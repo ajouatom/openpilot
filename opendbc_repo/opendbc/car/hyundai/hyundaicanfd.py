@@ -391,13 +391,20 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_last, accel, stopping, g
   soft_hold_info = 1 if CS.softHoldActive > 1 and enabled else 0
 
   # 이거안하면 정지중 뒤로 밀리는 현상 발생하는듯.. (신호정지중에 뒤로 밀리는 경험함.. 시험해봐야)
-  if values["InfoDisplay"] != 5: #5: Front Car Departure Notice
-    values["InfoDisplay"] = 4 if stopping and CS.out.aEgo > -0.3 else 0  # 1: SCC Mode, 2: Convention Cruise Mode, 3: Object disappered at low speed, 4: Available to resume acceleration control, 5: Front vehicle departure notice, 6: Reserved, 7: Invalid
+  # [추가원인 D & C 검증]: standstill(정차 중)일 때 InfoDisplay=0 마스킹하여 ISG 시동 꺼짐 유지 유도
+  if CS.out.standstill:
+    values["InfoDisplay"] = 0
+    values["DriverAlert"] = 0
+    values["TakeOverReq"] = 0
+    values["SysFailState"] = 0
+  else:
+    if values["InfoDisplay"] != 5: #5: Front Car Departure Notice
+      values["InfoDisplay"] = 4 if stopping and CS.out.aEgo > -0.3 else 0  # 1: SCC Mode, 2: Convention Cruise Mode, 3: Object disappered at low speed, 4: Available to resume acceleration control, 5: Front vehicle departure notice, 6: Reserved, 7: Invalid
 
-  values["TakeOverReq"] = 0    # 1: Takeover request, 2: Not used, 3: Error indicator , 이것이 켜지면 가속을 안하는듯함.
-  #values["NEW_SIGNAL_4"] = 9 if hud_control.leadVisible else 0
-  # AccelLimitBandUpper, Lower
-  values["SysFailState"] = 0    # 1: Performance degredation, 2: system temporairy unavailble, 3: SCC Service required , 눈이 묻어 레이더오류시... 2가 됨. 이때 가속을 안함...
+    values["TakeOverReq"] = 0    # 1: Takeover request, 2: Not used, 3: Error indicator , 이것이 켜지면 가속을 안하는듯함.
+    #values["NEW_SIGNAL_4"] = 9 if hud_control.leadVisible else 0
+    # AccelLimitBandUpper, Lower
+    values["SysFailState"] = 0    # 1: Performance degredation, 2: system temporairy unavailble, 3: SCC Service required , 눈이 묻어 레이더오류시... 2가 됨. 이때 가속을 안함...
 
   values["AccelLimitBandUpper"] = 0.0   # 이값이 1.26일때 가속을 안하는 증상이 보임.. 
   values["AccelLimitBandLower"] = 0.0
@@ -689,6 +696,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
     if CS.lfahda_cluster is not None:
       HDA_CntrlModSta = CS.lfahda_cluster["HDA_CntrlModSta"]
       HDA_LFA_SymSta = CS.lfahda_cluster["HDA_LFA_SymSta"]
+
+    # [추가원인 D 검증] 정차 중(standstill)일 때 클러스터 HDA 및 LFA 심볼을 순정 대기 상태(0)로 마스킹
+    if CS.out.standstill:
+      HDA_CntrlModSta = 0
+      HDA_LFA_SymSta = 0
 
     if frame % 2 == 0:
       #if CS.adrv_0x160 is not None:
