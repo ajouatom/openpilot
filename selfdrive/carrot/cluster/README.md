@@ -299,7 +299,8 @@ is easier to see. Detected vehicles, radar points, and desired-distance markers
 compress signed longitudinal placement by `0.5` in the rendered scene only, so
 actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Distance labels keep
 the actual signed longitudinal values, and there is no ego-vehicle visual
-offset.
+offset. A red horizontal marker bar is drawn at the rendered radar
+`longitudinal_m=0` position.
 `ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` uses a closer
 ego-bottom camera that places the ego vehicle almost against the lower screen
 edge for cars without rear radar.
