@@ -295,9 +295,10 @@ to the point/box top so speed and distance are less high above the vehicle.
 detected positions. The older fixed rear-tire-depth 2D arrow/label is removed.
 The default drive camera sits closer to the ego roof, lower than the earlier
 high view, tilted downward, and shifted `5m` forward so route/live scene space
-is easier to see. This is camera framing only: detected vehicles, radar points,
-desired-distance markers, and distance labels use the actual signed
-longitudinal values with no render-distance compression or ego-vehicle visual
+is easier to see. Detected vehicles, radar points, and desired-distance markers
+compress signed longitudinal placement by `0.5` in the rendered scene only, so
+actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Distance labels keep
+the actual signed longitudinal values, and there is no ego-vehicle visual
 offset.
 `ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` uses a closer
 ego-bottom camera that places the ego vehicle almost against the lower screen
