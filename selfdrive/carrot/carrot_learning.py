@@ -174,6 +174,7 @@ class CarrotLearner:
     self._curve_override_brake_sec = 0.0
     self._curve_override_brake_count = 0
     self._curve_max_decel = 0.0
+    self._curve_steer_error_sec = 0.0
 
     self._load()
 
@@ -431,6 +432,19 @@ class CarrotLearner:
             # Detect unique brake event in curve
             if not prev_brake:
               self._curve_override_brake_count += 1
+          
+          # Calculate steering tracking error (desired vs actual steering angle)
+          try:
+            desired_angle = 0.0
+            if sm.alive.get('carControl', False):
+              desired_angle = sm['carControl'].actuators.steeringAngleDeg
+            elif sm.alive.get('controlsState', False):
+              desired_angle = sm['controlsState'].steeringAngleDesired
+            steer_err = desired_angle - steer_deg
+            if abs(steer_err) >= 1.5:
+              self._curve_steer_error_sec += _DT
+          except Exception:
+            pass
 
     # ── 주행 중 팝업 타이머 업데이트 ──────────────────────────────────
     if engaged and not gear_park:
@@ -508,6 +522,7 @@ class CarrotLearner:
     self._curve_override_brake_sec = 0.0
     self._curve_override_brake_count = 0
     self._curve_max_decel = 0.0
+    self._curve_steer_error_sec = 0.0
 
     self._params.remove("CarrotLearningData")
     self._params.remove("CarrotLearningRecommend")
@@ -576,6 +591,7 @@ class CarrotLearner:
       self._curve_override_brake_sec = float(p6.get("curve_override_brake_sec", 0.0))
       self._curve_override_brake_count = int(p6.get("curve_override_brake_count", 0))
       self._curve_max_decel = float(p6.get("curve_max_decel", 0.0))
+      self._curve_steer_error_sec = float(p6.get("curve_steer_error_sec", 0.0))
 
       # v3 Override Intensity & Dynamics Restore
       override = data.get("override_dynamics", {})
@@ -628,6 +644,7 @@ class CarrotLearner:
         "curve_override_brake_sec": self._curve_override_brake_sec,
         "curve_override_brake_count": self._curve_override_brake_count,
         "curve_max_decel": self._curve_max_decel,
+        "curve_steer_error_sec": self._curve_steer_error_sec,
       },
       "override_dynamics": {
         "gas_max_accel": self._gas_max_accel,
@@ -1046,13 +1063,17 @@ class CarrotLearner:
     reason = ""
     sec = 0.0
 
-    # Brake overrides (Safety critical - takes priority)
-    if self._curve_override_brake_count >= 3 or self._curve_override_brake_sec >= 5.0:
+    # Brake/steer overrides (Safety critical - takes priority)
+    if self._curve_override_brake_count >= 3 or self._curve_override_brake_sec >= 5.0 or self._curve_steer_error_sec >= 3.0:
       recommended_raw = max(60, current_raw - 10)
-      reason = f"brake overrides (count {self._curve_override_brake_count}, peak decel {self._curve_max_decel:.2f}m/s^2)"
-      sec = self._curve_override_brake_sec
+      if self._curve_steer_error_sec >= 3.0:
+        reason = f"steering tracking error (accumulated {self._curve_steer_error_sec:.1f}s)"
+        sec = self._curve_steer_error_sec
+      else:
+        reason = f"brake overrides (count {self._curve_override_brake_count}, peak decel {self._curve_max_decel:.2f}m/s^2)"
+        sec = self._curve_override_brake_sec
     elif self._curve_override_gas_sec >= 10.0:
-      recommended_raw = min(150, current_raw + 10)
+      recommended_raw = min(130, current_raw + 10)
       reason = f"gas overrides (acc {self._curve_override_gas_sec:.1f}s)"
       sec = self._curve_override_gas_sec
 
@@ -1115,6 +1136,7 @@ class CarrotLearner:
     self._curve_override_brake_sec = 0.0
     self._curve_override_brake_count = 0
     self._curve_max_decel = 0.0
+    self._curve_steer_error_sec = 0.0
 
     # 주행 중 팝업 타이머 리셋 (적용 후 재학습 시작)
     self._engaged_elapsed_sec = 0.0

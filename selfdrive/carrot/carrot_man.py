@@ -1064,6 +1064,10 @@ class CarrotMan:
     v_safe = np.zeros(n_points)
     v_ego = max(CS.vEgo, 0.1)
 
+    # Check road condition / weather (WiperActive, CarrotRainWet, espActive)
+    # If wet/slippery condition is detected, we apply a safety reduction multiplier (0.8x)
+    wet_road = self.params.get_bool("WiperActive") or self.params.get_bool("CarrotRainWet") or CS.espActive
+
     for i in range(n_points):
       c = abs(curvatures[i])
       if c < 1e-4:
@@ -1075,6 +1079,16 @@ class CarrotMan:
         # User aggressiveness multiplier applies to the limit
         v_approx = v_ego
         lat_acc_limit = max(1.0, 2.5 - 0.011 * v_approx * 3.6) * self.autoCurveSpeedAggressiveness
+
+        # Apply road wet/slippery multiplier
+        if wet_road:
+          lat_acc_limit *= 0.80
+
+        # Apply smooth curvature factor to lat_acc_limit
+        # For curvatures c > 0.005, progressively scale down allowed lateral G-force to be more conservative.
+        # The scale factor is bounded to not go below 0.65 to avoid excessive deceleration and prevent vehicle roll/discomfort.
+        curvature_factor = max(0.65, 1.0 - 15.0 * max(0.0, c - 0.005))
+        lat_acc_limit *= curvature_factor
 
         # turnSpeed = sqrt(a_lat / curvature)
         v_safe[i] = math.sqrt(lat_acc_limit / c)

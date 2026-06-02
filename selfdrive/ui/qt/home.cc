@@ -292,7 +292,7 @@ public:
         - <b>PathOffset / SteerActuatorDelay</b>：修正转向偏差与延迟。<br>
         <b>🏎️ [弯道减速] (Curve Speed)</b><br>
         基于物理学（最大横向加速度）在弯道前自动降速，防止超速过弯。<br>
-        - <b>AutoCurveSpeedAggressiveness</b>：弯道减速激进程度（60~150%）。值越小越保守（早减速），越大越激进（少减速）。系统通过学习驾驶员在弯道的油门/刹车操作自动优化此参数。<br>
+        - <b>AutoCurveSpeedAggressiveness</b>：弯道减速激进程度（60~130%）。值越小越保守（早减速），越大越激进（少减速）。系统通过学习驾驶员在弯道的油门/刹车操作自动优化此参数。<br>
         <hr>
         <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>🧠 自动驾驶模式自主检测</div>
         即使驾驶员未踩踏板，系统也会持续监控自身控制质量：<br>
@@ -343,7 +343,7 @@ public:
         - <b>SteerActuatorDelay</b>: Reduces cornering delay.<br>
         <b>🏎️ [Curve Speed]</b><br>
         Automatically reduces speed before curves based on physics (max lateral acceleration), preventing overspeed in corners.<br>
-        - <b>AutoCurveSpeedAggressiveness</b>: Controls how aggressively the system slows down for curves (60~150%). Lower = more conservative (earlier braking), Higher = more aggressive (less slowdown). The system learns and self-tunes this parameter based on driver gas/brake interventions in curves.<br>
+        - <b>AutoCurveSpeedAggressiveness</b>: Controls how aggressively the system slows down for curves (60~130%). Lower = more conservative (earlier braking), Higher = more aggressive (less slowdown). The system learns and self-tunes this parameter based on driver gas/brake interventions in curves.<br>
         <hr>
         <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>🧠 Autonomous Pattern Detection</div>
         Even without your pedal input, the system monitors its own control quality:<br>
@@ -392,7 +392,7 @@ public:
         - <b>PathOffset / SteerActuatorDelay</b>: 조향 편차 및 지연 보정.<br>
         <b>🏎️ [곡선 감속] (Curve Speed)</b><br>
         물리 이론(최대 횡방향 가속도)을 기반으로 곡선 구간 진입 전에 자동으로 속도를 줄여 안전한 코너링을 지원합니다.<br>
-        - <b>AutoCurveSpeedAggressiveness</b>: 곡선 감속의 적극성을 조절합니다 (60~150%). 값이 낮을수록 보수적(일찍, 많이 감속), 높을수록 적극적(감속 최소화). 주행 중 곡선 구간에서 운전자가 가속/브레이크 페달을 밟는 패턴을 학습하여 자동으로 최적화됩니다.<br>
+        - <b>AutoCurveSpeedAggressiveness</b>: 곡선 감속의 적극성을 조절합니다 (60~130%). 값이 낮을수록 보수적(일찍, 많이 감속), 높을수록 적극적(감속 최소화). 주행 중 곡선 구간에서 운전자가 가속/브레이크 페달을 밟는 패턴을 학습하여 자동으로 최적화됩니다.<br>
         <hr>
         <div style='font-size: 50px; font-weight: bold; margin-top: 20px; margin-bottom: 10px;'>🧠 자율 주행 패턴 자동 감지</div>
         운전자가 페달을 밟지 않아도, 시스템은 스스로의 제어 품질을 감시합니다:<br>
