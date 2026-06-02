@@ -148,6 +148,9 @@ VEHICLE_BADGE_DISTANCE_FONT_SIZE = 17
 VEHICLE_BADGE_SPEED_FONT_SIZE = 15
 RADAR_LABEL_ANCHOR_Z_OFFSET_M = 0.30
 VEHICLE_BADGE_ANCHOR_Z_OFFSET_M = 0.32
+VEHICLE_DISTANCE_BAR_WIDTH_M = 0.13
+VEHICLE_DISTANCE_BAR_EXTRA_HEIGHT_M = 0.62
+VEHICLE_DISTANCE_BAR_COLOR = (255, 224, 42, 238)
 WORLD_LABEL_NEAR_M = 18.0
 WORLD_LABEL_FAR_M = 180.0
 WORLD_LABEL_MIN_SCALE = 0.56
@@ -1421,6 +1424,10 @@ class ClusterUiRenderer:
             for vehicle in scene.vehicles:
                 self._draw_vehicle(vehicle)
             self._profile_add("draw_scene.vehicles", profile_stage)
+            profile_stage = self._profile_start()
+            for vehicle in scene.vehicles:
+                self._draw_vehicle_distance_bar(vehicle)
+            self._profile_add("draw_scene.vehicle_distance_bars", profile_stage)
         finally:
             rl.rl_pop_matrix()
         profile_stage = self._profile_start()
@@ -1536,6 +1543,22 @@ class ClusterUiRenderer:
             max(0.42, vehicle.height_m * 0.45),
         )
         rl.draw_cube_v(marker_center, marker_size, rl_color(vehicle.body_color, alpha))
+
+    def _draw_vehicle_distance_bar(self, vehicle: VehicleBox) -> None:
+        if not vehicle.source and not vehicle.label:
+            return
+        bar_height_m = max(1.15, vehicle.height_m + VEHICLE_DISTANCE_BAR_EXTRA_HEIGHT_M)
+        marker_center = rl.Vector3(
+            vehicle.center.x,
+            vehicle.center.y,
+            bar_height_m * 0.5 + 0.035,
+        )
+        marker_size = rl.Vector3(
+            VEHICLE_DISTANCE_BAR_WIDTH_M,
+            VEHICLE_DISTANCE_BAR_WIDTH_M,
+            bar_height_m,
+        )
+        rl.draw_cube_v(marker_center, marker_size, rl_color(VEHICLE_DISTANCE_BAR_COLOR))
 
     def _draw_radar_point(self, point: RadarPointMarker) -> None:
         side_m = max(0.16, point.radius_m * 1.75)
