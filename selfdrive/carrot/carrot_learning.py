@@ -120,6 +120,8 @@ class CarrotLearner:
     self._prev_steer_deg = 0.0   # 이전 프레임 조향각
     self._curve_entries = 0      # 커브 진입 이벤트 수
     self._curve_overrides = 0    # 커브 진입 중 steeringPressed 이벤트 수
+    self._curve_overrides_understeer = 0     # 조향 부족 개입 횟수 (안쪽으로 더 꺾음)
+    self._curve_overrides_inner_hugging = 0   # 안쪽 쏠림 개입 횟수 (바깥쪽으로 풀어줌)
     self._in_curve_entry = False # 커브 진입 상태 플래그 (중복 카운트 방지)
     # Phase 3
     self._brake_count = 0        # 수동 브레이크 개입 횟수
@@ -153,6 +155,8 @@ class CarrotLearner:
     self.is_angle_control = None
     self._torque_curve_entries = 0
     self._torque_curve_overrides = 0
+    self._torque_curve_overrides_understeer = 0
+    self._torque_curve_overrides_inner_hugging = 0
     self._torque_straight_entries = 0
     self._torque_straight_overrides = 0
     self._torque_error_count = 0
@@ -270,6 +274,18 @@ class CarrotLearner:
     if engaged and v_ego_kph >= 20.0:
       steer_rate = abs(steer_deg - self._prev_steer_deg) / _DT
 
+      desired_angle = 0.0
+      steer_err = 0.0
+      if sm is not None:
+        try:
+          if sm.alive.get('carControl', False):
+            desired_angle = sm['carControl'].actuators.steeringAngleDeg
+          elif sm.alive.get('controlsState', False):
+            desired_angle = sm['controlsState'].steeringAngleDesired
+          steer_err = desired_angle - steer_deg
+        except Exception:
+          pass
+
       if self.is_angle_control:
         # [A] 앵글 조향 차량 데이터 수집
         # 직진 구간 편차 수집 (override 없을 때만 순수 자동조향 편차)
@@ -283,6 +299,12 @@ class CarrotLearner:
             self._curve_entries += 1
             if steer_pressed:
               self._curve_overrides += 1
+              # 개입 방향 판정 (desired_angle * steer_err)
+              # desired_angle과 steer_err의 부호가 같으면 Outer(풀어주기), 반대면 Inner(더 꺾기)
+              if desired_angle * steer_err > 0:
+                self._curve_overrides_inner_hugging += 1
+              elif desired_angle * steer_err < 0:
+                self._curve_overrides_understeer += 1
             self._in_curve_entry = True
         else:
           self._in_curve_entry = False
@@ -293,20 +315,11 @@ class CarrotLearner:
           self._torque_curve_entries += 1
           if steer_pressed:
             self._torque_curve_overrides += 1
-            
-          # 조향 오차 계산 시도
-          steer_err = 0.0
-          if sm is not None:
-            try:
-              desired_angle = 0.0
-              if sm.alive.get('carControl', False):
-                desired_angle = sm['carControl'].actuators.steeringAngleDeg
-              elif sm.alive.get('controlsState', False):
-                desired_angle = sm['controlsState'].steeringAngleDesired
-              
-              steer_err = desired_angle - steer_deg
-            except Exception:
-              pass
+            # 개입 방향 판정
+            if desired_angle * steer_err > 0:
+              self._torque_curve_overrides_inner_hugging += 1
+            elif desired_angle * steer_err < 0:
+              self._torque_curve_overrides_understeer += 1
               
           if abs(steer_err) >= 1.5:
             self._torque_error_count += 1
@@ -493,8 +506,12 @@ class CarrotLearner:
     self._steer_count = 0
     self._curve_entries = 0
     self._curve_overrides = 0
+    self._curve_overrides_understeer = 0
+    self._curve_overrides_inner_hugging = 0
     self._torque_curve_entries = 0
     self._torque_curve_overrides = 0
+    self._torque_curve_overrides_understeer = 0
+    self._torque_curve_overrides_inner_hugging = 0
     self._torque_straight_entries = 0
     self._torque_straight_overrides = 0
     self._torque_error_count = 0
@@ -560,8 +577,12 @@ class CarrotLearner:
       self._steer_count = int(lat.get("steer_count", 0))
       self._curve_entries = int(lat.get("curve_entries", 0))
       self._curve_overrides = int(lat.get("curve_overrides", 0))
+      self._curve_overrides_understeer = int(lat.get("curve_overrides_understeer", 0))
+      self._curve_overrides_inner_hugging = int(lat.get("curve_overrides_inner_hugging", 0))
       self._torque_curve_entries = int(lat.get("torque_curve_entries", 0))
       self._torque_curve_overrides = int(lat.get("torque_curve_overrides", 0))
+      self._torque_curve_overrides_understeer = int(lat.get("torque_curve_overrides_understeer", 0))
+      self._torque_curve_overrides_inner_hugging = int(lat.get("torque_curve_overrides_inner_hugging", 0))
       self._torque_straight_entries = int(lat.get("torque_straight_entries", 0))
       self._torque_straight_overrides = int(lat.get("torque_straight_overrides", 0))
       self._torque_error_count = int(lat.get("torque_error_count", 0))
@@ -619,8 +640,12 @@ class CarrotLearner:
         "steer_count": self._steer_count,
         "curve_entries": self._curve_entries,
         "curve_overrides": self._curve_overrides,
+        "curve_overrides_understeer": self._curve_overrides_understeer,
+        "curve_overrides_inner_hugging": self._curve_overrides_inner_hugging,
         "torque_curve_entries": self._torque_curve_entries,
         "torque_curve_overrides": self._torque_curve_overrides,
+        "torque_curve_overrides_understeer": self._torque_curve_overrides_understeer,
+        "torque_curve_overrides_inner_hugging": self._torque_curve_overrides_inner_hugging,
         "torque_straight_entries": self._torque_straight_entries,
         "torque_straight_overrides": self._torque_straight_overrides,
         "torque_error_count": self._torque_error_count,
@@ -790,11 +815,21 @@ class CarrotLearner:
       if self._curve_entries >= _LATERAL_MIN_CURVE:
         override_ratio = self._curve_overrides / self._curve_entries
         
+        # 개입 방향 비율 산출
+        understeer_ratio = 0.0
+        inner_hugging_ratio = 0.0
+        if self._curve_overrides > 0:
+          understeer_ratio = self._curve_overrides_understeer / self._curve_overrides
+          inner_hugging_ratio = self._curve_overrides_inner_hugging / self._curve_overrides
+
         # (1) SteerActuatorDelay
         current_delay = self._params.get_int("SteerActuatorDelay")
         recommended_delay = current_delay
         if override_ratio >= 0.30:
-          recommended_delay = min(300, current_delay + _DELAY_STEP_UNIT)
+          if understeer_ratio >= 0.60:
+            recommended_delay = min(300, current_delay + _DELAY_STEP_UNIT)
+          elif inner_hugging_ratio >= 0.60:
+            recommended_delay = max(50, current_delay - _DELAY_STEP_UNIT)
         elif override_ratio < 0.10: # 개입이 거의 없는 안정 상태 → 지연시간 소폭 감소로 최적점 수렴
           recommended_delay = max(50, current_delay - 10)
           
@@ -802,7 +837,7 @@ class CarrotLearner:
           result["조향 (Steering)"]["SteerActuatorDelay"] = {
             "current": current_delay,
             "recommended": recommended_delay,
-            "band_kph": "커브 진입 지연 보정" if override_ratio >= 0.30 else "커브 진입 안정화 감쇄",
+            "band_kph": "커브 진입 지연 보정 (조향 지연 상향)" if (override_ratio >= 0.30 and understeer_ratio >= 0.60) else ("커브 진입 안쪽 쏠림 보정 (조향 지연 하향)" if (override_ratio >= 0.30 and inner_hugging_ratio >= 0.60) else "커브 진입 안정화 감쇄"),
             "override_ratio": round(override_ratio * 100, 1),
           }
 
@@ -813,7 +848,10 @@ class CarrotLearner:
         recommended_sr = current_sr_rate
         
         if override_ratio >= 0.40:
-          recommended_sr = min(150, current_sr_rate + _SR_RATE_STEP_UNIT)
+          if understeer_ratio >= 0.60:
+            recommended_sr = min(150, current_sr_rate + _SR_RATE_STEP_UNIT)
+          elif inner_hugging_ratio >= 0.60:
+            recommended_sr = max(90, current_sr_rate - _SR_RATE_STEP_UNIT)
         elif override_ratio < 0.15: # 개입이 적은 경우 → 조향비 소폭 감소하여 더 완만하고 부드럽게
           recommended_sr = max(90, current_sr_rate - 2)
           
@@ -821,7 +859,7 @@ class CarrotLearner:
           result["조향 (Steering)"]["SteerRatioRate"] = {
             "current": current_sr_rate,
             "recommended": recommended_sr,
-            "band_kph": "커브 강한 개입 대응 (조향 강화)" if override_ratio >= 0.40 else "부드러운 조향 감속 보정",
+            "band_kph": "커브 강한 개입 대응 (조향 강화)" if (override_ratio >= 0.40 and understeer_ratio >= 0.60) else ("커브 안쪽 쏠림 개입 대응 (조향 감쇄)" if (override_ratio >= 0.40 and inner_hugging_ratio >= 0.60) else "부드러운 조향 감속 보정"),
             "override_ratio": round(override_ratio * 100, 1),
           }
     
@@ -830,10 +868,20 @@ class CarrotLearner:
       # 1. SteerActuatorDelay
       if self._torque_curve_entries >= 100: # 최소 샘플 수 (약 10초)
         override_ratio = self._torque_curve_overrides / self._torque_curve_entries
+        
+        understeer_ratio = 0.0
+        inner_hugging_ratio = 0.0
+        if self._torque_curve_overrides > 0:
+          understeer_ratio = self._torque_curve_overrides_understeer / self._torque_curve_overrides
+          inner_hugging_ratio = self._torque_curve_overrides_inner_hugging / self._torque_curve_overrides
+
         current_delay = self._params.get_int("SteerActuatorDelay")
         recommended_delay = current_delay
         if override_ratio >= 0.30:
-          recommended_delay = min(300, current_delay + 10)
+          if understeer_ratio >= 0.60:
+            recommended_delay = min(300, current_delay + 10)
+          elif inner_hugging_ratio >= 0.60:
+            recommended_delay = max(50, current_delay - 10)
         elif override_ratio < 0.10:
           recommended_delay = max(50, current_delay - 10)
           
@@ -841,7 +889,7 @@ class CarrotLearner:
           result["조향 (Steering)"]["SteerActuatorDelay"] = {
             "current": current_delay,
             "recommended": recommended_delay,
-            "band_kph": "토크 커브 진입 지연 보정" if override_ratio >= 0.30 else "토크 커브 안정화 감쇄",
+            "band_kph": "토크 커브 진입 지연 보정" if (override_ratio >= 0.30 and understeer_ratio >= 0.60) else ("토크 커브 안쪽 쏠림 보정" if (override_ratio >= 0.30 and inner_hugging_ratio >= 0.60) else "토크 커브 안정화 감쇄"),
             "override_ratio": round(override_ratio * 100, 1),
           }
 
