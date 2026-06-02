@@ -297,13 +297,15 @@ The default drive camera sits closer to the ego roof, lower than the earlier
 high view, tilted downward, and shifted `5m` forward so route/live scene space
 is pulled rearward together instead of moving only the ego vehicle. Drive
 object rendering compresses positive and negative longitudinal distance by
-`0.5`, so actual `20m` and `-10m` detections draw at rendered `10m` and `-5m`
-positions while labels keep the actual distance.
-Side reference bars mark the corner-radar zero-origin positions: front radar
-`0m` is red and rear radar `0m` is blue.
+`0.5`, so actual `20m` and `-10m` detections draw with half-scale spacing while
+labels keep the actual distance. Radar-origin objects (`radarState`, raw radar
+points, and LF/RF/LR/RR corner detections) start that compressed spacing from
+their matching radar zero origin, not from the ego center.
+Side reference bars mark the physical corner-radar zero-origin positions on the
+ego vehicle: front radar `0m` is red and rear radar `0m` is blue.
 Non-ego vehicle objects draw a thin vertical yellow bar at the object center
 where the vehicle distance is measured; this is visual only and does not alter
-distance values or positions.
+distance values.
 When both raw camera-bus ADRV `0x1EA` and CCNC `0x162` corner messages are
 fresh, ADRV is preferred for LF/RF/LR/RR distance in the Hyundai `carState`
 DBC parsing path. The cluster consumes the DBC-parsed `carState` corner fields
