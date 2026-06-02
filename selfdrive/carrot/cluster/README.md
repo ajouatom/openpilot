@@ -300,7 +300,8 @@ compress signed longitudinal placement by `0.5` in the rendered scene only, so
 actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Distance labels keep
 the actual signed longitudinal values, and there is no ego-vehicle visual
 offset. A red horizontal marker bar is drawn at the rendered radar
-`longitudinal_m=0` position.
+`longitudinal_m=0` position. Visible model lane-line start points are connected
+with a green marker line.
 `ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` uses a closer
 ego-bottom camera that places the ego vehicle almost against the lower screen
 edge for cars without rear radar.

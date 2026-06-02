@@ -16,6 +16,7 @@ from cluster_config import (
     DEFAULT_LANE_WIDTH_M,
     EGO,
     EGO_FORWARD_M,
+    GREEN,
     LIGHT_CLUSTER_THEME,
     PATH_END_M,
     PATH_HEIGHT_M,
@@ -155,6 +156,12 @@ RADAR_ZERO_MARKER_BODY_FORWARD_M = 0.08
 RADAR_ZERO_MARKER_HALF_WIDTH_LANE_FACTOR = 1.2
 RADAR_ZERO_MARKER_BACKING_COLOR: Color = (72, 0, 0, 220)
 RADAR_ZERO_MARKER_BODY_COLOR: Color = (255, 0, 0, 248)
+LANE_START_MARKER_BACKING_LAYER_M = PATH_HEIGHT_M + 0.182
+LANE_START_MARKER_BODY_LAYER_M = PATH_HEIGHT_M + 0.198
+LANE_START_MARKER_BACKING_WIDTH_M = 0.22
+LANE_START_MARKER_BODY_WIDTH_M = 0.12
+LANE_START_MARKER_BACKING_COLOR: Color = (0, 48, 20, 220)
+LANE_START_MARKER_BODY_COLOR: Color = (GREEN[0], GREEN[1], GREEN[2], 248)
 LANE_HIGHLIGHT_COLOR = (64, 148, 255)
 LANE_HIGHLIGHT_ALPHA = 220
 LANE_HIGHLIGHT_ROUTE_ALPHA = 170
@@ -1615,6 +1622,46 @@ def radar_zero_marker_strips(
             RADAR_ZERO_MARKER_BODY_FORWARD_M,
             RADAR_ZERO_MARKER_BODY_LAYER_M,
             RADAR_ZERO_MARKER_BODY_COLOR,
+        ),
+    )
+
+
+def lane_start_marker_strips(
+    state: ClusterUiState,
+    road_start_m: float,
+    road_end_m: float,
+) -> tuple[MeshStrip, ...]:
+    start_points: list[Vec3] = []
+    for marking in state.lanes:
+        if not marking.visible or not marking.model_points:
+            continue
+        point = marking.model_points[0]
+        forward_m = data_scene_forward_m(point.forward_m)
+        if forward_m < road_start_m or forward_m > road_end_m:
+            continue
+        start_points.append(
+            Vec3(
+                point.lateral_m + marking.model_lateral_shift_m,
+                forward_m,
+                0.0,
+            )
+        )
+    if len(start_points) < 2:
+        return ()
+    start_points.sort(key=lambda point: (point.x, point.y))
+    return strips_from_centerline_width_specs(
+        tuple(start_points),
+        (
+            (
+                LANE_START_MARKER_BACKING_WIDTH_M,
+                LANE_START_MARKER_BACKING_COLOR,
+                LANE_START_MARKER_BACKING_LAYER_M,
+            ),
+            (
+                LANE_START_MARKER_BODY_WIDTH_M,
+                LANE_START_MARKER_BODY_COLOR,
+                LANE_START_MARKER_BODY_LAYER_M,
+            ),
         ),
     )
 
@@ -3237,6 +3284,7 @@ def build_cluster_scene(
     planned_path = (
         *planned_path,
         *radar_zero_marker_strips(state, lane_width_m, road_start_m, road_end_m),
+        *lane_start_marker_strips(state, road_start_m, road_end_m),
     )
     profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
 
