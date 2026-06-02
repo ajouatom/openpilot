@@ -303,7 +303,7 @@ length behind the raw `0m` reference so its front bumper aligns to that
 reference. The temporary radar-zero, lane-start, and ego-zero debug marker bars
 are no longer rendered.
 `ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` uses a
-slightly pulled-back ego-bottom camera view for cars without rear radar.
+pulled-back ego-bottom camera view for cars without rear radar.
 The console refresh line prints `cam=<mode>` so live param changes can be
 confirmed while the HUD is running.
 When both raw camera-bus ADRV `0x1EA` and CCNC `0x162` corner messages are
