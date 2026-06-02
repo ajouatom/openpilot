@@ -122,6 +122,11 @@ LANE_MARKING_SHADOW_HEIGHT_M = 0.026
 LANE_MARKING_HEIGHT_M = 0.044
 LANE_MARKING_BORDER_EXTRA_WIDTH_PX = 3
 LANE_MARKING_BORDER_COLOR = LIGHT_CLUSTER_THEME.lane_marking_border
+RADAR_ZERO_BAR_THICKNESS_M = 0.14
+RADAR_ZERO_BAR_LAYER_M = PATH_HEIGHT_M + 0.156
+RADAR_ZERO_BAR_SIDE_GAP_M = VEHICLE_WIDTH_M * 0.5 + 0.18
+RADAR_ZERO_BAR_FRONT_COLOR: Color = (*RED, 232)
+RADAR_ZERO_BAR_REAR_COLOR: Color = (*BLUE, 232)
 ROAD_EDGE_SHADOW_HEIGHT_M = 0.032
 ROAD_EDGE_BODY_HEIGHT_M = 0.058
 ROAD_EDGE_HEIGHT_M = 0.074
@@ -292,6 +297,7 @@ class ClusterScene:
     highlight_lanes: tuple[MeshStrip, ...]
     lane_markings: tuple[MeshStrip, ...]
     planned_path: tuple[MeshStrip, ...]
+    reference_bars: tuple[MeshStrip, ...]
     radar_points: tuple[RadarPointMarker, ...]
     vehicles: tuple[VehicleBox, ...]
 
@@ -1564,6 +1570,41 @@ def follow_distance_marker_strips(
             FOLLOW_DISTANCE_MARKER_BODY_LAYER_M,
             FOLLOW_DISTANCE_MARKER_BODY_COLOR,
         ),
+    )
+
+
+def radar_zero_reference_bar_strips(state: ClusterUiState, lane_width_m: float) -> tuple[MeshStrip, ...]:
+    ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
+    ego_x_m = road_world_x(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m)
+    outer_half_width_m = max(lane_width_m * 1.55, RADAR_ZERO_BAR_SIDE_GAP_M + 1.35)
+    side_gap_m = min(RADAR_ZERO_BAR_SIDE_GAP_M, max(0.10, outer_half_width_m - 0.30))
+    front_zero_y_m = EGO_FORWARD_M + VEHICLE_LENGTH_M * 0.5
+    rear_zero_y_m = EGO_FORWARD_M - VEHICLE_LENGTH_M * 0.5
+
+    def bar_segment(y_m: float, left_x_m: float, right_x_m: float, color: Color) -> MeshStrip:
+        near_y_m = y_m - RADAR_ZERO_BAR_THICKNESS_M * 0.5
+        far_y_m = y_m + RADAR_ZERO_BAR_THICKNESS_M * 0.5
+        return MeshStrip(
+            left=(
+                Vec3(left_x_m, near_y_m, RADAR_ZERO_BAR_LAYER_M),
+                Vec3(left_x_m, far_y_m, RADAR_ZERO_BAR_LAYER_M),
+            ),
+            right=(
+                Vec3(right_x_m, near_y_m, RADAR_ZERO_BAR_LAYER_M),
+                Vec3(right_x_m, far_y_m, RADAR_ZERO_BAR_LAYER_M),
+            ),
+            color=color,
+        )
+
+    left_outer_x_m = ego_x_m - outer_half_width_m
+    left_inner_x_m = ego_x_m - side_gap_m
+    right_inner_x_m = ego_x_m + side_gap_m
+    right_outer_x_m = ego_x_m + outer_half_width_m
+    return (
+        bar_segment(front_zero_y_m, left_outer_x_m, left_inner_x_m, RADAR_ZERO_BAR_FRONT_COLOR),
+        bar_segment(front_zero_y_m, right_inner_x_m, right_outer_x_m, RADAR_ZERO_BAR_FRONT_COLOR),
+        bar_segment(rear_zero_y_m, left_outer_x_m, left_inner_x_m, RADAR_ZERO_BAR_REAR_COLOR),
+        bar_segment(rear_zero_y_m, right_inner_x_m, right_outer_x_m, RADAR_ZERO_BAR_REAR_COLOR),
     )
 
 
@@ -3179,6 +3220,10 @@ def build_cluster_scene(
     profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
+    reference_bars = radar_zero_reference_bar_strips(state, lane_width_m)
+    profile_scene_add(profile_add, "scene.build.reference_bars", profile_stage)
+
+    profile_stage = profile_scene_start(profile_add)
     hidden_merged_radar_points = tuple(point for point in state.radar_points if point.label in merged_radar_labels)
     radar_points = radar_point_markers(
         state,
@@ -3199,6 +3244,7 @@ def build_cluster_scene(
         highlight_lanes=tuple(highlight_lanes),
         lane_markings=lane_markings,
         planned_path=tuple(planned_path),
+        reference_bars=reference_bars,
         radar_points=tuple(radar_points),
         vehicles=tuple(vehicles),
     )

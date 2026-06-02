@@ -299,6 +299,8 @@ is pulled rearward together instead of moving only the ego vehicle. Drive
 object rendering compresses positive and negative longitudinal distance by
 `0.5`, so actual `20m` and `-10m` detections draw at rendered `10m` and `-5m`
 positions while labels keep the actual distance.
+Side reference bars mark the corner-radar zero-origin positions: front radar
+`0m` is red and rear radar `0m` is blue.
 When both raw camera-bus ADRV `0x1EA` and CCNC `0x162` corner messages are
 fresh, ADRV is preferred for LF/RF/LR/RR distance in the Hyundai `carState`
 DBC parsing path. The cluster consumes the DBC-parsed `carState` corner fields

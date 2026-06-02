@@ -1410,6 +1410,10 @@ class ClusterUiRenderer:
                 self._draw_strip(strip)
             self._profile_add("draw_scene.planned_path", profile_stage)
             profile_stage = self._profile_start()
+            for strip in scene.reference_bars:
+                self._draw_strip(strip)
+            self._profile_add("draw_scene.reference_bars", profile_stage)
+            profile_stage = self._profile_start()
             for point in scene.radar_points:
                 self._draw_radar_point(point)
             self._profile_add("draw_scene.radar_points", profile_stage)
