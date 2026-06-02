@@ -300,12 +300,6 @@ object rendering compresses positive and negative longitudinal distance by
 `0.5`, so actual `20m` and `-10m` detections draw with half-scale spacing while
 labels keep the actual distance. Radar-origin objects use the same ego-center
 compressed position transform as the rest of the scene.
-Side reference bars mark the physical corner-radar zero-origin positions on the
-ego vehicle for visual comparison only: front radar `0m` is red and rear radar
-`0m` is blue.
-Non-ego vehicle objects draw a thin vertical yellow bar at the point where
-vehicle distance is measured; it remains at the vehicle center and is visual
-only.
 When both raw camera-bus ADRV `0x1EA` and CCNC `0x162` corner messages are
 fresh, ADRV is preferred for LF/RF/LR/RR distance in the Hyundai `carState`
 DBC parsing path. The cluster consumes the DBC-parsed `carState` corner fields
