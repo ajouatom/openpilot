@@ -11,6 +11,7 @@ from pathlib import Path
 
 from cluster_config import (
     CLUSTER_BRIGHTNESS_PARAM,
+    CLUSTER_CAMERA_VIEW_MODE_PARAM,
     CLUSTER_ENCODER_AUTO,
     CLUSTER_ENCODER_HARDWARE,
     CLUSTER_ENCODER_JPEG,
@@ -32,6 +33,7 @@ from cluster_config import (
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
     normalize_cluster_brightness_percent,
+    normalize_cluster_camera_view_mode,
     normalize_cluster_core_mode,
     normalize_cluster_encoder_mode,
     normalize_cluster_live_fps,
@@ -78,6 +80,7 @@ THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
 BRIGHTNESS_PARAM_POLL_SECONDS = 1.0
 SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
+CAMERA_VIEW_PARAM_POLL_SECONDS = 1.0
 RADAR_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
 
@@ -234,6 +237,25 @@ class ClusterScreenModeParamReader:
             return 0
         try:
             return normalize_cluster_screen_mode(self._params.get_int(CLUSTER_SCREEN_MODE_PARAM))
+        except Exception:
+            return 0
+
+
+class ClusterCameraViewModeParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int:
+        if self._params is None:
+            return 0
+        try:
+            return normalize_cluster_camera_view_mode(self._params.get_int(CLUSTER_CAMERA_VIEW_MODE_PARAM))
         except Exception:
             return 0
 
@@ -603,6 +625,8 @@ def run_demo(
     active_theme_mode = theme_override or (theme_param_reader.read() if theme_param_reader is not None else "auto")
     screen_mode_param_reader = ClusterScreenModeParamReader()
     active_screen_mode = screen_mode_param_reader.read()
+    camera_view_param_reader = ClusterCameraViewModeParamReader()
+    active_camera_view_mode = camera_view_param_reader.read()
     radar_info_param_reader = ClusterRadarInfoParamReader()
     active_radar_info_mode = radar_info_param_reader.read()
     radar_display_param_reader = ClusterRadarDisplayParamReader()
@@ -622,6 +646,7 @@ def run_demo(
         screen_mode=active_screen_mode,
     )
     print(f"{CLUSTER_SCREEN_MODE_PARAM} initial: {active_screen_mode}", flush=True)
+    print(f"{CLUSTER_CAMERA_VIEW_MODE_PARAM} initial: {active_camera_view_mode}", flush=True)
     print(
         f"{CLUSTER_RADAR_INFO_PARAM} initial: {active_radar_info_mode} "
         f"{CLUSTER_RADAR_DISPLAY_PARAM} initial: {active_radar_display_mode} "
@@ -663,6 +688,7 @@ def run_demo(
     next_fps_param_read = start_time + FPS_PARAM_POLL_SECONDS
     next_brightness_param_read = start_time
     next_screen_mode_param_read = start_time
+    next_camera_view_param_read = start_time
     next_radar_param_read = start_time
     next_hud_mode_param_read = start_time
     report_frames = 0
@@ -793,6 +819,16 @@ def run_demo(
                             debug_plot=live_debug_plot_enabled(next_screen_mode),
                         )
                 next_screen_mode_param_read = now + SCREEN_MODE_PARAM_POLL_SECONDS
+            if now >= next_camera_view_param_read:
+                next_camera_view_mode = camera_view_param_reader.read()
+                if next_camera_view_mode != active_camera_view_mode:
+                    print(
+                        f"{CLUSTER_CAMERA_VIEW_MODE_PARAM} updated: "
+                        f"{active_camera_view_mode} -> {next_camera_view_mode}",
+                        flush=True,
+                    )
+                    active_camera_view_mode = next_camera_view_mode
+                next_camera_view_param_read = now + CAMERA_VIEW_PARAM_POLL_SECONDS
             if now >= next_radar_param_read:
                 next_radar_info_mode = radar_info_param_reader.read()
                 if next_radar_info_mode != active_radar_info_mode:
@@ -959,6 +995,7 @@ def run_demo(
                 radar_info_mode=active_radar_info_mode,
                 radar_display_mode=active_radar_display_mode,
                 radar_source_color_mode=active_radar_source_color_mode,
+                camera_view_mode=active_camera_view_mode,
                 center_clock_text=center_clock_text,
                 git_status=git_status_provider.status(),
                 actual_fps=display_actual_fps,
@@ -1137,6 +1174,7 @@ def run_demo(
                     f"{'-fast' if usb_display and usb_fast_write else ''} "
                     f"{'async ' if usb_pipeline is not None else ''}"
                     f"theme={renderer.theme_mode} "
+                    f"cam={state.camera_view_mode} "
                     f"view_yaw={state.surround_yaw_deg:+.0f} "
                     f"{source_status}"
                 )
