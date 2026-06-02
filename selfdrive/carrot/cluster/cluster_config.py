@@ -68,7 +68,7 @@ CLUSTER_PRIORITY_DEFAULT = 10
 CLUSTER_PRIORITY_MIN = 1
 CLUSTER_PRIORITY_MAX = 99
 CLUSTER_CAMERA_VIEW_MODE_DEFAULT = 0
-CLUSTER_CAMERA_VIEW_MODE_REAR = 1
+CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM = 1
 CLUSTER_CAMERA_VIEW_MODE_PARAM = "ClusterHudCameraViewMode"
 CLUSTER_SCREEN_MODE_DEFAULT = 0
 CLUSTER_SCREEN_MODE_DEBUG = 1
@@ -273,10 +273,13 @@ def normalize_cluster_camera_view_mode(value: object) -> int:
             "default": CLUSTER_CAMERA_VIEW_MODE_DEFAULT,
             "mode0": CLUSTER_CAMERA_VIEW_MODE_DEFAULT,
             "mode-0": CLUSTER_CAMERA_VIEW_MODE_DEFAULT,
-            "rear": CLUSTER_CAMERA_VIEW_MODE_REAR,
-            "mode1": CLUSTER_CAMERA_VIEW_MODE_REAR,
-            "mode-1": CLUSTER_CAMERA_VIEW_MODE_REAR,
-            "legacy": CLUSTER_CAMERA_VIEW_MODE_REAR,
+            "rear": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "bottom": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "ego-bottom": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "ego_bottom": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "mode1": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "mode-1": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+            "legacy": CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
         }
         if normalized in aliases:
             return aliases[normalized]
@@ -288,8 +291,8 @@ def normalize_cluster_camera_view_mode(value: object) -> int:
         mode = int(value)
     except (TypeError, ValueError):
         return CLUSTER_CAMERA_VIEW_MODE_DEFAULT
-    if mode == CLUSTER_CAMERA_VIEW_MODE_REAR:
-        return CLUSTER_CAMERA_VIEW_MODE_REAR
+    if mode == CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM:
+        return CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM
     return CLUSTER_CAMERA_VIEW_MODE_DEFAULT
 
 
