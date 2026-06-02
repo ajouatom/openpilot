@@ -303,6 +303,8 @@ compressed position transform as the rest of the scene.
 `ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` removes the
 `5m` drive-camera forward shift and restores the older camera placement close
 behind the ego vehicle for cars without rear radar.
+The console refresh line prints `cam=<mode>` so live param changes can be
+confirmed while the HUD is running.
 When both raw camera-bus ADRV `0x1EA` and CCNC `0x162` corner messages are
 fresh, ADRV is preferred for LF/RF/LR/RR distance in the Hyundai `carState`
 DBC parsing path. The cluster consumes the DBC-parsed `carState` corner fields

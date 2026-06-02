@@ -1174,6 +1174,7 @@ def run_demo(
                     f"{'-fast' if usb_display and usb_fast_write else ''} "
                     f"{'async ' if usb_pipeline is not None else ''}"
                     f"theme={renderer.theme_mode} "
+                    f"cam={state.camera_view_mode} "
                     f"view_yaw={state.surround_yaw_deg:+.0f} "
                     f"{source_status}"
                 )
