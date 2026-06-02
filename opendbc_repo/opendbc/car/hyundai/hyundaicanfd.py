@@ -743,10 +743,40 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["SETSPEED"] = (6 if hdp_active else 3 if cruise_enabled else 1) if main_enabled else 0
         values["SETSPEED_HUD"] = (5 if hdp_active else 3 if cruise_enabled else 1) if main_enabled else 0
 
-        if cruise_enabled:
-          set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
-          values["vSetDis"] = int(set_speed_in_units + 0.5)
+        if not hasattr(create_ccnc_messages, '_latched_v_set'):
+          create_ccnc_messages._latched_v_set = 30
+        if not hasattr(create_ccnc_messages, '_prev_cruise_enabled'):
+          create_ccnc_messages._prev_cruise_enabled = False
 
+        set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
+        current_v_set = int(set_speed_in_units + 0.5)
+
+        is_button_pressed = CS.cruise_buttons_msg is not None and CS.cruise_buttons_msg["CRUISE_BUTTONS"] != 0
+
+        # 디스인게이지(True -> False) 되는 바로 그 순간의 크루즈 속도를 고정(Latch)
+        if create_ccnc_messages._prev_cruise_enabled and not cruise_enabled:
+          create_ccnc_messages._latched_v_set = current_v_set
+
+        # 다음 루프를 위해 상태 저장
+        create_ccnc_messages._prev_cruise_enabled = cruise_enabled
+
+        if cruise_enabled:
+          # A. 인게이지 상태
+          if (CS.out.cruiseState.standstill or stopping) and not is_button_pressed:
+            # OP 주행 중 정차/감속 시 플래너 속도 급변으로 인한 계기판 출렁임 방지
+            pass
+          else:
+            create_ccnc_messages._latched_v_set = current_v_set
+        else:
+          # B. 디스인게이지 상태
+          # disable 순간에 고정된 속도를 계속 유지하여 계기판 출렁임 원천 차단
+          # 단, 꺼진 상태에서 운전자가 핸들 버튼(RES/SET)으로 속도를 바꾸면 그 값은 반영
+          if is_button_pressed and current_v_set > 0:
+            create_ccnc_messages._latched_v_set = current_v_set
+
+        # 최종 결정된 안정적인 속도를 계기판 신호에 주입
+        values["vSetDis"] = create_ccnc_messages._latched_v_set
+        
         values["DISTANCE"] = 4 if hdp_active else hud_control.leadDistanceBars
         values["DISTANCE_LEAD"] = 2 if cruise_enabled and hud_control.leadVisible else 1 if main_enabled and hud_control.leadVisible else 0
         values["DISTANCE_CAR"] = 3 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
