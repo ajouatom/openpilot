@@ -87,9 +87,10 @@ RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MAX_M = 11.0
 RADAR_FRONT_DETECTED_MERGE_LATERAL_M = 2.25
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
+EGO_VISUAL_REAR_OFFSET_M = VEHICLE_LENGTH_M * 0.5
 DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
-DRIVE_CAMERA_EGO_BOTTOM_POSITION_M = (0.0, -4.0, 5.00)
-DRIVE_CAMERA_EGO_BOTTOM_TARGET_M = (0.0, 14.0, -1.00)
+DRIVE_CAMERA_EGO_BOTTOM_POSITION_M = (0.0, -6.0, 5.00)
+DRIVE_CAMERA_EGO_BOTTOM_TARGET_M = (0.0, 8.0, 0.00)
 DRIVE_VIEW_REAR_RELATIVE_M = -5.0
 DRIVE_VIEW_REAR_ROAD_MARGIN_M = 8.0
 LONGITUDINAL_RENDER_DISTANCE_SCALE = 0.5
@@ -373,6 +374,10 @@ def render_scene_forward_m(relative_forward_m: float) -> float:
 
 def scene_data_relative_forward_m(forward_m: float) -> float:
     return forward_m - EGO_FORWARD_M
+
+
+def ego_vehicle_forward_m() -> float:
+    return EGO_FORWARD_M - EGO_VISUAL_REAR_OFFSET_M
 
 
 def lane_centerline(
@@ -3085,7 +3090,15 @@ def build_cluster_scene(
     profile_stage = profile_scene_start(profile_add)
     ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
     target_offset = state.highlight_lane_offset if state.lane_change_phase == "changing" else None
-    ego_vehicle = vehicle_box(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m, EGO, camera_active, target_offset)
+    ego_vehicle = vehicle_box(
+        ego_offset,
+        ego_vehicle_forward_m(),
+        state.steering,
+        lane_width_m,
+        EGO,
+        camera_active,
+        target_offset,
+    )
     merged_radar_labels = frozenset[str]()
     if route_mode:
         if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:

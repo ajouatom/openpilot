@@ -300,6 +300,9 @@ object rendering compresses positive and negative longitudinal distance by
 `0.5`, so actual `20m` and `-10m` detections draw with half-scale spacing while
 labels keep the actual distance. Radar-origin objects use the same ego-center
 compressed position transform as the rest of the scene.
+The ego vehicle mesh is drawn `VEHICLE_LENGTH_M / 2` behind the ego/model
+origin so the lane-line/model start aligns with the ego front bumper rather
+than the visual vehicle center.
 `ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` uses a closer
 ego-bottom camera that places the ego vehicle almost against the lower screen
 edge for cars without rear radar.
