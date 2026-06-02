@@ -69,7 +69,10 @@ class DesireHelper:
     self.lane_change_completed_on_blinker = False
     self.blinker_off_timer = 0.0  
     self.completed_direction = LaneChangeDirection.none
-    self.lane_appeared_timer = 0.0
+    
+    # [수정] 연속 변경 버그 및 1프레임 펄스 신호 제어를 위한 타이머 변수
+    self.lane_change_cooldown_timer = 0.0
+    self.lane_appeared_block_timer = 0.0
 
   # ─────────────────────────────────────────────
   def _update_params_periodic(self):
@@ -219,8 +222,12 @@ class DesireHelper:
     self._make_model_turn_speed(modeldata)
 
     self.carrot_lane_change_count = max(0, self.carrot_lane_change_count - 1)
-    self.lane_change_delay_timer        = max(0.0, self.lane_change_delay_timer - DT_MDL)
+    self.lane_change_delay_timer  = max(0.0, self.lane_change_delay_timer - DT_MDL)
     self.unsafe_cancel_timer      = max(0.0, self.unsafe_cancel_timer - DT_MDL)
+    
+    # [추가] 매 프레임 시간 감소 연산
+    self.lane_change_cooldown_timer = max(0.0, self.lane_change_cooldown_timer - DT_MDL)
+    self.lane_appeared_block_timer  = max(0.0, self.lane_appeared_block_timer - DT_MDL)
 
     v_ego = carstate.vEgo
     below_lane_change_speed = v_ego < LANE_CHANGE_SPEED_MIN
@@ -237,12 +244,10 @@ class DesireHelper:
     # ── 깜빡이 노이즈 필터링 및 반대 방향 전환 감지 ──
     if desire_enabled:
       self.blinker_off_timer = 0.0
-      # 만약 완료된 차선 변경 방향과 현재 켠 깜빡이 방향이 다르면 (예: 왼쪽 변경 후 즉시 오른쪽 복귀) 플래그 즉시 리셋
       if (blinker_state == BLINKER_LEFT and self.completed_direction == LaneChangeDirection.right) or \
          (blinker_state == BLINKER_RIGHT and self.completed_direction == LaneChangeDirection.left):
         self.lane_change_completed_on_blinker = False
     else:
-      # 깜빡이가 꺼졌을 때, 최소 0.5초(하드웨어 노이즈가 끝날 시간) 동안 유지되어야 완료 플래그를 최종 리셋
       self.blinker_off_timer += DT_MDL
       if self.blinker_off_timer > 0.5:
         self.lane_change_completed_on_blinker = False
@@ -254,17 +259,11 @@ class DesireHelper:
     else:
       side = self._get_selected_side(blinker_state) if blinker_state in (BLINKER_LEFT, BLINKER_RIGHT) else None
     
-    # 옆 차선이 새로 나타났을 때(lane_appeared) 바로 진입하지 못하도록 타이머 계산
+    # [이동 및 수정] NameError를 해결하기 위해 side 변수 선언 하단으로 이동 및 펄스 잠금 방식으로 보완
     if side is not None and side.lane_appeared:
-      self.lane_appeared_timer += DT_MDL
-    else:
-      self.lane_appeared_timer = 0.0
-
-    # 차선이 나타나고 최소 2.5초는 지나야 안정된 것으로 판단
-    lane_appeared_stable = self.lane_appeared_timer > 2.5
+      self.lane_appeared_block_timer = 2.5
 
     # 램프 구간 특유의 높은 곡률(급코너) 상태인지 감지
-    # 조향각이 크거나(예: 15도 이상) 차량의 회전 속도(Yaw rate)가 높으면 램프 주행 중으로 판단
     is_shaping_ramp = abs(carstate.steeringAngleDeg) > 15.0 or abs(modeldata.orientationRate.z[5]) > 0.05
 
     atc_lane_change_manual_only = (
@@ -274,8 +273,6 @@ class DesireHelper:
     )
 
     # ── lane_change_available 의 False→True 전환 감지 ──────────────
-    # commit_last() 는 update() 말미에 호출되므로
-    # 이 시점의 _last 값은 "이전 프레임의 available" 임
     avail_now  = side.lane_change_available      if side is not None else False
     avail_last = side.lane_change_available_last if side is not None else False
 
@@ -296,7 +293,7 @@ class DesireHelper:
       avail_now and
       avail_last and
       self.prev_desire_enabled and
-      self.lane_change_state == LaneChangeState.off and
+      self.lane_change_state == LaneChangeState.off &&
       self.unsafe_cancel_timer <= 0.0
     )
 
@@ -310,9 +307,10 @@ class DesireHelper:
         auto_lane_change_trigger = (
           self.auto_lane_change_enable and
           (not atc_lane_change_manual_only) and
-          (not is_shaping_ramp) and                     # [추가] 급커브/램프 돌고 있을 땐 ALC 금지
+          (not is_shaping_ramp) and
+          (self.lane_appeared_block_timer == 0.0) and  # [추가] 차선이 새로 발견된 직후 유예 기간 동안 ALC 금지
           side.edge_available and
-          (side.lane_available_trigger or (side.lane_appeared and lane_appeared_stable)) and # [수정] 차선 출현 후 대기 시간 적용
+          side.lane_available_trigger and
           side.lane_change_available
         )
       self.desire_log = f"{side.name}:ALC={self.auto_lane_change_enable}, "
@@ -371,9 +369,15 @@ class DesireHelper:
             avail_retry                        
           )
 
-          # 이미 한 번 완료했다면 깜빡이를 새로 켜기 전까지 재진입 차단!
-          if driver_enabled and self.lane_change_completed_on_blinker:
-            reentry = False
+          # [수정] 완료 플래그 차단 처리 - 단, ATC의 명시적인 새로운 명령 펄스가 돌고 있을 때는 예외 허용
+          if self.lane_change_completed_on_blinker:
+            if not (atc_enabled and self.carrot_lane_change_count > 0):
+              reentry = False
+
+          # [추가] 4초 쿨다운 제한 처리 - 단, ATC의 명시적인 새로운 명령 펄스가 돌고 있을 때는 예외 허용
+          if self.lane_change_cooldown_timer > 0.0:
+            if not (atc_enabled and self.carrot_lane_change_count > 0):
+              reentry = False
 
           if desire_enabled and reentry and not below_lane_change_speed and side is not None:
             self.lane_change_state   = LaneChangeState.preLaneChange
@@ -400,17 +404,15 @@ class DesireHelper:
             torque_cond    = (carstate.steeringTorque > 0) if blinker_state == BLINKER_LEFT else (carstate.steeringTorque < 0)
             torque_applied = carstate.steeringPressed and torque_cond
 
-            # ── 설정값과 무관하게 실질적인 차량 감지 여부 파악 ──
             bsd_detected = side.bsd_hold_counter > 0
             object_detected = side.side_object_detected
             
-            # 차량 감지 시 모드별 차단 로직 정교화
             vehicle_blocked = False
             if bsd_detected or object_detected:
               if self.lane_change_bsd >= 1:
-                vehicle_blocked = True  # 하드 블록 모드: 무조건 진입 차단
+                vehicle_blocked = True  
               elif self.lane_change_bsd == 0:
-                vehicle_blocked = not torque_applied  # 경고 모드: 운전자의 강제 조향 토크가 없으면 자동 진입 차단
+                vehicle_blocked = not torque_applied  
 
             solid_line_blocked = (self.lane_line_check >= 2) and \
                 (not side.lane_change_available_geom) and \
@@ -418,7 +420,6 @@ class DesireHelper:
 
             geom_blocked = (not side.lane_change_available_geom) and (not solid_line_blocked)
             
-            # 이제 vehicle_blocked가 적용되어 차량이 있으면 토크 없인 절대 못 넘어갑니다.
             unsafe_prechange = vehicle_blocked or geom_blocked
 
             start_gate = self.lane_change_delay_timer == 0 and \
@@ -440,7 +441,7 @@ class DesireHelper:
               self.unsafe_cancel_timer     = max(self.unsafe_cancel_timer, 1.5)
 
             elif not start_gate:
-              pass  # 딜레이 중 또는 차선 미감지 → 대기
+              pass  
 
             elif solid_line_blocked:
               if torque_applied:
@@ -450,18 +451,15 @@ class DesireHelper:
               if torque_applied and side.lane_change_available:
                 self.lane_change_state = LaneChangeState.laneChangeStarting
               elif self.lane_change_bsd == 0 and torque_applied and side.lane_change_available_no_bsd:
-                # 경고 모드(0)에서만 토크로 BSD override 허용
                 self.lane_change_state = LaneChangeState.laneChangeStarting
 
             elif driver_enabled:
               if side.lane_change_available:
                 self.lane_change_state = LaneChangeState.laneChangeStarting
               elif self.lane_change_bsd == 0 and side.lane_change_available_no_bsd and torque_applied:
-                # laneChangeBsd >= 1 에서는 여기로 시작하면 안 됨
                 self.lane_change_state = LaneChangeState.laneChangeStarting
 
             else:
-              # 자동 차선변경 (ALC)
               if (torque_applied or auto_lane_change_trigger or side.lane_line_info_edge_detect) \
                       and side.lane_change_available:
                 self.lane_change_state = LaneChangeState.laneChangeStarting
@@ -469,7 +467,6 @@ class DesireHelper:
         
         # ── laneChangeStarting 상태 ──────────────────────────────
         elif self.lane_change_state == LaneChangeState.laneChangeStarting:
-          # ── 이미 조향이 시작된 단계이므로 모드와 무관하게 차량 감지 시 즉시 취소 ──
           bsd_active   = (side is not None) and (side.bsd_hold_counter > 0) and (self.lane_change_bsd >= 0)
           object_active = (side is not None) and side.side_object_detected
           geom_lost    = (side is None) or (not side.lane_change_available_geom)
@@ -477,7 +474,6 @@ class DesireHelper:
           unsafe_now = bsd_active or object_active or geom_lost
 
           if unsafe_now:
-            # 차선 변경 도중 위험 감지 → 강하게 즉시 취소
             self.lane_change_direction   = LaneChangeDirection.none
             self.lane_change_state       = LaneChangeState.off
             self.auto_lane_change_enable = False
@@ -491,7 +487,6 @@ class DesireHelper:
             avail = side.lane_change_available_hold if side is not None else False
 
             if not avail:
-              # geometry flicker 정도만 finishing으로 넘김
               self.lane_change_direction = LaneChangeDirection.none
               self.lane_change_state     = LaneChangeState.laneChangeFinishing
             else:
@@ -505,12 +500,14 @@ class DesireHelper:
           if self.lane_change_ll_prob > 0.99:
             self.lane_change_completed_on_blinker = True
             
-            # ── direction을 none으로 지우기 전에 현재 방향을 먼저 대입해야 합니다! ──
             self.completed_direction = self.lane_change_direction
             
             self.lane_change_direction = LaneChangeDirection.none
             self.lane_change_state = LaneChangeState.off
             self.unsafe_cancel_timer = max(self.unsafe_cancel_timer, 0.5)
+            
+            # [추가] 차선 변경이 최종 완료된 직후 일반 주행 상태에 4초의 강제 쿨다운 락 가동
+            self.lane_change_cooldown_timer = 4.0
 
 
     # ── 타이머 ───────────────────────────────────────────────────
