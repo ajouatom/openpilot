@@ -162,6 +162,13 @@ LANE_START_MARKER_BACKING_WIDTH_M = 0.22
 LANE_START_MARKER_BODY_WIDTH_M = 0.12
 LANE_START_MARKER_BACKING_COLOR: Color = (0, 48, 20, 220)
 LANE_START_MARKER_BODY_COLOR: Color = (GREEN[0], GREEN[1], GREEN[2], 248)
+EGO_ZERO_MARKER_BACKING_LAYER_M = PATH_HEIGHT_M + 0.214
+EGO_ZERO_MARKER_BODY_LAYER_M = PATH_HEIGHT_M + 0.230
+EGO_ZERO_MARKER_BACKING_FORWARD_M = 0.16
+EGO_ZERO_MARKER_BODY_FORWARD_M = 0.08
+EGO_ZERO_MARKER_EXTRA_WIDTH_M = 0.25
+EGO_ZERO_MARKER_BACKING_COLOR: Color = (0, 22, 74, 220)
+EGO_ZERO_MARKER_BODY_COLOR: Color = (BLUE[0], BLUE[1], BLUE[2], 248)
 LANE_HIGHLIGHT_COLOR = (64, 148, 255)
 LANE_HIGHLIGHT_ALPHA = 220
 LANE_HIGHLIGHT_ROUTE_ALPHA = 170
@@ -1662,6 +1669,48 @@ def lane_start_marker_strips(
                 LANE_START_MARKER_BODY_COLOR,
                 LANE_START_MARKER_BODY_LAYER_M,
             ),
+        ),
+    )
+
+
+def ego_zero_marker_strips(
+    state: ClusterUiState,
+    lane_width_m: float,
+    road_start_m: float,
+    road_end_m: float,
+) -> tuple[MeshStrip, ...]:
+    forward_m = EGO_FORWARD_M
+    if forward_m < road_start_m or forward_m > road_end_m:
+        return ()
+    ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
+    center_x_m = road_world_x(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m)
+    half_width_m = VEHICLE_WIDTH_M * 0.5 + EGO_ZERO_MARKER_EXTRA_WIDTH_M
+
+    def marker_strip(half_forward_m: float, height_m: float, color: Color) -> MeshStrip:
+        near_m = forward_m - half_forward_m
+        far_m = forward_m + half_forward_m
+        return MeshStrip(
+            left=(
+                Vec3(center_x_m - half_width_m, near_m, height_m),
+                Vec3(center_x_m - half_width_m, far_m, height_m),
+            ),
+            right=(
+                Vec3(center_x_m + half_width_m, near_m, height_m),
+                Vec3(center_x_m + half_width_m, far_m, height_m),
+            ),
+            color=color,
+        )
+
+    return (
+        marker_strip(
+            EGO_ZERO_MARKER_BACKING_FORWARD_M,
+            EGO_ZERO_MARKER_BACKING_LAYER_M,
+            EGO_ZERO_MARKER_BACKING_COLOR,
+        ),
+        marker_strip(
+            EGO_ZERO_MARKER_BODY_FORWARD_M,
+            EGO_ZERO_MARKER_BODY_LAYER_M,
+            EGO_ZERO_MARKER_BODY_COLOR,
         ),
     )
 
@@ -3285,6 +3334,7 @@ def build_cluster_scene(
         *planned_path,
         *radar_zero_marker_strips(state, lane_width_m, road_start_m, road_end_m),
         *lane_start_marker_strips(state, road_start_m, road_end_m),
+        *ego_zero_marker_strips(state, lane_width_m, road_start_m, road_end_m),
     )
     profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
 
