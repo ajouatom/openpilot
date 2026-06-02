@@ -300,6 +300,9 @@ object rendering compresses positive and negative longitudinal distance by
 `0.5`, so actual `20m` and `-10m` detections draw with half-scale spacing while
 labels keep the actual distance. Radar-origin objects use the same ego-center
 compressed position transform as the rest of the scene.
+`ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` removes the
+`5m` drive-camera forward shift and restores the older camera placement close
+behind the ego vehicle for cars without rear radar.
 When both raw camera-bus ADRV `0x1EA` and CCNC `0x162` corner messages are
 fresh, ADRV is preferred for LF/RF/LR/RR distance in the Hyundai `carState`
 DBC parsing path. The cluster consumes the DBC-parsed `carState` corner fields

@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from cluster_config import (
     AMBER,
     BLUE,
+    CLUSTER_CAMERA_VIEW_MODE_REAR,
     CLUSTER_RADAR_DISPLAY_DETAIL,
     CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE,
     ClusterTheme,
@@ -87,6 +88,7 @@ RADAR_FRONT_DETECTED_MERGE_LATERAL_M = 2.25
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
+DRIVE_CAMERA_LEGACY_FORWARD_SHIFT_M = 0.0
 DRIVE_VIEW_REAR_RELATIVE_M = -5.0
 DRIVE_VIEW_REAR_ROAD_MARGIN_M = 8.0
 LONGITUDINAL_RENDER_DISTANCE_SCALE = 0.5
@@ -2425,10 +2427,15 @@ def ego_anchor_x_m(state: ClusterUiState, lane_width_m: float) -> float:
 def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float = 0.0) -> CameraSpec:
     ego_x_m = ego_anchor_x_m(state, lane_width_m) - anchor_x_m
     ego_y_m = EGO_FORWARD_M
+    drive_camera_forward_shift_m = (
+        DRIVE_CAMERA_LEGACY_FORWARD_SHIFT_M
+        if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_REAR
+        else DRIVE_CAMERA_FORWARD_SHIFT_M
+    )
 
     drive_camera = CameraSpec(
-        position=Vec3(0.0, -16.0 + DRIVE_CAMERA_FORWARD_SHIFT_M, 6.00),
-        target=Vec3(0.0, 7.0 + DRIVE_CAMERA_FORWARD_SHIFT_M, -0.20),
+        position=Vec3(0.0, -16.0 + drive_camera_forward_shift_m, 6.00),
+        target=Vec3(0.0, 7.0 + drive_camera_forward_shift_m, -0.20),
         fovy_deg=44.0,
     )
 
