@@ -65,7 +65,7 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
                                      wheelbase_m: float,
                                      steer_ratio: float,
                                      steer_sw_max_deg: float) -> float:
-  max_lat_accel = 5.0   # m/s^2
+  max_lat_accel = 8.5   # m/s^2
   max_lat_jerk  = 4.0   # m/s^3
   max_sw_rate_deg_per_tick = 2.0   # ★ EPS 보호용 상한
 
