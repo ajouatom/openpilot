@@ -302,7 +302,8 @@ the actual signed longitudinal values, and there is no ego-vehicle visual
 offset. A red horizontal marker bar is drawn at the rendered radar
 `longitudinal_m=0` position. Visible model lane-line start points are connected
 with a green marker line. A blue ego `0m` marker bar is drawn slightly wider
-than the ego vehicle.
+than the ego vehicle at the same raw `0m` reference, with the ego vehicle
+drawn half a vehicle length behind it so the front bumper aligns to that line.
 `ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` uses a closer
 ego-bottom camera that places the ego vehicle almost against the lower screen
 edge for cars without rear radar.
