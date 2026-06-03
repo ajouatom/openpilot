@@ -99,6 +99,11 @@ class NaviTrafficLightInfo:
     left_s: int | None = None
     right_s: int | None = None
     uturn_s: int | None = None
+    red_on: bool | None = None
+    straight_on: bool | None = None
+    left_on: bool | None = None
+    right_on: bool | None = None
+    uturn_on: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

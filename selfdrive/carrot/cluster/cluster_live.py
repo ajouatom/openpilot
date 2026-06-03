@@ -544,6 +544,11 @@ class OpenpilotLiveSource:
             left_s=self._parse_positive_int(value.get("leftS"), maximum=999),
             right_s=self._parse_positive_int(value.get("rightS"), maximum=999),
             uturn_s=self._parse_positive_int(value.get("uturnS"), maximum=999),
+            red_on=self._parse_optional_bool(value.get("redOn")),
+            straight_on=self._parse_optional_bool(value.get("straightOn")),
+            left_on=self._parse_optional_bool(value.get("leftOn")),
+            right_on=self._parse_optional_bool(value.get("rightOn")),
+            uturn_on=self._parse_optional_bool(value.get("uturnOn")),
         )
 
     @staticmethod
@@ -555,6 +560,23 @@ class OpenpilotLiveSource:
         if parsed <= 0 or parsed > maximum:
             return None
         return parsed
+
+    @staticmethod
+    def _parse_optional_bool(value: Any) -> bool | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in ("1", "true", "yes", "on"):
+                return True
+            if normalized in ("0", "false", "no", "off"):
+                return False
+        try:
+            return bool(int(value))
+        except Exception:
+            return None
 
     def _update_nav_route(self, data: Any) -> None:
         coords = safe_get(data, "coordinates")

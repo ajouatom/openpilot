@@ -1316,6 +1316,11 @@ class CarrotMan:
       "leftS": self._remaining_time(sinf.get("leftLightRemainTime")),
       "rightS": self._remaining_time(sinf.get("rightLightRemainTime")),
       "uturnS": self._remaining_time(sinf.get("uturnLightRemainTime")),
+      "redOn": bool(sinf.get("redLightOn")),
+      "straightOn": bool(sinf.get("greenLightOn")),
+      "leftOn": bool(sinf.get("leftLightOn")),
+      "rightOn": bool(sinf.get("rightLightOn")),
+      "uturnOn": bool(sinf.get("uturnLightOn")),
     }
 
   def _traffic_light_debug_from_ssinf(self, ssinf: dict) -> Dict[str, Any]:
@@ -1337,6 +1342,11 @@ class CarrotMan:
       "leftS": self._remaining_time(ssinf.get("left_remain_time")),
       "rightS": self._remaining_time(ssinf.get("right_remain_time")),
       "uturnS": self._remaining_time(ssinf.get("uturn_remain_time")),
+      "redOn": bool(red_remaining),
+      "straightOn": str(ssinf.get("straight", "")).upper() == "GREEN_LIGHT_ON",
+      "leftOn": str(ssinf.get("left", "")).upper() == "GREEN_LIGHT_ON",
+      "rightOn": str(ssinf.get("right", "")).upper() == "GREEN_LIGHT_ON",
+      "uturnOn": str(ssinf.get("uturn", "")).upper() == "GREEN_LIGHT_ON",
     }
 
   def _write_navi_image_param(self, crossroad: dict, image_hash: str):
