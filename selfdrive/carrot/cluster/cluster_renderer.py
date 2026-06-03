@@ -129,15 +129,16 @@ SPEED_LIMIT_SOURCE_LABELS = {
 SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
-NAVI_TRAFFIC_PANEL_W = 360
-NAVI_TRAFFIC_PANEL_H = 98
-NAVI_TRAFFIC_PANEL_X = SYSTEM_PANEL_X - NAVI_TRAFFIC_PANEL_W - 12
+NAVI_TRAFFIC_PANEL_RIGHT = TURN_SIGNAL_RIGHT_CENTER_X + 96
+NAVI_TRAFFIC_PANEL_H = 90
 NAVI_TRAFFIC_PANEL_Y = TURN_SIGNAL_CENTER_Y + TURN_SIGNAL_HEAD_HALF_HEIGHT + 10
-NAVI_TRAFFIC_SIGNAL_SIZE = 40.0
+NAVI_TRAFFIC_SIGNAL_SIZE = 58.0
 NAVI_TRAFFIC_SIGNAL_GAP = 10.0
+NAVI_TRAFFIC_TEXT_GAP = 14.0
+NAVI_TRAFFIC_PANEL_PAD_X = 16.0
 NAVI_TRAFFIC_BG_LIGHT = (62, 68, 81)
 NAVI_TRAFFIC_BG_DARK = (18, 21, 27)
-NAVI_TRAFFIC_BG_OUTLINE = (236, 238, 242)
+NAVI_TRAFFIC_BG_OUTLINE = (238, 241, 246)
 NAVI_TRAFFIC_OFF_LIGHT = (40, 43, 51)
 NAVI_TRAFFIC_OFF_DARK = (36, 39, 47)
 NAVI_TRAFFIC_OFF_ARROW = (58, 61, 70)
@@ -2262,17 +2263,11 @@ class ClusterUiRenderer:
 
     def _draw_navi_traffic_light_panel(self, info: NaviDebugInfo | None) -> None:
         theme = self._current_theme()
-        x = NAVI_TRAFFIC_PANEL_X
         y = NAVI_TRAFFIC_PANEL_Y
-        w = NAVI_TRAFFIC_PANEL_W
         h = NAVI_TRAFFIC_PANEL_H
         traffic = info.traffic_light if info is not None else None
         bg = NAVI_TRAFFIC_BG_DARK if theme.is_dark else NAVI_TRAFFIC_BG_LIGHT
         off = NAVI_TRAFFIC_OFF_DARK if theme.is_dark else NAVI_TRAFFIC_OFF_LIGHT
-        shadow = (0, 0, 0, 92)
-        outline = theme.faint if theme.is_dark else NAVI_TRAFFIC_BG_OUTLINE
-        self._rounded_rect(x + 5, y + 7, w, h, 20, shadow, None, 0)
-        self._rounded_rect(x, y, w, h, 20, bg, outline, 3)
 
         red_s = traffic.red_s if traffic is not None else None
         straight_s = traffic.straight_s if traffic is not None else None
@@ -2284,38 +2279,50 @@ class ClusterUiRenderer:
         left_on = self._navi_signal_active(traffic, "left", left_s)
         right_on = self._navi_signal_active(traffic, "right", right_s)
         uturn_on = self._navi_signal_active(traffic, "uturn", uturn_s)
-        use_uturn_slot = uturn_on and not left_on
-        turn_seconds = uturn_s if use_uturn_slot else left_s
-
-        slot_y = y + 34.0
-        slot_x = x + 26.0
-        step = NAVI_TRAFFIC_SIGNAL_SIZE + NAVI_TRAFFIC_SIGNAL_GAP
-        self._draw_navi_red_signal(slot_x, slot_y, red_on, off)
-        self._draw_navi_turn_signal_slot(slot_x + step, slot_y, active=uturn_on if use_uturn_slot else left_on, uturn=use_uturn_slot, off=off)
-        self._draw_navi_green_signal(slot_x + step * 2.0, slot_y, straight_on, off)
-        self._draw_navi_turn_signal_slot(slot_x + step * 3.0, slot_y, active=right_on, uturn=False, right=True, off=off)
-
-        for index, seconds in enumerate((red_s, turn_seconds, straight_s, right_s)):
-            seconds_text = "--" if seconds is None else str(seconds)
-            color = NAVI_TRAFFIC_RED if index == 0 and red_on else NAVI_TRAFFIC_GREEN if seconds is not None else theme.muted
-            self._draw_text(seconds_text, slot_x + step * index, y + 78, 15, color, anchor="center")
+        use_uturn_slot = (uturn_on or uturn_s is not None) and not (left_on or left_s is not None)
 
         primary_seconds, primary_red = self._navi_primary_signal_seconds(traffic)
         remain_text = "--" if primary_seconds is None else str(primary_seconds)
         remain_color = NAVI_TRAFFIC_RED if primary_red else NAVI_TRAFFIC_GREEN
+        remain_size = 54.0
+        remain_width, _ = self._measure_text(remain_text, remain_size, max(1.0, remain_size * 0.02))
+        show_right = right_on or right_s is not None
+        slot_count = 4 if show_right else 3
+        slot_span = slot_count * NAVI_TRAFFIC_SIGNAL_SIZE + (slot_count - 1) * NAVI_TRAFFIC_SIGNAL_GAP
+        content_w = slot_span + NAVI_TRAFFIC_TEXT_GAP + remain_width
+        w = max(270.0, content_w + NAVI_TRAFFIC_PANEL_PAD_X * 2.0)
+        x = NAVI_TRAFFIC_PANEL_RIGHT - w
+        shadow = (0, 0, 0, 92)
+        outline = theme.faint if theme.is_dark else NAVI_TRAFFIC_BG_OUTLINE
+        self._rounded_rect(x + 5.0, y + 7.0, w, h, 20.0, shadow, None, 0.0)
+        self._rounded_rect(x, y, w, h, 20.0, bg, outline, 3.0)
+
+        slot_y = y + h * 0.5
+        slot_x = x + NAVI_TRAFFIC_PANEL_PAD_X + NAVI_TRAFFIC_SIGNAL_SIZE * 0.5
+        step = NAVI_TRAFFIC_SIGNAL_SIZE + NAVI_TRAFFIC_SIGNAL_GAP
+        self._draw_navi_red_signal(slot_x, slot_y, red_on, off)
+        self._draw_navi_turn_signal_slot(
+            slot_x + step,
+            slot_y,
+            active=uturn_on if use_uturn_slot else left_on,
+            uturn=use_uturn_slot,
+            off=off,
+        )
+        self._draw_navi_green_signal(slot_x + step * 2.0, slot_y, straight_on, off)
+        if show_right:
+            self._draw_navi_turn_signal_slot(slot_x + step * 3.0, slot_y, active=right_on, right=True, off=off)
+
+        remain_x = slot_x + NAVI_TRAFFIC_SIGNAL_SIZE * 0.5 + step * (slot_count - 1) + NAVI_TRAFFIC_TEXT_GAP
         self._draw_text_with_stroke(
             remain_text,
-            x + w - 22,
-            y + 39,
-            42,
+            remain_x,
+            slot_y,
+            remain_size,
             remain_color,
             (0, 0, 0),
-            3,
-            anchor="right",
+            4,
+            anchor="left",
         )
-        distance = traffic.distance_m if traffic is not None else None
-        if distance is not None:
-            self._draw_text(f"{distance}m", x + w - 22, y + 78, 14, theme.muted, anchor="right")
 
     @staticmethod
     def _navi_signal_active(traffic: NaviTrafficLightInfo | None, name: str, seconds: int | None) -> bool:
@@ -2345,16 +2352,18 @@ class ClusterUiRenderer:
         return None, False
 
     def _draw_navi_red_signal(self, cx: float, cy: float, active: bool, off: tuple[int, int, int]) -> None:
-        radius = NAVI_TRAFFIC_SIGNAL_SIZE * 0.5
+        radius = NAVI_TRAFFIC_SIGNAL_SIZE * (12.5 / 26.0 if active else 0.5)
         color = NAVI_TRAFFIC_RED if active else off
         rl.draw_circle_v(rl.Vector2(cx, cy), radius, rl_color(color))
-        rl.draw_circle_lines(int(cx), int(cy), radius, rl_color((0, 0, 0), 210))
+        if active:
+            self._draw_navi_circle_stroke(cx, cy, radius, max(1.6, NAVI_TRAFFIC_SIGNAL_SIZE / 26.0), (0, 0, 0))
 
     def _draw_navi_green_signal(self, cx: float, cy: float, active: bool, off: tuple[int, int, int]) -> None:
-        radius = NAVI_TRAFFIC_SIGNAL_SIZE * 0.5
+        radius = NAVI_TRAFFIC_SIGNAL_SIZE * (12.5 / 26.0 if active else 0.5)
         color = NAVI_TRAFFIC_GREEN if active else off
         rl.draw_circle_v(rl.Vector2(cx, cy), radius, rl_color(color))
-        rl.draw_circle_lines(int(cx), int(cy), radius, rl_color((0, 0, 0), 210))
+        if active:
+            self._draw_navi_circle_stroke(cx, cy, radius, max(1.6, NAVI_TRAFFIC_SIGNAL_SIZE / 26.0), (0, 0, 0))
 
     def _draw_navi_turn_signal_slot(
         self,
@@ -2367,43 +2376,79 @@ class ClusterUiRenderer:
         off: tuple[int, int, int],
     ) -> None:
         radius = NAVI_TRAFFIC_SIGNAL_SIZE * 0.5
-        rl.draw_circle_v(rl.Vector2(cx, cy), radius, rl_color((34, 34, 34) if active else off))
-        rl.draw_circle_lines(int(cx), int(cy), radius, rl_color((0, 0, 0), 210))
+        active_bg = (0, 0, 0) if self._current_theme().is_dark else (34, 34, 34)
+        rl.draw_circle_v(rl.Vector2(cx, cy), radius, rl_color(active_bg if active else off))
         color = NAVI_TRAFFIC_GREEN if active else NAVI_TRAFFIC_OFF_ARROW
         if uturn:
             self._draw_navi_uturn_arrow(cx, cy, color)
         else:
             self._draw_navi_horizontal_arrow(cx, cy, color, right=right)
 
-    def _draw_navi_horizontal_arrow(self, cx: float, cy: float, color: tuple[int, int, int], *, right: bool) -> None:
-        direction = 1.0 if right else -1.0
-        start_x = cx - direction * 9.0
-        end_x = cx + direction * 8.0
-        rl.draw_line_ex(rl.Vector2(start_x, cy), rl.Vector2(end_x, cy), 4.3, rl_color(color))
-        tip = rl.Vector2(cx + direction * 11.0, cy)
-        back_x = cx + direction * 2.0
-        top = rl.Vector2(back_x, cy - 8.0)
-        bottom = rl.Vector2(back_x, cy + 8.0)
-        if right:
-            rl.draw_triangle(top, bottom, tip, rl_color(color))
-        else:
-            rl.draw_triangle(top, tip, bottom, rl_color(color))
-
-    def _draw_navi_uturn_arrow(self, cx: float, cy: float, color: tuple[int, int, int]) -> None:
-        rl.draw_line_ex(rl.Vector2(cx + 7, cy + 8), rl.Vector2(cx + 7, cy - 6), 3.4, rl_color(color))
+    def _draw_navi_circle_stroke(
+        self,
+        cx: float,
+        cy: float,
+        radius: float,
+        stroke_width: float,
+        color: tuple[int, int, int],
+    ) -> None:
         rl.draw_ring(
-            rl.Vector2(cx, cy - 6),
-            7.0,
-            10.5,
-            180,
-            360,
-            24,
+            rl.Vector2(cx, cy),
+            max(0.0, radius - stroke_width),
+            radius,
+            0.0,
+            360.0,
+            48,
             rl_color(color),
         )
-        tip = rl.Vector2(cx - 9, cy + 8)
-        left = rl.Vector2(cx - 15, cy - 2)
-        right = rl.Vector2(cx - 3, cy - 2)
-        rl.draw_triangle(left, tip, right, rl_color(color))
+
+    @staticmethod
+    def _navi_slot_point(cx: float, cy: float, x: float, y: float) -> "rl.Vector2":
+        scale = NAVI_TRAFFIC_SIGNAL_SIZE / 26.0
+        return rl.Vector2(cx + (x - 13.0) * scale, cy + (y - 13.0) * scale)
+
+    @staticmethod
+    def _draw_navi_round_line(start: "rl.Vector2", end: "rl.Vector2", width: float, color: tuple[int, int, int]) -> None:
+        draw_color = rl_color(color)
+        rl.draw_line_ex(start, end, width, draw_color)
+        cap_radius = width * 0.5
+        rl.draw_circle_v(start, cap_radius, draw_color)
+        rl.draw_circle_v(end, cap_radius, draw_color)
+
+    def _draw_navi_horizontal_arrow(self, cx: float, cy: float, color: tuple[int, int, int], *, right: bool) -> None:
+        def point(x: float, y: float) -> "rl.Vector2":
+            return self._navi_slot_point(cx, cy, 26.0 - x if right else x, y)
+
+        width = max(3.0, 3.0 * NAVI_TRAFFIC_SIGNAL_SIZE / 26.0)
+        self._draw_navi_round_line(point(8.5, 13.0), point(20.5, 13.0), width, color)
+        tip = point(6.418, 13.0)
+        top = point(12.532, 7.0)
+        bottom = point(12.532, 19.0)
+        self._draw_navi_round_line(top, tip, width, color)
+        self._draw_navi_round_line(tip, bottom, width, color)
+
+    def _draw_navi_uturn_arrow(self, cx: float, cy: float, color: tuple[int, int, int]) -> None:
+        scale = NAVI_TRAFFIC_SIGNAL_SIZE / 26.0
+        width = max(3.0, 3.0 * scale)
+        rl.draw_ring(
+            rl.Vector2(cx, cy - 3.2 * scale),
+            4.7 * scale,
+            4.7 * scale + width,
+            190.0,
+            360.0,
+            28,
+            rl_color(color),
+        )
+        self._draw_navi_round_line(
+            self._navi_slot_point(cx, cy, 17.8, 10.0),
+            self._navi_slot_point(cx, cy, 17.8, 18.6),
+            width,
+            color,
+        )
+        tip = self._navi_slot_point(cx, cy, 8.0, 18.8)
+        top = self._navi_slot_point(cx, cy, 4.9, 12.7)
+        bottom = self._navi_slot_point(cx, cy, 12.6, 15.0)
+        rl.draw_triangle(top, tip, bottom, rl_color(color))
 
     def _draw_navi_guidance_image_box(self, image: NaviGuidanceImage | None) -> None:
         theme = self._current_theme()
