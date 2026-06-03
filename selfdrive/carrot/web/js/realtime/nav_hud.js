@@ -146,6 +146,26 @@
     return parts.join(" · ");
   }
 
+  function cleanGuidanceText(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    if (/^route\s*=\s*[-+]?\d+(?:\.\d+)?$/i.test(text)) return "";
+    return text;
+  }
+
+  function escapeRegex(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function compactSideLabel(side) {
+    let label = String(side?.label || "").replace(/\s+/g, " ").trim();
+    const sign = String(side?.sign || "").trim();
+    if (side?.kind === "camera" && sign) {
+      label = label.replace(new RegExp(`^${escapeRegex(sign)}\\s*`), "").trim();
+    }
+    return label;
+  }
+
   function navIconSvg(kind) {
     const attrs = 'class="carrot-nav-hud__icon-svg" viewBox="0 0 48 48" aria-hidden="true" focusable="false"';
     const pathAttrs = 'fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"';
@@ -288,7 +308,10 @@
       }
 
       const compact = sideVisible && (sideLeft <= edge + 1 || groupWidth() > stageWidth * 0.68);
-      const cardHeight = compact ? 78 : clamp(stageHeight * 0.12, 82, 92);
+      const navScale = clamp(stageHeight / 604, 0.86, 1.10);
+      const compactScale = compact ? clamp(navScale * 0.92, 0.82, 0.98) : navScale;
+      const cardHeight = Math.round((compact ? 88 : 96) * compactScale);
+      const setPx = (name, value) => this.root.style.setProperty(name, `${Math.round(value)}px`);
       if (compact) this.root.dataset.layout = "compact";
       else delete this.root.dataset.layout;
       this.root.dataset.sideVisible = sideVisible ? "1" : "0";
@@ -300,6 +323,21 @@
       this.root.style.setProperty("--nav-card-height", `${Math.round(cardHeight)}px`);
       this.root.style.setProperty("--nav-main-left", `${mainLeft}px`);
       this.root.style.setProperty("--nav-side-left", `${Math.max(edge, sideLeft)}px`);
+      this.root.style.setProperty("--nav-scale", String(Number(compactScale.toFixed(3))));
+      setPx("--nav-padding-y", 12 * compactScale);
+      setPx("--nav-main-padding-x", 18 * compactScale);
+      setPx("--nav-side-padding-x", 15 * compactScale);
+      setPx("--nav-side-gap", 14 * compactScale);
+      setPx("--nav-body-gap", 5 * compactScale);
+      setPx("--nav-side-sign-size", 58 * compactScale);
+      setPx("--nav-side-sign-font", 25 * compactScale);
+      setPx("--nav-side-dist-font", 23 * compactScale);
+      setPx("--nav-side-label-font", 18 * compactScale);
+      setPx("--nav-icon-size", 62 * compactScale);
+      setPx("--nav-icon-font", 38 * compactScale);
+      setPx("--nav-dist-font", 33 * compactScale);
+      setPx("--nav-road-font", 21 * compactScale);
+      setPx("--nav-meta-font", 17 * compactScale);
     }
 
     readCarrotMan() {
@@ -327,8 +365,8 @@
       const turnDist = finiteNumber(cm.xDistToTurn) ?? 0;
       const turnCountdown = finiteNumber(cm.xTurnCountDown) ?? 0;
       const roadLimit = finiteNumber(cm.nRoadLimitSpeed) ?? 0;
-      const roadName = String(cm.szPosRoadName || "").trim();
-      const tbtRoad = String(cm.szTBTMainText || "").trim();
+      const roadName = cleanGuidanceText(cm.szPosRoadName);
+      const tbtRoad = cleanGuidanceText(cm.szTBTMainText);
       const atcType = String(cm.atcType || "").trim().toLowerCase();
       const trafficState = finiteNumber(cm.trafficState) ?? 0;
       const meta = buildMeta(cm);
@@ -513,7 +551,7 @@
         this.sideDistEl.textContent = side.dist || "";
         this.sideDistEl.hidden = !side.dist;
       }
-      if (this.sideLabelEl) this.sideLabelEl.textContent = side.label || "";
+      if (this.sideLabelEl) this.sideLabelEl.textContent = compactSideLabel(side);
       if (this.sideCountdownEl) {
         this.sideCountdownEl.textContent = side.countdown || "";
         this.sideCountdownEl.hidden = !side.countdown;

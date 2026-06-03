@@ -155,6 +155,12 @@ void V4LEncoder::dequeue_handler(V4LEncoder *e) {
 
 V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_height)
     : VideoEncoder(encoder_info, in_width, in_height) {
+  const bool carrot_livestream_road = strcmp(encoder_info.publish_name, "livestreamRoadEncodeData") == 0;
+  if (carrot_livestream_road) {
+    out_width = 964;
+    out_height = 604;
+  }
+
   fd = HANDLE_EINTR(open("/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1", O_RDWR|O_NONBLOCK));
   assert(fd >= 0);
 
@@ -251,6 +257,38 @@ V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_hei
     };
     for (auto ctrl : ctrls) {
       checked_ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+    }
+  }
+
+  if (carrot_livestream_road) {
+    LOGW("H264 compatibility profile enabled for %s: output=%dx%d bitrate=%d multi-slice-max-bytes=%d",
+         encoder_info.publish_name, out_width, out_height, 600'000, 1200);
+
+    struct v4l2_control compatibility_ctrls[] = {
+      { .id = V4L2_CID_MPEG_VIDEO_BITRATE, .value = 600'000},
+      { .id = V4L2_CID_MPEG_VIDEO_H264_PROFILE, .value = V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE},
+      { .id = V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE, .value = V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CAVLC},
+    };
+    for (auto ctrl : compatibility_ctrls) {
+      util::safe_ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+    }
+
+    struct v4l2_control slice_size = {
+      .id = V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_BYTES,
+      .value = 1200,
+    };
+    const bool size_set = util::safe_ioctl(fd, VIDIOC_S_CTRL, &slice_size) == 0;
+    struct v4l2_control slice_mode = {
+      .id = V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE,
+      .value = size_set ? V4L2_MPEG_VIDEO_MULTI_SICE_MODE_MAX_BYTES : V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE,
+    };
+    const bool mode_set = size_set && util::safe_ioctl(fd, VIDIOC_S_CTRL, &slice_mode) == 0;
+    if (mode_set) {
+      LOGW("multi-slice enabled for %s: max-bytes=%d", encoder_info.publish_name, 1200);
+    } else {
+      slice_mode.value = V4L2_MPEG_VIDEO_MULTI_SLICE_MODE_SINGLE;
+      util::safe_ioctl(fd, VIDIOC_S_CTRL, &slice_mode);
+      LOGW("multi-slice unavailable for %s; falling back to single-slice H264", encoder_info.publish_name);
     }
   }
 

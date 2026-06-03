@@ -306,6 +306,7 @@
       window.addEventListener("offline", this.sync);
       window.addEventListener("carrot:pagechange", this.sync);
       window.addEventListener("carrot:visionchange", this.sync);
+      window.addEventListener("carrot:visiontestchange", this.sync);
       window.addEventListener("carrot:websettingschange", this.sync);
       window.addEventListener("carrot:render-request", this.tick);
       document.addEventListener("visibilitychange", this.handleVisibility);
@@ -378,6 +379,7 @@
       if (!settings.enabled) return false;
       if (!isCarrotPageActive()) return false;
       if (!isVisionActive()) return false;
+      if (window.CarrotVisionTestState?.active) return false;
       // Staged startup: hold the map until the first camera frame renders so
       // it does not compete with the WebRTC first-frame acquisition.
       if (!hasVisionReachedReady()) return false;
