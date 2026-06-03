@@ -332,18 +332,19 @@ class RouteEngine:
       for path in self.route_geometry:
         coords += [c.as_dict() for c in path]
 
-    if len(coords) == 0:
-      return
     #print("$$$$$$$$$$$$$$$$$$coords=",coords)
     msg = messaging.new_message('navRouteNavd', valid=True)
     msg.navRouteNavd.coordinates = coords
     self.pm.send('navRouteNavd', msg)
 
   def clear_route(self):
+    had_route = self.route is not None or self.route_geometry is not None or self.step_idx is not None or self.nav_destination is not None
     self.route = None
     self.route_geometry = None
     self.step_idx = None
     self.nav_destination = None
+    if had_route:
+      self.send_route()
 
   def reset_recompute_limits(self):
     self.recompute_backoff = 0
