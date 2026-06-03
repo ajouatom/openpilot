@@ -30,8 +30,8 @@ RADAR_TO_CAMERA = 1.52  # RADAR is ~ 1.5m ahead from center of mesh frame
 STICKY_SELECTED_COUNT_MAX = int(2.0 / DT_MDL)
 STICKY_MAX_DPATH = 0.8
 STICKY_FAR_DREL = 60.0
-STICKY_MAX_DPATH_FAR = 1.6
-STICKY_PATH_Y_STD_GAIN = 0.7
+STICKY_MAX_DPATH_FAR = 1.2
+STICKY_PATH_Y_STD_GAIN = 0.5
 
 
 def laplacian_pdf(x: float, mu: float, b: float):
