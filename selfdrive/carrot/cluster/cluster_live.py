@@ -61,6 +61,7 @@ LIVE_SERVICES_BASE = (
     "wideRoadCameraState",
 )
 LIVE_CAN_SERVICES = ("can", "sendcan")
+NAVI_TRAFFIC_LIGHT_HOLD_SECONDS = 10.0
 
 
 class OpenpilotLiveSource:
@@ -95,6 +96,8 @@ class OpenpilotLiveSource:
         self._cached_live_debug: LiveDebugInfo | None = None
         self._cached_navi_debug: NaviDebugInfo | None = None
         self._cached_navi_image: NaviGuidanceImage | None = None
+        self._held_navi_traffic_light: NaviTrafficLightInfo | None = None
+        self._held_navi_traffic_light_received_t: float | None = None
         self._show_plot_mode = 0
         self._hud_debug_mode = 0
         self._live_debug_enabled = False
@@ -465,11 +468,22 @@ class OpenpilotLiveSource:
 
     def _navi_debug_info(self) -> NaviDebugInfo | None:
         self._refresh_debug_params()
+        traffic_light = self._held_navi_traffic_light_at(time.monotonic())
         if self._cached_navi_debug is not None:
-            return self._cached_navi_debug
+            return replace(
+                self._cached_navi_debug,
+                traffic_light=traffic_light,
+                guidance_image=self._cached_navi_image,
+            )
         route_count = len(self._nav_route_coords)
         lines = (f"Route points: {route_count}", "Waiting for POST /api/navi/{appVersion}")
-        return NaviDebugInfo(title="NAVI receiver", lines=lines, severity="normal", guidance_image=self._cached_navi_image)
+        return NaviDebugInfo(
+            title="NAVI receiver",
+            lines=lines,
+            severity="normal",
+            traffic_light=traffic_light,
+            guidance_image=self._cached_navi_image,
+        )
 
     def _read_navi_debug_info(self) -> NaviDebugInfo | None:
         params = self.params_memory or self.params
@@ -494,7 +508,14 @@ class OpenpilotLiveSource:
         raw_lines = data.get("lines", ())
         lines = tuple(str(line)[:80] for line in raw_lines if str(line).strip()) if isinstance(raw_lines, list) else ()
         speed_limit_kph = self._parse_positive_int(data.get("speedLimitKph"), maximum=300)
-        traffic_light = self._parse_navi_traffic_light(data.get("trafficLight"))
+        now = time.monotonic()
+        received_t = finite_float(data.get("receivedMono"))
+        if received_t is None:
+            received_t = now
+        parsed_traffic_light = self._parse_navi_traffic_light(data.get("trafficLight"))
+        if parsed_traffic_light is not None:
+            self._update_held_navi_traffic_light(parsed_traffic_light, received_t, now)
+        traffic_light = self._held_navi_traffic_light_at(now)
         return NaviDebugInfo(
             title=title[:80],
             lines=lines[:12],
@@ -549,6 +570,43 @@ class OpenpilotLiveSource:
             left_on=self._parse_optional_bool(value.get("leftOn")),
             right_on=self._parse_optional_bool(value.get("rightOn")),
             uturn_on=self._parse_optional_bool(value.get("uturnOn")),
+        )
+
+    def _update_held_navi_traffic_light(
+        self,
+        traffic_light: NaviTrafficLightInfo,
+        received_t: float,
+        now: float,
+    ) -> None:
+        if now - received_t > NAVI_TRAFFIC_LIGHT_HOLD_SECONDS:
+            return
+        self._held_navi_traffic_light = traffic_light
+        self._held_navi_traffic_light_received_t = received_t
+
+    def _held_navi_traffic_light_at(self, now: float) -> NaviTrafficLightInfo | None:
+        traffic_light = self._held_navi_traffic_light
+        received_t = self._held_navi_traffic_light_received_t
+        if traffic_light is None or received_t is None:
+            return None
+        age_s = max(0.0, now - received_t)
+        if age_s > NAVI_TRAFFIC_LIGHT_HOLD_SECONDS:
+            self._held_navi_traffic_light = None
+            self._held_navi_traffic_light_received_t = None
+            return None
+        elapsed_s = int(age_s)
+
+        def countdown(seconds: int | None) -> int | None:
+            if seconds is None:
+                return None
+            return max(0, int(seconds) - elapsed_s)
+
+        return replace(
+            traffic_light,
+            red_s=countdown(traffic_light.red_s),
+            straight_s=countdown(traffic_light.straight_s),
+            left_s=countdown(traffic_light.left_s),
+            right_s=countdown(traffic_light.right_s),
+            uturn_s=countdown(traffic_light.uturn_s),
         )
 
     @staticmethod
