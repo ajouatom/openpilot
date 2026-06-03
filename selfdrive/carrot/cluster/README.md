@@ -185,9 +185,12 @@ encoder FPS because the V4L2 encoder timing, SPS timing, and automatic bitrate
 are fixed at startup. Set `CLUSTER_AUTORUN_FPS` only for fixed test overrides;
 `0` means uncapped.
 `ClusterHudDebug` controls the autorun output gate: `0` starts external HUD
-rendering only while openpilot is onroad, and `1` keeps the older always-on
-debug behavior after power-up. When output is gated off, `cluster_autorun`
-sends TURZX brightness `0` so a stale HUD frame does not remain visible.
+rendering only while openpilot is onroad, and `1`, `2`, and `3` keep the
+always-on debug behavior after power-up. In live input only, `2` also keeps the
+top UI icons visible when source data is missing, and `3` also shows the navi
+debug UI before navi data has arrived. When output is gated off,
+`cluster_autorun` sends TURZX brightness `0` so a stale HUD frame does not
+remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
 Manager autostart enables realtime affinity by default. `cluster_autorun.py`

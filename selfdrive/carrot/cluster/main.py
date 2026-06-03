@@ -366,11 +366,19 @@ class ClusterHudOutputGateParamReader:
         except Exception:
             pass
 
+    def read_mode(self) -> int:
+        if self._params is None:
+            return 0
+        try:
+            return max(0, min(3, int(self._params.get_int(CLUSTER_HUD_DEBUG_PARAM))))
+        except Exception:
+            return 0
+
     def allowed(self) -> bool:
         if self._params is None:
             return True
         try:
-            return int(self._params.get_int(CLUSTER_HUD_DEBUG_PARAM)) == 1 or bool(self._params.get_bool("IsOnroad"))
+            return self.read_mode() >= 1 or bool(self._params.get_bool("IsOnroad"))
         except Exception:
             return False
 
@@ -642,7 +650,9 @@ def run_demo(
     hud_encoder_param_reader = ClusterHudEncoderParamReader() if hud_encoder_watch is not None else None
     hud_core_mode_param_reader = ClusterHudCoreModeParamReader() if hud_core_mode_watch is not None else None
     hud_priority_param_reader = ClusterHudPriorityParamReader() if hud_priority_watch is not None else None
-    hud_output_gate_param_reader = ClusterHudOutputGateParamReader() if hud_mode_watch is not None else None
+    hud_debug_param_reader = ClusterHudOutputGateParamReader() if hud_mode_watch is not None or input_mode == "live" else None
+    hud_output_gate_param_reader = hud_debug_param_reader if hud_mode_watch is not None else None
+    active_hud_debug_mode = hud_debug_param_reader.read_mode() if hud_debug_param_reader is not None else 0
     renderer = ClusterUiRenderer(
         frame_width,
         frame_height,
@@ -671,6 +681,7 @@ def run_demo(
     live_source = OpenpilotLiveSource(include_can=live_include_can, timeout_ms=live_timeout_ms) if input_mode == "live" else None
     if live_source is not None:
         live_source.set_profile_enabled(profile_render)
+        live_source.set_hud_debug_mode(active_hud_debug_mode)
         live_source.set_debug_panels_enabled(
             live_debug=live_debug_panel_enabled(active_screen_mode),
             debug_plot=live_debug_plot_enabled(active_screen_mode),
@@ -869,6 +880,7 @@ def run_demo(
                     or hud_encoder_param_reader is not None
                     or hud_core_mode_param_reader is not None
                     or hud_priority_param_reader is not None
+                    or hud_debug_param_reader is not None
                     or hud_output_gate_param_reader is not None
                 )
             ):
@@ -902,6 +914,17 @@ def run_demo(
                         flush=True,
                     )
                     break
+                if hud_debug_param_reader is not None:
+                    next_hud_debug_mode = hud_debug_param_reader.read_mode()
+                    if next_hud_debug_mode != active_hud_debug_mode:
+                        print(
+                            f"{CLUSTER_HUD_DEBUG_PARAM} updated: "
+                            f"{active_hud_debug_mode} -> {next_hud_debug_mode}",
+                            flush=True,
+                        )
+                        active_hud_debug_mode = next_hud_debug_mode
+                        if live_source is not None:
+                            live_source.set_hud_debug_mode(active_hud_debug_mode)
                 if hud_output_gate_param_reader is not None and not hud_output_gate_param_reader.allowed():
                     print(
                         f"{CLUSTER_HUD_DEBUG_PARAM}=0 and IsOnroad=0; "

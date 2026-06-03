@@ -48,6 +48,7 @@ NAVI_HTTP_PORT = 7713
 NAVI_HTTP_MAX_BODY_SIZE = 16 * 1024 * 1024
 NAVI_EVENT_TYPES = ("complexCrossroad", "rgdata", "vrtx", "ssinf", "sinf", "route")
 NAVI_DEBUG_PARAM = "CarrotNaviDebug"
+NAVI_IMAGE_PARAM = "CarrotNaviImage"
 
 ################ CarrotNavi
 ## 국가법령정보센터: 도로설계기준
@@ -1290,6 +1291,73 @@ class CarrotMan:
       "ts": time.monotonic(),
     }
     self._last_complex_crossroad = summary
+    self._write_navi_image_param(d, image_hash)
+
+
+  def _safe_int_or_none(self, value: Any, minimum: Optional[int] = None, maximum: Optional[int] = None) -> Optional[int]:
+    try:
+      int_value = int(float(value))
+    except Exception:
+      return None
+    if minimum is not None and int_value < minimum:
+      return None
+    if maximum is not None and int_value > maximum:
+      return None
+    return int_value
+
+  def _remaining_time(self, value: Any) -> Optional[int]:
+    return self._safe_int_or_none(value, minimum=1, maximum=999)
+
+  def _traffic_light_debug_from_sinf(self, sinf: dict) -> Dict[str, Any]:
+    return {
+      "distanceM": self._safe_int_or_none(sinf.get("distance"), minimum=0),
+      "redS": self._remaining_time(sinf.get("redLightRemainTime")),
+      "straightS": self._remaining_time(sinf.get("greenLightRemainTime")),
+      "leftS": self._remaining_time(sinf.get("leftLightRemainTime")),
+      "rightS": self._remaining_time(sinf.get("rightLightRemainTime")),
+      "uturnS": self._remaining_time(sinf.get("uturnLightRemainTime")),
+    }
+
+  def _traffic_light_debug_from_ssinf(self, ssinf: dict) -> Dict[str, Any]:
+    red_remaining = []
+    for signal_key, remain_key in (
+      ("straight", "straight_remain_time"),
+      ("left", "left_remain_time"),
+      ("right", "right_remain_time"),
+      ("uturn", "uturn_remain_time"),
+    ):
+      if str(ssinf.get(signal_key, "")).upper() == "RED_LIGHT_ON":
+        remaining = self._remaining_time(ssinf.get(remain_key))
+        if remaining is not None:
+          red_remaining.append(remaining)
+    return {
+      "distanceM": self._safe_int_or_none(ssinf.get("distance"), minimum=0),
+      "redS": max(red_remaining) if red_remaining else None,
+      "straightS": self._remaining_time(ssinf.get("straight_remain_time")),
+      "leftS": self._remaining_time(ssinf.get("left_remain_time")),
+      "rightS": self._remaining_time(ssinf.get("right_remain_time")),
+      "uturnS": self._remaining_time(ssinf.get("uturn_remain_time")),
+    }
+
+  def _write_navi_image_param(self, crossroad: dict, image_hash: str):
+    image_base64 = crossroad.get("imageBase64")
+    if not isinstance(image_base64, str):
+      image_base64 = ""
+    image = {
+      "receivedMono": time.monotonic(),
+      "show": bool(crossroad.get("show", False)),
+      "imageBase64": image_base64,
+      "imageMime": str(crossroad.get("imageMime", "")),
+      "imageEncoding": str(crossroad.get("imageEncoding", "")),
+      "imageWidth": self._safe_int_or_none(crossroad.get("imageWidth"), minimum=0) or 0,
+      "imageHeight": self._safe_int_or_none(crossroad.get("imageHeight"), minimum=0) or 0,
+      "imageHash": image_hash,
+      "imageUrl": str(crossroad.get("imageUrl", "")),
+    }
+    try:
+      self.params_memory.put_nonblocking(NAVI_IMAGE_PARAM, json.dumps(image, ensure_ascii=False))
+    except Exception as e:
+      print(f"navi image param error: {e}")
 
 
   def handle_carrot_state(self, d: dict):
@@ -1400,6 +1468,8 @@ class CarrotMan:
     title = f"NAVI {event_type}"
     severity = "normal"
     lines: List[str] = []
+    speed_limit_kph: Optional[int] = None
+    traffic_light: Optional[Dict[str, Any]] = None
 
     if isinstance(obj, dict) and event_type == "rgdata" and isinstance(obj.get("rgdata"), dict):
       rgdata = self._normalize_rgdata(obj["rgdata"])
@@ -1412,6 +1482,7 @@ class CarrotMan:
 
       road_name = rgdata.get("szPosRoadName") or rgdata.get("szNearDirName") or ""
       tbt_text = rgdata.get("szTBTMainText") or rgdata.get("szNearDirName") or ""
+      speed_limit_kph = self._safe_int_or_none(rgdata.get("nRoadLimitSpeed"), minimum=1, maximum=300)
       title = "NAVI rgdata"
       lines.extend((
         self._navi_debug_line("Road", road_name),
@@ -1439,6 +1510,7 @@ class CarrotMan:
     elif isinstance(obj, dict) and event_type == "sinf" and isinstance(obj.get("sinf"), dict):
       sinf = obj["sinf"]
       title = "Traffic light"
+      traffic_light = self._traffic_light_debug_from_sinf(sinf)
       if sinf.get("redLightOn"):
         severity = "stop"
       elif sinf.get("leftLightOn") or sinf.get("greenLightOn"):
@@ -1453,6 +1525,7 @@ class CarrotMan:
     elif isinstance(obj, dict) and event_type == "ssinf" and isinstance(obj.get("ssinf"), dict):
       ssinf = obj["ssinf"]
       title = "Traffic light detail"
+      traffic_light = self._traffic_light_debug_from_ssinf(ssinf)
       red_active = any(str(ssinf.get(key, "")).upper() == "RED_LIGHT_ON" for key in ("straight", "left", "right", "uturn"))
       green_active = any(str(ssinf.get(key, "")).upper() == "GREEN_LIGHT_ON" for key in ("straight", "left", "right", "uturn"))
       severity = "stop" if red_active else "go" if green_active else "normal"
@@ -1485,6 +1558,8 @@ class CarrotMan:
       "title": title,
       "severity": severity,
       "lines": [line for line in lines if line],
+      "speedLimitKph": speed_limit_kph,
+      "trafficLight": traffic_light,
     }
 
   def _write_navi_debug_param(self, obj: Any, event_type: str, event_time_ms: int):

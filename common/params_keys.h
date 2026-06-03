@@ -136,6 +136,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"NetworkAddress", {CLEAR_ON_MANAGER_START, STRING}},
     {"ScreenRecord", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL} },
     {"CarrotNaviDebug", {CLEAR_ON_MANAGER_START, STRING} },
+    {"CarrotNaviImage", {CLEAR_ON_MANAGER_START, STRING} },
     {"TrafficLight", {CLEAR_ON_MANAGER_START, STRING} },
 
     {"ApiCache_NavDestinations", {PERSISTENT, STRING}},

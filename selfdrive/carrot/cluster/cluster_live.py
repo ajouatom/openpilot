@@ -9,7 +9,16 @@ from pathlib import Path
 from typing import Any
 
 from cluster_config import BLUE, DEFAULT_LANE_WIDTH_M, SHOW_PLOT_MODE_PARAM
-from cluster_models import ClusterUiState, DebugPlotSnapshot, LaneMarking, LiveDebugInfo, ModelPathPoint, NaviDebugInfo
+from cluster_models import (
+    ClusterUiState,
+    DebugPlotSnapshot,
+    LaneMarking,
+    LiveDebugInfo,
+    ModelPathPoint,
+    NaviDebugInfo,
+    NaviGuidanceImage,
+    NaviTrafficLightInfo,
+)
 from cluster_route_replay import RouteLogParser, finite_float, frame_to_state, safe_get, safe_optional_float
 from cluster_utils import clamp
 
@@ -85,7 +94,9 @@ class OpenpilotLiveSource:
         self._steer_actuator_delay_param_s: float | None = None
         self._cached_live_debug: LiveDebugInfo | None = None
         self._cached_navi_debug: NaviDebugInfo | None = None
+        self._cached_navi_image: NaviGuidanceImage | None = None
         self._show_plot_mode = 0
+        self._hud_debug_mode = 0
         self._live_debug_enabled = False
         self._debug_plot_enabled = False
         self._navi_debug_enabled = False
@@ -116,6 +127,16 @@ class OpenpilotLiveSource:
         self._live_debug_enabled = live_debug
         self._debug_plot_enabled = debug_plot
         self._navi_debug_enabled = navi_debug
+
+    def set_hud_debug_mode(self, mode: int) -> None:
+        try:
+            next_mode = int(mode)
+        except (TypeError, ValueError):
+            next_mode = 0
+        next_mode = max(0, min(3, next_mode))
+        if next_mode != self._hud_debug_mode:
+            self._next_debug_param_read_t = 0.0
+        self._hud_debug_mode = next_mode
 
     def profile_samples(self) -> tuple[tuple[str, float], ...]:
         samples = tuple(self._profile_samples)
@@ -254,7 +275,11 @@ class OpenpilotLiveSource:
             self.parser._update_can_detections(data, event_t, service)
 
     def _with_debug_state(self, state: ClusterUiState) -> ClusterUiState:
-        if not self._live_debug_enabled and not self._debug_plot_enabled and not self._navi_debug_enabled:
+        force_debug_ui = self._hud_debug_mode in (2, 3)
+        navi_mode = self._navi_debug_enabled or self._hud_debug_mode == 3
+        if force_debug_ui:
+            state = replace(state, debug_ui_visible=True)
+        if not self._live_debug_enabled and not self._debug_plot_enabled and not navi_mode:
             return state
 
         profile_stage = self._profile_start()
@@ -266,9 +291,9 @@ class OpenpilotLiveSource:
         self._profile_add("source.live.debug_plot", profile_stage)
 
         profile_stage = self._profile_start()
-        navi_mode = self._navi_debug_enabled
         navi_debug = self._navi_debug_info() if navi_mode else None
         state = self._with_external_nav_route(state) if navi_mode else state
+        state = self._with_navi_speed_limit(state, navi_debug) if navi_mode else state
         self._profile_add("source.live.navi_debug", profile_stage)
 
         profile_stage = self._profile_start()
@@ -361,6 +386,7 @@ class OpenpilotLiveSource:
         self._steer_actuator_delay_param_s = self._finite_param_float("SteerActuatorDelay", 0.01)
         self._show_plot_mode = self._param_int(SHOW_PLOT_MODE_PARAM, 0)
         self._cached_live_debug = self._read_cached_live_debug()
+        self._cached_navi_image = self._read_navi_image_info()
         self._cached_navi_debug = self._read_navi_debug_info()
 
     def _debug_plot_snapshot(self) -> DebugPlotSnapshot | None:
@@ -443,7 +469,7 @@ class OpenpilotLiveSource:
             return self._cached_navi_debug
         route_count = len(self._nav_route_coords)
         lines = (f"Route points: {route_count}", "Waiting for POST /api/navi/{appVersion}")
-        return NaviDebugInfo(title="NAVI receiver", lines=lines, severity="normal")
+        return NaviDebugInfo(title="NAVI receiver", lines=lines, severity="normal", guidance_image=self._cached_navi_image)
 
     def _read_navi_debug_info(self) -> NaviDebugInfo | None:
         params = self.params_memory or self.params
@@ -467,7 +493,68 @@ class OpenpilotLiveSource:
         severity = str(data.get("severity") or "normal")
         raw_lines = data.get("lines", ())
         lines = tuple(str(line)[:80] for line in raw_lines if str(line).strip()) if isinstance(raw_lines, list) else ()
-        return NaviDebugInfo(title=title[:80], lines=lines[:12], severity=severity[:16])
+        speed_limit_kph = self._parse_positive_int(data.get("speedLimitKph"), maximum=300)
+        traffic_light = self._parse_navi_traffic_light(data.get("trafficLight"))
+        return NaviDebugInfo(
+            title=title[:80],
+            lines=lines[:12],
+            severity=severity[:16],
+            speed_limit_kph=speed_limit_kph,
+            traffic_light=traffic_light,
+            guidance_image=self._cached_navi_image,
+        )
+
+    def _read_navi_image_info(self) -> NaviGuidanceImage | None:
+        params = self.params_memory or self.params
+        if params is None:
+            return None
+        try:
+            raw = params.get("CarrotNaviImage")
+        except Exception:
+            return None
+        if not raw:
+            return None
+        try:
+            if isinstance(raw, (bytes, bytearray)):
+                raw = raw.decode("utf-8")
+            data = json.loads(raw)
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        image_base64 = str(data.get("imageBase64") or "")
+        image_hash = str(data.get("imageHash") or "")[:32]
+        if not image_base64 and not image_hash:
+            return None
+        return NaviGuidanceImage(
+            image_base64=image_base64,
+            image_mime=str(data.get("imageMime") or "")[:64],
+            image_hash=image_hash,
+            width=self._parse_positive_int(data.get("imageWidth"), maximum=10000) or 0,
+            height=self._parse_positive_int(data.get("imageHeight"), maximum=10000) or 0,
+        )
+
+    def _parse_navi_traffic_light(self, value: Any) -> NaviTrafficLightInfo | None:
+        if not isinstance(value, dict):
+            return None
+        return NaviTrafficLightInfo(
+            distance_m=self._parse_positive_int(value.get("distanceM"), maximum=10000),
+            red_s=self._parse_positive_int(value.get("redS"), maximum=999),
+            straight_s=self._parse_positive_int(value.get("straightS"), maximum=999),
+            left_s=self._parse_positive_int(value.get("leftS"), maximum=999),
+            right_s=self._parse_positive_int(value.get("rightS"), maximum=999),
+            uturn_s=self._parse_positive_int(value.get("uturnS"), maximum=999),
+        )
+
+    @staticmethod
+    def _parse_positive_int(value: Any, maximum: int) -> int | None:
+        try:
+            parsed = int(float(value))
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0 or parsed > maximum:
+            return None
+        return parsed
 
     def _update_nav_route(self, data: Any) -> None:
         coords = safe_get(data, "coordinates")
@@ -502,6 +589,13 @@ class OpenpilotLiveSource:
             planned_accel_mps2=None,
             planned_curvature_m_inv=None,
         )
+
+    def _with_navi_speed_limit(self, state: ClusterUiState, navi_debug: NaviDebugInfo | None) -> ClusterUiState:
+        if state.speed_limit_kph is not None:
+            return state
+        if navi_debug is None or navi_debug.speed_limit_kph is None:
+            return state
+        return replace(state, speed_limit_kph=navi_debug.speed_limit_kph, speed_limit_source="n")
 
     def _external_nav_route_model_path(self) -> tuple[ModelPathPoint, ...]:
         anchor = self._nav_route_anchor_from_carrot_man()

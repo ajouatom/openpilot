@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
+import base64
 import math
 import os
 import time
@@ -40,7 +41,15 @@ from cluster_config import (
     normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
 )
-from cluster_models import ClusterUiState, DebugPlotSnapshot, GitBranchStatus, LiveDebugInfo, NaviDebugInfo, RouteOverlay
+from cluster_models import (
+    ClusterUiState,
+    DebugPlotSnapshot,
+    GitBranchStatus,
+    LiveDebugInfo,
+    NaviDebugInfo,
+    NaviGuidanceImage,
+    RouteOverlay,
+)
 from cluster_scene import (
     ClusterScene,
     MeshStrip,
@@ -119,6 +128,14 @@ SPEED_LIMIT_SOURCE_LABELS = {
 SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
+NAVI_TRAFFIC_PANEL_X = TURN_SIGNAL_RIGHT_CENTER_X - 118
+NAVI_TRAFFIC_PANEL_Y = TURN_SIGNAL_CENTER_Y + TURN_SIGNAL_HEAD_HALF_HEIGHT + 10
+NAVI_TRAFFIC_PANEL_W = 236
+NAVI_TRAFFIC_PANEL_H = 94
+NAVI_GUIDANCE_IMAGE_X = SYSTEM_PANEL_X + 24
+NAVI_GUIDANCE_IMAGE_Y = SYSTEM_PANEL_Y + 210
+NAVI_GUIDANCE_IMAGE_W = SYSTEM_PANEL_W - 48
+NAVI_GUIDANCE_IMAGE_H = 270
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
 TEXT_MEASURE_CACHE_LIMIT = 1024
 TRIANGLE_STRIP_POINT_CACHE_LIMIT = 256
@@ -485,6 +502,9 @@ class ClusterUiRenderer:
         self._follow_vehicle_texture = None
         self._lfa_texture = None
         self._lfa_active_texture = None
+        self._navi_guidance_texture = None
+        self._navi_guidance_hash = ""
+        self._navi_guidance_size: tuple[int, int] | None = None
         self._route_video_texture = None
         self._route_video_size: tuple[int, int] | None = None
         self._route_video_frame_id: str | None = None
@@ -623,6 +643,11 @@ class ClusterUiRenderer:
         if self._lfa_active_texture is not None:
             rl.unload_texture(self._lfa_active_texture)
             self._lfa_active_texture = None
+        if self._navi_guidance_texture is not None:
+            rl.unload_texture(self._navi_guidance_texture)
+            self._navi_guidance_texture = None
+            self._navi_guidance_hash = ""
+            self._navi_guidance_size = None
         if self._owns_font and self._font is not None:
             rl.unload_font(self._font)
         self._font = None
@@ -1899,6 +1924,7 @@ class ClusterUiRenderer:
         self._profile_add("hud.push_scale", profile_stage)
         try:
             screen_mode = self.screen_mode
+            navi_active = state.navi_debug is not None
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
                 profile_stage = self._profile_start()
                 self._draw_speed_block(state)
@@ -1924,14 +1950,18 @@ class ClusterUiRenderer:
             self._draw_accel_block(state)
             self._profile_add("hud.accel_block", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_turn_signal("left", left_signal_lit)
+            self._draw_turn_signal("left", left_signal_lit, show_inactive=state.debug_ui_visible)
             self._profile_add("hud.turn_signal_left", profile_stage)
             profile_stage = self._profile_start()
             self._draw_drive_status(state)
             self._profile_add("hud.drive_status", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_turn_signal("right", right_signal_lit)
+            self._draw_turn_signal("right", right_signal_lit, show_inactive=state.debug_ui_visible)
             self._profile_add("hud.turn_signal_right", profile_stage)
+            if navi_active:
+                profile_stage = self._profile_start()
+                self._draw_navi_traffic_light_panel(state.navi_debug)
+                self._profile_add("hud.navi_traffic", profile_stage)
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
             self._profile_add("hud.center_clock", profile_stage)
@@ -1956,7 +1986,7 @@ class ClusterUiRenderer:
                     DEBUG_PLOT_RIGHT_H,
                 )
                 self._profile_add("hud.debug_plot_right", profile_stage)
-            if screen_mode == CLUSTER_SCREEN_MODE_NAVI_DEBUG:
+            if screen_mode == CLUSTER_SCREEN_MODE_NAVI_DEBUG or navi_active:
                 profile_stage = self._profile_start()
                 self._draw_navi_debug_panel(state.navi_debug)
                 self._profile_add("hud.navi_debug", profile_stage)
@@ -1966,7 +1996,7 @@ class ClusterUiRenderer:
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
                 CLUSTER_SCREEN_MODE_NAVI_DEBUG,
-            ):
+            ) and not navi_active:
                 profile_stage = self._profile_start()
                 self._draw_route_overlay(state.route_overlay)
                 self._profile_add("hud.route_overlay", profile_stage)
@@ -2187,6 +2217,7 @@ class ClusterUiRenderer:
         if info is None:
             self._draw_text("NAVI receiver", panel_x + 24, panel_y + 34, 24, theme.text)
             self._draw_text("waiting for data", panel_x + 24, panel_y + 76, 22, theme.muted)
+            self._draw_navi_guidance_image_box(None)
             return
 
         severity = info.severity.lower()
@@ -2211,11 +2242,111 @@ class ClusterUiRenderer:
         line_size = 19
         max_w = panel_w - 48.0
         lines = info.lines or ("no navi event",)
-        for index, line in enumerate(lines[:12]):
+        for index, line in enumerate(lines[:4]):
             text = self._ellipsize_text(str(line), line_size, max_w)
             color = theme.text if index < 4 else theme.muted
             self._draw_text(text, panel_x + 24, y, line_size, color)
             y += 31.0
+        self._draw_navi_guidance_image_box(info.guidance_image)
+
+    def _draw_navi_traffic_light_panel(self, info: NaviDebugInfo | None) -> None:
+        theme = self._current_theme()
+        x = NAVI_TRAFFIC_PANEL_X
+        y = NAVI_TRAFFIC_PANEL_Y
+        w = NAVI_TRAFFIC_PANEL_W
+        h = NAVI_TRAFFIC_PANEL_H
+        self._rounded_rect(x, y, w, h, 12, theme.route_panel_bg, theme.faint, 2)
+        self._draw_text("SIGNAL", x + 14, y + 15, 15, theme.muted)
+        traffic = info.traffic_light if info is not None else None
+        distance = traffic.distance_m if traffic is not None else None
+        distance_text = "--m" if distance is None else f"{distance}m"
+        self._draw_text(distance_text, x + w - 14, y + 15, 15, theme.muted, anchor="right")
+
+        items = (
+            ("R", traffic.red_s if traffic is not None else None, RED),
+            ("S", traffic.straight_s if traffic is not None else None, GREEN),
+            ("L", traffic.left_s if traffic is not None else None, GREEN),
+            ("Rt", traffic.right_s if traffic is not None else None, GREEN),
+            ("U", traffic.uturn_s if traffic is not None else None, GREEN),
+        )
+        col_w = (w - 28.0) / len(items)
+        for index, (label, seconds, active_color) in enumerate(items):
+            cx = x + 14.0 + col_w * (index + 0.5)
+            value = "--" if seconds is None else str(seconds)
+            color = active_color if seconds is not None else theme.muted
+            self._draw_text(label, cx, y + 42, 14, theme.muted, anchor="center")
+            self._draw_text(value, cx, y + 64, 22, color, anchor="center")
+
+    def _draw_navi_guidance_image_box(self, image: NaviGuidanceImage | None) -> None:
+        theme = self._current_theme()
+        box_x = NAVI_GUIDANCE_IMAGE_X
+        box_y = NAVI_GUIDANCE_IMAGE_Y
+        box_w = NAVI_GUIDANCE_IMAGE_W
+        box_h = NAVI_GUIDANCE_IMAGE_H
+        self._rounded_rect(box_x, box_y, box_w, box_h, 14, theme.panel_bg, theme.faint, 2)
+        self._draw_text("3D GUIDE", box_x + 16, box_y + 18, 15, theme.muted)
+        texture = self._navi_guidance_texture_for(image)
+        if texture is None:
+            return
+        texture_w = float(texture.width)
+        texture_h = float(texture.height)
+        if texture_w <= 0.0 or texture_h <= 0.0:
+            return
+        inner_x = box_x + 14.0
+        inner_y = box_y + 40.0
+        inner_w = box_w - 28.0
+        inner_h = box_h - 54.0
+        scale = min(inner_w / texture_w, inner_h / texture_h)
+        draw_w = texture_w * scale
+        draw_h = texture_h * scale
+        dest = rl.Rectangle(inner_x + (inner_w - draw_w) * 0.5, inner_y + (inner_h - draw_h) * 0.5, draw_w, draw_h)
+        source = rl.Rectangle(0.0, 0.0, texture_w, texture_h)
+        rl.draw_texture_pro(texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
+
+    def _navi_guidance_texture_for(self, image: NaviGuidanceImage | None):
+        image_hash = image.image_hash if image is not None else ""
+        image_base64 = image.image_base64 if image is not None else ""
+        if not image_hash and image_base64:
+            image_hash = str(hash(image_base64))
+        if not image_base64:
+            if self._navi_guidance_texture is not None:
+                rl.unload_texture(self._navi_guidance_texture)
+                self._navi_guidance_texture = None
+                self._navi_guidance_hash = ""
+                self._navi_guidance_size = None
+            return None
+        if self._navi_guidance_texture is not None and image_hash == self._navi_guidance_hash:
+            return self._navi_guidance_texture
+        if self._navi_guidance_texture is not None:
+            rl.unload_texture(self._navi_guidance_texture)
+            self._navi_guidance_texture = None
+            self._navi_guidance_hash = ""
+            self._navi_guidance_size = None
+        try:
+            payload = image_base64.split(",", 1)[1] if "," in image_base64[:64] else image_base64
+            image_bytes = base64.b64decode(payload, validate=False)
+        except Exception:
+            return None
+        extension = ".jpg" if image is not None and "jpeg" in image.image_mime.lower() else ".png"
+        loaded_image = None
+        try:
+            loaded_image = rl.load_image_from_memory(extension, image_bytes, len(image_bytes))
+            if not rl.is_image_valid(loaded_image):
+                return None
+            texture = rl.load_texture_from_image(loaded_image)
+            if not rl.is_texture_valid(texture):
+                rl.unload_texture(texture)
+                return None
+            rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._navi_guidance_texture = texture
+            self._navi_guidance_hash = image_hash
+            self._navi_guidance_size = (int(texture.width), int(texture.height))
+            return self._navi_guidance_texture
+        except Exception:
+            return None
+        finally:
+            if loaded_image is not None and rl.is_image_valid(loaded_image):
+                rl.unload_image(loaded_image)
 
     def _draw_system_stats_panel(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
@@ -2594,7 +2725,13 @@ class ClusterUiRenderer:
     def _draw_drive_status(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         gear_text = (state.gear_text or "").strip().upper()
-        if not gear_text and state.cruise_gap is None and not self._cruise_set_visible(state) and state.lfa_active is None:
+        if (
+            not state.debug_ui_visible
+            and not gear_text
+            and state.cruise_gap is None
+            and not self._cruise_set_visible(state)
+            and state.lfa_active is None
+        ):
             return
 
         bottom_y = self._drive_status_bottom_y(state)
@@ -2775,19 +2912,20 @@ class ClusterUiRenderer:
         speed_value = int(round(clamp(display_speed_kph, 0.0, MAX_SPEED_KPH)))
         self._draw_text(str(speed_value), SPEED_VALUE_CENTER_X, SPEED_VALUE_CENTER_Y, 156, theme.text, anchor="center")
 
-        if state.speed_limit_kph is not None:
+        if state.speed_limit_kph is not None or state.navi_debug is not None:
             center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)
             rl.draw_circle_v(center, SPEED_LIMIT_SIGN_RADIUS, rl_color(RED))
             rl.draw_circle_v(center, 47, rl_color(WHITE))
+            limit_text = "--" if state.speed_limit_kph is None else str(state.speed_limit_kph)
             self._draw_text(
-                str(state.speed_limit_kph),
+                limit_text,
                 SPEED_LIMIT_SIGN_CENTER_X,
                 SPEED_LIMIT_SIGN_CENTER_Y - 12,
                 42,
                 TEXT,
                 anchor="center",
             )
-            source_label = speed_limit_source_label(state.speed_limit_source)
+            source_label = speed_limit_source_label(state.speed_limit_source) if state.speed_limit_kph is not None else ""
             if source_label:
                 self._draw_text(
                     source_label,
@@ -2895,15 +3033,16 @@ class ClusterUiRenderer:
             started_at = self._right_turn_signal_started_at
         return blink_visible(now, started_at, float("inf"))
 
-    def _draw_turn_signal(self, side: str, lit: bool) -> None:
-        if not lit:
+    def _draw_turn_signal(self, side: str, lit: bool, show_inactive: bool = False) -> None:
+        if not lit and not show_inactive:
             return
 
+        theme = self._current_theme()
         cx = TURN_SIGNAL_LEFT_CENTER_X if side == "left" else TURN_SIGNAL_RIGHT_CENTER_X
         cy = TURN_SIGNAL_CENTER_Y
         direction = -1 if side == "left" else 1
-        fill = GREEN
-        outline = (8, 118, 65)
+        fill = GREEN if lit else (*theme.muted, 42)
+        outline = (8, 118, 65) if lit else (*theme.muted, 150)
         tail_back = -36
         tail_front = 12
         tail_half_height = 16
