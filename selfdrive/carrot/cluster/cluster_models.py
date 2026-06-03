@@ -82,6 +82,13 @@ class DebugPlotSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class NaviDebugInfo:
+    title: str
+    lines: tuple[str, ...] = ()
+    severity: str = "normal"
+
+
+@dataclass(frozen=True, slots=True)
 class DetectedVehicle:
     label: str
     longitudinal_m: float
@@ -179,6 +186,7 @@ class ClusterUiState:
     route_overlay: RouteOverlay | None = None
     live_debug: LiveDebugInfo | None = None
     debug_plot: DebugPlotSnapshot | None = None
+    navi_debug: NaviDebugInfo | None = None
     center_clock_text: str | None = None
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from cluster_config import BLUE, DEFAULT_LANE_WIDTH_M, SHOW_PLOT_MODE_PARAM
-from cluster_models import ClusterUiState, DebugPlotSnapshot, LaneMarking, LiveDebugInfo
+from cluster_models import ClusterUiState, DebugPlotSnapshot, LaneMarking, LiveDebugInfo, ModelPathPoint, NaviDebugInfo
 from cluster_route_replay import RouteLogParser, finite_float, frame_to_state, safe_get, safe_optional_float
 from cluster_utils import clamp
 
@@ -47,6 +47,8 @@ LIVE_SERVICES_BASE = (
     "liveTorqueParameters",
     "navInstruction",
     "navInstructionCarrot",
+    "navRoute",
+    "carrotMan",
     "wideRoadCameraState",
 )
 LIVE_CAN_SERVICES = ("can", "sendcan")
@@ -77,13 +79,18 @@ class OpenpilotLiveSource:
         self.start_t = time.monotonic()
         self.frames = 0
         self.params: Any | None = None
+        self.params_memory: Any | None = None
         self._next_debug_param_read_t = 0.0
         self._custom_steer_ratio: float | None = None
         self._steer_actuator_delay_param_s: float | None = None
         self._cached_live_debug: LiveDebugInfo | None = None
+        self._cached_navi_debug: NaviDebugInfo | None = None
         self._show_plot_mode = 0
         self._live_debug_enabled = False
         self._debug_plot_enabled = False
+        self._nav_route_coords: tuple[tuple[float, float], ...] = ()
+        self._nav_route_model_path: tuple[ModelPathPoint, ...] = ()
+        self._nav_route_anchor: tuple[float, float, float] | None = None
         self._standby_state = standby_state()
         self.profile_enabled = False
         self._profile_samples: list[tuple[str, float]] = []
@@ -91,6 +98,7 @@ class OpenpilotLiveSource:
             from openpilot.common.params import Params
 
             self.params = Params()
+            self.params_memory = Params("/dev/shm/params")
         except Exception:
             pass
 
@@ -220,6 +228,8 @@ class OpenpilotLiveSource:
             self.parser._update_lateral_plan(data)
         elif service in ("navInstruction", "navInstructionCarrot"):
             self.parser._update_nav_instruction(data, event_t)
+        elif service == "navRoute":
+            self._update_nav_route(data)
         elif service == "longitudinalPlan":
             self.parser._update_longitudinal_plan(data)
         elif service == "controlsState":
@@ -250,7 +260,13 @@ class OpenpilotLiveSource:
         self._profile_add("source.live.debug_plot", profile_stage)
 
         profile_stage = self._profile_start()
-        state = replace(state, live_debug=live_debug, debug_plot=debug_plot)
+        navi_mode = self._debug_plot_enabled and self._show_plot_mode == 3
+        navi_debug = self._navi_debug_info() if navi_mode else None
+        state = self._with_external_nav_route(state) if navi_mode else state
+        self._profile_add("source.live.navi_debug", profile_stage)
+
+        profile_stage = self._profile_start()
+        state = replace(state, live_debug=live_debug, debug_plot=debug_plot, navi_debug=navi_debug)
         self._profile_add("source.live.debug_replace", profile_stage)
         return state
 
@@ -339,6 +355,7 @@ class OpenpilotLiveSource:
         self._steer_actuator_delay_param_s = self._finite_param_float("SteerActuatorDelay", 0.01)
         self._show_plot_mode = self._param_int(SHOW_PLOT_MODE_PARAM, 0)
         self._cached_live_debug = self._read_cached_live_debug()
+        self._cached_navi_debug = self._read_navi_debug_info()
 
     def _debug_plot_snapshot(self) -> DebugPlotSnapshot | None:
         self._refresh_debug_params()
@@ -370,13 +387,7 @@ class OpenpilotLiveSource:
             return (speed_target, v_ego, a_ego), "2.Speed/Accel(Y:speed_0, G:v_ego, O:a_ego)"
 
         if show_plot_mode == 3:
-            position = safe_get(model, "position")
-            velocity = safe_get(model, "velocity")
-            return (
-                self._finite_index(safe_get(position, "x"), 32),
-                self._finite_index(safe_get(velocity, "x"), 32),
-                self._finite_index(safe_get(velocity, "x"), 0),
-            ), "3.Model(Y:pos_32, G:vel_32, O:vel_0)"
+            return (0.0, 0.0, 0.0), "3.Navi receiver"
 
         if show_plot_mode == 4:
             lead = safe_get(radar, "leadOne")
@@ -414,6 +425,119 @@ class OpenpilotLiveSource:
             return (curvature, curvature, curvature), "8.Curvature(*10000)"
 
         return (0.0, 0.0, 0.0), "no data"
+
+    def _navi_debug_info(self) -> NaviDebugInfo | None:
+        self._refresh_debug_params()
+        if self._cached_navi_debug is not None:
+            return self._cached_navi_debug
+        route_count = len(self._nav_route_coords)
+        lines = (f"Route points: {route_count}", "Waiting for POST /api/navi/{appVersion}")
+        return NaviDebugInfo(title="NAVI receiver", lines=lines, severity="normal")
+
+    def _read_navi_debug_info(self) -> NaviDebugInfo | None:
+        params = self.params_memory or self.params
+        if params is None:
+            return None
+        try:
+            raw = params.get("CarrotNaviDebug")
+        except Exception:
+            return None
+        if not raw:
+            return None
+        try:
+            if isinstance(raw, (bytes, bytearray)):
+                raw = raw.decode("utf-8")
+            data = json.loads(raw)
+        except Exception:
+            return None
+        if not isinstance(data, dict):
+            return None
+        title = str(data.get("title") or "Navi")
+        severity = str(data.get("severity") or "normal")
+        raw_lines = data.get("lines", ())
+        lines = tuple(str(line)[:80] for line in raw_lines if str(line).strip()) if isinstance(raw_lines, list) else ()
+        return NaviDebugInfo(title=title[:80], lines=lines[:12], severity=severity[:16])
+
+    def _update_nav_route(self, data: Any) -> None:
+        coords = safe_get(data, "coordinates")
+        if not coords:
+            self._nav_route_coords = ()
+            self._nav_route_model_path = ()
+            self._nav_route_anchor = None
+            return
+
+        parsed: list[tuple[float, float]] = []
+        for coord in coords:
+            lat = finite_float(safe_get(coord, "latitude"))
+            lon = finite_float(safe_get(coord, "longitude"))
+            if lat is None or lon is None:
+                continue
+            if not -90.0 <= lat <= 90.0 or not -180.0 <= lon <= 180.0:
+                continue
+            parsed.append((lat, lon))
+
+        self._nav_route_coords = tuple(parsed)
+        self._nav_route_model_path = ()
+        self._nav_route_anchor = None
+
+    def _with_external_nav_route(self, state: ClusterUiState) -> ClusterUiState:
+        path = self._external_nav_route_model_path()
+        if len(path) < 2:
+            return state
+        return replace(
+            state,
+            model_path=path,
+            planned_speed_kph=None,
+            planned_accel_mps2=None,
+            planned_curvature_m_inv=None,
+        )
+
+    def _external_nav_route_model_path(self) -> tuple[ModelPathPoint, ...]:
+        anchor = self._nav_route_anchor_from_carrot_man()
+        if anchor is None or len(self._nav_route_coords) < 2:
+            return ()
+        if self._nav_route_anchor == anchor and self._nav_route_model_path:
+            return self._nav_route_model_path
+
+        lat0, lon0, heading_deg = anchor
+        heading_rad = math.radians(heading_deg)
+        cos_h = math.cos(heading_rad)
+        sin_h = math.sin(heading_rad)
+        meters_per_lat = 40008000.0 / 360.0
+        meters_per_lon = meters_per_lat * math.cos(math.radians(lat0))
+        points: list[ModelPathPoint] = []
+        previous_forward = -1.0
+
+        for lat, lon in self._nav_route_coords:
+            east_m = (lon - lon0) * meters_per_lon
+            north_m = (lat - lat0) * meters_per_lat
+            lateral_m = east_m * cos_h - north_m * sin_h
+            forward_m = east_m * sin_h + north_m * cos_h
+            if forward_m < -5.0 or forward_m > 180.0:
+                continue
+            if abs(lateral_m) > 40.0:
+                continue
+            if forward_m <= previous_forward + 0.25:
+                continue
+            points.append(ModelPathPoint(forward_m=max(0.0, forward_m), lateral_m=lateral_m))
+            previous_forward = forward_m
+            if len(points) >= 96:
+                break
+
+        self._nav_route_anchor = anchor
+        self._nav_route_model_path = tuple(points)
+        return self._nav_route_model_path
+
+    def _nav_route_anchor_from_carrot_man(self) -> tuple[float, float, float] | None:
+        carrot_man = self._service_data("carrotMan")
+        lat = self._finite_attr(carrot_man, "xPosLat", 0.0)
+        lon = self._finite_attr(carrot_man, "xPosLon", 0.0)
+        heading = self._finite_attr(carrot_man, "xPosAngle", 0.0)
+        if abs(lat) < 0.000001 or abs(lon) < 0.000001:
+            return None
+        if not -90.0 <= lat <= 90.0 or not -180.0 <= lon <= 180.0:
+            return None
+        return (lat, lon, heading % 360.0)
 
     def _read_cached_live_debug(self) -> LiveDebugInfo | None:
         if self.params is None:

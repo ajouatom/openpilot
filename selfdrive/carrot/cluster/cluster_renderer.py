@@ -39,7 +39,7 @@ from cluster_config import (
     normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
 )
-from cluster_models import ClusterUiState, DebugPlotSnapshot, GitBranchStatus, LiveDebugInfo, RouteOverlay
+from cluster_models import ClusterUiState, DebugPlotSnapshot, GitBranchStatus, LiveDebugInfo, NaviDebugInfo, RouteOverlay
 from cluster_scene import (
     ClusterScene,
     MeshStrip,
@@ -656,7 +656,7 @@ class ClusterUiRenderer:
         if signal_lights is None:
             signal_lights = self._turn_signal_lights(state)
         profile_stage = self._profile_start()
-        if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
+        if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH and state.navi_debug is None:
             self._clear_world()
         else:
             self._render_world(state, signal_lights)
@@ -1905,15 +1905,29 @@ class ClusterUiRenderer:
                 profile_stage = self._profile_start()
                 self._draw_accel_block(state)
                 self._profile_add("hud.accel_block", profile_stage)
-                profile_stage = self._profile_start()
-                self._draw_debug_plot(
-                    state.debug_plot,
-                    DEBUG_PLOT_FULL_X,
-                    DEBUG_PLOT_FULL_Y,
-                    DEBUG_PLOT_FULL_W,
-                    DEBUG_PLOT_FULL_H,
-                )
-                self._profile_add("hud.debug_plot_full", profile_stage)
+                if state.navi_debug is not None:
+                    profile_stage = self._profile_start()
+                    self._draw_drive_status(state)
+                    self._profile_add("hud.drive_status", profile_stage)
+                    profile_stage = self._profile_start()
+                    self._draw_center_clock(state)
+                    self._profile_add("hud.center_clock", profile_stage)
+                    profile_stage = self._profile_start()
+                    self._draw_actual_fps(state.actual_fps)
+                    self._profile_add("hud.actual_fps", profile_stage)
+                    profile_stage = self._profile_start()
+                    self._draw_navi_debug_panel(state.navi_debug)
+                    self._profile_add("hud.navi_debug", profile_stage)
+                else:
+                    profile_stage = self._profile_start()
+                    self._draw_debug_plot(
+                        state.debug_plot,
+                        DEBUG_PLOT_FULL_X,
+                        DEBUG_PLOT_FULL_Y,
+                        DEBUG_PLOT_FULL_W,
+                        DEBUG_PLOT_FULL_H,
+                    )
+                    self._profile_add("hud.debug_plot_full", profile_stage)
                 return
 
             profile_stage = self._profile_start()
@@ -2169,6 +2183,47 @@ class ClusterUiRenderer:
         label_x = min(plot_x + plot_w - 4.0, latest.x + 42.0)
         label_y = clamp(latest.y + (24.0 if series_index > 0 else 0.0), plot_y + 12.0, plot_y + plot_h - 12.0)
         self._draw_text(label, label_x, label_y, label_size, color, anchor="right")
+
+    def _draw_navi_debug_panel(self, info: NaviDebugInfo | None) -> None:
+        theme = self._current_theme()
+        panel_x = SYSTEM_PANEL_X
+        panel_y = SYSTEM_PANEL_Y
+        panel_w = SYSTEM_PANEL_W
+        panel_h = min(DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0, 520.0)
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, theme.route_panel_bg, theme.faint, 2)
+
+        if info is None:
+            self._draw_text("NAVI receiver", panel_x + 24, panel_y + 34, 24, theme.text)
+            self._draw_text("waiting for data", panel_x + 24, panel_y + 76, 22, theme.muted)
+            return
+
+        severity = info.severity.lower()
+        title_color = {
+            "stop": RED,
+            "go": GREEN,
+            "warning": RED,
+            "caution": AMBER,
+        }.get(severity, theme.text)
+        title = self._ellipsize_text(info.title, 24, panel_w - 48)
+        self._draw_text(title, panel_x + 24, panel_y + 34, 24, title_color)
+
+        if severity not in ("normal", ""):
+            badge_w = 92.0
+            badge_h = 28.0
+            badge_x = panel_x + panel_w - badge_w - 24.0
+            badge_y = panel_y + 23.0
+            self._rounded_rect(badge_x, badge_y, badge_w, badge_h, 10, title_color, None, 0.0)
+            self._draw_text(severity.upper(), badge_x + badge_w * 0.5, badge_y + 6.0, 15, WHITE, anchor="center")
+
+        y = panel_y + 82.0
+        line_size = 19
+        max_w = panel_w - 48.0
+        lines = info.lines or ("no navi event",)
+        for index, line in enumerate(lines[:12]):
+            text = self._ellipsize_text(str(line), line_size, max_w)
+            color = theme.text if index < 4 else theme.muted
+            self._draw_text(text, panel_x + 24, y, line_size, color)
+            y += 31.0
 
     def _draw_system_stats_panel(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
