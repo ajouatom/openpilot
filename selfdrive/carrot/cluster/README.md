@@ -276,10 +276,14 @@ the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and
 core usage, `3` shows a large debug graph selected by `ShowPlotMode` with the
 driving scene disabled, and `4`
 shows the same graph in the right-side panel while keeping the driving scene.
+`5` shows the external navigation receiver debug panel while keeping the
+driving scene.
 Mode `3` also hides the speed, accel, clock, turn-signal, and git HUD so the
 large graph uses the available center/right height with only a small margin.
 Mode `4` keeps the driving HUD and uses the maximum right-side panel height with
-the same margin. Modes `1`, `2`, `3`, and `4` suppress the route overlay so the
+the same margin. Mode `5` draws the received navigation route through the
+normal planned-path renderer when route coordinates and current ego GPS are
+available. Modes `1`, `2`, `3`, `4`, and `5` suppress the route overlay so the
 selected debug view remains visible.
 `ClusterHudRadarInfo` controls world radar/vehicle speed and distance labels:
 `0` off, `1` speed for vehicle boxes only, `2` speed and distance for vehicle

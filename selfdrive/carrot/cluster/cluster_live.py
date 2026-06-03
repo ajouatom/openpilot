@@ -88,6 +88,7 @@ class OpenpilotLiveSource:
         self._show_plot_mode = 0
         self._live_debug_enabled = False
         self._debug_plot_enabled = False
+        self._navi_debug_enabled = False
         self._nav_route_coords: tuple[tuple[float, float], ...] = ()
         self._nav_route_model_path: tuple[ModelPathPoint, ...] = ()
         self._nav_route_anchor: tuple[float, float, float] | None = None
@@ -105,11 +106,16 @@ class OpenpilotLiveSource:
     def set_profile_enabled(self, enabled: bool) -> None:
         self.profile_enabled = enabled
 
-    def set_debug_panels_enabled(self, *, live_debug: bool, debug_plot: bool) -> None:
-        if live_debug != self._live_debug_enabled or debug_plot != self._debug_plot_enabled:
+    def set_debug_panels_enabled(self, *, live_debug: bool, debug_plot: bool, navi_debug: bool = False) -> None:
+        if (
+            live_debug != self._live_debug_enabled
+            or debug_plot != self._debug_plot_enabled
+            or navi_debug != self._navi_debug_enabled
+        ):
             self._next_debug_param_read_t = 0.0
         self._live_debug_enabled = live_debug
         self._debug_plot_enabled = debug_plot
+        self._navi_debug_enabled = navi_debug
 
     def profile_samples(self) -> tuple[tuple[str, float], ...]:
         samples = tuple(self._profile_samples)
@@ -248,7 +254,7 @@ class OpenpilotLiveSource:
             self.parser._update_can_detections(data, event_t, service)
 
     def _with_debug_state(self, state: ClusterUiState) -> ClusterUiState:
-        if not self._live_debug_enabled and not self._debug_plot_enabled:
+        if not self._live_debug_enabled and not self._debug_plot_enabled and not self._navi_debug_enabled:
             return state
 
         profile_stage = self._profile_start()
@@ -260,7 +266,7 @@ class OpenpilotLiveSource:
         self._profile_add("source.live.debug_plot", profile_stage)
 
         profile_stage = self._profile_start()
-        navi_mode = self._debug_plot_enabled and self._show_plot_mode == 3
+        navi_mode = self._navi_debug_enabled
         navi_debug = self._navi_debug_info() if navi_mode else None
         state = self._with_external_nav_route(state) if navi_mode else state
         self._profile_add("source.live.navi_debug", profile_stage)
@@ -387,7 +393,12 @@ class OpenpilotLiveSource:
             return (speed_target, v_ego, a_ego), "2.Speed/Accel(Y:speed_0, G:v_ego, O:a_ego)"
 
         if show_plot_mode == 3:
-            return (0.0, 0.0, 0.0), "3.Navi receiver"
+            position = safe_get(model, "position")
+            velocity = safe_get(model, "velocity")
+            pos_32 = self._finite_index(safe_get(position, "x"), 32) if position is not None else 0.0
+            vel_32 = self._finite_index(safe_get(velocity, "x"), 32) if velocity is not None else 0.0
+            vel_0 = self._finite_index(safe_get(velocity, "x"), 0) if velocity is not None else 0.0
+            return (pos_32, vel_32, vel_0), "3.Model(Y:pos_32, G:vel_32, O:vel_0)"
 
         if show_plot_mode == 4:
             lead = safe_get(radar, "leadOne")

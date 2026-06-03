@@ -24,6 +24,7 @@ from cluster_config import (
     CLUSTER_SCREEN_MODE_DEBUG,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+    CLUSTER_SCREEN_MODE_NAVI_DEBUG,
     CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
     ClusterTheme,
     DESIGN_HEIGHT,
@@ -656,7 +657,7 @@ class ClusterUiRenderer:
         if signal_lights is None:
             signal_lights = self._turn_signal_lights(state)
         profile_stage = self._profile_start()
-        if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH and state.navi_debug is None:
+        if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
             self._clear_world()
         else:
             self._render_world(state, signal_lights)
@@ -1905,29 +1906,15 @@ class ClusterUiRenderer:
                 profile_stage = self._profile_start()
                 self._draw_accel_block(state)
                 self._profile_add("hud.accel_block", profile_stage)
-                if state.navi_debug is not None:
-                    profile_stage = self._profile_start()
-                    self._draw_drive_status(state)
-                    self._profile_add("hud.drive_status", profile_stage)
-                    profile_stage = self._profile_start()
-                    self._draw_center_clock(state)
-                    self._profile_add("hud.center_clock", profile_stage)
-                    profile_stage = self._profile_start()
-                    self._draw_actual_fps(state.actual_fps)
-                    self._profile_add("hud.actual_fps", profile_stage)
-                    profile_stage = self._profile_start()
-                    self._draw_navi_debug_panel(state.navi_debug)
-                    self._profile_add("hud.navi_debug", profile_stage)
-                else:
-                    profile_stage = self._profile_start()
-                    self._draw_debug_plot(
-                        state.debug_plot,
-                        DEBUG_PLOT_FULL_X,
-                        DEBUG_PLOT_FULL_Y,
-                        DEBUG_PLOT_FULL_W,
-                        DEBUG_PLOT_FULL_H,
-                    )
-                    self._profile_add("hud.debug_plot_full", profile_stage)
+                profile_stage = self._profile_start()
+                self._draw_debug_plot(
+                    state.debug_plot,
+                    DEBUG_PLOT_FULL_X,
+                    DEBUG_PLOT_FULL_Y,
+                    DEBUG_PLOT_FULL_W,
+                    DEBUG_PLOT_FULL_H,
+                )
+                self._profile_add("hud.debug_plot_full", profile_stage)
                 return
 
             profile_stage = self._profile_start()
@@ -1969,11 +1956,16 @@ class ClusterUiRenderer:
                     DEBUG_PLOT_RIGHT_H,
                 )
                 self._profile_add("hud.debug_plot_right", profile_stage)
+            if screen_mode == CLUSTER_SCREEN_MODE_NAVI_DEBUG:
+                profile_stage = self._profile_start()
+                self._draw_navi_debug_panel(state.navi_debug)
+                self._profile_add("hud.navi_debug", profile_stage)
             if screen_mode not in (
                 CLUSTER_SCREEN_MODE_DEBUG,
                 CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+                CLUSTER_SCREEN_MODE_NAVI_DEBUG,
             ):
                 profile_stage = self._profile_start()
                 self._draw_route_overlay(state.route_overlay)
