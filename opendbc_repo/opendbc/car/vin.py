@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass, field
+from typing import Optional
 
 from opendbc.car import uds
 from opendbc.car.carlog import carlog
@@ -27,6 +28,23 @@ class Vin:
 
 def is_valid_vin(vin: str):
   return re.fullmatch(VIN_RE, vin) is not None
+
+
+def decode_vin(vin: bytes) -> Optional[str]:
+  # Ford and Nissan pad with null bytes. Some ECUs also pad empty bytes as 0xff.
+  vin = vin.strip(b'\x00\xff')
+
+  # Honda Bosch response starts with a length, trim to correct length
+  if vin.startswith(b'\x11'):
+    vin = vin[1:18]
+
+  try:
+    decoded_vin = vin.decode("ascii")
+  except UnicodeDecodeError:
+    return None
+
+  decoded_vin = decoded_vin.strip().upper()
+  return decoded_vin if is_valid_vin(decoded_vin) else None
 
 
 def get_vin(can_recv, can_send, buses, timeout=0.1, retry=2):
@@ -57,16 +75,13 @@ def get_vin(can_recv, can_send, buses, timeout=0.1, retry=2):
           for addr in vin_addrs:
             vin = results.get((addr, None))
             if vin is not None:
-              # Ford and Nissan pads with null bytes
-              if len(vin) in (19, 24):
-                vin = re.sub(b'\x00*$', b'', vin)
-
-              # Honda Bosch response starts with a length, trim to correct length
-              if vin.startswith(b'\x11'):
-                vin = vin[1:18]
+              decoded_vin = decode_vin(vin)
+              if decoded_vin is None:
+                carlog.error(f"invalid vin response with {request=}")
+                continue
 
               carlog.error(f"got vin with {request=}")
-              return uds.get_rx_addr_for_tx_addr(addr, rx_offset=rx_offset), bus, vin.decode()
+              return uds.get_rx_addr_for_tx_addr(addr, rx_offset=rx_offset), bus, decoded_vin
         except Exception:
           carlog.exception("VIN query exception")
 
