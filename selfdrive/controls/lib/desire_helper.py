@@ -472,6 +472,9 @@ class DesireHelper:
 
         # ── laneChangeStarting 상태 ──────────────────────────────
         elif self.lane_change_state == LaneChangeState.laneChangeStarting:
+          if self.lane_change_timer == 0.0:
+            self.lane_change_completed_on_blinker = True
+          
           bsd_active   = (side is not None) and (side.bsd_hold_counter > 0) and (self.lane_change_bsd >= 0)
           object_active = (side is not None) and side.side_object_detected
           geom_lost    = (side is None) or (not side.lane_change_available_geom)
@@ -487,6 +490,7 @@ class DesireHelper:
               self.unsafe_cancel_timer,
               max(self.bsd_clear_sec, self.object_clear_sec, 1.5)
             )
+            self.lane_change_completed_on_blinker = False
 
           else:
             avail = side.lane_change_available_hold if side is not None else False
@@ -503,8 +507,6 @@ class DesireHelper:
         elif self.lane_change_state == LaneChangeState.laneChangeFinishing:
           self.lane_change_ll_prob = min(self.lane_change_ll_prob + DT_MDL, 1.0)
           if self.lane_change_ll_prob > 0.99:
-            self.lane_change_completed_on_blinker = True
-
             self.completed_direction = self.lane_change_direction
 
             self.lane_change_direction = LaneChangeDirection.none
