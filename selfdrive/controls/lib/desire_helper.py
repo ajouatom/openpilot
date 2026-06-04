@@ -247,6 +247,12 @@ class DesireHelper:
       if (blinker_state == BLINKER_LEFT and self.completed_direction == LaneChangeDirection.right) or \
          (blinker_state == BLINKER_RIGHT and self.completed_direction == LaneChangeDirection.left):
         self.lane_change_completed_on_blinker = False
+
+      # 깜빡이가 새로 켜진 순간(재입력 의사 발생) 영구 락아웃을 방지하기 위해
+      # 완료 플래그는 해제해 주되, 쿨다운 타이머(cooldown_timer)는 그대로 유지하여 안전을 검증합니다.
+      if not self.prev_desire_enabled:
+        self.lane_change_completed_on_blinker = False
+
     else:
       self.blinker_off_timer += DT_MDL
       if self.blinker_off_timer > 0.5:
@@ -373,7 +379,7 @@ class DesireHelper:
             if not (atc_enabled and self.carrot_lane_change_count > 0):
               reentry = False
 
-          #  4초 쿨다운 제한 처리 - 단, ATC의 명시적인 새로운 명령 펄스가 돌고 있을 때는 예외 허용
+          #  쿨다운 제한 처리 - 단, ATC의 명시적인 새로운 명령 펄스가 돌고 있을 때는 예외 허용
           if self.lane_change_cooldown_timer > 0.0:
             if not (atc_enabled and self.carrot_lane_change_count > 0):
               reentry = False
@@ -506,7 +512,7 @@ class DesireHelper:
             self.unsafe_cancel_timer = max(self.unsafe_cancel_timer, 0.5)
 
             #  차선 변경이 최종 완료된 직후 일반 주행 상태에 4초의 강제 쿨다운 락 가동
-            self.lane_change_cooldown_timer = 2.0
+            self.lane_change_cooldown_timer = 1.5
 
 
     # ── 타이머 ───────────────────────────────────────────────────
