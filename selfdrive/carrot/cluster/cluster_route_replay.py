@@ -73,10 +73,11 @@ RADAR_MOTION_MAX_SAMPLE_GAP_S = 0.45
 RADAR_MOTION_MIN_SPEED_SAMPLES = 4
 RADAR_MOTION_MAX_ACCEL_MPS2 = 9.0
 RADAR_MOTION_MAX_ACCEL_OUTLIER_MPS2 = 18.0
+RADAR_MOTION_PROMOTE_MIN_SPEED_KPH = 10.0
 CORNER_DETECTION_STALE_S = 0.8
 RADAR_MIN_LONGITUDINAL_M = 0.0
 RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
-RadarMotionSample = tuple[float, float, int | None, float | None, float | None]
+RadarMotionSample = tuple[float, float, int | None, float | None, float | None, float | None]
 CORNER_RADAR_REAR_MIN_LONGITUDINAL_M = -180.0
 CCNC_CORNER_RADAR_ADDRESS = 0x162
 ADRV_CORNER_RADAR_ADDRESS = 0x1EA
@@ -1569,7 +1570,7 @@ class RouteLogParser:
         history = self.hyundai_canfd_radar_history.get(point.label, ())
         previous = history[-1] if history and self._radar_motion_history_continues(history[-1], point, event_t) else None
         if previous is not None:
-            previous_t, previous_distance_m, _, _, _ = previous
+            previous_t, previous_distance_m, _, _, _, _ = previous
             dt = event_t - previous_t
             if 0.02 <= dt <= 0.45:
                 observed_relative_mps = (point.longitudinal_m - previous_distance_m) / dt
@@ -1590,7 +1591,7 @@ class RouteLogParser:
         point: RadarPoint,
         event_t: float,
     ) -> bool:
-        previous_t, previous_distance_m, previous_valid_count, _, _ = previous
+        previous_t, previous_distance_m, previous_valid_count, _, _, _ = previous
         dt = event_t - previous_t
         if dt <= 0.0 or dt > RADAR_MOTION_MAX_SAMPLE_GAP_S:
             return False
@@ -1611,6 +1612,11 @@ class RouteLogParser:
             point.valid_count,
             point.relative_speed_mps,
             point.relative_accel_mps2,
+            (
+                None
+                if point.relative_speed_mps is None
+                else max(0.0, self.current_speed_kph + point.relative_speed_mps * 3.6)
+            ),
         )
         history = (*history, sample)[-RADAR_MOTION_HISTORY_MAX_SAMPLES:]
         self.hyundai_canfd_radar_history[point.label] = history
@@ -1624,9 +1630,11 @@ class RouteLogParser:
         valid_count = point.valid_count if point.valid_count is not None else 0
         if valid_count < RADAR_MOTION_MIN_VALID_COUNT:
             return False
-        if point.relative_accel_mps2 is not None and abs(point.relative_accel_mps2) > RADAR_MOTION_MAX_ACCEL_MPS2:
-            return False
         if not self._radar_motion_history_covers_min_count(history):
+            return False
+        if self._radar_motion_keeps_min_absolute_speed(history):
+            return True
+        if point.relative_accel_mps2 is not None and abs(point.relative_accel_mps2) > RADAR_MOTION_MAX_ACCEL_MPS2:
             return False
 
         signal_speed_samples = self._radar_motion_signal_speed_samples(history)
@@ -1667,6 +1675,24 @@ class RouteLogParser:
         return counts[-1] - counts[0] >= RADAR_MOTION_MIN_VALID_COUNT - 1
 
     @staticmethod
+    def _radar_motion_keeps_min_absolute_speed(history: tuple[RadarMotionSample, ...]) -> bool:
+        counts = [sample[2] for sample in history if sample[2] is not None]
+        if not counts:
+            return False
+        min_count = counts[-1] - RADAR_MOTION_MIN_VALID_COUNT + 1
+        speed_samples = [
+            sample[5]
+            for sample in history
+            if sample[2] is not None and sample[2] >= min_count
+        ]
+        if len(speed_samples) < RADAR_MOTION_MIN_SPEED_SAMPLES:
+            return False
+        return all(
+            speed is not None and speed >= RADAR_MOTION_PROMOTE_MIN_SPEED_KPH
+            for speed in speed_samples
+        )
+
+    @staticmethod
     def _radar_motion_signal_speed_samples(history: tuple[RadarMotionSample, ...]) -> list[tuple[float, float]]:
         return [(sample[0], float(sample[3])) for sample in history if sample[3] is not None]
 
@@ -1674,8 +1700,8 @@ class RouteLogParser:
     def _radar_motion_observed_speed_samples(history: tuple[RadarMotionSample, ...]) -> list[tuple[float, float]]:
         observed_speeds: list[tuple[float, float]] = []
         for left, right in zip(history, history[1:]):
-            left_t, left_distance_m, _, _, _ = left
-            right_t, right_distance_m, _, _, _ = right
+            left_t, left_distance_m, _, _, _, _ = left
+            right_t, right_distance_m, _, _, _, _ = right
             dt = right_t - left_t
             if 0.02 <= dt <= RADAR_MOTION_MAX_SAMPLE_GAP_S:
                 observed_speeds.append((right_t, (right_distance_m - left_distance_m) / dt))
