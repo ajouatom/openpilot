@@ -1770,7 +1770,10 @@ class RouteLogParser:
         car_state_detections = car_state_corner_detections(car_state)
         car_state_corner_labels = {vehicle.label for vehicle in car_state_detections}
         for vehicle in car_state_detections:
-            if not vehicle_is_inside_road_edges(vehicle, lane_values):
+            if (
+                not vehicle_is_confirmed_corner_radar(vehicle)
+                and not vehicle_is_inside_road_edges(vehicle, lane_values)
+            ):
                 continue
             if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
                 detections.append(vehicle)
@@ -1784,7 +1787,10 @@ class RouteLogParser:
             for vehicle in corner_detections:
                 if vehicle.label in car_state_corner_labels:
                     continue
-                if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                if (
+                    not vehicle_is_confirmed_corner_radar(vehicle)
+                    and not vehicle_is_inside_road_edges(vehicle, lane_values)
+                ):
                     continue
                 if not has_nearby_vehicle(detections, vehicle, longitudinal_tolerance=3.0, lateral_tolerance=1.1):
                     detections.append(vehicle)
@@ -3420,6 +3426,13 @@ def vehicle_is_inside_road_edges(vehicle: DetectedVehicle, lane_values: dict[str
     if right_edge_m is not None and vehicle.lateral_m > right_edge_m + ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M:
         return False
     return True
+
+
+def vehicle_is_confirmed_corner_radar(vehicle: DetectedVehicle) -> bool:
+    if vehicle.label not in ("LF", "RF", "LR", "RR"):
+        return False
+    source = vehicle.source.lower()
+    return source == "carstate" or source in ("can 0x162", "can 0x1ea")
 
 
 def detected_vehicle_summary(vehicles: tuple[DetectedVehicle, ...]) -> str:

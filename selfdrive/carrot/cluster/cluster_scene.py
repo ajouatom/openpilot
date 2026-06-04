@@ -2046,6 +2046,8 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         return False
     if abs(point.lateral_m) > lane_width_m * RADAR_VEHICLE_MAX_LATERAL_LANES:
         return False
+    if radar_point_is_confirmed_vehicle_source(point):
+        return True
     if point.valid_count is not None:
         if point.valid_count < RADAR_VEHICLE_MIN_VALID_COUNT:
             return False
@@ -2090,6 +2092,11 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
     if radar_point_is_moving_raw_vehicle(point, state, lane_width_m):
         return True
     return False
+
+
+def radar_point_is_confirmed_vehicle_source(point: RadarPoint) -> bool:
+    source = point.source.lower()
+    return "0x162" in source or "0x1ea" in source
 
 
 def radar_point_has_vehicle_estimate(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
