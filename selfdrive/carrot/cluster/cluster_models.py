@@ -82,6 +82,40 @@ class DebugPlotSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class NaviDebugInfo:
+    title: str
+    lines: tuple[str, ...] = ()
+    severity: str = "normal"
+    speed_limit_kph: int | None = None
+    traffic_light: NaviTrafficLightInfo | None = None
+    guidance_image: NaviGuidanceImage | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NaviTrafficLightInfo:
+    distance_m: int | None = None
+    red_s: int | None = None
+    straight_s: int | None = None
+    left_s: int | None = None
+    right_s: int | None = None
+    uturn_s: int | None = None
+    red_on: bool | None = None
+    straight_on: bool | None = None
+    left_on: bool | None = None
+    right_on: bool | None = None
+    uturn_on: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NaviGuidanceImage:
+    image_base64: str = ""
+    image_mime: str = ""
+    image_hash: str = ""
+    width: int = 0
+    height: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class DetectedVehicle:
     label: str
     longitudinal_m: float
@@ -112,6 +146,8 @@ class RadarPoint:
     valid: int | None = None
     valid_count: int | None = None
     in_my_lane: int | None = None
+    motion_consistent: bool | None = None
+    promotion_held: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,6 +215,8 @@ class ClusterUiState:
     route_overlay: RouteOverlay | None = None
     live_debug: LiveDebugInfo | None = None
     debug_plot: DebugPlotSnapshot | None = None
+    navi_debug: NaviDebugInfo | None = None
+    debug_ui_visible: bool = False
     center_clock_text: str | None = None
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None
