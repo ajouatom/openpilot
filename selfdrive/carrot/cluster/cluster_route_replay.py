@@ -66,7 +66,7 @@ class DbcSignalSpec:
 
 RADAR_TO_CAMERA_M = 1.52
 MODEL_LEAD_MIN_PROB = 0.08
-RADAR_POINT_STALE_S = 0.12
+RADAR_POINT_STALE_S = 0.25
 CORNER_DETECTION_STALE_S = 0.8
 RADAR_MIN_LONGITUDINAL_M = 0.0
 RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
@@ -1006,8 +1006,8 @@ class RouteLogParser:
         self.adrv_lane_changing = 0
         self.adrv_lane_changing_t = -999.0
         self.hyundai_canfd_radar_points: dict[str, RadarPoint] = {}
+        self.hyundai_canfd_radar_point_t: dict[str, float] = {}
         self.hyundai_canfd_radar_history: dict[str, tuple[float, float]] = {}
-        self.hyundai_canfd_radar_t = -999.0
         self.live_track_radar_points: dict[str, RadarPoint] = {}
         self.live_track_radar_t = -999.0
         self.radar_detections: tuple[DetectedVehicle, ...] = ()
@@ -1500,11 +1500,12 @@ class RouteLogParser:
                 valid_labels = {point.label for point in radar_points}
                 for label in labels:
                     self.hyundai_canfd_radar_points.pop(label, None)
+                    self.hyundai_canfd_radar_point_t.pop(label, None)
                     if label not in valid_labels:
                         self.hyundai_canfd_radar_history.pop(label, None)
                 for point in radar_points:
                     self.hyundai_canfd_radar_points[point.label] = self._radar_point_with_absolute_speed(point, event_t)
-                self.hyundai_canfd_radar_t = event_t
+                    self.hyundai_canfd_radar_point_t[point.label] = event_t
                 continue
             if address not in (CCNC_CORNER_RADAR_ADDRESS, ADRV_CORNER_RADAR_ADDRESS):
                 continue
@@ -1538,9 +1539,16 @@ class RouteLogParser:
 
     def _radar_points_from_current_state(self, event_t: float) -> tuple[RadarPoint, ...]:
         points: list[RadarPoint] = []
-        if event_t - self.hyundai_canfd_radar_t < RADAR_POINT_STALE_S:
-            points.extend(self.hyundai_canfd_radar_points.values())
-        elif event_t - self.live_track_radar_t < RADAR_POINT_STALE_S:
+        for label, point_t in tuple(self.hyundai_canfd_radar_point_t.items()):
+            if event_t - point_t < RADAR_POINT_STALE_S:
+                point = self.hyundai_canfd_radar_points.get(label)
+                if point is not None:
+                    points.append(point)
+                continue
+            self.hyundai_canfd_radar_point_t.pop(label, None)
+            self.hyundai_canfd_radar_points.pop(label, None)
+            self.hyundai_canfd_radar_history.pop(label, None)
+        if not points and event_t - self.live_track_radar_t < RADAR_POINT_STALE_S:
             points.extend(self.live_track_radar_points.values())
         return sorted_radar_points(points)
 
