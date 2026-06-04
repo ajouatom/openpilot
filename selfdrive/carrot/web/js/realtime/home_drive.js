@@ -2090,8 +2090,8 @@ window.HomeDrive = (() => {
 
       // Keep native probability-driven lanes, but allow a small test-page floor so
       // very low-confidence indoor/stationary lanes are still inspectable.
-      const highlightedLeft = i === 1 && leftLaneLine >= 20;
-      const highlightedRight = i === 2 && rightLaneLine >= 20;
+      const highlightedLeft = i === 1 && Math.floor(leftLaneLine / 10) === 2;
+      const highlightedRight = i === 2 && Math.floor(rightLaneLine / 10) === 2;
       const laneColor = highlightedLeft || highlightedRight ? { r: 255, g: 217, b: 94 } : { r: 255, g: 255, b: 255 };
       const baseHalfWidth = Math.max(highlightedLeft || highlightedRight ? 0.025 : 0.010, 0.025 * renderProb);
       const halfWidth = baseHalfWidth * LANE_VISUAL_WIDTH_GAIN;
