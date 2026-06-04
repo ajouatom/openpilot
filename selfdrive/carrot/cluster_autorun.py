@@ -195,7 +195,7 @@ def _read_is_onroad(params: Params) -> bool:
 
 
 def _hud_output_allowed(params: Params) -> bool:
-    return _read_hud_debug_mode(params) == 1 or _read_is_onroad(params)
+    return _read_hud_debug_mode(params) >= 1 or _read_is_onroad(params)
 
 
 def _read_encoder_mode(params: Params) -> int:

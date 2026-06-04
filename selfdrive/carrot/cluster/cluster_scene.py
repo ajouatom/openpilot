@@ -48,7 +48,7 @@ RoadEdgeLayer = tuple[int, Color, float, float]
 ProfileAdd = Callable[[str, float], None]
 PATH_BLOCKER_CLEARANCE_M = 1.25
 PATH_BLOCKER_LANE_TOLERANCE = 0.42
-RADAR_VEHICLE_MIN_VALID_COUNT = 11
+RADAR_VEHICLE_MIN_VALID_COUNT = 20
 RADAR_VEHICLE_MAX_DISTANCE_M = 150.0
 RADAR_VEHICLE_MAX_LATERAL_LANES = 2.75
 RADAR_ROAD_EDGE_HARD_CLEARANCE_M = 0.50
@@ -57,8 +57,8 @@ RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M = 0.0
 RADAR_ROAD_EDGE_KEEP_OUTSIDE_MARGIN_M = 0.85
 RADAR_ROAD_EDGE_STABLE_VEHICLE_OUTSIDE_MARGIN_M = 2.25
 RADAR_ROAD_EDGE_KEEP_SPEED_KPH = 18.0
-RADAR_ROAD_EDGE_KEEP_MIN_VALID_COUNT = 24
-RADAR_ROAD_EDGE_STABLE_VEHICLE_MIN_VALID_COUNT = 35
+RADAR_ROAD_EDGE_KEEP_MIN_VALID_COUNT = 20
+RADAR_ROAD_EDGE_STABLE_VEHICLE_MIN_VALID_COUNT = 20
 RADAR_ROAD_EDGE_STABLE_VEHICLE_MAX_ACCEL_MPS2 = 5.0
 RADAR_STATIC_OBJECT_SPEED_MPS = 1.25
 RADAR_STATIC_OBJECT_SPEED_KPH = 8.0
@@ -68,7 +68,7 @@ RADAR_CENTER_RAW_LATERAL_LANES = 0.72
 RADAR_ADJACENT_RAW_LATERAL_LANES = 1.45
 RADAR_OUTER_RAW_LATERAL_LANES = 2.65
 RADAR_RAW_MOVING_SPEED_KPH = 8.0
-RADAR_RAW_CENTER_MIN_VALID_COUNT = 16
+RADAR_RAW_CENTER_MIN_VALID_COUNT = 20
 RADAR_RAW_ADJACENT_MIN_VALID_COUNT = 24
 RADAR_RAW_OUTER_MIN_VALID_COUNT = 35
 RADAR_PROBABLE_VEHICLE_LATERAL_LANES = 2.75
@@ -1700,6 +1700,8 @@ def merged_radar_point(points: list[RadarPoint], state: ClusterUiState) -> Radar
         valid=max_optional_int(point.valid for point in points),
         valid_count=max_optional_int(point.valid_count for point in points),
         in_my_lane=max_optional_int(point.in_my_lane for point in points),
+        motion_consistent=merged_radar_motion_consistent(point.motion_consistent for point in points),
+        promotion_held=any(point.promotion_held for point in points),
     )
 
 
@@ -1718,6 +1720,21 @@ def average_optional_float(values: Iterable[float | None]) -> float | None:
 def max_optional_int(values: Iterable[int | None]) -> int | None:
     numbers = [int(value) for value in values if value is not None]
     return max(numbers) if numbers else None
+
+
+def merged_radar_motion_consistent(values: Iterable[bool | None]) -> bool | None:
+    has_true = False
+    has_known = False
+    for value in values:
+        if value is None:
+            continue
+        has_known = True
+        if not value:
+            return False
+        has_true = True
+    if not has_known:
+        return None
+    return has_true
 
 
 def radar_point_markers(
@@ -2029,8 +2046,15 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         return False
     if abs(point.lateral_m) > lane_width_m * RADAR_VEHICLE_MAX_LATERAL_LANES:
         return False
-    if point.valid_count is not None and point.valid_count < RADAR_VEHICLE_MIN_VALID_COUNT:
-        return False
+    if radar_point_is_confirmed_vehicle_source(point):
+        return True
+    if point.valid_count is not None:
+        if point.valid_count < RADAR_VEHICLE_MIN_VALID_COUNT:
+            return False
+        if point.motion_consistent is not True:
+            return False
+    if point.promotion_held:
+        return True
     outside_road_edge_m = radar_point_road_edge_outside_distance_m(point, state, lane_width_m)
     stable_edge_vehicle = (
         radar_point_has_stable_edge_vehicle_motion(point, state, lane_width_m)
@@ -2068,6 +2092,11 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
     if radar_point_is_moving_raw_vehicle(point, state, lane_width_m):
         return True
     return False
+
+
+def radar_point_is_confirmed_vehicle_source(point: RadarPoint) -> bool:
+    source = point.source.lower()
+    return "0x162" in source or "0x1ea" in source
 
 
 def radar_point_has_vehicle_estimate(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
