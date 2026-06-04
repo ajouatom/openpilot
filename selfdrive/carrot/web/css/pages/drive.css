@@ -36,6 +36,238 @@ body[data-page="carrot"] #driveHudCard {
   display: block;
 }
 
+.carrot-rtc-perf {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 8;
+  width: 100%;
+  pointer-events: none;
+}
+
+.carrot-rtc-perf[hidden],
+.carrot-rtc-perf-summary[hidden] {
+  display: none !important;
+}
+
+.carrot-rtc-perf-glance {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background: rgba(6, 19, 14, 0.88);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.30);
+  color: rgba(242, 255, 247, 0.96);
+  font: 800 11px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: -0.18px;
+}
+
+.carrot-rtc-perf-glance__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carrot-rtc-perf__dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #48d786;
+  box-shadow: 0 0 9px rgba(72, 215, 134, 0.66);
+}
+
+.carrot-rtc-perf-glance[data-tone="degraded"],
+.carrot-rtc-perf-summary[data-tone="degraded"] {
+  border-color: rgba(255, 207, 80, 0.48);
+}
+
+.carrot-rtc-perf-glance[data-tone="degraded"] .carrot-rtc-perf__dot,
+.carrot-rtc-perf-summary[data-tone="degraded"] .carrot-rtc-perf__dot {
+  background: #ffcf50;
+  box-shadow: 0 0 9px rgba(255, 207, 80, 0.66);
+}
+
+.carrot-rtc-perf-glance[data-tone="reconnecting"],
+.carrot-rtc-perf-summary[data-tone="reconnecting"] {
+  border-color: rgba(255, 157, 66, 0.56);
+}
+
+.carrot-rtc-perf-glance[data-tone="reconnecting"] .carrot-rtc-perf__dot,
+.carrot-rtc-perf-summary[data-tone="reconnecting"] .carrot-rtc-perf__dot {
+  background: #ff9d42;
+  box-shadow: 0 0 9px rgba(255, 157, 66, 0.70);
+}
+
+.carrot-rtc-perf-glance[data-tone="stall"],
+.carrot-rtc-perf-summary[data-tone="stall"] {
+  border-color: rgba(255, 92, 92, 0.62);
+  background: rgba(47, 10, 14, 0.92);
+}
+
+.carrot-rtc-perf-glance[data-tone="stall"] .carrot-rtc-perf__dot,
+.carrot-rtc-perf-summary[data-tone="stall"] .carrot-rtc-perf__dot {
+  background: #ff5c5c;
+  box-shadow: 0 0 10px rgba(255, 92, 92, 0.78);
+}
+
+.carrot-rtc-perf-glance[data-tone="offline"],
+.carrot-rtc-perf-summary[data-tone="offline"] {
+  border-color: rgba(191, 202, 197, 0.26);
+  background: rgba(19, 24, 23, 0.90);
+}
+
+.carrot-rtc-perf-glance[data-tone="offline"] .carrot-rtc-perf__dot,
+.carrot-rtc-perf-summary[data-tone="offline"] .carrot-rtc-perf__dot {
+  background: #aeb9b4;
+  box-shadow: none;
+}
+
+.carrot-rtc-perf-summary {
+  position: absolute;
+  left: 0;
+  bottom: 36px;
+  width: min(520px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  padding: 11px 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 11px;
+  background: rgba(6, 28, 20, 0.94);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.42);
+  color: rgba(245, 255, 249, 0.96);
+  pointer-events: auto;
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+}
+
+.carrot-rtc-perf-summary__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.carrot-rtc-perf-summary__title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: rgba(250, 255, 252, 0.98);
+  font: 900 13px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carrot-rtc-perf-summary__action,
+.carrot-rtc-perf-summary__close {
+  flex: 0 0 auto;
+  min-width: 32px;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(242, 255, 247, 0.92);
+  font: 900 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  cursor: pointer;
+}
+
+.carrot-rtc-perf-summary__close {
+  min-width: 24px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.carrot-rtc-perf-summary__sub {
+  margin-top: 4px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(193, 225, 207, 0.72);
+  font: 800 9px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.28px;
+}
+
+.carrot-rtc-perf-summary__grid {
+  display: grid;
+  grid-template-columns: auto minmax(92px, 1fr) auto minmax(92px, 1fr);
+  gap: 7px 10px;
+  align-items: center;
+  margin-top: 8px;
+  font: 700 11px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.carrot-rtc-perf-summary__grid span {
+  color: rgba(193, 225, 207, 0.70);
+}
+
+.carrot-rtc-perf-summary__grid strong {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(247, 255, 250, 0.96);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carrot-rtc-perf-summary__grid .carrot-rtc-perf-summary__path-label {
+  align-self: start;
+  padding-top: 1px;
+}
+
+.carrot-rtc-perf-summary__grid .carrot-rtc-perf-summary__path-value {
+  grid-column: 2 / -1;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.24;
+}
+
+.carrot-rtc-perf-hold-target {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--hud-radius, 18px);
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.carrot-rtc-perf-hold-target.is-holding {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.carrot-rtc-perf-hold-target::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid #48d786;
+  border-radius: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.carrot-rtc-perf-hold-target.is-holding::after {
+  opacity: 0.82;
+  animation: carrot-rtc-perf-hold-progress 0.6s linear;
+}
+
+@keyframes carrot-rtc-perf-hold-progress {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
 .carrot-hud-dock {
   display: none;
 }
@@ -621,6 +853,10 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
 }
 
 @media (orientation: portrait) {
+  .carrot-rtc-perf-summary {
+    display: none !important;
+  }
+
   .page--drive {
     justify-content: stretch;
   }

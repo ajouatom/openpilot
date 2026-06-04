@@ -17,6 +17,22 @@ window.HomeDrive = (() => {
   const metaEl = document.getElementById("carrotStageMeta");
   const debugEl = document.getElementById("carrotStageDebug");
   const driveHudCardEl = document.getElementById("driveHudCard");
+  const rtcPerfHudEl = document.getElementById("carrotRtcPerfHud");
+  const rtcPerfGlanceEl = document.getElementById("carrotRtcPerfGlance");
+  const rtcPerfGlanceTextEl = document.getElementById("carrotRtcPerfGlanceText");
+  const rtcPerfSummaryEl = document.getElementById("carrotRtcPerfSummary");
+  const rtcPerfTitleEl = document.getElementById("carrotRtcPerfTitle");
+  const rtcPerfVideoEl = document.getElementById("carrotRtcPerfVideo");
+  const rtcPerfCodecEl = document.getElementById("carrotRtcPerfCodec");
+  const rtcPerfBitrateEl = document.getElementById("carrotRtcPerfBitrate");
+  const rtcPerfRttEl = document.getElementById("carrotRtcPerfRtt");
+  const rtcPerfJitterEl = document.getElementById("carrotRtcPerfJitter");
+  const rtcPerfLossEl = document.getElementById("carrotRtcPerfLoss");
+  const rtcPerfFreezeEl = document.getElementById("carrotRtcPerfFreeze");
+  const rtcPerfPathEl = document.getElementById("carrotRtcPerfPath");
+  const rtcPerfHoldTargetEl = document.getElementById("carrotRtcPerfHoldTarget");
+  const rtcPerfCloseBtnEl = document.getElementById("carrotRtcPerfCloseBtn");
+  const rtcPerfLogBtnEl = document.getElementById("carrotRtcPerfLogBtn");
   const sourceVideoEl = videoEl;
   const displayModeButton = document.getElementById("btnDisplayModeCycle");
 
@@ -59,6 +75,9 @@ window.HomeDrive = (() => {
   const DESKTOP_DPR_CAP = 1.5;
   const RENDER_INTERVAL_MS = 33;  // ~30fps for denser plot data (C3: 20Hz/50ms)
   const CAMERA_FRAME_RECHECK_MS = 250;
+  const RTC_PERF_HOLD_MS = 600;
+  const RTC_PERF_HOLD_MOVE_PX = 12;
+  const RTC_PERF_SUMMARY_AUTO_CLOSE_MS = 8000;
   const MIN_ROAD_VIDEO_WIDTH = 320;
   const MIN_ROAD_VIDEO_HEIGHT = 180;
   const PATH_PALETTE = [
@@ -2272,15 +2291,22 @@ window.HomeDrive = (() => {
   }
 
   function getLeadBadgeOffsets(videoWidth, videoHeight) {
+    const uiScale = getLeadUiScale(videoWidth, videoHeight);
+    return {
+      dx: 80 * uiScale,
+      rectTopOffset: 25 * uiScale,
+      textBaselineOffset: 60 * uiScale,
+      badgeHeight: Math.max(42 * uiScale, 20),
+      fontSize: Math.max(40 * uiScale, 18),
+      radius: Math.max(12 * uiScale, 7),
+      strokeWidth: Math.max(4 * uiScale, 2.2),
+    };
+  }
+
+  function getLeadUiScale(videoWidth, videoHeight) {
     const scaleX = videoWidth / BASE_CAMERA.width;
     const scaleY = videoHeight / BASE_CAMERA.height;
-    return {
-      dx: 80 * scaleX,
-      rectTopOffset: 25 * scaleY,
-      textBaselineOffset: 60 * scaleY,
-      badgeHeight: Math.max(42 * scaleY, 26),
-      fontSize: Math.max(40 * scaleY, 20),
-    };
+    return clamp(Math.min(scaleX, scaleY), 0.45, 1.0);
   }
 
   function hasNearbyAssistLead(lead, speedMps) {
@@ -2325,28 +2351,33 @@ window.HomeDrive = (() => {
 
   function getLeadBoxClampMargins(videoWidth, videoHeight, stageWidth = videoWidth, stageHeight = videoHeight, transform = null, options = {}) {
     const visibleRect = getVisibleSourceRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
-    // C3 fixed margins: top=200, bottom=80, marginX=350
-    const topMargin = Math.max(200.0, visibleRect.top + 6);
+    const uiScale = getLeadUiScale(videoWidth, videoHeight);
+    // C3 fixed margins scaled to the encoded source resolution. Without this,
+    // 964x604 streams keep 1928x1208 margins and force lead UI into the center.
+    const topReserve = Math.max(200.0 * uiScale, 96.0);
+    const bottomReserve = Math.max(80.0 * uiScale, 42.0);
+    const sideReserve = Math.max(350.0 * uiScale, 120.0);
+    const topMargin = Math.max(topReserve, visibleRect.top + 6 * uiScale);
 
     // C3 base: maxCenterY = fb_h - 80
-    let maxCenterY = videoHeight - 80.0;
+    let maxCenterY = videoHeight - bottomReserve;
 
     // In crop/fit modes, also keep badges inside visible area
     const offsets = getLeadBadgeOffsets(videoWidth, videoHeight);
     let badgeReserve = 0;
     if (options.includeDistanceBadge !== false) {
-      badgeReserve = Math.max(badgeReserve, offsets.rectTopOffset + offsets.badgeHeight + 8);
+      badgeReserve = Math.max(badgeReserve, offsets.rectTopOffset + offsets.badgeHeight + 8 * uiScale);
     }
     if (options.includeStateText) {
-      badgeReserve = Math.max(badgeReserve, offsets.textBaselineOffset + Math.max(offsets.fontSize * 0.28, 8));
+      badgeReserve = Math.max(badgeReserve, offsets.textBaselineOffset + Math.max(offsets.fontSize * 0.28, 8 * uiScale));
     }
-    maxCenterY = Math.min(maxCenterY, visibleRect.bottom - Math.max(badgeReserve, 80.0));
+    maxCenterY = Math.min(maxCenterY, visibleRect.bottom - Math.max(badgeReserve, bottomReserve));
     maxCenterY = Math.max(topMargin, maxCenterY);
 
     return {
-      marginX: 350.0,
+      marginX: sideReserve,
       topMargin,
-      bottomMargin: Math.max(80.0, videoHeight - maxCenterY),
+      bottomMargin: Math.max(bottomReserve, videoHeight - maxCenterY),
       maxCenterY,
       visibleRect,
       bottomReserve: badgeReserve,
@@ -2381,7 +2412,8 @@ window.HomeDrive = (() => {
     // Match CarrotLink's adaptive bottom margin while keeping carrot.cc clamp policy.
     const _path_x = clamp(rawCenterX, marginX, Math.max(marginX, videoWidth - marginX));
     const _path_y = clamp(rawCenterY, topMargin, maxCenterY);
-    const _path_width = clamp(rawWidth, 120, 800);
+    const uiScale = getLeadUiScale(videoWidth, videoHeight);
+    const _path_width = clamp(rawWidth, 120 * uiScale, 800 * uiScale);
 
     // ── Step 2: Time-based EMA on clamped values ──
     // C3 uses alpha=0.85 at stable 20Hz.  Web frame rate varies, so
@@ -2401,8 +2433,8 @@ window.HomeDrive = (() => {
     const path_x = Math.trunc(path_fx);
     const path_y = Math.trunc(path_fy);
     const width = Math.max(Math.trunc(path_fw), 1);
-    const sidePad = 10;
-    const height = Math.max(Math.trunc(width * 0.8), 12);
+    const sidePad = Math.max(10 * uiScale, 5);
+    const height = Math.max(Math.trunc(width * 0.8), Math.round(12 * uiScale));
     // capnp default is -1; Number(null)=0 would falsely trigger radar-detected, so guard null
     const radarTrackId = (lead.radarTrackId != null) ? finiteNumber(lead.radarTrackId, -1) : -1;
     const radarDetected = radarTrackId >= 0;
@@ -2422,6 +2454,8 @@ window.HomeDrive = (() => {
       dRel: distance,
       modelProb: finiteNumber(lead.modelProb, 0),
       width,
+      videoWidth,
+      videoHeight,
     };
   }
 
@@ -2457,18 +2491,22 @@ window.HomeDrive = (() => {
     );
     const clampedCenterX = clamp((xl + xr) * 0.5, marginX, Math.max(marginX, videoWidth - marginX));
     const rawWidth = Math.max(xr - xl, 1);
-    const width = Math.max(Math.trunc(clamp(rawWidth, 120, 800)), 1);
+    const uiScale = getLeadUiScale(videoWidth, videoHeight);
+    const sidePad = Math.max(10 * uiScale, 5);
+    const width = Math.max(Math.trunc(clamp(rawWidth, 120 * uiScale, 800 * uiScale)), 1);
     const yInt = Math.trunc(clamp(y, topMargin, maxCenterY));
     const xlInt = Math.trunc(clampedCenterX - width * 0.5);
-    const height = Math.max(Math.trunc(width * 0.8), 1);
+    const height = Math.max(Math.trunc(width * 0.8), Math.round(12 * uiScale));
     return {
       rect: {
-        x: xlInt - 10,
+        x: xlInt - sidePad,
         y: yInt - height,
-        width: width + 20,
+        width: width + sidePad * 2,
         height,
       },
       dRel: distance,
+      videoWidth,
+      videoHeight,
     };
   }
 
@@ -2482,8 +2520,9 @@ window.HomeDrive = (() => {
   function drawLeadBoxCard(box, strokeColor, fillColor, primary = true) {
     if (!box?.rect) return;
     const { x, y, width, height } = box.rect;
-    const r = primary ? 15 : 12;
-    const sw = primary ? 3.0 : 2.2;
+    const uiScale = getLeadUiScale(box.videoWidth || BASE_CAMERA.width, box.videoHeight || BASE_CAMERA.height);
+    const r = Math.max((primary ? 15 : 12) * uiScale, primary ? 7 : 6);
+    const sw = Math.max((primary ? 3.0 : 2.2) * uiScale, primary ? 1.7 : 1.3);
     // C3 style: fill + stroke (carrot.cc ui_fill_rect with stroke color)
     fillRoundedRect(ctx, x, y, width, height, r, fillColor);
     strokeRoundedRect(ctx, x, y, width, height, r, strokeColor, sw);
@@ -2492,9 +2531,10 @@ window.HomeDrive = (() => {
   function eraseLeadBoxOcclusion(box, primary = true) {
     if (!box?.rect) return;
     const { x, y, width, height } = box.rect;
+    const uiScale = getLeadUiScale(box.videoWidth || BASE_CAMERA.width, box.videoHeight || BASE_CAMERA.height);
     ctx.save();
     ctx.globalCompositeOperation = "destination-out";
-    fillRoundedRect(ctx, x, y, width, height, primary ? 15 : 12, "rgba(0,0,0,1)");
+    fillRoundedRect(ctx, x, y, width, height, Math.max((primary ? 15 : 12) * uiScale, primary ? 7 : 6), "rgba(0,0,0,1)");
     ctx.restore();
   }
 
@@ -2510,9 +2550,9 @@ window.HomeDrive = (() => {
 
     const drawBadge = (text, centerX, bgColor) => {
       const charW = fontSize * 0.62;
-      const w = Math.max(52, 16 + text.length * charW);
+      const w = Math.max(52 * getLeadUiScale(videoWidth, videoHeight), 16 * getLeadUiScale(videoWidth, videoHeight) + text.length * charW);
       const bx = centerX - w * 0.5;
-      fillRoundedRect(ctx, bx, baseY, w, badgeH, 12, bgColor);
+      fillRoundedRect(ctx, bx, baseY, w, badgeH, offsets.radius, bgColor);
       ctx.save();
       ctx.font = `800 ${fontSize}px ${HUD_TEXT_FONT}`;
       ctx.textAlign = "center";
@@ -2520,7 +2560,7 @@ window.HomeDrive = (() => {
       ctx.lineJoin = "round";
       ctx.strokeStyle = "rgba(0,0,0,0.82)";
       ctx.fillStyle = textColor;
-      ctx.lineWidth = 4;
+      ctx.lineWidth = offsets.strokeWidth;
       ctx.strokeText(text, centerX, baseY + badgeH * 0.54);
       ctx.fillText(text, centerX, baseY + badgeH * 0.54);
       ctx.restore();
@@ -2619,15 +2659,16 @@ window.HomeDrive = (() => {
 
   function drawLeadStateBadge(box, text, _xState, videoWidth = BASE_CAMERA.width, videoHeight = BASE_CAMERA.height, stageWidth = videoWidth, stageHeight = videoHeight, transform = null) {
     if (!box?.rect || !text) return;
+    const uiScale = getLeadUiScale(videoWidth, videoHeight);
     const offsets = getLeadBadgeOffsets(videoWidth, videoHeight);
     const visibleRect = getVisibleSourceRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
-    const textY = Math.min(box.centerY + offsets.textBaselineOffset, Math.max(visibleRect.top + 6, visibleRect.bottom - 6));
+    const textY = Math.min(box.centerY + offsets.textBaselineOffset, Math.max(visibleRect.top + 6 * uiScale, visibleRect.bottom - 6 * uiScale));
     drawCanvasOutlinedText(text, box.centerX, textY, {
-      fontSize: Math.max(50 * (videoHeight / BASE_CAMERA.height), 24),
+      fontSize: Math.max(50 * uiScale, 22),
       fontWeight: 900,
       fillStyle: "#ffffff",
       strokeStyle: "rgba(0,0,0,0.88)",
-      strokeWidth: Math.max(4.0 * (videoHeight / BASE_CAMERA.height), 3.4),
+      strokeWidth: Math.max(4.0 * uiScale, 2.2),
       align: "center",
       baseline: "bottom",
     });
@@ -2667,17 +2708,18 @@ window.HomeDrive = (() => {
     return anchor;
   }
 
-  function drawRadarSpeedBadge(center, text, accentColor) {
+  function drawRadarSpeedBadge(center, text, accentColor, videoWidth = BASE_CAMERA.width, videoHeight = BASE_CAMERA.height) {
     if (!center || !text) return;
-    const badgeWidth = Math.max(40, 35 * String(text).length);
-    const badgeHeight = 42;
+    const uiScale = getLeadUiScale(videoWidth, videoHeight);
+    const badgeWidth = Math.max(40 * uiScale, 35 * uiScale * String(text).length);
+    const badgeHeight = Math.max(42 * uiScale, 20);
     const badgeX = center.x - badgeWidth * 0.5;
-    const badgeY = center.y - 35;
-    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, 15, accentColor);
+    const badgeY = center.y - 35 * uiScale;
+    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, Math.max(15 * uiScale, 7), accentColor);
     drawCanvasOutlinedText(String(text), center.x, center.y, {
-      fontSize: 40,
+      fontSize: Math.max(40 * uiScale, 18),
       fontWeight: 900,
-      strokeWidth: 4.2,
+      strokeWidth: Math.max(4.2 * uiScale, 2.2),
     });
   }
 
@@ -2700,19 +2742,22 @@ window.HomeDrive = (() => {
     const right = projectPoint(calibTransform, tfDistance, lineY + 1.0, lineZ + PATH_Z_OFFSET);
     if (!left || !right) return;
 
-    drawPolyline([left, right], "rgba(255,255,255,0.92)", 3.0);
+    const uiScale = getLeadUiScale(videoWidth, videoHeight);
+    drawPolyline([left, right], "rgba(255,255,255,0.92)", Math.max(3.0 * uiScale, 1.6));
     const labelText = `${displayDistanceMeters(tfDistance).toFixed(1)}(${finiteNumber(longitudinalPlan?.tFollow, 0).toFixed(2)})`;
+    const labelFontSize = Math.max(20 * uiScale, 12);
     const labelAnchor = clampTextAnchor(
       { x: right.x + 10, y: right.y - 4 },
       labelText,
-      20,
+      labelFontSize,
       videoWidth,
       videoHeight,
     );
     drawCanvasOutlinedText(labelText, labelAnchor.x, labelAnchor.y, {
-      fontSize: 20,
+      fontSize: labelFontSize,
       fontWeight: 800,
       align: "left",
+      strokeWidth: Math.max(3.4 * uiScale, 1.8),
     });
   }
 
@@ -2747,7 +2792,8 @@ window.HomeDrive = (() => {
     const rawCenterX = (left.x + right.x) * 0.5;
     const rawCenterY = (left.y + right.y) * 0.5;
     const { marginX, topMargin, bottomMargin } = getLeadBoxClampMargins(videoWidth, videoHeight);
-    const width = clamp(rawWidth, 120, 800);
+    const uiScale = getLeadUiScale(videoWidth, videoHeight);
+    const width = clamp(rawWidth, 120 * uiScale, 800 * uiScale);
     const centerX = clamp(rawCenterX, marginX, Math.max(marginX, videoWidth - marginX));
     const centerY = clamp(rawCenterY, topMargin, Math.max(topMargin, videoHeight - bottomMargin));
     return {
@@ -2764,15 +2810,15 @@ window.HomeDrive = (() => {
     const anchor = anchorBox || projectPathEndAnchorBox(modelPath, calibTransform, videoWidth, videoHeight);
     if (!anchor) return;
 
-    const scale = videoHeight / BASE_CAMERA.height;
-    const fontSize = Math.max(50 * scale, 24);
-    const baselineY = clamp(anchor.centerY + 60 * scale, fontSize + 8, videoHeight - 10);
+    const scale = getLeadUiScale(videoWidth, videoHeight);
+    const fontSize = Math.max(50 * scale, 22);
+    const baselineY = clamp(anchor.centerY + 60 * scale, fontSize + 8 * scale, videoHeight - 10 * scale);
     drawCanvasOutlinedText(text, anchor.centerX, baselineY, {
       fontSize,
       fontWeight: 900,
       fillStyle: "#ffffff",
       strokeStyle: "rgba(0,0,0,0.88)",
-      strokeWidth: Math.max(4.0 * scale, 3.4),
+      strokeWidth: Math.max(4.0 * scale, 2.2),
       align: "center",
       baseline: "bottom",
     });
@@ -2802,7 +2848,7 @@ window.HomeDrive = (() => {
     return model?.position || null;
   }
 
-  function drawRadarTargets(radarState, model, calibTransform) {
+  function drawRadarTargets(radarState, model, calibTransform, videoWidth = BASE_CAMERA.width, videoHeight = BASE_CAMERA.height) {
     const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, 0);
     if (showRadarInfo <= 0) return;
     const projectionLine = getRadarProjectionLine(model);
@@ -2834,8 +2880,9 @@ window.HomeDrive = (() => {
           : null;
         if (future) {
           const vectorColor = vSigned >= 0 ? "rgba(35,213,93,0.94)" : "rgba(255,59,48,0.94)";
-          drawPolyline([center, future], vectorColor, 3.0);
-          drawPolygon(circlePolygon(future.x, future.y, 10, 12), vectorColor);
+          const uiScale = getLeadUiScale(videoWidth, videoHeight);
+          drawPolyline([center, future], vectorColor, Math.max(3.0 * uiScale, 1.6));
+          drawPolygon(circlePolygon(future.x, future.y, Math.max(10 * uiScale, 5), 12), vectorColor);
         }
 
         let badgeColor = "rgba(255,59,48,0.96)";
@@ -2844,26 +2891,28 @@ window.HomeDrive = (() => {
         else if (vSigned > 0) badgeColor = "rgba(255,167,38,0.96)";
 
         const speedValue = vSigned * (isMetric ? 3.6 : 2.2369363);
-        drawRadarSpeedBadge({ x: center.x, y: center.y }, speedValue.toFixed(0), badgeColor);
+        drawRadarSpeedBadge({ x: center.x, y: center.y }, speedValue.toFixed(0), badgeColor, videoWidth, videoHeight);
 
         if (showRadarInfo >= 2) {
-          drawCanvasOutlinedText(displayDistanceMeters(finiteNumber(radar?.yRel, 0)).toFixed(1), center.x, center.y - 40, {
-            fontSize: 30,
+          const uiScale = getLeadUiScale(videoWidth, videoHeight);
+          drawCanvasOutlinedText(displayDistanceMeters(finiteNumber(radar?.yRel, 0)).toFixed(1), center.x, center.y - 40 * uiScale, {
+            fontSize: Math.max(30 * uiScale, 15),
             fontWeight: 900,
-            strokeWidth: 3.8,
+            strokeWidth: Math.max(3.8 * uiScale, 2.0),
           });
           const distanceValue = displayDistanceMeters(dRel);
-          drawCanvasOutlinedText(distanceValue.toFixed(1), center.x, center.y + 30, {
-            fontSize: 30,
+          drawCanvasOutlinedText(distanceValue.toFixed(1), center.x, center.y + 30 * uiScale, {
+            fontSize: Math.max(30 * uiScale, 15),
             fontWeight: 900,
-            strokeWidth: 3.8,
+            strokeWidth: Math.max(3.8 * uiScale, 2.0),
           });
         }
       } else if (showRadarInfo >= 3) {
+        const uiScale = getLeadUiScale(videoWidth, videoHeight);
         drawCanvasOutlinedText("*", center.x, center.y, {
-          fontSize: 40,
+          fontSize: Math.max(40 * uiScale, 18),
           fontWeight: 900,
-          strokeWidth: 4.2,
+          strokeWidth: Math.max(4.2 * uiScale, 2.2),
         });
       }
     }
@@ -2966,7 +3015,7 @@ window.HomeDrive = (() => {
       resetLeadTwoEma();
     }
     drawPathStatusText(modelPath, hudState, calibTransform, videoWidth, videoHeight, primaryStatusAnchorBox);
-    drawRadarTargets(radarState, model, calibTransform);
+    drawRadarTargets(radarState, model, calibTransform, videoWidth, videoHeight);
   }
 
   function roundedRectPath(context, x, y, width, height, radius) {
@@ -3064,79 +3113,180 @@ window.HomeDrive = (() => {
     });
   }
 
-  function formatRtcPerfLabel() {
+  function optionalNumber(value) {
+    if (value == null || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function formatRtcNumber(value, suffix = "", digits = 0) {
+    return value == null ? `-${suffix}` : `${value.toFixed(digits)}${suffix}`;
+  }
+
+  function getRtcCodecLabel(codec, codecParams) {
+    const rawCodec = String(codec || "").split("/").pop().trim().toUpperCase();
+    if (!rawCodec) return "-";
+    if (rawCodec !== "H264") return rawCodec;
+    const match = /profile-level-id=([0-9a-fA-F]{6})/.exec(String(codecParams || ""));
+    const profilePrefix = match?.[1]?.slice(0, 2)?.toLowerCase() || "";
+    const profile = profilePrefix === "42"
+      ? "Baseline"
+      : profilePrefix === "4d"
+        ? "Main"
+        : profilePrefix === "64"
+          ? "High"
+          : "";
+    return profile ? `${rawCodec} ${profile}` : rawCodec;
+  }
+
+  function buildRtcPerfHudModel() {
     const perf = window.CarrotRtcPerf || null;
-    if (!perf?.active) return "";
-    if (perf?.connectionState === "connecting" || perf?.iceConnectionState === "checking") return "RECONN";
-    if (perf?.error) return "";
+    if (!perf?.active) {
+      return { visible: false, tone: "offline", title: "VISION OFFLINE", glance: "" };
+    }
 
     const network = perf.network || {};
     const inbound = perf.inbound || {};
     const video = perf.video || {};
-    const resolutionLabel = String(network.resolutionLabel || "").trim();
-    const bitrateMbps = Number.isFinite(Number(network.bitrateMbps)) ? Number(network.bitrateMbps) : null;
-    const fps = Number.isFinite(Number(inbound.framesPerSecond)) ? Number(inbound.framesPerSecond) : null;
-    const rttMs = Number.isFinite(Number(network.rttMs)) ? Number(network.rttMs) : null;
-    const lossPct = Number.isFinite(Number(network.lossPct)) ? Number(network.lossPct) : null;
-    const jitterMs = Number.isFinite(Number(network.jitterMs)) ? Number(network.jitterMs) : null;
-    const keyFramesDecoded = Number.isFinite(Number(inbound.keyFramesDecoded)) ? Number(inbound.keyFramesDecoded) : null;
-    const packetsLost = Number.isFinite(Number(inbound.packetsLost)) ? Number(inbound.packetsLost) : null;
-    const hasFreeze = Number.isFinite(Number(inbound.freezeCount)) && Number(inbound.freezeCount) > 0 &&
-      Number.isFinite(Number(video.readyState)) && Number(video.readyState) < 3;
+    const resolution = String(network.resolutionLabel || "").trim() || "-";
+    const bitrateMbps = optionalNumber(network.bitrateMbps);
+    const fps = optionalNumber(inbound.framesPerSecond);
+    const rttMs = optionalNumber(network.rttMs);
+    const lossPct = optionalNumber(network.lossPct);
+    const jitterMs = optionalNumber(network.jitterMs);
+    const freezeCount = optionalNumber(inbound.freezeCount);
+    const framesDecoded = optionalNumber(inbound.framesDecoded);
+    const framesReceived = optionalNumber(inbound.framesReceived);
+    const readyState = optionalNumber(video.readyState);
+    const reconnecting = (
+      perf.connectionState === "connecting" ||
+      perf.iceConnectionState === "checking" ||
+      perf.iceConnectionState === "disconnected"
+    );
+    const stalled = (
+      (framesReceived != null && framesReceived > 0 && framesDecoded != null && framesDecoded <= 0) ||
+      (freezeCount != null && freezeCount > 0 && readyState != null && readyState < 3)
+    );
+    const degraded = (
+      (lossPct != null && lossPct >= 0.5) ||
+      (jitterMs != null && jitterMs >= 30) ||
+      (rttMs != null && rttMs >= 150)
+    );
+    const bitrateLabel = formatRtcNumber(bitrateMbps, "Mbps", bitrateMbps != null && bitrateMbps < 10 ? 2 : 1);
+    const fpsLabel = fps == null ? "-fps" : `${Math.round(fps)}fps`;
+    const rttLabel = rttMs == null ? "-ms" : `${Math.round(rttMs)}ms`;
+    const jitterLabel = jitterMs == null ? "-ms" : `${Math.round(jitterMs)}ms`;
+    const lossLabel = lossPct == null ? "-%" : `${lossPct.toFixed(lossPct >= 10 ? 0 : 1)}%`;
+    const codecLabel = getRtcCodecLabel(perf.codec, perf.codecParams);
+    const protocol = String(network.protocol || "-").toUpperCase();
+    const localType = String(network.localCandidateType || "-");
+    const remoteType = String(network.remoteCandidateType || "-");
+    let tone = "normal";
+    let title = "VISION OK";
+    let glance = `${resolution} | ${fpsLabel} | ${bitrateLabel} | ${rttLabel}`;
 
-    if (!resolutionLabel && bitrateMbps == null && fps == null && rttMs == null && lossPct == null && jitterMs == null) {
-      return hasFreeze ? "STALL" : "";
+    if (perf.error) {
+      tone = "offline";
+      title = "VISION OFFLINE";
+      glance = "OFFLINE | stats unavailable";
+    } else if (reconnecting) {
+      tone = "reconnecting";
+      title = "VISION RECONNECTING";
+      glance = "RECONNECTING | waiting stream";
+    } else if (stalled) {
+      tone = "stall";
+      title = "VISION STALL";
+      glance = `STALL | decode ${framesDecoded ?? "-"} | recv ${framesReceived ?? "-"}`;
+    } else if (degraded) {
+      tone = "degraded";
+      title = "VISION DEGRADED";
+      const warnings = [];
+      if (lossPct != null && lossPct >= 0.5) warnings.push(`loss ${lossLabel}`);
+      if (rttMs != null && rttMs >= 150) warnings.push(`RTT ${rttLabel}`);
+      if (jitterMs != null && jitterMs >= 30) warnings.push(`jitter ${jitterLabel}`);
+      glance = `DEGRADED | ${warnings.slice(0, 2).join(" | ")}`;
     }
 
-    const bitrateLabel = bitrateMbps != null
-      ? `${bitrateMbps >= 10 ? bitrateMbps.toFixed(0) : bitrateMbps.toFixed(1)}m`
-      : "-m";
-    const fpsLabel = fps != null ? `${Math.round(fps)}fps` : "-fps";
-    const rttLabel = rttMs != null ? `${Math.round(rttMs)}ms` : "-ms";
-    const warningLabels = [];
-    if (lossPct != null && lossPct >= 0.5) {
-      warningLabels.push(`loss${lossPct >= 10 ? Math.round(lossPct) : lossPct.toFixed(1)}%`);
-    } else if (packetsLost != null && packetsLost > 0 && Number(inbound.framesDecoded || 0) <= 0) {
-      warningLabels.push(`lost${packetsLost}`);
-    }
-    if (jitterMs != null && jitterMs >= 30) warningLabels.push(`jit${Math.round(jitterMs)}`);
-    if (keyFramesDecoded === 0 && Number(inbound.framesDecoded || 0) <= 0) warningLabels.push("key0");
-
-    return [resolutionLabel || "-p", bitrateLabel, fpsLabel, rttLabel].concat(warningLabels).join(" ");
+    return {
+      visible: true,
+      tone,
+      title,
+      glance,
+      video: `${resolution} | ${fpsLabel}`,
+      codec: codecLabel,
+      bitrate: bitrateLabel,
+      rtt: rttLabel,
+      jitter: jitterLabel,
+      loss: lossLabel,
+      freeze: freezeCount == null ? "-" : String(Math.round(freezeCount)),
+      path: `${protocol} ${localType} -> ${remoteType}`,
+    };
   }
 
-  function drawHudRightCenterPerfText(stageWidth, stageHeight, viewportRect, pathMode) {
-    const label = shortText(formatRtcPerfLabel(), 48);
-    if (!label) return;
+  function formatRtcPerfLabel() {
+    return buildRtcPerfHudModel().glance || "";
+  }
 
-    const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
-    const baseScale = Math.min(stageWidth / 1920, stageHeight / 1080);
-    const scale = clamp(baseScale, 0.48, 1.0);
-    const edgeInsetX = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
-    const edgeInsetTop = exactC3Mode ? 28.0 : clamp(30.0 * scale, 12.0, 30.0);
-    const maxWidth = Math.max(180.0, viewportRect.width * 0.42);
-    const fontSize = fitSingleLineHudFontSize(
-      label,
-      exactC3Mode ? 18.0 : clamp(18.0 * scale, 8.0, 18.0),
-      maxWidth,
-      6.0,
-      900,
-    );
-    const alpha = getHudLabelAlpha(pathMode, 0.0);
+  let _rtcPerfSummaryOpen = false;
+  let _rtcPerfSummaryCloseTimer = null;
 
-    drawOutlinedHudText({
-      text: label,
-      x: viewportRect.right - edgeInsetX,
-      y: viewportRect.top + edgeInsetTop,
-      color: `rgba(244, 244, 244, ${alpha.toFixed(3)})`,
-      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.08, 0.0, 1.0).toFixed(3)})`,
-      strokeWidth: clamp(4.2 * scale, 2.8, 5.4),
-      fontSize,
-      fontWeight: 900,
-      alignX: "right",
-      alignY: "top",
-      maxWidth,
-    });
+  function isRtcPerfSummaryAvailable() {
+    return window.matchMedia("(orientation: landscape)").matches;
+  }
+
+  function clearRtcPerfSummaryCloseTimer() {
+    if (_rtcPerfSummaryCloseTimer == null) return;
+    window.clearTimeout(_rtcPerfSummaryCloseTimer);
+    _rtcPerfSummaryCloseTimer = null;
+  }
+
+  function syncRtcPerfSummaryAutoClose(tone) {
+    clearRtcPerfSummaryCloseTimer();
+    if (!_rtcPerfSummaryOpen || tone !== "normal") return;
+    _rtcPerfSummaryCloseTimer = window.setTimeout(() => {
+      setRtcPerfSummaryOpen(false);
+    }, RTC_PERF_SUMMARY_AUTO_CLOSE_MS);
+  }
+
+  function setRtcPerfSummaryOpen(open) {
+    const model = buildRtcPerfHudModel();
+    const nextOpen = Boolean(open && model.visible && isRtcPerfSummaryAvailable());
+    _rtcPerfSummaryOpen = nextOpen;
+    if (rtcPerfSummaryEl) rtcPerfSummaryEl.hidden = !nextOpen;
+    if (!nextOpen) {
+      clearRtcPerfSummaryCloseTimer();
+      return;
+    }
+    syncRtcPerfSummaryAutoClose(model.tone);
+  }
+
+  function syncRtcPerfHud() {
+    if (!rtcPerfHudEl || !rtcPerfGlanceEl || !rtcPerfGlanceTextEl) return;
+    const model = buildRtcPerfHudModel();
+    rtcPerfHudEl.hidden = !model.visible;
+    rtcPerfGlanceEl.dataset.tone = model.tone;
+    rtcPerfGlanceTextEl.textContent = model.glance || model.title;
+
+    if (!model.visible || !isRtcPerfSummaryAvailable()) {
+      setRtcPerfSummaryOpen(false);
+      return;
+    }
+
+    if (rtcPerfSummaryEl) rtcPerfSummaryEl.dataset.tone = model.tone;
+    if (rtcPerfTitleEl) rtcPerfTitleEl.textContent = model.title;
+    if (rtcPerfVideoEl) rtcPerfVideoEl.textContent = model.video;
+    if (rtcPerfCodecEl) rtcPerfCodecEl.textContent = model.codec;
+    if (rtcPerfBitrateEl) rtcPerfBitrateEl.textContent = model.bitrate;
+    if (rtcPerfRttEl) rtcPerfRttEl.textContent = model.rtt;
+    if (rtcPerfJitterEl) rtcPerfJitterEl.textContent = model.jitter;
+    if (rtcPerfLossEl) rtcPerfLossEl.textContent = model.loss;
+    if (rtcPerfFreezeEl) rtcPerfFreezeEl.textContent = model.freeze;
+    if (rtcPerfPathEl) rtcPerfPathEl.textContent = model.path;
+    if (_rtcPerfSummaryOpen && _rtcPerfSummaryCloseTimer == null) {
+      syncRtcPerfSummaryAutoClose(model.tone);
+    } else if (_rtcPerfSummaryOpen && model.tone !== "normal") {
+      clearRtcPerfSummaryCloseTimer();
+    }
   }
 
   function drawStageEdgeFades(stageWidth, stageHeight) {
@@ -3679,6 +3829,7 @@ window.HomeDrive = (() => {
           : getUIText("start_vision_hint", "Tap the start button to enable drive vision."));
         setMeta("");
         setDebug("");
+        syncRtcPerfHud();
       }
       return;
     }
@@ -3707,6 +3858,7 @@ window.HomeDrive = (() => {
         width: stageWidth,
         height: stageHeight,
       });
+      syncRtcPerfHud();
       scheduleCameraFrameRecheck();
       return;
     }
@@ -3793,7 +3945,7 @@ window.HomeDrive = (() => {
       setDebug(debugText);
       drawHudTopLeftText(stageWidth, stageHeight, viewportRect, overlayInfoState.carLabel, pathStyle.mode);
       drawHudTopRightText(stageWidth, stageHeight, viewportRect, lastDebug, pathStyle.mode);
-      drawHudRightCenterPerfText(stageWidth, stageHeight, viewportRect, pathStyle.mode);
+      syncRtcPerfHud();
       drawHudBottomLeftText(stageWidth, stageHeight, viewportRect, overlayInfoState.branchLabel, pathStyle.mode);
       drawHudBottomText(stageWidth, stageHeight, viewportRect, selectedPath.latDebugText, hudState, pathStyle.mode);
     }
@@ -3942,6 +4094,85 @@ window.HomeDrive = (() => {
     });
   }
 
+  let _rtcPerfHoldTimer = null;
+  let _rtcPerfHoldPointerId = null;
+  let _rtcPerfHoldStartX = 0;
+  let _rtcPerfHoldStartY = 0;
+
+  function clearRtcPerfHold() {
+    if (_rtcPerfHoldTimer != null) {
+      window.clearTimeout(_rtcPerfHoldTimer);
+      _rtcPerfHoldTimer = null;
+    }
+    _rtcPerfHoldPointerId = null;
+    if (rtcPerfHoldTargetEl) rtcPerfHoldTargetEl.classList.remove("is-holding");
+  }
+
+  function bindRtcPerfHudInteractions() {
+    if (!rtcPerfHoldTargetEl || !rtcPerfSummaryEl) return;
+
+    rtcPerfHoldTargetEl.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      clearRtcPerfHold();
+      if (!isActive() || !isRtcPerfSummaryAvailable()) return;
+      _rtcPerfHoldPointerId = event.pointerId;
+      _rtcPerfHoldStartX = event.clientX;
+      _rtcPerfHoldStartY = event.clientY;
+      rtcPerfHoldTargetEl.classList.add("is-holding");
+      rtcPerfHoldTargetEl.setPointerCapture?.(event.pointerId);
+      _rtcPerfHoldTimer = window.setTimeout(() => {
+        _rtcPerfHoldTimer = null;
+        rtcPerfHoldTargetEl.classList.remove("is-holding");
+        setRtcPerfSummaryOpen(!_rtcPerfSummaryOpen);
+      }, RTC_PERF_HOLD_MS);
+    });
+    rtcPerfHoldTargetEl.addEventListener("pointermove", (event) => {
+      if (_rtcPerfHoldPointerId !== event.pointerId) return;
+      if (Math.hypot(event.clientX - _rtcPerfHoldStartX, event.clientY - _rtcPerfHoldStartY) > RTC_PERF_HOLD_MOVE_PX) {
+        clearRtcPerfHold();
+      }
+    });
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach((eventName) => {
+      rtcPerfHoldTargetEl.addEventListener(eventName, clearRtcPerfHold);
+    });
+    rtcPerfHoldTargetEl.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    rtcPerfCloseBtnEl?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setRtcPerfSummaryOpen(false);
+    });
+    rtcPerfLogBtnEl?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const previousText = rtcPerfLogBtnEl.textContent;
+      rtcPerfLogBtnEl.disabled = true;
+      rtcPerfLogBtnEl.textContent = "SEND";
+      (async () => {
+        try {
+          if (!window.CarrotVisionDiag?.uploadDiscord) throw new Error("diagnostic upload unavailable");
+          await window.CarrotVisionDiag.uploadDiscord();
+          rtcPerfLogBtnEl.textContent = "SENT";
+          if (typeof showAppToast === "function") showAppToast("Carrot Vision log sent to Discord", { duration: 2600 });
+        } catch (error) {
+          rtcPerfLogBtnEl.textContent = "FAIL";
+          if (typeof showAppToast === "function") showAppToast(`Discord upload failed: ${error?.message || error}`, { tone: "error", duration: 4200 });
+        } finally {
+          window.setTimeout(() => {
+            rtcPerfLogBtnEl.disabled = false;
+            rtcPerfLogBtnEl.textContent = previousText;
+          }, 1400);
+        }
+      })();
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!_rtcPerfSummaryOpen) return;
+      if (rtcPerfSummaryEl.contains(event.target) || rtcPerfHoldTargetEl.contains(event.target)) return;
+      setRtcPerfSummaryOpen(false);
+    }, true);
+  }
+
   function shouldIgnoreStageFullscreenToggle(target) {
     if (!(target instanceof Element)) return false;
     if (target.closest("button, a, input, textarea, select, label")) return true;
@@ -3958,11 +4189,13 @@ window.HomeDrive = (() => {
   }
 
   function requestFullRender() {
+    if (!isRtcPerfSummaryAvailable()) setRtcPerfSummaryOpen(false);
     refresh();
     requestRender({ force: true, overlayDirty: true, hudDirty: true });
   }
 
   function handleLifecycleChange() {
+    if (!isActive()) setRtcPerfSummaryOpen(false);
     if (isStageVisible()) {
       if (isCarrotVisionActive()) {
         const live = (getCarrotVisionState().controlState || "") === "live";
@@ -4008,6 +4241,8 @@ window.HomeDrive = (() => {
   } catch {}
 
   syncDisplayModeButtons();
+  bindRtcPerfHudInteractions();
+  syncRtcPerfHud();
   refreshParams(true);
   refreshOverlayInfo(true).catch(() => {});
   requestRender({ force: true, overlayDirty: true, hudDirty: true });
