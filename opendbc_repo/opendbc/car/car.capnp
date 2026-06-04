@@ -252,8 +252,8 @@ struct CarState {
   leftLongDist @71 : Float32; # distance to left lane line in the direction of travel
   rightLongDist @72 : Float32; # distance to right lane line in the direction of travel
   carrotCruise @73 : Int16;
-  leftLaneLine @74 : Int16; # -1: no lane, 0: dashed, 1: solid, +10: white, +20: yellow, ex) 21: solid yellow
-  rightLaneLine @75 : Int16; # -1: no lane, 0: dashed, 1: solid, +10: white, +20: yellow, ex) 21: solid yellow
+  leftLaneLine @74 : Int16; # -1: no lane, 0: dashed, 1: solid, +10: white, +20: yellow, +30: blue, ex) 21: solid yellow
+  rightLaneLine @75 : Int16; # -1: no lane, 0: dashed, 1: solid, +10: white, +20: yellow, +30: blue, ex) 21: solid yellow
   datetime @76 :UInt64; # timestamp in milliseconds since epoch
   leftRearLongDist @77 :Float32; # rear-left corner radar longitudinal distance
   rightRearLongDist @78 :Float32; # rear-right corner radar longitudinal distance
