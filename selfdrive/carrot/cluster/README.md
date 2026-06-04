@@ -185,9 +185,12 @@ encoder FPS because the V4L2 encoder timing, SPS timing, and automatic bitrate
 are fixed at startup. Set `CLUSTER_AUTORUN_FPS` only for fixed test overrides;
 `0` means uncapped.
 `ClusterHudDebug` controls the autorun output gate: `0` starts external HUD
-rendering only while openpilot is onroad, and `1` keeps the older always-on
-debug behavior after power-up. When output is gated off, `cluster_autorun`
-sends TURZX brightness `0` so a stale HUD frame does not remain visible.
+rendering only while openpilot is onroad, and `1`, `2`, and `3` keep the
+always-on debug behavior after power-up. In live input only, `2` also keeps the
+top UI icons visible when source data is missing, and `3` also shows the navi
+debug UI before navi data has arrived. When output is gated off,
+`cluster_autorun` sends TURZX brightness `0` so a stale HUD frame does not
+remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
 Manager autostart enables realtime affinity by default. `cluster_autorun.py`
@@ -276,10 +279,14 @@ the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and
 core usage, `3` shows a large debug graph selected by `ShowPlotMode` with the
 driving scene disabled, and `4`
 shows the same graph in the right-side panel while keeping the driving scene.
+`5` shows the external navigation receiver debug panel while keeping the
+driving scene.
 Mode `3` also hides the speed, accel, clock, turn-signal, and git HUD so the
 large graph uses the available center/right height with only a small margin.
 Mode `4` keeps the driving HUD and uses the maximum right-side panel height with
-the same margin. Modes `1`, `2`, `3`, and `4` suppress the route overlay so the
+the same margin. Mode `5` draws the received navigation route through the
+normal planned-path renderer when route coordinates and current ego GPS are
+available. Modes `1`, `2`, `3`, `4`, and `5` suppress the route overlay so the
 selected debug view remains visible.
 `ClusterHudRadarInfo` controls world radar/vehicle speed and distance labels:
 `0` off, `1` speed for vehicle boxes only, `2` speed and distance for vehicle

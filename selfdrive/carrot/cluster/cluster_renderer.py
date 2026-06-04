@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
+import base64
 import math
 import os
 import time
@@ -24,6 +25,7 @@ from cluster_config import (
     CLUSTER_SCREEN_MODE_DEBUG,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+    CLUSTER_SCREEN_MODE_NAVI_DEBUG,
     CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
     ClusterTheme,
     DESIGN_HEIGHT,
@@ -39,7 +41,16 @@ from cluster_config import (
     normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
 )
-from cluster_models import ClusterUiState, DebugPlotSnapshot, GitBranchStatus, LiveDebugInfo, RouteOverlay
+from cluster_models import (
+    ClusterUiState,
+    DebugPlotSnapshot,
+    GitBranchStatus,
+    LiveDebugInfo,
+    NaviDebugInfo,
+    NaviGuidanceImage,
+    NaviTrafficLightInfo,
+    RouteOverlay,
+)
 from cluster_scene import (
     ClusterScene,
     MeshStrip,
@@ -118,6 +129,25 @@ SPEED_LIMIT_SOURCE_LABELS = {
 SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
+NAVI_TRAFFIC_PANEL_RIGHT = TURN_SIGNAL_RIGHT_CENTER_X + 96
+NAVI_TRAFFIC_PANEL_H = 90
+NAVI_TRAFFIC_PANEL_Y = TURN_SIGNAL_CENTER_Y + TURN_SIGNAL_HEAD_HALF_HEIGHT + 10
+NAVI_TRAFFIC_SIGNAL_SIZE = 58.0
+NAVI_TRAFFIC_SIGNAL_GAP = 10.0
+NAVI_TRAFFIC_TEXT_GAP = 14.0
+NAVI_TRAFFIC_PANEL_PAD_X = 16.0
+NAVI_TRAFFIC_BG_LIGHT = (62, 68, 81)
+NAVI_TRAFFIC_BG_DARK = (18, 21, 27)
+NAVI_TRAFFIC_BG_OUTLINE = (238, 241, 246)
+NAVI_TRAFFIC_OFF_LIGHT = (40, 43, 51)
+NAVI_TRAFFIC_OFF_DARK = (36, 39, 47)
+NAVI_TRAFFIC_OFF_ARROW = (58, 61, 70)
+NAVI_TRAFFIC_RED = (255, 111, 111)
+NAVI_TRAFFIC_GREEN = (103, 255, 78)
+NAVI_GUIDANCE_IMAGE_X = SYSTEM_PANEL_X + 24
+NAVI_GUIDANCE_IMAGE_Y = SYSTEM_PANEL_Y + 210
+NAVI_GUIDANCE_IMAGE_W = SYSTEM_PANEL_W - 48
+NAVI_GUIDANCE_IMAGE_H = 270
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
 TEXT_MEASURE_CACHE_LIMIT = 1024
 TRIANGLE_STRIP_POINT_CACHE_LIMIT = 256
@@ -484,6 +514,9 @@ class ClusterUiRenderer:
         self._follow_vehicle_texture = None
         self._lfa_texture = None
         self._lfa_active_texture = None
+        self._navi_guidance_texture = None
+        self._navi_guidance_hash = ""
+        self._navi_guidance_size: tuple[int, int] | None = None
         self._route_video_texture = None
         self._route_video_size: tuple[int, int] | None = None
         self._route_video_frame_id: str | None = None
@@ -622,6 +655,11 @@ class ClusterUiRenderer:
         if self._lfa_active_texture is not None:
             rl.unload_texture(self._lfa_active_texture)
             self._lfa_active_texture = None
+        if self._navi_guidance_texture is not None:
+            rl.unload_texture(self._navi_guidance_texture)
+            self._navi_guidance_texture = None
+            self._navi_guidance_hash = ""
+            self._navi_guidance_size = None
         if self._owns_font and self._font is not None:
             rl.unload_font(self._font)
         self._font = None
@@ -1898,6 +1936,7 @@ class ClusterUiRenderer:
         self._profile_add("hud.push_scale", profile_stage)
         try:
             screen_mode = self.screen_mode
+            navi_active = state.navi_debug is not None
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH:
                 profile_stage = self._profile_start()
                 self._draw_speed_block(state)
@@ -1923,14 +1962,18 @@ class ClusterUiRenderer:
             self._draw_accel_block(state)
             self._profile_add("hud.accel_block", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_turn_signal("left", left_signal_lit)
+            self._draw_turn_signal("left", left_signal_lit, show_inactive=state.debug_ui_visible)
             self._profile_add("hud.turn_signal_left", profile_stage)
             profile_stage = self._profile_start()
             self._draw_drive_status(state)
             self._profile_add("hud.drive_status", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_turn_signal("right", right_signal_lit)
+            self._draw_turn_signal("right", right_signal_lit, show_inactive=state.debug_ui_visible)
             self._profile_add("hud.turn_signal_right", profile_stage)
+            if navi_active:
+                profile_stage = self._profile_start()
+                self._draw_navi_traffic_light_panel(state.navi_debug)
+                self._profile_add("hud.navi_traffic", profile_stage)
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
             self._profile_add("hud.center_clock", profile_stage)
@@ -1955,12 +1998,17 @@ class ClusterUiRenderer:
                     DEBUG_PLOT_RIGHT_H,
                 )
                 self._profile_add("hud.debug_plot_right", profile_stage)
+            if screen_mode == CLUSTER_SCREEN_MODE_NAVI_DEBUG or navi_active:
+                profile_stage = self._profile_start()
+                self._draw_navi_debug_panel(state.navi_debug)
+                self._profile_add("hud.navi_debug", profile_stage)
             if screen_mode not in (
                 CLUSTER_SCREEN_MODE_DEBUG,
                 CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
-            ):
+                CLUSTER_SCREEN_MODE_NAVI_DEBUG,
+            ) and not navi_active:
                 profile_stage = self._profile_start()
                 self._draw_route_overlay(state.route_overlay)
                 self._profile_add("hud.route_overlay", profile_stage)
@@ -2169,6 +2217,309 @@ class ClusterUiRenderer:
         label_x = min(plot_x + plot_w - 4.0, latest.x + 42.0)
         label_y = clamp(latest.y + (24.0 if series_index > 0 else 0.0), plot_y + 12.0, plot_y + plot_h - 12.0)
         self._draw_text(label, label_x, label_y, label_size, color, anchor="right")
+
+    def _draw_navi_debug_panel(self, info: NaviDebugInfo | None) -> None:
+        theme = self._current_theme()
+        panel_x = SYSTEM_PANEL_X
+        panel_y = SYSTEM_PANEL_Y
+        panel_w = SYSTEM_PANEL_W
+        panel_h = min(DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0, 520.0)
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, theme.route_panel_bg, theme.faint, 2)
+
+        if info is None:
+            self._draw_text("NAVI receiver", panel_x + 24, panel_y + 34, 24, theme.text)
+            self._draw_text("waiting for data", panel_x + 24, panel_y + 76, 22, theme.muted)
+            self._draw_navi_guidance_image_box(None)
+            return
+
+        severity = info.severity.lower()
+        title_color = {
+            "stop": RED,
+            "go": GREEN,
+            "warning": RED,
+            "caution": AMBER,
+        }.get(severity, theme.text)
+        title = self._ellipsize_text(info.title, 24, panel_w - 48)
+        self._draw_text(title, panel_x + 24, panel_y + 34, 24, title_color)
+
+        if severity not in ("normal", ""):
+            badge_w = 92.0
+            badge_h = 28.0
+            badge_x = panel_x + panel_w - badge_w - 24.0
+            badge_y = panel_y + 23.0
+            self._rounded_rect(badge_x, badge_y, badge_w, badge_h, 10, title_color, None, 0.0)
+            self._draw_text(severity.upper(), badge_x + badge_w * 0.5, badge_y + 6.0, 15, WHITE, anchor="center")
+
+        y = panel_y + 82.0
+        line_size = 19
+        max_w = panel_w - 48.0
+        lines = info.lines or ("no navi event",)
+        for index, line in enumerate(lines[:4]):
+            text = self._ellipsize_text(str(line), line_size, max_w)
+            color = theme.text if index < 4 else theme.muted
+            self._draw_text(text, panel_x + 24, y, line_size, color)
+            y += 31.0
+        self._draw_navi_guidance_image_box(info.guidance_image)
+
+    def _draw_navi_traffic_light_panel(self, info: NaviDebugInfo | None) -> None:
+        theme = self._current_theme()
+        y = NAVI_TRAFFIC_PANEL_Y
+        h = NAVI_TRAFFIC_PANEL_H
+        traffic = info.traffic_light if info is not None else None
+        bg = NAVI_TRAFFIC_BG_DARK if theme.is_dark else NAVI_TRAFFIC_BG_LIGHT
+        off = NAVI_TRAFFIC_OFF_DARK if theme.is_dark else NAVI_TRAFFIC_OFF_LIGHT
+
+        red_s = traffic.red_s if traffic is not None else None
+        straight_s = traffic.straight_s if traffic is not None else None
+        left_s = traffic.left_s if traffic is not None else None
+        right_s = traffic.right_s if traffic is not None else None
+        uturn_s = traffic.uturn_s if traffic is not None else None
+        red_on = self._navi_signal_active(traffic, "red", red_s)
+        straight_on = self._navi_signal_active(traffic, "straight", straight_s)
+        left_on = self._navi_signal_active(traffic, "left", left_s)
+        right_on = self._navi_signal_active(traffic, "right", right_s)
+        uturn_on = self._navi_signal_active(traffic, "uturn", uturn_s)
+        use_uturn_slot = (uturn_on or uturn_s is not None) and not (left_on or left_s is not None)
+
+        primary_seconds, primary_red = self._navi_primary_signal_seconds(traffic)
+        remain_text = "--" if primary_seconds is None else str(primary_seconds)
+        remain_color = NAVI_TRAFFIC_RED if primary_red else NAVI_TRAFFIC_GREEN
+        remain_size = 54.0
+        remain_width, _ = self._measure_text(remain_text, remain_size, max(1.0, remain_size * 0.02))
+        show_right = right_on or right_s is not None
+        slot_count = 4 if show_right else 3
+        slot_span = slot_count * NAVI_TRAFFIC_SIGNAL_SIZE + (slot_count - 1) * NAVI_TRAFFIC_SIGNAL_GAP
+        content_w = slot_span + NAVI_TRAFFIC_TEXT_GAP + remain_width
+        w = max(270.0, content_w + NAVI_TRAFFIC_PANEL_PAD_X * 2.0)
+        x = NAVI_TRAFFIC_PANEL_RIGHT - w
+        shadow = (0, 0, 0, 92)
+        outline = theme.faint if theme.is_dark else NAVI_TRAFFIC_BG_OUTLINE
+        self._rounded_rect(x + 5.0, y + 7.0, w, h, 20.0, shadow, None, 0.0)
+        self._rounded_rect(x, y, w, h, 20.0, bg, outline, 3.0)
+
+        slot_y = y + h * 0.5
+        slot_x = x + NAVI_TRAFFIC_PANEL_PAD_X + NAVI_TRAFFIC_SIGNAL_SIZE * 0.5
+        step = NAVI_TRAFFIC_SIGNAL_SIZE + NAVI_TRAFFIC_SIGNAL_GAP
+        self._draw_navi_red_signal(slot_x, slot_y, red_on, off)
+        self._draw_navi_turn_signal_slot(
+            slot_x + step,
+            slot_y,
+            active=uturn_on if use_uturn_slot else left_on,
+            uturn=use_uturn_slot,
+            off=off,
+        )
+        self._draw_navi_green_signal(slot_x + step * 2.0, slot_y, straight_on, off)
+        if show_right:
+            self._draw_navi_turn_signal_slot(slot_x + step * 3.0, slot_y, active=right_on, right=True, off=off)
+
+        remain_x = slot_x + NAVI_TRAFFIC_SIGNAL_SIZE * 0.5 + step * (slot_count - 1) + NAVI_TRAFFIC_TEXT_GAP
+        self._draw_text_with_stroke(
+            remain_text,
+            remain_x,
+            slot_y,
+            remain_size,
+            remain_color,
+            (0, 0, 0),
+            4,
+            anchor="left",
+        )
+
+    @staticmethod
+    def _navi_signal_active(traffic: NaviTrafficLightInfo | None, name: str, seconds: int | None) -> bool:
+        if traffic is None:
+            return False
+        flag = getattr(traffic, f"{name}_on", None)
+        if flag is not None:
+            return bool(flag)
+        return seconds is not None
+
+    def _navi_primary_signal_seconds(self, traffic: NaviTrafficLightInfo | None) -> tuple[int | None, bool]:
+        if traffic is None:
+            return None, False
+        ordered = (
+            ("red", traffic.red_s, True),
+            ("left", traffic.left_s, False),
+            ("uturn", traffic.uturn_s, False),
+            ("straight", traffic.straight_s, False),
+            ("right", traffic.right_s, False),
+        )
+        for name, seconds, is_red in ordered:
+            if self._navi_signal_active(traffic, name, seconds):
+                return seconds, is_red
+        for _, seconds, is_red in ordered:
+            if seconds is not None:
+                return seconds, is_red
+        return None, False
+
+    def _draw_navi_red_signal(self, cx: float, cy: float, active: bool, off: tuple[int, int, int]) -> None:
+        radius = NAVI_TRAFFIC_SIGNAL_SIZE * (12.5 / 26.0 if active else 0.5)
+        color = NAVI_TRAFFIC_RED if active else off
+        rl.draw_circle_v(rl.Vector2(cx, cy), radius, rl_color(color))
+        if active:
+            self._draw_navi_circle_stroke(cx, cy, radius, max(1.6, NAVI_TRAFFIC_SIGNAL_SIZE / 26.0), (0, 0, 0))
+
+    def _draw_navi_green_signal(self, cx: float, cy: float, active: bool, off: tuple[int, int, int]) -> None:
+        radius = NAVI_TRAFFIC_SIGNAL_SIZE * (12.5 / 26.0 if active else 0.5)
+        color = NAVI_TRAFFIC_GREEN if active else off
+        rl.draw_circle_v(rl.Vector2(cx, cy), radius, rl_color(color))
+        if active:
+            self._draw_navi_circle_stroke(cx, cy, radius, max(1.6, NAVI_TRAFFIC_SIGNAL_SIZE / 26.0), (0, 0, 0))
+
+    def _draw_navi_turn_signal_slot(
+        self,
+        cx: float,
+        cy: float,
+        *,
+        active: bool,
+        uturn: bool = False,
+        right: bool = False,
+        off: tuple[int, int, int],
+    ) -> None:
+        radius = NAVI_TRAFFIC_SIGNAL_SIZE * 0.5
+        active_bg = (0, 0, 0) if self._current_theme().is_dark else (34, 34, 34)
+        rl.draw_circle_v(rl.Vector2(cx, cy), radius, rl_color(active_bg if active else off))
+        color = NAVI_TRAFFIC_GREEN if active else NAVI_TRAFFIC_OFF_ARROW
+        if uturn:
+            self._draw_navi_uturn_arrow(cx, cy, color)
+        else:
+            self._draw_navi_horizontal_arrow(cx, cy, color, right=right)
+
+    def _draw_navi_circle_stroke(
+        self,
+        cx: float,
+        cy: float,
+        radius: float,
+        stroke_width: float,
+        color: tuple[int, int, int],
+    ) -> None:
+        rl.draw_ring(
+            rl.Vector2(cx, cy),
+            max(0.0, radius - stroke_width),
+            radius,
+            0.0,
+            360.0,
+            48,
+            rl_color(color),
+        )
+
+    @staticmethod
+    def _navi_slot_point(cx: float, cy: float, x: float, y: float) -> "rl.Vector2":
+        scale = NAVI_TRAFFIC_SIGNAL_SIZE / 26.0
+        return rl.Vector2(cx + (x - 13.0) * scale, cy + (y - 13.0) * scale)
+
+    @staticmethod
+    def _draw_navi_round_line(start: "rl.Vector2", end: "rl.Vector2", width: float, color: tuple[int, int, int]) -> None:
+        draw_color = rl_color(color)
+        rl.draw_line_ex(start, end, width, draw_color)
+        cap_radius = width * 0.5
+        rl.draw_circle_v(start, cap_radius, draw_color)
+        rl.draw_circle_v(end, cap_radius, draw_color)
+
+    def _draw_navi_horizontal_arrow(self, cx: float, cy: float, color: tuple[int, int, int], *, right: bool) -> None:
+        def point(x: float, y: float) -> "rl.Vector2":
+            return self._navi_slot_point(cx, cy, 26.0 - x if right else x, y)
+
+        width = max(3.0, 3.0 * NAVI_TRAFFIC_SIGNAL_SIZE / 26.0)
+        self._draw_navi_round_line(point(8.5, 13.0), point(20.5, 13.0), width, color)
+        tip = point(6.418, 13.0)
+        top = point(12.532, 7.0)
+        bottom = point(12.532, 19.0)
+        self._draw_navi_round_line(top, tip, width, color)
+        self._draw_navi_round_line(tip, bottom, width, color)
+
+    def _draw_navi_uturn_arrow(self, cx: float, cy: float, color: tuple[int, int, int]) -> None:
+        scale = NAVI_TRAFFIC_SIGNAL_SIZE / 26.0
+        width = max(3.0, 3.0 * scale)
+        rl.draw_ring(
+            rl.Vector2(cx, cy - 3.2 * scale),
+            4.7 * scale,
+            4.7 * scale + width,
+            190.0,
+            360.0,
+            28,
+            rl_color(color),
+        )
+        self._draw_navi_round_line(
+            self._navi_slot_point(cx, cy, 17.8, 10.0),
+            self._navi_slot_point(cx, cy, 17.8, 18.6),
+            width,
+            color,
+        )
+        tip = self._navi_slot_point(cx, cy, 8.0, 18.8)
+        top = self._navi_slot_point(cx, cy, 4.9, 12.7)
+        bottom = self._navi_slot_point(cx, cy, 12.6, 15.0)
+        rl.draw_triangle(top, tip, bottom, rl_color(color))
+
+    def _draw_navi_guidance_image_box(self, image: NaviGuidanceImage | None) -> None:
+        theme = self._current_theme()
+        box_x = NAVI_GUIDANCE_IMAGE_X
+        box_y = NAVI_GUIDANCE_IMAGE_Y
+        box_w = NAVI_GUIDANCE_IMAGE_W
+        box_h = NAVI_GUIDANCE_IMAGE_H
+        self._rounded_rect(box_x, box_y, box_w, box_h, 14, theme.panel_bg, theme.faint, 2)
+        self._draw_text("3D GUIDE", box_x + 16, box_y + 18, 15, theme.muted)
+        texture = self._navi_guidance_texture_for(image)
+        if texture is None:
+            return
+        texture_w = float(texture.width)
+        texture_h = float(texture.height)
+        if texture_w <= 0.0 or texture_h <= 0.0:
+            return
+        inner_x = box_x + 14.0
+        inner_y = box_y + 40.0
+        inner_w = box_w - 28.0
+        inner_h = box_h - 54.0
+        scale = min(inner_w / texture_w, inner_h / texture_h)
+        draw_w = texture_w * scale
+        draw_h = texture_h * scale
+        dest = rl.Rectangle(inner_x + (inner_w - draw_w) * 0.5, inner_y + (inner_h - draw_h) * 0.5, draw_w, draw_h)
+        source = rl.Rectangle(0.0, 0.0, texture_w, texture_h)
+        rl.draw_texture_pro(texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
+
+    def _navi_guidance_texture_for(self, image: NaviGuidanceImage | None):
+        image_hash = image.image_hash if image is not None else ""
+        image_base64 = image.image_base64 if image is not None else ""
+        if not image_hash and image_base64:
+            image_hash = str(hash(image_base64))
+        if not image_base64:
+            if self._navi_guidance_texture is not None:
+                rl.unload_texture(self._navi_guidance_texture)
+                self._navi_guidance_texture = None
+                self._navi_guidance_hash = ""
+                self._navi_guidance_size = None
+            return None
+        if self._navi_guidance_texture is not None and image_hash == self._navi_guidance_hash:
+            return self._navi_guidance_texture
+        if self._navi_guidance_texture is not None:
+            rl.unload_texture(self._navi_guidance_texture)
+            self._navi_guidance_texture = None
+            self._navi_guidance_hash = ""
+            self._navi_guidance_size = None
+        try:
+            payload = image_base64.split(",", 1)[1] if "," in image_base64[:64] else image_base64
+            image_bytes = base64.b64decode(payload, validate=False)
+        except Exception:
+            return None
+        extension = ".jpg" if image is not None and "jpeg" in image.image_mime.lower() else ".png"
+        loaded_image = None
+        try:
+            loaded_image = rl.load_image_from_memory(extension, image_bytes, len(image_bytes))
+            if not rl.is_image_valid(loaded_image):
+                return None
+            texture = rl.load_texture_from_image(loaded_image)
+            if not rl.is_texture_valid(texture):
+                rl.unload_texture(texture)
+                return None
+            rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            self._navi_guidance_texture = texture
+            self._navi_guidance_hash = image_hash
+            self._navi_guidance_size = (int(texture.width), int(texture.height))
+            return self._navi_guidance_texture
+        except Exception:
+            return None
+        finally:
+            if loaded_image is not None and rl.is_image_valid(loaded_image):
+                rl.unload_image(loaded_image)
 
     def _draw_system_stats_panel(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
@@ -2547,7 +2898,13 @@ class ClusterUiRenderer:
     def _draw_drive_status(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         gear_text = (state.gear_text or "").strip().upper()
-        if not gear_text and state.cruise_gap is None and not self._cruise_set_visible(state) and state.lfa_active is None:
+        if (
+            not state.debug_ui_visible
+            and not gear_text
+            and state.cruise_gap is None
+            and not self._cruise_set_visible(state)
+            and state.lfa_active is None
+        ):
             return
 
         bottom_y = self._drive_status_bottom_y(state)
@@ -2728,19 +3085,20 @@ class ClusterUiRenderer:
         speed_value = int(round(clamp(display_speed_kph, 0.0, MAX_SPEED_KPH)))
         self._draw_text(str(speed_value), SPEED_VALUE_CENTER_X, SPEED_VALUE_CENTER_Y, 156, theme.text, anchor="center")
 
-        if state.speed_limit_kph is not None:
+        if state.speed_limit_kph is not None or state.navi_debug is not None:
             center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)
             rl.draw_circle_v(center, SPEED_LIMIT_SIGN_RADIUS, rl_color(RED))
             rl.draw_circle_v(center, 47, rl_color(WHITE))
+            limit_text = "--" if state.speed_limit_kph is None else str(state.speed_limit_kph)
             self._draw_text(
-                str(state.speed_limit_kph),
+                limit_text,
                 SPEED_LIMIT_SIGN_CENTER_X,
                 SPEED_LIMIT_SIGN_CENTER_Y - 12,
                 42,
                 TEXT,
                 anchor="center",
             )
-            source_label = speed_limit_source_label(state.speed_limit_source)
+            source_label = speed_limit_source_label(state.speed_limit_source) if state.speed_limit_kph is not None else ""
             if source_label:
                 self._draw_text(
                     source_label,
@@ -2848,15 +3206,16 @@ class ClusterUiRenderer:
             started_at = self._right_turn_signal_started_at
         return blink_visible(now, started_at, float("inf"))
 
-    def _draw_turn_signal(self, side: str, lit: bool) -> None:
-        if not lit:
+    def _draw_turn_signal(self, side: str, lit: bool, show_inactive: bool = False) -> None:
+        if not lit and not show_inactive:
             return
 
+        theme = self._current_theme()
         cx = TURN_SIGNAL_LEFT_CENTER_X if side == "left" else TURN_SIGNAL_RIGHT_CENTER_X
         cy = TURN_SIGNAL_CENTER_Y
         direction = -1 if side == "left" else 1
-        fill = GREEN
-        outline = (8, 118, 65)
+        fill = GREEN if lit else (*theme.muted, 42)
+        outline = (8, 118, 65) if lit else (*theme.muted, 150)
         tail_back = -36
         tail_front = 12
         tail_half_height = 16
@@ -2940,6 +3299,31 @@ class ClusterUiRenderer:
             draw_x = x - text_width
             draw_y = y - text_height * 0.5
         rl.draw_text_ex(self._font, text, rl.Vector2(draw_x, draw_y), size, spacing, rl_color(color))
+
+    def _draw_text_with_stroke(
+        self,
+        text: str,
+        x: float,
+        y: float,
+        size: float,
+        color: tuple[int, int, int],
+        stroke_color: tuple[int, int, int],
+        stroke_width: int,
+        anchor: str = "left",
+    ) -> None:
+        if stroke_width > 0:
+            for dx, dy in (
+                (-stroke_width, 0),
+                (stroke_width, 0),
+                (0, -stroke_width),
+                (0, stroke_width),
+                (-stroke_width, -stroke_width),
+                (stroke_width, -stroke_width),
+                (-stroke_width, stroke_width),
+                (stroke_width, stroke_width),
+            ):
+                self._draw_text(text, x + dx, y + dy, size, stroke_color, anchor)
+        self._draw_text(text, x, y, size, color, anchor)
 
     def _draw_world_label_text(
         self,
