@@ -197,8 +197,9 @@ class DesireHelper:
       left_line_ok = self.left.lane_line_info_mod in (0, 5)
       right_line_ok = self.right.lane_line_info_mod in (0, 5)
     else:
-      left_line_ok = self.left.lane_line_info_raw < 20
-      right_line_ok = self.right.lane_line_info_raw < 20
+      # Hyundai lane color: 0 none, 1 white, 2 yellow, 3 blue. Only yellow blocks a lane change.
+      left_line_ok = self.left.lane_line_info_raw // 10 != 2
+      right_line_ok = self.right.lane_line_info_raw // 10 != 2
     self.left.compute_lane_change_available(lane_line_info_lt_20=left_line_ok, ignore_bsd=ignore_bsd)
     self.right.compute_lane_change_available(lane_line_info_lt_20=right_line_ok, ignore_bsd=ignore_bsd)
 

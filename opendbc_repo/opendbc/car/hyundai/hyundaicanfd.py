@@ -791,7 +791,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if lane_line_check >= 1:
           lane_line_warn_left = CS.out.leftLaneLine % 10 not in (0, 5)   # 실선이면 주황
         else:
-          lane_line_warn_left = CS.out.leftLaneLine >= 20                  # 노란색이면 주황
+          lane_line_warn_left = CS.out.leftLaneLine // 10 == 2           # 노란색이면 주황
         lane_color = 4 if lane_line_warn_left or CS.out.leftBlindspot else lane_color
         if hud_control.leftLaneDepart:
           values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
@@ -802,7 +802,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if lane_line_check >= 1:
           lane_line_warn_right = CS.out.rightLaneLine % 10 not in (0, 5)
         else:
-          lane_line_warn_right = CS.out.rightLaneLine >= 20
+          lane_line_warn_right = CS.out.rightLaneLine // 10 == 2
         lane_color = 4 if lane_line_warn_right or CS.out.rightBlindspot else lane_color
         if hud_control.rightLaneDepart:
           values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1

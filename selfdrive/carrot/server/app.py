@@ -25,6 +25,8 @@ from .services.git_status import git_status_loop
 from .services.heartbeat import heartbeat_loop
 from .services.params import HAS_PARAMS
 
+VISION_DIAG_UPLOAD_MAX_BYTES = 16 * 1024 * 1024
+
 
 # ===== request log middleware =====
 @web.middleware
@@ -125,7 +127,7 @@ async def on_cleanup(app: web.Application) -> None:
 
 
 def make_app() -> web.Application:
-  app = web.Application(middlewares=[log_mw])
+  app = web.Application(middlewares=[log_mw], client_max_size=VISION_DIAG_UPLOAD_MAX_BYTES)
   app.on_startup.append(on_startup)
   app.on_cleanup.append(on_cleanup)
 

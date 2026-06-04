@@ -6,6 +6,7 @@ from aiohttp import web, WSMsgType
 
 from ..config import TMUX_WEB_SESSION
 from ..services import tmux
+from ..terminal_commands import translate_meta_command
 
 
 async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
@@ -74,7 +75,8 @@ async def ws_terminal(request: web.Request) -> web.WebSocketResponse:
         typ = data.get("type")
         try:
           if typ == "input":
-            await asyncio.to_thread(tmux.send_line, session, str(data.get("data") or ""))
+            line = str(data.get("data") or "")
+            await asyncio.to_thread(tmux.send_line, session, translate_meta_command(line) or line)
             await push_screen(force=True, delay=0.03)
           elif typ == "control":
             action = (data.get("action") or "").strip()

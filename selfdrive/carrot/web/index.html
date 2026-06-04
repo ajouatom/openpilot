@@ -83,8 +83,8 @@
   <link rel="stylesheet" href="/css/pages/tools/base.css?v=2605-43" />
   <link rel="stylesheet" href="/css/pages/tools/qr.css?v=2605-40" />
   <link rel="stylesheet" href="/css/pages/tools/main.css?v=2605-50" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2605-18" />
-  <link rel="stylesheet" href="/css/components/nav_hud.css?v=2605-24" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2606-04" />
+  <link rel="stylesheet" href="/css/components/nav_hud.css?v=2605-26" />
   <link rel="stylesheet" href="/css/responsive.css?v=2605-10" />
   <link rel="stylesheet" href="/css/vendor/plyr.css?v=3.7.8" />
 </head>
@@ -484,6 +484,32 @@
   </div>
 
   <div id="driveHudCard">
+    <div id="carrotRtcPerfHud" class="carrot-rtc-perf" hidden>
+      <section id="carrotRtcPerfSummary" class="carrot-rtc-perf-summary" data-tone="offline" hidden aria-label="Carrot Vision live diagnostic summary">
+        <div class="carrot-rtc-perf-summary__head">
+          <span class="carrot-rtc-perf__dot" aria-hidden="true"></span>
+          <strong id="carrotRtcPerfTitle" class="carrot-rtc-perf-summary__title">VISION OFFLINE</strong>
+          <button id="carrotRtcPerfLogBtn" class="carrot-rtc-perf-summary__action" type="button">LOG</button>
+          <button id="carrotRtcPerfCloseBtn" class="carrot-rtc-perf-summary__close" type="button" aria-label="Close Carrot Vision diagnostic summary">x</button>
+        </div>
+        <div class="carrot-rtc-perf-summary__sub">RTC ROAD CAMERA / LIVE DIAGNOSTIC</div>
+        <div class="carrot-rtc-perf-summary__grid">
+          <span>Video</span><strong id="carrotRtcPerfVideo">-</strong>
+          <span>Codec</span><strong id="carrotRtcPerfCodec">-</strong>
+          <span>Bitrate</span><strong id="carrotRtcPerfBitrate">-</strong>
+          <span>RTT</span><strong id="carrotRtcPerfRtt">-</strong>
+          <span>Jitter</span><strong id="carrotRtcPerfJitter">-</strong>
+          <span>Loss</span><strong id="carrotRtcPerfLoss">-</strong>
+          <span>Freeze</span><strong id="carrotRtcPerfFreeze">-</strong>
+          <span class="carrot-rtc-perf-summary__path-label">Path</span><strong id="carrotRtcPerfPath" class="carrot-rtc-perf-summary__path-value">-</strong>
+        </div>
+      </section>
+      <div id="carrotRtcPerfGlance" class="carrot-rtc-perf-glance" data-tone="offline" aria-live="polite">
+        <span class="carrot-rtc-perf__dot" aria-hidden="true"></span>
+        <span id="carrotRtcPerfGlanceText" class="carrot-rtc-perf-glance__text">VISION OFFLINE</span>
+      </div>
+    </div>
+    <button id="carrotRtcPerfHoldTarget" class="carrot-rtc-perf-hold-target" type="button" aria-label="Hold HUD to toggle Carrot Vision diagnostic summary"></button>
     <div class="hudWrap" id="hudRoot">
       <div class="hudMetricBar" role="presentation">
         <div class="hudMetricCell">
@@ -686,14 +712,14 @@
   <script src="/js/pages/terminal.js?v=2604-72"></script>
   <script src="/js/realtime/raw_capnp.js?v=2604-05"></script>
   <script src="/js/realtime/vision_state.js?v=2605-01"></script>
-  <script src="/js/realtime/vision_rtc.js?v=2605-01"></script>
+  <script src="/js/realtime/vision_rtc.js?v=2606-06"></script>
   <script src="/js/realtime/vision_raw.js?v=2605-01"></script>
-  <script src="/js/realtime/app_realtime.js?v=2605-01"></script>
-  <script src="/js/realtime/vision_diag.js?v=2605-01"></script>
-  <script src="/js/realtime/carrot_map.js?v=2605-53"></script>
-  <script src="/js/realtime/nav_hud.js?v=2605-14"></script>
+  <script src="/js/realtime/app_realtime.js?v=2606-04"></script>
+  <script src="/js/realtime/vision_diag.js?v=2606-07"></script>
+  <script src="/js/realtime/carrot_map.js?v=2606-02"></script>
+  <script src="/js/realtime/nav_hud.js?v=2605-17"></script>
   <script src="/js/pages/vision_background.js?v=2605-01"></script>
-  <script src="/js/realtime/home_drive.js?v=2605-07"></script>
+  <script src="/js/realtime/home_drive.js?v=2606-05"></script>
   <script src="/js/app.js?v=2604-76"></script>
 </body>
 </html>

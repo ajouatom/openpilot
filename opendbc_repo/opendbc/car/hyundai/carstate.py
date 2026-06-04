@@ -635,7 +635,7 @@ class CarState(CarStateBase):
       right_lane_prob = lane_info["RIGHT_LANE_PROB"]
       left_lane_type = lane_info["LEFT_LANE_TYPE"] # 0: dashed, 1: solid, 2: undecided, 3: road edge, 4: DLM Inner Solid, 5: DLM InnerDashed, 6:DLM Inner Undecided, 7: Botts Dots, 8: Barrier
       right_lane_type = lane_info["RIGHT_LANE_TYPE"]
-      left_lane_color = lane_info["LEFT_LANE_COLOR"]
+      left_lane_color = lane_info["LEFT_LANE_COLOR"]  # 0: none, 1: white, 2: yellow, 3: blue
       right_lane_color = lane_info["RIGHT_LANE_COLOR"]
       left_lane_info = left_lane_color * 10 + left_lane_type
       right_lane_info = right_lane_color * 10 + right_lane_type
