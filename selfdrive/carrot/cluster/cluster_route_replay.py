@@ -74,6 +74,7 @@ RADAR_MOTION_MIN_SPEED_SAMPLES = 4
 RADAR_MOTION_MAX_ACCEL_MPS2 = 9.0
 RADAR_MOTION_MAX_ACCEL_OUTLIER_MPS2 = 18.0
 RADAR_MOTION_PROMOTE_MIN_SPEED_KPH = 10.0
+RADAR_MOTION_VALID_COUNT_DROP_TOLERANCE = 4
 CORNER_DETECTION_STALE_S = 0.8
 RADAR_MIN_LONGITUDINAL_M = 0.0
 RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
@@ -1016,6 +1017,7 @@ class RouteLogParser:
         self.hyundai_canfd_radar_points: dict[str, RadarPoint] = {}
         self.hyundai_canfd_radar_point_t: dict[str, float] = {}
         self.hyundai_canfd_radar_history: dict[str, tuple[RadarMotionSample, ...]] = {}
+        self.hyundai_canfd_radar_promoted_counts: dict[str, int] = {}
         self.live_track_radar_points: dict[str, RadarPoint] = {}
         self.live_track_radar_t = -999.0
         self.radar_detections: tuple[DetectedVehicle, ...] = ()
@@ -1511,6 +1513,7 @@ class RouteLogParser:
                     self.hyundai_canfd_radar_point_t.pop(label, None)
                     if label not in valid_labels:
                         self.hyundai_canfd_radar_history.pop(label, None)
+                        self.hyundai_canfd_radar_promoted_counts.pop(label, None)
                 for point in radar_points:
                     self.hyundai_canfd_radar_points[point.label] = self._radar_point_with_absolute_speed(point, event_t)
                     self.hyundai_canfd_radar_point_t[point.label] = event_t
@@ -1556,6 +1559,7 @@ class RouteLogParser:
             self.hyundai_canfd_radar_point_t.pop(label, None)
             self.hyundai_canfd_radar_points.pop(label, None)
             self.hyundai_canfd_radar_history.pop(label, None)
+            self.hyundai_canfd_radar_promoted_counts.pop(label, None)
         if not points and event_t - self.live_track_radar_t < RADAR_POINT_STALE_S:
             points.extend(self.live_track_radar_points.values())
         return sorted_radar_points(points)
@@ -1579,10 +1583,17 @@ class RouteLogParser:
                     observed_speed_kph = None
         history = self._updated_radar_motion_history(point, event_t)
         absolute_speed_kph = observed_speed_kph if observed_speed_kph is not None else signal_speed_kph
+        motion_consistent = self._radar_motion_is_consistent(point, history)
+        promotion_held = False
+        if not motion_consistent and self._radar_motion_should_keep_promotion(point):
+            motion_consistent = True
+            promotion_held = True
+        self._update_radar_motion_promotion_state(point, motion_consistent, history, absolute_speed_kph)
         return replace(
             point,
             absolute_speed_kph=absolute_speed_kph,
-            motion_consistent=self._radar_motion_is_consistent(point, history),
+            motion_consistent=motion_consistent,
+            promotion_held=promotion_held,
         )
 
     def _radar_motion_history_continues(
@@ -1596,7 +1607,7 @@ class RouteLogParser:
         if dt <= 0.0 or dt > RADAR_MOTION_MAX_SAMPLE_GAP_S:
             return False
         if point.valid_count is not None and previous_valid_count is not None:
-            if point.valid_count + 4 < previous_valid_count:
+            if point.valid_count + RADAR_MOTION_VALID_COUNT_DROP_TOLERANCE < previous_valid_count:
                 return False
         distance_jump_m = abs(point.longitudinal_m - previous_distance_m)
         expected_jump_m = abs(point.relative_speed_mps or 0.0) * dt + 4.0
@@ -1691,6 +1702,43 @@ class RouteLogParser:
             speed is not None and speed >= RADAR_MOTION_PROMOTE_MIN_SPEED_KPH
             for speed in speed_samples
         )
+
+    def _radar_motion_should_keep_promotion(self, point: RadarPoint) -> bool:
+        previous_count = self.hyundai_canfd_radar_promoted_counts.get(point.label)
+        if previous_count is None or point.valid_count is None:
+            return False
+        if point.valid_count < RADAR_MOTION_MIN_VALID_COUNT:
+            return False
+        return point.valid_count + RADAR_MOTION_VALID_COUNT_DROP_TOLERANCE >= previous_count
+
+    def _update_radar_motion_promotion_state(
+        self,
+        point: RadarPoint,
+        motion_consistent: bool,
+        history: tuple[RadarMotionSample, ...],
+        absolute_speed_kph: float | None,
+    ) -> None:
+        if point.valid_count is None:
+            self.hyundai_canfd_radar_promoted_counts.pop(point.label, None)
+            return
+        moving_enough = (
+            self._radar_motion_keeps_min_absolute_speed(history)
+            or (
+                absolute_speed_kph is not None
+                and absolute_speed_kph >= RADAR_MOTION_PROMOTE_MIN_SPEED_KPH
+            )
+        )
+        if motion_consistent and (
+            moving_enough or self._radar_motion_should_keep_promotion(point)
+        ):
+            previous_count = self.hyundai_canfd_radar_promoted_counts.get(point.label)
+            self.hyundai_canfd_radar_promoted_counts[point.label] = max(
+                point.valid_count,
+                previous_count if previous_count is not None else point.valid_count,
+            )
+            return
+        if not self._radar_motion_should_keep_promotion(point):
+            self.hyundai_canfd_radar_promoted_counts.pop(point.label, None)
 
     @staticmethod
     def _radar_motion_signal_speed_samples(history: tuple[RadarMotionSample, ...]) -> list[tuple[float, float]]:

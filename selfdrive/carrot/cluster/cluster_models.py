@@ -147,6 +147,7 @@ class RadarPoint:
     valid_count: int | None = None
     in_my_lane: int | None = None
     motion_consistent: bool | None = None
+    promotion_held: bool = False
 
 
 @dataclass(frozen=True, slots=True)

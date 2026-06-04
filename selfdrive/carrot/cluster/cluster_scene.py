@@ -1701,6 +1701,7 @@ def merged_radar_point(points: list[RadarPoint], state: ClusterUiState) -> Radar
         valid_count=max_optional_int(point.valid_count for point in points),
         in_my_lane=max_optional_int(point.in_my_lane for point in points),
         motion_consistent=merged_radar_motion_consistent(point.motion_consistent for point in points),
+        promotion_held=any(point.promotion_held for point in points),
     )
 
 
@@ -2050,6 +2051,8 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
             return False
         if point.motion_consistent is not True:
             return False
+    if point.promotion_held:
+        return True
     outside_road_edge_m = radar_point_road_edge_outside_distance_m(point, state, lane_width_m)
     stable_edge_vehicle = (
         radar_point_has_stable_edge_vehicle_motion(point, state, lane_width_m)
