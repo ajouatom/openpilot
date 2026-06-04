@@ -49,6 +49,9 @@ NAVI_HTTP_MAX_BODY_SIZE = 16 * 1024 * 1024
 NAVI_EVENT_TYPES = ("complexCrossroad", "rgdata", "vrtx", "ssinf", "sinf", "route")
 NAVI_DEBUG_PARAM = "CarrotNaviDebug"
 NAVI_IMAGE_PARAM = "CarrotNaviImage"
+NAVI_IMAGE_BASE64_MAX_CHARS = 6 * 1024 * 1024
+NAVI_ROUTE_MAX_POINTS = 4096
+NAVI_ROUTE_SUMMARY_MAX_SCAN = 20000
 
 ################ CarrotNavi
 ## 국가법령정보센터: 도로설계기준
@@ -1078,27 +1081,41 @@ class CarrotMan:
         return None
 
       try:
-        return float(lon_value), float(lat_value)
+        lon = float(lon_value)
+        lat = float(lat_value)
       except Exception:
         return None
+      if not math.isfinite(lon) or not math.isfinite(lat):
+        return None
+      if not -180.0 <= lon <= 180.0 or not -90.0 <= lat <= 90.0:
+        return None
+      return lon, lat
 
     if isinstance(point, (list, tuple)) and len(point) >= 2:
       try:
-        return float(point[0]), float(point[1])
+        lon = float(point[0])
+        lat = float(point[1])
       except Exception:
         return None
+      if not math.isfinite(lon) or not math.isfinite(lat):
+        return None
+      if not -180.0 <= lon <= 180.0 or not -90.0 <= lat <= 90.0:
+        return None
+      return lon, lat
 
     return None
 
-  def _extract_route_points(self, payload: Any):
+  def _extract_route_points(self, payload: Any, depth: int = 0):
     if payload is None:
       return []
+    if depth > 8:
+      return None
 
     if isinstance(payload, dict):
       for key in ("vrtx", "vertices", "vertexes", "coordinates", "coords", "points", "path", "route"):
         value = payload.get(key)
         if value is not None:
-          return self._extract_route_points(value)
+          return self._extract_route_points(value, depth + 1)
 
       point = self._route_point_to_lon_lat(payload)
       return [point] if point is not None else None
@@ -1114,11 +1131,71 @@ class CarrotMan:
 
     return points
 
+  def _limited_route_points(self, points: List[tuple]):
+    if len(points) <= NAVI_ROUTE_MAX_POINTS:
+      return points
+    limited = []
+    last_index = len(points) - 1
+    previous_index = -1
+    for i in range(NAVI_ROUTE_MAX_POINTS):
+      source_index = round(i * last_index / max(1, NAVI_ROUTE_MAX_POINTS - 1))
+      if source_index == previous_index:
+        continue
+      limited.append(points[source_index])
+      previous_index = source_index
+    return limited
+
+  def _route_payload_for_summary(self, payload: Any, depth: int = 0):
+    if payload is None or depth > 8:
+      return None
+    if isinstance(payload, dict):
+      for key in ("vrtx", "vertices", "vertexes", "coordinates", "coords", "points", "path", "route"):
+        value = payload.get(key)
+        if value is not None:
+          return self._route_payload_for_summary(value, depth + 1)
+    return payload
+
+  def _route_summary(self, payload: Any) -> Dict[str, Any]:
+    payload = self._route_payload_for_summary(payload)
+    first = None
+    last = None
+    count = 0
+    truncated = False
+
+    if isinstance(payload, list):
+      for point in payload:
+        lon_lat = self._route_point_to_lon_lat(point)
+        if lon_lat is None:
+          continue
+        if first is None:
+          first = lon_lat
+        last = lon_lat
+        count += 1
+        if count >= NAVI_ROUTE_SUMMARY_MAX_SCAN:
+          truncated = True
+          break
+    else:
+      lon_lat = self._route_point_to_lon_lat(payload)
+      if lon_lat is not None:
+        first = lon_lat
+        last = lon_lat
+        count = 1
+
+    summary: Dict[str, Any] = {"pointCount": count}
+    if first is not None:
+      summary["first"] = {"lon": first[0], "lat": first[1]}
+    if last is not None:
+      summary["last"] = {"lon": last[0], "lat": last[1]}
+    if truncated:
+      summary["truncated"] = True
+    return summary
+
   def handle_route(self, payload: Any):
     points = self._extract_route_points(payload)
     if points is None:
       print(f"Received route: unsupported payload type={type(payload).__name__}")
       return
+    points = self._limited_route_points(points)
 
     arr = [{"x": lon, "y": lat, "valid": True} for lon, lat in points]
     if not arr:
@@ -1276,17 +1353,20 @@ class CarrotMan:
     image_base64 = d.get("imageBase64")
     image_hash = ""
     if isinstance(image_base64, str) and image_base64:
-      image_hash = hashlib.sha256(image_base64.encode("ascii", "ignore")).hexdigest()[:16]
+      digest = hashlib.sha256()
+      for index in range(0, len(image_base64), 65536):
+        digest.update(image_base64[index:index + 65536].encode("ascii", "ignore"))
+      image_hash = digest.hexdigest()[:16]
 
     summary = {
       "show": bool(d.get("show", False)),
       "imageUrl": str(d.get("imageUrl", "")),
       "imageMime": str(d.get("imageMime", "")),
       "imageEncoding": str(d.get("imageEncoding", "")),
-      "imageWidth": int(d.get("imageWidth", 0) or 0),
-      "imageHeight": int(d.get("imageHeight", 0) or 0),
-      "totalMeters": int(d.get("totalMeters", 0) or 0),
-      "remainRatio": float(d.get("remainRatio", 0.0) or 0.0),
+      "imageWidth": self._safe_int_or_none(d.get("imageWidth"), minimum=0) or 0,
+      "imageHeight": self._safe_int_or_none(d.get("imageHeight"), minimum=0) or 0,
+      "totalMeters": self._safe_int_or_none(d.get("totalMeters"), minimum=0) or 0,
+      "remainRatio": self._safe_float_or_none(d.get("remainRatio"), minimum=0.0, maximum=1.0) or 0.0,
       "imageHash": image_hash,
       "ts": time.monotonic(),
     }
@@ -1299,11 +1379,26 @@ class CarrotMan:
       int_value = int(float(value))
     except Exception:
       return None
+    if not math.isfinite(int_value):
+      return None
     if minimum is not None and int_value < minimum:
       return None
     if maximum is not None and int_value > maximum:
       return None
     return int_value
+
+  def _safe_float_or_none(self, value: Any, minimum: Optional[float] = None, maximum: Optional[float] = None) -> Optional[float]:
+    try:
+      float_value = float(value)
+    except Exception:
+      return None
+    if not math.isfinite(float_value):
+      return None
+    if minimum is not None and float_value < minimum:
+      return None
+    if maximum is not None and float_value > maximum:
+      return None
+    return float_value
 
   def _remaining_time(self, value: Any) -> Optional[int]:
     return self._safe_int_or_none(value, minimum=1, maximum=999)
@@ -1353,6 +1448,10 @@ class CarrotMan:
     image_base64 = crossroad.get("imageBase64")
     if not isinstance(image_base64, str):
       image_base64 = ""
+    image_too_large = len(image_base64) > NAVI_IMAGE_BASE64_MAX_CHARS
+    if image_too_large:
+      print(f"navi image too large; metadata only size={len(image_base64)} hash={image_hash}")
+      image_base64 = ""
     image = {
       "receivedMono": time.monotonic(),
       "show": bool(crossroad.get("show", False)),
@@ -1363,6 +1462,7 @@ class CarrotMan:
       "imageHeight": self._safe_int_or_none(crossroad.get("imageHeight"), minimum=0) or 0,
       "imageHash": image_hash,
       "imageUrl": str(crossroad.get("imageUrl", "")),
+      "imageTooLarge": image_too_large,
     }
     try:
       self.params_memory.put_nonblocking(NAVI_IMAGE_PARAM, json.dumps(image, ensure_ascii=False))
@@ -1414,13 +1514,7 @@ class CarrotMan:
         "sdiDist": rgdata.get("nSdiDist"),
       })
     elif event_type in ("vrtx", "route"):
-      points = self._extract_route_points(obj.get(event_type))
-      if points:
-        summary.update({
-          "pointCount": len(points),
-          "first": {"lon": points[0][0], "lat": points[0][1]},
-          "last": {"lon": points[-1][0], "lat": points[-1][1]},
-        })
+      summary.update(self._route_summary(obj.get(event_type)))
     elif event_type == "sinf" and isinstance(obj.get("sinf"), dict):
       sinf = obj["sinf"]
       summary.update({
@@ -1439,7 +1533,19 @@ class CarrotMan:
         "leftRemain": ssinf.get("left_remain_time"),
       })
     elif event_type == "complexCrossroad" and isinstance(obj.get("complexCrossroad"), dict):
-      summary.update(self._last_complex_crossroad)
+      crossroad = obj["complexCrossroad"]
+      image_base64 = crossroad.get("imageBase64")
+      summary.update({
+        "show": bool(crossroad.get("show", False)),
+        "imageUrl": str(crossroad.get("imageUrl", ""))[:200],
+        "imageMime": str(crossroad.get("imageMime", ""))[:64],
+        "imageWidth": self._safe_int_or_none(crossroad.get("imageWidth"), minimum=0) or 0,
+        "imageHeight": self._safe_int_or_none(crossroad.get("imageHeight"), minimum=0) or 0,
+        "totalMeters": self._safe_int_or_none(crossroad.get("totalMeters"), minimum=0) or 0,
+        "remainRatio": self._safe_float_or_none(crossroad.get("remainRatio"), minimum=0.0, maximum=1.0) or 0.0,
+        "hasImageBase64": isinstance(image_base64, str) and bool(image_base64),
+        "imageBase64Size": len(image_base64) if isinstance(image_base64, str) else 0,
+      })
     else:
       summary["keys"] = list(obj.keys())[:10]
     return summary
@@ -1584,7 +1690,7 @@ class CarrotMan:
       "receivedAt": datetime.now().astimezone().isoformat(timespec="milliseconds"),
       "eventTimeMs": event_time_ms,
       "type": event_type,
-      "raw": obj,
+      "summary": self._summarize_navi_event(event_type, obj),
     }
     with self._navi_event_lock:
       self._last_navi_event = event
@@ -1635,12 +1741,15 @@ class CarrotMan:
 
     event_type = self._detect_navi_event_type(obj)
     event_time_ms = self._get_timestamp_ms(obj)
-    self._store_navi_event(obj, event_type, event_time_ms)
+    try:
+      self._store_navi_event(obj, event_type, event_time_ms)
+    except Exception as e:
+      print(f"navi event store error: {e}")
 
     handled = False
 
     if "complexCrossroad" in obj:
-      self.handle_complex_crossroad(obj["complexCrossroad"])
+      self._safe_dispatch_handler("complexCrossroad", self.handle_complex_crossroad, obj["complexCrossroad"])
       handled = True
 
     if "rgdata" in obj:
@@ -1648,23 +1757,23 @@ class CarrotMan:
       if stale:
         print(f"[STALE DROP] rgdata ts={event_time_ms} <= last={last_ts}")
       else:
-        self.handle_carrot_state(self._normalize_rgdata(obj["rgdata"]))
+        self._safe_dispatch_handler("rgdata", self.handle_carrot_state, self._normalize_rgdata(obj["rgdata"]))
       handled = True
 
     if "vrtx" in obj:
-      self.handle_route(obj["vrtx"])
+      self._safe_dispatch_handler("vrtx", self.handle_route, obj["vrtx"])
       handled = True
 
     if "ssinf" in obj:
-      self.handle_traffic_light_detail(obj["ssinf"])
+      self._safe_dispatch_handler("ssinf", self.handle_traffic_light_detail, obj["ssinf"])
       handled = True
 
     if "sinf" in obj:
-      self.handle_traffic_light(obj["sinf"])
+      self._safe_dispatch_handler("sinf", self.handle_traffic_light, obj["sinf"])
       handled = True
 
     if "route" in obj:
-      self.handle_route(obj["route"])
+      self._safe_dispatch_handler("route", self.handle_route, obj["route"])
       handled = True
 
     if handled:
@@ -1673,8 +1782,22 @@ class CarrotMan:
     if not handled:
       self.handle_unknown({"type": event_type, "keys": list(obj.keys())[:10]})
 
+  def _safe_dispatch_handler(self, label: str, handler: Any, *args: Any):
+    try:
+      return handler(*args)
+    except Exception as e:
+      print(f"navi {label} handler error: {e}")
+      traceback.print_exc()
+      return None
+
   def carrot_navi_http_thread(self):
-    asyncio.run(self.carrot_navi_http_server(self.carrot_navi_http_port))
+    while True:
+      try:
+        asyncio.run(self.carrot_navi_http_server(self.carrot_navi_http_port))
+      except Exception as e:
+        print(f"navi http server error: {e}")
+        traceback.print_exc()
+        time.sleep(2)
 
   def carrot_navi_tcp_server(self, port: int = 7712):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1782,7 +1905,7 @@ class CarrotMan:
       last_summary = {
         "receivedAt": last_event["receivedAt"],
         "eventTimeMs": last_event["eventTimeMs"],
-        "summary": self._summarize_navi_event(last_event["type"], last_event["raw"]),
+        "summary": last_event.get("summary", {}),
       }
 
     return web.json_response({
@@ -1820,9 +1943,9 @@ def main():
   carrot_man = CarrotMan()
 
   print(f"CarrotMan {carrot_man}")
-  threading.Thread(target=carrot_man.kisa_app_thread).start()
-  threading.Thread(target=carrot_man.carrot_navi_thread).start()
-  threading.Thread(target=carrot_man.carrot_navi_http_thread).start()
+  threading.Thread(target=carrot_man.kisa_app_thread, daemon=True).start()
+  threading.Thread(target=carrot_man.carrot_navi_thread, daemon=True).start()
+  threading.Thread(target=carrot_man.carrot_navi_http_thread, daemon=True).start()
 
   while True:
     try:
