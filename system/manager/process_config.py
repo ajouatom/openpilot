@@ -145,7 +145,7 @@ procs = [
   PythonProcess("webjoystick", "tools.bodyteleop.web", notcar),
   PythonProcess("joystick", "tools.joystick.joystick_control", and_(joystick, iscar)),
 
-  PythonProcess("carrot_man", "selfdrive.carrot.carrot_man", always_run),#, enabled=not PC),
+  PythonProcess("carrot_man", "selfdrive.carrot.carrot_man", always_run, restart_if_crash=True),#, enabled=not PC),
 
   PythonProcess("carrot_server", "selfdrive.carrot.carrot_server", always_run),
   PythonProcess("carrot_cluster", "selfdrive.carrot.cluster_autorun", enable_cluster_hud, restart_if_crash=True),

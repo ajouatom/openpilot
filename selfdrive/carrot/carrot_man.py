@@ -52,6 +52,26 @@ NAVI_IMAGE_PARAM = "CarrotNaviImage"
 NAVI_IMAGE_BASE64_MAX_CHARS = 6 * 1024 * 1024
 NAVI_ROUTE_MAX_POINTS = 4096
 NAVI_ROUTE_SUMMARY_MAX_SCAN = 20000
+AUTO_ONROAD_DIAGNOSTICS = os.environ.get("CARROT_AUTO_ONROAD_DIAGNOSTICS", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def limit_route_points(points, max_points=NAVI_ROUTE_MAX_POINTS):
+    if max_points <= 0:
+        return []
+    count = len(points)
+    if count <= max_points:
+        return list(points)
+
+    limited = []
+    last_index = count - 1
+    previous_index = -1
+    for i in range(max_points):
+        source_index = round(i * last_index / max(1, max_points - 1))
+        if source_index == previous_index:
+            continue
+        limited.append(points[source_index])
+        previous_index = source_index
+    return limited
 
 _carrot_exception_tmux_send_lock = threading.Lock()
 _carrot_exception_tmux_send_queued = False
@@ -888,15 +908,15 @@ class CarrotMan:
           isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
           if isOnroadCount == 0:
             is_tmux_sent = False
-          if isOnroadCount == 1:
+          if AUTO_ONROAD_DIAGNOSTICS and isOnroadCount == 1:
             self.show_panda_debug = True
 
           network_type = self.sm['deviceState'].networkType # if not force_wifi else NetworkType.wifi
           networkConnected = False if network_type == NetworkType.none else True
 
-          if isOnroadCount == 500:
+          if AUTO_ONROAD_DIAGNOSTICS and isOnroadCount == 500:
             self.make_tmux_data()
-          if isOnroadCount > 500 and not is_tmux_sent and networkConnected:
+          if AUTO_ONROAD_DIAGNOSTICS and isOnroadCount > 500 and not is_tmux_sent and networkConnected:
             self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
             self.send_tmux_http("onroad", send_settings = True)
             is_tmux_sent = True
@@ -954,6 +974,11 @@ class CarrotMan:
 
 
   def send_routes(self, coords, from_navd=False):
+    original_count = len(coords)
+    coords = limit_route_points(coords, NAVI_ROUTE_MAX_POINTS)
+    if original_count > len(coords):
+      print(f"Route points limited: {original_count} -> {len(coords)}")
+
     if from_navd:
       if len(coords) > 0:
         self.navi_points = [(c.longitude, c.latitude) for c in coords]
@@ -1167,18 +1192,7 @@ class CarrotMan:
     return points
 
   def _limited_route_points(self, points: List[tuple]):
-    if len(points) <= NAVI_ROUTE_MAX_POINTS:
-      return points
-    limited = []
-    last_index = len(points) - 1
-    previous_index = -1
-    for i in range(NAVI_ROUTE_MAX_POINTS):
-      source_index = round(i * last_index / max(1, NAVI_ROUTE_MAX_POINTS - 1))
-      if source_index == previous_index:
-        continue
-      limited.append(points[source_index])
-      previous_index = source_index
-    return limited
+    return limit_route_points(points, NAVI_ROUTE_MAX_POINTS)
 
   def _route_payload_for_summary(self, payload: Any, depth: int = 0):
     if payload is None or depth > 8:

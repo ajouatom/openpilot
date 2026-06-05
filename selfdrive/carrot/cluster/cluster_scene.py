@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from cluster_config import (
     AMBER,
     BLUE,
+    BLUE_SOFT,
     CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
     CLUSTER_RADAR_DISPLAY_DETAIL,
     CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE,
@@ -22,6 +23,7 @@ from cluster_config import (
     PATH_LANE_CHANGE_CURVE_END_M,
     PATH_LANE_CHANGE_CURVE_START_M,
     PATH_START_M,
+    GREEN,
     RED,
     ROAD_CURVE_M_PER_M2,
     ROAD_FAR_M,
@@ -1922,12 +1924,34 @@ def detected_vehicle_is_front_merge_candidate(vehicle: DetectedVehicle) -> bool:
 
 
 def detected_vehicle_base_source(vehicle: DetectedVehicle) -> str:
-    return vehicle.source.split(RADAR_MERGED_SOURCE_TAG, 1)[0]
+    return vehicle_source_base(vehicle.source)
+
+
+def vehicle_source_base(source: str) -> str:
+    return source.split(RADAR_MERGED_SOURCE_TAG, 1)[0]
+
+
+def vehicle_source_is_adas(source: str) -> bool:
+    base_source = vehicle_source_base(source)
+    return base_source == "carState" or base_source in ("CAN 0x162", "CAN 0x1ea")
+
+
+def vehicle_source_is_camera(source: str) -> bool:
+    return vehicle_source_base(source).startswith("camera")
+
+
+def vehicle_source_is_front_radar(source: str) -> bool:
+    return vehicle_source_base(source) == "radarState"
+
+
+def vehicle_source_is_radar_track(source: str) -> bool:
+    return source in ("radarPoint", "liveTracks") or RADAR_MERGED_SOURCE_TAG in source
 
 
 def merge_detected_vehicle_for_display(base: DetectedVehicle, other: DetectedVehicle) -> DetectedVehicle:
     return replace(
         base,
+        source=merged_detected_vehicle_source(base.source, other.source),
         probability=max(base.probability, other.probability),
         relative_speed_mps=base.relative_speed_mps if base.relative_speed_mps is not None else other.relative_speed_mps,
         absolute_speed_kph=base.absolute_speed_kph if base.absolute_speed_kph is not None else other.absolute_speed_kph,
@@ -1940,6 +1964,22 @@ def merge_detected_vehicle_for_display(base: DetectedVehicle, other: DetectedVeh
     )
 
 
+def merged_detected_vehicle_source(base_source: str, other_source: str) -> str:
+    if vehicle_source_is_adas(base_source):
+        return base_source
+    if vehicle_source_is_adas(other_source):
+        return other_source
+    if vehicle_source_is_front_radar(base_source):
+        return base_source
+    if vehicle_source_is_front_radar(other_source):
+        return other_source
+    if vehicle_source_is_radar_track(base_source):
+        return base_source
+    if vehicle_source_is_radar_track(other_source):
+        return other_source
+    return base_source
+
+
 def radar_merge_point_for_vehicle(
     vehicle: DetectedVehicle,
     radar_points: tuple[RadarPoint, ...],
@@ -1950,7 +1990,7 @@ def radar_merge_point_for_vehicle(
     candidates = tuple(
         point
         for point in radar_points
-        if radar_point_can_fill_vehicle_speed(point, state) and radar_point_close_to_vehicle(point, vehicle)
+        if radar_point_can_fill_vehicle_speed(point, state) and radar_point_can_merge_with_vehicle(point, vehicle)
     )
     if not candidates:
         return None
@@ -1964,6 +2004,8 @@ def radar_merge_point_for_vehicle(
 
 
 def detected_vehicle_needs_radar_merge(vehicle: DetectedVehicle) -> bool:
+    if vehicle.source.startswith("modelV2") and vehicle.longitudinal_m > 0.0:
+        return True
     return (
         vehicle.label in CORNER_RADAR_LABELS
         and vehicle.absolute_speed_kph is None
@@ -1973,6 +2015,12 @@ def detected_vehicle_needs_radar_merge(vehicle: DetectedVehicle) -> bool:
 
 def radar_point_can_fill_vehicle_speed(point: RadarPoint, state: ClusterUiState) -> bool:
     return radar_point_absolute_speed_kph(point, state) is not None or point.relative_speed_mps is not None
+
+
+def radar_point_can_merge_with_vehicle(point: RadarPoint, vehicle: DetectedVehicle) -> bool:
+    if vehicle.source.startswith("modelV2"):
+        return radar_point_close_to_detected_vehicle(point, vehicle)
+    return radar_point_close_to_vehicle(point, vehicle)
 
 
 def radar_point_close_to_vehicle(point: RadarPoint, vehicle: DetectedVehicle) -> bool:
@@ -2097,6 +2145,10 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
 def radar_point_is_confirmed_vehicle_source(point: RadarPoint) -> bool:
     source = point.source.lower()
     return "0x162" in source or "0x1ea" in source
+
+
+def radar_point_source_is_radar_track(point: RadarPoint) -> bool:
+    return point.source == "liveTracks"
 
 
 def radar_point_has_vehicle_estimate(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
@@ -2367,10 +2419,12 @@ def radar_point_color(point: RadarPoint) -> Color:
         return 116, 126, 136, 150
     if point.longitudinal_m < 12.0 and abs(point.lateral_m) < 1.6:
         return RED[0], RED[1], RED[2], 232
-    if point.in_my_lane is not None and point.in_my_lane > 0:
-        return BLUE[0], BLUE[1], BLUE[2], 226
     if point.probability is not None and point.probability < 0.25:
         return 116, 126, 136, 150
+    if radar_point_source_is_radar_track(point):
+        return AMBER[0], AMBER[1], AMBER[2], 226
+    if point.in_my_lane is not None and point.in_my_lane > 0:
+        return BLUE[0], BLUE[1], BLUE[2], 226
     if point.relative_speed_mps is not None and point.relative_speed_mps < -2.5:
         return AMBER[0], AMBER[1], AMBER[2], 226
     return 34, 150, 255, 208
@@ -2793,16 +2847,15 @@ def vehicle_color_for_source(
 ) -> tuple[int, int, int]:
     if source_color_mode != CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE:
         return theme.default_vehicle
-    if source == "radarState":
+    if vehicle_source_is_adas(source):
+        return GREEN
+    if vehicle_source_is_front_radar(source):
         return RED
-    if source == "radarPoint" or source == "liveTracks" or source.startswith("CAN-FD"):
+    if vehicle_source_is_radar_track(source):
         return AMBER
-    if (
-        RADAR_MERGED_SOURCE_TAG in source
-        or source == "carState"
-        or source.startswith("CAN 0x")
-        or source.startswith("modelV2")
-    ):
+    if vehicle_source_is_camera(source):
+        return BLUE_SOFT
+    if source.startswith("modelV2"):
         return BLUE
     return theme.default_vehicle
 
