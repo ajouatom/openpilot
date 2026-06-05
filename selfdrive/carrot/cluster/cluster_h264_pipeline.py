@@ -59,6 +59,8 @@ H264_DEBUG_PACKET_LIMIT = 40
 H264_DEBUG_PACKET_INTERVAL = 30
 H264_DEBUG_CHUNK_LIMIT = 60
 H264_DEBUG_CHUNK_INTERVAL = 25
+NATIVE_PACKET_QUEUE_MAX_CHUNKS = 8
+NATIVE_PACKET_QUEUE_PUT_TIMEOUT_S = 0.05
 V4L2_BUF_FLAG_KEYFRAME = 0x00000008
 V4L2_BUF_FLAG_PFRAME = 0x00000010
 V4L2_BUF_FLAG_BFRAME = 0x00000020
@@ -863,7 +865,7 @@ class H264UsbPipeline:
             self._close_native()
             raise
 
-        self._packet_queue = queue.Queue(maxsize=64)
+        self._packet_queue = queue.Queue(maxsize=NATIVE_PACKET_QUEUE_MAX_CHUNKS)
         self._sender_thread = threading.Thread(
             target=self._send_queued_packets,
             name="cluster-usb-h264-native-send",
@@ -1965,7 +1967,7 @@ class H264UsbPipeline:
             self._record_h264_unit("native", packet, chunks, keyframe=bool(keyframe))
             profile_stage = time.perf_counter() if profile_callback else 0.0
             for chunk in chunks:
-                packet_queue.put((chunk, False), timeout=1.0)
+                packet_queue.put((chunk, False), timeout=NATIVE_PACKET_QUEUE_PUT_TIMEOUT_S)
                 self._record_h264_queue_depth(packet_queue.qsize())
             if profile_callback:
                 self._add_sample("usb_h264.native.callback_queue", profile_stage)
