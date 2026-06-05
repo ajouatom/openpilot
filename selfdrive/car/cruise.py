@@ -676,12 +676,17 @@ class VCruiseCarrot:
       self._add_log(reason)
 
   def _check_safe_stop(self, CS, safe_distance = 3):
-    decel_rate = 2.5
-    closing_speed = max(0.0, -self.v_rel)
-    required_dist = safe_distance + (closing_speed ** 2) / (2 * decel_rate)
-    d_final = self.d_rel - required_dist
+    v_ego = CS.vEgo
+    decel_rate = 1.5
+    d_stop_ego = (v_ego ** 2) / (2 * decel_rate)
+    d_stop_rel = (self.v_rel ** 2) / (2 * decel_rate)
 
-    return d_final >= 0, d_final
+    d_final = self.d_rel - d_stop_ego - d_stop_rel
+
+    if d_final >= safe_distance:
+      return True, d_final
+    else:
+      return False, d_final
 
   def _update_cruise_state(self, CS, CC, v_cruise_kph):
     if not CC.enabled:
@@ -743,10 +748,9 @@ class VCruiseCarrot:
 
     elif self._brake_pressed_count < 0 and self._gas_pressed_count < 0:
       if not CC.enabled:
-        turning = abs(CS.steeringAngleDeg) > 20
         if self.d_rel > 0 and CS.vEgo > 0.02:
-          safe_state, safe_dist = self._check_safe_stop(CS, 3)
-          if turning:
+          safe_state, safe_dist = self._check_safe_stop(CS, 4)
+          if abs(CS.steeringAngleDeg) > 70:
             pass
           elif not safe_state:
             self._cruise_control(1, -1, "Cruise on (fcw)")
@@ -763,7 +767,7 @@ class VCruiseCarrot:
           if self._cruise_ready:
             if self.xState in [3]:
               self._cruise_control(1, 0, "Cruise on (traffic sign)")
-            elif self.d_rel > 0 and not turning:
+            elif self.d_rel > 0:
               self._cruise_control(1, 0, "Cruise on (lead car)")
       elif self._paddle_decel_active:
         if self.xState in [3]:
