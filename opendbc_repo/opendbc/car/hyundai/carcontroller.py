@@ -422,7 +422,7 @@ class CarController(CarControllerBase):
       if self.CP.carFingerprint in CAN_GEARS["send_mdps12"] and CS.mdps12 is not None:  # send mdps12 to LKAS to prevent LKAS error
         can_sends.append(hyundaican.create_mdps12(self.packer, self.frame, CS.mdps12))
 
-      casper_opt = self.CP.carFingerprint in (CAR.HYUNDAI_CASPER_EV)
+      casper_ev = self.CP.carFingerprint == CAR.HYUNDAI_CASPER_EV
       if self.frame % 2 == 0 and self.CP.openpilotLongitudinalControl:
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
         self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
@@ -432,7 +432,7 @@ class CarController(CarControllerBase):
           
           can_sends.extend(hyundaican.create_acc_commands_scc(self.packer, CC.enabled, accel, self.hyundai_jerk, int(self.frame / 2),
                                                           hud_control, set_speed_in_units, stopping,
-                                                          CC.cruiseControl.override, casper_opt, CS, self.soft_hold_mode))
+                                                          CC.cruiseControl.override, casper_ev, CS, self.soft_hold_mode))
         else:
           can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, self.hyundai_jerk, int(self.frame / 2),
                                                 hud_control, set_speed_in_units, stopping,
@@ -447,7 +447,7 @@ class CarController(CarControllerBase):
       if self.frame % 20 == 0 and self.CP.openpilotLongitudinalControl:
         if camera_scc:
           if CS.scc13 is not None:
-            if casper_opt:
+            if casper_ev:
               #can_sends.append(hyundaican.create_acc_opt_copy(CS, self.packer))
               pass
           pass
