@@ -16,6 +16,7 @@ import pyray as rl
 from cluster_config import (
     AMBER,
     BLUE,
+    BLUE_SOFT,
     CLUSTER_RADAR_INFO_ALL_SPEED,
     CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
     CLUSTER_RADAR_INFO_NONE,
@@ -393,15 +394,38 @@ def radar_info_shows_distance(mode: int) -> bool:
 def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme, source_color_mode: int) -> tuple[int, int, int]:
     if source_color_mode != CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE:
         return theme.world_label_text
-    if vehicle.source == "radarState":
+    if vehicle_source_is_adas(vehicle.source):
+        return GREEN
+    if vehicle_source_is_front_radar(vehicle.source):
         return RED
-    if vehicle.source == "radarPoint" or vehicle.source == "liveTracks" or vehicle.source.startswith("CAN-FD"):
+    if vehicle_source_is_radar_track(vehicle.source):
         return AMBER
-    if "+radar:" in vehicle.source or vehicle.source == "carState" or vehicle.source.startswith("CAN 0x"):
-        return BLUE
+    if vehicle_source_is_camera(vehicle.source):
+        return BLUE_SOFT
     if vehicle.source.startswith("modelV2"):
         return BLUE
     return theme.world_label_text
+
+
+def vehicle_source_base(source: str) -> str:
+    return source.split("+radar:", 1)[0]
+
+
+def vehicle_source_is_adas(source: str) -> bool:
+    base_source = vehicle_source_base(source)
+    return base_source == "carState" or base_source in ("CAN 0x162", "CAN 0x1ea")
+
+
+def vehicle_source_is_camera(source: str) -> bool:
+    return vehicle_source_base(source).startswith("camera")
+
+
+def vehicle_source_is_front_radar(source: str) -> bool:
+    return vehicle_source_base(source) == "radarState"
+
+
+def vehicle_source_is_radar_track(source: str) -> bool:
+    return source in ("radarPoint", "liveTracks") or "+radar:" in source
 
 
 def speed_limit_source_label(source: str | None) -> str:

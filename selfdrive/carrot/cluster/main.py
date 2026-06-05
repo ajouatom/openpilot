@@ -1615,7 +1615,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Disable live CAN/sendcan subscriptions. This keeps radarState/modelV2/liveTracks data "
-            "but skips direct raw CAN-FD parsing."
+            "but skips direct raw CAN parsing for camera-bus ADAS corner detections."
         ),
     )
     parser.add_argument(
