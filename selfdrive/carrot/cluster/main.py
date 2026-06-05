@@ -150,8 +150,13 @@ def apply_cluster_encoder_param(args: argparse.Namespace) -> str:
     elif encoder_mode in (CLUSTER_ENCODER_AUTO, CLUSTER_ENCODER_HARDWARE, CLUSTER_ENCODER_SOFTWARE):
         args.usb_codec = "h264"
         if not args.usb_h264_backend_from_cli:
-            args.usb_h264_backend = "ffmpeg" if encoder_mode == CLUSTER_ENCODER_SOFTWARE else "native"
-        if encoder_mode == CLUSTER_ENCODER_SOFTWARE and not args.usb_h264_ffmpeg_encoder_from_cli:
+            if encoder_mode == CLUSTER_ENCODER_SOFTWARE:
+                args.usb_h264_backend = "ffmpeg"
+            elif encoder_mode == CLUSTER_ENCODER_AUTO:
+                args.usb_h264_backend = "native"
+            else:
+                args.usb_h264_backend = "native"
+        if args.usb_h264_backend == "ffmpeg" and not args.usb_h264_ffmpeg_encoder_from_cli:
             args.usb_h264_ffmpeg_encoder = "libx264"
     return CLUSTER_ENCODER_PARAM
 

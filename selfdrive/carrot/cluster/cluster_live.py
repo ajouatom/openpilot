@@ -37,6 +37,32 @@ OPENPILOT_ROOT = find_openpilot_root(Path(__file__).resolve().parent)
 if OPENPILOT_ROOT is not None:
     sys.path.insert(0, str(OPENPILOT_ROOT))
 
+LIVE_NAV_ROUTE_MAX_POINTS = 4096
+LIVE_NAVI_IMAGE_BASE64_MAX_CHARS = 2 * 1024 * 1024
+LIVE_NAVI_IMAGE_MAX_DIMENSION = 2048
+
+
+def _limited_items(items: Any, max_items: int):
+    if max_items <= 0:
+        return ()
+    try:
+        count = len(items)
+    except Exception:
+        return items
+    if count <= max_items:
+        return items
+
+    last_index = count - 1
+    indices: list[int] = []
+    previous_index = -1
+    for i in range(max_items):
+        source_index = round(i * last_index / max(1, max_items - 1))
+        if source_index == previous_index:
+            continue
+        indices.append(source_index)
+        previous_index = source_index
+    return (items[index] for index in indices)
+
 
 LIVE_SERVICES_BASE = (
     "carState",
@@ -545,14 +571,25 @@ class OpenpilotLiveSource:
             return None
         image_base64 = str(data.get("imageBase64") or "")
         image_hash = str(data.get("imageHash") or "")[:32]
+        width = self._parse_positive_int(data.get("imageWidth"), maximum=10000) or 0
+        height = self._parse_positive_int(data.get("imageHeight"), maximum=10000) or 0
+        if (
+            image_base64
+            and (
+                len(image_base64) > LIVE_NAVI_IMAGE_BASE64_MAX_CHARS
+                or width > LIVE_NAVI_IMAGE_MAX_DIMENSION
+                or height > LIVE_NAVI_IMAGE_MAX_DIMENSION
+            )
+        ):
+            image_base64 = ""
         if not image_base64 and not image_hash:
             return None
         return NaviGuidanceImage(
             image_base64=image_base64,
             image_mime=str(data.get("imageMime") or "")[:64],
             image_hash=image_hash,
-            width=self._parse_positive_int(data.get("imageWidth"), maximum=10000) or 0,
-            height=self._parse_positive_int(data.get("imageHeight"), maximum=10000) or 0,
+            width=width,
+            height=height,
         )
 
     def _parse_navi_traffic_light(self, value: Any) -> NaviTrafficLightInfo | None:
@@ -645,7 +682,7 @@ class OpenpilotLiveSource:
             return
 
         parsed: list[tuple[float, float]] = []
-        for coord in coords:
+        for coord in _limited_items(coords, LIVE_NAV_ROUTE_MAX_POINTS):
             lat = finite_float(safe_get(coord, "latitude"))
             lon = finite_float(safe_get(coord, "longitude"))
             if lat is None or lon is None:

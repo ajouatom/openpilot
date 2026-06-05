@@ -193,10 +193,11 @@ debug UI before navi data has arrived. When output is gated off,
 remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
-Manager autostart enables realtime affinity by default. `cluster_autorun.py`
-uses `ClusterHudCoreMode=0` by default, which maps to cores `1,2,3,4`; mode
-`1` maps to all initially allowed CPU cores. `ClusterHudPriority` controls the
-common openpilot realtime helper priority with range `1..99`, default `10`.
+Manager autostart leaves realtime affinity off by default. If `CLUSTER_REALTIME=1`
+is set, `cluster_autorun.py` uses `ClusterHudCoreMode=0` by default, which maps
+to cores `1,2,3,4`; mode `1` maps to all initially allowed CPU cores.
+`ClusterHudPriority` controls the common openpilot realtime helper priority with
+range `1..99`, default `10`.
 Changing either param makes the running HUD exit so `cluster_autorun` can
 relaunch it with the new affinity/priority, without a whole system restart.
 Explicit `CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or
@@ -247,12 +248,13 @@ lane-change icon is not drawn; the LFA icon uses
 `-carState.steeringAngleDeg`, and recolors its white pixels green when LFA is
 active.
 When `--fps` is omitted, `ClusterHudLiveFps` controls the render limit and is
-polled about once per second while running: `0` uncapped, `1` 10 Hz,
-`2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz. Direct route/replay
-CLI runs also apply nonzero values; mode `0` keeps non-live H264 runs on the
-`--usb-h264-fps` safety cap. Explicit `--fps` remains a fixed override. For
-H264 USB output, changing the effective FPS exits the current HUD process so
-autostart can relaunch with a matching encoder FPS when a launcher is present.
+polled about once per second while running: `0` uncapped diagnostic mode, `1`
+10 Hz default, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
+Direct route/replay CLI runs also apply nonzero values; mode `0` keeps non-live
+H264 runs on the `--usb-h264-fps` safety cap. Explicit `--fps` remains a fixed
+override. For H264 USB output, changing the effective FPS exits the current HUD
+process so autostart can relaunch with a matching encoder FPS when a launcher
+is present.
 Runs also show a compact lower-right cluster-process CPU overlay by current
 core, formatted like `[0(10),1(25)]`, with 2 px bottom/right margins. The
 sampler reads the current cluster process and direct child processes only,
@@ -261,10 +263,11 @@ avoiding a full `/proc` PID scan in the render loop. Use
 cost plus per-process/core CPU breakdown, or `--no-cluster-core-usage` for an
 A/B run without the overlay.
 `ClusterHudEncoder` controls the encoder used by manager autostart and by
-direct USB CLI runs when `--usb-codec` is omitted: `0` auto tries native
-hardware H264, then ffmpeg/libx264 software H264, then JPEG in autostart;
-direct CLI auto uses the native hardware H264 choice. `1` forces JPEG,
-`2` forces native hardware H264, and `3` forces ffmpeg/libx264 software H264.
+direct USB CLI runs when `--usb-codec` is omitted: `0` auto tries
+native hardware H264 first, then ffmpeg/libx264 software H264, then JPEG when
+launched by `cluster_autorun`. Direct CLI auto uses native hardware H264 as the
+first encoder choice. `1` forces JPEG, `2` forces native hardware H264, and `3`
+forces ffmpeg/libx264 software H264.
 Live native hardware H264 automatically enables `--usb-h264-render-nv12`, so
 both auto hardware selection and explicit hardware selection use the lower-copy
 GPU NV12 submit path. Direct live CLI runs with backend `native` or
