@@ -59,6 +59,8 @@ class SideState:
   # computed “lane change available” (includes BSD+object)
   lane_change_available_geom: bool = False
   lane_change_available: bool = False
+  lane_change_available_last: bool = False
+  lane_change_available_released: bool = False
   lane_width_sum: float = 0.0
 
   def update_lane_geometry(self,
@@ -139,6 +141,7 @@ class SideState:
     # include bsd/object into lane_change_available (요구사항)
     bsd_active = (self.bsd_hold_counter > 0) and (not ignore_bsd)
     self.lane_change_available = self.lane_change_available_geom and (not self.side_object_detected) and (not bsd_active)
+    self.lane_change_available_released = self.lane_change_available and not self.lane_change_available_last
 
   def update_triggers(self):
     # lane_available_trigger (기존 로직 유지)
@@ -154,3 +157,4 @@ class SideState:
   def commit_last(self):
     self.lane_available_last = self.lane_available
     self.edge_available_last = self.edge_available
+    self.lane_change_available_last = self.lane_change_available
