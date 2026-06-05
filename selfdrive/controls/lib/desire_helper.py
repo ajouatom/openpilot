@@ -368,8 +368,9 @@ class DesireHelper:
               # LaneLineCheck=2: 실선에서도 토크 override 허용
               solid_line_blocked = (self.laneLineCheck >= 2) and (not side.lane_change_available_geom) and \
                                    (side.lane_available or side.edge_available)
+              block_released = side.lane_change_available_released
               start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
-                           side.lane_line_info_edge_detect or solid_line_blocked
+                           side.lane_line_info_edge_detect or solid_line_blocked or block_released
                 
               if start_gate:
                 if solid_line_blocked:
@@ -387,7 +388,9 @@ class DesireHelper:
                   if side.lane_change_available:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
                 else:
-                  if torque_applied or ((not atc_lane_change_manual_only) and (auto_lane_change_trigger or side.lane_line_info_edge_detect)):
+                  if torque_applied or ((not atc_lane_change_manual_only) and (
+                    auto_lane_change_trigger or side.lane_line_info_edge_detect or block_released
+                  )):
                     # 여기서는 시작 직전 안전성 체크
                     if side.lane_change_available:
                       self.lane_change_state = LaneChangeState.laneChangeStarting
