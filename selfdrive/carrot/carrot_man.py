@@ -53,6 +53,33 @@ NAVI_IMAGE_BASE64_MAX_CHARS = 6 * 1024 * 1024
 NAVI_ROUTE_MAX_POINTS = 4096
 NAVI_ROUTE_SUMMARY_MAX_SCAN = 20000
 
+_carrot_exception_tmux_send_lock = threading.Lock()
+_carrot_exception_tmux_send_queued = False
+
+
+def queue_carrot_exception_tmux_send(context: str = "") -> None:
+  global _carrot_exception_tmux_send_queued
+
+  with _carrot_exception_tmux_send_lock:
+    if _carrot_exception_tmux_send_queued:
+      return
+
+    try:
+      params = Params()
+      current = params.get("CarrotException")
+      if current in (None, "", b""):
+        put_nonblocking = getattr(params, "put_nonblocking", None)
+        if callable(put_nonblocking):
+          put_nonblocking("CarrotException", "tmux_send")
+        else:
+          params.put("CarrotException", "tmux_send")
+        _carrot_exception_tmux_send_queued = True
+        print(f"[carrot_man] CarrotException tmux_send queued: {context or 'exception'}")
+      elif current == "tmux_send":
+        _carrot_exception_tmux_send_queued = True
+    except Exception as e:
+      print(f"[carrot_man] failed to queue CarrotException tmux_send: {e}")
+
 ################ CarrotNavi
 ## 국가법령정보센터: 도로설계기준
 #V_CURVE_LOOKUP_BP = [0., 1./800., 1./670., 1./560., 1./440., 1./360., 1./265., 1./190., 1./135., 1./85., 1./55., 1./30., 1./15.]
@@ -227,21 +254,7 @@ class CarrotMan:
     self.curvatureFilter = MyMovingAverage(20)
     self.carrot_curve_speed_params()
 
-    self.carrot_zmq_thread = threading.Thread(target=self.carrot_cmd_zmq, args=[])
-    self.carrot_zmq_thread.daemon = True
-    self.carrot_zmq_thread.start()
-
-    self.carrot_panda_debug_thread = threading.Thread(target=self.carrot_panda_debug, args=[])
-    self.carrot_panda_debug_thread.daemon = True
-    self.carrot_panda_debug_thread.start()
-
-    self.carrot_route_thread = threading.Thread(target=self.carrot_route, args=[])
-    self.carrot_route_thread.daemon = True
-    self.carrot_route_thread.start()
-
     self.is_running = True
-    threading.Thread(target=self.broadcast_version_info).start()
-
     self.navi_points = []
     self.navi_points_start_index = 0
     self.navi_points_active = False
@@ -257,6 +270,17 @@ class CarrotMan:
     self._last_complex_crossroad: Dict[str, Any] = {}
 
     self.is_metric = self.params.get_bool("IsMetric")
+
+    self.carrot_zmq_thread = threading.Thread(target=self.carrot_cmd_zmq, args=[], daemon=True)
+    self.carrot_zmq_thread.start()
+
+    self.carrot_panda_debug_thread = threading.Thread(target=self.carrot_panda_debug, args=[], daemon=True)
+    self.carrot_panda_debug_thread.start()
+
+    self.carrot_route_thread = threading.Thread(target=self.carrot_route, args=[], daemon=True)
+    self.carrot_route_thread.start()
+
+    threading.Thread(target=self.broadcast_version_info, daemon=True).start()
 
   def get_broadcast_address(self):
     if PC:
@@ -342,12 +366,14 @@ class CarrotMan:
             self.connection = None
             print(f"##### broadcast_error...: {e}")
             traceback.print_exc()
+            queue_carrot_exception_tmux_send("broadcast_version_info")
 
         rk.keep_time()
         frame += 1
       except Exception as e:
         print(f"broadcast_version_info error...: {e}")
         traceback.print_exc()
+        queue_carrot_exception_tmux_send("broadcast_version_info")
         time.sleep(1)
 
 
@@ -621,6 +647,7 @@ class CarrotMan:
                   #print(json_obj)
                 except Exception as e:
                   traceback.print_exc()
+                  queue_carrot_exception_tmux_send("kisa_app_thread")
                   print(f"kisa_app_thread: json error...: {e}")
                   print(data)
 
@@ -1796,6 +1823,7 @@ class CarrotMan:
     except Exception as e:
       print(f"navi {label} handler error: {e}")
       traceback.print_exc()
+      queue_carrot_exception_tmux_send(f"navi {label} handler")
       return None
 
   def carrot_navi_http_thread(self):
@@ -1805,6 +1833,7 @@ class CarrotMan:
       except Exception as e:
         print(f"navi http server error: {e}")
         traceback.print_exc()
+        queue_carrot_exception_tmux_send("navi http server")
         time.sleep(2)
 
   def carrot_navi_tcp_server(self, port: int = 7712):
@@ -1897,6 +1926,7 @@ class CarrotMan:
     except Exception as e:
       print(f"[HTTP] dispatch error: {e}")
       traceback.print_exc()
+      queue_carrot_exception_tmux_send("navi http dispatch")
       return web.json_response({
         "ok": False,
         "error": str(e),
@@ -1961,6 +1991,7 @@ def main():
     except Exception as e:
       print(f"carrot_man error...: {e}")
       traceback.print_exc()
+      queue_carrot_exception_tmux_send("carrot_man_thread")
       time.sleep(10)
 
 
