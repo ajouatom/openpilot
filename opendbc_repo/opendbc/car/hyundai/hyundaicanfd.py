@@ -788,12 +788,13 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
-        lane_color = 6 if md is not None and md.meta.laneChangeAvailableLeft else 2
+        # LANELINE 경고 판단 (CAN raw 기준)
         if lane_line_check >= 1:
-          lane_line_warn_left = CS.out.leftLaneLine % 10 not in (0, 5)   # 실선이면 주황
+            lane_line_warn_left  = CS.out.leftLaneLine  % 10 not in (0, 5)
+            lane_line_warn_right = CS.out.rightLaneLine % 10 not in (0, 5)
         else:
-            lane_line_warn_left  = CS.out.leftLaneLine  >= 20  # 황색(10~)/주황(20~) 차단
-            lane_line_warn_right = CS.out.rightLaneLine >= 20
+            lane_line_warn_left  = CS.out.leftLaneLine  // 10 == 2  # 황색(10~)/주황(20~) 차단
+            lane_line_warn_right = CS.out.rightLaneLine // 10 == 2
 
         lca_avail_left  = (md is not None and md.meta.laneChangeAvailableLeft)
         lca_avail_right = (md is not None and md.meta.laneChangeAvailableRight)
@@ -811,7 +812,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if hud_control.leftLaneDepart:
           values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
         else:
-          values["LANELINE_LEFT"] = lane_color if hud_control.leftLaneVisible else 0
+          values["LANELINE_LEFT"] = lane_color
 
         # 오른쪽
         if lca_avail_right:
@@ -819,18 +820,18 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         elif lane_line_warn_right or CS.out.rightBlindspot or (side_object_right and side_object_detect_display):
           lane_color = 4
         else:
-          lane_line_warn_right = CS.out.rightLaneLine // 10 == 2
-        lane_color = 4 if lane_line_warn_right or CS.out.rightBlindspot else lane_color
+          lane_color = 2
+
         if hud_control.rightLaneDepart:
           values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
         else:
-          values["LANELINE_RIGHT"] = lane_color if hud_control.rightLaneVisible else 0
+          values["LANELINE_RIGHT"] = lane_color
 
         values["LCA_LEFT_ARROW"] = 2 if CS.out.leftBlinker else 0
         values["LCA_RIGHT_ARROW"] = 2 if CS.out.rightBlinker else 0
 
-        values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_active else 0
-        values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_active else 0
+        values["LCA_LEFT_ICON"]  = (1 if not lca_avail_left  else 2) if lat_active else 1 if lat_enabled else 0
+        values["LCA_RIGHT_ICON"] = (1 if not lca_avail_right else 2) if lat_active else 1 if lat_enabled else 0
 
         values["LANE_LEFT"] = 1 if desire in (1, 3) else 0
         values["LANE_RIGHT"] = 1 if desire in (2, 4) else 0
