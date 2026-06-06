@@ -4,6 +4,25 @@ from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
 hyundai_checksum = crcmod.mkCrcFun(0x11D, initCrc=0xFD, rev=False, xorOut=0xdf)
 
+def suppress_casper_ev_fca11_fault(values):
+  # CASPER EV can report transient FCA faults during camera-SCC handoff.
+  # Keep the copied FCA11 frame non-faulting without changing other cars.
+  fca_fault = values["FCA_Failinfo"] != 0 or values["FCA_Status"] == 3
+  values["FCA_Failinfo"] = 0
+
+  if fca_fault:
+    values["FCA_Status"] = 2
+    values["CF_VSM_Prefill"] = 0
+    values["CF_VSM_HBACmd"] = 0
+    values["CF_VSM_Warn"] = 0
+    values["CF_VSM_BeltCmd"] = 0
+    values["CR_VSM_DecCmd"] = 0
+    values["FCA_CmdAct"] = 0
+    values["FCA_StopReq"] = 0
+    values["CF_VSM_DecCmdAct"] = 0
+
+  return values
+
 def create_lkas11(packer, frame, CP, apply_torque, steer_req,
                   torque_fault, lkas11, sys_warning, sys_state, enabled,
                   left_lane, right_lane,
@@ -134,7 +153,7 @@ def create_lfahda_mfc(packer, CC, blinking_signal):
   }
   return packer.make_can_msg("LFAHDA_MFC", 0, values)
 
-def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_speed, stopping, long_override, use_fca, CS, soft_hold_mode):
+def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_speed, stopping, long_override, suppress_casper_ev_fca, CS, soft_hold_mode):
   from opendbc.car.hyundai.carcontroller import HyundaiJerk
   cruise_available = CS.out.cruiseState.available
   if CS.paddle_button_prev > 0:
@@ -214,11 +233,8 @@ def create_acc_commands_scc(packer, enabled, accel, jerk, idx, hud_control, set_
     values["ObjDistStat"] = objGap2
     commands.append(packer.make_can_msg("SCC14", 0, values))
 
-  if CS.fca11 is not None and use_fca: # CASPER_EV의 경우 FCA11에서 fail이 간헐적 발생함.. 그냥막자.. 원인불명..
-    values = copy.copy(CS.fca11)
-    if values["FCA_Failinfo"] != 0:
-      values["FCA_Status"] = 2
-    values["FCA_Failinfo"] = 0
+  if CS.fca11 is not None and suppress_casper_ev_fca: # CASPER_EV의 경우 FCA11에서 fail이 간헐적 발생함.. 그냥막자.. 원인불명..
+    values = suppress_casper_ev_fca11_fault(copy.copy(CS.fca11))
     fca11_dat = packer.make_can_msg("FCA11", 0, values)[1]
     values["CR_FCA_ChkSum"] = hyundai_checksum(fca11_dat[:7])
     commands.append(packer.make_can_msg("FCA11", 0, values))
