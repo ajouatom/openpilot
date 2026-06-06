@@ -397,6 +397,11 @@ class CarState(CarStateBase):
       aeb_warning = cp_cruise.vl[aeb_src]["CF_VSM_Warn"] != 0
       scc_warning = cp_cruise.vl["SCC12"]["TakeOverReq"] == 1  # sometimes only SCC system shows an FCW
       aeb_braking = cp_cruise.vl[aeb_src]["CF_VSM_DecCmdAct"] != 0 or cp_cruise.vl[aeb_src][aeb_sig] != 0
+      if self.CP.carFingerprint == CAR.HYUNDAI_CASPER_EV and aeb_src == "FCA11":
+        fca_fault = cp_cruise.vl["FCA11"]["FCA_Failinfo"] != 0 or cp_cruise.vl["FCA11"]["FCA_Status"] == 3
+        if fca_fault:
+          aeb_warning = False
+          aeb_braking = False
       ret.stockFcw = (aeb_warning or scc_warning) and not aeb_braking
       ret.stockAeb = aeb_warning and aeb_braking
 
