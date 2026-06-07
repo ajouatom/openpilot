@@ -253,8 +253,9 @@ class DesireHelper:
       not driver_enabled and
       self.atc_type in ("fork left", "fork right", "atc left", "atc right")
     )
-    # ATC-only lane changes should not auto-start across solid/unknown lane-line types.
-    atc_lane_change_line_blocked = (
+    # Do not treat a blocked->available retry as permission to cross solid/unknown lines.
+    # Geometry-based ATC at the last lane still works when the lane/road edge opens up.
+    atc_lane_change_retry_line_blocked = (
       atc_lane_change_only and
       side is not None and
       side.lane_line_info_mod not in (0, 5)
@@ -271,7 +272,6 @@ class DesireHelper:
         auto_lane_change_trigger = (
           self.auto_lane_change_enable and
           (not atc_lane_change_manual_only) and
-          (not atc_lane_change_line_blocked) and
           side.edge_available and
           (side.lane_available_trigger or side.lane_appeared) and
           (not side.side_object_detected) and
@@ -381,7 +381,7 @@ class DesireHelper:
               solid_line_blocked = (self.laneLineCheck >= 2) and (not side.lane_change_available_geom) and \
                                    (side.lane_available or side.edge_available)
               block_released = side.lane_change_available_released
-              block_released_auto = block_released and not atc_lane_change_line_blocked
+              block_released_auto = block_released and not atc_lane_change_retry_line_blocked
               start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
                            side.lane_line_info_edge_detect or solid_line_blocked or block_released_auto
                 
@@ -401,7 +401,7 @@ class DesireHelper:
                   if side.lane_change_available:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
                 else:
-                  if torque_applied or ((not atc_lane_change_manual_only) and (not atc_lane_change_line_blocked) and (
+                  if torque_applied or ((not atc_lane_change_manual_only) and (
                     auto_lane_change_trigger or side.lane_line_info_edge_detect or block_released_auto
                   )):
                     # 여기서는 시작 직전 안전성 체크
