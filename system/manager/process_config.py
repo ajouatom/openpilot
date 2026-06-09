@@ -148,6 +148,7 @@ procs = [
   PythonProcess("carrot_man", "selfdrive.carrot.carrot_man", always_run, restart_if_crash=True),#, enabled=not PC),
 
   PythonProcess("carrot_server", "selfdrive.carrot.carrot_server", always_run),
+  PythonProcess("cweb_push", "selfdrive.carrot.cweb_push", always_run, enabled=not PC),
   PythonProcess("carrot_cluster", "selfdrive.carrot.cluster_autorun", enable_cluster_hud, restart_if_crash=True),
 
   #Xiaoge data broadcaster (conditional on ShareData param)
