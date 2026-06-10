@@ -243,16 +243,16 @@ class DesireHelper:
 
     # 선택된 side (FSM은 이 side만 참고)
     side = self._get_selected_side(blinker_state) if blinker_state in (BLINKER_LEFT, BLINKER_RIGHT) else None
+    atc_lane_change_requested = (
+      atc_enabled and
+      self.atc_type in ("fork left", "fork right", "atc left", "atc right")
+    )
     atc_lane_change_manual_only = (
       atc_enabled and
       not driver_enabled and
       self.atc_type in ("fork left", "atc left")
     )
-    atc_lane_change_only = (
-      atc_enabled and
-      not driver_enabled and
-      self.atc_type in ("fork left", "fork right", "atc left", "atc right")
-    )
+    atc_lane_change_only = atc_lane_change_requested and not driver_enabled
     # Do not treat a blocked->available retry as permission to cross solid/unknown lines.
     # Geometry-based ATC at the last lane still works when the lane/road edge opens up.
     atc_lane_change_retry_line_blocked = (
@@ -365,6 +365,11 @@ class DesireHelper:
             ignore_bsd = (self.laneChangeBsd < 0)
             block_lanechange_bsd = (self.laneChangeBsd == 1)
             bsd_active = (side.bsd_hold_counter > 0) and (not ignore_bsd)
+            side_clear_without_line = (side.lane_available or side.edge_available) and \
+                                      (not side.side_object_detected) and (not bsd_active)
+            atc_driver_confirm = atc_lane_change_requested and driver_enabled
+            atc_geometry_release = atc_lane_change_only and auto_lane_change_trigger
+            atc_line_release = (atc_driver_confirm or atc_geometry_release) and side_clear_without_line
 
             # 차선이 일정시간 이상 안보이면 auto 허용(원본 유지)
             #if (not side.lane_available) or (side.lane_exist_count.counter < int(2.0 / DT_MDL)):
@@ -383,11 +388,11 @@ class DesireHelper:
               block_released = side.lane_change_available_released
               block_released_auto = block_released and not atc_lane_change_retry_line_blocked
               start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
-                           side.lane_line_info_edge_detect or solid_line_blocked or block_released_auto
+                           side.lane_line_info_edge_detect or solid_line_blocked or block_released_auto or atc_line_release
                 
               if start_gate:
                 if solid_line_blocked:
-                  if torque_applied and not (bsd_active and block_lanechange_bsd):
+                  if atc_line_release or (torque_applied and not (bsd_active and block_lanechange_bsd)):
                     self.lane_change_state = LaneChangeState.laneChangeStarting
                 elif bsd_active:
                   if torque_applied and (not block_lanechange_bsd):
@@ -398,14 +403,14 @@ class DesireHelper:
                 elif driver_enabled:
                   # driver blinker면 바로 시작(원본 유지)
                   # 단, object/bzd 막힘은 side.lane_change_available에서 걸림
-                  if side.lane_change_available:
+                  if side.lane_change_available or atc_line_release:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
                 else:
                   if torque_applied or ((not atc_lane_change_manual_only) and (
                     auto_lane_change_trigger or side.lane_line_info_edge_detect or block_released_auto
                   )):
                     # 여기서는 시작 직전 안전성 체크
-                    if side.lane_change_available:
+                    if side.lane_change_available or atc_line_release:
                       self.lane_change_state = LaneChangeState.laneChangeStarting
 
         elif self.lane_change_state == LaneChangeState.laneChangeStarting:
