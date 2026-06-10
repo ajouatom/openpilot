@@ -48,7 +48,7 @@ from cluster_utils import clamp, darken, lighten, smoothstep
 Color = tuple[int, int, int, int]
 RoadEdgeLayer = tuple[int, Color, float, float]
 ProfileAdd = Callable[[str, float], None]
-PATH_BLOCKER_CLEARANCE_M = 1.25
+PATH_BLOCKER_CLEARANCE_M = 0.25
 PATH_BLOCKER_LANE_TOLERANCE = 0.42
 RADAR_VEHICLE_MIN_VALID_COUNT = 20
 RADAR_VEHICLE_MAX_DISTANCE_M = 150.0
@@ -87,6 +87,7 @@ RADAR_MERGE_LATERAL_M = 1.35
 RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MIN_M = 5.0
 RADAR_FRONT_DETECTED_MERGE_LONGITUDINAL_MAX_M = 11.0
 RADAR_FRONT_DETECTED_MERGE_LATERAL_M = 2.25
+RADAR_TRACK_DISPLAY_LATERAL_INSET_M = 0.35
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
@@ -1759,7 +1760,7 @@ def radar_point_markers(
         markers.append(
             RadarPointMarker(
                 center=Vec3(
-                    clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0) + x_offset_m,
+                    radar_point_display_lateral_m(point, lane_width_m) + x_offset_m,
                     forward_m,
                     0.20,
                 ),
@@ -2063,7 +2064,7 @@ def radar_vehicle_box(
     alpha = int(92 + 163 * confidence)
     body_color = vehicle_color_for_source("radarPoint", theme, state.radar_source_color_mode)
     forward_m = render_scene_forward_m(point.longitudinal_m)
-    center_x_m = clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0)
+    center_x_m = radar_point_display_lateral_m(point, lane_width_m)
     return VehicleBox(
         center=Vec3(center_x_m, forward_m, VEHICLE_HEIGHT_M * 0.5),
         right_x=1.0,
@@ -2149,6 +2150,14 @@ def radar_point_is_confirmed_vehicle_source(point: RadarPoint) -> bool:
 
 def radar_point_source_is_radar_track(point: RadarPoint) -> bool:
     return point.source == "liveTracks"
+
+
+def radar_point_display_lateral_m(point: RadarPoint, lane_width_m: float) -> float:
+    lateral_m = clamp(point.lateral_m, -lane_width_m * 3.0, lane_width_m * 3.0)
+    if not radar_point_source_is_radar_track(point):
+        return lateral_m
+    magnitude = max(0.0, abs(lateral_m) - RADAR_TRACK_DISPLAY_LATERAL_INSET_M)
+    return math.copysign(magnitude, lateral_m) if magnitude > 0.0 else 0.0
 
 
 def radar_point_has_vehicle_estimate(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:

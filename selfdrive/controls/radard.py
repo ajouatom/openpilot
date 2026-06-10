@@ -33,6 +33,20 @@ STICKY_FAR_DREL = 60.0
 STICKY_MAX_DPATH_FAR = 1.2
 STICKY_PATH_Y_STD_GAIN = 0.5
 
+CUTIN_CONFIRM_FRAMES = int(0.25 / DT_MDL)
+CUTIN_STICKY_FRAMES = int(0.7 / DT_MDL)
+CUTIN_MIN_TRACK_AGE = int(1.0 / DT_MDL)
+CUTIN_ENTER_FUTURE_IN_LANE_PROB = 0.25
+CUTIN_ENTER_PROB_GAIN = 0.12
+CUTIN_ENTER_CENTERING_GAIN = 0.25
+CUTIN_KEEP_FUTURE_IN_LANE_PROB = 0.12
+CUTIN_KEEP_MAX_DPATH_FUTURE = 1.6
+CUTIN_KEEP_MAX_MOVING_AWAY = 0.3
+CUTIN_PROMOTE_DREL_MARGIN = 1.0
+RADAR_ONLY_FALLBACK_VISION_PROB = 0.55
+
+VISION_ONLY_RADAR_TRACK_MODE = -2
+
 
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
@@ -40,7 +54,6 @@ def laplacian_pdf(x: float, mu: float, b: float):
 
 def clamp(x: float, lo: float, hi: float) -> float:
   return float(np.clip(x, lo, hi))
-
 
 class Track:
   def __init__(self, identifier: int):
@@ -388,124 +401,6 @@ def get_RadarState_from_vision(md, lead_msg: capnp._DynamicStructReader, v_ego: 
     "radarTrackId": -1,
   }
 
-class VisionTrack:
-  def __init__(self, radar_ts):
-    self.radar_ts = radar_ts
-    self.dRel = 0.0
-    self.vRel = 0.0
-    self.yRel = 0.0
-    self.vLead = 0.0
-    self.aLead = 0.0
-    self.vLeadK = 0.0
-    self.aLeadK = 0.0
-    self.aLeadTau = _LEAD_ACCEL_TAU
-    self.prob = 0.0
-    self.status = False
-
-    self.dRel_last = 0.0
-    self.vLead_last = 0.0
-    self.alpha = 0.02
-    self.alpha_a = 0.02
-
-    self.vLat = 0.0
-
-    self.v_ego = 0.0
-    self.cnt = 0
-
-    self.dPath = 0.0
-
-  def get_lead(self, md):
-    #aLeadK = 0.0 if self.mixRadarInfo in [3] else clip(self.aLeadK, self.aLead - 1.0, self.aLead + 1.0)
-    return {
-      "dRel": self.dRel,
-      "yRel": self.yRel,
-      #"dPath": self.dPath,
-      "vRel": self.vRel,
-      "vLead": self.vLead,
-      "vLeadK": self.vLeadK,    ## TODO: 아직 vLeadK는 엉망인듯...
-      "aLead": self.aLead,
-      "aLeadK": self.aLeadK,
-      "aLeadTau": self.aLeadTau,
-      "jLead": 0.0,
-      "vLat": 0.0,
-      "fcw": False,
-      "modelProb": self.prob,
-      "status": self.status,
-      "radar": False,
-      "radarTrackId": -1,
-      #"aLead": self.aLead,
-      #"vLat": self.vLat,
-    }
-
-  def reset(self):
-    self.status = False
-    self.aLeadTau = _LEAD_ACCEL_TAU
-
-    self.vRel = 0.0
-    self.vLead = self.vLeadK = self.v_ego
-    self.aLead = self.aLeadK = 0.0
-    self.vLat = 0.0
-
-  def update(self, lead_msg, lead_prob, model_v_ego, v_ego, md):
-
-    lead_v_rel_pred = lead_msg.v[0] - model_v_ego
-    self.prob = lead_prob
-    self.v_ego = v_ego
-    if self.prob > .5:
-      dRel = float(lead_msg.x[0]) - RADAR_TO_CAMERA
-      if abs(self.dRel - dRel) > 5.0:
-        self.cnt = 0
-      self.dRel = dRel
-
-      self.yRel = float(-lead_msg.y[0])
-      dPath = self.yRel + np.interp(self.dRel, md.position.x, md.position.y)
-      a_lead_vision = lead_msg.a[0]
-      if self.cnt < 20 or self.prob < 0.97: # 레이더측정시 cnt는 0, 레이더사라지고 1초간 비젼데이터 그대로 사용
-        self.vRel = lead_v_rel_pred
-        self.vLead = float(v_ego + lead_v_rel_pred)
-        self.aLead = a_lead_vision
-        self.vLat = 0.0
-      else:
-        v_rel = (self.dRel - self.dRel_last) / self.radar_ts
-        v_rel = self.vRel * (1. - self.alpha) + v_rel * self.alpha
-
-        #self.vRel = lead_v_rel_pred if self.mixRadarInfo == 3 else (lead_v_rel_pred + self.vRel) / 2
-        model_weight = np.interp(self.prob, [0.97, 1.0], [0.4, 0.0])  # prob가 높으면 v_rel(dRel미분값)에 가중치를 줌.
-        self.vRel = float(lead_v_rel_pred * model_weight + v_rel * (1. - model_weight))
-        #self.vRel = (lead_v_rel_pred + v_rel) / 2
-        self.vLead = float(v_ego + self.vRel)
-
-        a_lead = (self.vLead - self.vLead_last) / self.radar_ts * 0.2 #0.5 -> 0.2 vel 미분적용을 줄임.
-        self.aLead = self.aLead * (1. - self.alpha_a) + a_lead * self.alpha_a
-        if abs(a_lead_vision) > abs(self.aLead): # or self.mixRadarInfo == 3:
-          self.aLead = a_lead_vision
-
-        vLat_alpha = 0.002
-        self.vLat = self.vLat * (1. - vLat_alpha) + (dPath - self.dPath) / self.radar_ts * vLat_alpha
-
-      self.dPath = dPath
-
-      self.vLeadK= self.vLead
-      self.aLeadK = self.aLead
-
-      self.status = True
-      self.cnt += 1
-    else:
-      self.reset()
-      self.cnt = 0
-      self.dPath = self.yRel + np.interp(v_ego ** 2 / (2 * 2.5), md.position.x, md.position.y)
-
-    self.dRel_last = self.dRel
-    self.vLead_last = self.vLead
-
-    # Learn if constant acceleration
-    #aLeadTauValue = self.aLeadTauPos if self.aLead > self.aLeadTauThreshold else self.aLeadTauNeg
-    if abs(self.aLead) < 0.3: #self.aLeadTauThreshold:
-      self.aLeadTau = 0.2 #aLeadTauValue
-    else:
-      #self.aLeadTau = min(self.aLeadTau * 0.9, aLeadTauValue)
-      self.aLeadTau *= 0.9
-
 class RadarD:
   def __init__(self, delay: float = 0.0):
     self.current_time = 0.0
@@ -523,8 +418,6 @@ class RadarD:
     self.radar_state_valid = False
 
     self.ready = False
-
-    self.vision_tracks = [VisionTrack(DT_MDL), VisionTrack(DT_MDL)]
 
     self.params = Params()
     self.enable_radar_tracks = self.params.get_int("EnableRadarTracks")
@@ -549,6 +442,7 @@ class RadarD:
     self.radar_lat_factor = self.params.get_float("RadarLatFactor") * 0.01
     self.radar_reaction_factor = self.params.get_float("RadarReactionFactor") * 0.01
     self.detect_cut_in = self.radar_lat_factor > 0
+    vision_only_mode = self.enable_radar_tracks <= VISION_ONLY_RADAR_TRACK_MODE
 
     leads_v3 = sm['modelV2'].leadsV3
     if sm.recv_frame['carState'] != self.last_v_ego_frame:
@@ -556,19 +450,22 @@ class RadarD:
       self.v_ego_hist.append(self.v_ego)
       self.last_v_ego_frame = sm.recv_frame['carState']
 
-    valid_ids = set()
-    for pt in rr.points:
-      track_id = pt.trackId
-      valid_ids.add(track_id)
+    if vision_only_mode:
+      self.tracks.clear()
+    else:
+      valid_ids = set()
+      for pt in rr.points:
+        track_id = pt.trackId
+        valid_ids.add(track_id)
 
-      if track_id not in self.tracks:
-        self.tracks[track_id] = Track(track_id)
+        if track_id not in self.tracks:
+          self.tracks[track_id] = Track(track_id)
 
-      self.tracks[track_id].update(sm['modelV2'], pt, self.ready, self.radar_reaction_factor, self.radar_lat_factor)
+        self.tracks[track_id].update(sm['modelV2'], pt, self.ready, self.radar_reaction_factor, self.radar_lat_factor)
 
-    for tid in list(self.tracks.keys()):
-      if tid not in valid_ids:
-        self.tracks.pop(tid)
+      for tid in list(self.tracks.keys()):
+        if tid not in valid_ids:
+          self.tracks.pop(tid)
 
     # *** publish radarState ***
     radar_state_valid = sm.all_checks()
@@ -593,8 +490,6 @@ class RadarD:
     if not self.radar_state_valid:
       self.radar_state = log.RadarState.new_message()
 
-    model_updated = False if self.radar_state.mdMonoTime == sm.logMonoTime['modelV2'] else True
-
     self.radar_state.mdMonoTime = sm.logMonoTime['modelV2']
     self.radar_state.radarErrors = rr.errors
     self.radar_state.carStateMonoTime = sm.logMonoTime['carState']
@@ -613,12 +508,6 @@ class RadarD:
           self.lead_prob_filters[i].update(lead_prob)
 
       md = sm['modelV2']
-      if model_updated:
-        if self.radar_detected:
-          self.vision_tracks[0].cnt = 0
-          self.vision_tracks[1].cnt = 0
-        self.vision_tracks[0].update(leads_v3[0], self.lead_prob_filters[0].x, model_v_ego, self.v_ego, md)
-        self.vision_tracks[1].update(leads_v3[1], self.lead_prob_filters[1].x, model_v_ego, self.v_ego, md)
 
       alive_tracks = {tid: trk for tid, trk in self.tracks.items() if trk.cnt > 2 }
       self.radar_state.leadOne, self.radar_detected = self.get_lead(sm['carState'], md, alive_tracks, 0, leads_v3[0], model_v_ego, self.lead_prob_filters[0].x, low_speed_override=False)
@@ -688,10 +577,11 @@ class RadarD:
     lead_dict = {'status': False}
     radar = False
     if track is not None:
-      lead_dict = track.get_RadarState(lead_prob, self.vision_tracks[0].yRel)
+      vision_y_rel = float(-lead_msg.y[0]) if ready else 0.0
+      lead_dict = track.get_RadarState(lead_prob, vision_y_rel)
       radar = True
     elif (track is None) and ready and (lead_prob > .5):
-        lead_dict = self.vision_tracks[index].get_lead(md)
+      lead_dict = get_RadarState_from_vision(md, lead_msg, v_ego, model_v_ego, lead_prob)
 
     if self.enable_corner_radar > 1:
       lead_dict = self.corner_radar(CS, lead_dict)
@@ -703,10 +593,57 @@ class RadarD:
 
         # Only choose new track if it is actually closer than the previous one
         if (not lead_dict['status']) or (closest_track.dRel < lead_dict['dRel']):
-          #lead_dict = closest_track.get_RadarState(lead_prob, self.vision_tracks[0].yRel, self.vision_tracks[0].vLat)
-          lead_dict = closest_track.get_RadarState(lead_prob, self.vision_tracks[0].yRel)
+          vision_y_rel = float(-lead_msg.y[0]) if ready else 0.0
+          lead_dict = closest_track.get_RadarState(lead_prob, vision_y_rel)
 
     return lead_dict, radar
+
+  def _is_cutin_enter_candidate(self, t: Track) -> bool:
+    if not self.detect_cut_in or not self.lane_line_available:
+      return False
+    if t.cnt < CUTIN_MIN_TRACK_AGE:
+      return False
+    if not (3.0 < t.dRel < 50.0 and t.vLead > 4.0):
+      return False
+    if t.in_lane_prob_future < CUTIN_ENTER_FUTURE_IN_LANE_PROB:
+      return False
+    if (t.in_lane_prob_future - t.in_lane_prob) < CUTIN_ENTER_PROB_GAIN:
+      return False
+    if (abs(t.dPath) - abs(t.dPath_future)) < CUTIN_ENTER_CENTERING_GAIN:
+      return False
+    return True
+
+  def _is_cutin_keep_candidate(self, t: Track) -> bool:
+    if not self.detect_cut_in or not self.lane_line_available:
+      return False
+    if not (2.5 < t.dRel < 55.0 and t.vLead > 2.0):
+      return False
+
+    moving_away = abs(t.dPath_future) - abs(t.dPath)
+    if moving_away > CUTIN_KEEP_MAX_MOVING_AWAY:
+      return False
+
+    return (
+      t.in_lane_prob_future > CUTIN_KEEP_FUTURE_IN_LANE_PROB or
+      abs(t.dPath_future) < CUTIN_KEEP_MAX_DPATH_FUTURE
+    )
+
+  def _update_cutin_sticky(self, t: Track) -> bool:
+    if self._is_cutin_enter_candidate(t):
+      t.cut_in_count = min(t.cut_in_count + 1, CUTIN_STICKY_FRAMES)
+    elif t.cut_in_count > 0 and self._is_cutin_keep_candidate(t):
+      t.cut_in_count = max(t.cut_in_count - 1, 0)
+    else:
+      t.cut_in_count = 0
+
+    return t.cut_in_count >= CUTIN_CONFIRM_FRAMES
+
+  def _cutin_can_replace_lead_one(self, cutin: dict[str, Any]) -> bool:
+    lead_one = self.radar_state.leadOne
+    if not lead_one.status:
+      return True
+
+    return cutin["dRel"] + CUTIN_PROMOTE_DREL_MARGIN < lead_one.dRel
 
   def compute_leads(self, v_ego, tracks, md, lead_prob):
     lead_msg = md.leadsV3[0] if (md is not None and len(md.position.x) == 33) else None
@@ -725,6 +662,7 @@ class RadarD:
       y_rel_neg = - c.yRel
       # center
       if c.in_lane_prob > 0.3:
+        c.cut_in_count = max(c.cut_in_count - 1, 0)
         if c.cnt > 3:
           ld = c.get_RadarState(lead_prob, float(-lead_msg.y[0]))
           ld['modelProb'] = 0.01
@@ -733,22 +671,16 @@ class RadarD:
       # left/right
       elif y_rel_neg < 0: #left_lane_y:
         ld = c.get_RadarState(0, 0)
-        if self.lane_line_available and c.in_lane_prob_future > 0.1 and c.cnt > int(2.0/DT_MDL):
-          if c.cut_in_count > int(0.1/DT_MDL):
-            ld['modelProb'] = 0.03
-            cutin_list.append(ld)
-          c.cut_in_count += 2
+        if self._update_cutin_sticky(c):
+          ld['modelProb'] = 0.03
+          cutin_list.append(ld)
         left_list.append(ld)
       else:
         ld = c.get_RadarState(0, 0)
-        if self.lane_line_available and c.in_lane_prob_future > 0.1 and c.cnt > int(2.0/DT_MDL):
-          if c.cut_in_count > int(0.1/DT_MDL):
-            ld['modelProb'] = 0.03
-            cutin_list.append(ld)
-          c.cut_in_count += 2
+        if self._update_cutin_sticky(c):
+          ld['modelProb'] = 0.03
+          cutin_list.append(ld)
         right_list.append(ld)
-
-      c.cut_in_count = max(c.cut_in_count - 1, 0)
 
     self.radar_state.leadsLeft   = left_list
     self.radar_state.leadsRight  = right_list
@@ -819,25 +751,27 @@ class RadarD:
     detected = self.radar_detected
 
     if self.leadCutIn and self.leadCutIn.get("status") and self.detect_cut_in:
-      if self.radar_state.leadOne.status:
-        if self.leadCutIn["dRel"] < self.radar_state.leadOne.dRel:
-          chosen = self.leadCutIn
-          chosen["modelProb"] = 0.03
-          detected = True
-      else:
+      if self._cutin_can_replace_lead_one(self.leadCutIn):
         chosen = self.leadCutIn
         chosen["modelProb"] = 0.03
         detected = True
 
     elif self.leadCenter and self.leadCenter["status"]:
+      lead_one = self.radar_state.leadOne
+      vision_prob = lead_one.modelProb if lead_one.status else 0.0
+
       if self.radar_detected:
-        if self.radar_state.leadOne.status and self.leadCenter["dRel"] < self.radar_state.leadOne.dRel:
+        if lead_one.status and self.leadCenter["dRel"] + CUTIN_PROMOTE_DREL_MARGIN < lead_one.dRel:
           chosen = self.leadCenter
           chosen["modelProb"] = 0.01
       else:
-        chosen = self.leadCenter
-        chosen["modelProb"] = 0.02
-        detected = True
+        radar_clearly_closer = lead_one.status and self.leadCenter["dRel"] + CUTIN_PROMOTE_DREL_MARGIN < lead_one.dRel
+        vision_weak_or_missing = (not lead_one.status) or vision_prob < RADAR_ONLY_FALLBACK_VISION_PROB
+
+        if vision_weak_or_missing and (not lead_one.status or radar_clearly_closer):
+          chosen = self.leadCenter
+          chosen["modelProb"] = 0.02
+          detected = True
 
     if chosen is not None:
         self.radar_state.leadOne = chosen
