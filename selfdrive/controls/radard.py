@@ -47,6 +47,17 @@ RADAR_ONLY_FALLBACK_VISION_PROB = 0.55
 
 VISION_ONLY_RADAR_TRACK_MODE = -2
 
+CENTER_LEAD_NEAR_DPATH_LIMIT = 1.2
+CENTER_LEAD_FAR_DPATH_LIMIT = 0.9
+CENTER_LEAD_FAR_DREL = 60.0
+CENTER_LEAD_NEAR_IN_LANE_PROB = 0.3
+CENTER_LEAD_FAR_IN_LANE_PROB = 0.45
+RADAR_ONLY_CENTER_DPATH_NEAR_LIMIT = 1.1
+RADAR_ONLY_CENTER_DPATH_MID_LIMIT = 0.9
+RADAR_ONLY_CENTER_DPATH_FAR_LIMIT = 0.75
+RADAR_ONLY_CENTER_MID_DREL = 60.0
+RADAR_ONLY_CENTER_FAR_DREL = 80.0
+
 
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
@@ -425,6 +436,9 @@ class RadarD:
     self.radar_lat_factor = 0.0
 
     self.radar_detected = False
+    self.leadCenter = None
+    self.leadTwo = None
+    self.leadCutIn = {'status': False}
 
     self._corner_lat_hist = {
       "L": deque(maxlen=10),
@@ -645,14 +659,39 @@ class RadarD:
 
     return cutin["dRel"] + CUTIN_PROMOTE_DREL_MARGIN < lead_one.dRel
 
+  def _is_center_lead_candidate(self, t: Track) -> bool:
+    in_lane_min = CENTER_LEAD_NEAR_IN_LANE_PROB
+    dpath_limit = CENTER_LEAD_NEAR_DPATH_LIMIT
+    if t.dRel > CENTER_LEAD_FAR_DREL:
+      in_lane_min = CENTER_LEAD_FAR_IN_LANE_PROB
+      dpath_limit = CENTER_LEAD_FAR_DPATH_LIMIT
+
+    return t.in_lane_prob > in_lane_min and abs(t.dPath) < dpath_limit
+
+  def _radar_only_center_ok(self, lead: dict[str, Any]) -> bool:
+    d_rel = float(lead.get("dRel", 999.0))
+    d_path = abs(float(lead.get("dPath", 999.0)))
+
+    if d_rel > RADAR_ONLY_CENTER_FAR_DREL:
+      return d_path < RADAR_ONLY_CENTER_DPATH_FAR_LIMIT
+    if d_rel > RADAR_ONLY_CENTER_MID_DREL:
+      return d_path < RADAR_ONLY_CENTER_DPATH_MID_LIMIT
+    return d_path < RADAR_ONLY_CENTER_DPATH_NEAR_LIMIT
+
   def compute_leads(self, v_ego, tracks, md, lead_prob):
-    lead_msg = md.leadsV3[0] if (md is not None and len(md.position.x) == 33) else None
+    self.leadCenter = None
+    self.leadTwo = None
     self.leadCutIn = {'status': False}
+
+    lead_msg = md.leadsV3[0] if (md is not None and len(md.position.x) == 33) else None
     if lead_msg is None:
       # reset
       self.radar_state.leadsLeft = []
       self.radar_state.leadsCenter = []
       self.radar_state.leadsRight = []
+      self.radar_state.leadsCutIn = []
+      self.radar_state.leadsLeft2 = []
+      self.radar_state.leadsRight2 = []
       self.radar_state.leadLeft = {'status': False}
       self.radar_state.leadRight = {'status': False}
       return
@@ -661,7 +700,7 @@ class RadarD:
     for c in tracks.values():
       y_rel_neg = - c.yRel
       # center
-      if c.in_lane_prob > 0.3:
+      if self._is_center_lead_candidate(c):
         c.cut_in_count = max(c.cut_in_count - 1, 0)
         if c.cnt > 3:
           ld = c.get_RadarState(lead_prob, float(-lead_msg.y[0]))
@@ -768,7 +807,7 @@ class RadarD:
         radar_clearly_closer = lead_one.status and self.leadCenter["dRel"] + CUTIN_PROMOTE_DREL_MARGIN < lead_one.dRel
         vision_weak_or_missing = (not lead_one.status) or vision_prob < RADAR_ONLY_FALLBACK_VISION_PROB
 
-        if vision_weak_or_missing and (not lead_one.status or radar_clearly_closer):
+        if vision_weak_or_missing and (not lead_one.status or radar_clearly_closer) and self._radar_only_center_ok(self.leadCenter):
           chosen = self.leadCenter
           chosen["modelProb"] = 0.02
           detected = True
