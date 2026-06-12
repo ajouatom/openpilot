@@ -57,6 +57,7 @@ RADAR_ONLY_CENTER_DPATH_MID_LIMIT = 0.9
 RADAR_ONLY_CENTER_DPATH_FAR_LIMIT = 0.75
 RADAR_ONLY_CENTER_MID_DREL = 60.0
 RADAR_ONLY_CENTER_FAR_DREL = 80.0
+RADAR_ONLY_CENTER_MAX_DREL = 100.0
 
 
 def laplacian_pdf(x: float, mu: float, b: float):
@@ -65,6 +66,30 @@ def laplacian_pdf(x: float, mu: float, b: float):
 
 def clamp(x: float, lo: float, hi: float) -> float:
   return float(np.clip(x, lo, hi))
+
+EMPTY_LEAD = {
+  "dRel": 0.0,
+  "yRel": 0.0,
+  "vRel": 0.0,
+  "aRel": 0.0,
+  "vLead": 0.0,
+  "aLead": 0.0,
+  "dPath": 0.0,
+  "vLat": 0.0,
+  "vLeadK": 0.0,
+  "aLeadK": 0.0,
+  "fcw": False,
+  "status": False,
+  "aLeadTau": 0.0,
+  "modelProb": 0.0,
+  "radar": False,
+  "radarTrackId": -1,
+  "jLead": 0.0,
+  "score": 0.0,
+}
+
+def empty_lead():
+  return EMPTY_LEAD.copy()
 
 class Track:
   def __init__(self, identifier: int):
@@ -438,7 +463,7 @@ class RadarD:
     self.radar_detected = False
     self.leadCenter = None
     self.leadTwo = None
-    self.leadCutIn = {'status': False}
+    self.leadCutIn = empty_lead()
 
     self._corner_lat_hist = {
       "L": deque(maxlen=10),
@@ -523,7 +548,7 @@ class RadarD:
 
       md = sm['modelV2']
 
-      alive_tracks = {tid: trk for tid, trk in self.tracks.items() if trk.cnt > 2 }
+      alive_tracks = {tid: trk for tid, trk in self.tracks.items() if trk.measured and trk.cnt > 2 }
       self.radar_state.leadOne, self.radar_detected = self.get_lead(sm['carState'], md, alive_tracks, 0, leads_v3[0], model_v_ego, self.lead_prob_filters[0].x, low_speed_override=False)
       self.radar_state.leadTwo, _ = self.get_lead(sm['carState'], md, alive_tracks, 1, leads_v3[1], model_v_ego, self.lead_prob_filters[1].x, low_speed_override=False)
 
@@ -588,7 +613,7 @@ class RadarD:
       if self.enable_radar_tracks == -1 or (self.enable_radar_tracks >= 2 and track_scc.vLead < 5.0):
         track = track_scc
 
-    lead_dict = {'status': False}
+    lead_dict = empty_lead()
     radar = False
     if track is not None:
       vision_y_rel = float(-lead_msg.y[0]) if ready else 0.0
@@ -672,6 +697,8 @@ class RadarD:
     d_rel = float(lead.get("dRel", 999.0))
     d_path = abs(float(lead.get("dPath", 999.0)))
 
+    if d_rel > RADAR_ONLY_CENTER_MAX_DREL:
+      return False
     if d_rel > RADAR_ONLY_CENTER_FAR_DREL:
       return d_path < RADAR_ONLY_CENTER_DPATH_FAR_LIMIT
     if d_rel > RADAR_ONLY_CENTER_MID_DREL:
@@ -681,7 +708,7 @@ class RadarD:
   def compute_leads(self, v_ego, tracks, md, lead_prob):
     self.leadCenter = None
     self.leadTwo = None
-    self.leadCutIn = {'status': False}
+    self.leadCutIn = empty_lead()
 
     lead_msg = md.leadsV3[0] if (md is not None and len(md.position.x) == 33) else None
     if lead_msg is None:
@@ -692,8 +719,8 @@ class RadarD:
       self.radar_state.leadsCutIn = []
       self.radar_state.leadsLeft2 = []
       self.radar_state.leadsRight2 = []
-      self.radar_state.leadLeft = {'status': False}
-      self.radar_state.leadRight = {'status': False}
+      self.radar_state.leadLeft = empty_lead()
+      self.radar_state.leadRight = empty_lead()
       return
 
     left_list, right_list, center_list, cutin_list = [], [], [], []
@@ -728,18 +755,18 @@ class RadarD:
     self.leadCutIn = min(
       (ld for ld in cutin_list if 3 < ld['dRel'] < 50 and ld['vLead'] > 4),
       key=lambda d: d['dRel'],
-      default={'status': False}
+      default=empty_lead()
     )
 
     self.radar_state.leadLeft  = min(
         (ld for ld in left_list if ld['dRel'] > 5 and abs(ld['dPath']) < 3.5),
         key=lambda d: d['dRel'],
-        default={'status': False}
+        default=empty_lead()
     )
     self.radar_state.leadRight = min(
         (ld for ld in right_list if ld['dRel'] > 5 and abs(ld['dPath']) < 3.5),
         key=lambda d: d['dRel'],
-        default={'status': False}
+        default=empty_lead()
     )
 
     self.leadTwo = None
