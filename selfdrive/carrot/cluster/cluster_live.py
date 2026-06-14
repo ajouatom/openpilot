@@ -727,21 +727,21 @@ class OpenpilotLiveSource:
         sin_h = math.sin(heading_rad)
         meters_per_lat = 40008000.0 / 360.0
         meters_per_lon = meters_per_lat * math.cos(math.radians(lat0))
-        points: list[ModelPathPoint] = []
-        previous_forward = -1.0
+        points: list[ModelPathPoint] = [ModelPathPoint(forward_m=0.0, lateral_m=0.0)]
+        previous_forward = 0.0
 
         for lat, lon in self._nav_route_coords:
             east_m = (lon - lon0) * meters_per_lon
             north_m = (lat - lat0) * meters_per_lat
             lateral_m = east_m * cos_h - north_m * sin_h
             forward_m = east_m * sin_h + north_m * cos_h
-            if forward_m < -5.0 or forward_m > 180.0:
+            if forward_m < 0.0 or forward_m > 180.0:
                 continue
             if abs(lateral_m) > 40.0:
                 continue
             if forward_m <= previous_forward + 0.25:
                 continue
-            points.append(ModelPathPoint(forward_m=max(0.0, forward_m), lateral_m=lateral_m))
+            points.append(ModelPathPoint(forward_m=forward_m, lateral_m=lateral_m))
             previous_forward = forward_m
             if len(points) >= 96:
                 break
