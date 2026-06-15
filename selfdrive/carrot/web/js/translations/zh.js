@@ -306,6 +306,7 @@ window.CarrotTranslations.register("zh", {
     terminal_ctrl_c: "Ctrl+C",
     terminal_clear: "Clear",
     terminal_ready: "tmux 已就绪",
+    terminal_meta_running: "执行命令",
     terminal_disconnected: "连接已断开",
     terminal_unavailable: "终端不可用",
     terminal_offline: "终端离线",

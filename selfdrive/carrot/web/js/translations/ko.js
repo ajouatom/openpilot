@@ -306,6 +306,7 @@ window.CarrotTranslations.register("ko", {
     terminal_ctrl_c: "Ctrl+C",
     terminal_clear: "Clear",
     terminal_ready: "tmux 준비됨",
+    terminal_meta_running: "커스텀 명령 실행",
     terminal_disconnected: "연결끊김",
     terminal_unavailable: "터미널 접속 실패",
     terminal_offline: "터미널 오프라인",

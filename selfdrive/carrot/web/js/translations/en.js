@@ -308,6 +308,7 @@ window.CarrotTranslations.register("en", {
     terminal_ctrl_c: "Ctrl+C",
     terminal_clear: "Clear",
     terminal_ready: "tmux ready",
+    terminal_meta_running: "Carrot command",
     terminal_disconnected: "disconnected",
     terminal_unavailable: "terminal unavailable",
     terminal_offline: "terminal offline",
