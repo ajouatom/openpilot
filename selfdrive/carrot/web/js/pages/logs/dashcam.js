@@ -1335,8 +1335,29 @@ async function fetchAllDashcamSegmentNames(route) {
 async function showDashcamRangeSelect(route) {
   const entry = (dashcamState.routes || []).find((item) => item.route === route);
   if (!entry) return;
+
+  // Load the full name list up front so we can show the available index range
+  // in the dialog title and select segments that aren't lazily loaded yet.
+  let names;
+  try {
+    names = await fetchAllDashcamSegmentNames(route);
+  } catch {
+    names = dashcamSegmentsForRoute(entry);
+  }
+  if (!names.length) names = dashcamSegmentsForRoute(entry);
+
+  const presentIndices = names.map((name) => dashcamSegmentIndex(name));
+  const minIndex = presentIndices.length ? Math.min(...presentIndices) : 0;
+  const maxIndex = presentIndices.length ? Math.max(...presentIndices) : 0;
+  const rangeLabel = presentIndices.length
+    ? (minIndex === maxIndex ? `${minIndex}` : `${minIndex}–${maxIndex}`)
+    : "";
+  const title = rangeLabel
+    ? `${getUIText("select_range", "Select range")} (${rangeLabel})`
+    : getUIText("select_range", "Select range");
+
   const input = await appPrompt("", {
-    title: getUIText("select_range", "Select range"),
+    title,
     placeholder: getUIText("range_input_hint", "1, 1-2, 1,2,3,4"),
   });
   if (input == null) return; // canceled
@@ -1346,15 +1367,8 @@ async function showDashcamRangeSelect(route) {
     return;
   }
 
-  let names;
-  try {
-    names = await fetchAllDashcamSegmentNames(route);
-  } catch {
-    names = dashcamSegmentsForRoute(entry);
-  }
   const current = (dashcamState.routes || []).find((item) => item.route === route);
   if (!current) return;
-  if (!names.length) names = dashcamSegmentsForRoute(current);
 
   const byIndex = new Map();
   names.forEach((name) => byIndex.set(dashcamSegmentIndex(name), name));
