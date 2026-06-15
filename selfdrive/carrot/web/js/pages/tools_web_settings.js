@@ -450,7 +450,10 @@ async function runWebAutoUpdateGitPull(status = {}) {
 }
 
 function handleWebAutoUpdateStatus(status = {}) {
-  runWebAutoUpdateGitPull(status).catch((err) => console.error("[WebSettings]", err));
+  // Auto update now runs device-side in carrot_server (services/auto_update.py),
+  // so it works without the web open and won't double-pull. Intentionally a
+  // no-op here; runWebAutoUpdateGitPull is kept for backward compatibility.
+  void status;
 }
 
 window.loadWebSettings = loadWebSettings;

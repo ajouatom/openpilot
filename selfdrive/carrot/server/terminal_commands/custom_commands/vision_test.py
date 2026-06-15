@@ -5,9 +5,18 @@ from ..registry import register_command
 
 
 @register_command(
-  name="vision_test",
-  summary="Run an offroad Carrot Vision camera and WebRTC test.",
-  usage=":vision_test [start|status|logs|stop] [--lines N]",
+  name="vision_on",
+  summary="Start the offroad Carrot Vision camera and WebRTC test.",
+  usage=":vision_on",
 )
-def run(args: list[str]) -> int:
-  return vision_test.run_command(args)
+def run_on(args: list[str]) -> int:
+  return vision_test.start_test()
+
+
+@register_command(
+  name="vision_off",
+  summary="Stop the Carrot Vision camera and WebRTC test.",
+  usage=":vision_off",
+)
+def run_off(args: list[str]) -> int:
+  return vision_test.stop_test()

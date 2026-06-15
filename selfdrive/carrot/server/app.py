@@ -21,6 +21,7 @@ from ..realtime.transports import CameraWsHub, RawWsHub
 from . import features
 from .config import WEB_DIR
 from .live_runtime.broker import RealtimeBroker
+from .services.auto_update import auto_update_loop
 from .services.git_status import git_status_loop
 from .services.heartbeat import heartbeat_loop
 from .services.params import HAS_PARAMS
@@ -83,6 +84,7 @@ async def on_startup(app: web.Application) -> None:
   if HAS_PARAMS:
     app["hb_task"] = asyncio.create_task(heartbeat_loop(app))
   app["git_status_task"] = asyncio.create_task(git_status_loop())
+  app["auto_update_task"] = asyncio.create_task(auto_update_loop())
   asyncio.create_task(_malloc_trim_loop())
 
 
@@ -116,6 +118,16 @@ async def on_cleanup(app: web.Application) -> None:
     git_status_task.cancel()
     try:
       await git_status_task
+    except asyncio.CancelledError:
+      pass
+    except Exception:
+      pass
+
+  auto_update_task = app.get("auto_update_task")
+  if auto_update_task:
+    auto_update_task.cancel()
+    try:
+      await auto_update_task
     except asyncio.CancelledError:
       pass
     except Exception:
