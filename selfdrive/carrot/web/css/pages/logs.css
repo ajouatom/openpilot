@@ -1309,7 +1309,7 @@
     align-items: stretch;
     gap: 6px;
     overflow: hidden;
-    padding: 0 0 0 8px;
+    padding: 8px 8px 8px 10px;
     border-left: 1px solid color-mix(in srgb, var(--md-outline-var) 38%, transparent);
   }
 
@@ -1421,7 +1421,7 @@
   }
 
   .dashcam-selection-row {
-    padding: 0 0 0 6px;
+    padding: 6px 6px 6px 8px;
   }
 
   .dashcam-segments,
