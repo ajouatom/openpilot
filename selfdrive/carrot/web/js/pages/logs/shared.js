@@ -364,15 +364,12 @@ function bindLogsPage() {
       } else if (action === "segment-menu") {
         ev.stopPropagation();
         showDashcamSegmentMenu(route, segment).catch(() => {});
+      } else if (action === "route-menu") {
+        ev.stopPropagation();
+        showDashcamRouteMenu(route).catch(() => {});
       } else if (action === "select-route") {
-        const entry = dashcamState.routes.find((item) => item.route === route);
-        if (!entry) return;
         const shouldClear = actionEl.dataset.selected === "1";
-        for (const item of dashcamSegmentsForRoute(entry)) {
-          if (shouldClear) dashcamState.selected.delete(item);
-          else dashcamState.selected.add(item);
-        }
-        if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes({ animate: false });
+        toggleDashcamRouteSelectAll(route, shouldClear).catch(() => {});
       } else if (action === "upload-selected") {
         const entry = dashcamState.routes.find((item) => item.route === route);
         const targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
