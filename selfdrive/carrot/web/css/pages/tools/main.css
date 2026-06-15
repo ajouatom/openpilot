@@ -11,6 +11,10 @@
 
   .web-settings-dialog {
     grid-template-columns: minmax(0, 1fr);
+    /* nav pinned to the top, panel fills the rest so short content top-aligns
+       (iOS/Google settings style) instead of stretching rows and centering. */
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: start;
     gap: 12px;
     height: 100%;
     width: 100%;
