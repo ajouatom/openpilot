@@ -565,6 +565,20 @@
   transform: translateZ(0);
 }
 
+/* Group (route) overflow menu — range select / sort.
+   Portrait: lives in the route head (always visible, even collapsed).
+   Landscape: head is hidden, so the copy inside the selection row is shown. */
+.dashcam-route-menu-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.dashcam-group-menu-btn {
+  display: none;
+}
+
 .logs-loading-list {
   display: flex;
   flex-direction: column;
@@ -1321,6 +1335,13 @@
 
   .dashcam-selection-row .btn--filled {
     padding-inline: 8px;
+  }
+
+  .dashcam-group-menu-btn {
+    display: inline-flex;
+    width: 100%;
+    min-height: 30px;
+    border-radius: 999px;
   }
 
   .dashcam-segment-tile--compact {

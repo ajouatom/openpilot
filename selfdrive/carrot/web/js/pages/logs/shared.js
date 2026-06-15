@@ -364,6 +364,9 @@ function bindLogsPage() {
       } else if (action === "segment-menu") {
         ev.stopPropagation();
         showDashcamSegmentMenu(route, segment).catch(() => {});
+      } else if (action === "route-menu") {
+        ev.stopPropagation();
+        showDashcamRouteMenu(route).catch(() => {});
       } else if (action === "select-route") {
         const entry = dashcamState.routes.find((item) => item.route === route);
         if (!entry) return;

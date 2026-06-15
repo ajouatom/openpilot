@@ -5,6 +5,8 @@
 // segment selection, FTP upload (with cancel/resume), segment menu, player.
 
 const DASHCAM_UPLOAD_JOB_STORAGE_KEY = "carrot_dashcam_upload_job_id";
+const DASHCAM_SORT_STORAGE_KEY = "carrot_dashcam_segment_sort";
+const DASHCAM_SEGMENT_NAME_LIMIT_MAX = 80;
 const DASHCAM_ROUTE_PAGE_MIN = 10;
 const DASHCAM_ROUTE_PAGE_MAX = 40;
 const DASHCAM_ROUTE_PAGE_VIEWPORTS = 3;
@@ -40,7 +42,22 @@ const dashcamState = {
   windowStart: 0,
   windowEnd: 0,
   signature: "",
+  sort: "asc",
 };
+
+function readDashcamSortPreference() {
+  try {
+    const stored = localStorage.getItem(DASHCAM_SORT_STORAGE_KEY);
+    return stored === "desc" ? "desc" : "asc";
+  } catch {
+    return "asc";
+  }
+}
+dashcamState.sort = readDashcamSortPreference();
+
+function dashcamSortDirection() {
+  return dashcamState.sort === "desc" ? "desc" : "asc";
+}
 
 function dashcamSegmentIndex(segment) {
   const parts = String(segment || "").split("--");
@@ -368,7 +385,7 @@ function dashcamSegmentNextOffset(entry) {
   return dashcamSegmentsForRoute(entry).length;
 }
 
-function mergeDashcamSegments(existing, incoming) {
+function mergeDashcamSegments(existing, incoming, sort = dashcamSortDirection()) {
   const merged = [];
   const seen = new Set();
   [...(existing || []), ...(incoming || [])].forEach((segment) => {
@@ -376,7 +393,8 @@ function mergeDashcamSegments(existing, incoming) {
     seen.add(segment);
     merged.push(segment);
   });
-  return merged.sort((a, b) => dashcamSegmentIndex(a) - dashcamSegmentIndex(b));
+  const sign = sort === "desc" ? -1 : 1;
+  return merged.sort((a, b) => sign * (dashcamSegmentIndex(a) - dashcamSegmentIndex(b)));
 }
 
 function mergeDashcamRoutePage(entry, existing) {
@@ -549,6 +567,9 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
           <div class="dashcam-route-title">${title}</div>
           <div class="dashcam-route-subtitle">${dateLabel}</div>
         </div>
+        <button class="dashcam-menu-btn dashcam-route-menu-btn" type="button" data-action="route-menu" data-route="${routeAttr}" aria-label="${escapeHtml(getUIText("group_menu", "Group menu"))}" title="${escapeHtml(getUIText("group_menu", "Group menu"))}">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
+        </button>
         <button class="dashcam-expand-btn" type="button" data-action="toggle-route" data-route="${routeAttr}" aria-expanded="${expanded ? "true" : "false"}" title="${escapeHtml(expanded ? getUIText("collapse", "Collapse") : getUIText("show_segments", "Show segments"))}">
           <svg viewBox="0 0 24 24"><path fill="currentColor" d="${expanded ? "M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z" : "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"}"/></svg>
         </button>
@@ -558,6 +579,9 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
           <span class="dashcam-selection-count">${escapeHtml(getUIText("selected_count", "{count} selected", { count: selected.length }))}</span>
           <button class="smallBtn" type="button" data-action="select-route" data-route="${routeAttr}" data-selected="${allSelected ? "1" : "0"}">${escapeHtml(selectLabel)}</button>
           <button class="smallBtn btn--filled" type="button" data-action="upload-selected" data-route="${routeAttr}" ${selected.length ? "" : "disabled"}>${escapeHtml(getUIText("upload_selected", "Upload selected"))}</button>
+          <button class="dashcam-menu-btn dashcam-group-menu-btn" type="button" data-action="route-menu" data-route="${routeAttr}" aria-label="${escapeHtml(getUIText("group_menu", "Group menu"))}" title="${escapeHtml(getUIText("group_menu", "Group menu"))}">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
+          </button>
         </div>
         <div class="dashcam-segment-list">${segmentList}${segmentLoader}</div>
       </div>
@@ -748,7 +772,7 @@ async function loadDashcamSegments(route) {
 
   try {
     const offset = dashcamSegmentNextOffset(entry);
-    const json = await getJson(`/api/dashcam/segments/${encodeURIComponent(route)}?offset=${offset}&limit=${DASHCAM_SEGMENT_PAGE_SIZE}`);
+    const json = await getJson(`/api/dashcam/segments/${encodeURIComponent(route)}?offset=${offset}&limit=${DASHCAM_SEGMENT_PAGE_SIZE}&sort=${dashcamSortDirection()}`);
     const current = (dashcamState.routes || []).find((item) => item.route === route);
     if (!current) return;
     const incoming = Array.isArray(json.segments) ? json.segments : [];
@@ -788,7 +812,7 @@ async function loadDashcamRoutes({ silent = false, append = false } = {}) {
     const currentCount = dashcamState.routes.length || 0;
     const routePageSize = dashcamRoutePageSize();
     const limit = append ? routePageSize : Math.max(routePageSize, currentCount || 0);
-    const json = await getJson(`/api/dashcam/routes?offset=${offset}&limit=${limit}&segment_limit=${DASHCAM_SEGMENT_PAGE_SIZE}`);
+    const json = await getJson(`/api/dashcam/routes?offset=${offset}&limit=${limit}&segment_limit=${DASHCAM_SEGMENT_PAGE_SIZE}&sort=${dashcamSortDirection()}`);
     if (seq !== dashcamState.loadSeq) {
       if (append) {
         dashcamState.loadingMore = false;
@@ -1262,4 +1286,140 @@ async function showDashcamSegmentMenu(route, segment) {
     const kind = selected.replace("download_", "");
     window.open(dashcamApiPath(`download/${encodeURIComponent(segment)}`, kind), "_blank", "noopener");
   }
+}
+
+// Parse a range expression like "1, 1-2, 1,2,3,4" into a Set of segment indices.
+// Supports single numbers and "a-b" / "a~b" ranges (a>b is auto-swapped).
+function parseDashcamRangeInput(input) {
+  const out = new Set();
+  String(input || "").split(",").forEach((token) => {
+    const t = token.trim();
+    if (!t) return;
+    const single = t.match(/^(\d+)$/);
+    if (single) {
+      out.add(Number.parseInt(single[1], 10));
+      return;
+    }
+    const range = t.match(/^(\d+)\s*[-~]\s*(\d+)$/);
+    if (!range) return;
+    let a = Number.parseInt(range[1], 10);
+    let b = Number.parseInt(range[2], 10);
+    if (a > b) [a, b] = [b, a];
+    if (b - a > 100000) b = a + 100000; // guard against runaway ranges
+    for (let i = a; i <= b; i += 1) out.add(i);
+  });
+  return out;
+}
+
+// Pull every segment folder name for a route (paged), so range selection works
+// even for not-yet-loaded segments and skips gaps (missing indices).
+async function fetchAllDashcamSegmentNames(route) {
+  const all = [];
+  const seen = new Set();
+  let offset = 0;
+  for (let guard = 0; guard < 1000; guard += 1) {
+    const json = await getJson(`/api/dashcam/segments/${encodeURIComponent(route)}?offset=${offset}&limit=${DASHCAM_SEGMENT_NAME_LIMIT_MAX}&sort=${dashcamSortDirection()}`);
+    const segs = Array.isArray(json.segments) ? json.segments : [];
+    for (const segment of segs) {
+      if (segment && !seen.has(segment)) {
+        seen.add(segment);
+        all.push(segment);
+      }
+    }
+    if (!json.hasMore || !segs.length) break;
+    offset = json.nextOffset == null ? all.length : (Number(json.nextOffset) || all.length);
+  }
+  return all;
+}
+
+async function showDashcamRangeSelect(route) {
+  const entry = (dashcamState.routes || []).find((item) => item.route === route);
+  if (!entry) return;
+  const input = await appPrompt("", {
+    title: getUIText("select_range", "Select range"),
+    placeholder: getUIText("range_input_hint", "1, 1-2, 1,2,3,4"),
+  });
+  if (input == null) return; // canceled
+  const indices = parseDashcamRangeInput(input);
+  if (!indices.size) {
+    showAppToast(getUIText("range_invalid", "Enter a valid range"), { tone: "error" });
+    return;
+  }
+
+  let names;
+  try {
+    names = await fetchAllDashcamSegmentNames(route);
+  } catch {
+    names = dashcamSegmentsForRoute(entry);
+  }
+  const current = (dashcamState.routes || []).find((item) => item.route === route);
+  if (!current) return;
+  if (!names.length) names = dashcamSegmentsForRoute(current);
+
+  const byIndex = new Map();
+  names.forEach((name) => byIndex.set(dashcamSegmentIndex(name), name));
+  let added = 0;
+  indices.forEach((index) => {
+    const name = byIndex.get(index);
+    if (name && !dashcamState.selected.has(name)) {
+      dashcamState.selected.add(name);
+      added += 1;
+    }
+  });
+
+  // Merge the full name list into the route so the selection count and tile
+  // checkboxes reflect segments that weren't lazily loaded yet.
+  if (names.length > dashcamSegmentsForRoute(current).length) {
+    current.segmentFolders = mergeDashcamSegments(dashcamSegmentsForRoute(current), names);
+    current.segmentCount = Math.max(dashcamSegmentCountForRoute(current), current.segmentFolders.length);
+    current.segmentsHasMore = current.segmentFolders.length < current.segmentCount;
+    current.segmentsNextOffset = current.segmentsHasMore ? current.segmentFolders.length : null;
+    dashcamState.signature = dashcamRoutesSignature(dashcamState.routes);
+  }
+
+  if (!renderDashcamRoute(route)) renderDashcamRoutes({ animate: false });
+  const total = dashcamSelectedForRoute(current).length;
+  showAppToast(getUIText("range_selected", "{count} selected", { count: total }), {
+    tone: added ? "default" : "error",
+  });
+}
+
+function setDashcamSort(next) {
+  const dir = next === "desc" ? "desc" : "asc";
+  if (dashcamState.sort === dir) return;
+  dashcamState.sort = dir;
+  try {
+    localStorage.setItem(DASHCAM_SORT_STORAGE_KEY, dir);
+  } catch {}
+  // Drop loaded segment pages so they reload in the new order. Server slices
+  // from a canonical ascending list and reverses for desc, so paging must
+  // restart to stay consistent with lazy loading.
+  (dashcamState.routes || []).forEach((entry) => {
+    const total = dashcamSegmentCountForRoute(entry);
+    entry.segmentFolders = [];
+    entry.segmentsNextOffset = 0;
+    entry.segmentsHasMore = total > 0;
+  });
+  dashcamState.signature = "";
+  const host = document.getElementById("dashcamRoutes");
+  if (host) host.dataset.signature = "";
+  loadDashcamRoutes().catch(() => {});
+}
+
+async function showDashcamRouteMenu(route) {
+  if (!route) return;
+  const sort = dashcamSortDirection();
+  const selected = await openAppDialog({
+    mode: "choice",
+    title: getUIText("group_menu", "Group menu"),
+    message: dashcamRouteTitle(route),
+    choices: [
+      { label: `${getUIText("select_range", "Select range")}…`, value: "range" },
+      { label: `${getUIText("sort_ascending", "Sort: ascending")}${sort === "asc" ? "  ✓" : ""}`, value: "sort_asc" },
+      { label: `${getUIText("sort_descending", "Sort: descending")}${sort === "desc" ? "  ✓" : ""}`, value: "sort_desc" },
+    ],
+  });
+  if (selected === "range") await showDashcamRangeSelect(route);
+  else if (selected === "sort_asc") setDashcamSort("asc");
+  else if (selected === "sort_desc") setDashcamSort("desc");
 }
