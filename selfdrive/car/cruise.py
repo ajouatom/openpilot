@@ -172,6 +172,7 @@ class VCruiseCarrot:
     self._cruise_button_mode = 2
     self._cancel_button_mode = 0
     self._lfa_button_mode = 0
+    self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
 
     self._gas_pressed_count = 0
     self._gas_pressed_count_last = 0
@@ -220,6 +221,7 @@ class VCruiseCarrot:
     self.autoCruiseControl = 0
     self.autoCruiseControl_cancel_timer = 0
     self.AutoSpeedUptoRoadSpeedLimit = 0.0
+    self.autoGasCancelSpeed = 30
 
     self.useLaneLineSpeed = self.params.get_int("UseLaneLineSpeed")
     self.useLaneLineSpeedApply = self.useLaneLineSpeed
@@ -245,6 +247,7 @@ class VCruiseCarrot:
     if self.frame % 10 == 0:
       self.autoCruiseControl = self.params.get_int("AutoCruiseControl") * unit_factor
       self.autoGasTokSpeed = self.params.get_int("AutoGasTokSpeed") * unit_factor
+      self.autoGasCancelSpeed = self.params.get_int("AutoGasCancelSpeed") * unit_factor
       self.autoGasSyncSpeed = self.params.get_int("AutoGasSyncSpeed")
       self.applyModelSpeed = self.params.get_float("ApplyModelSpeed") * 0.01
       self.autoSpeedUptoRoadSpeedLimit = self.params.get_float("AutoSpeedUptoRoadSpeedLimit") * 0.01
@@ -263,6 +266,7 @@ class VCruiseCarrot:
       self._cruise_button_mode = self.params.get_int("CruiseButtonMode")
       self._cancel_button_mode = self.params.get_int("CancelButtonMode")
       self._lfa_button_mode = self.params.get_int("LfaButtonMode")
+      self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
       self.autoRoadSpeedLimitOffset = self.params.get_int("AutoRoadSpeedLimitOffset")
       self.autoNaviSpeedSafetyFactor = self.params.get_float("AutoNaviSpeedSafetyFactor") * 0.01
       self.cruiseOnDist = self.params.get_float("CruiseOnDist") * 0.01
@@ -721,7 +725,7 @@ class VCruiseCarrot:
           self._cruise_control(1, -1 if self.aTarget > 0.0 else 0, "Cruise on (safe speed)")
         else:
           self._cruise_control(-1, 0, "Cruise off (lead car too close)")
-      elif self.v_ego_kph_set < 30:
+      elif self.v_ego_kph_set < self.autoGasCancelSpeed:
         self._cruise_control(-1, 0, "Cruise off (gas speed)")
       elif self.xState == 3:
         v_cruise_kph = min(self.v_ego_kph_set, v_cruise_kph)
@@ -795,6 +799,7 @@ class VCruiseCarrot:
 
   def _prepare_brake_gas(self, CS, CC):
     if CS.gasPressed:
+      gas_pressed_start = self._gas_pressed_count <= 0
       self._paddle_decel_active = False
       self._gas_pressed_count = max(1, self._gas_pressed_count + 1)
       self._gas_pressed_count_last = self._gas_pressed_count
@@ -803,6 +808,10 @@ class VCruiseCarrot:
       #if self._cruise_cancel_state and self._soft_hold_active == 2:
       #  self._cruise_control(-1, -1, "Cruise off,softhold mode (gasPressed)")
       self._soft_hold_active = 0
+      if gas_pressed_start and self.disengage_on_accelerator:
+        self._cruise_ready = False
+        self.carrot_cruise_active = False
+        self._cruise_control(-1, 0, "Cruise off (gas pressed)")
     else:
       self._gas_tok = True if 0 < self._gas_pressed_count < self._gas_tok_timer else False
       self._gas_pressed_count = min(-1, self._gas_pressed_count - 1)
