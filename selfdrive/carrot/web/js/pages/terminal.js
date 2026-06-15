@@ -38,8 +38,26 @@ function setTerminalSessionInfo(session = terminalSessionName) {
   setTerminalSessionMeta();
 }
 
+// The web terminal runs `:` meta commands by typing a fixed CLI bridge into
+// tmux, so tmux echoes the raw `python3 -m ...cli --line <cmd>` invocation.
+// Replace that echo with our own friendly "running command" line.
+const TERMINAL_META_ECHO_RE = /python3 -m selfdrive\.carrot\.server\.terminal_commands\.cli --line (.*)$/gm;
+
+function rewriteTerminalMetaEcho(text) {
+  return String(text || "").replace(TERMINAL_META_ECHO_RE, (match, raw) => {
+    let arg = String(raw || "").trim();
+    if (arg.length >= 2 &&
+        ((arg[0] === "'" && arg[arg.length - 1] === "'") ||
+         (arg[0] === '"' && arg[arg.length - 1] === '"'))) {
+      arg = arg.slice(1, -1);
+    }
+    const label = getUIText("terminal_meta_running", "Carrot command");
+    return `▶ ${label}: :${arg}`;
+  });
+}
+
 function sanitizeTerminalScreen(text) {
-  let nextText = String(text || " ");
+  let nextText = rewriteTerminalMetaEcho(String(text || " "));
   const headLimit = Math.min(nextText.length, 640);
   const head = nextText.slice(0, headLimit);
   const sanitizedHead = head.replace(

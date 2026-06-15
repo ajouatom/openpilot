@@ -5,8 +5,9 @@ starting with `:` is reserved for small web-terminal-only helpers.
 
 ```text
 :help
-:help vision_test
-:vision_test status
+:help vision_on
+:vision_on
+:vision_off
 ```
 
 ## Adding A Command

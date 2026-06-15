@@ -486,6 +486,18 @@
     pointer-events: auto;
   }
 
+  /* Flow the menu inside the page-anchored absolute layer instead of leaving it
+     viewport-fixed. A position:fixed element re-anchors to the page's transform
+     during page transitions (the page briefly gets will-change/transform), so
+     when the transition ends the FAB snaps by the nav-rail width — that is the
+     "jumps to another spot then returns" jitter. Page-relative flow stays put. */
+  .page.page--setting > .page-fab-layer--setting .setting-fab-menu {
+    position: relative;
+    right: auto;
+    left: auto;
+    bottom: auto;
+  }
+
   .page--setting.setting-layout-split #settingScreenItems .title {
     font-size: 16px;
     font-weight: 700;
