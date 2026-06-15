@@ -393,7 +393,7 @@ window.CarrotTranslations.register("ko", {
     segment_menu: "세그먼트 메뉴",
     group_menu: "그룹 메뉴",
     select_range: "범위 선택",
-    range_input_hint: "1, 1-2, 1,2,3,4",
+    range_input_hint: "0, 1-3, 5,6",
     range_invalid: "올바른 범위를 입력하세요",
     range_selected: "{count}개 선택됨",
     sort_ascending: "정렬: 오름차순",

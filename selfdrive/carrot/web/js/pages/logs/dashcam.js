@@ -6,7 +6,7 @@
 
 const DASHCAM_UPLOAD_JOB_STORAGE_KEY = "carrot_dashcam_upload_job_id";
 const DASHCAM_SORT_STORAGE_KEY = "carrot_dashcam_segment_sort";
-const DASHCAM_SEGMENT_NAME_LIMIT_MAX = 80;
+const DASHCAM_SEGMENT_NAME_LIMIT_MAX = 2000;
 const DASHCAM_ROUTE_PAGE_MIN = 10;
 const DASHCAM_ROUTE_PAGE_MAX = 40;
 const DASHCAM_ROUTE_PAGE_VIEWPORTS = 3;
@@ -576,8 +576,8 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
           <span class="dashcam-selection-count">${escapeHtml(getUIText("selected_count", "{count} selected", { count: selected.length }))}</span>
           <button class="smallBtn" type="button" data-action="select-route" data-route="${routeAttr}" data-selected="${allSelected ? "1" : "0"}">${escapeHtml(selectLabel)}</button>
           <button class="smallBtn btn--filled" type="button" data-action="upload-selected" data-route="${routeAttr}" ${selected.length ? "" : "disabled"}>${escapeHtml(getUIText("upload_selected", "Upload selected"))}</button>
-          <button class="dashcam-menu-btn dashcam-group-menu-btn" type="button" data-action="route-menu" data-route="${routeAttr}" aria-label="${escapeHtml(getUIText("group_menu", "Group menu"))}" title="${escapeHtml(getUIText("group_menu", "Group menu"))}">
-            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
+          <button class="smallBtn dashcam-group-menu-btn" type="button" data-action="route-menu" data-route="${routeAttr}" aria-label="${escapeHtml(getUIText("group_menu", "Group menu"))}" title="${escapeHtml(getUIText("group_menu", "Group menu"))}">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2"/></svg>
           </button>
         </div>
         <div class="dashcam-segment-list">${segmentList}${segmentLoader}</div>
@@ -1403,15 +1403,21 @@ async function setDashcamSort(next) {
   } catch {}
 
   // Reorder sub-segments in place — no route-list reload (no full-page refresh).
-  // Visible groups with content are fully fetched so their order is correct and
-  // complete; off-screen / empty groups drop their loaded page and lazy-load
-  // fresh in the new order when shown (offset paging is order-relative).
+  // Fully-loaded visible groups flip instantly (no network). Partially-loaded
+  // visible groups keep their order until a single background fetch completes.
+  // Off-screen / empty groups drop their page and lazy-load fresh in the new
+  // order when shown (offset paging is order-relative).
   const routes = dashcamState.routes || [];
-  const fullFetch = [];
+  const needFull = [];
   routes.forEach((entry) => {
     const rendered = dashcamState.expanded.has(entry.route) || isCompactLandscapeMode();
-    if (rendered && dashcamSegmentsForRoute(entry).length > 0) {
-      fullFetch.push(entry);
+    const loaded = dashcamSegmentsForRoute(entry).length;
+    if (rendered && loaded > 0) {
+      if (dashcamRouteHasMoreSegments(entry)) {
+        needFull.push(entry);
+      } else {
+        entry.segmentFolders = mergeDashcamSegments(dashcamSegmentsForRoute(entry), [], dir);
+      }
     } else {
       const total = dashcamSegmentCountForRoute(entry);
       entry.segmentFolders = [];
@@ -1420,13 +1426,21 @@ async function setDashcamSort(next) {
     }
   });
 
-  await Promise.all(fullFetch.map(async (entry) => {
+  const host = document.getElementById("dashcamRoutes");
+  dashcamState.signature = dashcamRoutesSignature(routes);
+  if (host) host.dataset.signature = "";
+  if (isLogsPageActive()) renderDashcamRoutes({ animate: false });
+  requestAnimationFrame(() => maybeLoadVisibleDashcamSegments());
+
+  if (!needFull.length) return;
+  await Promise.all(needFull.map(async (entry) => {
     let names = [];
     try {
       names = await fetchAllDashcamSegmentNames(entry.route);
     } catch {
       names = [];
     }
+    if (dashcamSortDirection() !== dir) return; // sort changed again mid-flight
     if (names.length) {
       entry.segmentFolders = mergeDashcamSegments(names, [], dir);
       entry.segmentCount = Math.max(dashcamSegmentCountForRoute(entry), entry.segmentFolders.length);
@@ -1436,12 +1450,10 @@ async function setDashcamSort(next) {
       entry.segmentFolders = mergeDashcamSegments(dashcamSegmentsForRoute(entry), [], dir);
     }
   }));
-
+  if (dashcamSortDirection() !== dir) return;
   dashcamState.signature = dashcamRoutesSignature(routes);
-  const host = document.getElementById("dashcamRoutes");
   if (host) host.dataset.signature = "";
   if (isLogsPageActive()) renderDashcamRoutes({ animate: false });
-  requestAnimationFrame(() => maybeLoadVisibleDashcamSegments());
 }
 
 // "Select all" for a group: pull the full segment list (covers not-yet-loaded

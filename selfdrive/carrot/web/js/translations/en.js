@@ -395,7 +395,7 @@ window.CarrotTranslations.register("en", {
     segment_menu: "Segment menu",
     group_menu: "Group menu",
     select_range: "Select range",
-    range_input_hint: "1, 1-2, 1,2,3,4",
+    range_input_hint: "0, 1-3, 5,6",
     range_invalid: "Enter a valid range",
     range_selected: "{count} selected",
     sort_ascending: "Sort: ascending",

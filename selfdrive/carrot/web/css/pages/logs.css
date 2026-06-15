@@ -566,13 +566,20 @@
 }
 
 /* Group (route) overflow menu — range select / sort.
-   Lives in the selection row; pushed to the right end (after "Upload selected"). */
+   Styled as a pill (like the other selection-row buttons) so it fits both
+   portrait (row) and landscape (column). Pushed to the right end in portrait. */
 .dashcam-group-menu-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  flex: 0 0 auto;
   margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 12px;
+}
+
+.dashcam-group-menu-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .logs-loading-list {
@@ -1331,13 +1338,6 @@
 
   .dashcam-selection-row .btn--filled {
     padding-inline: 8px;
-  }
-
-  .dashcam-group-menu-btn {
-    display: inline-flex;
-    width: 100%;
-    min-height: 30px;
-    border-radius: 999px;
   }
 
   .dashcam-segment-tile--compact {

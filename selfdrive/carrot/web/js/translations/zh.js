@@ -393,7 +393,7 @@ window.CarrotTranslations.register("zh", {
     segment_menu: "片段菜单",
     group_menu: "分组菜单",
     select_range: "选择范围",
-    range_input_hint: "1, 1-2, 1,2,3,4",
+    range_input_hint: "0, 1-3, 5,6",
     range_invalid: "请输入有效范围",
     range_selected: "已选 {count} 个",
     sort_ascending: "排序：升序",
