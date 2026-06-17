@@ -245,7 +245,7 @@ def _encoder_sequence(encoder_mode: int) -> list[int]:
 
 def _encoder_args(encoder_mode: int) -> list[str]:
     if encoder_mode == ENCODER_HARDWARE:
-        return ["--usb-codec", "h264", "--usb-h264-backend", "native", "--usb-h264-render-nv12"]
+        return ["--usb-codec", "h264", "--usb-h264-backend", "native"]
     if encoder_mode == ENCODER_SOFTWARE:
         return [
             "--usb-codec",
