@@ -40,6 +40,12 @@ def _default_heartbeat_url(report_url: str) -> str:
   return report_url.rstrip("/") + "/heartbeat"
 
 
+def _default_notify_url(report_url: str) -> str:
+  if report_url.endswith("/report"):
+    return report_url[:-len("/report")] + "/notify"
+  return report_url.rstrip("/") + "/notify"
+
+
 def _param_text(params: Params, key: str, default: str = "") -> str:
   try:
     value = params.get(key)
