@@ -16,7 +16,6 @@
 
 #include "common/swaglog.h"
 #include "common/util.h"
-#include "libyuv.h"
 #include "system/camerad/cameras/nv12_info.h"
 #include "third_party/linux/include/v4l2-controls.h"
 #include <linux/videodev2.h>
@@ -663,24 +662,6 @@ void ClusterH264Encoder::drain(int timeout_ms, const ClusterH264PacketCallback &
   process_ready_events(timeout_ms, false, on_packet);
 }
 
-std::vector<ClusterH264Packet> ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us) {
-  std::vector<ClusterH264Packet> packets;
-  encode_rgba(rgba, rgba_size, timestamp_us, [&packets](const ClusterH264PacketView &view) {
-    ClusterH264Packet packet;
-    packet.flags = view.flags;
-    packet.timestamp_us = view.timestamp_us;
-    packet.codec_config = view.codec_config;
-    packet.keyframe = view.keyframe;
-    packet.data.assign(view.data, view.data + view.size);
-    packets.push_back(std::move(packet));
-  });
-  return packets;
-}
-
-void ClusterH264Encoder::encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet) {
-  encode_input(rgba, rgba_size, timestamp_us, on_packet, &ClusterH264Encoder::copy_rgba_to_input, "RGBA");
-}
-
 std::vector<ClusterH264Packet> ClusterH264Encoder::encode_nv12(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us) {
   std::vector<ClusterH264Packet> packets;
   encode_nv12(nv12, nv12_size, timestamp_us, [&packets](const ClusterH264PacketView &view) {
@@ -761,14 +742,6 @@ void ClusterH264Encoder::encode_input(const uint8_t *data, size_t data_size, uin
   last_encode_timings_.total_us = elapsed_us(total_start);
 }
 
-void ClusterH264Encoder::copy_rgba_to_input(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
-  if (input_is_nv12()) {
-    rgba_to_nv12(rgba, rgba_size, dst);
-    return;
-  }
-  throw std::runtime_error("cluster H264 encoder has unsupported input format " + input_v4l_format_name_);
-}
-
 void ClusterH264Encoder::copy_nv12_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const {
   if (!input_is_nv12()) {
     throw std::runtime_error("cluster H264 encoder has unsupported input format " + input_v4l_format_name_);
@@ -794,36 +767,4 @@ void ClusterH264Encoder::copy_nv12_active_to_input(const uint8_t *nv12, size_t n
     throw std::runtime_error("cluster H264 encoder input buffer is not allocated");
   }
   memcpy(dst->addr, nv12, active_bytes);
-}
-
-void ClusterH264Encoder::rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const {
-  const size_t width = static_cast<size_t>(config_.width);
-  const size_t height = static_cast<size_t>(config_.height);
-  if ((width % 2) != 0 || (height % 2) != 0) {
-    throw std::runtime_error("cluster H264 NV12 input dimensions must be even");
-  }
-  const size_t expected_rgba_size = width * height * 4;
-  if (rgba_size < expected_rgba_size) {
-    throw std::runtime_error("cluster H264 encoder RGBA input is smaller than width*height*4");
-  }
-  if (dst == nullptr || dst->addr == nullptr || dst->len < input_bytesused_) {
-    throw std::runtime_error("cluster H264 encoder input buffer is not allocated");
-  }
-
-  uint8_t *base = reinterpret_cast<uint8_t*>(dst->addr);
-  uint8_t *y_plane = base;
-  uint8_t *uv_plane = base + input_uv_offset_;
-
-  const int result = libyuv::ABGRToNV12(
-      rgba,
-      static_cast<int>(width * 4),
-      y_plane,
-      static_cast<int>(input_stride_),
-      uv_plane,
-      static_cast<int>(input_stride_),
-      static_cast<int>(width),
-      static_cast<int>(height));
-  if (result != 0) {
-    throw std::runtime_error("cluster H264 libyuv ABGRToNV12 conversion failed");
-  }
 }
