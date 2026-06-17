@@ -52,7 +52,6 @@ from cluster_h264_pipeline import (
     DEFAULT_H264_ENCODER_ALIGN,
     DEFAULT_H264_FFMPEG,
     DEFAULT_H264_FFMPEG_ENCODER,
-    DEFAULT_H264_HELPER,
     DEFAULT_H264_LIBRARY,
     DEFAULT_H264_RATE_CONTROL,
     DEFAULT_H264_SLICE_MAX_BYTES,
@@ -159,20 +158,6 @@ def apply_cluster_encoder_param(args: argparse.Namespace) -> str:
         if args.usb_h264_backend == "ffmpeg" and not args.usb_h264_ffmpeg_encoder_from_cli:
             args.usb_h264_ffmpeg_encoder = "libx264"
     return CLUSTER_ENCODER_PARAM
-
-
-def apply_live_hardware_nv12_default(args: argparse.Namespace) -> None:
-    if args.usb_h264_render_nv12 is not None:
-        return
-
-    args.usb_h264_render_nv12 = (
-        args.input == "live"
-        and args.output in ("usb", "both")
-        and args.usb_codec == "h264"
-        and args.usb_h264_backend in ("auto", "native")
-        and not args.usb_h264_test_pattern
-        and not args.usb_h264_test_pattern_nv12
-    )
 
 
 class ClusterThemeParamReader:
@@ -513,7 +498,6 @@ def run_demo(
     usb_h264_gop: int,
     usb_h264_backend: str,
     usb_h264_library: str,
-    usb_h264_helper: str,
     usb_h264_ffmpeg: str,
     usb_h264_ffmpeg_encoder: str,
     usb_h264_device: str,
@@ -532,8 +516,6 @@ def run_demo(
     usb_h264_diagnose_interval_s: float,
     usb_h264_test_pattern: bool,
     usb_h264_test_pattern_nv12: bool,
-    usb_h264_render_nv12: bool,
-    usb_h264_render_nv12_flip_x: bool,
     usb_frame_drain_attempts: int,
     usb_frame_drain_timeout_ms: int,
     usb_fast_drain_attempts: int,
@@ -745,7 +727,6 @@ def run_demo(
                 usb_h264_gop,
                 usb_h264_backend,
                 usb_h264_library,
-                usb_h264_helper,
                 usb_h264_ffmpeg,
                 usb_h264_ffmpeg_encoder,
                 usb_h264_device,
@@ -765,26 +746,23 @@ def run_demo(
             profile.add_elapsed("usb_h264.start", profile_stage)
             profile.add_samples(usb_display.profile_samples())
             usb_display.clear_profile_samples()
-            if usb_h264_render_nv12:
-                if h264_pipeline.backend_name != "native":
-                    print(
-                        f"H264 GPU NV12 render path disabled; backend resolved to {h264_pipeline.backend_name}",
-                        flush=True,
-                    )
-                    usb_h264_render_nv12 = False
-                else:
-                    h264_render_nv12_layout = h264_pipeline.native_nv12_render_layout()
-                    stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, active_submit = h264_render_nv12_layout
-                    print(
-                        f"Using H264 GPU NV12 render path: "
-                        f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
-                        f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
-                        f"uv_offset={uv_offset} bytes={input_bytes} render_bytes={render_bytes} "
-                        f"active_submit={'on' if active_submit else 'off'} "
-                        f"flip_x={'on' if usb_h264_render_nv12_flip_x else 'off'}",
-                        flush=True,
-                    )
+            if h264_pipeline.backend_name == "native":
+                h264_render_nv12_layout = h264_pipeline.native_nv12_render_layout()
+                stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, active_submit = h264_render_nv12_layout
+                print(
+                    f"Using H264 native NV12 render path: "
+                    f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
+                    f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
+                    f"uv_offset={uv_offset} bytes={input_bytes} render_bytes={render_bytes} "
+                    f"active_submit={'on' if active_submit else 'off'} flip_x=on",
+                    flush=True,
+                )
             if usb_h264_test_pattern:
+                if h264_pipeline.backend_name == "native":
+                    raise RuntimeError(
+                        "--usb-h264-test-pattern is only supported by --usb-h264-backend ffmpeg; "
+                        "use --usb-h264-test-pattern-nv12 for native H264"
+                    )
                 h264_test_pattern_rgba = build_rgba_color_test_pattern(
                     h264_pipeline.width,
                     h264_pipeline.height,
@@ -796,6 +774,8 @@ def run_demo(
                     flush=True,
                 )
             if usb_h264_test_pattern_nv12:
+                if h264_pipeline.backend_name != "native":
+                    raise RuntimeError("--usb-h264-test-pattern-nv12 requires the native H264 backend")
                 h264_test_pattern_nv12 = h264_pipeline.build_nv12_color_test_pattern()
                 print(
                     f"Using H264 native NV12 color test pattern: "
@@ -1098,7 +1078,7 @@ def run_demo(
                     if h264_pipeline is None:
                         raise RuntimeError("H264 USB pipeline is not available")
                     if h264_test_pattern_rgba is None and h264_test_pattern_nv12 is None:
-                        if usb_h264_render_nv12:
+                        if h264_pipeline.backend_name == "native":
                             if h264_render_nv12_layout is None:
                                 raise RuntimeError("H264 GPU NV12 render path is missing the native layout")
                             stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, _ = h264_render_nv12_layout
@@ -1113,7 +1093,7 @@ def run_demo(
                                 uv_offset,
                                 render_bytes,
                                 h264_render_nv12_buffer,
-                                flip_x=usb_h264_render_nv12_flip_x,
+                                flip_x=True,
                             ) as h264_render_nv12_frame:
                                 profile.add_elapsed("main.usb.render_nv12_total", profile_stage)
                                 if isinstance(h264_render_nv12_frame, bytearray):
@@ -1343,7 +1323,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--usb-h264-backend",
-        choices=("auto", "native", "helper", "ffmpeg"),
+        choices=("auto", "native", "ffmpeg"),
         default="native",
         help=(
             "H264 encoder backend. Default native uses the Qualcomm hardware encoder; "
@@ -1356,14 +1336,6 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Native hardware H264 shared library for --usb-codec h264. "
             f"Default: {DEFAULT_H264_LIBRARY}."
-        ),
-    )
-    parser.add_argument(
-        "--usb-h264-helper",
-        default=str(DEFAULT_H264_HELPER),
-        help=(
-            "Fallback hardware H264 helper executable for --usb-codec h264. "
-            f"Default: {DEFAULT_H264_HELPER}."
         ),
     )
     parser.add_argument(
@@ -1406,14 +1378,14 @@ def parse_args() -> argparse.Namespace:
         choices=tuple(NATIVE_RATE_CONTROLS.keys()),
         default=DEFAULT_H264_RATE_CONTROL,
         help=(
-            "Hardware V4L2 rate-control mode for native/helper H264. "
+            "Hardware V4L2 rate-control mode for native H264. "
             "Default: %(default)s."
         ),
     )
     parser.add_argument(
         "--usb-h264-realtime-priority",
         action="store_true",
-        help="Request realtime priority from the native/helper V4L2 encoder.",
+        help="Request realtime priority from the native V4L2 encoder.",
     )
     parser.add_argument(
         "--usb-h264-orientation",
@@ -1438,7 +1410,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_H264_ENCODER_ALIGN,
         help=(
-            "Align native/helper hardware encoder input dimensions without changing the rendered display size. "
+            "Align native hardware encoder input dimensions without changing the rendered display size. "
             "Default %(default)s pads 462-wide TURZX frames to a macroblock-safe 464-wide encoder input."
         ),
     )
@@ -1485,35 +1457,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--usb-h264-test-pattern",
         action="store_true",
-        help="Feed a red/green/blue/white RGBA quadrant pattern into the H264 path.",
+        help="Feed a red/green/blue/white RGBA quadrant pattern into the ffmpeg H264 path.",
     )
     parser.add_argument(
         "--usb-h264-test-pattern-nv12",
         action="store_true",
         help="Feed a native-aligned red/green/blue/white NV12 quadrant pattern into the native H264 path.",
-    )
-    parser.add_argument(
-        "--usb-h264-render-nv12",
-        dest="usb_h264_render_nv12",
-        action="store_true",
-        default=None,
-        help=(
-            "Native path: render through a GPU RGBA-to-NV12 pack shader and submit aligned NV12. "
-            "Auto-enabled for live native-H264 USB output."
-        ),
-    )
-    parser.add_argument(
-        "--no-usb-h264-render-nv12",
-        dest="usb_h264_render_nv12",
-        action="store_false",
-        help="Disable live native-H264 automatic GPU NV12 rendering for A/B profiling.",
-    )
-    parser.add_argument(
-        "--usb-h264-render-nv12-no-flip-x",
-        dest="usb_h264_render_nv12_flip_x",
-        action="store_false",
-        default=True,
-        help="Disable the experimental GPU NV12 path's default horizontal sampling correction.",
     )
     parser.add_argument(
         "--usb-frame-drain-attempts",
@@ -1693,14 +1642,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--usb-h264-diagnose-interval must be 0 or greater")
     if args.usb_h264_test_pattern and args.usb_h264_test_pattern_nv12:
         parser.error("--usb-h264-test-pattern and --usb-h264-test-pattern-nv12 cannot be used together")
-    if args.usb_h264_render_nv12 and (args.usb_h264_test_pattern or args.usb_h264_test_pattern_nv12):
-        parser.error("--usb-h264-render-nv12 cannot be combined with H264 test-pattern flags")
-    if args.usb_h264_render_nv12 and args.usb_h264_backend not in ("auto", "native"):
-        parser.error("--usb-h264-render-nv12 requires --usb-h264-backend native or auto")
+    if args.usb_h264_test_pattern_nv12 and args.usb_h264_backend == "ffmpeg":
+        parser.error("--usb-h264-test-pattern-nv12 requires --usb-h264-backend native or auto")
     if not args.usb_h264_library:
         parser.error("--usb-h264-library must not be empty")
-    if not args.usb_h264_helper:
-        parser.error("--usb-h264-helper must not be empty")
     if not args.usb_h264_ffmpeg:
         parser.error("--usb-h264-ffmpeg must not be empty")
     if not args.usb_h264_ffmpeg_encoder:
@@ -1725,11 +1670,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     encoder_source = apply_cluster_encoder_param(args)
-    apply_live_hardware_nv12_default(args)
     if args.usb_async and args.usb_codec != "jpeg":
         raise SystemExit("--usb-async only supports --usb-codec jpeg")
-    if args.usb_h264_render_nv12 and args.usb_h264_backend not in ("auto", "native"):
-        raise SystemExit("--usb-h264-render-nv12 requires --usb-h264-backend native or auto")
     target_fps = args.fps
     fps_source = "--fps" if args.fps_from_cli else "default"
     live_fps_param_reader = None
@@ -1784,11 +1726,6 @@ def main() -> None:
             h264_bitrate_text += f" h264_rc={args.usb_h264_rate_control}"
         if args.usb_h264_realtime_priority:
             h264_bitrate_text += " h264_realtime=on"
-        if args.usb_h264_render_nv12:
-            h264_bitrate_text += (
-                " h264_render_nv12=on"
-                f" h264_nv12_flip_x={'on' if args.usb_h264_render_nv12_flip_x else 'off'}"
-            )
         if args.usb_h264_diagnose_interval > 0:
             h264_bitrate_text += f" h264_diag={args.usb_h264_diagnose_interval:g}s"
     brightness_text = "auto" if brightness_param_reader is not None and usb_brightness == 0 else f"{usb_brightness}%"
@@ -1829,7 +1766,6 @@ def main() -> None:
             args.usb_h264_gop,
             args.usb_h264_backend,
             args.usb_h264_library,
-            args.usb_h264_helper,
             args.usb_h264_ffmpeg,
             args.usb_h264_ffmpeg_encoder,
             args.usb_h264_device,
@@ -1848,8 +1784,6 @@ def main() -> None:
             args.usb_h264_diagnose_interval,
             args.usb_h264_test_pattern,
             args.usb_h264_test_pattern_nv12,
-            args.usb_h264_render_nv12,
-            args.usb_h264_render_nv12_flip_x,
             args.usb_frame_drain_attempts,
             args.usb_frame_drain_timeout_ms,
             args.usb_fast_drain_attempts,

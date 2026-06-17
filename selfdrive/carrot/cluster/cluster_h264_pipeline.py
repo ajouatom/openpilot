@@ -16,7 +16,6 @@ from cluster_usb_display import TuringUsbDisplay
 
 OPENPILOT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_H264_LIBRARY = OPENPILOT_ROOT / "system" / "loggerd" / "libcluster_h264_encoder_bridge.so"
-DEFAULT_H264_HELPER = OPENPILOT_ROOT / "system" / "loggerd" / "cluster_h264_encoder_cli"
 DEFAULT_H264_DEVICE = "/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1"
 DEFAULT_H264_FFMPEG = "ffmpeg"
 DEFAULT_H264_FFMPEG_ENCODER = "libx264"
@@ -717,7 +716,6 @@ class H264UsbPipeline:
         gop: int,
         backend: str,
         library_path: str,
-        helper_path: str,
         ffmpeg_path: str,
         ffmpeg_encoder: str,
         device_path: str,
@@ -744,7 +742,6 @@ class H264UsbPipeline:
         self.backend_request = backend
         self.backend_name = backend
         self.library_path = library_path
-        self.helper_path = helper_path
         self.ffmpeg_path = ffmpeg_path
         self.ffmpeg_encoder_request = ffmpeg_encoder
         self.ffmpeg_encoder_name = ffmpeg_encoder
@@ -816,12 +813,15 @@ class H264UsbPipeline:
             except Exception as exc:
                 if self.backend_request == "native":
                     raise
-                print(f"Warning: native H264 encoder unavailable, falling back to helper: {exc}", flush=True)
+                print(f"Warning: native H264 encoder unavailable, falling back to ffmpeg: {exc}", flush=True)
                 self._close_native()
 
-        if self.backend_request not in ("auto", "helper"):
+        if self.backend_request not in ("auto", "ffmpeg"):
             raise RuntimeError(f"unsupported H264 backend: {self.backend_request}")
-        self._start_helper()
+        if self.backend_request == "auto":
+            self.encoder_width = self.width
+            self.encoder_height = self.height
+        self._start_ffmpeg()
 
     def _diagnose_text(self) -> str:
         if not self._diagnostics_enabled():
@@ -911,61 +911,6 @@ class H264UsbPipeline:
         )
         self._debug_log_session_config("native")
 
-    def _start_helper(self) -> None:
-        helper = self._resolve_helper_executable()
-        command = self._helper_command(helper)
-        self.chunk_size = self.usb_display.start_h264_stream(self.requested_chunk_size)
-        self._stream_started = True
-        self._open_dump_file()
-        self.backend_name = "helper"
-        print(
-            "Starting H264 USB helper hardware encoder: "
-            f"{self.width}x{self.height}@{self.fps} "
-            f"encoder={self.encoder_width}x{self.encoder_height} "
-            f"bitrate={self.bitrate} gop={self.gop} "
-            f"slice_max={self.slice_max_bytes} rate_control={self.rate_control} "
-            f"realtime_priority={'on' if self.realtime_priority else 'off'} packetize=access-unit "
-            f"input={self.input_format} "
-            f"device={self.device_path} "
-            f"chunk_ack={'soft' if self.wait_for_ack and self.soft_ack else ('on' if self.wait_for_ack else 'off')}"
-            f"{self._diagnose_text()} "
-            "sps_patch=on sps_crop_patch=on sps_vui_patch=on",
-            flush=True,
-        )
-        if self.debug:
-            print(f"H264 helper encoder command: {' '.join(command)}", flush=True)
-            print(
-                "H264 helper debug: stdout is a byte stream, so helper stdout reads are not guaranteed to match encoder packet boundaries.",
-                flush=True,
-            )
-        self._debug_log_session_config("helper")
-        try:
-            self._proc = subprocess.Popen(
-                command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                bufsize=0,
-            )
-        except Exception:
-            self.usb_display.stop_h264_stream()
-            self._stream_started = False
-            self._close_dump_file()
-            raise
-
-        self._stdout_thread = threading.Thread(
-            target=self._read_stdout,
-            name="cluster-usb-h264-out",
-            daemon=True,
-        )
-        self._stderr_thread = threading.Thread(
-            target=self._read_stderr,
-            name="cluster-usb-h264-err",
-            daemon=True,
-        )
-        self._stdout_thread.start()
-        self._stderr_thread.start()
-
     def _start_ffmpeg(self) -> None:
         ffmpeg = self._ffmpeg_executable()
         self.ffmpeg_encoder_name = self._resolve_ffmpeg_encoder(ffmpeg)
@@ -1026,6 +971,8 @@ class H264UsbPipeline:
             )
         if self._closing:
             raise RuntimeError("H264 USB pipeline is closing")
+        if self._native_handle is not None:
+            raise RuntimeError("native H264 USB pipeline requires NV12 input")
 
         if input_size == encoder_size:
             encoder_rgba = rgba
@@ -1033,10 +980,6 @@ class H264UsbPipeline:
             profile_stage = time.perf_counter()
             encoder_rgba = self._encoder_rgba(rgba, width, height)
             self._add_sample("usb_h264.pad_rgba", profile_stage)
-        if self._native_handle is not None:
-            self._submit_rgba_native(encoder_rgba)
-            return
-
         proc = self._proc
         if proc is None or proc.stdin is None:
             raise RuntimeError("H264 USB pipeline is not started")
@@ -1051,43 +994,6 @@ class H264UsbPipeline:
             self._set_error(exc)
             raise
         self._add_sample("usb_h264.write_rgba", profile_stage)
-        self.check_error()
-
-    def _submit_rgba_native(self, rgba: Any) -> None:
-        lib = self._native_lib
-        handle = self._native_handle
-        if lib is None or handle is None or self._native_callback is None:
-            raise RuntimeError("native H264 USB pipeline is not started")
-
-        byte_count = self.encoder_width * self.encoder_height * 4
-        view = memoryview(rgba)
-        if view.nbytes < byte_count:
-            raise RuntimeError(
-                f"H264 encoder RGBA input is {view.nbytes} bytes, expected at least {byte_count}"
-            )
-        if not view.contiguous:
-            raise RuntimeError("H264 encoder RGBA input must be contiguous")
-
-        profile_stage = time.perf_counter()
-        try:
-            data_ptr = ctypes.addressof(ctypes.c_uint8.from_buffer(view))
-        except TypeError as exc:
-            raise RuntimeError("H264 encoder RGBA input must expose a writable buffer") from exc
-
-        timestamp_us = self._native_frame_index * 1000000 // self.fps
-        result = lib.cluster_h264_encoder_bridge_encode_rgba(
-            handle,
-            ctypes.c_void_p(data_ptr),
-            byte_count,
-            timestamp_us,
-            self._native_callback,
-            None,
-        )
-        if result != 0:
-            raise RuntimeError(self._native_error_text("native H264 encode failed"))
-        self._native_frame_index += 1
-        self._add_native_timing_samples(lib, handle)
-        self._add_sample("usb_h264.native_encode_rgba", profile_stage)
         self.check_error()
 
     def submit_nv12(self, nv12: Any, width: int, height: int) -> None:
@@ -1379,9 +1285,8 @@ class H264UsbPipeline:
     def _debug_log_stdout_read(self, index: int, source: str, packet: bytes) -> None:
         if not self.debug or not self._debug_should_log(index, H264_DEBUG_PACKET_LIMIT, H264_DEBUG_PACKET_INTERVAL):
             return
-        note = "read_window=1" if source == "helper" else "ffmpeg_read=1"
         print(
-            f"H264 stdout read {index}: {source} size={len(packet)} {note} "
+            f"H264 stdout read {index}: {source} size={len(packet)} ffmpeg_read=1 "
             f"head={_bytes_head(packet)} {_h264_packet_summary(packet, max_nals=10)}",
             flush=True,
         )
@@ -1586,47 +1491,6 @@ class H264UsbPipeline:
             "Build system/loggerd/libcluster_h264_encoder_bridge.so first."
         )
 
-    def _resolve_helper_executable(self) -> str:
-        path = Path(self.helper_path)
-        candidates = [path]
-        if not path.is_absolute():
-            candidates.append(OPENPILOT_ROOT / path)
-        for candidate in candidates:
-            if candidate.exists():
-                return str(candidate)
-        raise RuntimeError(
-            f"H264 hardware encoder helper not found: {self.helper_path}. "
-            "Build system/loggerd/cluster_h264_encoder_cli first."
-        )
-
-    def _helper_command(self, helper: str) -> list[str]:
-        command = [
-            helper,
-            "--width",
-            str(self.encoder_width),
-            "--height",
-            str(self.encoder_height),
-            "--fps",
-            str(self.fps),
-            "--bitrate",
-            self.bitrate,
-            "--gop",
-            str(self.gop),
-            "--device",
-            self.device_path,
-            "--input-format",
-            self.input_format,
-            "--slice-max-bytes",
-            str(self.slice_max_bytes),
-        ]
-        if self.rate_control != DEFAULT_H264_RATE_CONTROL:
-            command.extend(["--rate-control", self.rate_control])
-        if self.realtime_priority:
-            command.append("--realtime-priority")
-        if self.debug:
-            command.append("--debug")
-        return command
-
     def _ffmpeg_executable(self) -> str:
         path = Path(self.ffmpeg_path)
         if path.exists():
@@ -1766,15 +1630,6 @@ class H264UsbPipeline:
         lib.cluster_h264_encoder_bridge_create.restype = ctypes.c_void_p
         lib.cluster_h264_encoder_bridge_open.argtypes = [ctypes.c_void_p]
         lib.cluster_h264_encoder_bridge_open.restype = ctypes.c_int
-        lib.cluster_h264_encoder_bridge_encode_rgba.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_void_p,
-            ctypes.c_size_t,
-            ctypes.c_uint64,
-            NativePacketCallback,
-            ctypes.c_void_p,
-        ]
-        lib.cluster_h264_encoder_bridge_encode_rgba.restype = ctypes.c_int
         try:
             encode_nv12 = lib.cluster_h264_encoder_bridge_encode_nv12
         except AttributeError:
@@ -2051,14 +1906,14 @@ class H264UsbPipeline:
         view = memoryview(data)
         if view.nbytes < byte_count:
             raise RuntimeError(
-                f"H264 encoder RGBA input is {view.nbytes} bytes, expected at least {byte_count}"
+                f"H264 ffmpeg RGBA input is {view.nbytes} bytes, expected at least {byte_count}"
             )
 
         offset = 0
         while offset < byte_count:
             written = os.write(fd, view[offset:byte_count])
             if written <= 0:
-                raise BrokenPipeError("H264 helper encoder pipe wrote zero bytes")
+                raise BrokenPipeError("H264 ffmpeg encoder pipe wrote zero bytes")
             offset += written
 
     def _read_stdout(self) -> None:
@@ -2078,19 +1933,6 @@ class H264UsbPipeline:
                 self._debug_stdout_bytes += len(chunk)
                 self._debug_max_packet_bytes = max(self._debug_max_packet_bytes, len(chunk))
                 self._debug_log_stdout_read(read_index, self.backend_name, chunk)
-                if self.backend_name == "helper":
-                    before_patch = chunk
-                    chunk = self._prepare_hardware_packet(chunk)
-                    if self.debug and before_patch != chunk and self._debug_should_log(
-                        read_index,
-                        H264_DEBUG_PACKET_LIMIT,
-                        H264_DEBUG_PACKET_INTERVAL,
-                    ):
-                        print(
-                            f"H264 stdout read {read_index}: helper patched size {len(before_patch)}->{len(chunk)} "
-                            f"head={_bytes_head(chunk)} {_h264_packet_summary(chunk, max_nals=10)}",
-                            flush=True,
-                        )
                 chunks = self._packetize_h264_for_usb(chunk, chunk_size)
                 self._debug_log_packetize(self.backend_name, read_index, chunk, chunks, chunk_size)
                 self._write_dump(chunk)
