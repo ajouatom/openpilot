@@ -25,6 +25,26 @@ from selfdrive.carrot.carrot_man import CarrotMan
 REROUTE_DISTANCE = 25
 MANEUVER_TRANSITION_THRESHOLD = 10
 REROUTE_COUNTER_MIN = 3
+NAV_ROUTE_MAX_POINTS = 4096
+
+
+def limit_route_points(points, max_points=NAV_ROUTE_MAX_POINTS):
+  if max_points <= 0:
+    return []
+  count = len(points)
+  if count <= max_points:
+    return list(points)
+
+  limited = []
+  last_index = count - 1
+  previous_index = -1
+  for i in range(max_points):
+    source_index = round(i * last_index / max(1, max_points - 1))
+    if source_index == previous_index:
+      continue
+    limited.append(points[source_index])
+    previous_index = source_index
+  return limited
 
 
 class RouteEngine:
@@ -330,7 +350,13 @@ class RouteEngine:
 
     if self.route is not None:
       for path in self.route_geometry:
-        coords += [c.as_dict() for c in path]
+        coords.extend(c.as_dict() for c in path)
+
+    original_count = len(coords)
+    coords = limit_route_points(coords, NAV_ROUTE_MAX_POINTS)
+    if original_count > len(coords):
+      cloudlog.warning(f"navd route limited from {original_count} to {len(coords)} points")
+      print(f"navd route limited: {original_count} -> {len(coords)}")
 
     #print("$$$$$$$$$$$$$$$$$$coords=",coords)
     msg = messaging.new_message('navRouteNavd', valid=True)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 import threading
 import time
 
@@ -63,7 +64,7 @@ class AsyncJpegUsbPipeline:
         with self._condition:
             self._samples.append((name, milliseconds))
 
-    def _add_samples(self, samples: tuple[tuple[str, float], ...]) -> None:
+    def _add_samples(self, samples: Iterable[tuple[str, float]]) -> None:
         if not samples:
             return
         with self._condition:

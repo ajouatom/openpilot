@@ -88,19 +88,19 @@ class CarState(CarStateBase):
     self.scc14 = None
     self.lkas11 = None
     self.clu11 = None
-    
+
     # for CANFD parsing
-    self.scc_control = None    
-    self.lfa = None    
-    self.lfa_alt = None    
-    self.lfahda_cluster = None    
+    self.scc_control = None
+    self.lfa = None
+    self.lfa_alt = None
+    self.lfahda_cluster = None
     self.adrv_0x161 = None
     self.adrv_0x200 = None
     self.adrv_0x1ea = None
     self.adrv_0x160 = None
-    self.ccnc_0x162 = None    
-    self.hda_info_4a3 = None    
-    self.tcs = None    
+    self.ccnc_0x162 = None
+    self.hda_info_4a3 = None
+    self.tcs = None
     self.mdps = None
     self.steer_touch_2af = None
     self.cruise_buttons_msg = None
@@ -146,7 +146,7 @@ class CarState(CarStateBase):
     if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC):
       ecu_disabled = True
 
-    
+
     self.HAS_LFA_BUTTON = True if 913 in fingerprints[0] else False
     self.CRUISE_BUTTON_ALT = True if 1007 in fingerprints[0] else False
 
@@ -160,7 +160,7 @@ class CarState(CarStateBase):
 
     self.cp_bsm = None
     self.time_zone = "UTC"
-    
+
     self.cp = None
     self.cp_cam = None
     self.cp_alt = None
@@ -192,7 +192,7 @@ class CarState(CarStateBase):
           setattr(self, attr, parser.vl[name])
           return True
         return False
-      
+
       if self.controls_ready_count == 50:
         self.cp.controls_ready = self.cp_cam.controls_ready = True
         if self.cp_alt is not None:
@@ -215,7 +215,7 @@ class CarState(CarStateBase):
           if not add_and_cache(self.cp_cam, "FCA11", "fca11"):
             add_and_cache(self.cp, "FCA11", "fca11")
           add_and_cache(self.cp_cam, "LKAS11", "lkas11")
-          add_and_cache(self.cp, "CLU11", "clu11")       
+          add_and_cache(self.cp, "CLU11", "clu11")
         elif self.controls_ready_count == 105:
           cp_cruise = self.cp_cam if self.CP.flags & HyundaiFlags.CAMERA_SCC else self.cp
           add_and_cache(cp_cruise, "SCC11", "scc11")
@@ -225,20 +225,20 @@ class CarState(CarStateBase):
       else: # canfd
         if self.controls_ready_count == 120:
           cp_cruise = self.cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else self.cp
-          add_and_cache(cp_cruise, "SCC_CONTROL", "scc_control")          
+          add_and_cache(cp_cruise, "SCC_CONTROL", "scc_control")
         elif self.controls_ready_count == 121:
           add_and_cache(self.cp, "TCS", "tcs")
           add_and_cache(self.cp, "MDPS", "mdps")
           add_and_cache(self.cp_cam, "LFA", "lfa")
-          add_and_cache(self.cp_cam, "LFA_ALT", "lfa_alt")          
+          add_and_cache(self.cp_cam, "LFA_ALT", "lfa_alt")
           add_and_cache(self.cp_cam, "LFAHDA_CLUSTER", "lfahda_cluster")
         elif self.controls_ready_count == 122:
-          add_and_cache(self.cp_cam, "ADRV_0x161", "adrv_0x161")  
+          add_and_cache(self.cp_cam, "ADRV_0x161", "adrv_0x161")
           add_and_cache(self.cp_cam, "ADRV_0x200", "adrv_0x200")
           add_and_cache(self.cp_cam, "ADRV_0x1ea", "adrv_0x1ea")
           add_and_cache(self.cp_cam, "ADRV_0x160", "adrv_0x160")
           add_and_cache(self.cp_cam, "CCNC_0x162", "ccnc_0x162")
-        elif self.controls_ready_count == 123:        
+        elif self.controls_ready_count == 123:
           add_and_cache(self.cp, "HDA_INFO_4A3", "hda_info_4a3")
           add_and_cache(self.cp, "STEER_TOUCH_2AF", "steer_touch_2af")
         elif self.controls_ready_count == 124:
@@ -256,11 +256,11 @@ class CarState(CarStateBase):
           add_and_cache(self.cp, "DOORS_SEATBELTS", "doors_seatbelts")
         elif self.controls_ready_count == 126:
           add_and_cache(self.cp, "CRUISE_BUTTONS_ALT2", "cruise_buttons_alt2", ignore_counter = True)
-         
-          
-          
-        
-    
+
+
+
+
+
   def update(self, can_parsers) -> structs.CarState:
     self.monitor_fingerprint(can_parsers, self.CP.flags & HyundaiFlags.CANFD)
     cp = can_parsers[Bus.pt]
@@ -504,7 +504,7 @@ class CarState(CarStateBase):
     if self.doors_seatbelts is not None:
       ret.doorOpen = self.doors_seatbelts["DRIVER_DOOR"] == 1
       ret.seatbeltUnlatched = self.doors_seatbelts["DRIVER_SEATBELT"] == 0
-        
+
     gear = cp.vl[self.gear_msg_canfd]["GEAR"] if not self.use_accelerator else 0 if self.accelerator is None else self.accelerator["GEAR"]
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(gear))
 
@@ -537,7 +537,7 @@ class CarState(CarStateBase):
       ret.steeringAngleDeg = cp.vl["MDPS"]["STEERING_ANGLE_2"] * -1
     else:
       ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEERING_ANGLE"] * -1
-    
+
     ret.steeringTorque = cp.vl["MDPS"]["STEERING_COL_TORQUE"]
     ret.steeringTorqueEps = cp.vl["MDPS"]["STEERING_OUT_TORQUE"]
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > self.params.STEER_THRESHOLD, 5)
@@ -576,7 +576,7 @@ class CarState(CarStateBase):
       self.MainMode_ACC = cp_cam.vl["SCC_CONTROL"]["MainMode_ACC"] == 1
       self.ACCMode = cp_cam.vl["SCC_CONTROL"]["ACCMode"]
       self.LFA_ICON = cp_cam.vl["LFAHDA_CLUSTER"]["HDA_LFA_SymSta"]
-      
+
     if self.CP.openpilotLongitudinalControl:
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
@@ -618,7 +618,7 @@ class CarState(CarStateBase):
         ret.leftBlindspot = True
       if right_block:
         ret.rightBlindspot = True
-        
+
     if self.hda_info_4a3 is not None:
       speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
       if not self.is_metric:

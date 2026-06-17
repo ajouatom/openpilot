@@ -82,6 +82,40 @@ class DebugPlotSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class NaviDebugInfo:
+    title: str
+    lines: tuple[str, ...] = ()
+    severity: str = "normal"
+    speed_limit_kph: int | None = None
+    traffic_light: NaviTrafficLightInfo | None = None
+    guidance_image: NaviGuidanceImage | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NaviTrafficLightInfo:
+    distance_m: int | None = None
+    red_s: int | None = None
+    straight_s: int | None = None
+    left_s: int | None = None
+    right_s: int | None = None
+    uturn_s: int | None = None
+    red_on: bool | None = None
+    straight_on: bool | None = None
+    left_on: bool | None = None
+    right_on: bool | None = None
+    uturn_on: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NaviGuidanceImage:
+    image_base64: str = ""
+    image_mime: str = ""
+    image_hash: str = ""
+    width: int = 0
+    height: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class DetectedVehicle:
     label: str
     longitudinal_m: float
@@ -112,6 +146,8 @@ class RadarPoint:
     valid: int | None = None
     valid_count: int | None = None
     in_my_lane: int | None = None
+    motion_consistent: bool | None = None
+    promotion_held: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,8 +171,12 @@ class ClusterUiState:
     accel_mps2: float
     steering: float
     speed_limit_kph: int | None
+    speed_limit_source: str | None
     cruise_kph: int | None
     cruise_display_state: CruiseDisplayState
+    gear_text: str | None
+    cruise_gap: int | None
+    lfa_active: bool | None
     left_signal: bool
     right_signal: bool
     left_blindspot: bool
@@ -155,6 +195,7 @@ class ClusterUiState:
     surround_pitch_deg: float
     surround_view_active: bool
     lanes: tuple[LaneMarking, ...]
+    camera_view_mode: int = 0
     extra_left_lane_visible: bool = False
     extra_right_lane_visible: bool = False
     left_road_edge_offset: float | None = None
@@ -168,9 +209,14 @@ class ClusterUiState:
     model_path: tuple[ModelPathPoint, ...] = ()
     detected_vehicles: tuple[DetectedVehicle, ...] = ()
     radar_points: tuple[RadarPoint, ...] = ()
+    radar_info_mode: int = 4
+    radar_display_mode: int = 0
+    radar_source_color_mode: int = 0
     route_overlay: RouteOverlay | None = None
     live_debug: LiveDebugInfo | None = None
     debug_plot: DebugPlotSnapshot | None = None
+    navi_debug: NaviDebugInfo | None = None
+    debug_ui_visible: bool = False
     center_clock_text: str | None = None
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None
@@ -230,6 +276,8 @@ class ClusterUiState:
     lateral_plan_curvature_rates: tuple[float, ...] = ()
     display_speed_kph: float | None = None
     git_status: GitBranchStatus | None = None
+    actual_fps: float | None = None
+    cluster_core_usage_text: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
