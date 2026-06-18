@@ -351,6 +351,9 @@ exit; cleanup sends TURZX brightness zero before releasing the USB device.
 When autorun passes a HUD mode, USB open is pinned to that mode's TURZX PID
 (`1 -> 0x0092`, `2 -> 0x0123`) so a second connected TURZX panel is not opened
 by the vendor library's generic device scan.
+If frame or H264 chunk writes report that the USB device was disconnected, the
+active HUD exits instead of trying to recover in-process, letting
+`cluster_autorun` wait for the same PID and relaunch after replug.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.
