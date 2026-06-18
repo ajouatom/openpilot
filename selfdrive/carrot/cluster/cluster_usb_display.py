@@ -101,11 +101,13 @@ class TuringUsbDisplay:
         frame_drain_timeout_ms: int = 2,
         fast_frame_drain_attempts: int = 3,
         fast_frame_drain_timeout_ms: int = 2,
+        expected_product_id: int | None = None,
     ) -> None:
         self.brightness = int(clamp(brightness, 0, 100))
         self.display_fps = int(clamp(display_fps, 0, 255))
         self.jpeg_quality = int(clamp(jpeg_quality, 1, 95))
         self.jpeg_encoder = jpeg_encoder
+        self.expected_product_id = expected_product_id
         self.fast_write = fast_write
         self.wait_for_frame_ack = wait_for_frame_ack
         self.frame_drain_attempts = max(0, int(frame_drain_attempts))
@@ -231,8 +233,34 @@ class TuringUsbDisplay:
             return True
         return False
 
+    def _find_expected_usb_device(self) -> tuple[Any, int]:
+        if self.expected_product_id is None:
+            return self._find_usb_device()
+
+        import usb.core  # type: ignore
+
+        dev = usb.core.find(idVendor=TURZX_USB_VENDOR_ID, idProduct=self.expected_product_id)
+        if dev is None:
+            raise ValueError(f"USB device not found for pid=0x{self.expected_product_id:04x}")
+
+        try:
+            dev.set_configuration()
+        except usb.core.USBError as exc:
+            print("Warning: set_configuration() failed:", exc)
+
+        if sys.platform.startswith("linux"):
+            try:
+                if dev.is_kernel_driver_active(0):
+                    dev.detach_kernel_driver(0)
+            except usb.core.USBError as exc:
+                print("Warning: detach_kernel_driver failed:", exc)
+
+        return dev, self.expected_product_id
+
     def _connect_device(self) -> None:
-        self.dev, self.dev_pid = self._find_usb_device()
+        self.dev, self.dev_pid = self._find_expected_usb_device()
+        if self.dev_pid not in self._product_id:
+            raise RuntimeError(f"TURZX vendor library does not know pid=0x{self.dev_pid:04x}")
         self._cache_out_endpoint()
         portrait_width, portrait_height = self._product_id[self.dev_pid]
         self.landscape_width = portrait_height

@@ -32,7 +32,7 @@ AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
 REALTIME_CORES_ENV = "CLUSTER_REALTIME_CORES"
 REALTIME_PRIORITY_ENV = "CLUSTER_REALTIME_PRIORITY"
 AUTORUN_DEFAULT_ENV = {
-    "CLUSTER_REALTIME": "0",
+    "CLUSTER_REALTIME": "1",
 }
 DEFAULT_REALTIME_CORES = [1, 2, 3, 4]
 DEFAULT_REALTIME_PRIORITY = 10
@@ -494,7 +494,7 @@ def _turn_off_supported_usb_device(expected_product_id: int, reason: str) -> boo
     if find_supported_usb_product(expected_product_id) is None:
         return False
 
-    display = TuringUsbDisplay(brightness=0, display_fps=0)
+    display = TuringUsbDisplay(brightness=0, display_fps=0, expected_product_id=expected_product_id)
     try:
         display.open()
         print(

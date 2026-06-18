@@ -55,6 +55,7 @@ from cluster_models import (
 from cluster_scene import (
     ClusterScene,
     MeshStrip,
+    RADAR_STATIC_OBJECT_SPEED_KPH,
     RadarPointMarker,
     Vec3,
     VehicleBox,
