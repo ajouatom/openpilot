@@ -1670,7 +1670,7 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def main() -> None:
+def main(*, exit_on_error: bool = True) -> None:
     args = parse_args()
     encoder_source = apply_cluster_encoder_param(args)
     if args.usb_async and args.usb_codec != "jpeg":
@@ -1814,6 +1814,8 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nStopped.")
     except RuntimeError as exc:
+        if not exit_on_error:
+            raise
         raise SystemExit(f"Error: {exc}") from exc
 
 
