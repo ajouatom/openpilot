@@ -287,6 +287,9 @@ def ensure_running(procs: ValuesView[ManagerProcess], started: bool, params=None
 
   running = []
   for p in procs:
+    if p.proc is not None and p.proc.exitcode is not None:
+      p.stop(block=False)
+
     if p.enabled and p.name not in not_run and p.should_run(started, params, CP):
       running.append(p)
     else:

@@ -289,6 +289,14 @@ def _cluster_args(
 def _run_cluster_once(hud_mode: int, encoder_mode: int, core_mode: int, priority: int) -> None:
     from selfdrive.carrot import cluster_run
 
+    def run_cluster_entry() -> None:
+        try:
+            cluster_run.main(exit_on_error=False)
+        except SystemExit as exc:
+            if exc.code in (None, 0):
+                return
+            raise RuntimeError(f"cluster_run exited with {exc.code}") from exc
+
     previous_argv = sys.argv[:]
     try:
         sequence = _encoder_sequence(encoder_mode)
@@ -304,7 +312,7 @@ def _run_cluster_once(hud_mode: int, encoder_mode: int, core_mode: int, priority
                     previous_argv[0],
                     *_cluster_args(hud_mode, encoder_mode, active_encoder_mode, core_mode, priority),
                 ]
-                cluster_run.main()
+                run_cluster_entry()
                 return
             except Exception:
                 if encoder_mode != ENCODER_AUTO or index == len(sequence) - 1:
