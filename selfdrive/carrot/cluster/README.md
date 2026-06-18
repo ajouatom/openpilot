@@ -192,9 +192,10 @@ debug UI before navi data has arrived. When output is gated off,
 remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
-Manager autostart leaves realtime affinity off by default. If `CLUSTER_REALTIME=1`
-is set, `cluster_autorun.py` uses `ClusterHudCoreMode=0` by default, which maps
-to cores `1,2,3,4`; mode `1` maps to all initially allowed CPU cores.
+Manager autostart sets `CLUSTER_REALTIME=1` by default unless the environment
+already overrides it. With realtime enabled, `cluster_autorun.py` uses
+`ClusterHudCoreMode=0` by default, which maps to cores `1,2,3,4`; mode `1` maps
+to all initially allowed CPU cores.
 `ClusterHudPriority` controls the common openpilot realtime helper priority with
 range `1..99`, default `10`.
 Changing either param makes the running HUD exit so `cluster_autorun` can
@@ -328,6 +329,8 @@ reflections merge cleanly.
 vehicles yellow, `radarState` front/SCC radar leads red, camera-sourced vehicle
 leads light blue, comma model leads dark blue, and ADAS corner detections from
 `0x162`/`0x1EA` green.
+Radar samples whose distance and left/right offset are both zero are treated as
+empty/default data and are not drawn as radar points or vehicle boxes.
 Radar-track vehicle classification rejects points outside model road edges, but
 does not require in-road points to sit near the road-edge line; center-lane
 points can classify as vehicles when probability/in-lane data or moving radar
@@ -348,6 +351,13 @@ The planned path draws `longitudinalPlan.desiredDistance` as a magenta
 horizontal bar across the current lane width at the matching forward position.
 Changing `ClusterHud` to another supported mode or `0` makes the running HUD
 exit; cleanup sends TURZX brightness zero before releasing the USB device.
+When autorun passes a HUD mode, USB open is pinned to that mode's TURZX PID
+(`1 -> 0x0092`, `2 -> 0x0123`) so a second connected TURZX panel is not opened
+by the vendor library's generic device scan.
+If frame or H264 chunk writes report that the USB device was disconnected, the
+active HUD exits instead of trying to recover in-process. Autorun calls the
+launcher in non-exiting mode so the error returns to the watcher loop, letting
+`cluster_autorun` wait for the same PID and relaunch after replug.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.

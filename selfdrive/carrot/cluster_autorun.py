@@ -25,14 +25,14 @@ HUD_PRIORITY_PARAM = "ClusterHudPriority"
 IS_ONROAD_PARAM = "IsOnroad"
 RETRY_INTERVAL_S = 5.0
 HUD_CHECK_INTERVAL_S = 5.0
-USB_FALLBACK_SCAN_INTERVAL_S = 60.0
+USB_FALLBACK_SCAN_INTERVAL_S = 5.0
 USB_OFF_DIM_INTERVAL_S = 30.0
 NETLINK_KOBJECT_UEVENT = 15
 AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
 REALTIME_CORES_ENV = "CLUSTER_REALTIME_CORES"
 REALTIME_PRIORITY_ENV = "CLUSTER_REALTIME_PRIORITY"
 AUTORUN_DEFAULT_ENV = {
-    "CLUSTER_REALTIME": "0",
+    "CLUSTER_REALTIME": "1",
 }
 DEFAULT_REALTIME_CORES = [1, 2, 3, 4]
 DEFAULT_REALTIME_PRIORITY = 10
@@ -289,6 +289,14 @@ def _cluster_args(
 def _run_cluster_once(hud_mode: int, encoder_mode: int, core_mode: int, priority: int) -> None:
     from selfdrive.carrot import cluster_run
 
+    def run_cluster_entry() -> None:
+        try:
+            cluster_run.main(exit_on_error=False)
+        except SystemExit as exc:
+            if exc.code in (None, 0):
+                return
+            raise RuntimeError(f"cluster_run exited with {exc.code}") from exc
+
     previous_argv = sys.argv[:]
     try:
         sequence = _encoder_sequence(encoder_mode)
@@ -304,7 +312,7 @@ def _run_cluster_once(hud_mode: int, encoder_mode: int, core_mode: int, priority
                     previous_argv[0],
                     *_cluster_args(hud_mode, encoder_mode, active_encoder_mode, core_mode, priority),
                 ]
-                cluster_run.main()
+                run_cluster_entry()
                 return
             except Exception:
                 if encoder_mode != ENCODER_AUTO or index == len(sequence) - 1:
@@ -494,7 +502,7 @@ def _turn_off_supported_usb_device(expected_product_id: int, reason: str) -> boo
     if find_supported_usb_product(expected_product_id) is None:
         return False
 
-    display = TuringUsbDisplay(brightness=0, display_fps=0)
+    display = TuringUsbDisplay(brightness=0, display_fps=0, expected_product_id=expected_product_id)
     try:
         display.open()
         print(
