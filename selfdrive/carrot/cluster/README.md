@@ -329,6 +329,8 @@ reflections merge cleanly.
 vehicles yellow, `radarState` front/SCC radar leads red, camera-sourced vehicle
 leads light blue, comma model leads dark blue, and ADAS corner detections from
 `0x162`/`0x1EA` green.
+Radar samples whose distance and left/right offset are both zero are treated as
+empty/default data and are not drawn as radar points or vehicle boxes.
 Radar-track vehicle classification rejects points outside model road edges, but
 does not require in-road points to sit near the road-edge line; center-lane
 points can classify as vehicles when probability/in-lane data or moving radar
