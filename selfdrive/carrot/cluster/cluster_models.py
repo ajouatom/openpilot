@@ -150,6 +150,13 @@ class RadarPoint:
     promotion_held: bool = False
 
 
+RADAR_ZERO_POSITION_EPS_M = 1e-3
+
+
+def radar_position_is_zero(longitudinal_m: float, lateral_m: float) -> bool:
+    return abs(longitudinal_m) <= RADAR_ZERO_POSITION_EPS_M and abs(lateral_m) <= RADAR_ZERO_POSITION_EPS_M
+
+
 @dataclass(frozen=True, slots=True)
 class SimulatorInput:
     throttle: float = 0.0

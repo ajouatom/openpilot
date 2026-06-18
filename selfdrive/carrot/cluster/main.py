@@ -65,7 +65,7 @@ from cluster_renderer import ClusterUiRenderer
 from cluster_route_replay import RouteReplaySource
 from cluster_simulator import ClusterSimulator, RandomInputSource
 from cluster_system_monitor import ClusterProcessCoreUsageSampler
-from cluster_usb_display import TuringUsbDisplay
+from cluster_usb_display import TuringUsbDisplay, product_id_for_hud_mode
 from cluster_usb_pipeline import AsyncJpegUsbPipeline
 
 DEFAULT_FPS = 0.0
@@ -584,6 +584,9 @@ def run_demo(
             frame_drain_timeout_ms=usb_frame_drain_timeout_ms,
             fast_frame_drain_attempts=usb_fast_drain_attempts,
             fast_frame_drain_timeout_ms=usb_fast_drain_timeout_ms,
+            expected_product_id=(
+                product_id_for_hud_mode(hud_mode_watch) if hud_mode_watch is not None else None
+            ),
         )
         usb_display.set_profile_enabled(profile_render)
         profile_stage = time.perf_counter()
@@ -1667,7 +1670,7 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def main() -> None:
+def main(*, exit_on_error: bool = True) -> None:
     args = parse_args()
     encoder_source = apply_cluster_encoder_param(args)
     if args.usb_async and args.usb_codec != "jpeg":
@@ -1811,6 +1814,8 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nStopped.")
     except RuntimeError as exc:
+        if not exit_on_error:
+            raise
         raise SystemExit(f"Error: {exc}") from exc
 
 

@@ -99,7 +99,7 @@ def configure_cluster_realtime() -> None:
         print(f"[cluster_run] failed to configure realtime process: {exc}", flush=True)
 
 
-def main() -> None:
+def main(*, exit_on_error: bool = True) -> None:
     configure_cluster_locale()
     args = sys.argv[1:]
     if "--input" not in args:
@@ -109,7 +109,7 @@ def main() -> None:
     configure_cluster_realtime()
     from main import main as cluster_main
 
-    cluster_main()
+    cluster_main(exit_on_error=exit_on_error)
 
 
 if __name__ == "__main__":

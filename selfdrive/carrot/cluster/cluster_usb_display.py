@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import sys
 import os
 import threading
@@ -27,6 +28,22 @@ USB_COMMAND_TIMEOUT_MS = 2000
 USB_FRAME_TIMEOUT_MS = 2000
 USB_COMMAND_GAP_S = 0.2
 TURZX_BRIGHTNESS_COMMAND_MAX = 102
+USB_DISCONNECT_ERRNOS = {
+    errno.ENODEV,
+    errno.ENXIO,
+    errno.EIO,
+    getattr(errno, "ESHUTDOWN", 108),
+}
+USB_DISCONNECT_BACKEND_CODES = {
+    -4,  # libusb: LIBUSB_ERROR_NO_DEVICE
+}
+USB_DISCONNECT_TEXT = (
+    "no such device",
+    "device not found",
+    "disconnected",
+    "entity not found",
+    "device has been disconnected",
+)
 CMD_GET_H264_CHUNK_SIZE = 17
 CMD_PLAY_H264_CHUNK = 121
 CMD_GET_STREAM_STATUS = 122
@@ -101,11 +118,13 @@ class TuringUsbDisplay:
         frame_drain_timeout_ms: int = 2,
         fast_frame_drain_attempts: int = 3,
         fast_frame_drain_timeout_ms: int = 2,
+        expected_product_id: int | None = None,
     ) -> None:
         self.brightness = int(clamp(brightness, 0, 100))
         self.display_fps = int(clamp(display_fps, 0, 255))
         self.jpeg_quality = int(clamp(jpeg_quality, 1, 95))
         self.jpeg_encoder = jpeg_encoder
+        self.expected_product_id = expected_product_id
         self.fast_write = fast_write
         self.wait_for_frame_ack = wait_for_frame_ack
         self.frame_drain_attempts = max(0, int(frame_drain_attempts))
@@ -131,6 +150,7 @@ class TuringUsbDisplay:
         self._ep_out = None
         self._ep_in = None
         self._dll_dir_handle = None
+        self._disconnected = False
         self._frame_error_count = 0
         self._turbojpeg = None
         self._turbojpeg_unavailable = False
@@ -203,10 +223,11 @@ class TuringUsbDisplay:
             self._ep_in = None
             return
 
-        try:
-            self._send_brightness(0, "brightness-off")
-        except Exception as exc:
-            print(f"Warning: TURZX USB brightness-off command skipped during close: {exc}", flush=True)
+        if not self._disconnected:
+            try:
+                self._send_brightness(0, "brightness-off")
+            except Exception as exc:
+                print(f"Warning: TURZX USB brightness-off command skipped during close: {exc}", flush=True)
 
         try:
             import usb.util
@@ -231,8 +252,35 @@ class TuringUsbDisplay:
             return True
         return False
 
+    def _find_expected_usb_device(self) -> tuple[Any, int]:
+        if self.expected_product_id is None:
+            return self._find_usb_device()
+
+        import usb.core  # type: ignore
+
+        dev = usb.core.find(idVendor=TURZX_USB_VENDOR_ID, idProduct=self.expected_product_id)
+        if dev is None:
+            raise ValueError(f"USB device not found for pid=0x{self.expected_product_id:04x}")
+
+        try:
+            dev.set_configuration()
+        except usb.core.USBError as exc:
+            print("Warning: set_configuration() failed:", exc)
+
+        if sys.platform.startswith("linux"):
+            try:
+                if dev.is_kernel_driver_active(0):
+                    dev.detach_kernel_driver(0)
+            except usb.core.USBError as exc:
+                print("Warning: detach_kernel_driver failed:", exc)
+
+        return dev, self.expected_product_id
+
     def _connect_device(self) -> None:
-        self.dev, self.dev_pid = self._find_usb_device()
+        self.dev, self.dev_pid = self._find_expected_usb_device()
+        self._disconnected = False
+        if self.dev_pid not in self._product_id:
+            raise RuntimeError(f"TURZX vendor library does not know pid=0x{self.dev_pid:04x}")
         self._cache_out_endpoint()
         portrait_width, portrait_height = self._product_id[self.dev_pid]
         self.landscape_width = portrait_height
@@ -352,6 +400,37 @@ class TuringUsbDisplay:
         time.sleep(1.5)
         self._connect_device()
 
+    @staticmethod
+    def _exception_indicates_disconnect(exc: BaseException) -> bool:
+        visited: set[int] = set()
+        current: BaseException | None = exc
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            error_no = getattr(current, "errno", None)
+            if error_no in USB_DISCONNECT_ERRNOS:
+                return True
+            backend_error_code = getattr(current, "backend_error_code", None)
+            if backend_error_code in USB_DISCONNECT_BACKEND_CODES:
+                return True
+            text = str(current).lower()
+            if any(pattern in text for pattern in USB_DISCONNECT_TEXT):
+                return True
+            current = current.__cause__ or current.__context__
+        return False
+
+    def _mark_disconnected(self) -> None:
+        self.dev = None
+        self.dev_pid = None
+        self._ep_out = None
+        self._ep_in = None
+        self._disconnected = True
+
+    def _raise_usb_error(self, error_message: str, exc: BaseException) -> None:
+        if self._exception_indicates_disconnect(exc):
+            self._mark_disconnected()
+            raise RuntimeError("TURZX USB display disconnected") from exc
+        raise RuntimeError(error_message) from exc
+
     def _add_libusb_search_path(self) -> None:
         libusb = VENDOR_ROOT / "external" / "libusb-1.0" / "libusb-1.0.dll"
         if not libusb.exists():
@@ -429,7 +508,9 @@ class TuringUsbDisplay:
             if wait_for_ack:
                 try:
                     response = self._send_h264_chunk_ack(chunk, is_last=is_last)
-                except Exception:
+                except Exception as exc:
+                    if self._exception_indicates_disconnect(exc):
+                        raise
                     if require_ack_response:
                         raise
                     self._h264_flow_control(target_queue_depth=2)
@@ -586,7 +667,7 @@ class TuringUsbDisplay:
                 self._profile_add("usb.write_checked.read_ack", profile_stage)
                 return response
             except Exception as exc:
-                raise RuntimeError(error_message) from exc
+                self._raise_usb_error(error_message, exc)
 
     def _write_payload_no_ack(self, payload: bytes, error_message: str, timeout_ms: int) -> None:
         if self._ep_out is None:
@@ -601,7 +682,7 @@ class TuringUsbDisplay:
                 self._ep_out.write(payload, timeout_ms)
                 self._profile_add("usb.write_no_ack.write", profile_stage)
             except Exception as exc:
-                raise RuntimeError(error_message) from exc
+                self._raise_usb_error(error_message, exc)
 
     def _build_frame_payload(self, command_id: int, frame: bytes) -> bytes:
         if self._build_command_packet_header is None or self._encrypt_command_packet is None:
@@ -735,7 +816,7 @@ class TuringUsbDisplay:
                 self._profile_add("usb.h264.read_ack", profile_stage)
                 return response
             except Exception as exc:
-                raise RuntimeError("TURZX USB H264 chunk timed out") from exc
+                self._raise_usb_error("TURZX USB H264 chunk timed out", exc)
 
     def _h264_flow_control(self, *, target_queue_depth: int, max_attempts: int = 8) -> None:
         for _ in range(max_attempts):
@@ -779,7 +860,7 @@ class TuringUsbDisplay:
                 self._ep_out.write(payload, USB_FRAME_TIMEOUT_MS)
                 self._profile_add("usb.h264_no_ack.write", profile_stage)
             except Exception as exc:
-                raise RuntimeError("TURZX USB H264 chunk write failed") from exc
+                self._raise_usb_error("TURZX USB H264 chunk write failed", exc)
 
     def _check_frame_response(self, response: bytes | None) -> None:
         if not response:
@@ -787,6 +868,10 @@ class TuringUsbDisplay:
         self._frame_error_count = 0
 
     def _handle_frame_error(self, exc: Exception) -> None:
+        if self._exception_indicates_disconnect(exc):
+            self._mark_disconnected()
+            raise RuntimeError("TURZX USB display disconnected") from exc
+
         self._frame_error_count += 1
         print(
             f"USB frame upload failed "
