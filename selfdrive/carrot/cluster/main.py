@@ -65,7 +65,7 @@ from cluster_renderer import ClusterUiRenderer
 from cluster_route_replay import RouteReplaySource
 from cluster_simulator import ClusterSimulator, RandomInputSource
 from cluster_system_monitor import ClusterProcessCoreUsageSampler
-from cluster_usb_display import TuringUsbDisplay
+from cluster_usb_display import TuringUsbDisplay, product_id_for_hud_mode
 from cluster_usb_pipeline import AsyncJpegUsbPipeline
 
 DEFAULT_FPS = 0.0
@@ -584,6 +584,9 @@ def run_demo(
             frame_drain_timeout_ms=usb_frame_drain_timeout_ms,
             fast_frame_drain_attempts=usb_fast_drain_attempts,
             fast_frame_drain_timeout_ms=usb_fast_drain_timeout_ms,
+            expected_product_id=(
+                product_id_for_hud_mode(hud_mode_watch) if hud_mode_watch is not None else None
+            ),
         )
         usb_display.set_profile_enabled(profile_render)
         profile_stage = time.perf_counter()

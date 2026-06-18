@@ -192,9 +192,10 @@ debug UI before navi data has arrived. When output is gated off,
 remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
-Manager autostart leaves realtime affinity off by default. If `CLUSTER_REALTIME=1`
-is set, `cluster_autorun.py` uses `ClusterHudCoreMode=0` by default, which maps
-to cores `1,2,3,4`; mode `1` maps to all initially allowed CPU cores.
+Manager autostart sets `CLUSTER_REALTIME=1` by default unless the environment
+already overrides it. With realtime enabled, `cluster_autorun.py` uses
+`ClusterHudCoreMode=0` by default, which maps to cores `1,2,3,4`; mode `1` maps
+to all initially allowed CPU cores.
 `ClusterHudPriority` controls the common openpilot realtime helper priority with
 range `1..99`, default `10`.
 Changing either param makes the running HUD exit so `cluster_autorun` can
@@ -348,6 +349,9 @@ The planned path draws `longitudinalPlan.desiredDistance` as a magenta
 horizontal bar across the current lane width at the matching forward position.
 Changing `ClusterHud` to another supported mode or `0` makes the running HUD
 exit; cleanup sends TURZX brightness zero before releasing the USB device.
+When autorun passes a HUD mode, USB open is pinned to that mode's TURZX PID
+(`1 -> 0x0092`, `2 -> 0x0123`) so a second connected TURZX panel is not opened
+by the vendor library's generic device scan.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.
