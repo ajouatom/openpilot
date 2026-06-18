@@ -41,7 +41,14 @@ from cluster_config import (
     VEHICLE_LENGTH_M,
     VEHICLE_WIDTH_M,
 )
-from cluster_models import ClusterUiState, DetectedVehicle, LaneMarking, ModelPathPoint, RadarPoint
+from cluster_models import (
+    ClusterUiState,
+    DetectedVehicle,
+    LaneMarking,
+    ModelPathPoint,
+    RadarPoint,
+    radar_position_is_zero,
+)
 from cluster_utils import clamp, darken, lighten, smoothstep
 
 
@@ -1635,9 +1642,35 @@ def path_metric_color(accel_mps2: float) -> Color:
 
 
 def radar_points_for_display(state: ClusterUiState) -> tuple[RadarPoint, ...]:
+    points = state.radar_points
+    if any(radar_position_is_zero(point.longitudinal_m, point.lateral_m) for point in points):
+        points = tuple(
+            point
+            for point in points
+            if not radar_position_is_zero(point.longitudinal_m, point.lateral_m)
+        )
     if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
-        return state.radar_points
-    return merged_radar_points(state.radar_points, state)
+        return points
+    return merged_radar_points(points, state)
+
+
+def detected_vehicle_is_zero_radar_sample(vehicle: DetectedVehicle) -> bool:
+    if not radar_position_is_zero(vehicle.longitudinal_m, vehicle.lateral_m):
+        return False
+    return (
+        vehicle.source == "radarState"
+        or vehicle.source == "carState"
+        or vehicle.source in ("radarPoint", "liveTracks")
+        or vehicle.source.startswith("CAN 0x")
+    )
+
+
+def detected_vehicles_without_zero_radar_samples(
+    vehicles: tuple[DetectedVehicle, ...],
+) -> tuple[DetectedVehicle, ...]:
+    if not any(detected_vehicle_is_zero_radar_sample(vehicle) for vehicle in vehicles):
+        return vehicles
+    return tuple(vehicle for vehicle in vehicles if not detected_vehicle_is_zero_radar_sample(vehicle))
 
 
 def merged_radar_points(points: tuple[RadarPoint, ...], state: ClusterUiState) -> tuple[RadarPoint, ...]:
@@ -1864,6 +1897,7 @@ def detected_vehicles_for_display(
     vehicles: tuple[DetectedVehicle, ...],
     state: ClusterUiState,
 ) -> tuple[DetectedVehicle, ...]:
+    vehicles = detected_vehicles_without_zero_radar_samples(vehicles)
     if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL or len(vehicles) < 2:
         return vehicles
     selected: list[DetectedVehicle] = []
@@ -3050,8 +3084,9 @@ def build_cluster_scene(
     profile_stage = profile_scene_start(profile_add)
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
     display_radar_points = radar_points_for_display(state)
-    if display_radar_points is not state.radar_points:
-        state = replace(state, radar_points=display_radar_points)
+    display_detected_vehicles = detected_vehicles_without_zero_radar_samples(state.detected_vehicles)
+    if display_radar_points is not state.radar_points or display_detected_vehicles != state.detected_vehicles:
+        state = replace(state, radar_points=display_radar_points, detected_vehicles=display_detected_vehicles)
     anchor_x_m = ego_anchor_x_m(state, lane_width_m)
     scene_shift_x_m = -anchor_x_m
     relative_scene_x_offset_m = -scene_shift_x_m

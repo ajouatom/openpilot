@@ -40,6 +40,7 @@ from cluster_models import (
     ModelRiskPoint,
     RadarPoint,
     RouteOverlay,
+    radar_position_is_zero,
 )
 from cluster_utils import clamp, smoothstep
 
@@ -1456,6 +1457,8 @@ class RouteLogParser:
                 continue
             # openpilot yRel is left-positive; this renderer uses right-positive x.
             lateral_m = -safe_float(lead, "yRel", 0.0)
+            if radar_position_is_zero(d_rel, lateral_m):
+                continue
             relative_speed_mps = safe_optional_float(lead, "vRel")
             lead_speed_mps = safe_optional_float(lead, "vLead")
             absolute_speed_kph = (
@@ -2994,6 +2997,8 @@ def live_track_to_radar_point(track: Any, index: int, ego_speed_kph: float) -> R
         return None
     y_rel = safe_float(track, "yRel", 0.0)
     lateral_m = renderer_lateral_from_openpilot_yrel(y_rel)
+    if radar_position_is_zero(d_rel, lateral_m):
+        return None
     if not -12.0 <= lateral_m <= 12.0:
         return None
     track_id = safe_optional_int(track, "trackId")
@@ -3029,6 +3034,7 @@ def sorted_radar_points(points: Any) -> tuple[RadarPoint, ...]:
         for point in points
         if -12.0 <= point.lateral_m <= 12.0
         and RADAR_MIN_LONGITUDINAL_M <= point.longitudinal_m <= RADAR_FRONT_MAX_LONGITUDINAL_M
+        and not radar_position_is_zero(point.longitudinal_m, point.lateral_m)
     ]
     filtered.sort(key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label))
     return tuple(filtered)
