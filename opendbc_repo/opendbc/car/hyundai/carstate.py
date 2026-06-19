@@ -29,6 +29,7 @@ BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: Bu
 GearShifter = structs.CarState.GearShifter
 
 READY_COUNT_OK = 200
+TRAILER_DISCONNECT_GRACE_FRAMES = int(5.0 / DT_CTRL)
 
 
 NUMERIC_TO_TZ = {
@@ -545,13 +546,22 @@ class CarState(CarStateBase):
     else:
       ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEERING_ANGLE"] * -1
 
-    if self.trailer_status is not None:
+    trailer_signal = self.trailer_status is not None and self.trailer_status["TRAILER_CONNECTED"] != 0
+    if trailer_signal:
+      # Rising edge is immediate so trailer-specific behavior is preserved.
       self.trailer_timeout_cnt = 0
-      self.trailer_connected = self.trailer_status["TRAILER_CONNECTED"] != 0
-    else:
+      self.trailer_connected = True
+    elif self.trailer_connected:
+      # During ignition-off, the trailer bit can clear before the cluster shuts down.
+      # Keep suppression active through that transient, while still detecting a real
+      # disconnect after 5 seconds at the 100 Hz CarState update rate.
       self.trailer_timeout_cnt += 1
-      if self.trailer_timeout_cnt > 50:
+      if self.trailer_timeout_cnt > TRAILER_DISCONNECT_GRACE_FRAMES:
         self.trailer_connected = False
+    else:
+      self.trailer_timeout_cnt = 0
+
+    ret.trailerConnected = self.trailer_connected
 
     if self.trailer_connected != self.trailer_connected_prev:
       print(f"[TRAILER_DEBUG] connected={self.trailer_connected} timeout={self.trailer_timeout_cnt}")

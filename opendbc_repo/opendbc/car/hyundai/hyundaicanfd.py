@@ -643,23 +643,11 @@ def _apply_radar_blink(values, radar_pairs, frame, *,
     values[det_key] = 2 - blink
     values[dist_key] = min_dist
 
-def _suppress_trailer_lfa_cluster_warnings(values, CS):
-  if not getattr(CS, "trailer_connected", False):
-    return
-
-  # Keep the vehicle's native trailer mode active. Only suppress the cluster
-  # driver-assistance warning popup fields that would hide/block openpilot lateral UI.
-  for key in ("FAULT_LFA", "FAULT_HDA", "FAULT_DAS"):
-    if key in values:
-      values[key] = 0
-
-  for key in ("ALERTS_2", "ALERTS_3", "ALERTS_5"):
-    if key in values:
-      values[key] = 0
-
-  for key in ("SOUNDS_2", "SOUNDS_3", "SOUNDS_4"):
-    if key in values:
-      values[key] = 0
+def _suppress_trailer_mode_warning(values, CS):
+  # Logs from IONIQ 9 show ALERTS_5=6 is the periodic
+  # "driver assistance limited in trailer mode" popup.
+  if CS.trailer_connected and values.get("ALERTS_5") == 6:
+    values["ALERTS_5"] = 0
 
 def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
                      lane_line=True, corner_radar=True,
@@ -801,13 +789,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["ALERTS_5"] = 0
 
         # curvature 표시(0x161쪽 기존 로직 유지)
-        _suppress_trailer_lfa_cluster_warnings(values, CS)
+        _suppress_trailer_mode_warning(values, CS)
 
         curvature = round(CS.out.steeringAngleDeg / 3)
         values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
-        lane_color = 6 if md is not None and md.meta.laneChangeAvailableLeft else 2
+        trailer_lane_change_blocked = CS.trailer_connected
+        lane_color = 4 if trailer_lane_change_blocked else 6 if md is not None and md.meta.laneChangeAvailableLeft else 2
         if lane_line_check >= 1:
           lane_line_warn_left = CS.out.leftLaneLine % 10 not in (0, 5)   # 실선이면 주황
         else:
@@ -818,7 +807,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         else:
           values["LANELINE_LEFT"] = lane_color if hud_control.leftLaneVisible else 0
 
-        lane_color = 6 if md is not None and md.meta.laneChangeAvailableRight else 2
+        lane_color = 4 if trailer_lane_change_blocked else 6 if md is not None and md.meta.laneChangeAvailableRight else 2
         if lane_line_check >= 1:
           lane_line_warn_right = CS.out.rightLaneLine % 10 not in (0, 5)
         else:
@@ -832,11 +821,15 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LCA_LEFT_ARROW"] = 2 if CS.out.leftBlinker else 0
         values["LCA_RIGHT_ARROW"] = 2 if CS.out.rightBlinker else 0
 
-        values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_active else 0
-        values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_active else 0
+        if trailer_lane_change_blocked:
+          values["LCA_LEFT_ICON"] = 1 if lat_active else 0
+          values["LCA_RIGHT_ICON"] = 1 if lat_active else 0
+        else:
+          values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_active else 0
+          values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_active else 0
 
-        values["LANE_LEFT"] = 1 if desire in (1, 3) else 0
-        values["LANE_RIGHT"] = 1 if desire in (2, 4) else 0
+        values["LANE_LEFT"] = 0 if trailer_lane_change_blocked else 1 if desire in (1, 3) else 0
+        values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if desire in (2, 4) else 0
 
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter))
 
@@ -891,8 +884,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if canfd_debug > 0:
           values["FAULT_LSS"] = 0
           values["FAULT_DAS"] = 0
-
-        _suppress_trailer_lfa_cluster_warnings(values, CS)
 
         ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, values))
 

@@ -82,6 +82,7 @@ def car_state_snapshot(sm):
     "carState": {
       "vEgo": as_number(safe_get(cs, "vEgo", 0)),
       "latEnabled": bool(safe_get(cs, "latEnabled", False)),
+      "trailerConnected": bool(safe_get(cs, "trailerConnected", False)),
       "steeringAngleDeg": as_number(safe_get(cs, "steeringAngleDeg", 0)),
       "steeringTorque": as_number(safe_get(cs, "steeringTorque", 0)),
       "steeringTorqueEps": as_number(safe_get(cs, "steeringTorqueEps", 0)),

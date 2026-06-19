@@ -259,6 +259,7 @@ struct CarState {
   rightRearLongDist @78 :Float32; # rear-right corner radar longitudinal distance
   leftRearLatDist @79 :Float32; # rear-left corner radar lateral distance
   rightRearLatDist @80 :Float32; # rear-right corner radar lateral distance
+  trailerConnected @81 :Bool; # trailer connection state after disconnect debounce
 
   struct Tpms {
     fl @0 :Float32;

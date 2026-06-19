@@ -227,9 +227,18 @@ class DesireHelper:
 
     v_ego = carstate.vEgo
     below_lane_change_speed = v_ego < LANE_CHANGE_SPEED_MIN
+    trailer_maneuver_blocked = carstate.trailerConnected
 
     # per-side compute (좌/우 모두)
     self._process_sides(carstate, modeldata, radarState)
+    if trailer_maneuver_blocked:
+      self.left.lane_change_available = False
+      self.right.lane_change_available = False
+      self.lane_change_available_left = False
+      self.lane_change_available_right = False
+      self.auto_lane_change_enable = False
+      self.next_lane_change = False
+      self.desireLog = "TRAILER:MANEUVER_BLOCKED"
 
     # desire state from model
     self._check_desire_state(modeldata, carstate, self.maneuver_type)
@@ -263,7 +272,7 @@ class DesireHelper:
 
     # auto lane change trigger (기존 로직 유지하되 side 기반)
     auto_lane_change_trigger = False
-    if desire_enabled and side is not None:
+    if desire_enabled and side is not None and not trailer_maneuver_blocked:
       # carrot_lane_change_count>0이면 강제 허용
       if self.carrot_lane_change_count > 0:
         auto_lane_change_trigger = side.lane_change_available
@@ -288,7 +297,7 @@ class DesireHelper:
       self.next_lane_change = False
 
     # ───────────────────────── FSM ─────────────────────────
-    if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
+    if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX or trailer_maneuver_blocked:
       self.lane_change_state = LaneChangeState.off
       self.lane_change_direction = LaneChangeDirection.none
       self.turn_direction = TurnDirection.none
@@ -312,6 +321,9 @@ class DesireHelper:
           old_type=self.maneuver_type,
         )
       else:
+        new_type = "none"
+
+      if trailer_maneuver_blocked and new_type in ("lane_change", "turn"):
         new_type = "none"
 
       # switching rules
