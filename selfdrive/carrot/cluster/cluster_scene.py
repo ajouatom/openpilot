@@ -65,6 +65,7 @@ RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M = 1.05
 RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M = 0.0
 RADAR_ROAD_EDGE_KEEP_OUTSIDE_MARGIN_M = 0.85
 RADAR_ROAD_EDGE_STABLE_VEHICLE_OUTSIDE_MARGIN_M = 2.25
+RADAR_NARROW_SHOULDER_MAX_WIDTH_M = 2.50
 RADAR_ROAD_EDGE_KEEP_SPEED_KPH = 18.0
 RADAR_ROAD_EDGE_KEEP_MIN_VALID_COUNT = 20
 RADAR_ROAD_EDGE_STABLE_VEHICLE_MIN_VALID_COUNT = 20
@@ -2129,6 +2130,8 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         return False
     if abs(point.lateral_m) > lane_width_m * RADAR_VEHICLE_MAX_LATERAL_LANES:
         return False
+    if radar_point_is_in_narrow_shoulder(point, state, lane_width_m):
+        return False
     if radar_point_is_confirmed_vehicle_source(point):
         return True
     if point.valid_count is not None:
@@ -2414,6 +2417,54 @@ def road_edge_lateral_at(
         return edge_offset * lane_width_m
     return None
 
+
+def lane_marking_lateral_at(marking: LaneMarking, forward_m: float, lane_width_m: float) -> float:
+    lateral = model_line_lateral_at(marking.model_points, forward_m, marking.model_lateral_shift_m)
+    return lateral if lateral is not None else marking.offset * lane_width_m
+
+
+def radar_point_is_in_narrow_shoulder(
+    point: RadarPoint,
+    state: ClusterUiState,
+    lane_width_m: float,
+) -> bool:
+    lane_laterals = tuple(
+        lane_marking_lateral_at(marking, point.longitudinal_m, lane_width_m)
+        for marking in state.lanes
+        if marking.visible
+    )
+    if not lane_laterals:
+        return False
+
+    left_edge_m = road_edge_lateral_at(
+        state.left_road_edge_points,
+        state.left_road_edge_lateral_shift_m,
+        state.left_road_edge_offset,
+        point.longitudinal_m,
+        lane_width_m,
+    )
+    if left_edge_m is not None:
+        left_lane_m = min((lateral for lateral in lane_laterals if lateral > left_edge_m), default=None)
+        if left_lane_m is not None:
+            shoulder_width_m = left_lane_m - left_edge_m
+            if 0.0 <= shoulder_width_m <= RADAR_NARROW_SHOULDER_MAX_WIDTH_M and point.lateral_m <= left_lane_m:
+                return True
+
+    right_edge_m = road_edge_lateral_at(
+        state.right_road_edge_points,
+        state.right_road_edge_lateral_shift_m,
+        state.right_road_edge_offset,
+        point.longitudinal_m,
+        lane_width_m,
+    )
+    if right_edge_m is not None:
+        right_lane_m = max((lateral for lateral in lane_laterals if lateral < right_edge_m), default=None)
+        if right_lane_m is not None:
+            shoulder_width_m = right_edge_m - right_lane_m
+            if 0.0 <= shoulder_width_m <= RADAR_NARROW_SHOULDER_MAX_WIDTH_M and point.lateral_m >= right_lane_m:
+                return True
+
+    return False
 
 
 def radar_point_road_edge_distance_m(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> float | None:
