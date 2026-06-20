@@ -1,16 +1,18 @@
-import unittest, decimal, sys, json, contextlib
+import unittest, decimal, sys, json, contextlib, tempfile, pickle, io, math
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Generator
 
-from tinygrad.uop.ops import UOp, UPat, Ops, PatternMatcher, TrackedPatternMatcher, graph_rewrite, track_rewrites, TRACK_MATCH_STATS, profile_matches
+from tinygrad.uop.ops import UOp, UPat, Ops, PatternMatcher, TrackedPatternMatcher, graph_rewrite, track_rewrites, profile_matches
 from tinygrad.uop.symbolic import sym
-from tinygrad.dtype import dtypes
-from tinygrad.helpers import PROFILE, colored, ansistrip, flatten, TracingKey, ProfileRangeEvent, ProfileEvent, Context, cpu_events, profile_marker
-from tinygrad.helpers import VIZ, cpu_profile, ProfilePointEvent, unwrap
+from tinygrad.dtype import dtypes, AddrSpace
+from tinygrad.helpers import colored, ansistrip, flatten, TracingKey, ProfileRangeEvent, ProfileEvent, Context, cpu_events, profile_marker
+from tinygrad.helpers import cpu_profile, ProfilePointEvent, unwrap
 from tinygrad.device import Buffer
 
 from tinygrad.uop.ops import tracked_keys, tracked_ctxs, uop_fields, active_rewrites, active_group, _name_cnt, RewriteTrace
-from tinygrad.viz.serve import get_rewrites, get_full_rewrite, uop_to_json
+from tinygrad.viz.serve import load_rewrites, get_full_rewrite, uop_to_json, VizData, get_render, addrspace_colors
+from tinygrad.codegen import do_to_program
 
 @track_rewrites(name=True)
 def exec_rewrite(sink:UOp, pm_lst:list[PatternMatcher], names:None|list[str]=None) -> UOp:
@@ -21,41 +23,29 @@ def exec_rewrite(sink:UOp, pm_lst:list[PatternMatcher], names:None|list[str]=Non
 # small container class for the viz server module
 class VizTrace:
   # loader init
-  def __init__(self): self._trace:RewriteTrace|None = None
+  def __init__(self): self._data:VizData|None = None
   @property
-  def trace(self) -> RewriteTrace: return unwrap(self._trace)
-  def set_trace(self) -> None:
-    self._trace = RewriteTrace(tracked_keys.copy(), tracked_ctxs.copy(), uop_fields.copy())
-    import tinygrad.viz.serve as serve_module
-    serve_module.trace = self._trace
+  def data(self) -> VizData: return unwrap(self._data)
+  def set_data(self) -> None:
+    data = VizData(RewriteTrace(tracked_keys.copy(), tracked_ctxs.copy(), uop_fields.copy()))
+    load_rewrites(data)
+    self._data = data
   # the API
-  def list_items(self) -> list[dict]: return get_rewrites(self.trace)
+  def list_items(self) -> list[dict]:
+    return self.data.ctxs
   def get_details(self, rewrite_idx:int, step:int) -> Generator[dict, None, None]:
-    lst = self.list_items()
-    assert len(lst) > rewrite_idx, f"only loaded {len(lst)} traces, expecting at least {rewrite_idx}"
-    return get_full_rewrite(self.trace.rewrites[rewrite_idx][step])
+    assert len(self.data.trace.rewrites) > rewrite_idx, f"only loaded {len(self.data.trace.rewrites)} traces, expecting at least {rewrite_idx}"
+    return get_full_rewrite(self.data, self.data.trace.rewrites[rewrite_idx][step])
 
 @contextlib.contextmanager
 def save_viz():
-  # clear previous traces
   for lst in [tracked_keys, tracked_ctxs, active_rewrites, active_group, _name_cnt]: lst.clear()
   Buffer.profile_events.clear()
   cpu_events.clear()
-  # set the context vars to enable VIZ
-  prev_viz = VIZ.value
-  VIZ.value = -1
-  prev_tms = TRACK_MATCH_STATS.value
-  TRACK_MATCH_STATS.value = 2
-  prev_profile = PROFILE.value
-  PROFILE.value = 1
   viz = VizTrace()
-  try:
+  with Context(VIZ=-1, TRACK_MATCH_STATS=2, PROFILE=1):
     yield viz
-  finally:
-    viz.set_trace()
-    TRACK_MATCH_STATS.value = prev_tms
-    PROFILE.value = prev_profile
-    VIZ.value = prev_viz
+  viz.set_data()
 
 class TestViz(unittest.TestCase):
   def test_simple(self):
@@ -194,7 +184,7 @@ class TestViz(unittest.TestCase):
     class TestStruct:
       colored_field: str
     a = UOp(Ops.CUSTOM, arg=TestStruct(colored("xyz", "magenta")+colored("12345", "blue")))
-    a2 = uop_to_json(a)[id(a)]
+    a2 = uop_to_json(VizData(), a)[id(a)]
     self.assertEqual(ansistrip(a2["label"]), f"CUSTOM\n{TestStruct.__qualname__}(colored_field='xyz12345')")
 
   def test_colored_label_multiline(self):
@@ -217,38 +207,57 @@ class TestViz(unittest.TestCase):
       # use smaller stack limit for faster test (default is 250000)
       with Context(REWRITE_STACK_LIMIT=100): self.assertRaises(RuntimeError, exec_rewrite, a, [pm])
     graphs = flatten(x["graph"].values() for x in viz.get_details(0, 0))
-    self.assertEqual(graphs[0], uop_to_json(a)[id(a)])
-    self.assertEqual(graphs[1], uop_to_json(b)[id(b)])
+    self.assertEqual(graphs[0], uop_to_json(VizData(), a)[id(a)])
+    self.assertEqual(graphs[1], uop_to_json(VizData(), b)[id(b)])
     # fallback to NOOP with the error message
     nop = UOp(Ops.NOOP, arg="infinite loop in fixed_point_rewrite")
-    self.assertEqual(graphs[2], uop_to_json(nop)[id(nop)])
+    self.assertEqual(graphs[2], uop_to_json(VizData(), nop)[id(nop)])
 
   def test_const_node_visibility(self):
     with save_viz() as viz:
       a = UOp.variable("a", 0, 10, dtype=dtypes.int)
       z = UOp.const(a.dtype, 0)
+      y = UOp.const(dtypes.float, math.pi)
       alu = a*z
-      exec_rewrite(alu, [sym])
+      ret = exec_rewrite(sink:=UOp.sink(alu, y), [sym])
     lst = viz.list_items()
     self.assertEqual(len(lst), 1)
     graphs = [x["graph"] for x in viz.get_details(0, 0)]
-    # embed const in the parent node when possible
-    self.assertEqual(list(graphs[0]), [id(a), id(alu)])
-    self.assertEqual(list(graphs[1]), [id(z)])
+    # const is always in the graph, client side hides exclude=True nodes by default
+    self.assertEqual(list(graphs[0]), [id(a), id(z), id(alu), id(y), id(sink)])
+    self.assertTrue(graphs[0][id(z)]["exclude"])
+    self.assertTrue(graphs[0][id(y)]["exclude"])
+    self.assertFalse(graphs[0][id(alu)]["exclude"])
+    self.assertEqual(graphs[0][id(y)]["label"].split("\n")[:2], ["CONST", "3.14159"])
+    self.assertEqual(list(graphs[1]), [id(z), id(y), id(ret)])
 
   def test_const_reshape_expand_folded(self):
     # CONST->RESHAPE->EXPAND should be folded into the ALU node, not shown as separate RESHAPE/EXPAND nodes
-    c = UOp.const(dtypes.float, 1.0, device="CPU", shape=(3,4))  # creates CONST->RESHAPE->EXPAND chain
+    c = UOp.const(dtypes.float, 1.0, shape=(3,4))  # creates CONST->RESHAPE->EXPAND chain
     a = UOp(Ops.DEFINE_VAR, dtypes.float, arg=("a", 0.0, 10.0))
     alu = a + c
-    graph = uop_to_json(alu)
-    # the RESHAPE and EXPAND nodes from the const should not appear in the graph
-    labels = {v["label"].split("\n")[0] for v in graph.values()}
-    self.assertNotIn("RESHAPE", labels)
-    self.assertNotIn("EXPAND", labels)
-    # the CONST should be inlined into the ALU node's label
-    alu_label = graph[id(alu)]["label"]
-    self.assertIn("CONST", alu_label)
+    with save_viz() as viz:
+      graph_rewrite(alu, PatternMatcher([]))
+    graph = [x["graph"] for x in viz.get_details(0, 0)][0]
+    excluded_nodes = {v["label"].split("\n")[0] for v in graph.values() if v["exclude"]}
+    self.assertIn("CONST", excluded_nodes)
+    self.assertIn("STACK", excluded_nodes)
+    self.assertIn("RESHAPE", excluded_nodes)
+    self.assertIn("EXPAND", excluded_nodes)
+    self.assertIn("CONST1 1", graph[id(alu)]["label"])
+
+  def test_stack_movement_not_folded_unless_all_const(self):
+    a = UOp.variable("a", 0, 10, dtype=dtypes.int)
+    c = UOp.const(dtypes.int, 1)
+    stack = a.vectorize(c)
+    reshaped = stack.reshape((1, 2))
+    graph = uop_to_json(VizData(), reshaped)
+    self.assertFalse(graph[id(stack)]["exclude"])
+
+    const_stack = c.vectorize(UOp.const(dtypes.int, 2))
+    const_reshaped = const_stack.reshape((1, 2))
+    const_graph = uop_to_json(VizData(), const_reshaped)
+    self.assertTrue(const_graph[id(const_stack)]["exclude"])
 
 # VIZ displays nested graph_rewrites in a tree view
 
@@ -324,36 +333,48 @@ class TestVizGC(unittest.TestCase):
 
 # VIZ integrates with other parts of tinygrad
 
-from tinygrad import Tensor, Device
-from tinygrad.engine.realize import get_program
+from tinygrad import Tensor, Device, TinyJit, Variable, function
 
 class TestVizIntegration(unittest.TestCase):
   # codegen supports rendering of code blocks
   def test_codegen_tracing(self):
     with save_viz() as viz:
-      ast = Tensor.schedule(Tensor.empty(4)+Tensor.empty(4))[0].ast
-      prg = get_program(ast, Device[Device.DEFAULT].renderer)
+      ast = (Tensor.empty(4)+Tensor.empty(4)).schedule_linear().src[0].src[0]
+      prg = do_to_program(ast, Device[Device.DEFAULT].renderer)
     lst = viz.list_items()
     self.assertEqual(len(lst), 3)
-    self.assertEqual(lst[0]["name"], "Process 1 Buffer n1")
+    self.assertEqual(lst[0]["name"], "Callify 1 Buffer n1")
     self.assertEqual(lst[1]["name"], "Schedule 1 Kernel n1")
-    self.assertEqual(lst[2]["name"], prg.name)
+    self.assertEqual(lst[2]["name"], prg.arg.name)
+    input_ast = next(viz.get_details(2, 0))["graph"].values()
+    for u in input_ast:
+      if u["label"].startswith("PARAM\n"): self.assertEqual(u["addrspace"], addrspace_colors[AddrSpace.GLOBAL])
 
   # schedule graph CALL nodes have a link to jump to codegen
   def test_link_sched_codegen(self):
     with save_viz() as viz:
-      c1 = Tensor.empty(4).add(1)
-      c2 = Tensor.empty(8).add(1)
-      sched = Tensor.schedule(c1, c2)
-      prgs = [si.lower().prg.p.name for si in sched]
+      c1 = Tensor.empty(4, device="NULL").add(1)
+      c2 = Tensor.empty(8, device="NULL").add(1)
+      with Context(SCACHE=0):
+        sched = c1.schedule_linear(c2)
+      from tinygrad.engine.realize import compile_linear
+      sched = compile_linear(sched)
+      with Context(NO_COLOR=0):
+        prgs = [do_to_program(si.src[0], Device[c1.device].renderer).arg.name for si in sched.src]
     lst = viz.list_items()
     sched_idx = next(i for i,l in enumerate(lst) if l["name"].startswith("Schedule"))
     viz_kernel = next(i for i,s in enumerate(lst[sched_idx]["steps"]) if s["name"] == "View Kernel Graph")
-    graph = next(viz.get_details(sched_idx, viz_kernel))["graph"]
+    with Context(NO_COLOR=1):
+      graph = next(viz.get_details(sched_idx, viz_kernel))["graph"]
     call_nodes = [n for n in graph.values() if n["label"].startswith("CALL")]
     for i,n in enumerate(call_nodes):
       assert n["ref"] is not None
       self.assertEqual(lst[n["ref"]]["name"], prgs[i])
+      assert ansistrip(prgs[i]) in n["label"], f"CALL must contain kernel name, got {n['label']}"
+
+  def test_link_sched_codegen_beam(self):
+    with Context(BEAM=2):
+      self.test_link_sched_codegen()
 
   @Context(TRACEMETA=2)
   def test_metadata_tracing(self):
@@ -361,7 +382,7 @@ class TestVizIntegration(unittest.TestCase):
       a = Tensor.empty(1)
       b = Tensor.empty(1)
       metadata = (alu:=a+b).uop.metadata
-      alu.schedule()
+      alu.schedule_linear()
     graph = next(viz.get_details(0, 0))["graph"]
     self.assertEqual(len([n for n in graph.values() if repr(metadata) in n["label"]]), 1)
 
@@ -401,9 +422,16 @@ class TestVizIntegration(unittest.TestCase):
       default_test(c+2)
     ls = viz.list_items()
     self.assertEqual(len(ls), 2)
-    self.assertEqual(list(next(viz.get_details(0, 0))["graph"]), [id(c+1)])
+    graph = next(viz.get_details(0, 0))["graph"]
+    self.assertEqual(list(graph), [id(c), id(c+1)])
+    self.assertTrue(graph[id(c)]["exclude"])
+    self.assertFalse(graph[id(c+1)]["exclude"])
     self.assertEqual(list(next(viz.get_details(1, 0))["graph"]), [id(c)])
-    self.assertEqual(list(next(viz.get_details(1, 1))["graph"]), [id(c+2)])
+    graph = next(viz.get_details(1, 1))["graph"]
+    self.assertEqual(list(graph), [id(c), id(c.const_like(2)), id(c+2)])
+    self.assertTrue(graph[id(c)]["exclude"])
+    self.assertTrue(graph[id(c.const_like(2))]["exclude"])
+    self.assertFalse(graph[id(c+2)]["exclude"])
 
   def test_recurse(self):
     with save_viz() as viz:
@@ -413,11 +441,29 @@ class TestVizIntegration(unittest.TestCase):
     lst = viz.list_items()
     assert len(lst) == 1
 
+  def test_jit(self):
+    with save_viz():
+      @TinyJit
+      def f(a, b, c): return (a+b).contiguous().mul(3), c.add(1).contiguous().assign(a.to(c.device)), b.assign(c.to(b.device))
+      a, b, c = Tensor.empty(16, device="NULL"), Tensor.empty(16, device="NULL"), Tensor.empty(16, device="NULL:1")
+      for _ in range(3): Tensor.realize(*f(a, b, c))
+    out = load_profile(cpu_events)
+    self.assertEqual(["NULL", "NULL Graph", "NULL:SDMA:0", "NULL:1", "NULL:1:SDMA:0"], [k for k in out["layout"] if k.startswith("NULL")])
+    self.assertEqual(len(out["layout"]["NULL"]["events"]), 2*3)
+    self.assertEqual(len(out["layout"]["NULL:SDMA:0"]["events"]), 3)
+    self.assertEqual(len(out["layout"]["NULL Graph"]["events"]), 2)
+    for graph in out["layout"]["NULL Graph"]["events"]:
+      graph_st, graph_et = graph["st"], graph["st"]+graph["dur"]
+      for k in ["NULL", "NULL:1", "NULL:SDMA:0", "NULL:1:SDMA:0"]:
+        events = [e for e in out["layout"][k]["events"] if graph_st <= e["st"] and e["st"]+e["dur"] <= graph_et]
+        self.assertGreater(len(events), 0)
+        self.assertEqual([e["st"] for e in events], [graph_st+i*events[0]["dur"] for i in range(len(events))])
+
 from tinygrad.device import ProfileDeviceEvent, ProfileGraphEvent, ProfileGraphEntry
 from tinygrad.viz.serve import get_profile
-from extra.viz.cli import decode_profile
+from tinygrad.viz.cli import decode_profile
 
-def load_profile(lst:list[ProfileEvent]) -> dict: return decode_profile(get_profile(lst))
+def load_profile(lst:list[ProfileEvent]) -> dict: return decode_profile(get_profile(VizData(), lst))
 
 class TestVizProfiler(unittest.TestCase):
   def test_transfer_uses_copy_device(self):
@@ -426,9 +472,9 @@ class TestVizProfiler(unittest.TestCase):
       a.to("NULL:1").realize()
     range_events = [e for e in cpu_events if isinstance(e, ProfileRangeEvent)]
     compute_events = [e for e in range_events if e.device == "NULL"]
-    copy_events = [e for e in range_events if e.device.endswith(":COPY")]
+    copy_events = [e for e in range_events if e.device.endswith(":SDMA:0")]
     self.assertGreater(len(compute_events), 0, "expected compute events on base device")
-    self.assertGreater(len(copy_events), 0, "transfer must produce events with ':COPY' device suffix")
+    self.assertGreater(len(copy_events), 0, "transfer must produce events with ':SDMA' device suffix")
 
   def test_node(self):
     prof = [ProfileRangeEvent(device='NV', name='E_2', st=decimal.Decimal(1000), en=decimal.Decimal(1010)),
@@ -469,8 +515,7 @@ class TestVizProfiler(unittest.TestCase):
             ProfileDeviceEvent(device='NV:SDMA:0', tdiff=decimal.Decimal(-1000))]
     j = load_profile(prof)
     event = j['layout']['NV:SDMA:0']['events'][0]
-    gbs = sz/(dur*1e-6)*1e-9
-    self.assertEqual(event['fmt'], f"{gbs:.0f} GB/s\n{sz/1e6:.0f} MB")
+    self.assertEqual(event['fmt'], {"B/s": sz/(dur*1e-6), "B": sz})
 
   def test_graph(self):
     prof = [ProfileDeviceEvent(device='NV', tdiff=decimal.Decimal(-1000)),
@@ -511,8 +556,7 @@ class TestVizProfiler(unittest.TestCase):
 
     j = load_profile(prof)
     sdma_events = j['layout']['NV:1:SDMA:0']['events']
-    gbs = sz/(dur*1e-6)*1e-9
-    self.assertEqual(sdma_events[0]["fmt"], f"{gbs:.0f} GB/s\n{sz/1e6:.0f} MB")
+    self.assertEqual(sdma_events[0]["fmt"], {"B/s": sz/(dur*1e-6), "B": sz})
 
   def test_block_ordering(self):
     prof = [ProfileDeviceEvent(device='NV', tdiff=decimal.Decimal(-1000)),
@@ -563,7 +607,7 @@ class TestVizProfiler(unittest.TestCase):
     step = 10
     n_events = 1_000
     prof = [ProfileRangeEvent("CPU", name="k_test", st=decimal.Decimal(ts:=i*step), en=decimal.Decimal(ts)+step) for i in range(n_events)]
-    sz = len(get_profile(prof))
+    sz = len(get_profile(VizData(), prof))
     self.assertLessEqual(sz/n_events, 26)
 
   def test_calltrace(self):
@@ -576,7 +620,7 @@ class TestVizProfiler(unittest.TestCase):
     profile_ret = load_profile(cpu_events)
     e = profile_ret["layout"]["CUSTOM"]["events"][0]
     self.assertEqual(e["name"], "test_fxn")
-    runtime_trace = json.loads(e["fmt"].replace("TB:", ""))
+    runtime_trace = e["fmt"]["tb"]
     assert any(fxn.__code__.co_filename == f and fxn.__code__.co_firstlineno+1 == l for f,l,*_ in runtime_trace), str(runtime_trace)
 
   # can pack up to 1hr 11 min of trace events
@@ -586,7 +630,7 @@ class TestVizProfiler(unittest.TestCase):
     step = decimal.Decimal(dur_mins*60*1e6//n_events)
     prof = [ProfileRangeEvent("CPU", name="k_test", st=decimal.Decimal(ts:=i*step), en=decimal.Decimal(ts)+step) for i in range(n_events)]
     with self.assertRaisesRegex(ValueError, "timestamp out of range"):
-      get_profile(prof)
+      get_profile(VizData(), prof)
 
   def test_python_marker(self):
     with save_viz():
@@ -711,7 +755,6 @@ class TestVizMemoryLayout(unittest.TestCase):
     self.assertEqual(len(programs), len(set(users)), n)
 
 from tinygrad.uop.ops import KernelInfo
-from tinygrad.viz.serve import amdgpu_cfg
 from tinygrad.renderer.amd.dsl import s
 from tinygrad.runtime.autogen.amd.rdna3.ins import (s_add_u32, s_branch, s_cbranch_execz, s_cbranch_scc0, s_cbranch_scc1, s_cmp_eq_i32,
                                                     s_cmp_eq_u64, s_code_end, s_endpgm, s_mov_b32, s_nop)
@@ -727,13 +770,16 @@ class TestCfg(unittest.TestCase):
       gidx = UOp.special(1, "gidx0")
       sink = UOp.sink(out.base, lidx, gidx, arg=KernelInfo(name=name))
       return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.DEVICE, arg="NULL"), UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
-    with Context(DEV=f"NULL:HIP:{self.arch}"):
-      out = Tensor.custom_kernel(Tensor.empty(1), fxn=fxn)[0]
-      prg = out.schedule()[-1].lower().prg.p
-      return amdgpu_cfg(prg.lib, self.arch)
+    with save_viz() as viz:
+      with Context(DEV=f"NULL::{self.arch}"):
+        out = Tensor.custom_kernel(Tensor.empty(1), fxn=fxn)[0]
+        _ = do_to_program(out.schedule_linear().src[-1].src[0], Device[out.device].renderer)
+    codegen_rewrites = next(s for s in viz.list_items() if s["name"] == name)
+    disasm = next(s for s in codegen_rewrites["steps"] if s["name"] == "View Disassembly")
+    return get_render(viz.data, disasm["query"])
 
   def test_simple(self):
-    k = Kernel(arch=self.arch)
+    k = Kernel()
     k.label("entry")
     k.emit(s_branch(), target="bb1")
     k.label("bb1")
@@ -743,7 +789,7 @@ class TestCfg(unittest.TestCase):
     self.assertEqual(len(cfg["blocks"]), 2)
 
   def test_diamond(self):
-    k = Kernel(arch=self.arch)
+    k = Kernel()
     k.label("entry")
     k.emit(s_mov_b32(s[0], 0))
     k.emit(s_mov_b32(s[1], 0))
@@ -777,7 +823,7 @@ class TestCfg(unittest.TestCase):
       assert st.startswith("s_code_end") and st.endswith("x)"), st
 
   def test_loop(self):
-    k = Kernel(arch=self.arch)
+    k = Kernel()
     k.label("entry")
     k.emit(s_mov_b32(s[1], 4))
     k.label("loop")
@@ -789,7 +835,7 @@ class TestCfg(unittest.TestCase):
     self.get_cfg("simple_loop", k)
 
   def test_loop_branch(self):
-    k = Kernel(arch=self.arch)
+    k = Kernel()
     k.label("entry")
     k.emit(s_mov_b32(s[1], 4))
     k.label("loop")
@@ -807,7 +853,7 @@ class TestCfg(unittest.TestCase):
     self.get_cfg("loop_if", k)
 
   def test_loop_break(self):
-    k = Kernel(arch=self.arch)
+    k = Kernel()
     k.label("entry")
     k.emit(s_mov_b32(s[1], 8))
     k.label("loop")
@@ -822,7 +868,7 @@ class TestCfg(unittest.TestCase):
     self.get_cfg("loop_break", k)
 
   def test_switch(self):
-    k = Kernel(arch=self.arch)
+    k = Kernel()
     k.label("entry")
     k.emit(s_cmp_eq_i32(s[0], 0))
     k.emit(s_cbranch_scc1(), target="case0")
@@ -844,7 +890,7 @@ class TestCfg(unittest.TestCase):
     self.get_cfg("switch_case", k)
 
   def test_ping_pong(self):
-    k = Kernel(arch=self.arch)
+    k = Kernel()
     k.label("entry")
     k.emit(s_cmp_eq_i32(s[0], 0))
     k.emit(s_cbranch_scc1(), target="ping")
@@ -863,7 +909,7 @@ class TestCfg(unittest.TestCase):
 
   def test_colored_blocks(self):
     N = 10
-    k = Kernel(arch=self.arch)
+    k = Kernel()
     k.label("entry")
     k.emit(s_branch(), target="init0")
     for i in range(N):
@@ -883,7 +929,7 @@ class TestCfg(unittest.TestCase):
     self.get_cfg("test_colored_blocks", k)
 
   def test_jump_back_to_end(self):
-    k = Kernel(arch=self.arch)
+    k = Kernel()
     k.label("entry")
     k.emit(s_mov_b32(s[1], 2))
     k.emit(s_cbranch_execz(), target="loop")
@@ -895,6 +941,119 @@ class TestCfg(unittest.TestCase):
     k.emit(s_branch(), target="end")
     k.emit(s_code_end())
     self.get_cfg("jump_back_to_end", k)
+
+# launch viz cli without subprocess
+def run_cli(*cli_args) -> list[dict]:
+  from tinygrad.viz.cli import main, get_arg_parser
+  args = get_arg_parser().parse_args(cli_args+("--json",))
+  with contextlib.redirect_stdout(buf:=io.StringIO()):
+    main(args)
+  return [json.loads(line) for line in buf.getvalue().strip().splitlines()]
+
+@contextlib.contextmanager
+def write_files(viz) -> list[str]:
+  with tempfile.TemporaryDirectory() as tmpdir:
+    (r:=Path(tmpdir)/"rewrites.pkl").write_bytes(pickle.dumps(viz.data.trace))
+    (p:=Path(tmpdir)/"profile.pkl").write_bytes(pickle.dumps(cpu_events))
+    yield ["--rewrites-path", str(r), "--profile-path", str(p)]
+
+class TestCLI(unittest.TestCase):
+  def test_reconstruct_debug(self):
+    with save_viz() as viz:
+      Tensor.empty(1, device="NULL").add(2.0).realize()
+      profile_marker("marker @ 1")
+      Tensor.empty(1, device="NULL").add(3.0).realize()
+    with write_files(viz) as files, Context(DEBUG=4):
+      out = run_cli(*files, "-s", "NULL")
+    assert any(s.get("value", "").startswith("void E") for s in out)
+    assert any(s.get("name", "") == "marker @ 1" for s in out)
+
+  def test_aggregate(self):
+    N, CNT = 1024, 5
+    with save_viz() as viz:
+      for _ in range(CNT):
+        (Tensor.empty(N, N, device="NULL")@Tensor.empty(N, N, device="NULL")).realize()
+      for _ in range(CNT):
+        (Tensor.empty(N, N, device="NULL").assign(Tensor.empty(N, N, device="NULL"))).realize()
+    with write_files(viz) as files, Context(NO_COLOR=1):
+      kernels = run_cli(*files, "-s", "NULL", "-t")
+    self.assertEqual(len(kernels), 2)
+    gemm_summary = [s for s in kernels if s["name"].startswith("r_")][0]
+    copy_summary = [s for s in kernels if s["name"].startswith("E_")][0]
+    self.assertEqual(gemm_summary["count"], CNT)
+    self.assertEqual(copy_summary["count"], CNT)
+
+  def test_flops(self):
+    test_n = [(8, 16), (16, 32), (32, 64)]
+    with save_viz() as viz:
+      @TinyJit
+      def f(a, b): return (a@a.T), (b@b.T)
+      a = Tensor.empty(64, 64, device="NULL")
+      b = Tensor.empty(64, 64, device="NULL")
+      for i_val, j_val in test_n:
+        i = Variable("i", 1, 64).bind(i_val)
+        j = Variable("j", 1, 64).bind(j_val)
+        Tensor.realize(*f(a[:i], b[:j]))
+    with write_files(viz) as files:
+      out = run_cli(*files, "-s", "NULL")
+      aggregate = run_cli(*files, "-s", "NULL", "-t")
+    self.assertEqual(len(out), 3*2)
+    # flops increases as N gets larger
+    gflops = [row["fmt"]["FLOPS"] for row in out]
+    self.assertGreater(gflops[4], gflops[2])
+    self.assertGreater(gflops[5], gflops[3])
+    # aggregate flops
+    self.assertEqual(len(aggregate), 2)
+    agg_gflops = [row["fmt"]["FLOPS"] for row in aggregate]
+    assert all(min(gflops) < v < max(gflops) for v in agg_gflops), f"{agg_gflops}"
+
+  def test_dedup(self):
+    with save_viz() as viz:
+      for _ in range(CNT:=4):
+        # use kernel names unique to this test
+        Tensor.custom_kernel(Tensor.empty(4, device="NULL"), fxn=lambda _: UOp.sink(arg=KernelInfo("k1_test_viz_dedup")))[0].realize()
+        Tensor.custom_kernel(Tensor.empty(8, device="NULL"), fxn=lambda _: UOp.sink(arg=KernelInfo("k2_test_viz_dedup")))[0].realize()
+    with write_files(viz) as files, Context(NO_COLOR=1):
+      name = run_cli(*files, "-s", "NULL")[0]["name"]
+      with Context(DEBUG=3):
+        select = run_cli(*files, "-s", "NULL", name)
+    self.assertEqual(len([s for s in select if s.get("value")]), 1, "debug output was not deduped")
+    self.assertEqual(len([s for s in select if s.get("device") == "NULL"]), CNT, f"expected 4 runs for {name}")
+
+  def test_call_graph(self):
+    @function(precompile=True)
+    def f(x):
+      r = x.sum(axis=1).reshape(32, 1).expand(32, 32).contiguous()
+      return x + r
+    # turn off scache because this test requires a complete schedule rewrite
+    with save_viz() as viz, Context(SCACHE=0):
+      f(f(Tensor.empty(32, 32, device="NULL"))).realize()
+    with write_files(viz) as files, Context(NO_COLOR=1):
+      prgs = [s["name"] for s in run_cli(*files, "-s", "NULL")]
+      with Context(DEBUG=5):
+        out = run_cli(*files, "-s", "TINY")
+    i = next(i for i,s in enumerate(out) if s.get("value", "").lstrip() == "View Kernel Graph")
+    # next print is the CALL graph, CLI outputs exactly as web in TestVizIntegration.test_link_sched_codegen
+    call_nodes = [n for n in out[i+1].values() if n["label"].startswith("CALL")]
+    for i,n in enumerate(call_nodes):
+      assert prgs[i] in n["label"], f"CALL must contain kernel name, got {n['label']}"
+
+  def test_interval(self):
+    def emit_kernel(name:str): Tensor.custom_kernel(Tensor.empty(1, device="NULL"), fxn=lambda _: UOp.sink(arg=KernelInfo(name=name)))[0].realize()
+    with save_viz() as viz:
+      emit_kernel("pre_1")
+      emit_kernel("pre_2")
+      profile_marker("interval_start")
+      emit_kernel("target_1")
+      emit_kernel("target_2")
+      profile_marker("interval_end")
+      emit_kernel("post_1")
+      emit_kernel("post_2")
+    with write_files(viz) as files, Context(NO_COLOR=1):
+      flat = run_cli(*files, "-s", "NULL", "--interval", "interval_start", "interval_end")
+      aggregate = run_cli(*files, "-s", "NULL", "--interval", "interval_start", "interval_end", "-t")
+    self.assertEqual([s["name"] for s in flat], ["interval_start", "target_1", "target_2", "interval_end"])
+    self.assertEqual(sorted(s["name"] for s in aggregate), ["target_1", "target_2"])
 
 if __name__ == "__main__":
   unittest.main()

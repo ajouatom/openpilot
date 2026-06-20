@@ -79,8 +79,6 @@ void msgq_wait_for_subscriber(msgq_queue_t *q){
   while (*q->num_readers == 0){
     // wait for subscriber
   }
-
-  return;
 }
 
 int msgq_new_queue(msgq_queue_t * q, const char * path, size_t size){
@@ -197,11 +195,6 @@ void msgq_init_subscriber(msgq_queue_t * q) {
     // No more slots available. Reset all subscribers to kick out inactive ones
     if (new_num_readers > NUM_READERS){
       //std::cout << "Warning, evicting all subscribers!" << std::endl;
-      std::cout
-        << "Warning, evicting all subscribers! endpoint=" << q->endpoint
-        << " num_readers=" << cur_num_readers
-        << " pid=" << getpid()
-        << std::endl;
       *q->num_readers = 0;
 
       for (size_t i = 0; i < NUM_READERS; i++){

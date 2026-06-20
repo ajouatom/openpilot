@@ -4,7 +4,7 @@ TinyGPU app lets you use AMD and NVIDIA GPUs on macOS over USB4/Thunderbolt with
 
 ## Requirements
 
-- macOS (12.1+)
+- macOS (13.0+)
 - USB4/Thunderbolt port
 - A supported GPU (AMD RDNA3+ or NVIDIA Ampere+)
 
@@ -55,5 +55,7 @@ export PATH="$HOME/.local/bin:$PATH"
 ### 5. Use it!
 
 ```bash
-DEV={AMD|NV} python3 tinygrad/apps/llm.py
+DEV={AMD|NV} python3 -m tinygrad.llm
 ```
+
+**Note:** Use `JITBEAM=2` to search for faster kernels (one-time search cost, results cached).

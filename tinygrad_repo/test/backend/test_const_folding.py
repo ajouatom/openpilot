@@ -1,20 +1,24 @@
 import unittest, math
 from tinygrad import Tensor, Device, dtypes
 from tinygrad.dtype import DTYPES_DICT
-from tinygrad.uop.ops import Ops
-from tinygrad.device import is_dtype_supported
+from tinygrad.uop.ops import Ops, UOp
 import numpy as np
 from test.helpers import not_support_multi_device
 
 def _check_ast_count(desired_count:int, t:Tensor):
   # NOTE: this has side effect because everything can be scheduled only once
-  schedule = t.schedule()
-  asts = [s for s in schedule if s.ast.op is Ops.SINK]
+  schedule = t.schedule_linear()
+  asts = [s for s in schedule.src if s.src[0].op is Ops.SINK]
   len(asts)
   # NOT SUPPORTED ANYMORE
   #assert len(asts) == desired_count, f"{len(asts)} != {desired_count}"
 
 class TestMovedConstFolding(unittest.TestCase):
+  def test_contiguous_deviceless_const(self):
+    t = Tensor(UOp.const(dtypes.float, 2.0)).contiguous()
+    self.assertIs(t.uop.op, Ops.CONST)
+    self.assertIsNone(t.uop.device)
+
   def test_add_shrunk_zero(self):
     _check_ast_count(0, Tensor([1.0, 2, 3, 4]) + Tensor.zeros(6).shrink(((1, 5),)))
 
@@ -28,18 +32,16 @@ class TestMovedConstFolding(unittest.TestCase):
     _check_ast_count(1, Tensor([1.0, 2, 3, 4]) * Tensor.ones(2).pad(((1, 1),)))
 
   def test_copy_padded_const(self):
-    schedule = Tensor.ones(4, device="CPU:0").pad(((1, 1),)).to("CPU:1").schedule()
-    assert not any(si.ast.op is Ops.COPY for si in schedule), "const copy should be folded"
-    np.testing.assert_equal(Tensor.ones(4, device="CPU:0").pad(((1, 1),)).to("CPU:1").numpy(), [0, 1, 1, 1, 1, 0])
+    schedule = Tensor.ones(4, buffer=False).pad(((1, 1),)).to("CPU:1").schedule_linear()
+    assert not any(si.src[0].op is Ops.COPY for si in schedule.src), "const copy should be folded"
+    np.testing.assert_equal(Tensor.ones(4, buffer=False).pad(((1, 1),)).to("CPU:1").numpy(), [0, 1, 1, 1, 1, 0])
 
   def test_cast_padded(self):
     # NOTE: it's always 1 kernel when calling .numpy, limitation of _check_ast_count
-    if is_dtype_supported(dtypes.int16):
-      _check_ast_count(1, Tensor.ones(4).pad(((1, 1),)).cast(dtypes.int16))
-      np.testing.assert_equal(Tensor.ones(4).pad(((1, 1),)).cast(dtypes.int16).numpy(), [0, 1, 1, 1, 1, 0])
-    if is_dtype_supported(dtypes.uint16):
-      _check_ast_count(1, Tensor.full(4, fill_value=-1).pad(((1, 1),)).cast(dtypes.uint16))
-      np.testing.assert_equal(Tensor.full(4, fill_value=-1).pad(((1, 1),)).cast(dtypes.uint16).numpy(), [0, 65535, 65535, 65535, 65535, 0])
+    _check_ast_count(1, Tensor.ones(4).pad(((1, 1),)).cast(dtypes.int16))
+    np.testing.assert_equal(Tensor.ones(4).pad(((1, 1),)).cast(dtypes.int16).numpy(), [0, 1, 1, 1, 1, 0])
+    _check_ast_count(1, Tensor.full(4, fill_value=-1).pad(((1, 1),)).cast(dtypes.uint16))
+    np.testing.assert_equal(Tensor.full(4, fill_value=-1).pad(((1, 1),)).cast(dtypes.uint16).numpy(), [0, 65535, 65535, 65535, 65535, 0])
     # folded
     _check_ast_count(1, Tensor.ones(4).pad(((1, 1),)).cast(dtypes.int64))
     np.testing.assert_equal(Tensor.ones(4).pad(((1, 1),)).cast(dtypes.int64).numpy(), [0, 1, 1, 1, 1, 0])
@@ -109,7 +111,7 @@ class TestReduceOpsConstFolding(unittest.TestCase):
   def test_sum_output_dtype(self):
     # sum output dtype can be different from input
     for dt in DTYPES_DICT.values():
-      if is_dtype_supported(dt):
+      if dt in Device[Device.DEFAULT].renderer.supported_dtypes():
         t = Tensor.ones(16, dtype=dt).reshape(4, 4)
         assert t.sum().dtype == t.contiguous().sum().dtype
 
@@ -117,7 +119,7 @@ class TestReduceOpsConstFolding(unittest.TestCase):
 class TestMultiConstFolding(unittest.TestCase):
   def test_multi_const_folding_literal(self):
     ds = tuple(f"{Device.DEFAULT}:{i}" for i in range(4))
-    t = Tensor.arange(16).float().to(ds).realize()
+    t = Tensor.arange(16).float().clone().to(ds).realize()
 
     # non const folding case creates one ast on each shard
     _check_ast_count(4, t + 1)
@@ -142,7 +144,7 @@ class TestMultiConstFolding(unittest.TestCase):
 
   def test_multi_const_folding_tensor(self):
     ds = tuple(f"{Device.DEFAULT}:{i}" for i in range(4))
-    t = Tensor.arange(16).float().to(ds).realize()
+    t = Tensor.arange(16).float().clone().to(ds).realize()
     zero = Tensor.zeros(16).to(ds).realize()
     one = Tensor.ones(16).to(ds).realize()
 
@@ -162,6 +164,11 @@ class TestMultiConstFolding(unittest.TestCase):
     np.testing.assert_equal((t ** zero).numpy(), [1] * 16)
     np.testing.assert_equal((t ** one).numpy(), np.arange(16))
     np.testing.assert_equal((one ** t).numpy(), [1] * 16)
+
+class TestThreefryConstFolding(unittest.TestCase):
+  def test_threefry(self):
+    x = UOp.const(dtypes.uint64, 5).threefry(UOp.const(dtypes.uint64, 10))
+    self.assertIs(x.simplify().op, Ops.CONST)
 
 class TestTautologicalCompare(unittest.TestCase):
   # without const folding, these would have triggered -Wtautological-compare in clang

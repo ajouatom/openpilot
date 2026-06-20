@@ -3,7 +3,7 @@ import gc, inspect
 import unittest
 import numpy as np
 from tinygrad.device import Buffer
-from tinygrad.engine.realize import run_schedule
+from tinygrad.engine.realize import run_linear
 from tinygrad.uop.ops import UOp
 from tinygrad.tensor import Tensor
 
@@ -29,8 +29,8 @@ class TestGC(unittest.TestCase):
   def test_gc(self):
     Tensor.manual_seed(0)
     base = tensors_allocated()
-    a = Tensor.rand(4, 4, requires_grad=True)
-    b = Tensor.zeros(4, 4, requires_grad=True)
+    a = Tensor.rand(4, 4)
+    b = Tensor.zeros(4, 4)
     (a*b).mean().backward()
     assert (tensors_allocated()-base > 0)
     del a,b
@@ -40,14 +40,14 @@ class TestGC(unittest.TestCase):
   def test_gc_complex(self):
     Tensor.manual_seed(0)
     base = tensors_allocated()
-    a = Tensor(np.zeros((4, 4), dtype=np.float32), requires_grad=True)
-    b = Tensor.rand(4, 4, requires_grad=True)
+    a = Tensor(np.zeros((4, 4), dtype=np.float32))
+    b = Tensor.rand(4, 4)
     assert (tensors_allocated()-base == 4)
     (a*b).mean().backward()
     assert (tensors_allocated()-base == 6)
     del b
     assert (tensors_allocated()-base == 4)
-    b = Tensor(np.zeros((4, 4), dtype=np.float32), requires_grad=True)
+    b = Tensor(np.zeros((4, 4), dtype=np.float32))
     print(tensors_allocated())
     (a*b).mean().backward()
     print(tensors_allocated())
@@ -60,7 +60,7 @@ class TestGC(unittest.TestCase):
     init = bufs_allocated()
     x = Tensor.ones(256).contiguous().realize()
     y = Tensor.ones(5, 5).contiguous()
-    y.schedule()
+    y.schedule_linear()
     del x
     del y
     self.assertEqual(bufs_allocated()-init, 0)
@@ -69,9 +69,8 @@ class TestGC(unittest.TestCase):
     init = bufs_allocated()
     x = Tensor.ones(256).contiguous().realize()
     y = x+Tensor.ones(256).contiguous()
-    ys = y.schedule()
     del x
-    run_schedule(ys)
+    run_linear(*y.linear_with_vars())
     self.assertEqual(bufs_allocated()-init, 1)
     del y
     self.assertEqual(bufs_allocated()-init, 0)

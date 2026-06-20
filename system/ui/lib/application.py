@@ -16,7 +16,8 @@ from collections import deque
 from enum import StrEnum
 from pathlib import Path
 from typing import NamedTuple
-from importlib.resources import as_file, files
+from importlib.resources import as_file
+from openpilot.common.basedir import BASEDIR
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.hardware import HARDWARE, PC
 from openpilot.system.ui.lib.multilang import multilang
@@ -92,8 +93,9 @@ DEFAULT_TEXT_COLOR = rl.Color(255, 255, 255, int(255 * 0.9))
 # The real scales for the fonts below range from 1.212 to 1.266
 FONT_SCALE = 1.242 if BIG_UI else 1.16
 
-ASSETS_DIR = files("openpilot.selfdrive").joinpath("assets")
+ASSETS_DIR = Path(BASEDIR) / "selfdrive" / "assets"
 FONT_DIR = ASSETS_DIR.joinpath("fonts")
+FONT_SOURCE_EXTS = (".ttf", ".otf")
 
 
 class FontWeight(StrEnum):
@@ -864,35 +866,58 @@ class GuiApplication:
     return self._height
 
   def _load_fonts(self):
-    with as_file(FONT_DIR) as fspath:
-      print(f"[FONTDBG] FONT_DIR resolved to: {fspath}")
+    for fw in FontWeight:
+      fnt_path = FONT_DIR / fw
+      font_path = self._resolve_font_path(fnt_path)
+      if font_path != fnt_path:
+        cloudlog.warning(f"Font atlas missing, loading source font instead: {font_path}")
 
-      for fw in FontWeight:
-        fnt_path = fspath / fw
-        exists = fnt_path.exists()
-        size = fnt_path.stat().st_size if exists else -1
-        print(f"[FONTDBG] load {fw} -> {fnt_path} exists={exists} size={size}")
+      font = self._load_font_path(font_path, fw)
+      if fw != FontWeight.UNIFONT and self._font_texture_valid(font):
+        rl.gen_texture_mipmaps(font.texture)
+        rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
 
-        font = rl.load_font(fnt_path.as_posix())
-
-        # 실패/의심 탐지: texture id / width/height
-        try:
-          tex_id = int(font.texture.id)
-          tw = int(font.texture.width)
-          th = int(font.texture.height)
-        except Exception:
-          tex_id, tw, th = -1, -1, -1
-        print(f"[FONTDBG] loaded {fw}: tex_id={tex_id} tex={tw}x{th}")
-
-        if fw != FontWeight.UNIFONT and tex_id > 0:
-          rl.gen_texture_mipmaps(font.texture)
-          rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
-
-        self._fonts[fw] = font
+      self._fonts[fw] = font
 
     rl.gui_set_font(self._fonts[FontWeight.NORMAL])
 
-    print(f"[FONTDBG] DISPLAY filename = {FontWeight.DISPLAY}")
+  def _resolve_font_path(self, fnt_path: Path) -> Path:
+    if fnt_path.exists():
+      return fnt_path
+
+    stem = fnt_path.with_suffix("")
+    for ext in FONT_SOURCE_EXTS:
+      source_path = stem.with_suffix(ext)
+      if source_path.exists():
+        return source_path
+    return fnt_path
+
+  def _load_font_path(self, font_path: Path, font_weight: FontWeight) -> rl.Font:
+    if font_path.suffix.lower() == ".fnt":
+      return rl.load_font(font_path.as_posix())
+
+    try:
+      font_size = 16 if font_weight == FontWeight.UNIFONT else 48 if font_weight == FontWeight.DISPLAY else 200
+      codepoints = self._font_codepoints(font_weight)
+      cp_buffer = rl.ffi.new("int[]", codepoints)
+      cp_ptr = rl.ffi.cast("int *", cp_buffer)
+      return rl.load_font_ex(font_path.as_posix(), font_size, cp_ptr, len(codepoints))
+    except Exception:
+      cloudlog.exception(f"Failed to load source font with codepoints: {font_path}")
+      return rl.load_font(font_path.as_posix())
+
+  def _font_codepoints(self, font_weight: FontWeight) -> list[int]:
+    codepoints = set(range(32, 127))
+    if font_weight in (FontWeight.DISPLAY, FontWeight.UNIFONT):
+      codepoints.update(range(0xAC00, 0xD7A4))
+    return sorted(codepoints)
+
+  @staticmethod
+  def _font_texture_valid(font: rl.Font) -> bool:
+    try:
+      return int(font.texture.id) > 0
+    except Exception:
+      return False
 
   def _set_styles(self):
     rl.gui_set_style(rl.GuiControl.DEFAULT, rl.GuiControlProperty.BORDER_WIDTH, 0)

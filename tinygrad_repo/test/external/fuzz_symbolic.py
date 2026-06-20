@@ -7,14 +7,14 @@ import z3
 from tinygrad import Variable, dtypes
 from tinygrad.uop.ops import UOp
 from tinygrad.uop.validate import uops_to_z3
-from tinygrad.helpers import DEBUG, Context
+from tinygrad.helpers import DEBUG
 
 seed = int(sys.argv[1]) if len(sys.argv) > 1 else random.randint(0, 100)
 print(f"Seed: {seed}", flush=True)
 random.seed(seed)
 
 unary_ops = [lambda a:a+random.randint(-4, 4), lambda a: a*random.randint(-4, 4),
-            lambda a: a//random.randint(1, 9), lambda a: a%random.randint(1, 9),
+            lambda a: a//random.choice(list(range(-9, 0)) + list(range(1, 10))), lambda a: a%random.randint(1, 9),
             lambda a:a.maximum(random.randint(-10, 10)), lambda a:a.minimum(random.randint(-10, 10))]
 binary_ops = [lambda a,b: a+b, lambda a,b: a*b, lambda a,b:a.maximum(b), lambda a,b:a.minimum(b)]
 comp_ops = [operator.lt, operator.le, operator.gt, operator.ge]
@@ -56,8 +56,7 @@ if __name__ == "__main__":
     v = [u1,u2,u3]
     expr = random_int_expr(6)
 
-    with Context(CORRECT_DIVMOD_FOLDING=1):
-      simplified_expr = expr.simplify()
+    simplified_expr = expr.simplify()
 
     solver = z3.Solver(ctx=z3.Context())
     solver.set(timeout=5000)  # some expressions take very long verify, but its very unlikely they actually return sat
@@ -74,10 +73,9 @@ if __name__ == "__main__":
       m = solver.model()
       n1, n2, n3 = m[v1], m[v2], m[v3]
       u1_val, u2_val, u3_val = u1.const_like(n1.as_long()), u2.const_like(n2.as_long()), u3.const_like(n3.as_long())
-      with Context(CORRECT_DIVMOD_FOLDING=1):
-        num = expr.simplify().substitute({u1:u1_val, u2:u2_val, u3:u3_val}).ssimplify()
-        rn = expr.substitute({u1:u1_val, u2:u2_val, u3:u3_val}).ssimplify()
-        if num==rn: print("z3 found a mismatch but the expressions are equal!!")
+      num = expr.simplify().substitute({u1:u1_val, u2:u2_val, u3:u3_val}).ssimplify()
+      rn = expr.substitute({u1:u1_val, u2:u2_val, u3:u3_val}).ssimplify()
+      if num==rn: print("z3 found a mismatch but the expressions are equal!!")
       assert False, f"mismatched {expr.render()} at v1={m[v1]}; v2={m[v2]}; v3={m[v3]} = {num} != {rn}\n" +\
             "Reproduce with:\n" +\
             f"v1=Variable(\"{u1.arg[0]}\", {u1.arg[1]}, {u1.arg[2]})\n" +\

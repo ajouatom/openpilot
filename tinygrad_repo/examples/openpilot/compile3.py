@@ -4,7 +4,7 @@ if "JIT_BATCH_SIZE" not in os.environ: os.environ["JIT_BATCH_SIZE"] = "0"
 
 from tinygrad import fetch, Tensor, TinyJit, Context, GlobalCounters, Device, dtypes
 from tinygrad.helpers import DEBUG, getenv
-from tinygrad.engine.realize import CompiledRunner
+from tinygrad.uop.ops import Ops
 from tinygrad.nn.onnx import OnnxRunner
 
 OPENPILOT_MODEL = sys.argv[1] if len(sys.argv) > 1 else "https://github.com/commaai/openpilot/raw/v0.9.7/selfdrive/modeld/models/supercombo.onnx"
@@ -21,6 +21,8 @@ def compile(onnx_file):
   # TODO this seems dumb
   input_types = {k:(dtypes.float32 if v is dtypes.float16 else v) for k,v in input_types.items()}
   Tensor.manual_seed(100)
+  # replace symbolic dimensions (e.g. 'b' for dynamic batch) with 1
+  input_shapes = {k:tuple(s if isinstance(s, int) else 1 for s in shp) for k,shp in input_shapes.items()}
   inputs = {k:Tensor(Tensor.randn(*shp, dtype=input_types[k]).mul(8).realize().numpy(), device='NPY') for k,shp in sorted(input_shapes.items())}
   if not getenv("NPY_IMG"):
     inputs = {k:Tensor(v.numpy(), device=Device.DEFAULT).realize() if 'img' in k else v for k,v in inputs.items()}
@@ -35,7 +37,11 @@ def compile(onnx_file):
       ret = run_onnx_jit(**inputs).numpy()
     # copy i == 1 so use of JITBEAM is okay
     if i == 1: test_val = np.copy(ret)
-  print(f"captured {len(run_onnx_jit.captured.jit_cache)} kernels")
+  # iterate kernel CALLs in the captured LINEAR UOp; toposort descends into batched graph CUSTOM_FUNCTIONs
+  kernel_asts = {Ops.PROGRAM}
+  kernel_calls = [u for u in run_onnx_jit.captured.linear.toposort(gate=lambda x: x.op not in kernel_asts)
+                  if u.op is Ops.CALL and u.src[0].op in kernel_asts]
+  print(f"captured {len(kernel_calls)} kernels")
   np.testing.assert_equal(test_val, ret, "JIT run failed")
   print("jit run validated")
 
@@ -43,13 +49,14 @@ def compile(onnx_file):
   kernel_count = 0
   read_image_count = 0
   gated_read_image_count = 0
-  for ei in run_onnx_jit.captured.jit_cache:
-    if isinstance(ei.prg, CompiledRunner):
-      kernel_count += 1
-      read_image_count += ei.prg.p.src.count("read_image")
-      gated_read_image_count += ei.prg.p.src.count("?read_image")
-      for v in [m.group(1) for m in re.finditer(r'(val\d+)\s*=\s*read_imagef\(', ei.prg.p.src)]:
-        if len(re.findall(fr'[\?\:]{v}\.[xyzw]', ei.prg.p.src)) > 0: gated_read_image_count += 1
+  for call in kernel_calls:
+    _, _, _, source, _ = call.src[0].src
+    src = source.arg
+    kernel_count += 1
+    read_image_count += src.count("read_image")
+    gated_read_image_count += src.count("?read_image")
+    for v in [m.group(1) for m in re.finditer(r'(val\d+)\s*=\s*read_imagef\(', src)]:
+      if len(re.findall(fr'[\?\:]{v}\.[xyzw]', src)) > 0: gated_read_image_count += 1
   print(f"{kernel_count=},  {read_image_count=}, {gated_read_image_count=}")
   if (allowed_kernel_count:=getenv("ALLOWED_KERNEL_COUNT", -1)) != -1:
     assert kernel_count == allowed_kernel_count, f"different kernels! {kernel_count=}, {allowed_kernel_count=}"
@@ -80,7 +87,7 @@ def test_vs_compile(run, inputs, test_val=None):
     step_times.append((et-st)*1e3)
     print(f"enqueue {(mt-st)*1e3:6.2f} ms -- total run {step_times[-1]:6.2f} ms")
 
-  if (assert_time:=getenv("ASSERT_MIN_STEP_TIME")):
+  if (assert_time:=getenv("ASSERT_MIN_STEP_TIME", 0.0)):
     min_time = min(step_times)
     assert min_time < assert_time, f"Speed regression, expected min step time of < {assert_time} ms but took: {min_time} ms"
 
@@ -97,7 +104,7 @@ def test_vs_compile(run, inputs, test_val=None):
 def test_vs_onnx(new_inputs, test_val, onnx_file, tol):
   import onnx
   import onnxruntime as ort
-  
+
   onnx_inputs = {k:v.numpy() for k,v in new_inputs.items()}
   onnx_model = onnx.load(onnx_file)
 
@@ -128,14 +135,20 @@ def bench(run, inputs):
       run(**inputs).numpy()
 
 if __name__ == "__main__":
-  onnx_file = fetch(OPENPILOT_MODEL)
-  inputs, outputs = compile(onnx_file)
+  if getenv("RUN_PICKLE"):
+    with open(OUTPUT, "rb") as f: pickle_loaded = pickle.load(f)
+    inputs = {name: Tensor(Tensor.randn(*view.shape, dtype=dtype).numpy(), device=device)
+              for name, (view, _vars, dtype, device) in zip(pickle_loaded.captured.expected_names, pickle_loaded.captured.expected_input_info)}
+    test_vs_compile(pickle_loaded, inputs)
+  else:
+    onnx_file = fetch(OPENPILOT_MODEL)
+    inputs, outputs = compile(onnx_file)
 
-  with open(OUTPUT, "rb") as f: pickle_loaded = pickle.load(f)
+    with open(OUTPUT, "rb") as f: pickle_loaded = pickle.load(f)
 
-  test_vs_compile(pickle_loaded, inputs, outputs)
-  if getenv("SELFTEST"):
-    test_vs_onnx(inputs, outputs, onnx_file, 1e-4)
+    test_vs_compile(pickle_loaded, inputs, outputs)
+    if getenv("SELFTEST"):
+      test_vs_onnx(inputs, outputs, onnx_file, 1e-4)
 
   if getenv("BENCHMARK_LOG", ""):
     bench(pickle_loaded, inputs)

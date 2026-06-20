@@ -1,8 +1,9 @@
 import random
 import time
 import string
+import unittest
 import msgq
-import pytest
+
 
 def random_sock():
   return ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
@@ -10,14 +11,13 @@ def random_sock():
 def random_bytes(length=1000):
   return bytes([random.randrange(0xFF) for _ in range(length)])
 
-class TestPubSubSockets:
+class TestPubSubSockets(unittest.TestCase):
 
   def test_pub_sub(self):
     sock = random_sock()
     pub_sock = msgq.pub_sock(sock)
     sub_sock = msgq.sub_sock(sock, conflate=False, timeout=None)
-
-    for _ in range(1000):
+    for _ in range(100):
       msg = random_bytes()
       pub_sock.send(msg)
       recvd = sub_sock.receive()
@@ -35,7 +35,6 @@ class TestPubSubSockets:
         msg = random_bytes()
         pub_sock.send(msg)
         sent_msgs.append(msg)
-      time.sleep(0.1)
       recvd_msgs = msgq.drain_sock_raw(sub_sock)
       if conflate:
         assert len(recvd_msgs) == 1
@@ -45,13 +44,14 @@ class TestPubSubSockets:
         for rec_msg, sent_msg in zip(recvd_msgs, sent_msgs):
           assert rec_msg == sent_msg
 
-  @pytest.mark.flaky(retries=3, delay=1)
   def test_receive_timeout(self):
     sock = random_sock()
-    timeout = random.randrange(200)
-    sub_sock = msgq.sub_sock(sock, timeout=timeout)
+    timeout_ms = 5
+    sub_sock = msgq.sub_sock(sock, timeout=timeout_ms)
 
     start_time = time.monotonic()
     recvd = sub_sock.receive()
-    assert (time.monotonic() - start_time) < (timeout + 0.1)
+    elapsed = time.monotonic() - start_time
     assert recvd is None
+    assert elapsed >= timeout_ms / 1000
+    assert elapsed < 5  # this can be noisy due to other load on the system

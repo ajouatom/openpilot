@@ -1,7 +1,7 @@
 import gc
 from tinygrad import Tensor, UOp, Device, nn
-from tinygrad.engine.schedule import schedule_cache
-from tinygrad.engine.realize import method_cache, get_program
+from tinygrad.schedule import schedule_cache
+from tinygrad.codegen import to_program, to_program_cache
 from tinygrad.schedule.indexing import apply_movement_op, _apply_reshape
 from tinygrad.uop.divandmod import fold_divmod_general
 from test.test_tiny import TestTiny
@@ -14,38 +14,38 @@ def print_uops():
 def start(): pass
 def single_tensor(): Tensor([2])
 def two_plus_two(): Tensor([2])+Tensor([2])
-def two_plus_two_schedule(): (Tensor([2])+Tensor([2])).schedule()
+def two_plus_two_schedule(): (Tensor([2])+Tensor([2])).schedule_linear()
 def two_plus_two_kernel():
-  si = (Tensor([2])+Tensor([2])).schedule()[-1]
-  get_program(si.ast, Device.default.renderer)
+  linear = (Tensor([2])+Tensor([2])).schedule_linear()
+  to_program(linear.src[-1].src[0], Device.default.renderer)
 def two_plus_two_linearize():
-  si = (Tensor([2])+Tensor([2])).schedule()[-1]
-  get_program(si.ast, Device.default.renderer)
+  linear = (Tensor([2])+Tensor([2])).schedule_linear()
+  to_program(linear.src[-1].src[0], Device.default.renderer)
 def two_plus_two_realize(): (Tensor([2])+Tensor([2])).realize()
 def two_plus_two_item(): (Tensor([2])+Tensor([2])).item()
 def gradient_test():
-  x = Tensor.eye(3, requires_grad=True)
-  y = Tensor([[2.0,0,-2.0]], requires_grad=True)
+  x = Tensor.eye(3)
+  y = Tensor([[2.0,0,-2.0]])
   z = y.matmul(x).sum()
   z.backward()
 def realized_eye():
-  Tensor.eye(3, requires_grad=True).realize()
+  Tensor.eye(3).clone().realize()
 def realized_list():
-  Tensor([[2.0,0,-2.0]], requires_grad=True).realize()
+  Tensor([[2.0,0,-2.0]]).realize()
 def kernel_matmul():
-  x = Tensor.eye(3, requires_grad=True)
-  y = Tensor([[2.0,0,-2.0]], requires_grad=True)
+  x = Tensor.eye(3)
+  y = Tensor([[2.0,0,-2.0]])
   z = y.matmul(x)
-  si = z.schedule()[-1]
-  get_program(si.ast, Device.default.renderer)
+  linear = z.schedule_linear()
+  to_program(linear.src[-1].src[0], Device.default.renderer)
 def realized_matmul():
-  x = Tensor.eye(3, requires_grad=True)
-  y = Tensor([[2.0,0,-2.0]], requires_grad=True)
+  x = Tensor.eye(3)
+  y = Tensor([[2.0,0,-2.0]])
   z = y.matmul(x)
   Tensor.realize(z)
 def realized_gradient():
-  x = Tensor.eye(3, requires_grad=True)
-  y = Tensor([[2.0,0,-2.0]], requires_grad=True)
+  x = Tensor.eye(3)
+  y = Tensor([[2.0,0,-2.0]])
   z = y.matmul(x).sum()
   z.backward()
   Tensor.realize(x, y, z, x.grad, y.grad)
@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     # these caches will keep uops alive
     schedule_cache.clear()
-    method_cache.clear()
+    to_program_cache.clear()
     apply_movement_op.cache_clear()
     _apply_reshape.cache_clear()
     fold_divmod_general.cache_clear()

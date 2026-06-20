@@ -1,8 +1,7 @@
 import unittest, onnx, tempfile, pathlib
 import numpy as np
-from tinygrad import dtypes, Tensor
+from tinygrad import Tensor
 from tinygrad.uop.ops import Ops
-from tinygrad.device import is_dtype_supported
 from typing import Any
 from tinygrad.nn.onnx import OnnxRunner, OnnxPBParser, OnnxDataType
 from hypothesis import given, strategies as st
@@ -10,8 +9,8 @@ from hypothesis import given, strategies as st
 # copied from test_const_folding.py
 def _check_ast_count(desired_count:int, t:Tensor):
   # NOTE: this has side effect because everything can be scheduled only once
-  schedule = t.schedule()
-  asts = [s for s in schedule if s.ast.op is Ops.SINK]
+  linear = t.schedule_linear()
+  asts = [call for call in linear.src if call.src[0].op is Ops.SINK]
   assert len(asts) == desired_count, f"{len(asts)} != {desired_count}"
 
 def build_onnx(nodes, from_disk:bool=True, **kwargs):
@@ -89,23 +88,13 @@ class TestOnnxRunner(unittest.TestCase):
       np.testing.assert_equal(output.numpy(), weights + 1)
 
 all_dtypes = list(OnnxDataType)
-device_supported_dtypes = {odt for odt in OnnxDataType if is_dtype_supported(odt.to_dtype())}
 
 class TestOnnxRunnerDtypes(unittest.TestCase):
   """
   Internal tensors (initializers, attributes) fallback to default dtype if unsupported by device.
   External tensors (inputs) preserve their original dtype - user must ensure compatibility with device.
   """
-  def _get_expected_dtype(self, onnx_dtype: int, is_input: bool):
-    true_dtype = OnnxDataType(onnx_dtype).to_dtype()
-    # inputs always preserve their true dtype.
-    if is_input:
-      return true_dtype
-    # supported types are always themselves.
-    if onnx_dtype in device_supported_dtypes:
-      return true_dtype
-    # otherwise it's an unsupported dtype that's internal to the ONNX model, which should fallback to default.
-    return dtypes.default_int if dtypes.is_int(true_dtype) else dtypes.default_float
+  def _get_expected_dtype(self, onnx_dtype: int, is_input: bool): return OnnxDataType(onnx_dtype).to_dtype()
 
   @given(onnx_dtype=st.sampled_from(all_dtypes))
   def test_input_dtype(self, onnx_dtype: int):

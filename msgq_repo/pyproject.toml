@@ -1,7 +1,7 @@
 [project]
 name = "msgq"
 version = "0.0.1"
-description = "Code powering the comma.ai panda"
+description = "Lock-free IPC pub/sub message queue"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 license = {text = "MIT"}
@@ -15,12 +15,9 @@ dependencies = [
   "setuptools",  # for distutils
   "Cython",
   "scons",
+  "catch2 @ git+https://github.com/commaai/dependencies.git@release-catch2#subdirectory=catch2",
   "ruff",
   "parameterized",
-  "coverage",
-  "numpy",
-  "pytest",
-  "pytest-retry",
   "cppcheck",
   "cpplint",
   "codespell",
@@ -37,20 +34,9 @@ lint.flake8-implicit-str-concat.allow-multiline=false
 line-length = 160
 target-version="py311"
 
-[tool.ruff.lint.flake8-tidy-imports.banned-api]
-"pytest.main".msg = "pytest.main requires special handling that is easy to mess up!"
-"unittest".msg = "Use pytest"
-
 [tool.ty.src]
 exclude = ["site_scons/"]
 
 [tool.ty.rules]
 # Cython modules are compiled at build time, not available for static analysis
 unresolved-import = "ignore"
-
-[tool.pytest.ini_options]
-addopts = "--durations=10"
-testpaths = [
-  "msgq/tests",
-  "msgq/visionipc/tests",
-]

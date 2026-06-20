@@ -1,15 +1,18 @@
 import unittest, contextlib
 from tinygrad import Device, Tensor, Context, TinyJit
 from tinygrad.device import Compiled, ProfileProgramEvent, ProfileDeviceEvent
-from tinygrad.viz.serve import load_amd_counters
+from tinygrad.engine.realize import run_linear
+from tinygrad.codegen import to_program
+from tinygrad.viz.serve import load_amd_counters, VizData
 
 @contextlib.contextmanager
 def save_sqtt():
-  yield (ret:=[])
+  data = VizData()
+  yield data.ctxs
   Device[Device.DEFAULT].synchronize()
   Device[Device.DEFAULT]._at_profile_finalize()
-  load_amd_counters(ret, Compiled.profile_events)
-  ret[:] = [r for r in ret if r["name"].startswith("SQTT")]
+  load_amd_counters(data, Compiled.profile_events)
+  data.ctxs[:] = [r for r in data.ctxs if r["name"].startswith("SQTT")]
 
 @unittest.skipUnless(Device.DEFAULT == "AMD", "only runs on AMD")
 class TestSQTTProfiler(unittest.TestCase):
@@ -25,39 +28,41 @@ class TestSQTTProfiler(unittest.TestCase):
   def test_simple(self):
     t = Tensor.empty(1) + 1
     with save_sqtt() as sqtt:
-      ei = t.schedule()[0].lower()
-      ei.run()
+      linear = t.schedule_linear()
+      run_linear(linear)
+    fn_name = to_program(linear.src[0].src[0], renderer=Device[Device.DEFAULT].renderer).arg.function_name
     self.assertEqual(len(sqtt), 1)
-    self.assertEqual(sqtt[0]["name"], f"SQTT {ei.prg.p.function_name}")
+    self.assertEqual(sqtt[0]["name"], f"SQTT {fn_name}")
 
   def test_multiple_runs(self):
     t = Tensor.empty(1) + 1
     with save_sqtt() as sqtt:
-      ei = t.schedule()[0].lower()
-      for _ in range(N:=3):
-        ei.run()
+      linear = t.schedule_linear()
+      for _ in range(N:=3): run_linear(linear)
+    fn_name = to_program(linear.src[0].src[0], renderer=Device[Device.DEFAULT].renderer).arg.function_name
     self.assertEqual(len(sqtt), N)
     for i in range(1, N):
-      self.assertEqual(sqtt[i]["name"], f"SQTT {ei.prg.p.function_name} n{i+1}")
+      self.assertEqual(sqtt[i]["name"], f"SQTT {fn_name} n{i+1}")
 
   def test_multiple_kernels(self):
     t = ((Tensor.empty(1) + 1).contiguous() + 2)
-    sched = t.schedule()
+    linear = t.schedule_linear()
     with save_sqtt() as sqtt:
-      for si in sched: si.lower().run()
-    self.assertEqual(len(sqtt), len(sched))
-    for i,k in enumerate(sched):
-      self.assertEqual(sqtt[i]["name"], f"SQTT {k.lower().prg.p.function_name}")
+      run_linear(linear)
+    self.assertEqual(len(sqtt), len(linear.src))
+    for i,call in enumerate(linear.src):
+      fn_name = to_program(call.src[0], renderer=Device[Device.DEFAULT].renderer).arg.function_name
+      self.assertEqual(sqtt[i]["name"], f"SQTT {fn_name}")
 
   def test_multiple_kernels_lower(self):
     t = ((Tensor.empty(1) + 1).contiguous() + 2)
-    sched = t.schedule()
+    linear = t.schedule_linear()
     with save_sqtt() as sqtt:
-      prgs = [si.lower() for si in sched]
-      for p in prgs: p.run()
-    self.assertEqual(len(sqtt), len(sched))
-    for i,ei in enumerate(prgs):
-      self.assertEqual(sqtt[i]["name"], f"SQTT {ei.prg.p.function_name}")
+      run_linear(linear)
+    self.assertEqual(len(sqtt), len(linear.src))
+    for i,call in enumerate(linear.src):
+      fn_name = to_program(call.src[0], renderer=Device[Device.DEFAULT].renderer).arg.function_name
+      self.assertEqual(sqtt[i]["name"], f"SQTT {fn_name}")
 
   def test_jit(self):
     @TinyJit

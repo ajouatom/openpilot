@@ -8,7 +8,7 @@ from tinygrad.helpers import GlobalCounters, Context
 from tinygrad.nn import Conv1d, ConvTranspose1d, Conv2d, ConvTranspose2d, Linear, Embedding
 from tinygrad.nn import BatchNorm, LayerNorm, LayerNorm2d, GroupNorm, InstanceNorm, RMSNorm, LSTMCell
 from tinygrad.nn.state import load_state_dict
-from tinygrad.engine.realize import run_schedule
+from tinygrad.engine.realize import run_linear
 from test.helpers import not_support_multi_device, needs_second_gpu, slow
 
 @slow
@@ -149,8 +149,6 @@ class TestNN(unittest.TestCase):
 
     # create in tinygrad
     layer = Conv2d(C1, C2, kernel_size=K, stride=S, padding=P)
-    layer.weight.requires_grad = True
-    layer.bias.requires_grad = True
 
     # create in torch
     torch_layer = torch.nn.Conv2d(C1, C2, kernel_size=K, stride=S, padding=P).eval()
@@ -158,7 +156,7 @@ class TestNN(unittest.TestCase):
     torch_layer.bias = torch.nn.Parameter(torch.tensor(layer.bias.numpy(), dtype=torch.float32))
 
     # test
-    x = Tensor.uniform(BS, C1, H, W, requires_grad=True)
+    x = Tensor.uniform(BS, C1, H, W)
 
     with Context(WINO=1):
       z = layer(x)
@@ -192,12 +190,12 @@ class TestNN(unittest.TestCase):
 
     # create in tinygrad
     layer = GroupNorm(G, C)
-    layer.weight = Tensor(torch_layer.weight.detach().numpy(), requires_grad=True)
-    layer.bias = Tensor(torch_layer.bias.detach().numpy(), requires_grad=True)
+    layer.weight = Tensor(torch_layer.weight.detach().numpy())
+    layer.bias = Tensor(torch_layer.bias.detach().numpy())
 
     for _ in range(10):
       # forward
-      x = Tensor.randn(BS, C, H, W, requires_grad=True)
+      x = Tensor.randn(BS, C, H, W)
       z = layer(x)
       z.sum().backward()
 
@@ -218,10 +216,10 @@ class TestNN(unittest.TestCase):
 
     # create in tinygrad
     layer = LayerNorm([H, W])
-    layer.weight = Tensor(torch_layer.weight.detach().numpy(), requires_grad=True)
-    layer.bias = Tensor(torch_layer.bias.detach().numpy(), requires_grad=True)
+    layer.weight = Tensor(torch_layer.weight.detach().numpy())
+    layer.bias = Tensor(torch_layer.bias.detach().numpy())
 
-    x = Tensor.empty(N, C, H, W, requires_grad=True)
+    x = Tensor.empty(N, C, H, W)
     z = layer(x)
     z.realize()
 
@@ -240,12 +238,12 @@ class TestNN(unittest.TestCase):
 
     # create in tinygrad
     layer = LayerNorm([H, W])
-    layer.weight = Tensor(torch_layer.weight.detach().numpy(), requires_grad=True)
-    layer.bias = Tensor(torch_layer.bias.detach().numpy(), requires_grad=True)
+    layer.weight = Tensor(torch_layer.weight.detach().numpy())
+    layer.bias = Tensor(torch_layer.bias.detach().numpy())
 
     for _ in range(10):
       # forward
-      x = Tensor.randn(N, C, H, W, requires_grad=True)
+      x = Tensor.randn(N, C, H, W)
       z = layer(x)
       z.sum().backward()
 
@@ -266,12 +264,12 @@ class TestNN(unittest.TestCase):
 
     # create in tinygrad
     layer = LayerNorm2d(C)
-    layer.weight = Tensor(torch_layer.weight.detach().numpy(), requires_grad=True)
-    layer.bias = Tensor(torch_layer.bias.detach().numpy(), requires_grad=True)
+    layer.weight = Tensor(torch_layer.weight.detach().numpy())
+    layer.bias = Tensor(torch_layer.bias.detach().numpy())
 
     for _ in range(10):
       # forward
-      x = Tensor.randn(N, C, H, W, requires_grad=True)
+      x = Tensor.randn(N, C, H, W)
       z = layer(x)
       z.sum().backward()
 
@@ -292,12 +290,12 @@ class TestNN(unittest.TestCase):
 
     # create in tinygrad
     layer = InstanceNorm(C)
-    layer.weight = Tensor(torch_layer.weight.detach().numpy(), requires_grad=True)
-    layer.bias = Tensor(torch_layer.bias.detach().numpy(), requires_grad=True)
+    layer.weight = Tensor(torch_layer.weight.detach().numpy())
+    layer.bias = Tensor(torch_layer.bias.detach().numpy())
 
     for _ in range(10):
       # forward
-      x = Tensor.randn(N, C, H, W, requires_grad=True)
+      x = Tensor.randn(N, C, H, W)
       z = layer(x)
       z.sum().backward()
 
@@ -318,12 +316,12 @@ class TestNN(unittest.TestCase):
 
     # create in tinygrad
     layer = InstanceNorm(C)
-    layer.weight = Tensor(torch_layer.weight.detach().numpy(), requires_grad=True)
-    layer.bias = Tensor(torch_layer.bias.detach().numpy(), requires_grad=True)
+    layer.weight = Tensor(torch_layer.weight.detach().numpy())
+    layer.bias = Tensor(torch_layer.bias.detach().numpy())
 
     for _ in range(10):
       # forward
-      x = Tensor.randn(N, C, D, H, W, requires_grad=True)
+      x = Tensor.randn(N, C, D, H, W)
       z = layer(x)
       z.sum().backward()
 
@@ -356,11 +354,10 @@ class TestNN(unittest.TestCase):
     B, T, embed_size = 4, 10, 20
     torch_layer = TorchRMSNorm(embed_size)
     layer = RMSNorm(embed_size)
-    layer.weight.requires_grad = True
 
     for _ in range(10):
       # forward
-      x = Tensor.randn(B, T, embed_size, requires_grad=True)
+      x = Tensor.randn(B, T, embed_size)
       z = layer(x)
       z.sum().backward()
 
@@ -377,7 +374,7 @@ class TestNN(unittest.TestCase):
 
     for _ in range(10):
       # forward
-      x = Tensor.randn(B, T, embed_size, requires_grad=True)
+      x = Tensor.randn(B, T, embed_size)
       z = layer(x)
       z.sum().backward()
 
@@ -431,17 +428,19 @@ class TestNN(unittest.TestCase):
     a = Tensor([[1, 5, 9, 11],
                 [12, 19, 8, 1]])
     result = layer(a)
-    schedule = result.schedule()
-    self.assertEqual(len([item for item in schedule if item.ast.op is Ops.SINK]), kcount, "first run realizes weight and embedding")
-    run_schedule(schedule)
+    linear, var_vals = result.linear_with_vars()
+    self.assertEqual(len([call for call in linear.src if call.src[0].op is Ops.SINK]), kcount,
+                     "first run realizes weight and embedding")
+    run_linear(linear, var_vals)
 
     b = Tensor([[1, 2, 3],
                 [4, 5, 6],
                 [7, 8, 9]])
     result = layer(b)
-    schedule = result.schedule()
-    self.assertEqual(1, len([item for item in schedule if item.ast.op is Ops.SINK]), "second run realizes embedding only")
-    run_schedule(schedule)
+    linear, var_vals = result.linear_with_vars()
+    self.assertEqual(1, len([call for call in linear.src if call.src[0].op is Ops.SINK]),
+                     "second run realizes embedding only")
+    run_linear(linear, var_vals)
     print(f"Embedding used {GlobalCounters.global_ops} ops")
     self.assertLessEqual(GlobalCounters.global_ops, ops)
 
