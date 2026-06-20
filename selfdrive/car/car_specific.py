@@ -50,12 +50,13 @@ class CarSpecificEvents:
     self.mute_seatbelt = False
     self.vCruise_prev = 250
     self.carrotCruise_prev = False
+    self.tesla_lkas_button_prev = False
 
   def update_params(self):
     if self.frame % 100 == 0:
       self.mute_seatbelt = self.params.get_bool("MuteSeatbelt")
       self.mute_door = self.params.get_bool("MuteDoor")
-    
+
   def update(self, CS: car.CarState, CS_prev: car.CarState, CC: car.CarControl):
     self.frame += 1
     self.update_params()
@@ -172,6 +173,15 @@ class CarSpecificEvents:
     else:
       events = self.create_common_events(CS, CS_prev)
 
+    # Tesla 3-finger infotainment press: toggle ExperimentalMode
+    if self.CP.brand == 'tesla':
+      lkas_pressed = any(b.type == ButtonType.lkas and b.pressed for b in CS.buttonEvents)
+      # Only allow toggling once the user has acknowledged the experimental mode warning (matches UI gate)
+      if lkas_pressed and not self.tesla_lkas_button_prev and self.params.get_bool("ExperimentalModeConfirmed"):
+        new_val = not self.params.get_bool("ExperimentalMode")
+        self.params.put_bool("ExperimentalMode", new_val)
+      self.tesla_lkas_button_prev = lkas_pressed
+
     if CC.enabled:
       if self.vCruise_prev == 0 and CS.vCruise > 0:
         events.add(EventName.audioPrompt)
@@ -187,7 +197,7 @@ class CarSpecificEvents:
   def create_common_events(self, CS: structs.CarState, CS_prev: car.CarState, extra_gears=None, pcm_enable=True,
                            allow_enable=True, allow_button_cancel=True):
     events = Events()
-    
+
     if CS.doorOpen and not self.mute_door:
       events.add(EventName.doorOpen)
     if CS.seatbeltUnlatched and not self.mute_seatbelt:

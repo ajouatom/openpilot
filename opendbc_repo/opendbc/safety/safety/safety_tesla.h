@@ -5,6 +5,30 @@
 static bool tesla_longitudinal = false;
 static bool tesla_stock_aeb = false;
 
+// FSD 14 support: flips ANGLE_CONTROL and LANE_KEEP_ASSIST control types
+static bool tesla_fsd_14 = false;
+
+// Stock steering control (LDA/ELDA/Autopark) conflict detection
+static bool tesla_stock_steering_control = false;
+static bool tesla_stock_steering_control_prev = false;
+
+// Summon/Autopark state: block openpilot messages when active
+static bool tesla_summon = false;
+static bool tesla_summon_prev = false;
+
+static int tesla_get_steer_ctrl_type(const int ctrl_type) {
+  // Returns the flipped control type for FSD 14 vehicles
+  int steer_ctrl_type = ctrl_type;
+  if (tesla_fsd_14) {
+    if (ctrl_type == 1) {
+      steer_ctrl_type = 2;
+    } else if (ctrl_type == 2) {
+      steer_ctrl_type = 1;
+    }
+  }
+  return steer_ctrl_type;
+}
+
 static void tesla_rx_hook(const CANPacket_t *to_push) {
   int bus = GET_BUS(to_push);
   int addr = GET_ADDR(to_push);
@@ -36,6 +60,21 @@ static void tesla_rx_hook(const CANPacket_t *to_push) {
 
     // Cruise state
     if (addr == 0x286) {
+      // Autopark/Summon state
+      int autopark_state = (GET_BYTE(to_push, 3) >> 1) & 0x0FU;  // DI_autoparkState
+      bool tesla_summon_now = (autopark_state == 3) ||  // ACTIVE
+                              (autopark_state == 4) ||  // COMPLETE
+                              (autopark_state == 9);    // SELFPARK_STARTED
+
+      // Only consider rising edges while controls are not allowed
+      if (tesla_summon_now && !tesla_summon_prev && !cruise_engaged_prev) {
+        tesla_summon = true;
+      }
+      if (!tesla_summon_now) {
+        tesla_summon = false;
+      }
+      tesla_summon_prev = tesla_summon_now;
+
       int cruise_state = (GET_BYTE(to_push, 1) >> 4) & 0x07U;
       bool cruise_engaged = (cruise_state == 2) ||  // ENABLED
                             (cruise_state == 3) ||  // STANDSTILL
@@ -43,6 +82,7 @@ static void tesla_rx_hook(const CANPacket_t *to_push) {
                             (cruise_state == 6) ||  // PRE_FAULT
                             (cruise_state == 7);    // PRE_CANCEL
 
+      cruise_engaged = cruise_engaged && !tesla_summon;
       vehicle_moving = cruise_state != 3; // STANDSTILL
       pcm_cruise_check(cruise_engaged);
     }
@@ -52,6 +92,22 @@ static void tesla_rx_hook(const CANPacket_t *to_push) {
     if (tesla_longitudinal && (addr == 0x2b9)) {
       // "AEB_ACTIVE"
       tesla_stock_aeb = (GET_BYTE(to_push, 2) & 0x03U) == 1U;
+    }
+
+    // DAS_steeringControl: detect stock steering control (LDA, ELDA, Autopark)
+    if (addr == 0x488) {
+      int steering_control_type = GET_BYTE(to_push, 2) >> 6;
+      bool tesla_stock_steering_control_now = steering_control_type != 0;  // any non-NONE
+
+      // Always respect the DAS's steering commands, including emergency evasive steering.
+      // Without this, openpilot would block the emergency steering from reaching the EPAS.
+      if (tesla_stock_steering_control_now && !tesla_stock_steering_control_prev) {
+        tesla_stock_steering_control = true;
+      }
+      if (!tesla_stock_steering_control_now) {
+        tesla_stock_steering_control = false;
+      }
+      tesla_stock_steering_control_prev = tesla_stock_steering_control_now;
     }
   }
 
@@ -88,16 +144,35 @@ static bool tesla_tx_hook(const CANPacket_t *to_send) {
   int addr = GET_ADDR(to_send);
   bool violation = false;
 
+  // Don't send any messages when Summon is active
+  if (tesla_summon) {
+    violation = true;
+  }
+
   // Steering control: (0.1 * val) - 1638.35 in deg.
   if (addr == 0x488) {
     // We use 1/10 deg as a unit here
     int raw_angle_can = ((GET_BYTE(to_send, 0) & 0x7FU) << 8) | GET_BYTE(to_send, 1);
     int desired_angle = raw_angle_can - 16384;
     int steer_control_type = GET_BYTE(to_send, 2) >> 6;
-    bool steer_control_enabled = (steer_control_type != 0) &&  // NONE
-                                 (steer_control_type != 3);    // DISABLED
+    const int angle_ctrl_type = tesla_get_steer_ctrl_type(1);
+    const int lkas_ctrl_type = tesla_get_steer_ctrl_type(2);
+    bool steer_control_enabled = (steer_control_type == angle_ctrl_type) ||  // ANGLE_CONTROL
+                                 (steer_control_type == lkas_ctrl_type);     // LANE_KEEP_ASSIST
 
     if (steer_angle_cmd_checks(desired_angle, steer_control_enabled, TESLA_STEERING_LIMITS)) {
+      violation = true;
+    }
+
+    bool valid_steer_control_type = (steer_control_type == 0) ||                // NONE
+                                    (steer_control_type == angle_ctrl_type) ||  // ANGLE_CONTROL
+                                    (steer_control_type == lkas_ctrl_type);     // LANE_KEEP_ASSIST
+    if (!valid_steer_control_type) {
+      violation = true;
+    }
+
+    if (tesla_stock_steering_control) {
+      // Don't allow any steering commands when stock steering control is active (LDA, ELDA, Autopark)
       violation = true;
     }
   }
@@ -110,16 +185,16 @@ static bool tesla_tx_hook(const CANPacket_t *to_send) {
       violation = true;
     }
 
+    // Don't send long/cancel messages when the stock AEB system is active
+    if (tesla_stock_aeb) {
+      violation = true;
+    }
+
     int raw_accel_max = ((GET_BYTE(to_send, 6) & 0x1FU) << 4) | (GET_BYTE(to_send, 5) >> 4);
     int raw_accel_min = ((GET_BYTE(to_send, 5) & 0x0FU) << 5) | (GET_BYTE(to_send, 4) >> 3);
     int acc_state = GET_BYTE(to_send, 1) >> 4;
 
     if (tesla_longitudinal) {
-      // Don't send messages when the stock AEB system is active
-      if (tesla_stock_aeb) {
-        violation = true;
-      }
-
       // Prevent both acceleration from being negative, as this could cause the car to reverse after coming to standstill
       if ((raw_accel_max < TESLA_LONG_LIMITS.inactive_accel) && (raw_accel_min < TESLA_LONG_LIMITS.inactive_accel)) {
         violation = true;
@@ -162,14 +237,22 @@ static int tesla_fwd_hook(CANPacket_t* to_send) {
 
   if (bus_num == 2) {
     bool block_msg = false;
-    // DAS_steeringControl, APS_eacMonitor
-    if ((addr == 0x488) || (addr == 0x27d)) {
-      block_msg = true;
-    }
 
-    // DAS_control
-    if (tesla_longitudinal && (addr == 0x2b9) && !tesla_stock_aeb) {
-      block_msg = true;
+    if (!tesla_summon) {
+      // APS_eacMonitor
+      if (addr == 0x27d) {
+        block_msg = true;
+      }
+
+      // DAS_steeringControl: block when no stock steering conflict
+      if ((addr == 0x488) && !tesla_stock_steering_control) {
+        block_msg = true;
+      }
+
+      // DAS_control
+      if (tesla_longitudinal && (addr == 0x2b9) && !tesla_stock_aeb) {
+        block_msg = true;
+      }
     }
 
     if (!block_msg) {
@@ -186,15 +269,25 @@ static safety_config tesla_init(uint16_t param) {
     {0x488, 0, 4},  // DAS_steeringControl
     {0x2b9, 0, 8},  // DAS_control
     {0x27D, 0, 3},  // APS_eacMonitor
+    {0x3E9, 1, 8},  // DAS_bodyControls (blinker on vehicle bus)
   };
 
-  UNUSED(param);
+  const uint16_t TESLA_FLAG_FSD_14 = 2;
+  tesla_fsd_14 = GET_FLAG(param, TESLA_FLAG_FSD_14);
+
 #ifdef ALLOW_DEBUG
   const int TESLA_FLAG_LONGITUDINAL_CONTROL = 1;
   tesla_longitudinal = GET_FLAG(param, TESLA_FLAG_LONGITUDINAL_CONTROL);
 #endif
 
   tesla_stock_aeb = false;
+  tesla_stock_steering_control = false;
+  tesla_stock_steering_control_prev = false;
+  // we used to assume Summon on startup; instead we tolerate a short
+  // window without TX (DI_state comes at 10 Hz). Panda safety will
+  // reject TX until the first DI_state message clears tesla_summon.
+  tesla_summon = false;
+  tesla_summon_prev = false;
 
   static RxCheck tesla_model3_y_rx_checks[] = {
     {.msg = {{0x2b9, 2, 8, .ignore_checksum = true, .ignore_counter = true,.frequency = 25U}, { 0 }, { 0 }}},   // DAS_control
