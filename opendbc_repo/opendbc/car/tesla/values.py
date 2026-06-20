@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, AngleSteeringLimits, ISO_LATERAL_ACCEL
 from opendbc.car.structs import CarParams, CarState
-from opendbc.car.docs_definitions import CarDocs, CarFootnote, CarHarness, CarParts, Column
+from opendbc.car.docs_definitions import CarDocs, CarFootnote, CarHarness, CarParts, Column, SupportType
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries
 
 Ecu = CarParams.Ecu
@@ -33,6 +33,11 @@ class TeslaCarDocsHW4(CarDocs):
   car_parts: CarParts = field(default_factory=CarParts.common([CarHarness.tesla_b]))
   footnotes: list[Enum] = field(default_factory=lambda: [Footnote.HW_TYPE, Footnote.SETUP])
 
+@dataclass
+class TeslaCarHW4ModelSXDocs(TeslaCarDocsHW4):
+  support_type: SupportType = SupportType.COMMUNITY
+  support_link: str = "#community"
+
 
 @dataclass
 class TeslaPlatformConfig(PlatformConfig):
@@ -57,6 +62,10 @@ class CAR(Platforms):
     CarSpecs(mass=2072., wheelbase=2.890, steerRatio=12.0),
     {Bus.party: 'tesla_model3_party', Bus.radar: 'tesla_radar_continental_generated'},
   )
+  TESLA_MODEL_X = TeslaPlatformConfig(
+    [TeslaCarHW4ModelSXDocs("Tesla Model X (with HW4) 2024")],
+    CarSpecs(mass=2495., wheelbase=2.960, steerRatio=12.0),
+  )
 
 
 FW_QUERY_CONFIG = FwQueryConfig(
@@ -68,6 +77,18 @@ FW_QUERY_CONFIG = FwQueryConfig(
     )
   ]
 )
+
+# Cars with this EPS FW have FSD 14 and use TeslaFlags.FSD_14
+FSD_14_FW = {
+  CAR.TESLA_MODEL_3: [
+    b'TeMYG4_Main_0.0.0 (77),E4HP015.04.5',
+    b'TeMYG4_Main_0.0.0 (78),E4HP015.05.0',
+  ],
+  CAR.TESLA_MODEL_Y: [
+    b'TeMYG4_Legacy3Y_0.0.0 (6),Y4003.04.0',
+    b'TeMYG4_Main_0.0.0 (77),Y4003.05.4',
+  ]
+}
 
 
 class CANBUS:
@@ -113,15 +134,20 @@ class CarControllerParams:
   ACCEL_MIN = -3.48  # m/s^2
   JERK_LIMIT_MAX = 4.9  # m/s^3, ACC faults at 5.0
   JERK_LIMIT_MIN = -4.9  # m/s^3, ACC faults at 5.0
+  JERK_UP = 1.0  # m/s^3
 
 
 class TeslaSafetyFlags(IntFlag):
   LONG_CONTROL = 1
+  FSD_14 = 2
 
 
 class TeslaFlags(IntFlag):
   LONG_CONTROL = 1
+  FSD_14 = 2
   MISSING_DAS_SETTINGS = 4
+  HAS_VEHICLE_BUS = 8
+  HAS_DAS_BODY_CONTROLS = 16
 
 
 DBC = CAR.create_dbc_map()
