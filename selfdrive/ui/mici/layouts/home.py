@@ -12,6 +12,8 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.version import RELEASE_BRANCHES
 
+from openpilot.system.ui.widgets.network import WifiManagerUI, WifiManager
+
 HEAD_BUTTON_FONT_SIZE = 40
 HOME_PADDING = 8
 
@@ -93,6 +95,12 @@ class MiciHomeLayout(Widget):
     self._version_text = None
     self._experimental_mode = False
 
+    self._ip_address = "Offline"
+
+    self.wifi_manager = WifiManager()
+    self.wifi_manager_ui = WifiManagerUI(self.wifi_manager)
+
+    self._settings_icon = IconWidget("icons_mici/settings.png", (48, 48), opacity=0.9)
     self._experimental_icon = IconWidget("icons_mici/experimental_mode.png", (48, 48))
     self._mic_icon = IconWidget("icons_mici/microphone.png", (32, 46))
 
@@ -103,12 +111,12 @@ class MiciHomeLayout(Widget):
       self._mic_icon,
     ], spacing=18)
 
-    self._openpilot_label = UnifiedLabel("carrotpilot", font_size=75, font_weight=FontWeight.DISPLAY, max_width=480, wrap_text=False)
-    self._version_label = UnifiedLabel("", font_size=36, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
+    self._openpilot_label = UnifiedLabel("carrotpilot", font_size=55, font_weight=FontWeight.DISPLAY, max_width=480, wrap_text=False)
+    self._version_label = UnifiedLabel("", font_size=30, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
     self._large_version_label = UnifiedLabel("", font_size=64, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
-    self._date_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
-    self._branch_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, scroll=True)
-    self._version_commit_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
+    self._date_label = UnifiedLabel("", font_size=30, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
+    self._branch_label = UnifiedLabel("", font_size=30, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, scroll=True)
+    self._ip_label = UnifiedLabel("", font_size=30, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
 
   def show_event(self):
     super().show_event()
@@ -119,6 +127,8 @@ class MiciHomeLayout(Widget):
     self._experimental_mode = ui_state.params.get_bool("ExperimentalMode")
 
   def _update_state(self):
+    self.wifi_manager_ui._update_state()
+
     if self.is_pressed and not self._is_pressed_prev:
       self._mouse_down_t = time.monotonic()
     elif not self.is_pressed and self._is_pressed_prev:
@@ -138,6 +148,8 @@ class MiciHomeLayout(Widget):
     if rl.get_time() - self._last_refresh > 5.0:
       # Update version text
       self._version_text = self._get_version_text()
+      ip = self.wifi_manager_ui.ip_address
+      self._ip_address = ip if ip else "Offline"
       self._last_refresh = rl.get_time()
       self._update_params()
 
@@ -160,9 +172,8 @@ class MiciHomeLayout(Widget):
 
     commit_date_raw = ui_state.params.get("GitCommitDate")
     try:
-      # GitCommitDate format from get_commit_date(): '%ct %ci' e.g. "'1708012345 2024-02-15 ...'"
       unix_ts = int(commit_date_raw.strip("'").split()[0])
-      date_str = datetime.datetime.fromtimestamp(unix_ts).strftime("%b %d")
+      date_str = datetime.datetime.fromtimestamp(unix_ts).strftime("%Y/%m/%d")
     except (ValueError, IndexError, TypeError, AttributeError):
       date_str = ""
 
@@ -170,37 +181,48 @@ class MiciHomeLayout(Widget):
 
   def _render(self, _):
     # TODO: why is there extra space here to get it to be flush?
-    text_pos = rl.Vector2(self.rect.x - 2 + HOME_PADDING, self.rect.y - 16)
+    text_pos = rl.Vector2(self.rect.x - 2 + HOME_PADDING, self.rect.y - 5)
     self._openpilot_label.set_position(text_pos.x, text_pos.y)
     self._openpilot_label.render()
 
     if self._version_text is not None:
       # release branch
       release_branch = self._version_text[1] in RELEASE_BRANCHES
-      version_pos = rl.Rectangle(text_pos.x, text_pos.y + self._openpilot_label.font_size + 16, 100, 44)
-      self._version_label.set_text(self._version_text[0])
-      self._version_label.set_position(version_pos.x, version_pos.y)
+
+      # 1번째 줄: carrotpilot 옆에 버전
+      version_y = text_pos.y + self._openpilot_label.font_size - self._version_label.font_size
+      self._version_label.set_text(" " + self._version_text[0])
+      self._version_label.set_position(text_pos.x + self._openpilot_label.text_width + 8, version_y)
       self._version_label.render()
 
-      self._date_label.set_text(" " + self._version_text[3])
-      self._date_label.set_position(version_pos.x + self._version_label.text_width + 10, version_pos.y)
-      self._date_label.render()
+      line_x = text_pos.x
+      line_y = text_pos.y + self._openpilot_label.font_size + 12
 
-      self._branch_label.set_max_width(gui_app.width - self._version_label.text_width - self._date_label.text_width - 32)
-      branch_text = "release" if release_branch else self._version_text[1]
-      self._branch_label.set_text(" " + branch_text)
-      self._branch_label.set_position(version_pos.x + self._version_label.text_width + self._date_label.text_width + 20, version_pos.y)
+      # 2번째 줄: 브랜치명
+      branch_name = "release" if release_branch else self._version_text[1]
+      self._branch_label.set_max_width(self.rect.width - HOME_PADDING * 2)
+      self._branch_label.set_text(branch_name)
+      self._branch_label.set_position(line_x, line_y)
       self._branch_label.render()
+      line_y += self._branch_label.font_size + 6
 
+      # 3번째 줄: 날짜 (커밋, 모델명)
+      date_text = self._version_text[3]
       if not release_branch:
-        # 2nd line
         commit_text = self._version_text[2]
         model = ui_state.params.get("DrivingModelName") or ""
         if model:
           commit_text = f"{commit_text}  {model}"
-        self._version_commit_label.set_text(commit_text)
-        self._version_commit_label.set_position(version_pos.x, version_pos.y + self._date_label.font_size + 7)
-        self._version_commit_label.render()
+        date_text = f"{date_text} ({commit_text})"
+      self._date_label.set_text(date_text)
+      self._date_label.set_position(line_x, line_y)
+      self._date_label.render()
+      line_y += self._date_label.font_size + 6
+
+      # 4번째 줄: wifi(IP) 주소
+      self._ip_label.set_text(self._ip_address)
+      self._ip_label.set_position(line_x, line_y)
+      self._ip_label.render()
 
     # ***** Center-aligned bottom section icons *****
     self._experimental_icon.set_visible(self._experimental_mode)
