@@ -1,10 +1,9 @@
 import unittest
 from tinygrad import Tensor, Device, dtypes, Context
-from tinygrad.device import is_dtype_supported
-from tinygrad.helpers import getenv, system
+from tinygrad.helpers import getenv, system, DEV
 from extra.gemm.cdna_asm_gemm import asm_gemm
 from test.helpers import needs_second_gpu
-from examples.mlperf.models.flat_llama import FP8_DTYPE
+from examples.mlperf.models.flat_llama import FP8_DTYPE, quantize_fp8, FP8_MAX
 
 # On non CDNA4 it will only validate the Tensor.custom_kernel integration
 # Use DEV=NULL:HIP:gfx950 to also test the assembly
@@ -12,33 +11,48 @@ def is_cdna4(): return Device[Device.DEFAULT].renderer.target.arch.startswith("g
 
 def run_asm_gemm(a_shape, b_shape, dtype=dtypes.float16, a_shard=None, b_shard=None, gpus:int=1) -> None:
   Tensor.manual_seed(0)
-  a_rand = Tensor.randn(a_shape, dtype=dtypes.float).sub(0.5).cast(dtype)
-  b_rand = Tensor.randn(b_shape, dtype=dtypes.float).sub(0.5).cast(dtype)
+  input_dtype = dtypes.bfloat16 if dtype == FP8_DTYPE else dtype
+  a_rand = Tensor.randn(a_shape, dtype=dtypes.float).sub(0.5).cast(input_dtype)
+  b_rand = Tensor.randn(b_shape, dtype=dtypes.float).sub(0.5).cast(input_dtype)
   with Context(DEBUG=0):
     Tensor.realize(a_rand, b_rand)
 
   devs = tuple(f"{Device.DEFAULT}:{i}" for i in range(gpus)) if (multi:=gpus>1) else None
 
-  a, b = a_rand.clone().requires_grad_(), b_rand.clone().requires_grad_()
+  if dtype == FP8_DTYPE:
+    a_rand, x_scale, _ = quantize_fp8(a_rand)
+    b_rand, w_scale, _ = quantize_fp8(b_rand)
+    grad_amax_state = Tensor.full((), FP8_MAX, dtype=dtypes.float32, device=devs).contiguous()
+    with Context(DEBUG=0):
+      Tensor.realize(a_rand, x_scale, b_rand, w_scale, grad_amax_state)
+
+  # clone all inputs before any backward: a clone copies the source's current .grad
+  a, b = a_rand.clone(), b_rand.clone()
+  if dtype == FP8_DTYPE:
+    a_ref, b_ref = a_rand.detach().cast(dtypes.bfloat16), b_rand.detach().cast(dtypes.bfloat16)
+  else:
+    a_ref, b_ref = a_rand.clone(), b_rand.clone()
   if multi: a, b = a.shard(devs, axis=a_shard), b.shard(devs, axis=b_shard)
-  tst = asm_gemm(a, b)
+  if dtype == FP8_DTYPE:
+    tst = asm_gemm(a, b, x_scale=x_scale, w_scale=w_scale, grad_amax_state=grad_amax_state)
+  else:
+    tst = asm_gemm(a, b)
   tst.sum().backward()
   Tensor.realize(tst, a.grad, b.grad)
 
-  a_ref, b_ref = a_rand.clone().requires_grad_(), b_rand.clone().requires_grad_()
-  # do reference gemm in bf16 for fp8, adjusting atol for quantization effects
-  if a_ref.dtype == FP8_DTYPE:
-    a_ref = a_ref.cast(dtypes.bfloat16)
-    b_ref = b_ref.cast(dtypes.bfloat16)
   if multi: a_ref, b_ref = a_ref.shard(devs, axis=a_shard), b_ref.shard(devs, axis=b_shard)
-  ref = a_ref @ b_ref
+  if dtype == FP8_DTYPE:
+    ref = ((a_ref @ b_ref) * x_scale * w_scale).cast(dtypes.bfloat16)
+  else:
+    ref = a_ref @ b_ref
   ref.sum().backward()
   Tensor.realize(ref, a_ref.grad, b_ref.grad)
 
   # no validation on the NULL device
   if a_rand.device.startswith("NULL"): return None
   atol, rtol = (2e-1, 1e-2) if dtype == dtypes.bfloat16 else (256, 1e-2) if dtype == FP8_DTYPE else (1e-2, 1e-3)
-  grad_atol, grad_rtol = (16895, 0.125) if dtype == FP8_DTYPE else (atol, rtol)
+  # allow more rtol for multi because of ALLREDUCE_CAST
+  grad_atol, grad_rtol = (16895, 0.125) if dtype == FP8_DTYPE else (atol, 2e-2 if multi else rtol)
   with Context(DEBUG=0):
     # enable for debugging, slow for larger gemms
     if getenv("USE_NPY"):
@@ -46,9 +60,9 @@ def run_asm_gemm(a_shape, b_shape, dtype=dtypes.float16, a_shard=None, b_shard=N
       np.testing.assert_allclose(tst.numpy(), ref.numpy(), atol=atol, rtol=rtol)
       np.testing.assert_allclose(a.grad.numpy(), a_ref.grad.numpy(), atol=grad_atol, rtol=grad_rtol)
       np.testing.assert_allclose(b.grad.numpy(), b_ref.grad.numpy(), atol=grad_atol, rtol=grad_rtol)
-    assert tst.allclose(ref, atol=atol, rtol=rtol), "forward mismatch"
-    assert a.grad.allclose(a_ref.grad, atol=grad_atol, rtol=grad_rtol), "grad_a mismatch"
-    assert b.grad.allclose(b_ref.grad, atol=grad_atol, rtol=grad_rtol), "grad_b mismatch"
+    assert tst.allclose(ref, atol=atol, rtol=rtol).item(), "forward mismatch"
+    assert a.grad.allclose(a_ref.grad, atol=grad_atol, rtol=grad_rtol).item(), "grad_a mismatch"
+    assert b.grad.allclose(b_ref.grad, atol=grad_atol, rtol=grad_rtol).item(), "grad_b mismatch"
 
 def verify_asm_gemm(batch:int, M:int, N:int, K:int, dtype=dtypes.float16, gpus:int=1) -> None:
   run_asm_gemm((batch, M, K), (K, N), dtype=dtype, a_shard=0, b_shard=None, gpus=gpus)
@@ -70,7 +84,7 @@ def verify_asm_gemm_k_sharded_3d(batch:int, M:int, N:int, K:int, dtype=dtypes.fl
 
 # 128x smaller than usual
 # uses the UOp GEMM, runs on non CDNA4 and CI
-@unittest.skipUnless(is_dtype_supported(dtypes.half), "need half")
+@unittest.skipUnless(dtypes.half in Device[Device.DEFAULT].renderer.supported_dtypes(), "need half")
 class TestGemm(unittest.TestCase):
   def setUp(self):
     if is_cdna4(): self.skipTest("shapes are too small for the assembly GEMM")
@@ -131,19 +145,25 @@ class TestGemmLlama(unittest.TestCase):
   dtype = dtypes.bfloat16
 
   def setUp(self):
-    if not is_cdna4() or getenv("MOCKGPU"):
+    if not is_cdna4() or DEV.interface.startswith("MOCK"):
       self.skipTest("very slow on non mi350x")
 
   def test_empty(self): asm_gemm(Tensor.empty(N:=getenv("N", 4096), N, dtype=self.dtype), Tensor.empty(N, N, dtype=self.dtype)).realize()
 
   def test_empty_bw(self):
-    x = Tensor.empty(1, N:=getenv("N", 4096), N, dtype=self.dtype, requires_grad=True)
-    y = Tensor.empty((N, N), dtype=self.dtype, requires_grad=True)
-    z = asm_gemm(x, y)
+    x = Tensor.empty(1, N:=getenv("N", 4096), N, dtype=self.dtype)
+    y = Tensor.empty((N, N), dtype=self.dtype)
+    if self.dtype == FP8_DTYPE:
+      x_scale = Tensor.empty((), dtype=dtypes.float32)
+      w_scale = Tensor.empty((), dtype=dtypes.float32)
+      grad_amax_state = Tensor.empty((), dtype=dtypes.float32).contiguous()
+      z = asm_gemm(x, y, x_scale=x_scale, w_scale=w_scale, grad_amax_state=grad_amax_state)
+    else:
+      z = asm_gemm(x, y)
     z.sum().backward()
     Tensor.realize(z, x.grad, y.grad)
-    # FP8 forward output is bf16, gradients use fp8e5m2 (aka bf8)
-    grad_dtype = dtypes.fp8e5m2 if self.dtype == FP8_DTYPE else self.dtype
+    # FP8 GEMM stores bf16 output and its backward produces bf16 gradients.
+    grad_dtype = dtypes.bfloat16 if self.dtype == FP8_DTYPE else self.dtype
     assert z.dtype == dtypes.bfloat16
     assert x.grad.dtype == y.grad.dtype == grad_dtype
 
@@ -209,6 +229,127 @@ def has_hipcc():
 
 @unittest.skipUnless(has_hipcc(), "FP8 gemm requires hipcc to compile")
 class TestGemmLlamaFP8(TestGemmLlama): dtype = FP8_DTYPE
+
+# mxfp8: 1x32 block scaling along K, e8m0 scales packed iteration-major (K/128, dim) uint32
+def quantize_mxfp8(x:Tensor) -> tuple[Tensor, Tensor, Tensor]:
+  rows, K = x.shape
+  scale_K, k_iters = K // 32, K // 128
+  xb = x.reshape(rows, scale_K, 32).float()
+  amax = xb.abs().max(axis=-1)
+  e8 = (amax.log2().floor() + 127).clamp(0, 254)
+  e8 = (amax == 0).where(Tensor.zeros_like(e8), e8).cast(dtypes.uint8)
+  xq = (xb * (127.0 - e8.cast(dtypes.float32)).exp2().reshape(rows, scale_K, 1)).cast(FP8_DTYPE).reshape(rows, K)
+  packed = e8.reshape(rows, k_iters, 4).bitcast(dtypes.uint32).reshape(rows, k_iters).permute(1, 0)
+  return xq.contiguous(), e8, packed.contiguous()
+
+def dequant_mxfp8(xq:Tensor, e8:Tensor) -> Tensor:
+  rows, K = xq.shape
+  scale = (e8.cast(dtypes.float32) - 127.0).exp2()
+  return (xq.float().reshape(rows, K // 32, 32) * scale.reshape(rows, K // 32, 1)).reshape(rows, K)
+
+def run_mxfp8_gemm(M:int, N:int, K:int) -> None:
+  import functools
+  from extra.gemm.cdna_asm_gemm import custom_hk_mxfp8_gemm
+  Tensor.manual_seed(0)
+  a = (Tensor.randn(M, K, dtype=dtypes.float) * 0.5).realize()
+  b = (Tensor.randn(N, K, dtype=dtypes.float) * 0.5).realize()
+  a_q, a_e8, a_si = quantize_mxfp8(a)
+  b_q, b_e8, b_si = quantize_mxfp8(b)
+  Tensor.realize(a_q, a_e8, a_si, b_q, b_e8, b_si)
+
+  out = Tensor.invalids(1, M, N, dtype=dtypes.bfloat16, device=a.device)
+  tst = out.custom_kernel(a_q.unsqueeze(0), b_q, a_si, b_si, fxn=functools.partial(custom_hk_mxfp8_gemm, dname=a.device))[0].squeeze(0)
+  ref_mx = dequant_mxfp8(a_q, a_e8) @ dequant_mxfp8(b_q, b_e8).T
+  ref = a @ b.T
+  Tensor.realize(tst, ref_mx, ref)
+  if a.device.startswith("NULL"): return
+  err_mx = ((tst.float() - ref_mx).abs().mean() / ref_mx.abs().mean()).item()
+  err = ((tst.float() - ref).abs().mean() / ref.abs().mean()).item()
+  assert err_mx < 1e-2, f"kernel vs mxfp8 reference rel err {err_mx}"
+  assert err < 6e-2, f"kernel vs fp32 rel err {err}"
+
+def run_mx_gemm_bw(M:int, N:int, K:int, w_post:bool=False) -> None:
+  Tensor.manual_seed(0)
+  a_rand = (Tensor.randn(M, K, dtype=dtypes.float) * 0.5).cast(dtypes.bfloat16).realize()
+  b_rand = (Tensor.randn(N, K, dtype=dtypes.float) * 0.5).cast(dtypes.bfloat16).realize()
+  w_post_scale = (Tensor.rand(N, dtype=dtypes.float) + 0.5).realize() if w_post else None
+  a, b, a_ref, b_ref = a_rand.clone(), b_rand.clone(), a_rand.clone(), b_rand.clone()
+  tst = asm_gemm(a, b.T, mx=True, w_post_scale=w_post_scale)
+  tst.sum().backward()
+  Tensor.realize(tst, a.grad, b.grad)
+  a_grad, b_grad = a.grad.float().contiguous().realize(), b.grad.float().contiguous().realize()
+  ref = a_ref.float() @ b_ref.float().T
+  if w_post is not None and w_post_scale is not None: ref = ref * w_post_scale.reshape(1, -1)
+  ref.sum().backward()
+  ref_b_grad = b_ref.grad / w_post_scale.reshape(-1, 1) if w_post_scale is not None else b_ref.grad
+  Tensor.realize(ref, a_ref.grad, b_ref.grad)
+  if a.device.startswith("NULL"): return
+  for name, t, r in [("fw", tst, ref), ("grad_a", a_grad, a_ref.grad), ("grad_b", b_grad, ref_b_grad)]:
+    err = ((t.float() - r.float()).abs().mean() / (r.float().abs().mean() + 1e-8)).item()
+    assert err < 6e-2, f"{name} rel err {err}"
+
+def run_mx_gemm_multi(M:int, N:int, K:int, x_shard, w_shard, g_shard, gpus:int=2) -> None:
+  Tensor.manual_seed(0)
+  devs = tuple(f"{Device.DEFAULT}:{i}" for i in range(gpus))
+  x_r = (Tensor.randn(M, K, dtype=dtypes.float) * 0.5).cast(dtypes.bfloat16).realize()
+  w_r = (Tensor.randn(N, K, dtype=dtypes.float) * 0.5).cast(dtypes.bfloat16).realize()
+  def run(shard):
+    x = (x_r.shard(devs, axis=x_shard) if shard else x_r.clone())
+    w = (w_r.shard(devs, axis=w_shard) if shard else w_r.clone())
+    out = asm_gemm(x, w.T, mx=True)
+    gmul = Tensor.ones(M, N).cast(dtypes.bfloat16)
+    (out.float() * (gmul.shard(devs, axis=g_shard) if shard else gmul).float()).sum().backward()
+    Tensor.realize(out, x.grad, w.grad)
+    to = (lambda t: t.to(Device.DEFAULT)) if shard else (lambda t: t)
+    return to(out).float().numpy(), to(x.grad).float().numpy(), to(w.grad).float().numpy()
+  ref = run(False)
+  if Device.DEFAULT.startswith("NULL"): return
+  got = run(True)
+  for name, g, r in zip(("fw", "grad_x", "grad_w"), got, ref):
+    err = ((abs(g - r)).mean() / (abs(r).mean() + 1e-8))
+    assert err < 2e-2, f"{name} sharded vs single rel err {err}"
+
+def run_mx_prequant(M:int, N:int, K:int) -> None:
+  from extra.gemm.cdna_asm_gemm import quantize_mxfp8
+  Tensor.manual_seed(0)
+  x_rand = (Tensor.randn(M, K, dtype=dtypes.float) * 0.5).cast(dtypes.bfloat16).realize()
+  w_rand = (Tensor.randn(N, K, dtype=dtypes.float) * 0.5).cast(dtypes.bfloat16).realize()
+  x, w = x_rand.clone(), w_rand.clone()
+  x_q, x_e8, x_si = quantize_mxfp8(x)
+  w_q, w_e8, w_si = quantize_mxfp8(w)
+  out = asm_gemm(x_q, w_q.T, mx=True, mx_scales=(x_si, x_e8, w_si, w_e8))
+  out.sum().backward()
+  Tensor.realize(out, x.grad, w.grad)
+  if Device.DEFAULT.startswith("NULL"): return
+  ref_out, gx = x_rand.float() @ w_rand.float().T, w_rand.float().sum(0)
+  gw = x_rand.float().sum(0).reshape(1, K).expand(N, K)
+  for name, t, r in [("fw", out, ref_out), ("grad_x", x.grad, gx), ("grad_w", w.grad, gw)]:
+    err = ((t.float() - r.float()).abs().mean() / (r.float().abs().mean() + 1e-8)).item()
+    assert err < 6e-2, f"{name} prequant vs analytic rel err {err}"
+
+@unittest.skipUnless(has_hipcc(), "MXFP8 gemm requires hipcc to compile")
+class TestGemmMXFP8(unittest.TestCase):
+  def setUp(self):
+    if not is_cdna4() or DEV.interface.startswith("MOCK"): self.skipTest("mxfp8 gemm is only for cdna4")
+  def test_prequant_simple(self): run_mx_prequant(256, 256, 256)
+  def test_prequant_rect(self): run_mx_prequant(512, 256, 512)
+  def test_simple(self): run_mxfp8_gemm(N:=getenv("N", 256), N, 2*128)
+  def test_rect(self): run_mxfp8_gemm(512, 256, 512)
+  def test_llama_ffn(self): run_mxfp8_gemm(8192, 14336, 4096)
+  def test_llama_ffn2(self): run_mxfp8_gemm(8192, 4096, 14336)
+  def test_llama_qkv(self): run_mxfp8_gemm(8192, 4096, 4096)
+  # backward needs all dims tile-aligned (dgrad reduces N, wgrad reduces M)
+  def test_bw_simple(self): run_mx_gemm_bw(256, 256, 256)
+  def test_bw_rect(self): run_mx_gemm_bw(512, 256, 512)
+  def test_bw_w_post(self): run_mx_gemm_bw(256, 256, 256, w_post=True)
+  def test_bw_llama_qkv(self): run_mx_gemm_bw(8192, 4096, 4096)
+  # MP sharding: col-parallel (w on out axis), row-parallel (x,w on in axis)
+  @needs_second_gpu
+  def test_multi_col_parallel(self): run_mx_gemm_multi(512, 512, 512, x_shard=None, w_shard=0, g_shard=1)
+  @needs_second_gpu
+  def test_multi_row_parallel(self): run_mx_gemm_multi(512, 512, 512, x_shard=1, w_shard=1, g_shard=None)
+  @needs_second_gpu
+  def test_multi_data_parallel(self): run_mx_gemm_multi(512, 512, 512, x_shard=0, w_shard=None, g_shard=0)
 
 class TestMagicGu(unittest.TestCase):
   def test_magicgu_matches_old(self):

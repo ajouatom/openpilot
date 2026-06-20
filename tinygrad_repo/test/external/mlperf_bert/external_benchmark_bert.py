@@ -4,7 +4,7 @@ from tinygrad import Tensor, TinyJit, GlobalCounters, Device
 from tinygrad.helpers import getenv, Context
 from tinygrad.nn.optim import LAMB
 from tinygrad.nn.state import get_parameters
-from tinygrad.engine.realize import run_schedule
+from tinygrad.engine.realize import run_linear
 
 from extra.models import bert
 
@@ -49,17 +49,17 @@ class BenchmarkBertTrain(unittest.TestCase):
 
       y = layer(*inputs).contiguous().contiguous_backward()
       y.sum().backward()
-      if getenv("ASSIGN", 1): sched, _ = Tensor.schedule_with_vars(y, *list(inputs), *optim.schedule_step())
-      else: sched, _ = Tensor.schedule_with_vars(y, *list(inputs), *[t.grad for t in optim.params])
+      if getenv("ASSIGN", 1): linear, var_vals = Tensor.linear_with_vars(y, *list(inputs), *optim.schedule_step())
+      else: linear, var_vals = Tensor.linear_with_vars(y, *list(inputs), *[t.grad for t in optim.params])
 
       for _ in range(JITCNT):
-        run_schedule(sched)
+        run_linear(linear, var_vals)
 
     CNT = getenv("CNT", 5)
     best_tm = None
     flops, mem_used, mem, kernels = None, None, None, None
     for _ in range(CNT):
-      with Context(TRACK_MATCH_STATS=0): inputs = [Tensor.randn(*shape, requires_grad=False).realize() for shape in input_shapes]
+      with Context(TRACK_MATCH_STATS=0): inputs = [Tensor.randn(*shape).realize() for shape in input_shapes]
       GlobalCounters.reset()
 
       st = time.perf_counter()

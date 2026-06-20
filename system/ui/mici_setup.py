@@ -316,7 +316,7 @@ class NetworkSetupPageBase(Scroller):
 
     def on_waiting_click():
       offset = (self._wifi_button.rect.x + self._wifi_button.rect.width / 2) - (self._rect.x + self._rect.width / 2)
-      self._scroller.scroll_to(offset, smooth=True, block_interaction=True)
+      self._scroller.scroll_to(offset, smooth=True, block_interrupt=True, block_widget_interaction=True)
       # trigger grow when wifi button in view
       self._pending_wifi_grow_animation = True
 
@@ -399,7 +399,7 @@ class NetworkSetupPageBase(Scroller):
     self._scroller._layout()
     end_offset = -(self._scroller.content_size - self._rect.width)
     remaining = self._scroller.scroll_panel.get_offset() - end_offset
-    self._scroller.scroll_to(remaining, smooth=True, block_interaction=True)
+    self._scroller.scroll_to(remaining, smooth=True, block_interrupt=True, block_widget_interaction=True)
     self._pending_continue_grow_animation = True
 
   def set_custom_software(self, custom_software: bool):
@@ -574,7 +574,8 @@ def main():
     try:
       set_core_affinity([5])
     except OSError:
-      cloudlog.exception("Failed to set core affinity for setup process")
+      cores = sorted(os.sched_getaffinity(0))
+      cloudlog.warning(f"Skipping core 5 affinity for setup process, available cores: {cores}")
 
   try:
     gui_app.init_window("Setup")

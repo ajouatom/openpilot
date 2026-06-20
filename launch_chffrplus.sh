@@ -44,6 +44,43 @@ function start_carrot_recovery {
   (cd "$DIR" && "$py_bin" "$recovery_script" --port 6999 >> /tmp/carrot_recovery.log 2>&1 &)
 }
 
+function invalidate_modeld_build_if_needed {
+  local stamp_path="$DIR/selfdrive/modeld/models/.build_stamp"
+  local tg_devices_path="$DIR/selfdrive/modeld/models/tg_input_devices.json"
+  local driving_pkl_path="$DIR/selfdrive/modeld/models/driving_tinygrad.pkl"
+  local old_stamp
+
+  MODEL_BUILD_STAMP_VALUE="$(git rev-parse HEAD:selfdrive/modeld HEAD:tinygrad_repo HEAD:common/file_chunker.py 2>/dev/null | tr '\n' ':')"
+  if [ -z "$MODEL_BUILD_STAMP_VALUE" ]; then
+    MODEL_BUILD_STAMP_VALUE="$(git rev-parse HEAD 2>/dev/null || true)"
+  fi
+
+  old_stamp="$(cat "$stamp_path" 2>/dev/null || true)"
+  if [ "$MODEL_BUILD_STAMP_VALUE" != "$old_stamp" ] || [ ! -f "$tg_devices_path" ] || { [ ! -f "$driving_pkl_path" ] && [ ! -f "$driving_pkl_path.chunkmanifest" ]; }; then
+    echo "Model/tinygrad inputs changed, invalidating generated modeld artifacts."
+    rm -f "$DIR"/selfdrive/modeld/models/*_tinygrad.pkl*
+    rm -f "$DIR"/selfdrive/modeld/models/*_metadata.pkl
+    rm -f "$DIR"/selfdrive/modeld/models/tg_input_devices.json
+    FORCE_REBUILD=1
+  fi
+}
+
+function invalidate_native_build_if_needed {
+  local missing=0
+  local path
+
+  for path in "$DIR/system/loggerd/loggerd" "$DIR/system/loggerd/encoderd" "$DIR/system/camerad/camerad"; do
+    if [ ! -x "$path" ]; then
+      echo "Missing native binary: $path"
+      missing=1
+    fi
+  done
+
+  if [ "$missing" = "1" ]; then
+    FORCE_REBUILD=1
+  fi
+}
+
 function launch {
   # Remove orphaned git lock if it exists on boot
   [ -f "$DIR/.git/index.lock" ] && rm -f $DIR/.git/index.lock
@@ -94,6 +131,10 @@ function launch {
   if [ -f /AGNOS ]; then
     agnos_init
   fi
+
+  FORCE_REBUILD=0
+  invalidate_modeld_build_if_needed
+  invalidate_native_build_if_needed
 
   rm selfdrive/pandad/*.so
   # write tmux scrollback to a file
@@ -165,8 +206,15 @@ function launch {
 
   # start manager
   cd system/manager
-  if [ ! -f $DIR/prebuilt ]; then
-    ./build.py
+  if [ "$FORCE_REBUILD" = "1" ] || [ ! -f $DIR/prebuilt ]; then
+    if ! ./build.py; then
+      echo "openpilot build failed, not starting manager."
+      while true; do sleep 1; done
+    fi
+    if [ "$FORCE_REBUILD" = "1" ]; then
+      mkdir -p "$DIR/selfdrive/modeld/models"
+      echo -n "$MODEL_BUILD_STAMP_VALUE" > "$DIR/selfdrive/modeld/models/.build_stamp"
+    fi
   fi
   ./manager.py
 

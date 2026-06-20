@@ -38,13 +38,9 @@ void VisionIpcServer::create_buffers(VisionStreamType type, size_t num_buffers, 
   // TODO: assert that this type is not created yet
   assert(num_buffers < VISIONIPC_MAX_FDS);
 
-  size_t size = 0;
-  size_t stride = 0;
-  size_t uv_offset = 0;
-
-  size = width * height * 3 / 2;
-  stride = width;
-  uv_offset = width * height;
+  size_t size = width * height * 3 / 2;
+  size_t stride = width;
+  size_t uv_offset = width * height;
 
   create_buffers_with_sizes(type, num_buffers, width, height, size, stride, uv_offset);
 }
@@ -105,7 +101,11 @@ void VisionIpcServer::listener(){
 
     VisionStreamType type = VisionStreamType::VISION_STREAM_MAX;
     int r = ipc_sendrecv_with_fds(false, fd, &type, sizeof(type), nullptr, 0, nullptr);
-    assert(r == sizeof(type));
+    if (r != sizeof(type)) {
+      close(fd);
+      if (should_exit) break;
+      continue;
+    }
 
     // send available stream types
     if (type == VisionStreamType::VISION_STREAM_MAX) {
@@ -184,7 +184,13 @@ void VisionIpcServer::send(VisionBuf * buf, VisionIpcBufExtra * extra, bool sync
 
 VisionIpcServer::~VisionIpcServer(){
   should_exit = true;
-  listener_thread.join();
+  if (listener_thread.joinable()) {
+    int sock = ipc_connect(get_ipc_path(name).c_str());
+    if (sock >= 0) {
+      close(sock);
+    }
+    listener_thread.join();
+  }
 
   // VisionBuf cleanup
   for (auto const& [type, buf] : buffers) {

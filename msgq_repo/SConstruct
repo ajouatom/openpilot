@@ -2,16 +2,17 @@ import os
 import platform
 import subprocess
 import sysconfig
-import numpy as np
+import catch2
 
 arch = subprocess.check_output(["uname", "-m"], encoding='utf8').rstrip()
 if platform.system() == "Darwin":
   arch = "Darwin"
 
-common = ''
+common = []
 
 cpppath = [
-  f"#/",
+  catch2.INCLUDE_DIR,
+  "#/",
   '#msgq/',
   '/usr/lib/include',
   sysconfig.get_paths()['include'],
@@ -69,7 +70,6 @@ env = Environment(
 Export('env', 'arch', 'common')
 
 envCython = env.Clone(LIBS=[])
-envCython["CPPPATH"] += [np.get_include()]
 envCython["CCFLAGS"] += ["-Wno-#warnings", "-Wno-cpp", "-Wno-shadow", "-Wno-deprecated-declarations"]
 envCython["CCFLAGS"].remove('-Werror')
 if arch == "Darwin":

@@ -3,8 +3,8 @@ from typing import cast
 import ctypes, functools, hashlib
 from tinygrad.runtime.autogen import opencl as cl
 from tinygrad.runtime.support import c
-from tinygrad.helpers import to_char_p_p, from_mv, OSX, DEBUG, mv_address, suppress_finalizing
-from tinygrad.renderer.cstyle import OpenCLRenderer, IntelRenderer
+from tinygrad.helpers import to_char_p_p, from_mv, OSX, DEBUG, mv_address, suppress_finalizing, unwrap
+from tinygrad.renderer.cstyle import OpenCLRenderer
 from tinygrad.device import BufferSpec, LRUAllocator, Compiled, Compiler, CompileError
 from tinygrad.dtype import ImageDType
 
@@ -112,14 +112,20 @@ class CLDevice(Compiled):
     self.context = checked(cl.clCreateContext(None, 1, self.device_id, CC_CB(), None, status := ctypes.c_int32()), status)
     self.queue = checked(cl.clCreateCommandQueue(self.context, self.device_id, cl.CL_QUEUE_PROFILING_ENABLE, status), status)
     self.pending_copyin: list[memoryview] = []
-    self.device_exts = (cl.clGetDeviceInfo(self.device_id, cl.CL_DEVICE_EXTENSIONS, 4096,
-                                           ctypes.byref(buf := ctypes.create_string_buffer(4096)),
-                                           ctypes.byref(total := ctypes.c_size_t())),
-                                           ctypes.string_at(buf, size=total.value).decode())[1]
+    check(cl.clGetDeviceInfo(self.device_id, cl.CL_DEVICE_EXTENSIONS, 0, None, ctypes.byref(exts_len:=ctypes.c_size_t())))
+    self.device_exts = (cl.clGetDeviceInfo(self.device_id, cl.CL_DEVICE_EXTENSIONS, exts_len.value,
+                                           ctypes.byref(buf := ctypes.create_string_buffer(exts_len.value)), None),
+                                           ctypes.string_at(buf).decode().split())[1]
 
-    renderer = IntelRenderer if "cl_intel_subgroup_matrix_multiply_accumulate" in self.device_exts else OpenCLRenderer
     self.cl_compiler = CLCompiler(self, f"{hashlib.md5(self.device_name.encode() + self.driver_version.encode()).hexdigest()}")
-    super().__init__(device, CLAllocator(self), [renderer], functools.partial(CLProgram, self))
+
+    arch = ",".join(self.device_exts)
+    if "cl_khr_image2d_from_buffer" in self.device_exts:
+      check(cl.clGetDeviceInfo(self.device_id, cl.CL_DEVICE_IMAGE_PITCH_ALIGNMENT, 4, ctypes.byref(ipa := ctypes.c_uint32()), None))
+      arch += f",IMAGE_PITCH_ALIGNMENT={ipa.value}"
+    super().__init__(device, CLAllocator(self), [OpenCLRenderer], functools.partial(CLProgram, self), arch=arch)
+
+  def count(self) -> int: return len(unwrap(self.device_ids))
 
   def synchronize(self):
     check(cl.clFinish(self.queue))

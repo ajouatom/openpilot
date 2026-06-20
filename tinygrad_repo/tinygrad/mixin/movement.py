@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Self, Sequence
 from tinygrad.uop import Ops
-from tinygrad.helpers import prod, argfix, argsort, flatten, dedup, make_tuple, ceildiv
+from tinygrad.helpers import prod, argfix, argsort, flatten, dedup, make_tuple, ceildiv, round_up, all_int
 from tinygrad.uop.ops import resolve, smax, _align_left, _broadcast_shape
 
 if TYPE_CHECKING:
@@ -16,6 +16,10 @@ class MovementMixin:
 
   @property
   def shape(self) -> tuple[sint, ...]:
+    raise NotImplementedError
+
+  @property
+  def device(self) -> str|tuple[str, ...]|None:
     raise NotImplementedError
 
   # great functions you get!
@@ -42,6 +46,20 @@ class MovementMixin:
     """
     return prod(self.shape)
 
+  def size(self, dim:int|None=None) -> sint|tuple[sint, ...]:
+    """
+    Returns the size of the tensor. If `dim` is specified, return the length along dimension `dim`. Otherwise return the shape of the tensor.
+
+    ```python exec="true" source="above" session="tensor" result="python"
+    t = Tensor([[4, 5, 6], [7, 8, 9]])
+    print(t.size())
+    ```
+    ```python exec="true" source="above" session="tensor" result="python"
+    print(t.size(dim=1))
+    ```
+    """
+    return self.shape if dim is None else self.shape[dim]
+
   def _normalize_indices(self, indices:list) -> list:
     if len(ell := [i for i,x in enumerate(indices) if x is Ellipsis]) > 1: raise IndexError("indices can only have a single ellipsis")
     num_real = len(indices) - len(ell) - sum(1 for i in indices if i is None)
@@ -55,6 +73,45 @@ class MovementMixin:
     if not -max(1, total) <= dim <= max(1, total) - 1:
       raise IndexError(f"{dim=} out of range {[-max(1, total), max(1, total) - 1]}")
     return dim + total if dim < 0 else dim
+
+  def _parse_view_index(self, index, size: sint) -> dict:
+    # parses a single slice/int/None/sint index into {boundary, stride, size, collapse_dim}
+    from tinygrad.uop.ops import UOp, sint
+    match index:
+      case None: return {"size":1, "boundary":(0,1), "stride":1, "collapse_dim":False}
+      case int() | UOp(): # sint
+        if resolve(index >= size, False) or resolve(index < -size, False): raise IndexError(f"{index=} is out of bounds with {size=}")
+        # TODO: is this right for (negative) symbolic?
+        b = index if resolve(index >= 0, False) else index + size
+        return {"size":size, "boundary":(b, b+1), "stride":1, "collapse_dim":True}
+      case slice():
+        if not all(s is None or isinstance(s, sint) for s in (index.start, index.stop, index.step)):
+          raise TypeError(f"slice {index=} is not supported")
+        if resolve(index.step == 0, False): raise ValueError(f"{index=} cannot have 0 as step")
+        start, stop = 0 if index.start is None else index.start, size if index.stop is None else index.stop
+        step = 1 if index.step is None else index.step
+        if all_int((start, stop, step)):
+          # handle int slicing (resolve negative bounds, clamp, stride)
+          *bound, stride = index.indices(int(size.vmax) if isinstance(size, UOp) else size)
+          bound = [0, 0] if stride * (bound[1] - bound[0]) < 0 else ([bound[1]+1, bound[0]+1] if stride < 0 else bound)
+          return {"size":ceildiv(bound[1]-bound[0], abs(stride)), "boundary":tuple(bound), "stride":stride, "collapse_dim":False}
+        if resolve(step == 1, False) and resolve((stop-start) >= 0, False):
+          return {"size":stop-start, "boundary":(start, stop), "stride":step, "collapse_dim":False}
+        raise TypeError(f"slice {index=} is not supported")
+      case _: raise IndexError(f"{type(index).__name__} indexing is not supported")
+
+  def _apply_view_ops(self, mops:list) -> Self:
+    # applies shrink + flip + stride from a list of parsed view indices
+    # flip negative strides
+    x = self.shrink(tuple(m["boundary"] for m in mops)).flip(tuple(i for i, m in enumerate(mops) if m["stride"] < 0))
+    strides = tuple(abs(m["stride"]) for m in mops)
+    # apply stride
+    if any(st != 1 for st in strides):
+      if not all_int(x.shape): raise RuntimeError("symbolic shape not supported")
+      x = x.pad_to(tuple(round_up(s, st) for s, st in zip(x.shape, strides)))
+      x = x.reshape(tuple(flatten((s // st, st) for s, st in zip(x.shape, strides))))
+      x = x.shrink_to(tuple(flatten((s, 1) for s in x.shape[::2]))).reshape(x.shape[::2])
+    return x
 
   def _broadcast_to(self, new_shape: tuple[sint, ...]) -> Self:
     if self.shape == new_shape:
@@ -110,7 +167,7 @@ class MovementMixin:
   def pad(self, arg:tuple[tuple[sint, sint] | None, ...]) -> Self:
     if self.ndim != len(arg):
       raise ValueError(f"{self.ndim=} != {len(arg)=}")
-    ret = self._mop(Ops.PAD, tuple(x if x is not None else (0, 0) for x in arg))
+    ret = self._mop(Ops.PAD, tuple((x[0], s+x[0]+x[1]) if x is not None else (0, s) for x, s in zip(arg, self.shape)))
     return self if ret.shape == self.shape else ret
 
   def shrink(self, arg: tuple[tuple[sint, sint] | None, ...]) -> Self:
@@ -132,7 +189,7 @@ class MovementMixin:
     """
     if self.ndim != len(arg):
       raise ValueError(f"{self.ndim=} != {len(arg)=}")
-    ret = self._mop(Ops.SHRINK, arg=[x if x is not None else (0, s) for x, s in zip(arg, self.shape)])
+    ret = self._mop(Ops.SHRINK, arg=[(x[0], x[1]-x[0]) if x is not None else (0, s) for x, s in zip(arg, self.shape)])
     return self if ret.shape == self.shape else ret
 
   def permute(self, order, *args) -> Self:
@@ -183,7 +240,7 @@ class MovementMixin:
     return self.shrink(tuple([None if ns is None else (0, ns) for ns in argfix(shape, *args)]))
 
   def pad_to(self, shape, *args) -> Self:
-    return self._mop(Ops.PAD, tuple([(0, 0 if ns is None else ns-s) for s,ns in zip(self.shape, argfix(shape, *args), strict=True)]))
+    return self._mop(Ops.PAD, tuple((0, s if ns is None else ns) for s,ns in zip(self.shape, argfix(shape, *args), strict=True)))
 
   def view(self, shape, *args) -> Self:
     """`.view` is an alias for `.reshape`."""
