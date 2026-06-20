@@ -52,7 +52,8 @@ NAVI_IMAGE_PARAM = "CarrotNaviImage"
 NAVI_IMAGE_BASE64_MAX_CHARS = 6 * 1024 * 1024
 NAVI_ROUTE_MAX_POINTS = 4096
 NAVI_ROUTE_SUMMARY_MAX_SCAN = 20000
-AUTO_ONROAD_DIAGNOSTICS = os.environ.get("CARROT_AUTO_ONROAD_DIAGNOSTICS", "0").strip().lower() in ("1", "true", "yes", "on")
+AUTO_ONROAD_DIAGNOSTICS = os.environ.get("CARROT_AUTO_ONROAD_DIAGNOSTICS", "1").strip().lower() in ("1", "true", "yes", "on")
+AUTO_ONROAD_TMUX_DELAY_SECONDS = float(os.environ.get("CARROT_AUTO_ONROAD_TMUX_DELAY_SECONDS", "60"))
 CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS = 60.0
 
 
@@ -912,6 +913,9 @@ class CarrotMan:
     socket, poller = setup_socket()
     isOnroadCount = 0
     is_tmux_sent = False
+    onroad_start_at = None
+    onroad_tmux_captured = False
+    onroad_tmux_next_attempt_at = 0.0
     pending_tmux_reason = None
     pending_tmux_next_attempt_at = 0.0
 
@@ -929,21 +933,47 @@ class CarrotMan:
           json_obj = None
 
         if json_obj is None:
-          isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
-          if isOnroadCount == 0:
+          is_onroad = self.params.get_bool("IsOnroad")
+          if is_onroad:
+            if onroad_start_at is None:
+              onroad_start_at = now
+              isOnroadCount = 1
+              is_tmux_sent = False
+              onroad_tmux_captured = False
+              onroad_tmux_next_attempt_at = 0.0
+              if AUTO_ONROAD_DIAGNOSTICS:
+                self.show_panda_debug = True
+            else:
+              isOnroadCount += 1
+          else:
+            isOnroadCount = 0
+            onroad_start_at = None
             is_tmux_sent = False
-          if AUTO_ONROAD_DIAGNOSTICS and isOnroadCount == 1:
-            self.show_panda_debug = True
+            onroad_tmux_captured = False
+            onroad_tmux_next_attempt_at = 0.0
 
           network_type = self.sm['deviceState'].networkType # if not force_wifi else NetworkType.wifi
           networkConnected = False if network_type == NetworkType.none else True
 
-          if AUTO_ONROAD_DIAGNOSTICS and isOnroadCount == 500:
-            self.make_tmux_data()
-          if AUTO_ONROAD_DIAGNOSTICS and isOnroadCount > 500 and not is_tmux_sent and networkConnected:
-            self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
-            self.send_tmux_http("onroad", send_settings = True)
-            is_tmux_sent = True
+          if AUTO_ONROAD_DIAGNOSTICS and onroad_start_at is not None and not is_tmux_sent:
+            onroad_elapsed = now - onroad_start_at
+            if not onroad_tmux_captured and onroad_elapsed >= AUTO_ONROAD_TMUX_DELAY_SECONDS and now >= onroad_tmux_next_attempt_at:
+              if self.make_tmux_data():
+                onroad_tmux_captured = True
+                onroad_tmux_next_attempt_at = 0.0
+                print(f"[carrot_man] onroad tmux captured after {onroad_elapsed:.1f}s; waiting for network upload")
+              else:
+                onroad_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
+
+            if onroad_tmux_captured and networkConnected and now >= onroad_tmux_next_attempt_at:
+              ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
+              http_response = self.send_tmux_http("onroad", send_settings = True)
+              http_ok = http_response is not None and getattr(http_response, "ok", False)
+              if ftp_ok or http_ok:
+                print(f"[carrot_man] onroad tmux upload complete: ftp_ok={ftp_ok}, http_ok={http_ok}")
+                is_tmux_sent = True
+              else:
+                onroad_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
           carrot_exception = self.params.get("CarrotException")
           if carrot_exception in ["exception", "log", "tmux_send"] and pending_tmux_reason is None and now >= pending_tmux_next_attempt_at:
             if self.make_tmux_data():
