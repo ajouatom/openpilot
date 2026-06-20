@@ -17,7 +17,7 @@ python selfdrive/carrot/cluster_run.py --output window --width 1920 --height 480
 python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
 python selfdrive/carrot/cluster_run.py --output usb --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --usb-codec h264 --usb-h264-fps 30 --profile-render
-python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug --usb-h264-slice-max-bytes 4096
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern-nv12 --duration 20 --fps 10 --usb-h264-debug --usb-h264-slice-max-bytes 4096
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug
 python selfdrive/carrot/cluster_run.py --output usb --fps 10 --usb-jpeg-quality 55 --route-overlay off
 python selfdrive/carrot/cluster_run.py --output usb --profile-render --profile-interval 2
@@ -28,14 +28,16 @@ Pillow. Route replay defaults to `--route-overlay compact`, which shows the
 right-side debug panel. Use `--route-overlay off` for performance tests that
 should match live rendering cost more closely.
 
-`--usb-codec h264` feeds RGBA frames to the Qualcomm V4L2 encoder wrapper in
-`system/loggerd/encoder`, or to ffmpeg/libx264. H264 defaults to the same exact
-portrait upload geometry used by the working JPEG/PNG and earlier ffmpeg H264
-paths. For a 9.2-inch panel that means a 462x1920 H264 stream, with no
-16-pixel render-size padding unless `--usb-h264-align 16` is passed explicitly.
-Native/helper hardware encoding pads only the encoder input to a 16-pixel
-boundary by default, so 462x1920 display frames are fed to V4L2 as 464x1920 and
-cropped back to 462x1920 in SPS metadata.
+`--usb-codec h264` uses the native Qualcomm V4L2 encoder wrapper in
+`system/loggerd/encoder` or the ffmpeg/libx264 comparison path. Native H264
+renders directly into the Qualcomm/Venus-aligned NV12 layout before submit, so
+the cluster hardware path no longer depends on libyuv or a CPU RGBA-to-NV12
+conversion. H264 defaults to the same exact portrait upload geometry used by
+the working JPEG/PNG and earlier ffmpeg H264 paths. For a 9.2-inch panel that
+means a 462x1920 H264 stream, with no 16-pixel render-size padding unless
+`--usb-h264-align 16` is passed explicitly. Native hardware encoding pads only
+the encoder input to a 16-pixel boundary by default, so 462x1920 display frames
+are fed to V4L2 as 464x1920 and cropped back to 462x1920 in SPS metadata.
 The default backend is the native Qualcomm hardware path. It patches hardware
 SPS Baseline constraint flags to match the libx264 constrained-Baseline stream
 that the TURZX panel accepts, and patches hardware SPS frame-crop metadata for
@@ -60,17 +62,15 @@ hardware V4L2 rate-control default remains `--usb-h264-rate-control vbr-cfr`;
 `cbr-cfr` made frequent small blocks and `--usb-h264-realtime-priority` landed
 between VBR-CFR and CBR-CFR, so keep both off for normal tests. The
 ffmpeg/libx264 path remains available as a known-good comparison path. Build
-the native library and helper before hardware testing:
+the native library before hardware testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
-scons system/loggerd/cluster_h264_encoder_cli
 ```
 
 Use `--usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264` to compare
-the known-good software stream. Use `--usb-h264-backend helper` to compare the
-hardware helper process path, or `--usb-h264-backend auto` to try native and
-fall back to helper.
+the known-good software stream, or `--usb-h264-backend auto` to try native and
+fall back to ffmpeg.
 
 The default V4L2 device is
 `/dev/v4l/by-path/platform-aa00000.qcom_vidc-video-index1`. Input format
@@ -87,8 +87,7 @@ are rejected, the native path falls back internally to driver-compatible profile
 controls.
 `--usb-h264-debug` prints a detailed trace for each early hardware packet:
 native callback flags/timestamps/keyframe state, raw and patched NAL summaries,
-packetization results, TURZX chunk sizes, and a shutdown summary. The helper
-backend also prints C++ packet metadata to stderr before Python reads stdout.
+packetization results, TURZX chunk sizes, and a shutdown summary.
 `--usb-h264-diagnose-interval N` prints a compact periodic summary that is less
 noisy than debug mode: H264 unit count/keyframes, unit byte rate, chunks per
 unit, NAL sizes, native sender queue depth, and USB send latency. Use it on both
@@ -107,14 +106,14 @@ mode, the renderer reads back the aligned encoder size directly so the Python
 sender can avoid a per-frame RGBA padding copy while SPS crop metadata keeps
 the panel display at the requested 462-pixel width.
 `--usb-h264-slice-max-bytes 0` disables the hardware multi-slice request.
-Native/helper hardware output is sent as encoder access units, matching the
+Native hardware output is sent as encoder access units, matching the
 known-good ffmpeg/libx264 command boundary. The TURZX H264 command `last` flag
 is left off to match the working software path.
 
 For a quick H264 transport smoke test, run:
 
 ```bash
-python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug --usb-h264-slice-max-bytes 4096
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern-nv12 --duration 20 --fps 10 --usb-h264-debug --usb-h264-slice-max-bytes 4096
 ```
 
 The panel should show red/green/blue/white quadrants on the default NV12
@@ -166,13 +165,13 @@ When the panel still shows a corrupted picture, dump the outgoing stream and
 compare it separately:
 
 ```bash
-python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern --duration 20 --fps 10 --usb-h264-debug --usb-h264-input-format nv12 --usb-h264-dump /tmp/cluster_hw_nv12.h264
+python selfdrive/carrot/cluster_run.py --output usb --usb-codec h264 --usb-h264-test-pattern-nv12 --duration 20 --fps 10 --usb-h264-debug --usb-h264-dump /tmp/cluster_hw_nv12.h264
 ffprobe -show_streams /tmp/cluster_hw_nv12.h264
 ```
 
 If the dump plays correctly but the panel is corrupted, the remaining issue is
 TURZX stream compatibility or USB flow control. If the dump is corrupted too,
-the issue is in the V4L2 input conversion or encoder controls.
+the issue is in the V4L2 NV12 submit path or encoder controls.
 
 Keep `--usb-h264-input-format nv12` for native hardware testing. Direct RGB
 USERPTR diagnostics were removed after measured device tests showed corrupted
@@ -193,9 +192,10 @@ debug UI before navi data has arrived. When output is gated off,
 remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
-Manager autostart leaves realtime affinity off by default. If `CLUSTER_REALTIME=1`
-is set, `cluster_autorun.py` uses `ClusterHudCoreMode=0` by default, which maps
-to cores `1,2,3,4`; mode `1` maps to all initially allowed CPU cores.
+Manager autostart sets `CLUSTER_REALTIME=1` by default unless the environment
+already overrides it. With realtime enabled, `cluster_autorun.py` uses
+`ClusterHudCoreMode=0` by default, which maps to cores `1,2,3,4`; mode `1` maps
+to all initially allowed CPU cores.
 `ClusterHudPriority` controls the common openpilot realtime helper priority with
 range `1..99`, default `10`.
 Changing either param makes the running HUD exit so `cluster_autorun` can
@@ -269,12 +269,8 @@ native hardware H264 first, then ffmpeg/libx264 software H264, then JPEG when
 launched by `cluster_autorun`. Direct CLI auto uses native hardware H264 as the
 first encoder choice. `1` forces JPEG, `2` forces native hardware H264, and `3`
 forces ffmpeg/libx264 software H264.
-Live native hardware H264 automatically enables `--usb-h264-render-nv12`, so
-both auto hardware selection and explicit hardware selection use the lower-copy
-GPU NV12 submit path. Direct live CLI runs with backend `native` or
-native-first `auto` also auto-enable it; if `auto` falls back to the helper
-backend, the run disables the GPU NV12 path and uses the RGBA helper path. Use
-`--no-usb-h264-render-nv12` only for A/B profiling.
+Native hardware H264 always uses the direct GPU NV12 render/submit path. If
+backend `auto` falls back to ffmpeg, the run uses the software RGBA pipe.
 Changing this setting while the HUD is running makes the current HUD process
 exit so `cluster_autorun` can relaunch it with the new encoder choice.
 `ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows
@@ -333,6 +329,8 @@ reflections merge cleanly.
 vehicles yellow, `radarState` front/SCC radar leads red, camera-sourced vehicle
 leads light blue, comma model leads dark blue, and ADAS corner detections from
 `0x162`/`0x1EA` green.
+Radar samples whose distance and left/right offset are both zero are treated as
+empty/default data and are not drawn as radar points or vehicle boxes.
 Radar-track vehicle classification rejects points outside model road edges, but
 does not require in-road points to sit near the road-edge line; center-lane
 points can classify as vehicles when probability/in-lane data or moving radar
@@ -353,6 +351,13 @@ The planned path draws `longitudinalPlan.desiredDistance` as a magenta
 horizontal bar across the current lane width at the matching forward position.
 Changing `ClusterHud` to another supported mode or `0` makes the running HUD
 exit; cleanup sends TURZX brightness zero before releasing the USB device.
+When autorun passes a HUD mode, USB open is pinned to that mode's TURZX PID
+(`1 -> 0x0092`, `2 -> 0x0123`) so a second connected TURZX panel is not opened
+by the vendor library's generic device scan.
+If frame or H264 chunk writes report that the USB device was disconnected, the
+active HUD exits instead of trying to recover in-process. Autorun calls the
+launcher in non-exiting mode so the error returns to the watcher loop, letting
+`cluster_autorun` wait for the same PID and relaunch after replug.
 
 The bundled TURZX code includes only the Python vendor library. The openpilot
 device uses the system `libusb-1.0.so` through `pyusb`.

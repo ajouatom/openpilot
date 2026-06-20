@@ -35,6 +35,8 @@ TETHERING_IP_ADDRESS = "192.168.43.1"
 DEFAULT_TETHERING_PASSWORD = "swagswagcomma"
 SIGNAL_QUEUE_SIZE = 10
 SCAN_PERIOD_SECONDS = 5
+BACKGROUND_SCAN_INITIAL_PERIOD_SECONDS = 60
+BACKGROUND_SCAN_MAX_PERIOD_SECONDS = 120
 
 DEBUG = False
 _dbus_call_idx = 0
@@ -182,6 +184,7 @@ class WifiManager:
     self._ipv4_forward = False
 
     self._last_network_scan: float = 0.0
+    self._background_scan_period: float = BACKGROUND_SCAN_INITIAL_PERIOD_SECONDS
     self._callback_queue: list[Callable] = []
 
     self._tethering_ssid = "weedle"
@@ -321,6 +324,7 @@ class WifiManager:
 
     # Update networks and WiFi state (to self-heal) immediately when activating for UI
     if active:
+      self._background_scan_period = BACKGROUND_SCAN_INITIAL_PERIOD_SECONDS
       self._init_wifi_state(block=False)
       self._update_networks(block=False)
 
@@ -474,6 +478,7 @@ class WifiManager:
         wifi_state = replace(wifi_state, ssid=next((s for s, p in self._connections.items() if p == conn_path), None))
 
       self._wifi_state = wifi_state
+      self._background_scan_period = BACKGROUND_SCAN_INITIAL_PERIOD_SECONDS
       self._enqueue_callbacks(self._activated)
       self._update_active_connection_info()
 
@@ -494,10 +499,17 @@ class WifiManager:
 
   def _network_scanner(self):
     while not self._exit:
-      if self._active:
-        if time.monotonic() - self._last_network_scan > SCAN_PERIOD_SECONDS:
+      connected = self._wifi_state.status == ConnectStatus.CONNECTED
+      if self._active or not connected:
+        scan_period = SCAN_PERIOD_SECONDS if self._active else self._background_scan_period
+        if time.monotonic() - self._last_network_scan > scan_period:
           self._request_scan()
           self._last_network_scan = time.monotonic()
+
+          if self._active or connected:
+            self._background_scan_period = BACKGROUND_SCAN_INITIAL_PERIOD_SECONDS
+          else:
+            self._background_scan_period = min(self._background_scan_period * 2, BACKGROUND_SCAN_MAX_PERIOD_SECONDS)
       time.sleep(1 / 2.)
 
   def _wait_for_wifi_device(self):

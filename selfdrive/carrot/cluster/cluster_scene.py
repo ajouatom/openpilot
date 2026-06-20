@@ -41,7 +41,14 @@ from cluster_config import (
     VEHICLE_LENGTH_M,
     VEHICLE_WIDTH_M,
 )
-from cluster_models import ClusterUiState, DetectedVehicle, LaneMarking, ModelPathPoint, RadarPoint
+from cluster_models import (
+    ClusterUiState,
+    DetectedVehicle,
+    LaneMarking,
+    ModelPathPoint,
+    RadarPoint,
+    radar_position_is_zero,
+)
 from cluster_utils import clamp, darken, lighten, smoothstep
 
 
@@ -1636,9 +1643,35 @@ def path_metric_color(accel_mps2: float) -> Color:
 
 
 def radar_points_for_display(state: ClusterUiState) -> tuple[RadarPoint, ...]:
+    points = state.radar_points
+    if any(radar_position_is_zero(point.longitudinal_m, point.lateral_m) for point in points):
+        points = tuple(
+            point
+            for point in points
+            if not radar_position_is_zero(point.longitudinal_m, point.lateral_m)
+        )
     if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
-        return state.radar_points
-    return merged_radar_points(state.radar_points, state)
+        return points
+    return merged_radar_points(points, state)
+
+
+def detected_vehicle_is_zero_radar_sample(vehicle: DetectedVehicle) -> bool:
+    if not radar_position_is_zero(vehicle.longitudinal_m, vehicle.lateral_m):
+        return False
+    return (
+        vehicle.source == "radarState"
+        or vehicle.source == "carState"
+        or vehicle.source in ("radarPoint", "liveTracks")
+        or vehicle.source.startswith("CAN 0x")
+    )
+
+
+def detected_vehicles_without_zero_radar_samples(
+    vehicles: tuple[DetectedVehicle, ...],
+) -> tuple[DetectedVehicle, ...]:
+    if not any(detected_vehicle_is_zero_radar_sample(vehicle) for vehicle in vehicles):
+        return vehicles
+    return tuple(vehicle for vehicle in vehicles if not detected_vehicle_is_zero_radar_sample(vehicle))
 
 
 def merged_radar_points(points: tuple[RadarPoint, ...], state: ClusterUiState) -> tuple[RadarPoint, ...]:
@@ -1865,6 +1898,7 @@ def detected_vehicles_for_display(
     vehicles: tuple[DetectedVehicle, ...],
     state: ClusterUiState,
 ) -> tuple[DetectedVehicle, ...]:
+    vehicles = detected_vehicles_without_zero_radar_samples(vehicles)
     if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL or len(vehicles) < 2:
         return vehicles
     selected: list[DetectedVehicle] = []
@@ -2097,6 +2131,10 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         return False
     if radar_point_is_confirmed_vehicle_source(point):
         return True
+    if radar_point_is_outside_outer_lane(point, state, lane_width_m):
+        return False
+    if radar_point_is_center_raw_point(point, lane_width_m) and not radar_point_matches_front_lead(point, state):
+        return False
     if point.valid_count is not None:
         if point.valid_count < RADAR_VEHICLE_MIN_VALID_COUNT:
             return False
@@ -2146,6 +2184,29 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
 def radar_point_is_confirmed_vehicle_source(point: RadarPoint) -> bool:
     source = point.source.lower()
     return "0x162" in source or "0x1ea" in source
+
+
+def radar_point_is_outside_outer_lane(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
+    lane_laterals: list[float] = []
+    for marking in state.lanes:
+        if not marking.visible:
+            continue
+        lateral = model_line_lateral_at(marking.model_points, point.longitudinal_m, marking.model_lateral_shift_m)
+        lane_laterals.append(lateral if lateral is not None else marking.offset * lane_width_m)
+    if len(lane_laterals) < 2:
+        return False
+    return point.lateral_m <= min(lane_laterals) or point.lateral_m >= max(lane_laterals)
+
+
+def radar_point_is_center_raw_point(point: RadarPoint, lane_width_m: float) -> bool:
+    return abs(point.lateral_m) <= lane_width_m * RADAR_CENTER_RAW_LATERAL_LANES
+
+
+def radar_point_matches_front_lead(point: RadarPoint, state: ClusterUiState) -> bool:
+    return any(
+        detected_vehicle_is_front_lead(vehicle) and radar_point_close_to_detected_vehicle(point, vehicle)
+        for vehicle in state.detected_vehicles
+    )
 
 
 def radar_point_source_is_radar_track(point: RadarPoint) -> bool:
@@ -2379,7 +2440,6 @@ def road_edge_lateral_at(
     if edge_offset is not None:
         return edge_offset * lane_width_m
     return None
-
 
 
 def radar_point_road_edge_distance_m(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> float | None:
@@ -3059,8 +3119,9 @@ def build_cluster_scene(
     profile_stage = profile_scene_start(profile_add)
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
     display_radar_points = radar_points_for_display(state)
-    if display_radar_points is not state.radar_points:
-        state = replace(state, radar_points=display_radar_points)
+    display_detected_vehicles = detected_vehicles_without_zero_radar_samples(state.detected_vehicles)
+    if display_radar_points is not state.radar_points or display_detected_vehicles != state.detected_vehicles:
+        state = replace(state, radar_points=display_radar_points, detected_vehicles=display_detected_vehicles)
     anchor_x_m = ego_anchor_x_m(state, lane_width_m)
     scene_shift_x_m = -anchor_x_m
     relative_scene_x_offset_m = -scene_shift_x_m

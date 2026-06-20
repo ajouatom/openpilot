@@ -72,8 +72,6 @@ public:
   void close();
   bool is_open() const { return is_open_; }
 
-  std::vector<ClusterH264Packet> encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us);
-  void encode_rgba(const uint8_t *rgba, size_t rgba_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet);
   std::vector<ClusterH264Packet> encode_nv12(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us);
   void encode_nv12(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet);
   std::vector<ClusterH264Packet> encode_nv12_active(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us);
@@ -119,10 +117,8 @@ private:
   using InputCopyFn = void (ClusterH264Encoder::*)(const uint8_t *data, size_t data_size, VisionBuf *dst) const;
   void encode_input(const uint8_t *data, size_t data_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet,
                     InputCopyFn copy_input, const char *input_name);
-  void copy_rgba_to_input(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const;
   void copy_nv12_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const;
   void copy_nv12_active_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const;
-  void rgba_to_nv12(const uint8_t *rgba, size_t rgba_size, VisionBuf *dst) const;
   void validate_config() const;
 
   ClusterH264EncoderConfig config_;
