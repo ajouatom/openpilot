@@ -673,7 +673,7 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
     ]
     for det_key, dist_key in radar_all:
       if values[det_key] >= 4 and values[dist_key] != 0:
-        values[det_key] = 3
+        values[det_key] = 1
 
     if blink_pairs:
       _apply_radar_blink(values, blink_pairs, frame, t=blink_t)
