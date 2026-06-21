@@ -25,11 +25,8 @@ CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 ALLOW_THROTTLE_THRESHOLD = 0.5
 MIN_ALLOW_THROTTLE_SPEED = 2.5
 RESET_DECEL_RAMP_TIME = 2.0
-
-# Lookup table for turns
-_A_TOTAL_MAX_V = [2.4, 4.8] #[1.7, 3.2]
-_A_TOTAL_MAX_BP = [20., 40.]
-LAT_WEIGHT = 0.7
+TURN_CURVATURE_LOOKAHEAD = 1.0
+TURN_CURVATURE_MIN_SPEED = 3.0
 
 
 def get_max_accel(v_ego):
@@ -39,21 +36,17 @@ def get_coast_accel(pitch):
   return np.sin(pitch) * -5.65 - 0.3  # fitted from data using xx/projects/allow_throttle/compute_coast_accel.py
 
 
-def limit_accel_in_turns_org(v_ego, angle_steers, a_target, CP):
-  """
-  This function returns a limited long acceleration allowed, depending on the existing lateral acceleration
-  this should avoid accelerating when losing the target in turns
-  """
-  # FIXME: This function to calculate lateral accel is incorrect and should use the VehicleModel
-  # The lookup table for turns should also be updated if we do this
-  steer_abs = abs(angle_steers)
-  if v_ego > 20 or (v_ego > 25 and steer_abs < 3.0):
-    return a_target
-  a_total_max = np.interp(v_ego, _A_TOTAL_MAX_BP, _A_TOTAL_MAX_V)
-  a_y = v_ego ** 2 * angle_steers * CV.DEG_TO_RAD / (CP.steerRatio * CP.wheelbase) * LAT_WEIGHT
-  a_x_allowed = math.sqrt(max(a_total_max ** 2 - a_y ** 2, 0.))
+def get_future_curvature(model_msg, fallback_curvature, lookahead=TURN_CURVATURE_LOOKAHEAD):
+  if (len(model_msg.orientationRate.z) != ModelConstants.IDX_N or
+      len(model_msg.velocity.x) != ModelConstants.IDX_N):
+    return fallback_curvature
 
-  return [a_target[0], min(a_target[1], a_x_allowed)]
+  yaw_rate_future = float(np.interp(lookahead, ModelConstants.T_IDXS, model_msg.orientationRate.z))
+  velocity_future = float(np.interp(lookahead, ModelConstants.T_IDXS, model_msg.velocity.x))
+  if not (np.isfinite(yaw_rate_future) and np.isfinite(velocity_future)):
+    return fallback_curvature
+
+  return yaw_rate_future / max(abs(velocity_future), TURN_CURVATURE_MIN_SPEED)
 
 def limit_accel_in_turns(v_ego, curvature, a_target, a_lat_max,
                          safety_ratio=0.70,   # 0.60~0.85 (작을수록 더 얌전)
@@ -172,10 +165,9 @@ class LongitudinalPlanner:
     if self.mpc.mode == 'acc':
       #accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
       accel_limits = [A_CRUISE_MIN, carrot.get_carrot_accel(v_ego)]
-      steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['liveParameters'].angleOffsetDeg
-      #accel_limits_turns = limit_accel_in_turns(v_ego, steer_angle_without_offset, accel_limits, self.CP)
+      curvature_future = get_future_curvature(sm['modelV2'], sm['controlsState'].desiredCurvature)
       a_lat_max = 3.0
-      accel_limits_turns = limit_accel_in_turns(v_ego, sm['controlsState'].desiredCurvature, accel_limits, a_lat_max)
+      accel_limits_turns = limit_accel_in_turns(v_ego, curvature_future, accel_limits, a_lat_max)
     else:
       accel_limits = [ACCEL_MIN, ACCEL_MAX]
       accel_limits_turns = [ACCEL_MIN, ACCEL_MAX]
