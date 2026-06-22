@@ -5,11 +5,11 @@ from tinygrad.tensor import Tensor
 from tinygrad import Device
 from tinygrad.nn.state import get_state_dict
 from tinygrad.device import Allocator, Compiled
-from tinygrad.engine.realize import method_cache
+from tinygrad.codegen import to_program_cache
 from tinygrad.helpers import Profiling
 
 class FakeProgram:
-  def __init__(self, name:str, prg:bytes, **kwargs): pass
+  def __init__(self, name:str, lib:bytes, *args, **kwargs): pass
   def __call__(self, *bufs, global_size, local_size, vals=(), wait=False, **kw): pass
 
 class FakeAllocator(Allocator[Compiled]):
@@ -31,8 +31,8 @@ class TestLLaMASpeed(unittest.TestCase):
     for v in get_state_dict(model).values(): v.assign(Tensor.empty(*v.shape, dtype=v.dtype))
     print("assigned empty tensors, doing warmup")
 
-    def run_llama(st, empty_method_cache=True):
-      if empty_method_cache: method_cache.clear()
+    def run_llama(st, empty_cache=True):
+      if empty_cache: to_program_cache.clear()
       tms = [time.perf_counter()]
       for i in range(5):
         model(Tensor([[1,2,3,4]]), i).realize()

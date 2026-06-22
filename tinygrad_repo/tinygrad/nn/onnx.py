@@ -2,10 +2,11 @@
 from typing import Any, Sequence, cast, Literal, NamedTuple, Generator
 import dataclasses, functools, io, math, types, warnings, pathlib, sys, os, struct, enum
 from tinygrad.nn.state import TensorIO
-from tinygrad.tensor import Tensor, _broadcast_shape, ReductionStr
+from tinygrad.tensor import Tensor, _broadcast_shape
+from tinygrad.mixin import ReductionStr
 from tinygrad.helpers import getenv, all_same, prod, flatten, make_tuple, argsort, is_numpy_ndarray, get_single_element, polyN
 from tinygrad.dtype import DType, ConstType, dtypes, _from_np_dtype, truncate, least_upper_dtype, DTYPES_DICT
-from tinygrad.device import is_dtype_supported, Device
+from tinygrad.device import Device
 from tinygrad.uop.ops import sint
 
 # ***** protobuf definitions ******
@@ -34,13 +35,6 @@ class OnnxDataType(enum.IntEnum):
   UINT64 = 13; BFLOAT16 = 16 # noqa: E702
 
   def to_dtype(self) -> DType: return DTYPES_DICT[self.name.lower()]
-
-def dtype_fallback(dtype: DType, fallback_context: str) -> DType:
-  if is_dtype_supported(dtype): return dtype
-  default_dtype = dtypes.default_int if dtypes.is_int(dtype) else dtypes.default_float
-  warnings.warn(f"dtype {dtype} on {Device.DEFAULT} from {fallback_context} is not supported, falling back to {default_dtype}")
-  assert is_dtype_supported(default_dtype), f"dtype {default_dtype} must be supported on {Device.DEFAULT}"
-  return default_dtype
 
 # ***** onnx spec definitions *****
 class Domain(enum.Enum):
@@ -239,21 +233,20 @@ class OnnxPBParser:
       obj["data_location"] = 0
 
     # parse tensor
-    to_dtype = dtype_fallback(true_dtype := OnnxDataType(obj['data_type']).to_dtype(), "buffer parse")
+    dtype = OnnxDataType(obj['data_type']).to_dtype()
     shape = tuple(obj['dims'])
     present_fields = [field for field in ['float_data', 'int32_data', 'int64_data', 'double_data', 'uint64_data', 'raw_data'] if field in obj]
     assert len(present_fields) == 1, f"only 1 data field is allowed from {obj=}"
     data = obj[present_fields[0]]
     if not isinstance(data, Tensor):
-      obj["parsed_tensor"] = Tensor(data, dtype=to_dtype).reshape(shape)
+      obj["parsed_tensor"] = Tensor(data, dtype=dtype).reshape(shape)
       return obj
     assert isinstance(data, Tensor) and data.dtype == dtypes.uint8, data
-    data = data.bitcast(true_dtype).reshape(shape)
-    data = data.to(Device.DEFAULT) if true_dtype is to_dtype else data.to("cpu").cast(to_dtype).to(Device.DEFAULT)
+    data = data.bitcast(dtype).reshape(shape).to(Device.DEFAULT)
     # const folding
     if shape == ():
       if data.dtype == dtypes.float16 and sys.version_info < (3, 12): data = data.cast(dtypes.float32)
-      data = Tensor(data.item(), dtype=to_dtype).reshape(shape)
+      data = Tensor(data.item(), dtype=dtype).reshape(shape)
     obj["parsed_tensor"] = data
     return obj
 
@@ -410,12 +403,12 @@ class OnnxRunner:
     if spec.is_optional and value is None: return None
     if spec.is_sequence:
       if not isinstance(value, Sequence): raise RuntimeError(f"input {name} received {value}, expected a sequence type")
-      sequence = [Tensor(v, dtype=spec.dtype, requires_grad=self.is_training) if not isinstance(v, Tensor) else v for v in value]
+      sequence = [Tensor(v, dtype=spec.dtype) if not isinstance(v, Tensor) else v for v in value]
       if not all_same(tuple(t.shape for t in sequence)): raise RuntimeError(f"Shapes for input {name} sequence must be homogeneous")
       if not all(t.dtype is spec.dtype for t in sequence): warnings.warn(f"Dtypes for input {name} sequence aren't all {spec.dtype}")
       return sequence
     dtype = _from_np_dtype(value.dtype) if is_numpy_ndarray(value) else spec.dtype
-    tensor = Tensor(value, dtype=dtype, requires_grad=self.is_training) if not isinstance(value, Tensor) else value
+    tensor = Tensor(value, dtype=dtype) if not isinstance(value, Tensor) else value
     if tensor.dtype is not spec.dtype: warnings.warn(f"input {name} has mismatch on dtype. Expected {spec.dtype}, received {tensor.dtype}.")
     for dim, (onnx_dim, user_dim_input) in enumerate(zip(spec.shape, tensor.shape, strict=True)):
       if isinstance(onnx_dim, str):
@@ -573,10 +566,10 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
   def Constant(sparse_value:Tensor|None=None, value:Tensor|None=None, value_float:float|None=None, value_floats:list[float]|None=None,
               value_int:int|None=None, value_ints:list[int]|None=None, value_string:str|None=None, value_strings:list[str]|None=None):
     if value is not None: return value
-    if value_float is not None: return Tensor(value_float, dtype=dtypes.float32, requires_grad=False)
-    if value_floats is not None: return Tensor(list(value_floats), dtype=dtypes.float32, requires_grad=False)
-    if value_int is not None: return Tensor(value_int, dtype=dtypes.int64, requires_grad=False)
-    if value_ints is not None: return Tensor(list(value_ints), dtype=dtypes.int64, requires_grad=False)
+    if value_float is not None: return Tensor(value_float, dtype=dtypes.float32)
+    if value_floats is not None: return Tensor(list(value_floats), dtype=dtypes.float32)
+    if value_int is not None: return Tensor(value_int, dtype=dtypes.int64)
+    if value_ints is not None: return Tensor(list(value_ints), dtype=dtypes.int64)
     if value_string is not None or value_strings is not None or sparse_value is not None:
       raise NotImplementedError('Constant OP not implemented for value_string, value_strings and sparse_value')
 
@@ -593,7 +586,7 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
     raise ValueError(f"pixel_format={pixel_format!r} is not supported.")
 
   def EyeLike(x:Tensor, dtype:int|None=None, k:int=0):
-    ret = Tensor.eye(cast(int, min(x.shape)), dtype=dtype_fallback(OnnxDataType(dtype).to_dtype(), "EyeLike op") if dtype is not None else x.dtype)
+    ret = Tensor.eye(cast(int, min(x.shape)), dtype=OnnxDataType(dtype).to_dtype() if dtype is not None else x.dtype)
     return ret if x.size(0) == x.size(1) else ret.pad(tuple(None if d == ret.size(0) else (k, d-ret.shape[0]-k) for d in x.shape))
 
   def OptionalHasElement(x:Tensor|None=None): return Tensor(x is not None and x.numel() > 0)
@@ -604,7 +597,7 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
     return value.expand(shape)
 
   def Size(data:Tensor): return data.numel()
-  def Shape(data:Tensor, end:int|None=None, start:int=0): return Tensor(data.shape[start:end], dtype=dtypes.int64)
+  def Shape(data:Tensor, end:int|None=None, start:int=0): return Tensor(data.shape[start:end], dtype=dtypes.int64, device=data.device)
 
   # ***** Unary Ops (math) *****
   def Not(x:Tensor): return x.logical_not()
@@ -616,7 +609,7 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
   def softmax_13(x:Tensor, axis:int=-1): return x.softmax(axis)
   Softmax = {OpSetId(Domain.ONNX, 1):softmax_1, OpSetId(Domain.ONNX, 13):softmax_13}
   def HardSigmoid(x:Tensor, alpha:float=0.2, beta:float=0.5): return (alpha*x + beta).clip(0, 1)
-  def Gelu(x:Tensor, approximate:str|None=None): return x.gelu() if approximate == "tanh" else 0.5 * x * (1 + (x/math.sqrt(2)).erf())
+  def Gelu(x:Tensor, approximate:str|None=None): return x.gelu(approximate="none" if approximate is None else approximate)
   def BiasGelu(x: Tensor, bias: Tensor, approximate: str | None = None) -> Tensor: return Gelu(x + bias, approximate)
   def FastGelu(x:Tensor, bias:Tensor|None=None): return (x + bias).gelu() if bias is not None else x.gelu() # this is tanh approximated
   def PRelu(X:Tensor, slope:Tensor): return (X > 0).where(X, X * slope)
@@ -643,11 +636,11 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
   def BitwiseOr(x:Tensor,y:Tensor): return x | y
   def BitwiseXor(x:Tensor,y:Tensor): return x ^ y
   def BitwiseNot(x:Tensor): return ~x
-  def Mod(x:Tensor,y:Tensor,fmod=0): return x - x.div(y, rounding_mode="trunc") * y if fmod else x % y
+  def Mod(x:Tensor,y:Tensor,fmod=0): return x.fmod(y) if fmod else x % y
 
   # ***** Casting Ops *****
   # NOTE: saturate only applies to FP8 types
-  def Cast(x:Tensor, to:int, saturate:int=1): return x.cast(dtype_fallback(OnnxDataType(to).to_dtype(), "Cast op"))
+  def Cast(x:Tensor, to:int, saturate:int=1): return x.cast(OnnxDataType(to).to_dtype())
   def CastLike(x:Tensor, target_type:Tensor, saturate:int=1): return x.cast(target_type.dtype)
 
   # ***** Reduce Ops *****
@@ -790,11 +783,11 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
         axes:list[int]|None=None, coordinate_transformation_mode:str='half_pixel', cubic_coeff_a:float=-0.75, exclude_outside:int=0,
         extrapolation_value:float=0.0, keep_aspect_ratio_policy:str='stretch', mode:str='nearest', nearest_mode:str='round_prefer_floor'):
     def _apply_transformation(input_sz, output_sz, scale_dim, mode):
-      index = Tensor.arange(output_sz, requires_grad=False, device=X.device)
+      index = Tensor.arange(output_sz)
       if mode == "half_pixel": return (index + 0.5) / scale_dim - 0.5
-      if mode == "align_corners": return index * (input_sz - 1) / (output_sz - 1) if output_sz != 1 else Tensor.zeros_like(index)
+      if mode == "align_corners": return index * (input_sz - 1) / (output_sz - 1) if output_sz != 1 else index.const_like(0)
       if mode == "asymmetric": return index / scale_dim
-      if mode == "pytorch_half_pixel": return ((index + 0.5) / scale_dim - 0.5) if output_sz != 1 else Tensor.zeros_like(index)
+      if mode == "pytorch_half_pixel": return ((index + 0.5) / scale_dim - 0.5) if output_sz != 1 else index.const_like(0)
       if mode == "half_pixel_symmetric":
         output_dim_scaled = input_sz * scale_dim
         return (input_sz / 2) * (1 - (output_sz / output_dim_scaled)) + (index + 0.5) / scale_dim - 0.5
@@ -915,12 +908,13 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
     return x * scale.reshape(1, -1, *[1] * (x.ndim-2)) + bias.reshape(1, -1, *[1] * (x.ndim-2))
   def InstanceNormalization(x:Tensor, scale:Tensor, bias:Tensor, epsilon:float=1e-05):
     return GroupNormalization(x, scale, bias, num_groups=cast(int, x.shape[1]), epsilon=epsilon)
-  def LayerNormalization(x:Tensor, scale:Tensor, bias:Tensor, axis:int=-1, epsilon:float=1e-05, stash_type:int=1):
+  def LayerNormalization(x:Tensor, scale:Tensor, bias:Tensor|None=None, axis:int=-1, epsilon:float=1e-05, stash_type:int=1):
     assert stash_type == 1, "only float32 is supported"
     axes = tuple(i for i in range(axis if axis >= 0 else x.ndim + axis, x.ndim))
     mean = (x32:=x.cast(dtypes.float)).mean(axis=axes, keepdim=True)
     inv_std_dev = (x32.sub(mean)).square().mean(axis=axes, keepdim=True).add(epsilon).rsqrt()
-    return (x32.sub(mean)*inv_std_dev).cast(x.dtype).mul(scale).add(bias), mean, inv_std_dev
+    ret = (x32.sub(mean)*inv_std_dev).cast(x.dtype).mul(scale)
+    return (ret.add(bias) if bias is not None else ret), mean, inv_std_dev
   def SkipLayerNormalization(x:Tensor, skip:Tensor, gamma:Tensor, beta:Tensor|None=None, bias:Tensor|None=None, epsilon:float=1e-12):
     x = x + skip
     if bias is not None: x = x + bias
@@ -940,7 +934,7 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
       return x.unsqueeze(-1).expand(*x.shape, vocab_size)._one_hot_along_dim(vocab_size) @ weight
 
     # bert embedding layer
-    if position_ids is None: position_ids = Tensor.arange(seq_length, requires_grad=False).unsqueeze(0).expand(*input_shape)
+    if position_ids is None: position_ids = Tensor.arange(seq_length).unsqueeze(0).expand(*input_shape)
     wrd_embedding_res = embedding(input_ids, vocab_size, word_embedding)
     pos_embedding_res = embedding(position_ids, max_position_embeddings, position_embedding)
 
@@ -970,11 +964,11 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
   # Reimplemented here because you need legacy RNG for passing ONNX tests.
   def dropout_7(data:Tensor, ratio:float=0.5, training_mode:bool=False, seed:int|None=None):
     import numpy as np
-    if not training_mode: return data, data.full_like(True, dtype=dtypes.bool)
+    if not training_mode: return data, data.const_like(True).cast(dtypes.bool)
     if seed is not None:
-      rand = Tensor(np.random.RandomState(seed).random(cast(tuple[int,...], data.shape)), requires_grad=False, dtype=data.dtype, device=data.device)
+      rand = Tensor(np.random.RandomState(seed).random(cast(tuple[int,...], data.shape)), dtype=data.dtype, device=data.device)
     else:
-      rand = data.rand_like(requires_grad=False)
+      rand = data.rand_like()
     mask = rand >= ratio
     return data * mask / (1.0 - ratio), mask
   # 6 with 'is_test' needed for https://github.com/MTlab/onnx2caffe/raw/refs/heads/master/model/MobileNetV2.onnx
@@ -983,9 +977,9 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
 
   def _window(size, output_datatype, periodic, a):
     size = int(_resolve_const(size))
-    N, n = (size if periodic else size - 1), Tensor.arange(size, requires_grad=False)
+    N, n = (size if periodic else size - 1), Tensor.arange(size)
     w = a[0] - a[1] * (n * (2 * math.pi / N)).cos() + a[2] * (n * (4 * math.pi / N)).cos()
-    return w.cast(dtype_fallback(OnnxDataType(output_datatype).to_dtype(), "window op"))
+    return w.cast(OnnxDataType(output_datatype).to_dtype())
   def HannWindow(size, output_datatype:int=1, periodic:int=1): return _window(size, output_datatype, periodic, (0.5, 0.5, 0))
   def HammingWindow(size, output_datatype:int=1, periodic:int=1): return _window(size, output_datatype, periodic, (25/46, 21/46, 0))
   def BlackmanWindow(size, output_datatype:int=1, periodic:int=1): return _window(size, output_datatype, periodic, (0.42, 0.5, 0.08))
@@ -1003,10 +997,10 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
   def AffineGrid(theta:Tensor, size:list[int], align_corners:int=0):
     N, _, *spatial_dims = size
     def generate_grid(steps):
-      if align_corners: return Tensor.linspace(-1, 1, steps, device=theta.device)
-      return Tensor.linspace(-1+1/steps, 1-1/steps, steps, device=theta.device)
+      if align_corners: return Tensor.linspace(-1, 1, steps)
+      return Tensor.linspace(-1+1/steps, 1-1/steps, steps)
     grids = Tensor.meshgrid(*(generate_grid(d) for d in spatial_dims))
-    base_grid = Tensor.stack(*reversed(grids), Tensor.ones_like(grids[0], device=theta.device), dim=-1)
+    base_grid = Tensor.stack(*reversed(grids), grids[0].const_like(1), dim=-1)
     base_grid = base_grid.reshape(1, prod(spatial_dims), len(grids)+1).expand(N, -1, -1)
     return (base_grid @ theta.transpose(1, 2)).reshape(N, *spatial_dims, -1)
 
@@ -1038,7 +1032,7 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
       if mask_index.ndim != 1: mask = mask_index.bool()
       else:
         if mask_index.shape[0] == batch_size:
-          mask = Tensor.arange(attn_scores.shape[-1], requires_grad=False, device=mask_index.device).unsqueeze(0) < mask_index.unsqueeze(1)
+          mask = Tensor.arange(attn_scores.shape[-1]).unsqueeze(0) < mask_index.unsqueeze(1)
         elif mask_index.shape[0] == 2*batch_size:
           end_positions = mask_index[:batch_size]
           start_positions = mask_index[batch_size:]
@@ -1049,7 +1043,7 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
       attn_scores = mask.where(attn_scores, mask_filter_value)
 
     if unidirectional:
-      causal_mask = Tensor.ones((seq_len, seq_len), dtype=dtypes.bool).tril()
+      causal_mask = Tensor.ones((seq_len, seq_len), dtype=dtypes.bool, buffer=False).tril()
       attn_scores = causal_mask.where(attn_scores, mask_filter_value)
 
     output = attn_scores.softmax(-1) @ v
@@ -1081,7 +1075,7 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
     qk_matmul_return_val = scores
 
     if is_causal:
-      causal_mask = Tensor.ones(Q.shape[-2], K.shape[-2], device=Q.device, dtype=dtypes.bool, requires_grad=False).tril(0)
+      causal_mask = Tensor.ones(Q.shape[-2], K.shape[-2], dtype=dtypes.bool, buffer=False).tril(0)
       scores = scores.masked_fill(causal_mask.logical_not(), -float("inf"))
 
     if attn_mask is not None:
@@ -1135,10 +1129,10 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
   # ***** Indexing Ops *****
   def NonZero(x:Tensor):
     mask = (x!=0).flatten()
-    flat_idx = Tensor.arange(mask.numel(), dtype=dtypes.int64, device=x.device).masked_select(mask)
+    flat_idx = Tensor.arange(mask.numel(), dtype=dtypes.int64).masked_select(mask)
     if flat_idx.ndim == 0: flat_idx = flat_idx.reshape(1)
     if x.ndim == 0:
-      return Tensor.zeros((0, flat_idx.shape[0]), dtype=dtypes.int64, device=x.device, requires_grad=False)
+      return Tensor.zeros((0, flat_idx.shape[0]), dtype=dtypes.int64, device=x.device)
     strides = [prod(int(s) for s in x.shape[i+1:]) if i+1 < x.ndim else 1 for i in range(x.ndim)]
     coords = [((flat_idx // stride) % int(dim)) for stride, dim in zip(strides, x.shape)]
     return Tensor.stack(*coords, dim=0)
@@ -1165,7 +1159,7 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
     # NOTE: each batched dim of both input and indices are equal
     x = x.reshape(b, *x.shape[batch_dims:])
     indices = indices.reshape(b, *indices.shape[batch_dims:])
-    b_idx = Tensor.arange(b, device=x.device).reshape(b, *(1,)*(indices.ndim - 2)).expand(*indices.shape[:-1])
+    b_idx = Tensor.arange(b).reshape(b, *(1,)*(indices.ndim - 2)).expand(*indices.shape[:-1])
     ret = x[(b_idx,) + tuple(i.squeeze(-1) for i in indices.split(1, -1))]
     return ret.reshape(*x_shape[:batch_dims], *i_shape[batch_dims:-1], *ret.shape[indices.ndim-1:])
   def ScatterND(x:Tensor, indices:Tensor, updates:Tensor, reduction:Literal["none", "add", "mul", "max", "min"]='none'):
@@ -1185,9 +1179,9 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
     B, U, D = indices.shape[0], updates.shape[-2], int(data.shape[-2])
     orig_shape, data_flat, updates_flat = data.shape, data.reshape(-1, D, data.shape[-1]), updates.reshape(-1, U, updates.shape[-1])
     B_total = data_flat.shape[0]
-    batch_idx = Tensor.arange(B_total, device=data.device).reshape(B_total, 1).expand(B_total, U)
+    batch_idx = Tensor.arange(B_total).reshape(B_total, 1).expand(B_total, U)
     indices_expanded = indices.reshape(B, *([1] * (data.ndim - 3))).expand(*orig_shape[:-2]).reshape(B_total)
-    row_idx = indices_expanded.reshape(B_total, 1).expand(B_total, U) + Tensor.arange(U, device=data.device).reshape(1, U).expand(B_total, U)
+    row_idx = indices_expanded.reshape(B_total, 1).expand(B_total, U) + Tensor.arange(U).reshape(1, U).expand(B_total, U)
     if mode == 'circular': row_idx = row_idx % D
     return ScatterND(data_flat, batch_idx.unsqueeze(-1).cat(row_idx.unsqueeze(-1), dim=-1), updates_flat).reshape(orig_shape)
 
@@ -1205,13 +1199,13 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
       inp = inp.flatten()
       axis = 0
     axis = inp._resolve_dim(axis)
-    con = Tensor([i for i,cond in enumerate(condition) if cond]) # compress in python
+    con = Tensor([i for i,cond in enumerate(condition) if cond], device=inp.device) # compress in python
     return inp[tuple(con if i == axis else slice(None) for i in range(inp.ndim))]
 
   # ***** Quantization Ops *****
   def QuantizeLinear(x:Tensor, y_scale:Tensor, y_zero_point:Tensor|int=0, axis:int=1, block_size:int=0, output_dtype:int=0, saturate=1):
     if isinstance(y_zero_point, Tensor): out_dtype = y_zero_point.dtype
-    elif output_dtype != 0: out_dtype = dtype_fallback(OnnxDataType(output_dtype).to_dtype(), "QuantizeLinear op")
+    elif output_dtype != 0: out_dtype = OnnxDataType(output_dtype).to_dtype()
     else: out_dtype = dtypes.uint8
     y_scale, y_zero_point = _prepare_quantize(x, y_scale, y_zero_point, axis, block_size)
     if out_dtype == dtypes.uchar:
@@ -1235,6 +1229,9 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
 
   def QLinearConv(x:Tensor, x_scale:Tensor, x_zero_point:Tensor, w:Tensor, w_scale:Tensor, w_zero_point:Tensor, y_scale:Tensor,
                   y_zero_point:Tensor, B:Tensor|None=None, **opts):
+    # align quant params for non-scalars based on https://onnx.ai/onnx/operators/onnx__QLinearConv.html
+    w_zero_point = w_zero_point.reshape(-1, 1, 1, 1)
+    w_scale = w_scale.reshape(1, -1, 1, 1)
     return _qlinearop_quantized(Conv, [x,w], [x_zero_point,w_zero_point], [x_scale,w_scale], y_scale, y_zero_point, **{"B":B, **opts})
 
   def QLinearMatMul(a:Tensor, a_scale:Tensor, a_zero_point:Tensor, b:Tensor, b_scale:Tensor, b_zero_point:Tensor, y_scale:Tensor,
@@ -1284,8 +1281,8 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
     if T == 0: opt.b1_t, opt.b2_t = opt.b1_t.zeros_like(), opt.b2_t.zeros_like()
     else:
       # `T-1` since it's applied again at the start of `_step`
-      opt.b1_t = Tensor([alpha**(T-1)], dtype=dtypes.float32, device=X.device, requires_grad=False)
-      opt.b2_t = Tensor([beta**(T-1)], dtype=dtypes.float32, device=X.device, requires_grad=False)
+      opt.b1_t = Tensor([alpha**(T-1)], dtype=dtypes.float32, device=X.device)
+      opt.b2_t = Tensor([beta**(T-1)], dtype=dtypes.float32, device=X.device)
     opt.step()
     X = (1 - norm_coefficient_post) * X
     return [X, V, H]
@@ -1301,8 +1298,7 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
     return [X, V]
 
   def Gradient(*inputs:Tensor, y:str, intermediate_tensors:dict[str, Tensor], **_):
-    intermediate_tensors[y].backward()
-    return tuple([t.grad for t in inputs])
+    return tuple(intermediate_tensors[y].gradient(*inputs))
 
   return {
     # Tensor ops

@@ -1,5 +1,5 @@
-from tinygrad.helpers import all_same, prod, getenv
-from tinygrad.uop.ops import Ops, UOp, PatternMatcher, UPat, GroupOp, graph_rewrite, should_resolve_call
+from tinygrad.helpers import all_same, prod, getenv, ALLREDUCE_CAST
+from tinygrad.uop.ops import Ops, UOp, PatternMatcher, UPat, GroupOp, graph_rewrite
 from tinygrad.dtype import dtypes
 from tinygrad.schedule.allreduce import handle_allreduce
 
@@ -10,7 +10,7 @@ def mstack_early_shrink(ms:UOp, shrink:UOp):
   def apply_shrink(s:UOp, i:int) -> UOp:
     new_arg = [tuple([x.substitute({dvar[0]:dvar[0].const_like(i)}) if isinstance(x, UOp) and
                       (dvar:=[v for v in x.variables() if v.expr=='_device_num']) else x for x in ss]) for ss in shrink.marg]
-    return s.shrink(tuple(new_arg))
+    return s._mop(Ops.SHRINK, tuple(new_arg))
   for i, x in enumerate(ms.src):
     if x.op is Ops.COPY:
       ret.append(apply_shrink(x.src[0], i).copy_to_device(x.device))
@@ -43,7 +43,9 @@ if not getenv("LATE_ALLREDUCE", 1): replace_allreduce = _early_allreduce + repla
 
 def alu_multi(root:UOp):
   msrcs = root.src
-  assert all_same([x.device for x in msrcs]), f"all buffers must have the same device {[x.device for x in msrcs]}"
+  devices = [x.device for x in msrcs if x.device is not None]
+  assert all_same(devices), f"all buffers must have the same device {devices}"
+  dcount = len(devices[0])
   axis = root.axis
   assert axis is not None
 
@@ -52,7 +54,7 @@ def alu_multi(root:UOp):
     if mlb.axis is None:
       # no axis, shard it
       assert mlb.op is not Ops.MULTI
-      srcs.append(mlb._shard(axis))
+      srcs.append(mlb._shard(axis, dcount))
     else:
       assert mlb.op is Ops.MULTI
       if mlb.axis == axis:
@@ -60,14 +62,18 @@ def alu_multi(root:UOp):
         srcs.append(mlb.src[0])
       else:
         # axis mismatch, copy to all devices, and shard it correctly
-        srcs.append(copy_multi(mlb, mlb.device)._shard(axis))
+        srcs.append(copy_multi(mlb, mlb.device)._shard(axis, dcount))
   return srcs[0].alu(root.op, *srcs[1:]).multi(axis)
 
 def reduce_multi(root:UOp, multi:UOp):
   op, axis = root.arg
   if multi.axis is not None and multi.axis in axis:
-    # all-reduce on sharded axes
-    return multi.src[0]._rop(op, axis).allreduce(op, multi.device)
+    local = multi.src[0]._rop(op, axis)
+    # allreduce in pre-cast dtype when sum_acc_dtype promoted from bf16/half
+    if ALLREDUCE_CAST and multi.src[0].op is Ops.CAST and multi.src[0].src[0].dtype.scalar() in (dtypes.bfloat16, dtypes.half):
+      orig_dtype = multi.src[0].src[0].dtype
+      return local.cast(orig_dtype).allreduce(op, multi.device).cast(local.dtype)
+    return local.allreduce(op, multi.device)
   # reduce on non sharded axes, piecewise is fine. if axis is None this is also correct
   return multi.src[0]._rop(op, axis).multi(axis=multi.axis)
 
@@ -82,22 +88,25 @@ def expand_multi(root:UOp, multi:UOp):
   return multi.src[0].expand(new_shape).multi(multi.axis)
 
 def pad_multi(root:UOp, multi:UOp):
-  assert multi.axis is None or root.marg[multi.axis] == (0,0), f"padding not supported for {root.marg=}"
-  return multi.src[0].pad(root.marg).multi(multi.axis)
+  assert multi.axis is None or root.marg[multi.axis] == (0, multi.shape[multi.axis]), f"padding not supported for {root.marg=}"
+  local_pad = tuple((0, multi.src[0].shape[multi.axis]) if a == multi.axis else s for a,s in enumerate(root.marg))
+  return multi.src[0]._mop(Ops.PAD, local_pad).multi(multi.axis)
 
 def permute_multi(root:UOp, multi:UOp):
   # all permutes supported!
   return multi.src[0].permute(root.marg).multi(root.axis)
 
 def shrink_multi(root:UOp, multi:UOp):
-  assert multi.axis is None or root.marg[multi.axis] == (0, multi.shape[multi.axis]) or root.marg[multi.axis] in multi.bounds, \
+  shard_bounds = tuple((s,e-s) for s,e in multi.bounds) if multi.axis is not None else ()
+  assert multi.axis is None or root.marg[multi.axis] == (0, multi.shape[multi.axis]) or root.marg[multi.axis] in shard_bounds, \
     f"shrinking not supported for {root.marg=}"
-  if multi.axis is not None and root.marg[multi.axis] in multi.bounds and root.marg[multi.axis] != (0, multi.shape[multi.axis]):
+  if multi.axis is not None and root.marg[multi.axis] in shard_bounds and root.marg[multi.axis] != (0, multi.shape[multi.axis]):
     # NOTE: shrink on the shard axis is only allowed when result is a single partition, denoted by the new real
     # we just copy it to all the devices, no real. this will be optimized out later
     non_shard_shrink = tuple((0, multi.src[0].shape[i]) if i == multi.axis else s for i, s in enumerate(root.marg))
-    return multi.src[0].copy_to_device(multi.device, arg=multi.bounds.index(root.marg[multi.axis])).shrink(non_shard_shrink)
-  return multi.src[0].shrink(tuple((0, multi.src[0].shape[multi.axis]) if a == multi.axis else s for a,s in enumerate(root.marg))).multi(multi.axis)
+    return multi.src[0].copy_to_device(multi.device, arg=shard_bounds.index(root.marg[multi.axis]))._mop(Ops.SHRINK, non_shard_shrink)
+  local_shrink = tuple((0, multi.src[0].shape[multi.axis]) if a == multi.axis else s for a,s in enumerate(root.marg))
+  return multi.src[0]._mop(Ops.SHRINK, local_shrink).multi(multi.axis)
 
 def flip_multi(root:UOp, multi:UOp):
   assert multi.axis is None or not root.marg[multi.axis], "flipping not supported on sharded axis"
@@ -105,6 +114,9 @@ def flip_multi(root:UOp, multi:UOp):
 
 def copy_multi(multi:UOp, device:str | tuple[str, ...] | UOp):
   assert multi.axis is not None, "all multi ops have axis"
+  if isinstance(device, UOp) and isinstance(device.arg, str):
+    pieces = [multi.src[0].mselect(i).copy_to_device(device) for i in range(len(multi.device))]
+    return pieces[0].cat(*pieces[1:], dim=multi.axis)
   return multi.src[0]._unshard(multi.axis).allreduce(Ops.ADD, device)
 
 def store_after_multi(dest:UOp, src:UOp): return dest.after(dest.store(src.src[0])).multi(src.axis)
@@ -112,11 +124,11 @@ def store_after_multi(dest:UOp, src:UOp): return dest.after(dest.store(src.src[0
 def passthrough_multi(root:UOp, multi:UOp):
   return UOp(root.op, root.dtype, (multi.src[0],)+tuple(x.src[0] if x.op is Ops.MULTI else x for x in root.src[1:]), root.arg).multi(multi.axis)
 
-def rewrite_into_call(call:UOp):
-  if not should_resolve_call(call): return None
+def rewrite_into_function(call:UOp):
+  if call.arg.precompile: return None
   new_body = graph_rewrite(call.src[0], multi_pm, name="subcall")
   new_args = tuple(a.src[0] if a.op is Ops.MULTI else a for a in call.src[1:])
-  # after multi resolution, TUPLE elements may be MULTI — strip MULTI from body, create per-shard CALL, wrap each GETTUPLE in its own MULTI
+  # after multi resolution, TUPLE elements may be MULTI — strip MULTI from body, create per-shard FUNCTION, wrap each GETTUPLE in its own MULTI
   assert new_body.op is Ops.TUPLE
   if any(s.op is Ops.MULTI for s in new_body.src):
     shard_call = call.replace(src=(UOp.maketuple(*[s.src[0] if s.op is Ops.MULTI else s for s in new_body.src]),)+new_args)
@@ -125,13 +137,13 @@ def rewrite_into_call(call:UOp):
 
 def param_to_multi(p:UOp):
   if p.axis is None: return None
-  return UOp.param(p.arg, p.dtype, p.shard_shape, p._device).multi(p.axis)
+  return UOp.param(p.arg.slot, p.dtype, p.shard_shape, p.device, p.arg.vmin_vmax, p.arg.name, p.arg.addrspace).multi(p.axis)
 
 # NOTE: this is the same pattern as Ops.UNROLL
 multi_pm = PatternMatcher([
   (UPat(Ops.PARAM, name="p"), param_to_multi),
   (UPat(GroupOp.ALU, name="root", custom_early_reject=set([Ops.MULTI])), alu_multi),
-  (UPat(Ops.REDUCE_AXIS, src=(UPat(Ops.MULTI, name="multi"), ), name="root"), reduce_multi),
+  (UPat(Ops.REDUCE, src=(UPat(Ops.MULTI, name="multi"), ), name="root"), reduce_multi),
   (UPat(Ops.RESHAPE, src=(UPat(Ops.MULTI, name="multi"), UPat()), name="root"), reshape_multi),
   (UPat(Ops.EXPAND, src=(UPat(Ops.MULTI, name="multi"), UPat()), name="root"), expand_multi),
   (UPat(Ops.PAD, src=(UPat(Ops.MULTI, name="multi"), UPat(), UPat()), name="root"), pad_multi),
@@ -145,17 +157,16 @@ multi_pm = PatternMatcher([
 
   # resolve TUPLE+GETTUPLE (needed in multi)
   (UPat(Ops.GETTUPLE, src=(UPat(Ops.TUPLE, name="t"),), name="g"), lambda g,t: t.src[g.arg]),
-  # GETTUPLE on MULTI: passthrough MULTI (e.g. when CALL was replaced by MULTI(GETTUPLE(...)))
+  # GETTUPLE on MULTI: passthrough MULTI (e.g. when FUNCTION was replaced by MULTI(GETTUPLE(...)))
   (UPat(Ops.GETTUPLE, src=(UPat(Ops.MULTI, name="multi"),), name="g"),
-    lambda g, multi: multi.src[0].gettuple(g.arg).multi(multi.axis) if multi.src[0].op in {Ops.CALL, Ops.TUPLE}
+    lambda g, multi: multi.src[0].gettuple(g.arg).multi(multi.axis) if multi.src[0].op in {Ops.FUNCTION, Ops.TUPLE}
     else multi),
-  # rewrite into calls explicitly for MULTI
-  (UPat(Ops.CALL, name="call"), rewrite_into_call),
-  (UPat((Ops.CALL, Ops.AFTER), src=(UPat(Ops.MULTI, name="multi"), ), name="root", allow_any_len=True), passthrough_multi),
-  # we just remove the MULTI from non-value-producing CALLs (custom kernels, etc.) — TUPLE body CALLs are handled by rewrite_into_call
+  # rewrite into FUNCTION calls explicitly for MULTI (value-producing)
+  (UPat(Ops.FUNCTION, name="call"), rewrite_into_function),
+  (UPat((Ops.CALL, Ops.FUNCTION, Ops.AFTER), src=(UPat(Ops.MULTI, name="multi"), ), name="root", allow_any_len=True), passthrough_multi),
+  # just strip the MULTI from non-value-producing CALLs (custom kernels, etc.) — FUNCTION is handled by rewrite_into_function
   (UPat(Ops.CALL, dtype=dtypes.void, name="root", custom_early_reject=set([Ops.MULTI])), lambda root:
-    UOp(root.op, root.dtype, tuple(x.src[0] if x.op is Ops.MULTI else x for x in root.src), root.arg)
-    if root.src[0].op is not Ops.TUPLE else None),
+    UOp(root.op, root.dtype, tuple(x.src[0] if x.op is Ops.MULTI else x for x in root.src), root.arg)),
   (UPat((Ops.CAST, Ops.BITCAST, Ops.CONTIGUOUS, Ops.DETACH, Ops.CONTIGUOUS_BACKWARD),
         src=(UPat(Ops.MULTI, name="multi"), ), name="root"), passthrough_multi),
   # remove MULTI from STORE

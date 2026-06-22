@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import sys
 import subprocess
 import threading
@@ -156,7 +157,8 @@ def main():
     try:
       set_core_affinity([5])
     except OSError:
-      cloudlog.exception("Failed to set core affinity for updater process")
+      cores = sorted(os.sched_getaffinity(0))
+      cloudlog.warning(f"Skipping core 5 affinity for updater process, available cores: {cores}")
 
   if len(sys.argv) < 3:
     print("Usage: updater.py <updater_path> <manifest_path>")

@@ -1,12 +1,11 @@
 import unittest, time, gc
 import numpy as np
-from tinygrad.device import is_dtype_supported
 from tinygrad.nn import optim
 from tinygrad.nn.state import get_parameters
 from tinygrad.engine.jit import TinyJit
 from tinygrad import Tensor, Device, GlobalCounters, dtypes, Variable
 from tinygrad.helpers import Context
-from test.helpers import slow
+from test.helpers import slow, jit_cache_count
 from extra.lr_scheduler import OneCycleLR
 from test.helpers import derandomize_model
 
@@ -31,8 +30,7 @@ def helper_test(nm, gen, model, max_memory_allowed, max_kernels_allowed, all_jit
       tms.append(time.perf_counter_ns() - st)
     mem_used = (GlobalCounters.mem_used - global_mem_used) / 1e9
 
-    # TODO: jit should expose this correctly with graph
-    kernels_used = len(model.jit_cache) if hasattr(model, "jit_cache") else None
+    kernels_used = jit_cache_count(model.captured.linear) if getattr(model, "captured", None) is not None else None
     print(f"{nm}: used {mem_used/1e9:.2f} GB and {kernels_used} kernels in {min(tms)/1e6:.2f} ms")
     assert mem_used < max_memory_allowed, f"{nm} used more than {max_memory_allowed:.3f} GB - {mem_used:.3} GB used"
     assert (max_memory_allowed - mem_used) / max_memory_allowed < 0.2, f"{max_memory_allowed:.3f} GB is too far from {mem_used:.3} GB used"
@@ -41,6 +39,8 @@ def helper_test(nm, gen, model, max_memory_allowed, max_kernels_allowed, all_jit
       assert (max_kernels_allowed - kernels_used) / max_kernels_allowed < 0.2, f"{max_kernels_allowed=} is too far from {kernels_used=} used"
     if all_jitted:
       assert kernels_used > 0 and kernels_used == GlobalCounters.kernel_count or (kernels_used <= GlobalCounters.kernel_count and getattr(Device[Device.DEFAULT], "graph", None)), f"only {kernels_used} out of {GlobalCounters.kernel_count} were jitted"  # noqa: E501
+
+supported_dtypes = Device[Device.DEFAULT].renderer.supported_dtypes()
 
 class TestRealWorld(unittest.TestCase):
   def setUp(self):
@@ -54,7 +54,7 @@ class TestRealWorld(unittest.TestCase):
     dtypes.default_float = self.old_float
 
   @slow
-  @unittest.skipUnless(is_dtype_supported(dtypes.float16), "need dtypes.float16")
+  @unittest.skipUnless(dtypes.float16 in supported_dtypes, "need dtypes.float16")
   def test_stable_diffusion(self):
     params = unet_params
     params["model_ch"] = 8
@@ -79,7 +79,7 @@ class TestRealWorld(unittest.TestCase):
     exp_mem = 0.00037 if Device.DEFAULT == "CL" else 0.0002
     helper_test("test_unet_resblock", lambda: (Tensor.empty(4, 16, 8, 8), Tensor.empty(1, 24)), test, exp_mem, 37)
 
-  @unittest.skipUnless(is_dtype_supported(dtypes.float16), "need dtypes.float16")
+  @unittest.skipUnless(dtypes.float16 in supported_dtypes, "need dtypes.float16")
   def test_llama(self):
     dtypes.default_float = dtypes.float16
 
@@ -91,7 +91,7 @@ class TestRealWorld(unittest.TestCase):
     # TODO: test first token vs rest properly
     helper_test("test_llama", lambda: (Tensor([[1,2,3,4]]),), test, 0.23, 118, all_jitted=True)
 
-  @unittest.skipUnless(is_dtype_supported(dtypes.float16), "need dtypes.float16")
+  @unittest.skipUnless(dtypes.float16 in supported_dtypes, "need dtypes.float16")
   def test_gpt2(self):
     dtypes.default_float = dtypes.float16
 
@@ -148,7 +148,7 @@ class TestRealWorld(unittest.TestCase):
 
       helper_test("train_cifar", lambda: (Tensor.randn(BS, 3, 32, 32),), train, 0.12, 126)
 
-  @unittest.skipUnless(is_dtype_supported(dtypes.float16), "need dtypes.float16")
+  @unittest.skipUnless(dtypes.float16 in supported_dtypes, "need dtypes.float16")
   def test_train_cifar_hyp(self):
     dtypes.default_float = dtypes.float16
     with Tensor.train():

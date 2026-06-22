@@ -1,10 +1,13 @@
-import math
-from typing import Self
+import math, functools, operator
+from typing import TYPE_CHECKING, Literal, Self
 from tinygrad.uop import Ops
-from tinygrad.dtype import dtypes, ConstType, least_upper_dtype, least_upper_float
-from tinygrad.helpers import polyN
+from tinygrad.dtype import dtypes, ConstType, PyConst, least_upper_dtype, least_upper_float
+from tinygrad.helpers import argfix, polyN
 from tinygrad.mixin.dtype import DTypeMixin
 from tinygrad.mixin.creation import CreationMixin
+
+if TYPE_CHECKING:
+  from tinygrad.uop.ops import UOp
 
 
 class ElementwiseMixin(DTypeMixin, CreationMixin):
@@ -12,15 +15,31 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
   def alu(self, op: Ops, *src: Self) -> Self:
     raise NotImplementedError
 
-  def _broadcasted(self, y: Self | ConstType, reverse: bool = False) -> tuple[Self, Self]:
-    raise NotImplementedError
+  @property
+  def _uop(self) -> 'UOp': raise NotImplementedError
+
+  def _wrap_uop(self, u: 'UOp') -> Self: raise NotImplementedError
 
   # great functions you get!
-  def ufix(self, x: Self | ConstType) -> Self:
-    return self.const_like(x) if not isinstance(x, ElementwiseMixin) else x
+  def ufix(self, x: 'Self|ConstType|UOp') -> Self:
+    return x if isinstance(x, type(self)) else self._wrap_uop(self._uop.ufix(x))
+
+  # implemented in OpMixin, broadcasting needs the movement ops
+  def _broadcasted(self, y: 'Self|ConstType|UOp', reverse: bool = False) -> tuple[Self, Self]:
+    raise NotImplementedError
 
   def _binop(self, op: Ops, x: Self | ConstType, reverse: bool) -> Self:
-    return self.ufix(x).alu(op, self) if reverse else self.alu(op, self.ufix(x))
+    lhs, rhs = self._broadcasted(x, reverse)
+    return lhs.alu(op, rhs)
+
+  def usum(self, *uops) -> Self: return functools.reduce(operator.or_ if self.dtype is dtypes.bool else operator.add, argfix(*uops), self)
+  def uprod(self, *uops) -> Self: return functools.reduce(operator.and_ if self.dtype is dtypes.bool else operator.mul, argfix(*uops), self)
+
+  def detach(self) -> Self:
+    """
+    Returns a new tensor with the same data as this tensor, but detached from the autograd graph.
+    """
+    return self.alu(Ops.DETACH)
 
   def logical_not(self) -> Self:
     """
@@ -31,6 +50,14 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
     ```
     """
     return self.cast(dtypes.bool).ne(True)
+
+  def contiguous(self, *args, **kwargs) -> Self: raise NotImplementedError
+
+  def contiguous_backward(self) -> Self:
+    """
+    Inserts a contiguous operation in the backward pass.
+    """
+    return self.alu(Ops.CONTIGUOUS_BACKWARD)
 
   def neg(self) -> Self:
     """
@@ -106,6 +133,21 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
     """
     return self._binop(Ops.MUL, x, reverse)
 
+  def bitwise_not(self) -> Self:
+    """
+    Computes the bitwise NOT of `self`.
+    Equivalent to `~self`.
+    ```python exec="true" source="above" session="tensor" result="python"
+    print(Tensor([0, 2, 5, 255], dtype="int8").bitwise_not().numpy())
+    ```
+    ```python exec="true" source="above" session="tensor" result="python"
+    print(Tensor([True, False]).bitwise_not().numpy())
+    ```
+    """
+    self._check_dtype()
+    if self.dtype == dtypes.bool: return self.logical_not()
+    return (self ^ self.dtype.max) if dtypes.is_unsigned(self.dtype) else (self ^ -1)
+
   def bitwise_and(self, x: Self | ConstType, reverse: bool = False) -> Self:
     """
     Computes the bitwise AND of `self` and `x`.
@@ -152,24 +194,62 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
     self._check_dtype()
     return self._binop(Ops.XOR, x, reverse)
 
-  def idiv(self, x: Self | ConstType, reverse: bool = False) -> Self:
+  def mod(self, x: Self | ConstType, reverse: bool = False) -> Self:
     """
-    Divides `self` by `x`.
-    Equivalent to `self // x`.
+    Mod `self` by `x`.
+    Equivalent to `self % x`.
     Supports broadcasting to a common shape, type promotion, and integer inputs.
-    `idiv` performs integer division (truncate towards zero).
 
     ```python exec="true" source="above" session="tensor" result="python"
-    print(Tensor([-4, 7, 5, 4, -7, 8]).idiv(Tensor([2, -3, 8, -2, 3, 5])).numpy())
+    print(Tensor([-4, 7, 5, 4, -7, 8]).mod(Tensor([2, -3, 8, -2, 3, 5])).numpy())
     ```
     """
-    return self._binop(Ops.IDIV, x, reverse)
+    a, b = self._broadcasted(x, reverse)
+    if dtypes.is_int(a.dtype): return a.alu(Ops.FLOORMOD, b)
+    return a - a.div(b, rounding_mode="floor") * b
 
-  def mod(self, x: Self | ConstType, reverse: bool = False) -> Self:
-    return self._binop(Ops.MOD, x, reverse)
+  def fmod(self, x: Self | ConstType) -> Self:
+    """
+    C-style remainder of `self` divided by `x` (sign follows the dividend), using truncating division.
+    Differs from `mod`/`%`, which uses Python floor remainder.
 
-  def div(self, x: Self | ConstType, reverse: bool = False) -> Self:
-    return (self.ufix(x) * self.alu(Ops.RECIPROCAL)) if reverse else (self * self.ufix(x).alu(Ops.RECIPROCAL))
+    ```python exec="true" source="above" session="tensor" result="python"
+    print(Tensor([-4, 7, 5, 4, -7, 8]).fmod(Tensor([2, -3, 8, -2, 3, 5])).numpy())
+    ```
+    """
+    a, b = self._broadcasted(x)
+    if dtypes.is_int(a.dtype): return a.alu(Ops.CMOD, b)
+    return a - a.div(b, rounding_mode="trunc") * b
+
+  def div(self, x: Self | ConstType, reverse: bool = False, rounding_mode: Literal["trunc", "floor"] | None = None) -> Self:
+    """
+    Divides `self` by `x`.
+    Equivalent to `self / x`.
+    Supports broadcasting to a common shape, type promotion, and integer, float, boolean inputs.
+    `div` performs true division by default; pass `rounding_mode="trunc"` for truncating toward zero
+    or `rounding_mode="floor"` for floor division.
+
+    ```python exec="true" source="above" session="tensor" result="python"
+    Tensor.manual_seed(42)
+    t = Tensor.randn(4)
+    print(t.numpy())
+    ```
+    ```python exec="true" source="above" session="tensor" result="python"
+    print(t.div(3).numpy())
+    ```
+    ```python exec="true" source="above" session="tensor" result="python"
+    print(Tensor([1, 4, 10]).div(Tensor([2, 3, 4])).numpy())
+    ```
+    """
+    a, b = self._broadcasted(x, reverse)
+    if dtypes.is_int(a.dtype):
+      if rounding_mode == "trunc": return a.alu(Ops.CDIV, b)
+      if rounding_mode == "floor": return a.alu(Ops.FLOORDIV, b)
+    d = a * b.reciprocal()
+    if rounding_mode is None: return d
+    if rounding_mode == "trunc": return d.trunc()
+    if rounding_mode == "floor": return d.floor()
+    raise RuntimeError(f"{rounding_mode=} is not supported")
 
   def __neg__(self) -> Self:
     return self.neg()
@@ -190,7 +270,7 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
     return self.div(x)
 
   def __floordiv__(self, x: Self | ConstType) -> Self:
-    return self.idiv(x)  # TODO: idiv is trunc div, not floordiv
+    return self.div(x, rounding_mode="floor")
 
   def __mod__(self, x: Self | ConstType) -> Self:
     return self.mod(x)
@@ -217,7 +297,7 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
     return self.div(x, True)
 
   def __rfloordiv__(self, x: Self | ConstType) -> Self:
-    return self.idiv(x, True)
+    return self.div(x, reverse=True, rounding_mode="floor")
 
   def __rand__(self, x: Self | ConstType) -> Self:
     return self.bitwise_and(x, True)
@@ -322,20 +402,39 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
     Returns a tensor of with the magnitude of `self` and the sign of `other`, elementwise.
     """
     # NOTE: torch always return in float, we return based on the broadcasting rule.
-    other = self._broadcasted(other)[1]
-    return self.abs() * ((other < 0) | (other.reciprocal() < 0)).where(-1, 1)
+    a, b = self._broadcasted(other)
+    return a.abs() * ((b < 0) | (b.reciprocal() < 0)).where(-1, 1)
 
   def logaddexp(self, other: Self | ConstType) -> Self:
     """
     Calculates (self.exp()+other.exp()).log(), elementwise.
     """
-    m = self.maximum(other)
-    return ((self-m).exp() + (self._broadcasted(other)[1]-m).exp()).log() + m
+    a, b = self._broadcasted(other)
+    m = a.maximum(b)
+    return ((a-m).exp() + (b-m).exp()).log() + m
 
   def where(self, x: Self | ConstType, y: Self | ConstType) -> Self:
     ref: Self = x if isinstance(x, type(self)) else y if isinstance(y, type(self)) else \
       self.cast(least_upper_dtype(dtypes.from_py(x), dtypes.from_py(y)))
     return self.alu(Ops.WHERE, ref.ufix(x), ref.ufix(y))
+
+  def masked_fill(self, mask:Self, value:Self|PyConst) -> Self:
+    """
+    Replaces `self` with `value` wherever the elements of `mask` are True.
+
+    ```python exec="true" source="above" session="tensor" result="python"
+    t = Tensor([1, 2, 3, 4, 5])
+    mask = Tensor([True, False, True, False, False])
+    print(t.masked_fill(mask, -12).numpy())
+    ```
+    ```python exec="true" source="above" session="tensor" result="python"
+    t = Tensor([1, 2, 3, 4, 5])
+    mask = Tensor([True, False, True, False, False])
+    value = Tensor([-1, -2, -3, -4, -5])
+    print(t.masked_fill(mask, value).numpy())
+    ```
+    """
+    return mask.where(value, self)
 
   def threefry(self, seed: Self) -> Self:
     return self.alu(Ops.THREEFRY, seed)
@@ -535,7 +634,7 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
     ```
     """
     is_finite_close = self.isfinite() & other.isfinite() & ((self - other).abs() <= atol + rtol * other.abs())
-    is_infinite_close = (self.isinf() | other.isinf()) & (self == other)
+    is_infinite_close = (self.isinf() | other.isinf()) & self.eq(other)
     is_nan_close = (self.isnan() & other.isnan()) & equal_nan
     return is_finite_close | is_infinite_close | is_nan_close
 
@@ -664,7 +763,7 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
     """
     return self * (self * 1.702).sigmoid()
 
-  def gelu(self) -> Self:
+  def gelu(self, approximate:str="tanh") -> Self:
     """
     Applies the Gaussian Error Linear Unit (GELU) function element-wise.
 
@@ -674,7 +773,12 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
     print(Tensor([-3., -2., -1., 0., 1., 2., 3.]).gelu().numpy())
     ```
     """
-    return 0.5 * self * (1 + (math.sqrt(2 / math.pi) * (self + 0.044715 * self ** 3)).tanh())
+    if approximate == "tanh":
+      return 0.5 * self * (1 + (math.sqrt(2 / math.pi) * (self + 0.044715 * self ** 3)).tanh())
+    elif approximate == "none":
+      return self * 0.5 * (1.0 + (self / math.sqrt(2)).erf())
+    else:
+      raise RuntimeError(f"{approximate=} is not supported")
 
   def swish(self) -> Self:
     """
@@ -960,20 +1064,6 @@ class ElementwiseMixin(DTypeMixin, CreationMixin):
     ```
     """
     return self / (1 + self.abs())
-
-  def bitwise_not(self) -> Self:
-    """
-    Computes the bitwise NOT of `self`.
-    Equivalent to `~self`.
-    ```python exec="true" source="above" session="tensor" result="python"
-    print(Tensor([0, 2, 5, 255], dtype="int8").bitwise_not().numpy())
-    ```
-    ```python exec="true" source="above" session="tensor" result="python"
-    print(Tensor([True, False]).bitwise_not().numpy())
-    ```
-    """
-    if self.dtype != dtypes.bool and not dtypes.is_int(self.dtype): raise RuntimeError(f"{self.dtype} is not supported")
-    return self.logical_not() if self.dtype == dtypes.bool else self ^ -1
 
   def lerp(self, end: Self, weight: Self | ConstType) -> Self:
     """

@@ -1,26 +1,29 @@
-import functools, itertools, time
+import functools, time
 from typing import Generic, TypeVar, Callable, cast, overload
 from tinygrad.helpers import Context, dedup, getenv, DEBUG
-from tinygrad.uop.ops import UOp, Ops, graph_rewrite, PatternMatcher, UPat
+from tinygrad.uop.ops import UOp, Ops, ProgramInfo, graph_rewrite, PatternMatcher, UPat
 from tinygrad.tensor import Tensor
 from tinygrad.nn.state import get_state_dict
 
 def add_to_ctx(ctx, x:UOp):
+  if x.buf_uop in ctx[1]: return None
   ret = x.param_like(len(ctx[0]))
   ctx[0].append(x)
   return ret
-
-pm_transform_unique_const = PatternMatcher([
-  # transform unique consts to LUNIQUE
-  (UPat(Ops.CONST, src=(UPat(Ops.UNIQUE), UPat(Ops.DEVICE)), name="x"),
-   lambda ctx,x: x.replace(src=(UOp(Ops.LUNIQUE, arg=next(ctx[1])), x.src[1]))),
-])
 
 pm_ctx = PatternMatcher([
   (UPat((Ops.BUFFER, Ops.BIND), name="x"), add_to_ctx),
   (UPat((Ops.AFTER, Ops.CONTIGUOUS), name="x"),
    lambda ctx,x: add_to_ctx(ctx,x) if not x.op_in_backward_slice_with_self(Ops.PARAM) and x.op_in_backward_slice_with_self(Ops.BUFFER) else None),
-])+pm_transform_unique_const
+])
+
+def write_only_outputs(uret:UOp) -> set[UOp]:
+  ret: set[UOp] = set()
+  for call in uret.backward_slice_with_self:
+    if call.op is Ops.CALL and call.src[0].op is Ops.SINK:
+      info = ProgramInfo.from_sink(call.src[0])
+      ret.update(call.src[1+i].buf_uop for i in set(info.outs)-set(info.ins))
+  return ret
 
 ReturnType = TypeVar('ReturnType')
 class _function(Generic[ReturnType]):
@@ -40,7 +43,7 @@ class _function(Generic[ReturnType]):
     params = get_state_dict((args, kwargs), tensor_type=(Tensor, UOp)).values()
 
     # deduplicate input_uops, keeping the first occurrence index for each unique uop
-    call_uops: list[UOp] = dedup([(t.uop if isinstance(t, Tensor) else t) for t in params])
+    call_uops: list[UOp] = dedup([u for t in params if (u:=t._uop).device is not None])
 
     # disable realize/schedule while this is running
     # run it and do surgery later
@@ -65,12 +68,12 @@ class _function(Generic[ReturnType]):
 
     # the BUFFERs that are left are the implicit inputs
     num_explicit = len(call_uops)
-    uret = graph_rewrite(uret, pm_ctx, (call_uops, itertools.count(0)), bottom_up=True, name="get_implicit_inputs")
+    uret = graph_rewrite(uret, pm_ctx, (call_uops, write_only_outputs(uret)), bottom_up=True, name="get_implicit_inputs")
     name = getattr(self.fxn, '__qualname__', None) or type(self.fxn).__qualname__
     if not self.allow_implicit:
       implicit_buffers = [x for x in call_uops[num_explicit:] if x.op is Ops.BUFFER]
       if implicit_buffers:
-        buf_strs = '\n  '.join(f"{i}: dtype={b.dtype}, size={b.size}, device={b.device}" for i,b in enumerate(implicit_buffers))
+        buf_strs = '\n  '.join(f"{i}: dtype={b.dtype}, size={b.arg}, device={b.device}" for i,b in enumerate(implicit_buffers))
         raise RuntimeError(f"function {name} has {len(implicit_buffers)} implicit buffer(s), but allow_implicit=False\n  {buf_strs}")
 
     # assign output
@@ -84,7 +87,7 @@ class _function(Generic[ReturnType]):
                      precompile_backward=self.precompile_backward)
 
     if DEBUG >= 2:
-      #signature = [(x._shape, x.dtype, x._device) for x in call_uops]
+      #signature = [(x._shape, x.dtype, x.device) for x in call_uops]
       print("  "*_function.depth+f"function {uret.key.hex()[:8]} in {(time.perf_counter()-st)*1000:8.2f} ms: {name}") # with sig {signature}")
 
     if isinstance(ret, tuple):

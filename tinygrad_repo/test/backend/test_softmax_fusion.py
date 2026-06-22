@@ -2,8 +2,8 @@ import unittest
 import numpy as np
 from tinygrad import Tensor, GlobalCounters, Context, Device
 from tinygrad.dtype import DTypeLike, dtypes
+from tinygrad.engine.realize import run_linear
 from tinygrad.helpers import DEBUG, get_single_element
-from tinygrad.device import is_dtype_supported
 
 def single_kernel_softmax(x_in:Tensor, axis=-1, dtype:DTypeLike|None=None) -> Tensor:
   # only support axis =-1
@@ -26,7 +26,10 @@ def single_kernel_softmax(x_in:Tensor, axis=-1, dtype:DTypeLike|None=None) -> Te
   out = e.div(ss).reshape(x_in.shape)
   return out
 
-def run_one_schedule_item(out): get_single_element(out.schedule()).run()
+def run_one_schedule_item(out):
+  linear = out.schedule_linear()
+  get_single_element(linear.src)
+  run_linear(linear)
 
 class TestFuse(unittest.TestCase):
   def _test_fuse(self, fxn, *args, atol=1e-6, allow_multiple=False, **kwargs):
@@ -58,14 +61,14 @@ class TestFuse(unittest.TestCase):
     b = Tensor.rand(50,50).realize()
     self._test_fuse(lambda a,b: ((a@b).relu()+a).contiguous().softmax(axis=-1), a,b, allow_multiple=True)
 
-  @unittest.skipUnless(is_dtype_supported(dtypes.float16), f"no float16 on {Device.DEFAULT}")
+  @unittest.skipUnless(dtypes.float16 in Device[Device.DEFAULT].renderer.supported_dtypes(), f"no float16 on {Device.DEFAULT}")
   @unittest.skip("needs RANGEIFY>1")
   def test_fuse_softmax_dtype(self):
     a = Tensor.rand(50,50).realize()
     self._test_fuse(lambda a: a.softmax(axis=-1, dtype='half'), a, atol=3e-4)
 
   def test_fuse_arange_eye(self):
-    self._test_fuse(lambda: Tensor.arange(10).reshape(10,1).expand(10,10) == Tensor.arange(10).reshape(1,10).expand(10,10))
+    self._test_fuse(lambda: (Tensor.arange(10).reshape(10,1).expand(10,10) == Tensor.arange(10).reshape(1,10).expand(10,10)).clone())
 
   @unittest.skip("needs RANGEIFY>1")
   def test_double_gemm(self):
@@ -100,8 +103,8 @@ class TestFuse(unittest.TestCase):
     k = (x @ wk).contiguous()
     v = (x @ wv).contiguous()
     attn = q.scaled_dot_product_attention(k, v)
-    s = attn.schedule()
-    self.assertEqual(len(s), 4) # 3 matmul and 1 attention
+    s = attn.schedule_linear()
+    self.assertEqual(len(s.src), 4) # 3 matmul and 1 attention
 
   @unittest.skip("needs RANGEIFY>1")
   def test_flash_attention(self):
@@ -186,7 +189,6 @@ class TestSoftmaxFusion(unittest.TestCase):
 
   def test_softmax_bw(self):
     print("*** softmax bw ***")
-    self.test.requires_grad_()
     with Context(NOOPT=1, DEBUG=max(DEBUG.value, 2)):
       self.test.softmax(-1).sum().backward()
       sg = self.test.grad.realize()
