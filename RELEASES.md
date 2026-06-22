@@ -1,3 +1,9 @@
+carrot (2026-06-22)
+========================
+* Update comma 4 system components (AGNOS, camera pipeline, and model runtime)
+* CD210 model
+* Use the model's 1.0-second future curvature for turn acceleration limits
+
 carrot (2026-04-21)
 ========================
 * CD210 model
