@@ -64,10 +64,16 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
                                      lat_active: bool,
                                      wheelbase_m: float,
                                      steer_ratio: float,
-                                     steer_sw_max_deg: float) -> float:
+                                     steer_sw_max_deg: float,
+                                     model_v2=None) -> float:
   max_lat_accel = 8.5   # m/s^2
   max_lat_jerk  = 4.0   # m/s^3
-  max_sw_rate_deg_per_tick = 2.0   # ★ EPS 보호용 상한
+  y_std_1s = 0.1
+  if model_v2 is not None and len(model_v2.position.yStd) > 10:
+    model_y_std_1s = float(model_v2.position.yStd[10])
+    if np.isfinite(model_y_std_1s) and model_y_std_1s >= 0.0:
+      y_std_1s = model_y_std_1s
+  max_sw_rate_deg_per_tick = float(np.interp(y_std_1s, [0.1, 0.2, 0.4], [2.0, 1.5, 0.8]))
 
   v = max(float(v_ego), 1.0)
 
@@ -86,14 +92,15 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
   max_drw_per_tick = max_drw_dt * DT_CTRL                        # rad/tick
   max_drw_per_tick_deg = float(np.degrees(max_drw_per_tick))
 
+  err = abs(target_sw - last_sw_deg)
+  if err > 20.0:
+    max_sw_rate_deg_per_tick = min(max_sw_rate_deg_per_tick, 1.0)
+
   max_drw_per_tick_deg = min(
     max_drw_per_tick_deg,
     max_sw_rate_deg_per_tick / steer_ratio
   )
-  err = abs(target_sw - last_sw_deg)
-  if err > 20.0:
-    max_drw_per_tick_deg *= 0.5
-  
+
   # --- rate limit ---
   cmd_rw = rate_limit(target_rw, last_rw, -max_drw_per_tick_deg, max_drw_per_tick_deg)
 
@@ -231,7 +238,8 @@ class CarController(CarControllerBase):
       CC.latActive,
       self.CP.wheelbase,
       self.CP.steerRatio,
-      self.params.ANGLE_LIMITS.STEER_ANGLE_MAX
+      self.params.ANGLE_LIMITS.STEER_ANGLE_MAX,
+      CS.modelV2,
     )
 
     
