@@ -151,6 +151,8 @@ class CarController(CarControllerBase):
     self.recovering_from_override = False
     self.full_recovery_frames = 0
     self.repeated_override_count = 0
+    self.override_latched = False
+    self.override_release_frames = 0
 
     self.lkas11_active = False
 
@@ -257,13 +259,30 @@ class CarController(CarControllerBase):
       self.full_recovery_frames = 0
       self.recovering_from_override = True
 
+    torque_ratio = abs(CS.out.steeringTorque) / max(self.params.STEER_THRESHOLD, 1.0)
+    recovery_allowed = False
+
     if CS.out.steeringPressed:
       # Start yielding immediately when driver override is confirmed.
+      self.override_latched = True
+      self.override_release_frames = 0
       torque_delta = -20.0
     elif self.lkas_max_torque >= self.angle_max_torque:
       # Once fully recovered, hold full authority until the next driver override.
       torque_delta = 0.0
+    elif self.override_latched:
+      # Hold reduced authority until driver torque stays below 60% for 0.2 seconds.
+      self.override_release_frames = self.override_release_frames + 1 if torque_ratio < 0.6 else 0
+      if self.override_release_frames >= int(0.2 / DT_CTRL):
+        self.override_latched = False
+        self.override_release_frames = 0
+        recovery_allowed = True
+      else:
+        torque_delta = 0.0
     else:
+      recovery_allowed = True
+
+    if recovery_allowed:
       # Use one-second model uncertainty to set the base torque recovery time.
       # Missing or invalid model data falls back to a moderate 1.5-second recovery.
       y_std_1s = 0.2
@@ -280,13 +299,8 @@ class CarController(CarControllerBase):
       )))
       base_rate_up = (self.angle_max_torque - self.params.ANGLE_MIN_TORQUE) * DT_CTRL / recovery_time
 
-      # During recovery, taper the rate as driver torque approaches the override threshold.
-      torque_ratio = abs(CS.out.steeringTorque) / max(self.params.STEER_THRESHOLD, 1.0)
-      torque_delta = float(np.interp(
-        torque_ratio,
-        [0.0, 0.6, 0.8, 1.0],
-        [base_rate_up, base_rate_up, 0.0, -20.0],
-      ))
+      # During recovery, taper the rate to zero. Only steeringPressed can reduce authority.
+      torque_delta = base_rate_up * float(np.interp(torque_ratio, [0.6, 0.8], [1.0, 0.0]))
     self.lkas_max_torque = float(np.clip(self.lkas_max_torque + torque_delta,
                                          self.params.ANGLE_MIN_TORQUE, self.angle_max_torque))
 
@@ -305,6 +319,8 @@ class CarController(CarControllerBase):
       self.recovering_from_override = False
       self.full_recovery_frames = 0
       self.repeated_override_count = 0
+      self.override_latched = False
+      self.override_release_frames = 0
 
     self.steering_pressed_prev = CS.out.steeringPressed if CC.latActive else False
 
