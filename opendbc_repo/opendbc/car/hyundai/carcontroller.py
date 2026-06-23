@@ -21,13 +21,6 @@ MAX_ANGLE = 85
 MAX_ANGLE_FRAMES = 89
 MAX_ANGLE_CONSECUTIVE_FRAMES = 2
 
-MODEL_Y_STD_1S_INDEX = 10
-MODEL_Y_STD_GOOD = 0.15
-MODEL_Y_STD_BAD = 0.30
-MODEL_RECOVERY_FACTOR_MIN = 0.25
-RECOVER_LEVEL_RATE_MIN = 0.005
-TORQUE_RECOVERY_RATE_MIN = 1.0
-
 vibrate_intervals = [
   (0.0, 0.5),
   (1.0, 1.5),
@@ -63,21 +56,6 @@ def process_hud_alert(enabled, fingerprint, hud_control):
 
 def rate_limit(x, x_last, lo, hi):
   return float(np.clip(x, x_last + lo, x_last + hi))
-
-
-def get_model_recovery_factor(model_v2) -> float:
-  """Slow steering torque recovery when the model's one-second path is uncertain."""
-  if model_v2 is None or len(model_v2.position.yStd) <= MODEL_Y_STD_1S_INDEX:
-    return 1.0
-
-  y_std_1s = float(model_v2.position.yStd[MODEL_Y_STD_1S_INDEX])
-  if not np.isfinite(y_std_1s) or y_std_1s < 0.0:
-    return 1.0
-
-  return float(np.interp(y_std_1s,
-                         [MODEL_Y_STD_GOOD, MODEL_Y_STD_BAD],
-                         [1.0, MODEL_RECOVERY_FACTOR_MIN]))
-
 
 def apply_steer_angle_limits_physics(desired_sw_deg: float,
                                      last_sw_deg: float,
@@ -162,8 +140,6 @@ class CarController(CarControllerBase):
     self.apply_angle_last = 0
     self.lkas_max_torque = 0
     self.angle_max_torque = 250
-    self.prev_abs_angle_error = 0.0
-    self.recover_level = 1.0
 
     self.lkas11_active = False
 
@@ -262,60 +238,27 @@ class CarController(CarControllerBase):
     if angle_control:
       apply_steer_req = CC.latActive
 
-    def _clip(x, lo, hi):
-      return min(max(x, lo), hi)
+    # Use one-second model uncertainty to set the base torque recovery time.
+    # Missing or invalid model data falls back to a moderate 1.5-second recovery.
+    y_std_1s = 0.2
+    if CS.modelV2 is not None and len(CS.modelV2.position.yStd) > 10:
+      model_y_std_1s = float(CS.modelV2.position.yStd[10])
+      if np.isfinite(model_y_std_1s) and model_y_std_1s >= 0.0:
+        y_std_1s = model_y_std_1s
 
-    def _scale01(x, lo, hi):
-      return _clip((x - lo) / (hi - lo), 0.0, 1.0)
+    recovery_time = float(np.interp(y_std_1s, [0.1, 0.2, 0.4], [0.1, 1.5, 3.0]))
+    base_rate_up = (self.angle_max_torque - self.params.ANGLE_MIN_TORQUE) * DT_CTRL / recovery_time
 
-    angle_error = apply_angle - CS.out.steeringAngleDeg
-    abs_angle_error = abs(angle_error)
-
-    error_delta = self.prev_abs_angle_error - abs_angle_error
-
-    if CS.out.steeringPressed:
-      # Driver touched the wheel, gradually yield.
-      self.lkas_max_torque = max(self.lkas_max_torque - 20, self.params.ANGLE_MIN_TORQUE)
-      self.recover_level = 0.0
-
-    else:
-      target_torque = self.angle_max_torque
-      model_recovery_factor = get_model_recovery_factor(CS.modelV2)
-
-      max_steering_tq = self.params.STEER_DRIVER_ALLOWANCE * 0.7
-      rate_ratio = max(20, max_steering_tq - abs(CS.out.steeringTorque)) / max_steering_tq
-      rate_up = max(self.params.ANGLE_TORQUE_UP_RATE * rate_ratio * model_recovery_factor,
-                    TORQUE_RECOVERY_RATE_MIN)
-      rate_down = self.params.ANGLE_TORQUE_DOWN_RATE * rate_ratio
-
-      recover_level = self.recover_level
-
-      # error_delta > 0 means actual steering angle and apply_angle are getting closer.
-      recover_factor = 0.0
-      if error_delta > 0.02:
-        recover_factor = _scale01(error_delta, 0.02, 0.30)
-
-      # Normal recovery is slow.
-      # If angle error is decreasing, recover faster.
-      recover_rate = max((0.005 + recover_factor * 0.035) * model_recovery_factor,
-                         RECOVER_LEVEL_RATE_MIN)
-      recover_level = _clip(recover_level + recover_rate, 0.0, 1.0)
-      self.recover_level = recover_level
-
-      # While recovering, limit available torque.
-      # recover_level = 0.0 -> 30%
-      # recover_level = 1.0 -> 100%
-      target_torque *= 0.3 + recover_level * 0.7
-
-      # If angle error is already converging, allow torque to come back a little faster.
-      rate_up *= 1.0 + recover_factor * 0.5
-
-      if self.lkas_max_torque > target_torque:
-        self.lkas_max_torque = max(self.lkas_max_torque - rate_down, target_torque)
-      else:
-        self.lkas_max_torque = min(self.lkas_max_torque + rate_up, target_torque)
-
-    self.prev_abs_angle_error = abs_angle_error
+    # Recover while driver torque is low, hold around 80%, and smoothly yield
+    # before steeringPressed engages at 100% of the threshold.
+    torque_ratio = abs(CS.out.steeringTorque) / max(self.params.STEER_THRESHOLD, 1.0)
+    torque_delta = -20.0 if CS.out.steeringPressed else float(np.interp(
+      torque_ratio,
+      [0.0, 0.6, 0.8, 1.0],
+      [base_rate_up, base_rate_up, 0.0, -20.0],
+    ))
+    self.lkas_max_torque = float(np.clip(self.lkas_max_torque + torque_delta,
+                                         self.params.ANGLE_MIN_TORQUE, self.angle_max_torque))
 
     if not CC.latActive:
       apply_torque = 0
