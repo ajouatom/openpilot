@@ -291,7 +291,7 @@ class CarController(CarControllerBase):
         if np.isfinite(model_y_std_1s) and model_y_std_1s >= 0.0:
           y_std_1s = model_y_std_1s
 
-      recovery_time = float(np.interp(y_std_1s, [0.1, 0.2, 0.4], [0.1, 1.5, 3.0]))
+      recovery_time = float(np.interp(y_std_1s, [0.1, 0.2, 0.4], [0.2, 1.5, 3.0]))
       recovery_time = max(recovery_time, float(np.interp(
         self.repeated_override_count,
         [0, 1, 2, 3],
