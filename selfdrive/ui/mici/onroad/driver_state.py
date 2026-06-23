@@ -19,6 +19,7 @@ class DriverStateRenderer(Widget):
   BASE_SIZE = 60
   LINES_ANGLE_INCREMENT = 5
   LINES_STALE_ANGLES = 3.0  # seconds
+  AWARENESS_UNFULL_PERCENT = 100.0
 
   def __init__(self, lines: bool = False, inset: bool = False):
     super().__init__()
