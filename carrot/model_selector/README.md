@@ -75,7 +75,7 @@ Carrot 파일럿 전용 주행 모델 다운로드/설치/적용 모듈. c3x·c4
 [재부팅 → manager.main() 초입]
   └─ boot_compile.run() → installer.compile_pending()
        ├─ ONNX → tinygrad.pkl + metadata.pkl (QCOM/FLOAT16/NOLOCALS/JIT_BATCH_SIZE=0/IMAGE=1/OPENPILOT_HACKS=1)
-       ├─ legacy warp pkl 준비: 있으면 compile_warp.py/기존 pkl 사용, 최신 구조에서는 compile_legacy_warp.py로 standalone warp 생성
+       ├─ selected model metadata의 img 입력 크기로 standalone warp pkl 새로 생성 (빌트인 warp 재사용 안 함)
        ├─ atomic swap: /data/models_tmp → /data/models  (실패 시 backup 복원)
        └─ Params: DrivingModelName 기록, PendingModelName 삭제
 
