@@ -246,25 +246,31 @@ class CarController(CarControllerBase):
     if angle_control:
       apply_steer_req = CC.latActive
 
-    # Use one-second model uncertainty to set the base torque recovery time.
-    # Missing or invalid model data falls back to a moderate 1.5-second recovery.
-    y_std_1s = 0.2
-    if CS.modelV2 is not None and len(CS.modelV2.position.yStd) > 10:
-      model_y_std_1s = float(CS.modelV2.position.yStd[10])
-      if np.isfinite(model_y_std_1s) and model_y_std_1s >= 0.0:
-        y_std_1s = model_y_std_1s
+    if CS.out.steeringPressed:
+      # Start yielding immediately when driver override is confirmed.
+      torque_delta = -20.0
+    elif self.lkas_max_torque >= self.angle_max_torque:
+      # Once fully recovered, hold full authority until the next driver override.
+      torque_delta = 0.0
+    else:
+      # Use one-second model uncertainty to set the base torque recovery time.
+      # Missing or invalid model data falls back to a moderate 1.5-second recovery.
+      y_std_1s = 0.2
+      if CS.modelV2 is not None and len(CS.modelV2.position.yStd) > 10:
+        model_y_std_1s = float(CS.modelV2.position.yStd[10])
+        if np.isfinite(model_y_std_1s) and model_y_std_1s >= 0.0:
+          y_std_1s = model_y_std_1s
 
-    recovery_time = float(np.interp(y_std_1s, [0.1, 0.2, 0.4], [0.1, 1.5, 3.0]))
-    base_rate_up = (self.angle_max_torque - self.params.ANGLE_MIN_TORQUE) * DT_CTRL / recovery_time
+      recovery_time = float(np.interp(y_std_1s, [0.1, 0.2, 0.4], [0.1, 1.5, 3.0]))
+      base_rate_up = (self.angle_max_torque - self.params.ANGLE_MIN_TORQUE) * DT_CTRL / recovery_time
 
-    # Recover while driver torque is low, hold around 80%, and smoothly yield
-    # before steeringPressed engages at 100% of the threshold.
-    torque_ratio = abs(CS.out.steeringTorque) / max(self.params.STEER_THRESHOLD, 1.0)
-    torque_delta = -20.0 if CS.out.steeringPressed else float(np.interp(
-      torque_ratio,
-      [0.0, 0.6, 0.8, 1.0],
-      [base_rate_up, base_rate_up, 0.0, -20.0],
-    ))
+      # During recovery, taper the rate as driver torque approaches the override threshold.
+      torque_ratio = abs(CS.out.steeringTorque) / max(self.params.STEER_THRESHOLD, 1.0)
+      torque_delta = float(np.interp(
+        torque_ratio,
+        [0.0, 0.6, 0.8, 1.0],
+        [base_rate_up, base_rate_up, 0.0, -20.0],
+      ))
     self.lkas_max_torque = float(np.clip(self.lkas_max_torque + torque_delta,
                                          self.params.ANGLE_MIN_TORQUE, self.angle_max_torque))
 
