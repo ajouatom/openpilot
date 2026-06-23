@@ -2,7 +2,7 @@
 .setting-search-panel {
   --setting-search-form-width: clamp(320px, 42vw, 520px);
   --setting-search-results-width: min(72vw, 760px);
-  --setting-search-results-max-height: min(58dvh, 520px);
+  --setting-search-results-max-height: min(72dvh, 680px);
   position: fixed;
   inset: 0;
   z-index: 171;
@@ -525,6 +525,8 @@
 @media (prefers-reduced-motion: reduce) {
   .setting-profile-panel,
   .page--setting #items > .setting.ui-stagger-item,
+  .page--setting #items > .setting-section-block.ui-stagger-item,
+  .page--setting #items > .setting-group-card.ui-stagger-item,
   .page--setting #items > .setting-profile-section.ui-stagger-item,
   .page--setting #deviceItems > .setting.ui-stagger-item,
   .setting-profile-section.is-collapsing .setting-profile-section__body,
@@ -539,3 +541,65 @@
   }
 }
 
+/* ── 대(category) 구분 헤더 — carrot_settings.json menu 기반 그룹목록 ── */
+.setting-category-divider {
+  padding-top: var(--sp-lg);
+}
+
+.setting-category-divider strong {
+  color: var(--md-primary);
+  font-size: var(--fs-label-md);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.setting-category-divider span {
+  background: color-mix(in srgb, var(--md-primary) 30%, transparent);
+}
+
+/* ── 소(subgroup) 그룹박스 카드 — Material 3 / One UI ──
+   항목 화면에서 소-섹션을 둥근 카드로 묶는다. 카드 배경은 페이지(--md-surface)
+   보다 한 단계 밝은 surface-cont. 행(.setting)은 카드 안에서 hairline 으로 구분되고
+   :last-child 는 자동으로 선이 사라진다. */
+.setting-section-block {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 var(--sp-lg);
+}
+
+.setting-group-card {
+  background: var(--md-surface-cont);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+  border-radius: var(--r-xl);
+  padding: 0 var(--sp-lg);
+  margin: 0;
+  box-shadow: var(--shadow-1);
+}
+
+.setting-group-card__title {
+  padding: 0 2px;
+  color: var(--md-primary);
+  font-size: var(--fs-title-sm);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.setting-group-card__body > .setting {
+  margin-left: calc(-1 * var(--sp-lg));
+  margin-right: calc(-1 * var(--sp-lg));
+  border-radius: 0;
+  padding-left: var(--sp-lg);
+  padding-right: var(--sp-lg);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 32%, transparent);
+}
+
+.setting-group-card__body > .setting:first-child {
+  border-top-left-radius: calc(var(--r-xl) - 1px);
+  border-top-right-radius: calc(var(--r-xl) - 1px);
+}
+
+.setting-group-card__body > .setting:last-child {
+  border-bottom-left-radius: calc(var(--r-xl) - 1px);
+  border-bottom-right-radius: calc(var(--r-xl) - 1px);
+  border-bottom: none;
+}

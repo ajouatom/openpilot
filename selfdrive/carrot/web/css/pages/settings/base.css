@@ -24,6 +24,8 @@
 }
 
 .page--setting #items > .setting.ui-stagger-item,
+.page--setting #items > .setting-section-block.ui-stagger-item,
+.page--setting #items > .setting-group-card.ui-stagger-item,
 .page--setting #items > .setting-profile-section.ui-stagger-item,
 .page--setting #deviceItems > .setting.ui-stagger-item {
   animation-name: setting-item-stagger-in;
@@ -272,6 +274,11 @@
   border-color: #ffab66;
   color: #111;
   box-shadow: 0 12px 28px rgba(255, 135, 58, 0.22);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .fab--setting-menu.active,
@@ -282,15 +289,48 @@
   box-shadow: 0 12px 30px rgba(255, 135, 58, 0.3);
 }
 
+.fab--setting-menu:active {
+  transform: scale(0.94);
+}
+
+.setting-fab-menu.is-open .fab--setting-menu {
+  animation: setting-fab-pop 0.28s cubic-bezier(0.2, 0, 0, 1);
+  box-shadow: 0 16px 34px rgba(255, 135, 58, 0.34);
+}
+
 .fab--setting-menu svg {
   width: 26px;
   height: 26px;
-  transition: transform 0.24s cubic-bezier(0.2, 0, 0, 1);
+  transition: transform 0.26s cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Rotate the "+" into an "x" when the menu is open */
+.fab--setting-menu .setting-fab-menu-icon {
+  fill: none;
+}
+
+.fab--setting-menu .setting-fab-menu-icon path,
+.fab--setting-menu .setting-fab-menu-icon circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .fab--setting-menu[aria-expanded="true"] svg {
-  transform: rotate(135deg);
+  transform: rotate(90deg) scale(0.92);
+}
+
+@keyframes setting-fab-pop {
+  0% {
+    transform: scale(0.92);
+  }
+  58% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -298,6 +338,9 @@
   .setting-fab-action,
   .fab--setting-menu svg {
     transition: none !important;
+  }
+  .setting-fab-menu.is-open .fab--setting-menu {
+    animation: none !important;
   }
   .setting-fab-menu.is-open .setting-fab-action {
     transition-delay: 0ms !important;
