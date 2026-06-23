@@ -147,6 +147,10 @@ class CarController(CarControllerBase):
     self.apply_angle_last = 0
     self.lkas_max_torque = 0
     self.angle_max_torque = 250
+    self.steering_pressed_prev = False
+    self.recovering_from_override = False
+    self.full_recovery_frames = 0
+    self.repeated_override_count = 0
 
     self.lkas11_active = False
 
@@ -246,6 +250,13 @@ class CarController(CarControllerBase):
     if angle_control:
       apply_steer_req = CC.latActive
 
+    steering_pressed_rising = CS.out.steeringPressed and not self.steering_pressed_prev
+    if steering_pressed_rising:
+      if 0 < self.full_recovery_frames < int(5.0 / DT_CTRL):
+        self.repeated_override_count = min(self.repeated_override_count + 1, 3)
+      self.full_recovery_frames = 0
+      self.recovering_from_override = True
+
     if CS.out.steeringPressed:
       # Start yielding immediately when driver override is confirmed.
       torque_delta = -20.0
@@ -262,6 +273,11 @@ class CarController(CarControllerBase):
           y_std_1s = model_y_std_1s
 
       recovery_time = float(np.interp(y_std_1s, [0.1, 0.2, 0.4], [0.1, 1.5, 3.0]))
+      recovery_time = max(recovery_time, float(np.interp(
+        self.repeated_override_count,
+        [0, 1, 2, 3],
+        [0.1, 1.0, 2.0, 3.0],
+      )))
       base_rate_up = (self.angle_max_torque - self.params.ANGLE_MIN_TORQUE) * DT_CTRL / recovery_time
 
       # During recovery, taper the rate as driver torque approaches the override threshold.
@@ -274,9 +290,23 @@ class CarController(CarControllerBase):
     self.lkas_max_torque = float(np.clip(self.lkas_max_torque + torque_delta,
                                          self.params.ANGLE_MIN_TORQUE, self.angle_max_torque))
 
+    if not CS.out.steeringPressed and self.recovering_from_override and self.lkas_max_torque >= self.angle_max_torque:
+      self.recovering_from_override = False
+      self.full_recovery_frames = 1
+    elif not CS.out.steeringPressed and self.full_recovery_frames > 0:
+      self.full_recovery_frames += 1
+      if self.full_recovery_frames >= int(5.0 / DT_CTRL):
+        self.full_recovery_frames = 0
+        self.repeated_override_count = 0
+
     if not CC.latActive:
       apply_torque = 0
       self.lkas_max_torque = 0
+      self.recovering_from_override = False
+      self.full_recovery_frames = 0
+      self.repeated_override_count = 0
+
+    self.steering_pressed_prev = CS.out.steeringPressed if CC.latActive else False
 
     self.apply_angle_last = apply_angle
 
