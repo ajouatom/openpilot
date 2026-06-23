@@ -13,6 +13,8 @@ from pathlib import Path
 
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.transformations.camera import _ar_ox_fisheye, _os_fisheye
+from openpilot.common.transformations.model import MEDMODEL_INPUT_SIZE
 from openpilot.system.hardware import TICI
 
 from .config import (
@@ -35,7 +37,12 @@ from .config import (
 METADATA_SCRIPT = OPENPILOT_ROOT / "selfdrive" / "modeld" / "get_model_metadata.py"
 COMPILE3_SCRIPT = OPENPILOT_ROOT / "tinygrad_repo" / "examples" / "openpilot" / "compile3.py"
 COMPILE_WARP_SCRIPT = OPENPILOT_ROOT / "selfdrive" / "modeld" / "compile_warp.py"
+LEGACY_WARP_SCRIPT = OPENPILOT_ROOT / "carrot" / "model_selector" / "compile_legacy_warp.py"
 BUILTIN_MODELS_DIR = OPENPILOT_ROOT / "selfdrive" / "modeld" / "models"
+CAMERA_CONFIGS = (
+    (_ar_ox_fisheye.width, _ar_ox_fisheye.height),  # tici: 1928x1208
+    (_os_fisheye.width, _os_fisheye.height),        # mici: 1344x760
+)
 
 
 class InstallError(Exception):
@@ -85,11 +92,55 @@ def _compile_one(base: str, tmp_dir: Path, env: dict[str, str]) -> None:
     _run(["python3", str(COMPILE3_SCRIPT), str(onnx), str(pkl)], env=env)
 
 
-def _copy_warp_pkls(tmp_dir: Path) -> None:
-    # warp depends only on camera geometry; copy the built-in pkls so that a
-    # swapped-in /data/models directory is self-contained.
+def _copy_warp_pkls(tmp_dir: Path) -> int:
+    # Old openpilot builds produced standalone modeld warp pkls in
+    # selfdrive/modeld/models.  Newer builds embed these warps in the unified
+    # modeld pkl, so this may legitimately copy zero files.
+    copied = 0
     for warp in BUILTIN_MODELS_DIR.glob("warp_*_tinygrad.pkl"):
         shutil.copy2(warp, tmp_dir / warp.name)
+        copied += 1
+    if copied:
+        cloudlog.warning(f"model_selector: copied {copied} built-in warp pkls")
+    return copied
+
+
+def _compile_legacy_warp_pkls(tmp_dir: Path, env: dict[str, str]) -> None:
+    model_w, model_h = MEDMODEL_INPUT_SIZE
+    for cam_w, cam_h in CAMERA_CONFIGS:
+        output = tmp_dir / f"warp_{cam_w}x{cam_h}_tinygrad.pkl"
+        cloudlog.warning(f"model_selector: compiling legacy warp {cam_w}x{cam_h}")
+        _run([
+            "python3",
+            str(LEGACY_WARP_SCRIPT),
+            "--camera-resolution",
+            f"{cam_w}x{cam_h}",
+            "--model-size",
+            f"{model_w}x{model_h}",
+            "--output",
+            str(output),
+        ], env=env)
+
+
+def _ensure_warp_pkls(tmp_dir: Path, env: dict[str, str]) -> None:
+    if COMPILE_WARP_SCRIPT.exists():
+        # Legacy tree: compile_warp.py writes standalone warp pkls into the
+        # built-in model directory, then copy them into the custom model dir.
+        cloudlog.warning("model_selector: compiling warp with legacy compile_warp.py")
+        _run(["python3", str(COMPILE_WARP_SCRIPT)], env=env)
+        if _copy_warp_pkls(tmp_dir) == 0:
+            raise InstallError(f"compile_warp.py produced no warp pkls in {BUILTIN_MODELS_DIR}")
+        return
+
+    if _copy_warp_pkls(tmp_dir):
+        return
+
+    # Current tree: compile_warp.py and standalone warp pkls are gone because
+    # upstream compile_modeld.py embeds warp JITs in the unified modeld pkl.
+    # Carrot's split-model runner still loads standalone warp_* pkls, so build
+    # compatibility artifacts with the current compile_modeld warp primitives.
+    cloudlog.warning("model_selector: standalone warp pkls missing, compiling compatibility warps")
+    _compile_legacy_warp_pkls(tmp_dir, env)
 
 
 def _atomic_swap(tmp_dir: Path) -> None:
@@ -146,9 +197,7 @@ def compile_pending() -> None:
         for base in bases:
             _compile_one(base, MODELS_TMP_DIR, env)
 
-        cloudlog.warning("model_selector: compiling warp")
-        _run(["python3", str(COMPILE_WARP_SCRIPT)], env=env)
-        _copy_warp_pkls(MODELS_TMP_DIR)
+        _ensure_warp_pkls(MODELS_TMP_DIR, env)
 
         cloudlog.warning("model_selector: installing")
         _atomic_swap(MODELS_TMP_DIR)

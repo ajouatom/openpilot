@@ -45,7 +45,8 @@ TINYGRAD_COMPILE_ENV_QCOM = {
     "FLOAT16": "1",
     "NOLOCALS": "1",
     "JIT_BATCH_SIZE": "0",
-    "IMAGE": "2",
+    "IMAGE": "1",
+    "OPENPILOT_HACKS": "1",
 }
 TINYGRAD_COMPILE_ENV_FALLBACK = {
     "DEV": "CPU:LLVM",
