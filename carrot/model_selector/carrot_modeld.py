@@ -117,6 +117,21 @@ IMG_QUEUE_SHAPE = (6*(ModelConstants.MODEL_RUN_FREQ//ModelConstants.MODEL_CONTEX
 assert IMG_QUEUE_SHAPE[0] == 30
 
 
+def img_queue_shape(img_shape: tuple[int, ...]) -> tuple[int, int, int]:
+    """Return legacy standalone-warp queue shape for a model image input.
+
+    Metadata image inputs are shaped (batch, stacked_channels, h/2, w/2),
+    typically (1, 12, 128, 256).  The legacy warp pkl keeps a rolling channel
+    buffer shaped (queued_channels, h/2, w/2); derive it from metadata so custom
+    models with non-default image sizes don't reuse the old 512x256 assumption.
+    """
+    if len(img_shape) != 4:
+      raise ValueError(f"unexpected image input shape: {img_shape}")
+    n_channels = img_shape[1] // ModelConstants.N_FRAMES
+    queued_channels = (ModelConstants.MODEL_RUN_FREQ // ModelConstants.MODEL_CONTEXT_FREQ + (ModelConstants.N_FRAMES - 1)) * n_channels
+    return queued_channels, img_shape[2], img_shape[3]
+
+
 def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
                           lat_action_t: float, long_action_t: float, v_ego: float, lat_smooth_seconds: float, vEgoStopping: float) -> log.ModelDataV2.Action:
     # op11: on_policy가 (curv_unscaled, accel)을 직접 산출.
@@ -278,8 +293,8 @@ class ModelState:
       self.full_input_queues.update_dtypes_and_shapes({k: self.numpy_inputs[k].dtype}, {k: self.numpy_inputs[k].shape})
     self.full_input_queues.reset()
 
-    self.img_queues = {'img': Tensor.zeros(IMG_QUEUE_SHAPE, dtype='uint8').contiguous().realize(),
-                       'big_img': Tensor.zeros(IMG_QUEUE_SHAPE, dtype='uint8').contiguous().realize()}
+    self.img_queues = {k: Tensor.zeros(img_queue_shape(self.vision_input_shapes[k]), dtype='uint8').contiguous().realize()
+                       for k in self.vision_input_names}
     self.full_frames : dict[str, Tensor] = {}
     self._blob_cache : dict[tuple[str, int], Tensor] = {}
     self.transforms_np = {k: np.zeros((3,3), dtype=np.float32) for k in self.img_queues}
