@@ -1,20 +1,34 @@
-<div id="pageModels" class="page" style="display:none;">
+<div id="pageModels" class="page page--models" style="display:none;">
   <style>
     body[data-page="models"] { overflow: hidden; }
     body[data-page="models"] .wrap {
-      padding: var(--sp-lg);
-      padding-bottom: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px) + var(--sp-md));
+      padding: 0;
       min-height: 0;
-      height: calc(var(--app-vv-height, 100dvh));
+      height: var(--app-vv-height, 100dvh);
       overflow: hidden;
       box-sizing: border-box;
     }
-    #pageModels {
+    #pageModels.page--models {
       display: flex;
       flex-direction: column;
+      max-inline-size: none;
+      margin-inline: 0;
+      padding: 0;
       height: 100%;
       min-height: 0;
+      min-block-size: 0;
       overflow: hidden;
+      box-sizing: border-box;
+    }
+    #pageModels .ms-shell {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+      padding: var(--sp-lg);
+      padding-bottom: calc(var(--app-nav-bottom-gap, calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px))) + var(--sp-md));
       box-sizing: border-box;
     }
     #pageModels .ms-hero {
@@ -250,41 +264,43 @@
     }
   </style>
 
-  <div class="ms-hero">
-    <div class="ms-hero__title">모델 셀렉터</div>
-    <div class="ms-hero__subtitle" id="msSubtitle">주행 모델을 다운로드하고 적용합니다.</div>
-  </div>
+  <div class="ms-shell">
+    <div class="ms-hero">
+      <div class="ms-hero__title">모델 셀렉터</div>
+      <div class="ms-hero__subtitle" id="msSubtitle">주행 모델을 다운로드하고 적용합니다.</div>
+    </div>
 
-  <div class="ms-status-card">
-    <div class="ms-status-card__info">
-      <div class="ms-status-card__label">현재 모델</div>
-      <div class="ms-status-card__current" id="msCurrent">—</div>
-      <div class="ms-status-card__meta">
-        <span id="msDescription">—</span>
-        <span class="ms-chip ms-chip--pending" id="msPendingChip" style="display:none;">설치중: <span id="msPending"></span></span>
-        <span class="ms-chip" id="msDiskChip">남은 공간: <span id="msDisk">—</span> MB</span>
+    <div class="ms-status-card">
+      <div class="ms-status-card__info">
+        <div class="ms-status-card__label">현재 모델</div>
+        <div class="ms-status-card__current" id="msCurrent">—</div>
+        <div class="ms-status-card__meta">
+          <span id="msDescription">—</span>
+          <span class="ms-chip ms-chip--pending" id="msPendingChip" style="display:none;">설치중: <span id="msPending"></span></span>
+          <span class="ms-chip" id="msDiskChip">남은 공간: <span id="msDisk">—</span> MB</span>
+        </div>
+      </div>
+      <div class="ms-status-card__actions">
+        <button id="msResetBtn" class="btn btn--danger">기본 모델 복원</button>
       </div>
     </div>
-    <div class="ms-status-card__actions">
-      <button id="msResetBtn" class="btn btn--danger">기본 모델 복원</button>
+
+    <div id="msProgressWrap" class="ms-progress" style="display:none;">
+      <div class="ms-progress__label" id="msProgressMsg">&nbsp;</div>
+      <div class="ms-progress__bar">
+        <div class="ms-progress__fill" id="msProgressFill"></div>
+      </div>
     </div>
-  </div>
 
-  <div id="msProgressWrap" class="ms-progress" style="display:none;">
-    <div class="ms-progress__label" id="msProgressMsg">&nbsp;</div>
-    <div class="ms-progress__bar">
-      <div class="ms-progress__fill" id="msProgressFill"></div>
+    <div class="ms-section-head">
+      <div class="ms-section-head__title">사용 가능한 모델</div>
+      <button id="msRefreshBtn" class="smallBtn">새로고침</button>
     </div>
-  </div>
 
-  <div class="ms-section-head">
-    <div class="ms-section-head__title">사용 가능한 모델</div>
-    <button id="msRefreshBtn" class="smallBtn">새로고침</button>
-  </div>
+    <div id="msModelsBody" class="ms-list">
+      <div class="ms-loading">불러오는 중…</div>
+    </div>
 
-  <div id="msModelsBody" class="ms-list">
-    <div class="ms-loading">불러오는 중…</div>
+    <div id="msError" class="ms-error"></div>
   </div>
-
-  <div id="msError" class="ms-error"></div>
 </div>
