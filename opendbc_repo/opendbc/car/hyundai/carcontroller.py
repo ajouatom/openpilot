@@ -21,6 +21,13 @@ MAX_ANGLE = 85
 MAX_ANGLE_FRAMES = 89
 MAX_ANGLE_CONSECUTIVE_FRAMES = 2
 
+MODEL_Y_STD_1S_INDEX = 10
+MODEL_Y_STD_GOOD = 0.15
+MODEL_Y_STD_BAD = 0.30
+MODEL_RECOVERY_FACTOR_MIN = 0.25
+RECOVER_LEVEL_RATE_MIN = 0.005
+TORQUE_RECOVERY_RATE_MIN = 1.0
+
 vibrate_intervals = [
   (0.0, 0.5),
   (1.0, 1.5),
@@ -56,6 +63,21 @@ def process_hud_alert(enabled, fingerprint, hud_control):
 
 def rate_limit(x, x_last, lo, hi):
   return float(np.clip(x, x_last + lo, x_last + hi))
+
+
+def get_model_recovery_factor(model_v2) -> float:
+  """Slow steering torque recovery when the model's one-second path is uncertain."""
+  if model_v2 is None or len(model_v2.position.yStd) <= MODEL_Y_STD_1S_INDEX:
+    return 1.0
+
+  y_std_1s = float(model_v2.position.yStd[MODEL_Y_STD_1S_INDEX])
+  if not np.isfinite(y_std_1s) or y_std_1s < 0.0:
+    return 1.0
+
+  return float(np.interp(y_std_1s,
+                         [MODEL_Y_STD_GOOD, MODEL_Y_STD_BAD],
+                         [1.0, MODEL_RECOVERY_FACTOR_MIN]))
+
 
 def apply_steer_angle_limits_physics(desired_sw_deg: float,
                                      last_sw_deg: float,
@@ -253,15 +275,17 @@ class CarController(CarControllerBase):
 
     if CS.out.steeringPressed:
       # Driver touched the wheel, gradually yield.
-      self.lkas_max_torque = max(self.lkas_max_torque - 20, 25)
+      self.lkas_max_torque = max(self.lkas_max_torque - 20, self.params.ANGLE_MIN_TORQUE)
       self.recover_level = 0.0
 
     else:
       target_torque = self.angle_max_torque
+      model_recovery_factor = get_model_recovery_factor(CS.modelV2)
 
       max_steering_tq = self.params.STEER_DRIVER_ALLOWANCE * 0.7
       rate_ratio = max(20, max_steering_tq - abs(CS.out.steeringTorque)) / max_steering_tq
-      rate_up = self.params.ANGLE_TORQUE_UP_RATE * rate_ratio
+      rate_up = max(self.params.ANGLE_TORQUE_UP_RATE * rate_ratio * model_recovery_factor,
+                    TORQUE_RECOVERY_RATE_MIN)
       rate_down = self.params.ANGLE_TORQUE_DOWN_RATE * rate_ratio
 
       recover_level = self.recover_level
@@ -273,7 +297,8 @@ class CarController(CarControllerBase):
 
       # Normal recovery is slow.
       # If angle error is decreasing, recover faster.
-      recover_rate = 0.005 + recover_factor * 0.035
+      recover_rate = max((0.005 + recover_factor * 0.035) * model_recovery_factor,
+                         RECOVER_LEVEL_RATE_MIN)
       recover_level = _clip(recover_level + recover_rate, 0.0, 1.0)
       self.recover_level = recover_level
 
