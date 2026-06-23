@@ -698,9 +698,20 @@ btnBackCar.onclick = () => history.back();
 carTitle.onclick = () => history.back();
 modelTitle.onclick = () => showCarScreen("makers");
 
-if (btnBackGroups) btnBackGroups.onclick = () => history.back();
-settingTitle.onclick = () => history.back();
-if (itemsTitle) itemsTitle.onclick = () => history.back();
+function goBackUnlessSettingSplit() {
+  if (
+    CURRENT_PAGE === "setting" &&
+    typeof isCompactLandscapeMode === "function" &&
+    isCompactLandscapeMode()
+  ) {
+    return;
+  }
+  history.back();
+}
+
+if (btnBackGroups) btnBackGroups.onclick = goBackUnlessSettingSplit;
+settingTitle.onclick = goBackUnlessSettingSplit;
+if (itemsTitle) itemsTitle.onclick = goBackUnlessSettingSplit;
 
 btnBackBranch.onclick = () => history.back();
 branchTitle.onclick = () => history.back();
