@@ -84,6 +84,22 @@
   --r-2xl:   32px;
   --r-pill:  999px;
 
+  /* Popup UX primitives
+     - Compact sheets for alert / confirm / prompt.
+     - Bottom sheets on narrow portrait screens.
+     - Value grids for short numeric or code choices.
+     - Action lists for commands and destructive choices.
+     - Pill radius is reserved for FABs, switches, and small chips. */
+  --dialog-sheet-radius: 16px;
+  --dialog-sheet-radius-mobile: 18px;
+  --dialog-control-radius: 8px;
+  --dialog-choice-radius: 8px;
+  --dialog-choice-grid-radius: 8px;
+  --dialog-sheet-width: 420px;
+  --dialog-sheet-width-wide: 520px;
+  --dialog-sheet-max-height: calc(100dvh - var(--sp-lg) * 2);
+  --dialog-sheet-mobile-max-height: min(88dvh, 720px);
+
   /* ── Elevation ────────────────────────────────────────────────
      Material 3 dark elevation. Pick the smallest level that reads
      as "raised". Larger = more separation from background.

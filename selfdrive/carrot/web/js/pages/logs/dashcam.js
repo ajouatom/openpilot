@@ -1268,6 +1268,7 @@ async function showDashcamSegmentMenu(route, segment) {
     mode: "choice",
     title: `SEG ${dashcamSegmentIndex(segment)}`,
     message: segment,
+    choiceLayout: "list",
     choices: [
       { label: getUIText("play", "Play"), value: "play" },
       { label: getUIText("log_upload", "Upload Logs"), value: "upload" },
@@ -1497,10 +1498,11 @@ async function showDashcamRouteMenu(route) {
     mode: "choice",
     title: getUIText("group_menu", "Group menu"),
     message: dashcamRouteTitle(route),
+    choiceLayout: "list",
     choices: [
       { label: `${getUIText("select_range", "Select range")}…`, value: "range" },
-      { label: `${getUIText("sort_ascending", "Sort: ascending")}${sort === "asc" ? "  ✓" : ""}`, value: "sort_asc" },
-      { label: `${getUIText("sort_descending", "Sort: descending")}${sort === "desc" ? "  ✓" : ""}`, value: "sort_desc" },
+      { label: getUIText("sort_ascending", "Sort: ascending"), value: "sort_asc", selected: sort === "asc" },
+      { label: getUIText("sort_descending", "Sort: descending"), value: "sort_desc", selected: sort === "desc" },
     ],
   });
   if (selected === "range") await showDashcamRangeSelect(route);

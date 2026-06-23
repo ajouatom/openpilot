@@ -363,7 +363,12 @@ function setWebLanguage(lang, options = {}) {
       const currentTop = typeof getSettingItemsScrollTop === "function"
         ? getSettingItemsScrollTop()
         : 0;
-      renderItems(CURRENT_GROUP, { scrollMode: "restore", scrollTop: currentTop, animateItems: false });
+      renderItems(CURRENT_GROUP, {
+        detailName: (typeof CURRENT_SETTING_DETAIL !== "undefined" && CURRENT_SETTING_DETAIL) ? CURRENT_SETTING_DETAIL : "",
+        scrollMode: "restore",
+        scrollTop: currentTop,
+        animateItems: false,
+      });
     }
   }
   if (dispatch) {

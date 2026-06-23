@@ -22,6 +22,7 @@ async def api_settings(request: web.Request) -> web.Response:
       "apilot": data.get("apilot"),
       "groups": groups_list,
       "items_by_group": items_by_group,
+      "categories": settings_cache.get("categories"),  # 대>중>소 트리 (없으면 None → 프런트 폴백)
       "unit_cycle": UNIT_CYCLE,
       "has_params": HAS_PARAMS,
       "has_param_type": bool(ParamKeyType is not None and hasattr(Params(), "get_type")) if HAS_PARAMS else False,

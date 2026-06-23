@@ -62,7 +62,7 @@ body[data-page="terminal"] .app-toast-host {
 .app-dialog {
   position: fixed;
   inset: 0;
-  z-index: 160;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -71,7 +71,7 @@ body[data-page="terminal"] .app-toast-host {
 }
 
 #appDialog {
-  z-index: 180;
+  z-index: calc(var(--z-modal) + 10);
 }
 
 .app-dialog[hidden] {
@@ -87,31 +87,36 @@ body[data-page="terminal"] .app-toast-host {
   inset: 0;
   border: 0;
   padding: 0;
-  background: color-mix(in srgb, #000 56%, transparent);
+  background: color-mix(in srgb, #000 62%, transparent);
   opacity: 0;
-  transition: opacity 0.18s ease;
+  backdrop-filter: blur(2px) saturate(106%);
+  -webkit-backdrop-filter: blur(2px) saturate(106%);
+  transition: opacity var(--motion-base) var(--ease-linear);
 }
 
 .app-dialog__sheet {
   position: relative;
   z-index: 1;
-  width: min(100%, 420px);
-  max-height: calc(100dvh - var(--sp-lg) * 2);
+  width: min(100%, var(--dialog-sheet-width));
+  max-height: var(--dialog-sheet-max-height);
   display: flex;
   flex-direction: column;
   padding: var(--sp-lg);
   border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 92%, transparent);
-  border-radius: var(--r-lg);
+  border-radius: var(--dialog-sheet-radius);
   background: color-mix(in srgb, var(--md-surface-cont) 96%, #000);
+  box-shadow: var(--shadow-4);
   opacity: 0;
-  transform: translateY(14px);
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transform: translateY(14px) scale(0.985);
+  transition:
+    opacity var(--motion-base) var(--ease-emphasized),
+    transform var(--motion-medium) var(--ease-emphasized);
 }
 
 .app-dialog.is-open .app-dialog__backdrop,
 .app-dialog.is-open .app-dialog__sheet {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
 .app-dialog__head {
@@ -157,12 +162,12 @@ body[data-page="terminal"] .app-toast-host {
 
 .app-dialog__choices {
   display: grid;
-  gap: var(--sp-sm);
+  gap: 6px;
   margin-top: var(--sp-md);
   overflow-y: auto;
   min-height: 0;
   flex: 1 1 auto;
-  padding-right: 4px;
+  padding-right: 2px;
 }
 
 .app-dialog__choices[hidden] {
@@ -170,19 +175,109 @@ body[data-page="terminal"] .app-toast-host {
 }
 
 .app-dialog__choiceBtn {
-  width: 100%;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  width: 100%;
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: var(--dialog-choice-radius);
+  overflow: hidden;
+  text-overflow: ellipsis;
   min-height: 44px;
+  font-size: var(--fs-label-md);
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .app-dialog__choiceBtn.is-current {
   border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-stroke-soft));
-  background: var(--md-primary-state);
-  color: var(--md-primary);
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 74%, var(--md-primary-state));
+  color: var(--md-on-surface);
   font-weight: 800;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+}
+
+/* 박스 안 박스 금지 — 다이얼로그 시트 자체가 박스이므로 리스트엔 테두리/배경/라운드를
+   두지 않는다. 상·하 hairline 으로만 구역을 나누고 항목 사이는 구분선만. */
+.app-dialog__choices--list {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--md-stroke-soft) 30%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 30%, transparent);
+  background: transparent;
+}
+
+/* list 항목은 .app-dialog__choices--list 하위로 묶어 우선순위를 .btn(파일 뒤쪽
+   정의, 알약 라운드+1px 보더)보다 높인다. 그래야 사각·풀폭 행이 확실히 유지돼
+   선택/포커스 시 둥근 박스가 컨테이너 보더와 겹치지 않는다. */
+.app-dialog__choices--list .app-dialog__choiceBtn--action {
+  justify-content: space-between;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.25;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-dialog__choices--list .app-dialog__choiceBtn--action:last-child {
+  border-bottom: 0;
+}
+
+/* 즉시 동작(Play/Upload/Delete…)에 navigation chevron(›)은 오해를 부른다 → 없음 */
+.app-dialog__choices--list .app-dialog__choiceBtn--action::after {
+  content: "";
+  display: none;
+}
+
+/* 호버/포커스: 둥근 포커스링·보더 대신 풀폭 배경만 (선 겹침 방지) */
+.app-dialog__choices--list .app-dialog__choiceBtn--action:hover,
+.app-dialog__choices--list .app-dialog__choiceBtn--action:focus-visible {
+  background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+}
+
+.app-dialog__choices--list .app-dialog__choiceBtn--action.is-current {
+  color: var(--md-on-surface);
+  background: color-mix(in srgb, var(--md-primary) 14%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
+}
+
+/* 선택된 항목만 체크(✓) — 자체완결 */
+.app-dialog__choices--list .app-dialog__choiceBtn--action.is-current::after {
+  content: "";
+  display: block;
+  width: 6px;
+  height: 11px;
+  margin-left: 12px;
+  border-right: 2px solid color-mix(in srgb, var(--md-primary) 82%, var(--md-on-surface));
+  border-bottom: 2px solid color-mix(in srgb, var(--md-primary) 82%, var(--md-on-surface));
+  transform: rotate(45deg);
+  flex: 0 0 auto;
+}
+
+.app-dialog__choices--value-grid {
+  grid-template-columns: repeat(var(--app-dialog-choice-columns, 5), minmax(0, 1fr));
+  gap: 6px;
+}
+
+.app-dialog__choiceBtn--value {
+  min-height: 42px;
+  padding: 0 6px;
+  justify-content: center;
+  border-radius: var(--dialog-choice-grid-radius);
+  background: var(--md-surface-cont-h);
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .app-dialog__inputWrap {
@@ -201,10 +296,64 @@ body[data-page="terminal"] .app-toast-host {
 .app-dialog__actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--sp-sm);
+  gap: 8px;
   flex-wrap: wrap;
-  margin-top: var(--sp-lg);
+  margin-top: var(--sp-md);
   flex-shrink: 0;
+}
+
+.app-dialog__actions .smallBtn,
+.app-dialog__actions .btn {
+  border-radius: var(--dialog-control-radius);
+}
+
+.app-dialog--choice-grid .app-dialog__sheet,
+.app-dialog--choice-value-grid .app-dialog__sheet {
+  width: min(100%, var(--dialog-sheet-width));
+  max-height: min(82dvh, 640px);
+  padding: var(--sp-lg);
+}
+
+.app-dialog--choice-grid .app-dialog__body,
+.app-dialog--choice-value-grid .app-dialog__body {
+  flex: 0 0 auto;
+  font-size: var(--fs-label-sm);
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) and (orientation: portrait) {
+  .app-dialog {
+    align-items: center;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 8px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-dialog__sheet {
+    width: calc(100vw - 16px);
+    max-height: var(--dialog-sheet-mobile-max-height);
+    padding: 14px;
+    border-radius: var(--dialog-sheet-radius-mobile);
+    transform: translateY(10px) scale(0.985);
+  }
+
+  .app-dialog__head {
+    margin-bottom: 6px;
+  }
+
+  .app-dialog__title {
+    font-size: var(--fs-title-xs);
+  }
+
+  .app-dialog__body {
+    font-size: var(--fs-body-sm);
+  }
+
+  .app-dialog__choiceBtn {
+    min-height: 42px;
+  }
+
+  .app-dialog__choiceBtn--value {
+    min-height: 40px;
+  }
 }
 
 .app-branch-picker__sheet {

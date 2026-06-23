@@ -148,8 +148,11 @@
             </button>
           </div>
           <button id="btnSettingSearch" class="fab fab--round fab--icon fab--setting-search fab--setting-menu" type="button" aria-label="설정 작업" aria-expanded="false" aria-haspopup="menu" aria-controls="settingFabActions">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path fill="currentColor" d="M19 11h-6V5h-2v6H5v2h6v6h2v-6h6z"/>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="setting-fab-menu-icon">
+              <path d="M4 6h4m5 0h7M4 12h10m5 0h1M4 18h7m5 0h4"></path>
+              <circle cx="10.5" cy="6" r="2.2"></circle>
+              <circle cx="16.5" cy="12" r="2.2"></circle>
+              <circle cx="13.5" cy="18" r="2.2"></circle>
             </svg>
           </button>
         </div>
@@ -566,11 +569,12 @@
               </div>
               <div id="hudGapNum" class="hudGapText">(--)</div>
             </div>
-            <div class="hudGearStatus">
-              <div id="hudGearStep" class="hudGearStep" hidden>1</div>
-              <div id="hudGearLabel" class="hudGearLabel">GEAR</div>
-              <div id="hudGear" class="hudGearValue">P</div>
-            </div>
+          </div>
+          <!-- 기어: 설정속도 칼럼 우측 빈 공간(중앙)에 절대배치 -->
+          <div class="hudGearStatus hudGearStatus--floating">
+            <div id="hudGearStep" class="hudGearStep" hidden>1</div>
+            <div id="hudGearLabel" class="hudGearLabel">GEAR</div>
+            <div id="hudGear" class="hudGearValue">P</div>
           </div>
         </div>
       </div>

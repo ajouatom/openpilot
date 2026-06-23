@@ -734,3 +734,35 @@
     width: min(100%, var(--hud-max-width));
   }
 }
+
+/* ── 기어 띄움(floating) — 설정속도 칼럼 우측 빈 공간(중앙)으로 이동 ──
+   기존엔 차간거리 막대 옆 디테일 영역에 끼어 어색했음. 절대배치라 다른 요소
+   레이아웃은 안 건드린다. top/right 값은 실기기 보고 미세조정. */
+.hudSupportColumn {
+  position: relative;
+}
+
+.hudWrap .hudSupportColumn > .hudGearStatus--floating {
+  position: absolute;
+  top: 40%;
+  right: calc(var(--hud-padding) * 0.20);
+  transform: translateY(-50%);
+  min-width: 0;
+  max-width: none;
+  align-items: flex-end;
+  text-align: right;
+  z-index: 1;
+}
+
+.hudWrap .hudSupportColumn > .hudGearStatus--floating .hudGearStep,
+.hudWrap .hudSupportColumn > .hudGearStatus--floating .hudGearLabel,
+.hudWrap .hudSupportColumn > .hudGearStatus--floating .hudGearValue {
+  width: auto;
+  text-align: right;
+}
+
+/* 모든 초록 HUD에서 기어 모양 동일하게 — veryCompact·micro 의 GEAR 라벨 숨김을 덮어
+   라벨을 항상 노출 (단, 0~7 단수 hudGearStep 의 hidden 동작은 그대로 둠). */
+.hudWrap .hudSupportColumn > .hudGearStatus--floating .hudGearLabel {
+  display: block;
+}
