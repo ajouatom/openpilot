@@ -13,8 +13,27 @@
   --setting-profile-toolbar-height: 58px;
 }
 
-.page--setting.setting-profile-active {
-  --page-gutter-block: 0px;
+.page--setting #settingScreenHost.setting-screen-transitioning {
+  overflow: hidden !important;
+}
+
+.page--setting #settingScreenHost.setting-screen-transitioning > .page-transitioning {
+  overflow: hidden;
+  background: var(--md-surface);
+  pointer-events: none;
+  contain: paint;
+}
+
+.page--setting.setting-screen-transitioning #carrotTabContent,
+.page--setting.setting-screen-transitioning #deviceTabContent,
+.page--setting.setting-screen-transitioning #items,
+.page--setting.setting-screen-transitioning #deviceItems {
+  animation: none !important;
+}
+
+.page--setting .setting-screen-snapshot,
+.page--setting .setting-screen-snapshot * {
+  animation: none !important;
 }
 
 .page--setting .setting.is-restored-live .val {
@@ -160,6 +179,16 @@
   flex-direction: column;
   align-items: flex-end;
   pointer-events: auto;
+  transform-origin: right bottom;
+  transition:
+    opacity 0.12s ease,
+    transform 0.16s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* 전환 중 FAB 를 숨기지 않는다 — FAB 는 position:fixed 라 슬라이드와 무관하고,
+   끝에 다시 나타나며(opacity/scale) 한 번 깜박이던 원인이었다. 클릭만 잠시 막는다. */
+.page--setting.setting-screen-transitioning .setting-fab-menu {
+  pointer-events: none;
 }
 
 .setting-fab-actions {
@@ -294,14 +323,17 @@
 }
 
 .setting-fab-menu.is-open .fab--setting-menu {
-  animation: setting-fab-pop 0.28s cubic-bezier(0.2, 0, 0, 1);
   box-shadow: 0 16px 34px rgba(255, 135, 58, 0.34);
+}
+
+/* 터치/클릭 시 가벼운 바운스 (JS 가 is-bouncing 을 토글) */
+.fab--setting-menu.is-bouncing {
+  animation: setting-fab-bounce 0.3s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .fab--setting-menu svg {
   width: 26px;
   height: 26px;
-  transition: transform 0.26s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .fab--setting-menu .setting-fab-menu-icon {
@@ -317,16 +349,15 @@
   stroke-linejoin: round;
 }
 
-.fab--setting-menu[aria-expanded="true"] svg {
-  transform: rotate(90deg) scale(0.92);
-}
-
-@keyframes setting-fab-pop {
+@keyframes setting-fab-bounce {
   0% {
-    transform: scale(0.92);
+    transform: scale(1);
   }
-  58% {
-    transform: scale(1.04);
+  30% {
+    transform: scale(0.93);
+  }
+  62% {
+    transform: scale(1.03);
   }
   100% {
     transform: scale(1);
@@ -339,7 +370,7 @@
   .fab--setting-menu svg {
     transition: none !important;
   }
-  .setting-fab-menu.is-open .fab--setting-menu {
+  .fab--setting-menu.is-bouncing {
     animation: none !important;
   }
   .setting-fab-menu.is-open .setting-fab-action {

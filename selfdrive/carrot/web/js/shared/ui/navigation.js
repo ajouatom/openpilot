@@ -49,6 +49,9 @@ function resetPageRuntimeStyles(el) {
   el.style.left = "";
   el.style.right = "";
   el.style.width = "";
+  el.style.visibility = "";
+  el.style.pointerEvents = "";
+  el.style.boxShadow = "";
 }
 
 function setPageRendered(el, rendered) {
@@ -430,49 +433,92 @@ function commitPageChange(page, prevPage, pushHistory, options = {}) {
   else history.replaceState(state, "");
 }
 
-function applySwipeDrag(frame, dx, direction, withResistance = false) {
+function applySwipeDrag(frame, dx, direction, withResistance = false, options = {}) {
   if (!frame) return;
   const { fromEl, toEl, width } = frame;
+  const fade = options.fade !== false;
+  const hierarchy = options.hierarchy === true;
+  const parallax = Number.isFinite(options.parallax) ? options.parallax : 0.18;
   const dragX = withResistance ? dx * SWIPE_EDGE_RESISTANCE : dx;
   const progress = Math.min(Math.abs(dragX) / width, 1);
   const targetBase = direction === "forward" ? width : -width;
 
-  fromEl.style.transform = `translateX(${dragX}px)`;
-  fromEl.style.opacity = `${1 - (progress * 0.14)}`;
+  if (hierarchy && direction === "backward") {
+    fromEl.style.transform = `translateX(${dragX}px)`;
+    fromEl.style.zIndex = "2";
+  } else {
+    fromEl.style.transform = `translateX(${dragX}px)`;
+    fromEl.style.zIndex = "1";
+  }
+  fromEl.style.opacity = fade ? `${1 - (progress * 0.14)}` : "1";
 
   if (toEl) {
-    toEl.style.transform = `translateX(${targetBase + dragX}px)`;
-    toEl.style.opacity = `${0.82 + (progress * 0.18)}`;
-    toEl.style.zIndex = "2";
+    const targetX = hierarchy && direction === "backward"
+      ? (-width * parallax) + (dragX * parallax)
+      : targetBase + dragX;
+    toEl.style.transform = `translateX(${targetX}px)`;
+    toEl.style.opacity = fade ? `${0.82 + (progress * 0.18)}` : "1";
+    toEl.style.zIndex = hierarchy && direction === "backward" ? "1" : "2";
+  }
+
+  if (hierarchy) {
+    const foreground = direction === "backward" ? fromEl : toEl;
+    const background = direction === "backward" ? toEl : fromEl;
+    if (foreground) foreground.style.boxShadow = "-14px 0 30px rgba(0, 0, 0, 0.22)";
+    if (background) background.style.boxShadow = "none";
   }
 
   updateSwipeFrameHeight(frame);
 }
 
-function settleSwipe(frame, direction, commit, done) {
+function settleSwipe(frame, direction, commit, done, options = {}) {
   if (!frame) {
     done();
     return;
   }
   const { fromEl, toEl, width } = frame;
-  const outX = direction === "forward" ? -width : width;
+  const durationMs = Number.isFinite(options.durationMs) ? options.durationMs : SWIPE_SETTLE_MS;
+  const easing = options.easing || "cubic-bezier(0.22, 1, 0.36, 1)";
+  const fade = options.fade !== false;
+  const hierarchy = options.hierarchy === true;
+  const parallax = Number.isFinite(options.parallax) ? options.parallax : 0.18;
+  const outX = hierarchy && direction === "forward"
+    ? -(width * parallax)
+    : (direction === "forward" ? -width : width);
   const inX = direction === "forward" ? width : -width;
-  const transition = `transform ${SWIPE_SETTLE_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${SWIPE_SETTLE_MS}ms ease`;
+  const transition = `transform ${durationMs}ms ${easing}, opacity ${durationMs}ms ease`;
 
   fromEl.style.transition = transition;
   if (toEl) toEl.style.transition = transition;
 
+  void fromEl.offsetWidth;
+
+  // 전환이 '실제로 끝난' 시점에 정리한다. setTimeout(durationMs) 만 쓰면 rAF 로
+  // 1프레임 늦게 시작된 transition 보다 먼저 발화해, 마지막에 살짝 튀는 잔상이 생긴다.
+  let settleDone = false;
+  const finishSettle = () => {
+    if (settleDone) return;
+    settleDone = true;
+    fromEl.removeEventListener("transitionend", onTransitionEnd);
+    done();
+  };
+  const onTransitionEnd = (event) => {
+    if (event.target === fromEl && event.propertyName === "transform") finishSettle();
+  };
+  fromEl.addEventListener("transitionend", onTransitionEnd);
+
   requestAnimationFrame(() => {
     fromEl.style.transform = commit ? `translateX(${outX}px)` : "translateX(0px)";
-    fromEl.style.opacity = commit ? "0" : "1";
+    fromEl.style.opacity = fade && commit ? "0" : "1";
 
     if (toEl) {
       toEl.style.transform = commit ? "translateX(0px)" : `translateX(${inX}px)`;
-      toEl.style.opacity = commit ? "1" : "0.82";
+      toEl.style.opacity = fade ? (commit ? "1" : "0.82") : "1";
     }
   });
 
-  window.setTimeout(done, SWIPE_SETTLE_MS);
+  // transitionend 누락(예: 값 변화 없음) 대비 폴백.
+  window.setTimeout(finishSettle, durationMs + 80);
 }
 
 
@@ -519,6 +565,89 @@ function showPage(page, pushHistory = false, transition = null) {
   commitPageChange(page, prevPage, pushHistory);
 }
 
+/* One UI 기본 모션 곡선(공식): 빠르게 가속 후 천천히 감속.
+   전체 화면 좌우 슬라이드라 제스처 릴리스(기본 220ms ease-out)보다 살짝
+   길게(320ms) 잡아 또렷하고 의도적으로 보이게 한다. */
+const SETTING_SCREEN_SLIDE_MS = 320;
+const SETTING_SCREEN_SLIDE_EASE = "cubic-bezier(0.22, 0.25, 0, 1)";
+
+/* groups ↔ items 단계 전환을 탭으로 들어갈 때 One UI 식 좌우 슬라이드로 재생.
+   방향: 들어갈 때(items) forward, 나올 때(groups) backward. */
+function runSettingScreenSlide(showEl, hideEl, direction, token) {
+  if (!settingScreenHost || !showEl || !hideEl) return false;
+
+  // 단계 전환에서는 세로 stagger 를 재생하지 않고 좌우 슬라이드만 보인다(들어오는·나가는 화면 모두).
+  [showEl, hideEl].forEach((scr) => {
+    scr.querySelectorAll(".ui-stagger-item").forEach((el) => el.classList.remove("ui-stagger-item"));
+  });
+
+  // 세로 구조: 두 화면은 CSS 로 host 안에서 position:absolute inset:0 로 '항상' 겹쳐 있다.
+  // 따라서 전환은 순수 transform 만으로 끝난다 — pin/unpin·minHeight 가 없어, 끝날 때
+  // 재배치(흔들)나 재페인트(깜박)가 구조적으로 생기지 않는다.
+  [showEl, hideEl].forEach((el) => {
+    clearPageTransitionClasses(el);
+    el.style.transition = "none";
+    el.style.transform = "";
+    el.style.display = "";
+    el.classList.remove("hidden");
+  });
+
+  settingScreenHost.classList.add("setting-screen-transitioning");
+  document.getElementById("pageSetting")?.classList.add("setting-screen-transitioning");
+
+  const enterFrom = direction === "forward" ? "100%" : "-100%";
+  const exitTo = direction === "forward" ? "-100%" : "100%";
+  showEl.style.zIndex = "2";
+  showEl.style.willChange = "transform";
+  showEl.style.transform = `translateX(${enterFrom})`;
+  hideEl.style.zIndex = "1";
+  hideEl.style.willChange = "transform";
+  hideEl.style.transform = "translateX(0)";
+
+  void showEl.offsetWidth;
+
+  let settled = false;
+  const finalize = () => {
+    if (settled) return;
+    settled = true;
+    showEl.removeEventListener("transitionend", onTransitionEnd);
+    if (token !== settingScreenTransitionToken) return;
+    // transition 을 끈 채로 정리한다 — 그래야 transform 을 지울 때 .screen 의 .16s 전환이
+    // 재가동돼 끝에 살짝 움직이거나 깜박이지 않는다. 정리를 즉시 커밋한 뒤 CSS 전환을 복구한다.
+    showEl.style.transition = "none";
+    hideEl.style.transition = "none";
+    hideEl.style.display = "none";
+    hideEl.classList.add("hidden");
+    showEl.style.transform = "";
+    hideEl.style.transform = "";
+    showEl.style.zIndex = "";
+    hideEl.style.zIndex = "";
+    void showEl.offsetWidth;
+    showEl.style.transition = "";
+    hideEl.style.transition = "";
+    showEl.style.willChange = "";
+    hideEl.style.willChange = "";
+    settingScreenHost.classList.remove("setting-screen-transitioning");
+    document.getElementById("pageSetting")?.classList.remove("setting-screen-transitioning");
+  };
+  const onTransitionEnd = (event) => {
+    if (event.target === showEl && event.propertyName === "transform") finalize();
+  };
+  showEl.addEventListener("transitionend", onTransitionEnd);
+
+  requestAnimationFrame(() => {
+    if (token !== settingScreenTransitionToken) { finalize(); return; }
+    const slide = `transform ${SETTING_SCREEN_SLIDE_MS}ms ${SETTING_SCREEN_SLIDE_EASE}`;
+    showEl.style.transition = slide;
+    hideEl.style.transition = slide;
+    showEl.style.transform = "translateX(0)";
+    hideEl.style.transform = `translateX(${exitTo})`;
+  });
+
+  window.setTimeout(finalize, SETTING_SCREEN_SLIDE_MS + 80);
+  return true;
+}
+
 function showSettingScreen(which, pushHistory = false) {
   const isGroups = (which === "groups");
   const showEl = isGroups ? screenGroups : screenItems;
@@ -531,6 +660,15 @@ function showSettingScreen(which, pushHistory = false) {
   const transitionToken = ++settingScreenTransitionToken;
 
   settingScreenHideTimer = clearPendingScreenHide(settingScreenHideTimer);
+  if (settingScreenHost?.classList.contains("setting-screen-transitioning") && !settingGroupTransitionLock) {
+    [screenGroups, screenItems].forEach((el) => {
+      clearPageTransitionClasses(el);
+      resetPageRuntimeStyles(el);
+    });
+    settingScreenHost.classList.remove("setting-screen-transitioning");
+    document.getElementById("pageSetting")?.classList.remove("setting-screen-transitioning");
+    settingScreenHost.style.minHeight = "";
+  }
   syncSettingSplitLayoutClass(splitLandscape);
   document.getElementById("pageSetting")?.classList.toggle("setting-profile-active", isProfileItems);
 
@@ -550,24 +688,36 @@ function showSettingScreen(which, pushHistory = false) {
   settingTitle.textContent = isGroups ? (UI_STRINGS[LANG].setting || "Setting") : ((UI_STRINGS[LANG].setting || "Setting") + " - " + currentGroupLabel);
   if (settingSubnavWrap) settingSubnavWrap.style.display = (isGroups || isProfileItems) ? "none" : "";
 
-  showEl.style.display = "";
-  requestAnimationFrame(() => {
-    if (transitionToken !== settingScreenTransitionToken) return;
-    showEl.classList.remove("hidden");
-  });
+  const reduceMotion = Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const canSlide =
+    !window.__CARROT_WEB_BOOTSTRAPPING &&
+    !reduceMotion &&
+    settingScreenHost &&
+    showEl !== hideEl &&
+    hideEl.style.display !== "none" &&
+    !hideEl.classList.contains("hidden");
+  const didSlide = canSlide && runSettingScreenSlide(showEl, hideEl, isGroups ? "backward" : "forward", transitionToken);
 
-  hideEl.classList.add("hidden");
-  settingScreenHideTimer = window.setTimeout(() => {
-    if (transitionToken !== settingScreenTransitionToken) return;
-    hideEl.style.display = "none";
-    settingScreenHideTimer = null;
-  }, 170);
+  if (!didSlide) {
+    showEl.style.display = "";
+    requestAnimationFrame(() => {
+      if (transitionToken !== settingScreenTransitionToken) return;
+      showEl.classList.remove("hidden");
+    });
+
+    hideEl.classList.add("hidden");
+    settingScreenHideTimer = window.setTimeout(() => {
+      if (transitionToken !== settingScreenTransitionToken) return;
+      hideEl.style.display = "none";
+      settingScreenHideTimer = null;
+    }, 170);
+  }
 
   if (pushHistory) {
     history.pushState({ page: "setting", screen: which, group: CURRENT_GROUP || null }, "");
   }
 
-  if (settingScreenHost) settingScreenHost.style.minHeight = "";
+  if (settingScreenHost && !didSlide) settingScreenHost.style.minHeight = "";
   if (typeof syncSettingSubnavFixedOffset === "function") {
     requestAnimationFrame(syncSettingSubnavFixedOffset);
   }

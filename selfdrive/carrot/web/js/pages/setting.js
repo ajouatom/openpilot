@@ -826,18 +826,78 @@ function getSettingControlConfig(p) {
   return { kind, min, max, unit, optionCount };
 }
 
+const SETTING_DISPLAY_UNIT_TYPES = Object.freeze({
+  raw: "",
+  speedKph: "km/h",
+  distanceCm: "cm",
+  timeSec: "s",
+  timeMin: "min",
+  percent: "%",
+  degree: "deg",
+});
+
+const SETTING_PARAM_DISPLAY_TYPES = Object.freeze({
+  PathOffset: "distanceCm",
+  CruiseOnDist: "distanceCm",
+  CruiseEcoControl: "speedKph",
+  StopDistanceCarrot: "distanceCm",
+  TrafficStopDistanceAdjust: "distanceCm",
+  AutoTurnControlSpeedTurn: "speedKph",
+  CruiseSpeedUnit: "speedKph",
+  CruiseSpeedUnitBasic: "speedKph",
+  CruiseSpeed1: "speedKph",
+  CruiseSpeed2: "speedKph",
+  CruiseSpeed3: "speedKph",
+  CruiseSpeed4: "speedKph",
+  CruiseSpeed5: "speedKph",
+  AutoGasTokSpeed: "speedKph",
+  AutoGasCancelSpeed: "speedKph",
+  MaxTimeOffroadMin: "timeMin",
+  AutoSpeedUptoRoadSpeedLimit: "percent",
+  AutoRoadSpeedAdjust: "percent",
+  ApplyModelSpeed: "percent",
+  UseLaneLineSpeed: "speedKph",
+  UseLaneLineCurveSpeed: "speedKph",
+  AdjustLaneOffset: "distanceCm",
+  SoundVolumeAdjust: "percent",
+  SoundVolumeAdjustEngage: "percent",
+  AutoCurveSpeedLowerLimit: "speedKph",
+  AutoNaviSpeedCtrlEnd: "timeSec",
+  AutoNaviSpeedBumpTime: "timeSec",
+  AutoNaviSpeedBumpSpeed: "speedKph",
+  AutoRoadSpeedLimitOffset: "speedKph",
+  AutoCurveSpeedFactor: "percent",
+  MapTurnSpeedFactor: "percent",
+  AutoNaviSpeedSafetyFactor: "percent",
+  RadarReactionFactor: "percent",
+  SteerRatioRate: "percent",
+  DynamicTFollowLC: "percent",
+  TFollowDecelBoost: "percent",
+  ShowCustomBrightness: "percent",
+  ClusterHudBrightness: "percent",
+});
+
+function getSettingDisplayType(name) {
+  const key = String(name || "").trim();
+  return SETTING_PARAM_DISPLAY_TYPES[key] || "raw";
+}
+
 function getSettingDisplayUnit(name) {
-  if (!name) return "";
-  if (/Brightness|Volume/i.test(name)) return "%";
-  if (/Speed/i.test(name)) return "km/h";
-  if (/Dist|Distance|Offset/i.test(name)) return "cm";
-  return "";
+  return SETTING_DISPLAY_UNIT_TYPES[getSettingDisplayType(name)] || "";
 }
 
 function formatSettingDisplayValue(p, value) {
   const text = String(value);
   const unit = getSettingDisplayUnit(p?.name);
   return unit ? `${text}${unit}` : text;
+}
+
+function formatSettingRangeMeta(p) {
+  return [
+    `min=${formatSettingDisplayValue(p, p?.min)}`,
+    `max=${formatSettingDisplayValue(p, p?.max)}`,
+    `default=${formatSettingDisplayValue(p, p?.default)}`,
+  ].join(", ");
 }
 
 const SETTING_UNIT_STORAGE_KEY = "carrot.settingUnitIndex.v1";
@@ -917,7 +977,7 @@ function getSettingOptionValues(config) {
 }
 
 function getSettingOptionLabel(name, value) {
-  return String(value);
+  return formatSettingDisplayValue({ name }, value);
 }
 
 function syncSettingControlState(row, value) {
@@ -1072,42 +1132,6 @@ function formatSettingProfileDate(value) {
   }
 }
 
-function settingProfileMetaRows(profile) {
-  const meta = profile?.meta || {};
-  const rows = [];
-  if (profile?.created_at) {
-    rows.push([getUIText("setting_profile_created", "Created"), settingsDiffEscape(formatSettingProfileDate(profile.created_at))]);
-  }
-  if (meta.branch) rows.push([getUIText("branch", "Branch"), settingsDiffEscape(meta.branch)]);
-  if (meta.commit) {
-    const commitText = meta.commit_short || String(meta.commit).slice(0, 7);
-    const commitValue = meta.commit_url
-      ? `<a href="${settingsDiffEscape(meta.commit_url)}" target="_blank" rel="noopener">${settingsDiffEscape(commitText)}</a>`
-      : settingsDiffEscape(commitText);
-    rows.push([getUIText("commit", "Commit"), commitValue]);
-  }
-  return rows;
-}
-
-async function openSettingProfileInfo(profile) {
-  const rows = settingProfileMetaRows(profile);
-  const messageHtml = rows.length
-    ? `<div class="setting-profile-info">${rows.map(([label, value]) => `
-        <div class="setting-profile-panel__metaRow">
-          <span>${settingsDiffEscape(label)}</span>
-          <strong>${value}</strong>
-        </div>
-      `).join("")}</div>`
-    : `<div class="setting-profile-info setting-profile-info--empty">${settingsDiffEscape(getUIText("setting_profile_info_empty", "No profile metadata"))}</div>`;
-  await openAppDialog({
-    mode: "alert",
-    title: getUIText("setting_profile_info", "Profile Info"),
-    html: true,
-    messageHtml,
-    confirmLabel: getUIText("ok", "OK"),
-  });
-}
-
 async function saveSettingProfile(profileId, updates) {
   const payload = await postJson("/api/setting_profiles/update", { id: profileId, ...(updates || {}) });
   updateSettingProfilesFromPayload(payload);
@@ -1221,11 +1245,11 @@ async function deleteSettingProfile(profile) {
 }
 
 function closeSettingProfileActionMenus(exceptPanel = null) {
-  document.querySelectorAll(".setting-profile-action-menu.is-open").forEach((menu) => {
+  document.querySelectorAll(".setting-profile-menu.is-open").forEach((menu) => {
     if (exceptPanel && menu === exceptPanel) return;
     menu.classList.remove("is-open");
-    const button = menu.querySelector(".setting-profile-action-menu__button");
-    const panel = menu.querySelector(".setting-profile-action-menu__panel");
+    const button = menu.querySelector(".setting-profile-menu__button");
+    const panel = menu.querySelector(".setting-profile-menu__panel");
     if (button) button.setAttribute("aria-expanded", "false");
     if (panel) {
       panel.hidden = true;
@@ -1234,38 +1258,84 @@ function closeSettingProfileActionMenus(exceptPanel = null) {
   });
 }
 
-function makeSettingProfileMenuItem(label, onClick, className = "") {
+function settingProfileActionIcon(kind) {
+  const paths = {
+    edit: "M4 20h4l10.5-10.5a2.12 2.12 0 0 0-3-3L5 17v3m11-12 3 3",
+    search: "M10.5 18a7.5 7.5 0 1 1 5.3-12.8 7.5 7.5 0 0 1 0 10.6L20 20",
+    info: "M12 17v-6m0-4h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20",
+    apply: "m5 12 4 4L19 6",
+    delete: "M6 7h12m-10 0 .7 13h6.6L16 7M10 7V4h4v3",
+  };
+  const path = paths[kind] || paths.info;
+  return `
+    <svg class="setting-profile-action__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="${path}"></path>
+    </svg>
+  `;
+}
+
+function makeSettingProfileMenuItem({ label, icon = "info", onClick, className = "" }) {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = `setting-profile-action-menu__item ui-dropdown-menu__item${className ? ` ${className}` : ""}`;
+  button.className = `setting-profile-menu__item ui-dropdown-menu__item${className ? ` ${className}` : ""}`;
   button.setAttribute("role", "menuitem");
-  button.textContent = label;
+  button.innerHTML = `
+    ${settingProfileActionIcon(icon)}
+    <span>${settingsDiffEscape(label)}</span>
+  `;
   button.onclick = (event) => {
     event.stopPropagation();
     closeSettingProfileActionMenus();
-    onClick();
+    if (typeof onClick === "function") onClick();
   };
   return button;
 }
 
-function appendSettingProfileHeader(profile, container) {
-  const panel = document.createElement("div");
-  panel.className = "setting-profile-panel";
+function renderSettingProfileMetaRows(profile) {
+  const meta = profile?.meta || {};
+  const created = profile?.created_at ? settingsDiffEscape(formatSettingProfileDate(profile.created_at)) : "-";
+  const branch = meta.branch ? settingsDiffEscape(meta.branch) : "-";
+  let commit = "-";
+  if (meta.commit) {
+    const commitText = meta.commit_short || String(meta.commit).slice(0, 7);
+    commit = meta.commit_url
+      ? `<a href="${settingsDiffEscape(meta.commit_url)}" target="_blank" rel="noopener">${settingsDiffEscape(commitText)}</a>`
+      : settingsDiffEscape(commitText);
+  }
+  return [
+    [getUIText("setting_profile_created", "Created"), created],
+    [getUIText("branch", "Branch"), branch],
+    [getUIText("commit", "Commit"), commit],
+  ];
+}
 
-  const titleRow = document.createElement("div");
-  titleRow.className = "setting-profile-panel__titleRow";
-  const input = document.createElement("input");
-  input.className = "setting-profile-panel__name";
-  input.type = "text";
-  input.maxLength = 40;
-  input.value = profile.name || "";
-  input.setAttribute("aria-label", getUIText("setting_profile_name", "Profile name"));
+function appendSettingProfileHeader(profile, container) {
+  if (!container || !profile) return;
+  const panel = document.createElement("div");
+  panel.className = "setting-profile-panel setting-section-block ui-stagger-item";
+
+  const card = document.createElement("div");
+  card.className = "setting-profile-manage-card setting-group-card";
+  const valueCount = Object.keys(profile.values || {}).length;
+
+  const nameRow = document.createElement("div");
+  nameRow.className = "setting-profile-row setting-profile-row--name";
+  const nameLabel = document.createElement("div");
+  nameLabel.className = "setting-profile-row__label";
+  nameLabel.textContent = getUIText("setting_profile_card_title", "Profile ({count})", { count: valueCount });
+  const nameInput = document.createElement("input");
+  nameInput.className = "setting-profile-name-input";
+  nameInput.type = "text";
+  nameInput.maxLength = 40;
+  nameInput.value = profile.name || "";
+  nameInput.setAttribute("aria-label", getUIText("setting_profile_name", "Profile name"));
+
   let nameSaveTimer = 0;
   let nameSaveInFlight = null;
   async function persistProfileName() {
-    const nextName = input.value.trim();
+    const nextName = nameInput.value.trim();
     if (!nextName) {
-      input.value = profile.name || "";
+      nameInput.value = profile.name || "";
       return;
     }
     if (nextName === profile.name) return;
@@ -1274,49 +1344,51 @@ function appendSettingProfileHeader(profile, container) {
       if (nextName === profile.name) return;
     }
     try {
-      input.classList.add("is-saving");
+      nameInput.classList.add("is-saving");
       nameSaveInFlight = saveSettingProfile(profile.id, { name: nextName });
       const nextProfile = await nameSaveInFlight;
       if (nextProfile) profile.name = nextProfile.name;
-      if (itemsTitle) itemsTitle.textContent = profile.name;
       renderGroups({ animateGroups: false });
       renderSettingSubnav();
+      setSettingItemsTitle(profile.name);
+      showAppToast(getUIText("setting_profile_saved", "Profile saved"));
     } catch (e) {
       showAppToast(e?.message || getUIText("setting_profile_save_failed", "Failed to save profile"), { tone: "error" });
     } finally {
       nameSaveInFlight = null;
-      input.classList.remove("is-saving");
+      nameInput.classList.remove("is-saving");
     }
   }
-  function scheduleProfileNameSave(delay = 500) {
+  function scheduleProfileNameSave(delay = 650) {
     if (nameSaveTimer) clearTimeout(nameSaveTimer);
     nameSaveTimer = window.setTimeout(() => {
       nameSaveTimer = 0;
       persistProfileName().catch(() => {});
     }, delay);
   }
-  input.addEventListener("input", () => scheduleProfileNameSave());
-  input.addEventListener("blur", () => {
+  nameInput.addEventListener("input", () => scheduleProfileNameSave());
+  nameInput.addEventListener("blur", () => {
     if (nameSaveTimer) {
       clearTimeout(nameSaveTimer);
       nameSaveTimer = 0;
     }
     persistProfileName().catch(() => {});
   });
-  input.addEventListener("keydown", (event) => {
+  nameInput.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     event.preventDefault();
     if (nameSaveTimer) {
       clearTimeout(nameSaveTimer);
       nameSaveTimer = 0;
     }
-    persistProfileName().then(() => input.blur()).catch(() => {});
+    persistProfileName().then(() => nameInput.blur()).catch(() => {});
   });
+
   const menu = document.createElement("div");
-  menu.className = "setting-profile-action-menu ui-dropdown-menu";
+  menu.className = "setting-profile-menu ui-dropdown-menu";
   const menuBtn = document.createElement("button");
   menuBtn.type = "button";
-  menuBtn.className = "setting-profile-action-menu__button ui-dropdown-menu__button";
+  menuBtn.className = "setting-profile-menu__button ui-dropdown-menu__button";
   menuBtn.setAttribute("aria-haspopup", "menu");
   menuBtn.setAttribute("aria-expanded", "false");
   menuBtn.setAttribute("aria-label", getUIText("setting_profile_menu", "Profile menu"));
@@ -1326,28 +1398,27 @@ function appendSettingProfileHeader(profile, container) {
     </svg>
   `;
   const menuPanel = document.createElement("div");
-  menuPanel.className = "setting-profile-action-menu__panel ui-dropdown-menu__panel";
+  menuPanel.className = "setting-profile-menu__panel ui-dropdown-menu__panel";
   menuPanel.setAttribute("role", "menu");
   menuPanel.setAttribute("aria-hidden", "true");
   menuPanel.hidden = true;
-  menuPanel.appendChild(makeSettingProfileMenuItem(
-    getUIText("setting_profile_search", "Search Profile"),
-    () => openSettingSearchPanel({ scope: { type: "profile", profileId: profile.id } }).catch(() => {}),
-  ));
-  menuPanel.appendChild(makeSettingProfileMenuItem(
-    getUIText("setting_profile_info", "Info"),
-    () => openSettingProfileInfo(profile),
-  ));
-  menuPanel.appendChild(makeSettingProfileMenuItem(
-    getUIText("apply", "Apply"),
-    () => applySettingProfile(profile),
-    "setting-profile-action-menu__item--primary",
-  ));
-  menuPanel.appendChild(makeSettingProfileMenuItem(
-    getUIText("delete", "Delete"),
-    () => deleteSettingProfile(profile),
-    "setting-profile-action-menu__item--danger",
-  ));
+  menuPanel.appendChild(makeSettingProfileMenuItem({
+    label: getUIText("apply", "Apply"),
+    icon: "apply",
+    onClick: () => applySettingProfile(profile),
+    className: "setting-profile-menu__item--primary",
+  }));
+  menuPanel.appendChild(makeSettingProfileMenuItem({
+    label: getUIText("setting_profile_search", "Search Profile"),
+    icon: "search",
+    onClick: () => openSettingSearchPanel({ scope: { type: "profile", profileId: profile.id } }).catch(() => {}),
+  }));
+  menuPanel.appendChild(makeSettingProfileMenuItem({
+    label: getUIText("delete", "Delete"),
+    icon: "delete",
+    onClick: () => deleteSettingProfile(profile),
+    className: "setting-profile-menu__item--danger",
+  }));
   menuBtn.onclick = (event) => {
     event.stopPropagation();
     const nextOpen = !menu.classList.contains("is-open");
@@ -1359,10 +1430,31 @@ function appendSettingProfileHeader(profile, container) {
   };
   menu.appendChild(menuBtn);
   menu.appendChild(menuPanel);
-  titleRow.appendChild(input);
-  titleRow.appendChild(menu);
 
-  panel.appendChild(titleRow);
+  const rows = document.createElement("div");
+  rows.className = "setting-profile-card__rows";
+
+  nameRow.appendChild(nameLabel);
+  nameRow.appendChild(nameInput);
+  nameRow.appendChild(menu);
+  rows.appendChild(nameRow);
+
+  renderSettingProfileMetaRows(profile).forEach(([label, value]) => {
+    const row = document.createElement("div");
+    row.className = "setting-profile-row";
+    const rowLabel = document.createElement("div");
+    rowLabel.className = "setting-profile-row__label";
+    rowLabel.textContent = label;
+    const rowValue = document.createElement("div");
+    rowValue.className = "setting-profile-row__value";
+    rowValue.innerHTML = value;
+    row.appendChild(rowLabel);
+    row.appendChild(rowValue);
+    rows.appendChild(row);
+  });
+
+  card.appendChild(rows);
+  panel.appendChild(card);
   container.appendChild(panel);
 }
 
@@ -1536,8 +1628,17 @@ function hasSettingViewportLayoutChanged() {
   );
 }
 
+function isPortraitInternalScrollMode() {
+  return Boolean(window.matchMedia && window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches);
+}
+
 function getSettingItemsScrollContainer() {
   if (isCompactLandscapeMode() && screenItems) return screenItems;
+  // 세로 구조(뷰포트 고정 높이 + 화면 내부 스크롤)에서는 활성 화면이 스크롤러다.
+  if (isPortraitInternalScrollMode()) {
+    if (screenItems && screenItems.style.display !== "none" && !screenItems.classList.contains("hidden")) return screenItems;
+    if (screenGroups && screenGroups.style.display !== "none" && !screenGroups.classList.contains("hidden")) return screenGroups;
+  }
   return document.scrollingElement || document.documentElement || document.body;
 }
 
@@ -1606,6 +1707,7 @@ function isCarrotSettingTabActive() {
 function syncSettingGroupChrome(group = CURRENT_GROUP) {
   const meta = document.getElementById("groupMeta");
   const list = getSettingItemEntriesForGroup(group);
+  const profile = getSettingProfileByGroup(group);
   const groupLabel = group ? getSettingGroupLabel(group) : "";
   if (CURRENT_SETTING_DETAIL) {
     const detailEntry = getSettingDetailEntry(group, CURRENT_SETTING_DETAIL);
@@ -1617,7 +1719,10 @@ function syncSettingGroupChrome(group = CURRENT_GROUP) {
     }
     return;
   }
-  if (meta && group) meta.textContent = `${group} / ${list.length}`;
+  if (meta && group) {
+    meta.classList.remove("setting-profile-meta");
+    meta.textContent = profile ? "" : `${group} / ${list.length}`;
+  }
   if (group) {
     settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + groupLabel;
     setSettingItemsTitle(groupLabel);
@@ -1647,7 +1752,6 @@ async function selectSettingDetail(group, name, pushHistory = true) {
   saveCurrentSettingScrollPosition(targetGroup);
   CURRENT_GROUP = targetGroup;
   CURRENT_SETTING_DETAIL = targetName;
-  showSettingScreen("items", false);
   if (pushHistory) {
     history.pushState({
       page: "setting",
@@ -1656,12 +1760,12 @@ async function selectSettingDetail(group, name, pushHistory = true) {
       settingName: targetName,
     }, "");
   }
-  await renderItems(targetGroup, {
+  await transitionSettingItemsContent(() => renderItems(targetGroup, {
     detailName: targetName,
     scrollMode: "top",
-    animateItems: true,
+    animateItems: false,
     forceValues: true,
-  });
+  }), "forward");
 }
 
 function settingMarqueeHtml(text, className) {
@@ -1862,7 +1966,6 @@ async function openSettingSearchPanel(options = {}) {
   const scope = options.scope || { type: "all", profileId: "" };
   if (CURRENT_PAGE !== "setting") return;
   closeSettingFabMenu();
-  closeSettingProfileActionMenus();
   if (!SETTINGS) {
     try {
       await loadSettings();
@@ -1909,7 +2012,18 @@ async function openSettingSearchPanel(options = {}) {
 }
 
 if (btnSettingSearch) {
-  btnSettingSearch.onclick = () => toggleSettingFabMenu();
+  btnSettingSearch.addEventListener("animationend", (event) => {
+    if (event.animationName === "setting-fab-bounce") {
+      btnSettingSearch.classList.remove("is-bouncing");
+    }
+  });
+  btnSettingSearch.onclick = () => {
+    // 빠른 연타에도 바운스가 다시 재생되도록 클래스 제거 후 reflow 강제
+    btnSettingSearch.classList.remove("is-bouncing");
+    void btnSettingSearch.offsetWidth;
+    btnSettingSearch.classList.add("is-bouncing");
+    toggleSettingFabMenu();
+  };
 }
 
 if (btnSettingFabSearch) {
@@ -1992,8 +2106,9 @@ window.addEventListener("keydown", (e) => {
     closeSettingSearchPanel({ syncHistory: true });
     return;
   }
-  if (e.key === "Escape") {
+  if (e.key === "Escape" && document.querySelector(".setting-profile-menu.is-open")) {
     closeSettingProfileActionMenus();
+    return;
   }
   if (e.key === "Escape" && settingFabMenuOpen) {
     closeSettingFabMenu();
@@ -2001,18 +2116,18 @@ window.addEventListener("keydown", (e) => {
 });
 
 document.addEventListener("pointerdown", (e) => {
-  if (!(e.target instanceof Element && e.target.closest(".setting-profile-action-menu"))) {
+  if (!(e.target instanceof Element) || !e.target.closest(".setting-profile-menu")) {
     closeSettingProfileActionMenus();
   }
-  if (!settingFabMenuOpen || !settingFabMenu) return;
-  if (settingFabMenu.contains(e.target)) return;
-  closeSettingFabMenu();
+  if (settingFabMenuOpen && settingFabMenu && !settingFabMenu.contains(e.target)) {
+    closeSettingFabMenu();
+  }
 });
 
 window.addEventListener("carrot:pagechange", (event) => {
   if (event?.detail?.page !== "setting") {
-    closeSettingFabMenu();
     closeSettingProfileActionMenus();
+    closeSettingFabMenu();
   }
 });
 
@@ -2072,10 +2187,90 @@ function getSettingSubnavShiftTarget(direction) {
   };
 }
 
-function stripIdsFromClone(root) {
-  if (!root) return;
-  if (root.id) root.removeAttribute("id");
-  root.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+async function transitionSettingItemsContent(renderContent, direction = "forward") {
+  if (typeof renderContent !== "function") return false;
+
+  const reduceMotion = Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const canAnimate =
+    !window.__CARROT_WEB_BOOTSTRAPPING &&
+    !reduceMotion &&
+    !isCompactLandscapeMode() &&
+    !settingGroupTransitionLock &&
+    settingScreenHost &&
+    screenItems &&
+    screenItems.style.display !== "none" &&
+    !screenItems.classList.contains("hidden");
+
+  if (!canAnimate) {
+    if (screenItems && (screenItems.style.display === "none" || screenItems.classList.contains("hidden"))) {
+      showSettingScreen("items", false);
+    }
+    await renderContent();
+    return false;
+  }
+
+  settingGroupTransitionLock = true;
+  const snapshot = screenItems.cloneNode(true);
+  snapshot.classList.add("setting-screen-snapshot");
+  snapshot.querySelectorAll(".is-longpressing, .is-bouncing").forEach((el) => {
+    el.classList.remove("is-longpressing", "is-bouncing");
+  });
+  snapshot.setAttribute("aria-hidden", "true");
+  snapshot.style.pointerEvents = "none";
+
+  try {
+    settingScreenHost.classList.add("setting-screen-transitioning");
+    document.getElementById("pageSetting")?.classList.add("setting-screen-transitioning");
+    settingScreenHost.appendChild(snapshot);
+    prepareSwipeFrame(settingScreenHost, snapshot);
+    snapshot.style.zIndex = "1";
+    screenItems.style.visibility = "hidden";
+    screenItems.style.pointerEvents = "none";
+
+    await renderContent();
+
+    screenItems.querySelectorAll(".ui-stagger-item").forEach((el) => el.classList.remove("ui-stagger-item"));
+    screenItems.style.visibility = "";
+    const frame = prepareSwipeFrame(settingScreenHost, snapshot, screenItems);
+    if (!frame) {
+      resetPageRuntimeStyles(screenItems);
+      snapshot.remove();
+      settingScreenHost.classList.remove("setting-screen-transitioning");
+      document.getElementById("pageSetting")?.classList.remove("setting-screen-transitioning");
+      settingGroupTransitionLock = false;
+      return false;
+    }
+
+    applySwipeDrag(frame, 0, direction, false, { fade: false });
+    await new Promise((resolve) => {
+      settleSwipe(frame, direction, true, resolve, {
+        durationMs: SETTING_SCREEN_SLIDE_MS,
+        easing: SETTING_SCREEN_SLIDE_EASE,
+        fade: false,
+      });
+    });
+
+    clearPageTransitionClasses(screenItems);
+    resetPageRuntimeStyles(screenItems);
+    snapshot.remove();
+    settingScreenHost.style.minHeight = "";
+    settingScreenHost.classList.remove("setting-screen-transitioning");
+    document.getElementById("pageSetting")?.classList.remove("setting-screen-transitioning");
+    settingGroupTransitionLock = false;
+    scheduleSettingOverflowSync(screenItems);
+    return true;
+  } catch (e) {
+    clearPageTransitionClasses(screenItems);
+    resetPageRuntimeStyles(screenItems);
+    if (snapshot.parentElement) snapshot.remove();
+    if (settingScreenHost) {
+      settingScreenHost.style.minHeight = "";
+      settingScreenHost.classList.remove("setting-screen-transitioning");
+    }
+    document.getElementById("pageSetting")?.classList.remove("setting-screen-transitioning");
+    settingGroupTransitionLock = false;
+    throw e;
+  }
 }
 
 async function activateSettingGroup(group, pushHistory = true, options = {}) {
@@ -2096,7 +2291,9 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
   }
 
   CURRENT_GROUP = group;
-  renderGroups({ animateGroups });
+  // 드릴인 시 그룹 목록을 재생성/재-stagger 하지 않는다 — 그 변화가 '슬라이드로 나가는 중인'
+  // 최상위 메뉴에 보여서 어색했다. 활성 표시만 제자리 갱신(reuse 경로)한다.
+  renderGroups({ animateGroups: false });
   if (isCompactLandscapeMode() && CURRENT_PAGE === "setting") {
     showSettingScreen("items", false);
     history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
@@ -2122,13 +2319,13 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
     return;
   }
 
-  showSettingScreen("items", pushHistory);
-  if (!pushHistory) {
-    history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
-  }
-  syncSettingGroupChrome(group);
-  if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
   if (canReuseRenderedGroup) {
+    showSettingScreen("items", pushHistory);
+    if (!pushHistory) {
+      history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
+    }
+    syncSettingGroupChrome(group);
+    if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
     requestAnimationFrame(() => {
       if (scrollMode === "restore") {
         setSettingItemsScrollTop(
@@ -2140,11 +2337,20 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
     });
     return;
   }
+  // 단계 진입(items)은 좌우 슬라이드로만 보여준다 — 행별 세로 stagger 없이
+  // 한 덩어리로 슬라이드 인 (One UI). 세로 stagger 는 설정 첫 진입에서만.
   await renderItems(group, {
     scrollMode,
     scrollTop: options.scrollTop,
-    animateItems,
+    animateItems: false,
+    allowHidden: true,
   });
+  showSettingScreen("items", pushHistory);
+  if (!pushHistory) {
+    history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
+  }
+  syncSettingGroupChrome(group);
+  if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
 }
 
 async function animateSettingGroupSwitch(group, direction = "forward") {
@@ -2153,47 +2359,16 @@ async function animateSettingGroupSwitch(group, direction = "forward") {
     return;
   }
 
-  if (settingGroupTransitionLock || !settingScreenHost || !screenItems || screenItems.style.display === "none") {
+  if (settingGroupTransitionLock || !settingScreenHost || !screenItems) {
     await activateSettingGroup(group, false);
     return;
   }
 
-  settingGroupTransitionLock = true;
   if (typeof stopSettingSubnavMotion === "function") stopSettingSubnavMotion();
-
-  const snapshot = screenItems.cloneNode(true);
-  stripIdsFromClone(snapshot);
-  snapshot.setAttribute("aria-hidden", "true");
-  snapshot.style.pointerEvents = "none";
-
-  try {
-    settingScreenHost.appendChild(snapshot);
-    prepareSwipeFrame(settingScreenHost, snapshot);
-    screenItems.style.visibility = "hidden";
-    await activateSettingGroup(group, false);
-    screenItems.style.visibility = "";
-    const frame = prepareSwipeFrame(settingScreenHost, snapshot, screenItems);
-    if (!frame) {
-      snapshot.remove();
-      settingGroupTransitionLock = false;
-      return;
-    }
-
-    applySwipeDrag(frame, 0, direction);
-    settleSwipe(frame, direction, true, () => {
-      clearPageTransitionClasses(screenItems);
-      resetPageRuntimeStyles(screenItems);
-      if (snapshot.parentElement) snapshot.remove();
-      settingScreenHost.style.minHeight = "";
-      settingGroupTransitionLock = false;
-    });
-  } catch (e) {
-    screenItems.style.visibility = "";
-    if (snapshot.parentElement) snapshot.remove();
-    settingScreenHost.style.minHeight = "";
-    settingGroupTransitionLock = false;
-    throw e;
-  }
+  await transitionSettingItemsContent(
+    () => activateSettingGroup(group, false, { animateGroups: false, animateItems: false }),
+    direction,
+  );
 }
 
 function getCenteredSettingSubnavGroup() {
@@ -2463,6 +2638,7 @@ async function renderItems(group, options = {}) {
   const detailMode = Boolean(detailName);
   const scrollMode = options.scrollMode || "top";
   const animateItems = options.animateItems !== false;
+  const allowHidden = options.allowHidden === true;
   const requestedScrollTop = Number.isFinite(options.scrollTop) ? options.scrollTop : null;
   itemsBox.innerHTML = "";
   delete itemsBox.dataset.renderedGroup;
@@ -2477,11 +2653,14 @@ async function renderItems(group, options = {}) {
   if (screenItems) screenItems.classList.toggle("setting-screen-items--profile", Boolean(profile));
   if (screenItems) screenItems.classList.toggle("setting-screen-items--detail", detailMode);
   CURRENT_SETTING_DETAIL = detailMode ? detailName : null;
-  if (meta) meta.textContent = `${group} / ${detailMode ? "1" : list.length}`;
   const groupLabel = getSettingGroupLabel(group);
   const detailTitle = detailMode && list[0] ? getSettingDetailTitle(list[0]) : "";
   settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + (detailTitle || groupLabel);
   setSettingItemsTitle(detailTitle || groupLabel);
+  if (meta) {
+    meta.classList.remove("setting-profile-meta");
+    meta.textContent = profile && !detailMode ? "" : `${group} / ${detailMode ? "1" : list.length}`;
+  }
 
   let values = {};
   try {
@@ -2493,7 +2672,12 @@ async function renderItems(group, options = {}) {
     values = {};
   }
 
-  if (renderToken !== settingRenderToken || CURRENT_GROUP !== group || !isCarrotSettingTabActive() || screenItems?.style.display === "none") {
+  if (
+    renderToken !== settingRenderToken ||
+    CURRENT_GROUP !== group ||
+    !isCarrotSettingTabActive() ||
+    (!allowHidden && screenItems?.style.display === "none")
+  ) {
     return;
   }
 
@@ -2599,7 +2783,7 @@ async function renderItems(group, options = {}) {
     if (!detailMode && profile && originGroup !== lastProfileGroup) {
       lastProfileGroup = originGroup;
       const section = document.createElement("div");
-      section.className = animateItems ? "setting-profile-section ui-stagger-item" : "setting-profile-section";
+      section.className = animateItems ? "setting-section-block setting-profile-section ui-stagger-item" : "setting-section-block setting-profile-section";
       if (animateItems) section.style.setProperty("--i", String(Math.min(index + 1, 14)));
       const stateKey = `${profile.id}:${originGroup}`;
       const expanded = settingProfileSectionExpandedState.has(stateKey)
@@ -2623,7 +2807,7 @@ async function renderItems(group, options = {}) {
       const body = document.createElement("div");
       body.className = "setting-profile-section__body";
       const bodyInner = document.createElement("div");
-      bodyInner.className = "setting-profile-section__bodyInner";
+      bodyInner.className = "setting-group-card setting-group-card__body setting-profile-section__bodyInner";
       header.onclick = () => {
         const wasCollapsed = section.classList.contains("is-collapsed");
         const nextExpanded = wasCollapsed;
@@ -2650,6 +2834,7 @@ async function renderItems(group, options = {}) {
 
     const title = formatItemText(p, "title", "etitle", "");
     const descr = formatItemText(p, "descr", "edescr", "");
+    const rangeMeta = formatSettingRangeMeta(p);
 
     const el = document.createElement("div");
     el.className = animateItems ? "setting ui-stagger-item" : "setting";
@@ -2670,7 +2855,7 @@ async function renderItems(group, options = {}) {
       </div>
       ${settingMarqueeHtml(name, "name")}
       <div class="muted mt-sm">
-        min=${p.min}, max=${p.max}, default=${p.default}
+        ${escapeHtml(rangeMeta)}
       </div>
     `;
 
@@ -2876,7 +3061,10 @@ async function renderItems(group, options = {}) {
       let repeatTimer = null;
       let pointerActive = false;
       let activePointerId = null;
-      let ignoreNextClick = false;
+      let suppressClickUntil = 0;
+      const holdDelayMs = 900;
+      const repeatDelayMs = 160;
+      const clickSuppressMs = 450;
 
       function clearTimers() {
         if (holdTimer) {
@@ -2901,15 +3089,12 @@ async function renderItems(group, options = {}) {
           }
         }
         activePointerId = null;
-        window.setTimeout(() => {
-          ignoreNextClick = false;
-        }, 0);
       }
 
       function repeatDelta() {
         if (!pointerActive) return;
         requestDelta(sign);
-        repeatTimer = window.setTimeout(repeatDelta, 120);
+        repeatTimer = window.setTimeout(repeatDelta, repeatDelayMs);
       }
 
       button.addEventListener("pointerdown", (event) => {
@@ -2919,7 +3104,7 @@ async function renderItems(group, options = {}) {
         stopHold();
         pointerActive = true;
         activePointerId = event.pointerId;
-        ignoreNextClick = true;
+        suppressClickUntil = Date.now() + clickSuppressMs;
         button.classList.add("is-holding");
         if (typeof button.setPointerCapture === "function") {
           try {
@@ -2929,18 +3114,19 @@ async function renderItems(group, options = {}) {
           }
         }
         requestDelta(sign);
-        holdTimer = window.setTimeout(repeatDelta, 420);
+        holdTimer = window.setTimeout(repeatDelta, holdDelayMs);
       });
 
       button.addEventListener("pointerup", (event) => {
         event.stopPropagation();
+        suppressClickUntil = Date.now() + clickSuppressMs;
         stopHold();
       });
       button.addEventListener("pointercancel", stopHold);
       button.addEventListener("lostpointercapture", stopHold);
       button.addEventListener("click", (event) => {
         event.stopPropagation();
-        if (ignoreNextClick) {
+        if (Date.now() < suppressClickUntil) {
           event.preventDefault();
           return;
         }
@@ -2950,7 +3136,7 @@ async function renderItems(group, options = {}) {
 
     async function promptSettingValue() {
       const input = await appPrompt(
-        `min=${p.min}, max=${p.max}, default=${p.default}`,
+        rangeMeta,
         {
           title: title || name,
           defaultValue: val.dataset.rawValue ?? String(p.default),
@@ -2987,7 +3173,7 @@ async function renderItems(group, options = {}) {
         choiceLayout: "value-grid",
         title: title || name,
         html: true,
-        messageHtml: `<div class="setting-choice-dialog">${escapeHtml(name)}<br>min=${escapeHtml(p.min)}, max=${escapeHtml(p.max)}, default=${escapeHtml(p.default)}</div>`,
+        messageHtml: `<div class="setting-choice-dialog">${escapeHtml(name)}<br>${escapeHtml(rangeMeta)}</div>`,
         choices,
         cancelLabel: getUIText("cancel", "Cancel"),
         showCancel: true,
