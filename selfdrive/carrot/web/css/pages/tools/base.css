@@ -82,28 +82,6 @@
   mask-image: none;
 }
 
-.tools-meta__unreadBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border: 1px solid color-mix(in srgb, #ff8a8a 48%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, #ff3b30 82%, #3a0608);
-  color: #fff;
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, #fff 10%, transparent) inset,
-    0 0 12px color-mix(in srgb, #ff5252 30%, transparent);
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
 .tools-meta__status:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--md-primary) 72%, transparent);
   outline-offset: 2px;
