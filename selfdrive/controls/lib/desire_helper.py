@@ -213,6 +213,10 @@ class DesireHelper:
   def _get_selected_side(self, blinker_state: int) -> SideState:
     return self.left if blinker_state == BLINKER_LEFT else self.right
 
+  @staticmethod
+  def _is_last_lane(side: SideState) -> bool:
+    return side.lane_exist_count.counter <= 0 and not side.lane_change_available_geom
+
   # ─────────────────────────────────────────────
   # main update
   # ─────────────────────────────────────────────
@@ -357,9 +361,7 @@ class DesireHelper:
 
             # 맨 끝 차선이 아니면, ATC 자동 차선변경 비활성
             # (원본 유지: 차선 존재하거나 geom 가능하면 auto off, 아니면 on)
-            lane_exist_counter_side = side.lane_exist_count.counter
-            lane_change_available_geom = side.lane_change_available_geom
-            self.auto_lane_change_enable = False if (lane_exist_counter_side > 0 or lane_change_available_geom) else True
+            self.auto_lane_change_enable = self._is_last_lane(side)
             self.next_lane_change = False
 
         elif self.lane_change_state == LaneChangeState.preLaneChange:
@@ -383,9 +385,10 @@ class DesireHelper:
             atc_geometry_release = atc_lane_change_only and auto_lane_change_trigger
             atc_line_release = (atc_driver_confirm or atc_geometry_release) and side_clear_without_line
 
-            # 차선이 일정시간 이상 안보이면 auto 허용(원본 유지)
-            #if (not side.lane_available) or (side.lane_exist_count.counter < int(2.0 / DT_MDL)):
-            #  self.auto_lane_change_enable = True
+            # Arm automatic ATC only after this side has actually become the last lane.
+            # Keep it latched so a newly appearing lane can start the maneuver later.
+            if atc_lane_change_only and self._is_last_lane(side):
+              self.auto_lane_change_enable = True
 
             if not desire_enabled or below_lane_change_speed:
               self.lane_change_state = LaneChangeState.off
@@ -398,7 +401,10 @@ class DesireHelper:
               solid_line_blocked = (self.laneLineCheck >= 2) and (not side.lane_change_available_geom) and \
                                    (side.lane_available or side.edge_available)
               block_released = side.lane_change_available_released
-              block_released_auto = block_released and not atc_lane_change_retry_line_blocked
+              # A BSD/radar release must not start pure ATC unless ATC was armed at a last lane.
+              # Driver blinkers retain the existing retry behavior.
+              block_released_auto = block_released and (driver_enabled or self.auto_lane_change_enable) and \
+                                    not atc_lane_change_retry_line_blocked
               start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
                            side.lane_line_info_edge_detect or solid_line_blocked or block_released_auto or atc_line_release
                 
