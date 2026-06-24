@@ -21,6 +21,8 @@ window.addEventListener("popstate", async (ev) => {
 
   if (st.page === "setting") {
     const screen = st.screen || "groups";
+    const previousDetail = CURRENT_SETTING_DETAIL;
+    const itemsWereActive = typeof isSettingItemsScreenActive === "function" && isSettingItemsScreenActive();
     CURRENT_GROUP = st.group || null;
     showPage("setting", false);
 
@@ -48,16 +50,26 @@ window.addEventListener("popstate", async (ev) => {
     }
 
     if (screen === "detail" && CURRENT_GROUP && st.settingName) {
-      showSettingScreen("items", false);
-      renderItems(CURRENT_GROUP, {
+      await transitionSettingItemsContent(() => renderItems(CURRENT_GROUP, {
         detailName: st.settingName,
         scrollMode: "restore",
         animateItems: false,
-      });
+      }), previousDetail ? "backward" : "forward");
     } else if (screen === "items" && CURRENT_GROUP) {
-      showSettingScreen("items", false);
-      renderItems(CURRENT_GROUP, { scrollMode: "restore", animateItems: false });
+      if (itemsWereActive && previousDetail) {
+        await transitionSettingItemsContent(
+          () => renderItems(CURRENT_GROUP, { scrollMode: "restore", animateItems: false }),
+          "backward",
+        );
+      } else {
+        await activateSettingGroup(CURRENT_GROUP, false, {
+          scrollMode: "restore",
+          animateGroups: false,
+          animateItems: false,
+        });
+      }
     } else {
+      CURRENT_SETTING_DETAIL = null;
       showSettingScreen("groups", false);
     }
     if (st.search) {

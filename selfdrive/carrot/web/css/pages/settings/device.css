@@ -27,35 +27,10 @@
   white-space: nowrap;
 }
 
-.setting-profile-info {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-  white-space: normal;
-}
-
-.setting-profile-info--empty {
-  color: var(--md-on-surface-var);
-  font-weight: 800;
-}
-
-.page--setting #carrotTabContent,
-.page--setting #deviceTabContent,
-.page--setting #items,
-.page--setting #deviceItems {
-  animation: setting-content-enter 0.16s ease both;
-}
-
-@keyframes setting-content-enter {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+/* setting-content-enter(opacity 0→1 + translateY 4px→0) 제거 —
+   단계 전환이 끝나며(전환 중 `animation:none` 억제가 풀릴 때) 이 애니메이션이 재생돼
+   콘텐츠가 한 번 페이드(깜박)+4px 세로 점프(하단 위아래 흔들)하던 직접 원인이었다.
+   좌우 슬라이드가 이미 화면 진입을 표현하므로 별도 콘텐츠 진입 애니메이션은 불필요하다. */
 
 .setting-search-result {
   width: 100%;
@@ -236,51 +211,67 @@
   .page--setting #settingScreenItems.setting-screen-items--profile {
     padding-top: 0;
     --setting-profile-panel-sticky-top: 0px;
-    --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height);
+    --setting-profile-section-sticky-top: 72px;
   }
 
   .page--setting #settingScreenItems.setting-screen-items--profile #items {
     padding-top: 0;
   }
 
-  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-panel + .setting-profile-section {
-    margin-top: 0;
+  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-row {
+    min-height: 46px;
+    gap: var(--sp-sm);
   }
 
-  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-panel {
-    margin-left: calc(-1 * var(--sp-lg));
-    margin-right: calc(-1 * var(--sp-lg));
-    padding-left: calc(var(--sp-lg) + 14px);
-    padding-right: var(--sp-lg);
-  }
-
-  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-panel::before {
-    left: var(--sp-lg);
-  }
-
-  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-panel__titleRow {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 7px;
-  }
-
-  .page--setting #settingScreenItems.setting-screen-items--profile .setting-toolbar-action {
-    min-width: 50px;
-    padding-inline: 10px;
-    font-size: 12.5px;
+  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-action__icon {
+    width: 20px;
+    height: 20px;
   }
 
   .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-section__header {
-    margin-left: calc(-1 * var(--sp-lg));
-    margin-right: calc(-1 * var(--sp-lg));
-    padding-left: var(--sp-lg);
-    padding-right: var(--sp-lg);
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 2px;
+    padding-right: 2px;
   }
 
-  .page--setting #settingScreenHost,
-  .page--setting #settingScreenItems:not(.hidden) {
-    overflow: visible;
-    transform: none !important;
-    will-change: auto !important;
+  .page--setting #settingScreenItems.setting-screen-items--profile > .row-between.mb-sm {
+    display: grid;
+  }
+
+  /* ── 세로(phone): 설정을 뷰포트 고정 높이로, 두 화면을 absolute inset:0 로 '항상' 겹쳐
+     각자 내부 스크롤시킨다 → 단계 전환이 순수 transform(레이아웃 변화 0)이라 끝에
+     흔들림/깜박임이 구조적으로 생기지 않는다. (가로 split 모드와 동일 원리) ── */
+  .page.page--setting {
+    display: flex;
+    flex-direction: column;
+    height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px));
+    min-block-size: 0;
+    padding-bottom: 0;
+    overflow: hidden;
+  }
+
+  .page.page--setting > #settingsMeta {
+    flex: 0 0 auto;
+  }
+
+  .page.page--setting > #settingScreenHost {
+    flex: 1 1 auto;
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenGroups,
+  .page.page--setting > #settingScreenHost > #settingScreenItems {
+    position: absolute;
+    inset: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    padding-bottom: calc(var(--nav-bar-height) + 24px + env(safe-area-inset-bottom, 0px));
+    will-change: transform;
   }
 
   .page--setting #settingSubnavWrap {
@@ -376,7 +367,7 @@
   .page.page--setting > #settingScreenHost > #settingScreenItems.setting-screen-items--profile {
     padding-top: 0;
     --setting-profile-panel-sticky-top: 0px;
-    --setting-profile-section-sticky-top: var(--setting-profile-toolbar-height);
+    --setting-profile-section-sticky-top: 68px;
   }
 
   .page--setting #settingCarRow {

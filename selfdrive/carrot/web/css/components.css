@@ -991,11 +991,11 @@ body[data-page="terminal"] .app-toast-host {
   background: color-mix(in srgb, var(--md-error-cont) 18%, var(--md-surface-cont-h));
 }
 
+/* ── Setting Item ─────────────────────────────────────────── */
 .ui-action-grid > .git-pull-btn {
   justify-content: space-between;
 }
 
-/* ── Setting Item ─────────────────────────────────────────── */
 .setting {
   padding: var(--sp-lg) 0;
   margin: 0;
