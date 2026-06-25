@@ -221,10 +221,15 @@ function renderDeviceGroups(options = {}) {
 
 function applyDeviceItemsStagger(container) {
   if (!container) return;
-  Array.from(container.children).forEach((child, index) => {
-    if (!child.classList?.contains("setting")) return;
-    child.classList.add("ui-stagger-item");
-    child.style.setProperty("--i", String(index));
+  // Stagger the section-block card(s) like the CarrotPilot tab. Falls back to
+  // direct .setting children if items aren't card-wrapped (defensive).
+  const blocks = container.querySelectorAll(".setting-section-block");
+  const targets = blocks.length
+    ? Array.from(blocks)
+    : Array.from(container.children).filter((c) => c.classList?.contains("setting"));
+  targets.forEach((el, index) => {
+    el.classList.add("ui-stagger-item");
+    el.style.setProperty("--i", String(index));
   });
 }
 
@@ -378,7 +383,13 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
     return;
   }
 
-  itemsContainer.innerHTML = renderDeviceGroupItems(groupId, values) || `<div class="muted mt-md text-center">-</div>`;
+  // Wrap device items in the same card box the CarrotPilot tab uses
+  // (setting-section-block > setting-group-card > setting-group-card__body) so
+  // the device submenu looks identical, not the old flat rows.
+  const deviceItemsHtml = renderDeviceGroupItems(groupId, values);
+  itemsContainer.innerHTML = deviceItemsHtml
+    ? `<div class="setting-section-block"><div class="setting-group-card"><div class="setting-group-card__body">${deviceItemsHtml}</div></div></div>`
+    : `<div class="muted mt-md text-center">-</div>`;
   if (!silentRefresh && options.animateItems !== false) {
     applyDeviceItemsStagger(itemsContainer);
   }
