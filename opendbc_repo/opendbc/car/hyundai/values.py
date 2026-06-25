@@ -645,7 +645,14 @@ class CAR(Platforms):
     CarSpecs(mass=2087, wheelbase=3.09, steerRatio=14.23),
     flags=HyundaiFlags.RADAR_SCC,
   )
-
+  KIA_CARNIVAL_HEV_4TH_GEN = HyundaiCanFDPlatformConfig(
+    [
+      HyundaiCarDocs("Kia Carnival Hybrid (with HDA II) 2025", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_q])),
+    ],
+    CarSpecs(mass=2253, wheelbase=3.09, steerRatio=14.23),
+    flags=HyundaiFlags.RADAR_SCC,
+  )
+  
   # Genesis
   GENESIS_GV60_EV_1ST_GEN = HyundaiCanFDPlatformConfig(
     [
@@ -915,6 +922,7 @@ PART_NUMBER_FW_PATTERN = re.compile(b'(?<=[0-9][.,][0-9]{2} )([0-9]{5}[-/]?[A-Z]
 CANFD_FUZZY_WHITELIST = {CAR.KIA_SORENTO_4TH_GEN, CAR.KIA_SORENTO_HEV_4TH_GEN, CAR.KIA_K8_HEV_1ST_GEN,
                          # TODO: the hybrid variant is not out yet
                          CAR.KIA_CARNIVAL_4TH_GEN}
+                         CAR.KIA_CARNIVAL_4TH_GEN, CAR.KIA_CARNIVAL_HEV_4TH_GEN}
 
 # List of ECUs expected to have platform codes, camera and radar should exist on all cars
 # TODO: use abs, it has the platform code and part number on many platforms
