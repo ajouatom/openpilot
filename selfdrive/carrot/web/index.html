@@ -78,12 +78,12 @@
   <link rel="stylesheet" href="/css/components.css?v=2606-05" />
   <link rel="stylesheet" href="/css/pages/logs.css?v=2606-02" />
   <link rel="stylesheet" href="/css/pages/terminal.css?v=2606-01" />
-  <link rel="stylesheet" href="/css/pages/settings/base.css?v=2606-18" />
+  <link rel="stylesheet" href="/css/pages/settings/base.css?v=2606-19" />
   <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2606-11" />
   <link rel="stylesheet" href="/css/pages/settings/device.css?v=2606-27" />
   <link rel="stylesheet" href="/css/pages/tools/base.css?v=2605-43" />
   <link rel="stylesheet" href="/css/pages/tools/qr.css?v=2605-40" />
-  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2605-51" />
+  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2605-52" />
   <link rel="stylesheet" href="/css/pages/drive.css?v=2606-05" />
   <link rel="stylesheet" href="/css/components/nav_hud.css?v=2605-26" />
   <link rel="stylesheet" href="/css/responsive.css?v=2605-10" />
@@ -242,18 +242,20 @@
             <span id="gitCommandsTitle" class="section-title tools-group__title">Git Commands</span>
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
-          <div id="toolsGroupBodyGit" class="tools-group__body ui-action-grid">
-            <button id="btnGitPull" class="btn git-pull-btn" type="button">
-              <span>git pull</span>
-              <span id="gitPullBadge" class="git-pull-btn__badge" hidden aria-label="pending commits">0</span>
-            </button>
-            <button id="btnGitSync" class="btn">git sync</button>
-            <button id="btnGitReset" class="btn">git reset</button>
-            <button id="btnGitLog" class="btn">git log</button>
-            <button id="btnGitRemote" class="btn">change repository</button>
-            <button id="btnGitBranch" class="btn">change branch</button>
-            <button id="btnGitAddRemote" class="btn">add remote</button>
-            <button id="btnGitResetRepo" class="btn btn--danger">reset repo</button>
+          <div id="toolsGroupBodyGit" class="tools-group__body">
+            <div class="tools-group__bodyInner ui-action-grid">
+              <button id="btnGitPull" class="btn git-pull-btn" type="button">
+                <span>git pull</span>
+                <span id="gitPullBadge" class="git-pull-btn__badge" hidden aria-label="pending commits">0</span>
+              </button>
+              <button id="btnGitSync" class="btn">git sync</button>
+              <button id="btnGitReset" class="btn">git reset</button>
+              <button id="btnGitLog" class="btn">git log</button>
+              <button id="btnGitRemote" class="btn">change repository</button>
+              <button id="btnGitBranch" class="btn">change branch</button>
+              <button id="btnGitAddRemote" class="btn">add remote</button>
+              <button id="btnGitResetRepo" class="btn btn--danger">reset repo</button>
+            </div>
           </div>
         </div>
 
@@ -264,16 +266,18 @@
             <span id="userSystemTitle" class="section-title tools-group__title">User / System</span>
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
-          <div id="toolsGroupBodySystem" class="tools-group__body ui-action-grid hidden" hidden>
-            <button id="btnDeviceLang" class="btn" hidden style="display:none;">Device Lang</button>
-            <button id="btnResetCalib" class="btn btn--danger">Reset Calib</button>
-            <button id="btnSendTmuxLog" class="btn">capture tmux</button>
-            <button id="btnSendTmuxServerLog" class="btn">send tmux</button>
-            <button id="btnInstallRequired" class="btn">install flask</button>
-            <button id="btnDeleteVideos" class="btn btn--danger">delete all videos</button>
-            <button id="btnDeleteLogs" class="btn btn--danger">delete all logs</button>
-            <button id="btnRebuildAll" class="smallBtn btn--danger">Rebuild All</button>
-            <button id="btnReboot" class="btn">reboot</button>
+          <div id="toolsGroupBodySystem" class="tools-group__body">
+            <div class="tools-group__bodyInner ui-action-grid">
+              <button id="btnDeviceLang" class="btn" hidden style="display:none;">Device Lang</button>
+              <button id="btnResetCalib" class="btn btn--danger">Reset Calib</button>
+              <button id="btnSendTmuxLog" class="btn">capture tmux</button>
+              <button id="btnSendTmuxServerLog" class="btn">send tmux</button>
+              <button id="btnInstallRequired" class="btn">install flask</button>
+              <button id="btnDeleteVideos" class="btn btn--danger">delete all videos</button>
+              <button id="btnDeleteLogs" class="btn btn--danger">delete all logs</button>
+              <button id="btnRebuildAll" class="smallBtn btn--danger">Rebuild All</button>
+              <button id="btnReboot" class="btn">reboot</button>
+            </div>
           </div>
         </div>
 
@@ -284,13 +288,15 @@
             <span id="userSettingsTitle" class="section-title tools-group__title">Settings</span>
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
-          <div id="toolsGroupBodySettings" class="tools-group__body ui-action-grid hidden" hidden>
-            <button id="btnBackupSettings" class="btn">Backup</button>
-            <button id="btnRestoreSettings" class="btn">Restore</button>
-            <button id="btnQrBackupSettings" class="btn">QR Backup</button>
-            <button id="btnQrRestoreSettings" class="btn">QR Restore</button>
-            <button id="btnCopySettings" class="btn">Copy</button>
-            <button id="btnViewSettings" class="btn">View</button>
+          <div id="toolsGroupBodySettings" class="tools-group__body">
+            <div class="tools-group__bodyInner ui-action-grid">
+              <button id="btnBackupSettings" class="btn">Backup</button>
+              <button id="btnRestoreSettings" class="btn">Restore</button>
+              <button id="btnQrBackupSettings" class="btn">QR Backup</button>
+              <button id="btnQrRestoreSettings" class="btn">QR Restore</button>
+              <button id="btnCopySettings" class="btn">Copy</button>
+              <button id="btnViewSettings" class="btn">View</button>
+            </div>
           </div>
         </div>
 
@@ -709,7 +715,7 @@
   <script src="/js/pages/setting_device.js?v=2606-01"></script>
   <script src="/js/pages/tools_web_settings.js?v=2605-10"></script>
   <script src="/js/pages/tools_notifications.js?v=2605-30"></script>
-  <script src="/js/pages/tools.js?v=2605-17"></script>
+  <script src="/js/pages/tools.js?v=2605-18"></script>
   <script src="/js/pages/tools_settings_qr.js?v=2605-11"></script>
   <script src="/js/pages/branch.js?v=2604-82"></script>
   <script src="/js/pages/logs/shared.js?v=2605-17"></script>

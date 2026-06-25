@@ -180,9 +180,11 @@
   align-items: flex-end;
   pointer-events: auto;
   transform-origin: right bottom;
-  transition:
-    opacity 0.12s ease,
-    transform 0.16s cubic-bezier(0.2, 0, 0, 1);
+  /* No layout transition on the container itself: on load / resize / orientation
+     (portrait fixed ↔ landscape relative) and during page transitions its
+     position recomputes, and an always-on transform/opacity transition animated
+     those changes — the "흔들림". The FAB must just stay put. Open/close motion
+     lives on .setting-fab-actions and the bounce on .fab--setting-menu. */
 }
 
 /* 전환 중 FAB 를 숨기지 않는다 — FAB 는 position:fixed 라 슬라이드와 무관하고,

@@ -152,6 +152,31 @@
 
 .tools-group__body {
   margin-top: 8px;
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  transition:
+    grid-template-rows var(--motion-medium) var(--ease-emphasized),
+    opacity var(--motion-base) var(--ease-emphasized),
+    margin-top var(--motion-base) var(--ease-emphasized);
+}
+
+.tools-group:not(.is-open) > .tools-group__body {
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tools-group__bodyInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tools-group__body {
+    transition: none;
+  }
 }
 
 .page--tools .section.tools-group {
