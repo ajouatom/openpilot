@@ -65,14 +65,12 @@ function syncSettingTabChrome(tab = CURRENT_SETTING_TAB) {
 function syncSettingTabPanels(tab = CURRENT_SETTING_TAB) {
   const isDevice = tab === "device";
   const carrotTabContent = document.getElementById("carrotTabContent");
-  const deviceSubnav = document.getElementById("deviceSubnav");
   const items = document.getElementById("items");
   const deviceItems = document.getElementById("deviceItems");
 
   setSettingDeviceHidden(carrotTabContent, isDevice);
   setSettingDeviceHidden(deviceTabContent, !isDevice);
   setSettingDeviceHidden(settingSubnav, isDevice);
-  setSettingDeviceHidden(deviceSubnav, !isDevice);
   setSettingDeviceHidden(items, isDevice);
   setSettingDeviceHidden(deviceItems, !isDevice);
 }
@@ -141,7 +139,6 @@ async function loadDeviceNetwork(useCache = true) {
 
 function renderDeviceGroups(options = {}) {
   const groupContainer = document.getElementById("deviceGroupList");
-  const subnavContainer = document.getElementById("deviceSubnav");
   if (!groupContainer) return;
   const animateGroups = options.animateGroups !== false;
 
@@ -158,8 +155,7 @@ function renderDeviceGroups(options = {}) {
   if (
     !animateGroups &&
     groupContainer.dataset.deviceGroupsSignature === signature &&
-    groupContainer.children.length === groupEntries.length &&
-    (!subnavContainer || subnavContainer.children.length === groupEntries.length)
+    groupContainer.children.length === groupEntries.length
   ) {
     Array.from(groupContainer.children).forEach((button, index) => {
       const entry = groupEntries[index];
@@ -169,27 +165,12 @@ function renderDeviceGroups(options = {}) {
       button.innerHTML = `<span class="setting-group-label">${escapeHtml(entry.label)}</span>`;
       button.onclick = () => selectDeviceGroup(entry.group.id);
     });
-
-    if (subnavContainer && subnavContainer.children.length === groupEntries.length) {
-      Array.from(subnavContainer.children).forEach((tab, index) => {
-        const entry = groupEntries[index];
-        tab.className = "setting-subnav__tab";
-        if (entry.group.id === CURRENT_DEVICE_GROUP) tab.classList.add("is-active");
-        tab.dataset.deviceGroup = entry.group.id;
-        tab.textContent = entry.label;
-        tab.onclick = () => selectDeviceGroup(entry.group.id);
-      });
-    }
     if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
     return;
   }
 
   groupContainer.innerHTML = "";
   groupContainer.dataset.deviceGroupsSignature = signature;
-  if (subnavContainer) {
-    subnavContainer.innerHTML = "";
-    subnavContainer.dataset.deviceGroupsSignature = signature;
-  }
 
   groupEntries.forEach((entry, index) => {
     const group = entry.group;
@@ -203,18 +184,6 @@ function renderDeviceGroups(options = {}) {
     button.innerHTML = `<span class="setting-group-label">${escapeHtml(label)}</span>`;
     button.onclick = () => selectDeviceGroup(group.id);
     groupContainer.appendChild(button);
-
-    if (subnavContainer) {
-      const tab = document.createElement("button");
-      tab.type = "button";
-      tab.className = animateGroups ? "setting-subnav__tab ui-stagger-item" : "setting-subnav__tab";
-      if (animateGroups) tab.style.setProperty("--i", String(index));
-      if (group.id === CURRENT_DEVICE_GROUP) tab.classList.add("is-active");
-      tab.dataset.deviceGroup = group.id;
-      tab.textContent = label;
-      tab.onclick = () => selectDeviceGroup(group.id);
-      subnavContainer.appendChild(tab);
-    }
   });
   if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
 }

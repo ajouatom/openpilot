@@ -1325,7 +1325,6 @@
 }
 
 .page--setting #settingSubnav[hidden],
-.page--setting #deviceSubnav[hidden],
 .page--setting #carrotTabContent[hidden],
 .page--setting #deviceTabContent[hidden],
 .page--setting #items[hidden],
@@ -1335,6 +1334,12 @@
 
 .page--setting.setting-tab-device .page-fab-layer--setting {
   display: none;
+}
+
+/* The device tab has no top quick-tab subnav (old, unused). Hide the subnav
+   wrap on the device tab so no empty bar shows at any width / adaptive layout. */
+.page--setting.setting-tab-device #settingSubnavWrap {
+  display: none !important;
 }
 
 .page--setting #deviceItems .ctrl {
