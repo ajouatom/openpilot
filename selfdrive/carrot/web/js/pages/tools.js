@@ -1055,10 +1055,20 @@ function initToolsPage() {
 
       bindNodeOnce(toggle, "toolsGroupToggle", () => {
         const nextOpen = !group.classList.contains("is-open");
+        // One-shot fold (same pattern as the settings profile section): reset
+        // motion state, commit a baseline reflow, flip the static state, then
+        // play the motion class and clear it after the run for a clean finish.
+        group.classList.remove("is-expanding", "is-collapsing");
+        if (group.__toolsGroupMotionTimer) clearTimeout(group.__toolsGroupMotionTimer);
+        void group.offsetWidth;
         group.classList.toggle("is-open", nextOpen);
+        group.classList.add(nextOpen ? "is-expanding" : "is-collapsing");
         toggle.setAttribute("aria-expanded", nextOpen ? "true" : "false");
         localStorage.setItem("tools_group_" + groupName, nextOpen ? "true" : "false");
-        applyToolsStagger();
+        group.__toolsGroupMotionTimer = window.setTimeout(() => {
+          group.classList.remove("is-expanding", "is-collapsing");
+          group.__toolsGroupMotionTimer = null;
+        }, 280);
       });
     });
     applyToolsStagger();
