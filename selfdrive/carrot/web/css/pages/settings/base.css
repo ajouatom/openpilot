@@ -187,14 +187,15 @@
      lives on .setting-fab-actions and the bounce on .fab--setting-menu. */
 }
 
-/* Enter together with the page (one-shot). The FAB is position:fixed and lives
-   outside the sliding page, so without this it just popped in instantly while
-   the page content animated — "혼자 먼저 로딩된" 느낌. This is an animation (not a
-   transition), so it plays once on page entry and never re-fires on layout
-   reflow — the "stay put" fix above is preserved. */
+/* Enter together with the page (one-shot) so the FAB doesn't pop in instantly
+   while the page content animates. OPACITY ONLY — no transform/position change:
+   the FAB is position:fixed and a transform here re-anchored / shifted it during
+   the page-transition (the "세로모드에서 위→아래로 튐"). Fading in place keeps the
+   FAB exactly at its resting position. It's an animation (not a transition), so
+   it plays once on page entry and never re-fires on layout reflow. */
 @keyframes setting-fab-enter {
-  from { opacity: 0; transform: translateY(8px) scale(0.96); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 body[data-page="setting"] .page-fab-layer--setting .setting-fab-menu {
