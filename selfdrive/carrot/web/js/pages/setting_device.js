@@ -428,7 +428,7 @@ function renderDeviceToggleItems(values) {
     getUIText("driving_personality_desc", "Aggressive, Standard, Relaxed"),
     getUIText(option.labelKey, option.defaultLabel),
     "btnDevicePersonality",
-    "val pill",
+    "val value-surface",
   );
   return html;
 }

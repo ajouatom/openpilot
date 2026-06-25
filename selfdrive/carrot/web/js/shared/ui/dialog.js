@@ -24,6 +24,26 @@ function syncModalBodyLock() {
   document.body.classList.toggle("dialog-open", hasOpenDialog);
 }
 
+// Tone → icon glyph + style class. Centralized here so every toast across the
+// app (showAppToast is the single entry point) renders the same toast surface.
+const APP_TOAST_TONE_GLYPH = {
+  success: "✓", // ✓
+  error: "✕",   // ✕
+  warn: "!",
+  offline: "!",
+  info: "i",
+  hint: "i",
+  default: "i",
+};
+const APP_TOAST_TONE_CLASS = {
+  success: "is-success",
+  error: "is-error",
+  warn: "is-warn",
+  offline: "is-warn",
+  info: "is-info",
+  hint: "is-hint",
+};
+
 function showAppToast(message, opts = {}) {
   if (!appToastHost || !message) return;
 
@@ -37,9 +57,19 @@ function showAppToast(message, opts = {}) {
     activeAppToast = toast;
   }
 
-  toast.className = "app-toast";
-  if (tone && tone !== "default") toast.classList.add(`is-${tone}`);
-  toast.textContent = String(message);
+  const toneClass = APP_TOAST_TONE_CLASS[tone] || "";
+  toast.className = toneClass ? `app-toast ${toneClass}` : "app-toast";
+
+  const icon = document.createElement("span");
+  icon.className = "app-toast__icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = APP_TOAST_TONE_GLYPH[tone] || APP_TOAST_TONE_GLYPH.default;
+
+  const msg = document.createElement("div");
+  msg.className = "app-toast__msg";
+  msg.textContent = String(message);
+
+  toast.replaceChildren(icon, msg);
 
   if (appToastHideTimer) {
     clearTimeout(appToastHideTimer);
@@ -66,7 +96,7 @@ function showAppToast(message, opts = {}) {
       activeAppToast.remove();
       activeAppToast = null;
       appToastRemoveTimer = null;
-    }, 180);
+    }, 220);
   }, duration);
 }
 

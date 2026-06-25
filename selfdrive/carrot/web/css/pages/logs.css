@@ -566,8 +566,8 @@
 }
 
 /* Group (route) overflow menu — range select / sort.
-   Styled as a pill (like the other selection-row buttons) so it fits both
-   portrait (row) and landscape (column). Pushed to the right end in portrait. */
+   Uses the shared boxed control shape in both portrait and landscape.
+   Pushed to the right end in portrait. */
 .dashcam-group-menu-btn {
   margin-left: auto;
   flex: 0 0 auto;
@@ -746,7 +746,7 @@
   display: grid;
   place-items: center;
   padding: 18px;
-  background: rgba(0, 0, 0, .46);
+  background: var(--popup-backdrop);
   opacity: 0;
   transition: opacity .16s ease;
 }
@@ -758,10 +758,10 @@
 .dashcam-upload-progress__sheet {
   width: min(92vw, 430px);
   padding: 18px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 55%, transparent);
-  background: var(--md-surface-cont);
-  box-shadow: var(--shadow-2);
+  border-radius: var(--popup-radius);
+  border: 1px solid var(--popup-border-color);
+  background: var(--popup-bg);
+  box-shadow: var(--popup-shadow);
 }
 
 .dashcam-upload-progress__title {
@@ -810,6 +810,7 @@
 .dashcam-upload-progress__cancel {
   min-height: 38px;
   padding-inline: 16px;
+  border-radius: var(--dialog-control-radius);
   border-color: color-mix(in srgb, var(--md-error) 42%, var(--md-outline-var));
   color: color-mix(in srgb, var(--md-error) 82%, var(--md-on-surface));
   background: transparent;

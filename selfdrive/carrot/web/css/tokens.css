@@ -82,23 +82,45 @@
   --r-lg:    16px;
   --r-xl:    28px;
   --r-2xl:   32px;
-  --r-pill:  999px;
+  --r-round: 999px;
+
+  /* Default interactive controls are boxed.
+     --r-round is reserved for explicitly semantic shapes only:
+     FABs, switches, badges, status dots, and circular icon controls. */
+  --control-radius: var(--r-sm);
 
   /* Popup UX primitives
      - Compact sheets for alert / confirm / prompt.
      - Bottom sheets on narrow portrait screens.
      - Value grids for short numeric or code choices.
      - Action lists for commands and destructive choices.
-     - Pill radius is reserved for FABs, switches, and small chips. */
+     - Fully rounded shapes are reserved for semantic controls. */
   --dialog-sheet-radius: 16px;
   --dialog-sheet-radius-mobile: 18px;
-  --dialog-control-radius: 8px;
-  --dialog-choice-radius: 8px;
-  --dialog-choice-grid-radius: 8px;
+  --dialog-control-radius: var(--control-radius);
+  --dialog-choice-radius: var(--control-radius);
   --dialog-sheet-width: 420px;
   --dialog-sheet-width-wide: 520px;
   --dialog-sheet-max-height: calc(100dvh - var(--sp-lg) * 2);
   --dialog-sheet-mobile-max-height: min(88dvh, 720px);
+
+  /* ── Popup surface ────────────────────────────────────────────
+     One surface for every floating popup (dialog sheet, dropdown
+     menu, popover) so they share background / border / shadow /
+     radius / backdrop. Values equal the existing dialog sheet, so
+     dialogs are unchanged — only non-dialog popups (e.g. the
+     dropdown menu) are pulled onto this surface. Size stays per
+     component (width/height are NOT tokenized here). */
+  --popup-bg: color-mix(in srgb, var(--md-surface-cont) 96%, #000);
+  --popup-border-color: color-mix(in srgb, var(--md-stroke-soft) 92%, transparent);
+  --popup-radius: var(--dialog-sheet-radius);
+  --popup-shadow: var(--shadow-4);
+  --popup-backdrop: color-mix(in srgb, #000 62%, transparent);
+  --popup-item-radius: var(--control-radius);
+  --popup-item-border: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  --popup-item-bg: var(--md-surface-cont);
+  --popup-item-active-border: color-mix(in srgb, var(--md-primary) 56%, var(--md-stroke-soft));
+  --popup-item-active-bg: var(--md-primary-state);
 
   /* ── Elevation ────────────────────────────────────────────────
      Material 3 dark elevation. Pick the smallest level that reads
@@ -203,6 +225,25 @@
   --z-modal:   170;
   --z-toast:   200;
   --z-overlay: 220;
+
+  /* ── Toast / Snackbar ──────────────────────────────────────────
+     One surface design for every app toast (showAppToast → .app-toast).
+     Values match the carrot-web-push reference exactly (style.css
+     .toast / .toast-ic). The round icon carries the tone color; the
+     message text stays white so toasts differ only by glyph/color.
+     Default tone == reference "info" (blue i). */
+  --toast-bg: #1b222c;                       /* reference --surface-higher */
+  --toast-fg: #fff;
+  --toast-border: rgba(120, 129, 145, 0.22);
+  --toast-radius: 16px;
+  --toast-shadow: 0 16px 42px rgba(0, 0, 0, 0.55);
+  --toast-icon-size: 24px;
+  --toast-icon-fg: #0c0f14;
+  --toast-icon-default: #6ea8ff;             /* same as info */
+  --toast-icon-info: #6ea8ff;
+  --toast-icon-success: #3fef7d;
+  --toast-icon-warn: #ffb06d;                /* reference --orange */
+  --toast-icon-error: #ff6b6b;               /* reference --error */
 
   /* ── Focus Ring ────────────────────────────────────────────────
      One ring style for the whole app, via :focus-visible. Defined

@@ -234,7 +234,7 @@
   gap: 10px;
   padding: 0 16px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 84%, transparent);
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
   color: var(--md-on-surface);
   font-size: var(--fs-body-sm);

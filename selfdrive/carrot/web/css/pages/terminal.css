@@ -151,7 +151,7 @@
   margin: 8px var(--terminal-inline) var(--terminal-form-bottom);
   padding-left: 14px;
   border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 56%, transparent);
-  border-radius: var(--r-pill);
+  border-radius: var(--control-radius);
   background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
   overflow: hidden;
   position: relative;
