@@ -1874,3 +1874,34 @@
 .device-info-modal__body p {
   margin: 0 0 var(--sp-sm);
 }
+
+/* Portrait (phone): anchor the settings FAB as page-relative ABSOLUTE flow,
+   the same approach landscape already uses. As position:fixed the FAB was
+   captured by .page-active's transform (an ancestor transform is the
+   containing block for fixed children), so it followed the page geometry —
+   --app-vv-height settling on load, page transitions — and drifted up/down.
+   As a normal absolute child of the page it simply sits at the page's
+   bottom-right and stays put. The page already excludes the nav bar + safe
+   area from its height, so the offset here is just the small visual gap. */
+@media (max-width: 640px) and (orientation: portrait) {
+  .page.page--setting > .page-fab-layer--setting {
+    position: absolute;
+    top: auto;
+    left: auto;
+    right: max(var(--sp-lg), env(safe-area-inset-right, 0px));
+    bottom: calc(10px + var(--sp-lg));
+    width: auto;
+    height: auto;
+    display: flex;
+    justify-content: flex-end;
+    z-index: 130;
+    pointer-events: none;
+  }
+
+  .page.page--setting > .page-fab-layer--setting .setting-fab-menu {
+    position: relative;
+    right: auto;
+    left: auto;
+    bottom: auto;
+  }
+}
