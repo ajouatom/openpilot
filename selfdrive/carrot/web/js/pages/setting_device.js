@@ -564,6 +564,10 @@ async function switchSettingTab(tab) {
 
   if (typeof showSettingScreen === "function") {
     showSettingScreen("groups", false);
+    // Match the device tab: re-render the CarrotPilot groups with the stagger
+    // entrance so switching tabs animates both sides consistently (device
+    // re-renders via renderDeviceTab, CarrotPilot didn't → no animation).
+    if (typeof renderGroups === "function") renderGroups({ animateGroups: true });
     // Re-sync history to the CarrotPilot groups so back/forward stays in step
     // with the visible tab after a tab switch.
     if (!(typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode())) {
