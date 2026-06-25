@@ -245,13 +245,37 @@ async function renderDeviceTab(options = {}) {
   }
 }
 
-async function selectDeviceGroup(groupId) {
+async function selectDeviceGroup(groupId, pushHistory = true) {
   CURRENT_DEVICE_GROUP = groupId || CURRENT_DEVICE_GROUP;
   renderDeviceGroups();
   syncSettingTabState("device");
   syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
+  // Same history-based navigation as the CarrotPilot tab: an "items" entry lets
+  // the title back-chevron / device back button return to the device groups
+  // screen. Skip in compact-landscape split (it always shows items).
+  const splitLandscape =
+    typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode() && CURRENT_PAGE === "setting";
+  if (pushHistory && !splitLandscape) {
+    history.pushState({ page: "setting", tab: "device", screen: "items", deviceGroup: CURRENT_DEVICE_GROUP }, "");
+  }
   await renderDeviceItems(CURRENT_DEVICE_GROUP, true, { animateItems: true });
 }
+
+// Restore the device tab from a popstate without touching history (no push /
+// replace) — mirrors how app.js restores the CarrotPilot tab.
+async function restoreSettingDeviceTab(screen, deviceGroup) {
+  if (typeof CURRENT_SETTING_TAB !== "undefined") CURRENT_SETTING_TAB = "device";
+  syncSettingTabState("device");
+  await renderDeviceTab({ animateGroups: false, animateItems: false });
+  if (screen === "items" && deviceGroup) {
+    await selectDeviceGroup(deviceGroup, false);
+  } else if (typeof showSettingScreen === "function") {
+    showSettingScreen("groups", false);
+  }
+  syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
+  if (typeof syncDeviceSshRefresh === "function") syncDeviceSshRefresh();
+}
+window.restoreSettingDeviceTab = restoreSettingDeviceTab;
 
 async function loadDeviceSshStatus(useCache = true) {
   if (deviceSshStatus && useCache) return deviceSshStatus;
@@ -461,7 +485,12 @@ function syncDeviceGroupChrome(groupId = CURRENT_DEVICE_GROUP) {
   if (typeof settingTitle !== "undefined" && settingTitle) {
     settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + label;
   }
-  if (typeof itemsTitle !== "undefined" && itemsTitle) {
+  // Use the shared title renderer so the device submenu gets the same
+  // "‹ back" chevron as the CarrotPilot tab (the global itemsTitle click
+  // handler then drives history.back()).
+  if (typeof setSettingItemsTitle === "function") {
+    setSettingItemsTitle(label);
+  } else if (typeof itemsTitle !== "undefined" && itemsTitle) {
     itemsTitle.textContent = label;
   }
 }
@@ -493,6 +522,9 @@ async function switchSettingTab(tab) {
     await renderDeviceTab();
     if (!(typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode()) && typeof showSettingScreen === "function") {
       showSettingScreen("groups", false);
+      // Mark the device-groups base entry so back from a device submenu returns
+      // here (not to the CarrotPilot groups). Mirrors the CarrotPilot flow.
+      history.replaceState({ page: "setting", tab: "device", screen: "groups" }, "");
     }
     syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
     syncDeviceSshRefresh();
@@ -513,6 +545,11 @@ async function switchSettingTab(tab) {
 
   if (typeof showSettingScreen === "function") {
     showSettingScreen("groups", false);
+    // Re-sync history to the CarrotPilot groups so back/forward stays in step
+    // with the visible tab after a tab switch.
+    if (!(typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode())) {
+      history.replaceState({ page: "setting", screen: "groups", group: null }, "");
+    }
   }
   if (typeof syncSettingGroupChrome === "function") syncSettingGroupChrome(CURRENT_GROUP);
 }

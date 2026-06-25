@@ -295,8 +295,8 @@
   }
 
   .page.page--setting > #settingScreenHost > #settingScreenItems {
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 24px), transparent 100%);
-            mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
   }
 
   .page--setting #settingSubnavWrap {
@@ -373,8 +373,8 @@
 
   /* 가로모드도 하위 설정 화면에만 스크롤 가장자리 페이드를 유지한다. */
   .page.page--setting > #settingScreenHost > #settingScreenItems {
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 24px), transparent 100%);
-            mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
   }
 
   .page.page--setting > #settingScreenHost > #settingScreenGroups {
