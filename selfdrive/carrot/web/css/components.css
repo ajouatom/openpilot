@@ -22,19 +22,22 @@ body[data-page="terminal"] .app-toast-host {
 }
 
 .app-toast {
-  width: min(100%, 420px);
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 88%, transparent);
-  border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--md-surface-cont) 94%, #000);
-  color: var(--md-on-surface);
-  font-size: var(--fs-body-sm);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 440px);
+  padding: 14px 18px;
+  border: 1px solid var(--toast-border);
+  border-radius: var(--toast-radius);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--toast-shadow);
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.45;
-  white-space: pre-wrap;
   opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transform: translateY(16px);
+  transition: opacity 0.2s ease, transform 0.26s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .app-toast.is-visible {
@@ -42,22 +45,30 @@ body[data-page="terminal"] .app-toast-host {
   transform: translateY(0);
 }
 
-.app-toast.is-error {
-  border-color: color-mix(in srgb, var(--md-error) 42%, var(--md-stroke-soft));
-  color: color-mix(in srgb, var(--md-error) 72%, var(--md-on-surface));
+/* Round tone icon — the only part that changes color between tones. */
+.app-toast__icon {
+  flex: none;
+  width: var(--toast-icon-size);
+  height: var(--toast-icon-size);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--toast-icon-default);
+  color: var(--toast-icon-fg);
+  font: 900 14px/1 system-ui, sans-serif;
 }
 
-.app-toast.is-success {
-  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-stroke-soft));
-  color: var(--md-primary);
+.app-toast__msg {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
-.app-toast.is-hint {
-  border-color: color-mix(in srgb, var(--md-stroke-soft) 44%, transparent);
-  background: color-mix(in srgb, var(--md-surface-cont) 88%, #000);
-  color: var(--md-on-surface-var);
-  font-weight: 500;
-}
+.app-toast.is-info    .app-toast__icon { background: var(--toast-icon-info); }
+.app-toast.is-success .app-toast__icon { background: var(--toast-icon-success); }
+.app-toast.is-warn    .app-toast__icon { background: var(--toast-icon-warn); }
+.app-toast.is-error   .app-toast__icon { background: var(--toast-icon-error); }
 
 .app-dialog {
   position: fixed;
@@ -87,7 +98,7 @@ body[data-page="terminal"] .app-toast-host {
   inset: 0;
   border: 0;
   padding: 0;
-  background: color-mix(in srgb, #000 62%, transparent);
+  background: var(--popup-backdrop);
   opacity: 0;
   backdrop-filter: blur(2px) saturate(106%);
   -webkit-backdrop-filter: blur(2px) saturate(106%);
@@ -102,10 +113,10 @@ body[data-page="terminal"] .app-toast-host {
   display: flex;
   flex-direction: column;
   padding: var(--sp-lg);
-  border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 92%, transparent);
-  border-radius: var(--dialog-sheet-radius);
-  background: color-mix(in srgb, var(--md-surface-cont) 96%, #000);
-  box-shadow: var(--shadow-4);
+  border: 1px solid var(--popup-border-color);
+  border-radius: var(--popup-radius);
+  background: var(--popup-bg);
+  box-shadow: var(--popup-shadow);
   opacity: 0;
   transform: translateY(14px) scale(0.985);
   transition:
@@ -197,61 +208,48 @@ body[data-page="terminal"] .app-toast-host {
   font-weight: 800;
 }
 
-/* 박스 안 박스 금지 — 다이얼로그 시트 자체가 박스이므로 리스트엔 테두리/배경/라운드를
-   두지 않는다. 상·하 hairline 으로만 구역을 나누고 항목 사이는 구분선만. */
+/* Unified popup item look: compact boxed rows matching the branch picker.
+   Value grids remain a separate compact control for short numeric choices. */
 .app-dialog__choices--list {
-  gap: 0;
+  gap: var(--sp-sm);
   padding: 0;
   border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--md-stroke-soft) 30%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 30%, transparent);
   background: transparent;
 }
 
-/* list 항목은 .app-dialog__choices--list 하위로 묶어 우선순위를 .btn(파일 뒤쪽
-   정의, 알약 라운드+1px 보더)보다 높인다. 그래야 사각·풀폭 행이 확실히 유지돼
-   선택/포커스 시 둥근 박스가 컨테이너 보더와 겹치지 않는다. */
 .app-dialog__choices--list .app-dialog__choiceBtn--action {
   justify-content: space-between;
   text-align: left;
   white-space: normal;
   line-height: 1.25;
   min-height: 48px;
-  padding: 0 14px;
-  border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
-  border-radius: 0;
-  background: transparent;
+  padding: var(--sp-md) var(--sp-lg);
+  border: 1px solid var(--popup-item-border);
+  border-radius: var(--popup-item-radius);
+  background: var(--popup-item-bg);
   box-shadow: none;
 }
 
-.app-dialog__choices--list .app-dialog__choiceBtn--action:last-child {
-  border-bottom: 0;
-}
-
-/* 즉시 동작(Play/Upload/Delete…)에 navigation chevron(›)은 오해를 부른다 → 없음 */
-.app-dialog__choices--list .app-dialog__choiceBtn--action::after {
-  content: "";
-  display: none;
-}
-
-/* 호버/포커스: 둥근 포커스링·보더 대신 풀폭 배경만 (선 겹침 방지) */
 .app-dialog__choices--list .app-dialog__choiceBtn--action:hover,
 .app-dialog__choices--list .app-dialog__choiceBtn--action:focus-visible {
-  background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
-  border-bottom-color: color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
-  border-radius: 0;
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
   outline: none;
-  box-shadow: none;
+}
+
+.app-dialog__choices--list .app-dialog__choiceBtn--action:active {
+  transform: translateY(1px);
 }
 
 .app-dialog__choices--list .app-dialog__choiceBtn--action.is-current {
-  color: var(--md-on-surface);
-  background: color-mix(in srgb, var(--md-primary) 14%, transparent);
-  border-bottom-color: color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
+  border-color: var(--popup-item-active-border);
+  background: var(--popup-item-active-bg);
+  color: var(--md-primary);
+  font-weight: 850;
 }
 
-/* 선택된 항목만 체크(✓) — 자체완결 */
+/* Selected indicator — checkmark (branch picker uses a "현재" badge; the check
+   is the dialog's equivalent affordance). */
 .app-dialog__choices--list .app-dialog__choiceBtn--action.is-current::after {
   content: "";
   display: block;
@@ -269,15 +267,30 @@ body[data-page="terminal"] .app-toast-host {
   gap: 6px;
 }
 
-.app-dialog__choiceBtn--value {
+.app-dialog__choices--value-grid .app-dialog__choiceBtn--value {
   min-height: 42px;
   padding: 0 6px;
   justify-content: center;
-  border-radius: var(--dialog-choice-grid-radius);
-  background: var(--md-surface-cont-h);
+  border: 1px solid var(--popup-item-border);
+  border-radius: var(--popup-item-radius);
+  background: var(--popup-item-bg);
   text-align: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.app-dialog__choices--value-grid .app-dialog__choiceBtn--value:hover,
+.app-dialog__choices--value-grid .app-dialog__choiceBtn--value:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--popup-item-bg) 90%, var(--md-primary));
+  outline: none;
+}
+
+.app-dialog__choices--value-grid .app-dialog__choiceBtn--value.is-current {
+  border-color: var(--popup-item-active-border);
+  background: var(--popup-item-active-bg);
+  color: var(--md-primary);
+  font-weight: 850;
 }
 
 .app-dialog__inputWrap {
@@ -441,7 +454,7 @@ body[data-page="terminal"] .app-toast-host {
 .app-branch-picker__groupCount {
   flex: 0 0 auto;
   padding: 3px 8px;
-  border-radius: var(--r-pill);
+  border-radius: var(--r-round);
   background: color-mix(in srgb, var(--md-surface-cont-h) 80%, transparent);
   color: var(--md-on-surface-var);
   font-size: 11px;
@@ -465,6 +478,9 @@ body[data-page="terminal"] .app-toast-host {
   text-align: left;
   font-family: var(--font-mono);
   font-size: var(--fs-body-sm);
+  border-color: var(--popup-item-border);
+  border-radius: var(--popup-item-radius);
+  background: var(--popup-item-bg);
 }
 
 .app-branch-picker__label {
@@ -485,7 +501,7 @@ body[data-page="terminal"] .app-toast-host {
 .app-branch-picker__badge {
   flex: 0 0 auto;
   padding: 4px 8px;
-  border-radius: var(--r-pill);
+  border-radius: var(--r-round);
   border: 1px solid color-mix(in srgb, var(--md-primary) 42%, transparent);
   background: var(--md-primary-state-soft);
   color: var(--md-primary);
@@ -495,8 +511,8 @@ body[data-page="terminal"] .app-toast-host {
 }
 
 .app-branch-picker__item.is-current {
-  border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-stroke-soft));
-  background: var(--md-primary-state);
+  border-color: var(--popup-item-active-border);
+  background: var(--popup-item-active-bg);
   color: var(--md-primary);
   font-weight: 800;
 }
@@ -523,13 +539,15 @@ body[data-page="terminal"] .app-toast-host {
   margin-bottom: var(--sp-lg);
 }
 
-/* ── Buttons: Material 3 ─────────────────────────────────── */
+/* ── Buttons: boxed controls by default ────────────────────
+   Generic button primitives stay boxed. Fully rounded controls must opt in
+   through a dedicated semantic class. */
 .btn {
   padding: 10px 20px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
   background: var(--md-surface-cont-h);
   color: var(--md-on-surface);
-  border-radius: var(--r-pill);
+  border-radius: var(--control-radius);
   cursor: pointer;
   font-size: var(--fs-label-lg);
   font-weight: 750;
@@ -574,7 +592,7 @@ body[data-page="terminal"] .app-toast-host {
   min-width: 30px;
   height: 24px;
   padding: 0 8px;
-  border-radius: var(--r-pill);
+  border-radius: var(--r-round);
   background: var(--md-error);
   color: var(--md-on-error);
   font-size: 12px;
@@ -613,7 +631,7 @@ body[data-page="terminal"] .app-toast-host {
 
 .smallBtn {
   padding: var(--sp-sm) var(--sp-md);
-  border-radius: var(--r-pill);
+  border-radius: var(--control-radius);
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
   background: var(--md-surface-cont-h);
   color: var(--md-on-surface);
@@ -714,12 +732,14 @@ body[data-page="terminal"] .app-toast-host {
 
 .ui-dropdown-menu__panel {
   min-width: 156px;
-  padding: 6px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 48%, transparent);
-  border-radius: 8px;
-  background: var(--md-surface-cont);
+  display: grid;
+  gap: 6px;
+  padding: var(--sp-sm);
+  border: 1px solid var(--popup-border-color);
+  border-radius: var(--popup-radius);
+  background: var(--popup-bg);
   color: var(--md-on-surface);
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32);
+  box-shadow: var(--popup-shadow);
 }
 
 .ui-dropdown-menu__panel[hidden] {
@@ -730,9 +750,9 @@ body[data-page="terminal"] .app-toast-host {
   width: 100%;
   min-height: 40px;
   padding: 0 12px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
+  border: 1px solid var(--popup-item-border);
+  border-radius: var(--popup-item-radius);
+  background: var(--popup-item-bg);
   color: var(--md-on-surface);
   display: flex;
   align-items: center;
@@ -748,7 +768,8 @@ body[data-page="terminal"] .app-toast-host {
 
 .ui-dropdown-menu__item:hover,
 .ui-dropdown-menu__item:focus-visible {
-  background: color-mix(in srgb, var(--md-primary) 10%, transparent);
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--popup-item-bg) 90%, var(--md-primary));
   color: var(--md-on-surface);
   outline: none;
 }
@@ -1139,12 +1160,12 @@ body[data-page="terminal"] .app-toast-host {
   transform: translateY(1px);
 }
 
-/* ── Pill / Values ────────────────────────────────────────── */
-.pill {
+/* ── Value surface ────────────────────────────────────────── */
+.value-surface {
   background: var(--md-surface-cont);
   border: 1px solid var(--md-stroke-soft);
   padding: var(--sp-sm) var(--sp-md);
-  border-radius: var(--r-sm);
+  border-radius: var(--control-radius);
   font-size: var(--fs-body-sm);
   color: var(--md-on-surface-var);
 }
@@ -1219,7 +1240,7 @@ pre {
    ════════════════════════════════════════════════════════════════ */
 
 /* ── Chip ──────────────────────────────────────────────────────
-   A pill-shaped status/info tag. Two variants:
+   A compact status/info tag. Two variants:
 
      .chip                    neutral, surface tone (default)
      .chip.chip--accent       primary-tinted (e.g. "selected", counts)
@@ -1238,7 +1259,7 @@ pre {
   min-height: 22px;
   padding: 2px 10px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-round);
   background: color-mix(in srgb, var(--md-surface-cont-h) 80%, var(--md-surface-cont));
   color: var(--md-on-surface-var);
   font-size: var(--fs-label-sm);
@@ -1311,7 +1332,7 @@ pre {
      </button>
 
    Variants:
-     .icon-btn--circle    pill / circular (use with a 30–40 px size)
+     .icon-btn--circle    circular (use with a 30–40 px size)
      .icon-btn--ghost     transparent base, hover-only background
      .icon-btn--sm        28×28 (compact lists, dense toolbars)
      .icon-btn--lg        44×44 (FAB-like, touch-priority)
@@ -1360,7 +1381,7 @@ pre {
 }
 
 .icon-btn--circle {
-  border-radius: var(--r-pill);
+  border-radius: var(--r-round);
 }
 
 .icon-btn--ghost {

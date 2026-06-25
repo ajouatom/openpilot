@@ -87,7 +87,7 @@ async def api_param_set(request: web.Request) -> web.Response:
     pass
 
   try:
-    set_param_value(name, value)
+    set_param_value(name, value, p)
     return web.json_response({"ok": True, "name": name, "value": value, "has_params": HAS_PARAMS})
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)

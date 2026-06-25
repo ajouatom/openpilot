@@ -467,6 +467,33 @@ body[data-page="carrot"] #driveHudCard {
   white-space: nowrap;
 }
 
+.carrot-stage__loadingActions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr);
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.carrot-stage__loadingAction {
+  min-width: 0;
+  min-height: 38px;
+  margin: 0;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--md-surface-cont-h) 84%, transparent);
+}
+
+.carrot-stage__loadingAction--primary {
+  border-color: color-mix(in srgb, var(--md-primary) 58%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 18%, var(--md-surface-cont-h));
+  color: var(--md-primary);
+}
+
+.carrot-stage__loadingAction:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 @keyframes carrot-stage-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

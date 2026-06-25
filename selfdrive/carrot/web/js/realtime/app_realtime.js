@@ -546,6 +546,25 @@ async function reconnectCarrotVisionRealtime(reason = "manual reconnect") {
 
 window.CarrotVisionReconnect = reconnectCarrotVisionRealtime;
 
+async function stopCarrotVisionRealtime(reason = "user stop") {
+  if (!isCarrotVisionActive()) return;
+  console.warn("[vision] stop requested", reason);
+  setCarrotVisionActive(false, {
+    phase: CARROT_VISION_PHASE.INACTIVE,
+    reason,
+    statusText: getUIText("start_vision_hint", "Tap the start button to enable drive vision."),
+    updateRtcStatus: false,
+  });
+  syncCarrotRealtimeLifecycle(true);
+  await exitCarrotFullscreen({ quiet: true }).catch(() => {});
+  const overlay = document.getElementById("visionStartOverlay");
+  if (overlay) overlay.style.removeProperty("display");
+  rtcStatusSet(getUIText("start_vision_hint", "Tap the start button to enable drive vision."));
+  requestCarrotVisionRender({ reason });
+}
+
+window.CarrotVisionStop = stopCarrotVisionRealtime;
+
 window.CarrotVisionStart = async function() {
   if (isCarrotVisionActive()) {
     await reconnectCarrotVisionRealtime("start button while active");
@@ -571,6 +590,32 @@ window.CarrotVisionStart = async function() {
 function rtcInitAuto() {
   const btn = document.getElementById("btnStartVision");
   if (btn) btn.onclick = window.CarrotVisionStart;
+  const reconnectButton = document.getElementById("btnVisionReconnect");
+  const stopButton = document.getElementById("btnVisionStop");
+  let actionBusy = false;
+  const runLoadingAction = async (action) => {
+    if (actionBusy) return;
+    actionBusy = true;
+    if (reconnectButton) reconnectButton.disabled = true;
+    if (stopButton) stopButton.disabled = true;
+    try {
+      await action();
+    } finally {
+      actionBusy = false;
+      if (reconnectButton) reconnectButton.disabled = false;
+      if (stopButton) stopButton.disabled = false;
+    }
+  };
+  if (reconnectButton) {
+    reconnectButton.onclick = () => runLoadingAction(
+      () => reconnectCarrotVisionRealtime("loading panel reconnect"),
+    );
+  }
+  if (stopButton) {
+    stopButton.onclick = () => runLoadingAction(
+      () => stopCarrotVisionRealtime("loading panel stop"),
+    );
+  }
   syncCarrotVisionAvailability().catch(() => {});
   rtcBindVideoEvents();
 }
