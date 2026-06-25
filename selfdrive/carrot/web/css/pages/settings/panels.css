@@ -2,16 +2,23 @@
 .setting-search-panel {
   --setting-search-form-width: clamp(320px, 42vw, 520px);
   --setting-search-results-width: min(72vw, 760px);
-  --setting-search-results-max-height: min(72dvh, 680px);
+  --setting-search-results-max-height: 680px;
   position: fixed;
-  inset: 0;
+  top: var(--app-vv-top, 0px);
+  right: 0;
+  bottom: auto;
+  left: 0;
+  width: 100vw;
+  height: var(--app-vv-height, 100dvh);
+  min-height: 0;
+  box-sizing: border-box;
   z-index: 171;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
   gap: 14px;
-  padding: calc(18px + env(safe-area-inset-top, 0px)) var(--sp-lg) calc(var(--nav-bar-height) + 18px + env(safe-area-inset-bottom, 0px));
+  padding: calc(18px + env(safe-area-inset-top, 0px)) var(--sp-lg) calc(var(--app-nav-bottom-gap, var(--nav-bar-height)) + 18px + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 
@@ -28,7 +35,7 @@
   min-height: clamp(56px, 7vh, 62px);
   padding-left: 20px;
   border: 1px solid color-mix(in srgb, var(--md-primary) 26%, var(--md-stroke-soft));
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: color-mix(in srgb, var(--md-surface-cont) 76%, transparent);
   backdrop-filter: blur(10px) saturate(112%);
   -webkit-backdrop-filter: blur(10px) saturate(112%);
@@ -63,7 +70,7 @@
   height: 100%;
   border: 0;
   border-left: 1px solid color-mix(in srgb, var(--md-stroke-soft) 42%, transparent);
-  border-radius: 0 999px 999px 0;
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
   background: transparent;
   color: var(--md-primary);
   display: inline-flex;
@@ -86,11 +93,14 @@
   flex-direction: column;
   gap: 0;
   width: min(var(--setting-search-results-width), calc(100vw - 40px));
-  padding: 0 4px;
+  min-height: 0;
+  padding: 0 4px 12px;
   max-height: var(--setting-search-results-max-height);
-  flex: 0 1 var(--setting-search-results-max-height);
+  flex: 1 1 auto;
   overflow: auto;
   overscroll-behavior: contain;
+  scroll-padding-block: 8px 18px;
+  scrollbar-gutter: stable;
   pointer-events: auto;
   position: relative;
   z-index: 1;
@@ -102,31 +112,34 @@
 
 .setting-search-section {
   display: grid;
-  gap: 0;
-  padding: 0 0 2px;
+  gap: var(--sp-sm);
+  padding: 0 0 var(--sp-lg);
 }
 
 .setting-search-section__title {
-  position: sticky;
-  top: 0;
-  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 4px 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
-  background: color-mix(in srgb, var(--md-surface) 96%, #000);
-  color: var(--md-on-surface-var);
-  font-size: 12px;
+  padding: 0 4px;
+  color: var(--md-primary);
+  font-size: var(--fs-title-sm);
   font-weight: 900;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--md-outline-var) 18%, transparent);
+  letter-spacing: 0;
 }
 
 .setting-search-section__title strong {
-  color: var(--md-primary);
-  font-size: 12px;
-  font-weight: 900;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-md);
+  font-weight: 800;
+}
+
+.setting-search-section__body {
+  overflow: hidden;
+  background: var(--md-surface-cont);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-1);
 }
 
 .page--setting #groupList,

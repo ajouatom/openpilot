@@ -1780,10 +1780,20 @@ function syncSettingMarqueeOverflow(root = document) {
     const elWidth = el.clientWidth || 0;
     if (elWidth <= 0) return;
     const overflow = content.scrollWidth > el.clientWidth + 2;
-    const distance = Math.max(0, content.scrollWidth - el.clientWidth + 18);
+    const distance = Math.max(0, content.scrollWidth - el.clientWidth);
     const nextDistance = `${distance}px`;
     const prevDistance = el.style.getPropertyValue("--setting-marquee-distance");
     const wasOverflowing = el.classList.contains("is-overflowing");
+    if (el._settingMarqueeResetTimer) {
+      clearTimeout(el._settingMarqueeResetTimer);
+      el._settingMarqueeResetTimer = null;
+    }
+    if (el._settingMarqueeRestoreTimer) {
+      clearTimeout(el._settingMarqueeRestoreTimer);
+      el._settingMarqueeRestoreTimer = null;
+    }
+    el._settingMarqueeResetting = false;
+    el.classList.remove("is-manual");
     el.style.setProperty("--setting-marquee-distance", nextDistance);
     el.scrollLeft = 0;
     if (!overflow) {
@@ -1924,8 +1934,10 @@ function renderSettingSearchResults(query = "") {
         <span>${escapeHtml(section.title)}</span>
         <strong>${section.entries.length}</strong>
       </div>
+      <div class="setting-search-section__body"></div>
     `;
     settingSearchResults.appendChild(sectionEl);
+    const sectionBody = sectionEl.querySelector(".setting-search-section__body");
 
     section.entries.forEach((entry) => {
       const button = document.createElement("button");
@@ -1956,7 +1968,7 @@ function renderSettingSearchResults(query = "") {
           showAppToast(e.message || "Search jump failed", { tone: "error" });
         }
       };
-      sectionEl.appendChild(button);
+      sectionBody.appendChild(button);
     });
   });
 }
@@ -2866,7 +2878,7 @@ async function renderItems(group, options = {}) {
 
     const val = document.createElement("button");
     val.type = "button";
-    val.className = compactNumeric ? "pill val setting-value-compact" : "pill val";
+    val.className = compactNumeric ? "value-surface val setting-value-compact" : "value-surface val";
     val.setAttribute("aria-label", compactNumeric
       ? getUIText("setting_value_detail", "Open detail")
       : getUIText("setting_value_edit", "Edit value"));
@@ -2978,10 +2990,49 @@ async function renderItems(group, options = {}) {
 
     el.appendChild(top);
     el.appendChild(d);
+
+    // Footer actions row: optional unit-cycle (배율) plus a reset-to-default
+    // (기본값) button on every item. Pressing 기본값 confirms then restores
+    // the param to its declared default. commitSettingValue / normalizeSettingValue
+    // are hoisted function declarations below, so referencing them here is fine.
+    const actions = document.createElement("div");
+    actions.className = "setting-actions";
     if (unitBtn) {
       el.classList.add("setting--has-unit-cycle");
-      el.appendChild(unitBtn);
+      actions.appendChild(unitBtn);
     }
+    const defaultBtn = document.createElement("button");
+    defaultBtn.type = "button";
+    defaultBtn.className = "setting-default-reset";
+    defaultBtn.textContent = getUIText("setting_reset_default", "Default");
+    defaultBtn.setAttribute("aria-label", getUIText("setting_reset_default_aria", "Reset to default"));
+    defaultBtn.onclick = async (event) => {
+      event.stopPropagation();
+      const normalizedDefault = normalizeSettingValue(p.default);
+      const target = normalizedDefault === null ? p.default : normalizedDefault;
+      const current = val.dataset.committedValue ?? val.dataset.rawValue;
+      if (String(target) === String(current)) {
+        showAppToast(getUIText("setting_already_default", "Already at default"));
+        return;
+      }
+      const ok = await appConfirm(
+        getUIText("setting_reset_default_confirm", "Reset to default ({value})?", {
+          value: formatSettingDisplayValue(p, target),
+        }),
+        {
+          title: getUIText("setting_reset_default_title", "Reset to default"),
+          confirmLabel: getUIText("ok", "OK"),
+          cancelLabel: getUIText("cancel", "Cancel"),
+        },
+      );
+      if (!ok) return;
+      await commitSettingValue(target);
+      showAppToast(getUIText("setting_reset_default_done", "Restored to default"));
+    };
+    actions.appendChild(defaultBtn);
+    el.classList.add("setting--has-actions");
+    el.appendChild(actions);
+
     (currentProfileSectionBody || currentCategoryCardBody || itemsBox).appendChild(el);
 
     const cur = (name in values) ? values[name] : p.default;
@@ -3318,6 +3369,106 @@ function bindSettingFavoriteLongPress() {
 }
 
 bindSettingFavoriteLongPress();
+
+// Let long titles / param names be panned left-right by the user. Automatic
+// movement uses transform, while manual movement uses scrollLeft; never allow
+// both coordinate systems to remain active at the same time.
+function bindSettingMarqueeDrag() {
+  ["items", "deviceItems"].forEach((id) => {
+    const box = document.getElementById(id);
+    if (!box || box.dataset.marqueeDragBound === "1") return;
+    box.dataset.marqueeDragBound = "1";
+
+    let drag = null;
+
+    function cancelManualReset(el) {
+      if (!el) return;
+      if (el._settingMarqueeResetTimer) {
+        clearTimeout(el._settingMarqueeResetTimer);
+        el._settingMarqueeResetTimer = null;
+      }
+      if (el._settingMarqueeRestoreTimer) {
+        clearTimeout(el._settingMarqueeRestoreTimer);
+        el._settingMarqueeRestoreTimer = null;
+      }
+    }
+
+    function beginManualScroll(el) {
+      cancelManualReset(el);
+      el._settingMarqueeResetting = false;
+      el.classList.add("is-manual");
+    }
+
+    function scheduleManualReset(el) {
+      if (!el) return;
+      cancelManualReset(el);
+      el._settingMarqueeResetTimer = window.setTimeout(() => {
+        el._settingMarqueeResetTimer = null;
+        el._settingMarqueeResetting = true;
+        el.scrollTo({ left: 0, behavior: "smooth" });
+        el._settingMarqueeRestoreTimer = window.setTimeout(() => {
+          el._settingMarqueeRestoreTimer = null;
+          el.scrollLeft = 0;
+          el.classList.remove("is-manual");
+          el._settingMarqueeResetting = false;
+        }, 320);
+      }, 1200);
+    }
+
+    function endDrag(event) {
+      if (!drag || (event && event.pointerId !== drag.pointerId)) return;
+      const el = drag.el;
+      try { el.releasePointerCapture(drag.pointerId); } catch (_) {}
+      el.classList.remove("is-dragging");
+      drag = null;
+      scheduleManualReset(el);
+    }
+
+    box.addEventListener("pointerdown", (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      const marquee = event.target.closest(".setting-marquee");
+      if (!marquee || !box.contains(marquee) || !marquee.classList.contains("is-overflowing")) return;
+      beginManualScroll(marquee);
+      drag = {
+        el: marquee,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startScroll: marquee.scrollLeft,
+        moved: false,
+      };
+      marquee.classList.add("is-dragging");
+    });
+
+    box.addEventListener("pointermove", (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      // Touch pans the overflow container natively — don't double-apply scroll.
+      if (event.pointerType === "touch") return;
+      const dx = event.clientX - drag.startX;
+      if (!drag.moved) {
+        if (Math.abs(dx) <= 4) return;
+        drag.moved = true;
+        try { drag.el.setPointerCapture(drag.pointerId); } catch (_) {}
+      }
+      drag.el.scrollLeft = drag.startScroll - dx;
+      if (event.cancelable) event.preventDefault();
+    });
+
+    box.addEventListener("scroll", (event) => {
+      const marquee = event.target;
+      if (!(marquee instanceof Element) || !marquee.classList.contains("setting-marquee")) return;
+      if (!marquee.classList.contains("is-manual")) return;
+      if (marquee._settingMarqueeResetting) return;
+      cancelManualReset(marquee);
+      if (!drag || drag.el !== marquee) scheduleManualReset(marquee);
+    }, true);
+
+    box.addEventListener("pointerup", endDrag);
+    box.addEventListener("pointercancel", endDrag);
+    box.addEventListener("lostpointercapture", endDrag);
+  });
+}
+
+bindSettingMarqueeDrag();
 
 async function syncSettingViewportLayout(options = {}) {
   if (CURRENT_PAGE !== "setting" || !SETTINGS) return;

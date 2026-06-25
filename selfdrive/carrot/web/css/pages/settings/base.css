@@ -180,15 +180,38 @@
   align-items: flex-end;
   pointer-events: auto;
   transform-origin: right bottom;
-  transition:
-    opacity 0.12s ease,
-    transform 0.16s cubic-bezier(0.2, 0, 0, 1);
+  /* No layout transition on the container itself: on load / resize / orientation
+     (portrait fixed ↔ landscape relative) and during page transitions its
+     position recomputes, and an always-on transform/opacity transition animated
+     those changes — the "흔들림". The FAB must just stay put. Open/close motion
+     lives on .setting-fab-actions and the bounce on .fab--setting-menu. */
+}
+
+/* Enter together with the page (one-shot) so the FAB doesn't pop in instantly
+   while the page content animates. OPACITY ONLY — no transform/position change:
+   the FAB is position:fixed and a transform here re-anchored / shifted it during
+   the page-transition (the "세로모드에서 위→아래로 튐"). Fading in place keeps the
+   FAB exactly at its resting position. It's an animation (not a transition), so
+   it plays once on page entry and never re-fires on layout reflow. */
+@keyframes setting-fab-enter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+body[data-page="setting"] .page-fab-layer--setting .setting-fab-menu {
+  animation: setting-fab-enter var(--motion-medium) var(--ease-emphasized) both;
 }
 
 /* 전환 중 FAB 를 숨기지 않는다 — FAB 는 position:fixed 라 슬라이드와 무관하고,
    끝에 다시 나타나며(opacity/scale) 한 번 깜박이던 원인이었다. 클릭만 잠시 막는다. */
 .page--setting.setting-screen-transitioning .setting-fab-menu {
   pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="setting"] .page-fab-layer--setting .setting-fab-menu {
+    animation: none;
+  }
 }
 
 .setting-fab-actions {
@@ -234,7 +257,7 @@
   gap: 10px;
   padding: 0 16px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 84%, transparent);
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
   color: var(--md-on-surface);
   font-size: var(--fs-body-sm);

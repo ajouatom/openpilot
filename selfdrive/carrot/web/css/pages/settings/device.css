@@ -34,9 +34,9 @@
 
 .setting-search-result {
   width: 100%;
-  padding: 15px 0;
+  padding: 12px 14px;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 62%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 32%, transparent);
   border-radius: 0;
   background: transparent;
   color: inherit;
@@ -44,13 +44,26 @@
   cursor: pointer;
 }
 
+.setting-search-section__body > .setting-search-result:last-child {
+  border-bottom: 0;
+}
+
+.setting-search-result:hover,
+.setting-search-result:focus-visible {
+  background: color-mix(in srgb, var(--md-surface-cont) 88%, var(--md-primary));
+  outline: none;
+}
+
 .setting-search-result:active {
-  background: color-mix(in srgb, var(--md-primary) 6%, transparent);
+  transform: translateY(1px);
 }
 
 .setting-search-result--empty {
   cursor: default;
   color: var(--md-on-surface-var);
+  border: 1px solid var(--popup-item-border);
+  border-radius: var(--popup-item-radius);
+  background: var(--popup-item-bg);
 }
 
 .setting-search-result__group {
@@ -107,10 +120,10 @@
   .setting-search-panel {
     --setting-search-form-width: clamp(360px, 34vw, 540px);
     --setting-search-results-width: min(64vw, 820px);
-    --setting-search-results-max-height: min(72dvh, 680px);
+    --setting-search-results-max-height: 680px;
     gap: 14px;
     padding-top: calc(22px + env(safe-area-inset-top, 0px));
-    padding-bottom: calc(var(--nav-bar-height-desktop) + 18px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--app-nav-bottom-gap, var(--nav-bar-height-desktop)) + 18px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -192,9 +205,9 @@
   .setting-search-panel {
     --setting-search-form-width: calc(100vw - 28px);
     --setting-search-results-width: calc(100vw - 28px);
-    --setting-search-results-max-height: min(68dvh, 560px);
+    --setting-search-results-max-height: 560px;
     gap: 12px;
-    padding: calc(14px + env(safe-area-inset-top, 0px)) 12px calc(var(--nav-bar-height) + 14px + env(safe-area-inset-bottom, 0px));
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 12px calc(var(--app-nav-bottom-gap, var(--nav-bar-height)) + 14px + env(safe-area-inset-bottom, 0px));
   }
 
   .setting-search-form {
@@ -274,6 +287,18 @@
     will-change: transform;
   }
 
+  /* 최상위 그룹 화면은 탭과 첫 버튼을 선명하게 유지한다.
+     스크롤 가장자리 페이드는 하위 설정 화면에만 적용한다. */
+  .page.page--setting > #settingScreenHost > #settingScreenGroups {
+    -webkit-mask-image: none;
+            mask-image: none;
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenItems {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
+  }
+
   .page--setting #settingSubnavWrap {
     display: none !important;
   }
@@ -285,7 +310,7 @@
 
 @media (max-height: 760px) {
   .setting-search-panel {
-    --setting-search-results-max-height: min(64dvh, 520px);
+    --setting-search-results-max-height: 620px;
     gap: 10px;
     padding-top: calc(12px + env(safe-area-inset-top, 0px));
   }
@@ -339,9 +364,17 @@
     box-sizing: border-box;
     scrollbar-gutter: stable;
     transition: none;
-    /* One UI 스타일 스크롤 가장자리 페이드 (상 14px / 하 24px) */
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 24px), transparent 100%);
-            mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 24px), transparent 100%);
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenGroups {
+    -webkit-mask-image: none;
+            mask-image: none;
+  }
+
+  /* 가로모드도 하위 설정 화면에만 스크롤 가장자리 페이드를 유지한다. */
+  .page.page--setting > #settingScreenHost > #settingScreenItems {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
   }
 
   .page.page--setting > #settingScreenHost > #settingScreenGroups {
@@ -459,9 +492,17 @@
     display: inline-flex;
     opacity: 1 !important;
     visibility: visible !important;
-    transform: none !important;
     margin-right: 0;
     pointer-events: auto;
+  }
+
+  /* Reset the flow-positioning transform, but exempt the click bounce: CSS
+     animations are overridden by !important author rules, so the blanket
+     `transform: none !important` previously killed the FAB bounce in landscape
+     only (portrait has no such reset). Lifting it while .is-bouncing lets the
+     setting-fab-bounce keyframes play; it returns on animationend. */
+  .page.page--setting > .page-fab-layer--setting .fab:not(.is-bouncing) {
+    transform: none !important;
   }
 
   /* Flow the menu inside the page-anchored absolute layer instead of leaving it
@@ -525,9 +566,9 @@
   .setting-search-panel {
     --setting-search-form-width: min(76vw, 540px);
     --setting-search-results-width: min(82vw, 760px);
-    --setting-search-results-max-height: min(68dvh, 520px);
+    --setting-search-results-max-height: 680px;
     gap: 10px;
-    padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(var(--nav-bar-height) + 12px + env(safe-area-inset-bottom, 0px));
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(var(--app-nav-bottom-gap, 0px) + 12px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -544,6 +585,45 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+}
+
+/* Robust two-column layout for every width / orientation / language: the text
+   column shrinks (min-width:0) while the control column keeps its intrinsic
+   width, so right-side controls can never be pushed off-screen by long titles
+   (e.g. ko/zh). The media queries below still refine the gap and the
+   single-column wrap; this base rule fills the gaps they don't cover
+   (notably portrait wider than 640px). */
+.page--setting #settingScreenItems .settingTop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-md);
+  align-items: start;
+}
+
+.page--setting #settingScreenItems .settingTop > :first-child {
+  min-width: 0;
+}
+
+/* Long descriptions / range legends with no break opportunities (e.g. English
+   "0:stock,1,2:REC,..." — unlike CJK, Latin runs without spaces don't break)
+   must wrap instead of forcing the row wider than the viewport, which would
+   push the right-side control off-screen. CJK wraps per-character on its own,
+   which is why this only surfaced in English. The landscape split layout
+   already applies this; promote it to every layout. */
+.page--setting #settingScreenItems .title,
+.page--setting #settingScreenItems .name,
+.page--setting #settingScreenItems .muted,
+.page--setting #settingScreenItems .descr {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Safety net: never let a single item bleed past its box and drag the control
+   column with it (matches the known-good split layout). The title/name marquees
+   keep their own inner overflow-x scroller, so this does not clip them. */
+.page--setting #settingScreenItems .setting {
+  overflow: hidden;
 }
 
 .page--setting #settingScreenItems .ctrl {
@@ -862,6 +942,48 @@
   color: var(--md-on-surface);
 }
 
+/* Footer actions row — holds the optional unit-cycle (배율) and the
+   reset-to-default (기본값) button, right-aligned under the item. */
+.page--setting #settingScreenItems .setting--has-actions {
+  padding-bottom: var(--sp-md);
+}
+
+.page--setting #settingScreenItems .setting-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.page--setting #settingScreenItems .setting-actions .setting-unit-cycle {
+  margin: 0;
+}
+
+.page--setting #settingScreenItems .setting-default-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 54%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 72%, var(--md-surface-cont-h));
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-sm);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+
+.page--setting #settingScreenItems .setting-default-reset:active {
+  border-color: color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-on-surface));
+  color: var(--md-on-surface);
+}
+
 .page--setting #settingScreenItems .setting-copy {
   min-width: 0;
   max-width: 100%;
@@ -1033,13 +1155,13 @@
 }
 
 .page--setting #settingScreenItems .setting-marquee.is-overflowing .setting-marquee__content {
-  animation: setting-marquee-pan 7s ease-in-out 0.8s infinite alternate;
+  animation: setting-marquee-pan 6s linear 0.5s infinite alternate;
 }
 
-.page--setting #settingScreenItems .setting-marquee:hover .setting-marquee__content,
-.page--setting #settingScreenItems .setting-marquee:focus .setting-marquee__content,
-.page--setting #settingScreenItems .setting-marquee:active .setting-marquee__content {
-  animation-play-state: paused;
+.page--setting #settingScreenItems .setting-marquee.is-manual .setting-marquee__content {
+  animation: none;
+  transform: none;
+  will-change: auto;
 }
 
 .page--setting #settingScreenItems .title.setting-marquee,
@@ -1061,8 +1183,13 @@
 
 @media (max-width: 640px) and (orientation: portrait) {
   .page--setting #settingScreenItems > .row-between.mb-sm {
-    min-height: 48px;
+    /* min-height was 48px while the row content (42px back-icon + title) is
+       shorter, and align-items:end pushed the ~6px slack ABOVE the title —
+       the thin band the user saw. Collapse to content height so the title
+       starts at the top edge, like the groups screen. */
+    min-height: 0;
     margin-bottom: 10px;
+    padding-top: 0;
     padding-bottom: 8px;
   }
 
@@ -1079,11 +1206,10 @@
     padding-right: var(--sp-lg);
   }
 
-  .page--setting #settingScreenItems #items::after {
-    content: "";
-    display: block;
-    height: calc(var(--fab-size, 62px) + 12px);
-  }
+  /* No extra FAB spacer here: the scroll container's padding-bottom
+     (nav-bar-height + 24px) already clears the floating button, so the old
+     `#items::after` (fab-size + 12px) doubled the bottom gap on the submenu
+     only. Removing it matches the groups screen's spacing. */
 
   .page--setting #settingScreenItems .settingTop {
     display: grid;
@@ -1151,11 +1277,11 @@
 }
 
 @keyframes setting-marquee-pan {
-  from {
+  0%, 6% {
     transform: translateX(0);
   }
 
-  to {
+  94%, 100% {
     transform: translateX(calc(var(--setting-marquee-distance, 0px) * -1));
   }
 }
@@ -1199,7 +1325,6 @@
 }
 
 .page--setting #settingSubnav[hidden],
-.page--setting #deviceSubnav[hidden],
 .page--setting #carrotTabContent[hidden],
 .page--setting #deviceTabContent[hidden],
 .page--setting #items[hidden],
@@ -1209,6 +1334,12 @@
 
 .page--setting.setting-tab-device .page-fab-layer--setting {
   display: none;
+}
+
+/* The device tab has no top quick-tab subnav (old, unused). Hide the subnav
+   wrap on the device tab so no empty bar shows at any width / adaptive layout. */
+.page--setting.setting-tab-device #settingSubnavWrap {
+  display: none !important;
 }
 
 .page--setting #deviceItems .ctrl {
@@ -1657,7 +1788,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--sp-md);
-  background: rgba(0, 0, 0, 0.86);
+  background: var(--popup-backdrop);
 }
 
 .training-guide-modal__surface {
@@ -1667,9 +1798,10 @@
   width: min(100%, 960px);
   height: min(100%, 540px);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 48%, transparent);
-  border-radius: var(--r-md);
+  border: 1px solid var(--popup-border-color);
+  border-radius: var(--popup-radius);
   background: #000;
+  box-shadow: var(--popup-shadow);
 }
 
 .training-guide-modal__image {
@@ -1688,7 +1820,7 @@
   width: 42px;
   height: 42px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 56%, transparent);
-  border-radius: 999px;
+  border-radius: var(--dialog-control-radius);
   background: color-mix(in srgb, var(--md-surface-cont) 82%, #000);
   color: var(--md-on-surface);
   font-size: 28px;
@@ -1717,7 +1849,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   width: min(100%, 760px);
   height: min(100%, 620px);
-  background: var(--md-surface);
+  background: var(--popup-bg);
 }
 
 .device-info-modal__header {
@@ -1746,4 +1878,35 @@
 
 .device-info-modal__body p {
   margin: 0 0 var(--sp-sm);
+}
+
+/* Portrait (phone): anchor the settings FAB as page-relative ABSOLUTE flow,
+   the same approach landscape already uses. As position:fixed the FAB was
+   captured by .page-active's transform (an ancestor transform is the
+   containing block for fixed children), so it followed the page geometry —
+   --app-vv-height settling on load, page transitions — and drifted up/down.
+   As a normal absolute child of the page it simply sits at the page's
+   bottom-right and stays put. The page already excludes the nav bar + safe
+   area from its height, so the offset here is just the small visual gap. */
+@media (max-width: 640px) and (orientation: portrait) {
+  .page.page--setting > .page-fab-layer--setting {
+    position: absolute;
+    top: auto;
+    left: auto;
+    right: max(var(--sp-lg), env(safe-area-inset-right, 0px));
+    bottom: calc(10px + var(--sp-lg));
+    width: auto;
+    height: auto;
+    display: flex;
+    justify-content: flex-end;
+    z-index: 130;
+    pointer-events: none;
+  }
+
+  .page.page--setting > .page-fab-layer--setting .setting-fab-menu {
+    position: relative;
+    right: auto;
+    left: auto;
+    bottom: auto;
+  }
 }

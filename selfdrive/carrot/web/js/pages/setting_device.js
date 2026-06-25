@@ -65,14 +65,12 @@ function syncSettingTabChrome(tab = CURRENT_SETTING_TAB) {
 function syncSettingTabPanels(tab = CURRENT_SETTING_TAB) {
   const isDevice = tab === "device";
   const carrotTabContent = document.getElementById("carrotTabContent");
-  const deviceSubnav = document.getElementById("deviceSubnav");
   const items = document.getElementById("items");
   const deviceItems = document.getElementById("deviceItems");
 
   setSettingDeviceHidden(carrotTabContent, isDevice);
   setSettingDeviceHidden(deviceTabContent, !isDevice);
   setSettingDeviceHidden(settingSubnav, isDevice);
-  setSettingDeviceHidden(deviceSubnav, !isDevice);
   setSettingDeviceHidden(items, isDevice);
   setSettingDeviceHidden(deviceItems, !isDevice);
 }
@@ -141,7 +139,6 @@ async function loadDeviceNetwork(useCache = true) {
 
 function renderDeviceGroups(options = {}) {
   const groupContainer = document.getElementById("deviceGroupList");
-  const subnavContainer = document.getElementById("deviceSubnav");
   if (!groupContainer) return;
   const animateGroups = options.animateGroups !== false;
 
@@ -158,8 +155,7 @@ function renderDeviceGroups(options = {}) {
   if (
     !animateGroups &&
     groupContainer.dataset.deviceGroupsSignature === signature &&
-    groupContainer.children.length === groupEntries.length &&
-    (!subnavContainer || subnavContainer.children.length === groupEntries.length)
+    groupContainer.children.length === groupEntries.length
   ) {
     Array.from(groupContainer.children).forEach((button, index) => {
       const entry = groupEntries[index];
@@ -169,27 +165,12 @@ function renderDeviceGroups(options = {}) {
       button.innerHTML = `<span class="setting-group-label">${escapeHtml(entry.label)}</span>`;
       button.onclick = () => selectDeviceGroup(entry.group.id);
     });
-
-    if (subnavContainer && subnavContainer.children.length === groupEntries.length) {
-      Array.from(subnavContainer.children).forEach((tab, index) => {
-        const entry = groupEntries[index];
-        tab.className = "setting-subnav__tab";
-        if (entry.group.id === CURRENT_DEVICE_GROUP) tab.classList.add("is-active");
-        tab.dataset.deviceGroup = entry.group.id;
-        tab.textContent = entry.label;
-        tab.onclick = () => selectDeviceGroup(entry.group.id);
-      });
-    }
     if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
     return;
   }
 
   groupContainer.innerHTML = "";
   groupContainer.dataset.deviceGroupsSignature = signature;
-  if (subnavContainer) {
-    subnavContainer.innerHTML = "";
-    subnavContainer.dataset.deviceGroupsSignature = signature;
-  }
 
   groupEntries.forEach((entry, index) => {
     const group = entry.group;
@@ -203,28 +184,21 @@ function renderDeviceGroups(options = {}) {
     button.innerHTML = `<span class="setting-group-label">${escapeHtml(label)}</span>`;
     button.onclick = () => selectDeviceGroup(group.id);
     groupContainer.appendChild(button);
-
-    if (subnavContainer) {
-      const tab = document.createElement("button");
-      tab.type = "button";
-      tab.className = animateGroups ? "setting-subnav__tab ui-stagger-item" : "setting-subnav__tab";
-      if (animateGroups) tab.style.setProperty("--i", String(index));
-      if (group.id === CURRENT_DEVICE_GROUP) tab.classList.add("is-active");
-      tab.dataset.deviceGroup = group.id;
-      tab.textContent = label;
-      tab.onclick = () => selectDeviceGroup(group.id);
-      subnavContainer.appendChild(tab);
-    }
   });
   if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
 }
 
 function applyDeviceItemsStagger(container) {
   if (!container) return;
-  Array.from(container.children).forEach((child, index) => {
-    if (!child.classList?.contains("setting")) return;
-    child.classList.add("ui-stagger-item");
-    child.style.setProperty("--i", String(index));
+  // Stagger the section-block card(s) like the CarrotPilot tab. Falls back to
+  // direct .setting children if items aren't card-wrapped (defensive).
+  const blocks = container.querySelectorAll(".setting-section-block");
+  const targets = blocks.length
+    ? Array.from(blocks)
+    : Array.from(container.children).filter((c) => c.classList?.contains("setting"));
+  targets.forEach((el, index) => {
+    el.classList.add("ui-stagger-item");
+    el.style.setProperty("--i", String(index));
   });
 }
 
@@ -245,13 +219,37 @@ async function renderDeviceTab(options = {}) {
   }
 }
 
-async function selectDeviceGroup(groupId) {
+async function selectDeviceGroup(groupId, pushHistory = true) {
   CURRENT_DEVICE_GROUP = groupId || CURRENT_DEVICE_GROUP;
   renderDeviceGroups();
   syncSettingTabState("device");
   syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
+  // Same history-based navigation as the CarrotPilot tab: an "items" entry lets
+  // the title back-chevron / device back button return to the device groups
+  // screen. Skip in compact-landscape split (it always shows items).
+  const splitLandscape =
+    typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode() && CURRENT_PAGE === "setting";
+  if (pushHistory && !splitLandscape) {
+    history.pushState({ page: "setting", tab: "device", screen: "items", deviceGroup: CURRENT_DEVICE_GROUP }, "");
+  }
   await renderDeviceItems(CURRENT_DEVICE_GROUP, true, { animateItems: true });
 }
+
+// Restore the device tab from a popstate without touching history (no push /
+// replace) — mirrors how app.js restores the CarrotPilot tab.
+async function restoreSettingDeviceTab(screen, deviceGroup) {
+  if (typeof CURRENT_SETTING_TAB !== "undefined") CURRENT_SETTING_TAB = "device";
+  syncSettingTabState("device");
+  await renderDeviceTab({ animateGroups: false, animateItems: false });
+  if (screen === "items" && deviceGroup) {
+    await selectDeviceGroup(deviceGroup, false);
+  } else if (typeof showSettingScreen === "function") {
+    showSettingScreen("groups", false);
+  }
+  syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
+  if (typeof syncDeviceSshRefresh === "function") syncDeviceSshRefresh();
+}
+window.restoreSettingDeviceTab = restoreSettingDeviceTab;
 
 async function loadDeviceSshStatus(useCache = true) {
   if (deviceSshStatus && useCache) return deviceSshStatus;
@@ -337,6 +335,14 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
   if (!itemsContainer) return;
   const silentRefresh = options.silentRefresh === true;
 
+  // A drill-in from the groups screen triggers the left/right screen slide.
+  // Don't ALSO play the per-item rise (stagger) then — the slide + rise mix is
+  // the jarring combo the user saw. CarrotPilot is slide-only in this case.
+  // Detect it before the screen swaps (items screen still hidden = drill-in).
+  const screenItemsEl = document.getElementById("settingScreenItems");
+  const willSlide = showItemsScreen && !!screenItemsEl &&
+    (screenItemsEl.style.display === "none" || screenItemsEl.classList.contains("hidden"));
+
   syncSettingTabState("device");
   if (showItemsScreen && typeof showSettingScreen === "function") {
     showSettingScreen("items", false);
@@ -354,8 +360,14 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
     return;
   }
 
-  itemsContainer.innerHTML = renderDeviceGroupItems(groupId, values) || `<div class="muted mt-md text-center">-</div>`;
-  if (!silentRefresh && options.animateItems !== false) {
+  // Wrap device items in the same card box the CarrotPilot tab uses
+  // (setting-section-block > setting-group-card > setting-group-card__body) so
+  // the device submenu looks identical, not the old flat rows.
+  const deviceItemsHtml = renderDeviceGroupItems(groupId, values);
+  itemsContainer.innerHTML = deviceItemsHtml
+    ? `<div class="setting-section-block"><div class="setting-group-card"><div class="setting-group-card__body">${deviceItemsHtml}</div></div></div>`
+    : `<div class="muted mt-md text-center">-</div>`;
+  if (!silentRefresh && options.animateItems !== false && !willSlide) {
     applyDeviceItemsStagger(itemsContainer);
   }
   bindDeviceTabEvents(itemsContainer);
@@ -428,7 +440,7 @@ function renderDeviceToggleItems(values) {
     getUIText("driving_personality_desc", "Aggressive, Standard, Relaxed"),
     getUIText(option.labelKey, option.defaultLabel),
     "btnDevicePersonality",
-    "val pill",
+    "val value-surface",
   );
   return html;
 }
@@ -461,7 +473,12 @@ function syncDeviceGroupChrome(groupId = CURRENT_DEVICE_GROUP) {
   if (typeof settingTitle !== "undefined" && settingTitle) {
     settingTitle.textContent = (UI_STRINGS[LANG].setting || "Setting") + " - " + label;
   }
-  if (typeof itemsTitle !== "undefined" && itemsTitle) {
+  // Use the shared title renderer so the device submenu gets the same
+  // "‹ back" chevron as the CarrotPilot tab (the global itemsTitle click
+  // handler then drives history.back()).
+  if (typeof setSettingItemsTitle === "function") {
+    setSettingItemsTitle(label);
+  } else if (typeof itemsTitle !== "undefined" && itemsTitle) {
     itemsTitle.textContent = label;
   }
 }
@@ -493,6 +510,9 @@ async function switchSettingTab(tab) {
     await renderDeviceTab();
     if (!(typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode()) && typeof showSettingScreen === "function") {
       showSettingScreen("groups", false);
+      // Mark the device-groups base entry so back from a device submenu returns
+      // here (not to the CarrotPilot groups). Mirrors the CarrotPilot flow.
+      history.replaceState({ page: "setting", tab: "device", screen: "groups" }, "");
     }
     syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
     syncDeviceSshRefresh();
@@ -513,6 +533,15 @@ async function switchSettingTab(tab) {
 
   if (typeof showSettingScreen === "function") {
     showSettingScreen("groups", false);
+    // Match the device tab: re-render the CarrotPilot groups with the stagger
+    // entrance so switching tabs animates both sides consistently (device
+    // re-renders via renderDeviceTab, CarrotPilot didn't → no animation).
+    if (typeof renderGroups === "function") renderGroups({ animateGroups: true });
+    // Re-sync history to the CarrotPilot groups so back/forward stays in step
+    // with the visible tab after a tab switch.
+    if (!(typeof isCompactLandscapeMode === "function" && isCompactLandscapeMode())) {
+      history.replaceState({ page: "setting", screen: "groups", group: null }, "");
+    }
   }
   if (typeof syncSettingGroupChrome === "function") syncSettingGroupChrome(CURRENT_GROUP);
 }

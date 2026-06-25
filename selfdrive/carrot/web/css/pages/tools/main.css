@@ -152,6 +152,54 @@
 
 .tools-group__body {
   margin-top: 8px;
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  will-change: grid-template-rows, opacity;
+}
+
+.tools-group:not(.is-open) > .tools-group__body {
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* One-shot fold (same pattern as the settings profile section). JS adds the
+   motion class then removes it after the run, so the finish lands on the
+   static open/closed state instead of a lingering transition — that lingering
+   transition was what made the finish look off with taller (2-line) buttons. */
+.tools-group.is-collapsing > .tools-group__body {
+  animation: tools-group-fold var(--motion-medium) var(--ease-emphasized) both;
+}
+
+.tools-group.is-expanding > .tools-group__body {
+  animation: tools-group-fold var(--motion-medium) var(--ease-emphasized) reverse both;
+}
+
+.tools-group__bodyInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@keyframes tools-group-fold {
+  from {
+    grid-template-rows: 1fr;
+    margin-top: 8px;
+    opacity: 1;
+  }
+  to {
+    grid-template-rows: 0fr;
+    margin-top: 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tools-group.is-collapsing > .tools-group__body,
+  .tools-group.is-expanding > .tools-group__body {
+    animation: none;
+  }
 }
 
 .page--tools .section.tools-group {

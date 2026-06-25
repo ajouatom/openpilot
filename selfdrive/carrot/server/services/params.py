@@ -180,55 +180,88 @@ def get_param_values(names: list[str], defaults: Optional[Dict[str, Any]] = None
   return values
 
 
-def put_typed(params: "Params", key: str, value: Any) -> None:
-  try:
+def _coerce_bool(value: Any) -> bool:
+  if isinstance(value, str):
+    return value.strip().lower() in ("1", "true", "on", "yes")
+  return bool(value)
+
+
+def _put_inferred(params: "Params", key: str, value: Any, p: Optional[Dict[str, Any]]) -> None:
+  """Write using a type inferred from the setting definition.
+
+  Used when the runtime type system (get_type / ParamKeyType) is unavailable,
+  so a missing ParamKeyType can no longer silently drop the write (the previous
+  code promised this 'inference' fallback in a comment but never did it)."""
+  kind = infer_type_from_setting(p)
+  if kind == "bool":
+    v = _coerce_bool(value)
+    if hasattr(params, "put_bool"):
+      params.put_bool(key, v)
+    else:
+      params.put(key, "1" if v else "0")
+  elif kind == "int":
+    iv = int(float(value))
+    if hasattr(params, "put_int"):
+      params.put_int(key, iv)
+    else:
+      params.put(key, str(iv))
+  elif kind == "float":
+    fv = float(value)
+    if hasattr(params, "put_float"):
+      params.put_float(key, fv)
+    else:
+      params.put(key, repr(fv))
+  elif kind == "json":
+    obj = json.loads(value) if isinstance(value, str) else value
+    params.put(key, obj)
+  else:
+    params.put(key, str(value))
+
+
+def put_typed(params: "Params", key: str, value: Any, p: Optional[Dict[str, Any]] = None) -> None:
+  """Persist value with the param's declared type.
+
+  Prefers the runtime type (get_type / ParamKeyType); when that is unavailable
+  (older fork, ParamKeyType is None, or an unknown key) it falls back to a type
+  inferred from the setting definition. A genuine write failure is RAISED so the
+  caller (e.g. /api/param_set) reports it — previously every error here was
+  swallowed, so a failed save still returned ok and the UI showed a false
+  success ("toggle not saved")."""
+  t = None
+  if ParamKeyType is not None:
+    try:
       t = params.get_type(key)
+    except Exception:
+      t = None
 
-      # BOOL
-      if t == ParamKeyType.BOOL:
-        v = value in ("1", "true", "True", "on", "yes") if isinstance(value, str) else bool(value)
-        params.put_bool(key, v)
-        return
+  if t is None or ParamKeyType is None:
+    _put_inferred(params, key, value, p)
+    return
 
-      # INT
-      if t == ParamKeyType.INT:
-        params.put_int(key, int(float(value)))
-        return
-
-      # FLOAT
-      if t == ParamKeyType.FLOAT:
-        params.put_float(key, float(value))
-        return
-
-      # TIME (string ISO)
-      if t == ParamKeyType.TIME:
-        params.put(key, str(value))
-        return
-
-      # STRING
-      if t == ParamKeyType.STRING:
-        params.put(key, str(value))
-        return
-
-      # JSON
-      if t == ParamKeyType.JSON:
-        obj = json.loads(value) if isinstance(value, str) else value
-        params.put(key, obj)
-
-      # BYTES 등은 일단 스킵
-      raise RuntimeError(f"Unsupported ParamKeyType for {key}: {t}")
-
-  except Exception:
-    # fall through to inference
-    pass
+  if t == ParamKeyType.BOOL:
+    params.put_bool(key, _coerce_bool(value))
+  elif t == ParamKeyType.INT:
+    params.put_int(key, int(float(value)))
+  elif t == ParamKeyType.FLOAT:
+    params.put_float(key, float(value))
+  elif t == ParamKeyType.TIME:
+    params.put(key, str(value))
+  elif t == ParamKeyType.STRING:
+    params.put(key, str(value))
+  elif t == ParamKeyType.JSON:
+    obj = json.loads(value) if isinstance(value, str) else value
+    params.put(key, obj)
+  else:
+    # BYTES or anything unmapped → best-effort string write.
+    params.put(key, str(value))
 
 
-def set_param_value(name: str, value: Any) -> None:
+def set_param_value(name: str, value: Any, p: Optional[Dict[str, Any]] = None) -> None:
   if not HAS_PARAMS:
     _mem_store[name] = str(value)
     return
   params = Params()
-  put_typed(params, name, value)
+  put_typed(params, name, value, p)
 
 
 # -----------------------

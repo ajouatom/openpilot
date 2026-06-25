@@ -23,6 +23,25 @@
       document.documentElement.dataset.carrotStartPage = startPage;
     })();
   </script>
+  <script>
+    // Set the visual-viewport CSS vars BEFORE first paint. Geometry that depends
+    // on --app-vv-height (e.g. the settings page height → the page-anchored
+    // floating button's bottom) would otherwise first lay out at the 100dvh
+    // fallback, then shift when viewport.js corrects it on script load — that is
+    // the "세로모드 로딩 중 플로팅버튼이 위→아래로 복귀" jump. viewport.js keeps these updated.
+    (function () {
+      try {
+        var vv = window.visualViewport;
+        var h = Math.max(320, Math.round((vv && vv.height) || window.innerHeight || 0));
+        var w = Math.max(320, Math.round((vv && vv.width) || window.innerWidth || 0));
+        var t = Math.max(0, Math.round((vv && vv.offsetTop) || 0));
+        var s = document.documentElement.style;
+        s.setProperty("--app-vv-height", h + "px");
+        s.setProperty("--app-vv-width", w + "px");
+        s.setProperty("--app-vv-top", t + "px");
+      } catch (e) {}
+    })();
+  </script>
   <style>
     html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageCar,
     html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageSetting,
@@ -70,21 +89,21 @@
       background: color-mix(in srgb, var(--md-primary) 14%, transparent) !important;
     }
   </style>
-  <link rel="stylesheet" href="/css/tokens.css?v=2605-09" />
+  <link rel="stylesheet" href="/css/tokens.css?v=2606-03" />
   <link rel="stylesheet" href="/css/layout_tokens.css?v=2605-07" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2605-03" />
   <link rel="stylesheet" href="/css/base.css?v=2605-10" />
   <link rel="stylesheet" href="/css/layout.css?v=2605-08" />
-  <link rel="stylesheet" href="/css/components.css?v=2605-09" />
-  <link rel="stylesheet" href="/css/pages/logs.css?v=2605-26" />
-  <link rel="stylesheet" href="/css/pages/terminal.css?v=2605-07" />
-  <link rel="stylesheet" href="/css/pages/settings/base.css?v=2606-17" />
-  <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2606-09" />
-  <link rel="stylesheet" href="/css/pages/settings/device.css?v=2606-19" />
+  <link rel="stylesheet" href="/css/components.css?v=2606-05" />
+  <link rel="stylesheet" href="/css/pages/logs.css?v=2606-02" />
+  <link rel="stylesheet" href="/css/pages/terminal.css?v=2606-01" />
+  <link rel="stylesheet" href="/css/pages/settings/base.css?v=2606-21" />
+  <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2606-11" />
+  <link rel="stylesheet" href="/css/pages/settings/device.css?v=2606-30" />
   <link rel="stylesheet" href="/css/pages/tools/base.css?v=2605-43" />
   <link rel="stylesheet" href="/css/pages/tools/qr.css?v=2605-40" />
-  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2605-51" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2606-04" />
+  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2605-53" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2606-05" />
   <link rel="stylesheet" href="/css/components/nav_hud.css?v=2605-26" />
   <link rel="stylesheet" href="/css/responsive.css?v=2605-10" />
   <link rel="stylesheet" href="/css/vendor/plyr.css?v=3.7.8" />
@@ -195,7 +214,6 @@
         <div id="settingScreenItems" class="screen hidden" style="display:none;">
           <div id="settingSubnavWrap" class="setting-subnav-wrap">
             <div id="settingSubnav" class="setting-subnav" aria-label="Setting groups"></div>
-            <div id="deviceSubnav" class="setting-subnav" hidden aria-label="Device groups"></div>
           </div>
           <div class="row-between mb-sm">
             <h3 id="itemsTitle" class="section-title" style="cursor:pointer; margin:0;">Items</h3>
@@ -242,18 +260,20 @@
             <span id="gitCommandsTitle" class="section-title tools-group__title">Git Commands</span>
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
-          <div id="toolsGroupBodyGit" class="tools-group__body ui-action-grid">
-            <button id="btnGitPull" class="btn git-pull-btn" type="button">
-              <span>git pull</span>
-              <span id="gitPullBadge" class="git-pull-btn__badge" hidden aria-label="pending commits">0</span>
-            </button>
-            <button id="btnGitSync" class="btn">git sync</button>
-            <button id="btnGitReset" class="btn">git reset</button>
-            <button id="btnGitLog" class="btn">git log</button>
-            <button id="btnGitRemote" class="btn">change repository</button>
-            <button id="btnGitBranch" class="btn">change branch</button>
-            <button id="btnGitAddRemote" class="btn">add remote</button>
-            <button id="btnGitResetRepo" class="btn btn--danger">reset repo</button>
+          <div id="toolsGroupBodyGit" class="tools-group__body">
+            <div class="tools-group__bodyInner ui-action-grid">
+              <button id="btnGitPull" class="btn git-pull-btn" type="button">
+                <span>git pull</span>
+                <span id="gitPullBadge" class="git-pull-btn__badge" hidden aria-label="pending commits">0</span>
+              </button>
+              <button id="btnGitSync" class="btn">git sync</button>
+              <button id="btnGitReset" class="btn">git reset</button>
+              <button id="btnGitLog" class="btn">git log</button>
+              <button id="btnGitRemote" class="btn">change repository</button>
+              <button id="btnGitBranch" class="btn">change branch</button>
+              <button id="btnGitAddRemote" class="btn">add remote</button>
+              <button id="btnGitResetRepo" class="btn btn--danger">reset repo</button>
+            </div>
           </div>
         </div>
 
@@ -264,16 +284,18 @@
             <span id="userSystemTitle" class="section-title tools-group__title">User / System</span>
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
-          <div id="toolsGroupBodySystem" class="tools-group__body ui-action-grid hidden" hidden>
-            <button id="btnDeviceLang" class="btn">Device Lang</button>
-            <button id="btnResetCalib" class="btn btn--danger">Reset Calib</button>
-            <button id="btnSendTmuxLog" class="btn">capture tmux</button>
-            <button id="btnSendTmuxServerLog" class="btn">send tmux</button>
-            <button id="btnInstallRequired" class="btn">install flask</button>
-            <button id="btnDeleteVideos" class="btn btn--danger">delete all videos</button>
-            <button id="btnDeleteLogs" class="btn btn--danger">delete all logs</button>
-            <button id="btnRebuildAll" class="smallBtn btn--danger">Rebuild All</button>
-            <button id="btnReboot" class="btn">reboot</button>
+          <div id="toolsGroupBodySystem" class="tools-group__body">
+            <div class="tools-group__bodyInner ui-action-grid">
+              <button id="btnDeviceLang" class="btn" hidden style="display:none;">Device Lang</button>
+              <button id="btnResetCalib" class="btn btn--danger">Reset Calib</button>
+              <button id="btnSendTmuxLog" class="btn">capture tmux</button>
+              <button id="btnSendTmuxServerLog" class="btn">send tmux</button>
+              <button id="btnInstallRequired" class="btn">install flask</button>
+              <button id="btnDeleteVideos" class="btn btn--danger">delete all videos</button>
+              <button id="btnDeleteLogs" class="btn btn--danger">delete all logs</button>
+              <button id="btnRebuildAll" class="smallBtn btn--danger">Rebuild All</button>
+              <button id="btnReboot" class="btn">reboot</button>
+            </div>
           </div>
         </div>
 
@@ -284,13 +306,15 @@
             <span id="userSettingsTitle" class="section-title tools-group__title">Settings</span>
             <span class="tools-group__chevron" aria-hidden="true"></span>
           </button>
-          <div id="toolsGroupBodySettings" class="tools-group__body ui-action-grid hidden" hidden>
-            <button id="btnBackupSettings" class="btn">Backup</button>
-            <button id="btnRestoreSettings" class="btn">Restore</button>
-            <button id="btnQrBackupSettings" class="btn">QR Backup</button>
-            <button id="btnQrRestoreSettings" class="btn">QR Restore</button>
-            <button id="btnCopySettings" class="btn">Copy</button>
-            <button id="btnViewSettings" class="btn">View</button>
+          <div id="toolsGroupBodySettings" class="tools-group__body">
+            <div class="tools-group__bodyInner ui-action-grid">
+              <button id="btnBackupSettings" class="btn">Backup</button>
+              <button id="btnRestoreSettings" class="btn">Restore</button>
+              <button id="btnQrBackupSettings" class="btn">QR Backup</button>
+              <button id="btnQrRestoreSettings" class="btn">QR Restore</button>
+              <button id="btnCopySettings" class="btn">Copy</button>
+              <button id="btnViewSettings" class="btn">View</button>
+            </div>
           </div>
         </div>
 
@@ -466,6 +490,10 @@
             <div class="carrot-stage__spinner" aria-hidden="true"></div>
             <div id="carrotStageLoadingText" class="carrot-stage__loadingText"></div>
             <div id="carrotStageLoadingDetail" class="carrot-stage__loadingDetail"></div>
+            <div class="carrot-stage__loadingActions" role="group" aria-label="Vision connection actions">
+              <button id="btnVisionReconnect" class="smallBtn carrot-stage__loadingAction carrot-stage__loadingAction--primary" type="button">다시 연결</button>
+              <button id="btnVisionStop" class="smallBtn carrot-stage__loadingAction" type="button">중지</button>
+            </div>
           </div>
         </div>
 
@@ -680,32 +708,32 @@
   <script src="/js/vendor/qrcode-generator.js?v=1.4.4"></script>
   <script src="/js/vendor/jsQR.js?v=1.4.0"></script>
   <script src="/js/translations/registry.js?v=2605-09"></script>
-  <script src="/js/translations/ko.js?v=2605-20"></script>
-  <script src="/js/translations/en.js?v=2605-20"></script>
-  <script src="/js/translations/zh.js?v=2605-20"></script>
+  <script src="/js/translations/ko.js?v=2606-01"></script>
+  <script src="/js/translations/en.js?v=2606-01"></script>
+  <script src="/js/translations/zh.js?v=2606-01"></script>
   <script src="/js/realtime/hud_card.js?v=2604-05"></script>
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2604-71"></script>
   <script src="/js/shared/utils.js?v=2604-71"></script>
-  <script src="/js/shared/i18n.js?v=2605-06"></script>
+  <script src="/js/shared/i18n.js?v=2606-01"></script>
   <script src="/js/shared/api.js?v=2604-73"></script>
   <script src="/js/shared/setting_diff.js?v=2605-01"></script>
   <script src="/js/shared/activity.js?v=2604-04"></script>
   <script src="/js/shared/ui/focus_trap.js?v=2605-15"></script>
-  <script src="/js/shared/ui/dialog.js?v=2604-73"></script>
+  <script src="/js/shared/ui/dialog.js?v=2606-01"></script>
   <script src="/js/shared/ui/viewport.js?v=2604-71"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
   <script src="/js/shared/ui/navigation.js?v=2606-18"></script>
   <script src="/js/pages/car.js?v=2604-75"></script>
-  <script src="/js/pages/setting.js?v=2606-17"></script>
+  <script src="/js/pages/setting.js?v=2606-22"></script>
   <script src="/js/pages/setting_device_config.js?v=2605-05"></script>
   <script src="/js/pages/setting_device_render.js?v=2605-04"></script>
   <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
   <script src="/js/pages/setting_device_actions.js?v=2605-04"></script>
-  <script src="/js/pages/setting_device.js?v=2605-10"></script>
+  <script src="/js/pages/setting_device.js?v=2606-06"></script>
   <script src="/js/pages/tools_web_settings.js?v=2605-10"></script>
   <script src="/js/pages/tools_notifications.js?v=2605-30"></script>
-  <script src="/js/pages/tools.js?v=2605-17"></script>
+  <script src="/js/pages/tools.js?v=2605-19"></script>
   <script src="/js/pages/tools_settings_qr.js?v=2605-11"></script>
   <script src="/js/pages/branch.js?v=2604-82"></script>
   <script src="/js/pages/logs/shared.js?v=2605-17"></script>
@@ -716,12 +744,12 @@
   <script src="/js/realtime/vision_state.js?v=2605-01"></script>
   <script src="/js/realtime/vision_rtc.js?v=2606-06"></script>
   <script src="/js/realtime/vision_raw.js?v=2605-01"></script>
-  <script src="/js/realtime/app_realtime.js?v=2606-04"></script>
+  <script src="/js/realtime/app_realtime.js?v=2606-05"></script>
   <script src="/js/realtime/vision_diag.js?v=2606-07"></script>
   <script src="/js/realtime/carrot_map.js?v=2606-02"></script>
   <script src="/js/realtime/nav_hud.js?v=2605-17"></script>
   <script src="/js/pages/vision_background.js?v=2605-01"></script>
   <script src="/js/realtime/home_drive.js?v=2606-05"></script>
-  <script src="/js/app.js?v=2606-10"></script>
+  <script src="/js/app.js?v=2606-11"></script>
 </body>
 </html>

@@ -19,6 +19,14 @@ window.addEventListener("popstate", async (ev) => {
     return;
   }
 
+  if (st.page === "setting" && st.tab === "device") {
+    showPage("setting", false);
+    if (typeof restoreSettingDeviceTab === "function") {
+      await restoreSettingDeviceTab(st.screen || "groups", st.deviceGroup || null);
+    }
+    return;
+  }
+
   if (st.page === "setting") {
     const screen = st.screen || "groups";
     const previousDetail = CURRENT_SETTING_DETAIL;
