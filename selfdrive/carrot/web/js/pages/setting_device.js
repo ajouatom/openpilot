@@ -366,6 +366,14 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
   if (!itemsContainer) return;
   const silentRefresh = options.silentRefresh === true;
 
+  // A drill-in from the groups screen triggers the left/right screen slide.
+  // Don't ALSO play the per-item rise (stagger) then — the slide + rise mix is
+  // the jarring combo the user saw. CarrotPilot is slide-only in this case.
+  // Detect it before the screen swaps (items screen still hidden = drill-in).
+  const screenItemsEl = document.getElementById("settingScreenItems");
+  const willSlide = showItemsScreen && !!screenItemsEl &&
+    (screenItemsEl.style.display === "none" || screenItemsEl.classList.contains("hidden"));
+
   syncSettingTabState("device");
   if (showItemsScreen && typeof showSettingScreen === "function") {
     showSettingScreen("items", false);
@@ -390,7 +398,7 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
   itemsContainer.innerHTML = deviceItemsHtml
     ? `<div class="setting-section-block"><div class="setting-group-card"><div class="setting-group-card__body">${deviceItemsHtml}</div></div></div>`
     : `<div class="muted mt-md text-center">-</div>`;
-  if (!silentRefresh && options.animateItems !== false) {
+  if (!silentRefresh && options.animateItems !== false && !willSlide) {
     applyDeviceItemsStagger(itemsContainer);
   }
   bindDeviceTabEvents(itemsContainer);
