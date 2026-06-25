@@ -23,6 +23,25 @@
       document.documentElement.dataset.carrotStartPage = startPage;
     })();
   </script>
+  <script>
+    // Set the visual-viewport CSS vars BEFORE first paint. Geometry that depends
+    // on --app-vv-height (e.g. the settings page height → the page-anchored
+    // floating button's bottom) would otherwise first lay out at the 100dvh
+    // fallback, then shift when viewport.js corrects it on script load — that is
+    // the "세로모드 로딩 중 플로팅버튼이 위→아래로 복귀" jump. viewport.js keeps these updated.
+    (function () {
+      try {
+        var vv = window.visualViewport;
+        var h = Math.max(320, Math.round((vv && vv.height) || window.innerHeight || 0));
+        var w = Math.max(320, Math.round((vv && vv.width) || window.innerWidth || 0));
+        var t = Math.max(0, Math.round((vv && vv.offsetTop) || 0));
+        var s = document.documentElement.style;
+        s.setProperty("--app-vv-height", h + "px");
+        s.setProperty("--app-vv-width", w + "px");
+        s.setProperty("--app-vv-top", t + "px");
+      } catch (e) {}
+    })();
+  </script>
   <style>
     html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageCar,
     html[data-carrot-start-page]:not([data-carrot-bootstrapped]) #pageSetting,
