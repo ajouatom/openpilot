@@ -151,7 +151,14 @@
 
 }
 
-@media (max-width: 640px) and (orientation: portrait) {
+/* Portrait at ANY width (phone / foldable / tablet / wide window): the
+   group↔items slide in runSettingScreenSlide() assumes both screens are
+   stacked as position:absolute; inset:0 inside the host so the transition is
+   pure transform. That overlap must exist for every portrait width — not just
+   ≤640px — otherwise the screens fall back to normal flow and the submenu
+   appears to slide in vertically / only after the slide finishes. Landscape
+   has its own absolute-overlap block below, so the two together leave no gap. */
+@media (orientation: portrait) {
   .page--setting #settingScreenItems {
     padding-top: 0;
   }
