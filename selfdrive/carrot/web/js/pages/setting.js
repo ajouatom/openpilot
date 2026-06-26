@@ -937,6 +937,13 @@ function formatSettingRangeMeta(p) {
 
 function formatSettingPopularValue(p, raw) {
   if (raw === null || raw === undefined) return "";
+  const min = Number(p?.min);
+  const max = Number(p?.max);
+  if (min === 0 && max === 1) {
+    const text = String(raw).trim().toLowerCase();
+    if (text === "1" || text === "true" || text === "on") return "ON";
+    if (text === "0" || text === "false" || text === "off") return "OFF";
+  }
   return formatSettingDisplayValue(p, raw);
 }
 
@@ -965,22 +972,30 @@ function renderSettingPopularDetailHtml(p, entry) {
     return `<div class="setting-popular-detail"><div class="setting-popular-detail__empty">${escapeHtml(getUIText("setting_popular_value_empty", "표시할 설정값이 없습니다."))}</div></div>`;
   }
 
+  const counts = values.map((item) => Number(item?.count ?? 0)).filter((count) => Number.isFinite(count) && count > 0);
+  const maxCount = Math.max(1, ...counts);
+
   const rows = values.map((item, index) => {
     const rank = Number(item?.rank) || index + 1;
     const value = formatSettingPopularValue(p, item?.value);
     const count = Number(item?.count ?? 0);
+    const width = Math.max(4, Math.min(100, Math.round((Math.max(0, count) / maxCount) * 100)));
     return `
-      <div class="setting-popular-detail__row">
-        <span class="setting-popular-detail__rank">${escapeHtml(`${rank}위`)}</span>
+      <div class="setting-popular-detail__row" style="--setting-popular-width:${width}%">
+        <span class="setting-popular-detail__rank">${escapeHtml(String(rank))}</span>
         <span class="setting-popular-detail__value">${escapeHtml(`"${value}"`)}</span>
         <span class="setting-popular-detail__count">${escapeHtml(`${count}대`)}</span>
+        <span class="setting-popular-detail__bar" aria-hidden="true"></span>
       </div>
     `;
   }).join("");
 
   return `
     <div class="setting-popular-detail">
-      <div class="setting-popular-detail__name">${escapeHtml(p?.name || "")}</div>
+      <div class="setting-popular-detail__head">
+        <span class="setting-popular-detail__name">${escapeHtml(getUIText("setting_popular_value_title", "차량 기준 설정값"))}</span>
+        <span class="setting-popular-detail__range">${escapeHtml(getUIText("setting_popular_value_top10", "1~10위"))}</span>
+      </div>
       <div class="setting-popular-detail__rows">${rows}</div>
     </div>
   `;
@@ -2472,6 +2487,20 @@ async function renderItems(group, options = {}) {
   let currentProfileSectionBody = null;
   let lastCategorySectionKey = null;
   let currentCategoryCardBody = null;
+
+  if (detailMode && list.length) {
+    const detailBlock = document.createElement("section");
+    detailBlock.className = animateItems ? "setting-section-block ui-stagger-item" : "setting-section-block";
+    if (animateItems) detailBlock.style.setProperty("--i", "1");
+    const detailCard = document.createElement("div");
+    detailCard.className = "setting-group-card";
+    const detailBody = document.createElement("div");
+    detailBody.className = "setting-group-card__body";
+    detailCard.appendChild(detailBody);
+    detailBlock.appendChild(detailCard);
+    itemsBox.appendChild(detailBlock);
+    currentCategoryCardBody = detailBody;
+  }
 
   // 즐겨찾기도 다른 하위메뉴와 같은 카드 박스(공통분모: setting-section-block +
   // setting-group-card)에 담는다. 즐겨찾기는 소-섹션이 섞여 있으므로 단일 카드 1개로.

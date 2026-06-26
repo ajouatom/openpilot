@@ -900,19 +900,19 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: color-mix(in srgb, var(--md-on-surface-var) 48%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface-var) 42%, transparent);
   font-size: 11px;
   font-weight: 700;
   line-height: 1.18;
   letter-spacing: 0;
   text-align: right;
   box-shadow: none;
-  opacity: 0.82;
+  opacity: 0.74;
 }
 
 .page--setting #settingScreenItems .setting-popular-value-chip__accent {
-  color: color-mix(in srgb, var(--md-primary) 68%, var(--md-on-surface-var));
-  font-weight: 850;
+  color: color-mix(in srgb, var(--md-primary) 56%, var(--md-on-surface-var));
+  font-weight: 800;
 }
 
 .page--setting #settingScreenItems .setting-popular-value-chip__label {
@@ -954,13 +954,21 @@
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block {
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail {
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
   width: 100%;
+}
+
+.setting-popular-detail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
 }
 
 .setting-popular-detail__name {
@@ -971,9 +979,16 @@
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__name {
-  color: color-mix(in srgb, var(--md-on-surface-var) 62%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface-var) 56%, transparent);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 720;
+}
+
+.setting-popular-detail__range {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--md-on-surface-var) 46%, transparent);
+  font-size: 10px;
+  font-weight: 760;
 }
 
 .setting-popular-detail__rows {
@@ -998,19 +1013,21 @@
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__rows {
-  border-color: color-mix(in srgb, var(--md-outline-var) 18%, transparent);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--md-surface-cont) 52%, transparent);
+  border-color: color-mix(in srgb, var(--md-outline-var) 14%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--md-surface-cont) 36%, transparent);
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row {
-  grid-template-columns: 42px minmax(0, 1fr) 48px;
-  min-height: 30px;
-  padding: 0 9px;
+  position: relative;
+  grid-template-columns: 26px minmax(0, 1fr) 46px;
+  grid-template-rows: minmax(28px, auto) 3px;
+  min-height: 34px;
+  padding: 4px 9px 6px;
   gap: 8px;
-  color: color-mix(in srgb, var(--md-on-surface) 82%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface) 74%, transparent);
   font-size: 12px;
-  font-weight: 780;
+  font-weight: 740;
 }
 
 .setting-popular-detail__row:last-child {
@@ -1024,6 +1041,19 @@
   font-weight: 850;
 }
 
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-on-surface-var) 9%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface-var) 68%, transparent);
+  font-size: 10px;
+  font-weight: 820;
+}
+
 .setting-popular-detail__value {
   min-width: 0;
   overflow: hidden;
@@ -1032,12 +1062,39 @@
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__value {
-  color: color-mix(in srgb, var(--md-primary) 74%, var(--md-on-surface));
-  font-weight: 850;
+  color: color-mix(in srgb, var(--md-primary) 62%, var(--md-on-surface));
+  font-weight: 800;
 }
 
 .setting-popular-detail__count {
   text-align: right;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__count {
+  color: color-mix(in srgb, var(--md-on-surface-var) 58%, transparent);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.setting-popular-detail__bar {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  display: block;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-on-surface-var) 8%, transparent);
+}
+
+.setting-popular-detail__bar::after {
+  content: "";
+  display: block;
+  width: var(--setting-popular-width, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--md-primary) 46%, var(--md-on-surface-var));
+  opacity: 0.72;
 }
 
 .setting-popular-detail__empty {

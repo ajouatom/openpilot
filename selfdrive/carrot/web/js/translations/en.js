@@ -352,6 +352,7 @@ window.CarrotTranslations.register("en", {
     setting_popular_value_chip: "{sample} vehicles setting value {value}",
     setting_popular_value_chip_label: "vehicles setting value",
     setting_popular_value_title: "Vehicle setting values",
+    setting_popular_value_top10: "Top 1-10",
     setting_popular_value_empty: "No setting values to show.",
     setting_already_default: "Already at default",
     setting_search_placeholder: "Search name, description, group",

@@ -350,6 +350,7 @@ window.CarrotTranslations.register("ko", {
     setting_popular_value_chip: "{sample}대 차량 기준 설정값 {value}",
     setting_popular_value_chip_label: "차량 기준 설정값",
     setting_popular_value_title: "차량 기준 설정값",
+    setting_popular_value_top10: "1~10위",
     setting_popular_value_empty: "표시할 설정값이 없습니다.",
     setting_already_default: "이미 기본값입니다",
     setting_search_placeholder: "이름, 설명, 그룹 검색",
