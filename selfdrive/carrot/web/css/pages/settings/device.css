@@ -900,22 +900,19 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: color-mix(in srgb, var(--md-on-surface-var) 78%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface-var) 48%, transparent);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.18;
   letter-spacing: 0;
   text-align: right;
   box-shadow: none;
-}
-
-.page--setting #settingScreenItems .setting-popular-value-chip:active {
-  color: var(--md-on-surface-var);
+  opacity: 0.82;
 }
 
 .page--setting #settingScreenItems .setting-popular-value-chip__accent {
-  color: var(--md-primary);
-  font-weight: 950;
+  color: color-mix(in srgb, var(--md-primary) 68%, var(--md-on-surface-var));
+  font-weight: 850;
 }
 
 .page--setting #settingScreenItems .setting-popular-value-chip__label {
@@ -956,11 +953,27 @@
   min-width: min(360px, calc(100vw - 56px));
 }
 
+.page--setting #settingScreenItems .setting-popular-detail-block {
+  margin-top: 10px;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail {
+  gap: 7px;
+  min-width: 0;
+  width: 100%;
+}
+
 .setting-popular-detail__name {
   color: var(--md-on-surface-var);
   font-size: var(--fs-body-sm);
   font-weight: 800;
   overflow-wrap: anywhere;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__name {
+  color: color-mix(in srgb, var(--md-on-surface-var) 62%, transparent);
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .setting-popular-detail__rows {
@@ -984,6 +997,22 @@
   font-weight: 850;
 }
 
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__rows {
+  border-color: color-mix(in srgb, var(--md-outline-var) 18%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--md-surface-cont) 52%, transparent);
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row {
+  grid-template-columns: 42px minmax(0, 1fr) 48px;
+  min-height: 30px;
+  padding: 0 9px;
+  gap: 8px;
+  color: color-mix(in srgb, var(--md-on-surface) 82%, transparent);
+  font-size: 12px;
+  font-weight: 780;
+}
+
 .setting-popular-detail__row:last-child {
   border-bottom: 0;
 }
@@ -1000,6 +1029,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__value {
+  color: color-mix(in srgb, var(--md-primary) 74%, var(--md-on-surface));
+  font-weight: 850;
 }
 
 .setting-popular-detail__count {

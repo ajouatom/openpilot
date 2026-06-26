@@ -972,7 +972,7 @@ function renderSettingPopularDetailHtml(p, entry) {
     return `
       <div class="setting-popular-detail__row">
         <span class="setting-popular-detail__rank">${escapeHtml(`${rank}위`)}</span>
-        <span class="setting-popular-detail__value">${escapeHtml(value)}</span>
+        <span class="setting-popular-detail__value">${escapeHtml(`"${value}"`)}</span>
         <span class="setting-popular-detail__count">${escapeHtml(`${count}대`)}</span>
       </div>
     `;
@@ -984,15 +984,6 @@ function renderSettingPopularDetailHtml(p, entry) {
       <div class="setting-popular-detail__rows">${rows}</div>
     </div>
   `;
-}
-
-function showSettingPopularDetail(p, entry) {
-  if (!entry) return;
-  appAlert("", {
-    title: getUIText("setting_popular_value_title", "차량 기준 설정값"),
-    messageHtml: renderSettingPopularDetailHtml(p, entry),
-    confirmLabel: getUIText("ok", "OK"),
-  });
 }
 
 const SETTING_UNIT_STORAGE_KEY = "carrot.settingUnitIndex.v1";
@@ -2733,23 +2724,26 @@ async function renderItems(group, options = {}) {
     el.appendChild(top);
     el.appendChild(d);
 
+    const popularTopValues = Array.isArray(popularEntry?.top_values) ? popularEntry.top_values : [];
+    if (detailMode && popularTopValues.length) {
+      const popularDetail = document.createElement("div");
+      popularDetail.className = "setting-popular-detail-block";
+      popularDetail.innerHTML = renderSettingPopularDetailHtml(p, popularEntry);
+      el.appendChild(popularDetail);
+    }
+
     // Footer actions row: optional unit-cycle (배율) plus a reset-to-default
     // (기본값) button on every item. Pressing 기본값 confirms then restores
     // the param to its declared default. commitSettingValue / normalizeSettingValue
     // are hoisted function declarations below, so referencing them here is fine.
     const actions = document.createElement("div");
     actions.className = "setting-actions";
-    if (popularText && popularHtml) {
-      const popularBtn = document.createElement("button");
-      popularBtn.type = "button";
-      popularBtn.className = "setting-popular-value-chip";
-      popularBtn.innerHTML = popularHtml;
-      popularBtn.setAttribute("aria-label", popularText);
-      popularBtn.onclick = (event) => {
-        event.stopPropagation();
-        showSettingPopularDetail(p, popularEntry);
-      };
-      actions.appendChild(popularBtn);
+    if (!detailMode && popularText && popularHtml) {
+      const popularChip = document.createElement("span");
+      popularChip.className = "setting-popular-value-chip";
+      popularChip.innerHTML = popularHtml;
+      popularChip.setAttribute("aria-label", popularText);
+      actions.appendChild(popularChip);
     }
     if (unitBtn) {
       el.classList.add("setting--has-unit-cycle");
@@ -3008,6 +3002,10 @@ async function renderItems(group, options = {}) {
 
     val.onclick = (event) => {
       event.stopPropagation();
+      if (!detailMode && compactNumeric) {
+        selectSettingDetail(originGroup, name).catch(() => {});
+        return;
+      }
       if (controlConfig.kind === "slider") promptSettingValue();
     };
 
@@ -3036,6 +3034,14 @@ async function renderItems(group, options = {}) {
         const next = normalizeSettingValue(sliderInput.value);
         if (next === null || String(next) === String(val.dataset.committedValue ?? val.dataset.rawValue)) return;
         commitSettingValue(next);
+      };
+    }
+
+    if (!detailMode) {
+      el.onclick = (event) => {
+        if (el.dataset.settingSuppressClick === "1") return;
+        if (isSettingInlineControlTarget(event.target)) return;
+        selectSettingDetail(originGroup, name).catch(() => {});
       };
     }
   });
