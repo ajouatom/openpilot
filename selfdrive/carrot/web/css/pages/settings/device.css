@@ -954,11 +954,12 @@
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block {
+  width: min(520px, 100%);
   margin-top: 12px;
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail {
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
   width: 100%;
 }
@@ -979,16 +980,21 @@
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__name {
-  color: color-mix(in srgb, var(--md-on-surface-var) 56%, transparent);
-  font-size: 11px;
-  font-weight: 720;
+  color: color-mix(in srgb, var(--md-on-surface-var) 66%, transparent);
+  font-size: 12px;
+  font-weight: 780;
 }
 
 .setting-popular-detail__range {
   flex: 0 0 auto;
-  color: color-mix(in srgb, var(--md-on-surface-var) 46%, transparent);
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-on-surface-var) 8%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface-var) 58%, transparent);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: 820;
+  line-height: 20px;
 }
 
 .setting-popular-detail__rows {
@@ -1013,25 +1019,28 @@
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__rows {
-  border-color: color-mix(in srgb, var(--md-outline-var) 14%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--md-surface-cont) 36%, transparent);
+  gap: 6px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row {
-  position: relative;
-  grid-template-columns: 26px minmax(0, 1fr) 46px;
-  grid-template-rows: minmax(28px, auto) 3px;
-  min-height: 34px;
-  padding: 4px 9px 6px;
-  gap: 8px;
-  color: color-mix(in srgb, var(--md-on-surface) 74%, transparent);
+  grid-template-columns: 42px minmax(0, 1fr) 48px;
+  min-height: 48px;
+  padding: 8px 11px;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 16%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--md-surface-cont) 54%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface) 82%, transparent);
   font-size: 12px;
-  font-weight: 740;
+  font-weight: 760;
 }
 
 .setting-popular-detail__row:last-child {
-  border-bottom: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 16%, transparent);
 }
 
 .setting-popular-detail__rank,
@@ -1045,13 +1054,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 28px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--md-on-surface-var) 9%, transparent);
-  color: color-mix(in srgb, var(--md-on-surface-var) 68%, transparent);
+  background: color-mix(in srgb, var(--md-primary) 12%, var(--md-surface-cont-h));
+  color: color-mix(in srgb, var(--md-on-surface-var) 78%, transparent);
   font-size: 10px;
-  font-weight: 820;
+  font-weight: 900;
+}
+
+.setting-popular-detail__main {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
 }
 
 .setting-popular-detail__value {
@@ -1062,8 +1077,9 @@
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__value {
-  color: color-mix(in srgb, var(--md-primary) 62%, var(--md-on-surface));
-  font-weight: 800;
+  color: color-mix(in srgb, var(--md-primary) 68%, var(--md-on-surface));
+  font-size: 13px;
+  font-weight: 860;
 }
 
 .setting-popular-detail__count {
@@ -1071,20 +1087,19 @@
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__count {
-  color: color-mix(in srgb, var(--md-on-surface-var) 58%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface-var) 66%, transparent);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: 820;
 }
 
 .setting-popular-detail__bar {
-  grid-column: 2 / -1;
-  grid-row: 2;
   display: block;
   width: 100%;
-  height: 3px;
+  max-width: 260px;
+  height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--md-on-surface-var) 8%, transparent);
+  background: color-mix(in srgb, var(--md-on-surface-var) 10%, transparent);
 }
 
 .setting-popular-detail__bar::after {
@@ -1093,8 +1108,8 @@
   width: var(--setting-popular-width, 0%);
   height: 100%;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--md-primary) 46%, var(--md-on-surface-var));
-  opacity: 0.72;
+  background: color-mix(in srgb, var(--md-primary) 52%, var(--md-on-surface-var));
+  opacity: 0.78;
 }
 
 .setting-popular-detail__empty {

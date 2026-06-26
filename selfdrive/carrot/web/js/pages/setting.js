@@ -982,10 +982,12 @@ function renderSettingPopularDetailHtml(p, entry) {
     const width = Math.max(4, Math.min(100, Math.round((Math.max(0, count) / maxCount) * 100)));
     return `
       <div class="setting-popular-detail__row" style="--setting-popular-width:${width}%">
-        <span class="setting-popular-detail__rank">${escapeHtml(String(rank))}</span>
-        <span class="setting-popular-detail__value">${escapeHtml(`"${value}"`)}</span>
+        <span class="setting-popular-detail__rank">${escapeHtml(`${rank}위`)}</span>
+        <span class="setting-popular-detail__main">
+          <span class="setting-popular-detail__value">${escapeHtml(`"${value}"`)}</span>
+          <span class="setting-popular-detail__bar" aria-hidden="true"></span>
+        </span>
         <span class="setting-popular-detail__count">${escapeHtml(`${count}대`)}</span>
-        <span class="setting-popular-detail__bar" aria-hidden="true"></span>
       </div>
     `;
   }).join("");
