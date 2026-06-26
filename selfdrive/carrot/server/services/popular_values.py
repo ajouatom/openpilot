@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import socket
+import time
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
@@ -269,6 +270,7 @@ def _empty_cache(car_key: str = "", settings_hash: str = "") -> dict[str, Any]:
     "ok": True,
     "source": "empty",
     "updated_at": 0,
+    "fetched_at": 0,
     "car_key_type": "CarSelected3",
     "car_key": car_key,
     "settings_hash": settings_hash,
@@ -301,6 +303,7 @@ def store_popular_values_memory(data: dict[str, Any]) -> dict[str, Any]:
   clean = {
     "ok": bool(data.get("ok", True)),
     "source": "remote",
+    "fetched_at": int(time.time()),
     "car_key_type": str(data.get("car_key_type") or "CarSelected3"),
     "car_key": str(data.get("car_key") or ""),
     "settings_hash": str(data.get("settings_hash") or _current_settings_hash()),
@@ -438,3 +441,30 @@ def start_popular_value_upload(app: Any) -> asyncio.Task | None:
   if session is None:
     return None
   return asyncio.create_task(refresh_popular_values_once(session, upload=True))
+
+
+_popular_refresh_last_at = 0.0
+_popular_refresh_task: asyncio.Task | None = None
+
+
+def schedule_popular_value_refresh(app: Any, min_interval: float | None = None) -> None:
+  """Kick a throttled, download-only refresh from the central server.
+
+  Non-blocking and single-flight: called on each settings read so the web
+  reflects fleet changes within ~min_interval, without polling or websockets.
+  Does NOT re-upload (that only happens once at boot)."""
+  global _popular_refresh_last_at, _popular_refresh_task
+  session = app.get("http")
+  if session is None:
+    return
+  interval = (
+    _env_float("CARROT_PARAM_VALUE_REFRESH_MIN_S", 60.0)
+    if min_interval is None else min_interval
+  )
+  now = time.time()
+  if now - _popular_refresh_last_at < interval:
+    return
+  if _popular_refresh_task is not None and not _popular_refresh_task.done():
+    return
+  _popular_refresh_last_at = now
+  _popular_refresh_task = asyncio.create_task(download_popular_values_once(session))

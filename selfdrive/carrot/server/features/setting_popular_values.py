@@ -6,10 +6,14 @@ from ..services.popular_values import (
   get_popular_value_detail,
   read_popular_values_memory,
   refresh_popular_values_once,
+  schedule_popular_value_refresh,
 )
 
 
 async def api_setting_popular_values(request: web.Request) -> web.Response:
+  # Kick a throttled, download-only refresh so opening settings reflects the
+  # latest fleet values (non-blocking — returns the current cache immediately).
+  schedule_popular_value_refresh(request.app)
   return web.json_response(read_popular_values_memory())
 
 

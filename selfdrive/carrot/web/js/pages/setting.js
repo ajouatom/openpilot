@@ -15,6 +15,7 @@ const settingPopularValuesState = {
   loadPromise: null,
   carKey: "",
   values: {},
+  fetchedAt: 0,
 };
 
 const SETTING_FAVORITES_GROUP = "__setting_favorites__";
@@ -246,12 +247,14 @@ async function loadSettingPopularValues(force = false) {
     .then((payload) => {
       settingPopularValuesState.loaded = true;
       settingPopularValuesState.carKey = String(payload?.car_key || "");
+      settingPopularValuesState.fetchedAt = Number(payload?.fetched_at || 0);
       settingPopularValuesState.values = normalizeSettingPopularValues(payload);
       return settingPopularValuesState.values;
     })
     .catch(() => {
       settingPopularValuesState.loaded = true;
       settingPopularValuesState.carKey = "";
+      settingPopularValuesState.fetchedAt = 0;
       settingPopularValuesState.values = {};
       return settingPopularValuesState.values;
     })
@@ -577,7 +580,7 @@ async function loadSettings(options = {}) {
   if (SETTINGS && !force) {
     await loadSettingFavorites();
     await loadSettingProfiles();
-    await loadSettingPopularValues();
+    await loadSettingPopularValues(true);
     renderGroups({ animateGroups: false });
     syncSettingSearchFabState();
     if (!background && CURRENT_PAGE === "setting" && typeof syncSettingViewportLayout === "function") {
@@ -1010,7 +1013,22 @@ function renderSettingPopularChipHtml(p, entry) {
 }
 
 function getSettingPopularDetailTitle() {
+  const carKey = String(settingPopularValuesState.carKey || "").trim();
+  if (carKey) return getUIText("setting_popular_value_car_title", "{car} 인기값", { car: carKey });
   return getUIText("setting_popular_value_title", "내 차종 인기값");
+}
+
+function formatSettingPopularUpdated(epochSec) {
+  const sec = Number(epochSec || 0);
+  if (!Number.isFinite(sec) || sec <= 0) return "";
+  try {
+    return new Date(sec * 1000).toLocaleString(LANG === "ko" ? "ko-KR" : undefined, {
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+  } catch {
+    return "";
+  }
 }
 
 function renderSettingPopularDetailHtml(p, entry) {
@@ -1039,6 +1057,11 @@ function renderSettingPopularDetailHtml(p, entry) {
     `;
   }).join("");
 
+  const updated = formatSettingPopularUpdated(settingPopularValuesState.fetchedAt);
+  const updatedHtml = updated
+    ? `<div class="setting-popular-detail__updated" style="margin-top:8px;font-size:11px;color:var(--md-on-surface-var,#8a8f98)">${escapeHtml(getUIText("setting_popular_value_updated", "최근 업데이트: {time}", { time: updated }))}</div>`
+    : "";
+
   return `
     <div class="setting-popular-detail${values.length <= 1 ? " setting-popular-detail--single" : ""}">
       <div class="setting-popular-detail__head">
@@ -1046,6 +1069,7 @@ function renderSettingPopularDetailHtml(p, entry) {
         <span class="setting-popular-detail__range">${escapeHtml(getUIText("setting_popular_value_top10", "1~10위"))}</span>
       </div>
       <div class="setting-popular-detail__rows">${rows}</div>
+      ${updatedHtml}
     </div>
   `;
 }
