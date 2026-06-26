@@ -1021,12 +1021,21 @@
   grid-template-columns: 52px minmax(0, 1fr) 58px;
   align-items: center;
   gap: 10px;
+  width: 100%;
   min-height: 38px;
   padding: 0 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: transparent;
   color: var(--md-on-surface);
+  font-family: inherit;
   font-size: var(--fs-body-sm);
   font-weight: 850;
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__rows {
@@ -1048,6 +1057,11 @@
   color: color-mix(in srgb, var(--md-on-surface) 82%, transparent);
   font-size: 12px;
   font-weight: 760;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row:active {
+  border-color: color-mix(in srgb, var(--md-primary) 24%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 9%, var(--md-surface-cont));
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail--single .setting-popular-detail__row {

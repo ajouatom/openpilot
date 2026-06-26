@@ -991,8 +991,8 @@ function renderSettingPopularChipText(p, entry) {
   const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
   const value = formatSettingPopularValue(p, entry?.value);
   if (!sample || !value) return "";
-  return getUIText("setting_popular_value_chip", "{car} ({sample}대) {value}", {
-    car: getSettingPopularCarKeyLabel(),
+  return getUIText("setting_popular_value_chip", "{label} ({sample}대) {value}", {
+    label: getUIText("setting_popular_value_chip_label", "내 차종 인기값"),
     sample,
     value: `"${value}"`,
   });
@@ -1003,15 +1003,13 @@ function renderSettingPopularChipHtml(p, entry) {
   const value = formatSettingPopularValue(p, entry?.value);
   if (!sample || !value) return "";
   return `
-    <span class="setting-popular-value-chip__car">${escapeHtml(getSettingPopularCarKeyLabel())}</span>
+    <span class="setting-popular-value-chip__car">${escapeHtml(getUIText("setting_popular_value_chip_label", "내 차종 인기값"))}</span>
     <span class="setting-popular-value-chip__label">(</span><span class="setting-popular-value-chip__accent">${escapeHtml(getUIText("setting_popular_value_chip_sample", "{sample}대", { sample }))}</span><span class="setting-popular-value-chip__label">)</span>
     <span class="setting-popular-value-chip__accent">${escapeHtml(`"${value}"`)}</span>
   `;
 }
 
 function getSettingPopularDetailTitle() {
-  const carKey = String(settingPopularValuesState.carKey || "").trim();
-  if (carKey) return getUIText("setting_popular_value_car_title", "{car} 인기값", { car: carKey });
   return getUIText("setting_popular_value_title", "내 차종 인기값");
 }
 
@@ -1030,14 +1028,14 @@ function renderSettingPopularDetailHtml(p, entry) {
     const count = Number(item?.count ?? 0);
     const width = Math.max(4, Math.min(100, Math.round((Math.max(0, count) / maxCount) * 100)));
     return `
-      <div class="setting-popular-detail__row" style="--setting-popular-width:${width}%">
+      <button type="button" class="setting-popular-detail__row" style="--setting-popular-width:${width}%" data-setting-popular-value="${escapeHtml(item?.value ?? "")}">
         <span class="setting-popular-detail__rank">${escapeHtml(`${rank}위`)}</span>
         <span class="setting-popular-detail__main">
-          <span class="setting-popular-detail__value">${escapeHtml(`"${value}"`)}</span>
+          <span class="setting-popular-detail__value">${escapeHtml(value)}</span>
           ${values.length > 1 ? `<span class="setting-popular-detail__bar" aria-hidden="true"></span>` : ""}
         </span>
         <span class="setting-popular-detail__count">${escapeHtml(`${count}대`)}</span>
-      </div>
+      </button>
     `;
   }).join("");
 
@@ -2805,8 +2803,9 @@ async function renderItems(group, options = {}) {
     el.appendChild(d);
 
     const popularTopValues = Array.isArray(popularEntry?.top_values) ? popularEntry.top_values : [];
+    let popularDetail = null;
     if (detailMode && popularTopValues.length) {
-      const popularDetail = document.createElement("div");
+      popularDetail = document.createElement("div");
       popularDetail.className = "setting-popular-detail-block";
       popularDetail.innerHTML = renderSettingPopularDetailHtml(p, popularEntry);
       el.appendChild(popularDetail);
@@ -2906,6 +2905,38 @@ async function renderItems(group, options = {}) {
         showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
       }
     }
+
+    function bindPopularDetailRows() {
+      if (!popularDetail) return;
+      popularDetail.querySelectorAll("[data-setting-popular-value]").forEach((button) => {
+        button.onclick = async (event) => {
+          event.stopPropagation();
+          const next = normalizeSettingValue(button.dataset.settingPopularValue);
+          if (next === null) {
+            showAppToast(getUIText("setting_value_invalid", "Enter a valid number."), { tone: "error" });
+            return;
+          }
+          if (String(next) === String(val.dataset.rawValue)) {
+            showAppToast(getUIText("setting_popular_value_already_applied", "Already using this value"));
+            return;
+          }
+          const ok = await appConfirm(
+            getUIText("setting_popular_value_apply_confirm", "Apply this setting value ({value})?", {
+              value: formatSettingPopularValue(p, next),
+            }),
+            {
+              title: getUIText("setting_popular_value_apply_title", "Apply setting value"),
+              confirmLabel: getUIText("ok", "OK"),
+              cancelLabel: getUIText("cancel", "Cancel"),
+            },
+          );
+          if (!ok) return;
+          await commitSettingValue(next);
+        };
+      });
+    }
+
+    bindPopularDetailRows();
 
     async function applyDelta(sign) {
       const step = getSettingUnitValue(name);
