@@ -207,7 +207,7 @@
      layering must come from this scale.
 
        --z-base       in-flow content
-       --z-sticky     sticky headers, subnav
+       --z-sticky     sticky headers
        --z-rail       side nav rail
        --z-nav        bottom nav bar (matches existing topbar z:120)
        --z-fab        floating action buttons

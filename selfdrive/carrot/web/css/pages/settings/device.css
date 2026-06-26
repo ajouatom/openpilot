@@ -112,10 +112,6 @@
   pointer-events: none;
 }
 
-.page--setting .setting-subnav__tab--favorites {
-  color: color-mix(in srgb, #bae6fd 82%, var(--md-on-surface-var));
-}
-
 @media (min-width: 769px) {
   .setting-search-panel {
     --setting-search-form-width: clamp(360px, 34vw, 540px);
@@ -128,67 +124,6 @@
 }
 
 @media (max-width: 640px) {
-  .page--setting .setting-subnav-wrap {
-    margin-bottom: 0;
-    top: 0;
-    padding-top: calc(8px + env(safe-area-inset-top, 0px));
-    padding-bottom: 18px;
-    background: var(--md-surface);
-    border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 72%, transparent);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
-  }
-
-  .page--setting .setting-subnav-wrap::after {
-    display: none;
-  }
-
-  .page--setting .setting-subnav {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-    justify-content: stretch;
-    overflow: visible;
-    padding: 0;
-    border-bottom: 0;
-    scroll-snap-type: none;
-  }
-
-  .page--setting .setting-subnav::before,
-  .page--setting .setting-subnav::after {
-    display: none;
-  }
-
-  .page--setting .setting-subnav__tab {
-    flex: none;
-    min-height: 38px;
-    padding: 7px 6px;
-    border: 1px solid color-mix(in srgb, var(--md-outline-var) 44%, transparent);
-    border-radius: 8px;
-    background: var(--md-surface-cont);
-    color: var(--md-on-surface-var);
-    font-size: 12.5px;
-    font-weight: 800;
-    line-height: 1.15;
-    white-space: normal;
-    text-wrap: balance;
-    scroll-snap-align: none;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  }
-
-  .page--setting .setting-subnav__tab.is-active {
-    color: var(--md-primary);
-    border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
-    background: var(--md-primary-state);
-  }
-
-  .page--setting .setting-subnav__tab:active {
-    background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
-  }
-
-  .page--setting #settingSubnavWrap {
-    box-sizing: border-box;
-  }
-
   .page--setting .settingTop {
     flex-direction: column;
     align-items: stretch;
@@ -299,13 +234,6 @@
             mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
   }
 
-  .page--setting #settingSubnavWrap {
-    display: none !important;
-  }
-
-  .page--setting #settingSubnavWrap::after {
-    display: none;
-  }
 }
 
 @media (max-height: 760px) {
@@ -424,10 +352,6 @@
   .page--setting .setting-car-entry__text {
     min-width: 0;
     overflow: hidden;
-  }
-
-  .page--setting.setting-layout-split #settingSubnavWrap {
-    display: none !important;
   }
 
   .page--setting.setting-layout-split #groupList {
@@ -1324,7 +1248,6 @@
   transform: translateY(1px);
 }
 
-.page--setting #settingSubnav[hidden],
 .page--setting #carrotTabContent[hidden],
 .page--setting #deviceTabContent[hidden],
 .page--setting #items[hidden],
@@ -1334,12 +1257,6 @@
 
 .page--setting.setting-tab-device .page-fab-layer--setting {
   display: none;
-}
-
-/* The device tab has no top quick-tab subnav (old, unused). Hide the subnav
-   wrap on the device tab so no empty bar shows at any width / adaptive layout. */
-.page--setting.setting-tab-device #settingSubnavWrap {
-  display: none !important;
 }
 
 .page--setting #deviceItems .ctrl {

@@ -70,7 +70,6 @@ function syncSettingTabPanels(tab = CURRENT_SETTING_TAB) {
 
   setSettingDeviceHidden(carrotTabContent, isDevice);
   setSettingDeviceHidden(deviceTabContent, !isDevice);
-  setSettingDeviceHidden(settingSubnav, isDevice);
   setSettingDeviceHidden(items, isDevice);
   setSettingDeviceHidden(deviceItems, !isDevice);
 }

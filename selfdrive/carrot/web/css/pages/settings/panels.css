@@ -313,10 +313,6 @@
   animation: setting-profile-section-fold 0.24s cubic-bezier(.2, 0, 0, 1) reverse both;
 }
 
-.setting-subnav__tab--profile {
-  border-color: color-mix(in srgb, var(--md-primary) 34%, var(--md-outline-var));
-}
-
 .setting-profile-panel {
   --setting-profile-accent: var(--md-primary, #ffab66);
   --setting-profile-ink: var(--md-on-surface);
