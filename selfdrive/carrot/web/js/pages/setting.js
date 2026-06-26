@@ -947,6 +947,18 @@ function renderSettingPopularChipText(p, entry) {
   return getUIText("setting_popular_value_chip", "{sample}대 차량 기준 설정값 {value}", { sample, value });
 }
 
+function renderSettingPopularChipHtml(p, entry) {
+  const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
+  const value = formatSettingPopularValue(p, entry?.value);
+  if (!sample || !value) return "";
+  const label = getUIText("setting_popular_value_chip_label", "차량 기준 설정값");
+  return `
+    <span class="setting-popular-value-chip__accent">${escapeHtml(`${sample}대`)}</span>
+    <span class="setting-popular-value-chip__label">${escapeHtml(label)}</span>
+    <span class="setting-popular-value-chip__accent">${escapeHtml(value)}</span>
+  `;
+}
+
 function renderSettingPopularDetailHtml(p, entry) {
   const values = Array.isArray(entry?.top_values) ? entry.top_values.slice(0, 10) : [];
   if (!values.length) {
@@ -2707,8 +2719,28 @@ async function renderItems(group, options = {}) {
       ctrl.appendChild(btnPlus);
     }
 
+    const rightCol = document.createElement("div");
+    rightCol.className = "setting-control-column";
+    rightCol.appendChild(ctrl);
+
+    const popularEntry = getSettingPopularValue(name);
+    const popularText = renderSettingPopularChipText(p, popularEntry);
+    const popularHtml = renderSettingPopularChipHtml(p, popularEntry);
+    if (popularText && popularHtml) {
+      const popularBtn = document.createElement("button");
+      popularBtn.type = "button";
+      popularBtn.className = "setting-popular-value-chip";
+      popularBtn.innerHTML = popularHtml;
+      popularBtn.setAttribute("aria-label", popularText);
+      popularBtn.onclick = (event) => {
+        event.stopPropagation();
+        showSettingPopularDetail(p, popularEntry);
+      };
+      rightCol.appendChild(popularBtn);
+    }
+
     top.appendChild(left);
-    top.appendChild(ctrl);
+    top.appendChild(rightCol);
 
     const d = document.createElement("div");
     d.className = "descr";
@@ -2723,20 +2755,6 @@ async function renderItems(group, options = {}) {
     // are hoisted function declarations below, so referencing them here is fine.
     const actions = document.createElement("div");
     actions.className = "setting-actions";
-    const popularEntry = getSettingPopularValue(name);
-    const popularText = renderSettingPopularChipText(p, popularEntry);
-    if (popularText) {
-      const popularBtn = document.createElement("button");
-      popularBtn.type = "button";
-      popularBtn.className = "setting-popular-value-chip";
-      popularBtn.textContent = popularText;
-      popularBtn.setAttribute("aria-label", popularText);
-      popularBtn.onclick = (event) => {
-        event.stopPropagation();
-        showSettingPopularDetail(p, popularEntry);
-      };
-      actions.appendChild(popularBtn);
-    }
     if (unitBtn) {
       el.classList.add("setting--has-unit-cycle");
       actions.appendChild(unitBtn);
