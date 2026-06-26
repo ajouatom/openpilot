@@ -125,12 +125,12 @@ function launch {
   mkdir -p "$PYDEPS"
   export PYTHONPATH="$PYDEPS:$PWD${PYTHONPATH:+:$PYTHONPATH}"
 
-  start_carrot_recovery
-
   # hardware specific init
   if [ -f /AGNOS ]; then
     agnos_init
   fi
+
+  start_carrot_recovery
 
   FORCE_REBUILD=0
   invalidate_modeld_build_if_needed
