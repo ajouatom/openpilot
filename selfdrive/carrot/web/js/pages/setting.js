@@ -1,6 +1,6 @@
 "use strict";
 
-// Setting page — groups, items, value cache, search, subnav, screen layout.
+// Setting page — groups, items, value cache, search, screen layout.
 
 let settingsLoadPromise = null;
 let settingValueWarmupTimer = null;
@@ -10,10 +10,13 @@ const SETTING_VALUES_TTL_MS = 60000;
 const settingValueCache = new Map();
 const settingGroupValueCache = new Map();
 const settingGroupValuePromises = new Map();
-
-let settingSubnavSettleTimer = null;
-let settingSubnavProgrammaticScroll = false;
-let settingSubnavFocusTimer = null;
+const settingPopularValuesState = {
+  loaded: false,
+  loadPromise: null,
+  carKey: "",
+  values: {},
+  fetchedAt: 0,
+};
 
 const SETTING_FAVORITES_GROUP = "__setting_favorites__";
 const SETTING_PROFILES_DIVIDER = "__setting_profiles_divider__";
@@ -231,6 +234,42 @@ function getSettingItemEntriesForGroup(group) {
   return (SETTINGS?.items_by_group?.[group] || []).map((item) => ({ group, item }));
 }
 
+function normalizeSettingPopularValues(payload) {
+  const values = payload?.popular_values;
+  return values && typeof values === "object" && !Array.isArray(values) ? values : {};
+}
+
+async function loadSettingPopularValues(force = false) {
+  if (!force && settingPopularValuesState.loaded) return settingPopularValuesState.values;
+  if (!force && settingPopularValuesState.loadPromise) return settingPopularValuesState.loadPromise;
+
+  settingPopularValuesState.loadPromise = getJson("/api/setting_popular_values")
+    .then((payload) => {
+      settingPopularValuesState.loaded = true;
+      settingPopularValuesState.carKey = String(payload?.car_key || "");
+      settingPopularValuesState.fetchedAt = Number(payload?.fetched_at || 0);
+      settingPopularValuesState.values = normalizeSettingPopularValues(payload);
+      return settingPopularValuesState.values;
+    })
+    .catch(() => {
+      settingPopularValuesState.loaded = true;
+      settingPopularValuesState.carKey = "";
+      settingPopularValuesState.fetchedAt = 0;
+      settingPopularValuesState.values = {};
+      return settingPopularValuesState.values;
+    })
+    .finally(() => {
+      settingPopularValuesState.loadPromise = null;
+    });
+
+  return settingPopularValuesState.loadPromise;
+}
+
+function getSettingPopularValue(name) {
+  const entry = settingPopularValuesState.values?.[String(name || "")];
+  return entry && typeof entry === "object" ? entry : null;
+}
+
 async function loadSettingFavorites(force = false) {
   if (!force && settingFavoritesState.loaded) return settingFavoritesState.names;
   if (!force && settingFavoritesState.loadPromise) return settingFavoritesState.loadPromise;
@@ -286,7 +325,6 @@ function updateSettingFavoriteRowMarks(root = document.getElementById("items")) 
 function refreshSettingFavoriteChrome(options = {}) {
   const animateGroups = options.animateGroups === true;
   renderGroups({ animateGroups });
-  renderSettingSubnav();
   syncSettingGroupChrome(CURRENT_GROUP);
   updateSettingFavoriteRowMarks();
 }
@@ -542,8 +580,8 @@ async function loadSettings(options = {}) {
   if (SETTINGS && !force) {
     await loadSettingFavorites();
     await loadSettingProfiles();
+    await loadSettingPopularValues(true);
     renderGroups({ animateGroups: false });
-    renderSettingSubnav();
     syncSettingSearchFabState();
     if (!background && CURRENT_PAGE === "setting" && typeof syncSettingViewportLayout === "function") {
       await syncSettingViewportLayout({ animateChrome: false, animateItems: false });
@@ -565,6 +603,7 @@ async function loadSettings(options = {}) {
     settingGroupValuePromises.clear();
     await loadSettingFavorites(force);
     await loadSettingProfiles(force);
+    await loadSettingPopularValues(force);
     rebuildSettingSearchEntries();
 
     if (meta) {
@@ -582,7 +621,6 @@ async function loadSettings(options = {}) {
     }
 
     renderGroups();
-    renderSettingSubnav();
     syncSettingSearchFabState();
     scheduleSettingGroupValueWarmup(260);
 
@@ -900,6 +938,142 @@ function formatSettingRangeMeta(p) {
   ].join(", ");
 }
 
+function formatSettingPopularValue(p, raw) {
+  if (raw === null || raw === undefined) return "";
+  const min = Number(p?.min);
+  const max = Number(p?.max);
+  if (min === 0 && max === 1) {
+    const text = String(raw).trim().toLowerCase();
+    if (text === "1" || text === "true" || text === "on") return "ON";
+    if (text === "0" || text === "false" || text === "off") return "OFF";
+  }
+  return formatSettingDisplayValue(p, raw);
+}
+
+function normalizeSettingPopularNumericValue(p, raw) {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const min = Number(p?.min);
+  const max = Number(p?.max);
+  const text = String(raw).trim().toLowerCase();
+  if (min === 0 && max === 1) {
+    if (text === "1" || text === "true" || text === "on") return 1;
+    if (text === "0" || text === "false" || text === "off") return 0;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function isSettingPopularValueInRange(p, raw) {
+  const min = Number(p?.min);
+  const max = Number(p?.max);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return true;
+  const value = normalizeSettingPopularNumericValue(p, raw);
+  if (value === null) return false;
+  return value >= min && value <= max;
+}
+
+function getSettingPopularDisplayEntry(p, entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
+  if (!Number.isFinite(sample) || sample < 1) return null;
+  if (!isSettingPopularValueInRange(p, entry?.value)) return null;
+  const topValues = Array.isArray(entry?.top_values)
+    ? entry.top_values.filter((item) => {
+      const count = Number(item?.count ?? 0);
+      return Number.isFinite(count) && count > 0 && isSettingPopularValueInRange(p, item?.value);
+    }).slice(0, 10)
+    : [];
+  return { ...entry, top_values: topValues };
+}
+
+function getSettingPopularCarKeyLabel() {
+  return String(settingPopularValuesState.carKey || "").trim() || getUIText("setting_popular_value_my_model", "내 차종");
+}
+
+function renderSettingPopularChipText(p, entry) {
+  const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
+  const value = formatSettingPopularValue(p, entry?.value);
+  if (!sample || !value) return "";
+  return getUIText("setting_popular_value_chip", "{label} ({sample}대) {value}", {
+    label: getUIText("setting_popular_value_chip_label", "내 차종 인기값"),
+    sample,
+    value: `"${value}"`,
+  });
+}
+
+function renderSettingPopularChipHtml(p, entry) {
+  const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
+  const value = formatSettingPopularValue(p, entry?.value);
+  if (!sample || !value) return "";
+  return `
+    <span class="setting-popular-value-chip__car">${escapeHtml(getUIText("setting_popular_value_chip_label", "내 차종 인기값"))}</span>
+    <span class="setting-popular-value-chip__label">(</span><span class="setting-popular-value-chip__accent">${escapeHtml(getUIText("setting_popular_value_chip_sample", "{sample}대", { sample }))}</span><span class="setting-popular-value-chip__label">)</span>
+    <span class="setting-popular-value-chip__accent">${escapeHtml(`"${value}"`)}</span>
+  `;
+}
+
+function getSettingPopularDetailTitle() {
+  const carKey = String(settingPopularValuesState.carKey || "").trim();
+  if (carKey) return getUIText("setting_popular_value_car_title", "{car} 인기값", { car: carKey });
+  return getUIText("setting_popular_value_title", "내 차종 인기값");
+}
+
+function formatSettingPopularUpdated(epochSec) {
+  const sec = Number(epochSec || 0);
+  if (!Number.isFinite(sec) || sec <= 0) return "";
+  try {
+    return new Date(sec * 1000).toLocaleString(LANG === "ko" ? "ko-KR" : undefined, {
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function renderSettingPopularDetailHtml(p, entry) {
+  const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
+  if (!values.length) {
+    return `<div class="setting-popular-detail"><div class="setting-popular-detail__empty">${escapeHtml(getUIText("setting_popular_value_empty", "표시할 설정값이 없습니다."))}</div></div>`;
+  }
+
+  const counts = values.map((item) => Number(item?.count ?? 0)).filter((count) => Number.isFinite(count) && count > 0);
+  const maxCount = Math.max(1, ...counts);
+
+  const rows = values.map((item, index) => {
+    const rank = Number(item?.rank) || index + 1;
+    const value = formatSettingPopularValue(p, item?.value);
+    const count = Number(item?.count ?? 0);
+    const width = Math.max(4, Math.min(100, Math.round((Math.max(0, count) / maxCount) * 100)));
+    return `
+      <button type="button" class="setting-popular-detail__row" style="--setting-popular-width:${width}%" data-setting-popular-value="${escapeHtml(item?.value ?? "")}">
+        <span class="setting-popular-detail__rank">${escapeHtml(`${rank}위`)}</span>
+        <span class="setting-popular-detail__main">
+          <span class="setting-popular-detail__value">${escapeHtml(value)}</span>
+          ${values.length > 1 ? `<span class="setting-popular-detail__bar" aria-hidden="true"></span>` : ""}
+        </span>
+        <span class="setting-popular-detail__count">${escapeHtml(`${count}대`)}</span>
+      </button>
+    `;
+  }).join("");
+
+  const updated = formatSettingPopularUpdated(settingPopularValuesState.fetchedAt);
+  const updatedHtml = updated
+    ? `<div class="setting-popular-detail__updated" style="margin-top:8px;font-size:11px;color:var(--md-on-surface-var,#8a8f98)">${escapeHtml(getUIText("setting_popular_value_updated", "최근 업데이트: {time}", { time: updated }))}</div>`
+    : "";
+
+  return `
+    <div class="setting-popular-detail${values.length <= 1 ? " setting-popular-detail--single" : ""}">
+      <div class="setting-popular-detail__head">
+        <span class="setting-popular-detail__name">${escapeHtml(getSettingPopularDetailTitle())}</span>
+        <span class="setting-popular-detail__range">${escapeHtml(getUIText("setting_popular_value_top10", "1~10위"))}</span>
+      </div>
+      <div class="setting-popular-detail__rows">${rows}</div>
+      ${updatedHtml}
+    </div>
+  `;
+}
+
 const SETTING_UNIT_STORAGE_KEY = "carrot.settingUnitIndex.v1";
 let settingUnitIndexStore = null;
 
@@ -1011,7 +1185,6 @@ function syncSettingControlState(row, value) {
   }
 }
 
-const SETTING_SUBNAV_PAGE_STEP = 1;
 let settingGroupTransitionLock = false;
 let settingRenderToken = 0;
 let pendingSettingFocus = null;
@@ -1025,31 +1198,6 @@ let CURRENT_SETTING_DETAIL = null;
 
 function isCompactLandscapeMode() {
   return window.matchMedia("(orientation: landscape)").matches;
-}
-
-function isFixedPortraitSettingSubnavMode() {
-  return window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches;
-}
-
-function syncSettingSubnavFixedOffset() {
-  if (!settingSubnavWrap || !screenItems) return;
-
-  const shouldFix =
-    CURRENT_PAGE === "setting" &&
-    isFixedPortraitSettingSubnavMode() &&
-    screenItems.style.display !== "none" &&
-    settingSubnavWrap.style.display !== "none" &&
-    !settingPageRoot?.classList.contains("setting-profile-active");
-
-  if (!shouldFix) {
-    document.documentElement.style.removeProperty("--setting-fixed-subnav-height");
-    return;
-  }
-
-  const height = Math.ceil(settingSubnavWrap.getBoundingClientRect().height || settingSubnavWrap.offsetHeight || 0);
-  if (height > 0) {
-    document.documentElement.style.setProperty("--setting-fixed-subnav-height", `${height}px`);
-  }
 }
 
 function getLandscapeDefaultSettingGroup() {
@@ -1151,7 +1299,6 @@ async function createSettingProfileFromCurrent() {
     updateSettingProfilesFromPayload(payload);
     const profile = payload.profile;
     renderGroups({ animateGroups: false });
-    renderSettingSubnav();
     if (profile?.id) {
       await selectGroup(settingProfileGroup(profile.id));
       showAppToast(getUIText("setting_profile_saved", "Profile saved"));
@@ -1236,7 +1383,6 @@ async function deleteSettingProfile(profile) {
     updateSettingProfilesFromPayload(payload);
     CURRENT_GROUP = null;
     renderGroups({ animateGroups: false });
-    renderSettingSubnav();
     showSettingScreen("groups", false);
     showAppToast(getUIText("setting_profile_deleted", "Profile deleted"));
   } catch (e) {
@@ -1349,7 +1495,6 @@ function appendSettingProfileHeader(profile, container) {
       const nextProfile = await nameSaveInFlight;
       if (nextProfile) profile.name = nextProfile.name;
       renderGroups({ animateGroups: false });
-      renderSettingSubnav();
       setSettingItemsTitle(profile.name);
       showAppToast(getUIText("setting_profile_saved", "Profile saved"));
     } catch (e) {
@@ -2143,62 +2288,6 @@ window.addEventListener("carrot:pagechange", (event) => {
   }
 });
 
-function updateSettingSubnavLayoutState() {
-  if (!settingSubnav || !settingSubnavWrap) {
-    syncSettingSubnavFixedOffset();
-    return;
-  }
-
-  const maxScrollLeft = Math.max(settingSubnav.scrollWidth - settingSubnav.clientWidth, 0);
-  const isScrollable = maxScrollLeft > 4;
-  settingSubnavWrap.classList.toggle("is-scrollable", isScrollable);
-  syncSettingSubnavFixedOffset();
-}
-
-function getCurrentSettingCategoryId() {
-  if (!Array.isArray(SETTINGS?.categories) || !SETTINGS.categories.length) return null;
-  const meta = (SETTINGS?.groups || []).find((g) => g.group === CURRENT_GROUP);
-  return meta?.category || null;
-}
-
-function getSettingSubnavGroups() {
-  const all = getSettingGroupsForDisplay().filter((entry) =>
-    !isSettingProfilesDivider(entry) &&
-    !isSettingCategoryDivider(entry) &&
-    !isSettingFavoritesGroup(entry.group) &&
-    !isSettingProfileGroup(entry.group)
-  );
-  // 카테고리 모드: 서브내비(퀵링크)를 현재 카테고리의 그룹만으로 한정 → footprint 축소.
-  // 다른 카테고리는 뒤로가기(그룹목록)로 전환. CURRENT_GROUP 이 가상/없으면 전체 유지.
-  const catId = getCurrentSettingCategoryId();
-  if (catId) {
-    const scoped = all.filter((entry) => entry.category === catId);
-    if (scoped.length) return scoped;
-  }
-  return all;
-}
-
-function getSettingSubnavGroupIndex(group = CURRENT_GROUP) {
-  const groups = getSettingSubnavGroups();
-  return groups.findIndex((entry) => entry.group === group);
-}
-
-function getSettingSubnavShiftTarget(direction) {
-  const groups = getSettingSubnavGroups();
-  if (!groups.length) return null;
-
-  const currentIndex = Math.max(0, getSettingSubnavGroupIndex());
-  const delta = direction === "forward" ? SETTING_SUBNAV_PAGE_STEP : -SETTING_SUBNAV_PAGE_STEP;
-  const nextIndex = Math.max(0, Math.min(currentIndex + delta, groups.length - 1));
-
-  return {
-    currentIndex,
-    nextIndex,
-    group: groups[nextIndex]?.group || null,
-    reachedEdge: nextIndex === currentIndex,
-  };
-}
-
 async function transitionSettingItemsContent(renderContent, direction = "forward") {
   if (typeof renderContent !== "function") return false;
 
@@ -2310,7 +2399,6 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
     showSettingScreen("items", false);
     history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
     syncSettingGroupChrome(group);
-    if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
     if (canReuseRenderedGroup) {
       requestAnimationFrame(() => {
         if (scrollMode === "restore") {
@@ -2337,7 +2425,6 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
       history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
     }
     syncSettingGroupChrome(group);
-    if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
     requestAnimationFrame(() => {
       if (scrollMode === "restore") {
         setSettingItemsScrollTop(
@@ -2362,275 +2449,6 @@ async function activateSettingGroup(group, pushHistory = true, options = {}) {
     history.replaceState({ page: "setting", screen: "items", group: CURRENT_GROUP || null }, "");
   }
   syncSettingGroupChrome(group);
-  if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
-}
-
-async function animateSettingGroupSwitch(group, direction = "forward") {
-  if (!group || group === CURRENT_GROUP) {
-    centerActiveSettingSubnavTab("smooth");
-    return;
-  }
-
-  if (settingGroupTransitionLock || !settingScreenHost || !screenItems) {
-    await activateSettingGroup(group, false);
-    return;
-  }
-
-  if (typeof stopSettingSubnavMotion === "function") stopSettingSubnavMotion();
-  await transitionSettingItemsContent(
-    () => activateSettingGroup(group, false, { animateGroups: false, animateItems: false }),
-    direction,
-  );
-}
-
-function getCenteredSettingSubnavGroup() {
-  if (!settingSubnav) return null;
-  const tabs = Array.from(settingSubnav.querySelectorAll(".setting-subnav__tab"));
-  if (!tabs.length) return null;
-
-  const viewport = settingSubnav.getBoundingClientRect();
-  const centerX = viewport.left + (viewport.width / 2);
-  let bestGroup = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
-
-  tabs.forEach((tab) => {
-    const rect = tab.getBoundingClientRect();
-    const tabCenter = rect.left + (rect.width / 2);
-    const distance = Math.abs(tabCenter - centerX);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestGroup = tab.dataset.group || null;
-    }
-  });
-
-  return bestGroup;
-}
-
-function centerActiveSettingSubnavTab(behavior = "smooth") {
-  if (!settingSubnav) return;
-  const activeTab = settingSubnav.querySelector(".setting-subnav__tab.is-active");
-  if (activeTab) {
-    const maxScrollLeft = Math.max(settingSubnav.scrollWidth - settingSubnav.clientWidth, 0);
-    const targetLeft = activeTab.offsetLeft - ((settingSubnav.clientWidth - activeTab.offsetWidth) / 2);
-    const nextLeft = Math.max(0, Math.min(targetLeft, maxScrollLeft));
-    settingSubnavProgrammaticScroll = true;
-    settingSubnav.scrollTo({ left: nextLeft, behavior });
-    window.setTimeout(() => {
-      settingSubnavProgrammaticScroll = false;
-      updateSettingSubnavLayoutState();
-    }, behavior === "smooth" ? 260 : 80);
-  }
-  updateSettingSubnavLayoutState();
-}
-
-function scheduleSettingSubnavFocus() {
-  if (settingSubnavFocusTimer) clearTimeout(settingSubnavFocusTimer);
-
-  requestAnimationFrame(() => centerActiveSettingSubnavTab("auto"));
-  settingSubnavFocusTimer = window.setTimeout(() => {
-    centerActiveSettingSubnavTab("auto");
-    settingSubnavFocusTimer = window.setTimeout(() => {
-      centerActiveSettingSubnavTab("auto");
-      settingSubnavFocusTimer = null;
-    }, 180);
-  }, 60);
-}
-
-function stopSettingSubnavMotion() {
-  if (settingSubnavSettleTimer) {
-    clearTimeout(settingSubnavSettleTimer);
-    settingSubnavSettleTimer = null;
-  }
-  if (settingSubnavFocusTimer) {
-    clearTimeout(settingSubnavFocusTimer);
-    settingSubnavFocusTimer = null;
-  }
-  if (!settingSubnav) return;
-
-  settingSubnavProgrammaticScroll = false;
-  settingSubnav.scrollTo({ left: settingSubnav.scrollLeft, behavior: "auto" });
-  updateSettingSubnavLayoutState();
-}
-
-function renderSettingSubnav() {
-  if (!settingSubnav) return;
-
-  const groups = getSettingSubnavGroups();
-  const signature = groups.map((entry) => `${entry.group}:${entry.count ?? ""}`).join("|");
-
-  if (settingSubnav.dataset.groupsSignature === signature && settingSubnav.children.length === groups.length) {
-    Array.from(settingSubnav.children).forEach((button, index) => {
-      const entry = groups[index];
-      button.className = "setting-subnav__tab";
-      if (isSettingFavoritesGroup(entry.group)) button.classList.add("setting-subnav__tab--favorites");
-      if (isSettingProfileGroup(entry.group)) button.classList.add("setting-subnav__tab--profile");
-      if (entry.group === CURRENT_GROUP) button.classList.add("is-active");
-      button.dataset.group = entry.group;
-      button.textContent = getSettingGroupLabel(entry.group);
-      button.onclick = () => selectGroup(entry.group, screenItems?.style.display === "none");
-    });
-    scheduleSettingSubnavFocus();
-    requestAnimationFrame(syncSettingSubnavFixedOffset);
-    return;
-  }
-
-  settingSubnav.innerHTML = "";
-  settingSubnav.dataset.groupsSignature = signature;
-
-  groups.forEach((entry) => {
-    const button = document.createElement("button");
-    button.className = "setting-subnav__tab";
-    if (isSettingFavoritesGroup(entry.group)) button.classList.add("setting-subnav__tab--favorites");
-    if (isSettingProfileGroup(entry.group)) button.classList.add("setting-subnav__tab--profile");
-    if (entry.group === CURRENT_GROUP) button.classList.add("is-active");
-    button.dataset.group = entry.group;
-    button.textContent = getSettingGroupLabel(entry.group);
-    button.type = "button";
-    button.onclick = () => selectGroup(entry.group, screenItems?.style.display === "none");
-    settingSubnav.appendChild(button);
-  });
-
-  scheduleSettingSubnavFocus();
-  requestAnimationFrame(syncSettingSubnavFixedOffset);
-}
-
-if (settingSubnav) {
-  settingSubnav.addEventListener("scroll", () => {
-    updateSettingSubnavLayoutState();
-    if (settingSubnavProgrammaticScroll) return;
-
-    if (settingSubnavSettleTimer) clearTimeout(settingSubnavSettleTimer);
-    settingSubnavSettleTimer = window.setTimeout(() => {
-      settingSubnavSettleTimer = null;
-      const centeredGroup = getCenteredSettingSubnavGroup();
-      if (!centeredGroup) return;
-      if (centeredGroup !== CURRENT_GROUP) {
-        selectGroup(centeredGroup, false);
-        return;
-      }
-      centerActiveSettingSubnavTab("smooth");
-    }, 120);
-  }, { passive: true });
-  window.addEventListener("resize", () => requestAnimationFrame(updateSettingSubnavLayoutState));
-  window.addEventListener("orientationchange", () => {
-    window.setTimeout(syncSettingSubnavFixedOffset, 80);
-  }, { passive: true });
-}
-
-if (settingSubnavWrap) {
-  if (window.ResizeObserver) {
-    const settingSubnavResizeObserver = new ResizeObserver(() => syncSettingSubnavFixedOffset());
-    settingSubnavResizeObserver.observe(settingSubnavWrap);
-  }
-
-  let gesture = null;
-
-  settingSubnavWrap.addEventListener("touchstart", (e) => {
-    if (CURRENT_PAGE === "setting") {
-      gesture = null;
-      return;
-    }
-    if (
-      e.touches.length !== 1 ||
-      CURRENT_PAGE !== "setting" ||
-      !screenItems ||
-      screenItems.style.display === "none"
-    ) {
-      gesture = null;
-      return;
-    }
-
-    const touch = e.touches[0];
-    gesture = {
-      dragging: false,
-      startX: touch.clientX,
-      startY: touch.clientY,
-      dx: 0,
-      velocity: 0,
-      lastX: touch.clientX,
-      lastTime: performance.now(),
-    };
-  }, { passive: true });
-
-  settingSubnavWrap.addEventListener("touchmove", (e) => {
-    if (CURRENT_PAGE === "setting") {
-      gesture = null;
-      return;
-    }
-    if (!gesture || e.touches.length !== 1) return;
-
-    const touch = e.touches[0];
-    const dx = touch.clientX - gesture.startX;
-    const dy = touch.clientY - gesture.startY;
-
-    if (!gesture.dragging) {
-      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
-      if (Math.abs(dy) > Math.abs(dx) * 0.9) {
-        gesture = null;
-        return;
-      }
-      gesture.dragging = true;
-    }
-
-    e.preventDefault();
-
-    const now = performance.now();
-    const dt = Math.max(now - gesture.lastTime, 1);
-    gesture.velocity = (touch.clientX - gesture.lastX) / dt;
-    gesture.lastX = touch.clientX;
-    gesture.lastTime = now;
-    gesture.dx = dx;
-  }, { passive: false });
-
-  settingSubnavWrap.addEventListener("touchend", () => {
-    if (CURRENT_PAGE === "setting") {
-      gesture = null;
-      return;
-    }
-    if (!gesture) return;
-    if (!gesture.dragging) {
-      gesture = null;
-      return;
-    }
-
-    const dx = gesture.dx;
-    const direction = dx < 0 ? "forward" : "backward";
-    const velocityOk =
-      (direction === "forward" && gesture.velocity < -SWIPE_VELOCITY_THRESHOLD) ||
-      (direction === "backward" && gesture.velocity > SWIPE_VELOCITY_THRESHOLD);
-    const shouldShift = Math.abs(dx) > 48 || velocityOk;
-    const shiftTarget = shouldShift ? getSettingSubnavShiftTarget(direction) : null;
-
-    gesture = null;
-
-    if (!shouldShift || !shiftTarget) {
-      centerActiveSettingSubnavTab("smooth");
-      return;
-    }
-
-    if (typeof stopSettingSubnavMotion === "function") stopSettingSubnavMotion();
-
-    if (direction === "backward" && shiftTarget.reachedEdge) {
-      history.back();
-      return;
-    }
-
-    if (direction === "forward" && shiftTarget.reachedEdge) {
-      showPage("tools", true, getSwipeTransition(CURRENT_PAGE, "tools"));
-      return;
-    }
-
-    if (shiftTarget.group && shiftTarget.group !== CURRENT_GROUP) {
-      animateSettingGroupSwitch(shiftTarget.group, direction).catch((e) => console.log("[SettingSubnav] switch failed:", e));
-      return;
-    }
-
-    centerActiveSettingSubnavTab("smooth");
-  }, { passive: true });
-
-  settingSubnavWrap.addEventListener("touchcancel", () => {
-    gesture = null;
-  }, { passive: true });
 }
 
 function selectGroup(group, pushHistory = true) {
@@ -2655,7 +2473,6 @@ async function renderItems(group, options = {}) {
   itemsBox.innerHTML = "";
   delete itemsBox.dataset.renderedGroup;
   delete itemsBox.dataset.renderedDetail;
-  renderSettingSubnav();
 
   const allEntries = getSettingItemEntriesForGroup(group);
   const detailEntry = detailMode ? getSettingDetailEntry(group, detailName) : null;
@@ -2743,6 +2560,20 @@ async function renderItems(group, options = {}) {
   let currentProfileSectionBody = null;
   let lastCategorySectionKey = null;
   let currentCategoryCardBody = null;
+
+  if (detailMode && list.length) {
+    const detailBlock = document.createElement("section");
+    detailBlock.className = animateItems ? "setting-section-block ui-stagger-item" : "setting-section-block";
+    if (animateItems) detailBlock.style.setProperty("--i", "1");
+    const detailCard = document.createElement("div");
+    detailCard.className = "setting-group-card";
+    const detailBody = document.createElement("div");
+    detailBody.className = "setting-group-card__body";
+    detailCard.appendChild(detailBody);
+    detailBlock.appendChild(detailCard);
+    itemsBox.appendChild(detailBlock);
+    currentCategoryCardBody = detailBody;
+  }
 
   // 즐겨찾기도 다른 하위메뉴와 같은 카드 박스(공통분모: setting-section-block +
   // setting-group-card)에 담는다. 즐겨찾기는 소-섹션이 섞여 있으므로 단일 카드 1개로.
@@ -2872,7 +2703,7 @@ async function renderItems(group, options = {}) {
     `;
 
     const controlConfig = getSettingControlConfig(p);
-    const compactNumeric = !detailMode && controlConfig.kind === "slider";
+    const compactNumeric = controlConfig.kind === "slider";
     const ctrl = document.createElement("div");
     ctrl.className = `ctrl ctrl--${compactNumeric ? "value" : controlConfig.kind}`;
 
@@ -2981,6 +2812,10 @@ async function renderItems(group, options = {}) {
       ctrl.appendChild(btnPlus);
     }
 
+    const popularEntry = getSettingPopularDisplayEntry(p, getSettingPopularValue(name));
+    const popularText = renderSettingPopularChipText(p, popularEntry);
+    const popularHtml = renderSettingPopularChipHtml(p, popularEntry);
+
     top.appendChild(left);
     top.appendChild(ctrl);
 
@@ -2991,12 +2826,28 @@ async function renderItems(group, options = {}) {
     el.appendChild(top);
     el.appendChild(d);
 
+    const popularTopValues = Array.isArray(popularEntry?.top_values) ? popularEntry.top_values : [];
+    let popularDetail = null;
+    if (detailMode && popularTopValues.length) {
+      popularDetail = document.createElement("div");
+      popularDetail.className = "setting-popular-detail-block";
+      popularDetail.innerHTML = renderSettingPopularDetailHtml(p, popularEntry);
+      el.appendChild(popularDetail);
+    }
+
     // Footer actions row: optional unit-cycle (배율) plus a reset-to-default
     // (기본값) button on every item. Pressing 기본값 confirms then restores
     // the param to its declared default. commitSettingValue / normalizeSettingValue
     // are hoisted function declarations below, so referencing them here is fine.
     const actions = document.createElement("div");
     actions.className = "setting-actions";
+    if (!detailMode && popularText && popularHtml) {
+      const popularChip = document.createElement("span");
+      popularChip.className = "setting-popular-value-chip";
+      popularChip.innerHTML = popularHtml;
+      popularChip.setAttribute("aria-label", popularText);
+      actions.appendChild(popularChip);
+    }
     if (unitBtn) {
       el.classList.add("setting--has-unit-cycle");
       actions.appendChild(unitBtn);
@@ -3078,6 +2929,38 @@ async function renderItems(group, options = {}) {
         showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
       }
     }
+
+    function bindPopularDetailRows() {
+      if (!popularDetail) return;
+      popularDetail.querySelectorAll("[data-setting-popular-value]").forEach((button) => {
+        button.onclick = async (event) => {
+          event.stopPropagation();
+          const next = normalizeSettingValue(button.dataset.settingPopularValue);
+          if (next === null) {
+            showAppToast(getUIText("setting_value_invalid", "Enter a valid number."), { tone: "error" });
+            return;
+          }
+          if (String(next) === String(val.dataset.rawValue)) {
+            showAppToast(getUIText("setting_popular_value_already_applied", "Already using this value"));
+            return;
+          }
+          const ok = await appConfirm(
+            getUIText("setting_popular_value_apply_confirm", "Apply this setting value ({value})?", {
+              value: formatSettingPopularValue(p, next),
+            }),
+            {
+              title: getUIText("setting_popular_value_apply_title", "Apply setting value"),
+              confirmLabel: getUIText("ok", "OK"),
+              cancelLabel: getUIText("cancel", "Cancel"),
+            },
+          );
+          if (!ok) return;
+          await commitSettingValue(next);
+        };
+      });
+    }
+
+    bindPopularDetailRows();
 
     async function applyDelta(sign) {
       const step = getSettingUnitValue(name);
@@ -3254,6 +3137,10 @@ async function renderItems(group, options = {}) {
 
     val.onclick = (event) => {
       event.stopPropagation();
+      if (!detailMode && compactNumeric) {
+        selectSettingDetail(originGroup, name).catch(() => {});
+        return;
+      }
       if (controlConfig.kind === "slider") promptSettingValue();
     };
 
@@ -3282,6 +3169,14 @@ async function renderItems(group, options = {}) {
         const next = normalizeSettingValue(sliderInput.value);
         if (next === null || String(next) === String(val.dataset.committedValue ?? val.dataset.rawValue)) return;
         commitSettingValue(next);
+      };
+    }
+
+    if (!detailMode) {
+      el.onclick = (event) => {
+        if (el.dataset.settingSuppressClick === "1") return;
+        if (isSettingInlineControlTarget(event.target)) return;
+        selectSettingDetail(originGroup, name).catch(() => {});
       };
     }
   });
@@ -3499,7 +3394,6 @@ async function syncSettingViewportLayout(options = {}) {
   }
 
   renderGroups({ animateGroups: animateChrome });
-  renderSettingSubnav();
 
   if (splitLandscape) {
     const targetGroup = CURRENT_GROUP || getLandscapeDefaultSettingGroup();
@@ -3507,7 +3401,6 @@ async function syncSettingViewportLayout(options = {}) {
     CURRENT_GROUP = targetGroup;
     showSettingScreen("items", false);
     syncSettingGroupChrome(targetGroup);
-    if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
     if (!hasRenderedSettingItems(targetGroup)) {
       await renderItems(targetGroup, {
         detailName: CURRENT_SETTING_DETAIL || "",
@@ -3521,7 +3414,6 @@ async function syncSettingViewportLayout(options = {}) {
   if (CURRENT_GROUP) {
     syncSettingGroupChrome(CURRENT_GROUP);
     showSettingScreen("items", false);
-    if (typeof centerActiveSettingSubnavTab === "function") centerActiveSettingSubnavTab("auto");
     if (!hasRenderedSettingItems(CURRENT_GROUP)) {
       await renderItems(CURRENT_GROUP, {
         detailName: CURRENT_SETTING_DETAIL || "",
