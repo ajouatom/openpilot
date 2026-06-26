@@ -1047,7 +1047,7 @@
 }
 
 .page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row {
-  grid-template-columns: 42px minmax(0, 1fr) 48px;
+  grid-template-columns: 18px minmax(0, 1fr) 48px;
   min-height: 48px;
   padding: 8px 11px;
   gap: 10px;
@@ -1072,24 +1072,28 @@
   border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 16%, transparent);
 }
 
-.setting-popular-detail__rank,
 .setting-popular-detail__count {
   color: var(--md-on-surface-var);
   font-size: var(--fs-label-sm);
   font-weight: 850;
 }
 
-.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__rank {
+.setting-popular-detail__marker {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 28px;
+  width: 18px;
+  height: 18px;
+}
+
+.setting-popular-detail__marker::before {
+  content: "";
+  display: block;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--md-primary) 12%, var(--md-surface-cont-h));
-  color: color-mix(in srgb, var(--md-on-surface-var) 78%, transparent);
-  font-size: 10px;
-  font-weight: 900;
+  background: color-mix(in srgb, var(--md-primary) 46%, var(--md-on-surface-var));
+  opacity: 0.72;
 }
 
 .setting-popular-detail__main {
