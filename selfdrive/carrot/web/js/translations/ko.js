@@ -356,6 +356,7 @@ window.CarrotTranslations.register("ko", {
     setting_popular_value_title: "내 차종 인기값",
     setting_popular_value_car_title: "{car} 인기값",
     setting_popular_value_top10: "1~10위",
+    setting_popular_value_common_values: "많이 쓰는 값",
     setting_popular_value_empty: "표시할 설정값이 없습니다.",
     setting_popular_value_apply_title: "설정값 적용",
     setting_popular_value_apply_confirm: "{value} 설정을 적용하시겠습니까?",

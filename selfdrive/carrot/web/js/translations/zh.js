@@ -356,6 +356,7 @@ window.CarrotTranslations.register("zh", {
     setting_popular_value_title: "本车型热门值",
     setting_popular_value_car_title: "{car} 热门值",
     setting_popular_value_top10: "1~10名",
+    setting_popular_value_common_values: "常用值",
     setting_popular_value_empty: "没有可显示的设置值。",
     setting_popular_value_apply_title: "应用设置值",
     setting_popular_value_apply_confirm: "应用此设置值（{value}）？",

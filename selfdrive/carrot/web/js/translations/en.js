@@ -358,6 +358,7 @@ window.CarrotTranslations.register("en", {
     setting_popular_value_title: "Popular values for my model",
     setting_popular_value_car_title: "{car} popular values",
     setting_popular_value_top10: "Top 1-10",
+    setting_popular_value_common_values: "Common values",
     setting_popular_value_empty: "No setting values to show.",
     setting_popular_value_apply_title: "Apply setting value",
     setting_popular_value_apply_confirm: "Apply this setting value ({value})?",
