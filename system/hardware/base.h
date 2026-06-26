@@ -22,6 +22,7 @@ public:
   }
 
   static void set_ir_power(int percentage) {}
+  static void config_cpu_rendering(bool) {}
 
   static bool PC() { return false; }
   static bool TICI() { return false; }
