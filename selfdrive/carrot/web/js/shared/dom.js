@@ -86,8 +86,6 @@ const settingCarRow = document.getElementById("settingCarRow");
 const settingScreenHost = document.getElementById("settingScreenHost");
 const screenGroups = document.getElementById("settingScreenGroups");
 const screenItems = document.getElementById("settingScreenItems");
-const settingSubnavWrap = document.getElementById("settingSubnavWrap");
-const settingSubnav = document.getElementById("settingSubnav");
 const itemsTitle = document.getElementById("itemsTitle");
 
 // Device tab elements

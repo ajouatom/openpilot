@@ -360,7 +360,6 @@ function setWebLanguage(lang, options = {}) {
   if (SETTINGS && !(typeof getCurrentSettingTab === "function" && getCurrentSettingTab() === "device")) {
     if (typeof rebuildSettingSearchEntries === "function") rebuildSettingSearchEntries();
     if (typeof renderGroups === "function") renderGroups({ animateGroups: false });
-    if (typeof renderSettingSubnav === "function") renderSettingSubnav();
     if (CURRENT_GROUP && typeof renderItems === "function") {
       const currentTop = typeof getSettingItemsScrollTop === "function"
         ? getSettingItemsScrollTop()

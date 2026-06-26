@@ -112,10 +112,6 @@
   pointer-events: none;
 }
 
-.page--setting .setting-subnav__tab--favorites {
-  color: color-mix(in srgb, #bae6fd 82%, var(--md-on-surface-var));
-}
-
 @media (min-width: 769px) {
   .setting-search-panel {
     --setting-search-form-width: clamp(360px, 34vw, 540px);
@@ -128,67 +124,6 @@
 }
 
 @media (max-width: 640px) {
-  .page--setting .setting-subnav-wrap {
-    margin-bottom: 0;
-    top: 0;
-    padding-top: calc(8px + env(safe-area-inset-top, 0px));
-    padding-bottom: 18px;
-    background: var(--md-surface);
-    border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 72%, transparent);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
-  }
-
-  .page--setting .setting-subnav-wrap::after {
-    display: none;
-  }
-
-  .page--setting .setting-subnav {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-    justify-content: stretch;
-    overflow: visible;
-    padding: 0;
-    border-bottom: 0;
-    scroll-snap-type: none;
-  }
-
-  .page--setting .setting-subnav::before,
-  .page--setting .setting-subnav::after {
-    display: none;
-  }
-
-  .page--setting .setting-subnav__tab {
-    flex: none;
-    min-height: 38px;
-    padding: 7px 6px;
-    border: 1px solid color-mix(in srgb, var(--md-outline-var) 44%, transparent);
-    border-radius: 8px;
-    background: var(--md-surface-cont);
-    color: var(--md-on-surface-var);
-    font-size: 12.5px;
-    font-weight: 800;
-    line-height: 1.15;
-    white-space: normal;
-    text-wrap: balance;
-    scroll-snap-align: none;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  }
-
-  .page--setting .setting-subnav__tab.is-active {
-    color: var(--md-primary);
-    border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
-    background: var(--md-primary-state);
-  }
-
-  .page--setting .setting-subnav__tab:active {
-    background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
-  }
-
-  .page--setting #settingSubnavWrap {
-    box-sizing: border-box;
-  }
-
   .page--setting .settingTop {
     flex-direction: column;
     align-items: stretch;
@@ -216,7 +151,14 @@
 
 }
 
-@media (max-width: 640px) and (orientation: portrait) {
+/* Portrait at ANY width (phone / foldable / tablet / wide window): the
+   group↔items slide in runSettingScreenSlide() assumes both screens are
+   stacked as position:absolute; inset:0 inside the host so the transition is
+   pure transform. That overlap must exist for every portrait width — not just
+   ≤640px — otherwise the screens fall back to normal flow and the submenu
+   appears to slide in vertically / only after the slide finishes. Landscape
+   has its own absolute-overlap block below, so the two together leave no gap. */
+@media (orientation: portrait) {
   .page--setting #settingScreenItems {
     padding-top: 0;
   }
@@ -299,13 +241,6 @@
             mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
   }
 
-  .page--setting #settingSubnavWrap {
-    display: none !important;
-  }
-
-  .page--setting #settingSubnavWrap::after {
-    display: none;
-  }
 }
 
 @media (max-height: 760px) {
@@ -424,10 +359,6 @@
   .page--setting .setting-car-entry__text {
     min-width: 0;
     overflow: hidden;
-  }
-
-  .page--setting.setting-layout-split #settingSubnavWrap {
-    display: none !important;
   }
 
   .page--setting.setting-layout-split #groupList {
@@ -956,6 +887,49 @@
   margin-top: 8px;
 }
 
+.page--setting #settingScreenItems .setting-popular-value-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 3px;
+  min-width: 0;
+  max-width: min(360px, 52vw);
+  min-height: 18px;
+  margin-right: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--md-on-surface-var) 42%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: 0;
+  text-align: left;
+  white-space: nowrap;
+  box-shadow: none;
+  opacity: 0.74;
+}
+
+.page--setting #settingScreenItems .setting-popular-value-chip__car {
+  min-width: 0;
+  max-width: 170px;
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page--setting #settingScreenItems .setting-popular-value-chip__accent {
+  color: color-mix(in srgb, var(--md-primary) 56%, var(--md-on-surface-var));
+  font-weight: 800;
+}
+
+.page--setting #settingScreenItems .setting-popular-value-chip__label {
+  color: inherit;
+}
+
 .page--setting #settingScreenItems .setting-actions .setting-unit-cycle {
   margin: 0;
 }
@@ -982,6 +956,195 @@
   border-color: color-mix(in srgb, var(--md-outline-var) 68%, transparent);
   background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-on-surface));
   color: var(--md-on-surface);
+}
+
+.setting-popular-detail {
+  display: grid;
+  gap: 12px;
+  min-width: min(360px, calc(100vw - 56px));
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block {
+  width: min(520px, 100%);
+  margin-top: 12px;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail {
+  gap: 9px;
+  min-width: 0;
+  width: 100%;
+}
+
+.setting-popular-detail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.setting-popular-detail__name {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__name {
+  color: color-mix(in srgb, var(--md-on-surface-var) 66%, transparent);
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.setting-popular-detail__range {
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-on-surface-var) 8%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface-var) 58%, transparent);
+  font-size: 10px;
+  font-weight: 820;
+  line-height: 20px;
+}
+
+.setting-popular-detail__rows {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 32%, transparent);
+  border-radius: var(--r-md);
+  background: var(--md-surface-cont);
+}
+
+.setting-popular-detail__row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: transparent;
+  color: var(--md-on-surface);
+  font-family: inherit;
+  font-size: var(--fs-body-sm);
+  font-weight: 850;
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__rows {
+  gap: 6px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row {
+  grid-template-columns: 42px minmax(0, 1fr) 48px;
+  min-height: 48px;
+  padding: 8px 11px;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 16%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--md-surface-cont) 54%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface) 82%, transparent);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row:active {
+  border-color: color-mix(in srgb, var(--md-primary) 24%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 9%, var(--md-surface-cont));
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail--single .setting-popular-detail__row {
+  min-height: 44px;
+}
+
+.setting-popular-detail__row:last-child {
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 16%, transparent);
+}
+
+.setting-popular-detail__rank,
+.setting-popular-detail__count {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 850;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-primary) 12%, var(--md-surface-cont-h));
+  color: color-mix(in srgb, var(--md-on-surface-var) 78%, transparent);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.setting-popular-detail__main {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.setting-popular-detail__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__value {
+  color: color-mix(in srgb, var(--md-primary) 68%, var(--md-on-surface));
+  font-size: 13px;
+  font-weight: 860;
+}
+
+.setting-popular-detail__count {
+  text-align: right;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__count {
+  color: color-mix(in srgb, var(--md-on-surface-var) 66%, transparent);
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.setting-popular-detail__bar {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-on-surface-var) 10%, transparent);
+}
+
+.setting-popular-detail__bar::after {
+  content: "";
+  display: block;
+  width: var(--setting-popular-width, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--md-primary) 52%, var(--md-on-surface-var));
+  opacity: 0.78;
+}
+
+.setting-popular-detail__empty {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  font-weight: 750;
 }
 
 .page--setting #settingScreenItems .setting-copy {
@@ -1324,7 +1487,6 @@
   transform: translateY(1px);
 }
 
-.page--setting #settingSubnav[hidden],
 .page--setting #carrotTabContent[hidden],
 .page--setting #deviceTabContent[hidden],
 .page--setting #items[hidden],
@@ -1334,12 +1496,6 @@
 
 .page--setting.setting-tab-device .page-fab-layer--setting {
   display: none;
-}
-
-/* The device tab has no top quick-tab subnav (old, unused). Hide the subnav
-   wrap on the device tab so no empty bar shows at any width / adaptive layout. */
-.page--setting.setting-tab-device #settingSubnavWrap {
-  display: none !important;
 }
 
 .page--setting #deviceItems .ctrl {
