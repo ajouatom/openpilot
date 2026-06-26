@@ -153,6 +153,7 @@ class CarController(CarControllerBase):
     self.repeated_override_count = 0
     self.override_latched = False
     self.override_release_frames = 0
+    self.driver_unwind_frames = 0
 
     self.lkas11_active = False
 
@@ -262,6 +263,7 @@ class CarController(CarControllerBase):
       eps_loaded = abs(CS.out.steeringTorqueEps) > 18.0
       launch_large_angle = CS.out.vEgo < 6.0 and abs(CS.out.steeringAngleDeg) > 30.0
       low_speed_fast_steer = CS.out.vEgo < 7.0 and abs(CS.out.steeringRateDeg) > 45.0
+      post_driver_unwind = self.driver_unwind_frames > 0 and CS.out.vEgo < 10.0 and abs(CS.out.steeringAngleDeg) > 25.0
 
       if launch_large_angle:
         launch_angle_cap = float(np.interp(abs(CS.out.steeringAngleDeg), [30.0, 70.0, 120.0],
@@ -278,6 +280,14 @@ class CarController(CarControllerBase):
                                          [45.0, 80.0, self.angle_max_torque]))
         angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
                                                      min(rate_cap, rate_speed_cap)))
+
+      if post_driver_unwind:
+        unwind_angle_cap = float(np.interp(abs(CS.out.steeringAngleDeg), [25.0, 70.0, 120.0],
+                                           [80.0, 50.0, 35.0]))
+        unwind_speed_cap = float(np.interp(CS.out.vEgo, [0.0, 4.0, 10.0],
+                                           [35.0, 55.0, 120.0]))
+        angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
+                                                     min(unwind_angle_cap, unwind_speed_cap)))
 
       if low_speed_large_angle and (near_angle_cap or stalled_tracking or eps_loaded):
         clip_factor = float(np.interp(desired_clip_error, [0.0, 5.0, 20.0, 60.0],
@@ -296,6 +306,11 @@ class CarController(CarControllerBase):
       # authority immediately instead of letting the EPS grind against the stop.
       if near_angle_cap and desired_clip_error > 20.0:
         angle_torque_cap = min(angle_torque_cap, self.params.ANGLE_MIN_TORQUE)
+
+    if CS.out.steeringPressed and angle_control and CC.latActive:
+      self.driver_unwind_frames = int(1.5 / DT_CTRL)
+    elif self.driver_unwind_frames > 0:
+      self.driver_unwind_frames -= 1
 
     steering_pressed_rising = CS.out.steeringPressed and not self.steering_pressed_prev
     if steering_pressed_rising:
@@ -366,6 +381,7 @@ class CarController(CarControllerBase):
       self.repeated_override_count = 0
       self.override_latched = False
       self.override_release_frames = 0
+      self.driver_unwind_frames = 0
 
     self.steering_pressed_prev = CS.out.steeringPressed if CC.latActive else False
 
