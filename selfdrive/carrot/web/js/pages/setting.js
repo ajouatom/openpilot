@@ -1013,47 +1013,65 @@ function getSettingPopularCarKeyLabel() {
   return String(settingPopularValuesState.carKey || "").trim() || getUIText("setting_popular_value_my_model", "내 차종");
 }
 
-function getSettingPopularPrimaryValue(entry) {
-  const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
-  return values.length ? values[0]?.value : entry?.value;
-}
-
 function getSettingPopularPrimaryCount(entry) {
   const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
   const count = Number(values[0]?.count ?? entry?.top_count ?? entry?.count ?? 0);
   return Number.isFinite(count) ? count : 0;
 }
 
-function hasSettingPopularClearTop(entry) {
+function getSettingPopularSummaryValues(entry) {
   const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
-  if (!values.length) return false;
+  if (!values.length) return [];
 
   const topCount = getSettingPopularPrimaryCount(entry);
-  const secondCount = Number(values[1]?.count ?? 0);
-  return topCount >= 2 && topCount > (Number.isFinite(secondCount) ? secondCount : 0);
+  if (topCount < 2) return [];
+
+  const tiedValues = values.filter((item) => {
+    const count = Number(item?.count ?? 0);
+    return Number.isFinite(count) && count === topCount;
+  });
+
+  return tiedValues.length <= 2 ? tiedValues : [];
+}
+
+function hasSettingPopularClearTop(entry) {
+  return getSettingPopularSummaryValues(entry).length > 0;
 }
 
 function renderSettingPopularChipText(p, entry) {
-  if (!hasSettingPopularClearTop(entry)) return "";
+  const summaryValues = getSettingPopularSummaryValues(entry);
+  if (!summaryValues.length) return "";
   const sample = getSettingPopularPrimaryCount(entry);
-  const value = formatSettingPopularValue(p, getSettingPopularPrimaryValue(entry));
-  if (!sample || !value) return "";
-  return getUIText("setting_popular_value_chip", "{label} ({sample}대) {value}", {
-    label: getUIText("setting_popular_value_chip_label", "내 차종 인기값"),
+  const values = summaryValues.map((item) => formatSettingPopularValue(p, item?.value)).filter(Boolean);
+  if (!sample || !values.length) return "";
+  const label = getUIText("setting_popular_value_chip_label", "내 차종 인기값");
+  if (values.length === 1) {
+    return getUIText("setting_popular_value_chip", "{label} ({sample}대) {value}", {
+      label,
+      sample,
+      value: values[0],
+    });
+  }
+  return getUIText("setting_popular_value_chip_tied", "{label} (각 {sample}대) {values}", {
+    label,
     sample,
-    value,
+    values: values.join(" · "),
   });
 }
 
 function renderSettingPopularChipHtml(p, entry) {
-  if (!hasSettingPopularClearTop(entry)) return "";
+  const summaryValues = getSettingPopularSummaryValues(entry);
+  if (!summaryValues.length) return "";
   const sample = getSettingPopularPrimaryCount(entry);
-  const value = formatSettingPopularValue(p, getSettingPopularPrimaryValue(entry));
-  if (!sample || !value) return "";
+  const values = summaryValues.map((item) => formatSettingPopularValue(p, item?.value)).filter(Boolean);
+  if (!sample || !values.length) return "";
+  const sampleText = values.length === 1
+    ? getUIText("setting_popular_value_chip_sample", "{sample}대", { sample })
+    : getUIText("setting_popular_value_chip_each_sample", "각 {sample}대", { sample });
   return `
     <span class="setting-popular-value-chip__car">${escapeHtml(getUIText("setting_popular_value_chip_label", "내 차종 인기값"))}</span>
-    <span class="setting-popular-value-chip__label">(</span><span class="setting-popular-value-chip__accent">${escapeHtml(getUIText("setting_popular_value_chip_sample", "{sample}대", { sample }))}</span><span class="setting-popular-value-chip__label">)</span>
-    <span class="setting-popular-value-chip__accent">${escapeHtml(value)}</span>
+    <span class="setting-popular-value-chip__label">(</span><span class="setting-popular-value-chip__accent">${escapeHtml(sampleText)}</span><span class="setting-popular-value-chip__label">)</span>
+    <span class="setting-popular-value-chip__accent">${escapeHtml(values.join(" · "))}</span>
   `;
 }
 
