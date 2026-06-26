@@ -972,16 +972,39 @@ function isSettingPopularValueInRange(p, raw) {
   return value >= min && value <= max;
 }
 
+function compareSettingPopularValueItems(p, a, b, aIndex = 0, bIndex = 0) {
+  const aCount = Number(a?.count ?? 0);
+  const bCount = Number(b?.count ?? 0);
+  const safeACount = Number.isFinite(aCount) ? aCount : 0;
+  const safeBCount = Number.isFinite(bCount) ? bCount : 0;
+  if (safeACount !== safeBCount) return safeBCount - safeACount;
+
+  const aValue = normalizeSettingPopularNumericValue(p, a?.value);
+  const bValue = normalizeSettingPopularNumericValue(p, b?.value);
+  if (aValue !== null && bValue !== null && aValue !== bValue) return aValue - bValue;
+  if (aValue !== null && bValue === null) return -1;
+  if (aValue === null && bValue !== null) return 1;
+
+  const aText = formatSettingPopularValue(p, a?.value);
+  const bText = formatSettingPopularValue(p, b?.value);
+  const textOrder = aText.localeCompare(bText, LANG === "ko" ? "ko-KR" : undefined, { numeric: true, sensitivity: "base" });
+  if (textOrder !== 0) return textOrder;
+
+  return aIndex - bIndex;
+}
+
 function getSettingPopularDisplayEntry(p, entry) {
   if (!entry || typeof entry !== "object") return null;
   const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
   if (!Number.isFinite(sample) || sample < 1) return null;
   if (!isSettingPopularValueInRange(p, entry?.value)) return null;
   const topValues = Array.isArray(entry?.top_values)
-    ? entry.top_values.filter((item) => {
+    ? entry.top_values.map((item, index) => ({ item, index })).filter(({ item }) => {
       const count = Number(item?.count ?? 0);
       return Number.isFinite(count) && count > 0 && isSettingPopularValueInRange(p, item?.value);
-    }).slice(0, 10)
+    }).sort((a, b) => compareSettingPopularValueItems(p, a.item, b.item, a.index, b.index))
+      .slice(0, 10)
+      .map(({ item }) => item)
     : [];
   return { ...entry, top_values: topValues };
 }
@@ -990,25 +1013,65 @@ function getSettingPopularCarKeyLabel() {
   return String(settingPopularValuesState.carKey || "").trim() || getUIText("setting_popular_value_my_model", "내 차종");
 }
 
+function getSettingPopularPrimaryCount(entry) {
+  const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
+  const count = Number(values[0]?.count ?? entry?.top_count ?? entry?.count ?? 0);
+  return Number.isFinite(count) ? count : 0;
+}
+
+function getSettingPopularSummaryValues(entry) {
+  const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
+  if (!values.length) return [];
+
+  const topCount = getSettingPopularPrimaryCount(entry);
+  if (topCount < 2) return [];
+
+  const tiedValues = values.filter((item) => {
+    const count = Number(item?.count ?? 0);
+    return Number.isFinite(count) && count === topCount;
+  });
+
+  return tiedValues.length <= 2 ? tiedValues : [];
+}
+
+function hasSettingPopularClearTop(entry) {
+  return getSettingPopularSummaryValues(entry).length > 0;
+}
+
 function renderSettingPopularChipText(p, entry) {
-  const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
-  const value = formatSettingPopularValue(p, entry?.value);
-  if (!sample || !value) return "";
-  return getUIText("setting_popular_value_chip", "{label} ({sample}대) {value}", {
-    label: getUIText("setting_popular_value_chip_label", "내 차종 인기값"),
+  const summaryValues = getSettingPopularSummaryValues(entry);
+  if (!summaryValues.length) return "";
+  const sample = getSettingPopularPrimaryCount(entry);
+  const values = summaryValues.map((item) => formatSettingPopularValue(p, item?.value)).filter(Boolean);
+  if (!sample || !values.length) return "";
+  const label = getUIText("setting_popular_value_chip_label", "내 차종 인기값");
+  if (values.length === 1) {
+    return getUIText("setting_popular_value_chip", "{label} ({sample}대) {value}", {
+      label,
+      sample,
+      value: values[0],
+    });
+  }
+  return getUIText("setting_popular_value_chip_tied", "{label} (각 {sample}대) {values}", {
+    label,
     sample,
-    value: `"${value}"`,
+    values: values.join(" · "),
   });
 }
 
 function renderSettingPopularChipHtml(p, entry) {
-  const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
-  const value = formatSettingPopularValue(p, entry?.value);
-  if (!sample || !value) return "";
+  const summaryValues = getSettingPopularSummaryValues(entry);
+  if (!summaryValues.length) return "";
+  const sample = getSettingPopularPrimaryCount(entry);
+  const values = summaryValues.map((item) => formatSettingPopularValue(p, item?.value)).filter(Boolean);
+  if (!sample || !values.length) return "";
+  const sampleText = values.length === 1
+    ? getUIText("setting_popular_value_chip_sample", "{sample}대", { sample })
+    : getUIText("setting_popular_value_chip_each_sample", "각 {sample}대", { sample });
   return `
     <span class="setting-popular-value-chip__car">${escapeHtml(getUIText("setting_popular_value_chip_label", "내 차종 인기값"))}</span>
-    <span class="setting-popular-value-chip__label">(</span><span class="setting-popular-value-chip__accent">${escapeHtml(getUIText("setting_popular_value_chip_sample", "{sample}대", { sample }))}</span><span class="setting-popular-value-chip__label">)</span>
-    <span class="setting-popular-value-chip__accent">${escapeHtml(`"${value}"`)}</span>
+    <span class="setting-popular-value-chip__label">(</span><span class="setting-popular-value-chip__accent">${escapeHtml(sampleText)}</span><span class="setting-popular-value-chip__label">)</span>
+    <span class="setting-popular-value-chip__accent">${escapeHtml(values.join(" · "))}</span>
   `;
 }
 
@@ -1040,14 +1103,13 @@ function renderSettingPopularDetailHtml(p, entry) {
   const counts = values.map((item) => Number(item?.count ?? 0)).filter((count) => Number.isFinite(count) && count > 0);
   const maxCount = Math.max(1, ...counts);
 
-  const rows = values.map((item, index) => {
-    const rank = Number(item?.rank) || index + 1;
+  const rows = values.map((item) => {
     const value = formatSettingPopularValue(p, item?.value);
     const count = Number(item?.count ?? 0);
     const width = Math.max(4, Math.min(100, Math.round((Math.max(0, count) / maxCount) * 100)));
     return `
       <button type="button" class="setting-popular-detail__row" style="--setting-popular-width:${width}%" data-setting-popular-value="${escapeHtml(item?.value ?? "")}">
-        <span class="setting-popular-detail__rank">${escapeHtml(`${rank}위`)}</span>
+        <span class="setting-popular-detail__marker" aria-hidden="true"></span>
         <span class="setting-popular-detail__main">
           <span class="setting-popular-detail__value">${escapeHtml(value)}</span>
           ${values.length > 1 ? `<span class="setting-popular-detail__bar" aria-hidden="true"></span>` : ""}
@@ -1066,7 +1128,7 @@ function renderSettingPopularDetailHtml(p, entry) {
     <div class="setting-popular-detail${values.length <= 1 ? " setting-popular-detail--single" : ""}">
       <div class="setting-popular-detail__head">
         <span class="setting-popular-detail__name">${escapeHtml(getSettingPopularDetailTitle())}</span>
-        <span class="setting-popular-detail__range">${escapeHtml(getUIText("setting_popular_value_top10", "1~10위"))}</span>
+        <span class="setting-popular-detail__range">${escapeHtml(getUIText("setting_popular_value_common_values", "많이 쓰는 값"))}</span>
       </div>
       <div class="setting-popular-detail__rows">${rows}</div>
       ${updatedHtml}
