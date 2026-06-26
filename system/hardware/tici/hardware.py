@@ -136,11 +136,12 @@ class Tici(HardwareBase):
   def get_sim_info(self):
     ms = self.get_modem_state()
     sim_id = ms.get('iccid', '')
+    sim_state = ms.get('sim_state') or ("READY" if sim_id else "ABSENT")
     return {
       'sim_id': sim_id,
       'mcc_mnc': ms.get('mcc_mnc') or None,
       'network_type': ["Unknown"],
-      'sim_state': ["ABSENT"] if not sim_id else ["READY"],
+      'sim_state': [sim_state],
       'data_connected': ms.get('connected', False),
     }
 
