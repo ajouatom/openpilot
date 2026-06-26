@@ -951,7 +951,7 @@ function renderSettingPopularChipText(p, entry) {
   const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
   const value = formatSettingPopularValue(p, entry?.value);
   if (!sample || !value) return "";
-  return getUIText("setting_popular_value_chip", "{sample}대 차량 기준 설정값 {value}", { sample, value: `"${value}"` });
+  return getUIText("setting_popular_value_chip", "{sample}대 내 차종 상위 설정값 {value}", { sample, value: `"${value}"` });
 }
 
 function renderSettingPopularChipHtml(p, entry) {

@@ -347,7 +347,7 @@ window.CarrotTranslations.register("zh", {
     setting_reset_default_title: "恢复默认值",
     setting_reset_default_confirm: "要恢复为默认值（{value}）吗？",
     setting_reset_default_done: "已恢复为默认值",
-    setting_popular_value_chip: "基于 {sample} 台车辆的设置值 {value}",
+    setting_popular_value_chip: "基于 {sample} 台车辆的本车型常用设置 {value}",
     setting_popular_value_chip_label: "本车型常用设置",
     setting_popular_value_title: "本车型常用设置",
     setting_popular_value_top10: "1~10名",
