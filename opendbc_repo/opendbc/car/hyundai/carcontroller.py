@@ -252,6 +252,33 @@ class CarController(CarControllerBase):
     if angle_control:
       apply_steer_req = CC.latActive
 
+    angle_torque_cap = self.angle_max_torque
+    if angle_control and CC.latActive:
+      desired_clip_error = abs(float(actuators.steeringAngleDeg) - apply_angle)
+      tracking_error = abs(apply_angle - CS.out.steeringAngleDeg)
+      near_angle_cap = abs(apply_angle) > self.params.ANGLE_LIMITS.STEER_ANGLE_MAX - 2.0
+      low_speed_large_angle = CS.out.vEgo < 7.0 and abs(CS.out.steeringAngleDeg) > 70.0
+      stalled_tracking = abs(CS.out.steeringRateDeg) < 8.0 and tracking_error > 8.0
+      eps_loaded = abs(CS.out.steeringTorqueEps) > 18.0
+
+      if low_speed_large_angle and (near_angle_cap or stalled_tracking or eps_loaded):
+        clip_factor = float(np.interp(desired_clip_error, [0.0, 5.0, 20.0, 60.0],
+                                      [1.0, 0.75, 0.45, 0.25]))
+        tracking_factor = float(np.interp(tracking_error, [3.0, 8.0, 15.0, 30.0],
+                                          [1.0, 0.75, 0.55, 0.35]))
+        eps_factor = float(np.interp(abs(CS.out.steeringTorqueEps), [10.0, 18.0, 28.0],
+                                     [1.0, 0.75, 0.5]))
+        speed_factor = float(np.interp(CS.out.vEgo, [3.0, 7.0],
+                                       [0.65, 1.0]))
+        authority_factor = min(clip_factor, tracking_factor, eps_factor, speed_factor)
+        angle_torque_cap = max(self.params.ANGLE_MIN_TORQUE,
+                               self.angle_max_torque * authority_factor)
+
+      # If the applied angle is pinned while the model asks for much more, cut
+      # authority immediately instead of letting the EPS grind against the stop.
+      if near_angle_cap and desired_clip_error > 20.0:
+        angle_torque_cap = min(angle_torque_cap, self.params.ANGLE_MIN_TORQUE)
+
     steering_pressed_rising = CS.out.steeringPressed and not self.steering_pressed_prev
     if steering_pressed_rising:
       if 0 < self.full_recovery_frames < int(5.0 / DT_CTRL):
@@ -302,7 +329,7 @@ class CarController(CarControllerBase):
       # During recovery, taper the rate to zero. Only steeringPressed can reduce authority.
       torque_delta = base_rate_up * float(np.interp(torque_ratio, [0.6, 0.8], [1.0, 0.0]))
     self.lkas_max_torque = float(np.clip(self.lkas_max_torque + torque_delta,
-                                         self.params.ANGLE_MIN_TORQUE, self.angle_max_torque))
+                                         self.params.ANGLE_MIN_TORQUE, angle_torque_cap))
 
     if not CS.out.steeringPressed and self.recovering_from_override and self.lkas_max_torque >= self.angle_max_torque:
       self.recovering_from_override = False
