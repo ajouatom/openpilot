@@ -23,6 +23,22 @@ _DEFAULT_BASE_URL_BYTES = (
   28, 29, 7, 69, 64, 95, 76,
 )
 USER_AGENT = "openpilot-carrot-param-value/1"
+# Cloudflare Access service-token (optional). Sent as CF-Access-Client-Id /
+# CF-Access-Client-Secret so devices pass when the server sits behind Access.
+# Resolution order: env (CARROT_PARAM_VALUE_CF_ID/_SECRET) -> Params
+# (CarrotParamValueCfId/CarrotParamValueCfSecret) -> embedded obfuscated default.
+_DEFAULT_CF_ACCESS_ID_KEY = 41
+_DEFAULT_CF_ACCESS_ID_BYTES: tuple[int, ...] = (
+  25, 31, 76, 77, 24, 30, 75, 79, 31, 72, 75, 29, 26, 16, 17, 79, 28, 30, 28, 79,
+  25, 31, 72, 25, 16, 16, 27, 31, 72, 79, 29, 75, 7, 72, 74, 74, 76, 90, 90,
+)
+_DEFAULT_CF_ACCESS_SECRET_KEY = 41
+_DEFAULT_CF_ACCESS_SECRET_BYTES: tuple[int, ...] = (
+  74, 31, 25, 29, 17, 79, 16, 74, 24, 24, 31, 29, 16, 24, 25, 76, 29, 76, 29, 26,
+  75, 16, 27, 29, 24, 75, 16, 31, 27, 24, 74, 76, 76, 28, 74, 27, 30, 29, 79, 79,
+  75, 79, 74, 74, 75, 16, 79, 16, 25, 72, 30, 24, 28, 29, 16, 28, 79, 16, 75, 16,
+  31, 75, 76, 31,
+)
 _popular_values_memory: dict[str, Any] | None = None
 
 
@@ -305,9 +321,33 @@ def get_popular_value_detail(name: str) -> dict[str, Any]:
   return detail
 
 
-async def _post_snapshot(session: ClientSession, url: str, payload: dict[str, Any], timeout_s: float) -> tuple[bool, int, str]:
+def _cf_access_token(params: Params | None = None) -> tuple[str, str]:
+  cid = str(os.environ.get("CARROT_PARAM_VALUE_CF_ID", "")).strip()
+  sec = str(os.environ.get("CARROT_PARAM_VALUE_CF_SECRET", "")).strip()
+  if params is not None:
+    if not cid:
+      cid = _param_text(params, "CarrotParamValueCfId")
+    if not sec:
+      sec = _param_text(params, "CarrotParamValueCfSecret")
+  if not cid:
+    cid = "".join(chr(v ^ _DEFAULT_CF_ACCESS_ID_KEY) for v in _DEFAULT_CF_ACCESS_ID_BYTES)
+  if not sec:
+    sec = "".join(chr(v ^ _DEFAULT_CF_ACCESS_SECRET_KEY) for v in _DEFAULT_CF_ACCESS_SECRET_BYTES)
+  return cid, sec
+
+
+def _request_headers(params: Params | None = None) -> dict[str, str]:
+  headers = {"User-Agent": USER_AGENT}
+  cid, sec = _cf_access_token(params)
+  if cid and sec:
+    headers["CF-Access-Client-Id"] = cid
+    headers["CF-Access-Client-Secret"] = sec
+  return headers
+
+
+async def _post_snapshot(session: ClientSession, url: str, payload: dict[str, Any], timeout_s: float, headers: dict[str, str]) -> tuple[bool, int, str]:
   try:
-    async with session.post(url, json=payload, timeout=timeout_s, headers={"User-Agent": USER_AGENT}) as resp:
+    async with session.post(url, json=payload, timeout=timeout_s, headers=headers) as resp:
       text = await resp.text()
       return 200 <= resp.status < 300, int(resp.status), text
   except Exception as exc:
@@ -330,7 +370,7 @@ async def download_popular_values_once(session: ClientSession) -> dict[str, Any]
       url,
       params={"car_key_type": "CarSelected3", "car_key": car_key, "settings_hash": settings_hash},
       timeout=timeout_s,
-      headers={"User-Agent": USER_AGENT},
+      headers=_request_headers(params),
     ) as resp:
       data = await resp.json(content_type=None)
       if resp.status < 200 or resp.status >= 300 or not isinstance(data, dict):
@@ -367,8 +407,9 @@ async def popular_value_upload_once(session: ClientSession) -> bool:
   retry_count = max(1, _env_int("CARROT_PARAM_VALUE_RETRY_COUNT", DEFAULT_RETRY_COUNT))
   retry_delay_s = max(1.0, _env_float("CARROT_PARAM_VALUE_RETRY_DELAY_S", DEFAULT_RETRY_DELAY_S))
 
+  headers = _request_headers(params)
   for attempt in range(1, retry_count + 1):
-    ok, status, body = await _post_snapshot(session, url, payload, timeout_s)
+    ok, status, body = await _post_snapshot(session, url, payload, timeout_s, headers)
     if ok:
       print(
         f"[carrot_param_value] uploaded car_key={payload.get('car_key')} params={len(payload.get('values') or {})}",
