@@ -65,15 +65,14 @@ def _meaningful_device_id(value: str) -> str:
 
 
 def _device_id(params: Params) -> str:
-  for key in ("DongleId", "HardwareSerial"):
-    value = _meaningful_device_id(_param_text(params, key))
+  for value in (
+    _param_text(params, "DongleId"),
+    _param_text(params, "HardwareSerial"),
+  ):
+    value = _meaningful_device_id(value)
     if value:
       return value
   return socket.gethostname() or "comma"
-
-
-def _device_id_hash(device_id: str) -> str:
-  return hashlib.sha256(str(device_id).encode("utf-8")).hexdigest()
 
 
 def _repo_id_from_remote(remote: str) -> str:
@@ -186,6 +185,9 @@ def build_snapshot_payload() -> dict[str, Any] | None:
   car_key = _param_text(params, "CarSelected3")
   if not car_key:
     return None
+  device_id = _device_id(params)
+  if not device_id:
+    return None
 
   defaults = {name: by_name.get(name, {}).get("default", 0) for name in param_names}
   raw_values = get_param_values(param_names, defaults)
@@ -203,7 +205,7 @@ def build_snapshot_payload() -> dict[str, Any] | None:
 
   return {
     "schema_version": 1,
-    "device_id_hash": _device_id_hash(_device_id(params)),
+    "device_id": device_id,
     "repo_id": _repo_id_from_remote(repo_remote),
     "repo_remote": repo_remote,
     "car_key_type": "CarSelected3",

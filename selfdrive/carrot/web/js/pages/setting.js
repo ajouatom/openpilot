@@ -958,12 +958,18 @@ function renderSettingPopularChipHtml(p, entry) {
   const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
   const value = formatSettingPopularValue(p, entry?.value);
   if (!sample || !value) return "";
-  const label = getUIText("setting_popular_value_chip_label", "차량 기준 설정값");
+  const label = getUIText("setting_popular_value_chip_label", "내 차종 인기값");
   return `
     <span class="setting-popular-value-chip__accent">${escapeHtml(`${sample}대`)}</span>
     <span class="setting-popular-value-chip__label">${escapeHtml(label)}</span>
     <span class="setting-popular-value-chip__accent">${escapeHtml(`"${value}"`)}</span>
   `;
+}
+
+function getSettingPopularDetailTitle() {
+  const carKey = String(settingPopularValuesState.carKey || "").trim();
+  if (carKey) return getUIText("setting_popular_value_car_title", "{car} 인기값", { car: carKey });
+  return getUIText("setting_popular_value_title", "내 차종 인기값");
 }
 
 function renderSettingPopularDetailHtml(p, entry) {
@@ -995,7 +1001,7 @@ function renderSettingPopularDetailHtml(p, entry) {
   return `
     <div class="setting-popular-detail${values.length <= 1 ? " setting-popular-detail--single" : ""}">
       <div class="setting-popular-detail__head">
-        <span class="setting-popular-detail__name">${escapeHtml(getUIText("setting_popular_value_title", "내 차종 상위 설정값"))}</span>
+        <span class="setting-popular-detail__name">${escapeHtml(getSettingPopularDetailTitle())}</span>
         <span class="setting-popular-detail__range">${escapeHtml(getUIText("setting_popular_value_top10", "1~10위"))}</span>
       </div>
       <div class="setting-popular-detail__rows">${rows}</div>
@@ -2632,7 +2638,7 @@ async function renderItems(group, options = {}) {
     `;
 
     const controlConfig = getSettingControlConfig(p);
-    const compactNumeric = !detailMode && controlConfig.kind === "slider";
+    const compactNumeric = controlConfig.kind === "slider";
     const ctrl = document.createElement("div");
     ctrl.className = `ctrl ctrl--${compactNumeric ? "value" : controlConfig.kind}`;
 
