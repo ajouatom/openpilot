@@ -258,7 +258,7 @@ class Modem:
     return bool(r) and not r[0].startswith("AT")
 
   def _configure_modem(self, modem_version: str):
-    if not modem_version.startswith("EG25"):
+    if not modem_version.startswith(("EC20", "EG25")):
       return
     cmds = [
       # clear initial EPS bearer APN (some carriers reject the default)
@@ -288,7 +288,7 @@ class Modem:
       return State.INITIALIZING
 
     identity = self._read_identity()
-    if not identity["iccid"] or not identity["imei"]:
+    if not identity["imei"]:
       logging.warning(f"identity read incomplete: {identity}, retrying")
       return State.INITIALIZING
 
@@ -391,7 +391,7 @@ class Modem:
     return False
 
   def _check_iccid(self, state):
-    if state in (State.INITIALIZING, State.DISCONNECTING) or not self.S["iccid"]:
+    if state in (State.INITIALIZING, State.DISCONNECTING):
       return
     iccid = (self._atv("AT+QCCID", "+QCCID:") or "").rstrip("F")
     if iccid and iccid != self.S["iccid"]:
