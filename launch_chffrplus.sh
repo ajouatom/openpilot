@@ -125,6 +125,13 @@ function launch {
   mkdir -p "$PYDEPS"
   export PYTHONPATH="$PYDEPS:$PWD${PYTHONPATH:+:$PYTHONPATH}"
 
+  if python3 -c "import jeepney" > /dev/null 2>&1; then
+    echo "jeepney already installed."
+  else
+    echo "jeepney installing to pydeps."
+    python3 -m pip install --target "$PYDEPS" --upgrade jeepney
+  fi
+
   # hardware specific init
   if [ -f /AGNOS ]; then
     agnos_init
