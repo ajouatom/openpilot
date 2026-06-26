@@ -890,12 +890,13 @@
 .page--setting #settingScreenItems .setting-popular-value-chip {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 3px;
   min-width: 0;
   max-width: min(220px, 42vw);
   min-height: 18px;
+  margin-right: auto;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -905,7 +906,7 @@
   font-weight: 700;
   line-height: 1.18;
   letter-spacing: 0;
-  text-align: right;
+  text-align: left;
   box-shadow: none;
   opacity: 0.74;
 }
@@ -1037,6 +1038,10 @@
   color: color-mix(in srgb, var(--md-on-surface) 82%, transparent);
   font-size: 12px;
   font-weight: 760;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail--single .setting-popular-detail__row {
+  min-height: 44px;
 }
 
 .setting-popular-detail__row:last-child {

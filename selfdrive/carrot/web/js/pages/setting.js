@@ -985,7 +985,7 @@ function renderSettingPopularDetailHtml(p, entry) {
         <span class="setting-popular-detail__rank">${escapeHtml(`${rank}위`)}</span>
         <span class="setting-popular-detail__main">
           <span class="setting-popular-detail__value">${escapeHtml(`"${value}"`)}</span>
-          <span class="setting-popular-detail__bar" aria-hidden="true"></span>
+          ${values.length > 1 ? `<span class="setting-popular-detail__bar" aria-hidden="true"></span>` : ""}
         </span>
         <span class="setting-popular-detail__count">${escapeHtml(`${count}대`)}</span>
       </div>
@@ -993,9 +993,9 @@ function renderSettingPopularDetailHtml(p, entry) {
   }).join("");
 
   return `
-    <div class="setting-popular-detail">
+    <div class="setting-popular-detail${values.length <= 1 ? " setting-popular-detail--single" : ""}">
       <div class="setting-popular-detail__head">
-        <span class="setting-popular-detail__name">${escapeHtml(getUIText("setting_popular_value_title", "차량 기준 설정값"))}</span>
+        <span class="setting-popular-detail__name">${escapeHtml(getUIText("setting_popular_value_title", "내 차종 상위 설정값"))}</span>
         <span class="setting-popular-detail__range">${escapeHtml(getUIText("setting_popular_value_top10", "1~10위"))}</span>
       </div>
       <div class="setting-popular-detail__rows">${rows}</div>
