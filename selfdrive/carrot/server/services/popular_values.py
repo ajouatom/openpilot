@@ -153,6 +153,19 @@ def _settings_hash(data: dict[str, Any], param_names: list[str]) -> str:
   return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _param_catalog_payload(by_name: dict[str, dict[str, Any]], param_names: list[str]) -> dict[str, dict[str, Any]]:
+  catalog: dict[str, dict[str, Any]] = {}
+  for name in param_names:
+    item = by_name.get(name, {})
+    catalog[name] = {
+      "min": item.get("min"),
+      "max": item.get("max"),
+      "default": item.get("default"),
+      "unit": item.get("unit"),
+    }
+  return catalog
+
+
 def _coerce_value(value: Any, setting: dict[str, Any]) -> Any:
   kind = infer_type_from_setting(setting)
   if kind == "bool":
@@ -213,8 +226,20 @@ def build_snapshot_payload() -> dict[str, Any] | None:
     "settings_version": settings_version,
     "settings_hash": _settings_hash(data, param_names),
     "app_commit": _param_text(params, "GitCommit"),
+    "param_catalog": _param_catalog_payload(by_name, param_names),
     "values": values,
   }
+
+
+def _current_settings_hash() -> str:
+  if not HAS_PARAMS:
+    return ""
+  try:
+    data, _, by_name, _ = get_settings_cached()
+    param_names = [name for name in by_name.keys() if name]
+    return _settings_hash(data, param_names) if param_names else ""
+  except Exception:
+    return ""
 
 
 def _current_car_key() -> str:
@@ -223,13 +248,14 @@ def _current_car_key() -> str:
   return _param_text(Params(), "CarSelected3")
 
 
-def _empty_cache(car_key: str = "") -> dict[str, Any]:
+def _empty_cache(car_key: str = "", settings_hash: str = "") -> dict[str, Any]:
   return {
     "ok": True,
     "source": "empty",
     "updated_at": 0,
     "car_key_type": "CarSelected3",
     "car_key": car_key,
+    "settings_hash": settings_hash,
     "popular_values": {},
   }
 
@@ -237,14 +263,19 @@ def _empty_cache(car_key: str = "") -> dict[str, Any]:
 def read_popular_values_memory() -> dict[str, Any]:
   data = _popular_values_memory
   if not isinstance(data, dict):
-    return _empty_cache(_current_car_key())
+    return _empty_cache(_current_car_key(), _current_settings_hash())
   current_car_key = _current_car_key()
+  current_settings_hash = _current_settings_hash()
   cached_car_key = str(data.get("car_key") or "")
+  cached_settings_hash = str(data.get("settings_hash") or "")
   if current_car_key and cached_car_key and current_car_key != cached_car_key:
-    return _empty_cache(current_car_key)
+    return _empty_cache(current_car_key, current_settings_hash)
+  if current_settings_hash and cached_settings_hash and current_settings_hash != cached_settings_hash:
+    return _empty_cache(current_car_key, current_settings_hash)
   result = dict(data)
   result.setdefault("ok", True)
   result.setdefault("source", "memory")
+  result.setdefault("settings_hash", current_settings_hash)
   result.setdefault("popular_values", {})
   return result
 
@@ -256,6 +287,7 @@ def store_popular_values_memory(data: dict[str, Any]) -> dict[str, Any]:
     "source": "remote",
     "car_key_type": str(data.get("car_key_type") or "CarSelected3"),
     "car_key": str(data.get("car_key") or ""),
+    "settings_hash": str(data.get("settings_hash") or _current_settings_hash()),
     "popular_values": data.get("popular_values") if isinstance(data.get("popular_values"), dict) else {},
   }
   _popular_values_memory = clean
@@ -288,6 +320,7 @@ async def download_popular_values_once(session: ClientSession) -> dict[str, Any]
   params = Params()
   url = _popular_url(params)
   car_key = _param_text(params, "CarSelected3")
+  settings_hash = _current_settings_hash()
   if not url or not car_key:
     return None
 
@@ -295,7 +328,7 @@ async def download_popular_values_once(session: ClientSession) -> dict[str, Any]
   try:
     async with session.get(
       url,
-      params={"car_key_type": "CarSelected3", "car_key": car_key},
+      params={"car_key_type": "CarSelected3", "car_key": car_key, "settings_hash": settings_hash},
       timeout=timeout_s,
       headers={"User-Agent": USER_AGENT},
     ) as resp:

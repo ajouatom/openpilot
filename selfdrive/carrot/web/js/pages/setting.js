@@ -947,21 +947,64 @@ function formatSettingPopularValue(p, raw) {
   return formatSettingDisplayValue(p, raw);
 }
 
+function normalizeSettingPopularNumericValue(p, raw) {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const min = Number(p?.min);
+  const max = Number(p?.max);
+  const text = String(raw).trim().toLowerCase();
+  if (min === 0 && max === 1) {
+    if (text === "1" || text === "true" || text === "on") return 1;
+    if (text === "0" || text === "false" || text === "off") return 0;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function isSettingPopularValueInRange(p, raw) {
+  const min = Number(p?.min);
+  const max = Number(p?.max);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return true;
+  const value = normalizeSettingPopularNumericValue(p, raw);
+  if (value === null) return false;
+  return value >= min && value <= max;
+}
+
+function getSettingPopularDisplayEntry(p, entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
+  if (!Number.isFinite(sample) || sample < 1) return null;
+  if (!isSettingPopularValueInRange(p, entry?.value)) return null;
+  const topValues = Array.isArray(entry?.top_values)
+    ? entry.top_values.filter((item) => {
+      const count = Number(item?.count ?? 0);
+      return Number.isFinite(count) && count > 0 && isSettingPopularValueInRange(p, item?.value);
+    }).slice(0, 10)
+    : [];
+  return { ...entry, top_values: topValues };
+}
+
+function getSettingPopularCarKeyLabel() {
+  return String(settingPopularValuesState.carKey || "").trim() || getUIText("setting_popular_value_my_model", "내 차종");
+}
+
 function renderSettingPopularChipText(p, entry) {
   const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
   const value = formatSettingPopularValue(p, entry?.value);
   if (!sample || !value) return "";
-  return getUIText("setting_popular_value_chip", "{sample}대 내 차종 상위 설정값 {value}", { sample, value: `"${value}"` });
+  return getUIText("setting_popular_value_chip", "{car} ({sample}대) {value}", {
+    car: getSettingPopularCarKeyLabel(),
+    sample,
+    value: `"${value}"`,
+  });
 }
 
 function renderSettingPopularChipHtml(p, entry) {
   const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
   const value = formatSettingPopularValue(p, entry?.value);
   if (!sample || !value) return "";
-  const label = getUIText("setting_popular_value_chip_label", "내 차종 인기값");
   return `
-    <span class="setting-popular-value-chip__accent">${escapeHtml(`${sample}대`)}</span>
-    <span class="setting-popular-value-chip__label">${escapeHtml(label)}</span>
+    <span class="setting-popular-value-chip__car">${escapeHtml(getSettingPopularCarKeyLabel())}</span>
+    <span class="setting-popular-value-chip__label">(</span><span class="setting-popular-value-chip__accent">${escapeHtml(getUIText("setting_popular_value_chip_sample", "{sample}대", { sample }))}</span><span class="setting-popular-value-chip__label">)</span>
     <span class="setting-popular-value-chip__accent">${escapeHtml(`"${value}"`)}</span>
   `;
 }
@@ -973,7 +1016,7 @@ function getSettingPopularDetailTitle() {
 }
 
 function renderSettingPopularDetailHtml(p, entry) {
-  const values = Array.isArray(entry?.top_values) ? entry.top_values.slice(0, 10) : [];
+  const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
   if (!values.length) {
     return `<div class="setting-popular-detail"><div class="setting-popular-detail__empty">${escapeHtml(getUIText("setting_popular_value_empty", "표시할 설정값이 없습니다."))}</div></div>`;
   }
@@ -2747,7 +2790,7 @@ async function renderItems(group, options = {}) {
       ctrl.appendChild(btnPlus);
     }
 
-    const popularEntry = getSettingPopularValue(name);
+    const popularEntry = getSettingPopularDisplayEntry(p, getSettingPopularValue(name));
     const popularText = renderSettingPopularChipText(p, popularEntry);
     const popularHtml = renderSettingPopularChipHtml(p, popularEntry);
 

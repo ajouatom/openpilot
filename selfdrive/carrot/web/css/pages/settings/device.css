@@ -891,10 +891,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 3px;
   min-width: 0;
-  max-width: min(220px, 42vw);
+  max-width: min(360px, 52vw);
   min-height: 18px;
   margin-right: auto;
   padding: 0;
@@ -907,8 +907,18 @@
   line-height: 1.18;
   letter-spacing: 0;
   text-align: left;
+  white-space: nowrap;
   box-shadow: none;
   opacity: 0.74;
+}
+
+.page--setting #settingScreenItems .setting-popular-value-chip__car {
+  min-width: 0;
+  max-width: 170px;
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .page--setting #settingScreenItems .setting-popular-value-chip__accent {
