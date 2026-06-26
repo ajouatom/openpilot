@@ -20,6 +20,7 @@ KEY_MIN_ANIMATION_TIME = 0.075  # s
 
 DEBUG = False
 ANIMATION_SCALE = 0.65
+_DRAW_CIRCLE_GRADIENT_VECTOR: bool | None = None
 
 
 def zip_repeat(a, b):
@@ -35,6 +36,21 @@ def fast_euclidean_distance(dx, dy):
   if max_d < min_d:
     max_d, min_d = min_d, max_d
   return 0.941246 * max_d + 0.41 * min_d
+
+
+def draw_circle_gradient_compat(center_x: float, center_y: float, radius: float,
+                                top: rl.Color, bottom: rl.Color) -> None:
+  global _DRAW_CIRCLE_GRADIENT_VECTOR
+
+  if _DRAW_CIRCLE_GRADIENT_VECTOR is not False:
+    try:
+      rl.draw_circle_gradient(rl.Vector2(center_x, center_y), radius, top, bottom)
+      _DRAW_CIRCLE_GRADIENT_VECTOR = True
+      return
+    except TypeError:
+      _DRAW_CIRCLE_GRADIENT_VECTOR = False
+
+  rl.draw_circle_gradient(int(center_x), int(center_y), radius, top, bottom)
 
 
 class Key(Widget):
@@ -206,6 +222,8 @@ class MiciKeyboard(Widget):
     self._selected_key_t: float | None = None  # time key was initially selected
     self._unselect_key_t: float | None = None  # time to unselect key after release
     self._dragging_on_keyboard = False
+    self._touch_started_on_keyboard = False
+    self._release_started_on_keyboard = False
 
     self._text: str = ""
 
@@ -244,13 +262,21 @@ class MiciKeyboard(Widget):
   def _handle_mouse_event(self, mouse_event: MouseEvent) -> None:
     keyboard_pos_y = self._rect.y + self._rect.height - self._txt_bg.height
     if mouse_event.left_pressed:
-      if mouse_event.pos.y > keyboard_pos_y:
-        self._dragging_on_keyboard = True
+      self._touch_started_on_keyboard = mouse_event.pos.y > keyboard_pos_y
+      self._release_started_on_keyboard = False
+      self._dragging_on_keyboard = self._touch_started_on_keyboard
+      self._closest_key = (None, float('inf'))
+      self._selected_key_t = None
+      self._unselect_key_t = None
     elif mouse_event.left_released:
+      self._release_started_on_keyboard = self._touch_started_on_keyboard
+      self._touch_started_on_keyboard = False
       self._dragging_on_keyboard = False
+      if mouse_event.pos.y <= keyboard_pos_y:
+        self._closest_key = (None, float('inf'))
 
     if mouse_event.left_down and self._dragging_on_keyboard:
-      self._closest_key = self._get_closest_key()
+      self._closest_key = self._get_closest_key(mouse_event.pos)
       if self._selected_key_t is None:
         self._selected_key_t = rl.get_time()
 
@@ -261,11 +287,10 @@ class MiciKeyboard(Widget):
     if DEBUG:
       print('HANDLE MOUSE EVENT', mouse_event, self._closest_key[0].char if self._closest_key[0] else 'None')
 
-  def _get_closest_key(self) -> tuple[Key | None, float]:
+  def _get_closest_key(self, mouse_pos: MousePos) -> tuple[Key | None, float]:
     closest_key: tuple[Key | None, float] = (None, float('inf'))
     for row in self._current_keys:
       for key in row:
-        mouse_pos = gui_app.last_mouse_event.pos
         # approximate distance for comparison is accurate enough
         # use local y coords so parent widget offset (e.g. during NavWidget animate-in) doesn't affect hit testing
         dist = abs(key.original_position.x - mouse_pos.x) + abs(key.original_position.y - (mouse_pos.y - self._rect.y))
@@ -290,6 +315,14 @@ class MiciKeyboard(Widget):
         self._set_uppercase(False)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
+    if not self._release_started_on_keyboard:
+      self._closest_key = (None, float('inf'))
+      self._selected_key_t = None
+      self._unselect_key_t = None
+      self._dragging_on_keyboard = False
+      self._touch_started_on_keyboard = False
+      return
+
     if self._closest_key[0] is not None:
       if self._closest_key[0] == self._caps_key:
         self._set_uppercase(True)
@@ -314,6 +347,9 @@ class MiciKeyboard(Widget):
     key_selected_dt = rl.get_time() - (self._selected_key_t or 0)
     cur_t = rl.get_time()
     self._unselect_key_t = cur_t + KEY_MIN_ANIMATION_TIME if (key_selected_dt < KEY_MIN_ANIMATION_TIME) else cur_t
+    self._release_started_on_keyboard = False
+    self._dragging_on_keyboard = False
+    self._touch_started_on_keyboard = False
 
   def backspace(self):
     if self._text:
@@ -331,6 +367,10 @@ class MiciKeyboard(Widget):
       self._closest_key = (None, float('inf'))
       self._unselect_key_t = None
       self._selected_key_t = None
+      if not self.enabled:
+        self._dragging_on_keyboard = False
+        self._touch_started_on_keyboard = False
+        self._release_started_on_keyboard = False
 
   def _lay_out_keys(self, bg_x, bg_y, keys: list[list[Key]]):
     key_rect = rl.Rectangle(bg_x, bg_y, self._txt_bg.width, self._txt_bg.height)
@@ -353,8 +393,8 @@ class MiciKeyboard(Widget):
 
           # draw black circle behind selected key
           circle_alpha = int(self._selected_key_filter.x * 225)
-          rl.draw_circle_gradient(int(key_x + key.rect.width / 2), int(key_y + key.rect.height / 2),
-                                  SELECTED_CHAR_FONT_SIZE, rl.Color(0, 0, 0, circle_alpha), rl.BLANK)
+          draw_circle_gradient_compat(key_x + key.rect.width / 2, key_y + key.rect.height / 2,
+                                      SELECTED_CHAR_FONT_SIZE, rl.Color(0, 0, 0, circle_alpha), rl.BLANK)
         else:
           # move other keys away from selected key a bit
           dx = key.original_position.x - self._closest_key[0].original_position.x
