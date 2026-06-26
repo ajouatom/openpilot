@@ -9,6 +9,7 @@ ANGLE_TRIM_MAX_CURVATURE = 4.0e-4  # about one steering-wheel degree on HKG LFA2
 ANGLE_TRIM_I = 0.10
 ANGLE_TRIM_BUILDUP_BOOST = 2.5
 ANGLE_TRIM_LEAK_RATE = 0.995
+HYUNDAI_ANGLE_CONTROL_FLAG = 1 << 24
 
 
 class LatControlAngle(LatControl):
@@ -16,7 +17,7 @@ class LatControlAngle(LatControl):
     super().__init__(CP, CI)
     self.sat_check_min_speed = 5.
     self.curvature_trim = 0.0
-    self.curvature_trim_enabled = CP.carName == "hyundai"
+    self.curvature_trim_enabled = bool(CP.flags & HYUNDAI_ANGLE_CONTROL_FLAG)
 
   def reset(self):
     super().reset()
