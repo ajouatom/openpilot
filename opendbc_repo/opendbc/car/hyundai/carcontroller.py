@@ -261,6 +261,7 @@ class CarController(CarControllerBase):
       stalled_tracking = abs(CS.out.steeringRateDeg) < 8.0 and tracking_error > 8.0
       eps_loaded = abs(CS.out.steeringTorqueEps) > 18.0
       launch_large_angle = CS.out.vEgo < 6.0 and abs(CS.out.steeringAngleDeg) > 30.0
+      low_speed_fast_steer = CS.out.vEgo < 7.0 and abs(CS.out.steeringRateDeg) > 45.0
 
       if launch_large_angle:
         launch_angle_cap = float(np.interp(abs(CS.out.steeringAngleDeg), [30.0, 70.0, 120.0],
@@ -269,6 +270,14 @@ class CarController(CarControllerBase):
                                            [30.0, 50.0, 100.0, self.angle_max_torque]))
         angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
                                                      min(launch_angle_cap, launch_speed_cap)))
+
+      if low_speed_fast_steer:
+        rate_cap = float(np.interp(abs(CS.out.steeringRateDeg), [45.0, 90.0, 140.0],
+                                   [150.0, 90.0, 55.0]))
+        rate_speed_cap = float(np.interp(CS.out.vEgo, [0.0, 2.0, 7.0],
+                                         [45.0, 80.0, self.angle_max_torque]))
+        angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
+                                                     min(rate_cap, rate_speed_cap)))
 
       if low_speed_large_angle and (near_angle_cap or stalled_tracking or eps_loaded):
         clip_factor = float(np.interp(desired_clip_error, [0.0, 5.0, 20.0, 60.0],
