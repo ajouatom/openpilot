@@ -570,15 +570,6 @@
   max-width: 100%;
 }
 
-.page--setting #settingScreenItems .setting-control-column {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 7px;
-  min-width: 0;
-  max-width: 100%;
-}
-
 .page--setting #settingScreenItems .ctrl > :nth-child(1) {
   grid-column: 1;
   grid-row: 2;
