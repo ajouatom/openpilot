@@ -10,6 +10,12 @@ const SETTING_VALUES_TTL_MS = 60000;
 const settingValueCache = new Map();
 const settingGroupValueCache = new Map();
 const settingGroupValuePromises = new Map();
+const settingPopularValuesState = {
+  loaded: false,
+  loadPromise: null,
+  carKey: "",
+  values: {},
+};
 
 const SETTING_FAVORITES_GROUP = "__setting_favorites__";
 const SETTING_PROFILES_DIVIDER = "__setting_profiles_divider__";
@@ -225,6 +231,40 @@ function getSettingItemEntriesForGroup(group) {
   const profile = getSettingProfileByGroup(group);
   if (profile) return getProfileSettingEntries(profile);
   return (SETTINGS?.items_by_group?.[group] || []).map((item) => ({ group, item }));
+}
+
+function normalizeSettingPopularValues(payload) {
+  const values = payload?.popular_values;
+  return values && typeof values === "object" && !Array.isArray(values) ? values : {};
+}
+
+async function loadSettingPopularValues(force = false) {
+  if (!force && settingPopularValuesState.loaded) return settingPopularValuesState.values;
+  if (!force && settingPopularValuesState.loadPromise) return settingPopularValuesState.loadPromise;
+
+  settingPopularValuesState.loadPromise = getJson("/api/setting_popular_values")
+    .then((payload) => {
+      settingPopularValuesState.loaded = true;
+      settingPopularValuesState.carKey = String(payload?.car_key || "");
+      settingPopularValuesState.values = normalizeSettingPopularValues(payload);
+      return settingPopularValuesState.values;
+    })
+    .catch(() => {
+      settingPopularValuesState.loaded = true;
+      settingPopularValuesState.carKey = "";
+      settingPopularValuesState.values = {};
+      return settingPopularValuesState.values;
+    })
+    .finally(() => {
+      settingPopularValuesState.loadPromise = null;
+    });
+
+  return settingPopularValuesState.loadPromise;
+}
+
+function getSettingPopularValue(name) {
+  const entry = settingPopularValuesState.values?.[String(name || "")];
+  return entry && typeof entry === "object" ? entry : null;
 }
 
 async function loadSettingFavorites(force = false) {
@@ -537,6 +577,7 @@ async function loadSettings(options = {}) {
   if (SETTINGS && !force) {
     await loadSettingFavorites();
     await loadSettingProfiles();
+    await loadSettingPopularValues();
     renderGroups({ animateGroups: false });
     syncSettingSearchFabState();
     if (!background && CURRENT_PAGE === "setting" && typeof syncSettingViewportLayout === "function") {
@@ -559,6 +600,7 @@ async function loadSettings(options = {}) {
     settingGroupValuePromises.clear();
     await loadSettingFavorites(force);
     await loadSettingProfiles(force);
+    await loadSettingPopularValues(force);
     rebuildSettingSearchEntries();
 
     if (meta) {
@@ -891,6 +933,54 @@ function formatSettingRangeMeta(p) {
     `max=${formatSettingDisplayValue(p, p?.max)}`,
     `default=${formatSettingDisplayValue(p, p?.default)}`,
   ].join(", ");
+}
+
+function formatSettingPopularValue(p, raw) {
+  if (raw === null || raw === undefined) return "";
+  return formatSettingDisplayValue(p, raw);
+}
+
+function renderSettingPopularChipText(p, entry) {
+  const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
+  const value = formatSettingPopularValue(p, entry?.value);
+  if (!sample || !value) return "";
+  return getUIText("setting_popular_value_chip", "{sample}대 차량 기준 설정값 {value}", { sample, value });
+}
+
+function renderSettingPopularDetailHtml(p, entry) {
+  const values = Array.isArray(entry?.top_values) ? entry.top_values.slice(0, 10) : [];
+  if (!values.length) {
+    return `<div class="setting-popular-detail"><div class="setting-popular-detail__empty">${escapeHtml(getUIText("setting_popular_value_empty", "표시할 설정값이 없습니다."))}</div></div>`;
+  }
+
+  const rows = values.map((item, index) => {
+    const rank = Number(item?.rank) || index + 1;
+    const value = formatSettingPopularValue(p, item?.value);
+    const count = Number(item?.count ?? 0);
+    return `
+      <div class="setting-popular-detail__row">
+        <span class="setting-popular-detail__rank">${escapeHtml(`${rank}위`)}</span>
+        <span class="setting-popular-detail__value">${escapeHtml(value)}</span>
+        <span class="setting-popular-detail__count">${escapeHtml(`${count}대`)}</span>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="setting-popular-detail">
+      <div class="setting-popular-detail__name">${escapeHtml(p?.name || "")}</div>
+      <div class="setting-popular-detail__rows">${rows}</div>
+    </div>
+  `;
+}
+
+function showSettingPopularDetail(p, entry) {
+  if (!entry) return;
+  appAlert("", {
+    title: getUIText("setting_popular_value_title", "차량 기준 설정값"),
+    messageHtml: renderSettingPopularDetailHtml(p, entry),
+    confirmLabel: getUIText("ok", "OK"),
+  });
 }
 
 const SETTING_UNIT_STORAGE_KEY = "carrot.settingUnitIndex.v1";
@@ -2633,6 +2723,20 @@ async function renderItems(group, options = {}) {
     // are hoisted function declarations below, so referencing them here is fine.
     const actions = document.createElement("div");
     actions.className = "setting-actions";
+    const popularEntry = getSettingPopularValue(name);
+    const popularText = renderSettingPopularChipText(p, popularEntry);
+    if (popularText) {
+      const popularBtn = document.createElement("button");
+      popularBtn.type = "button";
+      popularBtn.className = "setting-popular-value-chip";
+      popularBtn.textContent = popularText;
+      popularBtn.setAttribute("aria-label", popularText);
+      popularBtn.onclick = (event) => {
+        event.stopPropagation();
+        showSettingPopularDetail(p, popularEntry);
+      };
+      actions.appendChild(popularBtn);
+    }
     if (unitBtn) {
       el.classList.add("setting--has-unit-cycle");
       actions.appendChild(unitBtn);

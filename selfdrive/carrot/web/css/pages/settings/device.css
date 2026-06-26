@@ -887,6 +887,32 @@
   margin-top: 8px;
 }
 
+.page--setting #settingScreenItems .setting-popular-value-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 32px;
+  margin-right: auto;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--md-primary) 11%, var(--md-surface-cont-h));
+  color: color-mix(in srgb, var(--md-primary) 72%, var(--md-on-surface));
+  font-size: var(--fs-label-sm);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page--setting #settingScreenItems .setting-popular-value-chip:active {
+  border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 18%, var(--md-surface-cont-hh));
+}
+
 .page--setting #settingScreenItems .setting-actions .setting-unit-cycle {
   margin: 0;
 }
@@ -913,6 +939,68 @@
   border-color: color-mix(in srgb, var(--md-outline-var) 68%, transparent);
   background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-on-surface));
   color: var(--md-on-surface);
+}
+
+.setting-popular-detail {
+  display: grid;
+  gap: 12px;
+  min-width: min(360px, calc(100vw - 56px));
+}
+
+.setting-popular-detail__name {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.setting-popular-detail__rows {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 32%, transparent);
+  border-radius: var(--r-md);
+  background: var(--md-surface-cont);
+}
+
+.setting-popular-detail__row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-sm);
+  font-weight: 850;
+}
+
+.setting-popular-detail__row:last-child {
+  border-bottom: 0;
+}
+
+.setting-popular-detail__rank,
+.setting-popular-detail__count {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 850;
+}
+
+.setting-popular-detail__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-popular-detail__count {
+  text-align: right;
+}
+
+.setting-popular-detail__empty {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  font-weight: 750;
 }
 
 .page--setting #settingScreenItems .setting-copy {

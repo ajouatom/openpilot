@@ -7,6 +7,7 @@ from . import (
   screenrecord,
   settings,
   setting_favorites,
+  setting_popular_values,
   setting_profiles,
   ssh_keys,
   static,
@@ -28,6 +29,7 @@ def register_all(app: web.Application) -> None:
   settings.register(app)
   params.register(app)
   setting_favorites.register(app)
+  setting_popular_values.register(app)
   setting_profiles.register(app)
   web_settings.register(app)
   ssh_keys.register(app)
