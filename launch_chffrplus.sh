@@ -49,6 +49,9 @@ function agnos_init {
     if $AGNOS_PY --verify $MANIFEST; then
       sudo reboot
     fi
+    echo "AGNOS_PY=${AGNOS_PY}"
+    echo "MANIFEST=${MANIFEST}"
+    echo "MODEL=${MODEL}"
     $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
   fi
 }
