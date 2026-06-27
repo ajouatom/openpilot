@@ -19,6 +19,24 @@ function agnos_init {
 
   # Check if AGNOS update is required
   if [ $(< /VERSION) != "$AGNOS_VERSION" ]; then
+    echo "Waiting for internet..."
+
+    timeout=60
+    while [ $timeout -gt 0 ]; do
+        if getent hosts pypi.org >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+        timeout=$((timeout-1))
+    done
+
+    if python3 -c "import jeepney" > /dev/null 2>&1; then
+      echo "jeepney already installed."
+    else
+      echo "jeepney installing to pydeps."
+      python3 -m pip install --target "$PYDEPS" --upgrade jeepney
+    fi
+
     AGNOS_PY="$DIR/system/hardware/tici/agnos.py"
     MANIFEST="$DIR/system/hardware/tici/agnos.json"
     MODEL="$(tr -d '\000\r\n' 2>/dev/null < /sys/firmware/devicetree/base/model | tr '[:upper:]' '[:lower:]')"
@@ -129,13 +147,6 @@ function launch {
   PYDEPS="$DIR/pydeps"
   mkdir -p "$PYDEPS"
   export PYTHONPATH="$PYDEPS:$PWD${PYTHONPATH:+:$PYTHONPATH}"
-
-  if python3 -c "import jeepney" > /dev/null 2>&1; then
-    echo "jeepney already installed."
-  else
-    echo "jeepney installing to pydeps."
-    python3 -m pip install --target "$PYDEPS" --upgrade jeepney
-  fi
 
   # hardware specific init
   if [ -f /AGNOS ]; then
