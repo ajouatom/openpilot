@@ -21,13 +21,15 @@ function agnos_init {
   if [ $(< /VERSION) != "$AGNOS_VERSION" ]; then
     echo "Waiting for internet..."
 
-    timeout=60
-    while [ $timeout -gt 0 ]; do
+    timeout=0
+    while [ $timeout -lt 120 ]; do
         if getent hosts pypi.org >/dev/null 2>&1; then
             break
         fi
-        sleep 1
-        timeout=$((timeout-1))
+        echo "Waiting for internet... (${timeout})"
+        sleep 5
+        timeout=$((timeout+5))
+
     done
 
     if python3 -c "import jeepney" > /dev/null 2>&1; then
