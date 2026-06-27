@@ -21,6 +21,11 @@ function agnos_init {
   if [ $(< /VERSION) != "$AGNOS_VERSION" ]; then
     AGNOS_PY="$DIR/system/hardware/tici/agnos.py"
     MANIFEST="$DIR/system/hardware/tici/agnos.json"
+    MODEL="$(tr -d '\000\r\n' 2>/dev/null < /sys/firmware/devicetree/base/model | tr '[:upper:]' '[:lower:]')"
+    MODEL="${MODEL#comma }"
+    if [ "$MODEL" = "c3" ] || [ "$MODEL" = "tici" ]; then
+      MANIFEST="$DIR/system/hardware/tici/agnos-tici.json"
+    fi
     if $AGNOS_PY --verify $MANIFEST; then
       sudo reboot
     fi

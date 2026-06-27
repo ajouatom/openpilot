@@ -221,6 +221,13 @@ def handle_agnos_update() -> None:
   set_offroad_alert("Offroad_NeosUpdate", True)
 
   manifest_path = os.path.join(OVERLAY_MERGED, "system/hardware/tici/agnos.json")
+  try:
+    with open("/sys/firmware/devicetree/base/model") as f:
+      model = f.read().replace("\x00", "").strip().lower().removeprefix("comma ")
+    if model in ("c3", "tici"):
+      manifest_path = os.path.join(OVERLAY_MERGED, "system/hardware/tici/agnos-tici.json")
+  except OSError:
+    pass
   target_slot_number = get_target_slot_number()
   flash_agnos_update(manifest_path, target_slot_number, cloudlog)
   set_offroad_alert("Offroad_NeosUpdate", False)
