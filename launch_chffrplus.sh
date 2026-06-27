@@ -53,6 +53,7 @@ function agnos_init {
     echo "MANIFEST=${MANIFEST}"
     echo "MODEL=${MODEL}"
     $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
+    echo "end updater $AGNOS_PY $MANIFEST"
   fi
 }
 
