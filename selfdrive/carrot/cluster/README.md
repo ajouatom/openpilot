@@ -342,8 +342,10 @@ Measured radar tracks with at least `12 km/h` of combined longitudinal/lateral
 motion remain visible as vehicles outside lane or road-edge boundaries, while
 slower boundary reflections stay filtered. Signed negative `vLead` values are
 preserved; oncoming tracks at or below `-12 km/h` render red. Tracks with at
-least `2.0 m/s` lateral velocity render amber and rotate their vehicle box to
-show the measured crossing direction.
+least `12 km/h` combined motion rotate their vehicle box to follow the measured
+longitudinal/lateral velocity vector, including after radar/model merging.
+Stopped and slow vehicles remain aligned with the road. Tracks with at least
+`2.0 m/s` lateral velocity render amber.
 Lane and road-edge rendering keeps model geometry visible instead of filtering
 by `laneLineProbs` or `roadEdgeStds`, avoiding distracting HUD flicker when
 model confidence jitters. Lane markings are still suppressed when their
