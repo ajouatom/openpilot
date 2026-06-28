@@ -301,8 +301,9 @@ to the point/box top so speed and distance are less high above the vehicle.
 `LR`/`RR` rear-corner detections render as normal vehicle boxes at their actual
 detected positions. The older fixed rear-tire-depth 2D arrow/label is removed.
 The default drive camera sits closer to the ego roof, lower than the earlier
-high view, tilted downward, and shifted `5m` forward so route/live scene space
-is easier to see. Detected vehicles, radar points, and desired-distance markers
+high view, tilted downward, shifted `5m` forward, and uses a `31` degree
+vertical field of view so nearby vehicles retain a useful apparent size.
+Detected vehicles, radar points, and desired-distance markers
 compress signed longitudinal placement by `0.5` in the rendered scene only, so
 actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Distance labels keep
 the actual signed longitudinal values. The ego vehicle is drawn half a vehicle
