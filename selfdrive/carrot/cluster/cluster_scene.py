@@ -1879,12 +1879,15 @@ def detected_vehicles_with_merged_radar(
             replace(
                 vehicle,
                 source=f"{vehicle.source}{RADAR_MERGED_SOURCE_TAG}{point.label}",
-                relative_speed_mps=vehicle.relative_speed_mps
-                if vehicle.relative_speed_mps is not None
-                else point.relative_speed_mps,
-                absolute_speed_kph=vehicle.absolute_speed_kph
-                if vehicle.absolute_speed_kph is not None
-                else absolute_speed_kph,
+                relative_speed_mps=point.relative_speed_mps
+                if point.relative_speed_mps is not None
+                else vehicle.relative_speed_mps,
+                absolute_speed_kph=absolute_speed_kph
+                if absolute_speed_kph is not None
+                else vehicle.absolute_speed_kph,
+                lateral_speed_mps=point.lateral_speed_mps
+                if point.lateral_speed_mps is not None
+                else vehicle.lateral_speed_mps,
                 acceleration_mps2=vehicle.acceleration_mps2
                 if vehicle.acceleration_mps2 is not None
                 else point.relative_accel_mps2,
@@ -1992,6 +1995,7 @@ def merge_detected_vehicle_for_display(base: DetectedVehicle, other: DetectedVeh
         probability=max(base.probability, other.probability),
         relative_speed_mps=base.relative_speed_mps if base.relative_speed_mps is not None else other.relative_speed_mps,
         absolute_speed_kph=base.absolute_speed_kph if base.absolute_speed_kph is not None else other.absolute_speed_kph,
+        lateral_speed_mps=base.lateral_speed_mps if base.lateral_speed_mps is not None else other.lateral_speed_mps,
         acceleration_mps2=base.acceleration_mps2 if base.acceleration_mps2 is not None else other.acceleration_mps2,
         cut_in=base.cut_in or other.cut_in,
         primary=base.primary or other.primary,
@@ -2407,12 +2411,24 @@ def radar_point_vehicle_heading(
     state: ClusterUiState,
 ) -> tuple[float, float, float, float]:
     longitudinal_speed_kph = radar_point_absolute_speed_kph(point, state)
+    return vehicle_heading_from_velocity(
+        longitudinal_speed_kph,
+        point.lateral_speed_mps,
+        (1.0, 0.0, 0.0, 1.0),
+    )
+
+
+def vehicle_heading_from_velocity(
+    longitudinal_speed_kph: float | None,
+    lateral_speed_mps: float | None,
+    default_heading: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    if longitudinal_speed_kph is None and lateral_speed_mps is None:
+        return default_heading
     forward_speed_mps = (longitudinal_speed_kph or 0.0) / 3.6
-    lateral_speed_mps = point.lateral_speed_mps or 0.0
-    if abs(lateral_speed_mps) < RADAR_CROSS_TRAFFIC_MIN_LATERAL_SPEED_MPS:
-        lateral_speed_mps = 0.0
-    if forward_speed_mps > -RADAR_MOVING_VEHICLE_MIN_SPEED_KPH / 3.6 and lateral_speed_mps == 0.0:
-        return 1.0, 0.0, 0.0, 1.0
+    lateral_speed_mps = lateral_speed_mps or 0.0
+    if math.hypot(forward_speed_mps, lateral_speed_mps) * 3.6 < RADAR_MOVING_VEHICLE_MIN_SPEED_KPH:
+        return default_heading
     forward_x, forward_y = normalize2(lateral_speed_mps, forward_speed_mps)
     return forward_y, -forward_x, forward_x, forward_y
 
@@ -2585,12 +2601,12 @@ def vehicle_box(
     longitudinal_m: float | None = None,
     relative_speed_mps: float | None = None,
     absolute_speed_kph: float | None = None,
+    lateral_speed_mps: float | None = None,
     acceleration_mps2: float | None = None,
     ttc_s: float | None = None,
     cut_in: bool = False,
     primary: bool = False,
     annotate: bool = False,
-    reverse_heading: bool = False,
     x_offset_m: float = 0.0,
 ) -> VehicleBox:
     confidence = clamp(confidence, 0.0, 1.0)
@@ -2604,9 +2620,11 @@ def vehicle_box(
         lane_width_m,
         target_offset,
     )
-    if reverse_heading:
-        right_x, right_y = -right_x, -right_y
-        forward_x, forward_y = -forward_x, -forward_y
+    right_x, right_y, forward_x, forward_y = vehicle_heading_from_velocity(
+        absolute_speed_kph,
+        lateral_speed_mps,
+        (right_x, right_y, forward_x, forward_y),
+    )
     width_m = VEHICLE_WIDTH_M
     length_m = VEHICLE_LENGTH_M
     height_m = VEHICLE_HEIGHT_M
@@ -3010,6 +3028,11 @@ def vehicle_color_for_detection(
         and vehicle.absolute_speed_kph <= -RADAR_MOVING_VEHICLE_MIN_SPEED_KPH
     ):
         return RED
+    if (
+        vehicle.lateral_speed_mps is not None
+        and abs(vehicle.lateral_speed_mps) >= RADAR_CROSS_TRAFFIC_MIN_LATERAL_SPEED_MPS
+    ):
+        return AMBER
     return vehicle_color_for_source(vehicle.source, theme, source_color_mode)
 
 
@@ -3360,15 +3383,12 @@ def build_cluster_scene(
                     if detected.relative_speed_mps is not None
                     else None
                 ),
+                lateral_speed_mps=detected.lateral_speed_mps,
                 acceleration_mps2=detected.acceleration_mps2,
                 ttc_s=detected.ttc_s,
                 cut_in=detected.cut_in,
                 primary=detected.primary,
                 annotate=vehicle_badge_has_special_info(detected),
-                reverse_heading=(
-                    detected.absolute_speed_kph is not None
-                    and detected.absolute_speed_kph <= -RADAR_MOVING_VEHICLE_MIN_SPEED_KPH
-                ),
                 x_offset_m=relative_scene_x_offset_m,
             )
             for detected in render_detected_vehicles

@@ -1462,6 +1462,9 @@ class RouteLogParser:
                 continue
             relative_speed_mps = safe_optional_float(lead, "vRel")
             lead_speed_mps = safe_optional_float(lead, "vLead")
+            lateral_speed_mps = safe_optional_float(lead, "vLat")
+            if lateral_speed_mps is not None:
+                lateral_speed_mps = -lateral_speed_mps
             absolute_speed_kph = (
                 lead_speed_mps * 3.6
                 if lead_speed_mps is not None
@@ -1479,6 +1482,7 @@ class RouteLogParser:
                     source="radarState",
                     relative_speed_mps=relative_speed_mps,
                     absolute_speed_kph=absolute_speed_kph,
+                    lateral_speed_mps=lateral_speed_mps,
                     acceleration_mps2=safe_optional_float(lead, "aLeadK"),
                     ttc_s=ttc_from_relative_speed(d_rel, relative_speed_mps),
                 )
