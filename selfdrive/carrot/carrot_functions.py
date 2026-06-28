@@ -517,9 +517,6 @@ class CarrotPlanner:
     if abs(carstate.steeringAngleDeg) > 20:
       self.trafficState = TrafficState.off
 
-    lead_before_signal_stop = lead_detected and radarstate.leadOne.dRel <= stop_model_x_raw
-    signal_stop_ahead = self.trafficState == TrafficState.red and not lead_before_signal_stop
-
     #self.update_user_control()
     if carstate.gasPressed or carstate.brakePressed:
       self.user_stop_distance = -1
@@ -531,6 +528,8 @@ class CarrotPlanner:
     elif self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2eCruise #XState.e2ePrepare
+      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_raw) < 2.0:
+        self.xState = XState.lead
       elif self.stopping_count == 0:
         if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker and self.trafficLightDetectMode != 1:
           #self.xState = XState.e2ePrepare
@@ -544,6 +543,8 @@ class CarrotPlanner:
         #self.xState = XState.e2ePrepare
         self.xState = XState.e2eCruise
         self.traffic_starting_count = 10.0 / DT_MDL
+      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_raw) < 2.0:
+        self.xState = XState.lead
       else:
         if self.trafficState == TrafficState.green:
           self.add_event(EventName.trafficSignGreen)
@@ -574,12 +575,12 @@ class CarrotPlanner:
         self.xState = XState.e2eCruise
     else: #XState.lead, XState.cruise, XState.e2eCruise
       self.traffic_starting_count = max(0, self.traffic_starting_count - 1)
-      if signal_stop_ahead and abs(carstate.steeringAngleDeg) < 30 and self.traffic_starting_count == 0:
+      if lead_detected:
+        self.xState = XState.lead
+      elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30 and self.traffic_starting_count == 0:
         self.add_event(EventName.trafficStopping)
         self.xState = XState.e2eStop
         self.actual_stop_distance = stop_model_x_rl
-      elif lead_detected:
-        self.xState = XState.lead
       else:
         self.xState = XState.e2eCruise
 
