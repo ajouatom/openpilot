@@ -351,8 +351,8 @@ class CarrotPlanner:
                   model_x < np.interp(v[0] * 3.6, [60, 80], [120.0, 150]) and
                   ((model_v < 3.0) or (model_v < v[0] * 0.7)) and
                   abs(y[-1]) < 5.0)
-      # 정상주행중 감속하는 경우(카메라 감속등), 오감지가 많음. 
-      # 회생감속시:v_cruise=0에는 신호호감지하도록함.
+      # 정상 주행 중 감속하는 경우(카메라 감속 등)에는 오감지가 많음.
+      # 회생 감속으로 v_cruise가 0인 경우에는 신호를 감지하도록 함.
       if v_cruise != 0 and (self.xState == XState.e2eCruise and a_ego < -1.0):
         stopSign = False
     else:
@@ -517,6 +517,11 @@ class CarrotPlanner:
     if abs(carstate.steeringAngleDeg) > 20:
       self.trafficState = TrafficState.off
 
+    signal_stop_ahead = (
+      self.trafficState == TrafficState.red and
+      (not lead_detected or radarstate.leadOne.dRel - stop_model_x_raw > 3.0)
+    )
+
     #self.update_user_control()
     if carstate.gasPressed or carstate.brakePressed:
       self.user_stop_distance = -1
@@ -528,8 +533,6 @@ class CarrotPlanner:
     elif self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2eCruise #XState.e2ePrepare
-      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_raw) < 2.0:
-        self.xState = XState.lead
       elif self.stopping_count == 0:
         if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker and self.trafficLightDetectMode != 1:
           #self.xState = XState.e2ePrepare
@@ -543,8 +546,6 @@ class CarrotPlanner:
         #self.xState = XState.e2ePrepare
         self.xState = XState.e2eCruise
         self.traffic_starting_count = 10.0 / DT_MDL
-      elif lead_detected and (radarstate.leadOne.dRel - stop_model_x_raw) < 2.0:
-        self.xState = XState.lead
       else:
         if self.trafficState == TrafficState.green:
           self.add_event(EventName.trafficSignGreen)
@@ -553,8 +554,9 @@ class CarrotPlanner:
           self.comfort_brake = self.comfortBrake * 0.9
           #self.comfort_brake = COMFORT_BRAKE
           self.trafficStopAdjustRatio = np.interp(v_ego_kph, [0, 100], [1.0, 0.7])
-          stop_dist = stop_model_x_rl * np.interp(stop_model_x_rl, [0, 50], [1.0, self.trafficStopAdjustRatio])  ##�����Ÿ��� ���� �����Ÿ� ��������
-          if stop_dist > 10.0: ### 10M�̻��϶���, self.actual_stop_distance�� ������Ʈ��.
+          # 속도가 높을수록 먼 정지거리 추정값을 줄여 보정함.
+          stop_dist = stop_model_x_rl * np.interp(stop_model_x_rl, [0, 50], [1.0, self.trafficStopAdjustRatio])
+          if stop_dist > 10.0:  # 10m 이상일 때만 실제 정지거리를 갱신함.
             self.actual_stop_distance = stop_dist
           stop_model_x = 0
           self.fakeCruiseDistance = 0 if self.actual_stop_distance > 10.0 else 10.0
@@ -574,12 +576,12 @@ class CarrotPlanner:
         self.xState = XState.e2eCruise
     else: #XState.lead, XState.cruise, XState.e2eCruise
       self.traffic_starting_count = max(0, self.traffic_starting_count - 1)
-      if lead_detected:
-        self.xState = XState.lead
-      elif self.trafficState == TrafficState.red and abs(carstate.steeringAngleDeg) < 30 and self.traffic_starting_count == 0:
+      if signal_stop_ahead and abs(carstate.steeringAngleDeg) < 30 and self.traffic_starting_count == 0:
         self.add_event(EventName.trafficStopping)
         self.xState = XState.e2eStop
         self.actual_stop_distance = stop_model_x_rl
+      elif lead_detected:
+        self.xState = XState.lead
       else:
         self.xState = XState.e2eCruise
 
@@ -597,9 +599,9 @@ class CarrotPlanner:
     self.comfort_brake *= self.mySafeFactor
     self.actual_stop_distance = max(0, self.actual_stop_distance - (v_ego * DT_MDL))
 
-    if stop_model_x == 1000.0: ##  e2eCruise, lead�ΰ��
+    if stop_model_x == 1000.0:  # e2eCruise 또는 lead 상태
       self.actual_stop_distance = 0.0
-    elif self.actual_stop_distance > 0: ## e2eStop, e2eStopped�ΰ��..
+    elif self.actual_stop_distance > 0:  # e2eStop 또는 e2eStopped 상태
       stop_model_x = 0.0
 
     stopping_active = self.xState not in [XState.e2eStop, XState.e2eStopped]
@@ -612,8 +614,6 @@ class CarrotPlanner:
     #   f"stopDist={self.actual_stop_distance:.1f}," +
     #   f"Traffic={str(self.trafficState)}"
     # )
-    #��ȣ�� �������� self.xState.value
-
     stop_dist =  stop_model_x + self.actual_stop_distance
     stop_dist = max(stop_dist, 0.0)
 
