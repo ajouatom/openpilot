@@ -41,7 +41,6 @@ class TrafficState(Enum):
     return self.name
 
 A_CRUISE_MAX_BP_CARROT = [0., 10 * CV.KPH_TO_MS, 40 * CV.KPH_TO_MS, 60 * CV.KPH_TO_MS, 80 * CV.KPH_TO_MS, 110 * CV.KPH_TO_MS, 140 * CV.KPH_TO_MS]
-SIGNAL_STOP_NEAR_LEAD_DISTANCE_M = 10.0
 
 class CarrotPlanner:
   def __init__(self):
@@ -120,7 +119,6 @@ class CarrotPlanner:
     self.trafficLightDetectMode = 2 # 0: None, 1:Stop, 2:Stop&Go
     self.trafficState_carrot = 0
     self.carrot_stay_stop = False
-    self.signal_stop_active = False
 
     self.eco_over_speed = 2
     self.eco_target_speed = 0
@@ -519,16 +517,8 @@ class CarrotPlanner:
     if abs(carstate.steeringAngleDeg) > 20:
       self.trafficState = TrafficState.off
 
-    signal_stop_ahead = (
-      self.trafficState == TrafficState.red and
-      (
-        not lead_detected or
-        (
-          radarstate.leadOne.dRel > SIGNAL_STOP_NEAR_LEAD_DISTANCE_M and
-          radarstate.leadOne.dRel - stop_model_x_raw > 3.0
-        )
-      )
-    )
+    lead_before_signal_stop = lead_detected and radarstate.leadOne.dRel <= stop_model_x_raw
+    signal_stop_ahead = self.trafficState == TrafficState.red and not lead_before_signal_stop
 
     #self.update_user_control()
     if carstate.gasPressed or carstate.brakePressed:
@@ -541,17 +531,8 @@ class CarrotPlanner:
     elif self.xState == XState.e2eStopped:
       if carstate.gasPressed:
         self.xState = XState.e2eCruise #XState.e2ePrepare
-      elif lead_detected and not self.signal_stop_active:
-        self.xState = XState.lead
       elif self.stopping_count == 0:
-        signal_start = (
-          self.signal_stop_active and
-          self.trafficState == TrafficState.green and
-          not self.carrot_stay_stop and
-          not carstate.leftBlinker and
-          self.trafficLightDetectMode != 1
-        )
-        if signal_start:
+        if self.trafficState == TrafficState.green and not self.carrot_stay_stop and not carstate.leftBlinker and self.trafficLightDetectMode != 1:
           #self.xState = XState.e2ePrepare
           self.xState = XState.e2eCruise  # 실험모드를 거치지 않고 바로 출발.
           self.add_event(EventName.trafficSignGreen)
@@ -563,10 +544,8 @@ class CarrotPlanner:
         #self.xState = XState.e2ePrepare
         self.xState = XState.e2eCruise
         self.traffic_starting_count = 10.0 / DT_MDL
-      elif lead_detected and not self.signal_stop_active:
-        self.xState = XState.lead
       else:
-        if self.signal_stop_active and self.trafficState == TrafficState.green:
+        if self.trafficState == TrafficState.green:
           self.add_event(EventName.trafficSignGreen)
           self.xState = XState.e2eCruise
         else:
@@ -598,7 +577,6 @@ class CarrotPlanner:
       if signal_stop_ahead and abs(carstate.steeringAngleDeg) < 30 and self.traffic_starting_count == 0:
         self.add_event(EventName.trafficStopping)
         self.xState = XState.e2eStop
-        self.signal_stop_active = True
         self.actual_stop_distance = stop_model_x_rl
       elif lead_detected:
         self.xState = XState.lead
@@ -609,13 +587,9 @@ class CarrotPlanner:
       stop_model_x = 1000.0
 
     if self.user_stop_distance >= 0:
-      self.signal_stop_active = False
       self.user_stop_distance = max(0, self.user_stop_distance - v_ego * DT_MDL)
       self.actual_stop_distance = self.user_stop_distance
       self.xState = XState.e2eStop if self.user_stop_distance > 0 else XState.e2eStopped
-
-    if self.xState not in [XState.e2eStop, XState.e2eStopped]:
-      self.signal_stop_active = False
 
     if mode == 'acc':
       mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
