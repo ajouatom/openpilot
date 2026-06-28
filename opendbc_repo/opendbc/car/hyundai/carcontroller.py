@@ -261,33 +261,54 @@ class CarController(CarControllerBase):
       low_speed_large_angle = CS.out.vEgo < 7.0 and abs(CS.out.steeringAngleDeg) > 70.0
       stalled_tracking = abs(CS.out.steeringRateDeg) < 8.0 and tracking_error > 8.0
       eps_loaded = abs(CS.out.steeringTorqueEps) > 18.0
-      launch_large_angle = CS.out.vEgo < 6.0 and abs(CS.out.steeringAngleDeg) > 30.0
-      low_speed_fast_steer = CS.out.vEgo < 7.0 and abs(CS.out.steeringRateDeg) > 45.0
-      post_driver_unwind = self.driver_unwind_frames > 0 and CS.out.vEgo < 10.0 and abs(CS.out.steeringAngleDeg) > 25.0
+      launch_large_angle = CS.out.vEgo < 7.0 and abs(CS.out.steeringAngleDeg) > 20.0
+      low_speed_fast_steer = CS.out.vEgo < 8.0 and abs(CS.out.steeringRateDeg) > 35.0
+      post_driver_unwind = self.driver_unwind_frames > 0 and CS.out.vEgo < 12.0 and abs(CS.out.steeringAngleDeg) > 15.0
 
       if launch_large_angle:
-        launch_angle_cap = float(np.interp(abs(CS.out.steeringAngleDeg), [30.0, 70.0, 120.0],
-                                           [160.0, 100.0, 60.0]))
+        launch_angle = abs(CS.out.steeringAngleDeg)
+        launch_angle_cap = float(np.interp(launch_angle, [20.0, 30.0, 70.0, 120.0],
+                                           [self.angle_max_torque, 160.0, 100.0, 60.0]))
         launch_speed_cap = float(np.interp(CS.out.vEgo, [0.0, 1.0, 3.0, 6.0],
                                            [30.0, 50.0, 100.0, self.angle_max_torque]))
+        launch_target_cap = min(launch_angle_cap, launch_speed_cap)
+        launch_angle_blend = float(np.interp(launch_angle, [20.0, 30.0], [0.0, 1.0]))
+        launch_cap = float(np.interp(launch_angle_blend, [0.0, 1.0],
+                                     [self.angle_max_torque, launch_target_cap]))
+        launch_cap = float(np.interp(CS.out.vEgo, [6.0, 7.0],
+                                     [launch_cap, self.angle_max_torque]))
         angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
-                                                     min(launch_angle_cap, launch_speed_cap)))
+                                                     launch_cap))
 
       if low_speed_fast_steer:
-        rate_cap = float(np.interp(abs(CS.out.steeringRateDeg), [45.0, 90.0, 140.0],
-                                   [150.0, 90.0, 55.0]))
+        steering_rate = abs(CS.out.steeringRateDeg)
+        rate_cap = float(np.interp(steering_rate, [35.0, 45.0, 90.0, 140.0],
+                                   [self.angle_max_torque, 150.0, 90.0, 55.0]))
         rate_speed_cap = float(np.interp(CS.out.vEgo, [0.0, 2.0, 7.0],
                                          [45.0, 80.0, self.angle_max_torque]))
+        rate_target_cap = min(rate_cap, rate_speed_cap)
+        rate_blend = float(np.interp(steering_rate, [35.0, 45.0], [0.0, 1.0]))
+        fast_steer_cap = float(np.interp(rate_blend, [0.0, 1.0],
+                                        [self.angle_max_torque, rate_target_cap]))
+        fast_steer_cap = float(np.interp(CS.out.vEgo, [7.0, 8.0],
+                                         [fast_steer_cap, self.angle_max_torque]))
         angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
-                                                     min(rate_cap, rate_speed_cap)))
+                                                     fast_steer_cap))
 
       if post_driver_unwind:
-        unwind_angle_cap = float(np.interp(abs(CS.out.steeringAngleDeg), [25.0, 70.0, 120.0],
-                                           [80.0, 50.0, 35.0]))
+        unwind_angle = abs(CS.out.steeringAngleDeg)
+        unwind_angle_cap = float(np.interp(unwind_angle, [15.0, 25.0, 70.0, 120.0],
+                                           [self.angle_max_torque, 80.0, 50.0, 35.0]))
         unwind_speed_cap = float(np.interp(CS.out.vEgo, [0.0, 4.0, 10.0],
                                            [35.0, 55.0, 120.0]))
+        unwind_target_cap = min(unwind_angle_cap, unwind_speed_cap)
+        unwind_angle_blend = float(np.interp(unwind_angle, [15.0, 25.0], [0.0, 1.0]))
+        unwind_cap = float(np.interp(unwind_angle_blend, [0.0, 1.0],
+                                     [self.angle_max_torque, unwind_target_cap]))
+        unwind_cap = float(np.interp(CS.out.vEgo, [10.0, 12.0],
+                                     [unwind_cap, self.angle_max_torque]))
         angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
-                                                     min(unwind_angle_cap, unwind_speed_cap)))
+                                                     unwind_cap))
 
       if low_speed_large_angle and (near_angle_cap or stalled_tracking or eps_loaded):
         clip_factor = float(np.interp(desired_clip_error, [0.0, 5.0, 20.0, 60.0],
@@ -768,4 +789,3 @@ class HyundaiJerk:
         self.jerk_l = min(max(1.0, -self.jerk * 4.0), jerk_max_l)
         self.cb_upper = np.clip(0.9 + accel * 0.2, 0, 1.2)
         self.cb_lower = np.clip(0.8 + accel * 0.2, 0, 1.2)
-
