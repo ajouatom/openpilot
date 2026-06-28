@@ -71,6 +71,7 @@ RADAR_ROAD_EDGE_KEEP_SPEED_KPH = 18.0
 RADAR_ROAD_EDGE_KEEP_MIN_VALID_COUNT = 20
 RADAR_ROAD_EDGE_STABLE_VEHICLE_MIN_VALID_COUNT = 20
 RADAR_ROAD_EDGE_STABLE_VEHICLE_MAX_ACCEL_MPS2 = 5.0
+RADAR_NEAR_ROAD_EDGE_VEHICLE_BLOCK_DISTANCE_M = 10.0
 RADAR_STATIC_OBJECT_SPEED_MPS = 1.25
 RADAR_STATIC_OBJECT_SPEED_KPH = 8.0
 RADAR_SIDE_STATIC_LATERAL_LANES = 0.58
@@ -2141,6 +2142,13 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         return False
     if abs(point.lateral_m) > lane_width_m * RADAR_VEHICLE_MAX_LATERAL_LANES:
         return False
+    outside_road_edge_m = radar_point_road_edge_outside_distance_m(point, state, lane_width_m)
+    if (
+        point.longitudinal_m <= RADAR_NEAR_ROAD_EDGE_VEHICLE_BLOCK_DISTANCE_M
+        and outside_road_edge_m is not None
+        and outside_road_edge_m > RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M
+    ):
+        return False
     if radar_point_is_confirmed_vehicle_source(point):
         return True
     meaningful_motion = radar_point_has_meaningful_motion(point, state)
@@ -2159,7 +2167,6 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
             return False
     if point.promotion_held:
         return True
-    outside_road_edge_m = radar_point_road_edge_outside_distance_m(point, state, lane_width_m)
     stable_edge_vehicle = (
         radar_point_has_stable_edge_vehicle_motion(point, state, lane_width_m)
         and radar_point_is_near_or_outside_road_edge(point, state, lane_width_m, outside_road_edge_m)

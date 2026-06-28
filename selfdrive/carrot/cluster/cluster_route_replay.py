@@ -110,6 +110,7 @@ ROUTE_VIDEO_DECODE_HEIGHT = 244
 ROUTE_VIDEO_SEEK_RESTART_FRAMES = 45
 NAV_SPEED_LIMIT_HOLD_SECONDS = 10.0
 ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
+NEAR_ROAD_EDGE_VEHICLE_BLOCK_DISTANCE_M = 10.0
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
@@ -1551,6 +1552,8 @@ class RouteLogParser:
         car_state_detections = car_state_corner_detections(car_state)
         car_state_corner_labels = {vehicle.label for vehicle in car_state_detections}
         for vehicle in car_state_detections:
+            if vehicle_is_blocked_by_near_road_edge(vehicle, lane_values):
+                continue
             if (
                 not vehicle_is_confirmed_corner_radar(vehicle)
                 and not vehicle_is_inside_road_edges(vehicle, lane_values)
@@ -1568,6 +1571,8 @@ class RouteLogParser:
             for vehicle in corner_detections:
                 if vehicle.label in car_state_corner_labels:
                     continue
+                if vehicle_is_blocked_by_near_road_edge(vehicle, lane_values):
+                    continue
                 if (
                     not vehicle_is_confirmed_corner_radar(vehicle)
                     and not vehicle_is_inside_road_edges(vehicle, lane_values)
@@ -1578,6 +1583,8 @@ class RouteLogParser:
 
         if event_t - self.radar_detection_t < 0.8:
             for vehicle in self.radar_detections:
+                if vehicle_is_blocked_by_near_road_edge(vehicle, lane_values):
+                    continue
                 if (
                     not vehicle_is_inside_road_edges(vehicle, lane_values)
                     and not radar_vehicle_has_meaningful_motion(vehicle)
@@ -3116,6 +3123,13 @@ def vehicle_is_inside_road_edges(vehicle: DetectedVehicle, lane_values: dict[str
     if right_edge_m is not None and vehicle.lateral_m > right_edge_m + ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M:
         return False
     return True
+
+
+def vehicle_is_blocked_by_near_road_edge(vehicle: DetectedVehicle, lane_values: dict[str, Any]) -> bool:
+    return (
+        abs(vehicle.longitudinal_m) <= NEAR_ROAD_EDGE_VEHICLE_BLOCK_DISTANCE_M
+        and not vehicle_is_inside_road_edges(vehicle, lane_values)
+    )
 
 
 def radar_vehicle_has_meaningful_motion(vehicle: DetectedVehicle) -> bool:
