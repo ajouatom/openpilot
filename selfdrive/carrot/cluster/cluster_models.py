@@ -176,6 +176,14 @@ class SimulatorInput:
 
 
 @dataclass(frozen=True, slots=True)
+class TpmsInfo:
+    fl: float | None = None
+    fr: float | None = None
+    rl: float | None = None
+    rr: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ClusterUiState:
     speed_kph: float
     accel_mps2: float
@@ -219,6 +227,7 @@ class ClusterUiState:
     model_path: tuple[ModelPathPoint, ...] = ()
     detected_vehicles: tuple[DetectedVehicle, ...] = ()
     radar_points: tuple[RadarPoint, ...] = ()
+    tpms: TpmsInfo = TpmsInfo()
     radar_info_mode: int = 4
     radar_display_mode: int = 0
     radar_source_color_mode: int = 0

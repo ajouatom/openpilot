@@ -41,6 +41,7 @@ from cluster_models import (
     RadarPoint,
     RADAR_MOVING_VEHICLE_MIN_SPEED_KPH,
     RouteOverlay,
+    TpmsInfo,
     radar_position_is_zero,
 )
 from cluster_utils import clamp, smoothstep
@@ -171,6 +172,7 @@ class RouteReplayFrame:
     brake: float
     detected_vehicles: tuple[DetectedVehicle, ...]
     radar_points: tuple[RadarPoint, ...] = ()
+    tpms: TpmsInfo = TpmsInfo()
     display_speed_kph: float | None = None
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None
@@ -1117,6 +1119,7 @@ class RouteLogParser:
             lane_change_phase,
         )
         radar_points = self._radar_points_from_current_state(event_t)
+        tpms = tpms_info_from_car_state(car_state)
 
         return RouteReplayFrame(
             t=event_t,
@@ -1166,6 +1169,7 @@ class RouteLogParser:
             brake=clamp(safe_float(car_state, "brake", 0.0), 0.0, 1.0),
             detected_vehicles=detected_vehicles,
             radar_points=radar_points,
+            tpms=tpms,
             display_speed_kph=display_speed_kph,
             planned_speed_kph=self.planned_speed_kph,
             planned_accel_mps2=self.planned_accel_mps2,
@@ -2181,6 +2185,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         model_path=frame.model_path,
         detected_vehicles=frame.detected_vehicles,
         radar_points=frame.radar_points,
+        tpms=frame.tpms,
         planned_speed_kph=frame.planned_speed_kph,
         planned_accel_mps2=frame.planned_accel_mps2,
         planned_curvature_m_inv=frame.planned_curvature_m_inv,
@@ -2367,6 +2372,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         brake=lerp(left.brake, right.brake),
         detected_vehicles=discrete.detected_vehicles,
         radar_points=discrete.radar_points,
+        tpms=discrete.tpms,
         planned_speed_kph=lerp_optional(left.planned_speed_kph, right.planned_speed_kph),
         planned_accel_mps2=lerp_optional(left.planned_accel_mps2, right.planned_accel_mps2),
         planned_curvature_m_inv=lerp_optional(left.planned_curvature_m_inv, right.planned_curvature_m_inv),
@@ -3356,6 +3362,21 @@ def finite_float(value: Any) -> float | None:
 def safe_optional_float(obj: Any, name: str) -> float | None:
     value = safe_float(obj, name, math.nan)
     return None if math.isnan(value) else value
+
+
+def tpms_info_from_car_state(car_state: Any) -> TpmsInfo:
+    tpms = safe_get(car_state, "tpms")
+
+    def pressure(name: str) -> float | None:
+        value = safe_optional_float(tpms, name) if tpms is not None else None
+        return value if value is not None and 5.0 <= value <= 60.0 else None
+
+    return TpmsInfo(
+        fl=pressure("fl"),
+        fr=pressure("fr"),
+        rl=pressure("rl"),
+        rr=pressure("rr"),
+    )
 
 
 def safe_optional_int(obj: Any, name: str) -> int | None:

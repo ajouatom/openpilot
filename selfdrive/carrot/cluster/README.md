@@ -1,6 +1,8 @@
 # Carrot Cluster
 
-Standalone raylib cluster UI bundle for openpilot devices.
+Standalone raylib cluster UI bundle for openpilot devices. Live and replay views
+show tire pressures beside the ego vehicle's four wheel positions when TPMS data
+is available; pressures below 31 psi are highlighted in red.
 
 Run from the openpilot root:
 

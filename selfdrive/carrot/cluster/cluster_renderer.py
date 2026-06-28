@@ -51,6 +51,7 @@ from cluster_models import (
     NaviGuidanceImage,
     NaviTrafficLightInfo,
     RouteOverlay,
+    TpmsInfo,
 )
 from cluster_scene import (
     ClusterScene,
@@ -74,6 +75,10 @@ JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
 VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
 FOLLOW_VEHICLE_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_cruse_gap_trimmed.png"
 LFA_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_wheel_org.png"
+TPMS_LOW_PRESSURE_PSI = 31.0
+TPMS_BADGE_WIDTH = 46.0
+TPMS_BADGE_HEIGHT = 25.0
+TPMS_BADGE_FONT_SIZE = 17.0
 ACCEL_TEXT_WIDTH_SAMPLES = ("+00.00", "-00.00")
 TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
@@ -1501,6 +1506,58 @@ class ClusterUiRenderer:
             state.radar_source_color_mode,
         )
         self._profile_add("draw_scene.vehicle_badges", profile_stage)
+        if scene.vehicles:
+            self._draw_ego_tpms(scene.vehicles[0], state.tpms, camera, scene.scene_shift_x_m)
+
+    def _draw_ego_tpms(
+        self,
+        vehicle: VehicleBox,
+        tpms: TpmsInfo,
+        camera,
+        scene_shift_x_m: float,
+    ) -> None:
+        pressures = (tpms.fl, tpms.fr, tpms.rl, tpms.rr)
+        if not any(value is not None for value in pressures):
+            return
+
+        lateral_m = vehicle.width_m * 0.60
+        longitudinal_m = vehicle.length_m * 0.31
+        wheels = (
+            (-lateral_m, longitudinal_m, tpms.fl),
+            (lateral_m, longitudinal_m, tpms.fr),
+            (-lateral_m, -longitudinal_m, tpms.rl),
+            (lateral_m, -longitudinal_m, tpms.rr),
+        )
+        for local_x, local_y, pressure in wheels:
+            anchor = rl.Vector3(
+                vehicle.center.x + vehicle.right_x * local_x + vehicle.forward_x * local_y + scene_shift_x_m,
+                vehicle.center.y + vehicle.right_y * local_x + vehicle.forward_y * local_y,
+                0.25,
+            )
+            screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
+            if screen is None:
+                continue
+
+            center_x = clamp(screen.x + (-18.0 if local_x < 0.0 else 18.0), TPMS_BADGE_WIDTH * 0.5 + 4.0, self.width - TPMS_BADGE_WIDTH * 0.5 - 4.0)
+            center_y = clamp(screen.y, TPMS_BADGE_HEIGHT * 0.5 + 4.0, self.height - TPMS_BADGE_HEIGHT * 0.5 - 4.0)
+            low = pressure is not None and pressure < TPMS_LOW_PRESSURE_PSI
+            text = "--" if pressure is None else f"{pressure:.0f}"
+            outline = (*RED, 235) if low else (105, 214, 242, 210)
+            text_color = (*RED, 255) if low else (245, 250, 255, 255)
+            if pressure is None:
+                outline = (120, 130, 140, 170)
+                text_color = (175, 182, 190, 220)
+            self._rounded_rect(
+                center_x - TPMS_BADGE_WIDTH * 0.5,
+                center_y - TPMS_BADGE_HEIGHT * 0.5,
+                TPMS_BADGE_WIDTH,
+                TPMS_BADGE_HEIGHT,
+                8.0,
+                (8, 15, 22, 218),
+                outline,
+                1.5,
+            )
+            self._draw_text(text, center_x, center_y, TPMS_BADGE_FONT_SIZE, text_color, anchor="center")
 
     def _draw_strip(self, strip: MeshStrip) -> None:
         count = min(len(strip.left), len(strip.right))
