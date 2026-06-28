@@ -151,6 +151,8 @@ class RadarPoint:
 
 
 RADAR_ZERO_POSITION_EPS_M = 1e-3
+RADAR_MOVING_VEHICLE_MIN_SPEED_KPH = 12.0
+RADAR_CROSS_TRAFFIC_MIN_LATERAL_SPEED_MPS = 2.0
 
 
 def radar_position_is_zero(longitudinal_m: float, lateral_m: float) -> bool:

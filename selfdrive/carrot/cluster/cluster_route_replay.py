@@ -39,6 +39,7 @@ from cluster_models import (
     ModelPathPoint,
     ModelRiskPoint,
     RadarPoint,
+    RADAR_MOVING_VEHICLE_MIN_SPEED_KPH,
     RouteOverlay,
     radar_position_is_zero,
 )
@@ -1462,10 +1463,10 @@ class RouteLogParser:
             relative_speed_mps = safe_optional_float(lead, "vRel")
             lead_speed_mps = safe_optional_float(lead, "vLead")
             absolute_speed_kph = (
-                max(0.0, lead_speed_mps * 3.6)
+                lead_speed_mps * 3.6
                 if lead_speed_mps is not None
                 else (
-                    max(0.0, self.current_speed_kph + relative_speed_mps * 3.6)
+                    self.current_speed_kph + relative_speed_mps * 3.6
                     if relative_speed_mps is not None
                     else None
                 )
@@ -1569,7 +1570,10 @@ class RouteLogParser:
 
         if event_t - self.radar_detection_t < 0.8:
             for vehicle in self.radar_detections:
-                if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                if (
+                    not vehicle_is_inside_road_edges(vehicle, lane_values)
+                    and not radar_vehicle_has_meaningful_motion(vehicle)
+                ):
                     continue
                 if vehicle.source == "radarState" or not has_nearby_vehicle(
                     detections,
@@ -3007,9 +3011,9 @@ def live_track_to_radar_point(track: Any, index: int, ego_speed_kph: float) -> R
     lead_speed_mps = safe_optional_float(track, "vLead")
     absolute_speed_kph = None
     if lead_speed_mps is not None:
-        absolute_speed_kph = max(0.0, lead_speed_mps * 3.6)
+        absolute_speed_kph = lead_speed_mps * 3.6
     elif rel_speed_mps is not None:
-        absolute_speed_kph = max(0.0, ego_speed_kph + rel_speed_mps * 3.6)
+        absolute_speed_kph = ego_speed_kph + rel_speed_mps * 3.6
     lat_speed_mps = safe_optional_float(track, "yvRel")
     if lat_speed_mps is not None:
         lat_speed_mps = renderer_lateral_from_openpilot_yrel(lat_speed_mps)
@@ -3102,6 +3106,14 @@ def vehicle_is_inside_road_edges(vehicle: DetectedVehicle, lane_values: dict[str
     if right_edge_m is not None and vehicle.lateral_m > right_edge_m + ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M:
         return False
     return True
+
+
+def radar_vehicle_has_meaningful_motion(vehicle: DetectedVehicle) -> bool:
+    return (
+        vehicle.source == "radarState"
+        and vehicle.absolute_speed_kph is not None
+        and abs(vehicle.absolute_speed_kph) >= RADAR_MOVING_VEHICLE_MIN_SPEED_KPH
+    )
 
 
 def vehicle_is_confirmed_corner_radar(vehicle: DetectedVehicle) -> bool:
