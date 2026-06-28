@@ -1886,10 +1886,12 @@ class CarrotMan:
       handled = True
 
     if "ssinf" in obj:
+      print(f"[NAVI ssinf RX] {json.dumps(obj['ssinf'], ensure_ascii=False)}", flush=True)
       self._safe_dispatch_handler("ssinf", self.handle_traffic_light_detail, obj["ssinf"])
       handled = True
 
     if "sinf" in obj:
+      print(f"[NAVI sinf RX] {json.dumps(obj['sinf'], ensure_ascii=False)}", flush=True)
       self._safe_dispatch_handler("sinf", self.handle_traffic_light, obj["sinf"])
       handled = True
 
