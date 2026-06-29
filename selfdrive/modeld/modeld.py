@@ -127,13 +127,19 @@ class ModelState:
   def run(self, bufs: dict[str, VisionBuf], transforms: dict[str, np.ndarray],
           inputs: dict[str, np.ndarray], prepare_only: bool) -> dict[str, np.ndarray] | None:
     for key in bufs.keys():
-      ptr = np.frombuffer(bufs[key].data, dtype=np.uint8).ctypes.data
       yuv_size = self.frame_buf_params[key][3]
-      # There is a ringbuffer of imgs, just cache tensors pointing to all of them
-      cache_key = (key, ptr)
-      if cache_key not in self._blob_cache:
-        self._blob_cache[cache_key] = Tensor.from_blob(ptr, (yuv_size,), dtype='uint8', device=self.WARP_DEV)
-      self.full_frames[key] = self._blob_cache[cache_key]
+      frame_data = np.frombuffer(bufs[key].data, dtype=np.uint8, count=yuv_size)
+      if self.WARP_DEV.split(':', 1)[0] in ('CUDA', 'NV'):
+        # VisionIPC buffers are host memory on discrete GPUs. from_blob would
+        # incorrectly treat their address as a GPU pointer and fault.
+        self.full_frames[key] = Tensor(frame_data, device=self.WARP_DEV).realize()
+      else:
+        ptr = frame_data.ctypes.data
+        # Integrated GPUs can access the VisionIPC ringbuffer directly.
+        cache_key = (key, ptr)
+        if cache_key not in self._blob_cache:
+          self._blob_cache[cache_key] = Tensor.from_blob(ptr, (yuv_size,), dtype='uint8', device=self.WARP_DEV)
+        self.full_frames[key] = self._blob_cache[cache_key]
 
     # Model decides when action is completed, so desire input is just a pulse triggered on rising edge
     inputs['desire_pulse'][0] = 0
