@@ -20,10 +20,12 @@ from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
+from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
 
 REPLAY = "REPLAY" in os.environ
 
 EventName = log.OnroadEvent.EventName
+ButtonType = car.CarState.ButtonEvent.Type
 
 # forward
 carlog.addHandler(ForwardingHandler(cloudlog))
@@ -73,6 +75,7 @@ class Car:
     self.CC_prev = car.CarControl.new_message()
     self.CS_prev = car.CarState.new_message()
     self.initialized_prev = False
+    self.cruise_main_toggle = CruiseMainOpenpilotToggle(ButtonType.mainCruise)
 
     self.last_actuators_output = structs.CarControl.Actuators()
 
@@ -270,6 +273,15 @@ class Car:
 
   def step(self):
     CS, RD = self.state_update()
+
+    if self.cruise_main_toggle.update(CS.buttonEvents, self.sm['carControl'].enabled):
+      if self.CI.CC is not None and not self.CP.dashcamOnly:
+        openpilot_enabled = not self.params.get_bool("OpenpilotEnabledToggle")
+        cloudlog.warning(f"Cruise MAIN long press: setting OpenpilotEnabledToggle to {openpilot_enabled}")
+        self.params.put_bool("OpenpilotEnabledToggle", openpilot_enabled)
+        self.params.put_bool("OnroadCycleRequested", True)
+      else:
+        cloudlog.warning("Cruise MAIN long press ignored: vehicle has no openpilot controller")
 
     self.state_publish(CS, RD)
 
