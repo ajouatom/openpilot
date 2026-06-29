@@ -127,11 +127,28 @@ class ModelState:
   def run(self, bufs: dict[str, VisionBuf], transforms: dict[str, np.ndarray],
           inputs: dict[str, np.ndarray], prepare_only: bool) -> dict[str, np.ndarray] | None:
     for key in bufs.keys():
-      yuv_size = self.frame_buf_params[key][3]
-      frame_data = np.frombuffer(bufs[key].data, dtype=np.uint8, count=yuv_size)
+      stride, y_height, uv_height, yuv_size = self.frame_buf_params[key]
+      frame_data = np.frombuffer(bufs[key].data, dtype=np.uint8)
       if self.WARP_DEV.split(':', 1)[0] in ('CUDA', 'NV'):
         # VisionIPC buffers are host memory on discrete GPUs. from_blob would
         # incorrectly treat their address as a GPU pointer and fault.
+        uv_offset = stride * y_height
+        if len(frame_data) != yuv_size or bufs[key].stride != stride or bufs[key].uv_offset != uv_offset:
+          # PC camera sources may provide tightly packed NV12. Convert them to
+          # the Venus layout expected by the compiled model warp.
+          src_stride = bufs[key].stride
+          src_uv_offset = bufs[key].uv_offset
+          packed_frame = np.zeros(yuv_size, dtype=np.uint8)
+          src_y_height = min(bufs[key].height, src_uv_offset // src_stride)
+          src_uv_height = min(bufs[key].height // 2, max(0, len(frame_data) - src_uv_offset) // src_stride)
+          copy_width = min(bufs[key].width, src_stride, stride)
+          src_y = frame_data[:src_stride * src_y_height].reshape(src_y_height, src_stride)
+          src_uv = frame_data[src_uv_offset:src_uv_offset + src_stride * src_uv_height].reshape(src_uv_height, src_stride)
+          dst_y = packed_frame[:uv_offset].reshape(y_height, stride)
+          dst_uv = packed_frame[uv_offset:uv_offset + stride * uv_height].reshape(uv_height, stride)
+          dst_y[:src_y_height, :copy_width] = src_y[:, :copy_width]
+          dst_uv[:src_uv_height, :copy_width] = src_uv[:, :copy_width]
+          frame_data = packed_frame
         self.full_frames[key] = Tensor(frame_data, device=self.WARP_DEV).realize()
       else:
         ptr = frame_data.ctypes.data
