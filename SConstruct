@@ -16,6 +16,9 @@ Decider('MD5-timestamp')
 
 SetOption('num_jobs', max(1, int(os.cpu_count()/2)))
 
+AddOption('--ubsan', action='store_true', default=False, help='turn on UBSan')
+AddOption('--mutation', action='store_true', default=False, help='generate mutation-ready code')
+AddOption('--coverage', action='store_true', default=False, help='build with test coverage options')
 AddOption('--ccflags', action='store', type='string', default='', help='pass arbitrary flags over the command line')
 AddOption('--verbose', action='store_true', default=False, help='show full build commands')
 AddOption('--minimal',
