@@ -98,6 +98,7 @@ def find_supported_usb_product(expected_product_id: int | None = None) -> int | 
     _add_libusb_search_path_once()
     try:
         import usb.core  # type: ignore
+        import usb.util  # type: ignore
     except Exception as exc:
         print(f"TURZX USB scan unavailable: {exc}", flush=True)
         return None
@@ -273,17 +274,26 @@ class TuringUsbDisplay:
         if dev is None:
             raise ValueError(f"USB device not found for pid=0x{self.expected_product_id:04x}")
 
-        try:
-            dev.set_configuration()
-        except usb.core.USBError as exc:
-            print("Warning: set_configuration() failed:", exc)
-
         if sys.platform.startswith("linux"):
             try:
                 if dev.is_kernel_driver_active(0):
                     dev.detach_kernel_driver(0)
             except usb.core.USBError as exc:
                 print("Warning: detach_kernel_driver failed:", exc)
+
+        try:
+            dev.set_configuration()
+        except usb.core.USBError as exc:
+            if getattr(exc, "errno", None) == errno.EBUSY:
+                raise RuntimeError("TURZX USB display is busy; another process may be using it") from exc
+            raise
+
+        try:
+            usb.util.claim_interface(dev, 0)
+        except usb.core.USBError as exc:
+            if getattr(exc, "errno", None) == errno.EBUSY:
+                raise RuntimeError("TURZX USB display is busy; another process may be using it") from exc
+            raise
 
         return dev, self.expected_product_id
 
