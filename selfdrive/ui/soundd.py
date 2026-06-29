@@ -11,6 +11,7 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.utils import retry
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
 
 from openpilot.system import micd
 from openpilot.system.hardware import HARDWARE
@@ -31,6 +32,7 @@ if HARDWARE.get_device_type() == "tizi":
   VOLUME_BASE = 10
 
 AudibleAlert = car.CarControl.HUDControl.AudibleAlert
+ButtonType = car.CarState.ButtonEvent.Type
 
 
 sound_list: dict[int, tuple[str, int | None, float]] = {
@@ -240,7 +242,8 @@ class Soundd:
     # sounddevice must be imported after forking processes
     import sounddevice as sd
 
-    sm = messaging.SubMaster(['selfdriveState', 'soundPressure', 'carrotMan'])
+    sm = messaging.SubMaster(['selfdriveState', 'soundPressure', 'carrotMan', 'carState'])
+    cruise_main_toggle = CruiseMainOpenpilotToggle(ButtonType.mainCruise)
 
     with self.get_stream(sd) as stream:
       rk = Ratekeeper(20)
@@ -254,7 +257,10 @@ class Soundd:
           self.spl_filter_weighted.update(sm["soundPressure"].soundPressureWeightedDb)
           self.current_volume = self.calculate_volume(float(self.spl_filter_weighted.x)) * self.soundVolumeAdjust
 
-        self.get_audible_alert(sm)
+        if cruise_main_toggle.update(sm['carState'].buttonEvents, sm['selfdriveState'].enabled):
+          self.update_alert(AudibleAlert.prompt)
+        else:
+          self.get_audible_alert(sm)
 
         rk.keep_time()
 

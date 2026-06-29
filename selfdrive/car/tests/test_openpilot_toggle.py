@@ -13,13 +13,13 @@ def button_event(pressed: bool, button_type=MAIN_BUTTON):
 
 
 class TestCruiseMainOpenpilotToggle(unittest.TestCase):
-  def test_long_press_triggers_on_release(self):
+  def test_long_press_triggers_at_threshold(self):
     toggle = CruiseMainOpenpilotToggle(MAIN_BUTTON)
 
     self.assertFalse(toggle.update([button_event(True)], engaged=False, now=1.0))
-    self.assertFalse(toggle.update([], engaged=False, now=1.0 + CRUISE_MAIN_LONG_PRESS_SECONDS))
-    self.assertTrue(toggle.update([button_event(False)], engaged=False, now=1.1 + CRUISE_MAIN_LONG_PRESS_SECONDS))
-    self.assertFalse(toggle.update([button_event(False)], engaged=False, now=10.0))
+    self.assertTrue(toggle.update([], engaged=False, now=1.0 + CRUISE_MAIN_LONG_PRESS_SECONDS))
+    self.assertFalse(toggle.update([], engaged=False, now=10.0))
+    self.assertFalse(toggle.update([button_event(False)], engaged=False, now=10.1))
 
   def test_short_press_does_not_trigger(self):
     toggle = CruiseMainOpenpilotToggle(MAIN_BUTTON)
@@ -31,7 +31,8 @@ class TestCruiseMainOpenpilotToggle(unittest.TestCase):
     toggle = CruiseMainOpenpilotToggle(MAIN_BUTTON)
 
     self.assertFalse(toggle.update([button_event(True)], engaged=True, now=1.0))
-    self.assertFalse(toggle.update([button_event(False)], engaged=True, now=1.1 + CRUISE_MAIN_LONG_PRESS_SECONDS))
+    self.assertFalse(toggle.update([], engaged=True, now=1.1 + CRUISE_MAIN_LONG_PRESS_SECONDS))
+    self.assertFalse(toggle.update([button_event(False)], engaged=True, now=10.0))
 
   def test_other_buttons_are_ignored(self):
     toggle = CruiseMainOpenpilotToggle(MAIN_BUTTON)
