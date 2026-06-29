@@ -187,7 +187,8 @@
                     "CustomSteerDeltaUp",
                     "CustomSteerDeltaDown",
                     "CustomSteerDeltaUpLC",
-                    "CustomSteerDeltaDownLC"
+                    "CustomSteerDeltaDownLC",
+                    "AngleControlBlend"
                   ]
                 }
               ]
@@ -896,6 +897,22 @@
       "max": 50,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "조향튜닝",
+      "name": "AngleControlBlend",
+      "title": "앵글조향 보정 적용률(0%)",
+      "descr": "angle steering 차량의 저속 EPS 보호와 추종 보정 적용률\n0: 최소\n100: 최대\n재시작 적용",
+      "egroup": "LAT",
+      "etitle": "Angle Control Blend(0%)",
+      "edescr": "Low-speed EPS protection and tracking correction for angle steering\n0: Min\n100: Max\nChanges apply on the next controls process start",
+      "cgroup": "转向",
+      "ctitle": "角度转向校正比例(0%)",
+      "cdescr": "角度转向车辆的低速 EPS 保护和跟踪校正比例\n0: Min\n100: Max\n中间值按比例混合两种状态\n更改将在下次控制进程启动时生效",
+      "min": 0,
+      "max": 100,
+      "default": 0,
+      "unit": 5
     },
     {
       "group": "조향튜닝",

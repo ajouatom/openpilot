@@ -2,6 +2,7 @@ import math
 import numpy as np
 
 from cereal import log
+from openpilot.common.params import Params
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 
 STEER_ANGLE_SATURATION_THRESHOLD = 2.5  # Degrees
@@ -18,6 +19,8 @@ class LatControlAngle(LatControl):
     self.sat_check_min_speed = 5.
     self.curvature_trim = 0.0
     self.curvature_trim_enabled = bool(CP.flags & HYUNDAI_ANGLE_CONTROL_FLAG)
+    angle_control_level = int(np.clip(Params().get_int("AngleControlBlend"), 0, 100))
+    self.angle_policy_blend = angle_control_level / 100.0 if self.curvature_trim_enabled else 0.0
 
   def reset(self):
     super().reset()
@@ -33,7 +36,7 @@ class LatControlAngle(LatControl):
     else:
       angle_log.active = True
       corrected_curvature = float(desired_curvature)
-      if not self.curvature_trim_enabled or CS.steeringPressed or CS.vEgo < 0.3:
+      if not self.curvature_trim_enabled or self.angle_policy_blend <= 0.0 or CS.steeringPressed or CS.vEgo < 0.3:
         self.curvature_trim = 0.0
       else:
         actual_curvature = -VM.calc_curvature(math.radians(CS.steeringAngleDeg - params.angleOffsetDeg), CS.vEgo, params.roll)
@@ -43,12 +46,13 @@ class LatControlAngle(LatControl):
         self.curvature_trim += curvature_error * trim_i * 0.01
         self.curvature_trim *= ANGLE_TRIM_LEAK_RATE
         self.curvature_trim = float(np.clip(self.curvature_trim, -ANGLE_TRIM_MAX_CURVATURE, ANGLE_TRIM_MAX_CURVATURE))
-        corrected_curvature += self.curvature_trim
+        corrected_curvature += self.curvature_trim * self.angle_policy_blend
 
       angle_steers_des = math.degrees(VM.get_steer_from_curvature(-corrected_curvature, CS.vEgo, params.roll))
       angle_steers_des += params.angleOffsetDeg
-      if CS.steeringPressed:
-        angle_steers_des = float(CS.steeringAngleDeg)
+      if CS.steeringPressed and self.angle_policy_blend > 0.0:
+        angle_steers_des = float(np.interp(self.angle_policy_blend, [0.0, 1.0],
+                                           [angle_steers_des, CS.steeringAngleDeg]))
 
     angle_control_saturated = abs(angle_steers_des - CS.steeringAngleDeg) > STEER_ANGLE_SATURATION_THRESHOLD
     angle_log.saturated = bool(self._check_saturation(angle_control_saturated, CS, False, curvature_limited))

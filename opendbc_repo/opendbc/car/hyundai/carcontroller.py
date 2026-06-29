@@ -164,6 +164,7 @@ class CarController(CarControllerBase):
     self.activeCarrot = 0
     self.camera_scc_params = Params().get_int("HyundaiCameraSCC")
     self.is_ldws_car = Params().get_bool("IsLdwsCar")
+    self.angle_control_level = int(np.clip(Params().get_int("AngleControlBlend"), 0, 100))
     self.enable_corner_radar = 0
 
     self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
@@ -253,20 +254,21 @@ class CarController(CarControllerBase):
     if angle_control:
       apply_steer_req = CC.latActive
 
+    angle_policy_level = self.angle_control_level if angle_control else 0
     angle_torque_cap = self.angle_max_torque
-    if angle_control and CC.latActive:
+    if angle_control and CC.latActive and angle_policy_level > 0:
       desired_clip_error = abs(float(actuators.steeringAngleDeg) - apply_angle)
       tracking_error = abs(apply_angle - CS.out.steeringAngleDeg)
       near_angle_cap = abs(apply_angle) > self.params.ANGLE_LIMITS.STEER_ANGLE_MAX - 2.0
       steering_angle_abs = abs(CS.out.steeringAngleDeg)
-      low_speed_large_angle = CS.out.vEgo < 8.0 and steering_angle_abs > 60.0
       stalled_tracking = abs(CS.out.steeringRateDeg) < 8.0 and tracking_error > 8.0
       eps_torque_abs = abs(CS.out.steeringTorqueEps)
-      eps_elevated = eps_torque_abs > 14.0
       eps_loaded = eps_torque_abs > 18.0
       launch_large_angle = CS.out.vEgo < 7.0 and abs(CS.out.steeringAngleDeg) > 20.0
       low_speed_fast_steer = CS.out.vEgo < 8.0 and abs(CS.out.steeringRateDeg) > 35.0
       post_driver_unwind = self.driver_unwind_frames > 0 and CS.out.vEgo < 12.0 and abs(CS.out.steeringAngleDeg) > 15.0
+
+      common_torque_cap = self.angle_max_torque
 
       if launch_large_angle:
         launch_angle = abs(CS.out.steeringAngleDeg)
@@ -280,8 +282,8 @@ class CarController(CarControllerBase):
                                      [self.angle_max_torque, launch_target_cap]))
         launch_cap = float(np.interp(CS.out.vEgo, [6.0, 7.0],
                                      [launch_cap, self.angle_max_torque]))
-        angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
-                                                     launch_cap))
+        common_torque_cap = min(common_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
+                                                       launch_cap))
 
       if low_speed_fast_steer:
         steering_rate = abs(CS.out.steeringRateDeg)
@@ -295,8 +297,8 @@ class CarController(CarControllerBase):
                                         [self.angle_max_torque, rate_target_cap]))
         fast_steer_cap = float(np.interp(CS.out.vEgo, [7.0, 8.0],
                                          [fast_steer_cap, self.angle_max_torque]))
-        angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
-                                                     fast_steer_cap))
+        common_torque_cap = min(common_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
+                                                       fast_steer_cap))
 
       if post_driver_unwind:
         unwind_angle = abs(CS.out.steeringAngleDeg)
@@ -310,10 +312,13 @@ class CarController(CarControllerBase):
                                      [self.angle_max_torque, unwind_target_cap]))
         unwind_cap = float(np.interp(CS.out.vEgo, [10.0, 12.0],
                                      [unwind_cap, self.angle_max_torque]))
-        angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
-                                                     unwind_cap))
+        common_torque_cap = min(common_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
+                                                       unwind_cap))
 
-      if low_speed_large_angle and (near_angle_cap or eps_elevated):
+      angle_torque_cap_100 = common_torque_cap
+      low_speed_large_angle_100 = CS.out.vEgo < 8.0 and steering_angle_abs > 60.0
+      eps_elevated = eps_torque_abs > 14.0
+      if low_speed_large_angle_100 and (near_angle_cap or eps_elevated):
         clip_factor = float(np.interp(desired_clip_error, [0.0, 5.0, 20.0, 60.0],
                                       [1.0, 0.75, 0.45, 0.25]))
         tracking_factor = 1.0
@@ -329,8 +334,8 @@ class CarController(CarControllerBase):
         speed_protection_blend = float(np.interp(CS.out.vEgo, [7.0, 8.0], [1.0, 0.0]))
         protection_blend = angle_protection_blend * speed_protection_blend
         authority_factor = 1.0 - (1.0 - authority_factor) * protection_blend
-        angle_torque_cap = min(angle_torque_cap, max(self.params.ANGLE_MIN_TORQUE,
-                                                     self.angle_max_torque * authority_factor))
+        angle_torque_cap_100 = min(angle_torque_cap_100, max(self.params.ANGLE_MIN_TORQUE,
+                                                             self.angle_max_torque * authority_factor))
 
       driver_torque_quiet = abs(CS.out.steeringTorque) < self.params.STEER_THRESHOLD * 0.6
       settled_tracking_stall = (self.driver_unwind_frames == 0 and not CS.out.steeringPressed and driver_torque_quiet and
@@ -338,15 +343,19 @@ class CarController(CarControllerBase):
       if settled_tracking_stall and not eps_loaded:
         tracking_need = float(np.interp(tracking_error, [20.0, 60.0], [0.0, 1.0]))
         eps_headroom = float(np.interp(eps_torque_abs, [14.0, 18.0], [1.0, 0.0]))
-        angle_torque_cap = min(self.angle_max_torque,
-                               angle_torque_cap + 30.0 * tracking_need * eps_headroom)
+        angle_torque_cap_100 = min(self.angle_max_torque,
+                                   angle_torque_cap_100 + 30.0 * tracking_need * eps_headroom)
 
       # If the applied angle is pinned while the model asks for much more, cut
       # authority immediately instead of letting the EPS grind against the stop.
       if near_angle_cap and desired_clip_error > 20.0:
-        angle_torque_cap = min(angle_torque_cap, self.params.ANGLE_MIN_TORQUE)
+        angle_torque_cap_100 = min(angle_torque_cap_100, self.params.ANGLE_MIN_TORQUE)
 
-    if CS.out.steeringPressed and angle_control and CC.latActive:
+      angle_policy_blend = angle_policy_level / 100.0
+      angle_torque_cap = float(np.interp(angle_policy_blend, [0.0, 1.0],
+                                         [self.angle_max_torque, angle_torque_cap_100]))
+
+    if CS.out.steeringPressed and angle_control and CC.latActive and angle_policy_level > 0:
       self.driver_unwind_frames = int(1.5 / DT_CTRL)
     elif self.driver_unwind_frames > 0:
       self.driver_unwind_frames -= 1
