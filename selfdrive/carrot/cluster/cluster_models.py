@@ -124,6 +124,7 @@ class DetectedVehicle:
     probability: float = 1.0
     relative_speed_mps: float | None = None
     absolute_speed_kph: float | None = None
+    lateral_speed_mps: float | None = None
     acceleration_mps2: float | None = None
     cut_in: bool = False
     primary: bool = False
@@ -151,6 +152,8 @@ class RadarPoint:
 
 
 RADAR_ZERO_POSITION_EPS_M = 1e-3
+RADAR_MOVING_VEHICLE_MIN_SPEED_KPH = 12.0
+RADAR_CROSS_TRAFFIC_MIN_LATERAL_SPEED_MPS = 2.0
 
 
 def radar_position_is_zero(longitudinal_m: float, lateral_m: float) -> bool:
@@ -170,6 +173,14 @@ class SimulatorInput:
     surround_view_active: bool = False
     left_signal_requested: bool = False
     right_signal_requested: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class TpmsInfo:
+    fl: float | None = None
+    fr: float | None = None
+    rl: float | None = None
+    rr: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +227,7 @@ class ClusterUiState:
     model_path: tuple[ModelPathPoint, ...] = ()
     detected_vehicles: tuple[DetectedVehicle, ...] = ()
     radar_points: tuple[RadarPoint, ...] = ()
+    tpms: TpmsInfo = TpmsInfo()
     radar_info_mode: int = 4
     radar_display_mode: int = 0
     radar_source_color_mode: int = 0

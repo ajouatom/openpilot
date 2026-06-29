@@ -1,6 +1,8 @@
 # Carrot Cluster
 
-Standalone raylib cluster UI bundle for openpilot devices.
+Standalone raylib cluster UI bundle for openpilot devices. Live and replay views
+show tire pressures beside the ego vehicle's four wheel positions when TPMS data
+is available; pressures below 31 psi are highlighted in red.
 
 Run from the openpilot root:
 
@@ -301,8 +303,9 @@ to the point/box top so speed and distance are less high above the vehicle.
 `LR`/`RR` rear-corner detections render as normal vehicle boxes at their actual
 detected positions. The older fixed rear-tire-depth 2D arrow/label is removed.
 The default drive camera sits closer to the ego roof, lower than the earlier
-high view, tilted downward, and shifted `5m` forward so route/live scene space
-is easier to see. Detected vehicles, radar points, and desired-distance markers
+high view, tilted downward, shifted `5m` forward, and uses a `31` degree
+vertical field of view so nearby vehicles retain a useful apparent size.
+Detected vehicles, radar points, and desired-distance markers
 compress signed longitudinal placement by `0.5` in the rendered scene only, so
 actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Distance labels keep
 the actual signed longitudinal values. The ego vehicle is drawn half a vehicle
@@ -338,6 +341,14 @@ radar evidence is sufficient. Points near or slightly outside a road edge can
 still classify as vehicles when their counter is stable, absolute speed is
 vehicle-like, and acceleration stays within about +/-5 m/s^2, even if the radar
 radar probability is low.
+Measured radar tracks with at least `12 km/h` of combined longitudinal/lateral
+motion remain visible as vehicles outside lane or road-edge boundaries, while
+slower boundary reflections stay filtered. Signed negative `vLead` values are
+preserved; oncoming tracks at or below `-12 km/h` render red. Tracks with at
+least `12 km/h` combined motion rotate their vehicle box to follow the measured
+longitudinal/lateral velocity vector, including after radar/model merging.
+Stopped and slow vehicles remain aligned with the road. Tracks with at least
+`2.0 m/s` lateral velocity render amber.
 Lane and road-edge rendering keeps model geometry visible instead of filtering
 by `laneLineProbs` or `roadEdgeStds`, avoiding distracting HUD flicker when
 model confidence jitters. Lane markings are still suppressed when their
