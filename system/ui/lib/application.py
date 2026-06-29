@@ -6,6 +6,7 @@ import queue
 import time
 import signal
 import sys
+import struct
 import pyray as rl
 import threading
 import platform
@@ -32,6 +33,15 @@ FPS_CRITICAL_THRESHOLD = 0.5  # Critical threshold for triggering strict actions
 MOUSE_THREAD_RATE = 140  # touch controller runs at 140Hz
 MAX_TOUCH_SLOTS = 2
 TOUCH_HISTORY_TIMEOUT = 3.0  # Seconds before touch points fade out
+
+TOUCH_EVENT_DEVICE = "/dev/input/by-path/platform-894000.i2c-event"
+EVENT_FORMAT = "llHHi"
+EVENT_SIZE = struct.calcsize(EVENT_FORMAT)
+EV_SYN, EV_KEY, EV_ABS = 0x00, 0x01, 0x03
+SYN_REPORT = 0x00
+BTN_TOUCH = 0x14a
+ABS_MT_SLOT = 0x2f
+ABS_MT_TRACKING_ID = 0x39
 
 BIG_UI = os.getenv("BIG", "0") == "1"
 ENABLE_VSYNC = os.getenv("ENABLE_VSYNC", "0") == "1"
@@ -146,6 +156,10 @@ class MouseState:
     self._events: deque[MouseEvent] = deque(maxlen=MOUSE_THREAD_RATE)  # bound event list
     self._prev_mouse_event: list[MouseEvent | None] = [None] * MAX_TOUCH_SLOTS
 
+    self._slot_active: list[bool] = [False] * MAX_TOUCH_SLOTS
+    self._cur_slot = 0
+    self._saw_mt = False
+
     self._rk = Ratekeeper(MOUSE_THREAD_RATE, print_delay_threshold=None)
     self._lock = threading.Lock()
     self._exit_event = threading.Event()
@@ -169,34 +183,73 @@ class MouseState:
       self._thread.join()
 
   def _run_thread(self):
-    while not self._exit_event.is_set():
-      rl.poll_input_events()
-      self._handle_mouse_event()
-      self._rk.keep_time()
+    touch_fd = self._open_touch_device()
+    try:
+      while not self._exit_event.is_set():
+        rl.poll_input_events()
+        if touch_fd is not None:
+          self._read_touch_events(touch_fd)
+        else:
+          self._handle_mouse_event()
+        self._rk.keep_time()
+    finally:
+      if touch_fd is not None:
+        os.close(touch_fd)
+
+  def _open_touch_device(self) -> int | None:
+    if PC:
+      return None
+    try:
+      return os.open(TOUCH_EVENT_DEVICE, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError as e:
+      cloudlog.warning(f"mouse: using raylib touch, can't open {TOUCH_EVENT_DEVICE}: {e}")
+      return None
+
+  def _read_touch_events(self, fd: int) -> None:
+    try:
+      data = os.read(fd, EVENT_SIZE * 64)
+    except (BlockingIOError, OSError):
+      return
+
+    for off in range(0, len(data) - EVENT_SIZE + 1, EVENT_SIZE):
+      _sec, _usec, etype, code, value = struct.unpack(EVENT_FORMAT, data[off:off + EVENT_SIZE])
+      if etype == EV_ABS:
+        if code == ABS_MT_SLOT:
+          self._cur_slot = value
+        elif code == ABS_MT_TRACKING_ID:
+          self._saw_mt = True
+          if 0 <= self._cur_slot < MAX_TOUCH_SLOTS:
+            self._slot_active[self._cur_slot] = value != -1
+      elif etype == EV_KEY and code == BTN_TOUCH and not self._saw_mt:
+        self._slot_active[0] = value != 0
+      elif etype == EV_SYN and code == SYN_REPORT:
+        for slot in range(MAX_TOUCH_SLOTS):
+          self._append_event(slot, self._slot_active[slot])
 
   def _handle_mouse_event(self):
-    # TODO: read touch events from evdev directly to get real kernel timestamps.
-    #  Polling at 140Hz with time.monotonic() causes timing jitter that makes scroll
-    #  velocity oscillate (alternating high/low). Real timestamps would also let us
-    #  detect swipe-stop-lift via event gaps instead of the fragile decel heuristic.
     for slot in range(MAX_TOUCH_SLOTS):
+      self._append_event(slot, rl.is_mouse_button_down(slot))
+
+  def _append_event(self, slot: int, down: bool) -> None:
+    prev = self._prev_mouse_event[slot]
+    prev_down = prev.left_down if prev is not None else False
+    pressed = down and not prev_down
+    released = prev_down and not down
+
+    if down:
       mouse_pos = rl.get_touch_position(slot)
       x = mouse_pos.x / self._scale if self._scale != 1.0 else mouse_pos.x
       y = mouse_pos.y / self._scale if self._scale != 1.0 else mouse_pos.y
-      ev = MouseEvent(
-        MousePos(x, y),
-        slot,
-        rl.is_mouse_button_pressed(slot),  # noqa: TID251
-        rl.is_mouse_button_released(slot),  # noqa: TID251
-        rl.is_mouse_button_down(slot),
-        time.monotonic(),
-      )
-      # Only add changes
-      prev = self._prev_mouse_event[slot]
-      if prev is None or ev[:-1] != prev[:-1]:
-        with self._lock:
-          self._events.append(ev)
-        self._prev_mouse_event[slot] = ev
+      pos = MousePos(x, y)
+    else:
+      pos = prev.pos if prev is not None else MousePos(0.0, 0.0)
+
+    ev = MouseEvent(pos, slot, pressed, released, down, time.monotonic())
+
+    if prev is None or ev[:-1] != prev[:-1]:
+      with self._lock:
+        self._events.append(ev)
+      self._prev_mouse_event[slot] = ev
 
 
 class GuiApplication:
