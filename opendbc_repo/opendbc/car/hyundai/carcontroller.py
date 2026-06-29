@@ -272,21 +272,26 @@ class CarController(CarControllerBase):
       self.recovering_from_override = True
 
     torque_threshold = max(self.params.STEER_THRESHOLD, 1.0)
-    driver_torque_abs = abs(float(CS.out.steeringTorque))
+    # Filter signed torque so alternating sensor noise cancels out before its
+    # magnitude is used for pre-override prediction.
+    driver_torque = float(CS.out.steeringTorque)
+    driver_torque_abs = abs(driver_torque)
     if not CC.latActive:
-      self.driver_torque_filtered = driver_torque_abs
-      self.driver_torque_filtered_prev = driver_torque_abs
+      self.driver_torque_filtered = driver_torque
+      self.driver_torque_filtered_prev = driver_torque
       self.pre_override_frames = 0
     else:
       torque_filter_alpha = DT_CTRL / (DRIVER_TORQUE_FILTER_TAU + DT_CTRL)
       self.driver_torque_filtered_prev = self.driver_torque_filtered
-      self.driver_torque_filtered += torque_filter_alpha * (driver_torque_abs - self.driver_torque_filtered)
+      self.driver_torque_filtered += torque_filter_alpha * (driver_torque - self.driver_torque_filtered)
 
-    driver_torque_rate = max(0.0, (self.driver_torque_filtered - self.driver_torque_filtered_prev) / DT_CTRL)
-    torque_ratio = self.driver_torque_filtered / torque_threshold
+    driver_torque_filtered_abs = abs(self.driver_torque_filtered)
+    driver_torque_filtered_prev_abs = abs(self.driver_torque_filtered_prev)
+    driver_torque_rate = max(0.0, (driver_torque_filtered_abs - driver_torque_filtered_prev_abs) / DT_CTRL)
+    torque_ratio = driver_torque_filtered_abs / torque_threshold
     raw_torque_ratio = driver_torque_abs / torque_threshold
     predicted_torque_ratio = (
-      self.driver_torque_filtered + driver_torque_rate * PRE_OVERRIDE_PREDICTION_TIME
+      driver_torque_filtered_abs + driver_torque_rate * PRE_OVERRIDE_PREDICTION_TIME
     ) / torque_threshold
     pre_override_candidate = (
       CC.latActive and
