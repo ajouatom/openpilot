@@ -392,7 +392,7 @@ static void canfd_bfwd_reset(CanfdBufferedFwd* st) {
   st->count = 0U;
   st->reuse_left = 0U;
   st->has_last_pkt = false;
-  (void)memset(&st->last_pkt, 0, sizeof(st->last_pkt));
+  st->last_pkt = (CANPacket_t){0};
 }
 static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt) {
   if ((st == NULL) || !st->enabled) return;
