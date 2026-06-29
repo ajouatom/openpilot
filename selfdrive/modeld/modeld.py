@@ -28,6 +28,7 @@ from openpilot.selfdrive.modeld.helpers import usbgpu_enabled, usbgpu_present, m
 
 PROCESS_NAME = "selfdrive.modeld.modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
+SIMULATION = os.getenv('SIMULATION') == '1'
 
 LAT_SMOOTH_SECONDS = 0.0
 LONG_SMOOTH_SECONDS = 0.3
@@ -409,7 +410,10 @@ def main(demo=False):
       drivingdata_send.drivingModelData.modelExecutionTime = mt3 - mt1
 
       fill_driving_model_data(drivingdata_send, modelv2_send)
-      fill_pose_msg(posenet_send, model_output, meta_main.frame_id, vipc_dropped_frames, meta_main.timestamp_eof, live_calib_seen)
+      # Slow PC inference can exceed locationd's rewind window. The simulator
+      # pose represents current simulated motion, so timestamp it at publish.
+      pose_timestamp_eof = time.monotonic_ns() if SIMULATION else meta_main.timestamp_eof
+      fill_pose_msg(posenet_send, model_output, meta_main.frame_id, vipc_dropped_frames, pose_timestamp_eof, live_calib_seen)
       pm.send('modelV2', modelv2_send)
       pm.send('drivingModelData', drivingdata_send)
       pm.send('cameraOdometry', posenet_send)
