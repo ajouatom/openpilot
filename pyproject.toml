@@ -48,6 +48,7 @@ dependencies = [
 
   # panda
   "libusb1",
+  "pyusb",       # carrot cluster USB display
   "spidev; platform_system == 'Linux'",
 
   # logging
