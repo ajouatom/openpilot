@@ -13,7 +13,10 @@ TRAINING_ASSETS_DIR = os.path.join(os.path.dirname(ROOT_DIR), "assets", "trainin
 OFFROAD_ASSETS_DIR = os.path.join(os.path.dirname(ROOT_DIR), "assets", "offroad")
 
 # Settings file
-DEFAULT_SETTINGS_PATH = "/data/openpilot/selfdrive/carrot_settings.json"
+DEFAULT_SETTINGS_PATH = os.environ.get(
+  "CARROT_SETTINGS_PATH",
+  os.path.join(os.path.dirname(ROOT_DIR), "carrot_settings.json"),
+)
 
 # Carrot data dirs
 CARROT_DATA_DIR = "/data/openpilot/selfdrive/carrot/data"
