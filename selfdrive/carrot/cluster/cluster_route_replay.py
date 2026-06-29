@@ -39,7 +39,9 @@ from cluster_models import (
     ModelPathPoint,
     ModelRiskPoint,
     RadarPoint,
+    RADAR_MOVING_VEHICLE_MIN_SPEED_KPH,
     RouteOverlay,
+    TpmsInfo,
     radar_position_is_zero,
 )
 from cluster_utils import clamp, smoothstep
@@ -108,6 +110,7 @@ ROUTE_VIDEO_DECODE_HEIGHT = 244
 ROUTE_VIDEO_SEEK_RESTART_FRAMES = 45
 NAV_SPEED_LIMIT_HOLD_SECONDS = 10.0
 ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
+NEAR_ROAD_EDGE_VEHICLE_BLOCK_DISTANCE_M = 10.0
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
@@ -170,6 +173,7 @@ class RouteReplayFrame:
     brake: float
     detected_vehicles: tuple[DetectedVehicle, ...]
     radar_points: tuple[RadarPoint, ...] = ()
+    tpms: TpmsInfo = TpmsInfo()
     display_speed_kph: float | None = None
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None
@@ -1116,6 +1120,7 @@ class RouteLogParser:
             lane_change_phase,
         )
         radar_points = self._radar_points_from_current_state(event_t)
+        tpms = tpms_info_from_car_state(car_state)
 
         return RouteReplayFrame(
             t=event_t,
@@ -1165,6 +1170,7 @@ class RouteLogParser:
             brake=clamp(safe_float(car_state, "brake", 0.0), 0.0, 1.0),
             detected_vehicles=detected_vehicles,
             radar_points=radar_points,
+            tpms=tpms,
             display_speed_kph=display_speed_kph,
             planned_speed_kph=self.planned_speed_kph,
             planned_accel_mps2=self.planned_accel_mps2,
@@ -1461,11 +1467,14 @@ class RouteLogParser:
                 continue
             relative_speed_mps = safe_optional_float(lead, "vRel")
             lead_speed_mps = safe_optional_float(lead, "vLead")
+            lateral_speed_mps = safe_optional_float(lead, "vLat")
+            if lateral_speed_mps is not None:
+                lateral_speed_mps = -lateral_speed_mps
             absolute_speed_kph = (
-                max(0.0, lead_speed_mps * 3.6)
+                lead_speed_mps * 3.6
                 if lead_speed_mps is not None
                 else (
-                    max(0.0, self.current_speed_kph + relative_speed_mps * 3.6)
+                    self.current_speed_kph + relative_speed_mps * 3.6
                     if relative_speed_mps is not None
                     else None
                 )
@@ -1478,6 +1487,7 @@ class RouteLogParser:
                     source="radarState",
                     relative_speed_mps=relative_speed_mps,
                     absolute_speed_kph=absolute_speed_kph,
+                    lateral_speed_mps=lateral_speed_mps,
                     acceleration_mps2=safe_optional_float(lead, "aLeadK"),
                     ttc_s=ttc_from_relative_speed(d_rel, relative_speed_mps),
                 )
@@ -1542,6 +1552,8 @@ class RouteLogParser:
         car_state_detections = car_state_corner_detections(car_state)
         car_state_corner_labels = {vehicle.label for vehicle in car_state_detections}
         for vehicle in car_state_detections:
+            if vehicle_is_blocked_by_near_road_edge(vehicle, lane_values):
+                continue
             if (
                 not vehicle_is_confirmed_corner_radar(vehicle)
                 and not vehicle_is_inside_road_edges(vehicle, lane_values)
@@ -1559,6 +1571,8 @@ class RouteLogParser:
             for vehicle in corner_detections:
                 if vehicle.label in car_state_corner_labels:
                     continue
+                if vehicle_is_blocked_by_near_road_edge(vehicle, lane_values):
+                    continue
                 if (
                     not vehicle_is_confirmed_corner_radar(vehicle)
                     and not vehicle_is_inside_road_edges(vehicle, lane_values)
@@ -1569,7 +1583,12 @@ class RouteLogParser:
 
         if event_t - self.radar_detection_t < 0.8:
             for vehicle in self.radar_detections:
-                if not vehicle_is_inside_road_edges(vehicle, lane_values):
+                if vehicle_is_blocked_by_near_road_edge(vehicle, lane_values):
+                    continue
+                if (
+                    not vehicle_is_inside_road_edges(vehicle, lane_values)
+                    and not radar_vehicle_has_meaningful_motion(vehicle)
+                ):
                     continue
                 if vehicle.source == "radarState" or not has_nearby_vehicle(
                     detections,
@@ -2173,6 +2192,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         model_path=frame.model_path,
         detected_vehicles=frame.detected_vehicles,
         radar_points=frame.radar_points,
+        tpms=frame.tpms,
         planned_speed_kph=frame.planned_speed_kph,
         planned_accel_mps2=frame.planned_accel_mps2,
         planned_curvature_m_inv=frame.planned_curvature_m_inv,
@@ -2359,6 +2379,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         brake=lerp(left.brake, right.brake),
         detected_vehicles=discrete.detected_vehicles,
         radar_points=discrete.radar_points,
+        tpms=discrete.tpms,
         planned_speed_kph=lerp_optional(left.planned_speed_kph, right.planned_speed_kph),
         planned_accel_mps2=lerp_optional(left.planned_accel_mps2, right.planned_accel_mps2),
         planned_curvature_m_inv=lerp_optional(left.planned_curvature_m_inv, right.planned_curvature_m_inv),
@@ -3007,9 +3028,9 @@ def live_track_to_radar_point(track: Any, index: int, ego_speed_kph: float) -> R
     lead_speed_mps = safe_optional_float(track, "vLead")
     absolute_speed_kph = None
     if lead_speed_mps is not None:
-        absolute_speed_kph = max(0.0, lead_speed_mps * 3.6)
+        absolute_speed_kph = lead_speed_mps * 3.6
     elif rel_speed_mps is not None:
-        absolute_speed_kph = max(0.0, ego_speed_kph + rel_speed_mps * 3.6)
+        absolute_speed_kph = ego_speed_kph + rel_speed_mps * 3.6
     lat_speed_mps = safe_optional_float(track, "yvRel")
     if lat_speed_mps is not None:
         lat_speed_mps = renderer_lateral_from_openpilot_yrel(lat_speed_mps)
@@ -3102,6 +3123,21 @@ def vehicle_is_inside_road_edges(vehicle: DetectedVehicle, lane_values: dict[str
     if right_edge_m is not None and vehicle.lateral_m > right_edge_m + ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M:
         return False
     return True
+
+
+def vehicle_is_blocked_by_near_road_edge(vehicle: DetectedVehicle, lane_values: dict[str, Any]) -> bool:
+    return (
+        abs(vehicle.longitudinal_m) <= NEAR_ROAD_EDGE_VEHICLE_BLOCK_DISTANCE_M
+        and not vehicle_is_inside_road_edges(vehicle, lane_values)
+    )
+
+
+def radar_vehicle_has_meaningful_motion(vehicle: DetectedVehicle) -> bool:
+    return (
+        vehicle.source == "radarState"
+        and vehicle.absolute_speed_kph is not None
+        and abs(vehicle.absolute_speed_kph) >= RADAR_MOVING_VEHICLE_MIN_SPEED_KPH
+    )
 
 
 def vehicle_is_confirmed_corner_radar(vehicle: DetectedVehicle) -> bool:
@@ -3340,6 +3376,21 @@ def finite_float(value: Any) -> float | None:
 def safe_optional_float(obj: Any, name: str) -> float | None:
     value = safe_float(obj, name, math.nan)
     return None if math.isnan(value) else value
+
+
+def tpms_info_from_car_state(car_state: Any) -> TpmsInfo:
+    tpms = safe_get(car_state, "tpms")
+
+    def pressure(name: str) -> float | None:
+        value = safe_optional_float(tpms, name) if tpms is not None else None
+        return value if value is not None and 5.0 <= value <= 60.0 else None
+
+    return TpmsInfo(
+        fl=pressure("fl"),
+        fr=pressure("fr"),
+        rl=pressure("rl"),
+        rr=pressure("rr"),
+    )
 
 
 def safe_optional_int(obj: Any, name: str) -> int | None:

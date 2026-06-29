@@ -25,6 +25,7 @@ from .services.auto_update import auto_update_loop
 from .services.git_status import git_status_loop
 from .services.heartbeat import heartbeat_loop
 from .services.params import HAS_PARAMS
+from .services.popular_values import start_popular_value_upload
 
 VISION_DIAG_UPLOAD_MAX_BYTES = 16 * 1024 * 1024
 
@@ -85,6 +86,7 @@ async def on_startup(app: web.Application) -> None:
     app["hb_task"] = asyncio.create_task(heartbeat_loop(app))
   app["git_status_task"] = asyncio.create_task(git_status_loop())
   app["auto_update_task"] = asyncio.create_task(auto_update_loop())
+  app["popular_value_upload_task"] = start_popular_value_upload(app)
   asyncio.create_task(_malloc_trim_loop())
 
 
@@ -128,6 +130,16 @@ async def on_cleanup(app: web.Application) -> None:
     auto_update_task.cancel()
     try:
       await auto_update_task
+    except asyncio.CancelledError:
+      pass
+    except Exception:
+      pass
+
+  popular_value_upload_task = app.get("popular_value_upload_task")
+  if popular_value_upload_task:
+    popular_value_upload_task.cancel()
+    try:
+      await popular_value_upload_task
     except asyncio.CancelledError:
       pass
     except Exception:

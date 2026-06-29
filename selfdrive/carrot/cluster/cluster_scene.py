@@ -47,6 +47,8 @@ from cluster_models import (
     LaneMarking,
     ModelPathPoint,
     RadarPoint,
+    RADAR_CROSS_TRAFFIC_MIN_LATERAL_SPEED_MPS,
+    RADAR_MOVING_VEHICLE_MIN_SPEED_KPH,
     radar_position_is_zero,
 )
 from cluster_utils import clamp, darken, lighten, smoothstep
@@ -69,6 +71,7 @@ RADAR_ROAD_EDGE_KEEP_SPEED_KPH = 18.0
 RADAR_ROAD_EDGE_KEEP_MIN_VALID_COUNT = 20
 RADAR_ROAD_EDGE_STABLE_VEHICLE_MIN_VALID_COUNT = 20
 RADAR_ROAD_EDGE_STABLE_VEHICLE_MAX_ACCEL_MPS2 = 5.0
+RADAR_NEAR_ROAD_EDGE_VEHICLE_BLOCK_DISTANCE_M = 10.0
 RADAR_STATIC_OBJECT_SPEED_MPS = 1.25
 RADAR_STATIC_OBJECT_SPEED_KPH = 8.0
 RADAR_SIDE_STATIC_LATERAL_LANES = 0.58
@@ -1877,12 +1880,15 @@ def detected_vehicles_with_merged_radar(
             replace(
                 vehicle,
                 source=f"{vehicle.source}{RADAR_MERGED_SOURCE_TAG}{point.label}",
-                relative_speed_mps=vehicle.relative_speed_mps
-                if vehicle.relative_speed_mps is not None
-                else point.relative_speed_mps,
-                absolute_speed_kph=vehicle.absolute_speed_kph
-                if vehicle.absolute_speed_kph is not None
-                else absolute_speed_kph,
+                relative_speed_mps=point.relative_speed_mps
+                if point.relative_speed_mps is not None
+                else vehicle.relative_speed_mps,
+                absolute_speed_kph=absolute_speed_kph
+                if absolute_speed_kph is not None
+                else vehicle.absolute_speed_kph,
+                lateral_speed_mps=point.lateral_speed_mps
+                if point.lateral_speed_mps is not None
+                else vehicle.lateral_speed_mps,
                 acceleration_mps2=vehicle.acceleration_mps2
                 if vehicle.acceleration_mps2 is not None
                 else point.relative_accel_mps2,
@@ -1990,6 +1996,7 @@ def merge_detected_vehicle_for_display(base: DetectedVehicle, other: DetectedVeh
         probability=max(base.probability, other.probability),
         relative_speed_mps=base.relative_speed_mps if base.relative_speed_mps is not None else other.relative_speed_mps,
         absolute_speed_kph=base.absolute_speed_kph if base.absolute_speed_kph is not None else other.absolute_speed_kph,
+        lateral_speed_mps=base.lateral_speed_mps if base.lateral_speed_mps is not None else other.lateral_speed_mps,
         acceleration_mps2=base.acceleration_mps2 if base.acceleration_mps2 is not None else other.acceleration_mps2,
         cut_in=base.cut_in or other.cut_in,
         primary=base.primary or other.primary,
@@ -2096,15 +2103,21 @@ def radar_vehicle_box(
 ) -> VehicleBox:
     confidence = radar_vehicle_confidence(point)
     alpha = int(92 + 163 * confidence)
-    body_color = vehicle_color_for_source("radarPoint", theme, state.radar_source_color_mode)
+    if radar_point_is_oncoming(point, state):
+        body_color = RED
+    elif radar_point_is_cross_traffic(point):
+        body_color = AMBER
+    else:
+        body_color = vehicle_color_for_source("radarPoint", theme, state.radar_source_color_mode)
     forward_m = render_scene_forward_m(point.longitudinal_m)
     center_x_m = radar_point_display_lateral_m(point, lane_width_m)
+    right_x, right_y, forward_x, forward_y = radar_point_vehicle_heading(point, state)
     return VehicleBox(
         center=Vec3(center_x_m, forward_m, VEHICLE_HEIGHT_M * 0.5),
-        right_x=1.0,
-        right_y=0.0,
-        forward_x=0.0,
-        forward_y=1.0,
+        right_x=right_x,
+        right_y=right_y,
+        forward_x=forward_x,
+        forward_y=forward_y,
         width_m=VEHICLE_WIDTH_M,
         length_m=VEHICLE_LENGTH_M,
         height_m=VEHICLE_HEIGHT_M,
@@ -2129,11 +2142,23 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         return False
     if abs(point.lateral_m) > lane_width_m * RADAR_VEHICLE_MAX_LATERAL_LANES:
         return False
+    outside_road_edge_m = radar_point_road_edge_outside_distance_m(point, state, lane_width_m)
+    if (
+        point.longitudinal_m <= RADAR_NEAR_ROAD_EDGE_VEHICLE_BLOCK_DISTANCE_M
+        and outside_road_edge_m is not None
+        and outside_road_edge_m > RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M
+    ):
+        return False
     if radar_point_is_confirmed_vehicle_source(point):
         return True
-    if radar_point_is_outside_outer_lane(point, state, lane_width_m):
+    meaningful_motion = radar_point_has_meaningful_motion(point, state)
+    if radar_point_is_outside_outer_lane(point, state, lane_width_m) and not meaningful_motion:
         return False
-    if radar_point_is_center_raw_point(point, lane_width_m) and not radar_point_matches_front_lead(point, state):
+    if (
+        radar_point_is_center_raw_point(point, lane_width_m)
+        and not radar_point_matches_front_lead(point, state)
+        and not meaningful_motion
+    ):
         return False
     if point.valid_count is not None:
         if point.valid_count < RADAR_VEHICLE_MIN_VALID_COUNT:
@@ -2142,7 +2167,6 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
             return False
     if point.promotion_held:
         return True
-    outside_road_edge_m = radar_point_road_edge_outside_distance_m(point, state, lane_width_m)
     stable_edge_vehicle = (
         radar_point_has_stable_edge_vehicle_motion(point, state, lane_width_m)
         and radar_point_is_near_or_outside_road_edge(point, state, lane_width_m, outside_road_edge_m)
@@ -2152,6 +2176,7 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         and point.probability < 0.20
         and not point.in_my_lane
         and not stable_edge_vehicle
+        and not meaningful_motion
     ):
         return False
     keep_across_road_edge = radar_point_should_keep_across_road_edge(
@@ -2164,11 +2189,14 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
         outside_road_edge_m is not None
         and outside_road_edge_m > RADAR_ROAD_EDGE_OUTSIDE_MARGIN_M
         and not keep_across_road_edge
+        and not meaningful_motion
     ):
         return False
     if radar_point_matches_detected_vehicle(point, state):
         return True
     if radar_point_has_vehicle_estimate(point, state, lane_width_m):
+        return True
+    if meaningful_motion:
         return True
     if radar_point_is_stationary_object(point, state):
         return False
@@ -2232,8 +2260,8 @@ def radar_point_has_vehicle_estimate(point: RadarPoint, state: ClusterUiState, l
 
 
 def radar_point_is_moving_raw_vehicle(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
-    absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
-    if absolute_speed_kph is None or absolute_speed_kph < RADAR_RAW_MOVING_SPEED_KPH:
+    motion_speed_kph = radar_point_motion_speed_kph(point, state)
+    if motion_speed_kph is None or motion_speed_kph < RADAR_RAW_MOVING_SPEED_KPH:
         return False
     valid_count = point.valid_count if point.valid_count is not None else RADAR_RAW_CENTER_MIN_VALID_COUNT
     lateral_lanes = abs(point.lateral_m) / max(0.1, lane_width_m)
@@ -2261,8 +2289,8 @@ def radar_point_should_keep_across_road_edge(
     valid_count = point.valid_count if point.valid_count is not None else 0
     if valid_count < RADAR_ROAD_EDGE_KEEP_MIN_VALID_COUNT:
         return False
-    absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
-    if absolute_speed_kph is None or absolute_speed_kph < RADAR_ROAD_EDGE_KEEP_SPEED_KPH:
+    motion_speed_kph = radar_point_motion_speed_kph(point, state)
+    if motion_speed_kph is None or motion_speed_kph < RADAR_ROAD_EDGE_KEEP_SPEED_KPH:
         return False
     if not radar_point_is_near_or_outside_road_edge(point, state, lane_width_m, outside_road_edge_m):
         return False
@@ -2281,8 +2309,8 @@ def radar_point_has_stable_edge_vehicle_motion(
     valid_count = point.valid_count if point.valid_count is not None else 0
     if valid_count < RADAR_ROAD_EDGE_STABLE_VEHICLE_MIN_VALID_COUNT:
         return False
-    absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
-    if absolute_speed_kph is None or absolute_speed_kph < RADAR_ROAD_EDGE_KEEP_SPEED_KPH:
+    motion_speed_kph = radar_point_motion_speed_kph(point, state)
+    if motion_speed_kph is None or motion_speed_kph < RADAR_ROAD_EDGE_KEEP_SPEED_KPH:
         return False
     if (
         point.relative_accel_mps2 is not None
@@ -2352,12 +2380,69 @@ def radar_point_absolute_speed_kph(point: RadarPoint, state: ClusterUiState) -> 
         return point.absolute_speed_kph
     if point.relative_speed_mps is None:
         return None
-    return max(0.0, state.speed_kph + point.relative_speed_mps * 3.6)
+    return state.speed_kph + point.relative_speed_mps * 3.6
+
+
+def radar_point_motion_speed_kph(point: RadarPoint, state: ClusterUiState) -> float | None:
+    longitudinal_speed_kph = radar_point_absolute_speed_kph(point, state)
+    lateral_speed_kph = point.lateral_speed_mps * 3.6 if point.lateral_speed_mps is not None else None
+    if longitudinal_speed_kph is None:
+        return abs(lateral_speed_kph) if lateral_speed_kph is not None else None
+    return math.hypot(longitudinal_speed_kph, lateral_speed_kph or 0.0)
+
+
+def radar_point_has_meaningful_motion(point: RadarPoint, state: ClusterUiState) -> bool:
+    if point.valid is not None and point.valid <= 0:
+        return False
+    motion_speed_kph = radar_point_motion_speed_kph(point, state)
+    return motion_speed_kph is not None and motion_speed_kph >= RADAR_MOVING_VEHICLE_MIN_SPEED_KPH
+
+
+def radar_point_is_oncoming(point: RadarPoint, state: ClusterUiState) -> bool:
+    longitudinal_speed_kph = radar_point_absolute_speed_kph(point, state)
+    return (
+        longitudinal_speed_kph is not None
+        and longitudinal_speed_kph <= -RADAR_MOVING_VEHICLE_MIN_SPEED_KPH
+    )
+
+
+def radar_point_is_cross_traffic(point: RadarPoint) -> bool:
+    return (
+        point.lateral_speed_mps is not None
+        and abs(point.lateral_speed_mps) >= RADAR_CROSS_TRAFFIC_MIN_LATERAL_SPEED_MPS
+    )
+
+
+def radar_point_vehicle_heading(
+    point: RadarPoint,
+    state: ClusterUiState,
+) -> tuple[float, float, float, float]:
+    longitudinal_speed_kph = radar_point_absolute_speed_kph(point, state)
+    return vehicle_heading_from_velocity(
+        longitudinal_speed_kph,
+        point.lateral_speed_mps,
+        (1.0, 0.0, 0.0, 1.0),
+    )
+
+
+def vehicle_heading_from_velocity(
+    longitudinal_speed_kph: float | None,
+    lateral_speed_mps: float | None,
+    default_heading: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    if longitudinal_speed_kph is None and lateral_speed_mps is None:
+        return default_heading
+    forward_speed_mps = (longitudinal_speed_kph or 0.0) / 3.6
+    lateral_speed_mps = lateral_speed_mps or 0.0
+    if math.hypot(forward_speed_mps, lateral_speed_mps) * 3.6 < RADAR_MOVING_VEHICLE_MIN_SPEED_KPH:
+        return default_heading
+    forward_x, forward_y = normalize2(lateral_speed_mps, forward_speed_mps)
+    return forward_y, -forward_x, forward_x, forward_y
 
 
 def radar_point_is_stationary_object(point: RadarPoint, state: ClusterUiState) -> bool:
     absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
-    return absolute_speed_kph is not None and absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH
+    return absolute_speed_kph is not None and abs(absolute_speed_kph) <= RADAR_STATIC_OBJECT_SPEED_KPH
 
 
 def radar_point_is_side_static_reflection(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
@@ -2388,7 +2473,7 @@ def radar_point_matches_static_road_edge(point: RadarPoint, state: ClusterUiStat
         return True
     rel_speed = abs(point.relative_speed_mps or 0.0)
     absolute_speed_kph = radar_point_absolute_speed_kph(point, state)
-    absolute_static = absolute_speed_kph is not None and absolute_speed_kph <= RADAR_STATIC_OBJECT_SPEED_KPH
+    absolute_static = absolute_speed_kph is not None and abs(absolute_speed_kph) <= RADAR_STATIC_OBJECT_SPEED_KPH
     relative_static = rel_speed <= RADAR_STATIC_OBJECT_SPEED_MPS
     return edge_distance <= RADAR_ROAD_EDGE_STATIONARY_CLEARANCE_M and (absolute_static or relative_static)
 
@@ -2488,6 +2573,11 @@ def radar_point_color(point: RadarPoint) -> Color:
         return 116, 126, 136, 150
     if point.longitudinal_m < 12.0 and abs(point.lateral_m) < 1.6:
         return RED[0], RED[1], RED[2], 232
+    if (
+        point.absolute_speed_kph is not None
+        and point.absolute_speed_kph <= -RADAR_MOVING_VEHICLE_MIN_SPEED_KPH
+    ):
+        return RED[0], RED[1], RED[2], 232
     if point.probability is not None and point.probability < 0.25:
         return 116, 126, 136, 150
     if radar_point_source_is_radar_track(point):
@@ -2518,6 +2608,7 @@ def vehicle_box(
     longitudinal_m: float | None = None,
     relative_speed_mps: float | None = None,
     absolute_speed_kph: float | None = None,
+    lateral_speed_mps: float | None = None,
     acceleration_mps2: float | None = None,
     ttc_s: float | None = None,
     cut_in: bool = False,
@@ -2535,6 +2626,11 @@ def vehicle_box(
         steering,
         lane_width_m,
         target_offset,
+    )
+    right_x, right_y, forward_x, forward_y = vehicle_heading_from_velocity(
+        absolute_speed_kph,
+        lateral_speed_mps,
+        (right_x, right_y, forward_x, forward_y),
     )
     width_m = VEHICLE_WIDTH_M
     length_m = VEHICLE_LENGTH_M
@@ -2591,7 +2687,7 @@ def scene_camera(state: ClusterUiState, lane_width_m: float, anchor_x_m: float =
         drive_camera = CameraSpec(
             position=Vec3(0.0, -16.0 + DRIVE_CAMERA_FORWARD_SHIFT_M, 6.00),
             target=Vec3(0.0, 7.0 + DRIVE_CAMERA_FORWARD_SHIFT_M, -0.20),
-            fovy_deg=44.0,
+            fovy_deg=31.0,
         )
 
     if not state.surround_view_active:
@@ -2934,6 +3030,16 @@ def vehicle_color_for_detection(
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
     source_color_mode: int = 0,
 ) -> tuple[int, int, int]:
+    if (
+        vehicle.absolute_speed_kph is not None
+        and vehicle.absolute_speed_kph <= -RADAR_MOVING_VEHICLE_MIN_SPEED_KPH
+    ):
+        return RED
+    if (
+        vehicle.lateral_speed_mps is not None
+        and abs(vehicle.lateral_speed_mps) >= RADAR_CROSS_TRAFFIC_MIN_LATERAL_SPEED_MPS
+    ):
+        return AMBER
     return vehicle_color_for_source(vehicle.source, theme, source_color_mode)
 
 
@@ -3280,10 +3386,11 @@ def build_cluster_scene(
                 absolute_speed_kph=detected.absolute_speed_kph
                 if detected.absolute_speed_kph is not None
                 else (
-                    max(0.0, state.speed_kph + detected.relative_speed_mps * 3.6)
+                    state.speed_kph + detected.relative_speed_mps * 3.6
                     if detected.relative_speed_mps is not None
                     else None
                 ),
+                lateral_speed_mps=detected.lateral_speed_mps,
                 acceleration_mps2=detected.acceleration_mps2,
                 ttc_s=detected.ttc_s,
                 cut_in=detected.cut_in,

@@ -370,7 +370,9 @@ static void canfd_copy_packet(CANPacket_t* dst, const CANPacket_t* src) {
   dst->addr = src->addr;
   dst->bus = src->bus;
   dst->data_len_code = src->data_len_code;
-  (void)memcpy(dst->data, src->data, dlc_to_len[src->data_len_code]);
+  for (uint8_t i = 0U; i < GET_LEN(src); i++) {
+    dst->data[i] = src->data[i];
+  }
 }
 static CanfdBufferedFwd* canfd_bfwd_find(int addr, int dst_bus) {
   for (int i = 0; canfd_bfwd[i].addr > 0; i++) {
@@ -390,7 +392,7 @@ static void canfd_bfwd_reset(CanfdBufferedFwd* st) {
   st->count = 0U;
   st->reuse_left = 0U;
   st->has_last_pkt = false;
-  (void)memset(&st->last_pkt, 0, sizeof(st->last_pkt));
+  st->last_pkt = (CANPacket_t){0};
 }
 static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt) {
   if ((st == NULL) || !st->enabled) return;
