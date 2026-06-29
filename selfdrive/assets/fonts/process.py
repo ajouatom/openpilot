@@ -108,23 +108,23 @@ def _process_font(font_path: Path, codepoints: tuple[int, ...]):
   file_buf = rl.ffi.new("unsigned char[]", data)
   cp_buffer = rl.ffi.new("int[]", codepoints)
   cp_ptr = rl.ffi.cast("int *", cp_buffer)
-  glyph_count = rl.ffi.new("int *", len(codepoints))
+  glyph_count = len(codepoints)
   glyphs = rl.load_font_data(
     rl.ffi.cast("unsigned char *", file_buf), len(data), font_size, cp_ptr, len(codepoints),
-    rl.FontType.FONT_DEFAULT, glyph_count
+    rl.FontType.FONT_DEFAULT
   )
   if glyphs == rl.ffi.NULL:
     raise RuntimeError("raylib failed to load font data")
 
   rects_ptr = rl.ffi.new("Rectangle **")
-  image = rl.gen_image_font_atlas(glyphs, rects_ptr, glyph_count[0], font_size, padding, 0)
+  image = rl.gen_image_font_atlas(glyphs, rects_ptr, glyph_count, font_size, padding, 0)
   if image.width == 0 or image.height == 0:
     raise RuntimeError("raylib returned an empty atlas")
 
   rects = rects_ptr[0]
   atlas_name = f"{font_path.stem}.png"
   atlas_path = FONT_DIR / atlas_name
-  entries, line_height, base = _glyph_metrics(glyphs, rects, glyph_count[0])
+  entries, line_height, base = _glyph_metrics(glyphs, rects, glyph_count)
 
   if not rl.export_image(image, atlas_path.as_posix()):
     raise RuntimeError("Failed to export atlas image")
