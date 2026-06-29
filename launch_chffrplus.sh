@@ -52,7 +52,10 @@ function agnos_init {
     echo "AGNOS_PY=${AGNOS_PY}"
     echo "MANIFEST=${MANIFEST}"
     echo "MODEL=${MODEL}"
-    $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
+    if ! python3 $DIR/system/ui/updater.py $AGNOS_PY $MANIFEST; then
+      echo "python updater failed, falling back to bundled updater"
+      $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
+    fi
     echo "end updater $AGNOS_PY $MANIFEST"
   fi
 }
