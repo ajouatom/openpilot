@@ -310,6 +310,12 @@ void SpectraCamera::camera_open(VisionIpcServer *v) {
 
   if (!enabled) return;
 
+  if (sensor->image_sensor == cereal::FrameData::ImageSensor::AR0231 &&
+      cc.output_type == ISP_BPS_PROCESSED) {
+    LOGW("AR0231 camera %d: using IFE path to avoid CAM-ICP/BPS recovery", cc.camera_num);
+    cc.output_type = ISP_IFE_PROCESSED;
+  }
+
   buf.out_img_width = sensor->frame_width / sensor->out_scale;
   buf.out_img_height = (sensor->hdr_offset > 0 ? (sensor->frame_height - sensor->hdr_offset) / 2 : sensor->frame_height) / sensor->out_scale;
 
