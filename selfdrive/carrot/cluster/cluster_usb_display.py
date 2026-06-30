@@ -53,6 +53,15 @@ MAX_H264_CHUNK_SIZE = 1024 * 1024
 _LIBUSB_DLL_DIR_HANDLE = None
 
 
+def _set_cluster_hud_connected(connected: bool) -> None:
+    try:
+        from openpilot.common.params import Params
+
+        Params().put_bool_nonblocking("ClusterHudConnected", connected)
+    except Exception as exc:
+        print(f"Warning: failed to update ClusterHudConnected: {exc}", flush=True)
+
+
 def product_id_for_hud_mode(hud_mode: int) -> int | None:
     try:
         return HUD_MODE_PRODUCT_IDS.get(int(hud_mode))
@@ -216,8 +225,10 @@ class TuringUsbDisplay:
             print("USB display did not respond during init; resetting device once...")
             self._reset_and_reconnect()
             self._initialize_device()
+        _set_cluster_hud_connected(True)
 
     def close(self) -> None:
+        _set_cluster_hud_connected(False)
         if self.dev is None:
             self._ep_out = None
             self._ep_in = None
@@ -419,6 +430,7 @@ class TuringUsbDisplay:
         return False
 
     def _mark_disconnected(self) -> None:
+        _set_cluster_hud_connected(False)
         self.dev = None
         self.dev_pid = None
         self._ep_out = None

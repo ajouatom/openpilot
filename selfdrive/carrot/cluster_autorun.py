@@ -558,6 +558,7 @@ def main() -> None:
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
 
     params = Params()
+    params.put_bool_nonblocking("ClusterHudConnected", False)
     while True:
         core_mode = _read_core_mode(params)
         priority = _read_priority(params)
