@@ -1,4 +1,3 @@
-import fcntl
 import hashlib
 import json
 import math
@@ -312,20 +311,25 @@ class CarrotMan:
     threading.Thread(target=self.broadcast_version_info, daemon=True).start()
 
   def get_broadcast_address(self):
-    if PC:
-      iface = b'br0'
-    else:
-      iface = b'wlan0'
+    # Prefer the interface carrying the default route. Ubuntu PCs generally
+    # do not have the C3-era br0 interface, while devices normally use wlan0.
     try:
-      with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        ip = fcntl.ioctl(
-          s.fileno(),
-          0x8919,
-          struct.pack('256s', iface)
-        )[20:24]
-        return socket.inet_ntoa(ip)
-    except (OSError, Exception):
-      return None
+      local_ip = self.get_local_ip()
+      ipv4_addrs = [
+        addr
+        for addresses in psutil.net_if_addrs().values()
+        for addr in addresses
+        if addr.family == socket.AF_INET and not addr.address.startswith("127.")
+      ]
+      ipv4_addrs.sort(key=lambda addr: addr.address != local_ip)
+      for addr in ipv4_addrs:
+        if addr.broadcast:
+          return addr.broadcast
+        if addr.netmask:
+          return str(ipaddress.ip_network(f"{addr.address}/{addr.netmask}", strict=False).broadcast_address)
+    except Exception as e:
+      print(f"[carrot_man] failed to resolve broadcast address: {e}")
+    return "255.255.255.255"
 
   def get_local_ip(self):
       try:
