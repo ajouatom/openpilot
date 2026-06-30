@@ -155,12 +155,16 @@ class MiciMainLayout(Scroller):
       
     if ui_state.started:
       show_plot_mode = ui_state.params.get_int("ShowPlotMode")
-      if show_plot_mode != self._show_plot_mode:
-        self._show_plot_mode = show_plot_mode
+      cluster_hud_connected = ui_state.params.get_bool("ClusterHudConnected")
+      effective_plot_mode = 0 if cluster_hud_connected else show_plot_mode
+      if effective_plot_mode != self._show_plot_mode:
+        self._show_plot_mode = effective_plot_mode
         if self._show_plot_mode > 0:
           self._scroll_to(self._debug_layout)
         else:
           self._in_plot_mode = False
+          if cluster_hud_connected:
+            self._scroll_to(self._onroad_layout)
 
     # When car leaves standstill, pop nav stack and scroll to onroad
     CS = ui_state.sm["carState"]
