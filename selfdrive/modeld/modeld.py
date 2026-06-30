@@ -28,6 +28,7 @@ from openpilot.selfdrive.modeld.helpers import usbgpu_enabled, usbgpu_present, m
 
 PROCESS_NAME = "selfdrive.modeld.modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
+SIMULATION = os.getenv('SIMULATION') == '1'
 
 LAT_SMOOTH_SECONDS = 0.0
 LONG_SMOOTH_SECONDS = 0.3
@@ -127,13 +128,36 @@ class ModelState:
   def run(self, bufs: dict[str, VisionBuf], transforms: dict[str, np.ndarray],
           inputs: dict[str, np.ndarray], prepare_only: bool) -> dict[str, np.ndarray] | None:
     for key in bufs.keys():
-      ptr = np.frombuffer(bufs[key].data, dtype=np.uint8).ctypes.data
-      yuv_size = self.frame_buf_params[key][3]
-      # There is a ringbuffer of imgs, just cache tensors pointing to all of them
-      cache_key = (key, ptr)
-      if cache_key not in self._blob_cache:
-        self._blob_cache[cache_key] = Tensor.from_blob(ptr, (yuv_size,), dtype='uint8', device=self.WARP_DEV)
-      self.full_frames[key] = self._blob_cache[cache_key]
+      stride, y_height, uv_height, yuv_size = self.frame_buf_params[key]
+      frame_data = np.frombuffer(bufs[key].data, dtype=np.uint8)
+      if self.WARP_DEV.split(':', 1)[0] in ('CUDA', 'NV'):
+        # VisionIPC buffers are host memory on discrete GPUs. from_blob would
+        # incorrectly treat their address as a GPU pointer and fault.
+        uv_offset = stride * y_height
+        if len(frame_data) != yuv_size or bufs[key].stride != stride or bufs[key].uv_offset != uv_offset:
+          # PC camera sources may provide tightly packed NV12. Convert them to
+          # the Venus layout expected by the compiled model warp.
+          src_stride = bufs[key].stride
+          src_uv_offset = bufs[key].uv_offset
+          packed_frame = np.zeros(yuv_size, dtype=np.uint8)
+          src_y_height = min(bufs[key].height, src_uv_offset // src_stride)
+          src_uv_height = min(bufs[key].height // 2, max(0, len(frame_data) - src_uv_offset) // src_stride)
+          copy_width = min(bufs[key].width, src_stride, stride)
+          src_y = frame_data[:src_stride * src_y_height].reshape(src_y_height, src_stride)
+          src_uv = frame_data[src_uv_offset:src_uv_offset + src_stride * src_uv_height].reshape(src_uv_height, src_stride)
+          dst_y = packed_frame[:uv_offset].reshape(y_height, stride)
+          dst_uv = packed_frame[uv_offset:uv_offset + stride * uv_height].reshape(uv_height, stride)
+          dst_y[:src_y_height, :copy_width] = src_y[:, :copy_width]
+          dst_uv[:src_uv_height, :copy_width] = src_uv[:, :copy_width]
+          frame_data = packed_frame
+        self.full_frames[key] = Tensor(frame_data, device=self.WARP_DEV).realize()
+      else:
+        ptr = frame_data.ctypes.data
+        # Integrated GPUs can access the VisionIPC ringbuffer directly.
+        cache_key = (key, ptr)
+        if cache_key not in self._blob_cache:
+          self._blob_cache[cache_key] = Tensor.from_blob(ptr, (yuv_size,), dtype='uint8', device=self.WARP_DEV)
+        self.full_frames[key] = self._blob_cache[cache_key]
 
     # Model decides when action is completed, so desire input is just a pulse triggered on rising edge
     inputs['desire_pulse'][0] = 0
@@ -386,7 +410,10 @@ def main(demo=False):
       drivingdata_send.drivingModelData.modelExecutionTime = mt3 - mt1
 
       fill_driving_model_data(drivingdata_send, modelv2_send)
-      fill_pose_msg(posenet_send, model_output, meta_main.frame_id, vipc_dropped_frames, meta_main.timestamp_eof, live_calib_seen)
+      # Slow PC inference can exceed locationd's rewind window. The simulator
+      # pose represents current simulated motion, so timestamp it at publish.
+      pose_timestamp_eof = time.monotonic_ns() if SIMULATION else meta_main.timestamp_eof
+      fill_pose_msg(posenet_send, model_output, meta_main.frame_id, vipc_dropped_frames, pose_timestamp_eof, live_calib_seen)
       pm.send('modelV2', modelv2_send)
       pm.send('drivingModelData', drivingdata_send)
       pm.send('cameraOdometry', posenet_send)

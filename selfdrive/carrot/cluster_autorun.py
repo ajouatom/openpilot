@@ -11,6 +11,7 @@ import traceback
 from pathlib import Path
 
 from openpilot.common.params import Params
+from openpilot.system.hardware import TICI
 
 
 CARROT_DIR = Path(__file__).resolve().parent
@@ -239,7 +240,7 @@ def _read_priority(params: Params) -> int:
 
 def _encoder_sequence(encoder_mode: int) -> list[int]:
     if encoder_mode == ENCODER_AUTO:
-        return [ENCODER_HARDWARE, ENCODER_SOFTWARE, ENCODER_JPEG]
+        return [ENCODER_HARDWARE, ENCODER_SOFTWARE, ENCODER_JPEG] if TICI else [ENCODER_SOFTWARE, ENCODER_JPEG]
     return [encoder_mode]
 
 
@@ -558,6 +559,7 @@ def main() -> None:
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
 
     params = Params()
+    params.put_bool_nonblocking("ClusterHudConnected", False)
     while True:
         core_mode = _read_core_mode(params)
         priority = _read_priority(params)

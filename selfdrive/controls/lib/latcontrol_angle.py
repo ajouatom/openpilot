@@ -5,7 +5,7 @@ from cereal import log
 from openpilot.common.params import Params
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 
-STEER_ANGLE_SATURATION_THRESHOLD = 2.5  # Degrees
+STEER_ANGLE_SATURATION_THRESHOLD = 3.0  # Degrees
 ANGLE_TRIM_MAX_CURVATURE = 4.0e-4  # about one steering-wheel degree on HKG LFA2
 ANGLE_TRIM_I = 0.10
 ANGLE_TRIM_BUILDUP_BOOST = 2.5

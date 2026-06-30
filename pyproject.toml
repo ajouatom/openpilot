@@ -48,6 +48,7 @@ dependencies = [
 
   # panda
   "libusb1",
+  "pyusb",       # carrot cluster USB display
   "spidev; platform_system == 'Linux'",
 
   # logging
@@ -75,7 +76,7 @@ dependencies = [
   "zstandard",
 
   # ui
-  "raylib > 5.5.0.3",
+  "raylib @ git+https://github.com/commaai/dependencies.git@release-raylib#subdirectory=raylib",
   "qrcode",
   "jeepney",
   "pillow",

@@ -297,6 +297,18 @@ class ClusterUiState:
     git_status: GitBranchStatus | None = None
     actual_fps: float | None = None
     cluster_core_usage_text: str | None = None
+    network_address: str | None = None
+    network_connected: bool = False
+    external_nav_active: bool = False
+    steering_output: float | None = None
+    steering_output_normalized: float | None = None
+    steering_output_kind: Literal["angle", "torque"] | None = None
+    fuel_gauge: float | None = None
+    energy_gauge_label: Literal["fuel", "battery"] = "fuel"
+    urea_gauge: float | None = None
+    cruise_override_kph: float | None = None
+    cruise_override_label: str | None = None
+    cruise_override_color_mode: int = 0
 
 
 @dataclass(frozen=True, slots=True)

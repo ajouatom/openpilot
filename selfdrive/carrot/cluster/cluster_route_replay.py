@@ -115,6 +115,7 @@ LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
 LANE_CHANGE_MODEL_DIRECT_ONLY = True
+LANE_LINE_PROBABILITY_MIN = 0.4
 MODEL_DIRECT_LANE_SETTLE_MIN_PROGRESS = 0.65
 LONGITUDINAL_PERSONALITY_GAPS = {
     "aggressive": 1,
@@ -906,6 +907,7 @@ class RouteLogParser:
         self.cruise_kph: int | None = None
         self.cruise_gap: int | None = None
         self.lfa_active: bool | None = None
+        self.selfdrive_enabled: bool | None = None
         self.controls_enabled: bool | None = None
         self.lane_width_m = DEFAULT_LANE_WIDTH_M
         self.left_lane_y_m: float | None = None
@@ -1443,6 +1445,9 @@ class RouteLogParser:
             self.controls_curvature_source = "controlsState"
 
     def _update_selfdrive_state(self, selfdrive_state: Any) -> None:
+        enabled = safe_get(selfdrive_state, "enabled", None)
+        if enabled is not None:
+            self.selfdrive_enabled = bool(enabled)
         cruise_gap = self._cruise_gap_from_personality(safe_get(selfdrive_state, "personality"))
         if cruise_gap is not None:
             self.cruise_gap = cruise_gap
@@ -1722,8 +1727,11 @@ class RouteLogParser:
         if cruise_kph is None:
             return "off"
 
+        if self.selfdrive_enabled is not None:
+            return "engaged" if self.selfdrive_enabled else "off"
+
         if self.controls_enabled is not None:
-            return "engaged" if self.controls_enabled else "paused"
+            return "engaged" if self.controls_enabled else "off"
 
         cruise_state = safe_get(car_state, "cruiseState")
         if cruise_state is not None and bool(safe_get(cruise_state, "enabled", False)):
@@ -1820,8 +1828,8 @@ class RouteLogParser:
                 "center": center_m,
                 "left_offset": -0.5,
                 "right_offset": 0.5,
-                "left_visible": True,
-                "right_visible": True,
+                "left_visible": self.left_lane_prob >= LANE_LINE_PROBABILITY_MIN,
+                "right_visible": self.right_lane_prob >= LANE_LINE_PROBABILITY_MIN,
                 "extra_left_visible": False,
                 "extra_right_visible": False,
                 "left_road_edge_offset": None,
@@ -1851,11 +1859,13 @@ class RouteLogParser:
         extra_left_visible = (
             outer_left_offset is not None
             and outer_left_offset < -0.78
+            and self.outer_left_lane_prob >= LANE_LINE_PROBABILITY_MIN
             and lane_offset_inside_road_edges(outer_left_offset, left_edge_bound, right_edge_bound)
         )
         extra_right_visible = (
             outer_right_offset is not None
             and outer_right_offset > 0.78
+            and self.outer_right_lane_prob >= LANE_LINE_PROBABILITY_MIN
             and lane_offset_inside_road_edges(outer_right_offset, left_edge_bound, right_edge_bound)
         )
         return {
@@ -1863,8 +1873,8 @@ class RouteLogParser:
             "center": center_m,
             "left_offset": left_offset,
             "right_offset": right_offset,
-            "left_visible": lane_offset_inside_road_edges(left_offset, left_edge_bound, right_edge_bound),
-            "right_visible": lane_offset_inside_road_edges(right_offset, left_edge_bound, right_edge_bound),
+            "left_visible": self.left_lane_prob >= LANE_LINE_PROBABILITY_MIN and lane_offset_inside_road_edges(left_offset, left_edge_bound, right_edge_bound),
+            "right_visible": self.right_lane_prob >= LANE_LINE_PROBABILITY_MIN and lane_offset_inside_road_edges(right_offset, left_edge_bound, right_edge_bound),
             "extra_left_visible": extra_left_visible,
             "extra_right_visible": extra_right_visible,
             "left_road_edge_offset": left_edge_bound,
