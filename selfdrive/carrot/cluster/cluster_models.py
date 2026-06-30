@@ -297,6 +297,12 @@ class ClusterUiState:
     git_status: GitBranchStatus | None = None
     actual_fps: float | None = None
     cluster_core_usage_text: str | None = None
+    network_address: str | None = None
+    network_connected: bool = False
+    external_nav_active: bool = False
+    steering_output: float | None = None
+    steering_output_kind: Literal["angle", "torque"] | None = None
+    fuel_gauge: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

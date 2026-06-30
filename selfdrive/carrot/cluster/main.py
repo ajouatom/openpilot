@@ -4,6 +4,7 @@ import argparse
 import gc
 from dataclasses import replace
 import signal
+import socket
 import sys
 import threading
 import time
@@ -83,6 +84,53 @@ SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
 CAMERA_VIEW_PARAM_POLL_SECONDS = 1.0
 RADAR_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
+NETWORK_ADDRESS_POLL_SECONDS = 2.0
+
+
+class NetworkAddressProvider:
+    def __init__(self) -> None:
+        self._params = None
+        self._next_refresh = 0.0
+        self._address: str | None = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params("/dev/shm/params")
+        except Exception:
+            pass
+
+    def address(self, now: float) -> str | None:
+        if now < self._next_refresh:
+            return self._address
+        self._next_refresh = now + NETWORK_ADDRESS_POLL_SECONDS
+        address = self._param_address()
+        self._address = address or self._socket_address()
+        return self._address
+
+    def _param_address(self) -> str | None:
+        if self._params is None:
+            return None
+        try:
+            value = self._params.get("NetworkAddress", encoding="utf-8")
+        except Exception:
+            return None
+        return self._valid_address(value)
+
+    @classmethod
+    def _socket_address(cls) -> str | None:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.connect(("8.8.8.8", 80))
+                return cls._valid_address(sock.getsockname()[0])
+        except OSError:
+            return None
+
+    @staticmethod
+    def _valid_address(value: object) -> str | None:
+        text = str(value or "").strip()
+        if not text or text in ("0.0.0.0", "127.0.0.1"):
+            return None
+        return text
 
 
 def live_debug_panel_enabled(screen_mode: int) -> bool:
@@ -660,6 +708,7 @@ def run_demo(
     )
     renderer.set_profile_enabled(profile_render)
     git_status_provider = GitBranchStatusProvider(Path(__file__).resolve().parent)
+    network_address_provider = NetworkAddressProvider()
     cluster_core_usage_sampler = (
         ClusterProcessCoreUsageSampler(debug=cluster_core_usage_debug)
         if cluster_core_usage_enabled
@@ -1008,6 +1057,7 @@ def run_demo(
                 profile_stage = time.perf_counter()
                 cluster_core_usage_text = cluster_core_usage_sampler.sample_text(now)
                 profile.add_elapsed("main.cluster_core_usage_sample", profile_stage)
+            network_address = network_address_provider.address(now)
             state = replace(
                 state,
                 radar_info_mode=active_radar_info_mode,
@@ -1016,6 +1066,8 @@ def run_demo(
                 camera_view_mode=active_camera_view_mode,
                 center_clock_text=center_clock_text,
                 git_status=git_status_provider.status(),
+                network_address=network_address,
+                network_connected=network_address is not None,
                 actual_fps=display_actual_fps,
                 cluster_core_usage_text=cluster_core_usage_text,
             )

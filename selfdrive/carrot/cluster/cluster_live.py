@@ -74,6 +74,7 @@ LIVE_SERVICES_BASE = (
     "controlsState",
     "selfdriveState",
     "carControl",
+    "carOutput",
     "deviceState",
     "cameraOdometry",
     "drivingModelData",
@@ -206,7 +207,7 @@ class OpenpilotLiveSource:
             state = frame_to_state(frame)
             self._profile_add("source.live.frame_to_state", profile_stage)
 
-            self.last_state = self._with_debug_state(state)
+            self.last_state = self._with_live_hud_state(self._with_debug_state(state))
             self.frames += 1
             return self.last_state
 
@@ -214,8 +215,42 @@ class OpenpilotLiveSource:
         state = self._standby_state
         self._profile_add("source.live.standby_state", profile_stage)
 
-        self.last_state = self._with_debug_state(state)
+        self.last_state = self._with_live_hud_state(self._with_debug_state(state))
         return self.last_state
+
+    def _with_live_hud_state(self, state: ClusterUiState) -> ClusterUiState:
+        car_state = self._service_data("carState")
+        fuel_gauge = safe_optional_float(car_state, "fuelGauge")
+        if fuel_gauge is None or not 0.0 < fuel_gauge <= 1.0:
+            fuel_gauge = None
+
+        steering_output = None
+        steering_output_kind = None
+        car_output = self._service_data("carOutput")
+        actuators_output = safe_get(car_output, "actuatorsOutput")
+        controls_state = self._service_data("controlsState")
+        lateral_state = safe_get(controls_state, "lateralControlState")
+        try:
+            lateral_kind = str(lateral_state.which()) if lateral_state is not None else ""
+        except Exception:
+            lateral_kind = ""
+        if lateral_kind == "angleState":
+            steering_output = safe_optional_float(actuators_output, "steeringAngleDeg")
+            steering_output_kind = "angle"
+        elif lateral_kind in ("torqueState", "pidState"):
+            steering_output = safe_optional_float(actuators_output, "torque")
+            steering_output_kind = "torque"
+
+        carrot_man = self._service_data("carrotMan")
+        active_carrot = safe_optional_float(carrot_man, "activeCarrot")
+        external_nav_active = active_carrot is not None and active_carrot > 0.0
+        return replace(
+            state,
+            external_nav_active=external_nav_active,
+            steering_output=steering_output,
+            steering_output_kind=steering_output_kind,
+            fuel_gauge=fuel_gauge,
+        )
 
     def status_text(self) -> str:
         profile_stage = self._profile_start()
