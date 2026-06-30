@@ -543,7 +543,10 @@ class CarController(CarControllerBase):
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
-    new_actuators.torqueOutputCan = apply_torque
+    # torqueOutputCan reflects the steering authority value actually sent over CAN.
+    # Torque-control platforms send the signed torque command, while angle-control
+    # platforms send LKAS_ANGLE_MAX_TORQUE alongside the requested angle.
+    new_actuators.torqueOutputCan = self.lkas_max_torque if angle_control else apply_torque
     new_actuators.steeringAngleDeg = float(apply_angle)
     new_actuators.accel = accel
 

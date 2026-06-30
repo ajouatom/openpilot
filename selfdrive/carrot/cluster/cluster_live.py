@@ -255,10 +255,10 @@ class OpenpilotLiveSource:
         except Exception:
             lateral_kind = ""
         if lateral_kind == "angleState":
-            steering_output = safe_optional_float(actuators_output, "steeringAngleDeg")
-            steering_output_kind = "angle"
+            steering_output = safe_optional_float(actuators_output, "torqueOutputCan")
+            steering_output_kind = "angleMaxTorque"
         elif lateral_kind in ("torqueState", "pidState"):
-            steering_output = safe_optional_float(actuators_output, "torque")
+            steering_output = safe_optional_float(actuators_output, "torqueOutputCan")
             steering_output_kind = "torque"
 
         carrot_man = self._service_data("carrotMan")

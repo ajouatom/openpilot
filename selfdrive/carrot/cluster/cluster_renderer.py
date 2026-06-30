@@ -3293,11 +3293,9 @@ class ClusterUiRenderer:
                 self._draw_text("TEST", gauge_center_x, 520, 14, AMBER, anchor="center")
 
     def _draw_steering_output_block(self, state: ClusterUiState) -> None:
-        preview_phase = int(time.perf_counter() / 1.5) % 2 == 1
         preview_torque = PREVIEW_MISSING_GAUGES and (
             state.steering_output is None
             or state.steering_output_kind is None
-            or (state.steering_output_kind == "angle" and preview_phase)
         )
         if not preview_torque and (state.steering_output is None or state.steering_output_kind is None):
             return
@@ -3306,15 +3304,15 @@ class ClusterUiRenderer:
         top = 80
         bottom = 240
         gauge_width = 62
-        value = math.sin(time.perf_counter() * 1.1) * 0.68 if preview_torque else float(state.steering_output)
+        value = math.sin(time.perf_counter() * 1.1) * 260.0 if preview_torque else float(state.steering_output)
         output_kind = "torque" if preview_torque else state.steering_output_kind
-        if output_kind == "angle":
-            limit = 90.0
-            value_text = f"{value:+.1f}°"
-            label = "angle"
+        if output_kind == "angleMaxTorque":
+            limit = 250.0
+            value_text = f"{value:.0f}"
+            label = "maxT"
         else:
-            limit = 1.0
-            value_text = f"{value:+.2f}"
+            limit = 409.0
+            value_text = f"{value:+.0f}"
             label = "torque"
         normalized = clamp(value / limit, -1.0, 1.0)
         color = BLUE if normalized > 0 else AMBER if normalized < 0 else theme.muted

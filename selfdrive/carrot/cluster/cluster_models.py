@@ -301,7 +301,7 @@ class ClusterUiState:
     network_connected: bool = False
     external_nav_active: bool = False
     steering_output: float | None = None
-    steering_output_kind: Literal["angle", "torque"] | None = None
+    steering_output_kind: Literal["angleMaxTorque", "torque"] | None = None
     fuel_gauge: float | None = None
     energy_gauge_label: Literal["fuel", "battery"] = "fuel"
 
