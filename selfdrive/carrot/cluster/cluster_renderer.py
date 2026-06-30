@@ -80,7 +80,6 @@ TPMS_LOW_PRESSURE_PSI = 31.0
 TPMS_BADGE_WIDTH = 46.0
 TPMS_BADGE_HEIGHT = 37.5
 TPMS_BADGE_FONT_SIZE = 25.5
-ACCEL_TEXT_WIDTH_SAMPLES = ("+00.00", "-00.00")
 PREVIEW_MISSING_GAUGES = True  # Temporary layout preview; real values always take priority.
 TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
@@ -128,6 +127,8 @@ SIDE_GAUGE_LOWER_BOTTOM = 360
 SIDE_GAUGE_WIDTH = 62
 SIDE_GAUGE_VALUE_Y = 27
 SIDE_GAUGE_LABEL_OFFSET = 15
+SIDE_GAUGE_LEFT_CENTER_X = 76
+SIDE_GAUGE_COLUMN_GAP = 88
 SPEED_LIMIT_SIGN_CENTER_X = 460
 SPEED_LIMIT_SIGN_CENTER_Y = TURN_SIGNAL_CENTER_Y
 SPEED_LIMIT_SIGN_RADIUS = 56.0
@@ -538,7 +539,6 @@ class ClusterUiRenderer:
         self._window_open = False
         self._font = None
         self._owns_font = False
-        self._accel_text_width = 0.0
         self._capture_target = None
         self._portrait_upload_target = None
         self._portrait_upload_target_size: tuple[int, int] | None = None
@@ -709,7 +709,6 @@ class ClusterUiRenderer:
             rl.unload_font(self._font)
         self._font = None
         self._owns_font = False
-        self._accel_text_width = 0.0
         if self._vehicle_model is not None:
             rl.unload_model(self._vehicle_model)
             self._vehicle_model = None
@@ -3251,16 +3250,8 @@ class ClusterUiRenderer:
         gauge_width = SIDE_GAUGE_WIDTH
         accel_value = 0.0 if abs(state.accel_mps2) < 0.005 else state.accel_mps2
         accel_text = f"{accel_value:+05.2f}"
-        accel_text_x = 20
         accel_text_size = 27
-        text_spacing = max(1.0, accel_text_size * 0.02)
-        if self._accel_text_width <= 0.0:
-            self._accel_text_width = max(
-                self._measure_text(text, accel_text_size, text_spacing)[0]
-                for text in ACCEL_TEXT_WIDTH_SAMPLES
-            )
-        text_width = self._accel_text_width
-        gauge_center_x = accel_text_x + text_width * 0.5
+        gauge_center_x = SIDE_GAUGE_LEFT_CENTER_X
         gauge_x = gauge_center_x - gauge_width * 0.5
         fill_x = gauge_x + 8
         fill_width = gauge_width - 16
@@ -3305,7 +3296,7 @@ class ClusterUiRenderer:
         if not preview_torque and (state.steering_output is None or state.steering_output_kind is None):
             return
         theme = self._current_theme()
-        gauge_center_x = DESIGN_WIDTH - 80
+        gauge_center_x = SIDE_GAUGE_LEFT_CENTER_X + SIDE_GAUGE_COLUMN_GAP
         top = SIDE_GAUGE_TOP
         bottom = SIDE_GAUGE_BOTTOM
         gauge_width = SIDE_GAUGE_WIDTH
