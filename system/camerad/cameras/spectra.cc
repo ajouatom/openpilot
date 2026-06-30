@@ -22,6 +22,13 @@
 
 // ************** low level camera helpers ****************
 
+int get_bps_blob_index(const SensorInfo *sensor) {
+  if (sensor->image_sensor == cereal::FrameData::ImageSensor::AR0231) {
+    return 2;
+  }
+  return sensor->num();
+}
+
 int do_cam_control(int fd, int op_code, void *handle, int size) {
   struct cam_control camcontrol = {0};
   camcontrol.op_code = op_code;
@@ -1168,11 +1175,13 @@ void SpectraCamera::configICP() {
 
   int cfg_handle;
 
+  const int bps_idx = get_bps_blob_index(sensor.get());
+  LOGW("camera %d sensor %d: using BPS blob index %d", cc.camera_num, sensor->num(), bps_idx);
   uint32_t cfg_size = sizeof(bps_cfg[0]) / sizeof(bps_cfg[0][0]);
   void *cfg = alloc_w_mmu_hdl(m->video0_fd, cfg_size, (uint32_t*)&cfg_handle, 0x1,
                               CAM_MEM_FLAG_HW_READ_WRITE | CAM_MEM_FLAG_UMD_ACCESS | CAM_MEM_FLAG_HW_SHARED_ACCESS,
                               m->icp_device_iommu);
-  memcpy(cfg, bps_cfg[sensor->num()], cfg_size);
+  memcpy(cfg, bps_cfg[bps_idx], cfg_size);
 
   struct cam_icp_acquire_dev_info icp_info = {
     .scratch_mem_size = 0x0,
@@ -1207,7 +1216,7 @@ void SpectraCamera::configICP() {
   // BPSIQSettings struct
   uint32_t settings_size = sizeof(bps_settings[0]) / sizeof(bps_settings[0][0]);
   bps_iq.init(m, settings_size, 0x20, true, m->icp_device_iommu);
-  memcpy(bps_iq.ptr, bps_settings[sensor->num()], settings_size);
+  memcpy(bps_iq.ptr, bps_settings[bps_idx], settings_size);
 
   // for cdm register writes, just make it bigger than you need
   bps_cdm_program_array.init(m, 0x1000, 0x20, true, m->icp_device_iommu);
@@ -1215,7 +1224,7 @@ void SpectraCamera::configICP() {
   // striping lib output
   uint32_t striping_size = sizeof(bps_striping_output[0]) / sizeof(bps_striping_output[0][0]);
   bps_striping.init(m, striping_size, 0x20, true, m->icp_device_iommu);
-  memcpy(bps_striping.ptr, bps_striping_output[sensor->num()], striping_size);
+  memcpy(bps_striping.ptr, bps_striping_output[bps_idx], striping_size);
 
   // used internally by the BPS, we just allocate it.
   // size comes from the BPSStripingLib
