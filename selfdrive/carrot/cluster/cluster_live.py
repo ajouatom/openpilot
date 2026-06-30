@@ -40,6 +40,8 @@ if OPENPILOT_ROOT is not None:
 LIVE_NAV_ROUTE_MAX_POINTS = 4096
 LIVE_NAVI_IMAGE_BASE64_MAX_CHARS = 2 * 1024 * 1024
 LIVE_NAVI_IMAGE_MAX_DIMENSION = 2048
+ACCELERATION_DUE_TO_GRAVITY = 9.80665
+DEFAULT_MAX_LATERAL_ACCEL = 3.0
 
 
 def _limited_items(items: Any, max_items: int):
@@ -118,6 +120,7 @@ class OpenpilotLiveSource:
         self.params: Any | None = None
         self.params_memory: Any | None = None
         self._energy_gauge_label = "fuel"
+        self._max_lateral_accel = DEFAULT_MAX_LATERAL_ACCEL
         self._next_debug_param_read_t = 0.0
         self._custom_steer_ratio: float | None = None
         self._steer_actuator_delay_param_s: float | None = None
@@ -143,6 +146,7 @@ class OpenpilotLiveSource:
             self.params = Params()
             self.params_memory = Params("/dev/shm/params")
             self._energy_gauge_label = self._resolve_energy_gauge_label()
+            self._max_lateral_accel = self._resolve_max_lateral_accel()
         except Exception:
             pass
 
@@ -162,6 +166,23 @@ class OpenpilotLiveSource:
         except Exception:
             pass
         return "fuel"
+
+    def _resolve_max_lateral_accel(self) -> float:
+        if self.params is None:
+            return DEFAULT_MAX_LATERAL_ACCEL
+        try:
+            from cereal import car
+
+            car_params_bytes = self.params.get("CarParams")
+            if not car_params_bytes:
+                return DEFAULT_MAX_LATERAL_ACCEL
+            car_params = self.messaging.log_from_bytes(car_params_bytes, car.CarParams)
+            value = finite_float(car_params.maxLateralAccel)
+            if value is not None and value > 0.0:
+                return value
+        except Exception:
+            pass
+        return DEFAULT_MAX_LATERAL_ACCEL
 
     def set_profile_enabled(self, enabled: bool) -> None:
         self.profile_enabled = enabled
@@ -248,6 +269,7 @@ class OpenpilotLiveSource:
             urea_gauge = None
 
         steering_output = None
+        steering_output_normalized = None
         steering_output_kind = None
         car_output = self._service_data("carOutput")
         actuators_output = safe_get(car_output, "actuatorsOutput")
@@ -258,23 +280,78 @@ class OpenpilotLiveSource:
         except Exception:
             lateral_kind = ""
         if lateral_kind == "angleState":
-            steering_output = safe_optional_float(actuators_output, "torqueOutputCan")
-            steering_output_kind = "angleMaxTorque"
+            # Angle-control cars send a positive maximum-torque authority value,
+            # which normally stays pinned at its maximum. Estimate signed steering
+            # utilization like mici's TorqueBar instead so the gauge reflects demand.
+            car_control = self._service_data("carControl")
+            lat_active = bool(safe_get(car_control, "latActive", False))
+            if lat_active:
+                v_ego = max(0.0, safe_optional_float(car_state, "vEgo") or 0.0)
+                curvature = safe_optional_float(controls_state, "curvature") or 0.0
+                desired_curvature = safe_optional_float(controls_state, "desiredCurvature") or curvature
+                live_parameters = self._service_data("liveParameters")
+                roll = safe_optional_float(live_parameters, "roll") or 0.0
+                roll_weight = clamp((v_ego - 5.0) / 10.0, 0.0, 1.0)
+                desired_lateral_accel = desired_curvature * v_ego * v_ego
+                roll_compensation = roll * ACCELERATION_DUE_TO_GRAVITY * roll_weight
+                steering_output_normalized = clamp(
+                    (desired_lateral_accel - roll_compensation) / self._max_lateral_accel,
+                    -1.0,
+                    1.0,
+                )
+            else:
+                steering_output_normalized = 0.0
+            steering_output = steering_output_normalized * 100.0
+            steering_output_kind = "angle"
         elif lateral_kind in ("torqueState", "pidState"):
-            steering_output = safe_optional_float(actuators_output, "torqueOutputCan")
+            actuator_torque = safe_optional_float(actuators_output, "torque")
+            if actuator_torque is not None:
+                steering_output_normalized = clamp(actuator_torque, -1.0, 1.0)
+            torque_output_can = safe_optional_float(actuators_output, "torqueOutputCan")
+            if torque_output_can is not None and abs(torque_output_can) <= 999.0:
+                steering_output = torque_output_can
+            elif steering_output_normalized is not None:
+                # Simulator and some non-CAN paths don't have a meaningful raw CAN
+                # torque value. Show normalized steering demand instead of sentinel
+                # values such as -4096.
+                steering_output = steering_output_normalized * 100.0
             steering_output_kind = "torque"
 
         carrot_man = self._service_data("carrotMan")
         active_carrot = safe_optional_float(carrot_man, "activeCarrot")
         external_nav_active = active_carrot is not None and active_carrot > 0.0
+
+        cruise_override_kph = None
+        cruise_override_label = None
+        cruise_override_color_mode = 0
+        if state.cruise_kph is not None and state.cruise_display_state != "off":
+            # Keep this priority and the thresholds in sync with mici's SetSpeedOverride.
+            longitudinal_plan = self._service_data("longitudinalPlan")
+            cruise_target = safe_optional_float(longitudinal_plan, "cruiseTarget")
+            if cruise_target is not None and cruise_target > state.cruise_kph + 0.5:
+                cruise_override_kph = cruise_target
+                cruise_override_label = "eco"
+                cruise_override_color_mode = 1
+            else:
+                desired_speed = safe_optional_float(carrot_man, "desiredSpeed")
+                desired_source = str(safe_get(carrot_man, "desiredSource", "") or "").strip()
+                if desired_speed is not None and 0.0 < desired_speed < 200.0 and desired_speed < state.cruise_kph:
+                    cruise_override_kph = desired_speed
+                    cruise_override_label = (desired_source or "apply")[:8]
+                    cruise_override_color_mode = 2
+
         return replace(
             state,
             external_nav_active=external_nav_active,
             steering_output=steering_output,
+            steering_output_normalized=steering_output_normalized,
             steering_output_kind=steering_output_kind,
             fuel_gauge=fuel_gauge,
             energy_gauge_label=energy_gauge_label,
             urea_gauge=urea_gauge,
+            cruise_override_kph=cruise_override_kph,
+            cruise_override_label=cruise_override_label,
+            cruise_override_color_mode=cruise_override_color_mode,
         )
 
     def status_text(self) -> str:

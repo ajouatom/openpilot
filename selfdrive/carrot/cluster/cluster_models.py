@@ -301,10 +301,14 @@ class ClusterUiState:
     network_connected: bool = False
     external_nav_active: bool = False
     steering_output: float | None = None
-    steering_output_kind: Literal["angleMaxTorque", "torque"] | None = None
+    steering_output_normalized: float | None = None
+    steering_output_kind: Literal["angle", "torque"] | None = None
     fuel_gauge: float | None = None
     energy_gauge_label: Literal["fuel", "battery"] = "fuel"
     urea_gauge: float | None = None
+    cruise_override_kph: float | None = None
+    cruise_override_label: str | None = None
+    cruise_override_color_mode: int = 0
 
 
 @dataclass(frozen=True, slots=True)
