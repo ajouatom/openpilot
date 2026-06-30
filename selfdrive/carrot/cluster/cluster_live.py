@@ -117,6 +117,7 @@ class OpenpilotLiveSource:
         self.frames = 0
         self.params: Any | None = None
         self.params_memory: Any | None = None
+        self._energy_gauge_label = "fuel"
         self._next_debug_param_read_t = 0.0
         self._custom_steer_ratio: float | None = None
         self._steer_actuator_delay_param_s: float | None = None
@@ -141,8 +142,26 @@ class OpenpilotLiveSource:
 
             self.params = Params()
             self.params_memory = Params("/dev/shm/params")
+            self._energy_gauge_label = self._resolve_energy_gauge_label()
         except Exception:
             pass
+
+    def _resolve_energy_gauge_label(self) -> str:
+        if self.params is None:
+            return "fuel"
+        try:
+            from cereal import car
+            from opendbc.car.hyundai.values import HyundaiFlags
+
+            car_params_bytes = self.params.get("CarParams")
+            if not car_params_bytes:
+                return "fuel"
+            car_params = self.messaging.log_from_bytes(car_params_bytes, car.CarParams)
+            if car_params.brand == "hyundai" and car_params.flags & HyundaiFlags.EV.value:
+                return "battery"
+        except Exception:
+            pass
+        return "fuel"
 
     def set_profile_enabled(self, enabled: bool) -> None:
         self.profile_enabled = enabled
@@ -223,6 +242,7 @@ class OpenpilotLiveSource:
         fuel_gauge = safe_optional_float(car_state, "fuelGauge")
         if fuel_gauge is None or not 0.0 < fuel_gauge <= 1.0:
             fuel_gauge = None
+        energy_gauge_label = "battery" if bool(safe_get(car_state, "charging", False)) else self._energy_gauge_label
 
         steering_output = None
         steering_output_kind = None
@@ -250,6 +270,7 @@ class OpenpilotLiveSource:
             steering_output=steering_output,
             steering_output_kind=steering_output_kind,
             fuel_gauge=fuel_gauge,
+            energy_gauge_label=energy_gauge_label,
         )
 
     def status_text(self) -> str:

@@ -111,7 +111,7 @@ class NetworkAddressProvider:
         if self._params is None:
             return None
         try:
-            value = self._params.get("NetworkAddress", encoding="utf-8")
+            value = self._params.get("NetworkAddress")
         except Exception:
             return None
         return self._valid_address(value)
@@ -127,6 +127,8 @@ class NetworkAddressProvider:
 
     @staticmethod
     def _valid_address(value: object) -> str | None:
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", errors="replace")
         text = str(value or "").strip()
         if not text or text in ("0.0.0.0", "127.0.0.1"):
             return None

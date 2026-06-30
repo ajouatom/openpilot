@@ -3281,7 +3281,7 @@ class ClusterUiRenderer:
                 470,
                 gauge_width,
                 clamp(state.fuel_gauge, 0.0, 1.0),
-                "fuel",
+                state.energy_gauge_label,
                 GREEN if state.fuel_gauge > 0.15 else RED,
             )
 
