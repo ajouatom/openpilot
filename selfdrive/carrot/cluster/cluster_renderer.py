@@ -81,6 +81,7 @@ TPMS_BADGE_WIDTH = 46.0
 TPMS_BADGE_HEIGHT = 37.5
 TPMS_BADGE_FONT_SIZE = 25.5
 ACCEL_TEXT_WIDTH_SAMPLES = ("+00.00", "-00.00")
+PREVIEW_MISSING_GAUGES = True  # Temporary layout preview; real values always take priority.
 TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
 TURN_SIGNAL_CENTER_Y = 72
@@ -3274,27 +3275,40 @@ class ClusterUiRenderer:
         self._draw_text(accel_text, gauge_center_x, 52, accel_text_size, fill_color, anchor="center")
         self._draw_text("accel", gauge_center_x, bottom + 27, 21, theme.muted, anchor="center")
 
-        if state.fuel_gauge is not None:
+        energy_value = state.fuel_gauge
+        energy_preview = energy_value is None and PREVIEW_MISSING_GAUGES
+        if energy_preview:
+            energy_value = 0.64 + math.sin(time.perf_counter() * 0.8) * 0.08
+        if energy_value is not None and (not energy_preview or self._preview_gauge_visible()):
             self._draw_level_gauge(
                 gauge_center_x,
                 310,
                 470,
                 gauge_width,
-                clamp(state.fuel_gauge, 0.0, 1.0),
+                clamp(energy_value, 0.0, 1.0),
                 state.energy_gauge_label,
-                GREEN if state.fuel_gauge > 0.15 else RED,
+                AMBER if energy_preview else GREEN if energy_value > 0.15 else RED,
             )
+            if energy_preview:
+                self._draw_text("TEST", gauge_center_x, 520, 14, AMBER, anchor="center")
 
     def _draw_steering_output_block(self, state: ClusterUiState) -> None:
-        if state.steering_output is None or state.steering_output_kind is None:
+        preview_phase = int(time.perf_counter() / 1.5) % 2 == 1
+        preview_torque = PREVIEW_MISSING_GAUGES and (
+            state.steering_output is None
+            or state.steering_output_kind is None
+            or (state.steering_output_kind == "angle" and preview_phase)
+        )
+        if not preview_torque and (state.steering_output is None or state.steering_output_kind is None):
             return
         theme = self._current_theme()
         gauge_center_x = DESIGN_WIDTH - 80
         top = 80
         bottom = 240
         gauge_width = 62
-        value = state.steering_output
-        if state.steering_output_kind == "angle":
+        value = math.sin(time.perf_counter() * 1.1) * 0.68 if preview_torque else float(state.steering_output)
+        output_kind = "torque" if preview_torque else state.steering_output_kind
+        if output_kind == "angle":
             limit = 90.0
             value_text = f"{value:+.1f}°"
             label = "angle"
@@ -3307,6 +3321,17 @@ class ClusterUiRenderer:
         self._draw_bipolar_gauge(gauge_center_x, top, bottom, gauge_width, normalized, color)
         self._draw_text(value_text, gauge_center_x, 52, 30, color, anchor="center")
         self._draw_text(label, gauge_center_x, bottom + 27, 21, theme.muted, anchor="center")
+        if preview_torque:
+            self._draw_text("TEST", gauge_center_x, bottom + 50, 14, AMBER, anchor="center")
+
+        if PREVIEW_MISSING_GAUGES and self._preview_gauge_visible():
+            def_value = 0.43 + math.sin(time.perf_counter() * 0.55) * 0.06
+            self._draw_level_gauge(gauge_center_x, 310, 470, gauge_width, def_value, "DEF", BLUE)
+            self._draw_text("TEST", gauge_center_x, 520, 14, AMBER, anchor="center")
+
+    @staticmethod
+    def _preview_gauge_visible() -> bool:
+        return time.perf_counter() % 1.0 < 0.72
 
     def _draw_bipolar_gauge(
         self,
