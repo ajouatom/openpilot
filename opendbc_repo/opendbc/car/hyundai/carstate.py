@@ -290,7 +290,6 @@ class CarState(CarStateBase):
 
     if cp.ts_nanos["EMS21"]["SCR_UREA_LEVEL"] > 0:
       ret.ureaGauge = float(np.clip(cp.vl["EMS21"]["SCR_UREA_LEVEL"] / 100.0, 0.0, 1.0))
-      ret.ureaGaugeValid = True
 
     ret.wheelSpeeds = self.get_wheel_speeds(
       cp.vl["WHL_SPD11"]["WHL_SPD_FL"],
