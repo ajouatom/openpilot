@@ -598,12 +598,18 @@ def _get_desire_and_lane_changing(md):
   lane_changing = 0
   if md is not None:
     desire = md.meta.desire.raw
-    ds = md.meta.desireState
-    if len(ds) > 4:
-      if ds[1] > 0.9: lane_changing = 1
-      if ds[2] > 0.9: lane_changing = 2
-      if ds[3] > 0.9: lane_changing = 3
-      if ds[4] > 0.9: lane_changing = 4
+    if md.meta.laneChangeState in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing):
+      if md.meta.laneChangeDirection == LaneChangeDirection.left:
+        lane_changing = 3
+      elif md.meta.laneChangeDirection == LaneChangeDirection.right:
+        lane_changing = 4
+    else:
+      ds = md.meta.desireState
+      if len(ds) > 4:
+        if ds[1] > 0.9: lane_changing = 1
+        if ds[2] > 0.9: lane_changing = 2
+        if ds[3] > 0.9: lane_changing = 3
+        if ds[4] > 0.9: lane_changing = 4
   return desire, lane_changing
 
 def _apply_lane_desire(values, desire):
@@ -690,6 +696,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
     create_ccnc_messages._lane_line_check = Params().get_int("LaneLineCheck")
   lane_line_check = create_ccnc_messages._lane_line_check
   desire, lane_changing = _get_desire_and_lane_changing(md)
+  display_desire = lane_changing if lane_changing in (3, 4) else desire
 
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
     HDA_CntrlModSta = 0
@@ -833,11 +840,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["LCA_LEFT_ICON"] = 1 if lat_active else 0
           values["LCA_RIGHT_ICON"] = 1 if lat_active else 0
         else:
-          values["LCA_LEFT_ICON"] = (2 if desire in (1, 3) else 1) if lat_active else 0
-          values["LCA_RIGHT_ICON"] = (2 if desire in (2, 4) else 1) if lat_active else 0
+          values["LCA_LEFT_ICON"] = (2 if values["LANELINE_LEFT"] in (2, 6) else 1) if lat_active else 0
+          values["LCA_RIGHT_ICON"] = (2 if values["LANELINE_RIGHT"] in (2, 6) else 1) if lat_active else 0
 
-        values["LANE_LEFT"] = 0 if trailer_lane_change_blocked else 1 if desire in (1, 3) else 0
-        values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if desire in (2, 4) else 0
+        values["LANE_LEFT"] = 0 if trailer_lane_change_blocked else 1 if display_desire in (1, 3) else 0
+        values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if display_desire in (2, 4) else 0
 
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter))
 
@@ -858,7 +865,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values, CS, lat_active, frame, hud_control,
           lane_line=True,
           corner_radar=True,
-          desire=desire,
+          desire=display_desire,
           # 기존대로 LR/RR만 깜빡임
           blink_pairs=[('LR_DETECT', 'LR_DETECT_DISTANCE'),
                        ('RR_DETECT', 'RR_DETECT_DISTANCE')],
