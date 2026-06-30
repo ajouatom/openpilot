@@ -118,9 +118,16 @@ WIFI_STATUS_CENTER_X = GEAR_STATUS_CENTER_X - 102
 WIFI_STATUS_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
 TOP_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
 DRIVE_STATUS_BOX_RADIUS = 8.0 * DRIVE_STATUS_SCALE
-SPEED_VALUE_CENTER_X = 260
+SPEED_VALUE_CENTER_X = 320
 SPEED_VALUE_CENTER_Y = 230
 CRUISE_SPEED_CENTER_Y = 92
+SIDE_GAUGE_TOP = 54
+SIDE_GAUGE_BOTTOM = 180
+SIDE_GAUGE_LOWER_TOP = 226
+SIDE_GAUGE_LOWER_BOTTOM = 360
+SIDE_GAUGE_WIDTH = 62
+SIDE_GAUGE_VALUE_Y = 27
+SIDE_GAUGE_LABEL_OFFSET = 15
 SPEED_LIMIT_SIGN_CENTER_X = 460
 SPEED_LIMIT_SIGN_CENTER_Y = TURN_SIGNAL_CENTER_Y
 SPEED_LIMIT_SIGN_RADIUS = 56.0
@@ -3238,14 +3245,14 @@ class ClusterUiRenderer:
 
     def _draw_accel_block(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
-        top = 80
-        bottom = 240
+        top = SIDE_GAUGE_TOP
+        bottom = SIDE_GAUGE_BOTTOM
         center = (top + bottom) // 2
-        gauge_width = 62
+        gauge_width = SIDE_GAUGE_WIDTH
         accel_value = 0.0 if abs(state.accel_mps2) < 0.005 else state.accel_mps2
         accel_text = f"{accel_value:+05.2f}"
         accel_text_x = 20
-        accel_text_size = 30
+        accel_text_size = 27
         text_spacing = max(1.0, accel_text_size * 0.02)
         if self._accel_text_width <= 0.0:
             self._accel_text_width = max(
@@ -3272,8 +3279,8 @@ class ClusterUiRenderer:
                 self._rounded_rect(fill_x, center - fill_height, fill_width, fill_height, 13, fill_color)
             else:
                 self._rounded_rect(fill_x, center, fill_width, fill_height, 13, fill_color)
-        self._draw_text(accel_text, gauge_center_x, 52, accel_text_size, fill_color, anchor="center")
-        self._draw_text("accel", gauge_center_x, bottom + 27, 21, theme.muted, anchor="center")
+        self._draw_text(accel_text, gauge_center_x, SIDE_GAUGE_VALUE_Y, accel_text_size, fill_color, anchor="center")
+        self._draw_text("accel", gauge_center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, theme.muted, anchor="center")
 
         energy_value = state.fuel_gauge
         energy_preview = energy_value is None and PREVIEW_MISSING_GAUGES
@@ -3282,15 +3289,13 @@ class ClusterUiRenderer:
         if energy_value is not None and (not energy_preview or self._preview_gauge_visible()):
             self._draw_level_gauge(
                 gauge_center_x,
-                310,
-                470,
+                SIDE_GAUGE_LOWER_TOP,
+                SIDE_GAUGE_LOWER_BOTTOM,
                 gauge_width,
                 clamp(energy_value, 0.0, 1.0),
-                state.energy_gauge_label,
+                f"{state.energy_gauge_label}{'*' if energy_preview else ''}",
                 AMBER if energy_preview else GREEN if energy_value > 0.15 else RED,
             )
-            if energy_preview:
-                self._draw_text("TEST", gauge_center_x, 520, 14, AMBER, anchor="center")
 
     def _draw_steering_output_block(self, state: ClusterUiState) -> None:
         preview_torque = PREVIEW_MISSING_GAUGES and (
@@ -3301,9 +3306,9 @@ class ClusterUiRenderer:
             return
         theme = self._current_theme()
         gauge_center_x = DESIGN_WIDTH - 80
-        top = 80
-        bottom = 240
-        gauge_width = 62
+        top = SIDE_GAUGE_TOP
+        bottom = SIDE_GAUGE_BOTTOM
+        gauge_width = SIDE_GAUGE_WIDTH
         value = math.sin(time.perf_counter() * 1.1) * 260.0 if preview_torque else float(state.steering_output)
         output_kind = "torque" if preview_torque else state.steering_output_kind
         if output_kind == "angleMaxTorque":
@@ -3317,15 +3322,20 @@ class ClusterUiRenderer:
         normalized = clamp(value / limit, -1.0, 1.0)
         color = BLUE if normalized > 0 else AMBER if normalized < 0 else theme.muted
         self._draw_bipolar_gauge(gauge_center_x, top, bottom, gauge_width, normalized, color)
-        self._draw_text(value_text, gauge_center_x, 52, 30, color, anchor="center")
-        self._draw_text(label, gauge_center_x, bottom + 27, 21, theme.muted, anchor="center")
-        if preview_torque:
-            self._draw_text("TEST", gauge_center_x, bottom + 50, 14, AMBER, anchor="center")
+        self._draw_text(value_text, gauge_center_x, SIDE_GAUGE_VALUE_Y, 27, color, anchor="center")
+        self._draw_text(f"{label}{'*' if preview_torque else ''}", gauge_center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, theme.muted, anchor="center")
 
         if PREVIEW_MISSING_GAUGES and self._preview_gauge_visible():
             def_value = 0.43 + math.sin(time.perf_counter() * 0.55) * 0.06
-            self._draw_level_gauge(gauge_center_x, 310, 470, gauge_width, def_value, "DEF", BLUE)
-            self._draw_text("TEST", gauge_center_x, 520, 14, AMBER, anchor="center")
+            self._draw_level_gauge(
+                gauge_center_x,
+                SIDE_GAUGE_LOWER_TOP,
+                SIDE_GAUGE_LOWER_BOTTOM,
+                gauge_width,
+                def_value,
+                "DEF*",
+                BLUE,
+            )
 
     @staticmethod
     def _preview_gauge_visible() -> bool:
@@ -3369,8 +3379,8 @@ class ClusterUiRenderer:
         fill_height = value * (bottom - top - 16)
         if fill_height > 0.0:
             self._rounded_rect(gauge_x + 8, bottom - 8 - fill_height, width - 16, fill_height, 13, color)
-        self._draw_text(f"{value * 100:.0f}%", center_x, top - 28, 25, color, anchor="center")
-        self._draw_text(label, center_x, bottom + 27, 21, theme.muted, anchor="center")
+        self._draw_text(f"{value * 100:.0f}%", center_x, top - 16, 20, color, anchor="center")
+        self._draw_text(label, center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, theme.muted, anchor="center")
 
     def _turn_signal_lights(self, state: ClusterUiState) -> tuple[bool, bool]:
         now = time.perf_counter()
