@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
@@ -7,7 +8,6 @@ from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
 from opendbc.car.interfaces import CarControllerBase
-from opendbc.car.vehicle_model import VehicleModel
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -29,6 +29,12 @@ PRE_OVERRIDE_FILTERED_MIN_RATIO = 0.65
 PRE_OVERRIDE_MIN_RATE_RATIO = 0.50
 PRE_OVERRIDE_CONFIRM_FRAMES = 2
 PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
+ANGLE_TRACKING_TRIM_MAX_CURVATURE = 4.0e-4
+# CarController has the nominal ratio only; retain headroom for the higher live ratio used by lateral control.
+ANGLE_TRACKING_TRIM_STEER_RATIO_MARGIN = 1.15
+ANGLE_TRACKING_TRIM_I = 0.001
+ANGLE_TRACKING_TRIM_BUILDUP_BOOST = 2.5
+ANGLE_TRACKING_TRIM_LEAK_RATE = 0.995
 
 vibrate_intervals = [
   (0.0, 0.5),
@@ -166,6 +172,11 @@ class CarController(CarControllerBase):
     self.driver_torque_filtered = 0.0
     self.driver_torque_filtered_prev = 0.0
     self.pre_override_frames = 0
+    self.angle_tracking_trim = 0.0
+    self.angle_tracking_trim_max = float(np.clip(
+      math.degrees(CP.wheelbase * CP.steerRatio * ANGLE_TRACKING_TRIM_MAX_CURVATURE) * ANGLE_TRACKING_TRIM_STEER_RATIO_MARGIN,
+      0.8, 1.5,
+    ))
 
     self.lkas11_active = False
 
@@ -237,6 +248,8 @@ class CarController(CarControllerBase):
       self.params.STEER_DELTA_DOWN = self.steerDeltaDown
     
     angle_control = self.CP.flags & HyundaiFlags.ANGLE_CONTROL
+    angle_policy_level = self.angle_control_level if angle_control else 0
+    angle_policy_blend = angle_policy_level / 100.0
 
     # steering torque
     new_torque = int(round(actuators.torque * self.params.STEER_MAX))
@@ -250,8 +263,29 @@ class CarController(CarControllerBase):
     #apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, 
     #                                           CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
 
+    desired_angle = float(actuators.steeringAngleDeg)
+    if angle_control and CC.latActive and angle_policy_level > 0:
+      if CS.out.steeringPressed:
+        self.angle_tracking_trim = 0.0
+        desired_angle = float(np.interp(angle_policy_blend, [0.0, 1.0],
+                                        [desired_angle, CS.out.steeringAngleDeg]))
+      elif CS.out.vEgo >= 0.3:
+        tracking_error_signed = desired_angle - CS.out.steeringAngleDeg
+        buildup = tracking_error_signed * desired_angle > 0.0 and abs(CS.out.steeringRateDeg) > 5.0
+        trim_i = ANGLE_TRACKING_TRIM_I * (ANGLE_TRACKING_TRIM_BUILDUP_BOOST if buildup else 1.0)
+        self.angle_tracking_trim += tracking_error_signed * trim_i
+        self.angle_tracking_trim *= ANGLE_TRACKING_TRIM_LEAK_RATE
+        self.angle_tracking_trim = float(np.clip(self.angle_tracking_trim,
+                                                 -self.angle_tracking_trim_max,
+                                                 self.angle_tracking_trim_max))
+        desired_angle += self.angle_tracking_trim * angle_policy_blend
+      else:
+        self.angle_tracking_trim = 0.0
+    else:
+      self.angle_tracking_trim = 0.0
+
     apply_angle = apply_steer_angle_limits_physics(
-      actuators.steeringAngleDeg,
+      desired_angle,
       self.apply_angle_last,
       CS.out.vEgoRaw,
       CS.out.steeringAngleDeg,
@@ -266,10 +300,9 @@ class CarController(CarControllerBase):
     if angle_control:
       apply_steer_req = CC.latActive
 
-    angle_policy_level = self.angle_control_level if angle_control else 0
     angle_torque_cap = self.angle_max_torque
     if angle_control and CC.latActive and angle_policy_level > 0:
-      desired_clip_error = abs(float(actuators.steeringAngleDeg) - apply_angle)
+      desired_clip_error = abs(desired_angle - apply_angle)
       tracking_error = abs(apply_angle - CS.out.steeringAngleDeg)
       near_angle_cap = abs(apply_angle) > self.params.ANGLE_LIMITS.STEER_ANGLE_MAX - 2.0
       steering_angle_abs = abs(CS.out.steeringAngleDeg)
@@ -363,7 +396,6 @@ class CarController(CarControllerBase):
       if near_angle_cap and desired_clip_error > 20.0:
         angle_torque_cap_100 = min(angle_torque_cap_100, self.params.ANGLE_MIN_TORQUE)
 
-      angle_policy_blend = angle_policy_level / 100.0
       angle_torque_cap = float(np.interp(angle_policy_blend, [0.0, 1.0],
                                          [self.angle_max_torque, angle_torque_cap_100]))
 
