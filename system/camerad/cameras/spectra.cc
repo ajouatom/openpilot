@@ -1197,7 +1197,7 @@ void SpectraCamera::configICP() {
   */
 
   int cfg_handle;
-  const int bps_idx = get_bps_blob_index(sensor.get());
+  const int bps_idx = get_bps_blob_index(sensor);
   assert(bps_idx >= 0 && bps_idx < BPS_BLOB_COUNT);
   if (bps_idx != sensor->num()) {
     LOGW("camera %d sensor %d: using BPS blob index %d", cc.camera_num, sensor->num(), bps_idx);
