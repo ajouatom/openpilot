@@ -622,7 +622,7 @@ class HudRenderer(Widget):
 
     cur_y = int(panel_y + panel_h * 0.48 - cur_size.y * 0.5) - 2
 
-    draw_text_ui_style(cur_text, cur_x, cur_y, cur_font, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+    draw_text_ui_style(cur_text, cur_x, cur_y, cur_font, rl.WHITE, font=self._font_display, border_width=2.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
 
     mode_text, mode_color = self._get_driving_mode_text_and_color()
     if self._debug_speed_panel:
@@ -636,7 +636,7 @@ class HudRenderer(Widget):
       mode_x = panel_x + 5
       mode_y = int(panel_y + panel_h * 0.05 - mode_size.y * 0.5 - 15)
 
-      draw_text_ui_style(mode_text, mode_x, mode_y, mode_font, mode_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+      draw_text_ui_style(mode_text, mode_x, mode_y, mode_font, mode_color, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
 
     # ----- set speed (center, smaller) -----
     show_set = self._engaged and self.is_cruise_set
@@ -658,7 +658,7 @@ class HudRenderer(Widget):
       set_size = measure_text_cached(self._font_display, set_text, set_font)
       set_x = int(panel_x + panel_w * 0.76 - set_size.x * 0.5)
       set_y = int(panel_y + panel_h * 0.33 - set_size.y * 0.5)
-      draw_text_ui_style(set_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+      draw_text_ui_style(set_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
       if ov.active:
         set_speed = ov.speed_kph
         if not ui_state.is_metric:
@@ -682,12 +682,12 @@ class HudRenderer(Widget):
         set_size = measure_text_cached(self._font_display, set_text, set_font)
         set_x = int(panel_x + panel_w * 0.90 - set_size.x * 0.5 + 50)
         set_y = int(panel_y + panel_h * 0.25 - set_size.y * 0.5)
-        draw_text_ui_style(set_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+        draw_text_ui_style(set_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
         set_font = 30
         set_size = measure_text_cached(self._font_display, set_label_text, set_font)
         set_x = int(panel_x + panel_w * 0.90 - set_size.x * 0.5 + 50)
         set_y = int(panel_y + panel_h * 0.10 - set_size.y * 0.5 - 20)
-        draw_text_ui_style(set_label_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+        draw_text_ui_style(set_label_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
 
     # ----- cruise gap (small circle + number, bottom-mid-right) -----
     gap = self._get_cruise_gap()
@@ -698,7 +698,7 @@ class HudRenderer(Widget):
     gap_text = str(gap)
     gap_font = 28
     gap_size = measure_text_cached(self._font_semi_bold, gap_text, gap_font)
-    draw_text_ui_style(gap_text, gap_center_x, gap_center_y, gap_font, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="center", y_offset=0.0)
+    draw_text_ui_style(gap_text, gap_center_x, gap_center_y, gap_font, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="center", y_offset=0.0)
 
     # active carrot
     sm = ui_state.sm
