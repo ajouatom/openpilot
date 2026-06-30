@@ -840,8 +840,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["LCA_LEFT_ICON"] = 1 if lat_active else 0
           values["LCA_RIGHT_ICON"] = 1 if lat_active else 0
         else:
-          values["LCA_LEFT_ICON"] = (2 if values["LANELINE_LEFT"] in (2, 6) else 1) if lat_active else 0
-          values["LCA_RIGHT_ICON"] = (2 if values["LANELINE_RIGHT"] in (2, 6) else 1) if lat_active else 0
+          values["LCA_LEFT_ICON"] = (2 if values["LANELINE_LEFT"] == 6 else 1) if lat_active else 0
+          values["LCA_RIGHT_ICON"] = (2 if values["LANELINE_RIGHT"] == 6 else 1) if lat_active else 0
 
         values["LANE_LEFT"] = 0 if trailer_lane_change_blocked else 1 if display_desire in (1, 3) else 0
         values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if display_desire in (2, 4) else 0
