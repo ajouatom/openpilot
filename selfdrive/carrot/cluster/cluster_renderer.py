@@ -73,6 +73,7 @@ OPENPILOT_ADDON_FONT_DIR = SELFDRIVE_DIR / "assets" / "addon" / "font"
 KAIGEN_GOTHIC_KR_BOLD_FONT_PATH = OPENPILOT_FONT_DIR / "KaiGenGothicKR-Bold.ttf"
 JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
 VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
+SPEED_BG_PATH = SELFDRIVE_DIR / "assets" / "images" / "speed_bg.png"
 FOLLOW_VEHICLE_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_cruse_gap_trimmed.png"
 LFA_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_wheel_org.png"
 WIFI_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "settings" / "network" / "wifi_strength_full.png"
@@ -85,6 +86,9 @@ TURN_SIGNAL_RIGHT_CENTER_X = 1310
 TURN_SIGNAL_CENTER_Y = 72
 TURN_SIGNAL_HEAD_HALF_HEIGHT = 38
 TURN_SIGNAL_MID_CENTER_X = (TURN_SIGNAL_LEFT_CENTER_X + TURN_SIGNAL_RIGHT_CENTER_X) * 0.5
+LANE_TURN_SIGNAL_LEFT_CENTER_X = 760
+LANE_TURN_SIGNAL_RIGHT_CENTER_X = 1160
+LANE_TURN_SIGNAL_CENTER_Y = 350
 DRIVE_STATUS_BASE_BOX_SIZE = 46.0
 DRIVE_STATUS_ROW_HEIGHT = TURN_SIGNAL_HEAD_HALF_HEIGHT * 2.0
 DRIVE_STATUS_SCALE = DRIVE_STATUS_ROW_HEIGHT / DRIVE_STATUS_BASE_BOX_SIZE
@@ -116,9 +120,18 @@ WIFI_STATUS_CENTER_X = GEAR_STATUS_CENTER_X - 102
 WIFI_STATUS_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
 TOP_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
 DRIVE_STATUS_BOX_RADIUS = 8.0 * DRIVE_STATUS_SCALE
-SPEED_VALUE_CENTER_X = 320
-SPEED_VALUE_CENTER_Y = 230
-CRUISE_SPEED_CENTER_Y = 92
+SPEED_PANEL_X = 210
+SPEED_PANEL_Y = 151
+SPEED_PANEL_W = 380
+SPEED_PANEL_H = 142
+SPEED_VALUE_CENTER_X = SPEED_PANEL_X + 84
+SPEED_VALUE_CENTER_Y = SPEED_PANEL_Y + 70
+SPEED_VALUE_FONT_SIZE = 112
+CRUISE_SPEED_CENTER_Y = SPEED_PANEL_Y + 55
+CRUISE_SET_SPEED_CENTER_X = SPEED_PANEL_X + 289
+CRUISE_OVERRIDE_SPEED_CENTER_X = SPEED_PANEL_X + 392
+CRUISE_OVERRIDE_SPEED_CENTER_Y = SPEED_PANEL_Y + 30
+CRUISE_OVERRIDE_LABEL_CENTER_Y = SPEED_PANEL_Y - 4
 SIDE_GAUGE_TOP = 54
 SIDE_GAUGE_BOTTOM = 180
 SIDE_GAUGE_LOWER_TOP = 243
@@ -131,6 +144,7 @@ SIDE_GAUGE_COLUMN_GAP = 88
 SPEED_LIMIT_SIGN_CENTER_X = 460
 SPEED_LIMIT_SIGN_CENTER_Y = TURN_SIGNAL_CENTER_Y
 SPEED_LIMIT_SIGN_RADIUS = 56.0
+CRUISE_OVERRIDE_APPLY_COLOR = (184, 112, 24)
 SPEED_LIMIT_SOURCE_LABELS = {
     "vehicle": "v",
     "car": "v",
@@ -551,6 +565,7 @@ class ClusterUiRenderer:
         self._nv12_pack_shader_locations: dict[str, int] = {}
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
+        self._speed_bg_texture = None
         self._follow_vehicle_texture = None
         self._lfa_texture = None
         self._lfa_active_texture = None
@@ -687,6 +702,9 @@ class ClusterUiRenderer:
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
+        if self._speed_bg_texture is not None:
+            rl.unload_texture(self._speed_bg_texture)
+            self._speed_bg_texture = None
         if self._follow_vehicle_texture is not None:
             rl.unload_texture(self._follow_vehicle_texture)
             self._follow_vehicle_texture = None
@@ -1319,6 +1337,8 @@ class ClusterUiRenderer:
         self._follow_vehicle_texture = self._load_icon_texture(FOLLOW_VEHICLE_ICON_PATH, "Follow gap vehicle")
 
     def _load_drive_status_textures(self) -> None:
+        if self._speed_bg_texture is None:
+            self._speed_bg_texture = self._load_icon_texture(SPEED_BG_PATH, "Speed background")
         if self._lfa_texture is None:
             self._lfa_texture = self._load_icon_texture(LFA_ICON_PATH, "LFA")
         if self._lfa_active_texture is None:
@@ -3039,7 +3059,7 @@ class ClusterUiRenderer:
             speed_h,
             unit_h,
         )
-        return SPEED_LIMIT_SIGN_CENTER_Y - SPEED_LIMIT_SIGN_RADIUS + row_h
+        return TURN_SIGNAL_CENTER_Y - SPEED_LIMIT_SIGN_RADIUS + row_h
 
     def _draw_drive_status_box(
         self,
@@ -3189,24 +3209,74 @@ class ClusterUiRenderer:
         theme = self._current_theme()
         display_speed_kph = state.display_speed_kph if state.display_speed_kph is not None else state.speed_kph
         speed_value = int(round(clamp(display_speed_kph, 0.0, MAX_SPEED_KPH)))
-        self._draw_text(str(speed_value), SPEED_VALUE_CENTER_X, SPEED_VALUE_CENTER_Y, 156, theme.text, anchor="center")
+        speed_text = str(speed_value)
+        speed_font_size = SPEED_VALUE_FONT_SIZE if len(speed_text) <= 2 else SPEED_VALUE_FONT_SIZE * 0.86
+        self._draw_speed_panel_bg()
+        self._draw_text_with_stroke(
+            speed_text,
+            SPEED_VALUE_CENTER_X,
+            SPEED_VALUE_CENTER_Y,
+            speed_font_size,
+            WHITE,
+            (0, 0, 0),
+            3,
+            anchor="center",
+        )
 
-        if self._cruise_set_visible(state):
-            cruise_color = self._cruise_set_color(state, theme)
-            cruise_text = self._cruise_set_speed_text(state)
-            self._draw_text("SET", SPEED_VALUE_CENTER_X - 58, CRUISE_SPEED_CENTER_Y, 24, cruise_color, anchor="center")
-            self._draw_text(cruise_text, SPEED_VALUE_CENTER_X + 12, CRUISE_SPEED_CENTER_Y, 58, cruise_color, anchor="center")
+        cruise_color = self._cruise_set_color(state, theme)
+        cruise_text = self._cruise_set_speed_text(state)
+        self._draw_text_with_stroke(
+            cruise_text,
+            CRUISE_SET_SPEED_CENTER_X,
+            CRUISE_SPEED_CENTER_Y,
+            58,
+            cruise_color,
+            (0, 0, 0),
+            2,
+            anchor="center",
+        )
+
+        if self._cruise_set_visible(state) and state.cruise_override_kph is not None:
+            override_color = (
+                GREEN
+                if state.cruise_override_color_mode == 1
+                else CRUISE_OVERRIDE_APPLY_COLOR
+                if state.cruise_override_color_mode == 2
+                else theme.text
+            )
+            override_text = str(int(round(state.cruise_override_kph)))
+            override_label = state.cruise_override_label or ""
+            self._draw_text_with_stroke(
+                override_label,
+                CRUISE_OVERRIDE_SPEED_CENTER_X,
+                CRUISE_OVERRIDE_LABEL_CENTER_Y,
+                25,
+                override_color,
+                (0, 0, 0),
+                2,
+                anchor="center",
+            )
+            self._draw_text_with_stroke(
+                override_text,
+                CRUISE_OVERRIDE_SPEED_CENTER_X,
+                CRUISE_OVERRIDE_SPEED_CENTER_Y,
+                52,
+                override_color,
+                (0, 0, 0),
+                2,
+                anchor="center",
+            )
 
         if state.speed_limit_kph is not None or state.navi_debug is not None:
             center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)
             rl.draw_circle_v(center, SPEED_LIMIT_SIGN_RADIUS, rl_color(RED))
-            rl.draw_circle_v(center, 47, rl_color(WHITE))
+            rl.draw_circle_v(center, SPEED_LIMIT_SIGN_RADIUS - 8.0, rl_color(WHITE))
             limit_text = "--" if state.speed_limit_kph is None else str(state.speed_limit_kph)
             self._draw_text(
                 limit_text,
                 SPEED_LIMIT_SIGN_CENTER_X,
-                SPEED_LIMIT_SIGN_CENTER_Y - 12,
-                42,
+                SPEED_LIMIT_SIGN_CENTER_Y - 10,
+                39,
                 TEXT,
                 anchor="center",
             )
@@ -3215,11 +3285,19 @@ class ClusterUiRenderer:
                 self._draw_text(
                     source_label,
                     SPEED_LIMIT_SIGN_CENTER_X,
-                    SPEED_LIMIT_SIGN_CENTER_Y + 31,
+                    SPEED_LIMIT_SIGN_CENTER_Y + 25,
                     17,
                     TEXT,
                     anchor="center",
                 )
+
+    def _draw_speed_panel_bg(self) -> None:
+        texture = self._speed_bg_texture
+        if texture is None:
+            return
+        source = rl.Rectangle(0.0, 0.0, float(texture.width), float(texture.height))
+        dest = rl.Rectangle(SPEED_PANEL_X, SPEED_PANEL_Y, SPEED_PANEL_W, SPEED_PANEL_H)
+        rl.draw_texture_pro(texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE, 235))
 
     @staticmethod
     def _cruise_set_visible(state: ClusterUiState) -> bool:
@@ -3228,7 +3306,7 @@ class ClusterUiRenderer:
     @staticmethod
     def _cruise_set_speed_text(state: ClusterUiState) -> str:
         if state.cruise_display_state == "off" or state.cruise_kph is None:
-            return "---"
+            return "--"
         return str(int(round(state.cruise_kph)))
 
     @staticmethod
@@ -3237,9 +3315,7 @@ class ClusterUiRenderer:
             return theme.muted
         if state.cruise_display_state == "paused":
             return theme.muted
-        if state.speed_limit_kph is not None and state.cruise_kph == state.speed_limit_kph:
-            return GREEN
-        return BLUE
+        return GREEN
 
     def _draw_accel_block(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
@@ -3290,16 +3366,18 @@ class ClusterUiRenderer:
         top = SIDE_GAUGE_TOP
         bottom = SIDE_GAUGE_BOTTOM
         gauge_width = SIDE_GAUGE_WIDTH
-        if state.steering_output is not None and state.steering_output_kind is not None:
+        if (
+            state.steering_output is not None
+            and state.steering_output_normalized is not None
+            and state.steering_output_kind is not None
+        ):
             value = float(state.steering_output)
             output_kind = state.steering_output_kind
-            if output_kind == "angleMaxTorque":
-                limit = 250.0
-                value_text = f"{value:.0f}"
+            normalized = clamp(float(state.steering_output_normalized), -1.0, 1.0)
+            if output_kind == "angle":
+                value_text = f"{value:+.0f}%"
             else:
-                limit = 409.0
-                value_text = f"{value:+.0f}"
-            normalized = clamp(value / limit, -1.0, 1.0)
+                value_text = f"{normalized * 100.0:+.0f}%" if abs(value) > 999.0 else f"{value:+.0f}"
             color = BLUE if normalized > 0 else AMBER if normalized < 0 else theme.muted
             self._draw_bipolar_gauge(gauge_center_x, top, bottom, gauge_width, normalized, color)
             self._draw_text(value_text, gauge_center_x, SIDE_GAUGE_VALUE_Y, 17, color, anchor="center")
@@ -3401,8 +3479,8 @@ class ClusterUiRenderer:
             return
 
         theme = self._current_theme()
-        cx = TURN_SIGNAL_LEFT_CENTER_X if side == "left" else TURN_SIGNAL_RIGHT_CENTER_X
-        cy = TURN_SIGNAL_CENTER_Y
+        cx = LANE_TURN_SIGNAL_LEFT_CENTER_X if side == "left" else LANE_TURN_SIGNAL_RIGHT_CENTER_X
+        cy = LANE_TURN_SIGNAL_CENTER_Y
         direction = -1 if side == "left" else 1
         fill = GREEN if lit else (*theme.muted, 42)
         outline = (8, 118, 65) if lit else (*theme.muted, 150)
