@@ -1523,7 +1523,8 @@ bool SpectraCamera::waitForFrameReady(uint64_t request_id) {
 }
 
 bool SpectraCamera::processFrame(int buf_idx, uint64_t request_id, uint64_t frame_id_raw, uint64_t timestamp) {
-  if (!syncFirstFrame(cc.camera_num, request_id, frame_id_raw, timestamp, cc.staggered_sof)) {
+  const bool staggered_sof = cc.staggered_sof && sensor->image_sensor != cereal::FrameData::ImageSensor::AR0231;
+  if (!syncFirstFrame(cc.camera_num, request_id, frame_id_raw, timestamp, staggered_sof)) {
     return false;
   }
 
@@ -1580,7 +1581,12 @@ bool SpectraCamera::syncFirstFrame(int camera_id, uint64_t request_id, uint64_t 
 
   // Timeout in case the timestamps never line up
   if (raw_id > 40) {
-    LOGE("camera first frame sync timed out");
+    LOGE("camera first frame sync timed out: camera %d request %lu raw_id %lu timestamp %lu cams %zu/%d",
+         camera_id, request_id, raw_id, timestamp, camera_sync_data.size(), enabled_camera_count);
+    for (const auto &[cam, sync_data] : camera_sync_data) {
+      LOGE("camera %d first frame sync data: frame_id_offset %lu timestamp %lu staggered %d",
+           cam, sync_data.frame_id_offset, sync_data.timestamp, sync_data.staggered);
+    }
     first_frame_synced = true;
   }
 
