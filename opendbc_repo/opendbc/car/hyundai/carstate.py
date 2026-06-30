@@ -288,6 +288,10 @@ class CarState(CarStateBase):
 
     ret.seatbeltUnlatched = cp.vl["CGW1"]["CF_Gway_DrvSeatBeltSw"] == 0
 
+    if cp.ts_nanos["EMS21"]["SCR_UREA_LEVEL"] > 0:
+      ret.ureaGauge = float(np.clip(cp.vl["EMS21"]["SCR_UREA_LEVEL"] / 100.0, 0.0, 1.0))
+      ret.ureaGaugeValid = True
+
     ret.wheelSpeeds = self.get_wheel_speeds(
       cp.vl["WHL_SPD11"]["WHL_SPD_FL"],
       cp.vl["WHL_SPD11"]["WHL_SPD_FR"],
@@ -782,6 +786,8 @@ class CarState(CarStateBase):
       return self.get_can_parsers_canfd(CP)
 
     return {
-      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 0),
+      # EMS21 carries SCR_UREA_LEVEL on diesel platforms. NaN frequency makes
+      # it optional, so gasoline/EV platforms do not fail CAN validity.
+      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [("EMS21", math.nan)], 0),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 2),
     }

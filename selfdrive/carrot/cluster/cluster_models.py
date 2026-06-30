@@ -304,6 +304,7 @@ class ClusterUiState:
     steering_output_kind: Literal["angleMaxTorque", "torque"] | None = None
     fuel_gauge: float | None = None
     energy_gauge_label: Literal["fuel", "battery"] = "fuel"
+    urea_gauge: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

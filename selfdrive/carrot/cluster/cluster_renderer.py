@@ -122,8 +122,8 @@ SPEED_VALUE_CENTER_Y = 230
 CRUISE_SPEED_CENTER_Y = 92
 SIDE_GAUGE_TOP = 54
 SIDE_GAUGE_BOTTOM = 180
-SIDE_GAUGE_LOWER_TOP = 226
-SIDE_GAUGE_LOWER_BOTTOM = 360
+SIDE_GAUGE_LOWER_TOP = 243
+SIDE_GAUGE_LOWER_BOTTOM = 377
 SIDE_GAUGE_WIDTH = 62
 SIDE_GAUGE_VALUE_Y = 27
 SIDE_GAUGE_LABEL_OFFSET = 15
@@ -3250,7 +3250,7 @@ class ClusterUiRenderer:
         gauge_width = SIDE_GAUGE_WIDTH
         accel_value = 0.0 if abs(state.accel_mps2) < 0.005 else state.accel_mps2
         accel_text = f"{accel_value:+05.2f}"
-        accel_text_size = 27
+        accel_text_size = 17
         gauge_center_x = SIDE_GAUGE_LEFT_CENTER_X
         gauge_x = gauge_center_x - gauge_width * 0.5
         fill_x = gauge_x + 8
@@ -3305,27 +3305,29 @@ class ClusterUiRenderer:
         if output_kind == "angleMaxTorque":
             limit = 250.0
             value_text = f"{value:.0f}"
-            label = "maxT"
         else:
             limit = 409.0
             value_text = f"{value:+.0f}"
-            label = "torque"
+        label = "steer"
         normalized = clamp(value / limit, -1.0, 1.0)
         color = BLUE if normalized > 0 else AMBER if normalized < 0 else theme.muted
         self._draw_bipolar_gauge(gauge_center_x, top, bottom, gauge_width, normalized, color)
-        self._draw_text(value_text, gauge_center_x, SIDE_GAUGE_VALUE_Y, 27, color, anchor="center")
+        self._draw_text(value_text, gauge_center_x, SIDE_GAUGE_VALUE_Y, 17, color, anchor="center")
         self._draw_text(f"{label}{'*' if preview_torque else ''}", gauge_center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, theme.muted, anchor="center")
 
-        if PREVIEW_MISSING_GAUGES and self._preview_gauge_visible():
-            def_value = 0.43 + math.sin(time.perf_counter() * 0.55) * 0.06
+        urea_value = state.urea_gauge
+        urea_preview = urea_value is None and PREVIEW_MISSING_GAUGES
+        if urea_preview:
+            urea_value = 0.43 + math.sin(time.perf_counter() * 0.55) * 0.06
+        if urea_value is not None and (not urea_preview or self._preview_gauge_visible()):
             self._draw_level_gauge(
                 gauge_center_x,
                 SIDE_GAUGE_LOWER_TOP,
                 SIDE_GAUGE_LOWER_BOTTOM,
                 gauge_width,
-                def_value,
-                "DEF*",
-                BLUE,
+                clamp(urea_value, 0.0, 1.0),
+                f"DEF{'*' if urea_preview else ''}",
+                AMBER if urea_value <= 0.15 else BLUE,
             )
 
     @staticmethod
@@ -3370,7 +3372,7 @@ class ClusterUiRenderer:
         fill_height = value * (bottom - top - 16)
         if fill_height > 0.0:
             self._rounded_rect(gauge_x + 8, bottom - 8 - fill_height, width - 16, fill_height, 13, color)
-        self._draw_text(f"{value * 100:.0f}%", center_x, top - 16, 20, color, anchor="center")
+        self._draw_text(f"{value * 100:.0f}%", center_x, top - 16, 17, color, anchor="center")
         self._draw_text(label, center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, theme.muted, anchor="center")
 
     def _turn_signal_lights(self, state: ClusterUiState) -> tuple[bool, bool]:

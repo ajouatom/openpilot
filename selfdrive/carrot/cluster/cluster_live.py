@@ -243,6 +243,9 @@ class OpenpilotLiveSource:
         if fuel_gauge is None or not 0.0 < fuel_gauge <= 1.0:
             fuel_gauge = None
         energy_gauge_label = "battery" if bool(safe_get(car_state, "charging", False)) else self._energy_gauge_label
+        urea_gauge = safe_optional_float(car_state, "ureaGauge") if bool(safe_get(car_state, "ureaGaugeValid", False)) else None
+        if urea_gauge is not None and not 0.0 <= urea_gauge <= 1.0:
+            urea_gauge = None
 
         steering_output = None
         steering_output_kind = None
@@ -271,6 +274,7 @@ class OpenpilotLiveSource:
             steering_output_kind=steering_output_kind,
             fuel_gauge=fuel_gauge,
             energy_gauge_label=energy_gauge_label,
+            urea_gauge=urea_gauge,
         )
 
     def status_text(self) -> str:

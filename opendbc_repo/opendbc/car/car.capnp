@@ -260,6 +260,8 @@ struct CarState {
   leftRearLatDist @79 :Float32; # rear-left corner radar lateral distance
   rightRearLatDist @80 :Float32; # rear-right corner radar lateral distance
   trailerConnected @81 :Bool; # trailer connection state after disconnect debounce
+  ureaGauge @82 :Float32; # diesel exhaust fluid/urea tank level from 0.0 to 1.0
+  ureaGaugeValid @83 :Bool; # true when ureaGauge was received from the vehicle
 
   struct Tpms {
     fl @0 :Float32;
