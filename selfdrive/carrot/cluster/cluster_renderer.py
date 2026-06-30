@@ -80,7 +80,6 @@ TPMS_LOW_PRESSURE_PSI = 31.0
 TPMS_BADGE_WIDTH = 46.0
 TPMS_BADGE_HEIGHT = 37.5
 TPMS_BADGE_FONT_SIZE = 25.5
-PREVIEW_MISSING_GAUGES = True  # Temporary layout preview; real values always take priority.
 TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
 TURN_SIGNAL_CENTER_Y = 72
@@ -3274,65 +3273,49 @@ class ClusterUiRenderer:
         self._draw_text("accel", gauge_center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, theme.muted, anchor="center")
 
         energy_value = state.fuel_gauge
-        energy_preview = energy_value is None and PREVIEW_MISSING_GAUGES
-        if energy_preview:
-            energy_value = 0.64 + math.sin(time.perf_counter() * 0.8) * 0.08
-        if energy_value is not None and (not energy_preview or self._preview_gauge_visible()):
+        if energy_value is not None:
             self._draw_level_gauge(
                 gauge_center_x,
                 SIDE_GAUGE_LOWER_TOP,
                 SIDE_GAUGE_LOWER_BOTTOM,
                 gauge_width,
                 clamp(energy_value, 0.0, 1.0),
-                f"{state.energy_gauge_label}{'*' if energy_preview else ''}",
-                AMBER if energy_preview else GREEN if energy_value > 0.15 else RED,
+                state.energy_gauge_label,
+                GREEN if energy_value > 0.15 else RED,
             )
 
     def _draw_steering_output_block(self, state: ClusterUiState) -> None:
-        preview_torque = PREVIEW_MISSING_GAUGES and (
-            state.steering_output is None
-            or state.steering_output_kind is None
-        )
-        if not preview_torque and (state.steering_output is None or state.steering_output_kind is None):
-            return
         theme = self._current_theme()
         gauge_center_x = SIDE_GAUGE_LEFT_CENTER_X + SIDE_GAUGE_COLUMN_GAP
         top = SIDE_GAUGE_TOP
         bottom = SIDE_GAUGE_BOTTOM
         gauge_width = SIDE_GAUGE_WIDTH
-        value = math.sin(time.perf_counter() * 1.1) * 260.0 if preview_torque else float(state.steering_output)
-        output_kind = "torque" if preview_torque else state.steering_output_kind
-        if output_kind == "angleMaxTorque":
-            limit = 250.0
-            value_text = f"{value:.0f}"
-        else:
-            limit = 409.0
-            value_text = f"{value:+.0f}"
-        label = "steer"
-        normalized = clamp(value / limit, -1.0, 1.0)
-        color = BLUE if normalized > 0 else AMBER if normalized < 0 else theme.muted
-        self._draw_bipolar_gauge(gauge_center_x, top, bottom, gauge_width, normalized, color)
-        self._draw_text(value_text, gauge_center_x, SIDE_GAUGE_VALUE_Y, 17, color, anchor="center")
-        self._draw_text(f"{label}{'*' if preview_torque else ''}", gauge_center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, theme.muted, anchor="center")
+        if state.steering_output is not None and state.steering_output_kind is not None:
+            value = float(state.steering_output)
+            output_kind = state.steering_output_kind
+            if output_kind == "angleMaxTorque":
+                limit = 250.0
+                value_text = f"{value:.0f}"
+            else:
+                limit = 409.0
+                value_text = f"{value:+.0f}"
+            normalized = clamp(value / limit, -1.0, 1.0)
+            color = BLUE if normalized > 0 else AMBER if normalized < 0 else theme.muted
+            self._draw_bipolar_gauge(gauge_center_x, top, bottom, gauge_width, normalized, color)
+            self._draw_text(value_text, gauge_center_x, SIDE_GAUGE_VALUE_Y, 17, color, anchor="center")
+            self._draw_text("steer", gauge_center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, theme.muted, anchor="center")
 
         urea_value = state.urea_gauge
-        urea_preview = urea_value is None and PREVIEW_MISSING_GAUGES
-        if urea_preview:
-            urea_value = 0.43 + math.sin(time.perf_counter() * 0.55) * 0.06
-        if urea_value is not None and (not urea_preview or self._preview_gauge_visible()):
+        if urea_value is not None:
             self._draw_level_gauge(
                 gauge_center_x,
                 SIDE_GAUGE_LOWER_TOP,
                 SIDE_GAUGE_LOWER_BOTTOM,
                 gauge_width,
                 clamp(urea_value, 0.0, 1.0),
-                f"DEF{'*' if urea_preview else ''}",
+                "DEF",
                 AMBER if urea_value <= 0.15 else BLUE,
             )
-
-    @staticmethod
-    def _preview_gauge_visible() -> bool:
-        return time.perf_counter() % 1.0 < 0.72
 
     def _draw_bipolar_gauge(
         self,
