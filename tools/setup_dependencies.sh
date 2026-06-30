@@ -86,6 +86,12 @@ EOF
 SUBSYSTEM=="usb", ATTR{idVendor}=="04d8", ATTR{idProduct}=="1234", ENV{adb_user}="yes"
 EOF
 
+    # Setup carrot cluster HUD udev rules
+    $SUDO tee /etc/udev/rules.d/51-carrot-cluster.rules > /dev/null <<EOF
+SUBSYSTEM=="usb", ATTR{idVendor}=="1cbe", ATTR{idProduct}=="0092", MODE="0666"
+SUBSYSTEM=="usb", ATTR{idVendor}=="1cbe", ATTR{idProduct}=="0123", MODE="0666"
+EOF
+
     $SUDO udevadm control --reload-rules && $SUDO udevadm trigger || true
   fi
 }

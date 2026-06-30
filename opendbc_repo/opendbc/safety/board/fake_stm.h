@@ -16,6 +16,10 @@ void puth(unsigned int i) {
   printf("%u", i);
 }
 
+void putui(uint32_t i) {
+  printf("%u", i);
+}
+
 typedef struct {
   uint32_t CNT;
 } TIM_TypeDef;

@@ -1,8 +1,11 @@
+import time
+
 import numpy as np
 
 from msgq.visionipc import VisionIpcServer, VisionStreamType
 from cereal import messaging
 
+from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 from openpilot.tools.sim.lib.common import W, H
 
 
@@ -31,7 +34,12 @@ def rgb_to_nv12(rgb):
   uv[:, 0::2] = u
   uv[:, 1::2] = v
 
-  return np.concatenate([y.ravel(), uv.ravel()]).tobytes()
+  stride, y_height, uv_height, size = get_nv12_info(w, h)
+  uv_offset = stride * y_height
+  nv12 = np.zeros(size, dtype=np.uint8)
+  nv12[:uv_offset].reshape(y_height, stride)[:h, :w] = y
+  nv12[uv_offset:uv_offset + stride * uv_height].reshape(uv_height, stride)[:h // 2, :w] = uv
+  return nv12.tobytes()
 
 
 class Camerad:
@@ -43,9 +51,11 @@ class Camerad:
     self.frame_wide_id = 0
     self.vipc_server = VisionIpcServer("camerad")
 
-    self.vipc_server.create_buffers(VisionStreamType.VISION_STREAM_ROAD, 5, W, H)
+    stride, y_height, _, size = get_nv12_info(W, H)
+    uv_offset = stride * y_height
+    self.vipc_server.create_buffers_with_sizes(VisionStreamType.VISION_STREAM_ROAD, 5, W, H, size, stride, uv_offset)
     if dual_camera:
-      self.vipc_server.create_buffers(VisionStreamType.VISION_STREAM_WIDE_ROAD, 5, W, H)
+      self.vipc_server.create_buffers_with_sizes(VisionStreamType.VISION_STREAM_WIDE_ROAD, 5, W, H, size, stride, uv_offset)
 
     self.vipc_server.start_listener()
 
@@ -64,7 +74,9 @@ class Camerad:
     return rgb_to_nv12(rgb)
 
   def _send_yuv(self, yuv, frame_id, pub_type, yuv_type):
-    eof = int(frame_id * 0.05 * 1e9)
+    # Camera timestamps share the system monotonic clock with IMU and locationd.
+    # Deriving them from frame_id resets time whenever the bridge restarts.
+    eof = time.monotonic_ns()
     self.vipc_server.send(yuv_type, yuv, frame_id, eof, eof)
 
     dat = messaging.new_message(pub_type, valid=True)
