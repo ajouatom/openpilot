@@ -1,4 +1,5 @@
 import hashlib
+import errno
 import json
 import math
 import os
@@ -52,6 +53,10 @@ NAVI_IMAGE_BASE64_MAX_CHARS = 6 * 1024 * 1024
 NAVI_ROUTE_MAX_POINTS = 4096
 NAVI_ROUTE_SUMMARY_MAX_SCAN = 20000
 AUTO_ONROAD_DIAGNOSTICS = os.environ.get("CARROT_AUTO_ONROAD_DIAGNOSTICS", "1").strip().lower() in ("1", "true", "yes", "on")
+BROADCAST_INTERVAL = 1.0
+BROADCAST_REMOTE_INTERVAL = 0.2
+BROADCAST_NETWORK_ERROR_RETRY_INTERVAL = 5.0
+BROADCAST_NETWORK_ERROR_LOG_INTERVAL = 30.0
 AUTO_ONROAD_TMUX_DELAY_SECONDS = float(os.environ.get("CARROT_AUTO_ONROAD_TMUX_DELAY_SECONDS", "60"))
 CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS = 60.0
 
@@ -346,6 +351,8 @@ class CarrotMan:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     frame = 0
+    next_broadcast_time = 0.0
+    last_network_error_log_time = 0.0
     self.save_toggle_values()
 
     rk = Ratekeeper(20, print_delay_threshold=None)
@@ -364,7 +371,9 @@ class CarrotMan:
         #print("curvatures=", curvatures)
         self.carrot_serv.update_navi(remote_ip, self.sm, self.pm, vturn_speed, coords, distances, route_speed, self.gps_location_service)
 
-        if frame % 20 == 0 or remote_addr is not None:
+        now = time.monotonic()
+        if now >= next_broadcast_time:
+          next_broadcast_time = now + (BROADCAST_REMOTE_INTERVAL if remote_addr is not None else BROADCAST_INTERVAL)
           try:
             self.broadcast_ip = self.get_broadcast_address() if remote_addr is None else remote_addr[0]
             if not PC:
@@ -393,6 +402,23 @@ class CarrotMan:
                 self.navi_points = []
                 self.navi_points_active = False
 
+          except OSError as e:
+            if e.errno in (errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ENETDOWN):
+              if self.connection:
+                self.connection.close()
+              self.connection = None
+              self.remote_addr = None
+              next_broadcast_time = now + BROADCAST_NETWORK_ERROR_RETRY_INTERVAL
+              if now - last_network_error_log_time >= BROADCAST_NETWORK_ERROR_LOG_INTERVAL:
+                print(f"[carrot_man] broadcast skipped: {e}")
+                last_network_error_log_time = now
+            else:
+              if self.connection:
+                self.connection.close()
+              self.connection = None
+              print(f"##### broadcast_error...: {e}")
+              traceback.print_exc()
+              queue_carrot_exception_tmux_send("broadcast_version_info")
           except Exception as e:
             if self.connection:
               self.connection.close()
