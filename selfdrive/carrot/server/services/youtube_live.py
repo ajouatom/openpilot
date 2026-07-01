@@ -7,6 +7,7 @@ import re
 import socket
 import ssl
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,8 @@ STATUS_WRITE_MIN_INTERVAL = 1.0
 BACKOFF_BASE_SECONDS = 3.0
 BACKOFF_MAX_SECONDS = 60.0
 STREAM_STABLE_SECONDS = 10.0
+MIN_RECONNECT_INTERVAL_SECONDS = 3.0
+EVENT_LOG_MAX = 50
 
 _PROCESS_MATCHES = {
   "carrot_cluster": "selfdrive.carrot.cluster_autorun",
@@ -38,6 +41,12 @@ _PROCESS_MATCHES = {
 
 def _now() -> float:
   return time.time()
+
+
+def _mono() -> float:
+  # Monotonic clock for durations/intervals — immune to wall-clock jumps
+  # (comma syncs system time from GPS/NTP after boot, which can step the clock).
+  return time.monotonic()
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -139,6 +148,8 @@ class YouTubeLiveService:
     self._next_retry_at = 0.0
     self._last_error = ""
     self._state = "disabled"
+    self._events: deque[dict[str, Any]] = deque(maxlen=EVENT_LOG_MAX)
+    self._last_start_mono = 0.0
     self._muxer_capabilities = pyav_capabilities()
     self._transport_capabilities = librtmp_capabilities()
     persisted = _read_json(self.state_path)
@@ -215,7 +226,7 @@ class YouTubeLiveService:
       "frame_width": self._frame_width,
       "frame_height": self._frame_height,
       "frame_fps": self._frame_fps,
-      "log_tail": [self._last_error] if self._last_error else [],
+      "log_tail": [f"{event['level']}: {event['message']}" for event in list(self._events)[-12:]],
       "resource_status": resource_status,
       "warnings": warnings,
     }
@@ -245,7 +256,7 @@ class YouTubeLiveService:
       "quality": PHASE1_QUALITY,
       "resource_status": status["resource_status"],
       "warnings": status["warnings"],
-      "log_tail": [self._last_error] if self._last_error else [],
+      "log_tail": [f"{event['level']}: {event['message']}" for event in list(self._events)[-12:]],
       "message": "ready" if ok else "stream key, RTMPS network, librtmp, or PyAV FLV/AAC is unavailable",
     }
 
@@ -298,7 +309,7 @@ class YouTubeLiveService:
         "name": "librtmp-rtmps",
         **self._transport_capabilities,
         "connected": self._transport_connected,
-        "log_tail": [self._last_error] if self._last_error else [],
+        "log_tail": [f"{event['level']}: {event['message']}" for event in list(self._events)[-12:]],
       },
       "muxer": {
         "name": "pyav-flv-aac",
@@ -411,6 +422,11 @@ class YouTubeLiveService:
       if not keyframe or not header:
         self._set_state("waiting_keyframe")
         return
+      if self._last_start_mono and (_mono() - self._last_start_mono) < MIN_RECONNECT_INTERVAL_SECONDS:
+        # Avoid hammering YouTube with rapid reconnects (it rejects them and it
+        # spins the state machine); hold briefly between start attempts.
+        self._set_state("backoff")
+        return
       try:
         await self._start_stream(stream_key, codec_header=header, width=width, height=height)
       except Exception as exc:
@@ -435,6 +451,14 @@ class YouTubeLiveService:
       _write_json_atomic(self.state_path, {"updated_at": now, **self.status()})
     except Exception:
       pass
+
+  def _log(self, message: str, level: str = "info") -> None:
+    # Rolling event history that survives restarts (unlike _last_error, which is
+    # cleared on each start attempt). Surfaced via status()/diagnostics log_tail.
+    text = str(message or "").strip()
+    if not text:
+      return
+    self._events.append({"t": round(_now(), 3), "level": level, "message": text})
 
   def _param_enabled(self) -> bool:
     try:
@@ -544,7 +568,9 @@ class YouTubeLiveService:
     await self._stop_stream()
     self._last_error = ""
     self._restart_count += 1
+    self._last_start_mono = _mono()
     self._set_state("starting")
+    self._log("connecting to YouTube RTMPS")
     rtmp_url = f"{YOUTUBE_RTMPS_BASE}/{stream_key}"
     transport = LibrtmpClient(rtmp_url)
     try:
@@ -566,6 +592,7 @@ class YouTubeLiveService:
     self._started_at = _now()
     self._session_started_bytes = self._bytes_sent
     self._next_retry_at = 0.0
+    self._log(f"stream started ({width}x{height})")
 
   async def _write_frame(self, payload: bytes, *, keyframe: bool) -> bool:
     transport = self._transport
@@ -620,6 +647,7 @@ class YouTubeLiveService:
     self._next_retry_at = _now() + delay
     if reason and not self._last_error:
       self._last_error = reason
+    self._log(f"retry in {delay:.0f}s: {reason or self._last_error or 'reconnect'}", "warn")
 
   def _process_status(self) -> dict[str, Any]:
     result = {}
