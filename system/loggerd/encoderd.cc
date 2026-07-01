@@ -142,7 +142,9 @@ void encoderd_thread(const LogCameraInfo (&cameras)[N]) {
     for (auto stream : streams) {
       auto it = std::find_if(std::begin(cameras), std::end(cameras),
                              [stream](auto &cam) { return cam.stream_type == stream; });
-      assert(it != std::end(cameras));
+      if (it == std::end(cameras)) {
+        continue;
+      }
       ++s.max_waiting;
       encoder_threads.push_back(std::thread(encoder_thread, &s, *it));
     }
@@ -163,6 +165,8 @@ int main(int argc, char* argv[]) {
     std::string arg1(argv[1]);
     if (arg1 == "--stream") {
       encoderd_thread(stream_cameras_logged);
+    } else if (arg1 == "--youtube") {
+      encoderd_thread(youtube_cameras_logged);
     } else {
       LOGE("Argument '%s' is not supported", arg1.c_str());
     }

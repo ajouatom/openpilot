@@ -2604,6 +2604,8 @@ struct Event {
     livestreamRoadEncodeData @120 :EncodeData;
     livestreamWideRoadEncodeData @121 :EncodeData;
     livestreamDriverEncodeData @122 :EncodeData;
+    youtubeRoadEncodeData @152 :EncodeData;
+    youtubeRoadEncodeIdx @153 :EncodeIndex;
 
     # *********** Custom: reserved for forks ***********
 

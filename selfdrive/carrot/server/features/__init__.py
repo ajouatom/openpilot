@@ -19,6 +19,7 @@ from . import (
   vision_test,
   web_settings,
   ws,
+  youtube_live,
 )
 
 
@@ -39,5 +40,6 @@ def register_all(app: web.Application) -> None:
   dashcam.register(app)
   screenrecord.register(app)
   tools.register(app)
+  youtube_live.register(app)
   vision_test.register(app)
   vision_diag.register(app)

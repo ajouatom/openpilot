@@ -26,6 +26,8 @@ CARROT_TOOL_JOBS_STATE_PATH = os.path.join(CARROT_STATE_DIR, "tool_jobs.json")
 CARROT_WEB_SETTINGS_PATH = os.path.join(CARROT_STATE_DIR, "web_settings.json")
 CARROT_SETTING_FAVORITES_PATH = os.path.join(CARROT_STATE_DIR, "setting_favorites.json")
 CARROT_SETTING_PROFILES_PATH = os.path.join(CARROT_STATE_DIR, "setting_profiles.json")
+CARROT_YOUTUBE_LIVE_STATE_PATH = os.path.join(CARROT_STATE_DIR, "youtube_live.json")
+CARROT_YOUTUBE_LIVE_SECRET_PATH = os.path.join(CARROT_STATE_DIR, "youtube_live_secret.json")
 
 # Dashcam
 DASHCAM_ROOT = "/data/media/0/realdata"

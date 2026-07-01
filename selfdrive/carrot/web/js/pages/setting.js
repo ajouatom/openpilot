@@ -2666,6 +2666,7 @@ async function renderItems(group, options = {}) {
         lastCategorySectionKey = secKey;
         const sectionBlock = document.createElement("section");
         sectionBlock.className = animateItems ? "setting-section-block ui-stagger-item" : "setting-section-block";
+        sectionBlock.dataset.settingSectionId = secKey;
         if (animateItems) sectionBlock.style.setProperty("--i", String(Math.min(index + 1, 14)));
         const cardLabel = settingNodeLabel(p.__section);
         if (cardLabel) {
@@ -3246,6 +3247,7 @@ async function renderItems(group, options = {}) {
   itemsBox.dataset.renderedGroup = group;
   if (detailMode) itemsBox.dataset.renderedDetail = detailName;
   scheduleSettingOverflowSync(itemsBox);
+  window.CarrotYouTubeLiveSettings?.sync?.();
 
   if (pendingSettingFocus?.group === group) {
     requestAnimationFrame(() => focusSettingItem(pendingSettingFocus.name));
