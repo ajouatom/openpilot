@@ -13,13 +13,6 @@
   padding-bottom: var(--sp-lg);
 }
 
-.youtube-live-card__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-md);
-}
-
 .youtube-live-card__summary {
   min-width: 0;
 }
@@ -87,33 +80,6 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--md-primary) 16%, transparent);
 }
 
-.youtube-live-pill {
-  flex: 0 0 auto;
-  max-width: 44%;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 38%, transparent);
-  border-radius: 999px;
-  padding: 5px 10px;
-  color: var(--md-on-surface);
-  background: color-mix(in srgb, var(--md-surface) 72%, transparent);
-  font-size: var(--fs-label);
-  font-weight: 800;
-  line-height: 1.2;
-  text-align: center;
-  overflow-wrap: anywhere;
-}
-
-.youtube-live-section[data-live-state="live"] .youtube-live-pill {
-  color: var(--md-primary);
-  border-color: color-mix(in srgb, var(--md-primary) 42%, transparent);
-  background: color-mix(in srgb, var(--md-primary) 14%, transparent);
-}
-
-.youtube-live-section[data-live-state="error"] .youtube-live-pill {
-  color: var(--md-error);
-  border-color: color-mix(in srgb, var(--md-error) 45%, transparent);
-  background: color-mix(in srgb, var(--md-error) 10%, transparent);
-}
-
 .youtube-live-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -137,29 +103,6 @@
   overflow-wrap: anywhere;
 }
 
-.youtube-live-error {
-  border-left: 3px solid var(--md-error);
-  padding: 8px 10px;
-  color: var(--md-error);
-  background: color-mix(in srgb, var(--md-error) 8%, transparent);
-  font-size: var(--fs-body-sm);
-  overflow-wrap: anywhere;
-}
-
-.youtube-live-warnings {
-  display: grid;
-  gap: 6px;
-}
-
-.youtube-live-warning {
-  border-left: 3px solid var(--md-tertiary, var(--md-primary));
-  padding: 8px 10px;
-  color: var(--md-on-surface);
-  background: color-mix(in srgb, var(--md-tertiary, var(--md-primary)) 9%, transparent);
-  font-size: var(--fs-body-sm);
-  overflow-wrap: anywhere;
-}
-
 .youtube-live-actions {
   --ui-action-min: 136px;
 }
@@ -177,11 +120,6 @@
 }
 
 @media (max-width: 430px) {
-  .youtube-live-card__head {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .youtube-live-key-row {
     display: grid;
     grid-template-columns: 1fr;
@@ -189,11 +127,6 @@
 
   .youtube-live-key-row .smallBtn {
     width: 100%;
-  }
-
-  .youtube-live-pill {
-    max-width: none;
-    align-self: flex-start;
   }
 
   .youtube-live-metrics {

@@ -54,9 +54,7 @@
   }
 
   function streamTitle(status) {
-    return status?.enabled
-      ? text("youtube_live_stream_active", "Streaming")
-      : text("youtube_live_stream_inactive", "Stream stopped");
+    return stateLabel(status);
   }
 
   function streamSummary(status) {
@@ -171,44 +169,30 @@
       statusCard.className = "setting-group-card youtube-live-card youtube-live-status-card";
       section.appendChild(statusCard);
 
-      const head = document.createElement("div");
-      head.className = "youtube-live-card__head";
       const summary = document.createElement("div");
       summary.className = "youtube-live-card__summary";
       const summaryTitle = document.createElement("div");
       summaryTitle.className = "youtube-live-card__title";
       summaryTitle.dataset.role = "title";
-      summaryTitle.textContent = text("youtube_live_stream_inactive", "Stream stopped");
+      summaryTitle.textContent = stateLabel({ state: "disabled" });
       const summaryDesc = document.createElement("div");
       summaryDesc.className = "youtube-live-card__desc";
       summaryDesc.dataset.role = "summary";
       summaryDesc.textContent = text("loading", "Loading...");
       summary.appendChild(summaryTitle);
       summary.appendChild(summaryDesc);
-      const pill = document.createElement("span");
-      pill.className = "youtube-live-pill";
-      pill.dataset.role = "state";
-      pill.textContent = "-";
-      head.appendChild(summary);
-      head.appendChild(pill);
-      statusCard.appendChild(head);
+      statusCard.appendChild(summary);
 
       const metrics = document.createElement("div");
       metrics.className = "youtube-live-metrics";
       metrics.dataset.role = "metrics";
       statusCard.appendChild(metrics);
 
-      const error = document.createElement("div");
-      error.className = "youtube-live-error";
-      error.dataset.role = "error";
-      error.hidden = true;
-      statusCard.appendChild(error);
-
-      const warnings = document.createElement("div");
-      warnings.className = "youtube-live-warnings";
-      warnings.dataset.role = "warnings";
-      warnings.hidden = true;
-      statusCard.appendChild(warnings);
+      const log = document.createElement("pre");
+      log.className = "muted text-mono";
+      log.dataset.role = "runtime-log";
+      log.hidden = true;
+      statusCard.appendChild(log);
 
       section.appendChild(helpCard);
 
@@ -232,15 +216,11 @@
     const card = ensureCard();
     if (!card) return;
     const titleEl = card.querySelector('[data-role="title"]');
-    const stateEl = card.querySelector('[data-role="state"]');
     const keyStatusEl = document.querySelector(`#${KEY_SECTION_ID} [data-role="key-status"]`);
     const summaryEl = card.querySelector('[data-role="summary"]');
     const metricsEl = card.querySelector('[data-role="metrics"]');
-    const errorEl = card.querySelector('[data-role="error"]');
-    const warningsEl = card.querySelector('[data-role="warnings"]');
-    card.dataset.liveState = String(status?.state || "disabled");
+    const logEl = card.querySelector('[data-role="runtime-log"]');
     if (titleEl) titleEl.textContent = streamTitle(status);
-    if (stateEl) stateEl.textContent = stateLabel(status);
     if (keyStatusEl) keyStatusEl.textContent = configuredLabel(status);
     if (summaryEl) summaryEl.textContent = streamSummary(status);
     if (metricsEl) {
@@ -252,12 +232,7 @@
       metricsEl.appendChild(metric(text("youtube_live_metric_total", "Total"), `${status?.total_mb || 0} MB`));
       metricsEl.appendChild(metric(text("youtube_live_metric_retry", "Retry"), retryLabel(status)));
     }
-    const error = String(status?.last_error || "").trim();
-    if (errorEl) {
-      errorEl.hidden = !error;
-      errorEl.textContent = localizedRuntimeMessage(error);
-    }
-    renderWarnings(warningsEl, status);
+    renderRuntimeLog(logEl, status);
   }
 
   function formatSeconds(seconds) {
@@ -276,22 +251,15 @@
     return "-";
   }
 
-  function renderWarnings(container, status) {
+  function renderRuntimeLog(container, status) {
     if (!container) return;
-    const warnings = Array.isArray(status?.warnings) ? status.warnings.filter(Boolean) : [];
-    if (!warnings.length) {
-      container.hidden = true;
-      container.innerHTML = "";
-      return;
-    }
-    container.hidden = false;
-    container.innerHTML = "";
-    warnings.slice(0, 3).forEach((warning) => {
-      const item = document.createElement("div");
-      item.className = "youtube-live-warning";
-      item.textContent = localizedRuntimeMessage(warning);
-      container.appendChild(item);
-    });
+    const error = String(status?.last_error || "").trim();
+    const warnings = uniqueLocalizedMessages(Array.isArray(status?.warnings) ? status.warnings : []);
+    const lines = [];
+    if (error) lines.push(`${text("youtube_live_error_label", "Error")}: ${localizedRuntimeMessage(error)}`);
+    warnings.forEach((warning) => lines.push(`${text("youtube_live_warning_label", "Notice")}: ${warning}`));
+    container.hidden = lines.length === 0;
+    container.textContent = lines.join("\n");
   }
 
   async function loadStatus() {
@@ -432,6 +400,7 @@
       "format looks valid": text("youtube_live_validation_format_ok", "Format looks valid."),
       "YouTube RTMPS ingest is reachable": text("youtube_live_validation_rtmps_ok", "YouTube RTMPS ingest is reachable."),
       "missing stream key or ffmpeg": text("youtube_live_test_missing", "Missing stream key or FFmpeg."),
+      "missing stream key, FFmpeg, or PyAV MPEG-TS support": text("youtube_live_test_muxer_missing", "Stream key, FFmpeg, or PyAV MPEG-TS support is missing."),
       "ready": text("youtube_live_check_ready", "Ready"),
     };
     return map[raw] || raw;
@@ -442,10 +411,13 @@
     if (!raw) return "-";
     const exact = {
       "Cluster HUD is enabled; monitor encoder load and thermal headroom while streaming.": text("youtube_live_warning_cluster", "Cluster HUD is enabled. Monitor encoder load and temperature while streaming."),
+      "Cluster HUD is enabled; monitor overall load and temperature during simultaneous use.": text("youtube_live_warning_cluster", "Cluster HUD is enabled. Monitor overall load and temperature during simultaneous use."),
       "Carrot Vision is enabled; YouTube Live shares camera/encoder/network resources.": text("youtube_live_warning_vision", "Carrot Vision is enabled. Camera, encoder, and network resources are shared."),
+      "Carrot Vision is enabled; simultaneous streaming increases network and memory bandwidth use.": text("youtube_live_warning_vision", "Carrot Vision is enabled. Simultaneous streaming increases network and memory bandwidth use."),
       "High quality mode is planned for Phase 3; Phase 2 keeps qRoadEncodeData only.": text("youtube_live_warning_quality", "High quality mode is not available yet."),
       "Error opening input files: Invalid argument": text("youtube_live_error_input_invalid", "Could not open the video input because an FFmpeg argument was invalid."),
       "ffmpeg not found": text("youtube_live_error_ffmpeg_missing", "FFmpeg is not installed."),
+      "PyAV MPEG-TS muxer is unavailable": text("youtube_live_error_muxer_missing", "PyAV MPEG-TS muxing is unavailable."),
       "no qRoadEncodeData frames": text("youtube_live_error_no_frames", "No qRoadEncodeData frames were received."),
     };
     if (exact[raw]) return exact[raw];
@@ -453,6 +425,9 @@
     if (exitMatch) return text("youtube_live_error_ffmpeg_exit", "FFmpeg exited (code {code}).", { code: exitMatch[1] });
     if (/^ffmpeg pipe closed:/i.test(raw)) {
       return text("youtube_live_error_ffmpeg_pipe", "The FFmpeg input pipe was closed.");
+    }
+    if (/^MPEG-TS mux failed:/i.test(raw)) {
+      return text("youtube_live_error_muxer_failed", "MPEG-TS muxing failed: {error}", { error: raw.split(":", 2)[1]?.trim() || "-" });
     }
     return raw;
   }
@@ -520,6 +495,7 @@
       `[${text("youtube_live_check_ready_section", "Readiness")}]`,
       `${text("youtube_live_key", "Stream key")}: ${test.configured ? pass : fail}`,
       `${text("youtube_live_validation_ffmpeg", "FFmpeg")}: ${test.ffmpeg_available ? pass : fail}`,
+      `${text("youtube_live_muxer", "PyAV MPEG-TS")}: ${test.muxer_available ? pass : fail}`,
       `${text("youtube_live_metric_source", "Source")}: ${test.source || "-"}`,
       "",
       `[${text("youtube_live_check_stream_section", "Stream status")}]`,

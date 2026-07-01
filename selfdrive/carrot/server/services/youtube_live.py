@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import CARROT_YOUTUBE_LIVE_SECRET_PATH, CARROT_YOUTUBE_LIVE_STATE_PATH
+from .youtube_live_muxer import H264MpegTsMuxer, pyav_capabilities
 
 
 YOUTUBE_LIVE_PARAM = "CarrotYouTubeLive"
@@ -120,6 +121,7 @@ class YouTubeLiveService:
     self._task: asyncio.Task | None = None
     self._stop_event = asyncio.Event()
     self._process: asyncio.subprocess.Process | None = None
+    self._muxer: H264MpegTsMuxer | None = None
     self._stderr_task: asyncio.Task | None = None
     self._stderr_tail: deque[str] = deque(maxlen=20)
     self._messaging: Any | None = None
@@ -136,6 +138,7 @@ class YouTubeLiveService:
     self._next_retry_at = 0.0
     self._last_error = ""
     self._state = "disabled"
+    self._muxer_capabilities = pyav_capabilities()
     persisted = _read_json(self.state_path)
     try:
       self._bytes_sent = int(persisted.get("bytes_sent") or 0)
@@ -177,6 +180,12 @@ class YouTubeLiveService:
       "configured": bool(stream_key),
       "masked_key": _mask_stream_key(stream_key),
       "source": PHASE1_SOURCE_SERVICE,
+      "muxer": "pyav-mpegts",
+      "muxer_available": bool(
+        self._muxer_capabilities.get("available")
+        and self._muxer_capabilities.get("mpegts")
+        and self._muxer_capabilities.get("h264")
+      ),
       "quality": PHASE1_QUALITY,
       "requested_quality": self._param_int(YOUTUBE_QUALITY_PARAM, 0),
       "phase": 1,
@@ -206,19 +215,26 @@ class YouTubeLiveService:
   def test_config(self) -> dict[str, Any]:
     stream_key = self.get_stream_key()
     ffmpeg_path = shutil.which("ffmpeg")
-    ok = bool(stream_key and ffmpeg_path)
+    muxer_ok = bool(
+      self._muxer_capabilities.get("available")
+      and self._muxer_capabilities.get("mpegts")
+      and self._muxer_capabilities.get("h264")
+    )
+    ok = bool(stream_key and ffmpeg_path and muxer_ok)
     status = self.status()
     return {
       "ok": ok,
       "configured": bool(stream_key),
       "ffmpeg_available": bool(ffmpeg_path),
       "ffmpeg_path": ffmpeg_path or "",
+      "muxer_available": muxer_ok,
+      "muxer": dict(self._muxer_capabilities),
       "source": PHASE1_SOURCE_SERVICE,
       "quality": PHASE1_QUALITY,
       "resource_status": status["resource_status"],
       "warnings": status["warnings"],
       "stderr_tail": list(self._stderr_tail),
-      "message": "ready" if ok else "missing stream key or ffmpeg",
+      "message": "ready" if ok else "missing stream key, FFmpeg, or PyAV MPEG-TS support",
     }
 
   def validate_stream_key(self, value: str | None = None) -> dict[str, Any]:
@@ -264,6 +280,10 @@ class YouTubeLiveService:
         "available": bool(shutil.which("ffmpeg")),
         "path": shutil.which("ffmpeg") or "",
         "stderr_tail": list(self._stderr_tail),
+      },
+      "muxer": {
+        "name": "pyav-mpegts",
+        **self._muxer_capabilities,
       },
       "processes": self._process_status(),
       "state_path": str(self.state_path),
@@ -326,6 +346,16 @@ class YouTubeLiveService:
       self._set_state("error")
       return
 
+    if not (
+      self._muxer_capabilities.get("available")
+      and self._muxer_capabilities.get("mpegts")
+      and self._muxer_capabilities.get("h264")
+    ):
+      await self._stop_process()
+      self._last_error = "PyAV MPEG-TS muxer is unavailable"
+      self._set_state("error")
+      return
+
     if self._param_int(YOUTUBE_QUALITY_PARAM, 0) > 0:
       await self._stop_process()
       self._last_error = "high quality YouTube Live is planned for Phase 3"
@@ -345,7 +375,7 @@ class YouTubeLiveService:
       self._set_state("backoff")
       return
 
-    payload, frame_id = self._recv_payload()
+    payload, frame_id, keyframe, width, height = self._recv_payload()
     if not payload:
       if self._process is not None and self._last_frame_at and _now() - self._last_frame_at > NO_FRAME_STOP_SECONDS:
         self._last_error = "no qRoadEncodeData frames"
@@ -357,11 +387,14 @@ class YouTubeLiveService:
     self._last_frame_at = _now()
     self._last_frame_id = frame_id
 
-    if self._process is None or self._process.returncode is not None:
-      await self._start_process(stream_key)
+    if self._process is None:
+      if not keyframe:
+        self._set_state("waiting_keyframe")
+        return
+      await self._start_process(stream_key, width=width, height=height)
 
-    await self._write_frame(payload)
-    self._set_state("live")
+    if await self._write_frame(payload, keyframe=keyframe):
+      self._set_state("live")
 
   def _set_state(self, state: str) -> None:
     self._state = state
@@ -446,45 +479,55 @@ class YouTubeLiveService:
       self._socket = None
     return self._socket
 
-  def _recv_payload(self) -> tuple[bytes, int | None]:
+  def _recv_payload(self) -> tuple[bytes, int | None, bool, int, int]:
     messaging = self._get_messaging()
     sock = self._get_socket()
     if messaging is None or sock is None:
-      return b"", None
+      return b"", None, False, 526, 330
     try:
       msg = messaging.recv_one_or_none(sock)
       if msg is None:
-        return b"", None
+        return b"", None, False, 526, 330
       which = msg.which()
       frame = getattr(msg, which, None)
       if frame is None:
-        return b"", None
+        return b"", None, False, 526, 330
       header = bytes(getattr(frame, "header", b"") or b"")
       data = bytes(getattr(frame, "data", b"") or b"")
       frame_id = None
+      flags = 0
       idx = getattr(frame, "idx", None)
       if idx is not None:
         try:
           frame_id = int(getattr(idx, "frameId", 0) or 0) or None
         except Exception:
           frame_id = None
+        try:
+          flags = int(getattr(idx, "flags", 0) or 0)
+        except Exception:
+          flags = 0
       if frame_id is None:
         try:
           frame_id = int(getattr(frame, "frameId", 0) or 0) or None
         except Exception:
           frame_id = None
-      return header + data, frame_id
+      width = int(getattr(frame, "width", 0) or 526)
+      height = int(getattr(frame, "height", 0) or 330)
+      keyframe = bool(header) or bool(flags & 0x8)
+      return header + data, frame_id, keyframe, width, height
     except Exception as exc:
       self._last_error = f"{PHASE1_SOURCE_SERVICE} recv failed: {exc}"
-      return b"", None
+      return b"", None, False, 526, 330
 
-  async def _start_process(self, stream_key: str) -> None:
+  async def _start_process(self, stream_key: str, *, width: int, height: int) -> None:
     await self._stop_process()
-    self._set_state("starting")
     self._stderr_tail.clear()
+    self._last_error = ""
+    self._set_state("starting")
     self._started_at = _now()
     self._session_started_bytes = self._bytes_sent
     rtmp_url = f"{YOUTUBE_RTMPS_BASE}/{stream_key}"
+    muxer = H264MpegTsMuxer(fps=20, width=width, height=height)
     cmd = [
       "ffmpeg",
       "-hide_banner",
@@ -493,9 +536,7 @@ class YouTubeLiveService:
       "-fflags",
       "nobuffer",
       "-f",
-      "h264",
-      "-r",
-      "20",
+      "mpegts",
       "-i",
       "pipe:0",
       "-f",
@@ -517,35 +558,50 @@ class YouTubeLiveService:
       "flv",
       rtmp_url,
     ]
-    self._process = await asyncio.create_subprocess_exec(
-      *cmd,
-      stdin=asyncio.subprocess.PIPE,
-      stdout=asyncio.subprocess.DEVNULL,
-      stderr=asyncio.subprocess.PIPE,
-    )
+    try:
+      self._process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+      )
+    except Exception:
+      muxer.close()
+      raise
+    self._muxer = muxer
     self._restart_count += 1
     self._next_retry_at = 0.0
     self._stderr_task = asyncio.create_task(self._read_stderr(self._process), name="carrot-youtube-live-stderr")
 
-  async def _write_frame(self, payload: bytes) -> None:
+  async def _write_frame(self, payload: bytes, *, keyframe: bool) -> bool:
     proc = self._process
-    if proc is None or proc.stdin is None:
-      return
+    muxer = self._muxer
+    if proc is None or proc.stdin is None or muxer is None:
+      return False
     if proc.returncode is not None:
       self._last_error = f"ffmpeg exited code={proc.returncode}"
       self._schedule_backoff("ffmpeg exited")
       await self._stop_process()
-      return
+      return False
     try:
-      proc.stdin.write(payload)
-      await proc.stdin.drain()
-      self._bytes_sent += len(payload)
+      chunk = muxer.mux(payload, keyframe=keyframe)
+      if chunk:
+        proc.stdin.write(chunk)
+        await proc.stdin.drain()
+        self._bytes_sent += len(chunk)
       if self._started_at and _now() - self._started_at >= PROCESS_STABLE_SECONDS:
         self._consecutive_failures = 0
+      return True
     except (BrokenPipeError, ConnectionResetError) as exc:
       self._last_error = f"ffmpeg pipe closed: {exc}"
       self._schedule_backoff("ffmpeg pipe closed")
       await self._stop_process()
+      return False
+    except Exception as exc:
+      self._last_error = f"MPEG-TS mux failed: {exc}"
+      self._schedule_backoff("MPEG-TS mux failed")
+      await self._stop_process()
+      return False
 
   async def _read_stderr(self, proc: asyncio.subprocess.Process) -> None:
     if proc.stderr is None:
@@ -562,8 +618,16 @@ class YouTubeLiveService:
   async def _stop_process(self) -> None:
     proc = self._process
     self._process = None
+    muxer = self._muxer
+    self._muxer = None
     stderr_task = self._stderr_task
     self._stderr_task = None
+    trailer = b""
+    if muxer is not None:
+      try:
+        trailer = muxer.close()
+      except Exception:
+        trailer = b""
     if proc is None:
       if stderr_task is not None and not stderr_task.done():
         stderr_task.cancel()
@@ -571,6 +635,9 @@ class YouTubeLiveService:
     self._set_state("stopping")
     if proc.stdin is not None:
       try:
+        if trailer and proc.returncode is None:
+          proc.stdin.write(trailer)
+          await proc.stdin.drain()
         proc.stdin.close()
         await proc.stdin.wait_closed()
       except Exception:
@@ -642,9 +709,9 @@ class YouTubeLiveService:
     cluster = resource_status.get("cluster") if isinstance(resource_status, dict) else {}
     vision = resource_status.get("carrot_vision") if isinstance(resource_status, dict) else {}
     if cluster and cluster.get("enabled"):
-      warnings.append("Cluster HUD is enabled; monitor encoder load and thermal headroom while streaming.")
+      warnings.append("Cluster HUD is enabled; monitor overall load and temperature during simultaneous use.")
     if vision and vision.get("enabled"):
-      warnings.append("Carrot Vision is enabled; YouTube Live shares camera/encoder/network resources.")
+      warnings.append("Carrot Vision is enabled; simultaneous streaming increases network and memory bandwidth use.")
     if self._param_int(YOUTUBE_QUALITY_PARAM, 0) > 0:
       warnings.append("High quality mode is planned for Phase 3; Phase 2 keeps qRoadEncodeData only.")
     return warnings
