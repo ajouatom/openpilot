@@ -28,6 +28,11 @@
   background: currentColor;
 }
 
+.topbar #btnHome.recording,
+.topbar #btnHome.youtube-live {
+  animation: nav-status-button-blink 1.2s steps(1, end) infinite;
+}
+
 .topbar #btnHome .nav-status-badge {
   min-width: 24px;
   padding: 2px 4px;
@@ -57,4 +62,15 @@
 .topbar #btnHome.recording::before {
   display: none;
   animation: none;
+}
+
+@keyframes nav-status-button-blink {
+  0%, 49% {
+    background: color-mix(in srgb, #ff6b6b 22%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, #ff6b6b 58%, transparent);
+  }
+  50%, 100% {
+    background: transparent;
+    box-shadow: none;
+  }
 }

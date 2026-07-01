@@ -143,9 +143,6 @@ class YouTubeLiveService:
     self._frame_width = 526
     self._frame_height = 330
     self._frame_fps = 20
-    self._frame_ts_ns = 0
-    self._stream_t0_ns = 0
-    self._last_pts_ms = 0
     self._bytes_sent = 0
     self._session_started_bytes = 0
     self._restart_count = 0
@@ -567,31 +564,10 @@ class YouTubeLiveService:
       width = int(getattr(frame, "width", 0) or 526)
       height = int(getattr(frame, "height", 0) or 330)
       keyframe = bool(header) or bool(flags & 0x8)
-      try:
-        # boottime ns from the encoder; monotonic and immune to wall-clock jumps
-        self._frame_ts_ns = int(getattr(frame, "timestampEof", 0) or getattr(frame, "timestampSof", 0) or 0)
-      except Exception:
-        self._frame_ts_ns = 0
       return header, data, frame_id, keyframe, width, height
     except Exception as exc:
       self._last_error = f"{PHASE1_SOURCE_SERVICE} recv failed: {exc}"
       return b"", b"", None, False, 526, 330
-
-  def _frame_pts_ms(self) -> int | None:
-    # Real presentation time (ms) from the encoder frame timestamp, relative to
-    # the first frame of this session. Keeps the stream aligned to wall time even
-    # when frames are dropped; returns None if no timestamp so the muxer falls
-    # back to frame-index timing.
-    ts_ns = self._frame_ts_ns
-    if ts_ns <= 0:
-      return None
-    if self._stream_t0_ns <= 0:
-      self._stream_t0_ns = ts_ns
-    pts_ms = int((ts_ns - self._stream_t0_ns) / 1_000_000)
-    if pts_ms < self._last_pts_ms:
-      pts_ms = self._last_pts_ms
-    self._last_pts_ms = pts_ms
-    return pts_ms
 
   async def _start_stream(self, stream_key: str, *, codec_header: bytes, width: int, height: int) -> None:
     await self._stop_stream()
@@ -622,8 +598,6 @@ class YouTubeLiveService:
     self._started_mono = _mono()
     self._session_started_bytes = self._bytes_sent
     self._next_retry_mono = 0.0
-    self._stream_t0_ns = 0
-    self._last_pts_ms = 0
     self._log(f"stream started ({width}x{height})")
 
   async def _write_frame(self, payload: bytes, *, keyframe: bool) -> bool:
