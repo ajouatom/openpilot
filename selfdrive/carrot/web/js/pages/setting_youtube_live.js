@@ -591,8 +591,26 @@
     state.timer = null;
   }
 
+  function lockTimestampToggle() {
+    const row = document.querySelector('.setting[data-setting-name="CarrotYouTubeTimestamp"]');
+    if (!row) return;
+    const toggle = row.querySelector(".setting-switch__input");
+    if (toggle) {
+      toggle.checked = false;
+      toggle.disabled = true;
+      toggle.setAttribute("aria-disabled", "true");
+    }
+    row.classList.add("youtube-timestamp-disabled");
+    if (state.timestampDisabledSynced) return;
+    state.timestampDisabledSynced = true;
+    setParam("CarrotYouTubeTimestamp", 0).catch(() => {
+      state.timestampDisabledSynced = false;
+    });
+  }
+
   function sync() {
     if (isVisible()) {
+      lockTimestampToggle();
       ensureCard();
       startPolling();
       return;
