@@ -3247,9 +3247,7 @@ async function renderItems(group, options = {}) {
   itemsBox.dataset.renderedGroup = group;
   if (detailMode) itemsBox.dataset.renderedDetail = detailName;
   scheduleSettingOverflowSync(itemsBox);
-  window.dispatchEvent(new CustomEvent("carrot:settingrendered", {
-    detail: { group, detailName: detailMode ? detailName : "" },
-  }));
+  window.CarrotYouTubeLiveSettings?.sync?.();
 
   if (pendingSettingFocus?.group === group) {
     requestAnimationFrame(() => focusSettingItem(pendingSettingFocus.name));

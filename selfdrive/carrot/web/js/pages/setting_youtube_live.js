@@ -92,12 +92,12 @@
   function placeYoutubeSections(box, keySection, infoSection) {
     const target = box.querySelector(`[data-setting-section-id="${YOUTUBE_SECTION}"]`);
     if (!target) {
-      box.insertBefore(keySection, box.firstChild);
-      box.appendChild(infoSection);
+      if (box.firstChild !== keySection) box.insertBefore(keySection, box.firstChild);
+      if (box.lastChild !== infoSection) box.appendChild(infoSection);
       return;
     }
-    box.insertBefore(keySection, target);
-    box.insertBefore(infoSection, target.nextSibling);
+    if (keySection.nextSibling !== target) box.insertBefore(keySection, target);
+    if (target.nextSibling !== infoSection) box.insertBefore(infoSection, target.nextSibling);
   }
 
   function ensureCard() {
@@ -590,9 +590,10 @@
       const name = event?.detail?.name;
       if (name === "CarrotYouTubeLive" || name === "CarrotYouTubeQuality") loadStatus();
     });
-    window.addEventListener("carrot:settingrendered", sync);
     sync();
   }
+
+  window.CarrotYouTubeLiveSettings = Object.freeze({ sync });
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
