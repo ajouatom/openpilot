@@ -13,6 +13,61 @@ AUDIO_BITRATE = 128_000
 AUDIO_SAMPLES = 1_024
 
 
+def _annexb_nalus(payload: bytes) -> list[bytes]:
+  starts: list[tuple[int, int]] = []
+  index = 0
+  size = len(payload)
+  while index + 3 <= size:
+    if index + 4 <= size and payload[index:index + 4] == b"\x00\x00\x00\x01":
+      starts.append((index, 4))
+      index += 4
+    elif payload[index:index + 3] == b"\x00\x00\x01":
+      starts.append((index, 3))
+      index += 3
+    else:
+      index += 1
+
+  nalus = []
+  for position, (offset, start_size) in enumerate(starts):
+    start = offset + start_size
+    end = starts[position + 1][0] if position + 1 < len(starts) else size
+    while end > start and payload[end - 1] == 0:
+      end -= 1
+    if end > start:
+      nalus.append(payload[start:end])
+  return nalus
+
+
+def _avc_decoder_configuration(codec_header: bytes) -> bytes:
+  if codec_header[:1] == b"\x01" and not codec_header.startswith((b"\x00\x00\x01", b"\x00\x00\x00\x01")):
+    return bytes(codec_header)
+  nalus = _annexb_nalus(codec_header)
+  sps_units = [nalu for nalu in nalus if nalu and nalu[0] & 0x1F == 7]
+  pps_units = [nalu for nalu in nalus if nalu and nalu[0] & 0x1F == 8]
+  if not sps_units or not pps_units or len(sps_units[0]) < 4:
+    raise ValueError("H.264 codec header has no SPS/PPS")
+  if len(sps_units) > 31 or len(pps_units) > 255:
+    raise ValueError("H.264 codec header has too many parameter sets")
+
+  first_sps = sps_units[0]
+  result = bytearray((1, first_sps[1], first_sps[2], first_sps[3], 0xFF, 0xE0 | len(sps_units)))
+  for sps in sps_units:
+    result.extend(len(sps).to_bytes(2, "big"))
+    result.extend(sps)
+  result.append(len(pps_units))
+  for pps in pps_units:
+    result.extend(len(pps).to_bytes(2, "big"))
+    result.extend(pps)
+  return bytes(result)
+
+
+def _annexb_to_avcc(payload: bytes) -> bytes:
+  nalus = _annexb_nalus(payload)
+  if not nalus:
+    return bytes(payload)
+  return b"".join(len(nalu).to_bytes(4, "big") + nalu for nalu in nalus)
+
+
 def pyav_capabilities() -> dict[str, Any]:
   try:
     import av
@@ -66,7 +121,7 @@ class H264FlvMuxer:
     self._video_stream.width = max(1, int(width))
     self._video_stream.height = max(1, int(height))
     self._video_stream.time_base = self._video_time_base
-    self._video_stream.codec_context.extradata = bytes(codec_header)
+    self._video_stream.codec_context.extradata = _avc_decoder_configuration(codec_header)
 
     self._audio_stream = self._container.add_stream(AAC_CODEC, rate=AUDIO_RATE)
     self._audio_stream.bit_rate = AUDIO_BITRATE
@@ -87,7 +142,7 @@ class H264FlvMuxer:
       target_audio_pts = int(self._packet_index * AUDIO_RATE / self._fps)
       self._mux_silence_until(target_audio_pts)
 
-      packet = self._av.Packet(payload)
+      packet = self._av.Packet(_annexb_to_avcc(payload))
       packet.stream = self._video_stream
       packet.pts = self._packet_index
       packet.dts = self._packet_index
