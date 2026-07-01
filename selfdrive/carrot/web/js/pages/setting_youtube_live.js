@@ -220,7 +220,7 @@
     if (summaryEl) summaryEl.textContent = streamSummary(status);
     if (metricsEl) {
       metricsEl.innerHTML = "";
-      metricsEl.appendChild(metric(text("youtube_live_metric_source", "Source"), status?.source || "qRoadEncodeData"));
+      metricsEl.appendChild(metric(text("youtube_live_metric_source", "Video"), sourceLabel(status)));
       metricsEl.appendChild(metric(
         text("youtube_live_metric_timestamp", "Time caption"),
         status?.timestamp_caption_enabled
@@ -249,6 +249,14 @@
     const height = Number(status?.frame_height || 330);
     const fps = Number(status?.frame_fps || 20);
     return `${width}*${height} * ${fps}fps`;
+  }
+
+  function sourceLabel(status) {
+    const source = String(status?.source || "");
+    if (source === "livestreamRoadEncodeData") return text("youtube_live_source_medium", "Medium quality");
+    if (source === "youtubeRoadEncodeData") return text("youtube_live_source_high", "High quality");
+    if (source === "livestreamWideRoadEncodeData") return text("youtube_live_source_wide", "Wide angle");
+    return text("youtube_live_source_low", "Low quality");
   }
 
   function retryLabel(status) {
@@ -429,14 +437,17 @@
       "Cluster HUD is enabled; monitor overall load and temperature during simultaneous use.": text("youtube_live_warning_cluster", "Cluster HUD is enabled. Monitor overall load and temperature during simultaneous use."),
       "Carrot Vision is enabled; YouTube Live shares camera/encoder/network resources.": text("youtube_live_warning_vision", "Carrot Vision is enabled. Camera, encoder, and network resources are shared."),
       "Carrot Vision is enabled; simultaneous streaming increases network and memory bandwidth use.": text("youtube_live_warning_vision", "Carrot Vision is enabled. Simultaneous streaming increases network and memory bandwidth use."),
-      "High quality mode is planned for Phase 3; Phase 2 keeps qRoadEncodeData only.": text("youtube_live_warning_quality", "High quality mode is not available yet."),
+      "High quality mode is planned for Phase 3; Phase 2 keeps qRoadEncodeData only.": text("youtube_live_warning_quality", "The selected video mode is unavailable."),
+      "The selected video mode is waiting for the shared livestream encoder to start onroad.": text("youtube_live_warning_source_wait", "The selected video mode is waiting for its encoder."),
+      "High quality is waiting for the dedicated YouTube encoder to start onroad.": text("youtube_live_warning_high_wait", "High quality is waiting for its encoder."),
       "librtmp is unavailable": text("youtube_live_error_transport_missing", "librtmp is unavailable."),
       "librtmp not found": text("youtube_live_error_transport_missing", "librtmp is unavailable."),
       "PyAV FLV/AAC muxer is unavailable": text("youtube_live_error_muxer_missing", "PyAV FLV/AAC muxing is unavailable."),
       "YouTube RTMPS connection closed": text("youtube_live_error_transport_closed", "The YouTube RTMPS connection was closed."),
-      "no qRoadEncodeData frames": text("youtube_live_error_no_frames", "No qRoadEncodeData frames were received."),
+      "no qRoadEncodeData frames": text("youtube_live_error_no_frames", "No camera frames were received."),
     };
     if (exact[raw]) return exact[raw];
+    if (/^no .* frames$/i.test(raw)) return text("youtube_live_error_no_frames", "No camera frames were received.");
     if (/^YouTube RTMPS publish failed:/i.test(raw)) {
       return text("youtube_live_error_publish_failed", "YouTube RTMPS publishing failed: {error}", { error: raw.split(":", 2)[1]?.trim() || "-" });
     }
@@ -511,7 +522,7 @@
       `${text("youtube_live_muxer", "PyAV FLV/AAC")}: ${test.muxer_available ? pass : fail}`,
       `${text("youtube_live_validation_transport", "librtmp")}: ${test.transport_available ? pass : fail}`,
       `${text("youtube_live_validation_rtmps", "YouTube RTMPS")}: ${test.rtmps_reachable ? pass : fail}`,
-      `${text("youtube_live_metric_source", "Source")}: ${test.source || "-"}`,
+      `${text("youtube_live_metric_source", "Source")}: ${sourceLabel({ source: test.source })}`,
       "",
       `[${text("youtube_live_check_stream_section", "Stream status")}]`,
       `${text("youtube_live_state_label", "State")}: ${stateLabel(status)}`,

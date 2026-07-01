@@ -20,19 +20,15 @@ from .youtube_live_transport import LibrtmpClient, RtmpSink, librtmp_capabilitie
 YOUTUBE_LIVE_PARAM = "CarrotYouTubeLive"
 YOUTUBE_QUALITY_PARAM = "CarrotYouTubeQuality"
 YOUTUBE_TIMESTAMP_PARAM = "CarrotYouTubeTimestamp"
-PHASE1_SOURCE_SERVICE = "qRoadEncodeData"
-PHASE1_QUALITY = "standard"
-# Single 3-way selector (CarrotYouTubeQuality):
-#   0 일반  = low-res qcamera (road, data-saving)
-#   1 고화질 = full-res road livestream
-#   2 광각  = full-res wide livestream
-# 1/2 need stream_encoderd, which the manager gate enables for HQ streaming.
+# The high-quality source has a dedicated encoder so Carrot Vision's shared
+# livestream resolution and bitrate remain unchanged.
 SOURCE_BY_QUALITY = {
   0: "qRoadEncodeData",
   1: "livestreamRoadEncodeData",
-  2: "livestreamWideRoadEncodeData",
+  2: "youtubeRoadEncodeData",
+  3: "livestreamWideRoadEncodeData",
 }
-QUALITY_LABELS = {0: "standard", 1: "high", 2: "wide"}
+QUALITY_LABELS = {0: "low", 1: "medium", 2: "high", 3: "wide"}
 YOUTUBE_RTMPS_BASE = "rtmps://a.rtmps.youtube.com:443/live2"
 YOUTUBE_RTMPS_HOST = "a.rtmps.youtube.com"
 YOUTUBE_RTMPS_PORT = 443
@@ -50,6 +46,7 @@ _PROCESS_MATCHES = {
   "carrot_cluster": "selfdrive.carrot.cluster_autorun",
   "webrtcd": "system.webrtc.webrtcd",
   "stream_encoderd": "system/loggerd/encoderd\x00--stream",
+  "youtube_encoderd": "system/loggerd/encoderd\x00--youtube",
 }
 
 
@@ -432,7 +429,7 @@ class YouTubeLiveService:
     header, data, frame_id, keyframe, width, height = self._recv_frame()
     if not data:
       if self._transport is not None and self._last_frame_mono and _mono() - self._last_frame_mono > NO_FRAME_STOP_SECONDS:
-        self._last_error = "no qRoadEncodeData frames"
+        self._last_error = f"no {self._current_source()} frames"
         await self._stop_stream()
         self._schedule_backoff("frame timeout")
       self._set_state("waiting_frame" if self._transport is None else "live")
@@ -602,7 +599,7 @@ class YouTubeLiveService:
       keyframe = bool(header) or bool(flags & 0x8)
       return header, data, frame_id, keyframe, width, height
     except Exception as exc:
-      self._last_error = f"{PHASE1_SOURCE_SERVICE} recv failed: {exc}"
+      self._last_error = f"{self._current_source()} recv failed: {exc}"
       return b"", b"", None, False, 526, 330
 
   async def _start_stream(self, stream_key: str, *, codec_header: bytes, width: int, height: int) -> None:
@@ -728,6 +725,9 @@ class YouTubeLiveService:
         "webrtcd_pids": list(processes.get("webrtcd", {}).get("pids") or []),
         "stream_encoderd_pids": list(processes.get("stream_encoderd", {}).get("pids") or []),
       },
+      "youtube_encoder": {
+        **processes.get("youtube_encoderd", {"running": False, "pids": []}),
+      },
     }
 
   def _warnings(self, resource_status: dict[str, Any]) -> list[str]:
@@ -740,9 +740,14 @@ class YouTubeLiveService:
       warnings.append("Cluster HUD is enabled; monitor overall load and temperature during simultaneous use.")
     if vision and vision.get("enabled"):
       warnings.append("Carrot Vision is enabled; simultaneous streaming increases network and memory bandwidth use.")
-    if self._param_int(YOUTUBE_QUALITY_PARAM, 0) > 0:
+    quality = self._param_int(YOUTUBE_QUALITY_PARAM, 0)
+    if quality in (1, 3):
       if not (vision and vision.get("stream_encoderd_running")):
-        warnings.append("High quality/wide uses the livestream encoder (stream_encoderd); it starts onroad — wait for frames.")
+        warnings.append("The selected video mode is waiting for the shared livestream encoder to start onroad.")
+    elif quality == 2:
+      youtube_encoder = resource_status.get("youtube_encoder") if isinstance(resource_status, dict) else {}
+      if not (youtube_encoder and youtube_encoder.get("running")):
+        warnings.append("High quality is waiting for the dedicated YouTube encoder to start onroad.")
     return warnings
 
 

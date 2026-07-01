@@ -50,6 +50,10 @@ struct EncoderSettings {
     int _stream_bitrate = getenv("STREAM_BITRATE") ? atoi(getenv("STREAM_BITRATE")) : 1'000'000;
     return EncoderSettings{.encode_type = cereal::EncodeIndex::Type::QCAMERA_H264, .bitrate = _stream_bitrate , .gop_size = 15};
   }
+
+  static EncoderSettings YouTubeEncoderSettings() {
+    return EncoderSettings{.encode_type = cereal::EncodeIndex::Type::QCAMERA_H264, .bitrate = 2'500'000, .gop_size = 20};
+  }
 };
 
 class EncoderInfo {
@@ -124,6 +128,15 @@ const EncoderInfo stream_driver_encoder_info = {
   INIT_ENCODE_FUNCTIONS(LivestreamDriverEncode),
 };
 
+const EncoderInfo youtube_road_encoder_info = {
+  .publish_name = "youtubeRoadEncodeData",
+  .record = false,
+  .frame_width = 1920,
+  .frame_height = 1080,
+  .get_settings = [](int){return EncoderSettings::YouTubeEncoderSettings();},
+  INIT_ENCODE_FUNCTIONS(YoutubeRoadEncode),
+};
+
 const EncoderInfo qcam_encoder_info = {
   .publish_name = "qRoadEncodeData",
   .filename = "qcamera.ts",
@@ -170,5 +183,12 @@ const LogCameraInfo stream_driver_camera_info{
   .encoder_infos = {stream_driver_encoder_info}
 };
 
+const LogCameraInfo youtube_road_camera_info{
+  .thread_name = "youtube_road_encoder",
+  .stream_type = VISION_STREAM_ROAD,
+  .encoder_infos = {youtube_road_encoder_info}
+};
+
 const LogCameraInfo cameras_logged[] = {road_camera_info, wide_road_camera_info, driver_camera_info};
 const LogCameraInfo stream_cameras_logged[] = {stream_road_camera_info, stream_wide_road_camera_info, stream_driver_camera_info};
+const LogCameraInfo youtube_cameras_logged[] = {youtube_road_camera_info};
