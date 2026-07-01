@@ -6,10 +6,13 @@
   const KEY_SECTION_ID = "youtubeLiveKeySection";
   const CARD_ID = "youtubeLiveStatusCard";
   const LIVE_CONTROL_ROOM_URL = "https://www.youtube.com/livestreaming";
-  const POLL_MS = 2500;
+  const POLL_MS = 1000;
   const state = {
     timer: null,
     loading: false,
+    keyLoading: false,
+    keyLoaded: false,
+    streamKey: "",
     status: null,
     observer: null,
   };
@@ -45,7 +48,8 @@
 
   function configuredLabel(status) {
     if (status?.configured) {
-      return text("youtube_live_key_configured", "Key saved: {key}", { key: status.masked_key || "****" });
+      if (!state.keyLoaded) return text("loading", "Loading...");
+      return text("youtube_live_key_configured", "Key saved: {key}", { key: state.streamKey || "-" });
     }
     return text("youtube_live_key_missing", "Stream key is not saved");
   }
@@ -153,7 +157,6 @@
         <div class="youtube-live-help-note">${escapeHtmlLocal(text("youtube_live_help_note", "Validation checks local format, FFmpeg, and RTMPS reachability. YouTube confirms the key only after streaming starts."))}</div>
         <div class="ui-action-grid ui-action-grid--quick youtube-live-actions" data-role="action-menu"></div>
       `;
-      section.appendChild(helpCard);
 
       const menuActions = helpCard.querySelector('[data-role="action-menu"]');
       if (menuActions) {
@@ -203,6 +206,8 @@
       warnings.dataset.role = "warnings";
       warnings.hidden = true;
       statusCard.appendChild(warnings);
+
+      section.appendChild(helpCard);
 
     }
 
@@ -289,6 +294,7 @@
 
   async function loadStatus() {
     if (state.loading || !isVisible()) return;
+    loadStreamKey();
     state.loading = true;
     try {
       const status = await getJson("/api/youtube_live/status");
@@ -301,37 +307,54 @@
     }
   }
 
+  async function loadStreamKey() {
+    if (state.keyLoading || state.keyLoaded || !isVisible()) return;
+    state.keyLoading = true;
+    try {
+      const result = await getJson("/api/youtube_live/stream_key");
+      state.streamKey = String(result?.stream_key || "");
+      state.keyLoaded = true;
+      if (state.status) renderStatus(state.status);
+    } catch (err) {
+      state.keyLoaded = false;
+    } finally {
+      state.keyLoading = false;
+    }
+  }
+
   function keyInputValue() {
     return String(document.querySelector(`#${KEY_SECTION_ID} [data-role="key-input"]`)?.value || "").trim();
   }
 
   async function saveKeyFromInput() {
     const value = keyInputValue();
-    if (!value) {
-      toast(text("youtube_live_key_empty", "Enter a stream key first."), { tone: "error" });
-      return;
-    }
+    let saveResult;
     try {
       const status = await postJson("/api/youtube_live/stream_key", { stream_key: value });
+      saveResult = { ok: true, status };
+      state.streamKey = value;
+      state.keyLoaded = true;
       state.status = status;
       renderStatus(status);
-      const input = document.querySelector(`#${KEY_SECTION_ID} [data-role="key-input"]`);
-      if (input) input.value = "";
-      const validation = await fetchStreamKeyValidation();
-      await appAlert(saveResultText(status, validation), {
-        title: text("youtube_live_save_result", "Stream key saved"),
-        copyText: JSON.stringify({
-          status,
-          validation,
-        }, null, 2),
-      });
     } catch (err) {
-      toast(err?.message || String(err), { tone: "error" });
+      saveResult = {
+        ok: false,
+        error: err?.message || String(err),
+        payload: err?.payload || null,
+      };
     }
+    const validation = await fetchStreamKeyValidation(value, true);
+    await appAlert(saveResultText(saveResult, validation, value), {
+      title: text("youtube_live_save_result", "Stream key save result"),
+      copyText: JSON.stringify({
+        save: saveResult.ok ? { ok: true, status: saveResult.status } : saveResult,
+        validation,
+      }, null, 2),
+    });
   }
 
-  async function fetchStreamKeyValidation(value) {
-    const payload = value ? { stream_key: value } : {};
+  async function fetchStreamKeyValidation(value, explicitValue) {
+    const payload = explicitValue || value ? { stream_key: value } : {};
     try {
       return await postJson("/api/youtube_live/stream_key/validate", payload);
     } catch (err) {
@@ -351,13 +374,13 @@
     const value = keyInputValue();
     try {
       const result = await fetchStreamKeyValidation(value);
-      await appAlert(validationText(result), {
+      await appAlert(validationText(result, value || state.streamKey), {
         title: text("youtube_live_validate_key", "Validate key"),
       });
     } catch (err) {
       const payload = err?.payload || null;
       if (payload) {
-        await appAlert(validationText(payload), {
+        await appAlert(validationText(payload, value || state.streamKey), {
           title: text("youtube_live_validate_key", "Validate key"),
         });
         return;
@@ -366,18 +389,21 @@
     }
   }
 
-  function saveResultText(status, validation) {
+  function saveResultText(saveResult, validation, streamKey) {
     const pass = text("youtube_live_validation_pass", "OK");
     const fail = text("youtube_live_validation_fail", "FAIL");
+    const saveDetail = saveResult?.ok
+      ? configuredLabel(saveResult.status)
+      : (saveResult?.error || "-");
     const lines = [
-      `${text("youtube_live_save_status", "Save")}: ${status?.configured ? pass : fail} - ${configuredLabel(status)}`,
+      `${text("youtube_live_save_status", "Save")}: ${saveResult?.ok ? pass : fail} - ${saveDetail}`,
       "",
-      validationText(validation),
+      validationText(validation, streamKey),
     ];
     return lines.join("\n");
   }
 
-  function validationText(result) {
+  function validationText(result, streamKey) {
     const pass = text("youtube_live_validation_pass", "OK");
     const fail = text("youtube_live_validation_fail", "FAIL");
     const lines = [
@@ -385,7 +411,8 @@
       `${text("youtube_live_validation_ffmpeg", "FFmpeg")}: ${result?.ffmpeg_available ? pass : fail}`,
       `${text("youtube_live_validation_rtmps", "YouTube RTMPS")}: ${result?.rtmps_reachable ? pass : fail} - ${localizedValidationMessage(result?.rtmps_message)}`,
     ];
-    if (result?.masked_key) lines.push(`${text("youtube_live_key", "Stream key")}: ${result.masked_key}`);
+    const visibleKey = String(streamKey || "");
+    if (visibleKey) lines.push(`${text("youtube_live_key", "Stream key")}: ${visibleKey}`);
     lines.push("");
     lines.push(result?.note || text("youtube_live_validation_note", "YouTube confirms the key only when streaming starts."));
     return lines.join("\n");
@@ -419,6 +446,8 @@
     if (!ok) return;
     try {
       const status = await requestJson("/api/youtube_live/stream_key", { method: "DELETE" });
+      state.streamKey = "";
+      state.keyLoaded = true;
       state.status = status;
       renderStatus(status);
       toast(text("youtube_live_key_cleared", "Stream key cleared"));
@@ -525,6 +554,7 @@
 
   function startPolling() {
     if (!state.timer) state.timer = window.setInterval(loadStatus, POLL_MS);
+    loadStreamKey();
     loadStatus();
   }
 
@@ -540,6 +570,8 @@
       return;
     }
     stopPolling();
+    state.keyLoaded = false;
+    state.streamKey = "";
     const card = document.getElementById(CARD_ID);
     if (card) card.remove();
     const keySection = document.getElementById(KEY_SECTION_ID);

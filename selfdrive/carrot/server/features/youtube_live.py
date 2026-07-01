@@ -45,6 +45,11 @@ async def api_set_stream_key(request: web.Request) -> web.Response:
   return web.json_response({"ok": True, **status})
 
 
+async def api_get_stream_key(request: web.Request) -> web.Response:
+  stream_key = _service(request).get_stream_key()
+  return web.json_response({"ok": True, "configured": bool(stream_key), "stream_key": stream_key})
+
+
 async def api_clear_stream_key(request: web.Request) -> web.Response:
   return web.json_response({"ok": True, **_service(request).clear_stream_key()})
 
@@ -74,6 +79,7 @@ def register(app: web.Application) -> None:
   app.cleanup_ctx.append(youtube_live_context)
   app.router.add_get("/api/youtube_live/status", api_status)
   app.router.add_get("/api/youtube_live/diagnostics", api_diagnostics)
+  app.router.add_get("/api/youtube_live/stream_key", api_get_stream_key)
   app.router.add_post("/api/youtube_live/stream_key", api_set_stream_key)
   app.router.add_post("/api/youtube_live/stream_key/validate", api_validate_stream_key)
   app.router.add_delete("/api/youtube_live/stream_key", api_clear_stream_key)

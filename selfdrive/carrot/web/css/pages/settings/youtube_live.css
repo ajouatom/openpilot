@@ -36,6 +36,7 @@
   color: var(--md-on-surface-var);
   font-size: var(--fs-body-sm);
   letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 
 .youtube-live-help-list {
