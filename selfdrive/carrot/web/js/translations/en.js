@@ -16,8 +16,6 @@ window.CarrotTranslations.register("en", {
     youtube_live_help_step_1: "Open YouTube Studio and click Create > Go live.",
     youtube_live_help_step_2: "In Live Control Room, open the Stream tab, create a Stream key, then copy it.",
     youtube_live_help_step_3: "Paste the key here, save it, then run Validate key.",
-    youtube_live_help_step_4: "Standard mode uses qRoadEncodeData, about 526x330 at 20fps. This fits YouTube's 240p-720p encoder range; stereo audio uses AAC 128Kbps.",
-    youtube_live_help_note: "Validation checks local format, FFmpeg, and RTMPS reachability. YouTube confirms the key only after streaming starts.",
     youtube_live_quality_standard: "Standard",
     youtube_live_visibility_studio: "Visibility: set in YouTube Studio",
     youtube_live_validate_key: "Validate key",

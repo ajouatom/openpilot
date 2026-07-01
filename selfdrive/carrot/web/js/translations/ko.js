@@ -16,8 +16,6 @@ window.CarrotTranslations.register("ko", {
     youtube_live_help_step_1: "YouTube Studio에서 만들기 > 라이브 스트리밍을 엽니다.",
     youtube_live_help_step_2: "Live Control Room의 스트림 탭에서 Stream key를 생성한 뒤 복사합니다.",
     youtube_live_help_step_3: "위 스트림 키 칸에 붙여넣고 저장 후 키 검증을 실행합니다.",
-    youtube_live_help_step_4: "표준 모드는 qRoadEncodeData를 사용합니다. 영상은 약 526x330/20fps이며 YouTube의 240p-720p 인코더 범위에 맞고, 오디오는 AAC 128Kbps입니다.",
-    youtube_live_help_note: "키 검증은 로컬 형식, FFmpeg, RTMPS 접속만 확인합니다. YouTube의 키 수락 여부는 실제 송출 시작 후 확정됩니다.",
     youtube_live_quality_standard: "표준",
     youtube_live_visibility_studio: "공개 범위: YouTube Studio 설정",
     youtube_live_validate_key: "키 검증",

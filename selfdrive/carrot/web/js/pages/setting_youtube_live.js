@@ -58,10 +58,7 @@
   }
 
   function streamSummary(status) {
-    const quality = text("youtube_live_quality_standard", "Standard");
-    const source = status?.source || "qRoadEncodeData";
-    const visibility = text("youtube_live_visibility_studio", "Visibility: set in YouTube Studio");
-    return `${quality} · ${source} · ${visibility}`;
+    return videoFormatLabel(status);
   }
 
   function metric(label, value) {
@@ -154,8 +151,6 @@
           <li>${escapeHtmlLocal(text("youtube_live_help_step_2", "In Live Control Room, open Stream and copy Stream key."))}</li>
           <li>${escapeHtmlLocal(text("youtube_live_help_step_3", "Paste the key here, save it, then run Validate key."))}</li>
         </ol>
-        <div class="youtube-live-help-note">${escapeHtmlLocal(text("youtube_live_help_step_4", "Standard mode uses qRoadEncodeData, about 526x330 at 20fps. This fits YouTube's 240p-720p encoder range; stereo audio uses AAC 128Kbps."))}</div>
-        <div class="youtube-live-help-note">${escapeHtmlLocal(text("youtube_live_help_note", "Validation checks local format, FFmpeg, and RTMPS reachability. YouTube confirms the key only after streaming starts."))}</div>
         <div class="ui-action-grid ui-action-grid--quick youtube-live-actions" data-role="action-menu"></div>
       `;
 
@@ -241,6 +236,13 @@
     const m = Math.floor((total % 3600) / 60);
     const s = total % 60;
     return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
+  }
+
+  function videoFormatLabel(status) {
+    const width = Number(status?.frame_width || 526);
+    const height = Number(status?.frame_height || 330);
+    const fps = Number(status?.frame_fps || 20);
+    return `${width}*${height} * ${fps}fps`;
   }
 
   function retryLabel(status) {

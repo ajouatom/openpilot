@@ -42,16 +42,9 @@
   letter-spacing: 0;
 }
 
-.youtube-live-help-list > li,
-.youtube-live-help-note {
+.youtube-live-help-list > li {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.youtube-live-help-note {
-  color: var(--md-on-surface-var);
-  font-size: var(--fs-body-sm);
-  letter-spacing: 0;
 }
 
 .youtube-live-key-row {

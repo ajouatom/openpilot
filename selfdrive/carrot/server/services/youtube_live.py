@@ -131,6 +131,9 @@ class YouTubeLiveService:
     self._started_at = 0.0
     self._last_frame_at = 0.0
     self._last_frame_id: int | None = None
+    self._frame_width = 526
+    self._frame_height = 330
+    self._frame_fps = 20
     self._bytes_sent = 0
     self._session_started_bytes = 0
     self._restart_count = 0
@@ -207,6 +210,9 @@ class YouTubeLiveService:
       "last_frame_at": self._last_frame_at,
       "last_frame_age_ms": last_frame_age_ms,
       "last_frame_id": self._last_frame_id,
+      "frame_width": self._frame_width,
+      "frame_height": self._frame_height,
+      "frame_fps": self._frame_fps,
       "stderr_tail": list(self._stderr_tail)[-5:],
       "resource_status": resource_status,
       "warnings": warnings,
@@ -386,6 +392,8 @@ class YouTubeLiveService:
 
     self._last_frame_at = _now()
     self._last_frame_id = frame_id
+    self._frame_width = width
+    self._frame_height = height
 
     if self._process is None:
       if not keyframe:
