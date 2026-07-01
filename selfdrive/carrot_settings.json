@@ -545,6 +545,16 @@
           ]
         },
         {
+          "id": "SYS_YOUTUBE",
+          "ko": "YouTube 라이브",
+          "en": "YouTube Live",
+          "zh": "YouTube Live",
+          "params": [
+            "CarrotYouTubeLive",
+            "CarrotYouTubeQuality"
+          ]
+        },
+        {
           "id": "SYS_NET",
           "ko": "네트워크·지도",
           "en": "Network & Map",
@@ -1726,6 +1736,38 @@
       "cdescr": "1: 标准摄像头, 2: 标准摄像头 + 广角摄像头",
       "min": 0,
       "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "SYS_YOUTUBE",
+      "name": "CarrotYouTubeLive",
+      "title": "YouTube 송출",
+      "descr": "YouTube Live로 qRoadEncodeData 영상을 송출합니다.\n0: 끄기, 1: 켜기",
+      "egroup": "System",
+      "etitle": "YouTube Live",
+      "edescr": "Stream qRoadEncodeData video to YouTube Live.\n0: OFF, 1: ON",
+      "cgroup": "System",
+      "ctitle": "YouTube Live",
+      "cdescr": "Stream qRoadEncodeData video to YouTube Live.\n0: OFF, 1: ON",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "SYS_YOUTUBE",
+      "name": "CarrotYouTubeQuality",
+      "title": "YouTube 화질",
+      "descr": "0: 표준(qRoadEncodeData), 1: 고화질(준비중)",
+      "egroup": "System",
+      "etitle": "YouTube Quality",
+      "edescr": "0: Standard(qRoadEncodeData), 1: High quality(preparing)",
+      "cgroup": "System",
+      "ctitle": "YouTube Quality",
+      "cdescr": "0: Standard(qRoadEncodeData), 1: High quality(preparing)",
+      "min": 0,
+      "max": 1,
       "default": 0,
       "unit": 1
     },
