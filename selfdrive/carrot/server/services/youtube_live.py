@@ -20,6 +20,17 @@ YOUTUBE_LIVE_PARAM = "CarrotYouTubeLive"
 YOUTUBE_QUALITY_PARAM = "CarrotYouTubeQuality"
 PHASE1_SOURCE_SERVICE = "qRoadEncodeData"
 PHASE1_QUALITY = "standard"
+# Single 3-way selector (CarrotYouTubeQuality):
+#   0 일반  = low-res qcamera (road, data-saving)
+#   1 고화질 = full-res road livestream
+#   2 광각  = full-res wide livestream
+# 1/2 need stream_encoderd, which the manager gate enables for HQ streaming.
+SOURCE_BY_QUALITY = {
+  0: "qRoadEncodeData",
+  1: "livestreamRoadEncodeData",
+  2: "livestreamWideRoadEncodeData",
+}
+QUALITY_LABELS = {0: "standard", 1: "high", 2: "wide"}
 YOUTUBE_RTMPS_BASE = "rtmps://a.rtmps.youtube.com:443/live2"
 YOUTUBE_RTMPS_HOST = "a.rtmps.youtube.com"
 YOUTUBE_RTMPS_PORT = 443
@@ -31,6 +42,7 @@ BACKOFF_MAX_SECONDS = 60.0
 STREAM_STABLE_SECONDS = 10.0
 MIN_RECONNECT_INTERVAL_SECONDS = 3.0
 EVENT_LOG_MAX = 50
+PROC_CACHE_SECONDS = 5.0
 
 _PROCESS_MATCHES = {
   "carrot_cluster": "selfdrive.carrot.cluster_autorun",
@@ -133,6 +145,8 @@ class YouTubeLiveService:
     self._muxer: H264FlvMuxer | None = None
     self._messaging: Any | None = None
     self._socket: Any | None = None
+    self._socket_source = ""
+    self._active_source = ""
     self._params: Any | None = None
     self._last_status_write = 0.0
     self._started_at = 0.0
@@ -152,6 +166,8 @@ class YouTubeLiveService:
     self._state = "disabled"
     self._events: deque[dict[str, Any]] = deque(maxlen=EVENT_LOG_MAX)
     self._last_start_mono = 0.0
+    self._proc_cache: dict[str, Any] | None = None
+    self._proc_cache_mono = 0.0
     self._muxer_capabilities = pyav_capabilities()
     self._transport_capabilities = librtmp_capabilities()
     persisted = _read_json(self.state_path)
@@ -197,7 +213,7 @@ class YouTubeLiveService:
       "enabled": self._param_enabled(),
       "configured": bool(stream_key),
       "masked_key": _mask_stream_key(stream_key),
-      "source": PHASE1_SOURCE_SERVICE,
+      "source": self._current_source(),
       "muxer": "pyav-flv-aac",
       "muxer_available": bool(
         self._muxer_capabilities.get("available")
@@ -207,7 +223,7 @@ class YouTubeLiveService:
       ),
       "transport": "librtmp-rtmps",
       "transport_available": bool(self._transport_capabilities.get("available")),
-      "quality": PHASE1_QUALITY,
+      "quality": self._quality_label(),
       "requested_quality": self._param_int(YOUTUBE_QUALITY_PARAM, 0),
       "phase": 1,
       "running": running,
@@ -256,8 +272,8 @@ class YouTubeLiveService:
       "rtmps_message": rtmps_message,
       "muxer_available": muxer_ok,
       "muxer": dict(self._muxer_capabilities),
-      "source": PHASE1_SOURCE_SERVICE,
-      "quality": PHASE1_QUALITY,
+      "source": self._current_source(),
+      "quality": self._quality_label(),
       "resource_status": status["resource_status"],
       "warnings": status["warnings"],
       "log_tail": [f"{event['level']}: {event['message']}" for event in list(self._events)[-12:]],
@@ -298,8 +314,8 @@ class YouTubeLiveService:
       "config": {
         "stream_key_configured": bool(stream_key),
         "stream_key_masked": _mask_stream_key(stream_key),
-        "source": PHASE1_SOURCE_SERVICE,
-        "quality": PHASE1_QUALITY,
+        "source": self._current_source(),
+        "quality": self._quality_label(),
         "rtmps_ingest": f"{YOUTUBE_RTMPS_BASE}/{_mask_stream_key(stream_key)}" if stream_key else "",
       },
       "params": {
@@ -390,11 +406,9 @@ class YouTubeLiveService:
       self._set_state("error")
       return
 
-    if self._param_int(YOUTUBE_QUALITY_PARAM, 0) > 0:
+    if self._transport is not None and self._active_source and self._active_source != self._current_source():
+      self._log(f"source changed to {self._current_source()}; restarting")
       await self._stop_stream()
-      self._last_error = "high quality YouTube Live is planned for Phase 3"
-      self._set_state("error")
-      return
 
     if self._next_retry_mono and _mono() < self._next_retry_mono:
       self._set_state("backoff")
@@ -521,16 +535,27 @@ class YouTubeLiveService:
       self._messaging = None
     return self._messaging
 
+  def _current_source(self) -> str:
+    quality = self._param_int(YOUTUBE_QUALITY_PARAM, 0)
+    return SOURCE_BY_QUALITY.get(quality, SOURCE_BY_QUALITY[0])
+
+  def _quality_label(self) -> str:
+    return QUALITY_LABELS.get(self._param_int(YOUTUBE_QUALITY_PARAM, 0), "standard")
+
   def _get_socket(self) -> Any | None:
-    if self._socket is not None:
+    source = self._current_source()
+    if self._socket is not None and self._socket_source == source:
       return self._socket
+    # first subscription or the selected source (quality/camera) changed
+    self._socket = None
     messaging = self._get_messaging()
     if messaging is None:
       return None
     try:
-      self._socket = messaging.sub_sock(PHASE1_SOURCE_SERVICE, conflate=True)
+      self._socket = messaging.sub_sock(source, conflate=True)
+      self._socket_source = source
     except Exception as exc:
-      self._last_error = f"{PHASE1_SOURCE_SERVICE} socket failed: {exc}"
+      self._last_error = f"{source} socket failed: {exc}"
       self._socket = None
     return self._socket
 
@@ -598,6 +623,7 @@ class YouTubeLiveService:
     self._started_mono = _mono()
     self._session_started_bytes = self._bytes_sent
     self._next_retry_mono = 0.0
+    self._active_source = self._current_source()
     self._log(f"stream started ({width}x{height})")
 
   async def _write_frame(self, payload: bytes, *, keyframe: bool) -> bool:
@@ -658,6 +684,9 @@ class YouTubeLiveService:
     self._log(f"retry in {delay:.0f}s: {reason or self._last_error or 'reconnect'}", "warn")
 
   def _process_status(self) -> dict[str, Any]:
+    mono = _mono()
+    if self._proc_cache is not None and (mono - self._proc_cache_mono) < PROC_CACHE_SECONDS:
+      return self._proc_cache
     result = {}
     for name, match in _PROCESS_MATCHES.items():
       pids = _find_matching_pids(match)
@@ -665,6 +694,8 @@ class YouTubeLiveService:
         "running": bool(pids),
         "pids": pids[:8],
       }
+    self._proc_cache = result
+    self._proc_cache_mono = mono
     return result
 
   def _resource_status(self) -> dict[str, Any]:
@@ -698,7 +729,8 @@ class YouTubeLiveService:
     if vision and vision.get("enabled"):
       warnings.append("Carrot Vision is enabled; simultaneous streaming increases network and memory bandwidth use.")
     if self._param_int(YOUTUBE_QUALITY_PARAM, 0) > 0:
-      warnings.append("High quality mode is planned for Phase 3; Phase 2 keeps qRoadEncodeData only.")
+      if not (vision and vision.get("stream_encoderd_running")):
+        warnings.append("High quality/wide uses the livestream encoder (stream_encoderd); it starts onroad — wait for frames.")
     return warnings
 
 

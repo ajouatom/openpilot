@@ -45,12 +45,20 @@ class MainLayout(Widget):
     # carrot_man    
     self._last_carrot_cmd_idx = -1
 
+  @staticmethod
+  def _sync_screen_record_state(requested: bool) -> bool:
+    recording = gui_app.is_recording()
+    if requested != recording:
+      ui_state.params.put_bool_nonblocking("ScreenRecord", recording)
+    return recording
+
   def _handle_carrot_record_cmd(self, sm) -> bool:
     screen_record = ui_state.params.get_bool("ScreenRecord")
     if screen_record:
       gui_app.start_recording()
     else:
       gui_app.stop_recording()
+    recording = self._sync_screen_record_state(screen_record)
 
     try:
       cm = sm['carrotMan']
@@ -59,21 +67,21 @@ class MainLayout(Widget):
       arg = str(cm.carrotArg)
     except Exception as e:
       print(f"Error reading carrotMan message: {e}")
-      return gui_app.is_recording()
+      return recording
 
     if cmd_idx == self._last_carrot_cmd_idx or self._last_carrot_cmd_idx == -1:
       self._last_carrot_cmd_idx = cmd_idx
-      return gui_app.is_recording()
+      return recording
     print(f"CarrotMan command received: {cmd} {arg} (index {cmd_idx})")
     self._last_carrot_cmd_idx = cmd_idx
     
     if not ui_state.started:
       gui_app.stop_recording()
-      return gui_app.is_recording()
+      return self._sync_screen_record_state(screen_record)
 
 
     if cmd != "RECORD":
-      return gui_app.is_recording()
+      return recording
 
     arg = arg.upper()
     if arg == "START":
@@ -83,10 +91,7 @@ class MainLayout(Widget):
     elif arg == "TOGGLE":
       gui_app.toggle_recording()
       
-    if screen_record != gui_app.is_recording():
-      ui_state.params.put_bool_nonblocking("ScreenRecord", gui_app.is_recording())
-
-    return gui_app.is_recording()
+    return self._sync_screen_record_state(screen_record)
     
   def _render(self, _):
     self._handle_onroad_transition()

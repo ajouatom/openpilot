@@ -85,6 +85,14 @@ def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
 def enable_webrtc(started, params, CP: car.CarParams) -> bool:
   return params.get_int("DisableDM") == 2
 
+def enable_youtube_hq(started, params, CP: car.CarParams) -> bool:
+  # High-quality/wide YouTube Live pulls the full-res livestream encoders, which
+  # only exist when stream_encoderd runs. Start it when HQ streaming is selected.
+  try:
+    return params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") > 0
+  except Exception:
+    return False
+
 def enable_cluster_hud(started, params, CP: car.CarParams) -> bool:
   try:
     return params.get_int("ClusterHud") in (1, 2)
@@ -96,7 +104,7 @@ procs = [
 
   NativeProcess("loggerd", "system/loggerd", ["./loggerd"], logging),
   NativeProcess("encoderd", "system/loggerd", ["./encoderd"], only_onroad),
-  NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], or_(notcar, and_(only_onroad, enable_webrtc))),
+  NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], or_(notcar, and_(only_onroad, or_(enable_webrtc, enable_youtube_hq)))),
   PythonProcess("logmessaged", "system.logmessaged", always_run),
 
   NativeProcess("camerad", "system/camerad", ["./camerad"], driverview, enabled=not WEBCAM),
