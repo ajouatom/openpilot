@@ -45,8 +45,8 @@ PROC_CACHE_SECONDS = 5.0
 _PROCESS_MATCHES = {
   "carrot_cluster": "selfdrive.carrot.cluster_autorun",
   "webrtcd": "system.webrtc.webrtcd",
-  "stream_encoderd": "system/loggerd/encoderd\x00--stream",
-  "youtube_encoderd": "system/loggerd/encoderd\x00--youtube",
+  "stream_encoderd": "encoderd\x00--stream",
+  "youtube_encoderd": "encoderd\x00--youtube",
 }
 
 
