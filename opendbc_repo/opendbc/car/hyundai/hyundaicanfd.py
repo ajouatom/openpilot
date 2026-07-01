@@ -697,6 +697,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
   lane_line_check = create_ccnc_messages._lane_line_check
   desire, lane_changing = _get_desire_and_lane_changing(md)
   display_desire = lane_changing if lane_changing in (3, 4) else desire
+  lane_change_starting = md is not None and md.meta.laneChangeState == LaneChangeState.laneChangeStarting
+  lane_change_finishing = md is not None and md.meta.laneChangeState == LaneChangeState.laneChangeFinishing
+  lane_change_left = md is not None and md.meta.laneChangeDirection == LaneChangeDirection.left
+  lane_change_right = md is not None and md.meta.laneChangeDirection == LaneChangeDirection.right
 
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
     HDA_CntrlModSta = 0
@@ -843,8 +847,22 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["LCA_LEFT_ICON"] = (2 if values["LANELINE_LEFT"] == 6 else 1) if lat_active else 0
           values["LCA_RIGHT_ICON"] = (2 if values["LANELINE_RIGHT"] == 6 else 1) if lat_active else 0
 
-        values["LANE_LEFT"] = 0 if trailer_lane_change_blocked else 1 if display_desire in (1, 3) else 0
-        values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if display_desire in (2, 4) else 0
+        if trailer_lane_change_blocked:
+          values["LANE_LEFT"] = 0
+          values["LANE_RIGHT"] = 0
+        elif lane_change_starting:
+          values["LANE_LEFT"] = 1 if lane_change_left else 0
+          values["LANE_RIGHT"] = 1 if lane_change_right else 0
+          values["LANE_HIGHLIGHT"] = 0
+          values["LANE_HIGHLIGHT_DISTANCE"] = 0.0
+        elif lane_change_finishing:
+          values["LANE_LEFT"] = 0
+          values["LANE_RIGHT"] = 0
+          values["LANE_HIGHLIGHT"] = 1
+          values["LANE_HIGHLIGHT_DISTANCE"] = 150.0
+        else:
+          values["LANE_LEFT"] = 1 if display_desire in (1, 3) else 0
+          values["LANE_RIGHT"] = 1 if display_desire in (2, 4) else 0
 
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter))
 
@@ -871,6 +889,13 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
                        ('RR_DETECT', 'RR_DETECT_DISTANCE')],
           blink_t=1.0
         )
+
+        if lane_change_starting:
+          values["LANE_LEFT"] = 2 if lane_change_left else 0
+          values["LANE_RIGHT"] = 2 if lane_change_right else 0
+        elif lane_change_finishing:
+          values["LANE_LEFT"] = 0
+          values["LANE_RIGHT"] = 0
 
         ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values, rx_counter = rx_counter))
 
