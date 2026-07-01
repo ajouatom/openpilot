@@ -110,8 +110,9 @@
       return existing;
     }
 
-    if (!existingKey) {
-      const keySection = document.createElement("section");
+    let keySection = existingKey;
+    if (!keySection) {
+      keySection = document.createElement("section");
       keySection.id = KEY_SECTION_ID;
       keySection.className = "setting-section-block youtube-live-section youtube-live-section--key";
     const keyCard = document.createElement("div");
@@ -210,8 +211,7 @@
 
     }
 
-    const keySection = document.getElementById(KEY_SECTION_ID);
-    if (keySection) placeYoutubeSections(box, keySection, section);
+    placeYoutubeSections(box, keySection, section);
     return section;
   }
 
