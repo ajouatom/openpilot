@@ -335,7 +335,8 @@
         ok: false,
         format_ok: false,
         format_message: err?.message || String(err),
-        ffmpeg_available: false,
+        transport_available: false,
+        muxer_available: false,
         rtmps_reachable: false,
         rtmps_message: "-",
       };
@@ -380,7 +381,8 @@
     const fail = text("youtube_live_validation_fail", "FAIL");
     const lines = [
       `${text("youtube_live_validation_format", "Key format")}: ${result?.format_ok ? pass : fail} - ${localizedValidationMessage(result?.format_message)}`,
-      `${text("youtube_live_validation_ffmpeg", "FFmpeg")}: ${result?.ffmpeg_available ? pass : fail}`,
+      `${text("youtube_live_muxer", "PyAV FLV/AAC")}: ${result?.muxer_available ? pass : fail}`,
+      `${text("youtube_live_validation_transport", "librtmp")}: ${result?.transport_available ? pass : fail}`,
       `${text("youtube_live_validation_rtmps", "YouTube RTMPS")}: ${result?.rtmps_reachable ? pass : fail} - ${localizedValidationMessage(result?.rtmps_message)}`,
     ];
     const visibleKey = String(streamKey || "");
@@ -401,10 +403,15 @@
       "stream key contains unsupported characters": text("youtube_live_validation_bad_chars", "Stream key contains unsupported characters."),
       "format looks valid": text("youtube_live_validation_format_ok", "Format looks valid."),
       "YouTube RTMPS ingest is reachable": text("youtube_live_validation_rtmps_ok", "YouTube RTMPS ingest is reachable."),
-      "missing stream key or ffmpeg": text("youtube_live_test_missing", "Missing stream key or FFmpeg."),
-      "missing stream key, FFmpeg, or PyAV MPEG-TS support": text("youtube_live_test_muxer_missing", "Stream key, FFmpeg, or PyAV MPEG-TS support is missing."),
+      "missing stream key, librtmp, or PyAV FLV/AAC support": text("youtube_live_test_muxer_missing", "Stream key, librtmp, or PyAV FLV/AAC support is missing."),
+      "stream key, RTMPS network, librtmp, or PyAV FLV/AAC is unavailable": text("youtube_live_test_muxer_missing", "Stream key, RTMPS network, librtmp, or PyAV FLV/AAC is unavailable."),
       "ready": text("youtube_live_check_ready", "Ready"),
     };
+    if (raw.startsWith("YouTube RTMPS ingest unreachable:")) {
+      return text("youtube_live_validation_rtmps_failed", "Cannot reach YouTube RTMPS: {error}", {
+        error: raw.slice(raw.indexOf(":") + 1).trim() || "-",
+      });
+    }
     return map[raw] || raw;
   }
 
@@ -417,19 +424,18 @@
       "Carrot Vision is enabled; YouTube Live shares camera/encoder/network resources.": text("youtube_live_warning_vision", "Carrot Vision is enabled. Camera, encoder, and network resources are shared."),
       "Carrot Vision is enabled; simultaneous streaming increases network and memory bandwidth use.": text("youtube_live_warning_vision", "Carrot Vision is enabled. Simultaneous streaming increases network and memory bandwidth use."),
       "High quality mode is planned for Phase 3; Phase 2 keeps qRoadEncodeData only.": text("youtube_live_warning_quality", "High quality mode is not available yet."),
-      "Error opening input files: Invalid argument": text("youtube_live_error_input_invalid", "Could not open the video input because an FFmpeg argument was invalid."),
-      "ffmpeg not found": text("youtube_live_error_ffmpeg_missing", "FFmpeg is not installed."),
-      "PyAV MPEG-TS muxer is unavailable": text("youtube_live_error_muxer_missing", "PyAV MPEG-TS muxing is unavailable."),
+      "librtmp is unavailable": text("youtube_live_error_transport_missing", "librtmp is unavailable."),
+      "librtmp not found": text("youtube_live_error_transport_missing", "librtmp is unavailable."),
+      "PyAV FLV/AAC muxer is unavailable": text("youtube_live_error_muxer_missing", "PyAV FLV/AAC muxing is unavailable."),
+      "YouTube RTMPS connection closed": text("youtube_live_error_transport_closed", "The YouTube RTMPS connection was closed."),
       "no qRoadEncodeData frames": text("youtube_live_error_no_frames", "No qRoadEncodeData frames were received."),
     };
     if (exact[raw]) return exact[raw];
-    const exitMatch = raw.match(/^ffmpeg exited code=(-?\d+)$/i);
-    if (exitMatch) return text("youtube_live_error_ffmpeg_exit", "FFmpeg exited (code {code}).", { code: exitMatch[1] });
-    if (/^ffmpeg pipe closed:/i.test(raw)) {
-      return text("youtube_live_error_ffmpeg_pipe", "The FFmpeg input pipe was closed.");
+    if (/^YouTube RTMPS publish failed:/i.test(raw)) {
+      return text("youtube_live_error_publish_failed", "YouTube RTMPS publishing failed: {error}", { error: raw.split(":", 2)[1]?.trim() || "-" });
     }
-    if (/^MPEG-TS mux failed:/i.test(raw)) {
-      return text("youtube_live_error_muxer_failed", "MPEG-TS muxing failed: {error}", { error: raw.split(":", 2)[1]?.trim() || "-" });
+    if (/^YouTube RTMPS start failed:/i.test(raw)) {
+      return text("youtube_live_error_start_failed", "YouTube RTMPS connection failed: {error}", { error: raw.split(":", 2)[1]?.trim() || "-" });
     }
     return raw;
   }
@@ -496,8 +502,9 @@
     const lines = [
       `[${text("youtube_live_check_ready_section", "Readiness")}]`,
       `${text("youtube_live_key", "Stream key")}: ${test.configured ? pass : fail}`,
-      `${text("youtube_live_validation_ffmpeg", "FFmpeg")}: ${test.ffmpeg_available ? pass : fail}`,
-      `${text("youtube_live_muxer", "PyAV MPEG-TS")}: ${test.muxer_available ? pass : fail}`,
+      `${text("youtube_live_muxer", "PyAV FLV/AAC")}: ${test.muxer_available ? pass : fail}`,
+      `${text("youtube_live_validation_transport", "librtmp")}: ${test.transport_available ? pass : fail}`,
+      `${text("youtube_live_validation_rtmps", "YouTube RTMPS")}: ${test.rtmps_reachable ? pass : fail}`,
       `${text("youtube_live_metric_source", "Source")}: ${test.source || "-"}`,
       "",
       `[${text("youtube_live_check_stream_section", "Stream status")}]`,
@@ -519,16 +526,19 @@
       lines.push(`[${text("youtube_live_warnings", "Warnings")}]`);
       warnings.forEach((warning) => lines.push(`- ${warning}`));
     }
-    const stderr = diag.ffmpeg?.stderr_tail || status.stderr_tail || [];
+    const streamLogs = diag.transport?.log_tail || status.log_tail || [];
     const errors = uniqueLocalizedMessages([
       status.last_error,
-      ...(Array.isArray(stderr) ? stderr.slice(-8) : []),
+      ...(Array.isArray(streamLogs) ? streamLogs.slice(-8) : []),
+      test.transport?.error,
+      test.muxer?.error,
+      test.rtmps_reachable ? "" : test.rtmps_message,
       diagnosticsResult?.ok ? "" : diagnosticsResult?.error,
       testResult?.ok || test.message === "ready" ? "" : (testResult?.error || test.message),
     ]);
     if (errors.length) {
       lines.push("");
-      lines.push(`[${text("youtube_live_check_error_section", "Errors and FFmpeg logs")}]`);
+      lines.push(`[${text("youtube_live_check_error_section", "Errors and stream logs")}]`);
       errors.forEach((error) => lines.push(`- ${localizedValidationMessage(error)}`));
     }
     return lines.join("\n");

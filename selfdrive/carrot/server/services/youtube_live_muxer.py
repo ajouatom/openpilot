@@ -1,41 +1,16 @@
 from __future__ import annotations
 
-import io
+import threading
 from fractions import Fraction
-from typing import Any
+from typing import Any, BinaryIO
 
 
-MPEGTS_FORMAT = "mpegts"
+FLV_FORMAT = "flv"
 H264_CODEC = "h264"
-
-
-class _StreamingBuffer(io.RawIOBase):
-  def __init__(self) -> None:
-    super().__init__()
-    self._chunks = bytearray()
-    self._position = 0
-
-  def writable(self) -> bool:
-    return True
-
-  def seekable(self) -> bool:
-    return False
-
-  def write(self, data: bytes | bytearray | memoryview) -> int:
-    chunk = bytes(data)
-    self._chunks.extend(chunk)
-    self._position += len(chunk)
-    return len(chunk)
-
-  def tell(self) -> int:
-    return self._position
-
-  def drain(self) -> bytes:
-    if not self._chunks:
-      return b""
-    chunk = bytes(self._chunks)
-    self._chunks.clear()
-    return chunk
+AAC_CODEC = "aac"
+AUDIO_RATE = 44_100
+AUDIO_BITRATE = 128_000
+AUDIO_SAMPLES = 1_024
 
 
 def pyav_capabilities() -> dict[str, Any]:
@@ -45,8 +20,9 @@ def pyav_capabilities() -> dict[str, Any]:
     return {
       "available": False,
       "version": "",
-      "mpegts": False,
+      "flv": False,
       "h264": False,
+      "aac": False,
       "error": str(exc),
     }
   formats = getattr(av, "formats_available", set())
@@ -54,59 +30,98 @@ def pyav_capabilities() -> dict[str, Any]:
   return {
     "available": True,
     "version": str(getattr(av, "__version__", "")),
-    "mpegts": MPEGTS_FORMAT in formats,
+    "flv": FLV_FORMAT in formats,
     "h264": H264_CODEC in codecs,
+    "aac": AAC_CODEC in codecs,
     "error": "",
   }
 
 
-class H264MpegTsMuxer:
-  def __init__(self, *, fps: int = 20, width: int = 526, height: int = 330) -> None:
+class H264FlvMuxer:
+  def __init__(
+    self,
+    output: BinaryIO,
+    *,
+    codec_header: bytes,
+    fps: int = 20,
+    width: int = 526,
+    height: int = 330,
+  ) -> None:
+    if not codec_header:
+      raise ValueError("H.264 codec header is required")
+
     import av
 
     self._av = av
     self._fps = max(1, int(fps))
-    self._time_base = Fraction(1, self._fps)
-    self._buffer = _StreamingBuffer()
+    self._video_time_base = Fraction(1, self._fps)
+    self._audio_time_base = Fraction(1, AUDIO_RATE)
     self._container = av.open(
-      self._buffer,
+      output,
       mode="w",
-      format=MPEGTS_FORMAT,
-      options={"flush_packets": "1", "mpegts_flags": "+resend_headers"},
+      format=FLV_FORMAT,
+      options={"flvflags": "no_duration_filesize", "flush_packets": "1"},
     )
-    self._stream = self._container.add_stream(H264_CODEC, rate=self._fps)
-    self._stream.width = max(1, int(width))
-    self._stream.height = max(1, int(height))
-    self._stream.time_base = self._time_base
+    self._video_stream = self._container.add_stream(H264_CODEC, rate=self._fps)
+    self._video_stream.width = max(1, int(width))
+    self._video_stream.height = max(1, int(height))
+    self._video_stream.time_base = self._video_time_base
+    self._video_stream.codec_context.extradata = bytes(codec_header)
+
+    self._audio_stream = self._container.add_stream(AAC_CODEC, rate=AUDIO_RATE)
+    self._audio_stream.bit_rate = AUDIO_BITRATE
+    self._audio_stream.layout = "stereo"
+    self._container.start_encoding()
     self._packet_index = 0
+    self._audio_pts = 0
     self._closed = False
+    self._lock = threading.RLock()
 
-  def mux(self, payload: bytes, *, keyframe: bool = False) -> bytes:
-    if self._closed:
-      raise RuntimeError("MPEG-TS muxer is closed")
-    if not payload:
-      return b""
-    packet = self._av.Packet(payload)
-    packet.stream = self._stream
-    packet.pts = self._packet_index
-    packet.dts = self._packet_index
-    packet.duration = 1
-    packet.time_base = self._time_base
-    if keyframe:
+  def mux(self, payload: bytes, *, keyframe: bool = False) -> None:
+    with self._lock:
+      if self._closed:
+        raise RuntimeError("FLV muxer is closed")
+      if not payload:
+        return
+
+      target_audio_pts = int(self._packet_index * AUDIO_RATE / self._fps)
+      self._mux_silence_until(target_audio_pts)
+
+      packet = self._av.Packet(payload)
+      packet.stream = self._video_stream
+      packet.pts = self._packet_index
+      packet.dts = self._packet_index
+      packet.duration = 1
+      packet.time_base = self._video_time_base
+      if keyframe:
+        try:
+          packet.is_keyframe = True
+        except Exception:
+          pass
+      self._container.mux(packet)
+      self._packet_index += 1
+
+  def close(self) -> None:
+    with self._lock:
+      if self._closed:
+        return
+      self._closed = True
       try:
-        packet.is_keyframe = True
-      except Exception:
-        pass
-    self._container.mux(packet)
-    self._packet_index += 1
-    return self._buffer.drain()
+        target_audio_pts = int(self._packet_index * AUDIO_RATE / self._fps)
+        self._mux_silence_until(target_audio_pts)
+        for packet in self._audio_stream.encode(None):
+          self._container.mux(packet)
+      finally:
+        self._container.close()
 
-  def close(self) -> bytes:
-    if self._closed:
-      return self._buffer.drain()
-    self._closed = True
-    try:
-      self._container.close()
-    except Exception:
-      pass
-    return self._buffer.drain()
+  def _mux_silence_until(self, target_pts: int) -> None:
+    while self._audio_pts <= target_pts:
+      frame = self._av.AudioFrame(format="fltp", layout="stereo", samples=AUDIO_SAMPLES)
+      frame.sample_rate = AUDIO_RATE
+      frame.pts = self._audio_pts
+      frame.time_base = self._audio_time_base
+      for plane in frame.planes:
+        plane.update(bytes(plane.buffer_size))
+      for packet in self._audio_stream.encode(frame):
+        self._container.mux(packet)
+      self._audio_pts += AUDIO_SAMPLES

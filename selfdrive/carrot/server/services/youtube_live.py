@@ -4,23 +4,22 @@ import asyncio
 import json
 import os
 import re
-import shutil
 import socket
 import ssl
 import time
-from collections import deque
 from pathlib import Path
 from typing import Any
 
 from ..config import CARROT_YOUTUBE_LIVE_SECRET_PATH, CARROT_YOUTUBE_LIVE_STATE_PATH
-from .youtube_live_muxer import H264MpegTsMuxer, pyav_capabilities
+from .youtube_live_muxer import H264FlvMuxer, pyav_capabilities
+from .youtube_live_transport import LibrtmpClient, RtmpSink, librtmp_capabilities
 
 
 YOUTUBE_LIVE_PARAM = "CarrotYouTubeLive"
 YOUTUBE_QUALITY_PARAM = "CarrotYouTubeQuality"
 PHASE1_SOURCE_SERVICE = "qRoadEncodeData"
 PHASE1_QUALITY = "standard"
-YOUTUBE_RTMPS_BASE = "rtmps://a.rtmps.youtube.com/live2"
+YOUTUBE_RTMPS_BASE = "rtmps://a.rtmps.youtube.com:443/live2"
 YOUTUBE_RTMPS_HOST = "a.rtmps.youtube.com"
 YOUTUBE_RTMPS_PORT = 443
 NO_FRAME_STOP_SECONDS = 8.0
@@ -28,7 +27,7 @@ START_BACKOFF_SECONDS = 5.0
 STATUS_WRITE_MIN_INTERVAL = 1.0
 BACKOFF_BASE_SECONDS = 3.0
 BACKOFF_MAX_SECONDS = 60.0
-PROCESS_STABLE_SECONDS = 10.0
+STREAM_STABLE_SECONDS = 10.0
 
 _PROCESS_MATCHES = {
   "carrot_cluster": "selfdrive.carrot.cluster_autorun",
@@ -120,10 +119,9 @@ class YouTubeLiveService:
     self.secret_path = Path(secret_path)
     self._task: asyncio.Task | None = None
     self._stop_event = asyncio.Event()
-    self._process: asyncio.subprocess.Process | None = None
-    self._muxer: H264MpegTsMuxer | None = None
-    self._stderr_task: asyncio.Task | None = None
-    self._stderr_tail: deque[str] = deque(maxlen=20)
+    self._transport: LibrtmpClient | None = None
+    self._transport_connected = False
+    self._muxer: H264FlvMuxer | None = None
     self._messaging: Any | None = None
     self._socket: Any | None = None
     self._params: Any | None = None
@@ -142,6 +140,7 @@ class YouTubeLiveService:
     self._last_error = ""
     self._state = "disabled"
     self._muxer_capabilities = pyav_capabilities()
+    self._transport_capabilities = librtmp_capabilities()
     persisted = _read_json(self.state_path)
     try:
       self._bytes_sent = int(persisted.get("bytes_sent") or 0)
@@ -164,16 +163,16 @@ class YouTubeLiveService:
         await task
       except asyncio.CancelledError:
         pass
-    await self._stop_process()
+    await self._stop_stream()
     self._task = None
     self._write_status(force=True)
 
   def status(self) -> dict[str, Any]:
     stream_key = self.get_stream_key()
-    pid = self._process.pid if self._process and self._process.returncode is None else None
+    running = self._transport_connected
     now = _now()
-    uptime = int(now - self._started_at) if self._started_at and pid else 0
-    elapsed = max(1.0, now - self._started_at) if self._started_at and pid else 1.0
+    uptime = int(now - self._started_at) if self._started_at and running else 0
+    elapsed = max(1.0, now - self._started_at) if self._started_at and running else 1.0
     last_frame_age_ms = int((now - self._last_frame_at) * 1000) if self._last_frame_at else None
     resource_status = self._resource_status()
     warnings = self._warnings(resource_status)
@@ -183,25 +182,27 @@ class YouTubeLiveService:
       "configured": bool(stream_key),
       "masked_key": _mask_stream_key(stream_key),
       "source": PHASE1_SOURCE_SERVICE,
-      "muxer": "pyav-mpegts",
+      "muxer": "pyav-flv-aac",
       "muxer_available": bool(
         self._muxer_capabilities.get("available")
-        and self._muxer_capabilities.get("mpegts")
+        and self._muxer_capabilities.get("flv")
         and self._muxer_capabilities.get("h264")
+        and self._muxer_capabilities.get("aac")
       ),
+      "transport": "librtmp-rtmps",
+      "transport_available": bool(self._transport_capabilities.get("available")),
       "quality": PHASE1_QUALITY,
       "requested_quality": self._param_int(YOUTUBE_QUALITY_PARAM, 0),
       "phase": 1,
-      "running": bool(pid),
-      "pid": pid,
-      "ffmpeg_available": bool(shutil.which("ffmpeg")),
-      "started_at": self._started_at if pid else 0,
+      "running": running,
+      "pid": None,
+      "started_at": self._started_at if running else 0,
       "uptime_sec": uptime,
       "bytes_sent": self._bytes_sent,
       "total_mb": round(max(0, self._bytes_sent) / (1024 * 1024), 2),
       "session_bytes": max(0, self._bytes_sent - self._session_started_bytes),
       "session_mb": round(max(0, self._bytes_sent - self._session_started_bytes) / (1024 * 1024), 2),
-      "estimated_kbps": int(((self._bytes_sent - self._session_started_bytes) * 8 / 1000) / elapsed) if pid else 0,
+      "estimated_kbps": int(((self._bytes_sent - self._session_started_bytes) * 8 / 1000) / elapsed) if running else 0,
       "restart_count": self._restart_count,
       "consecutive_failures": self._consecutive_failures,
       "next_retry_at": self._next_retry_at,
@@ -213,42 +214,52 @@ class YouTubeLiveService:
       "frame_width": self._frame_width,
       "frame_height": self._frame_height,
       "frame_fps": self._frame_fps,
-      "stderr_tail": list(self._stderr_tail)[-5:],
+      "log_tail": [self._last_error] if self._last_error else [],
       "resource_status": resource_status,
       "warnings": warnings,
     }
 
   def test_config(self) -> dict[str, Any]:
     stream_key = self.get_stream_key()
-    ffmpeg_path = shutil.which("ffmpeg")
+    rtmps_ok, rtmps_message = _check_rtmps_reachable()
     muxer_ok = bool(
       self._muxer_capabilities.get("available")
-      and self._muxer_capabilities.get("mpegts")
+      and self._muxer_capabilities.get("flv")
       and self._muxer_capabilities.get("h264")
+      and self._muxer_capabilities.get("aac")
     )
-    ok = bool(stream_key and ffmpeg_path and muxer_ok)
+    transport_ok = bool(self._transport_capabilities.get("available"))
+    ok = bool(stream_key and muxer_ok and transport_ok and rtmps_ok)
     status = self.status()
     return {
       "ok": ok,
       "configured": bool(stream_key),
-      "ffmpeg_available": bool(ffmpeg_path),
-      "ffmpeg_path": ffmpeg_path or "",
+      "transport_available": transport_ok,
+      "transport": dict(self._transport_capabilities),
+      "rtmps_reachable": rtmps_ok,
+      "rtmps_message": rtmps_message,
       "muxer_available": muxer_ok,
       "muxer": dict(self._muxer_capabilities),
       "source": PHASE1_SOURCE_SERVICE,
       "quality": PHASE1_QUALITY,
       "resource_status": status["resource_status"],
       "warnings": status["warnings"],
-      "stderr_tail": list(self._stderr_tail),
-      "message": "ready" if ok else "missing stream key, FFmpeg, or PyAV MPEG-TS support",
+      "log_tail": [self._last_error] if self._last_error else [],
+      "message": "ready" if ok else "stream key, RTMPS network, librtmp, or PyAV FLV/AAC is unavailable",
     }
 
   def validate_stream_key(self, value: str | None = None) -> dict[str, Any]:
     stream_key = _extract_stream_key(value) if value is not None else self.get_stream_key()
     format_ok, format_message = _validate_stream_key_format(stream_key)
     rtmps_ok, rtmps_message = _check_rtmps_reachable()
-    ffmpeg_path = shutil.which("ffmpeg")
-    ok = bool(format_ok and rtmps_ok and ffmpeg_path)
+    transport_ok = bool(self._transport_capabilities.get("available"))
+    muxer_ok = bool(
+      self._muxer_capabilities.get("available")
+      and self._muxer_capabilities.get("flv")
+      and self._muxer_capabilities.get("h264")
+      and self._muxer_capabilities.get("aac")
+    )
+    ok = bool(format_ok and rtmps_ok and transport_ok and muxer_ok)
     return {
       "ok": ok,
       "configured": bool(self.get_stream_key()),
@@ -256,8 +267,8 @@ class YouTubeLiveService:
       "format_message": format_message,
       "rtmps_reachable": rtmps_ok,
       "rtmps_message": rtmps_message,
-      "ffmpeg_available": bool(ffmpeg_path),
-      "ffmpeg_path": ffmpeg_path or "",
+      "transport_available": transport_ok,
+      "muxer_available": muxer_ok,
       "masked_key": _mask_stream_key(stream_key),
       "note": "YouTube only confirms whether the key is accepted when an encoder starts streaming.",
     }
@@ -282,13 +293,14 @@ class YouTubeLiveService:
         "DisableDM": self._param_int("DisableDM", 0),
         "IsOnroad": self._param_bool("IsOnroad", False),
       },
-      "ffmpeg": {
-        "available": bool(shutil.which("ffmpeg")),
-        "path": shutil.which("ffmpeg") or "",
-        "stderr_tail": list(self._stderr_tail),
+      "transport": {
+        "name": "librtmp-rtmps",
+        **self._transport_capabilities,
+        "connected": self._transport_connected,
+        "log_tail": [self._last_error] if self._last_error else [],
       },
       "muxer": {
-        "name": "pyav-mpegts",
+        "name": "pyav-flv-aac",
         **self._muxer_capabilities,
       },
       "processes": self._process_status(),
@@ -325,16 +337,15 @@ class YouTubeLiveService:
       except Exception as exc:
         self._last_error = str(exc)
         self._set_state("error")
-        await self._stop_process()
+        await self._stop_stream()
         await asyncio.sleep(START_BACKOFF_SECONDS)
-      await asyncio.sleep(0.02 if self._process else 0.25)
+      await asyncio.sleep(0.02 if self._transport else 0.25)
 
   async def _tick(self) -> None:
     if not self._param_enabled():
-      if self._process is not None:
-        await self._stop_process()
+      if self._transport is not None:
+        await self._stop_stream()
       self._last_error = ""
-      self._stderr_tail.clear()
       self._consecutive_failures = 0
       self._next_retry_at = 0.0
       self._set_state("disabled")
@@ -342,28 +353,29 @@ class YouTubeLiveService:
 
     stream_key = self.get_stream_key()
     if not stream_key:
-      await self._stop_process()
+      await self._stop_stream()
       self._set_state("needs_setup")
       return
 
-    if not shutil.which("ffmpeg"):
-      await self._stop_process()
-      self._last_error = "ffmpeg not found"
+    if not self._transport_capabilities.get("available"):
+      await self._stop_stream()
+      self._last_error = self._transport_capabilities.get("error") or "librtmp is unavailable"
       self._set_state("error")
       return
 
     if not (
       self._muxer_capabilities.get("available")
-      and self._muxer_capabilities.get("mpegts")
+      and self._muxer_capabilities.get("flv")
       and self._muxer_capabilities.get("h264")
+      and self._muxer_capabilities.get("aac")
     ):
-      await self._stop_process()
-      self._last_error = "PyAV MPEG-TS muxer is unavailable"
+      await self._stop_stream()
+      self._last_error = "PyAV FLV/AAC muxer is unavailable"
       self._set_state("error")
       return
 
     if self._param_int(YOUTUBE_QUALITY_PARAM, 0) > 0:
-      await self._stop_process()
+      await self._stop_stream()
       self._last_error = "high quality YouTube Live is planned for Phase 3"
       self._set_state("error")
       return
@@ -372,22 +384,21 @@ class YouTubeLiveService:
       self._set_state("backoff")
       return
 
-    if self._process is not None and self._process.returncode is not None:
-      exit_code = self._process.returncode
-      if not self._last_error:
-        self._last_error = f"ffmpeg exited code={exit_code}"
-      await self._stop_process()
-      self._schedule_backoff("ffmpeg exited")
+    if self._transport is not None and not await asyncio.to_thread(self._transport.is_connected):
+      self._transport_connected = False
+      self._last_error = "YouTube RTMPS connection closed"
+      await self._stop_stream()
+      self._schedule_backoff("RTMPS connection closed")
       self._set_state("backoff")
       return
 
-    payload, frame_id, keyframe, width, height = self._recv_payload()
-    if not payload:
-      if self._process is not None and self._last_frame_at and _now() - self._last_frame_at > NO_FRAME_STOP_SECONDS:
+    header, data, frame_id, keyframe, width, height = self._recv_frame()
+    if not data:
+      if self._transport is not None and self._last_frame_at and _now() - self._last_frame_at > NO_FRAME_STOP_SECONDS:
         self._last_error = "no qRoadEncodeData frames"
-        await self._stop_process()
+        await self._stop_stream()
         self._schedule_backoff("frame timeout")
-      self._set_state("waiting_frame" if self._process is None else "live")
+      self._set_state("waiting_frame" if self._transport is None else "live")
       return
 
     self._last_frame_at = _now()
@@ -395,13 +406,19 @@ class YouTubeLiveService:
     self._frame_width = width
     self._frame_height = height
 
-    if self._process is None:
-      if not keyframe:
+    if self._transport is None:
+      if not keyframe or not header:
         self._set_state("waiting_keyframe")
         return
-      await self._start_process(stream_key, width=width, height=height)
+      try:
+        await self._start_stream(stream_key, codec_header=header, width=width, height=height)
+      except Exception as exc:
+        self._last_error = f"YouTube RTMPS start failed: {exc}"
+        self._schedule_backoff("RTMPS start failed")
+        self._set_state("backoff")
+        return
 
-    if await self._write_frame(payload, keyframe=keyframe):
+    if await self._write_frame(data, keyframe=keyframe):
       self._set_state("live")
 
   def _set_state(self, state: str) -> None:
@@ -487,19 +504,19 @@ class YouTubeLiveService:
       self._socket = None
     return self._socket
 
-  def _recv_payload(self) -> tuple[bytes, int | None, bool, int, int]:
+  def _recv_frame(self) -> tuple[bytes, bytes, int | None, bool, int, int]:
     messaging = self._get_messaging()
     sock = self._get_socket()
     if messaging is None or sock is None:
-      return b"", None, False, 526, 330
+      return b"", b"", None, False, 526, 330
     try:
       msg = messaging.recv_one_or_none(sock)
       if msg is None:
-        return b"", None, False, 526, 330
+        return b"", b"", None, False, 526, 330
       which = msg.which()
       frame = getattr(msg, which, None)
       if frame is None:
-        return b"", None, False, 526, 330
+        return b"", b"", None, False, 526, 330
       header = bytes(getattr(frame, "header", b"") or b"")
       data = bytes(getattr(frame, "data", b"") or b"")
       frame_id = None
@@ -514,162 +531,85 @@ class YouTubeLiveService:
           flags = int(getattr(idx, "flags", 0) or 0)
         except Exception:
           flags = 0
-      if frame_id is None:
-        try:
-          frame_id = int(getattr(frame, "frameId", 0) or 0) or None
-        except Exception:
-          frame_id = None
       width = int(getattr(frame, "width", 0) or 526)
       height = int(getattr(frame, "height", 0) or 330)
       keyframe = bool(header) or bool(flags & 0x8)
-      return header + data, frame_id, keyframe, width, height
+      return header, data, frame_id, keyframe, width, height
     except Exception as exc:
       self._last_error = f"{PHASE1_SOURCE_SERVICE} recv failed: {exc}"
-      return b"", None, False, 526, 330
+      return b"", b"", None, False, 526, 330
 
-  async def _start_process(self, stream_key: str, *, width: int, height: int) -> None:
-    await self._stop_process()
-    self._stderr_tail.clear()
+  async def _start_stream(self, stream_key: str, *, codec_header: bytes, width: int, height: int) -> None:
+    await self._stop_stream()
     self._last_error = ""
+    self._restart_count += 1
     self._set_state("starting")
-    self._started_at = _now()
-    self._session_started_bytes = self._bytes_sent
     rtmp_url = f"{YOUTUBE_RTMPS_BASE}/{stream_key}"
-    muxer = H264MpegTsMuxer(fps=20, width=width, height=height)
-    cmd = [
-      "ffmpeg",
-      "-hide_banner",
-      "-loglevel",
-      "warning",
-      "-fflags",
-      "nobuffer",
-      "-f",
-      "mpegts",
-      "-i",
-      "pipe:0",
-      "-f",
-      "lavfi",
-      "-i",
-      "anullsrc=r=44100:cl=stereo",
-      "-map",
-      "0:v:0",
-      "-map",
-      "1:a:0",
-      "-c:v",
-      "copy",
-      "-c:a",
-      "aac",
-      "-b:a",
-      "128k",
-      "-shortest",
-      "-f",
-      "flv",
-      rtmp_url,
-    ]
+    transport = LibrtmpClient(rtmp_url)
     try:
-      self._process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.PIPE,
+      await asyncio.to_thread(transport.connect)
+      muxer = await asyncio.to_thread(
+        H264FlvMuxer,
+        RtmpSink(transport),
+        codec_header=codec_header,
+        fps=self._frame_fps,
+        width=width,
+        height=height,
       )
     except Exception:
-      muxer.close()
+      await asyncio.to_thread(transport.close)
       raise
+    self._transport = transport
+    self._transport_connected = True
     self._muxer = muxer
-    self._restart_count += 1
+    self._started_at = _now()
+    self._session_started_bytes = self._bytes_sent
     self._next_retry_at = 0.0
-    self._stderr_task = asyncio.create_task(self._read_stderr(self._process), name="carrot-youtube-live-stderr")
 
   async def _write_frame(self, payload: bytes, *, keyframe: bool) -> bool:
-    proc = self._process
+    transport = self._transport
     muxer = self._muxer
-    if proc is None or proc.stdin is None or muxer is None:
+    if transport is None or muxer is None:
       return False
-    if proc.returncode is not None:
-      self._last_error = f"ffmpeg exited code={proc.returncode}"
-      self._schedule_backoff("ffmpeg exited")
-      await self._stop_process()
+    if not await asyncio.to_thread(transport.is_connected):
+      self._transport_connected = False
+      self._last_error = "YouTube RTMPS connection closed"
+      self._schedule_backoff("RTMPS connection closed")
+      await self._stop_stream()
       return False
     try:
-      chunk = muxer.mux(payload, keyframe=keyframe)
-      if chunk:
-        proc.stdin.write(chunk)
-        await proc.stdin.drain()
-        self._bytes_sent += len(chunk)
-      if self._started_at and _now() - self._started_at >= PROCESS_STABLE_SECONDS:
+      await asyncio.to_thread(muxer.mux, payload, keyframe=keyframe)
+      self._bytes_sent = self._session_started_bytes + transport.bytes_written
+      if self._started_at and _now() - self._started_at >= STREAM_STABLE_SECONDS:
         self._consecutive_failures = 0
       return True
-    except (BrokenPipeError, ConnectionResetError) as exc:
-      self._last_error = f"ffmpeg pipe closed: {exc}"
-      self._schedule_backoff("ffmpeg pipe closed")
-      await self._stop_process()
-      return False
     except Exception as exc:
-      self._last_error = f"MPEG-TS mux failed: {exc}"
-      self._schedule_backoff("MPEG-TS mux failed")
-      await self._stop_process()
+      self._transport_connected = False
+      self._last_error = f"YouTube RTMPS publish failed: {exc}"
+      self._schedule_backoff("RTMPS publish failed")
+      await self._stop_stream()
       return False
 
-  async def _read_stderr(self, proc: asyncio.subprocess.Process) -> None:
-    if proc.stderr is None:
-      return
-    while True:
-      line = await proc.stderr.readline()
-      if not line:
-        break
-      text = line.decode("utf-8", errors="replace").strip()
-      if text:
-        self._stderr_tail.append(text[-300:])
-        self._last_error = text[-300:]
-
-  async def _stop_process(self) -> None:
-    proc = self._process
-    self._process = None
+  async def _stop_stream(self) -> None:
+    transport = self._transport
+    self._transport = None
+    self._transport_connected = False
     muxer = self._muxer
     self._muxer = None
-    stderr_task = self._stderr_task
-    self._stderr_task = None
-    trailer = b""
-    if muxer is not None:
-      try:
-        trailer = muxer.close()
-      except Exception:
-        trailer = b""
-    if proc is None:
-      if stderr_task is not None and not stderr_task.done():
-        stderr_task.cancel()
+    if transport is None and muxer is None:
+      self._started_at = 0.0
       return
     self._set_state("stopping")
-    if proc.stdin is not None:
+    if muxer is not None:
       try:
-        if trailer and proc.returncode is None:
-          proc.stdin.write(trailer)
-          await proc.stdin.drain()
-        proc.stdin.close()
-        await proc.stdin.wait_closed()
+        await asyncio.to_thread(muxer.close)
       except Exception:
         pass
-    try:
-      await asyncio.wait_for(proc.wait(), timeout=2.0)
-    except asyncio.TimeoutError:
+    if transport is not None:
+      self._bytes_sent = self._session_started_bytes + transport.bytes_written
       try:
-        proc.terminate()
-      except ProcessLookupError:
-        pass
-      try:
-        await asyncio.wait_for(proc.wait(), timeout=3.0)
-      except asyncio.TimeoutError:
-        try:
-          proc.kill()
-        except ProcessLookupError:
-          pass
-        await proc.wait()
-    if stderr_task is not None and not stderr_task.done():
-      stderr_task.cancel()
-      try:
-        await stderr_task
-      except asyncio.CancelledError:
+        await asyncio.to_thread(transport.close)
+      except Exception:
         pass
     self._started_at = 0.0
 

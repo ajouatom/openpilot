@@ -55,7 +55,7 @@ async def api_clear_stream_key(request: web.Request) -> web.Response:
 
 
 async def api_test(request: web.Request) -> web.Response:
-  result = _service(request).test_config()
+  result = await asyncio.to_thread(_service(request).test_config)
   return web.json_response(result, status=200 if result.get("ok") else 409)
 
 
