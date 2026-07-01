@@ -5,10 +5,11 @@
 const CURRENT_CAR_CACHE_KEY = "carrot_web_current_car_label";
 const CURRENT_CAR_PROMPT_SESSION_KEY = "carrot_web_missing_car_prompted";
 const CURRENT_CAR_RETRY_DELAYS_MS = [350, 800, 1500, 2500, 4000];
+const RECORD_STATE_POLL_MS = 1200;
 
 let recordStateIsOn = false;
 let recordTogglePending = false;
-let recordStateResyncTimer = null;
+let recordStatePollTimer = null;
 let currentCarRetryTimer = null;
 let currentCarRetryIndex = 0;
 let currentCarLastKnownLabel = "";
@@ -108,15 +109,18 @@ function parseRecordStateValue(value) {
   );
 }
 
-function scheduleRecordStateResync(delay = 520) {
-  if (recordStateResyncTimer) {
-    clearTimeout(recordStateResyncTimer);
-    recordStateResyncTimer = null;
-  }
-  recordStateResyncTimer = window.setTimeout(() => {
-    recordStateResyncTimer = null;
+function startRecordStatePolling() {
+  if (recordStatePollTimer !== null || document.hidden) return;
+  loadRecordState({ force: true }).catch(() => {});
+  recordStatePollTimer = window.setInterval(() => {
     loadRecordState({ force: true }).catch(() => {});
-  }, delay);
+  }, RECORD_STATE_POLL_MS);
+}
+
+function stopRecordStatePolling() {
+  if (recordStatePollTimer === null) return;
+  window.clearInterval(recordStatePollTimer);
+  recordStatePollTimer = null;
 }
 
 function applyRecordFabState(isOn = recordStateIsOn) {
@@ -193,24 +197,30 @@ async function loadCurrentCar(options = {}) {
 window.addEventListener("pageshow", () => {
   loadCurrentCar({ resetRetry: true }).catch(() => {});
   scheduleUiWarmup(90);
+  startRecordStatePolling();
 });
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     loadCurrentCar({ resetRetry: true, force: true }).catch(() => {});
     scheduleUiWarmup(70);
+    startRecordStatePolling();
+  } else {
+    stopRecordStatePolling();
   }
 });
 
 window.addEventListener("online", () => {
   scheduleUiWarmup(40);
+  loadRecordState({ force: true }).catch(() => {});
 });
+window.addEventListener("pagehide", stopRecordStatePolling);
 
 async function loadRecordState(options = {}) {
   const force = options.force === true;
   const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : PAGE_DATA_TTL_MS;
-  if (recordTogglePending && !force) return;
-  if (!force && recordStateLoadPromise) return recordStateLoadPromise;
+  if (recordTogglePending) return recordStateIsOn;
+  if (recordStateLoadPromise) return recordStateLoadPromise;
   if (!force && hasFreshPageData(recordStateLoadedAt, ttlMs)) return recordStateIsOn;
 
   recordStateLoadPromise = (async () => {
@@ -235,15 +245,11 @@ async function toggleRecord() {
   const prev = recordStateIsOn;
   const next = !prev;
   recordTogglePending = true;
-  if (recordStateResyncTimer) {
-    clearTimeout(recordStateResyncTimer);
-    recordStateResyncTimer = null;
-  }
-  applyRecordFabState(next);
-
   try {
     await setParam("ScreenRecord", next);
-    scheduleRecordStateResync();
+    await waitMs(650);
+    recordTogglePending = false;
+    await loadRecordState({ force: true });
   } catch (e) {
     applyRecordFabState(prev);
     showAppToast((UI_STRINGS[LANG].record || "Failed to toggle record: ") + e.message, { tone: "error" });

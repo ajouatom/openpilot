@@ -85,6 +85,20 @@ def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
 def enable_webrtc(started, params, CP: car.CarParams) -> bool:
   return params.get_int("DisableDM") == 2
 
+def enable_youtube_hq(started, params, CP: car.CarParams) -> bool:
+  # Medium/wide reuse the existing Carrot Vision livestream encoders.
+  try:
+    return params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") in (1, 3)
+  except Exception:
+    return False
+
+def enable_youtube_encoder(started, params, CP: car.CarParams) -> bool:
+  # High quality has a dedicated encoder so Carrot Vision settings stay unchanged.
+  try:
+    return params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") == 2
+  except Exception:
+    return False
+
 def enable_cluster_hud(started, params, CP: car.CarParams) -> bool:
   try:
     return params.get_int("ClusterHud") in (1, 2)
@@ -96,7 +110,8 @@ procs = [
 
   NativeProcess("loggerd", "system/loggerd", ["./loggerd"], logging),
   NativeProcess("encoderd", "system/loggerd", ["./encoderd"], only_onroad),
-  NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], or_(notcar, and_(only_onroad, enable_webrtc))),
+  NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], or_(notcar, and_(only_onroad, or_(enable_webrtc, enable_youtube_hq)))),
+  NativeProcess("youtube_encoderd", "system/loggerd", ["./encoderd", "--youtube"], and_(only_onroad, enable_youtube_encoder)),
   PythonProcess("logmessaged", "system.logmessaged", always_run),
 
   NativeProcess("camerad", "system/camerad", ["./camerad"], driverview, enabled=not WEBCAM),

@@ -539,9 +539,28 @@
           "ko": "녹화·전원",
           "en": "Record & Power",
           "zh": "录制与电源",
-          "params": [
-            "RecordRoadCam",
-            "MaxTimeOffroadMin"
+          "groups": [
+            {
+              "id": "SYS_RECORD_BASIC",
+              "ko": "녹화·전원",
+              "en": "Record & Power",
+              "zh": "录制与电源",
+              "params": [
+                "RecordRoadCam",
+                "MaxTimeOffroadMin"
+              ]
+            },
+            {
+              "id": "SYS_YOUTUBE",
+              "ko": "YouTube 라이브",
+              "en": "YouTube Live",
+              "zh": "YouTube Live",
+              "params": [
+                "CarrotYouTubeLive",
+                "CarrotYouTubeQuality",
+                "CarrotYouTubeTimestamp"
+              ]
+            }
           ]
         },
         {
@@ -1726,6 +1745,54 @@
       "cdescr": "1: 标准摄像头, 2: 标准摄像头 + 广角摄像头",
       "min": 0,
       "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "SYS_YOUTUBE",
+      "name": "CarrotYouTubeLive",
+      "title": "YouTube 송출",
+      "descr": "주행 중 선택한 카메라 영상을 YouTube Live로 송출합니다.\n0: 끄기, 1: 켜기",
+      "egroup": "System",
+      "etitle": "YouTube Live",
+      "edescr": "Stream the selected driving camera to YouTube Live.\n0: OFF, 1: ON",
+      "cgroup": "System",
+      "ctitle": "YouTube Live",
+      "cdescr": "Stream the selected driving camera to YouTube Live.\n0: OFF, 1: ON",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "SYS_YOUTUBE",
+      "name": "CarrotYouTubeQuality",
+      "title": "YouTube 화질",
+      "descr": "송출 영상\n0: 저화질 (데이터 절약)\n1: 중화질 (기본 전방)\n2: 고화질 (선명한 전방)\n3: 광각 (넓은 시야)",
+      "egroup": "System",
+      "etitle": "YouTube Quality",
+      "edescr": "Stream video\n0: Low (data saving)\n1: Medium (front)\n2: High (clear front)\n3: Wide (wide view)",
+      "cgroup": "System",
+      "ctitle": "YouTube Quality",
+      "cdescr": "Stream video\n0: Low (data saving)\n1: Medium (front)\n2: High (clear front)\n3: Wide (wide view)",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "SYS_YOUTUBE",
+      "name": "CarrotYouTubeTimestamp",
+      "title": "YouTube 시간 자막",
+      "descr": "영상 재인코딩 없이 현재 시간을 CEA-608/708 자막으로 송출합니다. 송출 시작 전에 Live Control Room의 스트림 설정 > 자막에서 '내장 608/708'을 선택해야 합니다. 종료된 영상의 수정 화면에서는 설정할 수 없습니다.\n0: 끄기, 1: 켜기",
+      "egroup": "System",
+      "etitle": "YouTube Time Caption",
+      "edescr": "Send the current time as embedded CEA-608/708 captions without re-encoding video. Before streaming, select Embedded 608/708 under Live Control Room > Stream settings > Captions. It cannot be enabled from the completed video's edit page.\n0: OFF, 1: ON",
+      "cgroup": "System",
+      "ctitle": "YouTube Time Caption",
+      "cdescr": "Send the current time as embedded CEA-608/708 captions without re-encoding video. Before streaming, select Embedded 608/708 under Live Control Room > Stream settings > Captions. It cannot be enabled from the completed video's edit page.\n0: OFF, 1: ON",
+      "min": 0,
+      "max": 1,
       "default": 0,
       "unit": 1
     },

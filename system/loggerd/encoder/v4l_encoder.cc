@@ -146,6 +146,7 @@ void V4LEncoder::dequeue_handler(V4LEncoder *e) {
 V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_height)
     : VideoEncoder(encoder_info, in_width, in_height) {
   const bool carrot_livestream_road = strcmp(encoder_info.publish_name, "livestreamRoadEncodeData") == 0;
+  const bool youtube_road = strcmp(encoder_info.publish_name, "youtubeRoadEncodeData") == 0;
   if (carrot_livestream_road) {
     out_width = 964;
     out_height = 604;
@@ -205,6 +206,30 @@ V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_hei
     }
   };
   util::safe_ioctl(fd, VIDIOC_S_FMT, &fmt_in, "VIDIOC_S_FMT failed");
+
+  if (youtube_road) {
+    int crop_width = in_width & ~1;
+    int crop_height = ((crop_width * 9) / 16) & ~1;
+    if (crop_height > in_height) {
+      crop_height = in_height & ~1;
+      crop_width = ((crop_height * 16) / 9) & ~1;
+    }
+
+    struct v4l2_selection selection = {};
+    selection.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    selection.target = V4L2_SEL_TGT_CROP;
+    selection.r.left = ((in_width - crop_width) / 2) & ~1;
+    selection.r.top = ((in_height - crop_height) / 2) & ~1;
+    selection.r.width = crop_width;
+    selection.r.height = crop_height;
+    if (util::safe_ioctl(fd, VIDIOC_S_SELECTION, &selection) != 0) {
+      LOGW("YouTube encoder crop unavailable; scaling the full camera frame");
+    } else {
+      LOGW("YouTube encoder crop=%dx%d+%d+%d output=%dx%d bitrate=%d",
+           crop_width, crop_height, selection.r.left, selection.r.top,
+           out_width, out_height, encoder_settings.bitrate);
+    }
+  }
 
   LOGD("in buffer size %d, out buffer size %d",
     fmt_in.fmt.pix_mp.plane_fmt[0].sizeimage,
