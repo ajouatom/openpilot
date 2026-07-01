@@ -56,6 +56,7 @@ INITIAL_STATE = {
   "state": "INITIALIZING",
   "connected": False, "ip_address": "",
   "iccid": "", "mcc_mnc": "", "imei": "", "modem_version": "",
+  "sim_state": "ABSENT",
   "signal_strength": 0, "signal_quality": 0,
   "network_type": "unknown", "operator": "", "band": "", "channel": 0,
   "registration": "unknown", "temperatures": [], "extra": "",
@@ -72,6 +73,7 @@ class State(Enum):
 
 
 STATE_WAIT = 1.0  # seconds to wait after each state handler returns
+ICCID_CHECK_INTERVAL = 60.0
 
 
 class PPPSession:
@@ -176,6 +178,7 @@ class Modem:
     self._sim_change = False
     self._apn = ""  # blank = network-provided via PCO
     self._roaming_allowed = True
+    self._last_iccid_check = 0.0
     self.running = True
     self.S = INITIAL_STATE.copy()
 
@@ -211,7 +214,7 @@ class Modem:
     os.chmod(f.name, 0o644)
     os.replace(f.name, STATE_PATH)
 
-  def _at(self, cmd):
+  def _at(self, cmd, log_errors=True):
     """Send AT command, return response lines. [] on error or if LPA holds port."""
     fd = os.open(AT_LOCK, os.O_CREAT | os.O_RDWR, 0o666)
     try:
@@ -238,14 +241,15 @@ class Modem:
           lines.append(line)
         return lines
     except (RuntimeError, TimeoutError, OSError) as e:
-      logging.info(f"AT {cmd} failed: {e}")
+      if log_errors:
+        logging.info(f"AT {cmd} failed: {e}")
       return []
     finally:
       fcntl.flock(fd, fcntl.LOCK_UN)
       os.close(fd)
 
-  def _atv(self, cmd, pfx):
-    for line in self._at(cmd):
+  def _atv(self, cmd, pfx, log_errors=True):
+    for line in self._at(cmd, log_errors=log_errors):
       if pfx in line and ":" in line:
         return line.split(":", 1)[1].strip()
     return None
@@ -258,7 +262,7 @@ class Modem:
     return bool(r) and not r[0].startswith("AT")
 
   def _configure_modem(self, modem_version: str):
-    if not modem_version.startswith("EG25"):
+    if not modem_version.startswith(("EC20", "EG25")):
       return
     cmds = [
       # clear initial EPS bearer APN (some carriers reject the default)
@@ -288,7 +292,7 @@ class Modem:
       return State.INITIALIZING
 
     identity = self._read_identity()
-    if not identity["iccid"] or not identity["imei"]:
+    if not identity["imei"]:
       logging.warning(f"identity read incomplete: {identity}, retrying")
       return State.INITIALIZING
 
@@ -300,33 +304,39 @@ class Modem:
     # blank APN lets the carrier supply one via PCO
     self._at(f'AT+CGDCONT={DIAL_CID},"IP","{self._apn}"')
     logging.info(f"APN '{self._apn or '(network-provided)'}' written to CID {DIAL_CID}, roaming={'on' if self._roaming_allowed else 'off'}")
+    if identity["sim_state"] == "ABSENT":
+      logging.info("SIM absent")
 
     self._sim_change = False  # clear since we just re-read identity with the new SIM
     self._publish_state(**identity)
     return State.SEARCHING
 
   def _read_identity(self):
-    def first_line(cmd):
-      r = self._at(cmd)
+    def first_line(cmd, log_errors=True):
+      r = self._at(cmd, log_errors=log_errors)
       return r[0].strip() if r else ""
 
     imei = first_line("AT+CGSN")
     if not (imei.isdigit() and 14 <= len(imei) <= 17):  # 3GPP TS 23.003
       imei = ""
 
-    iccid = (self._atv("AT+QCCID", "+QCCID:") or "").rstrip("F")
+    iccid = (self._atv("AT+QCCID", "+QCCID:", log_errors=False) or "").rstrip("F")
     if not iccid.isdigit():
       iccid = ""
 
-    imsi = first_line("AT+CIMI")
+    imsi = first_line("AT+CIMI", log_errors=False)
     mcc_mnc = imsi[:6] if imsi.isdigit() and len(imsi) >= 6 else ""
+    sim_state = "READY" if iccid or mcc_mnc else "ABSENT"
 
     modem_version = first_line("AT+GMR")
 
-    logging.info(f"imei={imei} iccid={iccid} mcc_mnc={mcc_mnc} ver={modem_version}")
-    return {"imei": imei, "iccid": iccid, "mcc_mnc": mcc_mnc, "modem_version": modem_version}
+    logging.info(f"imei={imei} iccid={iccid} mcc_mnc={mcc_mnc} sim_state={sim_state} ver={modem_version}")
+    return {"imei": imei, "iccid": iccid, "mcc_mnc": mcc_mnc, "modem_version": modem_version, "sim_state": sim_state}
 
   def _do_searching(self):
+    if self.S["sim_state"] == "ABSENT":
+      return self._searching_idle()
+
     new_roaming = self._is_roaming_allowed()
     if new_roaming != self._roaming_allowed:
       logging.info(f"roaming changed: {self._roaming_allowed} -> {new_roaming}")
@@ -391,9 +401,14 @@ class Modem:
     return False
 
   def _check_iccid(self, state):
-    if state in (State.INITIALIZING, State.DISCONNECTING) or not self.S["iccid"]:
+    if state in (State.INITIALIZING, State.DISCONNECTING):
       return
-    iccid = (self._atv("AT+QCCID", "+QCCID:") or "").rstrip("F")
+    now = time.monotonic()
+    if now - self._last_iccid_check < ICCID_CHECK_INTERVAL:
+      return
+    self._last_iccid_check = now
+
+    iccid = (self._atv("AT+QCCID", "+QCCID:", log_errors=False) or "").rstrip("F")
     if iccid and iccid != self.S["iccid"]:
       logging.warning(f"iccid changed: {self.S['iccid']} -> {iccid}")
       self._sim_change = True

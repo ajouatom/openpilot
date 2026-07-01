@@ -22,6 +22,13 @@
 
 // ************** low level camera helpers ****************
 
+int get_bps_blob_index(const SensorInfo *sensor) {
+  if (sensor->image_sensor == cereal::FrameData::ImageSensor::AR0231) {
+    return 2;
+  }
+  return sensor->num();
+}
+
 int do_cam_control(int fd, int op_code, void *handle, int size) {
   struct cam_control camcontrol = {0};
   camcontrol.op_code = op_code;
@@ -1046,7 +1053,8 @@ bool SpectraCamera::openSensor() {
   };
 
   // Figure out which sensor we have
-  if (!init_sensor_lambda(new OS04C10) &&
+  if (!init_sensor_lambda(new AR0231) &&
+      !init_sensor_lambda(new OS04C10) &&
       !init_sensor_lambda(new OX03C10)) {
     LOGE("** sensor %d FAILED bringup, disabling", cc.camera_num);
     enabled = false;
@@ -1167,11 +1175,13 @@ void SpectraCamera::configICP() {
 
   int cfg_handle;
 
+  const int bps_idx = get_bps_blob_index(sensor.get());
+  LOGW("camera %d sensor %d: using BPS blob index %d", cc.camera_num, sensor->num(), bps_idx);
   uint32_t cfg_size = sizeof(bps_cfg[0]) / sizeof(bps_cfg[0][0]);
   void *cfg = alloc_w_mmu_hdl(m->video0_fd, cfg_size, (uint32_t*)&cfg_handle, 0x1,
                               CAM_MEM_FLAG_HW_READ_WRITE | CAM_MEM_FLAG_UMD_ACCESS | CAM_MEM_FLAG_HW_SHARED_ACCESS,
                               m->icp_device_iommu);
-  memcpy(cfg, bps_cfg[sensor->num()], cfg_size);
+  memcpy(cfg, bps_cfg[bps_idx], cfg_size);
 
   struct cam_icp_acquire_dev_info icp_info = {
     .scratch_mem_size = 0x0,
@@ -1206,7 +1216,7 @@ void SpectraCamera::configICP() {
   // BPSIQSettings struct
   uint32_t settings_size = sizeof(bps_settings[0]) / sizeof(bps_settings[0][0]);
   bps_iq.init(m, settings_size, 0x20, true, m->icp_device_iommu);
-  memcpy(bps_iq.ptr, bps_settings[sensor->num()], settings_size);
+  memcpy(bps_iq.ptr, bps_settings[bps_idx], settings_size);
 
   // for cdm register writes, just make it bigger than you need
   bps_cdm_program_array.init(m, 0x1000, 0x20, true, m->icp_device_iommu);
@@ -1214,7 +1224,7 @@ void SpectraCamera::configICP() {
   // striping lib output
   uint32_t striping_size = sizeof(bps_striping_output[0]) / sizeof(bps_striping_output[0][0]);
   bps_striping.init(m, striping_size, 0x20, true, m->icp_device_iommu);
-  memcpy(bps_striping.ptr, bps_striping_output[sensor->num()], striping_size);
+  memcpy(bps_striping.ptr, bps_striping_output[bps_idx], striping_size);
 
   // used internally by the BPS, we just allocate it.
   // size comes from the BPSStripingLib
@@ -1513,7 +1523,8 @@ bool SpectraCamera::waitForFrameReady(uint64_t request_id) {
 }
 
 bool SpectraCamera::processFrame(int buf_idx, uint64_t request_id, uint64_t frame_id_raw, uint64_t timestamp) {
-  if (!syncFirstFrame(cc.camera_num, request_id, frame_id_raw, timestamp, cc.staggered_sof)) {
+  const bool staggered_sof = cc.staggered_sof && sensor->image_sensor != cereal::FrameData::ImageSensor::AR0231;
+  if (!syncFirstFrame(cc.camera_num, request_id, frame_id_raw, timestamp, staggered_sof)) {
     return false;
   }
 
@@ -1570,7 +1581,12 @@ bool SpectraCamera::syncFirstFrame(int camera_id, uint64_t request_id, uint64_t 
 
   // Timeout in case the timestamps never line up
   if (raw_id > 40) {
-    LOGE("camera first frame sync timed out");
+    LOGE("camera first frame sync timed out: camera %d request %lu raw_id %lu timestamp %lu cams %zu/%d",
+         camera_id, request_id, raw_id, timestamp, camera_sync_data.size(), enabled_camera_count);
+    for (const auto &[cam, sync_data] : camera_sync_data) {
+      LOGE("camera %d first frame sync data: frame_id_offset %lu timestamp %lu staggered %d",
+           cam, sync_data.frame_id_offset, sync_data.timestamp, sync_data.staggered);
+    }
     first_frame_synced = true;
   }
 

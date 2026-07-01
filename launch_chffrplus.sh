@@ -19,12 +19,44 @@ function agnos_init {
 
   # Check if AGNOS update is required
   if [ $(< /VERSION) != "$AGNOS_VERSION" ]; then
+    echo "Waiting for internet..."
+
+    timeout=0
+    while [ $timeout -lt 120 ]; do
+        if getent hosts pypi.org >/dev/null 2>&1; then
+            break
+        fi
+        echo "Waiting for internet... (${timeout})"
+        sleep 5
+        timeout=$((timeout+5))
+
+    done
+
+    if python3 -c "import jeepney" > /dev/null 2>&1; then
+      echo "jeepney already installed."
+    else
+      echo "jeepney installing to pydeps."
+      python3 -m pip install --target "$PYDEPS" --upgrade jeepney
+    fi
+
     AGNOS_PY="$DIR/system/hardware/tici/agnos.py"
     MANIFEST="$DIR/system/hardware/tici/agnos.json"
+    MODEL="$(tr -d '\000\r\n' 2>/dev/null < /sys/firmware/devicetree/base/model | tr '[:upper:]' '[:lower:]')"
+    MODEL="${MODEL#comma }"
+    if [ "$MODEL" = "c3" ] || [ "$MODEL" = "tici" ]; then
+      MANIFEST="$DIR/system/hardware/tici/agnos-tici.json"
+    fi
     if $AGNOS_PY --verify $MANIFEST; then
       sudo reboot
     fi
-    $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
+    echo "AGNOS_PY=${AGNOS_PY}"
+    echo "MANIFEST=${MANIFEST}"
+    echo "MODEL=${MODEL}"
+    if ! python3 $DIR/system/ui/updater.py $AGNOS_PY $MANIFEST; then
+      echo "python updater failed, falling back to bundled updater"
+      $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
+    fi
+    echo "end updater $AGNOS_PY $MANIFEST"
   fi
 }
 
@@ -124,13 +156,13 @@ function launch {
   PYDEPS="$DIR/pydeps"
   mkdir -p "$PYDEPS"
   export PYTHONPATH="$PYDEPS:$PWD${PYTHONPATH:+:$PYTHONPATH}"
-
   start_carrot_recovery
 
   # hardware specific init
   if [ -f /AGNOS ]; then
     agnos_init
   fi
+
 
   FORCE_REBUILD=0
   invalidate_modeld_build_if_needed
