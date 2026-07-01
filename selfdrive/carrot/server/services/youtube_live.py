@@ -173,6 +173,7 @@ class YouTubeLiveService:
     now = _now()
     uptime = int(now - self._started_at) if self._started_at and running else 0
     elapsed = max(1.0, now - self._started_at) if self._started_at and running else 1.0
+    session_bytes = max(0, self._bytes_sent - self._session_started_bytes) if running else 0
     last_frame_age_ms = int((now - self._last_frame_at) * 1000) if self._last_frame_at else None
     resource_status = self._resource_status()
     warnings = self._warnings(resource_status)
@@ -200,9 +201,9 @@ class YouTubeLiveService:
       "uptime_sec": uptime,
       "bytes_sent": self._bytes_sent,
       "total_mb": round(max(0, self._bytes_sent) / (1024 * 1024), 2),
-      "session_bytes": max(0, self._bytes_sent - self._session_started_bytes),
-      "session_mb": round(max(0, self._bytes_sent - self._session_started_bytes) / (1024 * 1024), 2),
-      "estimated_kbps": int(((self._bytes_sent - self._session_started_bytes) * 8 / 1000) / elapsed) if running else 0,
+      "session_bytes": session_bytes,
+      "session_mb": round(session_bytes / (1024 * 1024), 2),
+      "estimated_kbps": int((session_bytes * 8 / 1000) / elapsed) if running else 0,
       "restart_count": self._restart_count,
       "consecutive_failures": self._consecutive_failures,
       "next_retry_at": self._next_retry_at,
