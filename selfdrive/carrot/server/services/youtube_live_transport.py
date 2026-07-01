@@ -165,6 +165,10 @@ class LibrtmpClient:
         raise
 
   def write(self, data: bytes | bytearray | memoryview) -> int:
+    # Returns bytes CONSUMED by librtmp (may be < len). librtmp's RTMP_Write
+    # parses FLV tags and reads look-ahead beyond the current tag; feeding it a
+    # small single-tag buffer makes it read out of bounds and segfault, so the
+    # caller must batch and carry the unconsumed remainder forward.
     payload = bytes(data)
     if not payload:
       return 0
@@ -172,15 +176,12 @@ class LibrtmpClient:
       handle = self._handle
       if handle is None or not self._library.RTMP_IsConnected(handle):
         raise LibrtmpError("YouTube RTMPS connection is closed")
-      offset = 0
-      while offset < len(payload):
-        buffer = ctypes.create_string_buffer(payload[offset:])
-        written = int(self._library.RTMP_Write(handle, buffer, len(payload) - offset))
-        if written <= 0:
-          raise LibrtmpError("YouTube RTMPS write failed")
-        offset += written
-      self._bytes_written += offset
-      return offset
+      buffer = ctypes.create_string_buffer(payload)
+      written = int(self._library.RTMP_Write(handle, buffer, len(payload)))
+      if written < 0:
+        raise LibrtmpError("YouTube RTMPS write failed")
+      self._bytes_written += written
+      return written
 
   def is_connected(self) -> bool:
     with self._lock:
@@ -262,10 +263,17 @@ class LibrtmpClient:
 
 
 class RtmpSink(io.RawIOBase):
+  # Buffer muxer output and hand librtmp large, multi-tag chunks. Feeding
+  # librtmp one small FLV tag at a time makes RTMP_Write read past the buffer
+  # (look-ahead) and segfault. We keep whatever librtmp does not consume and
+  # prepend it to the next batch so it always has trailing context.
+  FLUSH_THRESHOLD = 16384
+
   def __init__(self, client: LibrtmpClient) -> None:
     super().__init__()
     self._client = client
     self._position = 0
+    self._pending = bytearray()
 
   def writable(self) -> bool:
     return True
@@ -274,12 +282,27 @@ class RtmpSink(io.RawIOBase):
     return False
 
   def write(self, data: bytes | bytearray | memoryview) -> int:
-    written = self._client.write(data)
-    self._position += written
-    return written
+    chunk = bytes(data)
+    self._pending.extend(chunk)
+    self._position += len(chunk)
+    if len(self._pending) >= self.FLUSH_THRESHOLD:
+      self._drain(self.FLUSH_THRESHOLD)
+    return len(chunk)
+
+  def _drain(self, floor: int) -> None:
+    # Keep at least `floor` bytes buffered so librtmp always has look-ahead.
+    while len(self._pending) >= floor:
+      written = self._client.write(bytes(self._pending))
+      if written <= 0:
+        break
+      del self._pending[:written]
 
   def tell(self) -> int:
     return self._position
 
   def flush(self) -> None:
-    return None
+    while self._pending:
+      written = self._client.write(bytes(self._pending))
+      if written <= 0:
+        break
+      del self._pending[:written]
