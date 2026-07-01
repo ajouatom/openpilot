@@ -137,10 +137,7 @@
       const menuActions = helpCard.querySelector('[data-role="action-menu"]');
       if (menuActions) {
         menuActions.appendChild(makeButton(text("youtube_live_open_studio", "Open Studio"), openLiveControlRoom));
-        menuActions.appendChild(makeButton(text("youtube_live_test", "Test"), testConfig));
-        menuActions.appendChild(makeButton(text("youtube_live_diagnostics", "Diagnostics"), showDiagnostics));
-        menuActions.appendChild(makeButton(text("youtube_live_download_logs", "Download logs"), downloadDiagnostics));
-        menuActions.appendChild(makeButton(text("youtube_live_stop", "Stop"), stopStream));
+        menuActions.appendChild(makeButton(text("youtube_live_check", "Check"), runCheck));
       }
 
       const statusCard = document.createElement("div");
@@ -350,6 +347,7 @@
       "format looks valid": text("youtube_live_validation_format_ok", "Format looks valid."),
       "YouTube RTMPS ingest is reachable": text("youtube_live_validation_rtmps_ok", "YouTube RTMPS ingest is reachable."),
       "missing stream key or ffmpeg": text("youtube_live_test_missing", "Missing stream key or FFmpeg."),
+      "ready": text("youtube_live_check_ready", "Ready"),
     };
     return map[raw] || raw;
   }
@@ -373,26 +371,51 @@
     }
   }
 
-  async function stopStream() {
+  async function fetchTestResult() {
     try {
-      const status = await postJson("/api/youtube_live/stop", {});
-      state.status = status;
-      renderStatus(status);
-      toast(text("youtube_live_stopped", "Stream stopped"));
+      const result = await postJson("/api/youtube_live/test", {});
+      return { ok: Boolean(result?.ok), payload: result };
     } catch (err) {
-      toast(err?.message || String(err), { tone: "error" });
+      const payload = err?.payload || null;
+      return {
+        ok: false,
+        payload,
+        error: payload?.message ? localizedValidationMessage(payload.message) : (err?.message || text("youtube_live_test_failed", "Test failed")),
+      };
     }
   }
 
-  async function testConfig() {
+  async function fetchDiagnosticsResult() {
     try {
-      const result = await postJson("/api/youtube_live/test", {});
-      toast(result.ok ? text("youtube_live_test_ready", "Ready") : localizedValidationMessage(result.message));
+      const payload = await getJson("/api/youtube_live/diagnostics");
+      return { ok: true, payload };
     } catch (err) {
-      const payload = err?.payload || null;
-      const reason = payload?.message ? localizedValidationMessage(payload.message) : (err?.message || text("youtube_live_test_failed", "Test failed"));
-      toast(reason, { tone: "error" });
+      return { ok: false, error: err?.message || String(err) };
     }
+  }
+
+  function checkText(testResult, diagnosticsResult) {
+    const pass = text("youtube_live_validation_pass", "OK");
+    const fail = text("youtube_live_validation_fail", "FAIL");
+    const test = testResult?.payload || {};
+    const lines = [
+      `${text("youtube_live_test", "Test")}: ${testResult?.ok ? pass : fail} - ${localizedValidationMessage(test.message || testResult?.error)}`,
+      `${text("youtube_live_key", "Stream key")}: ${test.configured ? pass : fail}`,
+      `${text("youtube_live_validation_ffmpeg", "FFmpeg")}: ${test.ffmpeg_available ? pass : fail}`,
+      `${text("youtube_live_metric_source", "Source")}: ${test.source || "-"}`,
+    ];
+    if (Array.isArray(test.warnings) && test.warnings.length) {
+      lines.push("");
+      lines.push(text("youtube_live_warnings", "Warnings"));
+      test.warnings.forEach((warning) => lines.push(`- ${warning}`));
+    }
+    lines.push("");
+    if (diagnosticsResult?.ok) {
+      lines.push(diagnosticText(diagnosticsResult.payload));
+    } else {
+      lines.push(`${text("youtube_live_diagnostics", "Diagnostics")}: ${fail} - ${diagnosticsResult?.error || "-"}`);
+    }
+    return lines.join("\n");
   }
 
   function diagnosticText(payload) {
@@ -425,21 +448,23 @@
     return lines.join("\n");
   }
 
-  async function showDiagnostics() {
-    try {
-      const payload = await getJson("/api/youtube_live/diagnostics");
-      const raw = JSON.stringify(payload.diagnostics || payload, null, 2);
-      await appAlert(diagnosticText(payload), {
-        title: text("youtube_live_diagnostics", "Diagnostics"),
-        copyText: raw,
-      });
-    } catch (err) {
-      toast(err?.message || String(err), { tone: "error" });
+  async function runCheck() {
+    const [testResult, diagnosticsResult] = await Promise.all([
+      fetchTestResult(),
+      fetchDiagnosticsResult(),
+    ]);
+    const status = diagnosticsResult?.payload?.diagnostics?.status;
+    if (status) {
+      state.status = status;
+      renderStatus(status);
     }
-  }
-
-  function downloadDiagnostics() {
-    window.open("/api/youtube_live/diagnostics/download", "_blank", "noopener");
+    await appAlert(checkText(testResult, diagnosticsResult), {
+      title: text("youtube_live_check_result", "Check result"),
+      copyText: JSON.stringify({
+        test: testResult.payload || { ok: false, error: testResult.error },
+        diagnostics: diagnosticsResult.payload?.diagnostics || { ok: false, error: diagnosticsResult.error },
+      }, null, 2),
+    });
   }
 
   function startPolling() {

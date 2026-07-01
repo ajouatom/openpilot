@@ -161,11 +161,6 @@ class YouTubeLiveService:
     self._task = None
     self._write_status(force=True)
 
-  async def stop_stream(self) -> dict[str, Any]:
-    await self._stop_process()
-    self._set_state("disabled")
-    return self.status()
-
   def status(self) -> dict[str, Any]:
     stream_key = self.get_stream_key()
     pid = self._process.pid if self._process and self._process.returncode is None else None

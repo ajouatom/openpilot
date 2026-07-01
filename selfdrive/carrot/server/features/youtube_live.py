@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import asyncio
 
 from aiohttp import web
@@ -50,11 +49,6 @@ async def api_clear_stream_key(request: web.Request) -> web.Response:
   return web.json_response({"ok": True, **_service(request).clear_stream_key()})
 
 
-async def api_stop(request: web.Request) -> web.Response:
-  status = await _service(request).stop_stream()
-  return web.json_response({"ok": True, **status})
-
-
 async def api_test(request: web.Request) -> web.Response:
   result = _service(request).test_config()
   return web.json_response(result, status=200 if result.get("ok") else 409)
@@ -76,25 +70,11 @@ async def api_diagnostics(request: web.Request) -> web.Response:
   return web.json_response({"ok": True, "diagnostics": _service(request).diagnostics()})
 
 
-async def api_download_diagnostics(request: web.Request) -> web.Response:
-  body = json.dumps(_service(request).diagnostics(), ensure_ascii=False, indent=2, sort_keys=True)
-  return web.Response(
-    text=body,
-    content_type="application/json",
-    headers={
-      "Cache-Control": "no-store",
-      "Content-Disposition": "attachment; filename=carrot-youtube-live-diagnostics.json",
-    },
-  )
-
-
 def register(app: web.Application) -> None:
   app.cleanup_ctx.append(youtube_live_context)
   app.router.add_get("/api/youtube_live/status", api_status)
   app.router.add_get("/api/youtube_live/diagnostics", api_diagnostics)
-  app.router.add_get("/api/youtube_live/diagnostics/download", api_download_diagnostics)
   app.router.add_post("/api/youtube_live/stream_key", api_set_stream_key)
   app.router.add_post("/api/youtube_live/stream_key/validate", api_validate_stream_key)
   app.router.add_delete("/api/youtube_live/stream_key", api_clear_stream_key)
-  app.router.add_post("/api/youtube_live/stop", api_stop)
   app.router.add_post("/api/youtube_live/test", api_test)
