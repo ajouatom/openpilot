@@ -95,11 +95,13 @@
   <link rel="stylesheet" href="/css/base.css?v=2605-10" />
   <link rel="stylesheet" href="/css/layout.css?v=2605-08" />
   <link rel="stylesheet" href="/css/components.css?v=2606-06" />
+  <link rel="stylesheet" href="/css/components/nav_status_badges.css?v=2607-04" />
   <link rel="stylesheet" href="/css/pages/logs.css?v=2606-02" />
   <link rel="stylesheet" href="/css/pages/terminal.css?v=2606-01" />
   <link rel="stylesheet" href="/css/pages/settings/base.css?v=2606-21" />
   <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2606-12" />
   <link rel="stylesheet" href="/css/pages/settings/device.css?v=2606-42" />
+  <link rel="stylesheet" href="/css/pages/settings/youtube_live.css?v=2607-18" />
   <link rel="stylesheet" href="/css/pages/tools/base.css?v=2605-43" />
   <link rel="stylesheet" href="/css/pages/tools/qr.css?v=2605-40" />
   <link rel="stylesheet" href="/css/pages/tools/main.css?v=2605-53" />
@@ -620,6 +622,10 @@
   <!-- Bottom Navigation (Material 3 style) -->
   <nav class="topbar">
     <button id="btnHome" class="nav-btn active">
+      <span id="navHomeStatusBadges" class="nav-status-badges" aria-hidden="true">
+        <span id="navRecordStatusBadge" class="nav-status-badge nav-status-badge--record" hidden>REC</span>
+        <span id="navYouTubeStatusBadge" class="nav-status-badge nav-status-badge--live" hidden>LIVE</span>
+      </span>
       <span class="nav-icon">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
       </span>
@@ -711,9 +717,9 @@
   <script src="/js/vendor/qrcode-generator.js?v=1.4.4"></script>
   <script src="/js/vendor/jsQR.js?v=1.4.0"></script>
   <script src="/js/translations/registry.js?v=2605-09"></script>
-  <script src="/js/translations/ko.js?v=2606-11"></script>
-  <script src="/js/translations/en.js?v=2606-11"></script>
-  <script src="/js/translations/zh.js?v=2606-11"></script>
+  <script src="/js/translations/ko.js?v=2607-24"></script>
+  <script src="/js/translations/en.js?v=2607-24"></script>
+  <script src="/js/translations/zh.js?v=2607-24"></script>
   <script src="/js/realtime/hud_card.js?v=2604-05"></script>
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2604-72"></script>
@@ -727,8 +733,10 @@
   <script src="/js/shared/ui/viewport.js?v=2604-71"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
   <script src="/js/shared/ui/navigation.js?v=2606-19"></script>
-  <script src="/js/pages/car.js?v=2604-75"></script>
-  <script src="/js/pages/setting.js?v=2606-39"></script>
+  <script src="/js/pages/car.js?v=2607-01"></script>
+  <script src="/js/pages/setting_youtube_live.js?v=2607-26"></script>
+  <script src="/js/shared/ui/nav_status_badges.js?v=2607-01"></script>
+  <script src="/js/pages/setting.js?v=2607-13"></script>
   <script src="/js/pages/setting_device_config.js?v=2605-05"></script>
   <script src="/js/pages/setting_device_render.js?v=2605-04"></script>
   <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
