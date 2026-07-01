@@ -5,7 +5,6 @@ from fractions import Fraction
 from typing import Any, BinaryIO
 
 
-FLV_FORMAT = "flv"
 H264_CODEC = "h264"
 AAC_CODEC = "aac"
 AUDIO_RATE = 44_100
@@ -80,12 +79,11 @@ def pyav_capabilities() -> dict[str, Any]:
       "aac": False,
       "error": str(exc),
     }
-  formats = getattr(av, "formats_available", set())
   codecs = getattr(av, "codecs_available", set())
   return {
     "available": True,
     "version": str(getattr(av, "__version__", "")),
-    "flv": FLV_FORMAT in formats,
+    "flv": True,
     "h264": H264_CODEC in codecs,
     "aac": AAC_CODEC in codecs,
     "error": "",
@@ -108,29 +106,26 @@ class H264FlvMuxer:
     import av
 
     self._av = av
+    self._output = output
     self._fps = max(1, int(fps))
     self._video_time_base = Fraction(1, self._fps)
     self._audio_time_base = Fraction(1, AUDIO_RATE)
-    self._container = av.open(
-      output,
-      mode="w",
-      format=FLV_FORMAT,
-      options={"flvflags": "no_duration_filesize", "flush_packets": "1"},
-    )
-    self._video_stream = self._container.add_stream(H264_CODEC, rate=self._fps)
-    self._video_stream.width = max(1, int(width))
-    self._video_stream.height = max(1, int(height))
-    self._video_stream.time_base = self._video_time_base
-    self._video_stream.codec_context.extradata = _avc_decoder_configuration(codec_header)
-
-    self._audio_stream = self._container.add_stream(AAC_CODEC, rate=AUDIO_RATE)
-    self._audio_stream.bit_rate = AUDIO_BITRATE
-    self._audio_stream.layout = "stereo"
-    self._container.start_encoding()
+    self._video_config = _avc_decoder_configuration(codec_header)
+    self._audio_codec = av.CodecContext.create(AAC_CODEC, "w")
+    self._audio_codec.sample_rate = AUDIO_RATE
+    self._audio_codec.layout = "stereo"
+    self._audio_codec.format = "fltp"
+    self._audio_codec.bit_rate = AUDIO_BITRATE
+    self._audio_codec.time_base = self._audio_time_base
+    self._audio_codec.open()
     self._packet_index = 0
     self._audio_pts = 0
     self._closed = False
     self._lock = threading.RLock()
+    self._output.write(b"FLV\x01\x05\x00\x00\x00\x09\x00\x00\x00\x00")
+    self._write_tag(9, 0, b"\x17\x00\x00\x00\x00" + self._video_config)
+    audio_config = bytes(self._audio_codec.extradata or b"\x12\x10")
+    self._write_tag(8, 0, b"\xAF\x00" + audio_config)
 
   def mux(self, payload: bytes, *, keyframe: bool = False) -> None:
     with self._lock:
@@ -142,18 +137,9 @@ class H264FlvMuxer:
       target_audio_pts = int(self._packet_index * AUDIO_RATE / self._fps)
       self._mux_silence_until(target_audio_pts)
 
-      packet = self._av.Packet(_annexb_to_avcc(payload))
-      packet.stream = self._video_stream
-      packet.pts = self._packet_index
-      packet.dts = self._packet_index
-      packet.duration = 1
-      packet.time_base = self._video_time_base
-      if keyframe:
-        try:
-          packet.is_keyframe = True
-        except Exception:
-          pass
-      self._container.mux(packet)
+      timestamp_ms = int(self._packet_index * 1000 / self._fps)
+      frame_header = b"\x17" if keyframe else b"\x27"
+      self._write_tag(9, timestamp_ms, frame_header + b"\x01\x00\x00\x00" + _annexb_to_avcc(payload))
       self._packet_index += 1
 
   def close(self) -> None:
@@ -164,10 +150,10 @@ class H264FlvMuxer:
       try:
         target_audio_pts = int(self._packet_index * AUDIO_RATE / self._fps)
         self._mux_silence_until(target_audio_pts)
-        for packet in self._audio_stream.encode(None):
-          self._container.mux(packet)
+        for packet in self._audio_codec.encode(None):
+          self._write_audio_packet(packet)
       finally:
-        self._container.close()
+        self._output.flush()
 
   def _mux_silence_until(self, target_pts: int) -> None:
     while self._audio_pts <= target_pts:
@@ -177,6 +163,23 @@ class H264FlvMuxer:
       frame.time_base = self._audio_time_base
       for plane in frame.planes:
         plane.update(bytes(plane.buffer_size))
-      for packet in self._audio_stream.encode(frame):
-        self._container.mux(packet)
+      for packet in self._audio_codec.encode(frame):
+        self._write_audio_packet(packet)
       self._audio_pts += AUDIO_SAMPLES
+
+  def _write_audio_packet(self, packet: Any) -> None:
+    packet_pts = packet.pts if packet.pts is not None else self._audio_pts
+    time_base = packet.time_base or self._audio_time_base
+    timestamp_ms = max(0, int(packet_pts * time_base * 1000))
+    self._write_tag(8, timestamp_ms, b"\xAF\x01" + bytes(packet))
+
+  def _write_tag(self, tag_type: int, timestamp_ms: int, payload: bytes) -> None:
+    timestamp = max(0, int(timestamp_ms)) & 0xFFFFFFFF
+    header = (
+      bytes((tag_type,))
+      + len(payload).to_bytes(3, "big")
+      + (timestamp & 0xFFFFFF).to_bytes(3, "big")
+      + bytes(((timestamp >> 24) & 0xFF,))
+      + b"\x00\x00\x00"
+    )
+    self._output.write(header + payload + (len(payload) + 11).to_bytes(4, "big"))
