@@ -27,6 +27,7 @@ START_BACKOFF_SECONDS = 5.0
 STATUS_WRITE_MIN_INTERVAL = 1.0
 BACKOFF_BASE_SECONDS = 3.0
 BACKOFF_MAX_SECONDS = 60.0
+PROCESS_STABLE_SECONDS = 10.0
 
 _PROCESS_MATCHES = {
   "carrot_cluster": "selfdrive.carrot.cluster_autorun",
@@ -306,6 +307,10 @@ class YouTubeLiveService:
     if not self._param_enabled():
       if self._process is not None:
         await self._stop_process()
+      self._last_error = ""
+      self._stderr_tail.clear()
+      self._consecutive_failures = 0
+      self._next_retry_at = 0.0
       self._set_state("disabled")
       return
 
@@ -328,6 +333,15 @@ class YouTubeLiveService:
       return
 
     if self._next_retry_at and _now() < self._next_retry_at:
+      self._set_state("backoff")
+      return
+
+    if self._process is not None and self._process.returncode is not None:
+      exit_code = self._process.returncode
+      if not self._last_error:
+        self._last_error = f"ffmpeg exited code={exit_code}"
+      await self._stop_process()
+      self._schedule_backoff("ffmpeg exited")
       self._set_state("backoff")
       return
 
@@ -480,7 +494,7 @@ class YouTubeLiveService:
       "nobuffer",
       "-f",
       "h264",
-      "-framerate",
+      "-r",
       "20",
       "-i",
       "pipe:0",
@@ -488,12 +502,17 @@ class YouTubeLiveService:
       "lavfi",
       "-i",
       "anullsrc=r=44100:cl=stereo",
+      "-map",
+      "0:v:0",
+      "-map",
+      "1:a:0",
       "-c:v",
       "copy",
       "-c:a",
       "aac",
       "-b:a",
       "128k",
+      "-shortest",
       "-f",
       "flv",
       rtmp_url,
@@ -521,7 +540,8 @@ class YouTubeLiveService:
       proc.stdin.write(payload)
       await proc.stdin.drain()
       self._bytes_sent += len(payload)
-      self._consecutive_failures = 0
+      if self._started_at and _now() - self._started_at >= PROCESS_STABLE_SECONDS:
+        self._consecutive_failures = 0
     except (BrokenPipeError, ConnectionResetError) as exc:
       self._last_error = f"ffmpeg pipe closed: {exc}"
       self._schedule_backoff("ffmpeg pipe closed")

@@ -255,7 +255,7 @@
     const error = String(status?.last_error || "").trim();
     if (errorEl) {
       errorEl.hidden = !error;
-      errorEl.textContent = error;
+      errorEl.textContent = localizedRuntimeMessage(error);
     }
     renderWarnings(warningsEl, status);
   }
@@ -289,7 +289,7 @@
     warnings.slice(0, 3).forEach((warning) => {
       const item = document.createElement("div");
       item.className = "youtube-live-warning";
-      item.textContent = warning;
+      item.textContent = localizedRuntimeMessage(warning);
       container.appendChild(item);
     });
   }
@@ -437,6 +437,30 @@
     return map[raw] || raw;
   }
 
+  function localizedRuntimeMessage(message) {
+    const raw = String(message || "").trim();
+    if (!raw) return "-";
+    const exact = {
+      "Cluster HUD is enabled; monitor encoder load and thermal headroom while streaming.": text("youtube_live_warning_cluster", "Cluster HUD is enabled. Monitor encoder load and temperature while streaming."),
+      "Carrot Vision is enabled; YouTube Live shares camera/encoder/network resources.": text("youtube_live_warning_vision", "Carrot Vision is enabled. Camera, encoder, and network resources are shared."),
+      "High quality mode is planned for Phase 3; Phase 2 keeps qRoadEncodeData only.": text("youtube_live_warning_quality", "High quality mode is not available yet."),
+      "Error opening input files: Invalid argument": text("youtube_live_error_input_invalid", "Could not open the video input because an FFmpeg argument was invalid."),
+      "ffmpeg not found": text("youtube_live_error_ffmpeg_missing", "FFmpeg is not installed."),
+      "no qRoadEncodeData frames": text("youtube_live_error_no_frames", "No qRoadEncodeData frames were received."),
+    };
+    if (exact[raw]) return exact[raw];
+    const exitMatch = raw.match(/^ffmpeg exited code=(-?\d+)$/i);
+    if (exitMatch) return text("youtube_live_error_ffmpeg_exit", "FFmpeg exited (code {code}).", { code: exitMatch[1] });
+    if (/^ffmpeg pipe closed:/i.test(raw)) {
+      return text("youtube_live_error_ffmpeg_pipe", "The FFmpeg input pipe was closed.");
+    }
+    return raw;
+  }
+
+  function uniqueLocalizedMessages(values) {
+    return [...new Set((values || []).filter(Boolean).map(localizedRuntimeMessage))];
+  }
+
   function openLiveControlRoom() {
     window.open(LIVE_CONTROL_ROOM_URL, "_blank", "noopener");
   }
@@ -485,52 +509,49 @@
     const pass = text("youtube_live_validation_pass", "OK");
     const fail = text("youtube_live_validation_fail", "FAIL");
     const test = testResult?.payload || {};
+    const diag = diagnosticsResult?.payload?.diagnostics || diagnosticsResult?.payload || {};
+    const status = diag.status || {};
+    const resources = status.resource_status || test.resource_status || {};
+    const cluster = resources.cluster || {};
+    const vision = resources.carrot_vision || {};
+    const enabled = text("youtube_live_resource_enabled", "Enabled");
+    const disabled = text("youtube_live_resource_disabled", "Disabled");
     const lines = [
-      `${text("youtube_live_test", "Test")}: ${testResult?.ok ? pass : fail} - ${localizedValidationMessage(test.message || testResult?.error)}`,
+      `[${text("youtube_live_check_ready_section", "Readiness")}]`,
       `${text("youtube_live_key", "Stream key")}: ${test.configured ? pass : fail}`,
       `${text("youtube_live_validation_ffmpeg", "FFmpeg")}: ${test.ffmpeg_available ? pass : fail}`,
       `${text("youtube_live_metric_source", "Source")}: ${test.source || "-"}`,
-    ];
-    if (Array.isArray(test.warnings) && test.warnings.length) {
-      lines.push("");
-      lines.push(text("youtube_live_warnings", "Warnings"));
-      test.warnings.forEach((warning) => lines.push(`- ${warning}`));
-    }
-    lines.push("");
-    if (diagnosticsResult?.ok) {
-      lines.push(diagnosticText(diagnosticsResult.payload));
-    } else {
-      lines.push(`${text("youtube_live_diagnostics", "Diagnostics")}: ${fail} - ${diagnosticsResult?.error || "-"}`);
-    }
-    return lines.join("\n");
-  }
-
-  function diagnosticText(payload) {
-    const diag = payload?.diagnostics || payload || {};
-    const status = diag.status || {};
-    const resources = status.resource_status || {};
-    const cluster = resources.cluster || {};
-    const vision = resources.carrot_vision || {};
-    const lines = [
+      "",
+      `[${text("youtube_live_check_stream_section", "Stream status")}]`,
       `${text("youtube_live_state_label", "State")}: ${stateLabel(status)}`,
-      `${text("youtube_live_metric_source", "Source")}: ${status.source || "-"}`,
       `${text("youtube_live_metric_bitrate", "Bitrate")}: ${status.estimated_kbps || 0} kbps`,
       `${text("youtube_live_metric_session", "Session")}: ${status.session_mb || 0} MB`,
       `${text("youtube_live_metric_total", "Total")}: ${status.total_mb || 0} MB`,
-      `ClusterHud: ${cluster.enabled ? "on" : "off"} (${cluster.param ?? "-"})`,
-      `CarrotVision: ${vision.enabled ? "on" : "off"} (DisableDM=${vision.disable_dm ?? "-"})`,
+      "",
+      `[${text("youtube_live_check_resource_section", "Resources")}]`,
+      `${text("youtube_live_resource_cluster", "Cluster HUD")}: ${cluster.enabled ? enabled : disabled}`,
+      `${text("youtube_live_resource_vision", "Carrot Vision")}: ${vision.enabled ? enabled : disabled}`,
     ];
-    const warnings = Array.isArray(status.warnings) ? status.warnings : [];
+    const warnings = uniqueLocalizedMessages([
+      ...(Array.isArray(test.warnings) ? test.warnings : []),
+      ...(Array.isArray(status.warnings) ? status.warnings : []),
+    ]);
     if (warnings.length) {
       lines.push("");
-      lines.push(text("youtube_live_warnings", "Warnings"));
+      lines.push(`[${text("youtube_live_warnings", "Warnings")}]`);
       warnings.forEach((warning) => lines.push(`- ${warning}`));
     }
     const stderr = diag.ffmpeg?.stderr_tail || status.stderr_tail || [];
-    if (stderr.length) {
+    const errors = uniqueLocalizedMessages([
+      status.last_error,
+      ...(Array.isArray(stderr) ? stderr.slice(-8) : []),
+      diagnosticsResult?.ok ? "" : diagnosticsResult?.error,
+      testResult?.ok || test.message === "ready" ? "" : (testResult?.error || test.message),
+    ]);
+    if (errors.length) {
       lines.push("");
-      lines.push("ffmpeg stderr");
-      stderr.slice(-8).forEach((line) => lines.push(`- ${line}`));
+      lines.push(`[${text("youtube_live_check_error_section", "Errors and FFmpeg logs")}]`);
+      errors.forEach((error) => lines.push(`- ${localizedValidationMessage(error)}`));
     }
     return lines.join("\n");
   }
