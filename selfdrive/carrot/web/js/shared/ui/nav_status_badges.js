@@ -15,6 +15,9 @@
   let pollTimer = null;
 
   function syncBadges() {
+    if (homeButton.classList.contains("youtube-live") !== youtubeLive) {
+      homeButton.classList.toggle("youtube-live", youtubeLive);
+    }
     const recording = homeButton.classList.contains("recording")
       && homeButton.dataset.recordBadge === "REC";
     recordBadge.hidden = !recording;

@@ -638,7 +638,7 @@ class YouTubeLiveService:
       await self._stop_stream()
       return False
     try:
-      await asyncio.to_thread(muxer.mux, payload, keyframe=keyframe, timestamp_ms=self._frame_pts_ms())
+      await asyncio.to_thread(muxer.mux, payload, keyframe=keyframe)
       self._bytes_sent = self._session_started_bytes + transport.bytes_written
       if self._started_mono and _mono() - self._started_mono >= STREAM_STABLE_SECONDS:
         self._consecutive_failures = 0

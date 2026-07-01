@@ -15,6 +15,19 @@
   display: flex;
 }
 
+.topbar #btnHome.youtube-live,
+.topbar #btnHome.youtube-live.active {
+  color: #ff8f84;
+}
+
+.topbar #btnHome.youtube-live.active {
+  background: color-mix(in srgb, #ff6b6b 18%, transparent);
+}
+
+.topbar #btnHome.youtube-live.active > span:last-child::after {
+  background: currentColor;
+}
+
 .topbar #btnHome .nav-status-badge {
   min-width: 24px;
   padding: 2px 4px;
