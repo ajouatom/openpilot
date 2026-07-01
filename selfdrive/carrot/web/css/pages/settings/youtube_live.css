@@ -1,7 +1,7 @@
 .youtube-live-section {
   display: grid;
   gap: var(--sp-md);
-  margin-top: var(--sp-lg);
+  margin: 0;
 }
 
 .youtube-live-key-card,

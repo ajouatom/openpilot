@@ -91,18 +91,21 @@
 
   function placeYoutubeSections(box, keySection, infoSection) {
     const target = box.querySelector(`[data-setting-section-id="${YOUTUBE_SECTION}"]`);
-    if (!target) {
-      if (box.firstChild !== keySection) box.insertBefore(keySection, box.firstChild);
-      if (box.lastChild !== infoSection) box.appendChild(infoSection);
-      return;
+    if (!target) return false;
+    const settingsCard = Array.from(target.children).find((child) => child.classList.contains("setting-group-card"));
+    if (keySection.parentElement !== target || keySection.nextSibling !== settingsCard) {
+      target.insertBefore(keySection, settingsCard || null);
     }
-    if (keySection.nextSibling !== target) box.insertBefore(keySection, target);
-    if (target.nextSibling !== infoSection) box.insertBefore(infoSection, target.nextSibling);
+    if (infoSection.parentElement !== target || target.lastElementChild !== infoSection) {
+      target.appendChild(infoSection);
+    }
+    return true;
   }
 
   function ensureCard() {
     const box = itemsBox();
     if (!box) return null;
+    if (!box.querySelector(`[data-setting-section-id="${YOUTUBE_SECTION}"]`)) return null;
     const existing = document.getElementById(CARD_ID);
     const existingKey = document.getElementById(KEY_SECTION_ID);
     if (existing && existingKey) {
@@ -114,7 +117,7 @@
     if (!keySection) {
       keySection = document.createElement("section");
       keySection.id = KEY_SECTION_ID;
-      keySection.className = "setting-section-block youtube-live-section youtube-live-section--key";
+      keySection.className = "youtube-live-section youtube-live-section--key";
     const keyCard = document.createElement("div");
     keyCard.className = "setting-group-card youtube-live-key-card";
     keyCard.innerHTML = `
@@ -142,7 +145,7 @@
     const section = existing || document.createElement("section");
     if (!existing) {
       section.id = CARD_ID;
-      section.className = "setting-section-block youtube-live-section youtube-live-section--info";
+      section.className = "youtube-live-section youtube-live-section--info";
 
       const helpCard = document.createElement("div");
       helpCard.className = "setting-group-card youtube-live-help-card";
