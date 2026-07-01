@@ -90,4 +90,11 @@ public:
 
     return ret;
   }
+
+  static void config_cpu_rendering(bool offscreen) {
+    if (offscreen) {
+      setenv("QT_QPA_PLATFORM", "eglfs", 1);
+    }
+    setenv("LP_NUM_THREADS", "0", 1);
+  }
 };
