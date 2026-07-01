@@ -136,16 +136,21 @@ class YouTubeLiveService:
     self._params: Any | None = None
     self._last_status_write = 0.0
     self._started_at = 0.0
+    self._started_mono = 0.0
     self._last_frame_at = 0.0
+    self._last_frame_mono = 0.0
     self._last_frame_id: int | None = None
     self._frame_width = 526
     self._frame_height = 330
     self._frame_fps = 20
+    self._frame_ts_ns = 0
+    self._stream_t0_ns = 0
+    self._last_pts_ms = 0
     self._bytes_sent = 0
     self._session_started_bytes = 0
     self._restart_count = 0
     self._consecutive_failures = 0
-    self._next_retry_at = 0.0
+    self._next_retry_mono = 0.0
     self._last_error = ""
     self._state = "disabled"
     self._events: deque[dict[str, Any]] = deque(maxlen=EVENT_LOG_MAX)
@@ -182,10 +187,12 @@ class YouTubeLiveService:
     stream_key = self.get_stream_key()
     running = self._transport_connected
     now = _now()
-    uptime = int(now - self._started_at) if self._started_at and running else 0
-    elapsed = max(1.0, now - self._started_at) if self._started_at and running else 1.0
+    mono = _mono()
+    uptime = int(mono - self._started_mono) if self._started_mono and running else 0
+    elapsed = max(1.0, mono - self._started_mono) if self._started_mono and running else 1.0
     session_bytes = max(0, self._bytes_sent - self._session_started_bytes) if running else 0
-    last_frame_age_ms = int((now - self._last_frame_at) * 1000) if self._last_frame_at else None
+    last_frame_age_ms = int((mono - self._last_frame_mono) * 1000) if self._last_frame_mono else None
+    retry_in_sec = max(0, int(self._next_retry_mono - mono)) if self._next_retry_mono else 0
     resource_status = self._resource_status()
     warnings = self._warnings(resource_status)
     return {
@@ -217,8 +224,8 @@ class YouTubeLiveService:
       "estimated_kbps": int((session_bytes * 8 / 1000) / elapsed) if running else 0,
       "restart_count": self._restart_count,
       "consecutive_failures": self._consecutive_failures,
-      "next_retry_at": self._next_retry_at,
-      "retry_in_sec": max(0, int(self._next_retry_at - now)) if self._next_retry_at else 0,
+      "next_retry_at": (now + retry_in_sec) if retry_in_sec else 0.0,
+      "retry_in_sec": retry_in_sec,
       "last_error": self._last_error,
       "last_frame_at": self._last_frame_at,
       "last_frame_age_ms": last_frame_age_ms,
@@ -359,7 +366,7 @@ class YouTubeLiveService:
         await self._stop_stream()
       self._last_error = ""
       self._consecutive_failures = 0
-      self._next_retry_at = 0.0
+      self._next_retry_mono = 0.0
       self._set_state("disabled")
       return
 
@@ -392,7 +399,7 @@ class YouTubeLiveService:
       self._set_state("error")
       return
 
-    if self._next_retry_at and _now() < self._next_retry_at:
+    if self._next_retry_mono and _mono() < self._next_retry_mono:
       self._set_state("backoff")
       return
 
@@ -406,7 +413,7 @@ class YouTubeLiveService:
 
     header, data, frame_id, keyframe, width, height = self._recv_frame()
     if not data:
-      if self._transport is not None and self._last_frame_at and _now() - self._last_frame_at > NO_FRAME_STOP_SECONDS:
+      if self._transport is not None and self._last_frame_mono and _mono() - self._last_frame_mono > NO_FRAME_STOP_SECONDS:
         self._last_error = "no qRoadEncodeData frames"
         await self._stop_stream()
         self._schedule_backoff("frame timeout")
@@ -414,6 +421,7 @@ class YouTubeLiveService:
       return
 
     self._last_frame_at = _now()
+    self._last_frame_mono = _mono()
     self._last_frame_id = frame_id
     self._frame_width = width
     self._frame_height = height
@@ -443,12 +451,12 @@ class YouTubeLiveService:
     self._write_status()
 
   def _write_status(self, *, force: bool = False) -> None:
-    now = _now()
-    if not force and now - self._last_status_write < STATUS_WRITE_MIN_INTERVAL:
+    mono = _mono()
+    if not force and mono - self._last_status_write < STATUS_WRITE_MIN_INTERVAL:
       return
-    self._last_status_write = now
+    self._last_status_write = mono
     try:
-      _write_json_atomic(self.state_path, {"updated_at": now, **self.status()})
+      _write_json_atomic(self.state_path, {"updated_at": _now(), **self.status()})
     except Exception:
       pass
 
@@ -559,10 +567,31 @@ class YouTubeLiveService:
       width = int(getattr(frame, "width", 0) or 526)
       height = int(getattr(frame, "height", 0) or 330)
       keyframe = bool(header) or bool(flags & 0x8)
+      try:
+        # boottime ns from the encoder; monotonic and immune to wall-clock jumps
+        self._frame_ts_ns = int(getattr(frame, "timestampEof", 0) or getattr(frame, "timestampSof", 0) or 0)
+      except Exception:
+        self._frame_ts_ns = 0
       return header, data, frame_id, keyframe, width, height
     except Exception as exc:
       self._last_error = f"{PHASE1_SOURCE_SERVICE} recv failed: {exc}"
       return b"", b"", None, False, 526, 330
+
+  def _frame_pts_ms(self) -> int | None:
+    # Real presentation time (ms) from the encoder frame timestamp, relative to
+    # the first frame of this session. Keeps the stream aligned to wall time even
+    # when frames are dropped; returns None if no timestamp so the muxer falls
+    # back to frame-index timing.
+    ts_ns = self._frame_ts_ns
+    if ts_ns <= 0:
+      return None
+    if self._stream_t0_ns <= 0:
+      self._stream_t0_ns = ts_ns
+    pts_ms = int((ts_ns - self._stream_t0_ns) / 1_000_000)
+    if pts_ms < self._last_pts_ms:
+      pts_ms = self._last_pts_ms
+    self._last_pts_ms = pts_ms
+    return pts_ms
 
   async def _start_stream(self, stream_key: str, *, codec_header: bytes, width: int, height: int) -> None:
     await self._stop_stream()
@@ -590,8 +619,11 @@ class YouTubeLiveService:
     self._transport_connected = True
     self._muxer = muxer
     self._started_at = _now()
+    self._started_mono = _mono()
     self._session_started_bytes = self._bytes_sent
-    self._next_retry_at = 0.0
+    self._next_retry_mono = 0.0
+    self._stream_t0_ns = 0
+    self._last_pts_ms = 0
     self._log(f"stream started ({width}x{height})")
 
   async def _write_frame(self, payload: bytes, *, keyframe: bool) -> bool:
@@ -606,9 +638,9 @@ class YouTubeLiveService:
       await self._stop_stream()
       return False
     try:
-      await asyncio.to_thread(muxer.mux, payload, keyframe=keyframe)
+      await asyncio.to_thread(muxer.mux, payload, keyframe=keyframe, timestamp_ms=self._frame_pts_ms())
       self._bytes_sent = self._session_started_bytes + transport.bytes_written
-      if self._started_at and _now() - self._started_at >= STREAM_STABLE_SECONDS:
+      if self._started_mono and _mono() - self._started_mono >= STREAM_STABLE_SECONDS:
         self._consecutive_failures = 0
       return True
     except Exception as exc:
@@ -626,6 +658,7 @@ class YouTubeLiveService:
     self._muxer = None
     if transport is None and muxer is None:
       self._started_at = 0.0
+      self._started_mono = 0.0
       return
     self._set_state("stopping")
     if muxer is not None:
@@ -640,11 +673,12 @@ class YouTubeLiveService:
       except Exception:
         pass
     self._started_at = 0.0
+    self._started_mono = 0.0
 
   def _schedule_backoff(self, reason: str = "") -> None:
     self._consecutive_failures += 1
     delay = min(BACKOFF_MAX_SECONDS, BACKOFF_BASE_SECONDS * (2 ** max(0, self._consecutive_failures - 1)))
-    self._next_retry_at = _now() + delay
+    self._next_retry_mono = _mono() + delay
     if reason and not self._last_error:
       self._last_error = reason
     self._log(f"retry in {delay:.0f}s: {reason or self._last_error or 'reconnect'}", "warn")

@@ -120,6 +120,7 @@ class H264FlvMuxer:
     self._audio_codec.open()
     self._packet_index = 0
     self._audio_pts = 0
+    self._last_video_ms = 0
     self._closed = False
     self._lock = threading.RLock()
     self._output.write(b"FLV\x01\x05\x00\x00\x00\x09\x00\x00\x00\x00")
@@ -127,19 +128,28 @@ class H264FlvMuxer:
     audio_config = bytes(self._audio_codec.extradata or b"\x12\x10")
     self._write_tag(8, 0, b"\xAF\x00" + audio_config)
 
-  def mux(self, payload: bytes, *, keyframe: bool = False) -> None:
+  def mux(self, payload: bytes, *, keyframe: bool = False, timestamp_ms: int | None = None) -> None:
     with self._lock:
       if self._closed:
         raise RuntimeError("FLV muxer is closed")
       if not payload:
         return
 
-      target_audio_pts = int(self._packet_index * AUDIO_RATE / self._fps)
-      self._mux_silence_until(target_audio_pts)
+      if timestamp_ms is None:
+        video_ms = int(self._packet_index * 1000 / self._fps)
+      else:
+        video_ms = max(0, int(timestamp_ms))
+      # FLV/RTMP timestamps must be non-decreasing
+      if video_ms < self._last_video_ms:
+        video_ms = self._last_video_ms
+      self._last_video_ms = video_ms
 
-      timestamp_ms = int(self._packet_index * 1000 / self._fps)
+      # keep the silent audio track filled up to the current video time so a
+      # dropped-frame gap stays A/V aligned
+      self._mux_silence_until(int(video_ms * AUDIO_RATE / 1000))
+
       frame_header = b"\x17" if keyframe else b"\x27"
-      self._write_tag(9, timestamp_ms, frame_header + b"\x01\x00\x00\x00" + _annexb_to_avcc(payload))
+      self._write_tag(9, video_ms, frame_header + b"\x01\x00\x00\x00" + _annexb_to_avcc(payload))
       self._packet_index += 1
 
   def close(self) -> None:
@@ -148,8 +158,7 @@ class H264FlvMuxer:
         return
       self._closed = True
       try:
-        target_audio_pts = int(self._packet_index * AUDIO_RATE / self._fps)
-        self._mux_silence_until(target_audio_pts)
+        self._mux_silence_until(int(self._last_video_ms * AUDIO_RATE / 1000))
         for packet in self._audio_codec.encode(None):
           self._write_audio_packet(packet)
       finally:
