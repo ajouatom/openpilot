@@ -539,19 +539,27 @@
           "ko": "녹화·전원",
           "en": "Record & Power",
           "zh": "录制与电源",
-          "params": [
-            "RecordRoadCam",
-            "MaxTimeOffroadMin"
-          ]
-        },
-        {
-          "id": "SYS_YOUTUBE",
-          "ko": "YouTube 라이브",
-          "en": "YouTube Live",
-          "zh": "YouTube Live",
-          "params": [
-            "CarrotYouTubeLive",
-            "CarrotYouTubeQuality"
+          "groups": [
+            {
+              "id": "SYS_RECORD_BASIC",
+              "ko": "녹화·전원",
+              "en": "Record & Power",
+              "zh": "录制与电源",
+              "params": [
+                "RecordRoadCam",
+                "MaxTimeOffroadMin"
+              ]
+            },
+            {
+              "id": "SYS_YOUTUBE",
+              "ko": "YouTube 라이브",
+              "en": "YouTube Live",
+              "zh": "YouTube Live",
+              "params": [
+                "CarrotYouTubeLive",
+                "CarrotYouTubeQuality"
+              ]
+            }
           ]
         },
         {
