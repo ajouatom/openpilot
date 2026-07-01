@@ -606,6 +606,49 @@ def _get_desire_and_lane_changing(md):
       if ds[4] > 0.9: lane_changing = 4
   return desire, lane_changing
 
+def _get_lane_highlight_phase(md):
+  state = md.meta.laneChangeState if md is not None else LaneChangeState.off
+  direction = md.meta.laneChangeDirection if md is not None else LaneChangeDirection.none
+  active_direction = getattr(_get_lane_highlight_phase, "active_direction", LaneChangeDirection.none)
+
+  if state not in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing):
+    _get_lane_highlight_phase.active_direction = LaneChangeDirection.none
+    _get_lane_highlight_phase.peak_offset = 0.0
+    _get_lane_highlight_phase.overlap_started = False
+    _get_lane_highlight_phase.crossed = False
+    return "off", direction
+
+  if direction not in (LaneChangeDirection.left, LaneChangeDirection.right):
+    direction = active_direction
+  if direction not in (LaneChangeDirection.left, LaneChangeDirection.right):
+    return "off", LaneChangeDirection.none
+
+  if active_direction != direction:
+    _get_lane_highlight_phase.active_direction = direction
+    _get_lane_highlight_phase.peak_offset = 0.0
+    _get_lane_highlight_phase.overlap_started = False
+    _get_lane_highlight_phase.crossed = False
+
+  crossed = getattr(_get_lane_highlight_phase, "crossed", False)
+  approaching = getattr(_get_lane_highlight_phase, "overlap_started", False)
+  if state == LaneChangeState.laneChangeFinishing:
+    crossed = True
+  elif not crossed and len(md.laneLines) >= 3 and len(md.laneLines[1].y) and len(md.laneLines[2].y):
+    left_y = float(md.laneLines[1].y[0])
+    right_y = float(md.laneLines[2].y[0])
+    lane_width = right_y - left_y
+    if np.isfinite(left_y) and np.isfinite(right_y) and 2.4 <= lane_width <= 4.6:
+      observed_offset = -((left_y + right_y) * 0.5) / lane_width
+      directional_offset = -observed_offset if direction == LaneChangeDirection.left else observed_offset
+      peak_offset = max(getattr(_get_lane_highlight_phase, "peak_offset", 0.0), directional_offset)
+      _get_lane_highlight_phase.peak_offset = peak_offset
+      approaching = approaching or directional_offset > 0.22
+      crossed = peak_offset > 0.22 and directional_offset < -0.08
+
+  _get_lane_highlight_phase.overlap_started = approaching and not crossed
+  _get_lane_highlight_phase.crossed = crossed
+  return ("center" if crossed else "overlap" if approaching else "target"), direction
+
 def _apply_lane_desire(values, desire):
   #values['LANE_CHANGING'] = 0
 
@@ -690,8 +733,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
     create_ccnc_messages._lane_line_check = Params().get_int("LaneLineCheck")
   lane_line_check = create_ccnc_messages._lane_line_check
   desire, lane_changing = _get_desire_and_lane_changing(md)
-  lane_change_state = md.meta.laneChangeState if md is not None else LaneChangeState.off
-  lane_change_direction = md.meta.laneChangeDirection if md is not None else LaneChangeDirection.none
+  lane_highlight_phase, lane_highlight_direction = _get_lane_highlight_phase(md)
 
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
     HDA_CntrlModSta = 0
@@ -843,19 +885,19 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["LANE_RIGHT"] = 0
           values["LANE_HIGHLIGHT"] = 0
           values["LANE_HIGHLIGHT_DISTANCE"] = 0.0
-        elif lane_change_state == LaneChangeState.laneChangeStarting:
-          values["LANE_LEFT"] = 1 if lane_change_direction == LaneChangeDirection.left else 0
-          values["LANE_RIGHT"] = 1 if lane_change_direction == LaneChangeDirection.right else 0
-          values["LANE_HIGHLIGHT"] = 0
-          values["LANE_HIGHLIGHT_DISTANCE"] = 0.0
-        elif lane_change_state == LaneChangeState.laneChangeFinishing:
+        elif lane_highlight_phase in ("target", "overlap"):
+          values["LANE_LEFT"] = 1 if lane_highlight_direction == LaneChangeDirection.left else 0
+          values["LANE_RIGHT"] = 1 if lane_highlight_direction == LaneChangeDirection.right else 0
+          values["LANE_HIGHLIGHT"] = 1 if lane_highlight_phase == "overlap" else 0
+          values["LANE_HIGHLIGHT_DISTANCE"] = 150.0 if lane_highlight_phase == "overlap" else 0.0
+        elif lane_highlight_phase == "center":
           values["LANE_LEFT"] = 0
           values["LANE_RIGHT"] = 0
           values["LANE_HIGHLIGHT"] = 1
           values["LANE_HIGHLIGHT_DISTANCE"] = 150.0
         else:
-          values["LANE_LEFT"] = 1 if desire in (1, 3) else 0
-          values["LANE_RIGHT"] = 1 if desire in (2, 4) else 0
+          values["LANE_LEFT"] = 1 if desire == 1 else 0
+          values["LANE_RIGHT"] = 1 if desire == 2 else 0
           values["LANE_HIGHLIGHT"] = 0
           values["LANE_HIGHLIGHT_DISTANCE"] = 0.0
 
