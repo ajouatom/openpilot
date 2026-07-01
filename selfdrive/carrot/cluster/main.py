@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import gc
+import ipaddress
 from dataclasses import replace
 import signal
 import socket
@@ -130,9 +131,15 @@ class NetworkAddressProvider:
         if isinstance(value, bytes):
             value = value.decode("utf-8", errors="replace")
         text = str(value or "").strip()
-        if not text or text in ("0.0.0.0", "127.0.0.1"):
+        if not text:
             return None
-        return text
+        try:
+            addr = ipaddress.ip_address(text)
+        except ValueError:
+            return None
+        if addr.is_unspecified or addr.is_loopback or addr.is_link_local:
+            return None
+        return str(addr)
 
 
 def live_debug_panel_enabled(screen_mode: int) -> bool:

@@ -342,8 +342,8 @@ class CarrotMan:
           with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
               s.connect(("8.8.8.8", 80))  # Google DNS로 연결 시도
               return s.getsockname()[0]
-      except Exception as e:
-          return f"Error: {e}"
+      except Exception:
+          return None
 
 
   # 브로드캐스트 메시지 전송
@@ -380,6 +380,8 @@ class CarrotMan:
               ip_address = socket.gethostbyname(socket.gethostname())
             else:
               ip_address = self.get_local_ip()
+            if ip_address is None:
+              raise OSError(errno.ENETUNREACH, "Network is unreachable")
             if ip_address != self.ip_address:
               self.ip_address = ip_address
               self.remote_addr = None
@@ -408,6 +410,8 @@ class CarrotMan:
                 self.connection.close()
               self.connection = None
               self.remote_addr = None
+              self.ip_address = "0.0.0.0"
+              self.params_memory.put_nonblocking("NetworkAddress", self.ip_address)
               next_broadcast_time = now + BROADCAST_NETWORK_ERROR_RETRY_INTERVAL
               if now - last_network_error_log_time >= BROADCAST_NETWORK_ERROR_LOG_INTERVAL:
                 print(f"[carrot_man] broadcast skipped: {e}")
