@@ -690,6 +690,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
     create_ccnc_messages._lane_line_check = Params().get_int("LaneLineCheck")
   lane_line_check = create_ccnc_messages._lane_line_check
   desire, lane_changing = _get_desire_and_lane_changing(md)
+  lane_change_state = md.meta.laneChangeState if md is not None else LaneChangeState.off
+  lane_change_direction = md.meta.laneChangeDirection if md is not None else LaneChangeDirection.none
 
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
     HDA_CntrlModSta = 0
@@ -833,11 +835,29 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["LCA_LEFT_ICON"] = 1 if lat_active else 0
           values["LCA_RIGHT_ICON"] = 1 if lat_active else 0
         else:
-          values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_active else 0
-          values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_active else 0
+          values["LCA_LEFT_ICON"] = (2 if values["LANELINE_LEFT"] == 6 else 1) if lat_active else 0
+          values["LCA_RIGHT_ICON"] = (2 if values["LANELINE_RIGHT"] == 6 else 1) if lat_active else 0
 
-        values["LANE_LEFT"] = 0 if trailer_lane_change_blocked else 1 if desire in (1, 3) else 0
-        values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if desire in (2, 4) else 0
+        if trailer_lane_change_blocked:
+          values["LANE_LEFT"] = 0
+          values["LANE_RIGHT"] = 0
+          values["LANE_HIGHLIGHT"] = 0
+          values["LANE_HIGHLIGHT_DISTANCE"] = 0.0
+        elif lane_change_state == LaneChangeState.laneChangeStarting:
+          values["LANE_LEFT"] = 1 if lane_change_direction == LaneChangeDirection.left else 0
+          values["LANE_RIGHT"] = 1 if lane_change_direction == LaneChangeDirection.right else 0
+          values["LANE_HIGHLIGHT"] = 0
+          values["LANE_HIGHLIGHT_DISTANCE"] = 0.0
+        elif lane_change_state == LaneChangeState.laneChangeFinishing:
+          values["LANE_LEFT"] = 0
+          values["LANE_RIGHT"] = 0
+          values["LANE_HIGHLIGHT"] = 1
+          values["LANE_HIGHLIGHT_DISTANCE"] = 150.0
+        else:
+          values["LANE_LEFT"] = 1 if desire in (1, 3) else 0
+          values["LANE_RIGHT"] = 1 if desire in (2, 4) else 0
+          values["LANE_HIGHLIGHT"] = 0
+          values["LANE_HIGHLIGHT_DISTANCE"] = 0.0
 
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter))
 
