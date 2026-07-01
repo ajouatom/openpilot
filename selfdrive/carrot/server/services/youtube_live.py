@@ -3,7 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
+import socket
+import ssl
 import time
 from collections import deque
 from pathlib import Path
@@ -17,6 +20,8 @@ YOUTUBE_QUALITY_PARAM = "CarrotYouTubeQuality"
 PHASE1_SOURCE_SERVICE = "qRoadEncodeData"
 PHASE1_QUALITY = "standard"
 YOUTUBE_RTMPS_BASE = "rtmps://a.rtmps.youtube.com/live2"
+YOUTUBE_RTMPS_HOST = "a.rtmps.youtube.com"
+YOUTUBE_RTMPS_PORT = 443
 NO_FRAME_STOP_SECONDS = 8.0
 START_BACKOFF_SECONDS = 5.0
 STATUS_WRITE_MIN_INTERVAL = 1.0
@@ -75,6 +80,31 @@ def _extract_stream_key(value: str) -> str:
   if raw.startswith("rtmp://") or raw.startswith("rtmps://"):
     return raw.rstrip("/").rsplit("/", 1)[-1].strip()
   return raw
+
+
+def _validate_stream_key_format(stream_key: str) -> tuple[bool, str]:
+  key = stream_key.strip()
+  if not key:
+    return False, "stream key is required"
+  if len(key) < 8:
+    return False, "stream key is too short"
+  if len(key) > 256:
+    return False, "stream key is too long"
+  if re.search(r"\s", key):
+    return False, "stream key must not contain spaces"
+  if not re.fullmatch(r"[A-Za-z0-9._/-]+", key):
+    return False, "stream key contains unsupported characters"
+  return True, "format looks valid"
+
+
+def _check_rtmps_reachable(timeout: float = 2.5) -> tuple[bool, str]:
+  try:
+    context = ssl.create_default_context()
+    with socket.create_connection((YOUTUBE_RTMPS_HOST, YOUTUBE_RTMPS_PORT), timeout=timeout) as sock:
+      with context.wrap_socket(sock, server_hostname=YOUTUBE_RTMPS_HOST):
+        return True, "YouTube RTMPS ingest is reachable"
+  except Exception as exc:
+    return False, f"YouTube RTMPS ingest unreachable: {exc}"
 
 
 class YouTubeLiveService:
@@ -193,6 +223,25 @@ class YouTubeLiveService:
       "warnings": status["warnings"],
       "stderr_tail": list(self._stderr_tail),
       "message": "ready" if ok else "missing stream key or ffmpeg",
+    }
+
+  def validate_stream_key(self, value: str | None = None) -> dict[str, Any]:
+    stream_key = _extract_stream_key(value) if value is not None else self.get_stream_key()
+    format_ok, format_message = _validate_stream_key_format(stream_key)
+    rtmps_ok, rtmps_message = _check_rtmps_reachable()
+    ffmpeg_path = shutil.which("ffmpeg")
+    ok = bool(format_ok and rtmps_ok and ffmpeg_path)
+    return {
+      "ok": ok,
+      "configured": bool(self.get_stream_key()),
+      "format_ok": format_ok,
+      "format_message": format_message,
+      "rtmps_reachable": rtmps_ok,
+      "rtmps_message": rtmps_message,
+      "ffmpeg_available": bool(ffmpeg_path),
+      "ffmpeg_path": ffmpeg_path or "",
+      "masked_key": _mask_stream_key(stream_key),
+      "note": "YouTube only confirms whether the key is accepted when an encoder starts streaming.",
     }
 
   def diagnostics(self) -> dict[str, Any]:

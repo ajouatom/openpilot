@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 
 from aiohttp import web
 
@@ -59,6 +60,18 @@ async def api_test(request: web.Request) -> web.Response:
   return web.json_response(result, status=200 if result.get("ok") else 409)
 
 
+async def api_validate_stream_key(request: web.Request) -> web.Response:
+  body = {}
+  if request.can_read_body:
+    try:
+      body = await request.json()
+    except Exception:
+      return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+  key = body.get("stream_key", body.get("key")) if isinstance(body, dict) else None
+  result = await asyncio.to_thread(_service(request).validate_stream_key, key)
+  return web.json_response(result, status=200 if result.get("ok") else 409)
+
+
 async def api_diagnostics(request: web.Request) -> web.Response:
   return web.json_response({"ok": True, "diagnostics": _service(request).diagnostics()})
 
@@ -81,6 +94,7 @@ def register(app: web.Application) -> None:
   app.router.add_get("/api/youtube_live/diagnostics", api_diagnostics)
   app.router.add_get("/api/youtube_live/diagnostics/download", api_download_diagnostics)
   app.router.add_post("/api/youtube_live/stream_key", api_set_stream_key)
+  app.router.add_post("/api/youtube_live/stream_key/validate", api_validate_stream_key)
   app.router.add_delete("/api/youtube_live/stream_key", api_clear_stream_key)
   app.router.add_post("/api/youtube_live/stop", api_stop)
   app.router.add_post("/api/youtube_live/test", api_test)
