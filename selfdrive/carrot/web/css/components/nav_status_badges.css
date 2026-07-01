@@ -37,6 +37,7 @@
 
 .topbar #btnHome .nav-status-badge--live {
   background: var(--md-error, #ba1a1a);
+  animation: nav-rec-badge-blink 1s steps(1, end) infinite;
 }
 
 /* The shared badge container replaces the legacy REC pseudo-element. */
