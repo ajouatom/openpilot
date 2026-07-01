@@ -1,0 +1,46 @@
+.topbar #btnHome .nav-status-badges {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  z-index: 1;
+  display: none;
+  max-width: calc(100% - 12px);
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.topbar #btnHome .nav-status-badges.is-visible {
+  display: flex;
+}
+
+.topbar #btnHome .nav-status-badge {
+  min-width: 24px;
+  padding: 2px 4px;
+  border-radius: 999px;
+  color: var(--md-on-error, #ffffff);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-surface) 72%, transparent);
+}
+
+.topbar #btnHome .nav-status-badge--record {
+  background: rgba(118, 18, 20, 0.92);
+  color: #ffd7d3;
+  animation: nav-rec-badge-blink 1s steps(1, end) infinite;
+}
+
+.topbar #btnHome .nav-status-badge--live {
+  background: var(--md-error, #ba1a1a);
+}
+
+/* The shared badge container replaces the legacy REC pseudo-element. */
+.topbar #btnHome.recording::before {
+  display: none;
+  animation: none;
+}
