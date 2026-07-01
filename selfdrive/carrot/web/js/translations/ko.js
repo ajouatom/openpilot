@@ -65,6 +65,7 @@ window.CarrotTranslations.register("ko", {
     youtube_live_test_failed: "테스트 실패",
     youtube_live_muxer: "PyAV FLV/AAC",
     youtube_live_metric_source: "소스",
+    youtube_live_metric_timestamp: "시간 자막",
     youtube_live_metric_runtime: "시간",
     youtube_live_metric_bitrate: "비트레이트",
     youtube_live_metric_session: "세션",

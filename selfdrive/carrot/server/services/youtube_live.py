@@ -12,12 +12,14 @@ from pathlib import Path
 from typing import Any
 
 from ..config import CARROT_YOUTUBE_LIVE_SECRET_PATH, CARROT_YOUTUBE_LIVE_STATE_PATH
+from .youtube_live_captions import Cea608TimestampInjector
 from .youtube_live_muxer import H264FlvMuxer, pyav_capabilities
 from .youtube_live_transport import LibrtmpClient, RtmpSink, librtmp_capabilities
 
 
 YOUTUBE_LIVE_PARAM = "CarrotYouTubeLive"
 YOUTUBE_QUALITY_PARAM = "CarrotYouTubeQuality"
+YOUTUBE_TIMESTAMP_PARAM = "CarrotYouTubeTimestamp"
 PHASE1_SOURCE_SERVICE = "qRoadEncodeData"
 PHASE1_QUALITY = "standard"
 # Single 3-way selector (CarrotYouTubeQuality):
@@ -143,6 +145,7 @@ class YouTubeLiveService:
     self._transport: LibrtmpClient | None = None
     self._transport_connected = False
     self._muxer: H264FlvMuxer | None = None
+    self._caption_injector = Cea608TimestampInjector()
     self._messaging: Any | None = None
     self._socket: Any | None = None
     self._socket_source = ""
@@ -225,6 +228,9 @@ class YouTubeLiveService:
       "transport_available": bool(self._transport_capabilities.get("available")),
       "quality": self._quality_label(),
       "requested_quality": self._param_int(YOUTUBE_QUALITY_PARAM, 0),
+      "timestamp_caption_enabled": self._param_bool(YOUTUBE_TIMESTAMP_PARAM),
+      "timestamp_caption_mode": "cea608-sei",
+      "timestamp_caption_packets": self._caption_injector.packets_injected,
       "phase": 1,
       "running": running,
       "pid": None,
@@ -321,6 +327,7 @@ class YouTubeLiveService:
       "params": {
         YOUTUBE_LIVE_PARAM: self._param_enabled(),
         YOUTUBE_QUALITY_PARAM: self._param_int(YOUTUBE_QUALITY_PARAM, 0),
+        YOUTUBE_TIMESTAMP_PARAM: self._param_bool(YOUTUBE_TIMESTAMP_PARAM),
         "ClusterHud": self._param_int("ClusterHud", 0),
         "DisableDM": self._param_int("DisableDM", 0),
         "IsOnroad": self._param_bool("IsOnroad", False),
@@ -454,6 +461,10 @@ class YouTubeLiveService:
         self._set_state("backoff")
         return
 
+    data = self._caption_injector.inject(
+      data,
+      enabled=self._param_bool(YOUTUBE_TIMESTAMP_PARAM),
+    )
     if await self._write_frame(data, keyframe=keyframe):
       self._set_state("live")
 
@@ -624,6 +635,7 @@ class YouTubeLiveService:
     self._session_started_bytes = self._bytes_sent
     self._next_retry_mono = 0.0
     self._active_source = self._current_source()
+    self._caption_injector.reset()
     self._log(f"stream started ({width}x{height})")
 
   async def _write_frame(self, payload: bytes, *, keyframe: bool) -> bool:

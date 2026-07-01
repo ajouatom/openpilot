@@ -557,7 +557,8 @@
               "zh": "YouTube Live",
               "params": [
                 "CarrotYouTubeLive",
-                "CarrotYouTubeQuality"
+                "CarrotYouTubeQuality",
+                "CarrotYouTubeTimestamp"
               ]
             }
           ]
@@ -1776,6 +1777,22 @@
       "cdescr": "Stream source\n0: Normal (qcam, low-res)\n1: High (road, full-res)\n2: Wide (wide cam, full-res)",
       "min": 0,
       "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "SYS_YOUTUBE",
+      "name": "CarrotYouTubeTimestamp",
+      "title": "YouTube 시간 자막",
+      "descr": "영상 재인코딩 없이 현재 시간을 CEA-608/708 자막으로 송출합니다. YouTube Studio에서 자막 소스를 '내장 608/708'로 설정하고 시청 화면에서 CC를 켜야 보입니다. 위치는 YouTube 플레이어에 따라 달라질 수 있습니다.\n0: 끄기, 1: 켜기",
+      "egroup": "System",
+      "etitle": "YouTube Time Caption",
+      "edescr": "Send the current time as embedded CEA-608/708 captions without re-encoding video. Select Embedded 608/708 captions in YouTube Studio and enable CC in the player. Placement may vary by player.\n0: OFF, 1: ON",
+      "cgroup": "System",
+      "ctitle": "YouTube Time Caption",
+      "cdescr": "Send the current time as embedded CEA-608/708 captions without re-encoding video. Enable embedded captions in YouTube Studio and turn on CC in the player.\n0: OFF, 1: ON",
+      "min": 0,
+      "max": 1,
       "default": 0,
       "unit": 1
     },

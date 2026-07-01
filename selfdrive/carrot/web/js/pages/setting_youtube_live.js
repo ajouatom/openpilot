@@ -221,6 +221,12 @@
     if (metricsEl) {
       metricsEl.innerHTML = "";
       metricsEl.appendChild(metric(text("youtube_live_metric_source", "Source"), status?.source || "qRoadEncodeData"));
+      metricsEl.appendChild(metric(
+        text("youtube_live_metric_timestamp", "Time caption"),
+        status?.timestamp_caption_enabled
+          ? text("youtube_live_resource_enabled", "Enabled")
+          : text("youtube_live_resource_disabled", "Disabled"),
+      ));
       metricsEl.appendChild(metric(text("youtube_live_metric_runtime", "Runtime"), formatSeconds(status?.uptime_sec || 0)));
       metricsEl.appendChild(metric(text("youtube_live_metric_bitrate", "Bitrate"), `${status?.estimated_kbps || 0} kbps`));
       metricsEl.appendChild(metric(text("youtube_live_metric_session", "Session"), `${status?.session_mb || 0} MB`));
@@ -600,7 +606,7 @@
     });
     window.addEventListener("carrot:paramchange", (event) => {
       const name = event?.detail?.name;
-      if (name === "CarrotYouTubeLive" || name === "CarrotYouTubeQuality") loadStatus();
+      if (name === "CarrotYouTubeLive" || name === "CarrotYouTubeQuality" || name === "CarrotYouTubeTimestamp") loadStatus();
     });
     sync();
   }

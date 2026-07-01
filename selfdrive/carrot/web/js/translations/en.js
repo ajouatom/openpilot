@@ -65,6 +65,7 @@ window.CarrotTranslations.register("en", {
     youtube_live_test_failed: "Test failed",
     youtube_live_muxer: "PyAV FLV/AAC",
     youtube_live_metric_source: "Source",
+    youtube_live_metric_timestamp: "Time caption",
     youtube_live_metric_runtime: "Runtime",
     youtube_live_metric_bitrate: "Bitrate",
     youtube_live_metric_session: "Session",

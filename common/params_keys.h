@@ -185,6 +185,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"RecordRoadCam", {PERSISTENT, INT, "0"}},
     {"CarrotYouTubeLive", {PERSISTENT, INT, "0"}},
     {"CarrotYouTubeQuality", {PERSISTENT, INT, "0"}},
+    {"CarrotYouTubeTimestamp", {PERSISTENT, INT, "0"}},
     {"HDPuse", {PERSISTENT, INT, "0"}},
 
     {"AutoCruiseControl", {PERSISTENT, INT, "0"}},
