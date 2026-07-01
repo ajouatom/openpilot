@@ -94,11 +94,13 @@
       <div class="youtube-live-key-row">
         <input class="youtube-live-key-input" data-role="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="${escapeHtmlLocal(text("youtube_live_key_placeholder", "Paste stream key"))}" />
         <button class="smallBtn btn--filled youtube-live-action" type="button" data-action="save-key">${escapeHtmlLocal(text("save", "Save"))}</button>
+        <button class="smallBtn youtube-live-action youtube-live-action--danger" type="button" data-action="clear-key">${escapeHtmlLocal(text("youtube_live_clear_key", "Clear key"))}</button>
         <button class="smallBtn youtube-live-action" type="button" data-action="validate-key">${escapeHtmlLocal(text("youtube_live_validate_key", "Validate key"))}</button>
       </div>
     `;
       keySection.appendChild(keyCard);
       keyCard.querySelector('[data-action="save-key"]')?.addEventListener("click", saveKeyFromInput);
+      keyCard.querySelector('[data-action="clear-key"]')?.addEventListener("click", clearKey);
       keyCard.querySelector('[data-action="validate-key"]')?.addEventListener("click", validateStreamKey);
       keyCard.querySelector('[data-role="key-input"]')?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
@@ -122,21 +124,24 @@
           <div>${escapeHtmlLocal(text("youtube_live_help_step_1", "1. Open YouTube Studio and click Create > Go live."))}</div>
           <div>${escapeHtmlLocal(text("youtube_live_help_step_2", "2. In Live Control Room, open Stream and copy Stream key."))}</div>
           <div>${escapeHtmlLocal(text("youtube_live_help_step_3", "3. Paste the key here, save it, then run Validate key."))}</div>
+          <div>${escapeHtmlLocal(text("youtube_live_help_step_4", "Standard mode uses qRoadEncodeData, about 526x330 at 20fps. This fits YouTube's 240p-720p encoder range; stereo audio uses AAC 128Kbps."))}</div>
           <div>${escapeHtmlLocal(text("youtube_live_help_note", "Validation checks local format, FFmpeg, and RTMPS reachability. YouTube confirms the key only after streaming starts."))}</div>
         </div>
+        <details class="youtube-live-menu">
+          <summary>${escapeHtmlLocal(text("youtube_live_menu_title", "Actions"))}</summary>
+          <div class="youtube-live-actions youtube-live-actions--menu" data-role="action-menu"></div>
+        </details>
       `;
       section.appendChild(helpCard);
 
-      const studioCard = document.createElement("div");
-      studioCard.className = "setting-group-card youtube-live-studio-card";
-      studioCard.innerHTML = `
-        <div>
-          <div class="youtube-live-card__title">${escapeHtmlLocal(text("youtube_live_studio_title", "Studio"))}</div>
-          <div class="youtube-live-card__desc">${escapeHtmlLocal(text("youtube_live_studio_desc", "Open Live Control Room to copy the stream key and monitor stream health."))}</div>
-        </div>
-        <button class="smallBtn youtube-live-action youtube-live-studio-button" type="button" data-action="open-studio">${escapeHtmlLocal(text("youtube_live_open_studio", "Open Studio"))}</button>
-      `;
-      section.appendChild(studioCard);
+      const menuActions = helpCard.querySelector('[data-role="action-menu"]');
+      if (menuActions) {
+        menuActions.appendChild(makeButton(text("youtube_live_open_studio", "Open Studio"), openLiveControlRoom));
+        menuActions.appendChild(makeButton(text("youtube_live_test", "Test"), testConfig));
+        menuActions.appendChild(makeButton(text("youtube_live_diagnostics", "Diagnostics"), showDiagnostics));
+        menuActions.appendChild(makeButton(text("youtube_live_download_logs", "Download logs"), downloadDiagnostics));
+        menuActions.appendChild(makeButton(text("youtube_live_stop", "Stop"), stopStream));
+      }
 
       const statusCard = document.createElement("div");
       statusCard.className = "setting-group-card youtube-live-card youtube-live-status-card";
@@ -181,16 +186,6 @@
       warnings.hidden = true;
       statusCard.appendChild(warnings);
 
-      const actions = document.createElement("div");
-      actions.className = "youtube-live-actions";
-      actions.appendChild(makeButton(text("youtube_live_test", "Test"), testConfig));
-      actions.appendChild(makeButton(text("youtube_live_diagnostics", "Diagnostics"), showDiagnostics));
-      actions.appendChild(makeButton(text("youtube_live_download_logs", "Download logs"), downloadDiagnostics));
-      actions.appendChild(makeButton(text("youtube_live_stop", "Stop"), stopStream));
-      actions.appendChild(makeButton(text("youtube_live_clear_key", "Clear key"), clearKey, "danger"));
-      statusCard.appendChild(actions);
-
-      studioCard.querySelector('[data-action="open-studio"]')?.addEventListener("click", openLiveControlRoom);
     }
 
     box.appendChild(section);
@@ -330,15 +325,33 @@
   }
 
   function validationText(result) {
+    const pass = text("youtube_live_validation_pass", "OK");
+    const fail = text("youtube_live_validation_fail", "FAIL");
     const lines = [
-      `${text("youtube_live_validation_format", "Key format")}: ${result?.format_ok ? "OK" : "FAIL"} - ${result?.format_message || "-"}`,
-      `${text("youtube_live_validation_ffmpeg", "FFmpeg")}: ${result?.ffmpeg_available ? "OK" : "FAIL"}`,
-      `${text("youtube_live_validation_rtmps", "YouTube RTMPS")}: ${result?.rtmps_reachable ? "OK" : "FAIL"} - ${result?.rtmps_message || "-"}`,
+      `${text("youtube_live_validation_format", "Key format")}: ${result?.format_ok ? pass : fail} - ${localizedValidationMessage(result?.format_message)}`,
+      `${text("youtube_live_validation_ffmpeg", "FFmpeg")}: ${result?.ffmpeg_available ? pass : fail}`,
+      `${text("youtube_live_validation_rtmps", "YouTube RTMPS")}: ${result?.rtmps_reachable ? pass : fail} - ${localizedValidationMessage(result?.rtmps_message)}`,
     ];
     if (result?.masked_key) lines.push(`${text("youtube_live_key", "Stream key")}: ${result.masked_key}`);
     lines.push("");
     lines.push(result?.note || text("youtube_live_validation_note", "YouTube confirms the key only when streaming starts."));
     return lines.join("\n");
+  }
+
+  function localizedValidationMessage(message) {
+    const raw = String(message || "").trim();
+    if (!raw) return "-";
+    const map = {
+      "stream key is required": text("youtube_live_validation_required", "Stream key is required."),
+      "stream key is too short": text("youtube_live_validation_too_short", "Stream key is too short."),
+      "stream key is too long": text("youtube_live_validation_too_long", "Stream key is too long."),
+      "stream key must not contain spaces": text("youtube_live_validation_no_spaces", "Stream key must not contain spaces."),
+      "stream key contains unsupported characters": text("youtube_live_validation_bad_chars", "Stream key contains unsupported characters."),
+      "format looks valid": text("youtube_live_validation_format_ok", "Format looks valid."),
+      "YouTube RTMPS ingest is reachable": text("youtube_live_validation_rtmps_ok", "YouTube RTMPS ingest is reachable."),
+      "missing stream key or ffmpeg": text("youtube_live_test_missing", "Missing stream key or FFmpeg."),
+    };
+    return map[raw] || raw;
   }
 
   function openLiveControlRoom() {
@@ -374,9 +387,11 @@
   async function testConfig() {
     try {
       const result = await postJson("/api/youtube_live/test", {});
-      toast(result.message || text("youtube_live_test_ready", "Ready"));
+      toast(result.ok ? text("youtube_live_test_ready", "Ready") : localizedValidationMessage(result.message));
     } catch (err) {
-      toast(err?.message || text("youtube_live_test_failed", "Test failed"), { tone: "error" });
+      const payload = err?.payload || null;
+      const reason = payload?.message ? localizedValidationMessage(payload.message) : (err?.message || text("youtube_live_test_failed", "Test failed"));
+      toast(reason, { tone: "error" });
     }
   }
 

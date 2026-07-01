@@ -6,8 +6,7 @@
 
 .youtube-live-key-card,
 .youtube-live-card,
-.youtube-live-help-card,
-.youtube-live-studio-card {
+.youtube-live-help-card {
   display: grid;
   gap: var(--sp-md);
   padding-top: var(--sp-lg);
@@ -54,7 +53,7 @@
 
 .youtube-live-key-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
   align-items: center;
 }
@@ -76,11 +75,6 @@
   outline: none;
   border-color: color-mix(in srgb, var(--md-primary) 62%, var(--md-outline-var));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--md-primary) 16%, transparent);
-}
-
-.youtube-live-studio-card {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
 }
 
 .youtube-live-pill {
@@ -162,6 +156,23 @@
   gap: 8px;
 }
 
+.youtube-live-menu {
+  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 20%, transparent);
+  padding-top: var(--sp-sm);
+}
+
+.youtube-live-menu > summary {
+  cursor: pointer;
+  color: var(--md-on-surface);
+  font-size: var(--fs-body);
+  font-weight: 800;
+  list-style-position: inside;
+}
+
+.youtube-live-actions--menu {
+  margin-top: var(--sp-sm);
+}
+
 .youtube-live-section .smallBtn,
 .youtube-live-action {
   display: inline-flex;
@@ -187,8 +198,17 @@
   }
 
   .youtube-live-key-row,
-  .youtube-live-studio-card {
+  .youtube-live-actions--menu {
     grid-template-columns: 1fr;
+  }
+
+  .youtube-live-key-row {
+    display: grid;
+  }
+
+  .youtube-live-section .smallBtn,
+  .youtube-live-action {
+    width: 100%;
   }
 
   .youtube-live-pill {
