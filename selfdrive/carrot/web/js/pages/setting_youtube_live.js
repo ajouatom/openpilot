@@ -2,9 +2,9 @@
 
 (function () {
   const YOUTUBE_GROUP = "SYS_YOUTUBE";
+  const KEY_SECTION_ID = "youtubeLiveKeySection";
   const CARD_ID = "youtubeLiveStatusCard";
   const LIVE_CONTROL_ROOM_URL = "https://www.youtube.com/livestreaming";
-  const YOUTUBE_ENCODER_HELP_URL = "https://support.google.com/youtube/answer/2907883";
   const POLL_MS = 2500;
   const state = {
     timer: null,
@@ -76,114 +76,124 @@
     const box = itemsBox();
     if (!box) return null;
     const existing = document.getElementById(CARD_ID);
-    if (existing) return existing;
+    const existingKey = document.getElementById(KEY_SECTION_ID);
+    if (existing && existingKey) {
+      if (existing.nextSibling) box.appendChild(existing);
+      return existing;
+    }
 
-    const section = document.createElement("section");
-    section.id = CARD_ID;
-    section.className = "setting-section-block youtube-live-section";
-
-    const title = document.createElement("div");
-    title.className = "setting-group-card__title youtube-live-section__title";
-    title.textContent = text("youtube_live_title", "YouTube Live");
-    section.appendChild(title);
-
+    if (!existingKey) {
+      const keySection = document.createElement("section");
+      keySection.id = KEY_SECTION_ID;
+      keySection.className = "setting-section-block youtube-live-section youtube-live-section--key";
     const keyCard = document.createElement("div");
     keyCard.className = "setting-group-card youtube-live-key-card";
     keyCard.innerHTML = `
-      <div class="youtube-live-key-card__head">
-        <div>
-          <div class="youtube-live-card__title">${escapeHtmlLocal(text("youtube_live_key_panel_title", "Stream key"))}</div>
-          <div class="youtube-live-card__desc" data-role="key-status">${escapeHtmlLocal(text("loading", "Loading..."))}</div>
-        </div>
-        <button class="smallBtn youtube-live-link-btn" type="button" data-action="open-studio">${escapeHtmlLocal(text("youtube_live_open_studio", "Open Studio"))}</button>
-      </div>
-      <div class="youtube-live-guide">
-        <span>${escapeHtmlLocal(text("youtube_live_key_guide_1", "YouTube Studio > Create > Go live"))}</span>
-        <span>${escapeHtmlLocal(text("youtube_live_key_guide_2", "Live Control Room > Stream > copy Stream key"))}</span>
-      </div>
+      <div class="youtube-live-card__title">${escapeHtmlLocal(text("youtube_live_key_panel_title", "Stream key"))}</div>
+      <div class="youtube-live-card__desc" data-role="key-status">${escapeHtmlLocal(text("loading", "Loading..."))}</div>
       <div class="youtube-live-key-row">
         <input class="youtube-live-key-input" data-role="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="${escapeHtmlLocal(text("youtube_live_key_placeholder", "Paste stream key"))}" />
         <button class="smallBtn btn--filled youtube-live-action" type="button" data-action="save-key">${escapeHtmlLocal(text("save", "Save"))}</button>
-      </div>
-      <div class="youtube-live-key-actions">
         <button class="smallBtn youtube-live-action" type="button" data-action="validate-key">${escapeHtmlLocal(text("youtube_live_validate_key", "Validate key"))}</button>
-        <button class="smallBtn youtube-live-action" type="button" data-action="open-help">${escapeHtmlLocal(text("youtube_live_help", "Help"))}</button>
       </div>
     `;
-    section.appendChild(keyCard);
+      keySection.appendChild(keyCard);
+      keyCard.querySelector('[data-action="save-key"]')?.addEventListener("click", saveKeyFromInput);
+      keyCard.querySelector('[data-action="validate-key"]')?.addEventListener("click", validateStreamKey);
+      keyCard.querySelector('[data-role="key-input"]')?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          saveKeyFromInput();
+        }
+      });
+      box.insertBefore(keySection, box.firstChild);
+    }
 
-    const statusCard = document.createElement("div");
-    statusCard.className = "setting-group-card youtube-live-card youtube-live-status-card";
-    section.appendChild(statusCard);
+    const section = existing || document.createElement("section");
+    if (!existing) {
+      section.id = CARD_ID;
+      section.className = "setting-section-block youtube-live-section youtube-live-section--info";
 
-    const head = document.createElement("div");
-    head.className = "youtube-live-card__head";
-    const summary = document.createElement("div");
-    summary.className = "youtube-live-card__summary";
-    const summaryTitle = document.createElement("div");
-    summaryTitle.className = "youtube-live-card__title";
-    summaryTitle.dataset.role = "title";
-    summaryTitle.textContent = text("youtube_live_phase1_source", "Phase 1 - qRoadEncodeData");
-    const summaryDesc = document.createElement("div");
-    summaryDesc.className = "youtube-live-card__desc";
-    summaryDesc.dataset.role = "configured";
-    summaryDesc.textContent = text("loading", "Loading...");
-    summary.appendChild(summaryTitle);
-    summary.appendChild(summaryDesc);
-    const pill = document.createElement("span");
-    pill.className = "youtube-live-pill";
-    pill.dataset.role = "state";
-    pill.textContent = "-";
-    head.appendChild(summary);
-    head.appendChild(pill);
-    statusCard.appendChild(head);
+      const helpCard = document.createElement("div");
+      helpCard.className = "setting-group-card youtube-live-help-card";
+      helpCard.innerHTML = `
+        <div class="youtube-live-card__title">${escapeHtmlLocal(text("youtube_live_help", "Help"))}</div>
+        <div class="youtube-live-help-list">
+          <div>${escapeHtmlLocal(text("youtube_live_help_step_1", "1. Open YouTube Studio and click Create > Go live."))}</div>
+          <div>${escapeHtmlLocal(text("youtube_live_help_step_2", "2. In Live Control Room, open Stream and copy Stream key."))}</div>
+          <div>${escapeHtmlLocal(text("youtube_live_help_step_3", "3. Paste the key here, save it, then run Validate key."))}</div>
+          <div>${escapeHtmlLocal(text("youtube_live_help_note", "Validation checks local format, FFmpeg, and RTMPS reachability. YouTube confirms the key only after streaming starts."))}</div>
+        </div>
+      `;
+      section.appendChild(helpCard);
 
-    const metrics = document.createElement("div");
-    metrics.className = "youtube-live-metrics";
-    metrics.dataset.role = "metrics";
-    statusCard.appendChild(metrics);
+      const studioCard = document.createElement("div");
+      studioCard.className = "setting-group-card youtube-live-studio-card";
+      studioCard.innerHTML = `
+        <div>
+          <div class="youtube-live-card__title">${escapeHtmlLocal(text("youtube_live_studio_title", "Studio"))}</div>
+          <div class="youtube-live-card__desc">${escapeHtmlLocal(text("youtube_live_studio_desc", "Open Live Control Room to copy the stream key and monitor stream health."))}</div>
+        </div>
+        <button class="smallBtn youtube-live-action youtube-live-studio-button" type="button" data-action="open-studio">${escapeHtmlLocal(text("youtube_live_open_studio", "Open Studio"))}</button>
+      `;
+      section.appendChild(studioCard);
 
-    const error = document.createElement("div");
-    error.className = "youtube-live-error";
-    error.dataset.role = "error";
-    error.hidden = true;
-    statusCard.appendChild(error);
+      const statusCard = document.createElement("div");
+      statusCard.className = "setting-group-card youtube-live-card youtube-live-status-card";
+      section.appendChild(statusCard);
 
-    const warnings = document.createElement("div");
-    warnings.className = "youtube-live-warnings";
-    warnings.dataset.role = "warnings";
-    warnings.hidden = true;
-    statusCard.appendChild(warnings);
+      const head = document.createElement("div");
+      head.className = "youtube-live-card__head";
+      const summary = document.createElement("div");
+      summary.className = "youtube-live-card__summary";
+      const summaryTitle = document.createElement("div");
+      summaryTitle.className = "youtube-live-card__title";
+      summaryTitle.dataset.role = "title";
+      summaryTitle.textContent = text("youtube_live_phase_status_title", "Phase 1 / status");
+      const summaryDesc = document.createElement("div");
+      summaryDesc.className = "youtube-live-card__desc";
+      summaryDesc.dataset.role = "configured";
+      summaryDesc.textContent = text("loading", "Loading...");
+      summary.appendChild(summaryTitle);
+      summary.appendChild(summaryDesc);
+      const pill = document.createElement("span");
+      pill.className = "youtube-live-pill";
+      pill.dataset.role = "state";
+      pill.textContent = "-";
+      head.appendChild(summary);
+      head.appendChild(pill);
+      statusCard.appendChild(head);
 
-    const opsCard = document.createElement("div");
-    opsCard.className = "setting-group-card youtube-live-ops-card";
-    const opsTitle = document.createElement("div");
-    opsTitle.className = "youtube-live-ops-card__title";
-    opsTitle.textContent = text("youtube_live_operations", "Operations");
-    opsCard.appendChild(opsTitle);
+      const metrics = document.createElement("div");
+      metrics.className = "youtube-live-metrics";
+      metrics.dataset.role = "metrics";
+      statusCard.appendChild(metrics);
 
-    const actions = document.createElement("div");
-    actions.className = "youtube-live-actions";
-    actions.appendChild(makeButton(text("youtube_live_test", "Test"), testConfig));
-    actions.appendChild(makeButton(text("youtube_live_diagnostics", "Diagnostics"), showDiagnostics));
-    actions.appendChild(makeButton(text("youtube_live_download_logs", "Download logs"), downloadDiagnostics));
-    actions.appendChild(makeButton(text("youtube_live_stop", "Stop"), stopStream));
-    actions.appendChild(makeButton(text("youtube_live_clear_key", "Clear key"), clearKey, "danger"));
-    opsCard.appendChild(actions);
-    section.appendChild(opsCard);
+      const error = document.createElement("div");
+      error.className = "youtube-live-error";
+      error.dataset.role = "error";
+      error.hidden = true;
+      statusCard.appendChild(error);
 
-    keyCard.querySelector('[data-action="open-studio"]')?.addEventListener("click", openLiveControlRoom);
-    keyCard.querySelector('[data-action="open-help"]')?.addEventListener("click", openYouTubeHelp);
-    keyCard.querySelector('[data-action="save-key"]')?.addEventListener("click", saveKeyFromInput);
-    keyCard.querySelector('[data-action="validate-key"]')?.addEventListener("click", validateStreamKey);
-    keyCard.querySelector('[data-role="key-input"]')?.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        saveKeyFromInput();
-      }
-    });
+      const warnings = document.createElement("div");
+      warnings.className = "youtube-live-warnings";
+      warnings.dataset.role = "warnings";
+      warnings.hidden = true;
+      statusCard.appendChild(warnings);
 
-    box.insertBefore(section, box.firstChild);
+      const actions = document.createElement("div");
+      actions.className = "youtube-live-actions";
+      actions.appendChild(makeButton(text("youtube_live_test", "Test"), testConfig));
+      actions.appendChild(makeButton(text("youtube_live_diagnostics", "Diagnostics"), showDiagnostics));
+      actions.appendChild(makeButton(text("youtube_live_download_logs", "Download logs"), downloadDiagnostics));
+      actions.appendChild(makeButton(text("youtube_live_stop", "Stop"), stopStream));
+      actions.appendChild(makeButton(text("youtube_live_clear_key", "Clear key"), clearKey, "danger"));
+      statusCard.appendChild(actions);
+
+      studioCard.querySelector('[data-action="open-studio"]')?.addEventListener("click", openLiveControlRoom);
+    }
+
+    box.appendChild(section);
     return section;
   }
 
@@ -201,7 +211,7 @@
     const card = ensureCard();
     if (!card) return;
     const stateEl = card.querySelector('[data-role="state"]');
-    const keyStatusEl = card.querySelector('[data-role="key-status"]');
+    const keyStatusEl = document.querySelector(`#${KEY_SECTION_ID} [data-role="key-status"]`);
     const configuredEl = card.querySelector('[data-role="configured"]');
     const metricsEl = card.querySelector('[data-role="metrics"]');
     const errorEl = card.querySelector('[data-role="error"]');
@@ -276,7 +286,7 @@
   }
 
   function keyInputValue() {
-    return String(document.querySelector(`#${CARD_ID} [data-role="key-input"]`)?.value || "").trim();
+    return String(document.querySelector(`#${KEY_SECTION_ID} [data-role="key-input"]`)?.value || "").trim();
   }
 
   async function saveKeyFromInput() {
@@ -289,7 +299,7 @@
       const status = await postJson("/api/youtube_live/stream_key", { stream_key: value });
       state.status = status;
       renderStatus(status);
-      const input = document.querySelector(`#${CARD_ID} [data-role="key-input"]`);
+      const input = document.querySelector(`#${KEY_SECTION_ID} [data-role="key-input"]`);
       if (input) input.value = "";
       toast(text("youtube_live_key_saved", "Stream key saved"));
     } catch (err) {
@@ -333,10 +343,6 @@
 
   function openLiveControlRoom() {
     window.open(LIVE_CONTROL_ROOM_URL, "_blank", "noopener");
-  }
-
-  function openYouTubeHelp() {
-    window.open(YOUTUBE_ENCODER_HELP_URL, "_blank", "noopener");
   }
 
   async function clearKey() {
@@ -440,6 +446,8 @@
     stopPolling();
     const card = document.getElementById(CARD_ID);
     if (card) card.remove();
+    const keySection = document.getElementById(KEY_SECTION_ID);
+    if (keySection) keySection.remove();
   }
 
   function init() {
