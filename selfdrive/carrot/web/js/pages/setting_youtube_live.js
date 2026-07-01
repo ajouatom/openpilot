@@ -1,7 +1,6 @@
 "use strict";
 
 (function () {
-  const YOUTUBE_GROUP = "SYS_RECORD";
   const YOUTUBE_SECTION = "SYS_YOUTUBE";
   const KEY_SECTION_ID = "youtubeLiveKeySection";
   const CARD_ID = "youtubeLiveStatusCard";
@@ -38,7 +37,7 @@
 
   function isVisible() {
     const box = itemsBox();
-    return Boolean(box && box.dataset.renderedGroup === YOUTUBE_GROUP && !box.dataset.renderedDetail);
+    return Boolean(box?.querySelector(`[data-setting-section-id="${YOUTUBE_SECTION}"]`));
   }
 
   function stateLabel(status) {
