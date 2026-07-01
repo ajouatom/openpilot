@@ -606,6 +606,11 @@ def _get_desire_and_lane_changing(md):
       if ds[4] > 0.9: lane_changing = 4
   return desire, lane_changing
 
+LANE_HIGHLIGHT_DESIRE_PEAK = 0.98
+LANE_HIGHLIGHT_DESIRE_OVERLAP = 0.95
+LANE_HIGHLIGHT_CROSSING_PEAK = 0.22
+LANE_HIGHLIGHT_REINDEX_RESET = -0.08
+
 def _get_lane_highlight_phase(md):
   state = md.meta.laneChangeState if md is not None else LaneChangeState.off
   direction = md.meta.laneChangeDirection if md is not None else LaneChangeDirection.none
@@ -614,6 +619,7 @@ def _get_lane_highlight_phase(md):
   if state not in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing):
     _get_lane_highlight_phase.active_direction = LaneChangeDirection.none
     _get_lane_highlight_phase.peak_offset = 0.0
+    _get_lane_highlight_phase.desire_peaked = False
     _get_lane_highlight_phase.overlap_started = False
     _get_lane_highlight_phase.crossed = False
     return "off", direction
@@ -626,6 +632,7 @@ def _get_lane_highlight_phase(md):
   if active_direction != direction:
     _get_lane_highlight_phase.active_direction = direction
     _get_lane_highlight_phase.peak_offset = 0.0
+    _get_lane_highlight_phase.desire_peaked = False
     _get_lane_highlight_phase.overlap_started = False
     _get_lane_highlight_phase.crossed = False
 
@@ -642,8 +649,14 @@ def _get_lane_highlight_phase(md):
       directional_offset = -observed_offset if direction == LaneChangeDirection.left else observed_offset
       peak_offset = max(getattr(_get_lane_highlight_phase, "peak_offset", 0.0), directional_offset)
       _get_lane_highlight_phase.peak_offset = peak_offset
-      approaching = approaching or directional_offset > 0.22
-      crossed = peak_offset > 0.22 and directional_offset < -0.08
+      desire_index = 3 if direction == LaneChangeDirection.left else 4
+      if len(md.meta.desireState) > desire_index:
+        desire_prob = float(md.meta.desireState[desire_index])
+        desire_peaked = getattr(_get_lane_highlight_phase, "desire_peaked", False) or desire_prob >= LANE_HIGHLIGHT_DESIRE_PEAK
+        _get_lane_highlight_phase.desire_peaked = desire_peaked
+        approaching = approaching or (desire_peaked and desire_prob <= LANE_HIGHLIGHT_DESIRE_OVERLAP and
+                                       peak_offset > LANE_HIGHLIGHT_CROSSING_PEAK)
+      crossed = peak_offset > LANE_HIGHLIGHT_CROSSING_PEAK and directional_offset < LANE_HIGHLIGHT_REINDEX_RESET
 
   _get_lane_highlight_phase.overlap_started = approaching and not crossed
   _get_lane_highlight_phase.crossed = crossed
