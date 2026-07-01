@@ -40,15 +40,24 @@
 
 .youtube-live-help-list {
   display: grid;
-  gap: 6px;
+  gap: var(--sp-sm);
+  margin: 0;
+  padding-left: 1.35em;
   color: var(--md-on-surface-var);
   font-size: var(--fs-body-sm);
   letter-spacing: 0;
 }
 
-.youtube-live-help-list > div {
+.youtube-live-help-list > li,
+.youtube-live-help-note {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.youtube-live-help-note {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  letter-spacing: 0;
 }
 
 .youtube-live-key-row {
@@ -151,30 +160,10 @@
 }
 
 .youtube-live-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  --ui-action-min: 136px;
 }
 
-.youtube-live-menu {
-  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 20%, transparent);
-  padding-top: var(--sp-sm);
-}
-
-.youtube-live-menu > summary {
-  cursor: pointer;
-  color: var(--md-on-surface);
-  font-size: var(--fs-body);
-  font-weight: 800;
-  list-style-position: inside;
-}
-
-.youtube-live-actions--menu {
-  margin-top: var(--sp-sm);
-}
-
-.youtube-live-section .smallBtn,
-.youtube-live-action {
+.youtube-live-key-row .smallBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -186,28 +175,18 @@
   padding: 0 12px;
 }
 
-.youtube-live-action--danger {
-  color: var(--md-error);
-  border-color: color-mix(in srgb, var(--md-error) 35%, var(--md-outline-var));
-}
-
 @media (max-width: 430px) {
   .youtube-live-card__head {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .youtube-live-key-row,
-  .youtube-live-actions--menu {
+  .youtube-live-key-row {
+    display: grid;
     grid-template-columns: 1fr;
   }
 
-  .youtube-live-key-row {
-    display: grid;
-  }
-
-  .youtube-live-section .smallBtn,
-  .youtube-live-action {
+  .youtube-live-key-row .smallBtn {
     width: 100%;
   }
 

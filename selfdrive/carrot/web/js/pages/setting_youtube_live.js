@@ -66,7 +66,7 @@
   function makeButton(label, action, tone) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `smallBtn youtube-live-action${tone ? ` youtube-live-action--${tone}` : ""}`;
+    button.className = `smallBtn${tone ? ` btn--${tone}` : ""}`;
     button.textContent = label;
     button.addEventListener("click", action);
     return button;
@@ -94,7 +94,7 @@
       <div class="youtube-live-key-row">
         <input class="youtube-live-key-input" data-role="key-input" type="password" autocomplete="off" spellcheck="false" placeholder="${escapeHtmlLocal(text("youtube_live_key_placeholder", "Paste stream key"))}" />
         <button class="smallBtn btn--filled youtube-live-action" type="button" data-action="save-key">${escapeHtmlLocal(text("save", "Save"))}</button>
-        <button class="smallBtn youtube-live-action youtube-live-action--danger" type="button" data-action="clear-key">${escapeHtmlLocal(text("youtube_live_clear_key", "Clear key"))}</button>
+        <button class="smallBtn youtube-live-action btn--danger" type="button" data-action="clear-key">${escapeHtmlLocal(text("youtube_live_clear_key", "Clear key"))}</button>
         <button class="smallBtn youtube-live-action" type="button" data-action="validate-key">${escapeHtmlLocal(text("youtube_live_validate_key", "Validate key"))}</button>
       </div>
     `;
@@ -120,17 +120,14 @@
       helpCard.className = "setting-group-card youtube-live-help-card";
       helpCard.innerHTML = `
         <div class="youtube-live-card__title">${escapeHtmlLocal(text("youtube_live_help", "Help"))}</div>
-        <div class="youtube-live-help-list">
-          <div>${escapeHtmlLocal(text("youtube_live_help_step_1", "1. Open YouTube Studio and click Create > Go live."))}</div>
-          <div>${escapeHtmlLocal(text("youtube_live_help_step_2", "2. In Live Control Room, open Stream and copy Stream key."))}</div>
-          <div>${escapeHtmlLocal(text("youtube_live_help_step_3", "3. Paste the key here, save it, then run Validate key."))}</div>
-          <div>${escapeHtmlLocal(text("youtube_live_help_step_4", "Standard mode uses qRoadEncodeData, about 526x330 at 20fps. This fits YouTube's 240p-720p encoder range; stereo audio uses AAC 128Kbps."))}</div>
-          <div>${escapeHtmlLocal(text("youtube_live_help_note", "Validation checks local format, FFmpeg, and RTMPS reachability. YouTube confirms the key only after streaming starts."))}</div>
-        </div>
-        <details class="youtube-live-menu">
-          <summary>${escapeHtmlLocal(text("youtube_live_menu_title", "Actions"))}</summary>
-          <div class="youtube-live-actions youtube-live-actions--menu" data-role="action-menu"></div>
-        </details>
+        <ol class="youtube-live-help-list">
+          <li>${escapeHtmlLocal(text("youtube_live_help_step_1", "Open YouTube Studio and click Create > Go live."))}</li>
+          <li>${escapeHtmlLocal(text("youtube_live_help_step_2", "In Live Control Room, open Stream and copy Stream key."))}</li>
+          <li>${escapeHtmlLocal(text("youtube_live_help_step_3", "Paste the key here, save it, then run Validate key."))}</li>
+        </ol>
+        <div class="youtube-live-help-note">${escapeHtmlLocal(text("youtube_live_help_step_4", "Standard mode uses qRoadEncodeData, about 526x330 at 20fps. This fits YouTube's 240p-720p encoder range; stereo audio uses AAC 128Kbps."))}</div>
+        <div class="youtube-live-help-note">${escapeHtmlLocal(text("youtube_live_help_note", "Validation checks local format, FFmpeg, and RTMPS reachability. YouTube confirms the key only after streaming starts."))}</div>
+        <div class="ui-action-grid ui-action-grid--quick youtube-live-actions" data-role="action-menu"></div>
       `;
       section.appendChild(helpCard);
 
