@@ -591,6 +591,7 @@
       const name = event?.detail?.name;
       if (name === "CarrotYouTubeLive" || name === "CarrotYouTubeQuality") loadStatus();
     });
+    window.addEventListener("carrot:settingrendered", sync);
     sync();
   }
 
