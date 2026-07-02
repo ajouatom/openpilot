@@ -39,12 +39,12 @@ function agnos_init {
       python3 -m pip install --target "$PYDEPS" --upgrade jeepney
     fi
 
-    AGNOS_PY="$DIR/system/hardware/tici/agnos.py"
-    MANIFEST="$DIR/system/hardware/tici/agnos.json"
+    AGNOS_PY="$DIR/openpilot/system/hardware/tici/agnos.py"
+    MANIFEST="$DIR/openpilot/system/hardware/tici/agnos.json"
     MODEL="$(tr -d '\000\r\n' 2>/dev/null < /sys/firmware/devicetree/base/model | tr '[:upper:]' '[:lower:]')"
     MODEL="${MODEL#comma }"
     if [ "$MODEL" = "c3" ] || [ "$MODEL" = "tici" ]; then
-      MANIFEST="$DIR/system/hardware/tici/agnos-tici.json"
+      MANIFEST="$DIR/openpilot/system/hardware/tici/agnos-tici.json"
     fi
     if $AGNOS_PY --verify $MANIFEST; then
       sudo reboot
@@ -52,23 +52,23 @@ function agnos_init {
     echo "AGNOS_PY=${AGNOS_PY}"
     echo "MANIFEST=${MANIFEST}"
     echo "MODEL=${MODEL}"
-    if ! python3 $DIR/system/ui/updater.py $AGNOS_PY $MANIFEST; then
+    if ! python3 $DIR/openpilot/system/ui/updater.py $AGNOS_PY $MANIFEST; then
       echo "python updater failed, falling back to bundled updater"
-      $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
+      $DIR/openpilot/system/hardware/tici/updater $AGNOS_PY $MANIFEST
     fi
     echo "end updater $AGNOS_PY $MANIFEST"
   fi
 }
 
 function start_carrot_recovery {
-  local recovery_script="$DIR/selfdrive/carrot/recovery/server.py"
+  local recovery_script="$DIR/openpilot/selfdrive/carrot/recovery/server.py"
   local py_bin
 
   [ -f "$recovery_script" ] || return
   py_bin="$(command -v python3 || command -v python || true)"
   [ -n "$py_bin" ] || return
 
-  if command -v pgrep >/dev/null 2>&1 && pgrep -f "selfdrive/carrot/recovery/server.py" >/dev/null 2>&1; then
+  if command -v pgrep >/dev/null 2>&1 && pgrep -f "openpilot/selfdrive/carrot/recovery/server.py" >/dev/null 2>&1; then
     return
   fi
 
@@ -77,12 +77,12 @@ function start_carrot_recovery {
 }
 
 function invalidate_modeld_build_if_needed {
-  local stamp_path="$DIR/selfdrive/modeld/models/.build_stamp"
-  local tg_devices_path="$DIR/selfdrive/modeld/models/tg_input_devices.json"
-  local driving_pkl_path="$DIR/selfdrive/modeld/models/driving_tinygrad.pkl"
+  local stamp_path="$DIR/openpilot/selfdrive/modeld/models/.build_stamp"
+  local tg_devices_path="$DIR/openpilot/selfdrive/modeld/models/tg_input_devices.json"
+  local driving_pkl_path="$DIR/openpilot/selfdrive/modeld/models/driving_tinygrad.pkl"
   local old_stamp
 
-  MODEL_BUILD_STAMP_VALUE="$(git rev-parse HEAD:selfdrive/modeld HEAD:tinygrad_repo HEAD:common/file_chunker.py 2>/dev/null | tr '\n' ':')"
+  MODEL_BUILD_STAMP_VALUE="$(git rev-parse HEAD:openpilot/selfdrive/modeld HEAD:tinygrad_repo HEAD:openpilot/common/file_chunker.py 2>/dev/null | tr '\n' ':')"
   if [ -z "$MODEL_BUILD_STAMP_VALUE" ]; then
     MODEL_BUILD_STAMP_VALUE="$(git rev-parse HEAD 2>/dev/null || true)"
   fi
@@ -90,9 +90,9 @@ function invalidate_modeld_build_if_needed {
   old_stamp="$(cat "$stamp_path" 2>/dev/null || true)"
   if [ "$MODEL_BUILD_STAMP_VALUE" != "$old_stamp" ] || [ ! -f "$tg_devices_path" ] || { [ ! -f "$driving_pkl_path" ] && [ ! -f "$driving_pkl_path.chunkmanifest" ]; }; then
     echo "Model/tinygrad inputs changed, invalidating generated modeld artifacts."
-    rm -f "$DIR"/selfdrive/modeld/models/*_tinygrad.pkl*
-    rm -f "$DIR"/selfdrive/modeld/models/*_metadata.pkl
-    rm -f "$DIR"/selfdrive/modeld/models/tg_input_devices.json
+    rm -f "$DIR"/openpilot/selfdrive/modeld/models/*_tinygrad.pkl*
+    rm -f "$DIR"/openpilot/selfdrive/modeld/models/*_metadata.pkl
+    rm -f "$DIR"/openpilot/selfdrive/modeld/models/tg_input_devices.json
     FORCE_REBUILD=1
   fi
 }
@@ -101,7 +101,7 @@ function invalidate_native_build_if_needed {
   local missing=0
   local path
 
-  for path in "$DIR/system/loggerd/loggerd" "$DIR/system/loggerd/encoderd" "$DIR/system/camerad/camerad"; do
+  for path in "$DIR/openpilot/system/loggerd/loggerd" "$DIR/openpilot/system/loggerd/encoderd" "$DIR/openpilot/system/camerad/camerad"; do
     if [ ! -x "$path" ]; then
       echo "Missing native binary: $path"
       missing=1
@@ -168,7 +168,7 @@ function launch {
   invalidate_modeld_build_if_needed
   invalidate_native_build_if_needed
 
-  rm selfdrive/pandad/*.so
+  rm openpilot/selfdrive/pandad/*.so
   # write tmux scrollback to a file
   tmux capture-pane -pq -S-1500 > /tmp/launch_log
   if python -c "import flask" > /dev/null 2>&1; then
@@ -213,16 +213,16 @@ function launch {
   LANG=$(cat /data/params/d/LanguageSetting)
   GITSTAT=$(git status)
 
-  # events.py 한글로 변경 및 파일이 교체된 상태인지 확인
-  if [ "${LANG}" = "ko" ] && [[ ! "${GITSTAT}" == *"modified:   selfdrive/selfdrived/events.py"* ]]; then
-    cp -f $DIR/selfdrive/selfdrived/events.py $DIR/scripts/add/events_en.py
-    cp -f $DIR/scripts/add/events_ko.py $DIR/selfdrive/selfdrived/events.py
-  elif [ "${LANG}" = "zh-CHS" ] && [[ ! "${GITSTAT}" == *"modified:   selfdrive/selfdrived/events.py"* ]]; then
+  # events.py ?쒓?濡?蹂寃?諛??뚯씪??援먯껜???곹깭?몄? ?뺤씤
+  if [ "${LANG}" = "ko" ] && [[ ! "${GITSTAT}" == *"modified:   openpilot/selfdrive/selfdrived/events.py"* ]]; then
+    cp -f $DIR/openpilot/selfdrive/selfdrived/events.py $DIR/scripts/add/events_en.py
+    cp -f $DIR/scripts/add/events_ko.py $DIR/openpilot/selfdrive/selfdrived/events.py
+  elif [ "${LANG}" = "zh-CHS" ] && [[ ! "${GITSTAT}" == *"modified:   openpilot/selfdrive/selfdrived/events.py"* ]]; then
     # Backup current events.py (assumed English) and install Simplified Chinese events
-    cp -f $DIR/selfdrive/selfdrived/events.py $DIR/scripts/add/events_en.py
-    cp -f $DIR/scripts/add/events_zh.py $DIR/selfdrive/selfdrived/events.py
-  elif [ "${LANG}" = "en" ] && [[ "${GITSTAT}" == *"modified:   selfdrive/selfdrived/events.py"* ]]; then
-    cp -f $DIR/scripts/add/events_en.py $DIR/selfdrive/selfdrived/events.py
+    cp -f $DIR/openpilot/selfdrive/selfdrived/events.py $DIR/scripts/add/events_en.py
+    cp -f $DIR/scripts/add/events_zh.py $DIR/openpilot/selfdrive/selfdrived/events.py
+  elif [ "${LANG}" = "en" ] && [[ "${GITSTAT}" == *"modified:   openpilot/selfdrive/selfdrived/events.py"* ]]; then
+    cp -f $DIR/scripts/add/events_en.py $DIR/openpilot/selfdrive/selfdrived/events.py
   fi
 
   # openpilot default ssh key installer
@@ -237,15 +237,15 @@ function launch {
   fi
 
   # start manager
-  cd system/manager
+  cd openpilot/system/manager
   if [ "$FORCE_REBUILD" = "1" ] || [ ! -f $DIR/prebuilt ]; then
     if ! ./build.py; then
       echo "openpilot build failed, not starting manager."
       while true; do sleep 1; done
     fi
     if [ "$FORCE_REBUILD" = "1" ]; then
-      mkdir -p "$DIR/selfdrive/modeld/models"
-      echo -n "$MODEL_BUILD_STAMP_VALUE" > "$DIR/selfdrive/modeld/models/.build_stamp"
+      mkdir -p "$DIR/openpilot/selfdrive/modeld/models"
+      echo -n "$MODEL_BUILD_STAMP_VALUE" > "$DIR/openpilot/selfdrive/modeld/models/.build_stamp"
     fi
   fi
   ./manager.py

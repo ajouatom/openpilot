@@ -6,7 +6,7 @@ import argparse
 import signal
 from collections import defaultdict
 
-import cereal.messaging as messaging
+import openpilot.cereal.messaging as messaging
 from openpilot.tools.lib.logreader import LogReader
 
 def sigint_handler(signal, frame):
@@ -104,8 +104,8 @@ class SteeringAccuracyTool:
           print(f"  {'-'*118}")
           for k in sorted(self.speed_group_stats[group].keys()):
             v = self.speed_group_stats[group][k]
-            print(f'  {k:#2}° | actuator:{int(v["steer"] / v["cnt"] * 100):#3}% ' +
-                  f'| error: {round(v["err"] / v["cnt"], 2):2.2f}° | -:{int(v["-"] / v["cnt"] * 100):#3}% ' +
+            print(f'  {k:#2}째 | actuator:{int(v["steer"] / v["cnt"] * 100):#3}% ' +
+                  f'| error: {round(v["err"] / v["cnt"], 2):2.2f}째 | -:{int(v["-"] / v["cnt"] * 100):#3}% ' +
                   f'| =:{int(v["="] / v["cnt"] * 100):#3}% | +:{int(v["+"] / v["cnt"] * 100):#3}% | lim:{v["limited"]:#5} ' +
                   f'| sat:{v["saturated"]:#5} | path dev: {round(v["dpp"] / v["cnt"], 2):2.2f}m | total: {v["cnt"]:#5}')
           print("")

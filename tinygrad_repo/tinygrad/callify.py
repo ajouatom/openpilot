@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from tinygrad.dtype import dtypes, AddrSpace, PtrDType, ImageDType, Invalid
+from tinygrad.dtype import dtypes, AddrSpace, PtrDType, ImageDType
 from tinygrad.uop.ops import UOp, UPat, PatternMatcher, Ops, GroupOp, graph_rewrite, track_rewrites
 from tinygrad.helpers import VIZ, pluralize, all_int
 
@@ -106,9 +106,6 @@ def _precompiled_output_redirect(s:UOp, t:UOp) -> UOp|None:
   if s.op in {Ops.BUFFER, Ops.MULTI} and s.has_buffer_identity(): return t
   return None
 
-def _is_invalid_init_store(base:UOp, dep:UOp) -> bool:
-  return dep.op is Ops.STORE and dep.src[0].buf_uop is base.buf_uop and dep.src[1].base.arg is Invalid
-
 def transform_precompiled_call(c:UOp) -> UOp|None:
   if not c.arg.precompile: return None
   assert c.src[0].op is Ops.TUPLE, f"expected TUPLE body for precompiled FUNCTION, got {c.src[0].op}"
@@ -124,14 +121,11 @@ def transform_precompiled_call(c:UOp) -> UOp|None:
   items:list[UOp] = []
   for s, t in zip(srcs, targets):
     after_deps:list[UOp] = []
-    init_afters:list[UOp] = []
     while s.op is Ops.AFTER:
-      if all(_is_invalid_init_store(s.src[0], x) for x in s.src[1:]): init_afters.append(s)
-      else: after_deps.extend(s.src[1:])
+      after_deps.extend(s.src[1:])
       s = s.src[0]
     if (placed := _precompiled_output_redirect(s, t)) is not None and s not in subs:
       subs[s] = placed
-      subs.update((x, placed) for x in init_afters)
       items.append(s.after(*after_deps) if after_deps else s)
     else:
       items.append(t.after(t.store(s), *after_deps))
@@ -189,7 +183,7 @@ def finalize_after(ctx:AllocCtx, x:UOp):
 def replace_input_buffer(ctx:AllocCtx, b:UOp):
   ctx.replacements.append(b)
   return UOp.param(len(ctx.replacements)-1, b.dtype, b.shape, b.device,
-                   b._min_max if b.op is Ops.BIND else None, b.src[0].arg[0] if b.op is Ops.BIND else None,
+                   b._min_max if b.op is Ops.BIND else None, b.src[0].expr if b.op is Ops.BIND else None,
                    b.addrspace if isinstance(b.dtype, (PtrDType, ImageDType)) else AddrSpace.GLOBAL)
 
 pm_finalize_call = PatternMatcher([
@@ -203,7 +197,7 @@ pm_replace_buf = PatternMatcher([
   # replace SLICE with PARAM. this rewrite is bottom up so BUFFERs we don't need won't be in the input
   (UPat(Ops.SLICE, src=(UPat(Ops.BUFFER), UPat(Ops.CONST, dtype=dtypes.weakint)), name="b"), replace_input_buffer),
   # strip value from BIND for cache key normalization, so different values hit same cache
-  (UPat(Ops.BIND, src=(UPat(Ops.DEFINE_VAR), UPat(Ops.CONST)), name="b"), replace_input_buffer),
+  (UPat(Ops.BIND, src=(UPat(Ops.PARAM), UPat(Ops.CONST)), name="b"), replace_input_buffer),
 ])
 
 @track_rewrites(lambda _,ret: f"Callify {pluralize('Buffer', len(ret[1]))}")
@@ -211,8 +205,8 @@ def transform_to_call(big_sink:UOp) -> tuple[UOp, dict[UOp, UOp]]:
   if VIZ: graph_rewrite(big_sink, PatternMatcher([]), name="View Tensor Graph")
   # uop list is a list in the original_sink graph and we can map to the tags later
   # here we build buffer map
-  dont_realize = {Ops.CONST, Ops.BUFFER, Ops.BIND, Ops.DEFINE_VAR, Ops.AFTER}
-  ctx = AllocCtx(bases=set([x.multibase for x in big_sink.src if x.base.op not in dont_realize]))
+  dont_realize = {Ops.CONST, Ops.BUFFER, Ops.BIND, Ops.AFTER}
+  ctx = AllocCtx(bases=set([x.multibase for x in big_sink.src if x.base.op not in dont_realize and x.base.addrspace is not AddrSpace.ALU]))
 
   # this rewrite is "read-only", it adds simple things to buffer_map and may sink things on big_sink, bottom_up
   # this is the only one where we have to be careful to not break the tensor graph

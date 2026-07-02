@@ -10,12 +10,12 @@ from openpilot.system.hardware import TICI, HARDWARE
 # TODO: pytest-cpp doesn't support FAIL, and we need to create test translations in sessionstart
 # pending https://github.com/pytest-dev/pytest-cpp/pull/147
 collect_ignore = [
-  "selfdrive/test/process_replay/test_processes.py",
-  "selfdrive/test/process_replay/test_regen.py",
+  "openpilot/selfdrive/test/process_replay/test_processes.py",
+  "openpilot/selfdrive/test/process_replay/test_regen.py",
 ]
 collect_ignore_glob = [
-  "selfdrive/debug/*.py",
-  "selfdrive/modeld/*.py",
+  "openpilot/selfdrive/debug/*.py",
+  "openpilot/selfdrive/modeld/*.py",
 ]
 
 

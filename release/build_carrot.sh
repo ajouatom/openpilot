@@ -14,7 +14,7 @@ find . -name '*.pyc' -delete
 find . -name 'moc_*' -delete
 find . -name '__pycache__' -delete
 rm -rf .sconsign.dblite Jenkinsfile release/
-rm selfdrive/modeld/models/*.onnx
+rm openpilot/selfdrive/modeld/models/*.onnx
 touch prebuilt
 
 # Add built files to git
