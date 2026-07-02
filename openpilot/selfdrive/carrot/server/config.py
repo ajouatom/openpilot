@@ -11,6 +11,7 @@ ASSETS_DIR = os.path.join(WEB_DIR, "assets")
 PAGES_DIR = os.path.join(WEB_DIR, "pages")
 TRAINING_ASSETS_DIR = os.path.join(os.path.dirname(ROOT_DIR), "assets", "training")
 OFFROAD_ASSETS_DIR = os.path.join(os.path.dirname(ROOT_DIR), "assets", "offroad")
+SOUND_ASSETS_DIR = os.path.join(os.path.dirname(ROOT_DIR), "assets")
 
 # Settings file
 DEFAULT_SETTINGS_PATH = os.environ.get(

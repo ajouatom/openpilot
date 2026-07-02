@@ -61,6 +61,18 @@ function renderSshKeysRow(statusOrUsername, fallbackHasKeys) {
   const hasKeys = Boolean(status.has_keys || status.hasKeys);
   const fingerprints = Array.isArray(status.fingerprints) ? status.fingerprints : [];
   const accountText = hasKeys ? (displayName || "-") : getUIText("not_configured", "Not configured");
+  const control = renderSettingFormControl({
+    label: getUIText("ssh_github_username", "GitHub username"),
+    value: accountText,
+    placeholder: getUIText("ssh_github_username_prompt", "Enter your GitHub username"),
+    configured: hasKeys,
+    editAction: "edit",
+    actionAttribute: "data-ssh-action",
+    actions: [
+      { action: "remove", label: getUIText("remove_upper", "REMOVE"), disabled: !hasKeys },
+      ...(fingerprints.length ? [{ action: "view", label: getUIText("ssh_keys_view", "View keys") }] : []),
+    ],
+  });
   return `
     <div class="setting device-setting">
       <div class="settingTop">
@@ -68,18 +80,14 @@ function renderSshKeysRow(statusOrUsername, fallbackHasKeys) {
           <div class="title">${escapeHtml(getUIText("ssh_keys", "SSH Keys"))}</div>
         </div>
         <div class="ctrl device-ssh-control">
-          <button type="button" class="device-ssh-account ${hasKeys ? "is-configured" : ""}" data-ssh-action="manage" data-has-keys="${hasKeys ? "1" : "0"}" title="${escapeHtml(accountText)}">
-            <span class="device-ssh-account__label">GitHub</span>
-            <span class="device-ssh-account__value">${escapeHtml(accountText)}</span>
-          </button>
-          ${fingerprints.length ? `<button type="button" class="smallBtn device-ssh-action" data-ssh-action="view" data-has-keys="1">${escapeHtml(getUIText("ssh_keys_view", "View keys"))}</button>` : ""}
+          <div class="device-ssh-form">${control}</div>
         </div>
       </div>
     </div>`;
 }
 
 function renderDeviceLanguageRow(info) {
-  const currentLang = info.language || "main_en";
+  const currentLang = info.language || "en";
   return `
     <div class="setting device-setting">
       <div class="settingTop">

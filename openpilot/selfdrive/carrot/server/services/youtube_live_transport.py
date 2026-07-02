@@ -26,6 +26,11 @@ REQUIRED_RTMP_SYMBOLS = (
 )
 
 
+# If forwarding to YouTube stalls this long (dead hotspot), fail fast instead of
+# blocking for the TCP retransmit timeout (minutes) so the service can reconnect.
+TUNNEL_STALL_TIMEOUT_SECONDS = 6.0
+
+
 class LibrtmpError(RuntimeError):
   pass
 
@@ -76,7 +81,9 @@ class _TlsTunnel:
       self._remote = ssl.create_default_context().wrap_socket(raw_remote, server_hostname=self._host)
       raw_remote = None
       self._local.settimeout(None)
-      self._remote.settimeout(None)
+      # Bound sends to YouTube so a dead network surfaces as a timeout in seconds
+      # (select gates recv, so this only bites a genuinely stalled forward).
+      self._remote.settimeout(TUNNEL_STALL_TIMEOUT_SECONDS)
       sockets = (self._local, self._remote)
       while not self._stop_event.is_set():
         readable, _, _ = select.select(sockets, [], [], 0.5)
@@ -178,7 +185,7 @@ class LibrtmpClient:
         raise LibrtmpError("YouTube RTMPS connection is closed")
       buffer = ctypes.create_string_buffer(payload)
       written = int(self._library.RTMP_Write(handle, buffer, len(payload)))
-      if written < 0:
+      if written <= 0:
         raise LibrtmpError("YouTube RTMPS write failed")
       self._bytes_written += written
       return written
@@ -274,6 +281,24 @@ class RtmpSink(io.RawIOBase):
     self._client = client
     self._position = 0
     self._pending = bytearray()
+    self._drain_calls = 0
+    self._partial_writes = 0
+
+  @property
+  def bytes_accepted(self) -> int:
+    return self._position
+
+  @property
+  def pending_bytes(self) -> int:
+    return len(self._pending)
+
+  @property
+  def drain_calls(self) -> int:
+    return self._drain_calls
+
+  @property
+  def partial_writes(self) -> int:
+    return self._partial_writes
 
   def writable(self) -> bool:
     return True
@@ -292,9 +317,13 @@ class RtmpSink(io.RawIOBase):
   def _drain(self, floor: int) -> None:
     # Keep at least `floor` bytes buffered so librtmp always has look-ahead.
     while len(self._pending) >= floor:
+      pending_before = len(self._pending)
       written = self._client.write(bytes(self._pending))
       if written <= 0:
         break
+      self._drain_calls += 1
+      if written < pending_before:
+        self._partial_writes += 1
       del self._pending[:written]
 
   def tell(self) -> int:
@@ -302,7 +331,11 @@ class RtmpSink(io.RawIOBase):
 
   def flush(self) -> None:
     while self._pending:
+      pending_before = len(self._pending)
       written = self._client.write(bytes(self._pending))
       if written <= 0:
         break
+      self._drain_calls += 1
+      if written < pending_before:
+        self._partial_writes += 1
       del self._pending[:written]

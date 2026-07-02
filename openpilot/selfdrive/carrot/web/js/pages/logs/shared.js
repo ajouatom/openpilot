@@ -149,7 +149,10 @@ function openLogsVideoPlayer(title, src, options = {}) {
       <video class="dashcam-player-video" playsinline></video>
       <div class="dashcam-player-toast" aria-live="polite"></div>
       <div class="dashcam-player-top">
-        <div class="dashcam-player-title">${escapeHtml(title || "Video")}</div>
+        <div class="dashcam-player-heading">
+          <div class="dashcam-player-title">${escapeHtml(title || "Video")}</div>
+          <div class="dashcam-player-subtitle"${options.subtitle ? "" : " hidden"}>${escapeHtml(options.subtitle || "")}</div>
+        </div>
         <button class="dashcam-player-close" type="button" aria-label="${escapeHtml(getUIText("close", "Close"))}" title="${escapeHtml(getUIText("close", "Close"))}">
           <svg viewBox="0 0 24 24"><path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.71 2.88 18.3 9.17 12 2.88 5.7 4.29 4.29l6.3 6.3 6.29-6.3z"/></svg>
         </button>
@@ -158,9 +161,19 @@ function openLogsVideoPlayer(title, src, options = {}) {
   </div>`;
   const videoEl = overlay.querySelector("video");
   const toastEl = overlay.querySelector(".dashcam-player-toast");
+  const subtitleEl = overlay.querySelector(".dashcam-player-subtitle");
   const downloadUrl = src + (src.includes("?") ? "&" : "?") + "download=1";
   let toastTimer = null;
   let suppressToasts = true;
+  const updateSubtitle = () => {
+    if (!subtitleEl) return;
+    const resolved = typeof options.subtitleForDuration === "function"
+      ? options.subtitleForDuration(videoEl.duration)
+      : options.subtitle;
+    subtitleEl.textContent = resolved || "";
+    subtitleEl.hidden = !resolved;
+  };
+  videoEl.addEventListener("loadedmetadata", updateSubtitle);
   const showToast = (text) => {
     if (!toastEl || suppressToasts || !text) return;
     toastEl.textContent = text;
