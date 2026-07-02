@@ -29,3 +29,24 @@ def test_post_driver_unwind_and_angle_cap():
   assert governor.update(True, state(4.0, 80.0, 2.0, 25.0), 110.0, 90.0) <= 55.0
   assert governor.driver_unwind_frames == 149
   assert governor.update(True, state(5.0, 100.0, 2.0, 25.0), 220.0, 174.0) == 25.0
+
+
+def test_low_eps_tracking_error_recovers_authority():
+  governor = AngleTorqueGovernor(250.0, 25.0, 175.0)
+  recovered_cap = governor.update(True, state(5.0, 85.0, 2.0, 10.0), 150.0, 150.0)
+  assert 125.0 < recovered_cap < 127.0
+
+
+def test_recovery_does_not_override_hard_protection():
+  governor = AngleTorqueGovernor(250.0, 25.0, 175.0)
+  assert governor.update(True, state(5.0, 85.0, 2.0, 20.0), 150.0, 150.0) <= 88.0
+
+  governor.update(True, state(5.0, 85.0, 2.0, 10.0, pressed=True), 150.0, 150.0)
+  assert governor.update(True, state(5.0, 85.0, 2.0, 10.0), 150.0, 150.0) <= 50.0
+
+  assert governor.update(True, state(5.0, 100.0, 2.0, 10.0), 220.0, 174.0) == 25.0
+
+
+def test_standstill_does_not_recover_authority():
+  governor = AngleTorqueGovernor(250.0, 25.0, 175.0)
+  assert governor.update(True, state(1.0, 85.0, 2.0, 10.0), 150.0, 150.0) == 50.0

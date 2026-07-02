@@ -20,10 +20,11 @@ class AngleTorqueGovernor:
 
     desired_clip_error = abs(float(desired_angle) - applied_angle)
     tracking_error = abs(applied_angle - CS.steeringAngleDeg)
+    eps_torque = abs(CS.steeringTorqueEps)
     near_angle_cap = abs(applied_angle) > self.max_angle - 2.0
     low_speed_large_angle = CS.vEgo < 7.0 and abs(CS.steeringAngleDeg) > 70.0
     stalled_tracking = abs(CS.steeringRateDeg) < 8.0 and tracking_error > 8.0
-    eps_loaded = abs(CS.steeringTorqueEps) > 18.0
+    eps_loaded = eps_torque > 18.0
     launch_large_angle = CS.vEgo < 7.0 and abs(CS.steeringAngleDeg) > 20.0
     low_speed_fast_steer = CS.vEgo < 8.0 and abs(CS.steeringRateDeg) > 35.0
     post_driver_unwind = self.driver_unwind_frames > 0 and CS.vEgo < 12.0 and abs(CS.steeringAngleDeg) > 15.0
@@ -55,6 +56,16 @@ class AngleTorqueGovernor:
       fast_steer_cap = float(np.interp(CS.vEgo, [7.0, 8.0], [fast_steer_cap, self.max_torque]))
       torque_cap = min(torque_cap, max(self.min_torque, fast_steer_cap))
 
+    authority_recovery = (not CS.steeringPressed and not post_driver_unwind and not near_angle_cap and
+                          3.0 < CS.vEgo < 7.0 and abs(applied_angle) > 30.0 and tracking_error > 8.0 and
+                          eps_torque < 18.0)
+    if authority_recovery:
+      tracking_need = float(np.interp(tracking_error, [8.0, 20.0, 40.0], [0.0, 0.6, 1.0]))
+      eps_headroom = float(np.interp(eps_torque, [10.0, 14.0, 18.0], [1.0, 0.5, 0.0]))
+      speed_authority = float(np.interp(CS.vEgo, [3.0, 4.2, 7.0], [105.0, 120.0, 140.0]))
+      authority_floor = 88.0 + tracking_need * eps_headroom * (speed_authority - 88.0)
+      torque_cap = max(torque_cap, min(self.max_torque, authority_floor))
+
     if post_driver_unwind:
       unwind_angle = abs(CS.steeringAngleDeg)
       unwind_angle_cap = float(np.interp(unwind_angle, [15.0, 25.0, 70.0, 120.0],
@@ -67,10 +78,11 @@ class AngleTorqueGovernor:
       unwind_cap = float(np.interp(CS.vEgo, [10.0, 12.0], [unwind_cap, self.max_torque]))
       torque_cap = min(torque_cap, max(self.min_torque, unwind_cap))
 
-    if low_speed_large_angle and (near_angle_cap or stalled_tracking or eps_loaded):
+    stalled_loaded = stalled_tracking and eps_torque >= 14.0
+    if low_speed_large_angle and (near_angle_cap or stalled_loaded or eps_loaded):
       clip_factor = float(np.interp(desired_clip_error, [0.0, 5.0, 20.0, 60.0], [1.0, 0.75, 0.45, 0.25]))
       tracking_factor = float(np.interp(tracking_error, [3.0, 8.0, 15.0, 30.0], [1.0, 0.75, 0.55, 0.35]))
-      eps_factor = float(np.interp(abs(CS.steeringTorqueEps), [10.0, 18.0, 28.0], [1.0, 0.75, 0.5]))
+      eps_factor = float(np.interp(eps_torque, [10.0, 18.0, 28.0], [1.0, 0.75, 0.5]))
       speed_factor = float(np.interp(CS.vEgo, [3.0, 7.0], [0.65, 1.0]))
       load_torque_cap = max(self.min_torque, self.max_torque * min(clip_factor, tracking_factor, eps_factor, speed_factor))
       torque_cap = min(torque_cap, load_torque_cap)
