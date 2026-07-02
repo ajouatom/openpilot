@@ -43,7 +43,6 @@ const appDialogBody = document.getElementById("appDialogBody");
 const appDialogChoices = document.getElementById("appDialogChoices");
 const appDialogInputWrap = document.getElementById("appDialogInputWrap");
 const appDialogInput = document.getElementById("appDialogInput");
-const appDialogInputError = document.getElementById("appDialogInputError");
 const appDialogCancel = document.getElementById("appDialogCancel");
 const appDialogCopy = document.getElementById("appDialogCopy");
 const appDialogConfirm = document.getElementById("appDialogConfirm");

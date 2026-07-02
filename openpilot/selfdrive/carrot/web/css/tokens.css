@@ -88,7 +88,6 @@
      --r-round is reserved for explicitly semantic shapes only:
      FABs, switches, badges, status dots, and circular icon controls. */
   --control-radius: var(--r-sm);
-  --control-min-height: 44px;
 
   /* Popup UX primitives
      - Compact sheets for alert / confirm / prompt.
@@ -198,7 +197,6 @@
   --state-focus:   0.12;
   --state-pressed: 0.12;
   --state-dragged: 0.16;
-  --state-disabled-opacity: 0.46;
   --state-hover-pct:   8%;
   --state-focus-pct:  12%;
   --state-pressed-pct:12%;

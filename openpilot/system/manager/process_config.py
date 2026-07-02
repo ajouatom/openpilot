@@ -89,27 +89,17 @@ def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
 def enable_webrtc(started, params, CP: car.CarParams) -> bool:
   return params.get_int("DisableDM") == 2
 
-def enable_youtube_low_encoder(started, params, CP: car.CarParams) -> bool:
+def enable_youtube_hq(started, params, CP: car.CarParams) -> bool:
+  # Medium/wide reuse the existing Carrot Vision livestream encoders.
   try:
-    return params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") not in (1, 2, 3)
-  except Exception:
-    return False
-
-def enable_youtube_medium_encoder(started, params, CP: car.CarParams) -> bool:
-  try:
-    return params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") == 1
+    return params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") in (1, 3)
   except Exception:
     return False
 
 def enable_youtube_encoder(started, params, CP: car.CarParams) -> bool:
+  # High quality has a dedicated encoder so Carrot Vision settings stay unchanged.
   try:
     return params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") == 2
-  except Exception:
-    return False
-
-def enable_youtube_wide_encoder(started, params, CP: car.CarParams) -> bool:
-  try:
-    return params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") == 3
   except Exception:
     return False
 
@@ -124,11 +114,8 @@ procs = [
 
   NativeProcess("loggerd", "openpilot/system/loggerd", ["./loggerd"], logging),
   NativeProcess("encoderd", "openpilot/system/loggerd", ["./encoderd"], only_onroad),
-  NativeProcess("stream_encoderd", "openpilot/system/loggerd", ["./encoderd", "--stream"], or_(notcar, and_(only_onroad, enable_webrtc))),
-  NativeProcess("youtube_low_encoderd", "openpilot/system/loggerd", ["./encoderd", "--youtube-low"], and_(only_onroad, enable_youtube_low_encoder)),
-  NativeProcess("youtube_medium_encoderd", "openpilot/system/loggerd", ["./encoderd", "--youtube-medium"], and_(only_onroad, enable_youtube_medium_encoder)),
+  NativeProcess("stream_encoderd", "openpilot/system/loggerd", ["./encoderd", "--stream"], or_(notcar, and_(only_onroad, or_(enable_webrtc, enable_youtube_hq)))),
   NativeProcess("youtube_encoderd", "openpilot/system/loggerd", ["./encoderd", "--youtube"], and_(only_onroad, enable_youtube_encoder)),
-  NativeProcess("youtube_wide_encoderd", "openpilot/system/loggerd", ["./encoderd", "--youtube-wide"], and_(only_onroad, enable_youtube_wide_encoder)),
   PythonProcess("logmessaged", "openpilot.system.logmessaged", always_run),
 
   NativeProcess("camerad", "openpilot/system/camerad", ["./camerad"], driverview, enabled=not WEBCAM),

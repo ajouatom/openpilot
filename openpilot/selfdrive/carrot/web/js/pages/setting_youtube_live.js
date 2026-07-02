@@ -48,52 +48,9 @@
   function configuredLabel(status) {
     if (status?.configured) {
       if (!state.keyLoaded) return text("loading", "Loading...");
-      return text("youtube_live_key_configured", "Key saved: {key}", { key: maskedKey(state.streamKey) || "-" });
+      return text("youtube_live_key_configured", "Key saved: {key}", { key: state.streamKey || "-" });
     }
     return text("youtube_live_key_missing", "Stream key is not saved");
-  }
-
-  function maskedKey(value) {
-    const key = String(value || "").trim();
-    if (!key) return "";
-    if (key.length <= 12) return `${key.slice(0, 3)}•••`;
-    return `${key.slice(0, 8)}•••${key.slice(-4)}`;
-  }
-
-  function keyControlMarkup() {
-    const configured = Boolean(state.status?.configured || state.streamKey);
-    return renderSettingFormControl({
-      label: text("youtube_live_key_panel_title", "Stream key"),
-      value: maskedKey(state.streamKey) || text("youtube_live_key_missing", "Stream key is not saved"),
-      placeholder: text("youtube_live_key_placeholder", "Paste stream key"),
-      configured,
-      editAction: "edit-key",
-      actions: [
-        { action: "clear-key", label: text("youtube_live_clear_key", "Clear key"), disabled: !configured },
-      ],
-    });
-  }
-
-  function bindKeyControl(keyCard) {
-    keyCard?.querySelector('[data-action="edit-key"]')?.addEventListener("click", editStreamKey);
-    keyCard?.querySelector('[data-action="clear-key"]')?.addEventListener("click", clearKey);
-  }
-
-  function syncKeyControl() {
-    const keyCard = document.querySelector(`#${KEY_SECTION_ID} .youtube-live-key-card`);
-    const host = keyCard?.querySelector('[data-role="key-control"]');
-    if (!host) return;
-    host.innerHTML = keyControlMarkup();
-    bindKeyControl(keyCard);
-  }
-
-  async function editStreamKey() {
-    await openSettingFormDialog({
-      title: text("youtube_live_key_panel_title", "Stream key"),
-      placeholder: text("youtube_live_key_placeholder", "Paste stream key"),
-      inputType: "password",
-      onSave: saveStreamKey,
-    });
   }
 
   function streamTitle(status) {
@@ -161,10 +118,23 @@
     keyCard.innerHTML = `
       <div class="youtube-live-card__title">${escapeHtmlLocal(text("youtube_live_key_panel_title", "Stream key"))}</div>
       <div class="youtube-live-card__desc" data-role="key-status">${escapeHtmlLocal(text("loading", "Loading..."))}</div>
-      <div data-role="key-control">${keyControlMarkup()}</div>
+      <div class="youtube-live-key-row">
+        <input class="youtube-live-key-input" data-role="key-input" type="text" autocomplete="off" spellcheck="false" placeholder="${escapeHtmlLocal(text("youtube_live_key_placeholder", "Paste stream key"))}" />
+        <button class="smallBtn btn--filled youtube-live-action" type="button" data-action="save-key">${escapeHtmlLocal(text("save", "Save"))}</button>
+        <button class="smallBtn youtube-live-action btn--danger" type="button" data-action="clear-key">${escapeHtmlLocal(text("youtube_live_clear_key", "Clear key"))}</button>
+        <button class="smallBtn youtube-live-action" type="button" data-action="validate-key">${escapeHtmlLocal(text("youtube_live_validate_key", "Validate key"))}</button>
+      </div>
     `;
       keySection.appendChild(keyCard);
-      bindKeyControl(keyCard);
+      keyCard.querySelector('[data-action="save-key"]')?.addEventListener("click", saveKeyFromInput);
+      keyCard.querySelector('[data-action="clear-key"]')?.addEventListener("click", clearKey);
+      keyCard.querySelector('[data-action="validate-key"]')?.addEventListener("click", validateStreamKey);
+      keyCard.querySelector('[data-role="key-input"]')?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          saveKeyFromInput();
+        }
+      });
     }
 
     const section = existing || document.createElement("section");
@@ -251,8 +221,6 @@
     if (metricsEl) {
       metricsEl.innerHTML = "";
       metricsEl.appendChild(metric(text("youtube_live_metric_source", "Video"), sourceLabel(status)));
-      metricsEl.appendChild(metric(text("youtube_live_metric_format", "Format"), videoFormatLabel(status)));
-      metricsEl.appendChild(metric(text("youtube_live_metric_target", "Target"), targetFormatLabel(status)));
       metricsEl.appendChild(metric(
         text("youtube_live_metric_timestamp", "Time caption"),
         status?.timestamp_caption_enabled
@@ -283,27 +251,7 @@
     return `${width}*${height} * ${fps}fps`;
   }
 
-  function targetFormatLabel(status) {
-    const width = Number(status?.target_width || status?.target?.width || 0);
-    const height = Number(status?.target_height || status?.target?.height || 0);
-    const kbps = Number(status?.target_video_kbps || status?.target?.video_kbps || 0);
-    if (!width || !height) return "-";
-    return `${width}*${height}${kbps ? ` / ${kbps}kbps` : ""}`;
-  }
-
   function sourceLabel(status) {
-    const requestedQuality = Number(status?.requested_quality);
-    if (Number.isFinite(requestedQuality)) {
-      if (requestedQuality <= 0) return text("youtube_live_source_low", "Low quality");
-      if (requestedQuality === 1) return text("youtube_live_source_medium", "Medium quality");
-      if (requestedQuality === 2) return text("youtube_live_source_high", "High quality");
-      if (requestedQuality === 3) return text("youtube_live_source_wide", "Wide angle");
-    }
-    const quality = String(status?.quality || "").toLowerCase();
-    if (quality === "low" || quality === "standard") return text("youtube_live_source_low", "Low quality");
-    if (quality === "medium") return text("youtube_live_source_medium", "Medium quality");
-    if (quality === "high") return text("youtube_live_source_high", "High quality");
-    if (quality === "wide") return text("youtube_live_source_wide", "Wide angle");
     const source = String(status?.source || "");
     if (source === "livestreamRoadEncodeData") return text("youtube_live_source_medium", "Medium quality");
     if (source === "youtubeRoadEncodeData") return text("youtube_live_source_high", "High quality");
@@ -352,7 +300,6 @@
       const result = await getJson("/api/youtube_live/stream_key");
       state.streamKey = String(result?.stream_key || "");
       state.keyLoaded = true;
-      syncKeyControl();
       if (state.status) renderStatus(state.status);
     } catch (err) {
       state.keyLoaded = false;
@@ -361,26 +308,35 @@
     }
   }
 
-  async function saveStreamKey(rawValue) {
-    const value = String(rawValue || "").trim();
-    const validation = await fetchStreamKeyValidation(value, true);
-    if (!validation?.format_ok) {
-      const validationMessage = localizedValidationMessage(validation?.format_message);
-      throw new Error(validationMessage !== "-"
-        ? validationMessage
-        : text("youtube_live_validation_required", "Stream key is required."));
-    }
+  function keyInputValue() {
+    return String(document.querySelector(`#${KEY_SECTION_ID} [data-role="key-input"]`)?.value || "").trim();
+  }
+
+  async function saveKeyFromInput() {
+    const value = keyInputValue();
+    let saveResult;
     try {
       const status = await postJson("/api/youtube_live/stream_key", { stream_key: value });
+      saveResult = { ok: true, status };
       state.streamKey = value;
       state.keyLoaded = true;
       state.status = status;
       renderStatus(status);
-      syncKeyControl();
-      toast(text("youtube_live_key_saved", "Stream key saved"));
     } catch (err) {
-      throw new Error(err?.message || String(err));
+      saveResult = {
+        ok: false,
+        error: err?.message || String(err),
+        payload: err?.payload || null,
+      };
     }
+    const validation = await fetchStreamKeyValidation(value, true);
+    await appAlert(saveResultText(saveResult, validation, value), {
+      title: text("youtube_live_save_result", "Stream key save result"),
+      copyText: JSON.stringify({
+        save: saveResult.ok ? { ok: true, status: saveResult.status } : saveResult,
+        validation,
+      }, null, 2),
+    });
   }
 
   async function fetchStreamKeyValidation(value, explicitValue) {
@@ -401,6 +357,55 @@
     }
   }
 
+  async function validateStreamKey() {
+    const value = keyInputValue();
+    try {
+      const result = await fetchStreamKeyValidation(value);
+      await appAlert(validationText(result, value || state.streamKey), {
+        title: text("youtube_live_validate_key", "Validate key"),
+      });
+    } catch (err) {
+      const payload = err?.payload || null;
+      if (payload) {
+        await appAlert(validationText(payload, value || state.streamKey), {
+          title: text("youtube_live_validate_key", "Validate key"),
+        });
+        return;
+      }
+      toast(err?.message || String(err), { tone: "error" });
+    }
+  }
+
+  function saveResultText(saveResult, validation, streamKey) {
+    const pass = text("youtube_live_validation_pass", "OK");
+    const fail = text("youtube_live_validation_fail", "FAIL");
+    const saveDetail = saveResult?.ok
+      ? configuredLabel(saveResult.status)
+      : (saveResult?.error || "-");
+    const lines = [
+      `${text("youtube_live_save_status", "Save")}: ${saveResult?.ok ? pass : fail} - ${saveDetail}`,
+      "",
+      validationText(validation, streamKey),
+    ];
+    return lines.join("\n");
+  }
+
+  function validationText(result, streamKey) {
+    const pass = text("youtube_live_validation_pass", "OK");
+    const fail = text("youtube_live_validation_fail", "FAIL");
+    const lines = [
+      `${text("youtube_live_validation_format", "Key format")}: ${result?.format_ok ? pass : fail} - ${localizedValidationMessage(result?.format_message)}`,
+      `${text("youtube_live_muxer", "PyAV FLV/AAC")}: ${result?.muxer_available ? pass : fail}`,
+      `${text("youtube_live_validation_transport", "librtmp")}: ${result?.transport_available ? pass : fail}`,
+      `${text("youtube_live_validation_rtmps", "YouTube RTMPS")}: ${result?.rtmps_reachable ? pass : fail} - ${localizedValidationMessage(result?.rtmps_message)}`,
+    ];
+    const visibleKey = String(streamKey || "");
+    if (visibleKey) lines.push(`${text("youtube_live_key", "Stream key")}: ${visibleKey}`);
+    lines.push("");
+    lines.push(result?.note || text("youtube_live_validation_note", "YouTube confirms the key only when streaming starts."));
+    return lines.join("\n");
+  }
+
   function localizedValidationMessage(message) {
     const raw = String(message || "").trim();
     if (!raw) return "-";
@@ -414,7 +419,6 @@
       "YouTube RTMPS ingest is reachable": text("youtube_live_validation_rtmps_ok", "YouTube RTMPS ingest is reachable."),
       "missing stream key, librtmp, or PyAV FLV/AAC support": text("youtube_live_test_muxer_missing", "Stream key, librtmp, or PyAV FLV/AAC support is missing."),
       "stream key, RTMPS network, librtmp, or PyAV FLV/AAC is unavailable": text("youtube_live_test_muxer_missing", "Stream key, RTMPS network, librtmp, or PyAV FLV/AAC is unavailable."),
-      "stream key, RTMPS network, librtmp, or FLV/AAC muxer is unavailable": text("youtube_live_test_muxer_missing", "Stream key, RTMPS network, librtmp, or FLV/AAC muxer is unavailable."),
       "ready": text("youtube_live_check_ready", "Ready"),
     };
     if (raw.startsWith("YouTube RTMPS ingest unreachable:")) {
@@ -436,8 +440,6 @@
       "High quality mode is planned for Phase 3; Phase 2 keeps qRoadEncodeData only.": text("youtube_live_warning_quality", "The selected video mode is unavailable."),
       "The selected video mode is waiting for the shared livestream encoder to start onroad.": text("youtube_live_warning_source_wait", "The selected video mode is waiting for its encoder."),
       "High quality is waiting for the dedicated YouTube encoder to start onroad.": text("youtube_live_warning_high_wait", "High quality is waiting for its encoder."),
-      "The selected road mode is waiting for the dedicated YouTube encoder to start onroad.": text("youtube_live_warning_high_wait", "Selected road mode is waiting for its encoder."),
-      "The selected YouTube encoder is waiting to start onroad.": text("youtube_live_warning_high_wait", "Selected video mode is waiting for its encoder."),
       "librtmp is unavailable": text("youtube_live_error_transport_missing", "librtmp is unavailable."),
       "librtmp not found": text("youtube_live_error_transport_missing", "librtmp is unavailable."),
       "PyAV FLV/AAC muxer is unavailable": text("youtube_live_error_muxer_missing", "PyAV FLV/AAC muxing is unavailable."),
@@ -446,7 +448,6 @@
     };
     if (exact[raw]) return exact[raw];
     if (/^no .* frames$/i.test(raw)) return text("youtube_live_error_no_frames", "No camera frames were received.");
-    if (/^YouTube ingest may be starved:/i.test(raw)) return raw;
     if (/^YouTube RTMPS publish failed:/i.test(raw)) {
       return text("youtube_live_error_publish_failed", "YouTube RTMPS publishing failed: {error}", { error: raw.split(":", 2)[1]?.trim() || "-" });
     }
@@ -475,7 +476,6 @@
       state.keyLoaded = true;
       state.status = status;
       renderStatus(status);
-      syncKeyControl();
       toast(text("youtube_live_key_cleared", "Stream key cleared"));
     } catch (err) {
       toast(err?.message || String(err), { tone: "error" });
@@ -519,15 +519,13 @@
     const lines = [
       `[${text("youtube_live_check_ready_section", "Readiness")}]`,
       `${text("youtube_live_key", "Stream key")}: ${test.configured ? pass : fail}`,
-      `${text("youtube_live_muxer", "FLV/AAC muxer")}: ${test.muxer_available ? pass : fail}`,
+      `${text("youtube_live_muxer", "PyAV FLV/AAC")}: ${test.muxer_available ? pass : fail}`,
       `${text("youtube_live_validation_transport", "librtmp")}: ${test.transport_available ? pass : fail}`,
       `${text("youtube_live_validation_rtmps", "YouTube RTMPS")}: ${test.rtmps_reachable ? pass : fail}`,
-      `${text("youtube_live_metric_source", "Source")}: ${sourceLabel(test)}`,
+      `${text("youtube_live_metric_source", "Source")}: ${sourceLabel({ source: test.source })}`,
       "",
       `[${text("youtube_live_check_stream_section", "Stream status")}]`,
       `${text("youtube_live_state_label", "State")}: ${stateLabel(status)}`,
-      `${text("youtube_live_metric_format", "Format")}: ${videoFormatLabel(status)}`,
-      `${text("youtube_live_metric_target", "Target")}: ${targetFormatLabel(status)}`,
       `${text("youtube_live_metric_bitrate", "Bitrate")}: ${status.estimated_kbps || 0} kbps`,
       `${text("youtube_live_metric_session", "Session")}: ${status.session_mb || 0} MB`,
       `${text("youtube_live_metric_total", "Total")}: ${status.total_mb || 0} MB`,
