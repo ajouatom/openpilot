@@ -77,8 +77,15 @@ def route_with_segment_page(entry: dict, segment_offset: int = 0, segment_limit:
   offset = max(0, min(segment_offset, total))
   limit = max(1, min(DASHCAM_SEGMENT_LIMIT_MAX, segment_limit))
   end = min(offset + limit, total)
+  page_segments = segments[offset:end]
   result = dict(entry)
-  result["segmentFolders"] = segments[offset:end]
+  result["segmentFolders"] = page_segments
+  all_segment_times = entry.get("segmentTimes") or {}
+  result["segmentTimes"] = {
+    segment: all_segment_times[segment]
+    for segment in page_segments
+    if segment in all_segment_times
+  }
   result["segmentCount"] = int(entry.get("segmentCount") or total)
   result["segmentOffset"] = offset
   result["segmentLimit"] = limit
@@ -143,6 +150,7 @@ async def api_dashcam_segments(request: web.Request) -> web.Response:
       "ok": True,
       "route": route,
       "segments": page["segmentFolders"],
+      "segmentTimes": page["segmentTimes"],
       "offset": page["segmentOffset"],
       "limit": page["segmentLimit"],
       "total": page["segmentCount"],

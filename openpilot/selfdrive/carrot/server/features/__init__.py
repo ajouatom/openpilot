@@ -3,6 +3,7 @@ from aiohttp import web
 from . import (
   cars,
   dashcam,
+  mapbox_tokens,
   params,
   screenrecord,
   settings,
@@ -40,6 +41,7 @@ def register_all(app: web.Application) -> None:
   dashcam.register(app)
   screenrecord.register(app)
   tools.register(app)
+  mapbox_tokens.register(app)
   youtube_live.register(app)
   vision_test.register(app)
   vision_diag.register(app)

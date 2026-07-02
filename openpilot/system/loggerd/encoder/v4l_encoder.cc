@@ -1,4 +1,5 @@
 #include <cassert>
+#include <stdexcept>
 #include <string>
 #include <sys/ioctl.h>
 #include <poll.h>
@@ -220,14 +221,34 @@ V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_hei
     selection.target = V4L2_SEL_TGT_CROP;
     selection.r.left = ((in_width - crop_width) / 2) & ~1;
     selection.r.top = ((in_height - crop_height) / 2) & ~1;
-    selection.r.width = crop_width;
-    selection.r.height = crop_height;
-    if (util::safe_ioctl(fd, VIDIOC_S_SELECTION, &selection) != 0) {
-      LOGW("YouTube encoder crop unavailable; scaling the full camera frame");
-    } else {
+    selection.r.width = (unsigned int)crop_width;
+    selection.r.height = (unsigned int)crop_height;
+    if (util::safe_ioctl(fd, VIDIOC_S_SELECTION, &selection) == 0) {
       LOGW("YouTube encoder crop=%dx%d+%d+%d output=%dx%d bitrate=%d",
            crop_width, crop_height, selection.r.left, selection.r.top,
            out_width, out_height, encoder_settings.bitrate);
+    } else {
+      // no crop support: scale the full frame. keep the camera aspect ratio by
+      // growing the output height, but only onto a 16-aligned size — unaligned
+      // dimensions push the venc firmware onto a slow path that stalls every
+      // other encode session sharing the hardware.
+      int aspect_height = (out_width * in_height / in_width) & ~15;
+      if (aspect_height > out_height) {
+        int out_height_prev = out_height;
+        out_height = aspect_height;
+        fmt_out.fmt.pix_mp.height = (unsigned int)out_height;
+        if (util::safe_ioctl(fd, VIDIOC_S_FMT, &fmt_out) != 0) {
+          out_height = out_height_prev;
+          fmt_out.fmt.pix_mp.height = (unsigned int)out_height;
+          util::safe_ioctl(fd, VIDIOC_S_FMT, &fmt_out, "VIDIOC_S_FMT failed");
+          LOGW("YouTube encoder crop and aspect resize unavailable; scaling the full camera frame");
+        } else {
+          LOGW("YouTube encoder crop unavailable; scaling full frame to %dx%d (aspect preserved)",
+               out_width, out_height);
+        }
+      } else {
+        LOGW("YouTube encoder crop unavailable; scaling the full camera frame");
+      }
     }
   }
 
@@ -242,7 +263,9 @@ V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_hei
       { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_P_FRAMES, .value = encoder_settings.gop_size - encoder_settings.b_frames - 1},
       { .id = V4L2_CID_MPEG_VIDC_VIDEO_NUM_B_FRAMES, .value = encoder_settings.b_frames},
       { .id = V4L2_CID_MPEG_VIDEO_HEADER_MODE, .value = V4L2_MPEG_VIDEO_HEADER_MODE_SEPARATE},
-      { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR},
+      { .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL, .value = encoder_settings.cbr
+          ? V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CBR_CFR
+          : V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_VBR_CFR},
       { .id = V4L2_CID_MPEG_VIDC_VIDEO_PRIORITY, .value = V4L2_MPEG_VIDC_VIDEO_PRIORITY_REALTIME_DISABLE},
       { .id = V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD, .value = 1},
     };
@@ -306,6 +329,33 @@ V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_hei
       util::safe_ioctl(fd, VIDIOC_S_CTRL, &slice_mode);
       LOGW("multi-slice unavailable for %s; falling back to single-slice H264", encoder_info.publish_name);
     }
+  }
+
+  if (encoder_settings.cbr) {
+    struct v4l2_control applied_rate_control = {
+      .id = V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL,
+    };
+    struct v4l2_control applied_bitrate = {
+      .id = V4L2_CID_MPEG_VIDEO_BITRATE,
+    };
+    const bool rate_control_read = util::safe_ioctl(fd, VIDIOC_G_CTRL, &applied_rate_control) == 0;
+    const bool bitrate_read = util::safe_ioctl(fd, VIDIOC_G_CTRL, &applied_bitrate) == 0;
+    if (rate_control_read && applied_rate_control.value != V4L2_CID_MPEG_VIDC_VIDEO_RATE_CONTROL_CBR_CFR) {
+      throw std::runtime_error("V4L2 encoder did not retain CBR_CFR rate control");
+    }
+    if (!rate_control_read) {
+      LOGW("V4L2 rate-control readback unavailable for %s; CBR_CFR set was accepted",
+           encoder_info.publish_name);
+    }
+    if (bitrate_read && applied_bitrate.value != encoder_settings.bitrate) {
+      LOGW("V4L2 encoder adjusted bitrate for %s: requested=%d applied=%d",
+           encoder_info.publish_name, encoder_settings.bitrate, applied_bitrate.value);
+    }
+    LOGW("CBR_CFR %s for %s: bitrate=%d gop=%d fps=%d",
+         rate_control_read ? "verified" : "configured",
+         encoder_info.publish_name,
+         bitrate_read ? applied_bitrate.value : encoder_settings.bitrate,
+         encoder_settings.gop_size, encoder_info.fps);
   }
 
   // allocate buffers

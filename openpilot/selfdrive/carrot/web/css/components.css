@@ -195,7 +195,7 @@ body[data-page="terminal"] .app-toast-host {
   border-radius: var(--dialog-choice-radius);
   overflow: hidden;
   text-overflow: ellipsis;
-  min-height: 44px;
+  min-height: var(--control-min-height);
   font-size: var(--fs-label-md);
   font-weight: 800;
   letter-spacing: 0;
@@ -366,6 +366,31 @@ body[data-page="terminal"] .app-toast-host {
 
   .app-dialog__choiceBtn--value {
     min-height: 40px;
+  }
+
+  .app-dialog--form {
+    align-items: flex-end;
+    padding: env(safe-area-inset-top, 0px) 0 0;
+  }
+
+  .app-dialog--form .app-dialog__sheet {
+    width: 100vw;
+    max-height: min(72dvh, var(--dialog-sheet-mobile-max-height));
+    padding: var(--sp-lg) var(--sp-lg) calc(var(--sp-lg) + env(safe-area-inset-bottom, 0px));
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: var(--dialog-sheet-radius-mobile) var(--dialog-sheet-radius-mobile) 0 0;
+    transform: translateY(24px);
+  }
+
+  .app-dialog--form .app-dialog__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-dialog--form .app-dialog__actions .smallBtn {
+    width: 100%;
   }
 }
 
@@ -551,7 +576,7 @@ body[data-page="terminal"] .app-toast-host {
   cursor: pointer;
   font-size: var(--fs-label-lg);
   font-weight: 750;
-  min-height: 44px;
+  min-height: var(--control-min-height);
   box-sizing: border-box;
   transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
   letter-spacing: 0.1px;
@@ -915,6 +940,146 @@ body[data-page="terminal"] .app-toast-host {
 }
 
 /* ── Setting Item ─────────────────────────────────────────── */
+/* Stored text / credential editor used by settings pages. The surface opens
+   a responsive form dialog; secondary operations remain visible beside it. */
+.setting-form-shell {
+  container-name: setting-form-control;
+  container-type: inline-size;
+  width: 100%;
+  min-width: 0;
+}
+
+.setting-form-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-sm);
+  min-width: 0;
+}
+
+.setting-form-control__surface {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-min-height);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: var(--sp-sm) var(--sp-md);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--md-surface) 72%, transparent);
+  color: var(--md-on-surface-var);
+  cursor: text;
+  font: inherit;
+  font-size: var(--fs-body-md);
+  line-height: 1.35;
+  text-align: start;
+}
+
+.setting-form-control__surface:hover {
+  border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+}
+
+.setting-form-control__surface:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.setting-form-control__surface.is-configured {
+  color: var(--md-on-surface);
+}
+
+.setting-form-control__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-form-control__actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 88px), 1fr));
+  gap: var(--sp-sm);
+  min-width: 0;
+}
+
+.setting-form-control__actions:empty {
+  display: none;
+}
+
+.setting-form-control__actions > .smallBtn {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  justify-content: center;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.setting-form-control__actions > .smallBtn:disabled {
+  opacity: var(--state-disabled-opacity);
+  cursor: not-allowed;
+  transform: none;
+}
+
+@container setting-form-control (min-width: 640px) {
+  .setting-form-control {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .setting-form-control__actions {
+    grid-template-columns: repeat(auto-fit, minmax(72px, auto));
+    grid-auto-flow: column;
+  }
+
+  .setting-form-control__actions > .smallBtn {
+    width: auto;
+    white-space: nowrap;
+  }
+}
+
+@supports not (container-type: inline-size) {
+  @media (min-width: 760px) {
+    .setting-form-control {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .setting-form-control__actions {
+      grid-template-columns: repeat(auto-fit, minmax(72px, auto));
+      grid-auto-flow: column;
+    }
+
+    .setting-form-control__actions > .smallBtn {
+      width: auto;
+      white-space: nowrap;
+    }
+  }
+}
+
+.app-dialog--form .app-dialog__body[hidden] {
+  display: none !important;
+}
+
+.app-dialog--form .app-dialog__inputWrap {
+  display: grid;
+  gap: var(--sp-xs);
+  margin-top: var(--sp-sm);
+}
+
+.app-dialog__inputError {
+  color: var(--md-error);
+  font-size: var(--fs-label-sm);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.app-dialog__inputError[hidden] {
+  display: none !important;
+}
+
 .ui-action-grid > .git-pull-btn {
   justify-content: space-between;
 }
