@@ -3,13 +3,8 @@
 VideoEncoder::VideoEncoder(const EncoderInfo &encoder_info, int in_width, int in_height)
     : encoder_info(encoder_info), in_width(in_width), in_height(in_height) {
 
-  const EncoderSettings encoder_settings = encoder_info.get_settings(in_width);
-  out_width = encoder_settings.frame_width > 0
-                ? encoder_settings.frame_width
-                : (encoder_info.frame_width > 0 ? encoder_info.frame_width : in_width);
-  out_height = encoder_settings.frame_height > 0
-                 ? encoder_settings.frame_height
-                 : (encoder_info.frame_height > 0 ? encoder_info.frame_height : in_height);
+  out_width = encoder_info.frame_width > 0 ? encoder_info.frame_width : in_width;
+  out_height = encoder_info.frame_height > 0 ? encoder_info.frame_height : in_height;
 
   pm.reset(new PubMaster(std::vector{encoder_info.publish_name}));
 }

@@ -12,7 +12,6 @@ const APP_DIALOG_VARIANT_CLASSES = [
   "app-dialog--choice-list",
   "app-dialog--choice-grid",
   "app-dialog--choice-value-grid",
-  "app-dialog--form",
 ];
 
 
@@ -161,24 +160,10 @@ function resolveAppDialog(result) {
       appDialogDefault.onclick = null;
     }
     if (appDialogInputWrap) appDialogInputWrap.hidden = true;
-    if (appDialogInputError) {
-      appDialogInputError.hidden = true;
-      appDialogInputError.textContent = "";
-    }
     if (appDialogInput) {
-      appDialogInput.disabled = false;
       appDialogInput.value = "";
       appDialogInput.placeholder = "";
-      appDialogInput.type = "text";
-      appDialogInput.removeAttribute("autocomplete");
-      appDialogInput.removeAttribute("autocapitalize");
-      appDialogInput.removeAttribute("inputmode");
-      appDialogInput.removeAttribute("aria-labelledby");
-      appDialogInput.spellcheck = true;
     }
-    if (appDialogBody) appDialogBody.hidden = false;
-    if (appDialogConfirm) appDialogConfirm.disabled = false;
-    if (appDialogCancel) appDialogCancel.disabled = false;
     if (state.lastFocus && typeof state.lastFocus.focus === "function") {
       state.lastFocus.focus();
     }
@@ -187,72 +172,35 @@ function resolveAppDialog(result) {
 }
 
 function cancelAppDialog() {
-  if (!activeAppDialog || activeAppDialog.submitting) return;
-  const result = activeAppDialog.mode === "prompt" || activeAppDialog.mode === "form" || activeAppDialog.mode === "choice"
+  if (!activeAppDialog) return;
+  const result = activeAppDialog.mode === "prompt" || activeAppDialog.mode === "choice"
     ? null
     : false;
   resolveAppDialog(result);
 }
 
-async function confirmAppDialog() {
-  if (!activeAppDialog || activeAppDialog.submitting) return;
-  const state = activeAppDialog;
-  const isInputMode = state.mode === "prompt" || state.mode === "form";
-  const result = isInputMode ? (appDialogInput ? appDialogInput.value : "") : true;
-  if (state.mode !== "form" || typeof state.onSubmit !== "function") {
-    resolveAppDialog(result);
-    return;
-  }
-
-  state.submitting = true;
-  if (appDialogInputError) {
-    appDialogInputError.hidden = true;
-    appDialogInputError.textContent = "";
-  }
-  if (appDialogInput) appDialogInput.disabled = true;
-  if (appDialogConfirm) {
-    appDialogConfirm.disabled = true;
-    appDialogConfirm.textContent = state.submittingLabel;
-  }
-  if (appDialogCancel) appDialogCancel.disabled = true;
-
-  try {
-    await state.onSubmit(result);
-    resolveAppDialog(result);
-  } catch (err) {
-    if (activeAppDialog !== state) return;
-    state.submitting = false;
-    if (appDialogInput) {
-      appDialogInput.disabled = false;
-      appDialogInput.focus();
-    }
-    if (appDialogConfirm) {
-      appDialogConfirm.disabled = false;
-      appDialogConfirm.textContent = state.confirmLabel;
-    }
-    if (appDialogCancel) appDialogCancel.disabled = false;
-    if (appDialogInputError) {
-      appDialogInputError.textContent = err?.message || String(err);
-      appDialogInputError.hidden = false;
-    }
-  }
+function confirmAppDialog() {
+  if (!activeAppDialog) return;
+  const result = activeAppDialog.mode === "prompt"
+    ? (appDialogInput ? appDialogInput.value : "")
+    : true;
+  resolveAppDialog(result);
 }
 
 function openAppDialog(options = {}) {
   if (!appDialog || !appDialogTitle || !appDialogBody || !appDialogConfirm || !appDialogCancel) {
-    if (options.mode === "prompt" || options.mode === "form") return Promise.resolve(null);
+    if (options.mode === "prompt") return Promise.resolve(null);
     return Promise.resolve(options.mode === "alert");
   }
 
   if (activeAppDialog) cancelAppDialog();
 
   const mode = options.mode || "alert";
-  const isForm = mode === "form";
   const title =
     options.title ||
     (mode === "confirm"
       ? getUIText("confirm_title", "Confirm")
-      : mode === "prompt" || mode === "form"
+      : mode === "prompt"
         ? getUIText("input_title", "Input")
         : getUIText("notice", "Notice"));
   const message = options.message || "";
@@ -271,7 +219,6 @@ function openAppDialog(options = {}) {
   const showCancel = mode !== "alert" && options.showCancel !== false;
 
   resetAppDialogPresentation();
-  if (appDialog && isForm) appDialog.classList.add("app-dialog--form");
   if (appDialog && hasChoices) {
     appDialog.classList.add("app-dialog--choice");
     appDialog.classList.add(choiceLayout === "value-grid" ? "app-dialog--choice-grid" : "app-dialog--choice-list");
@@ -281,7 +228,6 @@ function openAppDialog(options = {}) {
   appDialogTitle.textContent = title;
   if (useHtml) appDialogBody.innerHTML = String(messageHtml || message);
   else appDialogBody.textContent = String(message);
-  appDialogBody.hidden = isForm && !String(messageHtml || message).trim();
   appDialogBody.style.flex = hasChoices ? "0 0 auto" : "1 1 auto";
   appDialogConfirm.textContent = confirmLabel;
   appDialogCancel.textContent = cancelLabel;
@@ -342,26 +288,10 @@ function openAppDialog(options = {}) {
   }
 
   if (appDialogInputWrap && appDialogInput) {
-    const isPrompt = mode === "prompt" || isForm;
+    const isPrompt = mode === "prompt";
     appDialogInputWrap.hidden = !isPrompt;
     appDialogInput.value = options.defaultValue ?? "";
     appDialogInput.placeholder = options.placeholder || "";
-    appDialogInput.type = options.inputType === "password" ? "password" : "text";
-    const autocomplete = options.autocomplete ?? (isForm ? "off" : "");
-    const autocapitalize = options.autocapitalize ?? (isForm ? "none" : "");
-    if (autocomplete) appDialogInput.autocomplete = autocomplete;
-    else appDialogInput.removeAttribute("autocomplete");
-    if (autocapitalize) appDialogInput.autocapitalize = autocapitalize;
-    else appDialogInput.removeAttribute("autocapitalize");
-    appDialogInput.spellcheck = options.spellcheck == null ? !isForm : options.spellcheck === true;
-    if (isForm) appDialogInput.setAttribute("aria-labelledby", "appDialogTitle");
-    else appDialogInput.removeAttribute("aria-labelledby");
-    if (options.inputMode) appDialogInput.inputMode = options.inputMode;
-    else appDialogInput.removeAttribute("inputmode");
-    if (appDialogInputError) {
-      appDialogInputError.hidden = true;
-      appDialogInputError.textContent = "";
-    }
   }
 
   return new Promise((resolve) => {
@@ -370,10 +300,6 @@ function openAppDialog(options = {}) {
       resolve,
       mode,
       serial: dialogSerial,
-      onSubmit: options.onSubmit,
-      submitting: false,
-      confirmLabel,
-      submittingLabel: options.submittingLabel || getUIText("saving", "Saving..."),
       lastFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null,
     };
 
@@ -382,7 +308,7 @@ function openAppDialog(options = {}) {
 
     requestAnimationFrame(() => {
       appDialog.classList.add("is-open");
-      if ((mode === "prompt" || isForm) && appDialogInput) {
+      if (mode === "prompt" && appDialogInput) {
         appDialogInput.focus();
         appDialogInput.select();
       } else if (hasChoices && appDialogChoices) {
@@ -440,25 +366,6 @@ function appPrompt(message, opts = {}) {
   });
 }
 
-function appForm(message, opts = {}) {
-  return openAppDialog({
-    mode: "form",
-    title: opts.title,
-    message,
-    defaultValue: opts.defaultValue,
-    placeholder: opts.placeholder,
-    inputType: opts.inputType,
-    autocomplete: opts.autocomplete,
-    autocapitalize: opts.autocapitalize,
-    inputMode: opts.inputMode,
-    spellcheck: opts.spellcheck,
-    confirmLabel: opts.confirmLabel,
-    cancelLabel: opts.cancelLabel,
-    submittingLabel: opts.submittingLabel,
-    onSubmit: opts.onSubmit,
-  });
-}
-
 if (appDialogBackdrop) appDialogBackdrop.onclick = cancelAppDialog;
 if (appDialogCancel) appDialogCancel.onclick = cancelAppDialog;
 if (appDialogConfirm) appDialogConfirm.onclick = confirmAppDialog;
@@ -474,7 +381,6 @@ document.addEventListener("keydown", (ev) => {
   }
 
   if (ev.key === "Enter" && !ev.shiftKey) {
-    if (ev.isComposing) return;
     const targetTag = ev.target?.tagName;
     if (targetTag === "TEXTAREA") return;
     ev.preventDefault();

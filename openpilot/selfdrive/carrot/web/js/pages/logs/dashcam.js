@@ -90,8 +90,6 @@ function dashcamRoutesSignature(routes) {
   return (routes || []).map((entry) => [
     entry.route || "",
     entry.segmentCount || 0,
-    entry.routeStartEpoch || 0,
-    entry.routeEndEpoch || 0,
     entry.segmentsNextOffset ?? "",
     entry.segmentsHasMore ? "1" : "0",
     ...(entry.segmentFolders || []),
@@ -251,8 +249,6 @@ function dashcamRouteRenderKey(entry) {
     entry?.dateLabel || "",
     entry?.latestModifiedEpoch || "",
     entry?.latestModifiedLabel || "",
-    entry?.routeStartEpoch || "",
-    entry?.routeEndEpoch || "",
     dashcamSegmentCountForRoute(entry),
     entry?.segmentsNextOffset ?? "",
     entry?.segmentsHasMore ? "more" : "done",
@@ -414,59 +410,12 @@ function mergeDashcamRoutePage(entry, existing) {
   return {
     ...entry,
     segmentFolders: mergedSegments,
-    segmentTimes: { ...(existing.segmentTimes || {}), ...(entry.segmentTimes || {}) },
     segmentCount: total,
     segmentsNextOffset: mergedSegments.length < total
       ? Math.max(dashcamSegmentNextOffset(entry), dashcamSegmentNextOffset(existing), mergedSegments.length)
       : null,
     segmentsHasMore: mergedSegments.length < total,
   };
-}
-
-function dashcamDateParts(epochSeconds) {
-  const epoch = Number(epochSeconds || 0);
-  if (!Number.isFinite(epoch) || epoch <= 0) return null;
-  const date = new Date(epoch * 1000);
-  if (!Number.isFinite(date.getTime())) return null;
-  const pad = (value) => String(value).padStart(2, "0");
-  return {
-    date: `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`,
-    time: `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
-  };
-}
-
-function formatDashcamTimeRange(startEpoch, endEpoch, options = {}) {
-  const start = dashcamDateParts(startEpoch);
-  const end = dashcamDateParts(endEpoch);
-  if (!start || !end) return "";
-  if (start.date === end.date) {
-    return options.multiline
-      ? `${start.date}\n${start.time} – ${end.time}`
-      : `${start.date} ${start.time} – ${end.time}`;
-  }
-  return options.multiline
-    ? `${start.date} ${start.time}\n– ${end.date} ${end.time}`
-    : `${start.date} ${start.time} – ${end.date} ${end.time}`;
-}
-
-function dashcamSegmentTime(entry, segment) {
-  const value = entry?.segmentTimes?.[segment];
-  return value && typeof value === "object" ? value : null;
-}
-
-function formatDashcamClock(epochSeconds) {
-  const parts = dashcamDateParts(epochSeconds);
-  return parts ? parts.time.slice(0, 5) : "";
-}
-
-function formatDashcamSegmentTimeLabel(entry, segment) {
-  const time = dashcamSegmentTime(entry, segment);
-  return formatDashcamClock(time?.startEpoch) || `SEG ${dashcamSegmentIndex(segment)}`;
-}
-
-function formatDashcamSegmentFullTime(entry, segment) {
-  const time = dashcamSegmentTime(entry, segment);
-  return time ? formatDashcamTimeRange(time.startEpoch, time.endEpoch) : "";
 }
 
 let dashcamSegmentLoaderObserver = null;
@@ -532,12 +481,10 @@ function dashcamSelectedForRoute(entry) {
 }
 
 function dashcamSegmentTileHtml(route, segment, segmentIndex, options = {}) {
-  const entry = options.entry || (dashcamState.routes || []).find((item) => item.route === route);
   const compactSegments = options.compact === true;
   const animate = options.animate === true;
   const routeAttr = escapeHtml(route);
   const segAttr = escapeHtml(segment);
-  const timeLabel = escapeHtml(formatDashcamSegmentTimeLabel(entry, segment));
   const checked = dashcamState.selected.has(segment) ? " checked" : "";
   const tileClass = [
     "dashcam-segment-tile",
@@ -554,7 +501,7 @@ function dashcamSegmentTileHtml(route, segment, segmentIndex, options = {}) {
       </label>
     </div>
     <div class="dashcam-segment-body">
-      <div class="dashcam-segment-badge">${timeLabel}</div>
+      <div class="dashcam-segment-badge">SEG ${dashcamSegmentIndex(segment)}</div>
       <div class="dashcam-segment-name">${segAttr}</div>
     </div>
     <button class="dashcam-menu-btn" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${segAttr}" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
@@ -586,16 +533,11 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
   const title = escapeHtml(entry.title || dashcamRouteTitle(route));
   const dateLabel = escapeHtml(entry.dateLabel || route);
   const latest = escapeHtml(formatRelativeEpoch(entry.latestModifiedEpoch) || localizeRelativeLabel(entry.latestModifiedLabel) || "-");
-  const routeTimeRange = formatDashcamTimeRange(entry.routeStartEpoch, entry.routeEndEpoch, { multiline: true });
-  const routeTimestamp = routeTimeRange
-    ? `<div class="dashcam-route-preview__timestamp">${escapeHtml(routeTimeRange).replace("\n", "<br>")}</div>`
-    : "";
   const preview = representative
     ? `<div class="dashcam-route-media">
         <div class="dashcam-route-preview" data-action="play" data-route="${routeAttr}" data-segment="${escapeHtml(representative)}">
           <img class="logs-lazy-img" loading="lazy" decoding="async" fetchpriority="low" data-src="${dashcamApiPath("preview", representative)}" data-fallback="${dashcamApiPath("thumbnail", representative)}" onerror="this.onerror=null;if(this.dataset.fallback)this.src=this.dataset.fallback;" alt="">
           <div class="dashcam-route-preview__shade"></div>
-          ${routeTimestamp}
           <div class="dashcam-route-preview__chips">
             <span class="dashcam-chip">${escapeHtml(getUIText("segment_count", "{count} segments", { count: segmentCount }))}</span>
             <span class="dashcam-chip">${latest}</span>
@@ -611,7 +553,7 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
       </div>`
     : "";
   const segmentList = shouldRenderSegments ? segments.map((segment, segmentIndex) => {
-    return dashcamSegmentTileHtml(route, segment, segmentIndex, { compact: compactSegments, entry });
+    return dashcamSegmentTileHtml(route, segment, segmentIndex, { compact: compactSegments });
   }).join("") : "";
   const segmentLoader = shouldRenderSegments && hasMoreSegments
     ? `<div class="dashcam-segment-loader${loadingSegments ? " is-loading" : ""}" data-segment-loader="1" data-route="${routeAttr}" aria-hidden="true"></div>`
@@ -793,7 +735,7 @@ function appendDashcamSegmentsToRoute(route, newSegments, startIndex = 0) {
   // simultaneous animation + scrollTop adjustment is what causes "shake".
   const animate = !isScrolling;
   template.innerHTML = newSegments
-    .map((segment, offset) => dashcamSegmentTileHtml(route, segment, startIndex + offset, { compact, animate, entry }))
+    .map((segment, offset) => dashcamSegmentTileHtml(route, segment, startIndex + offset, { compact, animate }))
     .join("");
   const loader = list.querySelector("[data-segment-loader]");
   list.insertBefore(template.content, loader || null);
@@ -833,7 +775,6 @@ async function loadDashcamSegments(route) {
     const existing = new Set(dashcamSegmentsForRoute(current));
     const appended = incoming.filter((segment) => segment && !existing.has(segment));
     current.segmentFolders = mergeDashcamSegments(dashcamSegmentsForRoute(current), incoming);
-    current.segmentTimes = { ...(current.segmentTimes || {}), ...(json.segmentTimes || {}) };
     current.segmentCount = Number.isFinite(Number(json.total)) ? Number(json.total) : dashcamSegmentCountForRoute(current);
     current.segmentsNextOffset = json.nextOffset == null ? current.segmentFolders.length : Number(json.nextOffset) || current.segmentFolders.length;
     current.segmentsHasMore = Boolean(json.hasMore);
@@ -962,22 +903,10 @@ function markDashcamScrollBusy(options = {}) {
 }
 
 function openDashcamPlayer(route, segment) {
-  const entry = (dashcamState.routes || []).find((item) => item.route === route);
-  const time = dashcamSegmentTime(entry, segment);
-  const endEpoch = Number(time?.endEpoch || 0);
-  const initialSubtitle = formatDashcamTimeRange(time?.startEpoch, endEpoch);
   openLogsVideoPlayer(
     `${dashcamRouteTitle(route)} · Segment ${dashcamSegmentIndex(segment)}`,
     dashcamApiPath("video", segment),
-    {
-      kind: "dashcam",
-      subtitle: initialSubtitle,
-      subtitleForDuration: (duration) => {
-        const seconds = Number(duration || 0);
-        if (!Number.isFinite(seconds) || seconds <= 0 || endEpoch <= 0) return initialSubtitle;
-        return formatDashcamTimeRange(endEpoch - seconds, endEpoch);
-      },
-    },
+    { kind: "dashcam" },
   );
 }
 
@@ -1335,14 +1264,10 @@ async function uploadDashcamSegments(segments) {
 }
 
 async function showDashcamSegmentMenu(route, segment) {
-  const entry = (dashcamState.routes || []).find((item) => item.route === route);
-  const timeLabel = formatDashcamSegmentTimeLabel(entry, segment);
-  const fullTime = formatDashcamSegmentFullTime(entry, segment);
-  const message = fullTime ? `${segment}\n${fullTime}` : segment;
   const selected = await openAppDialog({
     mode: "choice",
-    title: timeLabel,
-    message,
+    title: `SEG ${dashcamSegmentIndex(segment)}`,
+    message: segment,
     choiceLayout: "list",
     choices: [
       { label: getUIText("play", "Play"), value: "play" },
@@ -1388,12 +1313,10 @@ function parseDashcamRangeInput(input) {
 async function fetchAllDashcamSegmentNames(route) {
   const all = [];
   const seen = new Set();
-  const segmentTimes = {};
   let offset = 0;
   for (let guard = 0; guard < 1000; guard += 1) {
     const json = await getJson(`/api/dashcam/segments/${encodeURIComponent(route)}?offset=${offset}&limit=${DASHCAM_SEGMENT_NAME_LIMIT_MAX}&sort=${dashcamSortDirection()}`);
     const segs = Array.isArray(json.segments) ? json.segments : [];
-    Object.assign(segmentTimes, json.segmentTimes || {});
     for (const segment of segs) {
       if (segment && !seen.has(segment)) {
         seen.add(segment);
@@ -1403,8 +1326,6 @@ async function fetchAllDashcamSegmentNames(route) {
     if (!json.hasMore || !segs.length) break;
     offset = json.nextOffset == null ? all.length : (Number(json.nextOffset) || all.length);
   }
-  const entry = (dashcamState.routes || []).find((item) => item.route === route);
-  if (entry) entry.segmentTimes = { ...(entry.segmentTimes || {}), ...segmentTimes };
   return all;
 }
 
