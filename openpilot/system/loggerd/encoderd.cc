@@ -165,8 +165,14 @@ int main(int argc, char* argv[]) {
     std::string arg1(argv[1]);
     if (arg1 == "--stream") {
       encoderd_thread(stream_cameras_logged);
+    } else if (arg1 == "--youtube-low") {
+      encoderd_thread(youtube_low_cameras_logged);
+    } else if (arg1 == "--youtube-medium") {
+      encoderd_thread(youtube_medium_cameras_logged);
     } else if (arg1 == "--youtube") {
       encoderd_thread(youtube_cameras_logged);
+    } else if (arg1 == "--youtube-wide") {
+      encoderd_thread(youtube_wide_cameras_logged);
     } else {
       LOGE("Argument '%s' is not supported", arg1.c_str());
     }

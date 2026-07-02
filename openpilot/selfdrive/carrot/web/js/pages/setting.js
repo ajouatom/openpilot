@@ -35,6 +35,7 @@ const settingProfilesState = {
   loadPromise: null,
 };
 const settingProfileSectionExpandedState = new Map();
+let settingSoundSampleAudio = null;
 
 function isSettingFavoritesGroup(group) {
   return group === SETTING_FAVORITES_GROUP;
@@ -839,6 +840,7 @@ const SETTING_CONTROL_OVERRIDES = {
   ShowPlotMode: { kind: "select" },
   ClusterHudScreenMode: { kind: "select" },
   ClusterHudRadarInfo: { kind: "select" },
+  SoundLanguageSetting: { kind: "select" },
 };
 
 function getSettingControlConfig(p) {
@@ -925,12 +927,18 @@ function getSettingDisplayUnit(name) {
 }
 
 function formatSettingDisplayValue(p, value) {
+  if (String(p?.name || "") === "SoundLanguageSetting") {
+    return getSoundLanguageSettingOptionLabel(value);
+  }
   const text = String(value);
   const unit = getSettingDisplayUnit(p?.name);
   return unit ? `${text}${unit}` : text;
 }
 
 function formatSettingRangeMeta(p) {
+  if (String(p?.name || "") === "SoundLanguageSetting") {
+    return "";
+  }
   return [
     `min=${formatSettingDisplayValue(p, p?.min)}`,
     `max=${formatSettingDisplayValue(p, p?.max)}`,
@@ -1205,7 +1213,67 @@ function setSettingItemsTitle(label) {
   `;
 }
 
-function getSettingOptionValues(config) {
+function getLanguageSettingOptions() {
+  const options = Array.isArray(window.CarrotDeviceLanguageOptions) ? window.CarrotDeviceLanguageOptions : [];
+  return options.length
+    ? options
+    : [
+        { code: "en", name: "English" },
+        { code: "ko", name: "한국어" },
+        { code: "zh-CHS", name: "中文（简体）" },
+      ];
+}
+
+function getSoundLanguageSettingOptions() {
+  return [
+    { code: "auto", name: getUIText("automatic", "Automatic") },
+    { code: "en", name: "English" },
+    { code: "ko", name: "한국어" },
+    { code: "zh-CHS", name: "中文" },
+  ];
+}
+
+function getSoundLanguageSettingOptionLabel(value) {
+  const text = String(value ?? "").trim();
+  const normalized = text.toLowerCase();
+  const match = getSoundLanguageSettingOptions().find((option) => String(option.code || "").trim().toLowerCase() === normalized);
+  return match?.name || text || getUIText("automatic", "Automatic");
+}
+
+function getResolvedSoundLanguageCode(value) {
+  const text = String(value ?? "").trim();
+  if (text && text.toLowerCase() !== "auto") return text;
+  const deviceLang = String(window.__CARROT_BOOTSTRAP__?.deviceLanguage || "").trim();
+  return deviceLang || LANG || "en";
+}
+
+function getSoundAssetDirForLanguage(value) {
+  let normalized = getResolvedSoundLanguageCode(value).replaceAll("_", "-").toLowerCase();
+  if (normalized.startsWith("main-")) normalized = normalized.slice(5);
+  if (normalized === "ko" || normalized.startsWith("ko-")) return "sounds";
+  if (normalized === "zh-chs" || normalized === "zh-hans" || normalized.startsWith("zh")) return "sounds_chs";
+  return "sounds_eng";
+}
+
+async function playSoundLanguageSample(value) {
+  const dir = getSoundAssetDirForLanguage(value);
+  const url = `/sound-assets/${encodeURIComponent(dir)}/audio_speed_down.wav`;
+  if (settingSoundSampleAudio) {
+    settingSoundSampleAudio.pause();
+    settingSoundSampleAudio = null;
+  }
+  const audio = new Audio(url);
+  settingSoundSampleAudio = audio;
+  audio.addEventListener("ended", () => {
+    if (settingSoundSampleAudio === audio) settingSoundSampleAudio = null;
+  }, { once: true });
+  await audio.play();
+}
+
+function getSettingOptionValues(name, config) {
+  if (String(name || "") === "SoundLanguageSetting") {
+    return getSoundLanguageSettingOptions().map((option) => String(option.code || "").trim()).filter(Boolean);
+  }
   if (!config || !Number.isInteger(config.min) || !Number.isInteger(config.max)) return [];
   const out = [];
   for (let value = config.min; value <= config.max; value += 1) out.push(value);
@@ -1213,6 +1281,9 @@ function getSettingOptionValues(config) {
 }
 
 function getSettingOptionLabel(name, value) {
+  if (String(name || "") === "SoundLanguageSetting") {
+    return getSoundLanguageSettingOptionLabel(value);
+  }
   return formatSettingDisplayValue({ name }, value);
 }
 
@@ -2741,6 +2812,9 @@ async function renderItems(group, options = {}) {
     const title = formatItemText(p, "title", "etitle", "");
     const descr = formatItemText(p, "descr", "edescr", "");
     const rangeMeta = formatSettingRangeMeta(p);
+    const rangeMetaHtml = rangeMeta
+      ? `<div class="muted mt-sm">${escapeHtml(rangeMeta)}</div>`
+      : "";
 
     const el = document.createElement("div");
     el.className = animateItems ? "setting ui-stagger-item" : "setting";
@@ -2760,9 +2834,7 @@ async function renderItems(group, options = {}) {
         ${renderSettingFavoriteMark(name)}
       </div>
       ${settingMarqueeHtml(name, "name")}
-      <div class="muted mt-sm">
-        ${escapeHtml(rangeMeta)}
-      </div>
+      ${rangeMetaHtml}
     `;
 
     const controlConfig = getSettingControlConfig(p);
@@ -2801,7 +2873,7 @@ async function renderItems(group, options = {}) {
     } else if (controlConfig.kind === "segmented") {
       const segmentWrap = document.createElement("div");
       segmentWrap.className = "setting-segments";
-      getSettingOptionValues(controlConfig).forEach((optionValue) => {
+      getSettingOptionValues(name, controlConfig).forEach((optionValue) => {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "setting-segment";
@@ -2915,6 +2987,22 @@ async function renderItems(group, options = {}) {
       el.classList.add("setting--has-unit-cycle");
       actions.appendChild(unitBtn);
     }
+    if (name === "SoundLanguageSetting") {
+      const sampleBtn = document.createElement("button");
+      sampleBtn.type = "button";
+      sampleBtn.className = "setting-default-reset";
+      sampleBtn.textContent = getUIText("sound_sample_play", "Sample");
+      sampleBtn.setAttribute("aria-label", getUIText("sound_sample_play", "Sample"));
+      sampleBtn.onclick = async (event) => {
+        event.stopPropagation();
+        try {
+          await playSoundLanguageSample(val.dataset.rawValue ?? p.default);
+        } catch (e) {
+          showAppToast(e?.message || getUIText("failed", "Failed"), { tone: "error" });
+        }
+      };
+      actions.appendChild(sampleBtn);
+    }
     const defaultBtn = document.createElement("button");
     defaultBtn.type = "button";
     defaultBtn.className = "setting-default-reset";
@@ -2956,6 +3044,12 @@ async function renderItems(group, options = {}) {
     function normalizeSettingValue(raw) {
       const text = String(raw).trim();
       if (!text) return null;
+
+      if (name === "SoundLanguageSetting") {
+        const values = getSettingOptionValues(name, controlConfig);
+        const matched = values.find((value) => String(value).toLowerCase() === text.toLowerCase());
+        return matched || null;
+      }
 
       const num = Number(text);
       if (!Number.isFinite(num)) return null;
@@ -3155,7 +3249,7 @@ async function renderItems(group, options = {}) {
 
     async function promptSettingChoice() {
       const current = String(val.dataset.rawValue ?? p.default);
-      const choices = getSettingOptionValues(controlConfig).map((optionValue) => {
+      const choices = getSettingOptionValues(name, controlConfig).map((optionValue) => {
         const optionText = String(optionValue);
         const isCurrent = optionText === current;
         return {
@@ -3247,6 +3341,7 @@ async function renderItems(group, options = {}) {
   itemsBox.dataset.renderedGroup = group;
   if (detailMode) itemsBox.dataset.renderedDetail = detailName;
   scheduleSettingOverflowSync(itemsBox);
+  window.CarrotMapboxTokenSettings?.sync?.();
   window.CarrotYouTubeLiveSettings?.sync?.();
 
   if (pendingSettingFocus?.group === group) {
