@@ -579,6 +579,7 @@
           "en": "Sound",
           "zh": "声音",
           "params": [
+            "SoundLanguageSetting",
             "SoundVolumeAdjust",
             "SoundVolumeAdjustEngage"
           ]
@@ -2515,6 +2516,19 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "SoundLanguageSetting",
+      "title": "사운드 언어",
+      "descr": "안내음성에 사용할 언어를 선택합니다. 자동은 기기 언어 설정을 따릅니다.",
+      "egroup": "START",
+      "etitle": "Sound Language",
+      "edescr": "Select the language used for voice prompts. Auto follows the device language.",
+      "cgroup": "启动设置",
+      "ctitle": "声音语言",
+      "cdescr": "选择提示音使用的语言。自动会跟随设备语言设置。",
+      "default": "auto"
     },
     {
       "group": "시작",

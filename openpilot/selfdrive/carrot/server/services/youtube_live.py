@@ -20,33 +20,54 @@ from .youtube_live_transport import LibrtmpClient, RtmpSink, librtmp_capabilitie
 YOUTUBE_LIVE_PARAM = "CarrotYouTubeLive"
 YOUTUBE_QUALITY_PARAM = "CarrotYouTubeQuality"
 YOUTUBE_TIMESTAMP_PARAM = "CarrotYouTubeTimestamp"
-# The high-quality source has a dedicated encoder so Carrot Vision's shared
-# livestream resolution and bitrate remain unchanged.
+# YouTube modes use dedicated encoders so qcamera and Carrot Vision's shared
+# livestream resolution/bitrate remain unchanged.
 SOURCE_BY_QUALITY = {
-  0: "qRoadEncodeData",
-  1: "livestreamRoadEncodeData",
+  0: "youtubeRoadEncodeData",
+  1: "youtubeRoadEncodeData",
   2: "youtubeRoadEncodeData",
-  3: "livestreamWideRoadEncodeData",
+  3: "youtubeRoadEncodeData",
 }
 QUALITY_LABELS = {0: "low", 1: "medium", 2: "high", 3: "wide"}
+QUALITY_TARGETS = {
+  0: {"width": 854, "height": 480, "video_kbps": 750, "gop_seconds": 2},
+  1: {"width": 1280, "height": 720, "video_kbps": 2000, "gop_seconds": 2},
+  2: {"width": 1920, "height": 1080, "video_kbps": 4200, "gop_seconds": 2},
+  3: {"width": 1280, "height": 720, "video_kbps": 2700, "gop_seconds": 2},
+}
 YOUTUBE_RTMPS_BASE = "rtmps://a.rtmps.youtube.com:443/live2"
 YOUTUBE_RTMPS_HOST = "a.rtmps.youtube.com"
 YOUTUBE_RTMPS_PORT = 443
 NO_FRAME_STOP_SECONDS = 8.0
 START_BACKOFF_SECONDS = 5.0
-STATUS_WRITE_MIN_INTERVAL = 1.0
+STATUS_WRITE_MIN_INTERVAL = 5.0
 BACKOFF_BASE_SECONDS = 3.0
 BACKOFF_MAX_SECONDS = 60.0
 STREAM_STABLE_SECONDS = 10.0
 MIN_RECONNECT_INTERVAL_SECONDS = 3.0
+CONNECTED_CHECK_INTERVAL_SECONDS = 1.0
+PARAM_CACHE_SECONDS = 0.5
+SOURCE_WARMUP_SECONDS = 6.0
+SOURCE_WARMUP_MIN_FRAMES = 45
+SOURCE_WARMUP_MIN_KBPS_RATIO = 0.55
+SOURCE_SAMPLE_WINDOW_SECONDS = 10.0
+SOURCE_GAP_RESET_SECONDS = 2.0
+UPLOAD_STARVED_GRACE_SECONDS = 20.0
+UPLOAD_STARVED_SECONDS = 15.0
+UPLOAD_SAMPLE_WINDOW_SECONDS = 10.0
 EVENT_LOG_MAX = 50
 PROC_CACHE_SECONDS = 5.0
+NET_CHECK_UP_INTERVAL_SECONDS = 8.0
+NET_CHECK_DOWN_INTERVAL_SECONDS = 2.0
 
 _PROCESS_MATCHES = {
   "carrot_cluster": "selfdrive.carrot.cluster_autorun",
   "webrtcd": "system.webrtc.webrtcd",
   "stream_encoderd": "encoderd\x00--stream",
-  "youtube_encoderd": "encoderd\x00--youtube",
+  "youtube_low_encoderd": "encoderd\x00--youtube-low",
+  "youtube_medium_encoderd": "encoderd\x00--youtube-medium",
+  "youtube_encoderd": "encoderd\x00--youtube\x00",
+  "youtube_wide_encoderd": "encoderd\x00--youtube-wide",
 }
 
 
@@ -128,6 +149,17 @@ def _check_rtmps_reachable(timeout: float = 2.5) -> tuple[bool, str]:
     return False, f"YouTube RTMPS ingest unreachable: {exc}"
 
 
+def _network_reachable(timeout: float = 1.5) -> bool:
+  # Lightweight readiness probe: can we open a TCP connection to YouTube's RTMPS
+  # ingest? Used to hold off (re)connecting until the network is actually up
+  # (first boot / hotspot re-attach), instead of forming a degraded session.
+  try:
+    with socket.create_connection((YOUTUBE_RTMPS_HOST, YOUTUBE_RTMPS_PORT), timeout=timeout):
+      return True
+  except Exception:
+    return False
+
+
 class YouTubeLiveService:
   def __init__(
     self,
@@ -141,13 +173,32 @@ class YouTubeLiveService:
     self._stop_event = asyncio.Event()
     self._transport: LibrtmpClient | None = None
     self._transport_connected = False
+    self._rtmp_sink: RtmpSink | None = None
     self._muxer: H264FlvMuxer | None = None
     self._caption_injector = Cea608TimestampInjector()
     self._messaging: Any | None = None
     self._socket: Any | None = None
     self._socket_source = ""
+    self._socket_quality = 0
     self._active_source = ""
+    self._active_quality = 0
+    self._warmup_source = ""
+    self._warmup_quality = 0
+    self._warmup_started_mono = 0.0
+    self._warmup_frames = 0
+    self._warmup_bytes = 0
+    self._warmup_kbps = 0.0
+    self._warmup_last_frame_id: int | None = None
+    self._stream_source_samples: deque[tuple[float, int, bool]] = deque(maxlen=800)
+    self._sent_samples: deque[tuple[float, int]] = deque(maxlen=800)
+    self._starved_since_mono = 0.0
+    self._stream_source_bytes = 0
+    self._stream_source_frames = 0
+    self._stream_source_keyframes = 0
     self._params: Any | None = None
+    self._param_cache: dict[str, tuple[float, Any]] = {}
+    self._stream_key_cache: tuple[int | None, str] = (None, "")
+    self._conn_checked_mono = 0.0
     self._last_status_write = 0.0
     self._started_at = 0.0
     self._started_mono = 0.0
@@ -168,6 +219,8 @@ class YouTubeLiveService:
     self._last_start_mono = 0.0
     self._proc_cache: dict[str, Any] | None = None
     self._proc_cache_mono = 0.0
+    self._net_ok = False
+    self._net_checked_mono = 0.0
     self._muxer_capabilities = pyav_capabilities()
     self._transport_capabilities = librtmp_capabilities()
     persisted = _read_json(self.state_path)
@@ -204,17 +257,26 @@ class YouTubeLiveService:
     uptime = int(mono - self._started_mono) if self._started_mono and running else 0
     elapsed = max(1.0, mono - self._started_mono) if self._started_mono and running else 1.0
     session_bytes = max(0, self._bytes_sent - self._session_started_bytes) if running else 0
+    rtmp_sink = self._rtmp_sink if running else None
+    mux_input_bytes = rtmp_sink.bytes_accepted if rtmp_sink is not None else 0
+    mux_pending_bytes = rtmp_sink.pending_bytes if rtmp_sink is not None else 0
+    mux_input_kbps = int((mux_input_bytes * 8 / 1000) / elapsed) if running else 0
+    source_recent = self._stream_source_recent(mono) if running else {}
+    stream_source_kbps = int((self._stream_source_bytes * 8 / 1000) / elapsed) if running else 0
+    stream_source_fps = round(self._stream_source_frames / elapsed, 1) if running else 0.0
     last_frame_age_ms = int((mono - self._last_frame_mono) * 1000) if self._last_frame_mono else None
     retry_in_sec = max(0, int(self._next_retry_mono - mono)) if self._next_retry_mono else 0
     resource_status = self._resource_status()
     warnings = self._warnings(resource_status)
+    target = self._quality_target()
+    warmup_age_sec = round(mono - self._warmup_started_mono, 1) if self._warmup_started_mono and not running else 0.0
     return {
       "state": self._state,
       "enabled": self._param_enabled(),
       "configured": bool(stream_key),
       "masked_key": _mask_stream_key(stream_key),
       "source": self._current_source(),
-      "muxer": "pyav-flv-aac",
+      "muxer": "flv-h264-aac",
       "muxer_available": bool(
         self._muxer_capabilities.get("available")
         and self._muxer_capabilities.get("flv")
@@ -223,8 +285,13 @@ class YouTubeLiveService:
       ),
       "transport": "librtmp-rtmps",
       "transport_available": bool(self._transport_capabilities.get("available")),
+      "transport_connected": self._transport_connected,
       "quality": self._quality_label(),
       "requested_quality": self._param_int(YOUTUBE_QUALITY_PARAM, 0),
+      "target_width": target.get("width"),
+      "target_height": target.get("height"),
+      "target_video_kbps": target.get("video_kbps"),
+      "target_gop_seconds": target.get("gop_seconds"),
       "timestamp_caption_enabled": self._param_bool(YOUTUBE_TIMESTAMP_PARAM),
       "timestamp_caption_mode": "cea608-sei",
       "timestamp_caption_packets": self._caption_injector.packets_injected,
@@ -238,6 +305,19 @@ class YouTubeLiveService:
       "session_bytes": session_bytes,
       "session_mb": round(session_bytes / (1024 * 1024), 2),
       "estimated_kbps": int((session_bytes * 8 / 1000) / elapsed) if running else 0,
+      "upload_recent_kbps": (self._upload_recent_kbps(mono) or 0) if running else 0,
+      "mux_input_bytes": mux_input_bytes,
+      "mux_input_kbps": mux_input_kbps,
+      "mux_pending_bytes": mux_pending_bytes,
+      "rtmp_drain_calls": rtmp_sink.drain_calls if rtmp_sink is not None else 0,
+      "rtmp_partial_writes": rtmp_sink.partial_writes if rtmp_sink is not None else 0,
+      "rtmp_write_ratio": round(session_bytes / mux_input_bytes, 3) if mux_input_bytes > 0 else None,
+      "stream_source_kbps": stream_source_kbps,
+      "stream_source_fps": stream_source_fps,
+      "stream_source_frames": self._stream_source_frames if running else 0,
+      "stream_source_keyframes": self._stream_source_keyframes if running else 0,
+      "stream_source_recent_kbps": source_recent.get("kbps", 0),
+      "stream_source_recent_fps": source_recent.get("fps", 0.0),
       "restart_count": self._restart_count,
       "consecutive_failures": self._consecutive_failures,
       "next_retry_at": (now + retry_in_sec) if retry_in_sec else 0.0,
@@ -249,6 +329,12 @@ class YouTubeLiveService:
       "frame_width": self._frame_width,
       "frame_height": self._frame_height,
       "frame_fps": self._frame_fps,
+      "frame_matches_target": self._frame_matches_target(target),
+      "source_warmup_sec": warmup_age_sec,
+      "source_warmup_frames": self._warmup_frames if not running else 0,
+      "source_warmup_kbps": int(self._warmup_kbps) if not running else 0,
+      "source_warmup_required_kbps": self._source_warmup_required_kbps(target),
+      "source_warmup_required_sec": SOURCE_WARMUP_SECONDS,
       "log_tail": [f"{event['level']}: {event['message']}" for event in list(self._events)[-12:]],
       "resource_status": resource_status,
       "warnings": warnings,
@@ -277,10 +363,11 @@ class YouTubeLiveService:
       "muxer": dict(self._muxer_capabilities),
       "source": self._current_source(),
       "quality": self._quality_label(),
+      "target": self._quality_target(),
       "resource_status": status["resource_status"],
       "warnings": status["warnings"],
       "log_tail": [f"{event['level']}: {event['message']}" for event in list(self._events)[-12:]],
-      "message": "ready" if ok else "stream key, RTMPS network, librtmp, or PyAV FLV/AAC is unavailable",
+      "message": "ready" if ok else "stream key, RTMPS network, librtmp, or FLV/AAC muxer is unavailable",
     }
 
   def validate_stream_key(self, value: str | None = None) -> dict[str, Any]:
@@ -319,6 +406,7 @@ class YouTubeLiveService:
         "stream_key_masked": _mask_stream_key(stream_key),
         "source": self._current_source(),
         "quality": self._quality_label(),
+        "target": self._quality_target(),
         "rtmps_ingest": f"{YOUTUBE_RTMPS_BASE}/{_mask_stream_key(stream_key)}" if stream_key else "",
       },
       "params": {
@@ -336,7 +424,7 @@ class YouTubeLiveService:
         "log_tail": [f"{event['level']}: {event['message']}" for event in list(self._events)[-12:]],
       },
       "muxer": {
-        "name": "pyav-flv-aac",
+        "name": "flv-h264-aac",
         **self._muxer_capabilities,
       },
       "processes": self._process_status(),
@@ -344,8 +432,20 @@ class YouTubeLiveService:
     }
 
   def get_stream_key(self) -> str:
+    # mtime-cached: this runs every service tick (up to 50Hz while live) and
+    # re-reading/parsing the secret file each time is wasted disk work
+    try:
+      mtime_ns = os.stat(self.secret_path).st_mtime_ns
+    except OSError:
+      self._stream_key_cache = (None, "")
+      return ""
+    cached_mtime, cached_key = self._stream_key_cache
+    if cached_mtime == mtime_ns:
+      return cached_key
     payload = _read_json(self.secret_path)
-    return str(payload.get("stream_key") or "").strip()
+    key = str(payload.get("stream_key") or "").strip()
+    self._stream_key_cache = (mtime_ns, key)
+    return key
 
   def set_stream_key(self, value: str) -> dict[str, Any]:
     stream_key = _extract_stream_key(value)
@@ -381,6 +481,7 @@ class YouTubeLiveService:
     if not self._param_enabled():
       if self._transport is not None:
         await self._stop_stream()
+      self._reset_source_warmup()
       self._last_error = ""
       self._consecutive_failures = 0
       self._next_retry_mono = 0.0
@@ -390,11 +491,13 @@ class YouTubeLiveService:
     stream_key = self.get_stream_key()
     if not stream_key:
       await self._stop_stream()
+      self._reset_source_warmup()
       self._set_state("needs_setup")
       return
 
     if not self._transport_capabilities.get("available"):
       await self._stop_stream()
+      self._reset_source_warmup()
       self._last_error = self._transport_capabilities.get("error") or "librtmp is unavailable"
       self._set_state("error")
       return
@@ -406,32 +509,72 @@ class YouTubeLiveService:
       and self._muxer_capabilities.get("aac")
     ):
       await self._stop_stream()
+      self._reset_source_warmup()
       self._last_error = "PyAV FLV/AAC muxer is unavailable"
       self._set_state("error")
       return
 
-    if self._transport is not None and self._active_source and self._active_source != self._current_source():
-      self._log(f"source changed to {self._current_source()}; restarting")
+    await self._refresh_network()
+
+    current_source = self._current_source()
+    current_quality = self._current_quality()
+    if self._transport is not None and (
+      (self._active_source and self._active_source != current_source)
+      or self._active_quality != current_quality
+    ):
+      self._log(f"video mode changed to {self._quality_label()}; restarting")
       await self._stop_stream()
+      self._reset_source_warmup()
 
     if self._next_retry_mono and _mono() < self._next_retry_mono:
       self._set_state("backoff")
       return
 
-    if self._transport is not None and not await asyncio.to_thread(self._transport.is_connected):
-      self._transport_connected = False
-      self._last_error = "YouTube RTMPS connection closed"
-      await self._stop_stream()
-      self._schedule_backoff("RTMPS connection closed")
-      self._set_state("backoff")
-      return
+    if self._transport is not None and (_mono() - self._conn_checked_mono) >= CONNECTED_CHECK_INTERVAL_SECONDS:
+      # rate-limited probe; write failures surface the same condition anyway
+      self._conn_checked_mono = _mono()
+      if not await asyncio.to_thread(self._transport.is_connected):
+        self._transport_connected = False
+        self._last_error = "YouTube RTMPS connection closed"
+        await self._stop_stream()
+        # source is fine — keep warmup so the reconnect stays a few seconds
+        self._schedule_backoff("RTMPS connection closed")
+        self._set_state("backoff")
+        return
 
-    header, data, frame_id, keyframe, width, height = self._recv_frame()
+    warmup_ready = False
+    if self._transport is None:
+      # Pre-connect we poll slowly while waiting for warmup/keyframe/network, and
+      # the queue can hold tens of seconds of frames. Drain it every tick so the
+      # stream can only start from the freshest keyframe — starting from a stale
+      # one makes YouTube play the past and buffer right at go-live.
+      header = data = b""
+      frame_id, keyframe = None, False
+      width, height = self._frame_width, self._frame_height
+      while True:
+        n_header, n_data, n_frame_id, n_keyframe, n_width, n_height = self._recv_frame()
+        if not n_data:
+          break
+        header, data, frame_id, keyframe, width, height = n_header, n_data, n_frame_id, n_keyframe, n_width, n_height
+        warmup_ready = self._source_warmup_ready(
+          current_source,
+          current_quality,
+          frame_id,
+          width,
+          height,
+          len(header) + len(data),
+        )
+    else:
+      header, data, frame_id, keyframe, width, height = self._recv_frame()
+
     if not data:
       if self._transport is not None and self._last_frame_mono and _mono() - self._last_frame_mono > NO_FRAME_STOP_SECONDS:
         self._last_error = f"no {self._current_source()} frames"
         await self._stop_stream()
         self._schedule_backoff("frame timeout")
+      if self._transport is None and self._last_frame_mono and _mono() - self._last_frame_mono > SOURCE_GAP_RESET_SECONDS:
+        # a real source gap (encoder stopped), not just an empty poll between frames
+        self._reset_source_warmup()
       self._set_state("waiting_frame" if self._transport is None else "live")
       return
 
@@ -442,8 +585,16 @@ class YouTubeLiveService:
     self._frame_height = height
 
     if self._transport is None:
+      if not warmup_ready:
+        self._set_state("waiting_stable_source")
+        return
       if not keyframe or not header:
         self._set_state("waiting_keyframe")
+        return
+      if not self._net_ok:
+        # Hold the first connect until the network is actually reachable so we
+        # never open a degraded session (first boot / hotspot re-attach).
+        self._set_state("waiting_network")
         return
       if self._last_start_mono and (_mono() - self._last_start_mono) < MIN_RECONNECT_INTERVAL_SECONDS:
         # Avoid hammering YouTube with rapid reconnects (it rejects them and it
@@ -454,6 +605,7 @@ class YouTubeLiveService:
         await self._start_stream(stream_key, codec_header=header, width=width, height=height)
       except Exception as exc:
         self._last_error = f"YouTube RTMPS start failed: {exc}"
+        # network/YouTube failure, not a source problem — keep warmup
         self._schedule_backoff("RTMPS start failed")
         self._set_state("backoff")
         return
@@ -462,7 +614,10 @@ class YouTubeLiveService:
       data,
       enabled=self._param_bool(YOUTUBE_TIMESTAMP_PARAM),
     )
+    self._record_stream_source_sample(len(data), keyframe)
     if await self._write_frame(data, keyframe=keyframe):
+      if await self._reconnect_if_starved():
+        return
       self._set_state("live")
 
   def _set_state(self, state: str) -> None:
@@ -488,14 +643,21 @@ class YouTubeLiveService:
     self._events.append({"t": round(_now(), 3), "level": level, "message": text})
 
   def _param_enabled(self) -> bool:
-    try:
-      params = self._get_params()
-      return bool(params and params.get_bool(YOUTUBE_LIVE_PARAM))
-    except Exception:
-      return False
+    return self._param_bool(YOUTUBE_LIVE_PARAM)
+
+  def _param_cached(self, key: str, reader: Any) -> Any:
+    # short TTL cache: params are file-backed reads and the live loop runs at
+    # up to 50Hz; a 0.5s-stale toggle/quality value is imperceptible
+    mono = _mono()
+    hit = self._param_cache.get(key)
+    if hit is not None and (mono - hit[0]) < PARAM_CACHE_SECONDS:
+      return hit[1]
+    value = reader()
+    self._param_cache[key] = (mono, value)
+    return value
 
   def _param_bool(self, name: str, default: bool = False) -> bool:
-    try:
+    def read() -> bool:
       params = self._get_params()
       if params is None:
         return default
@@ -505,11 +667,13 @@ class YouTubeLiveService:
       if isinstance(raw, bytes):
         raw = raw.decode("utf-8", errors="replace")
       return str(raw).strip() in ("1", "true", "True")
+    try:
+      return bool(self._param_cached(f"bool:{name}", read))
     except Exception:
       return default
 
   def _param_int(self, name: str, default: int = 0) -> int:
-    try:
+    def read() -> int:
       params = self._get_params()
       if params is None:
         return default
@@ -519,6 +683,8 @@ class YouTubeLiveService:
       if isinstance(raw, bytes):
         raw = raw.decode("utf-8", errors="replace")
       return int(str(raw).strip())
+    try:
+      return int(self._param_cached(f"int:{name}", read))
     except Exception:
       return default
 
@@ -544,24 +710,196 @@ class YouTubeLiveService:
     return self._messaging
 
   def _current_source(self) -> str:
-    quality = self._param_int(YOUTUBE_QUALITY_PARAM, 0)
+    quality = self._current_quality()
     return SOURCE_BY_QUALITY.get(quality, SOURCE_BY_QUALITY[0])
+
+  def _current_quality(self) -> int:
+    return self._param_int(YOUTUBE_QUALITY_PARAM, 0)
 
   def _quality_label(self) -> str:
     return QUALITY_LABELS.get(self._param_int(YOUTUBE_QUALITY_PARAM, 0), "standard")
 
+  def _quality_target(self) -> dict[str, int]:
+    return dict(QUALITY_TARGETS.get(self._current_quality(), {}))
+
+  def _frame_matches_target(self, target: dict[str, Any] | None = None) -> bool | None:
+    target = target if target is not None else self._quality_target()
+    target_width = int(target.get("width") or 0)
+    target_height = int(target.get("height") or 0)
+    if target_width <= 0 or target_height <= 0:
+      return None
+    return self._frame_width >= target_width and self._frame_height >= target_height
+
+  def _source_warmup_required_kbps(self, target: dict[str, Any] | None = None) -> int:
+    target = target if target is not None else self._quality_target()
+    target_kbps = int(target.get("video_kbps") or 0)
+    if target_kbps <= 0:
+      return 0
+    return int(target_kbps * SOURCE_WARMUP_MIN_KBPS_RATIO)
+
+  def _reset_source_warmup(self) -> None:
+    self._warmup_source = ""
+    self._warmup_quality = 0
+    self._warmup_started_mono = 0.0
+    self._warmup_frames = 0
+    self._warmup_bytes = 0
+    self._warmup_kbps = 0.0
+    self._warmup_last_frame_id = None
+
+  def _source_warmup_ready(
+    self,
+    source: str,
+    quality: int,
+    frame_id: int | None,
+    width: int,
+    height: int,
+    payload_bytes: int,
+  ) -> bool:
+    target = self._quality_target()
+    target_width = int(target.get("width") or 0)
+    target_height = int(target.get("height") or 0)
+    if target_width > 0 and target_height > 0 and (width < target_width or height < target_height):
+      self._reset_source_warmup()
+      return False
+
+    now = _mono()
+    if self._warmup_source != source or self._warmup_quality != quality or not self._warmup_started_mono:
+      self._warmup_source = source
+      self._warmup_quality = quality
+      self._warmup_started_mono = now
+      self._warmup_frames = 0
+      self._warmup_bytes = 0
+      self._warmup_kbps = 0.0
+      self._warmup_last_frame_id = None
+
+    if (
+      frame_id is not None
+      and self._warmup_last_frame_id is not None
+      and frame_id <= self._warmup_last_frame_id
+    ):
+      self._warmup_started_mono = now
+      self._warmup_frames = 0
+      self._warmup_bytes = 0
+      self._warmup_kbps = 0.0
+
+    self._warmup_last_frame_id = frame_id
+    self._warmup_frames += 1
+    self._warmup_bytes += max(0, int(payload_bytes))
+    warmup_sec = max(0.001, now - self._warmup_started_mono)
+    self._warmup_kbps = (self._warmup_bytes * 8 / 1000) / warmup_sec
+    return (
+      warmup_sec >= SOURCE_WARMUP_SECONDS
+      and self._warmup_frames >= SOURCE_WARMUP_MIN_FRAMES
+    )
+
+  def _reset_stream_source_stats(self) -> None:
+    self._stream_source_samples.clear()
+    self._stream_source_bytes = 0
+    self._stream_source_frames = 0
+    self._stream_source_keyframes = 0
+
+  def _record_stream_source_sample(self, payload_bytes: int, keyframe: bool) -> None:
+    payload = max(0, int(payload_bytes))
+    self._stream_source_samples.append((_mono(), payload, bool(keyframe)))
+    self._stream_source_bytes += payload
+    self._stream_source_frames += 1
+    if keyframe:
+      self._stream_source_keyframes += 1
+
+  def _stream_source_recent(self, now: float) -> dict[str, Any]:
+    cutoff = now - SOURCE_SAMPLE_WINDOW_SECONDS
+    while self._stream_source_samples and self._stream_source_samples[0][0] < cutoff:
+      self._stream_source_samples.popleft()
+    if not self._stream_source_samples:
+      return {"kbps": 0, "fps": 0.0}
+    first_mono = self._stream_source_samples[0][0]
+    duration = max(0.001, min(SOURCE_SAMPLE_WINDOW_SECONDS, now - first_mono))
+    bytes_total = sum(sample[1] for sample in self._stream_source_samples)
+    frames = len(self._stream_source_samples)
+    return {
+      "kbps": int((bytes_total * 8 / 1000) / duration),
+      "fps": round(frames / duration, 1),
+    }
+
+  def _upload_recent_kbps(self, now: float) -> int | None:
+    cutoff = now - UPLOAD_SAMPLE_WINDOW_SECONDS
+    while self._sent_samples and self._sent_samples[0][0] < cutoff:
+      self._sent_samples.popleft()
+    if len(self._sent_samples) < 2:
+      return None
+    first_mono, first_bytes = self._sent_samples[0]
+    duration = now - first_mono
+    if duration < UPLOAD_SAMPLE_WINDOW_SECONDS * 0.8:
+      return None
+    return int(((self._bytes_sent - first_bytes) * 8 / 1000) / max(0.001, duration))
+
+  async def _reconnect_if_starved(self) -> bool:
+    # Automate the manual toggle off/on: a session formed while the network was
+    # half-attached (first boot / hotspot) can stay "connected" while uploading
+    # far below the CBR target, which looks like a frozen stream on YouTube.
+    mono = _mono()
+    self._sent_samples.append((mono, self._bytes_sent))
+    if not self._started_mono or (mono - self._started_mono) < UPLOAD_STARVED_GRACE_SECONDS:
+      self._starved_since_mono = 0.0
+      return False
+    required_kbps = self._source_warmup_required_kbps()
+    upload_kbps = self._upload_recent_kbps(mono)
+    if required_kbps <= 0 or upload_kbps is None:
+      return False
+    if upload_kbps >= required_kbps:
+      self._starved_since_mono = 0.0
+      return False
+    if not self._starved_since_mono:
+      self._starved_since_mono = mono
+      return False
+    if (mono - self._starved_since_mono) < UPLOAD_STARVED_SECONDS:
+      return False
+    self._starved_since_mono = 0.0
+    self._last_error = f"upload starved: {upload_kbps} kbps below required {required_kbps} kbps"
+    self._log(f"upload starved ({upload_kbps} kbps < {required_kbps} kbps); reconnecting", "warn")
+    await self._stop_stream()
+    # keep source warmup: the encoder is proven stable, only the network is bad.
+    # skipping the 15s re-warmup keeps the reconnect gap at a few seconds, well
+    # inside YouTube's keep-alive window, so the broadcast is never split.
+    self._schedule_backoff("upload starved")
+    self._set_state("backoff")
+    return True
+
+  async def _refresh_network(self) -> None:
+    # Periodic, cached reachability probe. Poll faster while down so we notice a
+    # hotspot re-attach quickly; slower while up to avoid needless connects.
+    now = _mono()
+    interval = NET_CHECK_UP_INTERVAL_SECONDS if self._net_ok else NET_CHECK_DOWN_INTERVAL_SECONDS
+    if self._net_checked_mono and (now - self._net_checked_mono) < interval:
+      return
+    self._net_checked_mono = now
+    ok = await asyncio.to_thread(_network_reachable)
+    if ok != self._net_ok:
+      self._log("network reachable" if ok else "network unreachable", "info" if ok else "warn")
+    self._net_ok = ok
+
   def _get_socket(self) -> Any | None:
     source = self._current_source()
-    if self._socket is not None and self._socket_source == source:
+    quality = self._current_quality()
+    if self._socket is not None and self._socket_source == source and self._socket_quality == quality:
       return self._socket
     # first subscription or the selected source (quality/camera) changed
+    if self._socket is not None:
+      try:
+        self._socket.close()
+      except Exception:
+        pass
     self._socket = None
     messaging = self._get_messaging()
     if messaging is None:
       return None
     try:
-      self._socket = messaging.sub_sock(source, conflate=True)
+      # conflate=False: never drop frames. H.264 P-frames reference earlier
+      # frames, so dropping any frame corrupts the decode until the next keyframe
+      # (the "blocky/깍두기" artifacts). We must relay every frame in order.
+      self._socket = messaging.sub_sock(source, conflate=False)
       self._socket_source = source
+      self._socket_quality = quality
     except Exception as exc:
       self._last_error = f"{source} socket failed: {exc}"
       self._socket = None
@@ -613,9 +951,10 @@ class YouTubeLiveService:
     transport = LibrtmpClient(rtmp_url)
     try:
       await asyncio.to_thread(transport.connect)
+      sink = RtmpSink(transport)
       muxer = await asyncio.to_thread(
         H264FlvMuxer,
-        RtmpSink(transport),
+        sink,
         codec_header=codec_header,
         fps=self._frame_fps,
         width=width,
@@ -626,13 +965,19 @@ class YouTubeLiveService:
       raise
     self._transport = transport
     self._transport_connected = True
+    self._rtmp_sink = sink
     self._muxer = muxer
     self._started_at = _now()
     self._started_mono = _mono()
     self._session_started_bytes = self._bytes_sent
     self._next_retry_mono = 0.0
+    self._conn_checked_mono = self._started_mono
     self._active_source = self._current_source()
+    self._active_quality = self._current_quality()
     self._caption_injector.reset()
+    self._reset_stream_source_stats()
+    self._sent_samples.clear()
+    self._starved_since_mono = 0.0
     self._log(f"stream started ({width}x{height})")
 
   async def _write_frame(self, payload: bytes, *, keyframe: bool) -> bool:
@@ -640,13 +985,13 @@ class YouTubeLiveService:
     muxer = self._muxer
     if transport is None or muxer is None:
       return False
-    if not await asyncio.to_thread(transport.is_connected):
-      self._transport_connected = False
-      self._last_error = "YouTube RTMPS connection closed"
-      self._schedule_backoff("RTMPS connection closed")
-      await self._stop_stream()
-      return False
+    # no per-frame is_connected probe: librtmp's write raises the same
+    # "connection is closed" condition and the except path handles it
     try:
+      # Index-based CFR timestamps (muxer default). With conflate=False every
+      # 20fps frame is delivered, so frame-index == real time, and YouTube Live
+      # gets the constant frame rate it needs. (Monotonic/wall-clock PTS produced
+      # jittery VFR timing that left YouTube stuck "preparing".)
       await asyncio.to_thread(muxer.mux, payload, keyframe=keyframe)
       self._bytes_sent = self._session_started_bytes + transport.bytes_written
       if self._started_mono and _mono() - self._started_mono >= STREAM_STABLE_SECONDS:
@@ -663,6 +1008,7 @@ class YouTubeLiveService:
     transport = self._transport
     self._transport = None
     self._transport_connected = False
+    self._rtmp_sink = None
     muxer = self._muxer
     self._muxer = None
     if transport is None and muxer is None:
@@ -696,13 +1042,23 @@ class YouTubeLiveService:
     mono = _mono()
     if self._proc_cache is not None and (mono - self._proc_cache_mono) < PROC_CACHE_SECONDS:
       return self._proc_cache
-    result = {}
-    for name, match in _PROCESS_MATCHES.items():
-      pids = _find_matching_pids(match)
-      result[name] = {
-        "running": bool(pids),
-        "pids": pids[:8],
-      }
+    # single /proc pass matching every pattern at once
+    pids_by_name: dict[str, list[int]] = {name: [] for name in _PROCESS_MATCHES}
+    for proc_path in Path("/proc").glob("[0-9]*"):
+      try:
+        pid = int(proc_path.name)
+      except ValueError:
+        continue
+      cmdline = _pid_cmdline(pid)
+      if not cmdline:
+        continue
+      for name, match in _PROCESS_MATCHES.items():
+        if match in cmdline:
+          pids_by_name[name].append(pid)
+    result = {
+      name: {"running": bool(pids), "pids": sorted(pids)[:8]}
+      for name, pids in pids_by_name.items()
+    }
     self._proc_cache = result
     self._proc_cache_mono = mono
     return result
@@ -711,6 +1067,14 @@ class YouTubeLiveService:
     processes = self._process_status()
     cluster_param = self._param_int("ClusterHud", 0)
     disable_dm = self._param_int("DisableDM", 0)
+    quality = self._param_int(YOUTUBE_QUALITY_PARAM, 0)
+    selected_youtube_encoder = {
+      0: "youtube_low_encoderd",
+      1: "youtube_medium_encoderd",
+      2: "youtube_encoderd",
+      3: "youtube_wide_encoderd",
+    }.get(quality, "youtube_low_encoderd")
+    selected_process = processes.get(selected_youtube_encoder, {"running": False, "pids": []})
     return {
       "cluster": {
         "enabled": cluster_param in (1, 2),
@@ -726,7 +1090,8 @@ class YouTubeLiveService:
         "stream_encoderd_pids": list(processes.get("stream_encoderd", {}).get("pids") or []),
       },
       "youtube_encoder": {
-        **processes.get("youtube_encoderd", {"running": False, "pids": []}),
+        "selected": selected_youtube_encoder,
+        **selected_process,
       },
     }
 
@@ -740,14 +1105,27 @@ class YouTubeLiveService:
       warnings.append("Cluster HUD is enabled; monitor overall load and temperature during simultaneous use.")
     if vision and vision.get("enabled"):
       warnings.append("Carrot Vision is enabled; simultaneous streaming increases network and memory bandwidth use.")
-    quality = self._param_int(YOUTUBE_QUALITY_PARAM, 0)
-    if quality in (1, 3):
-      if not (vision and vision.get("stream_encoderd_running")):
-        warnings.append("The selected video mode is waiting for the shared livestream encoder to start onroad.")
-    elif quality == 2:
-      youtube_encoder = resource_status.get("youtube_encoder") if isinstance(resource_status, dict) else {}
-      if not (youtube_encoder and youtube_encoder.get("running")):
-        warnings.append("High quality is waiting for the dedicated YouTube encoder to start onroad.")
+    youtube_encoder = resource_status.get("youtube_encoder") if isinstance(resource_status, dict) else {}
+    if not (youtube_encoder and youtube_encoder.get("running")):
+      warnings.append("The selected YouTube encoder is waiting to start onroad.")
+    target = self._quality_target()
+    target_height = int(target.get("height") or 0)
+    if target_height > 0 and self._last_frame_mono and self._frame_height < target_height:
+      warnings.append(
+        f"YouTube encoder target is {target.get('width')}x{target_height}, "
+        f"but current frames are {self._frame_width}x{self._frame_height}."
+      )
+    target_kbps = int(target.get("video_kbps") or 0)
+    if self._transport_connected and self._started_mono and target_kbps > 0:
+      mono = _mono()
+      age = mono - self._started_mono
+      session_bytes = max(0, self._bytes_sent - self._session_started_bytes)
+      estimated_kbps = int((session_bytes * 8 / 1000) / max(1.0, age))
+      if age >= SOURCE_WARMUP_SECONDS and estimated_kbps < self._source_warmup_required_kbps(target):
+        warnings.append(
+          f"YouTube ingest may be starved: current bitrate is below "
+          f"{self._source_warmup_required_kbps(target)} kbps for target {target_kbps} kbps."
+        )
     return warnings
 
 
@@ -756,27 +1134,3 @@ def _pid_cmdline(pid: int) -> str:
     return Path(f"/proc/{int(pid)}/cmdline").read_bytes().decode(errors="replace")
   except Exception:
     return ""
-
-
-def _pid_alive(pid: int, match: str = "") -> bool:
-  if pid <= 0:
-    return False
-  try:
-    os.kill(pid, 0)
-  except OSError:
-    return False
-  return not match or match in _pid_cmdline(pid)
-
-
-def _find_matching_pids(match: str) -> list[int]:
-  if not Path("/proc").exists():
-    return []
-  matches = []
-  for proc_path in Path("/proc").glob("[0-9]*"):
-    try:
-      pid = int(proc_path.name)
-    except ValueError:
-      continue
-    if _pid_alive(pid, match):
-      matches.append(pid)
-  return sorted(matches)

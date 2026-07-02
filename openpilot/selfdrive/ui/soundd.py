@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import os
 import time
 import wave
 
@@ -80,6 +81,31 @@ if HARDWARE.get_device_type() == "tizi":
     AudibleAlert.disengage: ("disengage_tizi.wav", 1, float(Params().get_int("SoundVolumeAdjustEngage"))/100.),
   })
 
+def _param_string(value) -> str:
+  if isinstance(value, (bytes, bytearray, memoryview)):
+    return bytes(value).decode("utf-8", errors="replace")
+  return str(value or "")
+
+def read_sound_language_setting(params: Params) -> str:
+  sound_lang = _param_string(params.get("SoundLanguageSetting", return_default=True)).strip()
+  if sound_lang and sound_lang.lower() != "auto":
+    return sound_lang
+  return _param_string(params.get("LanguageSetting", return_default=True)).strip() or "en"
+
+def sound_asset_dir_for_language(lang: str | bytes | None) -> str:
+  if isinstance(lang, (bytes, bytearray, memoryview)):
+    raw = bytes(lang).decode("utf-8", errors="replace")
+  else:
+    raw = str(lang or "")
+  normalized = raw.strip().replace("_", "-").lower()
+  if normalized.startswith("main-"):
+    normalized = normalized[5:]
+  if normalized == "ko" or normalized.startswith("ko-"):
+    return "sounds"
+  if normalized in ("zh-chs", "zh-hans") or normalized.startswith("zh"):
+    return "sounds_chs"
+  return "sounds_eng"
+
 def check_selfdrive_timeout_alert(sm):
   ss_missing = time.monotonic() - sm.recv_time['selfdriveState']
 
@@ -121,7 +147,8 @@ class Soundd:
     self.soundVolumeAdjust = 1.0
     self.carrot_count_down = 0
 
-    self.lang = self.params.get('LanguageSetting')
+    self.lang = read_sound_language_setting(self.params)
+    self.next_language_check_time = 0.0
     self.load_sounds()
 
     self.current_alert = AudibleAlert.none
@@ -134,17 +161,16 @@ class Soundd:
 
   def load_sounds(self):
     self.loaded_sounds: dict[int, np.ndarray] = {}
+    sound_dir = os.path.join(BASEDIR, "openpilot", "selfdrive", "assets", sound_asset_dir_for_language(self.lang))
+    fallback_dir = os.path.join(BASEDIR, "openpilot", "selfdrive", "assets", "sounds_eng")
 
     # Load all sounds
     for sound in sound_list:
       filename, play_count, volume = sound_list[sound]
-
-      if self.lang == "main_ko":
-        wavefile = wave.open(BASEDIR + "/openpilot/selfdrive/assets/sounds/" + filename, 'r')
-      elif self.lang == "main_zh-CHS":
-        wavefile = wave.open(BASEDIR + "/openpilot/selfdrive/assets/sounds_chs/" + filename, 'r')
-      else:
-        wavefile = wave.open(BASEDIR + "/openpilot/selfdrive/assets/sounds_eng/" + filename, 'r')
+      path = os.path.join(sound_dir, filename)
+      if not os.path.exists(path):
+        path = os.path.join(fallback_dir, filename)
+      wavefile = wave.open(path, 'r')
 
       #assert wavefile.getnchannels() == 1
       assert wavefile.getsampwidth() == 2
@@ -167,6 +193,20 @@ class Soundd:
       resampled_samples = linear_resample(samples, actual_sample_rate, SAMPLE_RATE) * volume
 
       self.loaded_sounds[sound] = resampled_samples.astype(np.float32) / (2**16/2)
+
+  def update_language(self) -> None:
+    now = time.monotonic()
+    if now < self.next_language_check_time:
+      return
+    self.next_language_check_time = now + 1.0
+
+    lang = read_sound_language_setting(self.params)
+    if lang == self.lang:
+      return
+    self.lang = lang
+    self.load_sounds()
+    self.current_sound_frame = 0
+    cloudlog.info(f"soundd language changed: {self.lang} ({sound_asset_dir_for_language(self.lang)})")
 
   def get_sound_data(self, frames): # get "frames" worth of data from the current alert sound, looping when required
 
@@ -252,6 +292,7 @@ class Soundd:
       print(f"soundd stream started: {stream.samplerate=} {stream.channels=} {stream.dtype=} {stream.device=}, {stream.blocksize=}")
       while True:
         sm.update(0)
+        self.update_language()
 
         if sm.updated['soundPressure'] and self.current_alert == AudibleAlert.none: # only update volume filter when not playing alert
           self.spl_filter_weighted.update(sm["soundPressure"].soundPressureWeightedDb)

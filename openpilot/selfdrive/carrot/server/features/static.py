@@ -3,7 +3,7 @@ import os
 
 from aiohttp import web
 
-from ..config import TRAINING_ASSETS_DIR, WEB_DIR
+from ..config import SOUND_ASSETS_DIR, TRAINING_ASSETS_DIR, WEB_DIR
 from ..services.params import get_param_values
 from ..services.web_settings import read_web_settings
 
@@ -62,3 +62,5 @@ def register(app: web.Application) -> None:
   app.router.add_get("/", handle_index)
   if os.path.isdir(TRAINING_ASSETS_DIR):
     app.router.add_static("/training/", TRAINING_ASSETS_DIR, show_index=False)
+  if os.path.isdir(SOUND_ASSETS_DIR):
+    app.router.add_static("/sound-assets/", SOUND_ASSETS_DIR, show_index=False)
