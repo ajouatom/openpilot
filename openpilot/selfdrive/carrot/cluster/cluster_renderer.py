@@ -1283,13 +1283,18 @@ class ClusterUiRenderer:
         for candidate in self._font_candidates():
             if candidate.exists():
                 try:
+                    # Some TTFs have glyph bounds slightly taller than the requested
+                    # size, which makes raylib print harmless FONT warnings at startup.
+                    rl.set_trace_log_level(rl.TraceLogLevel.LOG_ERROR)
                     font = rl.load_font_ex(str(candidate), 160, None, 0)
+                    rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
                     if font.texture.id > 0:
                         rl.gen_texture_mipmaps(font.texture)
                         rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
                         self._owns_font = True
                         return font
                 except Exception as exc:
+                    rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
                     print(f"Cluster font load failed for {candidate}: {exc}")
         self._owns_font = False
         return rl.get_font_default()
