@@ -3,6 +3,7 @@ from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
+from opendbc.car.hyundai.angle_torque_governor import AngleTorqueGovernor
 from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
@@ -161,6 +162,8 @@ class CarController(CarControllerBase):
     self.apply_angle_last = 0
     self.lkas_max_torque = 0
     self.angle_max_torque = 250
+    self.angle_torque_governor = AngleTorqueGovernor(self.angle_max_torque, self.params.ANGLE_MIN_TORQUE,
+                                                     self.params.ANGLE_LIMITS.STEER_ANGLE_MAX)
     self.steering_pressed_prev = False
     self.recovering_from_override = False
     self.full_recovery_frames = 0
@@ -269,7 +272,9 @@ class CarController(CarControllerBase):
     if angle_control:
       apply_steer_req = CC.latActive
 
-    angle_torque_cap = self.angle_max_torque
+    angle_torque_cap = self.angle_torque_governor.update(
+      angle_control and CC.latActive, CS.out, actuators.steeringAngleDeg, apply_angle,
+    )
 
     steering_pressed_rising = CS.out.steeringPressed and not self.steering_pressed_prev
     if steering_pressed_rising:
@@ -772,4 +777,3 @@ class HyundaiJerk:
         self.jerk_l = min(max(1.0, -self.jerk * 4.0), jerk_max_l)
         self.cb_upper = np.clip(0.9 + accel * 0.2, 0, 1.2)
         self.cb_lower = np.clip(0.8 + accel * 0.2, 0, 1.2)
-
