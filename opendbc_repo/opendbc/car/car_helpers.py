@@ -11,7 +11,7 @@ from opendbc.car.mock.values import CAR as MOCK
 from opendbc.car.values import BRANDS
 from opendbc.car.vin import get_vin, is_valid_vin, VIN_UNKNOWN
 
-from common.params import Params
+from openpilot.common.params import Params
 
 
 FRAME_FINGERPRINT = 100  # 1s

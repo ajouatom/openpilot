@@ -1,6 +1,6 @@
 import copy
 from opendbc.can import CANDefine, CANParser
-from cereal import car
+from openpilot.cereal import car
 from openpilot.common.params import Params #kans
 import numpy as np
 from opendbc.car import Bus, create_button_events, structs

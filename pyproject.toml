@@ -122,16 +122,24 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = [ "." ]
+packages = [
+  "openpilot",
+  "msgq",
+  "opendbc",
+  "panda",
+  "rednose",
+  "teleoprtc",
+  "tinygrad",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "--ignore=openpilot/ --ignore=opendbc/ --ignore=panda/ --ignore=rednose_repo/ --ignore=tinygrad_repo/ --ignore=teleoprtc_repo/ --ignore=msgq/  -Werror --strict-config --strict-markers --durations=10 -n auto --dist=loadgroup"
+addopts = "--ignore=opendbc/ --ignore=panda/ --ignore=rednose_repo/ --ignore=tinygrad_repo/ --ignore=teleoprtc_repo/ --ignore=msgq/  -Werror --strict-config --strict-markers --durations=10 -n auto --dist=loadgroup"
 cpp_files = "test_*"
-cpp_harness = "selfdrive/test/cpp_harness.py"
+cpp_harness = "openpilot/selfdrive/test/cpp_harness.py"
 python_files = "test_*.py"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
@@ -140,11 +148,7 @@ markers = [
   "skip_tici_setup: mark test to skip tici setup fixture"
 ]
 testpaths = [
-  "common",
-  "selfdrive",
-  "system",
-  "tools",
-  "cereal",
+  "openpilot",
 ]
 
 [tool.codespell]
@@ -152,7 +156,7 @@ quiet-level = 3
 # if you've got a short variable name that's getting flagged, add it here
 ignore-words-list = "bu,ro,te,ue,alo,hda,ois,nam,nams,ned,som,parm,setts,inout,warmup,bumb,nd,sie,preints,whit,indexIn,ws,uint,grey,deque,stdio,amin,BA,LITE,atEnd,UIs,errorString,arange,FocusIn,od,tim,relA,hist,copyable,jupyter,thead,TGE,abl,lite,ser"
 builtin = "clear,rare,informal,code,names,en-GB_to_en-US"
-skip = "./third_party/*, ./tinygrad/*, ./tinygrad_repo/*, ./msgq/*, ./panda/*, ./opendbc/*, ./opendbc_repo/*, ./rednose/*, ./rednose_repo/*, ./teleoprtc/*, ./teleoprtc_repo/*, *.po, uv.lock, *.onnx, ./cereal/gen/*, */c_generated_code/*, docs/assets/*, tools/plotjuggler/layouts/*, selfdrive/assets/offroad/mici_fcc.html"
+skip = "./third_party/*, ./tinygrad/*, ./tinygrad_repo/*, ./msgq/*, ./panda/*, ./opendbc/*, ./opendbc_repo/*, ./rednose/*, ./rednose_repo/*, ./teleoprtc/*, ./teleoprtc_repo/*, *.po, uv.lock, *.onnx, ./openpilot/cereal/gen/*, */c_generated_code/*, docs/assets/*, openpilot/tools/plotjuggler/layouts/*, openpilot/selfdrive/assets/offroad/mici_fcc.html"
 
 # https://docs.astral.sh/ruff/configuration/#using-pyprojecttoml
 [tool.ruff]
@@ -180,7 +184,7 @@ line-length = 160
 target-version ="py311"
 exclude = [
   "body",
-  "cereal",
+  "openpilot/cereal",
   "panda",
   "opendbc",
   "opendbc_repo",
@@ -216,7 +220,7 @@ quote-style = "preserve"
 
 [tool.ty.src]
 exclude = [
-  "cereal/",
+  "openpilot/cereal/",
   "msgq/",
   "msgq_repo/",
   "opendbc/",

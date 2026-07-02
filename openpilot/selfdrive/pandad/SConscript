@@ -1,0 +1,16 @@
+import libusb
+
+Import('env', 'arch', 'common', 'messaging')
+
+if arch != "Darwin":
+  panda_env = env.Clone()
+  panda_env['CPPPATH'] += [libusb.INCLUDE_DIR]
+  panda_env['LIBPATH'] += [libusb.LIB_DIR]
+
+  libs = [common, messaging, 'pthread', 'usb-1.0']
+  panda = panda_env.Library('panda', ['panda.cc', 'panda_comms.cc', 'spi.cc'])
+
+  panda_env.Program('pandad', ['main.cc', 'pandad.cc', 'panda_safety.cc'], LIBS=[panda] + libs)
+
+  if GetOption('extras'):
+    panda_env.Program('tests/test_pandad_canprotocol', ['tests/test_pandad_canprotocol.cc'], LIBS=[panda] + libs)

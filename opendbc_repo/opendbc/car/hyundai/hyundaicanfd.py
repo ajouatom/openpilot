@@ -5,7 +5,7 @@ from opendbc.car.crc import CRC16_XMODEM
 from opendbc.car.hyundai.values import HyundaiFlags, HyundaiExtFlags
 from openpilot.common.params import Params
 from opendbc.car.common.conversions import Conversions as CV
-from cereal import log
+from openpilot.cereal import log
 
 LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
