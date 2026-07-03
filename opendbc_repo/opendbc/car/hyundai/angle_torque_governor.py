@@ -88,7 +88,15 @@ class AngleTorqueGovernor:
       torque_cap = min(torque_cap, load_torque_cap)
 
     if near_angle_cap and desired_clip_error > 20.0:
-      torque_cap = min(torque_cap, self.min_torque)
+      low_load_near_cap = (not CS.steeringPressed and not post_driver_unwind and
+                           3.0 < CS.vEgo < 7.0 and eps_torque < 14.0)
+      if low_load_near_cap:
+        near_cap_target = float(np.interp(desired_clip_error, [20.0, 40.0, 80.0], [88.0, 70.0, 50.0]))
+        near_cap_blend = float(np.interp(abs(applied_angle), [173.0, self.max_angle], [0.0, 1.0]))
+        near_cap_torque = float(np.interp(near_cap_blend, [0.0, 1.0], [torque_cap, near_cap_target]))
+        torque_cap = min(torque_cap, max(self.min_torque, near_cap_torque))
+      else:
+        torque_cap = min(torque_cap, self.min_torque)
 
     if CS.steeringPressed:
       self.driver_unwind_frames = int(1.5 / DT_CTRL)
