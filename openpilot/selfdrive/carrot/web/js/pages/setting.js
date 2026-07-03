@@ -1330,7 +1330,11 @@ let settingFabMenuOpen = false;
 let CURRENT_SETTING_DETAIL = null;
 
 function isCompactLandscapeMode() {
-  return window.matchMedia("(orientation: landscape)").matches;
+  // Wide layout = nav rail + two-column split. Shared with the whole app via
+  // CarrotLayout so fold/large-panel detection matches CSS.
+  return window.CarrotLayout
+    ? window.CarrotLayout.isWide()
+    : window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches;
 }
 
 function getLandscapeDefaultSettingGroup() {
@@ -1907,7 +1911,8 @@ function hasSettingViewportLayoutChanged() {
 }
 
 function isPortraitInternalScrollMode() {
-  return Boolean(window.matchMedia && window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches);
+  if (window.CarrotLayout?.isWide?.()) return false;
+  return Boolean(window.matchMedia && window.matchMedia("(max-width: 640px), (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px)").matches);
 }
 
 function getSettingItemsScrollContainer() {
@@ -2020,6 +2025,23 @@ function getSettingDetailTitle(item) {
 
 function isSettingInlineControlTarget(target) {
   return Boolean(target?.closest?.(".ctrl, button, input, select, textarea, a"));
+}
+
+const SETTING_VALUE_CONTROL_HIT_OUTSET = 8;
+
+function isSettingValueControlHit(event, row = null) {
+  if (!event || typeof event.clientX !== "number" || typeof event.clientY !== "number") return false;
+  const root = row || event.target?.closest?.(".setting[data-setting-name]");
+  const ctrl = root?.querySelector?.(".ctrl--value");
+  if (!ctrl) return false;
+  const rect = ctrl.getBoundingClientRect();
+  const outset = SETTING_VALUE_CONTROL_HIT_OUTSET;
+  return (
+    event.clientX >= rect.left - outset &&
+    event.clientX <= rect.right + outset &&
+    event.clientY >= rect.top - outset &&
+    event.clientY <= rect.bottom + outset
+  );
 }
 
 async function selectSettingDetail(group, name, pushHistory = true) {
@@ -2845,9 +2867,7 @@ async function renderItems(group, options = {}) {
     const val = document.createElement("button");
     val.type = "button";
     val.className = compactNumeric ? "value-surface val setting-value-compact" : "value-surface val";
-    val.setAttribute("aria-label", compactNumeric
-      ? getUIText("setting_value_detail", "Open detail")
-      : getUIText("setting_value_edit", "Edit value"));
+    val.setAttribute("aria-label", getUIText("setting_value_edit", "Edit value"));
 
     let btnMinus = null;
     let btnPlus = null;
@@ -3294,10 +3314,9 @@ async function renderItems(group, options = {}) {
 
     val.onclick = (event) => {
       event.stopPropagation();
-      if (!detailMode && compactNumeric) {
-        selectSettingDetail(originGroup, name).catch(() => {});
-        return;
-      }
+      // Tapping the value opens the number-entry popup directly (both in the
+      // items list and the detail screen) — it no longer drills into the detail
+      // screen. The detail screen is still reachable by tapping the row's title.
       if (controlConfig.kind === "slider") promptSettingValue();
     };
 
@@ -3332,6 +3351,7 @@ async function renderItems(group, options = {}) {
     if (!detailMode) {
       el.onclick = (event) => {
         if (el.dataset.settingSuppressClick === "1") return;
+        if (isSettingValueControlHit(event, el)) return;
         if (isSettingInlineControlTarget(event.target)) return;
         selectSettingDetail(originGroup, name).catch(() => {});
       };
@@ -3372,14 +3392,14 @@ function bindSettingFavoriteLongPress() {
     press = null;
   }
 
-  function isIgnoredFavoritePressTarget(target) {
-    return isSettingInlineControlTarget(target);
+  function isIgnoredFavoritePressTarget(event, row) {
+    return isSettingInlineControlTarget(event.target) || isSettingValueControlHit(event, row);
   }
 
   itemsBox.addEventListener("pointerdown", (event) => {
     if (event.button !== undefined && event.button !== 0) return;
     const row = event.target.closest(".setting[data-setting-name]");
-    if (!row || !itemsBox.contains(row) || isIgnoredFavoritePressTarget(event.target)) return;
+    if (!row || !itemsBox.contains(row) || isIgnoredFavoritePressTarget(event, row)) return;
 
     clearPress();
     const startX = event.clientX;

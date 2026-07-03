@@ -409,7 +409,6 @@ window.CarrotTranslations.register("zh", {
     not_set: "未设置",
     connecting: "连接中...",
     reconnecting: "重连中...",
-    vision_reconnect: "重新连接",
     vision_stop: "停止",
     error: "错误",
     notice: "提示",

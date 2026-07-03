@@ -411,7 +411,6 @@ window.CarrotTranslations.register("en", {
     connecting: "Connecting...",
     connected: "Connected",
     reconnecting: "Reconnecting...",
-    vision_reconnect: "Reconnect",
     vision_stop: "Stop",
     error: "Error",
     notice: "Notice",

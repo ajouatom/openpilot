@@ -1,4 +1,4 @@
-.page--terminal {
+﻿.page--terminal {
   --terminal-bottom-gap: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
   --terminal-form-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   --terminal-inline: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
@@ -303,7 +303,7 @@
   }
 }
 
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
   body[data-page="terminal"] .app-toast-host {
     left: var(--terminal-toast-left, calc(var(--nav-rail-width) + 20px));
     right: auto;

@@ -89,7 +89,8 @@
   }
 
   function getMode() {
-    return global.matchMedia?.("(orientation: portrait)")?.matches ? MODE.PORTRAIT : MODE.LANDSCAPE;
+    if (global.CarrotLayout?.isWide?.()) return MODE.LANDSCAPE;
+    return global.matchMedia?.("(max-width: 640px), (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px)")?.matches ? MODE.PORTRAIT : MODE.LANDSCAPE;
   }
 
   function syncHostMode(out, mode = getMode()) {

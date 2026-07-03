@@ -13,6 +13,7 @@ const APP_DIALOG_VARIANT_CLASSES = [
   "app-dialog--choice-grid",
   "app-dialog--choice-value-grid",
   "app-dialog--form",
+  "app-dialog--input",
 ];
 
 
@@ -272,6 +273,9 @@ function openAppDialog(options = {}) {
 
   resetAppDialogPresentation();
   if (appDialog && isForm) appDialog.classList.add("app-dialog--form");
+  // Any dialog that shows the text input (prompt OR form) gets the keyboard-aware
+  // positioning so it floats just above the on-screen keyboard, consistently.
+  if (appDialog && (mode === "prompt" || isForm)) appDialog.classList.add("app-dialog--input");
   if (appDialog && hasChoices) {
     appDialog.classList.add("app-dialog--choice");
     appDialog.classList.add(choiceLayout === "value-grid" ? "app-dialog--choice-grid" : "app-dialog--choice-list");

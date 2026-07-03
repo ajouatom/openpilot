@@ -285,7 +285,6 @@ function renderUIText() {
   setText("logsDashcamTitle", s.logs_dashcam || "Dashcam");
   setText("logsScreenTitle", s.logs_screenrecord || "Screen Record");
   setText("btnStartVision", `▶ ${s.start_vision || "Start Drive Vision"}`);
-  setText("btnVisionReconnect", s.vision_reconnect || "Reconnect");
   setText("btnVisionStop", s.vision_stop || "Stop");
   if (typeof applyRecordFabState === "function") applyRecordFabState();
   if (window.HomeDrive && typeof window.HomeDrive.renderText === "function") {

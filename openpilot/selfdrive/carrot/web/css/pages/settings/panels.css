@@ -18,7 +18,7 @@
   align-items: center;
   justify-content: flex-start;
   gap: 14px;
-  padding: calc(18px + env(safe-area-inset-top, 0px)) var(--sp-lg) calc(var(--app-nav-bottom-gap, var(--nav-bar-height)) + 18px + env(safe-area-inset-bottom, 0px));
+  padding: calc(18px + env(safe-area-inset-top, 0px)) var(--sp-lg) calc(var(--app-nav-bottom-gap, var(--nav-bar-height)) + 18px + var(--kb-inset) + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 

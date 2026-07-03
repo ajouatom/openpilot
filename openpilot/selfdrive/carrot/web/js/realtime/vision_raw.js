@@ -287,7 +287,7 @@ function handleOverlayDecodedMessage(service, data) {
 }
 
 function drivingHudUpdateFromCarPayload(j) {
-  if (!window.DrivingHud || !j) return;
+  if (!j) return;
 
   const runtimeIsMetric = window.CarrotLiveRuntimeState?.runtime?.params?.IsMetric;
   const isMetric = j.isMetric != null
@@ -317,6 +317,13 @@ function drivingHudUpdateFromCarPayload(j) {
     apm: j.apm,
   };
 
+  const miniHudPayload = window.CarrotMiniHudModel?.build?.(
+    payload,
+    RAW_HUD_STATE,
+    window.CarrotLiveRuntimeState,
+  );
+  if (miniHudPayload) window.CarrotMiniHud?.update?.(miniHudPayload);
+
   const payloadSignature = [
     typeof LANG === "string" ? LANG : "",
     payload.isMetric ? 1 : 0,
@@ -345,7 +352,7 @@ function drivingHudUpdateFromCarPayload(j) {
   ].join("|");
   if (payloadSignature === LAST_HUD_PAYLOAD_SIGNATURE) return;
   LAST_HUD_PAYLOAD_SIGNATURE = payloadSignature;
-  window.DrivingHud.update(payload);
+  window.DrivingHud?.update?.(payload);
 }
 
 function averageFiniteMetric(values) {

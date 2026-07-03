@@ -39,7 +39,9 @@
   }
 }
 
-@media (orientation: landscape) {
+/* Wide layout — offset page content for the left nav rail. Must track the
+   rail gate in responsive.css / viewport.js exactly. */
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
   :root {
     --page-shell-margin-left: var(--app-nav-left-gap, var(--nav-rail-width));
     --page-shell-margin-right: 0px;
