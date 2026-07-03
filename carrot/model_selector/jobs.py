@@ -1,9 +1,9 @@
 """Minimal in-memory job runner for the carrot web model selector routes.
 
-Mirrors the shape of carrot's own `_tool_jobs` helpers in
-`selfdrive/carrot/server/core.py` so the frontend can reuse the same polling
-UI (progress bar, message, log).  Kept in a dedicated module so the web
-routes stay declarative and unit-testable.
+Mirrors the polling-job shape of carrot's own web server
+(`openpilot/selfdrive/carrot/server/app.py`) so the frontend can reuse the
+same polling UI (progress bar, message, log).  Kept in a dedicated module so
+the web routes stay declarative and unit-testable.
 """
 from __future__ import annotations
 

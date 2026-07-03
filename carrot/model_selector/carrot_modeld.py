@@ -32,9 +32,9 @@ from tinygrad.tensor import Tensor
 import time
 import pickle
 import numpy as np
-import cereal.messaging as messaging
-from cereal import car, log
-from cereal.messaging import PubMaster, SubMaster
+import openpilot.cereal.messaging as messaging
+from openpilot.cereal import car, log
+from openpilot.cereal.messaging import PubMaster, SubMaster
 from msgq.visionipc import VisionIpcClient, VisionStreamType, VisionBuf
 from opendbc.car.car_helpers import get_demo_car_params
 from openpilot.common.swaglog import cloudlog
@@ -58,7 +58,7 @@ from openpilot.carrot.model_selector.carrot_parse_model_outputs import Parser
 PROCESS_NAME = "carrot.model_selector.carrot_modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
 
-DEFAULT_MODEL_DIR = Path('/data/openpilot/selfdrive/modeld/models')
+DEFAULT_MODEL_DIR = Path('/data/openpilot/openpilot/selfdrive/modeld/models')
 
 
 def validate_model_files(base: Path) -> bool:
@@ -555,7 +555,10 @@ def main(demo=False):
 
       dc = DEVICE_CAMERAS[(str(sm['deviceState'].deviceType), str(sm['roadCameraState'].sensor))]
       model_transform_main = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics if main_wide_camera else dc.fcam.intrinsics, False).astype(np.float32)
-      model_transform_extra = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics, True).astype(np.float32)
+      # 신 modeld.py 와 동일: 와이드캠이 없는 구성에서는 big_img 도 fcam 프레임이므로
+      # fcam 내참행렬로 워프해야 기하학적으로 맞다.
+      has_wide_camera = use_extra_client or main_wide_camera
+      model_transform_extra = get_warp_matrix(device_from_calib_euler, dc.ecam.intrinsics if has_wide_camera else dc.fcam.intrinsics, True).astype(np.float32)
       live_calib_seen = True
 
     traffic_convention = np.zeros(2)

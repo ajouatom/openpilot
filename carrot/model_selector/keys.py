@@ -12,4 +12,5 @@ MODEL_SIGNING_KEYS: dict[str, str] = {
 
 # Bumped when incompatible selector changes ship; manifests declare
 # `minimumSelectorVersion` and are rejected if this constant is lower.
-MODEL_SELECTOR_VERSION = 3
+# v4: new-architecture (driving_supercombo.onnx) model support.
+MODEL_SELECTOR_VERSION = 4

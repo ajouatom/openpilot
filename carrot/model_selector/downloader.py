@@ -131,15 +131,18 @@ def download_model(
                 pass
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Vision + (on_policy or policy) is required; fail fast if manifest is
-    # missing a required pair.
+    # Either a single supercombo onnx (new architecture) or the legacy
+    # vision + (on_policy or policy) set is required; fail fast otherwise.
     names = set(entry.files.keys())
-    if "driving_vision.onnx" not in names:
-        raise DownloadError("manifest entry missing driving_vision.onnx")
-    if "driving_on_policy.onnx" not in names and "driving_policy.onnx" not in names:
-        raise DownloadError(
-            "manifest entry needs driving_on_policy.onnx or driving_policy.onnx"
-        )
+    if "driving_supercombo.onnx" not in names:
+        if "driving_vision.onnx" not in names:
+            raise DownloadError(
+                "manifest entry missing driving_supercombo.onnx or driving_vision.onnx"
+            )
+        if "driving_on_policy.onnx" not in names and "driving_policy.onnx" not in names:
+            raise DownloadError(
+                "manifest entry needs driving_on_policy.onnx or driving_policy.onnx"
+            )
 
     results: dict[str, DownloadResult] = {}
     for filename in sorted(names):

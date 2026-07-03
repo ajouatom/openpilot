@@ -1,4 +1,10 @@
-"""Fetch and verify the Carrot model manifest (models.json).
+"""Fetch and verify the Carrot model manifest.
+
+Primary source is ``models_v4.json`` (full catalog incl. new-architecture
+models), with fallback to the frozen legacy ``models.json``.  Entries are
+version-gated before filename validation and unparseable entries are skipped,
+so future manifest additions can never break this selector's whole list
+(the v3 selector had that flaw — see config.MODELS_JSON_URL).
 
 Mirrors the canonical-JSON Ed25519 verification done in c3-ms
 ``model_manager.cc`` so the same signing tooling produces compatible bundles.
@@ -8,12 +14,13 @@ from __future__ import annotations
 import base64
 import json
 import math
+import sys
 import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
-from .config import ALLOWED_ONNX_FILES, MODELS_JSON_URL
+from .config import ALLOWED_ONNX_FILES, MODELS_JSON_FALLBACK_URL, MODELS_JSON_URL
 from .keys import MODEL_SELECTOR_VERSION, MODEL_SIGNING_KEYS
 
 
@@ -115,6 +122,22 @@ class ModelEntry:
         return sorted(self.files.keys())
 
 
+def _min_selector_version(raw: dict) -> int | None:
+    """Entry's minimum selector version; None when unparseable.
+
+    Callers treat None as fail-closed (skip the entry): an entry whose
+    version requirement can't be read must not be shown to selectors it
+    might be incompatible with.
+    """
+    min_ver = raw.get("minimum_selector_version")
+    if min_ver is None:
+        min_ver = raw.get("minimumSelectorVersion", 0)
+    try:
+        return int(min_ver)
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_model(raw: dict) -> ModelEntry:
     files: dict[str, FileSpec] = {}
     for fname, info in (raw.get("files") or {}).items():
@@ -129,22 +152,19 @@ def _parse_model(raw: dict) -> ModelEntry:
     if not base_url:
         raise ManifestError("missing base_url")
     added_at = raw.get("added_at") or raw.get("addedAt") or ""
-    min_ver = raw.get("minimum_selector_version")
-    if min_ver is None:
-        min_ver = raw.get("minimumSelectorVersion", 0)
     return ModelEntry(
         id=str(raw["id"]),
         name=str(raw.get("name") or raw["id"]),
         base_url=str(base_url),
         added_at=str(added_at),
         files=files,
-        minimum_selector_version=int(min_ver),
+        minimum_selector_version=_min_selector_version(raw) or 0,
         raw=raw,
     )
 
 
-def fetch_and_verify(url: str = MODELS_JSON_URL, timeout: float = 20.0) -> list[ModelEntry]:
-    """Download `models.json`, verify its Ed25519 signature, and return the
+def _fetch_and_verify_one(url: str, timeout: float = 20.0) -> list[ModelEntry]:
+    """Download one manifest URL, verify its Ed25519 signature, and return the
     parsed model list.  Raises `ManifestError` on any failure.
     """
     # Append cache-busting query to bypass raw.githubusercontent.com CDN.
@@ -162,7 +182,7 @@ def fetch_and_verify(url: str = MODELS_JSON_URL, timeout: float = 20.0) -> list[
 
     try:
         doc = json.loads(body)
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
         raise ManifestError(f"manifest is not valid JSON: {e}") from e
 
     if not isinstance(doc, dict):
@@ -194,13 +214,41 @@ def fetch_and_verify(url: str = MODELS_JSON_URL, timeout: float = 20.0) -> list[
 
     out: list[ModelEntry] = []
     for raw in models_raw:
+        if not isinstance(raw, dict):
+            continue
+        # Version-gate BEFORE parsing: entries for newer selectors may use
+        # filenames this version doesn't know, and must not fail the whole list.
+        # Unreadable version requirement → fail closed (skip).
+        min_ver = _min_selector_version(raw)
+        if min_ver is None or min_ver > MODEL_SELECTOR_VERSION:
+            continue
         try:
             entry = _parse_model(raw)
-        except (KeyError, ValueError, TypeError) as e:
-            raise ManifestError(f"invalid model entry: {e}") from e
-
-        if entry.minimum_selector_version > MODEL_SELECTOR_VERSION:
-            # Skip entries that require a newer selector.
+        except (ManifestError, KeyError, ValueError, TypeError):
+            # Forward compatibility: skip entries this selector can't handle
+            # instead of failing the entire (signature-verified) list.
             continue
         out.append(entry)
     return out
+
+
+def fetch_and_verify(url: str | None = None, timeout: float = 20.0) -> list[ModelEntry]:
+    """Fetch the model manifest and return the verified, parsed model list.
+
+    With no explicit `url`, tries the full catalog (`models_v4.json`) first
+    and falls back to the frozen legacy manifest (`models.json`).  Raises the
+    primary `ManifestError` only if every candidate fails.
+    """
+    urls = (url,) if url else (MODELS_JSON_URL, MODELS_JSON_FALLBACK_URL)
+    errors: list[ManifestError] = []
+    for u in urls:
+        try:
+            return _fetch_and_verify_one(u, timeout)
+        except ManifestError as e:
+            errors.append(e)
+            if len(urls) > 1:
+                # A quietly-degraded list (fallback after a broken primary)
+                # must at least be diagnosable from the web server log.
+                print(f"model_selector: manifest fetch failed for {u}: {e}",
+                      file=sys.stderr)
+    raise errors[0]

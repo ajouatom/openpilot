@@ -20,7 +20,15 @@ from ..downloader import DownloadError, download_model
 from ..installer import reset_to_default
 from ..jobs import Job, get as job_get, start as job_start
 from ..manifest import ManifestError, ModelEntry, fetch_and_verify
-from ..validator import describe, has_off_policy, has_on_policy, has_policy, has_vision, is_valid_model_dir
+from ..validator import (
+    describe,
+    has_off_policy,
+    has_on_policy,
+    has_policy,
+    has_supercombo,
+    has_vision,
+    is_valid_model_dir,
+)
 
 WEB_DIR = Path(__file__).parent / "frontend"
 
@@ -48,6 +56,7 @@ def _model_entry_json(entry: ModelEntry) -> dict:
         "total_size": sum(f.size for f in entry.files.values()),
         "has_off_policy": "driving_off_policy.onnx" in entry.files,
         "has_on_policy": "driving_on_policy.onnx" in entry.files,
+        "has_supercombo": "driving_supercombo.onnx" in entry.files,
         "minimum_selector_version": entry.minimum_selector_version,
     }
 
@@ -79,6 +88,7 @@ async def api_status(request: web.Request) -> web.Response:
             "on_policy": has_on_policy(MODELS_DIR),
             "policy": has_policy(MODELS_DIR),
             "off_policy": has_off_policy(MODELS_DIR),
+            "supercombo": has_supercombo(MODELS_DIR),
         },
         "description": describe(MODELS_DIR),
         "disk_free_mb": _disk_free_mb(MODELS_DIR),
@@ -105,6 +115,11 @@ async def api_install(request: web.Request) -> web.Response:
 
     async def run(job: Job) -> None:
         job.set_progress(message=f"preparing {entry.id}", current=0, total=len(entry.files))
+
+        # Drop any previous pending name before touching tmp: download_model
+        # wipes tmp first, so on failure a stale name must not survive and get
+        # attached to leftover (or partially re-downloaded) files at boot.
+        Params().remove(PARAM_PENDING_MODEL_NAME)
 
         loop = asyncio.get_event_loop()
         files = list(sorted(entry.files.keys()))

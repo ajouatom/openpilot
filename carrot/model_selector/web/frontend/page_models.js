@@ -79,6 +79,7 @@
   }
 
   function archLabel(m) {
+    if (m.has_supercombo) return "supercombo";
     if (m.has_off_policy) return m.has_on_policy ? "on+off policy" : "policy + off";
     return m.has_on_policy ? "on-policy" : "policy";
   }

@@ -37,7 +37,9 @@ def get_tg_input_devices(process_name: str, usbgpu: bool):
 
 def modeld_pkl_path(usbgpu: bool):
   prefix = 'big_' if usbgpu else ''
-  return MODELS_DIR / f'{prefix}driving_tinygrad.pkl'
+  # carrot model selector: load a custom-compiled model dir instead of the built-in one
+  models_dir = Path(override) if (override := os.getenv('MODELD_MODELS_DIR')) else MODELS_DIR
+  return models_dir / f'{prefix}driving_tinygrad.pkl'
 
 def dump_oob(obj, f):
   with tempfile.TemporaryFile(dir=".") as tmp:
