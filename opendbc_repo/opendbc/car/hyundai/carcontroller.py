@@ -29,7 +29,8 @@ PRE_OVERRIDE_FILTERED_MIN_RATIO = 0.65
 PRE_OVERRIDE_MIN_RATE_RATIO = 0.50
 PRE_OVERRIDE_CONFIRM_FRAMES = 2
 PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
-LOW_SPEED_ANGLE_RATE_LIMIT_SPEED = 15.0 * CV.KPH_TO_MS
+LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
+MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
 
 vibrate_intervals = [
   (0.0, 0.5),
@@ -84,14 +85,17 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
     if np.isfinite(model_y_std_1s) and model_y_std_1s >= 0.0:
       y_std_1s = model_y_std_1s
   max_sw_rate_deg_per_tick = float(np.interp(y_std_1s, [0.1, 0.2, 0.4], [2.0, 1.5, 0.8]))
-  if v_ego < LOW_SPEED_ANGLE_RATE_LIMIT_SPEED:
-    # Keep low-speed angle commands quieter without reducing LKAS_ANGLE_MAX_TORQUE.
-    # This is a reference cap from the old Hyundai ANGLE_LIMITS 0 km/h rate, not a direct use of that table.
-    max_sw_rate_deg_per_tick = min(max_sw_rate_deg_per_tick, 1.4)
-
   v = max(float(v_ego), 1.0)
 
   target_sw = float(np.clip(desired_sw_deg, -steer_sw_max_deg, steer_sw_max_deg))
+  if v_ego < MID_SPEED_ANGLE_RATE_LIMIT_SPEED:
+    # Keep low/mid-speed angle commands quieter without reducing LKAS_ANGLE_MAX_TORQUE.
+    # Allow the angle, but slow the arrival: 0~15 kph ramps 1.2->1.4 deg/tick,
+    # then 15~40 kph tapers 1.4->1.0 deg/tick. Above 40 kph, physics limits take over.
+    low_mid_speed_cap = float(np.interp(v_ego,
+                                        [0.0, LOW_SPEED_ANGLE_RATE_RAMP_SPEED, MID_SPEED_ANGLE_RATE_LIMIT_SPEED],
+                                        [1.2, 1.4, 1.0]))
+    max_sw_rate_deg_per_tick = min(max_sw_rate_deg_per_tick, low_mid_speed_cap)
 
   target_rw = target_sw / steer_ratio
   last_rw   = float(last_sw_deg) / steer_ratio
