@@ -78,10 +78,17 @@
     }
   }
 
+  function hasFile(m, fname) {
+    return Array.isArray(m.files) && m.files.some((f) => f && f.name === fname);
+  }
+
+  // has_* 플래그가 없는 구버전 백엔드와 조합돼도 files 목록으로 판별한다.
   function archLabel(m) {
-    if (m.has_supercombo) return "supercombo";
-    if (m.has_off_policy) return m.has_on_policy ? "on+off policy" : "policy + off";
-    return m.has_on_policy ? "on-policy" : "policy";
+    if (m.has_supercombo || hasFile(m, "driving_supercombo.onnx")) return "supercombo";
+    const off = m.has_off_policy || hasFile(m, "driving_off_policy.onnx");
+    const on = m.has_on_policy || hasFile(m, "driving_on_policy.onnx");
+    if (off) return on ? "on+off policy" : "policy + off";
+    return on ? "on-policy" : "policy";
   }
 
   function sortModels(list) {
