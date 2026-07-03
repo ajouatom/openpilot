@@ -1,4 +1,4 @@
-/* ── WebRTC Video ─────────────────────────────────────────── */
+﻿/* ?? WebRTC Video ??????????????????????????????????????????? */
 .rtcVideo {
   width: 100%;
   border-radius: var(--r-md);
@@ -285,6 +285,10 @@ body[data-page="carrot"] #driveHudCard {
   transition: opacity 0.3s ease;
 }
 
+.vision-start-overlay[hidden] {
+  display: none !important;
+}
+
 .vision-start-overlay__message {
   position: absolute;
   top: 50%;
@@ -470,7 +474,7 @@ body[data-page="carrot"] #driveHudCard {
 .carrot-stage__loadingActions {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 2px;
 }
@@ -481,12 +485,6 @@ body[data-page="carrot"] #driveHudCard {
   margin: 0;
   padding: 8px 12px;
   background: color-mix(in srgb, var(--md-surface-cont-h) 84%, transparent);
-}
-
-.carrot-stage__loadingAction--primary {
-  border-color: color-mix(in srgb, var(--md-primary) 58%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-primary) 18%, var(--md-surface-cont-h));
-  color: var(--md-primary);
 }
 
 .carrot-stage__loadingAction:disabled {
@@ -547,7 +545,7 @@ body[data-page="carrot"] .carrot-hud-dock {
   overflow: hidden;
 }
 
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
   .page--drive {
     display: block;
     height: var(--app-vv-height, 100dvh);
@@ -680,7 +678,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
   background: transparent;
 }
 
-/* Zoom-bias controls — bottom edge of the map dock. They nudge the global
+/* Zoom-bias controls ??bottom edge of the map dock. They nudge the global
    zoom offset (added on top of the automatic speed-based zoom) so each
    device/resolution can be tuned. */
 .carrot-map-zoom {
@@ -773,7 +771,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
   display: none !important;
 }
 
-@media (orientation: portrait) {
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .carrot-map-dock {
     display: none !important;
   }
@@ -817,7 +815,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   background: transparent;
 }
 
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
   .rtcVideo {
     max-height: 40vh;
     width: auto;
@@ -879,7 +877,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   z-index: 2;
 }
 
-@media (orientation: portrait) {
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .carrot-rtc-perf-summary {
     display: none !important;
   }

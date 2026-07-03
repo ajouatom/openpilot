@@ -75,7 +75,7 @@ function isCarrotPageVisible() {
 }
 
 function shouldRunCarrotHudRealtime() {
-  return isCarrotPageActive();
+  return isCarrotPageActive() || Boolean(window.CarrotMiniHudMode?.isActive?.());
 }
 
 function isCarrotVisionTestActive() {
@@ -85,6 +85,7 @@ window.isCarrotVisionTestActive = isCarrotVisionTestActive;
 
 function getCarrotVisionRealtimeBlockReason() {
   if (!isCarrotPageActive() || !isCarrotVisionActive()) return "";
+  if (window.CarrotMiniHudMode?.isActive?.()) return "mini-hud";
 
   const runtimeState = window.CarrotLiveRuntimeState || CARROT_LIVE_RUNTIME_STATE;
   if (!runtimeState?.ok) return "runtime-unavailable";
@@ -116,9 +117,10 @@ function shouldRunCarrotVisionRealtime() {
 }
 
 function isLandscapeOrientation() {
+  if (window.CarrotLayout?.isWide) return window.CarrotLayout.isWide();
   if (typeof window.matchMedia === "function") {
     try {
-      return window.matchMedia("(orientation: landscape)").matches;
+      return window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches;
     } catch {}
   }
   return Number(window.innerWidth || 0) > Number(window.innerHeight || 0);
@@ -213,7 +215,7 @@ function requestCarrotVisionDefaultFullscreen(options = {}) {
 }
 
 function shouldKeepCarrotFullscreen() {
-  return document.body?.dataset?.page === "carrot" && isCarrotVisionActive();
+  return document.body?.dataset?.page === "carrot" && isCarrotVisionActive() && !window.CarrotMiniHudMode?.isActive?.();
 }
 
 async function syncCarrotFullscreenLifecycle() {
@@ -230,6 +232,10 @@ window.addEventListener("carrot:pagechange", () => {
 });
 window.addEventListener("carrot:visionchange", () => {
   void syncCarrotFullscreenLifecycle();
+});
+window.addEventListener("carrot:minihudchange", () => {
+  void syncCarrotFullscreenLifecycle();
+  syncCarrotRealtimeLifecycle(true);
 });
 window.addEventListener("carrot:websettingschange", (event) => {
   if (event?.detail?.key !== "vision_fullscreen_default") return;
@@ -328,9 +334,10 @@ function isKmapStreaming() {
     ? ["1", "true", "yes", "on"].includes(enabled.trim().toLowerCase())
     : Boolean(enabled);
   if (!enabledBool) return false;
+  if (window.CarrotLayout?.isWide) return window.CarrotLayout.isWide();
   if (typeof window.matchMedia === "function") {
     try {
-      if (!window.matchMedia("(orientation: landscape)").matches) return false;
+      if (!window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches) return false;
     } catch {}
   }
   return true;
@@ -526,25 +533,12 @@ async function syncCarrotVisionAvailability() {
   }
 }
 
-async function reconnectCarrotVisionRealtime(reason = "manual reconnect") {
-  if (!isCarrotVisionActive()) return;
-  console.warn("[vision] reconnect requested", reason);
-  rtcStatusSet(getUIText("reconnecting", "Reconnecting..."));
-  setCarrotVisionPhase(CARROT_VISION_PHASE.RECOVERING, {
-    reason,
-    updateRtcStatus: false,
-  });
-  rtcCaptureVideoHoldFrame();
-  stopCarrotVisionHealthWatch();
-  await rawOverlayDisconnectAll().catch(() => {});
-  await rtcDisconnect({ keepVideo: true }).catch(() => {});
-  _carrotVisionRealtimeActive = false;
-  syncCarrotRealtimeLifecycle(true);
-  startCarrotVisionHealthWatch();
-  requestCarrotVisionRender();
+function syncCarrotVisionStartOverlay() {
+  const overlay = document.getElementById("visionStartOverlay");
+  if (!overlay) return;
+  overlay.hidden = isCarrotVisionActive();
+  overlay.style.removeProperty("display");
 }
-
-window.CarrotVisionReconnect = reconnectCarrotVisionRealtime;
 
 async function stopCarrotVisionRealtime(reason = "user stop") {
   if (!isCarrotVisionActive()) return;
@@ -557,8 +551,7 @@ async function stopCarrotVisionRealtime(reason = "user stop") {
   });
   syncCarrotRealtimeLifecycle(true);
   await exitCarrotFullscreen({ quiet: true }).catch(() => {});
-  const overlay = document.getElementById("visionStartOverlay");
-  if (overlay) overlay.style.removeProperty("display");
+  syncCarrotVisionStartOverlay();
   rtcStatusSet(getUIText("start_vision_hint", "Tap the start button to enable drive vision."));
   requestCarrotVisionRender({ reason });
 }
@@ -567,7 +560,7 @@ window.CarrotVisionStop = stopCarrotVisionRealtime;
 
 window.CarrotVisionStart = async function() {
   if (isCarrotVisionActive()) {
-    await reconnectCarrotVisionRealtime("start button while active");
+    syncCarrotVisionStartOverlay();
     return;
   }
   if (!CARROT_VISION_STATE.available && !(await syncCarrotVisionAvailability())) {
@@ -580,8 +573,7 @@ window.CarrotVisionStart = async function() {
     reason: "user start",
   });
   
-  const btn = document.getElementById("visionStartOverlay");
-  if (btn) btn.style.display = "none";
+  syncCarrotVisionStartOverlay();
 
   rtcStatusSet(getUIText("connecting", "Connecting..."));
   syncCarrotRealtimeLifecycle(true);
@@ -590,32 +582,25 @@ window.CarrotVisionStart = async function() {
 function rtcInitAuto() {
   const btn = document.getElementById("btnStartVision");
   if (btn) btn.onclick = window.CarrotVisionStart;
-  const reconnectButton = document.getElementById("btnVisionReconnect");
   const stopButton = document.getElementById("btnVisionStop");
   let actionBusy = false;
   const runLoadingAction = async (action) => {
     if (actionBusy) return;
     actionBusy = true;
-    if (reconnectButton) reconnectButton.disabled = true;
     if (stopButton) stopButton.disabled = true;
     try {
       await action();
     } finally {
       actionBusy = false;
-      if (reconnectButton) reconnectButton.disabled = false;
       if (stopButton) stopButton.disabled = false;
     }
   };
-  if (reconnectButton) {
-    reconnectButton.onclick = () => runLoadingAction(
-      () => reconnectCarrotVisionRealtime("loading panel reconnect"),
-    );
-  }
   if (stopButton) {
     stopButton.onclick = () => runLoadingAction(
       () => stopCarrotVisionRealtime("loading panel stop"),
     );
   }
+  syncCarrotVisionStartOverlay();
   syncCarrotVisionAvailability().catch(() => {});
   rtcBindVideoEvents();
 }
@@ -624,6 +609,9 @@ window.addEventListener("carrot:paramchange", (ev) => {
   if (ev?.detail?.name !== "DisableDM") return;
   syncCarrotVisionAvailability().catch(() => {});
 });
+
+window.addEventListener("carrot:visionchange", syncCarrotVisionStartOverlay);
+window.addEventListener("carrot:visionstatechange", syncCarrotVisionStartOverlay);
 
 window.addEventListener("carrot:pagechange", (ev) => {
   if (ev?.detail?.page !== "carrot") return;

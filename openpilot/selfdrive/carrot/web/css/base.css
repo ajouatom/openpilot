@@ -526,7 +526,7 @@ body:has(.page-transitioning) {
   line-height: 1.4;
 }
 
-@media (max-width: 640px), (orientation: portrait) {
+@media (max-width: 640px), (aspect-ratio < 13/10) {
   .settings-diff-summary {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }

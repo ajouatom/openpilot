@@ -1,4 +1,4 @@
-.youtube-live-section {
+﻿.youtube-live-section {
   display: grid;
   gap: var(--sp-md);
   margin: 0;
@@ -91,7 +91,7 @@
   box-shadow: none;
 }
 
-@media (max-width: 430px) {
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .youtube-live-metrics {
     grid-template-columns: 1fr;
   }

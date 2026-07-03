@@ -1,12 +1,12 @@
-/* ── Logs / Dashcam ───────────────────────────────────────── */
+﻿/* ?? Logs / Dashcam ????????????????????????????????????????? */
 .page--logs {
-  height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height));
+  height: calc(var(--app-vv-height, 100dvh) - var(--app-nav-bottom-gap, var(--nav-bar-height)));
   min-height: 0;
   background: var(--md-surface);
   overflow: hidden;
 }
 
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
   .page--logs {
     height: var(--page-content-height, calc(var(--app-vv-height, 100dvh) - 24px));
   }
@@ -186,7 +186,7 @@
   overscroll-behavior: contain;
   overflow-anchor: none;
   scrollbar-gutter: stable;
-  padding: 6px var(--logs-content-inline) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
+  padding: 6px var(--logs-content-inline) calc(var(--app-nav-bottom-gap, var(--nav-bar-height)) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -427,7 +427,7 @@
 .dashcam-segment-loader {
   flex: 0 0 auto;
   width: 100%;
-  /* Fixed height in both states — prevents layout shift / "shake" when the
+  /* Fixed height in both states ??prevents layout shift / "shake" when the
      loader toggles on near the bottom of the list. */
   height: 22px;
   position: relative;
@@ -584,7 +584,7 @@
   transform: translateZ(0);
 }
 
-/* Group (route) overflow menu — range select / sort.
+/* Group (route) overflow menu ??range select / sort.
    Uses the shared boxed control shape in both portrait and landscape.
    Pushed to the right end in portrait. */
 .dashcam-group-menu-btn {
@@ -840,7 +840,7 @@
   opacity: 0.62;
 }
 
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
   .dashcam-share-card {
     gap: 8px;
   }
@@ -1117,7 +1117,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding: 10px var(--logs-content-inline) calc(var(--nav-bar-height) + 16px + env(safe-area-inset-bottom, 0px));
+  padding: 10px var(--logs-content-inline) calc(var(--app-nav-bottom-gap, var(--nav-bar-height)) + 16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1285,7 +1285,7 @@
   }
 }
 
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
   .dashcam-route-card {
     display: grid;
     grid-template-columns: minmax(230px, 32%) minmax(0, 1fr);
@@ -1420,7 +1420,7 @@
   }
 }
 
-@media (orientation: landscape) and (max-height: 620px) {
+@media (max-height: 620px) and (min-aspect-ratio: 13/10), (max-height: 620px) and (horizontal-viewport-segments: 2), (max-height: 620px) and (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) and (max-height: 620px) {
   .logs-tabbar {
     padding-top: 6px;
     padding-bottom: 4px;

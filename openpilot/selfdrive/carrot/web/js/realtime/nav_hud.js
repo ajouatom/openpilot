@@ -99,9 +99,10 @@
   }
 
   function isLandscape() {
+    if (window.CarrotLayout?.isWide) return window.CarrotLayout.isWide();
     if (typeof window.matchMedia === "function") {
       try {
-        return window.matchMedia("(orientation: landscape)").matches;
+        return window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches;
       } catch {}
     }
     return Number(window.innerWidth || 0) >= Number(window.innerHeight || 0);

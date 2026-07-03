@@ -3,6 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="google" content="notranslate" />
+  <!-- Keep the default interactive-widget=resizes-visual: the on-screen keyboard
+       must shrink only the *visual* viewport, not the layout viewport. Dialogs
+       anchor to --app-vv-* (visualViewport) so they stay keyboard-safe, while the
+       layout-viewport aspect-ratio (which drives rail/split via 13/10) stays
+       stable — otherwise opening the keyboard on a near-square device would push
+       aspect-ratio past 13/10 and flip the whole app to the rail layout mid-typing. -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>CarrotPilot</title>
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
@@ -11,9 +17,12 @@
       var primaryPages = { carrot: 1, setting: 1, tools: 1, logs: 1, terminal: 1 };
       var startPage = "carrot";
       try {
+        var miniHudRequested = /(?:^|[?&])mini_hud=(?:auto|force|1)(?:&|$)/.test(window.location.search || "");
         var webSettings = window.__CARROT_BOOTSTRAP__ && window.__CARROT_BOOTSTRAP__.webSettings;
         var setting = (webSettings && webSettings.start_page) || "last";
-        if (setting === "last") {
+        if (miniHudRequested) {
+          startPage = "carrot";
+        } else if (setting === "last") {
           var lastPage = localStorage.getItem("carrot_web_last_page");
           startPage = primaryPages[lastPage] ? lastPage : "carrot";
         } else {
@@ -39,6 +48,23 @@
         s.setProperty("--app-vv-height", h + "px");
         s.setProperty("--app-vv-width", w + "px");
         s.setProperty("--app-vv-top", t + "px");
+        // Mirror the coarse layout mode before first paint so CSS attribute /
+        // container hooks (and JS read on early pages) match viewport.js.
+        var lw = window.innerWidth || w;
+        var lh = window.innerHeight || h;
+        var ratio = lh > 0 ? lw / lh : 1;
+        var segmented = false;
+        try {
+          segmented =
+            (window.viewport && Array.isArray(window.viewport.segments) && window.viewport.segments.length > 1) ||
+            (window.matchMedia && (
+              window.matchMedia("(horizontal-viewport-segments: 2)").matches ||
+              window.matchMedia("(vertical-viewport-segments: 2)").matches
+            ));
+        } catch (e) {}
+        var wide = ratio >= 1.3 || segmented || (lw >= 640 && lh >= 650);
+        document.documentElement.dataset.layout =
+          wide ? "wide" : (ratio >= 0.92 ? "square" : "tall");
       } catch (e) {}
     })();
   </script>
@@ -67,7 +93,7 @@
       display: block !important;
     }
 
-    @media (orientation: landscape) {
+    @media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
       html[data-carrot-start-page="tools"]:not([data-carrot-bootstrapped]) #pageTools {
         display: grid !important;
       }
@@ -89,26 +115,27 @@
       background: color-mix(in srgb, var(--md-primary) 14%, transparent) !important;
     }
   </style>
-  <link rel="stylesheet" href="/css/tokens.css?v=2607-01" />
-  <link rel="stylesheet" href="/css/layout_tokens.css?v=2605-07" />
+  <link rel="stylesheet" href="/css/tokens.css?v=2607-45" />
+  <link rel="stylesheet" href="/css/layout_tokens.css?v=2607-42" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2605-03" />
-  <link rel="stylesheet" href="/css/base.css?v=2605-10" />
+  <link rel="stylesheet" href="/css/base.css?v=2607-40" />
   <link rel="stylesheet" href="/css/layout.css?v=2605-08" />
-  <link rel="stylesheet" href="/css/components.css?v=2607-03" />
+  <link rel="stylesheet" href="/css/components.css?v=2607-45" />
   <link rel="stylesheet" href="/css/components/nav_status_badges.css?v=2607-04" />
-  <link rel="stylesheet" href="/css/pages/logs.css?v=2607-01" />
-  <link rel="stylesheet" href="/css/pages/terminal.css?v=2606-01" />
+  <link rel="stylesheet" href="/css/pages/logs.css?v=2607-43" />
+  <link rel="stylesheet" href="/css/pages/terminal.css?v=2607-42" />
   <link rel="stylesheet" href="/css/pages/settings/base.css?v=2606-21" />
-  <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2606-12" />
-  <link rel="stylesheet" href="/css/pages/settings/device.css?v=2606-42" />
-  <link rel="stylesheet" href="/css/pages/settings/youtube_live.css?v=2607-20" />
+  <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2607-44" />
+  <link rel="stylesheet" href="/css/pages/settings/device.css?v=2607-50" />
+  <link rel="stylesheet" href="/css/pages/settings/youtube_live.css?v=2607-23" />
   <link rel="stylesheet" href="/css/pages/settings/token_card.css?v=2607-08" />
   <link rel="stylesheet" href="/css/pages/tools/base.css?v=2605-43" />
   <link rel="stylesheet" href="/css/pages/tools/qr.css?v=2605-40" />
-  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2605-53" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2606-05" />
-  <link rel="stylesheet" href="/css/components/nav_hud.css?v=2605-26" />
-  <link rel="stylesheet" href="/css/responsive.css?v=2605-10" />
+  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2607-42" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2607-43" />
+  <link rel="stylesheet" href="/css/components/nav_hud.css?v=2607-42" />
+  <link rel="stylesheet" href="/css/components/mini_hud.css?v=2607-06" />
+  <link rel="stylesheet" href="/css/responsive.css?v=2607-44" />
   <link rel="stylesheet" href="/css/vendor/plyr.css?v=3.7.8" />
 </head>
 
@@ -491,7 +518,6 @@
             <div id="carrotStageLoadingText" class="carrot-stage__loadingText"></div>
             <div id="carrotStageLoadingDetail" class="carrot-stage__loadingDetail"></div>
             <div class="carrot-stage__loadingActions" role="group" aria-label="Vision connection actions">
-              <button id="btnVisionReconnect" class="smallBtn carrot-stage__loadingAction carrot-stage__loadingAction--primary" type="button">다시 연결</button>
               <button id="btnVisionStop" class="smallBtn carrot-stage__loadingAction" type="button">중지</button>
             </div>
           </div>
@@ -511,6 +537,47 @@
       <div id="carrotHudDock" class="carrot-hud-dock"></div>
     </div>
   </div>
+
+  <section id="carrotMiniHud" class="carrot-mini-hud" hidden aria-label="Carrot compact driving HUD">
+    <div class="carrot-mini-hud__top">
+      <div class="carrot-mini-hud__top-cell">
+        <span data-mini-hud-cpu>CPU:--°</span>
+      </div>
+      <div class="carrot-mini-hud__top-cell">
+        <span data-mini-hud-source>STOCK</span>
+      </div>
+    </div>
+
+    <div class="carrot-mini-hud__main">
+      <div class="carrot-mini-hud__limit" data-mini-hud-limit-zone>
+        <div class="carrot-mini-hud__limit-sign">
+          <span data-mini-hud-limit>--</span>
+          <small data-mini-hud-limit-label hidden></small>
+        </div>
+        <div class="carrot-mini-hud__limit-badge" data-mini-hud-limit-badge hidden></div>
+      </div>
+
+      <div class="carrot-mini-hud__alert" data-mini-hud-alert-zone>
+        <span data-mini-hud-countdown></span>
+        <span data-mini-hud-distance></span>
+        <strong data-mini-hud-alert></strong>
+      </div>
+
+      <div class="carrot-mini-hud__stock" data-mini-hud-stock-zone hidden>
+        <div class="carrot-mini-hud__drive-mode" data-mini-hud-drive-kind="normal">
+          <span data-mini-hud-drive-mode>NORMAL</span>
+        </div>
+        <div class="carrot-mini-hud__gear" aria-label="Current gear step">
+          <small>D</small><strong data-mini-hud-gear>--</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="carrot-mini-hud__speed-row">
+      <div class="carrot-mini-hud__speed"><span data-mini-hud-speed>--</span></div>
+      <div class="carrot-mini-hud__set-speed"><span data-mini-hud-set-speed>--</span></div>
+    </div>
+  </section>
 
   <div id="driveHudCard">
     <div id="carrotRtcPerfHud" class="carrot-rtc-perf" hidden>
@@ -722,49 +789,52 @@
   <script src="/js/translations/ko.js?v=2607-30"></script>
   <script src="/js/translations/en.js?v=2607-30"></script>
   <script src="/js/translations/zh.js?v=2607-30"></script>
-  <script src="/js/realtime/hud_card.js?v=2604-05"></script>
+  <script src="/js/realtime/hud_card.js?v=2607-42"></script>
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2607-01"></script>
   <script src="/js/shared/utils.js?v=2604-71"></script>
-  <script src="/js/shared/i18n.js?v=2606-02"></script>
+  <script src="/js/shared/i18n.js?v=2606-03"></script>
   <script src="/js/shared/api.js?v=2604-73"></script>
   <script src="/js/shared/setting_diff.js?v=2605-01"></script>
   <script src="/js/shared/activity.js?v=2604-04"></script>
   <script src="/js/shared/ui/focus_trap.js?v=2605-15"></script>
-  <script src="/js/shared/ui/dialog.js?v=2607-03"></script>
+  <script src="/js/shared/ui/dialog.js?v=2607-44"></script>
   <script src="/js/shared/ui/setting_form.js?v=2607-03"></script>
-  <script src="/js/shared/ui/viewport.js?v=2604-71"></script>
+  <script src="/js/shared/ui/viewport.js?v=2607-47"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
-  <script src="/js/shared/ui/navigation.js?v=2606-19"></script>
+  <script src="/js/shared/ui/navigation.js?v=2607-42"></script>
   <script src="/js/pages/car.js?v=2607-01"></script>
   <script src="/js/pages/setting_youtube_live.js?v=2607-31"></script>
   <script src="/js/pages/setting_mapbox_tokens.js?v=2607-06"></script>
   <script src="/js/shared/ui/nav_status_badges.js?v=2607-01"></script>
-  <script src="/js/pages/setting.js?v=2607-15"></script>
+  <script src="/js/pages/setting.js?v=2607-49"></script>
   <script src="/js/pages/setting_device_config.js?v=2605-06"></script>
   <script src="/js/pages/setting_device_render.js?v=2607-02"></script>
   <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
   <script src="/js/pages/setting_device_actions.js?v=2607-02"></script>
   <script src="/js/pages/setting_device.js?v=2607-02"></script>
   <script src="/js/pages/tools_web_settings.js?v=2605-10"></script>
-  <script src="/js/pages/tools_notifications.js?v=2605-30"></script>
-  <script src="/js/pages/tools.js?v=2605-19"></script>
+  <script src="/js/pages/tools_notifications.js?v=2607-42"></script>
+  <script src="/js/pages/tools.js?v=2607-42"></script>
   <script src="/js/pages/tools_settings_qr.js?v=2605-11"></script>
   <script src="/js/pages/branch.js?v=2604-82"></script>
   <script src="/js/pages/logs/shared.js?v=2607-01"></script>
   <script src="/js/pages/logs/dashcam.js?v=2607-02"></script>
   <script src="/js/pages/logs/screenrecord.js?v=2605-15"></script>
-  <script src="/js/pages/terminal.js?v=2604-73"></script>
+  <script src="/js/pages/terminal.js?v=2607-44"></script>
   <script src="/js/realtime/raw_capnp.js?v=2604-05"></script>
+  <script src="/js/realtime/mini_hud_model.js?v=2607-04"></script>
+  <script src="/js/realtime/mini_hud_mode.js?v=2607-10"></script>
+  <script src="/js/realtime/mini_hud.js?v=2607-06"></script>
   <script src="/js/realtime/vision_state.js?v=2605-01"></script>
   <script src="/js/realtime/vision_rtc.js?v=2606-06"></script>
-  <script src="/js/realtime/vision_raw.js?v=2605-01"></script>
-  <script src="/js/realtime/app_realtime.js?v=2606-05"></script>
+  <script src="/js/realtime/vision_raw.js?v=2607-04"></script>
+  <script src="/js/realtime/app_realtime.js?v=2607-44"></script>
   <script src="/js/realtime/vision_diag.js?v=2606-07"></script>
-  <script src="/js/realtime/carrot_map.js?v=2606-02"></script>
-  <script src="/js/realtime/nav_hud.js?v=2605-17"></script>
+  <script src="/js/realtime/carrot_map.js?v=2607-42"></script>
+  <script src="/js/realtime/nav_hud.js?v=2607-42"></script>
   <script src="/js/pages/vision_background.js?v=2605-01"></script>
-  <script src="/js/realtime/home_drive.js?v=2606-05"></script>
+  <script src="/js/realtime/home_drive.js?v=2607-42"></script>
   <script src="/js/app.js?v=2606-11"></script>
   <script src="/models/page_models.js?v=2604-15"></script>
 </body>
