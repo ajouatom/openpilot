@@ -1,4 +1,4 @@
-@media (max-width: 640px), (orientation: portrait) {
+﻿@media (max-width: 640px), (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .app-dialog--web-settings .app-dialog__sheet {
     --web-settings-sheet-width: 420px;
     --web-settings-sheet-height: clamp(440px, 72dvh, 560px);
@@ -76,7 +76,7 @@
   }
 }
 
-@media (max-height: 430px) and (orientation: landscape) {
+@media (max-height: 430px) and (min-aspect-ratio: 13/10) {
   .app-dialog--web-settings .app-dialog__sheet {
     --web-settings-sheet-height: calc(100dvh - 20px);
     --web-settings-row-min: 56px;
@@ -167,7 +167,7 @@
 
 /* One-shot fold (same pattern as the settings profile section). JS adds the
    motion class then removes it after the run, so the finish lands on the
-   static open/closed state instead of a lingering transition — that lingering
+   static open/closed state instead of a lingering transition ??that lingering
    transition was what made the finish look off with taller (2-line) buttons. */
 .tools-group.is-collapsing > .tools-group__body {
   animation: tools-group-fold var(--motion-medium) var(--ease-emphasized) both;
@@ -842,7 +842,7 @@
 }
 
 /* Tools notifications: landscape keeps commands left and the log dock right. */
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
   .page--tools {
     --tools-detail-duration: 340ms;
     --tools-log-scroll-gap: 10px;
@@ -1107,7 +1107,7 @@
 }
 
 /* Tools notifications: portrait becomes a page-contained notification center. */
-@media (orientation: portrait) {
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .page--tools {
     --tools-detail-duration: 360ms;
     --tools-log-scroll-gap: 6px;

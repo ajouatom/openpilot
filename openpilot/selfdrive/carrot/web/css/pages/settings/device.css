@@ -1,4 +1,4 @@
-.app-dialog--settings-diff .app-dialog__sheet {
+﻿.app-dialog--settings-diff .app-dialog__sheet {
   width: min(calc(100vw - 24px), 520px);
   max-height: min(calc(100dvh - 24px), 680px);
   overflow: hidden;
@@ -27,10 +27,10 @@
   white-space: nowrap;
 }
 
-/* setting-content-enter(opacity 0→1 + translateY 4px→0) 제거 —
-   단계 전환이 끝나며(전환 중 `animation:none` 억제가 풀릴 때) 이 애니메이션이 재생돼
-   콘텐츠가 한 번 페이드(깜박)+4px 세로 점프(하단 위아래 흔들)하던 직접 원인이었다.
-   좌우 슬라이드가 이미 화면 진입을 표현하므로 별도 콘텐츠 진입 애니메이션은 불필요하다. */
+/* setting-content-enter(opacity 0?? + translateY 4px??) ?쒓굅 ??
+   ?④퀎 ?꾪솚???앸굹硫??꾪솚 以?`animation:none` ?듭젣媛 ?由??? ???좊땲硫붿씠?섏씠 ?ъ깮??
+   肄섑뀗痢좉? ??踰??섏씠??源쒕컯)+4px ?몃줈 ?먰봽(?섎떒 ?꾩븘???붾뱾)?섎뜕 吏곸젒 ?먯씤?댁뿀??
+   醫뚯슦 ?щ씪?대뱶媛 ?대? ?붾㈃ 吏꾩엯???쒗쁽?섎?濡?蹂꾨룄 肄섑뀗痢?吏꾩엯 ?좊땲硫붿씠?섏? 遺덊븘?뷀븯?? */
 
 .setting-search-result {
   width: 100%;
@@ -112,7 +112,7 @@
   pointer-events: none;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 769px) and (min-aspect-ratio: 13/10), (min-width: 769px) and (horizontal-viewport-segments: 2), (min-width: 769px) and (vertical-viewport-segments: 2), (min-width: 769px) and (min-height: 650px) {
   .setting-search-panel {
     --setting-search-form-width: clamp(360px, 34vw, 540px);
     --setting-search-results-width: min(64vw, 820px);
@@ -123,7 +123,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .page--setting .settingTop {
     flex-direction: column;
     align-items: stretch;
@@ -152,13 +152,16 @@
 }
 
 /* Portrait at ANY width (phone / foldable / tablet / wide window): the
-   group↔items slide in runSettingScreenSlide() assumes both screens are
+   group?봧tems slide in runSettingScreenSlide() assumes both screens are
    stacked as position:absolute; inset:0 inside the host so the transition is
-   pure transform. That overlap must exist for every portrait width — not just
-   ≤640px — otherwise the screens fall back to normal flow and the submenu
+   pure transform. That overlap must exist for every portrait width ??not just
+   ??40px ??otherwise the screens fall back to normal flow and the submenu
    appears to slide in vertically / only after the slide finishes. Landscape
-   has its own absolute-overlap block below, so the two together leave no gap. */
-@media (orientation: portrait) {
+   has its own absolute-overlap block below, so the two together leave no gap.
+   Narrow layout (aspect-ratio < 13/10) covers portrait phones AND near-square
+   foldables ??the complement of the wide (>= 13/10) split block below, so the
+   two stay mutually exclusive and exhaustive (no square-aspect gap). */
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .page--setting #settingScreenItems {
     padding-top: 0;
   }
@@ -194,9 +197,9 @@
     display: grid;
   }
 
-  /* ── 세로(phone): 설정을 뷰포트 고정 높이로, 두 화면을 absolute inset:0 로 '항상' 겹쳐
-     각자 내부 스크롤시킨다 → 단계 전환이 순수 transform(레이아웃 변화 0)이라 끝에
-     흔들림/깜박임이 구조적으로 생기지 않는다. (가로 split 모드와 동일 원리) ── */
+  /* ?? ?몃줈(phone): ?ㅼ젙??酉고룷??怨좎젙 ?믪씠濡? ???붾㈃??absolute inset:0 濡?'??긽' 寃뱀퀜
+     媛곸옄 ?대? ?ㅽ겕濡ㅼ떆?⑤떎 ???④퀎 ?꾪솚???쒖닔 transform(?덉씠?꾩썐 蹂??0)?대씪 ?앹뿉
+     ?붾뱾由?源쒕컯?꾩씠 援ъ“?곸쑝濡??앷린吏 ?딅뒗?? (媛濡?split 紐⑤뱶? ?숈씪 ?먮━) ?? */
   .page.page--setting {
     display: flex;
     flex-direction: column;
@@ -229,8 +232,8 @@
     will-change: transform;
   }
 
-  /* 최상위 그룹 화면은 탭과 첫 버튼을 선명하게 유지한다.
-     스크롤 가장자리 페이드는 하위 설정 화면에만 적용한다. */
+  /* 理쒖긽??洹몃９ ?붾㈃? ??낵 泥?踰꾪듉???좊챸?섍쾶 ?좎??쒕떎.
+     ?ㅽ겕濡?媛?μ옄由??섏씠?쒕뒗 ?섏쐞 ?ㅼ젙 ?붾㈃?먮쭔 ?곸슜?쒕떎. */
   .page.page--setting > #settingScreenHost > #settingScreenGroups {
     -webkit-mask-image: none;
             mask-image: none;
@@ -251,7 +254,10 @@
   }
 }
 
-@media (orientation: landscape) {
+/* Wide layout ??two-column split (group list | detail). Complement of the
+   narrow single-column block above; only engages at aspect-ratio >= 13/10 so
+   near-square foldables don't get the cramped split. */
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
   .page.page--setting {
     --setting-landscape-left-width: clamp(208px, 28vw, 260px);
     --setting-landscape-gap: 12px;
@@ -306,7 +312,7 @@
             mask-image: none;
   }
 
-  /* 가로모드도 하위 설정 화면에만 스크롤 가장자리 페이드를 유지한다. */
+  /* 媛濡쒕え?쒕룄 ?섏쐞 ?ㅼ젙 ?붾㈃?먮쭔 ?ㅽ겕濡?媛?μ옄由??섏씠?쒕? ?좎??쒕떎. */
   .page.page--setting > #settingScreenHost > #settingScreenItems {
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
             mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
@@ -439,7 +445,7 @@
   /* Flow the menu inside the page-anchored absolute layer instead of leaving it
      viewport-fixed. A position:fixed element re-anchors to the page's transform
      during page transitions (the page briefly gets will-change/transform), so
-     when the transition ends the FAB snaps by the nav-rail width — that is the
+     when the transition ends the FAB snaps by the nav-rail width ??that is the
      "jumps to another spot then returns" jitter. Page-relative flow stays put. */
   .page.page--setting > .page-fab-layer--setting .setting-fab-menu {
     position: relative;
@@ -503,7 +509,7 @@
   }
 }
 
-@media (orientation: landscape) and (max-width: 760px) {
+@media (max-width: 760px) and (min-aspect-ratio: 13/10), (max-width: 760px) and (horizontal-viewport-segments: 2), (max-width: 760px) and (vertical-viewport-segments: 2), (min-width: 640px) and (max-width: 760px) and (min-height: 650px) {
   .page.page--setting {
     --setting-landscape-left-width: clamp(184px, 27vw, 220px);
   }
@@ -536,7 +542,7 @@
 }
 
 /* Long descriptions / range legends with no break opportunities (e.g. English
-   "0:stock,1,2:REC,..." — unlike CJK, Latin runs without spaces don't break)
+   "0:stock,1,2:REC,..." ??unlike CJK, Latin runs without spaces don't break)
    must wrap instead of forcing the row wider than the viewport, which would
    push the right-side control off-screen. CJK wraps per-character on its own,
    which is why this only surfaced in English. The landscape split layout
@@ -873,8 +879,8 @@
   color: var(--md-on-surface);
 }
 
-/* Footer actions row — holds the optional unit-cycle (배율) and the
-   reset-to-default (기본값) button, right-aligned under the item. */
+/* Footer actions row ??holds the optional unit-cycle (諛곗쑉) and the
+   reset-to-default (湲곕낯媛? button, right-aligned under the item. */
 .page--setting #settingScreenItems .setting--has-actions {
   padding-bottom: var(--sp-md);
 }
@@ -1336,22 +1342,22 @@
   text-align: left;
 }
 
-@media (max-width: 640px) {
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .page--setting #settingScreenItems .ctrl {
     justify-content: center;
   }
 }
 
-@media (orientation: landscape) and (max-width: 760px) {
+@media (max-width: 760px) and (min-aspect-ratio: 13/10), (max-width: 760px) and (horizontal-viewport-segments: 2), (max-width: 760px) and (vertical-viewport-segments: 2), (min-width: 640px) and (max-width: 760px) and (min-height: 650px) {
   .page--setting #settingScreenItems .ctrl {
     justify-content: start;
   }
 }
 
-@media (max-width: 640px) and (orientation: portrait) {
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .page--setting #settingScreenItems > .row-between.mb-sm {
     /* min-height was 48px while the row content (42px back-icon + title) is
-       shorter, and align-items:end pushed the ~6px slack ABOVE the title —
+       shorter, and align-items:end pushed the ~6px slack ABOVE the title ??
        the thin band the user saw. Collapse to content height so the title
        starts at the top edge, like the groups screen. */
     min-height: 0;
@@ -1637,7 +1643,7 @@
   overflow: hidden;
 }
 
-@media (max-width: 640px) {
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .page--setting #deviceItems .device-ssh-control {
     grid-column: 1 / -1;
     width: 100%;
@@ -1900,12 +1906,12 @@
 /* Portrait (phone): anchor the settings FAB as page-relative ABSOLUTE flow,
    the same approach landscape already uses. As position:fixed the FAB was
    captured by .page-active's transform (an ancestor transform is the
-   containing block for fixed children), so it followed the page geometry —
-   --app-vv-height settling on load, page transitions — and drifted up/down.
+   containing block for fixed children), so it followed the page geometry ??
+   --app-vv-height settling on load, page transitions ??and drifted up/down.
    As a normal absolute child of the page it simply sits at the page's
    bottom-right and stays put. The page already excludes the nav bar + safe
    area from its height, so the offset here is just the small visual gap. */
-@media (max-width: 640px) and (orientation: portrait) {
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .page.page--setting > .page-fab-layer--setting {
     position: absolute;
     top: auto;

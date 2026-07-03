@@ -405,6 +405,9 @@ web/js/realtime/
   carrot_map.js
   home_drive.js
   hud_card.js
+  mini_hud.js
+  mini_hud_mode.js
+  mini_hud_model.js
   nav_hud.js
   raw_capnp.js
   raw_capnp_worker.js
@@ -419,6 +422,9 @@ web/js/realtime/
 | `realtime/app_realtime.js` | Live runtime polling/raw stream wiring and HUD bridge. |
 | `realtime/home_drive.js` | Drive/Carrot Vision renderer and overlay canvas. |
 | `realtime/hud_card.js` | HUD card data rendering. |
+| `realtime/mini_hud_mode.js` | Compact HUD eligibility, viewport hysteresis, and activation events. |
+| `realtime/mini_hud_model.js` | Pure STOCK/NAV/WAZE compact HUD data normalization. |
+| `realtime/mini_hud.js` | Compact HUD DOM rendering and responsive typography. |
 | `realtime/carrot_map.js` | Kakao minimap iframe bridge (kmap), `FRAME_VERSION` gated to limit SDK quota. |
 | `realtime/nav_hud.js` | Carrot Nav HUD V2 — top-center guidance card from `carrotMan` state, no iframe/network. |
 | `realtime/raw_capnp.js` | Raw capnp decode entry. |
@@ -427,6 +433,23 @@ web/js/realtime/
 | `realtime/vision_rtc.js` | WebRTC stream client. |
 | `realtime/vision_raw.js` | Raw WebSocket client and worker bridge. |
 | `realtime/vision_diag.js` | Silent WebRTC/video diagnostic recorder (localStorage ring buffer) feeding the vision diag upload. |
+
+### Compact HUD mode
+
+Compact HUD is an adaptive CWeb surface for resizable launcher panels and
+Android multi-window use. By default it enters at viewport widths up to `480px`
+when the viewport is at least 22% smaller than the exposed screen or outer
+window. Widths up to `280px` are treated as unambiguously compact. The mode
+stays active through `539px` and exits at `540px`.
+
+`?mini_hud=auto` bypasses the windowed-evidence check but keeps the width
+thresholds. `?mini_hud=force` always enables the surface, and `?mini_hud=off`
+disables adaptive detection. Browser JavaScript has no reliable equivalent of
+Android `Activity.isInMultiWindowMode()`, so the default evidence check keeps
+ordinary full-screen phones out while supporting launcher panels, popup
+windows, desktop responsive windows, and multi-window layouts. While active,
+raw HUD realtime remains connected and Vision/WebRTC is suspended until the
+window leaves Compact HUD mode.
 
 ### Translations JS
 

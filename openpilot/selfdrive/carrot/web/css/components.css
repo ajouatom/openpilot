@@ -72,7 +72,17 @@ body[data-page="terminal"] .app-toast-host {
 
 .app-dialog {
   position: fixed;
-  inset: 0;
+  /* Anchor to the *visual* viewport, not the layout viewport. With the
+     on-screen keyboard open, inset:0 centered the sheet in the full-screen
+     height — so it floated up behind the keyboard (the near-square/landscape
+     case never hit the bottom-sheet fallback below). viewport.js keeps
+     --app-vv-top / --app-vv-height in sync with visualViewport, so centering
+     here always lands in the visible area above the keyboard. Same pattern as
+     .setting-search-panel. */
+  top: var(--app-vv-top, 0px);
+  left: 0;
+  right: 0;
+  height: var(--app-vv-height, 100dvh);
   z-index: var(--z-modal);
   display: flex;
   align-items: center;
@@ -334,7 +344,7 @@ body[data-page="terminal"] .app-toast-host {
   line-height: 1.4;
 }
 
-@media (max-width: 640px) and (orientation: portrait) {
+@media (max-width: 640px) and (aspect-ratio < 13/10) {
   .app-dialog {
     align-items: center;
     padding: calc(12px + env(safe-area-inset-top, 0px)) 8px calc(12px + env(safe-area-inset-bottom, 0px));
@@ -368,30 +378,14 @@ body[data-page="terminal"] .app-toast-host {
     min-height: 40px;
   }
 
-  .app-dialog--form {
-    align-items: flex-end;
-    padding: env(safe-area-inset-top, 0px) 0 0;
-  }
-
-  .app-dialog--form .app-dialog__sheet {
-    width: 100vw;
-    max-height: min(72dvh, var(--dialog-sheet-mobile-max-height));
-    padding: var(--sp-lg) var(--sp-lg) calc(var(--sp-lg) + env(safe-area-inset-bottom, 0px));
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: var(--dialog-sheet-radius-mobile) var(--dialog-sheet-radius-mobile) 0 0;
-    transform: translateY(24px);
-  }
-
-  .app-dialog--form .app-dialog__actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .app-dialog--form .app-dialog__actions .smallBtn {
-    width: 100%;
-  }
+  /* Form dialogs (stream key, mapbox token, device actions, …) render as the
+     SAME centered floating card as every other dialog — no full-width bottom
+     sheet jammed onto the keyboard. They inherit the mobile card sheet above
+     (side margins, all corners rounded, full border) and the right-aligned
+     flex actions from .app-dialog__actions. Because .app-dialog is anchored to
+     --app-vv-height, the card floats just above the on-screen keyboard when one
+     is open, and simply centers when there is none — consistent across phone,
+     foldable and desktop (no keyboard-toolbar dependency). */
 }
 
 .app-branch-picker__sheet {
@@ -1067,6 +1061,27 @@ body[data-page="terminal"] .app-toast-host {
   display: grid;
   gap: var(--sp-xs);
   margin-top: var(--sp-sm);
+}
+
+/* Form dialogs anchor to the bottom of the visible area (which is
+   --app-vv-height = above the on-screen keyboard) so the floating card sits
+   just above the keyboard — the input auto-focuses and the keyboard opens
+   immediately — instead of floating centered far above it. The container's
+   bottom padding gives the breathing gap between card and keyboard. */
+/* Any dialog that shows a text input (prompt OR form) centers when no keyboard
+   is up (desktop, keyboard-less devices, or before the field focuses), and hugs
+   just above the on-screen keyboard with a consistent gap when it is — toggled
+   by html[data-kb-open] from viewport.js. --kb-inset is the exact keyboard
+   height incl. the Samsung toolbar on Chromium (VirtualKeyboard API), 0
+   elsewhere (where --app-vv-height already excludes the keyboard). One shared
+   --kb-gap keeps this consistent with the terminal and search panel. */
+.app-dialog--input {
+  align-items: center;
+}
+
+html[data-kb-open="1"] .app-dialog--input {
+  align-items: flex-end;
+  padding-bottom: calc(var(--kb-gap) + var(--kb-inset) + env(safe-area-inset-bottom, 0px));
 }
 
 .app-dialog__inputError {

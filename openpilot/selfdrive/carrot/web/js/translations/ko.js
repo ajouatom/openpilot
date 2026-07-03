@@ -409,7 +409,6 @@ window.CarrotTranslations.register("ko", {
     not_set: "미설정",
     connecting: "연결중...",
     reconnecting: "재연결중...",
-    vision_reconnect: "다시 연결",
     vision_stop: "중지",
     error: "오류",
     notice: "알림",

@@ -768,7 +768,10 @@ function showCarScreen(which, pushHistory = false) {
 
 /* ── Setting back-swipe support helpers ─────────────────── */
 function isLandscapeRailMode() {
-  return window.matchMedia("(orientation: landscape)").matches;
+  // Nav rail engages on the shared wide layout resolver.
+  return window.CarrotLayout
+    ? window.CarrotLayout.isWide()
+    : window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches;
 }
 
 function isSettingItemsScreenActive() {

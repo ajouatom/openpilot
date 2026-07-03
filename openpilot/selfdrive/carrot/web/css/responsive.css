@@ -32,7 +32,7 @@
     margin-left: 0;
   }
 
-  .page {
+  .page:not(.page--full):not(.page--setting) {
     padding-bottom: var(--page-bottom-gutter, calc(var(--nav-bar-height-desktop) + 22px + env(safe-area-inset-bottom, 0px)));
     min-height: var(--page-min-height, calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height-desktop) - env(safe-area-inset-bottom, 0px)));
   }
@@ -71,7 +71,9 @@
 
 }
 
-@media (orientation: landscape) {
+/* Wide layout: left nav rail. Tracks viewport.js LAYOUT_WIDE_QUERY:
+   landscape-ish viewports, fold/viewport segments, and large fold/tablet panels. */
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
   :root {
     --nav-bar-height: 0px;
     --nav-rail-width: 92px;

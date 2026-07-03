@@ -15,7 +15,8 @@ let uiWarmupTimer = null;
 let toolsLogHistoryClosing = false;
 
 function isToolsPortraitMode() {
-  return Boolean(window.matchMedia?.("(orientation: portrait)")?.matches);
+  if (window.CarrotLayout?.isWide?.()) return false;
+  return Boolean(window.matchMedia?.("(max-width: 640px), (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px)")?.matches);
 }
 
 function pushToolsLogHistoryState() {

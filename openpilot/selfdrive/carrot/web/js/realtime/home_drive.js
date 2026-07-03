@@ -1803,7 +1803,7 @@ window.HomeDrive = (() => {
   }
 
   function applyCarrotHudLayout(viewportRect) {
-    if (window.matchMedia("(orientation: portrait)").matches) {
+    if (!window.CarrotLayout?.isWide?.()) {
       if (_lastHudLeft !== "" || _lastHudBottom !== "") {
         if (driveHudCardEl) {
           driveHudCardEl.style.removeProperty("--carrot-hud-left");
@@ -1853,7 +1853,7 @@ window.HomeDrive = (() => {
 
   function getCanvasDpr() {
     const rawDpr = window.devicePixelRatio || 1;
-    const portrait = window.matchMedia("(orientation: portrait)").matches;
+    const portrait = !window.CarrotLayout?.isWide?.();
     const shortSide = Math.min(window.innerWidth || 0, window.innerHeight || 0);
     if (portrait && shortSide > 0 && shortSide <= 540) {
       return Math.min(rawDpr, PHONE_PORTRAIT_DPR_CAP);
@@ -3231,7 +3231,7 @@ window.HomeDrive = (() => {
   let _rtcPerfSummaryCloseTimer = null;
 
   function isRtcPerfSummaryAvailable() {
-    return window.matchMedia("(orientation: landscape)").matches;
+    return Boolean(window.CarrotLayout?.isWide?.() ?? window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches);
   }
 
   function clearRtcPerfSummaryCloseTimer() {
@@ -3323,7 +3323,7 @@ window.HomeDrive = (() => {
   }
 
   function drawHudTopLeftText(stageWidth, stageHeight, viewportRect, text, pathMode) {
-    if (window.matchMedia("(orientation: portrait)").matches) return;
+    if (!window.CarrotLayout?.isWide?.()) return;
     const label = shortText(text, 160);
     if (!label) return;
     const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
