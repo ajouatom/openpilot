@@ -90,11 +90,11 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
   target_sw = float(np.clip(desired_sw_deg, -steer_sw_max_deg, steer_sw_max_deg))
   if v_ego < MID_SPEED_ANGLE_RATE_LIMIT_SPEED:
     # Keep low/mid-speed angle commands quieter without reducing LKAS_ANGLE_MAX_TORQUE.
-    # Allow the angle, but slow the arrival: 0~15 kph ramps 1.2->1.4 deg/tick,
-    # then 15~40 kph tapers 1.4->1.0 deg/tick. Above 40 kph, physics limits take over.
+    # Allow the angle, but slow the arrival: 0~15 kph ramps 0.8->1.1 deg/tick,
+    # then 15~40 kph tapers 1.1->0.8 deg/tick. Above 40 kph, physics limits take over.
     low_mid_speed_cap = float(np.interp(v_ego,
                                         [0.0, LOW_SPEED_ANGLE_RATE_RAMP_SPEED, MID_SPEED_ANGLE_RATE_LIMIT_SPEED],
-                                        [1.2, 1.4, 1.0]))
+                                        [0.8, 1.1, 0.8]))
     max_sw_rate_deg_per_tick = min(max_sw_rate_deg_per_tick, low_mid_speed_cap)
 
   target_rw = target_sw / steer_ratio
