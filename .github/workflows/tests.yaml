@@ -1,0 +1,33 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - carrot-wip
+  #pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      run_number:
+        default: '1'
+        required: true
+        type: string
+
+concurrency:
+  group: tests-ci-run-${{ inputs.run_number }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/carrot-wip' && github.run_id || github.head_ref || github.ref }}-${{ github.workflow }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  CI: 1
+
+jobs:
+  build_release:
+    name: build release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      - run: ./tools/op.sh setup
+      - name: Build openpilot
+        run: scons

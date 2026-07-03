@@ -21,18 +21,15 @@ if [ "$(uname)" == "Darwin" ] && [ $SHELL == "/bin/bash" ]; then
 fi
 function op_install() {
   echo "Installing op system-wide..."
-  CMD="\nalias op='"$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/op.sh" \"\$@\"'\n"
-  grep "alias op=" "$RC_FILE" &> /dev/null || printf "$CMD" >> $RC_FILE
-  echo -e " ??[${GREEN}??{NC}] op installed successfully. Open a new shell to use it."
-}
-
-function loge() {
-  if [[ -f "$LOG_FILE" ]]; then
-    # error type
-    echo "$1" >> $LOG_FILE
-    # error log
-    echo "$2" >> $LOG_FILE
-  fi
+  OP_SH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )/op.sh"
+  CMD=$(cat <<EOF
+alias op='$OP_SH "\$@"'
+_op_completions() { [ "\$COMP_CWORD" -eq 1 ] && COMPREPLY=(\$(compgen -W "\$(awk '/shift 1; op_/{print \$1}' $OP_SH)" -- "\${COMP_WORDS[1]}")); }
+[ -n "\$BASH_VERSION" ] && complete -F _op_completions -o default op
+EOF
+)
+  grep -q "alias op=" "$RC_FILE" 2>/dev/null || printf '\n%s\n' "$CMD" >> "$RC_FILE"
+  echo -e " ↳ [${GREEN}✔${NC}] op installed successfully. Open a new shell to use it."
 }
 
 function retry() {
@@ -51,16 +48,16 @@ function retry() {
 }
 
 function op_run_command() {
-  CMD="$@"
+  CMD="$*"
 
-  echo -e "${BOLD}Running command ??{NC} $CMD ??
+  echo -e "${BOLD}Running command →${NC} $CMD │"
   for ((i=0; i<$((19 + ${#CMD})); i++)); do
-    echo -n "?"
+    echo -n "─"
   done
-  echo -e "??n"
+  echo -e "┘\n"
 
   if [[ -z "$DRY" ]]; then
-    eval "$CMD"
+    "$@"
   fi
 }
 
@@ -78,7 +75,7 @@ function op_get_openpilot_dir() {
 
   # Fallback to hardcoded directories if not found
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
-  for dir in "${SCRIPT_DIR%/tools}" "$HOME/openpilot" "/data/openpilot"; do
+  for dir in "$(readlink -f "$SCRIPT_DIR/../..")" "$HOME/openpilot" "/data/openpilot"; do
     if [[ -f "$dir/launch_openpilot.sh" ]]; then
       OPENPILOT_ROOT="$dir"
       return 0
@@ -99,11 +96,11 @@ function op_install_post_commit() {
 function op_check_openpilot_dir() {
   echo "Checking for openpilot directory..."
   if [[ -f "$OPENPILOT_ROOT/launch_openpilot.sh" ]]; then
-    echo -e " ??[${GREEN}??{NC}] openpilot found."
+    echo -e " ↳ [${GREEN}✔${NC}] openpilot found."
     return 0
   fi
 
-  echo -e " ??[${RED}??{NC}] openpilot directory not found! Make sure that you are"
+  echo -e " ↳ [${RED}✗${NC}] openpilot directory not found! Make sure that you are"
   echo "       inside the openpilot directory or specify one with the"
   echo "       --dir option!"
   return 1
@@ -112,28 +109,28 @@ function op_check_openpilot_dir() {
 function op_check_git() {
   echo "Checking for git..."
   if ! command -v "git" > /dev/null 2>&1; then
-    echo -e " ??[${RED}??{NC}] git not found on your system!"
+    echo -e " ↳ [${RED}✗${NC}] git not found on your system!"
     return 1
   else
-    echo -e " ??[${GREEN}??{NC}] git found."
+    echo -e " ↳ [${GREEN}✔${NC}] git found."
   fi
 
   echo "Checking for git lfs files..."
   if [[ $(file -b $OPENPILOT_ROOT/openpilot/selfdrive/modeld/models/dmonitoring_model.onnx) == "data" ]]; then
-    echo -e " ??[${GREEN}??{NC}] git lfs files found."
+    echo -e " ↳ [${GREEN}✔${NC}] git lfs files found."
   else
-    echo -e " ??[${RED}??{NC}] git lfs files not found! Run 'git lfs pull'"
+    echo -e " ↳ [${RED}✗${NC}] git lfs files not found! Run 'git lfs pull'"
     return 1
   fi
 
   echo "Checking for git submodules..."
   for name in $(git config --file .gitmodules --get-regexp path | awk '{ print $2 }' | tr '\n' ' '); do
     if [[ -z $(ls $OPENPILOT_ROOT/$name) ]]; then
-      echo -e " ??[${RED}??{NC}] git submodule $name not found! Run 'git submodule update --init --recursive'"
+      echo -e " ↳ [${RED}✗${NC}] git submodule $name not found! Run 'git submodule update --init --recursive'"
       return 1
     fi
   done
-  echo -e " ??[${GREEN}??{NC}] git submodules found."
+  echo -e " ↳ [${GREEN}✔${NC}] git submodules found."
 }
 
 function op_check_os() {
@@ -144,25 +141,22 @@ function op_check_os() {
       source /etc/os-release
       case "$VERSION_CODENAME" in
         "jammy" | "kinetic" | "noble" | "focal")
-          echo -e " ??[${GREEN}??{NC}] Ubuntu $VERSION_CODENAME detected."
+          echo -e " ↳ [${GREEN}✔${NC}] Ubuntu $VERSION_CODENAME detected."
           ;;
         * )
-          echo -e " ??[${RED}??{NC}] Incompatible Ubuntu version $VERSION_CODENAME detected!"
-          loge "ERROR_INCOMPATIBLE_UBUNTU" "$VERSION_CODENAME"
+          echo -e " ↳ [${RED}✗${NC}] Incompatible Ubuntu version $VERSION_CODENAME detected!"
           return 1
           ;;
       esac
     else
-      echo -e " ??[${RED}??{NC}] No /etc/os-release on your system. Make sure you're running on Ubuntu, or similar!"
-      loge "ERROR_UNKNOWN_UBUNTU"
+      echo -e " ↳ [${RED}✗${NC}] No /etc/os-release on your system. Make sure you're running on Ubuntu, or similar!"
       return 1
     fi
 
   elif [[ "$OSTYPE" == "darwin"* ]]; then
-    echo -e " ??[${GREEN}??{NC}] macOS detected."
+    echo -e " ↳ [${GREEN}✔${NC}] macOS detected."
   else
-    echo -e " ??[${RED}??{NC}] OS type $OSTYPE not supported!"
-    loge "ERROR_UNKNOWN_OS" "$OSTYPE"
+    echo -e " ↳ [${RED}✗${NC}] OS type $OSTYPE not supported!"
     return 1
   fi
 }
@@ -170,9 +164,9 @@ function op_check_os() {
 function op_check_venv() {
   echo "Checking for venv..."
   if [[ -f $OPENPILOT_ROOT/.venv/bin/activate ]]; then
-    echo -e " ??[${GREEN}??{NC}] venv detected."
+    echo -e " ↳ [${GREEN}✔${NC}] venv detected."
   else
-    echo -e " ??[${RED}??{NC}] Can't activate venv in $OPENPILOT_ROOT. Assuming global env!"
+    echo -e " ↳ [${RED}✗${NC}] Can't activate venv in $OPENPILOT_ROOT. Assuming global env!"
   fi
 }
 
@@ -192,7 +186,7 @@ function op_before_cmd() {
   op_activate_venv
 
   if [[ -z $VERBOSE ]]; then
-    echo -e "${BOLD}Checking system ??{NC} [${GREEN}??{NC}]"
+    echo -e "${BOLD}Checking system →${NC} [${GREEN}✔${NC}]"
   else
     echo -e "$result"
   fi
@@ -209,34 +203,31 @@ function op_setup() {
   st="$(date +%s)"
   SETUP_SCRIPT="tools/setup_dependencies.sh"
   if ! $OPENPILOT_ROOT/$SETUP_SCRIPT; then
-    echo -e " ??[${RED}??{NC}] Dependencies installation failed!"
-    loge "ERROR_DEPENDENCIES_INSTALLATION"
+    echo -e " ↳ [${RED}✗${NC}] Dependencies installation failed!"
     return 1
   fi
   et="$(date +%s)"
-  echo -e " ??[${GREEN}??{NC}] Dependencies installed successfully in $((et - st)) seconds."
+  echo -e " ↳ [${GREEN}✔${NC}] Dependencies installed successfully in $((et - st)) seconds."
 
   op_activate_venv
 
   echo "Getting git submodules..."
   st="$(date +%s)"
   if ! retry 3 git submodule update --jobs 4 --init --recursive; then
-    echo -e " ??[${RED}??{NC}] Getting git submodules failed!"
-    loge "ERROR_GIT_SUBMODULES"
+    echo -e " ↳ [${RED}✗${NC}] Getting git submodules failed!"
     return 1
   fi
   et="$(date +%s)"
-  echo -e " ??[${GREEN}??{NC}] Submodules installed successfully in $((et - st)) seconds."
+  echo -e " ↳ [${GREEN}✔${NC}] Submodules installed successfully in $((et - st)) seconds."
 
   echo "Pulling git lfs files..."
   st="$(date +%s)"
   if ! retry 3 git lfs pull; then
-    echo -e " ??[${RED}??{NC}] Pulling git lfs files failed!"
-    loge "ERROR_GIT_LFS"
+    echo -e " ↳ [${RED}✗${NC}] Pulling git lfs files failed!"
     return 1
   fi
   et="$(date +%s)"
-  echo -e " ??[${GREEN}??{NC}] Files pulled successfully in $((et - st)) seconds."
+  echo -e " ↳ [${GREEN}✔${NC}] Files pulled successfully in $((et - st)) seconds."
 
   op_check
 }
@@ -307,7 +298,7 @@ function op_check() {
 
 function op_esim() {
   op_before_cmd
-  op_run_command openpilot/system/hardware/esim.py "$@"
+  op_run_command openpilot/common/esim/esim.py "$@"
 }
 
 function op_build() {
@@ -319,33 +310,33 @@ function op_build() {
     op_run_command openpilot/system/manager/build.py
   else
     # scons is fine on PC
-    op_run_command scons $@
+    op_run_command scons "$@"
   fi
 }
 
 function op_juggle() {
   op_before_cmd
-  op_run_command openpilot/tools/plotjuggler/juggle.py $@
+  op_run_command openpilot/tools/plotjuggler/juggle.py "$@"
 }
 
 function op_lint() {
   op_before_cmd
-  op_run_command scripts/lint/lint.sh $@
+  op_run_command scripts/lint/lint.sh "$@"
 }
 
 function op_test() {
   op_before_cmd
-  op_run_command pytest $@
+  op_run_command pytest "$@"
 }
 
 function op_replay() {
   op_before_cmd
-  op_run_command openpilot/tools/replay/replay $@
+  op_run_command openpilot/tools/replay/replay "$@"
 }
 
 function op_cabana() {
   op_before_cmd
-  op_run_command openpilot/tools/cabana/cabana $@
+  op_run_command openpilot/tools/cabana/cabana "$@"
 }
 
 function op_sim() {
@@ -356,7 +347,7 @@ function op_sim() {
 
 function op_clip() {
   op_before_cmd
-  op_run_command openpilot/tools/clip/run.py $@
+  op_run_command openpilot/tools/clip/run.py "$@"
 }
 
 function op_switch() {
@@ -468,7 +459,6 @@ function _op() {
     -d | --dir )       shift 1; OPENPILOT_ROOT="$1"; shift 1 ;;
     --dry )            shift 1; DRY="1" ;;
     -n | --no-verify ) shift 1; NO_VERIFY="1" ;;
-    -l | --log )       shift 1; LOG_FILE="$1" ; shift 1 ;;
   esac
 
   # parse Commands
@@ -499,4 +489,4 @@ function _op() {
   esac
 }
 
-_op $@
+_op "$@"
