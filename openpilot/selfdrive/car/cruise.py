@@ -155,6 +155,7 @@ class VCruiseCarrot:
     self.v_cruise_kph = 20 #V_CRUISE_UNSET
     self.v_cruise_cluster_kph = 20 #V_CRUISE_UNSET
     self.v_cruise_kph_last = 20
+    self._cruise_speed_initialized = False
 
     self.enabled_last = False
 
@@ -241,6 +242,9 @@ class VCruiseCarrot:
       self.log = log
       #self.event = event
       self._log_timer = self._log_timeout
+
+  def _current_speed_for_initial_resume(self):
+    return max(self.v_ego_kph_set, self._cruise_speed_min)
 
   def update_params(self, is_metric):
     unit_factor = 1.0 if is_metric else CV.MPH_TO_KPH
@@ -462,6 +466,7 @@ class VCruiseCarrot:
             self._add_log("Cruise accelCruise (carrot command)")
         elif self.carrot_arg == "STOP":
           v_cruise_kph = 5
+          self._cruise_speed_initialized = False
           self._add_log("Cruise stop (carrot command)")
 
       elif self.carrot_cmd == "SPEED":
@@ -501,17 +506,31 @@ class VCruiseCarrot:
         if self._soft_hold_active > 0:
           self._soft_hold_active = 0
         elif self._cruise_ready or not CC.enabled or CS.cruiseState.standstill or self.carrot_cruise_active:
+          if self._v_cruise_kph_at_brake > 0:
+            v_cruise_kph = max(v_cruise_kph, self._v_cruise_kph_at_brake)
+            self._v_cruise_kph_at_brake = 0
+            self._cruise_speed_initialized = True
+          elif not self._cruise_speed_initialized:
+            v_cruise_kph = self._current_speed_for_initial_resume()
+            self._cruise_speed_initialized = True
+            self._add_log(f"{v_cruise_kph} Cruise resume from current speed")
           if False: #self._cruise_button_mode in [2, 3]:
             road_limit_kph = self.nRoadLimitSpeed * self.autoSpeedUptoRoadSpeedLimit
             if road_limit_kph > 1.0:
               v_cruise_kph = max(v_cruise_kph, road_limit_kph)
-        elif self._v_cruise_kph_at_brake > 0 and v_cruise_kph < self._v_cruise_kph_at_brake:
-          v_cruise_kph = self._v_cruise_kph_at_brake
+        elif self._v_cruise_kph_at_brake > 0:
+          v_cruise_kph = max(v_cruise_kph, self._v_cruise_kph_at_brake)
           self._v_cruise_kph_at_brake = 0
+          self._cruise_speed_initialized = True
+        elif not self._cruise_speed_initialized:
+          v_cruise_kph = self._current_speed_for_initial_resume()
+          self._cruise_speed_initialized = True
+          self._add_log(f"{v_cruise_kph} Cruise resume from current speed")
         elif self._cruise_button_mode == 0:
           v_cruise_kph = button_kph
         else:
           v_cruise_kph = self._v_cruise_desired(CS, v_cruise_kph)
+        self._cruise_speed_initialized = True
         self.carrot_cruise_active = False
 
       elif button_type == ButtonType.decelCruise:
@@ -539,6 +558,7 @@ class VCruiseCarrot:
           self.carrot_cruise_active = True
           #self.events.append(EventName.audioPrompt)
         self._v_cruise_kph_at_brake = 0
+        self._cruise_speed_initialized = True
 
       elif button_type == ButtonType.gapAdjustCruise:
         longitudinalPersonalityMax = self.params.get_int("LongitudinalPersonalityMax")
