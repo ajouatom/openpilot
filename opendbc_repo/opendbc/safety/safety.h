@@ -25,6 +25,7 @@
 // CAN-FD only safety modes
 #ifdef CANFD
 #include "safety/safety_hyundai_canfd.h"
+#include "safety/safety_volkswagen_meb.h"  // MEB is CAN-FD only (ESC_51 48B, Motor_51 32B)
 #endif
 
 // from cereal.car.CarParams.SafetyModel
@@ -425,6 +426,7 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
     {SAFETY_RIVIAN, &rivian_hooks},
 #ifdef CANFD
     {SAFETY_HYUNDAI_CANFD, &hyundai_canfd_hooks},
+    {SAFETY_VOLKSWAGEN_MEB, &volkswagen_meb_hooks},
 #endif
 #ifdef ALLOW_DEBUG
     {SAFETY_TESLA, &tesla_hooks},
