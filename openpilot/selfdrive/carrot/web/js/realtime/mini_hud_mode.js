@@ -3,7 +3,7 @@
 (function () {
   const ENTER_MAX_WIDTH = 450;
   const EXIT_MIN_WIDTH = 520;
-  const MIN_HEIGHT = 160;
+  const MIN_HEIGHT = 96;
   const COMPACT_MAX_HEIGHT = 760;
   const LARGE_CANVAS_MIN = 700;
   const PARAM = "mini_hud";
@@ -15,7 +15,11 @@
   let lastDecisionLogKey = "";
 
   function readRequestMode() {
-    const value = new URLSearchParams(window.location.search).get(PARAM);
+    const search = new URLSearchParams(window.location.search);
+    // View-test mode (mini_hud_demo.js) always forces the HUD on so mock
+    // scenarios render on any viewport, even without a vehicle connected.
+    if (search.has("mhud_test")) return "force";
+    const value = search.get(PARAM);
     if (value === "0" || value === "off") return "off";
     if (value === "1" || value === "force") return "force";
     if (value === "auto") return "auto";
