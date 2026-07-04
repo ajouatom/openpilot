@@ -1244,4 +1244,31 @@ FW_VERSIONS = {
       b'\xf1\x875Q0907572S \xf1\x890780',
     ],
   },
+  CAR.VOLKSWAGEN_ID4_MK1: {
+    (Ecu.engine, 0x17fc0076, None): [
+      b'\xf1\x870EA906012DK\xf1\x892603',
+    ],
+    (Ecu.srs, 0x715, None): [
+      b'\xf1\x871EA959655EA\xf1\x890376',
+      b'\xf1\x875WA959655R \xf1\x890717',
+    ],
+    (Ecu.eps, 0x712, None): [
+      b'\xf1\x871EA907144AQ\xf1\x895033\xf1\x82\x000_BH0A0_ON',
+    ],
+    (Ecu.fwdCamera, 0x74f, None): [
+      b'\xf1\x871EA980654L \xf1\x895332',
+    ],
+    (Ecu.cornerRadar, 0x74e, None): [
+      b'\xf1\x872Q0907686K \xf1\x890289',
+    ],
+    (Ecu.adas, 0x769, None): [
+      b'\xf1\x871EA980556J \xf1\x890397',
+    ],
+    (Ecu.parkingAdas, 0x70a, None): [
+      b'\xf1\x871EA919294D \xf1\x890421',
+    ],
+    (Ecu.fwdRadar, 0x757, None): [
+      b'\xf1\x871EA907572H \xf1\x890234',
+    ],
+  },
 }
