@@ -1307,7 +1307,6 @@ class ClusterUiRenderer:
             JETBRAINS_MONO_FONT_PATH,
             OPENPILOT_FONT_DIR / "JetBrainsMono-Bold.ttf",
             Path("/data/openpilot/openpilot/selfdrive/assets/fonts/KaiGenGothicKR-Bold.ttf"),
-            Path("/data/openpilot/openpilot/selfdrive/assets/addon/font/KaiGenGothicKR-Bold.ttf"),
             Path("/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Medium.ttf"),
             Path("/usr/share/fonts/TTF/JetBrainsMono-Medium.ttf"),
             Path("/usr/local/share/fonts/JetBrainsMono-Medium.ttf"),
