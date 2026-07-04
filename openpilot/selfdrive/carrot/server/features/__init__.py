@@ -18,6 +18,7 @@ from . import (
   tools,
   vision_diag,
   vision_test,
+  web_sound,
   web_settings,
   ws,
   youtube_live,
@@ -45,3 +46,4 @@ def register_all(app: web.Application) -> None:
   youtube_live.register(app)
   vision_test.register(app)
   vision_diag.register(app)
+  web_sound.register(app)
