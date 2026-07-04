@@ -26,7 +26,8 @@ def suppress_casper_ev_fca11_fault(values):
 def create_lkas11(packer, frame, CP, apply_torque, steer_req,
                   torque_fault, lkas11, sys_warning, sys_state, enabled,
                   left_lane, right_lane,
-                  left_lane_depart, right_lane_depart, is_ldws_car):
+                  left_lane_depart, right_lane_depart, is_ldws_car,
+                  noact_warning=False):
 
   values = {s: lkas11[s] for s in [
     "CF_Lkas_LdwsActivemode",
@@ -96,6 +97,12 @@ def create_lkas11(packer, frame, CP, apply_torque, steer_req,
 
   if is_ldws_car:
     values["CF_Lkas_LdwsOpt_USM"] = 3
+
+  # Soul EV (KIA_EV_SK3): the MDPS won't start the LKAS overlay hands-off (needs a
+  # grip-and-release arm). Show the stock "keep hands on wheel" cluster warning while
+  # lateral is active but the MDPS is not applying our torque. HUD field only.
+  if noact_warning:
+    values["CF_Lkas_SysWarning"] = 4
 
   values["CF_Lkas_Chksum"] = 0
 
