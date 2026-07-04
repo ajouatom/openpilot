@@ -9,9 +9,10 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
+from cereal import car
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc, N
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
-from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan
+from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan, is_volkswagen_meb
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
@@ -85,6 +86,8 @@ class LongitudinalPlanner:
     self.CP = CP
     self.mpc = LongitudinalMpc(dt=dt)
     self.fcw = False
+    # VW MEB(ID.4/ID.5)에서만 True. 가속 오버라이드 중 출발 FCW 오탐을 끄기 위한 게이트.
+    self.is_vw_meb = is_volkswagen_meb(CP)
     self.dt = dt
     self.allow_throttle = True
 
@@ -223,7 +226,18 @@ class LongitudinalPlanner:
     self.j_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC[:-1], self.mpc.j_solution)
 
     # TODO counter is only needed because radar is glitchy, remove once radar is gone
-    self.fcw = self.mpc.crash_cnt > 2 and not sm['carState'].standstill and not reset_state
+    # VW MEB: 운전자가 가속페달을 밟는 중(오버라이드)이면 출발 FCW 오탐을 억제. 정지 후 급출발 시
+    # 레이더 dRel 지연(stale)·vLead 음수 아티팩트로 한 프레임 충돌예측이 떴음. gasPressed 동안엔
+    # 운전자가 직접 가속 제어 중이라 경고 의미가 약하고, FCW는 경고표시일 뿐 제동에는 영향 없음.
+    # 또 MEB는 crash_cnt 문턱을 높여(>15 ≈ 0.8s 지속) 잠깐 스치는 marginal 예측의 nuisance "삐"를
+    # 줄인다. 실제 제동(MPC)은 fcw와 무관하게 동작하므로 안전성 저하 없음. 타 차종은 기존 >2 유지.
+    # MEB 추가 억제: 차가 '가속 중'(aEgo>1.0)이면 충돌 임박 상태가 아니므로(임박하면 감속부터 함)
+    # 출발/따라잡기 중 nuisance "삐"를 끈다. gasPressed가 순간 누락돼도 이걸로 커버. 진짜 위험은
+    # 차가 감속(aEgo<0)으로 들어가면서 그때 FCW가 뜨고, 제동은 fcw와 무관하게 이미 작동한다.
+    fcw_crash_thresh = 15 if self.is_vw_meb else 2
+    meb_suppress = self.is_vw_meb and (sm['carState'].gasPressed or sm['carState'].aEgo > 1.0)
+    self.fcw = (self.mpc.crash_cnt > fcw_crash_thresh and not sm['carState'].standstill and not reset_state
+                and not meb_suppress)
     if self.fcw:
       cloudlog.info("FCW triggered")
 
