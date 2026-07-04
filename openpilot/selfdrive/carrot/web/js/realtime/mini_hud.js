@@ -11,14 +11,26 @@
     limit: root.querySelector("[data-mini-hud-limit]"),
     limitLabel: root.querySelector("[data-mini-hud-limit-label]"),
     limitBadge: root.querySelector("[data-mini-hud-limit-badge]"),
-    alertZone: root.querySelector("[data-mini-hud-alert-zone]"),
-    countdown: root.querySelector("[data-mini-hud-countdown]"),
-    distance: root.querySelector("[data-mini-hud-distance]"),
-    alert: root.querySelector("[data-mini-hud-alert]"),
-    stockZone: root.querySelector("[data-mini-hud-stock-zone]"),
+    alertBadge: root.querySelector("[data-mini-hud-alert-badge]"),
+    stockMode: root.querySelector("[data-mini-hud-stock-mode]"),
     driveMode: root.querySelector("[data-mini-hud-drive-mode]"),
     driveModeFrame: root.querySelector(".carrot-mini-hud__drive-mode"),
-    gearDrive: root.querySelector(".carrot-mini-hud__gear small"),
+    alertZone: root.querySelector("[data-mini-hud-alert-zone]"),
+    countdownZone: root.querySelector("[data-mini-hud-countdown-zone]"),
+    countdownLabel: root.querySelector("[data-mini-hud-countdown-zone] .carrot-mini-hud__chip-label"),
+    countdown: root.querySelector("[data-mini-hud-countdown]"),
+    distanceZone: root.querySelector("[data-mini-hud-distance-zone]"),
+    distanceLabel: root.querySelector("[data-mini-hud-distance-zone] .carrot-mini-hud__chip-label"),
+    distance: root.querySelector("[data-mini-hud-distance]"),
+    gapZone: root.querySelector("[data-mini-hud-gap-zone]"),
+    gapLabel: root.querySelector("[data-mini-hud-gap-zone] .carrot-mini-hud__chip-label"),
+    gap: root.querySelector("[data-mini-hud-gap]"),
+    gapSignal: root.querySelector("[data-mini-hud-gap-signal]"),
+    tempZone: root.querySelector("[data-mini-hud-temp-zone]"),
+    tempLabel: root.querySelector("[data-mini-hud-temp-label]"),
+    tempSpeed: root.querySelector("[data-mini-hud-temp-speed]"),
+    gearBadge: root.querySelector("[data-mini-hud-gear-badge]"),
+    gearLabel: root.querySelector("[data-mini-hud-gear-label]"),
     gear: root.querySelector("[data-mini-hud-gear]"),
     speed: root.querySelector("[data-mini-hud-speed]"),
     setSpeed: root.querySelector("[data-mini-hud-set-speed]"),
@@ -29,9 +41,44 @@
 
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
+  const TEMPERATURE_UNIT_KEY = "carrot.miniHud.temperatureUnit.v1";
   let latestModel = null;
   let layoutRaf = 0;
   let resizeObserver = null;
+  let temperatureUnit = loadTemperatureUnit();
+  let detailLabelsExpanded = null;
+
+  function loadTemperatureUnit() {
+    try {
+      return localStorage.getItem(TEMPERATURE_UNIT_KEY) === "f" ? "f" : "c";
+    } catch (_) {
+      return "c";
+    }
+  }
+
+  function saveTemperatureUnit() {
+    try {
+      localStorage.setItem(TEMPERATURE_UNIT_KEY, temperatureUnit);
+    } catch (_) {
+      // Storage can be unavailable in private or restricted browser contexts.
+    }
+  }
+
+  function cpuTemperatureText(celsius) {
+    if (celsius == null || celsius === "") return `CPU:--°${temperatureUnit.toUpperCase()}`;
+    const value = Number(celsius);
+    if (!Number.isFinite(value)) return `CPU:--°${temperatureUnit.toUpperCase()}`;
+    const display = temperatureUnit === "f" ? (value * 9 / 5) + 32 : value;
+    return `CPU:${Math.round(display)}°${temperatureUnit.toUpperCase()}`;
+  }
+
+  function syncCpuTemperature() {
+    setText(elements.cpu, cpuTemperatureText(latestModel?.cpu));
+    if (!elements.cpu) return;
+    const current = temperatureUnit === "f" ? "Fahrenheit" : "Celsius";
+    const next = temperatureUnit === "f" ? "Celsius" : "Fahrenheit";
+    elements.cpu.setAttribute("aria-label", `CPU temperature in ${current}. Activate to use ${next}.`);
+  }
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -45,6 +92,39 @@
 
   function setHidden(element, hidden) {
     if (element) element.hidden = Boolean(hidden);
+  }
+
+  function setRowEmpty(element, empty) {
+    if (element) element.dataset.miniHudEmpty = empty ? "1" : "0";
+  }
+
+  function shortLabel(value, fallback = "", maxLength = 5) {
+    const label = String(value || fallback || "").trim().toUpperCase();
+    return label.slice(0, Math.max(1, maxLength));
+  }
+
+  function syncDetailLabels(model, maxLength = 3) {
+    const expanded = maxLength > 1;
+    setText(elements.countdownLabel, expanded ? "TIM" : "T");
+    setText(elements.distanceLabel, expanded ? "DST" : "D");
+    setText(elements.gapLabel, expanded ? "GAP" : "G");
+    const tempSource = model?.source === "stock" ? "TMP" : model?.temp?.label;
+    setText(elements.tempLabel, shortLabel(
+      tempSource,
+      model?.alert?.name || model?.source || "SRC",
+      maxLength,
+    ));
+  }
+
+  function resolveDetailLabelLength(layoutScale, detailWidth) {
+    if (detailLabelsExpanded == null) {
+      detailLabelsExpanded = layoutScale >= 0.63 && detailWidth >= 108;
+    } else if (detailLabelsExpanded) {
+      if (layoutScale <= 0.57 || detailWidth <= 94) detailLabelsExpanded = false;
+    } else if (layoutScale >= 0.68 && detailWidth >= 118) {
+      detailLabelsExpanded = true;
+    }
+    return detailLabelsExpanded ? 3 : 1;
   }
 
   function measure(text, size, family = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif') {
@@ -65,6 +145,16 @@
     return inner > 4 ? inner : fallback;
   }
 
+  function contentHeight(element, fallback) {
+    if (!element) return fallback;
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    const inner = rect.height - padding;
+    // Same degenerate-frame guard as contentWidth (see above).
+    return inner > 4 ? inner : fallback;
+  }
+
   function render(model) {
     if (!model) return;
     latestModel = model;
@@ -74,10 +164,11 @@
     const alertVisible = !stock && Boolean(model.alert?.visible);
 
     root.dataset.source = model.source;
+    root.dataset.limitStyle = model.limitStyle || "kr";
     root.dataset.alertKind = model.alert?.kind || "none";
     root.classList.toggle("is-three-digit", String(model.speed).length >= 3 || String(model.setSpeed).length >= 3);
 
-    setText(elements.cpu, `CPU:${model.cpu == null ? "--" : model.cpu}°`);
+    syncCpuTemperature();
     setText(elements.source, model.source.toUpperCase());
     setText(elements.speed, model.speed);
     setText(elements.setSpeed, model.setSpeed);
@@ -89,18 +180,47 @@
     setText(elements.limitBadge, model.alert?.badge || "");
     setHidden(elements.limitBadge, !model.alert?.badge);
 
-    setHidden(elements.alertZone, !alertVisible);
-    setText(elements.countdown, model.alert?.countdown || "");
-    setHidden(elements.countdown, !model.alert?.countdown);
-    setText(elements.distance, model.alert?.distance || "");
-    setHidden(elements.distance, !model.alert?.distance);
-    setText(elements.alert, model.alert?.name || "");
+    const alertBadgeKind = limitVisible && alertVisible && ["camera", "police"].includes(model.alert?.kind)
+      ? model.alert.kind
+      : "";
+    if (elements.alertBadge && alertBadgeKind) {
+      const source = `/assets/alert_${alertBadgeKind}.svg`;
+      if (elements.alertBadge.getAttribute("src") !== source) elements.alertBadge.setAttribute("src", source);
+      elements.alertBadge.dataset.kind = alertBadgeKind;
+    }
+    setHidden(elements.alertBadge, !alertBadgeKind);
 
-    setHidden(elements.stockZone, !stock);
+    setHidden(elements.stockMode, !stock);
     setText(elements.driveMode, model.driveMode?.name || "NORMAL");
     if (elements.driveModeFrame) elements.driveModeFrame.dataset.miniHudDriveKind = model.driveMode?.kind || "normal";
-    setText(elements.gear, model.gearStep || "--");
-    setHidden(elements.gearDrive, model.gearStep == null);
+
+    const tempVisible = !stock && Boolean(model.temp?.visible);
+    setHidden(elements.alertZone, false);
+    syncDetailLabels(model, detailLabelsExpanded === false ? 1 : 3);
+    setText(elements.countdown, model.alert?.countdown || "--");
+    setHidden(elements.countdownZone, false);
+    setRowEmpty(elements.countdownZone, !model.alert?.countdown);
+    setText(elements.distance, model.alert?.distance || "--");
+    setHidden(elements.distanceZone, false);
+    setRowEmpty(elements.distanceZone, !model.alert?.distance);
+    setText(elements.gap, model.gap || "--");
+    if (elements.gapSignal) elements.gapSignal.dataset.level = String(clamp(Number(model.gap) || 0, 0, 4));
+    setHidden(elements.gapZone, false);
+    setRowEmpty(elements.gapZone, !model.gap);
+    setText(elements.tempSpeed, tempVisible ? model.temp?.speed : "--");
+    setHidden(elements.tempZone, false);
+    setRowEmpty(elements.tempZone, !tempVisible);
+    if (elements.tempZone) elements.tempZone.dataset.miniHudTempDecel = model.temp?.decel ? "1" : "0";
+
+    const gearStep = model.gearStep == null ? "" : String(model.gearStep);
+    const gearLabel = String(model.gear || (gearStep ? "D" : "")).trim().toUpperCase();
+    const gearKnown = Boolean(gearLabel || gearStep);
+    setText(elements.gearLabel, gearLabel);
+    setHidden(elements.gearLabel, !gearLabel);
+    setText(elements.gear, gearStep || (gearKnown ? "" : "--"));
+    setHidden(elements.gear, gearKnown && !gearStep);
+    setHidden(elements.gearBadge, false);
+    if (elements.gearBadge) elements.gearBadge.dataset.miniHudGearKnown = gearKnown ? "1" : "0";
 
     scheduleLayout();
   }
@@ -117,13 +237,17 @@
       return;
     }
     const width = Math.max(1, rect.width);
-    // Width-referenced scale, exactly like the preview (reference width 404).
-    const layoutScale = clamp(width / 404, 0.46, 1);
+    // Scale the whole compact surface from both axes. Short multi-window layouts
+    // must shrink the same tokens as narrow layouts instead of overflowing.
+    const layoutScale = clamp(Math.min(width / 404, rect.height / 650), 0.46, 1);
+    const style = root.style;
+    style.setProperty("--mini-ui-scale", layoutScale.toFixed(4));
+    style.setProperty("--mini-detail-height", `${(220 * layoutScale).toFixed(1)}px`);
 
     const topCells = root.querySelectorAll(".carrot-mini-hud__top-cell");
     const tempCellWidth = contentWidth(topCells[0], width * 0.50);
     const sourceCellWidth = contentWidth(topCells[1], width * 0.50);
-    const tempText = elements.cpu?.textContent || "CPU:--°";
+    const tempText = elements.cpu?.textContent || "CPU:--°C";
     const sourceText = elements.source?.textContent || "STOCK";
     const tempUnit = Math.max(1, measure(tempText, 100) / 100);
     const sourceUnit = Math.max(1, measure(sourceText, 100) / 100);
@@ -132,69 +256,110 @@
 
     const speedText = elements.speed?.textContent || "--";
     const cruiseText = elements.setSpeed?.textContent || "--";
-    const speedColWidth = contentWidth(elements.speedCell, width * 0.70);
-    const cruiseColWidth = contentWidth(elements.setSpeedCell, width * 0.30);
-    const baseSpeedUnit = Math.max(1, measure("72", 100) / 100);
-    const baseCruiseUnit = Math.max(1, measure("80", 100) / 100);
-    const speedSize = Math.max(1, Math.min(220, speedColWidth / baseSpeedUnit));
-    const cruiseSize = Math.max(1, Math.min(104, cruiseColWidth / baseCruiseUnit));
+    const speedRowWidth = contentWidth(elements.speedCell?.parentElement, width);
+    const speedGap = clamp(width * 0.030, 8 * layoutScale, 18 * layoutScale);
+    const speedGroupWidth = Math.max(1, Math.min(speedRowWidth * 0.96, width * 0.94));
+    const speedGroupLeft = Math.max(0, (speedRowWidth - speedGroupWidth) * 0.5);
+    // Also bound by the speed-ROW height so digits don't overflow (and clip
+    // against the fixed-inset root) on short viewports. Measure the row, not the
+    // cell: the cell is `align-items:end` grid content whose height IS the glyph
+    // line-box, so feeding it back into the font size ping-pongs the size. The
+    // row is a fixed 34% flex-basis and stays stable regardless of font.
+    const speedRowHeight = contentHeight(elements.speedCell?.parentElement, rect.height * 0.30);
     const speedFamily = getComputedStyle(elements.speed).fontFamily;
     const cruiseFamily = getComputedStyle(elements.setSpeed).fontFamily;
+    const baseSpeedSlotText = "88";
+    const baseCruiseSlotText = "88";
+    const baseSpeedUnit = Math.max(1, measure(baseSpeedSlotText, 100, speedFamily) / 100);
+    const baseCruiseUnit = Math.max(1, measure(baseCruiseSlotText, 100, cruiseFamily) / 100);
+    const stableCruiseSize = Math.max(1, Math.min(
+      124,
+      ((speedGroupWidth - speedGap) * 0.32) / baseCruiseUnit,
+      speedRowHeight * 0.66,
+    ));
+    const gearBottom = stableCruiseSize * 0.92;
+    const gearFont = stableCruiseSize * 0.30;
+    const gearHeight = stableCruiseSize * 0.52;
+    const cruiseShare = 0.32;
+    const speedShare = 1 - cruiseShare;
+    const speedMaxWidth = Math.max(1, (speedGroupWidth - speedGap) * speedShare);
+    const cruiseMaxWidth = Math.max(1, (speedGroupWidth - speedGap) * cruiseShare);
+    const gearLeft = speedGroupLeft + speedMaxWidth + speedGap;
+    const speedSize = Math.max(1, Math.min(240, speedMaxWidth / baseSpeedUnit, speedRowHeight * 1.10));
+    const cruiseSize = Math.max(1, Math.min(124, cruiseMaxWidth / baseCruiseUnit, speedRowHeight * 0.66));
     const speedRendered = Math.max(1, measure(speedText, speedSize, speedFamily));
     const cruiseRendered = Math.max(1, measure(cruiseText, cruiseSize, cruiseFamily));
-    const speedScaleX = speedText.length > 2 ? Math.min(1, speedColWidth * 0.98 / speedRendered) : 1;
-    const cruiseScaleX = cruiseText.length > 2 ? Math.min(1, cruiseColWidth * 0.98 / cruiseRendered) : 1;
+    const speedColWidth = speedMaxWidth;
+    const cruiseColWidth = cruiseMaxWidth;
+    const speedScaleX = speedText.length > 2 ? Math.min(1, speedMaxWidth * 0.98 / speedRendered) : 1;
+    const cruiseScaleX = cruiseText.length > 2 ? Math.min(1, cruiseMaxWidth * 0.98 / cruiseRendered) : 1;
 
     // Limit / detail / stock fonts are measured from their own zone rects, exactly
     // like the preview's syncHudScale (not the whole main region).
     const limitRect = elements.limitZone?.getBoundingClientRect?.();
+    const mainRect = elements.main?.getBoundingClientRect?.();
     const limitAreaWidth = limitRect?.width || width * 0.52;
-    const limitAreaHeight = limitRect?.height || width * 0.55;
-    const limitSize = Math.max(42, Math.min(220, limitAreaWidth * 0.90, limitAreaHeight * 0.86));
+    const limitAreaHeight = limitRect?.height || mainRect?.height || width * 0.55;
+    const limitSize = Math.max(46, Math.min(250, limitAreaWidth * 0.98, limitAreaHeight * 0.94));
     const limitInnerWidth = Math.max(1, limitSize * 0.66);
     const limitNumUnit = Math.max(1, measure(elements.limit?.textContent || "110", 100) / 100);
     const limitLabelUnit = Math.max(1, measure(elements.limitLabel?.textContent || "", 100) / 100);
     const limitBadgeUnit = Math.max(1, measure(elements.limitBadge?.textContent || "", 100) / 100);
-    const limitFont = Math.max(14, Math.min(72, limitSize * 0.40, limitInnerWidth / limitNumUnit));
-    const limitLabelFont = Math.max(7, Math.min(26, limitSize * 0.142, limitInnerWidth / limitLabelUnit));
-    const badgeFont = Math.max(10, Math.min(34, limitSize * 0.19, (limitSize * 0.80) / limitBadgeUnit));
+    const limitFont = Math.max(14, Math.min(78, limitSize * 0.40, limitInnerWidth / limitNumUnit));
+    const limitLabelFont = Math.max(7, Math.min(28, limitSize * 0.142, limitInnerWidth / limitLabelUnit));
+    const badgeFont = Math.max(10, Math.min(38, limitSize * 0.19, (limitSize * 0.80) / limitBadgeUnit));
+
+    // US MUTCD rectangle: the number fills a wider/taller area than the circle,
+    // with a stacked SPEED/LIMIT caption above it (sized off the same limitSize).
+    const isUsLimit = root.dataset.limitStyle === "us";
+    const usInnerWidth = Math.max(1, limitSize * 0.82 * 0.82);
+    const usCaptionUnit = Math.max(1, measure("LIMIT", 100) / 100);
+    const limitNumberFont = isUsLimit
+      ? Math.max(16, Math.min(108, limitSize * 0.52, usInnerWidth / limitNumUnit))
+      : limitFont;
+    const limitCaptionFont = Math.max(7, Math.min(34, limitSize * 0.145, usInnerWidth / usCaptionUnit));
 
     const detailRect = elements.alertZone?.getBoundingClientRect?.();
-    const detailWidth = detailRect?.width || width * 0.48;
-    const detailHeight = detailRect?.height || width * 0.45;
-    const detailUnit = Math.max(
-      measure(elements.countdown?.textContent || "", 100) / 100,
-      measure(elements.distance?.textContent || "", 100) / 100,
-      measure(elements.alert?.textContent || "", 100) / 100,
-      1,
-    );
-    const detailFont = Math.max(1, Math.min(46, detailWidth * 0.88 / detailUnit, detailHeight * 0.165));
+    const detailWidth = contentWidth(elements.alertZone, width * 0.48);
+    const detailHeight = contentHeight(elements.alertZone, detailRect?.height || width * 0.45);
+    const labelLength = resolveDetailLabelLength(layoutScale, detailWidth);
+    syncDetailLabels(latestModel, labelLength);
+    // Keep the detail area as fixed rows; empty rows stay in the scale budget.
+    const chipCount = 4;
+    const detailLabelUnit = 2.24;
+    const detailValueUnit = 3.40;
+    const detailLineUnit = detailValueUnit + detailLabelUnit + 0.72;
+    const detailFontH = (detailHeight / chipCount) * 0.76;
+    const detailFontW = (detailWidth * 0.90) / detailLineUnit;
+    const detailFont = Math.max(16 * layoutScale, Math.min(78, detailFontW, detailFontH));
 
-    const stockRect = elements.stockZone?.getBoundingClientRect?.();
-    const stockWidth = stockRect?.width || width;
-    const stockHeight = stockRect?.height || width * 0.60;
-    const modeUnit = Math.max(1, measure("NORMAL", 100, getComputedStyle(elements.driveMode).fontFamily) / 100);
-    const modeFrameWidth = stockWidth * 0.48 * 0.92;
-    const modeFont = Math.max(1, Math.min(80, modeFrameWidth / (modeUnit + 0.36), stockHeight * 0.28));
-    const gearUnit = Math.max(1, measure(elements.gear?.textContent || "4", 100) / 100);
-    const gearDriveUnit = Math.max(0, measure("D", 100) * 0.34 / 100);
-    const gearWidth = Math.max(1, stockWidth * 0.52 * 0.88 - 4 * layoutScale);
-    const gearFont = Math.max(1, Math.min(180, gearWidth / (gearUnit + gearDriveUnit), stockHeight * 0.50));
+    const modeFamily = getComputedStyle(elements.driveMode).fontFamily;
+    const modeUnit = Math.max(1, measure("NORMAL", 100, modeFamily) / 100);
+    const modeSize = limitSize;
+    const modeFont = Math.max(1, Math.min(72, modeSize * 0.80 / modeUnit, modeSize * 0.25));
 
-    const style = root.style;
-    style.setProperty("--mini-ui-scale", layoutScale.toFixed(4));
     style.setProperty("--mini-top-font", `${Math.min(tempFont, sourceFont).toFixed(1)}px`);
+    style.setProperty("--mini-speed-slot-width", `${speedColWidth.toFixed(1)}px`);
+    style.setProperty("--mini-set-slot-width", `${cruiseColWidth.toFixed(1)}px`);
+    style.setProperty("--mini-speed-gap", `${speedGap.toFixed(1)}px`);
+    style.setProperty("--mini-gear-left", `${gearLeft.toFixed(1)}px`);
+    style.setProperty("--mini-gear-bottom", `${gearBottom.toFixed(1)}px`);
+    style.setProperty("--mini-gear-font", `${gearFont.toFixed(1)}px`);
+    style.setProperty("--mini-gear-height", `${gearHeight.toFixed(1)}px`);
     style.setProperty("--mini-speed-font", `${speedSize.toFixed(1)}px`);
     style.setProperty("--mini-set-font", `${cruiseSize.toFixed(1)}px`);
     style.setProperty("--mini-speed-scale-x", speedScaleX.toFixed(4));
     style.setProperty("--mini-set-scale-x", cruiseScaleX.toFixed(4));
     style.setProperty("--mini-limit-size", `${limitSize.toFixed(1)}px`);
-    style.setProperty("--mini-limit-font", `${limitFont.toFixed(1)}px`);
+    style.setProperty("--mini-limit-font", `${limitNumberFont.toFixed(1)}px`);
+    style.setProperty("--mini-limit-caption-font", `${limitCaptionFont.toFixed(1)}px`);
     style.setProperty("--mini-limit-label-font", `${limitLabelFont.toFixed(1)}px`);
     style.setProperty("--mini-badge-font", `${badgeFont.toFixed(1)}px`);
     style.setProperty("--mini-alert-font", `${detailFont.toFixed(1)}px`);
+    style.setProperty("--mini-alert-label-font", `${(detailFont * 0.46).toFixed(1)}px`);
+    style.setProperty("--mini-alert-label-width", `${(detailFont * detailLabelUnit).toFixed(1)}px`);
+    style.setProperty("--mini-mode-size", `${modeSize.toFixed(1)}px`);
     style.setProperty("--mini-mode-font", `${modeFont.toFixed(1)}px`);
-    style.setProperty("--mini-gear-font", `${gearFont.toFixed(1)}px`);
   }
 
   function scheduleLayout() {
@@ -204,6 +369,13 @@
 
   function init() {
     window.CarrotMiniHudMode?.bind?.();
+    elements.cpu?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      temperatureUnit = temperatureUnit === "c" ? "f" : "c";
+      saveTemperatureUnit();
+      syncCpuTemperature();
+      scheduleLayout();
+    });
     const onResize = () => scheduleLayout();
     window.addEventListener("resize", onResize, { passive: true });
     window.addEventListener("orientationchange", onResize, { passive: true });

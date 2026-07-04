@@ -1182,6 +1182,76 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   color: var(--md-primary);
 }
 
+.carrot-stage__controlBtn--sound {
+  min-width: 68px;
+}
+
+.carrot-stage__controlBtn--sound.is-active {
+  border-color: color-mix(in srgb, #49dd82 72%, rgba(255, 255, 255, 0.22));
+  background: color-mix(in srgb, #49dd82 18%, var(--md-surface-cont-h));
+  color: #b9ffd2;
+  box-shadow: 0 0 0 1px rgba(73, 221, 130, 0.12), 0 0 14px rgba(73, 221, 130, 0.12), 0 8px 22px rgba(0, 0, 0, 0.24);
+}
+
+.app-dialog--web-sound .app-dialog__sheet {
+  width: min(calc(100vw - 32px), 430px);
+}
+
+.app-dialog--web-sound .app-dialog__body {
+  white-space: normal;
+}
+
+.web-sound-dialog {
+  display: grid;
+  gap: 18px;
+}
+
+.web-sound-dialog__description {
+  margin: 0;
+  color: var(--md-on-surface-var);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.web-sound-dialog__toggle {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 4px;
+  color: var(--md-on-surface);
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.web-sound-dialog__volume {
+  display: grid;
+  gap: 10px;
+  padding: 2px 4px 0;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.web-sound-dialog__volume-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.web-sound-dialog__volume-head output {
+  color: var(--md-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.web-sound-dialog__volume-slider {
+  width: 100%;
+  accent-color: var(--md-primary);
+}
+
 .carrot-stage__controlBtn--record {
   min-width: 74px;
 }

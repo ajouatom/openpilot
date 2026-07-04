@@ -132,9 +132,9 @@
   <link rel="stylesheet" href="/css/pages/tools/base.css?v=2605-43" />
   <link rel="stylesheet" href="/css/pages/tools/qr.css?v=2605-40" />
   <link rel="stylesheet" href="/css/pages/tools/main.css?v=2607-42" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2607-43" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2607-45" />
   <link rel="stylesheet" href="/css/components/nav_hud.css?v=2607-42" />
-  <link rel="stylesheet" href="/css/components/mini_hud.css?v=2607-06" />
+  <link rel="stylesheet" href="/css/components/mini_hud.css?v=2607-82" />
   <link rel="stylesheet" href="/css/responsive.css?v=2607-44" />
   <link rel="stylesheet" href="/css/vendor/plyr.css?v=3.7.8" />
 </head>
@@ -527,7 +527,8 @@
           <div id="carrotStageStatus" class="carrot-stage__status">waiting stream...</div>
         </div>
         <div id="carrotStageDebug" class="carrot-stage__debug">LD:- LT:- SR:-</div>
-        <div class="carrot-stage__controls" role="group" aria-label="Display and recording controls">
+        <div class="carrot-stage__controls" role="group" aria-label="Sound, display and recording controls">
+          <button id="btnWebSound" class="carrot-stage__controlBtn carrot-stage__controlBtn--sound" type="button" aria-label="Web sound">Sound</button>
           <button id="btnDisplayModeCycle" class="carrot-stage__controlBtn carrot-stage__controlBtn--display" type="button" aria-label="Display mode">Normal</button>
           <button id="btnRecordToggle" class="carrot-stage__controlBtn carrot-stage__controlBtn--record" type="button" aria-label="Record">Record</button>
         </div>
@@ -541,7 +542,7 @@
   <section id="carrotMiniHud" class="carrot-mini-hud" hidden aria-label="Carrot compact driving HUD">
     <div class="carrot-mini-hud__top">
       <div class="carrot-mini-hud__top-cell">
-        <span data-mini-hud-cpu>CPU:--°</span>
+        <button class="carrot-mini-hud__cpu" type="button" data-mini-hud-cpu aria-label="CPU temperature">CPU:--°C</button>
       </div>
       <div class="carrot-mini-hud__top-cell">
         <span data-mini-hud-source>STOCK</span>
@@ -550,32 +551,59 @@
 
     <div class="carrot-mini-hud__main">
       <div class="carrot-mini-hud__limit" data-mini-hud-limit-zone>
-        <div class="carrot-mini-hud__limit-sign">
-          <span data-mini-hud-limit>--</span>
-          <small data-mini-hud-limit-label hidden></small>
+        <div class="carrot-mini-hud__limit-visual">
+          <div class="carrot-mini-hud__limit-sign">
+            <div class="carrot-mini-hud__limit-us-caption" aria-hidden="true">
+              <span>SPEED</span><span>LIMIT</span>
+            </div>
+            <span data-mini-hud-limit>--</span>
+            <small data-mini-hud-limit-label hidden></small>
+          </div>
+          <img class="carrot-mini-hud__alert-badge" data-mini-hud-alert-badge alt="" hidden>
         </div>
         <div class="carrot-mini-hud__limit-badge" data-mini-hud-limit-badge hidden></div>
       </div>
 
-      <div class="carrot-mini-hud__alert" data-mini-hud-alert-zone>
-        <span data-mini-hud-countdown></span>
-        <span data-mini-hud-distance></span>
-        <strong data-mini-hud-alert></strong>
-      </div>
-
-      <div class="carrot-mini-hud__stock" data-mini-hud-stock-zone hidden>
+      <div class="carrot-mini-hud__stock-mode" data-mini-hud-stock-mode hidden>
         <div class="carrot-mini-hud__drive-mode" data-mini-hud-drive-kind="normal">
           <span data-mini-hud-drive-mode>NORMAL</span>
         </div>
-        <div class="carrot-mini-hud__gear" aria-label="Current gear step">
-          <small>D</small><strong data-mini-hud-gear>--</strong>
-        </div>
       </div>
+
+      <div class="carrot-mini-hud__alert" data-mini-hud-alert-zone>
+        <span class="carrot-mini-hud__chip" data-mini-hud-countdown-zone>
+          <small class="carrot-mini-hud__chip-label">남은</small>
+          <b data-mini-hud-countdown></b>
+        </span>
+        <span class="carrot-mini-hud__chip" data-mini-hud-distance-zone>
+          <small class="carrot-mini-hud__chip-label">거리</small>
+          <b data-mini-hud-distance></b>
+        </span>
+        <span class="carrot-mini-hud__chip" data-mini-hud-gap-zone>
+          <small class="carrot-mini-hud__chip-label">GAP</small>
+          <b class="carrot-mini-hud__gap-value">
+            <span data-mini-hud-gap></span>
+            <span class="carrot-mini-hud__gap-signal" data-mini-hud-gap-signal aria-hidden="true">
+              <i></i><i></i><i></i><i></i>
+            </span>
+          </b>
+        </span>
+        <strong class="carrot-mini-hud__chip carrot-mini-hud__temp" data-mini-hud-temp-zone data-mini-hud-temp-decel="0">
+          <small class="carrot-mini-hud__chip-label" data-mini-hud-temp-label></small>
+          <b data-mini-hud-temp-speed></b>
+        </strong>
+      </div>
+
     </div>
 
     <div class="carrot-mini-hud__speed-row">
       <div class="carrot-mini-hud__speed"><span data-mini-hud-speed>--</span></div>
-      <div class="carrot-mini-hud__set-speed"><span data-mini-hud-set-speed>--</span></div>
+      <div class="carrot-mini-hud__set-speed">
+        <small class="carrot-mini-hud__gear-badge" data-mini-hud-gear-badge data-mini-hud-gear-known="0">
+          <span data-mini-hud-gear-label hidden></span><strong data-mini-hud-gear>--</strong>
+        </small>
+        <span data-mini-hud-set-speed>--</span>
+      </div>
     </div>
   </section>
 
@@ -786,9 +814,9 @@
   <script src="/js/vendor/qrcode-generator.js?v=1.4.4"></script>
   <script src="/js/vendor/jsQR.js?v=1.4.0"></script>
   <script src="/js/translations/registry.js?v=2605-09"></script>
-  <script src="/js/translations/ko.js?v=2607-30"></script>
-  <script src="/js/translations/en.js?v=2607-30"></script>
-  <script src="/js/translations/zh.js?v=2607-30"></script>
+  <script src="/js/translations/ko.js?v=2607-32"></script>
+  <script src="/js/translations/en.js?v=2607-32"></script>
+  <script src="/js/translations/zh.js?v=2607-32"></script>
   <script src="/js/realtime/hud_card.js?v=2607-42"></script>
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2607-01"></script>
@@ -814,6 +842,7 @@
   <script src="/js/pages/setting_device_actions.js?v=2607-02"></script>
   <script src="/js/pages/setting_device.js?v=2607-02"></script>
   <script src="/js/pages/tools_web_settings.js?v=2605-10"></script>
+  <script src="/js/realtime/web_sound.js?v=2607-07"></script>
   <script src="/js/pages/tools_notifications.js?v=2607-42"></script>
   <script src="/js/pages/tools.js?v=2607-42"></script>
   <script src="/js/pages/tools_settings_qr.js?v=2605-11"></script>
@@ -823,9 +852,10 @@
   <script src="/js/pages/logs/screenrecord.js?v=2605-15"></script>
   <script src="/js/pages/terminal.js?v=2607-44"></script>
   <script src="/js/realtime/raw_capnp.js?v=2604-05"></script>
-  <script src="/js/realtime/mini_hud_model.js?v=2607-04"></script>
-  <script src="/js/realtime/mini_hud_mode.js?v=2607-10"></script>
-  <script src="/js/realtime/mini_hud.js?v=2607-06"></script>
+  <script src="/js/realtime/mini_hud_model.js?v=2607-14"></script>
+  <script src="/js/realtime/mini_hud_mode.js?v=2607-15"></script>
+  <script src="/js/realtime/mini_hud.js?v=2607-84"></script>
+  <script src="/js/realtime/mini_hud_demo.js?v=2607-63"></script>
   <script src="/js/realtime/vision_state.js?v=2605-01"></script>
   <script src="/js/realtime/vision_rtc.js?v=2606-06"></script>
   <script src="/js/realtime/vision_raw.js?v=2607-04"></script>

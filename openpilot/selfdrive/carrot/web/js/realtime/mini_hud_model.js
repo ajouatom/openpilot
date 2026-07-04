@@ -38,6 +38,19 @@
     return `${(value / 1000).toFixed(value >= 10000 ? 1 : 2)}km`;
   }
 
+  function displayGap(value) {
+    const number = integer(value);
+    return number != null && number >= 1 && number <= 9 ? String(number) : "";
+  }
+
+  function displayGear(value) {
+    const gear = String(value || "").trim().toUpperCase();
+    if (!gear || gear === "UNKNOWN") return "";
+    const aliases = { PARK: "P", REVERSE: "R", NEUTRAL: "N", DRIVE: "D", SPORT: "S", LOW: "L" };
+    if (aliases[gear]) return aliases[gear];
+    return gear.slice(0, 2);
+  }
+
   function alertDescriptor(type) {
     if (type === 100) return { name: "POLICE", kind: "police" };
     if (type === 22) return { name: "BUMP", kind: "bump" };
@@ -47,9 +60,11 @@
   }
 
   function sourceMode(carrotMan) {
+    // Waze cannot be reliably distinguished from other nav providers in normal
+    // driving (CarrotMan carries no provider field; only xSpdType 100/101 and
+    // desiredSource "waze"/"police" hint at it, and only during an active alert).
+    // So the compact HUD merges every non-stock nav source into a single "nav".
     const type = integer(carrotMan?.xSpdType, -1);
-    const desiredSource = String(carrotMan?.desiredSource || "").trim().toLowerCase();
-    if (WAZE_TYPES.has(type) || desiredSource === "police" || desiredSource === "waze") return "waze";
     if (type >= 0) return "nav";
     if (integer(carrotMan?.activeCarrot, 0) > 1) return "nav";
     return "stock";
@@ -75,13 +90,29 @@
     const alertVisible = source !== "stock" && alertType >= 0 && ((alertDistance ?? 0) > 0 || WAZE_TYPES.has(alertType));
     const gearStep = integer(payload?.gearStep);
 
+    // Active speed-control source line ("road 55" etc). We read desiredSource
+    // straight from carrotMan (not payload.temp, which blanks the label while
+    // decelerating) so the compact HUD always shows the winning source label.
+    const desiredSpeed = finite(carrotMan?.desiredSpeed);
+    const vSetKph = finite(payload?.vSetKph);
+    const tempVisible = source !== "stock" && desiredSpeed != null && desiredSpeed > 0;
+
     return {
       source,
       isMetric,
+      // metric → Korean/Vienna red circle, imperial → US MUTCD rectangle.
+      limitStyle: isMetric ? "kr" : "us",
       cpu: integer(payload?.cpuTempC),
       speed: displaySpeed(payload?.vEgoKph, isMetric),
       setSpeed: displaySpeed(payload?.vSetKph, isMetric),
       roadLimit: displayLimit(roadLimitKph, isMetric),
+      gap: displayGap(payload?.tfGap ?? payload?.tfBars),
+      temp: {
+        visible: tempVisible,
+        label: tempVisible ? String(carrotMan?.desiredSource || "").trim() : "",
+        speed: tempVisible ? displaySpeed(desiredSpeed, isMetric) : "",
+        decel: tempVisible && vSetKph != null && desiredSpeed < vSetKph,
+      },
       alert: {
         visible: alertVisible,
         name: alertVisible ? alert.name : "",
@@ -92,9 +123,10 @@
         section: alertVisible && alert.kind === "section",
       },
       driveMode: driveMode(payload),
+      gear: displayGear(payload?.gear),
       gearStep: gearStep != null && gearStep >= 1 && gearStep <= 7 ? gearStep : null,
     };
   }
 
-  window.CarrotMiniHudModel = { build, displayDistance, displaySpeed };
+  window.CarrotMiniHudModel = { build, displayDistance, displaySpeed, displayGap, displayGear };
 })();
