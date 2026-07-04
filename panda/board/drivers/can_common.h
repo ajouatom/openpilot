@@ -208,6 +208,13 @@ void ignition_can_hook(CANPacket_t *to_push) {
       ignition_can_cnt = 0U;
     }
 
+    // Volkswagen MEB exception (ID.4, ID.3, etc.)
+    // Signal: 0x3C0 bus 0, 4 bytes, byte[2] bit1 = ignition
+    if ((addr == 0x3C0) && (len == 4)) {
+      ignition_can = (GET_BYTE(to_push, 2) >> 1) & 1U;
+      ignition_can_cnt = 0U;
+    }
+
   }
 }
 

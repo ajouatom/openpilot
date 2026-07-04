@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum, IntFlag, StrEnum
 
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, structs, uds
+from opendbc.car.lateral import CurvatureSteeringLimits
 from opendbc.can import CANDefine
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column, \
@@ -15,6 +16,14 @@ NetworkLocation = structs.CarParams.NetworkLocation
 TransmissionType = structs.CarParams.TransmissionType
 GearShifter = structs.CarState.GearShifter
 Button = namedtuple('Button', ['event_type', 'can_addr', 'can_msg', 'values'])
+
+
+# VW MEB 곡률 폐루프 PID 게인/한계 (controlsd에서 사용하는 단일 소스)
+# infiniteCable2 LatControlCurvature 튜닝: kp/ki는 (BP m/s, V), 실차(ID.4 MK1) 검증값
+MEB_CURVATURE_PID_KP = ([10., 40.], [0., 1.45])
+MEB_CURVATURE_PID_KI = ([10., 40.], [0., 0.12])
+MEB_CURVATURE_PID_KF = 1.0
+MEB_CURVATURE_MAX = 0.2
 
 
 class CarControllerParams:
@@ -70,6 +79,47 @@ class CarControllerParams:
         "laneAssistUnavailNoSensorView": 3,  # "Lane Assist not available. No sensor view."
         "laneAssistTakeOver": 4,  # "Lane Assist: Please Take Over Steering"
         "laneAssistDeactivTrailer": 5,  # "Lane Assist: no function with trailer"
+      }
+
+    elif CP.flags & VolkswagenFlags.MEB:
+      self.AEB_CONTROL_STEP        = 100   # AWV_03 message frequency 1Hz
+      self.AEB_HUD_STEP            = 20    # MEB_AWV_01 message frequency 5Hz
+      self.LDW_STEP                = 10    # LDW_02 message frequency 10Hz
+      self.ACC_HUD_STEP            = 6     # MEB_ACC_01 message frequency 16Hz
+      self.STEER_DRIVER_ALLOWANCE  = 60    # Driver torque 0.6 Nm
+      self.STEER_DRIVER_SLIGHT_PRESS = 15  # Driver torque 0.15 Nm
+      self.STEER_DRIVER_MAX        = 300   # Driver torque 3.0 Nm
+      self.STEERING_POWER_MAX      = 50    # HCA_03 maximum steering power %
+      self.STEERING_POWER_MIN      = 4     # HCA_03 minimum steering power %
+      self.STEERING_POWER_STEP     = 2     # HCA_03 steering power counter steps
+
+      self.CURVATURE_LIMITS: CurvatureSteeringLimits = CurvatureSteeringLimits(0.195)
+
+      self.shifter_values = can_define.dv["Getriebe_11"]["GE_Fahrstufe"]
+      self.hca_status_values = can_define.dv["QFK_01"]["LatCon_HCA_Status"]
+
+      base_buttons = [
+        Button(structs.CarState.ButtonEvent.Type.setCruise, "GRA_ACC_01", "GRA_Tip_Setzen", [1]),
+        Button(structs.CarState.ButtonEvent.Type.resumeCruise, "GRA_ACC_01", "GRA_Tip_Wiederaufnahme", [1]),
+        Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_ACC_01", "GRA_Tip_Hoch", [1]),
+        Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_ACC_01", "GRA_Tip_Runter", [1]),
+        Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [3]),
+      ]
+      # 메인 스위치 종류에 따라 cancel 매핑 분리 (infiniteCable2 방식):
+      # - 모멘터리(getastet) 메인버튼: 메인버튼(GRA_Hauptschalter)을 cancel로 사용
+      # - 래칭(gerastet) 토글 스위치: 별도 물리 취소버튼(GRA_Abbrechen)을 cancel로 사용
+      # 래칭 메인스위치를 cancel로 매핑하면 크루즈 off 시 openpilot 전체가 해제(전원 꺼짐)됨 -> 분리.
+      self.BUTTONS = base_buttons + [
+        Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_ACC_01", "GRA_Hauptschalter", [1]),
+      ]
+      self.BUTTONS_ALT = base_buttons + [
+        Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_ACC_01", "GRA_Abbrechen", [1]),
+      ]
+
+      self.LDW_MESSAGES = {
+        "none": 0,                        # Nothing to display
+        "laneAssistTakeOverUrgent": 4,    # "Lane Assist: Please Take Over Steering" (red)
+        "laneAssistTakeOver": 8,          # "Lane Assist: Please Take Over Steering" (white)
       }
 
     else:
@@ -140,9 +190,14 @@ class VolkswagenSafetyFlags(IntFlag):
 class VolkswagenFlags(IntFlag):
   # Detected flags
   STOCK_HCA_PRESENT = 1
+  STOCK_KLR_PRESENT = 64  # capacitive steering wheel module present (KLR_01) -> EA hands-on pacification
+  STOCK_EA_PRESENT = 16384  # Emergency Assist module present (EA_01/EA_02) -> relay EA HUD (wheel icon)
 
   # Static flags
   PQ = 2
+  MEB = 16
+  MEB_GEN2 = 128
+  MQB_EVO = 256  # referenced by MEB longitudinal (mebcan); not set for ID.4 MK1
 
 
 @dataclass
@@ -160,6 +215,16 @@ class VolkswagenPQPlatformConfig(VolkswagenMQBPlatformConfig):
 
   def init(self):
     self.flags |= VolkswagenFlags.PQ
+
+
+@dataclass
+class VolkswagenMEBPlatformConfig(PlatformConfig):
+  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.pt: 'vw_meb', Bus.radar: 'vw_meb'})
+  chassis_codes: set[str] = field(default_factory=set)
+  wmis: set[WMI] = field(default_factory=set)
+
+  def init(self):
+    self.flags |= VolkswagenFlags.MEB
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -212,7 +277,7 @@ class VWCarDocs(CarDocs):
 # FW_VERSIONS for that existing CAR.
 
 class CAR(Platforms):
-  config: VolkswagenMQBPlatformConfig | VolkswagenPQPlatformConfig
+  config: VolkswagenMQBPlatformConfig | VolkswagenPQPlatformConfig | VolkswagenMEBPlatformConfig
 
   VOLKSWAGEN_ARTEON_MK1 = VolkswagenMQBPlatformConfig(
     [
@@ -441,6 +506,15 @@ class CAR(Platforms):
     chassis_codes={"3V", "NP"},
     wmis={WMI.SKODA},
   )
+  VOLKSWAGEN_ID4_MK1 = VolkswagenMEBPlatformConfig(
+    [
+      VWCarDocs("Volkswagen ID.4 2021-23"),
+      VWCarDocs("Volkswagen ID.5 2022-23"),
+    ],
+    VolkswagenCarSpecs(mass=2224, wheelbase=2.77),
+    chassis_codes={"E2"},
+    wmis={WMI.VOLKSWAGEN_USA_SUV, WMI.VOLKSWAGEN_EUROPE_CAR, WMI.VOLKSWAGEN_EUROPE_SUV},
+  )
 
 
 def match_fw_to_car_fuzzy(live_fw_versions, vin, offline_fw_versions) -> set[str]:
@@ -501,6 +575,7 @@ VOLKSWAGEN_VERSION_REQUEST_MULTI = bytes([uds.SERVICE_TYPE.READ_DATA_BY_IDENTIFI
 VOLKSWAGEN_VERSION_RESPONSE = bytes([uds.SERVICE_TYPE.READ_DATA_BY_IDENTIFIER + 0x40])
 
 VOLKSWAGEN_RX_OFFSET = 0x6a
+VOLKSWAGEN_RX_OFFSET_CANFD = 0x20000  # MEB platform CAN FD engine/inverter ECU offset
 
 FW_QUERY_CONFIG = FwQueryConfig(
   requests=[request for bus, obd_multiplexing in [(1, True), (1, False), (0, False)] for request in [
@@ -519,6 +594,14 @@ FW_QUERY_CONFIG = FwQueryConfig(
       bus=bus,
       obd_multiplexing=obd_multiplexing,
     ),
+    Request(
+      [VOLKSWAGEN_VERSION_REQUEST_MULTI],
+      [VOLKSWAGEN_VERSION_RESPONSE],
+      whitelist_ecus=[Ecu.engine],
+      rx_offset=VOLKSWAGEN_RX_OFFSET_CANFD,
+      bus=bus,
+      obd_multiplexing=obd_multiplexing,
+    ),
   ]],
   non_essential_ecus={Ecu.eps: list(CAR)},
   extra_ecus=[(Ecu.fwdCamera, 0x74f, None)],
@@ -526,3 +609,12 @@ FW_QUERY_CONFIG = FwQueryConfig(
 )
 
 DBC = CAR.create_dbc_map()
+
+if __name__ == "__main__":
+  cars = []
+  for platform in CAR:
+    for doc in platform.config.car_docs:
+      cars.append(doc.name)
+  cars.sort()
+  for c in cars:
+    print(c)

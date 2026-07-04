@@ -3,6 +3,13 @@ from openpilot.cereal import log
 from opendbc.car.vehicle_model import ACCELERATION_DUE_TO_GRAVITY
 from openpilot.common.realtime import DT_CTRL, DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
+from opendbc.car.volkswagen.values import VolkswagenFlags
+
+
+def is_volkswagen_meb(CP) -> bool:
+  # VW MEB(ID.4/ID.5) 판별 단일 소스. 플랫폼 플래그 기반이라 향후 다른 VW angle 제어
+  # 차종이 추가되어도 MEB 전용 경로(곡률 폐루프, 리드선택, FCW 게이트)가 오활성되지 않음.
+  return CP.brand == "volkswagen" and bool(CP.flags & VolkswagenFlags.MEB)
 import numpy as np
 
 MIN_SPEED = 1.0

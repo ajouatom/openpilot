@@ -163,6 +163,7 @@ class VCruiseCarrot:
     self.button_cnt = 0
     self.button_prev = ButtonType.unknown
     self.button_long_time = 40
+    self.button_big_step = False  # VW stage-2 (swipe) press -> immediate +10 (round) on release
 
     self.is_metric = True
 
@@ -393,6 +394,10 @@ class VCruiseCarrot:
     # long press tracking
     if self.button_cnt > 0:
       self.button_cnt += 1
+      # VW 쓸어올리기(2단) 래치: GRA_Tip_Stufe_2는 2단으로 밀고 있는 동안만 1이고 뗄 때는 이미 0.
+      # 뗄 때 샘플하면 항상 짧은누름으로 오인되므로, 누르고 있는 동안 한 번이라도 1이면 래치.
+      if self.button_prev in [ButtonType.accelCruise, ButtonType.decelCruise] and CS.cruiseSpeedBigStep:
+        self.button_big_step = True
 
     for b in buttonEvents:
       bt = b.type
@@ -411,12 +416,23 @@ class VCruiseCarrot:
       ]:
         self.button_cnt = 1
         self.button_prev = bt
+        # VW 쓸어올리기(2단): 누르기 시작 시점의 GRA_Tip_Stufe_2 샘플 (이후 유지 중 래치로 보강)
+        self.button_big_step = bt in [ButtonType.accelCruise, ButtonType.decelCruise] and CS.cruiseSpeedBigStep
         self.button_long_time = self._cruise_button_long_delay if bt in [ButtonType.accelCruise, ButtonType.decelCruise] else self._cruise_button_long_delay + 30
 
       elif not b.pressed and self.button_cnt > 0 and bt == self.button_prev:
+        # VW 쓸어올리기: 래치된 self.button_big_step 사용 (뗄 때 신호를 다시 읽으면 이미 0)
         if bt == ButtonType.cancel:
           button_type = bt
-        elif not self.long_pressed:          
+        elif self.button_big_step and not self.long_pressed and bt in [ButtonType.accelCruise, ButtonType.decelCruise]:
+          # VW swipe (stage-2): jump to next multiple of V_CRUISE_DELTA (=+10 like the stock stalk)
+          mod = button_kph % V_CRUISE_DELTA
+          if bt == ButtonType.accelCruise:
+            button_kph += V_CRUISE_DELTA - mod
+          else:
+            button_kph -= V_CRUISE_DELTA - (-mod % V_CRUISE_DELTA)
+          button_type = bt
+        elif not self.long_pressed:
           if bt == ButtonType.accelCruise:
             unit = SPEED_UP_UNIT if is_metric else SPEED_UP_UNIT * CV.MPH_TO_KPH
             button_kph = math.ceil((button_kph + 0.01) / unit) * unit
@@ -426,6 +442,7 @@ class VCruiseCarrot:
           button_type = bt
         self.long_pressed = False
         self.button_cnt = 0
+        self.button_big_step = False
 
     # Long press 처리
     if self.button_cnt > self.button_long_time:

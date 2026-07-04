@@ -261,6 +261,8 @@ struct CarState {
   rightRearLatDist @80 :Float32; # rear-right corner radar lateral distance
   trailerConnected @81 :Bool; # trailer connection state after disconnect debounce
   ureaGauge @82 :Float32; # diesel exhaust fluid/urea tank level from 0.0 to 1.0
+  cruiseSpeedBigStep @83 :Bool; # VW: cruise +/- button is a stage-2 (swipe/long) press -> use big increment
+  steeringCurvature @84 :Float32; # VW MEB: measured road curvature from EPS (QFK_01), rad/m. Used for closed-loop curvature correction.
 
   struct Tpms {
     fl @0 :Float32;
@@ -456,6 +458,9 @@ struct CarControl {
     leadRadar @15: Int16;
     modelDesire @16: Int16;
     atcDistance @17: Float32;
+    naviSpeedLimit @18: Int16;  # VW MEB cluster: TMAP 단속카메라/구간단속 제한속도 (kph, 0=없음) -> ACC_Tempolimit + event 5
+    naviEventType @19: Int16;   # VW MEB cluster: 0=없음 1=커브(event 6) 2=교차로 회전(event 9) 3=분기/고속도로 출구(event 11)
+    naviEventSpeed @20: Int16;  # VW MEB cluster: 커브/교차로 목표속도 (kph) -> ACC_Event_Wunschgeschw
 
     # not used with the dash, TODO: separate structs for dash UI and device UI
     audibleAlert @5: AudibleAlert;
