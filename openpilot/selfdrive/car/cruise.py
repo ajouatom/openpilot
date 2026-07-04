@@ -354,8 +354,10 @@ class VCruiseCarrot:
     else:
       self.v_cruise_kph = np.clip(v_cruise_kph, self._cruise_speed_min, self._cruise_speed_max) #max(20, self.v_ego_kph_set) #V_CRUISE_UNSET
       self.v_cruise_cluster_kph = self.v_cruise_kph #V_CRUISE_UNSET
-      #if self.cruise_state_available_last: # 최초 한번이라도 cruiseState.available이 True였다면
-      #  self._lat_enabled = False
+      # KIA_EV_SK3 전용: 크루즈 메인 ON->OFF 전환 순간 상시조향도 함께 종료
+      if self.cruise_state_available_last and self.CP.carFingerprint == "KIA_EV_SK3":
+        self._lat_enabled = False
+        self._add_log("Lateral disabled (main cruise off)")
 
     self.cruise_state_available_last = CS.cruiseState.available
     self.enabled_last = CC.enabled
