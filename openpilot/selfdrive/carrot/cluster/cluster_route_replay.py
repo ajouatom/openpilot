@@ -2973,8 +2973,17 @@ def parse_corner_radar_message(
 @cache
 def hyundai_canfd_corner_dbc_signals() -> dict[int, dict[str, DbcSignalSpec]]:
     openpilot_root = find_openpilot_root_for_schema(Path(__file__).resolve().parent)
-    dbc_path = openpilot_root / "opendbc_repo" / "opendbc" / "dbc" / "generator" / "hyundai" / "hyundai_canfd.dbc"
+    dbc_path = find_opendbc_file(
+        openpilot_root,
+        "opendbc",
+        "dbc",
+        "generator",
+        "hyundai",
+        "hyundai_canfd.dbc",
+    )
     signals: dict[int, dict[str, DbcSignalSpec]] = {address: {} for address in CORNER_RADAR_DBC_MESSAGES}
+    if dbc_path is None:
+        return signals
     current_address: int | None = None
     with open(dbc_path, encoding="utf-8") as dbc_file:
         for line in dbc_file:
@@ -3312,9 +3321,9 @@ def load_openpilot_log_schema() -> Any:
 def prepare_schema_copy() -> Path:
     openpilot_root = find_openpilot_root_for_schema(Path(__file__).resolve().parent)
     cereal_root = openpilot_root / "cereal"
-    car_schema = openpilot_root / "opendbc_repo" / "opendbc" / "car" / "car.capnp"
-    if not car_schema.exists():
-        raise RuntimeError(f"openpilot car schema not found: {car_schema}")
+    car_schema = find_opendbc_file(openpilot_root, "opendbc", "car", "car.capnp")
+    if car_schema is None:
+        raise RuntimeError(f"openpilot car schema not found near: {openpilot_root}")
 
     schema_dir = Path(tempfile.gettempdir()) / ROUTE_SCHEMA_CACHE_NAME
     include_dir = schema_dir / "include"
@@ -3328,12 +3337,20 @@ def prepare_schema_copy() -> Path:
 
 def find_openpilot_root_for_schema(start: Path) -> Path:
     for path in (start, *start.parents):
-        if (path / "cereal").exists() and (path / "opendbc_repo").exists():
+        if (path / "cereal").exists():
             return path
         nested = path / "openpilot"
-        if (nested / "cereal").exists() and (nested / "opendbc_repo").exists():
+        if (nested / "cereal").exists():
             return nested
     return start / "openpilot"
+
+
+def find_opendbc_file(openpilot_root: Path, *relative_parts: str) -> Path | None:
+    for root in (openpilot_root, openpilot_root.parent, *openpilot_root.parents):
+        candidate = root / "opendbc_repo" / Path(*relative_parts)
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def read_log_bytes(path: Path) -> bytes:
