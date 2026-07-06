@@ -1,5 +1,7 @@
 import math
+import os
 
+from opendbc import DBC_PATH
 from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import RadarInterfaceBase
@@ -18,6 +20,7 @@ RADAR_MSG_COUNT2 = 32
 CORNER_OBJECT_START_ADDR = 0x235
 CORNER_OBJECT_MSG_COUNT = 20
 CORNER_OBJECT_TRACK_ID_OFFSET = 200
+CORNER_OBJECT_DBC = 'hyundai_canfd_corner_radar_generated'
 
 # POC for parsing corner radars: https://github.com/commaai/openpilot/pull/24221/
 
@@ -41,10 +44,15 @@ def get_corner_object_can_parser(CP, enabled):
   if not enabled or not (CP.flags & HyundaiFlags.CANFD):
     return None
 
+  dbc_path = os.path.join(DBC_PATH, f"{CORNER_OBJECT_DBC}.dbc")
+  if not os.path.exists(dbc_path):
+    print(f"RadarInterface: missing {CORNER_OBJECT_DBC}.dbc, corner radar disabled")
+    return None
+
   CAN = CanBus(CP)
   messages = [("CORNER_RADAR_STATUS_230", 33)]
   messages += [(f"CORNER_RADAR_OBJECTS_{addr:x}", 33) for addr in range(CORNER_OBJECT_START_ADDR, CORNER_OBJECT_START_ADDR + CORNER_OBJECT_MSG_COUNT)]
-  return CANParser('hyundai_canfd_corner_radar_generated', messages, CAN.ACAN)
+  return CANParser(CORNER_OBJECT_DBC, messages, CAN.ACAN)
 
 def get_radar_can_parser_scc(CP):
   CAN = CanBus(CP)

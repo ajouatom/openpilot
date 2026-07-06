@@ -1518,6 +1518,7 @@ class RouteLogParser:
                 source_service != "sendcan"
                 and CORNER_OBJECT_START_ADDRESS <= address <= CORNER_OBJECT_END_ADDRESS
                 and is_hyundai_a_can_bus(bus)
+                and len(data) == 32
             ):
                 label = corner_object_radar_point_label(address)
                 point = decode_hyundai_corner_object_radar_point(address, data, self.current_speed_kph)
@@ -3114,7 +3115,7 @@ def decode_hyundai_corner_object_radar_point(
     data: bytes,
     ego_speed_kph: float,
 ) -> RadarPoint | None:
-    if len(data) < 17:
+    if len(data) != 32:
         return None
     quality = dbc_unsigned(data, 24, 7, "le")
     alive_age = dbc_unsigned(data, 32, 8, "le")
