@@ -1658,6 +1658,19 @@ def radar_points_for_display(state: ClusterUiState) -> tuple[RadarPoint, ...]:
     return merged_radar_points(points, state)
 
 
+def radar_point_is_raw_corner(point: RadarPoint) -> bool:
+    return point.source == "cornerRadar"
+
+
+def raw_corner_radar_points(points: tuple[RadarPoint, ...]) -> tuple[RadarPoint, ...]:
+    corners = tuple(point for point in points if radar_point_is_raw_corner(point))
+    return tuple(sorted(corners, key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label)))
+
+
+def detected_vehicle_is_rear_corner_summary(vehicle: DetectedVehicle) -> bool:
+    return vehicle.label in ("LR", "RR") and vehicle_source_is_adas(vehicle.source)
+
+
 def detected_vehicle_is_zero_radar_sample(vehicle: DetectedVehicle) -> bool:
     if not radar_position_is_zero(vehicle.longitudinal_m, vehicle.lateral_m):
         return False
@@ -2108,7 +2121,7 @@ def radar_vehicle_box(
     elif radar_point_is_cross_traffic(point):
         body_color = AMBER
     else:
-        body_color = vehicle_color_for_source("radarPoint", theme, state.radar_source_color_mode)
+        body_color = vehicle_color_for_source(point.source, theme, state.radar_source_color_mode)
     forward_m = render_scene_forward_m(point.longitudinal_m)
     center_x_m = radar_point_display_lateral_m(point, lane_width_m)
     right_x, right_y, forward_x, forward_y = radar_point_vehicle_heading(point, state)
@@ -2128,7 +2141,7 @@ def radar_vehicle_box(
         outline_color=rgba(darken(body_color, 0.42), min(235, alpha)),
         confidence=confidence,
         label=point.label,
-        source="radarPoint",
+        source=point.source,
         longitudinal_m=point.longitudinal_m,
         relative_speed_mps=point.relative_speed_mps,
         absolute_speed_kph=radar_point_absolute_speed_kph(point, state),
@@ -3224,8 +3237,14 @@ def build_cluster_scene(
 ) -> ClusterScene:
     profile_stage = profile_scene_start(profile_add)
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
-    display_radar_points = radar_points_for_display(state)
+    raw_corner_points = raw_corner_radar_points(state.radar_points)
+    raw_corner_active = bool(raw_corner_points)
+    display_radar_points = raw_corner_points if raw_corner_active else radar_points_for_display(state)
     display_detected_vehicles = detected_vehicles_without_zero_radar_samples(state.detected_vehicles)
+    if raw_corner_active:
+        display_detected_vehicles = tuple(
+            vehicle for vehicle in display_detected_vehicles if detected_vehicle_is_rear_corner_summary(vehicle)
+        )
     if display_radar_points is not state.radar_points or display_detected_vehicles != state.detected_vehicles:
         state = replace(state, radar_points=display_radar_points, detected_vehicles=display_detected_vehicles)
     anchor_x_m = ego_anchor_x_m(state, lane_width_m)
@@ -3233,7 +3252,11 @@ def build_cluster_scene(
     relative_scene_x_offset_m = -scene_shift_x_m
     camera = scene_camera(state, lane_width_m, anchor_x_m)
     camera_active = state.surround_view_active
-    selected_radar_vehicle_points = radar_vehicle_points(state, lane_width_m)
+    selected_radar_vehicle_points = (
+        raw_corner_points
+        if raw_corner_active
+        else radar_vehicle_points(state, lane_width_m)
+    )
     selected_radar_vehicle_boxes = tuple(
         radar_vehicle_box(point, state, lane_width_m, theme)
         for point in selected_radar_vehicle_points
@@ -3355,7 +3378,9 @@ def build_cluster_scene(
     )
     merged_radar_labels = frozenset[str]()
     if route_mode:
-        if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+        if raw_corner_active:
+            merged_detected_vehicles = state.detected_vehicles
+        elif state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
             merged_detected_vehicles = state.detected_vehicles
         else:
             merged_detected_vehicles = detected_vehicles_with_merged_radar(
@@ -3456,15 +3481,18 @@ def build_cluster_scene(
     profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    hidden_merged_radar_points = tuple(point for point in state.radar_points if point.label in merged_radar_labels)
-    radar_points = radar_point_markers(
-        state,
-        lane_width_m,
-        (*selected_radar_vehicle_points, *hidden_merged_radar_points),
-        min_forward_m=road_start_m,
-        max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
-        x_offset_m=relative_scene_x_offset_m,
-    )
+    if raw_corner_active:
+        radar_points = ()
+    else:
+        hidden_merged_radar_points = tuple(point for point in state.radar_points if point.label in merged_radar_labels)
+        radar_points = radar_point_markers(
+            state,
+            lane_width_m,
+            (*selected_radar_vehicle_points, *hidden_merged_radar_points),
+            min_forward_m=road_start_m,
+            max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
+            x_offset_m=relative_scene_x_offset_m,
+        )
     profile_scene_add(profile_add, "scene.build.radar_points", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
