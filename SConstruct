@@ -226,6 +226,7 @@ env_swaglog['CXXFLAGS'].append('-DSWAGLOG="\\"common/swaglog.h\\""')
 SConscript(['msgq_repo/SConscript'], exports={'env': env_swaglog})
 
 SConscript(['openpilot/cereal/SConscript'])
+SConscript(['opendbc_repo/opendbc/dbc/SConscript'])
 
 Import('socketmaster', 'msgq')
 messaging = [socketmaster, msgq, 'capnp', 'kj',]
