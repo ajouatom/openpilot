@@ -44,6 +44,7 @@ def write_supported_cars_files() -> None:
     ("toyota", "SupportedCars_toyota"),
     ("mazda", "SupportedCars_mazda"),
     ("ford", "SupportedCars_ford"),
+    ("volkswagen", "SupportedCars_vw"),
   ):
     try:
       values = importlib.import_module(f"opendbc.car.{brand}.values")
@@ -159,6 +160,10 @@ def manager_thread() -> None:
   if os.getenv("NOBOARD") is not None:
     ignore.append("pandad")
   ignore += [x for x in os.getenv("BLOCK", "").split(",") if len(x) > 0]
+
+  if params.get_bool("HardwareC3xLite"):
+    ignore += ["micd", "soundd", "loggerd"]
+    params.put_bool("RecordAudio", False)
 
   sm = messaging.SubMaster(['deviceState', 'carParams', 'pandaStates'], poll='deviceState')
   pm = messaging.PubMaster(['managerState'])

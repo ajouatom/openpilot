@@ -18,6 +18,27 @@ class CarState(CarStateBase):
     self.esp_hold_confirmation = False
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
+    # MEB (VW ID.4/ID.5) state - ported from infiniteCable2 via id4-meb branch
+    self.klr_stock_values = {}
+    self.ea_hud_stock_values = {}
+    self.ea_control_stock_values = {}
+    self.travel_assist_available = False
+    self.left_blinker_active = False
+    self.right_blinker_active = False
+    self.curvature = 0.
+    self.cruise_recovery_timer = 0  # update_acc_fault 디바운스용 (infiniteCable2)
+
+  def update_acc_fault(self, acc_fault, parking_brake=False, drive_mode=True, recovery_frames_max=100):
+    # infiniteCable2 포팅: 주차 중(EPB+비주행)엔 TSK fault를 무시하고, 주행 전환 직후
+    # recovery_frames_max(100) 동안 grace를 줘서 출발 직후 일시적 TSK 글리치로 인한
+    # 불필요한 Cruise Fault 해제를 막는다.
+    fault = acc_fault
+    if parking_brake and not drive_mode:
+      fault = False
+      self.cruise_recovery_timer = self.frame
+    elif self.frame - self.cruise_recovery_timer < recovery_frames_max:
+      fault = False
+    return fault
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
@@ -48,6 +69,9 @@ class CarState(CarStateBase):
 
     if self.CP.flags & VolkswagenFlags.PQ:
       return self.update_pq(pt_cp, cam_cp, ext_cp)
+
+    if self.CP.flags & VolkswagenFlags.MEB:
+      return self.update_meb(pt_cp, cam_cp, ext_cp)
 
     ret = structs.CarState()
 
@@ -140,6 +164,138 @@ class CarState(CarStateBase):
     self.gra_stock_values = pt_cp.vl["GRA_ACC_01"]
 
     ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS)
+
+    self.frame += 1
+    return ret
+
+  def update_meb(self, pt_cp, cam_cp, ext_cp) -> structs.CarState:
+    ret = structs.CarState()
+
+    # 바퀴 속도 및 차량 속도
+    ret.wheelSpeeds = self.get_wheel_speeds(
+      pt_cp.vl["ESC_51"]["VL_Radgeschw"],
+      pt_cp.vl["ESC_51"]["VR_Radgeschw"],
+      pt_cp.vl["ESC_51"]["HL_Radgeschw"],
+      pt_cp.vl["ESC_51"]["HR_Radgeschw"],
+    )
+    ret.vEgoRaw = (ret.wheelSpeeds.fl + ret.wheelSpeeds.fr + ret.wheelSpeeds.rl + ret.wheelSpeeds.rr) / 4.0
+    ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
+    ret.standstill = ret.vEgoRaw == 0
+
+    # 조향각/조향속도/조향토크 (부호 분리 신호)
+    ret.steeringAngleDeg = pt_cp.vl["LWI_01"]["LWI_Lenkradwinkel"] * (1, -1)[int(pt_cp.vl["LWI_01"]["LWI_VZ_Lenkradwinkel"])]
+    ret.steeringRateDeg  = pt_cp.vl["LWI_01"]["LWI_Lenkradw_Geschw"] * (1, -1)[int(pt_cp.vl["LWI_01"]["LWI_VZ_Lenkradw_Geschw"])]
+    ret.steeringTorque   = pt_cp.vl["LH_EPS_03"]["EPS_Lenkmoment"] * (1, -1)[int(pt_cp.vl["LH_EPS_03"]["EPS_VZ_Lenkmoment"])]
+    ret.steeringPressed  = abs(ret.steeringTorque) > self.CCP.STEER_DRIVER_ALLOWANCE
+
+    # MEB curvature 피드백: QFK_01.Curvature(40비트) + Curvature_VZ(55비트)
+    # QFK_01 곡률은 openpilot 곡률 부호 관례와 반대 -> 음수화 (infiniteCable2: ret.steeringCurvature = -QFK...)
+    # 조향 해제 시 "현재 곡률 유지"에 쓰여, 부호가 틀리면 핸들이 반대로 당겨짐
+    self.curvature = -pt_cp.vl["QFK_01"]["Curvature"] * (1, -1)[int(pt_cp.vl["QFK_01"]["Curvature_VZ"])]
+    # controlsd 폐루프 곡률 보정(useCarSteerCurvature)이 차량 실측 곡률을 보도록 노출
+    ret.steeringCurvature = self.curvature
+    # 깜빡이 실제 점등 상태 (EA 깜빡이 중계 시 순정이 이미 켜져 있으면 OP 중복 방지용)
+    self.left_blinker_active = bool(pt_cp.vl["Blinkmodi_02"]["BM_links"])
+    self.right_blinker_active = bool(pt_cp.vl["Blinkmodi_02"]["BM_rechts"])
+
+    # Yaw rate
+    ret.yawRate = -pt_cp.vl["ESC_50"]["Yaw_Rate"] * (1, -1)[int(pt_cp.vl["ESC_50"]["Yaw_Rate_Sign"])] * CV.DEG_TO_RAD
+
+    # HCA 상태 (QFK_01) - vw_meb.dbc는 소문자 값 정의, update_hca_state는 대문자 비교 → 변환
+    hca_status_raw = self.CCP.hca_status_values.get(pt_cp.vl["QFK_01"]["LatCon_HCA_Status"])
+    hca_status = hca_status_raw.upper() if hca_status_raw else hca_status_raw
+    drive_mode = pt_cp.vl["Getriebe_11"]["GE_Fahrstufe"] != 0  # 0 = Park/Neutral
+    ret.steerFaultTemporary, ret.steerFaultPermanent = self.update_hca_state_meb(hca_status, drive_mode=drive_mode)
+
+    # 기어
+    ret.gearShifter = self.parse_gear_shifter(self.CCP.shifter_values.get(pt_cp.vl["Getriebe_11"]["GE_Fahrstufe"], None))
+
+    # 가속/브레이크 페달
+    ret.gasPressed   = pt_cp.vl["Motor_51"]["Accel_Pedal_Pressure"] > 0
+    ret.brakePressed = bool(pt_cp.vl["Motor_14"]["MO_Fahrer_bremst"])
+    ret.brake        = pt_cp.vl["ESC_51"]["Brake_Pressure"]
+
+    # 주차 브레이크: infiniteCable2 DBC의 ESC_50.EPB_Status(317비트, 3비트)를 포팅해 사용.
+    # (1,4) = EPB 잠기는 중/잠김. ACC 정차홀드는 HMS(브레이크 홀드)라 EPB는 안 잠기므로
+    # 매 정차마다 오인되지 않음. 실제 전자식 주차브레이크 작동 시에만 True.
+    ret.parkingBrake = pt_cp.vl["ESC_50"]["EPB_Status"] in (1, 4)
+
+    # 도어
+    ret.doorOpen = any([pt_cp.vl["Gateway_72"]["ZV_FT_offen"],
+                        pt_cp.vl["Gateway_72"]["ZV_BT_offen"],
+                        pt_cp.vl["Gateway_72"]["ZV_HFS_offen"],
+                        pt_cp.vl["Gateway_72"]["ZV_HBFS_offen"],
+                        pt_cp.vl["Gateway_72"]["ZV_HD_offen"]])
+
+    # 안전벨트
+    ret.seatbeltUnlatched = pt_cp.vl["Airbag_02"]["AB_Gurtschloss_FA"] != 3
+
+    # BSM (블라인드 스팟) - 당근파일럿 vw_meb.dbc는 Left/Right 신호명 사용
+    if self.CP.enableBsm:
+      ret.leftBlindspot  = bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Left"]) or \
+                           bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Left"])
+      ret.rightBlindspot = bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Right"]) or \
+                           bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Right"])
+
+    # LDW HUD 스톡 값 (LDW_02 → create_lka_hud_control 사용)
+    self.ldw_stock_values = cam_cp.vl["LDW_02"]
+    # EA(Emergency Assist) HUD 스톡 값 - 핸들 아이콘/핸즈오프 램프 중계용 (create_blinker_control)
+    if self.CP.flags & VolkswagenFlags.STOCK_EA_PRESENT:
+      self.ea_hud_stock_values = cam_cp.vl["EA_02"]
+      self.ea_control_stock_values = cam_cp.vl["EA_01"]
+
+    ret.stockFcw = False
+    ret.stockAeb = False
+
+    self.acc_type = 2  # ACC stop and go
+    self.eps_stock_values = pt_cp.vl["LH_EPS_03"]
+    # 정전식 핸들 터치(KLR_01) stock 값 - Emergency Assist 핸즈온 pacification용
+    self.klr_stock_values = pt_cp.vl["KLR_01"] if self.CP.flags & VolkswagenFlags.STOCK_KLR_PRESENT else {}
+    # Travel Assist 가용성 (순정 TA_01) - TA_01 송신 게이트 = 스티어링휠 버튼 LED/핸들 아이콘 (infiniteCable2 방식)
+    self.travel_assist_available = bool(cam_cp.vl["TA_01"]["Travel_Assist_Available"])
+
+    # ESP 홀드 (정차 확인): infiniteCable2와 동일하게 ESC_50.Motion_State == 3(완전정지) 사용.
+    # 기존 Standstill(1비트)은 Motion_State(2비트)의 하위 1비트만 읽어 정차 판정 시점이
+    # 어긋났음 -> EPB 홀드/릴리스 타이밍 불일치로 재출발이 막힐 수 있었음.
+    self.esp_hold_confirmation = pt_cp.vl["ESC_50"]["Motion_State"] == 3
+
+    # ACC/크루즈 상태
+    ret.cruiseState.available  = pt_cp.vl["Motor_51"]["TSK_Status"] in (2, 3, 4, 5)
+    ret.cruiseState.enabled    = pt_cp.vl["Motor_51"]["TSK_Status"] in (3, 4, 5)
+    # accFaulted: 원시 TSK fault(6/7)를 update_acc_fault로 디바운스. 주차 중(EPB+비주행)엔 무시,
+    # 주행 전환 직후 100프레임 grace -> 출발 직후 일시적 TSK 글리치로 인한 오해제 방지. (infiniteCable2)
+    acc_drive_mode = ret.gearShifter == GearShifter.drive
+    ret.accFaulted = self.update_acc_fault(pt_cp.vl["Motor_51"]["TSK_Status"] in (6, 7),
+                                           parking_brake=ret.parkingBrake, drive_mode=acc_drive_mode)
+    ret.cruiseState.standstill = self.CP.pcmCruise and self.esp_hold_confirmation
+    ret.cruiseState.nonAdaptive = bool(pt_cp.vl["Motor_51"]["TSK_Limiter_ausgewaehlt"])
+
+    if self.CP.pcmCruise:
+      ret.cruiseState.speed = int(round(ext_cp.vl["MEB_ACC_01"]["ACC_Wunschgeschw_02"])) * CV.KPH_TO_MS
+      if ret.cruiseState.speed > 90:
+        ret.cruiseState.speed = 0
+
+    # 방향지시등
+    ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(
+      240,
+      pt_cp.vl["SMLS_01"]["BH_Blinker_li"],
+      pt_cp.vl["SMLS_01"]["BH_Blinker_re"],
+    )
+
+    # 버튼 이벤트 및 GRA 스톡 값
+    # 메인 스위치가 래칭(토글, GRA_Typ_Hauptschalter==0=gerastet)이면 물리 취소버튼(GRA_Abbrechen)을
+    # cancel로 쓰는 BUTTONS_ALT 사용. 모멘터리면 메인버튼을 cancel로 쓰는 BUTTONS. (infiniteCable2 방식)
+    # -> 래칭 메인스위치 off 시 cancel 이벤트가 안 떠 openpilot 전체가 꺼지지 않음.
+    main_cruise_latching = not bool(pt_cp.vl["GRA_ACC_01"]["GRA_Typ_Hauptschalter"])
+    buttons = self.CCP.BUTTONS_ALT if main_cruise_latching else self.CCP.BUTTONS
+    ret.buttonEvents    = self.create_button_events(pt_cp, buttons)
+    # 속도+/- 스토크 2단계(쓸어올리기/길게) = GRA_Tip_Stufe_2. cruise.py가 이걸 보고 +10(큰 단위) 적용.
+    ret.cruiseSpeedBigStep = bool(pt_cp.vl["GRA_ACC_01"]["GRA_Tip_Stufe_2"])
+    self.gra_stock_values = pt_cp.vl["GRA_ACC_01"]
+
+    # ESP 상태
+    ret.espDisabled = False
+    ret.espActive   = False
 
     self.frame += 1
     return ret
@@ -251,10 +407,21 @@ class CarState(CarStateBase):
     temp_fault = drive_mode and hca_status in ("REJECTED", "PREEMPTED") or not self.eps_init_complete
     return temp_fault, perm_fault
 
+  def update_hca_state_meb(self, hca_status, drive_mode=True):
+    # MEB EPS: HCA가 idle일 때 "disabled"(0)가 정상 상태. openpilot이 HCA_03을
+    # 보내기 시작하면 EPS가 ready/active로 전환됨. 따라서 disabled를 영구 결함으로 보지 않음.
+    self.eps_init_complete = self.eps_init_complete or (hca_status in ("DISABLED", "READY", "ACTIVE") or self.frame > 600)
+    perm_fault = self.eps_init_complete and hca_status == "FAULT"
+    temp_fault = (drive_mode and hca_status in ("REJECTED", "PREEMPTED")) or not self.eps_init_complete
+    return temp_fault, perm_fault
+
   @staticmethod
   def get_can_parsers(CP):
     if CP.flags & VolkswagenFlags.PQ:
       return CarState.get_can_parsers_pq(CP)
+
+    if CP.flags & VolkswagenFlags.MEB:
+      return CarState.get_can_parsers_meb(CP)
 
     # another case of the 1-50Hz
     cam_messages = []
@@ -276,5 +443,52 @@ class CarState(CarStateBase):
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CANBUS.pt),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CANBUS.cam),
+    }
+
+  @staticmethod
+  def get_can_parsers_meb(CP):
+    pt_messages = [
+      ("ESC_51", 100),      # From ESC (바퀴속도, 제동압)
+      ("LH_EPS_03", 100),   # From EPS (조향토크)
+      ("QFK_01", 100),      # From EPS (HCA 상태, 곡률)
+      ("LWI_01", 100),      # From EPS (조향각)
+      ("ESC_50", 50),       # From ESC (Yaw Rate, EPB, Motion State)
+      ("Motor_51", 50),     # From ECM (TSK Status, ACC)
+      ("Motor_14", 10),     # From ECM (제동등 스위치)
+      ("GRA_ACC_01", 33),   # From Gateway (ACC 버튼)
+      ("Gateway_72", 10),   # From Gateway (도어)
+      ("Airbag_02", 5),     # From 에어백 모듈 (안전벨트)
+      ("Getriebe_11", 50),  # From 변속기 (기어)
+      ("ESP_21", 50),       # From ESC (ESP 상태)
+      ("Blinkmodi_02", 1),  # From BCM (방향지시등)
+      ("SMLS_01", 1),       # From 스탈크 컨트롤
+    ]
+
+    if CP.flags & VolkswagenFlags.STOCK_KLR_PRESENT:
+      pt_messages += [("KLR_01", 50)]  # 정전식 핸들 터치 (EA 핸즈온)
+
+    cam_messages = [
+      ("TA_01", 50),  # Travel Assist 상태 (버튼 LED/핸들 아이콘 게이트 = Travel_Assist_Available)
+    ]
+
+    if CP.flags & VolkswagenFlags.STOCK_EA_PRESENT:
+      cam_messages += [("EA_01", 10), ("EA_02", 10)]  # Emergency Assist HUD (핸들 아이콘 중계)
+
+    if CP.networkLocation == NetworkLocation.gateway:
+      cam_messages += [
+        ("MEB_ACC_01", 50),   # From 레이더 (ACC 설정속도 = ACC_Wunschgeschw_02)
+      ]
+      if CP.enableBsm:
+        cam_messages += [("MEB_Side_Assist_01", 10)]
+    else:
+      pt_messages += [
+        ("MEB_ACC_01", 50),
+      ]
+      if CP.enableBsm:
+        pt_messages += [("MEB_Side_Assist_01", 10)]
+
+    return {
+      Bus.pt:  CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CANBUS.pt),
+      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CANBUS.cam),
     }
 

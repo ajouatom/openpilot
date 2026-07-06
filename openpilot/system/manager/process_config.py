@@ -89,6 +89,9 @@ def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
 def enable_webrtc(started, params, CP: car.CarParams) -> bool:
   return params.get_int("DisableDM") == 2
 
+def c3x_lite(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return started and params.get_bool("HardwareC3xLite")
+
 def enable_youtube_low_encoder(started, params, CP: car.CarParams) -> bool:
   try:
     return params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") not in (1, 2, 3)
@@ -186,6 +189,9 @@ procs = [
 
   #Xiaoge data broadcaster (conditional on ShareData param)
   PythonProcess("xiaoge_data", "openpilot.selfdrive.carrot.xiaoge_data", enable_xiaoge_data),
+
+  # C3x lite has no speaker; mirror alerts to the GPIO buzzer instead.
+  PythonProcess("beep", "openpilot.selfdrive.controls.beep", c3x_lite, enabled=TICI),
 ]
 
 managed_processes = {p.name: p for p in procs}

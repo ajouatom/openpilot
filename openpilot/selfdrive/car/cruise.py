@@ -155,6 +155,7 @@ class VCruiseCarrot:
     self.v_cruise_kph = 20 #V_CRUISE_UNSET
     self.v_cruise_cluster_kph = 20 #V_CRUISE_UNSET
     self.v_cruise_kph_last = 20
+    self._cruise_speed_initialized = False
 
     self.enabled_last = False
 
@@ -162,6 +163,7 @@ class VCruiseCarrot:
     self.button_cnt = 0
     self.button_prev = ButtonType.unknown
     self.button_long_time = 40
+    self.button_big_step = False  # VW stage-2 (swipe) press -> immediate +10 (round) on release
 
     self.is_metric = True
 
@@ -241,6 +243,9 @@ class VCruiseCarrot:
       self.log = log
       #self.event = event
       self._log_timer = self._log_timeout
+
+  def _current_speed_for_initial_resume(self):
+    return max(self.v_ego_kph_set, self._cruise_speed_min)
 
   def update_params(self, is_metric):
     unit_factor = 1.0 if is_metric else CV.MPH_TO_KPH
@@ -350,8 +355,10 @@ class VCruiseCarrot:
     else:
       self.v_cruise_kph = np.clip(v_cruise_kph, self._cruise_speed_min, self._cruise_speed_max) #max(20, self.v_ego_kph_set) #V_CRUISE_UNSET
       self.v_cruise_cluster_kph = self.v_cruise_kph #V_CRUISE_UNSET
-      #if self.cruise_state_available_last: # 최초 한번이라도 cruiseState.available이 True였다면
-      #  self._lat_enabled = False
+      # KIA_EV_SK3 전용: 크루즈 메인 ON->OFF 전환 순간 상시조향도 함께 종료
+      if self.cruise_state_available_last and self.CP.carFingerprint == "KIA_EV_SK3":
+        self._lat_enabled = False
+        self._add_log("Lateral disabled (main cruise off)")
 
     self.cruise_state_available_last = CS.cruiseState.available
     self.enabled_last = CC.enabled
@@ -389,6 +396,10 @@ class VCruiseCarrot:
     # long press tracking
     if self.button_cnt > 0:
       self.button_cnt += 1
+      # VW 쓸어올리기(2단) 래치: GRA_Tip_Stufe_2는 2단으로 밀고 있는 동안만 1이고 뗄 때는 이미 0.
+      # 뗄 때 샘플하면 항상 짧은누름으로 오인되므로, 누르고 있는 동안 한 번이라도 1이면 래치.
+      if self.button_prev in [ButtonType.accelCruise, ButtonType.decelCruise] and CS.cruiseSpeedBigStep:
+        self.button_big_step = True
 
     for b in buttonEvents:
       bt = b.type
@@ -407,12 +418,23 @@ class VCruiseCarrot:
       ]:
         self.button_cnt = 1
         self.button_prev = bt
+        # VW 쓸어올리기(2단): 누르기 시작 시점의 GRA_Tip_Stufe_2 샘플 (이후 유지 중 래치로 보강)
+        self.button_big_step = bt in [ButtonType.accelCruise, ButtonType.decelCruise] and CS.cruiseSpeedBigStep
         self.button_long_time = self._cruise_button_long_delay if bt in [ButtonType.accelCruise, ButtonType.decelCruise] else self._cruise_button_long_delay + 30
 
       elif not b.pressed and self.button_cnt > 0 and bt == self.button_prev:
+        # VW 쓸어올리기: 래치된 self.button_big_step 사용 (뗄 때 신호를 다시 읽으면 이미 0)
         if bt == ButtonType.cancel:
           button_type = bt
-        elif not self.long_pressed:          
+        elif self.button_big_step and not self.long_pressed and bt in [ButtonType.accelCruise, ButtonType.decelCruise]:
+          # VW swipe (stage-2): jump to next multiple of V_CRUISE_DELTA (=+10 like the stock stalk)
+          mod = button_kph % V_CRUISE_DELTA
+          if bt == ButtonType.accelCruise:
+            button_kph += V_CRUISE_DELTA - mod
+          else:
+            button_kph -= V_CRUISE_DELTA - (-mod % V_CRUISE_DELTA)
+          button_type = bt
+        elif not self.long_pressed:
           if bt == ButtonType.accelCruise:
             unit = SPEED_UP_UNIT if is_metric else SPEED_UP_UNIT * CV.MPH_TO_KPH
             button_kph = math.ceil((button_kph + 0.01) / unit) * unit
@@ -422,6 +444,7 @@ class VCruiseCarrot:
           button_type = bt
         self.long_pressed = False
         self.button_cnt = 0
+        self.button_big_step = False
 
     # Long press 처리
     if self.button_cnt > self.button_long_time:
@@ -462,6 +485,7 @@ class VCruiseCarrot:
             self._add_log("Cruise accelCruise (carrot command)")
         elif self.carrot_arg == "STOP":
           v_cruise_kph = 5
+          self._cruise_speed_initialized = False
           self._add_log("Cruise stop (carrot command)")
 
       elif self.carrot_cmd == "SPEED":
@@ -500,18 +524,32 @@ class VCruiseCarrot:
         self._pause_auto_speed_up = False
         if self._soft_hold_active > 0:
           self._soft_hold_active = 0
-        elif self._cruise_ready or not CC.enabled or CS.cruiseState.standstill or self.carrot_cruise_active:
+        elif self._cruise_ready or not CC.enabled or CS.cruiseState.standstill:
+          if self._v_cruise_kph_at_brake > 0:
+            v_cruise_kph = max(v_cruise_kph, self._v_cruise_kph_at_brake)
+            self._v_cruise_kph_at_brake = 0
+            self._cruise_speed_initialized = True
+          elif not self._cruise_speed_initialized:
+            v_cruise_kph = self._current_speed_for_initial_resume()
+            self._cruise_speed_initialized = True
+            self._add_log(f"{v_cruise_kph} Cruise resume from current speed")
           if False: #self._cruise_button_mode in [2, 3]:
             road_limit_kph = self.nRoadLimitSpeed * self.autoSpeedUptoRoadSpeedLimit
             if road_limit_kph > 1.0:
               v_cruise_kph = max(v_cruise_kph, road_limit_kph)
-        elif self._v_cruise_kph_at_brake > 0 and v_cruise_kph < self._v_cruise_kph_at_brake:
-          v_cruise_kph = self._v_cruise_kph_at_brake
+        elif self._v_cruise_kph_at_brake > 0:
+          v_cruise_kph = max(v_cruise_kph, self._v_cruise_kph_at_brake)
           self._v_cruise_kph_at_brake = 0
+          self._cruise_speed_initialized = True
+        elif not self._cruise_speed_initialized:
+          v_cruise_kph = self._current_speed_for_initial_resume()
+          self._cruise_speed_initialized = True
+          self._add_log(f"{v_cruise_kph} Cruise resume from current speed")
         elif self._cruise_button_mode == 0:
           v_cruise_kph = button_kph
         else:
           v_cruise_kph = self._v_cruise_desired(CS, v_cruise_kph)
+        self._cruise_speed_initialized = True
         self.carrot_cruise_active = False
 
       elif button_type == ButtonType.decelCruise:
@@ -539,6 +577,7 @@ class VCruiseCarrot:
           self.carrot_cruise_active = True
           #self.events.append(EventName.audioPrompt)
         self._v_cruise_kph_at_brake = 0
+        self._cruise_speed_initialized = True
 
       elif button_type == ButtonType.gapAdjustCruise:
         longitudinalPersonalityMax = self.params.get_int("LongitudinalPersonalityMax")

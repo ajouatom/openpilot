@@ -578,6 +578,7 @@ class ClusterUiRenderer:
         self._route_video_frame_id: str | None = None
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
+        self._hazard_signal_started_at: float | None = None
         self._triangle_strip_point_cache: OrderedDict[
             tuple[int, int],
             tuple[tuple[Vec3, ...], tuple[Vec3, ...], object, int],
@@ -1306,7 +1307,6 @@ class ClusterUiRenderer:
             JETBRAINS_MONO_FONT_PATH,
             OPENPILOT_FONT_DIR / "JetBrainsMono-Bold.ttf",
             Path("/data/openpilot/openpilot/selfdrive/assets/fonts/KaiGenGothicKR-Bold.ttf"),
-            Path("/data/openpilot/openpilot/selfdrive/assets/addon/font/KaiGenGothicKR-Bold.ttf"),
             Path("/usr/share/fonts/truetype/jetbrains-mono/JetBrainsMono-Medium.ttf"),
             Path("/usr/share/fonts/TTF/JetBrainsMono-Medium.ttf"),
             Path("/usr/local/share/fonts/JetBrainsMono-Medium.ttf"),
@@ -3443,6 +3443,15 @@ class ClusterUiRenderer:
 
     def _turn_signal_lights(self, state: ClusterUiState) -> tuple[bool, bool]:
         now = time.perf_counter()
+        if state.left_signal and state.right_signal:
+            if self._hazard_signal_started_at is None:
+                self._hazard_signal_started_at = now
+                self._left_turn_signal_started_at = None
+                self._right_turn_signal_started_at = None
+            lit = blink_visible(now, self._hazard_signal_started_at, float("inf"))
+            return lit, lit
+
+        self._hazard_signal_started_at = None
         return (
             self._turn_signal_lit("left", state.left_signal, now),
             self._turn_signal_lit("right", state.right_signal, now),

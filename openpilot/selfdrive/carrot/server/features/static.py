@@ -27,13 +27,19 @@ def _load_device_languages() -> list:
 
 def _build_bootstrap_payload() -> dict:
   try:
-    device_values = get_param_values(["LanguageSetting"], {"LanguageSetting": ""})
+    device_values = get_param_values(
+      ["LanguageSetting", "SoundLanguageSetting"],
+      {"LanguageSetting": "", "SoundLanguageSetting": "auto"},
+    )
     device_language = device_values.get("LanguageSetting", "")
+    sound_language = device_values.get("SoundLanguageSetting", "auto")
   except Exception:
     device_language = ""
+    sound_language = "auto"
   return {
     "webSettings": read_web_settings(),
     "deviceLanguage": device_language,
+    "soundLanguage": sound_language,
     "deviceLanguages": _load_device_languages(),
   }
 
