@@ -100,6 +100,7 @@ RADAR_FRONT_DETECTED_MERGE_LATERAL_M = 2.25
 RADAR_TRACK_DISPLAY_LATERAL_INSET_M = 0.35
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
+CORNER_RADAR_HEADING_COMPONENT_MIN_MPS = 0.5
 DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
 DRIVE_CAMERA_EGO_BOTTOM_POSITION_M = (0.0, -6.0, 5.00)
 DRIVE_CAMERA_EGO_BOTTOM_TARGET_M = (0.0, 14.0, -1.00)
@@ -2125,6 +2126,9 @@ def radar_vehicle_box(
     forward_m = render_scene_forward_m(point.longitudinal_m)
     center_x_m = radar_point_display_lateral_m(point, lane_width_m)
     right_x, right_y, forward_x, forward_y = radar_point_vehicle_heading(point, state)
+    if point.source == "cornerRadar":
+        center_x_m += forward_x * VEHICLE_LENGTH_M * 0.5
+        forward_m += forward_y * VEHICLE_LENGTH_M * 0.5
     return VehicleBox(
         center=Vec3(center_x_m, forward_m, VEHICLE_HEIGHT_M * 0.5),
         right_x=right_x,
@@ -2435,6 +2439,8 @@ def radar_point_vehicle_heading(
         longitudinal_speed_kph,
         point.lateral_speed_mps,
         (1.0, 0.0, 0.0, 1.0),
+        min_speed_kph=1.0 if point.source == "cornerRadar" else RADAR_MOVING_VEHICLE_MIN_SPEED_KPH,
+        min_component_mps=CORNER_RADAR_HEADING_COMPONENT_MIN_MPS if point.source == "cornerRadar" else 0.0,
     )
 
 
@@ -2442,12 +2448,16 @@ def vehicle_heading_from_velocity(
     longitudinal_speed_kph: float | None,
     lateral_speed_mps: float | None,
     default_heading: tuple[float, float, float, float],
+    min_speed_kph: float = RADAR_MOVING_VEHICLE_MIN_SPEED_KPH,
+    min_component_mps: float = 0.0,
 ) -> tuple[float, float, float, float]:
     if longitudinal_speed_kph is None and lateral_speed_mps is None:
         return default_heading
     forward_speed_mps = (longitudinal_speed_kph or 0.0) / 3.6
     lateral_speed_mps = lateral_speed_mps or 0.0
-    if math.hypot(forward_speed_mps, lateral_speed_mps) * 3.6 < RADAR_MOVING_VEHICLE_MIN_SPEED_KPH:
+    if min_component_mps > 0.0 and (abs(forward_speed_mps) < min_component_mps or abs(lateral_speed_mps) < min_component_mps):
+        return default_heading
+    if math.hypot(forward_speed_mps, lateral_speed_mps) * 3.6 < min_speed_kph:
         return default_heading
     forward_x, forward_y = normalize2(lateral_speed_mps, forward_speed_mps)
     return forward_y, -forward_x, forward_x, forward_y
