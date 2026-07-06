@@ -15,6 +15,9 @@ RADAR_START_ADDR_CANFD1 = 0x210
 RADAR_MSG_COUNT1 = 16
 RADAR_START_ADDR_CANFD2 = 0x3A5 # Group 2, Group 1: 0x210 2개씩있어서 일단 보류.
 RADAR_MSG_COUNT2 = 32
+CORNER_OBJECT_START_ADDR = 0x235
+CORNER_OBJECT_MSG_COUNT = 20
+CORNER_OBJECT_TRACK_ID_OFFSET = 200
 
 # POC for parsing corner radars: https://github.com/commaai/openpilot/pull/24221/
 
@@ -33,6 +36,15 @@ def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count):
     messages = [(f"RADAR_TRACK_{addr:x}", 20) for addr in range(msg_start_addr, msg_start_addr + msg_count)]
   #return CANParser(DBC[CP.carFingerprint][Bus.radar], messages, 1)
     return CANParser('hyundai_kia_mando_front_radar_generated', messages, 1)
+
+def get_corner_object_can_parser(CP, enabled):
+  if not enabled or not (CP.flags & HyundaiFlags.CANFD):
+    return None
+
+  CAN = CanBus(CP)
+  messages = [("CORNER_RADAR_STATUS_230", 33)]
+  messages += [(f"CORNER_RADAR_OBJECTS_{addr:x}", 33) for addr in range(CORNER_OBJECT_START_ADDR, CORNER_OBJECT_START_ADDR + CORNER_OBJECT_MSG_COUNT)]
+  return CANParser('hyundai_canfd_corner_radar_generated', messages, CAN.ACAN)
 
 def get_radar_can_parser_scc(CP):
   CAN = CanBus(CP)
@@ -67,13 +79,17 @@ class RadarInterface(RadarInterfaceBase):
       
     self.params = Params()
     self.radar_tracks = self.params.get_int("EnableRadarTracks") >= 1
+    self.corner_object_tracks = bool(CP.extFlags & HyundaiExtFlags.CORNER_RADAR_OBJECTS.value) and self.params.get_int("EnableCornerRadar") > 0
     self.updated_tracks = set()
     self.updated_scc = set()
+    self.updated_corner_objects = set()
     self.rcp_tracks = get_radar_can_parser(CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count)
+    self.rcp_corner_objects = get_corner_object_can_parser(CP, self.corner_object_tracks)
     self.rcp_scc = get_radar_can_parser_scc(CP)
     self.trigger_msg_scc = 416 if self.canfd else 0x420
 
     self.trigger_msg_tracks = self.radar_start_addr + self.radar_msg_count - 1
+    self.trigger_msg_corner_objects = CORNER_OBJECT_START_ADDR + CORNER_OBJECT_MSG_COUNT - 1
     self.track_id = 0
 
     self.radar_off_can = CP.radarUnavailable
@@ -91,39 +107,61 @@ class RadarInterface(RadarInterfaceBase):
 
     self.pts[SCC_TID] = structs.RadarData.RadarPoint()
     self.pts[SCC_TID].trackId = SCC_TID
+    for slot in range(CORNER_OBJECT_MSG_COUNT):
+      t_id = CORNER_OBJECT_TRACK_ID_OFFSET + slot
+      self.pts[t_id] = structs.RadarData.RadarPoint()
+      self.pts[t_id].measured = False
+      self.pts[t_id].trackId = t_id
 
     self.frame = 0
 
 
   def update(self, can_strings):
     self.frame += 1
-    if self.radar_off_can or (self.rcp_tracks is None and self.rcp_scc is None):
+    if self.radar_off_can or (self.rcp_tracks is None and self.rcp_scc is None and self.rcp_corner_objects is None):
       return super().update(None)
 
     if self.rcp_scc is not None:
       vls_s = self.rcp_scc.update(can_strings)
       self.updated_scc.update(vls_s)
-      if not self.radar_tracks and self.frame % 5 == 0:
-        self._update_scc(self.updated_scc)
-        self.updated_scc.clear()
-        ret = structs.RadarData()
-        if not self.rcp_scc.can_valid:
-          ret.errors.canError = True
-        ret.points = list(self.pts.values())
-        return ret
     if self.radar_tracks and self.rcp_tracks is not None:
       vls_t = self.rcp_tracks.update(can_strings)
       self.updated_tracks.update(vls_t)
       if self.trigger_msg_tracks in self.updated_tracks:
         self._update(self.updated_tracks)
         self._update_scc(self.updated_scc)
+        self._update_corner_objects(self.updated_corner_objects)
         self.updated_scc.clear()
         self.updated_tracks.clear()
+        self.updated_corner_objects.clear()
         ret = structs.RadarData()
-        if not self.rcp_tracks.can_valid:
+        if not self.rcp_tracks.can_valid or (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid):
           ret.errors.canError = True
         ret.points = list(self.pts.values())
         return ret
+    if self.rcp_corner_objects is not None:
+      vls_c = self.rcp_corner_objects.update(can_strings)
+      self.updated_corner_objects.update(vls_c)
+      if self.trigger_msg_corner_objects in self.updated_corner_objects:
+        self._update_scc(self.updated_scc)
+        self._update_corner_objects(self.updated_corner_objects)
+        self.updated_scc.clear()
+        self.updated_corner_objects.clear()
+        ret = structs.RadarData()
+        if not self.rcp_corner_objects.can_valid or (self.rcp_scc is not None and not self.rcp_scc.can_valid):
+          ret.errors.canError = True
+        ret.points = list(self.pts.values())
+        return ret
+    if not self.radar_tracks and self.frame % 5 == 0 and self.rcp_scc is not None:
+      self._update_scc(self.updated_scc)
+      self._update_corner_objects(self.updated_corner_objects)
+      self.updated_scc.clear()
+      self.updated_corner_objects.clear()
+      ret = structs.RadarData()
+      if not self.rcp_scc.can_valid or (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid):
+        ret.errors.canError = True
+      ret.points = list(self.pts.values())
+      return ret
 
     return None      
 
@@ -196,6 +234,50 @@ class RadarInterface(RadarInterfaceBase):
           self.pts[t_id].yvRel = msg['LAT_SPEED2']
 
         t_id += 1
+
+  def _update_corner_objects(self, updated_messages):
+    if self.rcp_corner_objects is None:
+      return
+
+    if not updated_messages:
+      for slot in range(CORNER_OBJECT_MSG_COUNT):
+        t_id = CORNER_OBJECT_TRACK_ID_OFFSET + slot
+        self.pts[t_id].measured = False
+        self.pts[t_id].dRel = 0
+        self.pts[t_id].yRel = 0
+        self.pts[t_id].vRel = 0
+        self.pts[t_id].vLead = self.v_ego
+        self.pts[t_id].aRel = float('nan')
+        self.pts[t_id].yvRel = 0
+      return
+
+    for slot, addr in enumerate(range(CORNER_OBJECT_START_ADDR, CORNER_OBJECT_START_ADDR + CORNER_OBJECT_MSG_COUNT)):
+      t_id = CORNER_OBJECT_TRACK_ID_OFFSET + slot
+      msg = self.rcp_corner_objects.vl[f"CORNER_RADAR_OBJECTS_{addr:x}"]
+
+      d_rel = msg["OBJ_REL_POS_X"]
+      y_rel = msg["OBJ_REL_POS_Y"]
+      v_rel = msg["OBJ_REL_VEL_X"]
+      yv_rel = msg["OBJ_REL_VEL_Y"]
+      a_rel = msg["OBJ_REL_ACCEL_X"]
+      valid = msg["OBJ_QUAL_LEVEL"] > 0 and 0.2 < d_rel < 180.0 and abs(y_rel) < 40.0 and v_rel > -99.0
+
+      self.pts[t_id].measured = bool(valid)
+      if not valid:
+        self.pts[t_id].dRel = 0
+        self.pts[t_id].yRel = 0
+        self.pts[t_id].vRel = 0
+        self.pts[t_id].vLead = self.v_ego
+        self.pts[t_id].aRel = float('nan')
+        self.pts[t_id].yvRel = 0
+        continue
+
+      self.pts[t_id].dRel = d_rel
+      self.pts[t_id].yRel = y_rel
+      self.pts[t_id].vRel = v_rel
+      self.pts[t_id].vLead = v_rel + self.v_ego
+      self.pts[t_id].aRel = a_rel
+      self.pts[t_id].yvRel = yv_rel
 
   def _update_scc(self, updated_messages):
     cpt = self.rcp_scc.vl

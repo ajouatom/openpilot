@@ -456,7 +456,7 @@ def vehicle_source_is_front_radar(source: str) -> bool:
 
 
 def vehicle_source_is_radar_track(source: str) -> bool:
-    return source in ("radarPoint", "liveTracks") or "+radar:" in source
+    return source in ("radarPoint", "liveTracks", "cornerRadar") or "+radar:" in source
 
 
 def speed_limit_source_label(source: str | None) -> str:
@@ -1668,7 +1668,7 @@ class ClusterUiRenderer:
         return points, point_count
 
     def _draw_vehicle(self, vehicle: VehicleBox) -> None:
-        source_marker = vehicle.source.startswith("modelV2") or vehicle.source in ("radarState", "radarPoint")
+        source_marker = vehicle.source.startswith("modelV2") or vehicle.source in ("radarState", "radarPoint", "cornerRadar")
         use_model = (
             self._vehicle_model is not None
             and not source_marker

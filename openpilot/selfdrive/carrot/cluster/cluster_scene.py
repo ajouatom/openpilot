@@ -1664,7 +1664,7 @@ def detected_vehicle_is_zero_radar_sample(vehicle: DetectedVehicle) -> bool:
     return (
         vehicle.source == "radarState"
         or vehicle.source == "carState"
-        or vehicle.source in ("radarPoint", "liveTracks")
+        or vehicle.source in ("radarPoint", "liveTracks", "cornerRadar")
         or vehicle.source.startswith("CAN 0x")
     )
 
@@ -1986,7 +1986,7 @@ def vehicle_source_is_front_radar(source: str) -> bool:
 
 
 def vehicle_source_is_radar_track(source: str) -> bool:
-    return source in ("radarPoint", "liveTracks") or RADAR_MERGED_SOURCE_TAG in source
+    return source in ("radarPoint", "liveTracks", "cornerRadar") or RADAR_MERGED_SOURCE_TAG in source
 
 
 def merge_detected_vehicle_for_display(base: DetectedVehicle, other: DetectedVehicle) -> DetectedVehicle:
@@ -2211,7 +2211,7 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
 
 def radar_point_is_confirmed_vehicle_source(point: RadarPoint) -> bool:
     source = point.source.lower()
-    return "0x162" in source or "0x1ea" in source
+    return source == "cornerradar" or "0x162" in source or "0x1ea" in source
 
 
 def radar_point_is_outside_outer_lane(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
@@ -2580,7 +2580,7 @@ def radar_point_color(point: RadarPoint) -> Color:
         return RED[0], RED[1], RED[2], 232
     if point.probability is not None and point.probability < 0.25:
         return 116, 126, 136, 150
-    if radar_point_source_is_radar_track(point):
+    if point.source == "cornerRadar" or radar_point_source_is_radar_track(point):
         return AMBER[0], AMBER[1], AMBER[2], 226
     if point.in_my_lane is not None and point.in_my_lane > 0:
         return BLUE[0], BLUE[1], BLUE[2], 226

@@ -146,6 +146,7 @@ class HyundaiExtFlags(IntFlag):
   CANFD_GEARS_NONE = 2 ** 6
   RADAR_GROUP1 = 2 ** 7  # 0x210 radar group 1, 0x3A5 radar group 2
   CANFD_GEARS_69 = 2 ** 10
+  CORNER_RADAR_OBJECTS = 2 ** 11  # 0x230 status + 0x235-0x248 raw corner radar objects
 
 class Footnote(Enum):
   CANFD = CarFootnote(
