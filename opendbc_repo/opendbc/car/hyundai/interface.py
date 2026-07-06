@@ -60,6 +60,9 @@ class CarInterface(CarInterfaceBase):
       if 0x210 in fingerprint[CAN.ACAN]:
         print("##### Radar Group 1 detected (0x210)")
         ret.extFlags |= HyundaiExtFlags.RADAR_GROUP1.value
+      elif 0x400 in fingerprint[CAN.ACAN] and 0x41D in fingerprint[CAN.ACAN]:
+        print("##### Radar Group 3 detected (0x400-0x41D)")
+        ret.extFlags |= HyundaiExtFlags.RADAR_GROUP3.value
 
       # detect HDA2 with ADAS Driving ECU
       if hda2:
