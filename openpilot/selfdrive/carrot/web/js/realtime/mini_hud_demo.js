@@ -5,6 +5,17 @@
 // CarrotMiniHud so the layout/styling can be checked with no vehicle connected —
 // tap the HUD to step to the next scenario; after a short idle it clears back to
 // a plain STOCK view. Without the param the guard below no-ops immediately.
+//
+// Scenarios mirror the LIVE build (CarrotMiniHudModel.build) 1:1, so previews
+// match what actually renders on the road:
+//   • detail labels always read TIM / DST / GAP / <temp source> at full length
+//     (never collapse to one letter — see mini_hud.js syncDetailLabels);
+//   • the 4 detail rows re-order by source (mini_hud.css): STOCK keeps
+//     countdown · distance · GAP · temp, while NAV lifts temp above GAP →
+//     countdown · distance · temp · GAP;
+//   • temp.label uses the real carrotMan.desiredSource tokens emitted by
+//     carrot_serv.py: road / cam / police / section / bump / waze / hda / atc /
+//     route / vturn / model / gas (rendered upper-cased, first 3 chars).
 (function () {
   if (!new URLSearchParams(window.location.search).has("mhud_test")) return;
 
@@ -96,7 +107,7 @@
       }),
     },
     {
-      name: "s / m / road (all 3)",
+      name: "NAV · all rows (TIM/DST/temp/GAP)",
       model: model({
         speed: "82", setSpeed: "90", roadLimit: "80", gap: "3",
         alert: { visible: true, name: "CAM", kind: "camera", distance: "480m", countdown: "12s", badge: "", section: false },
@@ -138,7 +149,7 @@
       }),
     },
     {
-      name: "US · s/m/road",
+      name: "US · all rows",
       model: model({
         isMetric: false, limitStyle: "us", speed: "62", setSpeed: "70", roadLimit: "55",
         alert: { visible: true, name: "CAM", kind: "camera", distance: "0.3mi", countdown: "9s", badge: "", section: false },

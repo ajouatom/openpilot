@@ -58,6 +58,10 @@
   let tizi = false;
   let activeSoundDirectory = bootstrapSoundDirectory();
   const bufferCache = new Map();
+  // Decoded buffers keyed by "dir/file", populated as loadBuffer resolves. Lets
+  // playAlert take a synchronous fast path (play in the same tick as the WS
+  // message) when the context is already running and the sound is decoded.
+  const readyBuffers = new Map();
 
   function loadEnabled() {
     try {
@@ -88,9 +92,8 @@
     webVolume = Math.max(0, Math.min(1, Number(value) || 0));
     try { localStorage.setItem(VOLUME_STORAGE_KEY, String(webVolume)); } catch (_) {}
     if (current?.gain && context) {
-      const spec = SOUND_MAP[current.alert];
-      const configuredGain = spec?.engageVolume ? volume * engageVolume : volume;
-      current.gain.gain.setValueAtTime(Math.max(0, Math.min(4, configuredGain * webVolume)), context.currentTime);
+      // Independent of device Settings > Sound volume — Web slider only.
+      current.gain.gain.setValueAtTime(Math.max(0, Math.min(1, webVolume)), context.currentTime);
     }
     return webVolume;
   }
@@ -123,7 +126,17 @@
   }
 
   function ensureContext() {
-    if (!context && AudioContextClass) context = new AudioContextClass();
+    if (!context && AudioContextClass) {
+      // "interactive" (also the spec default) asks the browser for the lowest
+      // reliable output latency — important since the alert must land as close to
+      // the device's own sound as possible. Older prefixed constructors may reject
+      // the options object, so fall back to the bare form.
+      try {
+        context = new AudioContextClass({ latencyHint: "interactive" });
+      } catch (_) {
+        context = new AudioContextClass();
+      }
+    }
     return context;
   }
 
@@ -142,9 +155,12 @@
       bufferCache.set(key, (async () => {
         const response = await fetch(`/sound-assets/${encodeURIComponent(soundDirectory())}/${encodeURIComponent(file)}`, { cache: "force-cache" });
         if (!response.ok) throw new Error(`sound asset HTTP ${response.status}`);
-        return audioContext.decodeAudioData(await response.arrayBuffer());
+        const decoded = await audioContext.decodeAudioData(await response.arrayBuffer());
+        readyBuffers.set(key, decoded);
+        return decoded;
       })().catch((error) => {
         bufferCache.delete(key);
+        readyBuffers.delete(key);
         throw error;
       }));
     }
@@ -178,45 +194,88 @@
     current = null;
   }
 
+  function resolveSoundFile(alertNum, spec) {
+    if (tizi && alertNum === 1) return "engage_tizi.wav";
+    if (tizi && alertNum === 2) return "disengage_tizi.wav";
+    return spec.file;
+  }
+
+  function startBuffer(alertNum, buffer, resolvedOneShot) {
+    stopCurrent(true);
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    source.buffer = buffer;
+    source.loop = !resolvedOneShot;
+    // Web playback volume is intentionally independent of the device's
+    // Settings > Sound volume (SoundVolumeAdjust / SoundVolumeAdjustEngage): only
+    // the in-dialog Web volume slider scales what the browser plays.
+    gain.gain.value = Math.max(0, Math.min(1, webVolume));
+    source.connect(gain);
+    gain.connect(context.destination);
+    current = { source, gain, alert: alertNum, loop: source.loop, released: false };
+    source.onended = () => {
+      if (current?.source === source) current = null;
+    };
+    source.start();
+    return current;
+  }
+
   async function playAlert(alert, options = {}) {
-    if (!enabled) return;
-    const spec = SOUND_MAP[Number(alert)];
+    const preview = Boolean(options.preview);
+    if (!enabled && !preview) return;
+    const alertNum = Number(alert);
+    const spec = SOUND_MAP[alertNum];
     if (!spec) return;
     const oneShot = Boolean(options.oneShot || spec.once);
     const request = ++playRequest;
-    pending = { request, alert: Number(alert), oneShot, forceOneShot: false };
+    pending = { request, alert: alertNum, oneShot, forceOneShot: false };
+    const file = resolveSoundFile(alertNum, spec);
+
+    // Fast path: warm context + already-decoded buffer → start in this same tick
+    // with no await hops, so the alert fires the moment the WS message lands
+    // (the extra ~50ms server poll was the real lag; this keeps the client tight).
+    if (context?.state === "running") {
+      const readyBuffer = readyBuffers.get(`${soundDirectory()}/${file}`);
+      if (readyBuffer) {
+        try {
+          const playback = startBuffer(alertNum, readyBuffer, oneShot);
+          if (pending?.request === request) pending = null;
+          return playback;
+        } catch (error) {
+          console.warn("[web sound] fast-path failed", error);
+        }
+      }
+    }
+
     try {
       await unlockAudio();
-      const file = tizi && Number(alert) === 1
-        ? "engage_tizi.wav"
-        : tizi && Number(alert) === 2
-          ? "disengage_tizi.wav"
-          : spec.file;
       const buffer = await loadBuffer(file);
-      if (!enabled || request !== playRequest) return;
+      if ((!enabled && !preview) || request !== playRequest) return;
       const resolvedOneShot = oneShot || Boolean(pending?.request === request && pending.forceOneShot);
-
-      stopCurrent(true);
-      const source = context.createBufferSource();
-      const gain = context.createGain();
-      source.buffer = buffer;
-      source.loop = !resolvedOneShot;
-      const configuredGain = spec.engageVolume ? volume * engageVolume : volume;
-      gain.gain.value = Math.max(0, Math.min(4, configuredGain * webVolume));
-      source.connect(gain);
-      gain.connect(context.destination);
-      current = { source, gain, alert: Number(alert), loop: source.loop, released: false };
-      source.onended = () => {
-        if (current?.source === source) current = null;
-      };
-      source.start();
-      return current;
+      return startBuffer(alertNum, buffer, resolvedOneShot);
     } catch (error) {
       console.warn("[web sound] playback failed", error);
       return null;
     } finally {
       if (pending?.request === request) pending = null;
     }
+  }
+
+  // Deduplicated sound list for the dialog's sample picker: one entry per file,
+  // labelled by the file stem (engage.wav → "engage"). Language-independent.
+  function sampleEntries() {
+    const seen = new Set();
+    const entries = [];
+    Object.keys(SOUND_MAP)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .forEach((num) => {
+        const file = SOUND_MAP[num]?.file;
+        if (!file || seen.has(file)) return;
+        seen.add(file);
+        entries.push({ alert: num, label: file.replace(/\.wav$/i, "") });
+      });
+    return entries;
   }
 
   function countdownAlert(countdown) {
@@ -351,6 +410,17 @@
           </span>
           <input class="web-sound-dialog__volume-slider" type="range" min="0" max="100" step="5" value="${Math.round(webVolume * 100)}" data-web-sound-volume />
         </label>
+        <div class="web-sound-dialog__sample">
+          <span class="web-sound-dialog__sample-head">${getUIText("web_sound_sample", "Play sample")}</span>
+          <div class="web-sound-dialog__sample-grid" role="listbox" aria-label="${getUIText("web_sound_sample", "Play sample")}">
+            ${sampleEntries().map((entry, index) => `<button type="button" class="web-sound-dialog__sample-option${index === 0 ? " is-current" : ""}" role="option" aria-selected="${index === 0 ? "true" : "false"}" data-web-sound-sample-option data-alert="${entry.alert}">${entry.label}</button>`).join("")}
+          </div>
+          <div class="web-sound-dialog__sample-actions">
+            <button type="button" class="btn web-sound-dialog__sample-play" data-web-sound-sample-play>
+              <span class="web-sound-dialog__sample-play-icon" aria-hidden="true">▶</span>${getUIText("web_sound_sample_play", "Play")}
+            </button>
+          </div>
+        </div>
       </div>`;
   }
 
@@ -377,6 +447,30 @@
         const percent = Math.max(0, Math.min(100, Number(volumeInput.value) || 0));
         setWebVolume(percent / 100);
         if (volumeValue) volumeValue.textContent = `${percent}%`;
+      });
+      const sampleOptions = Array.from(document.querySelectorAll("[data-web-sound-sample-option]"));
+      const samplePlay = document.querySelector("[data-web-sound-sample-play]");
+      let selectedSampleAlert = sampleOptions.length ? Number(sampleOptions[0].dataset.alert) || 0 : 0;
+      sampleOptions.forEach((option) => {
+        option.addEventListener("click", () => {
+          // Selection only — the sample auditions when Play is pressed, not here.
+          selectedSampleAlert = Number(option.dataset.alert) || 0;
+          sampleOptions.forEach((other) => {
+            const isSelected = other === option;
+            other.classList.toggle("is-current", isSelected);
+            other.setAttribute("aria-selected", isSelected ? "true" : "false");
+          });
+        });
+      });
+      samplePlay?.addEventListener("click", () => {
+        if (!selectedSampleAlert) return;
+        // preview:true so samples audition even when the live web-sound toggle is
+        // off; the click itself is the gesture that unlocks the AudioContext.
+        Promise.resolve(playAlert(selectedSampleAlert, { oneShot: true, preview: true })).then((playback) => {
+          if (!playback && typeof showAppToast === "function") {
+            showAppToast(getUIText("web_sound_sample_failed", "Could not play sample"), { tone: "error" });
+          }
+        });
       });
     }, 0);
     dialogPromise.finally(() => {
@@ -422,6 +516,10 @@
       volume,
       engageVolume,
       webVolume,
+      // Estimated browser audio output latency (ms) — the residual client-side lag
+      // once the server poll is tightened; useful to verify realtime tuning.
+      outputLatencyMs: context && Number.isFinite(context.outputLatency) ? Math.round(context.outputLatency * 1000) : null,
+      baseLatencyMs: context && Number.isFinite(context.baseLatency) ? Math.round(context.baseLatency * 1000) : null,
     };
   }
 
@@ -454,5 +552,6 @@
     },
     test: testAlert,
     testCountdown,
+    preview: (alert) => playAlert(alert, { oneShot: true, preview: true }),
   });
 })();

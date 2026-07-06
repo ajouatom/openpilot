@@ -1252,6 +1252,92 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   accent-color: var(--md-primary);
 }
 
+.web-sound-dialog__sample {
+  display: grid;
+  gap: 10px;
+  padding: 2px 4px 0;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* Keep the web-sound dialog body scrollbar space reserved too, so nothing shifts
+   width when the body scrollbar toggles as the sample list is used. */
+.app-dialog--web-sound .app-dialog__body {
+  scrollbar-gutter: stable;
+}
+
+/* Reuses the choice-dialog option look (--popup-item-* tokens + .is-current) so
+   the sample picker matches the app's existing selectors. */
+.web-sound-dialog__sample-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 196px;
+  overflow-y: auto;
+  /* Reserve the scrollbar's width permanently so it appearing on scroll/focus
+     never reflows the row and shakes the dialog (issue: UI jitter on Play). */
+  scrollbar-gutter: stable;
+  /* Extra right padding keeps the pills off the scrollbar track (they were
+     touching it); a touch of bottom padding lifts the last row off the edge. */
+  padding: 2px 10px 6px 2px;
+}
+
+.web-sound-dialog__sample-option {
+  min-height: 44px;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--popup-item-border);
+  border-radius: var(--popup-item-radius);
+  background: var(--popup-item-bg);
+  color: var(--md-on-surface);
+  font-size: 12.5px;
+  font-weight: 750;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+}
+
+.web-sound-dialog__sample-option:hover,
+.web-sound-dialog__sample-option:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--popup-item-bg) 90%, var(--md-primary));
+  outline: none;
+}
+
+.web-sound-dialog__sample-option.is-current {
+  border-color: var(--popup-item-active-border);
+  background: var(--popup-item-active-bg);
+  color: var(--md-primary);
+  font-weight: 850;
+}
+
+.web-sound-dialog__sample-actions {
+  display: flex;
+  justify-content: flex-end;
+  /* Pin the Play row on an opaque band at the body's bottom so pressing it never
+     lets the scrolling list clip it or bleed into the dialog's action row below. */
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-top: 4px;
+  padding: 8px 0 2px;
+  background: var(--popup-bg);
+}
+
+.web-sound-dialog__sample-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.web-sound-dialog__sample-play-icon {
+  color: var(--md-primary);
+  font-size: 12px;
+}
+
 .carrot-stage__controlBtn--record {
   min-width: 74px;
 }

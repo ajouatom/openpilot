@@ -13,6 +13,13 @@ from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
 AudibleAlert = car.CarControl.HUDControl.AudibleAlert
 ButtonType = car.CarState.ButtonEvent.Type
 SELFDRIVE_STATE_TIMEOUT = 5.0
+# Poll cadence for the sound state loop. selfdriveState publishes at 100Hz and the
+# device's own soundd only samples it at 20Hz (50ms), so polling here at ~5ms — the
+# same cadence the realtime raw/vision hub uses (RawWsHub.ACTIVE_POLL_SLEEP) — lets
+# the browser detect an alert change *before* the device and absorb the WS + audio
+# output latency, landing near-simultaneous instead of ~50ms late. We only send on
+# change, so a faster poll shortens detection latency without adding traffic.
+SOUND_POLL_INTERVAL = 0.005
 
 
 def _enum_raw(value, default: int = 0) -> int:
@@ -134,7 +141,7 @@ async def _send_sound_states(ws: web.WebSocketResponse) -> None:
       })
       last_signature = signature
 
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(SOUND_POLL_INTERVAL)
 
 
 async def ws_web_sound(request: web.Request) -> web.WebSocketResponse:
