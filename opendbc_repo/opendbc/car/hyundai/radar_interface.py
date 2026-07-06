@@ -122,7 +122,14 @@ class RadarInterface(RadarInterfaceBase):
     self.trigger_msg_corner_objects_180 = CORNER_OBJECT_180_START_ADDR + CORNER_OBJECT_180_MSG_COUNT - 1
     self.track_id = 0
 
-    self.radar_off_can = CP.radarUnavailable
+    self.corner_objects_available = self.rcp_corner_objects is not None or self.rcp_corner_objects_180 is not None
+    self.radar_off_can = CP.radarUnavailable and not self.corner_objects_available
+    print(
+      "RadarInterface: "
+      f"radarUnavailable={CP.radarUnavailable} radarTracks={self.radar_tracks} "
+      f"corner235={self.rcp_corner_objects is not None} corner180={self.rcp_corner_objects_180 is not None} "
+      f"radarOffCan={self.radar_off_can}"
+    )
 
     self.vRel_last = 0
     self.dRel_last = 0
@@ -184,7 +191,8 @@ class RadarInterface(RadarInterfaceBase):
         self._update(self.updated_tracks)
         self.updated_tracks.clear()
 
-      self._update_scc(self.updated_scc)
+      if self.rcp_scc is not None:
+        self._update_scc(self.updated_scc)
       self._update_corner_objects(self.updated_corner_objects)
       self._update_corner_objects_180(self.updated_corner_objects_180)
       self.updated_scc.clear()
@@ -192,8 +200,8 @@ class RadarInterface(RadarInterfaceBase):
       self.updated_corner_objects_180.clear()
 
       ret = structs.RadarData()
-      if ((self.rcp_tracks is not None and not self.rcp_tracks.can_valid) or
-          (self.rcp_scc is not None and not self.rcp_scc.can_valid) or
+      if ((self.rcp_tracks is not None and self.radar_tracks and not self.rcp_tracks.can_valid) or
+          (self.rcp_scc is not None and not self.corner_objects_available and not self.rcp_scc.can_valid) or
           (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid) or
           (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid)):
         ret.errors.canError = True

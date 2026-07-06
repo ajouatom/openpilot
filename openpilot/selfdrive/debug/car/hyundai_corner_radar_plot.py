@@ -103,6 +103,13 @@ class Snapshot:
   ego_speed: float
 
 
+@dataclass(frozen=True)
+class LogTiming:
+  start_t: float
+  end_t: float | None
+  video_base_t: float
+
+
 class VideoSampler:
   def __init__(self, path: Path, fallback_fps: float, offset: float):
     import cv2
@@ -299,17 +306,42 @@ def normalize_video_duration(duration: float, plot_fps: float) -> float:
   return duration
 
 
-def get_log_end_t(args: argparse.Namespace, rlog_path: Path, start_t: float) -> float | None:
-  end_t = None if args.duration is None else start_t + args.duration
+def get_rlog_data_duration(rlog_path: Path) -> float | None:
+  first_data_t: int | None = None
+  last_data_t: int | None = None
+  for msg in LogReader(str(rlog_path), only_union_types=True):
+    if msg.which() not in ("can", "carState"):
+      continue
+    if first_data_t is None:
+      first_data_t = msg.logMonoTime
+    last_data_t = msg.logMonoTime
+  if first_data_t is None or last_data_t is None:
+    return None
+  return max(0.0, (last_data_t - first_data_t) / 1e9)
+
+
+def get_log_timing(args: argparse.Namespace, rlog_path: Path, log_index: int) -> LogTiming:
+  video_base_t = 0.0
+  video_duration = None
   if args.no_video_duration_limit:
-    return end_t
+    video_duration = None
+  else:
+    raw_video_duration = get_video_duration(args, rlog_path)
+    video_duration = None if raw_video_duration is None else normalize_video_duration(raw_video_duration, args.fps)
+    if video_duration is not None and args.video_trim == "front":
+      rlog_duration = get_rlog_data_duration(rlog_path)
+      if rlog_duration is not None:
+        trim_tolerance = max(0.1, 1.0 / max(args.fps, 1e-3))
+        excess_duration = rlog_duration - video_duration
+        if excess_duration > trim_tolerance:
+          video_base_t = excess_duration
 
-  video_duration = get_video_duration(args, rlog_path)
-  if video_duration is None:
-    return end_t
-
-  video_end_t = max(0.0, normalize_video_duration(video_duration, args.fps) - args.video_offset)
-  return video_end_t if end_t is None else min(end_t, video_end_t)
+  start_t = video_base_t + (args.start if log_index == 0 else 0.0)
+  end_t = None if args.duration is None else start_t + args.duration
+  if video_duration is not None:
+    video_end_t = video_base_t + max(0.0, video_duration - args.video_offset)
+    end_t = video_end_t if end_t is None else min(end_t, video_end_t)
+  return LogTiming(start_t=start_t, end_t=end_t, video_base_t=video_base_t)
 
 
 def read_snapshots_from_log(args: argparse.Namespace, rlog_path: Path, log_index: int) -> list[Snapshot]:
@@ -317,8 +349,9 @@ def read_snapshots_from_log(args: argparse.Namespace, rlog_path: Path, log_index
   latest_summary: dict[str, SummaryCornerObject] = {}
   snapshots: list[Snapshot] = []
   first_data_t: int | None = None
-  start_t = args.start if log_index == 0 else 0.0
-  end_t = get_log_end_t(args, rlog_path, start_t)
+  timing = get_log_timing(args, rlog_path, log_index)
+  start_t = timing.start_t
+  end_t = timing.end_t
   next_frame_t = start_t
   frame_dt = 1.0 / args.fps
   latest_ego_speed = 0.0
@@ -369,7 +402,8 @@ def read_snapshots_from_log(args: argparse.Namespace, rlog_path: Path, log_index
       active.sort(key=lambda o: (o.group, o.slot))
       summary_active = [obj for obj in latest_summary.values() if t - obj.t <= args.summary_stale]
       summary_active.sort(key=lambda o: o.label)
-      snapshots.append(Snapshot(next_frame_t, next_frame_t, rlog_path, log_index, active, summary_active, latest_ego_speed))
+      display_t = max(0.0, next_frame_t - timing.video_base_t)
+      snapshots.append(Snapshot(display_t, display_t, rlog_path, log_index, active, summary_active, latest_ego_speed))
       next_frame_t += frame_dt
 
   return snapshots
@@ -837,6 +871,7 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--video", default="auto", help="TS video path, auto for qcamera.ts next to rlog, or none to disable")
   parser.add_argument("--video-fps", type=float, default=None, help="Override video FPS when OpenCV cannot detect it")
   parser.add_argument("--video-offset", type=float, default=0.0, help="Seconds added to radar time when selecting the video frame")
+  parser.add_argument("--video-trim", choices=("front", "back"), default="front", help="When an rlog segment is longer than video, trim the extra time from the rlog front or back")
   parser.add_argument("--no-video-duration-limit", action="store_true", help="Do not cap each rlog segment to the matching TS video duration")
   parser.add_argument("--save-png", default=None)
   parser.add_argument("--save-gif", default=None)
