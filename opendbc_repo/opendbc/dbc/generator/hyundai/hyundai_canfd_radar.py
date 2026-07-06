@@ -93,3 +93,14 @@ BO_ {a} RADAR_TRACK_{a:x}: 24 RADAR
  SG_ LAT_SPEED : 104|13@1- (0.01,0) [0|8191] "" XXX
  SG_ REL_ACCEL : 118|10@1- (0.05,0) [0|1023] "" XXX 
     """)
+
+    # Group 3 radar object list:
+    # 30 one-object messages at 20 Hz, with an empty distance sentinel of 0x7ff.
+    for a in range(0x400, 0x400 + 30):
+        f.write(f"""
+BO_ {a} RADAR_TRACK_{a:x}: 24 RADAR
+ SG_ OBJECT_LENGTH : 41|7@1+ (0.1,0) [0|12.7] "m" XXX
+ SG_ LONG_DIST : 64|11@1+ (0.1,0) [0|204.7] "m" XXX
+ SG_ LAT_DIST : 75|12@1- (0.05,0) [-102.4|102.35] "m" XXX
+ SG_ REL_SPEED : 87|11@1- (0.1,0) [-102.4|102.3] "m/s" XXX
+    """)

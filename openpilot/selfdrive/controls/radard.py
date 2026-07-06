@@ -65,6 +65,9 @@ RADAR_ONLY_CENTER_MID_DREL = 60.0
 RADAR_ONLY_CENTER_FAR_DREL = 80.0
 RADAR_ONLY_CENTER_MAX_DREL = 100.0
 
+RADAR_CENTER_PROMOTION_MAX_LANE_CENTER_OFFSET = 1.5
+RADAR_CENTER_PROMOTION_RECEDING_MAX_DREL = 45.0
+RADAR_CENTER_PROMOTION_RECEDING_VREL = 0.5
 
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
@@ -72,6 +75,20 @@ def laplacian_pdf(x: float, mu: float, b: float):
 
 def clamp(x: float, lo: float, hi: float) -> float:
   return float(np.clip(x, lo, hi))
+
+def is_radar_center_promotion_safe(lead: dict[str, Any]) -> bool:
+  d_rel = float(lead.get("dRel", 999.0))
+  y_rel = float(lead.get("yRel", 999.0))
+  d_path = float(lead.get("dPath", 999.0))
+  v_rel = float(lead.get("vRel", 999.0))
+
+  # Unmatched center candidates rely on predicted lane geometry. Avoid promotion
+  # when curvature can project an adjacent-lane radar return onto the ego path.
+  if abs(d_path - y_rel) >= RADAR_CENTER_PROMOTION_MAX_LANE_CENTER_OFFSET:
+    return False
+
+  # A far lead pulling away cannot constrain longitudinal control yet.
+  return d_rel <= RADAR_CENTER_PROMOTION_RECEDING_MAX_DREL or v_rel <= RADAR_CENTER_PROMOTION_RECEDING_VREL
 
 EMPTY_LEAD = {
   "dRel": 0.0,
@@ -865,7 +882,7 @@ class RadarD:
         chosen["modelProb"] = 0.03
         detected = True
 
-    elif self.leadCenter and self.leadCenter["status"]:
+    elif self.leadCenter and self.leadCenter["status"] and is_radar_center_promotion_safe(self.leadCenter):
       lead_one = self.radar_state.leadOne
       vision_prob = lead_one.modelProb if lead_one.status else 0.0
 
