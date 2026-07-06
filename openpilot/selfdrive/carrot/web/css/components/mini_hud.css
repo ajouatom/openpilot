@@ -523,12 +523,13 @@
     0
     calc(var(--mini-alert-row-radius) - 1px);
   background: var(--mini-alert-label-bg);
-  color: rgba(247, 255, 249, 0.96);
+  color: rgba(247, 255, 249, 0.98);
   font-size: var(--mini-alert-label-font);
   font-weight: 950;
   letter-spacing: 0;
   text-transform: uppercase;
   line-height: 1.05;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
 .carrot-mini-hud__chip > b {
@@ -611,7 +612,8 @@
   justify-content: center;
   align-items: end;
   column-gap: var(--mini-speed-gap);
-  margin-bottom: calc(var(--mini-section-gap) * 0.26);
+  /* Breathing room below the speed/cruise digits before the panel's bottom edge. */
+  margin-bottom: calc(var(--mini-section-gap) * 1.15);
 }
 
 .carrot-mini-hud__speed,

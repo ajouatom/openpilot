@@ -46,7 +46,12 @@
   let layoutRaf = 0;
   let resizeObserver = null;
   let temperatureUnit = loadTemperatureUnit();
-  let detailLabelsExpanded = null;
+  // Detail-row labels (TIM / DST / GAP / temp source) are ALWAYS shown at full
+  // length. The label chip already reserves a fixed width (--mini-alert-label-width
+  // = detailFont * DETAIL_LABEL_UNIT), so a 3-char label costs no extra room versus
+  // a 1-char one — the earlier "collapse to one letter on narrow layouts" behavior
+  // only left the reserved chip half-empty, so it was dropped.
+  const DETAIL_LABEL_LENGTH = 3;
 
   function loadTemperatureUnit() {
     try {
@@ -103,28 +108,34 @@
     return label.slice(0, Math.max(1, maxLength));
   }
 
-  function syncDetailLabels(model, maxLength = 3) {
-    const expanded = maxLength > 1;
-    setText(elements.countdownLabel, expanded ? "TIM" : "T");
-    setText(elements.distanceLabel, expanded ? "DST" : "D");
-    setText(elements.gapLabel, expanded ? "GAP" : "G");
+  function currentLang() {
+    // Cross-IIFE safe: i18n.js writes the active code onto <html lang>. hud_card's
+    // own currentLang() is module-private, so we read the DOM instead of it.
+    const raw = String(document.documentElement.lang || "en").toLowerCase();
+    return raw.split(/[-_]/)[0] || "en";
+  }
+
+  function localizedDriveMode(model) {
+    const kind = String(model?.driveMode?.kind || "normal").toLowerCase();
+    // driveModes is published globally by translations/registry.js
+    // (normal/eco/safe/sport → 일반/연비/안전/고속 등). Mirror hud_card's big-HUD
+    // label so the compact HUD is localized the same way instead of raw English.
+    const table = window.CarrotTranslations?.driveModes || {};
+    const lang = currentLang();
+    const labels = table[lang] || table.en || {};
+    return labels[kind] || model?.driveMode?.name || (kind ? kind.toUpperCase() : "NORMAL");
+  }
+
+  function syncDetailLabels(model, maxLength = DETAIL_LABEL_LENGTH) {
+    setText(elements.countdownLabel, "TIM");
+    setText(elements.distanceLabel, "DST");
+    setText(elements.gapLabel, "GAP");
     const tempSource = model?.source === "stock" ? "TMP" : model?.temp?.label;
     setText(elements.tempLabel, shortLabel(
       tempSource,
       model?.alert?.name || model?.source || "SRC",
       maxLength,
     ));
-  }
-
-  function resolveDetailLabelLength(layoutScale, detailWidth) {
-    if (detailLabelsExpanded == null) {
-      detailLabelsExpanded = layoutScale >= 0.63 && detailWidth >= 108;
-    } else if (detailLabelsExpanded) {
-      if (layoutScale <= 0.57 || detailWidth <= 94) detailLabelsExpanded = false;
-    } else if (layoutScale >= 0.68 && detailWidth >= 118) {
-      detailLabelsExpanded = true;
-    }
-    return detailLabelsExpanded ? 3 : 1;
   }
 
   function measure(text, size, family = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif') {
@@ -191,12 +202,12 @@
     setHidden(elements.alertBadge, !alertBadgeKind);
 
     setHidden(elements.stockMode, !stock);
-    setText(elements.driveMode, model.driveMode?.name || "NORMAL");
+    setText(elements.driveMode, localizedDriveMode(model));
     if (elements.driveModeFrame) elements.driveModeFrame.dataset.miniHudDriveKind = model.driveMode?.kind || "normal";
 
     const tempVisible = !stock && Boolean(model.temp?.visible);
     setHidden(elements.alertZone, false);
-    syncDetailLabels(model, detailLabelsExpanded === false ? 1 : 3);
+    syncDetailLabels(model);
     setText(elements.countdown, model.alert?.countdown || "--");
     setHidden(elements.countdownZone, false);
     setRowEmpty(elements.countdownZone, !model.alert?.countdown);
@@ -322,8 +333,7 @@
     const detailRect = elements.alertZone?.getBoundingClientRect?.();
     const detailWidth = contentWidth(elements.alertZone, width * 0.48);
     const detailHeight = contentHeight(elements.alertZone, detailRect?.height || width * 0.45);
-    const labelLength = resolveDetailLabelLength(layoutScale, detailWidth);
-    syncDetailLabels(latestModel, labelLength);
+    syncDetailLabels(latestModel);
     // Keep the detail area as fixed rows; empty rows stay in the scale budget.
     const chipCount = 4;
     const detailLabelUnit = 2.24;
@@ -356,7 +366,15 @@
     style.setProperty("--mini-limit-label-font", `${limitLabelFont.toFixed(1)}px`);
     style.setProperty("--mini-badge-font", `${badgeFont.toFixed(1)}px`);
     style.setProperty("--mini-alert-font", `${detailFont.toFixed(1)}px`);
-    style.setProperty("--mini-alert-label-font", `${(detailFont * 0.46).toFixed(1)}px`);
+    // Auto-fit the detail label instead of a small fixed ratio. The chip reserves
+    // detailLabelUnit(2.24)x the value width, but a 3-char label only needs ~2
+    // units, so we can size the label up until it fills the chip — capped at 0.78x
+    // the value so it stays clearly a label yet reads as a HUD on the smallest
+    // windows (the earlier fixed 0.54x was the "still too small" complaint).
+    const labelChipInner = detailFont * detailLabelUnit * 0.88;
+    const labelUnit = Math.max(1, measure("GAP", 100) / 100);
+    const labelFont = Math.max(1, Math.min(detailFont * 0.78, labelChipInner / labelUnit));
+    style.setProperty("--mini-alert-label-font", `${labelFont.toFixed(1)}px`);
     style.setProperty("--mini-alert-label-width", `${(detailFont * detailLabelUnit).toFixed(1)}px`);
     style.setProperty("--mini-mode-size", `${modeSize.toFixed(1)}px`);
     style.setProperty("--mini-mode-font", `${modeFont.toFixed(1)}px`);
@@ -387,6 +405,10 @@
         if (latestModel) render(latestModel);
         scheduleLayout();
       }
+    });
+    // Re-localize the drive-mode label when the user switches language.
+    window.addEventListener("carrot:languagechange", () => {
+      if (latestModel) render(latestModel);
     });
     if (typeof ResizeObserver === "function") {
       resizeObserver = new ResizeObserver(scheduleLayout);
