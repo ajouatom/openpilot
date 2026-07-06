@@ -43,7 +43,7 @@ BU_: XXX RADAR
 
 def write_status_msg(f):
   f.write("""
-BO_ 560 CORNER_RADAR_STATUS_230: 16 RADAR
+BO_ 560 CORNER_RADAR_235_STATUS_230: 16 RADAR
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
  SG_ ACTIVE_OBJECT_MSG_COUNT : 24|8@1+ (1,0) [0|255] "" XXX
@@ -65,7 +65,7 @@ BA_ "GenMsgCycleTime" BO_ 560 30;
 
 
 def write_object_msg(f, addr):
-  name = f"CORNER_RADAR_OBJECTS_{addr:x}"
+  name = f"CORNER_RADAR_235_OBJECTS_{addr:x}"
   f.write(f"""
 BO_ {addr} {name}: 32 RADAR
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX

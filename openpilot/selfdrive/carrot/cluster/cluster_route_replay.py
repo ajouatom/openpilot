@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import bz2
 import io
@@ -79,6 +79,10 @@ ADRV_CORNER_RADAR_ADDRESS = 0x1EA
 CORNER_OBJECT_START_ADDRESS = 0x235
 CORNER_OBJECT_END_ADDRESS = 0x248
 CORNER_OBJECT_TRACK_ID_OFFSET = 200
+CORNER_OBJECT_180_START_ADDRESS = 0x180
+CORNER_OBJECT_180_END_ADDRESS = 0x184
+CORNER_OBJECT_180_TRACK_ID_OFFSET = 240
+CORNER_OBJECT_180_SLOTS_PER_MESSAGE = 2
 CORNER_OBJECT_SOURCE = "cornerRadar"
 HYUNDAI_CAMERA_CAN_BUS_MOD = 2
 HYUNDAI_A_CAN_BUS_MOD = 1
@@ -1526,6 +1530,19 @@ class RouteLogParser:
                     self.corner_object_radar_points.pop(label, None)
                 else:
                     self.corner_object_radar_points[label] = point
+                self.corner_object_radar_t = event_t
+                continue
+            if (
+                source_service != "sendcan"
+                and CORNER_OBJECT_180_START_ADDRESS <= address <= CORNER_OBJECT_180_END_ADDRESS
+                and is_hyundai_a_can_bus(bus)
+                and len(data) == 32
+            ):
+                for point in decode_hyundai_corner_object_180_radar_points(address, data, self.current_speed_kph):
+                    if point.valid is not None and point.valid > 0:
+                        self.corner_object_radar_points[point.label] = point
+                    else:
+                        self.corner_object_radar_points.pop(point.label, None)
                 self.corner_object_radar_t = event_t
                 continue
             if address not in (CCNC_CORNER_RADAR_ADDRESS, ADRV_CORNER_RADAR_ADDRESS):
@@ -3078,10 +3095,13 @@ def live_track_to_radar_point(track: Any, index: int, ego_speed_kph: float) -> R
     track_id = safe_optional_int(track, "trackId")
     is_corner_object = (
         track_id is not None
-        and CORNER_OBJECT_TRACK_ID_OFFSET <= track_id <= CORNER_OBJECT_TRACK_ID_OFFSET + CORNER_OBJECT_END_ADDRESS - CORNER_OBJECT_START_ADDRESS
+        and (
+            CORNER_OBJECT_TRACK_ID_OFFSET <= track_id <= CORNER_OBJECT_TRACK_ID_OFFSET + CORNER_OBJECT_END_ADDRESS - CORNER_OBJECT_START_ADDRESS
+            or CORNER_OBJECT_180_TRACK_ID_OFFSET <= track_id < CORNER_OBJECT_180_TRACK_ID_OFFSET + (CORNER_OBJECT_180_END_ADDRESS - CORNER_OBJECT_180_START_ADDRESS + 1) * CORNER_OBJECT_180_SLOTS_PER_MESSAGE
+        )
     )
     label = (
-        f"CR{track_id - CORNER_OBJECT_TRACK_ID_OFFSET:02d}"
+        corner_track_label(track_id)
         if is_corner_object
         else (f"T{track_id}" if track_id is not None else f"T{index:03d}")
     )
@@ -3149,8 +3169,64 @@ def decode_hyundai_corner_object_radar_point(
     )
 
 
+def decode_hyundai_corner_object_180_radar_points(
+    address: int,
+    data: bytes,
+    ego_speed_kph: float,
+) -> tuple[RadarPoint, ...]:
+    if len(data) != 32:
+        return ()
+    slot_base = (address - CORNER_OBJECT_180_START_ADDRESS) * CORNER_OBJECT_180_SLOTS_PER_MESSAGE
+    return (
+        decode_hyundai_corner_object_180_slot(address, slot_base, data, 24, ego_speed_kph),
+        decode_hyundai_corner_object_180_slot(address, slot_base + 1, data, 152, ego_speed_kph),
+    )
+
+
+def decode_hyundai_corner_object_180_slot(
+    address: int,
+    slot: int,
+    data: bytes,
+    base: int,
+    ego_speed_kph: float,
+) -> RadarPoint:
+    quality = dbc_unsigned(data, base, 7, "le")
+    alive_age = dbc_unsigned(data, base + 8, 8, "le")
+    moving_flag = dbc_unsigned(data, base + 16, 4, "le")
+    object_class = dbc_unsigned(data, base + 36, 3, "le")
+    d_rel = dbc_unsigned(data, base + 40, 13, "le") * 0.05
+    y_rel = dbc_unsigned(data, base + 54, 12, "le") * 0.05 - 102.4
+    v_rel = dbc_unsigned(data, base + 67, 12, "le") * 0.05 - 100.0
+    yv_rel = dbc_unsigned(data, base + 80, 10, "le") * 0.05 - 25.0
+    a_rel = dbc_signed(data, base + 91, 9, "le") * 0.05
+    label = f"CR180_{slot:02d}"
+    valid = quality > 0 and 0.2 < d_rel < RADAR_FRONT_MAX_LONGITUDINAL_M and abs(y_rel) < 40.0 and v_rel > -99.0
+    lateral_m = renderer_lateral_from_openpilot_yrel(y_rel)
+    return RadarPoint(
+        label=label,
+        longitudinal_m=d_rel if valid else 0.0,
+        lateral_m=lateral_m if valid else 0.0,
+        source=CORNER_OBJECT_SOURCE,
+        relative_speed_mps=v_rel if valid else None,
+        absolute_speed_kph=ego_speed_kph + v_rel * 3.6 if valid else None,
+        lateral_speed_mps=renderer_lateral_from_openpilot_yrel(yv_rel) if valid else None,
+        relative_accel_mps2=a_rel if valid else None,
+        probability=clamp(quality / 100.0, 0.05, 0.98) if valid else None,
+        valid=1 if valid else 0,
+        valid_count=alive_age if valid and alive_age > 0 else None,
+        in_my_lane=1 if valid and abs(lateral_m) < DEFAULT_LANE_WIDTH_M * 0.55 else 0,
+        motion_consistent=(moving_flag > 0 or object_class > 0) if valid else None,
+    )
+
+
 def corner_object_radar_point_label(address: int) -> str:
     return f"CR{address - CORNER_OBJECT_START_ADDRESS:02d}"
+
+
+def corner_track_label(track_id: int) -> str:
+    if CORNER_OBJECT_180_TRACK_ID_OFFSET <= track_id < CORNER_OBJECT_180_TRACK_ID_OFFSET + (CORNER_OBJECT_180_END_ADDRESS - CORNER_OBJECT_180_START_ADDRESS + 1) * CORNER_OBJECT_180_SLOTS_PER_MESSAGE:
+        return f"CR180_{track_id - CORNER_OBJECT_180_TRACK_ID_OFFSET:02d}"
+    return f"CR{track_id - CORNER_OBJECT_TRACK_ID_OFFSET:02d}"
 
 
 def sorted_radar_points(points: Any) -> tuple[RadarPoint, ...]:
@@ -3634,3 +3710,4 @@ def lane_color_from_code(code: int) -> tuple[int, int, int] | None:
     if color_code == 2:
         return YELLOW
     return None
+

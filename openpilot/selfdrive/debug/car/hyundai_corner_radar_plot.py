@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -25,6 +25,8 @@ from opendbc.car.logreader import LogReader  # noqa: E402
 
 START_ADDR = 0x235
 END_ADDR = 0x248
+GROUP_180_START_ADDR = 0x180
+GROUP_180_END_ADDR = 0x184
 DEFAULT_STALE_S = 0.25
 WHEEL_SPEED_ADDR = 0xA0
 KPH_TO_MS = 1000.0 / 3600.0
@@ -94,22 +96,37 @@ def dbc_signed(data: bytes, start: int, length: int) -> int:
   return raw
 
 
-def decode_corner_object(t: float, address: int, data: bytes) -> CornerObject:
+def decode_object_at(t: float, address: int, slot: int, data: bytes, base: int) -> CornerObject:
   return CornerObject(
     t=t,
     address=address,
-    slot=address - START_ADDR,
-    quality=dbc_unsigned(data, 24, 7),
-    age=dbc_unsigned(data, 32, 8),
-    object_id=dbc_unsigned(data, 44, 7),
-    object_class=dbc_unsigned(data, 60, 3),
-    width=dbc_unsigned(data, 52, 7) * 0.05,
-    x=dbc_unsigned(data, 64, 13) * 0.05,
-    y=dbc_unsigned(data, 78, 12) * 0.05 - 102.4,
-    vx=dbc_unsigned(data, 91, 12) * 0.05 - 100.0,
-    vy=dbc_unsigned(data, 104, 10) * 0.05 - 25.0,
-    ax=dbc_signed(data, 115, 9) * 0.05,
+    slot=slot,
+    quality=dbc_unsigned(data, base + 0, 7),
+    age=dbc_unsigned(data, base + 8, 8),
+    object_id=dbc_unsigned(data, base + 20, 7),
+    object_class=dbc_unsigned(data, base + 36, 3),
+    width=dbc_unsigned(data, base + 28, 7) * 0.05,
+    x=dbc_unsigned(data, base + 40, 13) * 0.05,
+    y=dbc_unsigned(data, base + 54, 12) * 0.05 - 102.4,
+    vx=dbc_unsigned(data, base + 67, 12) * 0.05 - 100.0,
+    vy=dbc_unsigned(data, base + 80, 10) * 0.05 - 25.0,
+    ax=dbc_signed(data, base + 91, 9) * 0.05,
   )
+
+
+def decode_corner_objects(t: float, address: int, data: bytes, args: argparse.Namespace) -> list[CornerObject]:
+  if args.profile == "180":
+    if not GROUP_180_START_ADDR <= address <= GROUP_180_END_ADDR or len(data) != 32:
+      return []
+    base_slot = (address - GROUP_180_START_ADDR) * 2
+    return [
+      decode_object_at(t, address, base_slot, data, 24),
+      decode_object_at(t, address, base_slot + 1, data, 152),
+    ]
+
+  if START_ADDR <= address <= END_ADDR and len(data) == 32:
+    return [decode_object_at(t, address, address - START_ADDR, data, 24)]
+  return []
 
 
 def decode_wheel_speed_mps(data: bytes) -> float:
@@ -206,12 +223,13 @@ def read_snapshots(args: argparse.Namespace) -> list[tuple[float, list[CornerObj
       if can.src == args.speed_bus and can.address == WHEEL_SPEED_ADDR and len(can.dat) == 24:
         latest_ego_speed = decode_wheel_speed_mps(bytes(can.dat))
 
-      if can.src == args.bus and START_ADDR <= can.address <= END_ADDR and len(can.dat) == 32:
-        obj = decode_corner_object(t, can.address, bytes(can.dat))
-        if is_valid_object(obj, args.min_quality, args.max_x, args.max_abs_y):
-          latest[can.address] = obj
-        else:
-          latest.pop(can.address, None)
+      if can.src == args.bus:
+        for obj in decode_corner_objects(t, can.address, bytes(can.dat), args):
+          key = obj.slot
+          if is_valid_object(obj, args.min_quality, args.max_x, args.max_abs_y):
+            latest[key] = obj
+          else:
+            latest.pop(key, None)
 
       if summary_dbc is not None and can.src == args.summary_bus and can.address in summary_messages and len(can.dat) == 32:
         values = summary_messages[can.address].decode(bytes(can.dat), decode_choices=False)
@@ -231,7 +249,7 @@ def read_snapshots(args: argparse.Namespace) -> list[tuple[float, list[CornerObj
 
 
 def setup_axes(ax, args: argparse.Namespace) -> None:
-  ax.set_title("Hyundai IONIQ 5 PE corner radar candidates")
+  ax.set_title(f"Hyundai {args.profile.upper()} corner radar candidates")
   ax.set_xlabel("lateral y, vehicle left + [m]")
   ax.set_ylabel("longitudinal x, forward + [m]")
   # Top view: vehicle left should appear on the left side of the screen.
@@ -263,14 +281,14 @@ def plot_vy(obj: CornerObject, args: argparse.Namespace) -> float:
 def draw_snapshot(ax, t: float, objects: list[CornerObject], summary_objects: list[SummaryCornerObject], ego_speed: float, args: argparse.Namespace) -> None:
   ax.clear()
   setup_axes(ax, args)
-  ax.set_title(f"Hyundai corner radar candidates  t={t:.2f}s  vEgo={ego_speed * 3.6:.1f}kph  raw={len(objects)} summary={len(summary_objects)}")
+  ax.set_title(f"Hyundai {args.profile.upper()} corner radar candidates  t={t:.2f}s  vEgo={ego_speed * 3.6:.1f}kph  raw={len(objects)} summary={len(summary_objects)}")
 
   if objects:
     y = [plot_y(obj, args) for obj in objects]
     x = [obj.x for obj in objects]
     colors = [obj.slot for obj in objects]
 
-    sc = ax.scatter(y, x, c=colors, s=[40 + max(0, obj.quality) * 2 for obj in objects], cmap="tab20", vmin=0, vmax=19, edgecolors="black", linewidths=0.6)
+    sc = ax.scatter(y, x, c=colors, s=[40 + max(0, obj.quality) * 2 for obj in objects], cmap="tab20", vmin=0, vmax=max(19, max(colors)), edgecolors="black", linewidths=0.6)
     sc.set_label("raw object slot")
 
     for obj in objects:
@@ -297,7 +315,7 @@ def draw_snapshot(ax, t: float, objects: list[CornerObject], summary_objects: li
 
     cbar = getattr(ax.figure, "_corner_radar_cbar", None)
     if cbar is None:
-      ax.figure._corner_radar_cbar = ax.figure.colorbar(sc, ax=ax, label="slot 0x235 + n")
+      ax.figure._corner_radar_cbar = ax.figure.colorbar(sc, ax=ax, label=f"{args.profile} object slot")
 
   if summary_objects:
     front = [obj for obj in summary_objects if obj.x >= 0.0]
@@ -391,6 +409,7 @@ def parse_args() -> argparse.Namespace:
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
   )
   parser.add_argument("rlog", help="Path to rlog.zst")
+  parser.add_argument("--profile", choices=("235", "180"), default="235", help="Raw corner radar decode profile")
   parser.add_argument("--bus", type=int, default=1)
   parser.add_argument("--speed-bus", type=int, default=0, help="Bus containing WHEEL_SPEEDS 0xA0 for vEgo fallback")
   parser.add_argument("--start", type=float, default=0.0, help="Start time in seconds from the beginning of the rlog")
@@ -424,3 +443,4 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
   parsed_args = parse_args()
   plot_snapshots(read_snapshots(parsed_args), parsed_args)
+
