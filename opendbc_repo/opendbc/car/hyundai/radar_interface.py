@@ -159,62 +159,43 @@ class RadarInterface(RadarInterfaceBase):
     if self.rcp_scc is not None:
       vls_s = self.rcp_scc.update(can_strings)
       self.updated_scc.update(vls_s)
+
+    track_ready = False
     if self.radar_tracks and self.rcp_tracks is not None:
       vls_t = self.rcp_tracks.update(can_strings)
       self.updated_tracks.update(vls_t)
-      if self.trigger_msg_tracks in self.updated_tracks:
-        self._update(self.updated_tracks)
-        self._update_scc(self.updated_scc)
-        self._update_corner_objects(self.updated_corner_objects)
-        self._update_corner_objects_180(self.updated_corner_objects_180)
-        self.updated_scc.clear()
-        self.updated_tracks.clear()
-        self.updated_corner_objects.clear()
-        self.updated_corner_objects_180.clear()
-        ret = structs.RadarData()
-        if not self.rcp_tracks.can_valid or (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid) or (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid):
-          ret.errors.canError = True
-        ret.points = list(self.pts.values())
-        return ret
+      track_ready = self.trigger_msg_tracks in self.updated_tracks
+
+    corner_ready = False
     if self.rcp_corner_objects is not None:
       vls_c = self.rcp_corner_objects.update(can_strings)
       self.updated_corner_objects.update(vls_c)
-      if self.trigger_msg_corner_objects in self.updated_corner_objects:
-        self._update_scc(self.updated_scc)
-        self._update_corner_objects(self.updated_corner_objects)
-        self._update_corner_objects_180(self.updated_corner_objects_180)
-        self.updated_scc.clear()
-        self.updated_corner_objects.clear()
-        self.updated_corner_objects_180.clear()
-        ret = structs.RadarData()
-        if not self.rcp_corner_objects.can_valid or (self.rcp_scc is not None and not self.rcp_scc.can_valid) or (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid):
-          ret.errors.canError = True
-        ret.points = list(self.pts.values())
-        return ret
+      corner_ready = self.trigger_msg_corner_objects in self.updated_corner_objects
+
+    corner_180_ready = False
     if self.rcp_corner_objects_180 is not None:
       vls_180 = self.rcp_corner_objects_180.update(can_strings)
       self.updated_corner_objects_180.update(vls_180)
-      if self.trigger_msg_corner_objects_180 in self.updated_corner_objects_180:
-        self._update_scc(self.updated_scc)
-        self._update_corner_objects(self.updated_corner_objects)
-        self._update_corner_objects_180(self.updated_corner_objects_180)
-        self.updated_scc.clear()
-        self.updated_corner_objects.clear()
-        self.updated_corner_objects_180.clear()
-        ret = structs.RadarData()
-        if not self.rcp_corner_objects_180.can_valid or (self.rcp_scc is not None and not self.rcp_scc.can_valid) or (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid):
-          ret.errors.canError = True
-        ret.points = list(self.pts.values())
-        return ret
-    if not self.radar_tracks and self.frame % 5 == 0 and self.rcp_scc is not None:
+      corner_180_ready = self.trigger_msg_corner_objects_180 in self.updated_corner_objects_180
+
+    scc_ready = not self.radar_tracks and self.frame % 5 == 0 and self.rcp_scc is not None
+    if track_ready or corner_ready or corner_180_ready or scc_ready:
+      if track_ready:
+        self._update(self.updated_tracks)
+        self.updated_tracks.clear()
+
       self._update_scc(self.updated_scc)
       self._update_corner_objects(self.updated_corner_objects)
       self._update_corner_objects_180(self.updated_corner_objects_180)
       self.updated_scc.clear()
       self.updated_corner_objects.clear()
       self.updated_corner_objects_180.clear()
+
       ret = structs.RadarData()
-      if not self.rcp_scc.can_valid or (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid) or (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid):
+      if ((self.rcp_tracks is not None and not self.rcp_tracks.can_valid) or
+          (self.rcp_scc is not None and not self.rcp_scc.can_valid) or
+          (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid) or
+          (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid)):
         ret.errors.canError = True
       ret.points = list(self.pts.values())
       return ret

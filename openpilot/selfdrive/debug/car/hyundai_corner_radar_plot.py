@@ -268,12 +268,57 @@ def discover_rlog_playlist(initial_rlog: Path, max_logs: int | None) -> list[Pat
   return paths
 
 
+def get_video_duration(args: argparse.Namespace, rlog_path: Path) -> float | None:
+  video_path = resolve_video_path(args, rlog_path)
+  if video_path is None:
+    return None
+
+  try:
+    import cv2
+  except ImportError:
+    return None
+
+  cap = cv2.VideoCapture(str(video_path))
+  try:
+    if not cap.isOpened():
+      return None
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    if not fps or fps <= 1e-3 or not frame_count or frame_count <= 0:
+      return None
+    return float(frame_count) / float(fps)
+  finally:
+    cap.release()
+
+
+def normalize_video_duration(duration: float, plot_fps: float) -> float:
+  nearest_second = round(duration)
+  tolerance = max(0.1, 1.0 / max(plot_fps, 1e-3))
+  if abs(duration - nearest_second) <= tolerance:
+    return float(nearest_second)
+  return duration
+
+
+def get_log_end_t(args: argparse.Namespace, rlog_path: Path, start_t: float) -> float | None:
+  end_t = None if args.duration is None else start_t + args.duration
+  if args.no_video_duration_limit:
+    return end_t
+
+  video_duration = get_video_duration(args, rlog_path)
+  if video_duration is None:
+    return end_t
+
+  video_end_t = max(0.0, normalize_video_duration(video_duration, args.fps) - args.video_offset)
+  return video_end_t if end_t is None else min(end_t, video_end_t)
+
+
 def read_snapshots_from_log(args: argparse.Namespace, rlog_path: Path, log_index: int) -> list[Snapshot]:
   latest: dict[tuple[str, int], CornerObject] = {}
   latest_summary: dict[str, SummaryCornerObject] = {}
   snapshots: list[Snapshot] = []
   first_data_t: int | None = None
   start_t = args.start if log_index == 0 else 0.0
+  end_t = get_log_end_t(args, rlog_path, start_t)
   next_frame_t = start_t
   frame_dt = 1.0 / args.fps
   latest_ego_speed = 0.0
@@ -294,7 +339,7 @@ def read_snapshots_from_log(args: argparse.Namespace, rlog_path: Path, log_index
     t = (msg.logMonoTime - first_data_t) / 1e9
     if t < start_t:
       continue
-    if args.duration is not None and t > start_t + args.duration:
+    if end_t is not None and t >= end_t:
       break
 
     if msg_type == "carState":
@@ -319,7 +364,7 @@ def read_snapshots_from_log(args: argparse.Namespace, rlog_path: Path, log_index
         for obj in decode_summary_corners(t, source, values, args):
           latest_summary[obj.label] = obj
 
-    while t >= next_frame_t:
+    while t >= next_frame_t and (end_t is None or next_frame_t < end_t):
       active = [obj for obj in latest.values() if t - obj.t <= args.stale]
       active.sort(key=lambda o: (o.group, o.slot))
       summary_active = [obj for obj in latest_summary.values() if t - obj.t <= args.summary_stale]
@@ -792,6 +837,7 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--video", default="auto", help="TS video path, auto for qcamera.ts next to rlog, or none to disable")
   parser.add_argument("--video-fps", type=float, default=None, help="Override video FPS when OpenCV cannot detect it")
   parser.add_argument("--video-offset", type=float, default=0.0, help="Seconds added to radar time when selecting the video frame")
+  parser.add_argument("--no-video-duration-limit", action="store_true", help="Do not cap each rlog segment to the matching TS video duration")
   parser.add_argument("--save-png", default=None)
   parser.add_argument("--save-gif", default=None)
   args = parser.parse_args()
