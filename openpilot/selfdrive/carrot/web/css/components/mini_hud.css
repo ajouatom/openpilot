@@ -1,0 +1,737 @@
+/* Compact HUD (mini_hud) — pixel-matched to carrot-hud-only-preview.html.
+   Intentionally SEPARATE from the green drive HUD (hud_card): this file owns the
+   compact/HUD-only surface only. The token model, colors, gradients, shapes and
+   spacing mirror the preview 1:1; the only differences from the preview are the
+   class namespace (carrot-mini-hud__*), the runtime var names (--mini-*, driven
+   by mini_hud.js applyLayout), and the fixed-inset window wrapper so the surface
+   fills a small/multi-window viewport. */
+
+.carrot-mini-hud[hidden] {
+  display: none !important;
+}
+
+.carrot-mini-hud {
+  /* Runtime-fit fonts/sizes (mini_hud.js applyLayout). Defaults mirror the
+     preview's .hudWrap token defaults. */
+  --mini-ui-scale: 1;
+  --mini-top-font: 32px;
+  --mini-speed-font: 128px;
+  --mini-set-font: 60px;
+  --mini-speed-scale-x: 1;
+  --mini-set-scale-x: 1;
+  --mini-speed-slot-width: 260px;
+  --mini-set-slot-width: 112px;
+  --mini-speed-gap: 12px;
+  --mini-gear-left: 68%;
+  --mini-gear-bottom: var(--mini-set-font);
+  --mini-gear-font: 18px;
+  --mini-gear-height: 31px;
+  --mini-limit-size: 260px;
+  --mini-limit-font: 104px;
+  --mini-limit-caption-font: 34px;
+  --mini-limit-label-font: 34px;
+  --mini-badge-font: 46px;
+  --mini-alert-font: 34px;
+  --mini-alert-label-font: calc(var(--mini-alert-font) * 0.46);
+  --mini-alert-label-width: calc(var(--mini-alert-font) * 2.24);
+  --mini-alert-row-radius: calc(9px * var(--mini-ui-scale));
+  --mini-alert-row-border: rgba(98, 245, 167, 0.20);
+  --mini-alert-row-bg: rgba(31, 82, 58, 0.30);
+  --mini-alert-label-bg: rgba(98, 245, 167, 0.105);
+  --mini-detail-height: 220px;
+  --mini-mode-font: 48px;
+  --mini-mode-size: 160px;
+
+  --mini-radius: calc(20px * var(--mini-ui-scale));
+  --mini-padding: calc(12px * var(--mini-ui-scale));
+  --mini-section-gap: calc(10px * var(--mini-ui-scale));
+  --mini-band-height: calc(54px * var(--mini-ui-scale));
+  --mini-chip-radius: calc(12px * var(--mini-ui-scale)); /* app --r-md look for the detail chips */
+  --mini-panel-top: #0b3726;
+  --mini-panel-mid: #0f402d;
+  --mini-panel-bottom: #07140f;
+  --mini-panel-border: rgba(255, 255, 255, 0.16);
+  --mini-surface: rgba(255, 255, 255, 0.06);
+  --mini-surface-strong: rgba(255, 255, 255, 0.10);
+  --mini-text: #f7fff9;
+  --mini-muted: rgba(247, 255, 249, 0.66);
+  --mini-accent: #35f2a0;
+  --mini-warning: #ffd24a;
+  --mini-danger: #ff304f;
+  --mini-text-shadow-strong: 0 1px 2.4px rgba(0, 0, 0, 0.72);
+
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: var(--mini-padding);
+  border: 1px solid var(--mini-panel-border);
+  border-radius: var(--mini-radius);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01) 38%, transparent 72%),
+    linear-gradient(145deg, var(--mini-panel-top), var(--mini-panel-mid) 58%, var(--mini-panel-bottom));
+  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.54);
+  color: var(--mini-text);
+  isolation: isolate;
+  contain: strict;
+  user-select: none;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.carrot-mini-hud * {
+  box-sizing: border-box;
+}
+
+.carrot-mini-hud::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 16% 12%, rgba(255, 255, 255, 0.05), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 22%);
+  pointer-events: none;
+}
+
+.carrot-mini-hud > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Top metric bar (green) ──────────────────────────────────── */
+.carrot-mini-hud__top {
+  min-height: var(--mini-band-height);
+  flex: 0 0 var(--mini-band-height);
+  border-radius: 0;
+  background: #187047;
+  border: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+  margin:
+    calc(var(--mini-padding) * -1)
+    calc(var(--mini-padding) * -1)
+    calc(var(--mini-section-gap) * 0.20);
+  padding: 0 var(--mini-padding);
+}
+
+.carrot-mini-hud__top-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 calc(var(--mini-section-gap) * 0.24);
+  overflow: hidden;
+  color: var(--mini-text);
+  font-size: var(--mini-top-font);
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: var(--mini-text-shadow-strong);
+  white-space: nowrap;
+}
+
+.carrot-mini-hud__top-cell + .carrot-mini-hud__top-cell {
+  border-left: 1px solid rgba(255, 255, 255, 0.24);
+}
+
+.carrot-mini-hud__cpu {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-shadow: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.carrot-mini-hud__cpu:focus-visible {
+  outline: max(1px, calc(2px * var(--mini-ui-scale))) solid rgba(247, 255, 249, 0.78);
+  outline-offset: calc(3px * var(--mini-ui-scale));
+}
+
+/* ── Main region: limit | detail, or stock ───────────────────── */
+.carrot-mini-hud__main {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 48fr) minmax(0, 52fr);
+  column-gap: calc(var(--mini-section-gap) * 1.28);
+  align-items: center;
+  padding: 0 calc(var(--mini-padding) * 0.18);
+}
+
+.carrot-mini-hud__limit {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: stretch;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.carrot-mini-hud__limit-sign {
+  position: relative;
+  width: var(--mini-limit-size);
+  height: var(--mini-limit-size);
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: max(3px, calc(var(--mini-limit-size) * 0.095)) solid #ff3348;
+  background: radial-gradient(circle at 50% 48%, #ffffff 0 55%, #fff7f7 56% 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--mini-limit-size) * 0.025);
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.40),
+    0 0 26px rgba(255, 51, 72, 0.30),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.70);
+}
+
+.carrot-mini-hud__limit-sign > span {
+  color: #050807;
+  font-size: var(--mini-limit-font);
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: 0;
+  text-shadow: none;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.carrot-mini-hud__limit-sign > small {
+  color: #050807;
+  font-size: var(--mini-limit-label-font);
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.carrot-mini-hud__limit-badge {
+  position: relative;
+  z-index: 1;
+  margin-top: calc(var(--mini-limit-size) * -0.08);
+  min-width: calc(var(--mini-limit-size) * 0.72);
+  height: calc(var(--mini-limit-size) * 0.30);
+  border-radius: calc(var(--mini-limit-size) * 0.045);
+  background: linear-gradient(180deg, #f04a23, #d93318);
+  display: grid;
+  place-items: center;
+  padding: 0 calc(var(--mini-limit-size) * 0.08);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
+  color: #fff;
+  font-size: var(--mini-badge-font);
+  font-weight: 950;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.34);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.carrot-mini-hud__limit-badge[hidden],
+.carrot-mini-hud__limit-sign > small[hidden] {
+  display: none !important;
+}
+
+/* ── US MUTCD rectangular sign (imperial) — same CSS technique as the circle,
+      only the shape/colors differ; toggled by root[data-limit-style="us"]. ── */
+.carrot-mini-hud__limit-us-caption {
+  display: none;
+}
+
+.carrot-mini-hud[data-limit-style="us"] .carrot-mini-hud__limit-sign {
+  width: calc(var(--mini-limit-size) * 0.82);
+  height: var(--mini-limit-size);
+  border-radius: calc(var(--mini-limit-size) * 0.09);
+  border: max(3px, calc(var(--mini-limit-size) * 0.052)) solid #050807;
+  background: #ffffff;
+  gap: calc(var(--mini-limit-size) * 0.015);
+  padding: calc(var(--mini-limit-size) * 0.055) 0;
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.40),
+    inset 0 0 0 2px rgba(0, 0, 0, 0.05);
+}
+
+.carrot-mini-hud[data-limit-style="us"] .carrot-mini-hud__limit-us-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--mini-limit-size) * 0.006);
+  color: #050807;
+  font-size: var(--mini-limit-caption-font);
+  font-weight: 900;
+  line-height: 0.98;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.carrot-mini-hud[data-limit-style="us"] .carrot-mini-hud__limit-sign > span {
+  line-height: 0.86;
+}
+
+/* US sign carries no Korean SDI decorations */
+.carrot-mini-hud[data-limit-style="us"] .carrot-mini-hud__limit-badge,
+.carrot-mini-hud[data-limit-style="us"] .carrot-mini-hud__limit-sign > small {
+  display: none !important;
+}
+
+/* ── View-test badge (mini_hud_demo.js, ?mhud_test=1 only) ── */
+.carrot-mini-hud .carrot-mini-hud__demo-tag {
+  position: absolute;   /* beats the `.carrot-mini-hud > *` position:relative */
+  top: 3px;
+  left: 3px;
+  z-index: 20;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.58);
+  color: #8fe3ff;
+  font: 800 10px/1.25 system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.carrot-mini-hud .carrot-mini-hud__demo-tag[hidden] {
+  display: none !important;
+}
+
+/* ── Detail (alert) zone: countdown / distance / type ────────── */
+.carrot-mini-hud__alert {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: stretch;
+  align-self: center;
+  min-width: 0;
+  height: var(--mini-detail-height);
+  min-height: 0;
+  max-height: 100%;
+  display: grid;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  align-content: stretch;
+  align-items: stretch;
+  gap: calc(var(--mini-section-gap) * 0.52);
+  padding:
+    calc(var(--mini-section-gap) * 0.18)
+    calc(var(--mini-padding) * 0.34)
+    calc(var(--mini-section-gap) * 0.18)
+    calc(var(--mini-padding) * 0.10);
+}
+
+.carrot-mini-hud__limit-visual {
+  position: relative;
+  width: max-content;
+  height: max-content;
+  display: grid;
+  place-items: center;
+}
+
+.carrot-mini-hud__alert-badge {
+  --mini-alert-badge-glow: rgba(53, 242, 160, 0.48);
+  position: absolute;
+  top: calc(var(--mini-limit-size) * -0.075);
+  right: calc(var(--mini-limit-size) * -0.09);
+  z-index: 3;
+  width: calc(var(--mini-limit-size) * 0.47);
+  height: calc(var(--mini-limit-size) * 0.47);
+  object-fit: contain;
+  filter:
+    drop-shadow(1.5px 0 0 rgba(255, 255, 255, 0.98))
+    drop-shadow(-1.5px 0 0 rgba(255, 255, 255, 0.98))
+    drop-shadow(0 1.5px 0 rgba(255, 255, 255, 0.98))
+    drop-shadow(0 -1.5px 0 rgba(255, 255, 255, 0.98))
+    drop-shadow(1px 1px 0 rgba(255, 255, 255, 0.90))
+    drop-shadow(-1px -1px 0 rgba(255, 255, 255, 0.90))
+    drop-shadow(0 calc(8px * var(--mini-ui-scale)) calc(9px * var(--mini-ui-scale)) rgba(0, 0, 0, 0.76))
+    drop-shadow(0 0 calc(12px * var(--mini-ui-scale)) var(--mini-alert-badge-glow));
+  animation: carrot-mini-hud-alert-badge-in 180ms ease-out;
+}
+
+.carrot-mini-hud__alert-badge[data-kind="police"] {
+  --mini-alert-badge-glow: rgba(78, 153, 255, 0.58);
+}
+
+.carrot-mini-hud[data-limit-style="us"] .carrot-mini-hud__alert-badge {
+  top: calc(var(--mini-limit-size) * -0.10);
+  right: calc(var(--mini-limit-size) * -0.17);
+}
+
+.carrot-mini-hud__alert-badge[hidden] {
+  display: none !important;
+}
+
+@keyframes carrot-mini-hud-alert-badge-in {
+  from { opacity: 0; transform: scale(0.76); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.carrot-mini-hud__stock-mode {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.carrot-mini-hud__stock-mode[hidden] {
+  display: none !important;
+}
+
+.carrot-mini-hud__drive-mode {
+  --mini-mode-accent: #eaf4ef;
+  --mini-mode-fill: #050a08;
+  position: relative;
+  overflow: visible;
+  width: var(--mini-mode-size);
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--mini-mode-font) * 0.12) 0;
+}
+
+.carrot-mini-hud__drive-mode > span {
+  max-width: none;
+  overflow: visible;
+  color: var(--mini-mode-fill);
+  font-family: inherit;
+  font-size: var(--mini-mode-font);
+  font-stretch: condensed;
+  font-weight: 950;
+  line-height: 0.94;
+  letter-spacing: 0;
+  -webkit-text-stroke: max(2px, calc(2.6px * var(--mini-ui-scale))) rgba(255, 255, 255, 0.98);
+  paint-order: stroke fill;
+  text-shadow: 0 calc(2px * var(--mini-ui-scale)) calc(4px * var(--mini-ui-scale)) rgba(0, 0, 0, 0.72);
+  white-space: nowrap;
+}
+
+.carrot-mini-hud__drive-mode.is-demo-interactive {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.carrot-mini-hud__drive-mode.is-demo-interactive:active {
+  transform: translateY(calc(1px * var(--mini-ui-scale)));
+}
+
+.carrot-mini-hud__drive-mode.is-demo-interactive:focus-visible {
+  outline: max(1px, calc(2px * var(--mini-ui-scale))) solid var(--mini-mode-accent);
+  outline-offset: calc(3px * var(--mini-ui-scale));
+}
+
+.carrot-mini-hud__drive-mode[data-mini-hud-drive-kind="eco"] {
+  --mini-mode-accent: #49dd82;
+}
+
+.carrot-mini-hud__drive-mode[data-mini-hud-drive-kind="safe"] {
+  --mini-mode-accent: #78d5ee;
+}
+
+.carrot-mini-hud__drive-mode[data-mini-hud-drive-kind="sport"] {
+  --mini-mode-accent: #ff6673;
+}
+
+.carrot-mini-hud__alert > * {
+  min-width: 0;
+  color: var(--mini-text);
+  font-size: var(--mini-alert-font);
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.64);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.carrot-mini-hud__alert > strong {
+  color: var(--mini-accent);
+}
+
+.carrot-mini-hud[data-alert-kind="police"] .carrot-mini-hud__alert > strong,
+.carrot-mini-hud[data-alert-kind="bump"] .carrot-mini-hud__alert > strong {
+  color: var(--mini-warning);
+}
+
+/* ── Detail chips (countdown / distance / temp) ───────────────────────────────
+   Rounded-rect chips borrowing the app's --r-md / .chip structure (translucent
+   hairline border + faint fill), kept in the minihud green palette, no icons.
+   label = small + dim, value = prominent. */
+.carrot-mini-hud__chip {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: calc(var(--mini-alert-font) * 0.26);
+  padding: 0;
+  border: 1px solid var(--mini-alert-row-border);
+  border-radius: var(--mini-alert-row-radius);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.022)),
+    var(--mini-alert-row-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.052);
+  line-height: 1;
+}
+
+.carrot-mini-hud__chip + .carrot-mini-hud__chip {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.carrot-mini-hud__chip[hidden] {
+  display: none !important;
+}
+
+.carrot-mini-hud__chip[data-mini-hud-empty="1"] > b {
+  opacity: 0.48;
+}
+
+.carrot-mini-hud__chip-label {
+  align-self: stretch;
+  width: var(--mini-alert-label-width);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 calc(var(--mini-alert-font) * 0.16);
+  border-right: 1px solid rgba(98, 245, 167, 0.16);
+  border-radius:
+    calc(var(--mini-alert-row-radius) - 1px)
+    0
+    0
+    calc(var(--mini-alert-row-radius) - 1px);
+  background: var(--mini-alert-label-bg);
+  color: rgba(247, 255, 249, 0.98);
+  font-size: var(--mini-alert-label-font);
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  line-height: 1.05;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.carrot-mini-hud__chip > b {
+  min-width: 0;
+  justify-self: start;
+  text-align: left;
+  padding-right: calc(var(--mini-alert-font) * 0.30);
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
+}
+
+.carrot-mini-hud__gap-value {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: calc(var(--mini-alert-font) * 0.18);
+}
+
+.carrot-mini-hud__gap-signal {
+  width: 100%;
+  min-width: 0;
+  height: calc(var(--mini-alert-font) * 0.34);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  gap: calc(var(--mini-alert-font) * 0.085);
+}
+
+.carrot-mini-hud__gap-signal > i {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--mini-alert-font) * 0.10);
+  background: rgba(247, 255, 249, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(247, 255, 249, 0.09);
+}
+
+.carrot-mini-hud__gap-signal[data-level="1"] > i:nth-child(-n+1),
+.carrot-mini-hud__gap-signal[data-level="2"] > i:nth-child(-n+2),
+.carrot-mini-hud__gap-signal[data-level="3"] > i:nth-child(-n+3),
+.carrot-mini-hud__gap-signal[data-level="4"] > i:nth-child(-n+4) {
+  background: var(--mini-accent);
+  box-shadow: 0 0 calc(5px * var(--mini-ui-scale)) rgba(53, 242, 160, 0.32);
+}
+
+/* temp chip carries the accel/decel color; its rounded shape comes from .chip. */
+.carrot-mini-hud__temp {
+  /* Wins over the reddish `.carrot-mini-hud__alert > strong` and the police/bump
+     amber rules above, which target the same element slot. */
+  color: var(--mini-accent) !important;
+}
+
+.carrot-mini-hud__temp[data-mini-hud-temp-decel="1"] {
+  color: var(--mini-warning) !important;
+}
+
+.carrot-mini-hud[data-source="nav"] [data-mini-hud-temp-zone] {
+  grid-row: 3;
+}
+
+.carrot-mini-hud[data-source="nav"] [data-mini-hud-gap-zone] {
+  grid-row: 4;
+}
+
+/* Shared visibility rules for the main-band zones. */
+.carrot-mini-hud__limit[hidden],
+.carrot-mini-hud__alert[hidden] {
+  display: none !important;
+}
+
+/* ── Speed row: current speed (70%) | set speed (30%) ────────── */
+.carrot-mini-hud__speed-row {
+  position: relative;
+  flex: 0 0 34%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns:
+    minmax(0, var(--mini-speed-slot-width))
+    minmax(0, var(--mini-set-slot-width));
+  justify-content: center;
+  align-items: end;
+  column-gap: var(--mini-speed-gap);
+  /* Breathing room below the speed/cruise digits before the panel's bottom edge. */
+  margin-bottom: calc(var(--mini-section-gap) * 1.15);
+}
+
+.carrot-mini-hud__speed,
+.carrot-mini-hud__set-speed {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  overflow: visible;
+  font-weight: 900;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1.4px 3.6px rgba(0, 0, 0, 0.94);
+  white-space: nowrap;
+}
+
+.carrot-mini-hud__speed {
+  justify-content: center;
+  padding:
+    calc(var(--mini-padding) * 0.18)
+    0
+    calc(var(--mini-padding) * 0.10)
+    0;
+  color: #fff;
+  font-size: var(--mini-speed-font);
+  line-height: 0.84;
+  text-align: center;
+}
+
+.carrot-mini-hud__set-speed {
+  justify-content: center;
+  padding:
+    calc(var(--mini-padding) * 0.18)
+    0
+    calc(var(--mini-padding) * 0.10)
+    0;
+  color: #f4f7fb;
+  font-size: var(--mini-set-font);
+  line-height: 0.92;
+  text-align: center;
+}
+
+.carrot-mini-hud__gear-badge {
+  position: absolute;
+  left: var(--mini-gear-left);
+  right: auto;
+  bottom: var(--mini-gear-bottom);
+  min-width: calc(var(--mini-gear-font) * 2.6);
+  height: var(--mini-gear-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(3px * var(--mini-ui-scale));
+  padding: 0 calc(var(--mini-gear-font) * 0.40);
+  border: max(1px, calc(1.5px * var(--mini-ui-scale))) solid rgba(247, 255, 249, 0.34);
+  border-radius: calc(var(--mini-gear-font) * 0.43);
+  background: rgba(5, 17, 12, 0.90);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 calc(3px * var(--mini-ui-scale)) calc(7px * var(--mini-ui-scale)) rgba(0, 0, 0, 0.46);
+  color: rgba(247, 255, 249, 0.86);
+  font-size: var(--mini-gear-font);
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: var(--mini-text-shadow-strong);
+  white-space: nowrap;
+}
+
+.carrot-mini-hud__gear-badge[hidden] {
+  display: none !important;
+}
+
+.carrot-mini-hud__gear-badge > strong {
+  color: #ffffff;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.carrot-mini-hud__gear-badge[data-mini-hud-gear-known="0"] {
+  opacity: 0.64;
+}
+
+.carrot-mini-hud__speed > span,
+.carrot-mini-hud__set-speed > span {
+  display: inline-block;
+  line-height: inherit;
+  transform-origin: center bottom;
+  text-rendering: optimizeLegibility;
+}
+
+.carrot-mini-hud__speed > span {
+  transform: scaleX(var(--mini-speed-scale-x));
+}
+
+.carrot-mini-hud__set-speed > span {
+  transform: scaleX(var(--mini-set-scale-x));
+}
+
+.carrot-mini-hud.is-three-digit .carrot-mini-hud__speed > span,
+.carrot-mini-hud.is-three-digit .carrot-mini-hud__set-speed > span {
+  font-family: "Roboto Condensed", "Arial Narrow", "Noto Sans Condensed", "sans-serif-condensed", sans-serif;
+  font-stretch: condensed;
+}
+
+/* ── Drive-page integration: while active, hide the normal CWeb UI ── */
+html[data-carrot-mini-hud="1"],
+html[data-carrot-mini-hud="1"] body {
+  overflow: hidden !important;
+}
+
+html[data-carrot-mini-hud="1"] body .topbar,
+html[data-carrot-mini-hud="1"] body > .wrap,
+html[data-carrot-mini-hud="1"] body #driveHudCard {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+html[data-carrot-mini-hud="1"] body #carrotMiniHud {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}

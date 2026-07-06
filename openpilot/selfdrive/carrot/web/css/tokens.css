@@ -105,6 +105,17 @@
   --dialog-sheet-max-height: calc(100dvh - var(--sp-lg) * 2);
   --dialog-sheet-mobile-max-height: min(88dvh, 720px);
 
+  /* ── On-screen keyboard ───────────────────────────────────────
+     --kb-inset: exact keyboard height (INCLUDING the Samsung suggestion/autofill
+     toolbar) on Chromium via the VirtualKeyboard API (viewport.js opts in);
+     resolves to 0 on iOS Safari / Firefox / desktop, where the visualViewport
+     path handles the keyboard instead.
+     --kb-gap: the breathing space every keyboard-anchored surface keeps above
+     the keyboard. One source of truth so dialogs, terminal and the settings
+     search panel are consistent. */
+  --kb-inset: env(keyboard-inset-height, 0px);
+  --kb-gap: 36px;
+
   /* ── Popup surface ────────────────────────────────────────────
      One surface for every floating popup (dialog sheet, dropdown
      menu, popover) so they share background / border / shadow /

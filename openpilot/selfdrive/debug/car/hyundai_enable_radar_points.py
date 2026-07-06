@@ -13,11 +13,12 @@ USE AT YOUR OWN RISK! Safety features, like AEB and FCW, might be affected by th
 
 import sys
 import argparse
+import time
 from typing import NamedTuple
 from subprocess import check_output, CalledProcessError
 
 from opendbc.car.carlog import carlog
-from opendbc.car.uds import UdsClient, SESSION_TYPE, DATA_IDENTIFIER_TYPE
+from opendbc.car.uds import UdsClient, SESSION_TYPE, DATA_IDENTIFIER_TYPE, NegativeResponseError
 from opendbc.car.structs import CarParams
 from panda.python import Panda
 
@@ -76,9 +77,16 @@ SUPPORTED_FW_VERSIONS = {
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description='configure radar to output points (or reset to default)')
   parser.add_argument('--default', action="store_true", default=False, help='reset to default configuration (default: false)')
+  parser.add_argument('--read-only', action="store_true", default=False,
+                      help='only read firmware and configuration; never write to the radar')
+  parser.add_argument('--scan-config-dids', action="store_true", default=False,
+                      help='with --read-only, scan manufacturer DIDs 0x0100-0x01ff after 0x0142 fails')
   parser.add_argument('--debug', action="store_true", default=False, help='enable debug output (default: false)')
   parser.add_argument('--bus', type=int, default=0, help='can bus to use (default: 0)')
   args = parser.parse_args()
+
+  if args.scan_config_dids and not args.read_only:
+    parser.error('--scan-config-dids requires --read-only')
 
   if args.debug:
     carlog.setLevel('DEBUG')
@@ -100,24 +108,65 @@ if __name__ == "__main__":
   panda.set_safety_mode(CarParams.SafetyModel.elm327)
   uds_client = UdsClient(panda, 0x7D0, bus=args.bus)
 
-  print("\n[START DIAGNOSTIC SESSION]")
-  session_type : SESSION_TYPE = 0x07
-  uds_client.diagnostic_session_control(session_type)
+  if not args.read_only:
+    print("\n[START DIAGNOSTIC SESSION]")
+    session_type : SESSION_TYPE = 0x07
+    uds_client.diagnostic_session_control(session_type)
+  else:
+    print("\n[READ-ONLY DEFAULT SESSION]")
 
   print("[HARDWARE/SOFTWARE VERSION]")
   fw_version_data_id : DATA_IDENTIFIER_TYPE = 0xf100
   fw_version = uds_client.read_data_by_identifier(fw_version_data_id)
   print(fw_version)
-  if fw_version not in SUPPORTED_FW_VERSIONS.keys():
+  if fw_version not in SUPPORTED_FW_VERSIONS and not args.read_only:
     print("radar not supported! (aborted)")
     sys.exit(1)
 
   print("[GET CONFIGURATION]")
   config_data_id : DATA_IDENTIFIER_TYPE = 0x0142
-  current_config = uds_client.read_data_by_identifier(config_data_id)
+  try:
+    current_config = uds_client.read_data_by_identifier(config_data_id)
+  except NegativeResponseError as default_session_error:
+    if not args.read_only:
+      raise
+
+    print(f"default session config read failed: {default_session_error}")
+    print("[TRY EXTENDED DIAGNOSTIC SESSION]")
+    try:
+      uds_client.diagnostic_session_control(SESSION_TYPE.EXTENDED_DIAGNOSTIC)
+    except NegativeResponseError as extended_session_error:
+      print(f"extended diagnostic session failed: {extended_session_error}")
+      print("radar configuration could not be read; read-only mode made no changes")
+      sys.exit(2)
+
+    try:
+      current_config = uds_client.read_data_by_identifier(config_data_id)
+    except NegativeResponseError as extended_read_error:
+      print(f"extended session config read failed: {extended_read_error}")
+      if args.scan_config_dids:
+        print("[SCAN READ-ONLY CONFIGURATION DIDS 0x0100-0x01ff]")
+        found_dids = 0
+        for data_id in range(0x0100, 0x0200):
+          time.sleep(0.01)
+          try:
+            data = uds_client.read_data_by_identifier(data_id)
+          except NegativeResponseError:
+            continue
+          found_dids += 1
+          print(f"DID 0x{data_id:04x}: 0x{data.hex()} {data!r}")
+        print(f"supported configuration DIDs found: {found_dids}")
+      print("radar configuration could not be read; read-only mode made no changes")
+      sys.exit(0 if args.scan_config_dids else 2)
+  print(f"current config: 0x{current_config.hex()}")
+
+  if args.read_only:
+    support_status = "supported" if fw_version in SUPPORTED_FW_VERSIONS else "unknown"
+    print(f"radar configuration is {support_status}; read-only mode made no changes")
+    sys.exit(0)
+
   config_values = SUPPORTED_FW_VERSIONS[fw_version]
   new_config = config_values.default_config if args.default else config_values.tracks_enabled
-  print(f"current config: 0x{current_config.hex()}")
   if current_config != new_config:
     print("[CHANGE CONFIGURATION]")
     print(f"new config:     0x{new_config.hex()}")

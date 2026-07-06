@@ -13,6 +13,7 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL, Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.simple_kalman import KF1D
+from openpilot.selfdrive.controls.lib.drive_helpers import is_volkswagen_meb
 
 
 # Default lead acceleration decay set to 50% at 1s
@@ -32,6 +33,11 @@ STICKY_MAX_DPATH = 0.8
 STICKY_FAR_DREL = 60.0
 STICKY_MAX_DPATH_FAR = 1.2
 STICKY_PATH_Y_STD_GAIN = 0.5
+
+# VW MEB(ID.4/ID.5) 전용: 레이더 vLead 미분(interfaces.py MyTrack)이 만드는 aLeadK 노이즈 스파이크를
+# 모델(비전) 가속도 기준으로 제한할 밴드. 양자화된 Rel_Velo 탓에 정상 추종 중에도 aLeadK가
+# -1.4~-2.8까지 튀어 오탐 FCW/급제동을 유발했음(모델 a는 -0.6~+0.6로 매끈).
+MEB_ALEAD_CLAMP_BAND = 1.0
 
 CUTIN_CONFIRM_FRAMES = int(0.25 / DT_MDL)
 CUTIN_STICKY_FRAMES = int(0.7 / DT_MDL)
@@ -59,6 +65,9 @@ RADAR_ONLY_CENTER_MID_DREL = 60.0
 RADAR_ONLY_CENTER_FAR_DREL = 80.0
 RADAR_ONLY_CENTER_MAX_DREL = 100.0
 
+RADAR_CENTER_PROMOTION_MAX_LANE_CENTER_OFFSET = 1.5
+RADAR_CENTER_PROMOTION_RECEDING_MAX_DREL = 45.0
+RADAR_CENTER_PROMOTION_RECEDING_VREL = 0.5
 
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
@@ -66,6 +75,20 @@ def laplacian_pdf(x: float, mu: float, b: float):
 
 def clamp(x: float, lo: float, hi: float) -> float:
   return float(np.clip(x, lo, hi))
+
+def is_radar_center_promotion_safe(lead: dict[str, Any]) -> bool:
+  d_rel = float(lead.get("dRel", 999.0))
+  y_rel = float(lead.get("yRel", 999.0))
+  d_path = float(lead.get("dPath", 999.0))
+  v_rel = float(lead.get("vRel", 999.0))
+
+  # Unmatched center candidates rely on predicted lane geometry. Avoid promotion
+  # when curvature can project an adjacent-lane radar return onto the ego path.
+  if abs(d_path - y_rel) >= RADAR_CENTER_PROMOTION_MAX_LANE_CENTER_OFFSET:
+    return False
+
+  # A far lead pulling away cannot constrain longitudinal control yet.
+  return d_rel <= RADAR_CENTER_PROMOTION_RECEDING_MAX_DREL or v_rel <= RADAR_CENTER_PROMOTION_RECEDING_VREL
 
 EMPTY_LEAD = {
   "dRel": 0.0,
@@ -438,8 +461,11 @@ def get_RadarState_from_vision(md, lead_msg: capnp._DynamicStructReader, v_ego: 
   }
 
 class RadarD:
-  def __init__(self, delay: float = 0.0):
+  def __init__(self, delay: float = 0.0, is_vw_meb: bool = False):
     self.current_time = 0.0
+
+    # VW MEB(ID.4/ID.5)에서만 True -> get_lead가 infiniteCable2(=comma) 리드선택을 따름(sticky/track_scc 미사용).
+    self.is_vw_meb = is_vw_meb
 
     self.tracks: dict[int, Track] = {}
 
@@ -588,6 +614,40 @@ class RadarD:
 
     v_ego = self.v_ego
     ready = self.ready
+
+    # VW MEB(ID.4/ID.5): infiniteCable2(=comma) get_lead 정확 복제.
+    # carrot의 sticky_track/track_scc 우회 승격을 쓰지 않고, "비전과 sane하게 매칭된 레이더 +
+    # 비전단독 + (leadOne만)저속override" 만 사용. -> 정지물체/먼객체가 비전 확인 없이 리드로
+    # 승격돼 급제동하던 문제 제거. is_vw_meb 게이트라 타 차종은 아래 carrot 원본 그대로.
+    if self.is_vw_meb:
+      if len(tracks) > 0 and ready and lead_prob > .5:
+        track = match_vision_to_track(v_ego, lead_msg, lead_prob, tracks, update_counters=(index == 0))
+      else:
+        track = None
+      lead_dict = empty_lead()
+      radar = False
+      if track is not None:
+        vision_y_rel = float(-lead_msg.y[0]) if ready else 0.0
+        lead_dict = track.get_RadarState(lead_prob, vision_y_rel)
+        radar = True
+      elif ready and lead_prob > .5:
+        lead_dict = get_RadarState_from_vision(md, lead_msg, v_ego, model_v_ego, lead_prob)
+      if index == 0:  # infiniteCable2: leadOne만 low_speed_override (저속<4 & 0.75~25m 근접 정지물)
+        low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
+        if len(low_speed_tracks) > 0:
+          closest_track = min(low_speed_tracks, key=lambda c: c.dRel)
+          if (not lead_dict['status']) or (closest_track.dRel < lead_dict['dRel']):
+            vision_y_rel = float(-lead_msg.y[0]) if ready else 0.0
+            lead_dict = closest_track.get_RadarState(lead_prob, vision_y_rel)
+            radar = True
+      # 레이더 aLeadK를 모델 가속도 ±MEB_ALEAD_CLAMP_BAND로 제한. vLead 미분 노이즈 스파이크만
+      # 깎아 오탐 FCW/급제동을 막고, 실제 앞차 제동(모델도 감지)은 그대로 보존한다.
+      if radar and lead_dict.get('status') and lead_prob > .5:
+        model_a = float(lead_msg.a[0])
+        a_clamped = float(np.clip(lead_dict['aLeadK'], model_a - MEB_ALEAD_CLAMP_BAND, model_a + MEB_ALEAD_CLAMP_BAND))
+        lead_dict['aLead'] = a_clamped
+        lead_dict['aLeadK'] = a_clamped
+      return lead_dict, radar
 
     ## backup SCC radar(0, 1 trackid)
     if self.enable_radar_tracks <= 0:
@@ -822,7 +882,7 @@ class RadarD:
         chosen["modelProb"] = 0.03
         detected = True
 
-    elif self.leadCenter and self.leadCenter["status"]:
+    elif self.leadCenter and self.leadCenter["status"] and is_radar_center_promotion_safe(self.leadCenter):
       lead_one = self.radar_state.leadOne
       vision_prob = lead_one.modelProb if lead_one.status else 0.0
 
@@ -959,7 +1019,8 @@ def main() -> None:
   #sm = messaging.SubMaster(['modelV2', 'carState', 'liveTracks'])
   pm = messaging.PubMaster(['radarState'])
 
-  RD = RadarD(CP.radarDelay)
+  # VW MEB(ID.4/ID.5)만 infiniteCable2식 리드선택. 타 차종은 carrot 원본.
+  RD = RadarD(CP.radarDelay, is_vw_meb=is_volkswagen_meb(CP))
 
   while 1:
     sm.update()

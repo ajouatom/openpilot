@@ -31,6 +31,13 @@ GearShifter = structs.CarState.GearShifter
 READY_COUNT_OK = 200
 TRAILER_DISCONNECT_GRACE_FRAMES = int(5.0 / DT_CTRL)
 
+# accFaulted (TCS13/TCS.ACCEnable != 0) is otherwise a raw single-frame signal that goes
+# straight to EventName.accFaulted -> IMMEDIATE_DISABLE. On openpilot-long (modded) cars the
+# stock ACC module stays alive on the bus, so a 1-2 frame blip of ACCEnable disengages cruise
+# with no real fault. Require the fault to persist this many carState frames (100Hz -> ~70ms)
+# before reporting it. A genuine persistent ACC fault still disengages within ~70ms.
+ACC_FAULT_DEBOUNCE_FRAMES = 7
+
 
 NUMERIC_TO_TZ = {
     840: "America/New_York",   # 미국 (US) → 동부 시간대
@@ -122,6 +129,8 @@ class CarState(CarStateBase):
 
     self.main_enabled = True if Params().get_int("AutoEngage") == 2 else False
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
+
+    self.acc_fault_frames = 0  # debounce counter for accFaulted (see ACC_FAULT_DEBOUNCE_FRAMES)
 
     self.totalDistance = 0.0
     self.speedLimitDistance = 0
@@ -348,7 +357,16 @@ class CarState(CarStateBase):
       ret.parkingBrake = cp.vl["TCS13"]["PBRAKE_ACT"] == 1
       ret.espDisabled = cp.vl["TCS11"]["TCS_PAS"] == 1
       ret.espActive = cp.vl["TCS11"]["ABS_ACT"] == 1
-      ret.accFaulted = cp.vl["TCS13"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
+      # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
+      if self.CP.carFingerprint == CAR.KIA_EV_SK3:
+        # KIA_EV_SK3: ACCEnable blips non-zero for 1-2 frames on openpilot-long, debounce it
+        if cp.vl["TCS13"]["ACCEnable"] != 0:
+          self.acc_fault_frames = min(self.acc_fault_frames + 1, ACC_FAULT_DEBOUNCE_FRAMES)
+        else:
+          self.acc_fault_frames = 0
+        ret.accFaulted = self.acc_fault_frames >= ACC_FAULT_DEBOUNCE_FRAMES
+      else:
+        ret.accFaulted = cp.vl["TCS13"]["ACCEnable"] != 0
       ret.brakeLights = bool(cp.vl["TCS13"]["BrakeLight"] or ret.brakePressed)
 
     if self.CP.flags & (HyundaiFlags.HYBRID | HyundaiFlags.EV | HyundaiFlags.FCEV):

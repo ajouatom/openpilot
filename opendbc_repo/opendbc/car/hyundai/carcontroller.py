@@ -30,7 +30,15 @@ PRE_OVERRIDE_FILTERED_MIN_RATIO = 0.65
 PRE_OVERRIDE_MIN_RATE_RATIO = 0.50
 PRE_OVERRIDE_CONFIRM_FRAMES = 2
 PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
-LOW_SPEED_ANGLE_RATE_LIMIT_SPEED = 15.0 * CV.KPH_TO_MS
+LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
+MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
+
+# KIA_EV_SK3 note: do NOT toggle/knock the LKAS request bit to coax the MDPS into starting.
+# Field-tested and removed twice: (a) toggling with ToiFlt=1 faults the MDPS; (b) brief clean
+# cuts (ActToi=0/ToiFlt=0) while unlatched turn the MDPS's transient yields into full releases
+# ("more frequent drops"), and hands-off latching at speed happens with a steady request anyway.
+# Keep the request steady; the cluster warning (lkas_noact_frames) covers the unlatched state.
+
 
 vibrate_intervals = [
   (0.0, 0.5),
@@ -85,14 +93,17 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
     if np.isfinite(model_y_std_1s) and model_y_std_1s >= 0.0:
       y_std_1s = model_y_std_1s
   max_sw_rate_deg_per_tick = float(np.interp(y_std_1s, [0.1, 0.2, 0.4], [2.0, 1.5, 0.8]))
-  if v_ego < LOW_SPEED_ANGLE_RATE_LIMIT_SPEED:
-    # Keep low-speed angle commands quieter without reducing LKAS_ANGLE_MAX_TORQUE.
-    # This is a reference cap from the old Hyundai ANGLE_LIMITS 0 km/h rate, not a direct use of that table.
-    max_sw_rate_deg_per_tick = min(max_sw_rate_deg_per_tick, 1.6)
-
   v = max(float(v_ego), 1.0)
 
   target_sw = float(np.clip(desired_sw_deg, -steer_sw_max_deg, steer_sw_max_deg))
+  if v_ego < MID_SPEED_ANGLE_RATE_LIMIT_SPEED:
+    # Keep low/mid-speed angle commands quieter without reducing LKAS_ANGLE_MAX_TORQUE.
+    # Allow the angle, but slow the arrival: 0~15 kph ramps 0.8->1.1 deg/tick,
+    # then 15~40 kph tapers 1.1->0.8 deg/tick. Above 40 kph, physics limits take over.
+    low_mid_speed_cap = float(np.interp(v_ego,
+                                        [0.0, LOW_SPEED_ANGLE_RATE_RAMP_SPEED, MID_SPEED_ANGLE_RATE_LIMIT_SPEED],
+                                        [0.8, 1.1, 0.8]))
+    max_sw_rate_deg_per_tick = min(max_sw_rate_deg_per_tick, low_mid_speed_cap)
 
   target_rw = target_sw / steer_ratio
   last_rw   = float(last_sw_deg) / steer_ratio
@@ -127,7 +138,7 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
 
   cmd_sw = cmd_rw * steer_ratio
   return float(np.clip(cmd_sw, -steer_sw_max_deg, steer_sw_max_deg))
-  
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
@@ -135,6 +146,8 @@ class CarController(CarControllerBase):
     self.params = CarControllerParams(CP)
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.angle_limit_counter = 0
+    self.lkas_noact_frames = 0
+    self.mdps_noact_frames = 0
 
     self.accel_last = 0
     self.apply_torque_last = 0
@@ -219,7 +232,7 @@ class CarController(CarControllerBase):
         self.steerDeltaDownLC = steerDeltaDownLC
       else:
         self.steerDeltaDownLC = self.steerDeltaDown
-        
+
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
@@ -241,7 +254,7 @@ class CarController(CarControllerBase):
     else:
       self.params.STEER_DELTA_UP = self.steerDeltaUp
       self.params.STEER_DELTA_DOWN = self.steerDeltaDown
-    
+
     angle_control = self.CP.flags & HyundaiFlags.ANGLE_CONTROL
 
     # steering torque
@@ -252,8 +265,16 @@ class CarController(CarControllerBase):
     self.angle_limit_counter, apply_steer_req = common_fault_avoidance(abs(CS.out.steeringAngleDeg) >= MAX_ANGLE, CC.latActive,
                                                                        self.angle_limit_counter, self.max_angle_frames,
                                                                        MAX_ANGLE_CONSECUTIVE_FRAMES)
+    if self.car_fingerprint == CAR.KIA_EV_SK3:
+      # The generic >85deg guard cuts the request 2 frames (with ToiFlt=1) about once per
+      # second while the angle stays large. This MDPS is request-bit sensitive: each cut
+      # drops the whole overlay, causing latch/drop cycling through every turn — while the
+      # >90deg EPS fault the guard prevents has never been observed on this car (overlay
+      # held at 89deg under high torque). Keep the request steady; revert if
+      # steerFaultTemporary starts appearing at deep angles.
+      apply_steer_req = CC.latActive
 
-    #apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw, 
+    #apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw,
     #                                           CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
 
     apply_angle = apply_steer_angle_limits_physics(
@@ -268,7 +289,7 @@ class CarController(CarControllerBase):
       CS.modelV2,
     )
 
-    
+
     if angle_control:
       apply_steer_req = CC.latActive
 
@@ -393,8 +414,30 @@ class CarController(CarControllerBase):
 
     self.apply_angle_last = apply_angle
 
+    # KIA_EV_SK3: this MDPS accepts the LKAS overlay start only when the REQUESTED TORQUE is
+    # near zero at its evaluation moment — every observed latch (7/7 in the low-speed toggle
+    # session, hands-off and driver-assisted alike) happened at |torque| <= 9, while steady
+    # torque of 30..409 was refused indefinitely. "Driver grip helps" was a proxy: the driver
+    # limits push our torque to ~0. So while the MDPS is not applying our torque (ToiActive=0,
+    # torque ignored anyway), request with ZERO torque so its next evaluation accepts, then
+    # ramp up from zero after the latch. Request bit stays steadily 1 (no knocking).
+    if self.car_fingerprint == CAR.KIA_EV_SK3 and CC.latActive and \
+       int(round(getattr(CS, "steer_state", 1))) == 0:
+      self.mdps_noact_frames += 1
+    else:
+      self.mdps_noact_frames = 0
+    if self.mdps_noact_frames >= 10 and not angle_control:  # small debounce vs misreads
+      apply_torque = 0
+
     # Hold torque with induced temporary fault when cutting the actuation bit
     torque_fault = CC.latActive and not apply_steer_req
+
+    # cluster "keep hands on wheel" warning while lat is active but the MDPS is not applying
+    if self.car_fingerprint == CAR.KIA_EV_SK3 and CC.latActive and \
+       CS.out.vEgoRaw >= 2.0 and int(round(getattr(CS, "steer_state", 1))) == 0:
+      self.lkas_noact_frames += 1
+    else:
+      self.lkas_noact_frames = 0
 
     self.apply_torque_last = apply_torque
 
@@ -409,7 +452,7 @@ class CarController(CarControllerBase):
 
     active_speed_decel = hud_control.activeCarrot == 3 and self.activeCarrot != 3 # 3: Speed Decel
     self.activeCarrot = hud_control.activeCarrot
-    if active_speed_decel and self.speedCameraHapticEndFrame < 0: # 과속카메라 감속시작      
+    if active_speed_decel and self.speedCameraHapticEndFrame < 0: # 과속카메라 감속시작
       self.speedCameraHapticEndFrame = self.frame + (8.0 / DT_CTRL)  #8초간 켜줌.
     elif not active_speed_decel:
       self.speedCameraHapticEndFrame = -1
@@ -458,7 +501,7 @@ class CarController(CarControllerBase):
         can_sends.extend(hyundaicanfd.create_steering_messages_camera_scc(self.frame, self.packer, self.CP, self.CAN, CC, apply_steer_req, apply_torque, CS, apply_angle, self.lkas_max_torque, angle_control))
       else:
         can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_torque, apply_angle, self.lkas_max_torque, angle_control))
-              
+
       # prevent LFA from activating on HDA2 by sending "no lane lines detected" to ADAS ECU
       if self.frame % 5 == 0 and hda2 and not camera_scc:
         can_sends.extend(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS))
@@ -509,7 +552,8 @@ class CarController(CarControllerBase):
           can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
                                                     torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
                                                     hud_control.leftLaneVisible, hud_control.rightLaneVisible,
-                                                    left_lane_warning, right_lane_warning, self.is_ldws_car))
+                                                    left_lane_warning, right_lane_warning, self.is_ldws_car,
+                                                    noact_warning=self.lkas_noact_frames >= 100))
         self.lkas11_active = True
 
       if not self.CP.openpilotLongitudinalControl:
@@ -524,7 +568,7 @@ class CarController(CarControllerBase):
         #jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
         use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
         if camera_scc:
-          
+
           can_sends.extend(hyundaican.create_acc_commands_scc(self.packer, CC.enabled, accel, self.hyundai_jerk, int(self.frame / 2),
                                                           hud_control, set_speed_in_units, stopping,
                                                           CC.cruiseControl.override, casper_ev, CS, self.soft_hold_mode))
@@ -752,7 +796,7 @@ class HyundaiJerk:
             self.carrot_cruise_accel = max(carrot_cruise, self.carrot_cruise_accel - 1.0 * DT_CTRL) #  점진적으로 줄임.
     if self.carrot_cruise == 0:
       self.carrot_cruise_accel = CS.out.aEgo
-    
+
   def make_jerk(self, CP, CS, accel, actuators, hud_control):
     if actuators.longControlState == LongCtrlState.stopping:
       self.jerk = self.jerk_u_min / 2 - CS.out.aEgo

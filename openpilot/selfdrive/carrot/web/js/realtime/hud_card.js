@@ -82,13 +82,13 @@
 
   function isOverlayMount() {
     const page = document.body?.dataset?.page || "carrot";
-    return page === "carrot" && window.matchMedia("(orientation: landscape)").matches;
+    return page === "carrot" && Boolean(window.CarrotLayout?.isWide?.() ?? window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches);
   }
 
   function getHudSurface() {
     const page = document.body?.dataset?.page || "carrot";
     if (page !== "carrot") return SURFACE_HOME;
-    return window.matchMedia("(orientation: landscape)").matches ? SURFACE_OVERLAY : SURFACE_INLINE;
+    return Boolean(window.CarrotLayout?.isWide?.() ?? window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches) ? SURFACE_OVERLAY : SURFACE_INLINE;
   }
 
   function getPreferredAspectRatioForWindow(windowClass, wide) {

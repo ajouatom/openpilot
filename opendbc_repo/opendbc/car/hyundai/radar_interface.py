@@ -15,6 +15,8 @@ RADAR_START_ADDR_CANFD1 = 0x210
 RADAR_MSG_COUNT1 = 16
 RADAR_START_ADDR_CANFD2 = 0x3A5 # Group 2, Group 1: 0x210 2개씩있어서 일단 보류.
 RADAR_MSG_COUNT2 = 32
+RADAR_START_ADDR_CANFD3 = 0x400
+RADAR_MSG_COUNT3 = 30
 
 # POC for parsing corner radars: https://github.com/commaai/openpilot/pull/24221/
 
@@ -53,11 +55,16 @@ class RadarInterface(RadarInterfaceBase):
     
     self.canfd = True if CP.flags & HyundaiFlags.CANFD else False
     self.radar_group1 = False
+    self.radar_group3 = False
     if self.canfd:
       if CP.extFlags & HyundaiExtFlags.RADAR_GROUP1.value:
         self.radar_start_addr = RADAR_START_ADDR_CANFD1
         self.radar_msg_count = RADAR_MSG_COUNT1
         self.radar_group1 = True
+      elif CP.extFlags & HyundaiExtFlags.RADAR_GROUP3.value:
+        self.radar_start_addr = RADAR_START_ADDR_CANFD3
+        self.radar_msg_count = RADAR_MSG_COUNT3
+        self.radar_group3 = True
       else:
         self.radar_start_addr = RADAR_START_ADDR_CANFD2
         self.radar_msg_count = RADAR_MSG_COUNT2
@@ -136,6 +143,9 @@ class RadarInterface(RadarInterfaceBase):
 
       if self.radar_group1:
         valid = msg['VALID_CNT1'] > 10
+      elif self.radar_group3:
+        # Group 3 marks an empty object slot with LONG_DIST raw 0x7ff (204.7 m).
+        valid = msg['LONG_DIST'] < 204.7
       elif self.canfd:
         valid = msg['VALID_CNT'] > 10
       else:
@@ -157,12 +167,16 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].aRel = msg['REL_ACCEL1']
         self.pts[t_id].yvRel = msg['LAT_SPEED1']
       elif self.canfd:
-        self.pts[t_id].dRel = msg['LONG_DIST']
+        if self.radar_group3:
+          # Group 3 reports the object's center. Convert it to the rear surface to match SCC/vision dRel.
+          self.pts[t_id].dRel = max(0.0, msg['LONG_DIST'] - msg['OBJECT_LENGTH'] * 0.5 - 0.1)
+        else:
+          self.pts[t_id].dRel = msg['LONG_DIST']
         self.pts[t_id].yRel = msg['LAT_DIST']
         self.pts[t_id].vRel = msg['REL_SPEED']
         self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
-        self.pts[t_id].aRel = msg['REL_ACCEL']
-        self.pts[t_id].yvRel = msg['LAT_SPEED']
+        self.pts[t_id].aRel = float('nan') if self.radar_group3 else msg['REL_ACCEL']
+        self.pts[t_id].yvRel = 0.0 if self.radar_group3 else msg['LAT_SPEED']
       else:
         azimuth = math.radians(msg['AZIMUTH'])
         self.pts[t_id].dRel = math.cos(azimuth) * msg['LONG_DIST']
