@@ -77,9 +77,19 @@
   }
 
   function build(payload, rawState, liveState) {
+    // carrotMan reaches us on two paths: the raw HUD stream (rawState, ~20Hz,
+    // realtime) and the /api/live_runtime poll (liveState, slow). The raw stream
+    // carries the fast-changing fields (desiredSpeed / desiredSource / xSpdType /
+    // nRoadLimitSpeed / activeCarrot), so it must WIN to keep temp + road limit as
+    // live as the green drive HUD (which reads raw only). Live is kept underneath
+    // only to fill fields the raw schema omits — xSpdDist / xSpdCountDown, i.e. the
+    // alert distance & countdown. Merging (raw over live) instead of picking one
+    // was the fix for temp appearing frozen between the slow poll ticks.
     const liveCarrotMan = liveState?.services?.carrotMan;
     const rawCarrotMan = rawState?.carrotMan;
-    const carrotMan = liveCarrotMan && typeof liveCarrotMan === "object" ? liveCarrotMan : (rawCarrotMan || {});
+    const liveBase = liveCarrotMan && typeof liveCarrotMan === "object" ? liveCarrotMan : null;
+    const rawFast = rawCarrotMan && typeof rawCarrotMan === "object" ? rawCarrotMan : null;
+    const carrotMan = (liveBase || rawFast) ? { ...(liveBase || {}), ...(rawFast || {}) } : {};
     const isMetric = payload?.isMetric !== false;
     const source = sourceMode(carrotMan);
     const alertType = integer(carrotMan?.xSpdType, -1);
