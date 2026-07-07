@@ -5,6 +5,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
+from statistics import median
 
 from cluster_config import (
     AMBER,
@@ -100,6 +101,9 @@ RADAR_FRONT_DETECTED_MERGE_LATERAL_M = 2.25
 RADAR_TRACK_DISPLAY_LATERAL_INSET_M = 0.35
 RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
+CORNER_RADAR_HEADING_COMPONENT_MIN_MPS = 0.5
+CORNER_RADAR_EGO_LATERAL_COMP_MAX_MPS = 3.5
+CORNER_RADAR_EGO_LATERAL_COMP_MIN_POINTS = 2
 DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
 DRIVE_CAMERA_EGO_BOTTOM_POSITION_M = (0.0, -6.0, 5.00)
 DRIVE_CAMERA_EGO_BOTTOM_TARGET_M = (0.0, 14.0, -1.00)
@@ -1658,13 +1662,49 @@ def radar_points_for_display(state: ClusterUiState) -> tuple[RadarPoint, ...]:
     return merged_radar_points(points, state)
 
 
+def radar_point_is_raw_corner(point: RadarPoint) -> bool:
+    return point.source == "cornerRadar"
+
+
+def raw_corner_radar_points(points: tuple[RadarPoint, ...]) -> tuple[RadarPoint, ...]:
+    corners = tuple(point for point in points if radar_point_is_raw_corner(point))
+    return tuple(sorted(corners, key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label)))
+
+
+def corner_radar_common_lateral_speed_mps(points: tuple[RadarPoint, ...], state: ClusterUiState) -> float:
+    candidates = [
+        point.lateral_speed_mps
+        for point in points
+        if point.source == "cornerRadar"
+        and point.lateral_speed_mps is not None
+        and (point.valid is None or point.valid > 0)
+        and (absolute_speed_kph := radar_point_absolute_speed_kph(point, state)) is not None
+        and abs(absolute_speed_kph) <= RADAR_STATIC_OBJECT_SPEED_KPH
+    ]
+    if len(candidates) < CORNER_RADAR_EGO_LATERAL_COMP_MIN_POINTS:
+        return 0.0
+    return clamp(float(median(candidates)), -CORNER_RADAR_EGO_LATERAL_COMP_MAX_MPS, CORNER_RADAR_EGO_LATERAL_COMP_MAX_MPS)
+
+
+def radar_point_display_lateral_speed_mps(point: RadarPoint, lateral_speed_offset_mps: float = 0.0) -> float | None:
+    if point.lateral_speed_mps is None:
+        return None
+    if point.source != "cornerRadar":
+        return point.lateral_speed_mps
+    return point.lateral_speed_mps - lateral_speed_offset_mps
+
+
+def detected_vehicle_is_rear_corner_summary(vehicle: DetectedVehicle) -> bool:
+    return vehicle.label in ("LR", "RR") and vehicle_source_is_adas(vehicle.source)
+
+
 def detected_vehicle_is_zero_radar_sample(vehicle: DetectedVehicle) -> bool:
     if not radar_position_is_zero(vehicle.longitudinal_m, vehicle.lateral_m):
         return False
     return (
         vehicle.source == "radarState"
         or vehicle.source == "carState"
-        or vehicle.source in ("radarPoint", "liveTracks")
+        or vehicle.source in ("radarPoint", "liveTracks", "cornerRadar")
         or vehicle.source.startswith("CAN 0x")
     )
 
@@ -1783,6 +1823,7 @@ def radar_point_markers(
     min_forward_m: float = ROAD_NEAR_M,
     max_forward_m: float = ROAD_FAR_M + 30.0,
     x_offset_m: float = 0.0,
+    lateral_speed_offset_mps: float = 0.0,
 ) -> tuple[RadarPointMarker, ...]:
     markers: list[RadarPointMarker] = []
     for point in state.radar_points:
@@ -1807,7 +1848,7 @@ def radar_point_markers(
                 lateral_m=point.lateral_m,
                 relative_speed_mps=point.relative_speed_mps,
                 absolute_speed_kph=absolute_speed_kph,
-                lateral_speed_mps=point.lateral_speed_mps,
+                lateral_speed_mps=radar_point_display_lateral_speed_mps(point, lateral_speed_offset_mps),
                 relative_accel_mps2=point.relative_accel_mps2,
                 probability=point.probability,
                 valid=point.valid,
@@ -1860,6 +1901,7 @@ def detected_vehicles_with_merged_radar(
     vehicles: tuple[DetectedVehicle, ...],
     radar_points: tuple[RadarPoint, ...],
     state: ClusterUiState,
+    lateral_speed_offset_mps: float = 0.0,
 ) -> tuple[DetectedVehicle, ...]:
     if not vehicles or not radar_points:
         return vehicles
@@ -1886,7 +1928,7 @@ def detected_vehicles_with_merged_radar(
                 absolute_speed_kph=absolute_speed_kph
                 if absolute_speed_kph is not None
                 else vehicle.absolute_speed_kph,
-                lateral_speed_mps=point.lateral_speed_mps
+                lateral_speed_mps=radar_point_display_lateral_speed_mps(point, lateral_speed_offset_mps)
                 if point.lateral_speed_mps is not None
                 else vehicle.lateral_speed_mps,
                 acceleration_mps2=vehicle.acceleration_mps2
@@ -1986,7 +2028,7 @@ def vehicle_source_is_front_radar(source: str) -> bool:
 
 
 def vehicle_source_is_radar_track(source: str) -> bool:
-    return source in ("radarPoint", "liveTracks") or RADAR_MERGED_SOURCE_TAG in source
+    return source in ("radarPoint", "liveTracks", "cornerRadar") or RADAR_MERGED_SOURCE_TAG in source
 
 
 def merge_detected_vehicle_for_display(base: DetectedVehicle, other: DetectedVehicle) -> DetectedVehicle:
@@ -2100,18 +2142,22 @@ def radar_vehicle_box(
     state: ClusterUiState,
     lane_width_m: float,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
+    lateral_speed_offset_mps: float = 0.0,
 ) -> VehicleBox:
     confidence = radar_vehicle_confidence(point)
     alpha = int(92 + 163 * confidence)
     if radar_point_is_oncoming(point, state):
         body_color = RED
-    elif radar_point_is_cross_traffic(point):
+    elif radar_point_is_cross_traffic(point, lateral_speed_offset_mps):
         body_color = AMBER
     else:
-        body_color = vehicle_color_for_source("radarPoint", theme, state.radar_source_color_mode)
+        body_color = vehicle_color_for_source(point.source, theme, state.radar_source_color_mode)
     forward_m = render_scene_forward_m(point.longitudinal_m)
     center_x_m = radar_point_display_lateral_m(point, lane_width_m)
-    right_x, right_y, forward_x, forward_y = radar_point_vehicle_heading(point, state)
+    right_x, right_y, forward_x, forward_y = radar_point_vehicle_heading(point, state, lateral_speed_offset_mps)
+    if point.source == "cornerRadar":
+        center_x_m += forward_x * VEHICLE_LENGTH_M * 0.5
+        forward_m += forward_y * VEHICLE_LENGTH_M * 0.5
     return VehicleBox(
         center=Vec3(center_x_m, forward_m, VEHICLE_HEIGHT_M * 0.5),
         right_x=right_x,
@@ -2128,7 +2174,7 @@ def radar_vehicle_box(
         outline_color=rgba(darken(body_color, 0.42), min(235, alpha)),
         confidence=confidence,
         label=point.label,
-        source="radarPoint",
+        source=point.source,
         longitudinal_m=point.longitudinal_m,
         relative_speed_mps=point.relative_speed_mps,
         absolute_speed_kph=radar_point_absolute_speed_kph(point, state),
@@ -2211,7 +2257,7 @@ def radar_point_is_vehicle_candidate(point: RadarPoint, state: ClusterUiState, l
 
 def radar_point_is_confirmed_vehicle_source(point: RadarPoint) -> bool:
     source = point.source.lower()
-    return "0x162" in source or "0x1ea" in source
+    return source == "cornerradar" or "0x162" in source or "0x1ea" in source
 
 
 def radar_point_is_outside_outer_lane(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
@@ -2406,22 +2452,26 @@ def radar_point_is_oncoming(point: RadarPoint, state: ClusterUiState) -> bool:
     )
 
 
-def radar_point_is_cross_traffic(point: RadarPoint) -> bool:
+def radar_point_is_cross_traffic(point: RadarPoint, lateral_speed_offset_mps: float = 0.0) -> bool:
+    lateral_speed_mps = radar_point_display_lateral_speed_mps(point, lateral_speed_offset_mps)
     return (
-        point.lateral_speed_mps is not None
-        and abs(point.lateral_speed_mps) >= RADAR_CROSS_TRAFFIC_MIN_LATERAL_SPEED_MPS
+        lateral_speed_mps is not None
+        and abs(lateral_speed_mps) >= RADAR_CROSS_TRAFFIC_MIN_LATERAL_SPEED_MPS
     )
 
 
 def radar_point_vehicle_heading(
     point: RadarPoint,
     state: ClusterUiState,
+    lateral_speed_offset_mps: float = 0.0,
 ) -> tuple[float, float, float, float]:
     longitudinal_speed_kph = radar_point_absolute_speed_kph(point, state)
     return vehicle_heading_from_velocity(
         longitudinal_speed_kph,
-        point.lateral_speed_mps,
+        radar_point_display_lateral_speed_mps(point, lateral_speed_offset_mps),
         (1.0, 0.0, 0.0, 1.0),
+        min_speed_kph=1.0 if point.source == "cornerRadar" else RADAR_MOVING_VEHICLE_MIN_SPEED_KPH,
+        min_component_mps=CORNER_RADAR_HEADING_COMPONENT_MIN_MPS if point.source == "cornerRadar" else 0.0,
     )
 
 
@@ -2429,12 +2479,16 @@ def vehicle_heading_from_velocity(
     longitudinal_speed_kph: float | None,
     lateral_speed_mps: float | None,
     default_heading: tuple[float, float, float, float],
+    min_speed_kph: float = RADAR_MOVING_VEHICLE_MIN_SPEED_KPH,
+    min_component_mps: float = 0.0,
 ) -> tuple[float, float, float, float]:
     if longitudinal_speed_kph is None and lateral_speed_mps is None:
         return default_heading
     forward_speed_mps = (longitudinal_speed_kph or 0.0) / 3.6
     lateral_speed_mps = lateral_speed_mps or 0.0
-    if math.hypot(forward_speed_mps, lateral_speed_mps) * 3.6 < RADAR_MOVING_VEHICLE_MIN_SPEED_KPH:
+    if min_component_mps > 0.0 and (abs(forward_speed_mps) < min_component_mps or abs(lateral_speed_mps) < min_component_mps):
+        return default_heading
+    if math.hypot(forward_speed_mps, lateral_speed_mps) * 3.6 < min_speed_kph:
         return default_heading
     forward_x, forward_y = normalize2(lateral_speed_mps, forward_speed_mps)
     return forward_y, -forward_x, forward_x, forward_y
@@ -2580,7 +2634,7 @@ def radar_point_color(point: RadarPoint) -> Color:
         return RED[0], RED[1], RED[2], 232
     if point.probability is not None and point.probability < 0.25:
         return 116, 126, 136, 150
-    if radar_point_source_is_radar_track(point):
+    if point.source == "cornerRadar" or radar_point_source_is_radar_track(point):
         return AMBER[0], AMBER[1], AMBER[2], 226
     if point.in_my_lane is not None and point.in_my_lane > 0:
         return BLUE[0], BLUE[1], BLUE[2], 226
@@ -3224,18 +3278,29 @@ def build_cluster_scene(
 ) -> ClusterScene:
     profile_stage = profile_scene_start(profile_add)
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
-    display_radar_points = radar_points_for_display(state)
+    raw_corner_points = raw_corner_radar_points(state.radar_points)
+    raw_corner_active = bool(raw_corner_points)
+    display_radar_points = raw_corner_points if raw_corner_active else radar_points_for_display(state)
     display_detected_vehicles = detected_vehicles_without_zero_radar_samples(state.detected_vehicles)
+    if raw_corner_active:
+        display_detected_vehicles = tuple(
+            vehicle for vehicle in display_detected_vehicles if detected_vehicle_is_rear_corner_summary(vehicle)
+        )
     if display_radar_points is not state.radar_points or display_detected_vehicles != state.detected_vehicles:
         state = replace(state, radar_points=display_radar_points, detected_vehicles=display_detected_vehicles)
+    corner_lateral_speed_offset_mps = corner_radar_common_lateral_speed_mps(raw_corner_points, state) if raw_corner_active else 0.0
     anchor_x_m = ego_anchor_x_m(state, lane_width_m)
     scene_shift_x_m = -anchor_x_m
     relative_scene_x_offset_m = -scene_shift_x_m
     camera = scene_camera(state, lane_width_m, anchor_x_m)
     camera_active = state.surround_view_active
-    selected_radar_vehicle_points = radar_vehicle_points(state, lane_width_m)
+    selected_radar_vehicle_points = (
+        raw_corner_points
+        if raw_corner_active
+        else radar_vehicle_points(state, lane_width_m)
+    )
     selected_radar_vehicle_boxes = tuple(
-        radar_vehicle_box(point, state, lane_width_m, theme)
+        radar_vehicle_box(point, state, lane_width_m, theme, corner_lateral_speed_offset_mps)
         for point in selected_radar_vehicle_points
     )
     route_mode = data_geometry_mode_for_state(state)
@@ -3355,13 +3420,16 @@ def build_cluster_scene(
     )
     merged_radar_labels = frozenset[str]()
     if route_mode:
-        if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
+        if raw_corner_active:
+            merged_detected_vehicles = state.detected_vehicles
+        elif state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
             merged_detected_vehicles = state.detected_vehicles
         else:
             merged_detected_vehicles = detected_vehicles_with_merged_radar(
                 state.detected_vehicles,
                 state.radar_points,
                 state,
+                corner_lateral_speed_offset_mps,
             )
             merged_detected_vehicles = detected_vehicles_for_display(merged_detected_vehicles, state)
         render_detected_vehicles = merged_detected_vehicles
@@ -3456,15 +3524,19 @@ def build_cluster_scene(
     profile_scene_add(profile_add, "scene.build.planned_path", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
-    hidden_merged_radar_points = tuple(point for point in state.radar_points if point.label in merged_radar_labels)
-    radar_points = radar_point_markers(
-        state,
-        lane_width_m,
-        (*selected_radar_vehicle_points, *hidden_merged_radar_points),
-        min_forward_m=road_start_m,
-        max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
-        x_offset_m=relative_scene_x_offset_m,
-    )
+    if raw_corner_active:
+        radar_points = ()
+    else:
+        hidden_merged_radar_points = tuple(point for point in state.radar_points if point.label in merged_radar_labels)
+        radar_points = radar_point_markers(
+            state,
+            lane_width_m,
+            (*selected_radar_vehicle_points, *hidden_merged_radar_points),
+            min_forward_m=road_start_m,
+            max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
+            x_offset_m=relative_scene_x_offset_m,
+            lateral_speed_offset_mps=corner_lateral_speed_offset_mps,
+        )
     profile_scene_add(profile_add, "scene.build.radar_points", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)

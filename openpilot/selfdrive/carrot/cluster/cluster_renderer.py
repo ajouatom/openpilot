@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 import base64
 import math
@@ -456,7 +456,7 @@ def vehicle_source_is_front_radar(source: str) -> bool:
 
 
 def vehicle_source_is_radar_track(source: str) -> bool:
-    return source in ("radarPoint", "liveTracks") or "+radar:" in source
+    return source in ("radarPoint", "liveTracks", "cornerRadar") or "+radar:" in source
 
 
 def speed_limit_source_label(source: str | None) -> str:
@@ -1668,7 +1668,7 @@ class ClusterUiRenderer:
         return points, point_count
 
     def _draw_vehicle(self, vehicle: VehicleBox) -> None:
-        source_marker = vehicle.source.startswith("modelV2") or vehicle.source in ("radarState", "radarPoint")
+        source_marker = vehicle.source.startswith("modelV2") or vehicle.source in ("radarState", "radarPoint", "cornerRadar")
         use_model = (
             self._vehicle_model is not None
             and not source_marker
@@ -1685,13 +1685,22 @@ class ClusterUiRenderer:
 
     def _draw_vehicle_marker(self, vehicle: VehicleBox) -> None:
         alpha = int(80 + 150 * clamp(vehicle.confidence, 0.0, 1.0))
-        marker_center = rl.Vector3(vehicle.center.x, vehicle.center.y, vehicle.height_m * 0.32)
-        marker_size = rl.Vector3(
-            max(0.55, vehicle.width_m * 0.68),
-            max(1.05, vehicle.length_m * 0.64),
-            max(0.42, vehicle.height_m * 0.45),
+
+        def with_alpha(color: tuple[int, int, int] | tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+            return color[0], color[1], color[2], alpha
+
+        marker_vehicle = replace(
+            vehicle,
+            width_m=max(0.55, vehicle.width_m * 0.68),
+            length_m=max(1.05, vehicle.length_m * 0.64),
+            height_m=max(0.42, vehicle.height_m * 0.45),
+            body_color=with_alpha(vehicle.body_color),
+            side_color=with_alpha(vehicle.side_color),
+            rear_color=with_alpha(vehicle.rear_color),
+            top_highlight=with_alpha(vehicle.top_highlight),
+            outline_color=with_alpha(vehicle.outline_color),
         )
-        rl.draw_cube_v(marker_center, marker_size, rl_color(vehicle.body_color, alpha))
+        self._draw_vehicle_box(marker_vehicle)
 
     def _draw_radar_point(self, point: RadarPointMarker) -> None:
         side_m = max(0.16, point.radius_m * 1.75)
