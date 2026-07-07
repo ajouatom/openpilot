@@ -3140,7 +3140,7 @@ def decode_hyundai_corner_object_radar_point(
     quality = dbc_unsigned(data, 24, 7, "le")
     alive_age = dbc_unsigned(data, 32, 8, "le")
     moving_flag = dbc_unsigned(data, 40, 4, "le")
-    object_class = dbc_unsigned(data, 60, 3, "le")
+    object_class = dbc_unsigned(data, 60, 4, "le")
     d_rel = dbc_unsigned(data, 64, 13, "le") * 0.05
     y_rel = dbc_unsigned(data, 78, 12, "le") * 0.05 - 102.4
     v_rel = dbc_unsigned(data, 91, 12, "le") * 0.05 - 100.0

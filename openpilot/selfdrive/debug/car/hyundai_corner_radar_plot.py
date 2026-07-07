@@ -144,6 +144,9 @@ def dbc_signed(data: bytes, start: int, length: int) -> int:
 
 
 def decode_object_at(t: float, group: str, address: int, slot: int, data: bytes, base: int) -> CornerObject:
+  width_bits = 8 if group == "235" else 7
+  width_factor = 0.01 if group == "235" else 0.05
+  class_bits = 4 if group == "235" else 3
   return CornerObject(
     t=t,
     group=group,
@@ -152,8 +155,8 @@ def decode_object_at(t: float, group: str, address: int, slot: int, data: bytes,
     quality=dbc_unsigned(data, base + 0, 7),
     age=dbc_unsigned(data, base + 8, 8),
     object_id=dbc_unsigned(data, base + 20, 7),
-    object_class=dbc_unsigned(data, base + 36, 3),
-    width=dbc_unsigned(data, base + 28, 7) * 0.05,
+    object_class=dbc_unsigned(data, base + 36, class_bits),
+    width=dbc_unsigned(data, base + 28, width_bits) * width_factor,
     x=dbc_unsigned(data, base + 40, 13) * 0.05,
     y=dbc_unsigned(data, base + 54, 12) * 0.05 - 102.4,
     vx=dbc_unsigned(data, base + 67, 12) * 0.05 - 100.0,

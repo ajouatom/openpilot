@@ -74,8 +74,8 @@ BO_ {addr} {name}: 32 RADAR
  SG_ OBJ_ALIVE_AGE : 32|8@1+ (1,0) [0|255] "" XXX
  SG_ OBJ_MOVING_FLAG : 40|4@1+ (1,0) [0|15] "" XXX
  SG_ OBJ_ID : 44|7@1+ (1,0) [0|127] "" XXX
- SG_ OBJ_WIDTH : 52|7@1+ (0.05,0) [0|6.35] "m" XXX
- SG_ OBJ_CLASS : 60|3@1+ (1,0) [0|7] "" XXX
+ SG_ OBJ_WIDTH : 52|8@1+ (0.01,0) [0|2.55] "m" XXX
+ SG_ OBJ_CLASS : 60|4@1+ (1,0) [0|15] "" XXX
  SG_ OBJ_REL_POS_X : 64|13@1+ (0.05,0) [0|409.55] "m" XXX
  SG_ OBJ_REL_POS_Y : 78|12@1+ (0.05,-102.4) [-102.4|102.35] "m" XXX
  SG_ OBJ_REL_VEL_X : 91|12@1+ (0.05,-100) [-100|104.75] "m/s" XXX
