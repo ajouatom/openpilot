@@ -3084,6 +3084,10 @@ def vehicle_color_for_detection(
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
     source_color_mode: int = 0,
 ) -> tuple[int, int, int]:
+    if vehicle.cut_in:
+        return AMBER
+    if vehicle.primary:
+        return theme.primary_vehicle
     if (
         vehicle.absolute_speed_kph is not None
         and vehicle.absolute_speed_kph <= -RADAR_MOVING_VEHICLE_MIN_SPEED_KPH
