@@ -2064,6 +2064,52 @@ class ClusterUiRenderer:
         )
         for start, end in edges:
             rl.draw_line_3d(vec3(edge_points[start]), vec3(edge_points[end]), outline)
+        if vehicle.primary or vehicle.cut_in:
+            self._draw_selected_vehicle_outline(vehicle, corner, half_width, half_length, z0, z1)
+
+    def _draw_selected_vehicle_outline(
+        self,
+        vehicle: VehicleBox,
+        corner,
+        half_width: float,
+        half_length: float,
+        z0: float,
+        z1: float,
+    ) -> None:
+        outline_color = AMBER if vehicle.cut_in else WHITE
+        outline = rl_color(outline_color[0], outline_color[1], outline_color[2], 255)
+        halo_width = half_width + 0.12
+        halo_length = half_length + 0.16
+        halo_z0 = z0 + 0.015
+        halo_z1 = z1 + 0.065
+        halo_base = (
+            corner(-halo_width, -halo_length, halo_z0),
+            corner(halo_width, -halo_length, halo_z0),
+            corner(halo_width, halo_length, halo_z0),
+            corner(-halo_width, halo_length, halo_z0),
+        )
+        halo_top = (
+            corner(-halo_width, -halo_length, halo_z1),
+            corner(halo_width, -halo_length, halo_z1),
+            corner(halo_width, halo_length, halo_z1),
+            corner(-halo_width, halo_length, halo_z1),
+        )
+        halo_edges = (
+            (halo_top[0], halo_top[1]),
+            (halo_top[1], halo_top[2]),
+            (halo_top[2], halo_top[3]),
+            (halo_top[3], halo_top[0]),
+            (halo_base[0], halo_base[1]),
+            (halo_base[1], halo_base[2]),
+            (halo_base[2], halo_base[3]),
+            (halo_base[3], halo_base[0]),
+            (halo_base[0], halo_top[0]),
+            (halo_base[1], halo_top[1]),
+            (halo_base[2], halo_top[2]),
+            (halo_base[3], halo_top[3]),
+        )
+        for start, end in halo_edges:
+            rl.draw_line_3d(vec3(start), vec3(end), outline)
 
     def _draw_quad(
         self,
