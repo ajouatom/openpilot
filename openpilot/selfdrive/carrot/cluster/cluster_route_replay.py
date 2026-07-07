@@ -1024,6 +1024,7 @@ class RouteLogParser:
         self.live_track_radar_points: dict[str, RadarPoint] = {}
         self.live_track_radar_t = -999.0
         self.corner_object_radar_points: dict[str, RadarPoint] = {}
+        self.corner_object_radar_point_t: dict[str, float] = {}
         self.corner_object_radar_t = -999.0
         self.radar_detections: tuple[DetectedVehicle, ...] = ()
         self.radar_detection_t = -999.0
@@ -1527,9 +1528,10 @@ class RouteLogParser:
                 label = corner_object_radar_point_label(address)
                 point = decode_hyundai_corner_object_radar_point(address, data, self.current_speed_kph)
                 if point is None:
-                    self.corner_object_radar_points.pop(label, None)
+                    self._prune_corner_object_radar_point(label, event_t)
                 else:
                     self.corner_object_radar_points[label] = point
+                    self.corner_object_radar_point_t[label] = event_t
                 self.corner_object_radar_t = event_t
                 continue
             if (
@@ -1541,8 +1543,9 @@ class RouteLogParser:
                 for point in decode_hyundai_corner_object_180_radar_points(address, data, self.current_speed_kph):
                     if point.valid is not None and point.valid > 0:
                         self.corner_object_radar_points[point.label] = point
+                        self.corner_object_radar_point_t[point.label] = event_t
                     else:
-                        self.corner_object_radar_points.pop(point.label, None)
+                        self._prune_corner_object_radar_point(point.label, event_t)
                 self.corner_object_radar_t = event_t
                 continue
             if address not in (CCNC_CORNER_RADAR_ADDRESS, ADRV_CORNER_RADAR_ADDRESS):
@@ -1577,6 +1580,7 @@ class RouteLogParser:
 
     def _radar_points_from_current_state(self, event_t: float) -> tuple[RadarPoint, ...]:
         if event_t - self.corner_object_radar_t < RADAR_POINT_STALE_S:
+            self._prune_stale_corner_object_radar_points(event_t)
             points = sorted_radar_points(self.corner_object_radar_points.values())
             if points:
                 return points
@@ -1588,6 +1592,21 @@ class RouteLogParser:
                 return corner_points
             return sorted_radar_points(self.live_track_radar_points.values())
         return ()
+
+    def _prune_corner_object_radar_point(self, label: str, event_t: float) -> None:
+        if event_t - self.corner_object_radar_point_t.get(label, -999.0) >= RADAR_POINT_STALE_S:
+            self.corner_object_radar_points.pop(label, None)
+            self.corner_object_radar_point_t.pop(label, None)
+
+    def _prune_stale_corner_object_radar_points(self, event_t: float) -> None:
+        stale_labels = [
+            label
+            for label, point_t in self.corner_object_radar_point_t.items()
+            if event_t - point_t >= RADAR_POINT_STALE_S
+        ]
+        for label in stale_labels:
+            self.corner_object_radar_points.pop(label, None)
+            self.corner_object_radar_point_t.pop(label, None)
 
     def _detected_vehicles_from_current_state(
         self,

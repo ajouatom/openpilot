@@ -7,6 +7,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from statistics import median
 
 
 def add_repo_paths() -> None:
@@ -38,6 +39,19 @@ RADAR_MOVING_VEHICLE_MIN_SPEED_KPH = 8.0
 PLOT_HEADING_MIN_SPEED_KPH = 1.0
 PLOT_HEADING_COMPONENT_MIN_MPS = 0.5
 CORNER_RADAR_ENDPOINT_SPEED_MIN_MPS = 0.5
+EGO_LATERAL_COMP_MAX_MPS = 3.5
+EGO_LATERAL_COMP_STATIC_SPEED_KPH = 8.0
+CUTIN_DEFAULT_HORIZON_S = 1.0
+CUTIN_DEFAULT_CONFIRM_S = 0.25
+CUTIN_DEFAULT_STICKY_S = 0.7
+CUTIN_DEFAULT_MIN_AGE_S = 1.0
+CUTIN_DEFAULT_ENTER_FUTURE_IN_LANE_PROB = 0.25
+CUTIN_DEFAULT_ENTER_PROB_GAIN = 0.12
+CUTIN_DEFAULT_ENTER_CENTERING_GAIN = 0.25
+CUTIN_DEFAULT_KEEP_FUTURE_IN_LANE_PROB = 0.12
+CUTIN_DEFAULT_KEEP_MAX_DPATH_FUTURE = 1.6
+CUTIN_DEFAULT_KEEP_MAX_MOVING_AWAY = 0.3
+CUTIN_DEFAULT_LANE_HALF_WIDTH_M = 1.8
 CLUSTER_DEFAULT_VEHICLE = (70, 78, 88)
 CLUSTER_PRIMARY_VEHICLE = (50, 66, 82)
 CLUSTER_AMBER = (244, 172, 54)
@@ -108,6 +122,17 @@ class LogTiming:
   start_t: float
   end_t: float | None
   video_base_t: float
+
+
+@dataclass(frozen=True)
+class CutInInfo:
+  count: int
+  entering: bool
+  keep: bool
+  y_future: float
+  x_future: float
+  in_lane_prob: float
+  in_lane_prob_future: float
 
 
 class VideoSampler:
@@ -453,6 +478,29 @@ def plot_vy(obj: CornerObject, args: argparse.Namespace) -> float:
   return -obj.vy if args.flip_raw_y else obj.vy
 
 
+def object_key(obj: CornerObject) -> tuple[str, int]:
+  return obj.group, obj.slot
+
+
+def estimate_common_lateral_speed_mps(objects: list[CornerObject], ego_speed: float, args: argparse.Namespace) -> float:
+  if args.no_ego_lateral_compensation:
+    return 0.0
+  candidates = [
+    plot_vy(obj, args)
+    for obj in objects
+    if obj.quality >= args.min_quality
+    and 2.5 <= obj.x <= args.max_x
+    and abs((ego_speed + obj.vx) * 3.6) <= EGO_LATERAL_COMP_STATIC_SPEED_KPH
+  ]
+  if len(candidates) < 2:
+    return 0.0
+  return clamp(float(median(candidates)), -EGO_LATERAL_COMP_MAX_MPS, EGO_LATERAL_COMP_MAX_MPS)
+
+
+def display_vy(obj: CornerObject, args: argparse.Namespace, lateral_speed_offset_mps: float) -> float:
+  return plot_vy(obj, args) - lateral_speed_offset_mps
+
+
 def clamp(value: float, low: float, high: float) -> float:
   return max(low, min(high, value))
 
@@ -588,11 +636,11 @@ def draw_vehicle_marker(ax, center_y: float, center_x: float, forward_y: float, 
     ax.text(center_y, center_x, label, ha="center", va="center", fontsize=8, color="white", zorder=7)
 
 
-def object_vehicle_color(obj: CornerObject, ego_speed: float) -> tuple[int, int, int]:
+def object_vehicle_color(obj: CornerObject, ego_speed: float, lateral_speed_mps: float | None = None) -> tuple[int, int, int]:
   absolute_speed_kph = (ego_speed + obj.vx) * 3.6
   if absolute_speed_kph <= -RADAR_MOVING_VEHICLE_MIN_SPEED_KPH:
     return CLUSTER_RED
-  if abs(obj.vy) * 3.6 >= RADAR_MOVING_VEHICLE_MIN_SPEED_KPH:
+  if abs(lateral_speed_mps if lateral_speed_mps is not None else obj.vy) * 3.6 >= RADAR_MOVING_VEHICLE_MIN_SPEED_KPH:
     return CLUSTER_AMBER
   return CLUSTER_DEFAULT_VEHICLE
 
@@ -644,7 +692,109 @@ def format_object_label(obj: CornerObject, ego_speed: float, obj_y: float, field
   return " ".join(values[field] for field in fields if field in values)
 
 
-def draw_snapshot(ax, snapshot: Snapshot, args: argparse.Namespace, paused: bool = False) -> None:
+def lane_probability_from_y(y: float, lane_half_width_m: float) -> float:
+  return clamp(1.0 - abs(y) / max(0.1, lane_half_width_m), 0.0, 1.0)
+
+
+def cutin_object_info(
+  obj: CornerObject,
+  snapshot: Snapshot,
+  obj_y: float,
+  obj_vy: float,
+  track_age_s: float,
+  previous_count: int,
+  args: argparse.Namespace,
+) -> CutInInfo | None:
+  if args.no_cutin:
+    return None
+  v_lead = snapshot.ego_speed + obj.vx
+  horizon_s = max(0.0, args.cutin_horizon)
+  y_future = obj_y + obj_vy * horizon_s
+  x_future = obj.x + obj.vx * horizon_s
+  in_lane_prob = lane_probability_from_y(obj_y, args.cutin_lane_half_width)
+  in_lane_prob_future = lane_probability_from_y(y_future, args.cutin_lane_half_width)
+
+  entering = (
+    track_age_s >= args.cutin_min_age
+    and 3.0 < obj.x < 50.0
+    and v_lead > 4.0
+    and in_lane_prob_future >= args.cutin_enter_future_prob
+    and (in_lane_prob_future - in_lane_prob) >= args.cutin_enter_prob_gain
+    and (abs(obj_y) - abs(y_future)) >= args.cutin_enter_centering_gain
+  )
+  moving_away = abs(y_future) - abs(obj_y)
+  keep = (
+    previous_count > 0
+    and 2.5 < obj.x < 55.0
+    and v_lead > 2.0
+    and moving_away <= args.cutin_keep_max_moving_away
+    and (
+      in_lane_prob_future > args.cutin_keep_future_prob
+      or abs(y_future) < args.cutin_keep_max_dpath_future
+    )
+  )
+  return CutInInfo(
+    count=previous_count,
+    entering=entering,
+    keep=keep,
+    y_future=y_future,
+    x_future=x_future,
+    in_lane_prob=in_lane_prob,
+    in_lane_prob_future=in_lane_prob_future,
+  )
+
+
+def cutin_infos_for_snapshot(snapshots: list[Snapshot], frame_idx: int, args: argparse.Namespace) -> dict[tuple[str, int], CutInInfo]:
+  if args.no_cutin:
+    return {}
+  counts: dict[tuple[str, int], int] = {}
+  first_seen: dict[tuple[str, int], float] = {}
+  last_seen: dict[tuple[str, int], float] = {}
+  current_infos: dict[tuple[str, int], CutInInfo] = {}
+  sticky_frames = max(1, int(round(args.cutin_sticky * args.fps)))
+  confirm_frames = max(1, int(round(args.cutin_confirm * args.fps)))
+  for idx, snapshot in enumerate(snapshots[:frame_idx + 1]):
+    lateral_offset = estimate_common_lateral_speed_mps(snapshot.objects, snapshot.ego_speed, args)
+    frame_infos: dict[tuple[str, int], CutInInfo] = {}
+    for obj in snapshot.objects:
+      key = object_key(obj)
+      if key not in last_seen or snapshot.t - last_seen[key] > max(args.stale * 2.0, 0.25):
+        first_seen[key] = snapshot.t
+        counts[key] = 0
+      last_seen[key] = snapshot.t
+      obj_y = plot_y(obj, args)
+      obj_vy = display_vy(obj, args, lateral_offset)
+      previous_count = counts.get(key, 0)
+      info = cutin_object_info(obj, snapshot, obj_y, obj_vy, snapshot.t - first_seen[key], previous_count, args)
+      if info is None:
+        counts[key] = 0
+        continue
+      if info.entering:
+        count = min(previous_count + 1, sticky_frames)
+      elif info.keep:
+        count = max(previous_count - 1, 0)
+      else:
+        count = 0
+      counts[key] = count
+      frame_infos[key] = CutInInfo(
+        count=count,
+        entering=info.entering,
+        keep=info.keep,
+        y_future=info.y_future,
+        x_future=info.x_future,
+        in_lane_prob=info.in_lane_prob,
+        in_lane_prob_future=info.in_lane_prob_future,
+      )
+    if idx == frame_idx:
+      current_infos = {
+        key: info
+        for key, info in frame_infos.items()
+        if info.count >= confirm_frames
+      }
+  return current_infos
+
+
+def draw_snapshot(ax, snapshot: Snapshot, args: argparse.Namespace, paused: bool = False, cutin_infos: dict[tuple[str, int], CutInInfo] | None = None) -> None:
   ax.clear()
   setup_axes(ax, args)
   t = snapshot.t
@@ -658,16 +808,21 @@ def draw_snapshot(ax, snapshot: Snapshot, args: argparse.Namespace, paused: bool
     f"raw={len(objects)} summary={len(summary_objects)}{pause_label}"
   )
 
+  cutin_infos = cutin_infos or {}
   if objects:
     label_fields = selected_label_fields(args)
+    lateral_speed_offset_mps = estimate_common_lateral_speed_mps(objects, ego_speed, args)
     for obj in objects:
+      key = object_key(obj)
+      cutin_info = cutin_infos.get(key)
       obj_y = plot_y(obj, args)
       absolute_forward_speed_mps = ego_speed + obj.vx
-      lateral_speed_mps = plot_vy(obj, args)
+      lateral_speed_mps = display_vy(obj, args, lateral_speed_offset_mps)
       forward_y, forward_x = vehicle_heading_from_velocity(absolute_forward_speed_mps, lateral_speed_mps, (0.0, 1.0))
       center_y, center_x = adjusted_vehicle_center(obj_y, obj.x, forward_y, forward_x, obj.vx, args.point_anchor)
       confidence = clamp(0.56 + min(100, max(0, obj.quality)) / 100.0 * 0.36, 0.56, 0.92)
-      draw_vehicle_marker(ax, center_y, center_x, forward_y, forward_x, object_vehicle_color(obj, ego_speed), confidence)
+      color = CLUSTER_RED if cutin_info is not None else object_vehicle_color(obj, ego_speed, lateral_speed_mps)
+      draw_vehicle_marker(ax, center_y, center_x, forward_y, forward_x, color, confidence)
       ax.arrow(
         center_y,
         center_x,
@@ -680,7 +835,18 @@ def draw_snapshot(ax, snapshot: Snapshot, args: argparse.Namespace, paused: bool
         alpha=0.75,
         zorder=8,
       )
+      if cutin_info is not None:
+        ax.plot(
+          [obj_y, cutin_info.y_future],
+          [obj.x, cutin_info.x_future],
+          color=mpl_rgba(CLUSTER_RED, 0.86),
+          linewidth=2.0,
+          zorder=8,
+        )
+        ax.scatter([cutin_info.y_future], [cutin_info.x_future], s=48, color=mpl_rgba(CLUSTER_RED, 0.86), zorder=9)
       label = format_object_label(obj, ego_speed, obj_y, label_fields)
+      if cutin_info is not None:
+        label = f"CUT-IN {label}".strip()
       if label:
         ax.text(
           center_y,
@@ -743,7 +909,7 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
   global plt
   import matplotlib.pyplot as plt
   from matplotlib.animation import FuncAnimation
-  from matplotlib.widgets import CheckButtons
+  from matplotlib.widgets import CheckButtons, Slider
 
   if not snapshots:
     raise RuntimeError("No corner radar objects decoded. Check --start, --duration, or filter thresholds.")
@@ -767,7 +933,7 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
       video_ax = None
     idx = min(range(len(snapshots)), key=lambda i: abs(snapshots[i].t - args.snapshot_time))
     snapshot = snapshots[idx]
-    draw_snapshot(ax, snapshot, args)
+    draw_snapshot(ax, snapshot, args, cutin_infos=cutin_infos_for_snapshot(snapshots, idx, args))
     if video_ax is not None:
       setup_video_axis(video_ax, snapshot.video_t, get_video(snapshot.rlog_path))
     fig.tight_layout()
@@ -781,6 +947,7 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
   else:
     fig, (ax, controls_ax) = plt.subplots(1, 2, figsize=(11, 9), gridspec_kw={"width_ratios": [1.0, 0.25]})
     video_ax = None
+  fig.subplots_adjust(bottom=0.30)
   controls_ax.set_title("labels")
   controls_ax.set_xticks([])
   controls_ax.set_yticks([])
@@ -796,11 +963,30 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
   paused = {"value": False}
   current_frame = {"idx": 0}
   ani_holder: dict[str, FuncAnimation] = {}
+  slider_specs = (
+    ("cutin_horizon", "horizon", 0.0, 2.5, "%.2fs"),
+    ("cutin_lane_half_width", "lane half", 1.2, 2.4, "%.2fm"),
+    ("cutin_enter_future_prob", "future prob", 0.0, 0.8, "%.2f"),
+    ("cutin_enter_prob_gain", "prob gain", 0.0, 0.5, "%.2f"),
+    ("cutin_enter_centering_gain", "center gain", 0.0, 1.2, "%.2fm"),
+    ("cutin_confirm", "confirm", 0.05, 1.0, "%.2fs"),
+  )
+  slider_axes = []
+  sliders = []
+  left = 0.10
+  bottom = 0.22
+  width = 0.78
+  height = 0.022
+  for index, (attr, label, valmin, valmax, valfmt) in enumerate(slider_specs):
+    slider_ax = fig.add_axes([left, bottom - index * 0.035, width, height])
+    slider = Slider(slider_ax, label, valmin, valmax, valinit=getattr(args, attr), valfmt=valfmt)
+    slider_axes.append(slider_ax)
+    sliders.append((attr, slider))
 
   def update(frame_idx: int):
     current_frame["idx"] = frame_idx
     snapshot = snapshots[frame_idx]
-    draw_snapshot(ax, snapshot, args, paused["value"])
+    draw_snapshot(ax, snapshot, args, paused["value"], cutin_infos_for_snapshot(snapshots, frame_idx, args))
     if video_ax is not None:
       setup_video_axis(video_ax, snapshot.video_t, get_video(snapshot.rlog_path))
     return []
@@ -808,7 +994,7 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
   def on_click(event):
     if event.canvas != fig.canvas:
       return
-    if event.inaxes == controls_ax:
+    if event.inaxes == controls_ax or event.inaxes in slider_axes:
       return
     paused["value"] = not paused["value"]
     ani = ani_holder.get("ani")
@@ -831,10 +1017,18 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
     update(current_frame["idx"])
     fig.canvas.draw_idle()
 
+  def on_slider_change(_value: float):
+    for attr, slider in sliders:
+      setattr(args, attr, slider.val)
+    update(current_frame["idx"])
+    fig.canvas.draw_idle()
+
   ani = FuncAnimation(fig, update, frames=len(snapshots), interval=1000 / args.fps, blit=False, repeat=True)
   ani_holder["ani"] = ani
   fig.canvas.mpl_connect("button_press_event", on_click)
   label_checks.on_clicked(on_label_toggle)
+  for _, slider in sliders:
+    slider.on_changed(on_slider_change)
   if args.save_gif:
     ani.save(args.save_gif, writer="pillow", fps=args.fps)
     print(f"saved {args.save_gif}")
@@ -864,6 +1058,19 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--velocity-scale", type=float, default=0.35, help="Arrow length multiplier")
   parser.add_argument("--point-anchor", choices=("center", "rear-center", "front-center", "endpoint", "endpoint-reversed"), default="rear-center", help="How to interpret raw corner radar object position before drawing the vehicle")
   parser.add_argument("--label-fields", default="slot,id,speed,y", help="Comma-separated raw object label fields: slot,addr,group,id,speed,vx,vy,x,y,width,obj_width,class,obj_class,quality,age")
+  parser.add_argument("--no-ego-lateral-compensation", action="store_true", help="Do not subtract common lateral velocity from displayed corner radar object motion")
+  parser.add_argument("--no-cutin", action="store_true", help="Disable cut-in candidate highlighting")
+  parser.add_argument("--cutin-horizon", type=float, default=CUTIN_DEFAULT_HORIZON_S, help="Seconds used for cut-in lateral projection")
+  parser.add_argument("--cutin-lane-half-width", type=float, default=CUTIN_DEFAULT_LANE_HALF_WIDTH_M, help="Half lane width used by plot-only cut-in scoring")
+  parser.add_argument("--cutin-confirm", type=float, default=CUTIN_DEFAULT_CONFIRM_S, help="Seconds a cut-in candidate must persist before highlighting")
+  parser.add_argument("--cutin-sticky", type=float, default=CUTIN_DEFAULT_STICKY_S, help="Seconds to cap the plot-only cut-in sticky counter")
+  parser.add_argument("--cutin-min-age", type=float, default=CUTIN_DEFAULT_MIN_AGE_S, help="Seconds a track must exist before entering cut-in state")
+  parser.add_argument("--cutin-enter-future-prob", type=float, default=CUTIN_DEFAULT_ENTER_FUTURE_IN_LANE_PROB, help="Minimum future in-lane score for cut-in entry")
+  parser.add_argument("--cutin-enter-prob-gain", type=float, default=CUTIN_DEFAULT_ENTER_PROB_GAIN, help="Minimum in-lane score improvement for cut-in entry")
+  parser.add_argument("--cutin-enter-centering-gain", type=float, default=CUTIN_DEFAULT_ENTER_CENTERING_GAIN, help="Minimum lateral centering improvement in meters for cut-in entry")
+  parser.add_argument("--cutin-keep-future-prob", type=float, default=CUTIN_DEFAULT_KEEP_FUTURE_IN_LANE_PROB, help="Future in-lane score for keeping a cut-in candidate sticky")
+  parser.add_argument("--cutin-keep-max-dpath-future", type=float, default=CUTIN_DEFAULT_KEEP_MAX_DPATH_FUTURE, help="Future lateral distance threshold for keeping a cut-in candidate sticky")
+  parser.add_argument("--cutin-keep-max-moving-away", type=float, default=CUTIN_DEFAULT_KEEP_MAX_MOVING_AWAY, help="Maximum lateral movement away from lane center while keeping cut-in sticky")
   parser.add_argument("--snapshot-time", type=float, default=5.0)
   parser.add_argument("--flip-raw-y", action="store_true", help="Flip raw 0x235-0x248 RelPosY sign for comparison")
   parser.add_argument("--raw-y", action="store_true", help=argparse.SUPPRESS)

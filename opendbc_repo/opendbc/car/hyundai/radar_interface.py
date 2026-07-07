@@ -111,6 +111,8 @@ class RadarInterface(RadarInterfaceBase):
     self.updated_scc = set()
     self.updated_corner_objects = set()
     self.updated_corner_objects_180 = set()
+    self.corner_object_missed_updates = 0
+    self.corner_object_180_missed_updates = 0
     self.rcp_tracks = get_radar_can_parser(CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count)
     self.rcp_corner_objects = get_corner_object_can_parser(CP, self.corner_object_tracks)
     self.rcp_corner_objects_180 = get_corner_object_180_can_parser(CP, self.corner_object_180_tracks)
@@ -193,8 +195,22 @@ class RadarInterface(RadarInterfaceBase):
 
       if self.rcp_scc is not None:
         self._update_scc(self.updated_scc)
-      self._update_corner_objects(self.updated_corner_objects)
-      self._update_corner_objects_180(self.updated_corner_objects_180)
+      if self.rcp_corner_objects is not None:
+        if self.updated_corner_objects:
+          self._update_corner_objects(self.updated_corner_objects)
+          self.corner_object_missed_updates = 0
+        else:
+          self.corner_object_missed_updates += 1
+          if self.corner_object_missed_updates > 10:
+            self._clear_corner_objects()
+      if self.rcp_corner_objects_180 is not None:
+        if self.updated_corner_objects_180:
+          self._update_corner_objects_180(self.updated_corner_objects_180)
+          self.corner_object_180_missed_updates = 0
+        else:
+          self.corner_object_180_missed_updates += 1
+          if self.corner_object_180_missed_updates > 10:
+            self._clear_corner_objects_180()
       self.updated_scc.clear()
       self.updated_corner_objects.clear()
       self.updated_corner_objects_180.clear()
@@ -285,15 +301,7 @@ class RadarInterface(RadarInterfaceBase):
       return
 
     if not updated_messages:
-      for slot in range(CORNER_OBJECT_235_MSG_COUNT):
-        t_id = CORNER_OBJECT_235_TRACK_ID_OFFSET + slot
-        self.pts[t_id].measured = False
-        self.pts[t_id].dRel = 0
-        self.pts[t_id].yRel = 0
-        self.pts[t_id].vRel = 0
-        self.pts[t_id].vLead = self.v_ego
-        self.pts[t_id].aRel = float('nan')
-        self.pts[t_id].yvRel = 0
+      self._clear_corner_objects()
       return
 
     for slot, addr in enumerate(range(CORNER_OBJECT_235_START_ADDR, CORNER_OBJECT_235_START_ADDR + CORNER_OBJECT_235_MSG_COUNT)):
@@ -329,8 +337,7 @@ class RadarInterface(RadarInterfaceBase):
       return
 
     if not updated_messages:
-      for slot in range(CORNER_OBJECT_180_MSG_COUNT * CORNER_OBJECT_180_SLOTS_PER_MSG):
-        self._clear_point(CORNER_OBJECT_180_TRACK_ID_OFFSET + slot)
+      self._clear_corner_objects_180()
       return
 
     for msg_index, addr in enumerate(range(CORNER_OBJECT_180_START_ADDR, CORNER_OBJECT_180_START_ADDR + CORNER_OBJECT_180_MSG_COUNT)):
@@ -365,6 +372,14 @@ class RadarInterface(RadarInterfaceBase):
     self.pts[t_id].vLead = self.v_ego
     self.pts[t_id].aRel = float('nan')
     self.pts[t_id].yvRel = 0
+
+  def _clear_corner_objects(self):
+    for slot in range(CORNER_OBJECT_235_MSG_COUNT):
+      self._clear_point(CORNER_OBJECT_235_TRACK_ID_OFFSET + slot)
+
+  def _clear_corner_objects_180(self):
+    for slot in range(CORNER_OBJECT_180_MSG_COUNT * CORNER_OBJECT_180_SLOTS_PER_MSG):
+      self._clear_point(CORNER_OBJECT_180_TRACK_ID_OFFSET + slot)
 
   def _update_scc(self, updated_messages):
     cpt = self.rcp_scc.vl
