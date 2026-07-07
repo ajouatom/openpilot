@@ -39,16 +39,19 @@ STICKY_PATH_Y_STD_GAIN = 0.5
 # -1.4~-2.8까지 튀어 오탐 FCW/급제동을 유발했음(모델 a는 -0.6~+0.6로 매끈).
 MEB_ALEAD_CLAMP_BAND = 1.0
 
-CUTIN_CONFIRM_FRAMES = int(0.25 / DT_MDL)
 CUTIN_STICKY_FRAMES = int(0.7 / DT_MDL)
-CUTIN_MIN_TRACK_AGE = int(1.0 / DT_MDL)
-CUTIN_ENTER_FUTURE_IN_LANE_PROB = 0.25
 CUTIN_ENTER_PROB_GAIN = 0.12
-CUTIN_ENTER_CENTERING_GAIN = 0.25
 CUTIN_KEEP_FUTURE_IN_LANE_PROB = 0.12
 CUTIN_KEEP_MAX_DPATH_FUTURE = 1.6
 CUTIN_KEEP_MAX_MOVING_AWAY = 0.3
 CUTIN_PROMOTE_DREL_MARGIN = 1.0
+CUTIN_DEFAULT_CONFIRM_S = 0.20
+CUTIN_DEFAULT_MIN_TRACK_AGE_S = 0.25
+CUTIN_DEFAULT_ENTER_MIN_X = 1.0
+CUTIN_DEFAULT_ENTER_MAX_X = 55.0
+CUTIN_DEFAULT_ENTER_MIN_ABS_DPATH = 1.5
+CUTIN_DEFAULT_ENTER_FUTURE_IN_LANE_PROB = 0.20
+CUTIN_DEFAULT_ENTER_CENTERING_GAIN = 0.20
 RADAR_ONLY_FALLBACK_VISION_PROB = 0.55
 
 VISION_ONLY_RADAR_TRACK_MODE = -2
@@ -94,6 +97,20 @@ def laplacian_pdf(x: float, mu: float, b: float):
 
 def clamp(x: float, lo: float, hi: float) -> float:
   return float(np.clip(x, lo, hi))
+
+def cutin_tuning_from_sensitivity(sensitivity: float) -> dict[str, float]:
+  s = clamp(sensitivity, 0.0, 100.0)
+  xp = [0.0, 50.0, 100.0]
+  return {
+    "horizon_s": float(np.interp(s, xp, [0.5, 1.5, 2.5])),
+    "confirm_s": float(np.interp(s, xp, [0.25, 0.10, 0.06])),
+    "min_track_age_s": float(np.interp(s, xp, [0.50, 0.25, 0.10])),
+    "enter_min_x": float(np.interp(s, xp, [3.0, 1.0, 0.5])),
+    "enter_max_x": float(np.interp(s, xp, [50.0, 55.0, 65.0])),
+    "enter_min_abs_dpath": float(np.interp(s, xp, [1.9, 1.5, 1.2])),
+    "enter_future_in_lane_prob": float(np.interp(s, xp, [0.30, 0.15, 0.08])),
+    "enter_centering_gain": float(np.interp(s, xp, [0.30, 0.18, 0.10])),
+  }
 
 def is_radar_center_promotion_safe(lead: dict[str, Any]) -> bool:
   d_rel = float(lead.get("dRel", 999.0))
@@ -504,6 +521,13 @@ class RadarD:
     self.enable_radar_tracks = self.params.get_int("EnableRadarTracks")
     self.enable_corner_radar = self.params.get_int("EnableCornerRadar")
     self.radar_lat_factor = 0.0
+    self.cutin_confirm_frames = max(1, int(round(CUTIN_DEFAULT_CONFIRM_S / DT_MDL)))
+    self.cutin_min_track_age = max(1, int(round(CUTIN_DEFAULT_MIN_TRACK_AGE_S / DT_MDL)))
+    self.cutin_enter_min_x = CUTIN_DEFAULT_ENTER_MIN_X
+    self.cutin_enter_max_x = CUTIN_DEFAULT_ENTER_MAX_X
+    self.cutin_enter_min_abs_dpath = CUTIN_DEFAULT_ENTER_MIN_ABS_DPATH
+    self.cutin_enter_future_in_lane_prob = CUTIN_DEFAULT_ENTER_FUTURE_IN_LANE_PROB
+    self.cutin_enter_centering_gain = CUTIN_DEFAULT_ENTER_CENTERING_GAIN
 
     self.radar_detected = False
     self.leadCenter = None
@@ -519,7 +543,16 @@ class RadarD:
 
     self.enable_radar_tracks = self.params.get_int("EnableRadarTracks")
     self.enable_corner_radar = self.params.get_int("EnableCornerRadar")
-    self.radar_lat_factor = self.params.get_float("RadarLatFactor") * 0.01
+    raw_radar_lat_factor = self.params.get_float("RadarLatFactor")
+    cutin_tuning = cutin_tuning_from_sensitivity(raw_radar_lat_factor)
+    self.radar_lat_factor = cutin_tuning["horizon_s"] if raw_radar_lat_factor > 0.0 else 0.0
+    self.cutin_confirm_frames = max(1, int(round(cutin_tuning["confirm_s"] / DT_MDL)))
+    self.cutin_min_track_age = max(1, int(round(cutin_tuning["min_track_age_s"] / DT_MDL)))
+    self.cutin_enter_min_x = cutin_tuning["enter_min_x"]
+    self.cutin_enter_max_x = cutin_tuning["enter_max_x"]
+    self.cutin_enter_min_abs_dpath = cutin_tuning["enter_min_abs_dpath"]
+    self.cutin_enter_future_in_lane_prob = cutin_tuning["enter_future_in_lane_prob"]
+    self.cutin_enter_centering_gain = cutin_tuning["enter_centering_gain"]
     self.radar_reaction_factor = self.params.get_float("RadarReactionFactor") * 0.01
     self.detect_cut_in = self.radar_lat_factor > 0 and self.enable_corner_radar > 1
     vision_only_mode = self.enable_radar_tracks <= VISION_ONLY_RADAR_TRACK_MODE
@@ -792,15 +825,17 @@ class RadarD:
   def _is_cutin_enter_candidate(self, t: Track) -> bool:
     if not self.detect_cut_in or not self.lane_line_available or not self._is_corner_track(t):
       return False
-    if t.cnt < CUTIN_MIN_TRACK_AGE:
+    if t.cnt < self.cutin_min_track_age:
       return False
-    if not (3.0 < t.dRel < 50.0 and t.vLead > 4.0):
+    if not (self.cutin_enter_min_x < t.dRel < self.cutin_enter_max_x and t.vLead > 4.0):
       return False
-    if t.in_lane_prob_future < CUTIN_ENTER_FUTURE_IN_LANE_PROB:
+    if abs(t.dPath) < self.cutin_enter_min_abs_dpath:
+      return False
+    if t.in_lane_prob_future < self.cutin_enter_future_in_lane_prob:
       return False
     if (t.in_lane_prob_future - t.in_lane_prob) < CUTIN_ENTER_PROB_GAIN:
       return False
-    if (abs(t.dPath) - abs(t.dPath_future)) < CUTIN_ENTER_CENTERING_GAIN:
+    if (abs(t.dPath) - abs(t.dPath_future)) < self.cutin_enter_centering_gain:
       return False
     return True
 
@@ -827,7 +862,7 @@ class RadarD:
     else:
       t.cut_in_count = 0
 
-    return t.cut_in_count >= CUTIN_CONFIRM_FRAMES
+    return t.cut_in_count >= self.cutin_confirm_frames
 
   def _cutin_can_replace_lead_one(self, cutin: dict[str, Any]) -> bool:
     lead_one = self.radar_state.leadOne
@@ -932,7 +967,7 @@ class RadarD:
     self.radar_state.leadsCenter = center_list
     self.radar_state.leadsCutIn = cutin_list
     self.leadCutIn = min(
-      (ld for ld in cutin_list if 3 < ld['dRel'] < 50 and ld['vLead'] > 4),
+      (ld for ld in cutin_list if self.cutin_enter_min_x < ld['dRel'] < self.cutin_enter_max_x and ld['vLead'] > 4),
       key=lambda d: d['dRel'],
       default=empty_lead()
     )

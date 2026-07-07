@@ -41,17 +41,24 @@ PLOT_HEADING_COMPONENT_MIN_MPS = 0.5
 CORNER_RADAR_ENDPOINT_SPEED_MIN_MPS = 0.5
 EGO_LATERAL_COMP_MAX_MPS = 3.5
 EGO_LATERAL_COMP_STATIC_SPEED_KPH = 8.0
-CUTIN_DEFAULT_HORIZON_S = 1.0
-CUTIN_DEFAULT_CONFIRM_S = 0.25
+CUTIN_DEFAULT_SENSITIVITY = 50.0
+CUTIN_DEFAULT_HORIZON_S = 1.5
+CUTIN_DEFAULT_CONFIRM_S = 0.20
 CUTIN_DEFAULT_STICKY_S = 0.7
-CUTIN_DEFAULT_MIN_AGE_S = 1.0
-CUTIN_DEFAULT_ENTER_FUTURE_IN_LANE_PROB = 0.25
+CUTIN_DEFAULT_MIN_AGE_S = 0.25
+CUTIN_DEFAULT_ENTER_MIN_X_M = 1.0
+CUTIN_DEFAULT_ENTER_MAX_X_M = 55.0
+CUTIN_DEFAULT_ENTER_MIN_ABS_Y_M = 1.5
+CUTIN_DEFAULT_KEEP_MIN_X_M = 0.5
+CUTIN_DEFAULT_KEEP_MAX_X_M = 60.0
+CUTIN_DEFAULT_ENTER_FUTURE_IN_LANE_PROB = 0.20
 CUTIN_DEFAULT_ENTER_PROB_GAIN = 0.12
-CUTIN_DEFAULT_ENTER_CENTERING_GAIN = 0.25
+CUTIN_DEFAULT_ENTER_CENTERING_GAIN = 0.20
 CUTIN_DEFAULT_KEEP_FUTURE_IN_LANE_PROB = 0.12
 CUTIN_DEFAULT_KEEP_MAX_DPATH_FUTURE = 1.6
 CUTIN_DEFAULT_KEEP_MAX_MOVING_AWAY = 0.3
 CUTIN_DEFAULT_LANE_HALF_WIDTH_M = 1.8
+CORNER_RADAR_OBJECT_AGE_HZ = 33.0
 CLUSTER_DEFAULT_VEHICLE = (70, 78, 88)
 CLUSTER_PRIMARY_VEHICLE = (50, 66, 82)
 CLUSTER_AMBER = (244, 172, 54)
@@ -505,6 +512,41 @@ def clamp(value: float, low: float, high: float) -> float:
   return max(low, min(high, value))
 
 
+def cutin_tuning_from_sensitivity(sensitivity: float) -> dict[str, float]:
+  s = clamp(sensitivity, 0.0, 100.0)
+  xp = [0.0, 50.0, 100.0]
+  return {
+    "cutin_horizon": float(np_interp(s, xp, [0.5, 1.5, 2.5])),
+    "cutin_confirm": float(np_interp(s, xp, [0.25, 0.10, 0.06])),
+    "cutin_min_age": float(np_interp(s, xp, [0.50, 0.25, 0.10])),
+    "cutin_enter_min_x": float(np_interp(s, xp, [3.0, 1.0, 0.5])),
+    "cutin_enter_max_x": float(np_interp(s, xp, [50.0, 55.0, 65.0])),
+    "cutin_enter_min_abs_y": float(np_interp(s, xp, [1.9, 1.5, 1.2])),
+    "cutin_enter_future_prob": float(np_interp(s, xp, [0.30, 0.15, 0.08])),
+    "cutin_enter_centering_gain": float(np_interp(s, xp, [0.30, 0.18, 0.10])),
+  }
+
+
+def np_interp(x: float, xp: list[float], fp: list[float]) -> float:
+  if x <= xp[0]:
+    return fp[0]
+  for idx in range(1, len(xp)):
+    if x <= xp[idx]:
+      scale = (x - xp[idx - 1]) / max(1e-6, xp[idx] - xp[idx - 1])
+      return fp[idx - 1] + (fp[idx] - fp[idx - 1]) * scale
+  return fp[-1]
+
+
+def apply_cutin_sensitivity(args: argparse.Namespace, provided_flags: set[str] | None = None) -> None:
+  if args.cutin_sensitivity <= 0.0:
+    return
+  provided_flags = provided_flags or set()
+  for attr, value in cutin_tuning_from_sensitivity(args.cutin_sensitivity).items():
+    flag = "--" + attr.replace("_", "-")
+    if flag not in provided_flags:
+      setattr(args, attr, value)
+
+
 def blend_color(color: tuple[int, int, int], target: tuple[int, int, int], amount: float) -> tuple[int, int, int]:
   amount = clamp(amount, 0.0, 1.0)
   return tuple(int(round(channel + (target_channel - channel) * amount)) for channel, target_channel in zip(color, target))
@@ -716,7 +758,8 @@ def cutin_object_info(
 
   entering = (
     track_age_s >= args.cutin_min_age
-    and 3.0 < obj.x < 50.0
+    and args.cutin_enter_min_x < obj.x < args.cutin_enter_max_x
+    and abs(obj_y) >= args.cutin_enter_min_abs_y
     and v_lead > 4.0
     and in_lane_prob_future >= args.cutin_enter_future_prob
     and (in_lane_prob_future - in_lane_prob) >= args.cutin_enter_prob_gain
@@ -725,7 +768,7 @@ def cutin_object_info(
   moving_away = abs(y_future) - abs(obj_y)
   keep = (
     previous_count > 0
-    and 2.5 < obj.x < 55.0
+    and args.cutin_keep_min_x < obj.x < args.cutin_keep_max_x
     and v_lead > 2.0
     and moving_away <= args.cutin_keep_max_moving_away
     and (
@@ -742,6 +785,12 @@ def cutin_object_info(
     in_lane_prob=in_lane_prob,
     in_lane_prob_future=in_lane_prob_future,
   )
+
+
+def sensor_track_age_s(obj: CornerObject) -> float:
+  # The corner radar's ALIVE_AGE lets the plot recognize a target that was
+  # already tracked before it entered the visible/interesting plot region.
+  return max(0.0, obj.age / CORNER_RADAR_OBJECT_AGE_HZ)
 
 
 def cutin_infos_for_snapshot(snapshots: list[Snapshot], frame_idx: int, args: argparse.Namespace) -> dict[tuple[str, int], CutInInfo]:
@@ -765,7 +814,8 @@ def cutin_infos_for_snapshot(snapshots: list[Snapshot], frame_idx: int, args: ar
       obj_y = plot_y(obj, args)
       obj_vy = display_vy(obj, args, lateral_offset)
       previous_count = counts.get(key, 0)
-      info = cutin_object_info(obj, snapshot, obj_y, obj_vy, snapshot.t - first_seen[key], previous_count, args)
+      track_age_s = max(snapshot.t - first_seen[key], sensor_track_age_s(obj))
+      info = cutin_object_info(obj, snapshot, obj_y, obj_vy, track_age_s, previous_count, args)
       if info is None:
         counts[key] = 0
         continue
@@ -947,7 +997,7 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
   else:
     fig, (ax, controls_ax) = plt.subplots(1, 2, figsize=(11, 9), gridspec_kw={"width_ratios": [1.0, 0.25]})
     video_ax = None
-  fig.subplots_adjust(bottom=0.30)
+  fig.subplots_adjust(bottom=0.38)
   controls_ax.set_title("labels")
   controls_ax.set_xticks([])
   controls_ax.set_yticks([])
@@ -965,7 +1015,11 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
   updating_seek = {"value": False}
   ani_holder: dict[str, FuncAnimation] = {}
   slider_specs = (
+    ("cutin_sensitivity", "sensitivity", 0.0, 100.0, "%.0f"),
     ("cutin_horizon", "horizon", 0.0, 2.5, "%.2fs"),
+    ("cutin_min_age", "min age", 0.0, 1.5, "%.2fs"),
+    ("cutin_enter_min_x", "x min", 0.0, 5.0, "%.1fm"),
+    ("cutin_enter_min_abs_y", "y min", 0.0, 3.5, "%.1fm"),
     ("cutin_lane_half_width", "lane half", 1.2, 2.4, "%.2fm"),
     ("cutin_enter_future_prob", "future prob", 0.0, 0.8, "%.2f"),
     ("cutin_enter_prob_gain", "prob gain", 0.0, 0.5, "%.2f"),
@@ -974,15 +1028,17 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
   )
   slider_axes = []
   sliders = []
+  slider_by_attr = {}
   left = 0.10
-  bottom = 0.22
+  bottom = 0.33
   width = 0.78
-  height = 0.022
+  height = 0.018
   for index, (attr, label, valmin, valmax, valfmt) in enumerate(slider_specs):
-    slider_ax = fig.add_axes([left, bottom - index * 0.035, width, height])
+    slider_ax = fig.add_axes([left, bottom - index * 0.028, width, height])
     slider = Slider(slider_ax, label, valmin, valmax, valinit=getattr(args, attr), valfmt=valfmt)
     slider_axes.append(slider_ax)
     sliders.append((attr, slider))
+    slider_by_attr[attr] = slider
   seek_ax = fig.add_axes([left, 0.015, width, height])
   seek_slider = Slider(
     seek_ax,
@@ -1044,8 +1100,17 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
     fig.canvas.draw_idle()
 
   def on_slider_change(_value: float):
+    changed_attr = None
     for attr, slider in sliders:
+      if abs(float(getattr(args, attr)) - float(slider.val)) > 1e-9:
+        changed_attr = attr
       setattr(args, attr, slider.val)
+    if changed_attr == "cutin_sensitivity":
+      for attr, value in cutin_tuning_from_sensitivity(args.cutin_sensitivity).items():
+        setattr(args, attr, value)
+        slider = slider_by_attr.get(attr)
+        if slider is not None and abs(float(slider.val) - float(value)) > 1e-9:
+          slider.set_val(value)
     draw_frame(current_frame["idx"])
     fig.canvas.draw_idle()
 
@@ -1125,6 +1190,11 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--cutin-confirm", type=float, default=CUTIN_DEFAULT_CONFIRM_S, help="Seconds a cut-in candidate must persist before highlighting")
   parser.add_argument("--cutin-sticky", type=float, default=CUTIN_DEFAULT_STICKY_S, help="Seconds to cap the plot-only cut-in sticky counter")
   parser.add_argument("--cutin-min-age", type=float, default=CUTIN_DEFAULT_MIN_AGE_S, help="Seconds a track must exist before entering cut-in state")
+  parser.add_argument("--cutin-enter-min-x", type=float, default=CUTIN_DEFAULT_ENTER_MIN_X_M, help="Minimum forward distance for cut-in entry")
+  parser.add_argument("--cutin-enter-max-x", type=float, default=CUTIN_DEFAULT_ENTER_MAX_X_M, help="Maximum forward distance for cut-in entry")
+  parser.add_argument("--cutin-enter-min-abs-y", type=float, default=CUTIN_DEFAULT_ENTER_MIN_ABS_Y_M, help="Minimum absolute lateral distance for cut-in entry")
+  parser.add_argument("--cutin-keep-min-x", type=float, default=CUTIN_DEFAULT_KEEP_MIN_X_M, help="Minimum forward distance for keeping a cut-in candidate sticky")
+  parser.add_argument("--cutin-keep-max-x", type=float, default=CUTIN_DEFAULT_KEEP_MAX_X_M, help="Maximum forward distance for keeping a cut-in candidate sticky")
   parser.add_argument("--cutin-enter-future-prob", type=float, default=CUTIN_DEFAULT_ENTER_FUTURE_IN_LANE_PROB, help="Minimum future in-lane score for cut-in entry")
   parser.add_argument("--cutin-enter-prob-gain", type=float, default=CUTIN_DEFAULT_ENTER_PROB_GAIN, help="Minimum in-lane score improvement for cut-in entry")
   parser.add_argument("--cutin-enter-centering-gain", type=float, default=CUTIN_DEFAULT_ENTER_CENTERING_GAIN, help="Minimum lateral centering improvement in meters for cut-in entry")
@@ -1145,7 +1215,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--no-video-duration-limit", action="store_true", help="Do not cap each rlog segment to the matching TS video duration")
   parser.add_argument("--save-png", default=None)
   parser.add_argument("--save-gif", default=None)
+  parser.add_argument("--cutin-sensitivity", type=float, default=CUTIN_DEFAULT_SENSITIVITY, help="Cut-in sensitivity using the same scale as RadarLatFactor; 50 maps to horizon=1.5, confirm=0.10, future prob=0.15, center gain=0.18")
+  provided_flags = {arg.split("=", 1)[0] for arg in sys.argv[1:] if arg.startswith("--")}
   args = parser.parse_args()
+  apply_cutin_sensitivity(args, provided_flags)
   if args.duration == 0:
     args.duration = None
   return args
