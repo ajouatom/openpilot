@@ -102,6 +102,52 @@ const WEB_SETTINGS_GROUPS = [
       },
     ],
   },
+  {
+    id: "log_upload",
+    labelKey: "web_settings_log_upload",
+    defaultLabel: "Log upload",
+    items: [
+      {
+        id: "log_upload_target",
+        type: "select",
+        titleKey: "web_log_upload_target",
+        defaultTitle: "Upload server",
+        descKey: "web_log_upload_target_desc",
+        defaultDesc: "Where dashcam log uploads are sent.",
+        options: [
+          { value: "carrot", labelKey: "web_log_upload_target_carrot", defaultLabel: "Carrot server" },
+          { value: "toss", labelKey: "web_log_upload_target_toss", defaultLabel: "Toss server" },
+        ],
+      },
+      {
+        id: "toss_upload_url",
+        type: "text",
+        titleKey: "web_toss_upload_url",
+        defaultTitle: "Toss server URL",
+        descKey: "web_toss_upload_url_desc",
+        defaultDesc: "HTTPS upload API address, e.g. https://op.wjcloud.kr",
+        placeholder: "https://",
+      },
+      {
+        id: "toss_upload_token",
+        type: "password",
+        titleKey: "web_toss_upload_token",
+        defaultTitle: "Toss access token",
+        descKey: "web_toss_upload_token_desc",
+        defaultDesc: "Bearer token issued by the toss server operator.",
+      },
+      {
+        id: "toss_connection_test",
+        type: "action",
+        titleKey: "web_toss_connection_test",
+        defaultTitle: "Connection test",
+        descKey: "web_toss_connection_test_desc",
+        defaultDesc: "Check the saved URL and token against the toss server.",
+        buttonKey: "web_toss_connection_test_button",
+        defaultButton: "Test",
+      },
+    ],
+  },
 ];
 
 const WEB_LAST_PAGE_KEY = "carrot_web_last_page";
@@ -118,6 +164,9 @@ const WEB_SETTING_DEFAULTS = {
   kmap_overlay_curvature_color: false,
   kmap_map_type: "roadmap",
   nav_hud_enabled: true,
+  log_upload_target: "carrot",
+  toss_upload_url: "https://op.wjcloud.kr",
+  toss_upload_token: "",
 };
 
 const webSettingsState = { ...WEB_SETTING_DEFAULTS };
@@ -158,6 +207,18 @@ function normalizeWebSettingValue(key, value) {
   if (key === "kmap_map_type") {
     const mt = String(value || "").trim().toLowerCase();
     return ["roadmap", "satellite", "hybrid"].includes(mt) ? mt : WEB_SETTING_DEFAULTS.kmap_map_type;
+  }
+  if (key === "log_upload_target") {
+    const target = String(value || "").trim().toLowerCase();
+    return target === "toss" ? "toss" : "carrot";
+  }
+  if (key === "toss_upload_url") {
+    let url = String(value || "").trim().replace(/\/+$/, "");
+    if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`;
+    return url;
+  }
+  if (key === "toss_upload_token") {
+    return String(value || "").trim();
   }
   return value;
 }
@@ -297,6 +358,31 @@ function renderWebSettingsItem(item) {
       </label>`;
   }
 
+  if (item.type === "text" || item.type === "password") {
+    const value = String(getWebSettingValue(item) ?? "");
+    return `
+      <label class="web-settings-row web-settings-row--input" data-web-setting="${escapeHtml(item.id)}">
+        <span class="web-settings-row__copy">
+          <span class="web-settings-row__title">${escapeHtml(title)}</span>
+          <span class="web-settings-row__desc">${escapeHtml(desc)}</span>
+        </span>
+        <input class="web-settings-input" type="${item.type === "password" ? "password" : "text"}"
+          value="${escapeHtml(value)}" placeholder="${escapeHtml(item.placeholder || "")}"
+          autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${escapeHtml(title)}" />
+      </label>`;
+  }
+
+  if (item.type === "action") {
+    return `
+      <div class="web-settings-row web-settings-row--action" data-web-setting-action="${escapeHtml(item.id)}">
+        <span class="web-settings-row__copy">
+          <span class="web-settings-row__title">${escapeHtml(title)}</span>
+          <span class="web-settings-row__desc">${escapeHtml(desc)}</span>
+        </span>
+        <button type="button" class="web-settings-action">${escapeHtml(getUIText(item.buttonKey, item.defaultButton || "Run"))}</button>
+      </div>`;
+  }
+
   return `
     <div class="web-settings-row">
       <div class="web-settings-row__title">${escapeHtml(title)}</div>
@@ -389,6 +475,48 @@ function bindWebSettingsDialogEvents() {
             showAppToast(err?.message || String(err), { tone: "error" });
           }
         });
+      });
+    }
+    const textInput = row.querySelector(".web-settings-input");
+    if (textInput) {
+      textInput.addEventListener("change", () => {
+        setWebSettingValue(item, textInput.value)
+          .then(() => {
+            textInput.value = String(getWebSettingValue(item) ?? "");
+          })
+          .catch((err) => {
+            textInput.value = String(getWebSettingValue(item) ?? "");
+            if (typeof showAppToast === "function") {
+              showAppToast(err?.message || String(err), { tone: "error" });
+            }
+          });
+      });
+      textInput.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") textInput.blur();
+      });
+    }
+  });
+
+  document.querySelectorAll("[data-web-setting-action]").forEach((row) => {
+    if (row.dataset.webSettingActionBound === "1") return;
+    row.dataset.webSettingActionBound = "1";
+    const button = row.querySelector(".web-settings-action");
+    if (!button) return;
+    if (row.dataset.webSettingAction === "toss_connection_test") {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await postJson("/api/dashcam/upload/test", {});
+          if (typeof showAppToast === "function") {
+            showAppToast(getUIText("web_toss_connection_ok", "Toss server connection OK"), { duration: 3200 });
+          }
+        } catch (err) {
+          if (typeof showAppToast === "function") {
+            showAppToast(`${getUIText("web_toss_connection_failed", "Toss server connection failed")}: ${err?.message || err}`, { tone: "error", duration: 4200 });
+          }
+        } finally {
+          button.disabled = false;
+        }
       });
     }
   });

@@ -7,7 +7,7 @@ import time
 from aiohttp import web
 
 from ...config import DASHCAM_ROOT
-from . import upload_jobs
+from . import upload, upload_jobs
 from .catalog import build_routes, segment_file_summary
 from .ffmpeg import browser_video, ensure_preview, ensure_thumbnail
 from .paths import (
@@ -273,6 +273,20 @@ async def api_dashcam_upload_job(request: web.Request) -> web.Response:
   return web.json_response(upload_jobs.snapshot(job))
 
 
+async def api_dashcam_upload_test(request: web.Request) -> web.Response:
+  try:
+    base_url, token = upload.toss_settings()
+    if not base_url:
+      return web.json_response({"ok": False, "error": "Toss server URL is not configured"}, status=400)
+    if not token:
+      return web.json_response({"ok": False, "error": "Toss server token is not configured"}, status=400)
+    result = await upload.check_toss_health(base_url, token)
+    status = 200 if result.get("ok") else 502
+    return web.json_response({"target": "toss", "url": base_url, **result}, status=status)
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
 async def api_dashcam_upload_cancel(request: web.Request) -> web.Response:
   try:
     body = await request.json()
@@ -295,6 +309,7 @@ def register(app: web.Application) -> None:
   app.router.add_get("/api/dashcam/download/{segment}/{kind}", api_dashcam_download)
   app.router.add_post("/api/dashcam/upload/summary", api_dashcam_upload_summary)
   app.router.add_post("/api/dashcam/upload/start", api_dashcam_upload_start)
+  app.router.add_post("/api/dashcam/upload/test", api_dashcam_upload_test)
   app.router.add_get("/api/dashcam/upload/job", api_dashcam_upload_job)
   app.router.add_post("/api/dashcam/upload/cancel", api_dashcam_upload_cancel)
   app.router.add_post("/api/dashcam/upload", api_dashcam_upload)

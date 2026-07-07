@@ -47,6 +47,11 @@
     min-width: 104px;
   }
 
+  .web-settings-input {
+    width: min(180px, 52vw);
+    min-width: 120px;
+  }
+
   .app-dialog--tools-qr .app-dialog__sheet {
     width: min(calc(100vw - 24px), 440px);
     max-height: min(calc(100dvh - 24px), 680px);

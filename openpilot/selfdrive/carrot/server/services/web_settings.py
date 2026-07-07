@@ -7,6 +7,7 @@ from ..config import CARROT_WEB_SETTINGS_PATH
 
 WEB_PRIMARY_PAGES = {"last", "carrot", "setting", "tools", "logs", "terminal"}
 WEB_LANGUAGES = {"", "en", "ko", "zh"}
+LOG_UPLOAD_TARGETS = {"carrot", "toss"}
 
 DEFAULT_WEB_SETTINGS: Dict[str, Any] = {
   "auto_update_git_pull": False,
@@ -19,6 +20,9 @@ DEFAULT_WEB_SETTINGS: Dict[str, Any] = {
   "kmap_overlay_curvature_color": False,
   "kmap_map_type": "roadmap",
   "nav_hud_enabled": True,
+  "log_upload_target": "carrot",
+  "toss_upload_url": "https://op.wjcloud.kr",
+  "toss_upload_token": "",
 }
 
 
@@ -51,6 +55,13 @@ def _normalize_kmap_url(value: Any) -> str:
   return url or DEFAULT_WEB_SETTINGS["kmap_url"]
 
 
+def _normalize_toss_url(value: Any) -> str:
+  url = str(value or "").strip().rstrip("/")
+  if url and not url.lower().startswith(("http://", "https://")):
+    url = f"https://{url}"
+  return url
+
+
 def sanitize_web_settings(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
   raw = raw or {}
   settings = dict(DEFAULT_WEB_SETTINGS)
@@ -70,6 +81,10 @@ def sanitize_web_settings(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
   map_type = str(raw.get("kmap_map_type", settings["kmap_map_type"]) or "").strip().lower()
   settings["kmap_map_type"] = map_type if map_type in {"roadmap", "satellite", "hybrid"} else "roadmap"
   settings["nav_hud_enabled"] = _to_bool(raw.get("nav_hud_enabled", settings["nav_hud_enabled"]))
+  target = str(raw.get("log_upload_target", settings["log_upload_target"]) or "").strip().lower()
+  settings["log_upload_target"] = target if target in LOG_UPLOAD_TARGETS else "carrot"
+  settings["toss_upload_url"] = _normalize_toss_url(raw.get("toss_upload_url", settings["toss_upload_url"]))
+  settings["toss_upload_token"] = str(raw.get("toss_upload_token", settings["toss_upload_token"]) or "").strip()
   return settings
 
 

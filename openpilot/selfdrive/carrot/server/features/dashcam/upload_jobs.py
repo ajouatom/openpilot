@@ -170,17 +170,22 @@ def create_job(segments: list[str]) -> dict[str, Any]:
 
 async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = None) -> dict[str, Any]:
   params = Params() if HAS_PARAMS else None
+  target = upload.resolve_upload_target()  # raises if toss is selected but not configured
+  is_toss = target.get("kind") == "toss"
   meta = upload.upload_metadata(params)
   car_selected = meta.get("carName") or "none"
   dongle_id = meta.get("dongleId") or "unknown"
   directory = f"{car_selected} {dongle_id}".strip()
   remote_base_path = f"routes/{directory}/".replace("\\", "/")
+  if is_toss:
+    remote_base_path = f"{target['base_url']}/{remote_base_path}"
   total = len(segments)
   results: list[Any] = [None] * total  # filled by index so order matches input
 
   if job:
     job["upload_meta"] = meta
     job["remote_base_path"] = remote_base_path
+    job["upload_target"] = target.get("kind")
     job["partial_results"] = []
     progress(job, message="Preparing upload", current=0, total=total, percent=0)
 
@@ -209,13 +214,24 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
       try:
         segment_path = segment_dir(segment)
         files = await asyncio.to_thread(segment_file_summary, segment_path)
-        ok = await asyncio.to_thread(
-          upload.upload_folder_to_ftp,
-          segment_path,
-          directory,
-          segment,
-          (lambda: is_cancel_requested(job)) if job else None,
-        )
+        cancel_check = (lambda: is_cancel_requested(job)) if job else None
+        if is_toss:
+          ok = await upload.upload_folder_to_toss(
+            segment_path,
+            directory,
+            segment,
+            target["base_url"],
+            target["token"],
+            cancel_check,
+          )
+        else:
+          ok = await asyncio.to_thread(
+            upload.upload_folder_to_ftp,
+            segment_path,
+            directory,
+            segment,
+            cancel_check,
+          )
         results[idx0] = {
           "segment": segment,
           "route": route_name(segment),
@@ -257,6 +273,7 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
     "uploaded": ok_count,
     "total": len(results),
     "uploadedAt": uploaded_at,
+    "target": target.get("kind"),
     "remoteBasePath": remote_base_path,
     "meta": meta,
     "results": results,
@@ -267,10 +284,20 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
   if job:
     progress(job, message="Sending notification", current=total, total=total, percent=98)
   ensure_not_canceled(job)
-  response_payload["discord"] = await upload.send_discord_webhook(
-    upload.discord_webhook_url(params),
-    response_payload,
-  )
+  if is_toss:
+    # Toss uploads notify the toss server itself; the carrot Discord webhook
+    # must not receive them.
+    response_payload["tossComplete"] = await upload.send_toss_complete(
+      target["base_url"],
+      target["token"],
+      response_payload,
+    )
+    response_payload["discord"] = {"configured": False, "ok": False, "skipped": True}
+  else:
+    response_payload["discord"] = await upload.send_discord_webhook(
+      upload.discord_webhook_url(params),
+      response_payload,
+    )
   return response_payload
 
 
@@ -289,6 +316,7 @@ async def run_job(job: dict[str, Any]) -> None:
       "uploaded": ok_count,
       "total": total,
       "uploadedAt": uploaded_at,
+      "target": job.get("upload_target") or "carrot",
       "remoteBasePath": job.get("remote_base_path") or "",
       "meta": job.get("upload_meta") or {},
       "results": results,

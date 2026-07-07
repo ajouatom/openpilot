@@ -1267,8 +1267,15 @@ async function uploadDashcamSegments(segments) {
     const summary = await postJson("/api/dashcam/upload/summary", { segments: targets });
     if (Array.isArray(summary?.summaries)) uploadStats = dashcamUploadStats(summary.summaries);
   } catch {}
+  let uploadTarget = "carrot";
+  try {
+    if (typeof loadWebSettings === "function") await loadWebSettings();
+    if (typeof getWebSettingByKey === "function") uploadTarget = getWebSettingByKey("log_upload_target", "carrot") || "carrot";
+  } catch {}
   const confirmMessage = [
-    getUIText("log_upload_confirm", `Upload ${targets.length} logs to the Carrot server?`, { count: targets.length }),
+    uploadTarget === "toss"
+      ? getUIText("log_upload_confirm_toss", `Upload ${targets.length} logs to the Toss server?`, { count: targets.length })
+      : getUIText("log_upload_confirm", `Upload ${targets.length} logs to the Carrot server?`, { count: targets.length }),
     dashcamUploadSummaryLabel(uploadStats),
     getUIText("upload_data_warning", "This upload may use mobile data depending on your network connection."),
   ].join("\n\n");

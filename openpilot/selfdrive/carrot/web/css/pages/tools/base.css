@@ -488,6 +488,43 @@
   line-height: 1.2;
 }
 
+.web-settings-input {
+  width: min(220px, 48vw);
+  min-width: 140px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--md-surface-cont-h) 84%, transparent);
+  color: var(--md-on-surface);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.web-settings-input:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 1px;
+}
+
+.web-settings-action {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--md-surface-cont-h) 84%, transparent);
+  color: var(--md-on-surface);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.web-settings-action:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .app-dialog--tools-qr .app-dialog__sheet {
   width: min(calc(100vw - 32px), 520px);
   max-height: min(calc(100dvh - 32px), 720px);

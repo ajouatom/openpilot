@@ -1,6 +1,8 @@
 import base64
+import json
 import os
 import subprocess
+import urllib.parse
 from ftplib import FTP
 from typing import Any, Callable
 
@@ -9,6 +11,7 @@ from aiohttp import ClientSession, ClientTimeout
 from openpilot.system.hardware import HARDWARE
 
 from ...config import DASHCAM_DEFAULT_DISCORD_KEY, DASHCAM_DEFAULT_DISCORD_WEBHOOK
+from ...services.web_settings import read_web_settings
 
 
 def param_text(params: Any, key: str, default: str = "unknown") -> str:
@@ -118,6 +121,7 @@ def upload_message_lines(payload: dict[str, Any], max_results: int | None = None
     "# Carrot Dashcam Upload",
     "### Upload",
     f"- Time: {payload.get('uploadedAt') or ''}",
+    f"- Server: {'Toss' if payload.get('target') == 'toss' else 'Carrot'}",
     f"- Path: {payload.get('remoteBasePath') or ''}",
     "### Device",
     f"- Car name: {meta.get('carName') or 'none'}",
@@ -242,3 +246,127 @@ def upload_folder_to_ftp(
       ftp.quit()
     except Exception:
       pass
+
+
+def toss_settings() -> tuple[str, str]:
+  try:
+    settings = read_web_settings()
+  except Exception:
+    settings = {}
+  base_url = str(settings.get("toss_upload_url") or "").strip().rstrip("/")
+  token = str(settings.get("toss_upload_token") or "").strip()
+  return base_url, token
+
+
+def resolve_upload_target() -> dict[str, Any]:
+  try:
+    settings = read_web_settings()
+  except Exception:
+    settings = {}
+  if str(settings.get("log_upload_target") or "").strip().lower() != "toss":
+    return {"kind": "carrot"}
+  base_url, token = toss_settings()
+  if not base_url:
+    raise RuntimeError("Toss server URL is not configured")
+  if not token:
+    raise RuntimeError("Toss server token is not configured")
+  return {"kind": "toss", "base_url": base_url, "token": token}
+
+
+def _toss_url(base_url: str, *parts: str) -> str:
+  quoted = "/".join(urllib.parse.quote(part, safe="") for part in parts)
+  return f"{base_url}/api/v1/{quoted}"
+
+
+async def check_toss_health(base_url: str, token: str) -> dict[str, Any]:
+  try:
+    timeout = ClientTimeout(total=12)
+    async with ClientSession(timeout=timeout) as session:
+      url = f"{base_url}/api/v1/health"
+      async with session.get(url, headers={"Authorization": f"Bearer {token}"}) as resp:
+        text = await resp.text()
+        if resp.status == 200:
+          return {"ok": True, "status": resp.status}
+        return {"ok": False, "status": resp.status, "error": text[:300]}
+  except Exception as e:
+    return {"ok": False, "error": str(e)}
+
+
+async def upload_folder_to_toss(
+  local_folder: str,
+  directory: str,
+  remote_path: str,
+  base_url: str,
+  token: str,
+  should_cancel: Callable[[], bool] | None = None,
+) -> bool:
+  def check_cancel() -> None:
+    if should_cancel and should_cancel():
+      raise RuntimeError("upload canceled")
+
+  # The toss API stores a flat file list per segment
+  # (PUT /upload/{directory}/{segment}/{filename}); segment folders only
+  # contain top-level files in practice.
+  check_cancel()
+  try:
+    entries = sorted(e.name for e in os.scandir(local_folder) if e.is_file())
+  except OSError as e:
+    raise RuntimeError(f"cannot read segment folder: {e}") from e
+
+  headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/octet-stream"}
+  timeout = ClientTimeout(total=None, connect=20, sock_read=180)
+  async with ClientSession(timeout=timeout, headers=headers) as session:
+    for filename in entries:
+      local_path = os.path.join(local_folder, filename)
+      local_size = os.path.getsize(local_path)
+      url = _toss_url(base_url, "upload", directory, remote_path, filename)
+
+      async def send_file(path: str = local_path):
+        check_cancel()
+        with open(path, "rb") as f:
+          while True:
+            check_cancel()
+            chunk = f.read(1024 * 1024)
+            if not chunk:
+              break
+            yield chunk
+
+      last_error: Exception | None = None
+      for _attempt in range(2):
+        check_cancel()
+        try:
+          async with session.put(url, data=send_file()) as resp:
+            text = await resp.text()
+            try:
+              body = json.loads(text)
+            except Exception:
+              body = None
+            if resp.status != 200 or not (body or {}).get("ok"):
+              error = str((body or {}).get("error") or text or "")[:200]
+              raise RuntimeError(f"HTTP {resp.status}: {error}")
+            remote_size = int((body or {}).get("size") or -1)
+            if remote_size != local_size:
+              raise RuntimeError(f"size mismatch for {filename}: local {local_size}, remote {remote_size}")
+          last_error = None
+          break
+        except Exception as e:
+          check_cancel()
+          last_error = e
+      if last_error is not None:
+        raise RuntimeError(f"{filename}: {last_error}") from last_error
+      check_cancel()
+  return True
+
+
+async def send_toss_complete(base_url: str, token: str, payload: dict[str, Any]) -> dict[str, Any]:
+  try:
+    timeout = ClientTimeout(total=12)
+    async with ClientSession(timeout=timeout) as session:
+      url = f"{base_url}/api/v1/complete"
+      async with session.post(url, json=payload, headers={"Authorization": f"Bearer {token}"}) as resp:
+        text = await resp.text()
+        if 200 <= resp.status < 300:
+          return {"ok": True, "status": resp.status}
+        return {"ok": False, "status": resp.status, "error": text[:300]}
+  except Exception as e:
+    return {"ok": False, "error": str(e)}
