@@ -45,6 +45,7 @@ def write_supported_cars_files() -> None:
     ("mazda", "SupportedCars_mazda"),
     ("ford", "SupportedCars_ford"),
     ("volkswagen", "SupportedCars_vw"),
+    ("tesla", "SupportedCars_tesla"),
   ):
     try:
       values = importlib.import_module(f"opendbc.car.{brand}.values")
