@@ -227,6 +227,7 @@ class ClusterUiState:
     model_path: tuple[ModelPathPoint, ...] = ()
     detected_vehicles: tuple[DetectedVehicle, ...] = ()
     radar_points: tuple[RadarPoint, ...] = ()
+    corner_radar_supported: bool = False
     tpms: TpmsInfo = TpmsInfo()
     radar_info_mode: int = 4
     radar_display_mode: int = 0

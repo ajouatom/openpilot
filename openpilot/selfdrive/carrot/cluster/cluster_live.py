@@ -68,6 +68,7 @@ def _limited_items(items: Any, max_items: int):
 
 LIVE_SERVICES_BASE = (
     "carState",
+    "carParams",
     "modelV2",
     "radarState",
     "liveTracks",
@@ -147,6 +148,19 @@ class OpenpilotLiveSource:
             self.params_memory = Params("/dev/shm/params")
             self._energy_gauge_label = self._resolve_energy_gauge_label()
             self._max_lateral_accel = self._resolve_max_lateral_accel()
+            self._load_cached_car_params()
+        except Exception:
+            pass
+
+    def _load_cached_car_params(self) -> None:
+        if self.params is None:
+            return
+        try:
+            from openpilot.cereal import car
+
+            car_params_bytes = self.params.get("CarParams")
+            if car_params_bytes:
+                self.parser._update_car_params(self.messaging.log_from_bytes(car_params_bytes, car.CarParams))
         except Exception:
             pass
 
@@ -433,6 +447,8 @@ class OpenpilotLiveSource:
             self.parser._update_car_control(data)
         elif service == "cameraOdometry":
             self.parser._update_camera_odometry(data, self._service_valid(service))
+        elif service == "carParams":
+            self.parser._update_car_params(data)
         elif service == "radarState":
             self.parser._update_radar_state(data, event_t)
         elif service == "liveTracks":

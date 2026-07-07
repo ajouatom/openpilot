@@ -376,9 +376,17 @@ def radar_point_speed_label(point: RadarPointMarker) -> str:
 
 
 def vehicle_distance_label(vehicle: VehicleBox) -> str:
-    if vehicle.absolute_speed_kph is not None and abs(vehicle.absolute_speed_kph) <= RADAR_STATIC_OBJECT_SPEED_KPH:
+    if (
+        vehicle.absolute_speed_kph is not None
+        and abs(vehicle.absolute_speed_kph) <= RADAR_STATIC_OBJECT_SPEED_KPH
+        and not vehicle.primary
+        and not vehicle.cut_in
+    ):
         return ""
-    return f"{vehicle_distance_m(vehicle):.0f} m"
+    distance = f"{vehicle_distance_m(vehicle):.0f} m"
+    if (vehicle.primary or vehicle.cut_in) and vehicle.label:
+        return f"{vehicle.label} {distance}"
+    return distance
 
 
 def vehicle_distance_m(vehicle: VehicleBox) -> float:
@@ -423,6 +431,10 @@ def radar_info_shows_distance(mode: int) -> bool:
 
 
 def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme, source_color_mode: int) -> tuple[int, int, int]:
+    if vehicle.cut_in:
+        return AMBER
+    if vehicle.primary:
+        return theme.primary_vehicle
     if source_color_mode != CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE:
         return theme.world_label_text
     if vehicle_source_is_adas(vehicle.source):
