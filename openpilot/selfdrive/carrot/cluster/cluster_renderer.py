@@ -1874,13 +1874,18 @@ class ClusterUiRenderer:
         radar_info_mode: int = CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
         radar_source_color_mode: int = 0,
     ) -> None:
-        if not radar_info_shows_vehicle(radar_info_mode):
+        show_vehicle_info = radar_info_shows_vehicle(radar_info_mode)
+        if not show_vehicle_info and not any(vehicle.primary or vehicle.cut_in for vehicle in vehicles):
             return
         theme = self._current_theme()
         profile_enabled = self.profile_enabled
         profile_stage = self._profile_start()
         ordered = sorted(
-            (vehicle for vehicle in vehicles if vehicle.label),
+            (
+                vehicle
+                for vehicle in vehicles
+                if vehicle.label and (show_vehicle_info or vehicle.primary or vehicle.cut_in)
+            ),
             key=lambda vehicle: (
                 0 if vehicle.primary else 1 if vehicle.cut_in else 2,
                 max(0.0, vehicle.center.y - EGO_FORWARD_M),
@@ -1918,7 +1923,12 @@ class ClusterUiRenderer:
 
             if profile_enabled:
                 layout_stage = time.perf_counter()
-            distance = vehicle_distance_label(vehicle) if radar_info_shows_distance(radar_info_mode) else ""
+            show_important_label = vehicle.primary or vehicle.cut_in
+            distance = (
+                vehicle_distance_label(vehicle)
+                if radar_info_shows_distance(radar_info_mode) or show_important_label
+                else ""
+            )
             speed = vehicle_speed_label(vehicle) if radar_info_shows_speed(radar_info_mode) else ""
             if not distance and not speed:
                 if profile_enabled:
