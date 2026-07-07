@@ -962,6 +962,7 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
 
   paused = {"value": False}
   current_frame = {"idx": 0}
+  updating_seek = {"value": False}
   ani_holder: dict[str, FuncAnimation] = {}
   slider_specs = (
     ("cutin_horizon", "horizon", 0.0, 2.5, "%.2fs"),
@@ -982,21 +983,39 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
     slider = Slider(slider_ax, label, valmin, valmax, valinit=getattr(args, attr), valfmt=valfmt)
     slider_axes.append(slider_ax)
     sliders.append((attr, slider))
+  seek_ax = fig.add_axes([left, 0.015, width, height])
+  seek_slider = Slider(
+    seek_ax,
+    "seek",
+    0,
+    max(1, len(snapshots) - 1),
+    valinit=0,
+    valfmt="%0.0f",
+    valstep=1,
+  )
+  slider_axes.append(seek_ax)
 
-  def update(frame_idx: int):
+  def draw_frame(frame_idx: int):
+    frame_idx = int(clamp(frame_idx, 0, len(snapshots) - 1))
     current_frame["idx"] = frame_idx
     snapshot = snapshots[frame_idx]
     draw_snapshot(ax, snapshot, args, paused["value"], cutin_infos_for_snapshot(snapshots, frame_idx, args))
     if video_ax is not None:
       setup_video_axis(video_ax, snapshot.video_t, get_video(snapshot.rlog_path))
+    if not updating_seek["value"] and int(round(seek_slider.val)) != frame_idx:
+      updating_seek["value"] = True
+      seek_slider.set_val(frame_idx)
+      updating_seek["value"] = False
     return []
 
-  def on_click(event):
-    if event.canvas != fig.canvas:
-      return
-    if event.inaxes == controls_ax or event.inaxes in slider_axes:
-      return
-    paused["value"] = not paused["value"]
+  def animation_tick(_frame_idx: int):
+    frame_idx = current_frame["idx"]
+    artists = draw_frame(frame_idx)
+    current_frame["idx"] = (frame_idx + 1) % len(snapshots)
+    return artists
+
+  def set_paused(value: bool):
+    paused["value"] = value
     ani = ani_holder.get("ani")
     if ani is None:
       return
@@ -1004,7 +1023,14 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
       ani.event_source.stop()
     else:
       ani.event_source.start()
-    update(current_frame["idx"])
+
+  def on_click(event):
+    if event.canvas != fig.canvas:
+      return
+    if event.inaxes == controls_ax or event.inaxes in slider_axes:
+      return
+    set_paused(not paused["value"])
+    draw_frame(current_frame["idx"])
     fig.canvas.draw_idle()
 
   def on_label_toggle(label: str):
@@ -1014,21 +1040,55 @@ def plot_snapshots(snapshots: list[Snapshot], args: argparse.Namespace) -> None:
       if status
     ]
     args.active_label_fields = active
-    update(current_frame["idx"])
+    draw_frame(current_frame["idx"])
     fig.canvas.draw_idle()
 
   def on_slider_change(_value: float):
     for attr, slider in sliders:
       setattr(args, attr, slider.val)
-    update(current_frame["idx"])
+    draw_frame(current_frame["idx"])
     fig.canvas.draw_idle()
 
-  ani = FuncAnimation(fig, update, frames=len(snapshots), interval=1000 / args.fps, blit=False, repeat=True)
+  def seek_to_frame(frame_idx: int, pause: bool = True):
+    if pause:
+      set_paused(True)
+    draw_frame(int(clamp(frame_idx, 0, len(snapshots) - 1)))
+    fig.canvas.draw_idle()
+
+  def on_seek_change(value: float):
+    if updating_seek["value"]:
+      return
+    seek_to_frame(int(round(value)), pause=True)
+
+  def on_key_press(event):
+    key = (event.key or "").lower()
+    step = max(1, int(round(args.fps)))
+    if key == " ":
+      set_paused(not paused["value"])
+      draw_frame(current_frame["idx"])
+      fig.canvas.draw_idle()
+    elif key in ("left", "a"):
+      seek_to_frame(current_frame["idx"] - step)
+    elif key in ("right", "d"):
+      seek_to_frame(current_frame["idx"] + step)
+    elif key in ("down", "pagedown"):
+      seek_to_frame(current_frame["idx"] - step * 10)
+    elif key in ("up", "pageup"):
+      seek_to_frame(current_frame["idx"] + step * 10)
+    elif key == "home":
+      seek_to_frame(0)
+    elif key == "end":
+      seek_to_frame(len(snapshots) - 1)
+
+  animation_frames = range(len(snapshots)) if args.save_gif else None
+  ani = FuncAnimation(fig, animation_tick, frames=animation_frames, interval=1000 / args.fps, blit=False, repeat=True)
   ani_holder["ani"] = ani
   fig.canvas.mpl_connect("button_press_event", on_click)
+  fig.canvas.mpl_connect("key_press_event", on_key_press)
   label_checks.on_clicked(on_label_toggle)
   for _, slider in sliders:
     slider.on_changed(on_slider_change)
+  seek_slider.on_changed(on_seek_change)
   if args.save_gif:
     ani.save(args.save_gif, writer="pillow", fps=args.fps)
     print(f"saved {args.save_gif}")
