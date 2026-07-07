@@ -678,6 +678,29 @@ def draw_vehicle_marker(ax, center_y: float, center_x: float, forward_y: float, 
     ax.text(center_y, center_x, label, ha="center", va="center", fontsize=8, color="white", zorder=7)
 
 
+def draw_vehicle_label(ax, center_y: float, center_x: float, label: str, cutin: bool = False) -> None:
+  if not label:
+    return
+
+  ax.annotate(
+    label,
+    xy=(center_y, center_x),
+    xytext=(0, 12),
+    textcoords="offset points",
+    ha="center",
+    va="bottom",
+    fontsize=7.5,
+    color="white" if cutin else "0.08",
+    bbox={
+      "boxstyle": "round,pad=0.18",
+      "facecolor": mpl_rgba(CLUSTER_RED if cutin else (248, 250, 252), 0.88),
+      "edgecolor": mpl_rgba((90, 96, 104), 0.45),
+      "linewidth": 0.7,
+    },
+    zorder=10,
+  )
+
+
 def object_vehicle_color(obj: CornerObject, ego_speed: float, lateral_speed_mps: float | None = None) -> tuple[int, int, int]:
   absolute_speed_kph = (ego_speed + obj.vx) * 3.6
   if absolute_speed_kph <= -RADAR_MOVING_VEHICLE_MIN_SPEED_KPH:
@@ -872,7 +895,7 @@ def draw_snapshot(ax, snapshot: Snapshot, args: argparse.Namespace, paused: bool
       center_y, center_x = adjusted_vehicle_center(obj_y, obj.x, forward_y, forward_x, obj.vx, args.point_anchor)
       confidence = clamp(0.56 + min(100, max(0, obj.quality)) / 100.0 * 0.36, 0.56, 0.92)
       color = CLUSTER_RED if cutin_info is not None else object_vehicle_color(obj, ego_speed, lateral_speed_mps)
-      draw_vehicle_marker(ax, center_y, center_x, forward_y, forward_x, color, confidence)
+      draw_vehicle_marker(ax, center_y, center_x, forward_y, forward_x, color, confidence, label="CUT" if cutin_info is not None else None)
       ax.arrow(
         center_y,
         center_x,
@@ -895,18 +918,8 @@ def draw_snapshot(ax, snapshot: Snapshot, args: argparse.Namespace, paused: bool
         )
         ax.scatter([cutin_info.y_future], [cutin_info.x_future], s=48, color=mpl_rgba(CLUSTER_RED, 0.86), zorder=9)
       label = format_object_label(obj, ego_speed, obj_y, label_fields)
-      if cutin_info is not None:
-        label = f"CUT-IN {label}".strip()
       if label:
-        ax.text(
-          center_y,
-          center_x + 2.6,
-          label,
-          ha="center",
-          va="bottom",
-          fontsize=8,
-          zorder=9,
-        )
+        draw_vehicle_label(ax, center_y, center_x, label)
     ax.plot([], [], color=mpl_rgba(CLUSTER_DEFAULT_VEHICLE, 0.9), linewidth=6, label="raw corner vehicle")
 
   if summary_objects:
