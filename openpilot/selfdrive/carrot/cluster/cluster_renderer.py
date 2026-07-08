@@ -2077,7 +2077,7 @@ class ClusterUiRenderer:
         z1: float,
     ) -> None:
         outline_color = AMBER if vehicle.cut_in else WHITE
-        outline = rl_color(outline_color[0], outline_color[1], outline_color[2], 255)
+        outline = rl_color(outline_color, 255)
         halo_width = half_width + 0.12
         halo_length = half_length + 0.16
         halo_z0 = z0 + 0.015
