@@ -34,6 +34,10 @@ from openpilot.selfdrive.navd.helpers import Coordinate
 from openpilot.common.constants import CV
 
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
+try:
+  from openpilot.selfdrive.carrot.server.services.web_settings import read_web_settings
+except Exception:
+  read_web_settings = None
 
 from openpilot.common.gps import get_gps_location_service
 
@@ -815,21 +819,32 @@ class CarrotMan:
       return v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
 
     url = "https://tmux.carrotpilot.app/upload"
+    headers = {}
+    params = {}
+    try:
+      settings = read_web_settings() if callable(read_web_settings) else {}
+      if str(settings.get("log_upload_target") or "").strip().lower() == "toss":
+        base_url = str(settings.get("toss_upload_url") or "").strip().rstrip("/")
+        token = str(settings.get("toss_upload_token") or "").strip()
+        if base_url and token:
+          url = f"{base_url}/api/v1/tmux/upload"
+          headers["Authorization"] = f"Bearer {token}"
+    except Exception as e:
+      print(f"tmux toss settings error: {e}")
 
     payload = {
-      "car_name"          : _pstr("CarName"),
-      "git_branch"        : _pstr("GitBranch"),
-      "github_id"         : _pstr("GithubUsername"),
-      "git_remote"        : _pstr("GitRemote"),
-      "git_commit"        : _pstr("GitCommit"),
-      "git_commit_date"   : _pstr("GitCommitDate"),
-      "dongle_id"         : _pstr("DongleId"),
-      "device_serial"     : _pstr("HardwareSerial"),
-      "local_ip"          : get_private_ip_by_iface("wlan0"),
+      "tmux_why"           : tmux_why,
+      "car_name"           : _pstr("CarName"),
+      "git_branch"         : _pstr("GitBranch"),
+      "github_id"          : _pstr("GithubUsername"),
+      "git_remote"         : _pstr("GitRemote"),
+      "git_commit"         : _pstr("GitCommit"),
+      "git_commit_date"    : _pstr("GitCommitDate"),
+      "dongle_id"          : _pstr("DongleId"),
+      "device_serial"      : _pstr("HardwareSerial"),
+      "local_ip"           : get_private_ip_by_iface("wlan0"),
     }
 
-    params = {}
-    headers = {}
     files = []
 
     try:
