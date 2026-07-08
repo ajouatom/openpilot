@@ -2677,17 +2677,17 @@
     {
       "group": "차량간격",
       "name": "TFollowDecelBoost",
-      "title": "감속TFollow부스트비율(30)",
+      "title": "감속TFollow부스트비율(50)",
       "descr": "감속 중 TF 추가 확보 비율. 값이 클수록 감속 시 차간거리를 더 여유있게 유지합니다.",
       "egroup": "FDIST",
-      "etitle": "Decel TF Boost Ratio (30)",
+      "etitle": "Decel TF Boost Ratio (50)",
       "edescr": "Extra t_follow boost ratio during deceleration. Higher values keep more following distance while slowing down.",
       "cgroup": "跟车距离",
-      "ctitle": "减速TF增益比例(30)",
+      "ctitle": "减速TF增益比例(50)",
       "cdescr": "减速时额外增加 t_follow 的比例。数值越大，减速时跟车距离越宽松。",
       "min": 0,
       "max": 100,
-      "default": 10,
+      "default": 50,
       "unit": 10
     },
     {
