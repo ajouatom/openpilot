@@ -322,10 +322,16 @@ async def upload_folder_to_toss(
   async with ClientSession(timeout=timeout, headers=headers) as session:
     for filename in entries:
       local_path = os.path.join(local_folder, filename)
-      local_size = os.path.getsize(local_path)
       url = _toss_url(base_url, "upload", directory, remote_path, filename)
 
+      # The file may still be growing (currently-recording segment), so
+      # integrity is verified against the bytes actually streamed this
+      # attempt, not a pre-upload stat size.
+      sent = 0
+
       async def send_file(path: str = local_path):
+        nonlocal sent
+        sent = 0
         check_cancel()
         with open(path, "rb") as f:
           while True:
@@ -333,6 +339,7 @@ async def upload_folder_to_toss(
             chunk = f.read(1024 * 1024)
             if not chunk:
               break
+            sent += len(chunk)
             yield chunk
 
       last_error: Exception | None = None
@@ -348,9 +355,10 @@ async def upload_folder_to_toss(
             if resp.status != 200 or not (body or {}).get("ok"):
               error = str((body or {}).get("error") or text or "")[:200]
               raise RuntimeError(f"HTTP {resp.status}: {error}")
-            remote_size = int((body or {}).get("size") or -1)
-            if remote_size != local_size:
-              raise RuntimeError(f"size mismatch for {filename}: local {local_size}, remote {remote_size}")
+            raw_size = (body or {}).get("size")
+            remote_size = int(raw_size) if raw_size is not None else -1
+            if remote_size != sent:
+              raise RuntimeError(f"size mismatch for {filename}: sent {sent}, remote {remote_size}")
           last_error = None
           break
         except Exception as e:
