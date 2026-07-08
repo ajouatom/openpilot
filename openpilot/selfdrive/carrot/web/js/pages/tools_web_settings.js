@@ -145,6 +145,9 @@ const WEB_SETTINGS_GROUPS = [
         defaultDesc: "Check the saved URL and token against the toss server.",
         buttonKey: "web_toss_connection_test_button",
         defaultButton: "Test",
+        enabledWhen: () => getWebSettingByKey("log_upload_target", "carrot") === "toss",
+        disabledHintKey: "web_toss_test_requires_toss",
+        defaultDisabledHint: "Available when the toss server is selected as the upload target.",
       },
     ],
   },
@@ -373,13 +376,16 @@ function renderWebSettingsItem(item) {
   }
 
   if (item.type === "action") {
+    const enabled = typeof item.enabledWhen === "function" ? Boolean(item.enabledWhen()) : true;
+    const disabledHint = getUIText(item.disabledHintKey, item.defaultDisabledHint || "");
     return `
       <div class="web-settings-row web-settings-row--action" data-web-setting-action="${escapeHtml(item.id)}">
         <span class="web-settings-row__copy">
           <span class="web-settings-row__title">${escapeHtml(title)}</span>
           <span class="web-settings-row__desc">${escapeHtml(desc)}</span>
         </span>
-        <button type="button" class="web-settings-action">${escapeHtml(getUIText(item.buttonKey, item.defaultButton || "Run"))}</button>
+        <button type="button" class="web-settings-action" ${enabled ? "" : "disabled"}
+          title="${enabled ? "" : escapeHtml(disabledHint)}">${escapeHtml(getUIText(item.buttonKey, item.defaultButton || "Run"))}</button>
       </div>`;
   }
 
@@ -505,21 +511,138 @@ function bindWebSettingsDialogEvents() {
     if (row.dataset.webSettingAction === "toss_connection_test") {
       button.addEventListener("click", async () => {
         button.disabled = true;
+        button.dataset.busy = "1";
         try {
-          await postJson("/api/dashcam/upload/test", {});
-          if (typeof showAppToast === "function") {
-            showAppToast(getUIText("web_toss_connection_ok", "Toss server connection OK"), { duration: 3200 });
-          }
-        } catch (err) {
-          if (typeof showAppToast === "function") {
-            showAppToast(`${getUIText("web_toss_connection_failed", "Toss server connection failed")}: ${err?.message || err}`, { tone: "error", duration: 4200 });
-          }
+          await runTossConnectionTest();
         } finally {
-          button.disabled = false;
+          delete button.dataset.busy;
+          syncWebSettingsActionStates();
         }
       });
     }
   });
+
+  syncWebSettingsActionStates();
+}
+
+function syncWebSettingsActionStates() {
+  document.querySelectorAll("[data-web-setting-action]").forEach((row) => {
+    const item = WEB_SETTINGS_GROUPS.flatMap((group) => group.items).find((entry) => entry.id === row.dataset.webSettingAction);
+    if (!item || typeof item.enabledWhen !== "function") return;
+    const button = row.querySelector(".web-settings-action");
+    if (!button || button.dataset.busy === "1") return;
+    const enabled = Boolean(item.enabledWhen());
+    button.disabled = !enabled;
+    button.title = enabled ? "" : getUIText(item.disabledHintKey, item.defaultDisabledHint || "");
+  });
+}
+
+window.addEventListener("carrot:websettingschange", syncWebSettingsActionStates);
+
+/* ── Toss connection test popup ─────────────────────────── */
+const TOSS_TEST_STEPS = [
+  { id: "config", labelKey: "web_toss_test_step_config", defaultLabel: "Check settings" },
+  { id: "connect", labelKey: "web_toss_test_step_connect", defaultLabel: "Contact server" },
+  { id: "auth", labelKey: "web_toss_test_step_auth", defaultLabel: "Verify token & status" },
+];
+
+function closeTossTestPopup() {
+  document.getElementById("tossTestPop")?.remove();
+}
+
+function openTossTestPopup() {
+  closeTossTestPopup();
+  const title = getUIText("web_toss_test_title", "Toss server connection test");
+  const pop = document.createElement("div");
+  pop.id = "tossTestPop";
+  pop.className = "toss-test-pop";
+  pop.innerHTML = `
+    <div class="toss-test-pop__card" role="dialog" aria-live="polite" aria-label="${escapeHtml(title)}">
+      <div class="toss-test-pop__title">${escapeHtml(title)}</div>
+      <ul class="toss-test-pop__steps">
+        ${TOSS_TEST_STEPS.map((step) => `
+          <li class="toss-test-step" data-toss-step="${step.id}" data-state="pending">
+            <span class="toss-test-step__icon" aria-hidden="true"></span>
+            <span class="toss-test-step__label">${escapeHtml(getUIText(step.labelKey, step.defaultLabel))}</span>
+            <span class="toss-test-step__note"></span>
+          </li>`).join("")}
+      </ul>
+      <div class="toss-test-pop__result" hidden></div>
+      <button type="button" class="toss-test-pop__close">${escapeHtml(getUIText("web_toss_test_close", "Close"))}</button>
+    </div>`;
+  pop.querySelector(".toss-test-pop__close").addEventListener("click", closeTossTestPopup);
+  pop.addEventListener("click", (ev) => {
+    if (ev.target === pop && pop.classList.contains("is-done")) closeTossTestPopup();
+  });
+  document.body.appendChild(pop);
+  return pop;
+}
+
+function setTossTestStep(pop, stepId, state, note = "") {
+  const row = pop.querySelector(`[data-toss-step="${stepId}"]`);
+  if (!row) return;
+  row.dataset.state = state; // pending | running | ok | fail | skip
+  const icon = row.querySelector(".toss-test-step__icon");
+  if (icon) icon.textContent = state === "ok" ? "✓" : state === "fail" ? "✕" : state === "skip" ? "–" : "";
+  const noteEl = row.querySelector(".toss-test-step__note");
+  if (noteEl) noteEl.textContent = note;
+}
+
+function finishTossTest(pop, ok, message) {
+  const result = pop.querySelector(".toss-test-pop__result");
+  if (result) {
+    result.hidden = false;
+    result.textContent = message;
+    result.classList.toggle("is-ok", ok);
+    result.classList.toggle("is-fail", !ok);
+  }
+  pop.classList.add("is-done");
+}
+
+async function runTossConnectionTest() {
+  const pop = openTossTestPopup();
+
+  setTossTestStep(pop, "config", "running");
+  const url = String(getWebSettingByKey("toss_upload_url", "") || "").trim();
+  const token = String(getWebSettingByKey("toss_upload_token", "") || "").trim();
+  if (!url || !token) {
+    const reason = !url
+      ? getUIText("web_toss_test_no_url", "Toss server URL is not set")
+      : getUIText("web_toss_test_no_token", "Access token is not set");
+    setTossTestStep(pop, "config", "fail", reason);
+    setTossTestStep(pop, "connect", "skip");
+    setTossTestStep(pop, "auth", "skip");
+    finishTossTest(pop, false, getUIText("web_toss_connection_failed", "Toss server connection failed"));
+    return;
+  }
+  setTossTestStep(pop, "config", "ok", url.replace(/^https?:\/\//i, ""));
+
+  setTossTestStep(pop, "connect", "running");
+  try {
+    const payload = await postJson("/api/dashcam/upload/test", {});
+    if (!pop.isConnected) return;
+    const elapsed = Number(payload?.elapsed_ms);
+    const statusNote = `HTTP ${payload?.status ?? 200}${Number.isFinite(elapsed) ? ` · ${elapsed}ms` : ""}`;
+    setTossTestStep(pop, "connect", "ok");
+    setTossTestStep(pop, "auth", "ok", statusNote);
+    finishTossTest(pop, true, getUIText("web_toss_connection_ok", "Toss server connection OK"));
+  } catch (err) {
+    if (!pop.isConnected) return;
+    const remoteStatus = Number(err?.payload?.status);
+    if (Number.isFinite(remoteStatus) && remoteStatus > 0) {
+      // The toss server answered over HTTPS, so the connection itself is fine —
+      // the failure is the token or the server-side health state.
+      setTossTestStep(pop, "connect", "ok");
+      const authFailed = remoteStatus === 401 || remoteStatus === 403;
+      setTossTestStep(pop, "auth", "fail", authFailed
+        ? getUIText("web_toss_test_auth_failed", "Authentication failed — check the token")
+        : `HTTP ${remoteStatus}`);
+    } else {
+      setTossTestStep(pop, "connect", "fail", err?.message || String(err));
+      setTossTestStep(pop, "auth", "skip");
+    }
+    finishTossTest(pop, false, `${getUIText("web_toss_connection_failed", "Toss server connection failed")}: ${err?.message || err}`);
+  }
 }
 
 async function openWebSettingsDialog() {

@@ -525,6 +525,143 @@
   cursor: default;
 }
 
+/* ── Toss connection test popup ─────────────────────────── */
+.toss-test-pop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal, 170) + 30);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: color-mix(in srgb, #000 46%, transparent);
+}
+
+.toss-test-pop__card {
+  width: min(100%, 360px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 55%, transparent);
+  border-radius: 14px;
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+}
+
+.toss-test-pop__title {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.toss-test-pop__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.toss-test-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  min-height: 20px;
+}
+
+.toss-test-step__icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  border: 2px solid color-mix(in srgb, var(--md-outline-var) 65%, transparent);
+  color: transparent;
+}
+
+.toss-test-step[data-state="running"] .toss-test-step__icon {
+  border-color: color-mix(in srgb, var(--md-primary) 35%, transparent);
+  border-top-color: var(--md-primary);
+  animation: tossTestSpin 0.8s linear infinite;
+}
+
+.toss-test-step[data-state="ok"] .toss-test-step__icon {
+  border-color: var(--md-success);
+  background: var(--md-success);
+  color: #fff;
+}
+
+.toss-test-step[data-state="fail"] .toss-test-step__icon {
+  border-color: var(--md-danger);
+  background: var(--md-danger);
+  color: #fff;
+}
+
+.toss-test-step[data-state="skip"] .toss-test-step__icon {
+  color: var(--md-on-surface-var);
+  border-style: dashed;
+}
+
+.toss-test-step[data-state="skip"] .toss-test-step__label,
+.toss-test-step[data-state="pending"] .toss-test-step__label {
+  opacity: 0.55;
+}
+
+.toss-test-step__note {
+  margin-left: auto;
+  max-width: 55%;
+  font-size: 11px;
+  color: var(--md-on-surface-var);
+  text-align: right;
+  word-break: break-all;
+}
+
+.toss-test-step[data-state="fail"] .toss-test-step__note {
+  color: var(--md-danger);
+}
+
+@keyframes tossTestSpin {
+  to { transform: rotate(360deg); }
+}
+
+.toss-test-pop__result {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.toss-test-pop__result.is-ok {
+  background: color-mix(in srgb, var(--md-success) 16%, transparent);
+  color: var(--md-success);
+}
+
+.toss-test-pop__result.is-fail {
+  background: color-mix(in srgb, var(--md-danger) 14%, transparent);
+  color: var(--md-danger);
+}
+
+.toss-test-pop__close {
+  align-self: flex-end;
+  min-height: 34px;
+  padding: 0 18px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 84%, transparent);
+  color: var(--md-on-surface);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .app-dialog--tools-qr .app-dialog__sheet {
   width: min(calc(100vw - 32px), 520px);
   max-height: min(calc(100dvh - 32px), 720px);

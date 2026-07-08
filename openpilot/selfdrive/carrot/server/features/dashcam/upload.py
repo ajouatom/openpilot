@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import subprocess
+import time
 import urllib.parse
 from ftplib import FTP
 from typing import Any, Callable
@@ -279,6 +280,9 @@ def _toss_url(base_url: str, *parts: str) -> str:
 
 
 async def check_toss_health(base_url: str, token: str) -> dict[str, Any]:
+  start = time.monotonic()
+  def elapsed_ms() -> int:
+    return int((time.monotonic() - start) * 1000)
   try:
     timeout = ClientTimeout(total=12)
     async with ClientSession(timeout=timeout) as session:
@@ -286,10 +290,10 @@ async def check_toss_health(base_url: str, token: str) -> dict[str, Any]:
       async with session.get(url, headers={"Authorization": f"Bearer {token}"}) as resp:
         text = await resp.text()
         if resp.status == 200:
-          return {"ok": True, "status": resp.status}
-        return {"ok": False, "status": resp.status, "error": text[:300]}
+          return {"ok": True, "status": resp.status, "elapsed_ms": elapsed_ms()}
+        return {"ok": False, "status": resp.status, "error": text[:300], "elapsed_ms": elapsed_ms()}
   except Exception as e:
-    return {"ok": False, "error": str(e)}
+    return {"ok": False, "error": str(e), "elapsed_ms": elapsed_ms()}
 
 
 async def upload_folder_to_toss(

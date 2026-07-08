@@ -4,7 +4,10 @@
   left: var(--sp-lg);
   right: var(--sp-lg);
   bottom: calc(var(--nav-bar-height) + 18px + env(safe-area-inset-bottom, 0px));
-  z-index: 150;
+  /* Above dialogs (--z-modal + 10): toasts fired from inside a modal (e.g. web
+     settings actions) must stay visible; the host is pointer-events: none so it
+     never blocks the dialog underneath. */
+  z-index: calc(var(--z-modal) + 40);
   display: flex;
   flex-direction: column;
   align-items: center;
