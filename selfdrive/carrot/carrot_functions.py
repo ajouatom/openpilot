@@ -8,9 +8,38 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.selfdrived.events import Events
+from openpilot.selfdrive.carrot.carrot_learning import CarrotLearner, DrivingStyleProfiler
+from openpilot.common.swaglog import cloudlog
 
 EventName = log.OnroadEvent.EventName
 LaneChangeState = log.LaneChangeState
+
+# 속도-가변 차간거리: 고정 stop_distance가 저속 time-gap을 부풀려 'time-gap 역전'이 생긴다
+# (로그 f7: 5-15kph 3.4s vs 45kph+ 1.6s → 저속 과도하게 넓고 중고속은 좁음). 속도가 낮을수록
+# t_follow를 약간 줄여(≤30 좁게) 저속 간격을 당기고, 높을수록 늘려(≥30 넓게) time-gap을
+# 정상화한다(저속 좁게/고속 넓게 — 사용자 요청).
+_SPDTF_BP    = [20.0, 32.0, 50.0, 80.0]   # 속도 보간점(km/h)
+_SPDTF_DELTA = [-0.20, 0.0, 0.18, 0.28]   # 위 속도에서 t_follow 가감(초)
+_SPDTF_MIN   = 0.55                        # 보정 후 t_follow 안전 하한(초)
+# t_follow 감소(앞차 가속 등으로 간격 좁힐 때) 변화율 제한 — 즉시 스냅하면 '순간 가속'으로
+# 느껴지므로 부드럽게. 증가(0.1)보다 빠르게 둬 추종 반응성은 유지. (스텝/호출당, *DT_MDL)
+_TF_DECREASE_RATE = 1.5
+
+# 정차 후 출발 catch-up: 완전정지→출발 구간에서 일시적으로 Gap1(최근접)으로 추종해
+# 선행차를 민첩하게 따라잡고, 일정 속도 이상이면 원래 Gap으로 복귀한다. dynamic_t_follow의
+# catch-up이 저속(<30)에서 꺼져 있어(사각지대) 이 구간을 보완. 거리(t_follow)에만 적용하고
+# jerk/가속 특성은 원래 Gap을 유지하며, 복귀 시 apply_t_follow 증가율제한이 부드럽게 처리.
+_LAUNCH_GAP_ARM_KPH    = 3.0    # 이 속도 미만(정차/near-stop)에서 Gap1 무장
+_LAUNCH_GAP_REVERT_KPH = 40.0   # 이 속도 이상이면 원래 Gap으로 복귀
+
+# 정차 후 출발 가속 부스트: 위 launch 구간에서 가속 상한을 HIGH 모드 수준으로 일시 확대해
+# 캐치업 가속력을 확보한다(NORMAL 모드 CruiseMaxVals 상한에 막히는 문제 보완). 급발진 방지를
+# 위해 배수를 S-커브(smoothstep)로 이징: 출발 초반(급발진 방지)·40km/h 복귀(툭 끊김 방지)
+# 양 끝을 완만하게 하고 중속 구간에서 최대. 상한(ceiling)만 키우므로 catch-up이 필요할 때만
+# MPC가 실제로 사용한다(정속·근접 추종에선 미사용).
+_LAUNCH_ACCEL_GAIN     = 1.4    # 부스트 최대 배수(≈HIGH 모드 factor 상당)
+_LAUNCH_EASE_IN_KPH    = 10.0   # 0→이 속도까지 S-커브로 부스트 상승(급발진 방지)
+_LAUNCH_EASE_OUT_KPH   = 30.0   # 이 속도→REVERT까지 S-커브로 부스트 하강(복귀 부드럽게)
 
 class XState(Enum):
   lead = 0
@@ -105,6 +134,7 @@ class CarrotPlanner:
     self.enableSpeedTF = 0
     self.tFollowDecelBoost = 0.0
     self.personality = 1
+    self.launch_close_gap = False  # 정차 후 출발 catch-up: Gap1 일시 적용 상태
 
     self.cruiseMaxVals0 = 1.6
     self.cruiseMaxVals1 = 1.6
@@ -136,9 +166,14 @@ class CarrotPlanner:
     self.xDistToTurn = 0
     self.atcType = ""
     self.atc_active = False
+    self.tFollowSpeedFactor = 0.0 # 고속 주행 시 추가 차간 거리 가중치
 
     self._stop_x_rl = None
     self.last_event_time = 0.0
+    self.learner = CarrotLearner()
+    self.profiler = DrivingStyleProfiler()
+    self.filtered_j_lead = 0.0
+    self._v_ego_kph = 0.0
 
   def _params_update(self):
     self.frame += 1
@@ -163,6 +198,7 @@ class CarrotPlanner:
       self.tFollowGap2 = self.params.get_float("TFollowGap2") / 100.
       self.tFollowGap3 = self.params.get_float("TFollowGap3") / 100.
       self.tFollowGap4 = self.params.get_float("TFollowGap4") / 100.
+      self.tFollowSpeedFactor = self.params.get_float("TFollowSpeedFactor") / 100.
       self.dynamicTFollow = self.params.get_float("DynamicTFollow") / 100.
       self.dynamicTFollowLC = self.params.get_float("DynamicTFollowLC") / 100.
       self.enableSpeedTF = self.params.get_int("EnableSpeedTF")
@@ -186,10 +222,27 @@ class CarrotPlanner:
 
       self.params_count = 0
 
+  def _launch_accel_factor(self, v_ego):
+    # 정차 후 출발 구간에서만 가속 상한 배수를 S-커브(smoothstep)로 이징해 반환.
+    # 양 끝(출발 0, 복귀 REVERT)에서 1.0으로 수렴 → 급발진·복귀 툭 끊김 없이 매끄럽게.
+    if not self.launch_close_gap:
+      return 1.0
+    v_kph = v_ego * CV.MS_TO_KPH
+    if v_kph <= _LAUNCH_EASE_IN_KPH:
+      s = v_kph / max(1.0, _LAUNCH_EASE_IN_KPH)                       # 0→1 (이징 인)
+    elif v_kph >= _LAUNCH_EASE_OUT_KPH:
+      span = max(1.0, _LAUNCH_GAP_REVERT_KPH - _LAUNCH_EASE_OUT_KPH)
+      s = float(np.clip((_LAUNCH_GAP_REVERT_KPH - v_kph) / span, 0.0, 1.0))  # 1→0 (이징 아웃)
+    else:
+      s = 1.0                                                          # 중속: 최대 부스트
+    w = s * s * (3.0 - 2.0 * s)                                        # smoothstep(양 끝 기울기 0)
+    return 1.0 + (_LAUNCH_ACCEL_GAIN - 1.0) * w
+
   def get_carrot_accel(self, v_ego):
     cruiseMaxVals = [self.cruiseMaxVals0, self.cruiseMaxVals1, self.cruiseMaxVals2, self.cruiseMaxVals3, self.cruiseMaxVals4, self.cruiseMaxVals5, self.cruiseMaxVals6]
     factor = self.myHighModeFactor if self.myDrivingMode == DrivingMode.High else self.mySafeFactor
-    return np.interp(v_ego, A_CRUISE_MAX_BP_CARROT, cruiseMaxVals) * factor
+    accel = float(np.interp(v_ego, A_CRUISE_MAX_BP_CARROT, cruiseMaxVals) * factor)
+    return accel * self._launch_accel_factor(v_ego)
 
   def _get_base_t_follow(self, personality, v_ego):
     if self.enableSpeedTF < 0:
@@ -251,6 +304,12 @@ class CarrotPlanner:
       scale = (1.0 - reduce) + reduce * s
       tf_target *= scale
 
+    # 고속 주행 시 추가 차간 거리 가중치 (TFollowSpeedFactor)
+    # v_ego가 높을수록 차간 거리를 추가로 확보함
+    if self.tFollowSpeedFactor > 0:
+      speed_boost = float(np.clip((v_ego * CV.MS_TO_KPH - 60.0) / 100.0, 0.0, 1.0))
+      tf_target += speed_boost * self.tFollowSpeedFactor
+
     return float(tf_target)
 
 
@@ -280,12 +339,19 @@ class CarrotPlanner:
     return float(np.clip(t_follow, max(0.3, tf_min), tf_max))
 
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0):
+    if self.launch_close_gap:
+      personality = log.LongitudinalPersonality.aggressive  # 정차 후 출발: 최근접 Gap으로 catch-up
     tf_base = self._get_base_t_follow(personality, v_ego)
     tf_target = self._apply_speed_t_follow_scale(tf_base, v_ego)
     tf_adjusted = self._apply_decel_hold_and_boost_t_follow(tf_target, a_ego)
     tf_safe = float(tf_adjusted * self.mySafeFactor)
     tf_final = self._clip_t_follow(tf_safe)
+    # 속도-가변 간격 보정 (clip 이후 적용 — clip 하한에 막히지 않게). 자체 안전 하한 유지.
+    # 저속(≤30): t_follow 약간↓(간격 좁힘) / 고속(≥30): ↑(간격 넓힘) → time-gap 역전 정상화.
+    v_kph = v_ego * CV.MS_TO_KPH
+    tf_final = max(tf_final + float(np.interp(v_kph, _SPDTF_BP, _SPDTF_DELTA)), _SPDTF_MIN)
     self._tf_applied = float(tf_final)
+    self._v_ego_kph = float(v_kph)   # dynamic_t_follow catch-up 속도 게이트용
     return self.apply_t_follow(tf_final)
 
 
@@ -310,17 +376,39 @@ class CarrotPlanner:
       t_follow *= dynamicTFollowLC
       self.jerk_factor_apply = self.jerk_factor * dynamicTFollowLC
 
-    # 일반 lead follow: lead.jLead 기반 동적 조절
-    elif lead.status and self.dynamicTFollow > 0.0:
-      # lead.jLead < 0 : 앞차가 감속 방향으로 변함 -> 차간거리 증가
-      # lead.jLead > 0 : 앞차가 가속 방향으로 변함 -> 차간거리 감소
-      t_follow += np.interp(lead.jLead, [-3.0, -0.5, 0.5, 2.0], [1.0, 0.0, 0.0, -1.0]) * self.dynamicTFollow
+    # 일반 lead follow:
+    elif lead.status:
+      if self.dynamicTFollow > 0.0:
+        # lead.jLead 필터링을 통해 고주파 노이즈 제거
+        self.filtered_j_lead = 0.9 * self.filtered_j_lead + 0.1 * lead.jLead
+        # lead.jLead < 0 : 앞차가 감속 방향으로 변함 -> 차간거리 증가
+        # lead.jLead > 0 : 앞차가 가속 방향으로 변함 -> 차간거리 감소
+        t_follow += np.interp(self.filtered_j_lead, [-3.0, -0.5, 0.5, 2.0], [1.0, 0.0, 0.0, -1.0]) * self.dynamicTFollow
+        t_follow = np.clip(t_follow, 0.3, 2.0)
 
-      # 앞차가 풀어주는 상황에서는 jerk factor 약간 낮춰서 더 민첩하게
-      if lead.jLead > 0.2:
-        self.jerk_factor_apply = self.jerk_factor * 0.5
+      # 선행차가 '정속으로 멀어지는'(vRel>0, jLead~0) 경우엔 위 jLead 로직이 반응하지 않아
+      # 중고속에서 재가속(catch-up)이 약했다(로그 0101: 40-70 +0.5, 70+ +0.2). 간격목표를
+      # 속도비례로 살짝 좁혀 catch-up을 민첩하게. 저속(≤30, 이미 충분)·밀착(≤6m)엔 미적용.
+      v_kph = getattr(self, "_v_ego_kph", 0.0)
+      if lead.vRel > 0.5 and lead.dRel > 6.0:
+        catchup = float(np.interp(v_kph, [30.0, 50.0, 90.0], [0.0, 0.15, 0.30]))
+        catchup *= float(np.interp(lead.vRel, [0.5, 3.0], [0.0, 1.0]))
+        t_follow = max(t_follow - catchup, 0.3)
 
-      t_follow = np.clip(t_follow, 0.3, 2.0)
+      # Dynamic Jerk Control for early & gentle braking:
+      # If lead deceleration is detected and we are not braking hard, increase jerk penalty (make it smoother/gentler).
+      # Relax it back to normal jerk factor as distance error grows or ego deceleration increases.
+      if lead.aLeadK < -0.5 or lead.jLead < -0.2:
+        dist_err = desired_follow_distance - lead.dRel
+        prev_a_scalar = float(prev_a[0]) if hasattr(prev_a, "__len__") else float(prev_a)
+        scale_err = float(np.interp(dist_err, [0.0, 5.0], [1.8, 1.0]))
+        scale_decel = float(np.interp(prev_a_scalar, [-1.5, -0.5], [1.0, 1.8]))
+        jerk_scale = min(scale_err, scale_decel)
+        self.jerk_factor_apply = self.jerk_factor * jerk_scale
+      elif self.filtered_j_lead > 0.5 or lead.vRel > 1.0:
+        # 선행차가 가속/정속으로 멀어짐: jerk penalty를 약간 낮춰 재가속을 민첩하게 (부분 복원).
+        # jLead(가속 변화)뿐 아니라 vRel>1(정속 이탈)에도 적용 → 중고속 catch-up 보강.
+        self.jerk_factor_apply = self.jerk_factor * 0.7
 
     return self.apply_t_follow(t_follow, 0.0)
 
@@ -330,6 +418,9 @@ class CarrotPlanner:
     # 증가 방향만 천천히 반영
     if t_follow > self.t_follow_last:
       t_follow = min(t_follow, self.t_follow_last + 0.1 * DT_MDL)
+    elif t_follow < self.t_follow_last:
+      # 감소(앞차 가속 등으로 간격 좁힐 때)도 즉시 스냅하지 않고 부드럽게 → 순간 가속 완화.
+      t_follow = max(t_follow, self.t_follow_last - _TF_DECREASE_RATE * DT_MDL)
 
     self.t_follow_last = float(t_follow)
     return float(t_follow + adjust_t_follow)
@@ -595,6 +686,10 @@ class CarrotPlanner:
       mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
 
     self.comfort_brake *= self.mySafeFactor
+    # Low-Speed Comfort Brake Scaling
+    v_ego_kph = v_ego * CV.MS_TO_KPH
+    low_speed_factor = float(np.interp(v_ego_kph, [2.0, 10.0], [0.7, 1.0]))
+    self.comfort_brake *= low_speed_factor
     self.actual_stop_distance = max(0, self.actual_stop_distance - (v_ego * DT_MDL))
 
     if stop_model_x == 1000.0: ##  e2eCruise, lead�ΰ��
@@ -627,6 +722,47 @@ class CarrotPlanner:
     self.stop_dist = stop_dist
     self.mode = mode
     #return v_cruise, stop_dist, mode
+
+    # Auto-Tuner: 학습 데이터 수집
+    from cereal import car
+    gear_park = carstate.gearShifter == car.CarState.GearShifter.park
+    engaged = sm.alive.get('selfdriveState', False) and sm['selfdriveState'].enabled
+
+    # 정차 후 출발 catch-up: 완전정지(near-stop)에서 Gap1 무장 → 출발하며 선행차 민첩 추종,
+    # 일정 속도 이상/선행차 없음/미인게이지 시 원래 Gap 복귀. (get_T_FOLLOW에서 소비)
+    if not engaged or not lead_detected or v_ego_kph >= _LAUNCH_GAP_REVERT_KPH:
+      self.launch_close_gap = False
+    elif v_ego_kph < _LAUNCH_GAP_ARM_KPH:
+      self.launch_close_gap = True
+
+    # 현재 GAP 단계 파악 (Personality 기반)
+    personality = sm['selfdriveState'].personality
+    current_gap = 2  # default standard
+    if personality == log.LongitudinalPersonality.moreRelaxed: current_gap = 4
+    elif personality == log.LongitudinalPersonality.relaxed: current_gap = 3
+    elif personality == log.LongitudinalPersonality.standard: current_gap = 2
+    elif personality == log.LongitudinalPersonality.aggressive: current_gap = 1
+    self.learner.set_current_gap(current_gap)
+
+    # Auto-Tuner는 비핵심 학습 기능이므로, 여기서 예외가 나도 안전필수
+    # 종방향 플래너(plannerd)가 죽지 않도록 반드시 격리한다.
+    try:
+      self.learner.update(v_ego_kph, carstate.gasPressed, engaged, gear_park,
+                          steer_deg=carstate.steeringAngleDeg, steer_pressed=carstate.steeringPressed,
+                          brake_pressed=carstate.brakePressed,
+                          lead_drel=leadOne.dRel if leadOne.status else 0.0,
+                          lead_v_kph=leadOne.vLead * CV.MS_TO_KPH if leadOne.status else 0.0,
+                          a_ego=a_ego, lead_jlead=leadOne.jLead if leadOne.status else 0.0,
+                          v_cruise_kph=v_cruise_kph,
+                          gas_val=carstate.gas, brake_val=carstate.brake, sm=sm)
+
+      # DSP: 수동 주행 성향 프로파일링 (오픈파일럿 미인게이지 상태에서만 수집)
+      self.profiler.update(v_ego_kph, engaged, gear_park,
+                           a_ego=a_ego, brake_pressed=carstate.brakePressed,
+                           lead_drel=leadOne.dRel if leadOne.status else 0.0,
+                           lead_v_kph=leadOne.vLead * CV.MS_TO_KPH if leadOne.status else 0.0)
+    except Exception:
+      cloudlog.exception("CarrotLearner/Profiler update failed")
 
     return v_cruise_kph
 

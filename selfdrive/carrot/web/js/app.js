@@ -112,6 +112,11 @@ window.addEventListener("popstate", async (ev) => {
     return;
   }
 
+  if (st.page === "tuner") {
+    showPage("tuner", false);
+    return;
+  }
+
   if (st.page === "terminal") {
     showPage("terminal", false);
     return;

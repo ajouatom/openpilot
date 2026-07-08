@@ -252,8 +252,13 @@ def put_typed(params: "Params", key: str, value: Any, p: Optional[Dict[str, Any]
     obj = json.loads(value) if isinstance(value, str) else value
     params.put(key, obj)
   else:
-    # BYTES or anything unmapped → best-effort string write.
-    params.put(key, str(value))
+    # BYTES or anything unmapped → bytes write. params_pyx 타입표는 (bytes, BYTES)만
+    # 허용하므로 str을 그대로 넘기면 TypeError("Type mismatch") → UI "Save failed".
+    # (예: Clear All Logs의 CarrotLearningHistory="[]" 저장 실패 버그)
+    if isinstance(value, (bytes, bytearray, memoryview)):
+      params.put(key, bytes(value))
+    else:
+      params.put(key, str(value).encode("utf-8"))
 
 
 def set_param_value(name: str, value: Any, p: Optional[Dict[str, Any]] = None) -> None:

@@ -26,6 +26,22 @@ ALLOW_THROTTLE_THRESHOLD = 0.5
 MIN_ALLOW_THROTTLE_SPEED = 2.5
 RESET_DECEL_RAMP_TIME = 2.0
 
+# ── Jerk ease-in (A안): 가감속 onset에서 jerk를 점증시켜 S-curve로 만든다 ──
+# 일정 jerk 상한은 onset에서 jerk가 0→상한으로 '계단'처럼 튀어(=jounce 스파이크)
+# 시작 jolt를 남긴다. 시작 직후 jerk를 점증시키면 가속도가 S자로 부드럽게 붙는다.
+JERK_EASE_TIME = 0.4        # 새 maneuver 시작 후 jerk를 100%로 키우는 시간(s)
+JERK_EASE_FLOOR = 0.3       # 시작 시 jerk 비율 하한(감속 onset 등)
+# 가속은 선행차 추종 재가속(거리 좁히기)이 느리지 않게 시작 jerk를 더 높게 둔다.
+# (감속보다 높은 floor → 초중반 가속력↑, 단 0에서 시작하는 ease 자체는 유지해 급가속감 방지)
+JERK_EASE_FLOOR_ACCEL = 0.6
+# 가속 ease-out: 가속을 마무리하며(현재 가속 중, 양의 가속을 0 근처로 줄이는 구간) 목표
+# 차간거리에 살며시 도달하도록 부드러운 jerk를 쓴다(사용자 요청: 끝부분은 더 부드럽게).
+ACCEL_EASEOUT_JERK = 1.2
+# 고속 제동 안전 우회: 고속에서 선행차 접근 중이면 ease를 풀어(=즉응) 감지 초기부터
+# 충분한 제동이 미리 들어가게 한다(고속 늦은 감지로 인한 충돌 우려 대응).
+HIGH_SPEED_BRAKE_KPH = 70.0
+HIGH_SPEED_BRAKE_TTC = 8.0  # 이 TTC(초) 이내로 접근 중이면 제동 ease 해제
+
 # Lookup table for turns
 _A_TOTAL_MAX_V = [2.4, 4.8] #[1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
@@ -96,6 +112,8 @@ class LongitudinalPlanner:
     self.allow_throttle = True
 
     self.a_desired = init_a
+    self._jerk_ramp_t = 0.0   # jerk ease-in 경과시간(새 가감속 시작부터)
+    self._jerk_dir = 0        # 직전 가감속 방향(+1 가속 / -1 감속 / 0)
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
     self.prev_accel_clip = [ACCEL_MIN, ACCEL_MAX]
     self.output_a_target = 0.0
@@ -135,6 +153,77 @@ class LongitudinalPlanner:
     else:
       throttle_prob = 1.0
     return x, v, a, j, throttle_prob
+
+  @staticmethod
+  def _is_stopping(sm, carrot):
+    """정지 의도(신호등 정지 xState==3 또는 모델 shouldStop) 여부."""
+    try:
+      return bool(carrot.xState.value == 3 or sm['modelV2'].action.shouldStop)
+    except Exception:
+      return False
+
+
+  def _positive_jerk_limit(self, a_prev, v_ego_kph):
+    """가속 방향(a_target>a_prev) jerk 상한."""
+    if a_prev < 0.0:
+      # 감속 해제(음수 가속도를 0으로 푸는 구간)는 크게 허용 — 브레이크는 신속히 뗀다.
+      return 3.0
+    # 가속 build-up: 저중속 재가속(추종 거리 좁히기)이 느리지 않게 jerk를 속도비례로 키우고,
+    # 가속 전용 ease floor로 초중반 가속력을 확보(급가속감은 ease-in ramp로 방지).
+    jerk_speed = float(np.interp(v_ego_kph, [0.0, 30.0, 80.0], [0.95, 1.5, 2.0]))
+    jerk_accel = float(np.interp(a_prev, [0.0, 1.0], [1.0, 0.7]))
+    ease_acc = float(np.clip(self._jerk_ramp_t / JERK_EASE_TIME, JERK_EASE_FLOOR_ACCEL, 1.0))
+    return jerk_speed * jerk_accel * ease_acc
+
+  def _negative_jerk_limit(self, a_target, a_prev, v_ego_kph, sm, carrot):
+    """감속 방향(a_target<a_prev) jerk 상한. 상황별로 ease를 풀어 즉응 제동을 확보한다."""
+    if a_prev > 0.1 and a_target > -0.4:
+      # 가속 ease-out: 가속 중 목표 간격에 근접해 가속을 거두는 구간(실제 제동 아님)은
+      # 부드러운 jerk로 살며시 마무리(끝부분 부드럽게 — 사용자 요청).
+      return ACCEL_EASEOUT_JERK
+    # 제동 build-up: 목표 감속이 깊을수록 한도를 키워(≈무제한) 안전 확보.
+    #   -1.2(완만) 2.0 / -2.5 5.0 / -4.0(긴급) 12.0  [m/s^3]
+    max_negative_jerk = float(np.interp(a_target, [-4.0, -2.5, -1.2], [12.0, 5.0, 2.0]))
+    # 기본 ease(전환 후 점증)에서 시작, 아래 상황에선 ease를 풀어(→1.0) 즉응 제동.
+    ease_dec = float(np.clip(self._jerk_ramp_t / JERK_EASE_TIME, JERK_EASE_FLOOR, 1.0))
+    # (1) 깊은 감속은 '고속에서만' ease 해제 — 저속(≤25km/h)은 급브레이킹 완화 위해 ease 유지.
+    deep = float(np.interp(a_target, [-3.0, -1.5], [1.0, 0.0])) * float(np.interp(v_ego_kph, [25.0, 50.0], [0.0, 1.0]))
+    ease_dec = max(ease_dec, deep)
+    # (2) 고속 + 선행차 접근(TTC<임계): 감지 초기부터 충분 제동(고속 늦은 감지 충돌 우려 대응).
+    if v_ego_kph >= HIGH_SPEED_BRAKE_KPH:
+      try:
+        lead = sm['radarState'].leadOne
+        if lead.status and lead.dRel > 0.0 and lead.vRel < 0.0 and (lead.dRel / -lead.vRel) < HIGH_SPEED_BRAKE_TTC:
+          ease_dec = 1.0
+      except Exception:
+        pass
+    # (3) 정지(신호등/모델) 접근: 선행차 없어도 즉응 제동으로 정지선 초과 방지.
+    if self._is_stopping(sm, carrot):
+      ease_dec = 1.0
+    return max_negative_jerk * ease_dec
+
+  def _apply_jerk_limits(self, a_target, a_prev, v_ego_kph, sm, carrot):
+    """가감속 명령의 jerk(가속도 변화율)를 제한해 onset jolt를 줄인다(S-curve).
+
+    maneuver phase(가속 +1 / 감속 -1)를 a_target 부호 + 데드밴드(±0.15)로 판정하고,
+    가속↔감속 '전환'에서만 ease ramp를 재시작한다(지속 가감속에선 jerk가 100%까지 자람).
+    """
+    if a_target > 0.15:
+      phase = 1
+    elif a_target < -0.15:
+      phase = -1
+    else:
+      phase = self._jerk_dir   # 데드밴드: 직전 phase 유지
+    if phase != self._jerk_dir:
+      self._jerk_ramp_t = 0.0
+    self._jerk_dir = phase
+    self._jerk_ramp_t += self.dt
+
+    if a_target > a_prev:
+      a_target = min(a_target, a_prev + self._positive_jerk_limit(a_prev, v_ego_kph) * self.dt)
+    elif a_target < a_prev:
+      a_target = max(a_target, a_prev - self._negative_jerk_limit(a_target, a_prev, v_ego_kph, sm, carrot) * self.dt)
+    return a_target
 
   def update(self, sm, carrot):
     self.mpc.mode = 'blended' if sm['selfdriveState'].experimentalMode else 'acc'
@@ -237,7 +326,14 @@ class LongitudinalPlanner:
 
     # Interpolate 0.05 seconds and save as starting point for next iteration
     a_prev = self.a_desired
-    self.a_desired = float(np.interp(self.dt, CONTROL_N_T_IDX, self.a_desired_trajectory))
+    a_target = float(np.interp(self.dt, CONTROL_N_T_IDX, self.a_desired_trajectory))
+    v_ego_kph = v_ego * CV.MS_TO_KPH
+
+    # jerk(가속도 변화율) 제한으로 a_target을 다듬는다.
+    # (내리막 중력보상은 제거 — 내리막 크롤링 추종/재출발에서 MPC와 충돌해 과감속·stuck을
+    #  반복 유발. 평지와 동일한 openpilot 기본 동작 유지. git 히스토리에 보존.)
+    a_target = self._apply_jerk_limits(a_target, a_prev, v_ego_kph, sm, carrot)
+    self.a_desired = a_target
     self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.a_desired + a_prev) / 2.0
 
     longitudinalActuatorDelay = self.params.get_float("LongActuatorDelay")*0.01

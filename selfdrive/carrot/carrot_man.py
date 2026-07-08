@@ -1171,29 +1171,47 @@ class CarrotMan:
     return self.vturn_speed(sm['carState'], sm)
 
   def vturn_speed(self, CS, sm):
-    TARGET_LAT_A = 1.9  # m/s^2
+    # 거리 인지 곡률-추종 가변 속도 제어
+    #  - 예측경로의 '최대 곡률 1점'만 보던 방식(단일 목표)에서,
+    #    각 예측점의 곡률로 안전속도를 구하고 거리·편안한 감속도를 반영해
+    #    '지금 허용 가능한 속도'의 최소값을 목표로 삼는 방식으로 변경.
+    #  - 효과: 멀리 있는 급커브엔 일찍 완만히 감속을 시작하고(사전 감속),
+    #          정점 통과 후 곡률이 풀리면 자동으로 증속(램프 초입>중반>후반 가변).
+    TARGET_LAT_A = 1.9   # m/s^2  커브에서 허용할 횡가속도(높을수록 빠른 커브주행)
+    A_DECEL = 0.85       # m/s^2  커브 접근 시 가정하는 편안한 감속도(낮을수록 더 일찍 감속)
+                         #        1.2→0.85: 감속을 더 일찍 시작해 정점 전에 완료(정점 이후 가속)
 
     modelData = sm['modelV2']
-    v_ego = max(CS.vEgo, 0.1)
-    # Set the curve sensitivity
-    orientation_rate = np.array(modelData.orientationRate.z) * self.autoCurveSpeedFactor
+
+    orientation_rate = np.array(modelData.orientationRate.z)
     velocity = np.array(modelData.velocity.x)
+    distances = np.array(modelData.position.x)
 
-    # Get the maximum lat accel from the model
-    max_index = np.argmax(np.abs(orientation_rate))
-    curv_direction = np.sign(orientation_rate[max_index])
-    max_pred_lat_acc = np.amax(np.abs(orientation_rate) * velocity)
+    n = int(min(len(orientation_rate), len(velocity), len(distances)))
+    if n == 0:
+      return 250.0
 
-    # Get the maximum curve based on the current velocity
-    max_curve = max_pred_lat_acc / (v_ego**2)
+    orientation_rate = orientation_rate[:n]
+    velocity = np.maximum(velocity[:n], 0.1)
+    distances = np.maximum(distances[:n], 0.0)
 
-    # Set the target lateral acceleration
-    adjusted_target_lat_a = TARGET_LAT_A
+    # 진행방향(좌/우) 부호는 가장 굽은 지점 기준
+    max_index = int(np.argmax(np.abs(orientation_rate)))
+    curv_direction = np.sign(orientation_rate[max_index]) or 1.0
 
-    # Get the target velocity for the maximum curve
-    #turnSpeed = max(abs(adjusted_target_lat_a / max_curve)**0.5  * 3.6, self.autoCurveSpeedLowerLimit)
-    turnSpeed = max(abs(adjusted_target_lat_a / max_curve)**0.5  * 3.6, 5)
-    turnSpeed = min(turnSpeed, 250)
+    # 각 예측점의 곡률(1/m) = |yawRate|/v, AutoCurveSpeedFactor로 민감도 스케일
+    curvature = (np.abs(orientation_rate) / velocity) * self.autoCurveSpeedFactor
+    curvature = np.maximum(curvature, 1e-5)
+
+    # 각 점에서 허용 가능한 안전속도(횡가속도 한계 기준)
+    v_safe = np.sqrt(TARGET_LAT_A / curvature)  # m/s
+
+    # 그 점까지 편안히 감속해 도달하려면 '지금' 낼 수 있는 최대 속도
+    #   v_now^2 = v_safe^2 + 2*a*d  (거리 d가 멀수록 더 높은 현재속도 허용 → 일찍 완만히 감속)
+    v_allow = np.sqrt(v_safe**2 + 2.0 * A_DECEL * distances)
+
+    turnSpeed = float(np.min(v_allow)) * 3.6  # km/h
+    turnSpeed = min(max(turnSpeed, 5.0), 250.0)
     return turnSpeed * curv_direction
 
   def carrot_navi_thread(self):

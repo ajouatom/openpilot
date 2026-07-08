@@ -88,6 +88,876 @@
     </message>
 </context>
 <context>
+    <name>AutoTunerCardListDialog</name>
+    <message>
+        <source>Tuning History Card List</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation type="unfinished">Kapat</translation>
+    </message>
+    <message>
+        <source>No historical data to display</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>[%1 Applied]</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Restore</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Are you sure you want to restore the parameters to this state?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Restored to previous values successfully.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete this item?</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>AutoTunerDialog</name>
+    <message>
+        <source>사용 안내 (Guide)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>나중에 (Later)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>학습 초기화 (Clear)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>선택 적용 (Apply Selected)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>적용하지 않고 현재까지의 모든 학습 데이터를 삭제하시겠습니까?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>초기화</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>AutoTunerGraphWidget</name>
+    <message>
+        <source>No historical data to display</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>AutoTunerGuideDialog</name>
+    <message>
+        <source>확인</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>AutoTunerHistoryPanel</name>
+    <message>
+        <source>Parameters</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Apply LAT (Steering): ON</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Apply LAT (Steering): OFF</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Apply LONG (Accel): ON</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Apply LONG (Accel): OFF</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>View Card Type</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Show All Parameters</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear All Logs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation type="unfinished">Kapat</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to restore the parameters to this state?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Restore</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Restored to previous values successfully.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete this item?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear All</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Are you sure you want to delete all history and restore parameters to their factory default values?</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>CarrotPanel</name>
+    <message>
+        <source>Start</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Cruise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Speed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tuning</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Disp</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Path</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Button: Cruise Button Mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:Normal,1:User1,2:User2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Button: Cancel Button Mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:Long,1:Long+Lat</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Button: LFA Button Mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:Normal,1:Decel&amp;Stop&amp;LeadCarReady</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Button: Cruise Speed Unit(Basic)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Button: Cruise Speed Unit(Extra)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>CRUISE: Eco control(4km/h)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Temporarily increasing the set speed to improve fuel efficiency.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>CRUISE: Auto speed up (0%)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Auto speed up based on the lead car up to RoadSpeedLimit.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>GAP1: Apply TFollow (110)x0.01s</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>GAP2: Apply TFollow (120)x0.01s</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>GAP3: Apply TFollow (160)x0.01s</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>GAP4: Apply TFollow (180)x0.01s</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dynamic GAP control</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dynamic GAP control (LaneChange)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>DRIVEMODE: Select</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1:ECO,2:SAFE,3:NORMAL,4:HIGH</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>DRIVEMODE: Auto</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NORMAL mode only</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>TrafficLight DetectMode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:None, 1:Stopping only, 2: Stop &amp; Go</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>AChangeCostStarting</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>TrafficStopDistanceAdjust</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>View Tuning History</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Auto-Tuner: Driving-Based Learning</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Learn from driver interventions (gas/brake) and recommend parameter adjustments when parking. 0=Off, 1=On</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Laneline mode speed(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Laneline mode, lat_mpc control used</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Laneline mode curve speed(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Laneline mode, high speed only</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>AdjustLaneOffset(0)cm</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LaneChange need torque</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>-1:Disable lanechange, 0: no need torque, 1:need torque</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LaneChange delay</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>x0.1sec</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LaneChange Bsd</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>-1:ignore bsd, 0:BSD detect, 1: block steer torque</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LaneChange LineCheck</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:Color+Type, 1:Type only, 2:Type+torque override solid</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT: SteerRatiox0.1(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Custom SteerRatio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT: SteerRatioRatex0.01(100)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SteerRatio apply rate</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT: PathOffset</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>(-)left, (+)right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT:SteerActuatorDelay(30)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>x0.01, 0:LiveDelay</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT:LatSmoothSec(13)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>x0.01</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT: TorqueCustom(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT: TorqueAccelFactor(2500)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT: TorqueFriction(100)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT: CustomSteerMax(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT: CustomSteerDeltaUp(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LAT: CustomSteerDeltaDown(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LONG: P Gain(100)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LONG: I Gain(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LONG: FF Gain(100)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LONG: ActuatorDelay(20)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LONG: VEgoStopping(50)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Stopping factor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LONG: Radar reaction factor(100)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LONG: StoppingStartAccelx0.01(-40)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LONG: StopDistance (600)cm</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>LONG: Jerk Lead Factor (0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ACCEL:0km/h(160)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Acceleration needed at specified speed.(x0.01m/s^2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ACCEL:10km/h(160)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ACCEL:40km/h(120)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ACCEL:60km/h(100)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ACCEL:80km/h(80)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ACCEL:110km/h(70)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ACCEL:140km/h(60)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>MaxAngleFrames(89)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>89:Basic, steering instrument panel error 85~87</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Debug Info</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tpms Info</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Time Info</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:None,1:Time/Date,2:Time,3:Date</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Path End</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:None,1:Display</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Device State</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lane Info</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>-1:None, 0:Path, 1:Path+Lane, 2: Path+Lane+RoadEdge</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Radar Info</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:None,1:Display,2:RelPos,3:Stopped Car</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Route Info</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Debug plot</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Brightness ratio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tire Trajectory</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Display tire paths with a gradient effect on the lane markers.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Path Color: Cruise OFF</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>(+10:Stroke)0:Red,1:Orange,2:Yellow,3:Green,4:Blue,5:Indigo,6:Violet,7:Brown,8:White,9:Black</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Path Mode: Laneless</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:Normal,1,2:Rec,3,4:^^,5,6:Rec,7,8:^^,9,10,11,12:Smooth^^</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Path Color: Laneless</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Path Mode: LaneMode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Path Color: LaneMode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Path Width ratio(100%)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SELECT YOUR CAR</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Select Manufacturer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Select your car</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>HYUNDAI: CAMERA SCC</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1:Connect the SCC&apos;s CAN line to CAM, 2:Sync Cruise state, 3:StockLong</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>CANFD: HDA2 mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1:HDA2,2:HDA2+BSM</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable Radar Track</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1:Enable RadarTrack, -1,2:Disable use HKG SCC radar at all times</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Auto Cruise control</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Softhold, Auto Cruise ON/OFF control</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>CRUISE: Auto ON distance(0cm)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>When GAS/Brake is OFF, Cruise ON when the lead car gets closer.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Auto Engage control on start</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1:SteerEnable, 2:Steer/Cruise Engage</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Auto AccelTok speed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Gas(Accel)Tok enable speed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Read Cruise Speed from PCM</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Toyota must set to 1, Honda 3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Sound Volume(100%)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Sound Volume, Engage(10%)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Power off time (min)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>EnableConnect</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Your device may be banned by Comma</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Mapbox Style(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Record Road camera(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1:RoadCam, 2:RoadCam+WideRoadCam</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Use HDP(CCNC)(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1:While Using APN, 2:Always</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NNFF</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Twilsonco&apos;s NNFF(Reboot required)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NNFFLite</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Twilsonco&apos;s NNFF-Lite(Reboot required)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Auto update Cruise speed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Disable Min.SteerSpeed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Disable DM</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hotspot enabled on boot</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable Software Menu</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>IsLdwsCar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hardware is C3x Lite</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Share Data</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:None, 1:TCP JSON Data(Reboot required)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>CURVE: Lower limit speed(30)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>When you approach a curve, reduce your speed. Minimum speed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>CURVE: Auto Control ratio(100%)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>RoadSpeedLimitOffset(-1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>-1:NotUsed,RoadLimitSpeed+Offset</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Auto Roadlimit Speed adjust (50%)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SpeedCamDecelEnd(6s)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Sets the deceleration completion point. A larger value completes deceleration farther away from the camera.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NaviSpeedControlMode(2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:No slowdown, 1: speed camera, 2: + accident prevention bump, 3: + mobile camera</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SpeedCamDecelRatex0.01m/s^2(80)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lower number, slows down from a greater distance</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SpeedCamSafetyFactor(105%)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SpeedBumpTimeDistance(1s)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SpeedBumpSpeed(35Km/h)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NaviCountDown mode(2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0: off, 1:tbt+camera, 2:tbt+camera+bump</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Turn Speed control mode(1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0: off, 1:vision, 2:vision+route, 3: route</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Smart Speed Control(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0: off, 1:accel, 2:decel, 3: all</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Map TurnSpeed Factor(100)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Model TurnSpeed Factor(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ATC: Auto turn control(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:None, 1: lane change, 2: lane change + speed, 3: speed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ATC: Turn Speed (20)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>0:None, turn speed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ATC: Turn CtrlDistTime (6)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>dist=speed*time</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ATC Auto Map Change(0)</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ConfirmationDialog</name>
     <message>
         <source>Ok</source>
@@ -111,6 +981,33 @@
     <message>
         <source>Decline, uninstall %1</source>
         <translation>Reddet, Kurulumu kaldır. %1</translation>
+    </message>
+</context>
+<context>
+    <name>DestinationWidget</name>
+    <message>
+        <source>Home</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Work</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No destination set</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>home</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>work</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No %1 location set</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -172,11 +1069,11 @@
     </message>
     <message>
         <source>Reset Calibration</source>
-        <translation>Kalibrasyonu sıfırla</translation>
+        <translation type="vanished">Kalibrasyonu sıfırla</translation>
     </message>
     <message>
         <source>RESET</source>
-        <translation>SIFIRLA</translation>
+        <translation type="vanished">SIFIRLA</translation>
     </message>
     <message>
         <source>Are you sure you want to reset calibration?</source>
@@ -267,10 +1164,6 @@
         <translation>Bağlantıyı kes ve Cihazı kapat</translation>
     </message>
     <message>
-        <source>Reset</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Review</source>
         <translation type="unfinished"></translation>
     </message>
@@ -284,6 +1177,81 @@
     </message>
     <message>
         <source>PAIR</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ReCalibration</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Git Pull &amp; Reboot</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Git pull &amp; Reboot?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Yes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Failed to start update process.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update process started. Device will reboot if updates are applied.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Set default</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Set to default?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove MapboxKey</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove Mapbox key?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Calibration Status</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SHOW</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reboot &amp; Disengage to Calibration</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>DrawCarrot</name>
+    <message>
+        <source>ECO</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SAFE</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NORM</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>FAST</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ERRM</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -339,6 +1307,13 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
     </message>
 </context>
 <context>
+    <name>HomeWindow</name>
+    <message>
+        <source>Auto-Tuner: Driving pattern learned!</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>HudRenderer</name>
     <message>
         <source>km/h</source>
@@ -370,7 +1345,52 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
     <name>Installer</name>
     <message>
         <source>Installing...</source>
-        <translation>Yükleniyor...</translation>
+        <translation type="vanished">Yükleniyor...</translation>
+    </message>
+</context>
+<context>
+    <name>MapETA</name>
+    <message>
+        <source>eta</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>min</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>hr</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>MapSettings</name>
+    <message>
+        <source>NAVIGATION</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Manage at %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Manage at connect.comma.ai</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>MapWindow</name>
+    <message>
+        <source>Map Loading</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Waiting for GPS(APN)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Waiting for route</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -450,6 +1470,14 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
         <source>openpilot detected a change in the device&apos;s mounting position. Ensure the device is fully seated in the mount and the mount is firmly secured to the windshield.</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Poor visibility detected for driver monitoring. Ensure the device has a clear view of the driver. This can be checked in the device settings. Extreme lighting conditions and/or unconventional mounting positions may also trigger this alert.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Excessive %1 actuation detected on your last drive. Please contact support at https://comma.ai/support and share your device&apos;s Dongle ID for troubleshooting.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>OffroadHome</name>
@@ -524,6 +1552,21 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
     </message>
 </context>
 <context>
+    <name>PathEndDrawer</name>
+    <message>
+        <source>Signal Error</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Signal Ready</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Signal slowing</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>PrimeAdWidget</name>
     <message>
         <source>Upgrade Now</source>
@@ -577,7 +1620,7 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
     </message>
     <message>
         <source>openpilot</source>
-        <translation>openpilot</translation>
+        <translation type="vanished">openpilot</translation>
     </message>
     <message numerus="yes">
         <source>%n minute(s) ago</source>
@@ -599,6 +1642,26 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
     </message>
     <message>
         <source>now</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>km</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>m</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>mi</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>ft</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>carrotpilot</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -670,6 +1733,10 @@ This may take up to a minute.</source>
     </message>
     <message>
         <source>Firehose</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>CarrotPilot</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -1106,6 +2173,18 @@ This may take up to a minute.</source>
     </message>
     <message>
         <source>Enable driver monitoring even when openpilot is not engaged.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Record and Upload Microphone Audio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>MoreRelaxed</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

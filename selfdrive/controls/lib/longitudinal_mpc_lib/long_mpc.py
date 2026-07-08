@@ -59,6 +59,33 @@ T_DIFFS = np.diff(T_IDXS, prepend=[0.])
 COMFORT_BRAKE = 2.5
 STOP_DISTANCE = 6.0
 
+# 고속 + 선행차 접근 시 제동 명령을 앞당김 — 고속 늦은 감지로 인한 충돌 우려 대응.
+# 정속 추종·저속에서는 무동작(고속·접근·TTC 삼중 게이트)이라 평상시 부드러움은 유지.
+HIGH_SPEED_BRAKE_KPH = 70.0            # 이 속도(km/h) 이상에서만 선제 제동 강화 적용
+HIGH_SPEED_BRAKE_TTC = 7.0            # 접근 TTC(초)가 이 값 미만이면 활성
+HIGH_SPEED_TF_BOOST = 0.45           # Lever A: 추종거리(t_follow) 최대 선제 확대량(초)
+HIGH_SPEED_JLF_GAIN_BP = [60.0, 100.0]   # Lever C: JLeadFactor3 속도연동 보간 속도(km/h)
+HIGH_SPEED_JLF_GAIN_V = [1.0, 1.8]       # 위 속도에서의 j_lead_factor 배율
+
+# 선행차 status 깜빡임(레이더/비전이 0.x초 놓침→재포착) 보정: 잠깐 끊겨도 직전 lead를
+# 짧게 유지(외삽)해 '없음→가속→재포착→복귀' 떨림을 막는다. 짧고(가까운 lead만) 안전하게.
+_LEAD_HOLD_FRAMES = 6        # 유지 프레임수 (6*DT_MDL=0.3s)
+_LEAD_HOLD_MAX_DREL = 80.0   # 이 거리(m) 이내의 선행차만 유지
+
+
+class _HeldLead:
+  """status가 잠깐 끊긴 선행차를 외삽해 잠시 대체하는 경량 객체(process_lead 호환)."""
+  __slots__ = ('status', 'dRel', 'vLead', 'aLeadK', 'aLeadTau', 'vRel', 'jLead')
+
+  def __init__(self, dRel, vLead, aLeadK, aLeadTau, vRel):
+    self.status = True
+    self.dRel = dRel
+    self.vLead = vLead
+    self.aLeadK = aLeadK
+    self.aLeadTau = aLeadTau
+    self.vRel = vRel
+    self.jLead = 0.0   # 유지 중엔 jerk 예측 없음(떨림 방지)
+
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.moreRelaxed:
     return 1.0
@@ -240,6 +267,8 @@ class LongitudinalMpc:
 
     self.a_change_cost = A_CHANGE_COST
     self.j_lead = 0.0
+    self._lead_held = None   # 선행차 status 깜빡임 시 유지할 직전 lead
+    self._lead_hold_count = 0
 
     self.reset()
     self.source = SOURCES[2]
@@ -355,6 +384,21 @@ class LongitudinalMpc:
     lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau, j_lead)
     return lead_xv, v_lead
 
+  def lead_with_hold(self, lead):
+    """선행차 status가 잠깐 끊기면(깜빡임) 직전 lead를 짧게 외삽해 대체한다.
+    가까운 선행차(≤_LEAD_HOLD_MAX_DREL)에만, 최대 _LEAD_HOLD_FRAMES 동안만 유지."""
+    if lead.status:
+      self._lead_hold_count = _LEAD_HOLD_FRAMES
+      self._lead_held = _HeldLead(lead.dRel, lead.vLead, lead.aLeadK, lead.aLeadTau, lead.vRel)
+      return lead
+    if self._lead_hold_count > 0 and self._lead_held is not None and self._lead_held.dRel < _LEAD_HOLD_MAX_DREL:
+      self._lead_hold_count -= 1
+      h = self._lead_held
+      h.dRel = max(0.0, h.dRel + h.vRel * DT_MDL)       # 위치 외삽
+      h.vLead = max(0.0, h.vLead + h.aLeadK * DT_MDL)   # 속도 외삽(직전 가속도로)
+      return h
+    return lead  # 유지 만료 → 실제 상태(없음)
+
   def set_accel_limits(self, min_a, max_a):
     # TODO this sets a max accel limit, but the minimum limit is only for cruise decel
     # needs refactor
@@ -365,15 +409,20 @@ class LongitudinalMpc:
     v_ego = self.x0[1]
     a_ego = self.x0[2]
     t_follow = carrot.get_T_FOLLOW(personality, v_ego, a_ego)
-    self.status = radarstate.leadOne.status or radarstate.leadTwo.status
+    # 선행차 status 깜빡임 시 직전 lead를 짧게 유지(가감속 떨림 방지)
+    lead_one = self.lead_with_hold(radarstate.leadOne)
+    self.status = lead_one.status or radarstate.leadTwo.status
 
-    if radarstate.leadOne.status:
-      j_lead = radarstate.leadOne.jLead
+    if lead_one.status:
+      j_lead = lead_one.jLead
       self.j_lead = j_lead * 0.1 + self.j_lead * 0.9
     else:
       self.j_lead = 0.0
 
-    lead_xv_0, lead_v_0 = self.process_lead(radarstate.leadOne, np.clip(self.j_lead * carrot.j_lead_factor, -1.0, 1.0))
+    # Lever C: 고속에서 선행차 감속 예측(JLeadFactor3=j_lead_factor)을 증폭 → 제동을 앞당김.
+    #          (선행차가 '감속 중'일 때 효과. 정속 선행차는 Lever A가 담당)
+    jlf = carrot.j_lead_factor * float(np.interp(v_ego * 3.6, HIGH_SPEED_JLF_GAIN_BP, HIGH_SPEED_JLF_GAIN_V))
+    lead_xv_0, lead_v_0 = self.process_lead(lead_one, np.clip(self.j_lead * jlf, -1.0, 1.0))
     lead_xv_1, _ = self.process_lead(radarstate.leadTwo, 0.0)
 
     mode = self.mode
@@ -385,7 +434,15 @@ class LongitudinalMpc:
     else:
       v_cruise, stop_x, mode = carrot.v_cruise, carrot.stop_dist, carrot.mode
       desired_distance = desired_follow_distance(v_ego, lead_v_0, comfort_brake, stop_distance, t_follow)
-      t_follow = carrot.dynamic_t_follow(t_follow, radarstate.leadOne, desired_distance, self.prev_a)
+      t_follow = carrot.dynamic_t_follow(t_follow, lead_one, desired_distance, self.prev_a)
+      # Lever A: 고속 + 선행차 접근(TTC 낮음) → 추종거리를 선제 확대해 제동 명령을 앞당김.
+      #          (vRel<0 & TTC<임계 & 고속 삼중 게이트 → 정속 추종·저속에선 무동작)
+      _lead = lead_one
+      if _lead.status and v_ego * 3.6 >= HIGH_SPEED_BRAKE_KPH and _lead.dRel > 0.0 and _lead.vRel < 0.0:
+        _ttc = _lead.dRel / -_lead.vRel
+        _tf_boost = float(np.interp(_ttc, [3.0, HIGH_SPEED_BRAKE_TTC], [HIGH_SPEED_TF_BOOST, 0.0]))
+        _tf_boost *= float(np.interp(v_ego * 3.6, [HIGH_SPEED_BRAKE_KPH, 110.0], [0.5, 1.0]))
+        t_follow += _tf_boost
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
@@ -412,7 +469,9 @@ class LongitudinalMpc:
                                  v_upper)
       cruise_obstacle = np.cumsum(T_DIFFS * v_cruise_clipped) + get_safe_obstacle_distance(v_cruise_clipped, t_follow, comfort_brake, stop_distance)
 
-      adjust_dist = carrot.trafficStopDistanceAdjust if v_ego > 0.1 else -2.0
+      # 최종 정차(v<=0.1)는 파라미터 대신 하드코딩 보정 사용. 0에 가까울수록 정지점에 더 바짝 정차.
+      # 정지차(모델 인식)도 이 경로를 타므로 안전여유 확보 필요 → -1.5 (과거 -2.0은 너무 멀고, -1.0은 추돌위험).
+      adjust_dist = carrot.trafficStopDistanceAdjust if v_ego > 0.1 else -1.5
       if 50 < stop_x + adjust_dist < cruise_obstacle[0]:
         stop_x = cruise_obstacle[0] - adjust_dist
       x2 = stop_x * np.ones(N+1) + adjust_dist
@@ -428,7 +487,7 @@ class LongitudinalMpc:
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
-      if radarstate.leadOne.status:
+      if lead_one.status:
         self.a_change_cost = np.interp(abs(self.j_lead), [0.3, 2.0], [A_CHANGE_COST, 20])
       else:
         self.a_change_cost = A_CHANGE_COST

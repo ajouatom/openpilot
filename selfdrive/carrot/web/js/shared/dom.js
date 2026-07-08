@@ -8,6 +8,7 @@
 const btnHome = document.getElementById("btnHome");
 const btnSetting = document.getElementById("btnSetting");
 const btnLogs = document.getElementById("btnLogs");
+const btnTuner = document.getElementById("btnTuner");
 const btnTerminal = document.getElementById("btnTerminal");
 const btnTools = document.getElementById("btnTools");
 const btnRecordToggle = document.getElementById("btnRecordToggle");
@@ -70,6 +71,7 @@ const PAGE_ELEMENTS = {
   car: document.getElementById("pageCar"),
   tools: document.getElementById("pageTools"),
   logs: document.getElementById("pageLogs"),
+  tuner: document.getElementById("pageTuner"),
   terminal: document.getElementById("pageTerminal"),
   branch: document.getElementById("pageBranch"),
   carrot: document.getElementById("pageCarrot"),

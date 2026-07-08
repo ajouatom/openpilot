@@ -66,12 +66,45 @@ class LongControl:
     self.stopping_accel = 0
     self.j_lead = 0.0
 
+    # ── Coasting deadband + hysteresis ──────────────────────────────
+    # 사람 주행의 "발 떼고 코스팅(회생제동)" 구간을 흉내내, 계획 가속도가 0 근처에서
+    # 미세하게 +/- 진동(울렁거림)할 때 출력 가감속을 0으로 부드럽게 수렴시킨다.
+    # LongCoastBand: 코스팅 진입 임계 가속도(0.01 m/s² 단위, 0=비활성).
+    # 진입 임계의 2배를 벗어나야 코스팅을 빠져나가는 히스테리시스로 채터링을 방지.
+    self.coast_band = 0.0       # m/s² (0=off)
+    self.coasting = False
+    self.COAST_EXIT_JERK = 1.2  # m/s³, 코스팅 진입 시 출력→0 수렴 속도
+
     self.use_accel_pid = False
     if CP.brand == "toyota":
       self.use_accel_pid = True
 
   def reset(self):
     self.pid.reset()
+    self.coasting = False
+
+  def _update_coast_state(self, a_target):
+    """계획 가속도(a_target) 기준으로 코스팅 진입/이탈을 히스테리시스로 판정."""
+    if self.coast_band <= 0.0:
+      self.coasting = False
+      return
+    if self.coasting:
+      # 진입 임계의 2배(이탈 임계)를 넘어서는 분명한 가감속 요구가 있을 때만 이탈
+      if abs(a_target) > self.coast_band * 2.0:
+        self.coasting = False
+    else:
+      if abs(a_target) < self.coast_band:
+        self.coasting = True
+
+  def _coast_output(self):
+    """코스팅 중 출력 가감속을 0(무가감속=자연 회생제동)으로 부드럽게 램프."""
+    step = self.COAST_EXIT_JERK * DT_CTRL
+    oa = self.last_output_accel
+    if oa > step:
+      return oa - step
+    if oa < -step:
+      return oa + step
+    return 0.0
 
   def update(self, active, CS, long_plan, accel_limits, t_since_plan, radarState):
 
@@ -85,6 +118,7 @@ class LongControl:
     if self.readParamCount >= 100:
       self.readParamCount = 0
       self.stopping_accel = self.params.get_float("StoppingAccel") * 0.01
+      self.coast_band = self.params.get_float("LongCoastBand") * 0.01
     elif self.readParamCount == 10:
       if len(self.CP.longitudinalTuning.kpBP) == 1 and len(self.CP.longitudinalTuning.kiBP)==1:
         longitudinalTuningKpV = self.params.get_float("LongTuningKpV") * 0.01
@@ -116,8 +150,13 @@ class LongControl:
 
       stopAccel = self.stopping_accel if self.stopping_accel < 0.0 else self.CP.stopAccel
       if output_accel > stopAccel:
+        # 저속일수록 감속 rate를 줄여서 정차 직전 꿀렁임 방지 (속도 비례 감속 한계 조절)
+        speed_factor = float(np.interp(CS.vEgo, [0.0, 0.2, 0.5, 1.5], [0.05, 0.1, 0.3, 1.0]))
+        # Brake Cushion: stopAccel에 가까워질수록 감속 rate를 더 줄여서 부드럽게 안착
+        accel_margin = max(output_accel - stopAccel, 0.01)
+        cushion_factor = float(np.interp(accel_margin, [0.0, 0.3, 1.0], [0.15, 0.5, 1.0]))
         output_accel = min(output_accel, 0.0)
-        output_accel -= self.CP.stoppingDecelRate * DT_CTRL
+        output_accel -= self.CP.stoppingDecelRate * speed_factor * cushion_factor * DT_CTRL
       self.reset()
 
     elif self.long_control_state == LongCtrlState.starting:
@@ -129,8 +168,14 @@ class LongControl:
         error = a_target_ff - CS.aEgo
       else:
         error = v_target_now - CS.vEgo
+      # 코스팅 판정은 '계획 가속도(a_target_ff)'의 미세 진동을 기준으로 한다.
+      self._update_coast_state(a_target_ff)
       output_accel = self.pid.update(error, speed=CS.vEgo,
-                                     feedforward=a_target_ff)
+                                     feedforward=a_target_ff,
+                                     freeze_integrator=self.coasting)
+      if self.coasting:
+        # 코스팅 중에는 출력을 0으로 부드럽게 수렴 → 자연 회생제동/엔진브레이크 활용
+        output_accel = self._coast_output()
 
     self.last_output_accel = np.clip(output_accel, accel_limits[0], accel_limits[1])
     return self.last_output_accel, a_target_ff, j_target_now

@@ -227,6 +227,7 @@ function renderUIText() {
   setNavText("btnSetting", s.setting);
   setNavText("btnTools", s.tools);
   setNavText("btnLogs", s.logs);
+  setNavText("btnTuner", s.tuner || "Tuner");
   setNavText("btnTerminal", s.terminal);
   setText("btnQuickLinkWeb", "CarrotMan");
 

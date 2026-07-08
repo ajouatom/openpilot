@@ -245,6 +245,7 @@ function syncNavActivePage(page) {
   setElementClass(btnSetting, "active", page === "setting");
   setElementClass(btnTools, "active", page === "tools");
   setElementClass(btnLogs, "active", page === "logs");
+  setElementClass(btnTuner, "active", page === "tuner");
   setElementClass(btnTerminal, "active", page === "terminal");
 }
 
@@ -387,6 +388,10 @@ function runPageEnter(page, prevPage, pushHistory) {
 
   if (page === "logs" && typeof initLogsPage === "function") {
     initLogsPage();
+  }
+
+  if (page === "tuner" && typeof initTunerPage === "function") {
+    initTunerPage();
   }
 
   if (page === "terminal" && typeof initTerminalPage === "function") {
@@ -820,6 +825,7 @@ btnSetting.onclick = () => {
   showPage("setting", true, getSwipeTransition(CURRENT_PAGE, "setting"));
 };
 if (btnLogs) btnLogs.onclick = () => showPage("logs", true, getSwipeTransition(CURRENT_PAGE, "logs"));
+if (btnTuner) btnTuner.onclick = () => showPage("tuner", true, getSwipeTransition(CURRENT_PAGE, "tuner"));
 btnTerminal.onclick = () => showPage("terminal", true, getSwipeTransition(CURRENT_PAGE, "terminal"));
 
 if (settingCarRow) {

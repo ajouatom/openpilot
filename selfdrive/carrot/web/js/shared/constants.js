@@ -26,7 +26,7 @@ const SWIPE_COMMIT_RATIO = 0.22;
 const SWIPE_VELOCITY_THRESHOLD = 0.45;
 const SWIPE_EDGE_RESISTANCE = 0.18;
 
-const SWIPE_PAGES = ["carrot", "setting", "tools", "logs", "terminal"];
+const SWIPE_PAGES = ["carrot", "setting", "tools", "logs", "tuner", "terminal"];
 const SETTING_BACK_EDGE_WIDTH = 32;
 
 const QUICK_LINK_FIXED_URL = "https://man.carrotpilot.app/";

@@ -78,6 +78,22 @@ nav_type_mapping = {
 }
 
 import collections
+
+# 부드러운 재가속 auto(목표속도 slew 리미터).
+# 목표속도(desiredSpeed)를 실제 도달목표(설정속도 이하)로 "완만히 상승, 즉시 하강"시킨다.
+#  - AUTO_RISE_KPH_S: 상승 기울기(kph/초). 사용자 체감상 초당 약 +5 상승.
+#  - AUTO_MAX_HEAD_KPH: 목표가 현재속도보다 앞설 수 있는 최대치(가속 권한/안티와인드업).
+#    작으면 가속이 약해 저속에서 못 오르고(데드락), 크면 급가속. 5→10으로 상향해 데드락 해소.
+#  - AUTO_MAX_HEAD_LEAD_KPH: 선행차가 확실히 빠르게 앞서갈 때만 헤드룸을 넓혀 답답함 없이 캐치업.
+AUTO_RISE_KPH_S = 5.0
+AUTO_MAX_HEAD_KPH = 10.0
+AUTO_MAX_HEAD_LEAD_KPH = 18.0
+AUTO_DT = 0.05  # update_navi 주기(20Hz)
+# 선행차 캐치업 시 상승률. 기본 5kph/s(=1.39m/s²)는 정차출발 가속부스트(상한 ~2.47m/s²=8.9kph/s)
+# 보다 낮아, desiredSpeed가 못 따라오면 순항목표가 현재속도에 붙어 가속을 되레 1.39로 제한한다.
+# 캐치업 구간에선 상승률을 높여(부스트가 실제로 쓰이도록) 병목을 제거. 평시 완만함은 기본값 유지.
+AUTO_RISE_LEAD_KPH_S = 15.0
+
 class CarrotServ:
   def __init__(self):
     self.params = Params()
@@ -188,6 +204,7 @@ class CarrotServ:
     self.gas_override_speed = 0
     self.gas_pressed_state = False
     self.source_last = "none"
+    self.auto_speed = 0.0  # 재가속 auto slew 상태(kph)
 
     self.debugText = ""
 
@@ -991,7 +1008,44 @@ class CarrotServ:
 
     desired_speed, source = min(speed_n_sources, key=lambda x: x[0])
 
+    # 재가속 auto(목표속도 slew 리미터): 목표속도를 실제 도달목표(설정속도 이하)로
+    # "완만히 상승, 즉시 하강"시켜 모든 상황에서 급가속을 막으면서도 목표에 반드시 도달·유지한다.
+    #  - 상승: 초당 AUTO_RISE_KPH_S만큼, 단 현재속도+헤드룸을 넘지 않음(안티와인드업).
+    #  - 하강(감속 소스 등장): 즉시 반영(안전). 정지/미인게이지: 현재속도에서 재시작.
+    #  - 선행차가 확실히 빠르면 헤드룸을 넓혀 답답함 없이 캐치업(실제 거리는 추종 로직이 관리).
+    # 과거 "현재속도+5 고정" 방식은 목표가 실제 도달점에 못 오르고 저속에서 가속 데드락을
+    # 유발했고, 선행차 예외(+15)가 목표를 설정속도 위로 부풀렸다 → slew 방식으로 두 문제 해소.
     if CS is not None:
+      v_max = CS.vCruise if 0.0 < CS.vCruise < 200.0 else 250.0
+      auto_target = min(desired_speed, v_max)  # 실제 도달목표(설정속도 이하)
+
+      max_head = AUTO_MAX_HEAD_KPH
+      rise = AUTO_RISE_KPH_S
+      if sm.alive['radarState']:
+        lead = sm['radarState'].leadOne
+        if lead.status and lead.vLeadK * CV.MS_TO_KPH > v_ego_kph + 3.0:
+          max_head = AUTO_MAX_HEAD_LEAD_KPH  # 선행차 캐치업: 헤드룸 확장
+          rise = AUTO_RISE_LEAD_KPH_S        # + 상승률↑ → 가속부스트/Gap1 병목 제거
+
+      engaged = sm.alive['selfdriveState'] and sm['selfdriveState'].enabled
+      if not engaged:
+        self.auto_speed = v_ego_kph  # 미인게이지: 현재속도에서 재시작
+      elif auto_target <= self.auto_speed:
+        self.auto_speed = auto_target  # 감속: 즉시 하강
+      else:
+        # 완만 상승. 정지 상태(v_ego≈0)에서도 상승시켜야 출발이 가능하다(현재속도+헤드룸까지).
+        # 목표를 0에 못박으면 desiredSpeed=0이 되어 선행차 출발/신호 출발 시 가속 데드락 발생.
+        self.auto_speed = min(auto_target, self.auto_speed + rise * AUTO_DT)
+      # 안티와인드업: 목표가 현재속도+헤드룸 이상 앞서지 않게(급가속 방지). 감속목표(<현재)엔 영향 없음.
+      # 정지 시엔 현재속도+헤드룸(=헤드룸)까지만 목표가 오르며, 실제 정지 유지는 downstream
+      # MPC(선행차 추종/e2e stop, v_cruise=0)가 담당하므로 크리프 없이 안전하게 출발 대기한다.
+      self.auto_speed = min(self.auto_speed, v_ego_kph + max_head)
+      self.auto_speed = max(self.auto_speed, min(auto_target, v_ego_kph))  # 현재속도 이하로 불필요 하강 방지
+
+      if self.auto_speed < desired_speed:
+        desired_speed = self.auto_speed
+        source = "auto"  # UI 표시 라벨
+
       if source != self.source_last:
         self.gas_override_speed = 0
         self.gas_pressed_state = CS.gasPressed
@@ -1006,6 +1060,12 @@ class CarrotServ:
       if desired_speed < self.gas_override_speed:
         source = "gas"
         desired_speed = self.gas_override_speed
+        # 가스 오버라이드도 auto 램프 헤드룸(현재속도+head) 안으로 제한 → 페달을 뗀 뒤
+        # 목표가 현재속도보다 크게 앞서 급가속하거나 'gas' 표시가 오래 남는 것을 방지.
+        # (auto_speed는 이미 설정속도·저속제한을 반영하므로 안전한 상한이다)
+        if self.auto_speed < desired_speed:
+          desired_speed = self.auto_speed
+          source = "auto"
 
       self.debugText += f"route={route_speed:.1f}"#f"desired={desired_speed:.1f},{source},g={self.gas_override_speed:.0f}"
 
@@ -1169,6 +1229,9 @@ class CarrotServ:
     try:
         subprocess.run(["sudo", "ln", "-s", zoneinfo_path, localtime_path], check=True)
         print(f"Timezone successfully set to: {timezone}")
+        # 앱이 보낸 타임존은 최고 우선순위로 기록 -> timed.py의 wifi/gps 추정이 덮어쓰지 않음
+        self.params.put("TimezoneName", timezone)
+        self.params.put("TimezoneSource", "app")
     except subprocess.CalledProcessError as e:
         print(f"Failed to set timezone to {timezone}: {e}")
 
