@@ -152,6 +152,17 @@ EMPTY_LEAD = {
 def empty_lead():
   return EMPTY_LEAD.copy()
 
+def select_side_leads(front_leads: list[dict[str, Any]], corner_leads: list[dict[str, Any]],
+                      corner_tracks_available: bool) -> list[dict[str, Any]]:
+  return corner_leads if corner_tracks_available else front_leads
+
+def pick_side_lead(leads: list[dict[str, Any]]) -> dict[str, Any]:
+  return min(
+    (ld for ld in leads if ld['dRel'] > 5 and abs(ld['dPath']) < 3.5),
+    key=lambda d: d['dRel'],
+    default=empty_lead()
+  )
+
 class Track:
   def __init__(self, identifier: int):
     self.identifier = identifier
@@ -962,7 +973,9 @@ class RadarD:
       self.radar_state.leadRight = empty_lead()
       return
 
-    left_list, right_list, center_list, cutin_list = [], [], [], []
+    front_left_list, front_right_list = [], []
+    corner_left_list, corner_right_list = [], []
+    center_list, cutin_list = [], []
     corner_center_list, corner_stopped_list = [], []
     for c in tracks.values():
       y_rel_neg = - c.yRel
@@ -989,13 +1002,22 @@ class RadarD:
         if self._update_cutin_sticky(c):
           ld['modelProb'] = 0.03
           cutin_list.append(ld)
-        left_list.append(ld)
+        if is_corner:
+          corner_left_list.append(ld)
+        else:
+          front_left_list.append(ld)
       else:
         ld = self._corner_lead_from_track(c, 0, 0) if is_corner else c.get_RadarState(0, 0)
         if self._update_cutin_sticky(c):
           ld['modelProb'] = 0.03
           cutin_list.append(ld)
-        right_list.append(ld)
+        if is_corner:
+          corner_right_list.append(ld)
+        else:
+          front_right_list.append(ld)
+
+    left_list = select_side_leads(front_left_list, corner_left_list, self.corner_tracks_available)
+    right_list = select_side_leads(front_right_list, corner_right_list, self.corner_tracks_available)
 
     self.radar_state.leadsLeft   = left_list
     self.radar_state.leadsRight  = right_list
@@ -1012,16 +1034,8 @@ class RadarD:
       default=empty_lead()
     )
 
-    self.radar_state.leadLeft  = min(
-        (ld for ld in left_list if ld['dRel'] > 5 and abs(ld['dPath']) < 3.5),
-        key=lambda d: d['dRel'],
-        default=empty_lead()
-    )
-    self.radar_state.leadRight = min(
-        (ld for ld in right_list if ld['dRel'] > 5 and abs(ld['dPath']) < 3.5),
-        key=lambda d: d['dRel'],
-        default=empty_lead()
-    )
+    self.radar_state.leadLeft = pick_side_lead(left_list)
+    self.radar_state.leadRight = pick_side_lead(right_list)
 
     self.leadTwo = None
     if self.lane_line_available:
