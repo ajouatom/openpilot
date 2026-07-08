@@ -3288,7 +3288,8 @@ def build_cluster_scene(
     display_detected_vehicles = detected_vehicles_without_zero_radar_samples(state.detected_vehicles)
     if raw_corner_active:
         display_detected_vehicles = tuple(
-            vehicle for vehicle in display_detected_vehicles if detected_vehicle_is_rear_corner_summary(vehicle)
+            vehicle for vehicle in display_detected_vehicles
+            if detected_vehicle_is_rear_corner_summary(vehicle) or vehicle_source_is_front_radar(vehicle.source)
         )
     if display_radar_points is not state.radar_points or display_detected_vehicles != state.detected_vehicles:
         state = replace(state, radar_points=display_radar_points, detected_vehicles=display_detected_vehicles)
