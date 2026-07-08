@@ -90,6 +90,16 @@
   --control-radius: var(--r-sm);
   --control-min-height: 44px;
 
+  /* ── Switch (toggle) ───────────────────────────────────────────
+     One switch atom for the whole app: `.c-switch` (see components.css).
+     Size is fully driven by these two tokens — thumb = height - 8px,
+     travel = width - height (thumb stays vertically centered). Compact
+     surfaces (dense dialogs) use the `.c-switch--sm` modifier, which
+     overrides these locally. Colors reuse the primary/surface roles,
+     motion reuses --motion-quick / --motion-base — nothing per-switch. */
+  --switch-w: 52px;
+  --switch-h: 32px;
+
   /* Popup UX primitives
      - Compact sheets for alert / confirm / prompt.
      - Bottom sheets on narrow portrait screens.

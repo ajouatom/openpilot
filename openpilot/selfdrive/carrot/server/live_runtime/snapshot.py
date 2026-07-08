@@ -401,6 +401,11 @@ def _build_camera_state(service: Any, previous: dict[str, Any] | None = None) ->
   payload["timestampEof"] = safe_int(safe_get(service, "timestampEof"))
   payload["width"] = safe_int(safe_get(service, "width"))
   payload["height"] = safe_int(safe_get(service, "height"))
+  # Road camera sensor (ar0231 / ox03c10 / os04c10). The web overlay picks the
+  # matching intrinsics from this so OS04C10 units (different focal/resolution)
+  # project correctly instead of using the hardcoded AR0231/OX03C10 default.
+  sensor = safe_get(service, "sensor")
+  payload["sensor"] = str(sensor) if sensor is not None else ""
   return payload
 
 

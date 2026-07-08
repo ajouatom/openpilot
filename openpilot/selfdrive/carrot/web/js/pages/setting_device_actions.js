@@ -41,7 +41,7 @@ function bindDeviceTabEvents(container) {
 }
 
 function bindDeviceToggleRows(container) {
-  container.querySelectorAll(".device-toggle__input").forEach((input) => {
+  container.querySelectorAll(".device-toggle .c-switch__input").forEach((input) => {
     input.addEventListener("change", async (event) => {
       const toggle = event.target.closest(".device-toggle");
       const param = toggle?.dataset.param;
@@ -68,7 +68,7 @@ function bindDeviceToggleRows(container) {
         if (event.target.checked && (param === "JoystickDebugMode" || param === "LongitudinalManeuverMode")) {
           const otherParam = param === "JoystickDebugMode" ? "LongitudinalManeuverMode" : "JoystickDebugMode";
           await setParam(otherParam, 0);
-          const otherToggle = container.querySelector(`.device-toggle[data-param="${otherParam}"] .device-toggle__input`);
+          const otherToggle = container.querySelector(`.device-toggle[data-param="${otherParam}"] .c-switch__input`);
           if (otherToggle) otherToggle.checked = false;
         }
       } catch (err) {

@@ -1297,7 +1297,7 @@ function syncSettingControlState(row, value) {
     valueButton.dataset.rawValue = text;
   }
 
-  const toggle = row.querySelector(".setting-switch__input");
+  const toggle = row.querySelector(".c-switch__input");
   if (toggle) toggle.checked = Number(value) === 1;
 
   const slider = row.querySelector(".setting-slider__input");
@@ -2879,13 +2879,13 @@ async function renderItems(group, options = {}) {
 
     if (controlConfig.kind === "toggle") {
       const switchLabel = document.createElement("label");
-      switchLabel.className = "setting-switch";
+      switchLabel.className = "c-switch";
       toggleInput = document.createElement("input");
       toggleInput.type = "checkbox";
-      toggleInput.className = "setting-switch__input";
+      toggleInput.className = "c-switch__input";
       toggleInput.setAttribute("aria-label", title || name);
       const switchTrack = document.createElement("span");
-      switchTrack.className = "setting-switch__track";
+      switchTrack.className = "c-switch__track";
       switchLabel.appendChild(toggleInput);
       switchLabel.appendChild(switchTrack);
       ctrl.appendChild(switchLabel);

@@ -74,18 +74,19 @@
   --ui-action-min: 136px;
 }
 
-.page--setting #settingScreenItems .youtube-timestamp-disabled .setting-switch {
+.page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch {
   cursor: not-allowed;
 }
 
-.page--setting #settingScreenItems .youtube-timestamp-disabled .setting-switch__track,
-.page--setting #settingScreenItems .youtube-timestamp-disabled .setting-switch__input:checked + .setting-switch__track {
+.page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch__track,
+.page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch__input:checked + .c-switch__track {
+  opacity: 1;
   border-color: color-mix(in srgb, #000 84%, var(--md-outline-var));
   background: #000;
 }
 
-.page--setting #settingScreenItems .youtube-timestamp-disabled .setting-switch__track::after,
-.page--setting #settingScreenItems .youtube-timestamp-disabled .setting-switch__input:checked + .setting-switch__track::after {
+.page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch__track::after,
+.page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch__input:checked + .c-switch__track::after {
   transform: none;
   background: color-mix(in srgb, var(--md-on-surface-var) 42%, #000);
   box-shadow: none;
