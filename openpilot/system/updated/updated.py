@@ -310,6 +310,14 @@ class Updater:
       if not os.path.exists(basedir):
         return ""
 
+      def read_version(path: str) -> str:
+        for rel_path in ("common/version.h", "openpilot/common/version.h"):
+          version_path = os.path.join(path, rel_path)
+          if os.path.exists(version_path):
+            with open(version_path) as f:
+              return f.read().split('"')[1]
+        return ""
+
       version = ""
       branch = ""
       commit = ""
@@ -317,8 +325,7 @@ class Updater:
       try:
         branch = self.get_branch(basedir)
         commit = self.get_commit_hash(basedir)[:7]
-        with open(os.path.join(basedir, "common", "version.h")) as f:
-          version = f.read().split('"')[1]
+        version = read_version(basedir)
 
         commit_unix_ts = run(["git", "show", "-s", "--format=%ct", "HEAD"], basedir).rstrip()
         dt = datetime.datetime.fromtimestamp(int(commit_unix_ts))
