@@ -17,11 +17,13 @@ NS_ :
     BA_DEF_DEF_
     EV_DATA_
     ENVVAR_DATA_
+    ENVVAR_TYPE_
     SGTYPE_
     SGTYPE_VAL_
     BA_DEF_SGTYPE_
     BA_SGTYPE_
     SIG_TYPE_REF_
+    VAL_TABLE_
     SIG_GROUP_
     SIG_VALTYPE_
     SIGTYPE_VALTYPE_
@@ -42,15 +44,21 @@ BU_: XXX RADAR
 
 
 def write_object_msg(f, addr):
-  name = f"CORNER_RADAR_235_OBJECTS_{addr:x}"
+  name = f"CORNER_RADAR_180_OBJECTS_{addr:x}"
   f.write(f"""
 BO_ {addr} {name}: 32 RADAR
- SG_ OBJ_QUAL_LEVEL : 24|7@1+ (1,0) [0|100] "%" XXX
- SG_ OBJ_REL_POS_X : 64|13@1+ (0.05,0) [0|409.55] "m" XXX
- SG_ OBJ_REL_POS_Y : 78|12@1+ (0.05,-102.4) [-102.4|102.35] "m" XXX
- SG_ OBJ_REL_VEL_X : 91|12@1+ (0.05,-100) [-100|104.75] "m/s" XXX
- SG_ OBJ_REL_VEL_Y : 104|10@1+ (0.05,-25) [-25|26.15] "m/s" XXX
- SG_ OBJ_REL_ACCEL_X : 115|9@1- (0.05,0) [-12.8|12.75] "m/s^2" XXX
+ SG_ SLOT1_QUAL_LEVEL : 24|7@1+ (1,0) [0|100] "%" XXX
+ SG_ SLOT1_REL_POS_X : 64|13@1+ (0.05,0) [0|409.55] "m" XXX
+ SG_ SLOT1_REL_POS_Y : 78|12@1+ (0.05,-102.4) [-102.4|102.35] "m" XXX
+ SG_ SLOT1_REL_VEL_X : 91|12@1+ (0.05,-100) [-100|104.75] "m/s" XXX
+ SG_ SLOT1_REL_VEL_Y : 104|10@1+ (0.05,-25) [-25|26.15] "m/s" XXX
+ SG_ SLOT1_REL_ACCEL_X : 115|9@1- (0.05,0) [-12.8|12.75] "m/s^2" XXX
+ SG_ SLOT2_QUAL_LEVEL : 152|7@1+ (1,0) [0|100] "%" XXX
+ SG_ SLOT2_REL_POS_X : 192|13@1+ (0.05,0) [0|409.55] "m" XXX
+ SG_ SLOT2_REL_POS_Y : 206|12@1+ (0.05,-102.4) [-102.4|102.35] "m" XXX
+ SG_ SLOT2_REL_VEL_X : 219|12@1+ (0.05,-100) [-100|104.75] "m/s" XXX
+ SG_ SLOT2_REL_VEL_Y : 232|10@1+ (0.05,-25) [-25|26.15] "m/s" XXX
+ SG_ SLOT2_REL_ACCEL_X : 243|9@1- (0.05,0) [-12.8|12.75] "m/s^2" XXX
 """)
 
   f.write(f"""CM_ BO_ {addr} "Corner radar object payload on bus 1. Only signals consumed by Hyundai radar_interface are defined.";
@@ -65,5 +73,5 @@ if __name__ == "__main__":
     f.write(HEADER)
     f.write('BA_DEF_ BO_  "GenMsgCycleTime" INT 0 100000;\n')
     f.write('BA_DEF_DEF_  "GenMsgCycleTime" 0;\n')
-    for addr in range(0x235, 0x249):
+    for addr in range(0x180, 0x185):
       write_object_msg(f, addr)
