@@ -44,6 +44,9 @@ DANGER_ZONE_COST = 100.
 CRASH_DISTANCE = .25
 LEAD_DANGER_FACTOR = 0.8 # 0.75
 LIMIT_COST = 1e6
+PRED_DANGER_MARGIN_BP = [-5.0, -3.0, -1.0, 0.0]
+PRED_DANGER_A_CHANGE_COST = [20.0, 50.0, 120.0, A_CHANGE_COST]
+PRED_DANGER_A_CHANGE_COST_RECOVER = 20.0
 ACADOS_SOLVER_TYPE = 'SQP_RTI'
 
 
@@ -55,6 +58,7 @@ T_IDXS_LST = [index_function(idx, max_val=MAX_T, max_idx=N) for idx in range(N+1
 
 T_IDXS = np.array(T_IDXS_LST)
 FCW_IDXS = T_IDXS < 5.0
+PRED_DANGER_IDXS = (T_IDXS > 0.2) & (T_IDXS < 3.0)
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
 COMFORT_BRAKE = 2.5
 STOP_DISTANCE = 6.0
@@ -247,6 +251,7 @@ class LongitudinalMpc:
     self.t_follow = 1.0
     self.desired_distance = 0.0
     self.lead_danger_factor = LEAD_DANGER_FACTOR
+    self.predicted_danger_margin = 1e3
 
 
   def reset(self):
@@ -269,6 +274,7 @@ class LongitudinalMpc:
     self.last_cloudlog_t = 0
     self.status = False
     self.crash_cnt = 0.0
+    self.predicted_danger_margin = 1e3
     self.solution_status = 0
     # timers
     self.solve_time = 0.0
@@ -307,6 +313,26 @@ class LongitudinalMpc:
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner cost set')
     self.set_cost_weights(cost_weights, constraint_cost_weights)
+
+  def apply_predicted_danger_a_change_cost(self, lead, base_a_change_cost, lead_obstacle, t_follow, comfort_brake, stop_distance):
+    self.predicted_danger_margin = 1e3
+    if not lead.status:
+      target_a_change_cost = base_a_change_cost
+    else:
+      safe_distance = get_safe_obstacle_distance(self.x_sol[:,1], t_follow, comfort_brake, stop_distance)
+      danger_margin = lead_obstacle - self.x_sol[:,0] - self.lead_danger_factor * safe_distance
+      self.predicted_danger_margin = float(np.min(danger_margin[PRED_DANGER_IDXS]))
+
+      danger_a_change_cost = float(np.interp(self.predicted_danger_margin,
+                                             PRED_DANGER_MARGIN_BP,
+                                             PRED_DANGER_A_CHANGE_COST))
+      target_a_change_cost = min(base_a_change_cost, danger_a_change_cost)
+
+    if target_a_change_cost < self.a_change_cost:
+      self.a_change_cost = target_a_change_cost
+    else:
+      self.a_change_cost = min(target_a_change_cost,
+                               self.a_change_cost + PRED_DANGER_A_CHANGE_COST_RECOVER)
 
   def set_cur_state(self, v, a):
     v_prev = self.x0[1]
@@ -429,9 +455,9 @@ class LongitudinalMpc:
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
       if radarstate.leadOne.status:
-        self.a_change_cost = np.interp(abs(self.j_lead), [0.3, 2.0], [A_CHANGE_COST, 20])
+        base_a_change_cost = float(np.interp(abs(self.j_lead), [0.3, 2.0], [A_CHANGE_COST, 20]))
       else:
-        self.a_change_cost = A_CHANGE_COST
+        base_a_change_cost = A_CHANGE_COST
 
       #safe_distance = lead_0_obstacle[0] - get_safe_obstacle_distance(v_ego, comfort_brake, stop_distance)
       self.lead_danger_factor = LEAD_DANGER_FACTOR #np.interp(safe_distance, [-30.0, 0.0], [0.9, LEAD_DANGER_FACTOR]) # ?닿구?곸슜?섎땲, ?ш퀬諛⑹???媛먯냽???덈Т 湲됱젙嫄고븯?붽쾬 媛숈쓬.
@@ -471,6 +497,9 @@ class LongitudinalMpc:
     self.t_follow = t_follow
 
     self.run()
+    if mode == 'acc':
+      self.apply_predicted_danger_a_change_cost(radarstate.leadOne, base_a_change_cost, lead_0_obstacle, t_follow, comfort_brake, stop_distance)
+
     if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and
             radarstate.leadOne.modelProb > 0.9):
       self.crash_cnt += 1
