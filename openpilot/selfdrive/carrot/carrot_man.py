@@ -1029,14 +1029,18 @@ class CarrotMan:
 
             if onroad_tmux_captured and networkConnected and now >= onroad_tmux_next_attempt_at:
               upload_target = self.resolve_tmux_upload_target()
-              ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True) if upload_target["kind"] == "carrot" else False
-              http_response = self.send_tmux_http("onroad", send_settings = True, target=upload_target)
-              http_ok = http_response is not None and getattr(http_response, "ok", False)
-              if ftp_ok or http_ok:
-                print(f"[carrot_man] onroad tmux upload complete: ftp_ok={ftp_ok}, http_ok={http_ok}")
+              if upload_target["kind"] == "skip":
+                print(f"[carrot_man] onroad tmux upload failed: {upload_target['reason']}")
                 is_tmux_sent = True
               else:
-                onroad_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
+                ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True) if upload_target["kind"] == "carrot" else False
+                http_response = self.send_tmux_http("onroad", send_settings = True, target=upload_target)
+                http_ok = http_response is not None and getattr(http_response, "ok", False)
+                if ftp_ok or http_ok:
+                  print(f"[carrot_man] onroad tmux upload complete: ftp_ok={ftp_ok}, http_ok={http_ok}")
+                  is_tmux_sent = True
+                else:
+                  onroad_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
           carrot_exception = self.params.get("CarrotException")
           if carrot_exception in ["exception", "log", "tmux_send"] and pending_tmux_reason is None and now >= pending_tmux_next_attempt_at:
             if self.make_tmux_data():
@@ -1049,17 +1053,24 @@ class CarrotMan:
 
           if pending_tmux_reason is not None and networkConnected and now >= pending_tmux_next_attempt_at:
             upload_target = self.resolve_tmux_upload_target()
-            ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", pending_tmux_reason) if upload_target["kind"] == "carrot" else False
-            http_response = self.send_tmux_http(pending_tmux_reason, send_settings = False, target=upload_target)
-            http_ok = http_response is not None and getattr(http_response, "ok", False)
-            if ftp_ok or http_ok:
-              print(f"[carrot_man] tmux upload complete for {pending_tmux_reason}: ftp_ok={ftp_ok}, http_ok={http_ok}")
+            if upload_target["kind"] == "skip":
+              print(f"[carrot_man] tmux upload failed for {pending_tmux_reason}: {upload_target['reason']}")
               self.params.put("CarrotException", "")
               pending_tmux_reason = None
               pending_tmux_next_attempt_at = 0.0
               reset_carrot_exception_tmux_send_queue()
             else:
-              pending_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
+              ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", pending_tmux_reason) if upload_target["kind"] == "carrot" else False
+              http_response = self.send_tmux_http(pending_tmux_reason, send_settings = False, target=upload_target)
+              http_ok = http_response is not None and getattr(http_response, "ok", False)
+              if ftp_ok or http_ok:
+                print(f"[carrot_man] tmux upload complete for {pending_tmux_reason}: ftp_ok={ftp_ok}, http_ok={http_ok}")
+                self.params.put("CarrotException", "")
+                pending_tmux_reason = None
+                pending_tmux_next_attempt_at = 0.0
+                reset_carrot_exception_tmux_send_queue()
+              else:
+                pending_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
         elif 'echo_cmd' in json_obj:
           try:
             result = subprocess.run(json_obj['echo_cmd'], shell=True, capture_output=True, text=False)
@@ -1083,7 +1094,10 @@ class CarrotMan:
           http_response = self.send_tmux_http("tmux_send", target=upload_target) if tmux_created else None
           http_ok = http_response is not None and getattr(http_response, "ok", False)
           result = "success" if ftp_ok or http_ok else "failed"
-          echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": result, "ftp_ok": ftp_ok, "http_ok": http_ok})
+          echo_obj = {"tmux_send": json_obj['tmux_send'], "result": result, "ftp_ok": ftp_ok, "http_ok": http_ok}
+          if upload_target["kind"] == "skip":
+            echo_obj["error"] = upload_target["reason"]
+          echo = json.dumps(echo_obj)
           socket.send(echo.encode())
       except Exception as e:
         print(f"carrot_cmd_zmq error: {e}")
