@@ -33,6 +33,11 @@ ACCEL_MAX = 2.5
 ACCEL_MIN = -4.0 #3.5
 FRICTION_THRESHOLD = 0.3
 
+CORNER_RADAR_SLOT_TRACK_RANGES = ((200, 220), (240, 250))
+CORNER_RADAR_SLOT_DISCONTINUITY_D_REL_M = 8.0
+CORNER_RADAR_SLOT_DISCONTINUITY_Y_REL_M = 1.5
+CORNER_RADAR_SLOT_DISCONTINUITY_V_REL_MPS = 4.0
+
 NEURAL_PARAMS_PATH = os.path.join(BASEDIR, 'torque_data/neural_ff_weights.json')
 TORQUE_NN_MODEL_PATH = os.path.join(BASEDIR, 'torque_data/lat_models')
 
@@ -202,9 +207,13 @@ def get_nn_model(car, eps_firmware) -> tuple[FluxModel | None, float]:
     model = FluxModel(model)
   return model
 
+def radar_track_id_is_reused_corner_slot(track_id: int) -> bool:
+  return any(start <= track_id < end for start, end in CORNER_RADAR_SLOT_TRACK_RANGES)
+
 class MyTrack:
   def __init__(self, track_id: int, radar_point, dt: float):
     self.track_id = track_id
+    self.reused_corner_slot = radar_track_id_is_reused_corner_slot(track_id)
     self.cnt = 0
     self.dRel = radar_point.dRel
     self.vRel = radar_point.vRel
@@ -236,19 +245,34 @@ class MyTrack:
     self.jLead_avg.x = self.jLead
     self.yRel_avg.x = self.yRel
     self.yvRel_avg.x = self.yvRel
+
+  def is_discontinuous_corner_slot(self, radar_point) -> bool:
+    if not self.reused_corner_slot:
+      return False
+    return (
+      abs(radar_point.dRel - self.dRel) > CORNER_RADAR_SLOT_DISCONTINUITY_D_REL_M
+      or abs(radar_point.yRel - self.yRel) > CORNER_RADAR_SLOT_DISCONTINUITY_Y_REL_M
+      or abs(radar_point.vRel - self.vRel) > CORNER_RADAR_SLOT_DISCONTINUITY_V_REL_MPS
+    )
         
   def update(self, radar_point, a_ego):
     if not radar_point.measured:
       if self.cnt > 0:
         self.init_point(radar_point)
       self.cnt = 0
-    elif self.cnt < 1:
+    elif self.cnt < 1 or self.is_discontinuous_corner_slot(radar_point):
       self.init_point(radar_point)
       self.cnt += 1
     else:      
       self.vLead = radar_point.vLead
-      self.yRel = self.yRel_avg.update(radar_point.yRel)
-      self.yvRel = self.yvRel_avg.update(radar_point.yvRel)
+      if self.reused_corner_slot:
+        self.yRel = radar_point.yRel
+        self.yvRel = radar_point.yvRel
+        self.yRel_avg.x = self.yRel
+        self.yvRel_avg.x = self.yvRel
+      else:
+        self.yRel = self.yRel_avg.update(radar_point.yRel)
+        self.yvRel = self.yvRel_avg.update(radar_point.yvRel)
 
       if True: #math.isnan(radar_point.aRel): # 
         v_lead_filtered = self.vLead_avg.update(self.vLead)
