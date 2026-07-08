@@ -385,6 +385,8 @@ def vehicle_distance_label(vehicle: VehicleBox) -> str:
         return ""
     distance = f"{vehicle_distance_m(vehicle):.0f} m"
     if (vehicle.primary or vehicle.cut_in) and vehicle.label:
+        if vehicle.label in ("L1", "L2"):
+            return distance
         return f"{vehicle.label} {distance}"
     return distance
 
