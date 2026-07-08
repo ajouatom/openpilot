@@ -1,22 +1,29 @@
 * text=auto
 
-# to move existing files into LFS:
-# git add --renormalize .
+# Large binaries stay in Git LFS to keep clones small.
 *.onnx filter=lfs diff=lfs merge=lfs -text
-*.svg filter=lfs diff=lfs merge=lfs -text
-*.png filter=lfs diff=lfs merge=lfs -text
-*.gif filter=lfs diff=lfs merge=lfs -text
-*.ttf filter=lfs diff=lfs merge=lfs -text
-*.otf filter=lfs diff=lfs merge=lfs -text
-*.wav filter=lfs diff=lfs merge=lfs -text
-
-# Keep these historical carrot files as regular blobs. They were already shipped
-# this way before the package-layout squash; converting them to LFS pointers
-# makes existing devices see local changes and blocks git pull.
-openpilot/selfdrive/carrot/web/assets/img_chffr_wheel.png -filter -diff -merge -text
-openpilot/selfdrive/carrot/web/assets/speed_bg.png -filter -diff -merge -text
-openpilot/selfdrive/modeld/models/dmonitoring_model.onnx -filter -diff -merge -text
-openpilot/selfdrive/ui/installer/inter-ascii.ttf -filter -diff -merge -text
-
 selfdrive/car/tests/test_models_segs.txt filter=lfs diff=lfs merge=lfs -text
 system/hardware/tici/updater filter=lfs diff=lfs merge=lfs -text
+
+# Image / font / sound types are shipped as REAL blobs in this fork. Declaring
+# them as LFS while the committed blob is real content made git-lfs report
+# phantom "modified" files ("Encountered files that should have been pointers,
+# but weren't") and blocked git pull on agnos. So they are NOT LFS by type.
+# -text also keeps them out of EOL renormalization.
+*.svg -filter -diff -merge -text
+*.png -filter -diff -merge -text
+*.gif -filter -diff -merge -text
+*.ttf -filter -diff -merge -text
+*.otf -filter -diff -merge -text
+*.wav -filter -diff -merge -text
+
+# The few assets that ARE stored as LFS pointers must stay LFS, otherwise the
+# pointer text would be checked out as the file. These override the type rules
+# above (more specific path wins).
+docs/assets/comma-logo.png filter=lfs diff=lfs merge=lfs -text
+openpilot/tools/cabana/assets/cabana-icon.png filter=lfs diff=lfs merge=lfs -text
+openpilot/selfdrive/carrot/web/assets/alert_camera.svg filter=lfs diff=lfs merge=lfs -text
+openpilot/selfdrive/carrot/web/assets/alert_police.svg filter=lfs diff=lfs merge=lfs -text
+
+# dmonitoring model was already shipped as a real blob (supercombo stays LFS).
+openpilot/selfdrive/modeld/models/dmonitoring_model.onnx -filter -diff -merge -text

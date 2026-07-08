@@ -398,9 +398,9 @@
         )}</p>
         <label class="web-sound-dialog__toggle">
           <span>${getUIText("web_sound_toggle", "Play sounds in this browser")}</span>
-          <span class="web-settings-switch">
-            <input class="web-settings-switch__input" type="checkbox" data-web-sound-toggle ${enabled ? "checked" : ""} />
-            <span class="web-settings-switch__slider" aria-hidden="true"></span>
+          <span class="c-switch c-switch--sm">
+            <input class="c-switch__input" type="checkbox" data-web-sound-toggle ${enabled ? "checked" : ""} />
+            <span class="c-switch__track" aria-hidden="true"></span>
           </span>
         </label>
         <label class="web-sound-dialog__volume">
