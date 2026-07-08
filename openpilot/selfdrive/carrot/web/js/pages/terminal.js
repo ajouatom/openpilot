@@ -493,10 +493,12 @@ function initTerminalPage() {
   requestAnimationFrame(updateTerminalOverflowState);
   window.setTimeout(updateTerminalToastAnchor, 90);
   connectTerminal(false);
+  window.CarrotSupportTerminal?.init?.();
 }
 
 function teardownTerminalPage() {
   terminalPageActive = false;
+  window.CarrotSupportTerminal?.teardown?.();
   clearTerminalReconnectTimer();
   closeTerminalSocket();
   document.documentElement.style.removeProperty("--terminal-vv-height");

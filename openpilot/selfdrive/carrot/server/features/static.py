@@ -5,7 +5,7 @@ from aiohttp import web
 
 from ..config import SOUND_ASSETS_DIR, TRAINING_ASSETS_DIR, WEB_DIR
 from ..services.params import get_param_values
-from ..services.web_settings import read_web_settings
+from ..services.web_settings import read_web_settings, web_settings_client_spec
 
 
 _LANGUAGES_JSON_PATH = os.path.join(
@@ -38,6 +38,7 @@ def _build_bootstrap_payload() -> dict:
     sound_language = "auto"
   return {
     "webSettings": read_web_settings(),
+    "webSettingsSpec": web_settings_client_spec(),
     "deviceLanguage": device_language,
     "soundLanguage": sound_language,
     "deviceLanguages": _load_device_languages(),

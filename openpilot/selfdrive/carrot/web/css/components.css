@@ -1,3 +1,81 @@
+/* ── Switch (toggle atom) ─────────────────────────────────────
+   The one switch used across the app. Compose it inside any row:
+
+     <label class="row">
+       <span class="row__text">…</span>
+       <span class="c-switch">
+         <input class="c-switch__input" type="checkbox">
+         <span class="c-switch__track" aria-hidden="true"></span>
+       </span>
+     </label>
+
+   Size comes from --switch-w / --switch-h (tokens.css). Dense surfaces
+   add `.c-switch--sm`. Disabled state is driven by the native `:disabled`
+   on the input, so callers only toggle the attribute. */
+.c-switch {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 var(--switch-w);
+  width: var(--switch-w);
+  height: var(--switch-h);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.c-switch--sm {
+  --switch-w: 44px;
+  --switch-h: 28px;
+}
+
+.c-switch__input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.c-switch__track {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 52%, transparent);
+  border-radius: var(--r-round);
+  background: var(--md-surface-cont-h);
+  transition: background var(--motion-quick) var(--ease-standard),
+              border-color var(--motion-quick) var(--ease-standard);
+}
+
+.c-switch__track::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: calc(var(--switch-h) - 8px);
+  height: calc(var(--switch-h) - 8px);
+  border-radius: var(--r-round);
+  background: var(--md-on-surface-var);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--motion-base) var(--ease-standard),
+              background var(--motion-quick) var(--ease-standard);
+}
+
+.c-switch__input:checked + .c-switch__track {
+  border-color: color-mix(in srgb, var(--md-primary) 74%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 80%, var(--md-surface-cont-h));
+}
+
+.c-switch__input:checked + .c-switch__track::after {
+  transform: translateX(calc(var(--switch-w) - var(--switch-h)));
+  background: var(--md-on-primary);
+}
+
+.c-switch__input:focus-visible + .c-switch__track {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.c-switch__input:disabled + .c-switch__track {
+  opacity: var(--state-disabled-opacity);
+}
+
 /* ── App Toast / Dialog ──────────────────────────────────── */
 .app-toast-host {
   position: fixed;

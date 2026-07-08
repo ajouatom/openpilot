@@ -20,7 +20,7 @@ from openpilot.cereal import messaging
 from ..realtime.transports import CameraWsHub, RawWsHub
 from . import features
 from openpilot.carrot.model_selector.web import routes as model_selector_routes
-from .config import WEB_DIR
+from .config import WEB_DIR, migrate_legacy_carrot_state
 from .live_runtime.broker import RealtimeBroker
 from .services.auto_update import auto_update_loop
 from .services.git_status import git_status_loop
@@ -152,6 +152,10 @@ async def on_cleanup(app: web.Application) -> None:
 
 
 def make_app() -> web.Application:
+  # Bring forward user state (web settings, YouTube stream key, favorites) from
+  # the old in-repo location before any service reads it, so upgrading devices
+  # keep their settings instead of seeing defaults once.
+  migrate_legacy_carrot_state()
   app = web.Application(middlewares=[log_mw], client_max_size=VISION_DIAG_UPLOAD_MAX_BYTES)
   app.on_startup.append(on_startup)
   app.on_cleanup.append(on_cleanup)

@@ -1,4 +1,5 @@
 import os
+import shutil
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
@@ -19,9 +20,16 @@ DEFAULT_SETTINGS_PATH = os.environ.get(
   os.path.join(os.path.dirname(ROOT_DIR), "carrot_settings.json"),
 )
 
-# Carrot data dirs
-CARROT_DATA_DIR = "/data/openpilot/openpilot/selfdrive/carrot/data"
+# Carrot data dirs.
+# Kept OUTSIDE the git working tree so user state (web settings, YouTube stream
+# key, favorites/profiles) survives `git reset --hard` + `git clean -xfd`, which
+# the reset/sync tools run and which wipes untracked files. The old location was
+# inside the repo (selfdrive/carrot/data) and got erased on every reset; files
+# there are migrated once by migrate_legacy_carrot_state().
+CARROT_DATA_DIR = os.environ.get("CARROT_DATA_DIR", "/data/carrot")
 CARROT_STATE_DIR = os.path.join(CARROT_DATA_DIR, "state")
+# Pre-relocation in-repo path (what the old hardcoded CARROT_DATA_DIR pointed at).
+CARROT_LEGACY_STATE_DIR = "/data/openpilot/openpilot/selfdrive/carrot/data/state"
 CARROT_GIT_STATE_PATH = os.path.join(CARROT_STATE_DIR, "git.json")
 CARROT_TOOL_JOBS_STATE_PATH = os.path.join(CARROT_STATE_DIR, "tool_jobs.json")
 CARROT_WEB_SETTINGS_PATH = os.path.join(CARROT_STATE_DIR, "web_settings.json")
@@ -73,3 +81,36 @@ PARAMS_BACKUP_PATH = "/data/media/params_backup.json"
 
 # UI
 UNIT_CYCLE = [1, 2, 5, 10, 50, 100]
+
+
+# Files holding USER state that must survive a repo reset. Migrated once from the
+# legacy in-repo location to CARROT_STATE_DIR under /data.
+_LEGACY_STATE_FILES = (
+  "web_settings.json",
+  "youtube_live.json",
+  "youtube_live_secret.json",
+  "setting_favorites.json",
+  "setting_profiles.json",
+  "git.json",
+  "tool_jobs.json",
+)
+
+
+def migrate_legacy_carrot_state() -> None:
+  """One-time copy of user state from the old in-repo path (which `git clean
+  -xfd` wiped on reset/sync) to CARROT_STATE_DIR under /data. Idempotent and
+  best-effort: copies a file only when the destination is missing, so it never
+  clobbers newer settings and is safe to call on every startup."""
+  try:
+    if os.path.abspath(CARROT_LEGACY_STATE_DIR) == os.path.abspath(CARROT_STATE_DIR):
+      return
+    if not os.path.isdir(CARROT_LEGACY_STATE_DIR):
+      return
+    os.makedirs(CARROT_STATE_DIR, exist_ok=True)
+    for name in _LEGACY_STATE_FILES:
+      src = os.path.join(CARROT_LEGACY_STATE_DIR, name)
+      dst = os.path.join(CARROT_STATE_DIR, name)
+      if os.path.isfile(src) and not os.path.exists(dst):
+        shutil.copy2(src, dst)
+  except Exception:
+    pass

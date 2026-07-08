@@ -175,8 +175,10 @@ function renderDeviceToggleViewRow(title, checked, descr = "") {
         <div class="ctrl">
           <span class="device-toggle device-toggle--readonly">
             <span class="ctrl">
-              <input type="checkbox" class="device-toggle__input" ${checked ? "checked" : ""} disabled />
-              <span class="device-toggle__slider"></span>
+              <span class="c-switch">
+                <input type="checkbox" class="c-switch__input" ${checked ? "checked" : ""} disabled />
+                <span class="c-switch__track" aria-hidden="true"></span>
+              </span>
             </span>
           </span>
         </div>
@@ -199,8 +201,10 @@ function renderDeviceToggleRow(param, title, checked, options = {}) {
             <span class="title">${escapeHtml(title)}</span>
           </span>
           <span class="ctrl">
-            <input type="checkbox" class="device-toggle__input" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />
-            <span class="device-toggle__slider"></span>
+            <span class="c-switch">
+              <input type="checkbox" class="c-switch__input" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />
+              <span class="c-switch__track" aria-hidden="true"></span>
+            </span>
           </span>
         </label>
       </div>
