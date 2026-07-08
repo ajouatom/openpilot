@@ -57,8 +57,7 @@ def get_corner_object_can_parser(CP, enabled):
     return None
 
   CAN = CanBus(CP)
-  messages = [("CORNER_RADAR_235_STATUS_230", 33)]
-  messages += [(f"CORNER_RADAR_235_OBJECTS_{addr:x}", 33) for addr in range(CORNER_OBJECT_235_START_ADDR, CORNER_OBJECT_235_START_ADDR + CORNER_OBJECT_235_MSG_COUNT)]
+  messages = [(f"CORNER_RADAR_235_OBJECTS_{addr:x}", 33) for addr in range(CORNER_OBJECT_235_START_ADDR, CORNER_OBJECT_235_START_ADDR + CORNER_OBJECT_235_MSG_COUNT)]
   return CANParser(CORNER_OBJECT_235_DBC, messages, CAN.ACAN)
 
 def get_corner_object_180_can_parser(CP, enabled):
