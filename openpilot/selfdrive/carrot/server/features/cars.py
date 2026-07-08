@@ -1,4 +1,5 @@
 import glob
+import importlib
 import os
 from typing import Dict, List, Tuple
 
@@ -6,6 +7,15 @@ from aiohttp import web
 
 
 SUPPORTED_CAR_GLOB = "/data/params/d/SupportedCars*"
+SUPPORTED_CAR_BRANDS = (
+  "hyundai",
+  "gm",
+  "toyota",
+  "mazda",
+  "ford",
+  "volkswagen",
+  "tesla",
+)
 
 
 def load_supported_cars() -> Tuple[List[str], Dict[str, List[str]]]:
@@ -25,6 +35,20 @@ def load_supported_cars() -> Tuple[List[str], Dict[str, List[str]]]:
           maker, rest = parts[0], parts[1].strip()
           full = f"{maker} {rest}"
           makers.setdefault(maker, set()).add(full)
+    except Exception:
+      continue
+
+  for brand in SUPPORTED_CAR_BRANDS:
+    try:
+      values = importlib.import_module(f"opendbc.car.{brand}.values")
+      for platform in values.CAR:
+        for doc in platform.config.car_docs:
+          line = str(doc.name).strip()
+          parts = line.split(" ", 1)
+          if len(parts) < 2:
+            continue
+          maker = parts[0]
+          makers.setdefault(maker, set()).add(line)
     except Exception:
       continue
 
