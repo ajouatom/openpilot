@@ -636,10 +636,11 @@ class RadarD:
 
       md = sm['modelV2']
 
+      corner_radar_enabled = self.enable_corner_radar > 0
       alive_tracks = {tid: trk for tid, trk in self.tracks.items() if trk.measured and trk.cnt > 2 }
       front_tracks = {tid: trk for tid, trk in alive_tracks.items() if not self._is_corner_track(trk)}
-      corner_tracks = {tid: trk for tid, trk in alive_tracks.items() if self._is_corner_track(trk)}
-      self.corner_tracks_available = any(self._is_corner_track(trk) for trk in alive_tracks.values())
+      corner_tracks = {tid: trk for tid, trk in alive_tracks.items() if corner_radar_enabled and self._is_corner_track(trk)}
+      self.corner_tracks_available = len(corner_tracks) > 0
 
       self.radar_state.leadOne, self.radar_detected = self.get_lead(sm['carState'], md, front_tracks, 0, leads_v3[0], model_v_ego, self.lead_prob_filters[0].x, low_speed_override=False)
       self.radar_state.leadTwo, _ = self.get_lead(sm['carState'], md, front_tracks, 1, leads_v3[1], model_v_ego, self.lead_prob_filters[1].x, low_speed_override=False)
@@ -650,7 +651,7 @@ class RadarD:
       self.compute_leads(self.v_ego, compute_tracks, md, self.lead_prob_filters[0].x, front_tracks)
       if self.leadTwo is not None:
         self.radar_state.leadTwo = self.leadTwo
-      if self.enable_radar_tracks >= 3 or self.corner_tracks_available:
+      if self.enable_radar_tracks >= 3 or (self.cornerLeadStopped and self.cornerLeadStopped.get("status")):
         self._pick_lead_one_from_state()
 
   def publish(self, pm: messaging.PubMaster):
@@ -1039,22 +1040,14 @@ class RadarD:
 
     self.leadTwo = None
     if self.lane_line_available:
-      if self.corner_tracks_available:
-        self.leadCenter = min(
-            (ld for ld in corner_center_list if ld['vLead'] > 2 and ld['radar'] and ld['dRel'] > 3.5),
-            key=lambda d: d['dRel'],
-            default=None
-        )
-      else:
-        self.leadCenter = min(
-            (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and ld['dRel'] > 3.5),
-            key=lambda d: d['dRel'],
-            default=None
-        )
+      self.leadCenter = min(
+          (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and ld['dRel'] > 3.5),
+          key=lambda d: d['dRel'],
+          default=None
+      )
       if self.radar_state.leadOne.status and self.radar_state.leadOne.radar:
-        lead_two_candidates = corner_center_list if self.corner_tracks_available else center_list
         self.leadTwo = min(
-            (ld for ld in lead_two_candidates if ld['vLead'] > 2 and ld['radar'] and self.radar_state.leadOne.dRel < ld['dRel'] < 80),
+            (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and self.radar_state.leadOne.dRel < ld['dRel'] < 80),
             key=lambda d: d['dRel'],
             default=None
         )
@@ -1067,11 +1060,7 @@ class RadarD:
     else:
       self.leadCenter = None
 
-    if (
-      self._lead_one_has_front_radar_vision_match() and
-      self.leadCutIn and self.leadCutIn.get("status") and self.detect_cut_in and
-      self._corner_lead_clearly_closer_than_lead_one(self.leadCutIn)
-    ):
+    if self.leadCutIn and self.leadCutIn.get("status") and self.detect_cut_in:
       self.leadTwo = copy.deepcopy(self.leadCutIn)
       self.leadTwo["modelProb"] = 0.03
 
@@ -1100,13 +1089,7 @@ class RadarD:
     chosen = None
     detected = self.radar_detected
 
-    if self.leadCutIn and self.leadCutIn.get("status") and self.detect_cut_in:
-      if self._cutin_can_replace_lead_one(self.leadCutIn):
-        chosen = self.leadCutIn
-        chosen["modelProb"] = 0.03
-        detected = True
-
-    elif self.cornerLeadStopped and self.cornerLeadStopped.get("status"):
+    if self.cornerLeadStopped and self.cornerLeadStopped.get("status"):
       if self._corner_stopped_can_replace_lead_one(self.cornerLeadStopped):
         chosen = self.cornerLeadStopped
         chosen["modelProb"] = 0.04
