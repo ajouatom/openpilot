@@ -195,43 +195,57 @@ class RadarInterface(RadarInterfaceBase):
       corner_180_ready = self.trigger_msg_corner_objects_180 in self.updated_corner_objects_180
 
     scc_ready = not self.radar_tracks and self.frame % 5 == 0 and self.rcp_scc is not None
-    if track_ready or corner_ready or corner_180_ready or scc_ready:
-      if track_ready:
-        self._update(self.updated_tracks)
-        self.updated_tracks.clear()
 
-      if self.rcp_scc is not None:
-        self._update_scc(self.updated_scc)
-      if self.rcp_corner_objects is not None:
-        if self.updated_corner_objects:
-          self._update_corner_objects(self.updated_corner_objects)
-          self.corner_object_missed_updates = 0
-        else:
-          self.corner_object_missed_updates += 1
-          if self.corner_object_missed_updates > 10:
-            self._clear_corner_objects()
-      if self.rcp_corner_objects_180 is not None:
-        if self.updated_corner_objects_180:
-          self._update_corner_objects_180(self.updated_corner_objects_180)
-          self.corner_object_180_missed_updates = 0
-        else:
-          self.corner_object_180_missed_updates += 1
-          if self.corner_object_180_missed_updates > 10:
-            self._clear_corner_objects_180()
-      self.updated_scc.clear()
+    if track_ready:
+      self._update(self.updated_tracks)
+      self.updated_tracks.clear()
+
+    if corner_ready:
+      self._update_corner_objects(self.updated_corner_objects)
+      self.corner_object_missed_updates = 0
       self.updated_corner_objects.clear()
+
+    if corner_180_ready:
+      self._update_corner_objects_180(self.updated_corner_objects_180)
+      self.corner_object_180_missed_updates = 0
       self.updated_corner_objects_180.clear()
 
-      ret = structs.RadarData()
-      if ((self.rcp_tracks is not None and self.radar_tracks and not self.rcp_tracks.can_valid) or
-          (self.rcp_scc is not None and not self.corner_objects_available and not self.rcp_scc.can_valid) or
-          (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid) or
-          (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid)):
-        ret.errors.canError = True
-      ret.points = list(self.pts.values())
-      return ret
+    # Corner radar runs at its own cadence. Do not let corner-only frames publish
+    # RadarData, since liveTracks uses a fixed radarTimeStep for aLead/jLead.
+    publish_ready = track_ready or scc_ready
+    if not publish_ready:
+      return None
 
-    return None      
+    if self.rcp_scc is not None:
+      self._update_scc(self.updated_scc)
+    if self.rcp_corner_objects is not None:
+      if self.updated_corner_objects:
+        self._update_corner_objects(self.updated_corner_objects)
+        self.corner_object_missed_updates = 0
+      else:
+        self.corner_object_missed_updates += 1
+        if self.corner_object_missed_updates > 10:
+          self._clear_corner_objects()
+    if self.rcp_corner_objects_180 is not None:
+      if self.updated_corner_objects_180:
+        self._update_corner_objects_180(self.updated_corner_objects_180)
+        self.corner_object_180_missed_updates = 0
+      else:
+        self.corner_object_180_missed_updates += 1
+        if self.corner_object_180_missed_updates > 10:
+          self._clear_corner_objects_180()
+    self.updated_scc.clear()
+    self.updated_corner_objects.clear()
+    self.updated_corner_objects_180.clear()
+
+    ret = structs.RadarData()
+    if ((self.rcp_tracks is not None and self.radar_tracks and not self.rcp_tracks.can_valid) or
+        (self.rcp_scc is not None and not self.corner_objects_available and not self.rcp_scc.can_valid) or
+        (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid) or
+        (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid)):
+      ret.errors.canError = True
+    ret.points = list(self.pts.values())
+    return ret
 
   def _update(self, updated_messages):
 
