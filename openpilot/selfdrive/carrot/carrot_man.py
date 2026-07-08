@@ -800,7 +800,21 @@ class CarrotMan:
         except Exception:
           pass
 
-  def send_tmux_http(self, tmux_why, send_settings=False):
+  def resolve_tmux_upload_target(self):
+    try:
+      settings = read_web_settings() if callable(read_web_settings) else {}
+    except Exception as e:
+      print(f"tmux upload settings read error: {e}")
+      settings = {}
+    if str(settings.get("log_upload_target") or "").strip().lower() != "toss":
+      return {"kind": "carrot"}
+    base_url = str(settings.get("toss_upload_url") or "").strip().rstrip("/")
+    token = str(settings.get("toss_upload_token") or "").strip()
+    if not base_url or not token:
+      return {"kind": "skip", "reason": "toss selected but URL/token not configured"}
+    return {"kind": "toss", "base_url": base_url, "token": token}
+
+  def send_tmux_http(self, tmux_why, send_settings=False, target=None):
     def get_private_ip_by_iface(name="wlan0"):
       addrs = psutil.net_if_addrs().get(name, [])
 
@@ -818,19 +832,18 @@ class CarrotMan:
       v = Params().get(key) or ""
       return v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
 
+    if target is None:
+      target = self.resolve_tmux_upload_target()
+    if target.get("kind") == "skip":
+      print(f"tmux http upload skipped: {target.get('reason')}")
+      return None
+
     url = "https://tmux.carrotpilot.app/upload"
     headers = {}
     params = {}
-    try:
-      settings = read_web_settings() if callable(read_web_settings) else {}
-      if str(settings.get("log_upload_target") or "").strip().lower() == "toss":
-        base_url = str(settings.get("toss_upload_url") or "").strip().rstrip("/")
-        token = str(settings.get("toss_upload_token") or "").strip()
-        if base_url and token:
-          url = f"{base_url}/api/v1/tmux/upload"
-          headers["Authorization"] = f"Bearer {token}"
-    except Exception as e:
-      print(f"tmux toss settings error: {e}")
+    if target.get("kind") == "toss":
+      url = f"{target['base_url']}/api/v1/tmux/upload"
+      headers["Authorization"] = f"Bearer {target['token']}"
 
     payload = {
       "tmux_why"           : tmux_why,
@@ -1015,8 +1028,9 @@ class CarrotMan:
                 onroad_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
 
             if onroad_tmux_captured and networkConnected and now >= onroad_tmux_next_attempt_at:
-              ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
-              http_response = self.send_tmux_http("onroad", send_settings = True)
+              upload_target = self.resolve_tmux_upload_target()
+              ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True) if upload_target["kind"] == "carrot" else False
+              http_response = self.send_tmux_http("onroad", send_settings = True, target=upload_target)
               http_ok = http_response is not None and getattr(http_response, "ok", False)
               if ftp_ok or http_ok:
                 print(f"[carrot_man] onroad tmux upload complete: ftp_ok={ftp_ok}, http_ok={http_ok}")
@@ -1034,8 +1048,9 @@ class CarrotMan:
               reset_carrot_exception_tmux_send_queue()
 
           if pending_tmux_reason is not None and networkConnected and now >= pending_tmux_next_attempt_at:
-            ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", pending_tmux_reason)
-            http_response = self.send_tmux_http(pending_tmux_reason, send_settings = False)
+            upload_target = self.resolve_tmux_upload_target()
+            ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", pending_tmux_reason) if upload_target["kind"] == "carrot" else False
+            http_response = self.send_tmux_http(pending_tmux_reason, send_settings = False, target=upload_target)
             http_ok = http_response is not None and getattr(http_response, "ok", False)
             if ftp_ok or http_ok:
               print(f"[carrot_man] tmux upload complete for {pending_tmux_reason}: ftp_ok={ftp_ok}, http_ok={http_ok}")
@@ -1063,8 +1078,9 @@ class CarrotMan:
           socket.send(echo.encode())
         elif 'tmux_send' in json_obj:
           tmux_created = self.make_tmux_data()
-          ftp_ok = self.send_tmux(json_obj['tmux_send'], "tmux_send") if tmux_created else False
-          http_response = self.send_tmux_http("tmux_send") if tmux_created else None
+          upload_target = self.resolve_tmux_upload_target()
+          ftp_ok = self.send_tmux(json_obj['tmux_send'], "tmux_send") if tmux_created and upload_target["kind"] == "carrot" else False
+          http_response = self.send_tmux_http("tmux_send", target=upload_target) if tmux_created else None
           http_ok = http_response is not None and getattr(http_response, "ok", False)
           result = "success" if ftp_ok or http_ok else "failed"
           echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": result, "ftp_ok": ftp_ok, "http_ok": http_ok})
