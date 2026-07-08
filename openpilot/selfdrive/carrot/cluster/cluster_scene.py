@@ -389,6 +389,13 @@ def render_scene_forward_m(relative_forward_m: float) -> float:
     return data_scene_forward_m(render_relative_forward_m(relative_forward_m))
 
 
+def detected_vehicle_scene_forward_m(vehicle: DetectedVehicle) -> float:
+    forward_m = render_scene_forward_m(vehicle.longitudinal_m)
+    if vehicle.longitudinal_m > 0.0 and (vehicle.primary or vehicle.cut_in):
+        forward_m += VEHICLE_LENGTH_M * 0.5
+    return forward_m
+
+
 def scene_data_relative_forward_m(forward_m: float) -> float:
     return forward_m - EGO_FORWARD_M
 
@@ -3446,7 +3453,7 @@ def build_cluster_scene(
         detected_vehicle_boxes = tuple(
             vehicle_box(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
-                render_scene_forward_m(detected.longitudinal_m),
+                detected_vehicle_scene_forward_m(detected),
                 state.steering,
                 lane_width_m,
                 vehicle_color_for_detection(detected, theme, state.radar_source_color_mode),
