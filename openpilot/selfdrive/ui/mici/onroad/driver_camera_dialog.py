@@ -47,10 +47,12 @@ class BaseDriverCameraDialog(Widget):
   def show_event(self):
     super().show_event()
     ui_state.params.put_bool("IsDriverViewEnabled", True)
-    self._publish_alert_sound(None)
     device.set_override_interactive_timeout(300)
     ui_state.params.remove("DriverTooDistracted")
-    self._pm = messaging.PubMaster(['selfdriveState'])
+    self._pm = None
+    if ui_state.is_offroad() and not ui_state.params.get_bool("IsOnroad"):
+      self._pm = messaging.PubMaster(['selfdriveState'])
+      self._publish_alert_sound(None)
 
   def hide_event(self):
     super().hide_event()
@@ -108,6 +110,9 @@ class BaseDriverCameraDialog(Widget):
     """Publish selfdriveState with only alertSound field set"""
     if self._pm is None:
       return
+    if ui_state.started or ui_state.params.get_bool("IsOnroad"):
+      self._pm = None
+      return
 
     msg = messaging.new_message('selfdriveState')
     events = []
@@ -120,7 +125,10 @@ class BaseDriverCameraDialog(Widget):
       event_name = EVENT_TO_INT[events[0].name]
       if event_name is not None and event_name in EVENTS and ET.PERMANENT in EVENTS[event_name]:
         msg.selfdriveState.alertSound = EVENTS[event_name][ET.PERMANENT].audible_alert
-    self._pm.send('selfdriveState', msg)
+    try:
+      self._pm.send('selfdriveState', msg)
+    except messaging.MultiplePublishersError:
+      self._pm = None
 
   def _render_dm_alerts(self, rect: rl.Rectangle):
     """Render driver monitoring event names"""
