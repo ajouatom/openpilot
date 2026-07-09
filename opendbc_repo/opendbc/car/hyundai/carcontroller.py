@@ -610,6 +610,9 @@ class CarController(CarControllerBase):
     if CS.out.brakePressed or CS.out.brakeHoldActive:
       return can_sends
     if use_clu11:
+      if CS.clu11 is None:
+        return can_sends
+
       if CC.cruiseControl.cancel:
         can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP))
       elif False: #CC.cruiseControl.resume:

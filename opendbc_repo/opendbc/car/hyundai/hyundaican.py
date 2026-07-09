@@ -388,7 +388,7 @@ def create_frt_radar_opt(packer):
   return packer.make_can_msg("FRT_RADAR11", 0, frt_radar11_values)
 
 def create_clu11_button(packer, frame, clu11, button, CP):
-  values = clu11
+  values = clu11.copy()
   values["CF_Clu_CruiseSwState"] = button
   #values["CF_Clu_AliveCnt1"] = frame % 0x10
   values["CF_Clu_AliveCnt1"] = (values["CF_Clu_AliveCnt1"] + 1) % 0x10
