@@ -92,6 +92,10 @@ CORNER_STOPPED_FAR_IN_LANE_PROB = 0.5
 CORNER_STOPPED_FAR_DREL = 60.0
 CORNER_VISION_KEEP_PROB = 0.75
 FRONT_RADAR_VISION_MATCH_MIN_PROB = 0.4
+CORNER_YAW_COMP_GAIN = 1.0
+CORNER_YAW_COMP_MAX_YAW_RATE = 0.35
+CORNER_YAW_COMP_MAX_YVREL_CORRECTION = 4.0
+CORNER_YAW_COMP_MAX_VREL_CORRECTION = 1.5
 
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
@@ -198,7 +202,7 @@ class Track:
     self._vLead_filt = 0.0
     self._vLead_filt_init = False
 
-  def update(self, md, pt, ready, radar_reaction_factor, radar_lat_factor):
+  def update(self, md, pt, ready, radar_reaction_factor, radar_lat_factor, yaw_rate: float = 0.0, yaw_comp: bool = False):
     prev_measured = self.measured
     prev_dRel = self.dRel
     prev_yRel = self.yRel
@@ -212,6 +216,19 @@ class Track:
     self.aLead = self.aLeadK = pt.aLead
     self.jLead = pt.jLead
     self.yvLead = pt.yvRel
+
+    if yaw_comp and abs(yaw_rate) < CORNER_YAW_COMP_MAX_YAW_RATE:
+      # Convert ego-frame velocities toward a non-rotating ego frame. This keeps
+      # corner radar cut-in prediction from treating ego yaw as target lateral motion.
+      yv_rel_corr = clamp(-yaw_rate * self.dRel * CORNER_YAW_COMP_GAIN,
+                          -CORNER_YAW_COMP_MAX_YVREL_CORRECTION,
+                          CORNER_YAW_COMP_MAX_YVREL_CORRECTION)
+      v_rel_corr = clamp(yaw_rate * self.yRel * CORNER_YAW_COMP_GAIN,
+                         -CORNER_YAW_COMP_MAX_VREL_CORRECTION,
+                         CORNER_YAW_COMP_MAX_VREL_CORRECTION)
+      self.yvLead = pt.yvRel + yv_rel_corr
+      self.vRel = pt.vRel + v_rel_corr
+      self.vLead = self.vLeadK = pt.vLead + v_rel_corr
 
     self.measured = pt.measured
     if not self.measured:
@@ -550,6 +567,17 @@ class RadarD:
     self.cornerLeadStopped = empty_lead()
     self.corner_tracks_available = False
 
+  def _corner_yaw_rate(self, sm: messaging.SubMaster) -> float:
+    if not sm.seen.get('livePose', False):
+      return 0.0
+
+    live_pose = sm['livePose']
+    yaw_rate = float(live_pose.angularVelocityDevice.z)
+    if not (live_pose.inputsOK and live_pose.sensorsOK and live_pose.angularVelocityDevice.valid):
+      return 0.0
+    if not np.isfinite(yaw_rate) or abs(yaw_rate) >= CORNER_YAW_COMP_MAX_YAW_RATE:
+      return 0.0
+    return yaw_rate
 
   def update(self, sm: messaging.SubMaster, rr: car.RadarData):
     self.ready = sm.seen['modelV2']
@@ -581,6 +609,7 @@ class RadarD:
       self.tracks.clear()
     else:
       valid_ids = set()
+      corner_yaw_rate = self._corner_yaw_rate(sm)
       for pt in rr.points:
         track_id = pt.trackId
         valid_ids.add(track_id)
@@ -588,7 +617,12 @@ class RadarD:
         if track_id not in self.tracks:
           self.tracks[track_id] = Track(track_id)
 
-        self.tracks[track_id].update(sm['modelV2'], pt, self.ready, self.radar_reaction_factor, self.radar_lat_factor)
+        yaw_comp = (
+          CORNER_235_TRACK_ID_START <= track_id < CORNER_235_TRACK_ID_END or
+          CORNER_180_TRACK_ID_START <= track_id < CORNER_180_TRACK_ID_END
+        )
+        self.tracks[track_id].update(sm['modelV2'], pt, self.ready, self.radar_reaction_factor,
+                                     self.radar_lat_factor, corner_yaw_rate, yaw_comp)
 
       for tid in list(self.tracks.keys()):
         if tid not in valid_ids:
@@ -1127,7 +1161,8 @@ def main() -> None:
   cloudlog.info("radard got CarParams")
 
   # *** setup messaging
-  sm = messaging.SubMaster(['modelV2', 'carState', 'liveTracks'], poll='modelV2')
+  sm = messaging.SubMaster(['modelV2', 'carState', 'liveTracks', 'livePose'], poll='modelV2',
+                           ignore_alive=['livePose'], ignore_valid=['livePose'])
   #sm = messaging.SubMaster(['modelV2', 'carState', 'liveTracks'])
   pm = messaging.PubMaster(['radarState'])
 
