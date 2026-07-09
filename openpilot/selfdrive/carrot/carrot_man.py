@@ -1216,7 +1216,10 @@ class CarrotMan:
               ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", pending_tmux_reason) if upload_target["kind"] == "carrot" else False
               http_response = self.send_tmux_http(pending_tmux_reason, send_settings = False, target=upload_target)
               http_ok = http_response is not None and getattr(http_response, "ok", False)
-              discord_ok = self.send_tmux_discord(pending_tmux_reason, ftp_ok, http_ok, http_response)
+              # Discord is a carrot-side channel: skip it when toss is selected so
+              # logs stay off the carrot webhook and a Discord success can't mask
+              # a failed toss upload as complete.
+              discord_ok = self.send_tmux_discord(pending_tmux_reason, ftp_ok, http_ok, http_response) if upload_target["kind"] == "carrot" else False
               if ftp_ok or http_ok or discord_ok:
                 print(f"[carrot_man] tmux upload complete for {pending_tmux_reason}: ftp_ok={ftp_ok}, http_ok={http_ok}, discord_ok={discord_ok}")
                 self.params.put("CarrotException", "")
@@ -1247,7 +1250,7 @@ class CarrotMan:
           ftp_ok = self.send_tmux(json_obj['tmux_send'], "tmux_send") if tmux_created and upload_target["kind"] == "carrot" else False
           http_response = self.send_tmux_http("tmux_send", target=upload_target) if tmux_created else None
           http_ok = http_response is not None and getattr(http_response, "ok", False)
-          discord_ok = self.send_tmux_discord("tmux_send", ftp_ok, http_ok, http_response) if tmux_created else False
+          discord_ok = self.send_tmux_discord("tmux_send", ftp_ok, http_ok, http_response) if tmux_created and upload_target["kind"] == "carrot" else False
           result = "success" if ftp_ok or http_ok or discord_ok else "failed"
           echo_obj = {"tmux_send": json_obj['tmux_send'], "result": result, "ftp_ok": ftp_ok, "http_ok": http_ok, "discord_ok": discord_ok}
           if upload_target["kind"] == "skip":
