@@ -88,11 +88,23 @@ def browser_video(segment: str) -> tuple[str, str]:
   if source_name.endswith(".mp4"):
     return source, "video/mp4"
 
-  out = cache_path("video", segment, ".mp4")
+  # 예전 -an 변환으로 만들어진 무음 캐시와 섞이지 않도록 캐시 종류를 분리
+  out = cache_path("video2", segment, ".mp4")
   if os.path.isfile(out) and os.path.getsize(out) > 0:
     return out, "video/mp4"
 
-  result = run_ffmpeg(["-i", source, "-c", "copy", "-an", "-movflags", "+faststart", out], timeout=180.0)
+  # qcamera.ts의 오디오는 loggerd가 AAC로 먹싱하므로(RecordAudio) mp4에 그대로
+  # 복사해도 브라우저에서 재생된다 — 오디오 트랙을 보존한다
+  result = run_ffmpeg(["-i", source, "-c", "copy", "-movflags", "+faststart", out], timeout=180.0)
+  if result.returncode != 0 or not os.path.isfile(out) or os.path.getsize(out) <= 0:
+    try:
+      if os.path.exists(out):
+        os.remove(out)
+    except OSError:
+      pass
+    # 오디오 스트림이 mp4와 호환되지 않는 예외적인 경우엔 기존처럼 오디오 제거로 폴백
+    result = run_ffmpeg(["-i", source, "-c", "copy", "-an", "-movflags", "+faststart", out], timeout=180.0)
+
   if result.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 0:
     return out, "video/mp4"
   try:
