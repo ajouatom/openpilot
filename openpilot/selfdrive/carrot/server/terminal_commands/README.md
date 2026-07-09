@@ -1,13 +1,15 @@
 # Web Terminal Meta Commands
 
 The Carrot web terminal sends normal input to its tmux shell unchanged. Input
-starting with `:` is reserved for small web-terminal-only helpers.
+starting with `::` is reserved for small web-terminal-only helpers. A double
+colon is used so it never collides with a real shell command or a program's own
+`:` commands (e.g. vim `:qa!`), which pass straight through to the shell/program.
 
 ```text
-:help
-:help vision_on
-:vision_on
-:vision_off
+::help
+::help vision_on
+::vision_on
+::vision_off
 ```
 
 ## Adding A Command
@@ -25,7 +27,7 @@ from ..registry import register_command
 @register_command(
   name="example",
   summary="Describe the helper in one line.",
-  usage=":example [status]",
+  usage="::example [status]",
 )
 def run(args: list[str]) -> int:
   print("[example] ready")
@@ -40,7 +42,7 @@ command handler should remain a small text interface.
 
 ```text
 terminal_commands/
-  bridge.py              # Converts : input into a fixed CLI call.
+  bridge.py              # Converts :: input into a fixed CLI call.
   cli.py                 # Parses one meta-command line.
   registry.py            # Stores command metadata and handlers.
   custom_commands/       # Actual user-editable custom command files.
@@ -51,7 +53,7 @@ terminal_commands/
 ## Bridge Flow
 
 1. `features/terminal.py` receives terminal input over the existing websocket.
-2. `bridge.py` converts `:` input into a fixed Python CLI invocation.
+2. `bridge.py` converts `::` input into a fixed Python CLI invocation.
 3. `cli.py` parses the command and invokes a registered handler.
 4. stdout and stderr are rendered by the existing tmux screen capture loop.
 

@@ -116,10 +116,9 @@
   --dialog-sheet-mobile-max-height: min(88dvh, 720px);
 
   /* ── On-screen keyboard ───────────────────────────────────────
-     --kb-inset: exact keyboard height (INCLUDING the Samsung suggestion/autofill
-     toolbar) on Chromium via the VirtualKeyboard API (viewport.js opts in);
-     resolves to 0 on iOS Safari / Firefox / desktop, where the visualViewport
-     path handles the keyboard instead.
+     --kb-inset: exact keyboard height. The CSS env() fallback is used at first
+     paint; viewport.js overwrites it with VirtualKeyboard geometry when the API
+     is available so Chrome/Samsung use one measured value.
      --kb-gap: the breathing space every keyboard-anchored surface keeps above
      the keyboard. One source of truth so dialogs, terminal and the settings
      search panel are consistent. */

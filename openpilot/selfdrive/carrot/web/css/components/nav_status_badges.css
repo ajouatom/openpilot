@@ -1,4 +1,4 @@
-.topbar #btnHome .nav-status-badges {
+.topbar .nav-btn .nav-status-badges {
   position: absolute;
   top: 5px;
   right: 6px;
@@ -11,13 +11,18 @@
   pointer-events: none;
 }
 
-.topbar #btnHome .nav-status-badges.is-visible {
+.topbar .nav-btn .nav-status-badges.is-visible {
   display: flex;
 }
 
 .topbar #btnHome.youtube-live,
 .topbar #btnHome.youtube-live.active {
   color: #ff8f84;
+}
+
+.topbar #btnTerminal.remote-support,
+.topbar #btnTerminal.remote-support.active {
+  color: var(--md-primary);
 }
 
 .topbar #btnHome.youtube-live.active {
@@ -28,12 +33,17 @@
   background: currentColor;
 }
 
+.topbar #btnTerminal.remote-support.active > span:last-child::after {
+  background: currentColor;
+}
+
 .topbar #btnHome.recording,
-.topbar #btnHome.youtube-live {
+.topbar #btnHome.youtube-live,
+.topbar #btnTerminal.remote-support {
   animation: nav-status-button-fade 2.4s ease-in-out infinite;
 }
 
-.topbar #btnHome .nav-status-badge {
+.topbar .nav-btn .nav-status-badge {
   min-width: 24px;
   padding: 2px 4px;
   border-radius: 999px;
@@ -47,13 +57,19 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-surface) 72%, transparent);
 }
 
-.topbar #btnHome .nav-status-badge--record {
+.topbar .nav-btn .nav-status-badge--record {
   background: rgba(118, 18, 20, 0.92);
   color: #ffd7d3;
 }
 
-.topbar #btnHome .nav-status-badge--live {
+.topbar .nav-btn .nav-status-badge--live {
   background: var(--md-error, #ba1a1a);
+}
+
+.topbar .nav-btn .nav-status-badge--remote {
+  min-width: 34px;
+  background: color-mix(in srgb, var(--md-primary) 82%, #000 18%);
+  color: #fff2e7;
 }
 
 /* The shared badge container replaces the legacy REC pseudo-element. */
@@ -73,7 +89,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .topbar #btnHome.recording,
-  .topbar #btnHome.youtube-live {
+  .topbar #btnHome.youtube-live,
+  .topbar #btnTerminal.remote-support {
     animation: none;
     background: color-mix(in srgb, #c9827b 10%, transparent);
   }

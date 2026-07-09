@@ -74,25 +74,41 @@ let driveHudLayoutRaf = 0;
 
 function updateAppViewportMetrics() {
   const vv = window.visualViewport;
-  const height = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
-  const top = Math.max(0, Math.round(vv?.offsetTop || 0));
-  const width = Math.max(320, Math.round(vv?.width || window.innerWidth || 0));
-  document.documentElement.style.setProperty("--app-vv-height", `${height}px`);
-  document.documentElement.style.setProperty("--app-vv-top", `${top}px`);
-  document.documentElement.style.setProperty("--app-vv-width", `${width}px`);
+  const rawHeight = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
+  const rawTop = Math.max(0, Math.round(vv?.offsetTop || 0));
+  const rawWidth = Math.max(320, Math.round(vv?.width || window.innerWidth || 0));
 
   // Keyboard-open state, so keyboard-aware surfaces can hug the keyboard when it
   // is up and center when it is not (desktop, keyboard-less, or before focus).
   // VirtualKeyboard bounding rect on Chromium (visualViewport doesn't shrink
   // there); the visualViewport delta elsewhere.
   let keyboardOpen = false;
+  let keyboardHeight = 0;
   if (appVirtualKeyboard) {
-    keyboardOpen = Math.round((appVirtualKeyboard.boundingRect && appVirtualKeyboard.boundingRect.height) || 0) > 120;
+    keyboardHeight = Math.max(0, Math.round((appVirtualKeyboard.boundingRect && appVirtualKeyboard.boundingRect.height) || 0));
+    keyboardOpen = keyboardHeight > 120;
   } else if (vv) {
-    keyboardOpen = Math.round((window.innerHeight || 0) - height - top) > 120;
+    keyboardHeight = Math.max(0, Math.round((window.innerHeight || 0) - rawHeight - rawTop));
+    keyboardOpen = keyboardHeight > 120;
   }
   if (keyboardOpen) document.documentElement.dataset.kbOpen = "1";
   else delete document.documentElement.dataset.kbOpen;
+
+  const height = rawHeight;
+  const top = rawTop;
+  const width = rawWidth;
+  document.documentElement.style.setProperty("--app-vv-height", `${height}px`);
+  document.documentElement.style.setProperty("--app-vv-top", `${top}px`);
+  document.documentElement.style.setProperty("--app-vv-width", `${width}px`);
+  if (appVirtualKeyboard) {
+    // Samsung Internet can expose VirtualKeyboard geometry to JS while the CSS
+    // env(keyboard-inset-height) fallback stays stale or incomplete. Promote the
+    // measured geometry into the shared token so dialogs and terminal controls
+    // use the same keyboard inset on Chrome and Samsung.
+    document.documentElement.style.setProperty("--kb-inset", `${keyboardHeight}px`);
+  } else {
+    document.documentElement.style.removeProperty("--kb-inset");
+  }
 
   const topbarEl = document.querySelector(".topbar");
   let navLeftGap = 0;
@@ -152,6 +168,25 @@ function initVirtualKeyboard() {
 }
 
 const appVirtualKeyboard = initVirtualKeyboard();
+
+function setAppVirtualKeyboardOverlaysContent(enabled) {
+  if (!appVirtualKeyboard) return false;
+  try {
+    appVirtualKeyboard.overlaysContent = !!enabled;
+    if (enabled) document.documentElement.dataset.vk = "1";
+    else delete document.documentElement.dataset.vk;
+    updateAppViewportMetrics();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+window.CarrotViewport = {
+  ...(window.CarrotViewport || {}),
+  setVirtualKeyboardOverlaysContent: setAppVirtualKeyboardOverlaysContent,
+  updateMetrics: updateAppViewportMetrics,
+};
 
 /* overlaysContent=true also means the browser no longer auto-scrolls a focused
    input above the keyboard (it isn't resizing anything). Dialogs, the terminal

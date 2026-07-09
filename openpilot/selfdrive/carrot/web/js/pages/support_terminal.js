@@ -8,6 +8,7 @@
     ownerWs: null,
     reconnectTimer: 0,
     startPollTimer: 0,
+    busyAction: "",
     pending: new Map(),
     snapshot: { active: false, state: "idle" },
     typingActive: false,
@@ -38,7 +39,7 @@
     if (state.initialized) return;
     state.initialized = true;
     els.open = $("btnSupportTerminalOpen");
-    els.form = $("terminalForm");
+    els.approvalHost = $("supportTerminalApprovalHost");
     if (els.open) els.open.addEventListener("click", openSupportDialog);
     ensureApprovalHost();
   }
@@ -191,9 +192,17 @@
     const issueInput = $("supportTerminalIssue");
     state.issueDraft = issueInput?.value || state.issueDraft || "";
     state.busy = true;
-    renderToolbarButton();
-    renderApprovalHost();
-    renderDialog();
+    state.busyAction = "start";
+    applySnapshot({
+      ok: true,
+      active: true,
+      state: "starting",
+      ttl_seconds: state.settings.ttlSeconds,
+      permission_mode: state.settings.permissionMode,
+      command_timeout_seconds: state.settings.commandTimeoutSeconds,
+      guest_count: 0,
+      pending_commands: [],
+    });
     startStatusPolling();
     try {
       const snapshot = await postJson("/api/support_terminal/start", {
@@ -202,25 +211,33 @@
         permission_mode: state.settings.permissionMode,
         command_timeout_seconds: state.settings.commandTimeoutSeconds,
       });
-      applySnapshot(snapshot);
+      if (state.busyAction === "start") applySnapshot(snapshot);
       scheduleStatusRefresh(350);
       scheduleStatusRefresh(1200);
-      toast(t("support_terminal_started", "Remote support started"));
+      if (state.busyAction === "start" && snapshot?.active) toast(t("support_terminal_started", "Remote support started"));
     } catch (err) {
-      state.snapshot = { ...(state.snapshot || {}), error: err?.message || "start failed" };
-      renderDialog();
-      toast(err?.message || t("support_terminal_start_failed", "Remote support start failed"), { tone: "error", duration: 4200 });
+      if (state.busyAction === "start") {
+        state.snapshot = { ...(state.snapshot || {}), error: err?.message || "start failed" };
+        renderDialog();
+        toast(err?.message || t("support_terminal_start_failed", "Remote support start failed"), { tone: "error", duration: 4200 });
+      } else {
+        scheduleStatusRefresh(350);
+      }
     } finally {
-      clearStartPollTimer();
-      state.busy = false;
-      renderToolbarButton();
-      renderDialog();
+      if (state.busyAction === "start") {
+        clearStartPollTimer();
+        state.busy = false;
+        state.busyAction = "";
+        renderToolbarButton();
+        renderDialog();
+      }
     }
   }
 
   async function stopSession() {
-    if (state.busy) return;
+    if (state.busy && state.busyAction !== "start") return;
     state.busy = true;
+    state.busyAction = "stop";
     applySnapshot({ ok: true, active: false, state: "stopping" });
     state.issueDraft = "";
     try {
@@ -232,9 +249,13 @@
       await loadStatus({ quiet: true });
       toast(err?.message || t("support_terminal_stop_failed", "Stop failed"), { tone: "error" });
     } finally {
-      state.busy = false;
-      renderToolbarButton();
-      renderDialog();
+      if (state.busyAction === "stop") {
+        clearStartPollTimer();
+        state.busy = false;
+        state.busyAction = "";
+        renderToolbarButton();
+        renderDialog();
+      }
     }
   }
 
@@ -326,6 +347,9 @@
     const wasActive = state.active;
     state.snapshot = snapshot || { active: false, state: "idle" };
     state.active = Boolean(snapshot?.active);
+    try {
+      window.dispatchEvent(new CustomEvent("carrot:support-terminal-status", { detail: state.snapshot }));
+    } catch (err) {}
     if (snapshot?.ttl_seconds != null) state.settings.ttlSeconds = Number(snapshot.ttl_seconds);
     if (snapshot?.permission_mode) state.settings.permissionMode = String(snapshot.permission_mode);
     if (snapshot?.command_timeout_seconds != null) state.settings.commandTimeoutSeconds = Number(snapshot.command_timeout_seconds);
@@ -366,13 +390,8 @@
 
   function ensureApprovalHost() {
     if (els.approvalHost && document.body.contains(els.approvalHost)) return els.approvalHost;
-    const form = els.form || $("terminalForm");
-    if (!form || !form.parentNode) return null;
-    const host = document.createElement("div");
-    host.id = "supportTerminalApprovalHost";
-    host.className = "terminal-approval-host";
-    host.hidden = true;
-    form.parentNode.insertBefore(host, form);
+    const host = $("supportTerminalApprovalHost");
+    if (!host) return null;
     els.approvalHost = host;
     return host;
   }
@@ -459,6 +478,13 @@
     const pendingCount = state.pending.size;
     if (error) return error;
     if (!active) return state.busy ? busyLabel() : localizeState(stateText);
+    if (stateText === "starting") return detail ? localizeStatusDetail(detail) : t("support_terminal_starting", "Starting...");
+    if ([
+      "Secure tunnel ready",
+      "Sending Carrot server notification",
+    ].includes(detail)) {
+      return localizeStatusDetail(detail);
+    }
     const time = remaining == null ? t("support_terminal_time_unlimited", "Unlimited") : formatRemaining(remaining);
     if (pendingCount > 0) {
       return t("support_terminal_status_command_pending", "Command pending {time} - {count} approval", { time, count: pendingCount });
@@ -473,11 +499,11 @@
   }
 
   function discordLabel(discord) {
-    if (!discord || discord.configured === false) return t("support_terminal_discord_not_sent", "Discord not sent");
-    if (discord.disabled) return t("support_terminal_discord_disabled", "Discord disabled");
-    if (discord.ok) return t("support_terminal_discord_sent", "Discord sent");
-    if (discord.error) return t("support_terminal_discord_error", "Discord error");
-    return t("support_terminal_discord_pending", "Discord pending");
+    if (!discord || discord.configured === false) return t("support_terminal_discord_not_sent", "Notification not sent");
+    if (discord.disabled) return t("support_terminal_discord_disabled", "Notification disabled");
+    if (discord.ok) return t("support_terminal_discord_sent", "Notification sent");
+    if (discord.error) return t("support_terminal_discord_error", "Notification error");
+    return t("support_terminal_discord_pending", "Notification pending");
   }
 
   function localizeState(value) {
@@ -503,7 +529,7 @@
       "Starting secure tunnel": ["support_terminal_detail_tunnel", "Starting secure tunnel"],
       "cloudflared unavailable": ["support_terminal_detail_unavailable", "cloudflared unavailable"],
       "Secure tunnel ready": ["support_terminal_detail_tunnel_ready", "Secure tunnel ready"],
-      "Sending Discord message": ["support_terminal_detail_discord", "Sending Discord message"],
+      "Sending Carrot server notification": ["support_terminal_detail_discord", "Sending Carrot server notification"],
       "Ready": ["support_terminal_detail_ready", "Ready"],
       "Start failed": ["support_terminal_detail_failed", "Start failed"],
     };
@@ -517,7 +543,7 @@
     const status = supportStatusLabel();
     const issueDisabled = state.busy || active ? "disabled" : "";
     const startDisabled = state.busy || active ? "disabled" : "";
-    const stopDisabled = state.busy || !active ? "disabled" : "";
+    const stopDisabled = (state.busy && state.busyAction !== "start") || !active ? "disabled" : "";
     const actionButton = active
       ? `<button id="btnSupportTerminalStop" class="smallBtn" type="button" ${stopDisabled}>${escapeHtml(t("support_terminal_stop", "Stop"))}</button>`
       : `<button id="btnSupportTerminalStart" class="smallBtn btn--filled" type="button" ${startDisabled}>${escapeHtml(state.busy ? busyLabel() : t("support_terminal_start", "Start"))}</button>`;

@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import os
+import re
 import secrets
 import socket
 import time
@@ -13,6 +14,7 @@ from typing import Any
 from aiohttp import web, WSMsgType
 
 from ..config import TMUX_WEB_SESSION
+from ..terminal_commands import translate_meta_command
 from . import tmux
 from .support_discord import send_support_webhook, support_metadata
 from .support_tunnel import TunnelHandle, cloudflared_status, start_quick_tunnel
@@ -25,6 +27,9 @@ ALLOWED_PERMISSION_MODES = {"approve_each", "allow_all"}
 ALLOWED_COMMAND_TIMEOUT_SECONDS = {15, 30, 60, 120}
 SCREEN_POLL_SECONDS = 0.25
 PIN_FAILURE_LIMIT = 5
+PUBLIC_URL_START_DELAY = float(os.environ.get("CARROT_SUPPORT_LINK_START_DELAY_SECONDS", "3.0"))
+TMUX_ATTACH_RE = re.compile(r"^\s*tmux\s+(?:a|attach|attach-session)(?:\s*)$", re.IGNORECASE)
+TMUX_ATTACH_TARGET_RE = re.compile(r"^\s*tmux\s+(?:a|attach|attach-session)\s+-t\s+\S+\s*$", re.IGNORECASE)
 
 
 def _now() -> float:
@@ -41,6 +46,18 @@ def _new_session_id() -> str:
 
 def _new_csp_nonce() -> str:
   return base64.b64encode(secrets.token_bytes(16)).decode("ascii")
+
+
+def _translate_support_terminal_line(line: str) -> str:
+  translated = translate_meta_command(line)
+  if translated:
+    return translated
+  text = str(line or "")
+  if TMUX_ATTACH_RE.match(text):
+    return "TMUX= tmux a -t comma"
+  if TMUX_ATTACH_TARGET_RE.match(text):
+    return f"TMUX= {text.strip()}"
+  return text
 
 
 def _csp_connect_sources(host: str) -> str:
@@ -133,6 +150,19 @@ class SupportTerminalManager:
   def current(self) -> SupportSession | None:
     return self._session
 
+  def _is_current(self, session: SupportSession) -> bool:
+    return self._session is session
+
+  async def _finish_orphaned_start(self, session: SupportSession) -> dict[str, Any]:
+    await self._cleanup_session(session)
+    return self.snapshot(None)
+
+  async def _abort_if_not_current(self, session: SupportSession) -> bool:
+    if self._is_current(session):
+      return False
+    await self._cleanup_session(session)
+    return True
+
   def snapshot(self, session: SupportSession | None = None, include_secret: bool = False) -> dict[str, Any]:
     session = session or self._session
     if session is None:
@@ -194,50 +224,68 @@ class SupportTerminalManager:
         command_timeout_seconds=command_timeout,
       )
       self._session = session
-      try:
-        await self._set_status(session, "Preparing terminal session")
-        await asyncio.to_thread(tmux.ensure_session, TMUX_WEB_SESSION)
-        await self._set_status(session, "Starting support page")
-        await self._start_local_guest_server(session)
-        cloudflared = cloudflared_status()
-        if cloudflared.get("installed"):
-          await self._set_status(session, "Starting secure tunnel")
-        elif cloudflared.get("auto_install") and cloudflared.get("download_supported"):
-          await self._set_status(session, "Downloading cloudflared")
-        else:
-          await self._set_status(session, "cloudflared unavailable")
-        session.tunnel = await start_quick_tunnel(session.local_origin_url)
-        session.tunnel_url = self._public_session_url(session.tunnel.url, session.id)
-        session.state = "sharing"
-        await self._set_status(session, "Secure tunnel ready")
-        session.screen_task = asyncio.create_task(self._screen_loop(session))
-        if session.expires_at > 0:
-          session.expiry_task = asyncio.create_task(self._expiry_loop(session))
-        await self._set_status(session, "Sending Discord message")
-        session.discord = await send_support_webhook(app.get("http"), {
-          "server": "Carrot",
-          "device": os.environ.get("CARROT_DEVICE_NAME", socket.gethostname()),
-          "sessionId": session.id,
-          "createdAt": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(session.created_at)),
-          "url": session.tunnel_url,
-          "pin": session.pin,
-          "ttl_minutes": "unlimited" if session.ttl_seconds <= 0 else max(1, session.ttl_seconds // 60),
-          "permissionMode": session.permission_mode,
-          "commandTimeoutSeconds": session.command_timeout_seconds,
-          "tmuxSession": TMUX_WEB_SESSION,
-          "meta": await asyncio.to_thread(support_metadata),
-          "note": session.note,
-        })
-        await self._set_status(session, "Ready")
-        await self.broadcast_owner({"type": "session_status", **self.snapshot(session)})
-        return self.snapshot(session)
-      except Exception as exc:
+
+    try:
+      await self._set_status(session, "Preparing terminal session")
+      await asyncio.to_thread(tmux.ensure_session, TMUX_WEB_SESSION)
+      if await self._abort_if_not_current(session):
+        return self.snapshot(None)
+      await self._set_status(session, "Starting support page")
+      await self._start_local_guest_server(session)
+      if await self._abort_if_not_current(session):
+        return self.snapshot(None)
+      cloudflared = cloudflared_status()
+      if cloudflared.get("installed"):
+        await self._set_status(session, "Starting secure tunnel")
+      elif cloudflared.get("auto_install") and cloudflared.get("download_supported"):
+        await self._set_status(session, "Downloading cloudflared")
+      else:
+        await self._set_status(session, "cloudflared unavailable")
+      session.tunnel = await start_quick_tunnel(session.local_origin_url)
+      if await self._abort_if_not_current(session):
+        return self.snapshot(None)
+      session.tunnel_url = self._public_session_url(session.tunnel.url, session.id)
+      session.state = "sharing"
+      await self._set_status(session, "Secure tunnel ready")
+      if PUBLIC_URL_START_DELAY > 0:
+        await asyncio.sleep(PUBLIC_URL_START_DELAY)
+      if await self._abort_if_not_current(session):
+        return self.snapshot(None)
+      session.screen_task = asyncio.create_task(self._screen_loop(session))
+      if session.expires_at > 0:
+        session.expiry_task = asyncio.create_task(self._expiry_loop(session))
+      await self._set_status(session, "Sending Carrot server notification")
+      metadata = await asyncio.to_thread(support_metadata)
+      if await self._abort_if_not_current(session):
+        return self.snapshot(None)
+      session.discord = await send_support_webhook(app.get("http"), {
+        "server": "Carrot",
+        "device": os.environ.get("CARROT_DEVICE_NAME", socket.gethostname()),
+        "sessionId": session.id,
+        "createdAt": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(session.created_at)),
+        "url": session.tunnel_url,
+        "pin": session.pin,
+        "ttl_minutes": "unlimited" if session.ttl_seconds <= 0 else max(1, session.ttl_seconds // 60),
+        "permissionMode": session.permission_mode,
+        "commandTimeoutSeconds": session.command_timeout_seconds,
+        "tmuxSession": TMUX_WEB_SESSION,
+        "meta": metadata,
+        "note": session.note,
+      })
+      if await self._abort_if_not_current(session):
+        return self.snapshot(None)
+      await self._set_status(session, "Ready")
+      await self.broadcast_owner({"type": "session_status", **self.snapshot(session)})
+      return self.snapshot(session)
+    except Exception as exc:
+      if self._is_current(session):
         session.state = "error"
         session.error = str(exc)
         session.status_detail = "Start failed"
         await self._cleanup_session(session)
         await self.broadcast_owner({"type": "error", "message": session.error})
         return self.snapshot(session)
+      return await self._finish_orphaned_start(session)
 
   async def stop(self, reason: str = "stopped") -> dict[str, Any]:
     async with self._lock:
@@ -516,7 +564,7 @@ class SupportTerminalManager:
       elif command.control_action == "clear":
         await asyncio.to_thread(tmux.clear, TMUX_WEB_SESSION)
       else:
-        await asyncio.to_thread(tmux.send_line, TMUX_WEB_SESSION, command.line)
+        await asyncio.to_thread(tmux.send_line, TMUX_WEB_SESSION, _translate_support_terminal_line(command.line))
       await self.broadcast_all({"type": "command_running", "id": command.id})
       return {"ok": True}
     except Exception as exc:
@@ -902,13 +950,14 @@ GUEST_HTML = """<!doctype html>
         connectedUnlimited: "Connected · unlimited",
         timeUnlimited: "unlimited",
         hostAway: "Host is not viewing terminal",
-        hostAwayWithTime: "Host is not viewing · {time}",
-        hostAwayUnlimited: "Host is not viewing · unlimited",
+        hostAwayWithTime: "Host is not viewing terminal · {time}",
+        hostAwayUnlimited: "Host is not viewing terminal · unlimited",
         approvalWithTimeout: "Owner approval · {seconds}s",
         pinFailed: "PIN failed - {remaining} tries left",
-        waiting: "Waiting for owner approval...",
-        approved: "Command approved",
-        running: "Command running",
+        waiting: "Waiting for owner approval",
+        approved: "Approved · sending to terminal",
+        running: "Sent to terminal",
+        failed: "Failed to send command",
         rejected: "Command rejected",
         expired: "Command approval expired",
         closed: "Session closed",
@@ -932,17 +981,18 @@ GUEST_HTML = """<!doctype html>
         commandPlaceholderAllowAll: "명령이 즉시 실행됩니다",
         connected: "연결됨 - 명령은 소유자 승인이 필요합니다",
         connectedAllowAll: "연결됨 - 명령이 즉시 실행됩니다",
-        connectedWithTime: "접속됨 · {time}",
-        connectedUnlimited: "접속됨 · 무제한",
+        connectedWithTime: "연결됨 · {time}",
+        connectedUnlimited: "연결됨 · 무제한",
         timeUnlimited: "무제한",
         hostAway: "호스트가 터미널 페이지를 보고 있지 않습니다",
         hostAwayWithTime: "호스트가 터미널 페이지를 보고 있지 않습니다 · {time}",
         hostAwayUnlimited: "호스트가 터미널 페이지를 보고 있지 않습니다 · 무제한",
         approvalWithTimeout: "소유자 승인 · {seconds}초",
         pinFailed: "PIN 실패 - {remaining}회 남음",
-        waiting: "소유자 승인 대기 중...",
-        approved: "명령 승인됨",
-        running: "명령 실행 중",
+        waiting: "소유자 승인 대기 중",
+        approved: "승인됨 · 터미널로 전송 중",
+        running: "터미널로 전송됨",
+        failed: "명령 전송 실패",
         rejected: "명령 거절됨",
         expired: "명령 승인 만료",
         closed: "세션 닫힘",
@@ -970,13 +1020,14 @@ GUEST_HTML = """<!doctype html>
         connectedUnlimited: "已连接 · 无限",
         timeUnlimited: "无限",
         hostAway: "车主未查看终端页面",
-        hostAwayWithTime: "车主未查看 · {time}",
-        hostAwayUnlimited: "车主未查看 · 无限",
+        hostAwayWithTime: "车主未查看终端页面 · {time}",
+        hostAwayUnlimited: "车主未查看终端页面 · 无限",
         approvalWithTimeout: "车主批准 · {seconds}秒",
         pinFailed: "PIN 错误 - 剩余 {remaining} 次",
-        waiting: "正在等待车主批准...",
-        approved: "命令已批准",
-        running: "命令运行中",
+        waiting: "等待车主批准",
+        approved: "已批准 · 正在发送到终端",
+        running: "已发送到终端",
+        failed: "命令发送失败",
         rejected: "命令已拒绝",
         expired: "命令批准已过期",
         closed: "会话已关闭",
@@ -1018,6 +1069,7 @@ GUEST_HTML = """<!doctype html>
     let commandTimeoutSeconds = 30;
     let ownerPresent = false;
     let commandNoticeMessage = "";
+    let commandNoticeTimer = 0;
     let sessionClosed = false;
     let consoleBlocked = false;
     function setStatus(text, updateAuth = true) {
@@ -1036,6 +1088,11 @@ GUEST_HTML = """<!doctype html>
       if (!remainingTimer) return;
       clearInterval(remainingTimer);
       remainingTimer = 0;
+    }
+    function clearCommandNoticeTimer() {
+      if (!commandNoticeTimer) return;
+      clearTimeout(commandNoticeTimer);
+      commandNoticeTimer = 0;
     }
     function socketReady() {
       return ws && ws.readyState === WebSocket.OPEN;
@@ -1060,7 +1117,8 @@ GUEST_HTML = """<!doctype html>
       commandNoticeEl.classList.toggle("hidden", !commandVisible || !notice);
       if (commandVisible && notice) commandNoticeEl.textContent = notice;
     }
-    function setCommandNotice(message) {
+    function setCommandNotice(message, durationMs = 0) {
+      clearCommandNoticeTimer();
       commandNoticeMessage = String(message || "");
       if (!message) {
         commandNoticeEl.hidden = true;
@@ -1071,6 +1129,9 @@ GUEST_HTML = """<!doctype html>
       commandNoticeEl.textContent = message;
       commandNoticeEl.hidden = false;
       commandNoticeEl.classList.remove("hidden");
+      if (durationMs > 0) {
+        commandNoticeTimer = setTimeout(() => setCommandNotice(""), durationMs);
+      }
     }
     function showAuthPanel() {
       authForm.hidden = false;
@@ -1122,6 +1183,7 @@ GUEST_HTML = """<!doctype html>
     }
     function resetToPin(message) {
       clearTimeout(typingTimer);
+      clearCommandNoticeTimer();
       clearRemainingTimer();
       typingTimer = 0;
       remainingDeadlineMs = 0;
@@ -1220,13 +1282,15 @@ GUEST_HTML = """<!doctype html>
         } else if (data.type === "command_waiting_approval") {
           setCommandNotice(tx("waiting"));
         } else if (data.type === "command_approved") {
-          setCommandNotice(tx("approved"));
+          setCommandNotice(tx("approved"), 1600);
         } else if (data.type === "command_running") {
-          setCommandNotice(tx("running"));
+          setCommandNotice(tx("running"), 1800);
+        } else if (data.type === "command_failed") {
+          setCommandNotice(tx("failed"), 2600);
         } else if (data.type === "command_rejected") {
-          setCommandNotice(tx("rejected"));
+          setCommandNotice(tx("rejected"), 2200);
         } else if (data.type === "command_expired") {
-          setCommandNotice(tx("expired"));
+          setCommandNotice(tx("expired"), 2200);
         } else if (data.type === "session_closed") {
           sessionClosed = true;
           resetToPin(tx("closed"));
