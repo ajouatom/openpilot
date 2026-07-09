@@ -103,6 +103,7 @@ RADAR_MERGED_SOURCE_TAG = "+radar:"
 CORNER_RADAR_LABELS = frozenset(("LF", "RF", "LR", "RR"))
 CORNER_RADAR_HEADING_COMPONENT_MIN_MPS = 0.5
 CORNER_RADAR_EGO_LATERAL_COMP_MAX_MPS = 3.5
+CORNER_RADAR_EGO_LATERAL_COMP_GAIN = 0.5
 CORNER_RADAR_EGO_LATERAL_COMP_MIN_POINTS = 2
 DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
 DRIVE_CAMERA_EGO_BOTTOM_POSITION_M = (0.0, -6.0, 5.00)
@@ -1690,7 +1691,8 @@ def corner_radar_common_lateral_speed_mps(points: tuple[RadarPoint, ...], state:
     ]
     if len(candidates) < CORNER_RADAR_EGO_LATERAL_COMP_MIN_POINTS:
         return 0.0
-    return clamp(float(median(candidates)), -CORNER_RADAR_EGO_LATERAL_COMP_MAX_MPS, CORNER_RADAR_EGO_LATERAL_COMP_MAX_MPS)
+    offset = float(median(candidates)) * CORNER_RADAR_EGO_LATERAL_COMP_GAIN
+    return clamp(offset, -CORNER_RADAR_EGO_LATERAL_COMP_MAX_MPS, CORNER_RADAR_EGO_LATERAL_COMP_MAX_MPS)
 
 
 def radar_point_display_lateral_speed_mps(point: RadarPoint, lateral_speed_offset_mps: float = 0.0) -> float | None:
