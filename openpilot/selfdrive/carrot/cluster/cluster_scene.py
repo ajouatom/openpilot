@@ -3306,6 +3306,7 @@ def build_cluster_scene(
     anchor_x_m = ego_anchor_x_m(state, lane_width_m)
     scene_shift_x_m = -anchor_x_m
     relative_scene_x_offset_m = -scene_shift_x_m
+    radar_vehicle_x_offset_m = 0.0 if raw_corner_active else relative_scene_x_offset_m
     camera = scene_camera(state, lane_width_m, anchor_x_m)
     camera_active = state.surround_view_active
     selected_radar_vehicle_points = (
@@ -3510,7 +3511,7 @@ def build_cluster_scene(
             for vehicle in visible_radar_vehicle_boxes_raw
         )
         visible_radar_vehicle_boxes = tuple(
-            vehicle_box_with_x_offset(vehicle, relative_scene_x_offset_m)
+            vehicle_box_with_x_offset(vehicle, radar_vehicle_x_offset_m)
             for vehicle in visible_radar_vehicle_boxes_raw
         )
         blockers = (*detected_blockers, *radar_blockers)
