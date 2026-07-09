@@ -352,6 +352,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"MuteSeatbelt", {PERSISTENT, INT, "0"}},
 
     {"CarrotException", {CLEAR_ON_MANAGER_START, STRING}},
+    {"CarrotExceptionSent", {CLEAR_ON_MANAGER_START, BOOL}},
     {"CarrotExceptionDiscordWebhookUrl", {PERSISTENT, STRING}},
 
     {"CarName", {PERSISTENT, STRING}},
