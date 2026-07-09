@@ -281,7 +281,6 @@ function renderUIText() {
   setText("btnTerminalCtrlC", s.terminal_ctrl_c);
   setText("btnTerminalClear", s.terminal_clear);
   setText("btnTerminalReconnect", s.terminal_reconnect);
-  setText("btnTerminalSend", s.terminal_send);
   setText("logsDashcamTitle", s.logs_dashcam || "Dashcam");
   setText("logsScreenTitle", s.logs_screenrecord || "Screen Record");
   setText("btnStartVision", `▶ ${s.start_vision || "Start Drive Vision"}`);
@@ -290,8 +289,6 @@ function renderUIText() {
   if (window.HomeDrive && typeof window.HomeDrive.renderText === "function") {
     window.HomeDrive.renderText();
   }
-  const terminalInput = document.getElementById("terminalInput");
-  if (terminalInput) terminalInput.placeholder = "";
   setText("settingSearchTitle", s.setting_search);
   if (settingSearchInput) settingSearchInput.placeholder = s.setting_search_placeholder || "";
   if (settingSearchMeta && (!settingSearchInput || !settingSearchInput.value.trim())) {

@@ -4,6 +4,7 @@ import argparse
 import shlex
 import sys
 
+from .bridge import META_COMMAND_PREFIX
 from .custom_commands import load_commands
 from .registry import get_command
 
@@ -31,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
   command = get_command(parts[0])
   if command is None:
     print(f"[terminal] unknown command: {parts[0]}", file=sys.stderr)
-    print("[terminal] run :help to list available commands", file=sys.stderr)
+    print(f"[terminal] run {META_COMMAND_PREFIX}help to list available commands", file=sys.stderr)
     return 2
 
   try:

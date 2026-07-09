@@ -1,6 +1,6 @@
 "use strict";
 
-// Terminal page — tmux WebSocket client.
+// Terminal page tmux WebSocket client.
 
 /* ---------- Terminal ---------- */
 const terminalMetaEl = document.getElementById("terminalMeta");
@@ -8,21 +8,340 @@ const terminalSessionMetaEl = document.getElementById("terminalSessionMeta");
 const terminalPageEl = document.getElementById("pageTerminal");
 const terminalScreenEl = document.getElementById("terminalScreen");
 const terminalOutputEl = document.getElementById("terminalOutput");
-const terminalFormEl = document.getElementById("terminalForm");
-const terminalInputEl = document.getElementById("terminalInput");
+const terminalKeysEl = document.getElementById("terminalKeys");
 const btnTerminalCtrlCEl = document.getElementById("btnTerminalCtrlC");
 const btnTerminalClearEl = document.getElementById("btnTerminalClear");
 const btnTerminalReconnectEl = document.getElementById("btnTerminalReconnect");
+const terminalXtermEl = document.getElementById("terminalXterm");
 
 let terminalWs = null;
 let terminalReconnectTimer = null;
+let terminalResetPending = false;
 let terminalPageActive = false;
-let terminalSessionName = "carrot-web";
+let terminalSessionName = "";
 let terminalLastScreen = "";
+let terminalPtyBuffer = "";
 let terminalLayoutBound = false;
 let terminalFollowOutput = true;
 let terminalCurrentCwd = "/data/openpilot";
 let terminalScrollRaf = 0;
+const terminalUsePty = true;
+
+// Real terminal emulation via xterm.js (grid renderer): interprets cursor
+// moves / clears / colors / alternate-screen, so full-screen TUIs (btop, vim,
+// nested tmux) render correctly instead of the naive append-only fallback.
+// Falls back to the legacy <pre> renderer if xterm.js failed to load.
+let terminalXterm = null;
+let terminalXtermActive = false;
+let terminalXtermResizeObserver = null;
+let terminalXtermFitRaf = 0;
+let terminalKeyboardFitTimers = [];
+let terminalCtrlSticky = false;
+let terminalSuppressDataDepth = 0;
+let terminalLayoutRaf = 0;
+let terminalKeysTouchStart = null;
+let terminalLastSizeKey = "";
+const TERMINAL_GRID_COLS = 100;
+const TERMINAL_GRID_ROWS = 30;
+
+function enterTerminalKeyboardMode() {
+  window.CarrotViewport?.setVirtualKeyboardOverlaysContent?.(true);
+  window.CarrotViewport?.updateMetrics?.();
+}
+
+function leaveTerminalKeyboardMode() {
+  window.CarrotViewport?.setVirtualKeyboardOverlaysContent?.(true);
+  window.CarrotViewport?.updateMetrics?.();
+}
+
+function pinTerminalCursorToBottom() {
+  if (!terminalXtermActive || !terminalXterm || !terminalFollowOutput) return;
+  try {
+    const ns = terminalXterm.buffer;
+    const b = ns?.active;
+    if (!b) {
+      terminalXterm.scrollToBottom();
+      return;
+    }
+    if (ns.normal && b !== ns.normal) {
+      terminalXterm.scrollToBottom();
+      return;
+    }
+
+    const rows = Math.max(1, terminalXterm.rows | 0);
+    const cursorY = Math.max(0, b.cursorY | 0);
+    const baseY = Math.max(0, b.baseY | 0);
+    const targetViewportY = Math.max(0, baseY + cursorY - rows + 1);
+    if (typeof terminalXterm.scrollToLine === "function") {
+      terminalXterm.scrollToLine(targetViewportY);
+    } else {
+      terminalXterm.scrollToBottom();
+      const blankRows = Math.max(0, rows - 1 - cursorY);
+      if (blankRows > 0 && typeof terminalXterm.scrollLines === "function") {
+        terminalXterm.scrollLines(-blankRows);
+      }
+    }
+  } catch (e) {
+    try {
+      terminalXterm.scrollToBottom();
+    } catch (ignore) {}
+  }
+}
+
+// Raw escape sequences for the on-screen key bar (Esc/Tab/arrows) so touch
+// devices that have no physical Esc/Ctrl/arrow keys can still drive
+// interactive programs (vim, btop, less) that the shell input box cannot.
+const TERMINAL_KEY_SEQ = {
+  esc: "\x1b",
+  tab: "\t",
+  ctrl_c: "\x03",
+  ctrl_d: "\x04",
+  // tmux detach: AGNOS prefix is backtick, so ` then d (used to leave `tmux a`).
+  detach: "\x60d",
+  home: "\x1b[H",
+  end: "\x1b[F",
+  page_up: "\x1b[5~",
+  page_down: "\x1b[6~",
+  up: "\x1b[A",
+  down: "\x1b[B",
+  right: "\x1b[C",
+  left: "\x1b[D",
+};
+
+const terminalTextDecoder = (typeof TextDecoder === "function") ? new TextDecoder("utf-8") : null;
+
+function base64ToBytes(b64) {
+  const bin = atob(String(b64 || ""));
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function readCssVar(name, fallback) {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function terminalXtermSupported() {
+  return !!(terminalXtermEl
+    && typeof window.Terminal === "function");
+}
+
+// Scale the font so the fixed 100-column grid fills the width on any screen
+// (a phone gets a smaller font, a desktop a larger one). Uses xterm's own cell
+// measurement (FitAddon) instead of an estimated advance ratio: columns are
+// inversely proportional to font size, so one linear step lands on 100 cols.
+// Clamped so it stays legible — a very narrow phone floors and the container
+// pans horizontally (.terminal-xterm overflow-x / touch pan-x).
+// Fixed, readable cell size (auto-scaling to fill the width made it too small).
+// The 100-column grid keeps a consistent wrap width; when it is wider than a
+// narrow screen the container pans horizontally instead of shrinking the text.
+function terminalFontSize() {
+  const w = window.innerWidth || 800;
+  if (w <= 380) return 11;
+  if (w <= 640) return 12;
+  return 13;
+}
+
+function ensureTerminalXterm() {
+  if (terminalXterm) return terminalXterm;
+  if (!terminalXtermSupported()) return null;
+  const term = new window.Terminal({
+    fontFamily: readCssVar("--font-mono", "ui-monospace, \"Roboto Mono\", Menlo, monospace"),
+    fontSize: terminalFontSize(),
+    lineHeight: 1.25,
+    cursorBlink: true,
+    scrollback: 5000,
+    convertEol: false,
+    allowProposedApi: true,
+    allowTransparency: true,
+    theme: {
+      background: "rgba(0,0,0,0)",
+      foreground: readCssVar("--md-on-surface", "#e6e9ef"),
+      cursor: readCssVar("--md-primary", "#7ee0a0"),
+      cursorAccent: "#0b0f14",
+      selectionBackground: "rgba(120,160,255,0.35)",
+    },
+  });
+  term.open(terminalXtermEl);
+  // Keystrokes typed directly into the grid drive interactive programs.
+  term.onData((data) => {
+    if (terminalSuppressDataDepth > 0) return;
+    terminalFollowOutput = true;
+    sendTerminalPacket({ type: "raw", data: applyTerminalCtrl(data) }, { quiet: true });
+  });
+  term.onResize(({ cols, rows }) => {
+    terminalLastSizeKey = `${cols | 0}x${rows | 0}`;
+  });
+  terminalXterm = term;
+  // Re-fit whenever the host actually gets/changes size (page show, orientation,
+  // keyboard). Columns stay locked at 100; rows track the container height.
+  if (typeof ResizeObserver === "function" && !terminalXtermResizeObserver) {
+    terminalXtermResizeObserver = new ResizeObserver(() => {
+      if (terminalPageActive) refreshTerminalLayout();
+      else scheduleTerminalFit();
+    });
+    terminalXtermResizeObserver.observe(terminalXtermEl);
+  }
+  return term;
+}
+
+function writeTerminalXterm(data, options = {}) {
+  if (!terminalXtermActive || !terminalXterm) return;
+  const { suppressData = false } = options;
+  if (!suppressData) {
+    terminalXterm.write(data);
+    return;
+  }
+
+  terminalSuppressDataDepth += 1;
+  let done = false;
+  const release = () => {
+    if (done) return;
+    done = true;
+    terminalSuppressDataDepth = Math.max(0, terminalSuppressDataDepth - 1);
+  };
+  try {
+    terminalXterm.write(data, release);
+    window.setTimeout(release, 500);
+  } catch (e) {
+    release();
+    throw e;
+  }
+}
+
+function scheduleTerminalFit() {
+  if (terminalXtermFitRaf) cancelAnimationFrame(terminalXtermFitRaf);
+  terminalXtermFitRaf = requestAnimationFrame(() => {
+    terminalXtermFitRaf = 0;
+    fitTerminalXterm();
+  });
+}
+
+// The keyboard opening/closing resizes the container in steps (and Samsung
+// reports the geometry late); re-fit a few times as it settles so the grid ends
+// up matching the final height instead of a transient one (empty band bug).
+function scheduleKeyboardSettleFit() {
+  if (!terminalXtermActive) return;
+  terminalKeyboardFitTimers.forEach((t) => clearTimeout(t));
+  terminalKeyboardFitTimers = [0, 130, 320, 600].map((ms) => setTimeout(() => fitTerminalXterm(), ms));
+}
+
+function activateTerminalXterm() {
+  if (!terminalXtermSupported()) return false;
+  // Reveal the grid host before opening so xterm can measure its cell size
+  // (a display:none container yields no dimensions).
+  if (terminalScreenEl) terminalScreenEl.hidden = true;
+  if (terminalXtermEl) terminalXtermEl.hidden = false;
+  const term = ensureTerminalXterm();
+  if (!term) {
+    if (terminalScreenEl) terminalScreenEl.hidden = false;
+    if (terminalXtermEl) terminalXtermEl.hidden = true;
+    return false;
+  }
+  terminalXtermActive = true;
+  fitTerminalXterm();
+  // Container may still be settling right after the page is shown, and xterm's
+  // renderer measures the cell a frame or two after open; re-fit on the next
+  // frames and once more slightly later so the grid fills the whole area.
+  requestAnimationFrame(() => requestAnimationFrame(() => fitTerminalXterm()));
+  setTimeout(() => fitTerminalXterm(), 180);
+  return true;
+}
+
+// Rows follow the container height so the grid fills the screen (no empty band
+// below it) while columns stay locked at 100. The cell height is measured from
+// the actually-rendered .xterm-screen (its height / current rows) in CSS pixels
+// — this is DPR-safe. Reading xterm's internal renderService cell instead could
+// report DEVICE pixels and undercount rows by the DPR, which is what left the
+// big empty band under the terminal when the keyboard opened on high-DPR phones.
+function terminalGridRows() {
+  try {
+    const host = terminalXtermEl;
+    const h = host ? host.getBoundingClientRect().height : 0;
+    if (h > 0) {
+      let cellH = 0;
+      const screen = host.querySelector(".xterm-screen");
+      const curRows = terminalXterm && terminalXterm.rows;
+      if (screen && curRows > 0) {
+        const sh = screen.getBoundingClientRect().height;
+        if (sh > 0) cellH = sh / curRows;
+      }
+      if (!(cellH > 0)) {
+        const fs = (terminalXterm && terminalXterm.options && terminalXterm.options.fontSize) || 13;
+        cellH = fs * 1.25;
+      }
+      return Math.max(6, Math.floor(h / cellH));
+    }
+  } catch (e) {
+    /* not laid out yet */
+  }
+  return TERMINAL_GRID_ROWS;
+}
+
+function fitTerminalXterm() {
+  if (!terminalXtermActive || !terminalXterm) return;
+  try {
+    const fs = terminalFontSize();
+    if (terminalXterm && terminalXterm.options && terminalXterm.options.fontSize !== fs) {
+      terminalXterm.options.fontSize = fs;
+    }
+    const rows = terminalGridRows();
+    if (terminalXterm.cols !== TERMINAL_GRID_COLS || terminalXterm.rows !== rows) {
+      terminalXterm.resize(TERMINAL_GRID_COLS, rows);
+      // Tell the shared PTY the new row count (columns stay locked at 100) so
+      // full-screen apps (btop/vim) draw to the full height too.
+      sendTerminalPacket({ type: "resize", cols: TERMINAL_GRID_COLS, rows }, { quiet: true });
+      requestAnimationFrame(pinTerminalCursorToBottom);
+    } else {
+      terminalXterm.refresh(0, rows - 1);
+      pinTerminalCursorToBottom();
+    }
+  } catch (e) {
+    /* container not laid out yet */
+  }
+}
+
+function setTerminalCtrlSticky(on) {
+  terminalCtrlSticky = !!on;
+  const btn = document.querySelector('.terminal-key[data-key="ctrl"]');
+  if (btn) btn.classList.toggle("is-active", terminalCtrlSticky);
+}
+
+// When the sticky Ctrl key is armed, fold the next single character into its
+// control code (Ctrl-C, Ctrl-D, Ctrl-[, ...), then disarm.
+function applyTerminalCtrl(data) {
+  if (!terminalCtrlSticky || String(data).length !== 1) return data;
+  const code = String(data).toUpperCase().charCodeAt(0);
+  setTerminalCtrlSticky(false);
+  if (code >= 64 && code <= 95) return String.fromCharCode(code - 64);
+  return data;
+}
+
+function sendTerminalKey(key) {
+  if (key === "ctrl") {
+    setTerminalCtrlSticky(!terminalCtrlSticky);
+    if (terminalXtermActive && terminalXterm) terminalXterm.focus();
+    return;
+  }
+  const seq = TERMINAL_KEY_SEQ[key];
+  if (seq == null) return;
+  terminalFollowOutput = true;
+  const out = applyTerminalCtrl(seq);
+  if (sendTerminalPacket({ type: "raw", data: out }, { quiet: true })) {
+    if (terminalXtermActive && terminalXterm) terminalXterm.focus();
+  }
+}
+
+function currentTerminalSize() {
+  const rows = (terminalXtermActive && terminalXterm && terminalXterm.rows) || terminalGridRows();
+  return { cols: TERMINAL_GRID_COLS, rows };
+}
 
 function setTerminalMeta(text) {
   if (terminalMetaEl) terminalMetaEl.textContent = String(text || "");
@@ -38,10 +357,10 @@ function setTerminalSessionInfo(session = terminalSessionName) {
   setTerminalSessionMeta();
 }
 
-// The web terminal runs `:` meta commands by typing a fixed CLI bridge into
+// The web terminal runs `::` meta commands by typing a fixed CLI bridge into
 // tmux, so tmux echoes the raw `python3 -m ...cli --line <cmd>` invocation.
 // Replace that echo with our own friendly "running command" line.
-const TERMINAL_META_ECHO_RE = /python3 -m selfdrive\.carrot\.server\.terminal_commands\.cli --line (.*)$/gm;
+const TERMINAL_META_ECHO_RE = /(?:env\s+\S*PYTHONPATH=\S+\s+)?python3 -m selfdrive\.carrot\.server\.terminal_commands\.cli --line (.*)$/gm;
 
 function rewriteTerminalMetaEcho(text) {
   return String(text || "").replace(TERMINAL_META_ECHO_RE, (match, raw) => {
@@ -52,7 +371,7 @@ function rewriteTerminalMetaEcho(text) {
       arg = arg.slice(1, -1);
     }
     const label = getUIText("terminal_meta_running", "Carrot command");
-    return `▶ ${label}: :${arg}`;
+    return `> ${label}: ::${arg}`;
   });
 }
 
@@ -78,6 +397,52 @@ function sanitizeTerminalScreen(text) {
 
   if (!nextText.trim()) return " ";
   return nextText;
+}
+
+function stripTerminalAnsi(text) {
+  return String(text || "")
+    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1b[()][A-Za-z0-9]/g, "")
+    // Drop leftover C0 control chars (bell, stray ESC, etc.) so they don't
+    // render as boxes. Keep \b (0x08), \t (0x09), \n (0x0a), \r (0x0d).
+    .replace(/[\x00-\x07\x0b\x0c\x0e-\x1f]/g, "");
+}
+
+function appendTerminalPtyOutput(chunk) {
+  const text = stripTerminalAnsi(chunk).replace(/\r\n/g, "\n");
+  if (!text) return;
+  const out = terminalPtyBuffer || "";
+  // Split the committed lines from the line currently under the cursor so that
+  // carriage-return / backspace overwrite *within* the line the way a real
+  // terminal does (e.g. git/pip progress bars), instead of dropping text.
+  const lastNl = out.lastIndexOf("\n");
+  let head = lastNl >= 0 ? out.slice(0, lastNl + 1) : "";
+  let line = lastNl >= 0 ? out.slice(lastNl + 1) : out;
+  let col = line.length;
+  for (const ch of Array.from(text)) {
+    if (ch === "\n") {
+      head += line + "\n";
+      line = "";
+      col = 0;
+    } else if (ch === "\r") {
+      col = 0;
+    } else if (ch === "\b") {
+      if (col > 0) col -= 1;
+    } else {
+      if (col < line.length) {
+        line = line.slice(0, col) + ch + line.slice(col + 1);
+      } else {
+        if (col > line.length) line = line.padEnd(col, " ");
+        line += ch;
+      }
+      col += 1;
+    }
+  }
+  const merged = head + line;
+  const lines = merged.split("\n");
+  terminalPtyBuffer = lines.length > 600 ? lines.slice(-600).join("\n") : merged;
+  setTerminalScreen(terminalPtyBuffer || " ", false);
 }
 
 function extractTerminalCwd(text) {
@@ -147,6 +512,7 @@ function updateTerminalOverflowState() {
 
 function clearTerminalViewport() {
   terminalLastScreen = "";
+  terminalPtyBuffer = "";
   if (terminalOutputEl) terminalOutputEl.innerHTML = "";
   updateTerminalOverflowState();
   pinTerminalToBottom({ immediate: true });
@@ -180,26 +546,6 @@ function setTerminalScreen(text, forceStick = false) {
   });
 }
 
-function runTerminalLocalAlias(line) {
-  const key = String.fromCharCode(119, 104, 101, 114, 101, 105, 115, 109, 121, 99, 97, 114, 114, 111, 116);
-  if (String(line || "").trim().toLowerCase() !== key) return false;
-
-  const msg = String.fromCharCode(45817, 44540, 33, 33);
-  const evt = String.fromCharCode(99, 97, 114, 114, 111, 116, 58, 114, 117, 110, 58, 52, 48, 52);
-  const base = terminalLastScreen && terminalLastScreen.trim()
-    ? `${terminalLastScreen.replace(/\s+$/g, "")}\n`
-    : "";
-  terminalFollowOutput = true;
-  setTerminalScreen(`${base}${msg}`, true);
-
-  window.dispatchEvent(new CustomEvent(evt, {
-    detail: { [String.fromCharCode(113)]: 1 },
-  }));
-
-  if (terminalInputEl) terminalInputEl.value = "";
-  return true;
-}
-
 function clearTerminalReconnectTimer() {
   if (terminalReconnectTimer) {
     clearTimeout(terminalReconnectTimer);
@@ -208,14 +554,15 @@ function clearTerminalReconnectTimer() {
 }
 
 function updateTerminalToastAnchor() {
-  if (!terminalFormEl || document.body?.dataset?.page !== "terminal") {
+  const anchorEl = terminalKeysEl;
+  if (!anchorEl || document.body?.dataset?.page !== "terminal") {
     document.documentElement.style.removeProperty("--terminal-toast-bottom");
     document.documentElement.style.removeProperty("--terminal-toast-left");
     document.documentElement.style.removeProperty("--terminal-toast-width");
     return;
   }
 
-  const rect = terminalFormEl.getBoundingClientRect();
+  const rect = anchorEl.getBoundingClientRect();
   if (!rect.width || !rect.height) {
     document.documentElement.style.removeProperty("--terminal-toast-bottom");
     document.documentElement.style.removeProperty("--terminal-toast-left");
@@ -233,74 +580,78 @@ function updateTerminalToastAnchor() {
 
 function updateTerminalViewportMetrics() {
   updateAppViewportMetrics();
-  const vv = window.visualViewport;
-  const landscapeRail = typeof isLandscapeRailMode === "function" && isLandscapeRailMode();
-  const layoutHeight = Math.max(320, Math.round(window.innerHeight || vv?.height || 0));
-  const height = Math.max(320, Math.round(vv?.height || window.innerHeight || 0));
-  const top = Math.max(0, Math.round(vv?.offsetTop || 0));
-  const vk = navigator.virtualKeyboard;
-  const vkActive = !!(vk && document.documentElement.dataset.vk);
-  // VK API mode: visualViewport does NOT shrink for the keyboard, so derive the
-  // occlusion (keys + Samsung suggestion toolbar) from the keyboard's own
-  // bounding rect. Otherwise fall back to the visualViewport delta.
-  const keyboardInset = vkActive
-    ? Math.round((vk.boundingRect && vk.boundingRect.height) || 0)
-    : Math.max(0, Math.round(layoutHeight - height - top));
-  const keyboardOpen = !landscapeRail && keyboardInset > 120;
-  const desktopBottomNav = window.matchMedia?.("(min-width: 769px)")?.matches;
-  const restingBottomGap = landscapeRail
-    ? `calc(14px + env(safe-area-inset-bottom, 0px))`
-    : `calc(var(--nav-bar-height${desktopBottomNav ? "-desktop" : ""}) + env(safe-area-inset-bottom, 0px))`;
-  const restingFormBottom = landscapeRail
-    ? `max(10px, env(safe-area-inset-bottom, 0px))`
-    : `calc(8px + env(safe-area-inset-bottom, 0px))`;
-  document.documentElement.style.setProperty("--terminal-vv-height", `${height}px`);
-  document.documentElement.style.setProperty("--terminal-vv-top", `${top}px`);
-  const layoutStyle = terminalPageEl?.style || document.documentElement.style;
-  // In VK mode --terminal-vv-height is the FULL height (vv doesn't shrink), so the
-  // page height must also subtract the keyboard occlusion via the bottom gap; the
-  // form's own inner margin stays a small constant. In non-VK mode vv-height is
-  // already reduced, so only the small gap is needed.
-  // Page ends at the keyboard top (VK: subtract the keyboard occlusion since the
-  // visual viewport didn't shrink; non-VK: vv already excludes it), and the input
-  // form keeps the shared --kb-gap above that — same gap the dialogs use.
-  const keyboardBottomGap = vkActive
-    ? `calc(${keyboardInset}px + env(safe-area-inset-bottom, 0px))`
-    : `env(safe-area-inset-bottom, 0px)`;
-  layoutStyle.setProperty(
-    "--terminal-bottom-gap",
-    keyboardOpen ? keyboardBottomGap : restingBottomGap,
-  );
-  layoutStyle.setProperty(
-    "--terminal-form-bottom",
-    keyboardOpen
-      ? `calc(var(--kb-gap) + env(safe-area-inset-bottom, 0px))`
-      : restingFormBottom,
-  );
-  document.documentElement.classList.toggle("terminal-keyboard-open", keyboardOpen);
 }
 
 function bindTerminalLayoutObservers() {
   if (terminalLayoutBound) return;
   terminalLayoutBound = true;
 
-  const handleLayout = () => requestAnimationFrame(() => {
-    updateTerminalViewportMetrics();
-    updateTerminalToastAnchor();
-    updateTerminalOverflowState();
-    if (terminalFollowOutput) pinTerminalToBottom();
-  });
-  window.addEventListener("resize", handleLayout, { passive: true });
-  window.addEventListener("orientationchange", handleLayout, { passive: true });
+  const handleLayout = (options = {}) => {
+    const { resizeTerminal = true } = options;
+    if (terminalLayoutRaf) cancelAnimationFrame(terminalLayoutRaf);
+    terminalLayoutRaf = requestAnimationFrame(() => {
+      terminalLayoutRaf = 0;
+      updateTerminalViewportMetrics();
+      updateTerminalToastAnchor();
+      updateTerminalOverflowState();
+      if (resizeTerminal) sendTerminalResize();
+      if (!terminalXtermActive && terminalFollowOutput) pinTerminalToBottom();
+    });
+  };
+  const handleResizeLayout = () => {
+    handleLayout({ resizeTerminal: true });
+  };
+  const handleViewportScroll = () => {
+    if (document.body?.dataset?.page === "terminal" && document.documentElement.dataset.kbOpen === "1") {
+      updateTerminalToastAnchor();
+      return;
+    }
+    handleLayout({ resizeTerminal: false });
+  };
+
+  handleResizeLayout();
+  window.addEventListener("resize", handleResizeLayout, { passive: true });
+  window.addEventListener("orientationchange", handleResizeLayout, { passive: true });
+  window.addEventListener("pageshow", handleResizeLayout, { passive: true });
+  // Keyboard-driven layout changes also get extra settle-time re-fits.
+  const handleKeyboardLayout = () => {
+    handleResizeLayout();
+    scheduleKeyboardSettleFit();
+  };
   if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", handleLayout, { passive: true });
-    window.visualViewport.addEventListener("scroll", handleLayout, { passive: true });
+    window.visualViewport.addEventListener("resize", handleKeyboardLayout, { passive: true });
+    window.visualViewport.addEventListener("scroll", handleViewportScroll, { passive: true });
   }
   // VK API mode: the keyboard show/hide fires geometrychange, not a
   // visualViewport resize (the visual viewport no longer moves).
   if (navigator.virtualKeyboard) {
-    navigator.virtualKeyboard.addEventListener("geometrychange", handleLayout, { passive: true });
+    navigator.virtualKeyboard.addEventListener("geometrychange", handleKeyboardLayout, { passive: true });
   }
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && document.body?.dataset?.page === "terminal") handleResizeLayout();
+  }, { passive: true });
+  document.addEventListener("focusin", () => {
+    if (document.body?.dataset?.page === "terminal") handleResizeLayout();
+  }, { passive: true });
+  document.addEventListener("focusout", () => {
+    if (document.body?.dataset?.page === "terminal") window.setTimeout(handleResizeLayout, 80);
+  }, { passive: true });
+}
+
+function scheduleTerminalSettledLayouts() {
+  window.setTimeout(refreshTerminalLayout, 80);
+  window.setTimeout(refreshTerminalLayout, 260);
+  window.setTimeout(refreshTerminalLayout, 700);
+}
+
+function refreshTerminalLayout() {
+  requestAnimationFrame(() => {
+    updateTerminalViewportMetrics();
+    updateTerminalToastAnchor();
+    updateTerminalOverflowState();
+    sendTerminalResize();
+    if (!terminalXtermActive && terminalFollowOutput) pinTerminalToBottom();
+  });
 }
 
 function closeTerminalSocket() {
@@ -320,7 +671,23 @@ function closeTerminalSocket() {
 
 function getTerminalWsUrl() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  return `${proto}://${location.host}/ws/terminal?session=${encodeURIComponent(terminalSessionName)}`;
+  const size = currentTerminalSize();
+  const path = terminalUsePty ? "/ws/terminal_pty" : "/ws/terminal";
+  const params = new URLSearchParams({
+    cols: String(size.cols),
+    rows: String(size.rows),
+  });
+  if (terminalSessionName) params.set("session", terminalSessionName);
+  if (terminalResetPending) {
+    // One-shot: the Reconnect button ends the current session and starts fresh.
+    params.set("reset", "1");
+    terminalResetPending = false;
+  }
+  return `${proto}://${location.host}${path}?${params.toString()}`;
+}
+
+function sendTerminalResize() {
+  if (terminalXtermActive) fitTerminalXterm();
 }
 
 function scheduleTerminalReconnect(delay = 1200) {
@@ -362,6 +729,8 @@ function connectTerminal(force = false) {
   }
 
   setTerminalMeta(getUIText("connecting", "connecting..."));
+  if (terminalXtermActive && terminalXterm) terminalXterm.reset();
+  else if (terminalUsePty) clearTerminalViewport();
 
   let ws;
   try {
@@ -391,7 +760,29 @@ function connectTerminal(force = false) {
 
     if (data.type === "meta") {
       setTerminalSessionInfo(data.session || terminalSessionName);
-      setTerminalMeta(data.created ? getUIText("terminal_ready", "tmux ready") : getUIText("connected", "connected"));
+      setTerminalMeta(data.mode === "pty"
+        ? getUIText("connected", "connected")
+        : (data.created ? getUIText("terminal_ready", "tmux ready") : getUIText("connected", "connected")));
+      if (terminalXtermActive && terminalXterm) {
+        fitTerminalXterm();
+        terminalXterm.focus();
+      }
+      return;
+    }
+
+    if (data.type === "pty_output") {
+      const bytes = data.b64 != null ? base64ToBytes(data.b64) : null;
+      if (terminalXtermActive && terminalXterm) {
+        writeTerminalXterm(bytes || data.text || "", { suppressData: data.replay === true });
+      } else {
+        const text = bytes
+          ? (terminalTextDecoder ? terminalTextDecoder.decode(bytes) : data.text || "")
+          : (data.text || "");
+        appendTerminalPtyOutput(text);
+      }
+      if (terminalMetaEl && terminalMetaEl.textContent === getUIText("connecting", "connecting...")) {
+        setTerminalMeta(getUIText("connected", "connected"));
+      }
       return;
     }
 
@@ -433,29 +824,10 @@ function initTerminalBindings() {
 
   bindTerminalLayoutObservers();
 
-  if (terminalInputEl) {
-    terminalInputEl.autocomplete = "off";
-    terminalInputEl.autocapitalize = "none";
-    terminalInputEl.spellcheck = false;
-    terminalInputEl.setAttribute("autocorrect", "off");
-    terminalInputEl.setAttribute("enterkeyhint", "send");
-  }
-
   bindNodeOnce(terminalScreenEl, "scrollBound", () => {
     terminalFollowOutput = isTerminalPinnedToBottom();
     updateTerminalOverflowState();
   }, "scroll");
-
-  bindNodeOnce(terminalFormEl, "submitBound", (ev) => {
-    ev.preventDefault();
-    const line = (terminalInputEl?.value || "").trim();
-    if (!line) return;
-    if (runTerminalLocalAlias(line)) return;
-    terminalFollowOutput = isTerminalPinnedToBottom();
-    if (sendTerminalPacket({ type: "input", data: line })) {
-      terminalInputEl.value = "";
-    }
-  }, "submit");
 
   bindNodeOnce(btnTerminalCtrlCEl, "clickBound", () => {
     terminalFollowOutput = isTerminalPinnedToBottom();
@@ -464,50 +836,88 @@ function initTerminalBindings() {
 
   bindNodeOnce(btnTerminalClearEl, "clickBound", () => {
     terminalFollowOutput = true;
-    clearTerminalViewport();
+    if (terminalXtermActive && terminalXterm) terminalXterm.clear();
+    else clearTerminalViewport();
     sendTerminalControl("clear");
   });
 
   bindNodeOnce(btnTerminalReconnectEl, "clickBound", () => {
-    terminalFollowOutput = isTerminalPinnedToBottom();
-    const metaText = String(terminalMetaEl?.textContent || "");
-    const blockedByPassword = terminalLastScreen.includes("Password:");
-    const blockedByStartup = metaText.includes("returned non-zero exit status");
-    if ((blockedByPassword || blockedByStartup) && sendTerminalControl("new_session", { quiet: true })) {
-      setTerminalMeta(getUIText("connecting", "connecting..."));
-      return;
-    }
+    terminalFollowOutput = true;
+    // Reconnect = end the session and start a fresh one (not just re-attach).
+    terminalResetPending = true;
     connectTerminal(true);
   });
+
+  // On-screen key bar (Esc/Ctrl/Tab/arrows) for touch devices. mousedown
+  // preventDefault keeps focus on the grid so physical/virtual typing that
+  // follows still lands in the terminal.
+  if (terminalKeysEl && terminalKeysEl.dataset.keysBound !== "1") {
+    terminalKeysEl.dataset.keysBound = "1";
+    terminalKeysEl.addEventListener("touchstart", (ev) => {
+      const touch = ev.touches && ev.touches[0];
+      terminalKeysTouchStart = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    }, { passive: true });
+    terminalKeysEl.addEventListener("touchmove", (ev) => {
+      if (!terminalKeysTouchStart) return;
+      const touch = ev.touches && ev.touches[0];
+      if (!touch) return;
+      const dx = Math.abs(touch.clientX - terminalKeysTouchStart.x);
+      const dy = Math.abs(touch.clientY - terminalKeysTouchStart.y);
+      if (dy > dx + 4) ev.preventDefault();
+    }, { passive: false });
+    terminalKeysEl.addEventListener("touchend", () => {
+      terminalKeysTouchStart = null;
+    }, { passive: true });
+    terminalKeysEl.addEventListener("touchcancel", () => {
+      terminalKeysTouchStart = null;
+    }, { passive: true });
+    terminalKeysEl.querySelectorAll(".terminal-key").forEach((btn) => {
+      btn.addEventListener("mousedown", (ev) => ev.preventDefault());
+      btn.addEventListener("click", () => sendTerminalKey(btn.dataset.key));
+    });
+  }
+
+  // Click anywhere on the grid host focuses the terminal so a physical (PC)
+  // keyboard drives it directly. Esc/Ctrl/arrows are handled natively by xterm.
+  if (terminalXtermEl && terminalXtermEl.dataset.focusBound !== "1") {
+    terminalXtermEl.dataset.focusBound = "1";
+    terminalXtermEl.addEventListener("mousedown", () => {
+      if (terminalXtermActive && terminalXterm) {
+        requestAnimationFrame(() => terminalXterm.focus());
+      }
+    });
+  }
 }
 
 function initTerminalPage() {
+  enterTerminalKeyboardMode();
   terminalPageActive = true;
   terminalFollowOutput = true;
   terminalCurrentCwd = "/data/openpilot";
   initTerminalBindings();
+  activateTerminalXterm();
   setTerminalSessionMeta();
-  updateTerminalViewportMetrics();
-  if (!terminalLastScreen) setTerminalScreen(" ", true);
-  requestAnimationFrame(updateTerminalToastAnchor);
-  requestAnimationFrame(updateTerminalOverflowState);
-  window.setTimeout(updateTerminalToastAnchor, 90);
+  if (!terminalXtermActive && !terminalLastScreen) setTerminalScreen(" ", true);
+  refreshTerminalLayout();
+  scheduleTerminalSettledLayouts();
   connectTerminal(false);
   window.CarrotSupportTerminal?.init?.();
 }
 
 function teardownTerminalPage() {
   terminalPageActive = false;
+  leaveTerminalKeyboardMode();
   window.CarrotSupportTerminal?.teardown?.();
   clearTerminalReconnectTimer();
   closeTerminalSocket();
-  document.documentElement.style.removeProperty("--terminal-vv-height");
-  document.documentElement.style.removeProperty("--terminal-vv-top");
-  const layoutStyle = terminalPageEl?.style || document.documentElement.style;
-  layoutStyle.removeProperty("--terminal-bottom-gap");
-  layoutStyle.removeProperty("--terminal-form-bottom");
+  if (terminalLayoutRaf) {
+    cancelAnimationFrame(terminalLayoutRaf);
+    terminalLayoutRaf = 0;
+  }
+  terminalKeyboardFitTimers.forEach((t) => clearTimeout(t));
+  terminalKeyboardFitTimers = [];
   document.documentElement.style.removeProperty("--terminal-toast-bottom");
   document.documentElement.style.removeProperty("--terminal-toast-left");
   document.documentElement.style.removeProperty("--terminal-toast-width");
-  document.documentElement.classList.remove("terminal-keyboard-open");
+  terminalKeysTouchStart = null;
 }

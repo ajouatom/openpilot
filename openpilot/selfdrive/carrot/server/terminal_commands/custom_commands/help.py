@@ -7,7 +7,7 @@ from ..registry import get_command, iter_commands, register_command
 @register_command(
   name="help",
   summary="List web terminal meta commands or show command usage.",
-  usage=":help [command]",
+  usage=f"{META_COMMAND_PREFIX}help [command]",
 )
 def run(args: list[str]) -> int:
   if args:
@@ -21,5 +21,5 @@ def run(args: list[str]) -> int:
   print("Web terminal meta commands")
   for command in iter_commands():
     print(f"  {META_COMMAND_PREFIX}{command.name:<18} {command.summary}")
-  print("\nRun :help <command> for usage. Other input is sent to the shell unchanged.")
+  print(f"\nRun {META_COMMAND_PREFIX}help <command> for usage. Other input is sent to the shell unchanged.")
   return 0

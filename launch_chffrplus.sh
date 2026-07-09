@@ -76,6 +76,35 @@ function start_carrot_recovery {
   (cd "$DIR" && "$py_bin" "$recovery_script" --port 6999 >> /tmp/carrot_recovery.log 2>&1 &)
 }
 
+function start_carrot_web {
+  export CARROT_WEB_EXTERNAL="${CARROT_WEB_EXTERNAL:-1}"
+  [ "$CARROT_WEB_EXTERNAL" = "1" ] || return
+
+  local watchdog_script="$DIR/scripts/carrot_web_watchdog.sh"
+  local pid_file="${CARROT_WEB_PID_FILE:-/tmp/carrot_web_watchdog.pid}"
+  local py_bin
+
+  [ -f "$watchdog_script" ] || return
+
+  if [ -f "$pid_file" ]; then
+    local old_pid
+    old_pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [ -n "$old_pid" ] && kill -0 "$old_pid" >/dev/null 2>&1; then
+      return
+    fi
+  fi
+
+  py_bin="$(command -v python3 || command -v python || true)"
+  [ -n "$py_bin" ] || return
+
+  echo "Starting external carrot web server on 7000."
+  if command -v setsid >/dev/null 2>&1; then
+    setsid bash "$watchdog_script" "$DIR" "$py_bin" >> /tmp/carrot_server.log 2>&1 &
+  else
+    bash "$watchdog_script" "$DIR" "$py_bin" >> /tmp/carrot_server.log 2>&1 &
+  fi
+}
+
 function invalidate_modeld_build_if_needed {
   local stamp_path="$DIR/openpilot/selfdrive/modeld/models/.build_stamp"
   local tg_devices_path="$DIR/openpilot/selfdrive/modeld/models/tg_input_devices.json"
@@ -157,6 +186,7 @@ function launch {
   mkdir -p "$PYDEPS"
   export PYTHONPATH="$PYDEPS:$PWD${PYTHONPATH:+:$PYTHONPATH}"
   start_carrot_recovery
+  start_carrot_web
 
   # hardware specific init
   if [ -f /AGNOS ]; then
