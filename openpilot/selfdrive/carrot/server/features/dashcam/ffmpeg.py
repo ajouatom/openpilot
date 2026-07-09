@@ -88,8 +88,9 @@ def browser_video(segment: str) -> tuple[str, str]:
   if source_name.endswith(".mp4"):
     return source, "video/mp4"
 
-  # 예전 -an 변환으로 만들어진 무음 캐시와 섞이지 않도록 캐시 종류를 분리
-  out = cache_path("video2", segment, ".mp4")
+  # 주의: 예전 -an 변환으로 캐시된 무음 mp4가 남아있으면 그대로 재생됨 —
+  # 적용 후 기기에서 캐시 디렉토리(cache/dashcam/video)를 한 번 비워줄 것
+  out = cache_path("video", segment, ".mp4")
   if os.path.isfile(out) and os.path.getsize(out) > 0:
     return out, "video/mp4"
 
