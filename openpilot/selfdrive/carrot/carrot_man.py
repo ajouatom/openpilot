@@ -1211,10 +1211,7 @@ class CarrotMan:
             upload_target = self.resolve_tmux_upload_target()
             if upload_target["kind"] == "skip":
               print(f"[carrot_man] tmux upload failed for {pending_tmux_reason}: {upload_target['reason']}")
-              self.params.put("CarrotException", "")
-              pending_tmux_reason = None
-              pending_tmux_next_attempt_at = 0.0
-              reset_carrot_exception_tmux_send_queue()
+              pending_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
             else:
               ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", pending_tmux_reason) if upload_target["kind"] == "carrot" else False
               http_response = self.send_tmux_http(pending_tmux_reason, send_settings = False, target=upload_target)
