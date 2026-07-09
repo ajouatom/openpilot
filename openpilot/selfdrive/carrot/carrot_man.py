@@ -943,12 +943,26 @@ class CarrotMan:
         return value
     return self._decode_tmux_discord_webhook_url()
 
+  def _github_repo_url(self):
+    remote = self._param_text("GitRemote")
+    if remote.startswith("git@github.com:"):
+      remote = "https://github.com/" + remote[len("git@github.com:"):]
+    if remote.startswith("https://github.com/") or remote.startswith("http://github.com/"):
+      remote = remote.removesuffix(".git")
+      return remote.replace("http://github.com/", "https://github.com/", 1)
+
+    github_user = self._param_text("GithubUsername")
+    if github_user:
+      return f"https://github.com/{github_user}/openpilot"
+    return "https://github.com/ajouatom/openpilot"
+
   def _tmux_discord_content(self, tmux_why, ftp_ok, http_ok, http_response):
     branch = self._param_text("GitBranch", "unknown")
     commit = self._param_text("GitCommit", "unknown")
     commit_date = self._param_text("GitCommitDate", "unknown")
+    repo_url = self._github_repo_url()
     commit_text = (
-      f"[{commit[:8]}](https://github.com/ajouatom/openpilot/commit/{commit})"
+      f"[{commit[:8]}]({repo_url}/commit/{commit})"
       if commit and commit != "unknown"
       else "unknown"
     )
@@ -964,6 +978,7 @@ class CarrotMan:
       f"- Car name: {self._param_text('CarName', 'none')}",
       f"- DongleId: {self._param_text('DongleId', 'unknown')}",
       f"- Serial: {self._param_text('HardwareSerial', 'unknown')}",
+      f"- GitHub: {repo_url}",
       f"- Branch: {branch}",
       f"- Commit: {commit_text} ({commit_date})",
     ]
