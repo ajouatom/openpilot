@@ -1181,6 +1181,8 @@ class CarrotMan:
             discord_ok = self.send_tmux_discord(pending_tmux_reason, ftp_ok, http_ok, http_response)
             if ftp_ok or http_ok or discord_ok:
               print(f"[carrot_man] tmux upload complete for {pending_tmux_reason}: ftp_ok={ftp_ok}, http_ok={http_ok}, discord_ok={discord_ok}")
+              if pending_tmux_reason == "exception":
+                self.params.put_bool("CarrotExceptionSent", True)
               self.params.put("CarrotException", "")
               pending_tmux_reason = None
               pending_tmux_next_attempt_at = 0.0
