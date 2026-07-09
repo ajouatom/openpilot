@@ -10,6 +10,15 @@ from .lane_math import calculate_lane_width
 from .hysteresis import ExistCounter
 
 
+SIDE_LEAD_CLOSE_DREL = 5.0
+SIDE_LEAD_MIN_GAP_BASE = 6.0
+SIDE_LEAD_MIN_GAP_TIME = 0.30
+SIDE_LEAD_MIN_GAP_MAX = 12.0
+SIDE_LEAD_PROJECT_SEC = 1.5
+SIDE_LEAD_TTC_MIN_CLOSING = 0.5
+SIDE_LEAD_TTC_NEAR_MARGIN = 6.0
+
+
 @dataclass
 class SideState:
   name: str  # "left" / "right"
@@ -111,15 +120,7 @@ class SideState:
                        blindspot: bool,      # carstate.leftBlindspot/rightBlindspot
                        ignore_bsd: bool,
                        bsd_hold_sec: float = 2.0):
-    # object_detected from side radar.
-    if radar_obj is not None and radar_obj.status:
-      d = radar_obj.dRel
-      v = radar_obj.vLead
-      side_object_dist = d + v * 4.0
-    else:
-      side_object_dist = 255.0
-
-    object_detected = side_object_dist < (v_ego * 3.0)
+    object_detected = self._side_lead_is_unsafe(v_ego, radar_obj)
     if object_detected:
       self.object_detected_count = max(1, self.object_detected_count + 1)
     else:
@@ -133,6 +134,48 @@ class SideState:
       self.bsd_hold_counter = int(bsd_hold_sec / DT_MDL)
     else:
       self.bsd_hold_counter = max(0, self.bsd_hold_counter - 1)
+
+  @staticmethod
+  def _lead_float(radar_obj, name: str, default: float = 0.0) -> float:
+    try:
+      return float(getattr(radar_obj, name))
+    except (AttributeError, TypeError, ValueError):
+      return default
+
+  def _side_lead_is_unsafe(self, v_ego: float, radar_obj) -> bool:
+    if radar_obj is None or not radar_obj.status:
+      return False
+
+    d_rel = self._lead_float(radar_obj, "dRel", 255.0)
+    if not 0.1 < d_rel < 160.0:
+      return False
+
+    v_lead = self._lead_float(radar_obj, "vLead", v_ego)
+    v_rel = self._lead_float(radar_obj, "vRel", v_lead - v_ego)
+    v_ego = max(0.0, float(v_ego))
+
+    if d_rel < SIDE_LEAD_CLOSE_DREL:
+      return True
+
+    min_gap = float(np.clip(v_ego * SIDE_LEAD_MIN_GAP_TIME,
+                            SIDE_LEAD_MIN_GAP_BASE,
+                            SIDE_LEAD_MIN_GAP_MAX))
+
+    # Slower side-lane vehicles matter most when ego is closing on them.
+    closing_speed = max(0.0, -v_rel)
+    if closing_speed > SIDE_LEAD_TTC_MIN_CLOSING:
+      ttc = d_rel / closing_speed
+      ttc_limit = float(np.interp(v_ego, [0.0, 15.0, 30.0], [2.0, 3.0, 3.5]))
+      near_enough = d_rel < max(min_gap + SIDE_LEAD_TTC_NEAR_MARGIN, v_ego * 1.2)
+      if near_enough and ttc < ttc_limit:
+        return True
+
+      projected_gap = d_rel + v_rel * SIDE_LEAD_PROJECT_SEC
+      if projected_gap < min_gap:
+        return True
+
+    # Same-speed adjacent vehicles still need a basic speed-scaled gap.
+    return d_rel < min_gap and v_rel < 1.0
 
   def compute_lane_change_available(self, lane_line_info_lt_20: bool, ignore_bsd: bool):
     # geometric availability

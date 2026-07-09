@@ -368,6 +368,9 @@ web/js/pages/
   tools.js
   tools_notifications.js
   tools_settings_qr.js
+  tools_web_settings_schema.js
+  tools_web_settings_state.js
+  tools_web_settings_render.js
   tools_web_settings.js
   terminal.js
   vision_background.js
@@ -389,7 +392,10 @@ web/js/pages/
 | `pages/setting_device.js` | Device tab coordinator and tab state. |
 | `pages/tools.js` | Tools page state, metadata, action runner, button binding. |
 | `pages/tools_notifications.js` | Tools log/notification card renderer. |
-| `pages/tools_web_settings.js` | Web settings dialog and auto update setting. |
+| `pages/tools_web_settings_schema.js` | Web settings UI schema (groups/rows/control widgets); value types/defaults come from the backend spec. |
+| `pages/tools_web_settings_state.js` | Web settings state + API; ingests `bootstrap.webSettingsSpec`, exposes `CarrotWebSettingsState` and the public getters/setters + start-page. |
+| `pages/tools_web_settings_render.js` | Web settings dialog row/control rendering and active-panel sync. |
+| `pages/tools_web_settings.js` | Web settings dialog open/bind controller. |
 | `pages/tools_settings_qr.js` | Settings QR backup/restore UI. |
 | `pages/logs/shared.js` | Logs tab state, player, lazy image helpers. |
 | `pages/logs/dashcam.js` | Dashcam route/segment list, upload flow. |
@@ -541,7 +547,7 @@ Asset URLs carry `?v=` cache-busting query strings; bump the version when a file
 |---|---|---|---|---|
 | Drive/Home | `pageCarrot`, `driveHudCard`, `carrotNavHud`, `rtcVideo` | `realtime/*`, `vision_background.js` | `pages/drive.css`, `hud_card.css`, `components/nav_hud.css` | `features/system.py`, `features/ws.py`, `features/stream.py`, `features/vision_diag.py`, `realtime/transports/*` |
 | Setting | `pageSetting` | `setting.js`, `setting_device*.js`, `car.js` | `pages/settings/*` | `features/settings.py`, `features/params.py`, `features/system.py`, `features/setting_*` |
-| Tools | `pageTools` | `tools.js`, `tools_notifications.js`, `tools_web_settings.js`, `tools_settings_qr.js`, `branch.js` | `pages/tools/*` | `features/tools/*`, `features/system.py`, `features/params.py`, `features/web_settings.py` |
+| Tools | `pageTools` | `tools.js`, `tools_notifications.js`, `tools_web_settings*.js`, `tools_settings_qr.js`, `branch.js` | `pages/tools/*` | `features/tools/*`, `features/system.py`, `features/params.py`, `features/web_settings.py` |
 | Logs | `pageLogs` | `pages/logs/shared.js`, `dashcam.js`, `screenrecord.js` | `pages/logs.css` | `features/dashcam/*`, `features/screenrecord/*` |
 | Terminal | `pageTerminal` | `terminal.js` | `pages/terminal.css` | `features/terminal.py`, `services/tmux.py`, `terminal_commands/*` |
 | Car Select | `pageCar`, `appCarPicker` | `car.js` | `layout.css`, `components.css` | `features/cars.py`, Params |

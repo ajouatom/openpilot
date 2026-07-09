@@ -596,7 +596,7 @@
   function lockTimestampToggle() {
     const row = document.querySelector('.setting[data-setting-name="CarrotYouTubeTimestamp"]');
     if (!row) return;
-    const toggle = row.querySelector(".setting-switch__input");
+    const toggle = row.querySelector(".c-switch__input");
     if (toggle) {
       toggle.checked = false;
       toggle.disabled = true;

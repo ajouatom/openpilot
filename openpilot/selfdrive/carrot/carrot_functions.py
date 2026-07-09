@@ -104,6 +104,7 @@ class CarrotPlanner:
     self.dynamicTFollowLC = 0.0
     self.enableSpeedTF = 0
     self.tFollowDecelBoost = 0.0
+    self._tf_decel_extra = 0.0
     self.personality = 1
 
     self.cruiseMaxVals0 = 1.6
@@ -259,6 +260,7 @@ class CarrotPlanner:
       self._tf_applied = float(tf_target)
 
     DECEL_HOLD_A = -0.2  # m/s^2
+    self._tf_decel_extra = 0.0
 
     # 감속 중에는 t_follow 축소를 막음
     if a_ego <= DECEL_HOLD_A and tf_target < self._tf_applied:
@@ -268,15 +270,17 @@ class CarrotPlanner:
 
     # 감속 중에는 속도 감소로 실제 거리 여유가 줄 수 있으므로 약간 추가 확보
     # a_ego = -0.2 부근에서는 거의 0, 더 강한 감속일수록 boost 증가
-    decel_boost = float(np.interp(a_ego, [-2.5, -1.0, -0.2, 0.0],
-                                  [0.25, 0.12, 0.02, 0.0]))
+    decel_boost = float(np.interp(a_ego, [-2.5, -1.0, -0.3, 0.0],
+                                  [0.50, 0.25, 0.06, 0.0]))
+    self._tf_decel_extra = decel_boost * self.tFollowDecelBoost
 
-    return float(tf_held + decel_boost * self.tFollowDecelBoost)
+    return float(tf_held + self._tf_decel_extra)
 
 
   def _clip_t_follow(self, t_follow):
     tf_min = float(min(self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4))
     tf_max = float(max(self.tFollowGap1, self.tFollowGap2, self.tFollowGap3, self.tFollowGap4))
+    tf_max = min(2.0, tf_max + max(0.0, self._tf_decel_extra))
     return float(np.clip(t_follow, max(0.3, tf_min), tf_max))
 
   def get_T_FOLLOW(self, personality=log.LongitudinalPersonality.standard, v_ego=0.0, a_ego=0.0):
@@ -329,7 +333,8 @@ class CarrotPlanner:
     # t_follow가 급격히 증가하면 목표거리도 급격히 증가하여 강한 감속을 유도할 수 있으므로
     # 증가 방향만 천천히 반영
     if t_follow > self.t_follow_last:
-      t_follow = min(t_follow, self.t_follow_last + 0.1 * DT_MDL)
+      rise_rate = 0.45 if self._tf_decel_extra > 0.02 else 0.1
+      t_follow = min(t_follow, self.t_follow_last + rise_rate * DT_MDL)
 
     self.t_follow_last = float(t_follow)
     return float(t_follow + adjust_t_follow)

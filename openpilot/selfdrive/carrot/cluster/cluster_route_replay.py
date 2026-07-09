@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import bz2
 import io
@@ -76,6 +76,14 @@ RADAR_FRONT_MAX_LONGITUDINAL_M = 180.0
 CORNER_RADAR_REAR_MIN_LONGITUDINAL_M = -180.0
 CCNC_CORNER_RADAR_ADDRESS = 0x162
 ADRV_CORNER_RADAR_ADDRESS = 0x1EA
+CORNER_OBJECT_TRACK_ID_OFFSET = 200
+CORNER_OBJECT_TRACK_COUNT = 20
+CORNER_OBJECT_180_TRACK_ID_OFFSET = 240
+CORNER_OBJECT_180_TRACK_COUNT = 10
+CORNER_OBJECT_SOURCE = "cornerRadar"
+CORNER_RADAR_OBJECTS_235_EXT_FLAG = 2 ** 12
+CORNER_RADAR_OBJECTS_180_EXT_FLAG = 2 ** 13
+CORNER_RADAR_OBJECTS_EXT_FLAGS = CORNER_RADAR_OBJECTS_235_EXT_FLAG | CORNER_RADAR_OBJECTS_180_EXT_FLAG
 HYUNDAI_CAMERA_CAN_BUS_MOD = 2
 CORNER_RADAR_DBC_MESSAGES = {
     CCNC_CORNER_RADAR_ADDRESS: "CCNC_0x162",
@@ -174,6 +182,7 @@ class RouteReplayFrame:
     brake: float
     detected_vehicles: tuple[DetectedVehicle, ...]
     radar_points: tuple[RadarPoint, ...] = ()
+    corner_radar_supported: bool = False
     tpms: TpmsInfo = TpmsInfo()
     display_speed_kph: float | None = None
     planned_speed_kph: float | None = None
@@ -1012,6 +1021,8 @@ class RouteLogParser:
         self.adrv_corner_message_t = -999.0
         self.adrv_lane_changing = 0
         self.adrv_lane_changing_t = -999.0
+        self.corner_radar_supported = False
+        self.corner_radar_tracks_seen = False
         self.live_track_radar_points: dict[str, RadarPoint] = {}
         self.live_track_radar_t = -999.0
         self.radar_detections: tuple[DetectedVehicle, ...] = ()
@@ -1047,6 +1058,8 @@ class RouteLogParser:
                 self._update_car_control(event.carControl)
             elif event_type == "cameraOdometry":
                 self._update_camera_odometry(event.cameraOdometry, bool(safe_get(event, "valid", True)))
+            elif event_type == "carParams":
+                self._update_car_params(event.carParams)
             elif event_type == "radarState":
                 self._update_radar_state(event.radarState, event_t)
             elif event_type == "liveTracks":
@@ -1172,6 +1185,7 @@ class RouteLogParser:
             brake=clamp(safe_float(car_state, "brake", 0.0), 0.0, 1.0),
             detected_vehicles=detected_vehicles,
             radar_points=radar_points,
+            corner_radar_supported=self.corner_radar_active_for_display(),
             tpms=tpms,
             display_speed_kph=display_speed_kph,
             planned_speed_kph=self.planned_speed_kph,
@@ -1457,9 +1471,17 @@ class RouteLogParser:
         if lat_active is not None:
             self.lfa_active = bool(lat_active)
 
+    def _update_car_params(self, car_params: Any) -> None:
+        ext_flags = safe_optional_int(car_params, "extFlags")
+        if ext_flags is not None and (ext_flags & CORNER_RADAR_OBJECTS_EXT_FLAGS):
+            self.corner_radar_supported = True
+
+    def corner_radar_active_for_display(self) -> bool:
+        return self.corner_radar_supported or self.corner_radar_tracks_seen
+
     def _update_radar_state(self, radar_state: Any, event_t: float) -> None:
         detections: list[DetectedVehicle] = []
-        for label, lead_name in (("TARGET", "leadOne"), ("TARGET2", "leadTwo")):
+        for label, lead_name in (("L1", "leadOne"), ("L2", "leadTwo")):
             lead = safe_get(radar_state, lead_name)
             if lead is None or not bool(safe_get(lead, "status", False)):
                 continue
@@ -1475,6 +1497,8 @@ class RouteLogParser:
             lateral_speed_mps = safe_optional_float(lead, "vLat")
             if lateral_speed_mps is not None:
                 lateral_speed_mps = -lateral_speed_mps
+            track_id = safe_optional_int(lead, "radarTrackId")
+            cut_in = lead_name == "leadTwo" and radar_track_id_is_corner_object(track_id)
             absolute_speed_kph = (
                 lead_speed_mps * 3.6
                 if lead_speed_mps is not None
@@ -1486,7 +1510,7 @@ class RouteLogParser:
             )
             detections.append(
                 DetectedVehicle(
-                    label=label,
+                    label="L2 CUT-IN" if cut_in else label,
                     longitudinal_m=d_rel,
                     lateral_m=clamp(lateral_m, -8.0, 8.0),
                     source="radarState",
@@ -1494,6 +1518,8 @@ class RouteLogParser:
                     absolute_speed_kph=absolute_speed_kph,
                     lateral_speed_mps=lateral_speed_mps,
                     acceleration_mps2=safe_optional_float(lead, "aLeadK"),
+                    cut_in=cut_in,
+                    primary=True,
                     ttc_s=ttc_from_relative_speed(d_rel, relative_speed_mps),
                 )
             )
@@ -1534,11 +1560,23 @@ class RouteLogParser:
             point = live_track_to_radar_point(track, index, self.current_speed_kph)
             if point is not None:
                 points[point.label] = point
+                if point.source == CORNER_OBJECT_SOURCE:
+                    self.corner_radar_tracks_seen = True
         self.live_track_radar_points = points
         self.live_track_radar_t = event_t
 
     def _radar_points_from_current_state(self, event_t: float) -> tuple[RadarPoint, ...]:
-        if event_t - self.live_track_radar_t < RADAR_POINT_STALE_S:
+        live_tracks_fresh = event_t - self.live_track_radar_t < RADAR_POINT_STALE_S
+        if live_tracks_fresh:
+            corner_points = sorted_radar_points(
+                point for point in self.live_track_radar_points.values() if point.source == CORNER_OBJECT_SOURCE
+            )
+            if corner_points:
+                return corner_points
+
+        if live_tracks_fresh:
+            if self.corner_radar_active_for_display():
+                return ()
             return sorted_radar_points(self.live_track_radar_points.values())
         return ()
 
@@ -2202,6 +2240,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         model_path=frame.model_path,
         detected_vehicles=frame.detected_vehicles,
         radar_points=frame.radar_points,
+        corner_radar_supported=frame.corner_radar_supported,
         tpms=frame.tpms,
         planned_speed_kph=frame.planned_speed_kph,
         planned_accel_mps2=frame.planned_accel_mps2,
@@ -2389,6 +2428,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         brake=lerp(left.brake, right.brake),
         detected_vehicles=discrete.detected_vehicles,
         radar_points=discrete.radar_points,
+        corner_radar_supported=discrete.corner_radar_supported,
         tpms=discrete.tpms,
         planned_speed_kph=lerp_optional(left.planned_speed_kph, right.planned_speed_kph),
         planned_accel_mps2=lerp_optional(left.planned_accel_mps2, right.planned_accel_mps2),
@@ -3042,7 +3082,12 @@ def live_track_to_radar_point(track: Any, index: int, ego_speed_kph: float) -> R
     if not -12.0 <= lateral_m <= 12.0:
         return None
     track_id = safe_optional_int(track, "trackId")
-    label = f"T{track_id}" if track_id is not None else f"T{index:03d}"
+    is_corner_object = radar_track_id_is_corner_object(track_id)
+    label = (
+        corner_track_label(track_id)
+        if is_corner_object
+        else (f"T{track_id}" if track_id is not None else f"T{index:03d}")
+    )
     rel_speed_mps = safe_optional_float(track, "vRel")
     lead_speed_mps = safe_optional_float(track, "vLead")
     absolute_speed_kph = None
@@ -3058,7 +3103,7 @@ def live_track_to_radar_point(track: Any, index: int, ego_speed_kph: float) -> R
         label=label,
         longitudinal_m=d_rel,
         lateral_m=lateral_m,
-        source="liveTracks",
+        source=CORNER_OBJECT_SOURCE if is_corner_object else "liveTracks",
         relative_speed_mps=rel_speed_mps,
         absolute_speed_kph=absolute_speed_kph,
         lateral_speed_mps=lat_speed_mps,
@@ -3066,6 +3111,21 @@ def live_track_to_radar_point(track: Any, index: int, ego_speed_kph: float) -> R
         probability=0.72 if measured else 0.38,
         valid=1 if measured else 0,
     )
+
+
+def radar_track_id_is_corner_object(track_id: int | None) -> bool:
+    if track_id is None:
+        return False
+    return (
+        CORNER_OBJECT_TRACK_ID_OFFSET <= track_id < CORNER_OBJECT_TRACK_ID_OFFSET + CORNER_OBJECT_TRACK_COUNT
+        or CORNER_OBJECT_180_TRACK_ID_OFFSET <= track_id < CORNER_OBJECT_180_TRACK_ID_OFFSET + CORNER_OBJECT_180_TRACK_COUNT
+    )
+
+
+def corner_track_label(track_id: int) -> str:
+    if CORNER_OBJECT_180_TRACK_ID_OFFSET <= track_id < CORNER_OBJECT_180_TRACK_ID_OFFSET + CORNER_OBJECT_180_TRACK_COUNT:
+        return f"CR180_{track_id - CORNER_OBJECT_180_TRACK_ID_OFFSET:02d}"
+    return f"CR{track_id - CORNER_OBJECT_TRACK_ID_OFFSET:02d}"
 
 
 def sorted_radar_points(points: Any) -> tuple[RadarPoint, ...]:
@@ -3101,6 +3161,12 @@ def dbc_unsigned(data: bytes, start: int, length: int, byte_order: str) -> int:
         value = (value << 1) | ((data[bit // 8] >> (bit % 8)) & 1)
         bit = bit + 15 if bit % 8 == 0 else bit - 1
     return value
+
+
+def dbc_signed(data: bytes, start: int, length: int, byte_order: str) -> int:
+    value = dbc_unsigned(data, start, length, byte_order)
+    sign_bit = 1 << (length - 1)
+    return value - (1 << length) if value & sign_bit else value
 
 
 def has_nearby_vehicle(
@@ -3543,3 +3609,4 @@ def lane_color_from_code(code: int) -> tuple[int, int, int] | None:
     if color_code == 2:
         return YELLOW
     return None
+

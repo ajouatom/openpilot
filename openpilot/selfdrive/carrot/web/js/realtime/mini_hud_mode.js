@@ -26,6 +26,17 @@
     return "detect";
   }
 
+  // Web setting gate. Only the default "detect" path is gated — explicit URL
+  // params (off/force/auto/mhud_test) stay honored as developer overrides.
+  function settingEnabled() {
+    const settings = window.CarrotWebSettingsState || {};
+    const value = Object.prototype.hasOwnProperty.call(settings, "mini_hud_enabled")
+      ? settings.mini_hud_enabled
+      : true;
+    if (typeof value === "string") return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+    return Boolean(value);
+  }
+
   function viewportMetrics() {
     const viewport = window.visualViewport;
     const root = document.documentElement;
@@ -134,6 +145,11 @@
       return result;
     }
 
+    if (requestMode === "detect" && !settingEnabled()) {
+      result.reason = "setting-off";
+      return result;
+    }
+
     if (overlayOpen) {
       result.reason = "overlay-open";
       return result;
@@ -234,6 +250,9 @@
     window.addEventListener("resize", onResize, { passive: true });
     window.addEventListener("orientationchange", onResize, { passive: true });
     window.addEventListener("carrot:pagechange", () => schedule("pagechange"));
+    window.addEventListener("carrot:websettingschange", (event) => {
+      if (!event?.detail || event.detail.key === "mini_hud_enabled") schedule("websettingschange");
+    });
     if (window.visualViewport) {
       window.visualViewport.addEventListener("resize", onResize, { passive: true });
     }

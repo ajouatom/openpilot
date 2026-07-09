@@ -57,12 +57,26 @@ window.HomeDrive = (() => {
     [0, 0, 1],
     [1, 0, 0],
   ];
+  // Road-camera intrinsics. Default is AR0231 / OX03C10 (comma3/3X). Mutated in
+  // place by applyRoadCameraSensor() once the device's real sensor is known, so
+  // OS04C10 units (different focal length AND native resolution) project the
+  // overlay correctly instead of drifting up/down. All downstream code reads
+  // BASE_CAMERA.<field> at runtime, so mutating the fields updates everything.
   const BASE_CAMERA = {
     width: 1928,
     height: 1208,
     focalX: 2648,
     focalY: 2648,
   };
+  // Mirror of openpilot common/transformations/camera.py DEVICE_CAMERAS[*].fcam.
+  // CameraConfig intrinsics == [[f,0,w/2],[0,f,h/2],[0,0,1]] — same shape as
+  // getIntrinsics() here, so we only need width/height/focal per sensor.
+  const ROAD_CAMERAS = {
+    ar0231:  { width: 1928, height: 1208, focal: 2648.0 },
+    ox03c10: { width: 1928, height: 1208, focal: 2648.0 },
+    os04c10: { width: 1344, height: 760,  focal: 1141.5 },  // 2688/2 x 1520/2, 1522*3/4
+  };
+  let _roadCameraSensor = "";
   const DISPLAY_MODES = [
     { key: "fit", labelKey: "display_fit", fallbackLabel: "Fit" },
     { key: "normal", labelKey: "display_normal", fallbackLabel: "Normal" },
@@ -700,6 +714,29 @@ window.HomeDrive = (() => {
     const rpy = readRpyTriplet(liveCalibration);
     if (!rpy) return VIEW_FROM_DEVICE;
     return mat3Multiply(VIEW_FROM_DEVICE, rotFromEuler(rpy[0], rpy[1], rpy[2]));
+  }
+
+  // Select the real road-camera intrinsics from the device's reported sensor.
+  // No-ops for the AR0231/OX03C10 default and for unknown/unset sensors, so
+  // currently-correct units are byte-identical; only OS04C10 units are corrected.
+  function applyRoadCameraSensor(sensor) {
+    const key = String(sensor || "").trim().toLowerCase();
+    if (!key || key === _roadCameraSensor) return;
+    _roadCameraSensor = key;
+    const cfg = ROAD_CAMERAS[key];
+    if (!cfg) return;  // unknown sensor -> keep the AR0231/OX03C10 default
+    if (BASE_CAMERA.width === cfg.width && BASE_CAMERA.height === cfg.height &&
+        BASE_CAMERA.focalX === cfg.focal && BASE_CAMERA.focalY === cfg.focal) {
+      return;
+    }
+    BASE_CAMERA.width = cfg.width;
+    BASE_CAMERA.height = cfg.height;
+    BASE_CAMERA.focalX = cfg.focal;
+    BASE_CAMERA.focalY = cfg.focal;
+    resetFrameProjectionCache();
+    transformSignature = "";
+    _forceNextRender = true;
+    try { console.log("[carrot-vision] road camera sensor:", key, cfg); } catch (_) {}
   }
 
   function getIntrinsics(videoWidth, videoHeight) {
@@ -3874,6 +3911,7 @@ window.HomeDrive = (() => {
     const model = overlayState.modelV2 || null;
     const liveCalibration = overlayState.liveCalibration || null;
     const roadCameraState = overlayState.roadCameraState || null;
+    applyRoadCameraSensor(roadCameraState?.sensor);
     const selectedPath = getSelectedPath(overlayState, hudState);
     const pathStyle = getPathStyle(overlayState, hudState);
     const plotData = buildPlotData(overlayState, hudState);

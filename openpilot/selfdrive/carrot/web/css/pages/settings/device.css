@@ -706,57 +706,6 @@
   display: none;
 }
 
-.page--setting #settingScreenItems .setting-switch {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  width: 54px;
-  height: 32px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.page--setting #settingScreenItems .setting-switch__input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.page--setting #settingScreenItems .setting-switch__track {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 50%, transparent);
-  border-radius: 999px;
-  background: var(--md-surface-cont-h);
-  transition: background 0.16s ease, border-color 0.16s ease;
-}
-
-.page--setting #settingScreenItems .setting-switch__track::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--md-on-surface-var);
-  box-shadow: var(--shadow-1);
-  transition: transform 0.18s cubic-bezier(.2, 0, 0, 1), background 0.16s ease;
-}
-
-.page--setting #settingScreenItems .setting-switch__input:checked + .setting-switch__track {
-  border-color: color-mix(in srgb, var(--md-primary) 72%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-primary) 70%, var(--md-surface-cont-h));
-}
-
-.page--setting #settingScreenItems .setting-switch__input:checked + .setting-switch__track::after {
-  transform: translateX(22px);
-  background: var(--md-on-primary);
-}
-
-.page--setting #settingScreenItems .setting-switch:focus-within .setting-switch__track,
 .page--setting #settingScreenItems .setting-segment:focus-visible,
 .page--setting #settingScreenItems .setting-select:focus-visible,
 .page--setting #settingScreenItems .setting-slider__input:focus-visible {
@@ -1665,46 +1614,6 @@
   flex: 1 1 auto;
 }
 
-.device-toggle__input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.device-toggle__slider {
-  position: relative;
-  display: inline-block;
-  width: 52px;
-  height: 32px;
-  flex: 0 0 52px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 52%, transparent);
-  border-radius: 999px;
-  background: var(--md-surface-cont-h);
-  transition: background 0.14s ease, border-color 0.14s ease;
-}
-
-.device-toggle__slider::after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--md-on-surface-var);
-  transition: transform 0.16s cubic-bezier(0.4, 0, 0.2, 1), background 0.14s ease;
-}
-
-.device-toggle__input:checked + .device-toggle__slider {
-  border-color: color-mix(in srgb, var(--md-primary) 76%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-primary) 82%, var(--md-surface-cont-h));
-}
-
-.device-toggle__input:checked + .device-toggle__slider::after {
-  transform: translateX(20px);
-  background: var(--md-on-primary);
-}
-
 .device-toggle--readonly {
   width: auto;
   cursor: default;
@@ -1750,14 +1659,17 @@
   outline: none;
 }
 
-.device-setting--disabled .device-toggle__slider,
-.device-setting--disabled .device-toggle__input:checked + .device-toggle__slider {
+.device-setting--disabled .c-switch__track,
+.device-setting--disabled .c-switch__input:checked + .c-switch__track {
+  /* Device rows carry their own explicit gray for the disabled look, so
+     cancel the generic c-switch disabled opacity to avoid double-dimming. */
+  opacity: 1;
   border-color: color-mix(in srgb, var(--md-outline-var) 36%, transparent);
   background: color-mix(in srgb, var(--md-surface-cont-h) 54%, #2f343a);
 }
 
-.device-setting--disabled .device-toggle__slider::after,
-.device-setting--disabled .device-toggle__input:checked + .device-toggle__slider::after {
+.device-setting--disabled .c-switch__track::after,
+.device-setting--disabled .c-switch__input:checked + .c-switch__track::after {
   background: color-mix(in srgb, var(--md-on-surface-var) 54%, #6a7078);
 }
 
