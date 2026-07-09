@@ -92,10 +92,11 @@ CORNER_STOPPED_FAR_IN_LANE_PROB = 0.5
 CORNER_STOPPED_FAR_DREL = 60.0
 CORNER_VISION_KEEP_PROB = 0.75
 FRONT_RADAR_VISION_MATCH_MIN_PROB = 0.4
-CORNER_YAW_COMP_GAIN = 1.0
+CORNER_YAW_COMP_GAIN = 0.6
+CORNER_YAW_COMP_MAX_DREL = 50.0
 CORNER_YAW_COMP_MAX_YAW_RATE = 0.35
-CORNER_YAW_COMP_MAX_YVREL_CORRECTION = 4.0
-CORNER_YAW_COMP_MAX_VREL_CORRECTION = 1.5
+CORNER_YAW_COMP_MAX_YVREL_CORRECTION = 1.5
+CORNER_YAW_COMP_MAX_VREL_CORRECTION = 0.6
 
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
@@ -220,7 +221,8 @@ class Track:
     if yaw_comp and abs(yaw_rate) < CORNER_YAW_COMP_MAX_YAW_RATE:
       # Convert ego-frame velocities toward a non-rotating ego frame. This keeps
       # corner radar cut-in prediction from treating ego yaw as target lateral motion.
-      yv_rel_corr = clamp(-yaw_rate * self.dRel * CORNER_YAW_COMP_GAIN,
+      yaw_comp_d_rel = clamp(self.dRel, 0.0, CORNER_YAW_COMP_MAX_DREL)
+      yv_rel_corr = clamp(-yaw_rate * yaw_comp_d_rel * CORNER_YAW_COMP_GAIN,
                           -CORNER_YAW_COMP_MAX_YVREL_CORRECTION,
                           CORNER_YAW_COMP_MAX_YVREL_CORRECTION)
       v_rel_corr = clamp(yaw_rate * self.yRel * CORNER_YAW_COMP_GAIN,
