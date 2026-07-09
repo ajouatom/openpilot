@@ -1,13 +1,17 @@
-﻿.page--terminal {
-  --terminal-bottom-gap: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px));
-  --terminal-form-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+body[data-page="terminal"] {
+  --terminal-keyboard-inset: 0px;
+}
+
+.page--terminal {
+  --terminal-nav-gap: var(--app-nav-bottom-gap, var(--nav-bar-height));
+  --terminal-controls-bottom: calc(8px + var(--terminal-keyboard-inset) + env(safe-area-inset-bottom, 0px));
   --terminal-inline: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
   position: fixed;
   left: 0;
   right: 0;
-  top: var(--terminal-vv-top, 0px);
-  width: 100dvw;
-  height: calc(var(--terminal-vv-height, 100dvh) - var(--terminal-bottom-gap));
+  top: var(--app-vv-top, 0px);
+  width: var(--app-vv-width, 100dvw);
+  height: calc(var(--app-vv-height, 100dvh) - var(--terminal-nav-gap));
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -15,6 +19,22 @@
   padding: 0;
   z-index: 10;
   overflow: hidden;
+}
+
+html[data-kb-open="1"] body[data-page="terminal"] {
+  --terminal-keyboard-inset: var(--kb-inset, 0px);
+}
+
+html[data-kb-open="1"] body[data-page="terminal"] .page--terminal {
+  --terminal-controls-bottom: calc(10px + var(--terminal-keyboard-inset) + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-vk="1"][data-kb-open="1"] body[data-page="terminal"] .page--terminal {
+  --terminal-nav-gap: 0px;
+}
+
+html[data-vk="1"][data-kb-open="1"] body[data-page="terminal"] .topbar {
+  transform: translate3d(0, calc(var(--terminal-keyboard-inset) + env(safe-area-inset-bottom, 0px)), 0);
 }
 
 .terminal-shell {
@@ -286,8 +306,10 @@ body.support-terminal-dialog-open .app-toast-host {
 }
 
 .terminal-approval--status {
-  grid-template-columns: auto minmax(0, 1fr);
-  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  min-height: 54px;
+  padding: 9px 14px;
   border-color: var(--popup-item-border);
   background: var(--popup-item-bg);
 }
@@ -301,6 +323,10 @@ body.support-terminal-dialog-open .app-toast-host {
   font-size: var(--fs-label-sm);
   font-weight: 850;
   white-space: nowrap;
+}
+
+.terminal-approval--status .terminal-approval__meta {
+  grid-column: 1 / 2;
 }
 
 .terminal-approval__line {
@@ -319,16 +345,17 @@ body.support-terminal-dialog-open .app-toast-host {
 
 .terminal-approval__typingLabel {
   margin-right: 8px;
-  color: var(--md-on-surface-var);
+  color: var(--md-on-surface);
   font-family: inherit;
-  font-size: var(--fs-label-sm);
-  font-weight: 800;
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 .terminal-approval__draft {
   color: var(--md-on-surface);
   font-family: var(--font-mono);
-  font-weight: 750;
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 .terminal-approval__actions {
@@ -382,6 +409,16 @@ body.support-terminal-dialog-open .app-toast-host {
   display: inline-block;
   width: max-content;
   min-width: 100%;
+  /* Terminal fidelity: keep every glyph exactly one cell wide so MOTD ASCII
+     art / aligned columns don't collapse. No ligatures/kerning/letter-spacing,
+     fixed 8-col tabs like a real terminal. */
+  tab-size: 8;
+  -moz-tab-size: 8;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+  font-kerning: none;
+  text-rendering: optimizeSpeed;
 }
 
 .terminal-output__promptHost {
@@ -389,82 +426,100 @@ body.support-terminal-dialog-open .app-toast-host {
   font-weight: 700;
 }
 
-.terminal-form {
+/* xterm.js grid host: fills the same slot as .terminal-screen. Horizontal
+   padding tracks --terminal-inline so it stays aligned across breakpoints;
+   xterm owns its own scroll/viewport. */
+.terminal-xterm {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  box-sizing: border-box;
+  padding: 0 var(--terminal-inline);
+  overflow: auto hidden;
+  overscroll-behavior: contain;
+  /* Keep the grid horizontally pannable but hide the persistent scrollbar — it
+     stayed visible whenever the 100-col grid was wider than the screen. */
+  scrollbar-width: none;
+  touch-action: pan-x pan-y;
+  background: color-mix(in srgb, var(--md-surface) 92%, #000);
+}
+
+.terminal-xterm[hidden] {
+  display: none !important;
+}
+
+.terminal-xterm .xterm {
+  width: fit-content;
+  min-width: 100%;
+  height: 100%;
+  padding: 0;
+}
+
+.terminal-xterm .xterm-viewport {
+  background-color: transparent !important;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--md-outline) 48%, transparent) transparent;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.terminal-xterm::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-xterm .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.terminal-xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-outline) 42%, transparent);
+}
+
+/* On-screen key/control bar for touch devices. It replaces the old command
+   input field now that xterm owns direct terminal input. */
+.terminal-keys {
   flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   gap: var(--sp-sm);
   align-items: center;
-  margin: 8px var(--terminal-inline) var(--terminal-form-bottom);
-  padding-left: 14px;
-  border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 56%, transparent);
-  border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
-  overflow: hidden;
+  margin: 6px var(--terminal-inline) var(--terminal-controls-bottom);
+  padding: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
   position: relative;
   z-index: 152;
 }
 
-.terminal-form:focus-within {
-  border-color: color-mix(in srgb, var(--md-stroke-strong) 76%, transparent);
+.terminal-keys::-webkit-scrollbar {
+  display: none;
 }
 
-.terminal-form.is-disabled {
-  border-color: color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
-  background: color-mix(in srgb, var(--md-surface-cont) 84%, #000);
-  opacity: .82;
+.terminal-key {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 780;
+  white-space: nowrap;
 }
 
-.terminal-form__prompt {
+.terminal-key.is-active {
+  border-color: color-mix(in srgb, var(--md-primary) 60%, var(--md-stroke-soft));
   color: var(--md-primary);
-  font-family: var(--font-mono);
-  font-size: var(--fs-body-sm);
-  font-weight: 700;
-  letter-spacing: 0;
-  align-self: center;
-}
-
-.terminal-form__input {
-  min-width: 0;
-  min-height: 44px;
-  padding: 10px 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--md-on-surface);
-  font-size: var(--fs-body-sm);
-  font-family: var(--font-mono);
-  line-height: 1.25;
-  box-shadow: none;
-  outline: none;
-  appearance: none;
-}
-
-.terminal-form__input:focus {
-  border-color: transparent;
-}
-
-.terminal-form__input:disabled {
-  color: var(--md-on-surface-muted);
-  cursor: not-allowed;
-}
-
-.terminal-form .smallBtn {
-  align-self: stretch;
-  min-height: 100%;
-  padding: 0 16px;
-  font-size: 12px;
-  border: 0;
-  border-left: 1px solid color-mix(in srgb, var(--md-stroke-soft) 44%, transparent);
-  border-radius: 0;
   background: color-mix(in srgb, var(--md-primary) 16%, transparent);
-  color: var(--md-primary);
-  box-shadow: none;
 }
 
 @media (min-width: 769px) {
   .page--terminal {
-    --terminal-bottom-gap: calc(var(--nav-bar-height-desktop) + env(safe-area-inset-bottom, 0px));
+    --terminal-nav-gap: var(--app-nav-bottom-gap, var(--nav-bar-height-desktop));
   }
 }
 
@@ -506,9 +561,8 @@ body.support-terminal-dialog-open .app-toast-host {
     line-height: 1.35;
   }
 
-  .terminal-form {
-    margin: 8px var(--terminal-inline) var(--terminal-form-bottom);
-    padding-left: 12px;
+  .terminal-keys {
+    margin: 6px var(--terminal-inline) var(--terminal-controls-bottom);
   }
 
   .terminal-approval {
@@ -519,9 +573,10 @@ body.support-terminal-dialog-open .app-toast-host {
     display: none;
   }
 
-  .terminal-form .smallBtn {
-    padding: 0 14px;
-    font-size: 11px;
+  .terminal-key {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 12px;
   }
 }
 
@@ -558,9 +613,8 @@ body.support-terminal-dialog-open .app-toast-host {
     line-height: 1.35;
   }
 
-  .terminal-form {
-    margin: 8px var(--terminal-inline) var(--terminal-form-bottom);
-    padding-left: 12px;
+  .terminal-keys {
+    margin: 6px var(--terminal-inline) var(--terminal-controls-bottom);
   }
 
   .terminal-approval {
@@ -572,9 +626,10 @@ body.support-terminal-dialog-open .app-toast-host {
     justify-content: flex-end;
   }
 
-  .terminal-form .smallBtn {
-    padding: 0 14px;
-    font-size: 11px;
+  .terminal-key {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 12px;
   }
 }
 
@@ -588,9 +643,9 @@ body.support-terminal-dialog-open .app-toast-host {
 
   .page--terminal {
     --terminal-inline: 12px;
-    --terminal-bottom-gap: calc(14px + env(safe-area-inset-bottom, 0px));
+    --terminal-nav-gap: var(--app-nav-bottom-gap, 0px);
     left: var(--nav-rail-width);
-    width: calc(100dvw - var(--nav-rail-width));
+    width: calc(var(--app-vv-width, 100dvw) - var(--nav-rail-width));
   }
 
   .terminal-pageHeader {
@@ -633,9 +688,8 @@ body.support-terminal-dialog-open .app-toast-host {
     line-height: 1.45;
   }
 
-  .terminal-form {
-    margin: 6px var(--terminal-inline) var(--terminal-form-bottom);
-    padding-left: 12px;
+  .terminal-keys {
+    margin: 5px var(--terminal-inline) var(--terminal-controls-bottom);
   }
 
   .terminal-approval-host {
@@ -646,15 +700,9 @@ body.support-terminal-dialog-open .app-toast-host {
     padding: 7px 8px 7px 10px;
   }
 
-  .terminal-form__input {
-    min-height: 38px;
-    padding: 8px 0;
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  .terminal-form .smallBtn {
-    padding: 0 16px;
+  .terminal-key {
+    min-height: 36px;
+    padding: 7px 13px;
     font-size: 13px;
     font-weight: 700;
   }

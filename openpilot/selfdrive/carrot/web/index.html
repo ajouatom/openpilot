@@ -3,13 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="google" content="notranslate" />
-  <!-- Keep the default interactive-widget=resizes-visual: the on-screen keyboard
-       must shrink only the *visual* viewport, not the layout viewport. Dialogs
-       anchor to --app-vv-* (visualViewport) so they stay keyboard-safe, while the
-       layout-viewport aspect-ratio (which drives rail/split via 13/10) stays
-       stable — otherwise opening the keyboard on a near-square device would push
-       aspect-ratio past 13/10 and flip the whole app to the rail layout mid-typing. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <!-- Let keyboard-heavy pages follow the visible content viewport instead of
+       manually stacking keyboard offsets on top of the terminal/dialog layout. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>CarrotPilot</title>
   <link rel="icon" type="image/png" href="/assets/img_chffr_wheel.png?v=2604-01" />
   <script>
@@ -115,15 +111,16 @@
       background: color-mix(in srgb, var(--md-primary) 14%, transparent) !important;
     }
   </style>
-  <link rel="stylesheet" href="/css/tokens.css?v=2607-51" />
+  <link rel="stylesheet" href="/css/tokens.css?v=2607-52" />
   <link rel="stylesheet" href="/css/layout_tokens.css?v=2607-42" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2605-03" />
   <link rel="stylesheet" href="/css/base.css?v=2607-40" />
   <link rel="stylesheet" href="/css/layout.css?v=2605-08" />
   <link rel="stylesheet" href="/css/components.css?v=2607-51" />
-  <link rel="stylesheet" href="/css/components/nav_status_badges.css?v=2607-04" />
+  <link rel="stylesheet" href="/css/components/nav_status_badges.css?v=2607-05" />
   <link rel="stylesheet" href="/css/pages/logs.css?v=2607-43" />
-  <link rel="stylesheet" href="/css/pages/terminal.css?v=2607-64" />
+  <link rel="stylesheet" href="/css/vendor/xterm.css?v=550" />
+  <link rel="stylesheet" href="/css/pages/terminal.css?v=2607-97" />
   <link rel="stylesheet" href="/css/pages/settings/base.css?v=2606-21" />
   <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2607-44" />
   <link rel="stylesheet" href="/css/pages/settings/device.css?v=2607-51" />
@@ -405,20 +402,24 @@
         <div id="terminalScreen" class="terminal-screen">
           <pre id="terminalOutput" class="terminal-output">...</pre>
         </div>
-        <form id="terminalForm" class="terminal-form">
-          <span class="terminal-form__prompt" aria-hidden="true">&gt;</span>
-          <input
-            id="terminalInput"
-            type="text"
-            class="terminal-form__input"
-            autocomplete="off"
-            autocapitalize="none"
-            autocorrect="off"
-            spellcheck="false"
-            enterkeyhint="send"
-          />
-          <button id="btnTerminalSend" class="smallBtn btn--filled" type="submit">Send</button>
-        </form>
+        <div id="terminalXterm" class="terminal-xterm" hidden></div>
+        <div id="supportTerminalApprovalHost" class="terminal-approval-host" hidden></div>
+        <div id="terminalKeys" class="terminal-keys" role="group" aria-label="Terminal keys">
+          <button class="smallBtn terminal-key" type="button" data-key="esc">Esc</button>
+          <button class="smallBtn terminal-key" type="button" data-key="ctrl">Ctrl</button>
+          <button class="smallBtn terminal-key" type="button" data-key="ctrl_c">Ctrl+C</button>
+          <button class="smallBtn terminal-key" type="button" data-key="ctrl_d">Ctrl+D</button>
+          <button class="smallBtn terminal-key" type="button" data-key="detach">Detach</button>
+          <button class="smallBtn terminal-key" type="button" data-key="tab">Tab</button>
+          <button class="smallBtn terminal-key" type="button" data-key="home">Home</button>
+          <button class="smallBtn terminal-key" type="button" data-key="end">End</button>
+          <button class="smallBtn terminal-key" type="button" data-key="page_up">PgUp</button>
+          <button class="smallBtn terminal-key" type="button" data-key="page_down">PgDn</button>
+          <button class="smallBtn terminal-key" type="button" data-key="up" aria-label="Up">↑</button>
+          <button class="smallBtn terminal-key" type="button" data-key="down" aria-label="Down">↓</button>
+          <button class="smallBtn terminal-key" type="button" data-key="left" aria-label="Left">←</button>
+          <button class="smallBtn terminal-key" type="button" data-key="right" aria-label="Right">→</button>
+        </div>
       </div>
     </div>
 
@@ -747,6 +748,9 @@
       <span>Logs</span>
     </button>
     <button id="btnTerminal" class="nav-btn">
+      <span id="navTerminalStatusBadges" class="nav-status-badges" aria-hidden="true">
+        <span id="navRemoteStatusBadge" class="nav-status-badge nav-status-badge--remote" hidden>REMOTE</span>
+      </span>
       <span class="nav-icon">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m0 2v10h16V7zm2.8 8.6 3.8-3.6-3.8-3.6 1.4-1.4 5.2 5-5.2 5zm7.7 0H18v2h-3.5z"/></svg>
       </span>
@@ -815,9 +819,9 @@
   <script src="/js/vendor/qrcode-generator.js?v=1.4.4"></script>
   <script src="/js/vendor/jsQR.js?v=1.4.0"></script>
   <script src="/js/translations/registry.js?v=2605-09"></script>
-  <script src="/js/translations/ko.js?v=2607-52"></script>
-  <script src="/js/translations/en.js?v=2607-52"></script>
-  <script src="/js/translations/zh.js?v=2607-52"></script>
+  <script src="/js/translations/ko.js?v=2607-57"></script>
+  <script src="/js/translations/en.js?v=2607-57"></script>
+  <script src="/js/translations/zh.js?v=2607-57"></script>
   <script src="/js/realtime/hud_card.js?v=2607-42"></script>
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2607-01"></script>
@@ -829,13 +833,13 @@
   <script src="/js/shared/ui/focus_trap.js?v=2605-15"></script>
   <script src="/js/shared/ui/dialog.js?v=2607-44"></script>
   <script src="/js/shared/ui/setting_form.js?v=2607-03"></script>
-  <script src="/js/shared/ui/viewport.js?v=2607-47"></script>
+  <script src="/js/shared/ui/viewport.js?v=2607-53"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
   <script src="/js/shared/ui/navigation.js?v=2607-42"></script>
   <script src="/js/pages/car.js?v=2607-01"></script>
   <script src="/js/pages/setting_youtube_live.js?v=2607-51"></script>
   <script src="/js/pages/setting_mapbox_tokens.js?v=2607-06"></script>
-  <script src="/js/shared/ui/nav_status_badges.js?v=2607-01"></script>
+  <script src="/js/shared/ui/nav_status_badges.js?v=2607-02"></script>
   <script src="/js/pages/setting.js?v=2607-51"></script>
   <script src="/js/pages/setting_device_config.js?v=2605-06"></script>
   <script src="/js/pages/setting_device_render.js?v=2607-51"></script>
@@ -854,8 +858,9 @@
   <script src="/js/pages/logs/shared.js?v=2607-01"></script>
   <script src="/js/pages/logs/dashcam.js?v=2607-02"></script>
   <script src="/js/pages/logs/screenrecord.js?v=2605-15"></script>
-  <script src="/js/pages/terminal.js?v=2607-45"></script>
-  <script src="/js/pages/support_terminal.js?v=2607-14"></script>
+  <script src="/js/vendor/xterm.js?v=550"></script>
+  <script src="/js/pages/terminal.js?v=2607-90"></script>
+  <script src="/js/pages/support_terminal.js?v=2607-20"></script>
   <script src="/js/realtime/raw_capnp.js?v=2604-05"></script>
   <script src="/js/realtime/mini_hud_model.js?v=2607-85"></script>
   <script src="/js/realtime/mini_hud_mode.js?v=2607-51"></script>

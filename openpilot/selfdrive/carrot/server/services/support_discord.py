@@ -118,7 +118,7 @@ def _support_message(payload: dict[str, Any]) -> str:
   )
   permission_mode = str(payload.get("permissionMode") or "approve_each")
   permission_text = {
-    "approve_each": "매 명령 승인",
+    "approve_each": "항상 확인",
     "allow_all": "전체 허용",
   }.get(permission_mode, permission_mode)
   expires_text = payload.get("ttl_minutes") or 30

@@ -32,8 +32,15 @@ def send_keys(session: str, *keys: str, literal: bool = False) -> None:
   run(cmd, timeout=4.0, check=True)
 
 
-def bootstrap_shell(cwd: str = TMUX_START_DIR) -> str:
-  return f"cd {shlex.quote(cwd)} && exec bash -il"
+def bootstrap_shell() -> str:
+  # Reproduce the AGNOS ssh login *inside* the tmux window so the web terminal
+  # looks and behaves like WinSCP/ssh, not like an empty dedicated session:
+  #   1) print the device's own MOTD (exactly what pam_motd shows on ssh) by
+  #      running /etc/update-motd.d, falling back to the cached /run/motd.dynamic,
+  #   2) start in /data/openpilot (where openpilot work happens),
+  #   3) exec the real interactive login shell.
+  motd = "( run-parts /etc/update-motd.d 2>/dev/null || cat /run/motd.dynamic 2>/dev/null )"
+  return f"{motd}; cd {shlex.quote(TMUX_START_DIR)} 2>/dev/null; exec bash -il"
 
 
 def start_command() -> str:
@@ -80,6 +87,14 @@ def ensure_session(session: str = TMUX_WEB_SESSION) -> bool:
       check=True,
     )
     created = True
+  # Hide the tmux status bar on the web session so it reads like a plain ssh
+  # login shell (see 2nd reference screenshot) instead of a tmux window.
+  # Idempotent; only touches this web session, not the "comma" service session.
+  run(["tmux", "set-option", "-t", session, "status", "off"], timeout=3.0, check=False)
+  # Legacy tmux-backed terminal/support routes still use tmux capture/send-keys.
+  # Enable mouse so clients that attach to this web session can scroll tmux
+  # history instead of relying on browser scrollback.
+  run(["tmux", "set-option", "-t", session, "mouse", "on"], timeout=3.0, check=False)
   return created
 
 
