@@ -216,8 +216,7 @@ class Device:
     self._last_brightness: int = 0
     self._brightness_filter = FirstOrderFilter(BACKLIGHT_OFFROAD, 2.00, 1 / gui_app.target_fps)
     self._brightness_thread: threading.Thread | None = None
-    self._brightness_timer: int = 0
-    self._BRIGHTNESS_DELAY: int = 200
+    self._brightness_timer: int = 20
 
   @property
   def awake(self) -> bool:
@@ -267,36 +266,22 @@ class Device:
       else:
         clipped_brightness = ((clipped_brightness + 16.0) / 116.0) ** 3.0
 
-      clipped_brightness = float(np.interp(clipped_brightness, [0, 1], [30, 100]))
-      # 이벤트 감지 시 타이머 리셋
-      ss = ui_state.sm['selfdriveState']
-      has_event = ss.alertSize != 0 # and ss.alertStatus != log.SelfdriveState.AlertStatus.normal
-      if has_event:
-        self._brightness_timer = 0
-        self._brightness_filter.x = float(min(self._last_brightness / (ui_state.show_brightness_ratio or 1.0) * 2.0, 100.0))
-
-      self._brightness_timer += 1
+      clipped_brightness = float(np.clip(100.0 * clipped_brightness, 10.0, 100.0))
       ratio = ui_state.show_brightness_ratio
       if ratio <= 0.0:
-        # 자동모드: exposureValPercent가 높을수록(어두운 환경) 화면도 어둡게
-        # exposureValPercent를 직접 읽어서 반비례 적용
         try:
           exp_val = ui_state.sm['wideRoadCameraState'].exposureValPercent
-          # 어두운 환경(exp_val 높음) → 화면 밝기 낮춤 (30~80% 범위)
           auto_ratio = float(np.interp(exp_val, [0.0, 15.0], [0.8, 0.3]))
           clipped_brightness *= auto_ratio
         except Exception:
-          pass  # 센서값 없으면 원래 밝기 유지
-      elif self._brightness_timer >= self._BRIGHTNESS_DELAY:
-        # 타이머 경과: 설정값 그대로 → 어두움
+          pass
+      elif self._brightness_timer <= 0:
         clipped_brightness *= ratio
       else:
-        # 타이머 미만 (초기/이벤트/터치 직후): 설정값 × 2배 → 밝음
-        clipped_brightness *= min(ratio * 2.0, 1.0)
+        self._brightness_timer -= 1
 
     else:
-      # offroad 또는 센서 없음: 타이머 리셋
-      self._brightness_timer = 0
+      self._brightness_timer = 20
 
     brightness = round(self._brightness_filter.update(clipped_brightness))
     if not self._awake:
@@ -315,8 +300,7 @@ class Device:
 
     if ignition_just_turned_off or any(ev.left_down for ev in gui_app.mouse_events):
       self._reset_interactive_timeout()
-      self._brightness_timer = 0
-      self._brightness_filter.x = float(min(self._last_brightness / (ui_state.show_brightness_ratio or 1.0) * 2.0, 100.0))
+      self._brightness_timer = 20
 
     interaction_timeout = time.monotonic() > self._interaction_time
     if interaction_timeout and not self._prev_timed_out:
