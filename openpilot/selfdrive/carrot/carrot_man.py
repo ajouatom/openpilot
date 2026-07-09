@@ -1192,9 +1192,8 @@ class CarrotMan:
                 ftp_ok = self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True) if upload_target["kind"] == "carrot" else False
                 http_response = self.send_tmux_http("onroad", send_settings = True, target=upload_target)
                 http_ok = http_response is not None and getattr(http_response, "ok", False)
-                discord_ok = self.send_tmux_discord("onroad", ftp_ok, http_ok, http_response, send_settings=True)
-                if ftp_ok or http_ok or discord_ok:
-                  print(f"[carrot_man] onroad tmux upload complete: ftp_ok={ftp_ok}, http_ok={http_ok}, discord_ok={discord_ok}")
+                if ftp_ok or http_ok:
+                  print(f"[carrot_man] onroad tmux upload complete: ftp_ok={ftp_ok}, http_ok={http_ok}")
                   is_tmux_sent = True
                 else:
                   onroad_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
