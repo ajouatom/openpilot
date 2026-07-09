@@ -116,7 +116,14 @@ def main():
   assert vipc_client.is_connected()
   cloudlog.warning(f"connected with buffer size: {vipc_client.buffer_len}")
 
-  model = ModelState(vipc_client.width, vipc_client.height)
+  first_buf = None
+  cam_w, cam_h = vipc_client.width, vipc_client.height
+  while cam_w is None or cam_h is None:
+    first_buf = vipc_client.recv()
+    if first_buf is None:
+      continue
+    cam_w, cam_h = first_buf.width, first_buf.height
+  model = ModelState(cam_w, cam_h)
   cloudlog.warning("models loaded, dmonitoringmodeld starting")
 
   sm = SubMaster(["liveCalibration"])
@@ -126,7 +133,11 @@ def main():
   model_transform = None
 
   while True:
-    buf = vipc_client.recv()
+    if first_buf is not None:
+      buf = first_buf
+      first_buf = None
+    else:
+      buf = vipc_client.recv()
     if buf is None:
       continue
 
