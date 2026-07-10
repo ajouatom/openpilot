@@ -582,6 +582,8 @@ def run_demo(
     route_overlay_mode: str,
     route_loop: bool,
     route_replay_speed: float,
+    route_corner_lateral_offset_m: float,
+    route_corner_source: str,
     route_start_segment: int | None,
     route_max_segments: int | None,
     live_include_can: bool,
@@ -738,7 +740,15 @@ def run_demo(
     route_source = None
     if input_mode == "route":
         profile_stage = time.perf_counter()
-        route_source = RouteReplaySource.load(route_path, route_log, route_start_segment, route_max_segments)
+        route_source = RouteReplaySource.load(
+            route_path,
+            route_log,
+            route_start_segment,
+            route_max_segments,
+            1.0,
+            route_corner_source,
+            route_corner_lateral_offset_m,
+        )
         profile.add_elapsed("source.route_load_initial", profile_stage)
     if route_source is not None:
         print(
@@ -747,6 +757,11 @@ def run_demo(
             f"{route_source.loaded_file_count}/{len(route_source.source_files)} {route_log} files"
         )
     start_time = time.perf_counter()
+    route_wall_base_time = start_time
+    route_playback_base_s = 0.0
+    route_paused = False
+    route_pause_toggled_down = False
+    route_active_corner_lateral_offset_m = route_corner_lateral_offset_m
     last_frame_time = start_time
     last_report_time = start_time
     next_theme_param_read = start_time
@@ -1027,9 +1042,37 @@ def run_demo(
                 profile.add_elapsed("source.live_update", profile_stage)
             elif route_source is not None:
                 profile_stage = time.perf_counter()
-                playback_seconds = (now - start_time) * route_replay_speed
+                playback_seconds = (
+                    route_playback_base_s
+                    if route_paused
+                    else route_playback_base_s + (now - route_wall_base_time) * route_replay_speed
+                )
+                if output_mode in ("window", "both"):
+                    seek_s, next_corner_lateral_offset_m, _control_active = renderer.route_replay_control_input(
+                        playback_seconds,
+                        route_source.duration,
+                        route_active_corner_lateral_offset_m,
+                    )
+                    mouse_down = renderer.route_replay_mouse_down()
+                    if mouse_down and not _control_active and not route_pause_toggled_down:
+                        route_paused = not route_paused
+                        route_playback_base_s = playback_seconds
+                        route_wall_base_time = now
+                    route_pause_toggled_down = mouse_down
+                    if seek_s is not None:
+                        route_playback_base_s = seek_s
+                        route_wall_base_time = now
+                        playback_seconds = seek_s
+                        route_paused = True
+                    if next_corner_lateral_offset_m != route_active_corner_lateral_offset_m:
+                        route_active_corner_lateral_offset_m = next_corner_lateral_offset_m
+                        route_source.corner_lateral_offset_m = route_active_corner_lateral_offset_m
+                        route_paused = True
+                        route_playback_base_s = playback_seconds
+                        route_wall_base_time = now
                 if route_source.is_finished(playback_seconds, route_loop):
                     break
+                route_source.corner_lateral_offset_m = route_active_corner_lateral_offset_m
                 state = route_source.state_at(
                     playback_seconds,
                     route_loop,
@@ -1102,7 +1145,16 @@ def run_demo(
 
             if output_mode in ("window", "both"):
                 profile_stage = time.perf_counter()
-                renderer.render_frame(state)
+                if route_source is not None:
+                    renderer.render_route_replay_frame(
+                        state,
+                        playback_seconds,
+                        route_source.duration,
+                        route_active_corner_lateral_offset_m,
+                        route_paused,
+                    )
+                else:
+                    renderer.render_frame(state)
                 profile.add_elapsed("main.window_render_total", profile_stage)
             if usb_display is not None:
                 if usb_codec == "jpeg":
@@ -1612,6 +1664,21 @@ def parse_args() -> argparse.Namespace:
         help="Route playback speed multiplier.",
     )
     parser.add_argument(
+        "--route-corner-lateral-offset",
+        type=float,
+        default=0.5,
+        help="Replay-only side-lane centering offset in meters applied inward to stable/live corner radar vehicles.",
+    )
+    parser.add_argument(
+        "--route-corner-source",
+        choices=("stable", "raw", "live"),
+        default="stable",
+        help=(
+            "Corner radar source for route replay: stable uses raw CAN object association, "
+            "raw shows raw CAN slots directly, live shows logged liveTracks."
+        ),
+    )
+    parser.add_argument(
         "--route-start-segment",
         type=int,
         default=None,
@@ -1857,6 +1924,8 @@ def main(*, exit_on_error: bool = True) -> None:
             args.route_overlay,
             args.route_loop,
             args.route_replay_speed,
+            args.route_corner_lateral_offset,
+            args.route_corner_source,
             args.route_start_segment,
             args.route_max_segments,
             not args.live_no_can,

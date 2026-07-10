@@ -148,6 +148,28 @@ python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/reald
 python selfdrive/carrot/cluster_run.py --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay off --output usb --usb-codec h264 --duration 60 --fps 30 --usb-h264-bitrate 6M
 ```
 
+For a PC-connected USB cluster display, the shorter replay wrapper defaults to
+full rlog data, portable JPEG USB output, a local PC window, and the compact
+route camera/data overlay. The camera overlay uses `ffmpeg` from PATH when
+available and falls back to the `imageio-ffmpeg` package from requirements:
+
+```bash
+python -m pip install -r selfdrive/carrot/cluster/requirements.txt
+python selfdrive/carrot/cluster_replay_usb.py /data/media/0/realdata/0000012e--f190807d64--36 --duration 60
+python selfdrive/carrot/cluster_replay_usb.py /data/media/0/realdata/0000012e--f190807d64--36/rlog.zst --fps 20 --usb-brightness 80
+```
+
+Use `--route-overlay full` for a larger replay debug panel, or
+`--output usb --route-overlay off` when only the USB panel should be driven.
+Use `--corner-yaw-comp-gain 0.6` to add replay-only corner-radar yaw
+compensation, or a negative value to reduce compensation already present in
+the logged `liveTracks` data.
+
+On Windows, if the display is detected but opening it fails with access denied,
+install a WinUSB driver for the TURZX device with Zadig: enable
+`Options > List All Devices`, select the `1CBE:0092` or `1CBE:0123` display,
+install `WinUSB`, then unplug/replug the display.
+
 To compare native hardware output against ffmpeg/libx264 with the same USB
 transport diagnostics, use:
 

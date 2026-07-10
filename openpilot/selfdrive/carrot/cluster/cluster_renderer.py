@@ -77,6 +77,16 @@ SPEED_BG_PATH = SELFDRIVE_DIR / "assets" / "images" / "speed_bg.png"
 FOLLOW_VEHICLE_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_cruse_gap_trimmed.png"
 LFA_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_wheel_org.png"
 WIFI_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "settings" / "network" / "wifi_strength_full.png"
+ROUTE_CONTROL_PANEL_X = 340.0
+ROUTE_CONTROL_PANEL_Y = DESIGN_HEIGHT - 74.0
+ROUTE_CONTROL_PANEL_W = DESIGN_WIDTH - ROUTE_CONTROL_PANEL_X * 2.0
+ROUTE_CONTROL_PANEL_H = 58.0
+ROUTE_CONTROL_SEEK_Y = ROUTE_CONTROL_PANEL_Y + 18.0
+ROUTE_CONTROL_OFFSET_Y = ROUTE_CONTROL_PANEL_Y + 42.0
+ROUTE_CONTROL_BAR_X = ROUTE_CONTROL_PANEL_X + 142.0
+ROUTE_CONTROL_BAR_W = ROUTE_CONTROL_PANEL_W - 284.0
+ROUTE_CONTROL_OFFSET_MIN_M = 0.0
+ROUTE_CONTROL_OFFSET_MAX_M = 0.8
 TPMS_LOW_PRESSURE_PSI = 31.0
 TPMS_BADGE_WIDTH = 46.0
 TPMS_BADGE_HEIGHT = 37.5
@@ -764,6 +774,67 @@ class ClusterUiRenderer:
         profile_stage = self._profile_start()
         rl.end_drawing()
         self._profile_add("render_frame.end_drawing", profile_stage)
+
+    def render_route_replay_frame(
+        self,
+        state: ClusterUiState,
+        playback_s: float,
+        duration_s: float,
+        corner_lateral_offset_m: float,
+        paused: bool = False,
+    ) -> None:
+        self.open()
+        profile_stage = self._profile_start()
+        rl.begin_drawing()
+        self._profile_add("render_route_frame.begin_drawing", profile_stage)
+        try:
+            profile_stage = self._profile_start()
+            self.render(state)
+            self._profile_add("render_route_frame.render", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_route_replay_controls(playback_s, duration_s, corner_lateral_offset_m, paused)
+            self._profile_add("render_route_frame.controls", profile_stage)
+        finally:
+            profile_stage = self._profile_start()
+            rl.end_drawing()
+            self._profile_add("render_route_frame.end_drawing", profile_stage)
+
+    def route_replay_control_input(
+        self,
+        playback_s: float,
+        duration_s: float,
+        corner_lateral_offset_m: float,
+    ) -> tuple[float | None, float, bool]:
+        if not self._window_open or duration_s <= 0.0:
+            return None, corner_lateral_offset_m, False
+
+        sx = self.width / DESIGN_WIDTH
+        sy = self.height / DESIGN_HEIGHT
+        mouse = rl.get_mouse_position()
+        mx = float(mouse.x) / max(0.001, sx)
+        my = float(mouse.y) / max(0.001, sy)
+        if not rl.is_mouse_button_down(rl.MOUSE_BUTTON_LEFT):
+            return None, corner_lateral_offset_m, False
+
+        seek_rect = rl.Rectangle(ROUTE_CONTROL_BAR_X, ROUTE_CONTROL_SEEK_Y - 8.0, ROUTE_CONTROL_BAR_W, 16.0)
+        offset_rect = rl.Rectangle(ROUTE_CONTROL_BAR_X, ROUTE_CONTROL_OFFSET_Y - 8.0, ROUTE_CONTROL_BAR_W, 16.0)
+        if self._point_in_rect(mx, my, seek_rect):
+            ratio = clamp((mx - ROUTE_CONTROL_BAR_X) / max(1.0, ROUTE_CONTROL_BAR_W), 0.0, 1.0)
+            return ratio * duration_s, corner_lateral_offset_m, True
+        if self._point_in_rect(mx, my, offset_rect):
+            ratio = clamp((mx - ROUTE_CONTROL_BAR_X) / max(1.0, ROUTE_CONTROL_BAR_W), 0.0, 1.0)
+            offset_m = ROUTE_CONTROL_OFFSET_MIN_M + ratio * (ROUTE_CONTROL_OFFSET_MAX_M - ROUTE_CONTROL_OFFSET_MIN_M)
+            return None, round(offset_m, 3), True
+        return None, corner_lateral_offset_m, False
+
+    def route_replay_mouse_down(self) -> bool:
+        if not self._window_open:
+            return False
+        return bool(rl.is_mouse_button_down(rl.MOUSE_BUTTON_LEFT))
+
+    @staticmethod
+    def _point_in_rect(x: float, y: float, rect: "rl.Rectangle") -> bool:
+        return rect.x <= x <= rect.x + rect.width and rect.y <= y <= rect.y + rect.height
 
     def render(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
         """Draw one frame into the currently active raylib render target."""
@@ -2225,6 +2296,83 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             rl.rl_pop_matrix()
             self._profile_add("hud.pop_matrix", profile_stage)
+
+    def _draw_route_replay_controls(
+        self,
+        playback_s: float,
+        duration_s: float,
+        corner_lateral_offset_m: float,
+        paused: bool,
+    ) -> None:
+        sx = self.width / DESIGN_WIDTH
+        sy = self.height / DESIGN_HEIGHT
+        rl.rl_push_matrix()
+        rl.rl_scalef(sx, sy, 1.0)
+        try:
+            theme = self._current_theme()
+            panel = rl.Rectangle(
+                ROUTE_CONTROL_PANEL_X,
+                ROUTE_CONTROL_PANEL_Y,
+                ROUTE_CONTROL_PANEL_W,
+                ROUTE_CONTROL_PANEL_H,
+            )
+            rl.draw_rectangle_rounded(panel, 0.20, 12, rl_color((2, 5, 10, 188)))
+            rl.draw_rectangle_rounded_lines_ex(panel, 0.20, 12, 1.4, rl_color((255, 255, 255, 54)))
+
+            duration_s = max(0.001, duration_s)
+            playback_s = clamp(playback_s, 0.0, duration_s)
+            seek_ratio = playback_s / duration_s
+            offset_ratio = clamp(
+                (corner_lateral_offset_m - ROUTE_CONTROL_OFFSET_MIN_M)
+                / (ROUTE_CONTROL_OFFSET_MAX_M - ROUTE_CONTROL_OFFSET_MIN_M),
+                0.0,
+                1.0,
+            )
+            self._draw_route_slider(
+                "seek",
+                f"{self._format_time(playback_s)} / {self._format_time(duration_s)}{' PAUSED' if paused else ''}",
+                seek_ratio,
+                ROUTE_CONTROL_SEEK_Y,
+                BLUE_SOFT,
+                theme.text,
+            )
+            self._draw_route_slider(
+                "corner pos",
+                f"{corner_lateral_offset_m:.2f} m",
+                offset_ratio,
+                ROUTE_CONTROL_OFFSET_Y,
+                AMBER,
+                theme.text,
+            )
+        finally:
+            rl.rl_pop_matrix()
+
+    def _draw_route_slider(
+        self,
+        label: str,
+        value: str,
+        ratio: float,
+        center_y: float,
+        fill_color: tuple[int, int, int],
+        text_color: tuple[int, int, int],
+    ) -> None:
+        ratio = clamp(ratio, 0.0, 1.0)
+        self._draw_text(label, ROUTE_CONTROL_PANEL_X + 26.0, center_y - 9.0, 16, text_color)
+        self._draw_text(value, ROUTE_CONTROL_PANEL_X + ROUTE_CONTROL_PANEL_W - 26.0, center_y - 9.0, 16, text_color, anchor="right")
+        bar_bg = rl.Rectangle(ROUTE_CONTROL_BAR_X, center_y - 3.0, ROUTE_CONTROL_BAR_W, 6.0)
+        bar_fill = rl.Rectangle(ROUTE_CONTROL_BAR_X, center_y - 3.0, ROUTE_CONTROL_BAR_W * ratio, 6.0)
+        knob_x = ROUTE_CONTROL_BAR_X + ROUTE_CONTROL_BAR_W * ratio
+        rl.draw_rectangle_rounded(bar_bg, 1.0, 8, rl_color((255, 255, 255, 50)))
+        rl.draw_rectangle_rounded(bar_fill, 1.0, 8, rl_color(fill_color, 205))
+        rl.draw_circle_v(rl.Vector2(knob_x, center_y), 8.5, rl_color(fill_color, 235))
+        rl.draw_circle_lines(int(round(knob_x)), int(round(center_y)), 9.5, rl_color((255, 255, 255, 150)))
+
+    @staticmethod
+    def _format_time(seconds: float) -> str:
+        total = max(0, int(round(seconds)))
+        minutes = total // 60
+        secs = total % 60
+        return f"{minutes:d}:{secs:02d}"
 
     def _draw_center_clock(self, state: ClusterUiState) -> None:
         if not state.center_clock_text:
