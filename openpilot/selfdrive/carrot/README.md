@@ -76,6 +76,8 @@ server/
     setting_profiles.py
     settings.py
     ssh_keys.py
+    support_terminal.py
+    terminal_pty.py
     time_sync.py
     tmux.py
     vision_diag.py
@@ -129,6 +131,8 @@ server/
 | `services/device_info.py` | `features/system.py` | Device network and calibration helpers. |
 | `services/time_sync.py` | `features/system.py` | Browser-to-device time sync. |
 | `services/tmux.py` | `features/terminal.py` | tmux session create, capture, input, clear. |
+| `services/terminal_pty.py` | `features/terminal.py`, `services/support_terminal.py` | Persistent login-shell PTY shared by the local xterm and authenticated support viewers. Owns raw output broadcast, history replay, input, and owner-controlled geometry. |
+| `services/support_terminal.py` | `features/support_terminal.py` | PIN/TTL/tunnel lifecycle, owner approval, single-controller arbitration, and the restricted support guest page/assets. |
 | `services/ssh_keys.py` | `features/ssh_keys.py` | SSH key fetch/store helpers. |
 | `services/setting_favorites.py` | `features/setting_favorites.py` | Favorite setting names. |
 | `services/setting_profiles.py` | `features/setting_profiles.py` | Setting profile CRUD/import/export/apply. |
@@ -151,7 +155,8 @@ server/
 | SSH keys | `GET/POST /api/ssh_keys` | `features/ssh_keys.py`, `services/ssh_keys.py` |
 | Cars | `GET /api/cars` | `features/cars.py` |
 | System | `GET /api/heartbeat_status`, `/api/live_runtime`, `/api/device_network`, `/api/calibration_status`, `/api/regulatory`; `POST /api/reboot`, `/api/poweroff`, `/api/recalibrate`, `/api/set_default`, `/api/time_sync` | `features/system.py`, `services/device_info.py`, `services/heartbeat.py`, `services/time_sync.py` |
-| Terminal | `GET /ws/terminal`, `GET /download/tmux.log` | `features/terminal.py`, `services/tmux.py` |
+| Terminal | `GET /ws/terminal`, `/ws/terminal_pty`, `/api/terminal_pty/status`, `/download/tmux.log` | `features/terminal.py`, `services/terminal_pty.py`, `services/tmux.py` |
+| Support terminal | `POST /api/support_terminal/start`, `/stop`, command approve/reject; `GET /api/support_terminal/status`, `/support/terminal/{session_id}`, `/support-terminal-assets/{asset_name}`; WS owner/guest endpoints | `features/support_terminal.py`, `services/support_terminal.py`, `services/terminal_pty.py` |
 | Tools | `POST /api/tools`, `/api/tools/start`, `/api/tools/jobs/notice`; `GET /api/tools/job`, `/api/tools/jobs`, `/api/tools/git_status`; `DELETE /api/tools/jobs` | `features/tools/*`, `services/git_status.py` |
 | Dashcam | `/api/dashcam/*` (routes, segments, thumbnail, preview, video, download, upload) | `features/dashcam/*` |
 | Screenrecord | `/api/screenrecord/*` (videos, thumbnail, video, download) | `features/screenrecord/*` |
@@ -258,6 +263,10 @@ web/
   assets/
     img_chffr_wheel.png
     speed_bg.png
+  support_terminal/
+    guest.html
+    guest.css
+    guest.js
   css/
   js/
 ```
@@ -400,7 +409,9 @@ web/js/pages/
 | `pages/logs/shared.js` | Logs tab state, player, lazy image helpers. |
 | `pages/logs/dashcam.js` | Dashcam route/segment list, upload flow. |
 | `pages/logs/screenrecord.js` | Screenrecord list and thumbnails. |
-| `pages/terminal.js` | tmux WebSocket terminal UI. |
+| `pages/terminal.js` | Local xterm client for the persistent login-shell PTY, with fixed 100-column geometry and touch key controls. |
+| `pages/support_terminal.js` | Local owner controls for starting/stopping support, guest presence, and command approval overlays. |
+| `support_terminal/guest.js` | Standalone authenticated xterm guest client. Approval mode is read-only plus command requests; allow-all mode grants raw PTY input to one controller. |
 | `pages/vision_background.js` | Non-realtime page ambient canvas background. |
 
 ### Realtime JS
@@ -510,6 +521,7 @@ base.css
 layout.css
 components.css
 pages/logs.css
+vendor/xterm.css
 pages/terminal.css
 pages/settings/{base,panels,device}.css
 pages/tools/{base,qr,main}.css
@@ -533,6 +545,7 @@ pages/tools*.js
 pages/branch.js
 pages/logs/*.js
 pages/terminal.js
+pages/support_terminal.js
 realtime/{raw_capnp,vision_state,vision_rtc,vision_raw,app_realtime,vision_diag,carrot_map,nav_hud}.js
 pages/vision_background.js
 realtime/home_drive.js
@@ -549,7 +562,7 @@ Asset URLs carry `?v=` cache-busting query strings; bump the version when a file
 | Setting | `pageSetting` | `setting.js`, `setting_device*.js`, `car.js` | `pages/settings/*` | `features/settings.py`, `features/params.py`, `features/system.py`, `features/setting_*` |
 | Tools | `pageTools` | `tools.js`, `tools_notifications.js`, `tools_web_settings*.js`, `tools_settings_qr.js`, `branch.js` | `pages/tools/*` | `features/tools/*`, `features/system.py`, `features/params.py`, `features/web_settings.py` |
 | Logs | `pageLogs` | `pages/logs/shared.js`, `dashcam.js`, `screenrecord.js` | `pages/logs.css` | `features/dashcam/*`, `features/screenrecord/*` |
-| Terminal | `pageTerminal` | `terminal.js` | `pages/terminal.css` | `features/terminal.py`, `services/tmux.py`, `terminal_commands/*` |
+| Terminal | `pageTerminal` | `terminal.js`, `support_terminal.js` | `pages/terminal.css`, `vendor/xterm.css` | `features/terminal.py`, `features/support_terminal.py`, `services/terminal_pty.py`, `services/support_terminal.py` |
 | Car Select | `pageCar`, `appCarPicker` | `car.js` | `layout.css`, `components.css` | `features/cars.py`, Params |
 | Branch Select | `pageBranch`, `appBranchPicker` | `branch.js` | `components.css`, `pages/tools/*` | `features/tools/*` |
 
@@ -659,9 +672,18 @@ dashcam.js
 
 ```text
 web/js/pages/terminal.js
-  -> /ws/terminal
+  -> /ws/terminal_pty
   -> features/terminal.py
-  -> services/tmux.py (+ terminal_commands/*)
+  -> services/terminal_pty.py
+
+web/js/pages/support_terminal.js (owner approval/presence)
+  -> features/support_terminal.py
+  -> services/support_terminal.py
+
+web/support_terminal/guest.js (authenticated remote xterm)
+  -> /ws/support_terminal/{session_id}
+  -> services/support_terminal.py
+  -> shared services/terminal_pty.py
 ```
 
 ### Branch / Git
@@ -705,8 +727,6 @@ web/js/pages/branch.js
 | Logs UI | `web/js/pages/logs/*` |
 | Dashcam backend | `server/features/dashcam/*` |
 | Screenrecord backend | `server/features/screenrecord/*` |
-| Terminal UI/backend | `web/js/pages/terminal.js`, `server/features/terminal.py`, `server/terminal_commands/*` |
+| Terminal UI/backend | `web/js/pages/terminal.js`, `web/js/pages/support_terminal.js`, `web/support_terminal/*`, `server/features/terminal.py`, `server/features/support_terminal.py`, `server/services/terminal_pty.py`, `server/terminal_commands/*` |
 | Translations | `web/js/translations/*` |
 | Recovery server | `recovery/server.py` |
-</content>
-</invoke>

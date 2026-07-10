@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import base64
+import html
 import json
 import os
-import re
 import secrets
 import socket
 import time
@@ -13,10 +12,10 @@ from typing import Any
 
 from aiohttp import web, WSMsgType
 
-from ..config import TMUX_WEB_SESSION
+from ..config import WEB_DIR
 from ..terminal_commands import translate_meta_command
-from . import tmux
 from .support_discord import send_support_webhook, support_metadata
+from .terminal_pty import PTY_SESSION
 from .support_tunnel import TunnelHandle, cloudflared_status, start_quick_tunnel
 
 
@@ -25,11 +24,25 @@ COMMAND_TIMEOUT_SECONDS = int(os.environ.get("CARROT_SUPPORT_COMMAND_TIMEOUT_SEC
 ALLOWED_TTL_SECONDS = {900, 1800, 3600}
 ALLOWED_PERMISSION_MODES = {"approve_each", "allow_all"}
 ALLOWED_COMMAND_TIMEOUT_SECONDS = {15, 30, 60, 120}
-SCREEN_POLL_SECONDS = 0.25
 PIN_FAILURE_LIMIT = 5
 PUBLIC_URL_START_DELAY = float(os.environ.get("CARROT_SUPPORT_LINK_START_DELAY_SECONDS", "3.0"))
-TMUX_ATTACH_RE = re.compile(r"^\s*tmux\s+(?:a|attach|attach-session)(?:\s*)$", re.IGNORECASE)
-TMUX_ATTACH_TARGET_RE = re.compile(r"^\s*tmux\s+(?:a|attach|attach-session)\s+-t\s+\S+\s*$", re.IGNORECASE)
+SUPPORT_GUEST_DIR = os.path.join(WEB_DIR, "support_terminal")
+SUPPORT_GUEST_HTML_PATH = os.path.join(SUPPORT_GUEST_DIR, "guest.html")
+SUPPORT_GUEST_ASSETS = {
+  "tokens.css": os.path.join(WEB_DIR, "css", "tokens.css"),
+  "layout_tokens.css": os.path.join(WEB_DIR, "css", "layout_tokens.css"),
+  "base.css": os.path.join(WEB_DIR, "css", "base.css"),
+  "layout.css": os.path.join(WEB_DIR, "css", "layout.css"),
+  "components.css": os.path.join(WEB_DIR, "css", "components.css"),
+  "terminal.css": os.path.join(WEB_DIR, "css", "pages", "terminal.css"),
+  "guest.css": os.path.join(SUPPORT_GUEST_DIR, "guest.css"),
+  "guest.js": os.path.join(SUPPORT_GUEST_DIR, "guest.js"),
+  "xterm.css": os.path.join(WEB_DIR, "css", "vendor", "xterm.css"),
+  "xterm.js": os.path.join(WEB_DIR, "js", "vendor", "xterm.js"),
+  "xterm-addon-shim.js": os.path.join(WEB_DIR, "js", "vendor", "xterm-addon-shim.js"),
+  "xterm-addon-webgl.js": os.path.join(WEB_DIR, "js", "vendor", "xterm-addon-webgl.js"),
+  "xterm-addon-canvas.js": os.path.join(WEB_DIR, "js", "vendor", "xterm-addon-canvas.js"),
+}
 
 
 def _now() -> float:
@@ -44,20 +57,11 @@ def _new_session_id() -> str:
   return secrets.token_urlsafe(16)
 
 
-def _new_csp_nonce() -> str:
-  return base64.b64encode(secrets.token_bytes(16)).decode("ascii")
-
-
 def _translate_support_terminal_line(line: str) -> str:
   translated = translate_meta_command(line)
   if translated:
     return translated
-  text = str(line or "")
-  if TMUX_ATTACH_RE.match(text):
-    return "TMUX= tmux a -t comma"
-  if TMUX_ATTACH_TARGET_RE.match(text):
-    return f"TMUX= {text.strip()}"
-  return text
+  return str(line or "")
 
 
 def _csp_connect_sources(host: str) -> str:
@@ -98,6 +102,12 @@ def _sanitize_command_timeout_seconds(value: Any) -> int:
   return seconds
 
 
+def _sanitize_typing_text(value: Any) -> str:
+  # Collaboration indicators are text-only. Terminal control bytes never belong
+  # in a human-facing input preview.
+  return "".join(ch for ch in str(value or "") if ch.isprintable())[:160]
+
+
 @dataclass
 class PendingCommand:
   id: str
@@ -130,11 +140,10 @@ class SupportSession:
   pending_commands: dict[str, PendingCommand] = field(default_factory=dict)
   tunnel: TunnelHandle | None = None
   local_runner: web.AppRunner | None = None
-  screen_task: asyncio.Task | None = None
   expiry_task: asyncio.Task | None = None
   owner_sockets: set[web.WebSocketResponse] = field(default_factory=set)
   guest_sockets: set[web.WebSocketResponse] = field(default_factory=set)
-  last_screen: str = ""
+  controller_socket: web.WebSocketResponse | None = None
 
   def is_expired(self) -> bool:
     if self.expires_at <= 0:
@@ -183,6 +192,7 @@ class SupportTerminalManager:
       "guest_count": len(session.guest_sockets),
       "owner_count": len(session.owner_sockets),
       "owner_present": bool(session.owner_sockets),
+      "controller_present": session.controller_socket is not None and not session.controller_socket.closed,
       "discord": session.discord,
       "error": session.error,
       "status_detail": session.status_detail,
@@ -226,8 +236,8 @@ class SupportTerminalManager:
       self._session = session
 
     try:
-      await self._set_status(session, "Preparing terminal session")
-      await asyncio.to_thread(tmux.ensure_session, TMUX_WEB_SESSION)
+      await self._set_status(session, "Preparing shared terminal session")
+      await PTY_SESSION.ensure()
       if await self._abort_if_not_current(session):
         return self.snapshot(None)
       await self._set_status(session, "Starting support page")
@@ -251,7 +261,6 @@ class SupportTerminalManager:
         await asyncio.sleep(PUBLIC_URL_START_DELAY)
       if await self._abort_if_not_current(session):
         return self.snapshot(None)
-      session.screen_task = asyncio.create_task(self._screen_loop(session))
       if session.expires_at > 0:
         session.expiry_task = asyncio.create_task(self._expiry_loop(session))
       await self._set_status(session, "Sending Carrot server notification")
@@ -268,7 +277,7 @@ class SupportTerminalManager:
         "ttl_minutes": "unlimited" if session.ttl_seconds <= 0 else max(1, session.ttl_seconds // 60),
         "permissionMode": session.permission_mode,
         "commandTimeoutSeconds": session.command_timeout_seconds,
-        "tmuxSession": TMUX_WEB_SESSION,
+        "terminalSession": PTY_SESSION.session,
         "meta": metadata,
         "note": session.note,
       })
@@ -302,9 +311,11 @@ class SupportTerminalManager:
     asyncio.create_task(self._cleanup_session(session))
 
   async def _cleanup_session(self, session: SupportSession) -> None:
-    for task in (session.screen_task, session.expiry_task):
+    for task in (session.expiry_task,):
       if task:
         task.cancel()
+    for ws in list(session.guest_sockets):
+      await PTY_SESSION.detach(ws)
     for ws in list(session.owner_sockets | session.guest_sockets):
       try:
         await ws.close()
@@ -312,6 +323,7 @@ class SupportTerminalManager:
         pass
     session.owner_sockets.clear()
     session.guest_sockets.clear()
+    session.controller_socket = None
     if session.tunnel:
       await session.tunnel.stop()
       session.tunnel = None
@@ -326,6 +338,7 @@ class SupportTerminalManager:
     app = web.Application()
     app.router.add_get("/", self.handle_guest_page)
     app.router.add_get("/support/terminal/{session_id}", self.handle_guest_page)
+    app.router.add_get("/support-terminal-assets/{asset_name}", self.handle_guest_asset)
     app.router.add_get("/ws/support_terminal/{session_id}", self.handle_guest_ws)
     runner = web.AppRunner(app)
     await runner.setup()
@@ -355,17 +368,6 @@ class SupportTerminalManager:
       if self._session is session:
         await self._stop_locked("expired")
 
-  async def _screen_loop(self, session: SupportSession) -> None:
-    while session.state in {"starting", "sharing"}:
-      try:
-        screen = await asyncio.to_thread(tmux.capture, TMUX_WEB_SESSION)
-        if screen != session.last_screen:
-          session.last_screen = screen
-          await self.broadcast_guests({"type": "screen", "text": screen})
-      except Exception as exc:
-        await self.broadcast_guests({"type": "error", "message": str(exc)})
-      await asyncio.sleep(SCREEN_POLL_SECONDS)
-
   async def broadcast_owner(self, payload: dict[str, Any]) -> None:
     session = self._session
     if session is None:
@@ -383,6 +385,22 @@ class SupportTerminalManager:
     if session is None:
       return
     await self._broadcast(session.owner_sockets | session.guest_sockets, payload)
+
+  async def _sync_guest_control_roles(self, session: SupportSession) -> None:
+    if session.permission_mode != "allow_all":
+      session.controller_socket = None
+    elif session.controller_socket is None or session.controller_socket.closed or session.controller_socket not in session.guest_sockets:
+      session.controller_socket = next((guest for guest in session.guest_sockets if not guest.closed), None)
+    for guest in list(session.guest_sockets):
+      if guest.closed:
+        continue
+      try:
+        await guest.send_str(json.dumps({
+          "type": "control_role",
+          "granted": session.permission_mode != "allow_all" or guest is session.controller_socket,
+        }))
+      except Exception:
+        pass
 
   async def _broadcast(self, sockets: set[web.WebSocketResponse], payload: dict[str, Any]) -> None:
     dead: list[web.WebSocketResponse] = []
@@ -419,25 +437,25 @@ class SupportTerminalManager:
             continue
           if data.get("type") == "refresh":
             await ws.send_str(json.dumps({"type": "session_status", **self.snapshot(session)}, ensure_ascii=False))
+          elif data.get("type") == "typing":
+            text = _sanitize_typing_text(data.get("text"))
+            await self.broadcast_guests({"type": "host_typing", "active": bool(data.get("active")), "text": text})
     finally:
       session.owner_sockets.discard(ws)
       await self.broadcast_guests({"type": "owner_presence", "active": bool(session.owner_sockets)})
     return ws
 
   async def handle_guest_page(self, request: web.Request) -> web.Response:
-    nonce = _new_csp_nonce()
-    html = (
-      GUEST_HTML
-      .replace("__SESSION_ID__", request.match_info.get("session_id", ""))
-      .replace("__NONCE__", nonce)
-    )
+    session_id = html.escape(request.match_info.get("session_id", ""), quote=True)
+    with open(SUPPORT_GUEST_HTML_PATH, "r", encoding="utf-8") as f:
+      page_html = f.read().replace("__SESSION_ID__", session_id)
     csp = (
       "default-src 'none'; "
-      f"script-src 'nonce-{nonce}'; "
-      f"style-src 'nonce-{nonce}'; "
+      "script-src 'self'; "
+      "style-src 'self' 'unsafe-inline'; "
       f"connect-src {_csp_connect_sources(request.host)}; "
-      "base-uri 'none'; form-action 'self'; frame-ancestors 'none'; "
-      "require-trusted-types-for 'script'; trusted-types 'none'"
+      "img-src 'self' data:; font-src 'self'; "
+      "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     )
     headers = {
       "Cache-Control": "no-store",
@@ -447,7 +465,18 @@ class SupportTerminalManager:
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",
     }
-    return web.Response(text=html, content_type="text/html", headers=headers)
+    return web.Response(text=page_html, content_type="text/html", headers=headers)
+
+  async def handle_guest_asset(self, request: web.Request) -> web.StreamResponse:
+    asset_name = str(request.match_info.get("asset_name") or "")
+    path = SUPPORT_GUEST_ASSETS.get(asset_name)
+    if not path or not os.path.isfile(path):
+      raise web.HTTPNotFound()
+    return web.FileResponse(path, headers={
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "no-referrer",
+    })
 
   async def handle_guest_ws(self, request: web.Request) -> web.WebSocketResponse:
     ws = web.WebSocketResponse(heartbeat=20, compress=False)
@@ -482,6 +511,8 @@ class SupportTerminalManager:
             continue
           authed = True
           session.guest_sockets.add(ws)
+          if session.permission_mode == "allow_all" and (session.controller_socket is None or session.controller_socket.closed):
+            session.controller_socket = ws
           expires_in = None if session.expires_at <= 0 else max(0, int(session.expires_at - _now()))
           await ws.send_str(json.dumps({
             "type": "auth_ok",
@@ -489,29 +520,61 @@ class SupportTerminalManager:
             "command_timeout_seconds": session.command_timeout_seconds,
             "expires_in": expires_in,
             "owner_present": bool(session.owner_sockets),
+            "control_granted": session.permission_mode != "allow_all" or ws is session.controller_socket,
           }))
-          if session.last_screen:
-            await ws.send_str(json.dumps({"type": "screen", "text": session.last_screen}))
+          try:
+            await PTY_SESSION.attach(ws, primary_eligible=False)
+          except Exception as exc:
+            session.guest_sockets.discard(ws)
+            await ws.send_str(json.dumps({"type": "error", "message": str(exc)}))
+            await ws.close()
+            return ws
           await self.broadcast_owner({"type": "guest_presence", "count": len(session.guest_sockets)})
+          await self._sync_guest_control_roles(session)
           continue
 
         if typ == "typing":
-          text = str(data.get("text") or "")[:160]
+          text = _sanitize_typing_text(data.get("text"))
           await self.broadcast_owner({"type": "guest_typing", "active": bool(data.get("active")), "text": text})
-        elif typ == "close_session":
-          await self.stop("guest_closed")
-          return ws
+        elif typ in {"disconnect", "close_session"}:
+          break
         elif typ == "control":
+          if session.permission_mode == "allow_all" and ws is not session.controller_socket:
+            await ws.send_str(json.dumps({"type": "input_denied", "reason": "viewer only"}))
+            continue
           action = str(data.get("action") or "").strip()
           if action in {"ctrl_c", "clear"}:
             label = "Ctrl+C" if action == "ctrl_c" else "clear"
             await self.queue_guest_command(session, label, ws, control_action=action)
         elif typ == "input":
+          if session.permission_mode == "allow_all" and ws is not session.controller_socket:
+            await ws.send_str(json.dumps({"type": "input_denied", "reason": "viewer only"}))
+            continue
           line = str(data.get("data") or "").strip()
           if line:
             await self.queue_guest_command(session, line, ws)
+        elif typ == "raw":
+          if not session.owner_sockets:
+            await ws.send_str(json.dumps({"type": "owner_absent"}))
+            continue
+          if session.permission_mode != "allow_all":
+            await ws.send_str(json.dumps({"type": "input_denied", "reason": "approval required"}))
+            continue
+          if ws is not session.controller_socket:
+            await ws.send_str(json.dumps({"type": "input_denied", "reason": "viewer only"}))
+            continue
+          text = str(data.get("data") or "")[:4096]
+          if text:
+            try:
+              await PTY_SESSION.write_text(text)
+            except Exception as exc:
+              await ws.send_str(json.dumps({"type": "error", "message": str(exc)}))
     finally:
+      await PTY_SESSION.detach(ws)
       session.guest_sockets.discard(ws)
+      if session.controller_socket is ws:
+        session.controller_socket = None
+      await self._sync_guest_control_roles(session)
       await self.broadcast_owner({"type": "guest_presence", "count": len(session.guest_sockets)})
     return ws
 
@@ -560,11 +623,13 @@ class SupportTerminalManager:
   async def _run_command(self, session: SupportSession, command: PendingCommand) -> dict[str, Any]:
     try:
       if command.control_action == "ctrl_c":
-        await asyncio.to_thread(tmux.ctrl_c, TMUX_WEB_SESSION)
+        await PTY_SESSION.write(b"\x03")
       elif command.control_action == "clear":
-        await asyncio.to_thread(tmux.clear, TMUX_WEB_SESSION)
+        await PTY_SESSION.clear_history()
+        await PTY_SESSION.write(b"clear\r")
       else:
-        await asyncio.to_thread(tmux.send_line, TMUX_WEB_SESSION, _translate_support_terminal_line(command.line))
+        line = _translate_support_terminal_line(command.line)
+        await PTY_SESSION.write_text(line + "\r")
       await self.broadcast_all({"type": "command_running", "id": command.id})
       return {"ok": True}
     except Exception as exc:
@@ -582,783 +647,5 @@ class SupportTerminalManager:
     session.pending_commands.pop(command_id, None)
     await self.broadcast_all({"type": "command_rejected", "id": command.id})
     return {"ok": True}
-
-
-GUEST_HTML = """<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Carrot Remote Terminal</title>
-  <style nonce="__NONCE__">
-    :root {
-      color-scheme: dark;
-      --md-surface: #0b0f14;
-      --md-surface-cont: #141a21;
-      --md-on-surface: #f4f6f8;
-      --md-on-surface-var: #c4ccd4;
-      --md-outline: #98a3ad;
-      --md-primary: #c57a3d;
-      --md-stroke-soft: #54606c;
-      --control-radius: 8px;
-      --terminal-inline: 12px;
-      --popup-item-radius: var(--control-radius);
-      --popup-item-border: color-mix(in srgb, var(--md-outline) 46%, transparent);
-      --popup-item-bg: var(--md-surface-cont);
-      --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.16);
-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--md-surface);
-      color: var(--md-on-surface);
-    }
-    * { box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; }
-    body { margin: 0; overflow: hidden; background: var(--md-surface); }
-    button, input { font: inherit; }
-    .page--terminal {
-      position: fixed;
-      inset: 0;
-      width: 100dvw;
-      height: 100dvh;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      overflow: hidden;
-    }
-    .terminal-shell {
-      width: 100%;
-      height: 100%;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      background: color-mix(in srgb, var(--md-surface) 92%, #000);
-      overflow: hidden;
-      position: relative;
-    }
-    .terminal-auth {
-      position: absolute;
-      inset: 0;
-      z-index: 5;
-      display: grid;
-      place-items: center;
-      padding: clamp(18px, 6dvw, 56px);
-      background: color-mix(in srgb, var(--md-surface) 94%, #000);
-      opacity: 1;
-      transform: scale(1);
-      transition: opacity 180ms ease, transform 180ms ease, visibility 180ms ease;
-      visibility: visible;
-    }
-    .terminal-auth.is-hiding {
-      opacity: 0;
-      transform: scale(0.985);
-      visibility: hidden;
-    }
-    .terminal-auth[hidden] {
-      display: none !important;
-    }
-    .terminal-auth__panel {
-      --auth-control-height: clamp(58px, 9dvh, 82px);
-      --auth-input-size: clamp(24px, 5.2dvw, 34px);
-      --auth-button-size: clamp(16px, 2.8dvw, 20px);
-      width: min(92dvw, 560px);
-      display: grid;
-      gap: clamp(16px, 3dvh, 26px);
-      padding: 0;
-      border: 0;
-      border-radius: 0;
-      background: transparent;
-      box-shadow: none;
-    }
-    .terminal-auth__status {
-      min-height: 28px;
-      color: var(--md-on-surface);
-      font-size: clamp(18px, 3.2dvw, 24px);
-      font-weight: 900;
-      line-height: 1.25;
-      text-align: center;
-    }
-    .terminal-auth__form {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 0;
-      align-items: center;
-      border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 64%, transparent);
-      border-radius: var(--control-radius);
-      background: color-mix(in srgb, var(--md-surface-cont) 88%, #000);
-      overflow: hidden;
-      box-shadow: 0 12px 30px color-mix(in srgb, #000 26%, transparent);
-    }
-    .terminal-auth__input {
-      min-width: 0;
-      min-height: var(--auth-control-height);
-      padding: 12px clamp(16px, 4dvw, 28px);
-      border: 0;
-      background: transparent;
-      color: var(--md-on-surface);
-      font-family: var(--font-mono);
-      font-size: var(--auth-input-size);
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      outline: none;
-      text-align: center;
-    }
-    .terminal-auth__input::placeholder { color: var(--md-outline); }
-    .terminal-auth__button {
-      min-height: var(--auth-control-height);
-      padding: 0 clamp(24px, 5dvw, 38px);
-      border: 0;
-      border-left: 1px solid color-mix(in srgb, var(--md-stroke-soft) 44%, transparent);
-      background: color-mix(in srgb, var(--md-primary) 86%, #000 14%);
-      color: #fff;
-      font-size: var(--auth-button-size);
-      font-weight: 850;
-      cursor: pointer;
-    }
-    .terminal-head {
-      flex: 0 0 auto;
-      background: color-mix(in srgb, var(--md-surface) 92%, #000);
-      box-shadow: 0 8px 18px color-mix(in srgb, #000 22%, transparent);
-      z-index: 2;
-    }
-    .terminal-meta {
-      margin: 0;
-      padding: 12px var(--terminal-inline) 8px;
-      color: var(--md-on-surface);
-      font-size: 15px;
-      font-weight: 800;
-    }
-    .terminal-toolbar {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 8px;
-      align-items: center;
-      padding: 8px var(--terminal-inline);
-      border-top: 1px solid color-mix(in srgb, var(--md-stroke-soft) 18%, transparent);
-      border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 42%, transparent);
-    }
-    .terminal-sessionMeta {
-      min-width: 0;
-      color: var(--md-outline);
-      font-family: var(--font-mono);
-      font-size: 12px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .terminal-toolbar__actions {
-      display: inline-flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      justify-content: flex-end;
-      min-width: 0;
-    }
-    .terminal-toolbar__actions .smallBtn {
-      align-self: auto;
-      min-height: 34px;
-      padding: 6px 12px;
-      border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 54%, transparent);
-      border-radius: 8px;
-      background: color-mix(in srgb, var(--md-surface-cont-h) 88%, transparent);
-      color: var(--md-on-surface);
-      font-size: 12px;
-      white-space: nowrap;
-    }
-    .status-chip {
-      min-height: 26px;
-      display: inline-flex;
-      align-items: center;
-      padding: 2px 9px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--md-surface-cont) 72%, transparent);
-      color: var(--md-on-surface-var);
-      font-size: 12px;
-      font-weight: 750;
-      white-space: nowrap;
-    }
-    .terminal-screen {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow: auto;
-      padding: 8px var(--terminal-inline);
-      overscroll-behavior: contain;
-    }
-    .terminal-output {
-      margin: 0;
-      min-height: 100%;
-      display: inline-block;
-      width: max-content;
-      min-width: 100%;
-      background: transparent;
-      color: var(--md-on-surface);
-      font-family: var(--font-mono);
-      font-size: 13px;
-      line-height: 1.45;
-      white-space: pre;
-      word-break: normal;
-    }
-    .terminal-form {
-      flex: 0 0 auto;
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 8px;
-      align-items: center;
-      margin: 6px var(--terminal-inline) calc(8px + env(safe-area-inset-bottom, 0px));
-      padding-left: 12px;
-      border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 56%, transparent);
-      border-radius: var(--control-radius);
-      background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
-      overflow: hidden;
-    }
-    .terminal-form:focus-within {
-      border-color: color-mix(in srgb, var(--md-on-surface-var) 72%, transparent);
-    }
-    .terminal-form__prompt {
-      color: var(--md-primary);
-      font-family: var(--font-mono);
-      font-size: 14px;
-      font-weight: 800;
-    }
-    .terminal-commandNotice {
-      flex: 0 0 auto;
-      justify-self: start;
-      max-width: calc(100% - var(--terminal-inline) * 2);
-      margin: 0 var(--terminal-inline) 6px;
-      padding: 7px 10px;
-      border: 1px solid var(--popup-item-border, color-mix(in srgb, var(--md-stroke-soft) 48%, transparent));
-      border-radius: var(--popup-item-radius, var(--control-radius));
-      background: var(--popup-item-bg, color-mix(in srgb, var(--md-surface-cont) 92%, #000));
-      color: var(--md-on-surface-var);
-      font-size: 12px;
-      font-weight: 850;
-      line-height: 1.2;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      box-shadow: var(--shadow-1, 0 10px 24px color-mix(in srgb, #000 22%, transparent));
-    }
-    .terminal-form__mode {
-      min-height: 26px;
-      display: inline-flex;
-      align-items: center;
-      padding: 2px 8px;
-      border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 44%, transparent);
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--md-surface-cont-h) 72%, transparent);
-      color: var(--md-on-surface-var);
-      font-size: 11px;
-      font-weight: 850;
-      white-space: nowrap;
-    }
-    .terminal-form__input {
-      min-width: 0;
-      min-height: 38px;
-      padding: 8px 0;
-      border: 0;
-      background: transparent;
-      color: var(--md-on-surface);
-      font-family: var(--font-mono);
-      font-size: 14px;
-      font-weight: 650;
-      outline: none;
-    }
-    .terminal-form__input::placeholder { color: var(--md-outline); }
-    .smallBtn {
-      align-self: stretch;
-      min-height: 100%;
-      padding: 0 16px;
-      border: 0;
-      border-left: 1px solid color-mix(in srgb, var(--md-stroke-soft) 44%, transparent);
-      border-radius: 0;
-      background: color-mix(in srgb, var(--md-primary) 16%, transparent);
-      color: var(--md-primary);
-      font-size: 13px;
-      font-weight: 800;
-      cursor: pointer;
-    }
-    .hidden { display: none !important; }
-    .terminal-form {
-      opacity: 1;
-      transform: translateY(0);
-      transition: opacity 180ms ease, transform 180ms ease;
-    }
-    .terminal-form.is-entering {
-      opacity: 0;
-      transform: translateY(6px);
-    }
-    @media (max-width: 520px) {
-      :root { --terminal-inline: 10px; }
-      .terminal-output { font-size: 11px; line-height: 1.35; }
-      .terminal-form__input { font-size: 13px; }
-      .smallBtn { padding: 0 13px; font-size: 12px; }
-      .terminal-toolbar__actions .smallBtn { min-height: 32px; padding: 6px 8px; font-size: 11px; }
-      .status-chip { min-height: 24px; padding: 2px 7px; font-size: 11px; }
-    }
-  </style>
-</head>
-<body>
-  <main class="page--terminal">
-    <div class="terminal-shell">
-      <div class="terminal-head">
-        <div class="terminal-meta">Carrot Remote Terminal</div>
-        <div class="terminal-toolbar">
-          <div id="status" class="terminal-sessionMeta">PIN required</div>
-          <div class="terminal-toolbar__actions">
-            <button id="btnCtrlC" class="smallBtn" type="button">Ctrl+C</button>
-            <button id="btnClear" class="smallBtn" type="button">Clear</button>
-            <button id="btnStop" class="smallBtn" type="button">End</button>
-          </div>
-        </div>
-      </div>
-      <form id="auth" class="terminal-auth">
-        <div class="terminal-auth__panel">
-          <div id="authStatus" class="terminal-auth__status">PIN required</div>
-          <div class="terminal-auth__form">
-            <input id="pin" class="terminal-auth__input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000">
-            <button id="connectBtn" class="terminal-auth__button" type="submit">Connect</button>
-          </div>
-        </div>
-      </form>
-      <div id="terminalScreen" class="terminal-screen">
-        <pre id="screen" class="terminal-output">Not connected</pre>
-      </div>
-      <div id="commandNotice" class="terminal-commandNotice hidden"></div>
-      <form id="cmd" class="terminal-form hidden">
-        <span id="permission" class="terminal-form__mode hidden">Owner approval required</span>
-        <span class="terminal-form__prompt">$</span>
-        <input id="line" class="terminal-form__input" autocomplete="off" placeholder="">
-        <button id="sendBtn" class="smallBtn" type="submit">Send</button>
-      </form>
-    </div>
-  </main>
-  <script nonce="__NONCE__">
-    const strings = {
-      en: {
-        pinRequired: "PIN required",
-        approval: "Owner approval required",
-        approvalAllowAll: "Allow all",
-        connect: "Connect",
-        ctrlC: "Ctrl+C",
-        clear: "Clear",
-        endSession: "End Remote",
-        send: "Send",
-        notConnected: "Not connected",
-        commandPlaceholder: "Command waits for owner approval",
-        commandPlaceholderAllowAll: "Command runs immediately",
-        connected: "Connected - commands require owner approval",
-        connectedAllowAll: "Connected - commands run immediately",
-        connectedWithTime: "Connected · {time}",
-        connectedUnlimited: "Connected · unlimited",
-        timeUnlimited: "unlimited",
-        hostAway: "Host is not viewing terminal",
-        hostAwayWithTime: "Host is not viewing terminal · {time}",
-        hostAwayUnlimited: "Host is not viewing terminal · unlimited",
-        approvalWithTimeout: "Owner approval · {seconds}s",
-        pinFailed: "PIN failed - {remaining} tries left",
-        waiting: "Waiting for owner approval",
-        approved: "Approved · sending to terminal",
-        running: "Sent to terminal",
-        failed: "Failed to send command",
-        rejected: "Command rejected",
-        expired: "Command approval expired",
-        closed: "Session closed",
-        disconnected: "Disconnected",
-        consoleBlocked: "Developer tools detected - enter PIN again",
-        consoleWarningTitle: "Warning",
-        consoleWarningBody: "Console use is prohibited on this page.",
-        error: "Error"
-      },
-      ko: {
-        pinRequired: "PIN 필요",
-        approval: "소유자 승인 필요",
-        approvalAllowAll: "전체 허용",
-        connect: "연결",
-        ctrlC: "Ctrl+C",
-        clear: "Clear",
-        endSession: "원격 종료",
-        send: "전송",
-        notConnected: "연결되지 않음",
-        commandPlaceholder: "명령은 소유자 승인 후 실행됩니다",
-        commandPlaceholderAllowAll: "명령이 즉시 실행됩니다",
-        connected: "연결됨 - 명령은 소유자 승인이 필요합니다",
-        connectedAllowAll: "연결됨 - 명령이 즉시 실행됩니다",
-        connectedWithTime: "연결됨 · {time}",
-        connectedUnlimited: "연결됨 · 무제한",
-        timeUnlimited: "무제한",
-        hostAway: "호스트가 터미널 페이지를 보고 있지 않습니다",
-        hostAwayWithTime: "호스트가 터미널 페이지를 보고 있지 않습니다 · {time}",
-        hostAwayUnlimited: "호스트가 터미널 페이지를 보고 있지 않습니다 · 무제한",
-        approvalWithTimeout: "소유자 승인 · {seconds}초",
-        pinFailed: "PIN 실패 - {remaining}회 남음",
-        waiting: "소유자 승인 대기 중",
-        approved: "승인됨 · 터미널로 전송 중",
-        running: "터미널로 전송됨",
-        failed: "명령 전송 실패",
-        rejected: "명령 거절됨",
-        expired: "명령 승인 만료",
-        closed: "세션 닫힘",
-        disconnected: "연결 끊김",
-        consoleBlocked: "개발자 도구 감지됨 - PIN을 다시 입력하세요",
-        consoleWarningTitle: "경고",
-        consoleWarningBody: "콘솔 사용이 금지되어 있습니다.",
-        error: "오류"
-      },
-      zh: {
-        pinRequired: "需要 PIN",
-        approval: "需要车主批准",
-        approvalAllowAll: "全部允许",
-        connect: "连接",
-        ctrlC: "Ctrl+C",
-        clear: "清除",
-        endSession: "结束远程",
-        send: "发送",
-        notConnected: "未连接",
-        commandPlaceholder: "命令需要车主批准",
-        commandPlaceholderAllowAll: "命令会立即运行",
-        connected: "已连接 - 命令需要车主批准",
-        connectedAllowAll: "已连接 - 命令会立即运行",
-        connectedWithTime: "已连接 · {time}",
-        connectedUnlimited: "已连接 · 无限",
-        timeUnlimited: "无限",
-        hostAway: "车主未查看终端页面",
-        hostAwayWithTime: "车主未查看终端页面 · {time}",
-        hostAwayUnlimited: "车主未查看终端页面 · 无限",
-        approvalWithTimeout: "车主批准 · {seconds}秒",
-        pinFailed: "PIN 错误 - 剩余 {remaining} 次",
-        waiting: "等待车主批准",
-        approved: "已批准 · 正在发送到终端",
-        running: "已发送到终端",
-        failed: "命令发送失败",
-        rejected: "命令已拒绝",
-        expired: "命令批准已过期",
-        closed: "会话已关闭",
-        disconnected: "已断开",
-        consoleBlocked: "检测到开发者工具 - 请重新输入 PIN",
-        consoleWarningTitle: "警告",
-        consoleWarningBody: "此页面禁止使用控制台。",
-        error: "错误"
-      }
-    };
-    const language = (navigator.language || "").toLowerCase();
-    const lang = language.startsWith("ko") ? "ko" : language.startsWith("zh") ? "zh" : "en";
-    function tx(key, vars) {
-      let value = (strings[lang] && strings[lang][key]) || strings.en[key] || key;
-      if (vars) Object.keys(vars).forEach((name) => { value = value.replaceAll(`{${name}}`, String(vars[name])); });
-      return value;
-    }
-    const sessionId = "__SESSION_ID__" || location.pathname.split("/").pop();
-    const statusEl = document.getElementById("status");
-    const authStatusEl = document.getElementById("authStatus");
-    const permissionEl = document.getElementById("permission");
-    const authForm = document.getElementById("auth");
-    const pinInput = document.getElementById("pin");
-    const connectBtn = document.getElementById("connectBtn");
-    const btnCtrlC = document.getElementById("btnCtrlC");
-    const btnClear = document.getElementById("btnClear");
-    const btnStop = document.getElementById("btnStop");
-    const sendBtn = document.getElementById("sendBtn");
-    const screenEl = document.getElementById("screen");
-    const screenWrap = document.getElementById("terminalScreen");
-    const commandNoticeEl = document.getElementById("commandNotice");
-    const cmdForm = document.getElementById("cmd");
-    const lineInput = document.getElementById("line");
-    let ws = null;
-    let typingTimer = 0;
-    let remainingTimer = 0;
-    let remainingDeadlineMs = 0;
-    let allowAllMode = false;
-    let commandTimeoutSeconds = 30;
-    let ownerPresent = false;
-    let commandNoticeMessage = "";
-    let commandNoticeTimer = 0;
-    let sessionClosed = false;
-    let consoleBlocked = false;
-    function setStatus(text, updateAuth = true) {
-      statusEl.textContent = text;
-      if (updateAuth) authStatusEl.textContent = text;
-    }
-    function formatRemaining(seconds) {
-      if (seconds == null) return tx("timeUnlimited");
-      const total = Math.max(0, Math.ceil(Number(seconds || 0)));
-      const min = Math.floor(total / 60);
-      const sec = total % 60;
-      if (min <= 0) return `${sec}s`;
-      return `${min}:${String(sec).padStart(2, "0")}`;
-    }
-    function clearRemainingTimer() {
-      if (!remainingTimer) return;
-      clearInterval(remainingTimer);
-      remainingTimer = 0;
-    }
-    function clearCommandNoticeTimer() {
-      if (!commandNoticeTimer) return;
-      clearTimeout(commandNoticeTimer);
-      commandNoticeTimer = 0;
-    }
-    function socketReady() {
-      return ws && ws.readyState === WebSocket.OPEN;
-    }
-    function currentRemainingSeconds() {
-      if (!remainingDeadlineMs) return null;
-      return Math.max(0, Math.ceil((remainingDeadlineMs - Date.now()) / 1000));
-    }
-    function syncGuestControls() {
-      const commandVisible = !cmdForm.classList.contains("hidden");
-      const enabled = commandVisible && ownerPresent && socketReady();
-      cmdForm.classList.toggle("is-disabled", commandVisible && !enabled);
-      lineInput.disabled = !enabled;
-      sendBtn.disabled = !enabled;
-      btnCtrlC.disabled = !enabled;
-      btnClear.disabled = !enabled;
-      permissionEl.textContent = ownerPresent
-        ? (allowAllMode ? tx("approvalAllowAll") : tx("approvalWithTimeout", { seconds: commandTimeoutSeconds }))
-        : tx("hostAway");
-      const notice = ownerPresent ? commandNoticeMessage : tx("hostAway");
-      commandNoticeEl.hidden = !commandVisible || !notice;
-      commandNoticeEl.classList.toggle("hidden", !commandVisible || !notice);
-      if (commandVisible && notice) commandNoticeEl.textContent = notice;
-    }
-    function setCommandNotice(message, durationMs = 0) {
-      clearCommandNoticeTimer();
-      commandNoticeMessage = String(message || "");
-      if (!message) {
-        commandNoticeEl.hidden = true;
-        commandNoticeEl.classList.add("hidden");
-        commandNoticeEl.textContent = "";
-        return;
-      }
-      commandNoticeEl.textContent = message;
-      commandNoticeEl.hidden = false;
-      commandNoticeEl.classList.remove("hidden");
-      if (durationMs > 0) {
-        commandNoticeTimer = setTimeout(() => setCommandNotice(""), durationMs);
-      }
-    }
-    function showAuthPanel() {
-      authForm.hidden = false;
-      authForm.classList.remove("hidden");
-      requestAnimationFrame(() => authForm.classList.remove("is-hiding"));
-    }
-    function hideAuthPanel() {
-      authForm.classList.add("is-hiding");
-      window.setTimeout(() => {
-        if (authForm.classList.contains("is-hiding")) authForm.hidden = true;
-      }, 190);
-    }
-    function showCommandForm() {
-      cmdForm.classList.remove("hidden");
-      cmdForm.classList.add("is-entering");
-      requestAnimationFrame(() => cmdForm.classList.remove("is-entering"));
-    }
-    function hideCommandForm() {
-      cmdForm.classList.add("hidden");
-      cmdForm.classList.remove("is-entering");
-    }
-    function updateRemainingStatus() {
-      const seconds = currentRemainingSeconds();
-      if (!ownerPresent) {
-        setStatus(seconds == null ? tx("hostAwayUnlimited") : tx("hostAwayWithTime", { time: formatRemaining(seconds) }), false);
-        syncGuestControls();
-        return;
-      }
-      if (seconds == null) {
-        setStatus(tx("connectedUnlimited"), false);
-        syncGuestControls();
-        return;
-      }
-      setStatus(tx("connectedWithTime", { time: formatRemaining(seconds) }), false);
-      syncGuestControls();
-      if (seconds <= 0) resetToPin(tx("expired"));
-    }
-    function startRemainingTimer(expiresIn) {
-      clearRemainingTimer();
-      remainingDeadlineMs = expiresIn == null ? 0 : Date.now() + Math.max(0, Number(expiresIn || 0)) * 1000;
-      updateRemainingStatus();
-      remainingTimer = setInterval(updateRemainingStatus, 1000);
-    }
-    function showConsoleWarning() {
-      try {
-        console.log(`%c${tx("consoleWarningTitle")}`, "color:#ff4d4f;font-size:42px;font-weight:900;");
-        console.log(`%c${tx("consoleWarningBody")}`, "color:#ffb86b;font-size:16px;font-weight:700;");
-      } catch {}
-    }
-    function resetToPin(message) {
-      clearTimeout(typingTimer);
-      clearCommandNoticeTimer();
-      clearRemainingTimer();
-      typingTimer = 0;
-      remainingDeadlineMs = 0;
-      allowAllMode = false;
-      commandTimeoutSeconds = 30;
-      ownerPresent = false;
-      commandNoticeMessage = "";
-      sessionClosed = true;
-      if (ws) {
-        try {
-          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "typing", active: false, text: "" }));
-          ws.close();
-        } catch {}
-      }
-      ws = null;
-      lineInput.value = "";
-      pinInput.value = "";
-      hideCommandForm();
-      commandNoticeEl.hidden = true;
-      commandNoticeEl.classList.add("hidden");
-      syncGuestControls();
-      showAuthPanel();
-      setStatus(message || tx("pinRequired"));
-      pinInput.focus();
-    }
-    function blockForConsole() {
-      if (consoleBlocked) return;
-      consoleBlocked = true;
-      resetToPin(tx("consoleBlocked"));
-    }
-    function isDevToolsLikelyOpen() {
-      const widthGap = window.outerWidth > 0 ? Math.abs(window.outerWidth - window.innerWidth) : 0;
-      const heightGap = window.outerHeight > 0 ? Math.abs(window.outerHeight - window.innerHeight) : 0;
-      return widthGap > 170 || heightGap > 170;
-    }
-    function checkDevToolsOpen() {
-      if (isDevToolsLikelyOpen()) {
-        blockForConsole();
-        return true;
-      } else if (consoleBlocked) {
-        consoleBlocked = false;
-        setStatus(tx("pinRequired"));
-      }
-      return false;
-    }
-    function localizeStaticText() {
-      setStatus(tx("pinRequired"));
-      permissionEl.textContent = tx("approval");
-      connectBtn.textContent = tx("connect");
-      btnCtrlC.textContent = tx("ctrlC");
-      btnClear.textContent = tx("clear");
-      btnStop.textContent = tx("endSession");
-      sendBtn.textContent = tx("send");
-      screenEl.textContent = tx("notConnected");
-      lineInput.placeholder = "";
-    }
-    function connect(pin) {
-      if (consoleBlocked || checkDevToolsOpen()) return;
-      sessionClosed = false;
-      if (ws) {
-        try { ws.close(); } catch {}
-      }
-      const proto = location.protocol === "https:" ? "wss" : "ws";
-      ws = new WebSocket(`${proto}://${location.host}/ws/support_terminal/${encodeURIComponent(sessionId)}`);
-      ws.onopen = () => {
-        if (consoleBlocked || checkDevToolsOpen()) return;
-        ws.send(JSON.stringify({ type: "auth", pin }));
-      };
-      ws.onmessage = (event) => {
-        let data;
-        try { data = JSON.parse(event.data); } catch { return; }
-        if (data.type === "auth_ok") {
-          if (consoleBlocked || checkDevToolsOpen()) return;
-          allowAllMode = data.permission_mode === "allow_all";
-          commandTimeoutSeconds = Number(data.command_timeout_seconds || 30);
-          ownerPresent = Boolean(data.owner_present);
-          hideAuthPanel();
-          showCommandForm();
-          lineInput.placeholder = "";
-          startRemainingTimer(data.expires_in == null ? null : Number(data.expires_in || 0));
-          setCommandNotice("");
-          syncGuestControls();
-          if (ownerPresent) lineInput.focus();
-        } else if (data.type === "auth_failed") {
-          setStatus(tx("pinFailed", { remaining: data.remaining }));
-        } else if (data.type === "screen") {
-          screenEl.textContent = data.text || " ";
-          screenWrap.scrollTop = screenWrap.scrollHeight;
-        } else if (data.type === "owner_presence") {
-          ownerPresent = Boolean(data.active);
-          updateRemainingStatus();
-          if (ownerPresent) lineInput.focus();
-        } else if (data.type === "owner_absent") {
-          ownerPresent = false;
-          updateRemainingStatus();
-        } else if (data.type === "command_waiting_approval") {
-          setCommandNotice(tx("waiting"));
-        } else if (data.type === "command_approved") {
-          setCommandNotice(tx("approved"), 1600);
-        } else if (data.type === "command_running") {
-          setCommandNotice(tx("running"), 1800);
-        } else if (data.type === "command_failed") {
-          setCommandNotice(tx("failed"), 2600);
-        } else if (data.type === "command_rejected") {
-          setCommandNotice(tx("rejected"), 2200);
-        } else if (data.type === "command_expired") {
-          setCommandNotice(tx("expired"), 2200);
-        } else if (data.type === "session_closed") {
-          sessionClosed = true;
-          resetToPin(tx("closed"));
-          if (ws) ws.close();
-        } else if (data.type === "error") {
-          setStatus(data.message || tx("error"));
-        }
-      };
-      ws.onclose = () => {
-        ownerPresent = false;
-        syncGuestControls();
-        if (!sessionClosed) resetToPin(tx("disconnected"));
-      };
-    }
-    function sendControl(action) {
-      if (!socketReady() || !ownerPresent) {
-        updateRemainingStatus();
-        return false;
-      }
-      ws.send(JSON.stringify({ type: "control", action }));
-      return true;
-    }
-    authForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      if (consoleBlocked || checkDevToolsOpen()) return;
-      const pin = pinInput.value.trim();
-      if (pin) connect(pin);
-    });
-    btnCtrlC.addEventListener("click", () => {
-      sendControl("ctrl_c");
-    });
-    btnClear.addEventListener("click", () => {
-      screenEl.textContent = " ";
-      sendControl("clear");
-    });
-    btnStop.addEventListener("click", () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      ws.send(JSON.stringify({ type: "close_session" }));
-      resetToPin(tx("closed"));
-    });
-    lineInput.addEventListener("input", () => {
-      if (!socketReady() || !ownerPresent) return;
-      ws.send(JSON.stringify({ type: "typing", active: true, text: lineInput.value }));
-      clearTimeout(typingTimer);
-      typingTimer = setTimeout(() => {
-        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "typing", active: false, text: "" }));
-      }, 1400);
-    });
-    cmdForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const line = lineInput.value.trim();
-      if (!line || !socketReady()) return;
-      if (!ownerPresent) {
-        updateRemainingStatus();
-        return;
-      }
-      ws.send(JSON.stringify({ type: "typing", active: false, text: "" }));
-      ws.send(JSON.stringify({ type: "input", data: line }));
-      lineInput.value = "";
-    });
-    window.addEventListener("resize", checkDevToolsOpen);
-    window.setInterval(checkDevToolsOpen, 1200);
-    showConsoleWarning();
-    localizeStaticText();
-    syncGuestControls();
-  </script>
-</body>
-</html>"""
-
 
 manager = SupportTerminalManager()

@@ -36,10 +36,15 @@ let terminalXtermActive = false;
 let terminalXtermResizeObserver = null;
 let terminalXtermFitRaf = 0;
 let terminalKeyboardFitTimers = [];
+let terminalOuterScrollRaf = 0;
+let terminalOuterScrollTimer = 0;
+let terminalOuterScrollLockUntil = 0;
+let terminalSuppressScrollUntil = 0;
 let terminalCtrlSticky = false;
 let terminalSuppressDataDepth = 0;
 let terminalLayoutRaf = 0;
 let terminalKeysTouchStart = null;
+let terminalXtermTouchStartY = null;
 let terminalLastSizeKey = "";
 const TERMINAL_GRID_COLS = 100;
 const TERMINAL_GRID_ROWS = 30;
@@ -54,33 +59,47 @@ function leaveTerminalKeyboardMode() {
   window.CarrotViewport?.updateMetrics?.();
 }
 
+// Samsung Internet can scroll the outer, horizontally-pannable xterm host to
+// reveal xterm's focused helper textarea when the native keyboard opens. That
+// moves the whole rendered grid upward while xterm's own buffer stays correct.
+// The host deliberately has no vertical scrolling contract, so keep it at 0.
+function lockTerminalOuterVerticalScroll() {
+  if (Date.now() > terminalOuterScrollLockUntil) return;
+  if (terminalXtermEl && terminalXtermEl.scrollTop !== 0) terminalXtermEl.scrollTop = 0;
+}
+
+function scheduleTerminalOuterVerticalScrollLock() {
+  terminalOuterScrollLockUntil = Date.now() + 800;
+  lockTerminalOuterVerticalScroll();
+  if (terminalOuterScrollRaf) cancelAnimationFrame(terminalOuterScrollRaf);
+  if (terminalOuterScrollTimer) clearTimeout(terminalOuterScrollTimer);
+  terminalOuterScrollRaf = requestAnimationFrame(() => {
+    terminalOuterScrollRaf = 0;
+    lockTerminalOuterVerticalScroll();
+    requestAnimationFrame(lockTerminalOuterVerticalScroll);
+  });
+  terminalOuterScrollTimer = window.setTimeout(() => {
+    terminalOuterScrollTimer = 0;
+    lockTerminalOuterVerticalScroll();
+  }, 620);
+}
+
+// Output can arrive while a touch scroll is still in progress. Mark an actual
+// vertical drag immediately so a queued layout/output pin cannot pull the
+// viewport back to the bottom before xterm emits its scroll event.
+function trackTerminalXtermTouch(event) {
+  const touch = event.touches?.[0];
+  if (!touch || terminalXtermTouchStartY == null) return;
+  if (Math.abs(touch.clientY - terminalXtermTouchStartY) < 6) return;
+  terminalFollowOutput = false;
+  terminalSuppressScrollUntil = 0;
+}
+
 function pinTerminalCursorToBottom() {
   if (!terminalXtermActive || !terminalXterm || !terminalFollowOutput) return;
   try {
-    const ns = terminalXterm.buffer;
-    const b = ns?.active;
-    if (!b) {
-      terminalXterm.scrollToBottom();
-      return;
-    }
-    if (ns.normal && b !== ns.normal) {
-      terminalXterm.scrollToBottom();
-      return;
-    }
-
-    const rows = Math.max(1, terminalXterm.rows | 0);
-    const cursorY = Math.max(0, b.cursorY | 0);
-    const baseY = Math.max(0, b.baseY | 0);
-    const targetViewportY = Math.max(0, baseY + cursorY - rows + 1);
-    if (typeof terminalXterm.scrollToLine === "function") {
-      terminalXterm.scrollToLine(targetViewportY);
-    } else {
-      terminalXterm.scrollToBottom();
-      const blankRows = Math.max(0, rows - 1 - cursorY);
-      if (blankRows > 0 && typeof terminalXterm.scrollLines === "function") {
-        terminalXterm.scrollLines(-blankRows);
-      }
-    }
+    terminalSuppressScrollUntil = Date.now() + 350;
+    terminalXterm.scrollToBottom();
   } catch (e) {
     try {
       terminalXterm.scrollToBottom();
@@ -148,36 +167,123 @@ function terminalFontSize() {
   return 13;
 }
 
+// The host paints an opaque dark surface, so xterm never needs a see-through
+// background here. Reading the host's resolved color keeps the grid identical
+// in light/dark while letting us run xterm opaque — required because the WebGL
+// renderer thins glyphs badly whenever allowTransparency is on (xtermjs #4212).
+function terminalOpaqueBackground() {
+  try {
+    const bg = terminalXtermEl ? getComputedStyle(terminalXtermEl).backgroundColor : "";
+    if (bg && bg !== "transparent" && !/rgba?\([^)]*,\s*0\s*\)\s*$/i.test(bg)) return bg;
+  } catch (e) {}
+  return readCssVar("--md-surface", "#0b0f14");
+}
+
+// The default DOM renderer re-renders every visible row (<div> textContent) on
+// each scroll frame, which stutters on the device — worst on rows with heavy
+// ANSI styling (many colored spans). Paint to a single GPU surface instead:
+// WebGL first, Canvas as a fallback, and keep the DOM renderer if neither addon
+// activates (no regression). Each step logs its outcome so "why is it still the
+// DOM renderer" is answerable from the console.
+// The UMD builds expose the addon global as a namespace object
+// (window.WebglAddon === { WebglAddon: class }), not the class itself, so a
+// plain `new window.WebglAddon()` fails. Resolve the constructor from either
+// shape (direct class, or `.<name>` on the namespace).
+function resolveTerminalAddon(name) {
+  const g = window[name];
+  if (typeof g === "function") return g;
+  if (g && typeof g[name] === "function") return g[name];
+  return null;
+}
+
+function attachTerminalCanvasRenderer(term) {
+  try {
+    const Canvas = resolveTerminalAddon("CanvasAddon");
+    if (!Canvas) {
+      console.log("[Terminal] CanvasAddon not loaded");
+      return false;
+    }
+    term.loadAddon(new Canvas());
+    console.log("[Terminal] renderer: canvas");
+    return true;
+  } catch (e) {
+    console.log("[Terminal] canvas renderer failed:", (e && e.message) || e);
+    return false;
+  }
+}
+
+function attachTerminalRenderer(term) {
+  // Attempt the WebGL addon directly rather than pre-probing a detached canvas
+  // with getContext('webgl2') — several mobile browsers false-negative that
+  // probe for unattached canvases, which was silently dropping us to the slow
+  // DOM renderer even though WebGL2 works for the real, attached terminal.
+  try {
+    const Webgl = resolveTerminalAddon("WebglAddon");
+    if (Webgl) {
+      const addon = new Webgl();
+      if (typeof addon.onContextLoss === "function") {
+        addon.onContextLoss(() => {
+          try { addon.dispose(); } catch (e) {}
+          attachTerminalCanvasRenderer(term);
+        });
+      }
+      term.loadAddon(addon);
+      console.log("[Terminal] renderer: webgl");
+      return;
+    }
+    console.log("[Terminal] WebglAddon not loaded");
+  } catch (e) {
+    console.log("[Terminal] webgl renderer failed:", (e && e.message) || e);
+  }
+  if (!attachTerminalCanvasRenderer(term)) console.log("[Terminal] renderer: dom (fallback)");
+}
+
 function ensureTerminalXterm() {
   if (terminalXterm) return terminalXterm;
   if (!terminalXtermSupported()) return null;
   const term = new window.Terminal({
-    fontFamily: readCssVar("--font-mono", "ui-monospace, \"Roboto Mono\", Menlo, monospace"),
+    fontFamily: readCssVar("--font-mono", "ui-monospace, \"Roboto Mono\", Menlo, Consolas, monospace"),
     fontSize: terminalFontSize(),
     lineHeight: 1.25,
     cursorBlink: true,
     scrollback: 5000,
     convertEol: false,
     allowProposedApi: true,
-    allowTransparency: true,
+    allowTransparency: false,
     theme: {
-      background: "rgba(0,0,0,0)",
+      background: terminalOpaqueBackground(),
       foreground: readCssVar("--md-on-surface", "#e6e9ef"),
       cursor: readCssVar("--md-primary", "#7ee0a0"),
-      cursorAccent: "#0b0f14",
+      cursorAccent: readCssVar("--md-surface", "#0b0f14"),
       selectionBackground: "rgba(120,160,255,0.35)",
     },
   });
   term.open(terminalXtermEl);
+  attachTerminalRenderer(term);
+  term.element?.addEventListener("touchstart", (event) => {
+    terminalXtermTouchStartY = event.touches?.[0]?.clientY ?? null;
+  }, { capture: true, passive: true });
+  term.element?.addEventListener("touchmove", trackTerminalXtermTouch, { capture: true, passive: true });
+  term.element?.addEventListener("touchend", () => { terminalXtermTouchStartY = null; }, { capture: true, passive: true });
+  term.element?.addEventListener("touchcancel", () => { terminalXtermTouchStartY = null; }, { capture: true, passive: true });
   // Keystrokes typed directly into the grid drive interactive programs.
   term.onData((data) => {
     if (terminalSuppressDataDepth > 0) return;
     terminalFollowOutput = true;
-    sendTerminalPacket({ type: "raw", data: applyTerminalCtrl(data) }, { quiet: true });
+    if (sendTerminalPacket({ type: "raw", data: applyTerminalCtrl(data) }, { quiet: true })) {
+      window.CarrotSupportTerminal?.reportHostRawTyping?.(data);
+    }
+  });
+  term.onScroll((viewportY) => {
+    if (Date.now() < terminalSuppressScrollUntil) return;
+    const buffer = term.buffer?.active;
+    terminalFollowOutput = !buffer || viewportY >= (buffer.baseY | 0);
   });
   term.onResize(({ cols, rows }) => {
     terminalLastSizeKey = `${cols | 0}x${rows | 0}`;
+    scheduleTerminalOuterVerticalScrollLock();
   });
+  term.textarea?.addEventListener("focus", scheduleTerminalOuterVerticalScrollLock, { passive: true });
   terminalXterm = term;
   // Re-fit whenever the host actually gets/changes size (page show, orientation,
   // keyboard). Columns stay locked at 100; rows track the container height.
@@ -207,7 +313,9 @@ function writeTerminalXterm(data, options = {}) {
     terminalSuppressDataDepth = Math.max(0, terminalSuppressDataDepth - 1);
   };
   try {
-    terminalXterm.write(data, release);
+    terminalXterm.write(data, () => {
+      release();
+    });
     window.setTimeout(release, 500);
   } catch (e) {
     release();
@@ -263,7 +371,15 @@ function activateTerminalXterm() {
 function terminalGridRows() {
   try {
     const host = terminalXtermEl;
-    const h = host ? host.getBoundingClientRect().height : 0;
+    const outerHeight = host ? host.getBoundingClientRect().height : 0;
+    // The grid must only consume the content box.  Measuring the outer flex
+    // item includes its terminal padding, which lets the last row paint into
+    // the intended breathing room above the touch-key bar.
+    const hostStyle = host ? getComputedStyle(host) : null;
+    const verticalPadding = hostStyle
+      ? (parseFloat(hostStyle.paddingTop) || 0) + (parseFloat(hostStyle.paddingBottom) || 0)
+      : 0;
+    const h = Math.max(0, outerHeight - verticalPadding);
     if (h > 0) {
       let cellH = 0;
       const screen = host.querySelector(".xterm-screen");
@@ -297,10 +413,14 @@ function fitTerminalXterm() {
       // Tell the shared PTY the new row count (columns stay locked at 100) so
       // full-screen apps (btop/vim) draw to the full height too.
       sendTerminalPacket({ type: "resize", cols: TERMINAL_GRID_COLS, rows }, { quiet: true });
-      requestAnimationFrame(pinTerminalCursorToBottom);
+      requestAnimationFrame(() => {
+        pinTerminalCursorToBottom();
+        scheduleTerminalOuterVerticalScrollLock();
+      });
     } else {
       terminalXterm.refresh(0, rows - 1);
       pinTerminalCursorToBottom();
+      scheduleTerminalOuterVerticalScrollLock();
     }
   } catch (e) {
     /* container not laid out yet */
@@ -827,6 +947,10 @@ function initTerminalBindings() {
   bindNodeOnce(terminalScreenEl, "scrollBound", () => {
     terminalFollowOutput = isTerminalPinnedToBottom();
     updateTerminalOverflowState();
+  }, "scroll");
+
+  bindNodeOnce(terminalXtermEl, "outerScrollBound", () => {
+    if (terminalXtermEl?.scrollTop) lockTerminalOuterVerticalScroll();
   }, "scroll");
 
   bindNodeOnce(btnTerminalCtrlCEl, "clickBound", () => {
