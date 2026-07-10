@@ -51,6 +51,7 @@ CMD_STOP_STREAM = 123
 DEFAULT_H264_CHUNK_SIZE = 202752
 MAX_H264_CHUNK_SIZE = 1024 * 1024
 _LIBUSB_DLL_DIR_HANDLE = None
+_LIBUSB_BACKEND = None
 
 
 def _set_cluster_hud_connected(connected: bool) -> None:
@@ -58,6 +59,9 @@ def _set_cluster_hud_connected(connected: bool) -> None:
         from openpilot.common.params import Params
 
         Params().put_bool_nonblocking("ClusterHudConnected", connected)
+    except ModuleNotFoundError:
+        # PC replay runs may not have openpilot's compiled params extension.
+        pass
     except Exception as exc:
         print(f"Warning: failed to update ClusterHudConnected: {exc}", flush=True)
 
@@ -90,6 +94,42 @@ def _add_libusb_search_path_once() -> None:
         _LIBUSB_DLL_DIR_HANDLE = os.add_dll_directory(dll_dir)
 
 
+def _libusb_backend() -> Any:
+    global _LIBUSB_BACKEND
+
+    if _LIBUSB_BACKEND is not None:
+        return _LIBUSB_BACKEND
+
+    _add_libusb_search_path_once()
+    try:
+        import libusb_package  # type: ignore
+
+        backend = libusb_package.get_libusb1_backend()
+    except Exception:
+        import usb.backend.libusb1  # type: ignore
+
+        backend = usb.backend.libusb1.get_backend()
+
+    if backend is None:
+        raise RuntimeError(
+            "libusb backend is not available. On Windows install cluster requirements "
+            "so libusb-package can provide libusb-1.0.dll: "
+            "python -m pip install -r selfdrive/carrot/cluster/requirements.txt"
+        )
+
+    _LIBUSB_BACKEND = backend
+    return _LIBUSB_BACKEND
+
+
+def _windows_usb_access_help(exc: BaseException) -> RuntimeError:
+    return RuntimeError(
+        "TURZX USB display was found, but Windows denied libusb access. "
+        "Install a WinUSB/libusb-compatible driver for the TURZX device with Zadig "
+        "(Options > List All Devices, select the 1CBE:0092 or 1CBE:0123 display, install WinUSB), "
+        "then unplug/replug the display and retry."
+    )
+
+
 def find_supported_usb_product(expected_product_id: int | None = None) -> int | None:
     if not VENDOR_LIBRARY.exists():
         print(f"TURZX vendor library not found: {VENDOR_LIBRARY}", flush=True)
@@ -106,7 +146,7 @@ def find_supported_usb_product(expected_product_id: int | None = None) -> int | 
     product_ids = [expected_product_id] if expected_product_id is not None else list(TURZX_USB_PRODUCT_IDS)
     for product_id in product_ids:
         try:
-            dev = usb.core.find(idVendor=TURZX_USB_VENDOR_ID, idProduct=product_id)
+            dev = usb.core.find(idVendor=TURZX_USB_VENDOR_ID, idProduct=product_id, backend=_libusb_backend())
         except Exception as exc:
             print(f"TURZX USB scan failed for pid=0x{product_id:04x}: {exc}", flush=True)
             return None
@@ -265,14 +305,26 @@ class TuringUsbDisplay:
         return False
 
     def _find_expected_usb_device(self) -> tuple[Any, int]:
-        if self.expected_product_id is None:
-            return self._find_usb_device()
-
         import usb.core  # type: ignore
+        import usb.util  # type: ignore
 
-        dev = usb.core.find(idVendor=TURZX_USB_VENDOR_ID, idProduct=self.expected_product_id)
-        if dev is None:
-            raise ValueError(f"USB device not found for pid=0x{self.expected_product_id:04x}")
+        backend = _libusb_backend()
+        product_ids = (
+            [self.expected_product_id]
+            if self.expected_product_id is not None
+            else list(TURZX_USB_PRODUCT_IDS)
+        )
+        dev = None
+        dev_pid = None
+        for product_id in product_ids:
+            dev = usb.core.find(idVendor=TURZX_USB_VENDOR_ID, idProduct=product_id, backend=backend)
+            if dev is not None:
+                dev_pid = product_id
+                break
+        if dev is None or dev_pid is None:
+            if self.expected_product_id is not None:
+                raise ValueError(f"USB device not found for pid=0x{self.expected_product_id:04x}")
+            raise ValueError("USB device not found")
 
         if sys.platform.startswith("linux"):
             try:
@@ -284,6 +336,8 @@ class TuringUsbDisplay:
         try:
             dev.set_configuration()
         except usb.core.USBError as exc:
+            if getattr(exc, "errno", None) == errno.EACCES:
+                raise _windows_usb_access_help(exc) from exc
             if getattr(exc, "errno", None) == errno.EBUSY:
                 raise RuntimeError("TURZX USB display is busy; another process may be using it") from exc
             raise
@@ -291,11 +345,13 @@ class TuringUsbDisplay:
         try:
             usb.util.claim_interface(dev, 0)
         except usb.core.USBError as exc:
+            if getattr(exc, "errno", None) == errno.EACCES:
+                raise _windows_usb_access_help(exc) from exc
             if getattr(exc, "errno", None) == errno.EBUSY:
                 raise RuntimeError("TURZX USB display is busy; another process may be using it") from exc
             raise
 
-        return dev, self.expected_product_id
+        return dev, dev_pid
 
     def _connect_device(self) -> None:
         self.dev, self.dev_pid = self._find_expected_usb_device()
