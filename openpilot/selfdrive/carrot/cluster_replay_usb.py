@@ -41,8 +41,6 @@ def build_cluster_args(args: argparse.Namespace, passthrough: list[str]) -> list
         "--usb-codec", args.usb_codec,
         "--fps", str(args.fps),
         "--route-replay-speed", str(args.speed),
-        "--route-corner-lateral-offset", str(args.corner_lateral_offset),
-        "--route-corner-source", args.corner_source,
     ]
     if args.duration is not None:
         cluster_args.extend(("--duration", str(args.duration)))
@@ -73,8 +71,6 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--fps", type=float, default=20.0, help="Replay/render FPS")
     parser.add_argument("--duration", type=float, default=None, help="Seconds to replay; omit for route end")
     parser.add_argument("--speed", type=float, default=1.0, help="Replay speed multiplier")
-    parser.add_argument("--corner-lateral-offset", type=float, default=0.5, help="Replay-only side-lane corner radar centering offset in meters")
-    parser.add_argument("--corner-source", choices=("stable", "raw", "live"), default="stable", help="Corner radar source to display")
     parser.add_argument("--start-segment", type=int, default=None, help="First segment index when a route directory is given")
     parser.add_argument("--max-segments", type=int, default=None, help="Maximum number of route segments to replay")
     parser.add_argument("--loop", action="store_true", help="Loop the replay")

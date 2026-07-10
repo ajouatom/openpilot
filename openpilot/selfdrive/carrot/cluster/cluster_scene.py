@@ -105,16 +105,15 @@ CORNER_RADAR_HEADING_COMPONENT_MIN_MPS = 0.5
 CORNER_RADAR_EGO_LATERAL_COMP_MAX_MPS = 3.5
 CORNER_RADAR_EGO_LATERAL_COMP_GAIN = 0.25
 CORNER_RADAR_EGO_LATERAL_COMP_MIN_POINTS = 2
-STABLE_CORNER_DISPLAY_MAX_LATERAL_LANES = 2.75
-STABLE_CORNER_DISPLAY_MAX_ROAD_EDGE_OUTSIDE_M = 2.0
-STABLE_CORNER_DISPLAY_FAR_DISTANCE_M = 55.0
-STABLE_CORNER_DISPLAY_FAR_MIN_VALID_COUNT = 30
+CORNER_RADAR_HEADING_YAW_COMP_MAX_DREL = 120.0
+CORNER_RADAR_HEADING_YAW_COMP_MAX_YAW_RATE = 0.35
+CORNER_RADAR_HEADING_YAW_COMP_MAX_MPS = 3.0
 DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
 DRIVE_CAMERA_EGO_BOTTOM_POSITION_M = (0.0, -6.0, 5.00)
 DRIVE_CAMERA_EGO_BOTTOM_TARGET_M = (0.0, 14.0, -1.00)
 DRIVE_VIEW_REAR_RELATIVE_M = -5.0
 DRIVE_VIEW_REAR_ROAD_MARGIN_M = 8.0
-LONGITUDINAL_RENDER_DISTANCE_SCALE = 0.4
+LONGITUDINAL_RENDER_DISTANCE_SCALE = 1.0
 DRIVE_VIEW_REAR_VISIBLE_M = EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M
 DRIVE_VIEW_ROAD_START_M = (
     DRIVE_VIEW_REAR_VISIBLE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
@@ -165,11 +164,18 @@ PATH_METRIC_LAYER_M = PATH_HEIGHT_M + 0.066
 PATH_HIGHLIGHT_LAYER_M = PATH_HEIGHT_M + 0.088
 FOLLOW_DISTANCE_MARKER_BACKING_LAYER_M = PATH_HEIGHT_M + 0.116
 FOLLOW_DISTANCE_MARKER_BODY_LAYER_M = PATH_HEIGHT_M + 0.132
-FOLLOW_DISTANCE_MARKER_BACKING_FORWARD_M = 0.28
-FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M = 0.14
+FOLLOW_DISTANCE_MARKER_BACKING_FORWARD_M = 0.36
+FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M = 0.20
 FOLLOW_DISTANCE_MARKER_BACKING_EXTRA_WIDTH_M = 0.22
 FOLLOW_DISTANCE_MARKER_BACKING_COLOR: Color = (42, 0, 38, 230)
 FOLLOW_DISTANCE_MARKER_BODY_COLOR: Color = (255, 0, 220, 248)
+FOLLOW_DISTANCE_STOP_DISTANCE_M = 6.0
+FOLLOW_DISTANCE_GAP_T_FOLLOW_S = {
+    1: 1.25,
+    2: 1.45,
+    3: 1.75,
+    4: 2.0,
+}
 EGO_VEHICLE_CENTER_FORWARD_M = EGO_FORWARD_M - VEHICLE_LENGTH_M * 0.5
 LANE_HIGHLIGHT_COLOR = (64, 148, 255)
 LANE_HIGHLIGHT_ALPHA = 220
@@ -1546,7 +1552,8 @@ def planned_path_strips(
         if highlight_strip is not None:
             strips.append(highlight_strip)
     profile_stage = profile_scene_start(profile_add)
-    strips.extend(follow_distance_marker_strips(state, points, lane_width_m))
+    marker_points = model_path_centerline(state, lane_width_m, ()) if blockers else points
+    strips.extend(follow_distance_marker_strips(state, marker_points or points, lane_width_m))
     profile_scene_add(profile_add, "scene.build.planned_path.follow_distance", profile_stage)
     return tuple(strips)
 
@@ -1556,7 +1563,7 @@ def follow_distance_marker_strips(
     points: tuple[Vec3, ...],
     lane_width_m: float,
 ) -> tuple[MeshStrip, ...]:
-    distance_m = state.longitudinal_desired_distance_m
+    distance_m = cruise_follow_distance_marker_m(state)
     if distance_m is None or distance_m <= 0.0 or len(points) < 2:
         return ()
     forward_m = render_scene_forward_m(distance_m)
@@ -1598,6 +1605,18 @@ def follow_distance_marker_strips(
             FOLLOW_DISTANCE_MARKER_BODY_COLOR,
         ),
     )
+
+
+def cruise_follow_distance_marker_m(state: ClusterUiState) -> float | None:
+    if state.cruise_display_state == "off":
+        return None
+    t_follow = state.longitudinal_t_follow_s
+    if t_follow is None and state.cruise_gap is not None:
+        t_follow = FOLLOW_DISTANCE_GAP_T_FOLLOW_S.get(int(clamp(float(state.cruise_gap), 1.0, 4.0)))
+    if t_follow is None or not math.isfinite(t_follow) or t_follow <= 0.0:
+        return None
+    speed_mps = max(0.0, state.speed_kph / 3.6)
+    return FOLLOW_DISTANCE_STOP_DISTANCE_M + speed_mps * t_follow
 
 
 def centerline_x_at_forward(points: tuple[Vec3, ...], forward_m: float) -> float | None:
@@ -1683,42 +1702,12 @@ def raw_corner_radar_points(points: tuple[RadarPoint, ...]) -> tuple[RadarPoint,
     return tuple(sorted(corners, key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label)))
 
 
-def radar_point_is_stable_corner(point: RadarPoint) -> bool:
-    return radar_point_is_raw_corner(point) and point.label.startswith("CO")
-
-
-def stable_corner_point_visible_on_cluster(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
-    if not radar_point_is_stable_corner(point):
-        return True
-    valid_count = point.valid_count if point.valid_count is not None else 0
-    if (
-        point.longitudinal_m >= STABLE_CORNER_DISPLAY_FAR_DISTANCE_M
-        and valid_count < STABLE_CORNER_DISPLAY_FAR_MIN_VALID_COUNT
-    ):
-        return False
-    outside_road_edge_m = radar_point_road_edge_outside_distance_m(point, state, lane_width_m)
-    if (
-        outside_road_edge_m is not None
-        and outside_road_edge_m > STABLE_CORNER_DISPLAY_MAX_ROAD_EDGE_OUTSIDE_M
-    ):
-        return False
-    if abs(point.lateral_m) > lane_width_m * STABLE_CORNER_DISPLAY_MAX_LATERAL_LANES:
-        return False
-    return True
-
-
 def corner_radar_points_for_cluster_display(
     points: tuple[RadarPoint, ...],
     state: ClusterUiState,
     lane_width_m: float,
 ) -> tuple[RadarPoint, ...]:
-    if not any(radar_point_is_stable_corner(point) for point in points):
-        return points
-    return tuple(
-        point
-        for point in points
-        if stable_corner_point_visible_on_cluster(point, state, lane_width_m)
-    )
+    return points
 
 
 def corner_radar_common_lateral_speed_mps(points: tuple[RadarPoint, ...], state: ClusterUiState) -> float:
@@ -1745,8 +1734,32 @@ def radar_point_display_lateral_speed_mps(point: RadarPoint, lateral_speed_offse
     return point.lateral_speed_mps - lateral_speed_offset_mps
 
 
+def radar_point_heading_lateral_speed_mps(
+    point: RadarPoint,
+    state: ClusterUiState,
+    lateral_speed_offset_mps: float = 0.0,
+) -> float | None:
+    lateral_speed_mps = radar_point_display_lateral_speed_mps(point, lateral_speed_offset_mps)
+    if point.source != "cornerRadar" or lateral_speed_mps is None:
+        return lateral_speed_mps
+    yaw_rate = state.vision_yaw_rate_rps
+    if yaw_rate is None or not math.isfinite(yaw_rate) or abs(yaw_rate) >= CORNER_RADAR_HEADING_YAW_COMP_MAX_YAW_RATE:
+        return lateral_speed_mps
+    yaw_d_rel = clamp(point.longitudinal_m, 0.0, CORNER_RADAR_HEADING_YAW_COMP_MAX_DREL)
+    yaw_lateral_mps = clamp(
+        yaw_rate * yaw_d_rel,
+        -CORNER_RADAR_HEADING_YAW_COMP_MAX_MPS,
+        CORNER_RADAR_HEADING_YAW_COMP_MAX_MPS,
+    )
+    return lateral_speed_mps + yaw_lateral_mps
+
+
 def detected_vehicle_is_rear_corner_summary(vehicle: DetectedVehicle) -> bool:
     return vehicle.label in ("LR", "RR") and vehicle_source_is_adas(vehicle.source)
+
+
+def detected_vehicle_is_rear_car_state_summary(vehicle: DetectedVehicle) -> bool:
+    return vehicle.label in ("LR", "RR") and vehicle_source_base(vehicle.source) == "carState"
 
 
 def detected_vehicle_is_corner_summary(vehicle: DetectedVehicle) -> bool:
@@ -2351,10 +2364,7 @@ def radar_point_display_lateral_m(point: RadarPoint, lane_width_m: float) -> flo
 
 
 def radar_point_scene_x_m(point: RadarPoint, state: ClusterUiState, lane_width_m: float, forward_m: float) -> float:
-    display_lateral_m = radar_point_display_lateral_m(point, lane_width_m)
-    if state.surround_view_active:
-        return display_lateral_m
-    return road_world_x(display_lateral_m / max(0.1, lane_width_m), forward_m, state.steering, lane_width_m)
+    return radar_point_display_lateral_m(point, lane_width_m)
 
 
 def radar_point_has_vehicle_estimate(point: RadarPoint, state: ClusterUiState, lane_width_m: float) -> bool:
@@ -2539,7 +2549,7 @@ def radar_point_vehicle_heading(
     longitudinal_speed_kph = radar_point_absolute_speed_kph(point, state)
     return vehicle_heading_from_velocity(
         longitudinal_speed_kph,
-        radar_point_display_lateral_speed_mps(point, lateral_speed_offset_mps),
+        radar_point_heading_lateral_speed_mps(point, state, lateral_speed_offset_mps),
         (1.0, 0.0, 0.0, 1.0),
         min_speed_kph=1.0 if point.source == "cornerRadar" else RADAR_MOVING_VEHICLE_MIN_SPEED_KPH,
         min_component_mps=CORNER_RADAR_HEADING_COMPONENT_MIN_MPS if point.source == "cornerRadar" else 0.0,
@@ -2740,11 +2750,16 @@ def vehicle_box(
     primary: bool = False,
     annotate: bool = False,
     x_offset_m: float = 0.0,
+    center_x_m_override: float | None = None,
 ) -> VehicleBox:
     confidence = clamp(confidence, 0.0, 1.0)
     alpha = int(92 + 163 * confidence)
     body_color = color
-    center_x_m = road_world_x(offset, forward_m, steering, lane_width_m) + x_offset_m
+    center_x_m = (
+        center_x_m_override
+        if center_x_m_override is not None
+        else road_world_x(offset, forward_m, steering, lane_width_m) + x_offset_m
+    )
     right_x, right_y, forward_x, forward_y = vehicle_heading(
         offset,
         forward_m,
@@ -3361,11 +3376,12 @@ def build_cluster_scene(
     if raw_corner_active:
         display_detected_vehicles = tuple(
             vehicle for vehicle in display_detected_vehicles
-            if detected_vehicle_is_corner_summary(vehicle)
+            if detected_vehicle_is_front_lead(vehicle)
+            or detected_vehicle_is_rear_car_state_summary(vehicle)
         )
     if display_radar_points is not state.radar_points or display_detected_vehicles != state.detected_vehicles:
         state = replace(state, radar_points=display_radar_points, detected_vehicles=display_detected_vehicles)
-    corner_lateral_speed_offset_mps = corner_radar_common_lateral_speed_mps(raw_corner_points, state) if raw_corner_active else 0.0
+    corner_lateral_speed_offset_mps = 0.0
     anchor_x_m = ego_anchor_x_m(state, lane_width_m)
     scene_shift_x_m = -anchor_x_m
     relative_scene_x_offset_m = -scene_shift_x_m
@@ -3542,7 +3558,7 @@ def build_cluster_scene(
                 cut_in=detected.cut_in,
                 primary=detected.primary,
                 annotate=vehicle_badge_has_special_info(detected),
-                x_offset_m=relative_scene_x_offset_m,
+                center_x_m_override=detected.lateral_m + relative_scene_x_offset_m,
             )
             for detected in render_detected_vehicles
         )

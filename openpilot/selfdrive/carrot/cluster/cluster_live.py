@@ -95,7 +95,7 @@ NAVI_TRAFFIC_LIGHT_HOLD_SECONDS = 10.0
 
 
 class OpenpilotLiveSource:
-    def __init__(self, include_can: bool = True, timeout_ms: int = 0) -> None:
+    def __init__(self, include_can: bool = False, timeout_ms: int = 0) -> None:
         try:
             import openpilot.cereal.messaging as messaging
         except Exception as exc:
