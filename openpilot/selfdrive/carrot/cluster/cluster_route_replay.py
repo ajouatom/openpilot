@@ -108,7 +108,7 @@ ROUTE_CORNER_SOURCE_CHOICES = (
 CORNER_YAW_COMP_MAX_DREL = 50.0
 CORNER_YAW_COMP_MAX_YAW_RATE = 0.35
 CORNER_YAW_COMP_MAX_YVREL_CORRECTION = 1.5
-CORNER_DISPLAY_CENTERING_DEFAULT_M = 0.5
+CORNER_DISPLAY_CENTERING_DEFAULT_M = 0.0
 CORNER_DISPLAY_CENTERING_SIDE_LANE_MIN_M = 1.8
 CORNER_DISPLAY_CENTERING_SIDE_LANE_WIDTH_RATIO = 0.55
 CORNER_RADAR_OBJECTS_235_EXT_FLAG = 2 ** 12
@@ -487,7 +487,7 @@ def normalize_route_frames(frames: list[RouteReplayFrame], first_t: float) -> li
 
 
 class RouteLogPreloadWorker:
-    def __init__(self, corner_source: str = ROUTE_CORNER_SOURCE_STABLE) -> None:
+    def __init__(self, corner_source: str = ROUTE_CORNER_SOURCE_LIVE) -> None:
         self.corner_source = corner_source
         self._requests: Any | None = None
         self._results: Any | None = None
@@ -571,7 +571,7 @@ class RouteLogPreloadWorker:
 def route_log_preload_worker(
     requests: Any,
     results: Any,
-    corner_source: str = ROUTE_CORNER_SOURCE_STABLE,
+    corner_source: str = ROUTE_CORNER_SOURCE_LIVE,
     low_priority: bool = False,
 ) -> None:
     if low_priority:
@@ -611,8 +611,8 @@ class RouteReplaySource:
     def __init__(
         self,
         source_files: list[Path],
-        corner_yaw_comp_gain: float = 1.0,
-        corner_source: str = ROUTE_CORNER_SOURCE_STABLE,
+        corner_yaw_comp_gain: float = 0.0,
+        corner_source: str = ROUTE_CORNER_SOURCE_LIVE,
         corner_lateral_offset_m: float = CORNER_DISPLAY_CENTERING_DEFAULT_M,
     ) -> None:
         if not source_files:
@@ -646,8 +646,8 @@ class RouteReplaySource:
         log_kind: str = "qlog",
         start_segment: int | None = None,
         max_segments: int | None = None,
-        corner_yaw_comp_gain: float = 1.0,
-        corner_source: str = ROUTE_CORNER_SOURCE_STABLE,
+        corner_yaw_comp_gain: float = 0.0,
+        corner_source: str = ROUTE_CORNER_SOURCE_LIVE,
         corner_lateral_offset_m: float = CORNER_DISPLAY_CENTERING_DEFAULT_M,
     ) -> RouteReplaySource:
         files = discover_route_logs(route_path, log_kind, start_segment, max_segments)
@@ -1157,7 +1157,7 @@ class RouteVideoFrameReader:
 
 
 class RouteLogParser:
-    def __init__(self, corner_source: str = ROUTE_CORNER_SOURCE_STABLE) -> None:
+    def __init__(self, corner_source: str = ROUTE_CORNER_SOURCE_LIVE) -> None:
         self.corner_source = route_corner_source_or_default(corner_source)
         self.speed_limit_kph: int | None = None
         self.speed_limit_source: str | None = None
@@ -3628,7 +3628,7 @@ def raw_corner_object_to_radar_point(obj: RawCornerObject, ego_speed_kph: float)
 
 
 def route_corner_source_or_default(source: str | None) -> str:
-    return source if source in ROUTE_CORNER_SOURCE_CHOICES else ROUTE_CORNER_SOURCE_STABLE
+    return source if source in ROUTE_CORNER_SOURCE_CHOICES else ROUTE_CORNER_SOURCE_LIVE
 
 
 def has_nearby_vehicle(

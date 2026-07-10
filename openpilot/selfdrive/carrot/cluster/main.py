@@ -582,8 +582,6 @@ def run_demo(
     route_overlay_mode: str,
     route_loop: bool,
     route_replay_speed: float,
-    route_corner_lateral_offset_m: float,
-    route_corner_source: str,
     route_start_segment: int | None,
     route_max_segments: int | None,
     live_include_can: bool,
@@ -745,9 +743,9 @@ def run_demo(
             route_log,
             route_start_segment,
             route_max_segments,
-            1.0,
-            route_corner_source,
-            route_corner_lateral_offset_m,
+            0.0,
+            "live",
+            0.0,
         )
         profile.add_elapsed("source.route_load_initial", profile_stage)
     if route_source is not None:
@@ -761,7 +759,7 @@ def run_demo(
     route_playback_base_s = 0.0
     route_paused = False
     route_pause_toggled_down = False
-    route_active_corner_lateral_offset_m = route_corner_lateral_offset_m
+    route_active_corner_lateral_offset_m = 0.0
     last_frame_time = start_time
     last_report_time = start_time
     next_theme_param_read = start_time
@@ -1664,21 +1662,6 @@ def parse_args() -> argparse.Namespace:
         help="Route playback speed multiplier.",
     )
     parser.add_argument(
-        "--route-corner-lateral-offset",
-        type=float,
-        default=0.5,
-        help="Replay-only side-lane centering offset in meters applied inward to stable/live corner radar vehicles.",
-    )
-    parser.add_argument(
-        "--route-corner-source",
-        choices=("stable", "raw", "live"),
-        default="stable",
-        help=(
-            "Corner radar source for route replay: stable uses raw CAN object association, "
-            "raw shows raw CAN slots directly, live shows logged liveTracks."
-        ),
-    )
-    parser.add_argument(
         "--route-start-segment",
         type=int,
         default=None,
@@ -1694,8 +1677,14 @@ def parse_args() -> argparse.Namespace:
         "--live-no-can",
         action="store_true",
         help=(
-            "Disable live CAN/sendcan subscriptions. This keeps radarState/modelV2/liveTracks data "
-            "but skips direct raw CAN parsing for camera-bus ADAS corner detections."
+            "Keep live CAN/sendcan subscriptions disabled. This is the default for the in-car HUD."
+        ),
+    )
+    parser.add_argument(
+        "--live-include-can",
+        action="store_true",
+        help=(
+            "Enable live CAN/sendcan subscriptions for PC/debug runs. This adds raw CAN parsing load."
         ),
     )
     parser.add_argument(
@@ -1924,11 +1913,9 @@ def main(*, exit_on_error: bool = True) -> None:
             args.route_overlay,
             args.route_loop,
             args.route_replay_speed,
-            args.route_corner_lateral_offset,
-            args.route_corner_source,
             args.route_start_segment,
             args.route_max_segments,
-            not args.live_no_can,
+            bool(args.live_include_can and not args.live_no_can),
             args.live_timeout_ms,
             not args.no_cluster_core_usage,
             args.cluster_core_usage_debug,
