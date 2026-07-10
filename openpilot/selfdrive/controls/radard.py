@@ -928,6 +928,12 @@ class RadarD:
       return True
     return t.dRel + CUTIN_PROMOTE_DREL_MARGIN < lead_one.dRel
 
+  def _lead_is_closer_than_lead_one(self, lead: dict[str, Any]) -> bool:
+    lead_one = self.radar_state.leadOne
+    if not lead_one.status:
+      return True
+    return lead["dRel"] + CUTIN_PROMOTE_DREL_MARGIN < lead_one.dRel
+
   def _corner_stopped_can_replace_lead_one(self, stopped: dict[str, Any]) -> bool:
     lead_one = self.radar_state.leadOne
     if not lead_one.status:
@@ -1091,6 +1097,14 @@ class RadarD:
           #offset = 3.0 + min(gap * 0.2, 10)
           #self.leadTwo['dRel'] = self.radar_state.leadOne.dRel + offset
           self.leadTwo['dRel'] = max(self.radar_state.leadOne.dRel + 3.0, self.leadTwo['dRel'] - 8.0) # lead+1 차를 뒤로 8M후퇴하여, mpc에서  감자하도록함.. 최소 lead보다 3M앞에 위치하도록
+      corner_lead_two = min(
+          (ld for ld in center_list if ld['vLead'] > 2 and ld['radar'] and self._lead_is_corner_track(ld) and
+           self._lead_is_closer_than_lead_one(ld) and self._radar_only_center_ok(ld)),
+          key=lambda d: d['dRel'],
+          default=None
+      )
+      if corner_lead_two is not None:
+        self.leadTwo = copy.deepcopy(corner_lead_two)
     else:
       self.leadCenter = None
 
@@ -1123,13 +1137,9 @@ class RadarD:
     chosen = None
     detected = self.radar_detected
 
-    if self.cornerLeadStopped and self.cornerLeadStopped.get("status"):
-      if self._corner_stopped_can_replace_lead_one(self.cornerLeadStopped):
-        chosen = self.cornerLeadStopped
-        chosen["modelProb"] = 0.04
-        detected = True
-
-    elif self.leadCenter and self.leadCenter["status"] and is_radar_center_promotion_safe(self.leadCenter):
+    if (self.leadCenter and self.leadCenter["status"] and
+        not self._lead_is_corner_track(self.leadCenter) and
+        is_radar_center_promotion_safe(self.leadCenter)):
       lead_one = self.radar_state.leadOne
       vision_prob = lead_one.modelProb if lead_one.status else 0.0
 
