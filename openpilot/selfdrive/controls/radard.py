@@ -44,6 +44,9 @@ CUTIN_ENTER_PROB_GAIN = 0.12
 CUTIN_KEEP_FUTURE_IN_LANE_PROB = 0.12
 CUTIN_KEEP_MAX_DPATH_FUTURE = 1.6
 CUTIN_KEEP_MAX_MOVING_AWAY = 0.3
+CORNER_ACCEL_MIN_TRACK_AGE = 6
+CORNER_ACCEL_MAX_ABS_DPATH = 1.5
+CORNER_ACCEL_MAX_ABS_ALEAD = 3.0
 CUTIN_PROMOTE_DREL_MARGIN = 1.0
 CORNER_FRONT_MATCH_PROMOTE_DREL_MARGIN = 8.0
 CUTIN_DEFAULT_CONFIRM_S = 0.20
@@ -720,16 +723,30 @@ class RadarD:
       self._corner_in_lane_ok(t, stopped=True, matched_front=matched_front)
     )
 
-  def _corner_lead_from_track(self, t: Track, model_prob: float = 0.0, vision_y_rel: float = 0.0) -> dict[str, Any]:
+  def _corner_track_accel_allowed(self, t: Track) -> bool:
+    return (
+      t.cnt >= CORNER_ACCEL_MIN_TRACK_AGE and
+      self._track_is_closer_than_lead_one(t) and
+      abs(t.dPath) < CORNER_ACCEL_MAX_ABS_DPATH and
+      math.isfinite(t.aLeadK) and
+      abs(t.aLeadK) < CORNER_ACCEL_MAX_ABS_ALEAD
+    )
+
+  def _corner_lead_from_track(self, t: Track, model_prob: float = 0.0, vision_y_rel: float = 0.0, use_accel: bool = True) -> dict[str, Any]:
     ld = t.get_RadarState(model_prob, vision_y_rel)
-    ld["aLead"] = 0.0
-    ld["aLeadK"] = 0.0
+    if use_accel and self._corner_track_accel_allowed(t):
+      a_lead = float(np.clip(t.aLeadK, -CORNER_ACCEL_MAX_ABS_ALEAD, CORNER_ACCEL_MAX_ABS_ALEAD))
+      ld["aLead"] = a_lead
+      ld["aLeadK"] = a_lead
+    else:
+      ld["aLead"] = 0.0
+      ld["aLeadK"] = 0.0
     ld["aLeadTau"] = _LEAD_ACCEL_TAU
     ld["jLead"] = 0.0
     return ld
 
   def _corner_stopped_lead_from_track(self, t: Track, lead_prob: float) -> dict[str, Any]:
-    ld = self._corner_lead_from_track(t, min(0.04, lead_prob), 0.0)
+    ld = self._corner_lead_from_track(t, min(0.04, lead_prob), 0.0, use_accel=False)
     ld["modelProb"] = 0.04
     ld["vLead"] = 0.0
     ld["vLeadK"] = 0.0
@@ -853,6 +870,8 @@ class RadarD:
   def _is_cutin_enter_candidate(self, t: Track) -> bool:
     if not self.detect_cut_in or not self.lane_line_available or not self._is_corner_track(t):
       return False
+    if not self._track_is_closer_than_lead_one(t):
+      return False
     if t.cnt < self.cutin_min_track_age:
       return False
     if not (self.cutin_enter_min_x < t.dRel < self.cutin_enter_max_x and t.vLead > 4.0):
@@ -869,6 +888,8 @@ class RadarD:
 
   def _is_cutin_keep_candidate(self, t: Track) -> bool:
     if not self.detect_cut_in or not self.lane_line_available or not self._is_corner_track(t):
+      return False
+    if not self._track_is_closer_than_lead_one(t):
       return False
     if not (2.5 < t.dRel < 55.0 and t.vLead > 2.0):
       return False
@@ -901,6 +922,12 @@ class RadarD:
 
     return cutin["dRel"] + CUTIN_PROMOTE_DREL_MARGIN < lead_one.dRel
 
+  def _track_is_closer_than_lead_one(self, t: Track) -> bool:
+    lead_one = self.radar_state.leadOne
+    if not lead_one.status:
+      return True
+    return t.dRel + CUTIN_PROMOTE_DREL_MARGIN < lead_one.dRel
+
   def _corner_stopped_can_replace_lead_one(self, stopped: dict[str, Any]) -> bool:
     lead_one = self.radar_state.leadOne
     if not lead_one.status:
@@ -932,6 +959,13 @@ class RadarD:
     if int(lead_one.radarTrackId) >= CORNER_235_TRACK_ID_START:
       return False
     return float(lead_one.modelProb) >= FRONT_RADAR_VISION_MATCH_MIN_PROB
+
+  def _lead_is_corner_track(self, lead: dict[str, Any]) -> bool:
+    track_id = int(lead.get("radarTrackId", -1))
+    return (
+      CORNER_235_TRACK_ID_START <= track_id < CORNER_235_TRACK_ID_END or
+      CORNER_180_TRACK_ID_START <= track_id < CORNER_180_TRACK_ID_END
+    )
 
   def _is_center_lead_candidate(self, t: Track) -> bool:
     in_lane_min = CENTER_LEAD_NEAR_IN_LANE_PROB
@@ -1047,7 +1081,7 @@ class RadarD:
       )
       if self.radar_state.leadOne.status and self.radar_state.leadOne.radar:
         self.leadTwo = min(
-            (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and self.radar_state.leadOne.dRel < ld['dRel'] < 80),
+            (ld for ld in center_list if ld['vLead'] > 5 and ld['radar'] and not self._lead_is_corner_track(ld) and self.radar_state.leadOne.dRel < ld['dRel'] < 80),
             key=lambda d: d['dRel'],
             default=None
         )
