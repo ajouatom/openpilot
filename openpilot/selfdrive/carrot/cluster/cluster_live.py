@@ -1065,7 +1065,7 @@ class OpenpilotLiveSource:
         if not self._service_alive("carState"):
             return
         try:
-            self.parser.current_speed_kph = clamp(float(self.sm["carState"].vEgo) * 3.6, 0.0, 140.0)
+            self.parser.current_speed_kph = clamp(float(self.sm["carState"].vEgo) * 3.6, 0.0, 260.0)
         except Exception:
             return
 
