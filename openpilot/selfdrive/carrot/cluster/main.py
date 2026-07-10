@@ -276,12 +276,19 @@ class ClusterHudBrightnessParamReader:
 
 class ClusterHudMirrorParamReader:
     def __init__(self) -> None:
-        from openpilot.common.params import Params
-        self.params = Params()
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
 
     def read(self) -> int:
+        if self._params is None:
+            return 0
         try:
-            return max(0, min(3, self.params.get_int(CLUSTER_HUD_MIRROR_PARAM)))
+            return max(0, min(3, self._params.get_int(CLUSTER_HUD_MIRROR_PARAM)))
         except Exception:
             return 0
 
