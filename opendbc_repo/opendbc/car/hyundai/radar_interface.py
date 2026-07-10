@@ -122,7 +122,10 @@ class RadarInterface(RadarInterfaceBase):
     self.rcp_tracks = get_radar_can_parser(CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count)
     self.rcp_corner_objects = get_corner_object_can_parser(CP, self.corner_object_tracks)
     self.rcp_corner_objects_180 = get_corner_object_180_can_parser(CP, self.corner_object_180_tracks)
-    self.rcp_scc = get_radar_can_parser_scc(CP)
+    # Enabling raw radar tracks on legacy CAN disables the stock SCC11 stream on
+    # some Hyundai/Kia platforms. Camera-SCC cars may still use SCC11.
+    use_scc_parser = not (self.radar_tracks and not self.canfd and not (CP.flags & HyundaiFlags.CAMERA_SCC))
+    self.rcp_scc = get_radar_can_parser_scc(CP) if use_scc_parser else None
     self.trigger_msg_scc = 416 if self.canfd else 0x420
 
     self.trigger_msg_tracks = self.radar_start_addr + self.radar_msg_count - 1

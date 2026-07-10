@@ -235,10 +235,12 @@ class CarState(CarStateBase):
           add_and_cache(self.cp, "CLU11", "clu11")
         elif self.controls_ready_count == 105:
           cp_cruise = self.cp_cam if self.CP.flags & HyundaiFlags.CAMERA_SCC else self.cp
-          add_and_cache(cp_cruise, "SCC11", "scc11")
-          add_and_cache(cp_cruise, "SCC12", "scc12")
-          add_and_cache(cp_cruise, "SCC13", "scc13")
-          add_and_cache(cp_cruise, "SCC14", "scc14")
+          scc_messages_expected = not self.CP.openpilotLongitudinalControl or self.CP.flags & HyundaiFlags.CAMERA_SCC
+          if scc_messages_expected:
+            add_and_cache(cp_cruise, "SCC11", "scc11")
+            add_and_cache(cp_cruise, "SCC12", "scc12")
+            add_and_cache(cp_cruise, "SCC13", "scc13")
+            add_and_cache(cp_cruise, "SCC14", "scc14")
       else: # canfd
         if self.controls_ready_count == 120:
           cp_cruise = self.cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else self.cp
