@@ -19,6 +19,7 @@ from cluster_config import (
     CLUSTER_ENCODER_JPEG,
     CLUSTER_ENCODER_PARAM,
     CLUSTER_ENCODER_SOFTWARE,
+    CLUSTER_HUD_MIRROR_PARAM,
     CLUSTER_CORE_MODE_PARAM,
     CLUSTER_HUD_DEBUG_PARAM,
     CLUSTER_HUD_PARAM,
@@ -273,6 +274,16 @@ class ClusterHudBrightnessParamReader:
         except Exception:
             return 0
 
+class ClusterHudMirrorParamReader:
+    def __init__(self) -> None:
+        from openpilot.common.params import Params
+        self.params = Params()
+
+    def read(self) -> int:
+        try:
+            return max(0, min(3, self.params.get_int(CLUSTER_HUD_MIRROR_PARAM)))
+        except Exception:
+            return 0
 
 class ClusterScreenModeParamReader:
     def __init__(self) -> None:
@@ -623,6 +634,10 @@ def run_demo(
     usb_pipeline: AsyncJpegUsbPipeline | None = None
     h264_pipeline: H264UsbPipeline | None = None
     active_brightness_setting = normalize_cluster_brightness_percent(usb_brightness)
+
+    hud_mirror_param_reader = ClusterHudMirrorParamReader()
+    active_hud_mirror_mode = hud_mirror_param_reader.read()
+
     usb_brightness_auto_enabled = usb_brightness_param_reader is not None
     initial_usb_brightness = resolved_usb_brightness(
         active_brightness_setting,
@@ -876,6 +891,16 @@ def run_demo(
                 break
 
             now = time.perf_counter()
+
+            next_hud_mirror_mode = hud_mirror_param_reader.read()
+            if next_hud_mirror_mode != active_hud_mirror_mode:
+                print(
+                    f"{CLUSTER_HUD_MIRROR_PARAM} updated: "
+                    f"{active_hud_mirror_mode} -> {next_hud_mirror_mode}",
+                    flush=True,
+                )
+                active_hud_mirror_mode = next_hud_mirror_mode
+
             if theme_override is None and now >= next_theme_param_read:
                 next_theme_mode = theme_param_reader.read() if theme_param_reader is not None else "auto"
                 if next_theme_mode != renderer.theme_mode:
@@ -1207,7 +1232,7 @@ def run_demo(
                                 uv_offset,
                                 render_bytes,
                                 h264_render_nv12_buffer,
-                                flip_x=True,
+                                flip_x=not bool(active_hud_mirror_mode & 1),
                             ) as h264_render_nv12_frame:
                                 profile.add_elapsed("main.usb.render_nv12_total", profile_stage)
                                 if isinstance(h264_render_nv12_frame, bytearray):
