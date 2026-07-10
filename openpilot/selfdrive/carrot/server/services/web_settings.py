@@ -99,6 +99,13 @@ WEB_SETTINGS_SPEC: List[_Field] = [
   _Field("log_upload_target", "enum", "carrot", choices=LOG_UPLOAD_TARGETS),
   _Field("toss_upload_url", "str", "https://op.wjcloud.kr", normalize=_normalize_toss_url),
   _Field("toss_upload_token", "str", "", normalize=_normalize_stripped),
+  # Remote support last-used settings, persisted so the owner's choices survive a
+  # reload. Stored as strings via the enum type (numeric values are parsed back
+  # to ints client-side). Command permission defaults to "approve_each" so a
+  # fresh device always starts in the safest, confirm-each-command mode.
+  _Field("support_permission_mode", "enum", "approve_each", choices={"approve_each", "allow_all"}),
+  _Field("support_ttl_seconds", "enum", "1800", choices={"900", "1800", "3600"}),
+  _Field("support_command_timeout_seconds", "enum", "30", choices={"15", "30", "60", "120"}),
 ]
 
 _SPEC_BY_KEY: Dict[str, _Field] = {f.key: f for f in WEB_SETTINGS_SPEC}

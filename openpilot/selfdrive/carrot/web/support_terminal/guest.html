@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" data-session-id="__SESSION_ID__">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="color-scheme" content="dark">
+  <title>Carrot Remote Terminal</title>
+  <!-- Keep the remote surface on the same visual stack as the local terminal. -->
+  <link rel="stylesheet" href="/support-terminal-assets/tokens.css">
+  <link rel="stylesheet" href="/support-terminal-assets/layout_tokens.css">
+  <link rel="stylesheet" href="/support-terminal-assets/base.css">
+  <link rel="stylesheet" href="/support-terminal-assets/layout.css">
+  <link rel="stylesheet" href="/support-terminal-assets/components.css">
+  <link rel="stylesheet" href="/support-terminal-assets/xterm.css">
+  <link rel="stylesheet" href="/support-terminal-assets/terminal.css">
+  <link rel="stylesheet" href="/support-terminal-assets/guest.css">
+</head>
+<body data-page="terminal">
+  <main id="pageTerminal" class="page page--full page--terminal">
+    <div class="terminal-shell">
+      <header class="terminal-head">
+        <div id="terminalMeta" class="terminal-meta">Carrot Remote Terminal</div>
+        <div class="terminal-toolbar">
+          <div class="terminal-toolbar__status">
+            <span id="terminalSessionMeta" class="terminal-sessionMeta">PIN required</span>
+            <span id="permissionChip" class="status-chip" hidden></span>
+          </div>
+          <div class="terminal-toolbar__actions">
+            <button id="btnDisconnect" class="smallBtn" type="button" disabled>Disconnect</button>
+          </div>
+        </div>
+      </header>
+
+      <form id="authForm" class="terminal-auth" autocomplete="off">
+        <div class="terminal-auth__panel">
+          <div id="authStatus" class="terminal-auth__status">PIN required</div>
+          <div class="terminal-auth__form">
+            <input id="pinInput" class="terminal-auth__input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="PIN">
+            <button id="connectBtn" class="terminal-auth__button" type="submit">Connect</button>
+          </div>
+        </div>
+      </form>
+
+      <div id="terminalXterm" class="terminal-xterm" aria-label="Remote terminal"></div>
+      <div id="hostTypingHost" class="terminal-typing-host" aria-hidden="true"></div>
+      <div id="commandNotice" class="terminal-commandNotice" hidden></div>
+
+      <div id="terminalKeys" class="terminal-keys" hidden role="group" aria-label="Terminal keys">
+        <button class="smallBtn terminal-key" type="button" data-key="esc">Esc</button>
+        <button class="smallBtn terminal-key" type="button" data-key="ctrl">Ctrl</button>
+        <button id="btnCtrlC" class="smallBtn terminal-key" type="button" disabled>Ctrl+C</button>
+        <button class="smallBtn terminal-key" type="button" data-key="ctrl_d">Ctrl+D</button>
+        <button id="btnClear" class="smallBtn terminal-key" type="button" disabled>Clear</button>
+        <button class="smallBtn terminal-key" type="button" data-key="detach">Detach</button>
+        <button class="smallBtn terminal-key" type="button" data-key="tab">Tab</button>
+        <button class="smallBtn terminal-key" type="button" data-key="home">Home</button>
+        <button class="smallBtn terminal-key" type="button" data-key="end">End</button>
+        <button class="smallBtn terminal-key" type="button" data-key="page_up">PgUp</button>
+        <button class="smallBtn terminal-key" type="button" data-key="page_down">PgDn</button>
+        <button class="smallBtn terminal-key" type="button" data-key="up" aria-label="Up">↑</button>
+        <button class="smallBtn terminal-key" type="button" data-key="down" aria-label="Down">↓</button>
+        <button class="smallBtn terminal-key" type="button" data-key="left" aria-label="Left">←</button>
+        <button class="smallBtn terminal-key" type="button" data-key="right" aria-label="Right">→</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="/support-terminal-assets/xterm-addon-shim.js"></script>
+  <script src="/support-terminal-assets/xterm.js"></script>
+  <script src="/support-terminal-assets/xterm-addon-webgl.js"></script>
+  <script src="/support-terminal-assets/xterm-addon-canvas.js"></script>
+  <script src="/support-terminal-assets/guest.js"></script>
+</body>
+</html>

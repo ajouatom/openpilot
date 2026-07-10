@@ -120,7 +120,7 @@
   <link rel="stylesheet" href="/css/components/nav_status_badges.css?v=2607-05" />
   <link rel="stylesheet" href="/css/pages/logs.css?v=2607-43" />
   <link rel="stylesheet" href="/css/vendor/xterm.css?v=550" />
-  <link rel="stylesheet" href="/css/pages/terminal.css?v=2607-97" />
+  <link rel="stylesheet" href="/css/pages/terminal.css?v=2607-103" />
   <link rel="stylesheet" href="/css/pages/settings/base.css?v=2606-21" />
   <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2607-44" />
   <link rel="stylesheet" href="/css/pages/settings/device.css?v=2607-51" />
@@ -393,8 +393,6 @@
             <div id="terminalSessionMeta" class="terminal-sessionMeta">IP</div>
             <div class="terminal-toolbar__actions">
               <button id="btnSupportTerminalOpen" class="smallBtn terminal-support-open" type="button">Support</button>
-              <button id="btnTerminalCtrlC" class="smallBtn" type="button">Ctrl+C</button>
-              <button id="btnTerminalClear" class="smallBtn" type="button">Clear</button>
               <button id="btnTerminalReconnect" class="smallBtn" type="button">Reconnect</button>
             </div>
           </div>
@@ -403,12 +401,14 @@
           <pre id="terminalOutput" class="terminal-output">...</pre>
         </div>
         <div id="terminalXterm" class="terminal-xterm" hidden></div>
+        <div id="supportTerminalTypingHost" class="terminal-typing-host" aria-hidden="true"></div>
         <div id="supportTerminalApprovalHost" class="terminal-approval-host" hidden></div>
         <div id="terminalKeys" class="terminal-keys" role="group" aria-label="Terminal keys">
           <button class="smallBtn terminal-key" type="button" data-key="esc">Esc</button>
           <button class="smallBtn terminal-key" type="button" data-key="ctrl">Ctrl</button>
           <button class="smallBtn terminal-key" type="button" data-key="ctrl_c">Ctrl+C</button>
           <button class="smallBtn terminal-key" type="button" data-key="ctrl_d">Ctrl+D</button>
+          <button id="btnTerminalClear" class="smallBtn terminal-key" type="button">Clear</button>
           <button class="smallBtn terminal-key" type="button" data-key="detach">Detach</button>
           <button class="smallBtn terminal-key" type="button" data-key="tab">Tab</button>
           <button class="smallBtn terminal-key" type="button" data-key="home">Home</button>
@@ -833,7 +833,7 @@
   <script src="/js/shared/ui/focus_trap.js?v=2605-15"></script>
   <script src="/js/shared/ui/dialog.js?v=2607-44"></script>
   <script src="/js/shared/ui/setting_form.js?v=2607-03"></script>
-  <script src="/js/shared/ui/viewport.js?v=2607-53"></script>
+  <script src="/js/shared/ui/viewport.js?v=2607-54"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
   <script src="/js/shared/ui/navigation.js?v=2607-42"></script>
   <script src="/js/pages/car.js?v=2607-01"></script>
@@ -858,9 +858,12 @@
   <script src="/js/pages/logs/shared.js?v=2607-01"></script>
   <script src="/js/pages/logs/dashcam.js?v=2607-02"></script>
   <script src="/js/pages/logs/screenrecord.js?v=2605-15"></script>
-  <script src="/js/vendor/xterm.js?v=550"></script>
-  <script src="/js/pages/terminal.js?v=2607-90"></script>
-  <script src="/js/pages/support_terminal.js?v=2607-20"></script>
+  <script src="/js/vendor/xterm-addon-shim.js?v=1"></script>
+  <script src="/js/vendor/xterm.js?v=553"></script>
+  <script src="/js/vendor/xterm-addon-webgl.js?v=016"></script>
+  <script src="/js/vendor/xterm-addon-canvas.js?v=005"></script>
+  <script src="/js/pages/terminal.js?v=2607-101"></script>
+  <script src="/js/pages/support_terminal.js?v=2607-25"></script>
   <script src="/js/realtime/raw_capnp.js?v=2604-05"></script>
   <script src="/js/realtime/mini_hud_model.js?v=2607-85"></script>
   <script src="/js/realtime/mini_hud_mode.js?v=2607-51"></script>

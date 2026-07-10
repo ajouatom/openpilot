@@ -5,7 +5,7 @@ body[data-page="terminal"] {
 .page--terminal {
   --terminal-nav-gap: var(--app-nav-bottom-gap, var(--nav-bar-height));
   --terminal-controls-bottom: calc(8px + var(--terminal-keyboard-inset) + env(safe-area-inset-bottom, 0px));
-  --terminal-inline: max(var(--sp-lg), calc((100vw - var(--content-max-width)) / 2));
+  --terminal-inline: var(--sp-lg);
   position: fixed;
   left: 0;
   right: 0;
@@ -291,6 +291,86 @@ body.support-terminal-dialog-open .app-toast-host {
   display: none !important;
 }
 
+/* Live remote input sits over xterm, never in the terminal shell's flex flow.
+   A guest beginning to type must not consume terminal rows or move the key bar. */
+.terminal-typing-host {
+  display: none;
+}
+
+.terminal-xterm > .terminal-typing-host {
+  position: absolute;
+  bottom: var(--sp-sm);
+  left: var(--sp-sm);
+  right: var(--sp-sm);
+  z-index: 4;
+  display: flex;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(0, 6px, 0);
+  transition: opacity 120ms ease-out, transform 150ms ease-out;
+}
+
+.terminal-xterm > .terminal-typing-host.is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  will-change: opacity, transform;
+}
+
+.terminal-typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: min(560px, 100%);
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 38%, var(--md-stroke-soft));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-surface-cont) 94%, #000);
+  box-shadow: var(--shadow-1);
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-sm);
+  line-height: 1.2;
+}
+
+.terminal-typing-indicator::before {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--md-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-primary) 18%, transparent);
+  content: "";
+}
+
+.terminal-typing-indicator__meta,
+.terminal-typing-indicator__label {
+  flex: 0 0 auto;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.terminal-typing-indicator__meta {
+  color: var(--md-primary);
+}
+
+.terminal-typing-indicator__draft {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--md-on-surface);
+  font-family: var(--font-mono);
+  font-size: inherit;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-xterm > .terminal-typing-host {
+    transition: none;
+  }
+}
+
 .terminal-approval {
   min-width: 0;
   display: grid;
@@ -434,13 +514,19 @@ body.support-terminal-dialog-open .app-toast-host {
   min-height: 0;
   position: relative;
   box-sizing: border-box;
-  padding: 0 var(--terminal-inline);
+  padding: var(--sp-sm);
   overflow: auto hidden;
   overscroll-behavior: contain;
   /* Keep the grid horizontally pannable but hide the persistent scrollbar — it
      stayed visible whenever the 100-col grid was wider than the screen. */
   scrollbar-width: none;
-  touch-action: pan-x pan-y;
+  /* This host can only scroll horizontally (overflow-y is hidden); the vertical
+     scrollback lives in the inner .xterm-viewport. Declaring pan-y here let the
+     browser (notably Samsung Internet) claim vertical drags for a host that
+     cannot move, so scrollback felt dead/stiff and diagonal drags leaked to the
+     horizontal axis. Restrict this host to pan-x so vertical gestures fall
+     through to the viewport, which owns the pan-y axis. */
+  touch-action: pan-x;
   background: color-mix(in srgb, var(--md-surface) 92%, #000);
 }
 
@@ -530,7 +616,7 @@ body.support-terminal-dialog-open .app-toast-host {
 
   body[data-page="terminal"] .app-toast-host {
     top: auto;
-    bottom: var(--terminal-toast-bottom, calc(var(--nav-bar-height-desktop) + 104px + env(safe-area-inset-bottom, 0px)));
+    bottom: calc(var(--terminal-toast-bottom, calc(var(--nav-bar-height-desktop) + 104px + env(safe-area-inset-bottom, 0px))) + var(--terminal-collab-toast-offset, 0px));
   }
 
   .terminal-toolbar {
@@ -638,7 +724,7 @@ body.support-terminal-dialog-open .app-toast-host {
     left: var(--terminal-toast-left, calc(var(--nav-rail-width) + 20px));
     right: auto;
     width: var(--terminal-toast-width, calc(100vw - var(--nav-rail-width) - 40px));
-    bottom: var(--terminal-toast-bottom, calc(16px + env(safe-area-inset-bottom, 0px)));
+    bottom: calc(var(--terminal-toast-bottom, calc(16px + env(safe-area-inset-bottom, 0px))) + var(--terminal-collab-toast-offset, 0px));
   }
 
   .page--terminal {
