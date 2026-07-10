@@ -58,6 +58,10 @@ async def guest_page(request: web.Request) -> web.Response:
   return await manager.handle_guest_page(request)
 
 
+async def guest_asset(request: web.Request) -> web.StreamResponse:
+  return await manager.handle_guest_asset(request)
+
+
 def register(app: web.Application) -> None:
   app.router.add_post("/api/support_terminal/start", api_start)
   app.router.add_post("/api/support_terminal/stop", api_stop)
@@ -67,3 +71,4 @@ def register(app: web.Application) -> None:
   app.router.add_get("/ws/support_terminal/owner", ws_owner)
   app.router.add_get("/ws/support_terminal/{session_id}", ws_guest)
   app.router.add_get("/support/terminal/{session_id}", guest_page)
+  app.router.add_get("/support-terminal-assets/{asset_name}", guest_asset)
