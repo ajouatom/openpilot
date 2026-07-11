@@ -32,13 +32,6 @@ PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
 LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
 MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
 
-# KIA_EV_SK3 note: do NOT toggle/knock the LKAS request bit to coax the MDPS into starting.
-# Field-tested and removed twice: (a) toggling with ToiFlt=1 faults the MDPS; (b) brief clean
-# cuts (ActToi=0/ToiFlt=0) while unlatched turn the MDPS's transient yields into full releases
-# ("more frequent drops"), and hands-off latching at speed happens with a steady request anyway.
-# Keep the request steady; the cluster warning (lkas_noact_frames) covers the unlatched state.
-
-
 vibrate_intervals = [
   (0.0, 0.5),
   (1.0, 1.5),
@@ -145,8 +138,6 @@ class CarController(CarControllerBase):
     self.params = CarControllerParams(CP)
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.angle_limit_counter = 0
-    self.lkas_noact_frames = 0
-    self.mdps_noact_frames = 0
 
     self.accel_last = 0
     self.apply_torque_last = 0
@@ -262,14 +253,6 @@ class CarController(CarControllerBase):
     self.angle_limit_counter, apply_steer_req = common_fault_avoidance(abs(CS.out.steeringAngleDeg) >= MAX_ANGLE, CC.latActive,
                                                                        self.angle_limit_counter, self.max_angle_frames,
                                                                        MAX_ANGLE_CONSECUTIVE_FRAMES)
-    if self.car_fingerprint == CAR.KIA_EV_SK3:
-      # The generic >85deg guard cuts the request 2 frames (with ToiFlt=1) about once per
-      # second while the angle stays large. This MDPS is request-bit sensitive: each cut
-      # drops the whole overlay, causing latch/drop cycling through every turn — while the
-      # >90deg EPS fault the guard prevents has never been observed on this car (overlay
-      # held at 89deg under high torque). Keep the request steady; revert if
-      # steerFaultTemporary starts appearing at deep angles.
-      apply_steer_req = CC.latActive
 
     #apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgoRaw,
     #                                           CS.out.steeringAngleDeg, CC.latActive, self.params.ANGLE_LIMITS)
@@ -409,30 +392,8 @@ class CarController(CarControllerBase):
 
     self.apply_angle_last = apply_angle
 
-    # KIA_EV_SK3: this MDPS accepts the LKAS overlay start only when the REQUESTED TORQUE is
-    # near zero at its evaluation moment — every observed latch (7/7 in the low-speed toggle
-    # session, hands-off and driver-assisted alike) happened at |torque| <= 9, while steady
-    # torque of 30..409 was refused indefinitely. "Driver grip helps" was a proxy: the driver
-    # limits push our torque to ~0. So while the MDPS is not applying our torque (ToiActive=0,
-    # torque ignored anyway), request with ZERO torque so its next evaluation accepts, then
-    # ramp up from zero after the latch. Request bit stays steadily 1 (no knocking).
-    if self.car_fingerprint == CAR.KIA_EV_SK3 and CC.latActive and \
-       int(round(getattr(CS, "steer_state", 1))) == 0:
-      self.mdps_noact_frames += 1
-    else:
-      self.mdps_noact_frames = 0
-    if self.mdps_noact_frames >= 10 and not angle_control:  # small debounce vs misreads
-      apply_torque = 0
-
     # Hold torque with induced temporary fault when cutting the actuation bit
     torque_fault = CC.latActive and not apply_steer_req
-
-    # cluster "keep hands on wheel" warning while lat is active but the MDPS is not applying
-    if self.car_fingerprint == CAR.KIA_EV_SK3 and CC.latActive and \
-       CS.out.vEgoRaw >= 2.0 and int(round(getattr(CS, "steer_state", 1))) == 0:
-      self.lkas_noact_frames += 1
-    else:
-      self.lkas_noact_frames = 0
 
     self.apply_torque_last = apply_torque
 
@@ -547,8 +508,7 @@ class CarController(CarControllerBase):
           can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
                                                     torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
                                                     hud_control.leftLaneVisible, hud_control.rightLaneVisible,
-                                                    left_lane_warning, right_lane_warning, self.is_ldws_car,
-                                                    noact_warning=self.lkas_noact_frames >= 100))
+                                                    left_lane_warning, right_lane_warning, self.is_ldws_car))
         self.lkas11_active = True
 
       if not self.CP.openpilotLongitudinalControl:
