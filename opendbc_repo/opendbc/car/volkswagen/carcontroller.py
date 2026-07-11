@@ -37,10 +37,22 @@ class CarController(CarControllerBase):
     self.long_disabled_counter = 0
     self.klr_counter_last = None  # capacitive wheel touch (EA hands-on pacification)
 
+    # 계기판 내비 이벤트 배너->미니 아이콘 전환 (배너 ~1.2초 후 Lead_Brightness 아이콘으로 유지)
+    self.navi_event_last = 0
+    self.navi_banner_frames = 0
+    # 도로제한속도: 제한값이 바뀔 때만 "인식됨" 배너 후 km/h 아이콘 유지
+    self.road_limit_last = 0
+    self.road_banner_frames = 0
+    # 앞차 지배 표시 디바운스 (정체 깜빡임 방지)
+    self.lead_limit_disp = False
+    self.lead_limit_cnt = 0
+
+
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
     can_sends = []
+
 
     # **** Steering Controls ************************************************ #
 
@@ -214,29 +226,86 @@ class CarController(CarControllerBase):
         desired_gap = max(8, CS.out.vEgo * 1.45)  # carrot HUDControl lacks leadFollowTime -> default time gap
 
         # 계기판 내비(TMAP) 표시 - ID.4 선택 시 자동 적용 (carrot SDI/ATC 데이터 -> hudControl 경유).
-        # 우선순위: 단속카메라(5, ACC_Tempolimit 표지판) > 커브(6) > 교차로/분기(9) > 정차대기(3).
-        # 카메라 표지판은 카메라를 지날 때까지 유지(값이 있는 동안), 커브/교차로는 목표속도를 함께 표시.
+        # ACC_Events 실차 스캔 확정 지도(ID.4 MK1): 3 정차대기 / 4 표지판"전방" / 5 표지판"인식됨"
+        # 6 커브(S자) / 7~8 커브(방향) / 9 교차로 / 10 로터리 / 11 출구 / 12 정체 / 13 병목 / 14 내리막 / 15 오르막
         acc_event = self.CCS.acc_hud_event(acc_hud_status, CS.esp_hold_confirmation, False, 0, 0)  # 3(정차대기) 또는 0
         speed_limit = 0.
         event_speed_kph = 0
         if acc_hud_status in (3, 4):  # ACTIVE / OVERRIDE 에서만 계기판 이벤트 표시
           if hud_control.naviSpeedLimit > 0:  # 단속카메라/구간단속 제한속도
             speed_limit = hud_control.naviSpeedLimit * CV.KPH_TO_MS
-            acc_event = 5  # 카메라 표지판(빨간 원) + ACC_Tempolimit
-          elif hud_control.naviEventType == 1 and hud_control.naviEventSpeed > 0:  # 커브
-            acc_event = 6
-            event_speed_kph = hud_control.naviEventSpeed
+            acc_event = 4  # 표지판 + "전방" (앞에 있는 카메라에 대한 예고 - 아이콘 없이 유지)
+          elif hud_control.naviEventType == 1 and hud_control.naviEventSpeed != 0:  # 커브 (부호=방향)
+            # 실차 확인: 7=우커브, 8=좌커브. vTurnSpeed 양수=우, 음수=좌 (실주행 검증으로 확정).
+            acc_event = 7 if hud_control.naviEventSpeed > 0 else 8
+            event_speed_kph = abs(hud_control.naviEventSpeed)
           elif hud_control.naviEventType == 2 and hud_control.naviEventSpeed > 0:  # 교차로 좌/우회전
             acc_event = 9
             event_speed_kph = hud_control.naviEventSpeed
           elif hud_control.naviEventType == 3 and hud_control.naviEventSpeed > 0:  # 분기/고속도로 출구
-            acc_event = 11  # 실차 확인: ACC_Events 11 = 고속도로 출구 아이콘
+            acc_event = 11
             event_speed_kph = hud_control.naviEventSpeed
+          elif hud_control.naviEventType == 4:  # 로터리
+            acc_event = 10
+            event_speed_kph = hud_control.naviEventSpeed
+          elif hud_control.naviEventType == 5:  # 병목 구간 (티맵 SDI)
+            acc_event = 13
+
+        # 배너 -> 미니 아이콘 전환: 내비 이벤트(6~15)는 새로 뜰 때만 큰 배너 ~1.2초, 이후 미니 아이콘으로 유지.
+        # Lead_Brightness N = 이벤트 N+1과 같은 그림 (실차 스캔). 카메라(4/5)/정차(3)는 기존처럼 배너 유지.
+        status_icon = 0
+        if acc_event >= 6:
+          if acc_event != self.navi_event_last:
+            self.navi_banner_frames = 20  # ACC_HUD_STEP 6 (약 16Hz) x 20 = 약 1.2초
+          self.navi_event_last = acc_event
+          if self.navi_banner_frames > 0:
+            self.navi_banner_frames -= 1
+          else:
+            # 미니 아이콘 = 이벤트-1 (실차 스캔). 단 커브 방향 그림은 배너와 좌우가 거울상:
+            # 배너 7=우/8=좌 <-> 아이콘 7=우/6=좌 (실주행 검증) -> 커브만 특례 매핑
+            if acc_event == 7:      # 우커브
+              status_icon = 7
+            elif acc_event == 8:    # 좌커브
+              status_icon = 6
+            else:
+              status_icon = acc_event - 1
+            acc_event = 0
+            event_speed_kph = 0
+        else:
+          self.navi_event_last = 0
+          self.navi_banner_frames = 0
+          # 앞차 지배 상태 디바운스: 정체에서 lead<->도로제한 지배가 수초마다 왕복하며
+          # 하이라이트/아이콘이 깜빡이는 것 방지. 약 2초(32프레임@16Hz) 유지돼야 전환.
+          if hud_control.leadLimiting != self.lead_limit_disp:
+            self.lead_limit_cnt += 1
+            if self.lead_limit_cnt >= 32:
+              self.lead_limit_disp = hud_control.leadLimiting
+              self.lead_limit_cnt = 0
+          else:
+            self.lead_limit_cnt = 0
+          # 도로제한속도 제어 중: 제한값이 "실제로 바뀔 때만" 배너 ~1.2초, 이후 km/h 아이콘.
+          # road_limit_last는 지배자 변동/정차 등으로 잠깐 끊겨도 유지 -> 같은 제한값 배너 재생 방지.
+          if acc_event == 0 and acc_hud_status in (3, 4) and hud_control.naviEventType == 8:
+            road_limit_kph = abs(hud_control.naviEventSpeed)
+            if road_limit_kph != self.road_limit_last:
+              self.road_banner_frames = 20
+            self.road_limit_last = road_limit_kph
+            if self.road_banner_frames > 0 and road_limit_kph > 0:
+              self.road_banner_frames -= 1
+              acc_event = 5  # 표지판 + "인식됨"
+              speed_limit = road_limit_kph * CV.KPH_TO_MS
+            elif not self.lead_limit_disp:
+              # Lead_Brightness는 단일 필드라 아이콘과 앞차 하이라이트를 동시에 못 씀.
+              # 색 = 현재 속도의 지배자: 앞차가 속도를 제한 중이면 앞차 흰색 우선(디바운스 적용),
+              # 그 외(앞차가 없거나 멀어서 도로제한이 지배)에는 km/h 뱃지 점등.
+              status_icon = 4
+          else:
+            self.road_banner_frames = 0
 
         can_sends.append(self.CCS.create_acc_hud_control(self.packer_pt, CANBUS.pt, acc_hud_status, set_speed,
                                                          hud_control.leadVisible, hud_control.leadDistanceBars, True,
                                                          CS.esp_hold_confirmation, distance, desired_gap, fcw_alert, acc_event,
-                                                         speed_limit, event_speed_kph))
+                                                         speed_limit, event_speed_kph, status_icon=status_icon))
       else:
         # MQB ACC HUD (original carrot path, mqbcan signatures)
         lead_distance = 0
