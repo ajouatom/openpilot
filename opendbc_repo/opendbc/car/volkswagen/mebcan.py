@@ -282,7 +282,7 @@ def get_desired_gap(distance_bars, desired_gap, current_gap_signal):
   return gap
 
 
-def create_acc_hud_control(packer, bus, acc_control, set_speed, lead_visible, distance_bars, show_distance_bars, esp_hold, distance, desired_gap, fcw_alert, acc_event, speed_limit, event_speed_kph=0):
+def create_acc_hud_control(packer, bus, acc_control, set_speed, lead_visible, distance_bars, show_distance_bars, esp_hold, distance, desired_gap, fcw_alert, acc_event, speed_limit, event_speed_kph=0, status_icon=0):
   values = {
     "ACC_Status_ACC":                acc_control,
     "ACC_Tempolimit":                map_speed_to_acc_tempolimit(speed_limit) if acc_control in (ACC_HUD_ACTIVE, ACC_HUD_OVERRIDE) else 0,
@@ -300,7 +300,8 @@ def create_acc_hud_control(packer, bus, acc_control, set_speed, lead_visible, di
     "ACC_Enabled":                   1 if acc_control in (ACC_HUD_ACTIVE, ACC_HUD_OVERRIDE) else 0,
     "ACC_Standby_Override":          1 if acc_control != ACC_HUD_ACTIVE else 0,
     "Street_Color":                  1 if acc_control in (ACC_HUD_ACTIVE, ACC_HUD_OVERRIDE) else 0,
-    "Lead_Brightness":               3 if acc_control == ACC_HUD_ACTIVE else 0,
+    # Lead_Brightness 실차 스캔: 3=리드 하이라이트, 4~14=미니 상태 아이콘(이벤트 5~15와 동일 그림)
+    "Lead_Brightness":               status_icon if status_icon > 0 else (3 if acc_control == ACC_HUD_ACTIVE else 0),
     "ACC_Events":                    acc_event,
     # 커브(6)/교차로(9) 이벤트일 때 계기판에 표시되는 목표속도 (카메라 표지판은 ACC_Tempolimit 사용).
     # tjddyd0130/opendbc a6869ce 검증: if2 ACC_19의 140|10 (구 SET_ME_0X3FF = 미사용시 0)
