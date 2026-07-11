@@ -37,6 +37,7 @@ def build_cluster_args(args: argparse.Namespace, passthrough: list[str]) -> list
         "--route", str(args.route),
         "--route-log", args.route_log,
         "--route-overlay", args.route_overlay,
+        "--camera-view-mode", str(args.camera_view_mode),
         "--output", args.output,
         "--usb-codec", args.usb_codec,
         "--fps", str(args.fps),
@@ -75,6 +76,7 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--max-segments", type=int, default=None, help="Maximum number of route segments to replay")
     parser.add_argument("--loop", action="store_true", help="Loop the replay")
     parser.add_argument("--route-overlay", choices=("off", "compact", "full"), default="compact", help="Replay camera/data overlay on the PC window")
+    parser.add_argument("--camera-view-mode", type=int, choices=(0, 1, 2), default=2, help="Cluster camera view mode (default: 2, road camera background)")
     parser.add_argument("--usb-brightness", type=int, default=None, help="Manual USB display brightness 0-100")
     parser.add_argument("--profile-render", action="store_true", help="Print render/USB timing profile")
     parser.add_argument("--profile-interval", type=float, default=None, help="Seconds between profile reports")

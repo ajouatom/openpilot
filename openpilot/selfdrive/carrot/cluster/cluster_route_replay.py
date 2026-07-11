@@ -27,6 +27,7 @@ from cluster_config import (
     MAX_SPEED_KPH,
     MAX_STEERING_ANGLE_DEG,
     MODEL_DIRECT_LANE_RECENTER_SECONDS,
+    RADAR_TO_CAMERA_M,
     ROAD_CURVE_M_PER_M2,
     WHITE,
     YELLOW,
@@ -67,7 +68,6 @@ class DbcSignalSpec:
     offset: float
 
 
-RADAR_TO_CAMERA_M = 1.52
 MODEL_LEAD_MIN_PROB = 0.08
 RADAR_POINT_STALE_S = 0.25
 CORNER_DETECTION_STALE_S = 0.8
@@ -142,7 +142,7 @@ ROUTE_REPLAY_READAHEAD_S = 5.0
 ROUTE_REPLAY_PRELOAD_READY_AHEAD_S = 20.0
 ROUTE_REPLAY_RETAIN_BEHIND_S = 1.0
 ROUTE_REPLAY_PRELOAD_NICE = 10
-ROUTE_VIDEO_FPS = 20.0
+ROUTE_VIDEO_FPS = 10.0
 ROUTE_VIDEO_DECODE_WIDTH = 388
 ROUTE_VIDEO_DECODE_HEIGHT = 244
 ROUTE_VIDEO_SEEK_RESTART_FRAMES = 45
@@ -415,6 +415,8 @@ class RouteReplayFrame:
     vision_yaw_rate_rps: float | None = None
     vision_speed_std_mps: float | None = None
     vision_yaw_rate_std_rps: float | None = None
+    camera_device_type: str | None = None
+    camera_sensor: str | None = None
     camera_calibration_euler: tuple[float, float, float] | None = None
     road_transform_trans: tuple[float, float, float] | None = None
     road_transform_std: tuple[float, float, float] | None = None
@@ -1064,14 +1066,14 @@ class RouteVideoFrameReader:
             "error",
             "-threads",
             "1",
-            "-ss",
-            f"{seek_s:.3f}",
             "-i",
             str(segment.path),
+            "-ss",
+            f"{seek_s:.3f}",
             "-an",
             "-sn",
             "-vf",
-            f"scale={ROUTE_VIDEO_DECODE_WIDTH}:{ROUTE_VIDEO_DECODE_HEIGHT}",
+            f"fps={ROUTE_VIDEO_FPS:g},scale={ROUTE_VIDEO_DECODE_WIDTH}:{ROUTE_VIDEO_DECODE_HEIGHT}",
             "-pix_fmt",
             "rgba",
             "-f",
@@ -1221,6 +1223,8 @@ class RouteLogParser:
         self.vision_yaw_rate_rps: float | None = None
         self.vision_speed_std_mps: float | None = None
         self.vision_yaw_rate_std_rps: float | None = None
+        self.camera_device_type: str | None = None
+        self.camera_sensor: str | None = None
         self.camera_calibration_euler: tuple[float, float, float] | None = None
         self.road_transform_trans: tuple[float, float, float] | None = None
         self.road_transform_std: tuple[float, float, float] | None = None
@@ -1309,8 +1313,14 @@ class RouteLogParser:
                 self._update_selfdrive_state(event.selfdriveState)
             elif event_type == "carControl":
                 self._update_car_control(event.carControl)
+            elif event_type == "deviceState":
+                self._update_device_state(event.deviceState)
+            elif event_type == "roadCameraState":
+                self._update_road_camera_state(event.roadCameraState)
             elif event_type == "cameraOdometry":
                 self._update_camera_odometry(event.cameraOdometry, bool(safe_get(event, "valid", True)))
+            elif event_type == "liveCalibration":
+                self._update_live_calibration(event.liveCalibration, bool(safe_get(event, "valid", True)))
             elif event_type == "carParams":
                 self._update_car_params(event.carParams)
             elif event_type == "radarState":
@@ -1475,6 +1485,8 @@ class RouteLogParser:
             vision_yaw_rate_rps=self.vision_yaw_rate_rps,
             vision_speed_std_mps=self.vision_speed_std_mps,
             vision_yaw_rate_std_rps=self.vision_yaw_rate_std_rps,
+            camera_device_type=self.camera_device_type,
+            camera_sensor=self.camera_sensor,
             camera_calibration_euler=self.camera_calibration_euler,
             road_transform_trans=self.road_transform_trans,
             road_transform_std=self.road_transform_std,
@@ -1692,9 +1704,21 @@ class RouteLogParser:
             yaw_std = finite_float(rot_std[2])
             if yaw_std is not None:
                 self.vision_yaw_rate_std_rps = clamp(yaw_std, 0.0, 2.0)
-        self.camera_calibration_euler = three_float_tuple(safe_get(camera_odometry, "wideFromDeviceEuler"))
+        if self.camera_calibration_euler is None:
+            self.camera_calibration_euler = three_float_tuple(safe_get(camera_odometry, "wideFromDeviceEuler"))
         self.road_transform_trans = three_float_tuple(safe_get(camera_odometry, "roadTransformTrans"))
         self.road_transform_std = three_float_tuple(safe_get(camera_odometry, "roadTransformTransStd"))
+
+    def _update_live_calibration(self, live_calibration: Any, valid: bool) -> None:
+        if not valid:
+            return
+        rpy_calib = three_float_tuple(safe_get(live_calibration, "rpyCalib"))
+        if rpy_calib is not None:
+            self.camera_calibration_euler = rpy_calib
+        height_values = safe_get(live_calibration, "height")
+        height_m = numeric_tuple(height_values, limit=1, minimum=0.5, maximum=3.0)
+        if height_m:
+            self.road_transform_trans = (0.0, 0.0, height_m[0])
 
     def _update_controls_state(self, controls_state: Any) -> None:
         enabled = safe_get(controls_state, "enabled", None)
@@ -1723,6 +1747,16 @@ class RouteLogParser:
         lat_active = safe_get(car_control, "latActive", None)
         if lat_active is not None:
             self.lfa_active = bool(lat_active)
+
+    def _update_device_state(self, device_state: Any) -> None:
+        device_type = safe_get(device_state, "deviceType", None)
+        if device_type is not None:
+            self.camera_device_type = str(device_type).strip().lower()
+
+    def _update_road_camera_state(self, camera_state: Any) -> None:
+        sensor = safe_get(camera_state, "sensor", None)
+        if sensor is not None:
+            self.camera_sensor = str(sensor).strip().lower()
 
     def _update_car_params(self, car_params: Any) -> None:
         ext_flags = safe_optional_int(car_params, "extFlags")
@@ -2563,6 +2597,8 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         vision_yaw_rate_rps=frame.vision_yaw_rate_rps,
         vision_speed_std_mps=frame.vision_speed_std_mps,
         vision_yaw_rate_std_rps=frame.vision_yaw_rate_std_rps,
+        camera_device_type=frame.camera_device_type,
+        camera_sensor=frame.camera_sensor,
         camera_calibration_euler=frame.camera_calibration_euler,
         road_transform_trans=frame.road_transform_trans,
         road_transform_std=frame.road_transform_std,
@@ -2759,6 +2795,8 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         vision_yaw_rate_rps=lerp_optional(left.vision_yaw_rate_rps, right.vision_yaw_rate_rps),
         vision_speed_std_mps=lerp_optional(left.vision_speed_std_mps, right.vision_speed_std_mps),
         vision_yaw_rate_std_rps=lerp_optional(left.vision_yaw_rate_std_rps, right.vision_yaw_rate_std_rps),
+        camera_device_type=discrete.camera_device_type,
+        camera_sensor=discrete.camera_sensor,
         camera_calibration_euler=discrete.camera_calibration_euler,
         road_transform_trans=discrete.road_transform_trans,
         road_transform_std=discrete.road_transform_std,

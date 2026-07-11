@@ -79,7 +79,9 @@ LIVE_SERVICES_BASE = (
     "carControl",
     "carOutput",
     "deviceState",
+    "roadCameraState",
     "cameraOdometry",
+    "liveCalibration",
     "drivingModelData",
     "liveDelay",
     "liveParameters",
@@ -445,8 +447,14 @@ class OpenpilotLiveSource:
             self.parser._update_selfdrive_state(data)
         elif service == "carControl":
             self.parser._update_car_control(data)
+        elif service == "deviceState":
+            self.parser._update_device_state(data)
+        elif service == "roadCameraState":
+            self.parser._update_road_camera_state(data)
         elif service == "cameraOdometry":
             self.parser._update_camera_odometry(data, self._service_valid(service))
+        elif service == "liveCalibration":
+            self.parser._update_live_calibration(data, self._service_valid(service))
         elif service == "carParams":
             self.parser._update_car_params(data)
         elif service == "radarState":
