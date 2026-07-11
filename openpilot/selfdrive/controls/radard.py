@@ -521,7 +521,9 @@ class RadarD:
     self.enable_corner_radar = self.params.get_int("EnableCornerRadar")
     self.radar_lat_factor = self.params.get_float("RadarLatFactor") * 0.01
     self.radar_reaction_factor = self.params.get_float("RadarReactionFactor") * 0.01
-    self.detect_cut_in = self.radar_lat_factor > 0 and self.enable_corner_radar > 1
+    # VW MEB(ID.4): 코너레이더가 없어 전방 레이더 트랙으로 끼어들기 판정 (구 carrot 검증 로직의 MEB 이식).
+    # RadarLatFactor(기본 0)로 옵트인. 타 차종은 코너레이더 조건 그대로.
+    self.detect_cut_in = self.radar_lat_factor > 0 and (self.enable_corner_radar > 1 or self.is_vw_meb)
     vision_only_mode = self.enable_radar_tracks <= VISION_ONLY_RADAR_TRACK_MODE
 
     leads_v3 = sm['modelV2'].leadsV3
@@ -605,6 +607,10 @@ class RadarD:
         self.radar_state.leadTwo = self.leadTwo
       if self.enable_radar_tracks >= 3 or self.corner_tracks_available:
         self._pick_lead_one_from_state()
+      elif self.is_vw_meb and self.detect_cut_in:
+        # MEB: carrot 상태머신의 leadCenter/정지물 승격(유령 급제동 위험으로 MEB 미사용)은 건너뛰고
+        # 끼어들기(leadCutIn) 교체만 허용. RadarLatFactor=0이면 detect_cut_in=False라 완전 비활성.
+        self._meb_apply_cutin_lead()
 
   def publish(self, pm: messaging.PubMaster):
     assert self.radar_state is not None
@@ -790,7 +796,8 @@ class RadarD:
     return lead_dict, radar
 
   def _is_cutin_enter_candidate(self, t: Track) -> bool:
-    if not self.detect_cut_in or not self.lane_line_available or not self._is_corner_track(t):
+    # MEB는 전방 레이더 트랙도 후보 허용 (코너레이더 부재), 타 차종은 코너 트랙만
+    if not self.detect_cut_in or not self.lane_line_available or not (self._is_corner_track(t) or self.is_vw_meb):
       return False
     if t.cnt < CUTIN_MIN_TRACK_AGE:
       return False
@@ -805,7 +812,7 @@ class RadarD:
     return True
 
   def _is_cutin_keep_candidate(self, t: Track) -> bool:
-    if not self.detect_cut_in or not self.lane_line_available or not self._is_corner_track(t):
+    if not self.detect_cut_in or not self.lane_line_available or not (self._is_corner_track(t) or self.is_vw_meb):
       return False
     if not (2.5 < t.dRel < 55.0 and t.vLead > 2.0):
       return False
@@ -835,6 +842,23 @@ class RadarD:
       return True
 
     return cutin["dRel"] + CUTIN_PROMOTE_DREL_MARGIN < lead_one.dRel
+
+  def _meb_apply_cutin_lead(self):
+    # VW MEB(ID.4) 전용: 전방 레이더 횡속도 기반 끼어들기 리드 선승격.
+    # carrot 상태머신 전체(_pick_lead_one_from_state)가 아니라 cut-in 교체 분기만 사용하고,
+    # 승격 리드의 가속도는 클램프해 오탐 시에도 급제동이 아닌 완만한 감속만 나오게 한다.
+    cutin = self.leadCutIn
+    if not cutin or not cutin.get("status"):
+      return
+    if not self._cutin_can_replace_lead_one(cutin):
+      return
+    chosen = dict(cutin)
+    a = float(np.clip(float(chosen.get("aLeadK", 0.0)), -1.5, 1.0))
+    chosen["aLead"] = a
+    chosen["aLeadK"] = a
+    chosen["modelProb"] = 0.03
+    self.radar_state.leadOne = chosen
+    self.radar_detected = True
 
   def _corner_stopped_can_replace_lead_one(self, stopped: dict[str, Any]) -> bool:
     lead_one = self.radar_state.leadOne
