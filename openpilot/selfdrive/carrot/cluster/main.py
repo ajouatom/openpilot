@@ -14,6 +14,7 @@ from pathlib import Path
 from cluster_config import (
     CLUSTER_BRIGHTNESS_PARAM,
     CLUSTER_CAMERA_VIEW_MODE_PARAM,
+    CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
     CLUSTER_ENCODER_AUTO,
     CLUSTER_ENCODER_HARDWARE,
     CLUSTER_ENCODER_JPEG,
@@ -505,12 +506,19 @@ class ClusterHudPriorityParamReader:
             return None
 
 
-def route_overlay_for_mode(overlay: RouteOverlay | None, mode: str) -> RouteOverlay | None:
+def route_overlay_for_mode(
+    overlay: RouteOverlay | None,
+    mode: str,
+    *,
+    keep_video: bool = False,
+) -> RouteOverlay | None:
     if overlay is None or mode == "off":
+        if overlay is not None and keep_video:
+            return replace(overlay, panel_visible=False, data_lines=())
         return None
     if mode == "compact":
-        return replace(overlay, data_lines=overlay.data_lines[:4])
-    return overlay
+        return replace(overlay, panel_visible=True, data_lines=overlay.data_lines[:4])
+    return replace(overlay, panel_visible=True)
 
 
 def resolved_usb_brightness(
@@ -598,6 +606,7 @@ def run_demo(
     route_path: Path,
     route_log: str,
     route_overlay_mode: str,
+    camera_view_mode: int | None,
     route_loop: bool,
     route_replay_speed: float,
     route_start_segment: int | None,
@@ -707,8 +716,17 @@ def run_demo(
     active_theme_mode = theme_override or (theme_param_reader.read() if theme_param_reader is not None else "auto")
     screen_mode_param_reader = ClusterScreenModeParamReader()
     active_screen_mode = screen_mode_param_reader.read()
-    camera_view_param_reader = ClusterCameraViewModeParamReader()
-    active_camera_view_mode = camera_view_param_reader.read()
+    camera_view_override = (
+        normalize_cluster_camera_view_mode(camera_view_mode)
+        if camera_view_mode is not None
+        else None
+    )
+    camera_view_param_reader = ClusterCameraViewModeParamReader() if camera_view_override is None else None
+    active_camera_view_mode = (
+        camera_view_override
+        if camera_view_override is not None
+        else camera_view_param_reader.read()
+    )
     radar_info_param_reader = ClusterRadarInfoParamReader()
     active_radar_info_mode = radar_info_param_reader.read()
     radar_display_param_reader = ClusterRadarDisplayParamReader()
@@ -929,14 +947,15 @@ def run_demo(
                         )
                 next_screen_mode_param_read = now + SCREEN_MODE_PARAM_POLL_SECONDS
             if now >= next_camera_view_param_read:
-                next_camera_view_mode = camera_view_param_reader.read()
-                if next_camera_view_mode != active_camera_view_mode:
-                    print(
-                        f"{CLUSTER_CAMERA_VIEW_MODE_PARAM} updated: "
-                        f"{active_camera_view_mode} -> {next_camera_view_mode}",
-                        flush=True,
-                    )
-                    active_camera_view_mode = next_camera_view_mode
+                if camera_view_param_reader is not None:
+                    next_camera_view_mode = camera_view_param_reader.read()
+                    if next_camera_view_mode != active_camera_view_mode:
+                        print(
+                            f"{CLUSTER_CAMERA_VIEW_MODE_PARAM} updated: "
+                            f"{active_camera_view_mode} -> {next_camera_view_mode}",
+                            flush=True,
+                        )
+                        active_camera_view_mode = next_camera_view_mode
                 next_camera_view_param_read = now + CAMERA_VIEW_PARAM_POLL_SECONDS
             if now >= next_radar_param_read:
                 next_radar_info_mode = radar_info_param_reader.read()
@@ -1103,12 +1122,20 @@ def run_demo(
                 if route_source.is_finished(playback_seconds, route_loop):
                     break
                 route_source.corner_lateral_offset_m = route_active_corner_lateral_offset_m
+                keep_camera_video = active_camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
                 state = route_source.state_at(
                     playback_seconds,
                     route_loop,
-                    include_overlay=route_overlay_mode != "off",
+                    include_overlay=route_overlay_mode != "off" or keep_camera_video,
                 )
-                state = replace(state, route_overlay=route_overlay_for_mode(state.route_overlay, route_overlay_mode))
+                state = replace(
+                    state,
+                    route_overlay=route_overlay_for_mode(
+                        state.route_overlay,
+                        route_overlay_mode,
+                        keep_video=keep_camera_video,
+                    ),
+                )
                 source_status = route_source.status_text(playback_seconds, route_loop)
                 profile.add_elapsed("source.route_update", profile_stage)
             elif controller is None:
@@ -1653,6 +1680,13 @@ def parse_args() -> argparse.Namespace:
         help="Route replay debug overlay. Default compact shows the replay camera/data panel; use off for performance tests.",
     )
     parser.add_argument(
+        "--camera-view-mode",
+        type=int,
+        choices=(0, 1, 2),
+        default=None,
+        help=f"Camera view override. Default reads {CLUSTER_CAMERA_VIEW_MODE_PARAM}; mode 2 is camera.",
+    )
+    parser.add_argument(
         "--theme",
         choices=("auto", "dark", "light"),
         default=None,
@@ -1943,6 +1977,7 @@ def main(*, exit_on_error: bool = True) -> None:
             args.route,
             args.route_log,
             args.route_overlay,
+            args.camera_view_mode,
             args.route_loop,
             args.route_replay_speed,
             args.route_start_segment,

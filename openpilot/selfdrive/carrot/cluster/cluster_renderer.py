@@ -11,12 +11,17 @@ import os
 import time
 from pathlib import Path
 
+import numpy as np
 import pyray as rl
+
+from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_from_device_frame
+from openpilot.common.transformations.orientation import rot_from_euler
 
 from cluster_config import (
     AMBER,
     BLUE,
     BLUE_SOFT,
+    CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
     CLUSTER_RADAR_INFO_ALL_SPEED,
     CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
     CLUSTER_RADAR_INFO_NONE,
@@ -35,8 +40,10 @@ from cluster_config import (
     GREEN,
     MAX_ACCEL_MPS2,
     MAX_SPEED_KPH,
+    RADAR_TO_CAMERA_M,
     RED,
     TEXT,
+    VEHICLE_LENGTH_M,
     WHITE,
     current_cluster_theme,
     normalize_cluster_screen_mode,
@@ -84,6 +91,32 @@ ROUTE_CONTROL_PANEL_H = 34.0
 ROUTE_CONTROL_SEEK_Y = ROUTE_CONTROL_PANEL_Y + 18.0
 ROUTE_CONTROL_BAR_X = ROUTE_CONTROL_PANEL_X + 142.0
 ROUTE_CONTROL_BAR_W = ROUTE_CONTROL_PANEL_W - 284.0
+CAMERA_BACKGROUND_X = 390.0
+CAMERA_BACKGROUND_Y = 0.0
+CAMERA_BACKGROUND_W = 1140.0
+CAMERA_BACKGROUND_H = DESIGN_HEIGHT
+CAMERA_BACKGROUND_ALPHA = 220
+CAMERA_BACKGROUND_VIGNETTE_ALPHA = 32
+CAMERA_BACKGROUND_VERTICAL_BIAS = 0.5
+CAMERA_OVERLAY_MIN_DEPTH_M = 0.5
+CAMERA_OVERLAY_DEFAULT_CAMERA = DEVICE_CAMERAS["tici", "ar0231"].fcam
+CAMERA_OVERLAY_DEFAULT_HEIGHT_M = 1.22
+CAMERA_OVERLAY_Z_OFFSET_DEFAULT_M = 0.00
+CAMERA_OVERLAY_Z_OFFSET_MIN_M = -0.80
+CAMERA_OVERLAY_Z_OFFSET_MAX_M = 0.40
+CAMERA_OVERLAY_Z_OFFSET_STEP_M = 0.05
+CAMERA_OVERLAY_TUNE_PANEL_Y = ROUTE_CONTROL_PANEL_Y - 38.0
+CAMERA_OVERLAY_PITCH_OFFSET_DEFAULT_DEG = 0.0
+CAMERA_OVERLAY_PITCH_OFFSET_MIN_DEG = -3.0
+CAMERA_OVERLAY_PITCH_OFFSET_MAX_DEG = 3.0
+CAMERA_OVERLAY_PITCH_OFFSET_STEP_DEG = 0.2
+CAMERA_OVERLAY_PITCH_TUNE_PANEL_Y = ROUTE_CONTROL_PANEL_Y - 72.0
+CORNER_RADAR_COIN_RADIUS_M = 0.82
+CORNER_RADAR_COIN_HEIGHT_M = 0.10
+CORNER_RADAR_COIN_SLICES = 28
+CORNER_RADAR_COIN_FILL = (52, 210, 230)
+CORNER_RADAR_COIN_SIDE = (20, 116, 132)
+CORNER_RADAR_COIN_RING = (185, 248, 255)
 TPMS_LOW_PRESSURE_PSI = 31.0
 TPMS_BADGE_WIDTH = 46.0
 TPMS_BADGE_HEIGHT = 37.5
@@ -347,6 +380,21 @@ class CachedTextTexture:
     padding_px: float
 
 
+@dataclass(frozen=True, slots=True)
+class CameraOverlayProjection:
+    dest: rl.Rectangle
+    source: rl.Rectangle
+    video_dest: rl.Rectangle
+    camera_width: float
+    camera_height: float
+    focal_length: float
+    zoom: float
+    video_tx: float
+    video_ty: float
+    view_from_road: tuple[tuple[float, float, float], ...]
+    camera_height_m: float
+
+
 @lru_cache(maxsize=256)
 def _cached_rl_color(r: int, g: int, b: int, a: int) -> rl.Color:
     return rl.Color(r, g, b, a)
@@ -597,6 +645,8 @@ class ClusterUiRenderer:
         self._route_video_texture = None
         self._route_video_size: tuple[int, int] | None = None
         self._route_video_frame_id: str | None = None
+        self._live_road_camera = None
+        self._live_road_camera_failed = False
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
         self._hazard_signal_started_at: float | None = None
@@ -618,6 +668,8 @@ class ClusterUiRenderer:
         self._debug_plot_min = -2.0
         self._debug_plot_max = 2.0
         self._debug_plot_last_sample_time: float | None = None
+        self.camera_overlay_z_offset_m = CAMERA_OVERLAY_Z_OFFSET_DEFAULT_M
+        self.camera_overlay_pitch_offset_deg = CAMERA_OVERLAY_PITCH_OFFSET_DEFAULT_DEG
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_RENDER") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -724,6 +776,7 @@ class ClusterUiRenderer:
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
+        self._close_live_road_camera()
         if self._speed_bg_texture is not None:
             rl.unload_texture(self._speed_bg_texture)
             self._speed_bg_texture = None
@@ -789,7 +842,13 @@ class ClusterUiRenderer:
             self.render(state)
             self._profile_add("render_route_frame.render", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_route_replay_controls(playback_s, duration_s, corner_lateral_offset_m, paused)
+            self._draw_route_replay_controls(
+                playback_s,
+                duration_s,
+                corner_lateral_offset_m,
+                paused,
+                state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+            )
             self._profile_add("render_route_frame.controls", profile_stage)
         finally:
             profile_stage = self._profile_start()
@@ -810,14 +869,71 @@ class ClusterUiRenderer:
         mouse = rl.get_mouse_position()
         mx = float(mouse.x) / max(0.001, sx)
         my = float(mouse.y) / max(0.001, sy)
+        control_active = self._camera_overlay_tuning_input(mx, my)
         if not rl.is_mouse_button_down(rl.MOUSE_BUTTON_LEFT):
-            return None, corner_lateral_offset_m, False
+            return None, corner_lateral_offset_m, control_active
 
         seek_rect = rl.Rectangle(ROUTE_CONTROL_BAR_X, ROUTE_CONTROL_SEEK_Y - 8.0, ROUTE_CONTROL_BAR_W, 16.0)
         if self._point_in_rect(mx, my, seek_rect):
             ratio = clamp((mx - ROUTE_CONTROL_BAR_X) / max(1.0, ROUTE_CONTROL_BAR_W), 0.0, 1.0)
             return ratio * duration_s, corner_lateral_offset_m, True
-        return None, corner_lateral_offset_m, False
+        return None, corner_lateral_offset_m, control_active
+
+    def _camera_overlay_tuning_input(self, mx: float, my: float) -> bool:
+        left_key = getattr(rl, "KEY_LEFT_BRACKET", 91)
+        right_key = getattr(rl, "KEY_RIGHT_BRACKET", 93)
+        pitch_down_key = getattr(rl, "KEY_SEMICOLON", 59)
+        pitch_up_key = getattr(rl, "KEY_APOSTROPHE", 39)
+        reset_key = getattr(rl, "KEY_ZERO", 48)
+        changed = False
+        if rl.is_key_pressed(left_key):
+            self.camera_overlay_z_offset_m -= CAMERA_OVERLAY_Z_OFFSET_STEP_M
+            changed = True
+        if rl.is_key_pressed(right_key):
+            self.camera_overlay_z_offset_m += CAMERA_OVERLAY_Z_OFFSET_STEP_M
+            changed = True
+        if rl.is_key_pressed(pitch_down_key):
+            self.camera_overlay_pitch_offset_deg -= CAMERA_OVERLAY_PITCH_OFFSET_STEP_DEG
+            changed = True
+        if rl.is_key_pressed(pitch_up_key):
+            self.camera_overlay_pitch_offset_deg += CAMERA_OVERLAY_PITCH_OFFSET_STEP_DEG
+            changed = True
+        if rl.is_key_pressed(reset_key):
+            self.camera_overlay_z_offset_m = CAMERA_OVERLAY_Z_OFFSET_DEFAULT_M
+            self.camera_overlay_pitch_offset_deg = CAMERA_OVERLAY_PITCH_OFFSET_DEFAULT_DEG
+            changed = True
+
+        z_tune_rect = rl.Rectangle(ROUTE_CONTROL_BAR_X, CAMERA_OVERLAY_TUNE_PANEL_Y - 8.0, ROUTE_CONTROL_BAR_W, 16.0)
+        pitch_tune_rect = rl.Rectangle(ROUTE_CONTROL_BAR_X, CAMERA_OVERLAY_PITCH_TUNE_PANEL_Y - 8.0, ROUTE_CONTROL_BAR_W, 16.0)
+        mouse_z_tuning = rl.is_mouse_button_down(rl.MOUSE_BUTTON_LEFT) and self._point_in_rect(mx, my, z_tune_rect)
+        mouse_pitch_tuning = rl.is_mouse_button_down(rl.MOUSE_BUTTON_LEFT) and self._point_in_rect(mx, my, pitch_tune_rect)
+        if mouse_z_tuning:
+            ratio = clamp((mx - ROUTE_CONTROL_BAR_X) / max(1.0, ROUTE_CONTROL_BAR_W), 0.0, 1.0)
+            self.camera_overlay_z_offset_m = (
+                CAMERA_OVERLAY_Z_OFFSET_MIN_M
+                + ratio * (CAMERA_OVERLAY_Z_OFFSET_MAX_M - CAMERA_OVERLAY_Z_OFFSET_MIN_M)
+            )
+            changed = True
+        if mouse_pitch_tuning:
+            ratio = clamp((mx - ROUTE_CONTROL_BAR_X) / max(1.0, ROUTE_CONTROL_BAR_W), 0.0, 1.0)
+            self.camera_overlay_pitch_offset_deg = (
+                CAMERA_OVERLAY_PITCH_OFFSET_MIN_DEG
+                + ratio * (CAMERA_OVERLAY_PITCH_OFFSET_MAX_DEG - CAMERA_OVERLAY_PITCH_OFFSET_MIN_DEG)
+            )
+            changed = True
+
+        if changed:
+            self.camera_overlay_z_offset_m = clamp(
+                self.camera_overlay_z_offset_m,
+                CAMERA_OVERLAY_Z_OFFSET_MIN_M,
+                CAMERA_OVERLAY_Z_OFFSET_MAX_M,
+            )
+            self.camera_overlay_pitch_offset_deg = clamp(
+                self.camera_overlay_pitch_offset_deg,
+                CAMERA_OVERLAY_PITCH_OFFSET_MIN_DEG,
+                CAMERA_OVERLAY_PITCH_OFFSET_MAX_DEG,
+            )
+        return changed or mouse_z_tuning or mouse_pitch_tuning
 
     def route_replay_mouse_down(self) -> bool:
         if not self._window_open:
@@ -851,6 +967,8 @@ class ClusterUiRenderer:
     def _render_world(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
         if signal_lights is None:
             signal_lights = self._turn_signal_lights(state)
+        if state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+            self._close_live_road_camera()
         theme = self._current_theme()
         profile_stage = self._profile_start()
         scene = build_cluster_scene(
@@ -863,9 +981,436 @@ class ClusterUiRenderer:
         profile_stage = self._profile_start()
         rl.clear_background(rl_color(theme.bg))
         self._profile_add("render_world.clear_background", profile_stage)
-        profile_stage = self._profile_start()
-        self._draw_scene(scene, state)
-        self._profile_add("render_world.draw_scene", profile_stage)
+        if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+            profile_stage = self._profile_start()
+            self._draw_camera_background(state)
+            self._profile_add("render_world.camera_background", profile_stage)
+            profile_stage = self._profile_start()
+            self._draw_camera_projected_overlay(scene, state)
+            self._profile_add("render_world.camera_projected_overlay", profile_stage)
+        else:
+            profile_stage = self._profile_start()
+            self._draw_scene(scene, state)
+            self._profile_add("render_world.draw_scene", profile_stage)
+
+    def _draw_camera_background(self, state: ClusterUiState) -> None:
+        if state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+            return
+        overlay = state.route_overlay
+        projection = self._camera_overlay_projection(state)
+        if projection is None:
+            return
+        texture = None
+        if overlay is not None and overlay.video_rgba is not None:
+            texture = self._route_video_texture_for_overlay(overlay)
+        rl.begin_scissor_mode(
+            int(round(projection.dest.x)),
+            int(round(projection.dest.y)),
+            int(round(projection.dest.width)),
+            int(round(projection.dest.height)),
+        )
+        try:
+            drew_camera = False
+            if texture is not None:
+                rl.draw_texture_pro(
+                    texture,
+                    projection.source,
+                    projection.video_dest,
+                    rl.Vector2(0.0, 0.0),
+                    0.0,
+                    rl_color(WHITE, CAMERA_BACKGROUND_ALPHA),
+                )
+                drew_camera = True
+            else:
+                live_camera = self._live_road_camera_view()
+                if live_camera is not None:
+                    try:
+                        drew_camera = live_camera.draw(projection.video_dest)
+                    except Exception as exc:
+                        print(f"Cluster live road camera failed: {exc}", flush=True)
+                        self._close_live_road_camera()
+            if drew_camera:
+                rl.draw_rectangle_rec(projection.dest, rl_color((0, 0, 0), CAMERA_BACKGROUND_VIGNETTE_ALPHA))
+        finally:
+            rl.end_scissor_mode()
+
+    def _live_road_camera_view(self):
+        if self._live_road_camera is not None:
+            return self._live_road_camera
+        if self._live_road_camera_failed or os.name != "posix":
+            return None
+        try:
+            from cluster_live_camera import LiveRoadCamera
+
+            self._live_road_camera = LiveRoadCamera()
+        except Exception as exc:
+            print(f"Cluster live road camera disabled: {exc}", flush=True)
+            self._live_road_camera_failed = True
+        return self._live_road_camera
+
+    def _close_live_road_camera(self) -> None:
+        if self._live_road_camera is not None:
+            self._live_road_camera.close()
+            self._live_road_camera = None
+
+    def _camera_overlay_content_rect(self) -> rl.Rectangle:
+        sx = self.width / DESIGN_WIDTH
+        sy = self.height / DESIGN_HEIGHT
+        return rl.Rectangle(
+            CAMERA_BACKGROUND_X * sx,
+            CAMERA_BACKGROUND_Y * sy,
+            CAMERA_BACKGROUND_W * sx,
+            CAMERA_BACKGROUND_H * sy,
+        )
+
+    @staticmethod
+    def _camera_overlay_camera(state: ClusterUiState):
+        device_type = (state.camera_device_type or "").strip().lower()
+        sensor = (state.camera_sensor or "").strip().lower()
+        for key in ((device_type, sensor), ("unknown", sensor), (device_type, "unknown")):
+            device_camera = DEVICE_CAMERAS.get(key)
+            if device_camera is not None:
+                return device_camera.fcam
+        if sensor:
+            for (_, known_sensor), device_camera in DEVICE_CAMERAS.items():
+                if known_sensor == sensor:
+                    return device_camera.fcam
+        return CAMERA_OVERLAY_DEFAULT_CAMERA
+
+    def _camera_overlay_projection(self, state: ClusterUiState) -> CameraOverlayProjection | None:
+        overlay = state.route_overlay
+        dest = self._camera_overlay_content_rect()
+        roll = pitch = yaw = 0.0
+        if state.camera_calibration_euler is not None and len(state.camera_calibration_euler) >= 3:
+            roll, pitch, yaw = state.camera_calibration_euler
+        pitch += math.radians(self.camera_overlay_pitch_offset_deg)
+
+        device_from_road = rot_from_euler([roll, pitch, yaw]).dot(np.diag([1.0, -1.0, -1.0]))
+        view_from_road = view_frame_from_device_frame.dot(device_from_road)
+        camera = self._camera_overlay_camera(state)
+        source_width = (
+            float(overlay.video_width)
+            if overlay is not None and overlay.video_width > 0
+            else float(camera.width)
+        )
+        source_height = (
+            float(overlay.video_height)
+            if overlay is not None and overlay.video_height > 0
+            else float(camera.height)
+        )
+        intrinsic = camera.intrinsics
+        calib_transform = intrinsic @ view_from_road
+        kep = calib_transform @ np.array([1000.0, 0.0, 0.0])
+        zoom = max(dest.width / float(camera.width), dest.height / float(camera.height))
+        cx = float(intrinsic[0, 2])
+        cy = float(intrinsic[1, 2])
+        max_x_offset = max(0.0, cx * zoom - dest.width * 0.5)
+        max_y_offset = max(0.0, cy * zoom - dest.height * 0.5)
+        x_offset = 0.0
+        y_offset = 0.0
+        if abs(float(kep[2])) > 1e-6:
+            x_offset = clamp((float(kep[0]) / float(kep[2]) - cx) * zoom, -max_x_offset, max_x_offset)
+            y_offset = clamp((float(kep[1]) / float(kep[2]) - cy) * zoom, -max_y_offset, max_y_offset)
+        video_tx = (dest.width * 0.5 + dest.x - x_offset) - cx * zoom
+        video_ty = (dest.height * 0.5 + dest.y - y_offset) - cy * zoom
+        video_dest = rl.Rectangle(
+            video_tx,
+            video_ty,
+            float(camera.width) * zoom,
+            float(camera.height) * zoom,
+        )
+        camera_height_m = CAMERA_OVERLAY_DEFAULT_HEIGHT_M
+        if state.road_transform_trans is not None and len(state.road_transform_trans) >= 3:
+            height_m = float(state.road_transform_trans[2])
+            if math.isfinite(height_m):
+                camera_height_m = clamp(height_m, 0.5, 3.0)
+        return CameraOverlayProjection(
+            dest=dest,
+            source=rl.Rectangle(0.0, 0.0, source_width, source_height),
+            video_dest=video_dest,
+            camera_width=float(camera.width),
+            camera_height=float(camera.height),
+            focal_length=float(camera.focal_length),
+            zoom=zoom,
+            video_tx=video_tx,
+            video_ty=video_ty,
+            view_from_road=tuple(tuple(float(value) for value in row) for row in view_from_road),
+            camera_height_m=camera_height_m,
+        )
+
+    def _project_camera_overlay_point(
+        self,
+        point: Vec3,
+        projection: CameraOverlayProjection,
+        scene_shift_x_m: float = 0.0,
+    ) -> rl.Vector2 | None:
+        # Scene geometry is shifted forward for the synthetic 3D camera. Camera
+        # projection uses the physical road coordinate whose origin is the ego.
+        road_forward = float(point.y) - EGO_FORWARD_M
+        road_left = -float(point.x + scene_shift_x_m)
+        road_up = float(point.z) + self.camera_overlay_z_offset_m
+        if road_forward <= CAMERA_OVERLAY_MIN_DEPTH_M:
+            return None
+
+        matrix = projection.view_from_road
+        view_x = matrix[0][0] * road_forward + matrix[0][1] * road_left + matrix[0][2] * road_up
+        view_y = (
+            matrix[1][0] * road_forward
+            + matrix[1][1] * road_left
+            + matrix[1][2] * road_up
+            + projection.camera_height_m
+        )
+        view_z = matrix[2][0] * road_forward + matrix[2][1] * road_left + matrix[2][2] * road_up
+        if view_z <= CAMERA_OVERLAY_MIN_DEPTH_M or not all(math.isfinite(value) for value in (view_x, view_y, view_z)):
+            return None
+
+        camera_x = projection.focal_length * view_x / view_z + projection.camera_width * 0.5
+        camera_y = projection.focal_length * view_y / view_z + projection.camera_height * 0.5
+        screen_x = projection.zoom * camera_x + projection.video_tx
+        screen_y = projection.zoom * camera_y + projection.video_ty
+        clip_margin = 60.0
+        if (
+            screen_x < projection.dest.x - clip_margin
+            or screen_x > projection.dest.x + projection.dest.width + clip_margin
+            or screen_y < projection.dest.y - clip_margin
+            or screen_y > projection.dest.y + projection.dest.height + clip_margin
+        ):
+            return None
+        return rl.Vector2(screen_x, screen_y)
+
+    def _draw_camera_projected_overlay(self, scene: ClusterScene, state: ClusterUiState) -> None:
+        projection = self._camera_overlay_projection(state)
+        if projection is None:
+            return
+
+        rl.begin_scissor_mode(
+            int(round(projection.dest.x)),
+            int(round(projection.dest.y)),
+            int(round(projection.dest.width)),
+            int(round(projection.dest.height)),
+        )
+        try:
+            for strip in scene.highlight_lanes:
+                self._draw_camera_overlay_strip(strip, projection, scene.scene_shift_x_m)
+            for strip in scene.road_edges:
+                self._draw_camera_overlay_strip(strip, projection, scene.scene_shift_x_m)
+            for strip in scene.lane_markings:
+                self._draw_camera_overlay_strip(strip, projection, scene.scene_shift_x_m)
+            for strip in scene.planned_path:
+                self._draw_camera_overlay_strip(strip, projection, scene.scene_shift_x_m)
+            for point in scene.radar_points:
+                self._draw_camera_overlay_radar_point(point, projection, scene.scene_shift_x_m, state.radar_info_mode)
+            for vehicle in sorted(scene.vehicles, key=self._camera_overlay_vehicle_draw_key):
+                self._draw_camera_overlay_vehicle(vehicle, projection, scene.scene_shift_x_m, state.radar_info_mode)
+        finally:
+            rl.end_scissor_mode()
+
+    def _draw_camera_overlay_strip(
+        self,
+        strip: MeshStrip,
+        projection: CameraOverlayProjection,
+        scene_shift_x_m: float,
+    ) -> None:
+        count = min(len(strip.left), len(strip.right))
+        if count < 2:
+            return
+        color = rl_color(strip.color)
+        for index in range(count - 1):
+            left0 = self._project_camera_overlay_point(strip.left[index], projection, scene_shift_x_m + strip.x_offset_m)
+            right0 = self._project_camera_overlay_point(strip.right[index], projection, scene_shift_x_m + strip.x_offset_m)
+            left1 = self._project_camera_overlay_point(strip.left[index + 1], projection, scene_shift_x_m + strip.x_offset_m)
+            right1 = self._project_camera_overlay_point(strip.right[index + 1], projection, scene_shift_x_m + strip.x_offset_m)
+            if left0 is None or right0 is None or left1 is None or right1 is None:
+                continue
+            rl.draw_triangle(left0, right0, right1, color)
+            rl.draw_triangle(left0, right1, left1, color)
+
+    def _draw_camera_overlay_vehicle(
+        self,
+        vehicle: VehicleBox,
+        projection: CameraOverlayProjection,
+        scene_shift_x_m: float,
+        radar_info_mode: int,
+    ) -> None:
+        self._draw_camera_overlay_vehicle_coin(vehicle, projection, scene_shift_x_m, radar_info_mode)
+
+    @staticmethod
+    def _camera_overlay_vehicle_draw_key(vehicle: VehicleBox) -> tuple[int, float]:
+        label = vehicle.label.upper()
+        if vehicle.primary or label.startswith("L1"):
+            priority = 5
+        elif vehicle.cut_in or label.startswith("L2") or "CUT-IN" in label:
+            priority = 4
+        elif vehicle.source == "cornerRadar":
+            priority = 3
+        else:
+            priority = 2
+        return priority, -vehicle_distance_m(vehicle)
+
+    @staticmethod
+    def _camera_overlay_vehicle_tag(vehicle: VehicleBox) -> str:
+        label = vehicle.label.upper()
+        if label.startswith("L1") or vehicle.primary:
+            return "L1"
+        if label.startswith("L2") or "CUT-IN" in label:
+            return "L2"
+        return ""
+
+    def _draw_camera_overlay_vehicle_coin(
+        self,
+        vehicle: VehicleBox,
+        projection: CameraOverlayProjection,
+        scene_shift_x_m: float,
+        radar_info_mode: int,
+    ) -> None:
+        center_y_m = vehicle.center.y + RADAR_TO_CAMERA_M + VEHICLE_LENGTH_M
+        base_z = 0.025
+        center = self._project_camera_overlay_point(
+            Vec3(vehicle.center.x, center_y_m, base_z),
+            projection,
+            scene_shift_x_m,
+        )
+        if center is None:
+            return
+
+        tag = self._camera_overlay_vehicle_tag(vehicle)
+        lead_two = tag == "L2"
+        emphasized = vehicle.primary or vehicle.cut_in or bool(tag)
+        radius_m = CORNER_RADAR_COIN_RADIUS_M * (1.42 if lead_two else 1.2 if emphasized else 1.0)
+        right = self._project_camera_overlay_point(
+            Vec3(
+                vehicle.center.x + vehicle.right_x * radius_m,
+                center_y_m + vehicle.right_y * radius_m,
+                base_z,
+            ),
+            projection,
+            scene_shift_x_m,
+        )
+        forward = self._project_camera_overlay_point(
+            Vec3(
+                vehicle.center.x + vehicle.forward_x * radius_m,
+                center_y_m + vehicle.forward_y * radius_m,
+                base_z,
+            ),
+            projection,
+            scene_shift_x_m,
+        )
+
+        right_px = math.hypot(right.x - center.x, right.y - center.y) if right is not None else 16.0
+        forward_px = math.hypot(forward.x - center.x, forward.y - center.y) if forward is not None else 10.0
+        radius_x = clamp(
+            max(right_px, forward_px * 0.8),
+            12.0 if lead_two else 10.0 if emphasized else 8.0,
+            42.0 if lead_two else 36.0 if emphasized else 28.0,
+        )
+        radius_y = clamp(
+            min(forward_px * 0.42, radius_x * 0.46),
+            5.0 if lead_two else 4.5 if emphasized else 3.5,
+            15.0 if lead_two else 13.0 if emphasized else 10.0,
+        )
+
+        confidence = clamp(vehicle.confidence, 0.0, 1.0)
+        fill_base = RED if vehicle.cut_in else (255, 170, 36) if lead_two else AMBER if tag == "L1" else CORNER_RADAR_COIN_FILL
+        side_base = (
+            (116, 28, 32)
+            if vehicle.cut_in
+            else (138, 82, 18)
+            if lead_two
+            else (130, 98, 22)
+            if tag == "L1"
+            else CORNER_RADAR_COIN_SIDE
+        )
+        ring_base = RED if vehicle.cut_in else (255, 190, 54) if lead_two else AMBER if tag == "L1" else CORNER_RADAR_COIN_RING
+        fill_alpha = int((145 if emphasized else 120) + (95 if emphasized else 110) * confidence)
+        ring_alpha = int(180 + 65 * confidence)
+
+        cx = int(round(center.x))
+        cy = int(round(center.y))
+        rx = int(round(radius_x))
+        ry = int(round(radius_y))
+        rl.draw_ellipse(cx + 1, cy + 3, rx + 3, ry + 2, rl_color((0, 0, 0), int(70 + 45 * confidence)))
+        rl.draw_ellipse(cx, cy + 1, rx + 1, ry + 1, rl_color(side_base, max(120, fill_alpha - 35)))
+        rl.draw_ellipse(cx, cy, rx, ry, rl_color(ring_base, ring_alpha))
+        rl.draw_ellipse(cx, cy, max(1, int(rx * 0.78)), max(1, int(ry * 0.70)), rl_color(fill_base, fill_alpha))
+        rl.draw_ellipse(cx - int(rx * 0.18), cy - max(1, int(ry * 0.25)), max(1, int(rx * 0.26)), max(1, int(ry * 0.28)), rl_color((245, 255, 255), int(72 + 58 * confidence)))
+        rl.draw_ellipse_lines(cx, cy, rx, ry, rl_color(ring_base, 245))
+        if emphasized:
+            rl.draw_ellipse_lines(cx, cy, rx + 4, ry + 3, rl_color(ring_base, 185))
+            if tag:
+                tag_x = center.x + radius_x + 10.0 if lead_two else center.x
+                tag_y = center.y if lead_two else center.y - 7.0
+                self._draw_text_with_stroke(
+                    tag,
+                    tag_x,
+                    tag_y,
+                    14,
+                    (255, 255, 255, 245),
+                    (0, 0, 0, 190),
+                    1,
+                    anchor="center",
+                )
+
+        if forward is not None:
+            end_x = center.x + (forward.x - center.x) * 0.58
+            end_y = center.y + (forward.y - center.y) * 0.58
+            rl.draw_line_ex(
+                center,
+                rl.Vector2(end_x, end_y),
+                3.0 if emphasized else 2.0,
+                rl_color((255, 255, 255), int(170 + 70 * confidence)),
+            )
+
+        label = self._vehicle_overlay_label(vehicle, radar_info_mode)
+        if label:
+            label_color = (*ring_base[:3], 255 if vehicle.primary or vehicle.cut_in else 230)
+            label_y = center.y - radius_y - 16.0
+            if tag == "L1":
+                label_y = center.y - radius_y - 22.0
+            elif tag == "L2":
+                label_y = center.y + radius_y + 16.0
+            self._draw_world_label_text(
+                label,
+                center.x,
+                max(14.0, label_y),
+                17 if emphasized else 15,
+                label_color,
+                anchor="center",
+            )
+
+    def _vehicle_overlay_label(self, vehicle: VehicleBox, radar_info_mode: int) -> str:
+        parts: list[str] = []
+        if vehicle.label and (vehicle.primary or vehicle.cut_in):
+            label = vehicle.label.upper()
+            if not (label.startswith("L1") or label.startswith("L2") or "CUT-IN" in label):
+                parts.append(vehicle.label)
+        if radar_info_shows_distance(radar_info_mode) and vehicle.longitudinal_m is not None:
+            parts.append(f"{vehicle.longitudinal_m:.0f} m")
+        if radar_info_shows_speed(radar_info_mode) and vehicle.absolute_speed_kph is not None:
+            parts.append(f"{vehicle.absolute_speed_kph:.0f} km/h")
+        return " ".join(parts)
+
+    def _draw_camera_overlay_radar_point(
+        self,
+        point: RadarPointMarker,
+        projection: CameraOverlayProjection,
+        scene_shift_x_m: float,
+        radar_info_mode: int,
+    ) -> None:
+        camera_point = Vec3(point.center.x, point.center.y + RADAR_TO_CAMERA_M, point.center.z)
+        screen = self._project_camera_overlay_point(camera_point, projection, scene_shift_x_m)
+        if screen is None:
+            return
+        radius = max(3.0, min(10.0, 80.0 / max(6.0, point.longitudinal_m)))
+        rl.draw_circle_v(screen, radius, rl_color(point.color, 190))
+        if not radar_info_shows_radar_points(radar_info_mode):
+            return
+        label_parts = []
+        if radar_info_shows_distance(radar_info_mode):
+            label_parts.append(f"{point.longitudinal_m:.0f} m")
+        if point.absolute_speed_kph is not None:
+            label_parts.append(f"{point.absolute_speed_kph:.0f} km/h")
+        if label_parts:
+            self._draw_world_label_text(" ".join(label_parts), screen.x, screen.y - 16.0, 15, (*WHITE[:3], 220), anchor="center")
 
     def render_to_file(self, state: ClusterUiState, output_path: str | Path) -> None:
         image = self._render_to_image(state)
@@ -1766,11 +2311,15 @@ class ClusterUiRenderer:
         def with_alpha(color: tuple[int, int, int] | tuple[int, int, int, int]) -> tuple[int, int, int, int]:
             return color[0], color[1], color[2], alpha
 
+        marker_height_m = max(0.42, vehicle.height_m * 0.45)
+        marker_base_z = max(0.0, vehicle.center.z - vehicle.height_m * 0.5)
+
         marker_vehicle = replace(
             vehicle,
+            center=Vec3(vehicle.center.x, vehicle.center.y, marker_base_z + marker_height_m * 0.5),
             width_m=max(0.55, vehicle.width_m * 0.68),
             length_m=max(1.05, vehicle.length_m * 0.64),
-            height_m=max(0.42, vehicle.height_m * 0.45),
+            height_m=marker_height_m,
             body_color=with_alpha(vehicle.body_color),
             side_color=with_alpha(vehicle.side_color),
             rear_color=with_alpha(vehicle.rear_color),
@@ -2295,6 +2844,7 @@ class ClusterUiRenderer:
         duration_s: float,
         corner_lateral_offset_m: float,
         paused: bool,
+        camera_overlay_tuning_visible: bool = False,
     ) -> None:
         sx = self.width / DESIGN_WIDTH
         sy = self.height / DESIGN_HEIGHT
@@ -2322,6 +2872,31 @@ class ClusterUiRenderer:
                 BLUE_SOFT,
                 theme.text,
             )
+            if camera_overlay_tuning_visible:
+                pitch_ratio = (
+                    (self.camera_overlay_pitch_offset_deg - CAMERA_OVERLAY_PITCH_OFFSET_MIN_DEG)
+                    / max(0.001, CAMERA_OVERLAY_PITCH_OFFSET_MAX_DEG - CAMERA_OVERLAY_PITCH_OFFSET_MIN_DEG)
+                )
+                self._draw_route_slider(
+                    "pitch",
+                    f"{self.camera_overlay_pitch_offset_deg:+.1f} deg   ; / '",
+                    pitch_ratio,
+                    CAMERA_OVERLAY_PITCH_TUNE_PANEL_Y,
+                    RED,
+                    theme.text,
+                )
+                z_ratio = (
+                    (self.camera_overlay_z_offset_m - CAMERA_OVERLAY_Z_OFFSET_MIN_M)
+                    / max(0.001, CAMERA_OVERLAY_Z_OFFSET_MAX_M - CAMERA_OVERLAY_Z_OFFSET_MIN_M)
+                )
+                self._draw_route_slider(
+                    "cam z",
+                    f"{self.camera_overlay_z_offset_m:+.2f} m   [ / ]",
+                    z_ratio,
+                    CAMERA_OVERLAY_TUNE_PANEL_Y,
+                    AMBER,
+                    theme.text,
+                )
         finally:
             rl.rl_pop_matrix()
 
@@ -3085,7 +3660,7 @@ class ClusterUiRenderer:
         return BLUE
 
     def _draw_route_overlay(self, overlay: RouteOverlay | None) -> None:
-        if overlay is None:
+        if overlay is None or not overlay.panel_visible:
             return
         theme = self._current_theme()
         panel_x = 1416

@@ -12,6 +12,7 @@ from cluster_config import (
     BLUE,
     BLUE_SOFT,
     CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
+    CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
     CLUSTER_RADAR_DISPLAY_DETAIL,
     CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE,
     ClusterTheme,
@@ -3512,6 +3513,7 @@ def build_cluster_scene(
         camera_active,
         target_offset,
     )
+    show_ego_vehicle = state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
     merged_radar_labels = frozenset[str]()
     if route_mode:
         if raw_corner_active:
@@ -3594,10 +3596,11 @@ def build_cluster_scene(
             for vehicle in visible_radar_vehicle_boxes_raw
         )
         blockers = (*detected_blockers, *radar_blockers)
-        vehicles = (ego_vehicle, *detected_vehicle_boxes, *visible_radar_vehicle_boxes)
+        scene_vehicles = (*detected_vehicle_boxes, *visible_radar_vehicle_boxes)
+        vehicles = (ego_vehicle, *scene_vehicles) if show_ego_vehicle else scene_vehicles
     else:
         blockers = ()
-        vehicles = (ego_vehicle,)
+        vehicles = (ego_vehicle,) if show_ego_vehicle else ()
     profile_scene_add(profile_add, "scene.build.vehicles", profile_stage)
 
     profile_stage = profile_scene_start(profile_add)
