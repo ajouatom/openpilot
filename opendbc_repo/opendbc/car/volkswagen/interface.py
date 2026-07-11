@@ -42,6 +42,9 @@ class CarInterface(CarInterfaceBase):
     elif ret.flags & VolkswagenFlags.MEB:
       # Set global MEB parameters (ID.4, ID.5, etc.)
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.volkswagenMeb)]
+      if ret.flags & VolkswagenFlags.MEB_GEN2:
+        # 2024+ (ID.4 MK2 등): 신형 CRC 변형 - panda safety에 플래그 전달
+        ret.safetyConfigs[0].safetyParam |= VolkswagenSafetyFlags.ALT_CRC_VARIANT_1.value
       ret.enableBsm = 0x24C in fingerprint[0]  # MEB_Side_Assist_01
       ret.transmissionType = TransmissionType.direct
       # MEB is curvature-controlled (HCA_03). openpilot routes curvature cars through

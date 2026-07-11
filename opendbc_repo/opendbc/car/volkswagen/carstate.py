@@ -230,12 +230,18 @@ class CarState(CarStateBase):
     # 안전벨트
     ret.seatbeltUnlatched = pt_cp.vl["Airbag_02"]["AB_Gurtschloss_FA"] != 3
 
-    # BSM (블라인드 스팟) - 당근파일럿 vw_meb.dbc는 Left/Right 신호명 사용
+    # BSM (블라인드 스팟) - MK1: ext 버스 + Left/Right 신호명 / GEN2(2024+): PT 버스 + Driver/Passenger 신호명 (LHD 기준)
     if self.CP.enableBsm:
-      ret.leftBlindspot  = bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Left"]) or \
-                           bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Left"])
-      ret.rightBlindspot = bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Right"]) or \
-                           bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Right"])
+      if self.CP.flags & VolkswagenFlags.MEB_GEN2:
+        ret.leftBlindspot  = bool(pt_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Driver"]) or \
+                             bool(pt_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Driver"])
+        ret.rightBlindspot = bool(pt_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Passenger"]) or \
+                             bool(pt_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Passenger"])
+      else:
+        ret.leftBlindspot  = bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Left"]) or \
+                             bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Left"])
+        ret.rightBlindspot = bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Right"]) or \
+                             bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Right"])
 
     # LDW HUD 스톡 값 (LDW_02 → create_lka_hud_control 사용)
     self.ldw_stock_values = cam_cp.vl["LDW_02"]
@@ -479,7 +485,11 @@ class CarState(CarStateBase):
         ("MEB_ACC_01", 50),   # From 레이더 (ACC 설정속도 = ACC_Wunschgeschw_02)
       ]
       if CP.enableBsm:
-        cam_messages += [("MEB_Side_Assist_01", 10)]
+        # GEN2(2024+)는 BSM이 PT 버스로 옴 (infiniteCable2 동일)
+        if CP.flags & VolkswagenFlags.MEB_GEN2:
+          pt_messages += [("MEB_Side_Assist_01", 10)]
+        else:
+          cam_messages += [("MEB_Side_Assist_01", 10)]
     else:
       pt_messages += [
         ("MEB_ACC_01", 50),

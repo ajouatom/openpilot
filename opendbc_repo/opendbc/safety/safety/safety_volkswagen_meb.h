@@ -17,10 +17,12 @@
 // Note: MSG_LH_EPS_03 (0x09F), MSG_GRA_ACC_01 (0x12B), MSG_MOTOR_14 (0x3BE),
 //       MSG_LDW_02 (0x397) are shared with MQB (defined in safety_volkswagen_common.h)
 
-#define FLAG_VOLKSWAGEN_LONG_CONTROL 1  // matches VolkswagenSafetyFlags.LONG_CONTROL
+#define FLAG_VOLKSWAGEN_LONG_CONTROL 1       // matches VolkswagenSafetyFlags.LONG_CONTROL
+#define FLAG_VOLKSWAGEN_ALT_CRC_VARIANT_1 2  // matches VolkswagenSafetyFlags.ALT_CRC_VARIANT_1 (MEB GEN2, 2024+)
 
 static bool volkswagen_meb_brake_pedal_switch = false;
 static bool volkswagen_meb_longitudinal = false;
+static bool volkswagen_meb_gen2 = false;  // GEN2(ID.4 MK2 등): ESC_51=64B, Motor_51=48B (신호 오프셋은 동일)
 
 
 static safety_config volkswagen_meb_init(uint16_t param) {
@@ -65,13 +67,30 @@ static safety_config volkswagen_meb_init(uint16_t param) {
     {.msg = {{MSG_GRA_ACC_01, 0, 8, .max_counter = 15U, .frequency = 33U}, { 0 }, { 0 }}},
   };
 
+  // GEN2(2024+): DLC 확장 (신호 오프셋 동일, CRC는 대형 메시지 ignore라 별도 계산 불필요)
+  static RxCheck volkswagen_meb_gen2_rx_checks[] = {
+    {.msg = {{MSG_ESC_51, 0, 64, .ignore_checksum = true, .ignore_counter = true, .frequency = 100U}, { 0 }, { 0 }}},
+    {.msg = {{MSG_LH_EPS_03, 0, 8, .max_counter = 15U, .frequency = 100U}, { 0 }, { 0 }}},
+    {.msg = {{MSG_QFK_01, 0, 32, .ignore_checksum = true, .ignore_counter = true, .frequency = 100U}, { 0 }, { 0 }}},
+    {.msg = {{MSG_MOTOR_51, 0, 48, .ignore_checksum = true, .ignore_counter = true, .frequency = 50U}, { 0 }, { 0 }}},
+    {.msg = {{MSG_MOTOR_14, 0, 8, .ignore_checksum = true, .ignore_counter = true, .frequency = 10U}, { 0 }, { 0 }}},
+    {.msg = {{MSG_GRA_ACC_01, 0, 8, .max_counter = 15U, .frequency = 33U}, { 0 }, { 0 }}},
+  };
+
   volkswagen_meb_longitudinal = GET_FLAG(param, FLAG_VOLKSWAGEN_LONG_CONTROL);
+  volkswagen_meb_gen2 = GET_FLAG(param, FLAG_VOLKSWAGEN_ALT_CRC_VARIANT_1);
 
   volkswagen_set_button_prev = false;
   volkswagen_resume_button_prev = false;
   volkswagen_meb_brake_pedal_switch = false;
 
   gen_crc_lookup_table_8(0x2F, volkswagen_crc8_lut_8h2f);
+  if (volkswagen_meb_gen2) {
+    if (volkswagen_meb_longitudinal) {
+      return BUILD_SAFETY_CFG(volkswagen_meb_gen2_rx_checks, VOLKSWAGEN_MEB_LONG_TX_MSGS);
+    }
+    return BUILD_SAFETY_CFG(volkswagen_meb_gen2_rx_checks, VOLKSWAGEN_MEB_STOCK_TX_MSGS);
+  }
   if (volkswagen_meb_longitudinal) {
     return BUILD_SAFETY_CFG(volkswagen_meb_rx_checks, VOLKSWAGEN_MEB_LONG_TX_MSGS);
   }
