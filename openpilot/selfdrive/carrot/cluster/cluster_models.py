@@ -216,6 +216,7 @@ class ClusterUiState:
     surround_pitch_deg: float
     surround_view_active: bool
     lanes: tuple[LaneMarking, ...]
+    onroad: bool = False
     camera_view_mode: int = 0
     extra_left_lane_visible: bool = False
     extra_right_lane_visible: bool = False

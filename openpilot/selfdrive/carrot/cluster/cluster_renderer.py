@@ -1015,7 +1015,7 @@ class ClusterUiRenderer:
     def _render_world(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
         if signal_lights is None:
             signal_lights = self._turn_signal_lights(state)
-        if state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+        if state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA or not state.onroad:
             self._close_live_road_camera()
         theme = self._current_theme()
         profile_stage = self._profile_start()
@@ -1070,7 +1070,7 @@ class ClusterUiRenderer:
                 )
                 drew_camera = True
             else:
-                live_camera = self._live_road_camera_view()
+                live_camera = self._live_road_camera_view() if state.onroad else None
                 if live_camera is not None:
                     try:
                         drew_camera = live_camera.draw(projection.video_dest)
