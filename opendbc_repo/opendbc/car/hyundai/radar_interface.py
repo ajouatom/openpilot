@@ -146,28 +146,32 @@ class RadarInterface(RadarInterfaceBase):
     self.dRel_last = 0
 
     # Initialize pts
-    total_tracks = self.radar_msg_count * ( 2 if self.radar_group1 else 1)
-    for track_id in range(total_tracks):
-      t_id = track_id + 32
-      self.pts[t_id] = structs.RadarData.RadarPoint()
-      self.pts[t_id].measured = False
-      self.pts[t_id].trackId = t_id
+    if self.rcp_tracks is not None:
+      total_tracks = self.radar_msg_count * (2 if self.radar_group1 else 1)
+      for track_id in range(total_tracks):
+        t_id = track_id + 32
+        self.pts[t_id] = structs.RadarData.RadarPoint()
+        self.pts[t_id].measured = False
+        self.pts[t_id].trackId = t_id
 
-    self.pts[SCC_TID] = structs.RadarData.RadarPoint()
-    self.pts[SCC_TID].trackId = SCC_TID
-    self.pts[SCC_TID].radarSource = structs.RadarData.RadarPoint.RadarSource.scc
-    for slot in range(CORNER_OBJECT_235_MSG_COUNT):
-      t_id = CORNER_OBJECT_235_TRACK_ID_OFFSET + slot
-      self.pts[t_id] = structs.RadarData.RadarPoint()
-      self.pts[t_id].measured = False
-      self.pts[t_id].trackId = t_id
-      self.pts[t_id].radarSource = structs.RadarData.RadarPoint.RadarSource.corner235
-    for slot in range(CORNER_OBJECT_180_MSG_COUNT * CORNER_OBJECT_180_SLOTS_PER_MSG):
-      t_id = CORNER_OBJECT_180_TRACK_ID_OFFSET + slot
-      self.pts[t_id] = structs.RadarData.RadarPoint()
-      self.pts[t_id].measured = False
-      self.pts[t_id].trackId = t_id
-      self.pts[t_id].radarSource = structs.RadarData.RadarPoint.RadarSource.corner180
+    if self.rcp_scc is not None:
+      self.pts[SCC_TID] = structs.RadarData.RadarPoint()
+      self.pts[SCC_TID].trackId = SCC_TID
+      self.pts[SCC_TID].radarSource = "scc"
+    if self.rcp_corner_objects is not None:
+      for slot in range(CORNER_OBJECT_235_MSG_COUNT):
+        t_id = CORNER_OBJECT_235_TRACK_ID_OFFSET + slot
+        self.pts[t_id] = structs.RadarData.RadarPoint()
+        self.pts[t_id].measured = False
+        self.pts[t_id].trackId = t_id
+        self.pts[t_id].radarSource = "corner235"
+    if self.rcp_corner_objects_180 is not None:
+      for slot in range(CORNER_OBJECT_180_MSG_COUNT * CORNER_OBJECT_180_SLOTS_PER_MSG):
+        t_id = CORNER_OBJECT_180_TRACK_ID_OFFSET + slot
+        self.pts[t_id] = structs.RadarData.RadarPoint()
+        self.pts[t_id].measured = False
+        self.pts[t_id].trackId = t_id
+        self.pts[t_id].radarSource = "corner180"
 
     self.frame = 0
 
@@ -249,7 +253,7 @@ class RadarInterface(RadarInterfaceBase):
         (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid) or
         (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid)):
       ret.errors.canError = True
-    ret.points = list(self.pts.values())
+    ret.points = [point for point in self.pts.values() if point.measured]
     return ret
 
   def _update(self, updated_messages):
