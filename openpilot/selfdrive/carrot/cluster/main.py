@@ -69,7 +69,7 @@ from cluster_renderer import ClusterUiRenderer
 from cluster_route_replay import RouteReplaySource
 from cluster_simulator import ClusterSimulator, RandomInputSource
 from cluster_system_monitor import ClusterProcessCoreUsageSampler
-from cluster_usb_display import TuringUsbDisplay, product_id_for_hud_mode
+from cluster_usb_display import TuringUsbDisplay, find_supported_usb_product, product_id_for_hud_mode
 from cluster_usb_pipeline import AsyncJpegUsbPipeline
 
 DEFAULT_FPS = 0.0
@@ -88,6 +88,11 @@ CAMERA_VIEW_PARAM_POLL_SECONDS = 1.0
 RADAR_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
 NETWORK_ADDRESS_POLL_SECONDS = 2.0
+
+try:
+    from openpilot.system.hardware import TICI
+except Exception:
+    TICI = False
 
 
 class NetworkAddressProvider:
@@ -1855,6 +1860,14 @@ def parse_args() -> argparse.Namespace:
 
 def main(*, exit_on_error: bool = True) -> None:
     args = parse_args()
+    if args.output in ("usb", "both") and not TICI:
+        expected_product_id = product_id_for_hud_mode(args.cluster_hud_mode) if args.cluster_hud_mode is not None else None
+        if find_supported_usb_product(expected_product_id) is None:
+            print(
+                "TURZX USB cluster display not found on PC; rendering to window only.",
+                flush=True,
+            )
+            args.output = "window"
     encoder_source = apply_cluster_encoder_param(args)
     if args.usb_async and args.usb_codec != "jpeg":
         raise SystemExit("--usb-async only supports --usb-codec jpeg")

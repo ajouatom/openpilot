@@ -399,7 +399,6 @@
           "zh": "雷达",
           "params": [
             "EnableRadarTracks",
-            "RadarLatFactor",
             "EnableCornerRadar"
           ]
         },
@@ -2452,22 +2451,6 @@
       "min": -2,
       "max": 3,
       "default": 0,
-      "unit": 1
-    },
-    {
-      "group": "레이더설정",
-      "name": "RadarLatFactor",
-      "title": "끼어들기 감지 감도(0)",
-      "descr": "높을수록 옆차선에서 들어오는 차량을 더 빨리 잡지만, 너무 높으면 옆차를 앞차로 볼 수 있음",
-      "egroup": "RADAR",
-      "etitle": "Cut-in detection sensitivity(50)",
-      "edescr": "50 is the recommended baseline. Lower values reduce sensitivity; higher values catch lane-entering vehicles earlier, but too high may mistake adjacent-lane vehicles for leads.",
-      "cgroup": "雷达设置",
-      "ctitle": "切入检测灵敏度 (0)",
-      "cdescr": "值越高越早发现从旁边车道驶入的车辆，但太高可能把旁边车道车辆当作前车",
-      "min": 0,
-      "max": 100,
-      "default": 50,
       "unit": 1
     },
     {

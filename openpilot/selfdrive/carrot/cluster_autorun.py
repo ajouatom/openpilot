@@ -265,13 +265,13 @@ def _cluster_args(
     active_encoder_mode: int,
     core_mode: int,
     priority: int,
+    output_mode: str = "usb",
 ) -> list[str]:
     args = [
         "--input",
         "live",
         "--output",
-        "usb",
-        *_encoder_args(active_encoder_mode),
+        output_mode,
         "--cluster-hud-mode",
         str(hud_mode),
         "--cluster-hud-encoder",
@@ -281,13 +281,21 @@ def _cluster_args(
         "--cluster-hud-priority",
         str(priority),
     ]
+    if output_mode in ("usb", "both"):
+        args[4:4] = _encoder_args(active_encoder_mode)
     fps = os.environ.get(AUTORUN_FPS_ENV, "").strip()
     if fps:
         args.extend(["--fps", fps])
     return args
 
 
-def _run_cluster_once(hud_mode: int, encoder_mode: int, core_mode: int, priority: int) -> None:
+def _run_cluster_once(
+    hud_mode: int,
+    encoder_mode: int,
+    core_mode: int,
+    priority: int,
+    output_mode: str = "usb",
+) -> None:
     from selfdrive.carrot import cluster_run
 
     def run_cluster_entry() -> None:
@@ -300,23 +308,33 @@ def _run_cluster_once(hud_mode: int, encoder_mode: int, core_mode: int, priority
 
     previous_argv = sys.argv[:]
     try:
-        sequence = _encoder_sequence(encoder_mode)
+        sequence = _encoder_sequence(encoder_mode) if output_mode in ("usb", "both") else [encoder_mode]
         for index, active_encoder_mode in enumerate(sequence):
-            print(
-                f"[cluster_autorun] starting HUD encoder "
-                f"{ENCODER_NAMES[active_encoder_mode]} "
-                f"(setting={encoder_mode}:{ENCODER_NAMES[encoder_mode]})",
-                flush=True,
-            )
+            if output_mode in ("usb", "both"):
+                print(
+                    f"[cluster_autorun] starting HUD encoder "
+                    f"{ENCODER_NAMES[active_encoder_mode]} "
+                    f"(setting={encoder_mode}:{ENCODER_NAMES[encoder_mode]})",
+                    flush=True,
+                )
+            else:
+                print("[cluster_autorun] starting HUD window fallback", flush=True)
             try:
                 sys.argv = [
                     previous_argv[0],
-                    *_cluster_args(hud_mode, encoder_mode, active_encoder_mode, core_mode, priority),
+                    *_cluster_args(
+                        hud_mode,
+                        encoder_mode,
+                        active_encoder_mode,
+                        core_mode,
+                        priority,
+                        output_mode,
+                    ),
                 ]
                 run_cluster_entry()
                 return
             except Exception:
-                if encoder_mode != ENCODER_AUTO or index == len(sequence) - 1:
+                if output_mode not in ("usb", "both") or encoder_mode != ENCODER_AUTO or index == len(sequence) - 1:
                     raise
                 next_encoder_mode = sequence[index + 1]
                 print(
@@ -580,6 +598,24 @@ def main() -> None:
             continue
 
         if find_supported_usb_product(expected_product_id) is None:
+            if not TICI:
+                print(
+                    f"[cluster_autorun] {product_label(expected_product_id)} not found on PC; "
+                    "starting window-only HUD",
+                    flush=True,
+                )
+                try:
+                    _run_cluster_once(hud_mode, encoder_mode, core_mode, priority, output_mode="window")
+                    continue
+                except Exception as exc:
+                    print(
+                        f"[cluster_autorun] cluster HUD window failed: {exc}; "
+                        f"retrying in {RETRY_INTERVAL_S:.0f}s",
+                        flush=True,
+                    )
+                    traceback.print_exc()
+                    time.sleep(RETRY_INTERVAL_S)
+                    continue
             found_product_id = _wait_for_supported_usb_device(
                 params,
                 expected_product_id,
