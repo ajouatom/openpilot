@@ -117,7 +117,19 @@ CORNER_RADAR_COIN_SLICES = 28
 CORNER_RADAR_COIN_FILL = (52, 210, 230)
 CORNER_RADAR_COIN_SIDE = (20, 116, 132)
 CORNER_RADAR_COIN_RING = (185, 248, 255)
-CORNER_RADAR_APPROACHING_MIN_SPEED_MPS = 0.15
+CORNER_RADAR_COIN_SELECTED_FILL = (255, 170, 36)
+CORNER_RADAR_COIN_SELECTED_SIDE = (138, 82, 18)
+CORNER_RADAR_COIN_SELECTED_RING = (255, 190, 54)
+CORNER_RADAR_COIN_CUTIN_FILL = (198, 78, 238)
+CORNER_RADAR_COIN_CUTIN_SIDE = (94, 34, 122)
+CORNER_RADAR_COIN_CUTIN_RING = (238, 174, 255)
+CORNER_RADAR_COIN_SLOWER_FILL = (54, 136, 255)
+CORNER_RADAR_COIN_SLOWER_SIDE = (24, 65, 132)
+CORNER_RADAR_COIN_SLOWER_RING = (146, 198, 255)
+CORNER_RADAR_COIN_STOPPED_FILL = (132, 140, 148)
+CORNER_RADAR_COIN_STOPPED_SIDE = (68, 74, 80)
+CORNER_RADAR_COIN_STOPPED_RING = (205, 212, 218)
+CORNER_RADAR_COIN_STOPPED_MAX_SPEED_KPH = 3.0
 TPMS_LOW_PRESSURE_PSI = 31.0
 TPMS_BADGE_WIDTH = 46.0
 TPMS_BADGE_HEIGHT = 37.5
@@ -491,14 +503,24 @@ def radar_info_shows_distance(mode: int) -> bool:
     )
 
 
-def vehicle_is_approaching(vehicle: VehicleBox) -> bool:
-    if vehicle.longitudinal_m is None or vehicle.relative_speed_mps is None:
-        return False
-    if vehicle.longitudinal_m > 0.0:
-        return vehicle.relative_speed_mps < -CORNER_RADAR_APPROACHING_MIN_SPEED_MPS
-    if vehicle.longitudinal_m < 0.0:
-        return vehicle.relative_speed_mps > CORNER_RADAR_APPROACHING_MIN_SPEED_MPS
-    return False
+def camera_overlay_vehicle_coin_colors(
+    vehicle: VehicleBox,
+    selected: bool,
+) -> tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]]:
+    if vehicle.cut_in:
+        return CORNER_RADAR_COIN_CUTIN_FILL, CORNER_RADAR_COIN_CUTIN_SIDE, CORNER_RADAR_COIN_CUTIN_RING
+    if selected:
+        return CORNER_RADAR_COIN_SELECTED_FILL, CORNER_RADAR_COIN_SELECTED_SIDE, CORNER_RADAR_COIN_SELECTED_RING
+    if (
+        vehicle.absolute_speed_kph is not None
+        and abs(vehicle.absolute_speed_kph) <= CORNER_RADAR_COIN_STOPPED_MAX_SPEED_KPH
+    ):
+        return CORNER_RADAR_COIN_STOPPED_FILL, CORNER_RADAR_COIN_STOPPED_SIDE, CORNER_RADAR_COIN_STOPPED_RING
+    if vehicle.absolute_speed_kph is not None and vehicle.absolute_speed_kph < 0.0:
+        return RED, (116, 28, 32), RED
+    if vehicle.relative_speed_mps is not None and vehicle.relative_speed_mps < 0.0:
+        return CORNER_RADAR_COIN_SLOWER_FILL, CORNER_RADAR_COIN_SLOWER_SIDE, CORNER_RADAR_COIN_SLOWER_RING
+    return CORNER_RADAR_COIN_FILL, CORNER_RADAR_COIN_SIDE, CORNER_RADAR_COIN_RING
 
 
 def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme, source_color_mode: int) -> tuple[int, int, int]:
@@ -1326,19 +1348,7 @@ class ClusterUiRenderer:
         )
 
         confidence = clamp(vehicle.confidence, 0.0, 1.0)
-        approaching = vehicle_is_approaching(vehicle)
-        danger_color = vehicle.cut_in or approaching
-        fill_base = RED if danger_color else (255, 170, 36) if lead_two else AMBER if lead_one else CORNER_RADAR_COIN_FILL
-        side_base = (
-            (116, 28, 32)
-            if danger_color
-            else (138, 82, 18)
-            if lead_two
-            else (130, 98, 22)
-            if lead_one
-            else CORNER_RADAR_COIN_SIDE
-        )
-        ring_base = RED if danger_color else (255, 190, 54) if lead_two else AMBER if lead_one else CORNER_RADAR_COIN_RING
+        fill_base, side_base, ring_base = camera_overlay_vehicle_coin_colors(vehicle, lead_one or lead_two)
         fill_alpha = int((145 if emphasized else 120) + (95 if emphasized else 110) * confidence)
         ring_alpha = int(180 + 65 * confidence)
 
