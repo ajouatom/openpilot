@@ -121,6 +121,7 @@ DRIVE_VIEW_ROAD_START_M = (
 )
 VEHICLE_BADGE_TTC_S = 9.9
 VEHICLE_BADGE_ACCEL_MPS2 = 1.0
+DETECTED_VEHICLE_DISPLAY_HEIGHT_OFFSET_M = -0.3
 MODEL_LINE_STRIP_GROUP_CACHE_LIMIT = 48
 MODEL_LINE_STRIP_GROUP_CACHE_GRID_M = 0.5
 MODEL_LINE_STRIP_GROUP_CACHE_POINT_GRID_M = 0.05
@@ -2757,6 +2758,7 @@ def vehicle_box(
     annotate: bool = False,
     x_offset_m: float = 0.0,
     center_x_m_override: float | None = None,
+    center_z_m_offset: float = 0.0,
 ) -> VehicleBox:
     confidence = clamp(confidence, 0.0, 1.0)
     alpha = int(92 + 163 * confidence)
@@ -2788,7 +2790,7 @@ def vehicle_box(
     )
 
     return VehicleBox(
-        center=Vec3(center_x_m, forward_m, height_m * 0.5),
+        center=Vec3(center_x_m, forward_m, height_m * 0.5 + center_z_m_offset),
         right_x=right_x,
         right_y=right_y,
         forward_x=forward_x,
@@ -3581,6 +3583,7 @@ def build_cluster_scene(
                 primary=detected.primary,
                 annotate=vehicle_badge_has_special_info(detected),
                 center_x_m_override=detected.lateral_m + relative_scene_x_offset_m,
+                center_z_m_offset=DETECTED_VEHICLE_DISPLAY_HEIGHT_OFFSET_M,
             )
             for detected in render_detected_vehicles
         )
