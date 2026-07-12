@@ -2114,7 +2114,12 @@ def merge_detected_vehicle_for_display(base: DetectedVehicle, other: DetectedVeh
         ttc_s=base.ttc_s if base.ttc_s is not None else other.ttc_s,
         x_std_m=base.x_std_m if base.x_std_m is not None else other.x_std_m,
         y_std_m=base.y_std_m if base.y_std_m is not None else other.y_std_m,
+        radar_track_id=base.radar_track_id if base.radar_track_id is not None else other.radar_track_id,
     )
+
+
+def detected_vehicles_have_same_radar_track(left: DetectedVehicle, right: DetectedVehicle) -> bool:
+    return left.radar_track_id is not None and left.radar_track_id == right.radar_track_id
 
 
 def merged_detected_vehicle_source(base_source: str, other_source: str) -> str:
@@ -3377,8 +3382,23 @@ def build_cluster_scene(
     if raw_corner_active:
         display_detected_vehicles = tuple(
             vehicle for vehicle in display_detected_vehicles
-            if detected_vehicle_is_front_lead(vehicle)
+            if vehicle.cut_in
+            or detected_vehicle_is_front_lead(vehicle)
             or detected_vehicle_is_rear_car_state_summary(vehicle)
+        )
+    cutin_vehicles = tuple(vehicle for vehicle in display_detected_vehicles if vehicle.cut_in)
+    if cutin_vehicles:
+        display_detected_vehicles = tuple(
+            vehicle for vehicle in display_detected_vehicles
+            if vehicle.cut_in
+            or not any(detected_vehicles_have_same_radar_track(vehicle, cutin) for cutin in cutin_vehicles)
+        )
+    lead_one_vehicles = tuple(vehicle for vehicle in display_detected_vehicles if vehicle.label.upper().startswith("L1"))
+    if lead_one_vehicles:
+        display_detected_vehicles = tuple(
+            vehicle for vehicle in display_detected_vehicles
+            if not vehicle.label.upper().startswith("L2")
+            or not any(detected_vehicles_have_same_radar_track(vehicle, lead_one) for lead_one in lead_one_vehicles)
         )
     if display_radar_points is not state.radar_points or display_detected_vehicles != state.detected_vehicles:
         state = replace(state, radar_points=display_radar_points, detected_vehicles=display_detected_vehicles)

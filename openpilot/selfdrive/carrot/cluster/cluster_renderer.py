@@ -117,9 +117,12 @@ CORNER_RADAR_COIN_SLICES = 28
 CORNER_RADAR_COIN_FILL = (52, 210, 230)
 CORNER_RADAR_COIN_SIDE = (20, 116, 132)
 CORNER_RADAR_COIN_RING = (185, 248, 255)
-CORNER_RADAR_COIN_SELECTED_FILL = (255, 170, 36)
-CORNER_RADAR_COIN_SELECTED_SIDE = (138, 82, 18)
-CORNER_RADAR_COIN_SELECTED_RING = (255, 190, 54)
+CORNER_RADAR_COIN_LEAD_ONE_FILL = (255, 170, 36)
+CORNER_RADAR_COIN_LEAD_ONE_SIDE = (138, 82, 18)
+CORNER_RADAR_COIN_LEAD_ONE_RING = (255, 190, 54)
+CORNER_RADAR_COIN_LEAD_TWO_FILL = (255, 218, 64)
+CORNER_RADAR_COIN_LEAD_TWO_SIDE = (142, 96, 16)
+CORNER_RADAR_COIN_LEAD_TWO_RING = (255, 242, 132)
 CORNER_RADAR_COIN_CUTIN_FILL = (198, 78, 238)
 CORNER_RADAR_COIN_CUTIN_SIDE = (94, 34, 122)
 CORNER_RADAR_COIN_CUTIN_RING = (238, 174, 255)
@@ -505,12 +508,15 @@ def radar_info_shows_distance(mode: int) -> bool:
 
 def camera_overlay_vehicle_coin_colors(
     vehicle: VehicleBox,
-    selected: bool,
+    lead_one: bool,
+    lead_two: bool,
 ) -> tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]]:
-    if vehicle.cut_in:
+    if vehicle.cut_in or "CUT-IN" in vehicle.label.upper():
         return CORNER_RADAR_COIN_CUTIN_FILL, CORNER_RADAR_COIN_CUTIN_SIDE, CORNER_RADAR_COIN_CUTIN_RING
-    if selected:
-        return CORNER_RADAR_COIN_SELECTED_FILL, CORNER_RADAR_COIN_SELECTED_SIDE, CORNER_RADAR_COIN_SELECTED_RING
+    if lead_one:
+        return CORNER_RADAR_COIN_LEAD_ONE_FILL, CORNER_RADAR_COIN_LEAD_ONE_SIDE, CORNER_RADAR_COIN_LEAD_ONE_RING
+    if lead_two:
+        return CORNER_RADAR_COIN_LEAD_TWO_FILL, CORNER_RADAR_COIN_LEAD_TWO_SIDE, CORNER_RADAR_COIN_LEAD_TWO_RING
     if camera_overlay_vehicle_is_stopped(vehicle):
         return CORNER_RADAR_COIN_STOPPED_FILL, CORNER_RADAR_COIN_STOPPED_SIDE, CORNER_RADAR_COIN_STOPPED_RING
     if vehicle.absolute_speed_kph is not None and vehicle.absolute_speed_kph < 0.0:
@@ -1289,13 +1295,6 @@ class ClusterUiRenderer:
             priority = 2
         return priority, -vehicle_distance_m(vehicle)
 
-    @staticmethod
-    def _camera_overlay_vehicle_tag(vehicle: VehicleBox) -> str:
-        label = vehicle.label.upper()
-        if vehicle.cut_in or "CUT-IN" in label:
-            return "CUT-IN"
-        return ""
-
     def _draw_camera_overlay_vehicle_coin(
         self,
         vehicle: VehicleBox,
@@ -1313,7 +1312,6 @@ class ClusterUiRenderer:
         if center is None:
             return
 
-        tag = self._camera_overlay_vehicle_tag(vehicle)
         label = vehicle.label.upper()
         lead_two = label.startswith("L2") or "CUT-IN" in label
         lead_one = label.startswith("L1") or (vehicle.primary and not lead_two)
@@ -1352,7 +1350,7 @@ class ClusterUiRenderer:
         )
 
         confidence = clamp(vehicle.confidence, 0.0, 1.0)
-        fill_base, side_base, ring_base = camera_overlay_vehicle_coin_colors(vehicle, lead_one or lead_two)
+        fill_base, side_base, ring_base = camera_overlay_vehicle_coin_colors(vehicle, lead_one, lead_two)
         fill_alpha = int((145 if emphasized else 120) + (95 if emphasized else 110) * confidence)
         ring_alpha = int(180 + 65 * confidence)
 
@@ -1368,19 +1366,6 @@ class ClusterUiRenderer:
         rl.draw_ellipse_lines(cx, cy, rx, ry, rl_color(ring_base, 245))
         if emphasized:
             rl.draw_ellipse_lines(cx, cy, rx + 4, ry + 3, rl_color(ring_base, 185))
-            if tag:
-                tag_x = center.x + radius_x + 18.0 if lead_two else center.x
-                tag_y = center.y if lead_two else center.y - 7.0
-                self._draw_text_with_stroke(
-                    tag,
-                    tag_x,
-                    tag_y,
-                    13,
-                    (255, 255, 255, 245),
-                    (0, 0, 0, 190),
-                    1,
-                    anchor="center",
-                )
 
         if forward is not None:
             end_x = center.x + (forward.x - center.x) * 0.58

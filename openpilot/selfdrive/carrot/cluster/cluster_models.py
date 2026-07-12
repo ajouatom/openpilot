@@ -133,6 +133,7 @@ class DetectedVehicle:
     ttc_s: float | None = None
     x_std_m: float | None = None
     y_std_m: float | None = None
+    radar_track_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
