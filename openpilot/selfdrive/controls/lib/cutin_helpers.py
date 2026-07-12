@@ -24,6 +24,7 @@ CUTIN_ASSUMED_VEHICLE_HALF_WIDTH = 0.9
 CUTIN_FAST_MAX_LANE_BOUNDARY_TTC_S = 0.55
 CUTIN_FAST_NEAR_MAX_LANE_BOUNDARY_TTC_S = 0.7
 CUTIN_FAST_MIN_RADAR_INWARD_SPEED = 0.2
+CUTIN_PROJECTED_BOOST_MIN_TEMPORAL_INWARD_SPEED = 0.3
 
 
 def is_corner_track_id(track_id: int) -> bool:
@@ -95,7 +96,11 @@ def effective_cutin_inward_speed(
 ) -> float:
   time_gap = d_rel / max(v_ego, 1.0)
   urgent_distance = d_rel < CUTIN_FAST_CONFIRM_MAX_DREL or (v_ego > 5.0 and time_gap < CUTIN_FAST_CONFIRM_MAX_TIME_GAP_S)
-  if not urgent_distance or horizon_s <= 0.0:
+  if (
+    not urgent_distance
+    or horizon_s <= 0.0
+    or temporal_inward_speed < CUTIN_PROJECTED_BOOST_MIN_TEMPORAL_INWARD_SPEED
+  ):
     return temporal_inward_speed
   projected_inward_speed = max(0.0, (abs(d_path) - abs(projected_d_path)) / horizon_s)
   return max(temporal_inward_speed, projected_inward_speed)

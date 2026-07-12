@@ -1924,6 +1924,7 @@ class RouteLogParser:
                     cut_in=cut_in,
                     primary=True,
                     ttc_s=ttc_from_relative_speed(d_rel, relative_speed_mps),
+                    radar_track_id=track_id,
                 )
             )
         recorded_cutins = safe_get(radar_state, "leadsCutIn", ()) if self.show_recorded_cutins else ()
@@ -1966,6 +1967,7 @@ class RouteLogParser:
                     cut_in=True,
                     primary=True,
                     ttc_s=ttc_from_relative_speed(d_rel, relative_speed_mps),
+                    radar_track_id=track_id,
                 )
             )
         self.radar_detections = tuple(detections)
@@ -2260,6 +2262,7 @@ class RouteLogParser:
                         lateral_speed_mps=-track.yv_rel,
                         cut_in=True,
                         primary=True,
+                        radar_track_id=track.track_id,
                     )
                 )
 
@@ -2299,6 +2302,7 @@ class RouteLogParser:
                         lateral_speed_mps=-track.yv_rel,
                         cut_in=True,
                         primary=True,
+                        radar_track_id=track.track_id,
                     )
                 )
                 self.cutin_output_hold_reference = (track.d_rel, track.y_rel, track.v_rel)
@@ -3714,7 +3718,6 @@ def model_lead_detections_from_model_v2(model: Any) -> tuple[DetectedVehicle, ..
             else None
         )
         acceleration_mps2 = first_list_value(safe_get(lead, "a"))
-        cut_in = model_lead_is_cut_in(lead)
         x_std_m = first_list_value(safe_get(lead, "xStd"))
         y_std_m = first_list_value(safe_get(lead, "yStd"))
         detections.append(
@@ -3727,7 +3730,6 @@ def model_lead_detections_from_model_v2(model: Any) -> tuple[DetectedVehicle, ..
                 relative_speed_mps=relative_speed_mps,
                 absolute_speed_kph=max(0.0, lead_speed_mps * 3.6) if lead_speed_mps is not None else None,
                 acceleration_mps2=acceleration_mps2,
-                cut_in=cut_in,
                 primary=index == 0,
                 ttc_s=ttc_from_relative_speed(longitudinal_m, relative_speed_mps),
                 x_std_m=x_std_m,
@@ -3742,24 +3744,6 @@ def ttc_from_relative_speed(longitudinal_m: float, relative_speed_mps: float | N
         return None
     ttc_s = longitudinal_m / max(0.15, -relative_speed_mps)
     return clamp(ttc_s, 0.0, 99.0)
-
-
-def model_lead_is_cut_in(lead: Any) -> bool:
-    ys = safe_get(lead, "y")
-    xs = safe_get(lead, "x")
-    if ys is None or xs is None or len(ys) < 2 or len(xs) < 2:
-        return False
-    y0 = finite_float(ys[0])
-    if y0 is None or abs(y0) < 0.85:
-        return False
-    for index in range(1, min(len(ys), len(xs))):
-        future_y = finite_float(ys[index])
-        future_x = finite_float(xs[index])
-        if future_y is None or future_x is None or future_x - RADAR_TO_CAMERA_M > 75.0:
-            continue
-        if abs(future_y) < 0.70 or abs(future_y) < abs(y0) - 0.55:
-            return True
-    return False
 
 
 def lane_offset_from_y(y_m: float | None, center_m: float, lane_width_m: float) -> float | None:
