@@ -57,6 +57,7 @@ void main() {
 CONNECTION_RETRY_SECONDS = 0.5
 FRAME_POLL_SECONDS = 0.1
 FRAME_STALE_SECONDS = 1.2
+EGL_IMPORT_FAILURE_LIMIT = 3
 
 
 class LiveRoadCamera:
@@ -82,6 +83,7 @@ class LiveRoadCamera:
         self._last_frame_at = 0.0
         self._connection_wait_logged = False
         self._texture_needs_update = False
+        self._egl_import_failures = 0
         self._egl_images: dict[int, object] = {}
         fragment_shader = EXTERNAL_FRAGMENT_SHADER if self._zero_copy else NV12_FRAGMENT_SHADER
         self._shader = rl.load_shader_from_memory(VERTEX_SHADER, fragment_shader)
@@ -178,6 +180,21 @@ class LiveRoadCamera:
         self._texture_uv = None
         self._texture_shape = None
 
+    def _fallback_to_copy(self) -> None:
+        if not self._zero_copy:
+            return
+        self._destroy_egl_images()
+        if self._texture is not None and self._texture.id:
+            rl.unload_texture(self._texture)
+        if self._shader is not None and self._shader.id:
+            rl.unload_shader(self._shader)
+        self._zero_copy = False
+        self._texture = None
+        self._shader = rl.load_shader_from_memory(VERTEX_SHADER, NV12_FRAGMENT_SHADER)
+        self._texture_uv_location = rl.get_shader_location(self._shader, "texture1")
+        self._texture_needs_update = True
+        print("Cluster road camera EGL import failed; falling back to NV12 GPU upload", flush=True)
+
     def _draw_zero_copy(self, source: "rl.Rectangle", destination: "rl.Rectangle") -> bool:
         from openpilot.system.ui.lib.egl import bind_egl_image_to_texture, create_egl_image
 
@@ -195,8 +212,13 @@ class LiveRoadCamera:
                 self._frame.uv_offset,
             )
             if egl_image is None:
+                self._egl_import_failures += 1
+                if self._egl_import_failures >= EGL_IMPORT_FAILURE_LIMIT:
+                    self._fallback_to_copy()
+                    return self._draw_copy(source, destination)
                 return False
             self._egl_images[frame_index] = egl_image
+            self._egl_import_failures = 0
 
         self._texture.width = self._frame.width
         self._texture.height = self._frame.height
@@ -277,4 +299,5 @@ class LiveRoadCamera:
         self._frame = None
         self._connected_at = 0.0
         self._last_frame_at = 0.0
+        self._egl_import_failures = 0
         self._client = None

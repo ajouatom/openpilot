@@ -275,6 +275,8 @@ class OpenpilotLiveSource:
         return self.last_state
 
     def _with_live_hud_state(self, state: ClusterUiState) -> ClusterUiState:
+        device_state = self._service_data("deviceState")
+        onroad = self._service_alive("deviceState") and bool(safe_get(device_state, "started", False))
         car_state = self._service_data("carState")
         fuel_gauge = safe_optional_float(car_state, "fuelGauge")
         if fuel_gauge is None or not 0.0 < fuel_gauge <= 1.0:
@@ -358,6 +360,7 @@ class OpenpilotLiveSource:
 
         return replace(
             state,
+            onroad=onroad,
             external_nav_active=external_nav_active,
             steering_output=steering_output,
             steering_output_normalized=steering_output_normalized,
