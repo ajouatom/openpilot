@@ -511,16 +511,20 @@ def camera_overlay_vehicle_coin_colors(
         return CORNER_RADAR_COIN_CUTIN_FILL, CORNER_RADAR_COIN_CUTIN_SIDE, CORNER_RADAR_COIN_CUTIN_RING
     if selected:
         return CORNER_RADAR_COIN_SELECTED_FILL, CORNER_RADAR_COIN_SELECTED_SIDE, CORNER_RADAR_COIN_SELECTED_RING
-    if (
-        vehicle.absolute_speed_kph is not None
-        and abs(vehicle.absolute_speed_kph) <= CORNER_RADAR_COIN_STOPPED_MAX_SPEED_KPH
-    ):
+    if camera_overlay_vehicle_is_stopped(vehicle):
         return CORNER_RADAR_COIN_STOPPED_FILL, CORNER_RADAR_COIN_STOPPED_SIDE, CORNER_RADAR_COIN_STOPPED_RING
     if vehicle.absolute_speed_kph is not None and vehicle.absolute_speed_kph < 0.0:
         return RED, (116, 28, 32), RED
     if vehicle.relative_speed_mps is not None and vehicle.relative_speed_mps < 0.0:
         return CORNER_RADAR_COIN_SLOWER_FILL, CORNER_RADAR_COIN_SLOWER_SIDE, CORNER_RADAR_COIN_SLOWER_RING
     return CORNER_RADAR_COIN_FILL, CORNER_RADAR_COIN_SIDE, CORNER_RADAR_COIN_RING
+
+
+def camera_overlay_vehicle_is_stopped(vehicle: VehicleBox) -> bool:
+    return (
+        vehicle.absolute_speed_kph is not None
+        and abs(vehicle.absolute_speed_kph) <= CORNER_RADAR_COIN_STOPPED_MAX_SPEED_KPH
+    )
 
 
 def vehicle_metric_color(vehicle: VehicleBox, theme: ClusterTheme, source_color_mode: int) -> tuple[int, int, int]:
@@ -1407,13 +1411,14 @@ class ClusterUiRenderer:
 
     def _vehicle_overlay_label(self, vehicle: VehicleBox, radar_info_mode: int) -> str:
         parts: list[str] = []
+        stopped = camera_overlay_vehicle_is_stopped(vehicle)
         if vehicle.label and (vehicle.primary or vehicle.cut_in):
             label = vehicle.label.upper()
             if not (label.startswith("L1") or label.startswith("L2") or "CUT-IN" in label):
                 parts.append(vehicle.label)
-        if radar_info_shows_distance(radar_info_mode) and vehicle.longitudinal_m is not None:
+        if (stopped or radar_info_shows_distance(radar_info_mode)) and vehicle.longitudinal_m is not None:
             parts.append(f"{vehicle.longitudinal_m:.0f} m")
-        if radar_info_shows_speed(radar_info_mode) and vehicle.absolute_speed_kph is not None:
+        if not stopped and radar_info_shows_speed(radar_info_mode) and vehicle.absolute_speed_kph is not None:
             parts.append(f"{vehicle.absolute_speed_kph:.0f} km/h")
         return " ".join(parts)
 
