@@ -11,6 +11,9 @@ from opendbc.car.volkswagen.values import DBC, VolkswagenFlags
 RADAR_ADDR = 0x24F
 NO_OBJECT = 0
 LANE_TYPES = ("Same_Lane", "Left_Lane", "Right_Lane")
+RADAR_DT = 0.04           # Strukturen_01 25Hz
+YV_FILTER_ALPHA = 0.25    # 횡속도 저역필터 (프레임 노이즈 억제)
+YV_MAX = 6.0              # m/s, 비현실적 횡속도 클램프
 SIGNAL_SETS = tuple(
   (
     f"{prefix}_ObjectID",
@@ -41,6 +44,9 @@ class RadarInterface(RadarInterfaceBase):
     self._track_id_counter = 0
     self.radar_off_can = CP.radarUnavailable
     self.rcp = get_radar_can_parser(CP)
+    # 횡속도(yvRel) 산출: 레이더가 횡속도를 직접 안 주므로 yRel 미분+저역필터로 생성.
+    # radard의 끼어들기 선승격 판정(yvRel 기반 미래 횡위치 예측)에 필요.
+    self._yv_state: dict[int, tuple[float, float]] = {}  # obj_id -> (prev_yRel, yv_filtered)
 
   def update(self, can_strings):
     if self.radar_off_can or self.rcp is None:
@@ -111,11 +117,21 @@ class RadarInterface(RadarInterfaceBase):
       # 모든 레이더 객체가 "정지차"로 잡혀 급제동·출발막힘이 났음. carrot radard/현대RI와 동일하게 설정.
       pt.vLead = self.v_ego + v_rel
       pt.aRel = math.nan
-      pt.yvRel = math.nan
+      # 횡속도: yRel 미분 + 저역필터 (첫 프레임 0). ID 재사용 점프는 클램프+필터로 완충.
+      prev = self._yv_state.get(obj_id)
+      if prev is None:
+        yv = 0.0
+      else:
+        raw = (y_rel - prev[0]) / RADAR_DT
+        raw = max(-YV_MAX, min(YV_MAX, raw))
+        yv = prev[1] + YV_FILTER_ALPHA * (raw - prev[1])
+      self._yv_state[obj_id] = (y_rel, yv)
+      pt.yvRel = yv
 
     inactive_ids = self.pts.keys() - active_objects.keys()
     for obj_id in inactive_ids:
       self.pts.pop(obj_id, None)
+      self._yv_state.pop(obj_id, None)
 
 
     ret.points = list(self.pts.values())

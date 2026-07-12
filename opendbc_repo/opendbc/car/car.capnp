@@ -467,8 +467,9 @@ struct CarControl {
     modelDesire @16: Int16;
     atcDistance @17: Float32;
     naviSpeedLimit @18: Int16;  # VW MEB cluster: TMAP 단속카메라/구간단속 제한속도 (kph, 0=없음) -> ACC_Tempolimit + event 5
-    naviEventType @19: Int16;   # VW MEB cluster: 0=없음 1=커브(event 6) 2=교차로 회전(event 9) 3=분기/고속도로 출구(event 11)
-    naviEventSpeed @20: Int16;  # VW MEB cluster: 커브/교차로 목표속도 (kph) -> ACC_Event_Wunschgeschw
+    naviEventType @19: Int16;   # VW MEB cluster: 0=없음 1=커브 2=교차로 3=분기/출구 4=로터리 5=병목 8=도로제한제어중
+    naviEventSpeed @20: Int16;  # VW MEB cluster: 목표속도 kph (커브는 부호=방향: +우/-좌) -> ACC_Event_Wunschgeschw
+    leadLimiting @21: Bool;     # VW MEB cluster: 앞차가 속도를 제한 중(xState lead) -> 앞차 하이라이트 우선
 
     # not used with the dash, TODO: separate structs for dash UI and device UI
     audibleAlert @5: AudibleAlert;
