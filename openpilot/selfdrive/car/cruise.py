@@ -152,6 +152,8 @@ class VCruiseCarrot:
     self.frame = 0
     self.params_memory = Params("/dev/shm/params")
     self.params = Params()
+    from openpilot.selfdrive.controls.lib.drive_helpers import is_volkswagen_meb
+    self.is_vw_meb = is_volkswagen_meb(CP)
     self.v_cruise_kph = 20 #V_CRUISE_UNSET
     self.v_cruise_cluster_kph = 20 #V_CRUISE_UNSET
     self.v_cruise_kph_last = 20
@@ -291,6 +293,15 @@ class VCruiseCarrot:
     self._add_log("")
     self.update_params(is_metric)
     self.frame += 1
+    # MEB(ID.4): SET/RESUME으로 (재)인게이지하면 상시조향도 복구.
+    # TA 버튼 등으로 조향만 꺼진 뒤 SET 재인게이지 시 롱컨만 살고 조향이 죽는 문제 방지
+    # (가감속 버튼 핸들러는 이미 _lat_enabled를 켜지만 setCruise는 핸들러가 없음).
+    if self.is_vw_meb and not self._lat_enabled:
+      for be in CS.buttonEvents:
+        if be.pressed and be.type in (ButtonType.setCruise, ButtonType.resumeCruise):
+          self._lat_enabled = True
+          self._add_log("Lateral enabled (set/resume engage)")
+          break
     if CS.gearShifter != GearShifter.drive:
       self.autoCruiseControl_cancel_timer = 20 * 100  # 20 sec
     else:

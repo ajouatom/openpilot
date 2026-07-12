@@ -204,11 +204,16 @@ class CarState(CarStateBase):
     # HCA 상태 (QFK_01) - vw_meb.dbc는 소문자 값 정의, update_hca_state는 대문자 비교 → 변환
     hca_status_raw = self.CCP.hca_status_values.get(pt_cp.vl["QFK_01"]["LatCon_HCA_Status"])
     hca_status = hca_status_raw.upper() if hca_status_raw else hca_status_raw
-    drive_mode = pt_cp.vl["Getriebe_11"]["GE_Fahrstufe"] != 0  # 0 = Park/Neutral
+    # GEN2(2024+): Getriebe_11이 PT버스에 안 옴 -> Gateway_73에서 기어 읽기 (infiniteCable2 동일, 실차 rlog 확인)
+    if self.CP.flags & VolkswagenFlags.MEB_GEN2:
+      gear_raw = pt_cp.vl["Gateway_73"]["GE_Fahrstufe"]
+    else:
+      gear_raw = pt_cp.vl["Getriebe_11"]["GE_Fahrstufe"]
+    drive_mode = gear_raw != 0  # 0 = Park/Neutral
     ret.steerFaultTemporary, ret.steerFaultPermanent = self.update_hca_state_meb(hca_status, drive_mode=drive_mode)
 
     # 기어
-    ret.gearShifter = self.parse_gear_shifter(self.CCP.shifter_values.get(pt_cp.vl["Getriebe_11"]["GE_Fahrstufe"], None))
+    ret.gearShifter = self.parse_gear_shifter(self.CCP.shifter_values.get(gear_raw, None))
 
     # 가속/브레이크 페달
     ret.gasPressed   = pt_cp.vl["Motor_51"]["Accel_Pedal_Pressure"] > 0
@@ -230,12 +235,18 @@ class CarState(CarStateBase):
     # 안전벨트
     ret.seatbeltUnlatched = pt_cp.vl["Airbag_02"]["AB_Gurtschloss_FA"] != 3
 
-    # BSM (블라인드 스팟) - 당근파일럿 vw_meb.dbc는 Left/Right 신호명 사용
+    # BSM (블라인드 스팟) - MK1: ext 버스 + Left/Right 신호명 / GEN2(2024+): PT 버스 + Driver/Passenger 신호명 (LHD 기준)
     if self.CP.enableBsm:
-      ret.leftBlindspot  = bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Left"]) or \
-                           bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Left"])
-      ret.rightBlindspot = bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Right"]) or \
-                           bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Right"])
+      if self.CP.flags & VolkswagenFlags.MEB_GEN2:
+        ret.leftBlindspot  = bool(pt_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Driver"]) or \
+                             bool(pt_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Driver"])
+        ret.rightBlindspot = bool(pt_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Passenger"]) or \
+                             bool(pt_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Passenger"])
+      else:
+        ret.leftBlindspot  = bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Left"]) or \
+                             bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Left"])
+        ret.rightBlindspot = bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Right"]) or \
+                             bool(ext_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Right"])
 
     # LDW HUD 스톡 값 (LDW_02 → create_lka_hud_control 사용)
     self.ldw_stock_values = cam_cp.vl["LDW_02"]
@@ -458,28 +469,38 @@ class CarState(CarStateBase):
       ("GRA_ACC_01", 33),   # From Gateway (ACC 버튼)
       ("Gateway_72", 10),   # From Gateway (도어)
       ("Airbag_02", 5),     # From 에어백 모듈 (안전벨트)
-      ("Getriebe_11", 50),  # From 변속기 (기어)
       ("ESP_21", 50),       # From ESC (ESP 상태)
       ("Blinkmodi_02", 1),  # From BCM (방향지시등)
       ("SMLS_01", 1),       # From 스탈크 컨트롤
     ]
 
+    # GEN2(2024+, ID.4 MK2): 기어는 Gateway_73으로 오고, 일부 메시지 주기가 낮음 (실차 rlog 실측)
+    gen2 = bool(CP.flags & VolkswagenFlags.MEB_GEN2)
+    if gen2:
+      pt_messages += [("Gateway_73", 10)]   # 기어 (GE_Fahrstufe)
+    else:
+      pt_messages += [("Getriebe_11", 50)]  # 기어
+
     if CP.flags & VolkswagenFlags.STOCK_KLR_PRESENT:
-      pt_messages += [("KLR_01", 50)]  # 정전식 핸들 터치 (EA 핸즈온)
+      pt_messages += [("KLR_01", 10 if gen2 else 50)]  # 정전식 핸들 터치 (EA 핸즈온, GEN2 실측 ~16Hz)
 
     cam_messages = [
-      ("TA_01", 50),  # Travel Assist 상태 (버튼 LED/핸들 아이콘 게이트 = Travel_Assist_Available)
+      ("TA_01", 10 if gen2 else 50),  # Travel Assist 상태 (GEN2 실측 10Hz)
     ]
 
     if CP.flags & VolkswagenFlags.STOCK_EA_PRESENT:
-      cam_messages += [("EA_01", 10), ("EA_02", 10)]  # Emergency Assist HUD (핸들 아이콘 중계)
+      cam_messages += [("EA_01", 2 if gen2 else 10), ("EA_02", 2 if gen2 else 10)]  # EA HUD (GEN2 실측 2Hz)
 
     if CP.networkLocation == NetworkLocation.gateway:
       cam_messages += [
-        ("MEB_ACC_01", 50),   # From 레이더 (ACC 설정속도 = ACC_Wunschgeschw_02)
+        ("MEB_ACC_01", 10 if gen2 else 50),   # From 레이더 (ACC 설정속도, GEN2 실측 ~16Hz)
       ]
       if CP.enableBsm:
-        cam_messages += [("MEB_Side_Assist_01", 10)]
+        # GEN2(2024+)는 BSM이 PT 버스로 옴 (infiniteCable2 동일)
+        if CP.flags & VolkswagenFlags.MEB_GEN2:
+          pt_messages += [("MEB_Side_Assist_01", 10)]
+        else:
+          cam_messages += [("MEB_Side_Assist_01", 10)]
     else:
       pt_messages += [
         ("MEB_ACC_01", 50),

@@ -298,23 +298,33 @@ class Controls:
       if carrot_man.xSpdType >= 0 and carrot_man.xSpdType != 22 and carrot_man.xSpdLimit > 0:
         navi_speed_limit = int(carrot_man.xSpdLimit)
       hudControl.naviSpeedLimit = navi_speed_limit
-      # 커브(비전 커브속도) / 교차로 회전 / 분기·출구 (ATC 활성 상태에서만)
+      # 커브 / 교차로 / 분기·출구 / 로터리 / 병목 / 정체 (실차 스캔으로 확정된 이벤트 지도 기반)
       navi_event_type = 0
       navi_event_speed = 0
       v_ego_kph = CS.vEgo * CV.MS_TO_KPH
       vturn_kph = abs(carrot_man.vTurnSpeed)
       atc_type = carrot_man.atcType
+      if self.sm.frame % 100 == 0:  # 1Hz로만 파라미터 IO (100Hz 루프 보호)
+        self.atc_turn_speed = self.params.get_int("AutoTurnControlSpeedTurn")
       if 0 < vturn_kph < 120 and vturn_kph < v_ego_kph - 3:  # 커브 감속이 실제로 작동 중일 때만
         navi_event_type = 1
-        navi_event_speed = int(vturn_kph)
+        navi_event_speed = int(carrot_man.vTurnSpeed)  # 부호 유지 (양수=우커브, 음수=좌커브 - 실주행 검증)
       elif atc_type in ("turn left", "turn right", "atc left", "atc right"):  # 교차로 좌/우회전 (prepare 제외)
         navi_event_type = 2
-        if self.sm.frame % 100 == 0:  # 1Hz로만 파라미터 IO (100Hz 루프 보호)
-          self.atc_turn_speed = self.params.get_int("AutoTurnControlSpeedTurn")
         navi_event_speed = int(self.atc_turn_speed)
       elif atc_type in ("fork left", "fork right") and carrot_man.nRoadLimitSpeed > 0:  # 분기/고속도로 출구
         navi_event_type = 3
         navi_event_speed = int(carrot_man.nRoadLimitSpeed)
+      elif carrot_man.xTurnInfo == 5 and 0 < carrot_man.xDistToTurn < 500:  # 로터리 (TBT 131~142, 500m 이내)
+        navi_event_type = 4
+        navi_event_speed = int(self.atc_turn_speed)
+      elif carrot_man.szSdiDescr in ("병목지점", "Bottleneck point", "瓶颈路段"):  # 티맵 SDI 50 (경보 범위 내 수신)
+        navi_event_type = 5
+      elif carrot_man.desiredSource == "road" and 0 < carrot_man.desiredSpeed < 200:
+        navi_event_type = 8  # 도로제한속도 자동속도 제어 중 (제한값 변경 시 "인식됨" 배너 -> km/h 아이콘)
+        navi_event_speed = int(carrot_man.nRoadLimitSpeed)
+      # 앞차가 실제로 속도를 제한 중(MPC lead 모드)이면 계기판 앞차 하이라이트 우선 (km/h 아이콘 양보)
+      hudControl.leadLimiting = bool(hudControl.leadVisible and self.sm['longitudinalPlan'].xState == 0)  # XState.lead
       hudControl.naviEventType = navi_event_type
       hudControl.naviEventSpeed = navi_event_speed
 
