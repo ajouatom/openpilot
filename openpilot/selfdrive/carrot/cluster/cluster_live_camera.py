@@ -77,6 +77,7 @@ class LiveRoadCamera:
         self._client = self._new_client()
         self._frame = None
         self._last_connection_attempt = 0.0
+        self._connected_at = 0.0
         self._last_frame_poll = 0.0
         self._last_frame_at = 0.0
         self._connection_wait_logged = False
@@ -102,6 +103,7 @@ class LiveRoadCamera:
 
     def _reset_connection(self) -> None:
         self._frame = None
+        self._connected_at = 0.0
         self._last_frame_at = 0.0
         self._texture_needs_update = False
         self._destroy_egl_images()
@@ -111,6 +113,8 @@ class LiveRoadCamera:
 
     def _ensure_connection(self, now: float) -> bool:
         if self._client.is_connected():
+            if self._connected_at <= 0.0:
+                self._connected_at = now
             return True
         self._frame = None
         if now - self._last_connection_attempt < CONNECTION_RETRY_SECONDS:
@@ -118,6 +122,7 @@ class LiveRoadCamera:
         self._last_connection_attempt = now
         connected = bool(self._client.connect(False) and self._client.num_buffers)
         if connected:
+            self._connected_at = now
             print(
                 f"Cluster road camera connected: {self._client.width}x{self._client.height} "
                 f"{'EGL zero-copy' if self._zero_copy else 'NV12 GPU upload'}",
@@ -140,7 +145,10 @@ class LiveRoadCamera:
             self._texture_needs_update = True
         elif not self._client.is_connected():
             self._reset_connection()
-        elif self._last_frame_at > 0.0 and now - self._last_frame_at > FRAME_STALE_SECONDS:
+        elif (
+            self._connected_at > 0.0
+            and now - max(self._connected_at, self._last_frame_at) > FRAME_STALE_SECONDS
+        ):
             print("Cluster road camera stream stale; reconnecting VisionIPC", flush=True)
             self._reset_connection()
 
@@ -267,4 +275,6 @@ class LiveRoadCamera:
             rl.unload_shader(self._shader)
         self._shader = None
         self._frame = None
+        self._connected_at = 0.0
+        self._last_frame_at = 0.0
         self._client = None
