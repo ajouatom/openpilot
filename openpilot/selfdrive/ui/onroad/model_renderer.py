@@ -463,7 +463,7 @@ class ModelRenderer(Widget):
   def _init_carrot(self):
     self._carrot_show_lane_info = 1
     self._carrot_show_radar_info = 0
-    self._carrot_radar_lat_factor = 1.0
+    self._carrot_radar_lat_factor = 0.5
 
     self._carrot_show_path_mode_normal = 13
     self._carrot_show_path_color_normal = 14
@@ -532,7 +532,7 @@ class ModelRenderer(Widget):
   def _refresh_carrot_params(self):
     self._carrot_show_lane_info = ui_state.params.get_int("ShowLaneInfo")
     self._carrot_show_radar_info = ui_state.params.get_int("ShowRadarInfo")
-    self._carrot_radar_lat_factor = ui_state.params.get_float("RadarLatFactor") / 100.0
+    self._carrot_radar_lat_factor = 0.5
 
     self._carrot_show_path_mode_normal = ui_state.params.get_int("ShowPathMode")
     self._carrot_show_path_color_normal = ui_state.params.get_int("ShowPathColor")

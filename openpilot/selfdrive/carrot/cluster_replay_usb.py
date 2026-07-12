@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -76,6 +77,8 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--max-segments", type=int, default=None, help="Maximum number of route segments to replay")
     parser.add_argument("--loop", action="store_true", help="Loop the replay")
     parser.add_argument("--route-overlay", choices=("off", "compact", "full"), default="compact", help="Replay camera/data overlay on the PC window")
+    parser.add_argument("--show-recorded-cutins", action="store_true", help="Show cut-in decisions stored in the original radarState")
+    parser.add_argument("--cutin-sensitivity", type=float, default=50.0, help="Sensitivity used by the offline current-code cut-in evaluator")
     parser.add_argument("--camera-view-mode", type=int, choices=(0, 1, 2), default=2, help="Cluster camera view mode (default: 2, road camera background)")
     parser.add_argument("--usb-brightness", type=int, default=None, help="Manual USB display brightness 0-100")
     parser.add_argument("--profile-render", action="store_true", help="Print render/USB timing profile")
@@ -85,6 +88,11 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
 
 def main() -> None:
     args, passthrough = parse_args(sys.argv[1:])
+    if args.show_recorded_cutins:
+        os.environ["CLUSTER_ROUTE_SHOW_RECORDED_CUTINS"] = "1"
+    else:
+        os.environ.pop("CLUSTER_ROUTE_SHOW_RECORDED_CUTINS", None)
+    os.environ["CLUSTER_ROUTE_CUTIN_SENSITIVITY"] = str(max(0.0, min(100.0, args.cutin_sensitivity)))
     sys.argv = [sys.argv[0], *build_cluster_args(args, passthrough)]
 
     repo_root_text = str(REPO_ROOT)

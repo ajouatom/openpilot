@@ -128,6 +128,7 @@ class SelfdriveD:
     self.personality = self.read_personality_param()
     self.recalibrating_seen = False
     self.dm_lockout_set = False
+    self.cutin_audio_active = False
     self.dm_uncertain_alerted = False
     self.state_machine = StateMachine()
     self.rk = Ratekeeper(100, print_delay_threshold=None)
@@ -191,6 +192,11 @@ class SelfdriveD:
     # Don't add any more events while in dashcam mode
     if self.CP.passive:
       return
+
+    cutin_active = self.enabled and self.sm.valid['radarState'] and len(self.sm['radarState'].leadsCutIn) > 0
+    if cutin_active and not self.cutin_audio_active:
+      self.events.add(EventName.audioPrompt)
+    self.cutin_audio_active = cutin_active
 
     # Block resume if cruise never previously enabled
     resume_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)

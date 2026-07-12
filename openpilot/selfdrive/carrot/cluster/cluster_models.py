@@ -59,6 +59,7 @@ class RouteOverlay:
     video_frame_id: str | None = None
     video_status: str | None = None
     panel_visible: bool = True
+    cutin_status: str | None = None
     data_lines: tuple[str, ...] = ()
 
 

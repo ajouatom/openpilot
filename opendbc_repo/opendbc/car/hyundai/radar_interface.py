@@ -155,16 +155,19 @@ class RadarInterface(RadarInterfaceBase):
 
     self.pts[SCC_TID] = structs.RadarData.RadarPoint()
     self.pts[SCC_TID].trackId = SCC_TID
+    self.pts[SCC_TID].radarSource = structs.RadarData.RadarPoint.RadarSource.scc
     for slot in range(CORNER_OBJECT_235_MSG_COUNT):
       t_id = CORNER_OBJECT_235_TRACK_ID_OFFSET + slot
       self.pts[t_id] = structs.RadarData.RadarPoint()
       self.pts[t_id].measured = False
       self.pts[t_id].trackId = t_id
+      self.pts[t_id].radarSource = structs.RadarData.RadarPoint.RadarSource.corner235
     for slot in range(CORNER_OBJECT_180_MSG_COUNT * CORNER_OBJECT_180_SLOTS_PER_MSG):
       t_id = CORNER_OBJECT_180_TRACK_ID_OFFSET + slot
       self.pts[t_id] = structs.RadarData.RadarPoint()
       self.pts[t_id].measured = False
       self.pts[t_id].trackId = t_id
+      self.pts[t_id].radarSource = structs.RadarData.RadarPoint.RadarSource.corner180
 
     self.frame = 0
 

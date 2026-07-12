@@ -369,6 +369,14 @@ struct RadarData @0x888ad6581cf0aacb {
     vLead @7 :Float32; # m/s
     aLead @8 :Float32; # m/s^2
     jLead @9 :Float32; # m/s^3
+    radarSource @10 :RadarSource;
+
+    enum RadarSource {
+      frontRadar @0;
+      scc @1;
+      corner235 @2;
+      corner180 @3;
+    }
   }
 
   enum ErrorDEPRECATED {
