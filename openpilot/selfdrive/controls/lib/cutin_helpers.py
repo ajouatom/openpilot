@@ -24,6 +24,7 @@ CUTIN_ASSUMED_VEHICLE_HALF_WIDTH = 0.9
 CUTIN_FAST_MAX_LANE_BOUNDARY_TTC_S = 0.55
 CUTIN_FAST_NEAR_MAX_LANE_BOUNDARY_TTC_S = 0.7
 CUTIN_FAST_MIN_RADAR_INWARD_SPEED = 0.2
+CUTIN_FAST_MAX_PULL_AWAY_VREL_MPS = 3.0
 CUTIN_PROJECTED_BOOST_MIN_TEMPORAL_INWARD_SPEED = 0.3
 FRONT_CUTIN_MIN_DREL_M = 5.0
 FRONT_CUTIN_MAX_DREL_M = 50.0
@@ -83,6 +84,7 @@ def is_fast_cutin_entry(
   lane_half_width: float,
   inward_speed: float,
   radar_inward_speed: float = 0.0,
+  v_rel: float = 0.0,
 ) -> bool:
   time_gap = d_rel / max(v_ego, 1.0)
   urgent_distance = d_rel < CUTIN_FAST_CONFIRM_MAX_DREL or (v_ego > 5.0 and time_gap < CUTIN_FAST_CONFIRM_MAX_TIME_GAP_S)
@@ -95,6 +97,7 @@ def is_fast_cutin_entry(
     not urgent_distance
     or inward_speed < min_inward_speed
     or radar_inward_speed < CUTIN_FAST_MIN_RADAR_INWARD_SPEED
+    or v_rel > CUTIN_FAST_MAX_PULL_AWAY_VREL_MPS
   ):
     return False
   edge_distance = max(0.0, abs(d_path) - lane_half_width - CUTIN_ASSUMED_VEHICLE_HALF_WIDTH)

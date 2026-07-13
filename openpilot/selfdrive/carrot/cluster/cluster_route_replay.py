@@ -2252,6 +2252,7 @@ class RouteLogParser:
                     lane_half_width,
                     track.inward_speed,
                     max(0.0, -math.copysign(1.0, track.y_rel) * track.yv_rel),
+                    v_rel=track.v_rel,
                 ),
             ) or "enter"
             entering = track.rejection_reason == "enter"
