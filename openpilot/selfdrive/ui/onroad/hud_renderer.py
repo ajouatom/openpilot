@@ -15,6 +15,10 @@ from openpilot.system.ui.widgets import Widget
 SET_SPEED_NA = 255
 KM_TO_MILE = 0.621371
 CRUISE_DISABLED_CHAR = '–'
+CRUISE_SPEED_ANIMATION_START = 120
+CRUISE_SPEED_ANIMATION_MAX = 100
+CRUISE_SPEED_ANIMATION_STEP = 12
+CRUISE_SPEED_ANIMATION_START_SIZE = 300
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,7 @@ class Colors:
   BORDER_TRANSLUCENT = rl.Color(255, 255, 255, 75)
   HEADER_GRADIENT_START = rl.Color(0, 0, 0, 114)
   HEADER_GRADIENT_END = rl.BLANK
+  CARROT_GREEN = rl.Color(0, 203, 0, 255)
 
 
 UI_CONFIG = UIConfig()
@@ -149,6 +154,11 @@ class HudRenderer(Widget):
     self._debug_speed_panel = False
     self._engaged = False
 
+    # c3-wip cruise-speed animation: center popup -> left Carrot HUD target.
+    self._cruise_speed_text_last = ""
+    self._cruise_speed_animation_text = ""
+    self._cruise_speed_animation_time = -1
+
     self._blink_timer = 0
     self._disp_timer = 0
 
@@ -215,6 +225,7 @@ class HudRenderer(Widget):
     self._plot_renderer.draw(rect, self._font_display)
     self._draw_date_time(rect)
     self._draw_tpms_top_right(rect)
+    self._draw_cruise_speed_animation(rect)
 
   def user_interacting(self) -> bool:
     return self._exp_button.is_pressed
@@ -532,8 +543,10 @@ class HudRenderer(Widget):
     else:
       cruise_text = "--"
 
+    self._update_cruise_speed_animation(cruise_text)
+
     draw_text_ui_style(
-      cruise_text, bx + 170, by + 15 + 5, 60, rl.GREEN,
+      cruise_text, bx + 170, by + 15, 60, COLORS.CARROT_GREEN,
       font=self._font_display,
       border_width=1.0,
       shadow_offset=5.0,
@@ -573,6 +586,57 @@ class HudRenderer(Widget):
         shadow_offset=5.0,
         align="center_bottom",
       )
+
+  def _update_cruise_speed_animation(self, cruise_text: str) -> None:
+    if self._cruise_speed_text_last != cruise_text:
+      self._cruise_speed_text_last = cruise_text
+      if cruise_text == "--":
+        return
+      self._cruise_speed_animation_text = cruise_text
+      self._cruise_speed_animation_time = CRUISE_SPEED_ANIMATION_START
+
+  def _draw_cruise_speed_animation(self, rect: rl.Rectangle) -> None:
+    if self._cruise_speed_animation_time <= 0 or not self._cruise_speed_animation_text:
+      return
+
+    # c3-wip's integer state machine, tuned for a smaller and quicker BIG popup.
+    # At 20 Hz this renders for 10 frames and starts shrinking almost at once.
+    self._cruise_speed_animation_time -= CRUISE_SPEED_ANIMATION_STEP
+    animation_time = self._cruise_speed_animation_time
+    interpolation_time = min(animation_time, CRUISE_SPEED_ANIMATION_MAX)
+
+    start_x = rect.x + rect.width / 2.0
+    start_y = rect.y + rect.height - 400.0
+    target_x = rect.x + 140.0 + 170.0
+    target_y = rect.y + rect.height - 230.0 + 15.0
+    target_size = 60
+
+    x = int((start_x * interpolation_time + target_x * (CRUISE_SPEED_ANIMATION_MAX - interpolation_time)) /
+            CRUISE_SPEED_ANIMATION_MAX)
+    y = int((start_y * interpolation_time + target_y * (CRUISE_SPEED_ANIMATION_MAX - interpolation_time)) /
+            CRUISE_SPEED_ANIMATION_MAX)
+    font_size = int((CRUISE_SPEED_ANIMATION_START_SIZE * interpolation_time +
+                     target_size * (CRUISE_SPEED_ANIMATION_MAX - interpolation_time)) /
+                    CRUISE_SPEED_ANIMATION_MAX)
+
+    if animation_time >= CRUISE_SPEED_ANIMATION_MAX:
+      border_width = 9.0
+      shadow_offset = 8.0
+    else:
+      border_width = 3.0
+      shadow_offset = 0.0
+
+    draw_text_ui_style(
+      self._cruise_speed_animation_text,
+      x,
+      y,
+      font_size,
+      COLORS.CARROT_GREEN,
+      font=self._font_display,
+      border_width=border_width,
+      shadow_offset=shadow_offset,
+      align="center_bottom",
+    )
 
   def _draw_carrot_lower_status(self, bx: int, by: int):
     mode_text, mode_color = self._get_driving_mode_text_and_color()
