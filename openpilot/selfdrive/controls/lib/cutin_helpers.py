@@ -25,6 +25,11 @@ CUTIN_FAST_MAX_LANE_BOUNDARY_TTC_S = 0.55
 CUTIN_FAST_NEAR_MAX_LANE_BOUNDARY_TTC_S = 0.7
 CUTIN_FAST_MIN_RADAR_INWARD_SPEED = 0.2
 CUTIN_PROJECTED_BOOST_MIN_TEMPORAL_INWARD_SPEED = 0.3
+FRONT_CUTIN_MIN_DREL_M = 5.0
+FRONT_CUTIN_MAX_DREL_M = 12.0
+FRONT_CUTIN_MAX_ABS_YREL_M = 7.0
+FRONT_CUTIN_MAX_FRAME_Y_JUMP_M = 0.60
+FRONT_CUTIN_MIN_CONFIRM_S = 0.30
 
 
 def is_corner_track_id(track_id: int) -> bool:
@@ -33,6 +38,21 @@ def is_corner_track_id(track_id: int) -> bool:
 
 def is_corner_radar_source(source: Any) -> bool:
   return str(source) in CORNER_RADAR_SOURCES
+
+
+def is_front_radar_cutin_enabled(enable_radar_tracks: int, enable_corner_radar: int, car_brand: str) -> bool:
+  return car_brand == "hyundai" and enable_radar_tracks == 3 and enable_corner_radar != 2
+
+
+def is_front_radar_cutin_candidate(track_id: int, radar_source: str, d_rel: float, y_rel: float,
+                                   is_corner_radar: bool) -> bool:
+  return (
+    not is_corner_radar and
+    radar_source != "scc" and
+    track_id != 0 and
+    FRONT_CUTIN_MIN_DREL_M <= d_rel <= FRONT_CUTIN_MAX_DREL_M and
+    abs(y_rel) <= FRONT_CUTIN_MAX_ABS_YREL_M
+  )
 
 
 def cutin_confirmation_frames(base_frames: int, d_rel: float, inward_speed: float, v_ego: float = 0.0) -> int:

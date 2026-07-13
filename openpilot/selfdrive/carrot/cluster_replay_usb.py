@@ -78,6 +78,8 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--loop", action="store_true", help="Loop the replay")
     parser.add_argument("--route-overlay", choices=("off", "compact", "full"), default="compact", help="Replay camera/data overlay on the PC window")
     parser.add_argument("--show-recorded-cutins", action="store_true", help="Show cut-in decisions stored in the original radarState")
+    parser.add_argument("--front-radar-only", action="store_true", help="Ignore corner radar data and replay as a front-radar-only vehicle")
+    parser.add_argument("--cutin-radar-source", choices=("corner", "front"), default="corner", help="Radar tracks used by the offline current-code cut-in evaluator")
     parser.add_argument("--cutin-sensitivity", type=float, default=50.0, help="Sensitivity used by the offline current-code cut-in evaluator")
     parser.add_argument("--camera-view-mode", type=int, choices=(0, 1, 2), default=2, help="Cluster camera view mode (default: 2, road camera background)")
     parser.add_argument("--usb-brightness", type=int, default=None, help="Manual USB display brightness 0-100")
@@ -92,6 +94,11 @@ def main() -> None:
         os.environ["CLUSTER_ROUTE_SHOW_RECORDED_CUTINS"] = "1"
     else:
         os.environ.pop("CLUSTER_ROUTE_SHOW_RECORDED_CUTINS", None)
+    if args.front_radar_only:
+        os.environ["CLUSTER_ROUTE_FRONT_RADAR_ONLY"] = "1"
+    else:
+        os.environ.pop("CLUSTER_ROUTE_FRONT_RADAR_ONLY", None)
+    os.environ["CLUSTER_ROUTE_CUTIN_RADAR_SOURCE"] = args.cutin_radar_source
     os.environ["CLUSTER_ROUTE_CUTIN_SENSITIVITY"] = str(max(0.0, min(100.0, args.cutin_sensitivity)))
     sys.argv = [sys.argv[0], *build_cluster_args(args, passthrough)]
 
