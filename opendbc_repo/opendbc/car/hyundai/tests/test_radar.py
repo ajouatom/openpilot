@@ -1,11 +1,67 @@
+import math
+
 import pytest
 
 from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 import opendbc.car.hyundai.hyundaicanfd as hyundaicanfd
 import opendbc.car.hyundai.radar_interface as radar_interface_module
-from opendbc.car.hyundai.radar_interface import RADAR_MSG_COUNT3, RADAR_START_ADDR_CANFD3, RadarInterface
-from opendbc.car.hyundai.values import HyundaiExtFlags, HyundaiFlags
+from opendbc.car.hyundai.radar_interface import RADAR_MSG_COUNT3, RADAR_MSG_COUNT_DENSO, RADAR_START_ADDR_CANFD3, RadarInterface
+from opendbc.car.hyundai.values import CAR, HyundaiExtFlags, HyundaiFlags
+
+
+class TestDensoRadar:
+  @staticmethod
+  def parse(addr, dat):
+    name = f"RADAR_TRACK_{addr:x}"
+    parser = CANParser("hyundai_kia_denso_front_radar_generated", [(name, 20)], 1)
+    parser.update([0, [(addr, bytes.fromhex(dat), 1)]])
+    return parser.vl[name]
+
+  def test_active_track_signals(self):
+    # Person walking toward the parked car, left of the camera center.
+    track = self.parse(0x503, "bc047efcc1fe8b00")
+
+    assert track["LONG_DIST"] == pytest.approx(7.1875)
+    assert track["AZIMUTH"] == pytest.approx(-6.5)
+    assert track["REL_SPEED"] == pytest.approx(-0.734375)
+
+  def test_empty_track(self):
+    track = self.parse(0x520, "53fff80000000081")
+
+    assert track["LONG_DIST"] == pytest.approx(409.55)
+    assert track["AZIMUTH"] == 0
+    assert track["REL_SPEED"] == 0
+
+  def test_parser_selection_and_point_conversion(self, monkeypatch):
+    class FakeParams:
+      def get_int(self, key):
+        return 1 if key == "EnableRadarTracks" else 0
+
+    monkeypatch.setattr(radar_interface_module, "Params", FakeParams)
+    cp = structs.CarParams()
+    cp.carFingerprint = CAR.KIA_SORENTO
+    cp.flags = 0
+    cp.radarUnavailable = False
+    cp.safetyConfigs = [structs.CarParams.SafetyConfig()]
+
+    radar_interface = RadarInterface(cp)
+
+    assert radar_interface.denso_radar
+    assert radar_interface.radar_msg_count == RADAR_MSG_COUNT_DENSO
+    assert radar_interface.trigger_msg_tracks == 0x52C
+
+    active_dat = bytes.fromhex("bc047efcc1fe8b00")
+    empty_dat = bytes.fromhex("bcfff80000000081")
+    packets = [(addr, active_dat if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x52D)]
+    radar_data = radar_interface.update([0, packets])
+    point = next(point for point in radar_data.points if point.trackId == 35)
+
+    assert point.measured
+    assert point.dRel == pytest.approx(math.cos(math.radians(-6.5)) * 7.1875)
+    assert point.yRel == pytest.approx(-math.sin(math.radians(-6.5)) * 7.1875)
+    assert point.vRel == pytest.approx(-0.734375)
+    assert math.isnan(point.aRel)
 
 
 class TestRadarGroup3:

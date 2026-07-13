@@ -589,6 +589,7 @@ class CAR(Platforms):
       HyundaiCarDocs("Kia Sorento 2019", video="https://www.youtube.com/watch?v=Fkh3s6WHJz8", car_parts=CarParts.common([CarHarness.hyundai_e])),
     ],
     CarSpecs(mass=1985, wheelbase=2.78, steerRatio=14.4 * 1.1),  # 10% higher at the center seems reasonable
+    dbc_dict={Bus.pt: "hyundai_kia_generic", Bus.radar: "hyundai_kia_denso_front_radar_generated"},
     flags=HyundaiFlags.CHECKSUM_6B | HyundaiFlags.UNSUPPORTED_LONGITUDINAL,
   )
   KIA_SORENTO_4TH_GEN = HyundaiCanFDPlatformConfig(
