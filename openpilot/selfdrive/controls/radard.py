@@ -1100,6 +1100,7 @@ class RadarD:
         t.lane_half_width,
         t.dPath_inward_speed,
         max(0.0, -math.copysign(1.0, t.yRel) * t.yvLead),
+        v_rel=t.vRel,
       ),
     )
     return reason is None
