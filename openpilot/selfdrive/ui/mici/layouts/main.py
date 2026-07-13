@@ -161,6 +161,7 @@ class MiciMainLayout(Scroller):
     if ui_state.started:
       show_plot_mode = ui_state.params.get_int("ShowPlotMode")
       cluster_hud_connected = ui_state.params.get_bool("ClusterHudConnected")
+      self._onroad_layout.set_cluster_hud_connected(cluster_hud_connected)
       effective_plot_mode = 0 if cluster_hud_connected else show_plot_mode
       if effective_plot_mode != self._show_plot_mode:
         self._show_plot_mode = effective_plot_mode
