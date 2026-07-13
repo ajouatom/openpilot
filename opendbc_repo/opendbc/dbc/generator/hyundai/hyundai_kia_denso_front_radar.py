@@ -45,10 +45,10 @@ BS_:
 BU_: XXX
     """)
 
-    # Denso DNMWR006 radar used by the 2018-2019 Kia Sorento UM. Raw object
-    # tracks are published at 20 Hz in 45 slots. A range value of 0xfff8 is an
-    # empty slot; validity is derived in RadarInterface rather than the DBC.
-    for address in range(0x500, 0x52D):
+    # Denso DNMWR006 radar used by the 2018-2019 Kia Sorento UM. Eight tracked
+    # objects are published at 20 Hz from 0x500 through 0x507. Messages at
+    # 0x508 and above are distance-sorted raw detections, not stable tracks.
+    for address in range(0x500, 0x508):
       f.write(f"""
 BO_ {address} RADAR_TRACK_{address:x}: 8 RADAR
  SG_ COUNTER : 7|8@0+ (1,0) [0|255] "" XXX
@@ -57,5 +57,6 @@ BO_ {address} RADAR_TRACK_{address:x}: 8 RADAR
  SG_ OBJECT_FLAGS_1 : 36|5@0+ (1,0) [0|31] "" XXX
  SG_ OBJECT_FLAG_2 : 47|1@0+ (1,0) [0|1] "" XXX
  SG_ REL_SPEED : 46|12@0- (0.015625,0) [-32|31.984375] "m/s" XXX
- SG_ OBJECT_FLAGS_3 : 50|11@0+ (1,0) [0|2047] "" XXX
+ SG_ OBJECT_STATE : 50|3@0+ (1,0) [0|7] "" XXX
+ SG_ OBJECT_DETAIL : 63|8@0+ (1,0) [0|255] "" XXX
       """)

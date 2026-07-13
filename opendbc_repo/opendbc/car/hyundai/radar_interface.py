@@ -13,7 +13,7 @@ from openpilot.common.filter_simple import MyMovingAverage
 SCC_TID = 0
 RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 32
-RADAR_MSG_COUNT4 = 45
+RADAR_MSG_COUNT4 = 8
 RADAR_START_ADDR_CANFD1 = 0x210
 RADAR_MSG_COUNT1 = 16
 RADAR_START_ADDR_CANFD2 = 0x3A5 # Group 2, Group 1: 0x210 2媛쒖뵫?덉뼱???쇰떒 蹂대쪟.
@@ -275,8 +275,9 @@ class RadarInterface(RadarInterfaceBase):
         valid = msg['VALID_CNT'] > 10
       elif self.radar_group4:
         # DNMWR006 empty slots use the out-of-range raw distance 0xfff8
-        # (409.55 m). The useful detection range is about 205 m.
-        valid = 0.2 < msg['LONG_DIST'] < 205.0 and abs(msg['AZIMUTH']) <= 20.0
+        # (409.55 m). OBJECT_STATE 3 distinguishes tracked objects from the
+        # distance-sorted raw detections published at 0x508 and above.
+        valid = msg['OBJECT_STATE'] == 3 and 0.2 < msg['LONG_DIST'] < 205.0 and abs(msg['AZIMUTH']) <= 20.0
       else:
         valid = msg['STATE'] in (3, 4)
 
