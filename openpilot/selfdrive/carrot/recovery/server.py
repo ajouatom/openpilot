@@ -1,29 +1,95 @@
 #!/usr/bin/env python3
-"""Tiny recovery web server.
+"""Tiny recovery web server (standalone, standard-library only).
 
-This intentionally avoids importing openpilot modules. It is meant to keep a
-small Git/terminal surface available when the main web stack is broken.
+Goal: give the SAME terminal experience as the main Carrot web terminal, but
+from a SEPARATE recovery process that keeps working when the main web stack is
+broken.
+
+How the two goals are reconciled:
+  * Same experience  -> the recovery page reuses the *real* frontend assets
+    (tokens.css, terminal.css, xterm.js and the shared i18n / dialog / viewport
+    modules, plus pages/terminal.js) served straight from selfdrive/carrot/web,
+    and this server speaks the exact same `/ws/terminal_pty` protocol that
+    terminal.js already expects (meta / pty_output{b64,replay} / pty_resize /
+    pty_exit, and inbound input / raw / resize / control).
+  * Separate process -> no openpilot imports, standard library only, its own
+    port (6999) and its OWN persistent login-shell PTY, independent of the main
+    server's PTY_SESSION. Nothing here depends on the main aiohttp app running.
+
+The PTY core mirrors server/services/terminal_pty.py:PersistentPtySession, but
+is re-implemented on the standard library (that module is aiohttp-bound and
+lives inside the openpilot-importing web app, so it cannot be imported here).
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
+import mimetypes
 import os
+import platform
+import re
+import secrets
+import selectors
 import shlex
 import shutil
+import signal
+import socket
+import struct
 import subprocess
+import threading
+import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
+try:
+  import fcntl
+  import pty
+  import termios
+except Exception:  # non-POSIX (dev box); the terminal is POSIX-only.
+  fcntl = None
+  pty = None
+  termios = None
 
+
+# recovery/server.py -> carrot/recovery -> carrot -> selfdrive -> <repo root>
 REPO_ROOT = Path(__file__).resolve().parents[3]
+# carrot/web holds the real frontend assets we reuse verbatim.
+WEB_DIR = Path(__file__).resolve().parents[1] / "web"
+
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 6999
 TIMEOUT_SEC = 45
-TMUX_SESSION = "carrot-recovery"
-TMUX_CAPTURE_LINES = 1600
+
+# PTY geometry: same contract as the main terminal — columns are locked so every
+# client shares one wrap width; rows track each client's height (last setter
+# wins). See services/terminal_pty.py.
+PTY_FIXED_COLS = 100
+PTY_FIXED_ROWS = 30
+PTY_HISTORY_LIMIT = 512 * 1024
+TMUX_START_DIR = "/data/openpilot"
+
+WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+# Static assets the recovery page is allowed to serve out of carrot/web. This is
+# the exact subset the main index.html loads for the terminal, nothing more.
+STATIC_ROOTS = ("css/", "js/")
+STATIC_EXT_TYPES = {
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+}
 
 GIT_ACTIONS = {
   "git_pull",
@@ -38,803 +104,459 @@ GIT_ACTIONS = {
   "git_reboot",
 }
 
-HTML_PAGE = """<!doctype html>
-<html lang="ko">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Recovery</title>
-<style>
-:root {
-  --md-surface: #090c10;
-  --md-surface-cont: #11161d;
-  --md-surface-cont-h: #1b222c;
-  --md-surface-cont-hh: #262f3b;
-  --md-on-surface: #ffffff;
-  --md-on-surface-var: #eef2f8;
-  --md-outline: #cbd2de;
-  --md-outline-var: #7c8594;
-  --md-stroke-soft: #788191;
-  --md-stroke-strong: #aeb7c8;
-  --md-primary: #ffb06d;
-  --md-on-primary: #3a1800;
-  --md-primary-cont: #7b3e10;
-  --md-on-primary-cont: #fff0e2;
-  --md-error: #ff9d94;
-  --md-on-error: #690005;
-  --md-error-cont: #93000a;
-  --md-on-error-cont: #ffdad6;
-  --sp-xs: 4px;
-  --sp-sm: 8px;
-  --sp-md: 12px;
-  --sp-lg: 16px;
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
-  --r-pill: 999px;
-  --fs-body-sm: 14px;
-  --fs-body-md: 16px;
-  --fs-label-lg: 16px;
-  --fs-title-sm: 16px;
-  --shadow-2: 0 18px 44px rgba(0, 0, 0, 0.34);
-  --font-sans: "Roboto", system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, "Roboto Mono", SFMono-Regular, Menlo, monospace;
-  --vv-height: 100dvh;
-  --vv-top: 0px;
-}
-* { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; }
-body {
-  background: var(--md-surface);
-  color: var(--md-on-surface);
-  font-family: var(--font-sans);
-  font-size: var(--fs-body-sm);
-  line-height: 1.5;
-  -webkit-tap-highlight-color: transparent;
-  overflow: hidden;
-}
-.shell {
-  position: fixed;
-  left: 0;
-  right: 0;
-  top: var(--vv-top);
-  height: var(--vv-height);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-sm);
-  padding: max(var(--sp-md), env(safe-area-inset-top, 0px))
-           max(var(--sp-md), env(safe-area-inset-right, 0px))
-           max(var(--sp-sm), env(safe-area-inset-bottom, 0px))
-           max(var(--sp-md), env(safe-area-inset-left, 0px));
-}
-.head {
-  flex: 0 0 auto;
-  margin: 0;
-  padding: 2px 4px;
-  font-size: var(--fs-title-sm);
-  font-weight: 800;
-  color: var(--md-primary);
-  letter-spacing: 0.4px;
-}
-.menus {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--sp-sm);
-  position: relative;
-  z-index: 50;
-}
-.menu-wrap { position: relative; }
-.menu-trigger {
-  width: 100%;
-  min-width: 0;
-  min-height: 46px;
-  margin: 0;
-  padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
-  background: var(--md-surface-cont);
-  color: var(--md-on-surface);
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: var(--fs-label-lg);
-  font-weight: 750;
-  letter-spacing: 0.1px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  text-align: left;
-  line-height: 1.18;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
-}
-.menu-trigger:hover, .menu-trigger:focus-visible {
-  border-color: color-mix(in srgb, var(--md-primary) 36%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 92%, var(--md-primary));
-  outline: none;
-}
-.menu-trigger.is-open {
-  border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
-  color: var(--md-primary);
-}
-.menu-trigger__caret { font-size: 11px; opacity: 0.7; }
-.menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px;
-  background: color-mix(in srgb, var(--md-surface-cont) 96%, #000);
-  border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 92%, transparent);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-2);
-}
-.menu[hidden] { display: none; }
-.menu button {
-  text-align: left;
-  background: transparent;
-  color: var(--md-on-surface);
-  border: 0;
-  border-radius: var(--r-sm);
-  padding: 10px 12px;
-  font-family: inherit;
-  font-size: var(--fs-body-sm);
-  font-weight: 600;
-  cursor: pointer;
-  letter-spacing: 0.1px;
-}
-.menu button:hover {
-  background: var(--md-surface-cont-h);
-}
-.menu button.danger {
-  color: color-mix(in srgb, var(--md-error) 78%, var(--md-on-surface));
-}
-.menu button.danger:hover {
-  background: color-mix(in srgb, var(--md-error-cont) 18%, var(--md-surface-cont-h));
+# Tools-menu actions ported from the main web (server/features/tools/dispatcher.py),
+# limited to the ones that need no openpilot import.
+TOOL_ACTIONS = {
+  "rebuild_all",
+  "send_tmux_log",
+  "server_tmux_log",
 }
 
-.terminal-shell {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: color-mix(in srgb, var(--md-surface) 92%, #000);
-  border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 42%, transparent);
-  border-radius: var(--r-md);
-  overflow: hidden;
-}
-.terminal-screen {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding: var(--sp-md);
-}
-.terminal-output {
-  margin: 0;
-  background: transparent;
-  color: var(--md-on-surface);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.45;
-  white-space: pre;
-}
-.terminal-output__promptHost {
-  color: color-mix(in srgb, #67e27a 88%, #d7ffe0);
-  font-weight: 700;
-}
-.terminal-form {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--sp-sm);
-  align-items: center;
-  margin: var(--sp-sm);
-  padding-left: 14px;
-  border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 56%, transparent);
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
-  overflow: hidden;
-}
-.terminal-form:focus-within {
-  border-color: color-mix(in srgb, var(--md-stroke-strong) 76%, transparent);
-}
-.terminal-form__prompt {
-  color: var(--md-primary);
-  font-family: var(--font-mono);
-  font-size: var(--fs-body-sm);
-  font-weight: 700;
-}
-.terminal-form__input {
-  min-width: 0;
-  min-height: 44px;
-  padding: 10px 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--md-on-surface);
-  font-size: var(--fs-body-sm);
-  font-family: var(--font-mono);
-  line-height: 1.25;
-  outline: none;
-  appearance: none;
-}
-.smallBtn {
-  align-self: stretch;
-  padding: 0 16px;
-  border: 0;
-  border-left: 1px solid color-mix(in srgb, var(--md-stroke-soft) 44%, transparent);
-  border-radius: 0;
-  background: color-mix(in srgb, var(--md-primary) 16%, transparent);
-  color: var(--md-primary);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.smallBtn:hover {
-  background: color-mix(in srgb, var(--md-primary) 24%, transparent);
-}
-
-.modal-bg {
-  position: fixed;
-  inset: 0;
-  background: color-mix(in srgb, #000 56%, transparent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: var(--sp-lg);
-}
-.modal {
-  background: color-mix(in srgb, var(--md-surface-cont) 96%, #000);
-  border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 92%, transparent);
-  border-radius: var(--r-lg);
-  padding: var(--sp-lg);
-  width: min(100%, 460px);
-  max-height: calc(100dvh - var(--sp-lg) * 2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-md);
-}
-.modal h2 {
-  margin: 0;
-  font-size: var(--fs-title-sm);
-  font-weight: 800;
-  color: var(--md-on-surface);
-}
-.modal p {
-  margin: 0;
-  color: var(--md-on-surface-var);
-  font-size: var(--fs-body-md);
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.modal .list {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-sm);
-  padding-right: 2px;
-}
-.modal .list button {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-sm);
-  text-align: left;
-  background: var(--md-surface-cont-h);
-  color: var(--md-on-surface);
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
-  border-radius: var(--r-pill);
-  padding: 10px 14px;
-  font-family: var(--font-mono);
-  font-size: var(--fs-body-sm);
-  font-weight: 600;
-  min-height: 44px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
-}
-.modal .list .label {
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow-x: auto;
-  overflow-y: hidden;
-  text-overflow: clip;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-.modal .list .label::-webkit-scrollbar { display: none; }
-.modal .list button:hover {
-  border-color: color-mix(in srgb, var(--md-outline) 60%, var(--md-outline-var));
-  background: var(--md-surface-cont-hh);
-}
-.modal .list button.sel {
-  border-color: var(--md-primary);
-  box-shadow: inset 0 0 0 1px var(--md-primary);
-}
-.modal .viewer {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: var(--sp-md);
-  background: color-mix(in srgb, var(--md-surface) 92%, #000);
-  border: 1px solid color-mix(in srgb, var(--md-stroke-soft) 42%, transparent);
-  border-radius: var(--r-sm);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--md-on-surface-var);
-  white-space: pre;
-  overflow: auto;
-}
-.modal .row {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-sm);
-  flex-wrap: wrap;
-  margin-top: var(--sp-sm);
-}
-.modal .row button {
-  padding: 10px 20px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
-  background: var(--md-surface-cont-h);
-  color: var(--md-on-surface);
-  border-radius: var(--r-pill);
-  font-family: inherit;
-  font-size: var(--fs-label-lg);
-  font-weight: 750;
-  min-height: 44px;
-  letter-spacing: 0.1px;
-  cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
-}
-.modal .row button:hover {
-  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
-}
-.modal .row button.primary {
-  background: var(--md-primary);
-  border-color: color-mix(in srgb, var(--md-primary) 76%, var(--md-outline-var));
-  color: var(--md-on-primary);
-}
-.modal .row button.danger { color: var(--md-error); }
-
-@media (orientation: landscape) and (max-height: 700px) {
-  .shell { gap: var(--sp-xs); }
-  .head { font-size: 14px; padding: 0 4px; }
-  .menu-trigger {
-    min-height: 40px;
-    padding: 0 10px;
-    font-size: var(--fs-body-sm);
-  }
-  .menu {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-    gap: 2px;
-    padding: 3px;
-  }
-  .menu button {
-    padding: 7px 10px;
-    font-size: 13px;
-    min-height: 36px;
-  }
-  .terminal-form__input { min-height: 38px; padding: 6px 0; }
-  .smallBtn { padding: 0 12px; }
-}
-</style>
-</head>
-<body>
-<div class="shell">
-  <h1 class="head">carrot recovery</h1>
-  <div class="menus">
-    <div class="menu-wrap">
-      <button class="menu-trigger" data-menu="git">
-        <span>Git</span><span class="menu-trigger__caret">&#x25BE;</span>
-      </button>
-      <div class="menu" id="gitMenu" hidden>
-        <button data-act="git_pull">git pull</button>
-        <button data-act="git_sync">git sync</button>
-        <button data-act="git_reset">git reset</button>
-        <button data-act="git_log">git log</button>
-        <button data-act="git_branches">change branch</button>
-        <button data-act="git_reset_repo">reset repo</button>
-        <button data-act="git_rebuild">rebuild</button>
-        <button data-act="git_reboot" class="danger">reboot</button>
-      </div>
-    </div>
-    <div class="menu-wrap">
-      <button class="menu-trigger" data-menu="term">
-        <span>Terminal</span><span class="menu-trigger__caret">&#x25BE;</span>
-      </button>
-      <div class="menu" id="termMenu" hidden>
-        <button data-tctrl="ctrl_c">Ctrl+C</button>
-        <button data-tctrl="clear">Clear</button>
-        <button data-tctrl="new_session">Reconnect</button>
-      </div>
-    </div>
-  </div>
-  <div class="terminal-shell">
-    <div class="terminal-screen" id="terminalScreen">
-      <pre class="terminal-output" id="terminalOutput"></pre>
-    </div>
-    <form class="terminal-form" id="terminalForm">
-      <span class="terminal-form__prompt" aria-hidden="true">&gt;</span>
-      <input class="terminal-form__input" id="terminalInput" type="text"
-             autocomplete="off" autocapitalize="none" spellcheck="false" autocorrect="off">
-      <button class="smallBtn" id="terminalSend" type="submit">Send</button>
-    </form>
-  </div>
-</div>
-<div id="modalRoot" hidden></div>
-<script>
-const termOut = document.getElementById("terminalOutput");
-const termScreen = document.getElementById("terminalScreen");
-const termInput = document.getElementById("terminalInput");
-const termForm = document.getElementById("terminalForm");
-const modalRoot = document.getElementById("modalRoot");
-let terminalTimer = 0;
-let terminalLast = "";
-
-function updateVV() {
-  const vv = window.visualViewport;
-  const height = Math.max(320, Math.round((vv && vv.height) || window.innerHeight || 0));
-  const top = Math.max(0, Math.round((vv && vv.offsetTop) || 0));
-  const root = document.documentElement.style;
-  root.setProperty("--vv-height", height + "px");
-  root.setProperty("--vv-top", top + "px");
-}
-window.addEventListener("resize", updateVV, { passive: true });
-window.addEventListener("orientationchange", updateVV, { passive: true });
-if (window.visualViewport) {
-  window.visualViewport.addEventListener("resize", updateVV, { passive: true });
-  window.visualViewport.addEventListener("scroll", updateVV, { passive: true });
-}
-updateVV();
-
-function showModal(node) { modalRoot.replaceChildren(node); modalRoot.hidden = false; }
-function closeModal() { modalRoot.hidden = true; modalRoot.replaceChildren(); }
-function buildModal(title, message) {
-  const back = document.createElement("div");
-  back.className = "modal-bg";
-  const m = document.createElement("div");
-  m.className = "modal";
-  if (title) { const h = document.createElement("h2"); h.textContent = title; m.appendChild(h); }
-  if (message) { const p = document.createElement("p"); p.textContent = message; m.appendChild(p); }
-  back.appendChild(m);
-  back.onclick = (e) => { if (e.target === back) closeModal(); };
-  function addRow(actions) {
-    const row = document.createElement("div");
-    row.className = "row";
-    for (const a of actions) {
-      const b = document.createElement("button");
-      b.textContent = a.label;
-      if (a.kind) b.classList.add(a.kind);
-      b.onclick = () => { closeModal(); if (a.onClick) a.onClick(); };
-      row.appendChild(b);
-    }
-    m.appendChild(row);
-  }
-  return { back, body: m, addRow };
-}
-function confirmDialog(title, message, opts) {
-  opts = opts || {};
-  return new Promise((resolve) => {
-    const { back, addRow } = buildModal(title, message);
-    addRow([
-      { label: "Cancel", onClick: () => resolve(false) },
-      { label: opts.confirmLabel || "OK", kind: opts.danger ? "danger" : "primary", onClick: () => resolve(true) },
-    ]);
-    showModal(back);
-  });
-}
-function viewerDialog(title, text) {
-  return new Promise((resolve) => {
-    const { back, body, addRow } = buildModal(title, "");
-    const pre = document.createElement("pre");
-    pre.className = "viewer";
-    pre.textContent = text;
-    body.appendChild(pre);
-    addRow([
-      { label: "Close", kind: "primary", onClick: () => resolve() },
-    ]);
-    showModal(back);
-  });
-}
-function pickerDialog(title, items, opts) {
-  opts = opts || {};
-  return new Promise((resolve) => {
-    const { back, body, addRow } = buildModal(title, opts.message || "");
-    const list = document.createElement("div");
-    list.className = "list";
-    let chosen = opts.selected || null;
-    const buttons = [];
-    for (const item of items) {
-      const b = document.createElement("button");
-      const label = document.createElement("span");
-      label.className = "label";
-      label.textContent = item.label || item.value;
-      b.appendChild(label);
-      if (item.value === chosen) b.classList.add("sel");
-      b.onclick = () => {
-        chosen = item.value;
-        for (const x of buttons) x.classList.remove("sel");
-        b.classList.add("sel");
-      };
-      list.appendChild(b);
-      buttons.push(b);
-    }
-    body.appendChild(list);
-    addRow([
-      { label: "Cancel", onClick: () => resolve(null) },
-      { label: opts.confirmLabel || "OK", kind: opts.danger ? "danger" : "primary",
-        onClick: () => resolve(chosen) },
-    ]);
-    showModal(back);
-  });
-}
-
-function closeAllMenus() {
-  for (const t of document.querySelectorAll(".menu-trigger")) t.classList.remove("is-open");
-  for (const m of document.querySelectorAll(".menu")) m.hidden = true;
-}
-function openMenu(name) {
-  closeAllMenus();
-  const trigger = document.querySelector('.menu-trigger[data-menu="' + name + '"]');
-  const menu = document.getElementById(name + "Menu");
-  if (trigger) trigger.classList.add("is-open");
-  if (menu) menu.hidden = false;
-}
-function toggleMenu(name) {
-  const menu = document.getElementById(name + "Menu");
-  if (menu && !menu.hidden) closeAllMenus();
-  else openMenu(name);
-}
-document.addEventListener("click", (e) => {
-  if (e.target.closest(".menu-wrap")) return;
-  closeAllMenus();
-});
-document.querySelectorAll(".menu-trigger").forEach((btn) => {
-  btn.onclick = (e) => { e.stopPropagation(); toggleMenu(btn.dataset.menu); };
-});
-
-async function callAction(action, payload) {
-  const r = await fetch("/api/action", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(Object.assign({ action }, payload || {})),
-  });
-  return r.json();
-}
-async function terminalSend(data) {
-  await fetch("/api/terminal/input", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ data }),
-  });
-  await terminalScreen(true);
-}
-async function terminalControl(action) {
-  await fetch("/api/terminal/control", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action }),
-  });
-  await terminalScreen(true);
-}
-
-async function dispatchGit(action, payload) {
-  const data = await callAction(action, payload);
-  if (data.rebooting) return data;
-  if (data.command) await terminalSend(data.command);
-  return data;
-}
-const GIT_CONFIRMS = {
-  git_pull: {
-    title: "git pull",
-    message: "Pull latest commits from remote.\\nLocal changes will be reset first.",
-    confirmLabel: "Pull",
-    danger: true,
-  },
-  git_sync: {
-    title: "git sync",
-    message: "Delete all local branches except the current one,\\nthen fetch from remote.",
-    confirmLabel: "Sync",
-    danger: true,
-  },
-  git_reset: {
-    title: "git reset",
-    message: "Reset the current branch to the last commit.\\nAll local changes will be lost.",
-    confirmLabel: "Reset",
-    danger: true,
-  },
-  git_rebuild: {
-    title: "rebuild",
-    message: "Clean all build cache.\\nWill rebuild on next boot.\\n\\n• scons -c\\n• remove .sconsign.dblite, /tmp/scons_cache, prebuilt",
-    confirmLabel: "Clean",
-    danger: true,
-  },
-};
-
-async function clickGit(action) {
-  closeAllMenus();
-  if (action === "git_branches") return clickChangeBranch();
-  if (action === "git_reset_repo") return clickResetRepo();
-  if (action === "git_reboot") return clickReboot();
-  if (action === "git_log") return clickGitLog();
-  const c = GIT_CONFIRMS[action];
-  if (c) {
-    const ok = await confirmDialog(c.title, c.message, { confirmLabel: c.confirmLabel, danger: c.danger });
-    if (!ok) return;
-  }
-  await dispatchGit(action);
-}
-async function clickGitLog() {
-  const data = await callAction("git_log");
-  if (!data.ok) {
-    await viewerDialog("git log", data.error || "failed to read log");
-    return;
-  }
-  const commits = data.commits || [];
-  if (!commits.length) {
-    await viewerDialog("git log", "(no commits)");
-    return;
-  }
-  const items = commits.map((c) => ({
-    value: c.hash,
-    label: c.hash + "  " + (c.message || ""),
-  }));
-  const selected = await pickerDialog("git log", items, {
-    selected: data.current,
-    message: "Select a commit to checkout.",
-    confirmLabel: "Checkout",
-  });
-  if (!selected) return;
-  if (data.current && selected.startsWith(data.current)) return;
-  const ok = await confirmDialog(
-    "Checkout commit",
-    "Move to the selected commit.\\n\\n" + selected,
-    { confirmLabel: "Checkout" },
-  );
-  if (!ok) return;
-  await dispatchGit("git_checkout_commit", { commit: selected });
-}
-async function clickChangeBranch() {
-  const data = await callAction("git_branches");
-  if (!data.ok) return;
-  const items = data.branches.map((b) => ({
-    value: b.name,
-    label: (b.kind === "remote" ? "↗ " : "  ") + b.name,
-  }));
-  const choice = await pickerDialog("Change branch", items, {
-    selected: data.current,
-    message: "Select a branch to switch to.",
-    confirmLabel: "Switch",
-  });
-  if (!choice) return;
-  if (choice === data.current) return;
-  await dispatchGit("git_checkout", { branch: choice });
-}
-async function clickResetRepo() {
-  const data = await callAction("git_branches");
-  if (!data.ok) return;
-  const items = data.branches.map((b) => ({
-    value: b.name,
-    label: (b.kind === "remote" ? "↗ " : "  ") + b.name,
-  }));
-  const choice = await pickerDialog("Reset repo", items, {
-    selected: "c3-wip",
-    message: "Fetch the selected branch fresh.\\nAll local changes and untracked files will be lost.",
-    confirmLabel: "Next",
-    danger: true,
-  });
-  if (!choice) return;
-  const ok = await confirmDialog(
-    "Confirm reset",
-    "Branch: " + choice + "\\nRemote: ajouatom/openpilot.git\\n\\nThis cannot be undone.",
-    { confirmLabel: "Reset", danger: true },
-  );
-  if (!ok) return;
-  await dispatchGit("git_reset_repo", { branch: choice });
-}
-async function clickReboot() {
-  const ok1 = await confirmDialog("Reboot", "The device will restart immediately.", { confirmLabel: "Next", danger: true });
-  if (!ok1) return;
-  const ok2 = await confirmDialog("Confirm reboot", "Really reboot the device?", { confirmLabel: "Reboot", danger: true });
-  if (!ok2) return;
-  await dispatchGit("git_reboot");
-}
-
-document.querySelectorAll("[data-act]").forEach((btn) => {
-  btn.onclick = (e) => { e.stopPropagation(); clickGit(btn.dataset.act); };
-});
-document.querySelectorAll("[data-tctrl]").forEach((btn) => {
-  btn.onclick = async (e) => {
-    e.stopPropagation();
-    closeAllMenus();
-    await terminalControl(btn.dataset.tctrl);
-  };
-});
-
-async function terminalScreen(force) {
-  try {
-    const r = await fetch("/api/terminal/screen");
-    const j = await r.json();
-    if (!j.ok) { termOut.textContent = j.error || "terminal unavailable"; return; }
-    if (force || j.text !== terminalLast) {
-      const stick = termScreen.scrollHeight - termScreen.scrollTop - termScreen.clientHeight < 32;
-      terminalLast = j.text || " ";
-      termOut.textContent = terminalLast;
-      if (stick || force) termScreen.scrollTop = termScreen.scrollHeight;
-    }
-  } catch (e) { termOut.textContent = e.message; }
-}
-function startTerminal() {
-  clearInterval(terminalTimer);
-  terminalTimer = setInterval(() => terminalScreen(false), 250);
-  terminalScreen(true);
-}
-
-termForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const v = termInput.value;
-  termInput.value = "";
-  terminalSend(v);
-});
-
-startTerminal();
-</script>
-</body>
-</html>
-"""
+TMUX_LOG_PATH = "/data/media/tmux.log"
+PARAMS_DIR = "/data/params"
 
 
-def _json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict) -> None:
-  data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-  handler.send_response(status)
-  handler.send_header("Content-Type", "application/json; charset=utf-8")
-  handler.send_header("Content-Length", str(len(data)))
-  handler.send_header("Cache-Control", "no-store")
-  handler.end_headers()
-  handler.wfile.write(data)
+# ===================================================================
+# Shell / login command (mirrors services/tmux.py:bootstrap_shell +
+# start_command; duplicated on purpose so recovery imports nothing from the
+# openpilot-importing web app).
+# ===================================================================
+def _bootstrap_shell() -> str:
+  # Reproduce the AGNOS ssh login inside the PTY: print the device MOTD exactly
+  # like pam_motd does on ssh, start in /data/openpilot, then exec the real
+  # interactive login shell.
+  motd = "( run-parts /etc/update-motd.d 2>/dev/null || cat /run/motd.dynamic 2>/dev/null )"
+  return f"{motd}; cd {shlex.quote(TMUX_START_DIR)} 2>/dev/null; exec bash -il"
 
 
-def _html_response(handler: BaseHTTPRequestHandler) -> None:
-  data = HTML_PAGE.encode("utf-8")
-  handler.send_response(200)
-  handler.send_header("Content-Type", "text/html; charset=utf-8")
-  handler.send_header("Content-Length", str(len(data)))
-  handler.send_header("Cache-Control", "no-store")
-  handler.end_headers()
-  handler.wfile.write(data)
+def _start_command() -> str:
+  if os.name != "posix":
+    return "powershell"
+  bootstrap = _bootstrap_shell()
+  current_user = os.environ.get("USER") or os.environ.get("USERNAME") or ""
+  geteuid = getattr(os, "geteuid", None)
+  euid = geteuid() if callable(geteuid) else None
+  if current_user == "comma":
+    return bootstrap
+  if euid == 0:
+    return f"exec su - comma -c {shlex.quote(bootstrap)}"
+  if shutil.which("sudo"):
+    try:
+      probe = subprocess.run(
+        ["sudo", "-n", "-u", "comma", "true"],
+        capture_output=True, text=True, timeout=2,
+      )
+      if probe.returncode == 0:
+        return f"exec sudo -n -u comma -i bash -lc {shlex.quote(bootstrap)}"
+    except Exception:
+      pass
+  return bootstrap
 
 
-def _read_json(handler: BaseHTTPRequestHandler) -> dict:
-  length = int(handler.headers.get("Content-Length", "0"))
-  if length > 4096:
-    raise ValueError("request too large")
-  body = handler.rfile.read(length).decode("utf-8")
-  return json.loads(body or "{}")
+# ===================================================================
+# Persistent login-shell PTY (recovery-owned; independent of the main server).
+# ===================================================================
+def _set_pty_size(fd: int, rows: int, cols: int) -> None:
+  if fcntl is None or termios is None:
+    return
+  rows = max(8, min(int(rows or 24), 200))
+  cols = max(20, min(int(cols or 80), 400))
+  fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
 
+class RecoveryPty:
+  """One persistent login PTY shared by every connected recovery client.
+
+  Standard-library re-implementation of PersistentPtySession: keeps the shell
+  alive across websocket reconnects, replays a bounded history buffer to each
+  new client, and lets the local terminal own the row geometry.
+  """
+
+  def __init__(self) -> None:
+    self.session = "recovery-shell"
+    self.master_fd = -1
+    self.proc: subprocess.Popen | None = None
+    self.rows = PTY_FIXED_ROWS
+    self.cols = PTY_FIXED_COLS
+    self.history = bytearray()
+    self.clients: set["WsConn"] = set()
+    self.lock = threading.Lock()
+    self.reader_thread: threading.Thread | None = None
+
+  # ---- lifecycle -------------------------------------------------
+  def _alive_locked(self) -> bool:
+    return self.master_fd >= 0 and self.proc is not None and self.proc.poll() is None
+
+  def ensure(self) -> bool:
+    with self.lock:
+      if self._alive_locked():
+        return False
+      if pty is None:
+        raise RuntimeError("PTY terminal is only available on POSIX devices")
+      self._close_fd_locked()
+      self.history.clear()
+      self.rows = PTY_FIXED_ROWS
+      self.cols = PTY_FIXED_COLS
+
+      master_fd, slave_fd = pty.openpty()
+      try:
+        _set_pty_size(master_fd, self.rows, self.cols)
+        env = os.environ.copy()
+        env.pop("TMUX", None)
+        env.setdefault("TERM", "xterm-256color")
+        env.setdefault("COLORTERM", "truecolor")
+        shell = os.environ.get("SHELL") or "/bin/bash"
+        proc = subprocess.Popen(
+          [shell, "-lc", _start_command()],
+          stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+          cwd=str(REPO_ROOT), env=env, close_fds=True, start_new_session=True,
+        )
+      except Exception:
+        try:
+          os.close(master_fd)
+        except Exception:
+          pass
+        raise
+      finally:
+        try:
+          os.close(slave_fd)
+        except Exception:
+          pass
+
+      self.master_fd = master_fd
+      self.proc = proc
+      self.reader_thread = threading.Thread(target=self._read_loop, daemon=True)
+      self.reader_thread.start()
+      return True
+
+  def terminate(self) -> None:
+    with self.lock:
+      proc = self.proc
+      self.proc = None
+      if proc is not None and proc.poll() is None:
+        try:
+          os.killpg(proc.pid, signal.SIGHUP)
+        except Exception:
+          try:
+            proc.terminate()
+          except Exception:
+            pass
+      self._close_fd_locked()
+      self.history.clear()
+
+  def _close_fd_locked(self) -> None:
+    if self.master_fd >= 0:
+      try:
+        os.close(self.master_fd)
+      except Exception:
+        pass
+      self.master_fd = -1
+
+  # ---- clients ---------------------------------------------------
+  def attach(self, conn: "WsConn", reset: bool = False) -> None:
+    if reset:
+      self.terminate()
+    created = self.ensure()
+    with self.lock:
+      self.clients.add(conn)
+      history = bytes(self.history)
+      rows, cols, session = self.rows, self.cols, self.session
+    conn.send_json({
+      "type": "meta", "mode": "pty", "session": session, "created": created,
+      "user": "comma", "rows": rows, "cols": cols,
+    })
+    if history:
+      conn.send_json({
+        "type": "pty_output", "session": session,
+        "b64": base64.b64encode(history).decode("ascii"), "replay": True,
+      })
+
+  def detach(self, conn: "WsConn") -> None:
+    with self.lock:
+      self.clients.discard(conn)
+
+  # ---- io --------------------------------------------------------
+  def write(self, data: bytes) -> None:
+    with self.lock:
+      if not self._alive_locked():
+        raise RuntimeError("terminal session is not running")
+      fd = self.master_fd
+    view = memoryview(data)
+    while view:
+      written = os.write(fd, view)
+      if written <= 0:
+        raise OSError("pty write failed")
+      view = view[written:]
+
+  def write_text(self, text: str) -> None:
+    data = str(text or "").encode("utf-8", errors="replace")
+    if data:
+      self.write(data)
+
+  def clear_history(self) -> None:
+    with self.lock:
+      self.history.clear()
+
+  def resize(self, rows: int) -> None:
+    # Columns stay locked at PTY_FIXED_COLS; only rows track the client height.
+    new_rows = max(8, min(int(rows or PTY_FIXED_ROWS), 200))
+    with self.lock:
+      if not self._alive_locked() or new_rows == self.rows:
+        return
+      self.rows = new_rows
+      _set_pty_size(self.master_fd, self.rows, self.cols)
+      proc = self.proc
+      rows, cols, session = self.rows, self.cols, self.session
+    if proc is not None and proc.poll() is None:
+      try:
+        os.killpg(proc.pid, signal.SIGWINCH)
+      except Exception:
+        pass
+    self._broadcast({"type": "pty_resize", "session": session, "rows": rows, "cols": cols})
+
+  def _append_history(self, chunk: bytes) -> None:
+    self.history.extend(chunk)
+    if len(self.history) > PTY_HISTORY_LIMIT:
+      del self.history[:len(self.history) - PTY_HISTORY_LIMIT]
+
+  def _broadcast(self, payload: dict) -> None:
+    with self.lock:
+      clients = list(self.clients)
+    stale = []
+    for conn in clients:
+      if not conn.send_json(payload):
+        stale.append(conn)
+    if stale:
+      with self.lock:
+        for conn in stale:
+          self.clients.discard(conn)
+
+  def _read_loop(self) -> None:
+    sel = selectors.DefaultSelector()
+    try:
+      with self.lock:
+        fd = self.master_fd
+      sel.register(fd, selectors.EVENT_READ)
+      while True:
+        with self.lock:
+          if not self._alive_locked():
+            break
+          fd = self.master_fd
+        events = sel.select(timeout=0.5)
+        if not events:
+          continue
+        try:
+          chunk = os.read(fd, 4096)
+        except OSError:
+          break
+        if not chunk:
+          break
+        with self.lock:
+          self._append_history(chunk)
+          session = self.session
+        self._broadcast({
+          "type": "pty_output", "session": session,
+          "b64": base64.b64encode(chunk).decode("ascii"),
+        })
+    finally:
+      try:
+        sel.close()
+      except Exception:
+        pass
+      with self.lock:
+        exit_code = self.proc.poll() if self.proc else None
+        session = self.session
+        clients = list(self.clients)
+        self.clients.clear()
+        self._close_fd_locked()
+        self.proc = None
+      for conn in clients:
+        conn.send_json({"type": "pty_exit", "session": session, "exit_code": exit_code})
+        conn.close()
+
+
+PTY = RecoveryPty()
+
+
+# ===================================================================
+# Minimal RFC 6455 WebSocket connection (server side, standard library).
+# ===================================================================
+class WsClosed(Exception):
+  pass
+
+
+class WsConn:
+  """One websocket connection. Reads run on the request thread; writes may also
+  come from the shared PTY reader thread, so every send holds a lock."""
+
+  def __init__(self, handler: BaseHTTPRequestHandler) -> None:
+    self.handler = handler
+    self.rfile = handler.rfile
+    self.wfile = handler.wfile
+    self.send_lock = threading.Lock()
+    self.closed = False
+
+  @staticmethod
+  def accept_key(key: str) -> str:
+    digest = hashlib.sha1((key + WS_GUID).encode("ascii")).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+  def handshake(self, key: str) -> None:
+    accept = self.accept_key(key)
+    headers = (
+      "HTTP/1.1 101 Switching Protocols\r\n"
+      "Upgrade: websocket\r\n"
+      "Connection: Upgrade\r\n"
+      f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
+    )
+    with self.send_lock:
+      self.wfile.write(headers.encode("ascii"))
+      self.wfile.flush()
+
+  # ---- framing ---------------------------------------------------
+  def _send_frame(self, payload: bytes, opcode: int = 0x1) -> bool:
+    header = bytearray()
+    header.append(0x80 | opcode)  # FIN + opcode
+    n = len(payload)
+    if n < 126:
+      header.append(n)
+    elif n < 65536:
+      header.append(126)
+      header += struct.pack("!H", n)
+    else:
+      header.append(127)
+      header += struct.pack("!Q", n)
+    with self.send_lock:
+      if self.closed:
+        return False
+      try:
+        self.wfile.write(bytes(header) + payload)
+        self.wfile.flush()
+        return True
+      except Exception:
+        self.closed = True
+        return False
+
+  def send_json(self, payload: dict) -> bool:
+    try:
+      data = json.dumps(payload).encode("utf-8")
+    except Exception:
+      return False
+    return self._send_frame(data, 0x1)
+
+  def close(self) -> None:
+    if self.closed:
+      return
+    self._send_frame(b"", 0x8)
+    self.closed = True
+
+  def _read_exact(self, n: int) -> bytes:
+    data = self.rfile.read(n)
+    if data is None or len(data) < n:
+      raise WsClosed()
+    return data
+
+  def read_message(self) -> str | None:
+    """Return the next complete text message, or None on close/ping handled."""
+    payload = bytearray()
+    while True:
+      b0, b1 = self._read_exact(2)
+      fin = b0 & 0x80
+      opcode = b0 & 0x0F
+      masked = b1 & 0x80
+      length = b1 & 0x7F
+      if length == 126:
+        length = struct.unpack("!H", self._read_exact(2))[0]
+      elif length == 127:
+        length = struct.unpack("!Q", self._read_exact(8))[0]
+      mask = self._read_exact(4) if masked else b"\x00\x00\x00\x00"
+      raw = bytearray(self._read_exact(length)) if length else bytearray()
+      if masked:
+        for i in range(len(raw)):
+          raw[i] ^= mask[i & 3]
+
+      if opcode == 0x8:  # close
+        raise WsClosed()
+      if opcode == 0x9:  # ping -> pong
+        self._send_frame(bytes(raw), 0xA)
+        continue
+      if opcode == 0xA:  # pong
+        continue
+      # 0x0 continuation, 0x1 text, 0x2 binary
+      payload += raw
+      if fin:
+        try:
+          return payload.decode("utf-8", errors="replace")
+        except Exception:
+          return ""
+
+
+def _serve_terminal_ws(handler: BaseHTTPRequestHandler, query: dict) -> None:
+  key = handler.headers.get("Sec-WebSocket-Key")
+  if not key:
+    handler.send_error(400, "missing websocket key")
+    return
+  conn = WsConn(handler)
+  handler.close_connection = True
+  conn.handshake(key)
+
+  reset = (query.get("reset") or "") in ("1", "true", "yes")
+  try:
+    PTY.attach(conn, reset=reset)
+  except Exception as exc:
+    conn.send_json({"type": "error", "error": str(exc), "session": PTY.session})
+    conn.close()
+    return
+
+  try:
+    while True:
+      message = conn.read_message()
+      if message is None:
+        continue
+      try:
+        data = json.loads(message)
+      except Exception:
+        continue
+      typ = data.get("type")
+      try:
+        if typ == "input":
+          PTY.write_text(str(data.get("data") or "") + "\r")
+        elif typ == "raw":
+          text = str(data.get("data") or "")
+          if text:
+            PTY.write_text(text)
+        elif typ == "resize":
+          PTY.resize(int(data.get("rows") or PTY_FIXED_ROWS))
+        elif typ == "control":
+          action = (data.get("action") or "").strip()
+          if action == "ctrl_c":
+            PTY.write(b"\x03")
+          elif action == "clear":
+            PTY.clear_history()
+            PTY.write(b"clear\r")
+          elif action == "refresh":
+            PTY.write(b"\x0c")
+          elif action == "detach":
+            # AGNOS tmux prefix is backtick, so detach = ` then d.
+            PTY.write(b"\x60d")
+      except Exception as exc:
+        conn.send_json({"type": "error", "error": str(exc), "session": PTY.session})
+  except (WsClosed, OSError, ConnectionError):
+    pass
+  finally:
+    PTY.detach(conn)
+
+
+# ===================================================================
+# Git recovery actions (unchanged behaviour; injected into the PTY terminal).
+# ===================================================================
 def _run_exec(args: list[str], timeout: float = TIMEOUT_SEC) -> tuple[int, str]:
+  # Force UTF-8 decode (errors="replace") instead of the platform locale so a
+  # non-UTF-8 console (e.g. a Windows cp949 dev box) can't crash the reader on
+  # Korean commit messages; the device is UTF-8 either way.
   proc = subprocess.run(
-    args,
-    cwd=str(REPO_ROOT),
-    text=True,
-    capture_output=True,
-    timeout=timeout,
-    check=False,
+    args, cwd=str(REPO_ROOT), capture_output=True, timeout=timeout, check=False,
+    encoding="utf-8", errors="replace",
   )
   return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
 
@@ -883,7 +605,7 @@ def _git_reboot() -> dict:
 
 
 def _git_command(action: str, payload: dict) -> str | None:
-  """Returns shell command string to inject into tmux. None if invalid."""
+  """Returns a shell command string to inject into the terminal. None if invalid."""
   if action == "git_pull":
     return "git reset --hard && git pull"
   if action == "git_sync":
@@ -980,103 +702,1369 @@ def _git_action(action: str, payload: dict) -> dict:
   return {"ok": True, "command": cmd}
 
 
-def _tmux_run(args: list[str], timeout: float = 5.0, check: bool = False) -> subprocess.CompletedProcess:
-  return subprocess.run(args, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=timeout, check=check)
+# ===================================================================
+# Tools-menu actions (ported from dispatcher.py, openpilot-free subset).
+# ===================================================================
+def _capture_tmux_log() -> tuple[int, str]:
+  """Capture the current tmux pane to /data/media/tmux.log (mirrors
+  dispatcher.capture_tmux_log_sync). No -t: captures the most recent tmux
+  session (e.g. `comma` after `tmux a`)."""
+  try:
+    os.remove(TMUX_LOG_PATH)
+  except FileNotFoundError:
+    pass
+  except OSError as exc:
+    return 1, str(exc)
+  try:
+    proc = subprocess.run(
+      ["tmux", "capture-pane", "-pq", "-S-1000"],
+      capture_output=True, encoding="utf-8", errors="replace", check=False, timeout=10,
+    )
+  except FileNotFoundError:
+    return 1, "tmux not available"
+  except Exception as exc:
+    return 1, str(exc)
+  if proc.returncode != 0:
+    return proc.returncode, (proc.stderr or proc.stdout or "tmux capture failed").strip()
+  os.makedirs(os.path.dirname(TMUX_LOG_PATH), exist_ok=True)
+  with open(TMUX_LOG_PATH, "w", encoding="utf-8") as f:
+    f.write(proc.stdout or "")
+  return 0, ""
 
 
-def _tmux_start_command() -> str:
-  if os.name == "posix":
-    return f"cd {shlex.quote(str(REPO_ROOT))} && exec bash -il"
-  return "powershell -NoLogo"
+def _put_param(key: str, value: bytes) -> None:
+  """Write an openpilot param the same way the C++ Params does: stage in
+  /data/params/d_tmp then atomic-rename into /data/params/d. Lets recovery
+  trigger `server_tmux_log` (CarrotException=tmux_send) without importing
+  openpilot; a running carrot_man consumes it (no-op if openpilot is down)."""
+  d = os.path.join(PARAMS_DIR, "d")
+  d_tmp = os.path.join(PARAMS_DIR, "d_tmp")
+  os.makedirs(d, exist_ok=True)
+  os.makedirs(d_tmp, exist_ok=True)
+  tmp = os.path.join(d_tmp, key)
+  with open(tmp, "wb") as f:
+    f.write(value)
+    f.flush()
+    os.fsync(f.fileno())
+  os.replace(tmp, os.path.join(d, key))
 
 
-def _tmux_ensure() -> None:
-  if shutil.which("tmux") is None:
-    raise RuntimeError("tmux not available")
-  p = _tmux_run(["tmux", "has-session", "-t", TMUX_SESSION], timeout=2.5)
-  if p.returncode == 0:
-    return
-  _tmux_run(["tmux", "new-session", "-d", "-s", TMUX_SESSION, _tmux_start_command()], timeout=5.0, check=True)
+def _tool_action(action: str, payload: dict) -> dict:
+  if action == "rebuild_all":
+    # Same as the tools button: clean build + drop prebuilt, then reboot.
+    # Returned as a command so it runs in the visible PTY (like the git menu).
+    return {"ok": True, "command": "cd /data/openpilot && scons -c && rm -rf prebuilt && sudo reboot"}
+  if action == "send_tmux_log":
+    rc, err = _capture_tmux_log()
+    if rc != 0:
+      return {"ok": False, "error": err or "tmux capture failed"}
+    return {"ok": True, "file": "/download/tmux.log"}
+  if action == "server_tmux_log":
+    try:
+      _put_param("CarrotException", b"tmux_send")
+      return {"ok": True}
+    except Exception as exc:
+      return {"ok": False, "error": str(exc)}
+  return {"ok": False, "error": f"unknown action: {action}"}
 
 
-def _tmux_capture() -> str:
-  _tmux_ensure()
-  p = _tmux_run(
-    ["tmux", "capture-pane", "-p", "-J", "-t", TMUX_SESSION, "-S", f"-{TMUX_CAPTURE_LINES}"],
-    timeout=4.0,
+# ===================================================================
+# Remote support (ported from server/services/support_terminal.py + support_tunnel.py
+# + support_discord.py). Standalone stdlib reimplementation: shares recovery's PTY,
+# runs a SEPARATE guest HTTP server (so the public tunnel only exposes the restricted
+# guest page, not the recovery owner UI) + a cloudflared quick tunnel, and delivers
+# URL+PIN via the same Discord webhook (openpilot metadata degraded to git+hostname).
+# ===================================================================
+CARROT_DATA_DIR = os.environ.get("CARROT_DATA_DIR", "/data/carrot")
+SUPPORT_GUEST_DIR = str(WEB_DIR / "support_terminal")
+SUPPORT_GUEST_HTML_PATH = os.path.join(SUPPORT_GUEST_DIR, "guest.html")
+SUPPORT_GUEST_ASSETS = {
+  "tokens.css": str(WEB_DIR / "css" / "tokens.css"),
+  "layout_tokens.css": str(WEB_DIR / "css" / "layout_tokens.css"),
+  "base.css": str(WEB_DIR / "css" / "base.css"),
+  "layout.css": str(WEB_DIR / "css" / "layout.css"),
+  "components.css": str(WEB_DIR / "css" / "components.css"),
+  "terminal.css": str(WEB_DIR / "css" / "pages" / "terminal.css"),
+  "terminal_typing_indicator.js": str(WEB_DIR / "js" / "shared" / "ui" / "terminal_typing_indicator.js"),
+  "guest.css": os.path.join(SUPPORT_GUEST_DIR, "guest.css"),
+  "guest.js": os.path.join(SUPPORT_GUEST_DIR, "guest.js"),
+  "xterm.css": str(WEB_DIR / "css" / "vendor" / "xterm.css"),
+  "xterm.js": str(WEB_DIR / "js" / "vendor" / "xterm.js"),
+  "xterm-addon-shim.js": str(WEB_DIR / "js" / "vendor" / "xterm-addon-shim.js"),
+  "xterm-addon-webgl.js": str(WEB_DIR / "js" / "vendor" / "xterm-addon-webgl.js"),
+  "xterm-addon-canvas.js": str(WEB_DIR / "js" / "vendor" / "xterm-addon-canvas.js"),
+}
+
+SUPPORT_TTL_SECONDS = int(os.environ.get("CARROT_SUPPORT_TTL_SECONDS", "1800"))
+SUPPORT_COMMAND_TIMEOUT_SECONDS = int(os.environ.get("CARROT_SUPPORT_COMMAND_TIMEOUT_SECONDS", "30"))
+ALLOWED_TTL_SECONDS = {900, 1800, 3600}
+ALLOWED_PERMISSION_MODES = {"approve_each", "allow_all"}
+ALLOWED_COMMAND_TIMEOUT_SECONDS = {15, 30, 60, 120}
+PIN_FAILURE_LIMIT = 5
+
+TRYCLOUDFLARE_RE = re.compile(r"https://[a-zA-Z0-9.-]+\.trycloudflare\.com")
+CLOUDFLARED_DOWNLOADS = {
+  "x86_64": "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64",
+  "amd64": "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64",
+  "aarch64": "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64",
+  "arm64": "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64",
+  "armv7l": "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm",
+}
+
+
+def _ws_upgrade(handler: BaseHTTPRequestHandler) -> "WsConn | None":
+  key = handler.headers.get("Sec-WebSocket-Key")
+  if not key:
+    handler.send_error(400, "missing websocket key")
+    return None
+  conn = WsConn(handler)
+  handler.close_connection = True
+  conn.handshake(key)
+  return conn
+
+
+# --- Discord webhook (obfuscation copied from support_discord.py; base64+xor only) ---
+_SUPPORT_OBFUSCATION_KEY = b"carrot-support-v1"
+_SUPPORT_OBFUSCATED_WEBHOOK_URL = (
+  "CxUGAhxOAlwRGQMMHQZJWFIMDF0THx0CBBASGAAdH15ZAFZTRkBdRxpLQ0BEWUVFFUYEUE4ZJA0lf0Am"
+  "BhgINy1EJ39XAzlEOwNJHxwmJjUkGkYxVwFYQDVXDVQmEyYfHCI6AAZ0KjQZACAbRhIRHBMVGQwcBAY5CQ=="
+)
+
+
+def _support_webhook_url() -> str:
+  for key in ("CARROT_SUPPORT_DISCORD_WEBHOOK_URL", "CARROT_DISCORD_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"):
+    v = os.environ.get(key, "").strip()
+    if v:
+      return v
+  try:
+    data = base64.b64decode(_SUPPORT_OBFUSCATED_WEBHOOK_URL)
+    decoded = bytes(b ^ _SUPPORT_OBFUSCATION_KEY[i % len(_SUPPORT_OBFUSCATION_KEY)] for i, b in enumerate(data))
+    return decoded.decode("utf-8").strip()
+  except Exception:
+    return ""
+
+
+def _read_param(key: str, default: str = "") -> str:
+  try:
+    with open(os.path.join(PARAMS_DIR, "d", key), "r", encoding="utf-8", errors="replace") as f:
+      return f.read().strip() or default
+  except Exception:
+    return default
+
+
+def _support_metadata() -> dict:
+  return {
+    "carName": _read_param("CarName", "none") or "none",
+    "dongleId": _read_param("DongleId", "unknown") or "unknown",
+    "serial": _read_param("HardwareSerial") or _read_param("DeviceSerial") or _read_param("Serial") or "unknown",
+    "branch": (_run_exec(["git", "branch", "--show-current"], 6)[1] or "").strip() or "unknown",
+    "commit": (_run_exec(["git", "rev-parse", "--short", "HEAD"], 6)[1] or "").strip() or "unknown",
+    "host": socket.gethostname(),
+  }
+
+
+def _support_message(payload: dict) -> str:
+  meta = payload.get("meta") or {}
+  note = str(payload.get("note") or "").strip()
+  commit = str(meta.get("commit") or "").strip()
+  commit_text = (f"[{commit}](https://github.com/ajouatom/openpilot/commit/{commit})"
+                 if commit and commit != "unknown" else "unknown")
+  permission_text = {"approve_each": "항상 확인", "allow_all": "전체 허용"}.get(
+    str(payload.get("permissionMode") or "approve_each"), str(payload.get("permissionMode")))
+  ttl = payload.get("ttl_minutes") or 30
+  expires_text = "unlimited" if ttl == "unlimited" else f"{ttl} min"
+  lines = [
+    "# Carrot Remote Terminal (recovery)",
+    "### Session",
+    f"- Time: {payload.get('createdAt') or time.strftime('%Y-%m-%d %H:%M:%S')}",
+    f"- Session ID: {payload.get('sessionId') or 'unknown'}",
+    "### Access",
+    f"- Link: {payload.get('url') or ''}",
+    f"- PIN: **__{payload.get('pin') or ''}__**",
+    f"- Expires: {expires_text}",
+    f"- Permission: {permission_text}",
+  ]
+  if note:
+    lines += ["### Issue", f"- Note: {note[:500]}"]
+  lines += [
+    "### Device",
+    f"- Car name: {meta.get('carName') or 'none'}",
+    f"- DongleId: {meta.get('dongleId') or 'unknown'}",
+    f"- Serial: {meta.get('serial') or 'unknown'}",
+    f"- Branch: {meta.get('branch') or 'unknown'}",
+    f"- Commit: {commit_text}",
+  ]
+  return "\n".join(lines)[:1900]
+
+
+def _send_support_webhook(payload: dict) -> dict:
+  if os.environ.get("CARROT_SUPPORT_DISCORD_WEBHOOK_DISABLE", "").strip().lower() in {"1", "true", "yes", "on"}:
+    return {"configured": True, "ok": False, "skipped": True, "disabled": True}
+  url = _support_webhook_url()
+  if not url or not url.startswith(("http://", "https://")):
+    return {"configured": bool(url), "ok": False, "skipped": True}
+  body = json.dumps({
+    "username": "Carrot Support",
+    "content": _support_message(payload),
+    "allowed_mentions": {"parse": []},
+    "flags": 4,
+  }).encode("utf-8")
+  req = urllib.request.Request(url, data=body, headers={
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    # Discord rejects urllib's default Python-urllib user agent with HTTP 403.
+    "User-Agent": "CarrotRecovery/2.0",
+  }, method="POST")
+  try:
+    with urllib.request.urlopen(req, timeout=12) as resp:
+      return {"configured": True, "ok": 200 <= resp.status < 300, "status": resp.status}
+  except urllib.error.HTTPError as exc:
+    try:
+      detail = exc.read().decode("utf-8", errors="replace")[:500]
+    except Exception:
+      detail = ""
+    return {
+      "configured": True,
+      "ok": False,
+      "status": exc.code,
+      "error": detail or str(exc),
+    }
+  except Exception as exc:
+    return {"configured": True, "ok": False, "error": str(exc)}
+
+
+# --- cloudflared quick tunnel ---
+def _cloudflared_path() -> str:
+  configured = os.environ.get("CARROT_CLOUDFLARED_BIN", "").strip()
+  if configured:
+    return configured
+  found = shutil.which("cloudflared")
+  if found:
+    return found
+  local = os.path.join(CARROT_DATA_DIR, "bin", "cloudflared")
+  if os.path.isfile(local) and os.access(local, os.X_OK):
+    return local
+  return ""
+
+
+def _download_cloudflared() -> str:
+  if platform.system().lower() != "linux":
+    raise RuntimeError(f"cloudflared unavailable on {platform.system()} {platform.machine()}")
+  url = CLOUDFLARED_DOWNLOADS.get(platform.machine().lower(), "")
+  if not url:
+    raise RuntimeError(f"cloudflared auto-install unsupported on {platform.machine()}")
+  target = os.path.join(CARROT_DATA_DIR, "bin", "cloudflared")
+  os.makedirs(os.path.dirname(target), exist_ok=True)
+  tmp = f"{target}.tmp"
+  with urllib.request.urlopen(url, timeout=60) as resp, open(tmp, "wb") as out:
+    shutil.copyfileobj(resp, out)
+  os.chmod(tmp, 0o755)
+  os.replace(tmp, target)
+  return target
+
+
+class Tunnel:
+  def __init__(self, url: str, proc: subprocess.Popen | None = None):
+    self.url = url
+    self.proc = proc
+
+  def stop(self) -> None:
+    if self.proc and self.proc.poll() is None:
+      try:
+        self.proc.terminate()
+        try:
+          self.proc.wait(timeout=4)
+        except Exception:
+          self.proc.kill()
+      except Exception:
+        pass
+
+
+def _start_quick_tunnel(local_url: str, timeout_s: float = 25.0) -> Tunnel:
+  fake = os.environ.get("CARROT_SUPPORT_FAKE_TUNNEL_URL", "").strip()
+  if fake:
+    return Tunnel(url=fake)
+  binary = _cloudflared_path() or _download_cloudflared()
+  proc = subprocess.Popen(
+    [binary, "tunnel", "--url", local_url],
+    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
   )
-  if p.returncode != 0:
-    raise RuntimeError((p.stderr or p.stdout or "tmux capture failed").strip())
-  return (p.stdout or "").rstrip() or " "
+  url = ""
+  deadline = time.time() + timeout_s
+  while time.time() < deadline:
+    line = proc.stdout.readline() if proc.stdout else ""
+    if not line:
+      if proc.poll() is not None:
+        break
+      continue
+    match = TRYCLOUDFLARE_RE.search(line)
+    if match:
+      url = match.group(0)
+      break
+  if not url:
+    Tunnel(url="", proc=proc).stop()
+    raise RuntimeError("cloudflared did not provide a trycloudflare URL")
+  # Keep draining stdout so the OS pipe buffer can't fill and stall cloudflared.
+  threading.Thread(target=lambda: [None for _ in iter(proc.stdout.readline, "")], daemon=True).start()
+  return Tunnel(url=url, proc=proc)
 
 
-def _tmux_send_line(line: str) -> None:
-  _tmux_ensure()
-  if line:
-    _tmux_run(["tmux", "send-keys", "-t", TMUX_SESSION, "-l", line], timeout=4.0, check=True)
-  _tmux_run(["tmux", "send-keys", "-t", TMUX_SESSION, "Enter"], timeout=4.0, check=True)
+# --- session + manager ---
+def _now() -> float:
+  return time.time()
 
 
-def _tmux_control(action: str) -> None:
-  _tmux_ensure()
-  if action == "ctrl_c":
-    _tmux_run(["tmux", "send-keys", "-t", TMUX_SESSION, "C-c"], timeout=4.0, check=True)
-  elif action == "clear":
-    _tmux_send_line("clear")
-    _tmux_run(["tmux", "clear-history", "-t", TMUX_SESSION], timeout=4.0)
-  elif action == "new_session":
-    _tmux_run(["tmux", "kill-session", "-t", TMUX_SESSION], timeout=3.0)
-    _tmux_ensure()
-  else:
-    raise ValueError(f"unknown control: {action}")
+def _new_pin() -> str:
+  return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _sanitize_ttl(v) -> int:
+  try:
+    s = int(v)
+  except Exception:
+    s = SUPPORT_TTL_SECONDS
+  return s if s in ALLOWED_TTL_SECONDS else (SUPPORT_TTL_SECONDS if SUPPORT_TTL_SECONDS in ALLOWED_TTL_SECONDS else 1800)
+
+
+def _sanitize_permission(v) -> str:
+  m = str(v or "approve_each").strip()
+  return m if m in ALLOWED_PERMISSION_MODES else "approve_each"
+
+
+def _sanitize_cmd_timeout(v) -> int:
+  try:
+    s = int(v)
+  except Exception:
+    s = SUPPORT_COMMAND_TIMEOUT_SECONDS
+  return s if s in ALLOWED_COMMAND_TIMEOUT_SECONDS else (SUPPORT_COMMAND_TIMEOUT_SECONDS if SUPPORT_COMMAND_TIMEOUT_SECONDS in ALLOWED_COMMAND_TIMEOUT_SECONDS else 30)
+
+
+def _sanitize_typing(v) -> str:
+  return "".join(ch for ch in str(v or "") if ch.isprintable())[:160]
+
+
+class SupportSession:
+  def __init__(self, sid, pin, note, ttl, permission_mode, command_timeout):
+    self.id = sid
+    self.pin = pin
+    self.note = note
+    self.created_at = _now()
+    self.ttl_seconds = ttl
+    self.expires_at = 0 if ttl <= 0 else _now() + ttl
+    self.command_timeout_seconds = command_timeout
+    self.permission_mode = permission_mode
+    self.state = "starting"
+    self.tunnel_url = ""
+    self.local_url = ""
+    self.error = ""
+    self.status_detail = ""
+    self.discord: dict = {}
+    self.pin_failures = 0
+    self.pending: dict = {}          # id -> command dict
+    self.tunnel: Tunnel | None = None
+    self.guest_httpd: ThreadingHTTPServer | None = None
+    self.guest_port = 0
+    self.owner_conns: set = set()    # WsConn
+    self.guest_conns: set = set()    # WsConn
+    self.controller = None           # WsConn
+
+  def is_expired(self) -> bool:
+    return self.expires_at > 0 and _now() >= self.expires_at
+
+
+class SupportManager:
+  def __init__(self) -> None:
+    self.lock = threading.RLock()
+    self.session: SupportSession | None = None
+
+  def snapshot(self, session: SupportSession | None = None) -> dict:
+    session = session or self.session
+    if session is None:
+      return {"ok": True, "active": False, "state": "idle"}
+    remaining = None if session.expires_at <= 0 else max(0, int(session.expires_at - _now()))
+    return {
+      "ok": True,
+      "active": session.state in {"starting", "sharing"},
+      "id": session.id,
+      "state": session.state,
+      "url": session.tunnel_url,
+      "local_url": session.local_url,
+      "expires_at": session.expires_at,
+      "expires_in": remaining,
+      "ttl_seconds": session.ttl_seconds,
+      "permission_mode": session.permission_mode,
+      "command_timeout_seconds": session.command_timeout_seconds,
+      "guest_count": len(session.guest_conns),
+      "owner_count": len(session.owner_conns),
+      "owner_present": bool(session.owner_conns),
+      "controller_present": session.controller is not None and not session.controller.closed,
+      "discord": session.discord,
+      "error": session.error,
+      "status_detail": session.status_detail,
+      "pending_commands": [
+        {"id": c["id"], "line": c["line"], "status": c["status"], "created_at": c["created_at"]}
+        for c in session.pending.values() if c["status"] == "pending"
+      ],
+    }
+
+  def _broadcast(self, conns: set, payload: dict) -> None:
+    for conn in list(conns):
+      if conn.closed or not conn.send_json(payload):
+        conns.discard(conn)
+
+  def broadcast_owner(self, payload: dict) -> None:
+    if self.session:
+      self._broadcast(self.session.owner_conns, payload)
+
+  def broadcast_guests(self, payload: dict) -> None:
+    if self.session:
+      self._broadcast(self.session.guest_conns, payload)
+
+  def broadcast_all(self, payload: dict) -> None:
+    if self.session:
+      self._broadcast(self.session.owner_conns, payload)
+      self._broadcast(self.session.guest_conns, payload)
+
+  def _set_status(self, session: SupportSession, detail: str) -> None:
+    session.status_detail = detail
+    if self.session is session:
+      self.broadcast_owner({"type": "session_status", **self.snapshot(session)})
+
+  def start(self, note="", ttl_seconds=None, permission_mode=None, command_timeout_seconds=None) -> dict:
+    with self.lock:
+      if self.session and self.session.state in {"starting", "sharing"} and not self.session.is_expired():
+        return self.snapshot(self.session)
+      if self.session:
+        self._stop_locked("restart")
+      session = SupportSession(
+        sid=secrets.token_urlsafe(16),
+        pin=_new_pin(),
+        note=str(note or "")[:500],
+        ttl=_sanitize_ttl(ttl_seconds),
+        permission_mode=_sanitize_permission(permission_mode),
+        command_timeout=_sanitize_cmd_timeout(command_timeout_seconds),
+      )
+      self.session = session
+    try:
+      PTY.ensure()
+      self._set_status(session, "Starting support page")
+      self._start_guest_server(session)
+      self._set_status(session, "Starting secure tunnel")
+      session.tunnel = _start_quick_tunnel(f"http://127.0.0.1:{session.guest_port}")
+      base = session.tunnel.url.rstrip("/")
+      session.tunnel_url = base if "/support/terminal/" in base else f"{base}/support/terminal/{session.id}"
+      session.state = "sharing"
+      self._set_status(session, "Secure tunnel ready")
+      if session.expires_at > 0:
+        threading.Thread(target=self._expiry_loop, args=(session,), daemon=True).start()
+
+      def _notify():
+        session.discord = _send_support_webhook({
+          "sessionId": session.id,
+          "createdAt": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(session.created_at)),
+          "url": session.tunnel_url, "pin": session.pin,
+          "ttl_minutes": "unlimited" if session.ttl_seconds <= 0 else max(1, session.ttl_seconds // 60),
+          "permissionMode": session.permission_mode,
+          "commandTimeoutSeconds": session.command_timeout_seconds,
+          "meta": _support_metadata(), "note": session.note,
+        })
+        self.broadcast_owner({"type": "session_status", **self.snapshot(session)})
+      threading.Thread(target=_notify, daemon=True).start()
+      self._set_status(session, "Ready")
+      return self.snapshot(session)
+    except Exception as exc:
+      if self.session is session:
+        session.state = "error"
+        session.error = str(exc)
+        session.status_detail = "Start failed"
+        self._cleanup(session)
+        self.broadcast_owner({"type": "error", "message": session.error})
+        return self.snapshot(session)
+      self._cleanup(session)
+      return self.snapshot(None)
+
+  def stop(self, reason="stopped") -> dict:
+    with self.lock:
+      self._stop_locked(reason)
+      return self.snapshot(None)
+
+  def _stop_locked(self, reason: str) -> None:
+    session = self.session
+    if session is None:
+      return
+    session.state = "stopped" if reason != "expired" else "expired"
+    self.broadcast_all({"type": "session_closed", "reason": reason})
+    self.session = None
+    threading.Thread(target=self._cleanup, args=(session,), daemon=True).start()
+
+  def _cleanup(self, session: SupportSession) -> None:
+    for conn in list(session.guest_conns):
+      PTY.detach(conn)
+    for conn in list(session.owner_conns | session.guest_conns):
+      try:
+        conn.close()
+      except Exception:
+        pass
+    session.owner_conns.clear()
+    session.guest_conns.clear()
+    session.controller = None
+    if session.tunnel:
+      session.tunnel.stop()
+      session.tunnel = None
+    if session.guest_httpd:
+      try:
+        session.guest_httpd.shutdown()
+        session.guest_httpd.server_close()
+      except Exception:
+        pass
+      session.guest_httpd = None
+
+  def _start_guest_server(self, session: SupportSession) -> None:
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), SupportGuestHandler)
+    httpd.daemon_threads = True
+    session.guest_httpd = httpd
+    session.guest_port = httpd.server_address[1]
+    session.local_url = f"http://127.0.0.1:{session.guest_port}/support/terminal/{session.id}"
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+  def _expiry_loop(self, session: SupportSession) -> None:
+    while not session.is_expired():
+      if self.session is not session:
+        return
+      self.broadcast_owner({"type": "session_status", **self.snapshot(session)})
+      time.sleep(1.0)
+    with self.lock:
+      if self.session is session:
+        self._stop_locked("expired")
+
+  def _sync_control_roles(self, session: SupportSession) -> None:
+    if session.permission_mode != "allow_all":
+      session.controller = None
+    elif session.controller is None or session.controller.closed or session.controller not in session.guest_conns:
+      session.controller = next((g for g in session.guest_conns if not g.closed), None)
+    for g in list(session.guest_conns):
+      if g.closed:
+        continue
+      g.send_json({"type": "control_role",
+                   "granted": session.permission_mode != "allow_all" or g is session.controller})
+
+  # ---- owner side ----
+  def owner_connected(self, conn) -> bool:
+    session = self.session
+    if session is None:
+      conn.send_json({"type": "session_status", **self.snapshot(None)})
+      return False
+    session.owner_conns.add(conn)
+    conn.send_json({"type": "session_status", **self.snapshot(session)})
+    self.broadcast_owner({"type": "guest_presence", "count": len(session.guest_conns)})
+    self.broadcast_guests({"type": "owner_presence", "active": True})
+    return True
+
+  def owner_message(self, conn, data: dict) -> None:
+    session = self.session
+    if session is None:
+      return
+    if data.get("type") == "refresh":
+      conn.send_json({"type": "session_status", **self.snapshot(session)})
+    elif data.get("type") == "typing":
+      self.broadcast_guests({"type": "host_typing", "active": bool(data.get("active")), "text": _sanitize_typing(data.get("text"))})
+
+  def owner_disconnected(self, conn) -> None:
+    session = self.session
+    if session is None:
+      return
+    session.owner_conns.discard(conn)
+    self.broadcast_guests({"type": "owner_presence", "active": bool(session.owner_conns)})
+
+  # ---- guest side ----
+  def guest_auth(self, conn, session: SupportSession, pin: str):
+    if pin != session.pin:
+      session.pin_failures += 1
+      conn.send_json({"type": "auth_failed", "remaining": max(0, PIN_FAILURE_LIMIT - session.pin_failures)})
+      if session.pin_failures >= PIN_FAILURE_LIMIT:
+        conn.close()
+        return "closed"
+      return False
+    session.guest_conns.add(conn)
+    if session.permission_mode == "allow_all" and (session.controller is None or session.controller.closed):
+      session.controller = conn
+    expires_in = None if session.expires_at <= 0 else max(0, int(session.expires_at - _now()))
+    conn.send_json({
+      "type": "auth_ok",
+      "permission_mode": session.permission_mode,
+      "command_timeout_seconds": session.command_timeout_seconds,
+      "expires_in": expires_in,
+      "owner_present": bool(session.owner_conns),
+      "control_granted": session.permission_mode != "allow_all" or conn is session.controller,
+    })
+    try:
+      PTY.attach(conn)
+    except Exception as exc:
+      session.guest_conns.discard(conn)
+      conn.send_json({"type": "error", "message": str(exc)})
+      conn.close()
+      return "closed"
+    self.broadcast_owner({"type": "guest_presence", "count": len(session.guest_conns)})
+    self._sync_control_roles(session)
+    return True
+
+  def guest_message(self, conn, session: SupportSession, data: dict) -> None:
+    typ = data.get("type")
+    if typ == "typing":
+      self.broadcast_owner({"type": "guest_typing", "active": bool(data.get("active")), "text": _sanitize_typing(data.get("text"))})
+    elif typ == "close_session":
+      self.stop("guest")
+      raise WsClosed()
+    elif typ == "disconnect":
+      raise WsClosed()
+    elif typ == "control":
+      if session.permission_mode == "allow_all" and conn is not session.controller:
+        conn.send_json({"type": "input_denied", "reason": "viewer only"})
+        return
+      action = str(data.get("action") or "").strip()
+      if action in {"ctrl_c", "clear"}:
+        label = "Ctrl+C" if action == "ctrl_c" else "clear"
+        self.queue_command(session, label, conn, control_action=action)
+    elif typ == "input":
+      if session.permission_mode == "allow_all" and conn is not session.controller:
+        conn.send_json({"type": "input_denied", "reason": "viewer only"})
+        return
+      line = str(data.get("data") or "").strip()
+      if line:
+        self.queue_command(session, line, conn)
+    elif typ == "raw":
+      if not session.owner_conns:
+        conn.send_json({"type": "owner_absent"})
+        return
+      if session.permission_mode != "allow_all":
+        conn.send_json({"type": "input_denied", "reason": "approval required"})
+        return
+      if conn is not session.controller:
+        conn.send_json({"type": "input_denied", "reason": "viewer only"})
+        return
+      text = str(data.get("data") or "")[:4096]
+      if text:
+        try:
+          PTY.write_text(text)
+        except Exception as exc:
+          conn.send_json({"type": "error", "message": str(exc)})
+
+  def guest_disconnected(self, conn, session: SupportSession) -> None:
+    PTY.detach(conn)
+    session.guest_conns.discard(conn)
+    if session.controller is conn:
+      session.controller = None
+    self._sync_control_roles(session)
+    self.broadcast_owner({"type": "guest_presence", "count": len(session.guest_conns)})
+
+  # ---- command approval ----
+  def queue_command(self, session: SupportSession, line: str, conn=None, control_action="") -> None:
+    if not session.owner_conns:
+      if conn is not None and not conn.closed:
+        conn.send_json({"type": "owner_absent"})
+      return
+    if session.permission_mode == "allow_all":
+      cmd = {"id": secrets.token_urlsafe(8), "line": line[:4000], "created_at": _now(), "status": "approved", "control_action": control_action}
+      if conn is not None and not conn.closed:
+        conn.send_json({"type": "command_approved", "id": cmd["id"]})
+      self._run_command(session, cmd)
+      self.broadcast_owner({"type": "command_auto_run", "id": cmd["id"], "line": cmd["line"], "created_at": cmd["created_at"]})
+      return
+    cmd = {"id": secrets.token_urlsafe(8), "line": line[:4000], "created_at": _now(), "status": "pending", "control_action": control_action}
+    session.pending[cmd["id"]] = cmd
+    self.broadcast_owner({"type": "command_request", "id": cmd["id"], "line": cmd["line"], "created_at": cmd["created_at"], "control_action": control_action})
+    if conn is not None and not conn.closed:
+      conn.send_json({"type": "command_waiting_approval", "id": cmd["id"]})
+    threading.Timer(session.command_timeout_seconds, self._expire_command, args=(session, cmd["id"])).start()
+
+  def _expire_command(self, session: SupportSession, cmd_id: str) -> None:
+    cmd = session.pending.get(cmd_id)
+    if cmd is None or cmd["status"] != "pending":
+      return
+    cmd["status"] = "expired"
+    session.pending.pop(cmd_id, None)
+    self.broadcast_all({"type": "command_expired", "id": cmd_id})
+
+  def approve_command(self, cmd_id: str) -> dict:
+    session = self.session
+    if session is None:
+      return {"ok": False, "error": "no active session"}
+    cmd = session.pending.get(cmd_id)
+    if cmd is None or cmd["status"] != "pending":
+      return {"ok": False, "error": "command not pending"}
+    cmd["status"] = "approved"
+    session.pending.pop(cmd_id, None)
+    self.broadcast_all({"type": "command_approved", "id": cmd_id})
+    return self._run_command(session, cmd)
+
+  def reject_command(self, cmd_id: str) -> dict:
+    session = self.session
+    if session is None:
+      return {"ok": False, "error": "no active session"}
+    cmd = session.pending.get(cmd_id)
+    if cmd is None or cmd["status"] != "pending":
+      return {"ok": False, "error": "command not pending"}
+    cmd["status"] = "rejected"
+    session.pending.pop(cmd_id, None)
+    self.broadcast_all({"type": "command_rejected", "id": cmd_id})
+    return {"ok": True}
+
+  def _run_command(self, session: SupportSession, cmd: dict) -> dict:
+    try:
+      if cmd["control_action"] == "ctrl_c":
+        PTY.write(b"\x03")
+      elif cmd["control_action"] == "clear":
+        PTY.clear_history()
+        PTY.write(b"clear\r")
+      else:
+        PTY.write_text(cmd["line"] + "\r")
+      self.broadcast_all({"type": "command_running", "id": cmd["id"]})
+      return {"ok": True}
+    except Exception as exc:
+      self.broadcast_all({"type": "command_failed", "id": cmd["id"], "message": str(exc)})
+      return {"ok": False, "error": str(exc)}
+
+
+SUPPORT = SupportManager()
+
+
+def _serve_support_owner_ws(handler: BaseHTTPRequestHandler) -> None:
+  conn = _ws_upgrade(handler)
+  if conn is None:
+    return
+  if not SUPPORT.owner_connected(conn):
+    conn.close()
+    return
+  try:
+    while True:
+      message = conn.read_message()
+      if message is None:
+        continue
+      try:
+        data = json.loads(message)
+      except Exception:
+        continue
+      SUPPORT.owner_message(conn, data)
+  except (WsClosed, OSError, ConnectionError):
+    pass
+  finally:
+    SUPPORT.owner_disconnected(conn)
+
+
+def _serve_support_guest_ws(handler: BaseHTTPRequestHandler, session_id: str) -> None:
+  conn = _ws_upgrade(handler)
+  if conn is None:
+    return
+  session = SUPPORT.session
+  if session is None or session.id != session_id or session.is_expired():
+    conn.send_json({"type": "error", "message": "session unavailable"})
+    conn.close()
+    return
+  authed = False
+  try:
+    while True:
+      message = conn.read_message()
+      if message is None:
+        continue
+      try:
+        data = json.loads(message)
+      except Exception:
+        continue
+      if not authed:
+        if data.get("type") != "auth":
+          continue
+        result = SUPPORT.guest_auth(conn, session, str(data.get("pin") or "").strip())
+        if result == "closed":
+          return
+        authed = bool(result)
+        continue
+      SUPPORT.guest_message(conn, session, data)
+  except (WsClosed, OSError, ConnectionError):
+    pass
+  finally:
+    SUPPORT.guest_disconnected(conn, session)
+
+
+def _support_csp(host: str) -> str:
+  safe = "".join(ch for ch in str(host or "") if ch.isalnum() or ch in ".-:[]")
+  connect = "'self'" if not safe else f"'self' ws://{safe} wss://{safe}"
+  return (
+    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    f"connect-src {connect}; img-src 'self' data:; font-src 'self'; "
+    "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+  )
+
+
+class SupportGuestHandler(BaseHTTPRequestHandler):
+  """Restricted server exposed via the public tunnel — guest page/assets/WS only."""
+  server_version = "CarrotRecoveryGuest/1.0"
+  protocol_version = "HTTP/1.1"
+
+  def log_message(self, fmt: str, *args) -> None:
+    pass
+
+  def _send(self, status: int, ctype: str, data: bytes, extra: dict | None = None) -> None:
+    self.send_response(status)
+    self.send_header("Content-Type", ctype)
+    self.send_header("Content-Length", str(len(data)))
+    self.send_header("Cache-Control", "no-store")
+    self.send_header("X-Content-Type-Options", "nosniff")
+    self.send_header("Referrer-Policy", "no-referrer")
+    for k, v in (extra or {}).items():
+      self.send_header(k, v)
+    self.end_headers()
+    if self.command != "HEAD":
+      self.wfile.write(data)
+
+  def do_GET(self) -> None:
+    path = urlparse(self.path).path
+    if path.startswith("/ws/support_terminal/"):
+      if self.headers.get("Upgrade", "").lower() == "websocket":
+        _serve_support_guest_ws(self, path.rsplit("/", 1)[-1])
+      else:
+        self.send_error(400, "expected websocket upgrade")
+      return
+    if path == "/" or path.startswith("/support/terminal/"):
+      sid = path.rsplit("/", 1)[-1] if path.startswith("/support/terminal/") else ""
+      sid = "".join(c for c in sid if c.isalnum() or c in "-_")
+      try:
+        with open(SUPPORT_GUEST_HTML_PATH, "r", encoding="utf-8") as f:
+          page = f.read().replace("__SESSION_ID__", sid)
+      except Exception:
+        self.send_error(404)
+        return
+      self._send(200, "text/html; charset=utf-8", page.encode("utf-8"), {
+        "Content-Security-Policy": _support_csp(self.headers.get("Host", "")),
+        "X-Frame-Options": "DENY",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), usb=(), serial=(), hid=(), bluetooth=()",
+      })
+      return
+    if path.startswith("/support-terminal-assets/"):
+      asset = SUPPORT_GUEST_ASSETS.get(path.rsplit("/", 1)[-1])
+      if not asset or not os.path.isfile(asset):
+        self.send_error(404)
+        return
+      ctype = STATIC_EXT_TYPES.get(Path(asset).suffix.lower(), "application/octet-stream")
+      self._send(200, ctype, Path(asset).read_bytes())
+      return
+    self.send_error(404)
+
+  def do_HEAD(self) -> None:
+    self.do_GET()
+
+
+# ===================================================================
+# Recovery page — reuses the real terminal assets from selfdrive/carrot/web.
+# ===================================================================
+HTML_PAGE = """<!doctype html>
+<html class="notranslate" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Carrot Recovery</title>
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/layout_tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/vendor/xterm.css">
+<link rel="stylesheet" href="/css/pages/terminal.css?v=2607-104">
+<style>
+/* recovery has none of the app's nav chrome (side rail / bottom bar). The reused
+   terminal.css reserves space for them (left: var(--nav-rail-width) on wide
+   screens, a bottom gap of var(--nav-bar-height) on narrow ones), which shows up
+   as empty margins here. Zero the nav sizing tokens so the terminal fills the
+   viewport correctly in every layout (wide / narrow / foldable). */
+:root {
+  --nav-rail-width: 0px;
+  --nav-bar-height: 0px;
+  --nav-bar-height-desktop: 0px;
+  --app-nav-bottom-gap: 0px;
+}
+/* recovery-only: the Git recovery menu that lives in the terminal toolbar. It
+   reuses the app tokens (.smallBtn / popup surface), only the dropdown layout
+   is local. */
+.rc-menu-wrap { position: relative; }
+.rc-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: var(--z-popover, 150);
+  min-width: 208px; display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--popup-bg); border: 1px solid var(--popup-border-color);
+  border-radius: var(--popup-radius); box-shadow: var(--popup-shadow);
+}
+.rc-menu[hidden] { display: none; }
+.rc-menu button {
+  text-align: left; background: transparent; color: var(--md-on-surface); border: 0;
+  border-radius: var(--control-radius); padding: 10px 12px; font: inherit; font-weight: 700;
+  cursor: pointer;
+}
+.rc-menu button:hover { background: var(--md-surface-cont-h); }
+.rc-menu button.danger { color: var(--md-danger); }
+.rc-menu button.danger:hover { background: var(--md-danger-cont); }
+.rc-brand { color: var(--md-primary); font-weight: 800; }
+</style>
+</head>
+<body data-page="terminal">
+  <div id="pageTerminal" class="page page--full page--terminal">
+    <div class="terminal-shell">
+      <div class="terminal-head">
+        <div class="muted terminal-meta" id="terminalMeta">connecting...</div>
+        <div class="terminal-toolbar">
+          <div id="terminalSessionMeta" class="terminal-sessionMeta"><span class="rc-brand">carrot recovery</span></div>
+          <div class="terminal-toolbar__actions">
+            <div class="rc-menu-wrap">
+              <button id="rcGitBtn" class="smallBtn" type="button" aria-haspopup="true" aria-expanded="false">Git &#x25BE;</button>
+              <div id="rcGitMenu" class="rc-menu" hidden>
+                <button data-act="git_pull">git pull</button>
+                <button data-act="git_sync">git sync</button>
+                <button data-act="git_reset">git reset</button>
+                <button data-act="git_log">git log</button>
+                <button data-act="git_branches">change branch</button>
+                <button data-act="git_reset_repo">reset repo</button>
+              </div>
+            </div>
+            <div class="rc-menu-wrap">
+              <button id="rcToolsBtn" class="smallBtn" type="button" aria-haspopup="true" aria-expanded="false">Tools &#x25BE;</button>
+              <div id="rcToolsMenu" class="rc-menu" hidden>
+                <button data-tool="send_tmux_log">download tmux log</button>
+                <button data-tool="server_tmux_log">send tmux log</button>
+                <button data-tool="rebuild_all" class="danger">rebuild</button>
+                <button data-act="git_reboot" class="danger">reboot</button>
+              </div>
+            </div>
+            <button id="btnSupportTerminalOpen" class="smallBtn terminal-support-open" type="button">Support</button>
+            <button id="btnTerminalReconnect" class="smallBtn" type="button">Reconnect</button>
+          </div>
+        </div>
+      </div>
+      <div id="terminalScreen" class="terminal-screen"><pre id="terminalOutput" class="terminal-output"> </pre></div>
+      <div id="terminalXterm" class="terminal-xterm" hidden></div>
+      <div id="supportTerminalTypingHost" class="terminal-typing-host" aria-hidden="true"></div>
+      <div id="supportTerminalApprovalHost" class="terminal-approval-host" hidden></div>
+      <div id="terminalKeys" class="terminal-keys" role="group" aria-label="Terminal keys">
+        <button class="smallBtn terminal-key" type="button" data-key="esc">Esc</button>
+        <button class="smallBtn terminal-key" type="button" data-key="ctrl">Ctrl</button>
+        <button class="smallBtn terminal-key" type="button" data-key="ctrl_c">Ctrl+C</button>
+        <button class="smallBtn terminal-key" type="button" data-key="ctrl_d">Ctrl+D</button>
+        <button id="btnTerminalClear" class="smallBtn terminal-key" type="button">Clear</button>
+        <button class="smallBtn terminal-key" type="button" data-key="detach">Detach</button>
+        <button class="smallBtn terminal-key" type="button" data-key="tab">Tab</button>
+        <button class="smallBtn terminal-key" type="button" data-key="home">Home</button>
+        <button class="smallBtn terminal-key" type="button" data-key="end">End</button>
+        <button class="smallBtn terminal-key" type="button" data-key="page_up">PgUp</button>
+        <button class="smallBtn terminal-key" type="button" data-key="page_down">PgDn</button>
+        <button class="smallBtn terminal-key" type="button" data-key="up" aria-label="Up">&#x2191;</button>
+        <button class="smallBtn terminal-key" type="button" data-key="down" aria-label="Down">&#x2193;</button>
+        <button class="smallBtn terminal-key" type="button" data-key="left" aria-label="Left">&#x2190;</button>
+        <button class="smallBtn terminal-key" type="button" data-key="right" aria-label="Right">&#x2192;</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="appToastHost" class="app-toast-host" aria-live="polite" aria-atomic="true"></div>
+
+  <div id="appDialog" class="app-dialog" hidden>
+    <button id="appDialogBackdrop" class="app-dialog__backdrop" type="button" aria-label="Close dialog"></button>
+    <div class="app-dialog__sheet" role="dialog" aria-modal="true" aria-labelledby="appDialogTitle" aria-describedby="appDialogBody">
+      <div class="app-dialog__head">
+        <div id="appDialogTitle" class="app-dialog__title">Notice</div>
+      </div>
+      <div id="appDialogBody" class="app-dialog__body">-</div>
+      <div id="appDialogChoices" class="app-dialog__choices" hidden></div>
+      <div id="appDialogInputWrap" class="app-dialog__inputWrap" hidden>
+        <input id="appDialogInput" type="text" class="input-text app-dialog__input" />
+        <div id="appDialogInputError" class="app-dialog__inputError" role="alert" hidden></div>
+      </div>
+      <div class="app-dialog__actions">
+        <button id="appDialogCopy" class="smallBtn" type="button" hidden>Copy</button>
+        <button id="appDialogDefault" class="smallBtn" type="button" hidden>Default</button>
+        <button id="appDialogCancel" class="smallBtn" type="button">Cancel</button>
+        <button id="appDialogConfirm" class="smallBtn btn--filled" type="button">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/translations/registry.js"></script>
+  <script src="/js/translations/ko.js"></script>
+  <script src="/js/translations/en.js"></script>
+  <script src="/js/translations/zh.js"></script>
+  <script src="/js/shared/constants.js"></script>
+  <script src="/js/shared/dom.js"></script>
+  <script src="/js/shared/utils.js"></script>
+  <script src="/js/shared/i18n.js"></script>
+  <script src="/js/shared/ui/dialog.js"></script>
+  <script src="/js/shared/ui/viewport.js"></script>
+  <script src="/js/vendor/xterm-addon-shim.js"></script>
+  <script src="/js/vendor/xterm.js"></script>
+  <script src="/js/vendor/xterm-addon-webgl.js"></script>
+  <script src="/js/vendor/xterm-addon-canvas.js"></script>
+  <script src="/js/pages/terminal.js"></script>
+  <script src="/js/shared/ui/terminal_typing_indicator.js?v=2607-01"></script>
+  <script src="/recovery-api.js"></script>
+  <script src="/js/pages/support_terminal.js?v=2607-26"></script>
+  <script src="/recovery.js"></script>
+</body>
+</html>
+"""
+
+
+# Recovery-owned transport for shared UI modules. The main app normally
+# provides getJson/postJson from shared/api.js; recovery intentionally does not
+# load that app-wide API surface. Keep requests same-origin so they always
+# resolve to this standalone server (port 6999), never the main Carrot service.
+RECOVERY_API_JS = """\"use strict\";
+(function () {
+  async function requestJson(url, options) {
+    var response = await fetch(url, options || {});
+    var text = await response.text();
+    var payload = {};
+
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch (err) {
+        throw new Error(text.slice(0, 500) || ("HTTP " + response.status));
+      }
+    }
+
+    if (!response.ok || (payload && payload.ok === false)) {
+      var error = new Error((payload && (payload.error || payload.out)) || ("HTTP " + response.status));
+      error.status = response.status;
+      error.payload = payload || null;
+      throw error;
+    }
+    return payload;
+  }
+
+  function getJson(url) {
+    return requestJson(url, { cache: "no-store" });
+  }
+
+  function postJson(url, body) {
+    return requestJson(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+  }
+
+  var api = Object.freeze({ requestJson: requestJson, getJson: getJson, postJson: postJson });
+  window.CarrotRecoveryApi = api;
+
+  // Compatibility contract for the shared support_terminal.js component.
+  // These globals exist only in the recovery document and are backed by the
+  // recovery-owned, same-origin transport above.
+  window.getJson = getJson;
+  window.postJson = postJson;
+})();
+"""
+
+
+# recovery-only glue: wires the Git recovery menu to the reused app dialogs and
+# runs recovered commands in the shared PTY, then boots the reused terminal.
+RECOVERY_JS = """\"use strict\";
+(function () {
+  var menuWraps = Array.prototype.slice.call(document.querySelectorAll(\".rc-menu-wrap\"));
+  function closeMenus() {
+    menuWraps.forEach(function (wrap) {
+      var m = wrap.querySelector(\".rc-menu\");
+      var b = wrap.querySelector(\"button[aria-haspopup]\");
+      if (m) m.hidden = true;
+      if (b) b.setAttribute(\"aria-expanded\", \"false\");
+    });
+  }
+  menuWraps.forEach(function (wrap) {
+    var b = wrap.querySelector(\"button[aria-haspopup]\");
+    var m = wrap.querySelector(\".rc-menu\");
+    if (!b || !m) return;
+    b.addEventListener(\"click\", function (e) {
+      e.stopPropagation();
+      var willOpen = m.hidden;
+      closeMenus();
+      m.hidden = !willOpen;
+      b.setAttribute(\"aria-expanded\", String(willOpen));
+    });
+  });
+  document.addEventListener(\"click\", function (e) {
+    if (!e.target.closest(\".rc-menu-wrap\")) closeMenus();
+  });
+
+  function toast(msg, tone) {
+    if (typeof showAppToast === \"function\") showAppToast(msg, tone ? { tone: tone } : {});
+  }
+
+  async function callAction(action, payload) {
+    var body = Object.assign({ action: action }, payload || {});
+    var r = await fetch(\"/api/action\", {
+      method: \"POST\", headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify(body),
+    });
+    return r.json();
+  }
+  async function runInTerminal(command) {
+    await fetch(\"/api/terminal/input\", {
+      method: \"POST\", headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ data: command }),
+    });
+  }
+  async function dispatchGit(action, payload) {
+    var data = await callAction(action, payload);
+    if (data && data.rebooting) return data;
+    if (data && data.ok === false) { toast(data.error || \"failed\", \"error\"); return data; }
+    if (data && data.command) await runInTerminal(data.command);
+    return data;
+  }
+
+  var CONFIRMS = {
+    git_pull:    { title: \"git pull\",  message: \"Pull latest commits from remote.\\nLocal changes will be reset first.\", confirmLabel: \"Pull\" },
+    git_sync:    { title: \"git sync\",  message: \"Delete all local branches except the current one, then fetch from remote.\", confirmLabel: \"Sync\" },
+    git_reset:   { title: \"git reset\", message: \"Reset the current branch to the last commit.\\nAll local changes will be lost.\", confirmLabel: \"Reset\" },
+    git_rebuild: { title: \"rebuild\",   message: \"Clean all build cache. Will rebuild on next boot.\", confirmLabel: \"Clean\" },
+  };
+
+  async function pickBranch(title, message, selected, confirmLabel) {
+    var data = await callAction(\"git_branches\");
+    if (!data || !data.ok) { toast((data && data.error) || \"failed to list branches\", \"error\"); return null; }
+    var want = selected || data.current;
+    var choices = data.branches.map(function (b) {
+      return { label: (b.kind === \"remote\" ? \"\\u2197 \" : \"   \") + b.name, value: b.name, current: b.name === want };
+    });
+    return openAppDialog({ mode: \"choice\", title: title, message: message, choices: choices, confirmLabel: confirmLabel });
+  }
+
+  async function onGit(action) {
+    closeMenus();
+    if (CONFIRMS[action]) {
+      var c = CONFIRMS[action];
+      if (await appConfirm(c.message, { title: c.title, confirmLabel: c.confirmLabel })) await dispatchGit(action);
+      return;
+    }
+    if (action === \"git_log\") {
+      var log = await callAction(\"git_log\");
+      if (!log || !log.ok) { toast((log && log.error) || \"failed\", \"error\"); return; }
+      var commits = log.commits || [];
+      if (!commits.length) { appAlert(\"(no commits)\", { title: \"git log\" }); return; }
+      var logChoices = commits.map(function (c) {
+        return { label: c.hash + \"  \" + (c.message || \"\"), value: c.hash, current: !!(log.current && c.hash.indexOf(log.current) === 0) };
+      });
+      var sel = await openAppDialog({ mode: \"choice\", title: \"git log\", message: \"Select a commit to checkout.\", choices: logChoices, confirmLabel: \"Checkout\" });
+      if (!sel) return;
+      if (log.current && sel.indexOf(log.current) === 0) return;
+      if (await appConfirm(\"Move to the selected commit.\\n\\n\" + sel, { title: \"Checkout commit\", confirmLabel: \"Checkout\" })) {
+        await dispatchGit(\"git_checkout_commit\", { commit: sel });
+      }
+      return;
+    }
+    if (action === \"git_branches\") {
+      var branch = await pickBranch(\"Change branch\", \"Select a branch to switch to.\", null, \"Switch\");
+      if (branch) await dispatchGit(\"git_checkout\", { branch: branch });
+      return;
+    }
+    if (action === \"git_reset_repo\") {
+      var target = await pickBranch(\"Reset repo\", \"Fetch the selected branch fresh.\\nAll local changes and untracked files will be lost.\", \"c3-wip\", \"Next\");
+      if (!target) return;
+      if (await appConfirm(\"Branch: \" + target + \"\\nRemote: ajouatom/openpilot.git\\n\\nThis cannot be undone.\", { title: \"Confirm reset\", confirmLabel: \"Reset\" })) {
+        await dispatchGit(\"git_reset_repo\", { branch: target });
+      }
+      return;
+    }
+    if (action === \"git_reboot\") {
+      if (!(await appConfirm(\"The device will restart immediately.\", { title: \"Reboot\", confirmLabel: \"Next\" }))) return;
+      if (!(await appConfirm(\"Really reboot the device?\", { title: \"Confirm reboot\", confirmLabel: \"Reboot\" }))) return;
+      await dispatchGit(\"git_reboot\");
+      return;
+    }
+  }
+
+  async function onTool(action) {
+    closeMenus();
+    if (action === \"rebuild_all\") {
+      if (await appConfirm(\"Clean the build cache and reboot.\\n\\n\\u2022 scons -c\\n\\u2022 rm -rf prebuilt\\n\\u2022 sudo reboot\", { title: \"rebuild\", confirmLabel: \"Rebuild\" })) {
+        await dispatchGit(\"rebuild_all\");
+      }
+      return;
+    }
+    if (action === \"send_tmux_log\") {
+      var r = await callAction(\"send_tmux_log\");
+      if (r && r.ok) { toast(\"tmux log captured\", \"success\"); window.open(r.file || \"/download/tmux.log\", \"_blank\"); }
+      else toast((r && r.error) || \"capture failed\", \"error\");
+      return;
+    }
+    if (action === \"server_tmux_log\") {
+      var r2 = await callAction(\"server_tmux_log\");
+      if (r2 && r2.ok) toast(\"tmux log send triggered\", \"success\");
+      else toast((r2 && r2.error) || \"failed\", \"error\");
+      return;
+    }
+  }
+
+  document.querySelectorAll(\"[data-act]\").forEach(function (btn) {
+    btn.addEventListener(\"click\", function (e) { e.stopPropagation(); onGit(btn.dataset.act); });
+  });
+  document.querySelectorAll(\"[data-tool]\").forEach(function (btn) {
+    btn.addEventListener(\"click\", function (e) { e.stopPropagation(); onTool(btn.dataset.tool); });
+  });
+
+  // Boot the reused terminal (pages/terminal.js defines initTerminalPage).
+  function boot() {
+    if (typeof initTerminalPage === \"function\") initTerminalPage();
+    else setTimeout(boot, 30);
+  }
+  if (document.readyState === \"loading\") document.addEventListener(\"DOMContentLoaded\", boot);
+  else boot();
+})();
+"""
+
+
+# ===================================================================
+# HTTP handler
+# ===================================================================
+def _resolve_static(path: str) -> Path | None:
+  rel = path.lstrip("/")
+  if not any(rel.startswith(root) for root in STATIC_ROOTS):
+    return None
+  target = (WEB_DIR / rel).resolve()
+  try:
+    target.relative_to(WEB_DIR.resolve())
+  except ValueError:
+    return None  # path traversal
+  if not target.is_file():
+    return None
+  if target.suffix.lower() not in STATIC_EXT_TYPES:
+    return None
+  return target
 
 
 class RecoveryHandler(BaseHTTPRequestHandler):
-  server_version = "CarrotRecovery/1.0"
+  server_version = "CarrotRecovery/2.0"
+  protocol_version = "HTTP/1.1"
 
   def log_message(self, fmt: str, *args) -> None:
     print("[recovery]", self.address_string(), fmt % args)
 
+  # ---- helpers ---------------------------------------------------
+  def _send_bytes(self, status: int, content_type: str, data: bytes, cache: bool = False) -> None:
+    self.send_response(status)
+    self.send_header("Content-Type", content_type)
+    self.send_header("Content-Length", str(len(data)))
+    self.send_header("Cache-Control", "public, max-age=300" if cache else "no-store")
+    self.end_headers()
+    if self.command != "HEAD":
+      self.wfile.write(data)
+
+  def _send_json(self, status: int, payload: dict) -> None:
+    self._send_bytes(status, "application/json; charset=utf-8",
+                     json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+  def _read_json(self) -> dict:
+    length = int(self.headers.get("Content-Length", "0") or "0")
+    if length > 65536:
+      raise ValueError("request too large")
+    body = self.rfile.read(length).decode("utf-8") if length else ""
+    return json.loads(body or "{}")
+
+  # ---- routes ----------------------------------------------------
   def do_GET(self) -> None:
-    path = urlparse(self.path).path
+    parsed = urlparse(self.path)
+    path = parsed.path
+    query = dict(p.split("=", 1) if "=" in p else (p, "") for p in parsed.query.split("&") if p)
+
+    if path == "/ws/terminal_pty":
+      if (self.headers.get("Upgrade", "").lower() == "websocket"):
+        _serve_terminal_ws(self, query)
+      else:
+        self.send_error(400, "expected websocket upgrade")
+      return
+
+    if path == "/ws/support_terminal/owner":
+      if self.headers.get("Upgrade", "").lower() == "websocket":
+        _serve_support_owner_ws(self)
+      else:
+        self.send_error(400, "expected websocket upgrade")
+      return
+
+    if path == "/api/support_terminal/status":
+      self._send_json(200, SUPPORT.snapshot())
+      return
+
     if path in ("/", "/index.html"):
-      _html_response(self)
+      self._send_bytes(200, "text/html; charset=utf-8", HTML_PAGE.encode("utf-8"))
       return
-    if path == "/api/terminal/screen":
-      try:
-        _json_response(self, 200, {"ok": True, "session": TMUX_SESSION, "text": _tmux_capture()})
-      except Exception as exc:
-        _json_response(self, 200, {"ok": False, "error": str(exc), "session": TMUX_SESSION, "text": ""})
+
+    if path == "/recovery.js":
+      self._send_bytes(200, "text/javascript; charset=utf-8", RECOVERY_JS.encode("utf-8"))
       return
-    _json_response(self, 404, {"ok": False, "error": "not found"})
+
+    if path == "/recovery-api.js":
+      self._send_bytes(200, "text/javascript; charset=utf-8", RECOVERY_API_JS.encode("utf-8"))
+      return
+
+    if path == "/download/tmux.log":
+      if not os.path.isfile(TMUX_LOG_PATH):
+        self._send_json(404, {"ok": False, "error": "file not found"})
+        return
+      data = Path(TMUX_LOG_PATH).read_bytes()
+      self.send_response(200)
+      self.send_header("Content-Type", "text/plain; charset=utf-8")
+      self.send_header("Content-Length", str(len(data)))
+      self.send_header("Content-Disposition", "attachment; filename=tmux.log")
+      self.send_header("Cache-Control", "no-store")
+      self.end_headers()
+      if self.command != "HEAD":
+        self.wfile.write(data)
+      return
+
+    static = _resolve_static(path)
+    if static is not None:
+      ctype = STATIC_EXT_TYPES.get(static.suffix.lower()) or (mimetypes.guess_type(static.name)[0] or "application/octet-stream")
+      self._send_bytes(200, ctype, static.read_bytes(), cache=True)
+      return
+
+    self._send_json(404, {"ok": False, "error": "not found"})
+
+  def do_HEAD(self) -> None:
+    self.do_GET()
 
   def do_POST(self) -> None:
     path = urlparse(self.path).path
     try:
-      payload = _read_json(self)
+      payload = self._read_json()
     except Exception as exc:
-      _json_response(self, 400, {"ok": False, "error": str(exc)})
+      self._send_json(400, {"ok": False, "error": str(exc)})
       return
 
     if path == "/api/action":
-      _json_response(self, 200, _git_action(str(payload.get("action") or "").strip(), payload))
-      return
-    if path == "/api/terminal/input":
-      try:
-        _tmux_send_line(str(payload.get("data") or ""))
-        _json_response(self, 200, {"ok": True})
-      except Exception as exc:
-        _json_response(self, 200, {"ok": False, "error": str(exc)})
-      return
-    if path == "/api/terminal/control":
-      try:
-        _tmux_control(str(payload.get("action") or "").strip())
-        _json_response(self, 200, {"ok": True})
-      except Exception as exc:
-        _json_response(self, 200, {"ok": False, "error": str(exc)})
+      action = str(payload.get("action") or "").strip()
+      handler = _tool_action if action in TOOL_ACTIONS else _git_action
+      self._send_json(200, handler(action, payload))
       return
 
-    _json_response(self, 404, {"ok": False, "error": "not found"})
+    if path == "/api/terminal/input":
+      # Used by the git panel to run a recovered command in the shared PTY.
+      try:
+        PTY.write_text(str(payload.get("data") or "") + "\r")
+        self._send_json(200, {"ok": True})
+      except Exception as exc:
+        self._send_json(200, {"ok": False, "error": str(exc)})
+      return
+
+    if path == "/api/support_terminal/start":
+      self._send_json(200, SUPPORT.start(
+        note=payload.get("note") or "",
+        ttl_seconds=payload.get("ttl_seconds"),
+        permission_mode=payload.get("permission_mode"),
+        command_timeout_seconds=payload.get("command_timeout_seconds"),
+      ))
+      return
+
+    if path == "/api/support_terminal/stop":
+      self._send_json(200, SUPPORT.stop("user"))
+      return
+
+    support_cmd = re.match(r"^/api/support_terminal/commands/([^/]+)/(approve|reject)$", path)
+    if support_cmd:
+      cmd_id, act = support_cmd.group(1), support_cmd.group(2)
+      result = SUPPORT.approve_command(cmd_id) if act == "approve" else SUPPORT.reject_command(cmd_id)
+      self._send_json(200 if result.get("ok") else 400, result)
+      return
+
+    self._send_json(404, {"ok": False, "error": "not found"})
 
 
 def main() -> None:
@@ -1086,7 +2074,8 @@ def main() -> None:
   args = parser.parse_args()
 
   httpd = ThreadingHTTPServer((args.host, args.port), RecoveryHandler)
-  print(f"[recovery] serving http://{args.host}:{args.port} cwd={REPO_ROOT}")
+  httpd.daemon_threads = True
+  print(f"[recovery] serving http://{args.host}:{args.port} cwd={REPO_ROOT} web={WEB_DIR}")
   try:
     httpd.serve_forever()
   except KeyboardInterrupt:

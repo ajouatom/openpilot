@@ -319,38 +319,34 @@ body.support-terminal-dialog-open .app-toast-host {
 .terminal-typing-indicator {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
   max-width: min(560px, 100%);
-  min-height: 32px;
-  padding: 6px 10px;
-  border: 1px solid color-mix(in srgb, var(--md-primary) 38%, var(--md-stroke-soft));
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 22%, var(--md-stroke-soft));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--md-surface-cont) 94%, #000);
-  box-shadow: var(--shadow-1);
+  background: color-mix(in srgb, var(--md-surface-cont) 96%, #000);
+  box-shadow: 0 5px 16px color-mix(in srgb, #000 24%, transparent);
   color: var(--md-on-surface);
   font-size: var(--fs-label-sm);
   line-height: 1.2;
 }
 
-.terminal-typing-indicator::before {
+.terminal-typing-indicator__presence {
   width: 7px;
   height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--md-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-primary) 18%, transparent);
-  content: "";
+  animation: terminalTypingPresence 1400ms ease-in-out infinite;
 }
 
-.terminal-typing-indicator__meta,
-.terminal-typing-indicator__label {
+.terminal-typing-indicator__actor {
   flex: 0 0 auto;
   font-weight: 780;
   white-space: nowrap;
-}
-
-.terminal-typing-indicator__meta {
   color: var(--md-primary);
 }
 
@@ -365,9 +361,79 @@ body.support-terminal-dialog-open .app-toast-host {
   white-space: nowrap;
 }
 
+.terminal-typing-indicator__draft.is-empty {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--md-on-surface-var);
+  font-family: var(--font-sans);
+  font-weight: 650;
+}
+
+.terminal-typing-indicator__char {
+  display: inline-block;
+  animation: terminalTypingCharIn 150ms cubic-bezier(0.2, 0, 0, 1) both;
+  animation-delay: calc(var(--typing-char-index, 0) * 18ms);
+}
+
+.terminal-typing-indicator__caret {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.14em;
+  background: color-mix(in srgb, var(--md-primary) 78%, var(--md-on-surface));
+  animation: terminalTypingCaret 760ms steps(1, end) infinite;
+}
+
+.terminal-typing-indicator__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.terminal-typing-indicator__dots > span {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.28;
+  animation: terminalTypingDot 1050ms ease-in-out infinite;
+  animation-delay: calc(var(--typing-dot-index, 0) * 140ms);
+}
+
+@keyframes terminalTypingPresence {
+  0%, 100% { opacity: 0.62; box-shadow: 0 0 0 2px color-mix(in srgb, var(--md-primary) 12%, transparent); }
+  50% { opacity: 1; box-shadow: 0 0 0 4px color-mix(in srgb, var(--md-primary) 20%, transparent); }
+}
+
+@keyframes terminalTypingCharIn {
+  from { opacity: 0; transform: translate3d(0, 3px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes terminalTypingCaret {
+  0%, 48% { opacity: 1; }
+  49%, 100% { opacity: 0; }
+}
+
+@keyframes terminalTypingDot {
+  0%, 70%, 100% { opacity: 0.24; transform: translate3d(0, 0, 0); }
+  35% { opacity: 0.9; transform: translate3d(0, -1px, 0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .terminal-xterm > .terminal-typing-host {
     transition: none;
+  }
+
+  .terminal-typing-indicator__presence,
+  .terminal-typing-indicator__char,
+  .terminal-typing-indicator__caret,
+  .terminal-typing-indicator__dots > span {
+    animation: none;
+    opacity: 1;
+    transform: none;
   }
 }
 

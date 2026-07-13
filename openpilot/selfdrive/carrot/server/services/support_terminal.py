@@ -35,6 +35,7 @@ SUPPORT_GUEST_ASSETS = {
   "layout.css": os.path.join(WEB_DIR, "css", "layout.css"),
   "components.css": os.path.join(WEB_DIR, "css", "components.css"),
   "terminal.css": os.path.join(WEB_DIR, "css", "pages", "terminal.css"),
+  "terminal_typing_indicator.js": os.path.join(WEB_DIR, "js", "shared", "ui", "terminal_typing_indicator.js"),
   "guest.css": os.path.join(SUPPORT_GUEST_DIR, "guest.css"),
   "guest.js": os.path.join(SUPPORT_GUEST_DIR, "guest.js"),
   "xterm.css": os.path.join(WEB_DIR, "css", "vendor", "xterm.css"),
@@ -536,7 +537,10 @@ class SupportTerminalManager:
         if typ == "typing":
           text = _sanitize_typing_text(data.get("text"))
           await self.broadcast_owner({"type": "guest_typing", "active": bool(data.get("active")), "text": text})
-        elif typ in {"disconnect", "close_session"}:
+        elif typ == "close_session":
+          await self.stop("guest")
+          break
+        elif typ == "disconnect":
           break
         elif typ == "control":
           if session.permission_mode == "allow_all" and ws is not session.controller_socket:
