@@ -32,6 +32,7 @@ from cluster_config import (
     CLUSTER_SCREEN_MODE_DEBUG,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+    CLUSTER_SCREEN_MODE_NAVI,
     CLUSTER_SCREEN_MODE_NAVI_DEBUG,
     CLUSTER_SCREEN_MODE_PARAM,
     CLUSTER_THEME_PARAM,
@@ -64,6 +65,7 @@ from cluster_h264_pipeline import (
 )
 from cluster_live import OpenpilotLiveSource
 from cluster_models import RouteOverlay, SimulatorInput
+from cluster_navi_source import NaviSimulatorSource
 from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
 from cluster_renderer import ClusterUiRenderer
 from cluster_route_replay import RouteReplaySource
@@ -567,6 +569,10 @@ def run_demo(
     target_fps: float,
     live_fps_param_reader: ClusterLiveFpsParamReader | None,
     input_mode: str,
+    navi_host: str,
+    navi_port: int,
+    navi_advertise_ip: str | None,
+    navi_beacon_enabled: bool,
     output_mode: str,
     controller_index: int,
     width: int | None,
@@ -719,8 +725,12 @@ def run_demo(
     theme_override = normalize_cluster_theme_mode(theme_mode) if theme_mode is not None else None
     theme_param_reader = ClusterThemeParamReader() if theme_override is None else None
     active_theme_mode = theme_override or (theme_param_reader.read() if theme_param_reader is not None else "auto")
-    screen_mode_param_reader = ClusterScreenModeParamReader()
-    active_screen_mode = screen_mode_param_reader.read()
+    screen_mode_param_reader = None if input_mode == "navi" else ClusterScreenModeParamReader()
+    active_screen_mode = (
+        CLUSTER_SCREEN_MODE_NAVI
+        if input_mode == "navi"
+        else screen_mode_param_reader.read()
+    )
     camera_view_override = (
         normalize_cluster_camera_view_mode(camera_view_mode)
         if camera_view_mode is not None
@@ -772,6 +782,15 @@ def run_demo(
     controller = DualSenseSimulator(controller_index) if input_mode == "gamepad" else None
     random_input = RandomInputSource() if input_mode == "random" else None
     live_source = OpenpilotLiveSource(include_can=live_include_can, timeout_ms=live_timeout_ms) if input_mode == "live" else None
+    navi_source = (
+        NaviSimulatorSource(
+            host=navi_host,
+            port=navi_port,
+            advertise_ip=navi_advertise_ip,
+            beacon_enabled=navi_beacon_enabled,
+        )
+        if input_mode == "navi" else None
+    )
     if live_source is not None:
         live_source.set_profile_enabled(profile_render)
         live_source.set_hud_debug_mode(active_hud_debug_mode)
@@ -936,7 +955,7 @@ def run_demo(
                 if next_theme_mode != renderer.theme_mode:
                     renderer.set_theme_mode(next_theme_mode)
                 next_theme_param_read = now + THEME_PARAM_POLL_SECONDS
-            if now >= next_screen_mode_param_read:
+            if screen_mode_param_reader is not None and now >= next_screen_mode_param_read:
                 next_screen_mode = screen_mode_param_reader.read()
                 if next_screen_mode != renderer.screen_mode:
                     print(
@@ -1094,6 +1113,11 @@ def run_demo(
                 center_clock_text = time.strftime("%H:%M:%S")
                 profile.add_samples(live_source.profile_samples())
                 profile.add_elapsed("source.live_update", profile_stage)
+            elif navi_source is not None:
+                profile_stage = time.perf_counter()
+                state = navi_source.update()
+                source_status = navi_source.status_text()
+                profile.add_elapsed("source.navi_update", profile_stage)
             elif route_source is not None:
                 profile_stage = time.perf_counter()
                 playback_seconds = (
@@ -1391,6 +1415,8 @@ def run_demo(
             route_source.close()
         if live_source is not None:
             live_source.close()
+        if navi_source is not None:
+            navi_source.close()
         if usb_display is not None:
             usb_display.close()
         renderer.close()
@@ -1415,9 +1441,24 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--input",
-        choices=("random", "gamepad", "route", "live"),
+        choices=("random", "gamepad", "route", "live", "navi"),
         default="random",
-        help="Input source. Use --input live for live openpilot cereal data, or route to replay logs.",
+        help=(
+            "Input source. Use navi for the embedded TCP 7714 Carrot receiver, "
+            "live for openpilot cereal data, or route to replay logs."
+        ),
+    )
+    parser.add_argument("--navi-host", default="0.0.0.0", help="Bind host for --input navi. Default: 0.0.0.0.")
+    parser.add_argument("--navi-port", type=int, default=7714, help="TCP port for --input navi. Default: 7714.")
+    parser.add_argument(
+        "--navi-advertise-ip",
+        default=None,
+        help="Address broadcast to the Android app for --input navi. Default: detected LAN address.",
+    )
+    parser.add_argument(
+        "--navi-no-beacon",
+        action="store_true",
+        help="Disable UDP 7705 discovery broadcast in --input navi mode.",
     )
     parser.add_argument(
         "--output",
@@ -1800,6 +1841,8 @@ def parse_args() -> argparse.Namespace:
         args.fps = DEFAULT_FPS
     if args.fps < 0:
         parser.error("--fps must be 0 or greater")
+    if not 1 <= args.navi_port <= 65535:
+        parser.error("--navi-port must be between 1 and 65535")
     if (args.width is not None and args.width <= 0) or (args.height is not None and args.height <= 0):
         parser.error("--width and --height must be greater than 0")
     args.usb_brightness_from_cli = args.usb_brightness is not None
@@ -1946,6 +1989,10 @@ def main(*, exit_on_error: bool = True) -> None:
             target_fps,
             live_fps_param_reader,
             args.input,
+            args.navi_host,
+            args.navi_port,
+            args.navi_advertise_ip,
+            not args.navi_no_beacon,
             args.output,
             args.controller_index,
             args.width,

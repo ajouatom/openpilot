@@ -19,6 +19,7 @@ from cluster_models import (
     NaviGuidanceImage,
     NaviTrafficLightInfo,
 )
+from cluster_navi import fresh_carrot_navi, parse_carrot_navi
 from cluster_route_replay import RouteLogParser, finite_float, frame_to_state, safe_get, safe_optional_float
 from cluster_utils import clamp
 
@@ -90,6 +91,7 @@ LIVE_SERVICES_BASE = (
     "navInstructionCarrot",
     "navRoute",
     "carrotMan",
+    "carrotNavi",
     "wideRoadCameraState",
 )
 LIVE_CAN_SERVICES = ("can", "sendcan")
@@ -140,6 +142,9 @@ class OpenpilotLiveSource:
         self._nav_route_coords: tuple[tuple[float, float], ...] = ()
         self._nav_route_model_path: tuple[ModelPathPoint, ...] = ()
         self._nav_route_anchor: tuple[float, float, float] | None = None
+        self._carrot_navi = None
+        self._carrot_navi_generation = -1
+        self._carrot_navi_next_expiry_s = math.inf
         self._standby_state = standby_state()
         self.profile_enabled = False
         self._profile_samples: list[tuple[str, float]] = []
@@ -337,7 +342,23 @@ class OpenpilotLiveSource:
 
         carrot_man = self._service_data("carrotMan")
         active_carrot = safe_optional_float(carrot_man, "activeCarrot")
-        external_nav_active = active_carrot is not None and active_carrot > 0.0
+        navi_live = self._current_carrot_navi(time.monotonic())
+        navi_guidance_active = bool(
+            navi_live is not None
+            and (
+                navi_live.current is not None
+                or (navi_live.status is not None and navi_live.status.guidance_active)
+            )
+        )
+        external_nav_active = (active_carrot is not None and active_carrot > 0.0) or navi_guidance_active
+
+        speed_limit_kph = state.speed_limit_kph
+        speed_limit_source = state.speed_limit_source
+        if speed_limit_kph is None and navi_live is not None and navi_live.speed is not None:
+            navi_limit = navi_live.speed.road_limit_kph
+            if navi_limit is not None and navi_limit > 0:
+                speed_limit_kph = navi_limit
+                speed_limit_source = "n"
 
         cruise_override_kph = None
         cruise_override_label = None
@@ -362,6 +383,9 @@ class OpenpilotLiveSource:
             state,
             onroad=onroad,
             external_nav_active=external_nav_active,
+            speed_limit_kph=speed_limit_kph,
+            speed_limit_source=speed_limit_source,
+            navi_live=navi_live,
             steering_output=steering_output,
             steering_output_normalized=steering_output_normalized,
             steering_output_kind=steering_output_kind,
@@ -442,6 +466,8 @@ class OpenpilotLiveSource:
             self.parser._update_nav_instruction(data, event_t)
         elif service == "navRoute":
             self._update_nav_route(data)
+        elif service == "carrotNavi":
+            self._update_carrot_navi(data)
         elif service == "longitudinalPlan":
             self.parser._update_longitudinal_plan(data)
         elif service == "controlsState":
@@ -466,6 +492,23 @@ class OpenpilotLiveSource:
             self.parser._update_live_tracks(data, event_t)
         elif service in ("can", "sendcan"):
             self.parser._update_can_detections(data, event_t, service)
+
+    def _update_carrot_navi(self, data: Any) -> None:
+        try:
+            generation = int(data.generation)
+        except Exception:
+            generation = -1
+        if generation == self._carrot_navi_generation:
+            return
+        now = time.monotonic()
+        self._carrot_navi_generation = generation
+        self._carrot_navi = parse_carrot_navi(data, now)
+        self._carrot_navi, self._carrot_navi_next_expiry_s = fresh_carrot_navi(self._carrot_navi, now)
+
+    def _current_carrot_navi(self, now: float):
+        if now >= self._carrot_navi_next_expiry_s:
+            self._carrot_navi, self._carrot_navi_next_expiry_s = fresh_carrot_navi(self._carrot_navi, now)
+        return self._carrot_navi
 
     def _with_debug_state(self, state: ClusterUiState) -> ClusterUiState:
         force_debug_ui = self._hud_debug_mode in (2, 3)
