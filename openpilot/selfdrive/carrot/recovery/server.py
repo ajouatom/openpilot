@@ -97,6 +97,17 @@ GIT_ACTIONS = {
   "git_reboot",
 }
 
+# Tools-menu actions ported from the main web (server/features/tools/dispatcher.py),
+# limited to the ones that need no openpilot import.
+TOOL_ACTIONS = {
+  "rebuild_all",
+  "send_tmux_log",
+  "server_tmux_log",
+}
+
+TMUX_LOG_PATH = "/data/media/tmux.log"
+PARAMS_DIR = "/data/params"
+
 
 # ===================================================================
 # Shell / login command (mirrors services/tmux.py:bootstrap_shell +
@@ -685,6 +696,72 @@ def _git_action(action: str, payload: dict) -> dict:
 
 
 # ===================================================================
+# Tools-menu actions (ported from dispatcher.py, openpilot-free subset).
+# ===================================================================
+def _capture_tmux_log() -> tuple[int, str]:
+  """Capture the current tmux pane to /data/media/tmux.log (mirrors
+  dispatcher.capture_tmux_log_sync). No -t: captures the most recent tmux
+  session (e.g. `comma` after `tmux a`)."""
+  try:
+    os.remove(TMUX_LOG_PATH)
+  except FileNotFoundError:
+    pass
+  except OSError as exc:
+    return 1, str(exc)
+  try:
+    proc = subprocess.run(
+      ["tmux", "capture-pane", "-pq", "-S-1000"],
+      capture_output=True, encoding="utf-8", errors="replace", check=False, timeout=10,
+    )
+  except FileNotFoundError:
+    return 1, "tmux not available"
+  except Exception as exc:
+    return 1, str(exc)
+  if proc.returncode != 0:
+    return proc.returncode, (proc.stderr or proc.stdout or "tmux capture failed").strip()
+  os.makedirs(os.path.dirname(TMUX_LOG_PATH), exist_ok=True)
+  with open(TMUX_LOG_PATH, "w", encoding="utf-8") as f:
+    f.write(proc.stdout or "")
+  return 0, ""
+
+
+def _put_param(key: str, value: bytes) -> None:
+  """Write an openpilot param the same way the C++ Params does: stage in
+  /data/params/d_tmp then atomic-rename into /data/params/d. Lets recovery
+  trigger `server_tmux_log` (CarrotException=tmux_send) without importing
+  openpilot; a running carrot_man consumes it (no-op if openpilot is down)."""
+  d = os.path.join(PARAMS_DIR, "d")
+  d_tmp = os.path.join(PARAMS_DIR, "d_tmp")
+  os.makedirs(d, exist_ok=True)
+  os.makedirs(d_tmp, exist_ok=True)
+  tmp = os.path.join(d_tmp, key)
+  with open(tmp, "wb") as f:
+    f.write(value)
+    f.flush()
+    os.fsync(f.fileno())
+  os.replace(tmp, os.path.join(d, key))
+
+
+def _tool_action(action: str, payload: dict) -> dict:
+  if action == "rebuild_all":
+    # Same as the tools button: clean build + drop prebuilt, then reboot.
+    # Returned as a command so it runs in the visible PTY (like the git menu).
+    return {"ok": True, "command": "cd /data/openpilot && scons -c && rm -rf prebuilt && sudo reboot"}
+  if action == "send_tmux_log":
+    rc, err = _capture_tmux_log()
+    if rc != 0:
+      return {"ok": False, "error": err or "tmux capture failed"}
+    return {"ok": True, "file": "/download/tmux.log"}
+  if action == "server_tmux_log":
+    try:
+      _put_param("CarrotException", b"tmux_send")
+      return {"ok": True}
+    except Exception as exc:
+      return {"ok": False, "error": str(exc)}
+  return {"ok": False, "error": f"unknown action: {action}"}
+
+
+# ===================================================================
 # Recovery page — reuses the real terminal assets from selfdrive/carrot/web.
 # ===================================================================
 HTML_PAGE = """<!doctype html>
@@ -700,6 +777,17 @@ HTML_PAGE = """<!doctype html>
 <link rel="stylesheet" href="/css/vendor/xterm.css">
 <link rel="stylesheet" href="/css/pages/terminal.css">
 <style>
+/* recovery has none of the app's nav chrome (side rail / bottom bar). The reused
+   terminal.css reserves space for them (left: var(--nav-rail-width) on wide
+   screens, a bottom gap of var(--nav-bar-height) on narrow ones), which shows up
+   as empty margins here. Zero the nav sizing tokens so the terminal fills the
+   viewport correctly in every layout (wide / narrow / foldable). */
+:root {
+  --nav-rail-width: 0px;
+  --nav-bar-height: 0px;
+  --nav-bar-height-desktop: 0px;
+  --app-nav-bottom-gap: 0px;
+}
 /* recovery-only: the Git recovery menu that lives in the terminal toolbar. It
    reuses the app tokens (.smallBtn / popup surface), only the dropdown layout
    is local. */
@@ -739,7 +827,14 @@ HTML_PAGE = """<!doctype html>
                 <button data-act="git_log">git log</button>
                 <button data-act="git_branches">change branch</button>
                 <button data-act="git_reset_repo">reset repo</button>
-                <button data-act="git_rebuild">rebuild</button>
+              </div>
+            </div>
+            <div class="rc-menu-wrap">
+              <button id="rcToolsBtn" class="smallBtn" type="button" aria-haspopup="true" aria-expanded="false">Tools &#x25BE;</button>
+              <div id="rcToolsMenu" class="rc-menu" hidden>
+                <button data-tool="send_tmux_log">send tmux log</button>
+                <button data-tool="server_tmux_log">server tmux log</button>
+                <button data-tool="rebuild_all" class="danger">rebuild</button>
                 <button data-act="git_reboot" class="danger">reboot</button>
               </div>
             </div>
@@ -817,23 +912,29 @@ HTML_PAGE = """<!doctype html>
 # runs recovered commands in the shared PTY, then boots the reused terminal.
 RECOVERY_JS = """\"use strict\";
 (function () {
-  function byId(id) { return document.getElementById(id); }
-  var gitBtn = byId(\"rcGitBtn\");
-  var gitMenu = byId(\"rcGitMenu\");
-
-  function closeMenu() {
-    if (gitMenu) gitMenu.hidden = true;
-    if (gitBtn) gitBtn.setAttribute(\"aria-expanded\", \"false\");
+  var menuWraps = Array.prototype.slice.call(document.querySelectorAll(\".rc-menu-wrap\"));
+  function closeMenus() {
+    menuWraps.forEach(function (wrap) {
+      var m = wrap.querySelector(\".rc-menu\");
+      var b = wrap.querySelector(\"button[aria-haspopup]\");
+      if (m) m.hidden = true;
+      if (b) b.setAttribute(\"aria-expanded\", \"false\");
+    });
   }
-  function toggleMenu() {
-    if (!gitMenu) return;
-    var willOpen = gitMenu.hidden;
-    gitMenu.hidden = !willOpen;
-    if (gitBtn) gitBtn.setAttribute(\"aria-expanded\", String(willOpen));
-  }
-  if (gitBtn) gitBtn.addEventListener(\"click\", function (e) { e.stopPropagation(); toggleMenu(); });
+  menuWraps.forEach(function (wrap) {
+    var b = wrap.querySelector(\"button[aria-haspopup]\");
+    var m = wrap.querySelector(\".rc-menu\");
+    if (!b || !m) return;
+    b.addEventListener(\"click\", function (e) {
+      e.stopPropagation();
+      var willOpen = m.hidden;
+      closeMenus();
+      m.hidden = !willOpen;
+      b.setAttribute(\"aria-expanded\", String(willOpen));
+    });
+  });
   document.addEventListener(\"click\", function (e) {
-    if (gitMenu && !gitMenu.hidden && !e.target.closest(\".rc-menu-wrap\")) closeMenu();
+    if (!e.target.closest(\".rc-menu-wrap\")) closeMenus();
   });
 
   function toast(msg, tone) {
@@ -878,7 +979,7 @@ RECOVERY_JS = """\"use strict\";
   }
 
   async function onGit(action) {
-    closeMenu();
+    closeMenus();
     if (CONFIRMS[action]) {
       var c = CONFIRMS[action];
       if (await appConfirm(c.message, { title: c.title, confirmLabel: c.confirmLabel })) await dispatchGit(action);
@@ -921,11 +1022,34 @@ RECOVERY_JS = """\"use strict\";
     }
   }
 
-  if (gitMenu) {
-    gitMenu.querySelectorAll(\"[data-act]\").forEach(function (btn) {
-      btn.addEventListener(\"click\", function (e) { e.stopPropagation(); onGit(btn.dataset.act); });
-    });
+  async function onTool(action) {
+    closeMenus();
+    if (action === \"rebuild_all\") {
+      if (await appConfirm(\"Clean the build cache and reboot.\\n\\n\\u2022 scons -c\\n\\u2022 rm -rf prebuilt\\n\\u2022 sudo reboot\", { title: \"rebuild\", confirmLabel: \"Rebuild\" })) {
+        await dispatchGit(\"rebuild_all\");
+      }
+      return;
+    }
+    if (action === \"send_tmux_log\") {
+      var r = await callAction(\"send_tmux_log\");
+      if (r && r.ok) { toast(\"tmux log captured\", \"success\"); window.open(r.file || \"/download/tmux.log\", \"_blank\"); }
+      else toast((r && r.error) || \"capture failed\", \"error\");
+      return;
+    }
+    if (action === \"server_tmux_log\") {
+      var r2 = await callAction(\"server_tmux_log\");
+      if (r2 && r2.ok) toast(\"tmux log send triggered\", \"success\");
+      else toast((r2 && r2.error) || \"failed\", \"error\");
+      return;
+    }
   }
+
+  document.querySelectorAll(\"[data-act]\").forEach(function (btn) {
+    btn.addEventListener(\"click\", function (e) { e.stopPropagation(); onGit(btn.dataset.act); });
+  });
+  document.querySelectorAll(\"[data-tool]\").forEach(function (btn) {
+    btn.addEventListener(\"click\", function (e) { e.stopPropagation(); onTool(btn.dataset.tool); });
+  });
 
   // Boot the reused terminal (pages/terminal.js defines initTerminalPage).
   function boot() {
@@ -1006,6 +1130,21 @@ class RecoveryHandler(BaseHTTPRequestHandler):
       self._send_bytes(200, "text/javascript; charset=utf-8", RECOVERY_JS.encode("utf-8"))
       return
 
+    if path == "/download/tmux.log":
+      if not os.path.isfile(TMUX_LOG_PATH):
+        self._send_json(404, {"ok": False, "error": "file not found"})
+        return
+      data = Path(TMUX_LOG_PATH).read_bytes()
+      self.send_response(200)
+      self.send_header("Content-Type", "text/plain; charset=utf-8")
+      self.send_header("Content-Length", str(len(data)))
+      self.send_header("Content-Disposition", "attachment; filename=tmux.log")
+      self.send_header("Cache-Control", "no-store")
+      self.end_headers()
+      if self.command != "HEAD":
+        self.wfile.write(data)
+      return
+
     static = _resolve_static(path)
     if static is not None:
       ctype = STATIC_EXT_TYPES.get(static.suffix.lower()) or (mimetypes.guess_type(static.name)[0] or "application/octet-stream")
@@ -1026,7 +1165,9 @@ class RecoveryHandler(BaseHTTPRequestHandler):
       return
 
     if path == "/api/action":
-      self._send_json(200, _git_action(str(payload.get("action") or "").strip(), payload))
+      action = str(payload.get("action") or "").strip()
+      handler = _tool_action if action in TOOL_ACTIONS else _git_action
+      self._send_json(200, handler(action, payload))
       return
 
     if path == "/api/terminal/input":
