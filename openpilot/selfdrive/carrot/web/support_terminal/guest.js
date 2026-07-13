@@ -26,10 +26,11 @@
       approveEach: "Approve each · {seconds}s", allowAll: "Full control", viewOnly: "View only", hostAway: "Host is not viewing terminal",
       waiting: "Waiting for owner approval", approved: "Approved · sending to terminal", running: "Sent to terminal",
       rejected: "Command rejected", expired: "Command approval expired", failed: "Failed to send command",
-      request: "Request", disconnect: "Disconnect", closed: "Remote connection closed", inputDenied: "Owner approval is required",
+      disconnect: "Disconnect", closed: "Remote connection closed", inputDenied: "Owner approval is required",
       expires: "Connected · {time}", unlimited: "unlimited",
       consoleBlocked: "Developer tools detected - enter PIN again",
       consoleWarningTitle: "Warning", consoleWarningBody: "Console use is prohibited on this page.",
+      hostActor: "Host", typing: "Typing",
     },
     ko: {
       title: "Carrot 원격 터미널", pin: "PIN 필요", connect: "연결", connecting: "연결 중...",
@@ -37,10 +38,11 @@
       approveEach: "명령별 승인 · {seconds}초", allowAll: "전체 제어", viewOnly: "보기 전용", hostAway: "호스트가 터미널을 보고 있지 않습니다",
       waiting: "소유자 승인 대기 중", approved: "승인됨 · 터미널로 전송 중", running: "터미널로 전송됨",
       rejected: "명령이 거절되었습니다", expired: "명령 승인이 만료되었습니다", failed: "명령 전송 실패",
-      request: "승인 요청", disconnect: "연결 종료", closed: "원격 연결이 종료되었습니다", inputDenied: "소유자 승인이 필요합니다",
+      disconnect: "연결 종료", closed: "원격 연결이 종료되었습니다", inputDenied: "소유자 승인이 필요합니다",
       expires: "연결됨 · {time}", unlimited: "무제한",
       consoleBlocked: "개발자 도구 감지됨 - PIN을 다시 입력하세요",
       consoleWarningTitle: "경고", consoleWarningBody: "콘솔 사용이 금지되어 있습니다.",
+      hostActor: "호스트", typing: "입력 중",
     },
     zh: {
       title: "Carrot 远程终端", pin: "需要 PIN", connect: "连接", connecting: "正在连接...",
@@ -48,10 +50,11 @@
       approveEach: "逐条批准 · {seconds}秒", allowAll: "完全控制", viewOnly: "仅查看", hostAway: "车主未查看终端",
       waiting: "等待车主批准", approved: "已批准 · 正在发送", running: "已发送到终端",
       rejected: "命令已拒绝", expired: "命令批准已过期", failed: "命令发送失败",
-      request: "请求批准", disconnect: "断开连接", closed: "远程连接已关闭", inputDenied: "需要车主批准",
+      disconnect: "断开连接", closed: "远程连接已关闭", inputDenied: "需要车主批准",
       expires: "已连接 · {time}", unlimited: "无限",
       consoleBlocked: "检测到开发者工具 - 请重新输入 PIN",
       consoleWarningTitle: "警告", consoleWarningBody: "此页面禁止使用控制台。",
+      hostActor: "主机", typing: "正在输入",
     },
   };
 
@@ -91,10 +94,15 @@
     consoleBlocked: false,
     rawTypingBuffer: "",
     rawTypingTimer: 0,
+    approvalInput: "",
+    approvalCursor: 0,
+    approvalRenderedInput: "",
+    approvalRenderedCursor: 0,
     hostTypingActive: false,
     hostTypingText: "",
     hostTypingTimer: 0,
     hostTypingRaf: 0,
+    typingIndicator: null,
   };
 
   const KEY_SEQ = {
@@ -374,10 +382,13 @@
     terminal.element?.addEventListener("touchcancel", () => { state.touchStartY = null; }, { capture: true, passive: true });
     terminal.onResize(scheduleViewerOuterVerticalScrollLock);
     terminal.onData((data) => {
-      if (!canControlRaw()) return;
       if (isTerminalQueryResponse(data)) return;
-      send({ type: "raw", data: applyStickyCtrl(data) });
-      reportRawTyping(data);
+      if (canControlRaw()) {
+        send({ type: "raw", data: applyStickyCtrl(data) });
+        reportRawTyping(data);
+      } else if (canComposeApproval()) {
+        handleApprovalInput(data);
+      }
     });
     terminal.onScroll((viewportY) => {
       if (Date.now() < state.suppressScrollUntil) return;
@@ -407,11 +418,114 @@
     return state.authed && state.allowAll && state.controlGranted && state.ownerPresent && socketReady();
   }
 
+  function canComposeApproval() {
+    return state.authed && !state.allowAll && state.ownerPresent && socketReady();
+  }
+
+  function inputChars(value) {
+    return Array.from(String(value || ""));
+  }
+
+  function cellWidth(value) {
+    let width = 0;
+    for (const char of inputChars(value)) {
+      const code = char.codePointAt(0) || 0;
+      if ((code >= 0x300 && code <= 0x36f) || (code >= 0xfe00 && code <= 0xfe0f)) continue;
+      width += code >= 0x1100 && (
+        code <= 0x115f || code === 0x2329 || code === 0x232a ||
+        (code >= 0x2e80 && code <= 0xa4cf) || (code >= 0xac00 && code <= 0xd7a3) ||
+        (code >= 0xf900 && code <= 0xfaff) || (code >= 0xfe10 && code <= 0xfe6f) ||
+        (code >= 0xff00 && code <= 0xff60) || (code >= 0xffe0 && code <= 0xffe6) ||
+        (code >= 0x1f300 && code <= 0x1faff)
+      ) ? 2 : 1;
+    }
+    return width;
+  }
+
+  function approvalRenderSequence(clearOnly = false) {
+    const rendered = inputChars(state.approvalRenderedInput);
+    const renderedCursor = Math.min(state.approvalRenderedCursor, rendered.length);
+    const back = cellWidth(rendered.slice(0, renderedCursor).join(""));
+    let sequence = `${back ? `\x1b[${back}D` : ""}\x1b[0K`;
+    if (!clearOnly) {
+      const chars = inputChars(state.approvalInput);
+      const cursor = Math.min(state.approvalCursor, chars.length);
+      sequence += chars.join("");
+      const tail = cellWidth(chars.slice(cursor).join(""));
+      if (tail) sequence += `\x1b[${tail}D`;
+      state.approvalRenderedInput = state.approvalInput;
+      state.approvalRenderedCursor = cursor;
+    } else {
+      state.approvalRenderedInput = "";
+      state.approvalRenderedCursor = 0;
+    }
+    return sequence;
+  }
+
+  function renderApprovalInput(reportTyping = true) {
+    state.terminal?.write(approvalRenderSequence());
+    if (reportTyping) reportCommandTyping(state.approvalInput);
+  }
+
+  function clearApprovalInput(resetDraft = true) {
+    if (state.approvalRenderedInput) state.terminal?.write(approvalRenderSequence(true));
+    if (resetDraft) {
+      state.approvalInput = "";
+      state.approvalCursor = 0;
+      reportCommandTyping("");
+    }
+  }
+
+  function handleApprovalInput(data) {
+    if (data.length > 1 && !data.startsWith("\x1b") && /[\r\n]/.test(data)) {
+      for (const char of inputChars(data)) handleApprovalInput(char);
+      return;
+    }
+    if (data === "\r" || data === "\n") {
+      const line = state.approvalInput.trim();
+      clearApprovalInput();
+      if (line && send({ type: "input", data: line })) setNotice(t("waiting"));
+      return;
+    }
+    if (data === "\x03") {
+      clearApprovalInput();
+      send({ type: "control", action: "ctrl_c" });
+      return;
+    }
+    const chars = inputChars(state.approvalInput);
+    if (data === "\x7f" || data === "\b") {
+      if (state.approvalCursor > 0) chars.splice(--state.approvalCursor, 1);
+    } else if (data === "\x1b[D") {
+      state.approvalCursor = Math.max(0, state.approvalCursor - 1);
+    } else if (data === "\x1b[C") {
+      state.approvalCursor = Math.min(chars.length, state.approvalCursor + 1);
+    } else if (data === "\x1b[H" || data === "\x1b[1~") {
+      state.approvalCursor = 0;
+    } else if (data === "\x1b[F" || data === "\x1b[4~") {
+      state.approvalCursor = chars.length;
+    } else if (data === "\x1b[3~") {
+      if (state.approvalCursor < chars.length) chars.splice(state.approvalCursor, 1);
+    } else if (data === "\t") {
+      chars.splice(state.approvalCursor, 0, " ", " ");
+      state.approvalCursor += 2;
+    } else if (![...data].some((char) => char < " " || char === "\x7f")) {
+      const inserted = inputChars(data);
+      chars.splice(state.approvalCursor, 0, ...inserted);
+      state.approvalCursor += inserted.length;
+    } else {
+      return;
+    }
+    state.approvalInput = chars.join("").slice(0, 4000);
+    state.approvalCursor = Math.min(state.approvalCursor, inputChars(state.approvalInput).length);
+    renderApprovalInput();
+  }
+
   function syncInputMode() {
     const rawEnabled = canControlRaw();
+    const approvalEnabled = canComposeApproval();
     const controlsEnabled = state.authed && state.ownerPresent && socketReady()
       && (!state.allowAll || state.controlGranted);
-    if (state.terminal) state.terminal.options.disableStdin = !rawEnabled;
+    if (state.terminal) state.terminal.options.disableStdin = !(rawEnabled || approvalEnabled);
     // Ctrl+C and Clear are approval-aware control actions. Keep them in the
     // shared key bar even for approve-each sessions; raw keys only appear when
     // this guest has the same full terminal control as the host.
@@ -427,7 +541,8 @@
       ? t(state.controlGranted ? "allowAll" : "viewOnly")
       : t("approveEach", { seconds: state.commandTimeoutSeconds });
     if (!state.ownerPresent && state.authed) setNotice(t("hostAway"));
-    if (rawEnabled) state.terminal?.focus();
+    else if (els.notice.textContent === t("hostAway")) setNotice("");
+    if (rawEnabled || approvalEnabled) state.terminal?.focus();
   }
 
   function send(payload) {
@@ -471,26 +586,15 @@
       state.hostTypingRaf = 0;
       const host = ensureHostTypingOverlay();
       if (!host) return;
-      host.classList.toggle("is-visible", state.hostTypingActive);
-      host.setAttribute("aria-hidden", state.hostTypingActive ? "false" : "true");
-      if (!state.hostTypingActive) return;
-
-      let indicator = host.querySelector(".terminal-typing-indicator");
-      if (!indicator) {
-        indicator = document.createElement("div");
-        indicator.className = "terminal-typing-indicator";
-        const meta = document.createElement("span");
-        meta.className = "terminal-typing-indicator__meta";
-        const label = document.createElement("span");
-        label.className = "terminal-typing-indicator__label";
-        const draft = document.createElement("code");
-        draft.className = "terminal-typing-indicator__draft";
-        indicator.append(meta, label, draft);
-        host.append(indicator);
+      if (!state.typingIndicator && window.CarrotTerminalTypingIndicator) {
+        state.typingIndicator = window.CarrotTerminalTypingIndicator.create(host);
       }
-      indicator.querySelector(".terminal-typing-indicator__meta").textContent = "호스트";
-      indicator.querySelector(".terminal-typing-indicator__label").textContent = "입력";
-      indicator.querySelector(".terminal-typing-indicator__draft").textContent = state.hostTypingText.trim() || "입력 중...";
+      state.typingIndicator?.update({
+        active: state.hostTypingActive,
+        actor: t("hostActor"),
+        text: state.hostTypingText,
+        emptyLabel: t("typing"),
+      });
     });
   }
 
@@ -519,21 +623,35 @@
     }
   }
 
-  // Keep the PIN panel visually centered. The overlay stays full-page (so it is
-  // dead-centered at rest), and we only feed the on-screen keyboard's height as
-  // a bottom inset so the panel rises to the middle of the visible area when the
-  // keyboard is open. Deriving the keyboard height as innerHeight - vv.height
-  // works on iOS (dvh does not shrink) and is ~0 on Android resizes-content
-  // (where the page already shrank), so both stay centered.
+  // Anchor the PIN overlay to the browser's actual visible rectangle. This
+  // avoids device-specific dvh/keyboard resize behaviour and keeps the panel at
+  // the exact horizontal and vertical center before and after the IME opens.
   function syncAuthViewport() {
     const vv = window.visualViewport;
     const root = document.documentElement;
-    if (!vv) {
-      root.style.removeProperty("--auth-kb-inset");
+    const left = vv ? vv.offsetLeft : 0;
+    const top = vv ? vv.offsetTop : 0;
+    const width = vv ? vv.width : (window.innerWidth || document.documentElement.clientWidth || 0);
+    const height = vv ? vv.height : (window.innerHeight || document.documentElement.clientHeight || 0);
+    root.style.setProperty("--auth-vv-left", `${Math.round(left)}px`);
+    root.style.setProperty("--auth-vv-top", `${Math.round(top)}px`);
+    root.style.setProperty("--auth-vv-width", `${Math.round(width)}px`);
+    root.style.setProperty("--auth-vv-height", `${Math.round(height)}px`);
+  }
+
+  function reportCommandTyping(text) {
+    const value = String(text || "").slice(0, 160);
+    if (state.rawTypingTimer) clearTimeout(state.rawTypingTimer);
+    state.rawTypingTimer = 0;
+    if (!value) {
+      send({ type: "typing", active: false, text: "" });
       return;
     }
-    const kb = Math.max(0, (window.innerHeight || 0) - vv.height - vv.offsetTop);
-    root.style.setProperty("--auth-kb-inset", `${Math.round(kb)}px`);
+    send({ type: "typing", active: true, text: value });
+    state.rawTypingTimer = window.setTimeout(() => {
+      state.rawTypingTimer = 0;
+      send({ type: "typing", active: false, text: "" });
+    }, 1400);
   }
 
   function showAuth(message = t("pin")) {
@@ -565,6 +683,9 @@
     if (state.remainingTimer) clearInterval(state.remainingTimer);
     state.remainingTimer = 0;
     els.pin.value = "";
+    clearApprovalInput();
+    if (state.rawTypingTimer) clearTimeout(state.rawTypingTimer);
+    state.rawTypingTimer = 0;
     els.session.textContent = message || t("disconnected");
     setNotice("");
     if (clearTerminal) state.terminal?.reset();
@@ -624,7 +745,12 @@
   function isDevToolsLikelyOpen() {
     const widthGap = window.outerWidth > 0 ? Math.abs(window.outerWidth - window.innerWidth) : 0;
     const heightGap = window.outerHeight > 0 ? Math.abs(window.outerHeight - window.innerHeight) : 0;
-    return widthGap > 170 || heightGap > 170;
+    const touchDevice = Number(navigator.maxTouchPoints || 0) > 0;
+    // Normal desktop Chrome can reserve close to 200px for its own tab/address
+    // bars, while a mobile IME can legitimately consume much more height. A
+    // docked devtools pane is materially larger; only use the height signal on
+    // non-touch layouts so opening a phone keyboard never locks the PIN/input.
+    return widthGap > 260 || (!touchDevice && heightGap > 260);
   }
 
   function checkDevToolsOpen() {
@@ -703,7 +829,10 @@
       const output = data.b64 != null ? base64ToBytes(data.b64) : String(data.text || "");
       const shouldFollow = Boolean(data.replay) || state.followOutput;
       if (data.replay) state.followOutput = true;
+      const redrawApproval = Boolean(state.approvalRenderedInput);
+      if (redrawApproval) terminal.write(approvalRenderSequence(true));
       terminal.write(output, () => {
+        if (redrawApproval && state.approvalInput) renderApprovalInput(false);
         if (shouldFollow && state.followOutput) scheduleTerminalPin();
       });
       return;
@@ -785,10 +914,9 @@
   els.ctrlC.addEventListener("click", () => send({ type: "control", action: "ctrl_c" }));
   els.clear.addEventListener("click", () => send({ type: "control", action: "clear" }));
   els.disconnect.addEventListener("click", () => {
-    state.sessionClosed = true;
-    send({ type: "disconnect" });
-    closeSocket();
-    resetToPin(t("closed"));
+    if (!send({ type: "close_session" })) return;
+    els.disconnect.disabled = true;
+    setNotice(t("closed"));
   });
   els.keys.addEventListener("click", (event) => {
     const button = event.target.closest("[data-key]");

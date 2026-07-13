@@ -159,6 +159,33 @@ async def test_approve_each_writes_only_after_owner_approval(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_guest_close_session_stops_support_for_owner(monkeypatch):
+  fake_pty = FakePtySession()
+  monkeypatch.setattr(support_module, "PTY_SESSION", fake_pty)
+  manager = SupportTerminalManager()
+  manager._session = make_session("approve_each")
+  client = await make_client(manager)
+
+  try:
+    owner = await client.ws_connect("/owner")
+    await receive_type(owner, "session_status")
+    guest = await client.ws_connect("/guest/support-test")
+    await guest.send_json({"type": "auth", "pin": "123456"})
+    await receive_type(guest, "auth_ok")
+    await receive_type(guest, "pty_output")
+
+    await guest.send_json({"type": "close_session"})
+    closed = await receive_type(owner, "session_closed")
+    assert closed["reason"] == "guest"
+    assert manager._session is None
+
+    await guest.close()
+    await owner.close()
+  finally:
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_guest_page_serves_external_xterm_assets():
   manager = SupportTerminalManager()
   manager._session = make_session()
@@ -169,10 +196,16 @@ async def test_guest_page_serves_external_xterm_assets():
     assert response.status == 200
     assert 'data-session-id="support-test"' in html
     assert "/support-terminal-assets/xterm.js" in html
+    assert "/support-terminal-assets/terminal_typing_indicator.js" in html
+    assert 'id="commandForm"' not in html
     assert "script-src 'self'" in response.headers["Content-Security-Policy"]
 
     asset = await client.get("/support-terminal-assets/guest.js")
     assert asset.status == 200
     assert "new window.Terminal" in await asset.text()
+
+    component = await client.get("/support-terminal-assets/terminal_typing_indicator.js")
+    assert component.status == 200
+    assert "CarrotTerminalTypingIndicator" in await component.text()
   finally:
     await client.close()
