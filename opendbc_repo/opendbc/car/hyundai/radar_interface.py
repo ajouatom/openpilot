@@ -13,7 +13,7 @@ from openpilot.common.filter_simple import MyMovingAverage
 SCC_TID = 0
 RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 32
-RADAR_MSG_COUNT_DENSO = 45
+RADAR_MSG_COUNT4 = 45
 RADAR_START_ADDR_CANFD1 = 0x210
 RADAR_MSG_COUNT1 = 16
 RADAR_START_ADDR_CANFD2 = 0x3A5 # Group 2, Group 1: 0x210 2媛쒖뵫?덉뼱???쇰떒 蹂대쪟.
@@ -32,7 +32,7 @@ CORNER_OBJECT_180_DBC = 'hyundai_canfd_corner_radar_180_generated'
 
 # POC for parsing corner radars: https://github.com/commaai/openpilot/pull/24221/
 
-def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count, denso_radar=False):
+def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count, radar_group4=False):
   if not radar_tracks:
     return None
   #if Bus.radar not in DBC[CP.carFingerprint]:
@@ -46,7 +46,7 @@ def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count, denso_rada
   else:
     messages = [(f"RADAR_TRACK_{addr:x}", 20) for addr in range(msg_start_addr, msg_start_addr + msg_count)]
   #return CANParser(DBC[CP.carFingerprint][Bus.radar], messages, 1)
-    dbc_name = 'hyundai_kia_denso_front_radar_generated' if denso_radar else 'hyundai_kia_mando_front_radar_generated'
+    dbc_name = 'hyundai_kia_denso_front_radar_generated' if radar_group4 else 'hyundai_kia_mando_front_radar_generated'
     return CANParser(dbc_name, messages, 1)
 
 def get_corner_object_can_parser(CP, enabled):
@@ -93,9 +93,9 @@ class RadarInterface(RadarInterfaceBase):
     super().__init__(CP)
     
     self.canfd = True if CP.flags & HyundaiFlags.CANFD else False
-    self.denso_radar = not self.canfd and CP.carFingerprint == CAR.KIA_SORENTO
     self.radar_group1 = False
     self.radar_group3 = False
+    self.radar_group4 = not self.canfd and CP.carFingerprint == CAR.KIA_SORENTO
     if self.canfd:
       if CP.extFlags & HyundaiExtFlags.RADAR_GROUP1.value:
         self.radar_start_addr = RADAR_START_ADDR_CANFD1
@@ -110,7 +110,7 @@ class RadarInterface(RadarInterfaceBase):
         self.radar_msg_count = RADAR_MSG_COUNT2
     else:
       self.radar_start_addr = RADAR_START_ADDR
-      self.radar_msg_count = RADAR_MSG_COUNT_DENSO if self.denso_radar else RADAR_MSG_COUNT
+      self.radar_msg_count = RADAR_MSG_COUNT4 if self.radar_group4 else RADAR_MSG_COUNT
       
     self.params = Params()
     self.radar_tracks = self.params.get_int("EnableRadarTracks") >= 1
@@ -122,7 +122,7 @@ class RadarInterface(RadarInterfaceBase):
     self.updated_corner_objects_180 = set()
     self.corner_object_missed_updates = 0
     self.corner_object_180_missed_updates = 0
-    self.rcp_tracks = get_radar_can_parser(CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count, self.denso_radar)
+    self.rcp_tracks = get_radar_can_parser(CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count, self.radar_group4)
     self.rcp_corner_objects = get_corner_object_can_parser(CP, self.corner_object_tracks)
     self.rcp_corner_objects_180 = get_corner_object_180_can_parser(CP, self.corner_object_180_tracks)
     # Enabling raw radar tracks on legacy CAN disables the stock SCC11 stream on
@@ -273,7 +273,7 @@ class RadarInterface(RadarInterfaceBase):
         valid = msg['LONG_DIST'] < 204.7
       elif self.canfd:
         valid = msg['VALID_CNT'] > 10
-      elif self.denso_radar:
+      elif self.radar_group4:
         # DNMWR006 empty slots use the out-of-range raw distance 0xfff8
         # (409.55 m). The useful detection range is about 205 m.
         valid = 0.2 < msg['LONG_DIST'] < 205.0 and abs(msg['AZIMUTH']) <= 20.0
@@ -306,7 +306,7 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
         self.pts[t_id].aRel = float('nan') if self.radar_group3 else msg['REL_ACCEL']
         self.pts[t_id].yvRel = 0.0 if self.radar_group3 else msg['LAT_SPEED']
-      elif self.denso_radar:
+      elif self.radar_group4:
         azimuth = math.radians(msg['AZIMUTH'])
         self.pts[t_id].dRel = math.cos(azimuth) * msg['LONG_DIST']
         self.pts[t_id].yRel = -math.sin(azimuth) * msg['LONG_DIST']
