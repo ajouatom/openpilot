@@ -29,13 +29,19 @@ import hashlib
 import json
 import mimetypes
 import os
+import platform
+import re
+import secrets
 import selectors
 import shlex
 import shutil
 import signal
+import socket
 import struct
 import subprocess
 import threading
+import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -762,6 +768,771 @@ def _tool_action(action: str, payload: dict) -> dict:
 
 
 # ===================================================================
+# Remote support (ported from server/services/support_terminal.py + support_tunnel.py
+# + support_discord.py). Standalone stdlib reimplementation: shares recovery's PTY,
+# runs a SEPARATE guest HTTP server (so the public tunnel only exposes the restricted
+# guest page, not the recovery owner UI) + a cloudflared quick tunnel, and delivers
+# URL+PIN via the same Discord webhook (openpilot metadata degraded to git+hostname).
+# ===================================================================
+CARROT_DATA_DIR = os.environ.get("CARROT_DATA_DIR", "/data/carrot")
+SUPPORT_GUEST_DIR = str(WEB_DIR / "support_terminal")
+SUPPORT_GUEST_HTML_PATH = os.path.join(SUPPORT_GUEST_DIR, "guest.html")
+SUPPORT_GUEST_ASSETS = {
+  "tokens.css": str(WEB_DIR / "css" / "tokens.css"),
+  "layout_tokens.css": str(WEB_DIR / "css" / "layout_tokens.css"),
+  "base.css": str(WEB_DIR / "css" / "base.css"),
+  "layout.css": str(WEB_DIR / "css" / "layout.css"),
+  "components.css": str(WEB_DIR / "css" / "components.css"),
+  "terminal.css": str(WEB_DIR / "css" / "pages" / "terminal.css"),
+  "guest.css": os.path.join(SUPPORT_GUEST_DIR, "guest.css"),
+  "guest.js": os.path.join(SUPPORT_GUEST_DIR, "guest.js"),
+  "xterm.css": str(WEB_DIR / "css" / "vendor" / "xterm.css"),
+  "xterm.js": str(WEB_DIR / "js" / "vendor" / "xterm.js"),
+  "xterm-addon-shim.js": str(WEB_DIR / "js" / "vendor" / "xterm-addon-shim.js"),
+  "xterm-addon-webgl.js": str(WEB_DIR / "js" / "vendor" / "xterm-addon-webgl.js"),
+  "xterm-addon-canvas.js": str(WEB_DIR / "js" / "vendor" / "xterm-addon-canvas.js"),
+}
+
+SUPPORT_TTL_SECONDS = int(os.environ.get("CARROT_SUPPORT_TTL_SECONDS", "1800"))
+SUPPORT_COMMAND_TIMEOUT_SECONDS = int(os.environ.get("CARROT_SUPPORT_COMMAND_TIMEOUT_SECONDS", "30"))
+ALLOWED_TTL_SECONDS = {900, 1800, 3600}
+ALLOWED_PERMISSION_MODES = {"approve_each", "allow_all"}
+ALLOWED_COMMAND_TIMEOUT_SECONDS = {15, 30, 60, 120}
+PIN_FAILURE_LIMIT = 5
+
+TRYCLOUDFLARE_RE = re.compile(r"https://[a-zA-Z0-9.-]+\.trycloudflare\.com")
+CLOUDFLARED_DOWNLOADS = {
+  "x86_64": "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64",
+  "amd64": "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64",
+  "aarch64": "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64",
+  "arm64": "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64",
+  "armv7l": "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm",
+}
+
+
+def _ws_upgrade(handler: BaseHTTPRequestHandler) -> "WsConn | None":
+  key = handler.headers.get("Sec-WebSocket-Key")
+  if not key:
+    handler.send_error(400, "missing websocket key")
+    return None
+  conn = WsConn(handler)
+  handler.close_connection = True
+  conn.handshake(key)
+  return conn
+
+
+# --- Discord webhook (obfuscation copied from support_discord.py; base64+xor only) ---
+_SUPPORT_OBFUSCATION_KEY = b"carrot-support-v1"
+_SUPPORT_OBFUSCATED_WEBHOOK_URL = (
+  "CxUGAhxOAlwRGQMMHQZJWFIMDF0THx0CBBASGAAdH15ZAFZTRkBdRxpLQ0BEWUVFFUYEUE4ZJA0lf0Am"
+  "BhgINy1EJ39XAzlEOwNJHxwmJjUkGkYxVwFYQDVXDVQmEyYfHCI6AAZ0KjQZACAbRhIRHBMVGQwcBAY5CQ=="
+)
+
+
+def _support_webhook_url() -> str:
+  for key in ("CARROT_SUPPORT_DISCORD_WEBHOOK_URL", "CARROT_DISCORD_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"):
+    v = os.environ.get(key, "").strip()
+    if v:
+      return v
+  try:
+    data = base64.b64decode(_SUPPORT_OBFUSCATED_WEBHOOK_URL)
+    decoded = bytes(b ^ _SUPPORT_OBFUSCATION_KEY[i % len(_SUPPORT_OBFUSCATION_KEY)] for i, b in enumerate(data))
+    return decoded.decode("utf-8").strip()
+  except Exception:
+    return ""
+
+
+def _read_param(key: str, default: str = "") -> str:
+  try:
+    with open(os.path.join(PARAMS_DIR, "d", key), "r", encoding="utf-8", errors="replace") as f:
+      return f.read().strip() or default
+  except Exception:
+    return default
+
+
+def _support_metadata() -> dict:
+  return {
+    "carName": _read_param("CarName", "none") or "none",
+    "dongleId": _read_param("DongleId", "unknown") or "unknown",
+    "serial": _read_param("HardwareSerial") or _read_param("DeviceSerial") or _read_param("Serial") or "unknown",
+    "branch": (_run_exec(["git", "branch", "--show-current"], 6)[1] or "").strip() or "unknown",
+    "commit": (_run_exec(["git", "rev-parse", "--short", "HEAD"], 6)[1] or "").strip() or "unknown",
+    "host": socket.gethostname(),
+  }
+
+
+def _support_message(payload: dict) -> str:
+  meta = payload.get("meta") or {}
+  note = str(payload.get("note") or "").strip()
+  commit = str(meta.get("commit") or "").strip()
+  commit_text = (f"[{commit}](https://github.com/ajouatom/openpilot/commit/{commit})"
+                 if commit and commit != "unknown" else "unknown")
+  permission_text = {"approve_each": "항상 확인", "allow_all": "전체 허용"}.get(
+    str(payload.get("permissionMode") or "approve_each"), str(payload.get("permissionMode")))
+  ttl = payload.get("ttl_minutes") or 30
+  expires_text = "unlimited" if ttl == "unlimited" else f"{ttl} min"
+  lines = [
+    "# Carrot Remote Terminal (recovery)",
+    "### Session",
+    f"- Time: {payload.get('createdAt') or time.strftime('%Y-%m-%d %H:%M:%S')}",
+    f"- Session ID: {payload.get('sessionId') or 'unknown'}",
+    "### Access",
+    f"- Link: {payload.get('url') or ''}",
+    f"- PIN: **__{payload.get('pin') or ''}__**",
+    f"- Expires: {expires_text}",
+    f"- Permission: {permission_text}",
+  ]
+  if note:
+    lines += ["### Issue", f"- Note: {note[:500]}"]
+  lines += [
+    "### Device",
+    f"- Car name: {meta.get('carName') or 'none'}",
+    f"- DongleId: {meta.get('dongleId') or 'unknown'}",
+    f"- Serial: {meta.get('serial') or 'unknown'}",
+    f"- Branch: {meta.get('branch') or 'unknown'}",
+    f"- Commit: {commit_text}",
+  ]
+  return "\n".join(lines)[:1900]
+
+
+def _send_support_webhook(payload: dict) -> dict:
+  if os.environ.get("CARROT_SUPPORT_DISCORD_WEBHOOK_DISABLE", "").strip().lower() in {"1", "true", "yes", "on"}:
+    return {"configured": True, "ok": False, "skipped": True, "disabled": True}
+  url = _support_webhook_url()
+  if not url or not url.startswith(("http://", "https://")):
+    return {"configured": bool(url), "ok": False, "skipped": True}
+  body = json.dumps({
+    "username": "Carrot Support",
+    "content": _support_message(payload),
+    "allowed_mentions": {"parse": []},
+    "flags": 4,
+  }).encode("utf-8")
+  req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+  try:
+    with urllib.request.urlopen(req, timeout=12) as resp:
+      return {"configured": True, "ok": 200 <= resp.status < 300, "status": resp.status}
+  except Exception as exc:
+    return {"configured": True, "ok": False, "error": str(exc)}
+
+
+# --- cloudflared quick tunnel ---
+def _cloudflared_path() -> str:
+  configured = os.environ.get("CARROT_CLOUDFLARED_BIN", "").strip()
+  if configured:
+    return configured
+  found = shutil.which("cloudflared")
+  if found:
+    return found
+  local = os.path.join(CARROT_DATA_DIR, "bin", "cloudflared")
+  if os.path.isfile(local) and os.access(local, os.X_OK):
+    return local
+  return ""
+
+
+def _download_cloudflared() -> str:
+  if platform.system().lower() != "linux":
+    raise RuntimeError(f"cloudflared unavailable on {platform.system()} {platform.machine()}")
+  url = CLOUDFLARED_DOWNLOADS.get(platform.machine().lower(), "")
+  if not url:
+    raise RuntimeError(f"cloudflared auto-install unsupported on {platform.machine()}")
+  target = os.path.join(CARROT_DATA_DIR, "bin", "cloudflared")
+  os.makedirs(os.path.dirname(target), exist_ok=True)
+  tmp = f"{target}.tmp"
+  with urllib.request.urlopen(url, timeout=60) as resp, open(tmp, "wb") as out:
+    shutil.copyfileobj(resp, out)
+  os.chmod(tmp, 0o755)
+  os.replace(tmp, target)
+  return target
+
+
+class Tunnel:
+  def __init__(self, url: str, proc: subprocess.Popen | None = None):
+    self.url = url
+    self.proc = proc
+
+  def stop(self) -> None:
+    if self.proc and self.proc.poll() is None:
+      try:
+        self.proc.terminate()
+        try:
+          self.proc.wait(timeout=4)
+        except Exception:
+          self.proc.kill()
+      except Exception:
+        pass
+
+
+def _start_quick_tunnel(local_url: str, timeout_s: float = 25.0) -> Tunnel:
+  fake = os.environ.get("CARROT_SUPPORT_FAKE_TUNNEL_URL", "").strip()
+  if fake:
+    return Tunnel(url=fake)
+  binary = _cloudflared_path() or _download_cloudflared()
+  proc = subprocess.Popen(
+    [binary, "tunnel", "--url", local_url],
+    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+  )
+  url = ""
+  deadline = time.time() + timeout_s
+  while time.time() < deadline:
+    line = proc.stdout.readline() if proc.stdout else ""
+    if not line:
+      if proc.poll() is not None:
+        break
+      continue
+    match = TRYCLOUDFLARE_RE.search(line)
+    if match:
+      url = match.group(0)
+      break
+  if not url:
+    Tunnel(url="", proc=proc).stop()
+    raise RuntimeError("cloudflared did not provide a trycloudflare URL")
+  # Keep draining stdout so the OS pipe buffer can't fill and stall cloudflared.
+  threading.Thread(target=lambda: [None for _ in iter(proc.stdout.readline, "")], daemon=True).start()
+  return Tunnel(url=url, proc=proc)
+
+
+# --- session + manager ---
+def _now() -> float:
+  return time.time()
+
+
+def _new_pin() -> str:
+  return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _sanitize_ttl(v) -> int:
+  try:
+    s = int(v)
+  except Exception:
+    s = SUPPORT_TTL_SECONDS
+  return s if s in ALLOWED_TTL_SECONDS else (SUPPORT_TTL_SECONDS if SUPPORT_TTL_SECONDS in ALLOWED_TTL_SECONDS else 1800)
+
+
+def _sanitize_permission(v) -> str:
+  m = str(v or "approve_each").strip()
+  return m if m in ALLOWED_PERMISSION_MODES else "approve_each"
+
+
+def _sanitize_cmd_timeout(v) -> int:
+  try:
+    s = int(v)
+  except Exception:
+    s = SUPPORT_COMMAND_TIMEOUT_SECONDS
+  return s if s in ALLOWED_COMMAND_TIMEOUT_SECONDS else (SUPPORT_COMMAND_TIMEOUT_SECONDS if SUPPORT_COMMAND_TIMEOUT_SECONDS in ALLOWED_COMMAND_TIMEOUT_SECONDS else 30)
+
+
+def _sanitize_typing(v) -> str:
+  return "".join(ch for ch in str(v or "") if ch.isprintable())[:160]
+
+
+class SupportSession:
+  def __init__(self, sid, pin, note, ttl, permission_mode, command_timeout):
+    self.id = sid
+    self.pin = pin
+    self.note = note
+    self.created_at = _now()
+    self.ttl_seconds = ttl
+    self.expires_at = 0 if ttl <= 0 else _now() + ttl
+    self.command_timeout_seconds = command_timeout
+    self.permission_mode = permission_mode
+    self.state = "starting"
+    self.tunnel_url = ""
+    self.local_url = ""
+    self.error = ""
+    self.status_detail = ""
+    self.discord: dict = {}
+    self.pin_failures = 0
+    self.pending: dict = {}          # id -> command dict
+    self.tunnel: Tunnel | None = None
+    self.guest_httpd: ThreadingHTTPServer | None = None
+    self.guest_port = 0
+    self.owner_conns: set = set()    # WsConn
+    self.guest_conns: set = set()    # WsConn
+    self.controller = None           # WsConn
+
+  def is_expired(self) -> bool:
+    return self.expires_at > 0 and _now() >= self.expires_at
+
+
+class SupportManager:
+  def __init__(self) -> None:
+    self.lock = threading.RLock()
+    self.session: SupportSession | None = None
+
+  def snapshot(self, session: SupportSession | None = None) -> dict:
+    session = session or self.session
+    if session is None:
+      return {"ok": True, "active": False, "state": "idle"}
+    remaining = None if session.expires_at <= 0 else max(0, int(session.expires_at - _now()))
+    return {
+      "ok": True,
+      "active": session.state in {"starting", "sharing"},
+      "id": session.id,
+      "state": session.state,
+      "url": session.tunnel_url,
+      "local_url": session.local_url,
+      "expires_at": session.expires_at,
+      "expires_in": remaining,
+      "ttl_seconds": session.ttl_seconds,
+      "permission_mode": session.permission_mode,
+      "command_timeout_seconds": session.command_timeout_seconds,
+      "guest_count": len(session.guest_conns),
+      "owner_count": len(session.owner_conns),
+      "owner_present": bool(session.owner_conns),
+      "controller_present": session.controller is not None and not session.controller.closed,
+      "discord": session.discord,
+      "error": session.error,
+      "status_detail": session.status_detail,
+      "pending_commands": [
+        {"id": c["id"], "line": c["line"], "status": c["status"], "created_at": c["created_at"]}
+        for c in session.pending.values() if c["status"] == "pending"
+      ],
+    }
+
+  def _broadcast(self, conns: set, payload: dict) -> None:
+    for conn in list(conns):
+      if conn.closed or not conn.send_json(payload):
+        conns.discard(conn)
+
+  def broadcast_owner(self, payload: dict) -> None:
+    if self.session:
+      self._broadcast(self.session.owner_conns, payload)
+
+  def broadcast_guests(self, payload: dict) -> None:
+    if self.session:
+      self._broadcast(self.session.guest_conns, payload)
+
+  def broadcast_all(self, payload: dict) -> None:
+    if self.session:
+      self._broadcast(self.session.owner_conns, payload)
+      self._broadcast(self.session.guest_conns, payload)
+
+  def _set_status(self, session: SupportSession, detail: str) -> None:
+    session.status_detail = detail
+    if self.session is session:
+      self.broadcast_owner({"type": "session_status", **self.snapshot(session)})
+
+  def start(self, note="", ttl_seconds=None, permission_mode=None, command_timeout_seconds=None) -> dict:
+    with self.lock:
+      if self.session and self.session.state in {"starting", "sharing"} and not self.session.is_expired():
+        return self.snapshot(self.session)
+      if self.session:
+        self._stop_locked("restart")
+      session = SupportSession(
+        sid=secrets.token_urlsafe(16),
+        pin=_new_pin(),
+        note=str(note or "")[:500],
+        ttl=_sanitize_ttl(ttl_seconds),
+        permission_mode=_sanitize_permission(permission_mode),
+        command_timeout=_sanitize_cmd_timeout(command_timeout_seconds),
+      )
+      self.session = session
+    try:
+      PTY.ensure()
+      self._set_status(session, "Starting support page")
+      self._start_guest_server(session)
+      self._set_status(session, "Starting secure tunnel")
+      session.tunnel = _start_quick_tunnel(f"http://127.0.0.1:{session.guest_port}")
+      base = session.tunnel.url.rstrip("/")
+      session.tunnel_url = base if "/support/terminal/" in base else f"{base}/support/terminal/{session.id}"
+      session.state = "sharing"
+      self._set_status(session, "Secure tunnel ready")
+      if session.expires_at > 0:
+        threading.Thread(target=self._expiry_loop, args=(session,), daemon=True).start()
+
+      def _notify():
+        session.discord = _send_support_webhook({
+          "sessionId": session.id,
+          "createdAt": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(session.created_at)),
+          "url": session.tunnel_url, "pin": session.pin,
+          "ttl_minutes": "unlimited" if session.ttl_seconds <= 0 else max(1, session.ttl_seconds // 60),
+          "permissionMode": session.permission_mode,
+          "commandTimeoutSeconds": session.command_timeout_seconds,
+          "meta": _support_metadata(), "note": session.note,
+        })
+        self.broadcast_owner({"type": "session_status", **self.snapshot(session)})
+      threading.Thread(target=_notify, daemon=True).start()
+      self._set_status(session, "Ready")
+      return self.snapshot(session)
+    except Exception as exc:
+      if self.session is session:
+        session.state = "error"
+        session.error = str(exc)
+        session.status_detail = "Start failed"
+        self._cleanup(session)
+        self.broadcast_owner({"type": "error", "message": session.error})
+        return self.snapshot(session)
+      self._cleanup(session)
+      return self.snapshot(None)
+
+  def stop(self, reason="stopped") -> dict:
+    with self.lock:
+      self._stop_locked(reason)
+      return self.snapshot(None)
+
+  def _stop_locked(self, reason: str) -> None:
+    session = self.session
+    if session is None:
+      return
+    session.state = "stopped" if reason != "expired" else "expired"
+    self.broadcast_all({"type": "session_closed", "reason": reason})
+    self.session = None
+    threading.Thread(target=self._cleanup, args=(session,), daemon=True).start()
+
+  def _cleanup(self, session: SupportSession) -> None:
+    for conn in list(session.guest_conns):
+      PTY.detach(conn)
+    for conn in list(session.owner_conns | session.guest_conns):
+      try:
+        conn.close()
+      except Exception:
+        pass
+    session.owner_conns.clear()
+    session.guest_conns.clear()
+    session.controller = None
+    if session.tunnel:
+      session.tunnel.stop()
+      session.tunnel = None
+    if session.guest_httpd:
+      try:
+        session.guest_httpd.shutdown()
+        session.guest_httpd.server_close()
+      except Exception:
+        pass
+      session.guest_httpd = None
+
+  def _start_guest_server(self, session: SupportSession) -> None:
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), SupportGuestHandler)
+    httpd.daemon_threads = True
+    session.guest_httpd = httpd
+    session.guest_port = httpd.server_address[1]
+    session.local_url = f"http://127.0.0.1:{session.guest_port}/support/terminal/{session.id}"
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+  def _expiry_loop(self, session: SupportSession) -> None:
+    while not session.is_expired():
+      if self.session is not session:
+        return
+      self.broadcast_owner({"type": "session_status", **self.snapshot(session)})
+      time.sleep(1.0)
+    with self.lock:
+      if self.session is session:
+        self._stop_locked("expired")
+
+  def _sync_control_roles(self, session: SupportSession) -> None:
+    if session.permission_mode != "allow_all":
+      session.controller = None
+    elif session.controller is None or session.controller.closed or session.controller not in session.guest_conns:
+      session.controller = next((g for g in session.guest_conns if not g.closed), None)
+    for g in list(session.guest_conns):
+      if g.closed:
+        continue
+      g.send_json({"type": "control_role",
+                   "granted": session.permission_mode != "allow_all" or g is session.controller})
+
+  # ---- owner side ----
+  def owner_connected(self, conn) -> bool:
+    session = self.session
+    if session is None:
+      conn.send_json({"type": "session_status", **self.snapshot(None)})
+      return False
+    session.owner_conns.add(conn)
+    conn.send_json({"type": "session_status", **self.snapshot(session)})
+    self.broadcast_owner({"type": "guest_presence", "count": len(session.guest_conns)})
+    self.broadcast_guests({"type": "owner_presence", "active": True})
+    return True
+
+  def owner_message(self, conn, data: dict) -> None:
+    session = self.session
+    if session is None:
+      return
+    if data.get("type") == "refresh":
+      conn.send_json({"type": "session_status", **self.snapshot(session)})
+    elif data.get("type") == "typing":
+      self.broadcast_guests({"type": "host_typing", "active": bool(data.get("active")), "text": _sanitize_typing(data.get("text"))})
+
+  def owner_disconnected(self, conn) -> None:
+    session = self.session
+    if session is None:
+      return
+    session.owner_conns.discard(conn)
+    self.broadcast_guests({"type": "owner_presence", "active": bool(session.owner_conns)})
+
+  # ---- guest side ----
+  def guest_auth(self, conn, session: SupportSession, pin: str):
+    if pin != session.pin:
+      session.pin_failures += 1
+      conn.send_json({"type": "auth_failed", "remaining": max(0, PIN_FAILURE_LIMIT - session.pin_failures)})
+      if session.pin_failures >= PIN_FAILURE_LIMIT:
+        conn.close()
+        return "closed"
+      return False
+    session.guest_conns.add(conn)
+    if session.permission_mode == "allow_all" and (session.controller is None or session.controller.closed):
+      session.controller = conn
+    expires_in = None if session.expires_at <= 0 else max(0, int(session.expires_at - _now()))
+    conn.send_json({
+      "type": "auth_ok",
+      "permission_mode": session.permission_mode,
+      "command_timeout_seconds": session.command_timeout_seconds,
+      "expires_in": expires_in,
+      "owner_present": bool(session.owner_conns),
+      "control_granted": session.permission_mode != "allow_all" or conn is session.controller,
+    })
+    try:
+      PTY.attach(conn)
+    except Exception as exc:
+      session.guest_conns.discard(conn)
+      conn.send_json({"type": "error", "message": str(exc)})
+      conn.close()
+      return "closed"
+    self.broadcast_owner({"type": "guest_presence", "count": len(session.guest_conns)})
+    self._sync_control_roles(session)
+    return True
+
+  def guest_message(self, conn, session: SupportSession, data: dict) -> None:
+    typ = data.get("type")
+    if typ == "typing":
+      self.broadcast_owner({"type": "guest_typing", "active": bool(data.get("active")), "text": _sanitize_typing(data.get("text"))})
+    elif typ in {"disconnect", "close_session"}:
+      raise WsClosed()
+    elif typ == "control":
+      if session.permission_mode == "allow_all" and conn is not session.controller:
+        conn.send_json({"type": "input_denied", "reason": "viewer only"})
+        return
+      action = str(data.get("action") or "").strip()
+      if action in {"ctrl_c", "clear"}:
+        label = "Ctrl+C" if action == "ctrl_c" else "clear"
+        self.queue_command(session, label, conn, control_action=action)
+    elif typ == "input":
+      if session.permission_mode == "allow_all" and conn is not session.controller:
+        conn.send_json({"type": "input_denied", "reason": "viewer only"})
+        return
+      line = str(data.get("data") or "").strip()
+      if line:
+        self.queue_command(session, line, conn)
+    elif typ == "raw":
+      if not session.owner_conns:
+        conn.send_json({"type": "owner_absent"})
+        return
+      if session.permission_mode != "allow_all":
+        conn.send_json({"type": "input_denied", "reason": "approval required"})
+        return
+      if conn is not session.controller:
+        conn.send_json({"type": "input_denied", "reason": "viewer only"})
+        return
+      text = str(data.get("data") or "")[:4096]
+      if text:
+        try:
+          PTY.write_text(text)
+        except Exception as exc:
+          conn.send_json({"type": "error", "message": str(exc)})
+
+  def guest_disconnected(self, conn, session: SupportSession) -> None:
+    PTY.detach(conn)
+    session.guest_conns.discard(conn)
+    if session.controller is conn:
+      session.controller = None
+    self._sync_control_roles(session)
+    self.broadcast_owner({"type": "guest_presence", "count": len(session.guest_conns)})
+
+  # ---- command approval ----
+  def queue_command(self, session: SupportSession, line: str, conn=None, control_action="") -> None:
+    if not session.owner_conns:
+      if conn is not None and not conn.closed:
+        conn.send_json({"type": "owner_absent"})
+      return
+    if session.permission_mode == "allow_all":
+      cmd = {"id": secrets.token_urlsafe(8), "line": line[:4000], "created_at": _now(), "status": "approved", "control_action": control_action}
+      if conn is not None and not conn.closed:
+        conn.send_json({"type": "command_approved", "id": cmd["id"]})
+      self._run_command(session, cmd)
+      self.broadcast_owner({"type": "command_auto_run", "id": cmd["id"], "line": cmd["line"], "created_at": cmd["created_at"]})
+      return
+    cmd = {"id": secrets.token_urlsafe(8), "line": line[:4000], "created_at": _now(), "status": "pending", "control_action": control_action}
+    session.pending[cmd["id"]] = cmd
+    self.broadcast_owner({"type": "command_request", "id": cmd["id"], "line": cmd["line"], "created_at": cmd["created_at"], "control_action": control_action})
+    if conn is not None and not conn.closed:
+      conn.send_json({"type": "command_waiting_approval", "id": cmd["id"]})
+    threading.Timer(session.command_timeout_seconds, self._expire_command, args=(session, cmd["id"])).start()
+
+  def _expire_command(self, session: SupportSession, cmd_id: str) -> None:
+    cmd = session.pending.get(cmd_id)
+    if cmd is None or cmd["status"] != "pending":
+      return
+    cmd["status"] = "expired"
+    session.pending.pop(cmd_id, None)
+    self.broadcast_all({"type": "command_expired", "id": cmd_id})
+
+  def approve_command(self, cmd_id: str) -> dict:
+    session = self.session
+    if session is None:
+      return {"ok": False, "error": "no active session"}
+    cmd = session.pending.get(cmd_id)
+    if cmd is None or cmd["status"] != "pending":
+      return {"ok": False, "error": "command not pending"}
+    cmd["status"] = "approved"
+    session.pending.pop(cmd_id, None)
+    self.broadcast_all({"type": "command_approved", "id": cmd_id})
+    return self._run_command(session, cmd)
+
+  def reject_command(self, cmd_id: str) -> dict:
+    session = self.session
+    if session is None:
+      return {"ok": False, "error": "no active session"}
+    cmd = session.pending.get(cmd_id)
+    if cmd is None or cmd["status"] != "pending":
+      return {"ok": False, "error": "command not pending"}
+    cmd["status"] = "rejected"
+    session.pending.pop(cmd_id, None)
+    self.broadcast_all({"type": "command_rejected", "id": cmd_id})
+    return {"ok": True}
+
+  def _run_command(self, session: SupportSession, cmd: dict) -> dict:
+    try:
+      if cmd["control_action"] == "ctrl_c":
+        PTY.write(b"\x03")
+      elif cmd["control_action"] == "clear":
+        PTY.clear_history()
+        PTY.write(b"clear\r")
+      else:
+        PTY.write_text(cmd["line"] + "\r")
+      self.broadcast_all({"type": "command_running", "id": cmd["id"]})
+      return {"ok": True}
+    except Exception as exc:
+      self.broadcast_all({"type": "command_failed", "id": cmd["id"], "message": str(exc)})
+      return {"ok": False, "error": str(exc)}
+
+
+SUPPORT = SupportManager()
+
+
+def _serve_support_owner_ws(handler: BaseHTTPRequestHandler) -> None:
+  conn = _ws_upgrade(handler)
+  if conn is None:
+    return
+  if not SUPPORT.owner_connected(conn):
+    conn.close()
+    return
+  try:
+    while True:
+      message = conn.read_message()
+      if message is None:
+        continue
+      try:
+        data = json.loads(message)
+      except Exception:
+        continue
+      SUPPORT.owner_message(conn, data)
+  except (WsClosed, OSError, ConnectionError):
+    pass
+  finally:
+    SUPPORT.owner_disconnected(conn)
+
+
+def _serve_support_guest_ws(handler: BaseHTTPRequestHandler, session_id: str) -> None:
+  conn = _ws_upgrade(handler)
+  if conn is None:
+    return
+  session = SUPPORT.session
+  if session is None or session.id != session_id or session.is_expired():
+    conn.send_json({"type": "error", "message": "session unavailable"})
+    conn.close()
+    return
+  authed = False
+  try:
+    while True:
+      message = conn.read_message()
+      if message is None:
+        continue
+      try:
+        data = json.loads(message)
+      except Exception:
+        continue
+      if not authed:
+        if data.get("type") != "auth":
+          continue
+        result = SUPPORT.guest_auth(conn, session, str(data.get("pin") or "").strip())
+        if result == "closed":
+          return
+        authed = bool(result)
+        continue
+      SUPPORT.guest_message(conn, session, data)
+  except (WsClosed, OSError, ConnectionError):
+    pass
+  finally:
+    SUPPORT.guest_disconnected(conn, session)
+
+
+def _support_csp(host: str) -> str:
+  safe = "".join(ch for ch in str(host or "") if ch.isalnum() or ch in ".-:[]")
+  connect = "'self'" if not safe else f"'self' ws://{safe} wss://{safe}"
+  return (
+    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    f"connect-src {connect}; img-src 'self' data:; font-src 'self'; "
+    "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+  )
+
+
+class SupportGuestHandler(BaseHTTPRequestHandler):
+  """Restricted server exposed via the public tunnel — guest page/assets/WS only."""
+  server_version = "CarrotRecoveryGuest/1.0"
+  protocol_version = "HTTP/1.1"
+
+  def log_message(self, fmt: str, *args) -> None:
+    pass
+
+  def _send(self, status: int, ctype: str, data: bytes, extra: dict | None = None) -> None:
+    self.send_response(status)
+    self.send_header("Content-Type", ctype)
+    self.send_header("Content-Length", str(len(data)))
+    self.send_header("Cache-Control", "no-store")
+    self.send_header("X-Content-Type-Options", "nosniff")
+    self.send_header("Referrer-Policy", "no-referrer")
+    for k, v in (extra or {}).items():
+      self.send_header(k, v)
+    self.end_headers()
+    if self.command != "HEAD":
+      self.wfile.write(data)
+
+  def do_GET(self) -> None:
+    path = urlparse(self.path).path
+    if path.startswith("/ws/support_terminal/"):
+      if self.headers.get("Upgrade", "").lower() == "websocket":
+        _serve_support_guest_ws(self, path.rsplit("/", 1)[-1])
+      else:
+        self.send_error(400, "expected websocket upgrade")
+      return
+    if path == "/" or path.startswith("/support/terminal/"):
+      sid = path.rsplit("/", 1)[-1] if path.startswith("/support/terminal/") else ""
+      sid = "".join(c for c in sid if c.isalnum() or c in "-_")
+      try:
+        with open(SUPPORT_GUEST_HTML_PATH, "r", encoding="utf-8") as f:
+          page = f.read().replace("__SESSION_ID__", sid)
+      except Exception:
+        self.send_error(404)
+        return
+      self._send(200, "text/html; charset=utf-8", page.encode("utf-8"), {
+        "Content-Security-Policy": _support_csp(self.headers.get("Host", "")),
+        "X-Frame-Options": "DENY",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), usb=(), serial=(), hid=(), bluetooth=()",
+      })
+      return
+    if path.startswith("/support-terminal-assets/"):
+      asset = SUPPORT_GUEST_ASSETS.get(path.rsplit("/", 1)[-1])
+      if not asset or not os.path.isfile(asset):
+        self.send_error(404)
+        return
+      ctype = STATIC_EXT_TYPES.get(Path(asset).suffix.lower(), "application/octet-stream")
+      self._send(200, ctype, Path(asset).read_bytes())
+      return
+    self.send_error(404)
+
+  def do_HEAD(self) -> None:
+    self.do_GET()
+
+
+# ===================================================================
 # Recovery page — reuses the real terminal assets from selfdrive/carrot/web.
 # ===================================================================
 HTML_PAGE = """<!doctype html>
@@ -832,18 +1603,21 @@ HTML_PAGE = """<!doctype html>
             <div class="rc-menu-wrap">
               <button id="rcToolsBtn" class="smallBtn" type="button" aria-haspopup="true" aria-expanded="false">Tools &#x25BE;</button>
               <div id="rcToolsMenu" class="rc-menu" hidden>
-                <button data-tool="send_tmux_log">send tmux log</button>
-                <button data-tool="server_tmux_log">server tmux log</button>
+                <button data-tool="send_tmux_log">download tmux log</button>
+                <button data-tool="server_tmux_log">send tmux log</button>
                 <button data-tool="rebuild_all" class="danger">rebuild</button>
                 <button data-act="git_reboot" class="danger">reboot</button>
               </div>
             </div>
+            <button id="btnSupportTerminalOpen" class="smallBtn terminal-support-open" type="button">Support</button>
             <button id="btnTerminalReconnect" class="smallBtn" type="button">Reconnect</button>
           </div>
         </div>
       </div>
       <div id="terminalScreen" class="terminal-screen"><pre id="terminalOutput" class="terminal-output"> </pre></div>
       <div id="terminalXterm" class="terminal-xterm" hidden></div>
+      <div id="supportTerminalTypingHost" class="terminal-typing-host" aria-hidden="true"></div>
+      <div id="supportTerminalApprovalHost" class="terminal-approval-host" hidden></div>
       <div id="terminalKeys" class="terminal-keys" role="group" aria-label="Terminal keys">
         <button class="smallBtn terminal-key" type="button" data-key="esc">Esc</button>
         <button class="smallBtn terminal-key" type="button" data-key="ctrl">Ctrl</button>
@@ -902,6 +1676,7 @@ HTML_PAGE = """<!doctype html>
   <script src="/js/vendor/xterm-addon-webgl.js"></script>
   <script src="/js/vendor/xterm-addon-canvas.js"></script>
   <script src="/js/pages/terminal.js"></script>
+  <script src="/js/pages/support_terminal.js"></script>
   <script src="/recovery.js"></script>
 </body>
 </html>
@@ -1122,6 +1897,17 @@ class RecoveryHandler(BaseHTTPRequestHandler):
         self.send_error(400, "expected websocket upgrade")
       return
 
+    if path == "/ws/support_terminal/owner":
+      if self.headers.get("Upgrade", "").lower() == "websocket":
+        _serve_support_owner_ws(self)
+      else:
+        self.send_error(400, "expected websocket upgrade")
+      return
+
+    if path == "/api/support_terminal/status":
+      self._send_json(200, SUPPORT.snapshot())
+      return
+
     if path in ("/", "/index.html"):
       self._send_bytes(200, "text/html; charset=utf-8", HTML_PAGE.encode("utf-8"))
       return
@@ -1177,6 +1963,26 @@ class RecoveryHandler(BaseHTTPRequestHandler):
         self._send_json(200, {"ok": True})
       except Exception as exc:
         self._send_json(200, {"ok": False, "error": str(exc)})
+      return
+
+    if path == "/api/support_terminal/start":
+      self._send_json(200, SUPPORT.start(
+        note=payload.get("note") or "",
+        ttl_seconds=payload.get("ttl_seconds"),
+        permission_mode=payload.get("permission_mode"),
+        command_timeout_seconds=payload.get("command_timeout_seconds"),
+      ))
+      return
+
+    if path == "/api/support_terminal/stop":
+      self._send_json(200, SUPPORT.stop("user"))
+      return
+
+    support_cmd = re.match(r"^/api/support_terminal/commands/([^/]+)/(approve|reject)$", path)
+    if support_cmd:
+      cmd_id, act = support_cmd.group(1), support_cmd.group(2)
+      result = SUPPORT.approve_command(cmd_id) if act == "approve" else SUPPORT.reject_command(cmd_id)
+      self._send_json(200 if result.get("ok") else 400, result)
       return
 
     self._send_json(404, {"ok": False, "error": "not found"})
