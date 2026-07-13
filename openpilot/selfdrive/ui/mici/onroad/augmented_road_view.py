@@ -155,6 +155,7 @@ class AugmentedRoadView(CameraView):
     self._cached_matrix: np.ndarray | None = None
     self._content_rect = rl.Rectangle()
     self._last_click_time = 0.0
+    self._cluster_hud_connected = False
 
     # Bookmark icon with swipe gesture
     self._bookmark_icon = BookmarkIcon(bookmark_callback)
@@ -180,6 +181,9 @@ class AugmentedRoadView(CameraView):
     """Check if currently swiping left (for scroller to disable)."""
     return self._bookmark_icon.is_swiping_left()
 
+  def set_cluster_hud_connected(self, connected: bool) -> None:
+    self._cluster_hud_connected = connected
+
   def _update_state(self):
     super()._update_state()
 
@@ -198,10 +202,9 @@ class AugmentedRoadView(CameraView):
 
   def _render(self, _):
     start_draw = time.monotonic()
-    self._switch_stream_if_needed(ui_state.sm)
-
-    # Update calibration before rendering
-    self._update_calibration()
+    if not self._cluster_hud_connected:
+      self._switch_stream_if_needed(ui_state.sm)
+      self._update_calibration()
 
     # Create inner content area with border padding
     self._content_rect = rl.Rectangle(
@@ -221,18 +224,19 @@ class AugmentedRoadView(CameraView):
     )
 
     road_view_mode = self._road_view_mode()
-    if road_view_mode in (2, 3):
+    if self._cluster_hud_connected or road_view_mode in (2, 3):
       rl.draw_rectangle_rec(self._content_rect, rl.BLACK)
     else:
       # Render the base camera view
       super()._render(self._content_rect)
 
-    if road_view_mode in (0, 2):
+    if not self._cluster_hud_connected and road_view_mode in (0, 2):
       # Draw all UI overlays
       self._model_renderer.render(self._content_rect)
 
-    # Fade out bottom of overlays for looks
-    rl.draw_texture_ex(self._fade_texture, rl.Vector2(self._content_rect.x, self._content_rect.y), 0.0, 1.0, rl.WHITE)
+    if not self._cluster_hud_connected:
+      # Fade out bottom of overlays for looks
+      rl.draw_texture_ex(self._fade_texture, rl.Vector2(self._content_rect.x, self._content_rect.y), 0.0, 1.0, rl.WHITE)
 
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
 
