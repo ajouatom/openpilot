@@ -17,5 +17,6 @@ class TestFrontRadarCutin:
     assert not is_front_radar_cutin_candidate(0, "scc", 8.0, 0.0, False)
     assert not is_front_radar_cutin_candidate(200, "corner235", 8.0, 3.0, True)
     assert not is_front_radar_cutin_candidate(32, "frontRadar", 4.9, 3.0, False)
-    assert not is_front_radar_cutin_candidate(32, "frontRadar", 12.1, 3.0, False)
+    assert is_front_radar_cutin_candidate(32, "frontRadar", 40.0, 3.0, False)
+    assert not is_front_radar_cutin_candidate(32, "frontRadar", 50.1, 3.0, False)
     assert not is_front_radar_cutin_candidate(32, "frontRadar", 8.0, 7.1, False)
