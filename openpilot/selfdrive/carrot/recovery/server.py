@@ -41,6 +41,7 @@ import struct
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -907,10 +908,26 @@ def _send_support_webhook(payload: dict) -> dict:
     "allowed_mentions": {"parse": []},
     "flags": 4,
   }).encode("utf-8")
-  req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+  req = urllib.request.Request(url, data=body, headers={
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    # Discord rejects urllib's default Python-urllib user agent with HTTP 403.
+    "User-Agent": "CarrotRecovery/2.0",
+  }, method="POST")
   try:
     with urllib.request.urlopen(req, timeout=12) as resp:
       return {"configured": True, "ok": 200 <= resp.status < 300, "status": resp.status}
+  except urllib.error.HTTPError as exc:
+    try:
+      detail = exc.read().decode("utf-8", errors="replace")[:500]
+    except Exception:
+      detail = ""
+    return {
+      "configured": True,
+      "ok": False,
+      "status": exc.code,
+      "error": detail or str(exc),
+    }
   except Exception as exc:
     return {"configured": True, "ok": False, "error": str(exc)}
 
