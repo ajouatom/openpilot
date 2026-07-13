@@ -23,7 +23,7 @@ class TestDensoRadar:
     track = self.parse(0x503, "bc047efcc1fe8b00")
 
     assert track["LONG_DIST"] == pytest.approx(7.1875)
-    assert track["AZIMUTH"] == pytest.approx(-6.5)
+    assert track["AZIMUTH"] == pytest.approx(-9.1)
     assert track["REL_SPEED"] == pytest.approx(-0.734375)
     assert track["OBJECT_STATE"] == 3
 
@@ -60,8 +60,8 @@ class TestDensoRadar:
     point = next(point for point in radar_data.points if point.trackId == 35)
 
     assert point.measured
-    assert point.dRel == pytest.approx(math.cos(math.radians(-6.5)) * 7.1875)
-    assert point.yRel == pytest.approx(-math.sin(math.radians(-6.5)) * 7.1875)
+    assert point.dRel == pytest.approx(math.cos(math.radians(-9.1)) * 7.1875)
+    assert point.yRel == pytest.approx(-math.sin(math.radians(-9.1)) * 7.1875)
     assert point.vRel == pytest.approx(-0.734375)
     assert math.isnan(point.aRel)
 

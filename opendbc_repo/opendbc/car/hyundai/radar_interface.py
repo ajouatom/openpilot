@@ -277,7 +277,7 @@ class RadarInterface(RadarInterfaceBase):
         # DNMWR006 empty slots use the out-of-range raw distance 0xfff8
         # (409.55 m). OBJECT_STATE 3 distinguishes tracked objects from the
         # distance-sorted raw detections published at 0x508 and above.
-        valid = msg['OBJECT_STATE'] == 3 and 0.2 < msg['LONG_DIST'] < 205.0 and abs(msg['AZIMUTH']) <= 20.0
+        valid = msg['OBJECT_STATE'] == 3 and 0.2 < msg['LONG_DIST'] < 205.0 and abs(msg['AZIMUTH']) <= 28.0
       else:
         valid = msg['STATE'] in (3, 4)
 
