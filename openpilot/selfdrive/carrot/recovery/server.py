@@ -1676,10 +1676,63 @@ HTML_PAGE = """<!doctype html>
   <script src="/js/vendor/xterm-addon-webgl.js"></script>
   <script src="/js/vendor/xterm-addon-canvas.js"></script>
   <script src="/js/pages/terminal.js"></script>
+  <script src="/recovery-api.js"></script>
   <script src="/js/pages/support_terminal.js"></script>
   <script src="/recovery.js"></script>
 </body>
 </html>
+"""
+
+
+# Recovery-owned transport for shared UI modules. The main app normally
+# provides getJson/postJson from shared/api.js; recovery intentionally does not
+# load that app-wide API surface. Keep requests same-origin so they always
+# resolve to this standalone server (port 6999), never the main Carrot service.
+RECOVERY_API_JS = """\"use strict\";
+(function () {
+  async function requestJson(url, options) {
+    var response = await fetch(url, options || {});
+    var text = await response.text();
+    var payload = {};
+
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch (err) {
+        throw new Error(text.slice(0, 500) || ("HTTP " + response.status));
+      }
+    }
+
+    if (!response.ok || (payload && payload.ok === false)) {
+      var error = new Error((payload && (payload.error || payload.out)) || ("HTTP " + response.status));
+      error.status = response.status;
+      error.payload = payload || null;
+      throw error;
+    }
+    return payload;
+  }
+
+  function getJson(url) {
+    return requestJson(url, { cache: "no-store" });
+  }
+
+  function postJson(url, body) {
+    return requestJson(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+  }
+
+  var api = Object.freeze({ requestJson: requestJson, getJson: getJson, postJson: postJson });
+  window.CarrotRecoveryApi = api;
+
+  // Compatibility contract for the shared support_terminal.js component.
+  // These globals exist only in the recovery document and are backed by the
+  // recovery-owned, same-origin transport above.
+  window.getJson = getJson;
+  window.postJson = postJson;
+})();
 """
 
 
@@ -1914,6 +1967,10 @@ class RecoveryHandler(BaseHTTPRequestHandler):
 
     if path == "/recovery.js":
       self._send_bytes(200, "text/javascript; charset=utf-8", RECOVERY_JS.encode("utf-8"))
+      return
+
+    if path == "/recovery-api.js":
+      self._send_bytes(200, "text/javascript; charset=utf-8", RECOVERY_API_JS.encode("utf-8"))
       return
 
     if path == "/download/tmux.log":
