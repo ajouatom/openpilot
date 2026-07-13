@@ -6,7 +6,7 @@ from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 import opendbc.car.hyundai.hyundaicanfd as hyundaicanfd
 import opendbc.car.hyundai.radar_interface as radar_interface_module
-from opendbc.car.hyundai.radar_interface import RADAR_MSG_COUNT3, RADAR_MSG_COUNT_DENSO, RADAR_START_ADDR_CANFD3, RadarInterface
+from opendbc.car.hyundai.radar_interface import RADAR_MSG_COUNT3, RADAR_MSG_COUNT4, RADAR_START_ADDR_CANFD3, RadarInterface
 from opendbc.car.hyundai.values import CAR, HyundaiExtFlags, HyundaiFlags
 
 
@@ -47,8 +47,8 @@ class TestDensoRadar:
 
     radar_interface = RadarInterface(cp)
 
-    assert radar_interface.denso_radar
-    assert radar_interface.radar_msg_count == RADAR_MSG_COUNT_DENSO
+    assert radar_interface.radar_group4
+    assert radar_interface.radar_msg_count == RADAR_MSG_COUNT4
     assert radar_interface.trigger_msg_tracks == 0x52C
 
     active_dat = bytes.fromhex("bc047efcc1fe8b00")
