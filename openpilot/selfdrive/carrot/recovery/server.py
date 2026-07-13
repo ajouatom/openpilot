@@ -1312,7 +1312,10 @@ class SupportManager:
     typ = data.get("type")
     if typ == "typing":
       self.broadcast_owner({"type": "guest_typing", "active": bool(data.get("active")), "text": _sanitize_typing(data.get("text"))})
-    elif typ in {"disconnect", "close_session"}:
+    elif typ == "close_session":
+      self.stop("guest")
+      raise WsClosed()
+    elif typ == "disconnect":
       raise WsClosed()
     elif typ == "control":
       if session.permission_mode == "allow_all" and conn is not session.controller:
