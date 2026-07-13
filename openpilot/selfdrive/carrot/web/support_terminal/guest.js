@@ -30,6 +30,7 @@
       expires: "Connected · {time}", unlimited: "unlimited",
       consoleBlocked: "Developer tools detected - enter PIN again",
       consoleWarningTitle: "Warning", consoleWarningBody: "Console use is prohibited on this page.",
+      hostActor: "Host", typing: "Typing",
     },
     ko: {
       title: "Carrot 원격 터미널", pin: "PIN 필요", connect: "연결", connecting: "연결 중...",
@@ -41,6 +42,7 @@
       expires: "연결됨 · {time}", unlimited: "무제한",
       consoleBlocked: "개발자 도구 감지됨 - PIN을 다시 입력하세요",
       consoleWarningTitle: "경고", consoleWarningBody: "콘솔 사용이 금지되어 있습니다.",
+      hostActor: "호스트", typing: "입력 중",
     },
     zh: {
       title: "Carrot 远程终端", pin: "需要 PIN", connect: "连接", connecting: "正在连接...",
@@ -52,6 +54,7 @@
       expires: "已连接 · {time}", unlimited: "无限",
       consoleBlocked: "检测到开发者工具 - 请重新输入 PIN",
       consoleWarningTitle: "警告", consoleWarningBody: "此页面禁止使用控制台。",
+      hostActor: "主机", typing: "正在输入",
     },
   };
 
@@ -95,6 +98,7 @@
     hostTypingText: "",
     hostTypingTimer: 0,
     hostTypingRaf: 0,
+    typingIndicator: null,
   };
 
   const KEY_SEQ = {
@@ -471,26 +475,15 @@
       state.hostTypingRaf = 0;
       const host = ensureHostTypingOverlay();
       if (!host) return;
-      host.classList.toggle("is-visible", state.hostTypingActive);
-      host.setAttribute("aria-hidden", state.hostTypingActive ? "false" : "true");
-      if (!state.hostTypingActive) return;
-
-      let indicator = host.querySelector(".terminal-typing-indicator");
-      if (!indicator) {
-        indicator = document.createElement("div");
-        indicator.className = "terminal-typing-indicator";
-        const meta = document.createElement("span");
-        meta.className = "terminal-typing-indicator__meta";
-        const label = document.createElement("span");
-        label.className = "terminal-typing-indicator__label";
-        const draft = document.createElement("code");
-        draft.className = "terminal-typing-indicator__draft";
-        indicator.append(meta, label, draft);
-        host.append(indicator);
+      if (!state.typingIndicator && window.CarrotTerminalTypingIndicator) {
+        state.typingIndicator = window.CarrotTerminalTypingIndicator.create(host);
       }
-      indicator.querySelector(".terminal-typing-indicator__meta").textContent = "호스트";
-      indicator.querySelector(".terminal-typing-indicator__label").textContent = "입력";
-      indicator.querySelector(".terminal-typing-indicator__draft").textContent = state.hostTypingText.trim() || "입력 중...";
+      state.typingIndicator?.update({
+        active: state.hostTypingActive,
+        actor: t("hostActor"),
+        text: state.hostTypingText,
+        emptyLabel: t("typing"),
+      });
     });
   }
 
@@ -519,21 +512,20 @@
     }
   }
 
-  // Keep the PIN panel visually centered. The overlay stays full-page (so it is
-  // dead-centered at rest), and we only feed the on-screen keyboard's height as
-  // a bottom inset so the panel rises to the middle of the visible area when the
-  // keyboard is open. Deriving the keyboard height as innerHeight - vv.height
-  // works on iOS (dvh does not shrink) and is ~0 on Android resizes-content
-  // (where the page already shrank), so both stay centered.
+  // Anchor the PIN overlay to the browser's actual visible rectangle. This
+  // avoids device-specific dvh/keyboard resize behaviour and keeps the panel at
+  // the exact horizontal and vertical center before and after the IME opens.
   function syncAuthViewport() {
     const vv = window.visualViewport;
     const root = document.documentElement;
-    if (!vv) {
-      root.style.removeProperty("--auth-kb-inset");
-      return;
-    }
-    const kb = Math.max(0, (window.innerHeight || 0) - vv.height - vv.offsetTop);
-    root.style.setProperty("--auth-kb-inset", `${Math.round(kb)}px`);
+    const left = vv ? vv.offsetLeft : 0;
+    const top = vv ? vv.offsetTop : 0;
+    const width = vv ? vv.width : (window.innerWidth || document.documentElement.clientWidth || 0);
+    const height = vv ? vv.height : (window.innerHeight || document.documentElement.clientHeight || 0);
+    root.style.setProperty("--auth-vv-left", `${Math.round(left)}px`);
+    root.style.setProperty("--auth-vv-top", `${Math.round(top)}px`);
+    root.style.setProperty("--auth-vv-width", `${Math.round(width)}px`);
+    root.style.setProperty("--auth-vv-height", `${Math.round(height)}px`);
   }
 
   function showAuth(message = t("pin")) {

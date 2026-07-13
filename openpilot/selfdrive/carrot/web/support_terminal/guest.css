@@ -59,18 +59,22 @@ body[data-page="terminal"] .terminal-xterm .xterm-viewport {
   white-space: nowrap;
 }
 
-/* Full-page overlay, dead-centered at rest. guest.js feeds the on-screen
-   keyboard height into --auth-kb-inset as extra bottom padding so the panel
-   rises to the middle of the still-visible area when the keyboard opens instead
-   of sitting behind it. At rest the inset is 0 → true center. */
+/* Follow visualViewport's exact visible rectangle so the panel is centered on
+   both axes across browser chrome, display cutouts and virtual keyboards. */
 .terminal-auth {
   position: absolute;
-  inset: 0;
+  inset: auto;
+  left: var(--auth-vv-left, 0px);
+  top: var(--auth-vv-top, 0px);
+  width: var(--auth-vv-width, 100vw);
+  height: var(--auth-vv-height, 100dvh);
   z-index: 200;
   display: grid;
   place-items: center;
-  padding: clamp(18px, 6dvw, 56px);
-  padding-bottom: calc(clamp(18px, 6dvw, 56px) + var(--auth-kb-inset, 0px));
+  padding: max(clamp(18px, 6dvw, 56px), env(safe-area-inset-top, 0px))
+           max(clamp(18px, 6dvw, 56px), env(safe-area-inset-right, 0px))
+           max(clamp(18px, 6dvw, 56px), env(safe-area-inset-bottom, 0px))
+           max(clamp(18px, 6dvw, 56px), env(safe-area-inset-left, 0px));
   background: color-mix(in srgb, var(--md-surface) 96%, #000);
   transition: opacity 180ms ease, transform 180ms ease, visibility 180ms ease;
 }
@@ -83,7 +87,7 @@ body[data-page="terminal"] .terminal-xterm .xterm-viewport {
 
 .terminal-auth__panel {
   --auth-height: clamp(58px, 9dvh, 82px);
-  width: min(92dvw, 560px);
+  width: min(100%, 560px);
   display: grid;
   gap: clamp(16px, 3dvh, 26px);
 }

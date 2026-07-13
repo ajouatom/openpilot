@@ -785,6 +785,7 @@ SUPPORT_GUEST_ASSETS = {
   "layout.css": str(WEB_DIR / "css" / "layout.css"),
   "components.css": str(WEB_DIR / "css" / "components.css"),
   "terminal.css": str(WEB_DIR / "css" / "pages" / "terminal.css"),
+  "terminal_typing_indicator.js": str(WEB_DIR / "js" / "shared" / "ui" / "terminal_typing_indicator.js"),
   "guest.css": os.path.join(SUPPORT_GUEST_DIR, "guest.css"),
   "guest.js": os.path.join(SUPPORT_GUEST_DIR, "guest.js"),
   "xterm.css": str(WEB_DIR / "css" / "vendor" / "xterm.css"),
@@ -1563,7 +1564,7 @@ HTML_PAGE = """<!doctype html>
 <link rel="stylesheet" href="/css/base.css">
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/vendor/xterm.css">
-<link rel="stylesheet" href="/css/pages/terminal.css">
+<link rel="stylesheet" href="/css/pages/terminal.css?v=2607-104">
 <style>
 /* recovery has none of the app's nav chrome (side rail / bottom bar). The reused
    terminal.css reserves space for them (left: var(--nav-rail-width) on wide
@@ -1693,8 +1694,9 @@ HTML_PAGE = """<!doctype html>
   <script src="/js/vendor/xterm-addon-webgl.js"></script>
   <script src="/js/vendor/xterm-addon-canvas.js"></script>
   <script src="/js/pages/terminal.js"></script>
+  <script src="/js/shared/ui/terminal_typing_indicator.js?v=2607-01"></script>
   <script src="/recovery-api.js"></script>
-  <script src="/js/pages/support_terminal.js"></script>
+  <script src="/js/pages/support_terminal.js?v=2607-26"></script>
   <script src="/recovery.js"></script>
 </body>
 </html>

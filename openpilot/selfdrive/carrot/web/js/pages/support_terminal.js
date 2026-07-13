@@ -35,6 +35,7 @@
   const COMMAND_TIMEOUT_OPTIONS = [15, 30, 60, 120];
 
   const els = {};
+  let typingIndicator = null;
 
   function $(id) {
     return document.getElementById(id);
@@ -817,27 +818,15 @@
     if (!host) return;
     const active = state.typingActive;
     document.documentElement.style.setProperty("--terminal-collab-toast-offset", active ? "46px" : "0px");
-    host.classList.toggle("is-visible", active);
-    host.setAttribute("aria-hidden", active ? "false" : "true");
-    if (!active) return;
-
-    let indicator = host.querySelector(".terminal-typing-indicator");
-    if (!indicator) {
-      indicator = document.createElement("div");
-      indicator.className = "terminal-typing-indicator";
-      const meta = document.createElement("span");
-      meta.className = "terminal-typing-indicator__meta";
-      const label = document.createElement("span");
-      label.className = "terminal-typing-indicator__label";
-      const draft = document.createElement("code");
-      draft.className = "terminal-typing-indicator__draft";
-      indicator.append(meta, label, draft);
-      host.append(indicator);
+    if (!typingIndicator && window.CarrotTerminalTypingIndicator) {
+      typingIndicator = window.CarrotTerminalTypingIndicator.create(host);
     }
-    const guestCount = Number(state.snapshot?.guest_count || 0);
-    indicator.querySelector(".terminal-typing-indicator__meta").textContent = t("support_terminal_guest_count", "Guest {count}", { count: guestCount });
-    indicator.querySelector(".terminal-typing-indicator__label").textContent = t("support_terminal_guest_draft", "Guest input");
-    indicator.querySelector(".terminal-typing-indicator__draft").textContent = state.typingText.trim() || t("support_terminal_guest_typing", "Guest typing...");
+    typingIndicator?.update({
+      active,
+      actor: t("support_terminal_guest_actor", "Guest"),
+      text: state.typingText,
+      emptyLabel: t("support_terminal_typing", "Typing"),
+    });
   }
 
   function activeRemainingSeconds() {

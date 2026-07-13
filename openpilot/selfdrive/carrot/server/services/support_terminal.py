@@ -35,6 +35,7 @@ SUPPORT_GUEST_ASSETS = {
   "layout.css": os.path.join(WEB_DIR, "css", "layout.css"),
   "components.css": os.path.join(WEB_DIR, "css", "components.css"),
   "terminal.css": os.path.join(WEB_DIR, "css", "pages", "terminal.css"),
+  "terminal_typing_indicator.js": os.path.join(WEB_DIR, "js", "shared", "ui", "terminal_typing_indicator.js"),
   "guest.css": os.path.join(SUPPORT_GUEST_DIR, "guest.css"),
   "guest.js": os.path.join(SUPPORT_GUEST_DIR, "guest.js"),
   "xterm.css": os.path.join(WEB_DIR, "css", "vendor", "xterm.css"),
