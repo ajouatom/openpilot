@@ -28,6 +28,11 @@ CRUISE_DISABLED_CHAR = '–'
 
 SET_SPEED_PERSISTENCE = 2.5  # seconds
 DEFAULT_MAX_LAT_ACCEL = 3.0  # m/s^2
+CRUISE_SPEED_ANIMATION_START = 120
+CRUISE_SPEED_ANIMATION_MAX = 100
+CRUISE_SPEED_ANIMATION_STEP = 12
+CRUISE_SPEED_ANIMATION_START_SIZE = 96
+CRUISE_SPEED_ANIMATION_TARGET_SIZE = 40
 
 @dataclass(frozen=True)
 class SetSpeedOverrideState:
@@ -206,6 +211,10 @@ class HudRenderer(Widget):
     self._set_speed_override = SetSpeedOverride()
     self._debug_traffic_light = False
 
+    self._cruise_speed_text_last = ""
+    self._cruise_speed_animation_text = ""
+    self._cruise_speed_animation_time = -1
+
   def set_wheel_critical_icon(self, critical: bool):
     """Set the wheel icon to critical or normal state."""
     self._show_wheel_critical = critical
@@ -242,6 +251,13 @@ class HudRenderer(Widget):
     self.is_cruise_set = 0 < self.set_speed < SET_SPEED_NA
     self.is_cruise_available = self.set_speed != -1
 
+    if self._engaged and self.is_cruise_set:
+      display_set_speed = self.set_speed * (1.0 if ui_state.is_metric else KM_TO_MILE)
+      cruise_text = str(int(round(display_set_speed)))
+    else:
+      cruise_text = "--"
+    self._update_cruise_speed_animation(cruise_text)
+
     v_ego_cluster = car_state.vEgoCluster
     self.v_ego_cluster_seen = self.v_ego_cluster_seen or v_ego_cluster != 0.0
     v_ego = v_ego_cluster if self.v_ego_cluster_seen else car_state.vEgo
@@ -277,6 +293,62 @@ class HudRenderer(Widget):
     self._draw_set_speed(rect)
 
     self._draw_steering_wheel(rect)
+
+    self._draw_cruise_speed_animation(rect)
+
+  def _update_cruise_speed_animation(self, cruise_text: str) -> None:
+    if self._cruise_speed_text_last == cruise_text:
+      return
+
+    self._cruise_speed_text_last = cruise_text
+    if cruise_text == "--":
+      return
+
+    self._cruise_speed_animation_text = cruise_text
+    self._cruise_speed_animation_time = CRUISE_SPEED_ANIMATION_START
+
+  def _draw_cruise_speed_animation(self, rect: rl.Rectangle) -> None:
+    if self._cruise_speed_animation_time <= 0 or not self._cruise_speed_animation_text:
+      return
+
+    self._cruise_speed_animation_time -= CRUISE_SPEED_ANIMATION_STEP
+    animation_time = self._cruise_speed_animation_time
+    interpolation_time = min(animation_time, CRUISE_SPEED_ANIMATION_MAX)
+
+    panel_x = rect.x + 10.0
+    panel_y = rect.y + rect.height - self._txt_speed_bg.height - 10.0
+    start_x = rect.x + rect.width * 0.5
+    start_y = rect.y + rect.height * 0.45
+    target_x = panel_x + self._txt_speed_bg.width * 0.76
+    target_y = panel_y + self._txt_speed_bg.height * 0.33
+
+    x = int((start_x * interpolation_time + target_x * (CRUISE_SPEED_ANIMATION_MAX - interpolation_time)) /
+            CRUISE_SPEED_ANIMATION_MAX)
+    y = int((start_y * interpolation_time + target_y * (CRUISE_SPEED_ANIMATION_MAX - interpolation_time)) /
+            CRUISE_SPEED_ANIMATION_MAX)
+    font_size = int((CRUISE_SPEED_ANIMATION_START_SIZE * interpolation_time +
+                     CRUISE_SPEED_ANIMATION_TARGET_SIZE * (CRUISE_SPEED_ANIMATION_MAX - interpolation_time)) /
+                    CRUISE_SPEED_ANIMATION_MAX)
+
+    if animation_time >= CRUISE_SPEED_ANIMATION_MAX:
+      border_width = 3.0
+      shadow_offset = 3.0
+    else:
+      border_width = 1.0
+      shadow_offset = 0.0
+
+    draw_text_ui_style(
+      self._cruise_speed_animation_text,
+      x,
+      y,
+      font_size,
+      rl.Color(0, 255, 0, 230),
+      font=self._font_display,
+      border_width=border_width,
+      shadow_offset=shadow_offset,
+      align="center",
+      y_offset=0.0,
+    )
 
   def _draw_steering_wheel(self, rect: rl.Rectangle) -> None:
     wheel_txt = self._txt_wheel_critical if self._show_wheel_critical else self._txt_wheel
@@ -887,4 +959,3 @@ class HudRenderer(Widget):
     draw_text_ui_style(remain, text_x, text_y, remain_font, rl.Color(255, 255, 255, 235), font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
     return True
-

@@ -93,6 +93,8 @@ class ModelRenderer(Widget):
     self._lead_pt_filt = [None, None]
     self._radar_info_items: list[RadarInfoItem] = []
     self._font_display: rl.Font = gui_app.font(FontWeight.DISPLAY)
+    self._tire_trajectory = False
+    self._tire_trajectory_param_time = -1.0
 
     self._exp_gradient = Gradient(
       start=(0.0, 1.0),  # Bottom of path
@@ -112,6 +114,7 @@ class ModelRenderer(Widget):
 
   def _render(self, rect: rl.Rectangle):
     sm = ui_state.sm
+    self._refresh_tire_trajectory_param()
 
     self._torque_filter.update(-ui_state.sm['carOutput'].actuatorsOutput.torque)
 
@@ -165,6 +168,7 @@ class ModelRenderer(Widget):
     if ui_state.status != UIStatus.DISENGAGED:
       #self._draw_lane_lines()
       self._draw_path(sm)
+      self._draw_tire_trajectory(sm)
 
     if render_lead_indicator and radar_state:
       self._draw_lead_indicator()
@@ -414,6 +418,156 @@ class ModelRenderer(Widget):
       # if closest lane lines are not confident, make road edges green
       color = self._get_ll_color(float(1.0 - self._road_edge_stds[i]), float(self._lane_line_probs[i + 1]) < 0.25, i == 0)
       draw_polygon(self._rect, road_edge.projected_points, color)
+
+  def _refresh_tire_trajectory_param(self) -> None:
+    now = rl.get_time()
+    if now - self._tire_trajectory_param_time < 1.0:
+      return
+    self._tire_trajectory = ui_state.params.get_bool("CarrotTireTrajectory")
+    self._tire_trajectory_param_time = now
+
+  @staticmethod
+  def _tire_gradient_color(danger_ratio: float) -> rl.Color:
+    if danger_ratio <= 0.10:
+      red, green = 0.0, 180.0
+    elif danger_ratio <= 0.60:
+      factor = (danger_ratio - 0.10) / 0.50
+      red, green = factor * 255.0, 180.0
+    elif danger_ratio <= 1.00:
+      factor = (danger_ratio - 0.60) / 0.40
+      red, green = 255.0, 180.0 - factor * 180.0
+    else:
+      red, green = 255.0, 0.0
+    return rl.Color(int(red), int(green), 0, 255)
+
+  @staticmethod
+  def _draw_tire_edge_band(
+    left_points: np.ndarray,
+    right_points: np.ndarray,
+    is_left: bool,
+    color: rl.Color,
+  ) -> None:
+    n_edge = min(len(left_points), len(right_points))
+    if n_edge < 2:
+      return
+
+    rl.rl_disable_texture()
+    rl.rl_begin(rl.RL_QUADS)
+    try:
+      for i in range(n_edge - 1):
+        lx0, ly0 = map(float, left_points[i])
+        rx0, ry0 = map(float, right_points[i])
+        lx1, ly1 = map(float, left_points[i + 1])
+        rx1, ry1 = map(float, right_points[i + 1])
+        outer_y0 = ly0 if is_left else ry0
+        outer_y1 = ly1 if is_left else ry1
+        subdivisions = max(1, int(abs(outer_y1 - outer_y0) / 5.0))
+
+        for subdivision in range(subdivisions):
+          t0 = subdivision / subdivisions
+          t1 = (subdivision + 1) / subdivisions
+          slx_b = lx0 + (lx1 - lx0) * t0
+          sly_b = ly0 + (ly1 - ly0) * t0
+          srx_b = rx0 + (rx1 - rx0) * t0
+          sry_b = ry0 + (ry1 - ry0) * t0
+          slx_t = lx0 + (lx1 - lx0) * t1
+          sly_t = ly0 + (ly1 - ly0) * t1
+          srx_t = rx0 + (rx1 - rx0) * t1
+          sry_t = ry0 + (ry1 - ry0) * t1
+
+          band_width_bottom = abs(slx_b - srx_b) / 6.0
+          band_width_top = abs(slx_t - srx_t) / 6.0
+          outer_x_bottom = slx_b if is_left else srx_b
+          outer_y_bottom = sly_b if is_left else sry_b
+          outer_x_top = slx_t if is_left else srx_t
+          outer_y_top = sly_t if is_left else sry_t
+          center_bottom = (slx_b + srx_b) * 0.5
+          direction = 1.0 if center_bottom > outer_x_bottom else -1.0
+          inner_x_bottom = outer_x_bottom + direction * band_width_bottom
+          inner_x_top = outer_x_top + direction * band_width_top
+
+          edge_dx = outer_x_top - outer_x_bottom
+          edge_dy = outer_y_top - outer_y_bottom
+          if edge_dx * edge_dx + edge_dy * edge_dy < 0.25:
+            continue
+
+          rl.rl_color4ub(color.r, color.g, color.b, color.a)
+          rl.rl_vertex2f(outer_x_bottom, outer_y_bottom)
+          rl.rl_color4ub(color.r, color.g, color.b, 0)
+          rl.rl_vertex2f(inner_x_bottom, outer_y_bottom)
+          rl.rl_color4ub(color.r, color.g, color.b, 0)
+          rl.rl_vertex2f(inner_x_top, outer_y_top)
+          rl.rl_color4ub(color.r, color.g, color.b, color.a)
+          rl.rl_vertex2f(outer_x_top, outer_y_top)
+    finally:
+      rl.rl_end()
+
+  def _draw_tire_trajectory(self, sm) -> None:
+    if not self._tire_trajectory or not sm.alive['modelV2'] or not sm.valid['modelV2']:
+      return
+
+    projected_points = self._path.projected_points
+    side_length = len(projected_points) // 2
+    if side_length < 2:
+      return
+
+    left_points = projected_points[:side_length]
+    right_points = projected_points[side_length:side_length * 2][::-1]
+
+    model = sm['modelV2']
+    lane_lines = model.laneLines
+    lane_line_probs = model.laneLineProbs
+    if len(lane_lines) < 3 or len(lane_line_probs) < 3 or len(lane_lines[1].y) == 0 or len(lane_lines[2].y) == 0:
+      return
+
+    left_m = float(lane_lines[1].y[0])
+    right_m = -float(lane_lines[2].y[0])
+    if lane_line_probs[1] < 0.3 and lane_line_probs[2] > 0.3:
+      left_m = 3.0 - right_m
+    elif lane_line_probs[2] < 0.3 and lane_line_probs[1] > 0.3:
+      right_m = 3.0 - left_m
+
+    total_width = left_m + right_m
+    if total_width < 0.5:
+      total_width = 3.0
+    offset_m = (left_m - right_m) / 2.0
+    danger_ratio = abs(offset_m) / max(total_width / 2.0 - 0.9, 0.1)
+
+    lane_warning = abs(offset_m) >= 0.5
+    warning_pulse = lane_warning and int(rl.get_time() * 1000) % 800 < 400
+    edge_green = rl.Color(0, 200, 0, 255)
+    if lane_warning:
+      warning_color = rl.Color(255, 0, 0, 255) if warning_pulse else rl.Color(255, 100, 0, 200)
+      left_color = warning_color if offset_m > 0.0 else edge_green
+      right_color = warning_color if offset_m < 0.0 else edge_green
+    elif offset_m > 0.02:
+      left_color = self._tire_gradient_color(danger_ratio)
+      right_color = edge_green
+    elif offset_m < -0.02:
+      left_color = edge_green
+      right_color = self._tire_gradient_color(danger_ratio)
+    else:
+      left_color = right_color = edge_green
+
+    self._draw_tire_edge_band(left_points, right_points, True, left_color)
+    self._draw_tire_edge_band(left_points, right_points, False, right_color)
+
+    if danger_ratio < 1.5:
+      center_x = int(self._rect.x + self._rect.width / 2.0)
+      text_y = int(np.clip(
+        float(left_points[0][1]) - 40.0,
+        self._rect.y + 26.0,
+        self._rect.y + self._rect.height - 44.0,
+      ))
+      direction_label = "L" if offset_m > 0.02 else ("R" if offset_m < -0.02 else "C")
+      draw_text_ui_style(
+        direction_label, center_x, text_y, 24, rl.WHITE,
+        font=self._font_display, border_width=1.0, shadow_offset=0.0, align="center",
+      )
+      draw_text_ui_style(
+        f"{abs(offset_m):.2f}", center_x, text_y + 22, 18, rl.WHITE,
+        font=self._font_display, border_width=1.0, shadow_offset=0.0, align="center",
+      )
 
   def _draw_path(self, sm):
     """Draw path with dynamic coloring based on mode and throttle state."""
@@ -722,6 +876,4 @@ class ModelRenderer(Widget):
       #)
 
       draw_text_ui_style(item.text, tx, ty, font_size, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
-
-
 
