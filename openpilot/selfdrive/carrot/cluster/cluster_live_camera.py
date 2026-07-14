@@ -71,7 +71,8 @@ class LiveRoadCamera:
             from openpilot.system.ui.lib.egl import init_egl
 
             if not init_egl():
-                raise RuntimeError("failed to initialize EGL for the cluster road camera")
+                print("Cluster road camera EGL initialization failed; using NV12 GPU upload", flush=True)
+                self._zero_copy = False
 
         self._client_cls = VisionIpcClient
         self._stream_type = VisionStreamType.VISION_STREAM_ROAD
@@ -222,7 +223,9 @@ class LiveRoadCamera:
 
         self._texture.width = self._frame.width
         self._texture.height = self._frame.height
-        bind_egl_image_to_texture(self._texture.id, egl_image)
+        if self._texture_needs_update:
+            bind_egl_image_to_texture(self._texture.id, egl_image)
+            self._texture_needs_update = False
         rl.begin_shader_mode(self._shader)
         try:
             rl.draw_texture_pro(
