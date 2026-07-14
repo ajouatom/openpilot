@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import bz2
 import io
@@ -79,6 +79,7 @@ LOG_FILENAMES = {
     "qlog": "qlog.zst",
     "rlog": "rlog.zst",
 }
+NUMBERED_FOLDER_RE = re.compile(r"^(.*?)(\d+)$")
 
 
 @dataclass(frozen=True)
@@ -814,6 +815,28 @@ class RouteReplaySource:
     @property
     def loaded_file_count(self) -> int:
         return self._loaded_file_count
+
+    def log_path_at(self, playback_seconds: float) -> Path:
+        for chunk in self._loaded_chunks:
+            if chunk.start_t - 0.5 <= playback_seconds <= chunk.end_t + 0.5:
+                return chunk.path
+        if self._loaded_chunks:
+            nearest = min(
+                self._loaded_chunks,
+                key=lambda chunk: min(abs(playback_seconds - chunk.start_t), abs(playback_seconds - chunk.end_t)),
+            )
+            return nearest.path
+        return self.source_files[0]
+
+    def log_folder_at(self, playback_seconds: float) -> Path:
+        return self.log_path_at(playback_seconds).parent
+
+    def log_offset_at(self, playback_seconds: float) -> float:
+        log_path = self.log_path_at(playback_seconds)
+        chunk = next((item for item in self._loaded_chunks if item.path == log_path), None)
+        if chunk is None:
+            return 0.0
+        return clamp(playback_seconds - chunk.start_t, 0.0, max(0.0, chunk.end_t - chunk.start_t))
 
     def _status_frame_at(self, playback_seconds: float) -> RouteReplayFrame | None:
         if not self.frames:
@@ -4437,6 +4460,35 @@ def discover_route_logs(
     if max_segments is not None:
         files = files[:max_segments]
     return files
+
+
+def adjacent_route_log_path(
+    log_path: Path,
+    direction: int,
+    log_kind: str = "rlog",
+) -> Path | None:
+    if direction not in (-1, 1):
+        raise ValueError("direction must be -1 or 1")
+    if log_kind not in LOG_FILENAMES:
+        raise RuntimeError(f"unsupported route log kind: {log_kind}")
+
+    folder = log_path.resolve().parent if log_path.is_file() else log_path.resolve()
+    match = NUMBERED_FOLDER_RE.fullmatch(folder.name)
+    if match is None:
+        return None
+
+    prefix, digits = match.groups()
+    next_index = int(digits) + direction
+    if next_index < 0:
+        return None
+    next_name = f"{prefix}{next_index:0{len(digits)}d}"
+    next_folder = folder.parent / next_name
+    filenames = (LOG_FILENAMES[log_kind], f"{log_kind}.bz2")
+    for filename in filenames:
+        candidate = next_folder / filename
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def route_search_spec(route_path: Path, start_segment: int | None) -> tuple[Path, int | None, str | None]:

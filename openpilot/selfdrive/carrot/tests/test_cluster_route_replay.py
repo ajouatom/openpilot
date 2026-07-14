@@ -6,7 +6,7 @@ import sys
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
-from cluster_route_replay import RawCornerObject, RouteLogParser
+from cluster_route_replay import RawCornerObject, RouteLogParser, adjacent_route_log_path
 
 
 def corner_object(t, slot, object_id, age, x, y, vx, vy):
@@ -47,3 +47,25 @@ def test_replay_uses_raw_object_identity_when_corner_slot_is_reused():
   )))
 
   assert moved_track_id == new_track_id
+
+
+def test_adjacent_route_log_path_preserves_number_padding(tmp_path):
+  previous_folder = tmp_path / "route--004"
+  current_folder = tmp_path / "route--005"
+  next_folder = tmp_path / "route--006"
+  for folder in (previous_folder, current_folder, next_folder):
+    folder.mkdir()
+    (folder / "rlog.zst").write_bytes(b"")
+
+  current_log = current_folder / "rlog.zst"
+  assert adjacent_route_log_path(current_log, -1) == previous_folder / "rlog.zst"
+  assert adjacent_route_log_path(current_log, 1) == next_folder / "rlog.zst"
+
+
+def test_adjacent_route_log_path_returns_none_for_missing_number(tmp_path):
+  folder = tmp_path / "route-without-segment"
+  folder.mkdir()
+  log_path = folder / "rlog.zst"
+  log_path.write_bytes(b"")
+
+  assert adjacent_route_log_path(log_path, 1) is None

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import gc
 import ipaddress
+import os
 from dataclasses import replace
 import signal
 import socket
@@ -69,7 +70,12 @@ from cluster_models import RouteOverlay, SimulatorInput
 from cluster_navi_overlay import merge_navi_overlay_state
 from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
 from cluster_renderer import ClusterUiRenderer
-from cluster_route_replay import RouteReplaySource
+from cluster_route_replay import (
+    ROUTE_FRONT_RADAR_ONLY_ENV,
+    ROUTE_SHOW_RECORDED_CUTINS_ENV,
+    RouteReplaySource,
+    adjacent_route_log_path,
+)
 from cluster_simulator import ClusterSimulator, RandomInputSource
 from cluster_system_monitor import ClusterProcessCoreUsageSampler
 from cluster_usb_display import TuringUsbDisplay, find_supported_usb_product, product_id_for_hud_mode
@@ -198,6 +204,36 @@ def resolved_h264_encoder_fps(target_fps: float, h264_fps: int) -> int:
 
 def option_present(argv: list[str], option: str) -> bool:
     return any(arg == option or arg.startswith(f"{option}=") for arg in argv)
+
+
+def route_log_kind_for_path(path: Path, fallback: str) -> str:
+    name = path.name.lower()
+    if name.startswith("qlog."):
+        return "qlog"
+    if name.startswith("rlog."):
+        return "rlog"
+    return fallback
+
+
+def route_state_has_cutin(state: object) -> bool:
+    detected_vehicles = getattr(state, "detected_vehicles", ()) or ()
+    if any(bool(getattr(vehicle, "cut_in", False)) for vehicle in detected_vehicles):
+        return True
+    overlay = getattr(state, "route_overlay", None)
+    cutin_status = str(getattr(overlay, "cutin_status", "") or "").upper()
+    return "CUTIN" in cutin_status and ": YES" in cutin_status
+
+
+def play_cutin_alert() -> None:
+    if sys.platform == "win32":
+        try:
+            import winsound
+
+            winsound.PlaySound("SystemExclamation", winsound.SND_ALIAS | winsound.SND_ASYNC)
+            return
+        except (ImportError, RuntimeError):
+            pass
+    print("\a", end="", flush=True)
 
 
 def apply_cluster_encoder_param(args: argparse.Namespace) -> str:
@@ -624,6 +660,7 @@ def run_demo(
     route_tools_mode: str,
     camera_view_mode: int | None,
     route_loop: bool,
+    route_pause_on_cutin: bool,
     route_replay_speed: float,
     route_start_segment: int | None,
     route_max_segments: int | None,
@@ -849,6 +886,19 @@ def run_demo(
     route_paused = False
     route_pause_toggled_down = False
     route_active_corner_lateral_offset_m = 0.0
+    active_route_log_kind = route_log
+    active_route_overlay_mode = route_overlay_mode
+    route_next_retry_time = 0.0
+    route_end_waiting = False
+    route_cutin_active = False
+    route_options = {
+        "show_recorded_cutins": os.environ.get(ROUTE_SHOW_RECORDED_CUTINS_ENV) == "1",
+        "front_radar_only": os.environ.get(ROUTE_FRONT_RADAR_ONLY_ENV) == "1",
+        "route_loop": route_loop,
+        "pause_on_cutin": route_pause_on_cutin,
+        "show_route_overlay": active_route_overlay_mode != "off",
+        "road_camera": active_camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+    }
     last_frame_time = start_time
     last_report_time = start_time
     next_theme_param_read = start_time
@@ -865,6 +915,52 @@ def run_demo(
     h264_test_pattern_nv12: bytearray | None = None
     h264_render_nv12_buffer: bytearray | None = None
     h264_render_nv12_layout: tuple[int, int, int, int, int, int, bool] | None = None
+
+    def switch_route_source(
+        new_path: Path,
+        switch_time: float,
+        resume_s: float = 0.0,
+        paused: bool = False,
+    ) -> bool:
+        nonlocal route_source
+        nonlocal route_path, active_route_log_kind
+        nonlocal route_playback_base_s, route_wall_base_time, route_paused
+        nonlocal route_next_retry_time, route_end_waiting, route_cutin_active
+
+        new_path = new_path.resolve()
+        new_log_kind = route_log_kind_for_path(new_path, active_route_log_kind)
+        try:
+            new_source = RouteReplaySource.load(
+                new_path,
+                new_log_kind,
+                None,
+                1,
+                0.0,
+                "live",
+                route_active_corner_lateral_offset_m,
+            )
+        except Exception as exc:
+            print(f"Failed to open replay log {new_path}: {exc}", flush=True)
+            return False
+
+        old_source = route_source
+        route_source = new_source
+        route_path = new_path
+        active_route_log_kind = new_log_kind
+        route_playback_base_s = min(max(0.0, resume_s), new_source.duration)
+        route_wall_base_time = switch_time
+        route_paused = paused
+        route_next_retry_time = 0.0
+        route_end_waiting = False
+        route_cutin_active = False
+        if old_source is not None:
+            old_source.close()
+        print(
+            f"Playing replay log: {new_source.source_files[0].parent} "
+            f"({new_source.duration:.1f}s)",
+            flush=True,
+        )
+        return True
 
     if hud_output_gate_param_reader is not None and not hud_output_gate_param_reader.allowed():
         print(
@@ -1154,9 +1250,37 @@ def run_demo(
                     if route_paused
                     else route_playback_base_s + (now - route_wall_base_time) * route_replay_speed
                 )
+                action = None
                 if route_tools_window is not None:
                     action = route_tools_window.poll()
                     if action is not None:
+                        reload_parser_options = False
+                        for option_name, option_value in action.option_updates:
+                            if option_name not in route_options:
+                                continue
+                            route_options[option_name] = option_value
+                            if option_name == "show_recorded_cutins":
+                                os.environ[ROUTE_SHOW_RECORDED_CUTINS_ENV] = "1" if option_value else "0"
+                                reload_parser_options = True
+                            elif option_name == "front_radar_only":
+                                os.environ[ROUTE_FRONT_RADAR_ONLY_ENV] = "1" if option_value else "0"
+                                reload_parser_options = True
+                            elif option_name == "route_loop":
+                                route_loop = option_value
+                                if route_loop and route_end_waiting:
+                                    route_end_waiting = False
+                                    route_paused = False
+                                    route_playback_base_s = 0.0
+                                    route_wall_base_time = now
+                                    playback_seconds = 0.0
+                            elif option_name == "pause_on_cutin":
+                                if not option_value:
+                                    route_cutin_active = False
+                            elif option_name == "show_route_overlay":
+                                active_route_overlay_mode = "compact" if option_value else "off"
+                            elif option_name == "road_camera":
+                                active_camera_view_mode = CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA if option_value else 0
+
                         if action.toggle_pause:
                             route_paused = not route_paused
                             route_playback_base_s = playback_seconds
@@ -1166,13 +1290,38 @@ def run_demo(
                             route_wall_base_time = now
                             playback_seconds = action.seek_s
                             route_paused = True
+                            route_end_waiting = False
+                            route_cutin_active = False
+
+                        requested_path = Path(action.open_path) if action.open_path is not None else None
+                        if requested_path is None and (action.previous_log or action.next_log):
+                            direction = -1 if action.previous_log else 1
+                            requested_path = adjacent_route_log_path(
+                                route_source.log_path_at(playback_seconds),
+                                direction,
+                                active_route_log_kind,
+                            )
+                            if requested_path is None:
+                                direction_name = "previous" if direction < 0 else "next"
+                                print(f"No {direction_name} numbered replay log found", flush=True)
+
+                        if requested_path is not None:
+                            if switch_route_source(requested_path, now):
+                                playback_seconds = 0.0
+                        elif reload_parser_options:
+                            current_path = route_source.log_path_at(playback_seconds)
+                            current_offset = route_source.log_offset_at(playback_seconds)
+                            if switch_route_source(current_path, now, current_offset, route_paused):
+                                playback_seconds = route_playback_base_s
+
                         if action.closed:
                             route_tools_window.close()
                             route_tools_window = None
                     elif not route_tools_window.is_alive:
                         route_tools_window.close()
                         route_tools_window = None
-                elif route_tools_mode == "overlay" and output_mode in ("window", "both"):
+
+                if route_tools_mode == "overlay" and output_mode in ("window", "both"):
                     seek_s, next_corner_lateral_offset_m, _control_active = renderer.route_replay_control_input(
                         playback_seconds,
                         route_source.duration,
@@ -1189,30 +1338,70 @@ def run_demo(
                         route_wall_base_time = now
                         playback_seconds = seek_s
                         route_paused = True
+                        route_end_waiting = False
+                        route_cutin_active = False
                     if next_corner_lateral_offset_m != route_active_corner_lateral_offset_m:
                         route_active_corner_lateral_offset_m = next_corner_lateral_offset_m
                         route_source.corner_lateral_offset_m = route_active_corner_lateral_offset_m
                         route_paused = True
                         route_playback_base_s = playback_seconds
                         route_wall_base_time = now
-                if route_source.is_finished(playback_seconds, route_loop):
-                    break
+                elif output_mode in ("window", "both"):
+                    mouse_down = renderer.route_replay_mouse_down()
+                    if mouse_down and not route_pause_toggled_down:
+                        route_paused = not route_paused
+                        route_playback_base_s = playback_seconds
+                        route_wall_base_time = now
+                    route_pause_toggled_down = mouse_down
+
+                if route_end_waiting or route_source.is_finished(playback_seconds, route_loop):
+                    route_paused = True
+                    route_playback_base_s = route_source.duration
+                    route_wall_base_time = now
+                    playback_seconds = route_source.duration
+                    route_end_waiting = True
+                    if now >= route_next_retry_time:
+                        route_next_retry_time = now + 1.0
+                        next_path = adjacent_route_log_path(
+                            route_source.log_path_at(playback_seconds),
+                            1,
+                            active_route_log_kind,
+                        )
+                        if next_path is not None and switch_route_source(next_path, now):
+                            playback_seconds = 0.0
+
                 route_source.corner_lateral_offset_m = route_active_corner_lateral_offset_m
                 keep_camera_video = active_camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
                 state = route_source.state_at(
                     playback_seconds,
                     route_loop,
-                    include_overlay=route_overlay_mode != "off" or keep_camera_video,
+                    include_overlay=active_route_overlay_mode != "off" or keep_camera_video,
                 )
                 state = replace(
                     state,
                     route_overlay=route_overlay_for_mode(
                         state.route_overlay,
-                        route_overlay_mode,
+                        active_route_overlay_mode,
                         keep_video=keep_camera_video,
                     ),
                 )
+                cutin_active = route_state_has_cutin(state)
+                if route_options["pause_on_cutin"]:
+                    if cutin_active and not route_cutin_active:
+                        route_paused = True
+                        route_playback_base_s = playback_seconds
+                        route_wall_base_time = now
+                        play_cutin_alert()
+                        print(
+                            f"CUT-IN detected at {playback_seconds:.2f}s; replay paused",
+                            flush=True,
+                        )
+                    route_cutin_active = cutin_active
+                else:
+                    route_cutin_active = False
                 source_status = route_source.status_text(playback_seconds, route_loop)
+                if route_end_waiting:
+                    source_status += " | waiting for next log"
                 route_debug_overlay = state.route_overlay
                 if route_tools_window is not None:
                     route_tools_window.update(
@@ -1221,6 +1410,8 @@ def run_demo(
                         route_paused,
                         source_status,
                         route_debug_overlay,
+                        str(route_source.log_folder_at(playback_seconds)),
+                        route_options,
                     )
                 if route_tools_mode != "overlay" and route_debug_overlay is not None:
                     state = replace(
@@ -1866,6 +2057,11 @@ def parse_args() -> argparse.Namespace:
         help="Loop route replay instead of stopping at the end.",
     )
     parser.add_argument(
+        "--route-pause-on-cutin",
+        action="store_true",
+        help="Play an alert and pause route replay on the first frame of any cut-in detection.",
+    )
+    parser.add_argument(
         "--route-replay-speed",
         type=float,
         default=1.0,
@@ -2144,6 +2340,7 @@ def main(*, exit_on_error: bool = True) -> None:
             args.route_tools,
             args.camera_view_mode,
             args.route_loop,
+            args.route_pause_on_cutin,
             args.route_replay_speed,
             args.route_start_segment,
             args.route_max_segments,
