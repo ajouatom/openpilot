@@ -251,6 +251,8 @@ class NaviDashboardState:
     manifest_revision: int = 0
     received_count: int = 0
     last_received_age_ms: int | None = None
+    map_frame_age_ms: int | None = None
+    map_stream_stalled: bool = False
     peer: str = "-"
     error: str | None = None
     media: tuple[NaviMediaFrame, ...] = ()

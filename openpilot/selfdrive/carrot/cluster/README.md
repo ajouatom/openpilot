@@ -34,6 +34,12 @@ surfaces in a dedicated 1920x480 layout. Use `--navi-advertise-ip 127.0.0.1`
 with `adb reverse tcp:7714 tcp:7714`, or omit it for automatic LAN discovery.
 Only one receiver can own TCP 7714 at a time.
 
+Navigation map rendering requests `--navi-map-theme dark` by default. Use
+`auto` or `light` to request another theme from the smartphone renderer. The
+control WebSocket heartbeat is 5 seconds, and a `map_main` stream that stops
+for more than 3 seconds is replaced by `MAP STREAM STALLED` instead of leaving
+the last map frame frozen on screen.
+
 `--navi-overlay` keeps the selected vehicle source and adds the live Carrot
 navigation receiver. This is intended for editing the production navigation
 layout on a PC: use `--input route` for recorded vehicle data and `--output

@@ -2,6 +2,7 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 import sys
+import time
 
 from openpilot.selfdrive.carrot.carrot_navi import CATALOG
 from openpilot.selfdrive.carrot.carrot_navi_cereal import build_carrot_navi_payload
@@ -12,7 +13,7 @@ sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_navi import fresh_carrot_navi, parse_carrot_navi
 from cluster_navi_overlay import merge_navi_overlay_state
-from cluster_navi_source import NaviSimulatorSource
+from cluster_navi_source import MAP_FRAME_STALE_TIMEOUT_MS, NaviSimulatorSource
 from cluster_models import NaviDashboardState, NaviMediaFrame, TpmsInfo
 from cluster_renderer import ClusterUiRenderer
 
@@ -110,9 +111,30 @@ def test_disconnected_dashboard_does_not_reuse_stale_map_frame():
   map_frame = NaviMediaFrame("render:map_main", 1, True)
   connected = NaviDashboardState(True, "tcp://127.0.0.1:7714", media=(map_frame,))
   disconnected = replace(connected, connected=False)
+  stalled = replace(connected, map_stream_stalled=True)
 
   assert ClusterUiRenderer._navi_map_frame_present(connected) is True
   assert ClusterUiRenderer._navi_map_frame_present(disconnected) is False
+  assert ClusterUiRenderer._navi_map_frame_present(stalled) is False
+
+
+def test_stale_map_frame_is_removed_from_media_cache():
+  source = object.__new__(NaviSimulatorSource)
+  source._media = {"render:map_main": NaviMediaFrame("render:map_main", 7, True)}
+  source._map_frame_age_ms = None
+  source._map_stream_stalled = False
+  received_at_ms = time.time_ns() // 1_000_000 - MAP_FRAME_STALE_TIMEOUT_MS - 1
+
+  source._update_map_liveness({
+    "connected": True,
+    "records": {
+      "render:map_main": SimpleNamespace(present=True, received_at_ms=received_at_ms),
+    },
+  })
+
+  assert source._map_stream_stalled is True
+  assert source._map_frame_age_ms > MAP_FRAME_STALE_TIMEOUT_MS
+  assert "render:map_main" not in source._media
 
 
 def test_disconnected_dashboard_draws_system_panel(monkeypatch):
@@ -231,6 +253,11 @@ def test_embedded_navi_source_projects_json_and_png(unused_tcp_port):
         for kind, name in CATALOG
       ],
     }, "test-app")
+    map_stream = next(
+      item for item in manifest["streams"]
+      if item["kind"] == "render" and item["name"] == "map_main"
+    )
+    assert map_stream["params"]["map_theme"] == "dark"
     source.receiver.control_connected()
     vehicle = next(
       item for item in manifest["streams"]
@@ -286,5 +313,11 @@ def test_embedded_navi_source_projects_json_and_png(unused_tcp_port):
     assert merged.speed_kph == 83
     assert merged.navi_live is state.navi_live
     assert merged.navi_dashboard is state.navi_dashboard
+
+    source.receiver.control_disconnected()
+    disconnected = source.update()
+    assert disconnected.navi_dashboard is not None
+    assert disconnected.navi_dashboard.connected is False
+    assert disconnected.navi_dashboard.media == ()
   finally:
     source.close()

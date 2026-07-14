@@ -574,6 +574,7 @@ def run_demo(
     navi_port: int,
     navi_advertise_ip: str | None,
     navi_beacon_enabled: bool,
+    navi_map_theme: str,
     navi_overlay_enabled: bool,
     navi_publish_cereal: bool,
     output_mode: str,
@@ -805,6 +806,7 @@ def run_demo(
             advertise_ip=navi_advertise_ip,
             beacon_enabled=navi_beacon_enabled,
             publish_cereal=navi_publish_cereal,
+            map_theme=navi_map_theme,
         )
     if live_source is not None:
         live_source.set_profile_enabled(profile_render)
@@ -1530,6 +1532,12 @@ def parse_args() -> argparse.Namespace:
         help="Disable UDP 7705 discovery broadcast in --input navi mode.",
     )
     parser.add_argument(
+        "--navi-map-theme",
+        choices=("dark", "auto", "light"),
+        default="dark",
+        help="Theme requested for the smartphone-rendered map. Default: dark.",
+    )
+    parser.add_argument(
         "--navi-overlay",
         action="store_true",
         help="Receive live Carrot navigation while keeping the selected route/live vehicle input.",
@@ -2086,6 +2094,7 @@ def main(*, exit_on_error: bool = True) -> None:
             args.navi_port,
             args.navi_advertise_ip,
             not args.navi_no_beacon,
+            args.navi_map_theme,
             args.navi_overlay,
             args.navi_publish_cereal,
             args.output,

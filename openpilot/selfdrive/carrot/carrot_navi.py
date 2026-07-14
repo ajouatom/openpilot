@@ -18,6 +18,9 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 7714
 PROTOCOL_VERSION = 2
 MAX_MESSAGE_BYTES = 8 * 1024 * 1024
+CONTROL_WEBSOCKET_HEARTBEAT_S = 5.0
+STREAM_WEBSOCKET_HEARTBEAT_S = 10.0
+MAP_THEMES = frozenset(("auto", "dark", "light"))
 BINARY_HEADER = struct.Struct(">4sBBBBIIQQIHH")
 
 JSON_NAMES = (
@@ -122,7 +125,11 @@ def parse_binary_packet(packet: bytes) -> tuple[dict[str, int], bytes]:
   }, payload
 
 
-def _stream_params(kind: str, name: str) -> dict[str, Any]:
+def _stream_params(
+  kind: str,
+  name: str,
+  map_theme: str = "auto",
+) -> dict[str, Any]:
   if kind == "json":
     return {
       "delivery_mode": "on_change",
@@ -149,7 +156,7 @@ def _stream_params(kind: str, name: str) -> dict[str, Any]:
     "h264_bitrate_kbps": 3000,
     "h264_keyframe_interval_sec": 2,
     "camera_mode": "app_sync",
-    "map_theme": "auto",
+    "map_theme": map_theme,
     "zoom": 11.0,
     "tilt": 50.0,
     "bearing": 0.0,
@@ -163,7 +170,14 @@ def _stream_params(kind: str, name: str) -> dict[str, Any]:
   }
 
 
-def build_manifest(session_id: str, revision: int = 1) -> dict[str, Any]:
+def build_manifest(
+  session_id: str,
+  revision: int = 1,
+  map_theme: str = "auto",
+) -> dict[str, Any]:
+  normalized_map_theme = str(map_theme).strip().lower()
+  if normalized_map_theme not in MAP_THEMES:
+    raise ValueError(f"unsupported map theme: {map_theme}")
   streams = []
   for handle, (kind, name) in enumerate(CATALOG, start=1):
     streams.append({
@@ -172,7 +186,7 @@ def build_manifest(session_id: str, revision: int = 1) -> dict[str, Any]:
       "schema_version": 1,
       "stream_handle": handle,
       "enabled": True,
-      "params": _stream_params(kind, name),
+      "params": _stream_params(kind, name, normalized_map_theme),
     })
   return {
     "type": "subscription_manifest",
@@ -236,9 +250,16 @@ class ItemRecord:
 
 
 class CarrotNaviReceiver:
-  def __init__(self, port: int = DEFAULT_PORT) -> None:
+  def __init__(
+    self,
+    port: int = DEFAULT_PORT,
+    map_theme: str = "auto",
+  ) -> None:
     self._lock = threading.RLock()
     self._port = port
+    self._map_theme = str(map_theme).strip().lower()
+    if self._map_theme not in MAP_THEMES:
+      raise ValueError(f"unsupported map theme: {map_theme}")
     self._session_id: str | None = None
     self._app_version = ""
     self._manifest: dict[str, Any] | None = None
@@ -277,7 +298,10 @@ class CarrotNaviReceiver:
       raise ValueError("app v2 catalog does not match receiver catalog")
 
     session_id = secrets.token_hex(8)
-    manifest = build_manifest(session_id)
+    manifest = build_manifest(
+      session_id,
+      map_theme=self._map_theme,
+    )
     with self._lock:
       self._session_id = session_id
       self._app_version = app_version
@@ -616,7 +640,7 @@ async def ws_control(request: web.Request) -> web.WebSocketResponse:
   peer = _peer(request)
   app_version = request.match_info["version"]
   ws = web.WebSocketResponse(
-    heartbeat=20.0,
+    heartbeat=CONTROL_WEBSOCKET_HEARTBEAT_S,
     max_msg_size=MAX_MESSAGE_BYTES,
     compress=False,
   )
@@ -650,7 +674,7 @@ async def ws_json(request: web.Request) -> web.WebSocketResponse:
   session_id = request.match_info["session_id"]
   name = request.match_info["name"]
   ws = web.WebSocketResponse(
-    heartbeat=20.0,
+    heartbeat=STREAM_WEBSOCKET_HEARTBEAT_S,
     max_msg_size=MAX_MESSAGE_BYTES,
     compress=False,
   )
@@ -674,7 +698,7 @@ async def _ws_binary(request: web.Request, kind: str) -> web.WebSocketResponse:
   session_id = request.match_info["session_id"]
   name = request.match_info["name"]
   ws = web.WebSocketResponse(
-    heartbeat=20.0,
+    heartbeat=STREAM_WEBSOCKET_HEARTBEAT_S,
     max_msg_size=MAX_MESSAGE_BYTES,
     compress=False,
   )
@@ -718,10 +742,11 @@ def main() -> None:
   parser = argparse.ArgumentParser(description="Carrot Navi WebSocket receiver")
   parser.add_argument("--host", default=DEFAULT_HOST)
   parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+  parser.add_argument("--map-theme", choices=tuple(sorted(MAP_THEMES)), default="dark")
   parser.add_argument("--no-cereal", action="store_true")
   args = parser.parse_args()
 
-  receiver = CarrotNaviReceiver(port=args.port)
+  receiver = CarrotNaviReceiver(port=args.port, map_theme=args.map_theme)
   publisher = None
   if not args.no_cereal:
     try:
