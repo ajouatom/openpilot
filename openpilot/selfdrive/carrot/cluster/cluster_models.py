@@ -446,6 +446,7 @@ class ClusterUiState:
     lateral_plan_curvatures: tuple[float, ...] = ()
     lateral_plan_curvature_rates: tuple[float, ...] = ()
     display_speed_kph: float | None = None
+    traffic_state: int = 0
     git_status: GitBranchStatus | None = None
     actual_fps: float | None = None
     cluster_core_usage_text: str | None = None

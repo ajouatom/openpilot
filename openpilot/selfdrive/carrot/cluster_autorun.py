@@ -270,6 +270,8 @@ def _cluster_args(
     args = [
         "--input",
         "live",
+        "--navi-overlay",
+        "--navi-publish-cereal",
         "--output",
         output_mode,
         "--cluster-hud-mode",

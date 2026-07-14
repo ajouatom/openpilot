@@ -1,4 +1,5 @@
 raylib==5.5.0.4
+aiohttp==3.13.3
 av==15.0.0
 pygame==2.6.1
 Pillow==12.2.0

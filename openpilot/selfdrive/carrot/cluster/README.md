@@ -17,6 +17,7 @@ Useful options:
 ```bash
 python selfdrive/carrot/cluster_run.py --output window --width 1920 --height 480
 python selfdrive/carrot/cluster_run.py --input navi --output window --width 1920 --height 480 --fps 30
+python selfdrive/carrot/cluster_run.py --input route --route /path/to/route --navi-overlay --screen-mode navi --output both --width 1920 --height 480 --fps 30
 python selfdrive/carrot/cluster_run.py --output usb --live-no-can
 python selfdrive/carrot/cluster_run.py --output usb --usb-codec jpeg --usb-jpeg-quality 68
 python selfdrive/carrot/cluster_run.py --output usb --input route --route /data/media/0/realdata/0000012e--f190807d64--36 --route-overlay compact --usb-codec h264 --usb-h264-fps 30 --profile-render
@@ -32,6 +33,26 @@ UDP 7705, decodes MAP MAIN H.264 in-process, and displays all current JSON/PNG
 surfaces in a dedicated 1920x480 layout. Use `--navi-advertise-ip 127.0.0.1`
 with `adb reverse tcp:7714 tcp:7714`, or omit it for automatic LAN discovery.
 Only one receiver can own TCP 7714 at a time.
+
+`--navi-overlay` keeps the selected vehicle source and adds the live Carrot
+navigation receiver. This is intended for editing the production navigation
+layout on a PC: use `--input route` for recorded vehicle data and `--output
+both` to render the same state to the PC window and a connected TURZX display.
+The replay wrapper selects the full navigation screen automatically:
+
+```bash
+python selfdrive/carrot/cluster_replay_usb.py /path/to/route --navi-overlay --output both --fps 30
+```
+
+The replay wrapper opens camera/debug data and seek controls in a separate
+`Carrot Cluster Replay Tools` window. The 1920x480 cluster window and USB frame
+remain clean and use the same renderer output. Use `--route-tools overlay` for
+the previous in-frame controls or `--route-tools off` to disable replay tools.
+
+Pass `--screen-mode default` to inspect the normal HUD with its navigation
+panel instead. When the managed cluster HUD is enabled on a device, the cluster
+owns TCP 7714 and publishes `carrotNavi` itself so its live input receives the
+same H.264/PNG surfaces without a second receiver competing for the port.
 
 `--usb-jpeg-encoder auto` tries optional `turbojpeg` first and falls back to
 Pillow. Route replay defaults to `--route-overlay compact`, which shows the

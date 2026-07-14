@@ -9,7 +9,7 @@ from pathlib import Path
 
 CARROT_DIR = Path(__file__).resolve().parent
 BUNDLE_DIR = CARROT_DIR / "cluster"
-OPENPILOT_ROOT = CARROT_DIR.parents[1]
+OPENPILOT_ROOT = CARROT_DIR.parents[2]
 
 for path in (OPENPILOT_ROOT, BUNDLE_DIR):
     path_text = str(path)
