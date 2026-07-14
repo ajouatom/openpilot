@@ -57,7 +57,7 @@ from openpilot.selfdrive.controls.lib.cutin_helpers import (
     effective_cutin_inward_speed,
     FRONT_CUTIN_MAX_ABS_YREL_M,
     FRONT_CUTIN_MAX_DREL_M,
-    FRONT_CUTIN_MAX_FRAME_Y_JUMP_M,
+    is_cutin_track_discontinuous,
     FRONT_CUTIN_MIN_CONFIRM_S,
     FRONT_CUTIN_MIN_DREL_M,
     is_corner_track_id,
@@ -2153,14 +2153,14 @@ class RouteLogParser:
             track.v_rel = safe_float(point, "vRel", 0.0)
             track.v_lead = safe_float(point, "vLead", 0.0)
             track.yv_rel = safe_float(point, "yvRel", 0.0)
-            discontinuous = prev_measured and (
-                abs(track.d_rel - prev_d_rel) > 5.0
-                or abs(track.y_rel - prev_y_rel) > (
-                    FRONT_CUTIN_MAX_FRAME_Y_JUMP_M
-                    if self.cutin_radar_source == ROUTE_CUTIN_RADAR_SOURCE_FRONT
-                    else 2.0
-                )
-                or abs(track.v_lead - prev_v_lead) > 7.0
+            discontinuous = is_cutin_track_discontinuous(
+                prev_measured,
+                prev_d_rel,
+                prev_y_rel,
+                prev_v_lead,
+                track.d_rel,
+                track.y_rel,
+                track.v_lead,
             )
             if not track.measured:
                 track.cnt = 0
