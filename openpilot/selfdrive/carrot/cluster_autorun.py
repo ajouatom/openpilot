@@ -33,7 +33,7 @@ AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
 REALTIME_CORES_ENV = "CLUSTER_REALTIME_CORES"
 REALTIME_PRIORITY_ENV = "CLUSTER_REALTIME_PRIORITY"
 AUTORUN_DEFAULT_ENV = {
-    "CLUSTER_REALTIME": "1",
+    "CLUSTER_REALTIME": "0",
 }
 DEFAULT_REALTIME_CORES = [1, 2, 3, 4]
 DEFAULT_REALTIME_PRIORITY = 10
@@ -161,12 +161,14 @@ def _set_current_process_affinity(cores: list[int]) -> list[int]:
 
 
 def _configure_autorun_affinity() -> None:
-    if not _cluster_realtime_enabled():
-        return
     try:
         cores = _cluster_realtime_cores()
         allowed_cores = _set_current_process_affinity(cores)
-        print(f"[cluster_autorun] affinity enabled cores={allowed_cores or cores}", flush=True)
+        print(
+            f"[cluster_autorun] affinity configured cores={allowed_cores or cores} "
+            f"realtime={'on' if _cluster_realtime_enabled() else 'off'}",
+            flush=True,
+        )
     except Exception as exc:
         print(f"[cluster_autorun] failed to set core affinity: {exc}", flush=True)
 

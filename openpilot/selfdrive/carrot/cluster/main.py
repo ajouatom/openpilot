@@ -96,6 +96,7 @@ SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
 CAMERA_VIEW_PARAM_POLL_SECONDS = 1.0
 RADAR_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
+HUD_MIRROR_PARAM_POLL_SECONDS = 1.0
 NETWORK_ADDRESS_POLL_SECONDS = 2.0
 
 try:
@@ -822,7 +823,10 @@ def run_demo(
         flush=True,
     )
     renderer.set_profile_enabled(profile_render)
-    git_status_provider = GitBranchStatusProvider(Path(__file__).resolve().parent)
+    git_status_provider = GitBranchStatusProvider(
+        Path(__file__).resolve().parent,
+        remote_enabled=not TICI,
+    )
     network_address_provider = NetworkAddressProvider()
     cluster_core_usage_sampler = (
         ClusterProcessCoreUsageSampler(debug=cluster_core_usage_debug)
@@ -908,6 +912,7 @@ def run_demo(
     next_camera_view_param_read = start_time
     next_radar_param_read = start_time
     next_hud_mode_param_read = start_time
+    next_hud_mirror_param_read = start_time + HUD_MIRROR_PARAM_POLL_SECONDS
     report_frames = 0
     display_actual_fps: float | None = None
     frame_interval = 1.0 / target_fps if target_fps > 0 else 0.0
@@ -1066,14 +1071,16 @@ def run_demo(
 
             now = time.perf_counter()
 
-            next_hud_mirror_mode = hud_mirror_param_reader.read()
-            if next_hud_mirror_mode != active_hud_mirror_mode:
-                print(
-                    f"{CLUSTER_HUD_MIRROR_PARAM} updated: "
-                    f"{active_hud_mirror_mode} -> {next_hud_mirror_mode}",
-                    flush=True,
-                )
-                active_hud_mirror_mode = next_hud_mirror_mode
+            if now >= next_hud_mirror_param_read:
+                next_hud_mirror_mode = hud_mirror_param_reader.read()
+                if next_hud_mirror_mode != active_hud_mirror_mode:
+                    print(
+                        f"{CLUSTER_HUD_MIRROR_PARAM} updated: "
+                        f"{active_hud_mirror_mode} -> {next_hud_mirror_mode}",
+                        flush=True,
+                    )
+                    active_hud_mirror_mode = next_hud_mirror_mode
+                next_hud_mirror_param_read = now + HUD_MIRROR_PARAM_POLL_SECONDS
 
             if theme_override is None and now >= next_theme_param_read:
                 next_theme_mode = theme_param_reader.read() if theme_param_reader is not None else "auto"

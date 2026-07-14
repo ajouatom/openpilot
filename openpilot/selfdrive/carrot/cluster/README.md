@@ -251,16 +251,18 @@ debug UI before navi data has arrived. When output is gated off,
 remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
-Manager autostart sets `CLUSTER_REALTIME=1` by default unless the environment
-already overrides it. With realtime enabled, `cluster_autorun.py` uses
-`ClusterHudCoreMode=0` by default, which maps to cores `1,2,3,4`; mode `1` maps
-to all initially allowed CPU cores.
+Manager autostart sets `CLUSTER_REALTIME=0` by default and explicitly restores
+`SCHED_OTHER`. CPU affinity remains enabled: `ClusterHudCoreMode=0` maps to cores
+`1,2,3,4`, while mode `1` maps to all initially allowed CPU cores. Set
+`CLUSTER_REALTIME=1` only for an explicit diagnostic override; in that mode,
 `ClusterHudPriority` controls the common openpilot realtime helper priority with
 range `1..99`, default `10`.
 Changing either param makes the running HUD exit so `cluster_autorun` can
-relaunch it with the new affinity/priority, without a whole system restart.
+relaunch it with the new affinity/scheduler settings, without a whole system restart.
 Explicit `CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or
 `CLUSTER_REALTIME_PRIORITY` environment values still win.
+On TICI, the HUD reads the local Git branch directly but does not start remote
+`ls-remote` or `fetch` work. PC/window runs retain the periodic remote status.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
 `0` auto follows live `wideRoadCameraState.exposureValPercent` after samples are
 available, falling back to `deviceState.screenBrightnessPercent`; `1` through
