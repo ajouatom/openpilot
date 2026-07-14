@@ -1,4 +1,5 @@
 import asyncio
+import errno
 import struct
 
 import pytest
@@ -12,6 +13,7 @@ from openpilot.selfdrive.carrot.carrot_navi import (
   build_manifest,
   create_app,
   parse_binary_packet,
+  run_receiver_app,
 )
 from openpilot.selfdrive.carrot.carrot_navi_cereal import CarrotNaviCerealPublisher, build_carrot_navi_payload
 
@@ -31,6 +33,34 @@ def requirements_query() -> dict:
       for kind, name in CATALOG
     ],
   }
+
+
+def test_receiver_app_retries_temporary_port_conflict(monkeypatch):
+  calls = []
+
+  def fake_run_app(app, **kwargs):
+    calls.append((app, kwargs))
+    if len(calls) == 1:
+      raise OSError(errno.EADDRINUSE, "address already in use")
+
+  monkeypatch.setattr("openpilot.selfdrive.carrot.carrot_navi.web.run_app", fake_run_app)
+  run_receiver_app(CarrotNaviReceiver(), "0.0.0.0", 7714, retry_count=1, retry_interval_s=0.0)
+
+  assert len(calls) == 2
+  assert calls[0][0] is not calls[1][0]
+  assert calls[1][1]["host"] == "0.0.0.0"
+  assert calls[1][1]["port"] == 7714
+
+
+def test_receiver_app_does_not_retry_other_start_errors(monkeypatch):
+  def fake_run_app(app, **kwargs):
+    raise OSError(errno.EACCES, "permission denied")
+
+  monkeypatch.setattr("openpilot.selfdrive.carrot.carrot_navi.web.run_app", fake_run_app)
+  with pytest.raises(OSError) as exc_info:
+    run_receiver_app(CarrotNaviReceiver(), "0.0.0.0", 7714, retry_count=2, retry_interval_s=0.0)
+
+  assert exc_info.value.errno == errno.EACCES
 
 
 def test_manifest_enables_complete_catalog():

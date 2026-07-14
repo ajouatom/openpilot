@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import errno
 import json
 import secrets
 import struct
@@ -20,6 +21,8 @@ PROTOCOL_VERSION = 2
 MAX_MESSAGE_BYTES = 8 * 1024 * 1024
 CONTROL_WEBSOCKET_HEARTBEAT_S = 5.0
 STREAM_WEBSOCKET_HEARTBEAT_S = 10.0
+BIND_RETRY_COUNT = 10
+BIND_RETRY_INTERVAL_S = 0.5
 MAP_THEMES = frozenset(("auto", "dark", "light"))
 BINARY_HEADER = struct.Struct(">4sBBBBIIQQIHH")
 
@@ -738,6 +741,36 @@ def create_app(receiver: CarrotNaviReceiver | None = None) -> web.Application:
   return app
 
 
+def run_receiver_app(
+  receiver: CarrotNaviReceiver,
+  host: str,
+  port: int,
+  *,
+  retry_count: int = BIND_RETRY_COUNT,
+  retry_interval_s: float = BIND_RETRY_INTERVAL_S,
+) -> None:
+  retry_count = max(0, int(retry_count))
+  retry_interval_s = max(0.0, float(retry_interval_s))
+  for retry in range(retry_count + 1):
+    try:
+      web.run_app(
+        create_app(receiver),
+        host=host,
+        port=port,
+        access_log=None,
+      )
+      return
+    except OSError as exc:
+      if exc.errno != errno.EADDRINUSE or retry >= retry_count:
+        raise
+      print(
+        f"[carrot_navi] {host}:{port} still in use; "
+        f"retrying in {retry_interval_s:.1f}s ({retry + 1}/{retry_count})",
+        flush=True,
+      )
+      time.sleep(retry_interval_s)
+
+
 def main() -> None:
   parser = argparse.ArgumentParser(description="Carrot Navi WebSocket receiver")
   parser.add_argument("--host", default=DEFAULT_HOST)
@@ -758,14 +791,9 @@ def main() -> None:
       receiver.record_cereal_publish(f"publisher unavailable: {exc}")
       print(f"[carrot_navi] cereal publisher unavailable: {exc}")
 
-  print(f"[carrot_navi] listening on {args.host}:{args.port}")
+  print(f"[carrot_navi] starting receiver on {args.host}:{args.port}")
   try:
-    web.run_app(
-      create_app(receiver),
-      host=args.host,
-      port=args.port,
-      access_log=None,
-    )
+    run_receiver_app(receiver, args.host, args.port)
   finally:
     if publisher is not None:
       publisher.stop()
