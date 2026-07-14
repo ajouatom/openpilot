@@ -57,8 +57,9 @@ the previous in-frame controls or `--route-tools off` to disable replay tools.
 
 Pass `--screen-mode default` to inspect the normal HUD with its navigation
 panel instead. When the managed cluster HUD is enabled on a device, the cluster
-owns TCP 7714 and publishes `carrotNavi` itself so its live input receives the
-same H.264/PNG surfaces without a second receiver competing for the port.
+owns TCP 7714 and merges the embedded receiver snapshot directly. Managed
+autorun does not publish and subscribe the same state through `carrotNavi`;
+explicit standalone/CLI cereal publication remains available.
 
 `--usb-jpeg-encoder auto` tries optional `turbojpeg` first and falls back to
 Pillow. Route replay defaults to `--route-overlay compact`, which shows the
@@ -69,7 +70,14 @@ should match live rendering cost more closely.
 `system/loggerd/encoder` or the ffmpeg/libx264 comparison path. Native H264
 renders directly into the Qualcomm/Venus-aligned NV12 layout before submit, so
 the cluster hardware path no longer depends on libyuv or a CPU RGBA-to-NV12
-conversion. H264 defaults to the same exact portrait upload geometry used by
+conversion. On TICI with the current native bridge, the pipeline leases a cached
+ION/V4L2 input buffer and GLES reads the packed framebuffer directly into it;
+VIDC then queues the same buffer. This removes the per-frame raylib CPU image and
+C++ NV12 memcpy. It is direct handoff, not full zero-copy, because `glReadPixels`
+still performs a synchronous GPU readback. Missing symbols, an incompatible
+layout, or a first-use GL error retains/re-enters the staged compatibility path;
+set `CLUSTER_DIRECT_NV12_READBACK=0` to force that path for device A/B tests.
+H264 defaults to the same exact portrait upload geometry used by
 the working JPEG/PNG and earlier ffmpeg H264 paths. For a 9.2-inch panel that
 means a 462x1920 H264 stream, with no 16-pixel render-size padding unless
 `--usb-h264-align 16` is passed explicitly. Native hardware encoding pads only
@@ -127,7 +135,7 @@ native callback flags/timestamps/keyframe state, raw and patched NAL summaries,
 packetization results, TURZX chunk sizes, and a shutdown summary.
 `--usb-h264-diagnose-interval N` prints a compact periodic summary that is less
 noisy than debug mode: H264 unit count/keyframes, unit byte rate, chunks per
-unit, NAL sizes, native sender queue depth, and USB send latency. Use it on both
+unit, NAL sizes, native access-unit queue depth/drop count, and USB send latency. Use it on both
 native and ffmpeg runs when deciding whether artifacts line up with encoder
 output size/cadence or with USB transport stalls.
 Keep `--usb-h264-debug` and `--usb-h264-dump` off for FPS/CPU measurements;
@@ -263,6 +271,9 @@ Explicit `CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or
 `CLUSTER_REALTIME_PRIORITY` environment values still win.
 On TICI, the HUD reads the local Git branch directly but does not start remote
 `ls-remote` or `fetch` work. PC/window runs retain the periodic remote status.
+Native H.264 callback output is queued as complete access units. The bounded
+queue retains the latest codec config, keyframe, and frame without waiting for
+USB; stale access units are dropped and reported instead of failing the run.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
 `0` auto follows live `wideRoadCameraState.exposureValPercent` after samples are
 available, falling back to `deviceState.screenBrightnessPercent`; `1` through
@@ -328,11 +339,15 @@ A/B run without the overlay.
 `ClusterHudEncoder` controls the encoder used by manager autostart and by
 direct USB CLI runs when `--usb-codec` is omitted: `0` auto tries
 native hardware H264 first, then ffmpeg/libx264 software H264, then JPEG when
-launched by `cluster_autorun`. Direct CLI auto uses native hardware H264 as the
+launched by `cluster_autorun`. Autorun advances that sequence only when pipeline
+initialization fails; renderer, source, encoder-runtime, and USB errors exit the
+run for supervisor retry without silently changing codec. Direct CLI auto uses native hardware H264 as the
 first encoder choice. `1` forces JPEG, `2` forces native hardware H264, and `3`
 forces ffmpeg/libx264 software H264.
-Native hardware H264 always uses the direct GPU NV12 render/submit path. If
-backend `auto` falls back to ffmpeg, the run uses the software RGBA pipe.
+Native hardware H264 always uses GPU NV12 packing. Supported TICI builds report
+`direct_ion=on` and submit the leased encoder input without an intermediate copy;
+otherwise they report `direct_ion=off` and use staged NV12 readback. If backend
+`auto` falls back to ffmpeg, the run uses the software RGBA pipe.
 Changing this setting while the HUD is running makes the current HUD process
 exit so `cluster_autorun` can relaunch it with the new encoder choice.
 `ClusterHudScreenMode` controls optional debug views: `0` default, `1` shows
@@ -437,6 +452,13 @@ The renderer prefers
 `/data/openpilot/selfdrive/assets/fonts/KaiGenGothicKR-Bold.ttf` for HUD text.
 It falls back to the bundled/addon KaiGen copy, then JetBrainsMono and
 system/platform fonts if KaiGen is not present.
+Latin/numeric text uses the 160-pixel primary font. The complete Korean glyph
+set uses a separate 32-pixel base atlas with bilinear filtering and no mip chain;
+a host resource smoke produced `8192x4096` rather than the former `8192x8192`.
+Incoming Navi H.264 is decoded on a bounded worker. If it falls behind, dependent
+frames are discarded until the next keyframe, and stale completed frames cannot
+replace a newer requested sequence. RGBA texture upload reuses the immutable
+frame buffer through CFFI rather than making another full-frame copy.
 
 USB frame upload runs in no-ACK mode by default because some TURZX panels accept
 image data but never return a frame-upload response. Use `--usb-wait-frame-ack`
