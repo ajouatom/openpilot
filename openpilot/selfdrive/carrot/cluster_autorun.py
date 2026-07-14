@@ -300,6 +300,7 @@ def _run_cluster_once(
     output_mode: str = "usb",
 ) -> None:
     from selfdrive.carrot import cluster_run
+    from cluster_h264_pipeline import H264PipelineInitializationError
 
     def run_cluster_entry() -> None:
         try:
@@ -336,7 +337,7 @@ def _run_cluster_once(
                 ]
                 run_cluster_entry()
                 return
-            except Exception:
+            except H264PipelineInitializationError:
                 if output_mode not in ("usb", "both") or encoder_mode != ENCODER_AUTO or index == len(sequence) - 1:
                     raise
                 next_encoder_mode = sequence[index + 1]

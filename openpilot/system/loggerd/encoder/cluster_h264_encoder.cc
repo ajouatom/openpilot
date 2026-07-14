@@ -144,6 +144,7 @@ void ClusterH264Encoder::open() {
     }
     free_inputs_.clear();
     for (unsigned int i = 0; i < CLUSTER_H264_INPUT_BUFFER_COUNT; ++i) {
+      input_acquired_[i] = false;
       free_inputs_.push_back(i);
     }
     codec_config_.clear();
@@ -183,6 +184,7 @@ void ClusterH264Encoder::close() {
   }
 
   for (int i = 0; i < CLUSTER_H264_INPUT_BUFFER_COUNT; ++i) {
+    input_acquired_[i] = false;
     if (input_allocated_[i]) {
       input_buffers_[i].free();
       input_allocated_[i] = false;
@@ -708,8 +710,29 @@ void ClusterH264Encoder::encode_input(const uint8_t *data, size_t data_size, uin
     throw std::runtime_error(std::string("cluster H264 encoder received null ") + input_name + " input");
   }
 
+  ClusterH264InputBuffer input = acquire_nv12_input(on_packet);
+  try {
+    auto stage_start = std::chrono::steady_clock::now();
+    (this->*copy_input)(data, data_size, &input_buffers_[input.index]);
+    last_encode_timings_.convert_us = elapsed_us(stage_start);
+    submit_nv12_input(input.index, timestamp_us, on_packet);
+  } catch (...) {
+    if (input_acquired_[input.index]) {
+      cancel_nv12_input(input.index);
+    }
+    throw;
+  }
+}
+
+ClusterH264InputBuffer ClusterH264Encoder::acquire_nv12_input(const ClusterH264PacketCallback &on_packet) {
+  if (!is_open_) {
+    throw std::runtime_error("cluster H264 encoder is not open");
+  }
+  if (!input_is_nv12()) {
+    throw std::runtime_error("cluster H264 encoder has unsupported input format " + input_v4l_format_name_);
+  }
+
   last_encode_timings_ = {};
-  const auto total_start = std::chrono::steady_clock::now();
   auto stage_start = std::chrono::steady_clock::now();
   process_ready_events(0, false, on_packet);
   last_encode_timings_.pre_poll_us = elapsed_us(stage_start);
@@ -722,24 +745,64 @@ void ClusterH264Encoder::encode_input(const uint8_t *data, size_t data_size, uin
     }
   }
 
-  unsigned int index = free_inputs_.front();
+  const unsigned int index = free_inputs_.front();
   free_inputs_.pop_front();
-  stage_start = std::chrono::steady_clock::now();
-  (this->*copy_input)(data, data_size, &input_buffers_[index]);
-  last_encode_timings_.convert_us = elapsed_us(stage_start);
-  stage_start = std::chrono::steady_clock::now();
-  if (input_buffers_[index].sync(VISIONBUF_SYNC_TO_DEVICE) != 0) {
-    throw std::runtime_error("cluster H264 encoder failed to sync input to device");
+  VisionBuf *buf = &input_buffers_[index];
+  if (buf->addr == nullptr || buf->len < input_bytesused_) {
+    free_inputs_.push_front(index);
+    throw std::runtime_error("cluster H264 encoder input buffer is not allocated");
   }
-  last_encode_timings_.sync_us = elapsed_us(stage_start);
-  stage_start = std::chrono::steady_clock::now();
-  queue_output_buffer(index, timestamp_us);
-  last_encode_timings_.queue_us = elapsed_us(stage_start);
+  input_acquired_[index] = true;
+  return {
+    .data = reinterpret_cast<uint8_t*>(buf->addr),
+    .size = buf->len,
+    .index = index,
+  };
+}
 
-  stage_start = std::chrono::steady_clock::now();
-  process_ready_events(0, false, on_packet);
-  last_encode_timings_.post_poll_us = elapsed_us(stage_start);
-  last_encode_timings_.total_us = elapsed_us(total_start);
+void ClusterH264Encoder::submit_nv12_input(unsigned int index, uint64_t timestamp_us,
+                                            const ClusterH264PacketCallback &on_packet) {
+  if (index >= CLUSTER_H264_INPUT_BUFFER_COUNT || !input_acquired_[index]) {
+    throw std::runtime_error("cluster H264 encoder input buffer is not acquired");
+  }
+
+  bool queued = false;
+  try {
+    auto stage_start = std::chrono::steady_clock::now();
+    if (input_buffers_[index].sync(VISIONBUF_SYNC_TO_DEVICE) != 0) {
+      throw std::runtime_error("cluster H264 encoder failed to sync input to device");
+    }
+    last_encode_timings_.sync_us = elapsed_us(stage_start);
+
+    stage_start = std::chrono::steady_clock::now();
+    queue_output_buffer(index, timestamp_us);
+    last_encode_timings_.queue_us = elapsed_us(stage_start);
+    input_acquired_[index] = false;
+    queued = true;
+
+    stage_start = std::chrono::steady_clock::now();
+    process_ready_events(0, false, on_packet);
+    last_encode_timings_.post_poll_us = elapsed_us(stage_start);
+    last_encode_timings_.total_us =
+        last_encode_timings_.pre_poll_us + last_encode_timings_.wait_input_us +
+        last_encode_timings_.convert_us + last_encode_timings_.sync_us +
+        last_encode_timings_.queue_us + last_encode_timings_.post_poll_us;
+  } catch (...) {
+    if (!queued && input_acquired_[index]) {
+      cancel_nv12_input(index);
+    }
+    throw;
+  }
+}
+
+void ClusterH264Encoder::cancel_nv12_input(unsigned int index) {
+  if (index >= CLUSTER_H264_INPUT_BUFFER_COUNT || !input_acquired_[index]) {
+    throw std::runtime_error("cluster H264 encoder input buffer is not acquired");
+  }
+  input_acquired_[index] = false;
+  if (std::find(free_inputs_.begin(), free_inputs_.end(), index) == free_inputs_.end()) {
+    free_inputs_.push_front(index);
+  }
 }
 
 void ClusterH264Encoder::copy_nv12_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const {

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
+from collections import deque
+from dataclasses import dataclass, replace
 import json
 import socket
 import threading
@@ -34,6 +35,8 @@ DEFAULT_NAVI_HOST = "0.0.0.0"
 DEFAULT_NAVI_PORT = 7714
 MAP_FRAME_STALE_TIMEOUT_MS = 3000
 NAVI_IPC_DISCONNECT_TIMEOUT_S = 3.0
+H264_FLAG_KEYFRAME = 1
+H264_DECODE_QUEUE_MAX = 2
 
 
 def detect_advertise_ip(bind_host: str) -> str:
@@ -186,6 +189,150 @@ class H264Decoder:
                 for offset in range(0, plane.line_size * frame.height, plane.line_size)
             )
         return pixels, int(frame.width), int(frame.height)
+
+
+@dataclass(frozen=True)
+class _H264DecodeRequest:
+    epoch: int
+    key: str
+    sequence: int
+    payload: bytes
+    config_payload: bytes
+    config_sequence: int
+    keyframe: bool
+    reset_decoder: bool = False
+
+
+@dataclass(frozen=True)
+class _H264DecodeResult:
+    epoch: int
+    frame: NaviMediaFrame
+
+
+class H264DecodeWorker:
+    def __init__(self, decoder_factory=H264Decoder) -> None:
+        self._decoder_factory = decoder_factory
+        self._condition = threading.Condition()
+        self._pending: deque[_H264DecodeRequest] = deque()
+        self._results: dict[str, _H264DecodeResult] = {}
+        self._waiting_for_keyframe: set[str] = set()
+        self._thread: threading.Thread | None = None
+        self._stopped = False
+        self._dropped_requests = 0
+        self._last_error = ""
+
+    def submit(self, request: _H264DecodeRequest) -> None:
+        with self._condition:
+            if self._stopped:
+                return
+            self._ensure_thread_locked()
+            if request.keyframe:
+                retained = deque(item for item in self._pending if item.key != request.key)
+                self._dropped_requests += len(self._pending) - len(retained)
+                self._pending = retained
+                self._waiting_for_keyframe.discard(request.key)
+                request = replace(request, reset_decoder=True)
+            elif request.key in self._waiting_for_keyframe:
+                self._dropped_requests += 1
+                return
+            elif sum(item.key == request.key for item in self._pending) >= H264_DECODE_QUEUE_MAX:
+                retained = deque(item for item in self._pending if item.key != request.key)
+                self._dropped_requests += len(self._pending) - len(retained) + 1
+                self._pending = retained
+                self._waiting_for_keyframe.add(request.key)
+                return
+            self._pending.append(request)
+            self._condition.notify()
+
+    def discard(self, key: str) -> None:
+        with self._condition:
+            self._pending = deque(item for item in self._pending if item.key != key)
+            self._results.pop(key, None)
+            self._waiting_for_keyframe.discard(key)
+
+    def reset(self) -> None:
+        with self._condition:
+            self._pending.clear()
+            self._results.clear()
+            self._waiting_for_keyframe.clear()
+
+    def poll(self) -> tuple[_H264DecodeResult, ...]:
+        with self._condition:
+            results = tuple(self._results.values())
+            self._results.clear()
+            return results
+
+    @property
+    def dropped_requests(self) -> int:
+        with self._condition:
+            return self._dropped_requests
+
+    def close(self) -> None:
+        with self._condition:
+            self._stopped = True
+            self._pending.clear()
+            self._condition.notify_all()
+            thread = self._thread
+        if thread is not None:
+            thread.join(timeout=1.0)
+
+    def _ensure_thread_locked(self) -> None:
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._run, name="cluster-navi-h264-decode", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        decoders: dict[str, H264Decoder] = {}
+        config_sequences: dict[str, int] = {}
+        decoder_epochs: dict[str, int] = {}
+        while True:
+            with self._condition:
+                while not self._pending and not self._stopped:
+                    self._condition.wait()
+                if self._stopped:
+                    return
+                request = self._pending.popleft()
+
+            try:
+                decoder = decoders.get(request.key)
+                if decoder is None:
+                    decoder = self._decoder_factory()
+                    decoders[request.key] = decoder
+                config_changed = config_sequences.get(request.key) != request.config_sequence
+                epoch_changed = decoder_epochs.get(request.key) != request.epoch
+                if request.reset_decoder or config_changed or epoch_changed:
+                    if request.key in decoder_epochs:
+                        decoder.reset()
+                    config_sequences[request.key] = request.config_sequence
+                    decoder_epochs[request.key] = request.epoch
+                decoded = decoder.decode(request.config_payload + request.payload)
+                if decoded is None:
+                    continue
+                rgba, width, height = decoded
+                result = _H264DecodeResult(
+                    epoch=request.epoch,
+                    frame=NaviMediaFrame(
+                        key=request.key,
+                        sequence=request.sequence,
+                        present=True,
+                        mime="image/rgba",
+                        width=width,
+                        height=height,
+                        data=rgba,
+                    ),
+                )
+                with self._condition:
+                    self._results[request.key] = result
+                    self._last_error = ""
+            except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                with self._condition:
+                    should_log = error != self._last_error
+                    self._last_error = error
+                    self._waiting_for_keyframe.add(request.key)
+                if should_log:
+                    print(f"Navi H264 decode worker failed: {error}", flush=True)
 
 
 def _bool_word(value: Any, true_text: str, false_text: str) -> str:
@@ -394,8 +541,9 @@ class NaviSimulatorSource:
         self._last_session_id = ""
         self._navi_live = None
         self._media: dict[str, NaviMediaFrame] = {}
-        self._h264_decoders: dict[str, H264Decoder] = {}
-        self._h264_config_sequences: dict[str, int] = {}
+        self._media_epoch = 0
+        self._h264_requested_sequences: dict[str, int] = {}
+        self._h264_worker = H264DecodeWorker()
         self._map_frame_age_ms: int | None = None
         self._map_stream_stalled = False
         self._last_snapshot: dict[str, Any] = {}
@@ -422,6 +570,7 @@ class NaviSimulatorSource:
             self._publisher.stop()
             self._publisher = None
         self.server.close()
+        self._h264_worker.close()
 
     def update(self) -> ClusterUiState:
         now_s = time.monotonic()
@@ -435,7 +584,7 @@ class NaviSimulatorSource:
             self._last_session_id = session_id
             self._last_media_generation = -1
             self._clear_media()
-        elif not connected:
+        elif not connected and (self._media or self._h264_requested_sequences):
             self._clear_media()
         if int(snapshot["state_generation"]) != self._last_state_generation:
             self._last_state_generation = int(snapshot["state_generation"])
@@ -444,6 +593,7 @@ class NaviSimulatorSource:
         if int(snapshot["media_generation"]) != self._last_media_generation:
             self._last_media_generation = int(snapshot["media_generation"])
             self._update_media(snapshot)
+        self._apply_h264_results()
         self._update_map_liveness(snapshot)
 
         base = self._simulator.update(SimulatorInput(), dt)
@@ -480,12 +630,18 @@ class NaviSimulatorSource:
         received = snapshot.get("received_count", 0)
         map_age = "-" if self._map_frame_age_ms is None else f"{self._map_frame_age_ms}ms"
         map_status = "stalled" if self._map_stream_stalled else map_age
-        return f"navi connected={connected} app={app_version} items={len(records)}/28 received={received} map={map_sequence}/{map_status}"
+        decode_drops = self._h264_worker.dropped_requests
+        decode_status = f" decode_drop={decode_drops}" if decode_drops else ""
+        return (
+            f"navi connected={connected} app={app_version} items={len(records)}/28 "
+            + f"received={received} map={map_sequence}/{map_status}{decode_status}"
+        )
 
     def _clear_media(self) -> None:
         self._media.clear()
-        self._h264_decoders.clear()
-        self._h264_config_sequences.clear()
+        self._media_epoch += 1
+        self._h264_requested_sequences.clear()
+        self._h264_worker.reset()
         self._map_frame_age_ms = None
         self._map_stream_stalled = False
 
@@ -517,6 +673,8 @@ class NaviSimulatorSource:
             if record is None:
                 continue
             if not record.present:
+                self._h264_requested_sequences[key] = record.sequence
+                self._h264_worker.discard(key)
                 self._media[key] = NaviMediaFrame(
                     key=key,
                     sequence=record.sequence,
@@ -524,12 +682,20 @@ class NaviSimulatorSource:
                     reason=record.reason,
                 )
                 continue
-            previous = self._media.get(key)
-            if previous is not None and previous.sequence == record.sequence:
+            if self._h264_requested_sequences.get(key) == record.sequence:
                 continue
             frame = self._decode_media_record(key, record, configs.get(key))
             if frame is not None:
                 self._media[key] = frame
+
+    def _apply_h264_results(self) -> None:
+        for result in self._h264_worker.poll():
+            frame = result.frame
+            if result.epoch != self._media_epoch:
+                continue
+            if self._h264_requested_sequences.get(frame.key) != frame.sequence:
+                continue
+            self._media[frame.key] = frame
 
     def _decode_media_record(
         self,
@@ -539,6 +705,8 @@ class NaviSimulatorSource:
     ) -> NaviMediaFrame | None:
         payload = record.payload or b""
         if record.message_type == 1:
+            self._h264_requested_sequences[key] = record.sequence
+            self._h264_worker.discard(key)
             mime = "image/png" if record.format_or_reason == 1 else "image/jpeg"
             return NaviMediaFrame(
                 key=key,
@@ -551,29 +719,19 @@ class NaviSimulatorSource:
             )
         if record.message_type != 3 or not payload:
             return None
-        decoder = self._h264_decoders.get(key)
-        if decoder is None:
-            decoder = H264Decoder()
-            self._h264_decoders[key] = decoder
-        config_payload = b""
-        if config is not None and config.payload:
-            config_payload = config.payload
-            if self._h264_config_sequences.get(key) != config.sequence:
-                self._h264_config_sequences[key] = config.sequence
-                decoder.reset()
-        decoded = decoder.decode(config_payload + payload)
-        if decoded is None:
-            return None
-        rgba, width, height = decoded
-        return NaviMediaFrame(
-            key=key,
-            sequence=record.sequence,
-            present=True,
-            mime="image/rgba",
-            width=width,
-            height=height,
-            data=rgba,
+        self._h264_requested_sequences[key] = record.sequence
+        self._h264_worker.submit(
+            _H264DecodeRequest(
+                epoch=self._media_epoch,
+                key=key,
+                sequence=record.sequence,
+                payload=payload,
+                config_payload=config.payload if config is not None and config.payload else b"",
+                config_sequence=config.sequence if config is not None else -1,
+                keyframe=bool(record.flags & H264_FLAG_KEYFRAME),
+            )
         )
+        return None
 
     def _dashboard(self, snapshot: dict[str, Any]) -> NaviDashboardState:
         records: dict[str, ItemRecord] = snapshot["records"]

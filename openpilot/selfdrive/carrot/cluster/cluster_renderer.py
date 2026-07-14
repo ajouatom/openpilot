@@ -17,6 +17,7 @@ import pyray as rl
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
 
+from cluster_gles_readback import DirectNv12ReadbackError, create_tici_direct_readback
 from cluster_config import (
     AMBER,
     BLUE,
@@ -282,7 +283,7 @@ NAVI_MODE_MAP_X = NAVI_MODE_LEFT_W
 NAVI_MODE_MAP_W = 880.0
 NAVI_MODE_RIGHT_X = NAVI_MODE_MAP_X + NAVI_MODE_MAP_W
 NAVI_MODE_RIGHT_W = DESIGN_WIDTH - NAVI_MODE_RIGHT_X
-NAVI_FONT_BASE_SIZE = 48
+KOREAN_FONT_BASE_SIZE = 32
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
 TEXT_MEASURE_CACHE_LIMIT = 1024
 TRIANGLE_STRIP_POINT_CACHE_LIMIT = 256
@@ -719,6 +720,9 @@ class ClusterUiRenderer:
         self._nv12_pack_full_size: tuple[int, int] | None = None
         self._nv12_pack_shader = None
         self._nv12_pack_shader_locations: dict[str, int] = {}
+        self._direct_nv12_readback = None
+        self._direct_nv12_readback_checked = False
+        self._direct_nv12_readback_disabled = False
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
         self._speed_bg_texture = None
@@ -788,6 +792,21 @@ class ClusterUiRenderer:
     def clear_profile_samples(self) -> None:
         self._profile_samples.clear()
 
+    def direct_nv12_readback_available(self) -> bool:
+        if self._direct_nv12_readback_disabled:
+            return False
+        if not self._direct_nv12_readback_checked:
+            self._direct_nv12_readback_checked = True
+            try:
+                self._direct_nv12_readback = create_tici_direct_readback()
+            except DirectNv12ReadbackError:
+                self._direct_nv12_readback_disabled = True
+        return self._direct_nv12_readback is not None
+
+    def disable_direct_nv12_readback(self) -> None:
+        self._direct_nv12_readback = None
+        self._direct_nv12_readback_disabled = True
+
     def profile_samples(self) -> list[tuple[str, float]]:
         return self._profile_samples
 
@@ -822,8 +841,7 @@ class ClusterUiRenderer:
             self._profile_add("renderer.open.set_target_fps", profile_stage)
         profile_stage = self._profile_start()
         self._font = self._load_font()
-        if self.screen_mode != CLUSTER_SCREEN_MODE_NAVI:
-            self._korean_font = self._load_korean_font()
+        self._korean_font = self._load_korean_font()
         self._profile_add("renderer.open.load_font", profile_stage)
         profile_stage = self._profile_start()
         self._load_vehicle_model()
@@ -1584,6 +1602,8 @@ class ClusterUiRenderer:
         byte_count: int,
         buffer: bytearray | None = None,
         flip_x: bool = False,
+        destination_address: int | None = None,
+        destination_size: int = 0,
     ) -> Iterator[object]:
         self.open(hidden=self.hidden)
         output_width = int(output_width)
@@ -1641,6 +1661,8 @@ class ClusterUiRenderer:
         self._profile_add("render_to_nv12.gpu_upload_transform", profile_stage)
 
         pack_direct_input = stride % 4 == 0 and byte_count % stride == 0 and uv_offset % stride == 0
+        if destination_address is not None and not pack_direct_input:
+            raise DirectNv12ReadbackError("direct NV12 readback requires a four-byte packed Venus layout")
         if pack_direct_input:
             full_pack_w = stride // 4
             full_pack_h = byte_count // stride
@@ -1682,6 +1704,22 @@ class ClusterUiRenderer:
                 clear_target=False,
             )
             self._profile_add("render_to_nv12.pack_uv_shader", profile_stage)
+
+            if destination_address is not None:
+                readback = self._direct_nv12_readback
+                if readback is None:
+                    raise DirectNv12ReadbackError("TICI GLES direct NV12 readback is not available")
+                profile_stage = self._profile_start()
+                readback.read_rgba(
+                    full_target.id,
+                    full_target.texture.width,
+                    full_target.texture.height,
+                    destination_address,
+                    destination_size,
+                )
+                self._profile_add("render_to_nv12.readback_direct_ion", profile_stage)
+                yield destination_address
+                return
 
             profile_stage = self._profile_start()
             image = rl.load_image_from_texture(full_target.texture)
@@ -1983,12 +2021,6 @@ class ClusterUiRenderer:
         glyphs = None
         glyph_count = 0
         base_size = 160
-        if self.screen_mode == CLUSTER_SCREEN_MODE_NAVI:
-            codepoints = self._navi_font_codepoints()
-            glyph_buffer = rl.ffi.new("int[]", codepoints)
-            glyphs = rl.ffi.cast("int *", glyph_buffer)
-            glyph_count = len(codepoints)
-            base_size = NAVI_FONT_BASE_SIZE
         for candidate in self._font_candidates():
             if candidate.exists():
                 try:
@@ -2016,7 +2048,7 @@ class ClusterUiRenderer:
                 continue
             try:
                 rl.set_trace_log_level(rl.TraceLogLevel.LOG_ERROR)
-                font = rl.load_font_ex(str(candidate), NAVI_FONT_BASE_SIZE, glyphs, len(codepoints))
+                font = rl.load_font_ex(str(candidate), KOREAN_FONT_BASE_SIZE, glyphs, len(codepoints))
                 rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
                 if font.texture.id > 0:
                     rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
@@ -3770,7 +3802,7 @@ class ClusterUiRenderer:
                 rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             else:
                 texture = cached[2]
-            pixels = rl.ffi.new("unsigned char[]", frame.data)
+            pixels = rl.ffi.from_buffer("const unsigned char[]", frame.data)
             rl.update_texture(texture, pixels)
             self._navi_media_textures[frame.key] = (frame.sequence, size, texture)
             return texture
