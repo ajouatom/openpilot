@@ -4,6 +4,8 @@ from types import SimpleNamespace
 import sys
 import time
 
+import pytest
+
 from openpilot.selfdrive.carrot.carrot_navi import CATALOG
 from openpilot.selfdrive.carrot.carrot_navi_cereal import build_carrot_navi_payload
 
@@ -188,6 +190,29 @@ def test_navi_panel_shifts_3d_camera_modes_left():
     camera_view_mode=0,
     navi_live=None,
     navi_dashboard=None,
+  )) == 0
+
+
+def test_navi_panel_uses_same_design_shift_for_turn_signals():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1280
+  renderer.screen_mode = 0
+  dashboard = NaviDashboardState(False, "tcp://127.0.0.1:7714")
+
+  assert renderer._world_view_shift_design_x(SimpleNamespace(
+    camera_view_mode=0,
+    navi_live=None,
+    navi_dashboard=dashboard,
+  )) == pytest.approx(398)
+  assert renderer._world_view_shift_design_x(SimpleNamespace(
+    camera_view_mode=1,
+    navi_live=None,
+    navi_dashboard=dashboard,
+  )) == pytest.approx(398)
+  assert renderer._world_view_shift_design_x(SimpleNamespace(
+    camera_view_mode=2,
+    navi_live=None,
+    navi_dashboard=dashboard,
   )) == 0
 
 

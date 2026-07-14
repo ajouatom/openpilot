@@ -2368,6 +2368,11 @@ class ClusterUiRenderer:
             return 0.0
         return NAVI_WORLD_VIEW_SHIFT_X * self.width / DESIGN_WIDTH
 
+    def _world_view_shift_design_x(self, state: ClusterUiState) -> float:
+        if self.width <= 0:
+            return 0.0
+        return self._world_view_shift_x(state) * DESIGN_WIDTH / self.width
+
     def _draw_ego_tpms(
         self,
         vehicle: VehicleBox,
@@ -3038,13 +3043,24 @@ class ClusterUiRenderer:
             self._profile_add("hud.accel_block", profile_stage)
             self._draw_steering_output_block(state)
             profile_stage = self._profile_start()
-            self._draw_turn_signal("left", left_signal_lit, show_inactive=state.debug_ui_visible)
+            turn_signal_shift_x = -self._world_view_shift_design_x(state)
+            self._draw_turn_signal(
+                "left",
+                left_signal_lit,
+                show_inactive=state.debug_ui_visible,
+                center_x_offset=turn_signal_shift_x,
+            )
             self._profile_add("hud.turn_signal_left", profile_stage)
             profile_stage = self._profile_start()
             self._draw_drive_status(state)
             self._profile_add("hud.drive_status", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_turn_signal("right", right_signal_lit, show_inactive=state.debug_ui_visible)
+            self._draw_turn_signal(
+                "right",
+                right_signal_lit,
+                show_inactive=state.debug_ui_visible,
+                center_x_offset=turn_signal_shift_x,
+            )
             self._profile_add("hud.turn_signal_right", profile_stage)
             traffic_light = (
                 state.navi_live.traffic_light
@@ -5528,12 +5544,20 @@ class ClusterUiRenderer:
             started_at = self._right_turn_signal_started_at
         return blink_visible(now, started_at, float("inf"))
 
-    def _draw_turn_signal(self, side: str, lit: bool, show_inactive: bool = False) -> None:
+    def _draw_turn_signal(
+        self,
+        side: str,
+        lit: bool,
+        show_inactive: bool = False,
+        center_x_offset: float = 0.0,
+    ) -> None:
         if not lit and not show_inactive:
             return
 
         theme = self._current_theme()
-        cx = LANE_TURN_SIGNAL_LEFT_CENTER_X if side == "left" else LANE_TURN_SIGNAL_RIGHT_CENTER_X
+        cx = (
+            LANE_TURN_SIGNAL_LEFT_CENTER_X if side == "left" else LANE_TURN_SIGNAL_RIGHT_CENTER_X
+        ) + center_x_offset
         cy = LANE_TURN_SIGNAL_CENTER_Y
         direction = -1 if side == "left" else 1
         fill = GREEN if lit else (*theme.muted, 42)
