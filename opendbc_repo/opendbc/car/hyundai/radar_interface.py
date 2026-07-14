@@ -14,7 +14,6 @@ SCC_TID = 0
 RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 32
 RADAR_MSG_COUNT4 = 8
-RADAR_GROUP4_MAX_AZIMUTH = 20.0
 RADAR_GROUP4_MAX_YREL = 4.5
 RADAR_START_ADDR_CANFD1 = 0x210
 RADAR_MSG_COUNT1 = 16
@@ -279,13 +278,12 @@ class RadarInterface(RadarInterfaceBase):
       elif self.radar_group4:
         # DNMWR006 empty slots use the out-of-range raw distance 0xfff8
         # (409.55 m). OBJECT_STATE 3 distinguishes tracked objects from the
-        # distance-sorted raw detections published at 0x508 and above. Limit
-        # the output to the ego and adjacent lanes; farther side reflections
-        # accounted for roughly half of the apparent track clutter in logs.
-        azimuth = math.radians(msg['AZIMUTH'])
-        y_rel = -math.sin(azimuth) * msg['LONG_DIST']
+        # distance-sorted raw detections published at 0x508 and above. The
+        # signed 11-bit field is lateral distance, with positive raw values to
+        # the right (negative openpilot yRel). Limit output to the ego and
+        # adjacent lanes to suppress farther roadside reflections.
         valid = (msg['OBJECT_STATE'] == 3 and 0.2 < msg['LONG_DIST'] < 205.0 and
-                 abs(msg['AZIMUTH']) <= RADAR_GROUP4_MAX_AZIMUTH and abs(y_rel) <= RADAR_GROUP4_MAX_YREL)
+                 abs(msg['LAT_DIST']) <= RADAR_GROUP4_MAX_YREL)
       else:
         valid = msg['STATE'] in (3, 4)
 
@@ -316,9 +314,8 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].aRel = float('nan') if self.radar_group3 else msg['REL_ACCEL']
         self.pts[t_id].yvRel = 0.0 if self.radar_group3 else msg['LAT_SPEED']
       elif self.radar_group4:
-        azimuth = math.radians(msg['AZIMUTH'])
-        self.pts[t_id].dRel = math.cos(azimuth) * msg['LONG_DIST']
-        self.pts[t_id].yRel = -math.sin(azimuth) * msg['LONG_DIST']
+        self.pts[t_id].dRel = msg['LONG_DIST']
+        self.pts[t_id].yRel = -msg['LAT_DIST']
         self.pts[t_id].vRel = msg['REL_SPEED']
         self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
         self.pts[t_id].aRel = float('nan')
