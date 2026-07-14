@@ -35,6 +35,15 @@ class TestDensoRadar:
     assert track["REL_SPEED"] == 0
     assert track["OBJECT_STATE"] == 0
 
+  def test_long_range_lateral_distance(self):
+    # Real driving sample: treating the signed field as -12 degrees would put
+    # this target about 34 m sideways at 161 m. It is instead -3.0 m lateral.
+    track = self.parse(0x506, "b664eafa00cd230b")
+
+    assert track["LONG_DIST"] == pytest.approx(161.4625)
+    assert track["LAT_DIST"] == pytest.approx(-3.0)
+    assert track["OBJECT_STATE"] == 3
+
   def test_parser_selection_and_point_conversion(self, monkeypatch):
     class FakeParams:
       def get_int(self, key):
@@ -65,6 +74,16 @@ class TestDensoRadar:
     assert point.yRel == pytest.approx(1.625)
     assert point.vRel == pytest.approx(-0.734375)
     assert math.isnan(point.aRel)
+
+    # Confirm the long-range sample survives the track filter and is converted
+    # from radar-left-negative to openpilot-left-positive coordinates.
+    long_range_dat = bytes.fromhex("b664eafa00cd230b")
+    packets = [(addr, long_range_dat if addr == 0x506 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    radar_data = radar_interface.update([0, packets])
+    point = next(point for point in radar_data.points if point.trackId == 38)
+
+    assert point.dRel == pytest.approx(161.4625)
+    assert point.yRel == pytest.approx(3.0)
 
     # 0x508 and above carry state 0 distance-sorted detections. Even if such a
     # payload appears in a track slot, it must not become a RadarPoint.
