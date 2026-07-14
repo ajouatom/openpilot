@@ -1998,8 +1998,7 @@ class ClusterUiRenderer:
                     font = rl.load_font_ex(str(candidate), base_size, glyphs, glyph_count)
                     rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
                     if font.texture.id > 0:
-                        rl.gen_texture_mipmaps(font.texture)
-                        rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+                        rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
                         self._owns_font = True
                         return font
                 except Exception as exc:
@@ -2020,8 +2019,7 @@ class ClusterUiRenderer:
                 font = rl.load_font_ex(str(candidate), NAVI_FONT_BASE_SIZE, glyphs, len(codepoints))
                 rl.set_trace_log_level(rl.TraceLogLevel.LOG_WARNING)
                 if font.texture.id > 0:
-                    rl.gen_texture_mipmaps(font.texture)
-                    rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+                    rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
                     self._owns_korean_font = True
                     return font
             except Exception as exc:
