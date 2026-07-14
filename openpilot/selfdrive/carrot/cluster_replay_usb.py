@@ -54,6 +54,8 @@ def build_cluster_args(args: argparse.Namespace, passthrough: list[str]) -> list
         cluster_args.extend(("--route-max-segments", str(args.max_segments)))
     if args.loop:
         cluster_args.append("--route-loop")
+    if args.pause_on_cutin:
+        cluster_args.append("--route-pause-on-cutin")
     if args.usb_brightness is not None:
         cluster_args.extend(("--usb-brightness", str(args.usb_brightness)))
     if args.profile_render:
@@ -92,6 +94,12 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--start-segment", type=int, default=None, help="First segment index when a route directory is given")
     parser.add_argument("--max-segments", type=int, default=None, help="Maximum number of route segments to replay")
     parser.add_argument("--loop", action="store_true", help="Loop the replay")
+    parser.add_argument(
+        "--pause-on-cutin",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Play a Windows alert and pause when any cut-in detector becomes active",
+    )
     parser.add_argument("--route-overlay", choices=("off", "compact", "full"), default="compact", help="Replay camera/data detail level")
     parser.add_argument(
         "--route-tools",
@@ -101,7 +109,12 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     )
     parser.add_argument("--show-recorded-cutins", action="store_true", help="Show cut-in decisions stored in the original radarState")
     parser.add_argument("--front-radar-only", action="store_true", help="Ignore corner radar data and replay as a front-radar-only vehicle")
-    parser.add_argument("--cutin-radar-source", choices=("corner", "front"), default="corner", help="Radar tracks used by the offline current-code cut-in evaluator")
+    parser.add_argument(
+        "--cutin-radar-source",
+        choices=("corner", "front"),
+        default="corner",
+        help="Radar tracks used by the offline current-code cut-in evaluator",
+    )
     parser.add_argument("--cutin-sensitivity", type=float, default=50.0, help="Sensitivity used by the offline current-code cut-in evaluator")
     parser.add_argument("--camera-view-mode", type=int, choices=(0, 1, 2), default=2, help="Cluster camera view mode (default: 2, road camera background)")
     parser.add_argument("--usb-brightness", type=int, default=None, help="Manual USB display brightness 0-100")
