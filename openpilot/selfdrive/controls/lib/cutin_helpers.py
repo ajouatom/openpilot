@@ -29,7 +29,7 @@ CUTIN_PROJECTED_BOOST_MIN_TEMPORAL_INWARD_SPEED = 0.3
 FRONT_CUTIN_MIN_DREL_M = 5.0
 FRONT_CUTIN_MAX_DREL_M = 50.0
 FRONT_CUTIN_MAX_ABS_YREL_M = 7.0
-FRONT_CUTIN_MAX_FRAME_Y_JUMP_M = 0.60
+CUTIN_MAX_FRAME_Y_JUMP_M = 0.60
 FRONT_CUTIN_MIN_CONFIRM_S = 0.30
 
 
@@ -53,6 +53,15 @@ def is_front_radar_cutin_candidate(track_id: int, radar_source: str, d_rel: floa
     track_id != 0 and
     FRONT_CUTIN_MIN_DREL_M <= d_rel <= FRONT_CUTIN_MAX_DREL_M and
     abs(y_rel) <= FRONT_CUTIN_MAX_ABS_YREL_M
+  )
+
+
+def is_cutin_track_discontinuous(prev_measured: bool, prev_d_rel: float, prev_y_rel: float, prev_v_lead: float,
+                                 d_rel: float, y_rel: float, v_lead: float) -> bool:
+  return prev_measured and (
+    abs(d_rel - prev_d_rel) > 5.0 or
+    abs(y_rel - prev_y_rel) > CUTIN_MAX_FRAME_Y_JUMP_M or
+    abs(v_lead - prev_v_lead) > 7.0
   )
 
 

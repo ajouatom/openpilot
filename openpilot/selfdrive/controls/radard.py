@@ -22,7 +22,7 @@ from openpilot.selfdrive.controls.lib.cutin_helpers import (
   cutin_entry_rejection_reason,
   cutin_tuning_from_sensitivity,
   effective_cutin_inward_speed,
-  FRONT_CUTIN_MAX_FRAME_Y_JUMP_M,
+  is_cutin_track_discontinuous,
   FRONT_CUTIN_MIN_CONFIRM_S,
   is_corner_radar_source,
   is_corner_track_id,
@@ -245,11 +245,15 @@ class Track:
     self.measured = pt.measured
     self.radar_source = str(pt.radarSource)
     self.is_corner_radar = is_corner_radar
-    max_y_jump = FRONT_CUTIN_MAX_FRAME_Y_JUMP_M if is_cutin_track and not is_corner_radar else 2.0
-    track_discontinuous = prev_measured and (
-      abs(self.dRel - prev_dRel) > 5.0 or
-      abs(self.yRel - prev_yRel) > max_y_jump or
-      abs(self.vLead - prev_vLead) > 7.0
+    track_discontinuous = (
+      is_cutin_track_discontinuous(prev_measured, prev_dRel, prev_yRel, prev_vLead,
+                                   self.dRel, self.yRel, self.vLead)
+      if is_cutin_track
+      else prev_measured and (
+        abs(self.dRel - prev_dRel) > 5.0 or
+        abs(self.yRel - prev_yRel) > 2.0 or
+        abs(self.vLead - prev_vLead) > 7.0
+      )
     )
     if not self.measured:
       self.cnt = 0

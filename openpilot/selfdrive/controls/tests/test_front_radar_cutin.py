@@ -1,4 +1,5 @@
 from openpilot.selfdrive.controls.lib.cutin_helpers import (
+  is_cutin_track_discontinuous,
   is_fast_cutin_entry,
   is_front_radar_cutin_candidate,
   is_front_radar_cutin_enabled,
@@ -6,6 +7,26 @@ from openpilot.selfdrive.controls.lib.cutin_helpers import (
 
 
 class TestFrontRadarCutin:
+  def test_corner_track_lateral_jump_resets_cutin_history(self):
+    assert is_cutin_track_discontinuous(
+      True,
+      prev_d_rel=18.75,
+      prev_y_rel=10.70,
+      prev_v_lead=5.0,
+      d_rel=17.80,
+      y_rel=9.80,
+      v_lead=5.0,
+    )
+    assert not is_cutin_track_discontinuous(
+      True,
+      prev_d_rel=18.75,
+      prev_y_rel=10.70,
+      prev_v_lead=5.0,
+      d_rel=18.50,
+      y_rel=10.50,
+      v_lead=5.0,
+    )
+
   def test_enable_condition(self):
     assert is_front_radar_cutin_enabled(3, 0, "hyundai")
     assert is_front_radar_cutin_enabled(3, 1, "hyundai")
