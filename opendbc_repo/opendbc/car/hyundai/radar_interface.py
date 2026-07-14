@@ -28,8 +28,29 @@ CORNER_OBJECT_180_MSG_COUNT = 5
 CORNER_OBJECT_180_SLOTS_PER_MSG = 2
 CORNER_OBJECT_180_TRACK_ID_OFFSET = 240
 CORNER_OBJECT_180_DBC = 'hyundai_canfd_corner_radar_180_generated'
+CORNER_OBJECT_STABLE_TRACK_ID_START = 1000
 
 # POC for parsing corner radars: https://github.com/commaai/openpilot/pull/24221/
+
+
+class CornerObjectTrackIdManager:
+  def __init__(self):
+    self.next_track_id = CORNER_OBJECT_STABLE_TRACK_ID_START
+    self.objects: dict[tuple[str, int], tuple[int, int]] = {}
+
+  def get_track_id(self, source: str, object_id: int, age: int) -> int:
+    key = (source, object_id)
+    previous = self.objects.get(key)
+    if previous is None or age < previous[1]:
+      track_id = self.next_track_id
+      self.next_track_id += 1
+    else:
+      track_id = previous[0]
+    self.objects[key] = (track_id, age)
+    return track_id
+
+  def clear_source(self, source: str):
+    self.objects = {key: value for key, value in self.objects.items() if key[0] != source}
 
 def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count):
   if not radar_tracks:
@@ -119,6 +140,7 @@ class RadarInterface(RadarInterfaceBase):
     self.updated_corner_objects_180 = set()
     self.corner_object_missed_updates = 0
     self.corner_object_180_missed_updates = 0
+    self.corner_object_track_ids = CornerObjectTrackIdManager()
     self.rcp_tracks = get_radar_can_parser(CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count)
     self.rcp_corner_objects = get_corner_object_can_parser(CP, self.corner_object_tracks)
     self.rcp_corner_objects_180 = get_corner_object_180_can_parser(CP, self.corner_object_180_tracks)
@@ -341,6 +363,7 @@ class RadarInterface(RadarInterfaceBase):
       self._clear_corner_objects()
       return
 
+    candidates = []
     for slot, addr in enumerate(range(CORNER_OBJECT_235_START_ADDR, CORNER_OBJECT_235_START_ADDR + CORNER_OBJECT_235_MSG_COUNT)):
       t_id = CORNER_OBJECT_235_TRACK_ID_OFFSET + slot
       msg = self.rcp_corner_objects.vl[f"CORNER_RADAR_235_OBJECTS_{addr:x}"]
@@ -352,22 +375,14 @@ class RadarInterface(RadarInterfaceBase):
       a_rel = msg["OBJ_REL_ACCEL_X"]
       valid = msg["OBJ_QUAL_LEVEL"] > 0 and 0.2 < d_rel < 180.0 and abs(y_rel) < 40.0 and v_rel > -99.0
 
-      self.pts[t_id].measured = bool(valid)
       if not valid:
-        self.pts[t_id].dRel = 0
-        self.pts[t_id].yRel = 0
-        self.pts[t_id].vRel = 0
-        self.pts[t_id].vLead = self.v_ego
-        self.pts[t_id].aRel = float('nan')
-        self.pts[t_id].yvRel = 0
         continue
+      candidates.append((t_id, int(msg["OBJ_OBJECT_ID"]), int(msg["OBJ_AGE"]), int(msg["OBJ_QUAL_LEVEL"]),
+                         d_rel, y_rel, v_rel, yv_rel, a_rel))
 
-      self.pts[t_id].dRel = d_rel
-      self.pts[t_id].yRel = y_rel
-      self.pts[t_id].vRel = v_rel
-      self.pts[t_id].vLead = v_rel + self.v_ego
-      self.pts[t_id].aRel = a_rel
-      self.pts[t_id].yvRel = yv_rel
+    self._apply_corner_objects("corner235", candidates,
+                               range(CORNER_OBJECT_235_TRACK_ID_OFFSET,
+                                     CORNER_OBJECT_235_TRACK_ID_OFFSET + CORNER_OBJECT_235_MSG_COUNT))
 
   def _update_corner_objects_180(self, updated_messages):
     if self.rcp_corner_objects_180 is None:
@@ -377,6 +392,7 @@ class RadarInterface(RadarInterfaceBase):
       self._clear_corner_objects_180()
       return
 
+    candidates = []
     for msg_index, addr in enumerate(range(CORNER_OBJECT_180_START_ADDR, CORNER_OBJECT_180_START_ADDR + CORNER_OBJECT_180_MSG_COUNT)):
       msg = self.rcp_corner_objects_180.vl[f"CORNER_RADAR_180_OBJECTS_{addr:x}"]
       for slot_index in range(CORNER_OBJECT_180_SLOTS_PER_MSG):
@@ -389,17 +405,39 @@ class RadarInterface(RadarInterfaceBase):
         a_rel = msg[f"{prefix}REL_ACCEL_X"]
         valid = msg[f"{prefix}QUAL_LEVEL"] > 0 and 0.2 < d_rel < 180.0 and abs(y_rel) < 40.0 and v_rel > -99.0
 
-        self.pts[t_id].measured = bool(valid)
         if not valid:
-          self._clear_point(t_id)
           continue
+        candidates.append((t_id, int(msg[f"{prefix}OBJECT_ID"]), int(msg[f"{prefix}AGE"]), int(msg[f"{prefix}QUAL_LEVEL"]),
+                           d_rel, y_rel, v_rel, yv_rel, a_rel))
 
-        self.pts[t_id].dRel = d_rel
-        self.pts[t_id].yRel = y_rel
-        self.pts[t_id].vRel = v_rel
-        self.pts[t_id].vLead = v_rel + self.v_ego
-        self.pts[t_id].aRel = a_rel
-        self.pts[t_id].yvRel = yv_rel
+    self._apply_corner_objects("corner180", candidates,
+                               range(CORNER_OBJECT_180_TRACK_ID_OFFSET,
+                                     CORNER_OBJECT_180_TRACK_ID_OFFSET + CORNER_OBJECT_180_MSG_COUNT * CORNER_OBJECT_180_SLOTS_PER_MSG))
+
+  def _apply_corner_objects(self, source, candidates, slot_ids):
+    for t_id in slot_ids:
+      self._clear_point(t_id)
+
+    # The same object can occupy two CAN slots for one cycle during a slot handoff.
+    # Publish only the newest/highest-quality copy so trackId stays unique.
+    objects = {}
+    for candidate in candidates:
+      object_id = candidate[1]
+      previous = objects.get(object_id)
+      if previous is None or (candidate[2], candidate[3]) > (previous[2], previous[3]):
+        objects[object_id] = candidate
+
+    for t_id, object_id, age, _, d_rel, y_rel, v_rel, yv_rel, a_rel in objects.values():
+      point = self.pts[t_id]
+      point.measured = True
+      point.trackId = self.corner_object_track_ids.get_track_id(source, object_id, age)
+      point.radarSource = source
+      point.dRel = d_rel
+      point.yRel = y_rel
+      point.vRel = v_rel
+      point.vLead = v_rel + self.v_ego
+      point.aRel = a_rel
+      point.yvRel = yv_rel
 
   def _clear_point(self, t_id):
     self.pts[t_id].measured = False
@@ -413,10 +451,12 @@ class RadarInterface(RadarInterfaceBase):
   def _clear_corner_objects(self):
     for slot in range(CORNER_OBJECT_235_MSG_COUNT):
       self._clear_point(CORNER_OBJECT_235_TRACK_ID_OFFSET + slot)
+    self.corner_object_track_ids.clear_source("corner235")
 
   def _clear_corner_objects_180(self):
     for slot in range(CORNER_OBJECT_180_MSG_COUNT * CORNER_OBJECT_180_SLOTS_PER_MSG):
       self._clear_point(CORNER_OBJECT_180_TRACK_ID_OFFSET + slot)
+    self.corner_object_track_ids.clear_source("corner180")
 
   def _update_scc(self, updated_messages):
     cpt = self.rcp_scc.vl

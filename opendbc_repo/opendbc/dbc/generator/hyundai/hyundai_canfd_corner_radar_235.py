@@ -46,6 +46,8 @@ def write_object_msg(f, addr):
   f.write(f"""
 BO_ {addr} {name}: 32 RADAR
  SG_ OBJ_QUAL_LEVEL : 24|7@1+ (1,0) [0|100] "%" XXX
+ SG_ OBJ_AGE : 32|8@1+ (1,0) [0|255] "" XXX
+ SG_ OBJ_OBJECT_ID : 44|7@1+ (1,0) [0|127] "" XXX
  SG_ OBJ_REL_POS_X : 64|13@1+ (0.05,0) [0|409.55] "m" XXX
  SG_ OBJ_REL_POS_Y : 78|12@1+ (0.05,-102.4) [-102.4|102.35] "m" XXX
  SG_ OBJ_REL_VEL_X : 91|12@1+ (0.05,-100) [-100|104.75] "m/s" XXX

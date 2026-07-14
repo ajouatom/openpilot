@@ -14,6 +14,7 @@ CUTIN_ASSOC_MAX_YREL = 0.75
 CUTIN_ASSOC_MAX_VREL = 2.5
 CORNER_TRACK_ID_RANGES = ((200, 220), (240, 250))
 CORNER_RADAR_SOURCES = ("corner235", "corner180")
+STABLE_CORNER_TRACK_ID_START = 1000
 CUTIN_FAST_CONFIRM_MAX_DREL = 10.0
 CUTIN_FAST_CONFIRM_MIN_INWARD_SPEED = 0.65
 CUTIN_URGENT_CONFIRM_MIN_INWARD_SPEED = 0.55
@@ -35,6 +36,10 @@ FRONT_CUTIN_MIN_CONFIRM_S = 0.30
 
 def is_corner_track_id(track_id: int) -> bool:
   return any(start <= track_id < end for start, end in CORNER_TRACK_ID_RANGES)
+
+
+def is_stable_corner_track_id(track_id: int) -> bool:
+  return track_id >= STABLE_CORNER_TRACK_ID_START
 
 
 def is_corner_radar_source(source: Any) -> bool:
@@ -167,6 +172,10 @@ def associate_cutin_tracks(
   candidates: list[tuple[float, int, int]] = []
   for current_id, (d_rel, y_rel, v_rel) in current.items():
     for previous_id, (prev_d_rel, prev_y_rel, prev_v_rel) in previous.items():
+      # Stable corner IDs describe the physical radar object, not its CAN slot.
+      # Never carry cut-in history between two different physical objects.
+      if current_id != previous_id and (is_stable_corner_track_id(current_id) or is_stable_corner_track_id(previous_id)):
+        continue
       d_delta = abs(d_rel - prev_d_rel)
       y_delta = abs(y_rel - prev_y_rel)
       v_delta = abs(v_rel - prev_v_rel)
