@@ -17,7 +17,7 @@ from cluster_navi import fresh_carrot_navi, parse_carrot_navi
 from cluster_navi_overlay import merge_navi_overlay_state
 from cluster_navi_source import MAP_FRAME_STALE_TIMEOUT_MS, NaviSimulatorSource
 from cluster_models import NaviDashboardState, NaviMediaFrame, TpmsInfo
-from cluster_renderer import ClusterUiRenderer
+from cluster_renderer import SIDE_GAUGE_OUTLINE, ClusterUiRenderer
 
 
 def _namespace(value):
@@ -214,6 +214,19 @@ def test_navi_panel_uses_same_design_shift_for_turn_signals():
     navi_live=None,
     navi_dashboard=dashboard,
   )) == 0
+
+
+def test_dark_theme_uses_visible_side_gauge_outlines(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  state = SimpleNamespace(camera_view_mode=0)
+
+  monkeypatch.setattr(ClusterUiRenderer, "_current_theme", lambda self: SimpleNamespace(is_dark=True))
+  assert renderer._side_gauge_outline(state) == SIDE_GAUGE_OUTLINE
+
+  monkeypatch.setattr(ClusterUiRenderer, "_current_theme", lambda self: SimpleNamespace(is_dark=False))
+  assert renderer._side_gauge_outline(state) == (5, 9, 12, 235)
+  state.camera_view_mode = 2
+  assert renderer._side_gauge_outline(state) == SIDE_GAUGE_OUTLINE
 
 
 def test_road_camera_draws_compact_tpms_only(monkeypatch):
