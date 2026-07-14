@@ -62,6 +62,7 @@ from openpilot.selfdrive.controls.lib.cutin_helpers import (
     FRONT_CUTIN_MIN_DREL_M,
     is_corner_track_id,
     is_corner_radar_source,
+    is_stable_corner_track_id,
     is_fast_cutin_entry,
     new_cutin_position_history,
     update_cutin_confirmation,
@@ -4037,7 +4038,7 @@ def live_track_to_radar_point(
         and radar_track_id_is_corner_object(track_id)
     )
     label = (
-        corner_track_label(track_id)
+        corner_track_label(track_id, str(radar_source))
         if is_corner_object
         else (f"T{track_id}" if track_id is not None else f"T{index:03d}")
     )
@@ -4067,10 +4068,13 @@ def live_track_to_radar_point(
 
 
 def radar_track_id_is_corner_object(track_id: int | None) -> bool:
-    return track_id is not None and is_corner_track_id(track_id)
+    return track_id is not None and (is_corner_track_id(track_id) or is_stable_corner_track_id(track_id))
 
 
-def corner_track_label(track_id: int) -> str:
+def corner_track_label(track_id: int, radar_source: str = "") -> str:
+    if is_stable_corner_track_id(track_id):
+        group = "180" if radar_source == "corner180" else "235"
+        return f"CR{group}_T{track_id}"
     if CORNER_OBJECT_180_TRACK_ID_OFFSET <= track_id < CORNER_OBJECT_180_TRACK_ID_OFFSET + CORNER_OBJECT_180_TRACK_COUNT:
         return f"CR180_{track_id - CORNER_OBJECT_180_TRACK_ID_OFFSET:02d}"
     return f"CR{track_id - CORNER_OBJECT_TRACK_ID_OFFSET:02d}"

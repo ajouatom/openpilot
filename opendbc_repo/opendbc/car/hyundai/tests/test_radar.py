@@ -4,7 +4,13 @@ from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 import opendbc.car.hyundai.hyundaicanfd as hyundaicanfd
 import opendbc.car.hyundai.radar_interface as radar_interface_module
-from opendbc.car.hyundai.radar_interface import RADAR_MSG_COUNT3, RADAR_START_ADDR_CANFD3, RadarInterface
+from opendbc.car.hyundai.radar_interface import (
+  CORNER_OBJECT_STABLE_TRACK_ID_START,
+  RADAR_MSG_COUNT3,
+  RADAR_START_ADDR_CANFD3,
+  CornerObjectTrackIdManager,
+  RadarInterface,
+)
 from opendbc.car.hyundai.values import HyundaiExtFlags, HyundaiFlags
 
 
@@ -63,3 +69,39 @@ class TestRadarGroup3:
     assert point.dRel == pytest.approx(53.1)
     assert point.yRel == pytest.approx(-3.0)
     assert point.vRel == pytest.approx(4.4)
+
+
+class TestCornerRadarObjectIdentity:
+  @staticmethod
+  def set_bits(data, start, size, value):
+    for offset in range(size):
+      bit = start + offset
+      data[bit // 8] |= ((value >> offset) & 1) << (bit % 8)
+
+  @pytest.mark.parametrize(
+    "dbc,msg_name,addr,age_signal,id_signal,age_start,id_start",
+    (
+      ("hyundai_canfd_corner_radar_180_generated", "CORNER_RADAR_180_OBJECTS_180", 0x180,
+       "SLOT1_AGE", "SLOT1_OBJECT_ID", 32, 44),
+      ("hyundai_canfd_corner_radar_235_generated", "CORNER_RADAR_235_OBJECTS_235", 0x235,
+       "OBJ_AGE", "OBJ_OBJECT_ID", 32, 44),
+    ),
+  )
+  def test_object_identity_signals(self, dbc, msg_name, addr, age_signal, id_signal, age_start, id_start):
+    data = bytearray(32)
+    self.set_bits(data, age_start, 8, 23)
+    self.set_bits(data, id_start, 7, 46)
+    parser = CANParser(dbc, [(msg_name, 33)], 1)
+    parser.update([0, [(addr, bytes(data), 1)]])
+
+    assert parser.vl[msg_name][age_signal] == 23
+    assert parser.vl[msg_name][id_signal] == 46
+
+  def test_track_id_survives_slot_move_and_resets_with_age(self):
+    manager = CornerObjectTrackIdManager()
+    first_id = manager.get_track_id("corner180", object_id=108, age=240)
+
+    assert first_id == CORNER_OBJECT_STABLE_TRACK_ID_START
+    assert manager.get_track_id("corner180", object_id=108, age=241) == first_id
+    assert manager.get_track_id("corner235", object_id=108, age=241) != first_id
+    assert manager.get_track_id("corner180", object_id=108, age=2) != first_id
