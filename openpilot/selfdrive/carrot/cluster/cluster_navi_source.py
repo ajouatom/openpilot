@@ -32,6 +32,7 @@ from cluster_simulator import ClusterSimulator
 DISCOVERY_PORT = 7705
 DEFAULT_NAVI_HOST = "0.0.0.0"
 DEFAULT_NAVI_PORT = 7714
+MAP_FRAME_STALE_TIMEOUT_MS = 3000
 
 
 def detect_advertise_ip(bind_host: str) -> str:
@@ -234,22 +235,26 @@ class NaviSimulatorSource:
         advertise_ip: str | None = None,
         beacon_enabled: bool = True,
         publish_cereal: bool = False,
+        map_theme: str = "dark",
     ) -> None:
         self.host = host
         self.port = int(port)
         self.advertise_ip = advertise_ip or detect_advertise_ip(host)
         self.endpoint = f"{self.advertise_ip}:{self.port}"
-        self.receiver = CarrotNaviReceiver(port=self.port)
+        self.receiver = CarrotNaviReceiver(port=self.port, map_theme=map_theme)
         self.server = EmbeddedNaviReceiverServer(self.receiver, host, self.port)
         self.beacon = DiscoveryBeacon(self.advertise_ip) if beacon_enabled else None
         self._simulator = ClusterSimulator()
         self._last_update_s = time.monotonic()
         self._last_state_generation = -1
         self._last_media_generation = -1
+        self._last_session_id = ""
         self._navi_live = None
         self._media: dict[str, NaviMediaFrame] = {}
         self._h264_decoders: dict[str, H264Decoder] = {}
         self._h264_config_sequences: dict[str, int] = {}
+        self._map_frame_age_ms: int | None = None
+        self._map_stream_stalled = False
         self._last_snapshot: dict[str, Any] = {}
         self._publisher = None
         try:
@@ -281,6 +286,14 @@ class NaviSimulatorSource:
         self._last_update_s = now_s
         snapshot = self.receiver.dashboard_snapshot()
         self._last_snapshot = snapshot
+        session_id = str(snapshot.get("session_id", ""))
+        connected = bool(snapshot.get("connected"))
+        if session_id != self._last_session_id:
+            self._last_session_id = session_id
+            self._last_media_generation = -1
+            self._clear_media()
+        elif not connected:
+            self._clear_media()
         if int(snapshot["state_generation"]) != self._last_state_generation:
             self._last_state_generation = int(snapshot["state_generation"])
             payload = build_carrot_navi_payload(self.receiver.cereal_snapshot())
@@ -288,6 +301,7 @@ class NaviSimulatorSource:
         if int(snapshot["media_generation"]) != self._last_media_generation:
             self._last_media_generation = int(snapshot["media_generation"])
             self._update_media(snapshot)
+        self._update_map_liveness(snapshot)
 
         base = self._simulator.update(SimulatorInput(), dt)
         navi = self._navi_live
@@ -321,7 +335,33 @@ class NaviSimulatorSource:
         connected = int(bool(snapshot.get("connected")))
         app_version = snapshot.get("app_version") or "-"
         received = snapshot.get("received_count", 0)
-        return f"navi connected={connected} app={app_version} items={len(records)}/28 received={received} map={map_sequence}"
+        map_age = "-" if self._map_frame_age_ms is None else f"{self._map_frame_age_ms}ms"
+        map_status = "stalled" if self._map_stream_stalled else map_age
+        return f"navi connected={connected} app={app_version} items={len(records)}/28 received={received} map={map_sequence}/{map_status}"
+
+    def _clear_media(self) -> None:
+        self._media.clear()
+        self._h264_decoders.clear()
+        self._h264_config_sequences.clear()
+        self._map_frame_age_ms = None
+        self._map_stream_stalled = False
+
+    def _update_map_liveness(self, snapshot: dict[str, Any]) -> None:
+        if not bool(snapshot.get("connected")):
+            self._map_frame_age_ms = None
+            self._map_stream_stalled = False
+            return
+
+        record = snapshot.get("records", {}).get("render:map_main")
+        if record is None or not record.present:
+            self._map_frame_age_ms = None
+            self._map_stream_stalled = False
+            return
+
+        self._map_frame_age_ms = max(0, (time.time_ns() // 1_000_000) - int(record.received_at_ms))
+        self._map_stream_stalled = self._map_frame_age_ms > MAP_FRAME_STALE_TIMEOUT_MS
+        if self._map_stream_stalled:
+            self._media.pop("render:map_main", None)
 
     def _update_media(self, snapshot: dict[str, Any]) -> None:
         records: dict[str, ItemRecord] = snapshot["records"]
@@ -414,6 +454,8 @@ class NaviSimulatorSource:
             manifest_revision=int(snapshot["manifest_revision"]),
             received_count=int(snapshot["received_count"]),
             last_received_age_ms=age_ms,
+            map_frame_age_ms=self._map_frame_age_ms,
+            map_stream_stalled=self._map_stream_stalled,
             peer=str(snapshot["peer"]),
             error=str(snapshot["error"]) if snapshot["error"] else None,
             media=tuple(self._media[key] for key in sorted(self._media)),

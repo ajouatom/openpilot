@@ -46,6 +46,18 @@ def test_manifest_enables_complete_catalog():
   }
   assert enabled == set(CATALOG)
   assert [stream["stream_handle"] for stream in manifest["streams"]] == list(range(1, 29))
+  map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
+  assert map_stream["params"]["map_theme"] == "auto"
+
+
+def test_manifest_requests_configured_map_appearance():
+  manifest = build_manifest("12345678", map_theme="dark")
+  map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
+
+  assert map_stream["params"]["map_theme"] == "dark"
+
+  with pytest.raises(ValueError, match="map theme"):
+    build_manifest("12345678", map_theme="neon")
 
 
 def test_parse_binary_packet_validates_cn_v2_payload():

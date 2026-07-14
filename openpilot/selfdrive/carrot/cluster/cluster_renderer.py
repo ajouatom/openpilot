@@ -3425,6 +3425,8 @@ class ClusterUiRenderer:
         rl.draw_rectangle_rec(map_rect, rl_color(NAVI_MAP_BACKGROUND))
         if not self._draw_navi_media(map_frame, map_rect, cover=False):
             self._draw_navi_route_fallback(navi, map_rect)
+        if dashboard is not None and dashboard.map_stream_stalled:
+            self._draw_navi_map_stalled(map_rect, dashboard.map_frame_age_ms)
 
         self._draw_navi_map_media(media)
         self._draw_navi_left_band(state, navi, media)
@@ -3803,9 +3805,37 @@ class ClusterUiRenderer:
 
     @staticmethod
     def _navi_map_frame_present(dashboard: NaviDashboardState | None) -> bool:
-        if dashboard is None or not dashboard.connected:
+        if dashboard is None or not dashboard.connected or dashboard.map_stream_stalled:
             return False
         return any(frame.key == "render:map_main" and frame.present for frame in dashboard.media)
+
+    def _draw_navi_map_stalled(self, rect: rl.Rectangle, age_ms: int | None) -> None:
+        rl.draw_rectangle_rec(rect, rl_color(NAVI_MAP_BACKGROUND))
+        center_x = rect.x + rect.width * 0.5
+        center_y = rect.y + rect.height * 0.5
+        self._draw_text_with_stroke(
+            "MAP STREAM STALLED",
+            center_x,
+            center_y - 18.0,
+            24.0,
+            AMBER,
+            (5, 9, 12),
+            2,
+            anchor="center",
+        )
+        age_text = "WAITING FOR NEXT FRAME"
+        if age_ms is not None:
+            age_text = f"NO MAP FRAME FOR {age_ms / 1000.0:.1f} s"
+        self._draw_text_with_stroke(
+            age_text,
+            center_x,
+            center_y + 18.0,
+            16.0,
+            WHITE,
+            (5, 9, 12),
+            1,
+            anchor="center",
+        )
 
     def _draw_navi_live_panel(self, state: ClusterUiState) -> None:
         navi = state.navi_live
@@ -3825,6 +3855,14 @@ class ClusterUiRenderer:
                 panel_h=h,
                 status_text="NAVI DISCONNECTED",
             )
+            return
+        if dashboard is not None and dashboard.map_stream_stalled:
+            self._rounded_rect(x, y, w, h, 8.0, NAVI_MAP_BACKGROUND, theme.faint, 2.0)
+            self._draw_navi_map_stalled(
+                rl.Rectangle(x + 3.0, y + 3.0, w - 6.0, h - 6.0),
+                dashboard.map_frame_age_ms,
+            )
+            self._rounded_rect(x, y, w, h, 8.0, (0, 0, 0, 0), theme.faint, 2.0)
             return
 
         media = {
