@@ -63,6 +63,7 @@ from openpilot.selfdrive.controls.lib.cutin_helpers import (
     is_corner_track_id,
     is_corner_radar_source,
     is_stable_corner_track_id,
+    STABLE_CORNER_TRACK_ID_START,
     is_fast_cutin_entry,
     new_cutin_position_history,
     update_cutin_confirmation,
@@ -119,6 +120,10 @@ RAW_CORNER_TRACK_VELOCITY_ALPHA = 0.45
 RAW_CORNER_TRACK_DISPLAY_MIN_HITS = 4
 RAW_CORNER_TRACK_DISPLAY_OUTER_ABS_Y_M = 8.0
 RAW_CORNER_TRACK_DISPLAY_OUTER_MIN_HITS = 12
+REPLAY_CUTIN_RAW_OBJECT_MAX_AGE_S = 0.15
+REPLAY_CUTIN_RAW_OBJECT_MAX_DREL_M = 1.5
+REPLAY_CUTIN_RAW_OBJECT_MAX_YREL_M = 0.75
+REPLAY_CUTIN_RAW_OBJECT_MAX_VREL_MPS = 2.5
 ROUTE_CORNER_SOURCE_STABLE = "stable"
 ROUTE_CORNER_SOURCE_RAW = "raw"
 ROUTE_CORNER_SOURCE_LIVE = "live"
@@ -1250,6 +1255,8 @@ class RouteLogParser:
         self.cutin_right_ys: tuple[float, ...] = ()
         self.cutin_yaw_rate = 0.0
         self.cutin_tracks: dict[int, ReplayCutinTrack] = {}
+        self.cutin_corner_object_ids: dict[tuple[str, int], tuple[int, int]] = {}
+        self.next_cutin_corner_track_id = STABLE_CORNER_TRACK_ID_START
         self.cutin_detections: tuple[DetectedVehicle, ...] = ()
         self.cutin_detection_t = -999.0
         self.cutin_output_hold_count = 0
@@ -2086,7 +2093,7 @@ class RouteLogParser:
             return
 
         points = tuple(safe_get(live_tracks, "points", ()) or ())
-        point_by_id = {int(safe_get(point, "trackId", -1)): point for point in points}
+        point_by_id = self._cutin_points_by_stable_id(points, event_t)
         previous_positions = {
             track_id: (track.d_rel, track.y_rel, track.v_rel)
             for track_id, track in self.cutin_tracks.items()
@@ -2374,6 +2381,50 @@ class RouteLogParser:
         track_id = safe_optional_int(point, "trackId")
         return str(source) == "frontRadar" and self.car_brand == "hyundai" and radar_track_id_is_corner_object(track_id)
 
+    def _cutin_points_by_stable_id(self, points: tuple[Any, ...], event_t: float) -> dict[int, Any]:
+        if self.cutin_radar_source != ROUTE_CUTIN_RADAR_SOURCE_CORNER:
+            return {int(safe_get(point, "trackId", -1)): point for point in points}
+
+        point_by_id: dict[int, Any] = {}
+        for point in points:
+            track_id = int(safe_get(point, "trackId", -1))
+            obj = self._raw_corner_object_for_live_track(point, event_t)
+            if obj is not None:
+                track_id = self._stable_cutin_corner_track_id(obj)
+            point_by_id[track_id] = point
+        return point_by_id
+
+    def _raw_corner_object_for_live_track(self, point: Any, event_t: float) -> RawCornerObject | None:
+        track_id = safe_optional_int(point, "trackId")
+        if track_id is None:
+            return None
+        if CORNER_OBJECT_180_TRACK_ID_OFFSET <= track_id < CORNER_OBJECT_180_TRACK_ID_OFFSET + CORNER_OBJECT_180_TRACK_COUNT:
+            raw_key = ("180", track_id - CORNER_OBJECT_180_TRACK_ID_OFFSET)
+        elif CORNER_OBJECT_TRACK_ID_OFFSET <= track_id < CORNER_OBJECT_TRACK_ID_OFFSET + CORNER_OBJECT_TRACK_COUNT:
+            raw_key = ("235", track_id - CORNER_OBJECT_TRACK_ID_OFFSET)
+        else:
+            return None
+
+        obj = self.raw_corner_objects.get(raw_key)
+        if obj is None or not 0.0 <= event_t - obj.t <= REPLAY_CUTIN_RAW_OBJECT_MAX_AGE_S:
+            return None
+        if (abs(safe_float(point, "dRel", 0.0) - obj.x) > REPLAY_CUTIN_RAW_OBJECT_MAX_DREL_M
+                or abs(safe_float(point, "yRel", 0.0) - obj.y) > REPLAY_CUTIN_RAW_OBJECT_MAX_YREL_M
+                or abs(safe_float(point, "vRel", 0.0) - obj.vx) > REPLAY_CUTIN_RAW_OBJECT_MAX_VREL_MPS):
+            return None
+        return obj
+
+    def _stable_cutin_corner_track_id(self, obj: RawCornerObject) -> int:
+        key = (obj.group, obj.object_id)
+        previous = self.cutin_corner_object_ids.get(key)
+        if previous is None or obj.age < previous[1]:
+            track_id = self.next_cutin_corner_track_id
+            self.next_cutin_corner_track_id += 1
+        else:
+            track_id = previous[0]
+        self.cutin_corner_object_ids[key] = (track_id, obj.age)
+        return track_id
+
     def _is_front_cutin_track(self, point: Any) -> bool:
         if self._is_corner_live_track(point):
             return False
@@ -2395,6 +2446,8 @@ class RouteLogParser:
 
     def _track_id_is_corner_live(self, points: dict[int, Any], track_id: int) -> bool:
         point = points.get(track_id)
+        if point is None:
+            point = next((candidate for candidate in points.values() if safe_optional_int(candidate, "trackId") == track_id), None)
         return point is not None and self._is_corner_live_track(point)
 
     def _cutin_lane_geometry_available(self) -> bool:
