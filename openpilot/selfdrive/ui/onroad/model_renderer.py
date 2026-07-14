@@ -932,73 +932,57 @@ class ModelRenderer(Widget):
     if n_edge < 2 or self._rect.width <= 0 or self._rect.height <= 0:
       return
 
-    transparent = rl.Color(color.r, color.g, color.b, 0)
-    for i in range(n_edge - 1):
-      lx0, ly0 = map(float, left_points[i])
-      rx0, ry0 = map(float, right_points[i])
-      lx1, ly1 = map(float, left_points[i + 1])
-      rx1, ry1 = map(float, right_points[i + 1])
-      outer_y0 = ly0 if is_left else ry0
-      outer_y1 = ly1 if is_left else ry1
-      subdivisions = max(1, int(abs(outer_y1 - outer_y0) / 5.0))
+    # Keep C3's 5 px subdivision and edge fade, but submit the whole side as
+    # one rlgl batch. The previous path allocated a Gradient and NumPy array
+    # and entered/exited the shader once for every tiny quad.
+    rl.rl_disable_texture()
+    rl.rl_begin(rl.RL_QUADS)
+    try:
+      for i in range(n_edge - 1):
+        lx0, ly0 = map(float, left_points[i])
+        rx0, ry0 = map(float, right_points[i])
+        lx1, ly1 = map(float, left_points[i + 1])
+        rx1, ry1 = map(float, right_points[i + 1])
+        outer_y0 = ly0 if is_left else ry0
+        outer_y1 = ly1 if is_left else ry1
+        subdivisions = max(1, int(abs(outer_y1 - outer_y0) / 5.0))
 
-      for subdivision in range(subdivisions):
-        t0 = subdivision / subdivisions
-        t1 = (subdivision + 1) / subdivisions
-        slx_b = lx0 + (lx1 - lx0) * t0
-        sly_b = ly0 + (ly1 - ly0) * t0
-        srx_b = rx0 + (rx1 - rx0) * t0
-        sry_b = ry0 + (ry1 - ry0) * t0
-        slx_t = lx0 + (lx1 - lx0) * t1
-        sly_t = ly0 + (ly1 - ly0) * t1
-        srx_t = rx0 + (rx1 - rx0) * t1
-        sry_t = ry0 + (ry1 - ry0) * t1
+        for subdivision in range(subdivisions):
+          t0 = subdivision / subdivisions
+          t1 = (subdivision + 1) / subdivisions
+          slx_b = lx0 + (lx1 - lx0) * t0
+          sly_b = ly0 + (ly1 - ly0) * t0
+          srx_b = rx0 + (rx1 - rx0) * t0
+          sry_b = ry0 + (ry1 - ry0) * t0
+          slx_t = lx0 + (lx1 - lx0) * t1
+          sly_t = ly0 + (ly1 - ly0) * t1
+          srx_t = rx0 + (rx1 - rx0) * t1
+          sry_t = ry0 + (ry1 - ry0) * t1
 
-        band_width_bottom = abs(slx_b - srx_b) / 6.0
-        band_width_top = abs(slx_t - srx_t) / 6.0
-        outer_x_bottom = slx_b if is_left else srx_b
-        outer_y_bottom = sly_b if is_left else sry_b
-        outer_x_top = slx_t if is_left else srx_t
-        outer_y_top = sly_t if is_left else sry_t
-        center_bottom = (slx_b + srx_b) * 0.5
-        direction = 1.0 if center_bottom > outer_x_bottom else -1.0
-        inner_x_bottom = outer_x_bottom + direction * band_width_bottom
-        inner_x_top = outer_x_top + direction * band_width_top
+          band_width_bottom = abs(slx_b - srx_b) / 6.0
+          band_width_top = abs(slx_t - srx_t) / 6.0
+          outer_x_bottom = slx_b if is_left else srx_b
+          outer_y_bottom = sly_b if is_left else sry_b
+          outer_x_top = slx_t if is_left else srx_t
+          outer_y_top = sly_t if is_left else sry_t
+          center_bottom = (slx_b + srx_b) * 0.5
+          direction = 1.0 if center_bottom > outer_x_bottom else -1.0
+          inner_x_bottom = outer_x_bottom + direction * band_width_bottom
+          inner_x_top = outer_x_top + direction * band_width_top
 
-        edge_dx = outer_x_top - outer_x_bottom
-        edge_dy = outer_y_top - outer_y_bottom
-        edge_length = math.hypot(edge_dx, edge_dy)
-        if edge_length < 0.5:
-          continue
-        edge_dx /= edge_length
-        edge_dy /= edge_length
-        perpendicular_x = edge_dy * (-direction)
-        perpendicular_y = -edge_dx * (-direction)
-        average_width = (band_width_bottom + band_width_top) * 0.5
-        outer_mid_x = (outer_x_bottom + outer_x_top) * 0.5
-        outer_mid_y = (outer_y_bottom + outer_y_top) * 0.5
+          if math.hypot(outer_x_top - outer_x_bottom, outer_y_top - outer_y_bottom) < 0.5:
+            continue
 
-        gradient_start = (
-          (outer_mid_x - self._rect.x) / self._rect.width,
-          (outer_mid_y - self._rect.y) / self._rect.height,
-        )
-        gradient_end = (
-          (outer_mid_x + perpendicular_x * average_width - self._rect.x) / self._rect.width,
-          (outer_mid_y + perpendicular_y * average_width - self._rect.y) / self._rect.height,
-        )
-        gradient = Gradient(
-          start=gradient_start,
-          end=gradient_end,
-          colors=[transparent, color],
-          stops=[0.0, 1.0],
-        )
-        quad = np.array([
-          [outer_x_bottom, outer_y_bottom],
-          [inner_x_bottom, outer_y_bottom],
-          [inner_x_top, outer_y_top],
-          [outer_x_top, outer_y_top],
-        ], dtype=np.float32)
-        draw_polygon(self._rect, quad, gradient=gradient)
+          rl.rl_color4ub(color.r, color.g, color.b, color.a)
+          rl.rl_vertex2f(outer_x_bottom, outer_y_bottom)
+          rl.rl_color4ub(color.r, color.g, color.b, 0)
+          rl.rl_vertex2f(inner_x_bottom, outer_y_bottom)
+          rl.rl_color4ub(color.r, color.g, color.b, 0)
+          rl.rl_vertex2f(inner_x_top, outer_y_top)
+          rl.rl_color4ub(color.r, color.g, color.b, color.a)
+          rl.rl_vertex2f(outer_x_top, outer_y_top)
+    finally:
+      rl.rl_end()
 
 
   def _draw_lane_center_indicator_carrot(self, sm) -> None:
@@ -1051,12 +1035,12 @@ class ModelRenderer(Widget):
         if left_points and left[1] > left_points[-1][1]:
           continue
         left_points.append(left)
-        right_points.insert(0, right)
+        right_points.append(right)
 
     if not left_points or not right_points:
       return
     left_array = np.asarray(left_points, dtype=np.float32)
-    right_array = np.asarray(right_points[::-1], dtype=np.float32)
+    right_array = np.asarray(right_points, dtype=np.float32)
 
     lane_warning = abs(offset_m) >= 0.5
     warning_pulse = lane_warning and int(time.monotonic() * 1000) % 800 < 400
