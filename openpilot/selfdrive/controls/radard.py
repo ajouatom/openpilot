@@ -304,6 +304,7 @@ class Track:
           self.lane_half_width,
           self.dPath_future,
           self.in_lane_prob_future,
+          max(0.0, -math.copysign(1.0, self.dPath) * yv_rel_future),
         )
         self.dPath_inward_speed = effective_cutin_inward_speed(
           self.dRel,

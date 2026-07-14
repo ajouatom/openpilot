@@ -25,8 +25,10 @@ CUTIN_ASSUMED_VEHICLE_HALF_WIDTH = 0.9
 CUTIN_FAST_MAX_LANE_BOUNDARY_TTC_S = 0.55
 CUTIN_FAST_NEAR_MAX_LANE_BOUNDARY_TTC_S = 0.7
 CUTIN_FAST_MIN_RADAR_INWARD_SPEED = 0.2
+CUTIN_FAST_RADAR_INWARD_SPEED_MARGIN = 0.2
 CUTIN_FAST_MAX_PULL_AWAY_VREL_MPS = 3.0
 CUTIN_PROJECTED_BOOST_MIN_TEMPORAL_INWARD_SPEED = 0.3
+CUTIN_OUTER_TRACK_MIN_ABS_DPATH = 3.5
 FRONT_CUTIN_MIN_DREL_M = 5.0
 FRONT_CUTIN_MAX_DREL_M = 50.0
 FRONT_CUTIN_MAX_ABS_YREL_M = 7.0
@@ -120,7 +122,8 @@ def is_fast_cutin_entry(
     if d_rel < CUTIN_FAST_CONFIRM_MAX_DREL
     else CUTIN_FAST_MAX_LANE_BOUNDARY_TTC_S
   )
-  return edge_distance / max(inward_speed, 0.1) < max_boundary_ttc
+  boundary_inward_speed = min(inward_speed, radar_inward_speed + CUTIN_FAST_RADAR_INWARD_SPEED_MARGIN)
+  return edge_distance / max(boundary_inward_speed, 0.1) < max_boundary_ttc
 
 
 def effective_cutin_inward_speed(
@@ -256,9 +259,20 @@ def combine_cutin_future_projection(
   lane_half_width: float,
   projected_d_path: float,
   projected_in_lane_prob: float,
+  radar_inward_speed: float | None = None,
 ) -> tuple[float, float]:
   motion_horizon = min(horizon_s, CUTIN_LANE_MOTION_HORIZON_S)
-  motion_d_path = d_path + d_path_rate * motion_horizon
+  motion_rate = d_path_rate
+  if radar_inward_speed is not None and abs(d_path) > CUTIN_OUTER_TRACK_MIN_ABS_DPATH:
+    side = math.copysign(1.0, d_path)
+    motion_inward_speed = max(0.0, -side * d_path_rate)
+    bounded_inward_speed = min(
+      motion_inward_speed,
+      max(0.0, radar_inward_speed) + CUTIN_FAST_RADAR_INWARD_SPEED_MARGIN,
+    )
+    if motion_inward_speed > 0.0:
+      motion_rate = -side * bounded_inward_speed
+  motion_d_path = d_path + motion_rate * motion_horizon
   motion_in_lane_prob = max(0.0, 1.0 - abs(motion_d_path) / max(lane_half_width, 0.1))
   moving_inward = abs(motion_d_path) < abs(d_path)
   if moving_inward and motion_in_lane_prob > projected_in_lane_prob:
