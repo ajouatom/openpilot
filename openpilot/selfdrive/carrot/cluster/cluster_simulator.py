@@ -21,7 +21,7 @@ from cluster_config import (
     SURROUND_VIEW_SMOOTH_SECONDS,
     TURN_SIGNAL_SECONDS,
 )
-from cluster_models import ClusterUiState, LaneMarking, SimulatorInput
+from cluster_models import ClusterUiState, LaneMarking, SimulatorInput, TpmsInfo
 from cluster_utils import clamp, smoothstep
 
 
@@ -100,6 +100,7 @@ class ClusterSimulator:
             surround_yaw_deg=self.surround_yaw_deg,
             surround_pitch_deg=self.surround_pitch_deg,
             surround_view_active=self.surround_view_active,
+            tpms=TpmsInfo(fl=35.0, fr=34.0, rl=33.0, rr=32.0),
             lanes=lanes,
             throttle=command.throttle,
             brake=command.brake,

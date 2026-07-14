@@ -418,6 +418,7 @@ class RouteReplayFrame:
     corner_radar_supported: bool = False
     tpms: TpmsInfo = TpmsInfo()
     display_speed_kph: float | None = None
+    traffic_state: int = 0
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None
     planned_curvature_m_inv: float | None = None
@@ -1335,6 +1336,7 @@ class RouteLogParser:
         self.longitudinal_plan_should_stop = False
         self.longitudinal_plan_allow_throttle: bool | None = None
         self.longitudinal_plan_allow_brake: bool | None = None
+        self.traffic_state = 0
         self.longitudinal_t_follow_s: float | None = None
         self.longitudinal_desired_distance_m: float | None = None
         self.longitudinal_v_target_kph: float | None = None
@@ -1559,6 +1561,7 @@ class RouteLogParser:
             corner_radar_supported=self.corner_radar_active_for_display(),
             tpms=tpms,
             display_speed_kph=display_speed_kph,
+            traffic_state=self.traffic_state,
             planned_speed_kph=self.planned_speed_kph,
             planned_accel_mps2=self.planned_accel_mps2,
             planned_curvature_m_inv=self.model_action_curvature_m_inv,
@@ -1781,6 +1784,9 @@ class RouteLogParser:
         self.longitudinal_plan_allow_brake = bool(
             safe_get(longitudinal_plan, "allowBrake", self.longitudinal_plan_allow_brake)
         )
+        traffic_state = safe_optional_int(longitudinal_plan, "trafficState")
+        if traffic_state in (0, 1, 2):
+            self.traffic_state = traffic_state
         t_follow = safe_optional_float(longitudinal_plan, "tFollow")
         if t_follow is not None and 0.0 <= t_follow <= 5.0:
             self.longitudinal_t_follow_s = t_follow
@@ -3215,6 +3221,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         lateral_plan_curvatures=frame.lateral_plan_curvatures,
         lateral_plan_curvature_rates=frame.lateral_plan_curvature_rates,
         display_speed_kph=frame.display_speed_kph,
+        traffic_state=frame.traffic_state,
     )
 
 
@@ -3316,6 +3323,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         cruise_display_state=discrete.cruise_display_state,
         gear_text=discrete.gear_text,
         cruise_gap=discrete.cruise_gap,
+        traffic_state=discrete.traffic_state,
         lfa_active=discrete.lfa_active,
         left_signal=discrete.left_signal,
         right_signal=discrete.right_signal,

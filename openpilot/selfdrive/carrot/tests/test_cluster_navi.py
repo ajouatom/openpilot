@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -10,7 +11,10 @@ CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_navi import fresh_carrot_navi, parse_carrot_navi
+from cluster_navi_overlay import merge_navi_overlay_state
 from cluster_navi_source import NaviSimulatorSource
+from cluster_models import NaviDashboardState, NaviMediaFrame, TpmsInfo
+from cluster_renderer import ClusterUiRenderer
 
 
 def _namespace(value):
@@ -102,6 +106,90 @@ def test_disconnected_snapshot_clears_live_navi():
   assert parse_carrot_navi(_namespace(payload), now=1.0) is None
 
 
+def test_disconnected_dashboard_does_not_reuse_stale_map_frame():
+  map_frame = NaviMediaFrame("render:map_main", 1, True)
+  connected = NaviDashboardState(True, "tcp://127.0.0.1:7714", media=(map_frame,))
+  disconnected = replace(connected, connected=False)
+
+  assert ClusterUiRenderer._navi_map_frame_present(connected) is True
+  assert ClusterUiRenderer._navi_map_frame_present(disconnected) is False
+
+
+def test_disconnected_dashboard_draws_system_panel(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  dashboard = NaviDashboardState(False, "tcp://127.0.0.1:7714")
+  state = SimpleNamespace(navi_live=None, navi_dashboard=dashboard)
+  drawn = {}
+
+  monkeypatch.setattr(ClusterUiRenderer, "_current_theme", lambda self: SimpleNamespace())
+
+  def capture_system_panel(self, panel_state, **kwargs):
+    drawn["state"] = panel_state
+    drawn.update(kwargs)
+
+  monkeypatch.setattr(ClusterUiRenderer, "_draw_system_stats_panel", capture_system_panel)
+
+  renderer._draw_navi_live_panel(state)
+
+  assert drawn == {
+    "state": state,
+    "panel_x": 1124,
+    "panel_y": 1,
+    "panel_w": 792,
+    "panel_h": 478,
+    "status_text": "NAVI DISCONNECTED",
+  }
+
+
+def test_navi_panel_shifts_3d_camera_modes_left():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1920
+  renderer.screen_mode = 0
+  dashboard = NaviDashboardState(False, "tcp://127.0.0.1:7714")
+
+  assert renderer._world_view_shift_x(SimpleNamespace(
+    camera_view_mode=0,
+    navi_live=None,
+    navi_dashboard=dashboard,
+  )) == 398
+  assert renderer._world_view_shift_x(SimpleNamespace(
+    camera_view_mode=1,
+    navi_live=None,
+    navi_dashboard=dashboard,
+  )) == 398
+  assert renderer._world_view_shift_x(SimpleNamespace(
+    camera_view_mode=2,
+    navi_live=None,
+    navi_dashboard=dashboard,
+  )) == 0
+  assert renderer._world_view_shift_x(SimpleNamespace(
+    camera_view_mode=0,
+    navi_live=None,
+    navi_dashboard=None,
+  )) == 0
+
+
+def test_road_camera_draws_compact_tpms_only(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  badges = []
+
+  monkeypatch.setattr(ClusterUiRenderer, "_rounded_rect", lambda *args, **kwargs: None)
+  monkeypatch.setattr(
+    ClusterUiRenderer,
+    "_draw_compact_tpms_value",
+    lambda self, pressure, center_x, center_y: badges.append((pressure, center_x, center_y)),
+  )
+  tpms = TpmsInfo(fl=35.0, fr=34.0, rl=33.0, rr=32.0)
+
+  renderer._draw_camera_tpms(SimpleNamespace(camera_view_mode=0, tpms=tpms))
+  assert badges == []
+
+  renderer._draw_camera_tpms(SimpleNamespace(camera_view_mode=2, tpms=tpms))
+  assert [badge[0] for badge in badges] == [35.0, 34.0, 33.0, 32.0]
+  assert badges[0][1] < badges[1][1]
+  assert badges[0][2] < badges[2][2]
+
+
 def test_parser_accepts_direct_projection_dict():
   payload = build_carrot_navi_payload({
     "generation": 3,
@@ -186,5 +274,17 @@ def test_embedded_navi_source_projects_json_and_png(unused_tcp_port):
     assert state.navi_dashboard.connected is True
     assert any(frame.key == "image:tbt_next" for frame in state.navi_dashboard.media)
     assert len(state.navi_dashboard.items) == 28
+
+    replay_state = replace(
+      state,
+      speed_kph=83,
+      navi_live=None,
+      navi_dashboard=None,
+    )
+    merged = merge_navi_overlay_state(replay_state, state)
+
+    assert merged.speed_kph == 83
+    assert merged.navi_live is state.navi_live
+    assert merged.navi_dashboard is state.navi_dashboard
   finally:
     source.close()

@@ -29,6 +29,7 @@ from cluster_config import (
     CLUSTER_RADAR_DISPLAY_PARAM,
     CLUSTER_RADAR_INFO_PARAM,
     CLUSTER_RADAR_SOURCE_COLOR_PARAM,
+    CLUSTER_SCREEN_MODE_DEFAULT,
     CLUSTER_SCREEN_MODE_DEBUG,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
@@ -65,7 +66,7 @@ from cluster_h264_pipeline import (
 )
 from cluster_live import OpenpilotLiveSource
 from cluster_models import RouteOverlay, SimulatorInput
-from cluster_navi_source import NaviSimulatorSource
+from cluster_navi_overlay import merge_navi_overlay_state
 from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
 from cluster_renderer import ClusterUiRenderer
 from cluster_route_replay import RouteReplaySource
@@ -573,6 +574,8 @@ def run_demo(
     navi_port: int,
     navi_advertise_ip: str | None,
     navi_beacon_enabled: bool,
+    navi_overlay_enabled: bool,
+    navi_publish_cereal: bool,
     output_mode: str,
     controller_index: int,
     width: int | None,
@@ -617,6 +620,7 @@ def run_demo(
     route_path: Path,
     route_log: str,
     route_overlay_mode: str,
+    route_tools_mode: str,
     camera_view_mode: int | None,
     route_loop: bool,
     route_replay_speed: float,
@@ -630,6 +634,7 @@ def run_demo(
     profile_interval_s: float,
     gc_freeze_init: bool,
     theme_mode: str | None,
+    screen_mode: str | None,
     hud_mode_watch: int | None,
     hud_encoder_watch: int | None,
     hud_core_mode_watch: int | None,
@@ -725,12 +730,20 @@ def run_demo(
     theme_override = normalize_cluster_theme_mode(theme_mode) if theme_mode is not None else None
     theme_param_reader = ClusterThemeParamReader() if theme_override is None else None
     active_theme_mode = theme_override or (theme_param_reader.read() if theme_param_reader is not None else "auto")
-    screen_mode_param_reader = None if input_mode == "navi" else ClusterScreenModeParamReader()
-    active_screen_mode = (
-        CLUSTER_SCREEN_MODE_NAVI
-        if input_mode == "navi"
-        else screen_mode_param_reader.read()
+    screen_mode_override = normalize_cluster_screen_mode(screen_mode) if screen_mode is not None else None
+    screen_mode_param_reader = (
+        ClusterScreenModeParamReader()
+        if input_mode != "navi" and screen_mode_override is None
+        else None
     )
+    if input_mode == "navi":
+        active_screen_mode = CLUSTER_SCREEN_MODE_NAVI
+    elif screen_mode_override is not None:
+        active_screen_mode = screen_mode_override
+    elif screen_mode_param_reader is not None:
+        active_screen_mode = screen_mode_param_reader.read()
+    else:
+        active_screen_mode = CLUSTER_SCREEN_MODE_DEFAULT
     camera_view_override = (
         normalize_cluster_camera_view_mode(camera_view_mode)
         if camera_view_mode is not None
@@ -782,15 +795,17 @@ def run_demo(
     controller = DualSenseSimulator(controller_index) if input_mode == "gamepad" else None
     random_input = RandomInputSource() if input_mode == "random" else None
     live_source = OpenpilotLiveSource(include_can=live_include_can, timeout_ms=live_timeout_ms) if input_mode == "live" else None
-    navi_source = (
-        NaviSimulatorSource(
+    navi_source = None
+    if input_mode == "navi" or navi_overlay_enabled:
+        from cluster_navi_source import NaviSimulatorSource
+
+        navi_source = NaviSimulatorSource(
             host=navi_host,
             port=navi_port,
             advertise_ip=navi_advertise_ip,
             beacon_enabled=navi_beacon_enabled,
+            publish_cereal=navi_publish_cereal,
         )
-        if input_mode == "navi" else None
-    )
     if live_source is not None:
         live_source.set_profile_enabled(profile_render)
         live_source.set_hud_debug_mode(active_hud_debug_mode)
@@ -802,15 +817,22 @@ def run_demo(
     route_source = None
     if input_mode == "route":
         profile_stage = time.perf_counter()
-        route_source = RouteReplaySource.load(
-            route_path,
-            route_log,
-            route_start_segment,
-            route_max_segments,
-            0.0,
-            "live",
-            0.0,
-        )
+        try:
+            route_source = RouteReplaySource.load(
+                route_path,
+                route_log,
+                route_start_segment,
+                route_max_segments,
+                0.0,
+                "live",
+                0.0,
+            )
+        except Exception:
+            if navi_source is not None:
+                navi_source.close()
+            if live_source is not None:
+                live_source.close()
+            raise
         profile.add_elapsed("source.route_load_initial", profile_stage)
     if route_source is not None:
         print(
@@ -818,6 +840,7 @@ def run_demo(
             f"{route_source.duration:.1f}s from "
             f"{route_source.loaded_file_count}/{len(route_source.source_files)} {route_log} files"
         )
+    route_tools_window = None
     start_time = time.perf_counter()
     route_wall_base_time = start_time
     route_playback_base_s = 0.0
@@ -850,6 +873,10 @@ def run_demo(
         return
 
     try:
+        if route_source is not None and route_tools_mode == "separate":
+            from cluster_replay_tools import RouteReplayToolsWindow
+
+            route_tools_window = RouteReplayToolsWindow()
         renderer.open(hidden=output_mode == "usb")
         profile.add_samples(renderer.profile_samples())
         renderer.clear_profile_samples()
@@ -1113,7 +1140,7 @@ def run_demo(
                 center_clock_text = time.strftime("%H:%M:%S")
                 profile.add_samples(live_source.profile_samples())
                 profile.add_elapsed("source.live_update", profile_stage)
-            elif navi_source is not None:
+            elif input_mode == "navi" and navi_source is not None:
                 profile_stage = time.perf_counter()
                 state = navi_source.update()
                 source_status = navi_source.status_text()
@@ -1125,7 +1152,25 @@ def run_demo(
                     if route_paused
                     else route_playback_base_s + (now - route_wall_base_time) * route_replay_speed
                 )
-                if output_mode in ("window", "both"):
+                if route_tools_window is not None:
+                    action = route_tools_window.poll()
+                    if action is not None:
+                        if action.toggle_pause:
+                            route_paused = not route_paused
+                            route_playback_base_s = playback_seconds
+                            route_wall_base_time = now
+                        if action.seek_s is not None:
+                            route_playback_base_s = action.seek_s
+                            route_wall_base_time = now
+                            playback_seconds = action.seek_s
+                            route_paused = True
+                        if action.closed:
+                            route_tools_window.close()
+                            route_tools_window = None
+                    elif not route_tools_window.is_alive:
+                        route_tools_window.close()
+                        route_tools_window = None
+                elif route_tools_mode == "overlay" and output_mode in ("window", "both"):
                     seek_s, next_corner_lateral_offset_m, _control_active = renderer.route_replay_control_input(
                         playback_seconds,
                         route_source.duration,
@@ -1166,6 +1211,20 @@ def run_demo(
                     ),
                 )
                 source_status = route_source.status_text(playback_seconds, route_loop)
+                route_debug_overlay = state.route_overlay
+                if route_tools_window is not None:
+                    route_tools_window.update(
+                        playback_seconds,
+                        route_source.duration,
+                        route_paused,
+                        source_status,
+                        route_debug_overlay,
+                    )
+                if route_tools_mode != "overlay" and route_debug_overlay is not None:
+                    state = replace(
+                        state,
+                        route_overlay=replace(route_debug_overlay, panel_visible=False),
+                    )
                 profile.add_elapsed("source.route_update", profile_stage)
             elif controller is None:
                 profile_stage = time.perf_counter()
@@ -1186,6 +1245,14 @@ def run_demo(
                     raise RuntimeError("simulator is not available for gamepad input")
                 state = simulator.update(command, dt)
                 profile.add_elapsed("source.gamepad_update", profile_stage)
+
+            if navi_overlay_enabled and navi_source is not None:
+                profile_stage = time.perf_counter()
+                navi_overlay_state = navi_source.update()
+                state = merge_navi_overlay_state(state, navi_overlay_state)
+                navi_status = navi_source.status_text()
+                source_status = f"{source_status} | {navi_status}" if source_status else navi_status
+                profile.add_elapsed("source.navi_overlay_update", profile_stage)
 
             if live_source is None:
                 center_clock_text = state.center_clock_text
@@ -1231,7 +1298,7 @@ def run_demo(
 
             if output_mode in ("window", "both"):
                 profile_stage = time.perf_counter()
-                if route_source is not None:
+                if route_source is not None and route_tools_mode == "overlay":
                     renderer.render_route_replay_frame(
                         state,
                         playback_seconds,
@@ -1411,6 +1478,8 @@ def run_demo(
             usb_pipeline.close()
         if controller is not None:
             controller.close()
+        if route_tools_window is not None:
+            route_tools_window.close()
         if route_source is not None:
             route_source.close()
         if live_source is not None:
@@ -1459,6 +1528,16 @@ def parse_args() -> argparse.Namespace:
         "--navi-no-beacon",
         action="store_true",
         help="Disable UDP 7705 discovery broadcast in --input navi mode.",
+    )
+    parser.add_argument(
+        "--navi-overlay",
+        action="store_true",
+        help="Receive live Carrot navigation while keeping the selected route/live vehicle input.",
+    )
+    parser.add_argument(
+        "--navi-publish-cereal",
+        action="store_true",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--output",
@@ -1726,6 +1805,12 @@ def parse_args() -> argparse.Namespace:
         help="Route replay debug overlay. Default compact shows the replay camera/data panel; use off for performance tests.",
     )
     parser.add_argument(
+        "--route-tools",
+        choices=("overlay", "separate", "off"),
+        default="overlay",
+        help="Replay seek/debug UI placement. separate keeps the cluster frame clean in a second PC window.",
+    )
+    parser.add_argument(
         "--camera-view-mode",
         type=int,
         choices=(0, 1, 2),
@@ -1737,6 +1822,11 @@ def parse_args() -> argparse.Namespace:
         choices=("auto", "dark", "light"),
         default=None,
         help=f"HUD theme override. Default reads {CLUSTER_THEME_PARAM}: 0 auto, 1 dark, 2 light.",
+    )
+    parser.add_argument(
+        "--screen-mode",
+        default=None,
+        help=f"HUD screen override such as default, navi, or navi-debug. Default reads {CLUSTER_SCREEN_MODE_PARAM}.",
     )
     parser.add_argument(
         "--cluster-hud-mode",
@@ -1843,6 +1933,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--fps must be 0 or greater")
     if not 1 <= args.navi_port <= 65535:
         parser.error("--navi-port must be between 1 and 65535")
+    if args.navi_publish_cereal and args.input != "navi" and not args.navi_overlay:
+        parser.error("--navi-publish-cereal requires --input navi or --navi-overlay")
     if (args.width is not None and args.width <= 0) or (args.height is not None and args.height <= 0):
         parser.error("--width and --height must be greater than 0")
     args.usb_brightness_from_cli = args.usb_brightness is not None
@@ -1979,6 +2071,7 @@ def main(*, exit_on_error: bool = True) -> None:
     print(
         f"Refreshing native raylib cluster UI at {fps_text} "
         f"input={args.input} output={args.output}: {size_text} "
+        f"navi_overlay={'on' if args.navi_overlay else 'off'} "
         f"usb_codec={args.usb_codec} encoder_source={encoder_source}{h264_bitrate_text} "
         f"fps_source={fps_source} display_fps={display_fps_text} "
         f"brightness={brightness_text} brightness_source={brightness_source}"
@@ -1993,6 +2086,8 @@ def main(*, exit_on_error: bool = True) -> None:
             args.navi_port,
             args.navi_advertise_ip,
             not args.navi_no_beacon,
+            args.navi_overlay,
+            args.navi_publish_cereal,
             args.output,
             args.controller_index,
             args.width,
@@ -2037,6 +2132,7 @@ def main(*, exit_on_error: bool = True) -> None:
             args.route,
             args.route_log,
             args.route_overlay,
+            args.route_tools,
             args.camera_view_mode,
             args.route_loop,
             args.route_replay_speed,
@@ -2050,6 +2146,7 @@ def main(*, exit_on_error: bool = True) -> None:
             args.profile_interval,
             not args.no_gc_freeze,
             args.theme,
+            args.screen_mode,
             args.cluster_hud_mode,
             args.cluster_hud_encoder,
             args.cluster_hud_core_mode,

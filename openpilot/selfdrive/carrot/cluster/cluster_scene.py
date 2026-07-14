@@ -165,12 +165,13 @@ PATH_BODY_LAYER_M = PATH_HEIGHT_M + 0.046
 PATH_METRIC_LAYER_M = PATH_HEIGHT_M + 0.066
 PATH_HIGHLIGHT_LAYER_M = PATH_HEIGHT_M + 0.088
 FOLLOW_DISTANCE_MARKER_BACKING_LAYER_M = PATH_HEIGHT_M + 0.116
-FOLLOW_DISTANCE_MARKER_BODY_LAYER_M = PATH_HEIGHT_M + 0.132
-FOLLOW_DISTANCE_MARKER_BACKING_FORWARD_M = 0.36
-FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M = 0.20
-FOLLOW_DISTANCE_MARKER_BACKING_EXTRA_WIDTH_M = 0.22
-FOLLOW_DISTANCE_MARKER_BACKING_COLOR: Color = (42, 0, 38, 230)
-FOLLOW_DISTANCE_MARKER_BODY_COLOR: Color = (255, 0, 220, 248)
+FOLLOW_DISTANCE_MARKER_BODY_LAYER_M = FOLLOW_DISTANCE_MARKER_BACKING_LAYER_M + 0.001
+FOLLOW_DISTANCE_MARKER_WIDTH_M = 1.8
+FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M = 0.26
+FOLLOW_DISTANCE_MARKER_OUTLINE_M = 0.07
+FOLLOW_DISTANCE_MARKER_CAP_STEPS = 10
+FOLLOW_DISTANCE_MARKER_BACKING_COLOR: Color = (5, 9, 12, 230)
+FOLLOW_DISTANCE_MARKER_BODY_COLOR: Color = (255, 255, 255, 242)
 FOLLOW_DISTANCE_STOP_DISTANCE_M = 6.0
 FOLLOW_DISTANCE_GAP_T_FOLLOW_S = {
     1: 1.25,
@@ -1574,35 +1575,33 @@ def follow_distance_marker_strips(
     center_x_m = centerline_x_at_forward(points, forward_m)
     if center_x_m is None:
         return ()
-    half_width_m = lane_width_m * 0.5
-
-    def marker_strip(half_forward_m: float, extra_width_m: float, height_m: float, color: Color) -> MeshStrip:
-        left_x_m = center_x_m - half_width_m - extra_width_m
-        right_x_m = center_x_m + half_width_m + extra_width_m
-        near_m = forward_m - half_forward_m
-        far_m = forward_m + half_forward_m
+    def marker_strip(width_m: float, half_forward_m: float, height_m: float, color: Color) -> MeshStrip:
+        radius_m = min(width_m * 0.5, half_forward_m)
+        straight_half_width_m = width_m * 0.5 - radius_m
+        left: list[Vec3] = []
+        right: list[Vec3] = []
+        for index in range(FOLLOW_DISTANCE_MARKER_CAP_STEPS + 1):
+            offset_m = -half_forward_m + 2.0 * half_forward_m * index / FOLLOW_DISTANCE_MARKER_CAP_STEPS
+            cap_x_m = math.sqrt(max(0.0, radius_m * radius_m - offset_m * offset_m))
+            half_width_m = straight_half_width_m + cap_x_m
+            left.append(Vec3(center_x_m - half_width_m, forward_m + offset_m, height_m))
+            right.append(Vec3(center_x_m + half_width_m, forward_m + offset_m, height_m))
         return MeshStrip(
-            left=(
-                Vec3(left_x_m, near_m, height_m),
-                Vec3(left_x_m, far_m, height_m),
-            ),
-            right=(
-                Vec3(right_x_m, near_m, height_m),
-                Vec3(right_x_m, far_m, height_m),
-            ),
+            left=tuple(left),
+            right=tuple(right),
             color=color,
         )
 
     return (
         marker_strip(
-            FOLLOW_DISTANCE_MARKER_BACKING_FORWARD_M,
-            FOLLOW_DISTANCE_MARKER_BACKING_EXTRA_WIDTH_M,
+            FOLLOW_DISTANCE_MARKER_WIDTH_M + FOLLOW_DISTANCE_MARKER_OUTLINE_M * 2.0,
+            FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M + FOLLOW_DISTANCE_MARKER_OUTLINE_M,
             FOLLOW_DISTANCE_MARKER_BACKING_LAYER_M,
             FOLLOW_DISTANCE_MARKER_BACKING_COLOR,
         ),
         marker_strip(
+            FOLLOW_DISTANCE_MARKER_WIDTH_M,
             FOLLOW_DISTANCE_MARKER_BODY_FORWARD_M,
-            0.0,
             FOLLOW_DISTANCE_MARKER_BODY_LAYER_M,
             FOLLOW_DISTANCE_MARKER_BODY_COLOR,
         ),

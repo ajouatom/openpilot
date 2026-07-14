@@ -233,6 +233,7 @@ class NaviSimulatorSource:
         port: int = DEFAULT_NAVI_PORT,
         advertise_ip: str | None = None,
         beacon_enabled: bool = True,
+        publish_cereal: bool = False,
     ) -> None:
         self.host = host
         self.port = int(port)
@@ -250,15 +251,28 @@ class NaviSimulatorSource:
         self._h264_decoders: dict[str, H264Decoder] = {}
         self._h264_config_sequences: dict[str, int] = {}
         self._last_snapshot: dict[str, Any] = {}
-        self.server.start()
-        if self.beacon is not None:
-            self.beacon.start()
+        self._publisher = None
+        try:
+            self.server.start()
+            if publish_cereal:
+                from openpilot.selfdrive.carrot.carrot_navi_cereal import CarrotNaviCerealPublisher
+
+                self._publisher = CarrotNaviCerealPublisher(self.receiver)
+                self._publisher.start()
+            if self.beacon is not None:
+                self.beacon.start()
+        except Exception:
+            self.close()
+            raise
         discovery = self.advertise_ip if self.beacon is not None else "off"
         print(f"Navi receiver listening on {self.host}:{self.port}; discovery={discovery}", flush=True)
 
     def close(self) -> None:
         if self.beacon is not None:
             self.beacon.close()
+        if self._publisher is not None:
+            self._publisher.stop()
+            self._publisher = None
         self.server.close()
 
     def update(self) -> ClusterUiState:
