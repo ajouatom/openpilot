@@ -2213,6 +2213,7 @@ class RouteLogParser:
                 lane_half_width,
                 track.d_path_future,
                 track.in_lane_prob_future,
+                max(0.0, -math.copysign(1.0, track.d_path) * (track.yv_rel + yv_corr)),
             )
             track.inward_speed = effective_cutin_inward_speed(
                 track.d_rel,
