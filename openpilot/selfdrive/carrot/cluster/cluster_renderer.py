@@ -5445,9 +5445,8 @@ class ClusterUiRenderer:
                 outline,
             )
 
-    @staticmethod
-    def _side_gauge_outline(state: ClusterUiState) -> tuple[int, int, int, int]:
-        if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+    def _side_gauge_outline(self, state: ClusterUiState) -> tuple[int, int, int, int]:
+        if self._current_theme().is_dark or state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
             return SIDE_GAUGE_OUTLINE
         return (5, 9, 12, 235)
 
