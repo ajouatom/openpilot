@@ -24,6 +24,20 @@ def live_track(track_id, d_rel, y_rel, v_rel):
   )
 
 
+def radar_lead(track_id, d_rel=25.0, y_rel=2.0):
+  return SimpleNamespace(
+    status=True,
+    radar=True,
+    radarTrackId=track_id,
+    dRel=d_rel,
+    yRel=y_rel,
+    vRel=-1.0,
+    vLead=15.0,
+    vLat=0.0,
+    aLeadK=0.0,
+  )
+
+
 def test_replay_uses_raw_object_identity_when_corner_slot_is_reused():
   parser = RouteLogParser()
   old_object = corner_object(13.969, 2, 108, 255, 3.6, -4.65, -4.10, -0.20)
@@ -47,6 +61,32 @@ def test_replay_uses_raw_object_identity_when_corner_slot_is_reused():
   )))
 
   assert moved_track_id == new_track_id
+
+
+def test_recorded_cutin_display_requires_current_leads_cutin_membership():
+  parser = RouteLogParser()
+  parser.show_recorded_cutins = True
+  corner_lead = radar_lead(2540)
+
+  parser._update_radar_state(SimpleNamespace(
+    leadOne=radar_lead(62, d_rel=60.0, y_rel=0.0),
+    leadTwo=corner_lead,
+    leadsCutIn=[],
+  ), 1.0)
+
+  lead_two = next(d for d in parser.radar_detections if d.radar_track_id == 2540)
+  assert lead_two.label == "L2"
+  assert not lead_two.cut_in
+
+  parser._update_radar_state(SimpleNamespace(
+    leadOne=radar_lead(62, d_rel=60.0, y_rel=0.0),
+    leadTwo=corner_lead,
+    leadsCutIn=[corner_lead],
+  ), 1.05)
+
+  lead_two = next(d for d in parser.radar_detections if d.radar_track_id == 2540)
+  assert lead_two.label == "L2 CUT-IN"
+  assert lead_two.cut_in
 
 
 def test_adjacent_route_log_path_preserves_number_padding(tmp_path):

@@ -33,6 +33,26 @@ class TestFrontRadarCutin:
       v_lead=5.0,
     )
 
+  def test_corner_track_longitudinal_jump_resets_cutin_history(self):
+    assert is_cutin_track_discontinuous(
+      True,
+      prev_d_rel=32.3,
+      prev_y_rel=3.45,
+      prev_v_lead=12.0,
+      d_rel=28.2,
+      y_rel=3.15,
+      v_lead=12.0,
+    )
+    assert not is_cutin_track_discontinuous(
+      True,
+      prev_d_rel=32.3,
+      prev_y_rel=3.45,
+      prev_v_lead=12.0,
+      d_rel=31.0,
+      y_rel=3.15,
+      v_lead=12.0,
+    )
+
   def test_enable_condition(self):
     assert is_front_radar_cutin_enabled(3, 0, "hyundai")
     assert is_front_radar_cutin_enabled(3, 1, "hyundai")

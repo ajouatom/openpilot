@@ -32,6 +32,7 @@ CUTIN_OUTER_TRACK_MIN_ABS_DPATH = 3.5
 FRONT_CUTIN_MIN_DREL_M = 5.0
 FRONT_CUTIN_MAX_DREL_M = 50.0
 FRONT_CUTIN_MAX_ABS_YREL_M = 7.0
+CUTIN_MAX_FRAME_DREL_JUMP_M = 3.0
 CUTIN_MAX_FRAME_Y_JUMP_M = 0.60
 FRONT_CUTIN_MIN_CONFIRM_S = 0.30
 SIDE_CORNER_MAX_DREL_M = 0.20
@@ -82,7 +83,7 @@ def is_front_radar_cutin_candidate(track_id: int, radar_source: str, d_rel: floa
 def is_cutin_track_discontinuous(prev_measured: bool, prev_d_rel: float, prev_y_rel: float, prev_v_lead: float,
                                  d_rel: float, y_rel: float, v_lead: float) -> bool:
   return prev_measured and (
-    abs(d_rel - prev_d_rel) > 5.0 or
+    abs(d_rel - prev_d_rel) > CUTIN_MAX_FRAME_DREL_JUMP_M or
     abs(y_rel - prev_y_rel) > CUTIN_MAX_FRAME_Y_JUMP_M or
     abs(v_lead - prev_v_lead) > 7.0
   )
