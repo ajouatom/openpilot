@@ -279,7 +279,11 @@ class CarrotMan:
     self.params = Params()
     self.params_memory = Params("/dev/shm/params")
     self.gps_location_service = get_gps_location_service(self.params)
-    self.sm = messaging.SubMaster(['deviceState', 'carState', 'controlsState', 'radarState', 'longitudinalPlan', 'modelV2', 'selfdriveState', 'carControl', 'navRouteNavd', self.gps_location_service, 'navInstruction'])
+    self.sm = messaging.SubMaster([
+      'deviceState', 'carState', 'controlsState', 'radarState', 'longitudinalPlan', 'modelV2',
+      'selfdriveState', 'carControl', 'navRouteNavd', self.gps_location_service,
+      'navInstruction', 'carrotNavi',
+    ])
     self.pm = messaging.PubMaster(['carrotMan', "navRoute", "navInstructionCarrot"])
 
     self.carrot_serv = CarrotServ()
