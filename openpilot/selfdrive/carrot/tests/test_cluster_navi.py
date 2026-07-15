@@ -451,6 +451,7 @@ def test_embedded_navi_source_projects_json_and_png(unused_tcp_port):
     manifest = source.receiver.negotiate({
       "type": "requirements_query",
       "protocol_version": 2,
+      "catalog_revision": 1,
       "streams": [
         {"kind": kind, "name": name, "schema_version": 1}
         for kind, name in CATALOG
@@ -477,6 +478,7 @@ def test_embedded_navi_source_projects_json_and_png(unused_tcp_port):
       "stream_handle": vehicle["stream_handle"],
       "sequence": 1,
       "source_timestamp_ms": 1000,
+      "sent_at_ms": 1001,
       "present": True,
       "value": {"lat": 37.5, "lon": 127.0, "speed_kph": 36, "road_name": "Navi road"},
     }, "127.0.0.1")

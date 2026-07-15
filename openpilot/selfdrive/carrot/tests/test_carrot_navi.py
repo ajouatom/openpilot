@@ -128,13 +128,24 @@ def test_manifest_enables_complete_catalog():
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
   assert map_stream["params"]["map_theme"] == "auto"
 
+  invalid_requirements = requirements_query()
+  invalid_requirements["catalog_revision"] = 2
+  with pytest.raises(ValueError, match="catalog revision"):
+    CarrotNaviReceiver().negotiate(invalid_requirements, "test-app")
+
 
 def test_manifest_requests_configured_map_appearance():
   manifest = build_manifest("12345678", map_theme="dark", map_type="satellite")
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
+  crossroad_streams = [
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "image" and stream["name"].startswith("crossroad_")
+  ]
 
   assert map_stream["params"]["map_theme"] == "dark"
   assert map_stream["params"]["map_type"] == "satellite"
+  assert len(crossroad_streams) == 2
+  assert all(stream["params"]["theme"] == "dark" for stream in crossroad_streams)
 
   with pytest.raises(ValueError, match="map theme"):
     build_manifest("12345678", map_theme="neon")
@@ -182,6 +193,7 @@ def test_receiver_logs_changed_tbt_and_sdi_values(capsys):
       "stream_handle": stream["stream_handle"],
       "sequence": sequence,
       "source_timestamp_ms": 1000 + sequence,
+      "sent_at_ms": 2000 + sequence,
       "present": True,
       "value": value,
     }, "192.168.0.171")
@@ -202,6 +214,115 @@ def test_receiver_logs_changed_tbt_and_sdi_values(capsys):
   assert '"main_text":"Turn left"' in output
   assert "[carrot_navi][SDI]" in output
   assert '"distance_m":420' in output
+
+
+def test_receiver_preserves_latest_speed_bump_and_secondary_sdi_fields():
+  receiver = CarrotNaviReceiver()
+  manifest = receiver.negotiate(requirements_query(), "test-app")
+  speed_stream = next(
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "json" and stream["name"] == "speed"
+  )
+  app_status_stream = next(
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "json" and stream["name"] == "app_status"
+  )
+  value = {
+    "current_kph": 0,
+    "road_limit_kph": 30,
+    "sdi": {"type": 22, "distance_m": 93},
+    "sdi_secondary": {"type": 1, "distance_m": 420, "future_field": "kept"},
+    "future_group_field": {"enabled": True},
+  }
+  receiver.record_json(manifest["session_id"], "speed", {
+    "type": "item_update",
+    "protocol_version": 2,
+    "session_id": manifest["session_id"],
+    "manifest_revision": manifest["revision"],
+    "schema_version": 1,
+    "kind": "json",
+    "name": "speed",
+    "stream_handle": speed_stream["stream_handle"],
+    "sequence": 1,
+    "source_timestamp_ms": 1234,
+    "sent_at_ms": 1235,
+    "present": True,
+    "value": value,
+  }, "127.0.0.1")
+  receiver.record_json(manifest["session_id"], "app_status", {
+    "type": "item_update",
+    "protocol_version": 2,
+    "session_id": manifest["session_id"],
+    "manifest_revision": manifest["revision"],
+    "schema_version": 1,
+    "kind": "json",
+    "name": "app_status",
+    "stream_handle": app_status_stream["stream_handle"],
+    "sequence": 1,
+    "source_timestamp_ms": 1236,
+    "sent_at_ms": 1237,
+    "present": True,
+    "value": {"foreground": False, "window_focused": False},
+  }, "127.0.0.1")
+  value["sdi_secondary"]["future_field"] = "changed-after-receive"
+
+  received = receiver.latest()["items"]["json:speed"]
+
+  assert received["sent_at_ms"] == 1235
+  assert received["value"]["sdi"]["type"] == 22
+  assert received["value"]["sdi_secondary"] == {
+    "type": 1, "distance_m": 420, "future_field": "kept",
+  }
+  assert received["value"]["future_group_field"] == {"enabled": True}
+  assert receiver.health()["app_foreground"] is False
+  assert receiver.latest()["app_foreground"] is False
+
+
+def test_receiver_validates_json_envelope_and_value_shapes():
+  receiver = CarrotNaviReceiver()
+  manifest = receiver.negotiate(requirements_query(), "test-app")
+  streams = {
+    stream["name"]: stream for stream in manifest["streams"]
+    if stream["kind"] == "json"
+  }
+
+  def envelope(name, value, **changes):
+    stream = streams[name]
+    result = {
+      "type": "item_update",
+      "protocol_version": 2,
+      "session_id": manifest["session_id"],
+      "manifest_revision": manifest["revision"],
+      "schema_version": 1,
+      "kind": "json",
+      "name": name,
+      "stream_handle": stream["stream_handle"],
+      "sequence": 1,
+      "source_timestamp_ms": 1000,
+      "sent_at_ms": 1001,
+      "present": True,
+      "value": value,
+    }
+    result.update(changes)
+    return result
+
+  with pytest.raises(ValueError, match="sent_at_ms"):
+    invalid = envelope("speed", {})
+    del invalid["sent_at_ms"]
+    receiver.record_json(manifest["session_id"], "speed", invalid, "127.0.0.1")
+  with pytest.raises(ValueError, match="must be an object"):
+    receiver.record_json(
+      manifest["session_id"], "speed", envelope("speed", []), "127.0.0.1",
+    )
+  with pytest.raises(ValueError, match="array of objects"):
+    receiver.record_json(
+      manifest["session_id"], "lane_ahead", envelope("lane_ahead", {}), "127.0.0.1",
+    )
+  with pytest.raises(ValueError, match="valid reason"):
+    receiver.record_json(
+      manifest["session_id"], "speed",
+      envelope("speed", None, present=False, reason=""), "127.0.0.1",
+    )
 
 
 def test_safe_websocket_error_send_ignores_closing_transport():
@@ -267,6 +388,43 @@ def test_parse_binary_packet_validates_cn_v2_payload():
   struct.pack_into(">I", invalid, 32, len(png) + 1)
   with pytest.raises(ValueError, match="payload length"):
     parse_binary_packet(bytes(invalid))
+
+
+def test_receiver_rejects_binary_formats_that_do_not_match_stream_kind():
+  receiver = CarrotNaviReceiver()
+  manifest = receiver.negotiate(requirements_query(), "test-app")
+  image_stream = next(
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "image" and stream["name"] == "tbt_next"
+  )
+  render_stream = next(
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "render" and stream["name"] == "map_main"
+  )
+
+  def metadata(stream, format_code):
+    return {
+      "stream_handle": stream["stream_handle"],
+      "manifest_revision": manifest["revision"],
+      "sequence": 1,
+      "source_timestamp_ms": 1000,
+      "message_type": 1,
+      "format_or_reason": format_code,
+      "flags": 1,
+      "width": 32,
+      "height": 24,
+    }
+
+  with pytest.raises(ValueError, match="requires PNG"):
+    receiver.record_binary(
+      manifest["session_id"], "image", "tbt_next",
+      metadata(image_stream, 2), b"jpeg", "127.0.0.1",
+    )
+  with pytest.raises(ValueError, match="requires JPEG"):
+    receiver.record_binary(
+      manifest["session_id"], "render", "map_main",
+      metadata(render_stream, 1), b"png", "127.0.0.1",
+    )
 
 
 def test_dashboard_snapshot_retains_render_codec_config():
@@ -399,7 +557,7 @@ async def test_all_catalog_item_routes_receive_value_and_clear():
             "source_timestamp_ms": 1000,
             "sent_at_ms": 1001,
             "present": True,
-            "value": {"smoke": name},
+            "value": [] if name == "lane_ahead" else {"smoke": name},
           })
           await item.send_json({
             "type": "item_update",
@@ -465,6 +623,7 @@ def test_receiver_snapshot_builds_bounded_typed_payload():
     "stream_handle": guidance["stream_handle"],
     "sequence": 7,
     "source_timestamp_ms": 1234,
+    "sent_at_ms": 1235,
     "present": True,
     "value": {
       "distance_m": 320,

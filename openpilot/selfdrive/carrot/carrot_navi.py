@@ -26,6 +26,7 @@ DEFAULT_PORT = 7714
 DISCOVERY_PORT = 7705
 DISCOVERY_INTERVAL_S = 1.0
 PROTOCOL_VERSION = 2
+CATALOG_REVISION = 1
 MAX_MESSAGE_BYTES = 8 * 1024 * 1024
 CONTROL_WEBSOCKET_HEARTBEAT_S = 5.0
 STREAM_WEBSOCKET_HEARTBEAT_S = 10.0
@@ -59,6 +60,7 @@ CATALOG = tuple(
   + [("render", name) for name in RENDER_NAMES]
 )
 CATALOG_SET = frozenset(CATALOG)
+JSON_ARRAY_NAMES = frozenset(("lane_ahead",))
 CLEAR_REASONS = {
   1: "source_absent",
   2: "cleared",
@@ -248,7 +250,7 @@ def _stream_params(
       "stale_timeout_ms": 15000,
     }
     if name.startswith("crossroad_"):
-      params["theme"] = "auto"
+      params["theme"] = map_theme
     return params
   return {
     "composition": "map_route_vehicle",
@@ -318,6 +320,7 @@ class ItemRecord:
   manifest_revision: int
   sequence: int
   source_timestamp_ms: int
+  sent_at_ms: int | None
   present: bool
   value: Any
   payload: bytes | None
@@ -347,6 +350,7 @@ class ItemRecord:
       "bytes": len(self.payload) if self.payload is not None else 0,
     }
     if self.kind == "json":
+      result["sent_at_ms"] = self.sent_at_ms
       result["value"] = copy.deepcopy(self.value)
     else:
       result.update({
@@ -400,6 +404,9 @@ class CarrotNaviReceiver:
     if requirements.get("type") != "requirements_query" \
         or requirements.get("protocol_version") != PROTOCOL_VERSION:
       raise ValueError("invalid v2 requirements query")
+    catalog_revision = requirements.get("catalog_revision")
+    if isinstance(catalog_revision, bool) or catalog_revision != CATALOG_REVISION:
+      raise ValueError("unsupported v2 catalog revision")
 
     offered_streams = requirements.get("streams")
     if not isinstance(offered_streams, list) or len(offered_streams) != len(CATALOG):
@@ -486,15 +493,25 @@ class CarrotNaviReceiver:
       stream = self._validate_stream_locked(session_id, "json", name, envelope)
       sequence = self._nonnegative_int(envelope, "sequence")
       source_timestamp_ms = self._nonnegative_int(envelope, "source_timestamp_ms")
+      sent_at_ms = self._nonnegative_int(envelope, "sent_at_ms")
       present = envelope.get("present")
       if not isinstance(present, bool):
         raise ValueError("v2 JSON present must be boolean")
-      if not present and envelope.get("value") is not None:
-        raise ValueError("absent JSON item must contain value=null")
+      if "value" not in envelope:
+        raise ValueError("v2 JSON item must contain value")
+      value = envelope.get("value")
+      if present:
+        self._validate_json_value(name, value)
+      else:
+        if value is not None:
+          raise ValueError("absent JSON item must contain value=null")
+        reason = envelope.get("reason")
+        if not isinstance(reason, str) or not reason or len(reason) > 64:
+          raise ValueError("absent JSON item must contain a valid reason")
 
       key = f"json:{name}"
       self._validate_sequence_locked(key, sequence)
-      value = copy.deepcopy(envelope.get("value")) if present else None
+      value = copy.deepcopy(value) if present else None
       self._records[key] = ItemRecord(
         kind="json",
         name=name,
@@ -503,6 +520,7 @@ class CarrotNaviReceiver:
         manifest_revision=int(self._manifest["revision"]),
         sequence=sequence,
         source_timestamp_ms=source_timestamp_ms,
+        sent_at_ms=sent_at_ms,
         present=present,
         value=value,
         payload=None,
@@ -557,6 +575,10 @@ class CarrotNaviReceiver:
       raise ValueError("v2 image stream received non-image message")
     if kind == "render" and message_type not in (1, 2, 3, 4):
       raise ValueError("v2 render stream received invalid message")
+    if kind == "image" and message_type == 1 and int(metadata["format_or_reason"]) != 1:
+      raise ValueError("v2 image stream requires PNG frames")
+    if kind == "render" and message_type == 1 and int(metadata["format_or_reason"]) != 2:
+      raise ValueError("v2 render image frame requires JPEG")
 
     with self._lock:
       stream = self._validate_stream_locked(session_id, kind, name, metadata)
@@ -573,6 +595,7 @@ class CarrotNaviReceiver:
         manifest_revision=int(self._manifest["revision"]),
         sequence=sequence,
         source_timestamp_ms=int(metadata["source_timestamp_ms"]),
+        sent_at_ms=None,
         present=not clear,
         value=None,
         payload=None if clear else bytes(payload),
@@ -613,6 +636,7 @@ class CarrotNaviReceiver:
         "protocol_version": PROTOCOL_VERSION,
         "map_theme": self._map_theme,
         "map_type": self._map_type,
+        "app_foreground": self._app_foreground_locked(),
         "control_connected": self._control_connections > 0,
         "control_connections": self._control_connections,
         "session_id": self._session_id,
@@ -684,6 +708,7 @@ class CarrotNaviReceiver:
         "session_received_count": self._session_received_count,
         "last_received_at_ms": self._last_received_at_ms,
         "peer": self._last_peer,
+        "app_foreground": self._app_foreground_locked(),
         "error": self._last_error,
         "items": {
           key: record.summary()
@@ -737,6 +762,22 @@ class CarrotNaviReceiver:
     previous = self._records.get(key)
     if previous is not None and sequence <= previous.sequence:
       raise ValueError("stale v2 sequence")
+
+  @staticmethod
+  def _validate_json_value(name: str, value: Any) -> None:
+    if name in JSON_ARRAY_NAMES:
+      if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise ValueError(f"v2 JSON {name} value must be an array of objects")
+      return
+    if not isinstance(value, dict):
+      raise ValueError(f"v2 JSON {name} value must be an object")
+
+  def _app_foreground_locked(self) -> bool | None:
+    record = self._records.get("json:app_status")
+    if record is None or not record.present or not isinstance(record.value, dict):
+      return None
+    foreground = record.value.get("foreground")
+    return foreground if isinstance(foreground, bool) else None
 
   @staticmethod
   def _nonnegative_int(value: dict[str, Any], key: str) -> int:
