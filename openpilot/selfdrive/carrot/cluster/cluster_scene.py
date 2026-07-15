@@ -3644,7 +3644,15 @@ def build_cluster_scene(
 
     profile_stage = profile_scene_start(profile_add)
     if raw_corner_active:
-        radar_points = ()
+        radar_points = radar_point_markers(
+            state,
+            lane_width_m,
+            (),
+            min_forward_m=road_start_m,
+            max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
+            x_offset_m=relative_scene_x_offset_m,
+            lateral_speed_offset_mps=corner_lateral_speed_offset_mps,
+        )
     else:
         hidden_merged_radar_points = tuple(point for point in state.radar_points if point.label in merged_radar_labels)
         radar_points = radar_point_markers(
