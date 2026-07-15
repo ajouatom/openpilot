@@ -29,6 +29,9 @@ CORNER_OBJECT_180_SLOTS_PER_MSG = 2
 CORNER_OBJECT_180_TRACK_ID_OFFSET = 240
 CORNER_OBJECT_180_DBC = 'hyundai_canfd_corner_radar_180_generated'
 CORNER_OBJECT_STABLE_TRACK_ID_START = 1000
+CORNER_SIDE_OBJECT_MAX_DREL = 0.2
+CORNER_SIDE_OBJECT_MIN_ABS_YREL = 1.4
+CORNER_SIDE_OBJECT_MAX_ABS_YREL = 4.5
 
 # POC for parsing corner radars: https://github.com/commaai/openpilot/pull/24221/
 
@@ -51,6 +54,16 @@ class CornerObjectTrackIdManager:
 
   def clear_source(self, source: str):
     self.objects = {key: value for key, value in self.objects.items() if key[0] != source}
+
+
+def corner_object_position_valid(d_rel: float, y_rel: float) -> bool:
+  normal_object = 0.2 < d_rel < 180.0
+  clipped_side_object = (
+    0.0 <= d_rel <= CORNER_SIDE_OBJECT_MAX_DREL and
+    CORNER_SIDE_OBJECT_MIN_ABS_YREL <= abs(y_rel) <= CORNER_SIDE_OBJECT_MAX_ABS_YREL
+  )
+  return (normal_object or clipped_side_object) and abs(y_rel) < 40.0
+
 
 def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count):
   if not radar_tracks:
@@ -373,7 +386,10 @@ class RadarInterface(RadarInterfaceBase):
       v_rel = msg["OBJ_REL_VEL_X"]
       yv_rel = msg["OBJ_REL_VEL_Y"]
       a_rel = msg["OBJ_REL_ACCEL_X"]
-      valid = msg["OBJ_QUAL_LEVEL"] > 0 and 0.2 < d_rel < 180.0 and abs(y_rel) < 40.0 and v_rel > -99.0
+      # Side objects are clipped to x=0 by the corner radar. Quality, identity,
+      # and lateral motion still describe a real object, so keep them for
+      # corner-confirmed front-radar association in radard.
+      valid = msg["OBJ_QUAL_LEVEL"] > 0 and corner_object_position_valid(d_rel, y_rel) and v_rel > -99.0
 
       if not valid:
         continue
@@ -403,7 +419,7 @@ class RadarInterface(RadarInterfaceBase):
         v_rel = msg[f"{prefix}REL_VEL_X"]
         yv_rel = msg[f"{prefix}REL_VEL_Y"]
         a_rel = msg[f"{prefix}REL_ACCEL_X"]
-        valid = msg[f"{prefix}QUAL_LEVEL"] > 0 and 0.2 < d_rel < 180.0 and abs(y_rel) < 40.0 and v_rel > -99.0
+        valid = msg[f"{prefix}QUAL_LEVEL"] > 0 and corner_object_position_valid(d_rel, y_rel) and v_rel > -99.0
 
         if not valid:
           continue

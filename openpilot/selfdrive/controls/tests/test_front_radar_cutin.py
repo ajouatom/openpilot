@@ -1,10 +1,14 @@
 from openpilot.selfdrive.controls.lib.cutin_helpers import (
   associate_cutin_tracks,
   combine_cutin_future_projection,
+  hold_side_corner_front_matches,
   is_cutin_track_discontinuous,
   is_fast_cutin_entry,
+  is_corner_confirmed_near_cutin,
   is_front_radar_cutin_candidate,
   is_front_radar_cutin_enabled,
+  is_side_corner_object,
+  match_side_corner_to_front_tracks,
 )
 
 
@@ -44,6 +48,39 @@ class TestFrontRadarCutin:
     assert is_front_radar_cutin_candidate(32, "frontRadar", 40.0, 3.0, False)
     assert not is_front_radar_cutin_candidate(32, "frontRadar", 50.1, 3.0, False)
     assert not is_front_radar_cutin_candidate(32, "frontRadar", 8.0, 7.1, False)
+
+  def test_zero_distance_side_corner_matches_near_front_track(self):
+    corners = {1000: (0.0, 2.65, 0.25)}
+    fronts = {
+      32: (3.4, 1.4, 0.04),
+      39: (5.1, 0.2, 0.10),
+    }
+
+    assert is_side_corner_object(0.0, 2.65)
+    assert not is_side_corner_object(0.0, 0.0)
+    assert match_side_corner_to_front_tracks(corners, fronts) == {32: 1000}
+
+  def test_corner_confirmed_near_cutin_requires_motion_and_path_confidence(self):
+    args = {
+      "confirmed_frames": 8,
+      "d_rel": 3.2,
+      "v_lead": 0.6,
+      "d_path": 0.95,
+      "d_path_future": 0.55,
+      "inward_speed": 0.32,
+      "radar_inward_speed": 0.12,
+      "path_y_std": 0.15,
+    }
+    assert is_corner_confirmed_near_cutin(**args)
+    assert not is_corner_confirmed_near_cutin(**(args | {"radar_inward_speed": 0.0}))
+    assert not is_corner_confirmed_near_cutin(**(args | {"path_y_std": 1.2}))
+    assert not is_corner_confirmed_near_cutin(**(args | {"d_path": 2.1, "d_path_future": 1.6}))
+
+  def test_side_corner_match_holds_for_one_missing_frame(self):
+    matches, misses = hold_side_corner_front_matches({}, {32: 1000}, {}, {32})
+    assert matches == {32: 1000}
+    assert misses == {32: 1}
+    assert hold_side_corner_front_matches({}, matches, misses, {32}) == ({}, {})
 
   def test_fast_entry_rejects_rapidly_pulling_away_track(self):
     args = (6.2, 20.0, 2.84, 1.59, 0.72, 0.45)

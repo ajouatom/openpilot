@@ -34,6 +34,22 @@ FRONT_CUTIN_MAX_DREL_M = 50.0
 FRONT_CUTIN_MAX_ABS_YREL_M = 7.0
 CUTIN_MAX_FRAME_Y_JUMP_M = 0.60
 FRONT_CUTIN_MIN_CONFIRM_S = 0.30
+SIDE_CORNER_MAX_DREL_M = 0.20
+SIDE_CORNER_MIN_ABS_YREL_M = 1.40
+SIDE_CORNER_MAX_ABS_YREL_M = 4.50
+SIDE_CORNER_FRONT_MIN_DREL_M = 0.80
+SIDE_CORNER_FRONT_MAX_DREL_M = 6.00
+SIDE_CORNER_FRONT_MAX_ABS_YREL_M = 3.50
+SIDE_CORNER_FRONT_MAX_YREL_GAP_M = 2.00
+SIDE_CORNER_FRONT_MAX_VREL_GAP_MPS = 2.50
+SIDE_CORNER_MIN_CONFIRM_FRAMES = 5
+SIDE_CORNER_CUTIN_MIN_VLEAD_MPS = 0.30
+SIDE_CORNER_CUTIN_MIN_ABS_DPATH_M = 0.55
+SIDE_CORNER_CUTIN_MAX_ABS_DPATH_M = 1.80
+SIDE_CORNER_CUTIN_MIN_CENTERING_GAIN_M = 0.20
+SIDE_CORNER_CUTIN_MIN_INWARD_SPEED_MPS = 0.25
+SIDE_CORNER_CUTIN_MIN_RADAR_INWARD_SPEED_MPS = 0.05
+SIDE_CORNER_CUTIN_MAX_PATH_Y_STD_M = 0.80
 
 
 def is_corner_track_id(track_id: int) -> bool:
@@ -124,6 +140,92 @@ def is_fast_cutin_entry(
   )
   boundary_inward_speed = min(inward_speed, radar_inward_speed + CUTIN_FAST_RADAR_INWARD_SPEED_MARGIN)
   return edge_distance / max(boundary_inward_speed, 0.1) < max_boundary_ttc
+
+
+def is_side_corner_object(d_rel: float, y_rel: float) -> bool:
+  return (
+    0.0 <= d_rel <= SIDE_CORNER_MAX_DREL_M and
+    SIDE_CORNER_MIN_ABS_YREL_M <= abs(y_rel) <= SIDE_CORNER_MAX_ABS_YREL_M
+  )
+
+
+def match_side_corner_to_front_tracks(
+  corner_tracks: dict[int, tuple[float, float, float]],
+  front_tracks: dict[int, tuple[float, float, float]],
+) -> dict[int, int]:
+  candidates: list[tuple[float, int, int]] = []
+  for corner_id, (corner_d_rel, corner_y_rel, corner_v_rel) in corner_tracks.items():
+    if not is_side_corner_object(corner_d_rel, corner_y_rel):
+      continue
+    for front_id, (front_d_rel, front_y_rel, front_v_rel) in front_tracks.items():
+      if not (
+        SIDE_CORNER_FRONT_MIN_DREL_M <= front_d_rel <= SIDE_CORNER_FRONT_MAX_DREL_M and
+        abs(front_y_rel) <= SIDE_CORNER_FRONT_MAX_ABS_YREL_M and
+        math.copysign(1.0, front_y_rel) == math.copysign(1.0, corner_y_rel)
+      ):
+        continue
+      y_gap = abs(front_y_rel - corner_y_rel)
+      v_gap = abs(front_v_rel - corner_v_rel)
+      if y_gap > SIDE_CORNER_FRONT_MAX_YREL_GAP_M or v_gap > SIDE_CORNER_FRONT_MAX_VREL_GAP_MPS:
+        continue
+      score = (
+        front_d_rel / SIDE_CORNER_FRONT_MAX_DREL_M +
+        y_gap / SIDE_CORNER_FRONT_MAX_YREL_GAP_M +
+        v_gap / SIDE_CORNER_FRONT_MAX_VREL_GAP_MPS
+      )
+      candidates.append((score, front_id, corner_id))
+
+  matches: dict[int, int] = {}
+  used_corners: set[int] = set()
+  for _, front_id, corner_id in sorted(candidates):
+    if front_id in matches or corner_id in used_corners:
+      continue
+    matches[front_id] = corner_id
+    used_corners.add(corner_id)
+  return matches
+
+
+def hold_side_corner_front_matches(
+  current_matches: dict[int, int],
+  previous_matches: dict[int, int],
+  previous_misses: dict[int, int],
+  available_front_ids: set[int],
+  max_missing_frames: int = 1,
+) -> tuple[dict[int, int], dict[int, int]]:
+  held_matches = dict(current_matches)
+  misses = {front_id: 0 for front_id in current_matches}
+  for front_id, corner_id in previous_matches.items():
+    if front_id in held_matches or front_id not in available_front_ids:
+      continue
+    missing_frames = previous_misses.get(front_id, 0) + 1
+    if missing_frames <= max_missing_frames:
+      held_matches[front_id] = corner_id
+      misses[front_id] = missing_frames
+  return held_matches, misses
+
+
+def is_corner_confirmed_near_cutin(
+  *,
+  confirmed_frames: int,
+  d_rel: float,
+  v_lead: float,
+  d_path: float,
+  d_path_future: float,
+  inward_speed: float,
+  radar_inward_speed: float,
+  path_y_std: float,
+) -> bool:
+  centering_gain = abs(d_path) - abs(d_path_future)
+  return (
+    confirmed_frames >= SIDE_CORNER_MIN_CONFIRM_FRAMES and
+    SIDE_CORNER_FRONT_MIN_DREL_M <= d_rel <= SIDE_CORNER_FRONT_MAX_DREL_M and
+    v_lead >= SIDE_CORNER_CUTIN_MIN_VLEAD_MPS and
+    SIDE_CORNER_CUTIN_MIN_ABS_DPATH_M <= abs(d_path) <= SIDE_CORNER_CUTIN_MAX_ABS_DPATH_M and
+    centering_gain >= SIDE_CORNER_CUTIN_MIN_CENTERING_GAIN_M and
+    inward_speed >= SIDE_CORNER_CUTIN_MIN_INWARD_SPEED_MPS and
+    radar_inward_speed >= SIDE_CORNER_CUTIN_MIN_RADAR_INWARD_SPEED_MPS and
+    path_y_std <= SIDE_CORNER_CUTIN_MAX_PATH_Y_STD_M
+  )
 
 
 def effective_cutin_inward_speed(
