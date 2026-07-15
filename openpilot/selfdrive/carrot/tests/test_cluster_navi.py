@@ -195,6 +195,33 @@ def test_h264_decoder_preserves_yuv420_planes_and_strides():
   )
 
 
+def test_h264_decoder_prefers_tici_hardware_buffer(monkeypatch):
+  hardware_buffer = SimpleNamespace(width=960, height=540, sequence=17)
+  calls = []
+
+  class FakeHardwareDecoder:
+    def decode(self, payload, sequence):
+      calls.append((payload, sequence))
+      return hardware_buffer
+
+    def close(self):
+      calls.append("close")
+
+  monkeypatch.setitem(
+    H264Decoder.decode.__globals__,
+    "create_tici_h264_decoder",
+    lambda width, height: calls.append((width, height)) or FakeHardwareDecoder(),
+  )
+  decoder = H264Decoder()
+
+  decoded = decoder.decode(b"access-unit", sequence=17, width=960, height=540)
+  decoder.close()
+
+  assert decoded == DecodedH264Frame(width=960, height=540, hardware_buffer=hardware_buffer)
+  assert calls == [(960, 540), (b"access-unit", 17), "close"]
+  assert decoder._codec is None
+
+
 def test_h264_decode_worker_drops_backlog_until_next_keyframe():
   started = threading.Event()
   release = threading.Event()
@@ -204,7 +231,7 @@ def test_h264_decode_worker_drops_backlog_until_next_keyframe():
     def reset(self):
       reset_calls.append(True)
 
-    def decode(self, payload):
+    def decode(self, payload, **_kwargs):
       if payload.endswith(b"1"):
         started.set()
         assert release.wait(1.0)
@@ -262,7 +289,7 @@ def test_h264_decode_worker_accepts_sixty_hz_poll_burst():
     def reset(self):
       pass
 
-    def decode(self, payload):
+    def decode(self, payload, **_kwargs):
       if payload.endswith(b"1"):
         started.set()
         assert release.wait(1.0)
@@ -300,6 +327,53 @@ def test_h264_decode_worker_accepts_sixty_hz_poll_burst():
     assert worker.dropped_requests == 0
   finally:
     release.set()
+    worker.close()
+
+
+def test_h264_decode_worker_ignores_repeated_identical_codec_config():
+  reset_calls = []
+
+  class FakeDecoder:
+    def reset(self):
+      reset_calls.append(True)
+
+    def decode(self, payload, **_kwargs):
+      return _decoded_yuv_frame(payload[-1:])
+
+  def request(sequence, config_sequence, config_payload):
+    return _H264DecodeRequest(
+      epoch=1,
+      key="render:map_main",
+      sequence=sequence,
+      payload=str(sequence).encode(),
+      config_payload=config_payload,
+      config_sequence=config_sequence,
+      keyframe=True,
+      width=960,
+      height=540,
+    )
+
+  def wait_for(worker, sequence):
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+      results = worker.poll()
+      if results and results[-1].frame.sequence == sequence:
+        return
+      time.sleep(0.005)
+    raise AssertionError(f"decoder result {sequence} did not arrive")
+
+  worker = H264DecodeWorker(decoder_factory=FakeDecoder)
+  try:
+    worker.submit(request(1, 10, b"same-config"))
+    wait_for(worker, 1)
+    worker.submit(request(2, 11, b"same-config"))
+    wait_for(worker, 2)
+    assert reset_calls == []
+
+    worker.submit(request(3, 12, b"changed-config"))
+    wait_for(worker, 3)
+    assert reset_calls == [True]
+  finally:
     worker.close()
 
 

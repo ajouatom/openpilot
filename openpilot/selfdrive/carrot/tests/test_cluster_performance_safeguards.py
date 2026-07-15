@@ -1,7 +1,8 @@
 import ctypes
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import replace
 import importlib
+import os
 from pathlib import Path
 import queue
 import sys
@@ -15,6 +16,7 @@ sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_git_status import GitBranchStatusProvider
 import cluster_gles_readback
+from cluster_h264_decoder import TiciH264DecodedBuffer
 from cluster_h264_pipeline import (
   H264PipelineInitializationError,
   H264UsbPipeline,
@@ -22,6 +24,22 @@ from cluster_h264_pipeline import (
 )
 import cluster_renderer
 from cluster_renderer import ClusterUiRenderer
+
+
+def test_tici_decoded_buffer_releases_fd_and_capture_lease_once():
+  read_fd, write_fd = os.pipe()
+  owner = types.SimpleNamespace(generation=7, releases=[])
+  owner.release = owner.releases.append
+  owner.disable = lambda _reason: None
+  buffer = TiciH264DecodedBuffer(owner, 3, read_fd, 960, 540, 1024, 557056, 42)
+
+  buffer.release()
+  buffer.release()
+
+  assert owner.releases == [3]
+  with pytest.raises(OSError):
+    os.fstat(read_fd)
+  os.close(write_fd)
 
 
 def _import_cluster_autorun(monkeypatch):
@@ -383,6 +401,78 @@ def test_renderer_yuv420_upload_reuses_plane_textures(monkeypatch):
   cached = renderer._navi_media_textures["render:map_main"]
   assert cached.sequence == 2
   assert cached.size == (4, 2)
+
+
+def test_renderer_binds_hardware_nv12_dmabuf_without_pixel_upload(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._navi_media_textures = {}
+  renderer._navi_egl_images = OrderedDict()
+  renderer.profile_enabled = False
+  renderer._profile_samples = []
+  texture = types.SimpleNamespace(id=7, width=1, height=1)
+  image = object()
+  created_images = []
+  bindings = []
+  destroyed_images = []
+  failed = []
+
+  egl_module = types.ModuleType("openpilot.system.ui.lib.egl")
+  egl_module.init_egl = lambda: True
+  egl_module.create_egl_image = (
+    lambda width, height, stride, fd, uv_offset:
+      created_images.append((width, height, stride, fd, uv_offset)) or object()
+  )
+  egl_module.bind_egl_image_to_texture = lambda texture_id, egl_image: bindings.append((texture_id, egl_image))
+  egl_module.destroy_egl_image = destroyed_images.append
+  monkeypatch.setitem(sys.modules, "openpilot.system.ui.lib.egl", egl_module)
+  monkeypatch.setattr(cluster_renderer.rl, "gen_image_color", lambda *_args: image)
+  monkeypatch.setattr(cluster_renderer.rl, "load_texture_from_image", lambda _image: texture)
+  monkeypatch.setattr(cluster_renderer.rl, "unload_image", lambda _image: None)
+  monkeypatch.setattr(cluster_renderer.rl, "is_texture_valid", lambda _texture: True)
+  monkeypatch.setattr(cluster_renderer.rl, "set_texture_filter", lambda *_args: None)
+  monkeypatch.setattr(cluster_renderer.rl, "unload_texture", lambda *_args: None)
+
+  first_buffer = types.SimpleNamespace(
+    fd=31,
+    stride=1024,
+    uv_offset=557056,
+    token=(3, 0),
+    mark_egl_import_failed=lambda reason: failed.append(reason),
+  )
+  second_buffer = types.SimpleNamespace(
+    fd=32,
+    stride=1024,
+    uv_offset=557056,
+    token=(3, 1),
+    mark_egl_import_failed=lambda reason: failed.append(reason),
+  )
+  third_buffer = types.SimpleNamespace(
+    fd=33,
+    stride=1024,
+    uv_offset=557056,
+    token=(4, 0),
+    mark_egl_import_failed=lambda reason: failed.append(reason),
+  )
+  first = cluster_renderer.NaviMediaFrame(
+    "render:map_main", 1, True, "video/nv12-dmabuf", 960, 540, hardware_buffer=first_buffer
+  )
+  second = replace(first, sequence=2, hardware_buffer=second_buffer)
+  third = replace(first, sequence=3, hardware_buffer=third_buffer)
+
+  assert renderer._navi_media_texture_for(first) is texture
+  assert renderer._navi_media_texture_for(second) is texture
+  previous_generation_images = tuple(renderer._navi_egl_images.values())
+  assert renderer._navi_media_texture_for(third) is texture
+  assert created_images == [
+    (960, 540, 1024, 31, 557056),
+    (960, 540, 1024, 32, 557056),
+    (960, 540, 1024, 33, 557056),
+  ]
+  assert len(bindings) == 3
+  assert destroyed_images == list(previous_generation_images)
+  assert failed == []
+  assert renderer._navi_media_textures["render:map_main"].hardware_token == (4, 0)
+  assert (texture.width, texture.height) == (960, 540)
 
 
 def test_native_h264_direct_input_lease_submits_or_cancels():

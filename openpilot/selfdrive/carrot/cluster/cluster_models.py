@@ -237,6 +237,7 @@ class NaviMediaFrame:
     reason: str | None = None
     plane_data: tuple[bytes, bytes, bytes] | None = None
     plane_strides: tuple[int, int, int] | None = None
+    hardware_buffer: object | None = None
 
 
 @dataclass(frozen=True, slots=True)

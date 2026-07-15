@@ -115,6 +115,7 @@ the native library before hardware testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
+scons system/loggerd/libcluster_h264_decoder_bridge.so
 ```
 
 Use `--usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264` to compare
@@ -467,10 +468,21 @@ system/platform fonts if KaiGen is not present.
 Latin/numeric text uses the 160-pixel primary font. The complete Korean glyph
 set uses a separate 32-pixel base atlas with bilinear filtering and no mip chain;
 a host resource smoke produced `8192x4096` rather than the former `8192x8192`.
-Incoming Navi H.264 is decoded on a bounded worker. If it falls behind, dependent
-frames are discarded until the next keyframe, and stale completed frames cannot
-replace a newer requested sequence. RGBA texture upload reuses the immutable
-frame buffer through CFFI rather than making another full-frame copy.
+Incoming Navi H.264 is decoded on a bounded worker. On TICI, the default path
+uses Qualcomm VIDC `/dev/video32` to produce leased linear NV12 DMA-BUFs, imports
+them as EGLImages, and composes them through an external OpenGL texture without a
+decoded-pixel CPU copy or texture upload. Decoder-generation changes discard
+stale EGLImages before importing the new capture pool. If native decode or EGL
+import fails, the worker logs the reason and lazily falls back to PyAV YUV420P;
+host/non-TICI runs use that fallback directly. Set
+`CLUSTER_HARDWARE_H264_DECODE=0` for an explicit software A/B. Diagnostic
+overrides are `CLUSTER_H264_DECODER_LIBRARY`, `CLUSTER_H264_DECODER_DEVICE`,
+`CLUSTER_H264_DECODE_TIMEOUT_MS`, and `CLUSTER_H264_DECODER_DEBUG=1`.
+
+If the decode worker falls behind, dependent frames are discarded until the
+next keyframe, and stale completed frames cannot replace a newer requested
+sequence. The PyAV fallback preserves YUV420P plane strides and uploads three
+reusable plane textures rather than expanding to RGBA.
 
 USB frame upload runs in no-ACK mode by default because some TURZX panels accept
 image data but never return a frame-upload response. Use `--usb-wait-frame-ack`
