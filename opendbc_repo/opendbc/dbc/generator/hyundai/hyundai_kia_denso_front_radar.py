@@ -46,9 +46,10 @@ BU_: XXX
     """)
 
     # Denso DNMWR006 radar used by the 2018-2019 Kia Sorento UM. Eight tracked
-    # objects are published at 20 Hz from 0x500 through 0x507. Messages at
-    # 0x508 and above are distance-sorted raw detections, not stable tracks.
-    for address in range(0x500, 0x508):
+    # objects are published at 20 Hz from 0x500 through 0x507. This expanded
+    # test profile also decodes eight distance-sorted raw detections from
+    # 0x508 through 0x50f.
+    for address in range(0x500, 0x510):
       f.write(f"""
 BO_ {address} RADAR_TRACK_{address:x}: 8 RADAR
  SG_ COUNTER : 7|8@0+ (1,0) [0|255] "" XXX
