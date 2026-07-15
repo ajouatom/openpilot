@@ -60,13 +60,13 @@ class TestDensoRadar:
     radar_interface = RadarInterface(cp)
 
     assert radar_interface.radar_group4
-    assert RADAR_MSG_COUNT4 == 16
+    assert RADAR_MSG_COUNT4 == 8
     assert radar_interface.radar_msg_count == RADAR_MSG_COUNT4
-    assert radar_interface.trigger_msg_tracks == 0x50F
+    assert radar_interface.trigger_msg_tracks == 0x507
 
     active_dat = bytes.fromhex("bc047efcc1fe8b00")
     empty_dat = bytes.fromhex("bcfff80000000081")
-    packets = [(addr, active_dat if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x510)]
+    packets = [(addr, active_dat if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
     point = next(point for point in radar_data.points if point.trackId == 35)
 
@@ -76,42 +76,58 @@ class TestDensoRadar:
     assert point.vRel == pytest.approx(-0.734375)
     assert math.isnan(point.aRel)
 
-    # Confirm the long-range sample survives the track filter and is converted
-    # from radar-left-negative to openpilot-left-positive coordinates.
+    # EN: Confirm that the long-range sample survives the filter and converts
+    #     radar-left-negative to openpilot-left-positive coordinates.
+    # KO: 장거리 샘플이 필터를 통과하고 레이더의 좌측 음수 좌표가 openpilot의
+    #     좌측 양수 좌표로 변환되는지 확인한다.
     long_range_dat = bytes.fromhex("b664eafa00cd230b")
-    packets = [(addr, long_range_dat if addr == 0x506 else empty_dat, 1) for addr in range(0x500, 0x510)]
+    packets = [(addr, long_range_dat if addr == 0x506 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
     point = next(point for point in radar_data.points if point.trackId == 38)
 
     assert point.dRel == pytest.approx(161.4625)
     assert point.yRel == pytest.approx(3.0)
 
-    # A state 0 distance-sorted detection must not enter a stable track slot.
+    # EN: A state-0 raw detection must not enter a stable tracked-object slot.
+    # KO: 상태 0인 raw detection은 안정적인 추적 객체 슬롯에 들어오면 안 된다.
     raw_detection = bytes.fromhex("d702f4fc200000e4")
-    packets = [(addr, raw_detection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x510)]
+    packets = [(addr, raw_detection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
     assert not radar_data.points
 
-    # The same payload is valid in the expanded raw-detection slots.
-    packets = [(addr, raw_detection if addr == 0x508 else empty_dat, 1) for addr in range(0x500, 0x510)]
+    # EN: A real confirmed track beyond the former 205 m limit remains valid.
+    # KO: 기존 205m 상한을 넘는 실제 확정 트랙도 유효하게 유지한다.
+    confirmed_213m_track = bytes.fromhex("35854c0780f163e0")
+    packets = [(addr, confirmed_213m_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
-    point = next(point for point in radar_data.points if point.trackId == 40)
-    assert point.dRel == pytest.approx(4.725)
-    assert point.yRel == pytest.approx(1.9375)
-    assert point.vRel == 0
+    point = next(point for point in radar_data.points if point.trackId == 35)
+    assert point.dRel == pytest.approx(213.275)
+    assert point.yRel == pytest.approx(-3.75)
 
-    # The wider test profile keeps a real stable track at 4.875 m, covering
-    # more of the outer adjacent lane than the conservative 4.5 m profile.
+    # EN: The 325 m boundary is rejected, leaving ample separation from the
+    #     409.55 m empty-slot sentinel.
+    # KO: 325m 경계값은 제외하여 409.55m 빈 슬롯 값과 충분한 간격을 둔다.
+    boundary_track = bytes.fromhex("bccb200000000300")
+    packets = [(addr, boundary_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    radar_data = radar_interface.update([0, packets])
+    assert not radar_data.points
+
+    # EN: The wider profile keeps a real stable track at 4.875 m, covering more
+    #     of the outer adjacent lane than the conservative 4.5 m profile.
+    # KO: 넓어진 필터는 4.875m의 실제 안정 트랙을 유지해 보수적인 4.5m 설정보다
+    #     바깥쪽 인접 차선을 더 넓게 포함한다.
     outer_lane_track = bytes.fromhex("d80b66f640000300")
-    packets = [(addr, outer_lane_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x510)]
+    packets = [(addr, outer_lane_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
     point = next(point for point in radar_data.points if point.trackId == 35)
     assert point.yRel == pytest.approx(4.875)
 
-    # Tracks beyond the widened envelope are still rejected as roadside
-    # clutter. This payload differs only in lateral distance (-7.0 m).
+    # EN: Tracks beyond the widened envelope are rejected as roadside clutter;
+    #     this payload differs only in lateral distance (-7.0 m).
+    # KO: 넓어진 범위를 벗어난 트랙은 도로변 잡음으로 제외한다. 이 payload는
+    #     횡방향 거리(-7.0m)만 다르다.
     far_side_reflection = bytes.fromhex("d80b66f200000300")
-    packets = [(addr, far_side_reflection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x510)]
+    packets = [(addr, far_side_reflection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
     assert not radar_data.points
 
