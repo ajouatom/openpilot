@@ -172,9 +172,7 @@ def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
     values = {
       "ClusterNaviMapTheme": 2,
       "ClusterNaviMapType": 1,
-      "ClusterNaviMapHz": 0,
-      "ClusterNaviMapBitrateKbps": 0,
-      "ClusterHudLiveFps": 3,
+      "ClusterNaviMapFps": 3,
     }
 
     def get_int(self, key):
@@ -185,7 +183,7 @@ def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
     map_theme="dark", map_type="normal", map_hz=10, map_bitrate_kbps=3000,
   )
 
-  assert reader() == ("light", "satellite", 30, 9000)
+  assert reader() == ("light", "satellite", 30, 6000)
   assert receiver.set_map_config(*reader()) is True
   assert receiver.set_map_config(*reader()) is False
 
@@ -194,26 +192,27 @@ def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
   assert map_stream["params"]["map_theme"] == "light"
   assert map_stream["params"]["map_type"] == "satellite"
   assert map_stream["params"]["fps"] == 30
-  assert map_stream["params"]["h264_bitrate_kbps"] == 9000
+  assert map_stream["params"]["h264_bitrate_kbps"] == 6000
   assert receiver.health()["map_theme"] == "light"
   assert receiver.health()["map_type"] == "satellite"
   assert receiver.health()["map_hz"] == 30
-  assert receiver.health()["map_bitrate_kbps"] == 9000
+  assert receiver.health()["map_bitrate_kbps"] == 6000
 
 
-def test_cluster_navi_map_hz_sync_and_automatic_bitrate_resolution():
-  assert resolve_map_hz(0, 1) == 10
-  assert resolve_map_hz(0, 6) == 60
-  assert resolve_map_hz(0, 0) == 60
-  assert resolve_map_hz(17, 1) == 17
-  assert resolve_map_hz(99, 1) == 60
+def test_cluster_navi_map_fps_modes_and_automatic_bitrate_resolution():
+  assert resolve_map_hz(0) == 5
+  assert resolve_map_hz(1) == 10
+  assert resolve_map_hz(2) == 20
+  assert resolve_map_hz(3) == 30
+  assert resolve_map_hz(6) == 10
+  assert resolve_map_hz(None) == 10
 
-  assert resolve_map_bitrate_kbps(0, 960, 540, 10) == 3000
-  assert resolve_map_bitrate_kbps(0, 960, 540, 30) == 9000
-  assert resolve_map_bitrate_kbps(0, 960, 540, 60) == 12000
-  assert resolve_map_bitrate_kbps(1, 960, 540, 60) == 1
-  assert resolve_map_bitrate_kbps(4321, 960, 540, 60) == 4321
-  assert resolve_map_bitrate_kbps(20000, 960, 540, 10) == 12000
+  assert resolve_map_bitrate_kbps(960, 540, 5) == 1500
+  assert resolve_map_bitrate_kbps(960, 540, 10) == 3000
+  assert resolve_map_bitrate_kbps(960, 540, 20) == 3000
+  assert resolve_map_bitrate_kbps(960, 540, 30) == 6000
+  assert resolve_map_bitrate_kbps(480, 270, 30) == 1500
+  assert resolve_map_bitrate_kbps(1920, 1080, 30) == 12000
 
 
 def test_receiver_logs_changed_tbt_and_sdi_values(capsys):

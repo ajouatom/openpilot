@@ -491,8 +491,7 @@
                 "ClusterHudTheme",
                 "ClusterNaviMapTheme",
                 "ClusterNaviMapType",
-                "ClusterNaviMapHz",
-                "ClusterNaviMapBitrateKbps"
+                "ClusterNaviMapFps"
               ]
             },
             {
@@ -3113,34 +3112,18 @@
     },
     {
       "group": "외부 HUD",
-      "name": "ClusterNaviMapHz",
-      "title": "클러스터 내비 지도 주기(0)",
-      "descr": "0: 클러스터 HUD와 동기화\n1-60: 고정 지도 주기(Hz)\n변경하면 외부 내비가 자동으로 다시 연결됩니다.",
+      "name": "ClusterNaviMapFps",
+      "title": "클러스터 내비 지도 FPS(1)",
+      "descr": "0: 5 FPS\n1: 10 FPS(기본)\n2: 20 FPS\n3: 30 FPS\nHUD FPS와는 별개이며 지도 비트레이트는 자동 설정됩니다.\n변경하면 외부 내비가 자동으로 다시 연결됩니다.",
       "egroup": "CLUSTER HUD",
-      "etitle": "Cluster Navi Map Refresh Rate(0)",
-      "edescr": "0: Sync with the cluster HUD\n1-60: Fixed map refresh rate (Hz)\nThe external navigation app reconnects automatically when changed.",
+      "etitle": "Cluster Navi Map FPS(1)",
+      "edescr": "0: 5 FPS\n1: 10 FPS (default)\n2: 20 FPS\n3: 30 FPS\nThis is independent of HUD FPS and map bitrate is selected automatically.\nThe external navigation app reconnects automatically when changed.",
       "cgroup": "外部 HUD",
-      "ctitle": "集群导航地图刷新率(0)",
-      "cdescr": "0: 与集群 HUD 同步\n1-60: 固定地图刷新率 (Hz)\n更改后外部导航应用会自动重新连接。",
+      "ctitle": "集群导航地图 FPS(1)",
+      "cdescr": "0: 5 FPS\n1: 10 FPS（默认）\n2: 20 FPS\n3: 30 FPS\n此设置独立于 HUD FPS，地图比特率自动设置。\n更改后外部导航应用会自动重新连接。",
       "min": 0,
-      "max": 60,
-      "default": 0,
-      "unit": 1
-    },
-    {
-      "group": "외부 HUD",
-      "name": "ClusterNaviMapBitrateKbps",
-      "title": "클러스터 내비 지도 비트레이트(0)",
-      "descr": "0: 자동(해상도와 지도 주기로 계산)\n1-12000: 고정 비트레이트(kbps)\n변경하면 외부 내비가 자동으로 다시 연결됩니다.",
-      "egroup": "CLUSTER HUD",
-      "etitle": "Cluster Navi Map Bitrate(0)",
-      "edescr": "0: Auto (calculated from resolution and map refresh rate)\n1-12000: Fixed bitrate (kbps)\nThe external navigation app reconnects automatically when changed.",
-      "cgroup": "外部 HUD",
-      "ctitle": "集群导航地图比特率(0)",
-      "cdescr": "0: 自动（根据分辨率和地图刷新率计算）\n1-12000: 固定比特率 (kbps)\n更改后外部导航应用会自动重新连接。",
-      "min": 0,
-      "max": 12000,
-      "default": 0,
+      "max": 3,
+      "default": 1,
       "unit": 1
     },
     {

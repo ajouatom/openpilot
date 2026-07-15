@@ -43,14 +43,17 @@ MAP_BITRATE_KBPS_MIN = 1
 MAP_BITRATE_KBPS_MAX = 12_000
 MAP_BITRATE_KBPS_DEFAULT = 3_000
 MAP_AUTO_BITRATE_REFERENCE_HZ = 10
-CLUSTER_LIVE_HZ_BY_MODE = {
-  0: 60,
+MAP_AUTO_BITRATE_KBPS_BY_HZ = {
+  5: 1_500,
+  10: 3_000,
+  20: 3_000,
+  30: 6_000,
+}
+MAP_HZ_BY_MODE = {
+  0: 5,
   1: 10,
   2: 20,
   3: 30,
-  4: 40,
-  5: 50,
-  6: 60,
 }
 BINARY_HEADER = struct.Struct(">4sBBBBIIQQIHH")
 
@@ -184,39 +187,29 @@ def now_ms() -> int:
   return time.time_ns() // 1_000_000
 
 
-def resolve_map_hz(requested_hz: object, cluster_live_fps_mode: object) -> int:
+def resolve_map_hz(map_fps_mode: object) -> int:
   try:
-    requested = int(requested_hz)
+    map_mode = int(map_fps_mode)
   except (TypeError, ValueError):
-    requested = 0
-  if requested > 0:
-    return max(MAP_HZ_MIN, min(MAP_HZ_MAX, requested))
-
-  try:
-    cluster_mode = int(cluster_live_fps_mode)
-  except (TypeError, ValueError):
-    cluster_mode = 1
-  return CLUSTER_LIVE_HZ_BY_MODE.get(cluster_mode, MAP_HZ_DEFAULT)
+    map_mode = 1
+  return MAP_HZ_BY_MODE.get(map_mode, MAP_HZ_DEFAULT)
 
 
 def resolve_map_bitrate_kbps(
-  requested_bitrate_kbps: object,
   width: int,
   height: int,
   map_hz: int,
 ) -> int:
-  try:
-    requested = int(requested_bitrate_kbps)
-  except (TypeError, ValueError):
-    requested = 0
-  if requested > 0:
-    return max(MAP_BITRATE_KBPS_MIN, min(MAP_BITRATE_KBPS_MAX, requested))
-
   pixels = max(1, int(width)) * max(1, int(height))
   effective_hz = max(MAP_HZ_MIN, min(MAP_HZ_MAX, int(map_hz)))
   reference_pixels = MAP_RENDER_WIDTH * MAP_RENDER_HEIGHT
-  numerator = MAP_BITRATE_KBPS_DEFAULT * pixels * effective_hz
-  denominator = reference_pixels * MAP_AUTO_BITRATE_REFERENCE_HZ
+  reference_bitrate = MAP_AUTO_BITRATE_KBPS_BY_HZ.get(effective_hz)
+  if reference_bitrate is None:
+    reference_bitrate = (
+      MAP_BITRATE_KBPS_DEFAULT * effective_hz + MAP_AUTO_BITRATE_REFERENCE_HZ // 2
+    ) // MAP_AUTO_BITRATE_REFERENCE_HZ
+  numerator = reference_bitrate * pixels
+  denominator = reference_pixels
   automatic = (numerator + denominator // 2) // denominator
   return max(MAP_BITRATE_KBPS_MIN, min(MAP_BITRATE_KBPS_MAX, automatic))
 
@@ -934,12 +927,8 @@ class ClusterNaviMapParamReader:
   def read(self) -> tuple[str, str, int, int]:
     theme_value = self._read_int("ClusterNaviMapTheme", 1)
     type_value = self._read_int("ClusterNaviMapType", 0)
-    map_hz = resolve_map_hz(
-      self._read_int("ClusterNaviMapHz", 0),
-      self._read_int("ClusterHudLiveFps", 1),
-    )
+    map_hz = resolve_map_hz(self._read_int("ClusterNaviMapFps", 1))
     map_bitrate_kbps = resolve_map_bitrate_kbps(
-      self._read_int("ClusterNaviMapBitrateKbps", 0),
       MAP_RENDER_WIDTH,
       MAP_RENDER_HEIGHT,
       map_hz,

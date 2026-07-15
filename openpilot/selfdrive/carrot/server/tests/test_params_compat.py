@@ -43,10 +43,10 @@ def test_unregistered_json_setting_uses_atomic_file_fallback(tmp_path, monkeypat
   monkeypatch.setattr(params_service, "Params", lambda: stale_params)
   monkeypatch.setattr(params_service, "UnknownKeyName", FakeUnknownKeyName)
 
-  params_service.set_param_value("ClusterNaviMapHz", 42, int_setting())
+  params_service.set_param_value("FutureIntSetting", 42, int_setting())
 
-  assert (tmp_path / "ClusterNaviMapHz").read_text(encoding="utf-8") == "42"
-  assert params_service._read_param_value(stale_params, "ClusterNaviMapHz", 0) == 42
+  assert (tmp_path / "FutureIntSetting").read_text(encoding="utf-8") == "42"
+  assert params_service._read_param_value(stale_params, "FutureIntSetting", 0) == 42
 
 
 def test_unregistered_fallback_rejects_names_outside_settings(tmp_path, monkeypatch):
@@ -81,13 +81,13 @@ def test_unregistered_fallback_does_not_hide_other_write_failures(tmp_path, monk
   monkeypatch.setattr(params_service, "UnknownKeyName", FakeUnknownKeyName)
 
   with pytest.raises(OSError, match="disk full"):
-    params_service.set_param_value("ClusterNaviMapHz", 1, int_setting())
+    params_service.set_param_value("FutureIntSetting", 1, int_setting())
 
 
-def test_map_param_reader_reads_file_while_native_registry_is_stale(tmp_path):
+def test_map_param_reader_reads_map_fps_file_while_native_registry_is_stale(tmp_path):
   stale_params = StaleParams(tmp_path)
-  (tmp_path / "ClusterNaviMapHz").write_text("55", encoding="utf-8")
+  (tmp_path / "ClusterNaviMapFps").write_text("3", encoding="utf-8")
 
   reader = carrot_navi.ClusterNaviMapParamReader(stale_params)
 
-  assert reader._read_int("ClusterNaviMapHz", 0) == 55
+  assert reader._read_int("ClusterNaviMapFps", 1) == 3
