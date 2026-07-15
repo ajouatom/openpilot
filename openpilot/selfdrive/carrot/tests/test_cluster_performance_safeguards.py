@@ -277,8 +277,10 @@ def test_renderer_rgba_upload_reuses_frame_buffer(monkeypatch):
   image = types.SimpleNamespace()
   texture = types.SimpleNamespace(id=1, width=1, height=1)
   buffer_calls = []
+  cast_calls = []
   upload_calls = []
   buffer_pointer = object()
+  void_pointer = object()
 
   monkeypatch.setattr(cluster_renderer, "rl_color", lambda _color: object())
   monkeypatch.setattr(cluster_renderer.rl, "gen_image_color", lambda *_args: image)
@@ -291,6 +293,7 @@ def test_renderer_rgba_upload_reuses_frame_buffer(monkeypatch):
     "ffi",
     types.SimpleNamespace(
       from_buffer=lambda ctype, data: buffer_calls.append((ctype, data)) or buffer_pointer,
+      cast=lambda ctype, pointer: cast_calls.append((ctype, pointer)) or void_pointer,
     ),
   )
   monkeypatch.setattr(
@@ -306,7 +309,8 @@ def test_renderer_rgba_upload_reuses_frame_buffer(monkeypatch):
 
   assert result is texture
   assert buffer_calls == [("const unsigned char[]", frame_data)]
-  assert upload_calls == [(texture, buffer_pointer)]
+  assert cast_calls == [("void *", buffer_pointer)]
+  assert upload_calls == [(texture, void_pointer)]
 
 
 def test_native_h264_direct_input_lease_submits_or_cancels():

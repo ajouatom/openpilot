@@ -3802,7 +3802,7 @@ class ClusterUiRenderer:
                 rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             else:
                 texture = cached[2]
-            pixels = rl.ffi.from_buffer("const unsigned char[]", frame.data)
+            pixels = rl.ffi.cast("void *", rl.ffi.from_buffer("const unsigned char[]", frame.data))
             rl.update_texture(texture, pixels)
             self._navi_media_textures[frame.key] = (frame.sequence, size, texture)
             return texture
