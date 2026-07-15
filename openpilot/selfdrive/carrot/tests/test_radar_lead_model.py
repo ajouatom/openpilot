@@ -78,6 +78,21 @@ def test_cutin_filter_requires_persistence_and_holds_identity() -> None:
   assert len(decision.cutin_candidates) == 1
 
 
+def test_external_filter_is_independent_from_lead_and_cutin() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter()
+  decision = None
+  for frame in range(6):
+    sample = builder.update(context(frame * 0.05), (fused(),))[0]
+    prediction = RadarLeadPrediction(sample, 0.1, 0.1, 0.1, external_prob=0.8)
+    decision = decision_filter.update(frame * 0.05, (prediction,))
+
+  assert decision is not None
+  assert not decision.lead_candidates
+  assert not decision.cutin_candidates
+  assert len(decision.external_candidates) == 1
+
+
 def test_moving_away_cutin_is_released_quickly() -> None:
   builder = RadarLeadFeatureBuilder()
   decision_filter = RadarLeadDecisionFilter()

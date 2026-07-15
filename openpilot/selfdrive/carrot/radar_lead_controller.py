@@ -21,8 +21,6 @@ def _cloudlog(level: str, message: str) -> None:
 
 RADAR_TO_CAMERA = 1.52
 VISION_LEAD_MIN_PROB = 0.5
-MODEL_LEAD_MIN_PROB = 0.0
-CUTIN_DIRECT_MIN_PROB = 0.70
 
 
 def _finite(value: Any, fallback: float = 0.0) -> float:
@@ -47,6 +45,7 @@ class RadarLeadModelOutput:
   lead_one: dict[str, Any] | None = None
   lead_two: dict[str, Any] | None = None
   lead_cutin: dict[str, Any] | None = None
+  lead_external: dict[str, Any] | None = None
   lead_left: dict[str, Any] | None = None
   lead_right: dict[str, Any] | None = None
   leads_left: tuple[dict[str, Any], ...] = ()
@@ -104,12 +103,8 @@ class RadarLeadModelController:
     leads = getattr(model, "leadsV3", ())
     if not leads:
       return None
-    lead = max(
-      (lead for lead in leads if _finite(getattr(lead, "prob", 0.0)) > VISION_LEAD_MIN_PROB),
-      key=lambda lead: _finite(getattr(lead, "prob", 0.0)),
-      default=None,
-    )
-    if lead is None:
+    lead = leads[0]
+    if _finite(getattr(lead, "prob", 0.0)) <= VISION_LEAD_MIN_PROB:
       return None
     prob = _finite(getattr(lead, "prob", 0.0))
     if not getattr(lead, "x", ()) or not getattr(lead, "y", ()) or not getattr(lead, "v", ()):
@@ -188,16 +183,8 @@ class RadarLeadModelController:
       )
       and 0.5 < prediction.features.radar_object.d_rel < 160.0
       and abs(prediction.features.d_path) < 2.4
-      and prediction.lead_prob > MODEL_LEAD_MIN_PROB
     ]
     return min(candidates, key=lambda prediction: (-prediction.lead_prob, prediction.features.radar_object.d_rel), default=None)
-
-  @staticmethod
-  def _direct_cutin_predictions(predictions: tuple[RadarLeadPrediction, ...]) -> tuple[RadarLeadPrediction, ...]:
-    return tuple(sorted((
-      prediction for prediction in predictions
-      if prediction.cutin_prob >= CUTIN_DIRECT_MIN_PROB
-    ), key=lambda prediction: (-prediction.cutin_prob, prediction.features.radar_object.d_rel))[:2])
 
   def update(
     self,
@@ -216,7 +203,7 @@ class RadarLeadModelController:
       _cloudlog("info",
         f"radar lead model available={result.available} avg={self.time_ms / 100.0:.3f}ms "
         f"points={len(result.predictions)} lead={len(result.decision.lead_candidates)} "
-        f"cutin={len(result.decision.cutin_candidates)}"
+        f"cutin={len(result.decision.cutin_candidates)} external={len(result.decision.external_candidates)}"
       )
       self.time_ms = 0.0
     if not result.available:
@@ -227,7 +214,7 @@ class RadarLeadModelController:
     right: list[dict[str, Any]] = []
     for prediction in result.predictions:
       lead = self._lead_from_prediction(
-        prediction, max(prediction.lead_prob, prediction.cutin_prob),
+        prediction, max(prediction.lead_prob, prediction.cutin_prob, prediction.external_prob),
       )
       if lead is None:
         continue
@@ -244,7 +231,7 @@ class RadarLeadModelController:
         return None
       return lead
 
-    lead_one_prediction = self._lead_one_prediction(result.predictions)
+    lead_one_prediction = self._lead_one_prediction(result.decision.lead_candidates)
     lead_one = selected(lead_one_prediction, lead_one_prediction.lead_prob) if lead_one_prediction else None
     if lead_one is None:
       lead_one = self._lead_from_vision(model, v_ego)
@@ -252,15 +239,26 @@ class RadarLeadModelController:
 
     cutin_pairs = [
       (prediction, selected(prediction, prediction.cutin_prob))
-      for prediction in (*result.decision.cutin_candidates, *self._direct_cutin_predictions(result.predictions))
+      for prediction in result.decision.cutin_candidates
     ]
     cutin_leads = tuple(lead for _, lead in cutin_pairs if lead is not None)
+    external_pairs = [
+      (prediction, selected(prediction, prediction.external_prob))
+      for prediction in result.decision.external_candidates
+    ]
+    external_leads = tuple(lead for _, lead in external_pairs if lead is not None)
 
     lead_two = next((
       lead for prediction, lead in cutin_pairs
       if lead is not None and prediction.features.object_id != lead_one_object
       and self._external_control_usable(prediction)
     ), None)
+    if lead_two is None:
+      lead_two = next((
+        lead for prediction, lead in external_pairs
+        if lead is not None and prediction.features.object_id != lead_one_object
+        and self._external_control_usable(prediction)
+      ), None)
 
     left.sort(key=lambda lead: lead["dRel"])
     center.sort(key=lambda lead: lead["dRel"])
@@ -270,6 +268,7 @@ class RadarLeadModelController:
       lead_one=lead_one,
       lead_two=lead_two,
       lead_cutin=cutin_leads[0] if cutin_leads else None,
+      lead_external=external_leads[0] if external_leads else None,
       lead_left=self._pick_side(left),
       lead_right=self._pick_side(right),
       leads_left=tuple(left),

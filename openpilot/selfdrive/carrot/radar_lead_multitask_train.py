@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train the production fused-radar lead/cut-in two-head MLP."""
+"""Train the production fused-radar lead/cut-in/external MLP."""
 
 from __future__ import annotations
 
@@ -39,10 +39,10 @@ def _open(path: Path) -> Any:
 
 def load_datasets(paths: list[Path]) -> TrainingData:
   feature_rows: list[list[float]] = []
-  labels: list[tuple[float, float]] = []
-  weights: list[tuple[float, float]] = []
+  labels: list[tuple[float, ...]] = []
+  weights: list[tuple[float, ...]] = []
   groups: list[int] = []
-  manual: list[tuple[bool, bool]] = []
+  manual: list[tuple[bool, ...]] = []
   group_ids: dict[tuple[int, str], int] = {}
   for dataset_index, path in enumerate(paths):
     with _open(path) as source:
@@ -52,10 +52,10 @@ def load_datasets(paths: list[Path]) -> TrainingData:
         raise RuntimeError(f"fused dataset schema is outdated ({missing[0]} missing): {path}")
       for row in reader:
         feature_rows.append([float(row[name] or 0.0) for name in MODEL_FEATURE_NAMES])
-        labels.append((float(row["lead_label"]), float(row["cutin_label"])))
-        weights.append((float(row["lead_weight"]), float(row["cutin_weight"])))
+        labels.append(tuple(float(row[f"{name}_label"]) for name in MODEL_HEADS))
+        weights.append(tuple(float(row[f"{name}_weight"]) for name in MODEL_HEADS))
         groups.append(group_ids.setdefault((dataset_index, row["frame"]), len(group_ids)))
-        manual.append((row["lead_source"] == "manual", row["cutin_source"] == "manual"))
+        manual.append(tuple(row[f"{name}_source"] == "manual" for name in MODEL_HEADS))
   if not feature_rows:
     raise RuntimeError("no fused training rows found")
   return TrainingData(
@@ -237,11 +237,15 @@ def choose_threshold(
   head_index: int,
 ) -> tuple[float, dict[str, float | int]]:
   max_outputs = 2
-  beta = 0.5 if MODEL_HEADS[head_index] == "cutin" else 1.0
+  beta = {"cutin": 0.5, "external": 0.7}.get(MODEL_HEADS[head_index], 1.0)
   best_threshold = 0.5
   best_score = -1.0
   best_metrics: dict[str, float | int] = {}
-  for threshold in np.linspace(0.20, 0.95, 76):
+  threshold_values = np.unique(np.concatenate((
+    np.linspace(0.20, 0.95, 76),
+    np.asarray((0.96, 0.97, 0.98, 0.99, 0.995), dtype=np.float64),
+  )))
+  for threshold in threshold_values:
     metrics = group_metrics(probabilities, labels, weights, groups, float(threshold), max_outputs)
     precision = float(metrics["precision"])
     recall = float(metrics["recall"])
@@ -262,7 +266,7 @@ def parse_hidden(value: str) -> tuple[int, int]:
 
 
 def parse_args() -> argparse.Namespace:
-  parser = argparse.ArgumentParser(description="Train fused radar lead/cut-in MLP")
+  parser = argparse.ArgumentParser(description="Train fused radar lead/cut-in/external MLP")
   parser.add_argument("datasets", nargs="+", type=Path)
   parser.add_argument("--validation-dataset", action="append", type=Path, default=[])
   parser.add_argument("--output", required=True, type=Path)
@@ -273,7 +277,7 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--validation", type=float, default=0.2)
   parser.add_argument("--l2", type=float, default=1e-5)
   parser.add_argument("--patience", type=int, default=10)
-  parser.add_argument("--primary-head", choices=MODEL_HEADS, default="cutin")
+  parser.add_argument("--primary-head", choices=("all", *MODEL_HEADS), default="all")
   parser.add_argument("--init-model", type=Path, help="fine-tune an existing compatible multitask model")
   parser.add_argument("--seed", type=int, default=42)
   return parser.parse_args()
@@ -324,7 +328,9 @@ def main() -> int:
   best = {name: value.copy() for name, value in model.parameters.items()}
   print(
     f"rows {len(data.features)} train {len(train_indices)} validation {len(validation_indices)} [{validation_kind}] "
-    f"positive weights lead {positive_weights[0]:.2f} cutin {positive_weights[1]:.2f}", flush=True,
+    "positive weights " + " ".join(
+      f"{name} {positive_weights[index]:.2f}" for index, name in enumerate(MODEL_HEADS)
+    ), flush=True,
   )
   for epoch in range(1, args.epochs + 1):
     shuffled = rng.permutation(train_indices)
@@ -342,16 +348,18 @@ def main() -> int:
     validation_losses = weighted_losses(
       validation_prob, data.labels[validation_indices], data.weights[validation_indices], positive_weights,
     )
-    validation_loss = float(validation_losses[MODEL_HEADS.index(args.primary_head)])
+    validation_loss = float(np.mean(validation_losses)) if args.primary_head == "all" else float(
+      validation_losses[MODEL_HEADS.index(args.primary_head)]
+    )
     if validation_loss < best_loss:
       best_loss = validation_loss
       best_epoch = epoch
       best = {name: value.copy() for name, value in model.parameters.items()}
     if epoch == 1 or epoch % 5 == 0:
-      print(
-        f"epoch {epoch:3d} train {train_loss / max(batches, 1):.4f} "
-        f"val lead {validation_losses[0]:.4f} cutin {validation_losses[1]:.4f}"
+      validation_text = " ".join(
+        f"{name} {validation_losses[index]:.4f}" for index, name in enumerate(MODEL_HEADS)
       )
+      print(f"epoch {epoch:3d} train {train_loss / max(batches, 1):.4f} val {validation_text}")
     if epoch - best_epoch >= args.patience:
       print(f"early stop {epoch}; best {best_epoch}")
       break
@@ -383,7 +391,7 @@ def main() -> int:
   output.parent.mkdir(parents=True, exist_ok=True)
   np.savez_compressed(
     output,
-    version=np.asarray([5], dtype=np.int32),
+    version=np.asarray([6], dtype=np.int32),
     feature_names=np.asarray(MODEL_FEATURE_NAMES),
     head_names=np.asarray(MODEL_HEADS),
     mean=mean, std=std, thresholds=thresholds, calibration=calibration,

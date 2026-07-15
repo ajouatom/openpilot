@@ -39,7 +39,9 @@ RLOG_PATTERN = re.compile(r"^rlog(?:\.\d+)?\.(?:zst|bz2)$", re.IGNORECASE)
 DEFAULT_ANNOTATIONS = Path(__file__).with_name("radar_lead_annotations.json")
 METADATA_COLUMNS = (
   "frame", "time_s", "object_id", "aliases", "front_track_id", "corner_track_id", "scc_track_id",
-  "lead_label", "cutin_label", "lead_weight", "cutin_weight", "lead_source", "cutin_source",
+  "lead_label", "cutin_label", "external_label",
+  "lead_weight", "cutin_weight", "external_weight",
+  "lead_source", "cutin_source", "external_source",
 )
 
 
@@ -49,30 +51,22 @@ def _context(frame: RadarFrame) -> RadarLeadContext:
       lead.probability, lead.x - 1.52, -lead.y, lead.v, lead.a,
       lead.x_std, lead.y_std, lead.v_std,
     )
-    for lead in frame.model_leads[:2]
+    for lead in frame.model_leads[:1]
   )
   return RadarLeadContext(
     frame.mono_time_s, frame.v_ego, frame.path, frame.lane_lines, frame.lane_probs, model_leads,
   )
 
 
-def _manual_or_teacher_targets(
-  frame_index: int, labels: ManualLabels, teacher: CurrentRadardTeacher,
+def _role_targets(
+  frame_index: int, labels: ManualLabels, teacher: CurrentRadardTeacher, role: str,
 ) -> tuple[set[int], str]:
-  targets: set[int] = set()
-  sources: set[str] = set()
   selection = teacher.select(teacher.frames[frame_index], frame_index)
   candidates = {"leadOne": selection.lead_one, "leadTwo": selection.lead_two}
-  for role in ("leadOne", "leadTwo"):
-    is_manual, track_id = labels.get(frame_index, role)
-    if is_manual:
-      sources.add("manual")
-    else:
-      sources.add("teacher")
-      track_id = candidate_track_id(candidates[role])
-    if track_id is not None:
-      targets.add(track_id)
-  return targets, "manual" if "manual" in sources else "teacher"
+  is_manual, track_id = labels.get(frame_index, role)
+  if not is_manual:
+    track_id = candidate_track_id(candidates[role])
+  return ({track_id} if track_id is not None else set()), "manual" if is_manual else "teacher"
 
 
 def _cutin_targets(
@@ -132,8 +126,10 @@ def export_fused_dataset(
   output_path.parent.mkdir(parents=True, exist_ok=True)
   opener = gzip.open if output_path.suffix.lower() == ".gz" else open
   stats = {
-    "frames": len(frames), "groups": 0, "rows": 0, "lead_positives": 0, "cutin_positives": 0,
-    "manual_lead_groups": 0, "manual_cutin_groups": 0, "invalid_lead_groups": 0, "invalid_cutin_groups": 0,
+    "frames": len(frames), "groups": 0, "rows": 0,
+    "lead_positives": 0, "cutin_positives": 0, "external_positives": 0,
+    "manual_lead_groups": 0, "manual_cutin_groups": 0, "manual_external_groups": 0,
+    "invalid_lead_groups": 0, "invalid_cutin_groups": 0, "invalid_external_groups": 0,
     "annotations": annotation_count,
   }
   with opener(output_path, "wt", newline="", encoding="utf-8") as output:
@@ -147,27 +143,39 @@ def export_fused_dataset(
       samples = feature_builder.update(_context(frame), objects)
       if not samples:
         continue
-      lead_targets, lead_source = _manual_or_teacher_targets(frame_index, labels, teacher)
+      lead_targets, lead_source = _role_targets(frame_index, labels, teacher, "leadOne")
+      external_targets, external_source = _role_targets(frame_index, labels, teacher, "leadTwo")
       cutin_targets, cutin_source = _cutin_targets(frame_index, labels, weak_cutin_ids)
+      # External is the radar-only leadTwo role. Keep it distinct from both the
+      # vision-matched leadOne role and the dedicated cut-in role.
+      external_targets -= lead_targets | cutin_targets
       lead_valid = _targets_available(lead_targets, samples)
       cutin_valid = _targets_available(cutin_targets, samples)
+      external_valid = _targets_available(external_targets, samples)
       stats["invalid_lead_groups"] += int(not lead_valid)
       stats["invalid_cutin_groups"] += int(not cutin_valid)
+      stats["invalid_external_groups"] += int(not external_valid)
       stats["manual_lead_groups"] += int(lead_source == "manual")
       stats["manual_cutin_groups"] += int(cutin_source == "manual")
-      if not lead_valid and not cutin_valid:
+      stats["manual_external_groups"] += int(external_source == "manual")
+      if not lead_valid and not cutin_valid and not external_valid:
         continue
       stats["groups"] += 1
       for sample in samples:
         obj = sample.radar_object
         lead_label = int(lead_valid and any(object_contains_track(obj, target) for target in lead_targets))
         cutin_label = int(cutin_valid and any(object_contains_track(obj, target) for target in cutin_targets))
+        external_label = int(external_valid and any(object_contains_track(obj, target) for target in external_targets))
         # Missing cut-ins in the heuristic teacher are weak negatives. Video-confirmed manual
         # labels carry enough weight to correct both teacher false positives and false negatives.
         lead_weight = 6.0 if lead_source == "manual" else (1.0 if lead_valid else 0.0)
         cutin_weight = (
           10.0 if cutin_source == "manual" else
           (1.0 if cutin_label else 0.08) if cutin_valid else 0.0
+        )
+        external_weight = (
+          8.0 if external_source == "manual" else
+          (1.0 if external_label else 0.25) if external_valid else 0.0
         )
         row: dict[str, Any] = {
           "frame": frame_index,
@@ -179,16 +187,20 @@ def export_fused_dataset(
           "scc_track_id": "" if obj.scc_track_id is None else obj.scc_track_id,
           "lead_label": lead_label,
           "cutin_label": cutin_label,
+          "external_label": external_label,
           "lead_weight": f"{lead_weight:.3f}",
           "cutin_weight": f"{cutin_weight:.3f}",
+          "external_weight": f"{external_weight:.3f}",
           "lead_source": lead_source,
           "cutin_source": cutin_source,
+          "external_source": external_source,
         }
         row.update({name: f"{value:.6g}" for name, value in zip(MODEL_FEATURE_NAMES, sample.values, strict=True)})
         writer.writerow(row)
         stats["rows"] += 1
         stats["lead_positives"] += lead_label
         stats["cutin_positives"] += cutin_label
+        stats["external_positives"] += external_label
   return stats
 
 

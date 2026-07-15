@@ -155,12 +155,12 @@ radar model:
 py -3.12 openpilot/selfdrive/carrot/radar_lead_validation_review.py
 ```
 
-Each route starts two seconds before its validation window. Playback pauses on
-the first appearance of each new `leadOne`, `leadTwo`, and model cut-in, then
-pauses again at the end of the window with a PASS/FAIL verdict. Press Space to
-resume after an event, press R to restart the current review window, and close
-the window to open the next case. Recorded `radarState` leads are hidden by
-default and can be enabled with the `REC L1` and `REC L2` checkboxes.
+Each route starts at 0 seconds and plays through the full log. Playback pauses
+with a two-tone alert only when a model cut-in becomes active. Press Space to
+resume after a cut-in, press R to restart the current log, and close the window
+to open the next case. Only final `leadOne` and `leadTwo` are displayed by
+default; recorded `radarState`, raw radar points, and source-head candidates
+remain available through the display checkboxes.
 
 Review only positive or negative cases:
 
