@@ -139,6 +139,12 @@ class AugmentedRoadView(CameraView):
     ud.hudTimeMillis = hud_ms
     ud.alertTimeMillis = alert_ms
     ud.extrasTimeMillis = extras_ms
+    model_timings = self.model_renderer.render_timings
+    ud.modelPathTimeMillis = model_timings.path_time_millis
+    ud.modelLaneTimeMillis = model_timings.lane_time_millis
+    ud.modelBlindSpotTimeMillis = model_timings.blind_spot_time_millis
+    ud.modelRadarTimeMillis = model_timings.radar_time_millis
+    ud.modelTimingValid = model_timings.valid
     ud.plotMode = self._plot_mode
     ud.recording = gui_app.is_recording()
     self._pm.send('uiDebug', msg)

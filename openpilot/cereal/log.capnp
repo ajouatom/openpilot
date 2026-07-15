@@ -2376,6 +2376,11 @@ struct UIDebug {
   extrasTimeMillis      @6 :Float32;
   plotMode              @7 :UInt8;   # ShowPlotMode (~2초 스로틀 캐시, 0=off)
   recording             @8 :Bool;    # 화면 녹화 중 여부
+  modelPathTimeMillis      @9 :Float32;
+  modelLaneTimeMillis      @10 :Float32;
+  modelBlindSpotTimeMillis @11 :Float32;
+  modelRadarTimeMillis     @12 :Float32;
+  modelTimingValid         @13 :Bool;
 }
 
 struct ManagerState {
