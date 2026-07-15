@@ -20,6 +20,9 @@ def _cloudlog(level: str, message: str) -> None:
 
 
 RADAR_TO_CAMERA = 1.52
+VISION_LEAD_MIN_PROB = 0.5
+MODEL_LEAD_MIN_PROB = 0.0
+CUTIN_DIRECT_MIN_PROB = 0.70
 
 
 def _finite(value: Any, fallback: float = 0.0) -> float:
@@ -101,9 +104,15 @@ class RadarLeadModelController:
     leads = getattr(model, "leadsV3", ())
     if not leads:
       return None
-    lead = leads[0]
+    lead = max(
+      (lead for lead in leads if _finite(getattr(lead, "prob", 0.0)) > VISION_LEAD_MIN_PROB),
+      key=lambda lead: _finite(getattr(lead, "prob", 0.0)),
+      default=None,
+    )
+    if lead is None:
+      return None
     prob = _finite(getattr(lead, "prob", 0.0))
-    if prob < 0.5 or not getattr(lead, "x", ()) or not getattr(lead, "y", ()) or not getattr(lead, "v", ()):
+    if not getattr(lead, "x", ()) or not getattr(lead, "y", ()) or not getattr(lead, "v", ()):
       return None
     d_rel = _finite(lead.x[0]) - RADAR_TO_CAMERA
     if d_rel <= 0.5:
@@ -170,7 +179,7 @@ class RadarLeadModelController:
     return obj.front_track_id is not None or (obj.d_rel > 2.0 and obj.v_lead > 2.0)
 
   @staticmethod
-  def _lead_one_fallback_prediction(predictions: tuple[RadarLeadPrediction, ...]) -> RadarLeadPrediction | None:
+  def _lead_one_prediction(predictions: tuple[RadarLeadPrediction, ...]) -> RadarLeadPrediction | None:
     candidates = [
       prediction for prediction in predictions
       if (
@@ -179,9 +188,16 @@ class RadarLeadModelController:
       )
       and 0.5 < prediction.features.radar_object.d_rel < 160.0
       and abs(prediction.features.d_path) < 2.4
-      and prediction.lead_prob >= 0.15
+      and prediction.lead_prob > MODEL_LEAD_MIN_PROB
     ]
     return min(candidates, key=lambda prediction: (-prediction.lead_prob, prediction.features.radar_object.d_rel), default=None)
+
+  @staticmethod
+  def _direct_cutin_predictions(predictions: tuple[RadarLeadPrediction, ...]) -> tuple[RadarLeadPrediction, ...]:
+    return tuple(sorted((
+      prediction for prediction in predictions
+      if prediction.cutin_prob >= CUTIN_DIRECT_MIN_PROB
+    ), key=lambda prediction: (-prediction.cutin_prob, prediction.features.radar_object.d_rel))[:2])
 
   def update(
     self,
@@ -228,15 +244,7 @@ class RadarLeadModelController:
         return None
       return lead
 
-    lead_one_prediction = next((
-      prediction for prediction in result.decision.lead_candidates
-      if (
-        prediction.features.radar_object.front_track_id is not None
-        or prediction.features.radar_object.scc_track_id is not None
-      )
-    ), None)
-    if lead_one_prediction is None:
-      lead_one_prediction = self._lead_one_fallback_prediction(result.predictions)
+    lead_one_prediction = self._lead_one_prediction(result.predictions)
     lead_one = selected(lead_one_prediction, lead_one_prediction.lead_prob) if lead_one_prediction else None
     if lead_one is None:
       lead_one = self._lead_from_vision(model, v_ego)
@@ -244,7 +252,7 @@ class RadarLeadModelController:
 
     cutin_pairs = [
       (prediction, selected(prediction, prediction.cutin_prob))
-      for prediction in result.decision.cutin_candidates
+      for prediction in (*result.decision.cutin_candidates, *self._direct_cutin_predictions(result.predictions))
     ]
     cutin_leads = tuple(lead for _, lead in cutin_pairs if lead is not None)
 
@@ -253,14 +261,6 @@ class RadarLeadModelController:
       if lead is not None and prediction.features.object_id != lead_one_object
       and self._external_control_usable(prediction)
     ), None)
-    if lead_two is None:
-      lead_two_prediction = next((
-        prediction for prediction in result.decision.lead_candidates
-        if prediction.features.object_id != lead_one_object
-        and self._external_control_usable(prediction)
-      ), None)
-      if lead_two_prediction is not None:
-        lead_two = selected(lead_two_prediction, lead_two_prediction.lead_prob)
 
     left.sort(key=lambda lead: lead["dRel"])
     center.sort(key=lambda lead: lead["dRel"])
