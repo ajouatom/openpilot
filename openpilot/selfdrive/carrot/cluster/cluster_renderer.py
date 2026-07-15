@@ -256,6 +256,7 @@ NAVI_LIVE_CONTENT_W = NAVI_LIVE_PANEL_W - 158
 NAVI_LIVE_NEXT_Y = NAVI_LIVE_PANEL_Y + 184
 NAVI_LIVE_LANE_Y = NAVI_LIVE_PANEL_Y + 258
 NAVI_LIVE_FOOTER_Y = NAVI_LIVE_PANEL_Y + 328
+NAVI_LIVE_GUIDANCE_MEDIA_SCALE = 1.2
 NAVI_TURN_LEFT_TYPES = frozenset((7, 12, 16, 17, 44, 75, 76, 102, 105, 112, 115, 118, 1000, 1002, 1006))
 NAVI_TURN_RIGHT_TYPES = frozenset((6, 13, 19, 43, 73, 74, 101, 104, 111, 114, 117, 123, 124, 1001, 1003, 1007))
 NAVI_TURN_ROUNDABOUT_TYPES = frozenset(range(131, 143))
@@ -3937,7 +3938,12 @@ class ClusterUiRenderer:
             current_frame = media.get("image:tbt_current_compact")
             if current_frame is None or not current_frame.present:
                 current_frame = media.get("image:tbt_current_full")
-            current_rect = rl.Rectangle(x + 12.0, y + 12.0, 310.0, 116.0)
+            current_rect = rl.Rectangle(
+                x + 12.0,
+                y + 12.0,
+                310.0 * NAVI_LIVE_GUIDANCE_MEDIA_SCALE,
+                116.0 * NAVI_LIVE_GUIDANCE_MEDIA_SCALE,
+            )
             current_size = self._navi_media_fitted_size(current_frame, current_rect)
             self._draw_navi_media(
                 current_frame,
@@ -3946,10 +3952,19 @@ class ClusterUiRenderer:
                 align_y=0.0,
             )
             # The compact TBT bitmap includes transparent padding at its bottom.
-            next_y = current_rect.y + max(0.0, (current_size[1] if current_size is not None else 0.0) - 24.0)
+            next_y = current_rect.y + max(
+                0.0,
+                (current_size[1] if current_size is not None else 0.0)
+                - 24.0 * NAVI_LIVE_GUIDANCE_MEDIA_SCALE,
+            )
             self._draw_navi_media(
                 media.get("image:tbt_next"),
-                rl.Rectangle(x + 12.0, next_y, 190.0, 68.0),
+                rl.Rectangle(
+                    x + 12.0,
+                    next_y,
+                    190.0 * NAVI_LIVE_GUIDANCE_MEDIA_SCALE,
+                    68.0 * NAVI_LIVE_GUIDANCE_MEDIA_SCALE,
+                ),
                 align_x=0.0,
                 align_y=0.0,
             )
@@ -3992,7 +4007,14 @@ class ClusterUiRenderer:
                 rl.Rectangle(x + 10.0, y + h * 0.62 - 50.0, 110.0, 100.0),
                 align_x=0.0,
             )
-            lane_rect = rl.Rectangle(x + (w - 226.0) * 0.5, y + h - 73.0, 226.0, 67.0)
+            lane_width = 226.0 * NAVI_LIVE_GUIDANCE_MEDIA_SCALE
+            lane_height = 67.0 * NAVI_LIVE_GUIDANCE_MEDIA_SCALE
+            lane_rect = rl.Rectangle(
+                x + (w - lane_width) * 0.5,
+                y + h - lane_height - 6.0,
+                lane_width,
+                lane_height,
+            )
             lane_frame = media.get("image:lane_bottom")
             lane_size = self._navi_media_fitted_size(lane_frame, lane_rect)
             self._draw_navi_media(
