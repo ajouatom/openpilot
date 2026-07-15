@@ -1,5 +1,6 @@
-﻿import math
+import math
 import os
+from collections import deque
 
 from opendbc import DBC_PATH
 from opendbc.can import CANParser
@@ -15,7 +16,7 @@ RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 32
 RADAR_START_ADDR_CANFD1 = 0x210
 RADAR_MSG_COUNT1 = 16
-RADAR_START_ADDR_CANFD2 = 0x3A5 # Group 2, Group 1: 0x210 2媛쒖뵫?덉뼱???쇰떒 蹂대쪟.
+RADAR_START_ADDR_CANFD2 = 0x3A5 # Group 2, Group 1: 0x210 2개씩?�어???�단 보류.
 RADAR_MSG_COUNT2 = 32
 RADAR_START_ADDR_CANFD3 = 0x400
 RADAR_MSG_COUNT3 = 30
@@ -28,6 +29,48 @@ CORNER_OBJECT_180_MSG_COUNT = 5
 CORNER_OBJECT_180_SLOTS_PER_MSG = 2
 CORNER_OBJECT_180_TRACK_ID_OFFSET = 240
 CORNER_OBJECT_180_DBC = 'hyundai_canfd_corner_radar_180_generated'
+CORNER_OBJECT_430_LEFT_START_ADDR = 0x430
+CORNER_OBJECT_430_RIGHT_START_ADDR = 0x440
+CORNER_OBJECT_430_MSG_COUNT_PER_SIDE = 8
+CORNER_OBJECT_430_SLOTS_PER_MSG = 7
+CORNER_OBJECT_430_TRACK_ID_OFFSET = 300
+CORNER_OBJECT_430_DBC = 'hyundai_canfd_corner_radar_430_generated'
+CORNER_OBJECT_430_EMPTY_RAW_VALUES = (0x010d1f40, 0x00010d1f)
+CORNER_OBJECT_430_DEFAULT_DISTANCE_RAW_MIN = 2520  # 126.0 m
+CORNER_OBJECT_430_DEFAULT_DISTANCE_RAW_MAX = 2600  # 130.0 m
+CORNER_OBJECT_430_MAX_DREL = 120.0
+CORNER_OBJECT_430_MAX_TRACKS_PER_SIDE = 4
+CORNER_OBJECT_430_DT = 0.05
+CORNER_OBJECT_430_MAX_DREL_DELTA = 1.5
+CORNER_OBJECT_430_CANDIDATE_META_BYTE_3 = (2,)
+CORNER_OBJECT_430_CANDIDATE_EXCLUDED_SLOTS = (1,)
+CORNER_OBJECT_430_CANDIDATE_RAW_DELTA = 200
+CORNER_OBJECT_430_STRONG_META_BYTE_2 = (10,)
+CORNER_OBJECT_430_WEAK_META_BYTE_2 = (5, 6, 7, 8, 9)
+CORNER_OBJECT_430_STRONG_MIN_SUPPORT = 2
+CORNER_OBJECT_430_WEAK_MIN_SUPPORT = 3
+CORNER_OBJECT_430_CLUSTER_RAW_GAP = 200
+CORNER_OBJECT_430_TRACK_MATCH_MAX_DREL_DELTA = 3.0
+CORNER_OBJECT_430_MAX_ABS_VREL = 20.0
+CORNER_OBJECT_430_MAX_ABS_YVREL = 3.0
+CORNER_OBJECT_430_VREL_ALPHA = 0.35
+CORNER_OBJECT_430_YVREL_ALPHA = 0.35
+CORNER_OBJECT_430_LATERAL_CELL_MSG_WEIGHT = 0.35
+CORNER_OBJECT_430_LATERAL_CELL_SLOT_WEIGHT = 0.65
+CORNER_OBJECT_430_YREL_OFFSET = 5.8
+CORNER_OBJECT_430_YREL_SCALE = 1.1
+CORNER_OBJECT_430_RIGHT_CELL_MIRROR = 7.0
+CORNER_OBJECT_430_MIN_ABS_YREL = 0.8
+CORNER_OBJECT_430_MAX_ABS_YREL = 4.2
+CORNER_OBJECT_430_HISTORY_SIZE = 8
+CORNER_OBJECT_430_MIN_HISTORY = 5
+CORNER_OBJECT_430_MIN_INWARD_YREL_DELTA = 0.35
+CORNER_OBJECT_430_MIN_RECENT_INWARD_YREL_DELTA = 0.05
+CORNER_OBJECT_430_MIN_INWARD_RATIO = 0.65
+CORNER_OBJECT_430_INWARD_CENTER_ABS_YREL = 1.55
+CORNER_OBJECT_430_INWARD_KEEP_YVREL_ABS_YREL = 2.2
+CORNER_OBJECT_430_EARLY_INWARD_NONCENTER_FRAMES = 2
+CORNER_OBJECT_430_SIDE_KEEP_ABS_YREL = 2.0
 CORNER_OBJECT_STABLE_TRACK_ID_START = 1000
 CORNER_SIDE_OBJECT_MAX_DREL = 0.2
 CORNER_SIDE_OBJECT_MIN_ABS_YREL = 1.4
@@ -107,6 +150,20 @@ def get_corner_object_180_can_parser(CP, enabled):
   messages = [(f"CORNER_RADAR_180_OBJECTS_{addr:x}", 33) for addr in range(CORNER_OBJECT_180_START_ADDR, CORNER_OBJECT_180_START_ADDR + CORNER_OBJECT_180_MSG_COUNT)]
   return CANParser(CORNER_OBJECT_180_DBC, messages, CAN.ACAN)
 
+def get_corner_object_430_can_parser(CP, enabled):
+  if not enabled or not (CP.flags & HyundaiFlags.CANFD):
+    return None
+
+  dbc_path = os.path.join(DBC_PATH, f"{CORNER_OBJECT_430_DBC}.dbc")
+  if not os.path.exists(dbc_path):
+    print(f"RadarInterface: missing {CORNER_OBJECT_430_DBC}.dbc, 0x430/0x440 corner radar disabled")
+    return None
+
+  CAN = CanBus(CP)
+  messages = [(f"CORNER_RADAR_430_OBJECTS_{addr:x}", 33) for addr in range(CORNER_OBJECT_430_LEFT_START_ADDR, CORNER_OBJECT_430_LEFT_START_ADDR + CORNER_OBJECT_430_MSG_COUNT_PER_SIDE)]
+  messages += [(f"CORNER_RADAR_430_OBJECTS_{addr:x}", 33) for addr in range(CORNER_OBJECT_430_RIGHT_START_ADDR, CORNER_OBJECT_430_RIGHT_START_ADDR + CORNER_OBJECT_430_MSG_COUNT_PER_SIDE)]
+  return CANParser(CORNER_OBJECT_430_DBC, messages, CAN.ACAN)
+
 def get_radar_can_parser_scc(CP):
   CAN = CanBus(CP)
   if CP.flags & HyundaiFlags.CANFD:
@@ -147,16 +204,20 @@ class RadarInterface(RadarInterfaceBase):
     self.radar_tracks = self.params.get_int("EnableRadarTracks") >= 1
     self.corner_object_tracks = bool(CP.extFlags & HyundaiExtFlags.CORNER_RADAR_OBJECTS_235.value) and self.params.get_int("EnableCornerRadar") > 0
     self.corner_object_180_tracks = bool(CP.extFlags & HyundaiExtFlags.CORNER_RADAR_OBJECTS_180.value) and self.params.get_int("EnableCornerRadar") > 0
+    self.corner_object_430_tracks = bool(CP.extFlags & HyundaiExtFlags.CORNER_RADAR_OBJECTS_430.value) and self.params.get_int("EnableCornerRadar") > 0
     self.updated_tracks = set()
     self.updated_scc = set()
     self.updated_corner_objects = set()
     self.updated_corner_objects_180 = set()
+    self.updated_corner_objects_430 = set()
     self.corner_object_missed_updates = 0
     self.corner_object_180_missed_updates = 0
+    self.corner_object_430_missed_updates = 0
     self.corner_object_track_ids = CornerObjectTrackIdManager()
     self.rcp_tracks = get_radar_can_parser(CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count)
     self.rcp_corner_objects = get_corner_object_can_parser(CP, self.corner_object_tracks)
     self.rcp_corner_objects_180 = get_corner_object_180_can_parser(CP, self.corner_object_180_tracks)
+    self.rcp_corner_objects_430 = get_corner_object_430_can_parser(CP, self.corner_object_430_tracks)
     # Enabling raw radar tracks on legacy CAN disables the stock SCC11 stream on
     # some Hyundai/Kia platforms. Camera-SCC cars may still use SCC11.
     use_scc_parser = not (self.radar_tracks and not self.canfd and not (CP.flags & HyundaiFlags.CAMERA_SCC))
@@ -166,19 +227,28 @@ class RadarInterface(RadarInterfaceBase):
     self.trigger_msg_tracks = self.radar_start_addr + self.radar_msg_count - 1
     self.trigger_msg_corner_objects = CORNER_OBJECT_235_START_ADDR + CORNER_OBJECT_235_MSG_COUNT - 1
     self.trigger_msg_corner_objects_180 = CORNER_OBJECT_180_START_ADDR + CORNER_OBJECT_180_MSG_COUNT - 1
+    self.trigger_msg_corner_objects_430 = CORNER_OBJECT_430_RIGHT_START_ADDR + CORNER_OBJECT_430_MSG_COUNT_PER_SIDE - 1
     self.track_id = 0
 
-    self.corner_objects_available = self.rcp_corner_objects is not None or self.rcp_corner_objects_180 is not None
+    self.corner_objects_available = self.rcp_corner_objects is not None or self.rcp_corner_objects_180 is not None or self.rcp_corner_objects_430 is not None
     self.radar_off_can = CP.radarUnavailable and not self.corner_objects_available
     print(
       "RadarInterface: "
       f"radarUnavailable={CP.radarUnavailable} radarTracks={self.radar_tracks} "
       f"corner235={self.rcp_corner_objects is not None} corner180={self.rcp_corner_objects_180 is not None} "
+      f"corner430={self.rcp_corner_objects_430 is not None} "
       f"radarOffCan={self.radar_off_can}"
     )
 
     self.vRel_last = 0
     self.dRel_last = 0
+    self.corner_object_430_prev_d_rel = {}
+    self.corner_object_430_prev_v_rel = {}
+    self.corner_object_430_prev_y_rel = {}
+    self.corner_object_430_prev_yv_rel = {}
+    self.corner_object_430_prev_code = {}
+    self.corner_object_430_history = {}
+    self.corner_object_430_noncenter_inward_frames = {}
 
     # Initialize pts
     if self.rcp_tracks is not None:
@@ -207,13 +277,19 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].measured = False
         self.pts[t_id].trackId = t_id
         self.pts[t_id].radarSource = "corner180"
+    if self.rcp_corner_objects_430 is not None:
+      for slot in range(CORNER_OBJECT_430_MSG_COUNT_PER_SIDE * 2 * CORNER_OBJECT_430_SLOTS_PER_MSG):
+        t_id = CORNER_OBJECT_430_TRACK_ID_OFFSET + slot
+        self.pts[t_id] = structs.RadarData.RadarPoint()
+        self.pts[t_id].measured = False
+        self.pts[t_id].trackId = t_id
 
     self.frame = 0
 
 
   def update(self, can_strings):
     self.frame += 1
-    if self.radar_off_can or (self.rcp_tracks is None and self.rcp_scc is None and self.rcp_corner_objects is None and self.rcp_corner_objects_180 is None):
+    if self.radar_off_can or (self.rcp_tracks is None and self.rcp_scc is None and self.rcp_corner_objects is None and self.rcp_corner_objects_180 is None and self.rcp_corner_objects_430 is None):
       return super().update(None)
 
     if self.rcp_scc is not None:
@@ -238,6 +314,12 @@ class RadarInterface(RadarInterfaceBase):
       self.updated_corner_objects_180.update(vls_180)
       corner_180_ready = self.trigger_msg_corner_objects_180 in self.updated_corner_objects_180
 
+    corner_430_ready = False
+    if self.rcp_corner_objects_430 is not None:
+      vls_430 = self.rcp_corner_objects_430.update(can_strings)
+      self.updated_corner_objects_430.update(vls_430)
+      corner_430_ready = self.trigger_msg_corner_objects_430 in self.updated_corner_objects_430
+
     scc_ready = not self.radar_tracks and self.frame % 5 == 0 and self.rcp_scc is not None
 
     if track_ready:
@@ -253,6 +335,11 @@ class RadarInterface(RadarInterfaceBase):
       self._update_corner_objects_180(self.updated_corner_objects_180)
       self.corner_object_180_missed_updates = 0
       self.updated_corner_objects_180.clear()
+
+    if corner_430_ready:
+      self._update_corner_objects_430(self.updated_corner_objects_430)
+      self.corner_object_430_missed_updates = 0
+      self.updated_corner_objects_430.clear()
 
     # Corner radar runs at its own cadence. Do not let corner-only frames publish
     # RadarData, since liveTracks uses a fixed radarTimeStep for aLead/jLead.
@@ -278,15 +365,25 @@ class RadarInterface(RadarInterfaceBase):
         self.corner_object_180_missed_updates += 1
         if self.corner_object_180_missed_updates > 10:
           self._clear_corner_objects_180()
+    if self.rcp_corner_objects_430 is not None:
+      if self.updated_corner_objects_430:
+        self._update_corner_objects_430(self.updated_corner_objects_430)
+        self.corner_object_430_missed_updates = 0
+      else:
+        self.corner_object_430_missed_updates += 1
+        if self.corner_object_430_missed_updates > 10:
+          self._clear_corner_objects_430()
     self.updated_scc.clear()
     self.updated_corner_objects.clear()
     self.updated_corner_objects_180.clear()
+    self.updated_corner_objects_430.clear()
 
     ret = structs.RadarData()
     if ((self.rcp_tracks is not None and self.radar_tracks and not self.rcp_tracks.can_valid) or
         (self.rcp_scc is not None and not self.corner_objects_available and not self.rcp_scc.can_valid) or
         (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid) or
-        (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid)):
+        (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid) or
+        (self.rcp_corner_objects_430 is not None and not self.rcp_corner_objects_430.can_valid)):
       ret.errors.canError = True
     ret.points = [point for point in self.pts.values() if point.measured]
     return ret
@@ -344,7 +441,7 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].yvRel = 0.0
 
       t_id += 1
-    # radar group1? ?섎굹??msg??2媛쒖쓽 ?덉씠?붽? ?ㅼ뼱?덉쓬.
+    # radar group1?� ?�나??msg??2개의 ?�이?��? ?�어?�음.
     if self.radar_group1:
       for addr in range(self.radar_start_addr, self.radar_start_addr + self.radar_msg_count):
         msg = self.rcp_tracks.vl[f"RADAR_TRACK_{addr:x}"]
@@ -455,6 +552,229 @@ class RadarInterface(RadarInterfaceBase):
       point.aRel = a_rel
       point.yvRel = yv_rel
 
+
+  def _update_corner_objects_430(self, updated_messages):
+    if self.rcp_corner_objects_430 is None:
+      return
+
+    if not updated_messages:
+      self._clear_corner_objects_430()
+      return
+
+    bank_defs = (
+      (CORNER_OBJECT_430_LEFT_START_ADDR, 1.0, 0),
+      (CORNER_OBJECT_430_RIGHT_START_ADDR, -1.0, CORNER_OBJECT_430_MSG_COUNT_PER_SIDE * CORNER_OBJECT_430_SLOTS_PER_MSG),
+    )
+    for start_addr, side_sign, track_base in bank_defs:
+      bins = []
+      for msg_index, addr in enumerate(range(start_addr, start_addr + CORNER_OBJECT_430_MSG_COUNT_PER_SIDE)):
+        msg = self.rcp_corner_objects_430.vl[f"CORNER_RADAR_430_OBJECTS_{addr:x}"]
+        for slot_index in range(CORNER_OBJECT_430_SLOTS_PER_MSG):
+          prefix = f"SLOT{slot_index + 1}_"
+          distance_raw = int(msg[f"{prefix}DISTANCE_RAW"])
+          raw = (
+            distance_raw |
+            (int(msg[f"{prefix}META_13_15"]) << 13) |
+            (int(msg[f"{prefix}META_BYTE_2"]) << 16) |
+            (int(msg[f"{prefix}META_BYTE_3"]) << 24)
+          )
+          code = (
+            int(msg[f"{prefix}META_13_15"]),
+            int(msg[f"{prefix}META_BYTE_2"]),
+            int(msg[f"{prefix}META_BYTE_3"]),
+          )
+          d_rel = distance_raw * 0.05
+          default_distance = CORNER_OBJECT_430_DEFAULT_DISTANCE_RAW_MIN <= distance_raw <= CORNER_OBJECT_430_DEFAULT_DISTANCE_RAW_MAX
+          base_valid = (
+            raw not in CORNER_OBJECT_430_EMPTY_RAW_VALUES and
+            distance_raw not in (0, 8000, 8191) and
+            not default_distance and
+            0.2 < d_rel < CORNER_OBJECT_430_MAX_DREL
+          )
+          candidate_valid = (
+            base_valid and
+            slot_index + 1 not in CORNER_OBJECT_430_CANDIDATE_EXCLUDED_SLOTS and
+            code[2] in CORNER_OBJECT_430_CANDIDATE_META_BYTE_3 and
+            code[1] in CORNER_OBJECT_430_STRONG_META_BYTE_2 + CORNER_OBJECT_430_WEAK_META_BYTE_2
+          )
+          bins.append({
+            "msg_index": msg_index,
+            "slot_index": slot_index,
+            "distance_raw": distance_raw,
+            "d_rel": d_rel,
+            "code": code,
+            "candidate_valid": candidate_valid,
+          })
+
+      supported_bins = []
+      candidates = [b for b in bins if b["candidate_valid"]]
+      for b in candidates:
+        support = 1
+        for other in candidates:
+          if other is b:
+            continue
+          if abs(other["msg_index"] - b["msg_index"]) > 1:
+            continue
+          if abs(other["slot_index"] - b["slot_index"]) > 2:
+            continue
+          if abs(other["distance_raw"] - b["distance_raw"]) > CORNER_OBJECT_430_CANDIDATE_RAW_DELTA:
+            continue
+          support += 1
+        min_support = (CORNER_OBJECT_430_STRONG_MIN_SUPPORT if b["code"][1] in CORNER_OBJECT_430_STRONG_META_BYTE_2
+                       else CORNER_OBJECT_430_WEAK_MIN_SUPPORT)
+        if support >= min_support:
+          supported_bins.append({**b, "support": support})
+
+      clusters = []
+      for b in sorted(supported_bins, key=lambda item: item["distance_raw"]):
+        if not clusters or b["distance_raw"] - clusters[-1][-1]["distance_raw"] > CORNER_OBJECT_430_CLUSTER_RAW_GAP:
+          clusters.append([b])
+        else:
+          clusters[-1].append(b)
+      clusters = sorted(clusters, key=lambda cluster: sum(b["distance_raw"] for b in cluster) / len(cluster))[:CORNER_OBJECT_430_MAX_TRACKS_PER_SIDE]
+
+      cluster_objects = []
+      for cluster in clusters:
+        msg_index = sum(b["msg_index"] for b in cluster) / len(cluster)
+        slot = sum(b["slot_index"] + 1 for b in cluster) / len(cluster)
+        lateral_cell = (CORNER_OBJECT_430_LATERAL_CELL_MSG_WEIGHT * msg_index +
+                        CORNER_OBJECT_430_LATERAL_CELL_SLOT_WEIGHT * slot)
+        mapped_cell = lateral_cell if side_sign > 0.0 else CORNER_OBJECT_430_RIGHT_CELL_MIRROR - lateral_cell
+        y_abs = max(CORNER_OBJECT_430_MIN_ABS_YREL,
+                    min(CORNER_OBJECT_430_MAX_ABS_YREL,
+                        CORNER_OBJECT_430_YREL_OFFSET - CORNER_OBJECT_430_YREL_SCALE * mapped_cell))
+        cluster_objects.append({
+          "d_rel": sum(b["d_rel"] for b in cluster) / len(cluster),
+          "y_rel": side_sign * y_abs,
+          "code": max((b["code"] for b in cluster), key=lambda code: sum(1 for item in cluster if item["code"] == code)),
+        })
+
+      active_t_ids = set()
+      side_track_ids = [
+        CORNER_OBJECT_430_TRACK_ID_OFFSET + track_base + slot
+        for slot in range(CORNER_OBJECT_430_MAX_TRACKS_PER_SIDE)
+      ]
+      unmatched_track_ids = {t_id for t_id in side_track_ids if t_id in self.corner_object_430_prev_d_rel}
+      unused_track_ids = [t_id for t_id in side_track_ids if t_id not in unmatched_track_ids]
+
+      for cluster in cluster_objects:
+        d_rel = cluster["d_rel"]
+        code = cluster["code"]
+        matched_t_id = None
+        if unmatched_track_ids:
+          nearest_t_id = min(unmatched_track_ids, key=lambda t_id: abs(d_rel - self.corner_object_430_prev_d_rel[t_id]))
+          if abs(d_rel - self.corner_object_430_prev_d_rel[nearest_t_id]) <= CORNER_OBJECT_430_TRACK_MATCH_MAX_DREL_DELTA:
+            matched_t_id = nearest_t_id
+            unmatched_track_ids.remove(matched_t_id)
+        if matched_t_id is None and unused_track_ids:
+          matched_t_id = unused_track_ids.pop(0)
+        if matched_t_id is None:
+          continue
+
+        t_id = matched_t_id
+        active_t_ids.add(t_id)
+        prev_d_rel = self.corner_object_430_prev_d_rel.get(t_id)
+        prev_code = self.corner_object_430_prev_code.get(t_id)
+        self.corner_object_430_prev_d_rel[t_id] = d_rel
+        self.corner_object_430_prev_y_rel[t_id] = cluster["y_rel"]
+        self.corner_object_430_prev_code[t_id] = code
+        reset_track = prev_d_rel is None or code != prev_code or abs(d_rel - prev_d_rel) > CORNER_OBJECT_430_MAX_DREL_DELTA
+        if reset_track:
+          self.corner_object_430_prev_v_rel.pop(t_id, None)
+          self.corner_object_430_prev_yv_rel.pop(t_id, None)
+          self.corner_object_430_history.pop(t_id, None)
+          self.corner_object_430_noncenter_inward_frames.pop(t_id, None)
+
+        history = self.corner_object_430_history.setdefault(t_id, deque(maxlen=CORNER_OBJECT_430_HISTORY_SIZE))
+        history.append((d_rel, cluster["y_rel"]))
+        if len(history) < CORNER_OBJECT_430_MIN_HISTORY:
+          self._clear_point(t_id)
+          continue
+
+        window_dt = CORNER_OBJECT_430_DT * (len(history) - 1)
+        first_d_rel, first_y_rel = history[0]
+        hist_v_rel = (d_rel - first_d_rel) / window_dt
+        if abs(hist_v_rel) > CORNER_OBJECT_430_MAX_ABS_VREL:
+          self.corner_object_430_prev_v_rel.pop(t_id, None)
+          self.corner_object_430_prev_yv_rel.pop(t_id, None)
+          self.corner_object_430_history.pop(t_id, None)
+          self.corner_object_430_noncenter_inward_frames.pop(t_id, None)
+          self._clear_point(t_id)
+          continue
+        prev_v_rel = self.corner_object_430_prev_v_rel.get(t_id, hist_v_rel)
+        v_rel = (1.0 - CORNER_OBJECT_430_VREL_ALPHA) * prev_v_rel + CORNER_OBJECT_430_VREL_ALPHA * hist_v_rel
+        self.corner_object_430_prev_v_rel[t_id] = v_rel
+
+        inward_steps = 0
+        usable_steps = 0
+        prev_abs_y = abs(history[0][1])
+        for _, y_rel in list(history)[1:]:
+          abs_y = abs(y_rel)
+          delta = prev_abs_y - abs_y
+          if abs(delta) > 1e-3:
+            usable_steps += 1
+            if delta > 0.0:
+              inward_steps += 1
+          prev_abs_y = abs_y
+        net_inward_y = abs(first_y_rel) - abs(cluster["y_rel"])
+        inward_ratio = inward_steps / usable_steps if usable_steps > 0 else 0.0
+        hist_yv_rel = (cluster["y_rel"] - first_y_rel) / window_dt
+        recent_inward_y = abs(history[-3][1]) - abs(cluster["y_rel"]) if len(history) >= 3 else net_inward_y
+        if (net_inward_y < CORNER_OBJECT_430_MIN_INWARD_YREL_DELTA or
+            recent_inward_y < CORNER_OBJECT_430_MIN_RECENT_INWARD_YREL_DELTA or
+            inward_ratio < CORNER_OBJECT_430_MIN_INWARD_RATIO or
+            abs(hist_yv_rel) > CORNER_OBJECT_430_MAX_ABS_YVREL):
+          hist_yv_rel = 0.0
+        inward_motion_candidate = hist_yv_rel != 0.0 and abs(cluster["y_rel"]) <= CORNER_OBJECT_430_INWARD_KEEP_YVREL_ABS_YREL
+        inward_center_candidate = inward_motion_candidate and abs(cluster["y_rel"]) <= CORNER_OBJECT_430_INWARD_CENTER_ABS_YREL
+        y_rel = cluster["y_rel"]
+        if inward_motion_candidate:
+          if inward_center_candidate:
+            self.corner_object_430_noncenter_inward_frames[t_id] = 0
+            prev_yv_rel = self.corner_object_430_prev_yv_rel.get(t_id, hist_yv_rel)
+            yv_rel = (1.0 - CORNER_OBJECT_430_YVREL_ALPHA) * prev_yv_rel + CORNER_OBJECT_430_YVREL_ALPHA * hist_yv_rel
+          else:
+            noncenter_frames = self.corner_object_430_noncenter_inward_frames.get(t_id, 0) + 1
+            self.corner_object_430_noncenter_inward_frames[t_id] = noncenter_frames
+            if noncenter_frames <= CORNER_OBJECT_430_EARLY_INWARD_NONCENTER_FRAMES:
+              prev_yv_rel = self.corner_object_430_prev_yv_rel.get(t_id, hist_yv_rel)
+              yv_rel = (1.0 - CORNER_OBJECT_430_YVREL_ALPHA) * prev_yv_rel + CORNER_OBJECT_430_YVREL_ALPHA * hist_yv_rel
+            else:
+              yv_rel = 0.0
+          if not inward_center_candidate and abs(y_rel) < CORNER_OBJECT_430_SIDE_KEEP_ABS_YREL:
+            y_rel = math.copysign(CORNER_OBJECT_430_SIDE_KEEP_ABS_YREL, y_rel)
+        else:
+          hist_yv_rel = 0.0
+          yv_rel = 0.0
+          self.corner_object_430_noncenter_inward_frames[t_id] = 0
+          if abs(y_rel) < CORNER_OBJECT_430_SIDE_KEEP_ABS_YREL:
+            y_rel = math.copysign(CORNER_OBJECT_430_SIDE_KEEP_ABS_YREL, y_rel)
+        self.corner_object_430_prev_yv_rel[t_id] = yv_rel
+
+        self.pts[t_id].measured = True
+        self.pts[t_id].trackId = t_id
+        self.pts[t_id].dRel = d_rel
+        self.pts[t_id].yRel = y_rel
+        self.pts[t_id].vRel = v_rel
+        self.pts[t_id].vLead = v_rel + self.v_ego
+        self.pts[t_id].aRel = float('nan')
+        self.pts[t_id].yvRel = yv_rel
+
+      side_track_count = CORNER_OBJECT_430_MSG_COUNT_PER_SIDE * CORNER_OBJECT_430_SLOTS_PER_MSG
+      for slot in range(side_track_count):
+        t_id = CORNER_OBJECT_430_TRACK_ID_OFFSET + track_base + slot
+        if t_id in active_t_ids:
+          continue
+        self.corner_object_430_prev_d_rel.pop(t_id, None)
+        self.corner_object_430_prev_v_rel.pop(t_id, None)
+        self.corner_object_430_prev_y_rel.pop(t_id, None)
+        self.corner_object_430_prev_yv_rel.pop(t_id, None)
+        self.corner_object_430_prev_code.pop(t_id, None)
+        self.corner_object_430_history.pop(t_id, None)
+        self.corner_object_430_noncenter_inward_frames.pop(t_id, None)
+        self._clear_point(t_id)
+
+
   def _clear_point(self, t_id):
     self.pts[t_id].measured = False
     self.pts[t_id].dRel = 0
@@ -473,6 +793,17 @@ class RadarInterface(RadarInterfaceBase):
     for slot in range(CORNER_OBJECT_180_MSG_COUNT * CORNER_OBJECT_180_SLOTS_PER_MSG):
       self._clear_point(CORNER_OBJECT_180_TRACK_ID_OFFSET + slot)
     self.corner_object_track_ids.clear_source("corner180")
+
+  def _clear_corner_objects_430(self):
+    self.corner_object_430_prev_d_rel.clear()
+    self.corner_object_430_prev_v_rel.clear()
+    self.corner_object_430_prev_y_rel.clear()
+    self.corner_object_430_prev_yv_rel.clear()
+    self.corner_object_430_prev_code.clear()
+    self.corner_object_430_history.clear()
+    self.corner_object_430_noncenter_inward_frames.clear()
+    for slot in range(CORNER_OBJECT_430_MSG_COUNT_PER_SIDE * 2 * CORNER_OBJECT_430_SLOTS_PER_MSG):
+      self._clear_point(CORNER_OBJECT_430_TRACK_ID_OFFSET + slot)
 
   def _update_scc(self, updated_messages):
     cpt = self.rcp_scc.vl
