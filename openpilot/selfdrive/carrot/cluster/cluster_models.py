@@ -135,6 +135,9 @@ class NaviSpeedInfo:
     sdi_type: int | None = None
     sdi_distance_m: int | None = None
     sdi_speed_limit_kph: int | None = None
+    secondary_sdi_type: int | None = None
+    secondary_sdi_distance_m: int | None = None
+    secondary_sdi_speed_limit_kph: int | None = None
     section_active: bool = False
     section_speed_limit_kph: int | None = None
     section_average_kph: float | None = None

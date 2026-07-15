@@ -725,3 +725,44 @@ def test_payload_bounds_route_and_publisher_sends_dedicated_service():
   assert message.carrotNaviMedia["sessionId"] == "session"
   assert message.carrotNaviMedia["name"] == "tbt_next"
   assert message.carrotNaviMedia["payload"] == b"png-data"
+
+
+def test_payload_projects_primary_and_secondary_sdi_for_consumers():
+  payload = build_carrot_navi_payload({
+    "generation": 1,
+    "session_id": "session",
+    "connected": True,
+    "items": {
+      "speed": {
+        "present": True,
+        "sequence": 9,
+        "source_timestamp_ms": 1234,
+        "received_mono_ns": 5678,
+        "value": {
+          "road_limit_kph": 50,
+          "sdi": {
+            "type": 1,
+            "distance_m": 420,
+            "speed_limit_kph": 50,
+            "section_type": 7,
+            "block_type": 2,
+            "block_speed_kph": 40,
+            "block_distance_m": 390,
+          },
+          "sdi_secondary": {
+            "type": 22,
+            "distance_m": 93,
+            "block_type": 3,
+            "block_distance_m": 80,
+          },
+        },
+      },
+    },
+  }, publish_mono_ns=999)
+
+  speed = payload["speed"]
+  assert speed["sdiPresent"] is True
+  assert (speed["sdiSectionType"], speed["sdiBlockType"], speed["sdiBlockDistanceM"]) == (7, 2, 390)
+  assert speed["secondarySdiPresent"] is True
+  assert (speed["secondarySdiType"], speed["secondarySdiDistanceM"]) == (22, 93)
+  assert (speed["secondarySdiBlockType"], speed["secondarySdiBlockDistanceM"]) == (3, 80)

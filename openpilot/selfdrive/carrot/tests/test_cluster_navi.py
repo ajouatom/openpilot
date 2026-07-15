@@ -69,6 +69,7 @@ def test_parse_and_expire_live_navi_groups_independently():
         "current_kph": 48,
         "road_limit_kph": 50,
         "sdi": {"type": 1, "distance_m": 420, "speed_limit_kph": 50},
+        "sdi_secondary": {"type": 22, "distance_m": 93},
       }, 3, 100.0),
       "traffic_signal": _record({
         "visible": True,
@@ -90,6 +91,8 @@ def test_parse_and_expire_live_navi_groups_independently():
   assert state.current is not None and state.current.main_text == "Turn left"
   assert state.lane_current is not None and state.lane_current.available == (0, 8, 8, 0)
   assert state.speed is not None and state.speed.road_limit_kph == 50
+  assert state.speed.secondary_sdi_type == 22
+  assert state.speed.secondary_sdi_distance_m == 93
   assert state.traffic_light is not None and state.traffic_light.red_s == 18
   assert state.route is not None and state.route.polyline == ((37.5, 127.0),)
 

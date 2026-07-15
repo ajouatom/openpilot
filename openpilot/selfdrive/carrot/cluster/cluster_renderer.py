@@ -3631,12 +3631,19 @@ class ClusterUiRenderer:
                 y += slot_h
         elif navi is not None and navi.speed is not None:
             speed = navi.speed
-            if speed.sdi_type is not None:
-                sdi = "SDI"
-                if speed.sdi_speed_limit_kph is not None:
-                    sdi += f" {speed.sdi_speed_limit_kph} km/h"
-                if speed.sdi_distance_m is not None:
-                    sdi += f"  {self._format_navi_distance(speed.sdi_distance_m)}"
+            sdi_values = (
+                ("SDI", speed.sdi_type, speed.sdi_speed_limit_kph, speed.sdi_distance_m),
+                ("SDI 2", speed.secondary_sdi_type, speed.secondary_sdi_speed_limit_kph,
+                 speed.secondary_sdi_distance_m),
+            )
+            for label, sdi_type, speed_limit_kph, distance_m in sdi_values:
+                if sdi_type is None:
+                    continue
+                sdi = label
+                if speed_limit_kph is not None:
+                    sdi += f" {speed_limit_kph} km/h"
+                if distance_m is not None:
+                    sdi += f"  {self._format_navi_distance(distance_m)}"
                 self._draw_text(sdi, x, y + 6.0, 24.0, AMBER)
                 y += 40.0
             if speed.section_active:
@@ -4143,6 +4150,13 @@ class ClusterUiRenderer:
             if navi.speed.sdi_distance_m is not None:
                 sdi_text += f" / {self._format_navi_distance(navi.speed.sdi_distance_m)}"
             footer_parts.append(sdi_text)
+        if navi.speed is not None and navi.speed.secondary_sdi_type is not None:
+            secondary_sdi_text = "SDI2"
+            if navi.speed.secondary_sdi_speed_limit_kph:
+                secondary_sdi_text += f" {navi.speed.secondary_sdi_speed_limit_kph}"
+            if navi.speed.secondary_sdi_distance_m is not None:
+                secondary_sdi_text += f" / {self._format_navi_distance(navi.speed.secondary_sdi_distance_m)}"
+            footer_parts.append(secondary_sdi_text)
         if navi.crossroad is not None and navi.crossroad.visible:
             footer_parts.append(f"JCT {self._format_navi_distance(navi.crossroad.distance_m)}")
         if navi.status is not None and navi.status.off_route:
