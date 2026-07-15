@@ -37,6 +37,9 @@ class CarInterface(CarInterfaceBase):
 
     ret.brand = "hyundai"
 
+    if candidate == CAR.KIA_SORENTO:
+      ret.extFlags |= HyundaiExtFlags.RADAR_GROUP4.value
+
     cam_can = CanBus(None, fingerprint).CAM if camera_scc == 0 else 1
     hda2 = False #0x50 in fingerprint[cam_can] or 0x110 in fingerprint[cam_can]
     hda2 = hda2 or params.get_int("CanfdHDA2") > 0

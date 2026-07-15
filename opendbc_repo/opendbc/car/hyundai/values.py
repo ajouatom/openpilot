@@ -149,6 +149,7 @@ class HyundaiExtFlags(IntFlag):
   RADAR_GROUP3 = 2 ** 11  # 0x400-0x41D radar object group
   CORNER_RADAR_OBJECTS_235 = 2 ** 12  # 0x230 status + 0x235-0x248 raw corner radar objects
   CORNER_RADAR_OBJECTS_180 = 2 ** 13  # 0x180-0x184 bus 1 two-slot raw corner/front radar objects
+  RADAR_GROUP4 = 2 ** 14  # 0x500-0x507 Denso DNMWR006 stable radar tracks
 
 class Footnote(Enum):
   CANFD = CarFootnote(
@@ -589,6 +590,7 @@ class CAR(Platforms):
       HyundaiCarDocs("Kia Sorento 2019", video="https://www.youtube.com/watch?v=Fkh3s6WHJz8", car_parts=CarParts.common([CarHarness.hyundai_e])),
     ],
     CarSpecs(mass=1985, wheelbase=2.78, steerRatio=14.4 * 1.1),  # 10% higher at the center seems reasonable
+    dbc_dict={Bus.pt: "hyundai_kia_generic", Bus.radar: "hyundai_kia_denso_front_radar_generated"},
     flags=HyundaiFlags.CHECKSUM_6B | HyundaiFlags.UNSUPPORTED_LONGITUDINAL,
   )
   KIA_SORENTO_4TH_GEN = HyundaiCanFDPlatformConfig(
