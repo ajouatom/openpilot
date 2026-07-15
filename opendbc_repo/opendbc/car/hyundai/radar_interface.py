@@ -13,8 +13,12 @@ from openpilot.common.filter_simple import MyMovingAverage
 SCC_TID = 0
 RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 32
-RADAR_MSG_COUNT4 = 16
-RADAR_GROUP4_TRACKED_MSG_COUNT = 8
+# EN: DNMWR006 exposes eight stable tracked-object slots at 0x500-0x507.
+#     Messages from 0x508 onward are distance-sorted raw detections without stable IDs.
+# KO: DNMWR006의 안정적인 추적 객체 슬롯은 0x500~0x507의 8개이다.
+#     0x508 이후 메시지는 고정 ID가 없는 거리순 raw detection이므로 제외한다.
+RADAR_MSG_COUNT4 = 8
+RADAR_GROUP4_MAX_LONG_DIST = 325.0
 RADAR_GROUP4_MAX_YREL = 6.0
 RADAR_START_ADDR_CANFD1 = 0x210
 RADAR_MSG_COUNT1 = 16
@@ -277,15 +281,16 @@ class RadarInterface(RadarInterfaceBase):
       elif self.canfd:
         valid = msg['VALID_CNT'] > 10
       elif self.radar_group4:
-        # DNMWR006 empty slots use the out-of-range raw distance 0xfff8
-        # (409.55 m). The first eight stable tracks use OBJECT_STATE 3. The
-        # following eight distance-sorted raw detections use OBJECT_STATE 0;
-        # expose them only on this expanded test profile. The signed 11-bit
-        # field is lateral distance, with positive raw values to the right
-        # (negative openpilot yRel). Limit output to the ego and adjacent lanes
-        # to suppress farther roadside reflections.
-        expected_state = 3 if addr < RADAR_START_ADDR + RADAR_GROUP4_TRACKED_MSG_COUNT else 0
-        valid = (msg['OBJECT_STATE'] == expected_state and 0.2 < msg['LONG_DIST'] < 205.0 and
+        # EN: OBJECT_STATE 3 is a confirmed track; empty slots use LONG_DIST
+        #     raw 0xfff8 (409.55 m). Driving logs reached 317.65 m, so 325 m
+        #     preserves every observed confirmed track while retaining margin
+        #     from the empty-slot sentinel. Keep the +/-6 m ego/adjacent-lane
+        #     envelope to suppress farther roadside reflections.
+        # KO: OBJECT_STATE 3은 확정 추적 객체이며, 빈 슬롯은 LONG_DIST raw
+        #     0xfff8(409.55m)을 사용한다. 주행 로그의 최대값은 317.65m였으므로
+        #     325m 상한은 관측된 확정 트랙을 모두 보존하면서 빈 슬롯 값과 충분한
+        #     여유를 둔다. 원거리 도로변 반사를 줄이기 위해 좌우 6m 범위는 유지한다.
+        valid = (msg['OBJECT_STATE'] == 3 and 0.2 < msg['LONG_DIST'] < RADAR_GROUP4_MAX_LONG_DIST and
                  abs(msg['LAT_DIST']) <= RADAR_GROUP4_MAX_YREL)
       else:
         valid = msg['STATE'] in (3, 4)
