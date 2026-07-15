@@ -1,5 +1,6 @@
 import asyncio
 import errno
+import json
 import struct
 
 import pytest
@@ -8,7 +9,9 @@ from aiohttp.test_utils import TestClient, TestServer
 from openpilot.selfdrive.carrot.carrot_navi import (
   BINARY_HEADER,
   CATALOG,
+  CarrotNaviDiscoveryBeacon,
   CarrotNaviReceiver,
+  DISCOVERY_PORT,
   PROTOCOL_VERSION,
   build_manifest,
   create_app,
@@ -33,6 +36,29 @@ def requirements_query() -> dict:
       for kind, name in CATALOG
     ],
   }
+
+
+def test_standalone_discovery_advertises_new_navi_endpoint(monkeypatch):
+  sent = []
+
+  class FakeSocket:
+    def setsockopt(self, *args):
+      pass
+
+    def sendto(self, body, address):
+      sent.append((body, address))
+
+    def close(self):
+      pass
+
+  monkeypatch.setattr("openpilot.selfdrive.carrot.carrot_navi.socket.socket", lambda *args: FakeSocket())
+
+  CarrotNaviDiscoveryBeacon("192.168.0.10").broadcast_once()
+
+  assert len(sent) == 1
+  body, address = sent[0]
+  assert json.loads(body) == {"ip": "192.168.0.10", "navi_debug": 1}
+  assert address == ("255.255.255.255", DISCOVERY_PORT)
 
 
 def test_receiver_app_retries_temporary_port_conflict(monkeypatch):

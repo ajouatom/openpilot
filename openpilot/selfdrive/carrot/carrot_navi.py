@@ -6,6 +6,7 @@ import copy
 import errno
 import json
 import secrets
+import socket
 import struct
 import threading
 import time
@@ -17,6 +18,8 @@ from aiohttp import WSMsgType, web
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 7714
+DISCOVERY_PORT = 7705
+DISCOVERY_INTERVAL_S = 1.0
 PROTOCOL_VERSION = 2
 MAX_MESSAGE_BYTES = 8 * 1024 * 1024
 CONTROL_WEBSOCKET_HEARTBEAT_S = 5.0
@@ -57,6 +60,60 @@ CLEAR_REASONS = {
   4: "passed",
   5: "invalid",
 }
+
+
+def detect_advertise_ip(bind_host: str) -> str:
+  if bind_host not in ("", "0.0.0.0", "::"):
+    return bind_host
+  probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  try:
+    probe.connect(("8.8.8.8", 80))
+    return str(probe.getsockname()[0])
+  except OSError:
+    try:
+      return socket.gethostbyname(socket.gethostname())
+    except OSError:
+      return "127.0.0.1"
+  finally:
+    probe.close()
+
+
+class CarrotNaviDiscoveryBeacon:
+  def __init__(self, advertise_ip: str, interval_s: float = DISCOVERY_INTERVAL_S) -> None:
+    self.advertise_ip = advertise_ip
+    self.interval_s = max(0.2, float(interval_s))
+    self._stop = threading.Event()
+    self._thread: threading.Thread | None = None
+
+  def start(self) -> None:
+    if self._thread is not None:
+      return
+    self._stop.clear()
+    self._thread = threading.Thread(target=self._run, name="carrot_navi_discovery", daemon=True)
+    self._thread.start()
+
+  def stop(self) -> None:
+    self._stop.set()
+    if self._thread is not None:
+      self._thread.join(timeout=1.0)
+    self._thread = None
+
+  def broadcast_once(self) -> None:
+    body = json.dumps({"ip": self.advertise_ip, "navi_debug": 1}).encode("utf-8")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+      sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+      sock.sendto(body, ("255.255.255.255", DISCOVERY_PORT))
+    finally:
+      sock.close()
+
+  def _run(self) -> None:
+    while not self._stop.is_set():
+      try:
+        self.broadcast_once()
+      except OSError:
+        pass
+      self._stop.wait(self.interval_s)
 
 
 def now_ms() -> int:
@@ -775,11 +832,15 @@ def main() -> None:
   parser = argparse.ArgumentParser(description="Carrot Navi WebSocket receiver")
   parser.add_argument("--host", default=DEFAULT_HOST)
   parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+  parser.add_argument("--advertise-ip", default=None)
+  parser.add_argument("--no-beacon", action="store_true")
   parser.add_argument("--map-theme", choices=tuple(sorted(MAP_THEMES)), default="dark")
   parser.add_argument("--no-cereal", action="store_true")
   args = parser.parse_args()
 
   receiver = CarrotNaviReceiver(port=args.port, map_theme=args.map_theme)
+  advertise_ip = args.advertise_ip or detect_advertise_ip(args.host)
+  beacon = None if args.no_beacon else CarrotNaviDiscoveryBeacon(advertise_ip)
   publisher = None
   if not args.no_cereal:
     try:
@@ -791,10 +852,15 @@ def main() -> None:
       receiver.record_cereal_publish(f"publisher unavailable: {exc}")
       print(f"[carrot_navi] cereal publisher unavailable: {exc}")
 
+  if beacon is not None:
+    beacon.start()
+    print(f"[carrot_navi] discovery advertising {advertise_ip}:{args.port} via UDP {DISCOVERY_PORT}")
   print(f"[carrot_navi] starting receiver on {args.host}:{args.port}")
   try:
     run_receiver_app(receiver, args.host, args.port)
   finally:
+    if beacon is not None:
+      beacon.stop()
     if publisher is not None:
       publisher.stop()
 

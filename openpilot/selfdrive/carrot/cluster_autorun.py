@@ -270,8 +270,6 @@ def _cluster_args(
     args = [
         "--input",
         "live",
-        "--navi-overlay",
-        "--navi-publish-cereal",
         "--output",
         output_mode,
         "--cluster-hud-mode",
@@ -284,6 +282,7 @@ def _cluster_args(
         str(priority),
     ]
     if output_mode in ("usb", "both"):
+        # Standalone carrot_navi owns TCP 7714; live input consumes its carrotNavi cereal service.
         args[4:4] = _encoder_args(active_encoder_mode)
     fps = os.environ.get(AUTORUN_FPS_ENV, "").strip()
     if fps:
