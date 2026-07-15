@@ -396,7 +396,9 @@ class NaviIpcMediaSource:
         self._session_id = ""
         self._media: dict[str, NaviMediaFrame] = {}
         self._item_status: dict[str, NaviItemStatus] = {}
-        self._h264_decoders: dict[str, H264Decoder] = {}
+        self._media_epoch = 0
+        self._h264_requested_sequences: dict[str, int] = {}
+        self._h264_worker = H264DecodeWorker()
         self._h264_configs: dict[str, tuple[int, bytes]] = {}
         self._last_media_at_s = 0.0
         self._map_frame_at_s = 0.0
@@ -410,6 +412,7 @@ class NaviIpcMediaSource:
                 self._consume(event.carrotNaviMedia, now_s)
             except Exception as exc:
                 self._error = str(exc)[:256]
+        self._apply_h264_results(now_s)
 
         navi_session = str(getattr(navi_live, "session_id", "") or "")
         if not self._session_id and navi_session:
@@ -451,6 +454,7 @@ class NaviIpcMediaSource:
 
     def close(self) -> None:
         self._clear_media()
+        self._h264_worker.close()
         self._socket = None
 
     def _consume(self, data: Any, now_s: float) -> None:
@@ -476,6 +480,8 @@ class NaviIpcMediaSource:
         message_type = int(_ipc_value(data, "messageType", 0))
         payload = bytes(_ipc_value(data, "payload", b"") or b"")
         if not present or message_type == 4:
+            self._h264_requested_sequences[key] = sequence
+            self._h264_worker.discard(key)
             self._media[key] = NaviMediaFrame(key, sequence, False, reason=reason)
             if key == "render:map_main":
                 self._map_frame_at_s = 0.0
@@ -485,34 +491,50 @@ class NaviIpcMediaSource:
         height = max(0, int(_ipc_value(data, "height", 0)))
         format_or_reason = int(_ipc_value(data, "formatOrReason", 0))
         if message_type == 1:
+            self._h264_requested_sequences[key] = sequence
+            self._h264_worker.discard(key)
             mime = "image/png" if format_or_reason == 1 else "image/jpeg"
             self._media[key] = NaviMediaFrame(key, sequence, True, mime, width, height, payload)
         elif message_type == 2:
             self._h264_configs[key] = (sequence, payload)
-            decoder = self._h264_decoders.get(key)
-            if decoder is not None:
-                decoder.reset()
             return
         elif message_type == 3:
-            decoder = self._h264_decoders.get(key)
-            if decoder is None:
-                decoder = H264Decoder()
-                self._h264_decoders[key] = decoder
-            config_payload = self._h264_configs.get(key, (-1, b""))[1]
-            decoded = decoder.decode(config_payload + payload)
-            if decoded is None:
-                return
-            rgba, width, height = decoded
-            self._media[key] = NaviMediaFrame(key, sequence, True, "image/rgba", width, height, rgba)
+            config_sequence, config_payload = self._h264_configs.get(key, (-1, b""))
+            self._h264_requested_sequences[key] = sequence
+            self._h264_worker.submit(
+                _H264DecodeRequest(
+                    epoch=self._media_epoch,
+                    key=key,
+                    sequence=sequence,
+                    payload=payload,
+                    config_payload=config_payload,
+                    config_sequence=config_sequence,
+                    keyframe=bool(int(_ipc_value(data, "flags", 0)) & H264_FLAG_KEYFRAME),
+                )
+            )
+            return
         else:
             return
 
         if key == "render:map_main":
             self._map_frame_at_s = now_s
 
+    def _apply_h264_results(self, now_s: float) -> None:
+        for result in self._h264_worker.poll():
+            frame = result.frame
+            if result.epoch != self._media_epoch:
+                continue
+            if self._h264_requested_sequences.get(frame.key) != frame.sequence:
+                continue
+            self._media[frame.key] = frame
+            if frame.key == "render:map_main":
+                self._map_frame_at_s = now_s
+
     def _clear_media(self) -> None:
         self._media.clear()
-        self._h264_decoders.clear()
+        self._media_epoch += 1
+        self._h264_requested_sequences.clear()
+        self._h264_worker.reset()
         self._h264_configs.clear()
         self._map_frame_at_s = 0.0
 

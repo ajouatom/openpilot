@@ -5,12 +5,14 @@ import struct
 from types import SimpleNamespace
 
 import pytest
+from aiohttp import WSMsgType
 from aiohttp.test_utils import TestClient, TestServer
 
 from openpilot.selfdrive.carrot.carrot_navi import (
   BINARY_HEADER,
   CATALOG,
   CarrotNaviDiscoveryBeacon,
+  ClusterNaviAppearanceParamReader,
   CarrotNaviReceiver,
   DISCOVERY_PORT,
   PROTOCOL_VERSION,
@@ -108,13 +110,74 @@ def test_manifest_enables_complete_catalog():
 
 
 def test_manifest_requests_configured_map_appearance():
-  manifest = build_manifest("12345678", map_theme="dark")
+  manifest = build_manifest("12345678", map_theme="dark", map_type="satellite")
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
 
   assert map_stream["params"]["map_theme"] == "dark"
+  assert map_stream["params"]["map_type"] == "satellite"
 
   with pytest.raises(ValueError, match="map theme"):
     build_manifest("12345678", map_theme="neon")
+  with pytest.raises(ValueError, match="map type"):
+    build_manifest("12345678", map_type="terrain")
+
+
+def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
+  class FakeParams:
+    values = {"ClusterNaviMapTheme": 2, "ClusterNaviMapType": 1}
+
+    def get_int(self, key):
+      return self.values[key]
+
+  reader = ClusterNaviAppearanceParamReader(FakeParams())
+  receiver = CarrotNaviReceiver(map_theme="dark", map_type="normal")
+
+  assert reader() == ("light", "satellite")
+  assert receiver.set_map_appearance(*reader()) is True
+  assert receiver.set_map_appearance(*reader()) is False
+
+  manifest = receiver.negotiate(requirements_query(), "test-app")
+  map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
+  assert map_stream["params"]["map_theme"] == "light"
+  assert map_stream["params"]["map_type"] == "satellite"
+  assert receiver.health()["map_theme"] == "light"
+  assert receiver.health()["map_type"] == "satellite"
+
+
+def test_map_param_change_reconnects_websocket_with_new_manifest():
+  appearance = ["dark", "normal"]
+
+  async def scenario():
+    receiver = CarrotNaviReceiver(map_theme=appearance[0], map_type=appearance[1])
+    client = TestClient(TestServer(create_app(receiver, lambda: tuple(appearance))))
+    await client.start_server()
+    first_control = None
+    second_control = None
+    try:
+      first_control = await client.ws_connect("/api/navi/ws/v2/control/10.0.0")
+      await first_control.send_json(requirements_query())
+      first_manifest = await first_control.receive_json()
+      first_map = next(stream for stream in first_manifest["streams"] if stream["kind"] == "render")
+      assert first_map["params"]["map_type"] == "normal"
+
+      appearance[:] = ["light", "satellite"]
+      message = await first_control.receive(timeout=2.0)
+      assert message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED)
+
+      second_control = await client.ws_connect("/api/navi/ws/v2/control/10.0.0")
+      await second_control.send_json(requirements_query())
+      second_manifest = await second_control.receive_json()
+      second_map = next(stream for stream in second_manifest["streams"] if stream["kind"] == "render")
+      assert second_map["params"]["map_theme"] == "light"
+      assert second_map["params"]["map_type"] == "satellite"
+    finally:
+      if second_control is not None:
+        await second_control.close()
+      if first_control is not None:
+        await first_control.close()
+      await client.close()
+
+  asyncio.run(scenario())
 
 
 def test_parse_binary_packet_validates_cn_v2_payload():
