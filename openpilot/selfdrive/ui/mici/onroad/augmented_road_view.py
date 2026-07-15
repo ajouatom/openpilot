@@ -176,6 +176,18 @@ class AugmentedRoadView(CameraView):
 
     # debug
     self._pm = messaging.PubMaster(['uiDebug'])
+    # uiDebug.plotMode용 ShowPlotMode 캐시 — 파일 읽기라 매 프레임 금지, ~2초 스로틀
+    self._plot_mode = 0
+    self._plot_mode_next_t = 0.0
+
+  def _refresh_plot_mode(self, now: float) -> None:
+    if now < self._plot_mode_next_t:
+      return
+    self._plot_mode_next_t = now + 2.0
+    try:
+      self._plot_mode = min(max(ui_state.params.get_int("ShowPlotMode"), 0), 255)
+    except Exception:
+      self._plot_mode = 0
 
   def is_swiping_left(self) -> bool:
     """Check if currently swiping left (for scroller to disable)."""
@@ -201,7 +213,13 @@ class AugmentedRoadView(CameraView):
       super()._handle_mouse_release(mouse_pos)
 
   def _render(self, _):
+    # plotMode 갱신(가끔 파일 읽기)은 drawTime 창 밖에서 — total을 오염시키지 않는다
+    self._refresh_plot_mode(time.monotonic())
     start_draw = time.monotonic()
+    # 구간별 계측(계측 전용) — 렌더 호출 순서는 그대로, 각 구간 전후 monotonic만 잰다.
+    # alert/extras처럼 흩어진 구간은 누적(+=). scissor begin/end는 raylib 배치 flush
+    # 지점이라 특정 구간에 귀속시키지 않는다 — total과 구간 합의 차이(미귀속)로 남는다.
+    cam_ms = model_ms = ds_ms = hud_ms = alert_ms = extras_ms = 0.0
     if not self._cluster_hud_connected:
       self._switch_stream_if_needed(ui_state.sm)
       self._update_calibration()
@@ -224,45 +242,62 @@ class AugmentedRoadView(CameraView):
     )
 
     road_view_mode = self._road_view_mode()
+    _t = time.monotonic()
     if self._cluster_hud_connected or road_view_mode in (2, 3):
       rl.draw_rectangle_rec(self._content_rect, rl.BLACK)
     else:
       # Render the base camera view
       super()._render(self._content_rect)
+    cam_ms = (time.monotonic() - _t) * 1000.0
 
     if not self._cluster_hud_connected and road_view_mode in (0, 2):
       # Draw all UI overlays
+      _t = time.monotonic()
       self._model_renderer.render(self._content_rect)
+      model_ms = (time.monotonic() - _t) * 1000.0
 
     if not self._cluster_hud_connected:
       # Fade out bottom of overlays for looks
+      _t = time.monotonic()
       rl.draw_texture_ex(self._fade_texture, rl.Vector2(self._content_rect.x, self._content_rect.y), 0.0, 1.0, rl.WHITE)
+      extras_ms += (time.monotonic() - _t) * 1000.0
 
+    _t = time.monotonic()
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
+    alert_ms += (time.monotonic() - _t) * 1000.0
 
     # Hide DMoji when disengaged unless AlwaysOnDM is enabled
     should_draw_dmoji = (not self._hud_renderer.drawing_top_icons() and ui_state.is_onroad() and
                          (ui_state.status != UIStatus.DISENGAGED or ui_state.always_on_dm))
     self._driver_state_renderer.set_should_draw(should_draw_dmoji)
     self._driver_state_renderer.set_position(self._rect.x + 16, self._rect.y + 10)
+    _t = time.monotonic()
     self._driver_state_renderer.render()
+    ds_ms = (time.monotonic() - _t) * 1000.0
 
     self._hud_renderer.set_can_draw_top_icons(alert_to_render is None)
     self._hud_renderer.set_wheel_critical_icon(alert_to_render is not None and not not_animating_out and
                                                alert_to_render.visual_alert == car.CarControl.HUDControl.VisualAlert.steerRequired)
     # TODO: have alert renderer draw offroad mici label below
+    _t = time.monotonic()
     self._hud_renderer.render(self._content_rect)
+    hud_ms = (time.monotonic() - _t) * 1000.0
     if ui_state.started:
+      _t = time.monotonic()
       self._alert_renderer.render(self._content_rect)
+      alert_ms += (time.monotonic() - _t) * 1000.0
 
     # Draw fake rounded border
+    _t = time.monotonic()
     rl.draw_rectangle_rounded_lines_ex(self._content_rect, 0.2 * 1.02, 10, 50, rl.BLACK)
+    extras_ms += (time.monotonic() - _t) * 1000.0
 
     # End clipping region
     rl.end_scissor_mode()
 
     # Custom UI extension point - add custom overlays here
     # Use self._content_rect for positioning within camera bounds
+    _t = time.monotonic()
     self._traffic_light.render(self.rect)
     if not self._traffic_light.is_visible():
       self._confidence_ball.render(self.rect)
@@ -278,10 +313,20 @@ class AugmentedRoadView(CameraView):
       x = int(self._content_rect.x + 16)
       y = int(self._content_rect.y + self._content_rect.height - 16)
       rl.draw_circle(x, y, 6, rl.Color(255, 0, 0, 220))
+    extras_ms += (time.monotonic() - _t) * 1000.0
 
     # publish uiDebug
-    msg = messaging.new_message('uiDebug')
-    msg.uiDebug.drawTimeMillis = (time.monotonic() - start_draw) * 1000
+    msg = messaging.new_message('uiDebug', valid=True)
+    ud = msg.uiDebug
+    ud.drawTimeMillis = (time.monotonic() - start_draw) * 1000
+    ud.cameraTimeMillis = cam_ms
+    ud.modelTimeMillis = model_ms
+    ud.driverStateTimeMillis = ds_ms
+    ud.hudTimeMillis = hud_ms
+    ud.alertTimeMillis = alert_ms
+    ud.extrasTimeMillis = extras_ms
+    ud.plotMode = self._plot_mode
+    ud.recording = gui_app.is_recording()
     self._pm.send('uiDebug', msg)
 
   def _road_view_mode(self):
