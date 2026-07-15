@@ -92,10 +92,18 @@ class TestDensoRadar:
     radar_data = radar_interface.update([0, packets])
     assert not radar_data.points
 
-    # Stable tracks well outside the ego/adjacent-lane envelope are roadside
-    # reflections and must not create clutter in liveTracks.
-    side_reflection = bytes.fromhex("d80b66f640000300")
-    packets = [(addr, side_reflection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    # The wider test profile keeps a real stable track at 4.875 m, covering
+    # more of the outer adjacent lane than the conservative 4.5 m profile.
+    outer_lane_track = bytes.fromhex("d80b66f640000300")
+    packets = [(addr, outer_lane_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    radar_data = radar_interface.update([0, packets])
+    point = next(point for point in radar_data.points if point.trackId == 35)
+    assert point.yRel == pytest.approx(4.875)
+
+    # Tracks beyond the widened envelope are still rejected as roadside
+    # clutter. This payload differs only in lateral distance (-7.0 m).
+    far_side_reflection = bytes.fromhex("d80b66f200000300")
+    packets = [(addr, far_side_reflection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
     assert not radar_data.points
 
