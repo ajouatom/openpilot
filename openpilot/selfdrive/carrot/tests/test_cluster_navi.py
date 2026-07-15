@@ -15,7 +15,7 @@ sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_navi import fresh_carrot_navi, parse_carrot_navi
 from cluster_navi_overlay import merge_navi_overlay_state
-from cluster_navi_source import MAP_FRAME_STALE_TIMEOUT_MS, NaviSimulatorSource
+from cluster_navi_source import MAP_FRAME_STALE_TIMEOUT_MS, NaviIpcMediaSource, NaviSimulatorSource
 from cluster_models import NaviDashboardState, NaviMediaFrame, TpmsInfo
 from cluster_renderer import SIDE_GAUGE_OUTLINE, ClusterUiRenderer
 
@@ -163,6 +163,47 @@ def test_disconnected_dashboard_draws_system_panel(monkeypatch):
     "panel_h": 478,
     "status_text": "NAVI DISCONNECTED",
   }
+
+
+def test_ipc_media_source_restores_standalone_navigation_images():
+  media = SimpleNamespace(
+    schemaVersion=1,
+    sessionId="ipc-session",
+    kind="image",
+    name="tbt_next",
+    sequence=7,
+    present=True,
+    reason="",
+    messageType=1,
+    formatOrReason=1,
+    width=32,
+    height=24,
+    payload=b"\x89PNG\r\n\x1a\ncontent",
+  )
+
+  class FakeMessaging:
+    def __init__(self):
+      self.messages = [SimpleNamespace(carrotNaviMedia=media)]
+
+    def sub_sock(self, service, conflate):
+      assert service == "carrotNaviMedia"
+      assert conflate is False
+      return object()
+
+    def drain_sock(self, _socket):
+      messages, self.messages = self.messages, []
+      return messages
+
+  source = NaviIpcMediaSource(FakeMessaging())
+  dashboard = source.update(SimpleNamespace(session_id="ipc-session"))
+
+  assert dashboard.connected is True
+  assert dashboard.endpoint == "ipc://carrotNaviMedia"
+  assert dashboard.session_id == "ipc-session"
+  assert dashboard.received_count == 1
+  assert dashboard.media == (
+    NaviMediaFrame("image:tbt_next", 7, True, "image/png", 32, 24, b"\x89PNG\r\n\x1a\ncontent"),
+  )
 
 
 def test_navi_panel_shifts_3d_camera_modes_left():

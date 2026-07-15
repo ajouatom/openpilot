@@ -2,6 +2,7 @@ import asyncio
 import errno
 import json
 import struct
+from types import SimpleNamespace
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
@@ -374,6 +375,7 @@ def test_payload_bounds_route_and_publisher_sends_dedicated_service():
 
   class FakeMessage:
     carrotNavi = None
+    carrotNaviMedia = None
 
   class FakePubMaster:
     def __init__(self, services):
@@ -393,7 +395,7 @@ def test_payload_bounds_route_and_publisher_sends_dedicated_service():
 
     @staticmethod
     def new_message(service, valid):
-      assert service == "carrotNavi"
+      assert service in ("carrotNavi", "carrotNaviMedia")
       assert valid is True
       return FakeMessage()
 
@@ -403,9 +405,31 @@ def test_payload_bounds_route_and_publisher_sends_dedicated_service():
 
   assert publisher.publish_once(snapshot) == 11
   assert messaging.pub_master is not None
-  assert messaging.pub_master.services == ["carrotNavi"]
+  assert messaging.pub_master.services == ["carrotNavi", "carrotNaviMedia"]
   assert len(messaging.pub_master.sent) == 1
   service, message = messaging.pub_master.sent[0]
   assert service == "carrotNavi"
   assert len(message.carrotNavi["route"]["polyline"]) == 256
   assert receiver.health()["cereal_publish_count"] == 1
+
+  media_record = SimpleNamespace(
+    kind="image",
+    name="tbt_next",
+    sequence=5,
+    source_timestamp_ms=1234,
+    received_mono_ns=5678,
+    present=True,
+    message_type=1,
+    format_or_reason=1,
+    flags=0,
+    width=32,
+    height=24,
+    reason=None,
+    payload=b"png-data",
+  )
+  publisher.publish_media(media_record, "session")
+  service, message = messaging.pub_master.sent[-1]
+  assert service == "carrotNaviMedia"
+  assert message.carrotNaviMedia["sessionId"] == "session"
+  assert message.carrotNaviMedia["name"] == "tbt_next"
+  assert message.carrotNaviMedia["payload"] == b"png-data"
