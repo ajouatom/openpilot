@@ -394,6 +394,7 @@ class CarrotNaviReceiver:
     self._cereal_publish_count = 0
     self._last_cereal_publish_mono_ns = 0
     self._cereal_error: str | None = None
+    self._navigation_log_values: dict[str, str] = {}
 
   def negotiate(self, requirements: dict[str, Any], app_version: str) -> dict[str, Any]:
     if requirements.get("type") != "requirements_query" \
@@ -431,6 +432,7 @@ class CarrotNaviReceiver:
       self._media_updates.clear()
       self._session_received_count = 0
       self._control_events.clear()
+      self._navigation_log_values.clear()
       self._last_error = None
       self._mark_state_changed_locked()
     return copy.deepcopy(manifest)
@@ -492,6 +494,7 @@ class CarrotNaviReceiver:
 
       key = f"json:{name}"
       self._validate_sequence_locked(key, sequence)
+      value = copy.deepcopy(envelope.get("value")) if present else None
       self._records[key] = ItemRecord(
         kind="json",
         name=name,
@@ -501,7 +504,7 @@ class CarrotNaviReceiver:
         sequence=sequence,
         source_timestamp_ms=source_timestamp_ms,
         present=present,
-        value=copy.deepcopy(envelope.get("value")) if present else None,
+        value=value,
         payload=None,
         message_type=None,
         format_or_reason=None,
@@ -515,6 +518,34 @@ class CarrotNaviReceiver:
       )
       self._mark_received_locked(peer)
       self._mark_state_changed_locked()
+      self._log_navigation_update_locked(name, sequence, present, value, envelope.get("reason"))
+
+  def _log_navigation_update_locked(
+    self,
+    name: str,
+    sequence: int,
+    present: bool,
+    value: Any,
+    reason: Any,
+  ) -> None:
+    labels = {
+      "guidance_current": "TBT current",
+      "guidance_next": "TBT next",
+      "speed": "SDI",
+    }
+    label = labels.get(name)
+    if label is None:
+      return
+    content: Any = value if present else {"present": False, "reason": str(reason or "source_absent")}
+    try:
+      text = json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+      text = repr(content)
+    text = text[:1500]
+    if self._navigation_log_values.get(name) == text:
+      return
+    self._navigation_log_values[name] = text
+    print(f"[carrot_navi][{label}] seq={sequence} {text}", flush=True)
 
   def record_binary(self, session_id: str, kind: str, name: str,
                     metadata: dict[str, int], payload: bytes, peer: str) -> None:
@@ -816,6 +847,25 @@ def _protocol_error(code: str, message: str, kind: str | None = None,
   return result
 
 
+async def _safe_send_json(ws: web.WebSocketResponse, payload: dict[str, Any]) -> bool:
+  if ws.closed:
+    return False
+  try:
+    await ws.send_json(payload)
+    return True
+  except (ConnectionError, RuntimeError):
+    return False
+
+
+async def _safe_close_websocket(ws: web.WebSocketResponse, code: int, message: bytes) -> None:
+  if ws.closed:
+    return
+  try:
+    await ws.close(code=code, message=message)
+  except (ConnectionError, RuntimeError):
+    pass
+
+
 async def index(request: web.Request) -> web.Response:
   return web.json_response({
     "name": "Carrot Navi Receiver",
@@ -850,26 +900,32 @@ async def ws_control(request: web.Request) -> web.WebSocketResponse:
   await ws.prepare(request)
   _track_websocket(request, ws)
   receiver.control_connected()
+  print(f"[carrot_navi][WS] control connected peer={peer} app={app_version}", flush=True)
   try:
     async for message in ws:
       if message.type != WSMsgType.TEXT:
         error = "v2 control accepts JSON text only"
         receiver.fail(error, peer)
-        await ws.send_json(_protocol_error("invalid_control_message", error))
+        if not await _safe_send_json(ws, _protocol_error("invalid_control_message", error)):
+          break
         continue
       try:
         payload = parse_json_object(message.data)
         if payload.get("type") == "requirements_query":
           manifest = receiver.negotiate(payload, app_version)
-          await ws.send_json(manifest)
+          if not await _safe_send_json(ws, manifest):
+            break
         else:
           receiver.record_control(payload, peer)
       except (TypeError, ValueError) as exc:
         receiver.fail(str(exc), peer)
-        await ws.send_json(_protocol_error("invalid_control_message", str(exc)))
+        print(f"[carrot_navi][WS] control rejected peer={peer}: {exc}", flush=True)
+        if not await _safe_send_json(ws, _protocol_error("invalid_control_message", str(exc))):
+          break
   finally:
     receiver.control_disconnected()
     _untrack_websocket(request, ws)
+    print(f"[carrot_navi][WS] control disconnected peer={peer} app={app_version}", flush=True)
   return ws
 
 
@@ -893,8 +949,9 @@ async def ws_json(request: web.Request) -> web.WebSocketResponse:
       receiver.record_json(session_id, name, parse_json_object(message.data), peer)
   except (TypeError, ValueError) as exc:
     receiver.fail(str(exc), peer)
-    await ws.send_json(_protocol_error("json_stream_error", str(exc), "json", name))
-    await ws.close(code=1008, message=b"invalid JSON stream")
+    print(f"[carrot_navi][WS] json:{name} rejected peer={peer}: {exc}", flush=True)
+    await _safe_send_json(ws, _protocol_error("json_stream_error", str(exc), "json", name))
+    await _safe_close_websocket(ws, 1008, b"invalid JSON stream")
   finally:
     _untrack_websocket(request, ws)
   return ws
@@ -921,8 +978,9 @@ async def _ws_binary(request: web.Request, kind: str) -> web.WebSocketResponse:
       receiver.record_binary(session_id, kind, name, metadata, payload, peer)
   except (KeyError, TypeError, ValueError) as exc:
     receiver.fail(str(exc), peer)
-    await ws.send_json(_protocol_error("binary_stream_error", str(exc), kind, name))
-    await ws.close(code=1008, message=b"invalid binary stream")
+    print(f"[carrot_navi][WS] {kind}:{name} rejected peer={peer}: {exc}", flush=True)
+    await _safe_send_json(ws, _protocol_error("binary_stream_error", str(exc), kind, name))
+    await _safe_close_websocket(ws, 1008, b"invalid binary stream")
   finally:
     _untrack_websocket(request, ws)
   return ws
