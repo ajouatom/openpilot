@@ -106,6 +106,21 @@ def test_sticky_cutin_does_not_expose_low_probability_reassociation() -> None:
   assert not decision.cutin_candidates
 
 
+def test_decision_filter_uses_one_sample_per_object_identity() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter()
+  sample = None
+  for frame in range(6):
+    sample = builder.update(context(frame * 0.05), (fused(),))[0]
+    decision_filter.update(frame * 0.05, (RadarLeadPrediction(sample, 0.8, 0.1, 0.8),))
+
+  assert sample is not None
+  strong = RadarLeadPrediction(sample, 0.9, 0.1, 0.9)
+  weak = RadarLeadPrediction(sample, 0.2, 0.1, 0.2)
+  decision = decision_filter.update(0.35, (strong, weak))
+  assert decision.lead_candidates == (strong,)
+
+
 def test_close_inward_object_uses_lower_two_frame_threshold() -> None:
   builder = RadarLeadFeatureBuilder()
   decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.87)

@@ -64,10 +64,10 @@ class RadarLeadModelController:
       "aRel": float(obj.a_rel),
       "vLead": float(obj.v_lead),
       "vLeadK": float(obj.v_lead),
-      "aLead": 0.0,
-      "aLeadK": 0.0,
+      "aLead": float(obj.a_lead),
+      "aLeadK": float(obj.a_lead),
       "aLeadTau": 1.5,
-      "jLead": 0.0,
+      "jLead": float(obj.j_lead),
       "vLat": float(obj.yv_rel),
       "status": True,
       "fcw": probability > 0.9,
@@ -96,6 +96,11 @@ class RadarLeadModelController:
     second = next((lead for lead in usable[1:] if lead["dRel"] - usable[0]["dRel"] >= min_gap), None)
     return (usable[0],) if second is None else (usable[0], second)
 
+  @staticmethod
+  def _external_control_usable(prediction: RadarLeadPrediction) -> bool:
+    obj = prediction.features.radar_object
+    return obj.front_track_id is not None or (obj.d_rel > 2.0 and obj.v_lead > 2.0)
+
   def update(
     self,
     time_s: float,
@@ -119,7 +124,6 @@ class RadarLeadModelController:
     if not result.available:
       return RadarLeadModelOutput(False, result.error)
 
-    converted: dict[str, dict[str, Any]] = {}
     left: list[dict[str, Any]] = []
     center: list[dict[str, Any]] = []
     right: list[dict[str, Any]] = []
@@ -129,7 +133,6 @@ class RadarLeadModelController:
       )
       if lead is None:
         continue
-      converted[prediction.features.object_id] = lead
       if abs(prediction.features.d_path) < 1.8:
         center.append(lead)
       elif prediction.features.radar_object.y_rel > 0.0:
@@ -138,16 +141,14 @@ class RadarLeadModelController:
         right.append(lead)
 
     def selected(prediction: RadarLeadPrediction, probability: float) -> dict[str, Any] | None:
-      lead = converted.get(prediction.features.object_id)
+      lead = self._lead_from_prediction(prediction, probability)
       if lead is None:
         return None
-      output = lead.copy()
-      output["modelProb"] = float(probability)
-      return output
+      return lead
 
     lead_one_prediction = next((
       prediction for prediction in result.decision.lead_candidates
-      if prediction.features.object_id in converted
+      if prediction.features.radar_object.front_track_id is not None
     ), None)
     lead_one = selected(lead_one_prediction, lead_one_prediction.lead_prob) if lead_one_prediction else None
     lead_one_object = lead_one_prediction.features.object_id if lead_one_prediction else None
@@ -155,18 +156,19 @@ class RadarLeadModelController:
     cutin_pairs = [
       (prediction, selected(prediction, prediction.cutin_prob))
       for prediction in result.decision.cutin_candidates
-      if prediction.features.object_id in converted
     ]
     cutin_leads = tuple(lead for _, lead in cutin_pairs if lead is not None)
 
     lead_two = next((
       lead for prediction, lead in cutin_pairs
       if lead is not None and prediction.features.object_id != lead_one_object
+      and self._external_control_usable(prediction)
     ), None)
     if lead_two is None:
       lead_two_prediction = next((
         prediction for prediction in result.decision.lead_candidates
-        if prediction.features.object_id != lead_one_object and prediction.features.object_id in converted
+        if prediction.features.object_id != lead_one_object
+        and self._external_control_usable(prediction)
       ), None)
       if lead_two_prediction is not None:
         lead_two = selected(lead_two_prediction, lead_two_prediction.lead_prob)
