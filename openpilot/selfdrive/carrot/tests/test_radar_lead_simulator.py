@@ -1,4 +1,6 @@
 import csv
+from dataclasses import replace
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -6,6 +8,7 @@ import numpy as np
 
 from openpilot.selfdrive.carrot.radar_lead_simulator import (
   MODEL_FEATURE_NAMES,
+  Candidate,
   MLPLeadSelector,
   ManualLabels,
   ModelLead,
@@ -13,12 +16,16 @@ from openpilot.selfdrive.carrot.radar_lead_simulator import (
   RadarPoint,
   RecordedLead,
   SimpleLeadSelector,
+  Selection,
+  ValidationReview,
   candidate_track_id,
   comparison_summary,
   _copy_track_points,
   _route_replay_module,
   export_training_dataset,
+  resolve_validation_case,
   resolved_recorded_track_id,
+  validation_review_events,
 )
 from openpilot.selfdrive.carrot.radar_lead_train import (
   TrainingData,
@@ -65,6 +72,54 @@ def test_simple_selector_matches_model_lead() -> None:
   )))
 
   assert candidate_track_id(selected.lead_one) == 10
+
+
+def test_validation_review_stops_once_per_cutin_track_across_full_route() -> None:
+  frames = [replace(frame(()), mono_time_s=float(index), time_s=float(index)) for index in range(6)]
+  lead_one = Candidate(10, 0.9, "MLP active lead")
+  lead_two = Candidate(20, 0.9, "MLP active cutin")
+  selections = (
+    Selection(None, None),
+    Selection(lead_one, None),
+    Selection(lead_one, lead_two, active_cutin_candidates=(lead_two,)),
+    Selection(lead_one, lead_two, active_cutin_candidates=(lead_two,)),
+    Selection(lead_one, None),
+    Selection(lead_one, lead_two, active_cutin_candidates=(lead_two,)),
+  )
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      return selections[int(frame_index)]
+
+  review = ValidationReview("case", "detect", "corner", 40.0, 50.0, "scene")
+
+  assert validation_review_events(frames, Selector(), review) == {
+    2: ("CUT-IN id 20",),
+  }
+
+
+def test_validation_review_without_cutin_has_no_pause_events() -> None:
+  frames = [replace(frame(()), mono_time_s=float(index), time_s=float(index)) for index in range(3)]
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      return Selection(None, None)
+
+  review = ValidationReview("clear", "clear", "corner", 0.0, 2.0, "scene")
+  assert validation_review_events(frames, Selector(), review) == {}
+
+
+def test_validation_case_resolves_route_and_review_metadata(tmp_path: Path) -> None:
+  cases_path = tmp_path / "cases.json"
+  cases_path.write_text(json.dumps({"cases": [{
+    "id": "sample-case", "vehicle_folder": "CAR", "log": "SEG/rlog.zst",
+    "source": "front", "window": [8.0, 13.0], "expected": "detect", "scene": "test scene",
+  }]}), encoding="utf-8")
+
+  route, review = resolve_validation_case(cases_path, tmp_path / "routes", "sample")
+
+  assert route == tmp_path / "routes" / "CAR" / "SEG" / "rlog.zst"
+  assert review == ValidationReview("sample-case", "detect", "front", 8.0, 13.0, "test scene")
 
 
 def test_simple_selector_uses_distinct_path_candidate_for_lead_two() -> None:

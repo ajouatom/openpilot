@@ -15,9 +15,10 @@ except ModuleNotFoundError:
   from radar_object_fusion import FusedRadarObject
 
 
-MODEL_HEADS = ("lead", "cutin")
+MODEL_HEADS = ("lead", "cutin", "external")
 CUTIN_TEMPORAL_THRESHOLD_MAX = 0.82
 CUTIN_ACTIVE_CURRENT_MIN = 0.20
+EXTERNAL_ACTIVE_CURRENT_MIN = 0.20
 HISTORY_OFFSETS = (1, 2, 4, 8, 12, 16, 20)
 MAX_HISTORY_FRAMES = max(HISTORY_OFFSETS) + 2
 
@@ -62,12 +63,14 @@ class RadarLeadPrediction:
   lead_prob: float
   cutin_prob: float
   risk_prob: float
+  external_prob: float = 0.0
 
 
 @dataclass(frozen=True)
 class RadarLeadDecision:
   lead_candidates: tuple[RadarLeadPrediction, ...]
   cutin_candidates: tuple[RadarLeadPrediction, ...]
+  external_candidates: tuple[RadarLeadPrediction, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -91,10 +94,13 @@ class _ObjectHistory:
 class _DecisionState:
   lead_ema: float = 0.0
   cutin_ema: float = 0.0
+  external_ema: float = 0.0
   lead_hits: int = 0
   cutin_hits: int = 0
+  external_hits: int = 0
   lead_active_until: float = 0.0
   cutin_active_until: float = 0.0
+  external_active_until: float = 0.0
   last_seen: float = 0.0
 
 
@@ -131,7 +137,7 @@ def _feature_names() -> tuple[str, ...]:
   ]
   for lane_index in range(4):
     names.extend((f"lane{lane_index}_y", f"lane{lane_index}_prob"))
-  for lead_index in range(2):
+  for lead_index in range(1):
     names.extend((
       f"model{lead_index}_prob", f"model{lead_index}_d", f"model{lead_index}_y",
       f"model{lead_index}_v", f"model{lead_index}_a", f"model{lead_index}_x_std",
@@ -266,7 +272,7 @@ class RadarLeadFeatureBuilder:
       line = context.lane_lines[lane_index] if lane_index < len(context.lane_lines) else ()
       raw[f"lane{lane_index}_y"] = _line_y(line, obj.d_rel) if line else 0.0
       raw[f"lane{lane_index}_prob"] = context.lane_probs[lane_index] if lane_index < len(context.lane_probs) else 0.0
-    for lead_index in range(2):
+    for lead_index in range(1):
       lead = context.model_leads[lead_index] if lead_index < len(context.model_leads) else None
       values = (
         lead.probability, lead.d_rel, lead.y_rel, lead.v, lead.a,
@@ -325,7 +331,7 @@ class RadarLeadFeatureBuilder:
 
 
 class RadarLeadModel:
-  """Small two-head MLP with the same NumPy path used during training."""
+  """Small three-head MLP with the same NumPy path used during training."""
 
   def __init__(self, path: Path) -> None:
     import numpy as np
@@ -359,20 +365,25 @@ class RadarLeadModel:
     logits = logits * self.calibration[:, 0] + self.calibration[:, 1]
     probabilities = 1.0 / (1.0 + np.exp(-np.clip(logits, -30.0, 30.0)))
     output = []
-    for sample, (lead_prob, cutin_prob) in zip(features, probabilities, strict=True):
+    for sample, (lead_prob, cutin_prob, external_prob) in zip(features, probabilities, strict=True):
       closing = max(0.0, -sample.radar_object.v_rel)
       ttc_risk = min(1.0, closing / 8.0) * min(1.0, 25.0 / max(sample.radar_object.d_rel, 1.0))
-      risk_prob = float(max(cutin_prob, lead_prob * ttc_risk))
-      output.append(RadarLeadPrediction(sample, float(lead_prob), float(cutin_prob), risk_prob))
+      risk_prob = float(max(cutin_prob, lead_prob * ttc_risk, external_prob * ttc_risk))
+      output.append(RadarLeadPrediction(
+        sample, float(lead_prob), float(cutin_prob), risk_prob, float(external_prob),
+      ))
     return tuple(output)
 
 
 class RadarLeadDecisionFilter:
   """Identity-aware hysteresis for stable lead and cut-in decisions."""
 
-  def __init__(self, lead_threshold: float = 0.65, cutin_threshold: float = 0.70) -> None:
+  def __init__(
+    self, lead_threshold: float = 0.65, cutin_threshold: float = 0.70, external_threshold: float = 0.65,
+  ) -> None:
     self.lead_threshold = lead_threshold
     self.cutin_threshold = cutin_threshold
+    self.external_threshold = external_threshold
     self._states: dict[str, _DecisionState] = {}
 
   @staticmethod
@@ -391,12 +402,15 @@ class RadarLeadDecisionFilter:
     for prediction in predictions:
       object_id = prediction.features.object_id
       previous = strongest.get(object_id)
-      if previous is None or max(prediction.lead_prob, prediction.cutin_prob) > max(previous.lead_prob, previous.cutin_prob):
+      if previous is None or max(prediction.lead_prob, prediction.cutin_prob, prediction.external_prob) > max(
+        previous.lead_prob, previous.cutin_prob, previous.external_prob,
+      ):
         strongest[object_id] = prediction
     current = tuple(strongest.values())
     seen: set[str] = set()
     lead_active: list[RadarLeadPrediction] = []
     cutin_active: list[RadarLeadPrediction] = []
+    external_active: list[RadarLeadPrediction] = []
     for prediction in current:
       object_id = prediction.features.object_id
       seen.add(object_id)
@@ -404,8 +418,10 @@ class RadarLeadDecisionFilter:
       state.last_seen = time_s
       state.lead_ema = max(prediction.lead_prob, 0.65 * state.lead_ema + 0.35 * prediction.lead_prob)
       state.cutin_ema = max(prediction.cutin_prob, 0.60 * state.cutin_ema + 0.40 * prediction.cutin_prob)
+      state.external_ema = max(prediction.external_prob, 0.65 * state.external_ema + 0.35 * prediction.external_prob)
       reliable = self._reliable(prediction)
       state.lead_hits = state.lead_hits + 1 if reliable and state.lead_ema >= self.lead_threshold else 0
+      state.external_hits = state.external_hits + 1 if reliable and state.external_ema >= self.external_threshold else 0
       obj = prediction.features.radar_object
       inward = abs(prediction.features.d_path_future) + 0.15 < abs(prediction.features.d_path)
       close_future_limit = 2.5 if obj.d_rel < 8.0 else 2.2
@@ -424,10 +440,14 @@ class RadarLeadDecisionFilter:
         state.lead_active_until = time_s + 0.35
       if state.cutin_hits >= required_cutin_hits or urgent:
         state.cutin_active_until = time_s + 0.45
+      if state.external_hits >= 2:
+        state.external_active_until = time_s + 0.35
       if state.lead_ema < 0.25:
         state.lead_active_until = min(state.lead_active_until, time_s + 0.10)
       if state.cutin_ema < 0.25 or abs(prediction.features.d_path_future) > abs(prediction.features.d_path) + 0.5:
         state.cutin_active_until = min(state.cutin_active_until, time_s + 0.10)
+      if state.external_ema < 0.25:
+        state.external_active_until = min(state.external_active_until, time_s + 0.10)
       if time_s <= state.lead_active_until:
         lead_active.append(prediction)
       # Sticky state belongs to a fused object identity, but a sensor track ID can
@@ -435,10 +455,15 @@ class RadarLeadDecisionFilter:
       # a cut-in solely because the previous object was active.
       if time_s <= state.cutin_active_until and prediction.cutin_prob >= CUTIN_ACTIVE_CURRENT_MIN:
         cutin_active.append(prediction)
+      if time_s <= state.external_active_until and prediction.external_prob >= EXTERNAL_ACTIVE_CURRENT_MIN:
+        external_active.append(prediction)
     for object_id, state in tuple(self._states.items()):
       if object_id not in seen and time_s - state.last_seen > 0.5:
         self._states.pop(object_id, None)
     return RadarLeadDecision(
       lead_candidates=tuple(sorted(lead_active, key=lambda item: (-item.lead_prob, item.features.radar_object.d_rel))[:2]),
       cutin_candidates=tuple(sorted(cutin_active, key=lambda item: (-item.risk_prob, item.features.radar_object.d_rel))[:2]),
+      external_candidates=tuple(sorted(
+        external_active, key=lambda item: (-item.external_prob, item.features.radar_object.d_rel),
+      )[:2]),
     )

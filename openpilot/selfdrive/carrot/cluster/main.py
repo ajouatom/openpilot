@@ -227,15 +227,20 @@ def route_state_has_cutin(state: object) -> bool:
 
 
 def play_cutin_alert() -> None:
-    if sys.platform == "win32":
-        try:
-            import winsound
+    def play() -> None:
+        if sys.platform == "win32":
+            try:
+                import winsound
 
-            winsound.PlaySound("SystemExclamation", winsound.SND_ALIAS | winsound.SND_ASYNC)
-            return
-        except (ImportError, RuntimeError):
-            pass
-    print("\a", end="", flush=True)
+                # Beep does not depend on the user's Windows sound theme.
+                winsound.Beep(1400, 140)
+                winsound.Beep(1900, 180)
+                return
+            except (ImportError, RuntimeError):
+                pass
+        print("\a", end="", flush=True)
+
+    threading.Thread(target=play, name="cutin-alert", daemon=True).start()
 
 
 def apply_cluster_encoder_param(args: argparse.Namespace) -> str:

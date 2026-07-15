@@ -96,7 +96,7 @@ def _xy(data: Any) -> tuple[tuple[float, float], ...]:
 
 def runtime_context(time_s: float, v_ego: float, model: Any) -> RadarLeadContext:
   leads = []
-  for lead in model.leadsV3[:2]:
+  for lead in model.leadsV3[:1]:
     if not lead.x or not lead.y or not lead.v or not lead.a:
       continue
     leads.append(VisionLeadContext(
@@ -136,6 +136,7 @@ class RadarLeadRuntime:
       self.decisions = RadarLeadDecisionFilter(
         lead_threshold=max(0.5, float(self.model.thresholds[0])),
         cutin_threshold=max(0.5, min(CUTIN_TEMPORAL_THRESHOLD_MAX, float(self.model.thresholds[1]))),
+        external_threshold=max(0.5, float(self.model.thresholds[2])),
       )
       self.load_error = ""
       return True
