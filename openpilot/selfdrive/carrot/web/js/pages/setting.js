@@ -876,6 +876,8 @@ const SETTING_DISPLAY_UNIT_TYPES = Object.freeze({
   timeMin: "min",
   percent: "%",
   degree: "deg",
+  hertz: "Hz",
+  bitrateKbps: "kbps",
 });
 
 const SETTING_PARAM_DISPLAY_TYPES = Object.freeze({
@@ -917,6 +919,8 @@ const SETTING_PARAM_DISPLAY_TYPES = Object.freeze({
   TFollowDecelBoost: "percent",
   ShowCustomBrightness: "percent",
   ClusterHudBrightness: "percent",
+  ClusterNaviMapHz: "hertz",
+  ClusterNaviMapBitrateKbps: "bitrateKbps",
 });
 
 function getSettingDisplayType(name) {
@@ -939,6 +943,16 @@ function getClusterNaviMapOptionLabel(name, value) {
       ko: ["일반 지도", "위성 지도"],
       en: ["Normal map", "Satellite map"],
       zh: ["普通地图", "卫星地图"],
+    },
+    ClusterNaviMapHz: {
+      ko: ["클러스터 동기화"],
+      en: ["Cluster sync"],
+      zh: ["与集群同步"],
+    },
+    ClusterNaviMapBitrateKbps: {
+      ko: ["자동"],
+      en: ["Auto"],
+      zh: ["自动"],
     },
   };
   const values = labels[String(name || "")];

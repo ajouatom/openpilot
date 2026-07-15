@@ -329,6 +329,14 @@ H264 runs on the `--usb-h264-fps` safety cap. Explicit `--fps` remains a fixed
 override. For H264 USB output, changing the effective FPS exits the current HUD
 process so autostart can relaunch with a matching encoder FPS when a launcher
 is present.
+
+The Android MAP MAIN request has independent web settings. `ClusterNaviMapHz=0`
+follows the effective `ClusterHudLiveFps` cadence; uncapped cluster mode maps to
+the Android maximum of 60 Hz. Values `1..60` request a fixed map cadence.
+`ClusterNaviMapBitrateKbps=0` calculates H.264 bitrate from MAP MAIN resolution
+and effective Hz, using 3000 kbps at 960x540 and 10 Hz as the reference and a
+12000 kbps ceiling. Positive values are fixed kbps. A changed effective setting
+reconnects the Android navigation stream with a new manifest.
 Runs also show a compact lower-right cluster-process CPU overlay by current
 core, formatted like `[0(10),1(25)]`, with 2 px bottom/right margins. The
 sampler reads the current cluster process and direct child processes only,

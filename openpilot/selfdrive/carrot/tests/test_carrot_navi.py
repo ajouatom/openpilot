@@ -12,7 +12,7 @@ from openpilot.selfdrive.carrot.carrot_navi import (
   BINARY_HEADER,
   CATALOG,
   CarrotNaviDiscoveryBeacon,
-  ClusterNaviAppearanceParamReader,
+  ClusterNaviMapParamReader,
   CarrotNaviReceiver,
   DISCOVERY_PORT,
   PROTOCOL_VERSION,
@@ -20,6 +20,8 @@ from openpilot.selfdrive.carrot.carrot_navi import (
   create_app,
   discovery_targets,
   parse_binary_packet,
+  resolve_map_bitrate_kbps,
+  resolve_map_hz,
   run_receiver_app,
   _safe_send_json,
 )
@@ -135,7 +137,13 @@ def test_manifest_enables_complete_catalog():
 
 
 def test_manifest_requests_configured_map_appearance():
-  manifest = build_manifest("12345678", map_theme="dark", map_type="satellite")
+  manifest = build_manifest(
+    "12345678",
+    map_theme="dark",
+    map_type="satellite",
+    map_hz=60,
+    map_bitrate_kbps=12000,
+  )
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
   crossroad_streams = [
     stream for stream in manifest["streams"]
@@ -144,6 +152,8 @@ def test_manifest_requests_configured_map_appearance():
 
   assert map_stream["params"]["map_theme"] == "dark"
   assert map_stream["params"]["map_type"] == "satellite"
+  assert map_stream["params"]["fps"] == 60
+  assert map_stream["params"]["h264_bitrate_kbps"] == 12000
   assert len(crossroad_streams) == 2
   assert all(stream["params"]["theme"] == "dark" for stream in crossroad_streams)
 
@@ -151,28 +161,59 @@ def test_manifest_requests_configured_map_appearance():
     build_manifest("12345678", map_theme="neon")
   with pytest.raises(ValueError, match="map type"):
     build_manifest("12345678", map_type="terrain")
+  with pytest.raises(ValueError, match="refresh rate"):
+    build_manifest("12345678", map_hz=61)
+  with pytest.raises(ValueError, match="bitrate"):
+    build_manifest("12345678", map_bitrate_kbps=12001)
 
 
 def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
   class FakeParams:
-    values = {"ClusterNaviMapTheme": 2, "ClusterNaviMapType": 1}
+    values = {
+      "ClusterNaviMapTheme": 2,
+      "ClusterNaviMapType": 1,
+      "ClusterNaviMapHz": 0,
+      "ClusterNaviMapBitrateKbps": 0,
+      "ClusterHudLiveFps": 3,
+    }
 
     def get_int(self, key):
       return self.values[key]
 
-  reader = ClusterNaviAppearanceParamReader(FakeParams())
-  receiver = CarrotNaviReceiver(map_theme="dark", map_type="normal")
+  reader = ClusterNaviMapParamReader(FakeParams())
+  receiver = CarrotNaviReceiver(
+    map_theme="dark", map_type="normal", map_hz=10, map_bitrate_kbps=3000,
+  )
 
-  assert reader() == ("light", "satellite")
-  assert receiver.set_map_appearance(*reader()) is True
-  assert receiver.set_map_appearance(*reader()) is False
+  assert reader() == ("light", "satellite", 30, 9000)
+  assert receiver.set_map_config(*reader()) is True
+  assert receiver.set_map_config(*reader()) is False
 
   manifest = receiver.negotiate(requirements_query(), "test-app")
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
   assert map_stream["params"]["map_theme"] == "light"
   assert map_stream["params"]["map_type"] == "satellite"
+  assert map_stream["params"]["fps"] == 30
+  assert map_stream["params"]["h264_bitrate_kbps"] == 9000
   assert receiver.health()["map_theme"] == "light"
   assert receiver.health()["map_type"] == "satellite"
+  assert receiver.health()["map_hz"] == 30
+  assert receiver.health()["map_bitrate_kbps"] == 9000
+
+
+def test_cluster_navi_map_hz_sync_and_automatic_bitrate_resolution():
+  assert resolve_map_hz(0, 1) == 10
+  assert resolve_map_hz(0, 6) == 60
+  assert resolve_map_hz(0, 0) == 60
+  assert resolve_map_hz(17, 1) == 17
+  assert resolve_map_hz(99, 1) == 60
+
+  assert resolve_map_bitrate_kbps(0, 960, 540, 10) == 3000
+  assert resolve_map_bitrate_kbps(0, 960, 540, 30) == 9000
+  assert resolve_map_bitrate_kbps(0, 960, 540, 60) == 12000
+  assert resolve_map_bitrate_kbps(1, 960, 540, 60) == 1
+  assert resolve_map_bitrate_kbps(4321, 960, 540, 60) == 4321
+  assert resolve_map_bitrate_kbps(20000, 960, 540, 10) == 12000
 
 
 def test_receiver_logs_changed_tbt_and_sdi_values(capsys):
@@ -336,11 +377,14 @@ def test_safe_websocket_error_send_ignores_closing_transport():
 
 
 def test_map_param_change_reconnects_websocket_with_new_manifest():
-  appearance = ["dark", "normal"]
+  map_config = ["dark", "normal", 10, 3000]
 
   async def scenario():
-    receiver = CarrotNaviReceiver(map_theme=appearance[0], map_type=appearance[1])
-    client = TestClient(TestServer(create_app(receiver, lambda: tuple(appearance))))
+    receiver = CarrotNaviReceiver(
+      map_theme=map_config[0], map_type=map_config[1],
+      map_hz=map_config[2], map_bitrate_kbps=map_config[3],
+    )
+    client = TestClient(TestServer(create_app(receiver, lambda: tuple(map_config))))
     await client.start_server()
     first_control = None
     second_control = None
@@ -351,7 +395,7 @@ def test_map_param_change_reconnects_websocket_with_new_manifest():
       first_map = next(stream for stream in first_manifest["streams"] if stream["kind"] == "render")
       assert first_map["params"]["map_type"] == "normal"
 
-      appearance[:] = ["light", "satellite"]
+      map_config[:] = ["light", "satellite", 60, 12000]
       message = await first_control.receive(timeout=2.0)
       assert message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED)
 
@@ -361,6 +405,8 @@ def test_map_param_change_reconnects_websocket_with_new_manifest():
       second_map = next(stream for stream in second_manifest["streams"] if stream["kind"] == "render")
       assert second_map["params"]["map_theme"] == "light"
       assert second_map["params"]["map_type"] == "satellite"
+      assert second_map["params"]["fps"] == 60
+      assert second_map["params"]["h264_bitrate_kbps"] == 12000
     finally:
       if second_control is not None:
         await second_control.close()
