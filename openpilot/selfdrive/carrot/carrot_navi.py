@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import copy
 import errno
 import json
@@ -335,6 +336,7 @@ class CarrotNaviReceiver:
     self._control_events: list[dict[str, Any]] = []
     self._state_generation = 0
     self._media_generation = 0
+    self._media_updates: deque[ItemRecord] = deque(maxlen=256)
     self._state_changed = threading.Event()
     self._cereal_publish_count = 0
     self._last_cereal_publish_mono_ns = 0
@@ -372,6 +374,7 @@ class CarrotNaviReceiver:
       }
       self._records.clear()
       self._binary_configs.clear()
+      self._media_updates.clear()
       self._session_received_count = 0
       self._control_events.clear()
       self._last_error = None
@@ -487,7 +490,9 @@ class CarrotNaviReceiver:
       if kind == "render" and message_type == 2:
         self._binary_configs[key] = record
       self._media_generation += 1
+      self._media_updates.append(record)
       self._mark_received_locked(peer)
+      self._state_changed.set()
 
   def fail(self, message: str, peer: str = "-") -> None:
     with self._lock:
@@ -552,6 +557,12 @@ class CarrotNaviReceiver:
     changed = self._state_changed.wait(max(0.0, timeout))
     self._state_changed.clear()
     return changed
+
+  def drain_media_updates(self) -> list[ItemRecord]:
+    with self._lock:
+      updates = list(self._media_updates)
+      self._media_updates.clear()
+      return updates
 
   def record_cereal_publish(self, error: str | None = None) -> None:
     with self._lock:

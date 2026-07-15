@@ -185,7 +185,22 @@ struct CarrotNaviState @0xaedffd8f31e7b55d {
 	}
 }
 
-struct CustomReserved2 @0xf35cc4560bbf6ec2 {
+struct CarrotNaviMedia @0xf35cc4560bbf6ec2 {
+	schemaVersion @0 :UInt16;
+	sessionId @1 :Text;
+	kind @2 :Text;
+	name @3 :Text;
+	sequence @4 :UInt64;
+	sourceTimestampMillis @5 :UInt64;
+	receivedMonoTimeNanos @6 :UInt64;
+	present @7 :Bool;
+	messageType @8 :UInt8;
+	formatOrReason @9 :UInt8;
+	flags @10 :UInt16;
+	width @11 :UInt16;
+	height @12 :UInt16;
+	reason @13 :Text;
+	payload @14 :Data;
 }
 
 struct CustomReserved3 @0xda96579883444c35 {

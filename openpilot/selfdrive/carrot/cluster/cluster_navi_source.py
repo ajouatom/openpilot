@@ -33,6 +33,7 @@ DISCOVERY_PORT = 7705
 DEFAULT_NAVI_HOST = "0.0.0.0"
 DEFAULT_NAVI_PORT = 7714
 MAP_FRAME_STALE_TIMEOUT_MS = 3000
+NAVI_IPC_DISCONNECT_TIMEOUT_S = 3.0
 
 
 def detect_advertise_ip(bind_host: str) -> str:
@@ -225,6 +226,148 @@ def _compact_composition_status(record: ItemRecord | None) -> str:
         if key != "generation" and bool(enabled)
     ]
     return "UI " + (" / ".join(active[:5]) if active else "MAP ONLY")
+
+
+def _ipc_value(data: Any, name: str, default: Any = None) -> Any:
+    if isinstance(data, dict):
+        return data.get(name, default)
+    try:
+        return getattr(data, name)
+    except Exception:
+        return default
+
+
+class NaviIpcMediaSource:
+    """Projects standalone carrot_navi media messages into the cluster dashboard."""
+
+    def __init__(self, messaging_module: Any | None = None) -> None:
+        if messaging_module is None:
+            import openpilot.cereal.messaging as messaging_module
+
+        self.messaging = messaging_module
+        self._socket = messaging_module.sub_sock("carrotNaviMedia", conflate=False)
+        self._session_id = ""
+        self._media: dict[str, NaviMediaFrame] = {}
+        self._item_status: dict[str, NaviItemStatus] = {}
+        self._h264_decoders: dict[str, H264Decoder] = {}
+        self._h264_configs: dict[str, tuple[int, bytes]] = {}
+        self._last_media_at_s = 0.0
+        self._map_frame_at_s = 0.0
+        self._received_count = 0
+        self._error: str | None = None
+
+    def update(self, navi_live: Any | None) -> NaviDashboardState:
+        now_s = time.monotonic()
+        for event in self.messaging.drain_sock(self._socket):
+            try:
+                self._consume(event.carrotNaviMedia, now_s)
+            except Exception as exc:
+                self._error = str(exc)[:256]
+
+        navi_session = str(getattr(navi_live, "session_id", "") or "")
+        if not self._session_id and navi_session:
+            self._session_id = navi_session
+
+        connected = bool(
+            navi_live is not None
+            or (self._last_media_at_s > 0.0 and now_s - self._last_media_at_s <= NAVI_IPC_DISCONNECT_TIMEOUT_S)
+        )
+        map_age_ms = int(max(0.0, now_s - self._map_frame_at_s) * 1000) if self._map_frame_at_s > 0.0 else None
+        map_stalled = bool(connected and map_age_ms is not None and map_age_ms > MAP_FRAME_STALE_TIMEOUT_MS)
+        if map_stalled:
+            self._media.pop("render:map_main", None)
+        if not connected and self._last_media_at_s > 0.0:
+            self._clear_media()
+
+        items = tuple(
+            self._item_status.get(
+                f"{kind}:{name}",
+                NaviItemStatus(f"{kind}:{name}", 0, False, "waiting"),
+            )
+            for kind, name in CATALOG
+        )
+        return NaviDashboardState(
+            connected=connected,
+            endpoint="ipc://carrotNaviMedia",
+            session_id=self._session_id,
+            received_count=self._received_count,
+            last_received_age_ms=(
+                int(max(0.0, now_s - self._last_media_at_s) * 1000)
+                if self._last_media_at_s > 0.0 else None
+            ),
+            map_frame_age_ms=map_age_ms,
+            map_stream_stalled=map_stalled,
+            error=self._error,
+            media=tuple(self._media[key] for key in sorted(self._media)),
+            items=items,
+        )
+
+    def close(self) -> None:
+        self._clear_media()
+        self._socket = None
+
+    def _consume(self, data: Any, now_s: float) -> None:
+        if int(_ipc_value(data, "schemaVersion", 0)) != 1:
+            return
+        session_id = str(_ipc_value(data, "sessionId", "") or "")
+        if session_id and session_id != self._session_id:
+            self._clear_media()
+            self._session_id = session_id
+
+        kind = str(_ipc_value(data, "kind", "") or "")
+        name = str(_ipc_value(data, "name", "") or "")
+        if kind not in ("image", "render") or not name:
+            return
+        key = f"{kind}:{name}"
+        sequence = max(0, int(_ipc_value(data, "sequence", 0)))
+        present = bool(_ipc_value(data, "present", False))
+        reason = str(_ipc_value(data, "reason", "") or "") or None
+        self._item_status[key] = NaviItemStatus(key, sequence, present, reason)
+        self._last_media_at_s = now_s
+        self._received_count += 1
+
+        message_type = int(_ipc_value(data, "messageType", 0))
+        payload = bytes(_ipc_value(data, "payload", b"") or b"")
+        if not present or message_type == 4:
+            self._media[key] = NaviMediaFrame(key, sequence, False, reason=reason)
+            if key == "render:map_main":
+                self._map_frame_at_s = 0.0
+            return
+
+        width = max(0, int(_ipc_value(data, "width", 0)))
+        height = max(0, int(_ipc_value(data, "height", 0)))
+        format_or_reason = int(_ipc_value(data, "formatOrReason", 0))
+        if message_type == 1:
+            mime = "image/png" if format_or_reason == 1 else "image/jpeg"
+            self._media[key] = NaviMediaFrame(key, sequence, True, mime, width, height, payload)
+        elif message_type == 2:
+            self._h264_configs[key] = (sequence, payload)
+            decoder = self._h264_decoders.get(key)
+            if decoder is not None:
+                decoder.reset()
+            return
+        elif message_type == 3:
+            decoder = self._h264_decoders.get(key)
+            if decoder is None:
+                decoder = H264Decoder()
+                self._h264_decoders[key] = decoder
+            config_payload = self._h264_configs.get(key, (-1, b""))[1]
+            decoded = decoder.decode(config_payload + payload)
+            if decoded is None:
+                return
+            rgba, width, height = decoded
+            self._media[key] = NaviMediaFrame(key, sequence, True, "image/rgba", width, height, rgba)
+        else:
+            return
+
+        if key == "render:map_main":
+            self._map_frame_at_s = now_s
+
+    def _clear_media(self) -> None:
+        self._media.clear()
+        self._h264_decoders.clear()
+        self._h264_configs.clear()
+        self._map_frame_at_s = 0.0
 
 
 class NaviSimulatorSource:

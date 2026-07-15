@@ -256,6 +256,26 @@ def build_carrot_navi_payload(snapshot: dict[str, Any], publish_mono_ns: int | N
   }
 
 
+def build_carrot_navi_media_payload(record: Any, session_id: str) -> dict[str, Any]:
+  return {
+    "schemaVersion": SCHEMA_VERSION,
+    "sessionId": _text(session_id, 32),
+    "kind": _text(record.kind, 16),
+    "name": _text(record.name, 64),
+    "sequence": _integer(record.sequence, minimum=0),
+    "sourceTimestampMillis": _integer(record.source_timestamp_ms, minimum=0),
+    "receivedMonoTimeNanos": _integer(record.received_mono_ns, minimum=0),
+    "present": bool(record.present),
+    "messageType": _integer(record.message_type, minimum=0, maximum=255),
+    "formatOrReason": _integer(record.format_or_reason, minimum=0, maximum=255),
+    "flags": _integer(record.flags, minimum=0, maximum=65535),
+    "width": _integer(record.width, minimum=0, maximum=65535),
+    "height": _integer(record.height, minimum=0, maximum=65535),
+    "reason": _text(record.reason, 64),
+    "payload": record.payload or b"",
+  }
+
+
 class CarrotNaviCerealPublisher:
   def __init__(self, receiver: CarrotNaviReceiver, messaging_module: Any | None = None) -> None:
     if messaging_module is None:
@@ -263,7 +283,7 @@ class CarrotNaviCerealPublisher:
 
     self.receiver = receiver
     self.messaging = messaging_module
-    self.pm = messaging_module.PubMaster(["carrotNavi"])
+    self.pm = messaging_module.PubMaster(["carrotNavi", "carrotNaviMedia"])
     self._stop = threading.Event()
     self._thread: threading.Thread | None = None
 
@@ -289,6 +309,12 @@ class CarrotNaviCerealPublisher:
     self.receiver.record_cereal_publish()
     return _integer(snapshot.get("generation"), minimum=0)
 
+  def publish_media(self, record: Any, session_id: str) -> None:
+    message = self.messaging.new_message("carrotNaviMedia", valid=True)
+    message.carrotNaviMedia = build_carrot_navi_media_payload(record, session_id)
+    self.pm.send("carrotNaviMedia", message)
+    self.receiver.record_cereal_publish()
+
   def _run(self) -> None:
     last_generation = -1
     last_publish = 0.0
@@ -303,6 +329,13 @@ class CarrotNaviCerealPublisher:
         return
 
       snapshot = self.receiver.cereal_snapshot()
+      media_updates = self.receiver.drain_media_updates()
+      try:
+        for record in media_updates:
+          self.publish_media(record, str(snapshot.get("session_id", "")))
+      except Exception as exc:
+        self.receiver.record_cereal_publish(str(exc))
+
       generation = _integer(snapshot.get("generation"), minimum=0)
       elapsed = time.monotonic() - last_publish
       if generation == last_generation and elapsed < PUBLISH_HEARTBEAT_SECONDS:

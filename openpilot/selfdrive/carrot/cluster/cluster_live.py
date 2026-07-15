@@ -20,6 +20,7 @@ from cluster_models import (
     NaviTrafficLightInfo,
 )
 from cluster_navi import fresh_carrot_navi, parse_carrot_navi
+from cluster_navi_source import NaviIpcMediaSource
 from cluster_route_replay import RouteLogParser, finite_float, frame_to_state, safe_get, safe_optional_float
 from cluster_utils import clamp
 
@@ -145,6 +146,11 @@ class OpenpilotLiveSource:
         self._carrot_navi = None
         self._carrot_navi_generation = -1
         self._carrot_navi_next_expiry_s = math.inf
+        try:
+            self._carrot_navi_media = NaviIpcMediaSource(messaging)
+        except Exception as exc:
+            print(f"Carrot navigation media IPC unavailable: {exc}", flush=True)
+            self._carrot_navi_media = None
         self._standby_state = standby_state()
         self.profile_enabled = False
         self._profile_samples: list[tuple[str, float]] = []
@@ -343,6 +349,10 @@ class OpenpilotLiveSource:
         carrot_man = self._service_data("carrotMan")
         active_carrot = safe_optional_float(carrot_man, "activeCarrot")
         navi_live = self._current_carrot_navi(time.monotonic())
+        navi_dashboard = (
+            self._carrot_navi_media.update(navi_live)
+            if self._carrot_navi_media is not None else None
+        )
         navi_guidance_active = bool(
             navi_live is not None
             and (
@@ -386,6 +396,7 @@ class OpenpilotLiveSource:
             speed_limit_kph=speed_limit_kph,
             speed_limit_source=speed_limit_source,
             navi_live=navi_live,
+            navi_dashboard=navi_dashboard,
             steering_output=steering_output,
             steering_output_normalized=steering_output_normalized,
             steering_output_kind=steering_output_kind,
@@ -452,6 +463,8 @@ class OpenpilotLiveSource:
         return int(round(clamp(brightness, 0.0, 100.0)))
 
     def close(self) -> None:
+        if self._carrot_navi_media is not None:
+            self._carrot_navi_media.close()
         return None
 
     def _apply_service_update(self, service: str, event_t: float) -> None:

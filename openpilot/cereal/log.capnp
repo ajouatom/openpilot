@@ -2624,7 +2624,7 @@ struct Event {
     # DON'T change which struct it points to
     carrotMan @107 :Custom.CarrotMan;
     carrotNavi @108 :Custom.CarrotNaviState;
-    customReserved2 @109 :Custom.CustomReserved2;
+    carrotNaviMedia @109 :Custom.CarrotNaviMedia;
     customReserved3 @110 :Custom.CustomReserved3;
     customReserved4 @111 :Custom.CustomReserved4;
     customReserved5 @112 :Custom.CustomReserved5;
