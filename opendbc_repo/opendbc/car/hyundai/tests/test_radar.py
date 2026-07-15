@@ -60,12 +60,13 @@ class TestDensoRadar:
     radar_interface = RadarInterface(cp)
 
     assert radar_interface.radar_group4
+    assert RADAR_MSG_COUNT4 == 16
     assert radar_interface.radar_msg_count == RADAR_MSG_COUNT4
-    assert radar_interface.trigger_msg_tracks == 0x507
+    assert radar_interface.trigger_msg_tracks == 0x50F
 
     active_dat = bytes.fromhex("bc047efcc1fe8b00")
     empty_dat = bytes.fromhex("bcfff80000000081")
-    packets = [(addr, active_dat if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    packets = [(addr, active_dat if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x510)]
     radar_data = radar_interface.update([0, packets])
     point = next(point for point in radar_data.points if point.trackId == 35)
 
@@ -78,24 +79,31 @@ class TestDensoRadar:
     # Confirm the long-range sample survives the track filter and is converted
     # from radar-left-negative to openpilot-left-positive coordinates.
     long_range_dat = bytes.fromhex("b664eafa00cd230b")
-    packets = [(addr, long_range_dat if addr == 0x506 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    packets = [(addr, long_range_dat if addr == 0x506 else empty_dat, 1) for addr in range(0x500, 0x510)]
     radar_data = radar_interface.update([0, packets])
     point = next(point for point in radar_data.points if point.trackId == 38)
 
     assert point.dRel == pytest.approx(161.4625)
     assert point.yRel == pytest.approx(3.0)
 
-    # 0x508 and above carry state 0 distance-sorted detections. Even if such a
-    # payload appears in a track slot, it must not become a RadarPoint.
+    # A state 0 distance-sorted detection must not enter a stable track slot.
     raw_detection = bytes.fromhex("d702f4fc200000e4")
-    packets = [(addr, raw_detection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    packets = [(addr, raw_detection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x510)]
     radar_data = radar_interface.update([0, packets])
     assert not radar_data.points
+
+    # The same payload is valid in the expanded raw-detection slots.
+    packets = [(addr, raw_detection if addr == 0x508 else empty_dat, 1) for addr in range(0x500, 0x510)]
+    radar_data = radar_interface.update([0, packets])
+    point = next(point for point in radar_data.points if point.trackId == 40)
+    assert point.dRel == pytest.approx(4.725)
+    assert point.yRel == pytest.approx(1.9375)
+    assert point.vRel == 0
 
     # The wider test profile keeps a real stable track at 4.875 m, covering
     # more of the outer adjacent lane than the conservative 4.5 m profile.
     outer_lane_track = bytes.fromhex("d80b66f640000300")
-    packets = [(addr, outer_lane_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    packets = [(addr, outer_lane_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x510)]
     radar_data = radar_interface.update([0, packets])
     point = next(point for point in radar_data.points if point.trackId == 35)
     assert point.yRel == pytest.approx(4.875)
@@ -103,7 +111,7 @@ class TestDensoRadar:
     # Tracks beyond the widened envelope are still rejected as roadside
     # clutter. This payload differs only in lateral distance (-7.0 m).
     far_side_reflection = bytes.fromhex("d80b66f200000300")
-    packets = [(addr, far_side_reflection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    packets = [(addr, far_side_reflection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x510)]
     radar_data = radar_interface.update([0, packets])
     assert not radar_data.points
 
