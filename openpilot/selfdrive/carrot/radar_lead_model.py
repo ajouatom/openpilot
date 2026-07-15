@@ -384,7 +384,16 @@ class RadarLeadDecisionFilter:
     )
 
   def update(self, time_s: float, predictions: Iterable[RadarLeadPrediction]) -> RadarLeadDecision:
-    current = tuple(predictions)
+    # Sensor aliases can briefly merge while front/corner associations change.
+    # Process only the strongest current sample for an identity so sticky state
+    # cannot be applied to several different radar points in the same frame.
+    strongest: dict[str, RadarLeadPrediction] = {}
+    for prediction in predictions:
+      object_id = prediction.features.object_id
+      previous = strongest.get(object_id)
+      if previous is None or max(prediction.lead_prob, prediction.cutin_prob) > max(previous.lead_prob, previous.cutin_prob):
+        strongest[object_id] = prediction
+    current = tuple(strongest.values())
     seen: set[str] = set()
     lead_active: list[RadarLeadPrediction] = []
     cutin_active: list[RadarLeadPrediction] = []

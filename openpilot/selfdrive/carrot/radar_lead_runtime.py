@@ -34,6 +34,8 @@ class RuntimeRadarPoint:
   a_rel: float
   yv_rel: float
   v_lead: float
+  a_lead: float
+  j_lead: float
   measured: bool
   source: str
 
@@ -81,6 +83,8 @@ def runtime_points(points: Iterable[Any]) -> tuple[RuntimeRadarPoint, ...]:
     a_rel=_finite(point.aRel),
     yv_rel=_finite(point.yvRel),
     v_lead=_finite(point.vLead),
+    a_lead=_finite(getattr(point, "aLead", 0.0)),
+    j_lead=_finite(getattr(point, "jLead", 0.0)),
     measured=bool(point.measured),
     source=_source(point),
   ) for point in points)

@@ -16,6 +16,8 @@ class RadarPointLike(Protocol):
   a_rel: float
   yv_rel: float
   v_lead: float
+  a_lead: float
+  j_lead: float
   measured: bool
   source: str
 
@@ -42,6 +44,8 @@ class FusedRadarObject:
   lateral_source: str
   match_confidence: float
   pair_age: int
+  a_lead: float = 0.0
+  j_lead: float = 0.0
 
   @property
   def trusted_for_control(self) -> bool:
@@ -242,6 +246,8 @@ class RadarObjectFusion:
       lateral_source=corner.source,
       match_confidence=confidence,
       pair_age=state.quality_hits,
+      a_lead=_finite_or(getattr(front, "a_lead", 0.0), 0.0),
+      j_lead=_finite_or(getattr(front, "j_lead", 0.0), 0.0),
     )
 
   @staticmethod
@@ -269,6 +275,8 @@ class RadarObjectFusion:
       lateral_source=point.source,
       match_confidence=0.35,
       pair_age=1,
+      a_lead=_finite_or(getattr(point, "a_lead", 0.0), 0.0),
+      j_lead=_finite_or(getattr(point, "j_lead", 0.0), 0.0),
     )
 
   def update(self, time_s: float, points: Iterable[RadarPointLike]) -> tuple[FusedRadarObject, ...]:
