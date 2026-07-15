@@ -120,7 +120,7 @@ def runtime_context(time_s: float, v_ego: float, model: Any) -> RadarLeadContext
 
 
 class RadarLeadRuntime:
-  def __init__(self, model_path: Path = DEFAULT_MODEL_PATH, include_scc: bool = False) -> None:
+  def __init__(self, model_path: Path = DEFAULT_MODEL_PATH, include_scc: bool = True) -> None:
     self.model_path = model_path
     self.fusion = RadarObjectFusion(include_scc=include_scc)
     self.features = RadarLeadFeatureBuilder()
