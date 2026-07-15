@@ -34,6 +34,16 @@ class TestManager:
   def test_duplicate_procs(self):
     assert len(procs) == len(managed_processes), "Duplicate process names"
 
+  def test_carrot_navi_is_permanent_7714_owner(self):
+    process = managed_processes["carrot_navi"]
+    CP = car.CarParams.new_message()
+    params = Params()
+
+    params.put("ClusterHud", "0")
+    assert process.should_run(False, params, CP)
+    params.put("ClusterHud", "1")
+    assert process.should_run(False, params, CP)
+
   def test_blacklisted_procs(self):
     # TODO: ensure there are blacklisted procs until we have a dedicated test
     assert len(BLACKLIST_PROCS), "No blacklisted procs to test not_run"

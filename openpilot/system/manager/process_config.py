@@ -123,9 +123,6 @@ def enable_cluster_hud(started, params, CP: car.CarParams) -> bool:
   except Exception:
     return False
 
-def enable_standalone_carrot_navi(started, params, CP: car.CarParams) -> bool:
-  return not enable_cluster_hud(started, params, CP)
-
 procs = [
   DaemonProcess("manage_athenad", "openpilot.system.athena.manage_athenad", "AthenadPid"),
 
@@ -186,7 +183,8 @@ procs = [
   PythonProcess("joystick", "openpilot.tools.joystick.joystick_control", and_(joystick, iscar)),
 
   PythonProcess("carrot_man", "openpilot.selfdrive.carrot.carrot_man", always_run, restart_if_crash=True),#, enabled=not PC),
-  PythonProcess("carrot_navi", "openpilot.selfdrive.carrot.carrot_navi", enable_standalone_carrot_navi, restart_if_crash=True),
+  # carrot_navi permanently owns TCP 7714 and publishes navigation data over cereal.
+  PythonProcess("carrot_navi", "openpilot.selfdrive.carrot.carrot_navi", always_run, restart_if_crash=True),
 
   PythonProcess("carrot_server", "openpilot.selfdrive.carrot.carrot_server", always_run, enabled=not CARROT_WEB_EXTERNAL),
   PythonProcess("cweb_push", "openpilot.selfdrive.carrot.cweb_push", always_run, enabled=not PC),
