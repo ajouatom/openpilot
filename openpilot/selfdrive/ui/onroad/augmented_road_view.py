@@ -52,14 +52,30 @@ class AugmentedRoadView(CameraView):
 
     # debug
     self._pm = messaging.PubMaster(['uiDebug'])
+    # uiDebug.plotMode용 ShowPlotMode 캐시 — 파일 읽기라 매 프레임 금지, ~2초 스로틀
+    self._plot_mode = 0
+    self._plot_mode_next_t = 0.0
 
-
+  def _refresh_plot_mode(self, now: float) -> None:
+    if now < self._plot_mode_next_t:
+      return
+    self._plot_mode_next_t = now + 2.0
+    try:
+      self._plot_mode = min(max(ui_state.params.get_int("ShowPlotMode"), 0), 255)
+    except Exception:
+      self._plot_mode = 0
 
   def _render(self, rect):
+    # plotMode 갱신(가끔 파일 읽기)은 drawTime 창 밖에서 — total을 오염시키지 않는다
+    self._refresh_plot_mode(time.monotonic())
     # Only render when system is started to avoid invalid data access
     start_draw = time.monotonic()
     if not ui_state.started:
       return
+    # 구간별 계측(계측 전용) — 렌더 호출 순서는 그대로, 각 구간 전후 monotonic만 잰다.
+    # scissor begin/end는 raylib 배치 flush 지점이라 특정 구간에 귀속시키지 않는다 —
+    # total과 구간 합의 차이(미귀속)로 남는다. extras = carrot 테두리(+텍스트)
+    cam_ms = model_ms = ds_ms = hud_ms = alert_ms = extras_ms = 0.0
 
     self._switch_stream_if_needed(ui_state.sm)
 
@@ -84,13 +100,23 @@ class AugmentedRoadView(CameraView):
     )
 
     # Render the base camera view
+    _t = time.monotonic()
     super()._render(rect)
+    cam_ms = (time.monotonic() - _t) * 1000.0
 
     # Draw all UI overlays
+    _t = time.monotonic()
     self.model_renderer.render(self._content_rect)
-    self._hud_renderer.render(self._content_rect)
+    model_ms = (time.monotonic() - _t) * 1000.0
+    _t = time.monotonic()
+    self._hud_renderer.render(self._content_rect)  # plot 활성 시 plot 비용도 hud 구간에 포함
+    hud_ms = (time.monotonic() - _t) * 1000.0
+    _t = time.monotonic()
     self.alert_renderer.render(self._content_rect)
+    alert_ms = (time.monotonic() - _t) * 1000.0
+    _t = time.monotonic()
     self.driver_state_renderer.render(self._content_rect)
+    ds_ms = (time.monotonic() - _t) * 1000.0
 
     # Custom UI extension point - add custom overlays here
     # Use self._content_rect for positioning within camera bounds
@@ -99,11 +125,22 @@ class AugmentedRoadView(CameraView):
     rl.end_scissor_mode()
 
     # Draw colored border based on driving state
+    _t = time.monotonic()
     self._draw_border_carrot(rect)
+    extras_ms = (time.monotonic() - _t) * 1000.0
 
     # publish uiDebug
-    msg = messaging.new_message('uiDebug')
-    msg.uiDebug.drawTimeMillis = (time.monotonic() - start_draw) * 1000
+    msg = messaging.new_message('uiDebug', valid=True)
+    ud = msg.uiDebug
+    ud.drawTimeMillis = (time.monotonic() - start_draw) * 1000
+    ud.cameraTimeMillis = cam_ms
+    ud.modelTimeMillis = model_ms
+    ud.driverStateTimeMillis = ds_ms
+    ud.hudTimeMillis = hud_ms
+    ud.alertTimeMillis = alert_ms
+    ud.extrasTimeMillis = extras_ms
+    ud.plotMode = self._plot_mode
+    ud.recording = gui_app.is_recording()
     self._pm.send('uiDebug', msg)
 
   def _handle_mouse_press(self, _):
