@@ -233,7 +233,7 @@ class H264Decoder:
                     self._hardware = None
                 self._hardware_disabled = True
                 if not self._hardware_error_logged:
-                    print(f"TICI H264 hardware decode disabled; using PyAV: {exc}", flush=True)
+                    print(f"Qualcomm VIDC H264 decode disabled; using PyAV: {exc}", flush=True)
                     self._hardware_error_logged = True
 
         if self._codec is None:

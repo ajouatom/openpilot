@@ -214,7 +214,7 @@ class TiciH264Decoder:
 
 
 def create_tici_h264_decoder(width: int, height: int, fps: int = 30) -> TiciH264Decoder | None:
-  if os.environ.get("CLUSTER_HARDWARE_H264_DECODE", "1") == "0" or not Path("/TICI").is_file():
+  if os.environ.get("CLUSTER_HARDWARE_H264_DECODE", "1") == "0":
     return None
   library_path = Path(os.environ.get("CLUSTER_H264_DECODER_LIBRARY", str(DEFAULT_DECODER_LIBRARY)))
   if not library_path.is_file():

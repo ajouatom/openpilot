@@ -16,6 +16,7 @@ sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_git_status import GitBranchStatusProvider
 import cluster_gles_readback
+import cluster_h264_decoder
 from cluster_h264_decoder import TiciH264DecodedBuffer
 from cluster_h264_pipeline import (
   H264PipelineInitializationError,
@@ -40,6 +41,37 @@ def test_tici_decoded_buffer_releases_fd_and_capture_lease_once():
   with pytest.raises(OSError):
     os.fstat(read_fd)
   os.close(write_fd)
+
+
+def test_hardware_h264_decoder_factory_does_not_require_tici_marker(monkeypatch, tmp_path):
+  library_path = tmp_path / "libcluster_h264_decoder_bridge.so"
+  library_path.touch()
+  calls = []
+  original_is_file = Path.is_file
+
+  def reject_tici_marker_check(path):
+    assert str(path) != "/TICI"
+    return original_is_file(path)
+
+  monkeypatch.setenv("CLUSTER_HARDWARE_H264_DECODE", "1")
+  monkeypatch.setenv("CLUSTER_H264_DECODER_LIBRARY", str(library_path))
+  monkeypatch.setenv("CLUSTER_H264_DECODER_DEVICE", "/dev/test-vidc")
+  monkeypatch.setattr(Path, "is_file", reject_tici_marker_check)
+  monkeypatch.setattr(
+    cluster_h264_decoder,
+    "TiciH264Decoder",
+    lambda width, height, fps, **kwargs: calls.append((width, height, fps, kwargs)) or "decoder",
+  )
+
+  decoder = cluster_h264_decoder.create_tici_h264_decoder(960, 540, 30)
+
+  assert decoder == "decoder"
+  assert calls == [(960, 540, 30, {
+    "library_path": library_path,
+    "device_path": "/dev/test-vidc",
+    "timeout_ms": 250,
+    "debug": False,
+  })]
 
 
 def _import_cluster_autorun(monkeypatch):
