@@ -921,6 +921,14 @@ class ClusterNaviMapParamReader:
     try:
       return int(self.params.get_int(key))
     except Exception:
+      pass
+
+    # Source files can be updated before the native Params key table is
+    # rebuilt. Read the backing file during that short compatibility window.
+    try:
+      with open(self.params.get_param_path(key), "rb") as f:
+        return int(float(f.read().decode("utf-8", errors="replace")))
+    except Exception:
       return default
 
   def read(self) -> tuple[str, str, int, int]:
