@@ -336,6 +336,8 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
       "image:lane_top",
       "image:lane_bottom",
       "image:traffic_signal",
+      "image:center_tbt_icon",
+      "image:center_tbt_text",
     )
   }
   dashboard = NaviDashboardState(True, "ipc://carrotNaviMedia", media=tuple(frames.values()))
@@ -376,6 +378,12 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   assert drawn["image:lane_bottom"].height == pytest.approx(67.0 * 1.2)
   assert drawn["image:traffic_signal"].width == pytest.approx(230.0)
   assert drawn["image:traffic_signal"].height == pytest.approx(98.0)
+  center_icon = drawn["image:center_tbt_icon"]
+  center_text = drawn["image:center_tbt_text"]
+  assert center_text.x + center_text.width * 0.5 == pytest.approx(center_icon.x + center_icon.width * 0.5)
+  assert center_text.y == pytest.approx(center_icon.y + center_icon.height + 2.0)
+  assert center_text.width == pytest.approx(220.0)
+  assert center_text.height == pytest.approx(78.0)
   assert "image:lane_top" not in drawn
 
 

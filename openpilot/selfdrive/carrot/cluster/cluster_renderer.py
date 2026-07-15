@@ -3976,9 +3976,19 @@ class ClusterUiRenderer:
             )
 
             map_center_x = x + w * 0.5
+            center_tbt_icon_rect = rl.Rectangle(map_center_x - 55.0, y + 76.0, 110.0, 110.0)
             self._draw_navi_media(
                 media.get("image:center_tbt_icon"),
-                rl.Rectangle(map_center_x - 55.0, y + 76.0, 110.0, 110.0),
+                center_tbt_icon_rect,
+            )
+            self._draw_navi_media(
+                media.get("image:center_tbt_text"),
+                rl.Rectangle(
+                    map_center_x - 110.0,
+                    center_tbt_icon_rect.y + center_tbt_icon_rect.height + 2.0,
+                    220.0,
+                    78.0,
+                ),
             )
             traffic_rect = rl.Rectangle(x + w - 242.0, y + 12.0, 230.0, 98.0)
             self._draw_navi_media(
