@@ -21,6 +21,7 @@ from openpilot.selfdrive.carrot.carrot_navi import (
   discovery_targets,
   parse_binary_packet,
   run_receiver_app,
+  _safe_send_json,
 )
 from openpilot.selfdrive.carrot.carrot_navi_cereal import CarrotNaviCerealPublisher, build_carrot_navi_payload
 
@@ -161,6 +162,56 @@ def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
   assert map_stream["params"]["map_type"] == "satellite"
   assert receiver.health()["map_theme"] == "light"
   assert receiver.health()["map_type"] == "satellite"
+
+
+def test_receiver_logs_changed_tbt_and_sdi_values(capsys):
+  receiver = CarrotNaviReceiver()
+  manifest = receiver.negotiate(requirements_query(), "test-app")
+  streams = {stream["name"]: stream for stream in manifest["streams"] if stream["kind"] == "json"}
+
+  def record(name, sequence, value):
+    stream = streams[name]
+    receiver.record_json(manifest["session_id"], name, {
+      "type": "item_update",
+      "protocol_version": 2,
+      "session_id": manifest["session_id"],
+      "manifest_revision": manifest["revision"],
+      "schema_version": 1,
+      "kind": "json",
+      "name": name,
+      "stream_handle": stream["stream_handle"],
+      "sequence": sequence,
+      "source_timestamp_ms": 1000 + sequence,
+      "present": True,
+      "value": value,
+    }, "192.168.0.171")
+
+  current = {"distance_m": 320, "turn_type": 12, "main_text": "Turn left"}
+  record("guidance_current", 1, current)
+  record("guidance_current", 2, current)
+  record("guidance_next", 1, {"distance_m": 950, "turn_type": 6, "main_text": "Turn right"})
+  record("speed", 1, {
+    "current_kph": 48,
+    "road_limit_kph": 50,
+    "sdi": {"type": 1, "distance_m": 420, "speed_limit_kph": 50},
+  })
+
+  output = capsys.readouterr().out
+  assert output.count("[carrot_navi][TBT current]") == 1
+  assert "[carrot_navi][TBT next]" in output
+  assert '"main_text":"Turn left"' in output
+  assert "[carrot_navi][SDI]" in output
+  assert '"distance_m":420' in output
+
+
+def test_safe_websocket_error_send_ignores_closing_transport():
+  class ClosingWebSocket:
+    closed = False
+
+    async def send_json(self, _payload):
+      raise ConnectionResetError("Cannot write to closing transport")
+
+  assert asyncio.run(_safe_send_json(ClosingWebSocket(), {"error": True})) is False
 
 
 def test_map_param_change_reconnects_websocket_with_new_manifest():
