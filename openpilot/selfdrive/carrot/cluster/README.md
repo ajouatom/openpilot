@@ -54,6 +54,10 @@ The replay wrapper opens camera/debug data and seek controls in a separate
 `Carrot Cluster Replay Tools` window. The 1920x480 cluster window and USB frame
 remain clean and use the same renderer output. Use `--route-tools overlay` for
 the previous in-frame controls or `--route-tools off` to disable replay tools.
+The maintained cut-in route regression set and expected results are documented
+in [CUTIN_VALIDATION.md](CUTIN_VALIDATION.md); its 16 current-code checks can
+be run together with `validate_cutin_routes.py` and reviewed sequentially with
+`review_cutin_routes.py`.
 
 Pass `--screen-mode default` to inspect the normal HUD with its navigation
 panel instead. When the managed cluster HUD is enabled on a device, the cluster

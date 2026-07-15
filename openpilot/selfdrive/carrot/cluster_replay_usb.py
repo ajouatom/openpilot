@@ -48,6 +48,8 @@ def build_cluster_args(args: argparse.Namespace, passthrough: list[str]) -> list
     ]
     if args.duration is not None:
         cluster_args.extend(("--duration", str(args.duration)))
+    if args.start_time > 0.0:
+        cluster_args.extend(("--route-start-time", str(args.start_time)))
     if args.start_segment is not None:
         cluster_args.extend(("--route-start-segment", str(args.start_segment)))
     if args.max_segments is not None:
@@ -90,6 +92,7 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--usb-codec", choices=("jpeg", "png", "h264"), default="jpeg", help="USB transport codec")
     parser.add_argument("--fps", type=float, default=20.0, help="Replay/render FPS")
     parser.add_argument("--duration", type=float, default=None, help="Seconds to replay; omit for route end")
+    parser.add_argument("--start-time", type=float, default=0.0, help="Initial playback position in seconds")
     parser.add_argument("--speed", type=float, default=1.0, help="Replay speed multiplier")
     parser.add_argument("--start-segment", type=int, default=None, help="First segment index when a route directory is given")
     parser.add_argument("--max-segments", type=int, default=None, help="Maximum number of route segments to replay")

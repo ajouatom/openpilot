@@ -664,6 +664,7 @@ def run_demo(
     route_loop: bool,
     route_pause_on_cutin: bool,
     route_replay_speed: float,
+    route_start_time_s: float,
     route_start_segment: int | None,
     route_max_segments: int | None,
     live_include_can: bool,
@@ -887,7 +888,7 @@ def run_demo(
     route_tools_window = None
     start_time = time.perf_counter()
     route_wall_base_time = start_time
-    route_playback_base_s = 0.0
+    route_playback_base_s = min(max(0.0, route_start_time_s), route_source.duration) if route_source is not None else 0.0
     route_paused = False
     route_pause_toggled_down = False
     route_active_corner_lateral_offset_m = 0.0
@@ -2118,6 +2119,12 @@ def parse_args() -> argparse.Namespace:
         help="Route playback speed multiplier.",
     )
     parser.add_argument(
+        "--route-start-time",
+        type=float,
+        default=0.0,
+        help="Initial route playback position in seconds.",
+    )
+    parser.add_argument(
         "--route-start-segment",
         type=int,
         default=None,
@@ -2240,6 +2247,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--route-replay-speed must be greater than 0")
     if args.route_start_segment is not None and args.route_start_segment < 0:
         parser.error("--route-start-segment must be 0 or greater")
+    if args.route_start_time < 0.0:
+        parser.error("--route-start-time must be 0 or greater")
     if args.route_max_segments is not None and args.route_max_segments <= 0:
         parser.error("--route-max-segments must be greater than 0")
     if args.profile_interval <= 0:
@@ -2392,6 +2401,7 @@ def main(*, exit_on_error: bool = True) -> None:
             args.route_loop,
             args.route_pause_on_cutin,
             args.route_replay_speed,
+            args.route_start_time,
             args.route_start_segment,
             args.route_max_segments,
             bool(args.live_include_can and not args.live_no_can),
