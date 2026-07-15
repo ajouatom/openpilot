@@ -843,7 +843,35 @@ class ClusterUiRenderer:
                 self._direct_nv12_readback_disabled = True
         return self._direct_nv12_readback is not None
 
+    def async_nv12_readback_available(self) -> bool:
+        if not self.direct_nv12_readback_available():
+            return False
+        return bool(self._direct_nv12_readback.async_supported)
+
+    def async_nv12_readback_can_enqueue(self) -> bool:
+        readback = self._direct_nv12_readback
+        return readback is not None and readback.async_can_enqueue()
+
+    def async_nv12_readback_ready(self) -> bool:
+        readback = self._direct_nv12_readback
+        return readback is not None and readback.async_ready()
+
+    def copy_async_nv12_readback(self, destination_address: int, destination_size: int) -> bool:
+        readback = self._direct_nv12_readback
+        if readback is None:
+            raise DirectNv12ReadbackError("TICI GLES asynchronous NV12 readback is not available")
+        profile_stage = self._profile_start()
+        copied = readback.copy_ready(destination_address, destination_size)
+        self._profile_add("render_to_nv12.readback_pbo_copy", profile_stage)
+        return copied
+
+    def disable_async_nv12_readback(self) -> None:
+        if self._direct_nv12_readback is not None:
+            self._direct_nv12_readback.disable_async()
+
     def disable_direct_nv12_readback(self) -> None:
+        if self._direct_nv12_readback is not None:
+            self._direct_nv12_readback.close()
         self._direct_nv12_readback = None
         self._direct_nv12_readback_disabled = True
 
@@ -898,6 +926,10 @@ class ClusterUiRenderer:
     def close(self) -> None:
         if not self._window_open:
             return
+        if self._direct_nv12_readback is not None:
+            self._direct_nv12_readback.close()
+            self._direct_nv12_readback = None
+            self._direct_nv12_readback_checked = False
         if self._capture_target is not None:
             rl.unload_render_texture(self._capture_target)
             self._capture_target = None
@@ -1648,6 +1680,7 @@ class ClusterUiRenderer:
         flip_x: bool = False,
         destination_address: int | None = None,
         destination_size: int = 0,
+        async_readback: bool = False,
     ) -> Iterator[object]:
         self.open(hidden=self.hidden)
         output_width = int(output_width)
@@ -1705,8 +1738,10 @@ class ClusterUiRenderer:
         self._profile_add("render_to_nv12.gpu_upload_transform", profile_stage)
 
         pack_direct_input = stride % 4 == 0 and byte_count % stride == 0 and uv_offset % stride == 0
-        if destination_address is not None and not pack_direct_input:
+        if (destination_address is not None or async_readback) and not pack_direct_input:
             raise DirectNv12ReadbackError("direct NV12 readback requires a four-byte packed Venus layout")
+        if destination_address is not None and async_readback:
+            raise DirectNv12ReadbackError("asynchronous NV12 readback cannot use a direct destination")
         if pack_direct_input:
             full_pack_w = stride // 4
             full_pack_h = byte_count // stride
@@ -1748,6 +1783,20 @@ class ClusterUiRenderer:
                 clear_target=False,
             )
             self._profile_add("render_to_nv12.pack_uv_shader", profile_stage)
+
+            if async_readback:
+                readback = self._direct_nv12_readback
+                if readback is None or not readback.async_supported:
+                    raise DirectNv12ReadbackError("TICI GLES asynchronous NV12 readback is not available")
+                profile_stage = self._profile_start()
+                enqueued = readback.enqueue_rgba(
+                    full_target.id,
+                    full_target.texture.width,
+                    full_target.texture.height,
+                )
+                self._profile_add("render_to_nv12.readback_pbo_enqueue", profile_stage)
+                yield enqueued
+                return
 
             if destination_address is not None:
                 readback = self._direct_nv12_readback

@@ -1,4 +1,5 @@
 import ctypes
+from collections import deque
 from dataclasses import replace
 import importlib
 from pathlib import Path
@@ -478,3 +479,89 @@ def test_gles_direct_readback_restores_gl_state():
     ("buffer", cluster_gles_readback.GL_PIXEL_PACK_BUFFER, 19),
     ("framebuffer", cluster_gles_readback.GL_FRAMEBUFFER, 17),
   ]
+
+
+def test_gles_async_readback_uses_nonblocking_fence_and_copies_ready_pbo():
+  calls = []
+  errors = iter((0, 0, 0, 0, 0, 0))
+  waits = iter((cluster_gles_readback.GL_TIMEOUT_EXPIRED, cluster_gles_readback.GL_ALREADY_SIGNALED))
+  source = (ctypes.c_ubyte * 16)(*range(16))
+  destination = (ctypes.c_ubyte * 16)()
+
+  class FakeGles:
+    def glGetIntegerv(self, name, value_out):
+      if name == cluster_gles_readback.GL_FRAMEBUFFER_BINDING:
+        value = 17
+      elif name == cluster_gles_readback.GL_PIXEL_PACK_BUFFER_BINDING:
+        value = 19
+      else:
+        value = 8
+      ctypes.cast(value_out, ctypes.POINTER(ctypes.c_int))[0] = value
+
+    def glGetError(self):
+      return next(errors)
+
+    def glGenBuffers(self, count, buffers):
+      for index in range(count):
+        buffers[index] = 31 + index
+
+    def glDeleteBuffers(self, count, buffers):
+      calls.append(("delete_buffers", tuple(buffers[index] for index in range(count))))
+
+    def glBindBuffer(self, target, buffer):
+      calls.append(("buffer", target, buffer))
+
+    def glBufferData(self, target, size, _data, usage):
+      calls.append(("allocate", target, size, usage))
+
+    def glBindFramebuffer(self, target, framebuffer):
+      calls.append(("framebuffer", target, framebuffer))
+
+    def glPixelStorei(self, name, value):
+      calls.append(("pack", name, value))
+
+    def glReadPixels(self, _x, _y, width, height, _format, _type, destination_pointer):
+      calls.append(("read_pbo", width, height, destination_pointer.value))
+
+    def glFenceSync(self, condition, flags):
+      calls.append(("fence", condition, flags))
+      return 0x1234
+
+    def glFlush(self):
+      calls.append(("flush",))
+
+    def glClientWaitSync(self, fence, flags, timeout):
+      calls.append(("wait", fence.value, flags, timeout))
+      return next(waits)
+
+    def glMapBufferRange(self, target, offset, length, access):
+      calls.append(("map", target, offset, length, access))
+      return ctypes.addressof(source)
+
+    def glUnmapBuffer(self, target):
+      calls.append(("unmap", target))
+      return True
+
+    def glDeleteSync(self, fence):
+      calls.append(("delete_fence", fence.value))
+
+  readback = object.__new__(cluster_gles_readback.GlesDirectReadback)
+  readback._gles = FakeGles()
+  readback._async_supported = True
+  readback._pbo_slots = []
+  readback._pbo_free = deque()
+  readback._pbo_pending = deque()
+  readback._pbo_byte_count = 0
+
+  assert readback.enqueue_rgba(23, 2, 2)
+  assert not readback.async_ready()
+  assert readback.copy_ready(ctypes.addressof(destination), ctypes.sizeof(destination))
+  assert bytes(destination) == bytes(source)
+  assert not readback.async_ready()
+  assert len(readback._pbo_free) == cluster_gles_readback.ASYNC_READBACK_RING_SIZE
+
+  readback.close()
+  assert ("read_pbo", 2, 2, None) in calls
+  assert ("map", cluster_gles_readback.GL_PIXEL_PACK_BUFFER, 0, 16, cluster_gles_readback.GL_MAP_READ_BIT) in calls
+  assert ("delete_fence", 0x1234) in calls
+  assert ("delete_buffers", (31, 32, 33)) in calls

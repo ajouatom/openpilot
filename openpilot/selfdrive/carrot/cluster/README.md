@@ -71,12 +71,16 @@ should match live rendering cost more closely.
 renders directly into the Qualcomm/Venus-aligned NV12 layout before submit, so
 the cluster hardware path no longer depends on libyuv or a CPU RGBA-to-NV12
 conversion. On TICI with the current native bridge, the pipeline leases a cached
-ION/V4L2 input buffer and GLES reads the packed framebuffer directly into it;
-VIDC then queues the same buffer. This removes the per-frame raylib CPU image and
-C++ NV12 memcpy. It is direct handoff, not full zero-copy, because `glReadPixels`
-still performs a synchronous GPU readback. Missing symbols, an incompatible
-layout, or a first-use GL error retains/re-enters the staged compatibility path;
-set `CLUSTER_DIRECT_NV12_READBACK=0` to force that path for device A/B tests.
+ION/V4L2 input buffer. By default GLES queues packed readback into a persistent
+three-slot PBO/fence ring; a later frame nonblockingly maps only completed PBOs,
+copies one packed frame into the leased input, and submits it to VIDC. This moves
+the GPU fence off the render deadline at the cost of one explicit CPU copy and
+one frame of pipeline latency. A full ring drops the new render instead of
+blocking. Missing GLES3 symbols, a one-second fence stall, or a first-use PBO
+error falls back to synchronous direct-ION readback; an incompatible layout or
+direct-readback failure retains the staged compatibility path. Set
+`CLUSTER_ASYNC_NV12_READBACK=0` to force synchronous direct-ION A/B testing, or
+`CLUSTER_DIRECT_NV12_READBACK=0` to force staged readback.
 H264 defaults to the same exact portrait upload geometry used by
 the working JPEG/PNG and earlier ffmpeg H264 paths. For a 9.2-inch panel that
 means a 462x1920 H264 stream, with no 16-pixel render-size padding unless
