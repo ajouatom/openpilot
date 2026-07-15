@@ -20,6 +20,7 @@ from openpilot.system.hardware import PC, TICI
 from openpilot.selfdrive.navd.helpers import Coordinate
 from openpilot.common.constants import CV
 from openpilot.common.gps import get_gps_location_service
+from openpilot.selfdrive.carrot.carrot_navi_control import CarrotNaviControl, parse_carrot_navi_control
 
 nav_type_mapping = {
   12: ("turn", "left", 1),
@@ -188,6 +189,15 @@ class CarrotServ:
     self.gas_override_speed = 0
     self.gas_pressed_state = False
     self.source_last = "none"
+
+    self.carrot_navi_session_id = ""
+    self.carrot_navi_speed_sequence = -1
+    self.carrot_navi_current_sequence = -1
+    self.carrot_navi_next_sequence = -1
+    self.carrot_navi_active = False
+    self.carrot_navi_has_control = False
+    self.carrot_navi_road_limit_valid = False
+    self.carrot_navi_off_route = False
 
     self.debugText = ""
 
@@ -645,6 +655,138 @@ class CarrotServ:
       self.xSpdType = -1
       self.xSpdDist = 0
 
+  def _reset_carrot_navi_sequences(self, session_id):
+    self.carrot_navi_session_id = session_id
+    self.carrot_navi_speed_sequence = -1
+    self.carrot_navi_current_sequence = -1
+    self.carrot_navi_next_sequence = -1
+
+  def _clear_carrot_navi_control(self):
+    self.active_count = 0
+    self.active_sdi_count = 0
+    self.carrot_navi_has_control = False
+    self.carrot_navi_road_limit_valid = False
+    self.carrot_navi_off_route = False
+    self._reset_carrot_navi_sequences("")
+
+    self.nSdiType = self.nSdiBlockType = self.nSdiPlusType = self.nSdiPlusBlockType = -1
+    self.nSdiSpeedLimit = self.nSdiDist = 0
+    self.nSdiBlockSpeed = self.nSdiBlockDist = 0
+    self.nSdiPlusSpeedLimit = self.nSdiPlusDist = 0
+    self.nSdiPlusBlockSpeed = self.nSdiPlusBlockDist = 0
+    self.xSpdType = -1
+    self.xSpdLimit = self.xSpdDist = 0
+
+    self.nTBTTurnType = self.nTBTTurnTypeNext = -1
+    self.nTBTDist = self.nTBTDistNext = 0
+    self.xTurnInfo = self.xTurnInfoNext = -1
+    self.xDistToTurn = self.xDistToTurnNext = 0
+    self.navType = self.navTypeNext = "invalid"
+    self.navModifier = self.navModifierNext = ""
+
+  def _apply_carrot_navi_speed(self, navi: CarrotNaviControl):
+    speed = navi.speed
+    self.carrot_navi_road_limit_valid = speed.road_limit_kph is not None
+    if speed.road_limit_kph is not None:
+      self.nRoadLimitSpeed = speed.road_limit_kph
+
+    if speed.section_active:
+      self.nSdiType = 4
+      self.nSdiSpeedLimit = speed.section_speed_limit_kph
+      self.nSdiDist = speed.section_remaining_distance_m
+      self.nSdiBlockType = 2
+      self.nSdiBlockSpeed = speed.section_speed_limit_kph
+      self.nSdiBlockDist = speed.section_remaining_distance_m
+    elif speed.sdi_present:
+      self.nSdiType = speed.sdi_type
+      self.nSdiSpeedLimit = speed.sdi_speed_limit_kph
+      self.nSdiDist = speed.sdi_distance_m
+      self.nSdiBlockType = -1
+      self.nSdiBlockSpeed = 0
+      self.nSdiBlockDist = 0
+    else:
+      self.nSdiType = -1
+      self.nSdiSpeedLimit = 0
+      self.nSdiDist = 0
+      self.nSdiBlockType = -1
+      self.nSdiBlockSpeed = 0
+      self.nSdiBlockDist = 0
+
+    self.nSdiPlusType = -1
+    self.nSdiPlusSpeedLimit = 0
+    self.nSdiPlusDist = 0
+    self.nSdiPlusBlockType = -1
+    self.nSdiPlusBlockSpeed = 0
+    self.nSdiPlusBlockDist = 0
+    self._update_sdi()
+
+  def _apply_carrot_navi_guidance(self, navi: CarrotNaviControl, force=False):
+    current = navi.current
+    current_changed = force or current.sequence != self.carrot_navi_current_sequence
+    next_guidance = navi.next
+    next_changed = force or next_guidance.sequence != self.carrot_navi_next_sequence
+    if not current_changed and not next_changed:
+      return
+
+    old_current_dist = self.xDistToTurn
+    old_next_dist = self.xDistToTurnNext
+    if current_changed:
+      self.carrot_navi_current_sequence = current.sequence
+      self.nTBTDist = current.distance_m if current.present else 0
+      self.nTBTTurnType = current.turn_type if current.present else -1
+      self.szTBTMainText = current.main_text if current.present else ""
+      self.szNearDirName = current.near_direction if current.present else ""
+      self.szFarDirName = current.far_direction if current.present else ""
+
+    if next_changed:
+      self.carrot_navi_next_sequence = next_guidance.sequence
+      self.nTBTDistNext = next_guidance.distance_m if next_guidance.present else 0
+      self.nTBTTurnTypeNext = next_guidance.turn_type if next_guidance.present else -1
+      self.szTBTMainTextNext = next_guidance.main_text if next_guidance.present else ""
+
+    self._update_tbt()
+    if not current_changed:
+      self.xDistToTurn = old_current_dist
+    if not next_changed:
+      self.xDistToTurnNext = old_next_dist
+
+  def _update_carrot_navi(self, sm):
+    service_active = sm.alive['carrotNavi'] and sm.valid['carrotNavi']
+    if service_active and not sm.updated['carrotNavi']:
+      if self.carrot_navi_active:
+        self.active_count = 80
+        if self.carrot_navi_has_control:
+          self.active_sdi_count = self.active_sdi_count_max
+      return self.carrot_navi_active
+
+    navi = parse_carrot_navi_control(sm['carrotNavi']) if service_active else None
+    was_active = self.carrot_navi_active
+    self.carrot_navi_active = navi is not None
+    if navi is None:
+      if was_active:
+        self._clear_carrot_navi_control()
+      return False
+
+    new_session = navi.session_id != self.carrot_navi_session_id
+    if navi.session_id != self.carrot_navi_session_id:
+      self._reset_carrot_navi_sequences(navi.session_id)
+    off_route_changed = navi.off_route != self.carrot_navi_off_route
+    self.carrot_navi_off_route = navi.off_route
+    self.carrot_navi_road_limit_valid = navi.speed.road_limit_kph is not None
+    self.carrot_navi_has_control = navi.speed.present or navi.current.present or navi.next.present
+
+    self.active_count = 80
+    if self.carrot_navi_has_control:
+      self.active_sdi_count = self.active_sdi_count_max
+    if new_session or off_route_changed or navi.speed.sequence != self.carrot_navi_speed_sequence:
+      self.carrot_navi_speed_sequence = navi.speed.sequence
+      self._apply_carrot_navi_speed(navi)
+
+    if navi.road_category is not None:
+      self.roadcate = navi.road_category
+    self._apply_carrot_navi_guidance(navi, force=new_session or off_route_changed)
+    return True
+
   def _update_gps(self, v_ego, sm, gps_service):
     gps = sm[gps_service]
     #print(f"location = {sm.valid[llk]}, {sm.updated[llk]}, {sm.recv_frame[llk]}, {sm.recv_time[llk]}")
@@ -860,6 +1002,7 @@ class CarrotServ:
 
     self.debugText = ""
     self.update_params()
+    carrot_navi_active = self._update_carrot_navi(sm)
     if sm.alive['carState'] and sm.alive['selfdriveState']:
       CS = sm['carState']
       v_ego = CS.vEgo
@@ -894,7 +1037,8 @@ class CarrotServ:
       self.active_carrot = 0
 
     limit_speed = 200
-    if self.autoRoadSpeedLimitOffset >= 0 and self.active_carrot>=2:
+    road_limit_valid = not carrot_navi_active or self.carrot_navi_road_limit_valid
+    if self.autoRoadSpeedLimitOffset >= 0 and self.active_carrot>=2 and road_limit_valid:
       if self.nRoadLimitSpeed >= 30:
         road_speed_limit_offset = self.autoRoadSpeedLimitOffset
         if not self.is_metric:
