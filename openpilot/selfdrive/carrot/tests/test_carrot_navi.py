@@ -18,6 +18,7 @@ from openpilot.selfdrive.carrot.carrot_navi import (
   PROTOCOL_VERSION,
   build_manifest,
   create_app,
+  discovery_targets,
   parse_binary_packet,
   run_receiver_app,
 )
@@ -51,6 +52,9 @@ def test_standalone_discovery_advertises_new_navi_endpoint(monkeypatch):
     def sendto(self, body, address):
       sent.append((body, address))
 
+    def bind(self, address):
+      assert address == ("192.168.0.10", 0)
+
     def close(self):
       pass
 
@@ -62,6 +66,21 @@ def test_standalone_discovery_advertises_new_navi_endpoint(monkeypatch):
   body, address = sent[0]
   assert json.loads(body) == {"ip": "192.168.0.10", "navi_debug": 1}
   assert address == ("255.255.255.255", DISCOVERY_PORT)
+
+
+def test_discovery_advertises_each_ubuntu_network_interface(monkeypatch):
+  monkeypatch.setattr(
+    "openpilot.selfdrive.carrot.carrot_navi._interface_ipv4_addresses",
+    lambda: (
+      ("192.168.10.5", "255.255.255.0", "192.168.10.255"),
+      ("10.42.0.1", "255.255.255.0", None),
+    ),
+  )
+
+  assert discovery_targets() == (
+    ("192.168.10.5", "192.168.10.255"),
+    ("10.42.0.1", "10.42.0.255"),
+  )
 
 
 def test_receiver_app_retries_temporary_port_conflict(monkeypatch):

@@ -8,6 +8,7 @@ from collections.abc import Callable
 from contextlib import suppress
 import copy
 import errno
+import ipaddress
 import json
 import secrets
 import socket
@@ -83,8 +84,42 @@ def detect_advertise_ip(bind_host: str) -> str:
     probe.close()
 
 
+def _interface_ipv4_addresses() -> tuple[tuple[str, str | None, str | None], ...]:
+  try:
+    import psutil
+  except ImportError:
+    return ()
+  addresses = []
+  for interface_addresses in psutil.net_if_addrs().values():
+    for address in interface_addresses:
+      if address.family != socket.AF_INET or address.address.startswith("127."):
+        continue
+      addresses.append((address.address, address.netmask, address.broadcast))
+  return tuple(addresses)
+
+
+def discovery_targets(advertise_ip: str | None = None) -> tuple[tuple[str, str], ...]:
+  interfaces = _interface_ipv4_addresses()
+  targets = []
+  for address, netmask, broadcast in interfaces:
+    if advertise_ip is not None and address != advertise_ip:
+      continue
+    if not broadcast and netmask:
+      try:
+        broadcast = str(ipaddress.ip_network(f"{address}/{netmask}", strict=False).broadcast_address)
+      except ValueError:
+        broadcast = None
+    targets.append((address, broadcast or "255.255.255.255"))
+
+  if not targets:
+    address = advertise_ip or detect_advertise_ip(DEFAULT_HOST)
+    if not address.startswith("127."):
+      targets.append((address, "255.255.255.255"))
+  return tuple(dict.fromkeys(targets))
+
+
 class CarrotNaviDiscoveryBeacon:
-  def __init__(self, advertise_ip: str, interval_s: float = DISCOVERY_INTERVAL_S) -> None:
+  def __init__(self, advertise_ip: str | None = None, interval_s: float = DISCOVERY_INTERVAL_S) -> None:
     self.advertise_ip = advertise_ip
     self.interval_s = max(0.2, float(interval_s))
     self._stop = threading.Event()
@@ -104,13 +139,17 @@ class CarrotNaviDiscoveryBeacon:
     self._thread = None
 
   def broadcast_once(self) -> None:
-    body = json.dumps({"ip": self.advertise_ip, "navi_debug": 1}).encode("utf-8")
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-      sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-      sock.sendto(body, ("255.255.255.255", DISCOVERY_PORT))
-    finally:
-      sock.close()
+    for source_ip, broadcast_ip in discovery_targets(self.advertise_ip):
+      body = json.dumps({"ip": source_ip, "navi_debug": 1}).encode("utf-8")
+      sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+      try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.bind((source_ip, 0))
+        sock.sendto(body, (broadcast_ip, DISCOVERY_PORT))
+      except OSError:
+        continue
+      finally:
+        sock.close()
 
   def _run(self) -> None:
     while not self._stop.is_set():
@@ -967,7 +1006,7 @@ def main() -> None:
 
   map_theme, map_type = read_map_appearance()
   receiver = CarrotNaviReceiver(port=args.port, map_theme=map_theme, map_type=map_type)
-  advertise_ip = args.advertise_ip or detect_advertise_ip(args.host)
+  advertise_ip = args.advertise_ip or (args.host if args.host not in ("", "0.0.0.0", "::") else None)
   beacon = None if args.no_beacon else CarrotNaviDiscoveryBeacon(advertise_ip)
   publisher = None
   if not args.no_cereal:
@@ -982,7 +1021,8 @@ def main() -> None:
 
   if beacon is not None:
     beacon.start()
-    print(f"[carrot_navi] discovery advertising {advertise_ip}:{args.port} via UDP {DISCOVERY_PORT}")
+    advertised = ", ".join(address for address, _ in discovery_targets(advertise_ip)) or "unavailable"
+    print(f"[carrot_navi] discovery advertising {advertised}:{args.port} via UDP {DISCOVERY_PORT}")
   print(
     f"[carrot_navi] starting receiver on {args.host}:{args.port} "
     f"map_theme={map_theme} map_type={map_type}",
