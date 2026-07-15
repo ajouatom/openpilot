@@ -1,6 +1,8 @@
 from openpilot.selfdrive.controls.lib.cutin_helpers import (
   associate_cutin_tracks,
   combine_cutin_future_projection,
+  cutin_entry_rejection_reason,
+  cutin_tuning_from_sensitivity,
   hold_side_corner_front_matches,
   is_cutin_track_discontinuous,
   is_fast_cutin_entry,
@@ -131,6 +133,71 @@ class TestFrontRadarCutin:
 
     assert d_path_future == -3.54
     assert in_lane_prob_future == 0.0
+
+  def test_sustained_radar_motion_accepts_slow_truck_cutin(self):
+    args = {
+      "enabled": True,
+      "lane_line_available": True,
+      "corner_track": True,
+      "closer_or_matching": True,
+      "track_count": 8,
+      "min_track_age": 5,
+      "d_rel": 3.0,
+      "v_lead": 10.0,
+      "d_path": 2.06,
+      "d_path_future": 1.46,
+      "in_lane_prob": 0.0,
+      "in_lane_prob_future": 0.13,
+      "inward_speed": 0.40,
+      "tuning": cutin_tuning_from_sensitivity(50.0),
+      "fast_lane_entry": False,
+    }
+
+    assert cutin_entry_rejection_reason(**args, radar_inward_speed=0.0) == "future-lane"
+    assert cutin_entry_rejection_reason(**args, radar_inward_speed=0.20) is None
+
+  def test_lane_projection_cannot_outrun_radar_motion(self):
+    args = {
+      "enabled": True,
+      "lane_line_available": True,
+      "corner_track": True,
+      "closer_or_matching": True,
+      "track_count": 8,
+      "min_track_age": 5,
+      "d_rel": 13.0,
+      "v_lead": 8.0,
+      "d_path": 2.7,
+      "d_path_future": 0.6,
+      "in_lane_prob": 0.0,
+      "in_lane_prob_future": 0.55,
+      "inward_speed": 1.25,
+      "tuning": cutin_tuning_from_sensitivity(50.0),
+      "fast_lane_entry": False,
+    }
+
+    assert cutin_entry_rejection_reason(**args, radar_inward_speed=0.20) == "radar-motion"
+
+  def test_corner_entry_rejects_unreliable_far_track(self):
+    args = {
+      "enabled": True,
+      "lane_line_available": True,
+      "corner_track": True,
+      "closer_or_matching": True,
+      "track_count": 12,
+      "min_track_age": 5,
+      "d_rel": 34.0,
+      "v_lead": 19.0,
+      "d_path": 2.4,
+      "d_path_future": 0.4,
+      "in_lane_prob": 0.0,
+      "in_lane_prob_future": 0.75,
+      "inward_speed": 1.3,
+      "tuning": cutin_tuning_from_sensitivity(50.0),
+      "fast_lane_entry": False,
+      "radar_inward_speed": 1.3,
+    }
+
+    assert cutin_entry_rejection_reason(**args, max_d_rel=30.0) == "range-speed"
 
   def test_stable_corner_ids_do_not_inherit_another_objects_history(self):
     old_object = {1000: (3.6, -4.65, -4.05)}

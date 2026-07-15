@@ -17,6 +17,7 @@ from openpilot.selfdrive.controls.lib.drive_helpers import is_volkswagen_meb
 from openpilot.selfdrive.controls.lib.cutin_helpers import (
   associate_cutin_tracks,
   combine_cutin_future_projection,
+  CORNER_CUTIN_MAX_DREL_M,
   cutin_confirmation_frames,
   cutin_min_track_age_frames,
   cutin_entry_rejection_reason,
@@ -317,6 +318,9 @@ class Track:
       if side_corner_confirmed:
         self.cutin_path_d_path(md)
       if is_cutin_track and radar_lat_factor > 0.0:
+        self.cutin_radar_inward_speed = max(
+          0.0, -math.copysign(1.0, self.dPath) * yv_rel_future
+        )
         self.dPath_rate, self.dPath_inward_speed = update_lane_relative_motion(
           self._cutin_position_history,
           self.dRel,
@@ -335,7 +339,7 @@ class Track:
           self.lane_half_width,
           self.dPath_future,
           self.in_lane_prob_future,
-          max(0.0, -math.copysign(1.0, self.dPath) * yv_rel_future),
+          self.cutin_radar_inward_speed,
         )
         self.dPath_inward_speed = effective_cutin_inward_speed(
           self.dRel,
@@ -381,7 +385,6 @@ class Track:
           self._cutin_path_position_history.clear()
           self.path_dPath_rate = 0.0
           self.path_inward_speed = 0.0
-          self.cutin_radar_inward_speed = 0.0
       else:
         self._cutin_position_history.clear()
         self._cutin_path_position_history.clear()
@@ -1228,9 +1231,11 @@ class RadarD:
         t.dPath,
         t.lane_half_width,
         t.dPath_inward_speed,
-        max(0.0, -math.copysign(1.0, t.yRel) * t.yvLead),
+        t.cutin_radar_inward_speed,
         v_rel=t.vRel,
       ),
+      radar_inward_speed=t.cutin_radar_inward_speed,
+      max_d_rel=CORNER_CUTIN_MAX_DREL_M if self._is_corner_track(t) else None,
     )
     return reason is None
 

@@ -27,11 +27,17 @@ CUTIN_FAST_NEAR_MAX_LANE_BOUNDARY_TTC_S = 0.7
 CUTIN_FAST_MIN_RADAR_INWARD_SPEED = 0.2
 CUTIN_FAST_RADAR_INWARD_SPEED_MARGIN = 0.2
 CUTIN_FAST_MAX_PULL_AWAY_VREL_MPS = 3.0
+CUTIN_SUSTAINED_MIN_FUTURE_IN_LANE_PROB = 0.10
+CUTIN_SUSTAINED_MIN_INWARD_SPEED = 0.25
+CUTIN_SUSTAINED_MIN_RADAR_INWARD_SPEED = 0.18
+CUTIN_NORMAL_MIN_RADAR_INWARD_SPEED = 0.05
+CUTIN_NORMAL_RADAR_INWARD_SPEED_MARGIN = 0.35
 CUTIN_PROJECTED_BOOST_MIN_TEMPORAL_INWARD_SPEED = 0.3
 CUTIN_OUTER_TRACK_MIN_ABS_DPATH = 3.5
 FRONT_CUTIN_MIN_DREL_M = 5.0
 FRONT_CUTIN_MAX_DREL_M = 50.0
 FRONT_CUTIN_MAX_ABS_YREL_M = 7.0
+CORNER_CUTIN_MAX_DREL_M = 30.0
 CUTIN_MAX_FRAME_DREL_JUMP_M = 3.0
 CUTIN_MAX_FRAME_Y_JUMP_M = 0.60
 FRONT_CUTIN_MIN_CONFIRM_S = 0.30
@@ -400,6 +406,8 @@ def cutin_entry_rejection_reason(
   inward_speed: float,
   tuning: dict[str, Any],
   fast_lane_entry: bool = False,
+  radar_inward_speed: float | None = None,
+  max_d_rel: float | None = None,
 ) -> str | None:
   if not enabled:
     return "disabled"
@@ -411,19 +419,37 @@ def cutin_entry_rejection_reason(
     return "behind-lead"
   if track_count < min_track_age:
     return "track-age"
-  if not (tuning["enter_min_x"] < d_rel < tuning["enter_max_x"] and v_lead > 4.0):
+  enter_max_x = tuning["enter_max_x"] if max_d_rel is None else min(tuning["enter_max_x"], max_d_rel)
+  if not (tuning["enter_min_x"] < d_rel < enter_max_x and v_lead > 4.0):
     return "range-speed"
   if abs(d_path) < tuning["enter_min_abs_dpath"]:
     return "already-center"
-  if not fast_lane_entry:
+  sustained_radar_entry = (
+    radar_inward_speed is not None
+    and radar_inward_speed >= CUTIN_SUSTAINED_MIN_RADAR_INWARD_SPEED
+    and inward_speed >= CUTIN_SUSTAINED_MIN_INWARD_SPEED
+    and in_lane_prob_future >= CUTIN_SUSTAINED_MIN_FUTURE_IN_LANE_PROB
+    and (in_lane_prob_future - in_lane_prob) >= CUTIN_ENTER_PROB_GAIN
+    and (abs(d_path) - abs(d_path_future)) >= tuning["enter_centering_gain"]
+  )
+  if not fast_lane_entry and not sustained_radar_entry:
     if in_lane_prob_future < tuning["enter_future_in_lane_prob"]:
       return "future-lane"
     if (in_lane_prob_future - in_lane_prob) < CUTIN_ENTER_PROB_GAIN:
       return "prob-gain"
     if (abs(d_path) - abs(d_path_future)) < tuning["enter_centering_gain"]:
       return "center-gain"
-  if inward_speed < tuning["enter_min_inward_speed"]:
+  if inward_speed < tuning["enter_min_inward_speed"] and not sustained_radar_entry:
     return "lane-motion"
+  if (
+    radar_inward_speed is not None
+    and not fast_lane_entry
+    and (
+      radar_inward_speed < CUTIN_NORMAL_MIN_RADAR_INWARD_SPEED
+      or inward_speed > radar_inward_speed + CUTIN_NORMAL_RADAR_INWARD_SPEED_MARGIN
+    )
+  ):
+    return "radar-motion"
   return None
 
 

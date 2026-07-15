@@ -1,0 +1,149 @@
+{
+  "sensitivity": 50,
+  "cases": [
+    {
+      "id": "carnival-5b-18-early",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "window": [0.0, 10.0],
+      "expected": "detect",
+      "scene": "Multiple early cut-ins"
+    },
+    {
+      "id": "carnival-5b-15-truck",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "window": [45.0, 50.0],
+      "expected": "detect",
+      "scene": "Truck enters from the left"
+    },
+    {
+      "id": "azera-6d-1-front",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "0000006d--50a44bb074--1/rlog.zst",
+      "source": "front",
+      "window": [8.0, 13.0],
+      "expected": "detect",
+      "scene": "Left vehicle cuts in"
+    },
+    {
+      "id": "ioniq9-18f-2-front",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "0000018f--2bb73a4538--2/rlog.zst",
+      "source": "front",
+      "window": [24.0, 30.0],
+      "expected": "detect",
+      "scene": "Front-radar cut-in around 26 seconds"
+    },
+    {
+      "id": "carnival-6a-27-close",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "window": [54.0, 60.0],
+      "expected": "detect",
+      "scene": "Very close white vehicle enters from the left"
+    },
+    {
+      "id": "ioniq9-a7-22-truck",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a7--54660d9df7--22/rlog.zst",
+      "source": "corner",
+      "window": [20.0, 29.0],
+      "expected": "detect",
+      "scene": "Large truck begins entering around 21 seconds"
+    },
+    {
+      "id": "ioniq5-cab-49-curve",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cab--0e0be97e78--49/rlog.zst",
+      "source": "corner",
+      "window": [0.0, 30.0],
+      "expected": "clear",
+      "scene": "Right curve; adjacent vehicle stays in its lane"
+    },
+    {
+      "id": "ioniq9-192-7-early",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000192--b0f1546431--7/rlog.zst",
+      "source": "corner",
+      "window": [0.0, 10.0],
+      "expected": "clear",
+      "scene": "Early corner-radar false positive"
+    },
+    {
+      "id": "santafe-421-1",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5_HEV 61d2c91e1039ab5e",
+      "log": "00000421--6bbe001d3d--1/rlog.zst",
+      "source": "corner",
+      "window": [15.0, 20.0],
+      "expected": "clear",
+      "scene": "False cut-in around 17 seconds"
+    },
+    {
+      "id": "ioniq5-cb5-3-adjacent",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cb5--cf3e24bc3d--3/rlog.zst",
+      "source": "corner",
+      "window": [0.0, 60.0],
+      "expected": "clear",
+      "scene": "Adjacent vehicles before meeting a center lead"
+    },
+    {
+      "id": "k8-216-4-slot-change",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN 4aa2ded146fd78b9",
+      "log": "00000216--f69e641982--4/rlog.zst",
+      "source": "corner",
+      "window": [12.0, 17.0],
+      "expected": "clear",
+      "scene": "Raw corner slot changes object near 14 seconds"
+    },
+    {
+      "id": "gv80-218-2-close-pass",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "window": [35.0, 40.0],
+      "expected": "clear",
+      "scene": "Passing a close adjacent vehicle near 37 seconds"
+    },
+    {
+      "id": "gv80-218-6-point-jump",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--6/rlog.zst",
+      "source": "corner",
+      "window": [39.0, 44.0],
+      "expected": "clear",
+      "scene": "Lateral point jump near 41 seconds"
+    },
+    {
+      "id": "k8-221-18-persistent",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN 4aa2ded146fd78b9",
+      "log": "00000221--1ee7be4212--18/rlog.zst",
+      "source": "corner",
+      "window": [48.0, 53.0],
+      "expected": "clear",
+      "scene": "Persistent false cut-in around 50 seconds"
+    },
+    {
+      "id": "ioniq9-a7-2-two-false",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a7--54660d9df7--2/rlog.zst",
+      "source": "corner",
+      "window": [0.0, 33.0],
+      "expected": "clear",
+      "scene": "False positives near 2 and 29 seconds"
+    },
+    {
+      "id": "ioniq9-a5-22-curve",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a5--ba129171a3--22/rlog.zst",
+      "source": "corner",
+      "window": [30.0, 37.0],
+      "expected": "clear",
+      "scene": "Adjacent vehicle remains in its lane on a curve around 33 seconds"
+    }
+  ]
+}

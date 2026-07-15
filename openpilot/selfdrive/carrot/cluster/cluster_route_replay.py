@@ -50,6 +50,7 @@ from cluster_utils import clamp, smoothstep
 from openpilot.selfdrive.controls.lib.cutin_helpers import (
     associate_cutin_tracks,
     combine_cutin_future_projection,
+    CORNER_CUTIN_MAX_DREL_M,
     cutin_confirmation_frames,
     cutin_min_track_age_frames,
     cutin_entry_rejection_reason,
@@ -2350,6 +2351,9 @@ class RouteLogParser:
             future_y_rel = track.y_rel + (track.yv_rel + yv_corr) * self.cutin_tuning["horizon_s"]
             track.d_path, track.in_lane_prob = self._cutin_dpath(track.d_rel, track.y_rel)
             track.d_path_future, track.in_lane_prob_future = self._cutin_dpath(future_d_rel, future_y_rel)
+            track.radar_inward_speed = max(
+                0.0, -math.copysign(1.0, track.d_path) * (track.yv_rel + yv_corr)
+            )
             track.d_path_rate, track.inward_speed = update_lane_relative_motion(
                 track.position_history,
                 track.d_rel,
@@ -2369,7 +2373,7 @@ class RouteLogParser:
                 lane_half_width,
                 track.d_path_future,
                 track.in_lane_prob_future,
-                max(0.0, -math.copysign(1.0, track.d_path) * (track.yv_rel + yv_corr)),
+                track.radar_inward_speed,
             )
             track.inward_speed = effective_cutin_inward_speed(
                 track.d_rel,
@@ -2422,9 +2426,10 @@ class RouteLogParser:
                 track.path_position_history.clear()
                 track.path_d_path_rate = 0.0
                 track.path_inward_speed = 0.0
-            track.radar_inward_speed = max(
-                0.0, -math.copysign(1.0, track.path_d_path) * (track.yv_rel + yv_corr)
-            )
+            if side_corner_confirmed:
+                track.radar_inward_speed = max(
+                    0.0, -math.copysign(1.0, track.path_d_path) * (track.yv_rel + yv_corr)
+                )
             track.cnt += 1
 
             matching_front = any(
@@ -2484,8 +2489,12 @@ class RouteLogParser:
                         track.d_path,
                         lane_half_width,
                         track.inward_speed,
-                        max(0.0, -math.copysign(1.0, track.y_rel) * track.yv_rel),
+                        track.radar_inward_speed,
                         v_rel=track.v_rel,
+                    ),
+                    radar_inward_speed=track.radar_inward_speed,
+                    max_d_rel=(
+                        CORNER_CUTIN_MAX_DREL_M if self._is_corner_live_track(point) else None
                     ),
                 )
             track.rejection_reason = entry_rejection_reason or "enter"
