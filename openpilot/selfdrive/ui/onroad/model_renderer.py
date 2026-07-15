@@ -124,31 +124,22 @@ class ModelRenderer(Widget):
       self._longitudinal_control = sm['carParams'].openpilotLongitudinalControl
 
     model = sm['modelV2']
-    radar_state = sm['radarState'] if sm.valid['radarState'] else None
-    lead_one = radar_state.leadOne if radar_state else None
-    render_lead_indicator = self._longitudinal_control and radar_state is not None
+    if sm.updated['modelV2']:
+      self._update_raw_points(model)
 
-    # Update model data when needed
-    model_updated = sm.updated['modelV2']
-    if model_updated or sm.updated['radarState'] or self._transform_dirty:
-      if model_updated:
-        self._update_raw_points(model)
+    if self._path.raw_points.shape[0] == 0:
+      return
 
-      path_x_array = self._path.raw_points[:, 0]
-      if path_x_array.size == 0:
-        return
+    # The Carrot renderers below rebuild all projected geometry they consume.
+    # The legacy _update_model/_update_leads results only feed the disabled draw
+    # calls, and _draw_path_carrot immediately replaces path.projected_points.
+    self._transform_dirty = False
 
-      self._update_model(lead_one, path_x_array)
-      if render_lead_indicator:
-        self._update_leads(radar_state, path_x_array)
-      self._transform_dirty = False
-
-    # Draw elements
-    #self._draw_lane_lines()
-    #self._draw_path(sm)
-
-    #if render_lead_indicator and radar_state:
-    #  self._draw_lead_indicator()
+    # Legacy renderers are intentionally disabled. Restore their update pipeline
+    # together with these draw calls if they are ever enabled again.
+    # self._draw_lane_lines()
+    # self._draw_path(sm)
+    # self._draw_lead_indicator()
     self._draw_path_carrot(sm)
     self._draw_lane_lines_carrot(sm)
     self._draw_blind_spot_carrot(sm)
