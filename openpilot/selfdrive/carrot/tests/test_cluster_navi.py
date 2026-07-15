@@ -329,7 +329,14 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   renderer = object.__new__(ClusterUiRenderer)
   frames = {
     key: NaviMediaFrame(key, 1, True, "image/rgba", 1, 1, b"rgba")
-    for key in ("render:map_main", "image:tbt_current_compact", "image:tbt_next", "image:lane_bottom")
+    for key in (
+      "render:map_main",
+      "image:tbt_current_compact",
+      "image:tbt_next",
+      "image:lane_top",
+      "image:lane_bottom",
+      "image:traffic_signal",
+    )
   }
   dashboard = NaviDashboardState(True, "ipc://carrotNaviMedia", media=tuple(frames.values()))
   drawn = {}
@@ -342,6 +349,11 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   monkeypatch.setattr(ClusterUiRenderer, "_rounded_rect", lambda *args, **kwargs: None)
   monkeypatch.setattr(ClusterUiRenderer, "_draw_navi_crossroad_box", lambda *args, **kwargs: None)
   monkeypatch.setattr(ClusterUiRenderer, "_navi_media_fitted_size", lambda self, frame, rect: (rect.width, rect.height))
+  monkeypatch.setattr(
+    ClusterUiRenderer,
+    "_draw_navi_traffic_light_panel",
+    lambda *args, **kwargs: pytest.fail("structured traffic signal fallback must not render"),
+  )
 
   def capture_media(self, frame, rect, **kwargs):
     if frame is not None:
@@ -353,7 +365,8 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   monkeypatch.setattr("cluster_renderer.rl.begin_scissor_mode", lambda *args, **kwargs: None)
   monkeypatch.setattr("cluster_renderer.rl.end_scissor_mode", lambda: None)
 
-  renderer._draw_navi_live_panel(SimpleNamespace(navi_live=None, navi_dashboard=dashboard))
+  navi = SimpleNamespace(traffic_light=object(), route=None, vehicle=None)
+  renderer._draw_navi_live_panel(SimpleNamespace(navi_live=navi, navi_dashboard=dashboard))
 
   assert drawn["image:tbt_current_compact"].width == pytest.approx(310.0 * 1.2)
   assert drawn["image:tbt_current_compact"].height == pytest.approx(116.0 * 1.2)
@@ -361,6 +374,32 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   assert drawn["image:tbt_next"].height == pytest.approx(68.0 * 1.2)
   assert drawn["image:lane_bottom"].width == pytest.approx(226.0 * 1.2)
   assert drawn["image:lane_bottom"].height == pytest.approx(67.0 * 1.2)
+  assert drawn["image:traffic_signal"].width == pytest.approx(230.0)
+  assert drawn["image:traffic_signal"].height == pytest.approx(98.0)
+  assert "image:lane_top" not in drawn
+
+
+def test_navi_dashboard_hides_top_lane_and_draws_received_signal(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  frames = {
+    key: NaviMediaFrame(key, 1, True, "image/rgba", 1, 1, b"rgba")
+    for key in ("image:lane_top", "image:lane_bottom", "image:traffic_signal")
+  }
+  drawn = {}
+
+  def capture_media(self, frame, rect, **kwargs):
+    if frame is not None:
+      drawn[frame.key] = rect
+    return True
+
+  monkeypatch.setattr(ClusterUiRenderer, "_draw_navi_media", capture_media)
+
+  renderer._draw_navi_map_media(frames)
+
+  assert "image:lane_top" not in drawn
+  assert drawn["image:lane_bottom"].height == pytest.approx(174.0)
+  assert drawn["image:traffic_signal"].width == pytest.approx(230.0)
+  assert drawn["image:traffic_signal"].height == pytest.approx(98.0)
 
 
 def test_ipc_media_source_restores_standalone_navigation_images():

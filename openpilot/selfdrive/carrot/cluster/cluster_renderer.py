@@ -3093,19 +3093,22 @@ class ClusterUiRenderer:
                 center_x_offset=turn_signal_shift_x,
             )
             self._profile_add("hud.turn_signal_right", profile_stage)
-            traffic_light = (
-                state.navi_live.traffic_light
-                if state.navi_live is not None and state.navi_live.traffic_light is not None
-                else state.navi_debug.traffic_light
-                if state.navi_debug is not None
-                else None
-            )
             traffic_drawn_in_map = screen_mode == CLUSTER_SCREEN_MODE_DEFAULT and self._navi_map_frame_present(
                 state.navi_dashboard
             )
-            if traffic_light is not None and not traffic_drawn_in_map:
+            dashboard = state.navi_dashboard
+            traffic_frame = next(
+                (frame for frame in dashboard.media if frame.key == "image:traffic_signal"),
+                None,
+            ) if dashboard is not None and dashboard.connected else None
+            if traffic_frame is not None and not traffic_drawn_in_map:
                 profile_stage = self._profile_start()
-                self._draw_navi_traffic_light_panel(traffic_light)
+                self._draw_navi_media(
+                    traffic_frame,
+                    rl.Rectangle(NAVI_TRAFFIC_PANEL_RIGHT - 230.0, NAVI_TRAFFIC_PANEL_Y, 230.0, 98.0),
+                    align_x=1.0,
+                    align_y=0.0,
+                )
                 self._profile_add("hud.navi_traffic", profile_stage)
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
@@ -3557,10 +3560,6 @@ class ClusterUiRenderer:
             )
 
         self._draw_navi_media(
-            media.get("image:lane_top"),
-            rl.Rectangle(NAVI_MODE_MAP_X + 65.0, 8.0, NAVI_MODE_MAP_W - 130.0, 86.0),
-        )
-        self._draw_navi_media(
             media.get("image:lane_bottom"),
             rl.Rectangle(NAVI_MODE_MAP_X + 80.0, 298.0, NAVI_MODE_MAP_W - 160.0, 174.0),
         )
@@ -3981,24 +3980,13 @@ class ClusterUiRenderer:
                 media.get("image:center_tbt_icon"),
                 rl.Rectangle(map_center_x - 55.0, y + 76.0, 110.0, 110.0),
             )
-            self._draw_navi_media(
-                media.get("image:lane_top"),
-                rl.Rectangle(map_center_x - 210.0, y + 184.0, 420.0, 76.0),
-            )
-
             traffic_rect = rl.Rectangle(x + w - 242.0, y + 12.0, 230.0, 98.0)
-            drew_traffic_image = self._draw_navi_media(
+            self._draw_navi_media(
                 media.get("image:traffic_signal"),
                 traffic_rect,
                 align_x=1.0,
                 align_y=0.0,
             )
-            if not drew_traffic_image and navi is not None and navi.traffic_light is not None:
-                self._draw_navi_traffic_light_panel(
-                    navi.traffic_light,
-                    panel_right=x + w - 12.0,
-                    panel_y=y + 12.0,
-                )
 
             safety_frame = next(
                 (
