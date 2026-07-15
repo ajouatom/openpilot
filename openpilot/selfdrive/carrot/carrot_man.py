@@ -4,7 +4,6 @@ import base64
 import json
 import math
 import os
-import shutil
 import socket
 import struct
 import subprocess
@@ -32,12 +31,11 @@ from openpilot.common.realtime import Ratekeeper, set_core_affinity
 from openpilot.common.params import Params, ParamKeyType
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.system.hardware import PC, TICI
-from openpilot.system.hardware.hw import Paths
 from openpilot.selfdrive.navd.helpers import Coordinate
 from openpilot.common.constants import CV
 
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
-from openpilot.selfdrive.carrot.tmux_metadata import TmuxCaptureStore, capture_tmux_metadata
+from openpilot.selfdrive.carrot.tmux_metadata import capture_tmux_metadata
 try:
   from openpilot.selfdrive.carrot.server.services.web_settings import read_web_settings
 except Exception:
@@ -285,9 +283,9 @@ class CarrotMan:
     self.sm = messaging.SubMaster([
       'deviceState', 'carState', 'controlsState', 'radarState', 'longitudinalPlan', 'modelV2',
       'selfdriveState', 'carControl', 'navRouteNavd', self.gps_location_service,
-      'navInstruction', 'carrotNavi',
+      'navInstruction', 'carrotNavi', 'roadEncodeIdx',
     ])
-    self.tmux_captures = TmuxCaptureStore()
+    self.tmux_capture_metadata = None
     self.pm = messaging.PubMaster(['carrotMan', "navRoute", "navInstructionCarrot"])
 
     self.carrot_serv = CarrotServ()
@@ -754,34 +752,15 @@ class CarrotMan:
         print(f"Network error, retrying...: {e}")
         time.sleep(2)
 
-  def _tmux_capture_path(self, capture_key):
-    key_hash = hashlib.sha256(str(capture_key).encode("utf-8")).hexdigest()[:16]
-    return f"/data/media/tmux-{key_hash}.log"
-
-  def _discard_tmux_capture(self, capture_key):
-    capture = self.tmux_captures.pop(capture_key)
-    if capture is not None:
-      try:
-        os.unlink(capture.path)
-      except FileNotFoundError:
-        pass
-
-  def make_tmux_data(self, capture_key="default"):
-    capture_metadata = capture_tmux_metadata(self.params, Paths.log_root())
-    capture_path = self._tmux_capture_path(capture_key)
-    capture_part = f"{capture_path}.part"
+  def make_tmux_data(self):
+    self.tmux_capture_metadata = None
+    capture_metadata = capture_tmux_metadata(self.params, self.sm)
     try:
       subprocess.run("rm -f /data/media/tmux.log; tmux capture-pane -pq -S-1000 > /data/media/tmux.log", shell=True, capture_output=True, text=False, check=True)
       subprocess.run("/data/openpilot/openpilot/selfdrive/apilot.py", shell=True, capture_output=True, text=False)
-      shutil.copyfile("/data/media/tmux.log", capture_part)
-      os.replace(capture_part, capture_path)
-      self.tmux_captures.put(capture_key, capture_path, capture_metadata)
+      self.tmux_capture_metadata = capture_metadata
       return True
     except Exception as e:
-      try:
-        os.unlink(capture_part)
-      except FileNotFoundError:
-        pass
       print(f"TMUX creation error: {e}")
       return False
 
@@ -812,9 +791,7 @@ class CarrotMan:
         print(f"Directory creation failed: {e}")
       ftp.cwd(directory)
 
-      capture = self.tmux_captures.get(tmux_why)
-      tmux_path = capture.path if capture is not None else "/data/media/tmux.log"
-      with open(tmux_path, "rb") as file:
+      with open("/data/media/tmux.log", "rb") as file:
         ftp.storbinary(f'STOR {filename}', file)
 
       if send_settings:
@@ -884,9 +861,7 @@ class CarrotMan:
       url = f"{target['base_url']}/api/v1/tmux/upload"
       headers["Authorization"] = f"Bearer {target['token']}"
 
-    capture = self.tmux_captures.get(tmux_why)
-    capture_metadata = capture.metadata if capture is not None else capture_tmux_metadata(self.params, Paths.log_root())
-    tmux_path = capture.path if capture is not None else "/data/media/tmux.log"
+    capture_metadata = self.tmux_capture_metadata or capture_tmux_metadata(self.params, self.sm)
     payload = {
       "tmux_why"           : tmux_why,
       "car_name"           : _pstr("CarName"),
@@ -906,7 +881,7 @@ class CarrotMan:
     files = []
 
     try:
-      files.append(("files[0]", ("tmux.log", open(tmux_path, "rb"), "text/plain")))
+      files.append(("files[0]", ("tmux.log", open("/data/media/tmux.log", "rb"), "text/plain")))
 
       if send_settings:
         #self.save_toggle_values()
@@ -1037,8 +1012,7 @@ class CarrotMan:
       "flags": 4,
     }
 
-    capture = self.tmux_captures.get(tmux_why)
-    tmux_path = capture.path if capture is not None else "/data/media/tmux.log"
+    tmux_path = "/data/media/tmux.log"
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     branch = self._param_text("GitBranch", "unknown").replace("/", "__")
     files = []
@@ -1203,8 +1177,6 @@ class CarrotMan:
             else:
               isOnroadCount += 1
           else:
-            if onroad_start_at is not None:
-              self._discard_tmux_capture("onroad")
             isOnroadCount = 0
             onroad_start_at = None
             is_tmux_sent = False
@@ -1217,7 +1189,7 @@ class CarrotMan:
           if AUTO_ONROAD_DIAGNOSTICS and onroad_start_at is not None and not is_tmux_sent:
             onroad_elapsed = now - onroad_start_at
             if not onroad_tmux_captured and onroad_elapsed >= AUTO_ONROAD_TMUX_DELAY_SECONDS and now >= onroad_tmux_next_attempt_at:
-              if self.make_tmux_data("onroad"):
+              if self.make_tmux_data():
                 onroad_tmux_captured = True
                 onroad_tmux_next_attempt_at = 0.0
                 print(f"[carrot_man] onroad tmux captured after {onroad_elapsed:.1f}s; waiting for network upload")
@@ -1235,13 +1207,12 @@ class CarrotMan:
                 http_ok = http_response is not None and getattr(http_response, "ok", False)
                 if ftp_ok or http_ok:
                   print(f"[carrot_man] onroad tmux upload complete: ftp_ok={ftp_ok}, http_ok={http_ok}")
-                  self._discard_tmux_capture("onroad")
                   is_tmux_sent = True
                 else:
                   onroad_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
           carrot_exception = self.params.get("CarrotException")
           if carrot_exception in ["exception", "log", "tmux_send"] and pending_tmux_reason is None and now >= pending_tmux_next_attempt_at:
-            if self.make_tmux_data(carrot_exception):
+            if self.make_tmux_data():
               pending_tmux_reason = carrot_exception
               pending_tmux_next_attempt_at = 0.0
               print(f"[carrot_man] tmux captured for {carrot_exception}; waiting for network upload")
@@ -1264,7 +1235,6 @@ class CarrotMan:
               discord_ok = self.send_tmux_discord(pending_tmux_reason, ftp_ok, http_ok, http_response) if upload_target["kind"] == "carrot" else False
               if ftp_ok or http_ok or discord_ok:
                 print(f"[carrot_man] tmux upload complete for {pending_tmux_reason}: ftp_ok={ftp_ok}, http_ok={http_ok}, discord_ok={discord_ok}")
-                self._discard_tmux_capture(pending_tmux_reason)
                 if pending_tmux_reason == "exception":
                   self.params.put_bool("CarrotExceptionSent", True)
                 self.params.put("CarrotException", "")
@@ -1290,14 +1260,12 @@ class CarrotMan:
           #print(echo)
           socket.send(echo.encode())
         elif 'tmux_send' in json_obj:
-          tmux_created = self.make_tmux_data("tmux_send")
+          tmux_created = self.make_tmux_data()
           upload_target = self.resolve_tmux_upload_target()
           ftp_ok = self.send_tmux(json_obj['tmux_send'], "tmux_send") if tmux_created and upload_target["kind"] == "carrot" else False
           http_response = self.send_tmux_http("tmux_send", target=upload_target) if tmux_created else None
           http_ok = http_response is not None and getattr(http_response, "ok", False)
           discord_ok = self.send_tmux_discord("tmux_send", ftp_ok, http_ok, http_response) if tmux_created and upload_target["kind"] == "carrot" else False
-          if tmux_created:
-            self._discard_tmux_capture("tmux_send")
           result = "success" if ftp_ok or http_ok or discord_ok else "failed"
           echo_obj = {"tmux_send": json_obj['tmux_send'], "result": result, "ftp_ok": ftp_ok, "http_ok": http_ok, "discord_ok": discord_ok}
           if upload_target["kind"] == "skip":
