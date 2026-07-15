@@ -1,4 +1,5 @@
 import ctypes
+from dataclasses import replace
 import importlib
 from pathlib import Path
 import queue
@@ -311,6 +312,76 @@ def test_renderer_rgba_upload_reuses_frame_buffer(monkeypatch):
   assert buffer_calls == [("const unsigned char[]", frame_data)]
   assert cast_calls == [("void *", buffer_pointer)]
   assert upload_calls == [(texture, void_pointer)]
+
+
+def test_renderer_yuv420_upload_reuses_plane_textures(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._navi_media_textures = {}
+  renderer.profile_enabled = False
+  renderer._profile_samples = []
+  created = []
+  filters = []
+  uploads = []
+  ffi_arrays = []
+
+  def load_texture(image):
+    texture = types.SimpleNamespace(id=len(created) + 1, width=image.width, height=image.height)
+    created.append(texture)
+    return texture
+
+  monkeypatch.setattr(
+    cluster_renderer.rl,
+    "Image",
+    lambda _data, width, height, _mips, _format: types.SimpleNamespace(width=width, height=height),
+  )
+  monkeypatch.setattr(cluster_renderer.rl, "load_texture_from_image", load_texture)
+  monkeypatch.setattr(cluster_renderer.rl, "is_texture_valid", lambda _texture: True)
+  monkeypatch.setattr(
+    cluster_renderer.rl,
+    "set_texture_filter",
+    lambda texture, texture_filter: filters.append((texture.id, texture_filter)),
+  )
+  monkeypatch.setattr(cluster_renderer.rl, "unload_texture", lambda *_args: None)
+  monkeypatch.setattr(
+    cluster_renderer.rl,
+    "ffi",
+    types.SimpleNamespace(
+      new=lambda _ctype, values: ffi_arrays.append(tuple(values)) or tuple(values),
+      from_buffer=lambda _ctype, data: data,
+      cast=lambda _ctype, pointer: pointer,
+    ),
+  )
+  monkeypatch.setattr(
+    cluster_renderer.rl,
+    "update_texture",
+    lambda texture, pixels: uploads.append((texture.id, pixels)),
+  )
+
+  first = cluster_renderer.NaviMediaFrame(
+    "render:map_main",
+    1,
+    True,
+    "image/yuv420p",
+    4,
+    2,
+    plane_data=(b"y" * 16, b"u" * 4, b"v" * 4),
+    plane_strides=(8, 4, 4),
+  )
+  second = replace(first, sequence=2, plane_data=(b"Y" * 16, b"U" * 4, b"V" * 4))
+
+  assert renderer._navi_media_texture_for(first) is created[0]
+  assert renderer._navi_media_texture_for(second) is created[0]
+  assert [(texture.width, texture.height) for texture in created] == [(8, 2), (4, 1), (4, 1)]
+  assert filters == [
+    (1, cluster_renderer.rl.TextureFilter.TEXTURE_FILTER_BILINEAR),
+    (2, cluster_renderer.rl.TextureFilter.TEXTURE_FILTER_POINT),
+    (3, cluster_renderer.rl.TextureFilter.TEXTURE_FILTER_POINT),
+  ]
+  assert [texture_id for texture_id, _pixels in uploads] == [1, 2, 3, 1, 2, 3]
+  assert ffi_arrays == [(1.0, 1.0), (1.0, 1.0)]
+  cached = renderer._navi_media_textures["render:map_main"]
+  assert cached.sequence == 2
+  assert cached.size == (4, 2)
 
 
 def test_native_h264_direct_input_lease_submits_or_cancels():

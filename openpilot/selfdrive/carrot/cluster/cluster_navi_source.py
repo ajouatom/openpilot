@@ -155,6 +155,14 @@ class EmbeddedNaviReceiverServer:
             loop.close()
 
 
+@dataclass(frozen=True)
+class DecodedH264Frame:
+    width: int
+    height: int
+    planes: tuple[bytes, bytes, bytes]
+    strides: tuple[int, int, int]
+
+
 class H264Decoder:
     def __init__(self) -> None:
         try:
@@ -170,7 +178,7 @@ class H264Decoder:
     def reset(self) -> None:
         self._codec = self._create_codec()
 
-    def decode(self, access_unit: bytes) -> tuple[bytes, int, int] | None:
+    def decode(self, access_unit: bytes) -> DecodedH264Frame | None:
         try:
             frames = self._codec.decode(self._av.Packet(access_unit))
         except self._av.FFmpegError:
@@ -178,18 +186,21 @@ class H264Decoder:
             return None
         if not frames:
             return None
-        frame = frames[-1].reformat(format="rgba")
-        plane = frame.planes[0]
-        row_bytes = frame.width * 4
-        raw = bytes(plane)
-        if plane.line_size == row_bytes:
-            pixels = raw[:row_bytes * frame.height]
-        else:
-            pixels = b"".join(
-                raw[offset:offset + row_bytes]
-                for offset in range(0, plane.line_size * frame.height, plane.line_size)
-            )
-        return pixels, int(frame.width), int(frame.height)
+        frame = frames[-1]
+        if frame.format.name != "yuv420p":
+            frame = frame.reformat(format="yuv420p")
+        if len(frame.planes) < 3:
+            return None
+        return DecodedH264Frame(
+            width=int(frame.width),
+            height=int(frame.height),
+            planes=(bytes(frame.planes[0]), bytes(frame.planes[1]), bytes(frame.planes[2])),
+            strides=(
+                int(frame.planes[0].line_size),
+                int(frame.planes[1].line_size),
+                int(frame.planes[2].line_size),
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -321,17 +332,17 @@ class H264DecodeWorker:
                 decoded = decoder.decode(request.config_payload + request.payload)
                 if decoded is None:
                     continue
-                rgba, width, height = decoded
                 result = _H264DecodeResult(
                     epoch=request.epoch,
                     frame=NaviMediaFrame(
                         key=request.key,
                         sequence=request.sequence,
                         present=True,
-                        mime="image/rgba",
-                        width=width,
-                        height=height,
-                        data=rgba,
+                        mime="image/yuv420p",
+                        width=decoded.width,
+                        height=decoded.height,
+                        plane_data=decoded.planes,
+                        plane_strides=decoded.strides,
                     ),
                 )
                 with self._condition:

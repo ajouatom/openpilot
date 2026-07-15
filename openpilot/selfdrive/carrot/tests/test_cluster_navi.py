@@ -17,8 +17,10 @@ sys.path.insert(0, str(CLUSTER_DIR))
 from cluster_navi import fresh_carrot_navi, parse_carrot_navi
 from cluster_navi_overlay import merge_navi_overlay_state
 from cluster_navi_source import (
+  DecodedH264Frame,
   H264_DECODE_QUEUE_MAX,
   MAP_FRAME_STALE_TIMEOUT_MS,
+  H264Decoder,
   H264DecodeWorker,
   NaviIpcMediaSource,
   NaviSimulatorSource,
@@ -45,6 +47,15 @@ def _record(value, sequence: int, received_s: float):
     "received_mono_ns": int(received_s * 1_000_000_000),
     "value": value,
   }
+
+
+def _decoded_yuv_frame(value: bytes) -> DecodedH264Frame:
+  return DecodedH264Frame(
+    width=2,
+    height=2,
+    planes=(value * 4, b"\x80", b"\x80"),
+    strides=(2, 1, 1),
+  )
 
 
 def test_parse_and_expire_live_navi_groups_independently():
@@ -151,6 +162,39 @@ def test_stale_map_frame_is_removed_from_media_cache():
   assert "render:map_main" not in source._media
 
 
+def test_h264_decoder_preserves_yuv420_planes_and_strides():
+  class FakePlane:
+    def __init__(self, data, line_size):
+      self._data = data
+      self.line_size = line_size
+
+    def __bytes__(self):
+      return self._data
+
+  frame = SimpleNamespace(
+    width=4,
+    height=2,
+    format=SimpleNamespace(name="yuv420p"),
+    planes=(
+      FakePlane(b"y" * 16, 8),
+      FakePlane(b"u" * 4, 4),
+      FakePlane(b"v" * 4, 4),
+    ),
+  )
+  decoder = object.__new__(H264Decoder)
+  decoder._codec = SimpleNamespace(decode=lambda _packet: [frame])
+  decoder._av = SimpleNamespace(Packet=lambda payload: payload, FFmpegError=RuntimeError)
+
+  decoded = decoder.decode(b"access-unit")
+
+  assert decoded == DecodedH264Frame(
+    width=4,
+    height=2,
+    planes=(b"y" * 16, b"u" * 4, b"v" * 4),
+    strides=(8, 4, 4),
+  )
+
+
 def test_h264_decode_worker_drops_backlog_until_next_keyframe():
   started = threading.Event()
   release = threading.Event()
@@ -164,7 +208,7 @@ def test_h264_decode_worker_drops_backlog_until_next_keyframe():
       if payload.endswith(b"1"):
         started.set()
         assert release.wait(1.0)
-      return payload[-1:] * 4, 1, 1
+      return _decoded_yuv_frame(payload[-1:])
 
   def request(sequence, *, keyframe=False):
     return _H264DecodeRequest(
@@ -197,7 +241,12 @@ def test_h264_decode_worker_drops_backlog_until_next_keyframe():
 
     assert latest is not None
     assert latest.frame.sequence == next_keyframe
-    assert latest.frame.data == str(next_keyframe).encode()[-1:] * 4
+    assert latest.frame.mime == "image/yuv420p"
+    assert latest.frame.plane_data == (
+      str(next_keyframe).encode()[-1:] * 4,
+      b"\x80",
+      b"\x80",
+    )
     assert worker.dropped_requests == H264_DECODE_QUEUE_MAX + 1
     assert len(reset_calls) == 1
   finally:
@@ -217,7 +266,7 @@ def test_h264_decode_worker_accepts_sixty_hz_poll_burst():
       if payload.endswith(b"1"):
         started.set()
         assert release.wait(1.0)
-      return payload[-1:] * 4, 1, 1
+      return _decoded_yuv_frame(payload[-1:])
 
   def request(sequence, *, keyframe=False):
     return _H264DecodeRequest(
