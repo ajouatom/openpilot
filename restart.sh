@@ -6,9 +6,8 @@ cd "$DIR"
 
 git pull
 
-# A Params key is compiled into params_pyx.so. The root prebuilt marker makes
-# launch_chffrplus skip normal builds, so check this small target explicitly.
-# SCons exits immediately when it is already current.
+# A Params key is compiled into params_pyx.so. Check this small target before
+# restarting long-lived processes; SCons exits immediately when it is current.
 scons -u -j4 openpilot/common/params_pyx.so
 
 # carrot_server runs outside the comma tmux session under a watchdog. Restart
