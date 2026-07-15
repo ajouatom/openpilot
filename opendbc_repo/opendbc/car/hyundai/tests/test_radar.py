@@ -78,8 +78,8 @@ class TestDensoRadar:
 
     # EN: Confirm that the long-range sample survives the filter and converts
     #     radar-left-negative to openpilot-left-positive coordinates.
-    # KO: 장거리 샘플이 필터를 통과하고 레이더의 좌측 음수 좌표가 openpilot의
-    #     좌측 양수 좌표로 변환되는지 확인한다.
+    # KO: 장거리 샘플의 필터 통과와 레이더 좌측 음수 좌표가 openpilot 좌측
+    #     양수 좌표로 변환되는지 확인함.
     long_range_dat = bytes.fromhex("b664eafa00cd230b")
     packets = [(addr, long_range_dat if addr == 0x506 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
@@ -89,14 +89,14 @@ class TestDensoRadar:
     assert point.yRel == pytest.approx(3.0)
 
     # EN: A state-0 raw detection must not enter a stable tracked-object slot.
-    # KO: 상태 0인 raw detection은 안정적인 추적 객체 슬롯에 들어오면 안 된다.
+    # KO: 상태 0인 raw detection이 안정적인 추적 객체 슬롯에 들어오지 않음을 확인함.
     raw_detection = bytes.fromhex("d702f4fc200000e4")
     packets = [(addr, raw_detection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
     assert not radar_data.points
 
     # EN: A real confirmed track beyond the former 205 m limit remains valid.
-    # KO: 기존 205m 상한을 넘는 실제 확정 트랙도 유효하게 유지한다.
+    # KO: 기존 205m 상한을 넘는 실제 확정 트랙도 유효하게 유지됨.
     confirmed_213m_track = bytes.fromhex("35854c0780f163e0")
     packets = [(addr, confirmed_213m_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
@@ -106,7 +106,7 @@ class TestDensoRadar:
 
     # EN: The 325 m boundary is rejected, leaving ample separation from the
     #     409.55 m empty-slot sentinel.
-    # KO: 325m 경계값은 제외하여 409.55m 빈 슬롯 값과 충분한 간격을 둔다.
+    # KO: 325m 경계값을 제외해 409.55m 빈 슬롯 값과 충분한 간격을 확보함.
     boundary_track = bytes.fromhex("bccb200000000300")
     packets = [(addr, boundary_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
@@ -114,8 +114,8 @@ class TestDensoRadar:
 
     # EN: The wider profile keeps a real stable track at 4.875 m, covering more
     #     of the outer adjacent lane than the conservative 4.5 m profile.
-    # KO: 넓어진 필터는 4.875m의 실제 안정 트랙을 유지해 보수적인 4.5m 설정보다
-    #     바깥쪽 인접 차선을 더 넓게 포함한다.
+    # KO: 넓어진 필터에서 4.875m의 실제 안정 트랙을 유지해 보수적인 4.5m
+    #     설정보다 바깥쪽 인접 차선을 더 넓게 포함함.
     outer_lane_track = bytes.fromhex("d80b66f640000300")
     packets = [(addr, outer_lane_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
@@ -124,8 +124,8 @@ class TestDensoRadar:
 
     # EN: Tracks beyond the widened envelope are rejected as roadside clutter;
     #     this payload differs only in lateral distance (-7.0 m).
-    # KO: 넓어진 범위를 벗어난 트랙은 도로변 잡음으로 제외한다. 이 payload는
-    #     횡방향 거리(-7.0m)만 다르다.
+    # KO: 넓어진 범위를 벗어난 트랙은 도로변 잡음으로 제외함. 이 payload는
+    #     횡방향 거리(-7.0m)만 다름.
     far_side_reflection = bytes.fromhex("d80b66f200000300")
     packets = [(addr, far_side_reflection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
     radar_data = radar_interface.update([0, packets])
