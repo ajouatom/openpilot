@@ -55,16 +55,20 @@ from openpilot.selfdrive.controls.lib.cutin_helpers import (
     cutin_entry_rejection_reason,
     cutin_tuning_from_sensitivity,
     effective_cutin_inward_speed,
+    hold_side_corner_front_matches,
     FRONT_CUTIN_MAX_ABS_YREL_M,
     FRONT_CUTIN_MAX_DREL_M,
     is_cutin_track_discontinuous,
     FRONT_CUTIN_MIN_CONFIRM_S,
     FRONT_CUTIN_MIN_DREL_M,
+    is_corner_confirmed_near_cutin,
+    is_side_corner_object,
     is_corner_track_id,
     is_corner_radar_source,
     is_stable_corner_track_id,
     STABLE_CORNER_TRACK_ID_START,
     is_fast_cutin_entry,
+    match_side_corner_to_front_tracks,
     new_cutin_position_history,
     update_cutin_confirmation,
     update_lane_relative_motion,
@@ -505,12 +509,24 @@ class ReplayCutinTrack:
     in_lane_prob_future: float = 0.0
     d_path_rate: float = 0.0
     inward_speed: float = 0.0
+    path_d_path: float = 0.0
+    path_d_path_future: float = 0.0
+    path_in_lane_prob: float = 0.0
+    path_in_lane_prob_future: float = 0.0
+    path_d_path_rate: float = 0.0
+    path_inward_speed: float = 0.0
+    path_y_std: float = float("inf")
+    radar_inward_speed: float = 0.0
+    side_corner_confirmed_count: int = 0
     rejection_reason: str = "waiting"
     position_history: Any = None
+    path_position_history: Any = None
 
     def __post_init__(self) -> None:
         if self.position_history is None:
             self.position_history = new_cutin_position_history(REPLAY_CUTIN_DT)
+        if self.path_position_history is None:
+            self.path_position_history = new_cutin_position_history(REPLAY_CUTIN_DT)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1276,8 +1292,13 @@ class RouteLogParser:
         self.cutin_lane_xs: tuple[float, ...] = ()
         self.cutin_left_ys: tuple[float, ...] = ()
         self.cutin_right_ys: tuple[float, ...] = ()
+        self.cutin_path_xs: tuple[float, ...] = ()
+        self.cutin_path_ys: tuple[float, ...] = ()
+        self.cutin_path_y_stds: tuple[float, ...] = ()
         self.cutin_yaw_rate = 0.0
         self.cutin_tracks: dict[int, ReplayCutinTrack] = {}
+        self.cutin_side_corner_front_matches: dict[int, int] = {}
+        self.cutin_side_corner_front_match_misses: dict[int, int] = {}
         self.cutin_corner_object_ids: dict[tuple[str, int], tuple[int, int]] = {}
         self.next_cutin_corner_track_id = STABLE_CORNER_TRACK_ID_START
         self.cutin_detections: tuple[DetectedVehicle, ...] = ()
@@ -1733,6 +1754,15 @@ class RouteLogParser:
         if model_path:
             self.model_path = model_path
             self.model_path_source = "modelV2.position"
+        position = safe_get(model, "position")
+        if position is not None:
+            path_xs = tuple(float(value) for value in safe_get(position, "x", ()))
+            path_ys = tuple(float(value) for value in safe_get(position, "y", ()))
+            path_y_stds = tuple(float(value) for value in safe_get(position, "yStd", ()))
+            if len(path_xs) >= 2 and len(path_ys) == len(path_xs):
+                self.cutin_path_xs = path_xs
+                self.cutin_path_ys = path_ys
+                self.cutin_path_y_stds = path_y_stds if len(path_y_stds) == len(path_xs) else ()
 
         action = safe_get(model, "action")
         if action is not None:
@@ -2116,6 +2146,25 @@ class RouteLogParser:
             return
 
         points = tuple(safe_get(live_tracks, "points", ()) or ())
+        if self.cutin_radar_source == ROUTE_CUTIN_RADAR_SOURCE_CORNER:
+            current_side_matches = self._side_corner_front_matches(points, event_t)
+            available_front_ids = {
+                int(safe_get(point, "trackId", -1))
+                for point in points
+                if bool(safe_get(point, "measured", False)) and not self._is_corner_live_track(point)
+            }
+            (
+                self.cutin_side_corner_front_matches,
+                self.cutin_side_corner_front_match_misses,
+            ) = hold_side_corner_front_matches(
+                current_side_matches,
+                self.cutin_side_corner_front_matches,
+                self.cutin_side_corner_front_match_misses,
+                available_front_ids,
+            )
+        else:
+            self.cutin_side_corner_front_matches = {}
+            self.cutin_side_corner_front_match_misses = {}
         point_by_id = self._cutin_points_by_stable_id(points, event_t)
         previous_positions = {
             track_id: (track.d_rel, track.y_rel, track.v_rel)
@@ -2143,7 +2192,24 @@ class RouteLogParser:
                 y_rel=track.y_rel,
                 v_rel=track.v_rel,
                 v_lead=track.v_lead,
+                yv_rel=track.yv_rel,
+                d_path=track.d_path,
+                d_path_future=track.d_path_future,
+                in_lane_prob=track.in_lane_prob,
+                in_lane_prob_future=track.in_lane_prob_future,
+                d_path_rate=track.d_path_rate,
+                inward_speed=track.inward_speed,
+                path_d_path=track.path_d_path,
+                path_d_path_future=track.path_d_path_future,
+                path_in_lane_prob=track.path_in_lane_prob,
+                path_in_lane_prob_future=track.path_in_lane_prob_future,
+                path_d_path_rate=track.path_d_path_rate,
+                path_inward_speed=track.path_inward_speed,
+                path_y_std=track.path_y_std,
+                radar_inward_speed=track.radar_inward_speed,
+                side_corner_confirmed_count=track.side_corner_confirmed_count,
                 position_history=track.position_history.copy(),
+                path_position_history=track.path_position_history.copy(),
             )
             for track_id, track in self.cutin_tracks.items()
         }
@@ -2180,6 +2246,17 @@ class RouteLogParser:
                 track.cut_in_start_abs_dpath = source.cut_in_start_abs_dpath
                 track.position_history.clear()
                 track.position_history.extend(source.position_history)
+                track.path_d_path = source.path_d_path
+                track.path_d_path_future = source.path_d_path_future
+                track.path_in_lane_prob = source.path_in_lane_prob
+                track.path_in_lane_prob_future = source.path_in_lane_prob_future
+                track.path_d_path_rate = source.path_d_path_rate
+                track.path_inward_speed = source.path_inward_speed
+                track.path_y_std = source.path_y_std
+                track.radar_inward_speed = source.radar_inward_speed
+                track.side_corner_confirmed_count = source.side_corner_confirmed_count
+                track.path_position_history.clear()
+                track.path_position_history.extend(source.path_position_history)
             prev_measured = track.measured
             prev_d_rel = track.d_rel
             prev_y_rel = track.y_rel
@@ -2203,9 +2280,19 @@ class RouteLogParser:
                 track.cnt = 0
                 track.cut_in_count = 0
                 track.cut_in_start_abs_dpath = 0.0
+                track.side_corner_confirmed_count = 0
+                track.path_position_history.clear()
             elif discontinuous:
                 track.cut_in_count = 0
                 track.cut_in_start_abs_dpath = 0.0
+                track.side_corner_confirmed_count = 0
+                track.path_position_history.clear()
+
+            side_corner_confirmed = track_id in self.cutin_side_corner_front_matches
+            if track.measured and side_corner_confirmed:
+                track.side_corner_confirmed_count += 1
+            elif not side_corner_confirmed:
+                track.side_corner_confirmed_count = 0
 
             v_corr = clamp(self.cutin_yaw_rate * track.y_rel * REPLAY_CUTIN_YAW_GAIN, -0.6, 0.6)
             yv_corr = clamp(
@@ -2246,6 +2333,52 @@ class RouteLogParser:
                 track.d_path_future,
                 self.cutin_tuning["horizon_s"],
             )
+            (
+                track.path_d_path,
+                track.path_in_lane_prob,
+                track.path_y_std,
+            ) = self._cutin_path_dpath(track.d_rel, track.y_rel)
+            (
+                track.path_d_path_future,
+                track.path_in_lane_prob_future,
+                _,
+            ) = self._cutin_path_dpath(future_d_rel, future_y_rel)
+            if self._cutin_path_geometry_available():
+                track.path_d_path_rate, track.path_inward_speed = update_lane_relative_motion(
+                    track.path_position_history,
+                    track.d_rel,
+                    track.y_rel,
+                    self.cutin_path_xs,
+                    self.cutin_path_ys,
+                    self.cutin_path_ys,
+                    track.measured,
+                    discontinuous,
+                    REPLAY_CUTIN_DT,
+                )
+                track.path_d_path_future, track.path_in_lane_prob_future = combine_cutin_future_projection(
+                    track.path_d_path,
+                    track.path_d_path_rate,
+                    self.cutin_tuning["horizon_s"],
+                    lane_half_width,
+                    track.path_d_path_future,
+                    track.path_in_lane_prob_future,
+                    max(0.0, -math.copysign(1.0, track.path_d_path) * (track.yv_rel + yv_corr)),
+                )
+                track.path_inward_speed = effective_cutin_inward_speed(
+                    track.d_rel,
+                    self.current_speed_kph / 3.6,
+                    track.path_inward_speed,
+                    track.path_d_path,
+                    track.path_d_path_future,
+                    self.cutin_tuning["horizon_s"],
+                )
+            else:
+                track.path_position_history.clear()
+                track.path_d_path_rate = 0.0
+                track.path_inward_speed = 0.0
+            track.radar_inward_speed = max(
+                0.0, -math.copysign(1.0, track.path_d_path) * (track.yv_rel + yv_corr)
+            )
             track.cnt += 1
 
             matching_front = any(
@@ -2263,36 +2396,53 @@ class RouteLogParser:
                 and abs(track.v_rel - self.lead_one_v_rel) < 2.0
             )
             closer_or_matching = closer or matches_lead_one
-            track.rejection_reason = cutin_entry_rejection_reason(
-                enabled=self.cutin_sensitivity > 0.0,
-                lane_line_available=lane_line_available,
-                corner_track=True,
-                closer_or_matching=closer_or_matching,
-                track_count=track.cnt,
-                min_track_age=cutin_min_track_age_frames(
-                    self.cutin_min_track_age,
-                    track.d_rel,
-                    track.inward_speed,
-                    self.current_speed_kph / 3.6,
-                ),
-                d_rel=track.d_rel,
-                v_lead=track.v_lead,
-                d_path=track.d_path,
-                d_path_future=track.d_path_future,
-                in_lane_prob=track.in_lane_prob,
-                in_lane_prob_future=track.in_lane_prob_future,
-                inward_speed=track.inward_speed,
-                tuning=self.cutin_tuning,
-                fast_lane_entry=is_fast_cutin_entry(
-                    track.d_rel,
-                    self.current_speed_kph / 3.6,
-                    track.d_path,
-                    lane_half_width,
-                    track.inward_speed,
-                    max(0.0, -math.copysign(1.0, track.y_rel) * track.yv_rel),
-                    v_rel=track.v_rel,
-                ),
-            ) or "enter"
+            special_near_cutin = (
+                side_corner_confirmed
+                and is_corner_confirmed_near_cutin(
+                    confirmed_frames=track.side_corner_confirmed_count,
+                    d_rel=track.d_rel,
+                    v_lead=track.v_lead,
+                    d_path=track.path_d_path,
+                    d_path_future=track.path_d_path_future,
+                    inward_speed=track.path_inward_speed,
+                    radar_inward_speed=track.radar_inward_speed,
+                    path_y_std=track.path_y_std,
+                )
+            )
+            if side_corner_confirmed:
+                entry_rejection_reason = None if special_near_cutin else "side-corner"
+            else:
+                entry_rejection_reason = cutin_entry_rejection_reason(
+                    enabled=self.cutin_sensitivity > 0.0,
+                    lane_line_available=lane_line_available,
+                    corner_track=True,
+                    closer_or_matching=closer_or_matching,
+                    track_count=track.cnt,
+                    min_track_age=cutin_min_track_age_frames(
+                        self.cutin_min_track_age,
+                        track.d_rel,
+                        track.inward_speed,
+                        self.current_speed_kph / 3.6,
+                    ),
+                    d_rel=track.d_rel,
+                    v_lead=track.v_lead,
+                    d_path=track.d_path,
+                    d_path_future=track.d_path_future,
+                    in_lane_prob=track.in_lane_prob,
+                    in_lane_prob_future=track.in_lane_prob_future,
+                    inward_speed=track.inward_speed,
+                    tuning=self.cutin_tuning,
+                    fast_lane_entry=is_fast_cutin_entry(
+                        track.d_rel,
+                        self.current_speed_kph / 3.6,
+                        track.d_path,
+                        lane_half_width,
+                        track.inward_speed,
+                        max(0.0, -math.copysign(1.0, track.y_rel) * track.yv_rel),
+                        v_rel=track.v_rel,
+                    ),
+                )
+            track.rejection_reason = entry_rejection_reason or "enter"
             entering = track.rejection_reason == "enter"
             moving_away = abs(track.d_path_future) - abs(track.d_path)
             keep = (
@@ -2306,20 +2456,35 @@ class RouteLogParser:
                     or abs(track.d_path_future) < REPLAY_CUTIN_KEEP_MAX_DPATH_FUTURE
                 )
             )
-            if self.cutin_radar_source == ROUTE_CUTIN_RADAR_SOURCE_FRONT and keep:
+            if side_corner_confirmed and track.cut_in_count > 0:
+                moving_away_path = abs(track.path_d_path_future) - abs(track.path_d_path)
+                keep = (
+                    track.side_corner_confirmed_count > 0
+                    and 0.8 < track.d_rel < 8.0
+                    and track.v_lead > 0.0
+                    and track.path_y_std <= 0.8
+                    and moving_away_path <= REPLAY_CUTIN_KEEP_MAX_MOVING_AWAY
+                    and (
+                        track.path_in_lane_prob_future > REPLAY_CUTIN_KEEP_FUTURE_IN_LANE_PROB
+                        or abs(track.path_d_path_future) < REPLAY_CUTIN_KEEP_MAX_DPATH_FUTURE
+                    )
+                )
+            if (self.cutin_radar_source == ROUTE_CUTIN_RADAR_SOURCE_FRONT or side_corner_confirmed) and keep:
                 entering = True
                 if track.rejection_reason != "enter":
                     track.rejection_reason = "continue"
+            confirmation_d_path = track.path_d_path if side_corner_confirmed else track.d_path
+            confirmation_inward_speed = track.path_inward_speed if side_corner_confirmed else track.inward_speed
             confirm_frames = cutin_confirmation_frames(
                 self.cutin_confirm_frames,
                 track.d_rel,
-                track.inward_speed,
+                confirmation_inward_speed,
                 self.current_speed_kph / 3.6,
             )
             track.cut_in_count, track.cut_in_start_abs_dpath = update_cutin_confirmation(
                 track.cut_in_count,
                 track.cut_in_start_abs_dpath,
-                track.d_path,
+                confirmation_d_path,
                 track.d_rel,
                 entering,
                 keep,
@@ -2405,6 +2570,29 @@ class RouteLogParser:
         track_id = safe_optional_int(point, "trackId")
         return str(source) == "frontRadar" and self.car_brand == "hyundai" and radar_track_id_is_corner_object(track_id)
 
+    def _side_corner_front_matches(self, points: tuple[Any, ...], event_t: float) -> dict[int, int]:
+        corner_tracks: dict[int, tuple[float, float, float]] = {}
+        for obj in self.raw_corner_objects.values():
+            if not 0.0 <= event_t - obj.t <= REPLAY_CUTIN_RAW_OBJECT_MAX_AGE_S:
+                continue
+            if not raw_corner_object_is_valid(obj):
+                continue
+            corner_tracks[self._stable_cutin_corner_track_id(obj)] = (obj.x, obj.y, obj.vx)
+
+        front_tracks = {
+            int(safe_get(point, "trackId", -1)): (
+                safe_float(point, "dRel", 0.0),
+                safe_float(point, "yRel", 0.0),
+                safe_float(point, "vRel", 0.0),
+            )
+            for point in points
+            if bool(safe_get(point, "measured", False))
+            and not self._is_corner_live_track(point)
+            and str(safe_get(point, "radarSource", "frontRadar")) != "scc"
+            and not (self.car_brand == "hyundai" and safe_optional_int(point, "trackId") == 0)
+        }
+        return match_side_corner_to_front_tracks(corner_tracks, front_tracks)
+
     def _cutin_points_by_stable_id(self, points: tuple[Any, ...], event_t: float) -> dict[int, Any]:
         if self.cutin_radar_source != ROUTE_CUTIN_RADAR_SOURCE_CORNER:
             return {int(safe_get(point, "trackId", -1)): point for point in points}
@@ -2466,7 +2654,10 @@ class RouteLogParser:
     def _is_cutin_live_track(self, point: Any) -> bool:
         if self.cutin_radar_source == ROUTE_CUTIN_RADAR_SOURCE_FRONT:
             return self._is_front_cutin_track(point)
-        return self._is_corner_live_track(point)
+        track_id = safe_optional_int(point, "trackId")
+        return self._is_corner_live_track(point) or (
+            track_id is not None and track_id in self.cutin_side_corner_front_matches
+        )
 
     def _track_id_is_corner_live(self, points: dict[int, Any], track_id: int) -> bool:
         point = points.get(track_id)
@@ -2493,6 +2684,27 @@ class RouteLogParser:
         left_y = np.interp(d_rel, self.cutin_lane_xs, self.cutin_left_ys)
         right_y = np.interp(d_rel, self.cutin_lane_xs, self.cutin_right_ys)
         return max(0.1, abs(right_y - left_y) / 2.0)
+
+    def _cutin_path_geometry_available(self) -> bool:
+        return (
+            len(self.cutin_path_xs) >= 2
+            and len(self.cutin_path_ys) == len(self.cutin_path_xs)
+        )
+
+    def _cutin_path_dpath(self, d_rel: float, y_rel: float) -> tuple[float, float, float]:
+        if not self._cutin_path_geometry_available():
+            d_path, in_lane_prob = self._cutin_dpath(d_rel, y_rel)
+            return d_path, in_lane_prob, float("inf")
+        path_y = float(np.interp(d_rel, self.cutin_path_xs, self.cutin_path_ys))
+        d_path = float(y_rel + path_y)
+        lane_half_width = self._cutin_lane_half_width(d_rel)
+        in_lane_prob = max(0.0, 1.0 - abs(d_path) / lane_half_width)
+        path_y_std = (
+            float(np.interp(d_rel, self.cutin_path_xs, self.cutin_path_y_stds))
+            if len(self.cutin_path_y_stds) == len(self.cutin_path_xs)
+            else float("inf")
+        )
+        return d_path, in_lane_prob, path_y_std
 
     def _cutin_debug_summary(
         self,
@@ -4305,7 +4517,9 @@ def decode_raw_corner_object_at(
 def raw_corner_object_is_valid(obj: RawCornerObject) -> bool:
     if obj.quality < 1:
         return False
-    if not 0.2 <= obj.x <= RAW_CORNER_OBJECT_MAX_X_M:
+    if not 0.0 <= obj.x <= RAW_CORNER_OBJECT_MAX_X_M:
+        return False
+    if obj.x <= 0.2 and not is_side_corner_object(obj.x, obj.y):
         return False
     if abs(obj.y) > RAW_CORNER_OBJECT_MAX_ABS_Y_M:
         return False
@@ -4802,4 +5016,3 @@ def lane_color_from_code(code: int) -> tuple[int, int, int] | None:
     if color_code == 2:
         return YELLOW
     return None
-

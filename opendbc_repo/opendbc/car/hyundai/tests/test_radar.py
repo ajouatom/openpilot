@@ -10,6 +10,7 @@ from opendbc.car.hyundai.radar_interface import (
   RADAR_START_ADDR_CANFD3,
   CornerObjectTrackIdManager,
   RadarInterface,
+  corner_object_position_valid,
 )
 from opendbc.car.hyundai.values import HyundaiExtFlags, HyundaiFlags
 
@@ -105,3 +106,9 @@ class TestCornerRadarObjectIdentity:
     assert manager.get_track_id("corner180", object_id=108, age=241) == first_id
     assert manager.get_track_id("corner235", object_id=108, age=241) != first_id
     assert manager.get_track_id("corner180", object_id=108, age=2) != first_id
+
+  def test_clipped_side_object_position_is_valid(self):
+    assert corner_object_position_valid(0.0, 2.8)
+    assert corner_object_position_valid(25.0, 0.2)
+    assert not corner_object_position_valid(0.0, 0.0)
+    assert not corner_object_position_valid(0.0, 5.0)
