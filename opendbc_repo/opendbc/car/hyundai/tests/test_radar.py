@@ -112,3 +112,90 @@ class TestCornerRadarObjectIdentity:
     assert corner_object_position_valid(25.0, 0.2)
     assert not corner_object_position_valid(0.0, 0.0)
     assert not corner_object_position_valid(0.0, 5.0)
+
+
+class TestCornerRadar430CandidateFilter:
+  @staticmethod
+  def slot_word(distance_raw, meta13=0, b2=10, b3=2):
+    return distance_raw | (meta13 << 13) | (b2 << 16) | (b3 << 24)
+
+  @classmethod
+  def message(cls, slots):
+    words = [0x010d1f40] * 7
+    for slot, word in slots.items():
+      words[slot - 1] = word
+
+    dat = bytearray(32)
+    for idx, word in enumerate(words):
+      dat[4 + idx * 4:8 + idx * 4] = int(word).to_bytes(4, "little")
+    return bytes(dat)
+
+  @staticmethod
+  def build_interface(monkeypatch):
+    class FakeParams:
+      def get_int(self, key):
+        return 1 if key == "EnableCornerRadar" else 0
+
+    monkeypatch.setattr(radar_interface_module, "Params", FakeParams)
+    monkeypatch.setattr(hyundaicanfd, "Params", FakeParams)
+    cp = structs.CarParams()
+    cp.carFingerprint = next(car for car, dbc in radar_interface_module.DBC.items() if "hyundai_canfd" in dbc[Bus.pt])
+    cp.flags = HyundaiFlags.CANFD.value
+    cp.extFlags = HyundaiExtFlags.CORNER_RADAR_OBJECTS_430.value
+    cp.radarUnavailable = True
+    cp.safetyConfigs = [structs.CarParams.SafetyConfig()]
+    return RadarInterface(cp)
+
+  @staticmethod
+  def update_frames(radar_interface, packets, frames=5):
+    radar_data = None
+    for _ in range(frames):
+      radar_data = radar_interface.update([0, packets])
+    return radar_data
+
+  def test_430_promotes_supported_neighbor_bins(self, monkeypatch):
+    radar_interface = self.build_interface(monkeypatch)
+    empty = self.message({})
+    supported_bins = self.message({
+      6: self.slot_word(1000),
+      7: self.slot_word(1004),
+    })
+    packets = [(addr, supported_bins if addr == 0x436 else empty, 1) for addr in range(0x430, 0x438)]
+    packets += [(addr, empty, 1) for addr in range(0x440, 0x448)]
+
+    radar_data = self.update_frames(radar_interface, packets)
+    points = {point.trackId: point for point in radar_data.points}
+
+    assert points[300].measured
+    assert points[300].dRel == pytest.approx(50.1)
+    assert points[300].yRel == pytest.approx(2.0)
+    assert points[300].yvRel == 0.0
+
+  def test_430_expires_noncenter_inward_yvrel(self, monkeypatch):
+    radar_interface = self.build_interface(monkeypatch)
+    empty = self.message({})
+    frame_defs = (
+      (0x431, 4, 5),
+      (0x433, 3, 4),
+      (0x435, 2, 3),
+      (0x430, 5, 6),
+      (0x432, 4, 5),
+      (0x434, 3, 4),
+      (0x436, 2, 3),
+    )
+
+    radar_data = None
+    for addr, first_slot, second_slot in frame_defs:
+      msg = self.message({
+        first_slot: self.slot_word(1000),
+        second_slot: self.slot_word(1004),
+      })
+      packets = [(a, msg if a == addr else empty, 1) for a in range(0x430, 0x438)]
+      packets += [(a, empty, 1) for a in range(0x440, 0x448)]
+      radar_data = radar_interface.update([0, packets])
+    radar_data = self.update_frames(radar_interface, packets, frames=3)
+    points = {point.trackId: point for point in radar_data.points}
+
+    assert points[300].measured
+    assert points[300].yRel == pytest.approx(2.0)
+    assert points[300].yvRel == 0.0
