@@ -61,6 +61,8 @@ class RadarPoint:
   v_lead: float
   measured: bool
   source: str
+  a_lead: float = 0.0
+  j_lead: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -567,6 +569,8 @@ def _copy_track_points(points: Iterable[Any]) -> tuple[RadarPoint, ...]:
       v_lead=_finite(point.vLead),
       measured=bool(point.measured),
       source=source,
+      a_lead=_finite(getattr(point, "aLead", 0.0)),
+      j_lead=_finite(getattr(point, "jLead", 0.0)),
     ))
   return tuple(copied)
 
@@ -1257,7 +1261,9 @@ class SimulatorUI:
     self.show_recorded_two = True
     self.show_front_candidates = True
     self.show_corner_candidates = True
-    self.show_fused_objects = True
+    # Raw sensor points are the least ambiguous default for diagnosis. FUSED
+    # can still be enabled to inspect the objects actually passed to the model.
+    self.show_fused_objects = False
     self.min_candidate_probability = 0.5
     self.filter_checkboxes: dict[str, Any] = {}
     self.probability_slider: Any | None = None
@@ -1512,6 +1518,10 @@ class SimulatorUI:
           self._draw_candidate(
             rect, frame, candidate, self._color(colors[candidate_index]), radius, f"{source_label}{candidate_index}",
           )
+      # Final temporal outputs are control-facing decisions. Always show them,
+      # even when the raw probability slider hides the instantaneous candidate.
+      self._draw_candidate(rect, frame, selection.lead_one, self._color(self.GREEN), 36.0, "OUT1")
+      self._draw_candidate(rect, frame, selection.lead_two, self._color(self.YELLOW), 44.0, "OUT2")
     else:
       self._draw_candidate(rect, frame, selection.lead_one, self._color(self.GREEN), 23.0, "1")
       self._draw_candidate(rect, frame, selection.lead_two, self._color(self.PURPLE), 29.0, "2")
@@ -1596,13 +1606,11 @@ class SimulatorUI:
           value = self._candidate_text(frame, candidate)
           row_color = color
         line(f"{label}  {value}", row_color, 15, 21)
-      line(
-        "TEMPORAL DECISION  APPLIED" if multitask else "CUT-IN DECISION  NOT APPLIED",
-        self.GREEN if multitask else self.MUTED, 13, 27,
-      )
       if multitask:
-        active_text = ", ".join(f"id {candidate.track_id} p {candidate.score:.2f}" for candidate in selection.active_cutin_candidates)
-        line(f"ACTIVE CUTIN  {active_text or 'NONE'}", self.PURPLE if active_text else self.MUTED, 13, 24)
+        line("OUT1  " + self._candidate_text(frame, selection.lead_one), self.GREEN, 13, 21)
+        line("OUT2  " + self._candidate_text(frame, selection.lead_two), self.YELLOW, 13, 24)
+      else:
+        line("CUT-IN DECISION  NOT APPLIED", self.MUTED, 13, 24)
     else:
       line("1  " + self._candidate_text(frame, selection.lead_one), self.GREEN if one_match else self.RED, 16, 23)
       line("2  " + self._candidate_text(frame, selection.lead_two), self.PURPLE if two_match else self.RED, 16, 31)
@@ -1623,7 +1631,7 @@ class SimulatorUI:
 
     if self.show_fused_objects:
       line("NEAREST FUSED OBJECTS", self.MUTED, 15, 22)
-      for obj in self.fused_frames[self.index][:5]:
+      for obj in self.fused_frames[self.index][:4]:
         ids = (
           f"F{obj.front_track_id}/C{obj.corner_track_id}"
           if obj.front_track_id is not None and obj.corner_track_id is not None else
@@ -1633,7 +1641,7 @@ class SimulatorUI:
         line(f"{ids:11s} d {obj.d_rel:5.1f}  y {obj.y_rel:+5.1f}  v {obj.v_rel:+5.1f}", self.MUTED, 14, 19)
     else:
       line("NEAREST USABLE POINTS", self.MUTED, 15, 22)
-      nearest = sorted((point for point in frame.points if point.d_rel > 0.75), key=lambda point: point.d_rel)[:5]
+      nearest = sorted((point for point in frame.points if point.d_rel > 0.75), key=lambda point: point.d_rel)[:4]
       for point in nearest:
         source = {"frontRadar": "F", "scc": "S", "corner235": "C235", "corner180": "C180"}.get(point.source, point.source[:5])
         line(f"{point.track_id:5d}  {source:4s}  d {point.d_rel:5.1f}  y {point.y_rel:+5.1f}  v {point.v_rel:+5.1f}", self.MUTED, 14, 19)
