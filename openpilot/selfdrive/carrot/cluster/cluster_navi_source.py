@@ -13,6 +13,7 @@ from aiohttp import web
 
 from openpilot.selfdrive.carrot.carrot_navi import (
     CATALOG,
+    MAP_HZ_MAX,
     CarrotNaviReceiver,
     ItemRecord,
     create_app,
@@ -36,7 +37,7 @@ DEFAULT_NAVI_PORT = 7714
 MAP_FRAME_STALE_TIMEOUT_MS = 3000
 NAVI_IPC_DISCONNECT_TIMEOUT_S = 3.0
 H264_FLAG_KEYFRAME = 1
-H264_DECODE_QUEUE_MAX = 2
+H264_DECODE_QUEUE_MAX = MAP_HZ_MAX
 
 
 def detect_advertise_ip(bind_host: str) -> str:
@@ -207,6 +208,17 @@ class _H264DecodeRequest:
 class _H264DecodeResult:
     epoch: int
     frame: NaviMediaFrame
+
+
+def _is_new_h264_result(
+    result: _H264DecodeResult,
+    media: dict[str, NaviMediaFrame],
+    epoch: int,
+) -> bool:
+    if result.epoch != epoch:
+        return False
+    current = media.get(result.frame.key)
+    return current is None or result.frame.sequence > current.sequence
 
 
 class H264DecodeWorker:
@@ -522,9 +534,7 @@ class NaviIpcMediaSource:
     def _apply_h264_results(self, now_s: float) -> None:
         for result in self._h264_worker.poll():
             frame = result.frame
-            if result.epoch != self._media_epoch:
-                continue
-            if self._h264_requested_sequences.get(frame.key) != frame.sequence:
+            if not _is_new_h264_result(result, self._media, self._media_epoch):
                 continue
             self._media[frame.key] = frame
             if frame.key == "render:map_main":
@@ -713,9 +723,7 @@ class NaviSimulatorSource:
     def _apply_h264_results(self) -> None:
         for result in self._h264_worker.poll():
             frame = result.frame
-            if result.epoch != self._media_epoch:
-                continue
-            if self._h264_requested_sequences.get(frame.key) != frame.sequence:
+            if not _is_new_h264_result(result, self._media, self._media_epoch):
                 continue
             self._media[frame.key] = frame
 

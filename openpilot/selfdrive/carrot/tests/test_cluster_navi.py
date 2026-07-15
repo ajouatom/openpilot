@@ -17,6 +17,7 @@ sys.path.insert(0, str(CLUSTER_DIR))
 from cluster_navi import fresh_carrot_navi, parse_carrot_navi
 from cluster_navi_overlay import merge_navi_overlay_state
 from cluster_navi_source import (
+  H264_DECODE_QUEUE_MAX,
   MAP_FRAME_STALE_TIMEOUT_MS,
   H264DecodeWorker,
   NaviIpcMediaSource,
@@ -180,26 +181,74 @@ def test_h264_decode_worker_drops_backlog_until_next_keyframe():
   try:
     worker.submit(request(1, keyframe=True))
     assert started.wait(1.0)
-    worker.submit(request(2))
-    worker.submit(request(3))
-    worker.submit(request(4))
-    worker.submit(request(5))
-    worker.submit(request(6, keyframe=True))
+    for sequence in range(2, H264_DECODE_QUEUE_MAX + 3):
+      worker.submit(request(sequence))
+    next_keyframe = H264_DECODE_QUEUE_MAX + 3
+    worker.submit(request(next_keyframe, keyframe=True))
     release.set()
 
     latest = None
     deadline = time.monotonic() + 1.0
-    while time.monotonic() < deadline and (latest is None or latest.frame.sequence != 6):
+    while time.monotonic() < deadline and (latest is None or latest.frame.sequence != next_keyframe):
       results = worker.poll()
       if results:
         latest = results[-1]
       time.sleep(0.005)
 
     assert latest is not None
-    assert latest.frame.sequence == 6
-    assert latest.frame.data == b"6666"
-    assert worker.dropped_requests == 4
+    assert latest.frame.sequence == next_keyframe
+    assert latest.frame.data == str(next_keyframe).encode()[-1:] * 4
+    assert worker.dropped_requests == H264_DECODE_QUEUE_MAX + 1
     assert len(reset_calls) == 1
+  finally:
+    release.set()
+    worker.close()
+
+
+def test_h264_decode_worker_accepts_sixty_hz_poll_burst():
+  started = threading.Event()
+  release = threading.Event()
+
+  class FakeDecoder:
+    def reset(self):
+      pass
+
+    def decode(self, payload):
+      if payload.endswith(b"1"):
+        started.set()
+        assert release.wait(1.0)
+      return payload[-1:] * 4, 1, 1
+
+  def request(sequence, *, keyframe=False):
+    return _H264DecodeRequest(
+      epoch=1,
+      key="render:map_main",
+      sequence=sequence,
+      payload=str(sequence).encode(),
+      config_payload=b"config",
+      config_sequence=1,
+      keyframe=keyframe,
+    )
+
+  worker = H264DecodeWorker(decoder_factory=FakeDecoder)
+  try:
+    worker.submit(request(1, keyframe=True))
+    assert started.wait(1.0)
+    for sequence in range(2, 8):
+      worker.submit(request(sequence))
+    release.set()
+
+    latest = None
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and (latest is None or latest.frame.sequence != 7):
+      results = worker.poll()
+      if results:
+        latest = results[-1]
+      time.sleep(0.005)
+
+    assert latest is not None
+    assert latest.frame.sequence == 7
+    assert worker.dropped_requests == 0
   finally:
     release.set()
     worker.close()
@@ -207,25 +256,47 @@ def test_h264_decode_worker_drops_backlog_until_next_keyframe():
 
 def test_navi_source_rejects_stale_h264_worker_result():
   source = object.__new__(NaviSimulatorSource)
-  source._media = {}
+  source._media = {
+    "render:map_main": NaviMediaFrame("render:map_main", 8, False, reason="source_absent"),
+  }
   source._media_epoch = 2
-  source._h264_requested_sequences = {"render:map_main": 8}
   stale = _H264DecodeResult(
     epoch=2,
     frame=NaviMediaFrame("render:map_main", 7, True, "image/rgba", 1, 1, b"old!"),
   )
   latest = _H264DecodeResult(
     epoch=2,
-    frame=NaviMediaFrame("render:map_main", 8, True, "image/rgba", 1, 1, b"new!"),
+    frame=NaviMediaFrame("render:map_main", 9, True, "image/rgba", 1, 1, b"new!"),
   )
   results = iter(((stale,), (latest,)))
   source._h264_worker = SimpleNamespace(poll=lambda: next(results))
 
   source._apply_h264_results()
-  assert source._media == {}
+  assert source._media["render:map_main"].sequence == 8
+  assert source._media["render:map_main"].present is False
 
   source._apply_h264_results()
-  assert source._media["render:map_main"].sequence == 8
+  assert source._media["render:map_main"].sequence == 9
+
+
+def test_navi_source_accepts_decoded_frame_behind_latest_request():
+  source = object.__new__(NaviIpcMediaSource)
+  source._media = {
+    "render:map_main": NaviMediaFrame("render:map_main", 10, True, "image/rgba", 1, 1, b"old!"),
+  }
+  source._media_epoch = 2
+  source._h264_requested_sequences = {"render:map_main": 15}
+  source._map_frame_at_s = 0.0
+  result = _H264DecodeResult(
+    epoch=2,
+    frame=NaviMediaFrame("render:map_main", 12, True, "image/rgba", 1, 1, b"new!"),
+  )
+  source._h264_worker = SimpleNamespace(poll=lambda: (result,))
+
+  source._apply_h264_results(123.0)
+
+  assert source._media["render:map_main"].sequence == 12
+  assert source._map_frame_at_s == 123.0
 
 
 def test_disconnected_dashboard_draws_system_panel(monkeypatch):
