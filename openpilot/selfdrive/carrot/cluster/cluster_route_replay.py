@@ -1987,7 +1987,8 @@ class RouteLogParser:
             cut_in = (
                 self.show_recorded_cutins
                 and lead_name == "leadTwo"
-                and radar_track_id_is_corner_object(track_id)
+                and track_id is not None
+                and track_id in self.recorded_cutin_ids
             )
             absolute_speed_kph = (
                 lead_speed_mps * 3.6
