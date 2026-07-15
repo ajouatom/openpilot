@@ -49,8 +49,8 @@ BU_: XXX
     #     eight stable tracked objects at 20 Hz from 0x500 through 0x507.
     #     Do not decode 0x508+ distance-sorted raw detections as stable tracks.
     # KO: 2018-2019 Kia Sorento UM의 Denso DNMWR006 레이더는 0x500~0x507에서
-    #     안정적인 추적 객체 8개를 20Hz로 전송한다. 0x508 이후의 거리순 raw
-    #     detection은 안정적인 트랙으로 디코딩하지 않는다.
+    #     안정적인 추적 객체 8개를 20Hz로 전송함. 0x508 이후의 거리순 raw
+    #     detection은 안정적인 트랙으로 디코딩하지 않음.
     for address in range(0x500, 0x508):
       f.write(f"""
 BO_ {address} RADAR_TRACK_{address:x}: 8 RADAR
