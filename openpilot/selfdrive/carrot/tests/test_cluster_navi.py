@@ -251,6 +251,44 @@ def test_disconnected_dashboard_draws_system_panel(monkeypatch):
   }
 
 
+def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  frames = {
+    key: NaviMediaFrame(key, 1, True, "image/rgba", 1, 1, b"rgba")
+    for key in ("render:map_main", "image:tbt_current_compact", "image:tbt_next", "image:lane_bottom")
+  }
+  dashboard = NaviDashboardState(True, "ipc://carrotNaviMedia", media=tuple(frames.values()))
+  drawn = {}
+
+  monkeypatch.setattr(
+    ClusterUiRenderer,
+    "_current_theme",
+    lambda self: SimpleNamespace(faint=(0, 0, 0, 0), route_panel_bg=(0, 0, 0, 255)),
+  )
+  monkeypatch.setattr(ClusterUiRenderer, "_rounded_rect", lambda *args, **kwargs: None)
+  monkeypatch.setattr(ClusterUiRenderer, "_draw_navi_crossroad_box", lambda *args, **kwargs: None)
+  monkeypatch.setattr(ClusterUiRenderer, "_navi_media_fitted_size", lambda self, frame, rect: (rect.width, rect.height))
+
+  def capture_media(self, frame, rect, **kwargs):
+    if frame is not None:
+      drawn[frame.key] = rect
+    return True
+
+  monkeypatch.setattr(ClusterUiRenderer, "_draw_navi_media", capture_media)
+  monkeypatch.setattr("cluster_renderer.rl.draw_rectangle_rec", lambda *args, **kwargs: None)
+  monkeypatch.setattr("cluster_renderer.rl.begin_scissor_mode", lambda *args, **kwargs: None)
+  monkeypatch.setattr("cluster_renderer.rl.end_scissor_mode", lambda: None)
+
+  renderer._draw_navi_live_panel(SimpleNamespace(navi_live=None, navi_dashboard=dashboard))
+
+  assert drawn["image:tbt_current_compact"].width == pytest.approx(310.0 * 1.2)
+  assert drawn["image:tbt_current_compact"].height == pytest.approx(116.0 * 1.2)
+  assert drawn["image:tbt_next"].width == pytest.approx(190.0 * 1.2)
+  assert drawn["image:tbt_next"].height == pytest.approx(68.0 * 1.2)
+  assert drawn["image:lane_bottom"].width == pytest.approx(226.0 * 1.2)
+  assert drawn["image:lane_bottom"].height == pytest.approx(67.0 * 1.2)
+
+
 def test_ipc_media_source_restores_standalone_navigation_images():
   media = SimpleNamespace(
     schemaVersion=1,
