@@ -35,6 +35,7 @@ from openpilot.selfdrive.navd.helpers import Coordinate
 from openpilot.common.constants import CV
 
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
+from openpilot.selfdrive.carrot.tmux_metadata import capture_tmux_metadata
 try:
   from openpilot.selfdrive.carrot.server.services.web_settings import read_web_settings
 except Exception:
@@ -282,8 +283,9 @@ class CarrotMan:
     self.sm = messaging.SubMaster([
       'deviceState', 'carState', 'controlsState', 'radarState', 'longitudinalPlan', 'modelV2',
       'selfdriveState', 'carControl', 'navRouteNavd', self.gps_location_service,
-      'navInstruction', 'carrotNavi',
+      'navInstruction', 'carrotNavi', 'roadEncodeIdx',
     ])
+    self.tmux_capture_metadata = None
     self.pm = messaging.PubMaster(['carrotMan', "navRoute", "navInstructionCarrot"])
 
     self.carrot_serv = CarrotServ()
@@ -751,9 +753,12 @@ class CarrotMan:
         time.sleep(2)
 
   def make_tmux_data(self):
+    self.tmux_capture_metadata = None
+    capture_metadata = capture_tmux_metadata(self.params, self.sm)
     try:
       subprocess.run("rm -f /data/media/tmux.log; tmux capture-pane -pq -S-1000 > /data/media/tmux.log", shell=True, capture_output=True, text=False, check=True)
       subprocess.run("/data/openpilot/openpilot/selfdrive/apilot.py", shell=True, capture_output=True, text=False)
+      self.tmux_capture_metadata = capture_metadata
       return True
     except Exception as e:
       print(f"TMUX creation error: {e}")
@@ -856,6 +861,7 @@ class CarrotMan:
       url = f"{target['base_url']}/api/v1/tmux/upload"
       headers["Authorization"] = f"Bearer {target['token']}"
 
+    capture_metadata = self.tmux_capture_metadata or capture_tmux_metadata(self.params, self.sm)
     payload = {
       "tmux_why"           : tmux_why,
       "car_name"           : _pstr("CarName"),
@@ -867,6 +873,9 @@ class CarrotMan:
       "dongle_id"          : _pstr("DongleId"),
       "device_serial"      : _pstr("HardwareSerial"),
       "local_ip"           : get_private_ip_by_iface("wlan0"),
+      "route"              : capture_metadata["route"],
+      "segment"            : capture_metadata["segment"],
+      "captured_at"        : capture_metadata["captured_at"],
     }
 
     files = []
