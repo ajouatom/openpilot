@@ -840,6 +840,8 @@ const SETTING_CONTROL_OVERRIDES = {
   ShowPlotMode: { kind: "select" },
   ClusterHudScreenMode: { kind: "select" },
   ClusterHudRadarInfo: { kind: "select" },
+  ClusterNaviMapTheme: { kind: "select" },
+  ClusterNaviMapType: { kind: "select" },
   SoundLanguageSetting: { kind: "select" },
 };
 
@@ -926,10 +928,31 @@ function getSettingDisplayUnit(name) {
   return SETTING_DISPLAY_UNIT_TYPES[getSettingDisplayType(name)] || "";
 }
 
+function getClusterNaviMapOptionLabel(name, value) {
+  const labels = {
+    ClusterNaviMapTheme: {
+      ko: ["자동", "다크", "라이트"],
+      en: ["Auto", "Dark", "Light"],
+      zh: ["自动", "深色", "浅色"],
+    },
+    ClusterNaviMapType: {
+      ko: ["일반 지도", "위성 지도"],
+      en: ["Normal map", "Satellite map"],
+      zh: ["普通地图", "卫星地图"],
+    },
+  };
+  const values = labels[String(name || "")];
+  if (!values) return null;
+  const language = LANG === "zh" ? "zh" : (LANG === "ko" ? "ko" : "en");
+  return values[language][Number(value)] ?? null;
+}
+
 function formatSettingDisplayValue(p, value) {
   if (String(p?.name || "") === "SoundLanguageSetting") {
     return getSoundLanguageSettingOptionLabel(value);
   }
+  const mapOptionLabel = getClusterNaviMapOptionLabel(p?.name, value);
+  if (mapOptionLabel !== null) return mapOptionLabel;
   const text = String(value);
   const unit = getSettingDisplayUnit(p?.name);
   return unit ? `${text}${unit}` : text;

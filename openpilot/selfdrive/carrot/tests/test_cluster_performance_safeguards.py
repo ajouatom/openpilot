@@ -201,7 +201,7 @@ def test_h264_start_classifies_only_initialization_errors(monkeypatch):
     pipeline.start()
 
 
-def test_cluster_autorun_uses_direct_embedded_navi_without_cereal_roundtrip(monkeypatch):
+def test_cluster_autorun_leaves_navi_server_owned_by_standalone_process(monkeypatch):
   cluster_autorun = _import_cluster_autorun(monkeypatch)
 
   args = cluster_autorun._cluster_args(
@@ -212,7 +212,7 @@ def test_cluster_autorun_uses_direct_embedded_navi_without_cereal_roundtrip(monk
     priority=10,
   )
 
-  assert "--navi-overlay" in args
+  assert "--navi-overlay" not in args
   assert "--navi-publish-cereal" not in args
   assert args[args.index("--output") + 1] == "usb"
   assert args[args.index("--usb-h264-backend") + 1] == "native"

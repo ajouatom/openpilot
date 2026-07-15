@@ -487,7 +487,9 @@
                 "ClusterHud",
                 "ClusterHudBrightness",
                 "ClusterHudMirror",
-                "ClusterHudTheme"
+                "ClusterHudTheme",
+                "ClusterNaviMapTheme",
+                "ClusterNaviMapType"
               ]
             },
             {
@@ -3055,6 +3057,38 @@
       "cdescr": "0: 自动\n1: 深色\n2: 浅色",
       "min": 0,
       "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "외부 HUD",
+      "name": "ClusterNaviMapTheme",
+      "title": "클러스터 내비 지도 테마(1)",
+      "descr": "0: 자동\n1: 다크\n2: 라이트\n변경하면 외부 내비가 자동으로 다시 연결됩니다.",
+      "egroup": "CLUSTER HUD",
+      "etitle": "Cluster Navi Map Theme(1)",
+      "edescr": "0: Auto\n1: Dark\n2: Light\nThe external navigation app reconnects automatically when changed.",
+      "cgroup": "外部 HUD",
+      "ctitle": "集群导航地图主题(1)",
+      "cdescr": "0: 自动\n1: 深色\n2: 浅色\n更改后外部导航应用会自动重新连接。",
+      "min": 0,
+      "max": 2,
+      "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "외부 HUD",
+      "name": "ClusterNaviMapType",
+      "title": "클러스터 내비 지도 종류(0)",
+      "descr": "0: 일반 지도\n1: 위성 지도\n변경하면 외부 내비가 자동으로 다시 연결됩니다.",
+      "egroup": "CLUSTER HUD",
+      "etitle": "Cluster Navi Map Type(0)",
+      "edescr": "0: Normal map\n1: Satellite map\nThe external navigation app reconnects automatically when changed.",
+      "cgroup": "外部 HUD",
+      "ctitle": "集群导航地图类型(0)",
+      "cdescr": "0: 普通地图\n1: 卫星地图\n更改后外部导航应用会自动重新连接。",
+      "min": 0,
+      "max": 1,
       "default": 0,
       "unit": 1
     },
