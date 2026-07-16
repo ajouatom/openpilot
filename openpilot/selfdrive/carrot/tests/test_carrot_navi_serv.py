@@ -1,3 +1,6 @@
+import pytest
+
+from openpilot.common.constants import CV
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
 
 
@@ -48,9 +51,11 @@ def _serv():
   serv.active_sdi_count_max = 200
   serv.carrotIndex = 0
   serv.nRoadLimitSpeed_counter = 0
+  serv.active_kisa_count = 0
   serv.autoNaviSpeedCtrlMode = 3
   serv.autoNaviSpeedSafetyFactor = 1.0
   serv.autoNaviSpeedBumpSpeed = 20
+  serv.is_metric = True
   serv.roadcate = 8
   serv.nRoadLimitSpeed = 30
   serv.params_memory = _MemoryParams()
@@ -281,3 +286,42 @@ def test_legacy_7713_navigation_update_path_remains_operational():
   assert (serv.nTBTDist, serv.nTBTTurnType, serv.nTBTDistNext) == (310, 12, 940)
   assert (serv.nGoPosDist, serv.nGoPosTime) == (8700, 720)
   assert (serv.szPosRoadName, serv.vpPosPointLatNavi, serv.vpPosPointLonNavi) == ("Legacy road", 37.4, 126.9)
+
+
+@pytest.mark.parametrize(
+  ("is_metric", "report_id", "road_limit", "alert_distance", "expected_type", "expected_limit_kph", "expected_distance_m"),
+  (
+    (True, "camera", 50, "300 m", 101, 52.5, 300),
+    (False, "police", 25, "1000 ft", 100, 25 * CV.MPH_TO_KPH * 1.05, 304),
+  ),
+)
+def test_waze_alert_uses_navi_speed_limit_ratio(is_metric, report_id, road_limit, alert_distance,
+                                                expected_type, expected_limit_kph, expected_distance_m):
+  serv = _serv()
+  serv.is_metric = is_metric
+  serv.autoNaviSpeedSafetyFactor = 1.05
+
+  serv.update_kisa({
+    "kisawazeroadspdlimit": road_limit,
+    "kisawazereportid": report_id,
+    "kisawazealertdist": alert_distance,
+  })
+
+  assert serv.xSpdType == expected_type
+  assert serv.xSpdLimit == pytest.approx(expected_limit_kph)
+  assert serv.xSpdDist == expected_distance_m
+
+
+def test_waze_alert_without_road_limit_has_no_speed_target():
+  serv = _serv()
+  serv.nRoadLimitSpeed = 0
+  serv.autoNaviSpeedSafetyFactor = 1.05
+
+  serv.update_kisa({
+    "kisawazereportid": "camera",
+    "kisawazealertdist": "200 m",
+  })
+
+  assert serv.xSpdType == 101
+  assert serv.xSpdLimit == 0
+  assert serv.xSpdDist == 200

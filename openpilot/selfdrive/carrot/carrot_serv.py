@@ -1081,11 +1081,9 @@ class CarrotServ:
         xSpdType = 100
 
       if xSpdType >= 0:
-        offset = 5 if self.is_metric else 5 * CV.MPH_TO_KPH
-        self.xSpdLimit = self.nRoadLimitSpeed + offset
-
+        self.xSpdLimit = self.nRoadLimitSpeed * self.autoNaviSpeedSafetyFactor if self.nRoadLimitSpeed > 0 else 0
         self.xSpdDist = distance
-        self.xSpdType =xSpdType
+        self.xSpdType = xSpdType
 
   def update_navi(self, remote_ip, sm, pm, vturn_speed, coords, distances, route_speed, gps_service):
 
@@ -1156,7 +1154,7 @@ class CarrotServ:
     sdi_speed = 250
     hda_active = False
     ### 과속카메라, 사고방지턱
-    if (self.xSpdDist > 0 or self.xSpdType in [100, 101]) and self.active_carrot > 0:
+    if self.xSpdLimit > 0 and (self.xSpdDist > 0 or self.xSpdType in [100, 101]) and self.active_carrot > 0:
       safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
       decel = self.autoNaviSpeedDecelRate
       sdi_speed = min(sdi_speed, self.calculate_current_speed(self.xSpdDist, self.xSpdLimit, safe_sec, decel))
