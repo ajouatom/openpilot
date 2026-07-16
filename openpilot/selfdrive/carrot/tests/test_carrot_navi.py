@@ -12,7 +12,7 @@ from openpilot.selfdrive.carrot.carrot_navi import (
   BINARY_HEADER,
   CATALOG,
   CarrotNaviDiscoveryBeacon,
-  ClusterNaviAppearanceParamReader,
+  ClusterNaviMapParamReader,
   CarrotNaviReceiver,
   DISCOVERY_PORT,
   PROTOCOL_VERSION,
@@ -20,6 +20,8 @@ from openpilot.selfdrive.carrot.carrot_navi import (
   create_app,
   discovery_targets,
   parse_binary_packet,
+  resolve_map_bitrate_kbps,
+  resolve_map_hz,
   run_receiver_app,
   _safe_send_json,
 )
@@ -128,40 +130,89 @@ def test_manifest_enables_complete_catalog():
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
   assert map_stream["params"]["map_theme"] == "auto"
 
+  invalid_requirements = requirements_query()
+  invalid_requirements["catalog_revision"] = 2
+  with pytest.raises(ValueError, match="catalog revision"):
+    CarrotNaviReceiver().negotiate(invalid_requirements, "test-app")
+
 
 def test_manifest_requests_configured_map_appearance():
-  manifest = build_manifest("12345678", map_theme="dark", map_type="satellite")
+  manifest = build_manifest(
+    "12345678",
+    map_theme="dark",
+    map_type="satellite",
+    map_hz=60,
+    map_bitrate_kbps=12000,
+  )
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
+  crossroad_streams = [
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "image" and stream["name"].startswith("crossroad_")
+  ]
 
   assert map_stream["params"]["map_theme"] == "dark"
   assert map_stream["params"]["map_type"] == "satellite"
+  assert map_stream["params"]["fps"] == 60
+  assert map_stream["params"]["h264_bitrate_kbps"] == 12000
+  assert len(crossroad_streams) == 2
+  assert all(stream["params"]["theme"] == "dark" for stream in crossroad_streams)
 
   with pytest.raises(ValueError, match="map theme"):
     build_manifest("12345678", map_theme="neon")
   with pytest.raises(ValueError, match="map type"):
     build_manifest("12345678", map_type="terrain")
+  with pytest.raises(ValueError, match="refresh rate"):
+    build_manifest("12345678", map_hz=61)
+  with pytest.raises(ValueError, match="bitrate"):
+    build_manifest("12345678", map_bitrate_kbps=12001)
 
 
 def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
   class FakeParams:
-    values = {"ClusterNaviMapTheme": 2, "ClusterNaviMapType": 1}
+    values = {
+      "ClusterNaviMapTheme": 2,
+      "ClusterNaviMapType": 1,
+      "ClusterNaviMapFps": 3,
+    }
 
     def get_int(self, key):
       return self.values[key]
 
-  reader = ClusterNaviAppearanceParamReader(FakeParams())
-  receiver = CarrotNaviReceiver(map_theme="dark", map_type="normal")
+  reader = ClusterNaviMapParamReader(FakeParams())
+  receiver = CarrotNaviReceiver(
+    map_theme="dark", map_type="normal", map_hz=10, map_bitrate_kbps=3000,
+  )
 
-  assert reader() == ("light", "satellite")
-  assert receiver.set_map_appearance(*reader()) is True
-  assert receiver.set_map_appearance(*reader()) is False
+  assert reader() == ("light", "satellite", 30, 6000)
+  assert receiver.set_map_config(*reader()) is True
+  assert receiver.set_map_config(*reader()) is False
 
   manifest = receiver.negotiate(requirements_query(), "test-app")
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
   assert map_stream["params"]["map_theme"] == "light"
   assert map_stream["params"]["map_type"] == "satellite"
+  assert map_stream["params"]["fps"] == 30
+  assert map_stream["params"]["h264_bitrate_kbps"] == 6000
   assert receiver.health()["map_theme"] == "light"
   assert receiver.health()["map_type"] == "satellite"
+  assert receiver.health()["map_hz"] == 30
+  assert receiver.health()["map_bitrate_kbps"] == 6000
+
+
+def test_cluster_navi_map_fps_modes_and_automatic_bitrate_resolution():
+  assert resolve_map_hz(0) == 5
+  assert resolve_map_hz(1) == 10
+  assert resolve_map_hz(2) == 20
+  assert resolve_map_hz(3) == 30
+  assert resolve_map_hz(6) == 10
+  assert resolve_map_hz(None) == 10
+
+  assert resolve_map_bitrate_kbps(960, 540, 5) == 1500
+  assert resolve_map_bitrate_kbps(960, 540, 10) == 3000
+  assert resolve_map_bitrate_kbps(960, 540, 20) == 3000
+  assert resolve_map_bitrate_kbps(960, 540, 30) == 6000
+  assert resolve_map_bitrate_kbps(480, 270, 30) == 1500
+  assert resolve_map_bitrate_kbps(1920, 1080, 30) == 12000
 
 
 def test_receiver_logs_changed_tbt_and_sdi_values(capsys):
@@ -182,6 +233,7 @@ def test_receiver_logs_changed_tbt_and_sdi_values(capsys):
       "stream_handle": stream["stream_handle"],
       "sequence": sequence,
       "source_timestamp_ms": 1000 + sequence,
+      "sent_at_ms": 2000 + sequence,
       "present": True,
       "value": value,
     }, "192.168.0.171")
@@ -204,6 +256,115 @@ def test_receiver_logs_changed_tbt_and_sdi_values(capsys):
   assert '"distance_m":420' in output
 
 
+def test_receiver_preserves_latest_speed_bump_and_secondary_sdi_fields():
+  receiver = CarrotNaviReceiver()
+  manifest = receiver.negotiate(requirements_query(), "test-app")
+  speed_stream = next(
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "json" and stream["name"] == "speed"
+  )
+  app_status_stream = next(
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "json" and stream["name"] == "app_status"
+  )
+  value = {
+    "current_kph": 0,
+    "road_limit_kph": 30,
+    "sdi": {"type": 22, "distance_m": 93},
+    "sdi_secondary": {"type": 1, "distance_m": 420, "future_field": "kept"},
+    "future_group_field": {"enabled": True},
+  }
+  receiver.record_json(manifest["session_id"], "speed", {
+    "type": "item_update",
+    "protocol_version": 2,
+    "session_id": manifest["session_id"],
+    "manifest_revision": manifest["revision"],
+    "schema_version": 1,
+    "kind": "json",
+    "name": "speed",
+    "stream_handle": speed_stream["stream_handle"],
+    "sequence": 1,
+    "source_timestamp_ms": 1234,
+    "sent_at_ms": 1235,
+    "present": True,
+    "value": value,
+  }, "127.0.0.1")
+  receiver.record_json(manifest["session_id"], "app_status", {
+    "type": "item_update",
+    "protocol_version": 2,
+    "session_id": manifest["session_id"],
+    "manifest_revision": manifest["revision"],
+    "schema_version": 1,
+    "kind": "json",
+    "name": "app_status",
+    "stream_handle": app_status_stream["stream_handle"],
+    "sequence": 1,
+    "source_timestamp_ms": 1236,
+    "sent_at_ms": 1237,
+    "present": True,
+    "value": {"foreground": False, "window_focused": False},
+  }, "127.0.0.1")
+  value["sdi_secondary"]["future_field"] = "changed-after-receive"
+
+  received = receiver.latest()["items"]["json:speed"]
+
+  assert received["sent_at_ms"] == 1235
+  assert received["value"]["sdi"]["type"] == 22
+  assert received["value"]["sdi_secondary"] == {
+    "type": 1, "distance_m": 420, "future_field": "kept",
+  }
+  assert received["value"]["future_group_field"] == {"enabled": True}
+  assert receiver.health()["app_foreground"] is False
+  assert receiver.latest()["app_foreground"] is False
+
+
+def test_receiver_validates_json_envelope_and_value_shapes():
+  receiver = CarrotNaviReceiver()
+  manifest = receiver.negotiate(requirements_query(), "test-app")
+  streams = {
+    stream["name"]: stream for stream in manifest["streams"]
+    if stream["kind"] == "json"
+  }
+
+  def envelope(name, value, **changes):
+    stream = streams[name]
+    result = {
+      "type": "item_update",
+      "protocol_version": 2,
+      "session_id": manifest["session_id"],
+      "manifest_revision": manifest["revision"],
+      "schema_version": 1,
+      "kind": "json",
+      "name": name,
+      "stream_handle": stream["stream_handle"],
+      "sequence": 1,
+      "source_timestamp_ms": 1000,
+      "sent_at_ms": 1001,
+      "present": True,
+      "value": value,
+    }
+    result.update(changes)
+    return result
+
+  with pytest.raises(ValueError, match="sent_at_ms"):
+    invalid = envelope("speed", {})
+    del invalid["sent_at_ms"]
+    receiver.record_json(manifest["session_id"], "speed", invalid, "127.0.0.1")
+  with pytest.raises(ValueError, match="must be an object"):
+    receiver.record_json(
+      manifest["session_id"], "speed", envelope("speed", []), "127.0.0.1",
+    )
+  with pytest.raises(ValueError, match="array of objects"):
+    receiver.record_json(
+      manifest["session_id"], "lane_ahead", envelope("lane_ahead", {}), "127.0.0.1",
+    )
+  with pytest.raises(ValueError, match="valid reason"):
+    receiver.record_json(
+      manifest["session_id"], "speed",
+      envelope("speed", None, present=False, reason=""), "127.0.0.1",
+    )
+
+
 def test_safe_websocket_error_send_ignores_closing_transport():
   class ClosingWebSocket:
     closed = False
@@ -215,11 +376,14 @@ def test_safe_websocket_error_send_ignores_closing_transport():
 
 
 def test_map_param_change_reconnects_websocket_with_new_manifest():
-  appearance = ["dark", "normal"]
+  map_config = ["dark", "normal", 10, 3000]
 
   async def scenario():
-    receiver = CarrotNaviReceiver(map_theme=appearance[0], map_type=appearance[1])
-    client = TestClient(TestServer(create_app(receiver, lambda: tuple(appearance))))
+    receiver = CarrotNaviReceiver(
+      map_theme=map_config[0], map_type=map_config[1],
+      map_hz=map_config[2], map_bitrate_kbps=map_config[3],
+    )
+    client = TestClient(TestServer(create_app(receiver, lambda: tuple(map_config))))
     await client.start_server()
     first_control = None
     second_control = None
@@ -230,7 +394,7 @@ def test_map_param_change_reconnects_websocket_with_new_manifest():
       first_map = next(stream for stream in first_manifest["streams"] if stream["kind"] == "render")
       assert first_map["params"]["map_type"] == "normal"
 
-      appearance[:] = ["light", "satellite"]
+      map_config[:] = ["light", "satellite", 60, 12000]
       message = await first_control.receive(timeout=2.0)
       assert message.type in (WSMsgType.CLOSE, WSMsgType.CLOSED)
 
@@ -240,6 +404,8 @@ def test_map_param_change_reconnects_websocket_with_new_manifest():
       second_map = next(stream for stream in second_manifest["streams"] if stream["kind"] == "render")
       assert second_map["params"]["map_theme"] == "light"
       assert second_map["params"]["map_type"] == "satellite"
+      assert second_map["params"]["fps"] == 60
+      assert second_map["params"]["h264_bitrate_kbps"] == 12000
     finally:
       if second_control is not None:
         await second_control.close()
@@ -267,6 +433,43 @@ def test_parse_binary_packet_validates_cn_v2_payload():
   struct.pack_into(">I", invalid, 32, len(png) + 1)
   with pytest.raises(ValueError, match="payload length"):
     parse_binary_packet(bytes(invalid))
+
+
+def test_receiver_rejects_binary_formats_that_do_not_match_stream_kind():
+  receiver = CarrotNaviReceiver()
+  manifest = receiver.negotiate(requirements_query(), "test-app")
+  image_stream = next(
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "image" and stream["name"] == "tbt_next"
+  )
+  render_stream = next(
+    stream for stream in manifest["streams"]
+    if stream["kind"] == "render" and stream["name"] == "map_main"
+  )
+
+  def metadata(stream, format_code):
+    return {
+      "stream_handle": stream["stream_handle"],
+      "manifest_revision": manifest["revision"],
+      "sequence": 1,
+      "source_timestamp_ms": 1000,
+      "message_type": 1,
+      "format_or_reason": format_code,
+      "flags": 1,
+      "width": 32,
+      "height": 24,
+    }
+
+  with pytest.raises(ValueError, match="requires PNG"):
+    receiver.record_binary(
+      manifest["session_id"], "image", "tbt_next",
+      metadata(image_stream, 2), b"jpeg", "127.0.0.1",
+    )
+  with pytest.raises(ValueError, match="requires JPEG"):
+    receiver.record_binary(
+      manifest["session_id"], "render", "map_main",
+      metadata(render_stream, 1), b"png", "127.0.0.1",
+    )
 
 
 def test_dashboard_snapshot_retains_render_codec_config():
@@ -399,7 +602,7 @@ async def test_all_catalog_item_routes_receive_value_and_clear():
             "source_timestamp_ms": 1000,
             "sent_at_ms": 1001,
             "present": True,
-            "value": {"smoke": name},
+            "value": [] if name == "lane_ahead" else {"smoke": name},
           })
           await item.send_json({
             "type": "item_update",
@@ -465,6 +668,7 @@ def test_receiver_snapshot_builds_bounded_typed_payload():
     "stream_handle": guidance["stream_handle"],
     "sequence": 7,
     "source_timestamp_ms": 1234,
+    "sent_at_ms": 1235,
     "present": True,
     "value": {
       "distance_m": 320,
@@ -566,3 +770,44 @@ def test_payload_bounds_route_and_publisher_sends_dedicated_service():
   assert message.carrotNaviMedia["sessionId"] == "session"
   assert message.carrotNaviMedia["name"] == "tbt_next"
   assert message.carrotNaviMedia["payload"] == b"png-data"
+
+
+def test_payload_projects_primary_and_secondary_sdi_for_consumers():
+  payload = build_carrot_navi_payload({
+    "generation": 1,
+    "session_id": "session",
+    "connected": True,
+    "items": {
+      "speed": {
+        "present": True,
+        "sequence": 9,
+        "source_timestamp_ms": 1234,
+        "received_mono_ns": 5678,
+        "value": {
+          "road_limit_kph": 50,
+          "sdi": {
+            "type": 1,
+            "distance_m": 420,
+            "speed_limit_kph": 50,
+            "section_type": 7,
+            "block_type": 2,
+            "block_speed_kph": 40,
+            "block_distance_m": 390,
+          },
+          "sdi_secondary": {
+            "type": 22,
+            "distance_m": 93,
+            "block_type": 3,
+            "block_distance_m": 80,
+          },
+        },
+      },
+    },
+  }, publish_mono_ns=999)
+
+  speed = payload["speed"]
+  assert speed["sdiPresent"] is True
+  assert (speed["sdiSectionType"], speed["sdiBlockType"], speed["sdiBlockDistanceM"]) == (7, 2, 390)
+  assert speed["secondarySdiPresent"] is True
+  assert (speed["secondarySdiType"], speed["secondarySdiDistanceM"]) == (22, 93)
+  assert (speed["secondarySdiBlockType"], speed["secondarySdiBlockDistanceM"]) == (3, 80)

@@ -135,6 +135,9 @@ class NaviSpeedInfo:
     sdi_type: int | None = None
     sdi_distance_m: int | None = None
     sdi_speed_limit_kph: int | None = None
+    secondary_sdi_type: int | None = None
+    secondary_sdi_distance_m: int | None = None
+    secondary_sdi_speed_limit_kph: int | None = None
     section_active: bool = False
     section_speed_limit_kph: int | None = None
     section_average_kph: float | None = None
@@ -232,6 +235,9 @@ class NaviMediaFrame:
     height: int = 0
     data: bytes | None = None
     reason: str | None = None
+    plane_data: tuple[bytes, bytes, bytes] | None = None
+    plane_strides: tuple[int, int, int] | None = None
+    hardware_buffer: object | None = None
 
 
 @dataclass(frozen=True, slots=True)

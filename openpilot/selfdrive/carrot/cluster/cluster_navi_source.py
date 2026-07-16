@@ -13,12 +13,14 @@ from aiohttp import web
 
 from openpilot.selfdrive.carrot.carrot_navi import (
     CATALOG,
+    MAP_HZ_MAX,
     CarrotNaviReceiver,
     ItemRecord,
     create_app,
 )
 from openpilot.selfdrive.carrot.carrot_navi_cereal import build_carrot_navi_payload
 
+from cluster_h264_decoder import HardwareH264DecoderError, create_tici_h264_decoder
 from cluster_models import (
     ClusterUiState,
     NaviDashboardState,
@@ -36,7 +38,7 @@ DEFAULT_NAVI_PORT = 7714
 MAP_FRAME_STALE_TIMEOUT_MS = 3000
 NAVI_IPC_DISCONNECT_TIMEOUT_S = 3.0
 H264_FLAG_KEYFRAME = 1
-H264_DECODE_QUEUE_MAX = 2
+H264_DECODE_QUEUE_MAX = MAP_HZ_MAX
 
 
 def detect_advertise_ip(bind_host: str) -> str:
@@ -154,22 +156,91 @@ class EmbeddedNaviReceiverServer:
             loop.close()
 
 
+@dataclass(frozen=True)
+class DecodedH264Frame:
+    width: int
+    height: int
+    planes: tuple[bytes, bytes, bytes] | None = None
+    strides: tuple[int, int, int] | None = None
+    hardware_buffer: object | None = None
+
+
 class H264Decoder:
     def __init__(self) -> None:
-        try:
-            import av
-        except ImportError as exc:
-            raise RuntimeError("PyAV is required for cluster --input navi H.264 map frames") from exc
-        self._av = av
-        self._codec = self._create_codec()
+        self._av = None
+        self._codec = None
+        self._hardware = None
+        self._hardware_disabled = False
+        self._hardware_error_logged = False
+        self._hardware_started_logged = False
+        self._software_started_logged = False
 
     def _create_codec(self):
+        if self._av is None:
+            try:
+                import av
+            except ImportError as exc:
+                raise RuntimeError("PyAV is required for cluster --input navi H.264 map frames") from exc
+            self._av = av
         return self._av.CodecContext.create("h264", "r")
 
     def reset(self) -> None:
-        self._codec = self._create_codec()
+        if self._hardware is not None:
+            self._hardware.close()
+            self._hardware = None
+        if self._codec is not None:
+            self._codec = self._create_codec()
 
-    def decode(self, access_unit: bytes) -> tuple[bytes, int, int] | None:
+    def close(self) -> None:
+        if self._hardware is not None:
+            self._hardware.close()
+            self._hardware = None
+        self._codec = None
+
+    def decode(
+        self,
+        access_unit: bytes,
+        *,
+        sequence: int = 0,
+        width: int = 0,
+        height: int = 0,
+    ) -> DecodedH264Frame | None:
+        hardware_disabled = getattr(self, "_hardware_disabled", True)
+        if not hardware_disabled and width > 0 and height > 0:
+            try:
+                if self._hardware is None:
+                    self._hardware = create_tici_h264_decoder(width, height)
+                    if self._hardware is None:
+                        self._hardware_disabled = True
+                if self._hardware is not None:
+                    if not self._hardware_started_logged:
+                        print(
+                            f"Navi H264 decoder: Qualcomm VIDC NV12 DMA-BUF tid={threading.get_native_id()}",
+                            flush=True,
+                        )
+                        self._hardware_started_logged = True
+                    hardware_buffer = self._hardware.decode(access_unit, sequence)
+                    if hardware_buffer is None:
+                        return None
+                    return DecodedH264Frame(
+                        width=hardware_buffer.width,
+                        height=hardware_buffer.height,
+                        hardware_buffer=hardware_buffer,
+                    )
+            except (HardwareH264DecoderError, OSError, ValueError) as exc:
+                if self._hardware is not None:
+                    self._hardware.close()
+                    self._hardware = None
+                self._hardware_disabled = True
+                if not self._hardware_error_logged:
+                    print(f"Qualcomm VIDC H264 decode disabled; using PyAV: {exc}", flush=True)
+                    self._hardware_error_logged = True
+
+        if self._codec is None:
+            self._codec = self._create_codec()
+            if not self._software_started_logged:
+                print(f"Navi H264 decoder: PyAV software tid={threading.get_native_id()}", flush=True)
+                self._software_started_logged = True
         try:
             frames = self._codec.decode(self._av.Packet(access_unit))
         except self._av.FFmpegError:
@@ -177,18 +248,21 @@ class H264Decoder:
             return None
         if not frames:
             return None
-        frame = frames[-1].reformat(format="rgba")
-        plane = frame.planes[0]
-        row_bytes = frame.width * 4
-        raw = bytes(plane)
-        if plane.line_size == row_bytes:
-            pixels = raw[:row_bytes * frame.height]
-        else:
-            pixels = b"".join(
-                raw[offset:offset + row_bytes]
-                for offset in range(0, plane.line_size * frame.height, plane.line_size)
-            )
-        return pixels, int(frame.width), int(frame.height)
+        frame = frames[-1]
+        if frame.format.name != "yuv420p":
+            frame = frame.reformat(format="yuv420p")
+        if len(frame.planes) < 3:
+            return None
+        return DecodedH264Frame(
+            width=int(frame.width),
+            height=int(frame.height),
+            planes=(bytes(frame.planes[0]), bytes(frame.planes[1]), bytes(frame.planes[2])),
+            strides=(
+                int(frame.planes[0].line_size),
+                int(frame.planes[1].line_size),
+                int(frame.planes[2].line_size),
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -200,6 +274,8 @@ class _H264DecodeRequest:
     config_payload: bytes
     config_sequence: int
     keyframe: bool
+    width: int = 0
+    height: int = 0
     reset_decoder: bool = False
 
 
@@ -207,6 +283,17 @@ class _H264DecodeRequest:
 class _H264DecodeResult:
     epoch: int
     frame: NaviMediaFrame
+
+
+def _is_new_h264_result(
+    result: _H264DecodeResult,
+    media: dict[str, NaviMediaFrame],
+    epoch: int,
+) -> bool:
+    if result.epoch != epoch:
+        return False
+    current = media.get(result.frame.key)
+    return current is None or result.frame.sequence > current.sequence
 
 
 class H264DecodeWorker:
@@ -227,11 +314,12 @@ class H264DecodeWorker:
                 return
             self._ensure_thread_locked()
             if request.keyframe:
+                reset_decoder = request.key in self._waiting_for_keyframe
                 retained = deque(item for item in self._pending if item.key != request.key)
                 self._dropped_requests += len(self._pending) - len(retained)
                 self._pending = retained
                 self._waiting_for_keyframe.discard(request.key)
-                request = replace(request, reset_decoder=True)
+                request = replace(request, reset_decoder=reset_decoder)
             elif request.key in self._waiting_for_keyframe:
                 self._dropped_requests += 1
                 return
@@ -284,13 +372,17 @@ class H264DecodeWorker:
 
     def _run(self) -> None:
         decoders: dict[str, H264Decoder] = {}
-        config_sequences: dict[str, int] = {}
+        decoder_configs: dict[str, tuple[bytes, int, int]] = {}
         decoder_epochs: dict[str, int] = {}
         while True:
             with self._condition:
                 while not self._pending and not self._stopped:
                     self._condition.wait()
                 if self._stopped:
+                    for decoder in decoders.values():
+                        close_decoder = getattr(decoder, "close", None)
+                        if close_decoder is not None:
+                            close_decoder()
                     return
                 request = self._pending.popleft()
 
@@ -299,27 +391,36 @@ class H264DecodeWorker:
                 if decoder is None:
                     decoder = self._decoder_factory()
                     decoders[request.key] = decoder
-                config_changed = config_sequences.get(request.key) != request.config_sequence
+                decoder_config = (request.config_payload, request.width, request.height)
+                config_changed = decoder_configs.get(request.key) != decoder_config
                 epoch_changed = decoder_epochs.get(request.key) != request.epoch
                 if request.reset_decoder or config_changed or epoch_changed:
                     if request.key in decoder_epochs:
                         decoder.reset()
-                    config_sequences[request.key] = request.config_sequence
+                    decoder_configs[request.key] = decoder_config
                     decoder_epochs[request.key] = request.epoch
-                decoded = decoder.decode(request.config_payload + request.payload)
+                decoded = decoder.decode(
+                    request.config_payload + request.payload,
+                    sequence=request.sequence,
+                    width=request.width,
+                    height=request.height,
+                )
                 if decoded is None:
                     continue
-                rgba, width, height = decoded
+                hardware_buffer = decoded.hardware_buffer
+                decoded_sequence = int(getattr(hardware_buffer, "sequence", request.sequence))
                 result = _H264DecodeResult(
                     epoch=request.epoch,
                     frame=NaviMediaFrame(
                         key=request.key,
-                        sequence=request.sequence,
+                        sequence=decoded_sequence,
                         present=True,
-                        mime="image/rgba",
-                        width=width,
-                        height=height,
-                        data=rgba,
+                        mime="video/nv12-dmabuf" if hardware_buffer is not None else "image/yuv420p",
+                        width=decoded.width,
+                        height=decoded.height,
+                        plane_data=decoded.planes,
+                        plane_strides=decoded.strides,
+                        hardware_buffer=hardware_buffer,
                     ),
                 )
                 with self._condition:
@@ -510,6 +611,8 @@ class NaviIpcMediaSource:
                     config_payload=config_payload,
                     config_sequence=config_sequence,
                     keyframe=bool(int(_ipc_value(data, "flags", 0)) & H264_FLAG_KEYFRAME),
+                    width=width,
+                    height=height,
                 )
             )
             return
@@ -522,9 +625,7 @@ class NaviIpcMediaSource:
     def _apply_h264_results(self, now_s: float) -> None:
         for result in self._h264_worker.poll():
             frame = result.frame
-            if result.epoch != self._media_epoch:
-                continue
-            if self._h264_requested_sequences.get(frame.key) != frame.sequence:
+            if not _is_new_h264_result(result, self._media, self._media_epoch):
                 continue
             self._media[frame.key] = frame
             if frame.key == "render:map_main":
@@ -713,9 +814,7 @@ class NaviSimulatorSource:
     def _apply_h264_results(self) -> None:
         for result in self._h264_worker.poll():
             frame = result.frame
-            if result.epoch != self._media_epoch:
-                continue
-            if self._h264_requested_sequences.get(frame.key) != frame.sequence:
+            if not _is_new_h264_result(result, self._media, self._media_epoch):
                 continue
             self._media[frame.key] = frame
 
@@ -751,6 +850,8 @@ class NaviSimulatorSource:
                 config_payload=config.payload if config is not None and config.payload else b"",
                 config_sequence=config.sequence if config is not None else -1,
                 keyframe=bool(record.flags & H264_FLAG_KEYFRAME),
+                width=record.width,
+                height=record.height,
             )
         )
         return None

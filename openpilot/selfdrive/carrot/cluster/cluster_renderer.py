@@ -99,9 +99,14 @@ ROUTE_CONTROL_PANEL_H = 34.0
 ROUTE_CONTROL_SEEK_Y = ROUTE_CONTROL_PANEL_Y + 18.0
 ROUTE_CONTROL_BAR_X = ROUTE_CONTROL_PANEL_X + 142.0
 ROUTE_CONTROL_BAR_W = ROUTE_CONTROL_PANEL_W - 284.0
+# Keep the road camera strictly left of the navigation panel. These constants are
+# shared so future panel layout changes cannot reintroduce an overlap.
+NAVI_LIVE_PANEL_RIGHT = DESIGN_WIDTH - 4
+NAVI_LIVE_PANEL_W = 792
+NAVI_LIVE_PANEL_X = NAVI_LIVE_PANEL_RIGHT - NAVI_LIVE_PANEL_W
 CAMERA_BACKGROUND_X = 0.0
 CAMERA_BACKGROUND_Y = 0.0
-CAMERA_BACKGROUND_W = 1200.0
+CAMERA_BACKGROUND_W = NAVI_LIVE_PANEL_X
 CAMERA_BACKGROUND_H = DESIGN_HEIGHT
 CAMERA_BACKGROUND_ALPHA = 220
 CAMERA_BACKGROUND_VIGNETTE_ALPHA = 32
@@ -232,9 +237,6 @@ CRUISE_OVERRIDE_APPLY_COLOR = (184, 112, 24)
 SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
-NAVI_LIVE_PANEL_RIGHT = DESIGN_WIDTH - 4
-NAVI_LIVE_PANEL_W = 792
-NAVI_LIVE_PANEL_X = NAVI_LIVE_PANEL_RIGHT - NAVI_LIVE_PANEL_W
 NAVI_LIVE_PANEL_Y = 1
 NAVI_LIVE_PANEL_H = DESIGN_HEIGHT - 2
 NAVI_WORLD_VIEW_SHIFT_X = (DESIGN_WIDTH - NAVI_LIVE_PANEL_X) * 0.5
@@ -434,6 +436,56 @@ void main() {
     }
 }
 """
+NAVI_YUV420_FRAGMENT_SHADER = """
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+varying vec2 fragTexCoord;
+
+uniform sampler2D texture0;
+uniform sampler2D texture1;
+uniform sampler2D texture2;
+uniform vec2 uvScaleU;
+uniform vec2 uvScaleV;
+
+void main() {
+    float y = 1.164383 * (texture2D(texture0, fragTexCoord).r - 0.062745);
+    float u = texture2D(texture1, fragTexCoord * uvScaleU).r - 0.501961;
+    float v = texture2D(texture2, fragTexCoord * uvScaleV).r - 0.501961;
+    vec3 rgb = vec3(
+        y + 1.596027 * v,
+        y - 0.391762 * u - 0.812968 * v,
+        y + 2.017232 * u
+    );
+    gl_FragColor = vec4(clamp(rgb, 0.0, 1.0), 1.0);
+}
+"""
+NAVI_EXTERNAL_VERTEX_SHADER = """
+#version 300 es
+precision mediump float;
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
+in vec4 vertexColor;
+uniform mat4 mvp;
+out vec2 fragTexCoord;
+void main() {
+    fragTexCoord = vertexTexCoord;
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+"""
+NAVI_EXTERNAL_FRAGMENT_SHADER = """
+#version 300 es
+#extension GL_OES_EGL_image_external_essl3 : enable
+precision mediump float;
+in vec2 fragTexCoord;
+uniform samplerExternalOES texture0;
+out vec4 fragColor;
+void main() {
+    fragColor = texture(texture0, fragTexCoord);
+}
+"""
+NAVI_EGL_IMAGE_CACHE_LIMIT = 10
 
 
 @dataclass(slots=True)
@@ -444,6 +496,19 @@ class CachedTextTexture:
     texture_width: int
     texture_height: int
     padding_px: float
+
+
+@dataclass(slots=True)
+class CachedNaviMediaTexture:
+    sequence: int
+    size: tuple[int, int]
+    mime: str
+    texture: object
+    u_texture: object | None = None
+    v_texture: object | None = None
+    uv_scale_u: object | None = None
+    uv_scale_v: object | None = None
+    hardware_token: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -736,7 +801,11 @@ class ClusterUiRenderer:
         self._navi_guidance_texture = None
         self._navi_guidance_hash = ""
         self._navi_guidance_size: tuple[int, int] | None = None
-        self._navi_media_textures: dict[str, tuple[int, tuple[int, int], object]] = {}
+        self._navi_media_textures: dict[str, CachedNaviMediaTexture] = {}
+        self._navi_yuv_shader = None
+        self._navi_yuv_shader_locations: dict[str, int] = {}
+        self._navi_external_shader = None
+        self._navi_egl_images: OrderedDict[tuple[int, int], object] = OrderedDict()
         self._route_video_texture = None
         self._route_video_size: tuple[int, int] | None = None
         self._route_video_frame_id: str | None = None
@@ -804,7 +873,35 @@ class ClusterUiRenderer:
                 self._direct_nv12_readback_disabled = True
         return self._direct_nv12_readback is not None
 
+    def async_nv12_readback_available(self) -> bool:
+        if not self.direct_nv12_readback_available():
+            return False
+        return bool(self._direct_nv12_readback.async_supported)
+
+    def async_nv12_readback_can_enqueue(self) -> bool:
+        readback = self._direct_nv12_readback
+        return readback is not None and readback.async_can_enqueue()
+
+    def async_nv12_readback_ready(self) -> bool:
+        readback = self._direct_nv12_readback
+        return readback is not None and readback.async_ready()
+
+    def copy_async_nv12_readback(self, destination_address: int, destination_size: int) -> bool:
+        readback = self._direct_nv12_readback
+        if readback is None:
+            raise DirectNv12ReadbackError("TICI GLES asynchronous NV12 readback is not available")
+        profile_stage = self._profile_start()
+        copied = readback.copy_ready(destination_address, destination_size)
+        self._profile_add("render_to_nv12.readback_pbo_copy", profile_stage)
+        return copied
+
+    def disable_async_nv12_readback(self) -> None:
+        if self._direct_nv12_readback is not None:
+            self._direct_nv12_readback.disable_async()
+
     def disable_direct_nv12_readback(self) -> None:
+        if self._direct_nv12_readback is not None:
+            self._direct_nv12_readback.close()
         self._direct_nv12_readback = None
         self._direct_nv12_readback_disabled = True
 
@@ -859,6 +956,10 @@ class ClusterUiRenderer:
     def close(self) -> None:
         if not self._window_open:
             return
+        if self._direct_nv12_readback is not None:
+            self._direct_nv12_readback.close()
+            self._direct_nv12_readback = None
+            self._direct_nv12_readback_checked = False
         if self._capture_target is not None:
             rl.unload_render_texture(self._capture_target)
             self._capture_target = None
@@ -915,9 +1016,22 @@ class ClusterUiRenderer:
             self._navi_guidance_texture = None
             self._navi_guidance_hash = ""
             self._navi_guidance_size = None
-        for _, _, texture in self._navi_media_textures.values():
-            rl.unload_texture(texture)
+        for cached_media in self._navi_media_textures.values():
+            self._unload_navi_media_texture(cached_media)
         self._navi_media_textures.clear()
+        if self._navi_egl_images:
+            from openpilot.system.ui.lib.egl import destroy_egl_image
+
+            for egl_image in self._navi_egl_images.values():
+                destroy_egl_image(egl_image)
+            self._navi_egl_images.clear()
+        if self._navi_external_shader is not None:
+            rl.unload_shader(self._navi_external_shader)
+            self._navi_external_shader = None
+        if self._navi_yuv_shader is not None:
+            rl.unload_shader(self._navi_yuv_shader)
+            self._navi_yuv_shader = None
+            self._navi_yuv_shader_locations = {}
         if self._owns_font and self._font is not None:
             rl.unload_font(self._font)
         if self._owns_korean_font and self._korean_font is not None:
@@ -1605,6 +1719,7 @@ class ClusterUiRenderer:
         flip_x: bool = False,
         destination_address: int | None = None,
         destination_size: int = 0,
+        async_readback: bool = False,
     ) -> Iterator[object]:
         self.open(hidden=self.hidden)
         output_width = int(output_width)
@@ -1662,8 +1777,10 @@ class ClusterUiRenderer:
         self._profile_add("render_to_nv12.gpu_upload_transform", profile_stage)
 
         pack_direct_input = stride % 4 == 0 and byte_count % stride == 0 and uv_offset % stride == 0
-        if destination_address is not None and not pack_direct_input:
+        if (destination_address is not None or async_readback) and not pack_direct_input:
             raise DirectNv12ReadbackError("direct NV12 readback requires a four-byte packed Venus layout")
+        if destination_address is not None and async_readback:
+            raise DirectNv12ReadbackError("asynchronous NV12 readback cannot use a direct destination")
         if pack_direct_input:
             full_pack_w = stride // 4
             full_pack_h = byte_count // stride
@@ -1705,6 +1822,20 @@ class ClusterUiRenderer:
                 clear_target=False,
             )
             self._profile_add("render_to_nv12.pack_uv_shader", profile_stage)
+
+            if async_readback:
+                readback = self._direct_nv12_readback
+                if readback is None or not readback.async_supported:
+                    raise DirectNv12ReadbackError("TICI GLES asynchronous NV12 readback is not available")
+                profile_stage = self._profile_start()
+                enqueued = readback.enqueue_rgba(
+                    full_target.id,
+                    full_target.texture.width,
+                    full_target.texture.height,
+                )
+                self._profile_add("render_to_nv12.readback_pbo_enqueue", profile_stage)
+                yield enqueued
+                return
 
             if destination_address is not None:
                 readback = self._direct_nv12_readback
@@ -3093,19 +3224,22 @@ class ClusterUiRenderer:
                 center_x_offset=turn_signal_shift_x,
             )
             self._profile_add("hud.turn_signal_right", profile_stage)
-            traffic_light = (
-                state.navi_live.traffic_light
-                if state.navi_live is not None and state.navi_live.traffic_light is not None
-                else state.navi_debug.traffic_light
-                if state.navi_debug is not None
-                else None
-            )
             traffic_drawn_in_map = screen_mode == CLUSTER_SCREEN_MODE_DEFAULT and self._navi_map_frame_present(
                 state.navi_dashboard
             )
-            if traffic_light is not None and not traffic_drawn_in_map:
+            dashboard = state.navi_dashboard
+            traffic_frame = next(
+                (frame for frame in dashboard.media if frame.key == "image:traffic_signal"),
+                None,
+            ) if dashboard is not None and dashboard.connected else None
+            if traffic_frame is not None and not traffic_drawn_in_map:
                 profile_stage = self._profile_start()
-                self._draw_navi_traffic_light_panel(traffic_light)
+                self._draw_navi_media(
+                    traffic_frame,
+                    rl.Rectangle(NAVI_TRAFFIC_PANEL_RIGHT - 230.0, NAVI_TRAFFIC_PANEL_Y, 230.0, 98.0),
+                    align_x=1.0,
+                    align_y=0.0,
+                )
                 self._profile_add("hud.navi_traffic", profile_stage)
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
@@ -3557,10 +3691,6 @@ class ClusterUiRenderer:
             )
 
         self._draw_navi_media(
-            media.get("image:lane_top"),
-            rl.Rectangle(NAVI_MODE_MAP_X + 65.0, 8.0, NAVI_MODE_MAP_W - 130.0, 86.0),
-        )
-        self._draw_navi_media(
             media.get("image:lane_bottom"),
             rl.Rectangle(NAVI_MODE_MAP_X + 80.0, 298.0, NAVI_MODE_MAP_W - 160.0, 174.0),
         )
@@ -3631,12 +3761,19 @@ class ClusterUiRenderer:
                 y += slot_h
         elif navi is not None and navi.speed is not None:
             speed = navi.speed
-            if speed.sdi_type is not None:
-                sdi = "SDI"
-                if speed.sdi_speed_limit_kph is not None:
-                    sdi += f" {speed.sdi_speed_limit_kph} km/h"
-                if speed.sdi_distance_m is not None:
-                    sdi += f"  {self._format_navi_distance(speed.sdi_distance_m)}"
+            sdi_values = (
+                ("SDI", speed.sdi_type, speed.sdi_speed_limit_kph, speed.sdi_distance_m),
+                ("SDI 2", speed.secondary_sdi_type, speed.secondary_sdi_speed_limit_kph,
+                 speed.secondary_sdi_distance_m),
+            )
+            for label, sdi_type, speed_limit_kph, distance_m in sdi_values:
+                if sdi_type is None:
+                    continue
+                sdi = label
+                if speed_limit_kph is not None:
+                    sdi += f" {speed_limit_kph} km/h"
+                if distance_m is not None:
+                    sdi += f"  {self._format_navi_distance(distance_m)}"
                 self._draw_text(sdi, x, y + 6.0, 24.0, AMBER)
                 y += 40.0
             if speed.section_active:
@@ -3739,10 +3876,11 @@ class ClusterUiRenderer:
         align_y: float = 0.5,
     ) -> bool:
         texture = self._navi_media_texture_for(frame)
-        if texture is None or texture.width <= 0 or texture.height <= 0:
+        cached = self._navi_media_textures.get(frame.key) if frame is not None else None
+        if texture is None or cached is None or cached.size[0] <= 0 or cached.size[1] <= 0:
             return False
-        source_w = float(texture.width)
-        source_h = float(texture.height)
+        source_w = float(cached.size[0])
+        source_h = float(cached.size[1])
         scale = max(rect.width / source_w, rect.height / source_h) if cover else min(
             rect.width / source_w,
             rect.height / source_h,
@@ -3756,7 +3894,7 @@ class ClusterUiRenderer:
             draw_w,
             draw_h,
         )
-        rl.draw_texture_pro(texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
+        self._draw_cached_navi_media(cached, source, dest)
         return True
 
     def _navi_media_fitted_size(
@@ -3767,34 +3905,347 @@ class ClusterUiRenderer:
         cover: bool = False,
     ) -> tuple[float, float] | None:
         texture = self._navi_media_texture_for(frame)
-        if texture is None or texture.width <= 0 or texture.height <= 0:
+        cached = self._navi_media_textures.get(frame.key) if frame is not None else None
+        if texture is None or cached is None or cached.size[0] <= 0 or cached.size[1] <= 0:
             return None
-        source_w = float(texture.width)
-        source_h = float(texture.height)
+        source_w = float(cached.size[0])
+        source_h = float(cached.size[1])
         scale = max(rect.width / source_w, rect.height / source_h) if cover else min(
             rect.width / source_w,
             rect.height / source_h,
         )
         return source_w * scale, source_h * scale
 
+    def _draw_cached_navi_media(
+        self,
+        cached: CachedNaviMediaTexture,
+        source: rl.Rectangle,
+        dest: rl.Rectangle,
+    ) -> None:
+        if cached.mime == "video/nv12-dmabuf":
+            token = cached.hardware_token
+            egl_image = self._navi_egl_images.get(token) if token is not None else None
+            if egl_image is None:
+                return
+            from openpilot.system.ui.lib.egl import bind_egl_image_to_texture
+
+            shader = self._get_navi_external_shader()
+            rl.begin_shader_mode(shader)
+            try:
+                # GL_TEXTURE_EXTERNAL_OES is texture-unit state and raylib only
+                # restores GL_TEXTURE_2D during a batch draw. Rebind on every
+                # draw so the road camera cannot remain selected on texture0.
+                bind_egl_image_to_texture(cached.texture.id, egl_image)
+                rl.draw_texture_pro(cached.texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
+            finally:
+                rl.end_shader_mode()
+            return
+        if cached.mime != "image/yuv420p":
+            rl.draw_texture_pro(cached.texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
+            return
+        if cached.u_texture is None or cached.v_texture is None:
+            return
+        shader = self._get_navi_yuv_shader()
+        locations = self._navi_yuv_shader_locations
+        rl.begin_shader_mode(shader)
+        try:
+            rl.set_shader_value_texture(shader, locations["texture1"], cached.u_texture)
+            rl.set_shader_value_texture(shader, locations["texture2"], cached.v_texture)
+            rl.set_shader_value(
+                shader,
+                locations["uvScaleU"],
+                cached.uv_scale_u,
+                rl.ShaderUniformDataType.SHADER_UNIFORM_VEC2,
+            )
+            rl.set_shader_value(
+                shader,
+                locations["uvScaleV"],
+                cached.uv_scale_v,
+                rl.ShaderUniformDataType.SHADER_UNIFORM_VEC2,
+            )
+            rl.draw_texture_pro(cached.texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
+        finally:
+            rl.end_shader_mode()
+
+    def _get_navi_external_shader(self):
+        if self._navi_external_shader is None:
+            self._navi_external_shader = rl.load_shader_from_memory(
+                NAVI_EXTERNAL_VERTEX_SHADER,
+                NAVI_EXTERNAL_FRAGMENT_SHADER,
+            )
+            if not rl.is_shader_valid(self._navi_external_shader):
+                rl.unload_shader(self._navi_external_shader)
+                self._navi_external_shader = None
+                raise RuntimeError("failed to load Navi external NV12 shader")
+        return self._navi_external_shader
+
+    def _get_navi_yuv_shader(self):
+        if self._navi_yuv_shader is None:
+            self._navi_yuv_shader = rl.load_shader_from_memory(
+                NV12_PACK_VERTEX_SHADER,
+                NAVI_YUV420_FRAGMENT_SHADER,
+            )
+            if not rl.is_shader_valid(self._navi_yuv_shader):
+                rl.unload_shader(self._navi_yuv_shader)
+                self._navi_yuv_shader = None
+                raise RuntimeError("failed to load Navi YUV420 shader")
+            self._navi_yuv_shader_locations = {
+                name: rl.get_shader_location(self._navi_yuv_shader, name)
+                for name in ("texture1", "texture2", "uvScaleU", "uvScaleV")
+            }
+        return self._navi_yuv_shader
+
+    @staticmethod
+    def _load_navi_plane_texture(width: int, height: int, texture_filter):
+        image = rl.Image(None, int(width), int(height), 1, rl.PixelFormat.PIXELFORMAT_UNCOMPRESSED_GRAYSCALE)
+        texture = rl.load_texture_from_image(image)
+        if not rl.is_texture_valid(texture):
+            raise RuntimeError(f"failed to allocate Navi YUV plane texture {width}x{height}")
+        rl.set_texture_filter(texture, texture_filter)
+        return texture
+
+    @staticmethod
+    def _unload_navi_media_texture(cached: CachedNaviMediaTexture) -> None:
+        for texture in (cached.texture, cached.u_texture, cached.v_texture):
+            if texture is not None:
+                rl.unload_texture(texture)
+
+    def _evict_navi_egl_images(self) -> None:
+        if len(self._navi_egl_images) <= NAVI_EGL_IMAGE_CACHE_LIMIT:
+            return
+        from openpilot.system.ui.lib.egl import destroy_egl_image
+
+        active_tokens = {
+            cached.hardware_token
+            for cached in self._navi_media_textures.values()
+            if cached.hardware_token is not None
+        }
+        for token in tuple(self._navi_egl_images):
+            if len(self._navi_egl_images) <= NAVI_EGL_IMAGE_CACHE_LIMIT:
+                break
+            if token in active_tokens:
+                continue
+            destroy_egl_image(self._navi_egl_images.pop(token))
+
+    def _discard_stale_navi_egl_generation(self, generation: int) -> None:
+        stale_tokens = tuple(token for token in self._navi_egl_images if token[0] != generation)
+        if not stale_tokens:
+            return
+        from openpilot.system.ui.lib.egl import destroy_egl_image
+
+        for token in stale_tokens:
+            destroy_egl_image(self._navi_egl_images.pop(token))
+
+    def _upload_navi_hardware_buffer(
+        self,
+        frame: NaviMediaFrame,
+        cached: CachedNaviMediaTexture | None,
+    ):
+        hardware_buffer = frame.hardware_buffer
+        if hardware_buffer is None:
+            return cached.texture if cached is not None else None
+        width = int(frame.width)
+        height = int(frame.height)
+        stride = int(getattr(hardware_buffer, "stride", 0))
+        uv_offset = int(getattr(hardware_buffer, "uv_offset", 0))
+        fd = int(getattr(hardware_buffer, "fd", -1))
+        token = tuple(getattr(hardware_buffer, "token", ()))
+        if (
+            width <= 0
+            or height <= 0
+            or stride < width
+            or uv_offset < stride * height
+            or fd < 0
+            or len(token) != 2
+        ):
+            return cached.texture if cached is not None else None
+
+        profile_stage = self._profile_start()
+        try:
+            from openpilot.system.ui.lib.egl import bind_egl_image_to_texture, create_egl_image, init_egl
+
+            if not init_egl():
+                raise RuntimeError("EGL DMA-BUF import is unavailable")
+            self._discard_stale_navi_egl_generation(int(token[0]))
+            egl_image = self._navi_egl_images.get(token)
+            if egl_image is None:
+                egl_image = create_egl_image(width, height, stride, fd, uv_offset)
+                if egl_image is None:
+                    raise RuntimeError("EGL rejected the decoded NV12 DMA-BUF")
+                self._navi_egl_images[token] = egl_image
+            else:
+                self._navi_egl_images.move_to_end(token)
+
+            reuse = bool(
+                cached is not None
+                and cached.mime == frame.mime
+                and cached.size == (width, height)
+                and cached.u_texture is None
+                and cached.v_texture is None
+            )
+            texture = cached.texture if reuse else None
+            if texture is None:
+                image = rl.gen_image_color(1, 1, rl.BLACK)
+                try:
+                    texture = rl.load_texture_from_image(image)
+                finally:
+                    rl.unload_image(image)
+                if not rl.is_texture_valid(texture):
+                    raise RuntimeError("failed to allocate Navi external texture")
+                rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+            texture.width = width
+            texture.height = height
+            bind_egl_image_to_texture(texture.id, egl_image)
+        except Exception as exc:
+            if "texture" in locals() and texture is not None and (cached is None or texture is not cached.texture):
+                rl.unload_texture(texture)
+            mark_failed = getattr(hardware_buffer, "mark_egl_import_failed", None)
+            if mark_failed is not None:
+                mark_failed(str(exc))
+            print(
+                f"Navi hardware H264 EGL import failed token={token}; requesting PyAV fallback: {exc}",
+                flush=True,
+            )
+            return cached.texture if cached is not None else None
+
+        replacement = CachedNaviMediaTexture(
+            sequence=frame.sequence,
+            size=(width, height),
+            mime=frame.mime,
+            texture=texture,
+            hardware_token=(int(token[0]), int(token[1])),
+        )
+        if cached is not None and cached.texture is not texture:
+            self._unload_navi_media_texture(cached)
+        self._navi_media_textures[frame.key] = replacement
+        self._evict_navi_egl_images()
+        self._profile_add("navi_media.bind_nv12_dmabuf", profile_stage)
+        return texture
+
+    def _upload_navi_yuv420p(
+        self,
+        frame: NaviMediaFrame,
+        cached: CachedNaviMediaTexture | None,
+    ):
+        if frame.plane_data is None or frame.plane_strides is None:
+            return cached.texture if cached is not None else None
+        width = int(frame.width)
+        height = int(frame.height)
+        if width <= 0 or height <= 0 or (width & 1) != 0 or (height & 1) != 0:
+            return cached.texture if cached is not None else None
+        y_stride, u_stride, v_stride = (int(value) for value in frame.plane_strides)
+        chroma_width = width // 2
+        chroma_height = height // 2
+        if y_stride < width or u_stride < chroma_width or v_stride < chroma_width:
+            return cached.texture if cached is not None else None
+        plane_shapes = (
+            (y_stride, height),
+            (u_stride, chroma_height),
+            (v_stride, chroma_height),
+        )
+        if any(
+            len(data) < stride * plane_height
+            for data, (stride, plane_height) in zip(frame.plane_data, plane_shapes, strict=True)
+        ):
+            return cached.texture if cached is not None else None
+
+        reuse = bool(
+            cached is not None
+            and cached.mime == frame.mime
+            and cached.size == (width, height)
+            and cached.texture.width == y_stride
+            and cached.texture.height == height
+            and cached.u_texture is not None
+            and cached.u_texture.width == u_stride
+            and cached.v_texture is not None
+            and cached.v_texture.width == v_stride
+        )
+        replacement = cached
+        if not reuse:
+            created: list[object] = []
+            try:
+                y_texture = self._load_navi_plane_texture(
+                    y_stride,
+                    height,
+                    rl.TextureFilter.TEXTURE_FILTER_BILINEAR,
+                )
+                created.append(y_texture)
+                u_texture = self._load_navi_plane_texture(
+                    u_stride,
+                    chroma_height,
+                    rl.TextureFilter.TEXTURE_FILTER_POINT,
+                )
+                created.append(u_texture)
+                v_texture = self._load_navi_plane_texture(
+                    v_stride,
+                    chroma_height,
+                    rl.TextureFilter.TEXTURE_FILTER_POINT,
+                )
+                created.append(v_texture)
+                replacement = CachedNaviMediaTexture(
+                    sequence=frame.sequence,
+                    size=(width, height),
+                    mime=frame.mime,
+                    texture=y_texture,
+                    u_texture=u_texture,
+                    v_texture=v_texture,
+                    uv_scale_u=rl.ffi.new("float[]", [y_stride / (2.0 * u_stride), 1.0]),
+                    uv_scale_v=rl.ffi.new("float[]", [y_stride / (2.0 * v_stride), 1.0]),
+                )
+            except Exception:
+                for texture in created:
+                    rl.unload_texture(texture)
+                return cached.texture if cached is not None else None
+
+        if replacement is None or replacement.u_texture is None or replacement.v_texture is None:
+            return cached.texture if cached is not None else None
+        profile_stage = self._profile_start()
+        try:
+            for texture, plane in zip(
+                (replacement.texture, replacement.u_texture, replacement.v_texture),
+                frame.plane_data,
+                strict=True,
+            ):
+                pixels = rl.ffi.cast("void *", rl.ffi.from_buffer("const unsigned char[]", plane))
+                rl.update_texture(texture, pixels)
+        except Exception:
+            if replacement is not cached:
+                self._unload_navi_media_texture(replacement)
+            return cached.texture if cached is not None else None
+        self._profile_add("navi_media.upload_yuv420p", profile_stage)
+
+        replacement.sequence = frame.sequence
+        if replacement is not cached:
+            if cached is not None:
+                self._unload_navi_media_texture(cached)
+            self._navi_media_textures[frame.key] = replacement
+        return replacement.texture
+
     def _navi_media_texture_for(self, frame: NaviMediaFrame | None):
         if frame is None:
             return None
         cached = self._navi_media_textures.get(frame.key)
-        if not frame.present or frame.data is None:
+        has_payload = frame.hardware_buffer is not None or frame.data is not None or (
+            frame.mime == "image/yuv420p" and frame.plane_data is not None and frame.plane_strides is not None
+        )
+        if not frame.present or not has_payload:
             if cached is not None:
-                rl.unload_texture(cached[2])
+                self._unload_navi_media_texture(cached)
                 self._navi_media_textures.pop(frame.key, None)
             return None
-        if cached is not None and cached[0] == frame.sequence:
-            return cached[2]
+        if cached is not None and cached.sequence == frame.sequence and cached.mime == frame.mime:
+            return cached.texture
+        if frame.mime == "video/nv12-dmabuf":
+            return self._upload_navi_hardware_buffer(frame, cached)
+        if frame.mime == "image/yuv420p":
+            return self._upload_navi_yuv420p(frame, cached)
         size = (frame.width, frame.height)
         if frame.mime == "image/rgba":
             if len(frame.data) != frame.width * frame.height * 4:
-                return cached[2] if cached is not None else None
-            if cached is None or cached[1] != size:
+                return cached.texture if cached is not None else None
+            if cached is None or cached.mime != frame.mime or cached.size != size:
                 if cached is not None:
-                    rl.unload_texture(cached[2])
+                    self._unload_navi_media_texture(cached)
                 image = rl.gen_image_color(frame.width, frame.height, rl_color((0, 0, 0)))
                 texture = rl.load_texture_from_image(image)
                 rl.unload_image(image)
@@ -3802,10 +4253,15 @@ class ClusterUiRenderer:
                     return None
                 rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             else:
-                texture = cached[2]
+                texture = cached.texture
             pixels = rl.ffi.cast("void *", rl.ffi.from_buffer("const unsigned char[]", frame.data))
             rl.update_texture(texture, pixels)
-            self._navi_media_textures[frame.key] = (frame.sequence, size, texture)
+            self._navi_media_textures[frame.key] = CachedNaviMediaTexture(
+                frame.sequence,
+                size,
+                frame.mime,
+                texture,
+            )
             return texture
 
         extension = ".jpg" if "jpeg" in frame.mime else ".png"
@@ -3813,22 +4269,23 @@ class ClusterUiRenderer:
         try:
             loaded_image = rl.load_image_from_memory(extension, frame.data, len(frame.data))
             if not rl.is_image_valid(loaded_image):
-                return cached[2] if cached is not None else None
+                return cached.texture if cached is not None else None
             texture = rl.load_texture_from_image(loaded_image)
             if not rl.is_texture_valid(texture):
                 rl.unload_texture(texture)
-                return cached[2] if cached is not None else None
+                return cached.texture if cached is not None else None
             rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
             if cached is not None:
-                rl.unload_texture(cached[2])
-            self._navi_media_textures[frame.key] = (
+                self._unload_navi_media_texture(cached)
+            self._navi_media_textures[frame.key] = CachedNaviMediaTexture(
                 frame.sequence,
                 (int(texture.width), int(texture.height)),
+                frame.mime,
                 texture,
             )
             return texture
         except Exception:
-            return cached[2] if cached is not None else None
+            return cached.texture if cached is not None else None
         finally:
             if loaded_image is not None and rl.is_image_valid(loaded_image):
                 rl.unload_image(loaded_image)
@@ -3970,28 +4427,27 @@ class ClusterUiRenderer:
             )
 
             map_center_x = x + w * 0.5
+            center_tbt_icon_rect = rl.Rectangle(map_center_x - 55.0, y + 76.0, 110.0, 110.0)
             self._draw_navi_media(
                 media.get("image:center_tbt_icon"),
-                rl.Rectangle(map_center_x - 55.0, y + 76.0, 110.0, 110.0),
+                center_tbt_icon_rect,
             )
             self._draw_navi_media(
-                media.get("image:lane_top"),
-                rl.Rectangle(map_center_x - 210.0, y + 184.0, 420.0, 76.0),
+                media.get("image:center_tbt_text"),
+                rl.Rectangle(
+                    map_center_x - 110.0,
+                    center_tbt_icon_rect.y + center_tbt_icon_rect.height + 2.0,
+                    220.0,
+                    78.0,
+                ),
             )
-
             traffic_rect = rl.Rectangle(x + w - 242.0, y + 12.0, 230.0, 98.0)
-            drew_traffic_image = self._draw_navi_media(
+            self._draw_navi_media(
                 media.get("image:traffic_signal"),
                 traffic_rect,
                 align_x=1.0,
                 align_y=0.0,
             )
-            if not drew_traffic_image and navi is not None and navi.traffic_light is not None:
-                self._draw_navi_traffic_light_panel(
-                    navi.traffic_light,
-                    panel_right=x + w - 12.0,
-                    panel_y=y + 12.0,
-                )
 
             safety_frame = next(
                 (
@@ -4143,6 +4599,13 @@ class ClusterUiRenderer:
             if navi.speed.sdi_distance_m is not None:
                 sdi_text += f" / {self._format_navi_distance(navi.speed.sdi_distance_m)}"
             footer_parts.append(sdi_text)
+        if navi.speed is not None and navi.speed.secondary_sdi_type is not None:
+            secondary_sdi_text = "SDI2"
+            if navi.speed.secondary_sdi_speed_limit_kph:
+                secondary_sdi_text += f" {navi.speed.secondary_sdi_speed_limit_kph}"
+            if navi.speed.secondary_sdi_distance_m is not None:
+                secondary_sdi_text += f" / {self._format_navi_distance(navi.speed.secondary_sdi_distance_m)}"
+            footer_parts.append(secondary_sdi_text)
         if navi.crossroad is not None and navi.crossroad.visible:
             footer_parts.append(f"JCT {self._format_navi_distance(navi.crossroad.distance_m)}")
         if navi.status is not None and navi.status.off_route:

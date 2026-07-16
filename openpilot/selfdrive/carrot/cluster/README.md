@@ -75,12 +75,16 @@ should match live rendering cost more closely.
 renders directly into the Qualcomm/Venus-aligned NV12 layout before submit, so
 the cluster hardware path no longer depends on libyuv or a CPU RGBA-to-NV12
 conversion. On TICI with the current native bridge, the pipeline leases a cached
-ION/V4L2 input buffer and GLES reads the packed framebuffer directly into it;
-VIDC then queues the same buffer. This removes the per-frame raylib CPU image and
-C++ NV12 memcpy. It is direct handoff, not full zero-copy, because `glReadPixels`
-still performs a synchronous GPU readback. Missing symbols, an incompatible
-layout, or a first-use GL error retains/re-enters the staged compatibility path;
-set `CLUSTER_DIRECT_NV12_READBACK=0` to force that path for device A/B tests.
+ION/V4L2 input buffer. By default GLES queues packed readback into a persistent
+three-slot PBO/fence ring; a later frame nonblockingly maps only completed PBOs,
+copies one packed frame into the leased input, and submits it to VIDC. This moves
+the GPU fence off the render deadline at the cost of one explicit CPU copy and
+one frame of pipeline latency. A full ring drops the new render instead of
+blocking. Missing GLES3 symbols, a one-second fence stall, or a first-use PBO
+error falls back to synchronous direct-ION readback; an incompatible layout or
+direct-readback failure retains the staged compatibility path. Set
+`CLUSTER_ASYNC_NV12_READBACK=0` to force synchronous direct-ION A/B testing, or
+`CLUSTER_DIRECT_NV12_READBACK=0` to force staged readback.
 H264 defaults to the same exact portrait upload geometry used by
 the working JPEG/PNG and earlier ffmpeg H264 paths. For a 9.2-inch panel that
 means a 462x1920 H264 stream, with no 16-pixel render-size padding unless
@@ -115,6 +119,7 @@ the native library before hardware testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so
+scons system/loggerd/libcluster_h264_decoder_bridge.so
 ```
 
 Use `--usb-h264-backend ffmpeg --usb-h264-ffmpeg-encoder libx264` to compare
@@ -333,6 +338,14 @@ H264 runs on the `--usb-h264-fps` safety cap. Explicit `--fps` remains a fixed
 override. For H264 USB output, changing the effective FPS exits the current HUD
 process so autostart can relaunch with a matching encoder FPS when a launcher
 is present.
+
+`ClusterNaviMapFps` independently controls the Android MAP MAIN request: mode
+`0` is 5 Hz, `1` is the 10 Hz default, `2` is 20 Hz, and `3` is 30 Hz. At
+960x540 these modes select 1500, 3000, 3000, and 6000 kbps respectively; other
+resolutions scale the selected bitrate by pixel count within the protocol's
+1..12000 kbps bounds. There is no user-facing map bitrate setting. A changed
+MAP mode reconnects the Android navigation stream with a new manifest without
+changing the HUD FPS.
 Runs also show a compact lower-right cluster-process CPU overlay by current
 core, formatted like `[0(10),1(25)]`, with 2 px bottom/right margins. The
 sampler reads the current cluster process and direct child processes only,
@@ -459,10 +472,21 @@ system/platform fonts if KaiGen is not present.
 Latin/numeric text uses the 160-pixel primary font. The complete Korean glyph
 set uses a separate 32-pixel base atlas with bilinear filtering and no mip chain;
 a host resource smoke produced `8192x4096` rather than the former `8192x8192`.
-Incoming Navi H.264 is decoded on a bounded worker. If it falls behind, dependent
-frames are discarded until the next keyframe, and stale completed frames cannot
-replace a newer requested sequence. RGBA texture upload reuses the immutable
-frame buffer through CFFI rather than making another full-frame copy.
+Incoming Navi H.264 is decoded on a bounded worker. The default path attempts
+Qualcomm VIDC `/dev/video32` on every platform to produce leased linear NV12
+DMA-BUFs, imports them as EGLImages, and composes them through an external OpenGL
+texture without a decoded-pixel CPU copy or texture upload. Decoder-generation
+changes discard stale EGLImages before importing the new capture pool. If native
+decode or EGL import fails, the worker logs the reason and lazily falls back to
+PyAV YUV420P; platform markers do not control selection. Set
+`CLUSTER_HARDWARE_H264_DECODE=0` for an explicit software A/B. Diagnostic
+overrides are `CLUSTER_H264_DECODER_LIBRARY`, `CLUSTER_H264_DECODER_DEVICE`,
+`CLUSTER_H264_DECODE_TIMEOUT_MS`, and `CLUSTER_H264_DECODER_DEBUG=1`.
+
+If the decode worker falls behind, dependent frames are discarded until the
+next keyframe, and stale completed frames cannot replace a newer requested
+sequence. The PyAV fallback preserves YUV420P plane strides and uploads three
+reusable plane textures rather than expanding to RGBA.
 
 USB frame upload runs in no-ACK mode by default because some TURZX panels accept
 image data but never return a frame-upload response. Use `--usb-wait-frame-ack`

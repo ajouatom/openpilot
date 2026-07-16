@@ -148,6 +148,17 @@ def parse_carrot_navi(data: Any, now: float | None = None) -> NaviLiveState | No
             sdi_type=_int(speed_item, "sdiType", -1) if bool(_get(speed_item, "sdiPresent")) else None,
             sdi_distance_m=max(0, _int(speed_item, "sdiDistanceM")) if bool(_get(speed_item, "sdiPresent")) else None,
             sdi_speed_limit_kph=max(0, _int(speed_item, "sdiSpeedLimitKph")) if bool(_get(speed_item, "sdiPresent")) else None,
+            secondary_sdi_type=(
+                _int(speed_item, "secondarySdiType", -1) if bool(_get(speed_item, "secondarySdiPresent")) else None
+            ),
+            secondary_sdi_distance_m=(
+                max(0, _int(speed_item, "secondarySdiDistanceM"))
+                if bool(_get(speed_item, "secondarySdiPresent")) else None
+            ),
+            secondary_sdi_speed_limit_kph=(
+                max(0, _int(speed_item, "secondarySdiSpeedLimitKph"))
+                if bool(_get(speed_item, "secondarySdiPresent")) else None
+            ),
             section_active=bool(_get(speed_item, "sectionActive", False)),
             section_speed_limit_kph=(
                 max(0, _int(speed_item, "sectionSpeedLimitKph")) if bool(_get(speed_item, "sectionPresent")) else None

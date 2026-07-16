@@ -928,6 +928,7 @@ def run_demo(
     h264_render_nv12_buffer: bytearray | None = None
     h264_render_nv12_layout: tuple[int, int, int, int, int, int, bool] | None = None
     h264_direct_nv12_input = False
+    h264_async_nv12_input = False
 
     def switch_route_source(
         new_path: Path,
@@ -1029,13 +1030,18 @@ def run_demo(
                     h264_pipeline.native_direct_input_available()
                     and renderer.direct_nv12_readback_available()
                 )
+                h264_async_nv12_input = (
+                    h264_direct_nv12_input
+                    and renderer.async_nv12_readback_available()
+                )
                 print(
                     f"Using H264 native NV12 render path: "
                     f"{h264_pipeline.encoder_width}x{h264_pipeline.encoder_height} "
                     f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
                     f"uv_offset={uv_offset} bytes={input_bytes} render_bytes={render_bytes} "
                     f"active_submit={'on' if active_submit else 'off'} "
-                    f"direct_ion={'on' if h264_direct_nv12_input else 'off'} flip_x=on",
+                    f"direct_ion={'on' if h264_direct_nv12_input else 'off'} "
+                    f"async_pbo={'on' if h264_async_nv12_input else 'off'} flip_x=on",
                     flush=True,
                 )
             if usb_h264_test_pattern:
@@ -1564,8 +1570,56 @@ def run_demo(
                             if h264_render_nv12_layout is None:
                                 raise RuntimeError("H264 GPU NV12 render path is missing the native layout")
                             stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, _ = h264_render_nv12_layout
-                            direct_submitted = False
-                            if h264_direct_nv12_input:
+                            native_frame_handled = False
+                            if h264_async_nv12_input:
+                                try:
+                                    if renderer.async_nv12_readback_ready():
+                                        profile_stage = time.perf_counter()
+                                        with h264_pipeline.native_nv12_input_buffer() as direct_input:
+                                            profile.add_elapsed("main.usb_h264.acquire_pbo", profile_stage)
+
+                                            profile_stage = time.perf_counter()
+                                            if not renderer.copy_async_nv12_readback(
+                                                direct_input.address,
+                                                direct_input.size,
+                                            ):
+                                                raise DirectNv12ReadbackError(
+                                                    "ready NV12 PBO was unavailable during copy"
+                                                )
+                                            profile.add_elapsed("main.usb_h264.copy_pbo", profile_stage)
+
+                                            profile_stage = time.perf_counter()
+                                            h264_pipeline.submit_native_nv12_input(direct_input)
+                                            profile.add_elapsed("main.usb_h264.submit_pbo", profile_stage)
+
+                                    if renderer.async_nv12_readback_can_enqueue():
+                                        profile_stage = time.perf_counter()
+                                        with renderer.render_to_nv12_buffer(
+                                            state,
+                                            h264_pipeline.encoder_width,
+                                            h264_pipeline.encoder_height,
+                                            stride,
+                                            y_scanlines,
+                                            uv_scanlines,
+                                            uv_offset,
+                                            render_bytes,
+                                            flip_x=not bool(active_hud_mirror_mode & 1),
+                                            async_readback=True,
+                                        ):
+                                            pass
+                                        profile.add_elapsed("main.usb.render_nv12_pbo_total", profile_stage)
+                                    else:
+                                        profile.add("main.usb_h264.pbo_ring_full_drop", 0.0)
+                                    native_frame_handled = True
+                                except DirectNv12ReadbackError as exc:
+                                    h264_async_nv12_input = False
+                                    renderer.disable_async_nv12_readback()
+                                    print(
+                                        f"H264 asynchronous PBO readback unavailable; using synchronous direct ION: {exc}",
+                                        flush=True,
+                                    )
+
+                            if not native_frame_handled and h264_direct_nv12_input:
                                 try:
                                     profile_stage = time.perf_counter()
                                     with h264_pipeline.native_nv12_input_buffer() as direct_input:
@@ -1590,16 +1644,17 @@ def run_demo(
                                         profile_stage = time.perf_counter()
                                         h264_pipeline.submit_native_nv12_input(direct_input)
                                         profile.add_elapsed("main.usb_h264.submit_direct", profile_stage)
-                                    direct_submitted = True
+                                    native_frame_handled = True
                                 except DirectNv12ReadbackError as exc:
                                     h264_direct_nv12_input = False
+                                    h264_async_nv12_input = False
                                     renderer.disable_direct_nv12_readback()
                                     print(
                                         f"H264 direct ION readback unavailable; using staged NV12 fallback: {exc}",
                                         flush=True,
                                     )
 
-                            if not direct_submitted:
+                            if not native_frame_handled:
                                 profile_stage = time.perf_counter()
                                 with renderer.render_to_nv12_buffer(
                                     state,

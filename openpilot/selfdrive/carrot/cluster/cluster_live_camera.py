@@ -223,11 +223,13 @@ class LiveRoadCamera:
 
         self._texture.width = self._frame.width
         self._texture.height = self._frame.height
-        if self._texture_needs_update:
-            bind_egl_image_to_texture(self._texture.id, egl_image)
-            self._texture_needs_update = False
         rl.begin_shader_mode(self._shader)
         try:
+            # Navigation H264 frames also use samplerExternalOES on texture0.
+            # Raylib does not restore that binding for us, so select the current
+            # road-camera EGLImage immediately before every external draw.
+            bind_egl_image_to_texture(self._texture.id, egl_image)
+            self._texture_needs_update = False
             rl.draw_texture_pro(
                 self._texture,
                 source,

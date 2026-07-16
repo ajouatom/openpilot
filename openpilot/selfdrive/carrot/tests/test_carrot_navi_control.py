@@ -104,3 +104,63 @@ def test_off_route_suppresses_distance_based_control():
 def test_disconnected_or_wrong_schema_is_rejected():
   assert parse_carrot_navi_control(_message(connected=False)) is None
   assert parse_carrot_navi_control(_message(schemaVersion=2)) is None
+
+
+def test_parses_vehicle_route_traffic_and_secondary_sdi():
+  control = parse_carrot_navi_control(_message(
+    vehicle={
+      "meta": _meta(10),
+      "latitude": 37.5,
+      "longitude": 127.1,
+      "headingDeg": 361.0,
+      "speedKph": 42.5,
+      "roadName": "Test road",
+    },
+    speed={
+      "meta": _meta(11),
+      "sdiPresent": True,
+      "sdiType": 1,
+      "sdiDistanceM": 420,
+      "sdiSpeedLimitKph": 50,
+      "sdiSectionType": 7,
+      "sdiBlockType": 2,
+      "sdiBlockSpeedKph": 40,
+      "sdiBlockDistanceM": 390,
+      "secondarySdiPresent": True,
+      "secondarySdiType": 22,
+      "secondarySdiDistanceM": 93,
+    },
+    route={
+      "meta": _meta(12),
+      "remainingDistanceM": 12500,
+      "remainingTimeSec": 1320,
+      "polyline": [
+        {"latitude": 37.5, "longitude": 127.1},
+        {"latitude": 37.6, "longitude": 127.2},
+      ],
+    },
+    trafficSignal={
+      "meta": _meta(13),
+      "visible": True,
+      "distanceM": 145,
+      "source": "ssinf",
+      "redValid": True,
+      "redOn": True,
+      "redRemainSec": 18,
+    },
+    laneCurrent={"meta": _meta(15), "roadCategory": 6},
+    navigationStatus={"meta": _meta(14), "guidanceActive": True},
+  ))
+
+  assert control is not None
+  assert control.vehicle.present
+  assert (control.vehicle.latitude, control.vehicle.longitude, control.vehicle.heading_deg) == (37.5, 127.1, 1.0)
+  assert control.vehicle.road_name == "Test road"
+  assert control.speed.sdi_block_distance_m == 390
+  assert control.speed.secondary_sdi_present
+  assert (control.speed.secondary_sdi_type, control.speed.secondary_sdi_distance_m) == (22, 93)
+  assert control.route.remaining_distance_m == 12500
+  assert control.route.polyline == ((37.5, 127.1), (37.6, 127.2))
+  assert (control.traffic.lamp, control.traffic.remain_sec) == ("red", 18)
+  assert control.road_category == 6
+  assert control.guidance_active

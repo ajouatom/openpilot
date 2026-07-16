@@ -490,7 +490,8 @@
                 "ClusterHudMirror",
                 "ClusterHudTheme",
                 "ClusterNaviMapTheme",
-                "ClusterNaviMapType"
+                "ClusterNaviMapType",
+                "ClusterNaviMapFps"
               ]
             },
             {
@@ -3107,6 +3108,22 @@
       "min": 0,
       "max": 1,
       "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "외부 HUD",
+      "name": "ClusterNaviMapFps",
+      "title": "클러스터 내비 지도 FPS(1)",
+      "descr": "0: 5 FPS\n1: 10 FPS(기본)\n2: 20 FPS\n3: 30 FPS\nHUD FPS와는 별개이며 지도 비트레이트는 자동 설정됩니다.\n변경하면 외부 내비가 자동으로 다시 연결됩니다.",
+      "egroup": "CLUSTER HUD",
+      "etitle": "Cluster Navi Map FPS(1)",
+      "edescr": "0: 5 FPS\n1: 10 FPS (default)\n2: 20 FPS\n3: 30 FPS\nThis is independent of HUD FPS and map bitrate is selected automatically.\nThe external navigation app reconnects automatically when changed.",
+      "cgroup": "外部 HUD",
+      "ctitle": "集群导航地图 FPS(1)",
+      "cdescr": "0: 5 FPS\n1: 10 FPS（默认）\n2: 20 FPS\n3: 30 FPS\n此设置独立于 HUD FPS，地图比特率自动设置。\n更改后外部导航应用会自动重新连接。",
+      "min": 0,
+      "max": 3,
+      "default": 1,
       "unit": 1
     },
     {

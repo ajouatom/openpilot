@@ -17,7 +17,10 @@ sys.path.insert(0, str(CLUSTER_DIR))
 from cluster_navi import fresh_carrot_navi, parse_carrot_navi
 from cluster_navi_overlay import merge_navi_overlay_state
 from cluster_navi_source import (
+  DecodedH264Frame,
+  H264_DECODE_QUEUE_MAX,
   MAP_FRAME_STALE_TIMEOUT_MS,
+  H264Decoder,
   H264DecodeWorker,
   NaviIpcMediaSource,
   NaviSimulatorSource,
@@ -25,7 +28,15 @@ from cluster_navi_source import (
   _H264DecodeResult,
 )
 from cluster_models import NaviDashboardState, NaviMediaFrame, TpmsInfo
-from cluster_renderer import SIDE_GAUGE_OUTLINE, ClusterUiRenderer
+from cluster_renderer import (
+  CAMERA_BACKGROUND_X,
+  CAMERA_BACKGROUND_W,
+  DESIGN_HEIGHT,
+  DESIGN_WIDTH,
+  NAVI_LIVE_PANEL_X,
+  SIDE_GAUGE_OUTLINE,
+  ClusterUiRenderer,
+)
 
 
 def _namespace(value):
@@ -44,6 +55,15 @@ def _record(value, sequence: int, received_s: float):
     "received_mono_ns": int(received_s * 1_000_000_000),
     "value": value,
   }
+
+
+def _decoded_yuv_frame(value: bytes) -> DecodedH264Frame:
+  return DecodedH264Frame(
+    width=2,
+    height=2,
+    planes=(value * 4, b"\x80", b"\x80"),
+    strides=(2, 1, 1),
+  )
 
 
 def test_parse_and_expire_live_navi_groups_independently():
@@ -69,6 +89,7 @@ def test_parse_and_expire_live_navi_groups_independently():
         "current_kph": 48,
         "road_limit_kph": 50,
         "sdi": {"type": 1, "distance_m": 420, "speed_limit_kph": 50},
+        "sdi_secondary": {"type": 22, "distance_m": 93},
       }, 3, 100.0),
       "traffic_signal": _record({
         "visible": True,
@@ -90,6 +111,8 @@ def test_parse_and_expire_live_navi_groups_independently():
   assert state.current is not None and state.current.main_text == "Turn left"
   assert state.lane_current is not None and state.lane_current.available == (0, 8, 8, 0)
   assert state.speed is not None and state.speed.road_limit_kph == 50
+  assert state.speed.secondary_sdi_type == 22
+  assert state.speed.secondary_sdi_distance_m == 93
   assert state.traffic_light is not None and state.traffic_light.red_s == 18
   assert state.route is not None and state.route.polyline == ((37.5, 127.0),)
 
@@ -147,6 +170,66 @@ def test_stale_map_frame_is_removed_from_media_cache():
   assert "render:map_main" not in source._media
 
 
+def test_h264_decoder_preserves_yuv420_planes_and_strides():
+  class FakePlane:
+    def __init__(self, data, line_size):
+      self._data = data
+      self.line_size = line_size
+
+    def __bytes__(self):
+      return self._data
+
+  frame = SimpleNamespace(
+    width=4,
+    height=2,
+    format=SimpleNamespace(name="yuv420p"),
+    planes=(
+      FakePlane(b"y" * 16, 8),
+      FakePlane(b"u" * 4, 4),
+      FakePlane(b"v" * 4, 4),
+    ),
+  )
+  decoder = object.__new__(H264Decoder)
+  decoder._codec = SimpleNamespace(decode=lambda _packet: [frame])
+  decoder._av = SimpleNamespace(Packet=lambda payload: payload, FFmpegError=RuntimeError)
+
+  decoded = decoder.decode(b"access-unit")
+
+  assert decoded == DecodedH264Frame(
+    width=4,
+    height=2,
+    planes=(b"y" * 16, b"u" * 4, b"v" * 4),
+    strides=(8, 4, 4),
+  )
+
+
+def test_h264_decoder_prefers_tici_hardware_buffer(monkeypatch):
+  hardware_buffer = SimpleNamespace(width=960, height=540, sequence=17)
+  calls = []
+
+  class FakeHardwareDecoder:
+    def decode(self, payload, sequence):
+      calls.append((payload, sequence))
+      return hardware_buffer
+
+    def close(self):
+      calls.append("close")
+
+  monkeypatch.setitem(
+    H264Decoder.decode.__globals__,
+    "create_tici_h264_decoder",
+    lambda width, height: calls.append((width, height)) or FakeHardwareDecoder(),
+  )
+  decoder = H264Decoder()
+
+  decoded = decoder.decode(b"access-unit", sequence=17, width=960, height=540)
+  decoder.close()
+
+  assert decoded == DecodedH264Frame(width=960, height=540, hardware_buffer=hardware_buffer)
+  assert calls == [(960, 540), (b"access-unit", 17), "close"]
+  assert decoder._codec is None
+
+
 def test_h264_decode_worker_drops_backlog_until_next_keyframe():
   started = threading.Event()
   release = threading.Event()
@@ -156,11 +239,11 @@ def test_h264_decode_worker_drops_backlog_until_next_keyframe():
     def reset(self):
       reset_calls.append(True)
 
-    def decode(self, payload):
+    def decode(self, payload, **_kwargs):
       if payload.endswith(b"1"):
         started.set()
         assert release.wait(1.0)
-      return payload[-1:] * 4, 1, 1
+      return _decoded_yuv_frame(payload[-1:])
 
   def request(sequence, *, keyframe=False):
     return _H264DecodeRequest(
@@ -177,52 +260,174 @@ def test_h264_decode_worker_drops_backlog_until_next_keyframe():
   try:
     worker.submit(request(1, keyframe=True))
     assert started.wait(1.0)
-    worker.submit(request(2))
-    worker.submit(request(3))
-    worker.submit(request(4))
-    worker.submit(request(5))
-    worker.submit(request(6, keyframe=True))
+    for sequence in range(2, H264_DECODE_QUEUE_MAX + 3):
+      worker.submit(request(sequence))
+    next_keyframe = H264_DECODE_QUEUE_MAX + 3
+    worker.submit(request(next_keyframe, keyframe=True))
     release.set()
 
     latest = None
     deadline = time.monotonic() + 1.0
-    while time.monotonic() < deadline and (latest is None or latest.frame.sequence != 6):
+    while time.monotonic() < deadline and (latest is None or latest.frame.sequence != next_keyframe):
       results = worker.poll()
       if results:
         latest = results[-1]
       time.sleep(0.005)
 
     assert latest is not None
-    assert latest.frame.sequence == 6
-    assert latest.frame.data == b"6666"
-    assert worker.dropped_requests == 4
+    assert latest.frame.sequence == next_keyframe
+    assert latest.frame.mime == "image/yuv420p"
+    assert latest.frame.plane_data == (
+      str(next_keyframe).encode()[-1:] * 4,
+      b"\x80",
+      b"\x80",
+    )
+    assert worker.dropped_requests == H264_DECODE_QUEUE_MAX + 1
     assert len(reset_calls) == 1
   finally:
     release.set()
     worker.close()
 
 
+def test_h264_decode_worker_accepts_sixty_hz_poll_burst():
+  started = threading.Event()
+  release = threading.Event()
+
+  class FakeDecoder:
+    def reset(self):
+      pass
+
+    def decode(self, payload, **_kwargs):
+      if payload.endswith(b"1"):
+        started.set()
+        assert release.wait(1.0)
+      return _decoded_yuv_frame(payload[-1:])
+
+  def request(sequence, *, keyframe=False):
+    return _H264DecodeRequest(
+      epoch=1,
+      key="render:map_main",
+      sequence=sequence,
+      payload=str(sequence).encode(),
+      config_payload=b"config",
+      config_sequence=1,
+      keyframe=keyframe,
+    )
+
+  worker = H264DecodeWorker(decoder_factory=FakeDecoder)
+  try:
+    worker.submit(request(1, keyframe=True))
+    assert started.wait(1.0)
+    for sequence in range(2, 8):
+      worker.submit(request(sequence))
+    release.set()
+
+    latest = None
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and (latest is None or latest.frame.sequence != 7):
+      results = worker.poll()
+      if results:
+        latest = results[-1]
+      time.sleep(0.005)
+
+    assert latest is not None
+    assert latest.frame.sequence == 7
+    assert worker.dropped_requests == 0
+  finally:
+    release.set()
+    worker.close()
+
+
+def test_h264_decode_worker_ignores_repeated_identical_codec_config():
+  reset_calls = []
+
+  class FakeDecoder:
+    def reset(self):
+      reset_calls.append(True)
+
+    def decode(self, payload, **_kwargs):
+      return _decoded_yuv_frame(payload[-1:])
+
+  def request(sequence, config_sequence, config_payload):
+    return _H264DecodeRequest(
+      epoch=1,
+      key="render:map_main",
+      sequence=sequence,
+      payload=str(sequence).encode(),
+      config_payload=config_payload,
+      config_sequence=config_sequence,
+      keyframe=True,
+      width=960,
+      height=540,
+    )
+
+  def wait_for(worker, sequence):
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+      results = worker.poll()
+      if results and results[-1].frame.sequence == sequence:
+        return
+      time.sleep(0.005)
+    raise AssertionError(f"decoder result {sequence} did not arrive")
+
+  worker = H264DecodeWorker(decoder_factory=FakeDecoder)
+  try:
+    worker.submit(request(1, 10, b"same-config"))
+    wait_for(worker, 1)
+    worker.submit(request(2, 11, b"same-config"))
+    wait_for(worker, 2)
+    assert reset_calls == []
+
+    worker.submit(request(3, 12, b"changed-config"))
+    wait_for(worker, 3)
+    assert reset_calls == [True]
+  finally:
+    worker.close()
+
+
 def test_navi_source_rejects_stale_h264_worker_result():
   source = object.__new__(NaviSimulatorSource)
-  source._media = {}
+  source._media = {
+    "render:map_main": NaviMediaFrame("render:map_main", 8, False, reason="source_absent"),
+  }
   source._media_epoch = 2
-  source._h264_requested_sequences = {"render:map_main": 8}
   stale = _H264DecodeResult(
     epoch=2,
     frame=NaviMediaFrame("render:map_main", 7, True, "image/rgba", 1, 1, b"old!"),
   )
   latest = _H264DecodeResult(
     epoch=2,
-    frame=NaviMediaFrame("render:map_main", 8, True, "image/rgba", 1, 1, b"new!"),
+    frame=NaviMediaFrame("render:map_main", 9, True, "image/rgba", 1, 1, b"new!"),
   )
   results = iter(((stale,), (latest,)))
   source._h264_worker = SimpleNamespace(poll=lambda: next(results))
 
   source._apply_h264_results()
-  assert source._media == {}
+  assert source._media["render:map_main"].sequence == 8
+  assert source._media["render:map_main"].present is False
 
   source._apply_h264_results()
-  assert source._media["render:map_main"].sequence == 8
+  assert source._media["render:map_main"].sequence == 9
+
+
+def test_navi_source_accepts_decoded_frame_behind_latest_request():
+  source = object.__new__(NaviIpcMediaSource)
+  source._media = {
+    "render:map_main": NaviMediaFrame("render:map_main", 10, True, "image/rgba", 1, 1, b"old!"),
+  }
+  source._media_epoch = 2
+  source._h264_requested_sequences = {"render:map_main": 15}
+  source._map_frame_at_s = 0.0
+  result = _H264DecodeResult(
+    epoch=2,
+    frame=NaviMediaFrame("render:map_main", 12, True, "image/rgba", 1, 1, b"new!"),
+  )
+  source._h264_worker = SimpleNamespace(poll=lambda: (result,))
+
+  source._apply_h264_results(123.0)
+
+  assert source._media["render:map_main"].sequence == 12
+  assert source._map_frame_at_s == 123.0
 
 
 def test_disconnected_dashboard_draws_system_panel(monkeypatch):
@@ -255,7 +460,16 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   renderer = object.__new__(ClusterUiRenderer)
   frames = {
     key: NaviMediaFrame(key, 1, True, "image/rgba", 1, 1, b"rgba")
-    for key in ("render:map_main", "image:tbt_current_compact", "image:tbt_next", "image:lane_bottom")
+    for key in (
+      "render:map_main",
+      "image:tbt_current_compact",
+      "image:tbt_next",
+      "image:lane_top",
+      "image:lane_bottom",
+      "image:traffic_signal",
+      "image:center_tbt_icon",
+      "image:center_tbt_text",
+    )
   }
   dashboard = NaviDashboardState(True, "ipc://carrotNaviMedia", media=tuple(frames.values()))
   drawn = {}
@@ -268,6 +482,11 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   monkeypatch.setattr(ClusterUiRenderer, "_rounded_rect", lambda *args, **kwargs: None)
   monkeypatch.setattr(ClusterUiRenderer, "_draw_navi_crossroad_box", lambda *args, **kwargs: None)
   monkeypatch.setattr(ClusterUiRenderer, "_navi_media_fitted_size", lambda self, frame, rect: (rect.width, rect.height))
+  monkeypatch.setattr(
+    ClusterUiRenderer,
+    "_draw_navi_traffic_light_panel",
+    lambda *args, **kwargs: pytest.fail("structured traffic signal fallback must not render"),
+  )
 
   def capture_media(self, frame, rect, **kwargs):
     if frame is not None:
@@ -279,7 +498,8 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   monkeypatch.setattr("cluster_renderer.rl.begin_scissor_mode", lambda *args, **kwargs: None)
   monkeypatch.setattr("cluster_renderer.rl.end_scissor_mode", lambda: None)
 
-  renderer._draw_navi_live_panel(SimpleNamespace(navi_live=None, navi_dashboard=dashboard))
+  navi = SimpleNamespace(traffic_light=object(), route=None, vehicle=None)
+  renderer._draw_navi_live_panel(SimpleNamespace(navi_live=navi, navi_dashboard=dashboard))
 
   assert drawn["image:tbt_current_compact"].width == pytest.approx(310.0 * 1.2)
   assert drawn["image:tbt_current_compact"].height == pytest.approx(116.0 * 1.2)
@@ -287,6 +507,38 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   assert drawn["image:tbt_next"].height == pytest.approx(68.0 * 1.2)
   assert drawn["image:lane_bottom"].width == pytest.approx(226.0 * 1.2)
   assert drawn["image:lane_bottom"].height == pytest.approx(67.0 * 1.2)
+  assert drawn["image:traffic_signal"].width == pytest.approx(230.0)
+  assert drawn["image:traffic_signal"].height == pytest.approx(98.0)
+  center_icon = drawn["image:center_tbt_icon"]
+  center_text = drawn["image:center_tbt_text"]
+  assert center_text.x + center_text.width * 0.5 == pytest.approx(center_icon.x + center_icon.width * 0.5)
+  assert center_text.y == pytest.approx(center_icon.y + center_icon.height + 2.0)
+  assert center_text.width == pytest.approx(220.0)
+  assert center_text.height == pytest.approx(78.0)
+  assert "image:lane_top" not in drawn
+
+
+def test_navi_dashboard_hides_top_lane_and_draws_received_signal(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  frames = {
+    key: NaviMediaFrame(key, 1, True, "image/rgba", 1, 1, b"rgba")
+    for key in ("image:lane_top", "image:lane_bottom", "image:traffic_signal")
+  }
+  drawn = {}
+
+  def capture_media(self, frame, rect, **kwargs):
+    if frame is not None:
+      drawn[frame.key] = rect
+    return True
+
+  monkeypatch.setattr(ClusterUiRenderer, "_draw_navi_media", capture_media)
+
+  renderer._draw_navi_map_media(frames)
+
+  assert "image:lane_top" not in drawn
+  assert drawn["image:lane_bottom"].height == pytest.approx(174.0)
+  assert drawn["image:traffic_signal"].width == pytest.approx(230.0)
+  assert drawn["image:traffic_signal"].height == pytest.approx(98.0)
 
 
 def test_ipc_media_source_restores_standalone_navigation_images():
@@ -381,6 +633,18 @@ def test_navi_panel_uses_same_design_shift_for_turn_signals():
   )) == 0
 
 
+def test_road_camera_ends_exactly_where_right_navigation_panel_begins():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = DESIGN_WIDTH
+  renderer.height = DESIGN_HEIGHT
+
+  camera_rect = renderer._camera_overlay_content_rect()
+
+  assert camera_rect.x == CAMERA_BACKGROUND_X
+  assert camera_rect.x + camera_rect.width == NAVI_LIVE_PANEL_X
+  assert CAMERA_BACKGROUND_W == NAVI_LIVE_PANEL_X
+
+
 def test_dark_theme_uses_visible_side_gauge_outlines(monkeypatch):
   renderer = object.__new__(ClusterUiRenderer)
   state = SimpleNamespace(camera_view_mode=0)
@@ -451,6 +715,7 @@ def test_embedded_navi_source_projects_json_and_png(unused_tcp_port):
     manifest = source.receiver.negotiate({
       "type": "requirements_query",
       "protocol_version": 2,
+      "catalog_revision": 1,
       "streams": [
         {"kind": kind, "name": name, "schema_version": 1}
         for kind, name in CATALOG
@@ -477,6 +742,7 @@ def test_embedded_navi_source_projects_json_and_png(unused_tcp_port):
       "stream_handle": vehicle["stream_handle"],
       "sequence": 1,
       "source_timestamp_ms": 1000,
+      "sent_at_ms": 1001,
       "present": True,
       "value": {"lat": 37.5, "lon": 127.0, "speed_kph": 36, "road_name": "Navi road"},
     }, "127.0.0.1")

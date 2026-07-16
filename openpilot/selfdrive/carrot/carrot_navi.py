@@ -26,6 +26,7 @@ DEFAULT_PORT = 7714
 DISCOVERY_PORT = 7705
 DISCOVERY_INTERVAL_S = 1.0
 PROTOCOL_VERSION = 2
+CATALOG_REVISION = 1
 MAX_MESSAGE_BYTES = 8 * 1024 * 1024
 CONTROL_WEBSOCKET_HEARTBEAT_S = 5.0
 STREAM_WEBSOCKET_HEARTBEAT_S = 10.0
@@ -33,6 +34,27 @@ BIND_RETRY_COUNT = 10
 BIND_RETRY_INTERVAL_S = 0.5
 MAP_THEMES = frozenset(("auto", "dark", "light"))
 MAP_TYPES = frozenset(("normal", "satellite"))
+MAP_RENDER_WIDTH = 960
+MAP_RENDER_HEIGHT = 540
+MAP_HZ_MIN = 1
+MAP_HZ_MAX = 60
+MAP_HZ_DEFAULT = 10
+MAP_BITRATE_KBPS_MIN = 1
+MAP_BITRATE_KBPS_MAX = 12_000
+MAP_BITRATE_KBPS_DEFAULT = 3_000
+MAP_AUTO_BITRATE_REFERENCE_HZ = 10
+MAP_AUTO_BITRATE_KBPS_BY_HZ = {
+  5: 1_500,
+  10: 3_000,
+  20: 3_000,
+  30: 6_000,
+}
+MAP_HZ_BY_MODE = {
+  0: 5,
+  1: 10,
+  2: 20,
+  3: 30,
+}
 BINARY_HEADER = struct.Struct(">4sBBBBIIQQIHH")
 
 JSON_NAMES = (
@@ -59,6 +81,7 @@ CATALOG = tuple(
   + [("render", name) for name in RENDER_NAMES]
 )
 CATALOG_SET = frozenset(CATALOG)
+JSON_ARRAY_NAMES = frozenset(("lane_ahead",))
 CLEAR_REASONS = {
   1: "source_absent",
   2: "cleared",
@@ -164,6 +187,33 @@ def now_ms() -> int:
   return time.time_ns() // 1_000_000
 
 
+def resolve_map_hz(map_fps_mode: object) -> int:
+  try:
+    map_mode = int(map_fps_mode)
+  except (TypeError, ValueError):
+    map_mode = 1
+  return MAP_HZ_BY_MODE.get(map_mode, MAP_HZ_DEFAULT)
+
+
+def resolve_map_bitrate_kbps(
+  width: int,
+  height: int,
+  map_hz: int,
+) -> int:
+  pixels = max(1, int(width)) * max(1, int(height))
+  effective_hz = max(MAP_HZ_MIN, min(MAP_HZ_MAX, int(map_hz)))
+  reference_pixels = MAP_RENDER_WIDTH * MAP_RENDER_HEIGHT
+  reference_bitrate = MAP_AUTO_BITRATE_KBPS_BY_HZ.get(effective_hz)
+  if reference_bitrate is None:
+    reference_bitrate = (
+      MAP_BITRATE_KBPS_DEFAULT * effective_hz + MAP_AUTO_BITRATE_REFERENCE_HZ // 2
+    ) // MAP_AUTO_BITRATE_REFERENCE_HZ
+  numerator = reference_bitrate * pixels
+  denominator = reference_pixels
+  automatic = (numerator + denominator // 2) // denominator
+  return max(MAP_BITRATE_KBPS_MIN, min(MAP_BITRATE_KBPS_MAX, automatic))
+
+
 def parse_json_object(raw: str) -> dict[str, Any]:
   value = json.loads(raw)
   if not isinstance(value, dict):
@@ -234,6 +284,8 @@ def _stream_params(
   name: str,
   map_theme: str = "auto",
   map_type: str = "normal",
+  map_hz: int = MAP_HZ_DEFAULT,
+  map_bitrate_kbps: int = MAP_BITRATE_KBPS_DEFAULT,
 ) -> dict[str, Any]:
   if kind == "json":
     return {
@@ -248,17 +300,17 @@ def _stream_params(
       "stale_timeout_ms": 15000,
     }
     if name.startswith("crossroad_"):
-      params["theme"] = "auto"
+      params["theme"] = map_theme
     return params
   return {
     "composition": "map_route_vehicle",
-    "width": 960,
-    "height": 540,
+    "width": MAP_RENDER_WIDTH,
+    "height": MAP_RENDER_HEIGHT,
     "dpi": 360,
-    "fps": 5,
+    "fps": map_hz,
     "jpeg_quality": 75,
     "codec": "h264",
-    "h264_bitrate_kbps": 3000,
+    "h264_bitrate_kbps": map_bitrate_kbps,
     "h264_keyframe_interval_sec": 2,
     "camera_mode": "app_sync",
     "map_theme": map_theme,
@@ -281,6 +333,8 @@ def build_manifest(
   revision: int = 1,
   map_theme: str = "auto",
   map_type: str = "normal",
+  map_hz: int = MAP_HZ_DEFAULT,
+  map_bitrate_kbps: int = MAP_BITRATE_KBPS_DEFAULT,
 ) -> dict[str, Any]:
   normalized_map_theme = str(map_theme).strip().lower()
   if normalized_map_theme not in MAP_THEMES:
@@ -288,6 +342,10 @@ def build_manifest(
   normalized_map_type = str(map_type).strip().lower()
   if normalized_map_type not in MAP_TYPES:
     raise ValueError(f"unsupported map type: {map_type}")
+  if not MAP_HZ_MIN <= int(map_hz) <= MAP_HZ_MAX:
+    raise ValueError(f"unsupported map refresh rate: {map_hz}")
+  if not MAP_BITRATE_KBPS_MIN <= int(map_bitrate_kbps) <= MAP_BITRATE_KBPS_MAX:
+    raise ValueError(f"unsupported map bitrate: {map_bitrate_kbps}")
   streams = []
   for handle, (kind, name) in enumerate(CATALOG, start=1):
     streams.append({
@@ -296,7 +354,10 @@ def build_manifest(
       "schema_version": 1,
       "stream_handle": handle,
       "enabled": True,
-      "params": _stream_params(kind, name, normalized_map_theme, normalized_map_type),
+      "params": _stream_params(
+        kind, name, normalized_map_theme, normalized_map_type,
+        int(map_hz), int(map_bitrate_kbps),
+      ),
     })
   return {
     "type": "subscription_manifest",
@@ -318,6 +379,7 @@ class ItemRecord:
   manifest_revision: int
   sequence: int
   source_timestamp_ms: int
+  sent_at_ms: int | None
   present: bool
   value: Any
   payload: bytes | None
@@ -347,6 +409,7 @@ class ItemRecord:
       "bytes": len(self.payload) if self.payload is not None else 0,
     }
     if self.kind == "json":
+      result["sent_at_ms"] = self.sent_at_ms
       result["value"] = copy.deepcopy(self.value)
     else:
       result.update({
@@ -365,6 +428,8 @@ class CarrotNaviReceiver:
     port: int = DEFAULT_PORT,
     map_theme: str = "auto",
     map_type: str = "normal",
+    map_hz: int = MAP_HZ_DEFAULT,
+    map_bitrate_kbps: int = MAP_BITRATE_KBPS_DEFAULT,
   ) -> None:
     self._lock = threading.RLock()
     self._port = port
@@ -374,6 +439,12 @@ class CarrotNaviReceiver:
     self._map_type = str(map_type).strip().lower()
     if self._map_type not in MAP_TYPES:
       raise ValueError(f"unsupported map type: {map_type}")
+    self._map_hz = int(map_hz)
+    if not MAP_HZ_MIN <= self._map_hz <= MAP_HZ_MAX:
+      raise ValueError(f"unsupported map refresh rate: {map_hz}")
+    self._map_bitrate_kbps = int(map_bitrate_kbps)
+    if not MAP_BITRATE_KBPS_MIN <= self._map_bitrate_kbps <= MAP_BITRATE_KBPS_MAX:
+      raise ValueError(f"unsupported map bitrate: {map_bitrate_kbps}")
     self._session_id: str | None = None
     self._app_version = ""
     self._manifest: dict[str, Any] | None = None
@@ -400,6 +471,9 @@ class CarrotNaviReceiver:
     if requirements.get("type") != "requirements_query" \
         or requirements.get("protocol_version") != PROTOCOL_VERSION:
       raise ValueError("invalid v2 requirements query")
+    catalog_revision = requirements.get("catalog_revision")
+    if isinstance(catalog_revision, bool) or catalog_revision != CATALOG_REVISION:
+      raise ValueError("unsupported v2 catalog revision")
 
     offered_streams = requirements.get("streams")
     if not isinstance(offered_streams, list) or len(offered_streams) != len(CATALOG):
@@ -419,6 +493,8 @@ class CarrotNaviReceiver:
         session_id,
         map_theme=self._map_theme,
         map_type=self._map_type,
+        map_hz=self._map_hz,
+        map_bitrate_kbps=self._map_bitrate_kbps,
       )
       self._session_id = session_id
       self._app_version = app_version
@@ -437,18 +513,37 @@ class CarrotNaviReceiver:
       self._mark_state_changed_locked()
     return copy.deepcopy(manifest)
 
-  def set_map_appearance(self, map_theme: str, map_type: str) -> bool:
+  def set_map_config(
+    self,
+    map_theme: str,
+    map_type: str,
+    map_hz: int,
+    map_bitrate_kbps: int,
+  ) -> bool:
     normalized_map_theme = str(map_theme).strip().lower()
     normalized_map_type = str(map_type).strip().lower()
     if normalized_map_theme not in MAP_THEMES:
       raise ValueError(f"unsupported map theme: {map_theme}")
     if normalized_map_type not in MAP_TYPES:
       raise ValueError(f"unsupported map type: {map_type}")
+    normalized_map_hz = int(map_hz)
+    if not MAP_HZ_MIN <= normalized_map_hz <= MAP_HZ_MAX:
+      raise ValueError(f"unsupported map refresh rate: {map_hz}")
+    normalized_map_bitrate_kbps = int(map_bitrate_kbps)
+    if not MAP_BITRATE_KBPS_MIN <= normalized_map_bitrate_kbps <= MAP_BITRATE_KBPS_MAX:
+      raise ValueError(f"unsupported map bitrate: {map_bitrate_kbps}")
     with self._lock:
-      if normalized_map_theme == self._map_theme and normalized_map_type == self._map_type:
+      if (
+        normalized_map_theme == self._map_theme
+        and normalized_map_type == self._map_type
+        and normalized_map_hz == self._map_hz
+        and normalized_map_bitrate_kbps == self._map_bitrate_kbps
+      ):
         return False
       self._map_theme = normalized_map_theme
       self._map_type = normalized_map_type
+      self._map_hz = normalized_map_hz
+      self._map_bitrate_kbps = normalized_map_bitrate_kbps
       self._mark_state_changed_locked()
       return True
 
@@ -486,15 +581,25 @@ class CarrotNaviReceiver:
       stream = self._validate_stream_locked(session_id, "json", name, envelope)
       sequence = self._nonnegative_int(envelope, "sequence")
       source_timestamp_ms = self._nonnegative_int(envelope, "source_timestamp_ms")
+      sent_at_ms = self._nonnegative_int(envelope, "sent_at_ms")
       present = envelope.get("present")
       if not isinstance(present, bool):
         raise ValueError("v2 JSON present must be boolean")
-      if not present and envelope.get("value") is not None:
-        raise ValueError("absent JSON item must contain value=null")
+      if "value" not in envelope:
+        raise ValueError("v2 JSON item must contain value")
+      value = envelope.get("value")
+      if present:
+        self._validate_json_value(name, value)
+      else:
+        if value is not None:
+          raise ValueError("absent JSON item must contain value=null")
+        reason = envelope.get("reason")
+        if not isinstance(reason, str) or not reason or len(reason) > 64:
+          raise ValueError("absent JSON item must contain a valid reason")
 
       key = f"json:{name}"
       self._validate_sequence_locked(key, sequence)
-      value = copy.deepcopy(envelope.get("value")) if present else None
+      value = copy.deepcopy(value) if present else None
       self._records[key] = ItemRecord(
         kind="json",
         name=name,
@@ -503,6 +608,7 @@ class CarrotNaviReceiver:
         manifest_revision=int(self._manifest["revision"]),
         sequence=sequence,
         source_timestamp_ms=source_timestamp_ms,
+        sent_at_ms=sent_at_ms,
         present=present,
         value=value,
         payload=None,
@@ -557,6 +663,10 @@ class CarrotNaviReceiver:
       raise ValueError("v2 image stream received non-image message")
     if kind == "render" and message_type not in (1, 2, 3, 4):
       raise ValueError("v2 render stream received invalid message")
+    if kind == "image" and message_type == 1 and int(metadata["format_or_reason"]) != 1:
+      raise ValueError("v2 image stream requires PNG frames")
+    if kind == "render" and message_type == 1 and int(metadata["format_or_reason"]) != 2:
+      raise ValueError("v2 render image frame requires JPEG")
 
     with self._lock:
       stream = self._validate_stream_locked(session_id, kind, name, metadata)
@@ -573,6 +683,7 @@ class CarrotNaviReceiver:
         manifest_revision=int(self._manifest["revision"]),
         sequence=sequence,
         source_timestamp_ms=int(metadata["source_timestamp_ms"]),
+        sent_at_ms=None,
         present=not clear,
         value=None,
         payload=None if clear else bytes(payload),
@@ -613,6 +724,9 @@ class CarrotNaviReceiver:
         "protocol_version": PROTOCOL_VERSION,
         "map_theme": self._map_theme,
         "map_type": self._map_type,
+        "map_hz": self._map_hz,
+        "map_bitrate_kbps": self._map_bitrate_kbps,
+        "app_foreground": self._app_foreground_locked(),
         "control_connected": self._control_connections > 0,
         "control_connections": self._control_connections,
         "session_id": self._session_id,
@@ -684,6 +798,7 @@ class CarrotNaviReceiver:
         "session_received_count": self._session_received_count,
         "last_received_at_ms": self._last_received_at_ms,
         "peer": self._last_peer,
+        "app_foreground": self._app_foreground_locked(),
         "error": self._last_error,
         "items": {
           key: record.summary()
@@ -739,6 +854,22 @@ class CarrotNaviReceiver:
       raise ValueError("stale v2 sequence")
 
   @staticmethod
+  def _validate_json_value(name: str, value: Any) -> None:
+    if name in JSON_ARRAY_NAMES:
+      if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise ValueError(f"v2 JSON {name} value must be an array of objects")
+      return
+    if not isinstance(value, dict):
+      raise ValueError(f"v2 JSON {name} value must be an object")
+
+  def _app_foreground_locked(self) -> bool | None:
+    record = self._records.get("json:app_status")
+    if record is None or not record.present or not isinstance(record.value, dict):
+      return None
+    foreground = record.value.get("foreground")
+    return foreground if isinstance(foreground, bool) else None
+
+  @staticmethod
   def _nonnegative_int(value: dict[str, Any], key: str) -> int:
     candidate = value.get(key)
     if isinstance(candidate, bool):
@@ -765,10 +896,10 @@ class CarrotNaviReceiver:
 
 RECEIVER_KEY = web.AppKey("carrot_navi_receiver", CarrotNaviReceiver)
 WEBSOCKETS_KEY = web.AppKey("carrot_navi_websockets", set)
-APPEARANCE_READER_KEY = web.AppKey("carrot_navi_appearance_reader", Callable)
+MAP_CONFIG_READER_KEY = web.AppKey("carrot_navi_map_config_reader", Callable)
 
 
-class ClusterNaviAppearanceParamReader:
+class ClusterNaviMapParamReader:
   THEMES = {0: "auto", 1: "dark", 2: "light"}
   TYPES = {0: "normal", 1: "satellite"}
 
@@ -779,18 +910,37 @@ class ClusterNaviAppearanceParamReader:
       params = Params()
     self.params = params
 
-  def read(self) -> tuple[str, str]:
+  def _read_int(self, key: str, default: int) -> int:
     try:
-      theme_value = int(self.params.get_int("ClusterNaviMapTheme"))
+      return int(self.params.get_int(key))
     except Exception:
-      theme_value = 1
-    try:
-      type_value = int(self.params.get_int("ClusterNaviMapType"))
-    except Exception:
-      type_value = 0
-    return self.THEMES.get(theme_value, "dark"), self.TYPES.get(type_value, "normal")
+      pass
 
-  def __call__(self) -> tuple[str, str]:
+    # Source files can be updated before the native Params key table is
+    # rebuilt. Read the backing file during that short compatibility window.
+    try:
+      with open(self.params.get_param_path(key), "rb") as f:
+        return int(float(f.read().decode("utf-8", errors="replace")))
+    except Exception:
+      return default
+
+  def read(self) -> tuple[str, str, int, int]:
+    theme_value = self._read_int("ClusterNaviMapTheme", 1)
+    type_value = self._read_int("ClusterNaviMapType", 0)
+    map_hz = resolve_map_hz(self._read_int("ClusterNaviMapFps", 1))
+    map_bitrate_kbps = resolve_map_bitrate_kbps(
+      MAP_RENDER_WIDTH,
+      MAP_RENDER_HEIGHT,
+      map_hz,
+    )
+    return (
+      self.THEMES.get(theme_value, "dark"),
+      self.TYPES.get(type_value, "normal"),
+      map_hz,
+      map_bitrate_kbps,
+    )
+
+  def __call__(self) -> tuple[str, str, int, int]:
     return self.read()
 
 
@@ -802,23 +952,23 @@ def _untrack_websocket(request: web.Request, ws: web.WebSocketResponse) -> None:
   request.app[WEBSOCKETS_KEY].discard(ws)
 
 
-async def _watch_map_appearance(app: web.Application) -> None:
+async def _watch_map_config(app: web.Application) -> None:
   receiver = app[RECEIVER_KEY]
-  reader = app[APPEARANCE_READER_KEY]
+  reader = app[MAP_CONFIG_READER_KEY]
   while True:
-    map_theme, map_type = reader()
-    if receiver.set_map_appearance(map_theme, map_type):
+    map_theme, map_type, map_hz, map_bitrate_kbps = reader()
+    if receiver.set_map_config(map_theme, map_type, map_hz, map_bitrate_kbps):
       sockets = tuple(app[WEBSOCKETS_KEY])
       if sockets:
         await asyncio.gather(*(
-          ws.close(code=1012, message=b"map appearance changed")
+          ws.close(code=1012, message=b"map configuration changed")
           for ws in sockets
         ), return_exceptions=True)
     await asyncio.sleep(1.0)
 
 
-async def _map_appearance_context(app: web.Application):
-  task = asyncio.create_task(_watch_map_appearance(app))
+async def _map_config_context(app: web.Application):
+  task = asyncio.create_task(_watch_map_config(app))
   try:
     yield
   finally:
@@ -996,14 +1146,14 @@ async def ws_render(request: web.Request) -> web.WebSocketResponse:
 
 def create_app(
   receiver: CarrotNaviReceiver | None = None,
-  appearance_reader: Callable[[], tuple[str, str]] | None = None,
+  map_config_reader: Callable[[], tuple[str, str, int, int]] | None = None,
 ) -> web.Application:
   app = web.Application(client_max_size=MAX_MESSAGE_BYTES)
   app[RECEIVER_KEY] = receiver or CarrotNaviReceiver()
   app[WEBSOCKETS_KEY] = set()
-  if appearance_reader is not None:
-    app[APPEARANCE_READER_KEY] = appearance_reader
-    app.cleanup_ctx.append(_map_appearance_context)
+  if map_config_reader is not None:
+    app[MAP_CONFIG_READER_KEY] = map_config_reader
+    app.cleanup_ctx.append(_map_config_context)
   app.router.add_get("/", index)
   app.router.add_get("/health", health)
   app.router.add_get("/api/navi/latest", latest)
@@ -1021,14 +1171,14 @@ def run_receiver_app(
   *,
   retry_count: int = BIND_RETRY_COUNT,
   retry_interval_s: float = BIND_RETRY_INTERVAL_S,
-  appearance_reader: Callable[[], tuple[str, str]] | None = None,
+  map_config_reader: Callable[[], tuple[str, str, int, int]] | None = None,
 ) -> None:
   retry_count = max(0, int(retry_count))
   retry_interval_s = max(0.0, float(retry_interval_s))
   for retry in range(retry_count + 1):
     try:
       web.run_app(
-        create_app(receiver, appearance_reader),
+        create_app(receiver, map_config_reader),
         host=host,
         port=port,
         access_log=None,
@@ -1038,7 +1188,7 @@ def run_receiver_app(
       if exc.errno != errno.EADDRINUSE or retry >= retry_count:
         raise
       print(
-        f"[carrot_navi] {host}:{port} still in use; "
+        f"[carrot_navi] {host}:{port} still in use;",
         f"retrying in {retry_interval_s:.1f}s ({retry + 1}/{retry_count})",
         flush=True,
       )
@@ -1056,14 +1206,20 @@ def main() -> None:
   parser.add_argument("--no-cereal", action="store_true")
   args = parser.parse_args()
 
-  param_reader = ClusterNaviAppearanceParamReader()
+  param_reader = ClusterNaviMapParamReader()
 
-  def read_map_appearance() -> tuple[str, str]:
-    param_map_theme, param_map_type = param_reader()
-    return args.map_theme or param_map_theme, args.map_type or param_map_type
+  def read_map_config() -> tuple[str, str, int, int]:
+    param_map_theme, param_map_type, map_hz, map_bitrate_kbps = param_reader()
+    return args.map_theme or param_map_theme, args.map_type or param_map_type, map_hz, map_bitrate_kbps
 
-  map_theme, map_type = read_map_appearance()
-  receiver = CarrotNaviReceiver(port=args.port, map_theme=map_theme, map_type=map_type)
+  map_theme, map_type, map_hz, map_bitrate_kbps = read_map_config()
+  receiver = CarrotNaviReceiver(
+    port=args.port,
+    map_theme=map_theme,
+    map_type=map_type,
+    map_hz=map_hz,
+    map_bitrate_kbps=map_bitrate_kbps,
+  )
   advertise_ip = args.advertise_ip or (args.host if args.host not in ("", "0.0.0.0", "::") else None)
   beacon = None if args.no_beacon else CarrotNaviDiscoveryBeacon(advertise_ip)
   publisher = None
@@ -1082,11 +1238,12 @@ def main() -> None:
     advertised = ", ".join(address for address, _ in discovery_targets(advertise_ip)) or "unavailable"
     print(f"[carrot_navi] discovery advertising {advertised}:{args.port} via UDP {DISCOVERY_PORT}")
   print(
-    f"[carrot_navi] starting receiver on {args.host}:{args.port} "
-    f"map_theme={map_theme} map_type={map_type}",
+    f"[carrot_navi] starting receiver on {args.host}:{args.port}",
+    f"map_theme={map_theme} map_type={map_type} map_hz={map_hz}",
+    f"map_bitrate_kbps={map_bitrate_kbps}",
   )
   try:
-    run_receiver_app(receiver, args.host, args.port, appearance_reader=read_map_appearance)
+    run_receiver_app(receiver, args.host, args.port, map_config_reader=read_map_config)
   finally:
     if beacon is not None:
       beacon.stop()
