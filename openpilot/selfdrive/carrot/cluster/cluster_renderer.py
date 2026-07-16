@@ -99,9 +99,14 @@ ROUTE_CONTROL_PANEL_H = 34.0
 ROUTE_CONTROL_SEEK_Y = ROUTE_CONTROL_PANEL_Y + 18.0
 ROUTE_CONTROL_BAR_X = ROUTE_CONTROL_PANEL_X + 142.0
 ROUTE_CONTROL_BAR_W = ROUTE_CONTROL_PANEL_W - 284.0
+# Keep the road camera strictly left of the navigation panel. These constants are
+# shared so future panel layout changes cannot reintroduce an overlap.
+NAVI_LIVE_PANEL_RIGHT = DESIGN_WIDTH - 4
+NAVI_LIVE_PANEL_W = 792
+NAVI_LIVE_PANEL_X = NAVI_LIVE_PANEL_RIGHT - NAVI_LIVE_PANEL_W
 CAMERA_BACKGROUND_X = 0.0
 CAMERA_BACKGROUND_Y = 0.0
-CAMERA_BACKGROUND_W = 1200.0
+CAMERA_BACKGROUND_W = NAVI_LIVE_PANEL_X
 CAMERA_BACKGROUND_H = DESIGN_HEIGHT
 CAMERA_BACKGROUND_ALPHA = 220
 CAMERA_BACKGROUND_VIGNETTE_ALPHA = 32
@@ -232,9 +237,6 @@ CRUISE_OVERRIDE_APPLY_COLOR = (184, 112, 24)
 SYSTEM_PANEL_X = 1416
 SYSTEM_PANEL_Y = 118
 SYSTEM_PANEL_W = 476
-NAVI_LIVE_PANEL_RIGHT = DESIGN_WIDTH - 4
-NAVI_LIVE_PANEL_W = 792
-NAVI_LIVE_PANEL_X = NAVI_LIVE_PANEL_RIGHT - NAVI_LIVE_PANEL_W
 NAVI_LIVE_PANEL_Y = 1
 NAVI_LIVE_PANEL_H = DESIGN_HEIGHT - 2
 NAVI_WORLD_VIEW_SHIFT_X = (DESIGN_WIDTH - NAVI_LIVE_PANEL_X) * 0.5
@@ -3921,9 +3923,19 @@ class ClusterUiRenderer:
         dest: rl.Rectangle,
     ) -> None:
         if cached.mime == "video/nv12-dmabuf":
+            token = cached.hardware_token
+            egl_image = self._navi_egl_images.get(token) if token is not None else None
+            if egl_image is None:
+                return
+            from openpilot.system.ui.lib.egl import bind_egl_image_to_texture
+
             shader = self._get_navi_external_shader()
             rl.begin_shader_mode(shader)
             try:
+                # GL_TEXTURE_EXTERNAL_OES is texture-unit state and raylib only
+                # restores GL_TEXTURE_2D during a batch draw. Rebind on every
+                # draw so the road camera cannot remain selected on texture0.
+                bind_egl_image_to_texture(cached.texture.id, egl_image)
                 rl.draw_texture_pro(cached.texture, source, dest, rl.Vector2(0.0, 0.0), 0.0, rl_color(WHITE))
             finally:
                 rl.end_shader_mode()

@@ -54,7 +54,7 @@ def test_egl_image_retries_after_display_reinitialization(monkeypatch):
   assert reinitializations == [True]
 
 
-def test_zero_copy_rebinds_only_for_new_frame(monkeypatch):
+def test_zero_copy_rebinds_current_camera_image_before_every_draw(monkeypatch):
   camera = object.__new__(LiveRoadCamera)
   camera._frame = SimpleNamespace(idx=3, width=1928, height=1208)
   camera._texture = SimpleNamespace(id=7, width=1, height=1)
@@ -75,8 +75,8 @@ def test_zero_copy_rebinds_only_for_new_frame(monkeypatch):
   rect = cluster_live_camera.rl.Rectangle(0.0, 0.0, 100.0, 100.0)
   assert camera._draw_zero_copy(rect, rect)
   assert camera._draw_zero_copy(rect, rect)
-  assert len(binds) == 1
+  assert binds == [(7, camera._egl_images[3]), (7, camera._egl_images[3])]
 
   camera._texture_needs_update = True
   assert camera._draw_zero_copy(rect, rect)
-  assert len(binds) == 2
+  assert binds == [(7, camera._egl_images[3])] * 3

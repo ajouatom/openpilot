@@ -28,7 +28,15 @@ from cluster_navi_source import (
   _H264DecodeResult,
 )
 from cluster_models import NaviDashboardState, NaviMediaFrame, TpmsInfo
-from cluster_renderer import SIDE_GAUGE_OUTLINE, ClusterUiRenderer
+from cluster_renderer import (
+  CAMERA_BACKGROUND_X,
+  CAMERA_BACKGROUND_W,
+  DESIGN_HEIGHT,
+  DESIGN_WIDTH,
+  NAVI_LIVE_PANEL_X,
+  SIDE_GAUGE_OUTLINE,
+  ClusterUiRenderer,
+)
 
 
 def _namespace(value):
@@ -623,6 +631,18 @@ def test_navi_panel_uses_same_design_shift_for_turn_signals():
     navi_live=None,
     navi_dashboard=dashboard,
   )) == 0
+
+
+def test_road_camera_ends_exactly_where_right_navigation_panel_begins():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = DESIGN_WIDTH
+  renderer.height = DESIGN_HEIGHT
+
+  camera_rect = renderer._camera_overlay_content_rect()
+
+  assert camera_rect.x == CAMERA_BACKGROUND_X
+  assert camera_rect.x + camera_rect.width == NAVI_LIVE_PANEL_X
+  assert CAMERA_BACKGROUND_W == NAVI_LIVE_PANEL_X
 
 
 def test_dark_theme_uses_visible_side_gauge_outlines(monkeypatch):

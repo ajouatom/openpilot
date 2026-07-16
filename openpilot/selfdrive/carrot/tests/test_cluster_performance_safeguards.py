@@ -439,6 +439,7 @@ def test_renderer_binds_hardware_nv12_dmabuf_without_pixel_upload(monkeypatch):
   renderer = object.__new__(ClusterUiRenderer)
   renderer._navi_media_textures = {}
   renderer._navi_egl_images = OrderedDict()
+  renderer._navi_external_shader = object()
   renderer.profile_enabled = False
   renderer._profile_samples = []
   texture = types.SimpleNamespace(id=7, width=1, height=1)
@@ -505,6 +506,15 @@ def test_renderer_binds_hardware_nv12_dmabuf_without_pixel_upload(monkeypatch):
   assert failed == []
   assert renderer._navi_media_textures["render:map_main"].hardware_token == (4, 0)
   assert (texture.width, texture.height) == (960, 540)
+
+  monkeypatch.setattr(cluster_renderer.rl, "begin_shader_mode", lambda _shader: None)
+  monkeypatch.setattr(cluster_renderer.rl, "draw_texture_pro", lambda *_args: None)
+  monkeypatch.setattr(cluster_renderer.rl, "end_shader_mode", lambda: None)
+  cached = renderer._navi_media_textures["render:map_main"]
+  rect = cluster_renderer.rl.Rectangle(0.0, 0.0, 960.0, 540.0)
+  renderer._draw_cached_navi_media(cached, rect, rect)
+  renderer._draw_cached_navi_media(cached, rect, rect)
+  assert bindings[-2:] == [(7, renderer._navi_egl_images[(4, 0)])] * 2
 
 
 def test_native_h264_direct_input_lease_submits_or_cancels():
