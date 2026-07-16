@@ -2389,6 +2389,10 @@ struct UIDebug {
   hudPlotTimeMillis        @19 :Float32;
   hudAuxTimeMillis         @20 :Float32;
   hudTimingValid           @21 :Bool;
+  # bit 0=left BSM, bit 1=right BSM, bit 2=left assist, bit 3=right assist
+  modelBlindSpotStateMask  @22 :UInt8;
+  # false distinguishes unavailable inputs/legacy logs from a valid inactive mask
+  modelBlindSpotStateValid @23 :Bool;
 }
 
 struct ManagerState {

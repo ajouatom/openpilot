@@ -10,6 +10,7 @@ class FakeSubMaster(dict):
   def __init__(self, **messages):
     super().__init__(messages)
     self.valid = dict.fromkeys(messages, True)
+    self.alive = dict.fromkeys(messages, True)
 
 
 def blind_spot_messages(
@@ -89,9 +90,30 @@ def test_blind_spot_inactive_skips_barrier_update():
   updates = []
   renderer._update_blind_spot_barriers_carrot = lambda *args, **kwargs: updates.append((args, kwargs))
 
-  renderer._draw_blind_spot_carrot(sm)
+  state_mask, state_valid = renderer._draw_blind_spot_carrot(sm)
 
   assert updates == []
+  assert state_mask == 0
+  assert state_valid
+
+
+def test_blind_spot_invalid_state_is_distinct_from_inactive():
+  renderer = object.__new__(model_renderer.ModelRenderer)
+  car_state, radar_state, meta = blind_spot_messages()
+  sm = FakeSubMaster(modelV2=SimpleNamespace(meta=meta), carState=car_state, radarState=radar_state)
+  sm.valid["radarState"] = False
+
+  assert renderer._draw_blind_spot_carrot(sm) == (0, False)
+
+  sm.valid["radarState"] = True
+  sm.alive["radarState"] = False
+  assert renderer._draw_blind_spot_carrot(sm) == (0, False)
+
+
+@pytest.mark.parametrize("mask", range(16))
+def test_blind_spot_state_mask_uses_stable_bits(mask):
+  state = tuple(bool(mask & (1 << bit)) for bit in range(4))
+  assert model_renderer.ModelRenderer._blind_spot_state_mask_carrot(*state) == mask
 
 
 def test_blind_spot_updates_only_active_side():
@@ -104,11 +126,13 @@ def test_blind_spot_updates_only_active_side():
   renderer._update_blind_spot_barriers_carrot = lambda _, **kwargs: updates.append(kwargs)
   renderer._draw_blind_spot_segments_carrot = lambda points, color: draws.append((points, color))
 
-  renderer._draw_blind_spot_carrot(sm)
+  state_mask, state_valid = renderer._draw_blind_spot_carrot(sm)
 
   assert updates == [{"update_left": True, "update_right": False}]
   assert len(draws) == 1
   assert draws[0][0] is renderer._carrot_lane_barrier_vertices[0]
+  assert state_mask == model_renderer.BLIND_SPOT_LEFT_MASK
+  assert state_valid
 
 
 class FakeParams:
@@ -273,7 +297,11 @@ def test_model_overlay_timings(monkeypatch):
   renderer._draw_path_carrot = lambda _: calls.append("path")
   renderer._draw_lane_center_indicator_carrot = lambda _: calls.append("laneCenter")
   renderer._draw_lane_lines_carrot = lambda _: calls.append("laneLines")
-  renderer._draw_blind_spot_carrot = lambda _: calls.append("blindSpot")
+  def draw_blind_spot(_):
+    calls.append("blindSpot")
+    return model_renderer.BLIND_SPOT_LEFT_MASK, True
+
+  renderer._draw_blind_spot_carrot = draw_blind_spot
   renderer._draw_radar_info_carrot = lambda _: calls.append("radar")
   timestamps = iter((1_000_000_000, 1_010_000_000, 1_030_000_000, 1_034_000_000, 1_035_000_000))
   monkeypatch.setattr(model_renderer.time, "monotonic_ns", lambda: next(timestamps))
@@ -286,11 +314,13 @@ def test_model_overlay_timings(monkeypatch):
   assert renderer.render_timings.blind_spot_time_millis == pytest.approx(4.0)
   assert renderer.render_timings.radar_time_millis == pytest.approx(1.0)
   assert renderer.render_timings.valid
+  assert renderer.render_timings.blind_spot_state_mask == model_renderer.BLIND_SPOT_LEFT_MASK
+  assert renderer.render_timings.blind_spot_state_valid
 
 
 def test_render_early_return_resets_timings(monkeypatch):
   renderer = object.__new__(model_renderer.ModelRenderer)
-  renderer._render_timings = model_renderer.ModelRenderTimings(1.0, 2.0, 3.0, 4.0, True)
+  renderer._render_timings = model_renderer.ModelRenderTimings(1.0, 2.0, 3.0, 4.0, True, 15, True)
   sm = SimpleNamespace(recv_frame={"liveCalibration": 0, "modelV2": 0})
   monkeypatch.setattr(model_renderer.ui_state, "sm", sm, raising=False)
   monkeypatch.setattr(model_renderer.ui_state, "started_frame", 1, raising=False)
