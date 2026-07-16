@@ -2535,6 +2535,15 @@ class ClusterUiRenderer:
             return 0.0
         return self._world_view_shift_x(state) * DESIGN_WIDTH / self.width
 
+    def _turn_signal_center_x_offset(self, state: ClusterUiState, side: str) -> float:
+        signal_center_x = (
+            LANE_TURN_SIGNAL_LEFT_CENTER_X if side == "left" else LANE_TURN_SIGNAL_RIGHT_CENTER_X
+        )
+        if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+            camera_signal_center_x = CAMERA_BACKGROUND_X + signal_center_x * CAMERA_BACKGROUND_W / DESIGN_WIDTH
+            return camera_signal_center_x - signal_center_x
+        return -self._world_view_shift_design_x(state)
+
     def _draw_ego_tpms(
         self,
         vehicle: VehicleBox,
@@ -3205,12 +3214,11 @@ class ClusterUiRenderer:
             self._profile_add("hud.accel_block", profile_stage)
             self._draw_steering_output_block(state)
             profile_stage = self._profile_start()
-            turn_signal_shift_x = -self._world_view_shift_design_x(state)
             self._draw_turn_signal(
                 "left",
                 left_signal_lit,
                 show_inactive=state.debug_ui_visible,
-                center_x_offset=turn_signal_shift_x,
+                center_x_offset=self._turn_signal_center_x_offset(state, "left"),
             )
             self._profile_add("hud.turn_signal_left", profile_stage)
             profile_stage = self._profile_start()
@@ -3221,7 +3229,7 @@ class ClusterUiRenderer:
                 "right",
                 right_signal_lit,
                 show_inactive=state.debug_ui_visible,
-                center_x_offset=turn_signal_shift_x,
+                center_x_offset=self._turn_signal_center_x_offset(state, "right"),
             )
             self._profile_add("hud.turn_signal_right", profile_stage)
             traffic_drawn_in_map = screen_mode == CLUSTER_SCREEN_MODE_DEFAULT and self._navi_map_frame_present(

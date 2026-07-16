@@ -33,6 +33,8 @@ from cluster_renderer import (
   CAMERA_BACKGROUND_W,
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
+  LANE_TURN_SIGNAL_LEFT_CENTER_X,
+  LANE_TURN_SIGNAL_RIGHT_CENTER_X,
   NAVI_LIVE_PANEL_X,
   SIDE_GAUGE_OUTLINE,
   ClusterUiRenderer,
@@ -610,27 +612,41 @@ def test_navi_panel_shifts_3d_camera_modes_left():
   )) == 0
 
 
-def test_navi_panel_uses_same_design_shift_for_turn_signals():
+def test_turn_signals_center_on_the_active_world_or_road_camera_content():
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1280
   renderer.screen_mode = 0
   dashboard = NaviDashboardState(False, "tcp://127.0.0.1:7714")
 
-  assert renderer._world_view_shift_design_x(SimpleNamespace(
+  assert renderer._turn_signal_center_x_offset(SimpleNamespace(
     camera_view_mode=0,
     navi_live=None,
     navi_dashboard=dashboard,
-  )) == pytest.approx(398)
-  assert renderer._world_view_shift_design_x(SimpleNamespace(
+  ), "left") == pytest.approx(-398)
+  assert renderer._turn_signal_center_x_offset(SimpleNamespace(
     camera_view_mode=1,
     navi_live=None,
     navi_dashboard=dashboard,
-  )) == pytest.approx(398)
-  assert renderer._world_view_shift_design_x(SimpleNamespace(
+  ), "right") == pytest.approx(-398)
+
+  road_camera_state = SimpleNamespace(
     camera_view_mode=2,
     navi_live=None,
     navi_dashboard=dashboard,
-  )) == 0
+  )
+  left_offset = renderer._turn_signal_center_x_offset(road_camera_state, "left")
+  right_offset = renderer._turn_signal_center_x_offset(road_camera_state, "right")
+  assert LANE_TURN_SIGNAL_LEFT_CENTER_X + left_offset == pytest.approx(
+    CAMERA_BACKGROUND_X + LANE_TURN_SIGNAL_LEFT_CENTER_X * CAMERA_BACKGROUND_W / DESIGN_WIDTH
+  )
+  assert LANE_TURN_SIGNAL_RIGHT_CENTER_X + right_offset == pytest.approx(
+    CAMERA_BACKGROUND_X + LANE_TURN_SIGNAL_RIGHT_CENTER_X * CAMERA_BACKGROUND_W / DESIGN_WIDTH
+  )
+  assert renderer._turn_signal_center_x_offset(SimpleNamespace(
+    camera_view_mode=0,
+    navi_live=None,
+    navi_dashboard=None,
+  ), "left") == 0
 
 
 def test_road_camera_ends_exactly_where_right_navigation_panel_begins():
