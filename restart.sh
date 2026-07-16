@@ -6,9 +6,9 @@ cd "$DIR"
 
 git pull
 
-# A Params key is compiled into params_pyx.so. Check this small target before
-# restarting long-lived processes; SCons exits immediately when it is current.
-scons -u -j4 openpilot/common/params_pyx.so
+# Params keys are compiled into params_pyx.so. Use a content stamp so a stale
+# SCons timestamp or cache entry cannot preserve the previous key registry.
+bash "$DIR/scripts/ensure_params_build.sh"
 
 # carrot_server runs outside the comma tmux session under a watchdog. Restart
 # only its child so it reloads the newly built Params registry.
