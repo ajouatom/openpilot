@@ -2381,6 +2381,14 @@ struct UIDebug {
   modelBlindSpotTimeMillis @11 :Float32;
   modelRadarTimeMillis     @12 :Float32;
   modelTimingValid         @13 :Bool;
+  hudHeaderTimeMillis      @14 :Float32;
+  hudSpeedTimeMillis       @15 :Float32;
+  hudStatusTimeMillis      @16 :Float32;
+  hudNavigationTimeMillis  @17 :Float32;
+  hudButtonTimeMillis      @18 :Float32;
+  hudPlotTimeMillis        @19 :Float32;
+  hudAuxTimeMillis         @20 :Float32;
+  hudTimingValid           @21 :Bool;
 }
 
 struct ManagerState {

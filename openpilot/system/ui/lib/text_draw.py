@@ -4,6 +4,12 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 
 
+_OUTLINE_UNIT_OFFSETS = tuple(
+  (math.cos(math.radians(deg)), math.sin(math.radians(deg)))
+  for deg in range(0, 360, 45)
+)
+
+
 def draw_text_raw(font, text, x, y, font_size, color):
   rl.draw_text_ex(
     font,
@@ -67,10 +73,9 @@ def draw_text_ui_style(text: str,
   draw_x, draw_y, _ = get_text_draw_pos(font, text, x, y, font_size, align, y_offset)
 
   if border_width > 0.0:
-    for deg in range(0, 360, 45):
-      rad = math.radians(deg)
-      ox = border_width * math.cos(rad)
-      oy = border_width * math.sin(rad)
+    for unit_x, unit_y in _OUTLINE_UNIT_OFFSETS:
+      ox = border_width * unit_x
+      oy = border_width * unit_y
       draw_text_raw(font, text, draw_x + ox, draw_y + oy, font_size, border_color)
 
   if shadow_offset != 0.0:
