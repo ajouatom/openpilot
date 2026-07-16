@@ -11,6 +11,15 @@
       "scene": "Multiple early cut-ins"
     },
     {
+      "id": "carnival-5b-18-close-entry",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "window": [17.5, 19.2],
+      "expected": "detect",
+      "scene": "Close vehicle enters from the right; detect before it reaches the lane line"
+    },
+    {
       "id": "carnival-5b-15-truck",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "0000005b--02344a68f2--15/rlog.1.zst",
@@ -83,6 +92,15 @@
       "scene": "False cut-in around 17 seconds"
     },
     {
+      "id": "santafe-421-1-truck",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5_HEV 61d2c91e1039ab5e",
+      "log": "00000421--6bbe001d3d--1/rlog.zst",
+      "source": "corner",
+      "window": [26.0, 29.0],
+      "expected": "detect",
+      "scene": "Truck enters from the left around 27 seconds"
+    },
+    {
       "id": "ioniq5-cb5-3-adjacent",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
       "log": "00000cb5--cf3e24bc3d--3/rlog.zst",
@@ -110,6 +128,24 @@
       "scene": "Passing a close adjacent vehicle near 37 seconds"
     },
     {
+      "id": "gv80-218-2-adjacent-pass-44",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "window": [43.0, 45.5],
+      "expected": "clear",
+      "scene": "Adjacent vehicle approaches but remains outside the ego lane"
+    },
+    {
+      "id": "gv80-218-2-adjacent-pass-49",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "window": [48.0, 50.5],
+      "expected": "clear",
+      "scene": "Close adjacent vehicle remains outside the ego lane"
+    },
+    {
       "id": "gv80-218-6-point-jump",
       "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
       "log": "00000218--6aa147e461--6/rlog.zst",
@@ -117,6 +153,15 @@
       "window": [39.0, 44.0],
       "expected": "clear",
       "scene": "Lateral point jump near 41 seconds"
+    },
+    {
+      "id": "gv80-218-6-parallel-truck",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--6/rlog.zst",
+      "source": "corner",
+      "window": [46.0, 48.5],
+      "expected": "clear",
+      "scene": "Close truck continues parallel with negligible lateral motion"
     },
     {
       "id": "k8-221-18-persistent",

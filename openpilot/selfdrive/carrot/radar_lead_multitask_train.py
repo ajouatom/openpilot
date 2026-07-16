@@ -38,6 +38,46 @@ def _open(path: Path) -> Any:
 
 
 def load_datasets(paths: list[Path]) -> TrainingData:
+  try:
+    import pandas as pd
+  except ImportError:
+    pd = None
+
+  if pd is not None:
+    feature_chunks: list[np.ndarray] = []
+    label_chunks: list[np.ndarray] = []
+    weight_chunks: list[np.ndarray] = []
+    group_chunks: list[np.ndarray] = []
+    manual_chunks: list[np.ndarray] = []
+    group_offset = 0
+    columns = [
+      *MODEL_FEATURE_NAMES,
+      *(f"{name}_label" for name in MODEL_HEADS),
+      *(f"{name}_weight" for name in MODEL_HEADS),
+      *(f"{name}_source" for name in MODEL_HEADS),
+      "frame",
+    ]
+    for path in paths:
+      frame = pd.read_csv(path, usecols=columns)
+      feature_chunks.append(frame[list(MODEL_FEATURE_NAMES)].fillna(0.0).to_numpy(dtype=np.float32))
+      label_chunks.append(frame[[f"{name}_label" for name in MODEL_HEADS]].to_numpy(dtype=np.float32))
+      weight_chunks.append(frame[[f"{name}_weight" for name in MODEL_HEADS]].to_numpy(dtype=np.float32))
+      local_groups, unique_groups = pd.factorize(frame["frame"], sort=False)
+      group_chunks.append(local_groups.astype(np.int32) + group_offset)
+      group_offset += len(unique_groups)
+      manual_chunks.append(np.column_stack([
+        frame[f"{name}_source"].eq("manual").to_numpy(dtype=np.bool_) for name in MODEL_HEADS
+      ]))
+    if not feature_chunks:
+      raise RuntimeError("no fused training rows found")
+    return TrainingData(
+      features=np.nan_to_num(np.concatenate(feature_chunks), nan=0.0, posinf=1e4, neginf=-1e4),
+      labels=np.concatenate(label_chunks),
+      weights=np.concatenate(weight_chunks),
+      groups=np.concatenate(group_chunks),
+      manual=np.concatenate(manual_chunks),
+    )
+
   feature_rows: list[list[float]] = []
   labels: list[tuple[float, ...]] = []
   weights: list[tuple[float, ...]] = []
@@ -64,6 +104,33 @@ def load_datasets(paths: list[Path]) -> TrainingData:
     weights=np.asarray(weights, dtype=np.float32),
     groups=np.asarray(groups, dtype=np.int32),
     manual=np.asarray(manual, dtype=np.bool_),
+  )
+
+
+def load_cache(path: Path, sources: list[Path]) -> tuple[TrainingData, np.ndarray, np.ndarray] | None:
+  if not path.exists():
+    return None
+  with np.load(path, allow_pickle=False) as cache:
+    expected = tuple(str(source.resolve()) for source in sources)
+    actual = tuple(str(value) for value in cache["sources"].tolist())
+    if actual != expected:
+      return None
+    data = TrainingData(
+      features=cache["features"], labels=cache["labels"], weights=cache["weights"],
+      groups=cache["groups"], manual=cache["manual"],
+    )
+    return data, cache["train_indices"], cache["validation_indices"]
+
+
+def save_cache(
+  path: Path, sources: list[Path], data: TrainingData, train_indices: np.ndarray, validation_indices: np.ndarray,
+) -> None:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  np.savez(
+    path,
+    sources=np.asarray([str(source.resolve()) for source in sources]),
+    features=data.features, labels=data.labels, weights=data.weights, groups=data.groups, manual=data.manual,
+    train_indices=train_indices, validation_indices=validation_indices,
   )
 
 
@@ -276,24 +343,61 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--hidden", type=parse_hidden, default=(64, 32))
   parser.add_argument("--validation", type=float, default=0.2)
   parser.add_argument("--l2", type=float, default=1e-5)
+  parser.add_argument("--max-positive-weight", type=float, default=30.0)
   parser.add_argument("--patience", type=int, default=10)
   parser.add_argument("--primary-head", choices=("all", *MODEL_HEADS), default="all")
+  parser.add_argument("--train-head", choices=("all", *MODEL_HEADS), default="all")
+  parser.add_argument("--head-only", action="store_true", help="only update the selected output column")
+  parser.add_argument(
+    "--stationary-external", action="store_true",
+    help="train the external head only on candidates with |vLead| < 1.8 m/s",
+  )
   parser.add_argument("--init-model", type=Path, help="fine-tune an existing compatible multitask model")
+  parser.add_argument("--cache", type=Path, help="reuse the parsed train/validation arrays")
   parser.add_argument("--seed", type=int, default=42)
   return parser.parse_args()
 
 
 def main() -> int:
   args = parse_args()
-  training = load_datasets(args.datasets)
-  if args.validation_dataset:
-    data, train_indices, validation_indices = combine(training, load_datasets(args.validation_dataset))
-    validation_kind = "held-out logs"
+  if args.head_only and (args.train_head == "all" or args.init_model is None):
+    raise SystemExit("--head-only requires --train-head and --init-model")
+  if args.stationary_external and args.train_head != "external":
+    raise SystemExit("--stationary-external requires --train-head external")
+  sources = [*args.datasets, *args.validation_dataset]
+  cached = load_cache(args.cache, sources) if args.cache is not None else None
+  if cached is not None:
+    data, train_indices, validation_indices = cached
+    validation_kind = "cached held-out logs" if args.validation_dataset else "cached random frame groups"
   else:
-    data = training
-    train_indices, validation_indices = random_group_split(data, args.validation, args.seed)
-    validation_kind = "random frame groups"
+    training = load_datasets(args.datasets)
+    if args.validation_dataset:
+      data, train_indices, validation_indices = combine(training, load_datasets(args.validation_dataset))
+      validation_kind = "held-out logs"
+    else:
+      data = training
+      train_indices, validation_indices = random_group_split(data, args.validation, args.seed)
+      validation_kind = "random frame groups"
+    if args.cache is not None:
+      save_cache(args.cache, sources, data, train_indices, validation_indices)
+  if args.stationary_external:
+    v_lead_index = MODEL_FEATURE_NAMES.index("v_lead")
+    external_index = MODEL_HEADS.index("external")
+    focused = (np.abs(data.features[:, v_lead_index]) < 1.8) & (data.weights[:, external_index] > 0.0)
+    train_mask = np.zeros(len(data.features), dtype=np.bool_)
+    validation_mask = np.zeros(len(data.features), dtype=np.bool_)
+    train_mask[train_indices] = True
+    validation_mask[validation_indices] = True
+    data = TrainingData(
+      features=data.features[focused], labels=data.labels[focused], weights=data.weights[focused],
+      groups=data.groups[focused], manual=data.manual[focused],
+    )
+    train_indices = np.flatnonzero(train_mask[focused])
+    validation_indices = np.flatnonzero(validation_mask[focused])
+    validation_kind += ", stationary external"
   initial_parameters: dict[str, np.ndarray] | None = None
+  initial_thresholds: np.ndarray | None = None
+  initial_calibration: np.ndarray | None = None
   if args.init_model is not None:
     with np.load(args.init_model, allow_pickle=False) as initial:
       if tuple(str(value) for value in initial["feature_names"].tolist()) != MODEL_FEATURE_NAMES:
@@ -305,6 +409,8 @@ def main() -> int:
       initial_parameters = {
         name: initial[name].astype(np.float32) for name in ("w1", "b1", "w2", "b2", "w3", "b3")
       }
+      initial_thresholds = initial["thresholds"].astype(np.float32)
+      initial_calibration = initial["calibration"].astype(np.float32)
     hidden = (initial_parameters["w1"].shape[1], initial_parameters["w2"].shape[1])
   else:
     mean = data.features[train_indices].mean(axis=0, dtype=np.float64).astype(np.float32)
@@ -317,7 +423,11 @@ def main() -> int:
     valid = data.weights[train_indices, head] > 0.0
     positives = np.sum(data.weights[train_indices, head][valid] * data.labels[train_indices, head][valid])
     negatives = np.sum(data.weights[train_indices, head][valid] * (1.0 - data.labels[train_indices, head][valid]))
-    positive_weights[head] = min(30.0, max(1.0, negatives / max(positives, 1.0)))
+    positive_weights[head] = min(args.max_positive_weight, max(1.0, negatives / max(positives, 1.0)))
+  training_weights = data.weights.copy()
+  if args.train_head != "all":
+    selected_head = MODEL_HEADS.index(args.train_head)
+    training_weights[:, np.arange(len(MODEL_HEADS)) != selected_head] = 0.0
   model = MultiHeadMLP(len(MODEL_FEATURE_NAMES), *hidden, args.seed)
   if initial_parameters is not None:
     model.parameters = {name: value.copy() for name, value in initial_parameters.items()}
@@ -339,8 +449,14 @@ def main() -> int:
     for start in range(0, len(shuffled), args.batch_size):
       batch = shuffled[start:start + args.batch_size]
       loss, gradients = model.gradients(
-        features[batch], data.labels[batch], data.weights[batch], positive_weights, args.l2,
+        features[batch], data.labels[batch], training_weights[batch], positive_weights, args.l2,
       )
+      if args.head_only:
+        for name in ("w1", "b1", "w2", "b2"):
+          gradients[name].fill(0.0)
+        frozen_heads = np.arange(len(MODEL_HEADS)) != MODEL_HEADS.index(args.train_head)
+        gradients["w3"][:, frozen_heads] = 0.0
+        gradients["b3"][frozen_heads] = 0.0
       optimizer.update(model.parameters, gradients)
       train_loss += loss
       batches += 1
@@ -372,15 +488,27 @@ def main() -> int:
   thresholds = np.zeros(len(MODEL_HEADS), dtype=np.float32)
   metrics: dict[str, Any] = {"validation_loss": best_loss, "best_epoch": best_epoch}
   for head_index, name in enumerate(MODEL_HEADS):
-    scale, bias = fit_calibration(
-      validation_logits[:, head_index], validation_labels[:, head_index], validation_weights[:, head_index],
-    )
+    preserve_head = args.init_model is not None and args.train_head != "all" and name != args.train_head
+    if preserve_head:
+      assert initial_calibration is not None and initial_thresholds is not None
+      scale, bias = (float(value) for value in initial_calibration[head_index])
+    else:
+      scale, bias = fit_calibration(
+        validation_logits[:, head_index], validation_labels[:, head_index], validation_weights[:, head_index],
+      )
     calibration[head_index] = (scale, bias)
     calibrated[:, head_index] = sigmoid(validation_logits[:, head_index] * scale + bias)
-    threshold, head_metrics = choose_threshold(
-      calibrated[:, head_index], validation_labels[:, head_index], validation_weights[:, head_index],
-      data.groups[validation_indices], head_index,
-    )
+    if preserve_head:
+      threshold = float(initial_thresholds[head_index])
+      head_metrics = group_metrics(
+        calibrated[:, head_index], validation_labels[:, head_index], validation_weights[:, head_index],
+        data.groups[validation_indices], threshold, 2,
+      )
+    else:
+      threshold, head_metrics = choose_threshold(
+        calibrated[:, head_index], validation_labels[:, head_index], validation_weights[:, head_index],
+        data.groups[validation_indices], head_index,
+      )
     thresholds[head_index] = threshold
     metrics[name] = {"threshold": threshold, **head_metrics}
     print(

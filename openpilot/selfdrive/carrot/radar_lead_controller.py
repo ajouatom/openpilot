@@ -171,7 +171,17 @@ class RadarLeadModelController:
   @staticmethod
   def _external_control_usable(prediction: RadarLeadPrediction) -> bool:
     obj = prediction.features.radar_object
-    return obj.front_track_id is not None or (obj.d_rel > 2.0 and obj.v_lead > 2.0)
+    if obj.front_track_id is not None or (obj.d_rel > 2.0 and obj.v_lead > 2.0):
+      return True
+    stopped_corner = (
+      obj.corner_track_id is not None
+      and prediction.features.track_age >= 7
+      and 5.0 < obj.d_rel < 120.0
+      and abs(obj.v_lead) < 1.8
+      and abs(obj.yv_rel) < 0.8
+    )
+    path_limit = 1.0 if obj.d_rel < 35.0 else 0.75
+    return stopped_corner and abs(prediction.features.d_path) < path_limit
 
   @staticmethod
   def _lead_one_prediction(predictions: tuple[RadarLeadPrediction, ...]) -> RadarLeadPrediction | None:
@@ -185,6 +195,23 @@ class RadarLeadModelController:
       and abs(prediction.features.d_path) < 2.4
     ]
     return min(candidates, key=lambda prediction: (-prediction.lead_prob, prediction.features.radar_object.d_rel), default=None)
+
+  @staticmethod
+  def _matches_vision_lead(lead: dict[str, Any] | None, prediction: RadarLeadPrediction) -> bool:
+    if lead is None or lead.get("radar", True):
+      return False
+    obj = prediction.features.radar_object
+    vision_d = _finite(lead.get("dRel", 0.0))
+    vision_y = _finite(lead.get("yRel", 0.0))
+    vision_v = _finite(lead.get("vLead", 0.0))
+    distance_tolerance = min(10.0, max(6.0, 0.25 * vision_d))
+    velocity_tolerance = max(5.0, 0.25 * max(vision_v, obj.v_lead))
+    return (
+      abs(prediction.features.d_path) < 1.2
+      and abs(obj.d_rel - vision_d) < distance_tolerance
+      and abs(obj.y_rel - vision_y) < 1.2
+      and abs(obj.v_lead - vision_v) < velocity_tolerance
+    )
 
   def update(
     self,
@@ -251,12 +278,14 @@ class RadarLeadModelController:
     lead_two = next((
       lead for prediction, lead in cutin_pairs
       if lead is not None and prediction.features.object_id != lead_one_object
+      and not self._matches_vision_lead(lead_one, prediction)
       and self._external_control_usable(prediction)
     ), None)
     if lead_two is None:
       lead_two = next((
         lead for prediction, lead in external_pairs
         if lead is not None and prediction.features.object_id != lead_one_object
+        and not self._matches_vision_lead(lead_one, prediction)
         and self._external_control_usable(prediction)
       ), None)
 
