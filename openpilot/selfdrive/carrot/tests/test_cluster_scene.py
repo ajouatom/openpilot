@@ -8,7 +8,7 @@ import pytest
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
-from cluster_config import EGO_FORWARD_M, VEHICLE_LENGTH_M
+from cluster_config import CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA, EGO_FORWARD_M, VEHICLE_LENGTH_M
 from cluster_models import ClusterUiState, DetectedVehicle, LaneMarking, RadarPoint
 from cluster_scene import build_cluster_scene, detected_vehicle_scene_forward_m, render_scene_forward_m
 
@@ -56,16 +56,39 @@ def test_longitudinal_render_distance_is_halved_without_changing_lateral_data() 
     primary=True,
   )
 
+  state = _cluster_state(detected_vehicles=(vehicle,))
   assert vehicle.lateral_m == 2.25
-  assert render_scene_forward_m(vehicle.longitudinal_m) == pytest.approx(EGO_FORWARD_M + 20.0)
-  assert render_scene_forward_m(-20.0) == pytest.approx(EGO_FORWARD_M - 10.0)
-  assert detected_vehicle_scene_forward_m(vehicle) == pytest.approx(
+  assert render_scene_forward_m(vehicle.longitudinal_m, state) == pytest.approx(EGO_FORWARD_M + 20.0)
+  assert render_scene_forward_m(-20.0, state) == pytest.approx(EGO_FORWARD_M - 10.0)
+  assert detected_vehicle_scene_forward_m(vehicle, state) == pytest.approx(
     EGO_FORWARD_M + 20.0 + VEHICLE_LENGTH_M * 0.5
   )
-  scene = build_cluster_scene(_cluster_state(detected_vehicles=(vehicle,)))
+  scene = build_cluster_scene(state)
   detected_box = next(box for box in scene.vehicles if box.label == "L1")
   assert detected_box.center.x == pytest.approx(2.25)
   assert detected_box.center.y == pytest.approx(EGO_FORWARD_M + 20.0 + VEHICLE_LENGTH_M * 0.5)
+  assert detected_box.longitudinal_m == 40.0
+
+
+def test_road_camera_keeps_longitudinal_render_distance_one_to_one() -> None:
+  vehicle = DetectedVehicle(
+    "L1",
+    longitudinal_m=40.0,
+    lateral_m=2.25,
+    source="radarState",
+    primary=True,
+  )
+  state = _cluster_state(
+    camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+    detected_vehicles=(vehicle,),
+  )
+
+  assert render_scene_forward_m(vehicle.longitudinal_m, state) == pytest.approx(EGO_FORWARD_M + 40.0)
+  assert render_scene_forward_m(-20.0, state) == pytest.approx(EGO_FORWARD_M - 20.0)
+  scene = build_cluster_scene(state)
+  detected_box = next(box for box in scene.vehicles if box.label == "L1")
+  assert detected_box.center.x == pytest.approx(2.25)
+  assert detected_box.center.y == pytest.approx(EGO_FORWARD_M + 40.0 + VEHICLE_LENGTH_M * 0.5)
   assert detected_box.longitudinal_m == 40.0
 
 
