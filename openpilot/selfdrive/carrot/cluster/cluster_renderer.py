@@ -954,6 +954,7 @@ class ClusterUiRenderer:
         self._profile_add("renderer.open.total", profile_total)
 
     def close(self) -> None:
+        self._system_stats.close()
         if not self._window_open:
             return
         if self._direct_nv12_readback is not None:

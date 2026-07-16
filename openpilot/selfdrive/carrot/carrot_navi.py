@@ -74,6 +74,7 @@ IMAGE_NAMES = (
   "crossroad_minimized", "crossroad_expanded",
   "center_tbt_icon", "center_tbt_text", "center_tbt_fee",
 )
+CLUSTER_ENABLED_IMAGE_NAMES = frozenset(name for name in IMAGE_NAMES if name != "lane_top")
 RENDER_NAMES = ("map_main",)
 CATALOG = tuple(
   [("json", name) for name in JSON_NAMES]
@@ -353,7 +354,7 @@ def build_manifest(
       "name": name,
       "schema_version": 1,
       "stream_handle": handle,
-      "enabled": True,
+      "enabled": kind != "image" or name in CLUSTER_ENABLED_IMAGE_NAMES,
       "params": _stream_params(
         kind, name, normalized_map_theme, normalized_map_type,
         int(map_hz), int(map_bitrate_kbps),

@@ -1,14 +1,132 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+import ipaddress
 import os
 from pathlib import Path
+import socket
+import threading
 import time
 
 
 PROC_PATH = Path("/proc")
 PROC_STAT_PATH = Path("/proc/stat")
 PROC_MEMINFO_PATH = Path("/proc/meminfo")
+NETWORK_ADDRESS_REFRESH_SECONDS = 2.0
+
+
+class _AsyncRefreshWorker:
+    def __init__(self, refresh_interval_s: float, name: str, refresh: Callable[[], None]) -> None:
+        self.refresh_interval_s = max(0.1, float(refresh_interval_s))
+        self._name = name
+        self._refresh = refresh
+        self._lock = threading.Lock()
+        self._wake = threading.Event()
+        self._closed = False
+        self._next_refresh_time = 0.0
+        self._thread: threading.Thread | None = None
+
+    def request(self, now: float) -> None:
+        thread_to_start = None
+        with self._lock:
+            if self._closed or now < self._next_refresh_time:
+                return
+            self._next_refresh_time = now + self.refresh_interval_s
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._run, name=self._name, daemon=True)
+                thread_to_start = self._thread
+        if thread_to_start is not None:
+            thread_to_start.start()
+        self._wake.set()
+
+    def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            thread = self._thread
+        self._wake.set()
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=1.0)
+
+    def _run(self) -> None:
+        while True:
+            self._wake.wait()
+            self._wake.clear()
+            with self._lock:
+                if self._closed:
+                    return
+            try:
+                self._refresh()
+            except Exception as exc:
+                print(f"{self._name} refresh failed: {exc}", flush=True)
+
+
+class NetworkAddressProvider:
+    def __init__(self, refresh_interval_s: float = NETWORK_ADDRESS_REFRESH_SECONDS) -> None:
+        self._params = None
+        self._lock = threading.Lock()
+        self._address: str | None = None
+        self._worker = _AsyncRefreshWorker(
+            refresh_interval_s,
+            "cluster-network-address",
+            self._refresh,
+        )
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params("/dev/shm/params")
+        except Exception:
+            pass
+
+    def address(self, now: float | None = None) -> str | None:
+        if now is None:
+            now = time.perf_counter()
+        self._worker.request(now)
+        with self._lock:
+            return self._address
+
+    def close(self) -> None:
+        self._worker.close()
+
+    def _refresh(self) -> None:
+        address = self._param_address() or self._socket_address()
+        with self._lock:
+            self._address = address
+
+    def _param_address(self) -> str | None:
+        if self._params is None:
+            return None
+        try:
+            value = self._params.get("NetworkAddress")
+        except Exception:
+            return None
+        return self._valid_address(value)
+
+    @classmethod
+    def _socket_address(cls) -> str | None:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.connect(("8.8.8.8", 80))
+                return cls._valid_address(sock.getsockname()[0])
+        except OSError:
+            return None
+
+    @staticmethod
+    def _valid_address(value: object) -> str | None:
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", errors="replace")
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            addr = ipaddress.ip_address(text)
+        except ValueError:
+            return None
+        if addr.is_unspecified or addr.is_loopback or addr.is_link_local:
+            return None
+        return str(addr)
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,22 +139,30 @@ class SystemStats:
 
 class SystemStatsSampler:
     def __init__(self, refresh_interval_s: float = 1.0) -> None:
-        self.refresh_interval_s = max(0.1, float(refresh_interval_s))
-        self._next_sample_time = 0.0
+        self._lock = threading.Lock()
         self._stats = SystemStats()
         self._previous_linux_cpu_times: tuple[tuple[int, int], ...] | None = None
+        self._worker = _AsyncRefreshWorker(
+            refresh_interval_s,
+            "cluster-system-stats",
+            self._refresh,
+        )
 
     def sample(self, now: float | None = None) -> SystemStats:
         if now is None:
             now = time.perf_counter()
-        if now < self._next_sample_time:
+        self._worker.request(now)
+        with self._lock:
             return self._stats
 
+    def close(self) -> None:
+        self._worker.close()
+
+    def _refresh(self) -> None:
         stats = self._sample_linux()
         if stats is not None:
-            self._stats = stats
-        self._next_sample_time = now + self.refresh_interval_s
-        return self._stats
+            with self._lock:
+                self._stats = stats
 
     def _sample_linux(self) -> SystemStats | None:
         if not PROC_STAT_PATH.exists() and not PROC_MEMINFO_PATH.exists():
@@ -140,12 +266,16 @@ class _ThreadCpuSample:
 
 class ClusterProcessCoreUsageSampler:
     def __init__(self, refresh_interval_s: float = 1.0, debug: bool = False) -> None:
-        self.refresh_interval_s = max(0.1, float(refresh_interval_s))
         self.debug = debug
-        self._next_sample_time = 0.0
+        self._lock = threading.Lock()
         self._last_sample_time: float | None = None
         self._previous_thread_ticks: dict[tuple[int, int, int], int] | None = None
         self._text: str | None = None
+        self._worker = _AsyncRefreshWorker(
+            refresh_interval_s,
+            "cluster-core-usage",
+            self._refresh,
+        )
         try:
             self._clock_ticks = int(os.sysconf(os.sysconf_names["SC_CLK_TCK"]))
         except (AttributeError, KeyError, OSError, ValueError):
@@ -154,9 +284,15 @@ class ClusterProcessCoreUsageSampler:
     def sample_text(self, now: float | None = None) -> str | None:
         if now is None:
             now = time.perf_counter()
-        if now < self._next_sample_time:
+        self._worker.request(now)
+        with self._lock:
             return self._text
 
+    def close(self) -> None:
+        self._worker.close()
+
+    def _refresh(self) -> None:
+        now = time.perf_counter()
         scan_start = time.perf_counter()
         samples, candidate_processes, matched_processes = self._read_cluster_thread_samples()
         scan_ms = (time.perf_counter() - scan_start) * 1000.0
@@ -198,9 +334,8 @@ class ClusterProcessCoreUsageSampler:
 
         self._previous_thread_ticks = next_ticks
         self._last_sample_time = now
-        self._next_sample_time = now + self.refresh_interval_s
-        self._text = text
-        return self._text
+        with self._lock:
+            self._text = text
 
     def _read_cluster_thread_samples(self) -> tuple[tuple[_ThreadCpuSample, ...], int, int]:
         if not PROC_PATH.exists():
