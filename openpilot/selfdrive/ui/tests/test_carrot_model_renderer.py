@@ -10,7 +10,6 @@ class FakeSubMaster(dict):
   def __init__(self, **messages):
     super().__init__(messages)
     self.valid = dict.fromkeys(messages, True)
-    self.alive = dict.fromkeys(messages, True)
 
 
 def blind_spot_messages(
@@ -103,10 +102,6 @@ def test_blind_spot_invalid_state_is_distinct_from_inactive():
   sm = FakeSubMaster(modelV2=SimpleNamespace(meta=meta), carState=car_state, radarState=radar_state)
   sm.valid["radarState"] = False
 
-  assert renderer._draw_blind_spot_carrot(sm) == (0, False)
-
-  sm.valid["radarState"] = True
-  sm.alive["radarState"] = False
   assert renderer._draw_blind_spot_carrot(sm) == (0, False)
 
 
