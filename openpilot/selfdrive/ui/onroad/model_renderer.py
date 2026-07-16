@@ -1192,7 +1192,9 @@ class ModelRenderer(Widget):
     input_services = ("modelV2", "carState", "radarState")
     if not all(sm.valid[service] for service in input_services):
       return 0, False
-    state_valid = all(sm.alive[service] for service in input_services)
+    # Match the actual draw gate. A temporarily non-alive service can still
+    # render its last valid sample, so that executed branch remains attributable.
+    state_valid = True
 
     car_state = sm['carState']
     radar_state = sm['radarState']

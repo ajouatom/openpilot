@@ -341,14 +341,9 @@ def test_blind_spot_state_valid_distinguishes_inactive_from_missing_input(model_
     def __init__(self):
       super().__init__(modelV2=model, carState=car_state, radarState=radar_state)
       self.valid = dict.fromkeys(self, True)
-      self.alive = dict.fromkeys(self, True)
 
   sm = BlindSpotSubMaster()
   assert renderer._draw_blind_spot_carrot(sm) == (0, True)
 
   sm.valid["radarState"] = False
-  assert renderer._draw_blind_spot_carrot(sm) == (0, False)
-
-  sm.valid["radarState"] = True
-  sm.alive["radarState"] = False
   assert renderer._draw_blind_spot_carrot(sm) == (0, False)
