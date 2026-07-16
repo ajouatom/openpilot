@@ -4571,6 +4571,7 @@ class ClusterUiRenderer:
                     (10, 13, 16),
                     2,
                     anchor="right",
+                    cache=True,
                 )
             return
 

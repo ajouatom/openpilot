@@ -475,6 +475,7 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   }
   dashboard = NaviDashboardState(True, "ipc://carrotNaviMedia", media=tuple(frames.values()))
   drawn = {}
+  stroked_text = []
 
   monkeypatch.setattr(
     ClusterUiRenderer,
@@ -496,11 +497,17 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
     return True
 
   monkeypatch.setattr(ClusterUiRenderer, "_draw_navi_media", capture_media)
+  monkeypatch.setattr(ClusterUiRenderer, "_ellipsize_text", lambda _self, text, *_args: text)
+  monkeypatch.setattr(
+    ClusterUiRenderer,
+    "_draw_text_with_stroke",
+    lambda _self, *args, **kwargs: stroked_text.append((args, kwargs)),
+  )
   monkeypatch.setattr("cluster_renderer.rl.draw_rectangle_rec", lambda *args, **kwargs: None)
   monkeypatch.setattr("cluster_renderer.rl.begin_scissor_mode", lambda *args, **kwargs: None)
   monkeypatch.setattr("cluster_renderer.rl.end_scissor_mode", lambda: None)
 
-  navi = SimpleNamespace(traffic_light=object(), route=None, vehicle=None)
+  navi = SimpleNamespace(traffic_light=object(), route=None, vehicle=SimpleNamespace(road_name="Test road"))
   renderer._draw_navi_live_panel(SimpleNamespace(navi_live=navi, navi_dashboard=dashboard))
 
   assert drawn["image:tbt_current_compact"].width == pytest.approx(310.0 * 1.2)
@@ -518,6 +525,9 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   assert center_text.width == pytest.approx(220.0)
   assert center_text.height == pytest.approx(78.0)
   assert "image:lane_top" not in drawn
+  assert len(stroked_text) == 1
+  assert stroked_text[0][0][0] == "Test road"
+  assert stroked_text[0][1] == {"anchor": "right", "cache": True}
 
 
 def test_navi_dashboard_hides_top_lane_and_draws_received_signal(monkeypatch):
