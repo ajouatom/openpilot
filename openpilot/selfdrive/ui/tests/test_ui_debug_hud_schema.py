@@ -31,6 +31,8 @@ EXPECTED_UI_DEBUG_FIELDS = [
   ("hudPlotTimeMillis", 19, "Float32"),
   ("hudAuxTimeMillis", 20, "Float32"),
   ("hudTimingValid", 21, "Bool"),
+  ("modelBlindSpotStateMask", 22, "UInt8"),
+  ("modelBlindSpotStateValid", 23, "Bool"),
 ]
 
 EXPECTED_HUD_PUBLISH_MAPPING = {
@@ -42,6 +44,16 @@ EXPECTED_HUD_PUBLISH_MAPPING = {
   "hudPlotTimeMillis": "plot_time_millis",
   "hudAuxTimeMillis": "aux_time_millis",
   "hudTimingValid": "valid",
+}
+
+EXPECTED_MODEL_PUBLISH_MAPPING = {
+  "modelPathTimeMillis": "path_time_millis",
+  "modelLaneTimeMillis": "lane_time_millis",
+  "modelBlindSpotTimeMillis": "blind_spot_time_millis",
+  "modelRadarTimeMillis": "radar_time_millis",
+  "modelTimingValid": "valid",
+  "modelBlindSpotStateMask": "blind_spot_state_mask",
+  "modelBlindSpotStateValid": "blind_spot_state_valid",
 }
 
 
@@ -57,7 +69,7 @@ def test_ui_debug_schema_keeps_legacy_ordinals_and_appends_hud_fields():
 
   assert fields == EXPECTED_UI_DEBUG_FIELDS
   assert len({ordinal for _, ordinal, _ in fields}) == len(fields)
-  assert [ordinal for _, ordinal, _ in fields] == list(range(22))
+  assert [ordinal for _, ordinal, _ in fields] == list(range(24))
 
 
 def _is_attribute(node, *names):
@@ -105,6 +117,48 @@ def test_augmented_road_view_publishes_hud_snapshot_after_render():
         send_lines.append(node.lineno)
 
   assert mappings == EXPECTED_HUD_PUBLISH_MAPPING
+  assert len(snapshot_lines) == 1
+  assert render_lines and send_lines
+  assert render_lines[-1] < snapshot_lines[0] < min(mapping_lines) <= max(mapping_lines) < send_lines[-1]
+
+
+def test_augmented_road_view_publishes_model_snapshot_after_render():
+  tree = ast.parse(AUGMENTED_ROAD_VIEW_PATH.read_text(encoding="utf-8"))
+  mappings = {}
+  mapping_lines = []
+  render_lines = []
+  snapshot_lines = []
+  send_lines = []
+
+  for node in ast.walk(tree):
+    if isinstance(node, ast.Assign) and len(node.targets) == 1:
+      target = node.targets[0]
+      value = node.value
+      if (
+        isinstance(target, ast.Attribute)
+        and isinstance(target.value, ast.Name)
+        and target.value.id == "ud"
+        and isinstance(value, ast.Attribute)
+        and isinstance(value.value, ast.Name)
+        and value.value.id == "model_timings"
+      ):
+        assert target.attr not in mappings, f"duplicate publish assignment for {target.attr}"
+        mappings[target.attr] = value.attr
+        mapping_lines.append(node.lineno)
+      if (
+        isinstance(target, ast.Name)
+        and target.id == "model_timings"
+        and _is_attribute(value, "self", "model_renderer", "render_timings")
+      ):
+        snapshot_lines.append(node.lineno)
+
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+      if _is_attribute(node.func, "self", "model_renderer", "render"):
+        render_lines.append(node.lineno)
+      if _is_attribute(node.func, "self", "_pm", "send"):
+        send_lines.append(node.lineno)
+
+  assert mappings == EXPECTED_MODEL_PUBLISH_MAPPING
   assert len(snapshot_lines) == 1
   assert render_lines and send_lines
   assert render_lines[-1] < snapshot_lines[0] < min(mapping_lines) <= max(mapping_lines) < send_lines[-1]

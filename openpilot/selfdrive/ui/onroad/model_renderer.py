@@ -21,6 +21,11 @@ CARROT_PARAM_REFRESH_INTERVAL = 1.0
 
 LaneChangeState = log.LaneChangeState
 
+BLIND_SPOT_LEFT_MASK = 1 << 0
+BLIND_SPOT_RIGHT_MASK = 1 << 1
+BLIND_SPOT_LEFT_ASSIST_MASK = 1 << 2
+BLIND_SPOT_RIGHT_ASSIST_MASK = 1 << 3
+
 THROTTLE_COLORS = [
   rl.Color(13, 248, 122, 102),   # HSLF(148/360, 0.94, 0.51, 0.4)
   rl.Color(114, 255, 92, 89),    # HSLF(112/360, 1.0, 0.68, 0.35)
@@ -69,6 +74,8 @@ class ModelRenderTimings:
   blind_spot_time_millis: float = 0.0
   radar_time_millis: float = 0.0
   valid: bool = False
+  blind_spot_state_mask: int = 0
+  blind_spot_state_valid: bool = False
 
   def reset(self) -> None:
     self.path_time_millis = 0.0
@@ -76,6 +83,8 @@ class ModelRenderTimings:
     self.blind_spot_time_millis = 0.0
     self.radar_time_millis = 0.0
     self.valid = False
+    self.blind_spot_state_mask = 0
+    self.blind_spot_state_valid = False
 
 
 class ModelRenderer(Widget):
@@ -173,7 +182,7 @@ class ModelRenderer(Widget):
     lane_start = time.monotonic_ns()
     self._draw_lane_lines_carrot(sm)
     blind_spot_start = time.monotonic_ns()
-    self._draw_blind_spot_carrot(sm)
+    blind_spot_state_mask, blind_spot_state_valid = self._draw_blind_spot_carrot(sm)
     radar_start = time.monotonic_ns()
     self._draw_radar_info_carrot(sm)
     render_end = time.monotonic_ns()
@@ -183,6 +192,8 @@ class ModelRenderer(Widget):
     self._render_timings.blind_spot_time_millis = (radar_start - blind_spot_start) * 1e-6
     self._render_timings.radar_time_millis = (render_end - radar_start) * 1e-6
     self._render_timings.valid = True
+    self._render_timings.blind_spot_state_mask = blind_spot_state_mask
+    self._render_timings.blind_spot_state_valid = blind_spot_state_valid
 
   def _update_raw_points(self, model):
     """Update raw 3D points from model data"""
@@ -709,7 +720,12 @@ class ModelRenderer(Widget):
       )
 
   def _draw_polygon_from_xy_carrot(self, xs, ys, fill_color: rl.Color, brake_valid: bool, color_idx: int):
-    pts = np.array(list(zip(xs, ys)), dtype=np.float32)
+    pts = np.column_stack((xs, ys)).astype(np.float32, copy=False)
+    self._draw_polygon_points_carrot(pts, fill_color, brake_valid, color_idx)
+
+
+  def _draw_polygon_points_carrot(self, pts: np.ndarray, fill_color: rl.Color, brake_valid: bool, color_idx: int):
+    pts = np.asarray(pts, dtype=np.float32)
 
     if pts.shape[0] >= 2:
       keep = [0]
@@ -1026,6 +1042,68 @@ class ModelRenderer(Widget):
 
 
 
+  def _build_blind_spot_barrier_carrot(self, model_position: np.ndarray, y_shift: float) -> np.ndarray:
+    max_idx_barrier = self._get_path_length_idx(model_position[:, 0], 40.0)
+    points = model_position[:max_idx_barrier + 1]
+    points = points[points[:, 0] >= 0]
+    if points.shape[0] == 0:
+      return np.empty((0, 2), dtype=np.float32)
+
+    # Project the upper/lower barrier edges together. This preserves the old
+    # point and clipping rules without two Python projection calls per point.
+    offsets = np.array(
+      [[0.0, y_shift, 1.15], [0.0, y_shift, 0.6]],
+      dtype=np.float32,
+    )
+    points_3d = points[None, :, :] + offsets[:, None, :]
+    # Keep the former three-term float32 dot-product order while applying the
+    # projection to both edges and all model points at once.
+    transform = self._car_space_transform
+    projected = (
+      transform[:, 0, None, None] * points_3d[None, :, :, 0] +
+      transform[:, 1, None, None] * points_3d[None, :, :, 1] +
+      transform[:, 2, None, None] * points_3d[None, :, :, 2]
+    )
+    upper_projected = projected[:, 0, :]
+    lower_projected = projected[:, 1, :]
+
+    valid_depth = (np.abs(upper_projected[2]) >= 1e-6) & (np.abs(lower_projected[2]) >= 1e-6)
+    if not np.any(valid_depth):
+      return np.empty((0, 2), dtype=np.float32)
+
+    upper_screen = upper_projected[:2, valid_depth] / upper_projected[2, valid_depth][None, :]
+    lower_screen = lower_projected[:2, valid_depth] / lower_projected[2, valid_depth][None, :]
+
+    clip = self._clip_region
+    x_min, x_max = clip.x, clip.x + clip.width
+    y_min, y_max = clip.y, clip.y + clip.height
+    upper_in_clip = (
+      (upper_screen[0] >= x_min) & (upper_screen[0] <= x_max) &
+      (upper_screen[1] >= y_min) & (upper_screen[1] <= y_max)
+    )
+    lower_in_clip = (
+      (lower_screen[0] >= x_min) & (lower_screen[0] <= x_max) &
+      (lower_screen[1] >= y_min) & (lower_screen[1] <= y_max)
+    )
+    both_in_clip = upper_in_clip & lower_in_clip
+    if not np.any(both_in_clip):
+      return np.empty((0, 2), dtype=np.float32)
+
+    upper_screen = upper_screen[:, both_in_clip]
+    lower_screen = lower_screen[:, both_in_clip]
+
+    # Match the old hill/inversion filter: keep a point only when its upper
+    # screen Y does not increase relative to the last accepted point.
+    if upper_screen.shape[1] > 1:
+      keep = upper_screen[1] == np.minimum.accumulate(upper_screen[1])
+      upper_screen = upper_screen[:, keep]
+      lower_screen = lower_screen[:, keep]
+
+    if upper_screen.shape[1] == 0:
+      return np.empty((0, 2), dtype=np.float32)
+    return np.vstack((upper_screen.T, lower_screen[:, ::-1].T)).astype(np.float32)
+
+
   def _update_blind_spot_barriers_carrot(self, sm, update_left: bool = True, update_right: bool = True):
     if not sm.valid['modelV2']:
       self._carrot_lane_barrier_vertices[0] = np.empty((0, 2), dtype=np.float32)
@@ -1038,51 +1116,10 @@ class ModelRenderer(Widget):
       self._carrot_lane_barrier_vertices[1] = np.empty((0, 2), dtype=np.float32)
       return
 
-    max_idx_barrier = self._get_path_length_idx(model_position[:, 0], 40.0)
-
-    def build_barrier(y_shift: float) -> np.ndarray:
-      left_points = []
-      right_points = []
-
-      for i in range(0, max_idx_barrier + 1):
-        if model_position[i, 0] < 0:
-          continue
-
-        left = self._map_to_screen(
-          model_position[i, 0],
-          model_position[i, 1] + y_shift,
-          model_position[i, 2] + (1.2 - 0.05),
-        )
-        right = self._map_to_screen(
-          model_position[i, 0],
-          model_position[i, 1] + y_shift,
-          model_position[i, 2] + (1.2 - 0.6),
-        )
-
-        if left is not None and right is not None:
-          if len(left_points) > 0 and left[1] > left_points[-1][1]:
-            continue
-          left_points.append(left)
-          right_points.insert(0, right)
-
-      if len(left_points) == 0:
-        return np.empty((0, 2), dtype=np.float32)
-      return np.array(left_points + right_points, dtype=np.float32)
-
     if update_left:
-      self._carrot_lane_barrier_vertices[0] = build_barrier(-1.7)
+      self._carrot_lane_barrier_vertices[0] = self._build_blind_spot_barrier_carrot(model_position, -1.7)
     if update_right:
-      self._carrot_lane_barrier_vertices[1] = build_barrier(1.7)
-
-
-  def _order_polygon_points_carrot(self, pts: np.ndarray) -> np.ndarray:
-    if pts.shape[0] < 3:
-      return pts
-
-    center = np.mean(pts, axis=0)
-    angles = np.arctan2(pts[:, 1] - center[1], pts[:, 0] - center[0])
-    order = np.argsort(angles)
-    return pts[order]
+      self._carrot_lane_barrier_vertices[1] = self._build_blind_spot_barrier_carrot(model_position, 1.7)
 
   def _draw_blind_spot_segments_carrot(self, points: np.ndarray, color: rl.Color):
     if points.size == 0:
@@ -1093,19 +1130,26 @@ class ModelRenderer(Widget):
     if half < 3:
       return
 
-    for i in range(0, half - 2, 2):
-      p0 = points[i + 0]
-      p1 = points[i + 1]
-      p2 = points[count - i - 3]
-      p3 = points[count - i - 2]
+    starts = np.arange(0, half - 2, 2)
+    if starts.size == 0:
+      return
 
-      quad = np.array([p0, p1, p2, p3], dtype=np.float32)
-      quad = self._order_polygon_points_carrot(quad)
+    quads = np.stack(
+      (
+        points[starts],
+        points[starts + 1],
+        points[count - starts - 3],
+        points[count - starts - 2],
+      ),
+      axis=1,
+    )
+    centers = np.mean(quads, axis=1, keepdims=True)
+    angles = np.arctan2(quads[:, :, 1] - centers[:, :, 1], quads[:, :, 0] - centers[:, :, 0])
+    order = np.argsort(angles, axis=1)
+    ordered_quads = np.take_along_axis(quads, order[:, :, None], axis=1)
 
-      xs = [float(p[0]) for p in quad]
-      ys = [float(p[1]) for p in quad]
-
-      self._draw_polygon_from_xy_carrot(xs, ys, color, False, 10)
+    for quad in ordered_quads:
+      self._draw_polygon_points_carrot(quad, color, False, 10)
 
 
   @staticmethod
@@ -1130,9 +1174,26 @@ class ModelRenderer(Widget):
     return left_blindspot, right_blindspot, left_assist, right_assist
 
 
-  def _draw_blind_spot_carrot(self, sm):
-    if not sm.valid['modelV2'] or not sm.valid['carState'] or not sm.valid['radarState']:
-      return
+  @staticmethod
+  def _blind_spot_state_mask_carrot(
+    left_blindspot: bool,
+    right_blindspot: bool,
+    left_assist: bool,
+    right_assist: bool,
+  ) -> int:
+    return (
+      (BLIND_SPOT_LEFT_MASK if left_blindspot else 0) |
+      (BLIND_SPOT_RIGHT_MASK if right_blindspot else 0) |
+      (BLIND_SPOT_LEFT_ASSIST_MASK if left_assist else 0) |
+      (BLIND_SPOT_RIGHT_ASSIST_MASK if right_assist else 0)
+    )
+
+
+  def _draw_blind_spot_carrot(self, sm) -> tuple[int, bool]:
+    input_services = ("modelV2", "carState", "radarState")
+    if not all(sm.valid[service] for service in input_services):
+      return 0, False
+    state_valid = all(sm.alive[service] for service in input_services)
 
     car_state = sm['carState']
     radar_state = sm['radarState']
@@ -1141,8 +1202,11 @@ class ModelRenderer(Widget):
     left_blindspot, right_blindspot, left_assist, right_assist = self._blind_spot_draw_state_carrot(
       car_state, radar_state, meta,
     )
+    state_mask = self._blind_spot_state_mask_carrot(
+      left_blindspot, right_blindspot, left_assist, right_assist,
+    )
     if not (left_blindspot or right_blindspot or left_assist or right_assist):
-      return
+      return state_mask, state_valid
 
     warn_color = rl.Color(255, 215, 0, 150)
     assist_color = rl.Color(0, 204, 0, 150)
@@ -1161,6 +1225,8 @@ class ModelRenderer(Widget):
       self._draw_blind_spot_segments_carrot(self._carrot_lane_barrier_vertices[1], warn_color)
     elif right_assist:
       self._draw_blind_spot_segments_carrot(self._carrot_lane_barrier_vertices[1], assist_color)
+
+    return state_mask, state_valid
 
 
   def _draw_radar_info_carrot(self, sm):

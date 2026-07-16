@@ -145,6 +145,8 @@ class AugmentedRoadView(CameraView):
     ud.modelBlindSpotTimeMillis = model_timings.blind_spot_time_millis
     ud.modelRadarTimeMillis = model_timings.radar_time_millis
     ud.modelTimingValid = model_timings.valid
+    ud.modelBlindSpotStateMask = model_timings.blind_spot_state_mask
+    ud.modelBlindSpotStateValid = model_timings.blind_spot_state_valid
     hud_timings = self._hud_renderer.render_timings
     ud.hudHeaderTimeMillis = hud_timings.header_time_millis
     ud.hudSpeedTimeMillis = hud_timings.speed_time_millis

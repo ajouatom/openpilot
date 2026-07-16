@@ -218,3 +218,137 @@ def test_mode9_complex_path_preserves_segment_fill_outline_order(model_renderer_
   events.clear()
   renderer._draw_complex_path_carrot(color_idx=5, brake_valid=False)
   assert [event[0] for event in events] == ["fill", "fill", "fill", "fill"]
+
+
+@pytest.mark.parametrize("y_shift", (-1.7, 1.7))
+def test_blind_spot_barrier_vectorization_matches_scalar_reference(model_renderer_module, y_shift):
+  module = model_renderer_module
+  renderer = object.__new__(module.ModelRenderer)
+  renderer._car_space_transform = np.array(
+    [[0.0, 120.0, 960.0], [-18.0, 8.0, 720.0], [0.02, 0.0, 1.0]],
+    dtype=np.float32,
+  )
+  renderer._clip_region = module.rl.Rectangle(-500.0, -500.0, 3000.0, 2000.0)
+  model_position = np.array(
+    [
+      [-1.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0],
+      [5.0, 0.2, 0.05],
+      [10.0, -0.1, 0.10],
+      [20.0, 0.4, 0.15],
+      [30.0, -0.2, 0.20],
+      [40.0, 0.1, 0.25],
+      [50.0, 0.0, 0.30],
+    ],
+    dtype=np.float32,
+  )
+
+  max_idx = renderer._get_path_length_idx(model_position[:, 0], 40.0)
+  upper_points = []
+  lower_points = []
+  for i in range(max_idx + 1):
+    if model_position[i, 0] < 0:
+      continue
+    upper = renderer._map_to_screen(
+      model_position[i, 0], model_position[i, 1] + y_shift, model_position[i, 2] + 1.15,
+    )
+    lower = renderer._map_to_screen(
+      model_position[i, 0], model_position[i, 1] + y_shift, model_position[i, 2] + 0.6,
+    )
+    if upper is not None and lower is not None:
+      if upper_points and upper[1] > upper_points[-1][1]:
+        continue
+      upper_points.append(upper)
+      lower_points.insert(0, lower)
+  expected = np.array(upper_points + lower_points, dtype=np.float32)
+
+  actual = renderer._build_blind_spot_barrier_carrot(model_position, y_shift)
+
+  np.testing.assert_array_equal(actual, expected)
+
+
+def test_blind_spot_segment_vectorization_preserves_fill_outline_order(model_renderer_module, monkeypatch):
+  module = model_renderer_module
+  renderer = object.__new__(module.ModelRenderer)
+  upper = np.array(
+    [[100.0, 700.0], [110.0, 650.0], [120.0, 600.0], [130.0, 550.0], [140.0, 500.0], [150.0, 450.0]],
+    dtype=np.float32,
+  )
+  lower = np.array(
+    [[90.0, 710.0], [100.0, 660.0], [110.0, 610.0], [120.0, 560.0], [130.0, 510.0], [140.0, 460.0]],
+    dtype=np.float32,
+  )
+  points = np.vstack((upper, lower[::-1]))
+  color = module.rl.Color(255, 215, 0, 150)
+  events = []
+  monkeypatch.setattr(
+    module,
+    "draw_polygon_solid",
+    lambda quad, fill_color: events.append(("fill", quad.copy(), fill_color)),
+  )
+  renderer._draw_polygon_outline_carrot = (
+    lambda quad, outline_color, thickness: events.append(("outline", quad.copy(), outline_color, thickness))
+  )
+
+  expected_quads = []
+  count = points.shape[0]
+  half = count // 2
+  for i in range(0, half - 2, 2):
+    quad = np.array(
+      [points[i], points[i + 1], points[count - i - 3], points[count - i - 2]],
+      dtype=np.float32,
+    )
+    center = np.mean(quad, axis=0)
+    angles = np.arctan2(quad[:, 1] - center[1], quad[:, 0] - center[0])
+    expected_quads.append(quad[np.argsort(angles)])
+
+  renderer._draw_blind_spot_segments_carrot(points, color)
+
+  assert [event[0] for event in events] == ["fill", "outline", "fill", "outline"]
+  for index, expected in enumerate(expected_quads):
+    fill = events[index * 2]
+    outline = events[index * 2 + 1]
+    np.testing.assert_array_equal(fill[1], expected)
+    np.testing.assert_array_equal(outline[1], expected)
+    assert fill[2] == color
+    assert outline[2] == module.rl.WHITE
+    assert outline[3] == 2.0
+
+
+@pytest.mark.parametrize("mask", range(16))
+def test_blind_spot_state_mask_uses_stable_bits(model_renderer_module, mask):
+  module = model_renderer_module
+  state = tuple(bool(mask & (1 << bit)) for bit in range(4))
+  assert module.ModelRenderer._blind_spot_state_mask_carrot(*state) == mask
+
+
+def test_blind_spot_state_valid_distinguishes_inactive_from_missing_input(model_renderer_module):
+  module = model_renderer_module
+  renderer = object.__new__(module.ModelRenderer)
+  car_state = SimpleNamespace(leftBlindspot=False, rightBlindspot=False, vEgo=10.0)
+  radar_state = SimpleNamespace(
+    leadLeft=SimpleNamespace(status=False, dRel=100.0),
+    leadRight=SimpleNamespace(status=False, dRel=100.0),
+  )
+  model = SimpleNamespace(
+    meta=SimpleNamespace(
+      laneChangeState=module.LaneChangeState.off,
+      laneChangeDirection="none",
+    ),
+  )
+
+  class BlindSpotSubMaster(dict):
+    def __init__(self):
+      super().__init__(modelV2=model, carState=car_state, radarState=radar_state)
+      self.valid = dict.fromkeys(self, True)
+      self.alive = dict.fromkeys(self, True)
+
+  sm = BlindSpotSubMaster()
+  assert renderer._draw_blind_spot_carrot(sm) == (0, True)
+
+  sm.valid["radarState"] = False
+  assert renderer._draw_blind_spot_carrot(sm) == (0, False)
+
+  sm.valid["radarState"] = True
+  sm.alive["radarState"] = False
+  assert renderer._draw_blind_spot_carrot(sm) == (0, False)
