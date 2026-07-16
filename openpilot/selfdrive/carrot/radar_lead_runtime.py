@@ -96,7 +96,9 @@ def _xy(data: Any) -> tuple[tuple[float, float], ...]:
 
 def runtime_context(time_s: float, v_ego: float, model: Any) -> RadarLeadContext:
   leads = []
-  for lead in model.leadsV3[:1]:
+  # Cap'n Proto DynamicListReader accepts integer indexes, but not Python slices.
+  for index in range(min(1, len(model.leadsV3))):
+    lead = model.leadsV3[index]
     if not lead.x or not lead.y or not lead.v or not lead.a:
       continue
     leads.append(VisionLeadContext(
