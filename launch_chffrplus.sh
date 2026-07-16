@@ -185,6 +185,14 @@ function launch {
   PYDEPS="$DIR/pydeps"
   mkdir -p "$PYDEPS"
   export PYTHONPATH="$PYDEPS:$PWD${PYTHONPATH:+:$PYTHONPATH}"
+
+  # Build the Params registry before any external Python service imports it.
+  # This is independent of the full-build and prebuilt checks below.
+  if ! bash "$DIR/scripts/ensure_params_build.sh"; then
+    echo "Params registry build failed, not starting openpilot."
+    while true; do sleep 1; done
+  fi
+
   start_carrot_recovery
   start_carrot_web
 
