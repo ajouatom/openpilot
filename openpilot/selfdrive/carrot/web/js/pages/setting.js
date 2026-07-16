@@ -940,6 +940,11 @@ function getClusterNaviMapOptionLabel(name, value) {
       en: ["Normal map", "Satellite map"],
       zh: ["普通地图", "卫星地图"],
     },
+    ClusterNaviMapFps: {
+      ko: ["5 FPS", "10 FPS", "20 FPS", "30 FPS"],
+      en: ["5 FPS", "10 FPS", "20 FPS", "30 FPS"],
+      zh: ["5 FPS", "10 FPS", "20 FPS", "30 FPS"],
+    },
   };
   const values = labels[String(name || "")];
   if (!values) return null;

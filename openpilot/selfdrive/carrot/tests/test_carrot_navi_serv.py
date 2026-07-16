@@ -17,28 +17,48 @@ class _SubMaster:
     return self.data
 
 
+class _MemoryParams:
+  def __init__(self):
+    self.writes = []
+    self.removed = []
+
+  def put_nonblocking(self, key, value):
+    self.writes.append((key, value))
+
+  def remove(self, key):
+    self.removed.append(key)
+
+
 def _serv():
   serv = CarrotServ.__new__(CarrotServ)
   serv.carrot_navi_session_id = ""
   serv.carrot_navi_speed_sequence = -1
   serv.carrot_navi_current_sequence = -1
   serv.carrot_navi_next_sequence = -1
+  serv.carrot_navi_vehicle_sequence = -1
+  serv.carrot_navi_route_sequence = -1
   serv.carrot_navi_active = False
   serv.carrot_navi_has_control = False
   serv.carrot_navi_road_limit_valid = False
   serv.carrot_navi_off_route = False
+  serv.carrot_navi_traffic_active = False
+  serv.carrot_navi_control = None
   serv.active_count = 0
   serv.active_sdi_count = 0
   serv.active_sdi_count_max = 200
+  serv.carrotIndex = 0
+  serv.nRoadLimitSpeed_counter = 0
   serv.autoNaviSpeedCtrlMode = 3
   serv.autoNaviSpeedSafetyFactor = 1.0
   serv.autoNaviSpeedBumpSpeed = 20
   serv.roadcate = 8
   serv.nRoadLimitSpeed = 30
+  serv.params_memory = _MemoryParams()
 
   defaults = {
     "nSdiType": -1,
     "nSdiSpeedLimit": 0,
+    "nSdiSection": -1,
     "nSdiDist": 0,
     "nSdiBlockType": -1,
     "nSdiBlockSpeed": 0,
@@ -56,6 +76,7 @@ def _serv():
     "nTBTTurnType": -1,
     "nTBTDistNext": 0,
     "nTBTTurnTypeNext": -1,
+    "nTBTNextRoadWidth": 0,
     "szTBTMainText": "",
     "szNearDirName": "",
     "szFarDirName": "",
@@ -68,6 +89,15 @@ def _serv():
     "navModifier": "",
     "navTypeNext": "invalid",
     "navModifierNext": "",
+    "nGoPosDist": 0,
+    "nGoPosTime": 0,
+    "vpPosPointLatNavi": 0.0,
+    "vpPosPointLonNavi": 0.0,
+    "nPosAngle": 0.0,
+    "nPosSpeed": 0.0,
+    "szPosRoadName": "",
+    "last_update_gps_time_navi": 0.0,
+    "last_calculate_gps_time": 0.0,
   }
   for name, value in defaults.items():
     setattr(serv, name, value)
@@ -111,7 +141,7 @@ def test_applies_new_navi_control_without_resetting_distance_on_heartbeat():
   assert (serv.xSpdDist, serv.xDistToTurn, serv.xDistToTurnNext) == (400, 100, 3400)
 
 
-def test_disconnect_clears_new_navi_control_immediately():
+def test_disconnect_clears_7714_control_state():
   serv = _serv()
   data = _message()
   sm = _SubMaster(data)
@@ -142,3 +172,112 @@ def test_active_section_uses_existing_section_speed_control():
   assert serv.xSpdType == 4
   assert serv.xSpdLimit == 80
   assert serv.xSpdDist == 2346
+
+
+def test_applies_7714_vehicle_route_traffic_and_secondary_sdi():
+  serv = _serv()
+  data = _message()
+  data.update({
+    "vehicle": {
+      "meta": _meta(10),
+      "latitude": 37.5,
+      "longitude": 127.1,
+      "headingDeg": 92.0,
+      "speedKph": 42.5,
+      "roadName": "Test road",
+    },
+    "speed": {
+      "meta": _meta(11),
+      "roadLimitValid": True,
+      "roadLimitKph": 50,
+      "sdiPresent": True,
+      "sdiType": 1,
+      "sdiDistanceM": 420,
+      "sdiSpeedLimitKph": 50,
+      "sdiBlockType": 2,
+      "sdiBlockSpeedKph": 40,
+      "sdiBlockDistanceM": 390,
+      "secondarySdiPresent": True,
+      "secondarySdiType": 22,
+      "secondarySdiDistanceM": 93,
+    },
+    "route": {
+      "meta": _meta(12),
+      "remainingDistanceM": 12500,
+      "remainingTimeSec": 1320,
+      "polyline": [{"latitude": 37.5, "longitude": 127.1}],
+    },
+    "trafficSignal": {
+      "meta": _meta(13),
+      "visible": True,
+      "distanceM": 145,
+      "source": "ssinf",
+      "redValid": True,
+      "redOn": True,
+      "redRemainSec": 18,
+    },
+    "navigationStatus": {"meta": _meta(14), "guidanceActive": True},
+  })
+
+  sm = _SubMaster(data)
+  assert serv._update_carrot_navi(sm)
+  assert (serv.vpPosPointLatNavi, serv.vpPosPointLonNavi, serv.nPosAngle) == (37.5, 127.1, 92.0)
+  assert serv.szPosRoadName == "Test road"
+  assert serv.last_update_gps_time_navi > 0
+  assert (serv.nGoPosDist, serv.nGoPosTime) == (12500, 1320)
+  assert (serv.nSdiBlockType, serv.nSdiBlockSpeed, serv.nSdiBlockDist) == (2, 40, 390)
+  assert (serv.nSdiPlusType, serv.nSdiPlusDist) == (22, 93)
+  assert serv.params_memory.writes[-1][0] == "TrafficLight"
+  assert '"lamp": "red"' in serv.params_memory.writes[-1][1]
+
+  first_gps_update = serv.last_update_gps_time_navi
+  assert serv._update_carrot_navi(sm)
+  assert serv.last_update_gps_time_navi >= first_gps_update
+  assert len(serv.params_memory.writes) == 2
+
+  data["connected"] = False
+  assert not serv._update_carrot_navi(sm)
+  assert serv.last_update_gps_time_navi == 0
+  assert serv.szPosRoadName == ""
+  assert (serv.nGoPosDist, serv.nGoPosTime) == (0, 0)
+  assert serv.params_memory.removed[-1] == "TrafficLight"
+
+
+def test_legacy_7713_navigation_update_path_remains_operational():
+  serv = _serv()
+  legacy = {
+    "nRoadLimitSpeed": 50,
+    "nSdiType": 1,
+    "nSdiSpeedLimit": 40,
+    "nSdiSection": 0,
+    "nSdiDist": 240,
+    "nSdiBlockType": 2,
+    "nSdiBlockSpeed": 40,
+    "nSdiBlockDist": 210,
+    "nSdiPlusType": 22,
+    "nSdiPlusSpeedLimit": 20,
+    "nSdiPlusDist": 80,
+    "nTBTDist": 310,
+    "nTBTTurnType": 12,
+    "szTBTMainText": "Legacy left",
+    "szNearDirName": "Legacy near",
+    "szFarDirName": "Legacy far",
+    "nTBTDistNext": 940,
+    "nTBTTurnTypeNext": 13,
+    "nGoPosDist": 8700,
+    "nGoPosTime": 720,
+    "szPosRoadName": "Legacy road",
+    "vpPosPointLat": 37.4,
+    "vpPosPointLon": 126.9,
+    "nPosAngle": 183.0,
+    "nPosSpeed": 31.0,
+    "roadcate": 6,
+  }
+  for _ in range(7):
+    serv.update(legacy)
+
+  assert serv.nRoadLimitSpeed == 50
+  assert (serv.nSdiType, serv.nSdiDist, serv.nSdiPlusType) == (1, 240, 22)
+  assert (serv.nTBTDist, serv.nTBTTurnType, serv.nTBTDistNext) == (310, 12, 940)
+  assert (serv.nGoPosDist, serv.nGoPosTime) == (8700, 720)
+  assert (serv.szPosRoadName, serv.vpPosPointLatNavi, serv.vpPosPointLonNavi) == ("Legacy road", 37.4, 126.9)

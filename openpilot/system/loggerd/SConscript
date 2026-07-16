@@ -34,6 +34,12 @@ if arch != "Darwin":
     LIBS=[common, messaging, visionipc, 'pthread', 'z', 'm', 'zstd'],
     FRAMEWORKS=frameworks,
   )
+  env.SharedLibrary(
+    'cluster_h264_decoder_bridge',
+    ['decoder/cluster_h264_decoder_bridge.cc', 'decoder/cluster_h264_decoder.cc'],
+    LIBS=[common, messaging, visionipc, 'pthread', 'z', 'm', 'zstd'],
+    FRAMEWORKS=frameworks,
+  )
 
 if GetOption('extras'):
   env.Program('tests/test_logger', ['tests/test_runner.cc', 'tests/test_logger.cc', 'tests/test_zstd_writer.cc'], LIBS=libs)

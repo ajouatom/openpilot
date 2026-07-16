@@ -127,6 +127,18 @@ struct CarrotNaviState @0xaedffd8f31e7b55d {
 		sectionProgress @15 :Float32;
 		sectionSuspended @16 :Bool;
 		sectionOffRoute @17 :Bool;
+		sdiSectionType @18 :Int32;
+		sdiBlockType @19 :Int32;
+		sdiBlockSpeedKph @20 :Int16;
+		sdiBlockDistanceM @21 :Int32;
+		secondarySdiPresent @22 :Bool;
+		secondarySdiType @23 :Int32;
+		secondarySdiDistanceM @24 :Int32;
+		secondarySdiSpeedLimitKph @25 :Int16;
+		secondarySdiSectionType @26 :Int32;
+		secondarySdiBlockType @27 :Int32;
+		secondarySdiBlockSpeedKph @28 :Int16;
+		secondarySdiBlockDistanceM @29 :Int32;
 	}
 
 	struct TrafficSignal {

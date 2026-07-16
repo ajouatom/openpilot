@@ -35,6 +35,7 @@ from openpilot.selfdrive.navd.helpers import Coordinate
 from openpilot.common.constants import CV
 
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
+from openpilot.selfdrive.carrot.carrot_navi_control import CarrotNaviControl, parse_carrot_navi_control
 try:
   from openpilot.selfdrive.carrot.server.services.web_settings import read_web_settings
 except Exception:
@@ -307,6 +308,9 @@ class CarrotMan:
     self.navi_points_start_index = 0
     self.navi_points_active = False
     self.navd_active = False
+    self.carrot_navi_route_session_id = ""
+    self.carrot_navi_route_sequence = -1
+    self.carrot_navi_route_owned = False
 
     self.active_carrot_last = False
 
@@ -375,8 +379,16 @@ class CarrotMan:
     while self.is_running:
       try:
         self.sm.update(0)
-        if self.sm.updated['navRouteNavd']:
+        navd_route_updated = self.sm.updated['navRouteNavd']
+        if navd_route_updated:
           self.send_routes(self.sm['navRouteNavd'].coordinates, True)
+        carrot_navi_service_active = self.sm.alive['carrotNavi'] and self.sm.valid['carrotNavi']
+        if (
+          self.sm.updated['carrotNavi'] or navd_route_updated
+          or (self.carrot_navi_route_session_id and not carrot_navi_service_active)
+        ):
+          carrot_navi = parse_carrot_navi_control(self.sm['carrotNavi']) if carrot_navi_service_active else None
+          self._update_carrot_navi_route(carrot_navi, force=navd_route_updated)
         remote_addr = self.remote_addr
         remote_ip = remote_addr[0] if remote_addr is not None else ""
         vturn_speed = self.carrot_curve_speed(self.sm)
@@ -454,6 +466,49 @@ class CarrotMan:
         queue_carrot_exception_tmux_send("broadcast_version_info")
         time.sleep(1)
 
+
+  def _update_carrot_navi_route(self, navi: CarrotNaviControl | None, force: bool = False):
+    previous_session = self.carrot_navi_route_session_id
+    route_owned = self.carrot_navi_route_owned
+    if navi is None:
+      if not previous_session:
+        return
+      self.carrot_navi_route_session_id = ""
+      self.carrot_navi_route_sequence = -1
+      if force:
+        self.carrot_navi_route_owned = False
+        return
+      if not route_owned:
+        return
+      points = ()
+    else:
+      new_session = navi.session_id != previous_session
+      route = navi.route
+      if not force and not new_session and route.sequence == self.carrot_navi_route_sequence:
+        route_available = route.present and bool(route.polyline)
+        if not route_available or self.navi_points_active or not self.params.get_bool("IsOnroad"):
+          return
+      self.carrot_navi_route_session_id = navi.session_id
+      self.carrot_navi_route_sequence = route.sequence
+      points = route.polyline if route.present else ()
+      if not points and force:
+        self.carrot_navi_route_owned = False
+        return
+      if not points and not route_owned:
+        return
+
+    coords = [
+      {"latitude": latitude, "longitude": longitude}
+      for latitude, longitude in points
+    ]
+    self.navi_points = [(point["longitude"], point["latitude"]) for point in coords]
+    self.navi_points_start_index = 0
+    self.navi_points_active = bool(self.navi_points)
+    self.carrot_navi_route_owned = self.navi_points_active
+    # Keep the existing route consumer alive without asking navd to calculate a
+    # different route from the app's destination.
+    self.navd_active = self.navi_points_active
+    self.send_routes(coords)
 
   def carrot_navi_route(self):
 

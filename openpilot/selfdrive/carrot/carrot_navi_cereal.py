@@ -134,6 +134,7 @@ def build_carrot_navi_payload(snapshot: dict[str, Any], publish_mono_ns: int | N
   speed_record = _record(snapshot, "speed")
   speed = _dict(speed_record.get("value")) if speed_record.get("present") else {}
   sdi = _dict(speed.get("sdi"))
+  secondary_sdi = _dict(speed.get("sdi_secondary"))
   section = _dict(speed.get("section"))
   road_limit_valid = speed.get("road_limit_kph") is not None
 
@@ -196,6 +197,18 @@ def build_carrot_navi_payload(snapshot: dict[str, Any], publish_mono_ns: int | N
       "sdiType": _integer(sdi.get("type"), default=-1, minimum=-1, maximum=100_000),
       "sdiDistanceM": _integer(sdi.get("distance_m"), minimum=0, maximum=2_000_000),
       "sdiSpeedLimitKph": _integer(sdi.get("speed_limit_kph"), minimum=0, maximum=300),
+      "sdiSectionType": _integer(sdi.get("section_type"), default=-1, minimum=-1, maximum=100_000),
+      "sdiBlockType": _integer(sdi.get("block_type"), default=-1, minimum=-1, maximum=100_000),
+      "sdiBlockSpeedKph": _integer(sdi.get("block_speed_kph"), minimum=0, maximum=300),
+      "sdiBlockDistanceM": _integer(sdi.get("block_distance_m"), minimum=0, maximum=2_000_000),
+      "secondarySdiPresent": bool(secondary_sdi),
+      "secondarySdiType": _integer(secondary_sdi.get("type"), default=-1, minimum=-1, maximum=100_000),
+      "secondarySdiDistanceM": _integer(secondary_sdi.get("distance_m"), minimum=0, maximum=2_000_000),
+      "secondarySdiSpeedLimitKph": _integer(secondary_sdi.get("speed_limit_kph"), minimum=0, maximum=300),
+      "secondarySdiSectionType": _integer(secondary_sdi.get("section_type"), default=-1, minimum=-1, maximum=100_000),
+      "secondarySdiBlockType": _integer(secondary_sdi.get("block_type"), default=-1, minimum=-1, maximum=100_000),
+      "secondarySdiBlockSpeedKph": _integer(secondary_sdi.get("block_speed_kph"), minimum=0, maximum=300),
+      "secondarySdiBlockDistanceM": _integer(secondary_sdi.get("block_distance_m"), minimum=0, maximum=2_000_000),
       "sectionPresent": bool(section),
       "sectionActive": bool(section.get("active", False)),
       "sectionSpeedLimitKph": _integer(section.get("speed_limit_kph"), minimum=0, maximum=300),

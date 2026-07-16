@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import zlib
 from typing import Any, Dict, List, Optional
@@ -21,6 +22,7 @@ except Exception:
 HAS_PARAMS = False
 Params = None
 ParamKeyType = None
+UnknownKeyName = None
 
 try:
   from openpilot.common.params import Params as _Params
@@ -36,6 +38,11 @@ if HAS_PARAMS:
     ParamKeyType = _ParamKeyType
   except Exception:
     ParamKeyType = None
+  try:
+    from openpilot.common.params import UnknownKeyName as _UnknownKeyName
+    UnknownKeyName = _UnknownKeyName
+  except Exception:
+    UnknownKeyName = None
 
 
 # In-memory fallback store when Params is unavailable
@@ -103,6 +110,17 @@ def clamp_numeric(value: float, p: Optional[Dict[str, Any]]) -> float:
   return value
 
 
+def _unregistered_param_paths(params: "Params", key: str) -> tuple[str, str]:
+  if not isinstance(key, str) or not key or not key.isascii() or any(not (char.isalnum() or char == "_") for char in key):
+    raise ValueError(f"invalid param name: {key}")
+
+  param_dir = os.path.abspath(params.get_param_path())
+  param_path = os.path.abspath(params.get_param_path(key))
+  if os.path.normcase(os.path.dirname(param_path)) != os.path.normcase(param_dir):
+    raise ValueError(f"invalid param path: {key}")
+  return param_dir, param_path
+
+
 def _read_param_value(params: "Params", name: str, default: Any) -> Any:
   try:
     t = params.get_type(name)
@@ -132,6 +150,25 @@ def _read_param_value(params: "Params", name: str, default: Any) -> Any:
     if v is None:
       return default if default is not None else ""
     return v.decode("utf-8", errors="replace")
+  except Exception:
+    pass
+
+  # During a source hot-update, the web assets and settings JSON can be newer
+  # than the already-loaded native Params key table. Reading the backing file
+  # keeps newly registered settings usable until params_pyx is rebuilt/reloaded.
+  try:
+    _, param_path = _unregistered_param_paths(params, name)
+    with open(param_path, "rb") as f:
+      raw = f.read().decode("utf-8", errors="replace")
+    if isinstance(default, bool):
+      return raw.strip().lower() in ("1", "true", "on", "yes")
+    if isinstance(default, int):
+      return int(float(raw))
+    if isinstance(default, float):
+      return float(raw)
+    if isinstance(default, (dict, list)):
+      return json.loads(raw)
+    return raw
   except Exception:
     return default if default is not None else ""
 
@@ -186,36 +223,90 @@ def _coerce_bool(value: Any) -> bool:
   return bool(value)
 
 
+def _coerce_inferred_value(value: Any, p: Optional[Dict[str, Any]]) -> tuple[str, Any]:
+  kind = infer_type_from_setting(p)
+  if kind == "bool":
+    return kind, _coerce_bool(value)
+  if kind == "int":
+    return kind, int(float(value))
+  if kind == "float":
+    return kind, float(value)
+  if kind == "json":
+    return kind, json.loads(value) if isinstance(value, str) else value
+  return kind, str(value)
+
+
 def _put_inferred(params: "Params", key: str, value: Any, p: Optional[Dict[str, Any]]) -> None:
   """Write using a type inferred from the setting definition.
 
   Used when the runtime type system (get_type / ParamKeyType) is unavailable,
   so a missing ParamKeyType can no longer silently drop the write (the previous
   code promised this 'inference' fallback in a comment but never did it)."""
-  kind = infer_type_from_setting(p)
+  kind, coerced = _coerce_inferred_value(value, p)
   if kind == "bool":
-    v = _coerce_bool(value)
     if hasattr(params, "put_bool"):
-      params.put_bool(key, v)
+      params.put_bool(key, coerced)
     else:
-      params.put(key, "1" if v else "0")
+      params.put(key, "1" if coerced else "0")
   elif kind == "int":
-    iv = int(float(value))
     if hasattr(params, "put_int"):
-      params.put_int(key, iv)
+      params.put_int(key, coerced)
     else:
-      params.put(key, str(iv))
+      params.put(key, str(coerced))
   elif kind == "float":
-    fv = float(value)
     if hasattr(params, "put_float"):
-      params.put_float(key, fv)
+      params.put_float(key, coerced)
     else:
-      params.put(key, repr(fv))
+      params.put(key, repr(coerced))
   elif kind == "json":
-    obj = json.loads(value) if isinstance(value, str) else value
-    params.put(key, obj)
+    params.put(key, coerced)
   else:
-    params.put(key, str(value))
+    params.put(key, coerced)
+
+
+def _put_unregistered_setting(params: "Params", key: str, value: Any, p: Dict[str, Any]) -> None:
+  """Atomically persist a trusted setting while params_pyx still has an old key table."""
+  kind, coerced = _coerce_inferred_value(value, p)
+  if kind == "bool":
+    raw = "1" if coerced else "0"
+  elif kind == "float":
+    raw = repr(coerced)
+  elif kind == "json":
+    raw = json.dumps(coerced, ensure_ascii=False, separators=(",", ":"))
+  else:
+    raw = str(coerced)
+
+  param_dir, param_path = _unregistered_param_paths(params, key)
+
+  # Match the native Params writer: keep temporary files outside the `d`
+  # symlink so clear_all cannot remove one while it is being committed.
+  fd, temp_path = tempfile.mkstemp(prefix=".tmp_value_", dir=os.path.dirname(param_dir))
+  try:
+    with os.fdopen(fd, "wb") as f:
+      fd = -1
+      f.write(raw.encode("utf-8"))
+      f.flush()
+      os.fsync(f.fileno())
+    os.replace(temp_path, param_path)
+    temp_path = ""
+
+    try:
+      dir_fd = os.open(param_dir, os.O_RDONLY)
+    except OSError:
+      dir_fd = -1
+    if dir_fd >= 0:
+      try:
+        os.fsync(dir_fd)
+      finally:
+        os.close(dir_fd)
+  finally:
+    if fd >= 0:
+      os.close(fd)
+    if temp_path:
+      try:
+        os.unlink(temp_path)
+      except FileNotFoundError:
+        pass
 
 
 def put_typed(params: "Params", key: str, value: Any, p: Optional[Dict[str, Any]] = None) -> None:
@@ -261,7 +352,12 @@ def set_param_value(name: str, value: Any, p: Optional[Dict[str, Any]] = None) -
     _mem_store[name] = str(value)
     return
   params = Params()
-  put_typed(params, name, value, p)
+  try:
+    put_typed(params, name, value, p)
+  except Exception as exc:
+    if p is None or UnknownKeyName is None or not isinstance(exc, UnknownKeyName):
+      raise
+    _put_unregistered_setting(params, name, value, p)
 
 
 # -----------------------
