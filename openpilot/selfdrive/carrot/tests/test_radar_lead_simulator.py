@@ -74,7 +74,7 @@ def test_simple_selector_matches_model_lead() -> None:
   assert candidate_track_id(selected.lead_one) == 10
 
 
-def test_validation_review_stops_once_per_cutin_track_across_full_route() -> None:
+def test_validation_review_rearms_cutin_track_after_it_clears() -> None:
   frames = [replace(frame(()), mono_time_s=float(index), time_s=float(index)) for index in range(6)]
   lead_one = Candidate(10, 0.9, "MLP active lead")
   lead_two = Candidate(20, 0.9, "MLP active cutin")
@@ -95,6 +95,7 @@ def test_validation_review_stops_once_per_cutin_track_across_full_route() -> Non
 
   assert validation_review_events(frames, Selector(), review) == {
     2: ("CUT-IN id 20",),
+    5: ("CUT-IN id 20",),
   }
 
 
@@ -104,6 +105,19 @@ def test_validation_review_without_cutin_has_no_pause_events() -> None:
   class Selector:
     def select(self, _frame, frame_index=None):
       return Selection(None, None)
+
+  review = ValidationReview("clear", "clear", "corner", 0.0, 2.0, "scene")
+  assert validation_review_events(frames, Selector(), review) == {}
+
+
+def test_validation_review_ignores_internal_cutin_on_current_lead_one() -> None:
+  frames = [replace(frame(()), mono_time_s=float(index), time_s=float(index)) for index in range(2)]
+  lead_one = Candidate(10, 0.9, "MLP active lead")
+  internal_cutin = Candidate(10, 0.9, "MLP active cutin")
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      return Selection(lead_one, None, active_cutin_candidates=(internal_cutin,))
 
   review = ValidationReview("clear", "clear", "corner", 0.0, 2.0, "scene")
   assert validation_review_events(frames, Selector(), review) == {}
@@ -357,6 +371,13 @@ def test_reconstructed_corner_tracks_fill_only_missing_groups() -> None:
   )
 
   assert [point.trackId for point in preferred] == [1000, 1001]
+
+  front = SimpleNamespace(trackId=42, radarSource="frontRadar")
+  raw_only = route_replay.merge_recorded_and_reconstructed_tracks(
+    (front, recorded), (), raw_corner_only=True,
+  )
+
+  assert [point.trackId for point in raw_only] == [42]
 
 
 def test_route_parser_accepts_explicit_front_cutin_source() -> None:

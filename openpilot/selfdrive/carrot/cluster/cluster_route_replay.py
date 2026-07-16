@@ -2146,6 +2146,7 @@ class RouteLogParser:
             tracks = merge_recorded_and_reconstructed_tracks(
                 tracks,
                 self.raw_corner_tracker.live_tracks_at(event_t, self.current_speed_kph / 3.6),
+                raw_corner_only=True,
             )
         cutin_input = ReconstructedLiveTracks(tracks) if self.reconstruct_corner_live_tracks else live_tracks
         self._update_offline_cutin(cutin_input, event_t)
@@ -4607,6 +4608,7 @@ def merge_recorded_and_reconstructed_tracks(
     recorded: tuple[Any, ...],
     reconstructed: tuple[ReconstructedLiveTrack, ...],
     prefer_reconstructed_corner: bool = False,
+    raw_corner_only: bool = False,
 ) -> tuple[Any, ...]:
     recorded_groups: set[str] = set()
     for point in recorded:
@@ -4616,7 +4618,13 @@ def merge_recorded_and_reconstructed_tracks(
             recorded_groups.add("corner235")
         if source == "corner180" or CORNER_OBJECT_180_TRACK_ID_OFFSET <= track_id < CORNER_OBJECT_180_TRACK_ID_OFFSET + CORNER_OBJECT_180_TRACK_COUNT:
             recorded_groups.add("corner180")
-    if prefer_reconstructed_corner:
+    if raw_corner_only:
+        recorded = tuple(
+            point for point in recorded
+            if not point_is_corner_group(point, "corner235") and not point_is_corner_group(point, "corner180")
+        )
+        recorded_groups.clear()
+    elif prefer_reconstructed_corner:
         reconstructed_groups = {point.radarSource for point in reconstructed}
         recorded = tuple(
             point for point in recorded

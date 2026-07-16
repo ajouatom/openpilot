@@ -8,11 +8,12 @@ from openpilot.selfdrive.carrot.radar_object_fusion import FusedRadarObject
 
 def prediction(
   track_id: int, y_rel: float, lead_prob: float, cutin_prob: float, external_prob: float = 0.0,
-  *, front: bool = True, scc: bool = False, v_lead: float = 19.0, a_lead: float = 0.0, j_lead: float = 0.0,
+  *, front: bool = True, scc: bool = False, v_lead: float = 19.0, d_rel: float | None = None,
+  a_lead: float = 0.0, j_lead: float = 0.0,
 ) -> RadarLeadPrediction:
   source = "scc" if scc else "front" if front else "corner"
   obj = FusedRadarObject(
-    object_id=f"{source}:{track_id}", d_rel=12.0 + track_id / 10.0, y_rel=y_rel,
+    object_id=f"{source}:{track_id}", d_rel=d_rel if d_rel is not None else 12.0 + track_id / 10.0, y_rel=y_rel,
     v_rel=-1.0, a_rel=0.0, yv_rel=-0.4, v_lead=v_lead,
     front_track_id=track_id if front and not scc else None,
     corner_track_id=None if front or scc else track_id,
@@ -99,7 +100,7 @@ def test_corner_cutin_probability_can_fill_lead_two() -> None:
   assert output.lead_two["jLead"] == 0.3
 
 
-def test_stationary_corner_only_lead_is_not_used_for_control() -> None:
+def test_stationary_corner_only_lead_can_fill_lead_two_with_strict_geometry() -> None:
   corner = prediction(204, 0.4, 0.95, 0.9, front=False, v_lead=0.0)
 
   class CornerRuntime:
@@ -110,7 +111,7 @@ def test_stationary_corner_only_lead_is_not_used_for_control() -> None:
   controller.runtime = CornerRuntime()
   output = controller.update(0.0, 20.0, (), None)
   assert output.lead_one is None
-  assert output.lead_two is None
+  assert output.lead_two is not None and output.lead_two["radarTrackId"] == 204
 
 
 def test_front_prediction_does_not_bypass_temporal_decision() -> None:
@@ -186,6 +187,46 @@ def test_vision_fallback_uses_only_first_model_lead() -> None:
   assert output.lead_one is not None
   assert output.lead_one["dRel"] == 10.0
   assert output.lead_one["modelProb"] == 0.62
+
+
+def test_vision_fallback_deduplicates_matching_radar_cutin() -> None:
+  cutin = prediction(63, 0.5, 0.1, 0.9, d_rel=14.0, v_lead=25.0)
+
+  class CutinRuntime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(True, RadarLeadDecision((), (cutin,)), (cutin,), 0.1)
+
+  model = SimpleNamespace(
+    leadsV3=(SimpleNamespace(prob=0.99, x=(20.52,), y=(0.1,), v=(22.0,), a=(0.0,)),),
+    velocity=SimpleNamespace(x=(22.0,)),
+    position=SimpleNamespace(x=(0.0, 30.0), y=(0.0, 0.0)),
+  )
+  controller = RadarLeadModelController()
+  controller.runtime = CutinRuntime()
+  output = controller.update(0.0, 22.0, (), model)
+
+  assert output.lead_one is not None and not output.lead_one["radar"]
+  assert output.lead_two is None
+
+
+def test_vision_fallback_keeps_distinct_side_cutin() -> None:
+  cutin = prediction(63, 2.0, 0.1, 0.9, d_rel=14.0, v_lead=25.0)
+
+  class CutinRuntime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(True, RadarLeadDecision((), (cutin,)), (cutin,), 0.1)
+
+  model = SimpleNamespace(
+    leadsV3=(SimpleNamespace(prob=0.99, x=(20.52,), y=(0.1,), v=(22.0,), a=(0.0,)),),
+    velocity=SimpleNamespace(x=(22.0,)),
+    position=SimpleNamespace(x=(0.0, 30.0), y=(0.0, 0.0)),
+  )
+  controller = RadarLeadModelController()
+  controller.runtime = CutinRuntime()
+  output = controller.update(0.0, 22.0, (), model)
+
+  assert output.lead_one is not None and not output.lead_one["radar"]
+  assert output.lead_two is not None and output.lead_two["radarTrackId"] == 63
 
 
 def test_external_probability_fills_lead_two_after_cutin() -> None:

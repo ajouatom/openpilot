@@ -22,6 +22,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Protocol
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+  sys.path.insert(0, str(REPO_ROOT))
+
 try:
   from openpilot.selfdrive.carrot.radar_object_fusion import FusedRadarObject, RadarObjectFusion
 except ModuleNotFoundError:
@@ -45,6 +49,11 @@ except ModuleNotFoundError:
     RadarLeadModel,
     VisionLeadContext,
   )
+
+try:
+  from openpilot.selfdrive.carrot.radar_lead_controller import RadarLeadModelController
+except ModuleNotFoundError:
+  from radar_lead_controller import RadarLeadModelController
 
 
 RADAR_TO_CAMERA = 1.52
@@ -116,6 +125,8 @@ class Candidate:
   score: float
   reason: str
   decision_threshold: float = 0.0
+  d_rel: float | None = None
+  y_rel: float | None = None
 
   @property
   def eligible(self) -> bool:
@@ -148,14 +159,19 @@ def validation_review_events(
 ) -> dict[int, tuple[str, ...]]:
   events_by_frame: dict[int, tuple[str, ...]] = {}
   previous_cutins: set[int] = set()
-  handled_cutins: set[int] = set()
+  last_event_time: dict[int, float] = {}
   for index, frame in enumerate(frames):
     selection = selector.select(frame, index)
-    current_cutins = {candidate.track_id for candidate in selection.active_cutin_candidates}
-    new_cutins = current_cutins - previous_cutins - handled_cutins
+    current_cutins = {
+      selection.lead_two.track_id
+    } if selection.lead_two is not None and selection.lead_two.reason.endswith("active cutin") else set()
+    new_cutins = {
+      track_id for track_id in current_cutins - previous_cutins
+      if frame.time_s - last_event_time.get(track_id, -math.inf) >= 1.0
+    }
     if new_cutins:
       events_by_frame[index] = tuple(f"CUT-IN id {track_id}" for track_id in sorted(new_cutins))
-      handled_cutins.update(new_cutins)
+      last_event_time.update((track_id, frame.time_s) for track_id in new_cutins)
     previous_cutins = current_cutins
   return events_by_frame
 
@@ -703,7 +719,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       merged = route_replay.merge_recorded_and_reconstructed_tracks(
         recorded_points,
         reconstructed,
-        prefer_reconstructed_corner=True,
+        raw_corner_only=True,
       )
       latest_points = _copy_track_points(merged)
       latest_points_ns = event_ns
@@ -1266,12 +1282,45 @@ class MultitaskLeadSelector:
       active_external = [
         Candidate(track_id(value), value.external_prob, "MLP active external") for value in decision.external_candidates
       ]
-      lead_one = active_leads[0] if active_leads else None
-      lead_two = next(
-        (candidate for candidate in (*active_cutins, *active_external, *active_leads[1:])
-         if lead_one is None or candidate.track_id != lead_one.track_id),
-        None,
-      )
+      lead_one_prediction = RadarLeadModelController._lead_one_prediction(decision.lead_candidates)
+      lead_one = Candidate(
+        track_id(lead_one_prediction), lead_one_prediction.lead_prob, "MLP active lead",
+      ) if lead_one_prediction is not None else None
+      if lead_one is None and frame.model_leads and frame.model_leads[0].probability > 0.5:
+        vision = frame.model_leads[0]
+        vision_distance = vision.x - RADAR_TO_CAMERA
+        if vision_distance > 0.5:
+          lead_one = Candidate(
+            -1, vision.probability, "MLP vision fallback",
+            d_rel=vision_distance, y_rel=-vision.y,
+          )
+      vision_lead = None if lead_one is None or lead_one.track_id >= 0 else {
+        "radar": False,
+        "dRel": lead_one.d_rel,
+        "yRel": lead_one.y_rel,
+        "vLead": frame.model_leads[0].v if frame.model_leads else 0.0,
+      }
+      lead_one_object = lead_one_prediction.features.object_id if lead_one_prediction is not None else None
+      lead_two_prediction = next((
+        prediction for prediction in decision.cutin_candidates
+        if prediction.features.object_id != lead_one_object
+        and not RadarLeadModelController._matches_vision_lead(vision_lead, prediction)
+        and RadarLeadModelController._external_control_usable(prediction)
+      ), None)
+      lead_two_reason = "MLP active cutin"
+      if lead_two_prediction is None:
+        lead_two_prediction = next((
+          prediction for prediction in decision.external_candidates
+          if prediction.features.object_id != lead_one_object
+          and not RadarLeadModelController._matches_vision_lead(vision_lead, prediction)
+          and RadarLeadModelController._external_control_usable(prediction)
+        ), None)
+        lead_two_reason = "MLP active external"
+      lead_two = Candidate(
+        track_id(lead_two_prediction),
+        lead_two_prediction.cutin_prob if lead_two_reason.endswith("cutin") else lead_two_prediction.external_prob,
+        lead_two_reason,
+      ) if lead_two_prediction is not None else None
       selections.append(Selection(
         lead_one=lead_one,
         lead_two=lead_two,
@@ -1485,12 +1534,17 @@ class SimulatorUI:
     if candidate is None:
       return
     point = self._track_point(frame, candidate.track_id)
-    if point is None or point.d_rel > self.forward_range_m:
+    distance = point.d_rel if point is not None else candidate.d_rel
+    lateral = point.y_rel if point is not None else candidate.y_rel
+    if distance is None or lateral is None or distance > self.forward_range_m:
       return
-    position = self._world_to_screen(map_rect, point.d_rel, point.y_rel)
+    position = self._world_to_screen(map_rect, distance, lateral)
     rect = self.rl.Rectangle(position.x - size * 0.5, position.y - size * 0.5, size, size)
     self.rl.draw_rectangle_lines_ex(rect, 3.0, color)
-    display_label = f"{label}/SCC" if point.source == "scc" else label
+    if candidate.track_id == -1:
+      display_label = f"{label}/VISION"
+    else:
+      display_label = f"{label}/SCC" if point is not None and point.source == "scc" else label
     label_x = (
       rect.x - self._measure_text(display_label, 13) - 4.0
       if label.startswith("lead") else rect.x + rect.width + 4.0
@@ -1649,6 +1703,8 @@ class SimulatorUI:
     if candidate is None:
       return "NONE"
     point = self._track_point(frame, candidate.track_id)
+    if candidate.track_id == -1:
+      return f"VISION  prob {candidate.score:.2f}  {candidate.reason}"
     source = "SCC " if point is not None and point.source == "scc" else ""
     value_name = "prob" if candidate.reason.startswith("MLP") else "score"
     return f"{source}id {candidate.track_id}  {value_name} {candidate.score:.2f}  {candidate.reason}"
