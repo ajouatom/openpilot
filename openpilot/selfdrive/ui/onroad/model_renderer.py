@@ -10,7 +10,7 @@ from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
-from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
+from openpilot.system.ui.lib.shader_polygon import draw_polygon, draw_polygon_solid, Gradient
 from openpilot.system.ui.widgets import Widget
 
 CLIP_MARGIN = 500
@@ -687,7 +687,7 @@ class ModelRenderer(Widget):
 
   def _draw_quad_fill_carrot(self, p0, p1, p2, p3, color: rl.Color):
     pts = np.array([p0, p1, p2, p3], dtype=np.float32)
-    draw_polygon(self._rect, pts, color)
+    draw_polygon_solid(pts, color)
 
   def _draw_two_quads_from_6pts_carrot(self, x, y, fill_color: rl.Color, brake_valid: bool, color_idx: int):
     pts = np.array(list(zip(x, y)), dtype=np.float32)
@@ -697,8 +697,8 @@ class ModelRenderer(Widget):
     left_pts = np.array([pts[0], pts[1], pts[2], pts[5]], dtype=np.float32)
     right_pts = np.array([pts[5], pts[2], pts[3], pts[4]], dtype=np.float32)
 
-    draw_polygon(self._rect, left_pts, fill_color)
-    draw_polygon(self._rect, right_pts, fill_color)
+    draw_polygon_solid(left_pts, fill_color)
+    draw_polygon_solid(right_pts, fill_color)
 
     if color_idx >= 10 or brake_valid:
       self._draw_polygon_outline_carrot(
@@ -724,7 +724,7 @@ class ModelRenderer(Widget):
     if pts.shape[0] < 3:
       return
 
-    draw_polygon(self._rect, pts, fill_color)
+    draw_polygon_solid(pts, fill_color)
 
     if color_idx >= 10 or brake_valid:
       self._draw_polygon_outline_carrot(
@@ -944,10 +944,13 @@ class ModelRenderer(Widget):
 
     car_state = sm['carState']
     lane_line_probs = self._lane_line_probs
+    lane_line_visible = lane_line_probs > 0.3
     road_edge_stds = self._road_edge_stds
     lane_zero = self._lane_lines[0].raw_points
 
     if lane_zero.shape[0] == 0:
+      return
+    if self._carrot_show_lane_info == 1 and not np.any(lane_line_visible):
       return
 
     max_distance = float(np.clip(lane_zero[-1, 0], MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE))
@@ -957,9 +960,17 @@ class ModelRenderer(Widget):
     draw_double_left = left_lane_line % 10 == 4
 
     lane_vertices = []
-    lane_vertices_double = np.empty((0, 2), dtype=np.float32)
+    empty_vertices = np.empty((0, 2), dtype=np.float32)
+    lane_vertices_double = empty_vertices
 
     for i, lane_line in enumerate(self._lane_lines):
+      # The old path projected and submitted low-confidence lanes with alpha
+      # zero. They cannot affect the framebuffer, so avoid both the projection
+      # work and the draw call while preserving the > 0.3 visibility threshold.
+      if not lane_line_visible[i]:
+        lane_vertices.append(empty_vertices)
+        continue
+
       line_width = 0.025
       if i == 1 and left_lane_line >= 20:
         line_width = 0.05
@@ -980,7 +991,7 @@ class ModelRenderer(Widget):
     for i in range(4):
       if lane_vertices[i].size == 0:
         continue
-      alpha = 220 if lane_line_probs[i] > 0.3 else 0
+      alpha = 220
       stroke = 0.0
       if i == 1:
         color = rl.Color(218, 202, 37, alpha) if left_lane_line >= 20 else rl.Color(255, 255, 255, alpha)
@@ -990,12 +1001,12 @@ class ModelRenderer(Widget):
       else:
         color = rl.Color(255, 255, 255, alpha)
 
-      draw_polygon(self._rect, lane_vertices[i], color)
+      draw_polygon_solid(lane_vertices[i], color)
       if stroke > 0.0:
         self._draw_polygon_outline_carrot(lane_vertices[i], color, stroke)
 
       if i == 1 and draw_double_left and lane_vertices_double.size != 0:
-        draw_polygon(self._rect, lane_vertices_double, color)
+        draw_polygon_solid(lane_vertices_double, color)
         if stroke > 0.0:
           self._draw_polygon_outline_carrot(lane_vertices_double, color, stroke)
 
@@ -1010,7 +1021,7 @@ class ModelRenderer(Widget):
           continue
         temp_f = float(np.clip(road_edge_stds[i] / 2.0, 0.0, 1.0))
         color = rl.Color(int((1.0 - temp_f) * 255.0), 0, int(temp_f * 255.0), 255)
-        draw_polygon(self._rect, road_vertices[i], color)
+        draw_polygon_solid(road_vertices[i], color)
 
 
 
@@ -1651,7 +1662,7 @@ class ModelRenderer(Widget):
     show_path_mode = self._carrot_show_path_mode
 
     if show_path_mode == 0:
-      draw_polygon(self._rect, self._path.projected_points, self._carrot_colors[show_path_color % 10])
+      draw_polygon_solid(self._path.projected_points, self._carrot_colors[show_path_color % 10])
       if show_path_color >= 10 or brake_valid:
         self._draw_polygon_outline_carrot(
           self._path.projected_points,
