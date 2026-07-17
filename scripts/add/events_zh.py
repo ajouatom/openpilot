@@ -374,7 +374,7 @@ def wrong_car_mode_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubM
 
 def joystick_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   gb = sm['carControl'].actuators.accel / 4.
-  steer = sm['carControl'].actuators.steer
+  steer = sm['carControl'].actuators.torque
   vals = f"油门：{round(gb * 100.)}%，转向：{round(steer * 100.)}%"
   return NormalPermanentAlert("手柄模式", vals)
 
