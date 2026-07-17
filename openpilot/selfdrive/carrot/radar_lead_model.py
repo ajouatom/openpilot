@@ -527,9 +527,18 @@ class RadarLeadDecisionFilter:
         and future_d_path < (2.25 if close_fused_cutin else midrange_future_limit)
         and future_d_path + (0.15 if close_fused_cutin else 0.20) < current_d_path
       )
+      front_only_inward_cutin = (
+        obj.front_track_id is not None and obj.corner_track_id is None
+        and prediction.features.track_age >= 12
+        and 2.5 < obj.d_rel < 12.0 and obj.v_lead > 2.0
+        and lane_history_ready and lane_direction_reliable
+        and 0.75 < current_d_path <= 1.8 and abs(obj.y_rel) < 2.3
+        and 0.20 < h8_lane_inward < 3.2
+        and 0.20 < h12_lane_inward < 3.2
+      )
       effective_cutin_prob = max(
         prediction.cutin_prob,
-        min(0.95, cutin_threshold + 0.08) if fused_inward_cutin else 0.0,
+        min(0.95, cutin_threshold + 0.08) if fused_inward_cutin or front_only_inward_cutin else 0.0,
       )
       state.cutin_ema = max(effective_cutin_prob, 0.60 * state.cutin_ema + 0.40 * effective_cutin_prob)
       projected_lane_entry = (

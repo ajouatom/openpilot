@@ -103,6 +103,7 @@ be reviewed as separate results.
 | `HYUNDAI_IONIQ_9 c92fab3f15c0dbfb` | `000001a7--54660d9df7--2\rlog.zst` | corner | 0-33 s | False positives near 2 s and 29 s | PASS, no detection |
 | `HYUNDAI_IONIQ_9 c92fab3f15c0dbfb` | `000001a5--ba129171a3--22\rlog.zst` | corner | 30-37 s | Adjacent vehicle remains in its lane on a curve near 33 s | PASS, no detection |
 | `HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3` | `00000cd2--ea0776cc10--4\rlog.zst` | front+corner | 12-14.5 s | Stopped id 33 at 7.65 m is behind leadOne at 3.55 m | PASS, current model suppresses cut-in output and audio |
+| `HYUNDAI_PALISADE b84b4a4fbb604be1` | `00000bef--a8eb1d8c98--2\rlog.zst` | front | 24.4-25.2 s | Close right vehicle id 35 enters before becoming leadOne | PASS, front-only lane-history cut-in at 24.64 s |
 
 The two `000001a7--54660d9df7--2` failures cover different mechanisms:
 
