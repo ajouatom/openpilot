@@ -123,6 +123,7 @@ class RadarFrame:
   model_leads: tuple[ModelLead, ...]
   recorded_one: RecordedLead
   recorded_two: RecordedLead
+  video_time_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -829,6 +830,12 @@ def _copy_recorded_lead(lead: Any) -> RecordedLead:
   )
 
 
+def aligned_video_time_s(qcamera_start_eof_ns: int, model_eof_ns: int) -> float | None:
+  if qcamera_start_eof_ns <= 0 or model_eof_ns < qcamera_start_eof_ns:
+    return None
+  return (model_eof_ns - qcamera_start_eof_ns) / 1e9
+
+
 def load_frames(log_path: Path) -> list[RadarFrame]:
   route_replay = _route_replay_module()
   schema = route_replay.load_openpilot_log_schema()
@@ -842,6 +849,8 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   latest_lane_probs: tuple[float, ...] = ()
   latest_model_leads: tuple[ModelLead, ...] = ()
   latest_model_ns = 0
+  latest_model_eof_ns = 0
+  qcamera_start_eof_ns = 0
   absolute_frames: list[tuple[int, RadarFrame]] = []
   corner_tracker = route_replay.StableCornerObjectTracker()
 
@@ -851,7 +860,9 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
     except Exception:
       continue
     event_ns = int(event.logMonoTime)
-    if which == "liveTracks":
+    if which == "qRoadEncodeIdx" and qcamera_start_eof_ns == 0:
+      qcamera_start_eof_ns = int(event.qRoadEncodeIdx.timestampEof)
+    elif which == "liveTracks":
       event_t = event_ns / 1e9
       recorded_points = tuple(event.liveTracks.points)
       reconstructed = corner_tracker.live_tracks_at(event_t, latest_v_ego)
@@ -875,6 +886,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
     elif which == "modelV2":
       latest_path, latest_lanes, latest_lane_probs, latest_model_leads = _copy_model(event.modelV2)
       latest_model_ns = event_ns
+      latest_model_eof_ns = int(event.modelV2.timestampEof)
     elif which == "radarState" and latest_points is not None:
       radar_state = event.radarState
       absolute_frames.append((event_ns, RadarFrame(
@@ -890,6 +902,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         model_leads=latest_model_leads,
         recorded_one=_copy_recorded_lead(radar_state.leadOne),
         recorded_two=_copy_recorded_lead(radar_state.leadTwo),
+        video_time_s=aligned_video_time_s(qcamera_start_eof_ns, latest_model_eof_ns),
       )))
 
   if not absolute_frames:
@@ -910,6 +923,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       model_leads=frame.model_leads,
       recorded_one=frame.recorded_one,
       recorded_two=frame.recorded_two,
+      video_time_s=frame.video_time_s,
     )
     for event_ns, frame in absolute_frames
   ]
@@ -1632,8 +1646,9 @@ class SimulatorUI:
       if str(cluster_dir) not in sys.path:
         sys.path.insert(0, str(cluster_dir))
       from cluster_route_replay import RouteVideoFrameReader, RouteVideoSegment
+      video_end_s = max((frame.video_time_s if frame.video_time_s is not None else frame.time_s) for frame in self.frames)
       self.video_reader = RouteVideoFrameReader([
-        RouteVideoSegment(None, self.video_path, 0.0, self.times[-1]),
+        RouteVideoSegment(None, self.video_path, 0.0, video_end_s),
       ])
 
   def _prepare_lead_continuity(self) -> None:
@@ -1857,7 +1872,8 @@ class SimulatorUI:
   def _video_texture_for_time(self, playback_time: float) -> Any | None:
     if self.video_reader is None:
       return None
-    video_frame = self.video_reader.frame_at(playback_time)
+    aligned_time = self.frames[self.index].video_time_s
+    video_frame = self.video_reader.frame_at(aligned_time if aligned_time is not None else playback_time)
     if video_frame is None:
       return None
     size = (video_frame.width, video_frame.height)
