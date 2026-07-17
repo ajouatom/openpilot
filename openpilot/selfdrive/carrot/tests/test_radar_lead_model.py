@@ -303,6 +303,38 @@ def test_front_only_close_probability_spike_requires_two_frames() -> None:
   assert second.cutin_candidates
 
 
+def test_front_only_close_track_uses_sustained_lane_relative_history() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.90)
+  decision = None
+  lateral_positions = (-2.7,) * 12 + (-2.55, -2.4, -2.25, -2.1, -1.95, -1.8, -1.65, -1.5, -1.35, -1.2)
+  for frame, y_rel in enumerate(lateral_positions):
+    obj = fused(corner_id=None, y_rel=y_rel, yv_rel=0.0, d_rel=5.2)
+    sample = builder.update(context(frame * 0.05), (obj,))[0]
+    decision = decision_filter.update(frame * 0.05, (
+      RadarLeadPrediction(sample, lead_prob=0.0, cutin_prob=0.0, risk_prob=0.0),
+    ))
+
+  assert decision is not None
+  assert decision.cutin_candidates
+  assert decision.cutin_candidates[0].cutin_prob >= 0.90
+
+
+def test_front_only_close_parallel_track_is_not_forced_active() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.90)
+  decision = None
+  for frame in range(24):
+    obj = fused(corner_id=None, y_rel=-1.2, yv_rel=0.0, d_rel=5.2)
+    sample = builder.update(context(frame * 0.05), (obj,))[0]
+    decision = decision_filter.update(frame * 0.05, (
+      RadarLeadPrediction(sample, lead_prob=0.0, cutin_prob=0.0, risk_prob=0.0),
+    ))
+
+  assert decision is not None
+  assert not decision.cutin_candidates
+
+
 def test_close_cutin_evidence_does_not_accumulate_across_sensor_ids() -> None:
   builder = RadarLeadFeatureBuilder()
   decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)

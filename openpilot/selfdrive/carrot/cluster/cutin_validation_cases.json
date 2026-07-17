@@ -65,6 +65,16 @@
       "scene": "Front-radar cut-in around 26 seconds"
     },
     {
+      "id": "palisade-bef-2-front-close",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "window": [24.4, 25.2],
+      "expected": "detect",
+      "target_track_ids": [35],
+      "scene": "Close right vehicle enters using front radar only before becoming leadOne"
+    },
+    {
       "id": "carnival-6a-27-close",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "0000006a--f0976fc330--27/rlog.zst",
