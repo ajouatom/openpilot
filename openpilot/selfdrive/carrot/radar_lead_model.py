@@ -18,6 +18,7 @@ except ModuleNotFoundError:
 MODEL_HEADS = ("lead", "cutin", "external")
 CUTIN_TEMPORAL_THRESHOLD_MAX = 0.82
 CUTIN_ACTIVE_CURRENT_MIN = 0.20
+CUTIN_STICKY_MAX_S = 0.75
 EXTERNAL_ACTIVE_CURRENT_MIN = 0.20
 HISTORY_OFFSETS = (1, 2, 4, 8, 12, 16, 20)
 MAX_HISTORY_FRAMES = max(HISTORY_OFFSETS) + 2
@@ -100,6 +101,8 @@ class _DecisionState:
   external_hits: int = 0
   lead_active_until: float = 0.0
   cutin_active_until: float = 0.0
+  cutin_evidence_time: float = 0.0
+  cutin_hit_aliases: frozenset[str] = field(default_factory=frozenset)
   external_active_until: float = 0.0
   last_seen: float = 0.0
   cutin_aliases: frozenset[str] = field(default_factory=frozenset)
@@ -157,6 +160,14 @@ def _feature_names() -> tuple[str, ...]:
 MODEL_FEATURE_NAMES = _feature_names()
 H8_Y_RATE_INDEX = MODEL_FEATURE_NAMES.index("h8_y_rate")
 H12_Y_RATE_INDEX = MODEL_FEATURE_NAMES.index("h12_y_rate")
+H8_DT_INDEX = MODEL_FEATURE_NAMES.index("h8_dt")
+H12_DT_INDEX = MODEL_FEATURE_NAMES.index("h12_dt")
+H8_D_PATH_INDEX = MODEL_FEATURE_NAMES.index("h8_d_path")
+H12_D_PATH_INDEX = MODEL_FEATURE_NAMES.index("h12_d_path")
+H8_PRESENT_INDEX = MODEL_FEATURE_NAMES.index("h8_present")
+H12_PRESENT_INDEX = MODEL_FEATURE_NAMES.index("h12_present")
+LANE1_PROB_INDEX = MODEL_FEATURE_NAMES.index("lane1_prob")
+LANE2_PROB_INDEX = MODEL_FEATURE_NAMES.index("lane2_prob")
 
 
 def object_aliases(obj: FusedRadarObject) -> tuple[str, ...]:
@@ -473,8 +484,30 @@ class RadarLeadDecisionFilter:
       instant_inward_speed = -side_sign * obj.yv_rel
       h8_inward_speed = -side_sign * prediction.features.values[H8_Y_RATE_INDEX]
       h12_inward_speed = -side_sign * prediction.features.values[H12_Y_RATE_INDEX]
-      historical_inward = (
+      raw_historical_inward = (
         0.15 < h8_inward_speed < 3.0 or 0.15 < h12_inward_speed < 3.0
+      )
+      h8_dt = max(1e-3, prediction.features.values[H8_DT_INDEX])
+      h12_dt = max(1e-3, prediction.features.values[H12_DT_INDEX])
+      h8_lane_inward = (
+        abs(prediction.features.values[H8_D_PATH_INDEX]) - current_d_path
+      ) / h8_dt
+      h12_lane_inward = (
+        abs(prediction.features.values[H12_D_PATH_INDEX]) - current_d_path
+      ) / h12_dt
+      lane_history_ready = (
+        prediction.features.values[H8_PRESENT_INDEX] > 0.5
+        and prediction.features.values[H12_PRESENT_INDEX] > 0.5
+      )
+      lane_direction_reliable = (
+        prediction.features.values[LANE1_PROB_INDEX] > 0.5
+        and prediction.features.values[LANE2_PROB_INDEX] > 0.5
+      )
+      historical_inward = raw_historical_inward if obj.d_rel < 12.0 or not lane_history_ready else (
+        lane_direction_reliable
+        and raw_historical_inward
+        and h8_lane_inward > 0.15
+        and h12_lane_inward > 0.15
       )
       sustained_inward = (
         0.15 < instant_inward_speed < 3.0
@@ -485,7 +518,10 @@ class RadarLeadDecisionFilter:
         obj.front_track_id is not None and obj.corner_track_id is not None
         and prediction.features.track_age >= 7
         and 2.5 < obj.d_rel < 50.0 and obj.v_lead > 2.0
-        and (obj.d_rel < 20.0 or abs(obj.y_rel) < 3.2)
+        and (
+          obj.d_rel < 20.0
+          or (abs(obj.y_rel) < 2.7 and current_d_path < 2.1 and instant_inward_speed < 0.8)
+        )
         and (1.2 if close_fused_cutin else 1.8) < current_d_path < (4.2 if close_fused_cutin else 3.2)
         and sustained_inward
         and future_d_path < (2.25 if close_fused_cutin else midrange_future_limit)
@@ -501,18 +537,35 @@ class RadarLeadDecisionFilter:
       )
       inside_not_moving_out = current_d_path <= 1.8 and future_d_path <= current_d_path + 0.15
       directional_cutin = inside_not_moving_out or projected_lane_entry
-      state.cutin_hits = state.cutin_hits + 1 if (
-        reliable and directional_cutin and state.cutin_ema >= cutin_threshold
-      ) else 0
+      cutin_control_usable = (
+        (obj.d_rel < 12.0 or obj.v_lead > 2.0)
+        and (obj.d_rel < 12.0 or lane_direction_reliable or current_d_path < 1.5)
+      )
+      cutin_evidence = (
+        reliable and cutin_control_usable and directional_cutin and effective_cutin_prob >= cutin_threshold
+      )
+      current_aliases = frozenset(prediction.features.aliases)
+      if cutin_evidence:
+        state.cutin_hits = (
+          state.cutin_hits + 1
+          if state.cutin_hits > 0 and state.cutin_hit_aliases.intersection(current_aliases)
+          else 1
+        )
+        state.cutin_hit_aliases = current_aliases
+      else:
+        state.cutin_hits = 0
+        state.cutin_hit_aliases = frozenset()
       required_cutin_hits = 2 if close_geometry or fused_inward_cutin else 3
       urgent = (
         reliable and close_geometry and obj.d_rel < 4.5
+        and obj.front_track_id is not None and obj.corner_track_id is not None
         and prediction.cutin_prob >= max(0.85, cutin_threshold + 0.15)
       )
       if state.lead_hits >= 2:
         state.lead_active_until = time_s + 0.35
       if state.cutin_hits >= required_cutin_hits or urgent:
         state.cutin_active_until = time_s + 0.45
+        state.cutin_evidence_time = time_s
         state.cutin_aliases = frozenset(prediction.features.aliases)
       if state.external_hits >= 2:
         state.external_active_until = time_s + 0.35
@@ -530,18 +583,22 @@ class RadarLeadDecisionFilter:
       same_cutin_sensor = bool(state.cutin_aliases.intersection(prediction.features.aliases))
       sticky_distance_sane = obj.d_rel < 20.0 or (
         obj.front_track_id is not None and obj.corner_track_id is not None
-        and obj.d_rel < 50.0 and abs(obj.y_rel) < 3.2
+        and obj.d_rel < 50.0 and abs(obj.y_rel) < 2.7
       )
       sticky_cutin_geometry = (
         same_cutin_sensor and sticky_distance_sane and current_d_path < 2.5
         and future_d_path <= current_d_path + 0.30
+        and time_s <= state.cutin_evidence_time + CUTIN_STICKY_MAX_S
       )
       cutin_is_active = time_s <= state.cutin_active_until and (
         effective_cutin_prob >= CUTIN_ACTIVE_CURRENT_MIN or sticky_cutin_geometry
       )
       if cutin_is_active:
         if sticky_cutin_geometry:
-          state.cutin_active_until = max(state.cutin_active_until, time_s + 0.20)
+          state.cutin_active_until = min(
+            max(state.cutin_active_until, time_s + 0.20),
+            state.cutin_evidence_time + CUTIN_STICKY_MAX_S,
+          )
         active_cutin_prob = max(effective_cutin_prob, state.cutin_ema)
         cutin_active.append(replace(
           prediction,

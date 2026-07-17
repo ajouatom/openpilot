@@ -16,6 +16,18 @@ DEFAULT_MODEL = SCRIPT_DIR / "models" / "radar_lead_multitask.npz"
 SIMULATOR = SCRIPT_DIR / "radar_lead_simulator.py"
 
 
+def group_cases_by_log(cases: list[dict]) -> list[list[dict]]:
+  """Keep validation windows intact while opening each physical log once."""
+  groups: dict[tuple[str, str], list[dict]] = {}
+  for case in cases:
+    key = (
+      str(case["vehicle_folder"]).replace("\\", "/").casefold(),
+      str(case["log"]).replace("\\", "/").casefold(),
+    )
+    groups.setdefault(key, []).append(case)
+  return list(groups.values())
+
+
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(description="Replay routes and pause on cut-in, vision-only, or unmatched vision events")
   parser.add_argument("--root", type=Path, default=Path(r"W:\routes"), help="route log root")
@@ -39,21 +51,27 @@ def main() -> int:
   if not cases:
     print("No validation cases matched.")
     return 2
+  case_groups = group_cases_by_log(cases)
   if args.list:
-    for case in cases:
-      print(f"{case['id']}: {case['source']} - {case['scene']}")
+    for group in case_groups:
+      case = group[0]
+      extra = f" (+{len(group) - 1} validation windows)" if len(group) > 1 else ""
+      print(f"{case['id']}{extra}: {case['source']} - {case['scene']}")
     return 0
 
   missing = 0
-  for index, case in enumerate(cases, 1):
+  for index, group in enumerate(case_groups, 1):
+    case = group[0]
     route = args.root / case["vehicle_folder"] / Path(case["log"])
     if not route.is_file():
       missing += 1
-      print(f"[{index:02d}/{len(cases):02d}] MISSING {case['id']}: {route}", flush=True)
+      print(f"[{index:02d}/{len(case_groups):02d}] MISSING {case['id']}: {route}", flush=True)
       continue
+    grouped_ids = ", ".join(item["id"] for item in group[1:])
+    grouped_note = f"  grouped={grouped_ids}" if grouped_ids else ""
     print(
-      f"\n[{index:02d}/{len(cases):02d}] {case['id']}  "
-      f"source={case['source']}  {case['scene']}",
+      f"\n[{index:02d}/{len(case_groups):02d}] {case['id']}  "
+      f"source={case['source']}  {case['scene']}{grouped_note}",
       flush=True,
     )
     result = subprocess.run([
@@ -66,7 +84,11 @@ def main() -> int:
     ], check=False)
     if result.returncode != 0:
       return result.returncode
-  print(f"\nVisual review complete: {len(cases) - missing}/{len(cases)} routes opened")
+  duplicate_count = len(cases) - len(case_groups)
+  print(
+    f"\nVisual review complete: {len(case_groups) - missing}/{len(case_groups)} routes opened"
+    f" ({duplicate_count} duplicate validation entries skipped)"
+  )
   return int(missing > 0)
 
 

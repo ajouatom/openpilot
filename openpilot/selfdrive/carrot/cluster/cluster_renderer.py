@@ -110,7 +110,9 @@ CAMERA_BACKGROUND_W = NAVI_LIVE_PANEL_X
 CAMERA_BACKGROUND_H = DESIGN_HEIGHT
 CAMERA_BACKGROUND_ALPHA = 220
 CAMERA_BACKGROUND_VIGNETTE_ALPHA = 32
-CAMERA_BACKGROUND_VERTICAL_BIAS = 0.5
+# 0.5 is a centered cover crop; values toward 1.0 retain more of the road
+# camera's lower edge. Keep this shared with the projected overlay transform.
+CAMERA_BACKGROUND_VERTICAL_BIAS = 0.75
 CAMERA_OVERLAY_MIN_DEPTH_M = 0.5
 CAMERA_OVERLAY_DEFAULT_CAMERA = DEVICE_CAMERAS["tici", "ar0231"].fcam
 CAMERA_OVERLAY_DEFAULT_HEIGHT_M = 1.22
@@ -1389,12 +1391,14 @@ class ClusterUiRenderer:
             x_offset = clamp((float(kep[0]) / float(kep[2]) - cx) * zoom, -max_x_offset, max_x_offset)
             y_offset = clamp((float(kep[1]) / float(kep[2]) - cy) * zoom, -max_y_offset, max_y_offset)
         video_tx = (dest.width * 0.5 + dest.x - x_offset) - cx * zoom
-        video_ty = (dest.height * 0.5 + dest.y - y_offset) - cy * zoom
+        rendered_height = float(camera.height) * zoom
+        vertical_crop = max(0.0, rendered_height - dest.height)
+        video_ty = dest.y - y_offset - vertical_crop * CAMERA_BACKGROUND_VERTICAL_BIAS
         video_dest = rl.Rectangle(
             video_tx,
             video_ty,
             float(camera.width) * zoom,
-            float(camera.height) * zoom,
+            rendered_height,
         )
         camera_height_m = CAMERA_OVERLAY_DEFAULT_HEIGHT_M
         if state.road_transform_trans is not None and len(state.road_transform_trans) >= 3:

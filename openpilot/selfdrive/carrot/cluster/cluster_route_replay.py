@@ -1927,7 +1927,11 @@ class RouteLogParser:
                 self.vision_yaw_rate_std_rps = clamp(yaw_std, 0.0, 2.0)
         if self.camera_calibration_euler is None:
             self.camera_calibration_euler = three_float_tuple(safe_get(camera_odometry, "wideFromDeviceEuler"))
-        self.road_transform_trans = three_float_tuple(safe_get(camera_odometry, "roadTransformTrans"))
+        # cameraOdometry's road height is a noisy per-frame vision estimate. Use
+        # it only as an initial fallback; liveCalibration supplies the stable
+        # installation height and must not be overwritten every model frame.
+        if self.road_transform_trans is None:
+            self.road_transform_trans = three_float_tuple(safe_get(camera_odometry, "roadTransformTrans"))
         self.road_transform_std = three_float_tuple(safe_get(camera_odometry, "roadTransformTransStd"))
 
     def _update_live_calibration(self, live_calibration: Any, valid: bool) -> None:

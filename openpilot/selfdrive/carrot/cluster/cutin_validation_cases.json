@@ -20,6 +20,15 @@
       "scene": "Close vehicle enters from the right; detect before it reaches the lane line"
     },
     {
+      "id": "carnival-5b-18-adjacent-29",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "window": [28.0, 38.5],
+      "expected": "clear",
+      "scene": "Fast adjacent-lane change remains outside the ego lane"
+    },
+    {
       "id": "carnival-5b-15-truck",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "0000005b--02344a68f2--15/rlog.1.zst",
@@ -27,6 +36,15 @@
       "window": [45.0, 50.0],
       "expected": "detect",
       "scene": "Truck enters from the left"
+    },
+    {
+      "id": "carnival-5b-15-adjacent-27",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "window": [26.0, 29.0],
+      "expected": "clear",
+      "scene": "Right adjacent SUV remains in its lane"
     },
     {
       "id": "azera-6d-1-front",
@@ -74,6 +92,15 @@
       "scene": "Fused left vehicle enters the ego path around 37 seconds"
     },
     {
+      "id": "ioniq5-cd0-1-close-point-jump",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "front+corner",
+      "window": [27.5, 29.0],
+      "expected": "clear",
+      "scene": "Close front-only point IDs jump without a visible cut-in"
+    },
+    {
       "id": "ioniq5-cab-49-curve",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
       "log": "00000cab--0e0be97e78--49/rlog.zst",
@@ -81,6 +108,15 @@
       "window": [0.0, 30.0],
       "expected": "clear",
       "scene": "Right curve; adjacent vehicle stays in its lane"
+    },
+    {
+      "id": "ioniq5-cab-49-curve-late",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cab--0e0be97e78--49/rlog.zst",
+      "source": "corner",
+      "window": [40.0, 44.0],
+      "expected": "clear",
+      "scene": "Low-confidence curve lanes and a parallel right-side vehicle"
     },
     {
       "id": "ioniq9-192-7-early",
@@ -198,6 +234,26 @@
       "window": [30.0, 37.0],
       "expected": "clear",
       "scene": "Adjacent vehicle remains in its lane on a curve around 33 seconds"
+    },
+    {
+      "id": "ioniq9-1b9-2-stopped",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "front+corner",
+      "window": [27.0, 32.0],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [1053],
+      "scene": "Stopped traffic must not promote the adjacent corner point to leadTwo"
+    },
+    {
+      "id": "ioniq9-1b9-26-tunnel-ghost",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--26/rlog.zst",
+      "source": "front+corner",
+      "window": [0.0, 6.0],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [40],
+      "scene": "Tunnel reflection near 22 m must not become a stationary leadTwo"
     },
     {
       "id": "ioniq5-aa5-3-stationary-114m",

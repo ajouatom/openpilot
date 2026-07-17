@@ -155,7 +155,9 @@ radar model:
 py -3.12 openpilot/selfdrive/carrot/radar_lead_validation_review.py
 ```
 
-Each route starts at 0 seconds and plays through the full log. Playback pauses
+Each unique route starts at 0 seconds and plays through the full log. Multiple
+validation windows that reference the same rlog are grouped, so that physical
+log is opened only once. Playback pauses
 with a two-tone alert only when a model cut-in becomes active. Press Space to
 resume after a cut-in, press R to restart the current log, and close the window
 to open the next case. Only final `leadOne` and `leadTwo` are displayed by
