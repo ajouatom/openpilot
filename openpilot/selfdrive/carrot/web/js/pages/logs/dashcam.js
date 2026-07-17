@@ -1034,6 +1034,12 @@ function openDashcamPlayer(route, segment) {
         if (!Number.isFinite(seconds) || seconds <= 0 || endEpoch <= 0) return initialSubtitle;
         return formatDashcamTimeRange(endEpoch - seconds, endEpoch);
       },
+      onSend: () => uploadDashcamSegments([segment], {
+        confirm: false,
+        showProgress: false,
+        showResult: false,
+        toastDuration: 2600,
+      }),
       onMenu: ({ close } = {}) => showDashcamSegmentMenu(route, segment, { activePlayerClose: close }),
     },
   );
@@ -1331,7 +1337,7 @@ async function resumeDashcamUploadJobIfNeeded() {
   return dashcamUploadResumePromise;
 }
 
-async function uploadDashcamSegments(segments) {
+async function uploadDashcamSegments(segments, options = {}) {
   const existingJobId = dashcamUploadActiveJobId || getRememberedDashcamUploadJob();
   if (existingJobId) {
     showAppToast(getUIText("upload_already_running", "Upload already running."), { tone: "error", duration: 3200 });
@@ -1345,36 +1351,48 @@ async function uploadDashcamSegments(segments) {
     return;
   }
   let uploadStats = { segments: targets.length, files: 0, bytes: 0 };
-  try {
-    const summary = await postJson("/api/dashcam/upload/summary", { segments: targets });
-    if (Array.isArray(summary?.summaries)) uploadStats = dashcamUploadStats(summary.summaries);
-  } catch {}
-  let uploadTarget = "carrot";
-  try {
-    if (typeof loadWebSettings === "function") await loadWebSettings();
-    if (typeof getWebSettingByKey === "function") uploadTarget = getWebSettingByKey("log_upload_target", "carrot") || "carrot";
-  } catch {}
-  const confirmMessage = [
-    uploadTarget === "toss"
-      ? getUIText("log_upload_confirm_toss", `Upload ${targets.length} logs to the Toss server?`, { count: targets.length })
-      : getUIText("log_upload_confirm", `Upload ${targets.length} logs to the Carrot server?`, { count: targets.length }),
-    dashcamUploadSummaryLabel(uploadStats),
-    getUIText("upload_data_warning", "This upload may use mobile data depending on your network connection."),
-  ].join("\n\n");
-  const ok = await appConfirm(confirmMessage, { title: getUIText("log_upload", "Upload Logs") });
-  if (!ok) return;
+  if (options.confirm !== false) {
+    try {
+      const summary = await postJson("/api/dashcam/upload/summary", { segments: targets });
+      if (Array.isArray(summary?.summaries)) uploadStats = dashcamUploadStats(summary.summaries);
+    } catch {}
+    let uploadTarget = "carrot";
+    try {
+      if (typeof loadWebSettings === "function") await loadWebSettings();
+      if (typeof getWebSettingByKey === "function") uploadTarget = getWebSettingByKey("log_upload_target", "carrot") || "carrot";
+    } catch {}
+    const confirmMessage = [
+      uploadTarget === "toss"
+        ? getUIText("log_upload_confirm_toss", `Upload ${targets.length} logs to the Toss server?`, { count: targets.length })
+        : getUIText("log_upload_confirm", `Upload ${targets.length} logs to the Carrot server?`, { count: targets.length }),
+      dashcamUploadSummaryLabel(uploadStats),
+      getUIText("upload_data_warning", "This upload may use mobile data depending on your network connection."),
+    ].join("\n\n");
+    const ok = await appConfirm(confirmMessage, { title: getUIText("log_upload", "Upload Logs") });
+    if (!ok) return;
+  }
+  const silentProgress = {
+    setCancelHandler() {},
+    setCanceling() {},
+    setMessage() {},
+    setProgress() {},
+    setSummary() {},
+    close() {},
+  };
   let cancelRequested = false;
-  const progress = openDashcamUploadProgress(targets.length, uploadStats, {
-    onCancel: async () => {
-      cancelRequested = true;
-      progress.setCanceling(true);
-      if (jobId) await cancelDashcamUploadJob(jobId);
-      clearRememberedDashcamUploadJob(jobId);
-      progress.close();
-      showAppToast(getUIText("upload_canceled", "Upload canceled"), { duration: 2600 });
-    },
-  });
-  let activityId = typeof beginAppActivity === "function"
+  const progress = options.showProgress === false
+    ? silentProgress
+    : openDashcamUploadProgress(targets.length, uploadStats, {
+      onCancel: async () => {
+        cancelRequested = true;
+        progress.setCanceling(true);
+        if (jobId) await cancelDashcamUploadJob(jobId);
+        clearRememberedDashcamUploadJob(jobId);
+        progress.close();
+        showAppToast(getUIText("upload_canceled", "Upload canceled"), { duration: 2600 });
+      },
+    });
+  let activityId = options.showProgress !== false && typeof beginAppActivity === "function"
     ? beginAppActivity("logs", getUIText("log_uploading", "Uploading logs"))
     : null;
   let jobId = null;
@@ -1397,13 +1415,16 @@ async function uploadDashcamSegments(segments) {
       uploaded: result.uploaded || 0,
       total: result.total || targets.length,
     });
-    showAppToast(message, { tone: result.ok ? "default" : "error", duration: 3600 });
+    showAppToast(message, {
+      tone: result.ok ? "default" : "error",
+      duration: Number(options.toastDuration) || 3600,
+    });
     progress.close();
     if (activityId && typeof endAppActivity === "function") {
       endAppActivity(activityId);
       activityId = null;
     }
-    await showDashcamUploadResult(result);
+    if (options.showResult !== false) await showDashcamUploadResult(result);
   } catch (e) {
     progress.close();
     if (jobId) clearRememberedDashcamUploadJob(jobId);
@@ -1415,7 +1436,10 @@ async function uploadDashcamSegments(segments) {
     } else if (isDashcamUploadCanceledError(e)) {
       if (!cancelRequested) showAppToast(getUIText("upload_canceled", "Upload canceled"), { duration: 2600 });
     } else {
-      showAppToast(`${getUIText("log_upload", "Upload Logs")} ${getUIText("error", "Error")}: ${e.message || e}`, { tone: "error", duration: 4200 });
+      showAppToast(`${getUIText("log_upload", "Upload Logs")} ${getUIText("error", "Error")}: ${e.message || e}`, {
+        tone: "error",
+        duration: Number(options.toastDuration) || 4200,
+      });
     }
   } finally {
     if (activityId && typeof endAppActivity === "function") endAppActivity(activityId);

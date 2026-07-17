@@ -143,8 +143,13 @@ function logsEmptyStateHtml(type = "dashcam") {
 function openLogsVideoPlayer(title, src, options = {}) {
   const overlay = document.createElement("div");
   const kind = String(options.kind || "video").replace(/[^a-z0-9_-]/gi, "");
+  const sendButton = typeof options.onSend === "function"
+    ? `<button class="dashcam-menu-btn dashcam-player-action dashcam-player-send" type="button" aria-label="${escapeHtml(getUIText("log_upload", "Upload Logs"))}" title="${escapeHtml(getUIText("log_upload", "Upload Logs"))}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>`
+    : "";
   const menuButton = typeof options.onMenu === "function"
-    ? `<button class="dashcam-menu-btn dashcam-player-menu" type="button" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
+    ? `<button class="dashcam-menu-btn dashcam-player-action dashcam-player-menu" type="button" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
         <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
       </button>`
     : "";
@@ -158,6 +163,7 @@ function openLogsVideoPlayer(title, src, options = {}) {
           <div class="dashcam-player-title">${escapeHtml(title || "Video")}</div>
           <div class="dashcam-player-subtitle"${options.subtitle ? "" : " hidden"}>${escapeHtml(options.subtitle || "")}</div>
         </div>
+        ${sendButton}
         ${menuButton}
         <button class="dashcam-player-close c-close" type="button" aria-label="${escapeHtml(getUIText("close", "Close"))}" title="${escapeHtml(getUIText("close", "Close"))}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
@@ -174,6 +180,7 @@ function openLogsVideoPlayer(title, src, options = {}) {
   let toastTimer = null;
   let suppressToasts = true;
   let player = null;
+  let topActionPending = false;
   const updateSubtitle = () => {
     if (!subtitleEl) return;
     const resolved = typeof options.subtitleForDuration === "function"
@@ -199,17 +206,31 @@ function openLogsVideoPlayer(title, src, options = {}) {
     if (ev.target === overlay) close();
   });
   overlay.querySelector(".dashcam-player-close")?.addEventListener("click", close);
-  overlay.querySelector(".dashcam-player-menu")?.addEventListener("click", (event) => {
+  const runTopAction = (event, handler, stateClass) => {
     event.stopPropagation();
-    overlay.classList.add("is-menu-open");
+    if (topActionPending || typeof handler !== "function") return;
+    topActionPending = true;
+    const trigger = event.currentTarget;
+    trigger.disabled = true;
+    overlay.classList.add(stateClass);
     overlay.classList.remove("is-controls-hidden");
     player?.toggleControls?.(true);
     Promise.resolve()
-      .then(() => options.onMenu?.({ close }))
+      .then(() => handler({ close }))
       .catch((error) => {
         if (typeof showAppToast === "function") showAppToast(error?.message || String(error), { tone: "error" });
       })
-      .finally(() => overlay.classList.remove("is-menu-open"));
+      .finally(() => {
+        overlay.classList.remove(stateClass);
+        trigger.disabled = false;
+        topActionPending = false;
+      });
+  };
+  overlay.querySelector(".dashcam-player-send")?.addEventListener("click", (event) => {
+    runTopAction(event, options.onSend, "is-action-open");
+  });
+  overlay.querySelector(".dashcam-player-menu")?.addEventListener("click", (event) => {
+    runTopAction(event, options.onMenu, "is-menu-open");
   });
   document.body.appendChild(overlay);
   requestAnimationFrame(() => {

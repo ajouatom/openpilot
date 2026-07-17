@@ -168,7 +168,7 @@ body[data-page="terminal"] .app-toast-host {
   left: var(--terminal-toast-left, var(--sp-lg));
   right: auto;
   width: var(--terminal-toast-width, calc(100vw - (var(--sp-lg) * 2)));
-  z-index: 148;
+  z-index: calc(var(--z-toast) - 2);
 }
 
 .app-toast {
