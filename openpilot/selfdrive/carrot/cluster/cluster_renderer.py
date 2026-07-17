@@ -17,6 +17,7 @@ import pyray as rl
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
 
+from cluster_gles_dmabuf import DirectNv12DmabufError, create_tici_nv12_dmabuf_pool
 from cluster_gles_readback import DirectNv12ReadbackError, create_tici_direct_readback
 from cluster_config import (
     AMBER,
@@ -74,6 +75,7 @@ from cluster_scene import (
     Vec3,
     VehicleBox,
     build_cluster_scene,
+    cluster_scene_state_key,
 )
 from cluster_system_monitor import SystemStats, SystemStatsSampler
 from cluster_utils import blink_visible, clamp
@@ -816,8 +818,13 @@ class ClusterUiRenderer:
         self._direct_nv12_readback = None
         self._direct_nv12_readback_checked = False
         self._direct_nv12_readback_disabled = False
+        self._nv12_dmabuf_pool = None
+        self._nv12_dmabuf_pool_checked = False
+        self._nv12_dmabuf_pool_disabled = False
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
+        self._scene_cache_key: tuple[object, ...] | None = None
+        self._scene_cache: ClusterScene | None = None
         self._speed_bg_texture = None
         self._traffic_red_texture = None
         self._traffic_green_texture = None
@@ -856,6 +863,11 @@ class ClusterUiRenderer:
             PendingStrokedTextTexture,
         ] = OrderedDict()
         self._stroked_text_texture_cache_enabled = os.environ.get("CLUSTER_STROKED_TEXT_TEXTURE_CACHE", "1") != "0"
+        self._raw_draw_text_ex = getattr(getattr(rl, "rl", None), "DrawTextEx", None)
+        self._raw_stroked_text_enabled = (
+            os.environ.get("CLUSTER_RAW_STROKED_TEXT", "1") != "0"
+            and self._raw_draw_text_ex is not None
+        )
         self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
         self._debug_plot_mode_prev = -1
@@ -906,6 +918,17 @@ class ClusterUiRenderer:
                 self._direct_nv12_readback_disabled = True
         return self._direct_nv12_readback is not None
 
+    def nv12_dmabuf_output_available(self) -> bool:
+        if self._nv12_dmabuf_pool_disabled:
+            return False
+        if not self._nv12_dmabuf_pool_checked:
+            self._nv12_dmabuf_pool_checked = True
+            try:
+                self._nv12_dmabuf_pool = create_tici_nv12_dmabuf_pool()
+            except DirectNv12DmabufError:
+                self._nv12_dmabuf_pool_disabled = True
+        return self._nv12_dmabuf_pool is not None
+
     def async_nv12_readback_available(self) -> bool:
         if not self.direct_nv12_readback_available():
             return False
@@ -937,6 +960,16 @@ class ClusterUiRenderer:
             self._direct_nv12_readback.close()
         self._direct_nv12_readback = None
         self._direct_nv12_readback_disabled = True
+
+    def disable_nv12_dmabuf_output(self) -> None:
+        self.release_nv12_dmabuf_output()
+        self._nv12_dmabuf_pool_disabled = True
+
+    def release_nv12_dmabuf_output(self) -> None:
+        if self._nv12_dmabuf_pool is not None:
+            self._nv12_dmabuf_pool.close()
+        self._nv12_dmabuf_pool = None
+        self._nv12_dmabuf_pool_checked = False
 
     def profile_samples(self) -> list[tuple[str, float]]:
         return self._profile_samples
@@ -994,6 +1027,7 @@ class ClusterUiRenderer:
             self._direct_nv12_readback.close()
             self._direct_nv12_readback = None
             self._direct_nv12_readback_checked = False
+        self.release_nv12_dmabuf_output()
         if self._capture_target is not None:
             rl.unload_render_texture(self._capture_target)
             self._capture_target = None
@@ -1082,6 +1116,8 @@ class ClusterUiRenderer:
             rl.unload_model(self._vehicle_model)
             self._vehicle_model = None
         self._vehicle_model_load_attempted = False
+        self._scene_cache_key = None
+        self._scene_cache = None
         self._route_video_size = None
         self._route_video_frame_id = None
         rl.close_window()
@@ -1251,12 +1287,7 @@ class ClusterUiRenderer:
             self._close_live_road_camera()
         theme = self._current_theme()
         profile_stage = self._profile_start()
-        scene = build_cluster_scene(
-            state,
-            self._profile_add_elapsed if self.profile_enabled else None,
-            highlight_lane_lit=self._highlight_lane_lit(state, signal_lights),
-            theme=theme,
-        )
+        scene = self._scene_for_state(state, self._highlight_lane_lit(state, signal_lights), theme)
         self._profile_add("render_world.build_scene", profile_stage)
         profile_stage = self._profile_start()
         rl.clear_background(rl_color(theme.bg))
@@ -1272,6 +1303,25 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_scene(scene, state)
             self._profile_add("render_world.draw_scene", profile_stage)
+
+    def _scene_for_state(
+        self,
+        state: ClusterUiState,
+        highlight_lane_lit: bool,
+        theme: ClusterTheme,
+    ) -> ClusterScene:
+        cache_key = (*cluster_scene_state_key(state), highlight_lane_lit, theme)
+        if self._scene_cache is not None and cache_key == self._scene_cache_key:
+            return self._scene_cache
+        scene = build_cluster_scene(
+            state,
+            self._profile_add_elapsed if self.profile_enabled else None,
+            highlight_lane_lit=highlight_lane_lit,
+            theme=theme,
+        )
+        self._scene_cache_key = cache_key
+        self._scene_cache = scene
+        return scene
 
     def _draw_camera_background(self, state: ClusterUiState) -> None:
         if state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
@@ -1762,6 +1812,7 @@ class ClusterUiRenderer:
         destination_address: int | None = None,
         destination_size: int = 0,
         async_readback: bool = False,
+        destination_dmabuf_fd: int | None = None,
     ) -> Iterator[object]:
         self.open(hidden=self.hidden)
         output_width = int(output_width)
@@ -1820,10 +1871,12 @@ class ClusterUiRenderer:
         self._profile_add("render_to_nv12.gpu_upload_transform", profile_stage)
 
         pack_direct_input = stride % 4 == 0 and byte_count % stride == 0 and uv_offset % stride == 0
-        if (destination_address is not None or async_readback) and not pack_direct_input:
+        if (destination_address is not None or async_readback or destination_dmabuf_fd is not None) and not pack_direct_input:
             raise DirectNv12ReadbackError("direct NV12 readback requires a four-byte packed Venus layout")
         if destination_address is not None and async_readback:
             raise DirectNv12ReadbackError("asynchronous NV12 readback cannot use a direct destination")
+        if destination_dmabuf_fd is not None and (destination_address is not None or async_readback):
+            raise DirectNv12DmabufError("encoder DMA-BUF output cannot use a readback destination")
         if pack_direct_input:
             full_pack_w = stride // 4
             full_pack_h = byte_count // stride
@@ -1832,7 +1885,13 @@ class ClusterUiRenderer:
             y_pack_y = tail_pack_h + uv_scanlines
 
             profile_stage = self._profile_start()
-            full_target = self._get_nv12_pack_target("full", full_pack_w, full_pack_h)
+            if destination_dmabuf_fd is None:
+                full_target = self._get_nv12_pack_target("full", full_pack_w, full_pack_h)
+            else:
+                dmabuf_pool = self._nv12_dmabuf_pool
+                if dmabuf_pool is None:
+                    raise DirectNv12DmabufError("encoder DMA-BUF render targets are unavailable")
+                full_target = dmabuf_pool.target_for(destination_dmabuf_fd, stride, byte_count)
             self._profile_add("render_to_nv12.get_pack_targets", profile_stage)
 
             profile_stage = self._profile_start()
@@ -1865,6 +1924,13 @@ class ClusterUiRenderer:
                 clear_target=False,
             )
             self._profile_add("render_to_nv12.pack_uv_shader", profile_stage)
+
+            if destination_dmabuf_fd is not None:
+                profile_stage = self._profile_start()
+                dmabuf_pool.wait_for_gpu()
+                self._profile_add("render_to_nv12.dmabuf_fence_wait", profile_stage)
+                yield destination_dmabuf_fd
+                return
 
             if async_readback:
                 readback = self._direct_nv12_readback
@@ -6300,6 +6366,17 @@ class ClusterUiRenderer:
             if cached_text is not None:
                 self._draw_cached_text_texture(cached_text, x, y, anchor)
                 return
+        if stroke_width > 0 and self._draw_stroked_text_raw(
+            text,
+            x,
+            y,
+            size,
+            color,
+            stroke_color,
+            stroke_width,
+            anchor,
+        ):
+            return
         if stroke_width > 0:
             for dx, dy in (
                 (-stroke_width, 0),
@@ -6313,6 +6390,56 @@ class ClusterUiRenderer:
             ):
                 self._draw_text(text, x + dx, y + dy, size, stroke_color, anchor)
         self._draw_text(text, x, y, size, color, anchor)
+
+    def _draw_stroked_text_raw(
+        self,
+        text: str,
+        x: float,
+        y: float,
+        size: float,
+        color: tuple[int, int, int],
+        stroke_color: tuple[int, int, int],
+        stroke_width: int,
+        anchor: str,
+    ) -> bool:
+        draw_text_ex = getattr(self, "_raw_draw_text_ex", None)
+        if not getattr(self, "_raw_stroked_text_enabled", False) or draw_text_ex is None:
+            return False
+
+        font = self._font_for_text(text)
+        spacing = max(1.0, size * 0.02)
+        text_width, text_height = self._measure_text(text, size, spacing, font)
+        encoded_text = text.encode("utf-8")
+        position = rl.Vector2(0.0, 0.0)
+        fill = rl_color(color)
+        stroke = rl_color(stroke_color)
+
+        def draw_at(draw_x: float, draw_y: float, draw_color: rl.Color) -> None:
+            if anchor == "center":
+                draw_x -= text_width * 0.5
+                draw_y -= text_height * 0.5
+            elif anchor == "left":
+                draw_y -= text_height * 0.5
+            elif anchor == "right":
+                draw_x -= text_width
+                draw_y -= text_height * 0.5
+            position.x = draw_x
+            position.y = draw_y
+            draw_text_ex(font, encoded_text, position, size, spacing, draw_color)
+
+        for dx, dy in (
+            (-stroke_width, 0),
+            (stroke_width, 0),
+            (0, -stroke_width),
+            (0, stroke_width),
+            (-stroke_width, -stroke_width),
+            (stroke_width, -stroke_width),
+            (-stroke_width, stroke_width),
+            (stroke_width, stroke_width),
+        ):
+            draw_at(x + dx, y + dy, stroke)
+        draw_at(x, y, fill)
+        return True
 
     def _draw_cached_text_texture(
         self,
