@@ -100,8 +100,9 @@ that the TURZX panel accepts, and patches hardware SPS frame-crop metadata for
 non-macroblock geometry such as 462x1920. It also asks the V4L2 encoder for
 multi-slice output capped by `--usb-h264-slice-max-bytes` so the resulting NAL
 sizes are closer to the ffmpeg/libx264 stream accepted by TURZX. The default
-H264 bitrate is `auto`, which keeps roughly the same bits per frame as FPS
-changes and resolves to `7M` at 30 FPS. The native default is all-I
+H264 bitrate is `auto`, which preserves the `7M` at 30 FPS per-frame budget
+across the supported live-FPS modes and resolves to `14M` at 60 FPS. The native
+default is all-I
 (`--usb-h264-gop 1`) because TURZX panel corruption measurements improved as
 P-frame references were removed. GOP 3 route replay was much better than the
 earlier long-GOP runs, and GOP 2 further improved compact-overlay tests, but a
@@ -109,8 +110,11 @@ route replay without the overlay showed frequent small block artifacts at GOP 2.
 GOP 1 at 6M removed the visible squares on the same route, with only slightly
 softer compression detail, and a follow-up GOP 1 / 7M run also stayed clean, so
 GOP 1 is the measured stability default for now.
-An explicit `8M` route replay was worse and pushed H264 USB
-chunk writes into large latency spikes, so the auto cap is limited to `7M`. The
+An explicit `8M` route replay was worse and pushed H264 USB chunk writes into
+large latency spikes. That result remains transport evidence, not a reason to
+halve the per-frame quality budget at higher FPS. High-FPS testing therefore
+keeps proportional bitrate and treats any resulting sender or receiver stall as
+the implementation bottleneck. The
 larger `--usb-h264-slice-max-bytes 8192` A/B also looked worse than the default
 4096-byte slice cap, and `2048` caused smaller but more frequent smearing, so
 keep the default slice setting for normal tests. The

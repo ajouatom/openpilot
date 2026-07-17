@@ -49,6 +49,7 @@ from cluster_config import (
     normalize_cluster_radar_source_color_mode,
     normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
+    resolved_usb_h264_bitrate,
 )
 from cluster_gamepad import DualSenseSimulator
 from cluster_git_status import GitBranchStatusProvider
@@ -85,9 +86,6 @@ DEFAULT_FPS = 0.0
 DEFAULT_USB_BRIGHTNESS = 80
 DEFAULT_H264_BITRATE = "auto"
 DEFAULT_H264_GOP = 1
-H264_AUTO_BITRATE_BITS_PER_FPS = 234_000
-H264_AUTO_BITRATE_MIN_BPS = 1_000_000
-H264_AUTO_BITRATE_MAX_BPS = 7_000_000
 DEFAULT_H264_DIMENSION_ALIGN = 1
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
@@ -128,20 +126,6 @@ def resolved_usb_display_fps(
         return 0
     source_fps = target_fps if target_fps > 0 else float(h264_fps)
     return int(max(1, min(255, round(source_fps))))
-
-
-def resolved_usb_h264_bitrate(requested_bitrate: str, target_fps: float, h264_fps: int) -> str:
-    text = requested_bitrate.strip()
-    if text.lower() != "auto":
-        return text
-    source_fps = int(max(1, round(target_fps if target_fps > 0 else float(h264_fps))))
-    bitrate_bps = source_fps * H264_AUTO_BITRATE_BITS_PER_FPS
-    bitrate_bps = int(max(H264_AUTO_BITRATE_MIN_BPS, min(H264_AUTO_BITRATE_MAX_BPS, bitrate_bps)))
-    if bitrate_bps % 1_000_000 == 0:
-        return f"{bitrate_bps // 1_000_000}M"
-    if bitrate_bps % 1_000 == 0:
-        return f"{bitrate_bps // 1_000}k"
-    return str(bitrate_bps)
 
 
 def resolved_h264_encoder_fps(target_fps: float, h264_fps: int) -> int:
@@ -1905,8 +1889,8 @@ def parse_args() -> argparse.Namespace:
         "--usb-h264-bitrate",
         default=DEFAULT_H264_BITRATE,
         help=(
-            "Target H264 bitrate for --usb-codec h264. Default auto uses about 234k per FPS "
-            "bounded to 1M-7M; 30 FPS resolves to 7M."
+            "Target H264 bitrate for --usb-codec h264. Default auto preserves the 7M@30 FPS "
+            "per-frame budget through 60 FPS; 60 FPS resolves to 14M."
         ),
     )
     parser.add_argument(
