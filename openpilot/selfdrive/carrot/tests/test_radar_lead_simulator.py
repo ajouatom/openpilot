@@ -23,6 +23,7 @@ from openpilot.selfdrive.carrot.radar_lead_simulator import (
   _copy_track_points,
   _route_replay_module,
   export_training_dataset,
+  qcamera_path_for_log,
   resolve_validation_case,
   resolved_recorded_track_id,
   validation_review_events,
@@ -75,7 +76,7 @@ def test_simple_selector_matches_model_lead() -> None:
 
 
 def test_validation_review_rearms_cutin_track_after_it_clears() -> None:
-  frames = [replace(frame(()), mono_time_s=float(index), time_s=float(index)) for index in range(6)]
+  frames = [replace(frame(()), mono_time_s=float(index), time_s=float(index), model_leads=()) for index in range(6)]
   lead_one = Candidate(10, 0.9, "MLP active lead")
   lead_two = Candidate(20, 0.9, "MLP active cutin")
   selections = (
@@ -100,7 +101,7 @@ def test_validation_review_rearms_cutin_track_after_it_clears() -> None:
 
 
 def test_validation_review_without_cutin_has_no_pause_events() -> None:
-  frames = [replace(frame(()), mono_time_s=float(index), time_s=float(index)) for index in range(3)]
+  frames = [replace(frame(()), mono_time_s=float(index), time_s=float(index), model_leads=()) for index in range(3)]
 
   class Selector:
     def select(self, _frame, frame_index=None):
@@ -108,6 +109,29 @@ def test_validation_review_without_cutin_has_no_pause_events() -> None:
 
   review = ValidationReview("clear", "clear", "corner", 0.0, 2.0, "scene")
   assert validation_review_events(frames, Selector(), review) == {}
+
+
+def test_stationary_review_pauses_on_selected_target_track() -> None:
+  frames = [
+    replace(frame((point(35, 108.0, 0.1, 0.0),)), mono_time_s=float(index), time_s=float(index))
+    for index in range(3)
+  ]
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      if frame_index == 0:
+        return Selection(None, Candidate(35, 0.9, "MLP active stealth"))
+      return Selection(Candidate(35, 0.9, "vision-radar Laplacian match"), None)
+
+  review = ValidationReview("stopped", "stationary", "front", 0.0, 2.0, "scene", (35,))
+  assert validation_review_events(frames, Selector(), review) == {
+    0: ("STATIONARY leadTwo id 35 108m",),
+  }
+
+
+def test_numbered_rlog_uses_matching_qcamera_segment() -> None:
+  assert qcamera_path_for_log(Path("route/rlog.1.zst")) == Path("route/qcamera.1.ts")
+  assert qcamera_path_for_log(Path("route/rlog.zst")) == Path("route/qcamera.ts")
 
 
 def test_validation_review_ignores_internal_cutin_on_current_lead_one() -> None:

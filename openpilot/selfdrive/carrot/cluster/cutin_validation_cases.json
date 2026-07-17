@@ -189,6 +189,36 @@
       "window": [30.0, 37.0],
       "expected": "clear",
       "scene": "Adjacent vehicle remains in its lane on a curve around 33 seconds"
+    },
+    {
+      "id": "ioniq5-aa5-3-stationary-114m",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000aa5--26e26ea9a8--3/rlog.zst",
+      "source": "front",
+      "window": [29.5, 40.5],
+      "expected": "stationary",
+      "target_track_ids": [35],
+      "scene": "Night stationary queue approached from 114 m"
+    },
+    {
+      "id": "sorento-1-4-stationary-113m",
+      "vehicle_folder": "KIA_SORENTO_HEV_4TH_GEN ec52e28535e2b281",
+      "log": "00000001--468b94c6c9--4/rlog.zst",
+      "source": "front+corner",
+      "window": [16.5, 27.5],
+      "expected": "stationary",
+      "target_track_ids": [60, 1003],
+      "scene": "Night stopped vehicle approached from 113 m with front and corner radar"
+    },
+    {
+      "id": "sonata-237-0-stationary-99m",
+      "vehicle_folder": "HYUNDAI_SONATA 81685acfb327ceef",
+      "log": "00000237--5ab0b3e53c--0/rlog.1.zst",
+      "source": "front",
+      "window": [25.0, 36.0],
+      "expected": "stationary",
+      "target_track_ids": [41, 48],
+      "scene": "Rainy night stationary queue approached from 99 m"
     }
   ]
 }
