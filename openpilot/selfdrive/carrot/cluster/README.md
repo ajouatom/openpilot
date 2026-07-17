@@ -60,10 +60,12 @@ be run together with `validate_cutin_routes.py` and reviewed sequentially with
 `review_cutin_routes.py`.
 
 Pass `--screen-mode default` to inspect the normal HUD with its navigation
-panel instead. When the managed cluster HUD is enabled on a device, the cluster
-owns TCP 7714 and merges the embedded receiver snapshot directly. Managed
-autorun does not publish and subscribe the same state through `carrotNavi`;
-explicit standalone/CLI cereal publication remains available.
+panel instead. On a managed device, the permanent `carrot_navi` process owns
+TCP 7714 and publishes structured state through `carrotNavi` and binary media
+through `carrotNaviMedia`. Cluster autorun launches `--input live` and consumes
+both cereal services; it does not create an embedded receiver. The direct
+`--input navi` and `--navi-overlay` receiver paths remain available for explicit
+CLI runs when TCP 7714 is free.
 
 `--usb-jpeg-encoder auto` tries optional `turbojpeg` first and falls back to
 Pillow. Route replay defaults to `--route-overlay compact`, which shows the
