@@ -39,6 +39,8 @@ MAP_FRAME_STALE_TIMEOUT_MS = 3000
 NAVI_IPC_DISCONNECT_TIMEOUT_S = 3.0
 H264_FLAG_KEYFRAME = 1
 H264_DECODE_QUEUE_MAX = MAP_HZ_MAX
+NAVI_IPC_ITEM_KEYS = tuple(f"{kind}:{name}" for kind, name in CATALOG)
+NAVI_IPC_WAITING_ITEMS = tuple(NaviItemStatus(key, 0, False, "waiting") for key in NAVI_IPC_ITEM_KEYS)
 
 
 def detect_advertise_ip(bind_host: str) -> str:
@@ -497,6 +499,10 @@ class NaviIpcMediaSource:
         self._session_id = ""
         self._media: dict[str, NaviMediaFrame] = {}
         self._item_status: dict[str, NaviItemStatus] = {}
+        self._media_snapshot: tuple[NaviMediaFrame, ...] = ()
+        self._media_snapshot_dirty = False
+        self._item_snapshot = NAVI_IPC_WAITING_ITEMS
+        self._item_snapshot_dirty = False
         self._media_epoch = 0
         self._h264_requested_sequences: dict[str, int] = {}
         self._h264_worker = H264DecodeWorker()
@@ -526,17 +532,11 @@ class NaviIpcMediaSource:
         map_age_ms = int(max(0.0, now_s - self._map_frame_at_s) * 1000) if self._map_frame_at_s > 0.0 else None
         map_stalled = bool(connected and map_age_ms is not None and map_age_ms > MAP_FRAME_STALE_TIMEOUT_MS)
         if map_stalled:
-            self._media.pop("render:map_main", None)
+            if self._media.pop("render:map_main", None) is not None:
+                self._media_snapshot_dirty = True
         if not connected and self._last_media_at_s > 0.0:
             self._clear_media()
 
-        items = tuple(
-            self._item_status.get(
-                f"{kind}:{name}",
-                NaviItemStatus(f"{kind}:{name}", 0, False, "waiting"),
-            )
-            for kind, name in CATALOG
-        )
         return NaviDashboardState(
             connected=connected,
             endpoint="ipc://carrotNaviMedia",
@@ -549,9 +549,28 @@ class NaviIpcMediaSource:
             map_frame_age_ms=map_age_ms,
             map_stream_stalled=map_stalled,
             error=self._error,
-            media=tuple(self._media[key] for key in sorted(self._media)),
-            items=items,
+            media=self._projected_media(),
+            items=self._projected_items(),
         )
+
+    def _projected_media(self) -> tuple[NaviMediaFrame, ...]:
+        if self._media_snapshot_dirty:
+            self._media_snapshot = tuple(self._media[key] for key in sorted(self._media))
+            self._media_snapshot_dirty = False
+        return self._media_snapshot
+
+    def _projected_items(self) -> tuple[NaviItemStatus, ...]:
+        if self._item_snapshot_dirty:
+            self._item_snapshot = tuple(
+                self._item_status.get(key, waiting)
+                for key, waiting in zip(NAVI_IPC_ITEM_KEYS, NAVI_IPC_WAITING_ITEMS, strict=True)
+            )
+            self._item_snapshot_dirty = False
+        return self._item_snapshot
+
+    def _store_media(self, frame: NaviMediaFrame) -> None:
+        self._media[frame.key] = frame
+        self._media_snapshot_dirty = True
 
     def close(self) -> None:
         self._clear_media()
@@ -575,6 +594,7 @@ class NaviIpcMediaSource:
         present = bool(_ipc_value(data, "present", False))
         reason = str(_ipc_value(data, "reason", "") or "") or None
         self._item_status[key] = NaviItemStatus(key, sequence, present, reason)
+        self._item_snapshot_dirty = True
         self._last_media_at_s = now_s
         self._received_count += 1
 
@@ -583,7 +603,7 @@ class NaviIpcMediaSource:
         if not present or message_type == 4:
             self._h264_requested_sequences[key] = sequence
             self._h264_worker.discard(key)
-            self._media[key] = NaviMediaFrame(key, sequence, False, reason=reason)
+            self._store_media(NaviMediaFrame(key, sequence, False, reason=reason))
             if key == "render:map_main":
                 self._map_frame_at_s = 0.0
             return
@@ -595,7 +615,7 @@ class NaviIpcMediaSource:
             self._h264_requested_sequences[key] = sequence
             self._h264_worker.discard(key)
             mime = "image/png" if format_or_reason == 1 else "image/jpeg"
-            self._media[key] = NaviMediaFrame(key, sequence, True, mime, width, height, payload)
+            self._store_media(NaviMediaFrame(key, sequence, True, mime, width, height, payload))
         elif message_type == 2:
             self._h264_configs[key] = (sequence, payload)
             return
@@ -627,12 +647,14 @@ class NaviIpcMediaSource:
             frame = result.frame
             if not _is_new_h264_result(result, self._media, self._media_epoch):
                 continue
-            self._media[frame.key] = frame
+            self._store_media(frame)
             if frame.key == "render:map_main":
                 self._map_frame_at_s = now_s
 
     def _clear_media(self) -> None:
         self._media.clear()
+        self._media_snapshot = ()
+        self._media_snapshot_dirty = False
         self._media_epoch += 1
         self._h264_requested_sequences.clear()
         self._h264_worker.reset()

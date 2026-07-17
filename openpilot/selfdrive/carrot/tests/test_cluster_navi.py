@@ -144,6 +144,57 @@ def test_disconnected_snapshot_clears_live_navi():
   assert parse_carrot_navi(_namespace(payload), now=1.0) is None
 
 
+def test_parse_live_navi_reuses_unchanged_components_within_session():
+  route_record = _record({
+    "remain_distance_m": 12500,
+    "remain_time_sec": 1320,
+    "polyline": [
+      {"lat": 37.5, "lon": 127.0},
+      {"lat": 37.6, "lon": 127.1},
+    ],
+  }, 5, 100.0)
+  first_payload = build_carrot_navi_payload({
+    "generation": 9,
+    "session_id": "session",
+    "connected": True,
+    "items": {
+      "guidance_current": _record({"distance_m": 320, "main_text": "First"}, 1, 100.0),
+      "route": route_record,
+    },
+  }, publish_mono_ns=100_100_000_000)
+  first = parse_carrot_navi(_namespace(first_payload), now=100.1)
+  assert first is not None and first.current is not None and first.route is not None
+
+  second_payload = build_carrot_navi_payload({
+    "generation": 10,
+    "session_id": "session",
+    "connected": True,
+    "items": {
+      "guidance_current": _record({"distance_m": 300, "main_text": "Second"}, 2, 100.1),
+      "route": route_record,
+    },
+  }, publish_mono_ns=100_200_000_000)
+  second = parse_carrot_navi(_namespace(second_payload), now=100.2, previous=first)
+  fully_reparsed_second = parse_carrot_navi(_namespace(second_payload), now=100.2)
+
+  assert second is not None and second.current is not None and second.route is not None
+  assert second == fully_reparsed_second
+  assert second.current is not first.current
+  assert second.current.main_text == "Second"
+  assert second.route is first.route
+
+  next_session_payload = build_carrot_navi_payload({
+    "generation": 1,
+    "session_id": "next-session",
+    "connected": True,
+    "items": {"route": route_record},
+  }, publish_mono_ns=100_300_000_000)
+  next_session = parse_carrot_navi(_namespace(next_session_payload), now=100.3, previous=second)
+
+  assert next_session is not None and next_session.route is not None
+  assert next_session.route is not second.route
+
+
 def test_disconnected_dashboard_does_not_reuse_stale_map_frame():
   map_frame = NaviMediaFrame("render:map_main", 1, True)
   connected = NaviDashboardState(True, "tcp://127.0.0.1:7714", media=(map_frame,))
@@ -594,6 +645,14 @@ def test_ipc_media_source_restores_standalone_navigation_images():
   assert dashboard.media == (
     NaviMediaFrame("image:tbt_next", 7, True, "image/png", 32, 24, b"\x89PNG\r\n\x1a\ncontent"),
   )
+
+  unchanged = source.update(SimpleNamespace(session_id="ipc-session"))
+
+  assert unchanged.media is dashboard.media
+  assert unchanged.items is dashboard.items
+
+  source._clear_media()
+  assert source._projected_media() == ()
 
 
 def test_navi_panel_shifts_3d_camera_modes_left():

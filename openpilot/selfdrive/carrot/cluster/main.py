@@ -49,9 +49,11 @@ from cluster_config import (
     normalize_cluster_radar_source_color_mode,
     normalize_cluster_screen_mode,
     normalize_cluster_theme_mode,
+    resolved_usb_h264_bitrate,
 )
 from cluster_gamepad import DualSenseSimulator
 from cluster_git_status import GitBranchStatusProvider
+from cluster_gles_dmabuf import DirectNv12DmabufError
 from cluster_gles_readback import DirectNv12ReadbackError
 from cluster_h264_pipeline import (
     DEFAULT_H264_DEVICE,
@@ -84,9 +86,6 @@ DEFAULT_FPS = 0.0
 DEFAULT_USB_BRIGHTNESS = 80
 DEFAULT_H264_BITRATE = "auto"
 DEFAULT_H264_GOP = 1
-H264_AUTO_BITRATE_BITS_PER_FPS = 234_000
-H264_AUTO_BITRATE_MIN_BPS = 1_000_000
-H264_AUTO_BITRATE_MAX_BPS = 7_000_000
 DEFAULT_H264_DIMENSION_ALIGN = 1
 THEME_PARAM_POLL_SECONDS = 1.0
 FPS_PARAM_POLL_SECONDS = 1.0
@@ -127,20 +126,6 @@ def resolved_usb_display_fps(
         return 0
     source_fps = target_fps if target_fps > 0 else float(h264_fps)
     return int(max(1, min(255, round(source_fps))))
-
-
-def resolved_usb_h264_bitrate(requested_bitrate: str, target_fps: float, h264_fps: int) -> str:
-    text = requested_bitrate.strip()
-    if text.lower() != "auto":
-        return text
-    source_fps = int(max(1, round(target_fps if target_fps > 0 else float(h264_fps))))
-    bitrate_bps = source_fps * H264_AUTO_BITRATE_BITS_PER_FPS
-    bitrate_bps = int(max(H264_AUTO_BITRATE_MIN_BPS, min(H264_AUTO_BITRATE_MAX_BPS, bitrate_bps)))
-    if bitrate_bps % 1_000_000 == 0:
-        return f"{bitrate_bps // 1_000_000}M"
-    if bitrate_bps % 1_000 == 0:
-        return f"{bitrate_bps // 1_000}k"
-    return str(bitrate_bps)
 
 
 def resolved_h264_encoder_fps(target_fps: float, h264_fps: int) -> int:
@@ -872,6 +857,7 @@ def run_demo(
     h264_render_nv12_layout: tuple[int, int, int, int, int, int, bool] | None = None
     h264_direct_nv12_input = False
     h264_async_nv12_input = False
+    h264_dmabuf_nv12_input = False
 
     def switch_route_source(
         new_path: Path,
@@ -973,6 +959,10 @@ def run_demo(
                     h264_pipeline.native_direct_input_available()
                     and renderer.direct_nv12_readback_available()
                 )
+                h264_dmabuf_nv12_input = (
+                    h264_pipeline.native_dmabuf_input_available()
+                    and renderer.nv12_dmabuf_output_available()
+                )
                 h264_async_nv12_input = (
                     h264_direct_nv12_input
                     and renderer.async_nv12_readback_available()
@@ -983,6 +973,7 @@ def run_demo(
                     f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
                     f"uv_offset={uv_offset} bytes={input_bytes} render_bytes={render_bytes} "
                     f"active_submit={'on' if active_submit else 'off'} "
+                    f"dmabuf_output={'on' if h264_dmabuf_nv12_input else 'off'} "
                     f"direct_ion={'on' if h264_direct_nv12_input else 'off'} "
                     f"async_pbo={'on' if h264_async_nv12_input else 'off'} flip_x=on",
                     flush=True,
@@ -1514,7 +1505,45 @@ def run_demo(
                                 raise RuntimeError("H264 GPU NV12 render path is missing the native layout")
                             stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, _ = h264_render_nv12_layout
                             native_frame_handled = False
-                            if h264_async_nv12_input:
+                            if h264_dmabuf_nv12_input:
+                                try:
+                                    profile_stage = time.perf_counter()
+                                    with h264_pipeline.native_nv12_input_buffer() as direct_input:
+                                        profile.add_elapsed("main.usb_h264.acquire_dmabuf", profile_stage)
+                                        if direct_input.dmabuf_fd < 0:
+                                            raise DirectNv12DmabufError(
+                                                "native H264 input lease did not expose a DMA-BUF fd"
+                                            )
+
+                                        profile_stage = time.perf_counter()
+                                        with renderer.render_to_nv12_buffer(
+                                            state,
+                                            h264_pipeline.encoder_width,
+                                            h264_pipeline.encoder_height,
+                                            stride,
+                                            y_scanlines,
+                                            uv_scanlines,
+                                            uv_offset,
+                                            render_bytes,
+                                            flip_x=not bool(active_hud_mirror_mode & 1),
+                                            destination_dmabuf_fd=direct_input.dmabuf_fd,
+                                        ):
+                                            pass
+                                        profile.add_elapsed("main.usb.render_nv12_dmabuf_total", profile_stage)
+
+                                        profile_stage = time.perf_counter()
+                                        h264_pipeline.submit_native_nv12_dmabuf_input(direct_input)
+                                        profile.add_elapsed("main.usb_h264.submit_dmabuf", profile_stage)
+                                    native_frame_handled = True
+                                except DirectNv12DmabufError as exc:
+                                    h264_dmabuf_nv12_input = False
+                                    renderer.disable_nv12_dmabuf_output()
+                                    print(
+                                        f"H264 DMA-BUF output unavailable; using asynchronous PBO readback: {exc}",
+                                        flush=True,
+                                    )
+
+                            if not native_frame_handled and h264_async_nv12_input:
                                 try:
                                     if renderer.async_nv12_readback_ready():
                                         profile_stage = time.perf_counter()
@@ -1722,6 +1751,7 @@ def run_demo(
         network_address_provider.close()
         if cluster_core_usage_sampler is not None:
             cluster_core_usage_sampler.close()
+        renderer.release_nv12_dmabuf_output()
         if h264_pipeline is not None:
             h264_pipeline.close()
         if usb_pipeline is not None:
@@ -1859,8 +1889,8 @@ def parse_args() -> argparse.Namespace:
         "--usb-h264-bitrate",
         default=DEFAULT_H264_BITRATE,
         help=(
-            "Target H264 bitrate for --usb-codec h264. Default auto uses about 234k per FPS "
-            "bounded to 1M-7M; 30 FPS resolves to 7M."
+            "Target H264 bitrate for --usb-codec h264. Default auto preserves the 7M@30 FPS "
+            "per-frame budget through 60 FPS; 60 FPS resolves to 14M."
         ),
     )
     parser.add_argument(
