@@ -1,0 +1,207 @@
+/* Neutral shell for every drive presentation: live Vision, navigation, and replay. */
+.page--drive {
+  --drive-page-height: var(
+    --page-content-height,
+    calc(var(--app-vv-height, 100dvh) - var(--app-nav-bottom-gap, var(--nav-bar-height)))
+  );
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: var(--drive-page-height);
+  min-height: var(--drive-page-height);
+  max-height: var(--drive-page-height);
+  overflow: hidden;
+}
+
+.page--drive > .page-header--hidden {
+  display: none !important;
+}
+
+.drive-workspace {
+  --drive-workspace-divider-width: 0px;
+  --drive-workspace-secondary-width: 0px;
+  --drive-workspace-divider-height: 0px;
+  --drive-workspace-secondary-height: 0px;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    var(--drive-workspace-divider-width)
+    minmax(0, var(--drive-workspace-secondary-width));
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1 1 0;
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--drive-workspace-bg);
+  transition:
+    grid-template-columns var(--drive-workspace-layout-duration) var(--drive-workspace-layout-ease),
+    grid-template-rows var(--drive-workspace-layout-duration) var(--drive-workspace-layout-ease);
+}
+
+.drive-workspace.is-drive-workspace-vertical {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows:
+    minmax(0, 1fr)
+    var(--drive-workspace-divider-height)
+    minmax(0, var(--drive-workspace-secondary-height));
+}
+
+.drive-workspace > [data-drive-workspace-slot] {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  isolation: isolate;
+}
+
+.drive-workspace > [data-drive-workspace-slot="primary"] {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.drive-workspace > [data-drive-workspace-divider] {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.drive-workspace > [data-drive-workspace-slot="secondary"] {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.drive-workspace.is-drive-workspace-vertical > [data-drive-workspace-divider] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.drive-workspace.is-drive-workspace-vertical > [data-drive-workspace-slot="secondary"] {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.drive-workspace.is-drive-workspace-active.is-drive-workspace-swapped
+  > [data-drive-workspace-slot="primary"] {
+  grid-column: 3;
+}
+
+.drive-workspace.is-drive-workspace-active.is-drive-workspace-swapped
+  > [data-drive-workspace-slot="secondary"] {
+  grid-column: 1;
+}
+
+.drive-workspace.is-drive-workspace-active.is-drive-workspace-vertical.is-drive-workspace-swapped
+  > [data-drive-workspace-slot="primary"] {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.drive-workspace.is-drive-workspace-active.is-drive-workspace-vertical.is-drive-workspace-swapped
+  > [data-drive-workspace-slot="secondary"] {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.drive-workspace.is-drive-workspace-active.is-drive-workspace-area-1-only {
+  grid-template-columns: minmax(0, 1fr) 0 0;
+}
+
+.drive-workspace.is-drive-workspace-active.is-drive-workspace-area-2-only {
+  grid-template-columns: 0 0 minmax(0, 1fr);
+}
+
+.drive-workspace.is-drive-workspace-active.is-drive-workspace-vertical.is-drive-workspace-area-1-only {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 0 0;
+}
+
+.drive-workspace.is-drive-workspace-active.is-drive-workspace-vertical.is-drive-workspace-area-2-only {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 0 0 minmax(0, 1fr);
+}
+
+.drive-workspace.is-drive-workspace-active.is-drive-workspace-area-1-only
+  > [data-drive-workspace-area="area_2"],
+.drive-workspace.is-drive-workspace-active.is-drive-workspace-area-2-only
+  > [data-drive-workspace-area="area_1"] {
+  display: none !important;
+}
+
+.drive-workspace.is-drive-workspace-resizing {
+  transition-duration: var(--drive-workspace-resize-duration);
+  transition-timing-function: var(--drive-workspace-split-ease);
+  will-change: grid-template-columns, grid-template-rows;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.drive-workspace.is-drive-workspace-settling {
+  transition-duration: var(--drive-workspace-settle-duration);
+  transition-timing-function: var(--drive-workspace-split-ease);
+}
+
+.drive-workspace > [data-drive-workspace-slot]::after {
+  content: attr(data-split-ratio);
+  position: absolute;
+  inset: 0;
+  z-index: var(--drive-layer-resize);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--drive-workspace-resize-mask);
+  color: var(--drive-workspace-ratio-color);
+  font-size: var(--drive-workspace-ratio-font-size);
+  font-weight: var(--drive-workspace-ratio-font-weight);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: var(--drive-workspace-ratio-letter-spacing);
+  text-shadow: var(--drive-workspace-ratio-shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition:
+    opacity var(--drive-workspace-feedback-out-duration) ease,
+    visibility 0s linear var(--drive-workspace-feedback-out-duration);
+}
+
+.drive-workspace.is-drive-workspace-resizing > [data-drive-workspace-slot]::after,
+.drive-workspace.is-drive-workspace-settling > [data-drive-workspace-slot]::after {
+  opacity: 1;
+  visibility: visible;
+  backdrop-filter: blur(var(--drive-workspace-resize-blur)) saturate(110%);
+  -webkit-backdrop-filter: blur(var(--drive-workspace-resize-blur)) saturate(110%);
+  transition-delay: 0s;
+}
+
+.drive-workspace.is-drive-workspace-resizing > [data-drive-workspace-slot]::after {
+  transition-duration: var(--drive-workspace-feedback-in-duration);
+}
+
+.drive-workspace.is-drive-workspace-settling > [data-drive-workspace-slot]::after {
+  background: var(--drive-workspace-settle-mask);
+  backdrop-filter: blur(var(--drive-workspace-settle-blur)) saturate(106%);
+  -webkit-backdrop-filter: blur(var(--drive-workspace-settle-blur)) saturate(106%);
+}
+
+.drive-workspace > [data-drive-workspace-slot][hidden],
+.drive-workspace > [data-drive-workspace-divider][hidden] {
+  display: none !important;
+}
+
+.drive-workspace__aux {
+  display: none;
+  position: relative;
+  isolation: isolate;
+  flex: 0 0 0;
+  width: 100%;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  background: var(--drive-workspace-aux-bg);
+}

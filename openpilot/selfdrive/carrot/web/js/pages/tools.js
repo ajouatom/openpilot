@@ -528,8 +528,9 @@ function renderToolsMeta() {
   const webSettingsButton = document.createElement("button");
   webSettingsButton.type = "button";
   webSettingsButton.className = "tools-meta-iconBtn";
-  webSettingsButton.title = getUIText("web_settings", "Web Settings");
-  webSettingsButton.setAttribute("aria-label", getUIText("web_settings", "Web Settings"));
+  const webSettingsLabel = getUIText("web_settings") || "web_settings";
+  webSettingsButton.title = webSettingsLabel;
+  webSettingsButton.setAttribute("aria-label", webSettingsLabel);
   webSettingsButton.innerHTML = `
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path fill="currentColor" d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.3 7.3 0 0 0-1.69-.98L14.5 2.42A.5.5 0 0 0 14 2h-4a.5.5 0 0 0-.5.42L9.12 5.07c-.61.24-1.18.56-1.69.98l-2.49-1a.5.5 0 0 0-.61.22l-2 3.46a.5.5 0 0 0 .12.64l2.11 1.65c-.04.32-.06.65-.06.98s.02.66.07.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.14.24.43.34.68.22l2.49-1c.51.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.38-2.65c.61-.25 1.18-.58 1.69-.98l2.49 1c.25.12.54.02.68-.22l2-3.46a.5.5 0 0 0-.12-.64zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5"/>
@@ -1204,61 +1205,8 @@ function initToolsPage() {
     await runGitResetMode(mode);
   });
 
-  bindOnce("btnGitRemote", async () => {
-    const title = getUIText("git_remote_title", "Change Repository");
-    let defaultUrl = "";
-    try {
-      const v = await bulkGet(["GitRemote"]);
-      if (v && v.GitRemote) defaultUrl = String(v.GitRemote).trim();
-    } catch (e) {}
-
-    const msg = getUIText(
-      "git_remote_prompt",
-      "Current: {url}\n\nEnter new GitHub repository URL.\n(This will overwrite the current connection)",
-      { url: defaultUrl }
-    );
-    
-    const newUrl = await appPrompt(msg, { title, defaultValue: defaultUrl });
-    if (!newUrl || newUrl.trim() === "" || newUrl.trim() === defaultUrl) return;
-
-    try {
-      const waitMsg = getUIText("git_remote_fetching", "Fetching repository data.\nThis may take a few minutes for new repositories.\nPlease wait...");
-      toolsLogNotice(waitMsg, { label: "change repository" });
-      await runTool("git_remote_set", { url: newUrl.trim() });
-      await refreshToolsMetaInfo();
-      await refreshGitPullStatus({ force: true });
-      const successMsg = getUIText("git_remote_success", "Repository changed successfully.\nClick [change branch] to select a branch.");
-      toolsLogNotice(successMsg, { label: "change repository" });
-    } catch (e) {
-      showError("change repository", e);
-    }
-  });
   bindOnce("btnGitBranch", async () => {
     await loadBranchesAndShow();
-  });
-
-  bindOnce("btnGitAddRemote", async () => {
-    const title = getUIText("git_add_remote_title", "Add/Update Remote");
-    const nameInput = await appPrompt(
-      getUIText("git_add_remote_name_prompt", "Enter remote name (e.g. remote)"),
-      { title, placeholder: "remote" }
-    );
-    if (!nameInput || !nameInput.trim()) return;
-    const remoteName = nameInput.trim();
-
-    const urlInput = await appPrompt(
-      getUIText("git_add_remote_url_prompt", "Enter URL for '{name}'", { name: remoteName }),
-      { title, placeholder: "https://github.com/user/repo" }
-    );
-    if (!urlInput || !urlInput.trim()) return;
-
-    try {
-      await runTool("git_remote_add", { name: remoteName, url: urlInput.trim() });
-      await refreshGitPullStatus({ force: true });
-      toolsLogNotice(getUIText("git_add_remote_done", "Remote '{name}' added/updated", { name: remoteName }), { label: "git_remote_add" });
-    } catch (e) {
-      showError("git_remote_add", e);
-    }
   });
 
   bindOnce("btnGitLog", async () => {

@@ -1,6 +1,8 @@
 import asyncio
 import json
+import os
 import re
+import sys
 
 from aiohttp import web, WSMsgType
 
@@ -8,6 +10,8 @@ from ..config import TMUX_WEB_SESSION
 from ..services import tmux
 from ..services.terminal_pty import PTY_SESSION
 from ..terminal_commands import translate_meta_command
+from ..terminal_commands.custom_commands import load_commands
+from ..terminal_commands.registry import get_command, iter_commands
 
 
 TMUX_ATTACH_RE = re.compile(r"^\s*tmux\s+(?:a|attach|attach-session)(?:\s*)$", re.IGNORECASE)
@@ -209,6 +213,69 @@ async def handle_terminal_pty_status(request: web.Request) -> web.Response:
   return web.json_response({"ok": True, **await PTY_SESSION.snapshot()})
 
 
+async def handle_terminal_commands(_request: web.Request) -> web.Response:
+  load_commands()
+  commands = [
+    {
+      "name": command.name,
+      "summary": command.summary,
+      "usage": command.usage,
+    }
+    for command in iter_commands()
+  ]
+  return web.json_response({"ok": True, "command": "carrot", "commands": commands})
+
+
+async def handle_terminal_command_run(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+  except Exception:
+    return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+
+  name = str(body.get("command") or "").strip().lower()
+  raw_args = body.get("args", [])
+  if not isinstance(raw_args, list):
+    return web.json_response({"ok": False, "error": "args must be a list"}, status=400)
+  args = [str(arg) for arg in raw_args]
+  if not name or len(args) > 32 or any(len(arg) > 256 for arg in args):
+    return web.json_response({"ok": False, "error": "invalid command arguments"}, status=400)
+
+  load_commands()
+  command = get_command(name)
+  if command is None:
+    return web.json_response({"ok": False, "error": f"unknown command: {name}"}, status=404)
+
+  env = os.environ.copy()
+  package_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+  env["PYTHONPATH"] = os.pathsep.join(filter(None, (package_root, env.get("PYTHONPATH", ""))))
+  proc = await asyncio.create_subprocess_exec(
+    sys.executable,
+    "-m",
+    "selfdrive.carrot.server.terminal_commands.cli",
+    name,
+    *args,
+    cwd=package_root,
+    env=env,
+    stdout=asyncio.subprocess.PIPE,
+    stderr=asyncio.subprocess.PIPE,
+  )
+  try:
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=45.0)
+  except asyncio.TimeoutError:
+    proc.kill()
+    await proc.wait()
+    return web.json_response({"ok": False, "error": "command timed out"}, status=504)
+
+  output = stdout.decode("utf-8", errors="replace").strip()
+  error = stderr.decode("utf-8", errors="replace").strip()
+  return web.json_response({
+    "ok": proc.returncode == 0,
+    "rc": int(proc.returncode or 0),
+    "out": output,
+    "error": error,
+  }, status=200 if proc.returncode == 0 else 400)
+
+
 async def handle_download_tmux(request: web.Request) -> web.Response:
   path = "/data/media/tmux.log"
   if not os.path.exists(path):
@@ -224,6 +291,8 @@ async def handle_download_tmux(request: web.Request) -> web.Response:
 
 def register(app: web.Application) -> None:
   app.router.add_get("/api/terminal_pty/status", handle_terminal_pty_status)
+  app.router.add_get("/api/terminal_commands", handle_terminal_commands)
+  app.router.add_post("/api/terminal_commands/run", handle_terminal_command_run)
   app.router.add_get("/ws/terminal", ws_terminal)
   app.router.add_get("/ws/terminal_pty", ws_terminal_pty)
   app.router.add_get("/download/tmux.log", handle_download_tmux)

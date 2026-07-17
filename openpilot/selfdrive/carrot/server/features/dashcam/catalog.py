@@ -13,6 +13,7 @@ from .paths import (
 
 
 DASHCAM_SEGMENT_SECONDS = 60
+RLOG_SOURCE_NAMES = ("rlog.zst", "rlog.bz2", "rlog")
 
 
 def source_video_end_epoch(segment_dir_path: str) -> int:
@@ -38,6 +39,15 @@ def source_video(segment_dir_path: str) -> tuple[str, str]:
     if os.path.isfile(path) and os.path.getsize(path) > 0:
       return path, name
   raise web.HTTPNotFound(text="qcamera video not found")
+
+
+def source_rlog(segment_dir_path: str) -> tuple[str, str]:
+  """Return the canonical recorded log without parsing or decompressing it."""
+  for name in RLOG_SOURCE_NAMES:
+    path = os.path.join(segment_dir_path, name)
+    if os.path.isfile(path) and os.path.getsize(path) > 0:
+      return path, name
+  raise web.HTTPNotFound(text="rlog not found")
 
 
 def build_routes() -> list[dict[str, Any]]:

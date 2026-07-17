@@ -14,8 +14,7 @@ AudibleAlert = car.CarControl.HUDControl.AudibleAlert
 ButtonType = car.CarState.ButtonEvent.Type
 SELFDRIVE_STATE_TIMEOUT = 5.0
 # Poll cadence for the sound state loop. selfdriveState publishes at 100Hz and the
-# device's own soundd only samples it at 20Hz (50ms), so polling here at ~5ms — the
-# same cadence the realtime raw/vision hub uses (RawWsHub.ACTIVE_POLL_SLEEP) — lets
+# device's own soundd only samples it at 20Hz (50ms), so polling here at ~5ms lets
 # the browser detect an alert change *before* the device and absorb the WS + audio
 # output latency, landing near-simultaneous instead of ~50ms late. We only send on
 # change, so a faster poll shortens detection latency without adding traffic.

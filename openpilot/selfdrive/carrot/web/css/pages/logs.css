@@ -104,10 +104,8 @@
   opacity: .82;
 }
 
-.logs-icon-btn,
 .dashcam-expand-btn,
-.dashcam-menu-btn,
-.dashcam-player-close {
+.dashcam-menu-btn {
   appearance: none;
   border: 0;
   padding: 0;
@@ -121,26 +119,14 @@
   box-sizing: border-box;
 }
 
-.logs-icon-btn {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  border-radius: 8px;
-  background: var(--md-surface-cont);
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
-}
-
-.logs-icon-btn:hover,
 .dashcam-expand-btn:hover,
 .dashcam-menu-btn:hover {
   background: color-mix(in srgb, var(--md-primary) 10%, transparent);
   color: var(--md-on-surface);
 }
 
-.logs-icon-btn svg,
 .dashcam-expand-btn svg,
-.dashcam-menu-btn svg,
-.dashcam-player-close svg {
+.dashcam-menu-btn svg {
   width: 22px;
   height: 22px;
 }
@@ -286,6 +272,24 @@
   text-shadow: 0 1px 2px rgba(0,0,0,.45);
   backdrop-filter: blur(8px);
   pointer-events: none;
+}
+
+.dashcam-route-preview .dashcam-route-preview__menu {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  width: 36px;
+  height: 36px;
+  color: #fff;
+  background: rgba(0,0,0,.48);
+  border: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 3px 12px rgba(0,0,0,.2);
+  backdrop-filter: blur(8px);
+}
+
+.dashcam-route-preview .dashcam-route-preview__menu:hover {
+  background: rgba(0,0,0,.64);
 }
 
 .dashcam-chip {
@@ -929,6 +933,10 @@
   opacity: 1;
 }
 
+.dashcam-player-overlay.is-menu-open {
+  z-index: calc(var(--z-modal) - 1);
+}
+
 .dashcam-player-dialog {
   width: auto;
   max-width: min(92vw, 960px);
@@ -967,6 +975,10 @@
   max-height: min(78vh, 680px);
   object-fit: contain;
   background: #000;
+}
+
+.dashcam-player-frame .plyr__controls {
+  z-index: 5;
 }
 
 .dashcam-player-frame .plyr:-webkit-full-screen,
@@ -1042,13 +1054,19 @@
   padding: 10px;
   background: linear-gradient(180deg, rgba(0,0,0,.62), transparent);
   pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.dashcam-player-overlay.is-controls-hidden:not(.is-menu-open) .dashcam-player-top {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 
 .dashcam-player-toast {
   position: absolute;
   top: 50%;
   left: 50%;
-  z-index: 4;
+  z-index: 5;
   padding: 12px 22px;
   border-radius: 999px;
   background: rgba(0,0,0,.74);
@@ -1098,17 +1116,36 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The close button is the shared .c-close atom; it only needs to opt back
+   into pointer events since .dashcam-player-top is pointer-events: none. */
 .dashcam-player-close {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  color: #fff;
-  background: rgba(0,0,0,.34);
   pointer-events: auto;
 }
 
-.dashcam-player-close:hover {
-  background: rgba(255,255,255,.16);
+/* Match the sibling menu button to the .c-close footprint so the pair reads
+   as one control set (same size/radius/surface as the close). */
+.dashcam-player-menu {
+  width: var(--close-size);
+  height: var(--close-size);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 40%, transparent);
+  border-radius: var(--close-radius);
+  color: #fff;
+  background: color-mix(in srgb, var(--md-surface-cont) 82%, #000);
+  pointer-events: auto;
+  transition: background var(--motion-quick) var(--ease-standard),
+              border-color var(--motion-quick) var(--ease-standard),
+              color var(--motion-quick) var(--ease-standard);
+}
+
+.dashcam-player-menu svg {
+  width: var(--close-icon);
+  height: var(--close-icon);
+}
+
+.dashcam-player-menu:hover {
+  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont));
+  border-color: color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
+  color: #fff;
 }
 
 .screenrecord-list {

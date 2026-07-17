@@ -1,0 +1,535 @@
+{
+  "version": 1,
+  "schemaCommit": "c7b025e810930c9af0ac66f4cc6c537887ab6880",
+  "schemaBranch": "jominki354/web",
+  "services": {
+    "accelerometer": {
+      "domain": "device_sensor",
+      "purpose": "IMU의 선형 가속도·센서 출처를 기록한다.",
+      "recommendedView": "3축 그래프+센서 메타",
+      "privacy": "low"
+    },
+    "alertDebug": {
+      "domain": "debug_control",
+      "purpose": "시험 도구가 만든 alertText1/2 디버그 경고다.",
+      "recommendedView": "debug 경고 이벤트",
+      "privacy": "low"
+    },
+    "androidLog": {
+      "domain": "diagnostic_log",
+      "purpose": "journal/logcat 계열 id·timestamp·priority·pid/tid·tag·message를 기록한다.",
+      "recommendedView": "구조화 로그 표",
+      "privacy": "potential_sensitive_text"
+    },
+    "audioFeedback": {
+      "domain": "feedback_audio",
+      "purpose": "사용자 피드백용 오디오 block과 block 번호이며 segment 보존을 유발한다.",
+      "recommendedView": "오디오+marker",
+      "privacy": "audio"
+    },
+    "bookmarkButton": {
+      "domain": "feedback_marker",
+      "purpose": "UI에서 북마크 버튼을 누른 사건 자체인 빈 payload marker다.",
+      "recommendedView": "타임라인 marker",
+      "privacy": "user_action"
+    },
+    "cameraOdometry": {
+      "domain": "perception",
+      "purpose": "모델이 추정한 카메라 translation/rotation과 표준편차·frame 정보를 기록한다.",
+      "recommendedView": "6축 odometry 그래프",
+      "privacy": "driving"
+    },
+    "can": {
+      "domain": "vehicle_bus",
+      "purpose": "차량에서 수신한 원시 CAN 주소·bus(src)·payload 묶음이다.",
+      "recommendedView": "CAN 프레임 표+DBC 해석",
+      "privacy": "vehicle_bus"
+    },
+    "carControl": {
+      "domain": "control_command",
+      "purpose": "차량에 요청하는 최종 lateral/longitudinal actuator, cruise와 HUD 명령이다.",
+      "recommendedView": "명령 그래프+상태",
+      "privacy": "driving"
+    },
+    "carOutput": {
+      "domain": "control_output",
+      "purpose": "CarController의 차종별 rate limit/quirk 적용 후 실제 CAN에 반영된 actuator 출력이다.",
+      "recommendedView": "요청 대비 실제 출력 그래프",
+      "privacy": "driving"
+    },
+    "carParams": {
+      "domain": "vehicle_metadata",
+      "purpose": "차종 식별, VIN/FW, 물성·제어 tuning·safety·네트워크 위치 등 차량 정적 파라미터다.",
+      "recommendedView": "검색 가능한 메타데이터 표",
+      "privacy": "vehicle_identifier"
+    },
+    "carState": {
+      "domain": "vehicle_state",
+      "purpose": "CAN을 차종별 DBC/인터페이스로 해석한 속도·페달·조향·크루즈·기어·버튼·fault·차선/코너레이더 등 차량 상태다.",
+      "recommendedView": "상태 밴드+그래프+이벤트",
+      "privacy": "driving"
+    },
+    "carrotMan": {
+      "domain": "carrot_navigation",
+      "purpose": "기존 Carrot 내비·제한속도·회전·위치·교통·원격명령 요약값이다.",
+      "recommendedView": "안내 상태+위치/속도 그래프",
+      "privacy": "route_location_remote"
+    },
+    "carrotNavi": {
+      "domain": "carrot_navigation",
+      "purpose": "세션/신선도 메타와 차량, 현재/다음 안내, 차선, 속도/SDI, 신호, 교차로, 경로, 안내상태를 묶은 Carrot Navi v2 상태다.",
+      "recommendedView": "중첩 상태/객체+지도",
+      "privacy": "route_location"
+    },
+    "carrotNaviMedia": {
+      "domain": "carrot_navigation_media",
+      "purpose": "교차로 등 Carrot Navi 미디어의 kind/name/sequence/timestamp/format/size/payload를 운반한다.",
+      "recommendedView": "이미지/미디어+메타",
+      "privacy": "route_media"
+    },
+    "clocks": {
+      "domain": "time_system",
+      "purpose": "boottime·monotonic·monotonicRaw·realtime·Tai 시계 값을 함께 기록한다.",
+      "recommendedView": "시계 차이 그래프",
+      "privacy": "low"
+    },
+    "controlsState": {
+      "domain": "control",
+      "purpose": "제어기의 곡률·가감속 명령 성분, lateral controller 내부 상태와 deprecated 진단값을 기록한다.",
+      "recommendedView": "연속 그래프+controller 상태",
+      "privacy": "driving"
+    },
+    "customReservedRawData0": {
+      "domain": "custom_reserved",
+      "purpose": "fork가 사용할 수 있는 예약 raw Data 슬롯 0이며 현재 producer는 찾지 못했다.",
+      "recommendedView": "binary 원문",
+      "privacy": "unknown"
+    },
+    "customReservedRawData1": {
+      "domain": "custom_reserved",
+      "purpose": "services registry에는 있으나 현재 Event schema에는 없는 예약 슬롯 1이다.",
+      "recommendedView": "비활성/호환성 진단",
+      "privacy": "unknown"
+    },
+    "customReservedRawData2": {
+      "domain": "custom_reserved",
+      "purpose": "services registry에는 있으나 현재 Event schema에는 없는 예약 슬롯 2다.",
+      "recommendedView": "비활성/호환성 진단",
+      "privacy": "unknown"
+    },
+    "deviceState": {
+      "domain": "device_system",
+      "purpose": "장치 종류, 시작 상태, 저장공간·메모리·CPU/GPU, 전력, 온도, 네트워크 상태를 기록한다.",
+      "recommendedView": "상태표+시계열",
+      "privacy": "device_network"
+    },
+    "driverAssistance": {
+      "domain": "driver_assistance",
+      "purpose": "좌·우 차선 이탈 경고와 향후 운전자 보조 결과 확장용 상태다.",
+      "recommendedView": "경고 이벤트+상태",
+      "privacy": "driving"
+    },
+    "driverCameraState": {
+      "domain": "camera_metadata",
+      "purpose": "운전자 카메라 frame id·sensor·노출·gain·timestamp·transform 메타데이터다.",
+      "recommendedView": "frame 메타+영상 동기화",
+      "privacy": "camera_driver"
+    },
+    "driverEncodeData": {
+      "domain": "video_transport",
+      "purpose": "운전자 카메라 인코더의 codec header·frame bytes·index·크기·Unix timestamp를 운반한다.",
+      "recommendedView": "영상/인덱스 원문",
+      "privacy": "camera_driver"
+    },
+    "driverEncodeIdx": {
+      "domain": "media_index",
+      "purpose": "loggerd가 driverEncodeData를 기록하며 생성하는 운전자 카메라 영상 인덱스다.",
+      "recommendedView": "영상 동기화 인덱스",
+      "privacy": "camera_driver"
+    },
+    "driverMonitoringState": {
+      "domain": "driver_monitoring",
+      "purpose": "주의도, pose/face calibration, 정책, 산만/무반응 단계와 awareness 상태를 기록한다.",
+      "recommendedView": "상태 밴드+경고 이벤트",
+      "privacy": "biometric"
+    },
+    "driverStateV2": {
+      "domain": "driver_monitoring_model",
+      "purpose": "운전자 얼굴/눈/자세 확률·위치, wheel-on-right 확률 등 모델 출력을 기록한다.",
+      "recommendedView": "모델 상태+확률 그래프",
+      "privacy": "biometric_camera"
+    },
+    "drivingModelData": {
+      "domain": "model",
+      "purpose": "주행 모델의 frame/model execution, path/lane meta, desire·disengage 예측 등 압축된 모델 결과다.",
+      "recommendedView": "모델 메타+확률/경로",
+      "privacy": "driving"
+    },
+    "errorLogMessage": {
+      "domain": "diagnostic_log",
+      "purpose": "오류 우선순위 프로세스 로그 텍스트다.",
+      "recommendedView": "오류 로그 목록",
+      "privacy": "potential_sensitive_text"
+    },
+    "gnssMeasurements": {
+      "domain": "gnss_diagnostic",
+      "purpose": "보정된 GNSS 측정치와 ephemeris 상태를 위한 통합 서비스다.",
+      "recommendedView": "측정치 표+위성 상태",
+      "privacy": "location"
+    },
+    "gpsLocation": {
+      "domain": "location",
+      "purpose": "내장 Qualcomm GNSS의 위치·속도·bearing·정확도·fix를 기록한다.",
+      "recommendedView": "지도+정확도/속도 그래프",
+      "privacy": "location"
+    },
+    "gpsLocationExternal": {
+      "domain": "location",
+      "purpose": "외부 GNSS의 위경도·고도·속도·bearing·정확도·fix·source를 기록한다.",
+      "recommendedView": "지도+정확도/속도 그래프",
+      "privacy": "location"
+    },
+    "gpsNMEA": {
+      "domain": "location_raw",
+      "purpose": "NMEA 문장과 수신 시각을 담는 원시 GNSS 텍스트 서비스다.",
+      "recommendedView": "원문 텍스트+시각",
+      "privacy": "location"
+    },
+    "gyroscope": {
+      "domain": "device_sensor",
+      "purpose": "IMU의 각속도·바이어스·센서 출처를 기록한다.",
+      "recommendedView": "3축 그래프+센서 메타",
+      "privacy": "low"
+    },
+    "lateralManeuverPlan": {
+      "domain": "planning_tool",
+      "purpose": "lateral maneuver 도구가 발행하는 목표 곡률이다.",
+      "recommendedView": "곡률 그래프",
+      "privacy": "driving"
+    },
+    "lateralPlan": {
+      "domain": "planning",
+      "purpose": "차선·경로·lane change, 곡률/곡률률 궤적, solver 결과와 Carrot debug 경로를 기록한다.",
+      "recommendedView": "경로/곡률 그래프+상태",
+      "privacy": "driving"
+    },
+    "lightSensor": {
+      "domain": "device_sensor",
+      "purpose": "주변광 센서 값을 위한 등록 서비스다.",
+      "recommendedView": "수치 그래프",
+      "privacy": "low"
+    },
+    "liveCalibration": {
+      "domain": "calibration",
+      "purpose": "카메라-차량 자세 보정 상태, 행렬, rpy·높이와 보정 진행률을 기록한다.",
+      "recommendedView": "보정 상태+벡터/진행률",
+      "privacy": "low"
+    },
+    "liveDelay": {
+      "domain": "calibration",
+      "purpose": "추정된 lateral actuator delay와 보정 진행·상태를 기록한다.",
+      "recommendedView": "지연 그래프+상태",
+      "privacy": "driving"
+    },
+    "liveParameters": {
+      "domain": "calibration",
+      "purpose": "steer ratio, stiffness, angle offset 등 주행 중 차량 파라미터 추정값과 filter 상태를 기록한다.",
+      "recommendedView": "파라미터 그래프+유효 상태",
+      "privacy": "driving"
+    },
+    "livePose": {
+      "domain": "localization",
+      "purpose": "위치·속도·가속도·자세·각속도와 각 측정의 유효성/표준편차를 포함한 위치추정 결과다.",
+      "recommendedView": "벡터 그래프+유효 상태",
+      "privacy": "location"
+    },
+    "liveTorqueParameters": {
+      "domain": "calibration",
+      "purpose": "주행 중 추정한 lateral torque factor·friction·offset과 유효성/진행률을 기록한다.",
+      "recommendedView": "파라미터 그래프+유효 상태",
+      "privacy": "driving"
+    },
+    "liveTracks": {
+      "domain": "perception_raw",
+      "purpose": "차량 radar interface에서 나온 원시 RadarData 오류·point 목록이다.",
+      "recommendedView": "객체 표+원시 트랙",
+      "privacy": "driving"
+    },
+    "livestreamDriverEncodeData": {
+      "domain": "stream_transport",
+      "purpose": "운전자 WebRTC/라이브스트림용 인코딩 frame transport다.",
+      "recommendedView": "실시간 영상 transport",
+      "privacy": "camera_driver"
+    },
+    "livestreamDriverEncodeIdx": {
+      "domain": "stream_index",
+      "purpose": "운전자 라이브스트림 frame의 로그 인덱스 schema 항목이다.",
+      "recommendedView": "스트림 진단 인덱스",
+      "privacy": "camera_driver"
+    },
+    "livestreamRoadEncodeData": {
+      "domain": "stream_transport",
+      "purpose": "도로 WebRTC/라이브스트림용 인코딩 frame transport다.",
+      "recommendedView": "실시간 영상 transport",
+      "privacy": "camera"
+    },
+    "livestreamRoadEncodeIdx": {
+      "domain": "stream_index",
+      "purpose": "도로 라이브스트림 frame의 로그 인덱스 schema 항목이다.",
+      "recommendedView": "스트림 진단 인덱스",
+      "privacy": "camera"
+    },
+    "livestreamWideRoadEncodeData": {
+      "domain": "stream_transport",
+      "purpose": "광각 WebRTC/라이브스트림용 인코딩 frame transport다.",
+      "recommendedView": "실시간 영상 transport",
+      "privacy": "camera"
+    },
+    "livestreamWideRoadEncodeIdx": {
+      "domain": "stream_index",
+      "purpose": "광각 라이브스트림 frame의 로그 인덱스 schema 항목이다.",
+      "recommendedView": "스트림 진단 인덱스",
+      "privacy": "camera"
+    },
+    "logMessage": {
+      "domain": "diagnostic_log",
+      "purpose": "일반 프로세스 로그 텍스트다.",
+      "recommendedView": "검색 가능한 로그 목록",
+      "privacy": "potential_sensitive_text"
+    },
+    "longitudinalPlan": {
+      "domain": "planning",
+      "purpose": "향후 속도·가속도·jerk 궤적, lead/FCW, stop/throttle/brake 허용, solver 및 Carrot 종방향 상태를 기록한다.",
+      "recommendedView": "계획 곡선+상태/이벤트",
+      "privacy": "driving"
+    },
+    "magnetometer": {
+      "domain": "device_sensor",
+      "purpose": "자기장 벡터와 센서 출처를 기록한다.",
+      "recommendedView": "3축 그래프+센서 메타",
+      "privacy": "low"
+    },
+    "managerState": {
+      "domain": "process_system",
+      "purpose": "manager가 관리하는 프로세스별 running/shouldBeRunning/pid/exitCode 상태다.",
+      "recommendedView": "프로세스 상태표+전이 이벤트",
+      "privacy": "device_process"
+    },
+    "mapRenderState": {
+      "domain": "navigation",
+      "purpose": "지도 렌더러 frame id와 render time·location mono time을 기록한다.",
+      "recommendedView": "렌더링 성능 그래프",
+      "privacy": "location"
+    },
+    "modelV2": {
+      "domain": "model",
+      "purpose": "주행 모델의 position/orientation/velocity, lane/edge, leads, desire/meta/pose/action 전체 출력을 기록한다.",
+      "recommendedView": "경로·객체 snapshot+확률 그래프",
+      "privacy": "driving"
+    },
+    "navInstruction": {
+      "domain": "navigation",
+      "purpose": "표준 내비 maneuver, 거리/시간, primary/secondary text, 차선, speed limit 안내다.",
+      "recommendedView": "안내 카드+상태 전이",
+      "privacy": "route_location"
+    },
+    "navInstructionCarrot": {
+      "domain": "carrot_navigation",
+      "purpose": "Carrot 경로 안내를 표준 NavInstruction 형태로 발행한다.",
+      "recommendedView": "안내 카드+상태 전이",
+      "privacy": "route_location"
+    },
+    "navModel": {
+      "domain": "navigation_legacy",
+      "purpose": "services registry에는 남아 있으나 현재 Event에는 navModelDEPRECATED만 있는 불일치 항목이다.",
+      "recommendedView": "비활성/호환성 진단",
+      "privacy": "route_location"
+    },
+    "navRoute": {
+      "domain": "navigation",
+      "purpose": "Carrot 경로 좌표 polyline이다.",
+      "recommendedView": "지도 polyline",
+      "privacy": "route_location"
+    },
+    "navRouteNavd": {
+      "domain": "navigation",
+      "purpose": "navd가 발행하는 경로 좌표 polyline이다.",
+      "recommendedView": "지도 polyline",
+      "privacy": "route_location"
+    },
+    "navThumbnail": {
+      "domain": "navigation_media",
+      "purpose": "nav map renderer가 만든 지도 썸네일이다.",
+      "recommendedView": "이미지",
+      "privacy": "route_location"
+    },
+    "onroadEvents": {
+      "domain": "control_event",
+      "purpose": "현재 발생 중인 각 OnroadEvent 이름과 enable/noEntry/warning/disable/override 역할 flag 목록이다.",
+      "recommendedView": "원인별 상태 밴드+이벤트",
+      "privacy": "driving"
+    },
+    "pandaStates": {
+      "domain": "vehicle_interface",
+      "purpose": "Panda별 점화·전원·fault·CAN health·safety 허용 상태를 기록한다.",
+      "recommendedView": "장치별 상태표+fault 이벤트",
+      "privacy": "vehicle_bus"
+    },
+    "peripheralState": {
+      "domain": "vehicle_interface",
+      "purpose": "주변장치/Panda의 전압·전류·팬 속도를 기록한다.",
+      "recommendedView": "수치 그래프+상태",
+      "privacy": "low"
+    },
+    "procLog": {
+      "domain": "process_system",
+      "purpose": "전체/프로세스별 CPU time, memory, thread·FD·process 상태를 기록한다.",
+      "recommendedView": "프로세스 표+자원 그래프",
+      "privacy": "device_process"
+    },
+    "qRoadEncodeData": {
+      "domain": "video_transport",
+      "purpose": "저해상도 도로 카메라 인코더 frame과 index를 운반한다.",
+      "recommendedView": "영상/인덱스 원문",
+      "privacy": "camera"
+    },
+    "qRoadEncodeIdx": {
+      "domain": "media_index",
+      "purpose": "loggerd가 qRoadEncodeData를 기록하며 생성하는 저해상도 도로 영상 인덱스다.",
+      "recommendedView": "영상 동기화 인덱스",
+      "privacy": "camera"
+    },
+    "qcomGnss": {
+      "domain": "gnss_diagnostic",
+      "purpose": "Qualcomm GNSS 측정·clock·dead-reckoning·위성 polynomial 보고서를 union별로 기록한다.",
+      "recommendedView": "GNSS 객체/위성 표",
+      "privacy": "location"
+    },
+    "radarState": {
+      "domain": "perception",
+      "purpose": "레이더와 모델을 융합한 lead 객체, 코너/중앙 트랙 묶음과 FCW 관련 상태를 기록한다.",
+      "recommendedView": "객체 스냅샷+거리/속도 그래프",
+      "privacy": "driving"
+    },
+    "rawAudioData": {
+      "domain": "audio",
+      "purpose": "PCM/원시 오디오 byte와 sample rate를 기록하며 RecordAudio 조건부다.",
+      "recommendedView": "파형/재생 또는 binary",
+      "privacy": "audio"
+    },
+    "roadCameraState": {
+      "domain": "camera_metadata",
+      "purpose": "도로 카메라 frame id·sensor·노출·gain·timestamp·transform 메타데이터다.",
+      "recommendedView": "frame 메타+영상 동기화",
+      "privacy": "camera"
+    },
+    "roadEncodeData": {
+      "domain": "video_transport",
+      "purpose": "도로 카메라 인코더의 codec header·frame bytes·index·크기·Unix timestamp를 운반한다.",
+      "recommendedView": "영상/인덱스 원문",
+      "privacy": "camera"
+    },
+    "roadEncodeIdx": {
+      "domain": "media_index",
+      "purpose": "loggerd가 roadEncodeData를 기록하며 생성하는 도로 카메라 영상 인덱스다.",
+      "recommendedView": "영상 동기화 인덱스",
+      "privacy": "camera"
+    },
+    "selfdriveState": {
+      "domain": "control_state",
+      "purpose": "openpilot 상위 상태기계, enabled/active/engageable, 경고 UI와 주행 설정을 기록한다.",
+      "recommendedView": "상태 밴드+전이 이벤트",
+      "privacy": "driving"
+    },
+    "sendcan": {
+      "domain": "vehicle_bus_command",
+      "purpose": "Panda로 송신 요청된 CAN 주소·bus·payload 묶음이다.",
+      "recommendedView": "송신 CAN 표+DBC 해석",
+      "privacy": "vehicle_bus"
+    },
+    "soundPressure": {
+      "domain": "audio",
+      "purpose": "마이크 음압, A-weighted 음압과 dB 값을 기록한다.",
+      "recommendedView": "음압 그래프",
+      "privacy": "audio_environment"
+    },
+    "temperatureSensor": {
+      "domain": "device_sensor",
+      "purpose": "센서 칩 온도와 센서 출처를 기록한다.",
+      "recommendedView": "온도 그래프",
+      "privacy": "low"
+    },
+    "testJoystick": {
+      "domain": "debug_control",
+      "purpose": "조이스틱 시험 축과 button 값을 기록한다.",
+      "recommendedView": "축 그래프+button 이벤트",
+      "privacy": "driving"
+    },
+    "thumbnail": {
+      "domain": "media",
+      "purpose": "loggerd JPEG encoder가 만든 저주기 썸네일과 frame/timestamp를 기록한다.",
+      "recommendedView": "이미지+영상 위치",
+      "privacy": "camera"
+    },
+    "touch": {
+      "domain": "user_input",
+      "purpose": "Linux 입력 계층의 터치 type/code/value와 sec/usec를 기록한다.",
+      "recommendedView": "입력 이벤트 목록",
+      "privacy": "user_input"
+    },
+    "ubloxGnss": {
+      "domain": "gnss_diagnostic",
+      "purpose": "u-blox 수신기의 위성·측정·ephemeris·iono·hardware 상태를 union별로 기록한다.",
+      "recommendedView": "GNSS 객체/위성 표",
+      "privacy": "location"
+    },
+    "ubloxRaw": {
+      "domain": "location_raw",
+      "purpose": "Pigeon/u-blox에서 들어온 해석 전 UBX 원시 바이트다.",
+      "recommendedView": "binary 원문/다운로드",
+      "privacy": "location"
+    },
+    "uiDebug": {
+      "domain": "ui_debug",
+      "purpose": "UI 프로세스가 발행하는 비정형 debug text다.",
+      "recommendedView": "debug 원문",
+      "privacy": "potential_sensitive_text"
+    },
+    "uploaderState": {
+      "domain": "upload_system",
+      "purpose": "업로드 진행 파일·크기·속도·timestamp를 위한 상태 schema다.",
+      "recommendedView": "업로드 상태표",
+      "privacy": "device_network"
+    },
+    "userBookmark": {
+      "domain": "feedback_marker",
+      "purpose": "사용자 북마크 사건 자체를 나타내는 빈 payload marker이며 segment 보존을 유발한다.",
+      "recommendedView": "타임라인 marker",
+      "privacy": "user_action"
+    },
+    "wideRoadCameraState": {
+      "domain": "camera_metadata",
+      "purpose": "광각 도로 카메라 frame id·sensor·노출·gain·timestamp·transform 메타데이터다.",
+      "recommendedView": "frame 메타+영상 동기화",
+      "privacy": "camera"
+    },
+    "wideRoadEncodeData": {
+      "domain": "video_transport",
+      "purpose": "광각 도로 카메라 인코더의 codec header·frame bytes·index·크기·Unix timestamp를 운반한다.",
+      "recommendedView": "영상/인덱스 원문",
+      "privacy": "camera"
+    },
+    "wideRoadEncodeIdx": {
+      "domain": "media_index",
+      "purpose": "loggerd가 wideRoadEncodeData를 기록하며 생성하는 광각 도로 카메라 영상 인덱스다.",
+      "recommendedView": "영상 동기화 인덱스",
+      "privacy": "camera"
+    },
+    "youtubeRoadEncodeData": {
+      "domain": "stream_transport",
+      "purpose": "YouTube 송출용 도로 인코딩 frame transport다.",
+      "recommendedView": "송출 영상 transport",
+      "privacy": "camera"
+    }
+  }
+}

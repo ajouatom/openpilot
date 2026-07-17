@@ -5,6 +5,33 @@
 // tools_web_settings_render.js — this module only opens the dialog and wires
 // row events to the setters.
 
+let webSettingsViewportSyncBound = false;
+
+function ensureActiveWebSettingsGroupVisible() {
+  const nav = document.querySelector(".app-dialog--web-settings .web-settings-nav");
+  const active = nav?.querySelector(".web-settings-nav__item.is-active");
+  if (!nav || !active) return false;
+  const navRect = nav.getBoundingClientRect();
+  const activeRect = active.getBoundingClientRect();
+  let left = 0;
+  let top = 0;
+  if (activeRect.left < navRect.left) left = activeRect.left - navRect.left;
+  else if (activeRect.right > navRect.right) left = activeRect.right - navRect.right;
+  if (activeRect.top < navRect.top) top = activeRect.top - navRect.top;
+  else if (activeRect.bottom > navRect.bottom) top = activeRect.bottom - navRect.bottom;
+  if (Math.abs(left) < 1 && Math.abs(top) < 1) return false;
+  if (typeof nav.scrollBy === "function") nav.scrollBy({ left, top, behavior: "auto" });
+  else {
+    nav.scrollLeft += left;
+    nav.scrollTop += top;
+  }
+  return true;
+}
+
+function scheduleActiveWebSettingsGroupVisibility() {
+  window.requestAnimationFrame(ensureActiveWebSettingsGroupVisible);
+}
+
 function bindWebSettingsDialogEvents() {
   document.querySelectorAll("[data-web-settings-group]").forEach((button) => {
     if (button.dataset.webSettingsBound === "1") return;
@@ -12,13 +39,14 @@ function bindWebSettingsDialogEvents() {
     button.addEventListener("click", () => {
       activeWebSettingsGroup = button.dataset.webSettingsGroup || "general";
       syncWebSettingsDialog();
+      scheduleActiveWebSettingsGroupVisibility();
     });
   });
 
   document.querySelectorAll("[data-web-setting]").forEach((row) => {
     if (row.dataset.webSettingBound === "1") return;
     row.dataset.webSettingBound = "1";
-    const item = WEB_SETTINGS_GROUPS.flatMap((group) => group.items).find((entry) => entry.id === row.dataset.webSetting);
+    const item = findWebSettingsItem(row.dataset.webSetting);
     const input = row.querySelector(".c-switch__input");
     const select = row.querySelector(".web-settings-select");
     if (!item) return;
@@ -49,12 +77,20 @@ function bindWebSettingsDialogEvents() {
       });
     }
   });
+  globalThis.WebSettingsComponents?.bind?.(document);
+  scheduleActiveWebSettingsGroupVisibility();
+  if (!webSettingsViewportSyncBound) {
+    webSettingsViewportSyncBound = true;
+    for (const eventName of ["resize", "orientationchange", "carrot:viewportlayout"]) {
+      window.addEventListener(eventName, scheduleActiveWebSettingsGroupVisibility, { passive: true });
+    }
+  }
 }
 
 async function openWebSettingsDialog() {
   await loadWebSettings().catch(() => {});
   const dialogPromise = appAlert("", {
-    title: getUIText("web_settings", "Web Settings"),
+    title: webSettingsText("web_settings"),
     html: true,
     messageHtml: renderWebSettingsDialogHtml(),
   });

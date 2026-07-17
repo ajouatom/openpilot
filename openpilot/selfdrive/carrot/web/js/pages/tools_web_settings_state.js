@@ -19,6 +19,7 @@ WEB_SETTINGS_SPEC.forEach((field) => { if (field && field.key) WEB_SPEC_BY_KEY[f
 
 const WEB_SETTING_DEFAULTS = Object.create(null);
 WEB_SETTINGS_SPEC.forEach((field) => { if (field && field.key) WEB_SETTING_DEFAULTS[field.key] = field.default; });
+window.CarrotWebSettingDefaults = WEB_SETTING_DEFAULTS;
 
 function webSettingKnownKeys() {
   const keys = Object.keys(WEB_SETTING_DEFAULTS);
@@ -105,24 +106,41 @@ function getWebSettingByKey(key, fallback = undefined) {
   return webSettingsState[key] ?? fallback ?? WEB_SETTING_DEFAULTS[key];
 }
 
-async function setWebSettingByKey(key, value) {
-  const known = Object.prototype.hasOwnProperty.call(webSettingsState, key) ||
-    Object.prototype.hasOwnProperty.call(WEB_SETTING_DEFAULTS, key);
-  if (!known) return undefined;
-  const previous = webSettingsState[key];
-  const next = normalizeWebSettingValue(key, value);
-  webSettingsState[key] = next;
+async function setWebSettingsByKeys(updates = {}) {
+  const normalizedUpdates = {};
+  const previous = {};
+  for (const [key, value] of Object.entries(updates || {})) {
+    const known = Object.prototype.hasOwnProperty.call(webSettingsState, key) ||
+      Object.prototype.hasOwnProperty.call(WEB_SETTING_DEFAULTS, key);
+    if (!known) continue;
+    previous[key] = webSettingsState[key];
+    normalizedUpdates[key] = normalizeWebSettingValue(key, value);
+    webSettingsState[key] = normalizedUpdates[key];
+  }
+  const keys = Object.keys(normalizedUpdates);
+  if (!keys.length) return {};
   try {
-    const payload = await requestWebSettings("POST", { [key]: next });
-    applyWebSettings(payload?.settings || { [key]: next });
+    const payload = await requestWebSettings("POST", normalizedUpdates);
+    applyWebSettings(payload?.settings || normalizedUpdates);
     window.dispatchEvent(new CustomEvent("carrot:websettingschange", {
-      detail: { key, value: webSettingsState[key], settings: { ...webSettingsState } },
+      detail: {
+        key: keys[0],
+        keys,
+        value: webSettingsState[keys[0]],
+        values: Object.fromEntries(keys.map((key) => [key, webSettingsState[key]])),
+        settings: { ...webSettingsState },
+      },
     }));
   } catch (err) {
-    webSettingsState[key] = previous;
+    Object.assign(webSettingsState, previous);
     throw err;
   }
-  return webSettingsState[key];
+  return Object.fromEntries(keys.map((key) => [key, webSettingsState[key]]));
+}
+
+async function setWebSettingByKey(key, value) {
+  const settings = await setWebSettingsByKeys({ [key]: value });
+  return settings[key];
 }
 
 function getWebStartPageSetting() {
@@ -154,6 +172,7 @@ function recordWebLastPage(page) {
 window.loadWebSettings = loadWebSettings;
 window.getWebSettingByKey = getWebSettingByKey;
 window.setWebSettingByKey = setWebSettingByKey;
+window.setWebSettingsByKeys = setWebSettingsByKeys;
 window.getWebStartPage = getWebStartPage;
 window.getWebStartPageSetting = getWebStartPageSetting;
 window.setWebStartPage = setWebStartPage;

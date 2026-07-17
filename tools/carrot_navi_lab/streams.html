@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Carrot Navi TMAP 전체 상황 프리뷰</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, sans-serif; background: #070a0e; color: #f2f6fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 18px; background: radial-gradient(circle at 14% 0%, #172333 0, transparent 34%), #070a0e; }
+    header, main { width: min(1480px, 100%); margin-inline: auto; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+    h1 { margin: 0; font-size: clamp(21px, 3vw, 32px); }
+    h2 { margin: 0 0 10px; font-size: 17px; }
+    p { margin: 5px 0 0; color: #aeb9c5; line-height: 1.5; }
+    .status { padding: 8px 12px; border: 1px solid #73551a; border-radius: 999px; background: #4b3712; font-weight: 800; white-space: nowrap; }
+    .status.live { border-color: #24764c; background: #16482f; }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-bottom: 14px; }
+    .metric { min-height: 76px; padding: 12px 14px; border: 1px solid #263241; border-radius: 13px; background: rgba(15, 21, 29, .92); }
+    .metric strong { display: block; margin-bottom: 3px; font-size: 23px; }
+    .metric span { color: #92a1b0; font-size: 12px; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(350px, .8fr); gap: 14px; align-items: start; }
+    .card { overflow: hidden; border: 1px solid #263241; border-radius: 16px; background: rgba(14, 19, 26, .94); }
+    .card-head { padding: 13px 15px 0; }
+    .toolbar, .filters { display: flex; flex-wrap: wrap; gap: 7px; padding: 12px 14px; }
+    button { padding: 8px 12px; border: 1px solid #354357; border-radius: 999px; background: #151d27; color: #cbd5df; cursor: pointer; font-weight: 700; }
+    button.active { border-color: #5b91d8; background: #23476d; color: #fff; }
+    .pane-wrap { display: flex; justify-content: center; padding: 0 12px; }
+    .pane { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid #334153; border-radius: 12px; background: #05070a; transition: width .2s ease; }
+    .pane.compact { width: min(100%, 500px); }
+    .pane.scenario::before { content: ""; position: absolute; inset: 0; background: linear-gradient(28deg, transparent 48%, rgba(103,123,145,.22) 49%, rgba(103,123,145,.22) 52%, transparent 53%), radial-gradient(ellipse at 65% 90%, #21313e 0, #111923 42%, #080c12 78%); }
+    .pane.scenario::after { content: "실제 운영 오버레이 배치"; position: absolute; inset: auto 12px 10px auto; color: rgba(255,255,255,.34); font-size: 11px; }
+    .pane video, .pane canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #mapVideo, #liveOverlay { opacity: 0; pointer-events: none; }
+    #outputCanvas { z-index: 2; }
+    #scenarioOverlay { z-index: 3; }
+    .mode-note { min-height: 44px; padding: 10px 14px 14px; color: #aeb9c5; font-size: 13px; line-height: 1.5; }
+    .positions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 0 14px 14px; }
+    .positions div { padding: 9px 10px; border-radius: 9px; background: #111923; color: #aeb9c5; font-size: 12px; }
+    .positions b { display: block; margin-bottom: 2px; color: #eff4f8; }
+    .scenario-list { display: grid; gap: 7px; padding: 0 12px 12px; }
+    .scenario-button { width: 100%; padding: 10px 12px; border-radius: 10px; text-align: left; }
+    .scenario-button strong { display: block; color: #eef4fa; }
+    .scenario-button small { display: block; margin-top: 3px; color: #93a2b1; font-weight: 500; }
+    .stream-card { grid-column: 1 / -1; }
+    .table-wrap { overflow: auto; max-height: 560px; border-top: 1px solid #263241; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #1e2936; text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; z-index: 2; background: #111923; color: #9dabb9; }
+    code { color: #d7e8ff; font: 11px/1.4 ui-monospace, monospace; }
+    .pill { display: inline-block; min-width: 58px; padding: 4px 7px; border-radius: 999px; text-align: center; font-size: 10px; font-weight: 900; }
+    .pill.live { background: #165b38; color: #b9ffd8; }
+    .pill.wait { background: #453a20; color: #ffe4a5; }
+    .pill.full { background: #193f66; color: #c8e5ff; }
+    .pill.diag { background: #393d46; color: #d2d8df; }
+    details { margin: 0 12px 12px; padding: 10px 12px; border-radius: 10px; background: #0b1016; }
+    pre { max-height: 240px; overflow: auto; margin: 8px 0 0; color: #a8c0d9; font: 11px/1.45 ui-monospace, monospace; white-space: pre-wrap; }
+    @media (max-width: 920px) { body { padding: 8px; } header { align-items: flex-start; } .layout { grid-template-columns: 1fr; } .summary { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+  <header>
+    <div><h1>TMAP 전체 상황 · 실제 웹 레이아웃 프리뷰</h1><p>운영 <code>CarrotNaviOverlay</code>를 그대로 실행해 평소 보이지 않는 UI도 강제로 확인합니다.</p></div>
+    <div id="connection" class="status">실제 TMAP 연결 대기</div>
+  </header>
+  <main>
+    <section class="summary">
+      <div class="metric"><strong>28</strong><span>논리 스트림: JSON 13 + 이미지 14 + 지도 1</span></div>
+      <div class="metric"><strong>2</strong><span>브라우저 WebSocket: state + media</span></div>
+      <div class="metric"><strong id="liveCount">0</strong><span>현재 실제로 present인 항목</span></div>
+      <div class="metric"><strong id="frameAge">-</strong><span><code>map_main</code> 최근 프레임</span></div>
+    </section>
+    <div class="layout">
+      <section class="card">
+        <div class="card-head"><h2>웹에서 실제로 보이는 합성 결과</h2></div>
+        <div class="toolbar">
+          <button id="wideButton" class="active">넓은 분할</button>
+          <button id="compactButton">50% 이하</button>
+          <button id="liveButton">실시간으로 복귀</button>
+        </div>
+        <div class="pane-wrap">
+          <div id="previewPane" class="pane scenario">
+            <video id="mapVideo" muted autoplay playsinline disablepictureinpicture></video>
+            <canvas id="liveOverlay"></canvas>
+            <canvas id="outputCanvas"></canvas>
+            <canvas id="scenarioOverlay"></canvas>
+          </div>
+        </div>
+        <div id="modeNote" class="mode-note"></div>
+        <div class="positions">
+          <div><b>좌상단</b>현재 회전, 그 아래 다음 회전</div>
+          <div><b>우상단</b>신호등과 남은 시간</div>
+          <div><b>중앙 상·하단</b>차선 안내와 중앙 회전/요금</div>
+          <div><b>좌하단</b>제한속도·SDI·구간단속</div>
+          <div><b>지도 오른쪽 42%부터</b>사진의 교차로 확대 이미지</div>
+          <div><b>하단</b>남은 거리·시간·도착시각·도로명</div>
+        </div>
+        <details><summary>현재 프리뷰 state JSON</summary><pre id="stateDump">시나리오를 선택하세요.</pre></details>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>강제 상황 프리뷰</h2><p>각 버튼은 실제 운영 렌더러에 테스트 상태를 넣습니다.</p></div>
+        <div id="scenarioList" class="scenario-list"></div>
+      </section>
+      <section class="card stream-card">
+        <div class="card-head"><h2>전체 스트림과 웹 처리 위치</h2></div>
+        <div class="filters">
+          <button class="active" data-filter="all">전체 28</button>
+          <button data-filter="json">JSON 13</button>
+          <button data-filter="image">이미지 14</button>
+          <button data-filter="render">지도 1</button>
+          <button data-filter="diag">진단 전용</button>
+        </div>
+        <div class="table-wrap">
+          <table><thead><tr><th>스트림</th><th>내용</th><th>웹 표시/사용 위치</th><th>구현</th><th>현재 수신</th></tr></thead><tbody id="streamRows"></tbody></table>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script src="/lab/carrot_navi_overlay_primitives.js?v=2607-01"></script>
+  <script src="/lab/carrot_navi_overlay.js?v=2607-09"></script>
+  <script src="/lab/carrot_navi_overlay_store.js"></script>
+  <script src="/lab/carrot_navi_mse.js"></script>
+  <script src="/lab/carrot_navi_compositor.js"></script>
+  <script>
+    "use strict";
+    const catalog = [
+      ["json","vehicle","차량 위치·방향·속도·도로명","도로명 하단, 연결/상태 판단","full","vehicle"],
+      ["json","guidance_current","현재 회전 안내","좌상단 이미지가 없으면 JSON 카드","full","guidanceCurrent"],
+      ["json","guidance_next","다음 회전 안내","현재 회전 아래 JSON 대체 카드","full","guidanceNext"],
+      ["json","lane_current","현재 차선 안내","하단 중앙 JSON 차선 스트립","full","laneCurrent"],
+      ["json","lane_ahead","앞쪽 차선 후보","현재 차선이 없을 때 하단 중앙 대체","full","laneAhead"],
+      ["json","speed","제한속도·SDI·구간단속","좌하단 원형 제한속도와 구간 패널","full","speed"],
+      ["json","traffic_signal","전체 신호 종류·잔여시간","우상단 5종 신호 JSON 대체","full","trafficSignal"],
+      ["json","crossroad","교차로 상태·거리","이미지가 없으면 지도 우측 교차로 배지","full","crossroad"],
+      ["json","route","남은/전체/이동 거리·시간","하단 거리·시간·도착시각·진행률","full","route"],
+      ["json","navigation_status","안내·경로·이탈 상태","상단 중앙 경로이탈/재탐색 배지","full","navigationStatus"],
+      ["json","app_status","TMAP 앱 진단 상태","웹 직접 표시 없음, 수신기 진단용","diag",null],
+      ["json","camera_state","TMAP 카메라 진단","웹 직접 표시 없음, 수신기 진단용","diag",null],
+      ["json","composition_state","TMAP 합성 진단","웹 직접 표시 없음, 수신기 진단용","diag",null],
+      ["image","tbt_current_compact","현재 안내 축소 이미지","50% 이하 좌상단","full"],
+      ["image","tbt_current_full","현재 안내 전체 이미지","넓은 분할 좌상단","full"],
+      ["image","tbt_next","다음 안내 이미지","현재 안내 바로 아래","full"],
+      ["image","traffic_signal","신호등 패널","우상단","full"],
+      ["image","lane_top","상단 차선 안내","지도 중앙 상단","full"],
+      ["image","lane_bottom","하단 차선 안내","지도 하단 중앙","full"],
+      ["image","safety_primary","1차 안전 정보","좌하단 우선 표시","full"],
+      ["image","safety_secondary","2차 안전 정보","1차가 없을 때 좌하단","full"],
+      ["image","safety_section","구간단속 정보","앞선 안전 이미지가 없을 때 좌하단","full"],
+      ["image","crossroad_minimized","교차로 축소 이미지","지도 오른쪽 70% 지점","full"],
+      ["image","crossroad_expanded","교차로 확대 이미지","지도 오른쪽 42%부터 크게 팝아웃","full"],
+      ["image","center_tbt_icon","중앙 회전 아이콘","넓은 분할 중앙 상단","full"],
+      ["image","center_tbt_text","중앙 안내 문구","넓은 분할 중앙 상단","full"],
+      ["image","center_tbt_fee","통행료 안내","넓은 분할 중앙 33% 지점","full"],
+      ["render","map_main","960×540 지도 H.264","fMP4/MSE 후 단일 canvas 합성","full"],
+    ];
+    const meta = { present: true };
+    const baseState = () => ({
+      connected: true,
+      vehicle: { meta, roadName: "서해안고속도로", speedKph: 82 },
+      guidanceCurrent: { meta, distanceM: 145, turnType: 12, mainText: "서평택JC", nearDirection: "오른쪽" },
+      guidanceNext: { meta: { present: false } },
+      laneCurrent: { meta: { present: false } },
+      laneAhead: [],
+      speed: { meta, roadLimitValid: true, roadLimitKph: 100 },
+      trafficSignal: { meta: { present: false }, visible: false },
+      crossroad: { meta: { present: false }, visible: false },
+      route: { meta, remainingDistanceM: 15000, remainingTimeSec: 1260, movedDistanceM: 5300, totalDistanceM: 20300 },
+      navigationStatus: { meta, guidanceActive: true, routePresent: true, offRoute: false },
+    });
+    const scenarios = [
+      ["normal","기본 주행 · JSON 대체","이미지 UI가 하나도 없을 때 현재 회전·속도·경로가 표시됩니다."],
+      ["next","연속 회전","현재 회전 아래에 다음 회전 카드가 추가됩니다."],
+      ["lane","복잡한 차선","차선 이미지가 없을 때 하단 중앙 차선 스트립을 확인합니다."],
+      ["section","구간단속","좌하단 평균속도·잔여거리·진행률과 일시정지를 확인합니다."],
+      ["traffic","전체 신호등","적·좌·직·우·유턴과 UI 카운터를 우상단에 모두 표시합니다."],
+      ["crossroad","교차로 이미지 없음","사진의 좌측 교차로 이미지가 없을 때 웹 우측 배지를 확인합니다."],
+      ["offroute","경로 이탈","상단 중앙 재탐색 배지와 구간 이탈 상태를 표시합니다."],
+      ["disconnected","내비 연결 끊김","평소 잠깐만 보이는 재연결 상태 패널입니다."],
+      ["stalled","지도 영상 멈춤","프레임 정체 감지 뒤 복구 중인 상태 패널입니다."],
+      ["allmedia","14개 이미지 배치도","모든 이미지 스트림을 라벨로 대체해 실제 위치를 한 번에 봅니다."],
+    ];
+    const pane = document.getElementById("previewPane");
+    const video = document.getElementById("mapVideo");
+    const liveCanvas = document.getElementById("liveOverlay");
+    const outputCanvas = document.getElementById("outputCanvas");
+    const scenarioCanvas = document.getElementById("scenarioOverlay");
+    const liveOverlay = CarrotNaviOverlay.create(liveCanvas);
+    const liveStore = CarrotNaviOverlayStore.create(liveOverlay);
+    const scenarioOverlay = CarrotNaviOverlay.create(scenarioCanvas);
+    let compositor = null;
+    const mse = CarrotNaviMse.create(video, { onFrame: () => compositor?.render(), onError: error => setConnection(String(error || "디코더 오류"), false) });
+    compositor = CarrotNaviCompositor.create({ pane, canvas: outputCanvas, video, overlayCanvas: liveCanvas, overlayStore: liveStore });
+    compositor.setActive(true);
+    const worker = new Worker("/lab/carrot_navi_worker.js");
+    worker.postMessage({ type: "configure" });
+    let currentState = null;
+    let latestStatus = null;
+    let activeFilter = "all";
+    let previewMode = "scenario";
+    let sequence = 1;
+
+    function setConnection(text, live) {
+      const element = document.getElementById("connection");
+      element.textContent = text;
+      element.classList.toggle("live", Boolean(live));
+    }
+
+    function setPreviewMode(mode) {
+      previewMode = mode;
+      const scenario = mode === "scenario";
+      pane.classList.toggle("scenario", scenario);
+      scenarioCanvas.hidden = !scenario;
+      outputCanvas.hidden = scenario;
+      if (!scenario) {
+        document.querySelectorAll(".scenario-button").forEach(button => button.classList.remove("active"));
+        document.getElementById("modeNote").textContent = "실제 TMAP map_main과 현재 들어오는 이미지 UI를 운영 합성 경로로 표시 중입니다.";
+        if (currentState) document.getElementById("stateDump").textContent = JSON.stringify(currentState, null, 2);
+        compositor.render();
+      }
+    }
+
+    function placeholder(name, width = 300, height = 100) {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "rgba(31, 91, 145, .86)";
+      context.fillRect(0, 0, width, height);
+      context.strokeStyle = "rgba(180, 225, 255, .9)";
+      context.lineWidth = 4;
+      context.strokeRect(2, 2, width - 4, height - 4);
+      context.fillStyle = "#fff";
+      context.font = `800 ${Math.max(14, Math.min(26, width / 12))}px system-ui`;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(name, width / 2, height / 2, width - 16);
+      return canvas;
+    }
+
+    function stateFor(name) {
+      const state = baseState();
+      if (name === "next") state.guidanceNext = { meta, distanceM: 620, mainText: "당진 방면", nearDirection: "왼쪽" };
+      if (name === "lane") state.laneCurrent = { meta, visible: true, count: 5, currentLane: 2, available: [0, 1, 1, 0, 0], distanceM: 280 };
+      if (name === "section" || name === "offroute") state.speed = { ...state.speed, sectionPresent: true, sectionActive: true, sectionSpeedLimitKph: 100, sectionAverageKph: 93, sectionRemainingDistanceM: 2400, sectionRemainingTimeSec: 95, sectionProgress: .63, sectionSuspended: name === "section", sectionOffRoute: name === "offroute" };
+      if (name === "traffic") state.trafficSignal = { meta, visible: true, distanceM: 180, redValid: true, redOn: true, redRemainSec: 24, leftValid: true, leftOn: false, leftRemainSec: 9, greenValid: true, greenOn: false, greenRemainSec: 24, rightValid: true, rightOn: true, rightRemainSec: 9, uturnValid: true, uturnOn: false, uturnRemainSec: 9, uiCounterValid: true, uiCounterRemainSec: 24 };
+      if (name === "crossroad") state.crossroad = { meta, visible: true, distanceM: 145, imageCode: 7 };
+      if (name === "offroute") state.navigationStatus = { ...state.navigationStatus, offRoute: true };
+      return state;
+    }
+
+    function showScenario(name) {
+      setPreviewMode("scenario");
+      scenarioOverlay.clearImages();
+      scenarioOverlay.setStatus(null);
+      const state = stateFor(name);
+      if (name === "disconnected") scenarioOverlay.setStatus({ mode: "disconnected" });
+      if (name === "stalled") scenarioOverlay.setStatus({ mode: "stalled" });
+      if (name === "allmedia") {
+        const imageNames = catalog.filter(item => item[0] === "image").map(item => item[1]);
+        for (const imageName of imageNames) {
+          const tall = imageName.includes("crossroad");
+          scenarioOverlay.setImage(imageName, placeholder(imageName, tall ? 360 : 300, tall ? 240 : 90), sequence++);
+        }
+      }
+      scenarioOverlay.setState(state);
+      scenarioOverlay.renderNow();
+      document.getElementById("stateDump").textContent = JSON.stringify({ scenario: name, state }, null, 2);
+      const info = scenarios.find(item => item[0] === name);
+      document.getElementById("modeNote").textContent = `${info[1]} — ${info[2]}`;
+      document.querySelectorAll(".scenario-button").forEach(button => button.classList.toggle("active", button.dataset.scenario === name));
+    }
+
+    worker.addEventListener("message", async event => {
+      const message = event.data || {};
+      if (message.type === "mse-init") mse.start(message.segment, message.mime);
+      else if (message.type === "mse-segment") mse.append(message.segment, message);
+      else if (message.type === "overlay-image") liveStore.present(message.name, message.bitmap, message.sequence, message.sourceTimestampMillis);
+      else if (message.type === "overlay-bytes") await liveStore.decode(message);
+      else if (message.type === "overlay-clear") liveStore.clear(message.name, message.sequence, message.sourceTimestampMillis);
+      else if (message.type === "overlay-reset") liveStore.resetImages();
+      else if (message.type === "clear") { mse.markClear(message.reason); compositor.invalidate({ preserveFrame: true }); }
+      if (previewMode === "live") compositor.render();
+    });
+
+    function fieldPresent(state, field) {
+      const value = state?.[field];
+      if (Array.isArray(value)) return value.some(item => item?.meta?.present);
+      return Boolean(value?.meta?.present);
+    }
+
+    function mediaLive(kind, name) {
+      const record = latestStatus?.streams?.[`${kind}:${name}`];
+      return Boolean(record?.present && Date.now() - Number(record.updatedAtMs || 0) < (kind === "render" ? 2500 : 16000));
+    }
+
+    function renderRows() {
+      const tbody = document.getElementById("streamRows");
+      tbody.textContent = "";
+      let live = 0;
+      for (const [kind, name, meaning, handling, coverage, field] of catalog) {
+        const received = kind === "json" ? Boolean(field && fieldPresent(currentState, field)) : mediaLive(kind, name);
+        live += Number(received);
+        if (activeFilter !== "all" && activeFilter !== kind && !(activeFilter === "diag" && coverage === "diag")) continue;
+        const row = document.createElement("tr");
+        const cells = [
+          `<span class="pill ${kind === "json" ? "diag" : "full"}">${kind}</span><br><code>${name}</code>`,
+          meaning,
+          handling,
+          `<span class="pill ${coverage}">${coverage === "full" ? "구현" : "진단"}</span>`,
+          `<span class="pill ${received ? "live" : "wait"}">${received ? "LIVE" : "대기"}</span>`,
+        ];
+        for (const html of cells) { const cell = document.createElement("td"); cell.innerHTML = html; row.appendChild(cell); }
+        tbody.appendChild(row);
+      }
+      document.getElementById("liveCount").textContent = String(live);
+    }
+
+    function applyStatus(status) {
+      latestStatus = status;
+      const live = Boolean(status?.receiver?.connected && status?.state?.connected);
+      setConnection(live ? "실제 TMAP 연결됨" : "실제 TMAP 연결 대기", live);
+      const age = status?.map?.frameAgeMs;
+      document.getElementById("frameAge").textContent = Number.isFinite(age) ? `${age}ms` : "-";
+      renderRows();
+    }
+
+    async function refreshStatus() {
+      try { const response = await fetch("/lab/api/status", { cache: "no-store" }); if (response.ok) applyStatus(await response.json()); } catch (_) {}
+    }
+
+    for (const [name, title, detail] of scenarios) {
+      const button = document.createElement("button");
+      button.className = "scenario-button";
+      button.dataset.scenario = name;
+      button.innerHTML = `<strong>${title}</strong><small>${detail}</small>`;
+      button.addEventListener("click", () => showScenario(name));
+      document.getElementById("scenarioList").appendChild(button);
+    }
+    document.getElementById("liveButton").addEventListener("click", () => setPreviewMode("live"));
+    document.getElementById("wideButton").addEventListener("click", () => {
+      pane.classList.remove("compact");
+      document.getElementById("wideButton").classList.add("active");
+      document.getElementById("compactButton").classList.remove("active");
+      scenarioOverlay.renderNow();
+      if (previewMode === "live") compositor.render();
+    });
+    document.getElementById("compactButton").addEventListener("click", () => {
+      pane.classList.add("compact");
+      document.getElementById("compactButton").classList.add("active");
+      document.getElementById("wideButton").classList.remove("active");
+      scenarioOverlay.renderNow();
+      if (previewMode === "live") compositor.render();
+    });
+    pane.addEventListener("transitionend", event => {
+      if (event.propertyName !== "width") return;
+      scenarioOverlay.renderNow();
+      if (previewMode === "live") compositor.render();
+    });
+    document.querySelectorAll("[data-filter]").forEach(button => button.addEventListener("click", () => {
+      document.querySelectorAll("[data-filter]").forEach(item => item.classList.remove("active"));
+      button.classList.add("active");
+      activeFilter = button.dataset.filter;
+      renderRows();
+    }));
+
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const socket = new WebSocket(`${protocol}//${location.host}/lab/ws`);
+    socket.binaryType = "arraybuffer";
+    socket.addEventListener("message", event => {
+      if (typeof event.data === "string") {
+        const message = JSON.parse(event.data);
+        if (message.type === "state") {
+          currentState = message.state;
+          liveStore.setState(currentState);
+          if (previewMode === "live") {
+            document.getElementById("stateDump").textContent = JSON.stringify(currentState, null, 2);
+            compositor.render();
+          }
+          renderRows();
+        } else if (message.type === "hello") applyStatus(message.status);
+        return;
+      }
+      const buffer = event.data;
+      worker.postMessage({ type: "media", buffer }, [buffer]);
+    });
+    socket.addEventListener("open", refreshStatus);
+    socket.addEventListener("close", () => setConnection("프리뷰 연결 끊김", false));
+    window.addEventListener("resize", () => { scenarioOverlay.renderNow(); if (previewMode === "live") compositor.render(); });
+    setInterval(refreshStatus, 1000);
+    renderRows();
+    showScenario("allmedia");
+  </script>
+</body>
+</html>

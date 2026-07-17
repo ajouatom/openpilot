@@ -154,27 +154,33 @@ void encoderd_thread(const LogCameraInfo (&cameras)[N]) {
 }
 
 int main(int argc, char* argv[]) {
+  const std::string mode = argc > 1 ? argv[1] : "";
+  const bool carrot_vision_mode = mode == "--carrot-vision-road";
   if (!Hardware::PC()) {
     int ret;
     ret = util::set_realtime_priority(52);
     assert(ret == 0);
-    ret = util::set_core_affinity({3});
+    // Main/logging encoders keep their established core 3 placement. The
+    // independent Carrot Vision encoder uses core 0 so its real-time feed does
+    // not queue behind the regular encoderd threads or run on the UI core.
+    ret = util::set_core_affinity({carrot_vision_mode ? 0 : 3});
     assert(ret == 0);
   }
   if (argc > 1) {
-    std::string arg1(argv[1]);
-    if (arg1 == "--stream") {
+    if (mode == "--stream") {
       encoderd_thread(stream_cameras_logged);
-    } else if (arg1 == "--youtube-low") {
+    } else if (carrot_vision_mode) {
+      encoderd_thread(carrot_vision_cameras_logged);
+    } else if (mode == "--youtube-low") {
       encoderd_thread(youtube_low_cameras_logged);
-    } else if (arg1 == "--youtube-medium") {
+    } else if (mode == "--youtube-medium") {
       encoderd_thread(youtube_medium_cameras_logged);
-    } else if (arg1 == "--youtube") {
+    } else if (mode == "--youtube") {
       encoderd_thread(youtube_cameras_logged);
-    } else if (arg1 == "--youtube-wide") {
+    } else if (mode == "--youtube-wide") {
       encoderd_thread(youtube_wide_cameras_logged);
     } else {
-      LOGE("Argument '%s' is not supported", arg1.c_str());
+      LOGE("Argument '%s' is not supported", mode.c_str());
     }
   } else {
     encoderd_thread(cameras_logged);

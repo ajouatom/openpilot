@@ -15,16 +15,12 @@ from ..services.time_sync import TIME_SYNC_DEBUG_DEFAULT, sync_system_time_from_
 
 
 _LIVE_RUNTIME_SERVICE_NAMES = (
-  "selfdriveState",
-  "carState",
-  "controlsState",
-  "deviceState",
-  "peripheralState",
-  "longitudinalPlan",
-  "lateralPlan",
-  "radarState",
-  "carrotMan",
+  "navInstructionCarrot",
+  "navRoute",
 )
+
+_LIVE_RUNTIME_CACHE_MAX_AGE_MS = 4800
+_LIVE_RUNTIME_FORCE_MIN_AGE_MS = 100
 
 _CARROT_DEFAULT_RESET_EXCLUDED_NAMES = {
   # Vehicle identity / selection / fingerprinting.
@@ -138,7 +134,13 @@ async def api_live_runtime(request: web.Request) -> web.Response:
     runtime = {}
 
   age_ms = broker.snapshot_age_ms()
-  if force or age_ms is None or age_ms > 250 or not runtime.get("params"):
+  needs_refresh = (
+    age_ms is None
+    or age_ms > _LIVE_RUNTIME_CACHE_MAX_AGE_MS
+    or not runtime.get("params")
+    or (force and age_ms > _LIVE_RUNTIME_FORCE_MIN_AGE_MS)
+  )
+  if needs_refresh:
     # Serialize poll across concurrent requests: broker.poll() runs
     # SubMaster.update(), and msgq's SubMaster is NOT thread-safe — parallel
     # polls (multiple tabs/devices hitting /api/live_runtime) can corrupt or
@@ -150,7 +152,12 @@ async def api_live_runtime(request: web.Request) -> web.Response:
         async with lock:
           fresh_age = broker.snapshot_age_ms()
           fresh_runtime = broker.last_snapshot.get("runtime") if isinstance(broker.last_snapshot, dict) else {}
-          if force or fresh_age is None or fresh_age > 250 or not (fresh_runtime or {}).get("params"):
+          if (
+            fresh_age is None
+            or fresh_age > _LIVE_RUNTIME_CACHE_MAX_AGE_MS
+            or not (fresh_runtime or {}).get("params")
+            or (force and fresh_age > _LIVE_RUNTIME_FORCE_MIN_AGE_MS)
+          ):
             await asyncio.to_thread(broker.poll, 0)
       else:
         await asyncio.to_thread(broker.poll, 0)

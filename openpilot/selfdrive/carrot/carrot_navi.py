@@ -452,6 +452,7 @@ class CarrotNaviReceiver:
     self._manifest_by_key: dict[str, dict[str, Any]] = {}
     self._records: dict[str, ItemRecord] = {}
     self._binary_configs: dict[str, ItemRecord] = {}
+    self._binary_keyframes: dict[str, ItemRecord] = {}
     self._received_count = 0
     self._session_received_count = 0
     self._last_received_at_ms = 0
@@ -506,6 +507,7 @@ class CarrotNaviReceiver:
       }
       self._records.clear()
       self._binary_configs.clear()
+      self._binary_keyframes.clear()
       self._media_updates.clear()
       self._session_received_count = 0
       self._control_events.clear()
@@ -699,8 +701,14 @@ class CarrotNaviReceiver:
         received_mono_ns=time.monotonic_ns(),
       )
       self._records[key] = record
-      if kind == "render" and message_type == 2:
+      if clear:
+        self._binary_configs.pop(key, None)
+        self._binary_keyframes.pop(key, None)
+      elif kind == "render" and message_type == 2:
         self._binary_configs[key] = record
+        self._binary_keyframes.pop(key, None)
+      elif kind == "render" and message_type == 3 and record.flags & 1:
+        self._binary_keyframes[key] = record
       self._media_generation += 1
       self._media_updates.append(record)
       self._mark_received_locked(peer)
@@ -780,6 +788,18 @@ class CarrotNaviReceiver:
       updates = list(self._media_updates)
       self._media_updates.clear()
       return updates
+
+  def media_bootstrap(self) -> list[ItemRecord]:
+    with self._lock:
+      records = [self._binary_configs[key] for key in sorted(self._binary_configs)]
+      records.extend(self._binary_keyframes[key] for key in sorted(self._binary_keyframes))
+      for key in sorted(self._records):
+        record = self._records[key]
+        if not record.present:
+          continue
+        if record.kind == "image":
+          records.append(record)
+      return records
 
   def record_cereal_publish(self, error: str | None = None) -> None:
     with self._lock:

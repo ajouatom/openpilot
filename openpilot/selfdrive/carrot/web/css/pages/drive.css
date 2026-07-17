@@ -36,6 +36,18 @@ body[data-page="carrot"] #driveHudCard {
   display: block;
 }
 
+body[data-page="carrot"] #driveHudCard.is-vision-hud-suppressed {
+  display: none !important;
+}
+
+/* The vertical workspace is reserved for Vision/Navi content. The green HUD
+   remains a Vision feature, but is intentionally landscape-only. */
+@media (orientation: portrait) {
+  body[data-page="carrot"] #driveHudCard {
+    display: none !important;
+  }
+}
+
 .carrot-rtc-perf {
   position: absolute;
   left: 0;
@@ -164,8 +176,7 @@ body[data-page="carrot"] #driveHudCard {
   white-space: nowrap;
 }
 
-.carrot-rtc-perf-summary__action,
-.carrot-rtc-perf-summary__close {
+.carrot-rtc-perf-summary__action {
   flex: 0 0 auto;
   min-width: 32px;
   height: 24px;
@@ -178,11 +189,7 @@ body[data-page="carrot"] #driveHudCard {
   cursor: pointer;
 }
 
-.carrot-rtc-perf-summary__close {
-  min-width: 24px;
-  padding: 0;
-  font-size: 12px;
-}
+/* .carrot-rtc-perf-summary__close now uses the shared .c-close--sm atom. */
 
 .carrot-rtc-perf-summary__sub {
   margin-top: 4px;
@@ -268,10 +275,6 @@ body[data-page="carrot"] #driveHudCard {
   to { clip-path: inset(0 0 0 0); }
 }
 
-.carrot-hud-dock {
-  display: none;
-}
-
 .vision-start-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -281,7 +284,7 @@ body[data-page="carrot"] #driveHudCard {
   justify-content: center;
   gap: 10px;
   background: rgba(0, 0, 0, 0.4);
-  z-index: 50;
+  z-index: var(--drive-layer-modal);
   transition: opacity 0.3s ease;
 }
 
@@ -402,7 +405,7 @@ body[data-page="carrot"] #driveHudCard {
   justify-content: center;
   padding: 20px;
   background: linear-gradient(180deg, rgba(2, 4, 8, 0.26), rgba(2, 4, 8, 0.40));
-  z-index: 46;
+  z-index: var(--drive-layer-loading);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
@@ -414,8 +417,8 @@ body[data-page="carrot"] #driveHudCard {
 }
 
 .carrot-stage__loadingPanel {
-  min-width: min(70vw, 240px);
-  max-width: min(70vw, 280px);
+  min-width: min(76vw, 260px);
+  max-width: min(82vw, 320px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -450,14 +453,20 @@ body[data-page="carrot"] #driveHudCard {
 }
 
 .carrot-stage__loadingText {
+  width: 100%;
   color: rgba(255, 255, 255, 0.96);
   font-size: 16px;
   font-weight: 900;
   letter-spacing: 0;
+  line-height: 1.3;
   text-align: center;
+  text-wrap: balance;
+  white-space: pre-line;
+  overflow-wrap: break-word;
 }
 
 .carrot-stage__loadingDetail {
+  width: 100%;
   max-width: 100%;
   min-height: 16px;
   color: rgba(255, 255, 255, 0.72);
@@ -466,9 +475,26 @@ body[data-page="carrot"] #driveHudCard {
   letter-spacing: 0;
   line-height: 1.35;
   text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-wrap: balance;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+}
+
+html[lang^="ko"] .carrot-stage__loadingText,
+html[lang^="ko"] .carrot-stage__loadingDetail {
+  word-break: keep-all;
+}
+
+html[lang^="en"] .carrot-stage__loadingText,
+html[lang^="en"] .carrot-stage__loadingDetail {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+html[lang^="zh"] .carrot-stage__loadingText,
+html[lang^="zh"] .carrot-stage__loadingDetail {
+  line-break: strict;
+  word-break: break-all;
 }
 
 .carrot-stage__loadingActions {
@@ -497,108 +523,14 @@ body[data-page="carrot"] #driveHudCard {
   to { transform: rotate(360deg); }
 }
 
-body[data-page="carrot"] #driveHudCard.driveHudCard--inline {
-  position: relative !important;
-  inset: auto !important;
-  transform: none !important;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-}
-
-.page--drive {
-  --carrot-page-bottom-gap: var(--app-nav-bottom-gap, calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px)));
-  display: flex;
-  flex-direction: column;
-  height: calc(var(--app-vv-height, 100dvh) - var(--carrot-page-bottom-gap));
-  min-height: calc(var(--app-vv-height, 100dvh) - var(--carrot-page-bottom-gap));
-  overflow: hidden;
-}
-
-.page--drive > .page-header--hidden {
-  display: none !important;
-}
-
-.page--drive > .carrot-stage {
-  flex: 1 1 auto;
+.drive-workspace > .carrot-stage {
+  width: auto;
   height: auto;
-  min-height: 200px;
-  max-height: calc(var(--app-vv-height, 100dvh) - var(--carrot-page-bottom-gap));
+  min-height: 0;
+  max-height: none;
   border-radius: 0;
   border-left: 0;
   border-right: 0;
-}
-
-body[data-page="carrot"] .carrot-hud-dock {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: var(--carrot-dock-panel-height, auto);
-  min-height: var(--carrot-dock-panel-height, auto);
-  padding: 0;
-  margin: 0;
-  margin-top: auto;
-  background: #0b0e12;
-  overflow: hidden;
-}
-
-@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
-  .page--drive {
-    display: block;
-    height: var(--app-vv-height, 100dvh);
-    min-height: var(--app-vv-height, 100dvh);
-    max-height: var(--app-vv-height, 100dvh);
-  }
-
-  .page--drive > .page-header--hidden {
-    display: none !important;
-  }
-
-  .page--drive > .carrot-stage {
-    height: var(--app-vv-height, 100dvh);
-    min-height: 0;
-    max-height: var(--app-vv-height, 100dvh);
-    border-radius: 0;
-  }
-
-  body[data-page="carrot"] .carrot-hud-dock {
-    display: none !important;
-  }
-
-  .page--drive .carrot-stage__topbar {
-    top: 12px;
-    left: 12px;
-    right: 12px;
-  }
-
-  .page--drive .carrot-stage__status {
-    max-width: min(42vw, 480px);
-  }
-
-  .page--drive .carrot-stage__debug {
-    top: 12px;
-    right: 12px;
-    max-width: min(48vw, 560px);
-  }
-
-  .page--drive .carrot-stage__meta {
-    left: 12px;
-    right: auto;
-    bottom: 12px;
-    max-width: min(56vw, 700px);
-  }
-
-  .page--drive .carrot-stage__controls {
-    right: 12px;
-    bottom: 12px;
-  }
-}
-
-body[data-page="carrot"] #driveHudCard.driveHudCard--inline .hudWrap {
-  margin-inline: auto;
 }
 
 body[data-page="carrot"] #driveHudCard.driveHudCard--overlay {
@@ -609,7 +541,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay {
   top: auto !important;
   width: auto;
   max-width: calc(100% - (var(--carrot-hud-left, 12px) * 2));
-  z-index: 60;
+  z-index: var(--drive-layer-controls);
 }
 
 body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
@@ -625,7 +557,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
   width: var(--carrot-map-width, var(--carrot-map-size, 410px));
   height: var(--carrot-map-height, var(--carrot-map-size, 460px));
   transform: translateY(calc(-50% + var(--carrot-map-offset-y, -20px))) scale(0.985);
-  z-index: 4;
+  z-index: var(--drive-layer-status);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.20);
   border-radius: 8px;
@@ -662,7 +594,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
   content: "";
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: var(--drive-layer-media);
   pointer-events: none;
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.20), transparent 24%),
@@ -686,7 +618,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--overlay .hudWrap {
   left: 0;
   right: 0;
   bottom: clamp(10px, 2.4vh, 18px);
-  z-index: 5;
+  z-index: var(--drive-layer-alert);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -846,7 +778,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
 .carrot-stage__ambient {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: var(--drive-layer-surface);
   width: 100%;
   height: 100%;
   display: block;
@@ -874,44 +806,12 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
 .carrot-stage__video,
 .carrot-stage__videoHold,
 .carrot-stage__canvas {
-  z-index: 2;
+  z-index: var(--drive-layer-media);
 }
 
 @media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
   .carrot-rtc-perf-summary {
     display: none !important;
-  }
-
-  .page--drive {
-    justify-content: stretch;
-  }
-
-  .page--drive > .carrot-stage {
-    flex: 1 1 0;
-    min-height: 0;
-  }
-
-  body[data-page="carrot"] .carrot-hud-dock {
-    flex: 0 0 var(--carrot-dock-panel-height, auto);
-    padding-inline: 0;
-    padding-bottom: 0;
-    align-items: stretch;
-  }
-
-  body[data-page="carrot"] #driveHudCard.driveHudCard--inline {
-    width: 100%;
-    max-width: none;
-    justify-content: stretch;
-  }
-
-  body[data-page="carrot"] #driveHudCard.driveHudCard--inline .hudWrap {
-    width: 100%;
-    height: var(--hud-card-height);
-    margin: 0;
-    border-radius: 0;
-    border-left: 0;
-    border-right: 0;
-    box-shadow: none;
   }
 }
 
@@ -945,7 +845,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   will-change: transform;
   background: #000;
   pointer-events: none;
-  z-index: 2;
+  z-index: var(--drive-layer-media);
 }
 
 .carrot-stage__canvas {
@@ -953,13 +853,21 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   will-change: transform;
   pointer-events: none;
   contain: strict;
-  z-index: 3;
+  z-index: var(--drive-layer-overlay);
+}
+
+.carrot-stage__canvas--performance {
+  visibility: hidden;
+}
+
+.carrot-stage.is-performance-renderer .carrot-stage__canvas--performance {
+  visibility: visible;
 }
 
 .carrot-stage__hud {
   inset: 0;
   pointer-events: none;
-  z-index: 3;
+  z-index: var(--drive-layer-overlay);
 }
 
 .carrot-stage__alert {
@@ -969,7 +877,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   align-items: center;
   justify-content: center;
   padding: 0;
-  z-index: 5;
+  z-index: var(--drive-layer-alert);
   pointer-events: none;
 }
 
@@ -1068,7 +976,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  z-index: 4;
+  z-index: var(--drive-layer-status);
   pointer-events: none;
 }
 
@@ -1107,7 +1015,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   position: absolute;
   left: 14px;
   bottom: 14px;
-  z-index: 4;
+  z-index: var(--drive-layer-status);
   max-width: min(72vw, 760px);
   line-height: 1.3;
   white-space: nowrap;
@@ -1119,7 +1027,7 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   position: absolute;
   top: 14px;
   right: 14px;
-  z-index: 4;
+  z-index: var(--drive-layer-status);
   max-width: min(42vw, 520px);
   justify-content: flex-end;
   text-align: right;
@@ -1132,13 +1040,14 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   position: absolute;
   right: 14px;
   bottom: 14px;
-  z-index: 60;
+  z-index: var(--drive-layer-controls);
   display: inline-flex;
   gap: 8px;
   padding: 0;
   border: 0;
   pointer-events: auto;
 }
+
 
 .carrot-stage__controlBtn {
   position: relative;

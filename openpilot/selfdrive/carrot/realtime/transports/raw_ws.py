@@ -1,92 +1,108 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from typing import Any
 
 from aiohttp import web
+
+from openpilot.cereal import log
+from openpilot.selfdrive.carrot.realtime.compact_state import (
+  CARROT_STATE_SERVICES,
+  COMPACT_BATCH_WINDOW_SECONDS,
+  compact_service_interval,
+  encode_carrot_state_batch,
+  encode_carrot_state_frame,
+)
+
+try:
+  from openpilot.selfdrive.carrot.realtime.compact_state_pyx import encode_frame as encode_compact_frame_native
+except ImportError:
+  encode_compact_frame_native = None
 
 from ..raw_services import is_supported_raw_service
 from ..raw_protocol import encode_raw_multiplex_frame
 
 
 class RawWsHub:
-  SEND_TIMEOUT = 0.35
+  """One latest-only cereal relay shared by every Carrot Web client.
+
+  The server only selects/serializes display fields. Projection, lane/path
+  construction, and drawing remain browser work. Legacy raw capnp endpoints
+  remain diagnostic-only; all modes share these sockets and this poll loop so
+  viewers never multiply device-side cereal readers.
+  """
+
+  SEND_TIMEOUT = 0.75
+  COMPACT_BATCH_WINDOW = COMPACT_BATCH_WINDOW_SECONDS
+  MIN_POLL_SLEEP = 0.002
   IDLE_SLEEP = 0.03
-  ACTIVE_POLL_SLEEP = 0.004
   IDLE_STOP_SEC = 5.0
-  FAILURE_THRESHOLD = 3
 
   def __init__(self, messaging: Any) -> None:
     self.messaging = messaging
     self._clients: dict[str, set[web.WebSocketResponse]] = {}
-    self._tasks: dict[str, asyncio.Task] = {}
     self._sockets: dict[str, Any] = {}
-    self._send_failures: dict[str, dict[web.WebSocketResponse, int]] = {}
-    self._last_send_time: dict[str, float] = {}
+    self._next_read_time: dict[str, float] = {}
+    self._sequence: dict[str, int] = {}
     self._ws_modes: dict[web.WebSocketResponse, str] = {}
     self._ws_services: dict[web.WebSocketResponse, set[str]] = {}
-    self._ws_send_locks: dict[web.WebSocketResponse, asyncio.Lock] = {}
+    self._ws_pending: dict[web.WebSocketResponse, OrderedDict[str, bytes]] = {}
+    self._ws_sender_events: dict[web.WebSocketResponse, asyncio.Event] = {}
+    self._ws_sender_tasks: dict[web.WebSocketResponse, asyncio.Task] = {}
+    self._poll_task: asyncio.Task | None = None
     self._lock = asyncio.Lock()
 
   def is_allowed_service(self, service: str) -> bool:
     return is_supported_raw_service(service)
 
-  # Phase 2-2: per-service throttle intervals (seconds)
-  # 0 = no throttle (send every message)
-  _THROTTLE_MAP = {
-    "modelV2": 0,             # camera-synced, don't throttle
-    "carState": 0,            # plot 1,2,5,7,8 — needs full rate for dense graphs
-    "controlsState": 0,       # plot 6 — needs full rate for dense graphs
-    "longitudinalPlan": 0,    # plot 1,2,4 — needs full rate for dense graphs
-    "carControl": 0,          # plot 1,6,7,8 — needs full rate for dense graphs
-    "radarState": 0,          # plot 4,5 — needs full rate for dense graphs
-    "lateralPlan": 0,         # overlay path rendering
-    "carrotMan": 0,           # HUD status updates
-    "roadCameraState": 0.25,  # metadata/debug only on web HUD
-    "deviceState": 0.5,       # slow-changing HUD stats
-    "peripheralState": 0.5,
-    "gpsLocationExternal": 0.5,
-    "selfdriveState": 0.2,
-    "liveCalibration": 0.25,  # slow-changing
-    "liveParameters": 0.25,
-    "liveTorqueParameters": 0.25,
-    "liveDelay": 0.25,
-  }
-  _THROTTLE_DEFAULT = 0.05  # 20Hz for everything else
+  def is_compact_service(self, service: str) -> bool:
+    return service in CARROT_STATE_SERVICES
 
   def _throttle_interval(self, service: str) -> float:
-    return self._THROTTLE_MAP.get(service, self._THROTTLE_DEFAULT)
+    return compact_service_interval(service)
 
   def client_count(self, service: str | None = None) -> int:
     if service is None:
-      return sum(len(clients) for clients in self._clients.values())
+      return len(self._ws_services)
     return len(self._clients.get(service, set()))
 
   async def register(self, service: str, ws: web.WebSocketResponse) -> None:
-    self._clients.setdefault(service, set()).add(ws)
-    self._send_failures.setdefault(service, {})
-    self._ws_modes.setdefault(ws, "single")
-    self._ws_services.setdefault(ws, set()).add(service)
-    self._ws_send_locks.setdefault(ws, asyncio.Lock())
-    await self.ensure_service_task(service)
+    await self._register_many([service], ws, mode="single")
 
   async def register_many(self, services: list[str], ws: web.WebSocketResponse) -> None:
+    await self._register_many(services, ws, mode="multiplex")
+
+  async def register_compact_many(self, services: list[str], ws: web.WebSocketResponse) -> None:
+    await self._register_many(services, ws, mode="compact")
+
+  async def _register_many(self, services: list[str], ws: web.WebSocketResponse, *, mode: str) -> None:
     unique_services = [service for service in dict.fromkeys(services) if service]
-    self._ws_modes[ws] = "multiplex"
+    self._ws_modes[ws] = mode
     self._ws_services[ws] = set(unique_services)
-    self._ws_send_locks.setdefault(ws, asyncio.Lock())
+    self._ws_pending.setdefault(ws, OrderedDict())
+    self._ws_sender_events.setdefault(ws, asyncio.Event())
     for service in unique_services:
       self._clients.setdefault(service, set()).add(ws)
-      self._send_failures.setdefault(service, {})
-      await self.ensure_service_task(service)
+    await self._ensure_poll_task()
 
-  async def unregister_client(self, ws: web.WebSocketResponse, *, close_code: int | None = None, close_message: bytes | None = None) -> None:
+  async def unregister_client(self, ws: web.WebSocketResponse, *, close_code: int | None = None,
+                              close_message: bytes | None = None) -> None:
     services = self._ws_services.pop(ws, set())
     for service in services:
       self._clients.get(service, set()).discard(ws)
-      self._send_failures.get(service, {}).pop(ws, None)
     self._ws_modes.pop(ws, None)
-    self._ws_send_locks.pop(ws, None)
+    self._ws_pending.pop(ws, None)
+    self._ws_sender_events.pop(ws, None)
+    sender_task = self._ws_sender_tasks.pop(ws, None)
+    if sender_task is not None and sender_task is not asyncio.current_task():
+      sender_task.cancel()
+      try:
+        await sender_task
+      except asyncio.CancelledError:
+        pass
+      except Exception:
+        pass
     try:
       if close_code is not None:
         await ws.close(code=close_code, message=close_message or b"")
@@ -95,112 +111,196 @@ class RawWsHub:
     except Exception:
       pass
 
-  async def ensure_service_task(self, service: str) -> None:
+  async def _ensure_poll_task(self) -> None:
     async with self._lock:
-      task = self._tasks.get(service)
-      if task is None or task.done():
-        self._tasks[service] = asyncio.create_task(self._service_loop(service))
+      if self._poll_task is None or self._poll_task.done():
+        self._poll_task = asyncio.create_task(self._poll_loop())
 
   async def stop_all(self) -> None:
     async with self._lock:
-      tasks = list(self._tasks.values())
-      self._tasks = {}
-    for task in tasks:
-      task.cancel()
+      poll_task = self._poll_task
+      self._poll_task = None
+    if poll_task is not None:
+      poll_task.cancel()
       try:
-        await task
+        await poll_task
       except asyncio.CancelledError:
         pass
       except Exception:
         pass
-    all_clients: set[web.WebSocketResponse] = set(self._ws_services.keys())
+
+    all_clients = set(self._ws_services)
     for clients in self._clients.values():
       all_clients.update(clients)
     for ws in tuple(all_clients):
-      try:
-        await ws.close()
-      except Exception:
-        pass
+      await self.unregister_client(ws)
     for clients in self._clients.values():
       clients.clear()
+    self._close_sockets()
     self._ws_modes.clear()
     self._ws_services.clear()
-    self._ws_send_locks.clear()
-    self._send_failures.clear()
-    self._sockets.clear()
+    self._ws_pending.clear()
+    self._ws_sender_events.clear()
+    self._ws_sender_tasks.clear()
+    self._next_read_time.clear()
+    self._sequence.clear()
 
-  async def _send_payload(self, service: str, ws: web.WebSocketResponse, payload: bytes) -> None:
-    lock = self._ws_send_locks.setdefault(ws, asyncio.Lock())
-    mode = self._ws_modes.get(ws, "single")
-    wire_payload = encode_raw_multiplex_frame(service=service, payload=payload) if mode == "multiplex" else payload
-    async with lock:
-      await ws.send_bytes(wire_payload)
+  def _close_sockets(self, services: set[str] | None = None) -> None:
+    selected = set(self._sockets) if services is None else services
+    for service in selected:
+      sock = self._sockets.pop(service, None)
+      if sock is not None:
+        try:
+          sock.close()
+        except Exception:
+          pass
+      self._next_read_time.pop(service, None)
 
-  async def _service_loop(self, service: str) -> None:
+  def _queue_wire_payload(self, service: str, ws: web.WebSocketResponse, wire_payload: bytes) -> None:
+    if ws not in self._ws_services:
+      return
+    pending = self._ws_pending.setdefault(ws, OrderedDict())
+    pending[service] = wire_payload
+    pending.move_to_end(service)
+    self._ws_sender_events.setdefault(ws, asyncio.Event()).set()
+    task = self._ws_sender_tasks.get(ws)
+    if task is None or task.done():
+      self._ws_sender_tasks[ws] = asyncio.create_task(self._sender_loop(ws))
+
+  async def _sender_loop(self, ws: web.WebSocketResponse) -> None:
+    try:
+      while ws in self._ws_services and not ws.closed:
+        pending = self._ws_pending.get(ws)
+        event = self._ws_sender_events.get(ws)
+        if pending is None or event is None:
+          break
+        if not pending:
+          event.clear()
+          if pending:
+            continue
+          await event.wait()
+          continue
+
+        if self._ws_modes.get(ws) == "compact":
+          # Coalesce the services that changed during one display tick. Each
+          # service remains latest-only, but one websocket write wakes the
+          # browser once instead of once per cereal service.
+          await asyncio.sleep(self.COMPACT_BATCH_WINDOW)
+          if not pending:
+            continue
+          wire_payload = encode_carrot_state_batch(tuple(pending.values()))
+          pending.clear()
+        else:
+          _, wire_payload = pending.popitem(last=False)
+        try:
+          await asyncio.wait_for(ws.send_bytes(wire_payload), timeout=self.SEND_TIMEOUT)
+        except Exception:
+          await self.unregister_client(ws, close_code=1011, close_message=b"state_send_timeout")
+          break
+    except asyncio.CancelledError:
+      raise
+    finally:
+      if self._ws_sender_tasks.get(ws) is asyncio.current_task():
+        self._ws_sender_tasks.pop(ws, None)
+
+  def _compact_frame(self, service: str, payload: bytes) -> bytes | None:
+    sequence = (self._sequence.get(service, 0) + 1) & 0xffff
+    try:
+      if encode_compact_frame_native is not None:
+        try:
+          frame = encode_compact_frame_native(service, payload, sequence)
+        except Exception:
+          with log.Event.from_bytes(payload, traversal_limit_in_words=2**64 - 1) as event:
+            frame = encode_carrot_state_frame(service, getattr(event, service), sequence)
+      else:
+        with log.Event.from_bytes(payload, traversal_limit_in_words=2**64 - 1) as event:
+          frame = encode_carrot_state_frame(service, getattr(event, service), sequence)
+    except Exception:
+      return None
+    self._sequence[service] = sequence
+    return frame
+
+  def _broadcast_payload(self, service: str, payload: bytes, clients: set[web.WebSocketResponse]) -> None:
+    single_clients: list[web.WebSocketResponse] = []
+    multiplex_clients: list[web.WebSocketResponse] = []
+    compact_clients: list[web.WebSocketResponse] = []
+    for ws in list(clients):
+      mode = self._ws_modes.get(ws)
+      if mode == "single":
+        single_clients.append(ws)
+      elif mode == "multiplex":
+        multiplex_clients.append(ws)
+      elif mode == "compact":
+        compact_clients.append(ws)
+
+    for ws in single_clients:
+      self._queue_wire_payload(service, ws, payload)
+
+    if multiplex_clients:
+      multiplex_payload = encode_raw_multiplex_frame(service=service, payload=payload)
+      for ws in multiplex_clients:
+        self._queue_wire_payload(service, ws, multiplex_payload)
+
+    if compact_clients:
+      compact_payload = self._compact_frame(service, payload)
+      if compact_payload is not None:
+        for ws in compact_clients:
+          self._queue_wire_payload(service, ws, compact_payload)
+
+  async def _poll_loop(self) -> None:
     idle_started_at = 0.0
     try:
       while True:
-        clients = self._clients.get(service, set())
-        if not clients:
+        active_services = {service for service, clients in self._clients.items() if clients}
+        if not active_services:
           if idle_started_at <= 0.0:
             idle_started_at = asyncio.get_running_loop().time()
-          elif (asyncio.get_running_loop().time() - idle_started_at) >= self.IDLE_STOP_SEC:
+          elif asyncio.get_running_loop().time() - idle_started_at >= self.IDLE_STOP_SEC:
             break
           await asyncio.sleep(self.IDLE_SLEEP)
           continue
 
         idle_started_at = 0.0
-        sock = self._sockets.get(service)
-        if sock is None:
-          try:
-            sock = self.messaging.sub_sock(service, conflate=True)
-            self._sockets[service] = sock
-          except Exception:
-            await asyncio.sleep(self.IDLE_SLEEP)
-            continue
+        inactive_services = set(self._sockets) - active_services
+        if inactive_services:
+          self._close_sockets(inactive_services)
 
-        try:
-          payload = sock.receive(non_blocking=True)
-        except Exception:
-          await asyncio.sleep(self.ACTIVE_POLL_SLEEP)
-          continue
-        if payload is None:
-          await asyncio.sleep(self.ACTIVE_POLL_SLEEP)
-          continue
-
-        # Phase 2-2: per-service throttle — skip if too soon since last send
         now = asyncio.get_running_loop().time()
-        interval = self._throttle_interval(service)
-        last_send = self._last_send_time.get(service, 0.0)
-        if interval > 0 and (now - last_send) < interval:
-          await asyncio.sleep(self.ACTIVE_POLL_SLEEP)
-          continue
-        self._last_send_time[service] = now
-
-        stale: list[web.WebSocketResponse] = []
-        client_list = list(clients)
-        results = await asyncio.gather(
-          *[asyncio.wait_for(self._send_payload(service, ws, payload), timeout=self.SEND_TIMEOUT) for ws in client_list],
-          return_exceptions=True,
-        )
-        failures = self._send_failures.setdefault(service, {})
-        for ws, result in zip(client_list, results):
-          if not isinstance(result, Exception):
-            failures.pop(ws, None)
+        for service in active_services:
+          # Sockets are conflated, so reading faster than the fixed display
+          # cadence only copies samples that are immediately discarded. Read
+          # at that cadence and let msgq retain the newest sample in between.
+          if now < self._next_read_time.get(service, 0.0):
             continue
-          fail_count = failures.get(ws, 0) + 1
-          failures[ws] = fail_count
-          if fail_count >= self.FAILURE_THRESHOLD:
-            stale.append(ws)
+          interval = self._throttle_interval(service)
+          self._next_read_time[service] = now + interval
 
-        for ws in stale:
-          await self.unregister_client(ws, close_code=1011, close_message=b"raw_send_timeout")
+          sock = self._sockets.get(service)
+          if sock is None:
+            try:
+              sock = self.messaging.sub_sock(service, conflate=True)
+              self._sockets[service] = sock
+            except Exception:
+              continue
+
+          try:
+            payload = sock.receive(non_blocking=True)
+          except Exception:
+            continue
+          if payload is None:
+            continue
+          self._broadcast_payload(service, payload, self._clients.get(service, set()))
+
+        next_due = min(
+          (self._next_read_time.get(service, now + self.IDLE_SLEEP) for service in active_services),
+          default=now + self.IDLE_SLEEP,
+        )
+        sleep_for = max(self.MIN_POLL_SLEEP, min(self.IDLE_SLEEP, next_due - asyncio.get_running_loop().time()))
+        await asyncio.sleep(sleep_for)
     except asyncio.CancelledError:
       raise
     finally:
+      self._close_sockets()
       async with self._lock:
-        current = self._tasks.get(service)
-        if current is asyncio.current_task():
-          self._tasks.pop(service, None)
-      self._sockets.pop(service, None)
-      self._send_failures.pop(service, None)
+        if self._poll_task is asyncio.current_task():
+          self._poll_task = None

@@ -1,0 +1,4122 @@
+{
+  "version": 1,
+  "schemaCommit": "c7b025e810930c9af0ac66f4cc6c537887ab6880",
+  "schemaBranch": "jominki354/web",
+  "fields": {
+    "accelerometer.acceleration.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer.gyro.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer.gyroUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer.magnetic.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer.magneticUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer.orientation.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer.pressure.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer.type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "accelerometer2DEPRECATED.acceleration.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer2DEPRECATED.gyro.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer2DEPRECATED.gyroUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer2DEPRECATED.magnetic.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer2DEPRECATED.magneticUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer2DEPRECATED.orientation.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer2DEPRECATED.pressure.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer2DEPRECATED.type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "accelerometer2DEPRECATED.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "androidGnssDEPRECATED.measurements.clock.biasNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.clock.biasUncertaintyNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.clock.fullBiasNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.clock.hardwareClockDiscontinuityCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "androidGnssDEPRECATED.measurements.clock.hasBiasNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.clock.hasBiasUncertaintyNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.clock.hasFullBiasNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.clock.hasTimeUncertaintyNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.clock.timeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.clock.timeUncertaintyNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.measurements[].accumulatedDeltaRangeState": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "androidGnssDEPRECATED.measurements.measurements[].carrierFrequencyHz": {
+      "unit": "Hz",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.measurements[].cn0DbHz": {
+      "unit": "Hz",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.measurements[].hasCarrierFrequencyHz": {
+      "unit": "Hz",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.measurements[].receivedSvTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.measurements[].receivedSvTimeUncertaintyNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.measurements.measurements[].state": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "androidGnssDEPRECATED.measurements.measurements[].svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "androidGnssDEPRECATED.measurements.measurements[].timeOffsetNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "androidGnssDEPRECATED.navigationMessage.svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "androidGnssDEPRECATED.navigationMessage.type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "applanixLocationDEPRECATED.accuracy.ellipsoidOrientationError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "applanixLocationDEPRECATED.accuracy.ellipsoidSemiMajorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "applanixLocationDEPRECATED.accuracy.ellipsoidSemiMinorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "applanixLocationDEPRECATED.accuracy.headingError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "applanixLocationDEPRECATED.accuracy.pitchError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "applanixLocationDEPRECATED.accuracy.rollError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "applanixLocationDEPRECATED.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "applanixLocationDEPRECATED.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "boot.wallTimeNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "cameraOdometry.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "can[].address": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carControl.actuators.steeringAngleDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carControl.actuatorsOutputDEPRECATED.steeringAngleDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carControl.hudControl.atcDistance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carControl.hudControl.leadDistance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carControl.hudControl.naviEventType": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carOutput.actuatorsOutput.steeringAngleDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carParams.carFw[].address": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carParams.carFw[].bus": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carParams.carFw[].responseAddress": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carParams.carFw[].subAddress": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carParams.extFlags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carParams.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carParams.lateralTuning.torque.latAccelFactor": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "carParams.lateralTuning.torque.steeringAngleDeadzoneDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carParams.steerRatio": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "carParams.tireStiffnessFactor": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "carParams.wheelSpeedFactor": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "carState.aEgo": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carState.canErrorCounter": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carState.cumLagMs": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "explicit unit suffix in field name"
+    },
+    "carState.fuelGauge": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "carState.speedLimitDistance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carState.steeringAngleDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carState.steeringAngleOffsetDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carState.steeringRateDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carState.ureaGauge": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "carState.vCluRatio": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "carState.vEgo": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carState.vEgoRaw": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotMan.carrotCmdIndex": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotMan.leftSec": {
+      "unit": "s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotMan.trafficState": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotMan.xSpdCountDown": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotMan.xSpdType": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotMan.xTurnCountDown": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.crossroad.distanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.crossroad.imageCode": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNavi.crossroad.meta.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.crossroad.meta.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.crossroad.meta.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceCurrent.distanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceCurrent.latitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceCurrent.longitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceCurrent.meta.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceCurrent.meta.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.guidanceCurrent.meta.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceCurrent.timeSec": {
+      "unit": "s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceCurrent.turnType": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNavi.guidanceNext.distanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceNext.latitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceNext.longitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceNext.meta.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceNext.meta.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.guidanceNext.meta.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceNext.timeSec": {
+      "unit": "s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.guidanceNext.turnType": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNavi.laneAhead[].count": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.laneAhead[].distanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.laneAhead[].meta.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.laneAhead[].meta.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.laneAhead[].meta.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.laneAhead[].roadCategory": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNavi.laneAhead[].turnCode": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNavi.laneAhead[].voiceCode": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNavi.laneCurrent.count": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.laneCurrent.distanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.laneCurrent.meta.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.laneCurrent.meta.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.laneCurrent.meta.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.laneCurrent.roadCategory": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNavi.laneCurrent.turnCode": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNavi.laneCurrent.voiceCode": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNavi.navigationStatus.meta.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.navigationStatus.meta.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.navigationStatus.meta.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.publishMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.route.meta.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.route.meta.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.route.meta.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.route.movedDistanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.route.movedTimeSec": {
+      "unit": "s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.route.polyline[].latitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.route.polyline[].longitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.route.remainingDistanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.route.remainingTimeSec": {
+      "unit": "s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.route.totalDistanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.schemaVersion": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.speed.currentKph": {
+      "unit": "km/h",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.speed.meta.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.speed.meta.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.speed.meta.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.speed.roadLimitKph": {
+      "unit": "km/h",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.speed.sdiDistanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.speed.sdiSpeedLimitKph": {
+      "unit": "km/h",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.speed.sdiType": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNavi.speed.sectionAverageKph": {
+      "unit": "km/h",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.speed.sectionOverallAverageKph": {
+      "unit": "km/h",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.speed.sectionProgress": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "carrotNavi.speed.sectionRemainingDistanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.speed.sectionRemainingTimeSec": {
+      "unit": "s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.speed.sectionSpeedLimitKph": {
+      "unit": "km/h",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.trafficSignal.distanceM": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.trafficSignal.greenRemainSec": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "explicit unit suffix in field name"
+    },
+    "carrotNavi.trafficSignal.leftRemainSec": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "explicit unit suffix in field name"
+    },
+    "carrotNavi.trafficSignal.meta.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.trafficSignal.meta.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.trafficSignal.meta.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.trafficSignal.redRemainSec": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "explicit unit suffix in field name"
+    },
+    "carrotNavi.trafficSignal.rightRemainSec": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "explicit unit suffix in field name"
+    },
+    "carrotNavi.trafficSignal.uiCounterRemainSec": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "explicit unit suffix in field name"
+    },
+    "carrotNavi.trafficSignal.uturnRemainSec": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "explicit unit suffix in field name"
+    },
+    "carrotNavi.vehicle.headingDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.vehicle.latitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.vehicle.longitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.vehicle.meta.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.vehicle.meta.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNavi.vehicle.meta.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNavi.vehicle.speedKph": {
+      "unit": "km/h",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNaviMedia.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNaviMedia.formatOrReason": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNaviMedia.messageType": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "carrotNaviMedia.receivedMonoTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "carrotNaviMedia.schemaVersion": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNaviMedia.sequence": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "carrotNaviMedia.sourceTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "clocks.deprecated.bootTimeNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "clocks.deprecated.modemUptimeMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "clocks.deprecated.monotonicNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "clocks.deprecated.monotonicRawNanos": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "clocks.wallTimeNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.deprecated.aEgo": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.deprecated.awarenessStatus": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "controlsState.deprecated.canErrorCounter": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "controlsState.deprecated.cumLagMs": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "explicit unit suffix in field name"
+    },
+    "controlsState.deprecated.jerkFactor": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "controlsState.deprecated.steeringAngleDesiredDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.deprecated.vEgo": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.deprecated.vEgoRaw": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.angleState.steeringAngleDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.angleState.steeringAngleDesiredDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.curvatureStateDEPRECATED.error": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "controlsState.lateralControlState.debugState.steeringAngleDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.indiStateDEPRECATED.accelError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "controlsState.lateralControlState.indiStateDEPRECATED.steeringAccelDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.indiStateDEPRECATED.steeringAngleDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.indiStateDEPRECATED.steeringAngleDesiredDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.indiStateDEPRECATED.steeringRateDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.indiStateDEPRECATED.steeringRateDesiredDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.lqrStateDEPRECATED.steeringAngleDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.lqrStateDEPRECATED.steeringAngleDesiredDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.pidState.angleError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "controlsState.lateralControlState.pidState.steeringAngleDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.pidState.steeringAngleDesiredDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.pidState.steeringRateDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "controlsState.lateralControlState.torqueState.error": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "controlsState.lateralControlState.torqueState.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "deviceState.bottomSocTempC": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.carBatteryCapacityUwh": {
+      "unit": "uWh",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.cpuTempC[]": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.cpuUsagePercent[]": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.deprecated.ambientTempC": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.deprecated.batteryPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.deprecated.batteryTempC": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.deprecated.cpuUsagePercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.deprecated.nvmeTempC[]": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.dspTempC": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.exhaustTempC": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.freeSpacePercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.gnssTempC": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.gpuTempC[]": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.gpuUsagePercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.intakeTempC": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.maxTempC": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.memoryTempC": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.memoryUsagePercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.modemTempC[]": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.offroadPowerUsageUwh": {
+      "unit": "uWh",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.pmicTempC[]": {
+      "unit": "deg C",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.powerDrawW": {
+      "unit": "W",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.screenBrightnessPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "deviceState.somPowerDrawW": {
+      "unit": "W",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverCameraState.deprecated.recoverState": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "driverCameraState.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverCameraState.exposureValPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverCameraState.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverCameraState.frameIdSensor": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverEncodeData.idx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverEncodeData.idx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "driverEncodeData.idx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverEncodeData.idx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverEncodeData.idx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverEncodeData.unixTimestampNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverEncodeIdx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverEncodeIdx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "driverEncodeIdx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverEncodeIdx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverEncodeIdx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverMonitoringState.alert3Count": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverMonitoringState.alertCountLockoutPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverMonitoringState.alertTimeLockoutPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverMonitoringState.lockoutRecoveryPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverMonitoringState.noResponseCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverMonitoringState.rhdCalibration.calibratedPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverMonitoringState.visionPolicyState.awarenessPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverMonitoringState.visionPolicyState.pose.pitchCalib.calibratedPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverMonitoringState.visionPolicyState.pose.yawCalib.calibratedPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverMonitoringState.visionPolicyState.uncertainOffroadAlertPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverMonitoringState.visionPolicyState.wheeltouchFallbackPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverMonitoringState.wheeltouchPolicyState.awarenessPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "driverMonitoringStateDEPRECATED.awarenessStatus": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "driverMonitoringStateDEPRECATED.deprecated.phoneProbValidCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverMonitoringStateDEPRECATED.distractedType": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "driverMonitoringStateDEPRECATED.hiStdCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverMonitoringStateDEPRECATED.posePitchValidCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverMonitoringStateDEPRECATED.poseYawValidCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverMonitoringStateDEPRECATED.uncertainCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverStateDEPRECATED.faceProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateDEPRECATED.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverStateDEPRECATED.leftBlinkProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateDEPRECATED.leftEyeProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateDEPRECATED.occludedProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateDEPRECATED.rightBlinkProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateDEPRECATED.rightEyeProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateDEPRECATED.sunglassesProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.deprecated.poorVisionProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "driverStateV2.leftDriverData.deprecated.occludedProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.leftDriverData.faceProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.leftDriverData.leftBlinkProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.leftDriverData.leftEyeProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.leftDriverData.phoneProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.leftDriverData.rightBlinkProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.leftDriverData.rightEyeProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.leftDriverData.sleepProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.leftDriverData.sunglassesProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.rightDriverData.deprecated.occludedProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.rightDriverData.faceProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.rightDriverData.leftBlinkProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.rightDriverData.leftEyeProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.rightDriverData.phoneProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.rightDriverData.rightBlinkProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.rightDriverData.rightEyeProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.rightDriverData.sleepProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.rightDriverData.sunglassesProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "driverStateV2.wheelOnRightProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "drivingModelData.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "drivingModelData.frameIdExtra": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "drivingModelData.laneLineMeta.leftProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "drivingModelData.laneLineMeta.rightProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "featuresDEPRECATED.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "gnssMeasurements.correctedMeasurements[].deprecated.ephemerisSource.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "gnssMeasurements.correctedMeasurements[].svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "gnssMeasurements.ephemerisStatuses[].gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "gnssMeasurements.ephemerisStatuses[].svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "gnssMeasurements.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "gpsLocation.bearingAccuracyDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "gpsLocation.bearingDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "gpsLocation.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gpsLocation.latitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "gpsLocation.longitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "gpsLocation.satelliteCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "gpsLocation.unixTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "gpsLocationExternal.bearingAccuracyDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "gpsLocationExternal.bearingDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "gpsLocationExternal.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gpsLocationExternal.latitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "gpsLocationExternal.longitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "gpsLocationExternal.satelliteCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "gpsLocationExternal.unixTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "gyroscope.acceleration.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope.gyro.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope.gyroUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope.magnetic.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope.magneticUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope.orientation.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope.pressure.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope.type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "gyroscope2DEPRECATED.acceleration.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope2DEPRECATED.gyro.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope2DEPRECATED.gyroUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope2DEPRECATED.magnetic.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope2DEPRECATED.magneticUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope2DEPRECATED.orientation.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope2DEPRECATED.pressure.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope2DEPRECATED.type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "gyroscope2DEPRECATED.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "initData.deprecated.androidSensors[].fifoMaxEventCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "initData.deprecated.androidSensors[].fifoReservedEventCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "initData.deprecated.androidSensors[].type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "initData.deprecated.androidSensors[].version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "initData.wallTimeNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "lateralPlan.deprecated.angleOffsetDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "lateralPlan.deprecated.cProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "lateralPlan.deprecated.dProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "lateralPlan.deprecated.lProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "lateralPlan.deprecated.rProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "lateralPlan.deprecated.steeringAngleDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "lateralPlan.deprecated.steeringRateDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "lidarPtsDEPRECATED.idx": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "lightSensor.acceleration.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "lightSensor.gyro.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "lightSensor.gyroUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "lightSensor.magnetic.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "lightSensor.magneticUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "lightSensor.orientation.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "lightSensor.pressure.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "lightSensor.type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "lightSensor.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "liveCalibration.deprecated.calStatus": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationCorrectedDEPRECATED.accuracy.ellipsoidOrientationError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationCorrectedDEPRECATED.accuracy.ellipsoidSemiMajorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationCorrectedDEPRECATED.accuracy.ellipsoidSemiMinorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationCorrectedDEPRECATED.accuracy.headingError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationCorrectedDEPRECATED.accuracy.pitchError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationCorrectedDEPRECATED.accuracy.rollError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationCorrectedDEPRECATED.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "liveLocationCorrectedDEPRECATED.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationDEPRECATED.accuracy.ellipsoidOrientationError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationDEPRECATED.accuracy.ellipsoidSemiMajorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationDEPRECATED.accuracy.ellipsoidSemiMinorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationDEPRECATED.accuracy.headingError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationDEPRECATED.accuracy.pitchError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationDEPRECATED.accuracy.rollError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationDEPRECATED.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "liveLocationDEPRECATED.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationKalmanDEPRECATED.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "liveLocationKalmanDEPRECATED.unixTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveLocationKalmanDeprecatedDEPRECATED.accuracy.ellipsoidOrientationError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationKalmanDeprecatedDEPRECATED.accuracy.ellipsoidSemiMajorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationKalmanDeprecatedDEPRECATED.accuracy.ellipsoidSemiMinorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationKalmanDeprecatedDEPRECATED.accuracy.headingError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationKalmanDeprecatedDEPRECATED.accuracy.pitchError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationKalmanDeprecatedDEPRECATED.accuracy.rollError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationKalmanDeprecatedDEPRECATED.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "liveLocationKalmanDeprecatedDEPRECATED.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationTimingDEPRECATED.accuracy.ellipsoidOrientationError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationTimingDEPRECATED.accuracy.ellipsoidSemiMajorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationTimingDEPRECATED.accuracy.ellipsoidSemiMinorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationTimingDEPRECATED.accuracy.headingError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationTimingDEPRECATED.accuracy.pitchError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationTimingDEPRECATED.accuracy.rollError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLocationTimingDEPRECATED.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "liveLocationTimingDEPRECATED.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveLongitudinalMpcDEPRECATED.aEgo[]": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveLongitudinalMpcDEPRECATED.aLead[]": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveLongitudinalMpcDEPRECATED.vEgo[]": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveLongitudinalMpcDEPRECATED.vLead[]": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveMapDataDEPRECATED.lastGps.bearingAccuracyDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveMapDataDEPRECATED.lastGps.bearingDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveMapDataDEPRECATED.lastGps.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveMapDataDEPRECATED.lastGps.latitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveMapDataDEPRECATED.lastGps.longitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveMapDataDEPRECATED.lastGps.satelliteCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "liveMapDataDEPRECATED.lastGps.unixTimestampMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveMapDataDEPRECATED.speedLimitAheadDistance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveParameters.angleOffsetAverageDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveParameters.angleOffsetDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveParameters.steerRatio": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "liveParameters.stiffnessFactor": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "livePose.debugFilterState.observations[].kind": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveTorqueParameters.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "liveTracks.points[].aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveTracks.points[].aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveTracks.points[].dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveTracks.points[].jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveTracks.points[].trackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "liveTracks.points[].vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveTracks.points[].vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveTracks.points[].yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveTracksDEPRECATED[].aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveTracksDEPRECATED[].dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveTracksDEPRECATED[].status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "liveTracksDEPRECATED[].trackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "liveTracksDEPRECATED[].vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveTracksDEPRECATED[].yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "liveUIDEPRECATED.awarenessStatus": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "livestreamDriverEncodeData.idx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamDriverEncodeData.idx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "livestreamDriverEncodeData.idx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamDriverEncodeData.idx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamDriverEncodeData.idx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamDriverEncodeData.unixTimestampNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "livestreamDriverEncodeIdx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamDriverEncodeIdx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "livestreamDriverEncodeIdx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamDriverEncodeIdx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamDriverEncodeIdx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamRoadEncodeData.idx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamRoadEncodeData.idx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "livestreamRoadEncodeData.idx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamRoadEncodeData.idx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamRoadEncodeData.idx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamRoadEncodeData.unixTimestampNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "livestreamRoadEncodeIdx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamRoadEncodeIdx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "livestreamRoadEncodeIdx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamRoadEncodeIdx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamRoadEncodeIdx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamWideRoadEncodeData.idx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamWideRoadEncodeData.idx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "livestreamWideRoadEncodeData.idx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamWideRoadEncodeData.idx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamWideRoadEncodeData.idx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamWideRoadEncodeData.unixTimestampNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "livestreamWideRoadEncodeIdx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamWideRoadEncodeIdx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "livestreamWideRoadEncodeIdx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamWideRoadEncodeIdx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "livestreamWideRoadEncodeIdx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "locationDEPRECATED.accuracy.ellipsoidOrientationError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "locationDEPRECATED.accuracy.ellipsoidSemiMajorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "locationDEPRECATED.accuracy.ellipsoidSemiMinorError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "locationDEPRECATED.accuracy.headingError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "locationDEPRECATED.accuracy.pitchError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "locationDEPRECATED.accuracy.rollError": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "locationDEPRECATED.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "locationDEPRECATED.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "logMonoTime": {
+      "unit": "ns",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "longitudinalPlan.deprecated.jerkFactor": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "longitudinalPlan.desiredDistance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "longitudinalPlan.myDrivingMode": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "longitudinalPlan.trafficState": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "longitudinalPlan.xState": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "magnetometer.acceleration.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "magnetometer.gyro.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "magnetometer.gyroUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "magnetometer.magnetic.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "magnetometer.magneticUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "magnetometer.orientation.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "magnetometer.pressure.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "magnetometer.type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "magnetometer.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "managerState.processes[].exitCode": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "mapRenderState.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "model.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "model.lead.prob": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "model.leadFuture.prob": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "model.leftLane.prob": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "model.meta.brakeDisengageProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "model.meta.engagedProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "model.meta.gasDisengageProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "model.meta.steerOverrideProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "model.path.prob": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "model.rightLane.prob": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "modelV2.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "modelV2.frameIdExtra": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "modelV2.leadsV3[].prob": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "modelV2.leads[].prob": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "modelV2.meta.deprecated.brakeDisengageProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "modelV2.meta.deprecated.gasDisengageProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "modelV2.meta.deprecated.steerOverrideProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "modelV2.meta.engagedProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "modelV2.meta.laneChangeProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "navInstruction.allManeuvers[].distance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "navInstruction.maneuverDistance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "navInstructionCarrot.allManeuvers[].distance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "navInstructionCarrot.maneuverDistance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "navModelDEPRECATED.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "navRoute.coordinates[].latitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "navRoute.coordinates[].longitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "navRouteNavd.coordinates[].latitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "navRouteNavd.coordinates[].longitude": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "navThumbnail.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "navUpdateDEPRECATED.segments[].distance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "orbFeaturesSummaryDEPRECATED.featureCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "orbFeaturesSummaryDEPRECATED.matchCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "orbObservationDEPRECATED[].matchDistance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "orbslamCorrectionDEPRECATED.numInliers": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "pandaStateDEPRECATED.fanStallCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "pandaStateDEPRECATED.spiChecksumErrorCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "pandaStates[].fanStallCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "pandaStates[].spiChecksumErrorCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "procLog.procs[].numThreads": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "procLog.procs[].state": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qRoadEncodeData.idx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qRoadEncodeData.idx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qRoadEncodeData.idx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qRoadEncodeData.idx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qRoadEncodeData.idx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qRoadEncodeData.unixTimestampNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "qRoadEncodeIdx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qRoadEncodeIdx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qRoadEncodeIdx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qRoadEncodeIdx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qRoadEncodeIdx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.clockReport.bdsClockSource": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qcomGnss.clockReport.bdsMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.clockReport.bdsToGloTimeBiasMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.clockReport.fCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.clockReport.fCountOffset": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.clockReport.frequencySource": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qcomGnss.clockReport.galClockSource": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qcomGnss.clockReport.galMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.clockReport.galToBdsTimeBiasMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.clockReport.galToGloTimeBiasMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.clockReport.glonassClockSource": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qcomGnss.clockReport.glonassMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.clockReport.gpsClockSource": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qcomGnss.clockReport.gpsLeapSeconds": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "seconds suffix"
+    },
+    "qcomGnss.clockReport.gpsLeapSecondsSource": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qcomGnss.clockReport.gpsMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.clockReport.gpsToBdsTimeBiasMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.clockReport.gpsToGalTimeBiasMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.clockReport.gpsToGlonassTimeBiasMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.clockReport.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.clockReport.lpmRtcCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.drMeasurementReport.fCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.drMeasurementReport.frequencySource": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qcomGnss.drMeasurementReport.glonassClockSource": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qcomGnss.drMeasurementReport.glonassMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.drMeasurementReport.gpsClockSource": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qcomGnss.drMeasurementReport.gpsLeapSeconds": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "seconds suffix"
+    },
+    "qcomGnss.drMeasurementReport.gpsMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.drMeasurementReport.gpsToGlonassTimeBiasMilliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.drMeasurementReport.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.drMeasurementReport.reason": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "qcomGnss.drMeasurementReport.sv[].cycleSlipCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.drMeasurementReport.sv[].fCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.drMeasurementReport.sv[].glonassFrequencyIndex": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.drMeasurementReport.sv[].parityErrorCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.drMeasurementReport.sv[].svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.drSvPoly.frequencyIndex": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.drSvPoly.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.drSvPoly.svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.measurementReport.fCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.measurementReport.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.measurementReport.milliseconds": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "millisecond suffix"
+    },
+    "qcomGnss.measurementReport.sv[].cycleSlipCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.measurementReport.sv[].glonassFrequencyIndex": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.measurementReport.sv[].glonassHemmingErrorCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.measurementReport.sv[].gpsParityErrorCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "qcomGnss.measurementReport.sv[].svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.deprecated.calStatus": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "radarState.deprecated.cumLagMs": {
+      "unit": "ms",
+      "unitStatus": "inferred-name",
+      "unitBasis": "explicit unit suffix in field name"
+    },
+    "radarState.leadLeft.aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadLeft.aLeadK": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadLeft.aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadLeft.dPath": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadLeft.dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadLeft.jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadLeft.modelProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "radarState.leadLeft.radarTrackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.leadLeft.vLat": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadLeft.vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadLeft.vLeadK": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadLeft.vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadLeft.yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.aLeadK": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.dPath": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.modelProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "radarState.leadOne.radarTrackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.leadOne.vLat": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.vLeadK": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadOne.yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.aLeadK": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.dPath": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.modelProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "radarState.leadRight.radarTrackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.leadRight.vLat": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.vLeadK": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadRight.yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.aLeadK": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.dPath": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.modelProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "radarState.leadTwo.radarTrackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.leadTwo.vLat": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.vLeadK": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadTwo.yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].aLeadK": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].dPath": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].modelProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "radarState.leadsCenter[].radarTrackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.leadsCenter[].vLat": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].vLeadK": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCenter[].yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].aLeadK": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].dPath": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].modelProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "radarState.leadsCutIn[].radarTrackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.leadsCutIn[].vLat": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].vLeadK": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsCutIn[].yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].aLeadK": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].dPath": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].modelProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "radarState.leadsLeft2[].radarTrackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.leadsLeft2[].vLat": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].vLeadK": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft2[].yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].aLeadK": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].dPath": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].modelProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "radarState.leadsLeft[].radarTrackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.leadsLeft[].vLat": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].vLeadK": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsLeft[].yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].aLeadK": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].dPath": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].modelProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "radarState.leadsRight2[].radarTrackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.leadsRight2[].vLat": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].vLeadK": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight2[].yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].aLead": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].aLeadK": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].aRel": {
+      "unit": "m/s^2",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].dPath": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].dRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].jLead": {
+      "unit": "m/s^3",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].modelProb": {
+      "unit": "ratio",
+      "unitStatus": "inferred-dimensionless",
+      "unitBasis": "dimensionless/probability naming"
+    },
+    "radarState.leadsRight[].radarTrackId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "radarState.leadsRight[].vLat": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].vLead": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].vLeadK": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].vRel": {
+      "unit": "m/s",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "radarState.leadsRight[].yRel": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "roadCameraState.deprecated.recoverState": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "roadCameraState.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "roadCameraState.exposureValPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "roadCameraState.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "roadCameraState.frameIdSensor": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "roadEncodeData.idx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "roadEncodeData.idx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "roadEncodeData.idx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "roadEncodeData.idx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "roadEncodeData.idx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "roadEncodeData.unixTimestampNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "roadEncodeIdx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "roadEncodeIdx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "roadEncodeIdx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "roadEncodeIdx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "roadEncodeIdx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "sendcan[].address": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "sensorEventDEPRECATED.acceleration.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventDEPRECATED.gyro.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventDEPRECATED.gyroUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventDEPRECATED.magnetic.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventDEPRECATED.magneticUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventDEPRECATED.orientation.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventDEPRECATED.pressure.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventDEPRECATED.type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventDEPRECATED.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "sensorEventsDEPRECATED[].acceleration.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventsDEPRECATED[].gyro.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventsDEPRECATED[].gyroUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventsDEPRECATED[].magnetic.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventsDEPRECATED[].magneticUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventsDEPRECATED[].orientation.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventsDEPRECATED[].pressure.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventsDEPRECATED[].type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "sensorEventsDEPRECATED[].version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "soundPressure.deprecated.filteredSoundPressureWeightedDb": {
+      "unit": "dB",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "soundPressure.soundPressureWeightedDb": {
+      "unit": "dB",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "temperatureSensor.acceleration.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor.gyro.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor.gyroUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor.magnetic.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor.magneticUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor.orientation.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor.pressure.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor.type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "temperatureSensor2DEPRECATED.acceleration.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor2DEPRECATED.gyro.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor2DEPRECATED.gyroUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor2DEPRECATED.magnetic.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor2DEPRECATED.magneticUncalibrated.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor2DEPRECATED.orientation.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor2DEPRECATED.pressure.status": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor2DEPRECATED.type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "temperatureSensor2DEPRECATED.version": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "thumbnail.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "touch[].code": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "touch[].sec": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "seconds suffix"
+    },
+    "touch[].type": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "touch[].usec": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "seconds suffix"
+    },
+    "trafficEventsDEPRECATED[].distance": {
+      "unit": "m",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "ubloxGnss.ephemeris.deprecated.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "ubloxGnss.ephemeris.svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "ubloxGnss.ephemeris.towCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "ubloxGnss.glonassEphemeris.svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "ubloxGnss.glonassEphemeris.svType": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "ubloxGnss.glonassEphemeris.tkSeconds": {
+      "unit": "s",
+      "unitStatus": "inferred-name",
+      "unitBasis": "seconds suffix"
+    },
+    "ubloxGnss.hwStatus.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "ubloxGnss.hwStatus2.postStatus": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "ubloxGnss.ionoData.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "ubloxGnss.measurementReport.gpsWeek": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "ubloxGnss.measurementReport.measurements[].glonassFrequencyIndex": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "ubloxGnss.measurementReport.measurements[].svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "ubloxGnss.measurementReport.numMeas": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "ubloxGnss.satReport.svs[].azimuthDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "ubloxGnss.satReport.svs[].elevationDeg": {
+      "unit": "deg",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "ubloxGnss.satReport.svs[].svId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "uiDebug.drawTimeMillis": {
+      "unit": "ms",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "uiPlanDEPRECATED.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "uploaderState.immediateQueueCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "uploaderState.rawQueueCount": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadCameraState.deprecated.recoverState": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "wideRoadCameraState.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadCameraState.exposureValPercent": {
+      "unit": "%",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "wideRoadCameraState.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadCameraState.frameIdSensor": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadEncodeData.idx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadEncodeData.idx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "wideRoadEncodeData.idx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadEncodeData.idx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadEncodeData.idx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadEncodeData.unixTimestampNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "wideRoadEncodeIdx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadEncodeIdx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "wideRoadEncodeIdx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadEncodeIdx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "wideRoadEncodeIdx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "youtubeRoadEncodeData.idx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "youtubeRoadEncodeData.idx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "youtubeRoadEncodeData.idx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "youtubeRoadEncodeData.idx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "youtubeRoadEncodeData.idx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "youtubeRoadEncodeData.unixTimestampNanos": {
+      "unit": "ns since Unix epoch",
+      "unitStatus": "verified-source",
+      "unitBasis": "existing schema/comment extraction"
+    },
+    "youtubeRoadEncodeIdx.encodeId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "youtubeRoadEncodeIdx.flags": {
+      "unit": "code/bitmask",
+      "unitStatus": "not-applicable",
+      "unitBasis": "categorical code naming"
+    },
+    "youtubeRoadEncodeIdx.frameId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "youtubeRoadEncodeIdx.segmentId": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    },
+    "youtubeRoadEncodeIdx.segmentIdEncode": {
+      "unit": "count/id",
+      "unitStatus": "not-applicable",
+      "unitBasis": "identifier/index/counter naming"
+    }
+  }
+}

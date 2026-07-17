@@ -301,10 +301,9 @@ V4LEncoder::V4LEncoder(const EncoderInfo &encoder_info, int in_width, int in_hei
 
   if (carrot_livestream_road) {
     LOGW("H264 compatibility profile enabled for %s: output=%dx%d bitrate=%d multi-slice-max-bytes=%d",
-         encoder_info.publish_name, out_width, out_height, 600'000, 1200);
+         encoder_info.publish_name, out_width, out_height, encoder_settings.bitrate, 1200);
 
     struct v4l2_control compatibility_ctrls[] = {
-      { .id = V4L2_CID_MPEG_VIDEO_BITRATE, .value = 600'000},
       { .id = V4L2_CID_MPEG_VIDEO_H264_PROFILE, .value = V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE},
       { .id = V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE, .value = V4L2_MPEG_VIDEO_H264_ENTROPY_MODE_CAVLC},
     };

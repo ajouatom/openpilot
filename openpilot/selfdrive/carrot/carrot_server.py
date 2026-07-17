@@ -12,10 +12,9 @@ from .server.services.settings import settings_cache as _settings_cache
 
 
 def main():
-  # Core affinity is tunable via env so carrot_server can be moved off the
-  # cores webrtcd / the livestream encoder need (webrtcd itself sets no
-  # affinity). Format: comma-separated core ids, e.g. CARROT_WEB_CORES="2,3".
-  # Default preserves the previous behavior ([0, 1, 2, 3]).
+  # Core affinity is tunable via env. The default shares the background core
+  # pool used by Carrot WebRTC; its dedicated video encoder is pinned separately.
+  # Format: comma-separated core ids, e.g. CARROT_WEB_CORES="2,3".
   try:
     cores_env = os.environ.get("CARROT_WEB_CORES", "")
     cores = [int(c) for c in cores_env.split(",") if c.strip() != ""] or [0, 1, 2, 3]

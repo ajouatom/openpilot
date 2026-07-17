@@ -37,9 +37,9 @@ _STREAM_PROXY_HISTORY: deque[dict[str, Any]] = deque(maxlen=STREAM_PROXY_HISTORY
 _STREAM_PROXY_HISTORY_LOCK = threading.Lock()
 _PROCESS_MATCHES = {
   "camerad": "openpilot/system/camerad/camerad",
-  "stream_encoderd": "openpilot/system/loggerd/encoderd\x00--stream",
+  "stream_encoderd": "openpilot/system/loggerd/encoderd\x00--carrot-vision-road",
   "encoderd": "openpilot/system/loggerd/encoderd",
-  "webrtcd": "openpilot.system.webrtc.webrtcd",
+  "webrtcd": "openpilot.system.webrtc.carrot_webrtcd",
   "carrot_web": "openpilot.selfdrive.carrot.server",
 }
 _JOURNAL_TERMS = (

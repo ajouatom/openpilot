@@ -36,6 +36,12 @@ let terminalXtermActive = false;
 let terminalXtermResizeObserver = null;
 let terminalXtermFitRaf = 0;
 let terminalKeyboardFitTimers = [];
+let terminalRendererAddon = null;
+let terminalRendererKind = "dom";
+let terminalRendererDpr = 0;
+let terminalRendererVerifiedDpr = 0;
+let terminalRendererScaleCheckTimer = 0;
+let terminalDprMediaQuery = null;
 let terminalOuterScrollRaf = 0;
 let terminalOuterScrollTimer = 0;
 let terminalOuterScrollLockUntil = 0;
@@ -128,6 +134,62 @@ const TERMINAL_KEY_SEQ = {
 };
 
 const terminalTextDecoder = (typeof TextDecoder === "function") ? new TextDecoder("utf-8") : null;
+const TERMINAL_WEB_ACTION_PREFIX = "[[CARROT_WEB_ACTION:";
+const TERMINAL_WEB_ACTION_SUFFIX = "]]";
+let terminalWebActionCarry = "";
+
+function runTerminalWebAction(action) {
+  if (action !== "web-intro") return;
+  if (!terminalPageActive || document.visibilityState === "hidden") return;
+  if (typeof window.CarrotIntroShell?.open !== "function") {
+    showAppToast("인트로를 불러오지 못했습니다.", { tone: "error" });
+    return;
+  }
+  window.CarrotIntroShell.open({ preview: true });
+}
+
+/* Custom commands can request a browser-only action without adding another
+   server state/polling channel. The marker is removed before xterm renders it;
+   history replay is consumed but deliberately never dispatched again. */
+function consumeTerminalWebActions(chunk, { dispatch = true } = {}) {
+  let text = terminalWebActionCarry + String(chunk || "");
+  terminalWebActionCarry = "";
+  let output = "";
+
+  while (text) {
+    const start = text.indexOf(TERMINAL_WEB_ACTION_PREFIX);
+    if (start < 0) {
+      let carryLength = 0;
+      const max = Math.min(text.length, TERMINAL_WEB_ACTION_PREFIX.length - 1);
+      for (let length = max; length > 0; length -= 1) {
+        if (text.endsWith(TERMINAL_WEB_ACTION_PREFIX.slice(0, length))) {
+          carryLength = length;
+          break;
+        }
+      }
+      if (carryLength) {
+        output += text.slice(0, -carryLength);
+        terminalWebActionCarry = text.slice(-carryLength);
+      } else {
+        output += text;
+      }
+      break;
+    }
+
+    output += text.slice(0, start);
+    const end = text.indexOf(TERMINAL_WEB_ACTION_SUFFIX, start + TERMINAL_WEB_ACTION_PREFIX.length);
+    if (end < 0) {
+      terminalWebActionCarry = text.slice(start);
+      break;
+    }
+
+    const action = text.slice(start + TERMINAL_WEB_ACTION_PREFIX.length, end).trim();
+    if (dispatch) window.setTimeout(() => runTerminalWebAction(action), 0);
+    text = text.slice(end + TERMINAL_WEB_ACTION_SUFFIX.length);
+  }
+
+  return output;
+}
 
 function base64ToBytes(b64) {
   const bin = atob(String(b64 || ""));
@@ -196,17 +258,40 @@ function resolveTerminalAddon(name) {
   return null;
 }
 
+function currentTerminalDevicePixelRatio() {
+  const dpr = Number(window.devicePixelRatio);
+  return Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
+}
+
+function rememberTerminalRenderer(addon, kind) {
+  terminalRendererAddon = addon || null;
+  terminalRendererKind = kind;
+  terminalRendererDpr = currentTerminalDevicePixelRatio();
+}
+
+function disposeTerminalRendererAddon() {
+  const addon = terminalRendererAddon;
+  terminalRendererAddon = null;
+  terminalRendererKind = "dom";
+  if (!addon || typeof addon.dispose !== "function") return;
+  try { addon.dispose(); } catch {}
+}
+
 function attachTerminalCanvasRenderer(term) {
+  let addon = null;
   try {
     const Canvas = resolveTerminalAddon("CanvasAddon");
     if (!Canvas) {
       console.log("[Terminal] CanvasAddon not loaded");
       return false;
     }
-    term.loadAddon(new Canvas());
+    addon = new Canvas();
+    term.loadAddon(addon);
+    rememberTerminalRenderer(addon, "canvas");
     console.log("[Terminal] renderer: canvas");
     return true;
   } catch (e) {
+    try { addon?.dispose?.(); } catch {}
     console.log("[Terminal] canvas renderer failed:", (e && e.message) || e);
     return false;
   }
@@ -217,25 +302,102 @@ function attachTerminalRenderer(term) {
   // with getContext('webgl2') — several mobile browsers false-negative that
   // probe for unattached canvases, which was silently dropping us to the slow
   // DOM renderer even though WebGL2 works for the real, attached terminal.
+  let addon = null;
   try {
     const Webgl = resolveTerminalAddon("WebglAddon");
     if (Webgl) {
-      const addon = new Webgl();
+      addon = new Webgl();
       if (typeof addon.onContextLoss === "function") {
         addon.onContextLoss(() => {
-          try { addon.dispose(); } catch (e) {}
-          attachTerminalCanvasRenderer(term);
+          if (terminalRendererAddon !== addon) return;
+          disposeTerminalRendererAddon();
+          if (!attachTerminalCanvasRenderer(term)) rememberTerminalRenderer(null, "dom");
+          term.refresh(0, Math.max(0, term.rows - 1));
         });
       }
       term.loadAddon(addon);
+      rememberTerminalRenderer(addon, "webgl");
       console.log("[Terminal] renderer: webgl");
       return;
     }
     console.log("[Terminal] WebglAddon not loaded");
   } catch (e) {
+    try { addon?.dispose?.(); } catch {}
     console.log("[Terminal] webgl renderer failed:", (e && e.message) || e);
   }
-  if (!attachTerminalCanvasRenderer(term)) console.log("[Terminal] renderer: dom (fallback)");
+  if (!attachTerminalCanvasRenderer(term)) {
+    rememberTerminalRenderer(null, "dom");
+    console.log("[Terminal] renderer: dom (fallback)");
+  }
+}
+
+function resetTerminalRendererForDpr(term, reason) {
+  const previousKind = terminalRendererKind;
+  const previousDpr = terminalRendererDpr;
+  disposeTerminalRendererAddon();
+  attachTerminalRenderer(term);
+  console.log(
+    `[Terminal] renderer scale reset (${reason}): ${previousKind} ${previousDpr} -> ${terminalRendererKind} ${terminalRendererDpr}`,
+  );
+}
+
+function syncTerminalRendererDpr(term) {
+  const dpr = currentTerminalDevicePixelRatio();
+  if (!terminalRendererDpr) {
+    terminalRendererDpr = dpr;
+    return;
+  }
+  if (Math.abs(dpr - terminalRendererDpr) < 0.01) return;
+  if (!terminalPageActive) return;
+  terminalRendererVerifiedDpr = 0;
+  resetTerminalRendererForDpr(term, "devicePixelRatio changed");
+}
+
+function terminalRendererCanvasScaleMismatch() {
+  if (!terminalRendererAddon || !terminalXtermEl) return false;
+  const dpr = currentTerminalDevicePixelRatio();
+  const canvases = terminalXtermEl.querySelectorAll(".xterm-screen canvas");
+  for (const canvas of canvases) {
+    const cssWidth = Number.parseFloat(canvas.style.width) || canvas.getBoundingClientRect().width;
+    if (cssWidth < 1 || canvas.width < 1) continue;
+    const backingStoreRatio = canvas.width / cssWidth;
+    if (Math.abs(backingStoreRatio - dpr) > 0.15) return true;
+  }
+  return false;
+}
+
+function scheduleTerminalRendererScaleCheck() {
+  if (Math.abs(currentTerminalDevicePixelRatio() - terminalRendererVerifiedDpr) < 0.01) return;
+  if (terminalRendererScaleCheckTimer) clearTimeout(terminalRendererScaleCheckTimer);
+  terminalRendererScaleCheckTimer = window.setTimeout(() => {
+    terminalRendererScaleCheckTimer = 0;
+    if (!terminalPageActive || !terminalXtermActive || !terminalXterm || !terminalRendererAddon) return;
+    const dpr = currentTerminalDevicePixelRatio();
+    if (Math.abs(dpr - terminalRendererVerifiedDpr) < 0.01) return;
+    terminalRendererVerifiedDpr = dpr;
+    if (!terminalRendererCanvasScaleMismatch()) return;
+    resetTerminalRendererForDpr(terminalXterm, "canvas backing-store mismatch");
+    scheduleTerminalFit();
+  }, 120);
+}
+
+function bindTerminalDprObserver(onChange) {
+  if (typeof window.matchMedia !== "function") return;
+  if (terminalDprMediaQuery) {
+    if (typeof terminalDprMediaQuery.media.removeEventListener === "function") {
+      terminalDprMediaQuery.media.removeEventListener("change", terminalDprMediaQuery.listener);
+    } else {
+      terminalDprMediaQuery.media.removeListener?.(terminalDprMediaQuery.listener);
+    }
+  }
+  const media = window.matchMedia(`(resolution: ${currentTerminalDevicePixelRatio()}dppx)`);
+  const listener = () => {
+    bindTerminalDprObserver(onChange);
+    onChange();
+  };
+  if (typeof media.addEventListener === "function") media.addEventListener("change", listener);
+  else media.addListener?.(listener);
+  terminalDprMediaQuery = { media, listener };
 }
 
 function ensureTerminalXterm() {
@@ -403,6 +565,7 @@ function terminalGridRows() {
 function fitTerminalXterm() {
   if (!terminalXtermActive || !terminalXterm) return;
   try {
+    syncTerminalRendererDpr(terminalXterm);
     const fs = terminalFontSize();
     if (terminalXterm && terminalXterm.options && terminalXterm.options.fontSize !== fs) {
       terminalXterm.options.fontSize = fs;
@@ -422,6 +585,7 @@ function fitTerminalXterm() {
       pinTerminalCursorToBottom();
       scheduleTerminalOuterVerticalScrollLock();
     }
+    scheduleTerminalRendererScaleCheck();
   } catch (e) {
     /* container not laid out yet */
   }
@@ -730,6 +894,7 @@ function bindTerminalLayoutObservers() {
   };
 
   handleResizeLayout();
+  bindTerminalDprObserver(handleResizeLayout);
   window.addEventListener("resize", handleResizeLayout, { passive: true });
   window.addEventListener("orientationchange", handleResizeLayout, { passive: true });
   window.addEventListener("pageshow", handleResizeLayout, { passive: true });
@@ -892,13 +1057,15 @@ function connectTerminal(force = false) {
 
     if (data.type === "pty_output") {
       const bytes = data.b64 != null ? base64ToBytes(data.b64) : null;
+      const decoded = bytes
+        ? (terminalTextDecoder ? terminalTextDecoder.decode(bytes, { stream: true }) : data.text || "")
+        : (data.text || "");
+      const output = consumeTerminalWebActions(decoded, { dispatch: data.replay !== true });
+      if (data.replay === true) terminalWebActionCarry = "";
       if (terminalXtermActive && terminalXterm) {
-        writeTerminalXterm(bytes || data.text || "", { suppressData: data.replay === true });
+        if (output) writeTerminalXterm(output, { suppressData: data.replay === true });
       } else {
-        const text = bytes
-          ? (terminalTextDecoder ? terminalTextDecoder.decode(bytes) : data.text || "")
-          : (data.text || "");
-        appendTerminalPtyOutput(text);
+        appendTerminalPtyOutput(output);
       }
       if (terminalMetaEl && terminalMetaEl.textContent === getUIText("connecting", "connecting...")) {
         setTerminalMeta(getUIText("connected", "connected"));

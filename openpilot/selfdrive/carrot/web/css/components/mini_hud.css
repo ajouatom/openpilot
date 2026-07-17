@@ -292,26 +292,6 @@
   display: none !important;
 }
 
-/* ── View-test badge (mini_hud_demo.js, ?mhud_test=1 only) ── */
-.carrot-mini-hud .carrot-mini-hud__demo-tag {
-  position: absolute;   /* beats the `.carrot-mini-hud > *` position:relative */
-  top: 3px;
-  left: 3px;
-  z-index: 20;
-  padding: 1px 6px;
-  border-radius: 5px;
-  background: rgba(0, 0, 0, 0.58);
-  color: #8fe3ff;
-  font: 800 10px/1.25 system-ui, -apple-system, "Segoe UI", sans-serif;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.carrot-mini-hud .carrot-mini-hud__demo-tag[hidden] {
-  display: none !important;
-}
-
 /* ── Detail (alert) zone: countdown / distance / type ────────── */
 .carrot-mini-hud__alert {
   grid-column: 2;
@@ -425,20 +405,6 @@
   paint-order: stroke fill;
   text-shadow: 0 calc(2px * var(--mini-ui-scale)) calc(4px * var(--mini-ui-scale)) rgba(0, 0, 0, 0.72);
   white-space: nowrap;
-}
-
-.carrot-mini-hud__drive-mode.is-demo-interactive {
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.carrot-mini-hud__drive-mode.is-demo-interactive:active {
-  transform: translateY(calc(1px * var(--mini-ui-scale)));
-}
-
-.carrot-mini-hud__drive-mode.is-demo-interactive:focus-visible {
-  outline: max(1px, calc(2px * var(--mini-ui-scale))) solid var(--mini-mode-accent);
-  outline-offset: calc(3px * var(--mini-ui-scale));
 }
 
 .carrot-mini-hud__drive-mode[data-mini-hud-drive-kind="eco"] {

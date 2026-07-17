@@ -57,6 +57,15 @@
       hud: "idle",
       overlay: "idle",
     },
+    environment: {
+      disableDm: null,
+      clusterHud: null,
+      isOffroad: null,
+      isOnroad: null,
+      testActive: false,
+      testStatus: "stopped",
+      testError: "",
+    },
   };
 
   function isCarrotVisionActive() {
@@ -78,6 +87,16 @@
   }
 
   function getCarrotVisionPhaseStatusText(phase) {
+    const environment = CARROT_VISION_STATE.environment || {};
+    if (environment.testStatus === "error" && environment.testError) {
+      return getUIText("vision_test_failed_title", "Camera check stopped");
+    }
+    if (CARROT_VISION_STATE.active && environment.isOffroad === true && !environment.testActive) {
+      if (environment.testStatus === "starting") {
+        return getUIText("vision_test_starting_title", "Preparing camera check");
+      }
+      return getUIText("vision_parked_title", "Vehicle is parked");
+    }
     switch (phase) {
       case CARROT_VISION_PHASE.UNAVAILABLE:
         return CARROT_VISION_STATE.disabledMessage || getUIText("vision_unavailable_hint", "Available when DisableDM is 2.");
@@ -102,6 +121,16 @@
   }
 
   function getCarrotVisionPhaseDetailText(phase) {
+    const environment = CARROT_VISION_STATE.environment || {};
+    if (environment.testStatus === "error" && environment.testError) {
+      return getUIText("vision_test_failed_detail", "Check the camera test log and try again.");
+    }
+    if (CARROT_VISION_STATE.active && environment.isOffroad === true && !environment.testActive) {
+      if (environment.testStatus === "starting") {
+        return getUIText("vision_step_starting", "Preparing the device camera.");
+      }
+      return getUIText("vision_parked_detail", "The camera will connect automatically when driving starts.");
+    }
     switch (phase) {
       case CARROT_VISION_PHASE.UNAVAILABLE:
         return getUIText("vision_step_unavailable", "Enable DisableDM 2 to use Carrot Vision.");
@@ -141,6 +170,7 @@
     const next = { ...patch };
     if (next.rtc == null) delete next.rtc;
     if (next.raw == null) delete next.raw;
+    if (next.environment == null) delete next.environment;
     if (next.rtc && typeof next.rtc === "object") {
       Object.assign(CARROT_VISION_STATE.rtc, next.rtc);
       delete next.rtc;
@@ -148,6 +178,10 @@
     if (next.raw && typeof next.raw === "object") {
       Object.assign(CARROT_VISION_STATE.raw, next.raw);
       delete next.raw;
+    }
+    if (next.environment && typeof next.environment === "object") {
+      Object.assign(CARROT_VISION_STATE.environment, next.environment);
+      delete next.environment;
     }
     Object.assign(CARROT_VISION_STATE, next);
     CARROT_VISION_STATE.active = Boolean(CARROT_VISION_STATE.active);
@@ -257,9 +291,12 @@
 
   function relocalizeCarrotVisionState() {
     const phase = CARROT_VISION_STATE.phase || CARROT_VISION_PHASE.UNAVAILABLE;
+    const clusterHudActive = Number(CARROT_VISION_STATE.environment?.clusterHud || 0) > 0;
     const disabledMessage = CARROT_VISION_STATE.available
       ? ""
-      : getUIText("vision_unavailable_hint", "Available when DisableDM is 2.");
+      : (clusterHudActive
+        ? getUIText("vision_unavailable_cluster_hud", "Carrot Vision is unavailable while Cluster HUD is enabled.")
+        : getUIText("vision_unavailable_hint", "Available when DisableDM is 2."));
     if (disabledMessage) CARROT_VISION_STATE.disabledMessage = disabledMessage;
     setCarrotVisionState({
       statusText: getCarrotVisionPhaseStatusText(phase),

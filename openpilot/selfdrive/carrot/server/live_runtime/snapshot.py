@@ -82,9 +82,9 @@ def build_live_payload(
   service_alive = _ensure_dict(runtime, "serviceAlive")
   _update_alive_map(sm, service_alive)
   core_alive = _ensure_dict(runtime, "coreServicesAlive")
-  _update_alive_subset(service_alive, common_services(), core_alive)
+  _update_alive_subset(service_alive, tuple(name for name in common_services() if name in service_alive), core_alive)
   optional_alive = _ensure_dict(runtime, "optionalServicesAlive")
-  _update_alive_subset(service_alive, optional_services(), optional_alive)
+  _update_alive_subset(service_alive, tuple(name for name in optional_services() if name in service_alive), optional_alive)
   runtime["activeCoreServices"] = sum(1 for alive in core_alive.values() if alive)
   runtime["activeOptionalServices"] = sum(1 for alive in optional_alive.values() if alive)
   _refill_missing(service_alive, _ensure_list(runtime, "missingServices"))
@@ -92,11 +92,11 @@ def build_live_payload(
   _refill_missing(optional_alive, _ensure_list(runtime, "missingOptionalServices"))
   runtime["snapshotFresh"] = len(runtime["missingCoreServices"]) == 0
 
-  service_names = []
-  for name in list(common_services()) + list(optional_services()):
-    if name in service_names:
-      continue
-    service_names.append(name)
+  try:
+    service_names = list(sm.data.keys())
+  except Exception:
+    service_names = []
+  for name in service_names:
     services_payload[name] = _build_service_payload(sm, name, previous=services_payload.get(name))
   for stale_name in list(services_payload.keys()):
     if stale_name not in service_names:
@@ -163,7 +163,6 @@ def _service(sm: Any, name: str) -> Any:
 _LIVE_PUSH_ONLY_SERVICES = frozenset({
   "modelV2",
   "liveCalibration",
-  "roadCameraState",
   "wideRoadCameraState",
 })
 
@@ -411,6 +410,10 @@ def _build_camera_state(service: Any, previous: dict[str, Any] | None = None) ->
 
 def _build_device_state(service: Any, previous: dict[str, Any] | None = None) -> dict[str, Any]:
   p = previous if isinstance(previous, dict) else {}
+  device_type = safe_get(service, "deviceType")
+  # Native onroad selects camera intrinsics from (deviceType, sensor). Keep the
+  # enum name so the web renderer can use the same rule across device families.
+  p["deviceType"] = str(device_type) if device_type is not None else ""
   p["started"] = safe_bool(safe_get(service, "started"))
   p["freeSpacePercent"] = safe_float(safe_get(service, "freeSpacePercent"))
   p["memoryUsagePercent"] = safe_float(safe_get(service, "memoryUsagePercent"))

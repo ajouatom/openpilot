@@ -55,6 +55,36 @@ async def ws_raw_multiplex(request: web.Request) -> web.WebSocketResponse:
   return ws
 
 
+async def ws_compact_state(request: web.Request) -> web.WebSocketResponse:
+  hub: RawWsHub | None = request.app.get("realtime_raw_hub")
+  if hub is None:
+    raise web.HTTPServiceUnavailable(text="realtime state hub unavailable")
+
+  services_param = request.query.get("services", "")
+  services = [service.strip() for service in services_param.split(",") if service.strip()]
+  if not services:
+    raise web.HTTPBadRequest(text="missing compact state services")
+  invalid = [service for service in services if not hub.is_compact_service(service)]
+  if invalid:
+    raise web.HTTPNotFound(text=f"unknown compact state services: {','.join(invalid)}")
+
+  ws = web.WebSocketResponse(heartbeat=20, max_msg_size=1024 * 1024, compress=False)
+  await ws.prepare(request)
+  await ws.send_str(json.dumps({
+    "mode": "carrot-state-v1",
+    "services": list(dict.fromkeys(services)),
+  }, separators=(",", ":")))
+  await hub.register_compact_many(services, ws)
+  try:
+    async for msg in ws:
+      if msg.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.ERROR):
+        break
+  finally:
+    await hub.unregister_client(ws)
+
+  return ws
+
+
 async def ws_camera(request: web.Request) -> web.WebSocketResponse:
   hub: CameraWsHub | None = request.app.get("realtime_camera_hub")
   if hub is None:
@@ -63,6 +93,7 @@ async def ws_camera(request: web.Request) -> web.WebSocketResponse:
 
 
 def register(app: web.Application) -> None:
+  app.router.add_get("/ws/compact_state", ws_compact_state)
   app.router.add_get("/ws/raw_multiplex", ws_raw_multiplex)
   app.router.add_get("/ws/raw/{service}", ws_raw)
   app.router.add_get("/ws/camera/{camera}", ws_camera)

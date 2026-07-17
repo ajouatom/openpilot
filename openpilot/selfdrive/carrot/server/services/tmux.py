@@ -7,6 +7,7 @@ import time
 from typing import List
 
 from ..config import TMUX_CAPTURE_LINES, TMUX_START_DIR, TMUX_WEB_SESSION
+from ..terminal_commands import shell_function_definition
 
 
 def run(args: List[str], timeout: float = 5.0, check: bool = False) -> subprocess.CompletedProcess:
@@ -40,7 +41,8 @@ def bootstrap_shell() -> str:
   #   2) start in /data/openpilot (where openpilot work happens),
   #   3) exec the real interactive login shell.
   motd = "( run-parts /etc/update-motd.d 2>/dev/null || cat /run/motd.dynamic 2>/dev/null )"
-  return f"{motd}; cd {shlex.quote(TMUX_START_DIR)} 2>/dev/null; exec bash -il"
+  carrot_command = shell_function_definition()
+  return f"{motd}; cd {shlex.quote(TMUX_START_DIR)} 2>/dev/null; {carrot_command}; exec bash -il"
 
 
 def start_command() -> str:

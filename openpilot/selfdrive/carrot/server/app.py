@@ -24,7 +24,7 @@ from .live_runtime.broker import RealtimeBroker
 from .services.auto_update import auto_update_loop
 from .services.git_status import git_status_loop
 from .services.heartbeat import heartbeat_loop
-from .services.params import HAS_PARAMS
+from .services.params import HAS_PARAMS, Params
 from .services.popular_values import start_popular_value_upload
 
 VISION_DIAG_UPLOAD_MAX_BYTES = 16 * 1024 * 1024
@@ -57,20 +57,38 @@ def _do_gc_and_trim() -> None:
     pass
 
 
-async def _malloc_trim_loop():
+async def _malloc_trim_loop(app: web.Application):
   """Periodic gc + malloc_trim to reclaim leaked objects and return C heap.
   Runs via to_thread so the event loop is never blocked."""
   while True:
     await asyncio.sleep(30.0)
+    raw_hub = app.get("realtime_raw_hub")
+    if raw_hub is not None and raw_hub.client_count() > 0:
+      continue
+    params = app.get("params")
+    try:
+      if params is not None and params.get_bool("CarrotVisionActive"):
+        continue
+    except Exception:
+      pass
     await asyncio.to_thread(_do_gc_and_trim)
 
 
 async def on_startup(app: web.Application) -> None:
   app["http"] = ClientSession()
+  app["params"] = Params() if HAS_PARAMS and Params is not None else None
   app["hb_last"] = {"ok": None, "msg": "not yet", "ts": 0}
-  # Eager broker creation ??single SubMaster via RealtimeBroker
+  # Keep only route metadata plus the server-side engagement safety signal
+  # outside the compact HUD/overlay relay.
   try:
-    broker = RealtimeBroker(repo_flavor="c3")
+    broker = RealtimeBroker(
+      repo_flavor="c3",
+      include_optional=("navInstructionCarrot", "navRoute"),
+      exclude_services=(
+        "carState", "controlsState", "longitudinalPlan",
+        "liveCalibration", "modelV2", "roadCameraState", "deviceState",
+      ),
+    )
     app["realtime_broker"] = broker
     app["realtime_broker_error"] = None
   except Exception as exc:
@@ -87,10 +105,20 @@ async def on_startup(app: web.Application) -> None:
   app["git_status_task"] = asyncio.create_task(git_status_loop())
   app["auto_update_task"] = asyncio.create_task(auto_update_loop())
   app["popular_value_upload_task"] = start_popular_value_upload(app)
-  asyncio.create_task(_malloc_trim_loop())
+  app["malloc_trim_task"] = asyncio.create_task(_malloc_trim_loop(app))
 
 
 async def on_cleanup(app: web.Application) -> None:
+  malloc_trim_task = app.get("malloc_trim_task")
+  if malloc_trim_task:
+    malloc_trim_task.cancel()
+    try:
+      await malloc_trim_task
+    except asyncio.CancelledError:
+      pass
+    except Exception:
+      pass
+
   realtime_camera_hub = app.get("realtime_camera_hub")
   if realtime_camera_hub is not None:
     try:
