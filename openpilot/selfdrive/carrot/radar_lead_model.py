@@ -484,7 +484,8 @@ class RadarLeadDecisionFilter:
       fused_inward_cutin = (
         obj.front_track_id is not None and obj.corner_track_id is not None
         and prediction.features.track_age >= 7
-        and 2.5 < obj.d_rel < 20.0 and obj.v_lead > 2.0
+        and 2.5 < obj.d_rel < 50.0 and obj.v_lead > 2.0
+        and (obj.d_rel < 20.0 or abs(obj.y_rel) < 3.2)
         and (1.2 if close_fused_cutin else 1.8) < current_d_path < (4.2 if close_fused_cutin else 3.2)
         and sustained_inward
         and future_d_path < (2.25 if close_fused_cutin else midrange_future_limit)
@@ -527,8 +528,12 @@ class RadarLeadDecisionFilter:
       # be reassociated. Never expose a newly associated low-probability point as
       # a cut-in solely because the previous object was active.
       same_cutin_sensor = bool(state.cutin_aliases.intersection(prediction.features.aliases))
+      sticky_distance_sane = obj.d_rel < 20.0 or (
+        obj.front_track_id is not None and obj.corner_track_id is not None
+        and obj.d_rel < 50.0 and abs(obj.y_rel) < 3.2
+      )
       sticky_cutin_geometry = (
-        same_cutin_sensor and obj.d_rel < 20.0 and current_d_path < 2.5
+        same_cutin_sensor and sticky_distance_sane and current_d_path < 2.5
         and future_d_path <= current_d_path + 0.30
       )
       cutin_is_active = time_s <= state.cutin_active_until and (

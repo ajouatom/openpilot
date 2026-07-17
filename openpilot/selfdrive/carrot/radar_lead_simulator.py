@@ -1523,16 +1523,16 @@ class MultitaskLeadSelector:
         ), None)
       lead_two_prediction = next((
         prediction for prediction in decision.cutin_candidates
-        if VisionModelRadarController._external_control_usable(prediction)
+        if not matches_primary(prediction)
+        and VisionModelRadarController._external_control_usable(prediction)
       ), None)
       lead_two_reason = "MLP active cutin"
       lead_two_probability = lead_two_prediction.cutin_prob if lead_two_prediction is not None else 0.0
-      if lead_two_prediction is not None and matches_primary(lead_two_prediction):
-        lead_two_reason = "MLP duplicate primary"
       if lead_two_prediction is None:
         lead_two_prediction = next((
           prediction for prediction in decision.external_candidates
-          if VisionModelRadarController._external_control_usable(prediction)
+          if not matches_primary(prediction)
+          and VisionModelRadarController._external_control_usable(prediction)
         ), None)
         lead_two_reason = "MLP active external"
         lead_two_probability = lead_two_prediction.external_prob if lead_two_prediction is not None else 0.0

@@ -389,13 +389,19 @@ class VisionModelRadarController:
         held_lead = self._lead_from_prediction(held_primary, held_primary.lead_prob, v_ego, prefer_front=True)
         if held_lead is not None:
           primary_hold_pair = (held_primary, held_lead)
-    # Keep a duplicate primary object in leadTwo for control, but do not report
-    # an already-established primary lead as a new cut-in event.
+    # Do not let the same physical object compete with itself as both MPC lead0
+    # and lead1. It is still reported as a cut-in before it becomes primary.
     cutin_leads = tuple(lead for prediction, lead in cutin_pairs if lead is not None and not matches_primary(prediction))
     external_leads = tuple(lead for _, lead in external_pairs if lead is not None)
-    lead_two = next((lead for _, lead in cutin_pairs if lead is not None), None)
+    lead_two = next((
+      lead for prediction, lead in cutin_pairs
+      if lead is not None and not matches_primary(prediction)
+    ), None)
     if lead_two is None:
-      lead_two = external_leads[0] if external_leads else None
+      lead_two = next((
+        lead for prediction, lead in external_pairs
+        if lead is not None and not matches_primary(prediction)
+      ), None)
     if lead_two is None and primary_hold_pair is not None:
       lead_two = primary_hold_pair[1]
     if lead_two is None:
