@@ -646,6 +646,49 @@ def test_native_h264_direct_input_lease_submits_or_cancels():
   assert pipeline._native_frame_index == 1
 
 
+def test_native_h264_direct_input_lease_exposes_dmabuf_fd():
+  pipeline = _new_h264_pipeline()
+  calls = []
+
+  def acquire_dmabuf(_handle, address_out, size_out, index_out, fd_out, _callback, _opaque):
+    ctypes.cast(address_out, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(0x56780000)
+    ctypes.cast(size_out, ctypes.POINTER(ctypes.c_size_t))[0] = 16384
+    ctypes.cast(index_out, ctypes.POINTER(ctypes.c_uint32))[0] = 5
+    ctypes.cast(fd_out, ctypes.POINTER(ctypes.c_int))[0] = 42
+    calls.append("acquire_dmabuf")
+    return 0
+
+  def cancel(_handle, index):
+    calls.append(("cancel", index))
+    return 0
+
+  def submit_dmabuf(_handle, index, timestamp_us, _callback, _opaque):
+    calls.append(("submit_dmabuf", index, timestamp_us))
+    return 0
+
+  pipeline._native_lib = types.SimpleNamespace(
+    cluster_h264_encoder_bridge_acquire_nv12_input_dmabuf=acquire_dmabuf,
+    cluster_h264_encoder_bridge_submit_nv12_input_dmabuf=submit_dmabuf,
+    cluster_h264_encoder_bridge_cancel_nv12_input=cancel,
+  )
+  pipeline._native_handle = 1
+  pipeline._native_callback = object()
+  pipeline._native_has_direct_input = True
+  pipeline._native_has_dmabuf_input = True
+  pipeline._native_input_bytesused = 16384
+
+  with pipeline.native_nv12_input_buffer() as input_buffer:
+    assert (
+      input_buffer.address,
+      input_buffer.size,
+      input_buffer.index,
+      input_buffer.dmabuf_fd,
+    ) == (0x56780000, 16384, 5, 42)
+    pipeline.submit_native_nv12_dmabuf_input(input_buffer)
+
+  assert calls == ["acquire_dmabuf", ("submit_dmabuf", 5, 0)]
+
+
 def test_gles_direct_readback_restores_gl_state():
   calls = []
   errors = iter((0, 0))

@@ -17,6 +17,7 @@ import pyray as rl
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
 
+from cluster_gles_dmabuf import DirectNv12DmabufError, create_tici_nv12_dmabuf_pool
 from cluster_gles_readback import DirectNv12ReadbackError, create_tici_direct_readback
 from cluster_config import (
     AMBER,
@@ -817,6 +818,9 @@ class ClusterUiRenderer:
         self._direct_nv12_readback = None
         self._direct_nv12_readback_checked = False
         self._direct_nv12_readback_disabled = False
+        self._nv12_dmabuf_pool = None
+        self._nv12_dmabuf_pool_checked = False
+        self._nv12_dmabuf_pool_disabled = False
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
         self._scene_cache_key: tuple[object, ...] | None = None
@@ -909,6 +913,17 @@ class ClusterUiRenderer:
                 self._direct_nv12_readback_disabled = True
         return self._direct_nv12_readback is not None
 
+    def nv12_dmabuf_output_available(self) -> bool:
+        if self._nv12_dmabuf_pool_disabled:
+            return False
+        if not self._nv12_dmabuf_pool_checked:
+            self._nv12_dmabuf_pool_checked = True
+            try:
+                self._nv12_dmabuf_pool = create_tici_nv12_dmabuf_pool()
+            except DirectNv12DmabufError:
+                self._nv12_dmabuf_pool_disabled = True
+        return self._nv12_dmabuf_pool is not None
+
     def async_nv12_readback_available(self) -> bool:
         if not self.direct_nv12_readback_available():
             return False
@@ -940,6 +955,16 @@ class ClusterUiRenderer:
             self._direct_nv12_readback.close()
         self._direct_nv12_readback = None
         self._direct_nv12_readback_disabled = True
+
+    def disable_nv12_dmabuf_output(self) -> None:
+        self.release_nv12_dmabuf_output()
+        self._nv12_dmabuf_pool_disabled = True
+
+    def release_nv12_dmabuf_output(self) -> None:
+        if self._nv12_dmabuf_pool is not None:
+            self._nv12_dmabuf_pool.close()
+        self._nv12_dmabuf_pool = None
+        self._nv12_dmabuf_pool_checked = False
 
     def profile_samples(self) -> list[tuple[str, float]]:
         return self._profile_samples
@@ -997,6 +1022,7 @@ class ClusterUiRenderer:
             self._direct_nv12_readback.close()
             self._direct_nv12_readback = None
             self._direct_nv12_readback_checked = False
+        self.release_nv12_dmabuf_output()
         if self._capture_target is not None:
             rl.unload_render_texture(self._capture_target)
             self._capture_target = None
@@ -1781,6 +1807,7 @@ class ClusterUiRenderer:
         destination_address: int | None = None,
         destination_size: int = 0,
         async_readback: bool = False,
+        destination_dmabuf_fd: int | None = None,
     ) -> Iterator[object]:
         self.open(hidden=self.hidden)
         output_width = int(output_width)
@@ -1839,10 +1866,12 @@ class ClusterUiRenderer:
         self._profile_add("render_to_nv12.gpu_upload_transform", profile_stage)
 
         pack_direct_input = stride % 4 == 0 and byte_count % stride == 0 and uv_offset % stride == 0
-        if (destination_address is not None or async_readback) and not pack_direct_input:
+        if (destination_address is not None or async_readback or destination_dmabuf_fd is not None) and not pack_direct_input:
             raise DirectNv12ReadbackError("direct NV12 readback requires a four-byte packed Venus layout")
         if destination_address is not None and async_readback:
             raise DirectNv12ReadbackError("asynchronous NV12 readback cannot use a direct destination")
+        if destination_dmabuf_fd is not None and (destination_address is not None or async_readback):
+            raise DirectNv12DmabufError("encoder DMA-BUF output cannot use a readback destination")
         if pack_direct_input:
             full_pack_w = stride // 4
             full_pack_h = byte_count // stride
@@ -1851,7 +1880,13 @@ class ClusterUiRenderer:
             y_pack_y = tail_pack_h + uv_scanlines
 
             profile_stage = self._profile_start()
-            full_target = self._get_nv12_pack_target("full", full_pack_w, full_pack_h)
+            if destination_dmabuf_fd is None:
+                full_target = self._get_nv12_pack_target("full", full_pack_w, full_pack_h)
+            else:
+                dmabuf_pool = self._nv12_dmabuf_pool
+                if dmabuf_pool is None:
+                    raise DirectNv12DmabufError("encoder DMA-BUF render targets are unavailable")
+                full_target = dmabuf_pool.target_for(destination_dmabuf_fd, stride, byte_count)
             self._profile_add("render_to_nv12.get_pack_targets", profile_stage)
 
             profile_stage = self._profile_start()
@@ -1884,6 +1919,13 @@ class ClusterUiRenderer:
                 clear_target=False,
             )
             self._profile_add("render_to_nv12.pack_uv_shader", profile_stage)
+
+            if destination_dmabuf_fd is not None:
+                profile_stage = self._profile_start()
+                dmabuf_pool.wait_for_gpu()
+                self._profile_add("render_to_nv12.dmabuf_fence_wait", profile_stage)
+                yield destination_dmabuf_fd
+                return
 
             if async_readback:
                 readback = self._direct_nv12_readback

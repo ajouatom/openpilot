@@ -64,6 +64,7 @@ struct ClusterH264InputBuffer {
   uint8_t *data = nullptr;
   size_t size = 0;
   unsigned int index = 0;
+  int dmabuf_fd = -1;
 };
 
 class ClusterH264Encoder {
@@ -84,6 +85,7 @@ public:
   void encode_nv12_active(const uint8_t *nv12, size_t nv12_size, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet);
   ClusterH264InputBuffer acquire_nv12_input(const ClusterH264PacketCallback &on_packet);
   void submit_nv12_input(unsigned int index, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet);
+  void submit_nv12_input_dmabuf(unsigned int index, uint64_t timestamp_us, const ClusterH264PacketCallback &on_packet);
   void cancel_nv12_input(unsigned int index);
   std::vector<ClusterH264Packet> drain(int timeout_ms = 0);
   void drain(int timeout_ms, const ClusterH264PacketCallback &on_packet);
@@ -128,6 +130,8 @@ private:
                     InputCopyFn copy_input, const char *input_name);
   void copy_nv12_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const;
   void copy_nv12_active_to_input(const uint8_t *nv12, size_t nv12_size, VisionBuf *dst) const;
+  void submit_nv12_input_with_sync(unsigned int index, uint64_t timestamp_us,
+                                   const ClusterH264PacketCallback &on_packet, bool dmabuf_written);
   void validate_config() const;
 
   ClusterH264EncoderConfig config_;

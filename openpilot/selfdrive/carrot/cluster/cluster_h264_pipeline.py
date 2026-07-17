@@ -86,6 +86,7 @@ class NativeNv12InputBuffer:
     size: int
     index: int
     owner_id: int
+    dmabuf_fd: int = -1
     active: bool = True
 
 
@@ -803,6 +804,7 @@ class H264UsbPipeline:
         self._native_input_active_bytes = 0
         self._native_has_active_nv12 = False
         self._native_has_direct_input = False
+        self._native_has_dmabuf_input = False
         self._packet_queue: queue.Queue[Any] | None = None
         self._packet_queue_lock = threading.Lock()
         self._condition = threading.Condition()
@@ -1165,6 +1167,9 @@ class H264UsbPipeline:
     def native_direct_input_available(self) -> bool:
         return self._native_handle is not None and self._native_has_direct_input
 
+    def native_dmabuf_input_available(self) -> bool:
+        return self.native_direct_input_available() and self._native_has_dmabuf_input
+
     @contextmanager
     def native_nv12_input_buffer(self) -> Iterator[NativeNv12InputBuffer]:
         lib = self._native_lib
@@ -1176,14 +1181,27 @@ class H264UsbPipeline:
         address = ctypes.c_void_p()
         size = ctypes.c_size_t()
         index = ctypes.c_uint32()
-        result = lib.cluster_h264_encoder_bridge_acquire_nv12_input(
-            handle,
-            ctypes.byref(address),
-            ctypes.byref(size),
-            ctypes.byref(index),
-            callback,
-            None,
-        )
+        dmabuf_fd = ctypes.c_int(-1)
+        acquire_dmabuf = getattr(lib, "cluster_h264_encoder_bridge_acquire_nv12_input_dmabuf", None)
+        if acquire_dmabuf is None:
+            result = lib.cluster_h264_encoder_bridge_acquire_nv12_input(
+                handle,
+                ctypes.byref(address),
+                ctypes.byref(size),
+                ctypes.byref(index),
+                callback,
+                None,
+            )
+        else:
+            result = acquire_dmabuf(
+                handle,
+                ctypes.byref(address),
+                ctypes.byref(size),
+                ctypes.byref(index),
+                ctypes.byref(dmabuf_fd),
+                callback,
+                None,
+            )
         if result != 0:
             raise RuntimeError(self._native_error_text("native H264 input buffer acquire failed"))
         if not address.value or size.value < self._native_input_bytesused:
@@ -1195,6 +1213,7 @@ class H264UsbPipeline:
             size=int(size.value),
             index=int(index.value),
             owner_id=id(self),
+            dmabuf_fd=int(dmabuf_fd.value),
         )
         try:
             yield input_buffer
@@ -1227,6 +1246,32 @@ class H264UsbPipeline:
         self._native_frame_index += 1
         self._add_native_timing_samples(lib, handle)
         self._add_sample("usb_h264.native_submit_direct", profile_stage)
+        self.check_error()
+
+    def submit_native_nv12_dmabuf_input(self, input_buffer: NativeNv12InputBuffer) -> None:
+        lib = self._native_lib
+        handle = self._native_handle
+        callback = self._native_callback
+        if lib is None or handle is None or callback is None or not self.native_dmabuf_input_available():
+            raise RuntimeError("native H264 DMA-BUF input API is not available")
+        if input_buffer.owner_id != id(self) or not input_buffer.active or input_buffer.dmabuf_fd < 0:
+            raise RuntimeError("native H264 DMA-BUF input lease is not active")
+
+        profile_stage = time.perf_counter()
+        timestamp_us = self._native_frame_index * 1000000 // self.fps
+        result = lib.cluster_h264_encoder_bridge_submit_nv12_input_dmabuf(
+            handle,
+            input_buffer.index,
+            timestamp_us,
+            callback,
+            None,
+        )
+        if result != 0:
+            raise RuntimeError(self._native_error_text("native H264 DMA-BUF input submit failed"))
+        input_buffer.active = False
+        self._native_frame_index += 1
+        self._add_native_timing_samples(lib, handle)
+        self._add_sample("usb_h264.native_submit_dmabuf", profile_stage)
         self.check_error()
 
     def _encoder_rgba(self, rgba: Any, width: int, height: int) -> Any:
@@ -1803,6 +1848,31 @@ class H264UsbPipeline:
             cancel_nv12_input.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
             cancel_nv12_input.restype = ctypes.c_int
             self._native_has_direct_input = True
+        try:
+            acquire_nv12_input_dmabuf = lib.cluster_h264_encoder_bridge_acquire_nv12_input_dmabuf
+            submit_nv12_input_dmabuf = lib.cluster_h264_encoder_bridge_submit_nv12_input_dmabuf
+        except AttributeError:
+            self._native_has_dmabuf_input = False
+        else:
+            acquire_nv12_input_dmabuf.argtypes = [
+                ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_void_p),
+                ctypes.POINTER(ctypes.c_size_t),
+                ctypes.POINTER(ctypes.c_uint32),
+                ctypes.POINTER(ctypes.c_int),
+                NativePacketCallback,
+                ctypes.c_void_p,
+            ]
+            acquire_nv12_input_dmabuf.restype = ctypes.c_int
+            submit_nv12_input_dmabuf.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_uint32,
+                ctypes.c_uint64,
+                NativePacketCallback,
+                ctypes.c_void_p,
+            ]
+            submit_nv12_input_dmabuf.restype = ctypes.c_int
+            self._native_has_dmabuf_input = True
         lib.cluster_h264_encoder_bridge_drain.argtypes = [
             ctypes.c_void_p,
             ctypes.c_int,

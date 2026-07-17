@@ -52,6 +52,7 @@ from cluster_config import (
 )
 from cluster_gamepad import DualSenseSimulator
 from cluster_git_status import GitBranchStatusProvider
+from cluster_gles_dmabuf import DirectNv12DmabufError
 from cluster_gles_readback import DirectNv12ReadbackError
 from cluster_h264_pipeline import (
     DEFAULT_H264_DEVICE,
@@ -872,6 +873,7 @@ def run_demo(
     h264_render_nv12_layout: tuple[int, int, int, int, int, int, bool] | None = None
     h264_direct_nv12_input = False
     h264_async_nv12_input = False
+    h264_dmabuf_nv12_input = False
 
     def switch_route_source(
         new_path: Path,
@@ -973,6 +975,10 @@ def run_demo(
                     h264_pipeline.native_direct_input_available()
                     and renderer.direct_nv12_readback_available()
                 )
+                h264_dmabuf_nv12_input = (
+                    h264_pipeline.native_dmabuf_input_available()
+                    and renderer.nv12_dmabuf_output_available()
+                )
                 h264_async_nv12_input = (
                     h264_direct_nv12_input
                     and renderer.async_nv12_readback_available()
@@ -983,6 +989,7 @@ def run_demo(
                     f"stride={stride} scanlines={y_scanlines}/{uv_scanlines} "
                     f"uv_offset={uv_offset} bytes={input_bytes} render_bytes={render_bytes} "
                     f"active_submit={'on' if active_submit else 'off'} "
+                    f"dmabuf_output={'on' if h264_dmabuf_nv12_input else 'off'} "
                     f"direct_ion={'on' if h264_direct_nv12_input else 'off'} "
                     f"async_pbo={'on' if h264_async_nv12_input else 'off'} flip_x=on",
                     flush=True,
@@ -1514,7 +1521,45 @@ def run_demo(
                                 raise RuntimeError("H264 GPU NV12 render path is missing the native layout")
                             stride, y_scanlines, uv_scanlines, uv_offset, input_bytes, render_bytes, _ = h264_render_nv12_layout
                             native_frame_handled = False
-                            if h264_async_nv12_input:
+                            if h264_dmabuf_nv12_input:
+                                try:
+                                    profile_stage = time.perf_counter()
+                                    with h264_pipeline.native_nv12_input_buffer() as direct_input:
+                                        profile.add_elapsed("main.usb_h264.acquire_dmabuf", profile_stage)
+                                        if direct_input.dmabuf_fd < 0:
+                                            raise DirectNv12DmabufError(
+                                                "native H264 input lease did not expose a DMA-BUF fd"
+                                            )
+
+                                        profile_stage = time.perf_counter()
+                                        with renderer.render_to_nv12_buffer(
+                                            state,
+                                            h264_pipeline.encoder_width,
+                                            h264_pipeline.encoder_height,
+                                            stride,
+                                            y_scanlines,
+                                            uv_scanlines,
+                                            uv_offset,
+                                            render_bytes,
+                                            flip_x=not bool(active_hud_mirror_mode & 1),
+                                            destination_dmabuf_fd=direct_input.dmabuf_fd,
+                                        ):
+                                            pass
+                                        profile.add_elapsed("main.usb.render_nv12_dmabuf_total", profile_stage)
+
+                                        profile_stage = time.perf_counter()
+                                        h264_pipeline.submit_native_nv12_dmabuf_input(direct_input)
+                                        profile.add_elapsed("main.usb_h264.submit_dmabuf", profile_stage)
+                                    native_frame_handled = True
+                                except DirectNv12DmabufError as exc:
+                                    h264_dmabuf_nv12_input = False
+                                    renderer.disable_nv12_dmabuf_output()
+                                    print(
+                                        f"H264 DMA-BUF output unavailable; using asynchronous PBO readback: {exc}",
+                                        flush=True,
+                                    )
+
+                            if not native_frame_handled and h264_async_nv12_input:
                                 try:
                                     if renderer.async_nv12_readback_ready():
                                         profile_stage = time.perf_counter()
@@ -1722,6 +1767,7 @@ def run_demo(
         network_address_provider.close()
         if cluster_core_usage_sampler is not None:
             cluster_core_usage_sampler.close()
+        renderer.release_nv12_dmabuf_output()
         if h264_pipeline is not None:
             h264_pipeline.close()
         if usb_pipeline is not None:
