@@ -863,6 +863,11 @@ class ClusterUiRenderer:
             PendingStrokedTextTexture,
         ] = OrderedDict()
         self._stroked_text_texture_cache_enabled = os.environ.get("CLUSTER_STROKED_TEXT_TEXTURE_CACHE", "1") != "0"
+        self._raw_draw_text_ex = getattr(getattr(rl, "rl", None), "DrawTextEx", None)
+        self._raw_stroked_text_enabled = (
+            os.environ.get("CLUSTER_RAW_STROKED_TEXT", "1") != "0"
+            and self._raw_draw_text_ex is not None
+        )
         self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
         self._debug_plot_mode_prev = -1
@@ -6361,6 +6366,17 @@ class ClusterUiRenderer:
             if cached_text is not None:
                 self._draw_cached_text_texture(cached_text, x, y, anchor)
                 return
+        if stroke_width > 0 and self._draw_stroked_text_raw(
+            text,
+            x,
+            y,
+            size,
+            color,
+            stroke_color,
+            stroke_width,
+            anchor,
+        ):
+            return
         if stroke_width > 0:
             for dx, dy in (
                 (-stroke_width, 0),
@@ -6374,6 +6390,56 @@ class ClusterUiRenderer:
             ):
                 self._draw_text(text, x + dx, y + dy, size, stroke_color, anchor)
         self._draw_text(text, x, y, size, color, anchor)
+
+    def _draw_stroked_text_raw(
+        self,
+        text: str,
+        x: float,
+        y: float,
+        size: float,
+        color: tuple[int, int, int],
+        stroke_color: tuple[int, int, int],
+        stroke_width: int,
+        anchor: str,
+    ) -> bool:
+        draw_text_ex = getattr(self, "_raw_draw_text_ex", None)
+        if not getattr(self, "_raw_stroked_text_enabled", False) or draw_text_ex is None:
+            return False
+
+        font = self._font_for_text(text)
+        spacing = max(1.0, size * 0.02)
+        text_width, text_height = self._measure_text(text, size, spacing, font)
+        encoded_text = text.encode("utf-8")
+        position = rl.Vector2(0.0, 0.0)
+        fill = rl_color(color)
+        stroke = rl_color(stroke_color)
+
+        def draw_at(draw_x: float, draw_y: float, draw_color: rl.Color) -> None:
+            if anchor == "center":
+                draw_x -= text_width * 0.5
+                draw_y -= text_height * 0.5
+            elif anchor == "left":
+                draw_y -= text_height * 0.5
+            elif anchor == "right":
+                draw_x -= text_width
+                draw_y -= text_height * 0.5
+            position.x = draw_x
+            position.y = draw_y
+            draw_text_ex(font, encoded_text, position, size, spacing, draw_color)
+
+        for dx, dy in (
+            (-stroke_width, 0),
+            (stroke_width, 0),
+            (0, -stroke_width),
+            (0, stroke_width),
+            (-stroke_width, -stroke_width),
+            (stroke_width, -stroke_width),
+            (-stroke_width, stroke_width),
+            (stroke_width, stroke_width),
+        ):
+            draw_at(x + dx, y + dy, stroke)
+        draw_at(x, y, fill)
+        return True
 
     def _draw_cached_text_texture(
         self,

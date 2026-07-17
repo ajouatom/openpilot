@@ -515,7 +515,7 @@ class OpenpilotLiveSource:
             return
         now = time.monotonic()
         self._carrot_navi_generation = generation
-        self._carrot_navi = parse_carrot_navi(data, now)
+        self._carrot_navi = parse_carrot_navi(data, now, self._carrot_navi)
         self._carrot_navi, self._carrot_navi_next_expiry_s = fresh_carrot_navi(self._carrot_navi, now)
 
     def _current_carrot_navi(self, now: float):

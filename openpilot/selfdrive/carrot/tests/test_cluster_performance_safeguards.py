@@ -295,6 +295,59 @@ def test_fast_changing_stroked_text_can_bypass_texture_cache(monkeypatch):
   assert len(direct_draws) == 9
 
 
+def test_raw_stroked_text_preserves_draw_order_positions_and_colors(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._raw_stroked_text_enabled = True
+  renderer._font = object()
+  renderer._korean_font = None
+  renderer._text_measure_cache = {}
+  calls = []
+
+  class Position:
+    def __init__(self, x, y):
+      self.x = x
+      self.y = y
+
+  def draw_text_ex(font, text, position, size, spacing, color):
+    calls.append((font, text, position.x, position.y, size, spacing, color))
+
+  renderer._raw_draw_text_ex = draw_text_ex
+  monkeypatch.setattr(cluster_renderer.rl, "Vector2", Position)
+  monkeypatch.setattr(cluster_renderer, "rl_color", lambda color: color)
+  monkeypatch.setattr(renderer, "_measure_text", lambda *_args: (40.0, 20.0))
+  monkeypatch.setattr(
+    renderer,
+    "_draw_text",
+    lambda *_args: pytest.fail("raw stroked-text path must bypass the pyray wrapper"),
+  )
+
+  renderer._draw_text_with_stroke(
+    "NAVI",
+    100.0,
+    50.0,
+    25.0,
+    (0, 255, 0),
+    (0, 0, 0),
+    2,
+    anchor="center",
+  )
+
+  assert [(call[2], call[3]) for call in calls] == [
+    (78.0, 40.0),
+    (82.0, 40.0),
+    (80.0, 38.0),
+    (80.0, 42.0),
+    (78.0, 38.0),
+    (82.0, 38.0),
+    (78.0, 42.0),
+    (82.0, 42.0),
+    (80.0, 40.0),
+  ]
+  assert [call[6] for call in calls] == [(0, 0, 0)] * 8 + [(0, 255, 0)]
+  assert all(call[1] == b"NAVI" for call in calls)
+  assert all(call[4:6] == (25.0, 1.0) for call in calls)
+
+
 def test_cluster_autorun_falls_back_only_for_h264_initialization(monkeypatch):
   cluster_autorun = _import_cluster_autorun(monkeypatch)
   carrot_package = importlib.import_module("selfdrive.carrot")

@@ -480,6 +480,12 @@ system/platform fonts if KaiGen is not present.
 Latin/numeric text uses the 160-pixel primary font. The complete Korean glyph
 set uses a separate 32-pixel base atlas with bilinear filtering and no mip chain;
 a host resource smoke produced `8192x4096` rather than the former `8192x8192`.
+Dynamic stroked HUD text keeps the original eight outline draws plus one fill
+draw, but calls the same raylib `DrawTextEx` C symbol directly after preparing
+the font, measurement, UTF-8 text, anchor, and colors once. Set
+`CLUSTER_RAW_STROKED_TEXT=0` to restore the pyray-wrapper path for an A/B or
+recovery run. The switch does not select a different shader, glyph atlas,
+outline algorithm, resolution, or text update cadence.
 Incoming Navi H.264 is decoded on a bounded worker. The default path attempts
 Qualcomm VIDC `/dev/video32` on every platform to produce leased linear NV12
 DMA-BUFs, imports them as EGLImages, and composes them through an external OpenGL
