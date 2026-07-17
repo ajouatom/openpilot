@@ -33,6 +33,10 @@ def _finite(value: Any, fallback: float = 0.0) -> float:
   return parsed if math.isfinite(parsed) else fallback
 
 
+def cutin_is_ahead_of_primary(cutin_d_rel: float, primary_d_rel: float | None) -> bool:
+  return primary_d_rel is None or cutin_d_rel <= primary_d_rel
+
+
 def _first(values: Any, fallback: float = 0.0) -> float:
   try:
     return _finite(values[0], fallback)
@@ -350,6 +354,11 @@ class VisionModelRadarController:
       (prediction, self._lead_from_prediction(prediction, prediction.cutin_prob, v_ego))
       for prediction in result.decision.cutin_candidates
     ]
+    primary_d_rel = lead_one.get("dRel") if lead_one is not None else None
+    relevant_cutin_pairs = [
+      (prediction, lead) for prediction, lead in cutin_pairs
+      if lead is not None and cutin_is_ahead_of_primary(float(lead["dRel"]), primary_d_rel)
+    ]
     external_pairs = [
       (prediction, self._lead_from_prediction(prediction, prediction.external_prob, v_ego))
       for prediction in result.decision.external_candidates
@@ -395,11 +404,11 @@ class VisionModelRadarController:
     # Report independent cut-in decisions even when they are not safe leadTwo
     # control inputs, but do not re-report the vision-matched primary object as
     # a separate cut-in.
-    cutin_leads = tuple(lead for prediction, lead in cutin_pairs if lead is not None and not matches_primary(prediction))
+    cutin_leads = tuple(lead for prediction, lead in relevant_cutin_pairs if not matches_primary(prediction))
     external_leads = tuple(lead for _, lead in external_pairs if lead is not None)
     lead_two = next((
-      lead for prediction, lead in cutin_pairs
-      if lead is not None and not matches_primary(prediction) and self._external_control_usable(prediction)
+      lead for prediction, lead in relevant_cutin_pairs
+      if not matches_primary(prediction) and self._external_control_usable(prediction)
     ), None)
     if lead_two is None:
       lead_two = next((
