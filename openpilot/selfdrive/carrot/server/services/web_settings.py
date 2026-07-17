@@ -8,6 +8,9 @@ from ..config import CARROT_WEB_SETTINGS_PATH
 WEB_PRIMARY_PAGES = {"last", "carrot", "setting", "tools", "logs", "terminal"}
 WEB_LANGUAGES = {"", "en", "ko", "zh"}
 LOG_UPLOAD_TARGETS = {"carrot", "toss"}
+WEB_REPLAY_INSIGHTS_TABS = {"events", "graphs", "sensors", "advanced"}
+WEB_DRIVE_LAYOUT_MODES = {"split", "area_1", "area_2"}
+WEB_DRIVE_LAYOUT_CONTENTS = {"vision", "navigation"}
 
 
 def _to_bool(value: Any) -> bool:
@@ -48,6 +51,22 @@ def _normalize_toss_url(value: Any) -> str:
 
 def _normalize_stripped(value: Any) -> str:
   return str(value or "").strip()
+def _normalize_drive_split_ratio(value: Any, fallback: float) -> str:
+  try:
+    ratio = float(value)
+  except (TypeError, ValueError):
+    ratio = fallback
+  ratio = min(0.7, max(0.3, ratio))
+  ratio = round(ratio / 0.05) * 0.05
+  return f"{ratio:.2f}"
+
+
+def _normalize_carrot_navi_split_ratio(value: Any) -> str:
+  return _normalize_drive_split_ratio(value, 0.7)
+
+
+def _normalize_carrot_navi_vertical_split_ratio(value: Any) -> str:
+  return _normalize_drive_split_ratio(value, 0.5)
 
 
 class _Field:
@@ -90,6 +109,16 @@ WEB_SETTINGS_SPEC: List[_Field] = [
   _Field("mini_hud_enabled", "bool", False),
   _Field("web_language", "str", "", normalize=_normalize_language),
   _Field("vision_fullscreen_default", "bool", False),
+  _Field("replay_insights_tab", "enum", "events", choices=WEB_REPLAY_INSIGHTS_TABS),
+  _Field("carrot_navi_enabled", "bool", True),
+  _Field("carrot_navi_horizontal_mode", "enum", "split", choices=WEB_DRIVE_LAYOUT_MODES),
+  _Field("carrot_navi_horizontal_area_1", "enum", "vision", choices=WEB_DRIVE_LAYOUT_CONTENTS),
+  _Field("carrot_navi_horizontal_area_2", "enum", "navigation", choices=WEB_DRIVE_LAYOUT_CONTENTS),
+  _Field("carrot_navi_split_ratio", "str", "0.70", normalize=_normalize_carrot_navi_split_ratio),
+  _Field("carrot_navi_vertical_mode", "enum", "split", choices=WEB_DRIVE_LAYOUT_MODES),
+  _Field("carrot_navi_vertical_area_1", "enum", "vision", choices=WEB_DRIVE_LAYOUT_CONTENTS),
+  _Field("carrot_navi_vertical_area_2", "enum", "navigation", choices=WEB_DRIVE_LAYOUT_CONTENTS),
+  _Field("carrot_navi_vertical_split_ratio", "str", "0.50", normalize=_normalize_carrot_navi_vertical_split_ratio),
   _Field("kmap_enabled", "bool", False),
   _Field("kmap_url", "str", "https://jominki354.github.io/kmap/", normalize=_normalize_kmap_url),
   _Field("kmap_overlay_heading_up", "bool", False),
@@ -121,6 +150,11 @@ def sanitize_web_settings(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
   for field in WEB_SETTINGS_SPEC:
     value = raw.get(field.key, field.default) if isinstance(raw, dict) else field.default
     settings[field.key] = field.coerce(value)
+  for orientation in ("horizontal", "vertical"):
+    area_1_key = f"carrot_navi_{orientation}_area_1"
+    area_2_key = f"carrot_navi_{orientation}_area_2"
+    if settings[area_1_key] == settings[area_2_key]:
+      settings[area_2_key] = "navigation" if settings[area_1_key] == "vision" else "vision"
   return settings
 
 

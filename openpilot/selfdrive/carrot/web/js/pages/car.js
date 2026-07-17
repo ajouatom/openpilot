@@ -3,7 +3,6 @@
 // Car page + Drive-page record FAB + currentCar status (cross-cutting with setting page).
 
 const CURRENT_CAR_CACHE_KEY = "carrot_web_current_car_label";
-const CURRENT_CAR_PROMPT_SESSION_KEY = "carrot_web_missing_car_prompted";
 const CURRENT_CAR_RETRY_DELAYS_MS = [350, 800, 1500, 2500, 4000];
 const RECORD_STATE_POLL_MS = 1200;
 
@@ -16,7 +15,6 @@ let currentCarLastKnownLabel = "";
 let currentCarLoadPromise = null;
 let currentCarLoadedAt = 0;
 let currentCarHasSnapshot = false;
-let currentCarPromptActive = false;
 let recordStateLoadPromise = null;
 let recordStateLoadedAt = 0;
 let carsLoadPromise = null;
@@ -167,17 +165,9 @@ async function loadCurrentCar(options = {}) {
         cancelCurrentCarRetry();
         currentCarRetryIndex = 0;
         applyCurrentCarLabel(label);
-        if (isMissingCarSelectionValues(values)) {
-          window.setTimeout(() => {
-            promptMissingCurrentCarSelection(values).catch(() => {});
-          }, 350);
-        }
       } else {
         applyCurrentCarLabel("", { blank: !currentCarLastKnownLabel });
         scheduleCurrentCarRetry();
-        window.setTimeout(() => {
-          promptMissingCurrentCarSelection(values).catch(() => {});
-        }, 350);
       }
       currentCarHasSnapshot = true;
       currentCarLoadedAt = Date.now();

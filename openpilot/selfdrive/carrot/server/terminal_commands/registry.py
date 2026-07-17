@@ -6,7 +6,7 @@ from typing import Callable, Iterable
 
 
 CommandHandler = Callable[[list[str]], int | None]
-_COMMAND_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_COMMAND_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
 @dataclass(frozen=True)
@@ -15,12 +15,13 @@ class TerminalCommand:
   summary: str
   usage: str
   handler: CommandHandler
+  hidden: bool = False
 
 
 _commands: dict[str, TerminalCommand] = {}
 
 
-def register_command(*, name: str, summary: str, usage: str) -> Callable[[CommandHandler], CommandHandler]:
+def register_command(*, name: str, summary: str, usage: str, hidden: bool = False) -> Callable[[CommandHandler], CommandHandler]:
   normalized = str(name or "").strip().lower()
   if not _COMMAND_NAME_RE.fullmatch(normalized):
     raise ValueError(f"invalid terminal command name: {name!r}")
@@ -33,6 +34,7 @@ def register_command(*, name: str, summary: str, usage: str) -> Callable[[Comman
       summary=str(summary or "").strip(),
       usage=str(usage or "").strip(),
       handler=handler,
+      hidden=bool(hidden),
     )
     return handler
 
@@ -43,5 +45,6 @@ def get_command(name: str) -> TerminalCommand | None:
   return _commands.get(str(name or "").strip().lower())
 
 
-def iter_commands() -> Iterable[TerminalCommand]:
-  return sorted(_commands.values(), key=lambda command: command.name)
+def iter_commands(*, include_hidden: bool = False) -> Iterable[TerminalCommand]:
+  commands = _commands.values() if include_hidden else (command for command in _commands.values() if not command.hidden)
+  return sorted(commands, key=lambda command: command.name)

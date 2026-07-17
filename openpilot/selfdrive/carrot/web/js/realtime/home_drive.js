@@ -2,8 +2,10 @@
 
 window.HomeDrive = (() => {
   const stageEl = document.getElementById("carrotStage");
+  const replayViewportEl = document.getElementById("carrotReplayViewport");
   const videoEl = document.getElementById("carrotRoadVideo");
   const videoHoldEl = document.getElementById("carrotLastFrameCanvas");
+  const performanceCanvasEl = document.getElementById("carrotPerformanceCanvas");
   const canvasEl = document.getElementById("carrotOverlayCanvas");
   const hudCanvasEl = document.getElementById("carrotHudCanvas");
   const onroadAlertEl = document.getElementById("carrotOnroadAlert");
@@ -16,27 +18,12 @@ window.HomeDrive = (() => {
   const statusEl = document.getElementById("carrotStageStatus");
   const metaEl = document.getElementById("carrotStageMeta");
   const debugEl = document.getElementById("carrotStageDebug");
-  const driveHudCardEl = document.getElementById("driveHudCard");
-  const rtcPerfHudEl = document.getElementById("carrotRtcPerfHud");
-  const rtcPerfGlanceEl = document.getElementById("carrotRtcPerfGlance");
-  const rtcPerfGlanceTextEl = document.getElementById("carrotRtcPerfGlanceText");
-  const rtcPerfSummaryEl = document.getElementById("carrotRtcPerfSummary");
-  const rtcPerfTitleEl = document.getElementById("carrotRtcPerfTitle");
-  const rtcPerfVideoEl = document.getElementById("carrotRtcPerfVideo");
-  const rtcPerfCodecEl = document.getElementById("carrotRtcPerfCodec");
-  const rtcPerfBitrateEl = document.getElementById("carrotRtcPerfBitrate");
-  const rtcPerfRttEl = document.getElementById("carrotRtcPerfRtt");
-  const rtcPerfJitterEl = document.getElementById("carrotRtcPerfJitter");
-  const rtcPerfLossEl = document.getElementById("carrotRtcPerfLoss");
-  const rtcPerfFreezeEl = document.getElementById("carrotRtcPerfFreeze");
-  const rtcPerfPathEl = document.getElementById("carrotRtcPerfPath");
-  const rtcPerfHoldTargetEl = document.getElementById("carrotRtcPerfHoldTarget");
-  const rtcPerfCloseBtnEl = document.getElementById("carrotRtcPerfCloseBtn");
-  const rtcPerfLogBtnEl = document.getElementById("carrotRtcPerfLogBtn");
+  const visionHudContent = window.DriveVisionHudContent;
+  const driveHudCardEl = visionHudContent?.root || null;
   const sourceVideoEl = videoEl;
   const displayModeButton = document.getElementById("btnDisplayModeCycle");
 
-  if (!stageEl || !videoEl || !canvasEl || !hudCanvasEl || !statusEl || !metaEl || !debugEl) {
+  if (!stageEl || !videoEl || !canvasEl || !hudCanvasEl || !statusEl || !metaEl || !debugEl || !visionHudContent) {
     return {};
   }
 
@@ -45,6 +32,37 @@ window.HomeDrive = (() => {
   if (!ctx || !hudCtx) {
     return {};
   }
+  const performanceRenderer = window.CarrotVisionWebGL2?.getRenderer?.(performanceCanvasEl) || null;
+  const replayRenderBridge = window.DriveVisionReplayRenderBridge?.create?.({
+    stage: stageEl,
+    replayViewport: replayViewportEl,
+    video: videoEl,
+    getReplay: () => window.CarrotVisionReplay,
+  }) || null;
+  const hudLayout = window.DriveVisionHudLayout?.create?.({
+    stage: stageEl,
+    card: driveHudCardEl,
+  }) || null;
+  const hudCanvas = window.DriveVisionHudCanvas?.create?.({
+    stage: stageEl,
+    context: hudCtx,
+  }) || null;
+  const hudModel = window.DriveVisionHudModel || null;
+  const roadOverlayPolicy = window.DriveVisionRoadOverlayPolicy?.create?.({ hudModel }) || null;
+  const roadOverlayLeadModel = window.DriveVisionRoadOverlayLeadModel?.create?.({
+    text: (key, fallback) => getUIText(key, fallback),
+  }) || null;
+  const rtcPerfHud = window.DriveVisionRtcPerfHud?.create?.({
+    root: driveHudCardEl,
+    model: hudModel,
+    isActive,
+    isReplayActive: replayRenderBridge?.isActive,
+    showToast(message, options) {
+      if (typeof showAppToast === "function") showAppToast(message, options);
+    },
+  }) || null;
+  if (!replayRenderBridge || !hudCanvas || !hudModel || !roadOverlayPolicy || !roadOverlayLeadModel || !rtcPerfHud) return {};
+  let performanceGeometryActive = false;
 
   // Rendering policy:
   // - Keep geometry/projection in the web renderer.
@@ -57,11 +75,9 @@ window.HomeDrive = (() => {
     [0, 0, 1],
     [1, 0, 0],
   ];
-  // Road-camera intrinsics. Default is AR0231 / OX03C10 (comma3/3X). Mutated in
-  // place by applyRoadCameraSensor() once the device's real sensor is known, so
-  // OS04C10 units (different focal length AND native resolution) project the
-  // overlay correctly instead of drifting up/down. All downstream code reads
-  // BASE_CAMERA.<field> at runtime, so mutating the fields updates everything.
+  // Road-camera intrinsics. Native openpilot selects these from
+  // DEVICE_CAMERAS[(deviceType, sensor)]; the web renderer follows that same
+  // rule so C3/C3X/C4 share one projection path.
   const BASE_CAMERA = {
     width: 1928,
     height: 1208,
@@ -69,14 +85,16 @@ window.HomeDrive = (() => {
     focalY: 2648,
   };
   // Mirror of openpilot common/transformations/camera.py DEVICE_CAMERAS[*].fcam.
-  // CameraConfig intrinsics == [[f,0,w/2],[0,f,h/2],[0,0,1]] — same shape as
-  // getIntrinsics() here, so we only need width/height/focal per sensor.
-  const ROAD_CAMERAS = {
-    ar0231:  { width: 1928, height: 1208, focal: 2648.0 },
-    ox03c10: { width: 1928, height: 1208, focal: 2648.0 },
-    os04c10: { width: 1344, height: 760,  focal: 1141.5 },  // 2688/2 x 1520/2, 1522*3/4
+  const ROAD_CAMERA_PROFILES = {
+    ar_ox: { width: 1928, height: 1208, focal: 2648.0 },
+    os04c10: { width: 1344, height: 760, focal: 1141.5 },
   };
+  let _roadCameraDeviceType = "";
   let _roadCameraSensor = "";
+  let _roadCameraProfileKey = "ar_ox";
+  let _roadCameraProfileResolved = false;
+  let _lastValidCalibrationMatrix = null;
+  let _lastValidCalibrationSignature = "";
   const DISPLAY_MODES = [
     { key: "fit", labelKey: "display_fit", fallbackLabel: "Fit" },
     { key: "normal", labelKey: "display_normal", fallbackLabel: "Normal" },
@@ -87,11 +105,9 @@ window.HomeDrive = (() => {
   const PHONE_PORTRAIT_DPR_CAP = 1.0;
   const MOBILE_DPR_CAP = 1.25;
   const DESKTOP_DPR_CAP = 1.5;
+  const PERFORMANCE_RENDER_DPR_CAP = 3.0;
   const RENDER_INTERVAL_MS = 33;  // ~30fps for denser plot data (C3: 20Hz/50ms)
   const CAMERA_FRAME_RECHECK_MS = 250;
-  const RTC_PERF_HOLD_MS = 600;
-  const RTC_PERF_HOLD_MOVE_PX = 12;
-  const RTC_PERF_SUMMARY_AUTO_CLOSE_MS = 8000;
   const MIN_ROAD_VIDEO_WIDTH = 320;
   const MIN_ROAD_VIDEO_HEIGHT = 180;
   const PATH_PALETTE = [
@@ -112,19 +128,13 @@ window.HomeDrive = (() => {
     { color: "#ff9f43", label: "O" },
   ];
   const PLOT_MAX_POINTS = 600;  // ~20s at 30fps (C3: 400 at 20fps = 20s)
-  const PATH_HALF_WIDTH = 0.9;
   const PATH_Z_OFFSET = 1.22;
-  const LONG_PLAN_SOURCE_LEAD1 = 2;
   const MIN_DRAW_DISTANCE = 10;
   const MAX_DRAW_DISTANCE = 100;
   const RADAR_INTERPOLATION_MIN_MS = 16;
   const RADAR_INTERPOLATION_DEFAULT_MS = 50;
   const RADAR_INTERPOLATION_MAX_MS = 120;
   const RADAR_INTERPOLATION_LEAD_MS = 12;
-  const TEST_PATH_VISIBILITY_SOLID_ALPHA = 0.50;
-  const TEST_PATH_VISIBILITY_MID_ALPHA = 0.24;
-  const TEST_LANE_PROB_MIN = 0.003;
-  const TEST_LANE_PROB_BOOST = 6;
   const ALERT_STATUS_NORMAL = 0;
   const ALERT_STATUS_USER_PROMPT = 1;
   const ALERT_STATUS_CRITICAL = 2;
@@ -133,17 +143,6 @@ window.HomeDrive = (() => {
   const ALERT_SIZE_MID = 2;
   const ALERT_SIZE_FULL = 3;
   const ONROAD_ALERT_SCALE = 1.5;
-  const POLYLINE_SMOOTH_NEAR_DISTANCE = 16;
-  const POLYLINE_SMOOTH_FAR_DISTANCE = 52;
-  const POLYLINE_SMOOTH_MAX_STRENGTH = 0.34;
-  const POLYLINE_CENTER_SMOOTH_MAX_STRENGTH = 0.24;
-  const PATH_TEMPORAL_SMOOTH_ALPHA = 0.20;
-  const LANE_TEMPORAL_SMOOTH_ALPHA = 0.16;
-  const LANE_VISUAL_WIDTH_GAIN = 1.4;
-  const GEOMETRY_QUALITY_DEFAULT = "default";
-  const GEOMETRY_QUALITY_LANE = "lane";
-  const GEOMETRY_QUALITY_ROAD_EDGE = "road-edge";
-
   const defaultParams = {
     IsMetric: 1,
     ShowPathEnd: 0,
@@ -195,36 +194,17 @@ window.HomeDrive = (() => {
   };
 
   /* ── EMA state for lead box smoothing ──
-   * C3 uses alpha=0.85 at a stable 20Hz UI loop.  The web's actual frame
-   * rate varies, so we use time-based EMA: alpha_adj = 0.85^(dt/50ms).
-   * This guarantees the same wall-clock convergence speed as C3.          */
+   * C3 uses alpha=0.85 at a stable 20Hz UI loop. The web uses a time-based
+   * EMA: wall time for live video and media time for recorded replay.      */
   const LEAD_EMA_ALPHA = 0.85;
   const C3_FRAME_MS = 50;  // C3 UI loop interval (~20Hz)
   let leadEmaState = [
     { fx: NaN, fy: NaN, fw: NaN, trackId: -1, lastMs: 0 },  // slot 0: leadOne
     { fx: NaN, fy: NaN, fw: NaN, trackId: -1, lastMs: 0 },  // slot 1: leadTwo
   ];
-  let leadTwoEmaState = { xl: NaN, xr: NaN, y: NaN, lastMs: 0 };
-  /* ── Lead hold state: keeps box visible briefly when status flickers false ──
-   * C3 reads SubMaster at stable 20Hz; web's merged WebSocket state can
-   * briefly lose status between messages.  Hold last valid box for up to
-   * LEAD_HOLD_MS so the visual experience matches C3's stability.           */
-  const LEAD_HOLD_MS = 1500;
-  let leadHoldState = {
-    lastValidMs: 0,
-    box: null,
-    strokeColor: null,
-    isLeadScc: false,
-    radarDist: 0,
-    visionDist: 0,
-    badgeTextColor: "#ffffff",
-  };
-  let leadRenderState = {
-    lastCameraFrameId: NaN,
-    lastModelFrameId: NaN,
-    lastSourceWidth: NaN,
-    lastSourceHeight: NaN,
-  };
+  let leadTwoEmaState = { xl: NaN, xr: NaN, y: NaN, trackId: -1, lastMs: 0 };
+  // Lead flicker hold and source-rewind state live in the renderer.
+  let roadOverlayLeadRenderer = null;
 
   /* ── Phase 1-2: dirty check ── */
   let _lastOverlaySig = "";
@@ -252,14 +232,6 @@ window.HomeDrive = (() => {
     refs: null,
     result: null,
   };
-  let _frameProjectionCache = {
-    pathLengthIdx: new WeakMap(),
-    ribbon: new WeakMap(),
-    verticalRibbon: new WeakMap(),
-    pathZ: new WeakMap(),
-    pathY: new WeakMap(),
-  };
-
   function pathDataSignature(pathData) {
     const x = Array.isArray(pathData?.x) ? pathData.x : [];
     const y = Array.isArray(pathData?.y) ? pathData.y : [];
@@ -306,11 +278,18 @@ window.HomeDrive = (() => {
       finiteNumber(liveCalibration?.rpyCalib?.[0], 0).toFixed(3),
       finiteNumber(liveCalibration?.rpyCalib?.[1], 0).toFixed(3),
       finiteNumber(liveCalibration?.rpyCalib?.[2], 0).toFixed(3),
+      liveCalibration?.calStatus ?? "-",
+      _roadCameraProfileKey,
       finiteNumber(liveCalibration?.height?.[0], 0).toFixed(2),
       Boolean(controlsState?.activeLaneLine) ? 1 : 0,
       Boolean(controlsState?.enabled) ? 1 : 0,
       finiteNumber(carState?.useLaneLineSpeed, 0).toFixed(2),
       Boolean(carState?.brakeLights) ? 1 : 0,
+      Boolean(carState?.leftBlindspot) ? 1 : 0,
+      Boolean(carState?.rightBlindspot) ? 1 : 0,
+      finiteNumber(carState?.vEgo, 0).toFixed(2),
+      overlayState?.lateralPlan?.laneChangeState ?? "-",
+      overlayState?.lateralPlan?.laneChangeDirection ?? "-",
       Boolean(overlayState?.carControl?.longActive) ? 1 : 0,
       longPlan?.xState ?? "-",
       longPlan?.trafficState ?? "-",
@@ -336,7 +315,7 @@ window.HomeDrive = (() => {
     const carrotMan = hudState?.carrotMan;
     const longPlan = hudState?.longitudinalPlan;
     const selfdriveState = hudState?.selfdriveState;
-    const rtcPerfText = formatRtcPerfLabel();
+    const rtcPerfText = hudModel.formatRtcPerfLabel(window.CarrotRtcPerf);
     return [
       finiteNumber(carState?.vEgo, 0).toFixed(3),
       finiteNumber(carState?.vEgoCluster, 0).toFixed(3),
@@ -368,8 +347,6 @@ window.HomeDrive = (() => {
   /* ── Phase 1-3: gradient cache ── */
   const _gradientCache = new Map();
   const GRADIENT_CACHE_MAX = 16;
-  const _hudGradientCache = new Map();
-  const HUD_GRADIENT_CACHE_MAX = 8;
   const _roundedRectPathCache = new Map();
   const ROUNDED_RECT_CACHE_MAX = 24;
   const _textWidthCache = new Map();
@@ -385,18 +362,6 @@ window.HomeDrive = (() => {
     }
     _gradientCache.set(key, g);
     return g;
-  }
-
-  function getCachedHudGradient(key, factory) {
-    const cached = _hudGradientCache.get(key);
-    if (cached) return cached;
-    const gradient = factory();
-    if (_hudGradientCache.size >= HUD_GRADIENT_CACHE_MAX) {
-      const firstKey = _hudGradientCache.keys().next().value;
-      _hudGradientCache.delete(firstKey);
-    }
-    _hudGradientCache.set(key, gradient);
-    return gradient;
   }
 
   function getCachedTextWidth(canvasCtx, font, text) {
@@ -450,6 +415,29 @@ window.HomeDrive = (() => {
     return [roll, pitch, yaw];
   }
 
+  function normalizeEnumName(value, numericNames = null) {
+    if (value == null) return "";
+    const text = String(value).trim();
+    if (!text) return "";
+    const numeric = Number(value);
+    if (numericNames && Number.isInteger(numeric) && numericNames[numeric]) {
+      return numericNames[numeric];
+    }
+    const normalized = text.toLowerCase();
+    const tail = normalized.split(".").pop() || normalized;
+    return tail.replace(/[^a-z0-9_]/g, "");
+  }
+
+  function isCalibrationComplete(liveCalibration) {
+    const status = normalizeEnumName(liveCalibration?.calStatus, {
+      0: "uncalibrated",
+      1: "calibrated",
+      2: "invalid",
+      3: "recalibrating",
+    });
+    return status === "calibrated";
+  }
+
   function formatRpyTriplet(liveCalibration) {
     const rpy = readRpyTriplet(liveCalibration);
     if (!rpy) return "-";
@@ -475,8 +463,6 @@ window.HomeDrive = (() => {
   const _rgbaCache = new Map();
   const RGBA_CACHE_MAX = 64;
   const _emptyDash = [];
-  let _temporalRibbonState = new Map();
-
   function rgba(rgb, alpha) {
     const a = clamp(alpha, 0, 1);
     const key = (rgb.r << 20) | (rgb.g << 10) | rgb.b | ((a * 1000 | 0) << 24);
@@ -493,77 +479,6 @@ window.HomeDrive = (() => {
   function paletteColor(index) {
     const normalized = ((Number(index) % PATH_PALETTE.length) + PATH_PALETTE.length) % PATH_PALETTE.length;
     return PATH_PALETTE[normalized] || PATH_PALETTE[3];
-  }
-
-  function resetFrameProjectionCache() {
-    _frameProjectionCache = {
-      pathLengthIdx: new WeakMap(),
-      ribbon: new WeakMap(),
-      verticalRibbon: new WeakMap(),
-      pathZ: new WeakMap(),
-      pathY: new WeakMap(),
-    };
-  }
-
-  function resetTemporalRibbonState() {
-    _temporalRibbonState = new Map();
-  }
-
-  function getWeakCacheBucket(weakMap, target) {
-    if (!target || typeof target !== "object") return null;
-    let bucket = weakMap.get(target);
-    if (!bucket) {
-      bucket = new Map();
-      weakMap.set(target, bucket);
-    }
-    return bucket;
-  }
-
-  function getProjectionSampleStride(distance, maxDistance) {
-    const dist = finiteNumber(distance, 0);
-    const maxDist = finiteNumber(maxDistance, MAX_DRAW_DISTANCE);
-    if (maxDist <= 36) return 1;
-    if (dist >= Math.min(maxDist * 0.72, 62)) return 3;
-    if (dist >= Math.min(maxDist * 0.44, 34)) return 2;
-    return 1;
-  }
-
-  function getProjectionSampleStrideForQuality(distance, maxDistance, quality = GEOMETRY_QUALITY_DEFAULT) {
-    const baseStride = getProjectionSampleStride(distance, maxDistance);
-    const dist = finiteNumber(distance, 0);
-
-    if (quality === GEOMETRY_QUALITY_ROAD_EDGE) {
-      if (dist >= 64) return Math.min(baseStride + 2, 5);
-      if (dist >= 40) return Math.min(baseStride + 1, 4);
-      return baseStride;
-    }
-    if (quality === GEOMETRY_QUALITY_LANE) {
-      if (dist >= 58) return Math.min(baseStride + 1, 4);
-      return baseStride;
-    }
-    return baseStride;
-  }
-
-  function forEachProjectedSampleIndex(xs, maxIdx, maxDistance, visitor, quality = GEOMETRY_QUALITY_DEFAULT) {
-    if (maxIdx < 0) return;
-    let i = 0;
-    let lastVisited = -1;
-    while (i <= maxIdx) {
-      visitor(i);
-      lastVisited = i;
-      i += getProjectionSampleStrideForQuality(xs[i], maxDistance, quality);
-    }
-    if (lastVisited !== maxIdx) visitor(maxIdx);
-  }
-
-  function getGeometrySmoothingGain(quality, axis = "side") {
-    if (quality === GEOMETRY_QUALITY_ROAD_EDGE) {
-      return axis === "center" ? 1.12 : 1.22;
-    }
-    if (quality === GEOMETRY_QUALITY_LANE) {
-      return axis === "center" ? 1.06 : 1.12;
-    }
-    return 1.0;
   }
 
   function getCachedRoundedRectPath(width, height, radius) {
@@ -592,78 +507,6 @@ window.HomeDrive = (() => {
     }
     _roundedRectPathCache.set(key, path);
     return path;
-  }
-
-  function mixPoint(a, b, ratio) {
-    return {
-      x: a.x + (b.x - a.x) * ratio,
-      y: a.y + (b.y - a.y) * ratio,
-    };
-  }
-
-  function getPolylineSmoothingStrength(distance, maxDistance, maxStrength) {
-    const dist = finiteNumber(distance, 0);
-    const smoothFarDistance = Math.max(
-      POLYLINE_SMOOTH_FAR_DISTANCE,
-      Math.min(finiteNumber(maxDistance, MAX_DRAW_DISTANCE), MAX_DRAW_DISTANCE),
-    );
-    if (dist <= POLYLINE_SMOOTH_NEAR_DISTANCE) return 0;
-    const ratio = clamp(
-      (dist - POLYLINE_SMOOTH_NEAR_DISTANCE) /
-      Math.max(1, smoothFarDistance - POLYLINE_SMOOTH_NEAR_DISTANCE),
-      0,
-      1,
-    );
-    return maxStrength * ratio;
-  }
-
-  function smoothProjectedPolyline(points, distances, maxDistance, maxStrength = POLYLINE_SMOOTH_MAX_STRENGTH) {
-    if (!Array.isArray(points) || points.length < 3) return points;
-
-    let smoothed = null;
-    for (let i = 1; i < points.length - 1; i += 1) {
-      const strength = getPolylineSmoothingStrength(distances?.[i], maxDistance, maxStrength);
-      if (strength <= 0.001) continue;
-
-      const prev = points[i - 1];
-      const current = points[i];
-      const next = points[i + 1];
-      const targetX = prev.x * 0.25 + current.x * 0.5 + next.x * 0.25;
-      const targetY = prev.y * 0.25 + current.y * 0.5 + next.y * 0.25;
-      if (!smoothed) {
-        smoothed = points.map((point) => ({ x: point.x, y: point.y }));
-      }
-      smoothed[i].x = current.x + (targetX - current.x) * strength;
-      smoothed[i].y = current.y + (targetY - current.y) * strength;
-    }
-    return smoothed || points;
-  }
-
-  function smoothPointListTemporal(previous, next, alpha) {
-    if (!Array.isArray(previous) || !Array.isArray(next) || previous.length !== next.length) {
-      return next.map((point) => ({ x: point.x, y: point.y }));
-    }
-    const a = clamp(alpha, 0, 1);
-    return next.map((point, index) => ({
-      x: previous[index].x + (point.x - previous[index].x) * a,
-      y: previous[index].y + (point.y - previous[index].y) * a,
-    }));
-  }
-
-  function smoothRibbonTemporal(key, ribbon, alpha) {
-    if (!key || !ribbon?.polygon?.length) return ribbon;
-    const previous = _temporalRibbonState.get(key);
-    const left = smoothPointListTemporal(previous?.left, ribbon.left, alpha);
-    const right = smoothPointListTemporal(previous?.right, ribbon.right, alpha);
-    const center = smoothPointListTemporal(previous?.center, ribbon.center, alpha);
-    const next = {
-      left,
-      right,
-      center,
-      polygon: left.length >= 2 && right.length >= 2 ? left.concat([...right].reverse()) : [],
-    };
-    _temporalRibbonState.set(key, next);
-    return next;
   }
 
   function mat3Multiply(a, b) {
@@ -711,32 +554,68 @@ window.HomeDrive = (() => {
   }
 
   function getCalibrationMatrix(liveCalibration) {
+    // Match native onroad: only completed calibration may replace the last
+    // known-good transform. Invalid/recalibrating values must not move graphics.
+    if (!isCalibrationComplete(liveCalibration)) return _lastValidCalibrationMatrix;
     const rpy = readRpyTriplet(liveCalibration);
-    if (!rpy) return VIEW_FROM_DEVICE;
-    return mat3Multiply(VIEW_FROM_DEVICE, rotFromEuler(rpy[0], rpy[1], rpy[2]));
+    if (!rpy) return _lastValidCalibrationMatrix;
+    const signature = rpy.map((value) => value.toFixed(8)).join("|");
+    if (_lastValidCalibrationMatrix && signature === _lastValidCalibrationSignature) {
+      return _lastValidCalibrationMatrix;
+    }
+    _lastValidCalibrationSignature = signature;
+    _lastValidCalibrationMatrix = mat3Multiply(VIEW_FROM_DEVICE, rotFromEuler(rpy[0], rpy[1], rpy[2]));
+    return _lastValidCalibrationMatrix;
   }
 
-  // Select the real road-camera intrinsics from the device's reported sensor.
-  // No-ops for the AR0231/OX03C10 default and for unknown/unset sensors, so
-  // currently-correct units are byte-identical; only OS04C10 units are corrected.
-  function applyRoadCameraSensor(sensor) {
-    const key = String(sensor || "").trim().toLowerCase();
-    if (!key || key === _roadCameraSensor) return;
-    _roadCameraSensor = key;
-    const cfg = ROAD_CAMERAS[key];
-    if (!cfg) return;  // unknown sensor -> keep the AR0231/OX03C10 default
+  function selectRoadCameraProfile(deviceType, sensor) {
+    const deviceKey = normalizeEnumName(deviceType, {
+      0: "unknown", 1: "neo", 2: "chffrandroid", 3: "chffrios",
+      4: "tici", 5: "pc", 6: "tizi", 7: "mici",
+    });
+    const sensorKey = normalizeEnumName(sensor, {
+      0: "unknown", 1: "ar0231", 2: "ox03c10", 3: "os04c10",
+    });
+
+    if (sensorKey === "os04c10") return { key: "os04c10", deviceKey, sensorKey };
+    if (sensorKey === "ar0231" || sensorKey === "ox03c10") return { key: "ar_ox", deviceKey, sensorKey };
+    // Only tici has a native "unknown sensor" fallback. C3X/C4 must wait for
+    // their actual sensor instead of briefly drawing with a guessed camera.
+    if (deviceKey === "tici") return { key: "ar_ox", deviceKey, sensorKey: sensorKey || "unknown" };
+    return null;
+  }
+
+  function applyRoadCameraProfile(deviceType, sensor) {
+    const selected = selectRoadCameraProfile(deviceType, sensor);
+    if (!selected) return _roadCameraProfileResolved;
+    _roadCameraProfileResolved = true;
+    _roadCameraDeviceType = selected.deviceKey;
+    _roadCameraSensor = selected.sensorKey;
+    if (selected.key === _roadCameraProfileKey) return true;
+
+    const cfg = ROAD_CAMERA_PROFILES[selected.key];
+    if (!cfg) return false;
+    _roadCameraProfileKey = selected.key;
     if (BASE_CAMERA.width === cfg.width && BASE_CAMERA.height === cfg.height &&
         BASE_CAMERA.focalX === cfg.focal && BASE_CAMERA.focalY === cfg.focal) {
-      return;
+      return true;
     }
     BASE_CAMERA.width = cfg.width;
     BASE_CAMERA.height = cfg.height;
     BASE_CAMERA.focalX = cfg.focal;
     BASE_CAMERA.focalY = cfg.focal;
-    resetFrameProjectionCache();
+    roadOverlayProjection.resetFrame();
     transformSignature = "";
     _forceNextRender = true;
-    try { console.log("[carrot-vision] road camera sensor:", key, cfg); } catch (_) {}
+    try {
+      console.log("[carrot-vision] road camera profile:", {
+        deviceType: _roadCameraDeviceType,
+        sensor: _roadCameraSensor,
+        profile: _roadCameraProfileKey,
+        config: cfg,
+      });
+    } catch (_) {}
+    return true;
   }
 
   function getIntrinsics(videoWidth, videoHeight) {
@@ -885,30 +764,23 @@ window.HomeDrive = (() => {
     };
   }
 
-  function getPathLengthIdx(line, maxDistance) {
-    const cacheBucket = getWeakCacheBucket(_frameProjectionCache.pathLengthIdx, line);
-    const cacheKey = Number.isFinite(Number(maxDistance))
-      ? Math.round(Number(maxDistance) * 100)
-      : "default";
-    if (cacheBucket?.has(cacheKey)) return cacheBucket.get(cacheKey);
+  const roadOverlayProjection = window.DriveVisionRoadOverlayProjection?.create?.({
+    projectPoint,
+    projectPointPrecise,
+    isRecordedReplayActive: replayRenderBridge.isActive,
+    maxDrawDistance: MAX_DRAW_DISTANCE,
+  }) || null;
+  if (!roadOverlayProjection) return {};
 
-    const xs = Array.isArray(line?.x) ? line.x : [];
-    let maxIdx = 0;
-    for (let i = 1; i < xs.length; i += 1) {
-      if (Number(xs[i]) > maxDistance) break;
-      maxIdx = i;
-    }
-    cacheBucket?.set(cacheKey, maxIdx);
-    return maxIdx;
+  function getLeadTemporalNowMs() {
+    return replayRenderBridge.temporalNowMs(performance.now());
   }
 
-  function getHeldLeadBox(nowMs = performance.now()) {
-    if (!leadHoldState.box) return null;
-    if ((nowMs - finiteNumber(leadHoldState.lastValidMs, 0)) >= LEAD_HOLD_MS) return null;
-    return leadHoldState.box;
+  function getHeldLeadBox(nowMs = getLeadTemporalNowMs()) {
+    return roadOverlayLeadRenderer?.getHeldBox(nowMs) || null;
   }
 
-  function getPrimaryLeadDistance(overlayState = null, nowMs = performance.now()) {
+  function getPrimaryLeadDistance(overlayState = null, nowMs = getLeadTemporalNowMs()) {
     const leadOne = overlayState?.radarState?.leadOne;
     const liveDistance = finiteNumber(leadOne?.dRel, NaN);
     if (Boolean(leadOne?.status) && Number.isFinite(liveDistance) && liveDistance > 0) {
@@ -938,61 +810,6 @@ window.HomeDrive = (() => {
     return Math.max(0, finiteNumber(sceneMaxDistance, 0) - 2.0);
   }
 
-  function buildRibbon(calibTransform, line, halfWidth, zOffset, maxDistance, allowInvert = false, centerShift = 0, quality = GEOMETRY_QUALITY_DEFAULT) {
-    const cacheBucket = getWeakCacheBucket(_frameProjectionCache.ribbon, line);
-    const cacheKey = [
-      Math.round(finiteNumber(halfWidth, 0) * 1000),
-      Math.round(finiteNumber(zOffset, 0) * 1000),
-      Math.round(finiteNumber(maxDistance, MAX_DRAW_DISTANCE) * 100),
-      allowInvert ? 1 : 0,
-      Math.round(finiteNumber(centerShift, 0) * 1000),
-      quality,
-    ].join("|");
-    if (cacheBucket?.has(cacheKey)) return cacheBucket.get(cacheKey);
-
-    const xs = Array.isArray(line?.x) ? line.x : [];
-    const ys = Array.isArray(line?.y) ? line.y : [];
-    const zs = Array.isArray(line?.z) ? line.z : [];
-    const left = [];
-    const right = [];
-    const center = [];
-    const distances = [];
-    const maxIdx = getPathLengthIdx(line, maxDistance);
-
-    forEachProjectedSampleIndex(xs, maxIdx, maxDistance, (i) => {
-      const x = finiteNumber(xs[i], NaN);
-      if (!Number.isFinite(x) || x < 0) return;
-
-      const y = finiteNumber(ys[i], 0) + centerShift;
-      const z = finiteNumber(zs[i], 0) + zOffset;
-      const leftPt = projectPointPrecise(calibTransform, x, y - halfWidth, z);
-      const rightPt = projectPointPrecise(calibTransform, x, y + halfWidth, z);
-      const centerPt = projectPointPrecise(calibTransform, x, y, z);
-      if (!leftPt || !rightPt || !centerPt) return;
-      if (!allowInvert && center.length && centerPt.y > center[center.length - 1].y) return;
-
-      left.push(leftPt);
-      right.push(rightPt);
-      center.push(centerPt);
-      distances.push(x);
-    }, quality);
-
-    const smoothMaxDistance = finiteNumber(maxDistance, MAX_DRAW_DISTANCE);
-    const sideSmoothGain = getGeometrySmoothingGain(quality, "side");
-    const centerSmoothGain = getGeometrySmoothingGain(quality, "center");
-    const smoothedLeft = smoothProjectedPolyline(left, distances, smoothMaxDistance, POLYLINE_SMOOTH_MAX_STRENGTH * sideSmoothGain);
-    const smoothedRight = smoothProjectedPolyline(right, distances, smoothMaxDistance, POLYLINE_SMOOTH_MAX_STRENGTH * sideSmoothGain);
-    const smoothedCenter = smoothProjectedPolyline(center, distances, smoothMaxDistance, POLYLINE_CENTER_SMOOTH_MAX_STRENGTH * centerSmoothGain);
-    const result = {
-      left: smoothedLeft,
-      right: smoothedRight,
-      center: smoothedCenter,
-      polygon: smoothedLeft.length >= 2 && smoothedRight.length >= 2 ? smoothedLeft.concat([...smoothedRight].reverse()) : [],
-    };
-    cacheBucket?.set(cacheKey, result);
-    return result;
-  }
-
   function drawPolygon(points, fillStyle, strokeStyle = "", lineWidth = 1) {
     if (!Array.isArray(points) || points.length < 3) return;
     ctx.beginPath();
@@ -1010,6 +827,15 @@ window.HomeDrive = (() => {
       ctx.strokeStyle = strokeStyle;
       ctx.stroke();
     }
+  }
+
+  function drawGeometryPolygon(points, fillStyle, strokeStyle = "", lineWidth = 1) {
+    if (performanceGeometryActive && performanceRenderer && fillStyle) {
+      performanceRenderer.drawPolygon(points, fillStyle);
+      if (strokeStyle) drawPolygon(points, "", strokeStyle, lineWidth);
+      return;
+    }
+    drawPolygon(points, fillStyle, strokeStyle, lineWidth);
   }
 
   function drawPolyline(points, strokeStyle, lineWidth, dashPattern = [], dashOffset = 0) {
@@ -1030,45 +856,6 @@ window.HomeDrive = (() => {
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.stroke();
-  }
-
-  function buildBandPolygon(left, right, startRatio, endRatio) {
-    if (!Array.isArray(left) || !Array.isArray(right) || left.length < 2 || right.length < 2 || left.length !== right.length) {
-      return [];
-    }
-
-    const first = [];
-    const second = [];
-    for (let i = 0; i < left.length; i += 1) {
-      first.push(mixPoint(left[i], right[i], startRatio));
-      second.push(mixPoint(left[i], right[i], endRatio));
-    }
-    return first.concat(second.reverse());
-  }
-
-  function interp1D(x, xs, ys) {
-    if (!Array.isArray(xs) || !Array.isArray(ys) || xs.length < 2 || ys.length < 2) return NaN;
-    const target = finiteNumber(x, NaN);
-    if (!Number.isFinite(target)) return NaN;
-    const lastIdx = Math.min(xs.length, ys.length) - 1;
-    if (target <= finiteNumber(xs[0], 0)) return finiteNumber(ys[0], NaN);
-
-    for (let i = 1; i <= lastIdx; i += 1) {
-      const x0 = finiteNumber(xs[i - 1], NaN);
-      const x1 = finiteNumber(xs[i], NaN);
-      if (!Number.isFinite(x0) || !Number.isFinite(x1)) continue;
-      if (target > x1 && i < lastIdx) continue;
-
-      const y0 = finiteNumber(ys[i - 1], NaN);
-      const y1 = finiteNumber(ys[i], NaN);
-      if (!Number.isFinite(y0) || !Number.isFinite(y1)) return NaN;
-      if (Math.abs(x1 - x0) < 1e-5) return y1;
-
-      const ratio = clamp((target - x0) / (x1 - x0), 0, 1);
-      return y0 + (y1 - y0) * ratio;
-    }
-
-    return finiteNumber(ys[lastIdx], NaN);
   }
 
   function normalizeVisualParams(values, fallback = defaultParams) {
@@ -1112,6 +899,7 @@ window.HomeDrive = (() => {
   }
 
   function readLiveRuntimeServices() {
+    if (replayRenderBridge.isActive()) return {};
     const services = window.CarrotLiveRuntimeState?.services;
     return services && typeof services === "object" ? services : {};
   }
@@ -1122,7 +910,9 @@ window.HomeDrive = (() => {
     if (raw === live) return raw;
     if (!hasEnumerableKeys(live)) return raw;
     if (!hasEnumerableKeys(raw)) return live;
-    return { ...raw, ...live };
+    // Live REST is a slow metadata/safety fallback. Raw/compact state is the
+    // current sample and must win for fields present in both sources.
+    return { ...live, ...raw };
   }
 
   function mergeDefinedState(baseState, preferredState) {
@@ -1343,20 +1133,26 @@ window.HomeDrive = (() => {
       cachedRefs.rawLiveParameters === rawOverlayState?.liveParameters &&
       cachedRefs.liveCarState === liveServices?.carState &&
       cachedRefs.liveControlsState === liveServices?.controlsState &&
+      cachedRefs.liveDeviceState === liveServices?.deviceState &&
       cachedRefs.liveSelfdriveState === liveServices?.selfdriveState &&
       cachedRefs.liveLongitudinalPlan === liveServices?.longitudinalPlan &&
       cachedRefs.liveCarrotMan === liveServices?.carrotMan &&
       cachedRefs.liveLateralPlan === liveServices?.lateralPlan &&
-      cachedRefs.liveRadarState === liveServices?.radarState
+      cachedRefs.liveRadarState === liveServices?.radarState &&
+      cachedRefs.liveLiveCalibration === liveServices?.liveCalibration &&
+      cachedRefs.liveRoadCameraState === liveServices?.roadCameraState
     ) {
       return _mergeRuntimeCache.result;
     }
 
     const radarState = mergeRadarState(rawOverlayState?.radarState, liveServices.radarState);
+    const liveCalibration = mergeDefinedState(liveServices.liveCalibration, rawOverlayState?.liveCalibration);
+    const roadCameraState = mergeDefinedState(liveServices.roadCameraState, rawOverlayState?.roadCameraState);
     const mergedHudState = {
       ...rawHudState,
       carState: mergeServiceState(rawHudState?.carState, liveServices.carState),
       controlsState: mergeServiceState(rawHudState?.controlsState, liveServices.controlsState),
+      deviceState: mergeServiceState(rawHudState?.deviceState, liveServices.deviceState),
       selfdriveState: mergeServiceState(rawHudState?.selfdriveState, liveServices.selfdriveState),
       longitudinalPlan: mergeServiceState(rawHudState?.longitudinalPlan, liveServices.longitudinalPlan),
       carrotMan: mergeServiceState(rawHudState?.carrotMan, liveServices.carrotMan),
@@ -1366,6 +1162,8 @@ window.HomeDrive = (() => {
 
     const mergedOverlayState = {
       ...rawOverlayState,
+      liveCalibration,
+      roadCameraState,
       radarState: mergedHudState.radarState,
       lateralPlan: mergedHudState.lateralPlan,
       carrotMan: mergedHudState.carrotMan,
@@ -1399,11 +1197,14 @@ window.HomeDrive = (() => {
       rawLiveParameters: rawOverlayState?.liveParameters,
       liveCarState: liveServices?.carState,
       liveControlsState: liveServices?.controlsState,
+      liveDeviceState: liveServices?.deviceState,
       liveSelfdriveState: liveServices?.selfdriveState,
       liveLongitudinalPlan: liveServices?.longitudinalPlan,
       liveCarrotMan: liveServices?.carrotMan,
       liveLateralPlan: liveServices?.lateralPlan,
       liveRadarState: liveServices?.radarState,
+      liveLiveCalibration: liveServices?.liveCalibration,
+      liveRoadCameraState: liveServices?.roadCameraState,
     };
     _mergeRuntimeCache.result = result;
     return result;
@@ -1504,6 +1305,7 @@ window.HomeDrive = (() => {
   }
 
   function setCarrotVisionRenderPhase(phase, detail = {}) {
+    if (replayRenderBridge.reportRenderable(phase === "ready")) return;
     // Single phase owner: home_drive is the authority on whether a real camera
     // frame is on screen, but it no longer writes the phase directly. It
     // reports renderability to vision_rtc, which owns the live/first-frame
@@ -1687,11 +1489,13 @@ window.HomeDrive = (() => {
     displayModeButton.title = label;
   }
 
-  function setDisplayModeIndex(nextIndex) {
+  function setDisplayModeIndex(nextIndex, options = {}) {
     displayModeIndex = clamp(nextIndex, 0, DISPLAY_MODES.length - 1);
-    try {
-      localStorage.setItem(DISPLAY_MODE_STORAGE_KEY, String(displayModeIndex));
-    } catch {}
+    if (options.persist !== false) {
+      try {
+        localStorage.setItem(DISPLAY_MODE_STORAGE_KEY, String(displayModeIndex));
+      } catch {}
+    }
     transformSignature = "";
     syncDisplayModeButtons();
   }
@@ -1702,6 +1506,20 @@ window.HomeDrive = (() => {
   }
 
   function syncSourceStream() {
+    if (replayRenderBridge.isActive()) {
+      const sourceKey = replayRenderBridge.videoSourceKey();
+      if (_roadCameraStreamState.stream !== sourceKey) {
+        _roadCameraStreamState = {
+          stream: sourceKey,
+          decodedFramesAtBind: sourceKey ? getDecodedVideoFrameCount(videoEl) : null,
+          currentTimeAtBind: sourceKey ? Number(videoEl.currentTime || 0) : 0,
+          firstRenderableSeen: false,
+        };
+        cancelCameraFrameRecheck();
+      }
+      return Boolean(sourceKey);
+    }
+
     const stream = sourceVideoEl.srcObject || null;
     if (sourceVideoEl !== videoEl && videoEl.srcObject !== stream) {
       videoEl.srcObject = stream;
@@ -1747,11 +1565,17 @@ window.HomeDrive = (() => {
   }
 
   function isRoadCameraFrameRenderable(video) {
-    if (!video || !video.srcObject || !hasLiveVideoTrack(video)) return false;
+    const recordedReplay = replayRenderBridge.isActive();
+    if (!video) return false;
+    if (!recordedReplay && (!video.srcObject || !hasLiveVideoTrack(video))) return false;
     const videoWidth = Number(video.videoWidth || 0);
     const videoHeight = Number(video.videoHeight || 0);
     if (videoWidth < MIN_ROAD_VIDEO_WIDTH || videoHeight < MIN_ROAD_VIDEO_HEIGHT) return false;
     if (Number(video.readyState || 0) < 2) return false;
+    if (recordedReplay) {
+      _roadCameraStreamState.firstRenderableSeen = true;
+      return true;
+    }
     if (_roadCameraStreamState.firstRenderableSeen) return true;
 
     const decodedFrames = getDecodedVideoFrameCount(video);
@@ -1805,7 +1629,7 @@ window.HomeDrive = (() => {
     if (_lastStageLoading !== l) {
       _lastStageLoading = l;
       stageEl.classList.toggle("is-loading", l);
-      if (driveHudCardEl) driveHudCardEl.classList.toggle("driveHudCard--loading", l);
+      visionHudContent.setLoading(l);
       if (stageLoadingEl) stageLoadingEl.hidden = !l;
     }
     if (!l) return;
@@ -1821,73 +1645,6 @@ window.HomeDrive = (() => {
     }
   }
 
-  let _lastHudLeft = "";
-  let _lastHudBottom = "";
-  let _lastViewportSig = "";
-
-  function resetCarrotHudLayout() {
-    if (driveHudCardEl) {
-      driveHudCardEl.style.removeProperty("--carrot-hud-left");
-      driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
-    }
-    if (stageEl) {
-      stageEl.style.removeProperty("--carrot-viewport-left");
-      stageEl.style.removeProperty("--carrot-viewport-top");
-      stageEl.style.removeProperty("--carrot-viewport-width");
-      stageEl.style.removeProperty("--carrot-viewport-height");
-    }
-    _lastViewportSig = "";
-  }
-
-  function applyCarrotHudLayout(viewportRect) {
-    if (!window.CarrotLayout?.isWide?.()) {
-      if (_lastHudLeft !== "" || _lastHudBottom !== "") {
-        if (driveHudCardEl) {
-          driveHudCardEl.style.removeProperty("--carrot-hud-left");
-          driveHudCardEl.style.removeProperty("--carrot-hud-bottom");
-        }
-        _lastHudLeft = "";
-        _lastHudBottom = "";
-      }
-      return;
-    }
-    const stageWidth = stageEl?.clientWidth || viewportRect?.width || 0;
-    const stageHeight = stageEl?.clientHeight || viewportRect?.height || 0;
-    if (!stageWidth || !stageHeight) return;
-    const viewport = {
-      left: Math.round(finiteNumber(viewportRect?.left, 0)),
-      top: Math.round(finiteNumber(viewportRect?.top, 0)),
-      width: Math.round(finiteNumber(viewportRect?.width, stageWidth)),
-      height: Math.round(finiteNumber(viewportRect?.height, stageHeight)),
-      stageWidth: Math.round(stageWidth),
-      stageHeight: Math.round(stageHeight),
-    };
-    const viewportSig = `${viewport.left},${viewport.top},${viewport.width},${viewport.height},${viewport.stageWidth},${viewport.stageHeight}`;
-    if (stageEl && _lastViewportSig !== viewportSig) {
-      _lastViewportSig = viewportSig;
-      stageEl.style.setProperty("--carrot-viewport-left", `${viewport.left}px`);
-      stageEl.style.setProperty("--carrot-viewport-top", `${viewport.top}px`);
-      stageEl.style.setProperty("--carrot-viewport-width", `${viewport.width}px`);
-      stageEl.style.setProperty("--carrot-viewport-height", `${viewport.height}px`);
-      window.dispatchEvent(new CustomEvent("carrot:viewportlayout", { detail: viewport }));
-    }
-
-    if (!driveHudCardEl) return;
-    const overlayInsetX = clamp(stageWidth * 0.028, 16, 28);
-    const overlayInsetY = clamp(stageHeight * 0.038, 20, 30);
-    const leftVal = `${Math.round(overlayInsetX)}px`;
-    const bottomVal = `${Math.round(overlayInsetY)}px`;
-
-    if (_lastHudLeft !== leftVal) {
-      _lastHudLeft = leftVal;
-      driveHudCardEl.style.setProperty("--carrot-hud-left", leftVal);
-    }
-    if (_lastHudBottom !== bottomVal) {
-      _lastHudBottom = bottomVal;
-      driveHudCardEl.style.setProperty("--carrot-hud-bottom", bottomVal);
-    }
-  }
-
   function getCanvasDpr() {
     const rawDpr = window.devicePixelRatio || 1;
     const portrait = !window.CarrotLayout?.isWide?.();
@@ -1899,13 +1656,44 @@ window.HomeDrive = (() => {
     return Math.min(rawDpr, cap);
   }
 
+  function prefersPerformanceRenderer() {
+    return Boolean(performanceCanvasEl && performanceRenderer);
+  }
+
+  function getPerformanceCanvasDpr(baseDpr) {
+    if (!prefersPerformanceRenderer()) return baseDpr;
+    // This scales only the backing pixels. Geometry keeps using the original
+    // videoWidth/videoHeight coordinate space passed to beginFrame().
+    const rawDpr = Math.max(1, Number(window.devicePixelRatio) || 1);
+    return Math.max(baseDpr, Math.min(rawDpr, PERFORMANCE_RENDER_DPR_CAP));
+  }
+
+  function beginGeometryFrame(videoWidth, videoHeight) {
+    performanceGeometryActive = Boolean(
+      prefersPerformanceRenderer()
+      && performanceCanvasEl
+      && performanceRenderer?.beginFrame?.(videoWidth, videoHeight)
+    );
+    stageEl.classList.toggle("is-performance-renderer", performanceGeometryActive);
+    if (!performanceGeometryActive) performanceRenderer?.clear?.();
+  }
+
+  function endGeometryFrame() {
+    if (performanceGeometryActive) performanceRenderer?.endFrame?.();
+  }
+
   function syncCanvasSize(videoWidth, videoHeight, stageWidth, stageHeight) {
     const dpr = getCanvasDpr();
+    const performanceDpr = getPerformanceCanvasDpr(dpr);
+    // Performance mode is a hybrid renderer: WebGL2 owns fills while the 2D
+    // overlay owns their strokes and animated center lines. Rasterizing those
+    // stacked layers at the same DPR prevents sub-pixel edge separation.
+    const geometryDpr = prefersPerformanceRenderer() ? performanceDpr : dpr;
 
-    const nextOverlaySignature = `${videoWidth}x${videoHeight}@${dpr.toFixed(2)}`;
+    const nextOverlaySignature = `${videoWidth}x${videoHeight}@${geometryDpr.toFixed(2)}|p${performanceDpr.toFixed(2)}`;
     if (overlaySizeSignature !== nextOverlaySignature) {
       overlaySizeSignature = nextOverlaySignature;
-      resetTemporalRibbonState();
+      roadOverlayProjection.resetTemporal();
       videoEl.style.width = `${videoWidth}px`;
       videoEl.style.height = `${videoHeight}px`;
       if (videoHoldEl) {
@@ -1916,9 +1704,21 @@ window.HomeDrive = (() => {
       }
       canvasEl.style.width = `${videoWidth}px`;
       canvasEl.style.height = `${videoHeight}px`;
-      canvasEl.width = Math.max(1, Math.round(videoWidth * dpr));
-      canvasEl.height = Math.max(1, Math.round(videoHeight * dpr));
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      canvasEl.width = Math.max(1, Math.round(videoWidth * geometryDpr));
+      canvasEl.height = Math.max(1, Math.round(videoHeight * geometryDpr));
+      ctx.setTransform(geometryDpr, 0, 0, geometryDpr, 0, 0);
+      if (performanceCanvasEl) {
+        performanceCanvasEl.style.width = `${videoWidth}px`;
+        performanceCanvasEl.style.height = `${videoHeight}px`;
+        const performanceWidth = Math.max(1, Math.round(videoWidth * performanceDpr));
+        const performanceHeight = Math.max(1, Math.round(videoHeight * performanceDpr));
+        if (performanceRenderer?.ownsOffscreenCanvas?.()) {
+          performanceRenderer.resize(performanceWidth, performanceHeight);
+        } else {
+          performanceCanvasEl.width = performanceWidth;
+          performanceCanvasEl.height = performanceHeight;
+        }
+      }
     }
 
     const nextHudSignature = `${stageWidth}x${stageHeight}@${dpr.toFixed(2)}`;
@@ -1937,352 +1737,40 @@ window.HomeDrive = (() => {
     if (transformSignature === nextSignature) return;
 
     transformSignature = nextSignature;
-    resetTemporalRibbonState();
+    roadOverlayProjection.resetTemporal();
     const cssMatrix = `matrix(${transform.scale}, 0, 0, ${transform.scale}, ${transform.tx}, ${transform.ty})`;
     videoEl.style.transform = cssMatrix;
     if (videoHoldEl) videoHoldEl.style.transform = cssMatrix;
+    if (performanceCanvasEl) performanceCanvasEl.style.transform = cssMatrix;
     canvasEl.style.transform = cssMatrix;
   }
 
-  function clearOverlay(videoWidth, videoHeight) {
+  function clearOverlay(videoWidth, videoHeight, options = {}) {
     ctx.clearRect(0, 0, videoWidth, videoHeight);
+    if (options.clearPerformance) performanceRenderer?.clear?.();
   }
 
-  function clearHud(stageWidth, stageHeight) {
-    hudCtx.clearRect(0, 0, stageWidth, stageHeight);
-  }
-
-  function fitSingleLineHudFontSize(text, preferredSize, maxWidth, minSize = 4.5, fontWeight = 900) {
-    const label = String(text || "").trim();
-    if (!label) return preferredSize;
-    let fontSize = preferredSize;
-    const font = `${fontWeight} ${fontSize}px ${HUD_TEXT_FONT}`;
-    const measured = getCachedTextWidth(hudCtx, font, label);
-    if (measured > maxWidth && measured > 1.0) {
-      fontSize = clamp(fontSize * ((maxWidth / measured) * 0.985), minSize, fontSize);
-    }
-    return fontSize;
-  }
-
-  function drawOutlinedHudText({
-    text,
-    x,
-    y,
-    color = "rgba(244, 244, 244, 0.94)",
-    strokeColor = "rgba(0, 0, 0, 0.94)",
-    strokeWidth = 3,
-    fontSize = 24,
-    fontWeight = 900,
-    alignX = "left",
-    alignY = "top",
-    maxWidth,
-  }) {
-    const label = String(text || "").trim();
-    if (!label) return;
-
-    hudCtx.save();
-    hudCtx.font = `${fontWeight} ${fontSize}px ${HUD_TEXT_FONT}`;
-    hudCtx.fillStyle = color;
-    hudCtx.strokeStyle = strokeColor;
-    hudCtx.lineWidth = strokeWidth;
-    hudCtx.lineJoin = "round";
-    hudCtx.miterLimit = 2;
-    hudCtx.textAlign = alignX === "center" ? "center" : alignX === "right" ? "right" : "left";
-    hudCtx.textBaseline = alignY === "middle" ? "middle" : alignY === "bottom" ? "bottom" : alignY === "baselineBottom" ? "alphabetic" : "top";
-    if (strokeWidth > 0) {
-      hudCtx.strokeText(label, x, y, maxWidth);
-    }
-    hudCtx.fillText(label, x, y, maxWidth);
-    hudCtx.restore();
-  }
-
-  function drawSegmentBands(left, right, style, step) {
-    if (!Array.isArray(left) || left.length < 3 || left.length !== right.length) return;
-    const baseColor = paletteColor(style.paletteIndex);
-    const stroke = style.emphasisStroke ? style.strokeColor : "";
-    for (let i = 0; i < left.length - 2; i += step) {
-      const next = Math.min(i + 2, left.length - 1);
-      const segment = [left[i], left[next], right[next], right[i]];
-      drawPolygon(segment, rgba(baseColor, 0.28), stroke, 1.1);
-    }
-  }
-
-  function createPathGradient(baseColor, canvasHeight, style) {
-    const mode = finiteNumber(style?.mode, 0);
-    let solidAlpha = mode === 0 ? 0.40 : 0.24;
-    let midAlpha = mode === 0 ? 0.20 : 0.12;
-
-    if (mode === 0 || style?.isCruiseOff) {
-      solidAlpha = Math.max(solidAlpha, TEST_PATH_VISIBILITY_SOLID_ALPHA);
-      midAlpha = Math.max(midAlpha, TEST_PATH_VISIBILITY_MID_ALPHA);
-    }
-
-    const cacheKey = `g:${baseColor.r},${baseColor.g},${baseColor.b}|${Math.round(canvasHeight)}|${solidAlpha}|${midAlpha}`;
-    return getCachedGradient(cacheKey, () => {
-      const gradient = ctx.createLinearGradient(0, canvasHeight, 0, canvasHeight * 0.32);
-      gradient.addColorStop(0, rgba(baseColor, solidAlpha));
-      gradient.addColorStop(0.55, rgba(baseColor, midAlpha));
-      gradient.addColorStop(1, rgba(baseColor, 0.0));
-      return gradient;
-    });
-  }
-
-  function drawPathRibbon(ribbon, style, canvasHeight) {
-    if (!ribbon.polygon.length) return;
-    const baseColor = paletteColor(style.paletteIndex);
-    if (style.mode === 0) {
-      drawPolygon(
-        ribbon.polygon,
-        rgba(baseColor, 0.42),
-        style.emphasisStroke ? style.strokeColor : "",
-        style.emphasisStroke ? 2.0 : 0,
-      );
-      return;
-    }
-    const fill = createPathGradient(baseColor, canvasHeight, style);
-    drawPolygon(ribbon.polygon, fill, style.emphasisStroke ? style.strokeColor : "", style.emphasisStroke ? 1.7 : 0);
-  }
-
-  function drawAnimatedPath(ribbon, style) {
-    if (!ribbon.center.length) return;
-    const dashPresets = {
-      1: [14, 11],
-      2: [10, 8],
-      3: [26, 12],
-      4: [18, 10, 5, 10],
-      5: [30, 12],
-      6: [12, 7],
-      7: [20, 8, 4, 8],
-      8: [8, 6],
-    };
-    const baseColor = paletteColor(style.paletteIndex);
-    const dash = dashPresets[style.mode] || dashPresets[1];
-    const dashLength = dash.reduce((sum, value) => sum + value, 0);
-    const dashOffset = -((performance.now() / 120) % dashLength);
-    drawPolyline(ribbon.center, rgba(baseColor, 0.78), 5.5, dash, dashOffset);
-    if (style.emphasisStroke) {
-      drawPolyline(ribbon.center, style.strokeColor, 1.6);
-    }
-  }
-
-  function drawComplexPath(ribbon, style) {
-    const step = style.mode === 9 ? 3 : style.mode === 10 ? 4 : style.mode === 11 ? 5 : 6;
-    drawSegmentBands(ribbon.left, ribbon.right, style, step);
-  }
-
-  function drawSpecialPath(ribbon, style) {
-    const baseColor = paletteColor(style.paletteIndex);
-    const bands = [];
-    if (style.mode === 13 || style.mode === 14) {
-      bands.push(buildBandPolygon(ribbon.left, ribbon.right, 0.0, 0.18));
-      bands.push(buildBandPolygon(ribbon.left, ribbon.right, 0.82, 1.0));
-    }
-    if (style.mode === 13 || style.mode === 15) {
-      bands.push(buildBandPolygon(ribbon.left, ribbon.right, 0.38, 0.62));
-    }
-
-    for (const band of bands) {
-      drawPolygon(band, rgba(baseColor, 0.34), style.emphasisStroke ? style.strokeColor : "", style.emphasisStroke ? 1.4 : 0);
-    }
-  }
-
-  function getPathHalfWidth() {
-    const widthRatio = clamp(finiteNumber(paramsState.ShowPathWidth, 100) / 100, 0.1, 2.0);
-    return PATH_HALF_WIDTH * widthRatio;
-  }
-
-  function drawPath(pathData, model, overlayState, calibTransform, canvasHeight, style) {
-    if (!pathData || !Array.isArray(pathData.x) || !pathData.x.length) return;
-    const sceneMaxDistance = getSceneMaxDistance(model, overlayState);
-    const rawRibbon = buildRibbon(calibTransform, pathData, getPathHalfWidth(), PATH_Z_OFFSET, getPathMaxDistance(sceneMaxDistance), false);
-    const ribbon = smoothRibbonTemporal(`path:${style?.laneMode ? "lane" : "model"}:${style?.mode ?? 0}`, rawRibbon, PATH_TEMPORAL_SMOOTH_ALPHA);
-    if (ribbon.polygon.length < 3) return;
-
-    drawPathRibbon(ribbon, style, canvasHeight);
-    if (style.mode === 0) return;
-    if (style.mode >= 13 && style.mode <= 15) {
-      drawSpecialPath(ribbon, style);
-      return;
-    }
-    if (style.mode >= 9) {
-      drawComplexPath(ribbon, style);
-      return;
-    }
-    drawAnimatedPath(ribbon, style);
-  }
-
-  function drawLaneLines(model, overlayState, hudState, calibTransform) {
-    const laneLines = Array.isArray(model?.laneLines) ? model.laneLines : [];
-    const laneLineProbs = Array.isArray(model?.laneLineProbs) ? model.laneLineProbs : [];
-    if (!laneLines.length) return;
-
-    const leftLaneLine = finiteNumber(hudState?.carState?.leftLaneLine, 0);
-    const rightLaneLine = finiteNumber(hudState?.carState?.rightLaneLine, 0);
-    const sceneMaxDistance = getSceneMaxDistance(model, overlayState);
-    const maxIdx = getPathLengthIdx(laneLines[0], sceneMaxDistance);
-    for (let i = 0; i < laneLines.length; i += 1) {
-      const prob = clamp(finiteNumber(laneLineProbs[i], 0), 0, 0.9);
-      const renderProb = prob >= 0.02 ? prob : (prob >= TEST_LANE_PROB_MIN ? clamp(prob * TEST_LANE_PROB_BOOST, 0.02, 0.12) : 0);
-      if (renderProb <= 0) continue;
-
-      // Keep native probability-driven lanes, but allow a small test-page floor so
-      // very low-confidence indoor/stationary lanes are still inspectable.
-      const highlightedLeft = i === 1 && Math.floor(leftLaneLine / 10) === 2;
-      const highlightedRight = i === 2 && Math.floor(rightLaneLine / 10) === 2;
-      const laneColor = highlightedLeft || highlightedRight ? { r: 255, g: 217, b: 94 } : { r: 255, g: 255, b: 255 };
-      const baseHalfWidth = Math.max(highlightedLeft || highlightedRight ? 0.025 : 0.010, 0.025 * renderProb);
-      const halfWidth = baseHalfWidth * LANE_VISUAL_WIDTH_GAIN;
-      const fillAlpha = prob >= 0.02 ? clamp(renderProb, 0.12, 0.7) : clamp(renderProb * 3.0, 0.16, 0.26);
-      const strokeAlpha = prob >= 0.02 ? 0.20 : 0.24;
-      const rawRibbon = buildRibbon(
-        calibTransform,
-        laneLines[i],
-        halfWidth,
-        0,
-        finiteNumber(laneLines[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE),
-        false,
-        0,
-        GEOMETRY_QUALITY_LANE,
-      );
-      const ribbon = smoothRibbonTemporal(`lane:${i}`, rawRibbon, LANE_TEMPORAL_SMOOTH_ALPHA);
-      drawPolygon(
-        ribbon.polygon,
-        `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${fillAlpha.toFixed(3)})`,
-        `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${strokeAlpha.toFixed(3)})`,
-        1,
-      );
-
-      if ((i === 1 && (leftLaneLine % 10) === 4) || (i === 2 && (rightLaneLine % 10) === 4)) {
-        const shift = i === 1 ? -0.3 : 0.3;
-        const rawDoubleRibbon = buildRibbon(
-          calibTransform,
-          laneLines[i],
-          halfWidth,
-          0,
-          finiteNumber(laneLines[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE),
-          false,
-          shift,
-          GEOMETRY_QUALITY_LANE,
-        );
-        const doubleRibbon = smoothRibbonTemporal(`lane:${i}:double:${shift}`, rawDoubleRibbon, LANE_TEMPORAL_SMOOTH_ALPHA);
-        drawPolygon(
-          doubleRibbon.polygon,
-          `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${fillAlpha.toFixed(3)})`,
-          `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${strokeAlpha.toFixed(3)})`,
-          1,
-        );
-      }
-    }
-  }
-
-  function drawRoadEdges(model, overlayState, calibTransform) {
-    const roadEdges = Array.isArray(model?.roadEdges) ? model.roadEdges : [];
-    const roadEdgeStds = Array.isArray(model?.roadEdgeStds) ? model.roadEdgeStds : [];
-    if (!roadEdges.length) return;
-
-    const sceneMaxDistance = getSceneMaxDistance(model, overlayState);
-    const maxIdx = getPathLengthIdx(roadEdges[0], sceneMaxDistance);
-    for (let i = 0; i < roadEdges.length; i += 1) {
-      const edgeStd = clamp(finiteNumber(roadEdgeStds[i], 0.4), 0, 1);
-      const alpha = clamp(1 - edgeStd, 0.12, 0.66);
-      const ribbon = buildRibbon(
-        calibTransform,
-        roadEdges[i],
-        0.025,
-        0,
-        finiteNumber(roadEdges[i]?.x?.[maxIdx], MAX_DRAW_DISTANCE),
-        false,
-        0,
-        GEOMETRY_QUALITY_ROAD_EDGE,
-      );
-      drawPolygon(
-        ribbon.polygon,
-        `rgba(255,78,59,${alpha.toFixed(3)})`,
-        "rgba(255,124,104,0.28)",
-        1,
-      );
-    }
-  }
-
-  function samplePathZ(position, distance) {
-    const cacheBucket = getWeakCacheBucket(_frameProjectionCache.pathZ, position);
-    const cacheKey = Math.round(finiteNumber(distance, 0) * 100);
-    if (cacheBucket?.has(cacheKey)) return cacheBucket.get(cacheKey);
-
-    const zs = Array.isArray(position?.z) ? position.z : [];
-    const idx = getPathLengthIdx(position, distance);
-    const value = finiteNumber(zs[idx], 0);
-    cacheBucket?.set(cacheKey, value);
-    return value;
-  }
-
-  function samplePathY(position, distance) {
-    const cacheBucket = getWeakCacheBucket(_frameProjectionCache.pathY, position);
-    const cacheKey = Math.round(finiteNumber(distance, 0) * 100);
-    if (cacheBucket?.has(cacheKey)) return cacheBucket.get(cacheKey);
-
-    const value = interp1D(
-      distance,
-      Array.isArray(position?.x) ? position.x : [],
-      Array.isArray(position?.y) ? position.y : [],
-    );
-    cacheBucket?.set(cacheKey, value);
-    return value;
-  }
-
-  function circlePolygon(cx, cy, radius, points = 12) {
-    const polygon = [];
-    for (let i = 0; i < points; i += 1) {
-      const theta = (Math.PI * 2 * i) / points;
-      polygon.push({
-        x: cx + Math.cos(theta) * radius,
-        y: cy + Math.sin(theta) * radius,
-      });
-    }
-    return polygon;
-  }
-
-  function buildVerticalRibbon(calibTransform, line, centerShift, topZOffset, bottomZOffset, maxDistance) {
-    const cacheBucket = getWeakCacheBucket(_frameProjectionCache.verticalRibbon, line);
-    const cacheKey = [
-      Math.round(finiteNumber(centerShift, 0) * 1000),
-      Math.round(finiteNumber(topZOffset, 0) * 1000),
-      Math.round(finiteNumber(bottomZOffset, 0) * 1000),
-      Math.round(finiteNumber(maxDistance, MAX_DRAW_DISTANCE) * 100),
-    ].join("|");
-    if (cacheBucket?.has(cacheKey)) return cacheBucket.get(cacheKey);
-
-    const xs = Array.isArray(line?.x) ? line.x : [];
-    const ys = Array.isArray(line?.y) ? line.y : [];
-    const zs = Array.isArray(line?.z) ? line.z : [];
-    const top = [];
-    const bottom = [];
-    const distances = [];
-    const maxIdx = getPathLengthIdx(line, maxDistance);
-
-    forEachProjectedSampleIndex(xs, maxIdx, maxDistance, (i) => {
-      const x = finiteNumber(xs[i], NaN);
-      if (!Number.isFinite(x) || x < 0) return;
-
-      const y = finiteNumber(ys[i], 0) + centerShift;
-      const z = finiteNumber(zs[i], 0);
-      const topPoint = projectPoint(calibTransform, x, y, z + topZOffset);
-      const bottomPoint = projectPoint(calibTransform, x, y, z + bottomZOffset);
-      if (!topPoint || !bottomPoint) return;
-      if (top.length && topPoint.y > top[top.length - 1].y) return;
-
-      top.push(topPoint);
-      bottom.push(bottomPoint);
-      distances.push(x);
-    });
-
-    const smoothMaxDistance = finiteNumber(maxDistance, MAX_DRAW_DISTANCE);
-    const smoothedTop = smoothProjectedPolyline(top, distances, smoothMaxDistance, POLYLINE_SMOOTH_MAX_STRENGTH);
-    const smoothedBottom = smoothProjectedPolyline(bottom, distances, smoothMaxDistance, POLYLINE_SMOOTH_MAX_STRENGTH);
-    const result = smoothedTop.length >= 2 && smoothedBottom.length >= 2 ? smoothedTop.concat([...smoothedBottom].reverse()) : [];
-    cacheBucket?.set(cacheKey, result);
-    return result;
-  }
+  const roadOverlayGeometryRenderer = window.DriveVisionRoadOverlayGeometryRenderer?.create?.({
+    context: ctx,
+    getParams: () => paramsState,
+    isPerformanceActive: () => performanceGeometryActive,
+    pathZOffset: PATH_Z_OFFSET,
+    maxDrawDistance: MAX_DRAW_DISTANCE,
+    paletteColor,
+    rgba,
+    getCachedGradient,
+    geometry: {
+      drawPolygon: drawGeometryPolygon,
+      drawPolyline,
+      buildRibbon: roadOverlayProjection.buildRibbon,
+      smoothRibbon: roadOverlayProjection.smoothRibbon,
+      buildBandPolygon: roadOverlayProjection.buildBandPolygon,
+      getSceneMaxDistance,
+      getPathMaxDistance,
+      getPathLengthIndex: roadOverlayProjection.getPathLengthIndex,
+    },
+  }) || null;
+  if (!roadOverlayGeometryRenderer) return {};
 
   function resetLeadEmaSlot(slot) {
     if (slot !== 0 && slot !== 1) return;
@@ -2290,41 +1778,37 @@ window.HomeDrive = (() => {
   }
 
   function resetLeadTwoEma() {
-    leadTwoEmaState = { xl: NaN, xr: NaN, y: NaN, lastMs: 0 };
+    leadTwoEmaState = { xl: NaN, xr: NaN, y: NaN, trackId: -1, lastMs: 0 };
   }
 
-  function syncLeadRenderState(videoWidth, videoHeight, modelFrameId, cameraFrameId) {
-    const nextWidth = finiteNumber(videoWidth, NaN);
-    const nextHeight = finiteNumber(videoHeight, NaN);
-    const nextModelFrameId = finiteNumber(modelFrameId, NaN);
-    const nextCameraFrameId = finiteNumber(cameraFrameId, NaN);
-    const prev = leadRenderState;
+  function resetLeadTemporalState() {
+    resetLeadEmaSlot(0);
+    resetLeadEmaSlot(1);
+    resetLeadTwoEma();
+    roadOverlayLeadRenderer?.reset();
+  }
 
-    const sourceChanged =
-      Number.isFinite(prev.lastSourceWidth) &&
-      Number.isFinite(prev.lastSourceHeight) &&
-      (Math.abs(prev.lastSourceWidth - nextWidth) > 0.5 || Math.abs(prev.lastSourceHeight - nextHeight) > 0.5);
-    const cameraFrameRewind =
-      Number.isFinite(prev.lastCameraFrameId) &&
-      Number.isFinite(nextCameraFrameId) &&
-      nextCameraFrameId < prev.lastCameraFrameId;
-    const modelFrameRewind =
-      Number.isFinite(prev.lastModelFrameId) &&
-      Number.isFinite(nextModelFrameId) &&
-      nextModelFrameId < prev.lastModelFrameId;
-    if (sourceChanged || cameraFrameRewind || modelFrameRewind) {
-      resetLeadEmaSlot(0);
-      resetLeadEmaSlot(1);
-      resetLeadTwoEma();
-      leadHoldState.box = null;
-    }
+  function resetVisualTemporalState() {
+    roadOverlayProjection.resetTemporal();
+    resetLeadTemporalState();
+  }
 
-    leadRenderState = {
-      lastCameraFrameId: nextCameraFrameId,
-      lastModelFrameId: nextModelFrameId,
-      lastSourceWidth: nextWidth,
-      lastSourceHeight: nextHeight,
-    };
+  function resetReplayProjectionState() {
+    // A replay/seek can switch device camera profiles and calibration. Never
+    // draw the new segment using a previous segment's last-known-good matrix.
+    _roadCameraDeviceType = "";
+    _roadCameraSensor = "";
+    _roadCameraProfileResolved = false;
+    _lastValidCalibrationMatrix = null;
+    _lastValidCalibrationSignature = "";
+    transformSignature = "";
+    roadOverlayProjection.resetFrame();
+    _forceNextRender = true;
+  }
+
+  function resetReplayVisualState() {
+    resetVisualTemporalState();
+    resetReplayProjectionState();
   }
 
   function getLeadBadgeOffsets(videoWidth, videoHeight) {
@@ -2346,44 +1830,14 @@ window.HomeDrive = (() => {
     return clamp(Math.min(scaleX, scaleY), 0.45, 1.0);
   }
 
-  function hasNearbyAssistLead(lead, speedMps) {
-    const speed = finiteNumber(speedMps, 0);
-    if (speed <= 0) return false;
-    const threshold = speed * 3.0;
-    return Boolean(lead?.status) && finiteNumber(lead?.dRel, Infinity) > 0 && finiteNumber(lead?.dRel, Infinity) < threshold;
-  }
-
-  function drawBlindspotBarriers(modelPath, overlayState, hudState, calibTransform) {
-    if (!modelPath || !Array.isArray(modelPath.x) || modelPath.x.length < 2) return;
-
-    const radarState = overlayState?.radarState || {};
-    const carState = hudState?.carState || {};
-    const lateralPlan = overlayState?.lateralPlan || {};
-    const speedMps = finiteNumber(carState?.vEgo, finiteNumber(carState?.vEgoCluster, 0));
-    const laneChangeState = finiteNumber(lateralPlan?.laneChangeState, 0);
-    const laneChangeDirection = finiteNumber(lateralPlan?.laneChangeDirection, 0);
-    const leftBlindspot = Boolean(carState?.leftBlindspot);
-    const rightBlindspot = Boolean(carState?.rightBlindspot);
-    const leftAssistWarn = !leftBlindspot && laneChangeState === 1 && laneChangeDirection === 1 && hasNearbyAssistLead(radarState?.leadLeft, speedMps);
-    const rightAssistWarn = !rightBlindspot && laneChangeState === 1 && laneChangeDirection === 2 && hasNearbyAssistLead(radarState?.leadRight, speedMps);
-    if (!leftBlindspot && !rightBlindspot && !leftAssistWarn && !rightAssistWarn) return;
-
-    const goldFill = "rgba(255, 215, 0, 0.48)";
-    const goldStroke = "rgba(255, 215, 0, 0.84)";
-    const greenFill = "rgba(0, 204, 0, 0.44)";
-    const greenStroke = "rgba(0, 204, 0, 0.80)";
-
-    const drawRibbon = (shift, fill, stroke) => {
-      const ribbon = buildVerticalRibbon(calibTransform, modelPath, shift, 1.15, 0.60, 40);
-      if (ribbon.length < 8) return;
-      drawPolygon(ribbon, fill, stroke, 1.2);
-    };
-
-    if (leftBlindspot) drawRibbon(-1.7, goldFill, goldStroke);
-    else if (leftAssistWarn) drawRibbon(-1.7, greenFill, greenStroke);
-
-    if (rightBlindspot) drawRibbon(1.7, goldFill, goldStroke);
-    else if (rightAssistWarn) drawRibbon(1.7, greenFill, greenStroke);
+  function getLeadProjectionScale(videoWidth, videoHeight) {
+    // Geometry must follow the encoded camera resolution exactly. qcamera is
+    // 526x330, well below the 0.45 readability floor used for text/icons; using
+    // that UI floor for geometry inflates an 800px native box to 360px instead
+    // of about 218px and lets the enlarged box escape the replay viewport.
+    const scaleX = videoWidth / BASE_CAMERA.width;
+    const scaleY = videoHeight / BASE_CAMERA.height;
+    return clamp(Math.min(scaleX, scaleY), 0.05, 1.0);
   }
 
   function getLeadBoxClampMargins(videoWidth, videoHeight, stageWidth = videoWidth, stageHeight = videoHeight, transform = null, options = {}) {
@@ -2411,8 +1865,16 @@ window.HomeDrive = (() => {
     maxCenterY = Math.min(maxCenterY, visibleRect.bottom - Math.max(badgeReserve, bottomReserve));
     maxCenterY = Math.max(topMargin, maxCenterY);
 
+    // Preserve the native side reserve when space allows, but keep a usable
+    // center lane in aggressively cropped/portrait replay viewports.
+    const sideInset = Math.min(sideReserve, Math.max(0, visibleRect.width * 0.28));
+    const minCenterX = visibleRect.left + sideInset;
+    const maxCenterX = visibleRect.right - sideInset;
+
     return {
       marginX: sideReserve,
+      minCenterX,
+      maxCenterX: Math.max(minCenterX, maxCenterX),
       topMargin,
       bottomMargin: Math.max(bottomReserve, videoHeight - maxCenterY),
       maxCenterY,
@@ -2427,7 +1889,7 @@ window.HomeDrive = (() => {
     if (!Number.isFinite(distance) || distance <= 0) return null;
 
     const yCenter = -finiteNumber(lead.yRel, 0);
-    const z = samplePathZ(modelPath, distance) + PATH_Z_OFFSET;
+    const z = roadOverlayProjection.samplePathZ(modelPath, distance) + PATH_Z_OFFSET;
     const left = projectPointPrecise(calibTransform, distance, yCenter - 1.2, z);
     const right = projectPointPrecise(calibTransform, distance, yCenter + 1.2, z);
     if (!left || !right) return null;
@@ -2437,7 +1899,7 @@ window.HomeDrive = (() => {
 
     const rawCenterX = (left.x + right.x) * 0.5;
     const rawCenterY = (left.y + right.y) * 0.5;
-    const { marginX, topMargin, maxCenterY } = getLeadBoxClampMargins(
+    const { minCenterX, maxCenterX, topMargin, maxCenterY, visibleRect } = getLeadBoxClampMargins(
       videoWidth,
       videoHeight,
       stageWidth,
@@ -2447,31 +1909,47 @@ window.HomeDrive = (() => {
     );
 
     // Match CarrotLink's adaptive bottom margin while keeping carrot.cc clamp policy.
-    const _path_x = clamp(rawCenterX, marginX, Math.max(marginX, videoWidth - marginX));
+    const _path_x = clamp(rawCenterX, minCenterX, maxCenterX);
     const _path_y = clamp(rawCenterY, topMargin, maxCenterY);
     const uiScale = getLeadUiScale(videoWidth, videoHeight);
-    const _path_width = clamp(rawWidth, 120 * uiScale, 800 * uiScale);
+    const projectionScale = getLeadProjectionScale(videoWidth, videoHeight);
+    const sidePad = Math.max(10 * uiScale, 5);
+    const horizontalWidthLimit = Math.max(
+      1,
+      2 * Math.max(0, Math.min(_path_x - visibleRect.left, visibleRect.right - _path_x) - sidePad),
+    );
+    const verticalWidthLimit = Math.max(1, (maxCenterY - visibleRect.top) / 0.8);
+    const maxWidth = Math.max(1, Math.min(800 * projectionScale, horizontalWidthLimit, verticalWidthLimit));
+    const minWidth = Math.min(120 * projectionScale, maxWidth);
+    const _path_width = clamp(rawWidth, minWidth, maxWidth);
 
     // ── Step 2: Time-based EMA on clamped values ──
-    // C3 uses alpha=0.85 at stable 20Hz.  Web frame rate varies, so
-    // alpha_adj = 0.85^(dt/50ms) gives identical wall-clock convergence.
+    // C3 uses alpha=0.85 at stable 20Hz. Live rendering follows wall time;
+    // replay follows media time so pause, seek and playback speed stay aligned.
     const ema = leadEmaState[slot] || { fx: NaN, fy: NaN, fw: NaN, trackId: -1, lastMs: 0 };
     const currentTrackId = (lead.radarTrackId != null) ? finiteNumber(lead.radarTrackId, -1) : -1;
-    const nowMs = performance.now();
-    const dt = ema.lastMs > 0 ? clamp(nowMs - ema.lastMs, 1, 500) : C3_FRAME_MS;
-    const alpha = Math.pow(LEAD_EMA_ALPHA, dt / C3_FRAME_MS);
-    const hasPrev = Number.isFinite(ema.fx) && Number.isFinite(ema.fy) && Number.isFinite(ema.fw);
+    const nowMs = getLeadTemporalNowMs();
+    const dt = ema.lastMs > 0 ? clamp(nowMs - ema.lastMs, 0, 500) : C3_FRAME_MS;
+    const alpha = dt > 0 ? Math.pow(LEAD_EMA_ALPHA, dt / C3_FRAME_MS) : 1;
+    const hasPrev = ema.trackId === currentTrackId
+      && Number.isFinite(ema.fx)
+      && Number.isFinite(ema.fy)
+      && Number.isFinite(ema.fw);
     const path_fx = hasPrev ? (ema.fx * alpha + _path_x * (1 - alpha)) : _path_x;
     const path_fy = hasPrev ? (ema.fy * alpha + _path_y * (1 - alpha)) : _path_y;
     const path_fw = hasPrev ? (ema.fw * alpha + _path_width * (1 - alpha)) : _path_width;
-    leadEmaState[slot] = { fx: path_fx, fy: path_fy, fw: path_fw, trackId: currentTrackId, lastMs: nowMs };
 
     // ── Step 3: Build box from smoothed values ──
-    const path_x = Math.trunc(path_fx);
-    const path_y = Math.trunc(path_fy);
-    const width = Math.max(Math.trunc(path_fw), 1);
-    const sidePad = Math.max(10 * uiScale, 5);
+    const width = Math.max(Math.trunc(clamp(path_fw, minWidth, maxWidth)), 1);
     const height = Math.max(Math.trunc(width * 0.8), Math.round(12 * uiScale));
+    const safeMinX = visibleRect.left + sidePad + width * 0.5;
+    const safeMaxX = visibleRect.right - sidePad - width * 0.5;
+    const path_x = Math.trunc(safeMaxX >= safeMinX
+      ? clamp(path_fx, safeMinX, safeMaxX)
+      : visibleRect.left + visibleRect.width * 0.5);
+    const safeMinY = Math.min(maxCenterY, Math.max(topMargin, visibleRect.top + height));
+    const path_y = Math.trunc(clamp(path_fy, safeMinY, maxCenterY));
+    leadEmaState[slot] = { fx: path_x, fy: path_y, fw: width, trackId: currentTrackId, lastMs: nowMs };
     // capnp default is -1; Number(null)=0 would falsely trigger radar-detected, so guard null
     const radarTrackId = (lead.radarTrackId != null) ? finiteNumber(lead.radarTrackId, -1) : -1;
     const radarDetected = radarTrackId >= 0;
@@ -2502,23 +1980,27 @@ window.HomeDrive = (() => {
     if (!Number.isFinite(distance) || distance <= 0) return null;
 
     const yCenter = -finiteNumber(lead.yRel, 0);
-    const z = samplePathZ(modelPath, distance) + PATH_Z_OFFSET;
+    const z = roadOverlayProjection.samplePathZ(modelPath, distance) + PATH_Z_OFFSET;
     const left = projectPointPrecise(calibTransform, distance, yCenter - 1.2, z);
     const right = projectPointPrecise(calibTransform, distance, yCenter + 1.2, z);
     if (!left || !right) return null;
 
     const prev = leadTwoEmaState;
-    const hasPrev = Number.isFinite(prev.xl) && Number.isFinite(prev.xr) && Number.isFinite(prev.y);
+    const currentTrackId = (lead.radarTrackId != null) ? finiteNumber(lead.radarTrackId, -1) : -1;
+    const hasPrev = prev.trackId === currentTrackId
+      && Number.isFinite(prev.xl)
+      && Number.isFinite(prev.xr)
+      && Number.isFinite(prev.y);
     // C3 lead_two uses alpha=0.8 at 20Hz; apply same time-compensation
-    const nowMs2 = performance.now();
-    const dt2 = prev.lastMs > 0 ? clamp(nowMs2 - prev.lastMs, 1, 500) : C3_FRAME_MS;
-    const a2 = Math.pow(0.8, dt2 / C3_FRAME_MS);
+    const nowMs2 = getLeadTemporalNowMs();
+    const dt2 = prev.lastMs > 0 ? clamp(nowMs2 - prev.lastMs, 0, 500) : C3_FRAME_MS;
+    const a2 = dt2 > 0 ? Math.pow(0.8, dt2 / C3_FRAME_MS) : 1;
     const xl = hasPrev ? (prev.xl * a2 + left.x * (1 - a2)) : left.x;
     const xr = hasPrev ? (prev.xr * a2 + right.x * (1 - a2)) : right.x;
     const y = hasPrev ? (prev.y * a2 + left.y * (1 - a2)) : left.y;
-    leadTwoEmaState = { xl, xr, y, lastMs: nowMs2 };
+    leadTwoEmaState = { xl, xr, y, trackId: currentTrackId, lastMs: nowMs2 };
 
-    const { marginX, topMargin, maxCenterY } = getLeadBoxClampMargins(
+    const { minCenterX, maxCenterX, topMargin, maxCenterY, visibleRect } = getLeadBoxClampMargins(
       videoWidth,
       videoHeight,
       stageWidth,
@@ -2526,14 +2008,27 @@ window.HomeDrive = (() => {
       transform,
       { includeDistanceBadge: false, includeStateText: false },
     );
-    const clampedCenterX = clamp((xl + xr) * 0.5, marginX, Math.max(marginX, videoWidth - marginX));
+    const clampedCenterX = clamp((xl + xr) * 0.5, minCenterX, maxCenterX);
     const rawWidth = Math.max(xr - xl, 1);
     const uiScale = getLeadUiScale(videoWidth, videoHeight);
+    const projectionScale = getLeadProjectionScale(videoWidth, videoHeight);
     const sidePad = Math.max(10 * uiScale, 5);
-    const width = Math.max(Math.trunc(clamp(rawWidth, 120 * uiScale, 800 * uiScale)), 1);
-    const yInt = Math.trunc(clamp(y, topMargin, maxCenterY));
-    const xlInt = Math.trunc(clampedCenterX - width * 0.5);
+    const horizontalWidthLimit = Math.max(
+      1,
+      2 * Math.max(0, Math.min(clampedCenterX - visibleRect.left, visibleRect.right - clampedCenterX) - sidePad),
+    );
+    const verticalWidthLimit = Math.max(1, (maxCenterY - visibleRect.top) / 0.8);
+    const maxWidth = Math.max(1, Math.min(800 * projectionScale, horizontalWidthLimit, verticalWidthLimit));
+    const minWidth = Math.min(120 * projectionScale, maxWidth);
+    const width = Math.max(Math.trunc(clamp(rawWidth, minWidth, maxWidth)), 1);
     const height = Math.max(Math.trunc(width * 0.8), Math.round(12 * uiScale));
+    const safeMinX = visibleRect.left + sidePad + width * 0.5;
+    const safeMaxX = visibleRect.right - sidePad - width * 0.5;
+    const centerX = safeMaxX >= safeMinX
+      ? clamp(clampedCenterX, safeMinX, safeMaxX)
+      : visibleRect.left + visibleRect.width * 0.5;
+    const yInt = Math.trunc(clamp(y, Math.min(maxCenterY, Math.max(topMargin, visibleRect.top + height)), maxCenterY));
+    const xlInt = Math.trunc(centerX - width * 0.5);
     return {
       rect: {
         x: xlInt - sidePad,
@@ -2545,170 +2040,6 @@ window.HomeDrive = (() => {
       videoWidth,
       videoHeight,
     };
-  }
-
-  function getPrimaryVisionDistance(model) {
-    const lead = Array.isArray(model?.leadsV3) ? model.leadsV3[0] : null;
-    const prob = finiteNumber(lead?.prob, 0);
-    const distance = finiteNumber(lead?.x?.[0], 0);
-    return prob > 0.5 && distance > 0 ? Math.max(0, distance - 1.52) : 0;
-  }
-
-  function drawLeadBoxCard(box, strokeColor, fillColor, primary = true) {
-    if (!box?.rect) return;
-    const { x, y, width, height } = box.rect;
-    const uiScale = getLeadUiScale(box.videoWidth || BASE_CAMERA.width, box.videoHeight || BASE_CAMERA.height);
-    const r = Math.max((primary ? 15 : 12) * uiScale, primary ? 7 : 6);
-    const sw = Math.max((primary ? 3.0 : 2.2) * uiScale, primary ? 1.7 : 1.3);
-    // C3 style: fill + stroke (carrot.cc ui_fill_rect with stroke color)
-    fillRoundedRect(ctx, x, y, width, height, r, fillColor);
-    strokeRoundedRect(ctx, x, y, width, height, r, strokeColor, sw);
-  }
-
-  function eraseLeadBoxOcclusion(box, primary = true) {
-    if (!box?.rect) return;
-    const { x, y, width, height } = box.rect;
-    const uiScale = getLeadUiScale(box.videoWidth || BASE_CAMERA.width, box.videoHeight || BASE_CAMERA.height);
-    ctx.save();
-    ctx.globalCompositeOperation = "destination-out";
-    fillRoundedRect(ctx, x, y, width, height, Math.max((primary ? 15 : 12) * uiScale, primary ? 7 : 6), "rgba(0,0,0,1)");
-    ctx.restore();
-  }
-
-  // C3-style dual distance badges: radar left (red/orange) + vision right (blue)
-  function drawLeadDistanceBadgesC3(box, radarDist, visionDist, isLeadScc, textColor = "#ffffff", videoWidth = BASE_CAMERA.width, videoHeight = BASE_CAMERA.height, stageWidth = videoWidth, stageHeight = videoHeight, transform = null) {
-    if (!box?.rect) return;
-    const cx = box.centerX;
-    const offsets = getLeadBadgeOffsets(videoWidth, videoHeight);
-    const badgeH = offsets.badgeHeight;
-    const fontSize = offsets.fontSize;
-    const visibleRect = getVisibleSourceRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
-    const baseY = Math.min(box.centerY + offsets.rectTopOffset, Math.max(visibleRect.top + 4, visibleRect.bottom - badgeH - 4));
-
-    const drawBadge = (text, centerX, bgColor) => {
-      const charW = fontSize * 0.62;
-      const w = Math.max(52 * getLeadUiScale(videoWidth, videoHeight), 16 * getLeadUiScale(videoWidth, videoHeight) + text.length * charW);
-      const bx = centerX - w * 0.5;
-      fillRoundedRect(ctx, bx, baseY, w, badgeH, offsets.radius, bgColor);
-      ctx.save();
-      ctx.font = `800 ${fontSize}px ${HUD_TEXT_FONT}`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.lineJoin = "round";
-      ctx.strokeStyle = "rgba(0,0,0,0.82)";
-      ctx.fillStyle = textColor;
-      ctx.lineWidth = offsets.strokeWidth;
-      ctx.strokeText(text, centerX, baseY + badgeH * 0.54);
-      ctx.fillText(text, centerX, baseY + badgeH * 0.54);
-      ctx.restore();
-    };
-
-    const hasRadar = radarDist > 0;
-    const hasVision = visionDist > 0;
-    // C3 exact colors: COLOR_RED(255,0,0), COLOR_ORANGE(255,175,3), COLOR_BLUE(0,0,255)
-    const radarColor = isLeadScc ? "rgba(255,0,0,0.92)" : "rgba(255,175,3,0.92)";
-    const visionColor = "rgba(0,0,255,0.92)";
-    const radarCenterX = cx - offsets.dx;
-    const visionCenterX = cx + offsets.dx;
-
-    if (hasRadar && hasVision) {
-      const rText = radarDist < 10 ? radarDist.toFixed(1) : radarDist.toFixed(0);
-      const vText = visionDist < 10 ? visionDist.toFixed(1) : visionDist.toFixed(0);
-      drawBadge(rText, radarCenterX, radarColor);
-      drawBadge(vText, visionCenterX, visionColor);
-    } else if (hasRadar) {
-      const rText = radarDist < 10 ? radarDist.toFixed(1) : radarDist.toFixed(0);
-      drawBadge(rText, radarCenterX, radarColor);
-    } else if (hasVision) {
-      const vText = visionDist < 10 ? visionDist.toFixed(1) : visionDist.toFixed(0);
-      drawBadge(vText, visionCenterX, visionColor);
-    }
-  }
-
-  function leadStateAccentColor(xState) {
-    switch (xState) {
-      case 3:
-      case 5:
-        return "rgba(255, 167, 38, 0.82)";
-      case 4:
-        return "rgba(35, 213, 93, 0.82)";
-      case 1:
-        return "rgba(145, 164, 191, 0.82)";
-      default:
-        return "rgba(255, 255, 255, 0.82)";
-    }
-  }
-
-  function getLeadStateText(overlayState, hudState) {
-    const longPlan = hudState?.longitudinalPlan || {};
-    const carrotMan = overlayState?.carrotMan || hudState?.carrotMan || {};
-    const carState = hudState?.carState || {};
-    const xState = finiteNumber(longPlan?.xState, finiteNumber(carrotMan?.xState, -1));
-    const trafficState = finiteNumber(longPlan?.trafficState, finiteNumber(carrotMan?.trafficState, -1));
-    const longActive = Boolean(hudState?.controlsState?.enabled);
-    const vEgoMps = finiteNumber(carState?.vEgo, finiteNumber(carState?.vEgoCluster, 0));
-    const brakeHoldActive = Boolean(carState?.brakeHoldActive);
-    const softHoldActive = finiteNumber(carState?.softHoldActive, 0) > 0;
-    const carrotCruise = finiteNumber(carState?.carrotCruise, 0) > 0;
-
-    if (brakeHoldActive || softHoldActive || carrotCruise) {
-      return {
-        text: brakeHoldActive ? "AUTOHOLD" : (softHoldActive ? "SOFTHOLD" : "CARROT"),
-        xState,
-        showDistanceBadge: false,
-      };
-    }
-
-    if (!longActive) {
-      return {
-        text: "",
-        xState,
-        showDistanceBadge: true,
-      };
-    }
-    if (xState === 3 || xState === 5) {
-      return {
-        text: vEgoMps < 1.0 ? (trafficState >= 1000 ? "Signal Error" : "Signal Ready") : "Signal slowing",
-        xState,
-        showDistanceBadge: false,
-      };
-    }
-    if (xState === 4) {
-      return {
-        text: getUIText("e2e_driving", "E2E driving"),
-        xState,
-        showDistanceBadge: false,
-      };
-    }
-    if (xState === 0 || xState === 1 || xState === 2) {
-      return {
-        text: "",
-        xState,
-        showDistanceBadge: true,
-      };
-    }
-    return {
-      text: "",
-      xState,
-      showDistanceBadge: false,
-    };
-  }
-
-  function drawLeadStateBadge(box, text, _xState, videoWidth = BASE_CAMERA.width, videoHeight = BASE_CAMERA.height, stageWidth = videoWidth, stageHeight = videoHeight, transform = null) {
-    if (!box?.rect || !text) return;
-    const uiScale = getLeadUiScale(videoWidth, videoHeight);
-    const offsets = getLeadBadgeOffsets(videoWidth, videoHeight);
-    const visibleRect = getVisibleSourceRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
-    const textY = Math.min(box.centerY + offsets.textBaselineOffset, Math.max(visibleRect.top + 6 * uiScale, visibleRect.bottom - 6 * uiScale));
-    drawCanvasOutlinedText(text, box.centerX, textY, {
-      fontSize: Math.max(50 * uiScale, 22),
-      fontWeight: 900,
-      fillStyle: "#ffffff",
-      strokeStyle: "rgba(0,0,0,0.88)",
-      strokeWidth: Math.max(4.0 * uiScale, 2.2),
-      align: "center",
-      baseline: "bottom",
-    });
   }
 
   function drawCanvasOutlinedText(text, x, y, {
@@ -2745,66 +2076,25 @@ window.HomeDrive = (() => {
     return anchor;
   }
 
-  function drawRadarSpeedBadge(center, text, accentColor, videoWidth = BASE_CAMERA.width, videoHeight = BASE_CAMERA.height) {
-    if (!center || !text) return;
-    const uiScale = getLeadUiScale(videoWidth, videoHeight);
-    const badgeWidth = Math.max(40 * uiScale, 35 * uiScale * String(text).length);
-    const badgeHeight = Math.max(42 * uiScale, 20);
-    const badgeX = center.x - badgeWidth * 0.5;
-    const badgeY = center.y - 35 * uiScale;
-    fillRoundedRect(ctx, badgeX, badgeY, badgeWidth, badgeHeight, Math.max(15 * uiScale, 7), accentColor);
-    drawCanvasOutlinedText(String(text), center.x, center.y, {
-      fontSize: Math.max(40 * uiScale, 18),
-      fontWeight: 900,
-      strokeWidth: Math.max(4.2 * uiScale, 2.2),
-    });
-  }
-
-  function drawProjectedTfMarker(modelPath, longitudinalPlan, calibTransform, videoWidth, videoHeight) {
-    if (finiteNumber(paramsState.ShowPathEnd, 0) <= 0) return;
-
-    const tfDistance = finiteNumber(longitudinalPlan?.desiredDistance, 0);
-    if (!Number.isFinite(tfDistance) || tfDistance <= 0) return;
-
-    const xs = Array.isArray(modelPath?.x) ? modelPath.x : [];
-    if (xs.length < 2) return;
-    const lastX = finiteNumber(xs[xs.length - 1], 0);
-    if (!lastX || tfDistance > lastX) return;
-
-    const lineY = samplePathY(modelPath, tfDistance);
-    const lineZ = interp1D(tfDistance, xs, Array.isArray(modelPath?.z) ? modelPath.z : []);
-    if (!Number.isFinite(lineY) || !Number.isFinite(lineZ)) return;
-
-    const left = projectPoint(calibTransform, tfDistance, lineY - 1.0, lineZ + PATH_Z_OFFSET);
-    const right = projectPoint(calibTransform, tfDistance, lineY + 1.0, lineZ + PATH_Z_OFFSET);
-    if (!left || !right) return;
-
-    const uiScale = getLeadUiScale(videoWidth, videoHeight);
-    drawPolyline([left, right], "rgba(255,255,255,0.92)", Math.max(3.0 * uiScale, 1.6));
-    const labelText = `${displayDistanceMeters(tfDistance).toFixed(1)}(${finiteNumber(longitudinalPlan?.tFollow, 0).toFixed(2)})`;
-    const labelFontSize = Math.max(20 * uiScale, 12);
-    const labelAnchor = clampTextAnchor(
-      { x: right.x + 10, y: right.y - 4 },
-      labelText,
-      labelFontSize,
-      videoWidth,
-      videoHeight,
-    );
-    drawCanvasOutlinedText(labelText, labelAnchor.x, labelAnchor.y, {
-      fontSize: labelFontSize,
-      fontWeight: 800,
-      align: "left",
-      strokeWidth: Math.max(3.4 * uiScale, 1.8),
-    });
-  }
-
-  function getPathStatusText(hudState) {
-    const carState = hudState?.carState || {};
-    if (Boolean(carState?.brakeHoldActive)) return "AUTOHOLD";
-    if (finiteNumber(carState?.softHoldActive, 0) > 0) return "SOFTHOLD";
-    if (finiteNumber(carState?.carrotCruise, 0) > 0) return "CARROT";
-    return "";
-  }
+  const roadOverlayAuxRenderer = window.DriveVisionRoadOverlayAuxRenderer?.create?.({
+    getParams: () => paramsState,
+    pathZOffset: PATH_Z_OFFSET,
+    geometry: {
+      buildVerticalRibbon: roadOverlayProjection.buildVerticalRibbon,
+      drawPolygon,
+      samplePathY: roadOverlayProjection.samplePathY,
+      interpolate: roadOverlayProjection.interpolate,
+      projectPoint,
+      drawPolyline,
+    },
+    ui: {
+      getScale: getLeadUiScale,
+      displayDistance: displayDistanceMeters,
+      clampTextAnchor,
+      drawText: drawCanvasOutlinedText,
+    },
+  }) || null;
+  if (!roadOverlayAuxRenderer) return {};
 
   function projectPathEndAnchorBox(modelPath, calibTransform, videoWidth, videoHeight) {
     const xs = Array.isArray(modelPath?.x) ? modelPath.x : [];
@@ -2813,7 +2103,7 @@ window.HomeDrive = (() => {
     if (!xs.length || !ys.length || !zs.length) return null;
 
     const tailDistance = clamp(finiteNumber(xs[xs.length - 1], 0), MIN_DRAW_DISTANCE, MAX_DRAW_DISTANCE);
-    const idx = getPathLengthIdx(modelPath, tailDistance);
+    const idx = roadOverlayProjection.getPathLengthIndex(modelPath, tailDistance);
     const distance = finiteNumber(xs[idx], NaN);
     const centerLineY = finiteNumber(ys[idx], NaN);
     const centerLineZ = finiteNumber(zs[idx], NaN);
@@ -2840,220 +2130,41 @@ window.HomeDrive = (() => {
     };
   }
 
-  function drawPathStatusText(modelPath, hudState, calibTransform, videoWidth, videoHeight, anchorBox = null) {
-    const text = getPathStatusText(hudState);
-    if (!text) return;
-
-    const anchor = anchorBox || projectPathEndAnchorBox(modelPath, calibTransform, videoWidth, videoHeight);
-    if (!anchor) return;
-
-    const scale = getLeadUiScale(videoWidth, videoHeight);
-    const fontSize = Math.max(50 * scale, 22);
-    const baselineY = clamp(anchor.centerY + 60 * scale, fontSize + 8 * scale, videoHeight - 10 * scale);
-    drawCanvasOutlinedText(text, anchor.centerX, baselineY, {
-      fontSize,
-      fontWeight: 900,
-      fillStyle: "#ffffff",
-      strokeStyle: "rgba(0,0,0,0.88)",
-      strokeWidth: Math.max(4.0 * scale, 2.2),
-      align: "center",
-      baseline: "bottom",
-    });
-  }
-
-  function getRadarTracks(radarState) {
-    const source = radarState && typeof radarState === "object" ? radarState : {};
-    const tracks = [
-      ...(Array.isArray(source.leadsLeft) ? source.leadsLeft : []),
-      ...(Array.isArray(source.leadsRight) ? source.leadsRight : []),
-      ...(Array.isArray(source.leadsCenter) ? source.leadsCenter : []),
-    ];
-    if (tracks.length) return tracks;
-
-    const fallback = [];
-    if (source.leadOne?.status) fallback.push(source.leadOne);
-    if (source.leadTwo?.status) fallback.push(source.leadTwo);
-    return fallback;
-  }
-
-  function getRadarProjectionLine(model) {
-    const laneLines = Array.isArray(model?.laneLines) ? model.laneLines : [];
-    const centerLane = laneLines[2];
-    if (Array.isArray(centerLane?.x) && Array.isArray(centerLane?.z) && centerLane.x.length && centerLane.z.length) {
-      return centerLane;
-    }
-    return model?.position || null;
-  }
-
-  function drawRadarTargets(radarState, model, calibTransform, videoWidth = BASE_CAMERA.width, videoHeight = BASE_CAMERA.height) {
-    const showRadarInfo = finiteNumber(paramsState.ShowRadarInfo, 0);
-    if (showRadarInfo <= 0) return;
-    const projectionLine = getRadarProjectionLine(model);
-    if (!projectionLine) return;
-    const radarLatFactor = finiteNumber(paramsState.RadarLatFactor, 0) / 100.0;
-    const isMetric = isMetricDisplay();
-
-    for (const radar of getRadarTracks(radarState)) {
-      const dRel = finiteNumber(radar?.dRel, 0);
-      if (!Number.isFinite(dRel) || dRel <= 2.5) continue;
-
-      const yRel = finiteNumber(radar?.yRel, 0);
-      const z = samplePathZ(projectionLine, dRel) - 0.61;
-      const center = projectPointPrecise(calibTransform, dRel, -yRel, z);
-      if (!center) continue;
-
-      const vLead = finiteNumber(radar?.vLeadK, finiteNumber(radar?.vRel, 0));
-      const vLat = finiteNumber(radar?.vLat, 0);
-      const vAbs = Math.sqrt((vLead * vLead) + (vLat * vLat));
-      const vSigned = vLead >= 0 ? vAbs : -vAbs;
-      const radarDetected = Boolean(radar?.radar);
-      const modelProb = finiteNumber(radar?.modelProb, 0);
-
-      if (vAbs > 3.0) {
-        const futureDRel = Math.max(2.0, dRel + vLead * radarLatFactor);
-        const futureYRel = yRel + vLat * radarLatFactor;
-        const future = Math.abs(vLead) > 3.0
-          ? projectPointPrecise(calibTransform, futureDRel, -futureYRel, z)
-          : null;
-        if (future) {
-          const vectorColor = vSigned >= 0 ? "rgba(35,213,93,0.94)" : "rgba(255,59,48,0.94)";
-          const uiScale = getLeadUiScale(videoWidth, videoHeight);
-          drawPolyline([center, future], vectorColor, Math.max(3.0 * uiScale, 1.6));
-          drawPolygon(circlePolygon(future.x, future.y, Math.max(10 * uiScale, 5), 12), vectorColor);
-        }
-
-        let badgeColor = "rgba(255,59,48,0.96)";
-        if (!radarDetected) badgeColor = "rgba(61,123,255,0.96)";
-        else if (Math.abs(modelProb - 0.01) < 1e-3) badgeColor = "rgba(35,213,93,0.96)";
-        else if (vSigned > 0) badgeColor = "rgba(255,167,38,0.96)";
-
-        const speedValue = vSigned * (isMetric ? 3.6 : 2.2369363);
-        drawRadarSpeedBadge({ x: center.x, y: center.y }, speedValue.toFixed(0), badgeColor, videoWidth, videoHeight);
-
-        if (showRadarInfo >= 2) {
-          const uiScale = getLeadUiScale(videoWidth, videoHeight);
-          drawCanvasOutlinedText(displayDistanceMeters(finiteNumber(radar?.yRel, 0)).toFixed(1), center.x, center.y - 40 * uiScale, {
-            fontSize: Math.max(30 * uiScale, 15),
-            fontWeight: 900,
-            strokeWidth: Math.max(3.8 * uiScale, 2.0),
-          });
-          const distanceValue = displayDistanceMeters(dRel);
-          drawCanvasOutlinedText(distanceValue.toFixed(1), center.x, center.y + 30 * uiScale, {
-            fontSize: Math.max(30 * uiScale, 15),
-            fontWeight: 900,
-            strokeWidth: Math.max(3.8 * uiScale, 2.0),
-          });
-        }
-      } else if (showRadarInfo >= 3) {
-        const uiScale = getLeadUiScale(videoWidth, videoHeight);
-        drawCanvasOutlinedText("*", center.x, center.y, {
-          fontSize: Math.max(40 * uiScale, 18),
-          fontWeight: 900,
-          strokeWidth: Math.max(4.2 * uiScale, 2.2),
-        });
-      }
-    }
-  }
-
-  function drawRadarLeadBoxes(model, overlayState, hudState, calibTransform, videoWidth, videoHeight, stageWidth, stageHeight, transform) {
-    const radarState = overlayState?.radarState || {};
-    const modelPath = model?.position || null;
-    const leadState = getLeadStateText(overlayState, hudState);
-    const roadCameraState = overlayState?.roadCameraState || null;
-    const longPlan = hudState?.longitudinalPlan || {};
-    const leadTwoStatus = finiteNumber(longPlan?.longitudinalPlanSource, 0) === LONG_PLAN_SOURCE_LEAD1 ? 2 : 1;
-
-    syncLeadRenderState(videoWidth, videoHeight, model?.frameId, roadCameraState?.frameId);
-
-    const leadOneBox = projectLeadBox(
-      radarState?.leadOne,
-      modelPath,
-      calibTransform,
-      videoWidth,
-      videoHeight,
-      0,
-      stageWidth,
-      stageHeight,
-      transform,
-      {
-        includeDistanceBadge: leadState?.showDistanceBadge !== false,
-        includeStateText: Boolean(leadState?.text),
-      },
-    );
-    const nowMs = performance.now();
-
-    let primaryStatusAnchorBox = null;
-    if (leadOneBox) {
-      const isLeadScc = leadOneBox.radarTrackId < 1;
-      // C3 exact colors: COLOR_RED(255,0,0), COLOR_ORANGE(255,175,3), COLOR_BLUE(0,0,255)
-      const strokeColor = !leadOneBox.radarDetected
-        ? "rgba(0,0,255,0.96)"
-        : (isLeadScc ? "rgba(255,0,0,0.96)" : "rgba(255,175,3,0.96)");
-      eraseLeadBoxOcclusion(leadOneBox, true);
-      drawLeadBoxCard(leadOneBox, strokeColor, "rgba(0,0,0,0.20)", true);
-
-      // Update hold state for persistence across brief status flickers
-      leadHoldState.lastValidMs = nowMs;
-      leadHoldState.box = leadOneBox;
-      leadHoldState.strokeColor = strokeColor;
-      leadHoldState.isLeadScc = isLeadScc;
-
-      // C3-style distance badges: radar (red/orange bg) + vision (blue bg) side by side below box
-      if (leadState?.showDistanceBadge !== false) {
-        const radarDist = Boolean(radarState?.leadOne?.radar) ? Math.max(0, finiteNumber(radarState?.leadOne?.dRel, 0)) : 0;
-        const visionDist = getPrimaryVisionDistance(model);
-        leadHoldState.radarDist = radarDist;
-        leadHoldState.visionDist = visionDist;
-        if (radarDist > 0 || visionDist > 0) {
-          const badgeTextColor = leadState?.xState === 0 ? "#ffffff" : (leadState?.xState === 1 ? "#b0b0b0" : "#23d55d");
-          leadHoldState.badgeTextColor = badgeTextColor;
-          drawLeadDistanceBadgesC3(leadOneBox, radarDist, visionDist, isLeadScc, badgeTextColor, videoWidth, videoHeight, stageWidth, stageHeight, transform);
-        }
-      }
-
-      if (leadState?.text) {
-        drawLeadStateBadge(leadOneBox, leadState.text, leadState.xState, videoWidth, videoHeight, stageWidth, stageHeight, transform);
-      }
-      primaryStatusAnchorBox = leadOneBox;
-    } else if (leadHoldState.box && (nowMs - leadHoldState.lastValidMs) < LEAD_HOLD_MS) {
-      // Status flickered false briefly — hold last valid box (C3's SubMaster doesn't flicker)
-      const held = leadHoldState;
-      eraseLeadBoxOcclusion(held.box, true);
-      drawLeadBoxCard(held.box, held.strokeColor, "rgba(0,0,0,0.20)", true);
-      if (leadState?.showDistanceBadge !== false && (held.radarDist > 0 || held.visionDist > 0)) {
-        drawLeadDistanceBadgesC3(held.box, held.radarDist, held.visionDist, held.isLeadScc, held.badgeTextColor, videoWidth, videoHeight, stageWidth, stageHeight, transform);
-      }
-      if (leadState?.text) {
-        drawLeadStateBadge(held.box, leadState.text, leadState.xState, videoWidth, videoHeight, stageWidth, stageHeight, transform);
-      }
-      primaryStatusAnchorBox = held.box;
-    } else {
-      leadHoldState.box = null;
-    }
-
-    // LeadTwo: same logic as C3 (radar && dRel > leadOne.dRel + 3)
-    const leadTwo = radarState?.leadTwo;
-    const validLeadTwo = Boolean(leadTwo?.status) &&
-      Boolean(leadTwo?.radar) &&
-      finiteNumber(leadTwo?.dRel, 0) > (finiteNumber(radarState?.leadOne?.dRel, 0) + 3);
-    if (validLeadTwo) {
-      const leadTwoBox = projectLeadTwoBox(leadTwo, modelPath, calibTransform, videoWidth, videoHeight, stageWidth, stageHeight, transform);
-      if (leadTwoBox) {
-        eraseLeadBoxOcclusion(leadTwoBox, false);
-        drawLeadBoxCard(
-          leadTwoBox,
-          "rgba(218,111,37,0.96)",  // C3 COLOR_OCHRE(218,111,37)
-          leadTwoStatus === 2 ? "rgba(255,0,0,0.20)" : "rgba(0,0,0,0.20)",  // C3 COLOR_RED_ALPHA(50)
-          false,
-        );
-      }
-    } else {
-      resetLeadEmaSlot(1);
-      resetLeadTwoEma();
-    }
-    drawPathStatusText(modelPath, hudState, calibTransform, videoWidth, videoHeight, primaryStatusAnchorBox);
-    drawRadarTargets(radarState, model, calibTransform, videoWidth, videoHeight);
-  }
+  roadOverlayLeadRenderer = window.DriveVisionRoadOverlayLeadRenderer?.create?.({
+    context: ctx,
+    model: roadOverlayLeadModel,
+    getParams: () => paramsState,
+    isMetricDisplay,
+    displayDistance: displayDistanceMeters,
+    baseCamera: BASE_CAMERA,
+    fontFamily: HUD_TEXT_FONT,
+    projection: {
+      projectLeadBox,
+      projectLeadTwoBox,
+      projectPathEndAnchorBox,
+      samplePathZ: roadOverlayProjection.samplePathZ,
+      projectPointPrecise,
+    },
+    geometry: {
+      drawPolyline,
+      drawPolygon,
+      circlePolygon: roadOverlayProjection.circlePolygon,
+    },
+    ui: {
+      getScale: getLeadUiScale,
+      getBadgeOffsets: getLeadBadgeOffsets,
+      getVisibleRect: getVisibleSourceRect,
+      fillRoundedRect,
+      strokeRoundedRect,
+      drawText: drawCanvasOutlinedText,
+    },
+    temporal: {
+      now: getLeadTemporalNowMs,
+      resetLeadSlot: resetLeadEmaSlot,
+      resetLeadTwo: resetLeadTwoEma,
+    },
+  }) || null;
+  if (!roadOverlayLeadRenderer) return {};
 
   function roundedRectPath(context, x, y, width, height, radius) {
     const r = Math.min(radius, width / 2, height / 2);
@@ -3097,498 +2208,6 @@ window.HomeDrive = (() => {
     }
     roundedRectPath(context, x, y, width, height, radius);
     context.stroke();
-  }
-
-  function getHudLabelAlpha(pathMode, phaseShift = 0) {
-    if (pathMode < 1 || pathMode > 8) return 0.94;
-    const wave = (Math.sin((performance.now() / 1000) * 0.78 + phaseShift) + 1.0) * 0.5;
-    const eased = Math.pow(wave, 1.7);
-    return clamp(0.14 + eased * 0.86, 0.14, 1.0);
-  }
-
-  function formatBottomCenterText(text, hudState) {
-    const raw = String(text || "").trim();
-    const modeText = laneModeLabel(hudState);
-    if (!raw) return modeText;
-    const normalized = raw.toLowerCase();
-    if (normalized.startsWith("lanemode") || normalized.startsWith("laneless")) {
-      return raw;
-    }
-    return `${modeText} | ${raw}`;
-  }
-
-  function drawHudTopRightText(stageWidth, stageHeight, viewportRect, text, pathMode) {
-    const label = shortText(text, 160);
-    if (!label) return;
-    const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
-    const baseScale = Math.min(stageWidth / 1920, stageHeight / 1080);
-    const scale = clamp(baseScale, 0.48, 1.0);
-    const edgeInsetX = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
-    const edgeInsetTop = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
-    const maxWidth = Math.max(120.0, viewportRect.width - edgeInsetX * 2.0);
-    const fontSize = fitSingleLineHudFontSize(
-      label,
-      exactC3Mode ? 24.0 : clamp(24.0 * scale, 7.0, 24.0),
-      maxWidth,
-      4.5,
-      900,
-    );
-    const alpha = getHudLabelAlpha(pathMode, 0.0);
-
-    drawOutlinedHudText({
-      text: label,
-      x: viewportRect.right - edgeInsetX,
-      y: viewportRect.top + edgeInsetTop,
-      color: `rgba(244, 244, 244, ${alpha.toFixed(3)})`,
-      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.08, 0.0, 1.0).toFixed(3)})`,
-      strokeWidth: clamp(4.2 * scale, 2.8, 5.4),
-      fontSize,
-      fontWeight: 900,
-      alignX: "right",
-      alignY: "top",
-      maxWidth,
-    });
-  }
-
-  function optionalNumber(value) {
-    if (value == null || value === "") return null;
-    const number = Number(value);
-    return Number.isFinite(number) ? number : null;
-  }
-
-  function formatRtcNumber(value, suffix = "", digits = 0) {
-    return value == null ? `-${suffix}` : `${value.toFixed(digits)}${suffix}`;
-  }
-
-  function getRtcCodecLabel(codec, codecParams) {
-    const rawCodec = String(codec || "").split("/").pop().trim().toUpperCase();
-    if (!rawCodec) return "-";
-    if (rawCodec !== "H264") return rawCodec;
-    const match = /profile-level-id=([0-9a-fA-F]{6})/.exec(String(codecParams || ""));
-    const profilePrefix = match?.[1]?.slice(0, 2)?.toLowerCase() || "";
-    const profile = profilePrefix === "42"
-      ? "Baseline"
-      : profilePrefix === "4d"
-        ? "Main"
-        : profilePrefix === "64"
-          ? "High"
-          : "";
-    return profile ? `${rawCodec} ${profile}` : rawCodec;
-  }
-
-  function buildRtcPerfHudModel() {
-    const perf = window.CarrotRtcPerf || null;
-    if (!perf?.active) {
-      return { visible: false, tone: "offline", title: "VISION OFFLINE", glance: "" };
-    }
-
-    const network = perf.network || {};
-    const inbound = perf.inbound || {};
-    const video = perf.video || {};
-    const resolution = String(network.resolutionLabel || "").trim() || "-";
-    const bitrateMbps = optionalNumber(network.bitrateMbps);
-    const fps = optionalNumber(inbound.framesPerSecond);
-    const rttMs = optionalNumber(network.rttMs);
-    const lossPct = optionalNumber(network.lossPct);
-    const jitterMs = optionalNumber(network.jitterMs);
-    const freezeCount = optionalNumber(inbound.freezeCount);
-    const framesDecoded = optionalNumber(inbound.framesDecoded);
-    const framesReceived = optionalNumber(inbound.framesReceived);
-    const readyState = optionalNumber(video.readyState);
-    const reconnecting = (
-      perf.connectionState === "connecting" ||
-      perf.iceConnectionState === "checking" ||
-      perf.iceConnectionState === "disconnected"
-    );
-    const stalled = (
-      (framesReceived != null && framesReceived > 0 && framesDecoded != null && framesDecoded <= 0) ||
-      (freezeCount != null && freezeCount > 0 && readyState != null && readyState < 3)
-    );
-    const degraded = (
-      (lossPct != null && lossPct >= 0.5) ||
-      (jitterMs != null && jitterMs >= 30) ||
-      (rttMs != null && rttMs >= 150)
-    );
-    const bitrateLabel = formatRtcNumber(bitrateMbps, "Mbps", bitrateMbps != null && bitrateMbps < 10 ? 2 : 1);
-    const fpsLabel = fps == null ? "-fps" : `${Math.round(fps)}fps`;
-    const rttLabel = rttMs == null ? "-ms" : `${Math.round(rttMs)}ms`;
-    const jitterLabel = jitterMs == null ? "-ms" : `${Math.round(jitterMs)}ms`;
-    const lossLabel = lossPct == null ? "-%" : `${lossPct.toFixed(lossPct >= 10 ? 0 : 1)}%`;
-    const codecLabel = getRtcCodecLabel(perf.codec, perf.codecParams);
-    const protocol = String(network.protocol || "-").toUpperCase();
-    const localType = String(network.localCandidateType || "-");
-    const remoteType = String(network.remoteCandidateType || "-");
-    let tone = "normal";
-    let title = "VISION OK";
-    let glance = `${resolution} | ${fpsLabel} | ${bitrateLabel} | ${rttLabel}`;
-
-    if (perf.error) {
-      tone = "offline";
-      title = "VISION OFFLINE";
-      glance = "OFFLINE | stats unavailable";
-    } else if (reconnecting) {
-      tone = "reconnecting";
-      title = "VISION RECONNECTING";
-      glance = "RECONNECTING | waiting stream";
-    } else if (stalled) {
-      tone = "stall";
-      title = "VISION STALL";
-      glance = `STALL | decode ${framesDecoded ?? "-"} | recv ${framesReceived ?? "-"}`;
-    } else if (degraded) {
-      tone = "degraded";
-      title = "VISION DEGRADED";
-      const warnings = [];
-      if (lossPct != null && lossPct >= 0.5) warnings.push(`loss ${lossLabel}`);
-      if (rttMs != null && rttMs >= 150) warnings.push(`RTT ${rttLabel}`);
-      if (jitterMs != null && jitterMs >= 30) warnings.push(`jitter ${jitterLabel}`);
-      glance = `DEGRADED | ${warnings.slice(0, 2).join(" | ")}`;
-    }
-
-    return {
-      visible: true,
-      tone,
-      title,
-      glance,
-      video: `${resolution} | ${fpsLabel}`,
-      codec: codecLabel,
-      bitrate: bitrateLabel,
-      rtt: rttLabel,
-      jitter: jitterLabel,
-      loss: lossLabel,
-      freeze: freezeCount == null ? "-" : String(Math.round(freezeCount)),
-      path: `${protocol} ${localType} -> ${remoteType}`,
-    };
-  }
-
-  function formatRtcPerfLabel() {
-    return buildRtcPerfHudModel().glance || "";
-  }
-
-  let _rtcPerfSummaryOpen = false;
-  let _rtcPerfSummaryCloseTimer = null;
-
-  function isRtcPerfSummaryAvailable() {
-    return Boolean(window.CarrotLayout?.isWide?.() ?? window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches);
-  }
-
-  function clearRtcPerfSummaryCloseTimer() {
-    if (_rtcPerfSummaryCloseTimer == null) return;
-    window.clearTimeout(_rtcPerfSummaryCloseTimer);
-    _rtcPerfSummaryCloseTimer = null;
-  }
-
-  function syncRtcPerfSummaryAutoClose(tone) {
-    clearRtcPerfSummaryCloseTimer();
-    if (!_rtcPerfSummaryOpen || tone !== "normal") return;
-    _rtcPerfSummaryCloseTimer = window.setTimeout(() => {
-      setRtcPerfSummaryOpen(false);
-    }, RTC_PERF_SUMMARY_AUTO_CLOSE_MS);
-  }
-
-  function setRtcPerfSummaryOpen(open) {
-    const model = buildRtcPerfHudModel();
-    const nextOpen = Boolean(open && model.visible && isRtcPerfSummaryAvailable());
-    _rtcPerfSummaryOpen = nextOpen;
-    if (rtcPerfSummaryEl) rtcPerfSummaryEl.hidden = !nextOpen;
-    if (!nextOpen) {
-      clearRtcPerfSummaryCloseTimer();
-      return;
-    }
-    syncRtcPerfSummaryAutoClose(model.tone);
-  }
-
-  function syncRtcPerfHud() {
-    if (!rtcPerfHudEl || !rtcPerfGlanceEl || !rtcPerfGlanceTextEl) return;
-    const model = buildRtcPerfHudModel();
-    rtcPerfHudEl.hidden = !model.visible;
-    rtcPerfGlanceEl.dataset.tone = model.tone;
-    rtcPerfGlanceTextEl.textContent = model.glance || model.title;
-
-    if (!model.visible || !isRtcPerfSummaryAvailable()) {
-      setRtcPerfSummaryOpen(false);
-      return;
-    }
-
-    if (rtcPerfSummaryEl) rtcPerfSummaryEl.dataset.tone = model.tone;
-    if (rtcPerfTitleEl) rtcPerfTitleEl.textContent = model.title;
-    if (rtcPerfVideoEl) rtcPerfVideoEl.textContent = model.video;
-    if (rtcPerfCodecEl) rtcPerfCodecEl.textContent = model.codec;
-    if (rtcPerfBitrateEl) rtcPerfBitrateEl.textContent = model.bitrate;
-    if (rtcPerfRttEl) rtcPerfRttEl.textContent = model.rtt;
-    if (rtcPerfJitterEl) rtcPerfJitterEl.textContent = model.jitter;
-    if (rtcPerfLossEl) rtcPerfLossEl.textContent = model.loss;
-    if (rtcPerfFreezeEl) rtcPerfFreezeEl.textContent = model.freeze;
-    if (rtcPerfPathEl) rtcPerfPathEl.textContent = model.path;
-    if (_rtcPerfSummaryOpen && _rtcPerfSummaryCloseTimer == null) {
-      syncRtcPerfSummaryAutoClose(model.tone);
-    } else if (_rtcPerfSummaryOpen && model.tone !== "normal") {
-      clearRtcPerfSummaryCloseTimer();
-    }
-  }
-
-  function drawStageEdgeFades(stageWidth, stageHeight) {
-    const topHeight = clamp(stageHeight * 0.16, 72, 148);
-    const bottomHeight = clamp(stageHeight * 0.24, 104, 212);
-
-    hudCtx.save();
-    hudCtx.globalCompositeOperation = "source-over";
-
-    const topGradientKey = `hud-top:${Math.round(stageWidth)}x${Math.round(stageHeight)}:${Math.round(topHeight)}`;
-    const topGradient = getCachedHudGradient(topGradientKey, () => {
-      const gradient = hudCtx.createLinearGradient(0, 0, 0, topHeight);
-      gradient.addColorStop(0.0, "rgba(0, 0, 0, 0.64)");
-      gradient.addColorStop(0.42, "rgba(0, 0, 0, 0.30)");
-      gradient.addColorStop(1.0, "rgba(0, 0, 0, 0.00)");
-      return gradient;
-    });
-    hudCtx.fillStyle = topGradient;
-    hudCtx.fillRect(0, 0, stageWidth, topHeight);
-
-    const bottomStart = Math.max(0, stageHeight - bottomHeight);
-    const bottomGradientKey = `hud-bottom:${Math.round(stageWidth)}x${Math.round(stageHeight)}:${Math.round(bottomStart)}:${Math.round(bottomHeight)}`;
-    const bottomGradient = getCachedHudGradient(bottomGradientKey, () => {
-      const gradient = hudCtx.createLinearGradient(0, bottomStart, 0, stageHeight);
-      gradient.addColorStop(0.0, "rgba(0, 0, 0, 0.00)");
-      gradient.addColorStop(0.42, "rgba(0, 0, 0, 0.28)");
-      gradient.addColorStop(1.0, "rgba(0, 0, 0, 0.74)");
-      return gradient;
-    });
-    hudCtx.fillStyle = bottomGradient;
-    hudCtx.fillRect(0, bottomStart, stageWidth, bottomHeight);
-
-    hudCtx.restore();
-  }
-
-  function drawHudTopLeftText(stageWidth, stageHeight, viewportRect, text, pathMode) {
-    if (!window.CarrotLayout?.isWide?.()) return;
-    const label = shortText(text, 160);
-    if (!label) return;
-    const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
-    const baseScale = Math.min(stageWidth / 1920, stageHeight / 1080);
-    const scale = clamp(baseScale, 0.48, 1.0);
-    const edgeInsetX = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
-    const edgeInsetTop = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
-    const maxWidth = Math.max(120.0, viewportRect.width - edgeInsetX * 2.0);
-    const fontSize = fitSingleLineHudFontSize(
-      label,
-      exactC3Mode ? 24.0 : clamp(24.0 * scale, 7.0, 24.0),
-      maxWidth,
-      4.5,
-      900,
-    );
-    const alpha = getHudLabelAlpha(pathMode, 0.0);
-
-    drawOutlinedHudText({
-      text: label,
-      x: viewportRect.left + edgeInsetX,
-      y: viewportRect.top + edgeInsetTop,
-      color: `rgba(244, 244, 244, ${alpha.toFixed(3)})`,
-      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.08, 0.0, 1.0).toFixed(3)})`,
-      strokeWidth: clamp(4.2 * scale, 2.8, 5.4),
-      fontSize,
-      fontWeight: 900,
-      alignX: "left",
-      alignY: "top",
-      maxWidth,
-    });
-  }
-
-  function drawHudLeftCenterLogs(stageWidth, stageHeight, viewportRect, statusText, metaText, pathMode) {
-    const statusLabel = shortText(statusText, 96);
-    const metaLabel = shortText(metaText, 160);
-    if (!statusLabel && !metaLabel) return;
-
-    const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
-    const baseScale = Math.min(stageWidth / 1920, stageHeight / 1080);
-    const scale = clamp(baseScale, 0.48, 1.0);
-    const edgeInsetX = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
-    const maxWidth = Math.max(180.0, viewportRect.width * 0.52);
-    const alpha = getHudLabelAlpha(pathMode, Math.PI * 0.5);
-    const centerY = viewportRect.centerY;
-    const statusFontSize = fitSingleLineHudFontSize(
-      statusLabel,
-      exactC3Mode ? 24.0 : clamp(24.0 * scale, 9.0, 24.0),
-      maxWidth,
-      6.0,
-      900,
-    );
-    const metaFontSize = fitSingleLineHudFontSize(
-      metaLabel,
-      exactC3Mode ? 20.0 : clamp(20.0 * scale, 8.0, 20.0),
-      maxWidth,
-      6.0,
-      800,
-    );
-    const statusY = centerY - (exactC3Mode ? 16.0 : clamp(18.0 * scale, 10.0, 18.0));
-    const metaY = centerY + (exactC3Mode ? 14.0 : clamp(16.0 * scale, 9.0, 16.0));
-
-    drawOutlinedHudText({
-      text: statusLabel,
-      x: viewportRect.left + edgeInsetX,
-      y: statusY,
-      color: `rgba(244, 244, 244, ${alpha.toFixed(3)})`,
-      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.08, 0.0, 1.0).toFixed(3)})`,
-      strokeWidth: clamp(4.2 * scale, 2.8, 5.4),
-      fontSize: statusFontSize,
-      fontWeight: 900,
-      alignX: "left",
-      alignY: "bottom",
-      maxWidth,
-    });
-    drawOutlinedHudText({
-      text: metaLabel,
-      x: viewportRect.left + edgeInsetX,
-      y: metaY,
-      color: `rgba(236, 236, 236, ${alpha.toFixed(3)})`,
-      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.08, 0.0, 1.0).toFixed(3)})`,
-      strokeWidth: clamp(4.0 * scale, 2.8, 5.2),
-      fontSize: metaFontSize,
-      fontWeight: 800,
-      alignX: "left",
-      alignY: "top",
-      maxWidth,
-    });
-  }
-
-  function drawHudBottomText(stageWidth, stageHeight, viewportRect, text, hudState, pathMode) {
-    const label = formatBottomCenterText(text, hudState);
-    if (!label) return;
-    const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
-    const baseScale = Math.min(stageWidth / 1920, stageHeight / 1080);
-    const scale = clamp(baseScale, 0.48, 1.0);
-    const maxWidth = Math.max(120.0, viewportRect.width - 4.0);
-    const fontSize = fitSingleLineHudFontSize(
-      label,
-      exactC3Mode ? 24.0 : clamp(24.0 * scale, 7.0, 24.0),
-      maxWidth,
-      4.5,
-      900,
-    );
-    const bottomInset = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
-    const alpha = getHudLabelAlpha(pathMode, Math.PI);
-
-    drawOutlinedHudText({
-      text: label,
-      x: viewportRect.centerX,
-      y: viewportRect.bottom - bottomInset,
-      color: `rgba(236, 236, 236, ${alpha.toFixed(3)})`,
-      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.08, 0.0, 1.0).toFixed(3)})`,
-      strokeWidth: clamp(4.0 * scale, 2.8, 5.2),
-      fontSize,
-      fontWeight: 900,
-      alignX: "center",
-      alignY: "baselineBottom",
-      maxWidth,
-    });
-  }
-
-  function drawHudBottomLeftText(stageWidth, stageHeight, viewportRect, text, pathMode) {
-    const label = shortText(text, 160);
-    if (!label) return;
-    const exactC3Mode = stageWidth >= 1280 && stageHeight >= 720;
-    const baseScale = Math.min(stageWidth / 1920, stageHeight / 1080);
-    const scale = clamp(baseScale, 0.48, 1.0);
-    const edgeInsetX = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
-    const bottomInset = exactC3Mode ? 1.5 : clamp(2.0 * scale, 1.0, 2.5);
-    const maxWidth = Math.max(120.0, viewportRect.width * 0.42);
-    const fontSize = fitSingleLineHudFontSize(
-      label,
-      exactC3Mode ? 24.0 : clamp(24.0 * scale, 7.0, 24.0),
-      maxWidth,
-      4.5,
-      900,
-    );
-    const alpha = getHudLabelAlpha(pathMode, Math.PI);
-
-    drawOutlinedHudText({
-      text: label,
-      x: viewportRect.left + edgeInsetX,
-      y: viewportRect.bottom - bottomInset,
-      color: `rgba(236, 236, 236, ${alpha.toFixed(3)})`,
-      strokeColor: `rgba(0, 0, 0, ${clamp(alpha + 0.08, 0.0, 1.0).toFixed(3)})`,
-      strokeWidth: clamp(4.0 * scale, 2.8, 5.2),
-      fontSize,
-      fontWeight: 900,
-      alignX: "left",
-      alignY: "baselineBottom",
-      maxWidth,
-    });
-  }
-
-  function formatDebugText(overlayState) {
-    const liveDelay = overlayState.liveDelay || {};
-    const liveTorqueParameters = overlayState.liveTorqueParameters || {};
-    const liveParameters = overlayState.liveParameters || {};
-    const customSr = finiteNumber(paramsState.CustomSR, 0) / 10.0;
-
-    return `LD[${finiteNumber(liveDelay.calPerc, 0).toFixed(0)}%,${finiteNumber(liveDelay.lateralDelay, 0).toFixed(2)}] ` +
-      `LT[${finiteNumber(liveTorqueParameters.calPerc, 0).toFixed(0)}%,${liveTorqueParameters.liveValid ? "ON" : "OFF"}]` +
-      `(${finiteNumber(liveTorqueParameters.latAccelFactorFiltered, 0).toFixed(2)}/${finiteNumber(liveTorqueParameters.frictionCoefficientFiltered, 0).toFixed(2)}) ` +
-      `SR(${finiteNumber(liveParameters.steerRatio, 0).toFixed(1)},${customSr.toFixed(1)})`;
-  }
-
-  function isLongActive(overlayState) {
-    return Boolean(overlayState?.carControl?.longActive);
-  }
-
-  function isLaneMode(hudState) {
-    return Boolean(hudState?.controlsState?.activeLaneLine) || finiteNumber(hudState?.carState?.useLaneLineSpeed, 0) > 0;
-  }
-
-  function getPathStyle(overlayState, hudState) {
-    // Mirror carrot.cc path mode/color selection so Carrot params drive web visuals too.
-    const laneMode = isLaneMode(hudState);
-    let mode = finiteNumber(laneMode ? paramsState.ShowPathModeLane : paramsState.ShowPathMode, 0);
-    let colorIndex = finiteNumber(laneMode ? paramsState.ShowPathColorLane : paramsState.ShowPathColor, 13);
-    const isCruiseOff = !isLongActive(overlayState);
-
-    if (isCruiseOff) {
-      colorIndex = finiteNumber(paramsState.ShowPathColorCruiseOff, 19);
-    } else if (colorIndex >= 20) {
-      const leadOne = overlayState?.radarState?.leadOne || {};
-      const accel = firstFinite(hudState?.longitudinalPlan?.accels, 0);
-      colorIndex = 13;
-      if (leadOne.status) {
-        if (Math.abs(accel) < 0.5) colorIndex = 12;
-        else if (accel >= 0.5) colorIndex = 11;
-        else colorIndex = 10;
-      }
-    }
-
-    return {
-      mode,
-      colorIndex,
-      paletteIndex: colorIndex % 10,
-      emphasisStroke: colorIndex >= 10 || Boolean(hudState?.carState?.brakeLights),
-      strokeColor: hudState?.carState?.brakeLights ? "rgba(255, 76, 76, 0.96)" : "rgba(255, 255, 255, 0.92)",
-      isCruiseOff,
-      laneMode,
-    };
-  }
-
-  function getSelectedPath(overlayState, hudState) {
-    const model = overlayState?.modelV2 || null;
-    const lateralPlan = overlayState?.lateralPlan || null;
-    const laneMode = isLaneMode(hudState);
-    const lanePath = lateralPlan?.position;
-    const hasLanePath = Array.isArray(lanePath?.x) && lanePath.x.length > 2;
-    if (laneMode && hasLanePath) {
-      return {
-        model,
-        pathData: lanePath,
-        pathSource: "lateralPlan",
-        latDebugText: lateralPlan?.latDebugText || "",
-        laneMode,
-      };
-    }
-
-    return {
-      model,
-      pathData: model?.position || null,
-      pathSource: "modelV2",
-      latDebugText: lateralPlan?.latDebugText || "",
-      laneMode,
-    };
   }
 
   function buildPlotData(overlayState, hudState) {
@@ -3817,10 +2436,6 @@ window.HomeDrive = (() => {
     hudCtx.restore();
   }
 
-  function laneModeLabel(hudState) {
-    return isLaneMode(hudState) ? "LaneMode" : "Laneless";
-  }
-
   function refreshParams(force = false) {
     const runtimeParams = readLiveRuntimeParams();
     if (runtimeParams) {
@@ -3834,18 +2449,24 @@ window.HomeDrive = (() => {
   }
 
   function isActive() {
-    return document.body?.dataset?.page === "carrot";
+    return document.body?.dataset?.page === "carrot"
+      && window.CarrotVisionContentRuntime?.isActive?.() !== false;
   }
 
   function renderActiveFrame(options = {}) {
     refreshParams();
-    const stageWidth = Math.max(1, stageEl.clientWidth);
-    const stageHeight = Math.max(1, stageEl.clientHeight);
+    const renderViewport = replayRenderBridge.getRenderViewport();
+    const stageWidth = Math.max(1, renderViewport.clientWidth);
+    const stageHeight = Math.max(1, renderViewport.clientHeight);
     const forceAll = Boolean(options.force || _forceNextRender);
     const rawOverlayState = window.CarrotOverlayState || {};
     const rawHudState = window.CarrotHudState || {};
     const runtimeState = mergeRuntimeState(rawHudState, rawOverlayState);
     let overlayState = runtimeState.overlayState;
+    const synchronizedModel = window.CarrotVisionFrameSync?.selectModel?.();
+    if (synchronizedModel && synchronizedModel !== overlayState?.modelV2) {
+      overlayState = { ...overlayState, modelV2: synchronizedModel };
+    }
     const hudState = runtimeState.hudState;
     const brokerServices = runtimeState.brokerServices;
 
@@ -3855,39 +2476,51 @@ window.HomeDrive = (() => {
         _lastHudSig = "vision-disabled";
         _lastPlotInputSig = "off";
         cancelCameraFrameRecheck();
-        resetTemporalRibbonState();
+        roadOverlayProjection.resetTemporal();
         hideOnroadAlert();
         setStageLoading(false);
         setStageReady(false);
-        clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
-        clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
+        clearOverlay(canvasEl.width || 1, canvasEl.height || 1, { clearPerformance: true });
+        hudCanvas.clear(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
         setStatus(!isCarrotVisionAvailable()
           ? getCarrotVisionDisabledMessage()
           : getUIText("start_vision_hint", "Tap the start button to enable drive vision."));
         setMeta("");
         setDebug("");
-        syncRtcPerfHud();
+        rtcPerfHud.sync();
       }
       return;
     }
 
     const hasStream = syncSourceStream();
-    if (!hasStream || !isRoadCameraFrameRenderable(videoEl)) {
+    const roadFrameRenderable = isRoadCameraFrameRenderable(videoEl);
+    const holdReplayFrame = Boolean(
+      hasStream
+      && !roadFrameRenderable
+      && replayRenderBridge.shouldHoldFrameDuringSeek()
+    );
+    if (holdReplayFrame) {
+      setStageLoading(false);
+      setStageReady(true);
+      scheduleCameraFrameRecheck();
+      return;
+    }
+    if (!hasStream || !roadFrameRenderable) {
       if (hasStream) {
         setCarrotVisionRenderPhase("first-frame-waiting", { reason: "camera stream waiting first frame" });
       }
       _lastOverlaySig = "";
       _lastHudSig = "";
-      resetTemporalRibbonState();
+      roadOverlayProjection.resetTemporal();
       hideOnroadAlert();
       setStageLoading(true, getCarrotVisionStatusText(getUIText("connecting", "Connecting...")), getCarrotVisionDetailText());
       setStageReady(false);
-      clearOverlay(canvasEl.width || 1, canvasEl.height || 1);
-      clearHud(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
+      clearOverlay(canvasEl.width || 1, canvasEl.height || 1, { clearPerformance: true });
+      hudCanvas.clear(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
       setStatus(getCarrotVisionStatusText(getUIText("waiting_road_stream", "Waiting road camera stream...")));
       setMeta("road:- model:- path:-");
       setDebug("LD:- LT:- SR:-");
-      applyCarrotHudLayout({
+      hudLayout?.apply({
         left: 0,
         top: 0,
         right: stageWidth,
@@ -3895,7 +2528,7 @@ window.HomeDrive = (() => {
         width: stageWidth,
         height: stageHeight,
       });
-      syncRtcPerfHud();
+      rtcPerfHud.sync();
       scheduleCameraFrameRecheck();
       return;
     }
@@ -3911,15 +2544,14 @@ window.HomeDrive = (() => {
     const model = overlayState.modelV2 || null;
     const liveCalibration = overlayState.liveCalibration || null;
     const roadCameraState = overlayState.roadCameraState || null;
-    applyRoadCameraSensor(roadCameraState?.sensor);
-    const selectedPath = getSelectedPath(overlayState, hudState);
-    const pathStyle = getPathStyle(overlayState, hudState);
+    const cameraProfileReady = applyRoadCameraProfile(hudState?.deviceState?.deviceType, roadCameraState?.sensor);
+    const { selectedPath, pathStyle } = roadOverlayPolicy.resolve(overlayState, hudState, paramsState);
     const plotData = buildPlotData(overlayState, hudState);
     const showLaneInfo = finiteNumber(paramsState.ShowLaneInfo, defaultParams.ShowLaneInfo);
     const debugText = firstNonEmptyText(
       brokerServices?.carrotMan?.stockDebugTopRightText,
       overlayState?.carrotMan?.stockDebugTopRightText,
-      formatDebugText(overlayState),
+      hudModel.formatDebugText(overlayState, paramsState.CustomSR),
     );
     const overlaySig = overlayDataSignature(hudState, overlayState, selectedPath, pathStyle, showLaneInfo);
     // C3 pushes plot data EVERY frame unconditionally (drawPlot.draw→updatePlotQueue).
@@ -3935,67 +2567,116 @@ window.HomeDrive = (() => {
       refreshOverlayInfo().catch(() => {});
     }
     const overlayDirty = forceAll || Boolean(options.overlayDirty) || overlaySig !== _lastOverlaySig;
-    const hudDirty = forceAll || overlayDirty || Boolean(options.hudDirty) || plotChanged || hudSig !== _lastHudSig;
+    const hudDirty = forceAll || Boolean(options.hudDirty) || plotChanged || hudSig !== _lastHudSig;
     if (!overlayDirty && !hudDirty) return;
-    _lastOverlaySig = overlaySig;
-    _lastHudSig = hudSig;
+    if (overlayDirty) _lastOverlaySig = overlaySig;
+    if (hudDirty) _lastHudSig = hudSig;
     _forceNextRender = false;
 
     const calibration = getCalibrationMatrix(liveCalibration);
-    const transform = getStageTransform(videoWidth, videoHeight, stageWidth, stageHeight, calibration);
+    const projectionReady = Boolean(cameraProfileReady && calibration);
+    const transform = getStageTransform(videoWidth, videoHeight, stageWidth, stageHeight, calibration || VIEW_FROM_DEVICE);
     const viewportRect = getHudViewportRect(videoWidth, videoHeight, stageWidth, stageHeight, transform);
     const laneCount = Array.isArray(model?.laneLines) ? model.laneLines.length : 0;
     const edgeCount = Array.isArray(model?.roadEdges) ? model.roadEdges.length : 0;
     const leadCount = Array.isArray(model?.leadsV3) ? model.leadsV3.length : 0;
     const rpyText = formatRpyTriplet(liveCalibration);
     const modeLabel = getDisplayModeLabel(transform.displayMode || DISPLAY_MODES[1]);
-    const laneLabel = laneModeLabel(hudState);
+    const laneLabel = hudModel.laneModeLabel(hudState);
 
     applyStageTransform(transform);
     setStageReady(true);
     setCarrotVisionRenderPhase("ready", { reason: "camera frame renderable" });
-    applyCarrotHudLayout(viewportRect);
+    hudLayout?.apply(viewportRect);
     // The <video> may hold a renderable-but-stale last frame during a reconnect.
     // vision_rtc only promotes to controlState "live" when the connection is
     // genuinely up, so key the loading panel on that: live -> hide it; otherwise
     // keep a "reconnecting/connecting" message over the frozen frame instead of
     // a silent blank.
-    const carrotLive = (getCarrotVisionState().controlState || "") === "live";
+    const carrotLive = replayRenderBridge.isActive()
+      ? replayRenderBridge.isReady()
+      : (getCarrotVisionState().controlState || "") === "live";
     setStageLoading(!carrotLive, getCarrotVisionStatusText(getUIText("connecting", "Connecting...")), getCarrotVisionDetailText());
 
     if (overlayDirty) {
-      resetFrameProjectionCache();
+      roadOverlayProjection.resetFrame();
       clearOverlay(videoWidth, videoHeight);
-      if (model) {
-        if (showLaneInfo >= 1) drawLaneLines(model, overlayState, hudState, transform.calibTransform);
-        if (showLaneInfo > 1) drawRoadEdges(model, overlayState, transform.calibTransform);
-        if (showLaneInfo >= 0) drawPath(selectedPath.pathData, model, overlayState, transform.calibTransform, videoHeight, pathStyle);
-        drawBlindspotBarriers(model?.position, overlayState, hudState, transform.calibTransform);
-        drawRadarLeadBoxes(model, overlayState, hudState, transform.calibTransform, videoWidth, videoHeight, stageWidth, stageHeight, transform);
-        drawProjectedTfMarker(model?.position, hudState?.longitudinalPlan, transform.calibTransform, videoWidth, videoHeight);
+      beginGeometryFrame(videoWidth, videoHeight);
+      if (model && projectionReady) {
+        if (showLaneInfo >= 1) {
+          roadOverlayGeometryRenderer.drawLaneLines(model, overlayState, hudState, transform.calibTransform);
+        }
+        if (showLaneInfo > 1) {
+          roadOverlayGeometryRenderer.drawRoadEdges(model, overlayState, transform.calibTransform);
+        }
+        if (showLaneInfo >= 0) {
+          roadOverlayGeometryRenderer.drawPath(
+            selectedPath.pathData,
+            model,
+            overlayState,
+            transform.calibTransform,
+            videoHeight,
+            pathStyle,
+          );
+        }
+        roadOverlayAuxRenderer.drawBlindspotBarriers(
+          model?.position,
+          overlayState,
+          hudState,
+          transform.calibTransform,
+        );
+        roadOverlayLeadRenderer.draw(
+          model,
+          overlayState,
+          hudState,
+          transform.calibTransform,
+          videoWidth,
+          videoHeight,
+          stageWidth,
+          stageHeight,
+          transform,
+        );
+        roadOverlayAuxRenderer.drawProjectedTfMarker(
+          model?.position,
+          hudState?.longitudinalPlan,
+          transform.calibTransform,
+          videoWidth,
+          videoHeight,
+        );
       }
+      endGeometryFrame();
     }
 
     if (hudDirty) {
-      clearHud(stageWidth, stageHeight);
-      drawStageEdgeFades(stageWidth, stageHeight);
+      hudCanvas.clear(stageWidth, stageHeight);
+      hudCanvas.drawEdgeFades(stageWidth, stageHeight);
       drawPlot(stageWidth, stageHeight, viewportRect, plotData);
       setDebug(debugText);
-      drawHudTopLeftText(stageWidth, stageHeight, viewportRect, overlayInfoState.carLabel, pathStyle.mode);
-      drawHudTopRightText(stageWidth, stageHeight, viewportRect, lastDebug, pathStyle.mode);
-      syncRtcPerfHud();
-      drawHudBottomLeftText(stageWidth, stageHeight, viewportRect, overlayInfoState.branchLabel, pathStyle.mode);
-      drawHudBottomText(stageWidth, stageHeight, viewportRect, selectedPath.latDebugText, hudState, pathStyle.mode);
+      hudCanvas.drawTopLeft(stageWidth, stageHeight, viewportRect, overlayInfoState.carLabel, pathStyle.mode);
+      hudCanvas.drawTopRight(stageWidth, stageHeight, viewportRect, lastDebug, pathStyle.mode);
+      rtcPerfHud.sync();
+      hudCanvas.drawBottomLeft(stageWidth, stageHeight, viewportRect, overlayInfoState.branchLabel, pathStyle.mode);
+      hudCanvas.drawBottomCenter(
+        stageWidth,
+        stageHeight,
+        viewportRect,
+        hudModel.formatBottomCenterText(selectedPath.latDebugText, hudState),
+        pathStyle.mode,
+      );
     }
 
-    if (!model) {
+    if (!cameraProfileReady) {
+      setStatus(`road ${videoWidth}x${videoHeight} · ${getUIText("waiting_camera_profile", "waiting camera profile...")} · ${laneLabel}`);
+    } else if (!calibration) {
+      setStatus(`road ${videoWidth}x${videoHeight} · ${getUIText("waiting_calibration", "waiting calibration...")} · ${laneLabel}`);
+    } else if (!model) {
       setStatus(`road ${videoWidth}x${videoHeight} · ${getUIText("waiting_model", "waiting modelV2...")} · ${laneLabel}`);
     } else {
       setStatus(`road ${videoWidth}x${videoHeight} · model ${model.frameId ?? "-"} · ${laneLabel} · ${modeLabel}`);
     }
 
     setMeta(
-      `road:${roadCameraState?.frameId ?? "-"} model:${model?.frameId ?? "-"} path:${selectedPath.pathSource}/${pathStyle.mode}:${pathStyle.colorIndex} width:${finiteNumber(paramsState.ShowPathWidth, 100)} laneInfo:${showLaneInfo} lane:${laneCount} edge:${edgeCount} lead:${leadCount} plot:${finiteNumber(paramsState.ShowPlotMode, 0)} rpy:${rpyText} h:${finiteNumber(liveCalibration?.height?.[0], 0).toFixed(2)}`,
+      `road:${roadCameraState?.frameId ?? "-"} model:${model?.frameId ?? "-"} cam:${_roadCameraDeviceType || "-"}/${_roadCameraSensor || "-"}/${_roadCameraProfileKey} cal:${liveCalibration?.calStatus ?? "-"} path:${selectedPath.pathSource}/${pathStyle.mode}:${pathStyle.colorIndex} width:${finiteNumber(paramsState.ShowPathWidth, 100)} laneInfo:${showLaneInfo} lane:${laneCount} edge:${edgeCount} lead:${leadCount} plot:${finiteNumber(paramsState.ShowPlotMode, 0)} rpy:${rpyText} h:${finiteNumber(liveCalibration?.height?.[0], 0).toFixed(2)}`,
     );
     if (!hudDirty) setDebug(debugText);
   }
@@ -4044,7 +2725,7 @@ window.HomeDrive = (() => {
     _renderTimerId = null;
     _renderVideoFrameId = null;
     if (!isStageVisible()) {
-      if (!isActive()) resetCarrotHudLayout();
+      if (!isActive()) hudLayout?.reset();
       return;
     }
 
@@ -4062,6 +2743,7 @@ window.HomeDrive = (() => {
     return (
       _pendingRenderState.overlayDirty &&
       !_pendingRenderState.force &&
+      !replayRenderBridge.isActive() &&
       typeof videoEl.requestVideoFrameCallback === "function" &&
       isCarrotVisionActive() &&
       !videoEl.paused &&
@@ -4073,7 +2755,7 @@ window.HomeDrive = (() => {
     mergePendingRenderState(options);
     if (!isStageVisible()) {
       cancelScheduledRender();
-      if (!isActive()) resetCarrotHudLayout();
+      if (!isActive()) hudLayout?.reset();
       return;
     }
 
@@ -4088,8 +2770,12 @@ window.HomeDrive = (() => {
       return;
     }
     if (canUseVideoFrameScheduling()) {
-      _renderVideoFrameId = videoEl.requestVideoFrameCallback(() => {
+      _renderVideoFrameId = videoEl.requestVideoFrameCallback((_now, metadata) => {
         _renderVideoFrameId = null;
+        if (!replayRenderBridge.isActive()) {
+          window.CarrotVisionFrameSync?.notePresentedVideoFrame?.(metadata);
+          window.CarrotVisionRtc?.reportPresentedFrame?.();
+        }
         flushScheduledRender();
       });
       return;
@@ -4105,8 +2791,24 @@ window.HomeDrive = (() => {
       overlayDirty: Boolean(options.force || (hasOverlayDirty ? options.overlayDirty : true)),
       hudDirty: Boolean(options.force || (hasHudDirty ? options.hudDirty : true)),
     };
+    if (stageEl.parentElement?.classList.contains("is-drive-workspace-resizing")) {
+      mergePendingRenderState(normalized);
+      cancelScheduledRender();
+      return;
+    }
     scheduleRender(normalized);
   }
+
+  const replayRenderController = window.DriveVisionReplayRenderController?.create?.({
+    isReplayActive: replayRenderBridge.isActive,
+    isStageVisible,
+    cancelScheduledRender,
+    resetFrameTemporalState: resetVisualTemporalState,
+    resetReplayState: resetReplayVisualState,
+    mergePendingRenderState,
+    flushScheduledRender,
+  }) || null;
+  if (!replayRenderController) return {};
 
   function refresh() {
     transformSignature = "";
@@ -4117,9 +2819,9 @@ window.HomeDrive = (() => {
     _lastPlotInputSig = "";
     _forceNextRender = true;
     _gradientCache.clear();
-    _hudGradientCache.clear();
+    hudCanvas.reset();
     _rgbaCache.clear();
-    resetTemporalRibbonState();
+    resetVisualTemporalState();
     _mergeRuntimeCache.refs = null;
     _mergeRuntimeCache.result = null;
   }
@@ -4132,85 +2834,6 @@ window.HomeDrive = (() => {
     });
   }
 
-  let _rtcPerfHoldTimer = null;
-  let _rtcPerfHoldPointerId = null;
-  let _rtcPerfHoldStartX = 0;
-  let _rtcPerfHoldStartY = 0;
-
-  function clearRtcPerfHold() {
-    if (_rtcPerfHoldTimer != null) {
-      window.clearTimeout(_rtcPerfHoldTimer);
-      _rtcPerfHoldTimer = null;
-    }
-    _rtcPerfHoldPointerId = null;
-    if (rtcPerfHoldTargetEl) rtcPerfHoldTargetEl.classList.remove("is-holding");
-  }
-
-  function bindRtcPerfHudInteractions() {
-    if (!rtcPerfHoldTargetEl || !rtcPerfSummaryEl) return;
-
-    rtcPerfHoldTargetEl.addEventListener("pointerdown", (event) => {
-      event.stopPropagation();
-      clearRtcPerfHold();
-      if (!isActive() || !isRtcPerfSummaryAvailable()) return;
-      _rtcPerfHoldPointerId = event.pointerId;
-      _rtcPerfHoldStartX = event.clientX;
-      _rtcPerfHoldStartY = event.clientY;
-      rtcPerfHoldTargetEl.classList.add("is-holding");
-      rtcPerfHoldTargetEl.setPointerCapture?.(event.pointerId);
-      _rtcPerfHoldTimer = window.setTimeout(() => {
-        _rtcPerfHoldTimer = null;
-        rtcPerfHoldTargetEl.classList.remove("is-holding");
-        setRtcPerfSummaryOpen(!_rtcPerfSummaryOpen);
-      }, RTC_PERF_HOLD_MS);
-    });
-    rtcPerfHoldTargetEl.addEventListener("pointermove", (event) => {
-      if (_rtcPerfHoldPointerId !== event.pointerId) return;
-      if (Math.hypot(event.clientX - _rtcPerfHoldStartX, event.clientY - _rtcPerfHoldStartY) > RTC_PERF_HOLD_MOVE_PX) {
-        clearRtcPerfHold();
-      }
-    });
-    ["pointerup", "pointercancel", "lostpointercapture"].forEach((eventName) => {
-      rtcPerfHoldTargetEl.addEventListener(eventName, clearRtcPerfHold);
-    });
-    rtcPerfHoldTargetEl.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    });
-
-    rtcPerfCloseBtnEl?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      setRtcPerfSummaryOpen(false);
-    });
-    rtcPerfLogBtnEl?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const previousText = rtcPerfLogBtnEl.textContent;
-      rtcPerfLogBtnEl.disabled = true;
-      rtcPerfLogBtnEl.textContent = "SEND";
-      (async () => {
-        try {
-          if (!window.CarrotVisionDiag?.uploadDiscord) throw new Error("diagnostic upload unavailable");
-          await window.CarrotVisionDiag.uploadDiscord();
-          rtcPerfLogBtnEl.textContent = "SENT";
-          if (typeof showAppToast === "function") showAppToast("Carrot Vision log sent to Discord", { duration: 2600 });
-        } catch (error) {
-          rtcPerfLogBtnEl.textContent = "FAIL";
-          if (typeof showAppToast === "function") showAppToast(`Discord upload failed: ${error?.message || error}`, { tone: "error", duration: 4200 });
-        } finally {
-          window.setTimeout(() => {
-            rtcPerfLogBtnEl.disabled = false;
-            rtcPerfLogBtnEl.textContent = previousText;
-          }, 1400);
-        }
-      })();
-    });
-    document.addEventListener("pointerdown", (event) => {
-      if (!_rtcPerfSummaryOpen) return;
-      if (rtcPerfSummaryEl.contains(event.target) || rtcPerfHoldTargetEl.contains(event.target)) return;
-      setRtcPerfSummaryOpen(false);
-    }, true);
-  }
-
   function shouldIgnoreStageFullscreenToggle(target) {
     if (!(target instanceof Element)) return false;
     if (target.closest("button, a, input, textarea, select, label")) return true;
@@ -4221,19 +2844,25 @@ window.HomeDrive = (() => {
 
   async function handleStageFullscreenToggle(event) {
     if (!isCarrotVisionActive()) return;
+    if (replayRenderBridge.isActive()) return;
     if (shouldIgnoreStageFullscreenToggle(event?.target)) return;
     if (typeof window.ToggleCarrotFullscreen !== "function") return;
     await window.ToggleCarrotFullscreen({ quiet: false }).catch(() => {});
   }
 
   function requestFullRender() {
-    if (!isRtcPerfSummaryAvailable()) setRtcPerfSummaryOpen(false);
+    if (stageEl.parentElement?.classList.contains("is-drive-workspace-resizing")) {
+      mergePendingRenderState({ force: true, overlayDirty: true, hudDirty: true });
+      cancelScheduledRender();
+      return;
+    }
+    rtcPerfHud.layoutChanged();
     refresh();
     requestRender({ force: true, overlayDirty: true, hudDirty: true });
   }
 
   function handleLifecycleChange() {
-    if (!isActive()) setRtcPerfSummaryOpen(false);
+    if (!isActive()) rtcPerfHud.close();
     if (isStageVisible()) {
       if (isCarrotVisionActive()) {
         const live = (getCarrotVisionState().controlState || "") === "live";
@@ -4245,7 +2874,7 @@ window.HomeDrive = (() => {
     }
     cancelScheduledRender();
     setStageLoading(false);
-    if (!isActive()) resetCarrotHudLayout();
+    if (!isActive()) hudLayout?.reset();
   }
 
   stageEl.addEventListener("click", handleStageFullscreenToggle);
@@ -4257,10 +2886,15 @@ window.HomeDrive = (() => {
   window.addEventListener("carrot:pagechange", handleLifecycleChange);
   window.addEventListener("carrot:visionchange", handleLifecycleChange);
   window.addEventListener("carrot:visionstatechange", handleLifecycleChange);
+  window.addEventListener("carrot:visioncontentchange", handleLifecycleChange);
+  window.addEventListener("drive:workspacelayoutchange", requestFullRender);
+  window.addEventListener("drive:workspaceresizestart", cancelScheduledRender);
+  window.addEventListener("drive:workspaceresizeend", requestFullRender);
   document.addEventListener("visibilitychange", handleLifecycleChange);
   if (typeof ResizeObserver === "function") {
     const stageResizeObserver = new ResizeObserver(requestFullRender);
     stageResizeObserver.observe(stageEl);
+    if (replayViewportEl) stageResizeObserver.observe(replayViewportEl);
   }
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", requestFullRender, { passive: true });
@@ -4279,8 +2913,7 @@ window.HomeDrive = (() => {
   } catch {}
 
   syncDisplayModeButtons();
-  bindRtcPerfHudInteractions();
-  syncRtcPerfHud();
+  rtcPerfHud.sync();
   refreshParams(true);
   refreshOverlayInfo(true).catch(() => {});
   requestRender({ force: true, overlayDirty: true, hudDirty: true });
@@ -4288,7 +2921,11 @@ window.HomeDrive = (() => {
   return {
     refresh,
     requestRender,
+    resize: requestFullRender,
+    renderReplayVideoFrame: replayRenderController.renderVideoFrame,
+    resetReplayTemporalState: replayRenderController.resetTemporalState,
     renderText: syncDisplayModeButtons,
+    getDisplayModeIndex: () => displayModeIndex,
     setDisplayModeIndex,
   };
 })();

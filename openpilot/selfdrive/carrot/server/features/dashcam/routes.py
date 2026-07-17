@@ -3,12 +3,13 @@ import mimetypes
 import os
 import threading
 import time
+from urllib.parse import quote
 
 from aiohttp import web
 
 from ...config import DASHCAM_ROOT
 from . import upload, upload_jobs
-from .catalog import build_routes, segment_file_summary
+from .catalog import build_routes, segment_file_summary, source_rlog, source_video
 from .ffmpeg import browser_video, ensure_preview, ensure_thumbnail
 from .paths import (
   file_size_label,
@@ -18,7 +19,7 @@ from .paths import (
   segment_index,
 )
 
-ROUTE_CACHE_TTL = 3.0
+ROUTE_CACHE_TTL = 15.0
 DASHCAM_ROUTE_LIMIT_DEFAULT = 40
 DASHCAM_ROUTE_LIMIT_MAX = 200
 DASHCAM_SEGMENT_LIMIT_DEFAULT = 10
@@ -26,6 +27,33 @@ DASHCAM_SEGMENT_LIMIT_MAX = 2000
 DASHCAM_OFFSET_MAX = 1000000
 _route_cache_lock = threading.Lock()
 _route_cache = {"time": 0.0, "routes": []}
+
+
+def client_replay_source_description(segment: str) -> dict:
+  """Describe raw replay inputs without running replay preparation or ffmpeg."""
+  segment = safe_segment(segment)
+  segment_path = segment_dir(segment)
+  rlog_path, rlog_name = source_rlog(segment_path)
+  video_path, video_name = source_video(segment_path)
+  encoded_segment = quote(segment, safe="")
+  return {
+    "ok": True,
+    "mode": "client",
+    "segment": segment,
+    "segmentIndex": segment_index(segment),
+    "rlog": {
+      "name": rlog_name,
+      "size": os.path.getsize(rlog_path),
+      "compression": "zstd" if rlog_name.endswith(".zst") else ("bzip2" if rlog_name.endswith(".bz2") else "none"),
+      "url": f"/api/dashcam/replay-source/{encoded_segment}/rlog",
+    },
+    "video": {
+      "name": video_name,
+      "size": os.path.getsize(video_path),
+      "container": "mp4" if video_name.endswith(".mp4") else "mpegts",
+      "url": f"/api/dashcam/replay-source/{encoded_segment}/video",
+    },
+  }
 
 
 async def request_upload_segments(request: web.Request) -> list[str]:
@@ -186,6 +214,39 @@ async def api_dashcam_video(request: web.Request) -> web.StreamResponse:
   return web.FileResponse(path, headers=headers)
 
 
+async def api_dashcam_replay_source(request: web.Request) -> web.Response:
+  """Return only cheap filesystem metadata for client-side replay processing."""
+  try:
+    payload = client_replay_source_description(request.match_info.get("segment", ""))
+    return web.json_response(payload, headers={"Cache-Control": "no-store"})
+  except web.HTTPException as e:
+    return web.json_response({"ok": False, "error": e.text or e.reason}, status=e.status, headers={"Cache-Control": "no-store"})
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500, headers={"Cache-Control": "no-store"})
+
+
+async def api_dashcam_replay_source_file(request: web.Request) -> web.StreamResponse:
+  """Stream an untouched replay input; no LogReader, decompression, or ffmpeg."""
+  segment = safe_segment(request.match_info.get("segment", ""))
+  segment_path = segment_dir(segment)
+  kind = (request.match_info.get("kind", "") or "").strip()
+  if kind == "rlog":
+    path, name = source_rlog(segment_path)
+    content_type = "application/zstd" if name.endswith(".zst") else (
+      "application/x-bzip2" if name.endswith(".bz2") else "application/octet-stream"
+    )
+  elif kind == "video":
+    path, name = source_video(segment_path)
+    content_type = "video/mp4" if name.endswith(".mp4") else "video/mp2t"
+  else:
+    raise web.HTTPNotFound(text="replay source not found")
+  return web.FileResponse(path, headers={
+    "Content-Type": content_type,
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  })
+
+
 async def api_dashcam_download(request: web.Request) -> web.StreamResponse:
   segment = request.match_info.get("segment", "")
   kind = (request.match_info.get("kind", "") or "").strip()
@@ -306,6 +367,8 @@ def register(app: web.Application) -> None:
   app.router.add_get("/api/dashcam/thumbnail/{segment}", api_dashcam_thumbnail)
   app.router.add_get("/api/dashcam/preview/{segment}", api_dashcam_preview)
   app.router.add_get("/api/dashcam/video/{segment}", api_dashcam_video)
+  app.router.add_get("/api/dashcam/replay-source/{segment}", api_dashcam_replay_source)
+  app.router.add_get("/api/dashcam/replay-source/{segment}/{kind}", api_dashcam_replay_source_file)
   app.router.add_get("/api/dashcam/download/{segment}/{kind}", api_dashcam_download)
   app.router.add_post("/api/dashcam/upload/summary", api_dashcam_upload_summary)
   app.router.add_post("/api/dashcam/upload/start", api_dashcam_upload_start)

@@ -143,28 +143,37 @@ function logsEmptyStateHtml(type = "dashcam") {
 function openLogsVideoPlayer(title, src, options = {}) {
   const overlay = document.createElement("div");
   const kind = String(options.kind || "video").replace(/[^a-z0-9_-]/gi, "");
+  const menuButton = typeof options.onMenu === "function"
+    ? `<button class="dashcam-menu-btn dashcam-player-menu" type="button" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
+        <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
+      </button>`
+    : "";
   overlay.className = `dashcam-player-overlay dashcam-player-overlay--${kind}`;
   overlay.innerHTML = `<div class="dashcam-player-dialog" role="dialog" aria-modal="true">
     <div class="dashcam-player-frame">
-      <video class="dashcam-player-video" playsinline></video>
+      <video class="dashcam-player-video" playsinline webkit-playsinline disablepictureinpicture disableremoteplayback controlslist="nodownload noplaybackrate noremoteplayback"></video>
       <div class="dashcam-player-toast" aria-live="polite"></div>
       <div class="dashcam-player-top">
         <div class="dashcam-player-heading">
           <div class="dashcam-player-title">${escapeHtml(title || "Video")}</div>
           <div class="dashcam-player-subtitle"${options.subtitle ? "" : " hidden"}>${escapeHtml(options.subtitle || "")}</div>
         </div>
-        <button class="dashcam-player-close" type="button" aria-label="${escapeHtml(getUIText("close", "Close"))}" title="${escapeHtml(getUIText("close", "Close"))}">
-          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.71 2.88 18.3 9.17 12 2.88 5.7 4.29 4.29l6.3 6.3 6.29-6.3z"/></svg>
+        ${menuButton}
+        <button class="dashcam-player-close c-close" type="button" aria-label="${escapeHtml(getUIText("close", "Close"))}" title="${escapeHtml(getUIText("close", "Close"))}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
         </button>
       </div>
     </div>
   </div>`;
   const videoEl = overlay.querySelector("video");
+  videoEl.controls = false;
+  videoEl.removeAttribute("controls");
   const toastEl = overlay.querySelector(".dashcam-player-toast");
   const subtitleEl = overlay.querySelector(".dashcam-player-subtitle");
   const downloadUrl = src + (src.includes("?") ? "&" : "?") + "download=1";
   let toastTimer = null;
   let suppressToasts = true;
+  let player = null;
   const updateSubtitle = () => {
     if (!subtitleEl) return;
     const resolved = typeof options.subtitleForDuration === "function"
@@ -181,7 +190,6 @@ function openLogsVideoPlayer(title, src, options = {}) {
     if (toastTimer) window.clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => toastEl.classList.remove("is-visible"), 850);
   };
-  let player = null;
   const close = () => {
     if (toastTimer) window.clearTimeout(toastTimer);
     try { player?.destroy?.(); } catch {}
@@ -191,18 +199,34 @@ function openLogsVideoPlayer(title, src, options = {}) {
     if (ev.target === overlay) close();
   });
   overlay.querySelector(".dashcam-player-close")?.addEventListener("click", close);
+  overlay.querySelector(".dashcam-player-menu")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    overlay.classList.add("is-menu-open");
+    overlay.classList.remove("is-controls-hidden");
+    player?.toggleControls?.(true);
+    Promise.resolve()
+      .then(() => options.onMenu?.({ close }))
+      .catch((error) => {
+        if (typeof showAppToast === "function") showAppToast(error?.message || String(error), { tone: "error" });
+      })
+      .finally(() => overlay.classList.remove("is-menu-open"));
+  });
   document.body.appendChild(overlay);
   requestAnimationFrame(() => {
     overlay.classList.add("is-open");
     try {
       player = new Plyr(videoEl, {
-        controls: ["play-large","rewind","play","fast-forward","progress","current-time","fullscreen","download"],
-        hideControls: false,
+        controls: ["play", "progress", "current-time", "duration", "settings", "fullscreen", "download"],
+        hideControls: true,
         seekTime: 5,
+        settings: ["speed"],
+        speed: { selected: 1, options: [0.5, 1, 1.5, 2] },
         keyboard: { focused: true, global: false },
         fullscreen: { enabled: true, fallback: true, iosNative: true },
         urls: { download: downloadUrl },
       });
+      videoEl.controls = false;
+      videoEl.removeAttribute("controls");
       player.source = {
         type: "video",
         title: title || "Video",
@@ -210,11 +234,11 @@ function openLogsVideoPlayer(title, src, options = {}) {
       };
       player.once("ready", () => {
         const container = player.elements?.container || overlay;
+        player.on("controlshidden", () => overlay.classList.add("is-controls-hidden"));
+        player.on("controlsshown", () => overlay.classList.remove("is-controls-hidden"));
         const bindBtn = (sel, label) => {
           container.querySelectorAll(sel).forEach((btn) => btn.addEventListener("click", () => showToast(label)));
         };
-        bindBtn('[data-plyr="rewind"]', `⏪ ${getUIText("rewind_5", "5s")}`);
-        bindBtn('[data-plyr="fast-forward"]', `${getUIText("forward_5", "5s")} ⏩`);
         bindBtn('[data-plyr="download"]', `⤓ ${getUIText("download", "Download")}`);
         container.addEventListener("keydown", (ev) => {
           if (ev.key === "ArrowLeft") showToast(`⏪ ${getUIText("rewind_5", "5s")}`);
@@ -231,7 +255,10 @@ function openLogsVideoPlayer(title, src, options = {}) {
         window.setTimeout(() => { suppressToasts = false; }, 350);
       });
     } catch (err) {
+      // Plyr can be unavailable on older embedded browsers. Preserve the
+      // browser's native video transport as the fallback.
       videoEl.controls = true;
+      videoEl.setAttribute("controls", "");
       videoEl.src = src;
     }
   });

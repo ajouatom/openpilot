@@ -1,289 +1,231 @@
-/* Carrot Vision raw HUD/overlay runtime.
- * Owns raw-capnp websocket streams, multiplex fallback, decode worker, and HUD normalization.
+/* Carrot Vision compact HUD/overlay runtime.
+ * Owns one compact websocket, latest display state, and HUD normalization.
  */
 var setCarrotVisionState = window.CarrotVisionSetState;
 
 let LAST_HUD_PAYLOAD_SIGNATURE = "";
-const RAW_WS_HELLO_TIMEOUT_MS = 3500;
-const RAW_WS_FIRST_DATA_TIMEOUT_MS = 6500;
-const RAW_WS_WATCHDOG_T = new WeakMap();
+const COMPACT_FIRST_DATA_TIMEOUT_MS = 8000;
 
-const RAW_HUD_LOG_PREFIX = "[raw hud]";
-const RAW_HUD_MUX_LOG_PREFIX = "[raw hud mux]";
-const RAW_HUD_SERVICES = window.CarrotRawCapnp?.HUD_SERVICES || [];
-const RAW_HUD_WS = Object.create(null);
-const RAW_HUD_RETRY_T = Object.create(null);
+const RAW_HUD_SERVICES = window.CarrotVisionCompact?.HUD_SERVICES || [];
 const RAW_HUD_STATE = Object.create(null);
 window.CarrotHudState = RAW_HUD_STATE;
-const RAW_HUD_OVERLAY_DIRTY_SERVICES = new Set(["carState", "controlsState"]);
-const RAW_OVERLAY_LOG_PREFIX = "[raw overlay]";
-const RAW_OVERLAY_MUX_LOG_PREFIX = "[raw overlay mux]";
-const RAW_OVERLAY_SERVICES = window.CarrotRawCapnp?.OVERLAY_SERVICES || [];
-const RAW_OVERLAY_WS = Object.create(null);
-const RAW_OVERLAY_RETRY_T = Object.create(null);
+const RAW_OVERLAY_SERVICES = window.CarrotVisionCompact?.OVERLAY_SERVICES || [];
 const RAW_OVERLAY_STATE = Object.create(null);
 window.CarrotOverlayState = RAW_OVERLAY_STATE;
+const RAW_STATE_UPDATED_AT = Object.create(null);
+window.CarrotStateUpdatedAt = RAW_STATE_UPDATED_AT;
 const RAW_OVERLAY_HUD_ONLY_SERVICES = new Set(["roadCameraState", "liveDelay", "liveTorqueParameters", "liveParameters"]);
-const RAW_MULTIPLEX_MODE = "raw-capnp-multiplex-relay";
-const RAW_TEXT_DECODER = typeof TextDecoder !== "undefined" ? new TextDecoder() : null;
-let RAW_HUD_MUX_WS = null;
-let RAW_HUD_MUX_RETRY_T = null;
-let RAW_HUD_MUX_DISABLED = false;
-let RAW_OVERLAY_MUX_WS = null;
-let RAW_OVERLAY_MUX_RETRY_T = null;
-let RAW_OVERLAY_MUX_DISABLED = false;
-const RAW_DECODE_WORKER_URL = "/js/realtime/raw_capnp_worker.js";
-let RAW_DECODE_WORKER = null;
-let RAW_DECODE_WORKER_FAILED = false;
-let RAW_DECODE_REQ_ID = 0;
-const RAW_DECODE_PENDING = new Map();
-const RAW_DECODE_BACKPRESSURE = {
-  hud: Object.create(null),
-  overlay: Object.create(null),
-};
-const RAW_DECODE_EPOCH = {
-  hud: 0,
-  overlay: 0,
-};
+const COMPACT_STATE_MODE = "carrot-state-v1";
+let COMPACT_OVERLAY_WS = null;
+let COMPACT_OVERLAY_RETRY_T = null;
+let COMPACT_OVERLAY_READY = false;
+let COMPACT_STATE_SERVICE_SIGNATURE = "";
+let COMPACT_OVERLAY_REQUESTED = false;
+let COMPACT_FIRST_DATA_T = null;
+const MODEL_FRAME_HISTORY = [];
+const MODEL_FRAME_HISTORY_LIMIT = 64;
+const RTP_FRAME_HISTORY = new Map();
+const RTP_FRAME_HISTORY_LIMIT = 96;
+let PRESENTED_VIDEO_FRAME_ID = null;
+let LAST_PRESENTED_RTP_TIMESTAMP = null;
 
-function rawClearWsWatchdog(ws) {
-  const timer = RAW_WS_WATCHDOG_T.get(ws);
-  if (!timer) return;
-  clearTimeout(timer);
-  RAW_WS_WATCHDOG_T.delete(ws);
-}
-
-function rawArmWsWatchdog(ws, label, ms, reason, shouldClose) {
-  rawClearWsWatchdog(ws);
-  const timer = setTimeout(() => {
-    RAW_WS_WATCHDOG_T.delete(ws);
-    let close = true;
-    try {
-      close = typeof shouldClose === "function" ? Boolean(shouldClose()) : true;
-    } catch {
-      close = true;
-    }
-    if (!close) return;
-    console.warn("[raw watchdog]", label, reason);
-    try { ws.close(4000, reason); } catch {}
-  }, ms);
-  RAW_WS_WATCHDOG_T.set(ws, timer);
-}
-
-function rawHasState(state) {
-  return Boolean(state && Object.keys(state).length > 0);
-}
-
-function rejectPendingRawDecodeRequests(message) {
-  for (const [requestId, pending] of RAW_DECODE_PENDING.entries()) {
-    RAW_DECODE_PENDING.delete(requestId);
-    pending.reject(new Error(message));
+function rememberModelFrame(model) {
+  const frameId = Number(model?.frameId);
+  if (!Number.isFinite(frameId)) return;
+  const previous = MODEL_FRAME_HISTORY[MODEL_FRAME_HISTORY.length - 1];
+  if (Number(previous?.frameId) === frameId) {
+    MODEL_FRAME_HISTORY[MODEL_FRAME_HISTORY.length - 1] = model;
+  } else {
+    MODEL_FRAME_HISTORY.push(model);
+    if (MODEL_FRAME_HISTORY.length > MODEL_FRAME_HISTORY_LIMIT) MODEL_FRAME_HISTORY.shift();
   }
 }
 
-function handleRawDecodeWorkerMessage(event) {
-  const payload = event?.data || {};
-  const requestId = Number(payload.requestId);
-  const pending = RAW_DECODE_PENDING.get(requestId);
-  if (!pending) return;
-  RAW_DECODE_PENDING.delete(requestId);
-  if (!payload.ok) {
-    pending.reject(new Error(payload.error || "raw decode failed"));
+function notePresentedVideoFrame(metadata) {
+  const rawRtpTimestamp = Number(metadata?.rtpTimestamp);
+  const rtpTimestamp = Number.isFinite(rawRtpTimestamp) ? (rawRtpTimestamp >>> 0) : null;
+  LAST_PRESENTED_RTP_TIMESTAMP = rtpTimestamp;
+  if (rtpTimestamp != null && RTP_FRAME_HISTORY.has(rtpTimestamp)) {
+    PRESENTED_VIDEO_FRAME_ID = RTP_FRAME_HISTORY.get(rtpTimestamp);
     return;
   }
-  pending.resolve(payload.decoded);
+
+  // requestVideoFrameCallback.rtpTimestamp is optional. mediaTime remains a
+  // guarded compatibility fallback for browsers which do not expose it.
+  const mediaTime = Number(metadata?.mediaTime);
+  const roadFrameId = Number(RAW_OVERLAY_STATE?.roadCameraState?.frameId);
+  const inferred = Math.round(mediaTime / 0.05);
+  PRESENTED_VIDEO_FRAME_ID = Number.isFinite(inferred)
+    && Number.isFinite(roadFrameId)
+    && Math.abs(roadFrameId - inferred) <= 120
+    ? inferred
+    : null;
 }
 
-function handleRawDecodeWorkerFailure(error) {
-  console.log("[raw decode] worker disabled", error);
-  RAW_DECODE_WORKER_FAILED = true;
-  if (RAW_DECODE_WORKER) {
-    try { RAW_DECODE_WORKER.terminate(); } catch {}
-    RAW_DECODE_WORKER = null;
-  }
-  rejectPendingRawDecodeRequests(error?.message || "raw decode worker failed");
-}
+function noteRtpFrameMapping(rtpTimestampValue, frameIdValue) {
+  const rtpTimestamp = Number(rtpTimestampValue);
+  const frameId = Number(frameIdValue);
+  if (!Number.isFinite(rtpTimestamp) || !Number.isFinite(frameId)) return;
 
-function ensureRawDecodeWorker() {
-  if (RAW_DECODE_WORKER || RAW_DECODE_WORKER_FAILED || typeof Worker === "undefined") return RAW_DECODE_WORKER;
-  try {
-    const worker = new Worker(RAW_DECODE_WORKER_URL);
-    worker.onmessage = handleRawDecodeWorkerMessage;
-    worker.onerror = handleRawDecodeWorkerFailure;
-    worker.onmessageerror = handleRawDecodeWorkerFailure;
-    RAW_DECODE_WORKER = worker;
-  } catch (error) {
-    RAW_DECODE_WORKER_FAILED = true;
-    console.log("[raw decode] worker unavailable", error);
-  }
-  return RAW_DECODE_WORKER;
-}
-
-async function normalizeRawMessageBuffer(data) {
-  if (data instanceof ArrayBuffer) return data;
-  if (ArrayBuffer.isView(data)) {
-    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-  }
-  if (data instanceof Blob) return data.arrayBuffer();
-  throw new Error(`unsupported raw payload: ${Object.prototype.toString.call(data)}`);
-}
-
-function decodeRawMessageSync(streamKind, service, buffer) {
-  if (streamKind === "hud") {
-    return window.CarrotRawCapnp?.decodeHudEvent?.(service, buffer);
-  }
-  if (streamKind === "overlay") {
-    return window.CarrotRawCapnp?.decodeOverlayEvent?.(service, buffer);
-  }
-  return null;
-}
-
-async function decodeRawMessage(streamKind, service, data) {
-  const buffer = await normalizeRawMessageBuffer(data);
-  const worker = ensureRawDecodeWorker();
-  if (!worker) {
-    return decodeRawMessageSync(streamKind, service, buffer);
+  const normalizedTimestamp = rtpTimestamp >>> 0;
+  RTP_FRAME_HISTORY.set(normalizedTimestamp, frameId >>> 0);
+  while (RTP_FRAME_HISTORY.size > RTP_FRAME_HISTORY_LIMIT) {
+    RTP_FRAME_HISTORY.delete(RTP_FRAME_HISTORY.keys().next().value);
   }
 
-  return new Promise((resolve, reject) => {
-    const requestId = ++RAW_DECODE_REQ_ID;
-    RAW_DECODE_PENDING.set(requestId, { resolve, reject });
-    try {
-      worker.postMessage({ requestId, streamKind, service, buffer }, [buffer]);
-    } catch (error) {
-      RAW_DECODE_PENDING.delete(requestId);
-      reject(error);
-    }
-  });
-}
-
-function getRawDecodeEpoch(streamKind) {
-  return Number(RAW_DECODE_EPOCH[streamKind] || 0);
-}
-
-function invalidateRawDecodeState(streamKind) {
-  RAW_DECODE_EPOCH[streamKind] = getRawDecodeEpoch(streamKind) + 1;
-  const nextEpoch = RAW_DECODE_EPOCH[streamKind];
-  const bucket = RAW_DECODE_BACKPRESSURE[streamKind];
-  Object.values(bucket).forEach((state) => {
-    state.pendingData = null;
-    state.pendingEpoch = nextEpoch;
-    state.pendingVersion = Number(state.pendingVersion || 0) + 1;
-  });
-}
-
-function getRawDecodeServiceState(streamKind, service) {
-  const bucket = RAW_DECODE_BACKPRESSURE[streamKind];
-  if (!bucket[service]) {
-    bucket[service] = {
-      inFlight: false,
-      pendingData: null,
-      pendingEpoch: getRawDecodeEpoch(streamKind),
-      pendingVersion: 0,
-    };
+  if (LAST_PRESENTED_RTP_TIMESTAMP === normalizedTimestamp) {
+    PRESENTED_VIDEO_FRAME_ID = frameId >>> 0;
+    emitCarrotRenderRequest({ overlayDirty: true, hudDirty: false });
   }
-  return bucket[service];
 }
 
-function shouldApplyDecodedStream(streamKind) {
-  return streamKind === "hud" ? shouldRunCarrotHudRealtime() : shouldRunCarrotVisionRealtime();
-}
+function selectSynchronizedModel() {
+  if (!MODEL_FRAME_HISTORY.length) return RAW_OVERLAY_STATE?.modelV2 || null;
+  if (!Number.isFinite(PRESENTED_VIDEO_FRAME_ID)) {
+    return MODEL_FRAME_HISTORY[MODEL_FRAME_HISTORY.length - 1];
+  }
+  const target = PRESENTED_VIDEO_FRAME_ID;
 
-async function flushRawDecodeQueue(streamKind, service, applyDecoded) {
-  const state = getRawDecodeServiceState(streamKind, service);
-  if (state.inFlight) return;
-  state.inFlight = true;
-  try {
-    while (state.pendingData != null) {
-      const nextData = state.pendingData;
-      const pendingEpoch = state.pendingEpoch;
-      const pendingVersion = state.pendingVersion;
-      state.pendingData = null;
-
-      let decoded = null;
-      try {
-        decoded = await decodeRawMessage(streamKind, service, nextData);
-      } catch (error) {
-        console.log(`[raw decode] ${streamKind}/${service} failed`, error);
-        continue;
-      }
-
-      if (!decoded) continue;
-      if (!shouldApplyDecodedStream(streamKind)) continue;
-      if (pendingEpoch !== getRawDecodeEpoch(streamKind)) continue;
-      if (state.pendingData != null || state.pendingEpoch !== pendingEpoch || state.pendingVersion !== pendingVersion) continue;
-      applyDecoded(decoded);
-    }
-  } finally {
-    state.inFlight = false;
-    if (state.pendingData != null) {
-      flushRawDecodeQueue(streamKind, service, applyDecoded).catch((error) => {
-        console.log(`[raw decode] ${streamKind}/${service} queue restart failed`, error);
-      });
+  let selected = null;
+  for (let index = MODEL_FRAME_HISTORY.length - 1; index >= 0; index -= 1) {
+    const candidate = MODEL_FRAME_HISTORY[index];
+    if (Number(candidate?.frameId) <= target) {
+      selected = candidate;
+      break;
     }
   }
+  return selected || MODEL_FRAME_HISTORY[0];
 }
 
-function queueRawDecodedMessage(streamKind, service, data, applyDecoded) {
-  const state = getRawDecodeServiceState(streamKind, service);
-  state.pendingData = data;
-  state.pendingEpoch = getRawDecodeEpoch(streamKind);
-  state.pendingVersion = Number(state.pendingVersion || 0) + 1;
-  flushRawDecodeQueue(streamKind, service, applyDecoded).catch((error) => {
-    console.log(`[raw decode] ${streamKind}/${service} queue failed`, error);
-  });
+function resetFrameSynchronization() {
+  MODEL_FRAME_HISTORY.length = 0;
+  RTP_FRAME_HISTORY.clear();
+  PRESENTED_VIDEO_FRAME_ID = null;
+  LAST_PRESENTED_RTP_TIMESTAMP = null;
 }
 
-function buildRawMultiplexUrl(services) {
+window.CarrotVisionFrameSync = {
+  notePresentedVideoFrame,
+  noteRtpFrameMapping,
+  reset: resetFrameSynchronization,
+  selectModel: selectSynchronizedModel,
+};
+
+function clearCompactFirstDataTimer() {
+  if (COMPACT_FIRST_DATA_T != null) {
+    clearTimeout(COMPACT_FIRST_DATA_T);
+    COMPACT_FIRST_DATA_T = null;
+  }
+}
+
+function compactStateActive() {
+  return COMPACT_OVERLAY_READY;
+}
+
+function compactDesiredServices() {
+  const services = [];
+  if (shouldRunCarrotHudRealtime()) services.push(...RAW_HUD_SERVICES);
+  if (COMPACT_OVERLAY_REQUESTED && shouldRunCarrotVisionRealtime()) services.push(...RAW_OVERLAY_SERVICES);
+  return Array.from(new Set(services));
+}
+
+function publishCompactState() {
+  window.CarrotVisionCompactStateActive = compactStateActive();
+}
+
+function buildCompactStateUrl(services) {
   const wsProto = (location.protocol === "https:") ? "wss" : "ws";
   const params = new URLSearchParams();
   params.set("services", services.join(","));
-  return `${wsProto}://${location.host}/ws/raw_multiplex?${params.toString()}`;
+  return `${wsProto}://${location.host}/ws/compact_state?${params.toString()}`;
 }
 
-async function parseRawMultiplexFrame(data) {
-  const buffer = await normalizeRawMessageBuffer(data);
-  const bytes = new Uint8Array(buffer);
-  if (bytes.length < 2) {
-    throw new Error("bad raw multiplex frame");
-  }
-  const serviceNameLength = bytes[0];
-  const serviceNameEnd = 1 + serviceNameLength;
-  if (bytes.length <= serviceNameEnd) {
-    throw new Error("truncated raw multiplex frame");
-  }
-  const service = RAW_TEXT_DECODER
-    ? RAW_TEXT_DECODER.decode(bytes.subarray(1, serviceNameEnd))
-    : String.fromCharCode(...bytes.subarray(1, serviceNameEnd));
-  return {
-    service,
-    payload: buffer.slice(serviceNameEnd),
-  };
-}
-
-function handleHudDecodedMessage(service, data) {
-  queueRawDecodedMessage("hud", service, data, (decoded) => {
+function applyCompactFrame(service, decoded, options = {}) {
+  if (!decoded || typeof decoded !== "object") return false;
+  let applied = false;
+  let hudDirty = false;
+  let overlayDirty = false;
+  RAW_STATE_UPDATED_AT[service] = Date.now();
+  if (RAW_HUD_SERVICES.includes(service)) {
     RAW_HUD_STATE[service] = decoded;
     window.CarrotHudState = RAW_HUD_STATE;
-    setCarrotVisionState({ raw: { hud: "ready" } }, { reason: `raw hud ${service}`, silent: true });
-    _hudMarkDirty();
-    emitCarrotRenderRequest({
-      hudDirty: true,
-      overlayDirty: RAW_HUD_OVERLAY_DIRTY_SERVICES.has(service),
-    });
-  });
-}
-
-function handleOverlayDecodedMessage(service, data) {
-  queueRawDecodedMessage("overlay", service, data, (decoded) => {
+    if (options.updateVisionState !== false) {
+      setCarrotVisionState({ raw: { hud: "ready" } }, { reason: `compact hud ${service}`, silent: true });
+    }
+    if (options.markHud !== false) _hudMarkDirty();
+    hudDirty = true;
+    applied = true;
+  }
+  if (RAW_OVERLAY_SERVICES.includes(service)) {
+    if (service === "modelV2") rememberModelFrame(decoded);
     RAW_OVERLAY_STATE[service] = decoded;
     window.CarrotOverlayState = RAW_OVERLAY_STATE;
-    setCarrotVisionState({ raw: { overlay: "ready" } }, { reason: `raw overlay ${service}`, silent: true });
+    if (options.updateVisionState !== false) {
+      setCarrotVisionState({ raw: { overlay: "ready" } }, { reason: `compact overlay ${service}`, silent: true });
+    }
+    overlayDirty = !RAW_OVERLAY_HUD_ONLY_SERVICES.has(service);
+    applied = true;
+  }
+  if (applied && options.render !== false) {
     emitCarrotRenderRequest({
-      hudDirty: true,
-      overlayDirty: !RAW_OVERLAY_HUD_ONLY_SERVICES.has(service),
+      hudDirty,
+      overlayDirty,
     });
+  }
+  return applied;
+}
+
+function applyCompactFrames(frames, options = {}) {
+  const list = Array.isArray(frames) ? frames : [];
+  let applied = 0;
+  let hudReady = false;
+  let overlayReady = false;
+  let overlayDirty = false;
+
+  for (const frame of list) {
+    const service = frame?.service;
+    const isHud = RAW_HUD_SERVICES.includes(service);
+    const isOverlay = RAW_OVERLAY_SERVICES.includes(service);
+    if (!isHud && !isOverlay) continue;
+    if (!applyCompactFrame(service, frame.decoded, {
+      render: false,
+      markHud: false,
+      updateVisionState: false,
+    })) continue;
+    applied += 1;
+    hudReady = hudReady || isHud;
+    overlayReady = overlayReady || isOverlay;
+    overlayDirty = overlayDirty || (isOverlay && !RAW_OVERLAY_HUD_ONLY_SERVICES.has(service));
+  }
+
+  if (hudReady) _hudMarkDirty();
+  if (hudReady || overlayReady) {
+    setCarrotVisionState({
+      raw: {
+        ...(hudReady ? { hud: "ready" } : {}),
+        ...(overlayReady ? { overlay: "ready" } : {}),
+      },
+    }, { reason: options.reason || "compact batch", silent: true });
+  }
+  if (applied && options.render !== false) {
+    emitCarrotRenderRequest({ hudDirty: hudReady, overlayDirty });
+  }
+  return applied;
+}
+
+function clearCompactState(options = {}) {
+  for (const key of Object.keys(RAW_HUD_STATE)) delete RAW_HUD_STATE[key];
+  for (const key of Object.keys(RAW_OVERLAY_STATE)) delete RAW_OVERLAY_STATE[key];
+  for (const key of Object.keys(RAW_STATE_UPDATED_AT)) delete RAW_STATE_UPDATED_AT[key];
+  LAST_HUD_PAYLOAD_SIGNATURE = "";
+  resetFrameSynchronization();
+  setCarrotVisionState({ raw: { hud: "idle", overlay: "idle" } }, {
+    reason: options.reason || "compact state cleared",
+    silent: true,
   });
+  if (options.render !== false) {
+    emitCarrotRenderRequest({ force: true, hudDirty: true, overlayDirty: true });
+  }
 }
 
 function drivingHudUpdateFromCarPayload(j) {
@@ -352,7 +294,7 @@ function drivingHudUpdateFromCarPayload(j) {
   ].join("|");
   if (payloadSignature === LAST_HUD_PAYLOAD_SIGNATURE) return;
   LAST_HUD_PAYLOAD_SIGNATURE = payloadSignature;
-  window.DrivingHud?.update?.(payload);
+  window.DriveVisionHudContent?.update?.(payload);
 }
 
 function averageFiniteMetric(values) {
@@ -374,7 +316,8 @@ function pickFiniteMetric(...values) {
 }
 
 function deriveNormalizedHudDeviceMetrics(rawHudState) {
-  const liveServices = window.CarrotLiveRuntimeState?.services;
+  const replayActive = Boolean(window.CarrotVisionReplay?.isActive?.());
+  const liveServices = replayActive ? {} : window.CarrotLiveRuntimeState?.services;
   const liveDeviceState = liveServices?.deviceState && typeof liveServices.deviceState === "object"
     ? liveServices.deviceState
     : {};
@@ -396,7 +339,10 @@ function deriveNormalizedHudDeviceMetrics(rawHudState) {
     liveDeviceState.memoryUsagePercent,
     rawDeviceState.memoryUsagePercent,
   );
-  const freeSpacePct = pickFiniteMetric(liveDeviceState.freeSpacePercent);
+  const freeSpacePct = pickFiniteMetric(
+    liveDeviceState.freeSpacePercent,
+    rawDeviceState.freeSpacePercent,
+  );
   const diskPct = Number.isFinite(freeSpacePct)
     ? Math.min(100, Math.max(0, 100 - freeSpacePct))
     : null;
@@ -410,7 +356,8 @@ function deriveNormalizedHudDeviceMetrics(rawHudState) {
 }
 
 function deriveNormalizedHudVehicleMetrics(rawHudState) {
-  const liveServices = window.CarrotLiveRuntimeState?.services;
+  const replayActive = Boolean(window.CarrotVisionReplay?.isActive?.());
+  const liveServices = replayActive ? {} : window.CarrotLiveRuntimeState?.services;
   const liveCarState = liveServices?.carState && typeof liveServices.carState === "object"
     ? liveServices.carState
     : {};
@@ -428,9 +375,90 @@ function deriveNormalizedHudVehicleMetrics(rawHudState) {
   };
 }
 
+function compactHudDriveMode(state) {
+  const mode = Number(state?.longitudinalPlan?.myDrivingMode);
+  if (mode === 1) return { name: "Eco", kind: "eco" };
+  if (mode === 2) return { name: "Safe", kind: "safe" };
+  if (mode === 4) return { name: "Sport", kind: "sport" };
+  return { name: "Normal", kind: "normal" };
+}
+
+function compactHudGap(state) {
+  const personality = Number(state?.selfdriveState?.personality);
+  return Number.isFinite(personality) ? personality + 1 : null;
+}
+
+function compactHudSpeedLimitKph(state) {
+  const xSpdLimit = Number(state?.carrotMan?.xSpdLimit);
+  const xSpdType = Number(state?.carrotMan?.xSpdType);
+  if (Number.isFinite(xSpdLimit) && xSpdLimit > 0 && xSpdType !== 22) return xSpdLimit;
+  const roadLimit = Number(state?.carrotMan?.nRoadLimitSpeed);
+  return Number.isFinite(roadLimit) && roadLimit > 0 ? roadLimit : null;
+}
+
+function compactHudTemp(state) {
+  const desiredSpeed = Number(state?.carrotMan?.desiredSpeed);
+  const vCruise = Number(state?.carState?.vCruiseCluster ?? state?.controlsState?.vCruiseCluster);
+  if (!Number.isFinite(desiredSpeed)) return null;
+  return {
+    speed: desiredSpeed,
+    source: Number.isFinite(vCruise) && desiredSpeed >= vCruise ? (state?.carrotMan?.desiredSource || "") : "",
+    is_decel: Number.isFinite(vCruise) ? desiredSpeed < vCruise : false,
+  };
+}
+
+function compactHudGear(state) {
+  const raw = String(state?.carState?.gearShifter || "").trim().toLowerCase();
+  const labels = { park: "P", reverse: "R", neutral: "N", drive: "D", sport: "S", low: "L" };
+  if (!raw) return null;
+  return labels[raw] || (raw.length > 2 ? raw.slice(0, 2).toUpperCase() : raw.toUpperCase());
+}
+
+function deriveCompactHudPayload(state) {
+  const deviceState = state?.deviceState || {};
+  const peripheralState = state?.peripheralState || {};
+  const carState = state?.carState || {};
+  const carrotMan = state?.carrotMan || {};
+  const controlsState = state?.controlsState || {};
+  const cpuTemps = Array.isArray(deviceState?.cpuTempC)
+    ? deviceState.cpuTempC.filter((value) => Number.isFinite(Number(value))).map(Number)
+    : [];
+  const cpuTempC = cpuTemps.length ? Math.max(...cpuTemps) : null;
+  const voltageMv = Number(peripheralState?.voltage);
+  const vEgo = Number(carState?.vEgoCluster ?? carState?.vEgo);
+  const speedLimitKph = compactHudSpeedLimitKph(state);
+  const tfGap = compactHudGap(state);
+  const gearStep = String(carState?.gearShifter || "").toLowerCase() === "drive"
+    && Number.isFinite(Number(carState?.gearStep)) && Number(carState.gearStep) > 0
+    ? Math.round(Number(carState.gearStep))
+    : null;
+  const trafficState = Number(carrotMan?.trafficState ?? state?.longitudinalPlan?.trafficState);
+  return {
+    cpuTempC,
+    memPct: Number(deviceState?.memoryUsagePercent),
+    diskPct: null,
+    voltageV: Number.isFinite(voltageMv) ? voltageMv / 1000.0 : null,
+    vEgo,
+    vSetKph: Number(carState?.vCruiseCluster ?? controlsState?.vCruiseCluster),
+    temp: compactHudTemp(state),
+    redDot: false,
+    tlight: trafficState === 1 ? "red" : (trafficState === 2 ? "green" : "off"),
+    tfGap,
+    tfBars: tfGap,
+    gear: compactHudGear(state),
+    gearStep,
+    gpsOk: state?.gpsLocationExternal?.latitude != null || state?.gpsLocationExternal?.longitude != null,
+    driveMode: compactHudDriveMode(state),
+    speedLimitKph,
+    speedLimitOver: Number.isFinite(vEgo) && Number.isFinite(speedLimitKph) ? (vEgo * 3.6) > speedLimitKph : false,
+    speedLimitBlink: Number.isFinite(Number(carrotMan?.xSpdLimit)) && Number(carrotMan.xSpdLimit) > 0
+      && Number(carrotMan?.xSpdType) !== 22 && Number(carrotMan?.xSpdType) !== 4,
+    apm: Number(carrotMan?.activeCarrot) >= 2 ? "APN" : (Number(carrotMan?.activeCarrot) >= 1 ? "APM" : ""),
+  };
+}
+
 function drivingHudUpdateFromRawState() {
-  const payload = window.CarrotRawCapnp?.deriveHudPayload?.(RAW_HUD_STATE);
-  if (!payload) return;
+  const payload = deriveCompactHudPayload(RAW_HUD_STATE);
   Object.assign(payload, deriveNormalizedHudDeviceMetrics(RAW_HUD_STATE));
   Object.assign(payload, deriveNormalizedHudVehicleMetrics(RAW_HUD_STATE));
   drivingHudUpdateFromCarPayload(payload);
@@ -444,12 +472,16 @@ function _hudMarkDirty() {
   _hudScheduleRender();
 }
 
+function shouldRenderCarrotHudState() {
+  return shouldRunCarrotHudRealtime() || Boolean(window.CarrotVisionReplay?.isActive?.());
+}
+
 function _hudScheduleRender() {
   if (_hudRafId != null || !_hudRenderDirty) return;
-  if (!shouldRunCarrotHudRealtime()) return;
+  if (!shouldRenderCarrotHudState()) return;
   _hudRafId = requestAnimationFrame(() => {
     _hudRafId = null;
-    if (!_hudRenderDirty || !shouldRunCarrotHudRealtime()) return;
+    if (!_hudRenderDirty || !shouldRenderCarrotHudState()) return;
     _hudRenderDirty = false;
     drivingHudUpdateFromRawState();
   });
@@ -463,331 +495,143 @@ function _hudStopRenderLoop() {
   _hudRenderDirty = false;
 }
 
-function rawHudScheduleReconnect(service, ms = 1000) {
-  if (!shouldRunCarrotHudRealtime()) return;
-  if (RAW_HUD_RETRY_T[service]) return;
-  RAW_HUD_RETRY_T[service] = setTimeout(() => {
-    RAW_HUD_RETRY_T[service] = null;
-    if (!shouldRunCarrotHudRealtime()) return;
-    rawHudConnectService(service);
+function compactOverlayScheduleReconnect(ms = 1000) {
+  if (!compactDesiredServices().length || COMPACT_OVERLAY_RETRY_T) return;
+  COMPACT_OVERLAY_RETRY_T = setTimeout(() => {
+    COMPACT_OVERLAY_RETRY_T = null;
+    if (compactDesiredServices().length) compactOverlayConnect();
   }, ms);
 }
 
-function rawHudScheduleMultiplexReconnect(ms = 1000) {
-  if (!shouldRunCarrotHudRealtime() || RAW_HUD_MUX_DISABLED) return;
-  if (RAW_HUD_MUX_RETRY_T) return;
-  RAW_HUD_MUX_RETRY_T = setTimeout(() => {
-    RAW_HUD_MUX_RETRY_T = null;
-    if (!shouldRunCarrotHudRealtime() || RAW_HUD_MUX_DISABLED) return;
-    rawHudConnectMultiplex();
-  }, ms);
-}
-
-function rawHudConnectService(service) {
-  if (!shouldRunCarrotHudRealtime()) return;
-  const current = RAW_HUD_WS[service];
-  if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) return;
-
-  const wsProto = (location.protocol === "https:") ? "wss" : "ws";
-  const ws = new WebSocket(`${wsProto}://${location.host}/ws/raw/${service}`);
-  ws.binaryType = "arraybuffer";
-  RAW_HUD_WS[service] = ws;
-
-  ws.onopen = () => {
-    console.log(RAW_HUD_LOG_PREFIX, service, "open");
-  };
-
-  ws.onmessage = async (ev) => {
-    try {
-      if (typeof ev.data === "string") {
-        const hello = JSON.parse(ev.data);
-        console.log(RAW_HUD_LOG_PREFIX, service, "hello", hello);
-        return;
-      }
-      handleHudDecodedMessage(service, ev.data);
-    } catch (e) {
-      console.log(RAW_HUD_LOG_PREFIX, service, "bad msg", e);
-    }
-  };
-
-  ws.onerror = (e) => {
-    console.log(RAW_HUD_LOG_PREFIX, service, "error", e);
-  };
-
-  ws.onclose = () => {
-    console.log(RAW_HUD_LOG_PREFIX, service, "close -> reconnect");
-    if (RAW_HUD_WS[service] !== ws) return;
-    RAW_HUD_WS[service] = null;
-    rawHudScheduleReconnect(service, 1000);
-  };
-}
-
-function rawHudConnectAllLegacy() {
-  for (const service of RAW_HUD_SERVICES) {
-    rawHudConnectService(service);
+function compactOverlayConnect() {
+  const services = compactDesiredServices();
+  if (!services.length) return;
+  const serviceSignature = services.join(",");
+  if (COMPACT_OVERLAY_WS && (COMPACT_OVERLAY_WS.readyState === WebSocket.OPEN || COMPACT_OVERLAY_WS.readyState === WebSocket.CONNECTING)) {
+    if (COMPACT_STATE_SERVICE_SIGNATURE === serviceSignature) return;
+    const previous = COMPACT_OVERLAY_WS;
+    COMPACT_OVERLAY_WS = null;
+    COMPACT_OVERLAY_READY = false;
+    COMPACT_STATE_SERVICE_SIGNATURE = "";
+    clearCompactFirstDataTimer();
+    try { previous.close(1000, "compact_services_changed"); } catch {}
   }
-  _hudMarkDirty();
-}
 
-function rawHudConnectMultiplex() {
-  if (!shouldRunCarrotHudRealtime() || RAW_HUD_MUX_DISABLED) return;
-  const current = RAW_HUD_MUX_WS;
-  if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) return;
-
-  let helloReceived = false;
   let firstDataReceived = false;
-  const ws = new WebSocket(buildRawMultiplexUrl(RAW_HUD_SERVICES));
+  const ws = new WebSocket(buildCompactStateUrl(services));
   ws.binaryType = "arraybuffer";
-  RAW_HUD_MUX_WS = ws;
-  rawArmWsWatchdog(ws, "hud mux hello", RAW_WS_HELLO_TIMEOUT_MS, "raw_hello_timeout", () => (
-    shouldRunCarrotHudRealtime() && RAW_HUD_MUX_WS === ws && !helloReceived
-  ));
+  COMPACT_OVERLAY_WS = ws;
+  COMPACT_STATE_SERVICE_SIGNATURE = serviceSignature;
+  clearCompactFirstDataTimer();
+  COMPACT_FIRST_DATA_T = setTimeout(() => {
+    COMPACT_FIRST_DATA_T = null;
+    if (COMPACT_OVERLAY_WS === ws && !firstDataReceived) {
+      try { ws.close(4000, "compact_first_data_timeout"); } catch {}
+    }
+  }, COMPACT_FIRST_DATA_TIMEOUT_MS);
 
-  ws.onopen = () => {
-    console.log(RAW_HUD_MUX_LOG_PREFIX, "open");
-  };
-
-  ws.onmessage = async (ev) => {
+  ws.onmessage = async (event) => {
     try {
-      if (typeof ev.data === "string") {
-        const hello = JSON.parse(ev.data);
-        console.log(RAW_HUD_MUX_LOG_PREFIX, "hello", hello);
-        helloReceived = hello?.mode === RAW_MULTIPLEX_MODE;
-        rawClearWsWatchdog(ws);
-        if (helloReceived) {
-          rawArmWsWatchdog(ws, "hud mux first-data", RAW_WS_FIRST_DATA_TIMEOUT_MS, "raw_first_data_timeout", () => (
-            shouldRunCarrotHudRealtime() && RAW_HUD_MUX_WS === ws && !firstDataReceived && !rawHasState(RAW_HUD_STATE)
-          ));
+      if (typeof event.data === "string") {
+        const hello = JSON.parse(event.data);
+        if (hello?.mode !== COMPACT_STATE_MODE) {
+          try { ws.close(1002, "compact_bad_hello"); } catch {}
         }
         return;
       }
+      const data = event.data instanceof Blob ? await event.data.arrayBuffer() : event.data;
+      const frames = window.CarrotVisionCompact?.decodeFrames?.(data)
+        || [window.CarrotVisionCompact?.decodeFrame?.(data)].filter(Boolean);
+      for (const frame of frames) {
+        if (!frame || (!RAW_HUD_SERVICES.includes(frame.service) && !RAW_OVERLAY_SERVICES.includes(frame.service))) continue;
+        applyCompactFrame(frame.service, frame.decoded);
+      }
+      if (!frames.length) return;
       firstDataReceived = true;
-      rawClearWsWatchdog(ws);
-      const frame = await parseRawMultiplexFrame(ev.data);
-      if (!RAW_HUD_SERVICES.includes(frame.service)) return;
-      handleHudDecodedMessage(frame.service, frame.payload);
-    } catch (e) {
-      console.log(RAW_HUD_MUX_LOG_PREFIX, "bad msg", e);
+      clearCompactFirstDataTimer();
+      COMPACT_OVERLAY_READY = true;
+      publishCompactState();
+    } catch (error) {
+      console.warn("[compact overlay] bad message", error);
     }
-  };
-
-  ws.onerror = (e) => {
-    console.log(RAW_HUD_MUX_LOG_PREFIX, "error", e);
   };
 
   ws.onclose = () => {
-    rawClearWsWatchdog(ws);
-    console.log(RAW_HUD_MUX_LOG_PREFIX, "close");
-    if (RAW_HUD_MUX_WS !== ws) return;
-    RAW_HUD_MUX_WS = null;
-    if (!shouldRunCarrotHudRealtime()) return;
-    if (!helloReceived) {
-      RAW_HUD_MUX_DISABLED = true;
-      rawHudConnectAllLegacy();
-      return;
-    }
-    rawHudScheduleMultiplexReconnect(1000);
+    clearCompactFirstDataTimer();
+    if (COMPACT_OVERLAY_WS !== ws) return;
+    COMPACT_OVERLAY_WS = null;
+    COMPACT_OVERLAY_READY = false;
+    COMPACT_STATE_SERVICE_SIGNATURE = "";
+    publishCompactState();
+    if (!compactDesiredServices().length) return;
+    compactOverlayScheduleReconnect(1000);
   };
 }
 
 function rawHudConnectAll() {
-  invalidateRawDecodeState("hud");
+  if (!shouldRunCarrotHudRealtime()) return;
   setCarrotVisionState({ raw: { hud: "connecting" } }, { reason: "raw hud connecting" });
-  if (!RAW_HUD_MUX_DISABLED) {
-    rawHudConnectMultiplex();
-    if (RAW_HUD_MUX_WS) {
-      _hudMarkDirty();
-      return;
-    }
-  }
-  rawHudConnectAllLegacy();
-}
-
-function rawOverlayScheduleReconnect(service, ms = 1000) {
-  if (!shouldRunCarrotVisionRealtime()) return;
-  if (RAW_OVERLAY_RETRY_T[service]) return;
-  RAW_OVERLAY_RETRY_T[service] = setTimeout(() => {
-    RAW_OVERLAY_RETRY_T[service] = null;
-    if (!shouldRunCarrotVisionRealtime()) return;
-    rawOverlayConnectService(service);
-  }, ms);
-}
-
-function rawOverlayScheduleMultiplexReconnect(ms = 1000) {
-  if (!shouldRunCarrotVisionRealtime() || RAW_OVERLAY_MUX_DISABLED) return;
-  if (RAW_OVERLAY_MUX_RETRY_T) return;
-  RAW_OVERLAY_MUX_RETRY_T = setTimeout(() => {
-    RAW_OVERLAY_MUX_RETRY_T = null;
-    if (!shouldRunCarrotVisionRealtime() || RAW_OVERLAY_MUX_DISABLED) return;
-    rawOverlayConnectMultiplex();
-  }, ms);
-}
-
-function rawOverlayConnectService(service) {
-  if (!shouldRunCarrotVisionRealtime()) return;
-  const current = RAW_OVERLAY_WS[service];
-  if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) return;
-
-  const wsProto = (location.protocol === "https:") ? "wss" : "ws";
-  const ws = new WebSocket(`${wsProto}://${location.host}/ws/raw/${service}`);
-  ws.binaryType = "arraybuffer";
-  RAW_OVERLAY_WS[service] = ws;
-
-  ws.onopen = () => {
-    console.log(RAW_OVERLAY_LOG_PREFIX, service, "open");
-  };
-
-  ws.onmessage = async (ev) => {
-    try {
-      if (typeof ev.data === "string") {
-        const hello = JSON.parse(ev.data);
-        console.log(RAW_OVERLAY_LOG_PREFIX, service, "hello", hello);
-        return;
-      }
-      handleOverlayDecodedMessage(service, ev.data);
-    } catch (e) {
-      console.log(RAW_OVERLAY_LOG_PREFIX, service, "bad msg", e);
-    }
-  };
-
-  ws.onerror = (e) => {
-    console.log(RAW_OVERLAY_LOG_PREFIX, service, "error", e);
-  };
-
-  ws.onclose = () => {
-    console.log(RAW_OVERLAY_LOG_PREFIX, service, "close -> reconnect");
-    if (RAW_OVERLAY_WS[service] !== ws) return;
-    RAW_OVERLAY_WS[service] = null;
-    rawOverlayScheduleReconnect(service, 1000);
-  };
-}
-
-function rawOverlayConnectAllLegacy() {
-  for (const service of RAW_OVERLAY_SERVICES) {
-    rawOverlayConnectService(service);
-  }
-}
-
-function rawOverlayConnectMultiplex() {
-  if (!shouldRunCarrotVisionRealtime() || RAW_OVERLAY_MUX_DISABLED) return;
-  const current = RAW_OVERLAY_MUX_WS;
-  if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) return;
-
-  let helloReceived = false;
-  let firstDataReceived = false;
-  const ws = new WebSocket(buildRawMultiplexUrl(RAW_OVERLAY_SERVICES));
-  ws.binaryType = "arraybuffer";
-  RAW_OVERLAY_MUX_WS = ws;
-  rawArmWsWatchdog(ws, "overlay mux hello", RAW_WS_HELLO_TIMEOUT_MS, "raw_hello_timeout", () => (
-    shouldRunCarrotVisionRealtime() && RAW_OVERLAY_MUX_WS === ws && !helloReceived
-  ));
-
-  ws.onopen = () => {
-    console.log(RAW_OVERLAY_MUX_LOG_PREFIX, "open");
-  };
-
-  ws.onmessage = async (ev) => {
-    try {
-      if (typeof ev.data === "string") {
-        const hello = JSON.parse(ev.data);
-        console.log(RAW_OVERLAY_MUX_LOG_PREFIX, "hello", hello);
-        helloReceived = hello?.mode === RAW_MULTIPLEX_MODE;
-        rawClearWsWatchdog(ws);
-        if (helloReceived) {
-          rawArmWsWatchdog(ws, "overlay mux first-data", RAW_WS_FIRST_DATA_TIMEOUT_MS, "raw_first_data_timeout", () => (
-            shouldRunCarrotVisionRealtime() && RAW_OVERLAY_MUX_WS === ws && !firstDataReceived && !rawHasState(RAW_OVERLAY_STATE)
-          ));
-        }
-        return;
-      }
-      firstDataReceived = true;
-      rawClearWsWatchdog(ws);
-      const frame = await parseRawMultiplexFrame(ev.data);
-      if (!RAW_OVERLAY_SERVICES.includes(frame.service)) return;
-      handleOverlayDecodedMessage(frame.service, frame.payload);
-    } catch (e) {
-      console.log(RAW_OVERLAY_MUX_LOG_PREFIX, "bad msg", e);
-    }
-  };
-
-  ws.onerror = (e) => {
-    console.log(RAW_OVERLAY_MUX_LOG_PREFIX, "error", e);
-  };
-
-  ws.onclose = () => {
-    rawClearWsWatchdog(ws);
-    console.log(RAW_OVERLAY_MUX_LOG_PREFIX, "close");
-    if (RAW_OVERLAY_MUX_WS !== ws) return;
-    RAW_OVERLAY_MUX_WS = null;
-    if (!shouldRunCarrotVisionRealtime()) return;
-    if (!helloReceived) {
-      RAW_OVERLAY_MUX_DISABLED = true;
-      rawOverlayConnectAllLegacy();
-      return;
-    }
-    rawOverlayScheduleMultiplexReconnect(1000);
-  };
+  compactOverlayConnect();
+  _hudMarkDirty();
 }
 
 function rawOverlayConnectAll() {
-  invalidateRawDecodeState("overlay");
+  if (!shouldRunCarrotVisionRealtime()) return;
+  COMPACT_OVERLAY_REQUESTED = true;
   setCarrotVisionState({ raw: { overlay: "connecting" } }, { reason: "raw overlay connecting" });
-  if (!RAW_OVERLAY_MUX_DISABLED) {
-    rawOverlayConnectMultiplex();
-    if (RAW_OVERLAY_MUX_WS) return;
-  }
-  rawOverlayConnectAllLegacy();
+  compactOverlayConnect();
 }
 
 async function rawHudDisconnectAll() {
-  invalidateRawDecodeState("hud");
   setCarrotVisionState({ raw: { hud: "idle" } }, { reason: "raw hud idle" });
   _hudStopRenderLoop();
-  if (RAW_HUD_MUX_RETRY_T) {
-    clearTimeout(RAW_HUD_MUX_RETRY_T);
-    RAW_HUD_MUX_RETRY_T = null;
+  if (COMPACT_OVERLAY_RETRY_T) {
+    clearTimeout(COMPACT_OVERLAY_RETRY_T);
+    COMPACT_OVERLAY_RETRY_T = null;
   }
-  if (RAW_HUD_MUX_WS) rawClearWsWatchdog(RAW_HUD_MUX_WS);
-  try { if (RAW_HUD_MUX_WS) RAW_HUD_MUX_WS.close(); } catch {}
-  RAW_HUD_MUX_WS = null;
-  for (const service of RAW_HUD_SERVICES) {
-    if (RAW_HUD_RETRY_T[service]) {
-      clearTimeout(RAW_HUD_RETRY_T[service]);
-      RAW_HUD_RETRY_T[service] = null;
-    }
-    if (RAW_HUD_WS[service]) rawClearWsWatchdog(RAW_HUD_WS[service]);
-    try { if (RAW_HUD_WS[service]) RAW_HUD_WS[service].close(); } catch {}
-    RAW_HUD_WS[service] = null;
-  }
+  clearCompactFirstDataTimer();
+  const compactWs = COMPACT_OVERLAY_WS;
+  COMPACT_OVERLAY_WS = null;
+  COMPACT_OVERLAY_READY = false;
+  COMPACT_STATE_SERVICE_SIGNATURE = "";
+  publishCompactState();
+  try { compactWs?.close?.(); } catch {}
+  if (compactDesiredServices().length) compactOverlayConnect();
 }
 
 async function rawOverlayDisconnectAll() {
-  invalidateRawDecodeState("overlay");
+  const overlayWasRequested = COMPACT_OVERLAY_REQUESTED;
+  COMPACT_OVERLAY_REQUESTED = false;
+  resetFrameSynchronization();
   setCarrotVisionState({ raw: { overlay: "idle" } }, { reason: "raw overlay idle" });
-  if (RAW_OVERLAY_MUX_RETRY_T) {
-    clearTimeout(RAW_OVERLAY_MUX_RETRY_T);
-    RAW_OVERLAY_MUX_RETRY_T = null;
+  // The compact socket is shared with the HUD. Lifecycle synchronization can
+  // request an overlay disconnect before the overlay was ever enabled; in that
+  // case closing a HUD-only CONNECTING socket only creates a browser warning
+  // and an unnecessary reconnect.
+  if (!overlayWasRequested) return;
+  if (COMPACT_OVERLAY_RETRY_T) {
+    clearTimeout(COMPACT_OVERLAY_RETRY_T);
+    COMPACT_OVERLAY_RETRY_T = null;
   }
-  if (RAW_OVERLAY_MUX_WS) rawClearWsWatchdog(RAW_OVERLAY_MUX_WS);
-  try { if (RAW_OVERLAY_MUX_WS) RAW_OVERLAY_MUX_WS.close(); } catch {}
-  RAW_OVERLAY_MUX_WS = null;
-  for (const service of RAW_OVERLAY_SERVICES) {
-    if (RAW_OVERLAY_RETRY_T[service]) {
-      clearTimeout(RAW_OVERLAY_RETRY_T[service]);
-      RAW_OVERLAY_RETRY_T[service] = null;
-    }
-    if (RAW_OVERLAY_WS[service]) rawClearWsWatchdog(RAW_OVERLAY_WS[service]);
-    try { if (RAW_OVERLAY_WS[service]) RAW_OVERLAY_WS[service].close(); } catch {}
-    RAW_OVERLAY_WS[service] = null;
-  }
+  clearCompactFirstDataTimer();
+  const compactWs = COMPACT_OVERLAY_WS;
+  COMPACT_OVERLAY_WS = null;
+  COMPACT_OVERLAY_READY = false;
+  COMPACT_STATE_SERVICE_SIGNATURE = "";
+  publishCompactState();
+  try { compactWs?.close?.(); } catch {}
+  if (compactDesiredServices().length) compactOverlayConnect();
 }
 
 window.CarrotVisionRaw = {
+  applyCompactFrame,
+  applyCompactFrames,
+  clearState: clearCompactState,
   connectHud: rawHudConnectAll,
   connectOverlay: rawOverlayConnectAll,
   disconnectHud: rawHudDisconnectAll,
   disconnectOverlay: rawOverlayDisconnectAll,
-  ensureDecodeWorker: ensureRawDecodeWorker,
+  hasCompactState: compactStateActive,
   markHudDirty: _hudMarkDirty,
   scheduleHudRender: _hudScheduleRender,
   stopHudRenderLoop: _hudStopRenderLoop,
@@ -797,7 +641,6 @@ window.CarrotVisionRaw = {
 Object.assign(window, {
   drivingHudUpdateFromCarPayload,
   drivingHudUpdateFromRawState,
-  ensureRawDecodeWorker,
   rawHudConnectAll,
   rawHudDisconnectAll,
   rawOverlayConnectAll,

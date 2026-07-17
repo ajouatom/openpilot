@@ -1,5 +1,4 @@
 import os
-import operator
 import platform
 import importlib.util
 
@@ -73,10 +72,10 @@ def check_fleet(started, params, CP: car.CarParams) -> bool:
   return FLASK_AVAILABLE
 
 def or_(*fns):
-  return lambda *args: operator.or_(*(fn(*args) for fn in fns))
+  return lambda *args: any(fn(*args) for fn in fns)
 
 def and_(*fns):
-  return lambda *args: operator.and_(*(fn(*args) for fn in fns))
+  return lambda *args: all(fn(*args) for fn in fns)
 
 def enable_dm(started, params, CP: car.CarParams) -> bool:
   return (started or params.get_bool("IsDriverViewEnabled")) and params.get_int("DisableDM") == 0
@@ -87,8 +86,19 @@ def enable_dm(started, params, CP: car.CarParams) -> bool:
 def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
   return params.get_bool("ShareData")
 
+def cluster_hud_active(params: Params) -> bool:
+  try:
+    return params.get_int("ClusterHud") in (1, 2)
+  except Exception:
+    return False
+
 def enable_webrtc(started, params, CP: car.CarParams) -> bool:
-  return params.get_int("DisableDM") == 2
+  # Cluster HUD consumes the road camera directly. Keep Carrot Vision's
+  # WebRTC/encoder processes out of the same onroad session.
+  return params.get_int("DisableDM") == 2 and not cluster_hud_active(params)
+
+def carrot_vision_active(started, params, CP: car.CarParams) -> bool:
+  return started and params.get_bool("CarrotVisionActive")
 
 def c3x_lite(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and params.get_bool("HardwareC3xLite")
@@ -118,17 +128,17 @@ def enable_youtube_wide_encoder(started, params, CP: car.CarParams) -> bool:
     return False
 
 def enable_cluster_hud(started, params, CP: car.CarParams) -> bool:
-  try:
-    return params.get_int("ClusterHud") in (1, 2)
-  except Exception:
-    return False
+  return cluster_hud_active(params)
 
 procs = [
   DaemonProcess("manage_athenad", "openpilot.system.athena.manage_athenad", "AthenadPid"),
 
   NativeProcess("loggerd", "openpilot/system/loggerd", ["./loggerd"], logging),
   NativeProcess("encoderd", "openpilot/system/loggerd", ["./encoderd"], only_onroad),
-  NativeProcess("stream_encoderd", "openpilot/system/loggerd", ["./encoderd", "--stream"], or_(notcar, and_(only_onroad, enable_webrtc))),
+  # Preserve generic multi-camera WebRTC for notCar users. Carrot Vision on a
+  # real device is road-only and remains gated by DisableDM == 2.
+  NativeProcess("stream_encoderd", "openpilot/system/loggerd", ["./encoderd", "--stream"], notcar),
+  NativeProcess("carrot_vision_encoderd", "openpilot/system/loggerd", ["./encoderd", "--carrot-vision-road"], and_(iscar, enable_webrtc, carrot_vision_active)),
   NativeProcess("youtube_low_encoderd", "openpilot/system/loggerd", ["./encoderd", "--youtube-low"], and_(only_onroad, enable_youtube_low_encoder)),
   NativeProcess("youtube_medium_encoderd", "openpilot/system/loggerd", ["./encoderd", "--youtube-medium"], and_(only_onroad, enable_youtube_medium_encoder)),
   NativeProcess("youtube_encoderd", "openpilot/system/loggerd", ["./encoderd", "--youtube"], and_(only_onroad, enable_youtube_encoder)),
@@ -178,7 +188,8 @@ procs = [
 
   # debug procs
   NativeProcess("bridge", "openpilot/cereal/messaging", ["./bridge"], notcar),
-  PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", or_(notcar, and_(only_onroad, enable_webrtc))),
+  PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", notcar),
+  PythonProcess("carrot_webrtcd", "openpilot.system.webrtc.carrot_webrtcd", and_(iscar, enable_webrtc)),
   PythonProcess("webjoystick", "openpilot.tools.bodyteleop.web", notcar, enabled=BODYTELEOP_AVAILABLE),
   PythonProcess("joystick", "openpilot.tools.joystick.joystick_control", and_(joystick, iscar)),
 

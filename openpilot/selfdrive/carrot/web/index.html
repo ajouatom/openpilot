@@ -111,28 +111,35 @@
       background: color-mix(in srgb, var(--md-primary) 14%, transparent) !important;
     }
   </style>
-  <link rel="stylesheet" href="/css/tokens.css?v=2607-52" />
+  <link rel="stylesheet" href="/css/tokens.css?v=2607-65" />
   <link rel="stylesheet" href="/css/layout_tokens.css?v=2607-42" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2605-03" />
   <link rel="stylesheet" href="/css/base.css?v=2607-40" />
   <link rel="stylesheet" href="/css/layout.css?v=2605-08" />
-  <link rel="stylesheet" href="/css/components.css?v=2607-51" />
+  <link rel="stylesheet" href="/css/components.css?v=2607-53" />
+  <link rel="stylesheet" href="/css/components/media_transport.css?v=2607-04" />
   <link rel="stylesheet" href="/css/components/nav_status_badges.css?v=2607-05" />
-  <link rel="stylesheet" href="/css/pages/logs.css?v=2607-43" />
+  <link rel="stylesheet" href="/css/components/drive_content_intro.css?v=2607-03" />
+  <link rel="stylesheet" href="/css/components/drive_workspace.css?v=2607-06" />
+  <link rel="stylesheet" href="/css/pages/logs.css?v=2607-56" />
   <link rel="stylesheet" href="/css/vendor/xterm.css?v=550" />
   <link rel="stylesheet" href="/css/pages/terminal.css?v=2607-104" />
   <link rel="stylesheet" href="/css/pages/settings/base.css?v=2606-21" />
   <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2607-44" />
-  <link rel="stylesheet" href="/css/pages/settings/device.css?v=2607-51" />
+  <link rel="stylesheet" href="/css/pages/settings/device.css?v=2607-52" />
   <link rel="stylesheet" href="/css/pages/settings/youtube_live.css?v=2607-51" />
   <link rel="stylesheet" href="/css/pages/settings/token_card.css?v=2607-08" />
-  <link rel="stylesheet" href="/css/pages/tools/base.css?v=2607-53" />
+  <link rel="stylesheet" href="/css/pages/tools/base.css?v=2607-56" />
   <link rel="stylesheet" href="/css/pages/tools/qr.css?v=2605-40" />
-  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2607-42" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2607-49" />
-  <link rel="stylesheet" href="/css/components/nav_hud.css?v=2607-42" />
+  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2607-44" />
+  <link rel="stylesheet" href="/css/pages/tools/drive_layout.css?v=2607-05" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2607-82" />
+  <link rel="stylesheet" href="/css/pages/drive_replay.css?v=2607-20" />
+  <link rel="stylesheet" href="/css/components/replay_insights.css?v=2607-39" />
+  <link rel="stylesheet" href="/css/pages/carrot_navi.css?v=2607-14" />
   <link rel="stylesheet" href="/css/components/mini_hud.css?v=2607-88" />
   <link rel="stylesheet" href="/css/responsive.css?v=2607-44" />
+  <link rel="stylesheet" href="/css/pages/intro.css?v=2607-96" />
   <link rel="stylesheet" href="/css/vendor/plyr.css?v=3.7.8" />
 </head>
 
@@ -293,9 +300,7 @@
               <button id="btnGitSync" class="btn">git sync</button>
               <button id="btnGitReset" class="btn">git reset</button>
               <button id="btnGitLog" class="btn">git log</button>
-              <button id="btnGitRemote" class="btn">change repository</button>
               <button id="btnGitBranch" class="btn">change branch</button>
-              <button id="btnGitAddRemote" class="btn">add remote</button>
               <button id="btnGitResetRepo" class="btn btn--danger">reset repo</button>
             </div>
           </div>
@@ -455,51 +460,15 @@
         <h2 id="carrotTitle" class="page-title">Home</h2>
       </div>
 
-      <div id="carrotStage" class="carrot-stage">
+      <div id="carrotDriveWorkspace" class="drive-workspace">
+        <div id="carrotStage" class="carrot-stage" data-drive-workspace-slot="primary">
         <canvas id="carrotAmbientCanvas" class="carrot-stage__ambient" aria-hidden="true"></canvas>
+        <div id="carrotReplayViewport" class="carrot-stage__replayViewport" aria-hidden="true"></div>
         <video id="carrotRoadVideo" class="carrot-stage__video" autoplay playsinline muted disablepictureinpicture></video>
         <canvas id="carrotLastFrameCanvas" class="carrot-stage__videoHold" aria-hidden="true"></canvas>
+        <canvas id="carrotPerformanceCanvas" class="carrot-stage__canvas carrot-stage__canvas--performance" aria-hidden="true"></canvas>
         <canvas id="carrotOverlayCanvas" class="carrot-stage__canvas"></canvas>
         <canvas id="carrotHudCanvas" class="carrot-stage__hud"></canvas>
-        <div id="carrotMapDock" class="carrot-map-dock" hidden>
-          <iframe id="carrotMapFrame" class="carrot-map-frame" title="Carrot map" loading="eager" referrerpolicy="no-referrer"></iframe>
-          <div class="carrot-map-zoom" data-carrot-map-zoom-bar>
-            <button type="button" class="carrot-map-zoom__btn" data-carrot-map-zoom="out" aria-label="지도 축소">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
-            </button>
-            <div class="carrot-map-zoom-level" data-carrot-map-zoom-level hidden>기본</div>
-            <button type="button" class="carrot-map-zoom__btn" data-carrot-map-zoom="in" aria-label="지도 확대">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
-            </button>
-          </div>
-        </div>
-        <div id="carrotNavHud" class="carrot-nav-hud" hidden aria-live="polite">
-          <div class="carrot-nav-hud__side" data-nav-hud-side hidden>
-            <div class="carrot-nav-hud__side-sign" data-nav-hud-side-sign></div>
-            <div class="carrot-nav-hud__side-body">
-              <div class="carrot-nav-hud__side-dist" data-nav-hud-side-dist></div>
-              <div class="carrot-nav-hud__side-label" data-nav-hud-side-label></div>
-            </div>
-            <div class="carrot-nav-hud__side-countdown" data-nav-hud-side-countdown hidden></div>
-          </div>
-          <div class="carrot-nav-hud__main" data-nav-hud-main>
-            <div class="carrot-nav-hud__atc" data-nav-hud-atc hidden></div>
-            <div class="carrot-nav-hud__icon" data-nav-hud-icon>↑</div>
-            <div class="carrot-nav-hud__body">
-              <div class="carrot-nav-hud__dist-row">
-                <span class="carrot-nav-hud__dist" data-nav-hud-dist></span>
-                <span class="carrot-nav-hud__advice" data-nav-hud-advice hidden></span>
-                <span class="carrot-nav-hud__countdown" data-nav-hud-countdown hidden></span>
-              </div>
-              <div class="carrot-nav-hud__road-row">
-                <span class="carrot-nav-hud__road" data-nav-hud-road></span>
-                <span class="carrot-nav-hud__limit" data-nav-hud-limit hidden></span>
-              </div>
-              <div class="carrot-nav-hud__meta" data-nav-hud-meta hidden></div>
-            </div>
-            <div class="carrot-nav-hud__hint" data-nav-hud-hint hidden></div>
-          </div>
-        </div>
         <div id="carrotOnroadAlert" class="carrot-stage__alert" hidden aria-live="polite" aria-atomic="true">
           <div id="carrotOnroadAlertBox" class="carrot-stage__alert-box">
             <div id="carrotOnroadAlertText1" class="carrot-stage__alert-text carrot-stage__alert-text--primary"></div>
@@ -529,15 +498,211 @@
           <div id="carrotStageStatus" class="carrot-stage__status">waiting stream...</div>
         </div>
         <div id="carrotStageDebug" class="carrot-stage__debug">LD:- LT:- SR:-</div>
+        <div id="carrotReplayControls" class="carrot-replay-controls" hidden aria-label="Drive replay controls">
+          <div class="carrot-replay-controls__header">
+            <div class="carrot-replay-controls__heading">
+              <label id="carrotReplaySegmentPicker" class="carrot-replay-controls__segmentPicker carrot-replay-controls__segmentPicker--title" hidden>
+                <select id="carrotReplaySegmentSelect" class="carrot-replay-controls__segmentSelect smallBtn" aria-label="Replay record time"></select>
+              </label>
+            </div>
+            <div class="carrot-replay-controls__headerActions">
+              <button id="btnCarrotReplayClose" class="carrot-replay-controls__close smallBtn" type="button" aria-label="Close replay">닫기</button>
+            </div>
+          </div>
+          <label id="carrotReplayHudControl" class="carrot-replay-controls__hudToggle" for="carrotReplayHudToggle">
+            <input id="carrotReplayHudToggle" type="checkbox">
+            <span id="carrotReplayHudToggleLabel">HUD</span>
+          </label>
+          <div id="carrotReplaySegmentNav" class="carrot-replay-controls__segmentNav carrot-media-action-group" role="group" aria-label="Replay playback controls" hidden>
+            <button id="btnCarrotReplayPrevious" class="carrot-replay-controls__segmentBtn carrot-media-action-button carrot-media-action-button--previous" type="button" aria-label="Previous segment">
+              <svg viewBox="0 0 36 36" aria-hidden="true"><path d="M11 10h3v16h-3zm4 8 12-8v16z"></path></svg>
+            </button>
+            <button id="btnCarrotReplayPlay" class="carrot-replay-controls__play carrot-media-action-button carrot-media-action-button--play" type="button" aria-label="Play replay" data-state="play">
+              <svg viewBox="0 0 36 36" aria-hidden="true"><path d="M13 9v18l14-9z"></path></svg>
+            </button>
+            <button id="btnCarrotReplayNext" class="carrot-replay-controls__segmentBtn carrot-media-action-button carrot-media-action-button--next" type="button" aria-label="Next segment">
+              <svg viewBox="0 0 36 36" aria-hidden="true"><path d="M22 10h3v16h-3zM9 10l12 8-12 8z"></path></svg>
+            </button>
+          </div>
+          <div class="carrot-replay-controls__transport">
+            <div id="carrotReplayEventSummary" class="carrot-replay-insights__summary" hidden>
+              <span id="carrotReplayEventSummaryIcon" class="carrot-replay-insights__summaryIcon" aria-hidden="true"></span>
+              <strong id="carrotReplayEventSummaryTitle"></strong>
+              <span id="carrotReplayEventSummaryMeta"></span>
+            </div>
+            <div class="carrot-replay-controls__timeline">
+              <div id="carrotReplayEventRail" class="carrot-replay-insights__rail" aria-label="Replay events"></div>
+              <div id="carrotReplayEventCluster" class="carrot-replay-insights__cluster" hidden>
+                <strong id="carrotReplayEventClusterTitle"></strong>
+                <div id="carrotReplayEventClusterItems"></div>
+              </div>
+              <div id="carrotReplayFilmstrip" class="carrot-replay-controls__filmstrip" aria-hidden="true">
+                <img id="carrotReplayThumbnail" class="carrot-replay-controls__thumbnail" alt="" draggable="false">
+              </div>
+              <div class="carrot-replay-controls__timelineShade" aria-hidden="true"></div>
+              <input id="carrotReplaySeek" class="carrot-replay-controls__seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Replay position">
+              <div id="carrotReplayScrubPreview" class="carrot-replay-controls__scrubPreview" hidden aria-hidden="true">
+                <div id="carrotReplayScrubEventInfo" class="carrot-replay-controls__scrubEventInfo" hidden>
+                  <span id="carrotReplayScrubEventIcon" class="carrot-replay-controls__scrubEventIcon" aria-hidden="true"></span>
+                  <strong id="carrotReplayScrubEventTitle"></strong>
+                  <span id="carrotReplayScrubEventMeta"></span>
+                </div>
+                <img id="carrotReplayScrubImage" alt="" draggable="false">
+                <div id="carrotReplayScrubEvents" class="carrot-replay-controls__scrubEvents" hidden aria-label="Nearby replay events">
+                  <canvas id="carrotReplayScrubEventsCanvas" aria-hidden="true"></canvas>
+                </div>
+                <span id="carrotReplayScrubTime">0:00</span>
+              </div>
+            </div>
+          </div>
+          <div class="carrot-replay-controls__timeOverlay" aria-live="off">
+            <div class="carrot-replay-controls__timeGroup">
+              <span id="carrotReplayCurrentTime" class="carrot-replay-controls__time carrot-replay-controls__time--current">0:00</span>
+              <span class="carrot-replay-controls__timeSeparator" aria-hidden="true">/</span>
+              <span id="carrotReplayDuration" class="carrot-replay-controls__time">0:00</span>
+            </div>
+          </div>
+        </div>
+        <aside id="carrotReplayInsights" class="carrot-replay-insights" aria-label="Replay details" aria-hidden="true">
+          <div class="carrot-replay-insights__tabbar">
+            <div class="carrot-replay-insights__tabs" role="tablist" aria-label="Replay detail type">
+              <button id="carrotReplayInsightsEventsTab" class="carrot-replay-insights__tab smallBtn is-active" type="button" role="tab" aria-selected="true" aria-controls="carrotReplayInsightsEventsPanel" tabindex="0" data-replay-insights-tab="events">Events</button>
+              <button id="carrotReplayInsightsGraphsTab" class="carrot-replay-insights__tab smallBtn" type="button" role="tab" aria-selected="false" aria-controls="carrotReplayInsightsGraphsPanel" tabindex="-1" data-replay-insights-tab="graphs">Graphs</button>
+              <button id="carrotReplayInsightsSensorsTab" class="carrot-replay-insights__tab smallBtn" type="button" role="tab" aria-selected="false" aria-controls="carrotReplayInsightsSensorsPanel" tabindex="-1" data-replay-insights-tab="sensors">Forward</button>
+              <button id="carrotReplayInsightsAdvancedTab" class="carrot-replay-insights__tab smallBtn" type="button" role="tab" aria-selected="false" aria-controls="carrotReplayInsightsAdvancedPanel" tabindex="-1" data-replay-insights-tab="advanced">Analysis</button>
+            </div>
+          </div>
+          <div class="carrot-replay-insights__body">
+            <section id="carrotReplayInsightsEventsPanel" class="carrot-replay-insights__panel is-active" role="tabpanel" aria-labelledby="carrotReplayInsightsEventsTab" aria-hidden="false" tabindex="0" data-replay-insights-panel="events">
+              <p id="carrotReplayEventDegraded" class="carrot-replay-insights__degraded" role="status" hidden></p>
+              <ol id="carrotReplayEventList" class="carrot-replay-insights__eventList"></ol>
+              <div id="carrotReplayEventEmpty" class="carrot-replay-insights__empty">No major events.</div>
+              <button id="btnCarrotReplayEventFollow" class="carrot-replay-insights__follow smallBtn" type="button" hidden>Jump to current</button>
+            </section>
+            <section id="carrotReplayInsightsGraphsPanel" class="carrot-replay-insights__panel" role="tabpanel" aria-labelledby="carrotReplayInsightsGraphsTab" aria-hidden="true" tabindex="0" data-replay-insights-panel="graphs">
+              <div class="carrot-replay-insights__graphs">
+                  <div class="carrot-replay-insights__graph" data-replay-graph="speed" aria-label="Speed graph">
+                    <div class="carrot-replay-insights__graphHead"><strong id="carrotReplaySpeedGraphLabel">Speed</strong><output>--.- km/h</output></div>
+                    <svg viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.8"></polyline></svg>
+                    <i class="carrot-replay-insights__cursor" aria-hidden="true"></i>
+                  </div>
+                  <div class="carrot-replay-insights__graph" data-replay-graph="steer" aria-label="Steering angle graph">
+                    <div class="carrot-replay-insights__graphHead"><strong id="carrotReplaySteerGraphLabel">Steering</strong><output>--.--°</output></div>
+                    <svg viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.6"></polyline></svg>
+                    <i class="carrot-replay-insights__cursor" aria-hidden="true"></i>
+                  </div>
+                  <div class="carrot-replay-insights__graph" data-replay-graph="accel" aria-label="Acceleration graph">
+                    <div class="carrot-replay-insights__graphHead"><strong id="carrotReplayAccelGraphLabel">Acceleration</strong><output>--.-- m/s²</output></div>
+                    <svg viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.6"></polyline></svg>
+                    <i class="carrot-replay-insights__cursor" aria-hidden="true"></i>
+                  </div>
+                  <div class="carrot-replay-insights__graph" data-replay-graph="lead" aria-label="Lead distance graph">
+                    <div class="carrot-replay-insights__graphHead"><strong id="carrotReplayLeadGraphLabel">Lead distance</strong><output>--.- m</output></div>
+                    <svg viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.6"></polyline></svg>
+                    <i class="carrot-replay-insights__cursor" aria-hidden="true"></i>
+                  </div>
+              </div>
+            </section>
+            <section id="carrotReplayInsightsSensorsPanel" class="carrot-replay-insights__panel carrot-replay-insights__panel--sensors" role="tabpanel" aria-labelledby="carrotReplayInsightsSensorsTab" aria-hidden="true" tabindex="0" data-replay-insights-panel="sensors">
+              <div id="carrotReplaySensorTopview" class="carrot-replay-sensor" aria-labelledby="carrotReplaySensorTitle">
+                <div class="carrot-replay-sensor__head">
+                  <strong id="carrotReplaySensorTitle">Forward perception</strong>
+                  <span id="carrotReplaySensorStatus">--</span>
+                </div>
+                <div id="carrotReplaySensorLegend" class="carrot-replay-sensor__legend" aria-label="Sensor sources"></div>
+                <div id="carrotReplaySensorViewport" class="carrot-replay-sensor__viewport" role="region" tabindex="0" aria-labelledby="carrotReplaySensorTitle">
+                  <div id="carrotReplaySensorPlot" class="carrot-replay-sensor__plot">
+                    <canvas id="carrotReplaySensorCanvas" aria-label="Forward perception"></canvas>
+                    <svg id="carrotReplaySensorEgo" class="carrot-replay-sensor__ego" viewBox="0 0 24 40" aria-hidden="true" focusable="false">
+                      <rect class="carrot-replay-sensor__egoMirror" x="1.4" y="11.4" width="2.9" height="3.2" rx="1.1" />
+                      <rect class="carrot-replay-sensor__egoMirror" x="19.7" y="11.4" width="2.9" height="3.2" rx="1.1" />
+                      <path d="M12 1.6c2.2 0 3.6.5 4.4 1.5l2.3 2.9c1 1.3 1.5 2.9 1.5 4.7v20.1c0 2.4-.6 4.1-1.9 5.2l-1.7 1.5c-1.2 1-2.8 1.4-4.6 1.4s-3.4-.4-4.6-1.4l-1.7-1.5c-1.3-1.1-1.9-2.8-1.9-5.2V10.7c0-1.8.5-3.4 1.5-4.7l2.3-2.9C8.4 2.1 9.8 1.6 12 1.6z" />
+                      <path class="carrot-replay-sensor__egoGlass" d="M8.8 10.4h6.4l1.5 4.4H7.3z" />
+                      <path class="carrot-replay-sensor__egoGlass" d="M7.7 28h8.6l-1.1 3.6H8.8z" />
+                    </svg>
+                    <div id="carrotReplaySensorTooltip" class="carrot-replay-sensor__tooltip" hidden>
+                      <span class="carrot-replay-sensor__tooltipIcon" aria-hidden="true"></span>
+                      <strong class="carrot-replay-sensor__tooltipTitle"></strong>
+                      <span class="carrot-replay-sensor__tooltipState"></span>
+                      <dl class="carrot-replay-sensor__tooltipRows"></dl>
+                    </div>
+                  </div>
+                </div>
+                <div id="carrotReplaySensorMessage" class="carrot-replay-sensor__message" role="status">LOADING</div>
+              </div>
+            </section>
+            <section id="carrotReplayInsightsAdvancedPanel" class="carrot-replay-insights__panel" role="tabpanel" aria-labelledby="carrotReplayInsightsAdvancedTab" aria-hidden="true" tabindex="0" data-replay-insights-panel="advanced">
+              <div class="carrot-replay-insights__advanced">
+                <div class="carrot-replay-insights__advancedSelectors">
+                  <label>
+                    <span id="carrotReplayAdvancedServiceLabel">Data type</span>
+                    <select id="carrotReplayAdvancedService"></select>
+                  </label>
+                  <label>
+                    <span id="carrotReplayAdvancedFieldLabel">Measurement</span>
+                    <select id="carrotReplayAdvancedField"></select>
+                  </label>
+                </div>
+                <div class="carrot-replay-insights__advancedContext">
+                  <code id="carrotReplayAdvancedTechnicalPath">--</code>
+                  <div id="carrotReplayAdvancedStatus" class="carrot-replay-insights__advancedStatus" role="status" aria-live="polite" data-state="idle">Select a field.</div>
+                </div>
+                <div class="carrot-replay-insights__advancedMetrics">
+                  <article class="carrot-replay-insights__advancedMetric--current"><strong id="carrotReplayAdvancedCurrent">--</strong><span id="carrotReplayAdvancedCurrentLabel">Current value</span></article>
+                  <article><strong id="carrotReplayAdvancedMin">--</strong><span id="carrotReplayAdvancedMinLabel">Minimum</span></article>
+                  <article><strong id="carrotReplayAdvancedMax">--</strong><span id="carrotReplayAdvancedMaxLabel">Maximum</span></article>
+                  <article><strong id="carrotReplayAdvancedAverage">--</strong><span id="carrotReplayAdvancedAverageLabel">Average</span></article>
+                </div>
+                <div id="carrotReplayAdvancedTrack" class="carrot-replay-insights__advancedTrack" data-kind="empty">
+                  <canvas id="carrotReplayAdvancedCanvas" aria-hidden="true"></canvas>
+                  <i id="carrotReplayAdvancedCursor" class="carrot-replay-insights__cursor" aria-hidden="true"></i>
+                </div>
+                <div class="carrot-replay-insights__advancedActions">
+                  <button id="btnCarrotReplayAdvancedSnapshot" class="carrot-replay-insights__snapshotButton smallBtn" type="button" hidden>View current raw values</button>
+                  <p id="carrotReplayAdvancedHelp">Only the selected field is analyzed locally when needed.</p>
+                </div>
+                <div id="carrotReplayAdvancedSnapshot" class="carrot-replay-insights__snapshot" hidden></div>
+                <details id="carrotReplayAdvancedStatisticsDetails" class="carrot-replay-insights__advancedDisclosure" hidden>
+                  <summary><span id="carrotReplayAdvancedStatisticsTitle">Detailed statistics</span><small id="carrotReplayAdvancedStatisticsHint">Distribution and data quality</small></summary>
+                  <div id="carrotReplayAdvancedStatistics" class="carrot-replay-insights__advancedStatistics" hidden></div>
+                </details>
+                <details id="carrotReplayAdvancedSourceDetails" class="carrot-replay-insights__advancedDisclosure">
+                  <summary><span id="carrotReplayAdvancedSourceTitle">Recording information</span><small id="carrotReplayAdvancedSourceHint">Coverage and available data</small></summary>
+                  <div class="carrot-replay-insights__advancedDisclosureBody">
+                    <div class="carrot-replay-insights__advancedMeta">
+                      <span><b id="carrotReplayInsightsRecordCount">0</b><small id="carrotReplayInsightsRecordCountLabel">Records</small></span>
+                      <span><b id="carrotReplayInsightsServiceCount">0</b><small id="carrotReplayInsightsServiceCountLabel">Services</small></span>
+                      <span><b id="carrotReplayInsightsEventCount">0</b><small id="carrotReplayInsightsEventCountLabel">Events</small></span>
+                      <span><b id="carrotReplayInsightsGraphCount">0</b><small id="carrotReplayInsightsGraphCountLabel">Samples</small></span>
+                      <span><b id="carrotReplayInsightsInvalidCount">0</b><small id="carrotReplayInsightsInvalidCountLabel">Invalid</small></span>
+                    </div>
+                    <div id="carrotReplayAdvancedCatalog" class="carrot-replay-insights__catalog"></div>
+                  </div>
+                </details>
+              </div>
+            </section>
+          </div>
+        </aside>
         <div class="carrot-stage__controls" role="group" aria-label="Sound, display and recording controls">
           <button id="btnWebSound" class="carrot-stage__controlBtn carrot-stage__controlBtn--sound" type="button" aria-label="Web sound">Sound</button>
+          <button id="btnCarrotReplaySpeed" class="carrot-stage__controlBtn carrot-stage__controlBtn--replay-speed" type="button" aria-label="Replay speed" hidden>1×</button>
           <button id="btnDisplayModeCycle" class="carrot-stage__controlBtn carrot-stage__controlBtn--display" type="button" aria-label="Display mode">Normal</button>
           <button id="btnRecordToggle" class="carrot-stage__controlBtn carrot-stage__controlBtn--record" type="button" aria-label="Record">Record</button>
         </div>
 
-        <div id="carrotStageMeta" class="carrot-stage__meta">model:- road:- cal:-</div>
+          <div id="carrotStageMeta" class="carrot-stage__meta">model:- road:- cal:-</div>
+        </div>
+        <div id="carrotNaviDivider" class="carrot-navi-divider" data-drive-workspace-divider role="separator" aria-orientation="vertical" aria-label="Resize Carrot Navi" aria-valuemin="30" aria-valuemax="70" aria-valuenow="70" tabindex="0" hidden>
+          <span aria-hidden="true"></span>
+        </div>
+        <aside id="carrotNaviPane" class="carrot-navi-pane" data-drive-workspace-slot="secondary" aria-label="Carrot Navi" aria-hidden="true">
+          <video id="carrotNaviVideo" class="carrot-navi-pane__video" muted autoplay playsinline webkit-playsinline disableremoteplayback preload="auto" aria-hidden="true"></video>
+          <canvas id="carrotNaviCanvas" class="carrot-navi-pane__canvas" aria-label="Carrot Navi map"></canvas>
+          <canvas id="carrotNaviOverlayCanvas" class="carrot-navi-pane__overlay" aria-label="Carrot Navi guidance"></canvas>
+          <div id="carrotNaviStatus" class="carrot-navi-pane__status" hidden></div>
+        </aside>
       </div>
-      <div id="carrotHudDock" class="carrot-hud-dock"></div>
+      <div id="carrotDriveAuxPane" class="drive-workspace__aux"></div>
     </div>
   </div>
 
@@ -616,7 +781,7 @@
           <span class="carrot-rtc-perf__dot" aria-hidden="true"></span>
           <strong id="carrotRtcPerfTitle" class="carrot-rtc-perf-summary__title">VISION OFFLINE</strong>
           <button id="carrotRtcPerfLogBtn" class="carrot-rtc-perf-summary__action" type="button">LOG</button>
-          <button id="carrotRtcPerfCloseBtn" class="carrot-rtc-perf-summary__close" type="button" aria-label="Close Carrot Vision diagnostic summary">x</button>
+          <button id="carrotRtcPerfCloseBtn" class="carrot-rtc-perf-summary__close c-close c-close--sm" type="button" aria-label="Close Carrot Vision diagnostic summary"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button>
         </div>
         <div class="carrot-rtc-perf-summary__sub">RTC ROAD CAMERA / LIVE DIAGNOSTIC</div>
         <div class="carrot-rtc-perf-summary__grid">
@@ -779,7 +944,7 @@
         <div id="appDialogInputError" class="app-dialog__inputError" role="alert" hidden></div>
       </div>
       <div class="app-dialog__actions">
-        <button id="appDialogCopy" class="smallBtn" type="button" hidden>복사</button>
+        <button id="appDialogCopy" class="smallBtn" type="button" hidden>Copy</button>
         <button id="appDialogDefault" class="smallBtn" type="button" hidden>기본값</button>
         <button id="appDialogCancel" class="smallBtn" type="button">취소</button>
         <button id="appDialogConfirm" class="smallBtn btn--filled" type="button">확인</button>
@@ -819,23 +984,25 @@
   <script src="/js/vendor/qrcode-generator.js?v=1.4.4"></script>
   <script src="/js/vendor/jsQR.js?v=1.4.0"></script>
   <script src="/js/translations/registry.js?v=2605-09"></script>
-  <script src="/js/translations/ko.js?v=2607-57"></script>
-  <script src="/js/translations/en.js?v=2607-57"></script>
-  <script src="/js/translations/zh.js?v=2607-57"></script>
-  <script src="/js/realtime/hud_card.js?v=2607-42"></script>
+  <script src="/js/translations/ko.js?v=2607-93"></script>
+  <script src="/js/translations/en.js?v=2607-90"></script>
+  <script src="/js/translations/zh.js?v=2607-90"></script>
+  <script src="/js/realtime/drive_contents/vision/hud_renderer.js?v=2607-45"></script>
+  <script src="/js/realtime/drive_contents/vision/hud_content.js?v=2607-05"></script>
   <script src="/js/shared/constants.js?v=2604-72"></script>
   <script src="/js/shared/dom.js?v=2607-01"></script>
   <script src="/js/shared/utils.js?v=2604-71"></script>
-  <script src="/js/shared/i18n.js?v=2606-03"></script>
+  <script src="/js/shared/i18n.js?v=2607-06"></script>
   <script src="/js/shared/api.js?v=2604-73"></script>
   <script src="/js/shared/setting_diff.js?v=2605-01"></script>
   <script src="/js/shared/activity.js?v=2604-04"></script>
   <script src="/js/shared/ui/focus_trap.js?v=2605-15"></script>
   <script src="/js/shared/ui/dialog.js?v=2607-44"></script>
   <script src="/js/shared/ui/setting_form.js?v=2607-03"></script>
-  <script src="/js/shared/ui/viewport.js?v=2607-54"></script>
+  <script src="/js/shared/ui/viewport.js?v=2607-56"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
-  <script src="/js/shared/ui/navigation.js?v=2607-42"></script>
+  <script src="/js/shared/ui/media_transport.js?v=2607-16"></script>
+  <script src="/js/shared/ui/navigation.js?v=2607-43"></script>
   <script src="/js/pages/car.js?v=2607-01"></script>
   <script src="/js/pages/setting_youtube_live.js?v=2607-51"></script>
   <script src="/js/pages/setting_mapbox_tokens.js?v=2607-06"></script>
@@ -844,41 +1011,95 @@
   <script src="/js/pages/setting_device_config.js?v=2605-06"></script>
   <script src="/js/pages/setting_device_render.js?v=2607-51"></script>
   <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
-  <script src="/js/pages/setting_device_actions.js?v=2607-51"></script>
+  <script src="/js/pages/setting_device_actions.js?v=2607-52"></script>
   <script src="/js/pages/setting_device.js?v=2607-02"></script>
-  <script src="/js/pages/tools_web_settings_schema.js?v=2607-51"></script>
-  <script src="/js/pages/tools_web_settings_state.js?v=2607-51"></script>
-  <script src="/js/pages/tools_web_settings_render.js?v=2607-51"></script>
-  <script src="/js/pages/tools_web_settings.js?v=2607-52"></script>
+  <script src="/js/shared/drive_layout_spec.js?v=2607-03"></script>
+  <script src="/js/pages/tools_web_settings_schema.js?v=2607-58"></script>
+  <script src="/js/pages/tools_web_settings_state.js?v=2607-53"></script>
+  <script src="/js/pages/web_settings/components.js?v=2607-01"></script>
+  <script src="/js/pages/tools_web_settings_render.js?v=2607-53"></script>
+  <script src="/js/pages/web_settings/drive_layout.js?v=2607-05"></script>
+  <script src="/js/pages/tools_web_settings.js?v=2607-55"></script>
   <script src="/js/realtime/web_sound.js?v=2607-51"></script>
   <script src="/js/pages/tools_notifications.js?v=2607-42"></script>
-  <script src="/js/pages/tools.js?v=2607-42"></script>
+  <script src="/js/pages/tools.js?v=2607-44"></script>
   <script src="/js/pages/tools_settings_qr.js?v=2605-11"></script>
   <script src="/js/pages/branch.js?v=2604-82"></script>
-  <script src="/js/pages/logs/shared.js?v=2607-01"></script>
-  <script src="/js/pages/logs/dashcam.js?v=2607-02"></script>
+  <script src="/js/pages/logs/shared.js?v=2607-14"></script>
+  <script src="/js/pages/logs/dashcam.js?v=2607-14"></script>
   <script src="/js/pages/logs/screenrecord.js?v=2605-15"></script>
   <script src="/js/vendor/xterm-addon-shim.js?v=1"></script>
   <script src="/js/vendor/xterm.js?v=553"></script>
   <script src="/js/vendor/xterm-addon-webgl.js?v=016"></script>
   <script src="/js/vendor/xterm-addon-canvas.js?v=005"></script>
-  <script src="/js/pages/terminal.js?v=2607-101"></script>
+  <script src="/js/pages/terminal.js?v=2607-103"></script>
   <script src="/js/shared/ui/terminal_typing_indicator.js?v=2607-01"></script>
   <script src="/js/pages/support_terminal.js?v=2607-26"></script>
-  <script src="/js/realtime/raw_capnp.js?v=2604-05"></script>
   <script src="/js/realtime/mini_hud_model.js?v=2607-85"></script>
   <script src="/js/realtime/mini_hud_mode.js?v=2607-51"></script>
   <script src="/js/realtime/mini_hud.js?v=2607-89"></script>
-  <script src="/js/realtime/mini_hud_demo.js?v=2607-87"></script>
-  <script src="/js/realtime/vision_state.js?v=2605-01"></script>
-  <script src="/js/realtime/vision_rtc.js?v=2606-06"></script>
-  <script src="/js/realtime/vision_raw.js?v=2607-04"></script>
-  <script src="/js/realtime/app_realtime.js?v=2607-44"></script>
-  <script src="/js/realtime/vision_diag.js?v=2606-07"></script>
-  <script src="/js/realtime/carrot_map.js?v=2607-42"></script>
-  <script src="/js/realtime/nav_hud.js?v=2607-42"></script>
+  <script src="/js/realtime/vision_state.js?v=2607-04"></script>
+  <script src="/js/realtime/vision_compact.js?v=2607-05"></script>
+  <script src="/js/realtime/vision_rtc.js?v=2607-24"></script>
+  <script src="/js/realtime/vision_raw.js?v=2607-16"></script>
+  <script src="/js/realtime/app_realtime.js?v=2607-58"></script>
+  <script src="/js/realtime/replay_insights_model.js?v=2607-05"></script>
+  <script src="/js/realtime/replay_insights_renderers.js?v=2607-01"></script>
+  <script src="/js/realtime/replay_insights_data.js?v=2607-09"></script>
+  <script src="/js/realtime/replay_sensor_topview.js?v=2607-11"></script>
+  <script src="/js/realtime/replay_insights.js?v=2607-40"></script>
+  <script src="/js/realtime/replay_client.js?v=2607-08"></script>
+  <script src="/js/realtime/vision_replay.js?v=2607-37"></script>
+  <script src="/js/realtime/vision_diag.js?v=2607-01"></script>
   <script src="/js/pages/vision_background.js?v=2605-01"></script>
-  <script src="/js/realtime/home_drive.js?v=2607-53"></script>
+  <script src="/js/realtime/vision_webgl2.js?v=2607-04"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/overlay_primitives.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/overlay.js?v=2607-13"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/footer_state.js?v=2607-02"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/overlay_store.js?v=2607-03"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/lifecycle.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/compositor.js?v=2607-02"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/mse.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/transport.js?v=2607-02"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/health.js?v=2607-05"></script>
+  <script src="/js/realtime/drive_workspace.js?v=2607-18"></script>
+  <script src="/js/realtime/drive_workspace_runtime.js?v=2607-02"></script>
+  <script src="/js/realtime/drive_content.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_content_intro.js?v=2607-02"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/split.js?v=2607-16"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/runtime.js?v=2607-44"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/facade.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/carrot_navi/content.js?v=2607-03"></script>
+  <script src="/js/realtime/drive_contents/vision/replay_render_bridge.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/replay_render_controller.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/hud_layout.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/hud_canvas.js?v=2607-02"></script>
+  <script src="/js/realtime/drive_contents/vision/hud_model.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/hud_rtc_perf.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/road_overlay_policy.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/road_overlay_projection.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/road_overlay_geometry_renderer.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/road_overlay_aux_renderer.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/road_overlay_lead_model.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/road_overlay_lead_renderer.js?v=2607-01"></script>
+  <script src="/js/realtime/home_drive.js?v=2607-88"></script>
+  <script src="/js/realtime/drive_contents/vision/facade.js?v=2607-01"></script>
+  <script src="/js/realtime/drive_contents/vision/content.js?v=2607-05"></script>
+  <!-- 인트로 무대. 최초 1회만 쓰이며, 서버가 shouldShow 로 판단한다. -->
+  <div class="intro" id="introDeck" hidden></div>
+  <div class="intro-curtain" id="introCurtain"></div>
+
+  <script src="/js/intro/intro_i18n.js?v=2607-92"></script>
+  <script src="/js/intro/intro_registry.js?v=2607-91"></script>
+  <script src="/js/intro/intro_api.js?v=2607-91"></script>
+  <script src="/js/intro/steps/step0_welcome.js?v=2607-91"></script>
+  <script src="/js/intro/steps/step0b_restore.js?v=2607-91"></script>
+  <script src="/js/intro/steps/step2_car.js?v=2607-91"></script>
+  <script src="/js/intro/steps/step3_hda.js?v=2607-91"></script>
+  <script src="/js/intro/steps/step4_control.js?v=2607-91"></script>
+  <script src="/js/intro/steps/step5_legal.js?v=2607-91"></script>
+  <script src="/js/intro/steps/step6_outro.js?v=2607-91"></script>
+  <script src="/js/intro/intro.js?v=2607-92"></script>
   <script src="/js/app.js?v=2606-11"></script>
   <script src="/models/page_models.js?v=2607-01"></script>
 </body>

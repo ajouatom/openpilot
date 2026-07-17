@@ -3,7 +3,8 @@
 
   // Carrot Vision diagnostic recorder (enriched).
   //
-  // Silently records, into a ring buffer persisted to localStorage:
+  // Silently records into a memory ring buffer. Persistent/console capture is
+  // opt-in with ?vision_diag=1 or carrot_vision_diag_enabled=1.
   //   PHASE   - RTC phase / recovery transitions (deduped)
   //   STAT    - periodic WebRTC + <video> numbers, with framesReceived/Decoded
   //             deltas so a decode stall ("data in, 0 frames out") is obvious
@@ -30,8 +31,16 @@
   const MAX_CONSOLE_ENTRIES = 1200;
   const MAX_CONSOLE_ARG_CHARS = 1600;
   const PERSIST_THROTTLE_MS = 4000;
-  const STAT_FAST_MS = 1000;     // while connecting / reconnecting / pre-first-frame
-  const STAT_SLOW_MS = 2500;     // once decoding steadily
+  const STAT_FAST_MS = 2000;     // while connecting / reconnecting / pre-first-frame
+  const STAT_SLOW_MS = 5000;     // once decoding steadily
+  const PERSIST_ENABLED = (() => {
+    try {
+      const query = new URLSearchParams(window.location.search);
+      return query.get("vision_diag") === "1" || window.localStorage?.getItem("carrot_vision_diag_enabled") === "1";
+    } catch (_) {
+      return false;
+    }
+  })();
 
   let entries = [];
   let lastPersist = 0;
@@ -91,18 +100,21 @@
     window.console.__carrotVisionDiagHooked = true;
   }
 
-  hookConsole();
+  if (PERSIST_ENABLED) hookConsole();
 
   // Restore a prior buffer (survives the reconnect/reload that often follows a drop).
-  try {
-    const raw = window.localStorage && window.localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) entries = parsed.slice(-MAX_ENTRIES);
-    }
-  } catch (_) {}
+  if (PERSIST_ENABLED) {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) entries = parsed.slice(-MAX_ENTRIES);
+      }
+    } catch (_) {}
+  }
 
   function persist(force) {
+    if (!PERSIST_ENABLED) return;
     const t = Date.now();
     if (!force && t - lastPersist < PERSIST_THROTTLE_MS) return;
     lastPersist = t;
@@ -678,8 +690,8 @@
     });
   }
 
-  statsTick();
-  window.addEventListener("beforeunload", function () { persist(true); });
+  if (PERSIST_ENABLED) statsTick();
+  if (PERSIST_ENABLED) window.addEventListener("beforeunload", function () { persist(true); });
 
   // --- phone-friendly export button on the drive page ---
   function ensureButton() {

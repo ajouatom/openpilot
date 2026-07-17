@@ -25,14 +25,14 @@ _PROCESS_SPECS = {
     "match": "openpilot/system/camerad/camerad",
   },
   "stream_encoderd": {
-    "cmd": [str(REPO_ROOT / "openpilot/system/loggerd/encoderd"), "--stream"],
+    "cmd": [str(REPO_ROOT / "openpilot/system/loggerd/encoderd"), "--carrot-vision-road"],
     "cwd": str(REPO_ROOT),
-    "match": "openpilot/system/loggerd/encoderd\x00--stream",
+    "match": "openpilot/system/loggerd/encoderd\x00--carrot-vision-road",
   },
   "webrtcd": {
-    "cmd": [sys.executable, "-m", "openpilot.system.webrtc.webrtcd"],
+    "cmd": [sys.executable, "-m", "openpilot.system.webrtc.carrot_webrtcd"],
     "cwd": str(REPO_ROOT),
-    "match": "openpilot.system.webrtc.webrtcd",
+    "match": "openpilot.system.webrtc.carrot_webrtcd",
   },
 }
 
@@ -133,6 +133,15 @@ def get_status() -> dict[str, Any]:
   runner_pid = int(state.get("runner_pid") or 0)
   status = str(state.get("status") or "stopped")
   runner_alive = _pid_alive(runner_pid, RUNNER_MODULE)
+  try:
+    params = _params()
+    device = {
+      "disable_dm": int(params.get_int("DisableDM")),
+      "is_offroad": bool(params.get_bool("IsOffroad")),
+      "is_onroad": bool(params.get_bool("IsOnroad")),
+    }
+  except Exception:
+    device = {"disable_dm": None, "is_offroad": None, "is_onroad": None}
   return {
     **state,
     "status": status if runner_alive or status == "error" else "stopped",
@@ -142,6 +151,7 @@ def get_status() -> dict[str, Any]:
     "vipc_streams": _vipc_streams(),
     "webrtcd_port_open": _port_open(5001),
     "log_path": str(LOG_PATH),
+    "device": device,
   }
 
 
@@ -238,7 +248,7 @@ def start_test() -> int:
       print("[vision_test] runner exited during startup", file=sys.stderr)
       return 1
 
-  print("[vision_test] startup is still in progress; run :vision_test status", file=sys.stderr)
+  print("[vision_test] startup is still in progress; run 'carrot vision status'", file=sys.stderr)
   return 1
 
 
@@ -382,7 +392,7 @@ def _run_test() -> int:
 
 
 def run_command(args: list[str]) -> int:
-  parser = argparse.ArgumentParser(prog=":vision_test", add_help=False)
+  parser = argparse.ArgumentParser(prog="carrot vision", add_help=False)
   parser.add_argument("action", nargs="?", default="start", choices=("start", "status", "logs", "stop"))
   parser.add_argument("--lines", type=int, default=80)
   try:

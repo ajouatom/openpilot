@@ -123,18 +123,6 @@
   display: none;
 }
 
-.tools-meta__infoBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  min-height: 24px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
 .tools-lang-menu {
   height: 100%;
 }
@@ -251,13 +239,9 @@
 }
 
 .app-dialog--web-settings .app-dialog__sheet {
-  --web-settings-sheet-width: 560px;
-  --web-settings-sheet-height: clamp(420px, 68dvh, 560px);
-  --web-settings-nav-width: 112px;
-  --web-settings-row-min: 64px;
-  width: min(calc(100vw - 32px), var(--web-settings-sheet-width));
-  height: min(var(--web-settings-sheet-height), calc(100dvh - 32px));
-  max-height: min(var(--web-settings-sheet-height), calc(100dvh - 32px));
+  width: min(calc(100vw - 32px), var(--preference-sheet-width));
+  height: min(var(--preference-sheet-height), calc(100dvh - 32px));
+  max-height: min(var(--preference-sheet-height), calc(100dvh - 32px));
   padding: 16px;
   overflow: hidden;
 }
@@ -281,7 +265,7 @@
 
 .web-settings-dialog {
   display: grid;
-  grid-template-columns: var(--web-settings-nav-width) minmax(0, 1fr);
+  grid-template-columns: var(--preference-nav-width) minmax(0, 1fr);
   align-items: start;
   gap: var(--sp-lg);
   min-width: 0;
@@ -317,6 +301,9 @@
   font-weight: 800;
   line-height: 1.2;
   text-align: left;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
   cursor: pointer;
   transition: background var(--motion-quick) var(--ease-standard),
               border-color var(--motion-quick) var(--ease-standard),
@@ -369,6 +356,9 @@
   font-weight: 800;
   line-height: 1.2;
   text-align: left;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .web-settings-group__body {
@@ -386,7 +376,7 @@
 
 .web-settings-row,
 .web-settings-empty {
-  min-height: var(--web-settings-row-min);
+  min-height: var(--preference-row-min-height);
   padding: var(--sp-md) var(--sp-lg);
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 48%, transparent);
   border-radius: var(--r-sm);
@@ -426,6 +416,9 @@
   font-size: var(--fs-body-sm);
   font-weight: 800;
   line-height: 1.25;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .web-settings-row__desc,
@@ -433,11 +426,14 @@
   color: var(--md-on-surface-var);
   font-size: var(--fs-label-sm);
   line-height: 1.35;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .web-settings-select {
-  width: min(150px, 38vw);
-  min-width: 112px;
+  width: var(--preference-select-width);
+  min-width: var(--preference-select-min-width);
   min-height: 34px;
   padding: 0 34px 0 11px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);

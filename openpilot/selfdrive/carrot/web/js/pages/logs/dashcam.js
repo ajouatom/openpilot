@@ -11,6 +11,8 @@ const DASHCAM_ROUTE_PAGE_MIN = 10;
 const DASHCAM_ROUTE_PAGE_MAX = 40;
 const DASHCAM_ROUTE_PAGE_VIEWPORTS = 3;
 const DASHCAM_SEGMENT_PAGE_SIZE = 10;
+const DASHCAM_SEGMENT_SECONDS = 60;
+const DASHCAM_REPLAY_TIME_TOLERANCE_SECONDS = 120;
 const DASHCAM_LOAD_AHEAD_VIEWPORTS = 1.5;
 const DASHCAM_ROUTE_WINDOW_OVERSCAN_VIEWPORTS = 1.25;
 let dashcamUploadActiveJobId = null;
@@ -30,6 +32,7 @@ const dashcamState = {
   scrollTimer: null,
   renderFrame: 0,
   loadSeq: 0,
+  replayLoadSeq: 0,
   layoutBound: false,
   layoutTimer: null,
   landscape: null,
@@ -469,6 +472,57 @@ function formatDashcamSegmentFullTime(entry, segment) {
   return time ? formatDashcamTimeRange(time.startEpoch, time.endEpoch) : "";
 }
 
+function compactDashcamSegmentName(segment) {
+  const value = String(segment || "").trim();
+  if (value.length <= 22) return value;
+  const parts = value.split("--");
+  if (parts.length >= 3) {
+    const device = parts[0].slice(0, 8);
+    const route = parts[parts.length - 2].slice(-10);
+    const index = parts[parts.length - 1];
+    return `${device}…${route}--${index}`;
+  }
+  return `${value.slice(0, 10)}…${value.slice(-9)}`;
+}
+
+function normalizedDashcamReplayTime(entry, segment) {
+  const raw = dashcamSegmentTime(entry, segment);
+  const rawStart = Number(raw?.startEpoch || 0);
+  const rawEnd = Number(raw?.endEpoch || 0);
+  const candidates = Object.entries(entry?.segmentTimes || {})
+    .map(([name, time]) => ({
+      index: dashcamSegmentIndex(name),
+      startEpoch: Number(time?.startEpoch || 0),
+      endEpoch: Number(time?.endEpoch || 0),
+    }))
+    .filter((time) => time.startEpoch > 0 && time.endEpoch >= time.startEpoch)
+    .sort((left, right) => left.index - right.index);
+  const anchor = candidates[0];
+  if (!anchor) return null;
+  const targetIndex = dashcamSegmentIndex(segment);
+  const expectedStart = anchor.startEpoch + (targetIndex - anchor.index) * DASHCAM_SEGMENT_SECONDS;
+  const rawDuration = rawEnd - rawStart;
+  const duration = rawDuration > 0 && rawDuration <= DASHCAM_REPLAY_TIME_TOLERANCE_SECONDS
+    ? rawDuration
+    : DASHCAM_SEGMENT_SECONDS;
+  const useRawStart = rawStart > 0
+    && Math.abs(rawStart - expectedStart) <= DASHCAM_REPLAY_TIME_TOLERANCE_SECONDS;
+  const startEpoch = useRawStart ? rawStart : expectedStart;
+  return { startEpoch, endEpoch: startEpoch + duration };
+}
+
+function formatDashcamReplayTitle(entry, segment) {
+  const segmentName = compactDashcamSegmentName(segment);
+  const time = normalizedDashcamReplayTime(entry, segment);
+  const start = dashcamDateParts(time?.startEpoch);
+  const end = dashcamDateParts(time?.endEpoch);
+  if (start && end) {
+    const timeLabel = `${start.time}–${end.time}`;
+    return segmentName ? `${segmentName} · ${timeLabel}` : timeLabel;
+  }
+  return segmentName || `#${dashcamSegmentIndex(segment)}`;
+}
+
 let dashcamSegmentLoaderObserver = null;
 function ensureDashcamSegmentLoaderObserver(scroller) {
   if (!scroller || !("IntersectionObserver" in window)) return null;
@@ -600,6 +654,9 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
             <span class="dashcam-chip">${escapeHtml(getUIText("segment_count", "{count} segments", { count: segmentCount }))}</span>
             <span class="dashcam-chip">${latest}</span>
           </div>
+          <button class="dashcam-menu-btn dashcam-route-preview__menu" type="button" data-action="segment-menu" data-route="${routeAttr}" data-segment="${escapeHtml(representative)}" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
+            <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
+          </button>
           <div class="dashcam-play-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
           </div>
@@ -654,7 +711,7 @@ function renderDashcamRoutes(options = {}) {
   if (!isLogsPageActive()) return;
   if (dashcamState.loading && !routes.length) {
     setDashcamStatus(getUIText("loading", "Loading..."));
-    host.innerHTML = "";
+    host.innerHTML = logsLoadingSkeletonHtml("dashcam");
     host.dataset.signature = "";
     host.dataset.renderCount = "0";
     return;
@@ -913,7 +970,7 @@ async function loadDashcamRoutes({ silent = false, append = false } = {}) {
     dashcamState.loading = false;
     dashcamState.loadingMore = false;
     setDashcamLoadingMoreUi(false);
-    renderDashcamRoutes({ animate: append || !silent });
+    renderDashcamRoutes({ animate: append });
     if (!silent && logsScrollTops.dashcam === 0) restoreLogsScrollTop("dashcam", { reset: true });
     requestAnimationFrame(() => {
       maybeLoadMoreDashcamRoutes();
@@ -977,8 +1034,33 @@ function openDashcamPlayer(route, segment) {
         if (!Number.isFinite(seconds) || seconds <= 0 || endEpoch <= 0) return initialSubtitle;
         return formatDashcamTimeRange(endEpoch - seconds, endEpoch);
       },
+      onMenu: ({ close } = {}) => showDashcamSegmentMenu(route, segment, { activePlayerClose: close }),
     },
   );
+}
+
+async function openDashcamDriveReplay(route, segment) {
+  const requestId = ++dashcamState.replayLoadSeq;
+  const replay = window.CarrotVisionReplay;
+  if (!replay?.start) {
+    showAppToast(getUIText("replay_unavailable", "Drive replay is not available in this browser."), { tone: "error" });
+    return;
+  }
+  const entry = (dashcamState.routes || []).find((item) => item.route === route);
+  const segments = mergeDashcamSegments(dashcamSegmentsForRoute(entry), [], "asc");
+  const titleForSegment = (target) => formatDashcamReplayTitle(entry, target);
+  const startPromise = replay.start({
+    route,
+    segment,
+    segments,
+    title: titleForSegment(segment),
+    titleForSegment,
+  });
+  fetchAllDashcamSegmentNames(route).then((allSegments) => {
+    if (requestId !== dashcamState.replayLoadSeq || !replay.isActive?.()) return;
+    replay.updateSegments?.(mergeDashcamSegments(allSegments, [], "asc"), route);
+  }).catch(() => {});
+  await startPromise;
 }
 
 function dashcamUploadStats(items) {
@@ -1341,7 +1423,7 @@ async function uploadDashcamSegments(segments) {
   }
 }
 
-async function showDashcamSegmentMenu(route, segment) {
+async function showDashcamSegmentMenu(route, segment, options = {}) {
   const entry = (dashcamState.routes || []).find((item) => item.route === route);
   const timeLabel = formatDashcamSegmentTimeLabel(entry, segment);
   const fullTime = formatDashcamSegmentFullTime(entry, segment);
@@ -1353,13 +1435,17 @@ async function showDashcamSegmentMenu(route, segment) {
     choiceLayout: "list",
     choices: [
       { label: getUIText("play", "Play"), value: "play" },
+      { label: getUIText("drive_replay", "Replay"), value: "drive_replay" },
       { label: getUIText("log_upload", "Upload Logs"), value: "upload" },
       { label: `qcamera ${getUIText("download", "Download")}`, value: "download_qcamera" },
       { label: `rlog ${getUIText("download", "Download")}`, value: "download_rlog" },
       { label: `qlog ${getUIText("download", "Download")}`, value: "download_qlog" },
     ],
   });
-  if (selected === "play") openDashcamPlayer(route, segment);
+  if (selected === "drive_replay") {
+    options.activePlayerClose?.();
+    await openDashcamDriveReplay(route, segment);
+  } else if (selected === "play" && typeof options.activePlayerClose !== "function") openDashcamPlayer(route, segment);
   else if (selected === "upload") await uploadDashcamSegments([segment]);
   else if (selected?.startsWith?.("download_")) {
     const kind = selected.replace("download_", "");

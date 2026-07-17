@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from ..bridge import META_COMMAND_PREFIX
 from ..registry import get_command, iter_commands, register_command
 
 
 @register_command(
   name="help",
-  summary="List web terminal meta commands or show command usage.",
-  usage=f"{META_COMMAND_PREFIX}help [command]",
+  summary="사용 가능한 Carrot 명령과 사용법을 보여줍니다.",
+  usage="carrot help [command]",
 )
 def run(args: list[str]) -> int:
   if args:
@@ -18,8 +17,8 @@ def run(args: list[str]) -> int:
     print(f"{command.usage}\n  {command.summary}")
     return 0
 
-  print("Web terminal meta commands")
+  print("Carrot 명령")
   for command in iter_commands():
-    print(f"  {META_COMMAND_PREFIX}{command.name:<18} {command.summary}")
-  print(f"\nRun {META_COMMAND_PREFIX}help <command> for usage. Other input is sent to the shell unchanged.")
+    print(f"  carrot {command.name:<14} {command.summary}")
+  print("\n자세한 사용법: carrot help <명령>")
   return 0

@@ -258,6 +258,7 @@ SConscript([
   'openpilot/selfdrive/locationd/SConscript',
   'openpilot/selfdrive/modeld/SConscript',
   'openpilot/selfdrive/ui/SConscript',
+  'openpilot/selfdrive/carrot/realtime/SConscript',
 ])
 
 # Build tools

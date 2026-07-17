@@ -49,6 +49,14 @@ function isWideLayout() {
   return width / Math.max(height, 1) >= 1.3 || (width >= LAYOUT_WIDE_MIN_WIDTH && height >= LAYOUT_WIDE_MIN_HEIGHT);
 }
 
+function getLayoutOrientation() {
+  // Keep physical/window orientation separate from the coarse `wide` mode:
+  // large portrait tablets may be wide-capable while portrait-only surfaces
+  // still need to mount into the lower HUD dock.
+  const { width, height } = layoutViewportSize();
+  return width > height ? "landscape" : "portrait";
+}
+
 function computeLayoutMode() {
   if (isWideLayout()) return "wide";
   const { width: w, height: h } = layoutViewportSize();
@@ -62,6 +70,7 @@ window.CarrotLayout = {
   WIDE_QUERY: LAYOUT_WIDE_QUERY,
   isWide: isWideLayout,
   mode: computeLayoutMode,
+  orientation: getLayoutOrientation,
   hasViewportSegments,
   devicePosture: getDevicePostureType,
 };
@@ -69,7 +78,6 @@ window.CarrotLayout = {
 let appViewportMetricsBound = false;
 let appUnobscuredViewportHeight = 0;
 let appKeyboardInset = 0;
-const driveHudCardEl = document.getElementById("driveHudCard");
 let driveHudLayoutObserversBound = false;
 let driveHudLayoutRaf = 0;
 
@@ -271,8 +279,7 @@ bindAppViewportObservers();
 
 function syncDriveHudLayout() {
   driveHudLayoutRaf = 0;
-  if (!driveHudCardEl || !window.DrivingHud) return;
-  window.DrivingHud.relayout();
+  window.DriveVisionHudContent?.resize?.();
 }
 
 function scheduleDriveHudLayout() {

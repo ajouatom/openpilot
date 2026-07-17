@@ -46,13 +46,17 @@
 .c-switch__track::after {
   content: "";
   position: absolute;
-  top: 4px;
+  top: 50%;
   left: 4px;
-  width: calc(var(--switch-h) - 8px);
-  height: calc(var(--switch-h) - 8px);
+  /* -8px keeps the 4px inset; -2px compensates the track's 1px border on each
+     side, which shrinks the ::after containing block (padding box) below the
+     token size. Without it the thumb sits 1px low and overshoots 2px when on. */
+  width: calc(var(--switch-h) - 10px);
+  height: calc(var(--switch-h) - 10px);
   border-radius: var(--r-round);
   background: var(--md-on-surface-var);
   box-shadow: var(--shadow-1);
+  transform: translateY(-50%);
   transition: transform var(--motion-base) var(--ease-standard),
               background var(--motion-quick) var(--ease-standard);
 }
@@ -63,7 +67,7 @@
 }
 
 .c-switch__input:checked + .c-switch__track::after {
-  transform: translateX(calc(var(--switch-w) - var(--switch-h)));
+  transform: translate(calc(var(--switch-w) - var(--switch-h)), -50%);
   background: var(--md-on-primary);
 }
 
@@ -74,6 +78,71 @@
 
 .c-switch__input:disabled + .c-switch__track {
   opacity: var(--state-disabled-opacity);
+}
+
+/* ── Close button (X atom) ───────────────────────────────────
+   The one close/dismiss control used across the app. Drop it into any
+   overlay, modal, or panel header:
+
+     <button class="c-close" type="button" aria-label="Close">
+       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+     </button>
+
+   Size/radius come from --close-size / --close-radius (tokens.css).
+   Tight surfaces add `.c-close--sm`. The rounded-square surface reads on
+   both plain panels and over video; positioning is left to the caller. */
+.c-close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--close-size);
+  height: var(--close-size);
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 40%, transparent);
+  border-radius: var(--close-radius);
+  background: color-mix(in srgb, var(--md-surface-cont) 82%, #000);
+  color: var(--md-on-surface);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--motion-quick) var(--ease-standard),
+              color var(--motion-quick) var(--ease-standard),
+              border-color var(--motion-quick) var(--ease-standard),
+              transform var(--motion-quick) var(--ease-standard);
+}
+
+.c-close svg {
+  width: var(--close-icon);
+  height: var(--close-icon);
+  display: block;
+}
+
+.c-close svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.c-close:hover {
+  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont));
+  border-color: color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
+  color: var(--md-on-surface);
+}
+
+.c-close:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.c-close:active {
+  transform: scale(0.94);
+}
+
+.c-close--sm {
+  --close-size: 26px;
+  --close-icon: 14px;
+  --close-radius: 8px;
 }
 
 /* ── App Toast / Dialog ──────────────────────────────────── */
@@ -1481,97 +1550,6 @@ pre {
 
 @keyframes skeleton-shimmer {
   to { transform: translateX(100%); }
-}
-
-/* ── Icon Button ────────────────────────────────────────────────
-   Standard icon-only button. Used as the base for menu chevrons,
-   close buttons, expand toggles, kebab menus, etc. Default is the
-   36×36 rounded-square (logs-icon-btn pattern); add a variant for
-   circular shape, smaller size, or transparent (toolbar) feel.
-
-   Pattern:
-     <button class="icon-btn" type="button" aria-label="Open menu">
-       <svg viewBox="0 0 24 24" aria-hidden="true"><path .../></svg>
-     </button>
-
-   Variants:
-     .icon-btn--circle    circular (use with a 30–40 px size)
-     .icon-btn--ghost     transparent base, hover-only background
-     .icon-btn--sm        28×28 (compact lists, dense toolbars)
-     .icon-btn--lg        44×44 (FAB-like, touch-priority)
-
-   Replaces: hand-rolled .logs-icon-btn / .dashcam-expand-btn /
-            .dashcam-menu-btn / .setting-toolbar-action /
-            .tools-meta__infoBtn / .app-dialog__close patterns. */
-.icon-btn {
-  appearance: none;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 36%, transparent);
-  border-radius: var(--r-sm);
-  background: var(--md-surface-cont);
-  color: var(--md-on-surface-var);
-  cursor: pointer;
-  line-height: 0;
-  box-sizing: border-box;
-  transition:
-    background var(--motion-quick) var(--ease-standard),
-    color var(--motion-quick) var(--ease-standard),
-    border-color var(--motion-quick) var(--ease-standard);
-  -webkit-tap-highlight-color: transparent;
-}
-
-@media (hover: hover) {
-  .icon-btn:hover {
-    background: color-mix(in srgb, var(--md-primary) var(--state-hover-pct), var(--md-surface-cont));
-    color: var(--md-on-surface);
-  }
-}
-
-.icon-btn:active {
-  background: color-mix(in srgb, var(--md-primary) var(--state-pressed-pct), var(--md-surface-cont));
-}
-
-.icon-btn svg {
-  width: 22px;
-  height: 22px;
-  display: block;
-}
-
-.icon-btn--circle {
-  border-radius: var(--r-round);
-}
-
-.icon-btn--ghost {
-  background: transparent;
-  border-color: transparent;
-}
-
-.icon-btn--sm {
-  width: 28px;
-  height: 28px;
-  flex-basis: 28px;
-}
-
-.icon-btn--sm svg {
-  width: 18px;
-  height: 18px;
-}
-
-.icon-btn--lg {
-  width: 44px;
-  height: 44px;
-  flex-basis: 44px;
-}
-
-.icon-btn--lg svg {
-  width: 24px;
-  height: 24px;
 }
 
 /* ── Staggered Reveal (.ui-stagger-item) ────────────────────────

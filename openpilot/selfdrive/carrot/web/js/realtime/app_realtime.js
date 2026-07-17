@@ -49,14 +49,29 @@ let LIVE_RUNTIME_FETCH_IN_FLIGHT = null;
 let LIVE_RUNTIME_POLL_ACTIVE = false;
 let CARROT_VISION_TEST_FETCH_T = null;
 let CARROT_VISION_TEST_FETCH_IN_FLIGHT = null;
-const CARROT_VISION_REQUIRED_LIVE_SERVICES = Object.freeze(["roadCameraState", "modelV2"]);
-const CARROT_VISION_TEST_REQUIRED_LIVE_SERVICES = Object.freeze(["roadCameraState"]);
 const CARROT_VISION_TEST_STATE = {
   active: false,
   status: "stopped",
+  runnerAlive: false,
+  children: {},
+  vipcStreams: [],
+  portOpen: false,
+  error: "",
   fetchedAtMs: 0,
 };
 window.CarrotVisionTestState = CARROT_VISION_TEST_STATE;
+const CARROT_DEVICE_RUNTIME_STATE = {
+  disableDm: null,
+  clusterHud: null,
+  isOffroad: null,
+  isOnroad: null,
+  fetchedAtMs: 0,
+};
+window.CarrotDeviceRuntimeState = CARROT_DEVICE_RUNTIME_STATE;
+const CARROT_VISION_CONTENT_STATE = {
+  active: true,
+  keepWarm: false,
+};
 var CARROT_VISION_PHASE = window.CarrotVisionPhase;
 var CARROT_VISION_CONTROL = window.CarrotVisionControl;
 var CARROT_VISION_STATE = window.CarrotVisionState;
@@ -74,8 +89,24 @@ function isCarrotPageVisible() {
   return isCarrotPageActive() && !document.hidden;
 }
 
+function isCarrotRecordedReplayActive() {
+  return Boolean(window.CarrotVisionReplay?.isActive?.());
+}
+
+function isCarrotVisionContentActive() {
+  return CARROT_VISION_CONTENT_STATE.active;
+}
+
+function isCarrotVisionContentRuntimeWanted() {
+  return CARROT_VISION_CONTENT_STATE.active || CARROT_VISION_CONTENT_STATE.keepWarm;
+}
+
 function shouldRunCarrotHudRealtime() {
-  return isCarrotPageActive() || Boolean(window.CarrotMiniHudMode?.isActive?.());
+  if (isCarrotRecordedReplayActive()) return false;
+  return !document.hidden && (
+    (isCarrotPageActive() && isCarrotVisionContentRuntimeWanted())
+    || Boolean(window.CarrotMiniHudMode?.isActive?.())
+  );
 }
 
 function isCarrotVisionTestActive() {
@@ -83,22 +114,100 @@ function isCarrotVisionTestActive() {
 }
 window.isCarrotVisionTestActive = isCarrotVisionTestActive;
 
+function activateCarrotVisionForRunningTest() {
+  if (
+    !isCarrotPageActive()
+    || !isCarrotVisionTestActive()
+    || isCarrotVisionActive()
+  ) return false;
+  setCarrotVisionActive(true, {
+    phase: CARROT_VISION_PHASE.STARTING,
+    reason: "camera test active",
+    updateRtcStatus: false,
+  });
+  syncCarrotVisionStartOverlay();
+  return true;
+}
+
+function normalizeRuntimeBool(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(text)) return true;
+  if (["0", "false", "no", "off", ""].includes(text)) return false;
+  return null;
+}
+
+function updateCarrotDeviceRuntimeState(patch = {}) {
+  const previous = JSON.stringify({
+    disableDm: CARROT_DEVICE_RUNTIME_STATE.disableDm,
+    clusterHud: CARROT_DEVICE_RUNTIME_STATE.clusterHud,
+    isOffroad: CARROT_DEVICE_RUNTIME_STATE.isOffroad,
+    isOnroad: CARROT_DEVICE_RUNTIME_STATE.isOnroad,
+  });
+  if (Object.prototype.hasOwnProperty.call(patch, "disableDm")) {
+    const value = Number.parseInt(String(patch.disableDm ?? ""), 10);
+    CARROT_DEVICE_RUNTIME_STATE.disableDm = Number.isFinite(value) ? value : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "clusterHud")) {
+    const value = Number.parseInt(String(patch.clusterHud ?? ""), 10);
+    CARROT_DEVICE_RUNTIME_STATE.clusterHud = Number.isFinite(value) ? value : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "isOffroad")) {
+    CARROT_DEVICE_RUNTIME_STATE.isOffroad = normalizeRuntimeBool(patch.isOffroad);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "isOnroad")) {
+    CARROT_DEVICE_RUNTIME_STATE.isOnroad = normalizeRuntimeBool(patch.isOnroad);
+  }
+  CARROT_DEVICE_RUNTIME_STATE.fetchedAtMs = Date.now();
+  window.CarrotDeviceRuntimeState = CARROT_DEVICE_RUNTIME_STATE;
+  return previous !== JSON.stringify({
+    disableDm: CARROT_DEVICE_RUNTIME_STATE.disableDm,
+    clusterHud: CARROT_DEVICE_RUNTIME_STATE.clusterHud,
+    isOffroad: CARROT_DEVICE_RUNTIME_STATE.isOffroad,
+    isOnroad: CARROT_DEVICE_RUNTIME_STATE.isOnroad,
+  });
+}
+
+let _carrotVisionEnvironmentSignature = "";
+function syncCarrotVisionEnvironmentState(reason = "environment update") {
+  const environment = {
+    disableDm: CARROT_DEVICE_RUNTIME_STATE.disableDm,
+    clusterHud: CARROT_DEVICE_RUNTIME_STATE.clusterHud,
+    isOffroad: CARROT_DEVICE_RUNTIME_STATE.isOffroad,
+    isOnroad: CARROT_DEVICE_RUNTIME_STATE.isOnroad,
+    testActive: CARROT_VISION_TEST_STATE.active,
+    testStatus: CARROT_VISION_TEST_STATE.status,
+    testError: CARROT_VISION_TEST_STATE.error,
+    testChildren: CARROT_VISION_TEST_STATE.children,
+    testPortOpen: CARROT_VISION_TEST_STATE.portOpen,
+  };
+  const signature = JSON.stringify(environment);
+  if (_carrotVisionEnvironmentSignature === signature) return false;
+  _carrotVisionEnvironmentSignature = signature;
+  setCarrotVisionState({ environment }, { reason, silent: true });
+  if (!isCarrotRecordedReplayActive()) {
+    setCarrotVisionPhase(CARROT_VISION_STATE.phase, {
+      reason,
+      updateRtcStatus: false,
+    });
+  }
+  return true;
+}
+
+function isCarrotVisionParked() {
+  return CARROT_DEVICE_RUNTIME_STATE.isOffroad === true && CARROT_DEVICE_RUNTIME_STATE.isOnroad !== true;
+}
+
 function getCarrotVisionRealtimeBlockReason() {
   if (!isCarrotPageActive() || !isCarrotVisionActive()) return "";
+  if (isCarrotRecordedReplayActive()) return "recorded-replay";
   if (window.CarrotMiniHudMode?.isActive?.()) return "mini-hud";
-
-  const runtimeState = window.CarrotLiveRuntimeState || CARROT_LIVE_RUNTIME_STATE;
-  if (!runtimeState?.ok) return "runtime-unavailable";
-
-  const runtime = runtimeState.runtime && typeof runtimeState.runtime === "object" ? runtimeState.runtime : {};
-  const serviceAlive = runtime.serviceAlive && typeof runtime.serviceAlive === "object" ? runtime.serviceAlive : null;
-  if (!serviceAlive) return "runtime-unavailable";
-
-  const requiredServices = isCarrotVisionTestActive()
-    ? CARROT_VISION_TEST_REQUIRED_LIVE_SERVICES
-    : CARROT_VISION_REQUIRED_LIVE_SERVICES;
-  const missing = requiredServices.filter((service) => serviceAlive[service] !== true);
-  return missing.length ? "services-missing" : "";
+  if (isCarrotVisionParked() && !isCarrotVisionTestActive()) {
+    if (CARROT_VISION_TEST_STATE.status === "starting") return "camera-test-starting";
+    return "vehicle-parked";
+  }
+  return "";
 }
 
 function isCarrotVisionRealtimeSourceReady() {
@@ -106,15 +215,76 @@ function isCarrotVisionRealtimeSourceReady() {
 }
 
 function getCarrotVisionRuntimeWaitDetail(reason = getCarrotVisionRealtimeBlockReason()) {
+  if (reason === "recorded-replay") {
+    return getUIText("replay_loading_detail", "Matching the saved road video with driving information.");
+  }
+  if (reason === "camera-test-starting") {
+    return getUIText("vision_step_starting", "Preparing the device camera.");
+  }
+  if (reason === "vehicle-parked") {
+    return getUIText("vision_parked_detail", "The camera will connect automatically when driving starts.");
+  }
   if (reason === "services-missing") {
     return getUIText("vision_step_waiting_car", "Waiting for car camera services.");
   }
   return getUIText("vision_step_waiting_runtime", "Waiting for car runtime connection.");
 }
 
-function shouldRunCarrotVisionRealtime() {
-  return isCarrotPageActive() && isCarrotVisionActive() && isCarrotVisionRealtimeSourceReady();
+function getCarrotVisionRuntimeWaitStatus(reason = getCarrotVisionRealtimeBlockReason()) {
+  if (reason === "recorded-replay") {
+    return getUIText("replay_loading", "Preparing drive replay...");
+  }
+  if (reason === "camera-test-starting") {
+    return getUIText("vision_test_starting_title", "Preparing camera check");
+  }
+  if (reason === "vehicle-parked") {
+    return getUIText("vision_parked_title", "Vehicle is parked");
+  }
+  return getUIText("connecting", "Connecting...");
 }
+
+function shouldRunCarrotVisionRealtime() {
+  return isCarrotPageVisible()
+    && isCarrotVisionContentRuntimeWanted()
+    && isCarrotVisionActive()
+    && isCarrotVisionRealtimeSourceReady();
+}
+
+function getCarrotVisionContentRuntimeStatus() {
+  return {
+    active: CARROT_VISION_CONTENT_STATE.active,
+    keepWarm: CARROT_VISION_CONTENT_STATE.keepWarm,
+    userActive: Boolean(isCarrotVisionActive()),
+    pageActive: isCarrotPageActive(),
+  };
+}
+
+function setCarrotVisionContentActive(value, options = {}) {
+  const nextActive = Boolean(value);
+  const nextKeepWarm = !nextActive && Boolean(options.keepWarm) && isCarrotVisionActive();
+  const changed = CARROT_VISION_CONTENT_STATE.active !== nextActive
+    || CARROT_VISION_CONTENT_STATE.keepWarm !== nextKeepWarm;
+  if (!changed) return false;
+
+  CARROT_VISION_CONTENT_STATE.active = nextActive;
+  CARROT_VISION_CONTENT_STATE.keepWarm = nextKeepWarm;
+  syncCarrotRealtimeLifecycle(true);
+  if (nextActive) requestCarrotVisionRender({ reason: options.reason || "content active" });
+  window.dispatchEvent(new CustomEvent("carrot:visioncontentchange", {
+    detail: {
+      ...getCarrotVisionContentRuntimeStatus(),
+      reason: String(options.reason || "content state change"),
+    },
+  }));
+  return true;
+}
+
+window.CarrotVisionContentRuntime = Object.freeze({
+  isActive: isCarrotVisionContentActive,
+  isRuntimeWanted: isCarrotVisionContentRuntimeWanted,
+  setActive: setCarrotVisionContentActive,
+  status: getCarrotVisionContentRuntimeStatus,
+});
 
 function isLandscapeOrientation() {
   if (window.CarrotLayout?.isWide) return window.CarrotLayout.isWide();
@@ -326,26 +496,9 @@ async function fetchLiveRuntimeState(force = false) {
   return LIVE_RUNTIME_FETCH_IN_FLIGHT;
 }
 
-function isKmapStreaming() {
-  if (!isCarrotPageVisible()) return false;
-  const settings = window.CarrotWebSettingsState || {};
-  const enabled = settings.kmap_enabled;
-  const enabledBool = typeof enabled === "string"
-    ? ["1", "true", "yes", "on"].includes(enabled.trim().toLowerCase())
-    : Boolean(enabled);
-  if (!enabledBool) return false;
-  if (window.CarrotLayout?.isWide) return window.CarrotLayout.isWide();
-  if (typeof window.matchMedia === "function") {
-    try {
-      if (!window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches) return false;
-    } catch {}
-  }
-  return true;
-}
-
 function getLiveRuntimePollMs() {
-  if (!isCarrotPageVisible()) return 3000;
-  return isKmapStreaming() ? 500 : 1000;
+  if (!isCarrotPageVisible()) return 15000;
+  return 5000;
 }
 
 function scheduleLiveRuntimeStateFetch(ms = getLiveRuntimePollMs()) {
@@ -378,23 +531,44 @@ async function fetchCarrotVisionTestState() {
 
   CARROT_VISION_TEST_FETCH_IN_FLIGHT = (async () => {
     const wasActive = CARROT_VISION_TEST_STATE.active;
+    let runtimeChanged = false;
     try {
       const response = await fetch("/api/vision_test/status", { cache: "no-store" });
       const payload = await response.json();
       if (!payload?.ok) throw new Error(payload?.error || "vision_test status failed");
       CARROT_VISION_TEST_STATE.active = payload.status === "running" && payload.runner_alive === true;
       CARROT_VISION_TEST_STATE.status = String(payload.status || "stopped");
+      CARROT_VISION_TEST_STATE.runnerAlive = payload.runner_alive === true;
+      CARROT_VISION_TEST_STATE.children = payload.children && typeof payload.children === "object" ? payload.children : {};
+      CARROT_VISION_TEST_STATE.vipcStreams = Array.isArray(payload.vipc_streams) ? payload.vipc_streams : [];
+      CARROT_VISION_TEST_STATE.portOpen = payload.webrtcd_port_open === true;
+      CARROT_VISION_TEST_STATE.error = String(payload.error || "");
       CARROT_VISION_TEST_STATE.fetchedAtMs = Date.now();
+      const device = payload.device && typeof payload.device === "object" ? payload.device : {};
+      runtimeChanged = updateCarrotDeviceRuntimeState({
+        disableDm: device.disable_dm,
+        isOffroad: device.is_offroad,
+        isOnroad: device.is_onroad,
+      });
       window.CarrotVisionTestState = CARROT_VISION_TEST_STATE;
     } catch {
       CARROT_VISION_TEST_STATE.active = false;
       CARROT_VISION_TEST_STATE.status = "unavailable";
+      CARROT_VISION_TEST_STATE.runnerAlive = false;
+      CARROT_VISION_TEST_STATE.children = {};
+      CARROT_VISION_TEST_STATE.vipcStreams = [];
+      CARROT_VISION_TEST_STATE.portOpen = false;
       CARROT_VISION_TEST_STATE.fetchedAtMs = Date.now();
     } finally {
       CARROT_VISION_TEST_FETCH_IN_FLIGHT = null;
     }
 
-    if (wasActive !== CARROT_VISION_TEST_STATE.active) {
+    const environmentChanged = syncCarrotVisionEnvironmentState("vision test status");
+    const visionActivated = activateCarrotVisionForRunningTest();
+    if (environmentChanged) {
+      requestCarrotVisionRender({ reason: "vision test status" });
+    }
+    if (wasActive !== CARROT_VISION_TEST_STATE.active || runtimeChanged || visionActivated) {
       window.dispatchEvent(new CustomEvent("carrot:visiontestchange", {
         detail: { ...CARROT_VISION_TEST_STATE },
       }));
@@ -440,13 +614,18 @@ function showCarrotVisionBadgeHint(el) {
   }, 1400);
 }
 
-async function fetchDisableDmValue() {
-  const r = await fetch("/api/params_bulk?names=DisableDM", { cache: "no-store" });
+async function fetchCarrotDeviceRuntimeState() {
+  const r = await fetch("/api/params_bulk?names=DisableDM,ClusterHud,IsOffroad,IsOnroad", { cache: "no-store" });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
-  const raw = j.values?.DisableDM;
-  const value = Number.parseInt(String(raw ?? "0"), 10);
-  return Number.isFinite(value) ? value : 0;
+  const changed = updateCarrotDeviceRuntimeState({
+    disableDm: j.values?.DisableDM,
+    clusterHud: j.values?.ClusterHud,
+    isOffroad: j.values?.IsOffroad,
+    isOnroad: j.values?.IsOnroad,
+  });
+  syncCarrotVisionEnvironmentState("device runtime");
+  return { ...CARROT_DEVICE_RUNTIME_STATE, changed };
 }
 
 function updateCarrotVisionAvailabilityUi(available, message = window.CARROT_VISION_DISABLED_MESSAGE) {
@@ -454,8 +633,9 @@ function updateCarrotVisionAvailabilityUi(available, message = window.CARROT_VIS
   const wasActive = isCarrotVisionActive();
   const button = document.getElementById("btnStartVision");
   const messageEl = document.getElementById("visionDisabledMessage");
-  const unavailableHint = getUIText("vision_unavailable_hint", "Available when DisableDM is 2.");
-  const disabledMessage = nextAvailable ? "" : (message || unavailableHint);
+  const defaultUnavailableHint = getUIText("vision_unavailable_hint", "Available when DisableDM is 2.");
+  const disabledMessage = nextAvailable ? "" : (message || defaultUnavailableHint);
+  const unavailableHint = disabledMessage || defaultUnavailableHint;
   setCarrotVisionAvailable(nextAvailable, {
     disabledMessage,
     reason: "availability ui",
@@ -519,9 +699,15 @@ function updateCarrotVisionAvailabilityUi(available, message = window.CARROT_VIS
 
 async function syncCarrotVisionAvailability() {
   try {
-    const disableDm = await fetchDisableDmValue();
-    const available = disableDm === 2 || isCarrotVisionTestActive();
-    updateCarrotVisionAvailabilityUi(available);
+    const runtime = await fetchCarrotDeviceRuntimeState();
+    if (isCarrotRecordedReplayActive()) return true;
+    const clusterHudActive = Number(runtime.clusterHud || 0) > 0;
+    const available = !clusterHudActive && (isCarrotVisionTestActive() || runtime.disableDm === 2);
+    const unavailableMessage = clusterHudActive
+      ? getUIText("vision_unavailable_cluster_hud", "Carrot Vision is unavailable while Cluster HUD is enabled.")
+      : undefined;
+    updateCarrotVisionAvailabilityUi(available, unavailableMessage);
+    if (runtime.changed) syncCarrotRealtimeLifecycle(true);
     return available;
   } catch (e) {
     if (isCarrotVisionTestActive()) {
@@ -532,6 +718,7 @@ async function syncCarrotVisionAvailability() {
     return false;
   }
 }
+window.CarrotVisionSyncAvailability = syncCarrotVisionAvailability;
 
 function syncCarrotVisionStartOverlay() {
   const overlay = document.getElementById("visionStartOverlay");
@@ -541,6 +728,10 @@ function syncCarrotVisionStartOverlay() {
 }
 
 async function stopCarrotVisionRealtime(reason = "user stop") {
+  if (isCarrotRecordedReplayActive()) {
+    await window.CarrotVisionReplay?.stop?.({ returnToLogs: true, reason });
+    return;
+  }
   if (!isCarrotVisionActive()) return;
   console.warn("[vision] stop requested", reason);
   setCarrotVisionActive(false, {
@@ -606,7 +797,7 @@ function rtcInitAuto() {
 }
 
 window.addEventListener("carrot:paramchange", (ev) => {
-  if (ev?.detail?.name !== "DisableDM") return;
+  if (!["DisableDM", "ClusterHud", "IsOffroad", "IsOnroad"].includes(ev?.detail?.name)) return;
   syncCarrotVisionAvailability().catch(() => {});
 });
 
@@ -655,12 +846,8 @@ async function startAll() {
   syncServerTimeOnConnect().catch(() => {});
   rtcInitAuto();
   startCarrotVisionTestStateFetch();
-  ensureRawDecodeWorker();
 
-  if (window.DrivingHud) {
-    window.DrivingHud.init();
-    _hudMarkDirty();
-  }
+  _hudMarkDirty();
   syncCarrotRealtimeLifecycle(false);
 }
 
@@ -734,7 +921,9 @@ function scheduleCarrotVisionPageReturnConnect(reason = "page return") {
 
 function syncCarrotRealtimeLifecycle(forceFetch = false) {
   const nextHudActive = shouldRunCarrotHudRealtime();
-  const nextVisionWanted = isCarrotPageActive() && isCarrotVisionActive();
+  const nextVisionWanted = isCarrotPageVisible()
+    && isCarrotVisionContentRuntimeWanted()
+    && isCarrotVisionActive();
   const nextVisionBlockReason = getCarrotVisionRealtimeBlockReason();
   const nextVisionActive = nextVisionWanted && !nextVisionBlockReason;
 
@@ -760,7 +949,6 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
 
   if (nextHudActive) {
     console.log("[perf] carrot hud realtime -> active");
-    ensureRawDecodeWorker();
     rawHudConnectAll();
     startLiveRuntimeStateFetch(forceFetch, 100);
     _hudMarkDirty();
@@ -783,9 +971,8 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
       updateRtcStatus: false,
     });
     requestCarrotVisionDefaultFullscreen({ quiet: true }).catch(() => {});
-    ensureRawDecodeWorker();
-    // Staged startup: do NOT connect the heavy overlay multiplex WS here.
-    // The overlay stream (modelV2 + 8 services, full-rate) competes with the
+    // Staged startup: keep the shared compact WS on HUD fields here.
+    // Expanding it to the overlay services (including modelV2) competes with the
     // WebRTC first-frame/keyframe for the same link and viewer CPU. Overlay
     // data does not affect reaching "ready" (that comes from the camera video
     // frame), so we defer it until the first frame renders — see the
@@ -802,12 +989,14 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
     cancelCarrotVisionPageReturnConnect();
     if (nextVisionWanted && nextVisionBlockReason) {
       console.log("[perf] carrot vision realtime -> waiting", nextVisionBlockReason);
-      setCarrotVisionPhase(CARROT_VISION_PHASE.STARTING, {
-        reason: nextVisionBlockReason,
-        statusText: getUIText("connecting", "Connecting..."),
-        detailText: getCarrotVisionRuntimeWaitDetail(nextVisionBlockReason),
-        updateRtcStatus: false,
-      });
+      if (nextVisionBlockReason !== "recorded-replay") {
+        setCarrotVisionPhase(CARROT_VISION_PHASE.STARTING, {
+          reason: nextVisionBlockReason,
+          statusText: getCarrotVisionRuntimeWaitStatus(nextVisionBlockReason),
+          detailText: getCarrotVisionRuntimeWaitDetail(nextVisionBlockReason),
+          updateRtcStatus: false,
+        });
+      }
       rtcCancelRetry();
       rtcCancelRecovery();
       rtcDisarmTrackTimeout();
@@ -931,12 +1120,12 @@ window.addEventListener("carrot:pagechange", (event) => {
 });
 
 // Staged overlay gate, driven by vision phase:
-//   - Connect the heavy overlay multiplex WS (modelV2 + 8 services, full-rate)
-//     only once the camera video has produced its first renderable frame
+//   - Expand the shared compact WS to overlay fields only once the camera video
+//     has produced its first renderable frame
 //     (phase === "ready"). Until then the WebRTC first-frame/keyframe owns the
 //     link + viewer CPU, so first-frame-waiting resolves fast.
-//   - When phase leaves "ready" for an active (re)connection state, drop the
-//     overlay WS again so the reconnect's keyframe gets a clean window. With
+//   - When phase leaves "ready" for an active (re)connection state, contract the
+//     compact WS to HUD fields so the reconnect's keyframe gets a clean window. With
 //     the tolerant freeze watchdog, transient stalls hold at phase "ready"
 //     (no churn here); only genuine reconnects leave "ready", which is exactly
 //     when we want the link freed.
@@ -950,7 +1139,9 @@ window.addEventListener("carrot:visionstatechange", (event) => {
     _overlayStaged = false;
     return;
   }
-  const isReady = state.controlState === CARROT_VISION_CONTROL.LIVE && !isCarrotVisionTestActive();
+  const isReady = state.controlState === CARROT_VISION_CONTROL.LIVE
+    && !isCarrotVisionTestActive()
+    && !isCarrotRecordedReplayActive();
   if (isReady && !_overlayStaged) {
     _overlayStaged = true;
     window.CarrotVisionRaw?.connectOverlay?.();

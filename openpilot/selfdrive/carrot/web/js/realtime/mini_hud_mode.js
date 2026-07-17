@@ -16,9 +16,6 @@
 
   function readRequestMode() {
     const search = new URLSearchParams(window.location.search);
-    // View-test mode (mini_hud_demo.js) always forces the HUD on so mock
-    // scenarios render on any viewport, even without a vehicle connected.
-    if (search.has("mhud_test")) return "force";
     const value = search.get(PARAM);
     if (value === "0" || value === "off") return "off";
     if (value === "1" || value === "force") return "force";
@@ -26,8 +23,8 @@
     return "detect";
   }
 
-  // Web setting gate. Only the default "detect" path is gated — explicit URL
-  // params (off/force/auto/mhud_test) stay honored as developer overrides.
+  // Web setting gate. Only the default "detect" path is gated; explicit URL
+  // params (off/force/auto) stay honored as overrides.
   function settingEnabled() {
     const settings = window.CarrotWebSettingsState || {};
     const value = Object.prototype.hasOwnProperty.call(settings, "mini_hud_enabled")
