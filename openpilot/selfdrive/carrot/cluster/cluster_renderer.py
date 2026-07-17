@@ -74,6 +74,7 @@ from cluster_scene import (
     Vec3,
     VehicleBox,
     build_cluster_scene,
+    cluster_scene_state_key,
 )
 from cluster_system_monitor import SystemStats, SystemStatsSampler
 from cluster_utils import blink_visible, clamp
@@ -818,6 +819,8 @@ class ClusterUiRenderer:
         self._direct_nv12_readback_disabled = False
         self._vehicle_model = None
         self._vehicle_model_load_attempted = False
+        self._scene_cache_key: tuple[object, ...] | None = None
+        self._scene_cache: ClusterScene | None = None
         self._speed_bg_texture = None
         self._traffic_red_texture = None
         self._traffic_green_texture = None
@@ -1082,6 +1085,8 @@ class ClusterUiRenderer:
             rl.unload_model(self._vehicle_model)
             self._vehicle_model = None
         self._vehicle_model_load_attempted = False
+        self._scene_cache_key = None
+        self._scene_cache = None
         self._route_video_size = None
         self._route_video_frame_id = None
         rl.close_window()
@@ -1251,12 +1256,7 @@ class ClusterUiRenderer:
             self._close_live_road_camera()
         theme = self._current_theme()
         profile_stage = self._profile_start()
-        scene = build_cluster_scene(
-            state,
-            self._profile_add_elapsed if self.profile_enabled else None,
-            highlight_lane_lit=self._highlight_lane_lit(state, signal_lights),
-            theme=theme,
-        )
+        scene = self._scene_for_state(state, self._highlight_lane_lit(state, signal_lights), theme)
         self._profile_add("render_world.build_scene", profile_stage)
         profile_stage = self._profile_start()
         rl.clear_background(rl_color(theme.bg))
@@ -1272,6 +1272,25 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_scene(scene, state)
             self._profile_add("render_world.draw_scene", profile_stage)
+
+    def _scene_for_state(
+        self,
+        state: ClusterUiState,
+        highlight_lane_lit: bool,
+        theme: ClusterTheme,
+    ) -> ClusterScene:
+        cache_key = (*cluster_scene_state_key(state), highlight_lane_lit, theme)
+        if self._scene_cache is not None and cache_key == self._scene_cache_key:
+            return self._scene_cache
+        scene = build_cluster_scene(
+            state,
+            self._profile_add_elapsed if self.profile_enabled else None,
+            highlight_lane_lit=highlight_lane_lit,
+            theme=theme,
+        )
+        self._scene_cache_key = cache_key
+        self._scene_cache = scene
+        return scene
 
     def _draw_camera_background(self, state: ClusterUiState) -> None:
         if state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:

@@ -3369,6 +3369,52 @@ def data_geometry_mode_for_state(state: ClusterUiState) -> bool:
     )
 
 
+SCENE_STATE_FIELDS = (
+    "speed_kph",
+    "steering",
+    "vision_yaw_rate_rps",
+    "camera_view_mode",
+    "surround_view_active",
+    "surround_yaw_deg",
+    "surround_pitch_deg",
+    "lane_width_m",
+    "lanes",
+    "lane_change",
+    "lane_change_phase",
+    "highlight_lane",
+    "highlight_lane_offset",
+    "ego_lane_offset",
+    "road_view_lane_position",
+    "extra_left_lane_visible",
+    "extra_right_lane_visible",
+    "left_blindspot",
+    "right_blindspot",
+    "model_path",
+    "route_overlay",
+    "detected_vehicles",
+    "radar_points",
+    "radar_display_mode",
+    "radar_source_color_mode",
+    "left_road_edge_offset",
+    "right_road_edge_offset",
+    "left_road_edge_points",
+    "right_road_edge_points",
+    "left_road_edge_lateral_shift_m",
+    "right_road_edge_lateral_shift_m",
+    "left_road_edge_distance_m",
+    "right_road_edge_distance_m",
+    "left_road_edge_confidence",
+    "right_road_edge_confidence",
+    "cruise_display_state",
+    "cruise_gap",
+    "longitudinal_t_follow_s",
+)
+
+
+def cluster_scene_state_key(state: ClusterUiState) -> tuple[object, ...]:
+    return tuple(getattr(state, field) for field in SCENE_STATE_FIELDS)
+
+
 def build_cluster_scene(
     state: ClusterUiState,
     profile_add: ProfileAdd | None = None,

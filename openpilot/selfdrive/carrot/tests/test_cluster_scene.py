@@ -1,6 +1,8 @@
+import ast
 from dataclasses import replace
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -8,9 +10,18 @@ import pytest
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
-from cluster_config import CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA, EGO_FORWARD_M, VEHICLE_LENGTH_M
+from cluster_config import CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA, EGO_FORWARD_M, LIGHT_CLUSTER_THEME, VEHICLE_LENGTH_M
 from cluster_models import ClusterUiState, DetectedVehicle, LaneMarking, RadarPoint
-from cluster_scene import build_cluster_scene, detected_vehicle_scene_forward_m, render_scene_forward_m
+import cluster_renderer
+from cluster_renderer import ClusterUiRenderer
+import cluster_scene
+from cluster_scene import (
+  SCENE_STATE_FIELDS,
+  build_cluster_scene,
+  cluster_scene_state_key,
+  detected_vehicle_scene_forward_m,
+  render_scene_forward_m,
+)
 
 
 def _cluster_state(**changes) -> ClusterUiState:
@@ -45,6 +56,41 @@ def _cluster_state(**changes) -> ClusterUiState:
     lanes=(LaneMarking(-1.8), LaneMarking(1.8)),
   )
   return replace(state, **changes)
+
+
+def test_scene_cache_key_covers_every_cluster_scene_state_access() -> None:
+  tree = ast.parse(Path(cluster_scene.__file__).read_text(encoding="utf-8"))
+  accessed_fields = {
+    node.attr
+    for node in ast.walk(tree)
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "state"
+  }
+
+  assert accessed_fields == set(SCENE_STATE_FIELDS)
+
+
+def test_renderer_reuses_scene_when_only_hud_state_changes(monkeypatch) -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._scene_cache_key = None
+  renderer._scene_cache = None
+  renderer.profile_enabled = False
+  scenes = []
+
+  def build_scene(*_args, **_kwargs):
+    scene = SimpleNamespace(sequence=len(scenes))
+    scenes.append(scene)
+    return scene
+
+  monkeypatch.setattr(cluster_renderer, "build_cluster_scene", build_scene)
+  state = _cluster_state()
+  first = renderer._scene_for_state(state, True, LIGHT_CLUSTER_THEME)
+  hud_only = renderer._scene_for_state(replace(state, center_clock_text="12:34"), True, LIGHT_CLUSTER_THEME)
+  changed_world = renderer._scene_for_state(replace(state, steering=0.1), True, LIGHT_CLUSTER_THEME)
+
+  assert cluster_scene_state_key(state) == cluster_scene_state_key(replace(state, center_clock_text="12:34"))
+  assert first is hud_only
+  assert changed_world is not first
+  assert len(scenes) == 2
 
 
 def test_longitudinal_render_distance_is_halved_without_changing_lateral_data() -> None:
