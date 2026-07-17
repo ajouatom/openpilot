@@ -209,6 +209,92 @@ def test_renderer_fonts_use_bilinear_filter_without_mipmaps(tmp_path, monkeypatc
   assert load_args[1][3] == len(renderer._navi_font_codepoints())
 
 
+def test_stroked_text_texture_rasterizes_once_and_reuses_cached_draw(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._font = object()
+  renderer._korean_font = None
+  renderer._stroked_text_texture_cache = OrderedDict()
+  renderer._pending_stroked_text_textures = OrderedDict()
+  renderer._stroked_text_texture_cache_enabled = True
+  renderer._text_measure_cache = {}
+  renderer.profile_enabled = False
+  renderer._profile_samples = []
+  image = object()
+  texture = types.SimpleNamespace(id=7)
+  image_draws = []
+  texture_loads = []
+  texture_draws = []
+
+  monkeypatch.setattr(cluster_renderer, "rl_color", lambda color: color)
+  monkeypatch.setattr(cluster_renderer.rl, "measure_text_ex", lambda *_args: types.SimpleNamespace(x=50, y=20))
+  monkeypatch.setattr(cluster_renderer.rl, "gen_image_color", lambda *_args: image)
+  monkeypatch.setattr(
+    cluster_renderer.rl,
+    "image_draw_text_ex",
+    lambda *args: image_draws.append(args),
+  )
+  monkeypatch.setattr(
+    cluster_renderer.rl,
+    "load_texture_from_image",
+    lambda source: texture_loads.append(source) or texture,
+  )
+  monkeypatch.setattr(cluster_renderer.rl, "is_texture_valid", lambda _texture: True)
+  monkeypatch.setattr(cluster_renderer.rl, "set_texture_filter", lambda *_args: None)
+  monkeypatch.setattr(cluster_renderer.rl, "unload_image", lambda *_args: None)
+  monkeypatch.setattr(
+    cluster_renderer.rl,
+    "draw_texture_pro",
+    lambda *args: texture_draws.append(args),
+  )
+
+  direct_draws = []
+  monkeypatch.setattr(renderer, "_draw_text", lambda *args: direct_draws.append(args))
+
+  renderer._draw_text_with_stroke("NAVI", 100, 50, 27, (0, 255, 0), (0, 0, 0), 2, cache=True)
+
+  assert len(direct_draws) == 9
+  assert image_draws == []
+  assert texture_loads == []
+  assert len(renderer._pending_stroked_text_textures) == 1
+
+  renderer._flush_pending_stroked_text_textures()
+  renderer._draw_text_with_stroke("NAVI", 100, 50, 27, (0, 255, 0), (0, 0, 0), 2, cache=True)
+
+  assert len(image_draws) == 9
+  assert texture_loads == [image]
+  assert len(texture_draws) == 1
+  assert len(renderer._stroked_text_texture_cache) == 1
+
+
+def test_fast_changing_stroked_text_can_bypass_texture_cache(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._stroked_text_texture_cache_enabled = True
+  direct_draws = []
+  monkeypatch.setattr(
+    renderer,
+    "_draw_text",
+    lambda *args: direct_draws.append(args),
+  )
+  monkeypatch.setattr(
+    renderer,
+    "_stroked_text_texture",
+    lambda *_args: pytest.fail("dynamic text must not create a cached texture"),
+  )
+
+  renderer._draw_text_with_stroke(
+    "+0.17",
+    100,
+    50,
+    17,
+    (255, 255, 255),
+    (0, 0, 0),
+    2,
+    cache=False,
+  )
+
+  assert len(direct_draws) == 9
+
+
 def test_cluster_autorun_falls_back_only_for_h264_initialization(monkeypatch):
   cluster_autorun = _import_cluster_autorun(monkeypatch)
   carrot_package = importlib.import_module("selfdrive.carrot")

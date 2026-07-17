@@ -114,7 +114,7 @@ DRIVE_CAMERA_EGO_BOTTOM_POSITION_M = (0.0, -6.0, 5.00)
 DRIVE_CAMERA_EGO_BOTTOM_TARGET_M = (0.0, 14.0, -1.00)
 DRIVE_VIEW_REAR_RELATIVE_M = -5.0
 DRIVE_VIEW_REAR_ROAD_MARGIN_M = 8.0
-LONGITUDINAL_RENDER_DISTANCE_SCALE = 1.0
+LONGITUDINAL_RENDER_DISTANCE_SCALE = 0.5
 DRIVE_VIEW_REAR_VISIBLE_M = EGO_FORWARD_M + DRIVE_VIEW_REAR_RELATIVE_M
 DRIVE_VIEW_ROAD_START_M = (
     DRIVE_VIEW_REAR_VISIBLE_M - DRIVE_VIEW_REAR_ROAD_MARGIN_M
@@ -395,16 +395,18 @@ def data_scene_forward_m(relative_forward_m: float) -> float:
     return EGO_FORWARD_M + relative_forward_m
 
 
-def render_relative_forward_m(relative_forward_m: float) -> float:
-    return relative_forward_m * LONGITUDINAL_RENDER_DISTANCE_SCALE
+def longitudinal_render_distance_scale(state: ClusterUiState) -> float:
+    if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+        return 1.0
+    return LONGITUDINAL_RENDER_DISTANCE_SCALE
 
 
-def render_scene_forward_m(relative_forward_m: float) -> float:
-    return data_scene_forward_m(render_relative_forward_m(relative_forward_m))
+def render_scene_forward_m(relative_forward_m: float, state: ClusterUiState) -> float:
+    return data_scene_forward_m(relative_forward_m * longitudinal_render_distance_scale(state))
 
 
-def detected_vehicle_scene_forward_m(vehicle: DetectedVehicle) -> float:
-    forward_m = render_scene_forward_m(vehicle.longitudinal_m)
+def detected_vehicle_scene_forward_m(vehicle: DetectedVehicle, state: ClusterUiState) -> float:
+    forward_m = render_scene_forward_m(vehicle.longitudinal_m, state)
     if vehicle.longitudinal_m > 0.0 and (vehicle.primary or vehicle.cut_in):
         forward_m += VEHICLE_LENGTH_M * 0.5
     return forward_m
@@ -1569,7 +1571,7 @@ def follow_distance_marker_strips(
     distance_m = cruise_follow_distance_marker_m(state)
     if distance_m is None or distance_m <= 0.0 or len(points) < 2:
         return ()
-    forward_m = render_scene_forward_m(distance_m)
+    forward_m = render_scene_forward_m(distance_m, state)
     if forward_m < points[0].y or forward_m > points[-1].y:
         return ()
     center_x_m = centerline_x_at_forward(points, forward_m)
@@ -1898,7 +1900,7 @@ def radar_point_markers(
     for point in state.radar_points:
         if radar_point_hidden_by_vehicle_box(point, vehicle_points, state):
             continue
-        forward_m = render_scene_forward_m(point.longitudinal_m)
+        forward_m = render_scene_forward_m(point.longitudinal_m, state)
         if forward_m < min_forward_m or forward_m > max_forward_m:
             continue
         color = radar_point_color(point)
@@ -2226,7 +2228,7 @@ def radar_vehicle_box(
         body_color = AMBER
     else:
         body_color = vehicle_color_for_source(point.source, theme, state.radar_source_color_mode)
-    forward_m = render_scene_forward_m(point.longitudinal_m)
+    forward_m = render_scene_forward_m(point.longitudinal_m, state)
     center_x_m = radar_point_scene_x_m(point, state, lane_width_m, forward_m)
     right_x, right_y, forward_x, forward_y = radar_point_vehicle_heading(point, state, lateral_speed_offset_mps)
     if point.source == "cornerRadar" and state.surround_view_active:
@@ -3431,7 +3433,7 @@ def build_cluster_scene(
     road_steps = ROAD_STEPS_SURROUND if camera_active else ROAD_STEPS_MODEL if route_mode else ROAD_STEPS_SIM
     if (state.detected_vehicles or selected_radar_vehicle_boxes) and not camera_active:
         nearest_detected_y = min(
-            (render_scene_forward_m(vehicle.longitudinal_m) for vehicle in state.detected_vehicles),
+            (render_scene_forward_m(vehicle.longitudinal_m, state) for vehicle in state.detected_vehicles),
             default=ROAD_FAR_M,
         )
         nearest_radar_y = min((vehicle.center.y for vehicle in selected_radar_vehicle_boxes), default=ROAD_FAR_M)
@@ -3558,7 +3560,7 @@ def build_cluster_scene(
         detected_vehicle_boxes = tuple(
             vehicle_box(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
-                detected_vehicle_scene_forward_m(detected),
+                detected_vehicle_scene_forward_m(detected, state),
                 state.steering,
                 lane_width_m,
                 vehicle_color_for_detection(detected, theme, state.radar_source_color_mode),
@@ -3592,7 +3594,7 @@ def build_cluster_scene(
         detected_blockers = tuple(
             PathBlocker(
                 clamp(detected.lateral_m / lane_width_m, -2.2, 2.2),
-                render_scene_forward_m(detected.longitudinal_m),
+                render_scene_forward_m(detected.longitudinal_m, state),
                 VEHICLE_LENGTH_M,
             )
             for detected in blocking_detected_vehicles

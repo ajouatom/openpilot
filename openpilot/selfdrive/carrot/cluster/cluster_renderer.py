@@ -289,6 +289,8 @@ NAVI_MODE_RIGHT_W = DESIGN_WIDTH - NAVI_MODE_RIGHT_X
 KOREAN_FONT_BASE_SIZE = 32
 SYSTEM_STATS_REFRESH_SECONDS = 1.0
 TEXT_MEASURE_CACHE_LIMIT = 1024
+STROKED_TEXT_TEXTURE_CACHE_LIMIT = 384
+STROKED_TEXT_TEXTURE_PADDING_PX = 2
 TRIANGLE_STRIP_POINT_CACHE_LIMIT = 256
 DEBUG_PLOT_MAX_SAMPLES = 360
 DEBUG_PLOT_SAMPLE_SECONDS = 0.05
@@ -496,6 +498,28 @@ class CachedTextTexture:
     texture_width: int
     texture_height: int
     padding_px: float
+
+
+StrokedTextTextureCacheKey = tuple[
+    int,
+    str,
+    float,
+    float,
+    tuple[int, int, int, int],
+    tuple[int, int, int, int],
+    int,
+]
+
+
+@dataclass(frozen=True, slots=True)
+class PendingStrokedTextTexture:
+    font: object
+    text: str
+    render_size: float
+    spacing: float
+    fill_color: tuple[int, int, int, int]
+    stroke_color: tuple[int, int, int, int]
+    stroke_width: int
 
 
 @dataclass(slots=True)
@@ -823,6 +847,12 @@ class ClusterUiRenderer:
             CachedTextTexture,
         ] = OrderedDict()
         self._world_label_texture_cache_enabled = os.environ.get("CLUSTER_WORLD_LABEL_TEXTURE_CACHE", "0") == "1"
+        self._stroked_text_texture_cache: OrderedDict[StrokedTextTextureCacheKey, CachedTextTexture] = OrderedDict()
+        self._pending_stroked_text_textures: OrderedDict[
+            StrokedTextTextureCacheKey,
+            PendingStrokedTextTexture,
+        ] = OrderedDict()
+        self._stroked_text_texture_cache_enabled = os.environ.get("CLUSTER_STROKED_TEXT_TEXTURE_CACHE", "1") != "0"
         self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
         self._debug_plot_mode_prev = -1
@@ -954,6 +984,7 @@ class ClusterUiRenderer:
         self._profile_add("renderer.open.total", profile_total)
 
     def close(self) -> None:
+        self._system_stats.close()
         if not self._window_open:
             return
         if self._direct_nv12_readback is not None:
@@ -986,6 +1017,10 @@ class ClusterUiRenderer:
         for cached_text in self._world_label_texture_cache.values():
             rl.unload_texture(cached_text.texture)
         self._world_label_texture_cache.clear()
+        for cached_text in self._stroked_text_texture_cache.values():
+            rl.unload_texture(cached_text.texture)
+        self._stroked_text_texture_cache.clear()
+        self._pending_stroked_text_textures.clear()
         if self._route_video_texture is not None:
             rl.unload_texture(self._route_video_texture)
             self._route_video_texture = None
@@ -1063,6 +1098,7 @@ class ClusterUiRenderer:
         profile_stage = self._profile_start()
         rl.end_drawing()
         self._profile_add("render_frame.end_drawing", profile_stage)
+        self._flush_pending_stroked_text_textures()
 
     def render_route_replay_frame(
         self,
@@ -1094,6 +1130,7 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             rl.end_drawing()
             self._profile_add("render_route_frame.end_drawing", profile_stage)
+            self._flush_pending_stroked_text_textures()
 
     def route_replay_control_input(
         self,
@@ -1745,6 +1782,7 @@ class ClusterUiRenderer:
         self.render(state)
         rl.end_texture_mode()
         self._profile_add("render_to_nv12.draw_to_target", profile_stage)
+        self._flush_pending_stroked_text_textures()
 
         profile_stage = self._profile_start()
         upload_target = self._get_portrait_upload_target(output_width, output_height)
@@ -1974,6 +2012,7 @@ class ClusterUiRenderer:
         self.render(state)
         rl.end_texture_mode()
         self._profile_add("render_to_image.draw_to_target", profile_stage)
+        self._flush_pending_stroked_text_textures()
 
         if portrait_upload:
             profile_stage = self._profile_start()
@@ -2534,6 +2573,15 @@ class ClusterUiRenderer:
         if self.width <= 0:
             return 0.0
         return self._world_view_shift_x(state) * DESIGN_WIDTH / self.width
+
+    def _turn_signal_center_x_offset(self, state: ClusterUiState, side: str) -> float:
+        signal_center_x = (
+            LANE_TURN_SIGNAL_LEFT_CENTER_X if side == "left" else LANE_TURN_SIGNAL_RIGHT_CENTER_X
+        )
+        if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+            camera_signal_center_x = CAMERA_BACKGROUND_X + signal_center_x * CAMERA_BACKGROUND_W / DESIGN_WIDTH
+            return camera_signal_center_x - signal_center_x
+        return -self._world_view_shift_design_x(state)
 
     def _draw_ego_tpms(
         self,
@@ -3205,12 +3253,11 @@ class ClusterUiRenderer:
             self._profile_add("hud.accel_block", profile_stage)
             self._draw_steering_output_block(state)
             profile_stage = self._profile_start()
-            turn_signal_shift_x = -self._world_view_shift_design_x(state)
             self._draw_turn_signal(
                 "left",
                 left_signal_lit,
                 show_inactive=state.debug_ui_visible,
-                center_x_offset=turn_signal_shift_x,
+                center_x_offset=self._turn_signal_center_x_offset(state, "left"),
             )
             self._profile_add("hud.turn_signal_left", profile_stage)
             profile_stage = self._profile_start()
@@ -3221,7 +3268,7 @@ class ClusterUiRenderer:
                 "right",
                 right_signal_lit,
                 show_inactive=state.debug_ui_visible,
-                center_x_offset=turn_signal_shift_x,
+                center_x_offset=self._turn_signal_center_x_offset(state, "right"),
             )
             self._profile_add("hud.turn_signal_right", profile_stage)
             traffic_drawn_in_map = screen_mode == CLUSTER_SCREEN_MODE_DEFAULT and self._navi_map_frame_present(
@@ -3403,6 +3450,7 @@ class ClusterUiRenderer:
                 (10, 13, 16),
                 2,
                 anchor="right",
+                cache=True,
             )
 
     def _draw_debug_plot(
@@ -4523,6 +4571,7 @@ class ClusterUiRenderer:
                     (10, 13, 16),
                     2,
                     anchor="right",
+                    cache=True,
                 )
             return
 
@@ -5465,11 +5514,20 @@ class ClusterUiRenderer:
             text = self._ellipsize_text(text, text_size, GIT_STATUS_MAX_TEXT_W)
             dot_center_x = GIT_STATUS_MARGIN + GIT_STATUS_DOT_RADIUS
             rl.draw_circle_v(rl.Vector2(dot_center_x, center_y), GIT_STATUS_DOT_RADIUS, rl_color(color))
-            self._draw_text_with_stroke(text, text_x, center_y, text_size, WHITE, (5, 9, 12), 2)
+            self._draw_text_with_stroke(text, text_x, center_y, text_size, WHITE, (5, 9, 12), 2, cache=True)
         if network_address:
             network_text = self._ellipsize_text(network_address, text_size, GIT_STATUS_MAX_TEXT_W)
             network_y = center_y - row_h - 4.0
-            self._draw_text_with_stroke(network_text, text_x, network_y, text_size, WHITE, (5, 9, 12), 2)
+            self._draw_text_with_stroke(
+                network_text,
+                text_x,
+                network_y,
+                text_size,
+                WHITE,
+                (5, 9, 12),
+                2,
+                cache=True,
+            )
             network_width, _ = self._measure_text(network_text, text_size, spacing)
             self._draw_actual_fps(actual_fps, text_x + network_width + 18.0, network_y)
 
@@ -5817,6 +5875,7 @@ class ClusterUiRenderer:
             (5, 9, 12),
             2,
             anchor="center",
+            cache=True,
         )
 
     def _draw_speed_gear_badge(self, state: ClusterUiState) -> None:
@@ -5842,6 +5901,7 @@ class ClusterUiRenderer:
             (5, 9, 12),
             2,
             anchor="center",
+            cache=True,
         )
 
     def _draw_speed_panel_bg(self) -> None:
@@ -5900,10 +5960,26 @@ class ClusterUiRenderer:
             else:
                 self._rounded_rect(fill_x, center, fill_width, fill_height, 13, fill_color)
         self._draw_text_with_stroke(
-            accel_text, gauge_center_x, SIDE_GAUGE_VALUE_Y, accel_text_size, fill_color, (5, 9, 12), 2, anchor="center"
+            accel_text,
+            gauge_center_x,
+            SIDE_GAUGE_VALUE_Y,
+            accel_text_size,
+            fill_color,
+            (5, 9, 12),
+            2,
+            anchor="center",
+            cache=False,
         )
         self._draw_text_with_stroke(
-            "accel", gauge_center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, WHITE, (5, 9, 12), 2, anchor="center"
+            "accel",
+            gauge_center_x,
+            bottom + SIDE_GAUGE_LABEL_OFFSET,
+            17,
+            WHITE,
+            (5, 9, 12),
+            2,
+            anchor="center",
+            cache=True,
         )
 
         energy_value = state.fuel_gauge
@@ -5941,10 +6017,26 @@ class ClusterUiRenderer:
             color = BLUE if normalized > 0 else AMBER if normalized < 0 else theme.muted
             self._draw_bipolar_gauge(gauge_center_x, top, bottom, gauge_width, normalized, color, outline)
             self._draw_text_with_stroke(
-                value_text, gauge_center_x, SIDE_GAUGE_VALUE_Y, 17, color, (5, 9, 12), 2, anchor="center"
+                value_text,
+                gauge_center_x,
+                SIDE_GAUGE_VALUE_Y,
+                17,
+                color,
+                (5, 9, 12),
+                2,
+                anchor="center",
+                cache=False,
             )
             self._draw_text_with_stroke(
-                "steer", gauge_center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, WHITE, (5, 9, 12), 2, anchor="center"
+                "steer",
+                gauge_center_x,
+                bottom + SIDE_GAUGE_LABEL_OFFSET,
+                17,
+                WHITE,
+                (5, 9, 12),
+                2,
+                anchor="center",
+                cache=True,
             )
 
         urea_value = state.urea_gauge
@@ -6008,7 +6100,15 @@ class ClusterUiRenderer:
             f"{value * 100:.0f}%", center_x, top - 16, 17, color, (5, 9, 12), 2, anchor="center"
         )
         self._draw_text_with_stroke(
-            label, center_x, bottom + SIDE_GAUGE_LABEL_OFFSET, 17, WHITE, (5, 9, 12), 2, anchor="center"
+            label,
+            center_x,
+            bottom + SIDE_GAUGE_LABEL_OFFSET,
+            17,
+            WHITE,
+            (5, 9, 12),
+            2,
+            anchor="center",
+            cache=True,
         )
 
     def _turn_signal_lights(self, state: ClusterUiState) -> tuple[bool, bool]:
@@ -6146,6 +6246,8 @@ class ClusterUiRenderer:
         color: tuple[int, int, int],
         anchor: str = "left",
     ) -> None:
+        if not text:
+            return
         font = self._font_for_text(text)
         spacing = max(1.0, size * 0.02)
         text_width, text_height = self._measure_text(text, size, spacing, font)
@@ -6178,7 +6280,21 @@ class ClusterUiRenderer:
         stroke_color: tuple[int, int, int],
         stroke_width: int,
         anchor: str = "left",
+        cache: bool = False,
     ) -> None:
+        if not text:
+            return
+        if cache and stroke_width > 0 and self._stroked_text_texture_cache_enabled:
+            cached_text = self._stroked_text_texture(
+                text,
+                size,
+                color,
+                stroke_color,
+                stroke_width,
+            )
+            if cached_text is not None:
+                self._draw_cached_text_texture(cached_text, x, y, anchor)
+                return
         if stroke_width > 0:
             for dx, dy in (
                 (-stroke_width, 0),
@@ -6192,6 +6308,179 @@ class ClusterUiRenderer:
             ):
                 self._draw_text(text, x + dx, y + dy, size, stroke_color, anchor)
         self._draw_text(text, x, y, size, color, anchor)
+
+    def _draw_cached_text_texture(
+        self,
+        cached_text: CachedTextTexture,
+        x: float,
+        y: float,
+        anchor: str,
+    ) -> None:
+        draw_x = x
+        draw_y = y
+        if anchor == "center":
+            draw_x -= cached_text.text_width * 0.5
+            draw_y -= cached_text.text_height * 0.5
+        elif anchor == "left":
+            draw_y -= cached_text.text_height * 0.5
+        elif anchor == "right":
+            draw_x -= cached_text.text_width
+            draw_y -= cached_text.text_height * 0.5
+        draw_x -= cached_text.padding_px
+        draw_y -= cached_text.padding_px
+        rl.draw_texture_pro(
+            cached_text.texture,
+            rl.Rectangle(
+                0.0,
+                0.0,
+                float(cached_text.texture_width),
+                float(cached_text.texture_height),
+            ),
+            rl.Rectangle(
+                draw_x,
+                draw_y,
+                float(cached_text.texture_width),
+                float(cached_text.texture_height),
+            ),
+            rl.Vector2(0.0, 0.0),
+            0.0,
+            rl_color(WHITE),
+        )
+
+    def _stroked_text_texture(
+        self,
+        text: str,
+        size: float,
+        color: tuple[int, int, int] | tuple[int, int, int, int],
+        stroke_color: tuple[int, int, int] | tuple[int, int, int, int],
+        stroke_width: int,
+    ) -> CachedTextTexture | None:
+        font = self._font_for_text(text)
+        render_size = float(size)
+        spacing = max(1.0, render_size * 0.02)
+        fill_key = rgba_key(color)
+        stroke_key = rgba_key(stroke_color)
+        cache_key = (
+            id(font),
+            text,
+            render_size,
+            spacing,
+            fill_key,
+            stroke_key,
+            int(stroke_width),
+        )
+        cached_text = self._stroked_text_texture_cache.get(cache_key)
+        if cached_text is not None:
+            self._stroked_text_texture_cache.move_to_end(cache_key)
+            return cached_text
+
+        # Texture upload inside an active target corrupts the miss frame on GLES.
+        self._pending_stroked_text_textures.setdefault(
+            cache_key,
+            PendingStrokedTextTexture(
+                font=font,
+                text=text,
+                render_size=render_size,
+                spacing=spacing,
+                fill_color=fill_key,
+                stroke_color=stroke_key,
+                stroke_width=int(stroke_width),
+            ),
+        )
+        return None
+
+    def _flush_pending_stroked_text_textures(self) -> None:
+        if not self._pending_stroked_text_textures:
+            return
+        if not self._stroked_text_texture_cache_enabled:
+            self._pending_stroked_text_textures.clear()
+            return
+
+        profile_stage = self._profile_start()
+        pending_textures = self._pending_stroked_text_textures
+        self._pending_stroked_text_textures = OrderedDict()
+        for cache_key, pending in pending_textures.items():
+            if cache_key in self._stroked_text_texture_cache:
+                continue
+            cached_text = self._create_stroked_text_texture(pending)
+            if cached_text is None:
+                continue
+            self._stroked_text_texture_cache[cache_key] = cached_text
+            while len(self._stroked_text_texture_cache) > STROKED_TEXT_TEXTURE_CACHE_LIMIT:
+                _, old_text = self._stroked_text_texture_cache.popitem(last=False)
+                rl.unload_texture(old_text.texture)
+        self._profile_add("stroked_text_texture_cache.flush", profile_stage)
+
+    def _create_stroked_text_texture(
+        self,
+        pending: PendingStrokedTextTexture,
+    ) -> CachedTextTexture | None:
+        text_width, text_height = self._measure_text(
+            pending.text,
+            pending.render_size,
+            pending.spacing,
+            pending.font,
+        )
+        padding_px = float(max(0, pending.stroke_width) + STROKED_TEXT_TEXTURE_PADDING_PX)
+        texture_width = max(1, int(math.ceil(text_width + padding_px * 2.0)))
+        texture_height = max(1, int(math.ceil(text_height + padding_px * 2.0)))
+        image = None
+        texture = None
+        try:
+            image = rl.gen_image_color(texture_width, texture_height, rl_color((0, 0, 0, 0)))
+            for dx, dy in (
+                (-pending.stroke_width, 0),
+                (pending.stroke_width, 0),
+                (0, -pending.stroke_width),
+                (0, pending.stroke_width),
+                (-pending.stroke_width, -pending.stroke_width),
+                (pending.stroke_width, -pending.stroke_width),
+                (-pending.stroke_width, pending.stroke_width),
+                (pending.stroke_width, pending.stroke_width),
+            ):
+                rl.image_draw_text_ex(
+                    image,
+                    pending.font,
+                    pending.text,
+                    rl.Vector2(padding_px + dx, padding_px + dy),
+                    pending.render_size,
+                    pending.spacing,
+                    rl_color(pending.stroke_color),
+                )
+            rl.image_draw_text_ex(
+                image,
+                pending.font,
+                pending.text,
+                rl.Vector2(padding_px, padding_px),
+                pending.render_size,
+                pending.spacing,
+                rl_color(pending.fill_color),
+            )
+            texture = rl.load_texture_from_image(image)
+            if hasattr(rl, "is_texture_valid") and not rl.is_texture_valid(texture):
+                rl.unload_texture(texture)
+                return None
+            rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
+        except Exception:
+            if texture is not None:
+                try:
+                    rl.unload_texture(texture)
+                except Exception:
+                    pass
+            return None
+        finally:
+            if image is not None:
+                rl.unload_image(image)
+
+        cached_text = CachedTextTexture(
+            texture=texture,
+            text_width=text_width,
+            text_height=text_height,
+            texture_width=texture_width,
+            texture_height=texture_height,
+            padding_px=padding_px,
+        )
+        return cached_text
 
     def _draw_world_label_text(
         self,

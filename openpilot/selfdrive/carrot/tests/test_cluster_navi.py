@@ -33,6 +33,8 @@ from cluster_renderer import (
   CAMERA_BACKGROUND_W,
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
+  LANE_TURN_SIGNAL_LEFT_CENTER_X,
+  LANE_TURN_SIGNAL_RIGHT_CENTER_X,
   NAVI_LIVE_PANEL_X,
   SIDE_GAUGE_OUTLINE,
   ClusterUiRenderer,
@@ -473,6 +475,7 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   }
   dashboard = NaviDashboardState(True, "ipc://carrotNaviMedia", media=tuple(frames.values()))
   drawn = {}
+  stroked_text = []
 
   monkeypatch.setattr(
     ClusterUiRenderer,
@@ -494,11 +497,17 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
     return True
 
   monkeypatch.setattr(ClusterUiRenderer, "_draw_navi_media", capture_media)
+  monkeypatch.setattr(ClusterUiRenderer, "_ellipsize_text", lambda _self, text, *_args: text)
+  monkeypatch.setattr(
+    ClusterUiRenderer,
+    "_draw_text_with_stroke",
+    lambda _self, *args, **kwargs: stroked_text.append((args, kwargs)),
+  )
   monkeypatch.setattr("cluster_renderer.rl.draw_rectangle_rec", lambda *args, **kwargs: None)
   monkeypatch.setattr("cluster_renderer.rl.begin_scissor_mode", lambda *args, **kwargs: None)
   monkeypatch.setattr("cluster_renderer.rl.end_scissor_mode", lambda: None)
 
-  navi = SimpleNamespace(traffic_light=object(), route=None, vehicle=None)
+  navi = SimpleNamespace(traffic_light=object(), route=None, vehicle=SimpleNamespace(road_name="Test road"))
   renderer._draw_navi_live_panel(SimpleNamespace(navi_live=navi, navi_dashboard=dashboard))
 
   assert drawn["image:tbt_current_compact"].width == pytest.approx(310.0 * 1.2)
@@ -516,6 +525,9 @@ def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
   assert center_text.width == pytest.approx(220.0)
   assert center_text.height == pytest.approx(78.0)
   assert "image:lane_top" not in drawn
+  assert len(stroked_text) == 1
+  assert stroked_text[0][0][0] == "Test road"
+  assert stroked_text[0][1] == {"anchor": "right", "cache": True}
 
 
 def test_navi_dashboard_hides_top_lane_and_draws_received_signal(monkeypatch):
@@ -610,27 +622,41 @@ def test_navi_panel_shifts_3d_camera_modes_left():
   )) == 0
 
 
-def test_navi_panel_uses_same_design_shift_for_turn_signals():
+def test_turn_signals_center_on_the_active_world_or_road_camera_content():
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1280
   renderer.screen_mode = 0
   dashboard = NaviDashboardState(False, "tcp://127.0.0.1:7714")
 
-  assert renderer._world_view_shift_design_x(SimpleNamespace(
+  assert renderer._turn_signal_center_x_offset(SimpleNamespace(
     camera_view_mode=0,
     navi_live=None,
     navi_dashboard=dashboard,
-  )) == pytest.approx(398)
-  assert renderer._world_view_shift_design_x(SimpleNamespace(
+  ), "left") == pytest.approx(-398)
+  assert renderer._turn_signal_center_x_offset(SimpleNamespace(
     camera_view_mode=1,
     navi_live=None,
     navi_dashboard=dashboard,
-  )) == pytest.approx(398)
-  assert renderer._world_view_shift_design_x(SimpleNamespace(
+  ), "right") == pytest.approx(-398)
+
+  road_camera_state = SimpleNamespace(
     camera_view_mode=2,
     navi_live=None,
     navi_dashboard=dashboard,
-  )) == 0
+  )
+  left_offset = renderer._turn_signal_center_x_offset(road_camera_state, "left")
+  right_offset = renderer._turn_signal_center_x_offset(road_camera_state, "right")
+  assert LANE_TURN_SIGNAL_LEFT_CENTER_X + left_offset == pytest.approx(
+    CAMERA_BACKGROUND_X + LANE_TURN_SIGNAL_LEFT_CENTER_X * CAMERA_BACKGROUND_W / DESIGN_WIDTH
+  )
+  assert LANE_TURN_SIGNAL_RIGHT_CENTER_X + right_offset == pytest.approx(
+    CAMERA_BACKGROUND_X + LANE_TURN_SIGNAL_RIGHT_CENTER_X * CAMERA_BACKGROUND_W / DESIGN_WIDTH
+  )
+  assert renderer._turn_signal_center_x_offset(SimpleNamespace(
+    camera_view_mode=0,
+    navi_live=None,
+    navi_dashboard=None,
+  ), "left") == 0
 
 
 def test_road_camera_ends_exactly_where_right_navigation_panel_begins():

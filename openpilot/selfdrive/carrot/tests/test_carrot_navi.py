@@ -11,6 +11,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from openpilot.selfdrive.carrot.carrot_navi import (
   BINARY_HEADER,
   CATALOG,
+  CLUSTER_ENABLED_IMAGE_NAMES,
   CarrotNaviDiscoveryBeacon,
   ClusterNaviMapParamReader,
   CarrotNaviReceiver,
@@ -114,7 +115,7 @@ def test_receiver_app_does_not_retry_other_start_errors(monkeypatch):
   assert exc_info.value.errno == errno.EACCES
 
 
-def test_manifest_enables_complete_catalog():
+def test_manifest_disables_only_cluster_unused_images():
   manifest = build_manifest("12345678")
 
   assert manifest["type"] == "subscription_manifest"
@@ -125,7 +126,14 @@ def test_manifest_enables_complete_catalog():
     for stream in manifest["streams"]
     if stream["enabled"]
   }
-  assert enabled == set(CATALOG)
+  assert enabled == set(CATALOG) - {("image", "lane_top")}
+  assert CLUSTER_ENABLED_IMAGE_NAMES == {
+    "tbt_current_compact", "tbt_current_full", "tbt_next",
+    "traffic_signal", "lane_bottom",
+    "safety_primary", "safety_secondary", "safety_section",
+    "crossroad_minimized", "crossroad_expanded",
+    "center_tbt_icon", "center_tbt_text", "center_tbt_fee",
+  }
   assert [stream["stream_handle"] for stream in manifest["streams"]] == list(range(1, 29))
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
   assert map_stream["params"]["map_theme"] == "auto"
@@ -563,6 +571,12 @@ async def test_websocket_negotiation_and_json_receive():
       stream for stream in manifest["streams"]
       if stream["kind"] == "image" and stream["name"] == "tbt_current_compact"
     )["enabled"] is True
+    assert next(
+      stream for stream in manifest["streams"]
+      if stream["kind"] == "image" and stream["name"] == "lane_top"
+    )["enabled"] is False
+    with pytest.raises(ValueError, match="not enabled"):
+      receiver.stream_config(session_id, "image", "lane_top")
   finally:
     if item is not None:
       await item.close()
@@ -572,7 +586,7 @@ async def test_websocket_negotiation_and_json_receive():
 
 
 @pytest.mark.asyncio
-async def test_all_catalog_item_routes_receive_value_and_clear():
+async def test_all_enabled_catalog_item_routes_receive_value_and_clear():
   receiver = CarrotNaviReceiver()
   client = TestClient(TestServer(create_app(receiver)))
   await client.start_server()
@@ -583,7 +597,8 @@ async def test_all_catalog_item_routes_receive_value_and_clear():
     manifest = await control.receive_json()
     session_id = manifest["session_id"]
 
-    for stream in manifest["streams"]:
+    enabled_streams = [stream for stream in manifest["streams"] if stream["enabled"]]
+    for received_index, stream in enumerate(enabled_streams, start=1):
       kind = stream["kind"]
       name = stream["name"]
       item = await client.ws_connect(f"/api/navi/ws/v2/{kind}/{session_id}/{name}")
@@ -632,7 +647,7 @@ async def test_all_catalog_item_routes_receive_value_and_clear():
             stream["stream_handle"], manifest["revision"], 2, 1002, 0, 0, 0,
           ))
         for _ in range(50):
-          if receiver.health()["session_received_count"] >= stream["stream_handle"] * 2:
+          if receiver.health()["session_received_count"] >= received_index * 2:
             break
           await asyncio.sleep(0.002)
       finally:
@@ -640,8 +655,11 @@ async def test_all_catalog_item_routes_receive_value_and_clear():
 
     health = receiver.health()
     assert health["error"] is None
-    assert health["session_received_count"] == len(CATALOG) * 2
-    assert set(health["items"]) == {f"{kind}:{name}" for kind, name in CATALOG}
+    assert health["session_received_count"] == len(enabled_streams) * 2
+    assert set(health["items"]) == {
+      f"{stream['kind']}:{stream['name']}"
+      for stream in enabled_streams
+    }
     assert all(item["present"] is False for item in health["items"].values())
   finally:
     if control is not None:
