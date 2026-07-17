@@ -52,6 +52,26 @@ The offline workbench uses the production controller's final selection gates: `l
 
 The stationary network does not alter cut-in probabilities.
 
+## On-device hybrid policy
+
+`RadarLeadModelMode=1` runs the independent `radard_model.py` process path.
+Its compact vision/radar matcher uses the first `modelV2` lead as an existence
+and association observation, applies Laplacian distance/lateral/velocity
+scoring, and requires all three sanity gates. The published `leadOne`
+kinematics always come from the matched front radar or SCC object; raw vision
+distance and velocity are never published as a fallback.
+
+The model lead head remains in this artifact for offline analysis, but it is
+not used for `leadOne`. Temporally confirmed cut-in and external predictions
+populate `leadTwo`. A model object is allowed to match `leadOne` and also appear
+as `leadTwo`; consumers already evaluate both leads, and preserving the model
+decision avoids hiding a real cut-in transition.
+
+This policy does not require retraining the current artifact because its
+cut-in and external heads were trained and calibrated independently. A future
+two-head retrain can remove the unused lead output after collecting more
+hard-negative cut-in and stationary examples.
+
 ## Reproduction
 
 Use `radar_lead_corpus.py` to scan, select, and export weak teacher labels. The trainer supports a parsed `--cache`, head-specific training, and `--stationary-external`. The stationary v11 run used a maximum positive weight of 5; larger automatic weighting produced unacceptable false positives.

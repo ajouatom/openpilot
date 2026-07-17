@@ -7,7 +7,7 @@ from openpilot.cereal import car, log, messaging
 from openpilot.common.params import Params
 from openpilot.common.realtime import Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
-from openpilot.selfdrive.carrot.radar_lead_controller import RadarLeadModelController, RadarLeadModelOutput
+from openpilot.selfdrive.carrot.radar_vision_model_controller import RadarLeadModelOutput, VisionModelRadarController
 
 
 EMPTY_LEAD = {
@@ -37,10 +37,10 @@ def empty_lead() -> dict:
 
 
 class ModelRadarD:
-  """Builds radarState using only the fused radar model path."""
+  """Build radarState with vision-matched leadOne and model secondary leads."""
 
   def __init__(self) -> None:
-    self.controller = RadarLeadModelController()
+    self.controller = VisionModelRadarController()
     self.radar_state = log.RadarState.new_message()
     self.radar_state_valid = False
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay maintained routes from zero and pause on model cut-in events."""
+"""Replay routes and pause on cut-in, vision-only, or unmatched vision events."""
 
 from __future__ import annotations
 
@@ -17,12 +17,12 @@ SIMULATOR = SCRIPT_DIR / "radar_lead_simulator.py"
 
 
 def parse_args() -> argparse.Namespace:
-  parser = argparse.ArgumentParser(description="Replay maintained radar routes and pause on model cut-ins")
+  parser = argparse.ArgumentParser(description="Replay routes and pause on cut-in, vision-only, or unmatched vision events")
   parser.add_argument("--root", type=Path, default=Path(r"W:\routes"), help="route log root")
   parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
   parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
   parser.add_argument("--case", action="append", default=[], help="case-id substring; repeat to select more")
-  parser.add_argument("--expected", choices=("all", "detect", "clear"), default="all")
+  parser.add_argument("--expected", choices=("all", "detect", "clear", "stationary"), default="all")
   parser.add_argument("--list", action="store_true")
   return parser.parse_args()
 
@@ -62,6 +62,7 @@ def main() -> int:
       "--validation-root", str(args.root),
       "--validation-cases", str(args.cases),
       "--model", str(args.model),
+      "--hybrid",
     ], check=False)
     if result.returncode != 0:
       return result.returncode

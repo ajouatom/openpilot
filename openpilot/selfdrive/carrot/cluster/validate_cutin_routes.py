@@ -38,6 +38,7 @@ def load_cases() -> tuple[float, list[dict[str, Any]]]:
 
 
 def selected_cases(cases: list[dict[str, Any]], filters: list[str]) -> list[dict[str, Any]]:
+  cases = [case for case in cases if case["expected"] in ("detect", "clear")]
   if not filters:
     return cases
   lowered = [value.lower() for value in filters]
