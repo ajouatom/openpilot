@@ -58,9 +58,9 @@ except ModuleNotFoundError:
   from radar_lead_controller import RadarLeadModelController
 
 try:
-  from openpilot.selfdrive.carrot.radar_vision_model_controller import PRIMARY_STEALTH_HOLD_S, STEALTH_LEAD_HOLD_S, VisionModelRadarController, VisionRadarMatcher
+  from openpilot.selfdrive.carrot.radar_vision_model_controller import PRIMARY_STEALTH_HOLD_S, STEALTH_LEAD_HOLD_S, VisionModelRadarController, VisionRadarMatcher, cutin_is_ahead_of_primary
 except ModuleNotFoundError:
-  from radar_vision_model_controller import PRIMARY_STEALTH_HOLD_S, STEALTH_LEAD_HOLD_S, VisionModelRadarController, VisionRadarMatcher
+  from radar_vision_model_controller import PRIMARY_STEALTH_HOLD_S, STEALTH_LEAD_HOLD_S, VisionModelRadarController, VisionRadarMatcher, cutin_is_ahead_of_primary
 
 
 RADAR_TO_CAMERA = 1.52
@@ -1509,12 +1509,17 @@ class MultitaskLeadSelector:
 
       def matches_primary(prediction: Any) -> bool:
         return bool(primary_aliases & frozenset(prediction.features.aliases))
+      primary_d_rel = lead_one.d_rel if lead_one is not None else None
+
+      def cutin_relevant(prediction: Any) -> bool:
+        return cutin_is_ahead_of_primary(prediction.features.radar_object.d_rel, primary_d_rel)
+
       active_leads = [] if vision_matcher is not None else [
         Candidate(track_id(value), value.lead_prob, "MLP active lead") for value in decision.lead_candidates
       ]
       active_cutins = [
         Candidate(track_id(value), value.cutin_prob, "MLP active cutin")
-        for value in decision.cutin_candidates if not matches_primary(value)
+        for value in decision.cutin_candidates if not matches_primary(value) and cutin_relevant(value)
       ]
       active_external = [
         Candidate(track_id(value), value.external_prob, "MLP active external")
@@ -1552,6 +1557,7 @@ class MultitaskLeadSelector:
       lead_two_prediction = next((
         prediction for prediction in decision.cutin_candidates
         if not matches_primary(prediction)
+        and cutin_relevant(prediction)
         and VisionModelRadarController._external_control_usable(prediction)
       ), None)
       lead_two_reason = "MLP active cutin"

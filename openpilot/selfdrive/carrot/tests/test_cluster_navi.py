@@ -14,6 +14,7 @@ from openpilot.selfdrive.carrot.carrot_navi_cereal import build_carrot_navi_payl
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
+from cluster_config import RADAR_TO_CAMERA_M, VEHICLE_LENGTH_M
 from cluster_navi import fresh_carrot_navi, parse_carrot_navi
 from cluster_navi_overlay import merge_navi_overlay_state
 from cluster_navi_source import (
@@ -31,6 +32,7 @@ from cluster_models import NaviDashboardState, NaviMediaFrame, TpmsInfo
 from cluster_renderer import (
   CAMERA_BACKGROUND_X,
   CAMERA_BACKGROUND_W,
+  CAMERA_OVERLAY_VEHICLE_ROAD_HEIGHT_M,
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
   LANE_TURN_SIGNAL_LEFT_CENTER_X,
@@ -692,6 +694,26 @@ def test_road_camera_cover_crop_retains_more_of_lower_frame():
   )
   assert top_crop > bottom_crop
   assert top_crop / (top_crop + bottom_crop) == pytest.approx(0.75)
+
+
+def test_road_camera_vehicle_ellipse_uses_vehicle_road_anchor(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  projected = []
+  monkeypatch.setattr(
+    ClusterUiRenderer,
+    "_project_camera_overlay_point",
+    lambda self, point, projection, scene_shift_x_m=0.0: (projected.append(point), None)[1],
+  )
+  renderer._draw_camera_overlay_vehicle_coin(
+    SimpleNamespace(center=SimpleNamespace(x=0.0, y=10.0)),
+    None,
+    0.0,
+    0,
+  )
+
+  assert CAMERA_OVERLAY_VEHICLE_ROAD_HEIGHT_M == pytest.approx(0.025)
+  assert projected[0].y == pytest.approx(10.0 + RADAR_TO_CAMERA_M + VEHICLE_LENGTH_M)
+  assert projected[0].z == pytest.approx(0.025)
 
 
 def test_dark_theme_uses_visible_side_gauge_outlines(monkeypatch):

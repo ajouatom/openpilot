@@ -256,6 +256,16 @@
       "scene": "Tunnel reflection near 22 m must not become a stationary leadTwo"
     },
     {
+      "id": "ioniq5-cd2-4-stopped-false-cutin",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd2--ea0776cc10--4/rlog.zst",
+      "source": "front+corner",
+      "window": [12.0, 14.5],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [33],
+      "scene": "Stopped object id 33 at 7.65 m must not trigger cut-in audio"
+    },
+    {
       "id": "ioniq5-aa5-3-stationary-114m",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
       "log": "00000aa5--26e26ea9a8--3/rlog.zst",

@@ -145,6 +145,32 @@ def test_controller_reports_control_unusable_cutin_without_lead_two() -> None:
   assert output.leads_cutin[0]["radarTrackId"] == 32
 
 
+def test_controller_hides_cutin_behind_primary_lead() -> None:
+  primary = prediction(35, -0.3, 0.95, 0.1, d_rel=3.55, v_lead=0.0)
+  primary = replace(primary, features=replace(
+    primary.features,
+    radar_object=replace(primary.features.radar_object, front_d_rel=3.55, front_v_rel=0.0),
+  ))
+  hidden_cutin = prediction(33, 0.25, 0.1, 0.99, front=False, d_rel=7.65, v_lead=0.0)
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(
+        True,
+        RadarLeadDecision((primary,), (hidden_cutin,)),
+        (primary, hidden_cutin),
+        0.1,
+      )
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  output = controller.update(0.0, 0.0, (), vision_model(3.55, -0.3, 0.0))
+
+  assert output.lead_one is not None and output.lead_one["radarTrackId"] == 35
+  assert output.lead_two is None
+  assert output.leads_cutin == ()
+
+
 def test_controller_never_uses_raw_vision_as_lead_one() -> None:
   far = prediction(40, 0.2, 0.1, 0.1)
 

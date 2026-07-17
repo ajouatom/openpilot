@@ -113,6 +113,7 @@ CAMERA_BACKGROUND_VIGNETTE_ALPHA = 32
 # 0.5 is a centered cover crop; values toward 1.0 retain more of the road
 # camera's lower edge. Keep this shared with the projected overlay transform.
 CAMERA_BACKGROUND_VERTICAL_BIAS = 0.75
+CAMERA_OVERLAY_VEHICLE_ROAD_HEIGHT_M = 0.025
 CAMERA_OVERLAY_MIN_DEPTH_M = 0.5
 CAMERA_OVERLAY_DEFAULT_CAMERA = DEVICE_CAMERAS["tici", "ar0231"].fcam
 CAMERA_OVERLAY_DEFAULT_HEIGHT_M = 1.22
@@ -1536,7 +1537,7 @@ class ClusterUiRenderer:
         radar_info_mode: int,
     ) -> None:
         center_y_m = vehicle.center.y + RADAR_TO_CAMERA_M + VEHICLE_LENGTH_M
-        base_z = 0.025
+        base_z = CAMERA_OVERLAY_VEHICLE_ROAD_HEIGHT_M
         center = self._project_camera_overlay_point(
             Vec3(vehicle.center.x, center_y_m, base_z),
             projection,
