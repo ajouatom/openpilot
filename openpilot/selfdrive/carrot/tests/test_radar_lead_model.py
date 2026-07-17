@@ -274,6 +274,44 @@ def test_midrange_fused_object_requires_sustained_inward_history() -> None:
   assert decision.cutin_candidates
 
 
+def test_fused_inward_object_is_detected_beyond_twenty_meters() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)
+  decision = None
+  obj = fused(y_rel=2.3, yv_rel=-0.25, d_rel=34.0)
+  for frame in range(10):
+    sample = builder.update(context(frame * 0.05), (obj,))[0]
+    values = list(sample.values)
+    values[MODEL_FEATURE_NAMES.index("h8_y_rate")] = -0.25
+    values[MODEL_FEATURE_NAMES.index("h12_y_rate")] = -0.25
+    sample = replace(sample, values=tuple(values), d_path=2.1, d_path_future=1.8)
+    decision = decision_filter.update(frame * 0.05, (
+      RadarLeadPrediction(sample, lead_prob=0.0, cutin_prob=0.01, risk_prob=0.01),
+    ))
+
+  assert decision is not None
+  assert decision.cutin_candidates
+
+
+def test_midrange_fused_object_far_from_ego_axis_is_not_forced_active() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)
+  decision = None
+  obj = fused(y_rel=-4.8, yv_rel=1.3, d_rel=39.0)
+  for frame in range(10):
+    sample = builder.update(context(frame * 0.05), (obj,))[0]
+    values = list(sample.values)
+    values[MODEL_FEATURE_NAMES.index("h8_y_rate")] = 1.0
+    values[MODEL_FEATURE_NAMES.index("h12_y_rate")] = 1.0
+    sample = replace(sample, values=tuple(values), d_path=-2.3, d_path_future=-1.1)
+    decision = decision_filter.update(frame * 0.05, (
+      RadarLeadPrediction(sample, lead_prob=0.0, cutin_prob=0.01, risk_prob=0.01),
+    ))
+
+  assert decision is not None
+  assert not decision.cutin_candidates
+
+
 def test_close_parallel_object_keeps_normal_threshold() -> None:
   builder = RadarLeadFeatureBuilder()
   decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.87)

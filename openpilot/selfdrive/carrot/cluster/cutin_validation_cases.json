@@ -65,6 +65,15 @@
       "scene": "Large truck begins entering around 21 seconds"
     },
     {
+      "id": "ioniq5-cd0-1-merge",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "front+corner",
+      "window": [36.5, 39.0],
+      "expected": "detect",
+      "scene": "Fused left vehicle enters the ego path around 37 seconds"
+    },
+    {
       "id": "ioniq5-cab-49-curve",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
       "log": "00000cab--0e0be97e78--49/rlog.zst",

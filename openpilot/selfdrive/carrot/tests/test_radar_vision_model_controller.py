@@ -84,7 +84,7 @@ def test_scc_can_supply_vision_matched_lead_one() -> None:
   assert match.prediction.features.radar_object.scc_track_id == 0
 
 
-def test_controller_allows_same_object_as_lead_one_and_cutin_lead_two() -> None:
+def test_controller_does_not_duplicate_primary_cutin_as_lead_two() -> None:
   shared = prediction(40, 0.2, 0.1, 0.95)
 
   class Runtime:
@@ -100,9 +100,28 @@ def test_controller_allows_same_object_as_lead_one_and_cutin_lead_two() -> None:
   controller.runtime = Runtime()
   output = controller.update(0.0, 20.0, (), vision_model(12.0, 0.2, 19.0))
   assert output.lead_one is not None and output.lead_one["radarTrackId"] == 40
-  assert output.lead_two is not None and output.lead_two["radarTrackId"] == 40
-  assert output.lead_one["radar"] and output.lead_two["radar"]
+  assert output.lead_two is None
+  assert output.lead_one["radar"]
   assert output.leads_cutin == ()
+
+
+def test_controller_does_not_duplicate_primary_external_as_lead_two() -> None:
+  shared = prediction(40, 0.2, 0.95, 0.1, external_prob=0.95)
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(
+        True,
+        RadarLeadDecision((shared,), (), (shared,)),
+        (shared,),
+        0.1,
+      )
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  output = controller.update(0.0, 20.0, (), vision_model(12.0, 0.2, 19.0))
+  assert output.lead_one is not None and output.lead_one["radarTrackId"] == 40
+  assert output.lead_two is None
 
 
 def test_controller_never_uses_raw_vision_as_lead_one() -> None:
