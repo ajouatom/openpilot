@@ -18,6 +18,7 @@ from openpilot.selfdrive.carrot.radar_lead_simulator import (
   SimpleLeadSelector,
   Selection,
   ValidationReview,
+  aligned_video_time_s,
   candidate_track_id,
   comparison_summary,
   _copy_track_points,
@@ -132,6 +133,12 @@ def test_stationary_review_pauses_on_selected_target_track() -> None:
 def test_numbered_rlog_uses_matching_qcamera_segment() -> None:
   assert qcamera_path_for_log(Path("route/rlog.1.zst")) == Path("route/qcamera.1.ts")
   assert qcamera_path_for_log(Path("route/rlog.zst")) == Path("route/qcamera.ts")
+
+
+def test_video_time_aligns_model_frame_to_qcamera_start() -> None:
+  assert aligned_video_time_s(1_000_000_000, 6_800_000_000) == 5.8
+  assert aligned_video_time_s(0, 6_800_000_000) is None
+  assert aligned_video_time_s(7_000_000_000, 6_800_000_000) is None
 
 
 def test_validation_review_ignores_internal_cutin_on_current_lead_one() -> None:
