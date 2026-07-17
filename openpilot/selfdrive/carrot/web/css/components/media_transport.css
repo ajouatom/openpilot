@@ -1,0 +1,149 @@
+:root {
+  --carrot-media-chrome-fade: 140ms cubic-bezier(0, 0, 0.2, 1);
+  --carrot-media-control-fade: 90ms cubic-bezier(0.4, 0, 1, 1);
+  --carrot-media-control-size: 40px;
+  --carrot-media-control-icon-size: 24px;
+  --carrot-media-action-size: 64px;
+  --carrot-media-action-icon-size: 30px;
+  --carrot-media-action-gap: 32px;
+  --carrot-media-action-border: rgba(255, 255, 255, 0.78);
+  --carrot-media-action-surface: rgba(22, 27, 34, 0.46);
+  --carrot-media-action-surface-hover: rgba(22, 27, 34, 0.62);
+  --carrot-media-action-shadow: 0 5px 18px rgba(0, 0, 0, 0.34);
+  --carrot-media-action-fade: 110ms cubic-bezier(0, 0, 0.2, 1);
+  --carrot-media-action-hover-scale: 1.05;
+  --carrot-media-action-pressed-scale: 0.92;
+  --carrot-media-preview-max-width: 560px;
+}
+
+.carrot-media-icon-button {
+  width: var(--carrot-media-control-size);
+  min-width: var(--carrot-media-control-size);
+  height: var(--carrot-media-control-size);
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  opacity: 1;
+  cursor: pointer;
+  transition: opacity var(--carrot-media-control-fade);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.carrot-media-icon-button svg {
+  width: var(--carrot-media-control-icon-size);
+  height: var(--carrot-media-control-icon-size);
+  display: block;
+  fill: currentColor;
+  stroke: none;
+  pointer-events: none;
+}
+
+.carrot-media-icon-button:not(:disabled):hover,
+.carrot-media-icon-button:not(:disabled):focus-visible {
+  opacity: 0.82;
+}
+
+.carrot-media-icon-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+
+.carrot-media-icon-button:disabled {
+  opacity: 0.24;
+  cursor: default;
+  pointer-events: none;
+}
+
+.carrot-media-action-group {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--carrot-media-action-gap);
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: none;
+  transition: opacity var(--carrot-media-action-fade), transform var(--carrot-media-action-fade);
+}
+
+.carrot-media-action-group[hidden] {
+  display: none !important;
+}
+
+.carrot-media-action-button {
+  width: var(--carrot-media-action-size);
+  min-width: var(--carrot-media-action-size);
+  height: var(--carrot-media-action-size);
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1.5px solid var(--carrot-media-action-border);
+  border-radius: 50%;
+  background: var(--carrot-media-action-surface);
+  color: #fff;
+  box-shadow: var(--carrot-media-action-shadow);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.72);
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity var(--carrot-media-action-fade),
+              transform var(--carrot-media-action-fade),
+              background var(--carrot-media-action-fade),
+              border-color var(--carrot-media-action-fade);
+}
+
+.carrot-media-action-button svg {
+  width: var(--carrot-media-action-icon-size);
+  height: var(--carrot-media-action-icon-size);
+  display: block;
+  fill: currentColor;
+  stroke: none;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.58));
+}
+
+.carrot-media-action-button:not(:disabled):hover,
+.carrot-media-action-button:not(:disabled):focus-visible {
+  background: var(--carrot-media-action-surface-hover);
+  border-color: #fff;
+  transform: scale(var(--carrot-media-action-hover-scale));
+}
+
+.carrot-media-action-button:not(:disabled):active {
+  transform: scale(var(--carrot-media-action-pressed-scale));
+}
+
+.carrot-media-action-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+.carrot-media-action-button:disabled {
+  opacity: 0.2;
+  pointer-events: none;
+  cursor: default;
+}
+
+@media (max-width: 700px) {
+  :root {
+    --carrot-media-action-size: 56px;
+    --carrot-media-action-icon-size: 28px;
+    --carrot-media-action-gap: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carrot-media-icon-button,
+  .carrot-media-action-group,
+  .carrot-media-action-button {
+    transition-duration: 1ms;
+  }
+}

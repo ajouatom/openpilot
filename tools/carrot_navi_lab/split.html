@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Carrot Navi Split Preview</title>
+  <link rel="stylesheet" href="/lab/carrot_navi.css?v=2607-06">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #05080c; color: #fff; font-family: system-ui, sans-serif; }
+    body { display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 18px; gap: 14px; }
+    .toolbar { display: flex; align-items: center; gap: 8px; }
+    .toolbar strong { margin-right: auto; font-size: 18px; }
+    button { padding: 8px 12px; border: 1px solid #475363; border-radius: 999px; background: #151c25; color: #fff; font-weight: 800; cursor: pointer; }
+    .carrot-drive-workspace { position: relative; min-height: 0; border: 1px solid #283342; border-radius: 14px; }
+    .carrot-stage { position: relative; min-width: 0; overflow: hidden; background: linear-gradient(145deg, #162433, #070c12); }
+    .carrot-stage::before, .carrot-navi-pane::before { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255,255,255,.42); font-size: 24px; font-weight: 800; }
+    .carrot-stage::before { content: "당근비전"; }
+    .carrot-navi-pane::before { content: "TMAP"; background: linear-gradient(145deg, #1f3f35, #08110f); }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <strong>실제 분할 모듈 프리뷰</strong>
+    <button data-ratio="0.3">30 / 70</button>
+    <button data-ratio="0.5">50 / 50</button>
+    <button data-ratio="0.7">70 / 30</button>
+  </div>
+  <div id="workspace" class="carrot-drive-workspace">
+    <section id="stage" class="carrot-stage"></section>
+    <div id="divider" class="carrot-navi-divider" role="separator" aria-valuemin="30" aria-valuemax="70" aria-valuenow="50"><span></span></div>
+    <aside id="pane" class="carrot-navi-pane"></aside>
+  </div>
+  <script src="/lab/carrot_navi_split.js?v=2607-06"></script>
+  <script>
+    const workspace = document.getElementById("workspace");
+    const split = CarrotNaviSplit.create({
+      workspace,
+      stage: document.getElementById("stage"),
+      pane: document.getElementById("pane"),
+      divider: document.getElementById("divider"),
+      overlay: { requestRender() {}, setRenderSuspended() {} },
+      initialRatio: 0.5,
+      persist() {},
+    });
+    split.setActive(true);
+    document.querySelectorAll("[data-ratio]").forEach(button => button.addEventListener("click", () => {
+      workspace.classList.add("is-carrot-navi-settling");
+      split.setRatio(Number(button.dataset.ratio));
+      // Hold the transient feedback long enough for screenshot-based QA.
+      setTimeout(() => workspace.classList.remove("is-carrot-navi-settling"), 1200);
+    }));
+    window.splitPreview = split;
+  </script>
+</body>
+</html>

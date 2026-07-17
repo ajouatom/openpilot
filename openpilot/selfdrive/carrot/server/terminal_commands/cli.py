@@ -4,7 +4,6 @@ import argparse
 import shlex
 import sys
 
-from .bridge import META_COMMAND_PREFIX
 from .custom_commands import load_commands
 from .registry import get_command
 
@@ -19,20 +18,26 @@ def _parse_command_line(command_line: str) -> list[str] | None:
 
 def main(argv: list[str] | None = None) -> int:
   parser = argparse.ArgumentParser(add_help=False)
-  parser.add_argument("--line", default="help")
+  parser.add_argument("--line")
+  parser.add_argument("command", nargs="?")
+  parser.add_argument("args", nargs=argparse.REMAINDER)
   options = parser.parse_args(argv)
 
   load_commands()
-  parts = _parse_command_line(options.line)
-  if parts is None:
-    return 2
+  if options.line is not None:
+    parts = _parse_command_line(options.line)
+    if parts is None:
+      return 2
+  else:
+    parts = [options.command, *options.args] if options.command else []
+  parts = [str(part) for part in parts if part is not None]
   if not parts:
     parts = ["help"]
 
   command = get_command(parts[0])
   if command is None:
     print(f"[terminal] unknown command: {parts[0]}", file=sys.stderr)
-    print(f"[terminal] run {META_COMMAND_PREFIX}help to list available commands", file=sys.stderr)
+    print("[terminal] run 'carrot help' to list available commands", file=sys.stderr)
     return 2
 
   try:

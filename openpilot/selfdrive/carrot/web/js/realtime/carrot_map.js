@@ -64,6 +64,24 @@
     return Number.isFinite(number) ? number : null;
   }
 
+  function readRealtimeService(name) {
+    const rawValue = window.CarrotHudState?.[name];
+    const rawUpdatedAt = finiteNumber(window.CarrotStateUpdatedAt?.[name]);
+    if (rawValue && typeof rawValue === "object" && rawUpdatedAt !== null
+        && Date.now() - rawUpdatedAt <= LOCATION_MAX_AGE_MS) {
+      return { value: rawValue, updatedAt: rawUpdatedAt };
+    }
+
+    const runtimeState = window.CarrotLiveRuntimeState;
+    const runtimeValue = runtimeState?.services?.[name];
+    const runtimeUpdatedAt = finiteNumber(runtimeState?.fetchedAtMs);
+    if (runtimeState?.ok && runtimeValue && typeof runtimeValue === "object"
+        && runtimeUpdatedAt !== null && Date.now() - runtimeUpdatedAt <= LOCATION_MAX_AGE_MS) {
+      return { value: runtimeValue, updatedAt: runtimeUpdatedAt };
+    }
+    return null;
+  }
+
   function normalizeBool(value) {
     if (typeof value === "string") return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
     return Boolean(value);
@@ -700,14 +718,12 @@
     }
 
     readLocation() {
-      const runtimeState = window.CarrotLiveRuntimeState;
-      if (!runtimeState?.ok) return null;
-
-      const services = runtimeState.services || {};
-      const carrotMan = services.carrotMan || {};
-      const gps = services.gpsLocationExternal || {};
-      const fetchedAtMs = finiteNumber(runtimeState.fetchedAtMs) || Date.now();
-      if (Date.now() - fetchedAtMs > LOCATION_MAX_AGE_MS) return null;
+      const carrotSnapshot = readRealtimeService("carrotMan");
+      const gpsSnapshot = readRealtimeService("gpsLocationExternal");
+      const carrotMan = carrotSnapshot?.value || {};
+      const gps = gpsSnapshot?.value || {};
+      const fetchedAtMs = Math.max(carrotSnapshot?.updatedAt || 0, gpsSnapshot?.updatedAt || 0);
+      if (!fetchedAtMs) return null;
 
       const lat = finiteNumber(carrotMan.xPosLat);
       const lon = finiteNumber(carrotMan.xPosLon);
@@ -818,12 +834,10 @@
 
     buildNavPayload(location = null) {
       const runtimeState = window.CarrotLiveRuntimeState;
-      if (!runtimeState?.ok) return this.buildNavClearPayload("runtime");
-
-      const services = runtimeState.services || {};
-      const carrotMan = services.carrotMan || {};
-      const fetchedAtMs = finiteNumber(runtimeState.fetchedAtMs) || Date.now();
-      if (Date.now() - fetchedAtMs > LOCATION_MAX_AGE_MS) return this.buildNavClearPayload("stale");
+      const carrotSnapshot = readRealtimeService("carrotMan");
+      if (!carrotSnapshot) return this.buildNavClearPayload("stale");
+      const carrotMan = carrotSnapshot.value;
+      const fetchedAtMs = carrotSnapshot.updatedAt;
 
       const path = String(carrotMan.naviPaths || "").trim();
       const activeCarrot = finiteNumber(carrotMan.activeCarrot) ?? 0;
@@ -833,7 +847,7 @@
       const sdiDist = finiteNumber(carrotMan.xSpdDist) ?? 0;
       const goalDist = finiteNumber(carrotMan.nGoPosDist) ?? 0;
       const active = activeCarrot > 1 || path.length > 0 || turnDist > 0 || sdiDist > 0 || goalDist > 0;
-      const routeCoordinates = this.readRouteCoordinates(runtimeState, 2500);
+      const routeCoordinates = runtimeState?.ok ? this.readRouteCoordinates(runtimeState, 2500) : [];
       const origin = this.closestRouteOrigin(routeCoordinates, location);
 
       return {

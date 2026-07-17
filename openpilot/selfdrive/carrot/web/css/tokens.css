@@ -100,6 +100,14 @@
   --switch-w: 52px;
   --switch-h: 32px;
 
+  /* ── Close button (toggle) ─────────────────────────────────────
+     One close atom for the whole app: `.c-close` (see components.css).
+     A crisp SVG X (stroke), rounded-square surface, driven by these
+     tokens. Tight surfaces use the `.c-close--sm` modifier. */
+  --close-size: 32px;
+  --close-icon: 16px;
+  --close-radius: 10px;
+
   /* Popup UX primitives
      - Compact sheets for alert / confirm / prompt.
      - Bottom sheets on narrow portrait screens.
@@ -114,6 +122,32 @@
   --dialog-sheet-width-wide: 520px;
   --dialog-sheet-max-height: calc(100dvh - var(--sp-lg) * 2);
   --dialog-sheet-mobile-max-height: min(88dvh, 720px);
+
+  /* Preference editor component. The tools web-settings dialog is the first
+     consumer; keep its geometry and control sizing centralized for future
+     drive-workspace and other preference editors. */
+  --preference-sheet-width: 560px;
+  --preference-sheet-height: clamp(420px, 68dvh, 560px);
+  --preference-nav-width: 112px;
+  --preference-row-min-height: 64px;
+  --preference-select-width: min(150px, 38vw);
+  --preference-select-min-width: 112px;
+
+  /* Drive layout preference preview. Runtime layout values stay in the shared
+     JS spec; these tokens only define reusable presentation geometry/colors. */
+  --drive-layout-preview-landscape-aspect: 16 / 7;
+  --drive-layout-preview-divider-size: 4px;
+  --drive-layout-segment-height: 34px;
+  --drive-layout-vision-surface: color-mix(in srgb, var(--md-info) 16%, var(--md-surface-cont-h));
+  --drive-layout-navigation-surface: color-mix(in srgb, var(--md-success) 14%, var(--md-surface-cont-h));
+
+  /* Drive Workspace empty/idle content surface. Feature modules provide copy
+     and state; shared tokens keep every slot intro visually consistent. */
+  --drive-content-intro-bg: color-mix(in srgb, var(--md-surface) 96%, #000);
+  --drive-content-intro-accent: var(--md-primary);
+  --drive-content-intro-max-width: 36ch;
+  --drive-content-intro-enter-distance: 10px;
+  --drive-content-intro-exit-distance: -6px;
 
   /* ── On-screen keyboard ───────────────────────────────────────
      --kb-inset: exact keyboard height. The CSS env() fallback is used at first
@@ -198,6 +232,42 @@
   --ease-emphasized:            cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
   --ease-linear:                linear;
+
+  /* Drive Workspace owns page geometry and resize feedback. Feature-specific
+     surfaces keep their own visual tokens below. */
+  --drive-workspace-bg: #020407;
+  --drive-workspace-aux-bg: #0b0e12;
+  --drive-workspace-resize-mask: rgba(4, 8, 12, 0.1);
+  --drive-workspace-settle-mask: rgba(4, 8, 12, 0.07);
+  --drive-workspace-layout-duration: 0ms;
+  --drive-workspace-layout-ease: cubic-bezier(0.22, 0.82, 0.22, 1);
+  --drive-workspace-split-ease: cubic-bezier(0.16, 0.74, 0.2, 1);
+  --drive-workspace-resize-duration: 160ms;
+  --drive-workspace-settle-duration: 240ms;
+  --drive-workspace-feedback-in-duration: 70ms;
+  --drive-workspace-feedback-out-duration: 160ms;
+  --drive-workspace-resize-blur: 5px;
+  --drive-workspace-settle-blur: 2px;
+  --drive-workspace-ratio-color: rgba(255, 255, 255, 0.92);
+  --drive-workspace-ratio-font-size: clamp(34px, 5.2vw, 68px);
+  --drive-workspace-ratio-font-weight: 900;
+  --drive-workspace-ratio-letter-spacing: -0.04em;
+  --drive-workspace-ratio-shadow: 0 2px 18px rgba(0, 0, 0, 0.72);
+  --drive-layer-surface: 0;
+  --drive-layer-content: 1;
+  --drive-layer-media: 2;
+  --drive-layer-overlay: 3;
+  --drive-layer-status: 4;
+  --drive-layer-alert: 5;
+  --drive-layer-loading: 46;
+  --drive-layer-modal: 50;
+  --drive-layer-controls: 60;
+  --drive-layer-resize: 65;
+  --drive-layer-transport: 70;
+  --drive-layer-panel: 90;
+  --carrot-navi-pane-bg: #090d12;
+  --carrot-navi-divider-handle-width: 8px;
+  --carrot-navi-divider-handle-height: 84px;
 
   /* ── State Layer (Material 3) ──────────────────────────────────
      Material 3 expresses hover/focus/pressed by overlaying a tinted

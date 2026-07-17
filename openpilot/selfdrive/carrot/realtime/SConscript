@@ -1,0 +1,7 @@
+Import('envCython', 'cereal')
+
+envCython.Program(
+  'compact_state_pyx.so',
+  ['compact_state_pyx.pyx', 'compact_state_native.cc'],
+  LIBS=envCython['LIBS'] + [cereal, 'capnp', 'kj'],
+)

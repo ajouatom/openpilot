@@ -334,7 +334,7 @@ class AugmentedRoadView(CameraView):
     pitch = math.degrees(calib.rpyCalib[1])
     yaw = math.degrees(calib.rpyCalib[2])
 
-    position = f"{abs(pitch):.1f}째 {'v' if pitch > 0 else '^'} {abs(yaw):.1f}째 {'<' if yaw > 0 else '>'}"
+    position = f"{abs(pitch):.1f}° {'v' if pitch > 0 else '^'} {abs(yaw):.1f}° {'<' if yaw > 0 else '>'}"
 
     if position != self._last_device_position:
       self.params.put("DevicePosition", position)

@@ -116,10 +116,8 @@ body {
   display: none !important;
 }
 
-/* Layout A: the in-iframe nav info panel is superseded by the parent-side
-   #carrotNavHud (top-center card on the camera). Keep the DOM/JS in case
-   a future provider wants it back, but hide it for now to avoid showing
-   the same data twice. */
+/* Keep the legacy in-iframe navigation panel dormant. Navigation presentation
+   is owned by the drive workspace rather than the embedded map provider. */
 .kmap-nav-info {
   display: none !important;
   position: absolute;

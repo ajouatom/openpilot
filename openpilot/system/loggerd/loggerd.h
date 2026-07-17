@@ -50,8 +50,12 @@ struct EncoderSettings {
   }
 
   static EncoderSettings StreamEncoderSettings() {
-    int _stream_bitrate = getenv("STREAM_BITRATE") ? atoi(getenv("STREAM_BITRATE")) : 1'000'000;
-    return EncoderSettings{.encode_type = cereal::EncodeIndex::Type::QCAMERA_H264, .bitrate = _stream_bitrate , .gop_size = 15};
+    int _stream_bitrate = getenv("STREAM_BITRATE") ? atoi(getenv("STREAM_BITRATE")) : 600'000;
+    return EncoderSettings{
+      .encode_type = cereal::EncodeIndex::Type::QCAMERA_H264,
+      .bitrate = _stream_bitrate,
+      .gop_size = 15,
+    };
   }
 
   static EncoderSettings YouTubeLowEncoderSettings() {
@@ -247,6 +251,15 @@ const LogCameraInfo stream_driver_camera_info{
   .encoder_infos = {stream_driver_encoder_info}
 };
 
+// Carrot Vision only requests the road track. Keep the generic three-camera
+// --stream mode intact for other WebRTC users, while avoiding two unused
+// hardware encoder sessions on C3/C3X/C4.
+const LogCameraInfo carrot_vision_road_camera_info{
+  .thread_name = "carrot_vision_road_encoder",
+  .stream_type = VISION_STREAM_ROAD,
+  .encoder_infos = {stream_road_encoder_info},
+};
+
 const LogCameraInfo youtube_road_low_camera_info{
   .thread_name = "youtube_road_low_encoder",
   .stream_type = VISION_STREAM_ROAD,
@@ -273,6 +286,7 @@ const LogCameraInfo youtube_wide_road_camera_info{
 
 const LogCameraInfo cameras_logged[] = {road_camera_info, wide_road_camera_info, driver_camera_info};
 const LogCameraInfo stream_cameras_logged[] = {stream_road_camera_info, stream_wide_road_camera_info, stream_driver_camera_info};
+const LogCameraInfo carrot_vision_cameras_logged[] = {carrot_vision_road_camera_info};
 const LogCameraInfo youtube_low_cameras_logged[] = {youtube_road_low_camera_info};
 const LogCameraInfo youtube_medium_cameras_logged[] = {youtube_road_medium_camera_info};
 const LogCameraInfo youtube_cameras_logged[] = {youtube_road_camera_info};

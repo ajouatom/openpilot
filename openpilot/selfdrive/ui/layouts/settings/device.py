@@ -22,7 +22,7 @@ from openpilot.system.ui.widgets.scroller_tici import Scroller
 DESCRIPTIONS = {
   'pair_device': tr_noop("Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer."),
   'driver_camera': tr_noop("Preview the driver facing camera to ensure that driver monitoring has good visibility. (vehicle must be off)"),
-  'reset_calibration': tr_noop("openpilot requires the device to be mounted within 4째 left or right and within 5째 up or 9째 down."),
+  'reset_calibration': tr_noop("openpilot requires the device to be mounted within 4° left or right and within 5° up or 9° down."),
   'review_guide': tr_noop("Review the rules, features, and limitations of openpilot"),
 }
 
@@ -123,7 +123,7 @@ class DeviceLayout(Widget):
         if calib.calStatus != log.LiveCalibrationData.Status.uncalibrated:
           pitch = math.degrees(calib.rpyCalib[1])
           yaw = math.degrees(calib.rpyCalib[2])
-          desc += tr(" Your device is pointed {:.1f}째 {} and {:.1f}째 {}.").format(abs(pitch), tr("down") if pitch > 0 else tr("up"),
+          desc += tr(" Your device is pointed {:.1f}° {} and {:.1f}° {}.").format(abs(pitch), tr("down") if pitch > 0 else tr("up"),
                                                                                   abs(yaw), tr("left") if yaw > 0 else tr("right"))
       except Exception:
         cloudlog.exception("invalid CalibrationParams")
@@ -170,7 +170,7 @@ class DeviceLayout(Widget):
           pitch = math.degrees(calib.rpyCalib[1])
           yaw = math.degrees(calib.rpyCalib[2])
 
-          position = f"{abs(pitch):.1f}째 {'v' if pitch > 0 else '^'} {abs(yaw):.1f}째 {'<' if yaw > 0 else '>'}"
+          position = f"{abs(pitch):.1f}° {'v' if pitch > 0 else '^'} {abs(yaw):.1f}° {'<' if yaw > 0 else '>'}"
           self._params.put("DevicePosition", position)
       except Exception:
         cloudlog.exception("invalid CalibrationParams")

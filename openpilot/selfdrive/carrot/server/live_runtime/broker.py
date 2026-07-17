@@ -142,7 +142,10 @@ class RealtimeBroker:
     )
     self.last_snapshot = snapshot
     self.last_snapshot_monotonic = time.monotonic()
-    self.last_payload_encoding, self.last_payload_bytes = self._encode_snapshot(snapshot)
+    # /api/live_runtime selects a small JSON subset from last_snapshot. The old
+    # /ws/live transport is not registered, so eagerly serializing the entire
+    # snapshot here only spends device CPU and allocates a discarded buffer.
+    self.last_payload_bytes = b""
     return snapshot
 
   def snapshot_age_ms(self) -> int | None:

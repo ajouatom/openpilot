@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Carrot Navi Live Pipeline Preview</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #090c11; color: #eef4fb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 16px; }
+    header { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    h1 { margin: 0; font-size: clamp(18px, 3vw, 28px); }
+    #connection { padding: 7px 11px; border-radius: 999px; background: #5a4316; font-weight: 750; white-space: nowrap; }
+    #connection.live { background: #155b35; }
+    #source { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: #111822; color: #b8c5d2; font: 12px/1.45 ui-monospace, monospace; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .panel { overflow: hidden; border: 1px solid #293443; border-radius: 14px; background: #111822; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; }
+    .panel h2 { margin: 0; font-size: 15px; }
+    .badge { min-width: 82px; padding: 5px 8px; border-radius: 999px; background: #343d4a; text-align: center; font-size: 12px; font-weight: 800; }
+    .badge.pass { background: #17663b; }
+    .badge.fail { background: #8c2929; }
+    .badge.warn { background: #765716; }
+    .viewport { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: #000; }
+    video, canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
+    .decoder { width: 2px; height: 2px; opacity: 0.001; pointer-events: none; }
+    .detail { min-height: 52px; padding: 8px 12px 11px; color: #aebbc9; font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
+    footer { margin-top: 14px; color: #9aa9b8; font-size: 13px; }
+    @media (max-width: 760px) { body { padding: 8px; } .grid { grid-template-columns: 1fr; gap: 8px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Carrot Navi 실시간 파이프라인 비교</h1>
+    <div id="connection">클러스터 연결 대기</div>
+  </header>
+  <div id="source">실행 중인 클러스터의 실제 TMAP 미디어 스트림 연결 대기 중</div>
+  <main class="grid">
+    <section class="panel" data-panel="direct">
+      <div class="panel-head"><h2>1. 운영 fMP4 → video 직접 표시</h2><span class="badge">WAIT</span></div>
+      <div class="viewport"><video id="directVideo" muted autoplay playsinline disablepictureinpicture></video></div>
+      <div class="detail">운영 muxer + 운영 worker + MSE</div>
+    </section>
+    <section class="panel" data-panel="copy">
+      <div class="panel-head"><h2>2. 현재 분할: fMP4 video → canvas</h2><span class="badge">WAIT</span></div>
+      <div class="viewport"><video id="copyVideo" class="decoder" muted autoplay playsinline disablepictureinpicture></video><canvas id="copyCanvas"></canvas></div>
+      <div class="detail">운영 muxer + 운영 worker + MSE + drawImage</div>
+    </section>
+    <section class="panel" data-panel="webcodecs">
+      <div class="panel-head"><h2>3. 실제 H.264 → WebCodecs canvas</h2><span class="badge">WAIT</span></div>
+      <div class="viewport"><canvas id="webCodecsCanvas"></canvas></div>
+      <div class="detail">앱 Annex-B H.264를 브라우저에서 직접 디코딩</div>
+    </section>
+    <section class="panel" data-panel="jpeg">
+      <div class="panel-head"><h2>4. 실제 H.264 → 서버 JPEG canvas</h2><span class="badge">WAIT</span></div>
+      <div class="viewport"><canvas id="jpegCanvas"></canvas></div>
+      <div class="detail">앱 H.264를 PC PyAV로 디코딩한 기준 화면</div>
+    </section>
+  </main>
+  <footer>네 화면은 모두 같은 실제 TMAP 프레임을 사용합니다. 4번만 보이면 브라우저 디코더 문제, 1번만 보이면 video→canvas 문제, 3·4번만 보이면 fMP4/MSE 문제로 바로 좁힐 수 있습니다.</footer>
+  <script>
+    "use strict";
+
+    const MEDIA_MAGIC = [0x43, 0x4e, 0x57, 0x42];
+    const MEDIA_HEADER_BYTES = 9;
+    const MSE_MAX_QUEUE = 12;
+    const MSE_KEEP_SECONDS = 5;
+    const MSE_START_SEGMENTS = 2;
+    const MSE_TARGET_LAG_SECONDS = 0.55;
+    const MSE_HARD_RECOVERY_LAG_SECONDS = 4;
+
+    const directVideo = document.getElementById("directVideo");
+    const copyVideo = document.getElementById("copyVideo");
+    const copyCanvas = document.getElementById("copyCanvas");
+    const webCodecsCanvas = document.getElementById("webCodecsCanvas");
+    const jpegCanvas = document.getElementById("jpegCanvas");
+    const connection = document.getElementById("connection");
+    const source = document.getElementById("source");
+    const panelState = new Map();
+    let hello = null;
+    let decoder = null;
+    let decoderCodec = "";
+    let latestStatus = null;
+
+    function setDetail(name, state, text) {
+      const panel = document.querySelector(`[data-panel="${name}"]`);
+      const badge = panel.querySelector(".badge");
+      badge.className = `badge ${state}`;
+      badge.textContent = state === "pass" ? "MOVING" : state === "fail" ? "BLACK" : state === "warn" ? "FROZEN" : "WAIT";
+      panel.querySelector(".detail").textContent = text;
+    }
+
+    function parseWire(buffer) {
+      const bytes = new Uint8Array(buffer);
+      if (bytes.byteLength < MEDIA_HEADER_BYTES || MEDIA_MAGIC.some((value, index) => bytes[index] !== value)) {
+        throw new Error("Invalid Carrot Navi media frame");
+      }
+      const view = new DataView(buffer);
+      if (view.getUint8(4) !== 1) throw new Error("Unsupported Carrot Navi media version");
+      const headerLength = view.getUint32(5, false);
+      const payloadOffset = MEDIA_HEADER_BYTES + headerLength;
+      if (headerLength <= 0 || payloadOffset > bytes.byteLength) throw new Error("Invalid Carrot Navi media header");
+      const metadata = JSON.parse(new TextDecoder().decode(bytes.subarray(MEDIA_HEADER_BYTES, payloadOffset)));
+      return { metadata, payload: bytes.subarray(payloadOffset) };
+    }
+
+    function drawCover(frame, canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(2, Math.max(1, devicePixelRatio || 1));
+      const width = Math.max(1, Math.round(rect.width * dpr));
+      const height = Math.max(1, Math.round(rect.height * dpr));
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
+      const sourceWidth = frame.displayWidth || frame.videoWidth || frame.width;
+      const sourceHeight = frame.displayHeight || frame.videoHeight || frame.height;
+      if (!sourceWidth || !sourceHeight) return false;
+      const scale = Math.max(width / sourceWidth, height / sourceHeight);
+      const cropWidth = width / scale;
+      const cropHeight = height / scale;
+      canvas.getContext("2d", { alpha: false, desynchronized: true }).drawImage(
+        frame,
+        Math.max(0, (sourceWidth - cropWidth) / 2),
+        Math.max(0, (sourceHeight - cropHeight) / 2),
+        cropWidth,
+        cropHeight,
+        0,
+        0,
+        width,
+        height,
+      );
+      return true;
+    }
+
+    function mediaSourceConstructor(mime) {
+      for (const constructor of [window.ManagedMediaSource, window.MediaSource]) {
+        if (typeof constructor !== "function") continue;
+        const checker = constructor.isTypeSupported || window.MediaSource?.isTypeSupported;
+        try {
+          if (typeof checker === "function" && checker.call(constructor, mime)) return constructor;
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    class ProductionMsePlayer {
+      constructor(video, panelName, onFrame = null) {
+        this.video = video;
+        this.panelName = panelName;
+        this.onFrame = onFrame;
+        this.mediaSource = null;
+        this.sourceBuffer = null;
+        this.url = "";
+        this.queue = [];
+        this.trimming = false;
+        this.appendedSegments = 0;
+        this.playbackStarted = false;
+        this.waitingForKeyframe = false;
+        this.callbackId = 0;
+      }
+
+      destroy() {
+        if (this.callbackId && typeof this.video.cancelVideoFrameCallback === "function") {
+          try { this.video.cancelVideoFrameCallback(this.callbackId); } catch (_) {}
+        }
+        this.callbackId = 0;
+        try { this.video.pause(); } catch (_) {}
+        if (this.sourceBuffer) {
+          try { if (this.sourceBuffer.updating) this.sourceBuffer.abort(); } catch (_) {}
+        }
+        this.mediaSource = null;
+        this.sourceBuffer = null;
+        this.queue = [];
+        this.trimming = false;
+        this.appendedSegments = 0;
+        this.playbackStarted = false;
+        this.waitingForKeyframe = false;
+        this.video.removeAttribute("src");
+        try { this.video.load(); } catch (_) {}
+        if (this.url) URL.revokeObjectURL(this.url);
+        this.url = "";
+      }
+
+      start(initialization, mime) {
+        this.destroy();
+        const Constructor = mediaSourceConstructor(mime);
+        if (!Constructor) {
+          setDetail(this.panelName, "fail", `MSE 미지원: ${mime}`);
+          return;
+        }
+        const mediaSource = new Constructor();
+        this.mediaSource = mediaSource;
+        this.queue.push({ bytes: new Uint8Array(initialization), media: false, keyframe: false });
+        mediaSource.addEventListener("sourceopen", () => {
+          if (this.mediaSource !== mediaSource || mediaSource.readyState !== "open") return;
+          try {
+            this.sourceBuffer = mediaSource.addSourceBuffer(mime);
+            this.sourceBuffer.addEventListener("updateend", () => this.onUpdateEnd());
+            this.sourceBuffer.addEventListener("error", (event) => this.fail(event));
+            this.pump();
+          } catch (error) {
+            this.fail(error);
+          }
+        });
+        this.video.muted = true;
+        this.video.autoplay = true;
+        this.video.playsInline = true;
+        this.video.disableRemotePlayback = true;
+        this.url = URL.createObjectURL(mediaSource);
+        this.video.src = this.url;
+      }
+
+      append(segment, keyframe) {
+        if (!this.mediaSource) return;
+        if (this.waitingForKeyframe) {
+          if (!keyframe) return;
+          this.waitingForKeyframe = false;
+        }
+        if (this.queue.length >= MSE_MAX_QUEUE) {
+          this.queue = this.queue.filter((item) => !item.media);
+          this.waitingForKeyframe = !keyframe;
+          if (this.waitingForKeyframe) return;
+        }
+        this.queue.push({ bytes: new Uint8Array(segment), media: true, keyframe });
+        this.pump();
+      }
+
+      pump() {
+        const buffer = this.sourceBuffer;
+        if (!buffer || buffer.updating || this.mediaSource?.readyState !== "open") return;
+        if (buffer.buffered.length && this.queue.length <= 2) {
+          const end = buffer.buffered.end(buffer.buffered.length - 1);
+          const start = buffer.buffered.start(0);
+          const current = Number(this.video.currentTime);
+          const removeBefore = Math.min(end - MSE_KEEP_SECONDS, Number.isFinite(current) ? current - 3 : 0);
+          if (!this.trimming && removeBefore > start + 0.5) {
+            this.trimming = true;
+            try { buffer.remove(0, removeBefore); return; } catch (_) { this.trimming = false; }
+          }
+        }
+        const next = this.queue.shift();
+        if (!next) return;
+        try {
+          buffer.appendBuffer(next.bytes);
+          if (next.media) this.appendedSegments += 1;
+        } catch (error) {
+          this.fail(error);
+        }
+      }
+
+      onUpdateEnd() {
+        this.trimming = false;
+        this.syncPlayback();
+        this.pump();
+      }
+
+      syncPlayback() {
+        if (!this.video.buffered?.length) return;
+        const range = this.video.buffered.length - 1;
+        const start = this.video.buffered.start(range);
+        const end = this.video.buffered.end(range);
+        const current = Number(this.video.currentTime);
+        const lag = Number.isFinite(current) ? end - current : Number.POSITIVE_INFINITY;
+        if (!this.playbackStarted) {
+          if (this.appendedSegments < MSE_START_SEGMENTS) return;
+          try { this.video.currentTime = Math.max(start, end - MSE_TARGET_LAG_SECONDS); } catch (_) {}
+          this.playbackStarted = true;
+          this.video.playbackRate = 1;
+        } else if (!Number.isFinite(current) || current < start || lag > MSE_HARD_RECOVERY_LAG_SECONDS) {
+          try { this.video.currentTime = Math.max(start, end - MSE_TARGET_LAG_SECONDS); } catch (_) {}
+          this.video.playbackRate = 1;
+        } else if (lag > 1.2) {
+          this.video.playbackRate = 1.05;
+        } else if (lag > 0.85) {
+          this.video.playbackRate = 1.02;
+        } else if (lag < 0.7 && this.video.playbackRate !== 1) {
+          this.video.playbackRate = 1;
+        }
+        if (this.video.paused) this.video.play().catch(() => {});
+        this.scheduleFrameCallback();
+      }
+
+      scheduleFrameCallback() {
+        if (typeof this.video.requestVideoFrameCallback !== "function" || this.callbackId) return;
+        this.callbackId = this.video.requestVideoFrameCallback(() => {
+          this.callbackId = 0;
+          this.onFrame?.(this.video);
+          this.scheduleFrameCallback();
+        });
+      }
+
+      fail(error) {
+        const videoError = this.video.error;
+        const message = error?.message || videoError?.message || (videoError?.code ? `video error ${videoError.code}` : String(error));
+        setDetail(this.panelName, "fail", message);
+      }
+    }
+
+    const directMse = new ProductionMsePlayer(directVideo, "direct");
+    const copyMse = new ProductionMsePlayer(copyVideo, "copy", (video) => drawCover(video, copyCanvas));
+    copyVideo.addEventListener("timeupdate", () => drawCover(copyVideo, copyCanvas));
+
+    const worker = new Worker("/lab/carrot_navi_worker.js");
+    worker.postMessage({ type: "configure" });
+    worker.addEventListener("message", (event) => {
+      const message = event.data || {};
+      if (message.type === "mse-init") {
+        directMse.start(message.segment.slice(0), message.mime);
+        copyMse.start(message.segment.slice(0), message.mime);
+      } else if (message.type === "mse-segment") {
+        directMse.append(message.segment.slice(0), Boolean(message.keyframe));
+        copyMse.append(message.segment.slice(0), Boolean(message.keyframe));
+      } else if (message.type === "clear") {
+        directMse.destroy();
+        copyMse.destroy();
+      } else if (message.type === "error") {
+        setDetail("direct", "fail", message.message);
+        setDetail("copy", "fail", message.message);
+      }
+    });
+
+    function configureWebCodecs(codec) {
+      if (typeof VideoDecoder !== "function") {
+        setDetail("webcodecs", "warn", "이 브라우저는 VideoDecoder를 지원하지 않음");
+        return;
+      }
+      if (decoder?.state !== "closed" && decoderCodec === codec) return;
+      try { decoder?.close(); } catch (_) {}
+      decoderCodec = codec;
+      decoder = new VideoDecoder({
+        output(frame) {
+          drawCover(frame, webCodecsCanvas);
+          frame.close();
+        },
+        error(error) { setDetail("webcodecs", "fail", String(error)); },
+      });
+      try {
+        decoder.configure({ codec, optimizeForLatency: true, hardwareAcceleration: "prefer-hardware" });
+      } catch (error) {
+        setDetail("webcodecs", "fail", String(error));
+      }
+    }
+
+    async function handleWire(buffer) {
+      const { metadata, payload } = parseWire(buffer);
+      if (!metadata.present || Number(metadata.messageType) === 4) {
+        worker.postMessage({ type: "reset-media" });
+        return;
+      }
+      if (metadata.kind === "fmp4") {
+        const copy = buffer.slice(0);
+        worker.postMessage({ type: "media", buffer: copy }, [copy]);
+        return;
+      }
+      if (metadata.kind === "raw_h264" && Number(metadata.messageType) === 3) {
+        const codec = String(metadata.codec || hello?.codec || "avc1.42E01E");
+        configureWebCodecs(codec);
+        if (decoder?.state === "configured") {
+          const keyframe = Boolean((Number(metadata.flags) || 0) & 1);
+          try {
+            decoder.decode(new EncodedVideoChunk({
+              type: keyframe ? "key" : "delta",
+              timestamp: Math.max(0, Number(metadata.sourceTimestampMillis) || 0) * 1000,
+              data: payload,
+            }));
+          } catch (error) {
+            setDetail("webcodecs", "fail", String(error));
+          }
+        }
+        return;
+      }
+      if (metadata.kind === "jpeg" && payload.byteLength) {
+        const bitmap = await createImageBitmap(new Blob([payload], { type: "image/jpeg" }));
+        drawCover(bitmap, jpegCanvas);
+        bitmap.close();
+      }
+    }
+
+    const sampleCanvas = document.createElement("canvas");
+    sampleCanvas.width = 32;
+    sampleCanvas.height = 18;
+    const sampleContext = sampleCanvas.getContext("2d", { willReadFrequently: true });
+
+    function inspect(name, frame, detail) {
+      if (!latestStatus?.receiver?.connected || !latestStatus?.map?.frames) {
+        setDetail(name, "", `${detail}\n실제 TMAP 입력 대기 중`);
+        return;
+      }
+      const state = panelState.get(name) || { hash: -1, unchanged: 0 };
+      try {
+        sampleContext.drawImage(frame, 0, 0, 32, 18);
+        const pixels = sampleContext.getImageData(0, 0, 32, 18).data;
+        let max = 0;
+        let min = 255;
+        let hash = 0;
+        for (let index = 0; index < pixels.length; index += 16) {
+          const luma = Math.round((pixels[index] * 3 + pixels[index + 1] * 6 + pixels[index + 2]) / 10);
+          max = Math.max(max, luma);
+          min = Math.min(min, luma);
+          hash = (hash * 33 + luma) >>> 0;
+        }
+        state.unchanged = hash === state.hash ? state.unchanged + 1 : 0;
+        state.hash = hash;
+        panelState.set(name, state);
+        if (max < 12) setDetail(name, "fail", `${detail}\nluma ${min}-${max}`);
+        else if (state.unchanged >= 5) setDetail(name, "warn", `${detail}\n화면 변화 없음 ${state.unchanged}`);
+        else setDetail(name, "pass", `${detail}\nluma ${min}-${max}`);
+      } catch (error) {
+        setDetail(name, "warn", `${detail}\n픽셀 확인 불가: ${error}`);
+      }
+    }
+
+    setInterval(() => {
+      const directQuality = directVideo.getVideoPlaybackQuality?.();
+      inspect("direct", directVideo, `t=${directVideo.currentTime.toFixed(2)} frames=${directQuality?.totalVideoFrames ?? "-"}`);
+      inspect("copy", copyCanvas, `t=${copyVideo.currentTime.toFixed(2)}`);
+      inspect("webcodecs", webCodecsCanvas, `queue=${decoder?.decodeQueueSize ?? "-"} codec=${decoderCodec || "-"}`);
+      inspect("jpeg", jpegCanvas, `server baseline seq=${latestStatus?.map?.lastSequence ?? "-"}`);
+    }, 700);
+
+    function applyHello(message) {
+      hello = message;
+      latestStatus = message.status || latestStatus;
+      const receiver = latestStatus?.receiver || {};
+      const map = latestStatus?.map || {};
+      const connected = Boolean(receiver.connected);
+      connection.textContent = connected ? "실제 TMAP 스트림 연결됨" : "클러스터 스트림 대기";
+      connection.classList.toggle("live", connected);
+      source.textContent = connected
+        ? `peer=${receiver.peer} app=${receiver.appVersion || "-"} | ${map.codec || message.codec} ${map.width || message.width}x${map.height || message.height} | frames=${map.frames || 0} keyframes=${map.keyframes || 0}`
+        : "클러스터의 실시간 Carrot Navi 미디어 소켓에 자동 재연결 중입니다.";
+    }
+
+    async function refreshStatus() {
+      try {
+        const response = await fetch("/lab/api/status", { cache: "no-store" });
+        if (!response.ok) return;
+        latestStatus = await response.json();
+        applyHello({ ...(hello || {}), status: latestStatus });
+      } catch (_) {}
+    }
+
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const socket = new WebSocket(`${protocol}//${location.host}/lab/ws`);
+    socket.binaryType = "arraybuffer";
+    socket.addEventListener("open", () => refreshStatus());
+    socket.addEventListener("close", () => {
+      connection.textContent = "프리뷰 연결 끊김";
+      connection.classList.remove("live");
+    });
+    socket.addEventListener("message", (event) => {
+      if (typeof event.data === "string") {
+        const message = JSON.parse(event.data);
+        if (message.type === "hello") applyHello(message);
+      } else {
+        handleWire(event.data).catch((error) => console.error(error));
+      }
+    });
+    setInterval(refreshStatus, 1000);
+  </script>
+</body>
+</html>

@@ -503,16 +503,33 @@ def test_dashboard_snapshot_retains_render_codec_config():
   )
   receiver.record_binary(
     manifest["session_id"], "render", "map_main",
-    {**identity, "message_type": 3, "sequence": 2},
-    b"\x00\x00\x00\x01\x65frame", "127.0.0.1",
+    {**identity, "message_type": 3, "sequence": 2, "flags": 1},
+    b"\x00\x00\x00\x01\x65keyframe", "127.0.0.1",
+  )
+  receiver.record_binary(
+    manifest["session_id"], "render", "map_main",
+    {**identity, "message_type": 3, "sequence": 3},
+    b"\x00\x00\x00\x01\x41delta", "127.0.0.1",
   )
 
   snapshot = receiver.dashboard_snapshot()
 
-  assert snapshot["media_generation"] == 2
-  assert snapshot["records"]["render:map_main"].sequence == 2
+  assert snapshot["media_generation"] == 3
+  assert snapshot["records"]["render:map_main"].sequence == 3
   assert snapshot["binary_configs"]["render:map_main"].sequence == 1
   assert snapshot["binary_configs"]["render:map_main"].payload.endswith(b"config")
+
+  updates = receiver.drain_media_updates()
+  assert [record.sequence for record in updates] == [1, 2, 3]
+  assert receiver.drain_media_updates() == []
+  assert [record.sequence for record in receiver.media_bootstrap()] == [1, 2]
+
+  receiver.record_binary(
+    manifest["session_id"], "render", "map_main",
+    {**identity, "message_type": 2, "sequence": 4},
+    b"\x00\x00\x00\x01\x67new-config", "127.0.0.1",
+  )
+  assert [record.sequence for record in receiver.media_bootstrap()] == [4]
 
 
 @pytest.mark.asyncio
@@ -754,9 +771,14 @@ def test_payload_bounds_route_and_publisher_sends_dedicated_service():
       assert valid is True
       return FakeMessage()
 
+  class FakeParams:
+    @staticmethod
+    def get_bool(_key):
+      return False
+
   receiver = CarrotNaviReceiver()
   messaging = FakeMessaging()
-  publisher = CarrotNaviCerealPublisher(receiver, messaging)
+  publisher = CarrotNaviCerealPublisher(receiver, messaging, params=FakeParams())
 
   assert publisher.publish_once(snapshot) == 11
   assert messaging.pub_master is not None
@@ -788,6 +810,14 @@ def test_payload_bounds_route_and_publisher_sends_dedicated_service():
   assert message.carrotNaviMedia["sessionId"] == "session"
   assert message.carrotNaviMedia["name"] == "tbt_next"
   assert message.carrotNaviMedia["payload"] == b"png-data"
+
+  publisher.publish_media(media_record, "session", kind_override="web_render")
+  _, message = messaging.pub_master.sent[-1]
+  assert message.carrotNaviMedia["kind"] == "web_render"
+
+  publisher.publish_media(media_record, "session", kind_override="web_image")
+  _, message = messaging.pub_master.sent[-1]
+  assert message.carrotNaviMedia["kind"] == "web_image"
 
 
 def test_payload_projects_primary_and_secondary_sdi_for_consumers():

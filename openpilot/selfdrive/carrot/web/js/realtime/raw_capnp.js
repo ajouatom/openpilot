@@ -43,22 +43,88 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
         gearStep: { kind: "int16", offset: 45 },          // @66 int16 slot 45
         useLaneLineSpeed: { kind: "float32", offset: 25 },// @68 32-bit slot 25
         brakeLights: { kind: "bool", offset: 68 },        // @19 bool bit 68
+        gasPressed: { kind: "bool", offset: 64 },
+        brakePressed: { kind: "bool", offset: 65 },
+        steeringPressed: { kind: "bool", offset: 66 },
+        standstill: { kind: "bool", offset: 67 },
+        leftBlinker: { kind: "bool", offset: 69 },
+        rightBlinker: { kind: "bool", offset: 70 },
+        doorOpen: { kind: "bool", offset: 72 },
+        seatbeltUnlatched: { kind: "bool", offset: 73 },
+        canValid: { kind: "bool", offset: 74 },
+        clutchPressed: { kind: "bool", offset: 75 },
+        stockAeb: { kind: "bool", offset: 77 },
+        stockFcw: { kind: "bool", offset: 78 },
+        espDisabled: { kind: "bool", offset: 79 },
+        leftBlindspot: { kind: "bool", offset: 352 },
+        rightBlindspot: { kind: "bool", offset: 353 },
+        steerFaultTemporary: { kind: "bool", offset: 354 },
+        steerFaultPermanent: { kind: "bool", offset: 355 },
+        parkingBrake: { kind: "bool", offset: 357 },
+        canTimeout: { kind: "bool", offset: 358 },
+        accFaulted: { kind: "bool", offset: 359 },
+        carFaultedNonCritical: { kind: "bool", offset: 362 },
+        vehicleSensorsInvalid: { kind: "bool", offset: 365 },
+        lowSpeedAlert: { kind: "bool", offset: 367 },
+        buttonEnable: { kind: "bool", offset: 368 },
+        leftLaneLine: { kind: "int16", offset: 61 },
+        rightLaneLine: { kind: "int16", offset: 62 },
+        pcmCruiseGap: { kind: "int16", offset: 44 },
         gearShifter: { kind: "enum", offset: 5, values: HUD_GEAR_NAMES }, // @14 enum16 slot 5
+        cruiseState: {
+          kind: "struct",
+          offset: 2,
+          schema: { fields: { enabled: { kind: "bool", offset: 0 } } },
+        },
+        buttonEvents: {
+          kind: "list<struct>",
+          offset: 3,
+          schema: {
+            fields: {
+              pressed: { kind: "bool", offset: 0 },
+              type: {
+                kind: "enum",
+                offset: 1,
+                values: [
+                  "unknown", "leftBlinker", "rightBlinker", "accelCruise", "decelCruise",
+                  "cancel", "lkas", "altButton2", "mainCruise", "setCruise", "resumeCruise",
+                  "gapAdjustCruise", "lfaButton", "paddleLeft", "paddleRight",
+                ],
+              },
+            },
+          },
+        },
       },
     },
     controlsState: {
       fields: {
         // capnp slot offsets (not ordinals) — verified via slot allocation algorithm
-        vCruiseCluster: { kind: "float32", offset: 46 },  // @63 — may be fork-repurposed field
+        enabled: { kind: "bool", offset: 704 },
+        vCruiseCluster: { kind: "float32", offset: 46 },
         activeLaneLine: { kind: "bool", offset: 716 },    // @67 bool bit 716
         curvature: { kind: "float32", offset: 34 },       // @37 32-bit slot 34
         desiredCurvature: { kind: "float32", offset: 44 },// @61 32-bit slot 44
+        forceDecel: { kind: "bool", offset: 713 },
+        longControlState: { kind: "enum", offset: 45, values: ["off", "pid", "stopping", "starting"] },
+        torqueState: {
+          kind: "struct",
+          offset: 5,
+          schema: {
+            fields: {
+              actualLateralAccel: { kind: "float32", offset: 8 },
+              desiredLateralAccel: { kind: "float32", offset: 9 },
+              lateralOutput: { kind: "float32", offset: 6 },
+            },
+          },
+        },
       },
     },
     deviceState: {
       fields: {
         memoryUsagePercent: { kind: "int8", offset: 25 },
         cpuTempC: { kind: "list<float32>", offset: 1 },
+        freeSpacePercent: { kind: "float32", offset: 4 },
+        deviceType: { kind: "enum", offset: 41, values: ["unknown", "neo", "chffrAndroid", "chffrIos", "tici", "pc", "tizi", "mici"] },
       },
     },
     peripheralState: {
@@ -72,28 +138,53 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
         nRoadLimitSpeed: { kind: "int32", offset: 1 },
         xSpdType: { kind: "int32", offset: 2 },
         xSpdLimit: { kind: "int32", offset: 3 },
+        xSpdDist: { kind: "int32", offset: 4 },
+        xSpdCountDown: { kind: "int32", offset: 5 },
+        xTurnInfo: { kind: "int32", offset: 6 },
+        xDistToTurn: { kind: "int32", offset: 7 },
+        xTurnCountDown: { kind: "int32", offset: 8 },
+        atcType: { kind: "text", offset: 1 },
+        szPosRoadName: { kind: "text", offset: 2 },
+        szTBTMainText: { kind: "text", offset: 3 },
         desiredSpeed: { kind: "int32", offset: 10 },
-        xPosLat: { kind: "float32", offset: 19 },
-        xPosLon: { kind: "float32", offset: 20 },
-        xPosAngle: { kind: "float32", offset: 21 },
-        xPosSpeed: { kind: "float32", offset: 22 },
+        xPosLat: { kind: "float32", offset: 12 },
+        xPosLon: { kind: "float32", offset: 13 },
+        xPosAngle: { kind: "float32", offset: 14 },
+        xPosSpeed: { kind: "float32", offset: 15 },
+        trafficState: { kind: "int32", offset: 16 },
+        nGoPosDist: { kind: "int32", offset: 17 },
+        nGoPosTime: { kind: "int32", offset: 18 },
+        szSdiDescr: { kind: "text", offset: 7 },
+        naviPaths: { kind: "text", offset: 8 },
         desiredSource: { kind: "text", offset: 4 },
+        carrotCmdIndex: { kind: "int32", offset: 11 },
+        carrotCmd: { kind: "text", offset: 5 },
+        carrotArg: { kind: "text", offset: 6 },
       },
     },
     selfdriveState: {
       fields: {
+        state: { kind: "enum", offset: 0, values: ["disabled", "preEnabled", "enabled", "softDisabling", "overriding"] },
+        enabled: { kind: "bool", offset: 16 },
+        engageable: { kind: "bool", offset: 18 },
+        experimentalMode: { kind: "bool", offset: 19 },
         personality: { kind: "enum", offset: 5 },
+        alertStatus: { kind: "enum", offset: 2 },
+        alertSize: { kind: "enum", offset: 3 },
+        alertType: { kind: "text", offset: 2 },
+        alertText1: { kind: "text", offset: 0 },
+        alertText2: { kind: "text", offset: 1 },
       },
     },
     gpsLocationExternal: {
       fields: {
         latitude: { kind: "float64", offset: 1 },
         longitude: { kind: "float64", offset: 2 },
-        speed: { kind: "float32", offset: 4 },
-        bearingDeg: { kind: "float32", offset: 5 },
-        bearingAccuracyDeg: { kind: "float32", offset: 11 },
-        speedAccuracy: { kind: "float32", offset: 12 },
-        hasFix: { kind: "bool", offset: 13 },
+        speed: { kind: "float32", offset: 1 },
+        bearingDeg: { kind: "float32", offset: 8 },
+        bearingAccuracyDeg: { kind: "float32", offset: 13 },
+        speedAccuracy: { kind: "float32", offset: 14 },
+        hasFix: { kind: "bool", offset: 480 },
       },
     },
     longitudinalPlan: {
@@ -104,6 +195,12 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
         tFollow: { kind: "float32", offset: 26 },
         desiredDistance: { kind: "float32", offset: 27 },
         myDrivingMode: { kind: "int32", offset: 28 },
+        xState: { kind: "int32", offset: 21 },
+        trafficState: { kind: "int32", offset: 22 },
+        longitudinalPlanSource: { kind: "enum", offset: 1 },
+        hasLead: { kind: "bool", offset: 2 },
+        fcw: { kind: "bool", offset: 3 },
+        shouldStop: { kind: "bool", offset: 12 },
       },
     },
   };
@@ -156,6 +253,28 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     },
   };
 
+  const RADAR_POINT_SCHEMA = {
+    fields: {
+      // RadarPoint starts with a UInt64 track id. Float32 offsets therefore
+      // begin at slot 2 rather than following the source field ordinals.
+      trackId: { kind: "uint64", offset: 0 },
+      dRel: { kind: "float32", offset: 2 },
+      yRel: { kind: "float32", offset: 3 },
+      vRel: { kind: "float32", offset: 4 },
+      aRel: { kind: "float32", offset: 5 },
+      yvRel: { kind: "float32", offset: 6 },
+      measured: { kind: "bool", offset: 224 },
+      vLead: { kind: "float32", offset: 8 },
+      aLead: { kind: "float32", offset: 9 },
+      jLead: { kind: "float32", offset: 10 },
+      radarSource: {
+        kind: "enum",
+        offset: 15,
+        values: ["frontRadar", "scc", "corner235", "corner180"],
+      },
+    },
+  };
+
   const MODEL_META_SCHEMA = {
     fields: {
       laneChangeState: { kind: "enum", offset: 9 },
@@ -199,7 +318,7 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     roadCameraState: {
       fields: {
         frameId: { kind: "uint32", offset: 0 },
-        transform: { kind: "list<float32>", offset: 2 },
+        sensor: { kind: "enum", offset: 40, values: ["unknown", "ar0231", "ox03c10", "os04c10"] },
       },
     },
     lateralPlan: {
@@ -208,6 +327,8 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
         latDebugText: { kind: "text", offset: 9 },
         position: { kind: "struct", offset: 10, schema: XYZT_SCHEMA },
         distances: { kind: "list<float32>", offset: 11 },
+        laneChangeState: { kind: "enum", offset: 16 },
+        laneChangeDirection: { kind: "enum", offset: 17 },
       },
     },
     radarState: {
@@ -216,8 +337,19 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
         // lead slots, so these offsets follow the pointer-section layout.
         leadOne: { kind: "struct", offset: 1, schema: RADAR_LEAD_SCHEMA },
         leadTwo: { kind: "struct", offset: 2, schema: RADAR_LEAD_SCHEMA },
-        leadRight: { kind: "struct", offset: 5, schema: RADAR_LEAD_SCHEMA },
-        leadLeft: { kind: "struct", offset: 9, schema: RADAR_LEAD_SCHEMA },
+        leadRight: { kind: "struct", offset: 6, schema: RADAR_LEAD_SCHEMA },
+        leadLeft: { kind: "struct", offset: 10, schema: RADAR_LEAD_SCHEMA },
+        leadsLeft: { kind: "list<struct>", offset: 8, schema: RADAR_LEAD_SCHEMA },
+        leadsCenter: { kind: "list<struct>", offset: 7, schema: RADAR_LEAD_SCHEMA },
+        leadsRight: { kind: "list<struct>", offset: 9, schema: RADAR_LEAD_SCHEMA },
+        leadsLeft2: { kind: "list<struct>", offset: 11, schema: RADAR_LEAD_SCHEMA },
+        leadsRight2: { kind: "list<struct>", offset: 12, schema: RADAR_LEAD_SCHEMA },
+        leadsCutIn: { kind: "list<struct>", offset: 13, schema: RADAR_LEAD_SCHEMA },
+      },
+    },
+    liveTracks: {
+      fields: {
+        points: { kind: "list<struct>", offset: 1, schema: RADAR_POINT_SCHEMA },
       },
     },
     carControl: {
@@ -232,6 +364,17 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
               steeringAngleDeg: { kind: "float32", offset: 3 },
               accel: { kind: "float32", offset: 4 },
               curvature: { kind: "float32", offset: 7 },
+            },
+          },
+        },
+        cruiseControl: {
+          kind: "struct",
+          offset: 0,
+          schema: {
+            fields: {
+              cancel: { kind: "bool", offset: 0 },
+              resume: { kind: "bool", offset: 1 },
+              override: { kind: "bool", offset: 2 },
             },
           },
         },
@@ -259,6 +402,57 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     },
   };
 
+  const DRIVER_MONITORING_SCHEMA = {
+    fields: {
+      lockout: { kind: "bool", offset: 0 },
+      alertLevel: { kind: "enum", offset: 2, values: ["none", "one", "two", "three"] },
+      visionPolicyState: {
+        kind: "struct",
+        offset: 1,
+        schema: { fields: { isDistracted: { kind: "bool", offset: 8 } } },
+      },
+    },
+  };
+
+  const REPLAY_SCHEMAS = {
+    ...HUD_SCHEMAS,
+    ...OVERLAY_SCHEMAS,
+    driverMonitoringState: DRIVER_MONITORING_SCHEMA,
+    qRoadEncodeIdx: {
+      fields: {
+        frameId: { kind: "uint32", offset: 0 },
+        segmentNum: { kind: "int32", offset: 3 },
+        segmentId: { kind: "uint32", offset: 4 },
+        timestampSof: { kind: "uint64", offset: 3 },
+      },
+    },
+  };
+
+  // cereal Event union discriminants from the checked-in log.capnp schema.
+  // These are wire discriminants, not the explicit @field ordinals.
+  const EVENT_SERVICE_BY_DISCRIMINANT = new Map([
+    [1, "roadCameraState"],
+    [5, "deviceState"],
+    [6, "controlsState"],
+    [12, "radarState"],
+    [18, "liveCalibration"],
+    [21, "carState"],
+    [22, "carControl"],
+    [23, "longitudinalPlan"],
+    [47, "gpsLocationExternal"],
+    [60, "liveParameters"],
+    [63, "lateralPlan"],
+    [73, "modelV2"],
+    [78, "peripheralState"],
+    [88, "qRoadEncodeIdx"],
+    [92, "liveTorqueParameters"],
+    [105, "carrotMan"],
+    [128, "selfdriveState"],
+    [129, "liveTracks"],
+    [144, "liveDelay"],
+    [149, "driverMonitoringState"],
+  ]);
+
   function signed30(value) {
     return (value & 0x20000000) ? (value - 0x40000000) : value;
   }
@@ -285,6 +479,23 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
       segmentByteOffset += wordCount * 8;
     }
     return { bytes, view, segments };
+  }
+
+  function framedMessageByteLength(data) {
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    if (bytes.byteLength < 4) return 0;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const segmentCount = view.getUint32(0, true) + 1;
+    if (segmentCount <= 0 || segmentCount > 512) throw new Error("invalid capnp segment count");
+    const tableBytes = 4 + segmentCount * 4 + (segmentCount % 2 === 0 ? 4 : 0);
+    if (bytes.byteLength < tableBytes) return 0;
+    let wordCount = 0;
+    for (let index = 0; index < segmentCount; index += 1) {
+      wordCount += view.getUint32(4 + index * 4, true);
+      if (wordCount > 64 * 1024 * 1024) throw new Error("capnp message too large");
+    }
+    const byteLength = tableBytes + wordCount * 8;
+    return bytes.byteLength >= byteLength ? byteLength : 0;
   }
 
   function getSegment(message, segmentIndex) {
@@ -433,6 +644,12 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
       }
       case "uint32":
         return message.view.getUint32(base + offset * 4, true);
+      case "uint64": {
+        const byteOffset = base + offset * 8;
+        const lo = message.view.getUint32(byteOffset, true);
+        const hi = message.view.getUint32(byteOffset + 4, true);
+        return hi * 0x100000000 + lo;
+      }
       case "int32":
         return message.view.getInt32(base + offset * 4, true);
       case "float32":
@@ -520,7 +737,9 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     switch (fieldSpec.kind) {
       case "bool":
       case "int8":
+      case "int16":
       case "uint32":
+      case "uint64":
       case "int32":
       case "float32":
       case "float64": {
@@ -558,7 +777,36 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     if (!eventRef) return null;
     const payloadRef = readStructSlot(message, eventRef, 0);
     if (!payloadRef) return null;
-    return decodeStruct(message, payloadRef, schema);
+    const decoded = decodeStruct(message, payloadRef, schema);
+    if (service === "controlsState" && decoded?.torqueState) {
+      Object.assign(decoded, decoded.torqueState);
+      delete decoded.torqueState;
+    }
+    return decoded;
+  }
+
+  function decodeReplayEvent(data, expectedService = "", excludedService = "") {
+    const message = parseMessage(data);
+    const eventRef = readStructPointer(message, 0, 0);
+    if (!eventRef) return null;
+    const base = structDataByteOffset(message, eventRef);
+    if (eventRef.dataWords < 2) return null;
+    const discriminant = message.view.getUint16(base + 8, true);
+    const service = EVENT_SERVICE_BY_DISCRIMINANT.get(discriminant);
+    if (!service) return null;
+    if (expectedService && service !== expectedService) return null;
+    if (excludedService && service === excludedService) return null;
+    const payloadRef = readStructSlot(message, eventRef, 0);
+    if (!payloadRef) return null;
+    const logMonoTime = readScalar(message, eventRef, "uint64", 0);
+    // Event.valid has a wire default of true, so the stored bit is inverted.
+    const valid = !readScalar(message, eventRef, "bool", 80);
+    const decoded = decodeStruct(message, payloadRef, REPLAY_SCHEMAS[service]);
+    if (service === "controlsState" && decoded?.torqueState) {
+      Object.assign(decoded, decoded.torqueState);
+      delete decoded.torqueState;
+    }
+    return { service, logMonoTime, valid, decoded };
   }
 
   function rawHudDriveMode(state) {
@@ -679,6 +927,8 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     decodeOverlayEvent(service, data) {
       return decodeEventFields(service, data, OVERLAY_SCHEMAS);
     },
+    framedMessageByteLength,
+    decodeReplayEvent,
     deriveHudPayload,
   };
 })();

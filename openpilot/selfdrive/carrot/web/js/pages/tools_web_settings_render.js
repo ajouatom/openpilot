@@ -1,11 +1,39 @@
 "use strict";
 
-// Web settings dialog rendering — turns the UI schema (WEB_SETTINGS_GROUPS) into
-// DOM strings and keeps the active panel in sync. Control widgets are dispatched
-// by row.type; add a new widget by adding a branch in renderWebSettingsItem.
-// Reuses the shared .c-switch component and getUIText / escapeHtml helpers.
+// Declarative web-settings renderer. The backend field spec decides the
+// control type/default/choices; the presentation schema only groups and labels.
 
 let activeWebSettingsGroup = "general";
+
+function webSettingsText(key) {
+  return getUIText(key) || String(key || "");
+}
+
+function getWebSettingsField(item) {
+  return item?.id ? WEB_SPEC_BY_KEY[item.id] || null : null;
+}
+
+function isWebSettingsItemVisible(item) {
+  if (item?.component) {
+    return Boolean(globalThis.WebSettingsComponents?.isVisible?.(item.component, WEB_SPEC_BY_KEY));
+  }
+  return Boolean(getWebSettingsField(item));
+}
+
+function getVisibleWebSettingsGroups() {
+  return WEB_SETTINGS_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter(isWebSettingsItemVisible),
+  })).filter((group) => group.items.length > 0);
+}
+
+function findWebSettingsItem(id) {
+  for (const group of getVisibleWebSettingsGroups()) {
+    const item = group.items.find((entry) => entry.id === id);
+    if (item) return item;
+  }
+  return null;
+}
 
 function getWebSettingValue(item) {
   return getWebSettingByKey(item.id, WEB_SETTING_DEFAULTS[item.id]);
@@ -16,10 +44,14 @@ function setWebSettingValue(item, value) {
 }
 
 function renderWebSettingsItem(item) {
-  const title = getUIText(item.titleKey, item.defaultTitle);
-  const desc = getUIText(item.descKey, item.defaultDesc);
-  if (item.type === "toggle") {
-    const checked = getWebSettingValue(item);
+  if (item?.component) return globalThis.WebSettingsComponents?.render?.(item.component, item) || "";
+  const field = getWebSettingsField(item);
+  if (!field) return "";
+  const title = webSettingsText(item.titleKey);
+  const desc = webSettingsText(item.descKey);
+
+  if (field.type === "bool") {
+    const checked = Boolean(getWebSettingValue(item));
     return `
       <label class="web-settings-row web-settings-row--toggle" data-web-setting="${escapeHtml(item.id)}">
         <span class="web-settings-row__copy">
@@ -33,13 +65,16 @@ function renderWebSettingsItem(item) {
       </label>`;
   }
 
-  if (item.type === "select") {
-    const value = getWebSettingValue(item);
-    const options = (item.options || []).map((option) => `
-      <option value="${escapeHtml(option.value)}" ${option.value === value ? "selected" : ""}>
-        ${escapeHtml(getUIText(option.labelKey, option.defaultLabel))}
-      </option>
-    `).join("");
+  if (field.type === "enum") {
+    const value = String(getWebSettingValue(item));
+    const allowed = new Set(field.choices || []);
+    const options = (item.options || [])
+      .filter((option) => allowed.size === 0 || allowed.has(option.value))
+      .map((option) => `
+        <option value="${escapeHtml(option.value)}" ${option.value === value ? "selected" : ""}>
+          ${escapeHtml(webSettingsText(option.labelKey))}
+        </option>
+      `).join("");
     return `
       <label class="web-settings-row web-settings-row--select" data-web-setting="${escapeHtml(item.id)}">
         <span class="web-settings-row__copy">
@@ -53,18 +88,15 @@ function renderWebSettingsItem(item) {
   }
 
   return `
-    <div class="web-settings-row">
+    <div class="web-settings-row" data-web-setting="${escapeHtml(item.id)}">
       <div class="web-settings-row__title">${escapeHtml(title)}</div>
       ${desc ? `<div class="web-settings-row__desc">${escapeHtml(desc)}</div>` : ""}
     </div>`;
 }
 
 function renderWebSettingsGroup(group) {
-  const title = getUIText(group.labelKey, group.defaultLabel);
-  const body = group.items.length
-    ? group.items.map(renderWebSettingsItem).join("")
-    : `<div class="web-settings-empty">${escapeHtml(getUIText("web_settings_empty", "No general web settings yet."))}</div>`;
-
+  const title = webSettingsText(group.labelKey);
+  const body = group.items.map(renderWebSettingsItem).join("");
   return `
     <section class="web-settings-group" data-web-settings-panel="${escapeHtml(group.id)}" ${group.id === activeWebSettingsGroup ? "" : "hidden"}>
       <div class="web-settings-group__title">${escapeHtml(title)}</div>
@@ -73,21 +105,25 @@ function renderWebSettingsGroup(group) {
 }
 
 function renderWebSettingsDialogHtml() {
-  const groups = WEB_SETTINGS_GROUPS.map((group) => {
+  const visibleGroups = getVisibleWebSettingsGroups();
+  if (!visibleGroups.some((group) => group.id === activeWebSettingsGroup)) {
+    activeWebSettingsGroup = visibleGroups[0]?.id || "general";
+  }
+  const tabs = visibleGroups.map((group) => {
     const active = group.id === activeWebSettingsGroup;
     return `
       <button type="button" class="web-settings-nav__item ${active ? "is-active" : ""}" data-web-settings-group="${escapeHtml(group.id)}" aria-pressed="${active ? "true" : "false"}">
-        ${escapeHtml(getUIText(group.labelKey, group.defaultLabel))}
+        ${escapeHtml(webSettingsText(group.labelKey))}
       </button>`;
   }).join("");
 
   return `
     <div class="web-settings-dialog">
-      <nav class="web-settings-nav" aria-label="${escapeHtml(getUIText("web_settings", "Web Settings"))}">
-        ${groups}
+      <nav class="web-settings-nav" aria-label="${escapeHtml(webSettingsText("web_settings"))}">
+        ${tabs}
       </nav>
       <div class="web-settings-panels">
-        ${WEB_SETTINGS_GROUPS.map(renderWebSettingsGroup).join("")}
+        ${visibleGroups.map(renderWebSettingsGroup).join("")}
       </div>
     </div>`;
 }

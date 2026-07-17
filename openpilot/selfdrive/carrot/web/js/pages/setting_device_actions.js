@@ -295,7 +295,7 @@ function openDeviceInfoModal(title, html) {
   overlay.className = "training-guide-modal device-info-modal";
   overlay.innerHTML = `
     <div class="training-guide-modal__surface device-info-modal__surface" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
-      <button type="button" class="training-guide-modal__close" data-device-info-close aria-label="${escapeHtml(getUIText("close", "Close"))}">×</button>
+      <button type="button" class="training-guide-modal__close c-close" data-device-info-close aria-label="${escapeHtml(getUIText("close", "Close"))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
       <div class="device-info-modal__header">${escapeHtml(title)}</div>
       <div class="device-info-modal__body"></div>
     </div>`;
@@ -320,7 +320,7 @@ function openTrainingGuide() {
   overlay.className = "training-guide-modal";
   overlay.innerHTML = `
     <div class="training-guide-modal__surface" role="dialog" aria-modal="true" aria-label="${escapeHtml(getUIText("review_training_guide", "Review Training Guide"))}">
-      <button type="button" class="training-guide-modal__close" data-training-close aria-label="${escapeHtml(getUIText("close", "Close"))}">×</button>
+      <button type="button" class="training-guide-modal__close c-close" data-training-close aria-label="${escapeHtml(getUIText("close", "Close"))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
       <img class="training-guide-modal__image" alt="" />
       <div class="training-guide-modal__bar">
         <button type="button" class="smallBtn" data-training-prev>${escapeHtml(getUIText("back", "Back"))}</button>

@@ -6,6 +6,7 @@ from aiohttp import web
 from ..config import SOUND_ASSETS_DIR, TRAINING_ASSETS_DIR, WEB_DIR
 from ..services.params import get_param_values
 from ..services.web_settings import read_web_settings, web_settings_client_spec
+from .intro.state import intro_bootstrap
 
 
 _LANGUAGES_JSON_PATH = os.path.join(
@@ -36,12 +37,21 @@ def _build_bootstrap_payload() -> dict:
   except Exception:
     device_language = ""
     sound_language = "auto"
+  # Injected (not fetched) so the client can gate on the very first render —
+  # a separate request would let the home page paint before the intro takes over.
+  try:
+    intro = intro_bootstrap()
+  except Exception:
+    # Never let the intro decision keep the page from loading.
+    intro = {"shouldShow": False, "reason": "bootstrap_error"}
+
   return {
     "webSettings": read_web_settings(),
     "webSettingsSpec": web_settings_client_spec(),
     "deviceLanguage": device_language,
     "soundLanguage": sound_language,
     "deviceLanguages": _load_device_languages(),
+    "intro": intro,
   }
 
 

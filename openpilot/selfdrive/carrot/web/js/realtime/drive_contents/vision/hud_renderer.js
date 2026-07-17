@@ -1,4 +1,5 @@
-/* Adaptive driving HUD
+/* Vision-owned adaptive driving HUD renderer.
+ * Lifecycle and visibility are owned by drive_contents/vision/hud_content.js.
  * - Reuses CarrotLink homePreview surface as the primary web HUD layout.
  * - Mount position (inline vs overlay) is handled separately from the visual surface.
  */
@@ -82,13 +83,13 @@
 
   function isOverlayMount() {
     const page = document.body?.dataset?.page || "carrot";
-    return page === "carrot" && Boolean(window.CarrotLayout?.isWide?.() ?? window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches);
+    return page === "carrot";
   }
 
   function getHudSurface() {
     const page = document.body?.dataset?.page || "carrot";
     if (page !== "carrot") return SURFACE_HOME;
-    return Boolean(window.CarrotLayout?.isWide?.() ?? window.matchMedia("(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)").matches) ? SURFACE_OVERLAY : SURFACE_INLINE;
+    return SURFACE_OVERLAY;
   }
 
   function getPreferredAspectRatioForWindow(windowClass, wide) {
@@ -171,8 +172,7 @@
   }
 
   function getSurfaceTarget() {
-    if (isOverlayMount()) return $("carrotStage");
-    return $("carrotHudDock");
+    return $("carrotStage");
   }
 
   function mountHudToSurface(surface) {
@@ -340,7 +340,6 @@
         wide: false,
         preferredAspectRatio: surface === SURFACE_OVERLAY ? 1.02 : surface === SURFACE_INLINE ? 0.98 : 1.24,
         borderRadius: 18,
-        dockInset: surface === SURFACE_OVERLAY ? 4 : surface === SURFACE_HOME ? 2 : 6,
         padding: surface === SURFACE_HOME ? 10 : 13,
         sectionGap: surface === SURFACE_HOME ? 8 : 11,
         metricGap: surface === SURFACE_HOME ? 7 : 9,
@@ -364,7 +363,6 @@
             ? (wide ? 0.96 : 0.80)
             : (wide ? 1.34 : 1.24),
         borderRadius: 20,
-        dockInset: surface === SURFACE_OVERLAY ? 6 : surface === SURFACE_HOME ? 3 : 8,
         padding: surface === SURFACE_HOME ? 12 : 16,
         sectionGap: surface === SURFACE_HOME ? 10 : 13,
         metricGap: surface === SURFACE_HOME ? 8 : 10,
@@ -388,7 +386,6 @@
             ? (wide ? 1.00 : 0.84)
             : (wide ? 1.44 : 1.30),
         borderRadius: 24,
-        dockInset: surface === SURFACE_OVERLAY ? 8 : surface === SURFACE_HOME ? 4 : 10,
         padding: surface === SURFACE_HOME ? 14 : 20,
         sectionGap: surface === SURFACE_HOME ? 12 : 15,
         metricGap: surface === SURFACE_HOME ? 9 : 11,
@@ -411,7 +408,6 @@
           ? (wide ? 1.16 : 0.90)
           : (wide ? 1.56 : 1.38),
       borderRadius: 28,
-      dockInset: surface === SURFACE_OVERLAY ? 10 : surface === SURFACE_HOME ? 5 : 12,
       padding: surface === SURFACE_HOME ? 16 : 24,
       sectionGap: surface === SURFACE_HOME ? 14 : 18,
       metricGap: surface === SURFACE_HOME ? 10 : 13,
@@ -458,7 +454,6 @@
         density: "micro",
         wide: false,
         borderRadius: 18,
-        dockInset: 4,
         padding: Math.max(8, Math.round(profile.padding * 0.64)),
         sectionGap: Math.max(6, Math.round(profile.sectionGap * 0.56)),
         metricGap: Math.max(5, Math.round(profile.metricGap * 0.56)),
@@ -506,12 +501,9 @@
     style.setProperty("--hud-metric-value-scale", bandTypography.metricScale.toFixed(2));
     style.setProperty("--hud-bottom-segment-scale", bandTypography.bottomScale.toFixed(2));
     style.setProperty("--hud-max-width", `${Math.round(profile.maxWidth)}px`);
-    style.setProperty("--hud-dock-inset", `${profile.dockInset}px`);
     style.setProperty("--hud-text-shadow-strong", STRONG_TEXT_SHADOW);
     style.setProperty("--hud-card-width", `${Math.round(panelWidth)}px`);
     style.setProperty("--hud-card-height", `${panelHeight}px`);
-    document.documentElement.style.setProperty("--carrot-dock-panel-height", `${Math.round(panelHeight + (portraitInline ? 0 : profile.dockInset * 2))}px`);
-    document.documentElement.style.setProperty("--carrot-dock-panel-width", `${Math.round(panelWidth)}px`);
   }
 
   function scheduleHudProfileApply() {
@@ -536,9 +528,7 @@
     }
     if (typeof ResizeObserver === "function") {
       const observer = new ResizeObserver(handleLayout);
-      const carrotDock = $("carrotHudDock");
       const carrotStage = $("carrotStage");
-      if (carrotDock) observer.observe(carrotDock);
       if (carrotStage) observer.observe(carrotStage);
     }
     scheduleHudProfileApply();
@@ -754,7 +744,7 @@
     setText("hudGearLabel", labels.gear);
   }
 
-  const DrivingHud = {
+  const DriveVisionHudRenderer = {
     init() {
       bindHudLayout();
       syncStaticHudText(true);
@@ -801,5 +791,5 @@
     },
   };
 
-  window.DrivingHud = DrivingHud;
+  window.DriveVisionHudRenderer = DriveVisionHudRenderer;
 })();

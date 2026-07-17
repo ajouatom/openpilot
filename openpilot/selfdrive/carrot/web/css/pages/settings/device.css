@@ -1747,20 +1747,13 @@
   background: #000;
 }
 
+/* Visuals come from the shared .c-close atom; this only pins it to the
+   modal's top-right corner. */
 .training-guide-modal__close {
   position: absolute;
   top: 10px;
   right: 10px;
   z-index: 1;
-  width: 42px;
-  height: 42px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 56%, transparent);
-  border-radius: var(--dialog-control-radius);
-  background: color-mix(in srgb, var(--md-surface-cont) 82%, #000);
-  color: var(--md-on-surface);
-  font-size: 28px;
-  font-weight: 800;
-  line-height: 1;
 }
 
 .training-guide-modal__bar {

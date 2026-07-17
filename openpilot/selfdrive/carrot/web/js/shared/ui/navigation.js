@@ -317,10 +317,40 @@ function markWebStartPageBootstrapped() {
   document.documentElement.dataset.carrotBootstrapped = "1";
 }
 
+/* First-run intro gate.
+   The server decides (features/intro/state.py) and static.py ships the answer
+   in the bootstrap payload, so this is a synchronous read — the home page never
+   paints before the intro takes over.
+
+   Everything is wrapped in try/catch and defaults to "no intro": being shown
+   the intro twice is a nuisance, but a broken gate that locks the user out of
+   the app is not recoverable from the car. */
+function shouldGateOnIntro(source) {
+  if (source === "intro") return false;   // the intro itself is handing control back
+  try {
+    if (!window.__CARROT_BOOTSTRAP__?.intro?.shouldShow) return false;
+    return typeof window.CarrotIntroShell?.open === "function";
+  } catch {
+    return false;
+  }
+}
+
 function bootstrapWebStartPage(source = "app") {
   if (window.__CARROT_WEB_HAS_BOOTSTRAPPED_PAGE) {
     markWebStartPageBootstrapped();
     return window.__CARROT_WEB_INITIAL_PAGE || CURRENT_PAGE || "carrot";
+  }
+
+  if (shouldGateOnIntro(source)) {
+    try {
+      window.CarrotIntroShell.open();
+      /* Not marked as bootstrapped: the intro calls back with
+         bootstrapWebStartPage("intro") once it is done, and that call does
+         the real page setup. */
+      return null;
+    } catch (err) {
+      console.error("[intro] failed to open, entering the app instead", err);
+    }
   }
 
   const startPage = resolveWebStartPage();
@@ -370,9 +400,7 @@ function runPageEnter(page, prevPage, pushHistory) {
     return;
   }
 
-  if (page === "carrot" && window.HomeDrive && typeof window.HomeDrive.refresh === "function") {
-    window.HomeDrive.refresh();
-  }
+  if (page === "carrot") window.DriveVisionFacade?.lifecycle?.refresh?.();
 
   if (page === "car") {
     showCarScreen("makers", false);

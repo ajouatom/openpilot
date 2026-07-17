@@ -1,0 +1,171 @@
+.carrot-navi-divider {
+  position: relative;
+  z-index: var(--drive-layer-transport);
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  background: rgba(3, 7, 11, 0.62);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.drive-workspace.is-drive-workspace-active .carrot-navi-divider {
+  opacity: 1;
+}
+
+.carrot-navi-divider::before {
+  content: "";
+  position: absolute;
+  inset: 0 -22px;
+}
+
+.drive-workspace.is-drive-workspace-vertical .carrot-navi-divider {
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.drive-workspace.is-drive-workspace-vertical .carrot-navi-divider::before {
+  inset: -22px 0;
+}
+
+.drive-workspace.is-drive-workspace-vertical .carrot-navi-divider span {
+  width: var(--carrot-navi-divider-handle-height);
+  height: var(--carrot-navi-divider-handle-width);
+}
+
+.carrot-navi-divider span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--carrot-navi-divider-handle-width);
+  height: var(--carrot-navi-divider-handle-height);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.38);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  transform: translate(-50%, -50%);
+  transition: background 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
+}
+
+.carrot-navi-divider::after {
+  content: attr(data-ratio);
+  position: absolute;
+  top: calc(50% + 58px);
+  left: 50%;
+  min-width: 42px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(5, 10, 15, 0.86);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  pointer-events: none;
+  display: none;
+}
+
+.drive-workspace.is-drive-workspace-resizing .carrot-navi-divider span,
+.carrot-navi-divider:focus-visible span {
+  background: rgba(255, 178, 111, 0.92);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.38), 0 0 0 5px rgba(255, 161, 82, 0.14);
+  transform: translate(-50%, -50%) scaleY(1.06);
+}
+
+.drive-workspace.is-drive-workspace-resizing .carrot-navi-divider::after,
+.carrot-navi-divider:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.carrot-navi-pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--carrot-navi-pane-bg);
+  opacity: 1;
+}
+
+.carrot-navi-pane__canvas,
+.carrot-navi-pane__video {
+  display: block;
+  position: absolute;
+  z-index: var(--drive-layer-content);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--carrot-navi-pane-bg);
+}
+
+.carrot-navi-pane__video {
+  z-index: var(--drive-layer-surface);
+  width: 2px;
+  height: 2px;
+  opacity: 0.001;
+  pointer-events: none;
+}
+
+.carrot-navi-pane__canvas[hidden],
+.carrot-navi-pane__video[hidden] {
+  display: none !important;
+}
+
+.carrot-navi-pane__overlay {
+  position: absolute;
+  z-index: var(--drive-layer-media);
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.carrot-navi-pane__status {
+  position: absolute;
+  z-index: var(--drive-layer-status);
+  left: 50%;
+  bottom: 18px;
+  max-width: calc(100% - 32px);
+  padding: 8px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(7, 11, 16, 0.82);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.carrot-navi-pane__status[data-tone="warning"] {
+  border-color: rgba(255, 181, 74, 0.5);
+  background: rgba(63, 39, 11, 0.9);
+  color: #ffd18c;
+}
+
+.carrot-navi-pane__status[data-tone="disconnected"] {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(12, 17, 24, 0.92);
+}
+
+.carrot-stage.is-drive-workspace-split .carrot-map-dock {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* At 50% and below, preserve the limited road-view area for driving content.
+   Alerts, connection actions, replay controls, and stage controls remain. */
+html.is-drive-workspace-compact-primary body[data-page="carrot"] #driveHudCard,
+html.is-drive-workspace-compact-primary body[data-page="carrot"] #carrotMiniHud,
+.carrot-stage.is-drive-workspace-compact-primary .carrot-stage__debug {
+  display: none !important;
+}

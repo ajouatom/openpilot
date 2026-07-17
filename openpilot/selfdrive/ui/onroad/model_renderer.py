@@ -1,6 +1,5 @@
 import math
 import colorsys
-import time
 import numpy as np
 import pyray as rl
 from openpilot.cereal import messaging, car, log
@@ -151,7 +150,6 @@ class ModelRenderer(Widget):
     #if render_lead_indicator and radar_state:
     #  self._draw_lead_indicator()
     self._draw_path_carrot(sm)
-    self._draw_lane_center_indicator_carrot(sm)
     self._draw_lane_lines_carrot(sm)
     self._draw_blind_spot_carrot(sm)
     self._draw_radar_info_carrot(sm)
@@ -464,7 +462,6 @@ class ModelRenderer(Widget):
 
   def _init_carrot(self):
     self._carrot_show_lane_info = 1
-    self._carrot_tire_trajectory = False
     self._carrot_show_radar_info = 0
     self._carrot_radar_lat_factor = 0.5
 
@@ -534,7 +531,6 @@ class ModelRenderer(Widget):
 
   def _refresh_carrot_params(self):
     self._carrot_show_lane_info = ui_state.params.get_int("ShowLaneInfo")
-    self._carrot_tire_trajectory = ui_state.params.get_bool("CarrotTireTrajectory")
     self._carrot_show_radar_info = ui_state.params.get_int("ShowRadarInfo")
     self._carrot_radar_lat_factor = 0.5
 
@@ -903,174 +899,6 @@ class ModelRenderer(Widget):
         rl.Color(0, 0, 0, 20),
         radar_stroke,
         3.0,
-      )
-
-
-  @staticmethod
-  def _lane_center_gradient_color_carrot(danger_ratio: float, alpha: int = 255) -> rl.Color:
-    if danger_ratio <= 0.10:
-      red, green = 0.0, 180.0
-    elif danger_ratio <= 0.60:
-      factor = (danger_ratio - 0.10) / 0.50
-      red, green = factor * 255.0, 180.0
-    elif danger_ratio <= 1.00:
-      factor = (danger_ratio - 0.60) / 0.40
-      red, green = 255.0, 180.0 - factor * 180.0
-    else:
-      red, green = 255.0, 0.0
-    return rl.Color(int(red), int(green), 0, alpha)
-
-
-  def _draw_tire_edge_band_carrot(
-    self,
-    left_points: np.ndarray,
-    right_points: np.ndarray,
-    is_left: bool,
-    color: rl.Color,
-  ) -> None:
-    n_edge = min(len(left_points), len(right_points))
-    if n_edge < 2 or self._rect.width <= 0 or self._rect.height <= 0:
-      return
-
-    # Keep C3's 5 px subdivision and edge fade, but submit the whole side as
-    # one rlgl batch. The previous path allocated a Gradient and NumPy array
-    # and entered/exited the shader once for every tiny quad.
-    rl.rl_disable_texture()
-    rl.rl_begin(rl.RL_QUADS)
-    try:
-      for i in range(n_edge - 1):
-        lx0, ly0 = map(float, left_points[i])
-        rx0, ry0 = map(float, right_points[i])
-        lx1, ly1 = map(float, left_points[i + 1])
-        rx1, ry1 = map(float, right_points[i + 1])
-        outer_y0 = ly0 if is_left else ry0
-        outer_y1 = ly1 if is_left else ry1
-        subdivisions = max(1, int(abs(outer_y1 - outer_y0) / 5.0))
-
-        for subdivision in range(subdivisions):
-          t0 = subdivision / subdivisions
-          t1 = (subdivision + 1) / subdivisions
-          slx_b = lx0 + (lx1 - lx0) * t0
-          sly_b = ly0 + (ly1 - ly0) * t0
-          srx_b = rx0 + (rx1 - rx0) * t0
-          sry_b = ry0 + (ry1 - ry0) * t0
-          slx_t = lx0 + (lx1 - lx0) * t1
-          sly_t = ly0 + (ly1 - ly0) * t1
-          srx_t = rx0 + (rx1 - rx0) * t1
-          sry_t = ry0 + (ry1 - ry0) * t1
-
-          band_width_bottom = abs(slx_b - srx_b) / 6.0
-          band_width_top = abs(slx_t - srx_t) / 6.0
-          outer_x_bottom = slx_b if is_left else srx_b
-          outer_y_bottom = sly_b if is_left else sry_b
-          outer_x_top = slx_t if is_left else srx_t
-          outer_y_top = sly_t if is_left else sry_t
-          center_bottom = (slx_b + srx_b) * 0.5
-          direction = 1.0 if center_bottom > outer_x_bottom else -1.0
-          inner_x_bottom = outer_x_bottom + direction * band_width_bottom
-          inner_x_top = outer_x_top + direction * band_width_top
-
-          if math.hypot(outer_x_top - outer_x_bottom, outer_y_top - outer_y_bottom) < 0.5:
-            continue
-
-          rl.rl_color4ub(color.r, color.g, color.b, color.a)
-          rl.rl_vertex2f(outer_x_bottom, outer_y_bottom)
-          rl.rl_color4ub(color.r, color.g, color.b, 0)
-          rl.rl_vertex2f(inner_x_bottom, outer_y_bottom)
-          rl.rl_color4ub(color.r, color.g, color.b, 0)
-          rl.rl_vertex2f(inner_x_top, outer_y_top)
-          rl.rl_color4ub(color.r, color.g, color.b, color.a)
-          rl.rl_vertex2f(outer_x_top, outer_y_top)
-    finally:
-      rl.rl_end()
-
-
-  def _draw_lane_center_indicator_carrot(self, sm) -> None:
-    if not self._carrot_tire_trajectory or not sm.alive['modelV2'] or not sm.valid['modelV2']:
-      return
-
-    model = sm['modelV2']
-    lane_lines = model.laneLines
-    lane_line_probs = model.laneLineProbs
-    if len(lane_lines) < 3 or len(lane_line_probs) < 3 or len(lane_lines[1].y) == 0 or len(lane_lines[2].y) == 0:
-      return
-
-    left_m = float(lane_lines[1].y[0])
-    right_m = -float(lane_lines[2].y[0])
-    if lane_line_probs[1] < 0.3 and lane_line_probs[2] > 0.3:
-      left_m = 3.0 - right_m
-    elif lane_line_probs[2] < 0.3 and lane_line_probs[1] > 0.3:
-      right_m = 3.0 - left_m
-
-    total_width = left_m + right_m
-    if total_width < 0.5:
-      total_width = 3.0
-    offset_m = (left_m - right_m) / 2.0
-    limit_offset = max(total_width / 2.0 - 0.9, 0.1)
-    danger_ratio = abs(offset_m) / limit_offset
-    direction_label = "L" if offset_m > 0.02 else ("R" if offset_m < -0.02 else "C")
-    distance_text = f"{abs(offset_m):.2f}"
-
-    position = self._path.raw_points
-    if position.shape[0] == 0:
-      return
-    max_distance = 40.0
-    if len(model.leadsV3) > 0:
-      lead = model.leadsV3[0]
-      if lead.prob > 0.5 and len(lead.x) > 0 and 3.0 < lead.x[0] < max_distance:
-        max_distance = float(lead.x[0])
-    max_idx = self._get_path_length_idx(position[:, 0], max_distance)
-    if max_idx < 5:
-      return
-
-    left_points = []
-    right_points = []
-    for i in range(max_idx + 1):
-      path_x, path_y, path_z = map(float, position[i])
-      if path_x < 0.0:
-        continue
-      left = self._map_to_screen(path_x, path_y - 0.9, path_z + 1.22)
-      right = self._map_to_screen(path_x, path_y + 0.9, path_z + 1.22)
-      if left is not None and right is not None:
-        if left_points and left[1] > left_points[-1][1]:
-          continue
-        left_points.append(left)
-        right_points.append(right)
-
-    if not left_points or not right_points:
-      return
-    left_array = np.asarray(left_points, dtype=np.float32)
-    right_array = np.asarray(right_points, dtype=np.float32)
-
-    lane_warning = abs(offset_m) >= 0.5
-    warning_pulse = lane_warning and int(time.monotonic() * 1000) % 800 < 400
-    edge_green = rl.Color(0, 200, 0, 255)
-    if lane_warning:
-      warning_color = rl.Color(255, 0, 0, 255) if warning_pulse else rl.Color(255, 100, 0, 200)
-      left_color = warning_color if offset_m > 0.0 else edge_green
-      right_color = warning_color if offset_m < 0.0 else edge_green
-    elif offset_m > 0.02:
-      left_color = self._lane_center_gradient_color_carrot(danger_ratio)
-      right_color = edge_green
-    elif offset_m < -0.02:
-      left_color = edge_green
-      right_color = self._lane_center_gradient_color_carrot(danger_ratio)
-    else:
-      left_color = right_color = edge_green
-
-    self._draw_tire_edge_band_carrot(left_array, right_array, True, left_color)
-    self._draw_tire_edge_band_carrot(left_array, right_array, False, right_color)
-
-    if danger_ratio < 1.5:
-      text_y = float(left_array[0][1]) - 130.0
-      center_x = int(self._rect.x + self._rect.width / 2.0)
-      draw_text_ui_style(
-        direction_label, center_x, int(text_y), 72, rl.WHITE,
-        font=self._font_display, border_width=3.5, shadow_offset=0.0, align="center",
-      )
-      draw_text_ui_style(
-        distance_text, center_x, int(text_y + 70.0), 58, rl.WHITE,
-        font=self._font_display, border_width=3.0, shadow_offset=0.0, align="center",
       )
 
 
