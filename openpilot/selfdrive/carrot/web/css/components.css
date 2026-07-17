@@ -151,7 +151,7 @@
   left: var(--sp-lg);
   right: var(--sp-lg);
   bottom: calc(var(--nav-bar-height) + 18px + env(safe-area-inset-bottom, 0px));
-  z-index: 150;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -165,7 +165,7 @@ body[data-page="terminal"] .app-toast-host {
   left: var(--terminal-toast-left, var(--sp-lg));
   right: auto;
   width: var(--terminal-toast-width, calc(100vw - (var(--sp-lg) * 2)));
-  z-index: 148;
+  z-index: calc(var(--z-toast) - 2);
 }
 
 .app-toast {

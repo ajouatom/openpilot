@@ -920,7 +920,7 @@
 .dashcam-player-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1400;
+  z-index: calc(var(--z-toast) - 1);
   display: grid;
   place-items: center;
   padding: 16px;
@@ -933,7 +933,8 @@
   opacity: 1;
 }
 
-.dashcam-player-overlay.is-menu-open {
+.dashcam-player-overlay.is-menu-open,
+.dashcam-player-overlay.is-action-open {
   z-index: calc(var(--z-modal) - 1);
 }
 
@@ -1057,7 +1058,7 @@
   transition: opacity .2s ease, transform .2s ease;
 }
 
-.dashcam-player-overlay.is-controls-hidden:not(.is-menu-open) .dashcam-player-top {
+.dashcam-player-overlay.is-controls-hidden:not(.is-menu-open):not(.is-action-open) .dashcam-player-top {
   opacity: 0;
   transform: translateY(-10px);
 }
@@ -1122,9 +1123,9 @@
   pointer-events: auto;
 }
 
-/* Match the sibling menu button to the .c-close footprint so the pair reads
+/* Match the sibling action buttons to the .c-close footprint so the group reads
    as one control set (same size/radius/surface as the close). */
-.dashcam-player-menu {
+.dashcam-player-action {
   width: var(--close-size);
   height: var(--close-size);
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 40%, transparent);
@@ -1137,15 +1138,20 @@
               color var(--motion-quick) var(--ease-standard);
 }
 
-.dashcam-player-menu svg {
+.dashcam-player-action svg {
   width: var(--close-icon);
   height: var(--close-icon);
 }
 
-.dashcam-player-menu:hover {
+.dashcam-player-action:hover {
   background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont));
   border-color: color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
   color: #fff;
+}
+
+.dashcam-player-action:disabled {
+  opacity: .55;
+  cursor: default;
 }
 
 .screenrecord-list {
