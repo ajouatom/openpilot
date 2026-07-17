@@ -131,8 +131,10 @@ class DebugPlot(Widget):
 
     a_ego = cs.aEgo
     v_ego = cs.vEgo
-    accel = lp.accels[0]
-    speed_0 = lp.speeds[0]
+    # A live longitudinalPlan can still contain empty arrays while the planner
+    # is starting up. Keep the debug UI alive until the first populated plan.
+    accel = float(_safe_arr_get(lp.accels, 0, 0.0))
+    speed_0 = float(_safe_arr_get(lp.speeds, 0, 0.0))
     accel_out = cc.actuators.accel
 
     torque_state = None
