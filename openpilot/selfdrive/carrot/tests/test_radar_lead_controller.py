@@ -245,6 +245,21 @@ def test_external_probability_fills_lead_two_after_cutin() -> None:
   assert output.lead_external is not None and output.lead_external["modelProb"] == 0.9
 
 
+def test_stationary_front_external_is_not_used_as_lead_two() -> None:
+  ghost = prediction(40, 0.2, 0.0, 0.0, 1.0, v_lead=0.0, d_rel=22.0)
+
+  class ExternalRuntime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(True, RadarLeadDecision((), (), (ghost,)), (ghost,), 0.1)
+
+  controller = RadarLeadModelController()
+  controller.runtime = ExternalRuntime()
+  output = controller.update(0.0, 17.0, (), None)
+
+  assert output.lead_two is None
+  assert output.lead_external is not None
+
+
 def test_cutin_uses_temporal_decision_only() -> None:
   lead = prediction(40, 0.2, 0.2, 0.1)
   low_cutin = prediction(41, 2.0, 0.1, 0.69)

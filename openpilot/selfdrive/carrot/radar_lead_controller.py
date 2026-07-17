@@ -171,7 +171,9 @@ class RadarLeadModelController:
   @staticmethod
   def _external_control_usable(prediction: RadarLeadPrediction) -> bool:
     obj = prediction.features.radar_object
-    if obj.front_track_id is not None or (obj.d_rel > 2.0 and obj.v_lead > 2.0):
+    if obj.front_track_id is not None:
+      return obj.d_rel > 2.0 and obj.v_lead > 2.0
+    if obj.d_rel > 2.0 and obj.v_lead > 2.0:
       return True
     stopped_corner = (
       obj.corner_track_id is not None

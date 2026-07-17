@@ -267,7 +267,10 @@ class VisionModelRadarController:
   def _external_control_usable(prediction: RadarLeadPrediction) -> bool:
     obj = prediction.features.radar_object
     if obj.front_track_id is not None or obj.scc_track_id is not None:
-      return 1.0 < obj.d_rel < 160.0
+      # Unmatched stationary front returns are commonly tunnel/gantry ghosts.
+      # A stopped object still becomes leadOne when vision matches it; do not
+      # independently feed a radar-only stationary ghost to MPC as leadTwo.
+      return 1.0 < obj.d_rel < 160.0 and obj.v_lead > 2.0
     if obj.d_rel <= 2.0 or obj.d_rel >= 120.0:
       return False
     if obj.v_lead > 2.0:
@@ -285,6 +288,7 @@ class VisionModelRadarController:
     return (
       (obj.front_track_id is not None or obj.scc_track_id is not None)
       and 1.0 < obj.d_rel < 160.0
+      and obj.v_lead > 2.0
       and prediction.features.track_age >= STEALTH_LEAD_MIN_TRACK_AGE
       and abs(prediction.features.d_path) < STEALTH_LEAD_MAX_DPATH_M
       and prediction.features.in_lane_prob >= STEALTH_LEAD_MIN_IN_LANE_PROB
@@ -345,7 +349,6 @@ class VisionModelRadarController:
     cutin_pairs = [
       (prediction, self._lead_from_prediction(prediction, prediction.cutin_prob, v_ego))
       for prediction in result.decision.cutin_candidates
-      if self._external_control_usable(prediction)
     ]
     external_pairs = [
       (prediction, self._lead_from_prediction(prediction, prediction.external_prob, v_ego))
@@ -389,13 +392,14 @@ class VisionModelRadarController:
         held_lead = self._lead_from_prediction(held_primary, held_primary.lead_prob, v_ego, prefer_front=True)
         if held_lead is not None:
           primary_hold_pair = (held_primary, held_lead)
-    # Do not let the same physical object compete with itself as both MPC lead0
-    # and lead1. It is still reported as a cut-in before it becomes primary.
+    # Report independent cut-in decisions even when they are not safe leadTwo
+    # control inputs, but do not re-report the vision-matched primary object as
+    # a separate cut-in.
     cutin_leads = tuple(lead for prediction, lead in cutin_pairs if lead is not None and not matches_primary(prediction))
     external_leads = tuple(lead for _, lead in external_pairs if lead is not None)
     lead_two = next((
       lead for prediction, lead in cutin_pairs
-      if lead is not None and not matches_primary(prediction)
+      if lead is not None and not matches_primary(prediction) and self._external_control_usable(prediction)
     ), None)
     if lead_two is None:
       lead_two = next((

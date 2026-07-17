@@ -89,6 +89,31 @@ def test_recorded_cutin_display_requires_current_leads_cutin_membership():
   assert lead_two.cut_in
 
 
+def test_live_calibration_height_is_not_overwritten_by_camera_odometry():
+  parser = RouteLogParser()
+  camera_odometry = SimpleNamespace(
+    trans=(0.0, 0.0, 0.0),
+    rot=(0.0, 0.0, 0.0),
+    transStd=(0.0, 0.0, 0.0),
+    rotStd=(0.0, 0.0, 0.0),
+    wideFromDeviceEuler=(0.0, 0.02, 0.0),
+    roadTransformTrans=(0.0, 0.0, 1.36),
+    roadTransformTransStd=(0.0, 0.0, 0.02),
+  )
+  parser._update_camera_odometry(camera_odometry, True)
+  assert parser.road_transform_trans == (0.0, 0.0, 1.36)
+
+  parser._update_live_calibration(SimpleNamespace(
+    rpyCalib=(0.0, 0.02, 0.0),
+    height=(1.418,),
+  ), True)
+  parser._update_camera_odometry(SimpleNamespace(
+    **{**camera_odometry.__dict__, "roadTransformTrans": (0.0, 0.0, 1.35)},
+  ), True)
+
+  assert parser.road_transform_trans == (0.0, 0.0, 1.418)
+
+
 def test_adjacent_route_log_path_preserves_number_padding(tmp_path):
   previous_folder = tmp_path / "route--004"
   current_folder = tmp_path / "route--005"

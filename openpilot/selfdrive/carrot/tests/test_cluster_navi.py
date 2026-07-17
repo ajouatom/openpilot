@@ -671,6 +671,29 @@ def test_road_camera_ends_exactly_where_right_navigation_panel_begins():
   assert CAMERA_BACKGROUND_W == NAVI_LIVE_PANEL_X
 
 
+def test_road_camera_cover_crop_retains_more_of_lower_frame():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = DESIGN_WIDTH
+  renderer.height = DESIGN_HEIGHT
+  renderer.camera_overlay_pitch_offset_deg = 0.0
+  projection = renderer._camera_overlay_projection(SimpleNamespace(
+    route_overlay=None,
+    camera_calibration_euler=(0.0, 0.0, 0.0),
+    camera_device_type="tici",
+    camera_sensor="ar0231",
+    road_transform_trans=(0.0, 0.0, 1.418),
+  ))
+
+  assert projection is not None
+  top_crop = projection.dest.y - projection.video_dest.y
+  bottom_crop = (
+    projection.video_dest.y + projection.video_dest.height
+    - projection.dest.y - projection.dest.height
+  )
+  assert top_crop > bottom_crop
+  assert top_crop / (top_crop + bottom_crop) == pytest.approx(0.75)
+
+
 def test_dark_theme_uses_visible_side_gauge_outlines(monkeypatch):
   renderer = object.__new__(ClusterUiRenderer)
   state = SimpleNamespace(camera_view_mode=0)
