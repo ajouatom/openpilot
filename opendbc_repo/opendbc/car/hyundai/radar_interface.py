@@ -14,6 +14,9 @@ from openpilot.common.filter_simple import MyMovingAverage
 SCC_TID = 0
 RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 32
+RADAR_MSG_COUNT4 = 8
+RADAR_GROUP4_MAX_LONG_DIST = 325.0
+RADAR_GROUP4_MAX_YREL = 6.0
 RADAR_START_ADDR_CANFD1 = 0x210
 RADAR_MSG_COUNT1 = 16
 RADAR_START_ADDR_CANFD2 = 0x3A5 # Group 2, Group 1: 0x210 2개씩?�어???�단 보류.
@@ -108,7 +111,7 @@ def corner_object_position_valid(d_rel: float, y_rel: float) -> bool:
   return (normal_object or clipped_side_object) and abs(y_rel) < 40.0
 
 
-def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count):
+def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count, radar_group4=False):
   if not radar_tracks:
     return None
   #if Bus.radar not in DBC[CP.carFingerprint]:
@@ -122,7 +125,8 @@ def get_radar_can_parser(CP, radar_tracks, msg_start_addr, msg_count):
   else:
     messages = [(f"RADAR_TRACK_{addr:x}", 20) for addr in range(msg_start_addr, msg_start_addr + msg_count)]
   #return CANParser(DBC[CP.carFingerprint][Bus.radar], messages, 1)
-    return CANParser('hyundai_kia_mando_front_radar_generated', messages, 1)
+    dbc_name = 'hyundai_kia_denso_front_radar_generated' if radar_group4 else 'hyundai_kia_mando_front_radar_generated'
+    return CANParser(dbc_name, messages, 1)
 
 def get_corner_object_can_parser(CP, enabled):
   if not enabled or not (CP.flags & HyundaiFlags.CANFD):
@@ -184,6 +188,7 @@ class RadarInterface(RadarInterfaceBase):
     self.canfd = True if CP.flags & HyundaiFlags.CANFD else False
     self.radar_group1 = False
     self.radar_group3 = False
+    self.radar_group4 = not self.canfd and bool(CP.extFlags & HyundaiExtFlags.RADAR_GROUP4.value)
     if self.canfd:
       if CP.extFlags & HyundaiExtFlags.RADAR_GROUP1.value:
         self.radar_start_addr = RADAR_START_ADDR_CANFD1
@@ -198,7 +203,7 @@ class RadarInterface(RadarInterfaceBase):
         self.radar_msg_count = RADAR_MSG_COUNT2
     else:
       self.radar_start_addr = RADAR_START_ADDR
-      self.radar_msg_count = RADAR_MSG_COUNT
+      self.radar_msg_count = RADAR_MSG_COUNT4 if self.radar_group4 else RADAR_MSG_COUNT
       
     self.params = Params()
     self.radar_tracks = self.params.get_int("EnableRadarTracks") >= 1
@@ -214,7 +219,7 @@ class RadarInterface(RadarInterfaceBase):
     self.corner_object_180_missed_updates = 0
     self.corner_object_430_missed_updates = 0
     self.corner_object_track_ids = CornerObjectTrackIdManager()
-    self.rcp_tracks = get_radar_can_parser(CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count)
+    self.rcp_tracks = get_radar_can_parser(CP, self.radar_tracks, self.radar_start_addr, self.radar_msg_count, self.radar_group4)
     self.rcp_corner_objects = get_corner_object_can_parser(CP, self.corner_object_tracks)
     self.rcp_corner_objects_180 = get_corner_object_180_can_parser(CP, self.corner_object_180_tracks)
     self.rcp_corner_objects_430 = get_corner_object_430_can_parser(CP, self.corner_object_430_tracks)
@@ -235,6 +240,7 @@ class RadarInterface(RadarInterfaceBase):
     print(
       "RadarInterface: "
       f"radarUnavailable={CP.radarUnavailable} radarTracks={self.radar_tracks} "
+      f"group4={self.radar_group4} "
       f"corner235={self.rcp_corner_objects is not None} corner180={self.rcp_corner_objects_180 is not None} "
       f"corner430={self.rcp_corner_objects_430 is not None} "
       f"radarOffCan={self.radar_off_can}"
@@ -402,6 +408,22 @@ class RadarInterface(RadarInterfaceBase):
         valid = msg['LONG_DIST'] < 204.7
       elif self.canfd:
         valid = msg['VALID_CNT'] > 10
+      elif self.radar_group4:
+        # EN: DNMWR006 exposes eight stable tracked-object slots at 0x500-0x507.
+        #     Messages from 0x508 onward are distance-sorted raw detections without
+        #     stable IDs, so they are excluded. OBJECT_STATE 3 is a confirmed track;
+        #     empty slots use LONG_DIST raw 0xfff8 (409.55 m). Driving logs reached
+        #     317.80 m, so 325 m preserves every observed confirmed track while
+        #     retaining margin from the empty-slot sentinel. Keep the +/-6 m
+        #     ego/adjacent-lane envelope to suppress farther roadside reflections.
+        # KO: DNMWR006의 안정적인 추적 객체 슬롯은 0x500~0x507의 8개임.
+        #     0x508 이후 메시지는 고정 ID가 없는 거리순 raw detection이므로 제외함.
+        #     OBJECT_STATE 3은 확정 추적 객체이며, 빈 슬롯은 LONG_DIST raw
+        #     0xfff8(409.55m)을 사용함. 주행 로그의 최대값은 317.80m였으므로
+        #     325m 상한으로 관측된 확정 트랙을 모두 보존하면서 빈 슬롯 값과 충분한
+        #     여유를 확보함. 원거리 도로변 반사를 줄이기 위해 좌우 6m 범위를 유지함.
+        valid = (msg['OBJECT_STATE'] == 3 and 0.2 < msg['LONG_DIST'] < RADAR_GROUP4_MAX_LONG_DIST and
+                 abs(msg['LAT_DIST']) <= RADAR_GROUP4_MAX_YREL)
       else:
         valid = msg['STATE'] in (3, 4)
 
@@ -431,6 +453,13 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
         self.pts[t_id].aRel = float('nan') if self.radar_group3 else msg['REL_ACCEL']
         self.pts[t_id].yvRel = 0.0 if self.radar_group3 else msg['LAT_SPEED']
+      elif self.radar_group4:
+        self.pts[t_id].dRel = msg['LONG_DIST']
+        self.pts[t_id].yRel = -msg['LAT_DIST']
+        self.pts[t_id].vRel = msg['REL_SPEED']
+        self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
+        self.pts[t_id].aRel = float('nan')
+        self.pts[t_id].yvRel = 0.0
       else:
         azimuth = math.radians(msg['AZIMUTH'])
         self.pts[t_id].dRel = math.cos(azimuth) * msg['LONG_DIST']

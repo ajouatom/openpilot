@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from opendbc.can import CANParser
@@ -7,12 +9,135 @@ import opendbc.car.hyundai.radar_interface as radar_interface_module
 from opendbc.car.hyundai.radar_interface import (
   CORNER_OBJECT_STABLE_TRACK_ID_START,
   RADAR_MSG_COUNT3,
+  RADAR_MSG_COUNT4,
   RADAR_START_ADDR_CANFD3,
   CornerObjectTrackIdManager,
   RadarInterface,
   corner_object_position_valid,
 )
-from opendbc.car.hyundai.values import HyundaiExtFlags, HyundaiFlags
+from opendbc.car.hyundai.values import CAR, HyundaiExtFlags, HyundaiFlags
+
+
+class TestDensoRadar:
+  @staticmethod
+  def parse(addr, dat):
+    name = f"RADAR_TRACK_{addr:x}"
+    parser = CANParser("hyundai_kia_denso_front_radar_generated", [(name, 20)], 1)
+    parser.update([0, [(addr, bytes.fromhex(dat), 1)]])
+    return parser.vl[name]
+
+  def test_active_track_signals(self):
+    # Person walking toward the parked car, left of the camera center.
+    track = self.parse(0x503, "bc047efcc1fe8b00")
+
+    assert track["LONG_DIST"] == pytest.approx(7.1875)
+    assert track["LAT_DIST"] == pytest.approx(-1.625)
+    assert track["REL_SPEED"] == pytest.approx(-0.734375)
+    assert track["OBJECT_STATE"] == 3
+
+  def test_empty_track(self):
+    track = self.parse(0x507, "53fff80000000081")
+
+    assert track["LONG_DIST"] == pytest.approx(409.55)
+    assert track["LAT_DIST"] == 0
+    assert track["REL_SPEED"] == 0
+    assert track["OBJECT_STATE"] == 0
+
+  def test_long_range_lateral_distance(self):
+    # Real driving sample: treating the signed field as -12 degrees would put
+    # this target about 34 m sideways at 161 m. It is instead -3.0 m lateral.
+    track = self.parse(0x506, "b664eafa00cd230b")
+
+    assert track["LONG_DIST"] == pytest.approx(161.4625)
+    assert track["LAT_DIST"] == pytest.approx(-3.0)
+    assert track["OBJECT_STATE"] == 3
+
+  def test_parser_selection_and_point_conversion(self, monkeypatch):
+    class FakeParams:
+      def get_int(self, key):
+        return 1 if key == "EnableRadarTracks" else 0
+
+    monkeypatch.setattr(radar_interface_module, "Params", FakeParams)
+    cp = structs.CarParams()
+    cp.carFingerprint = CAR.KIA_SORENTO
+    cp.flags = 0
+    cp.extFlags = HyundaiExtFlags.RADAR_GROUP4.value
+    cp.radarUnavailable = False
+    cp.safetyConfigs = [structs.CarParams.SafetyConfig()]
+
+    radar_interface = RadarInterface(cp)
+
+    assert radar_interface.radar_group4
+    assert RADAR_MSG_COUNT4 == 8
+    assert radar_interface.radar_msg_count == RADAR_MSG_COUNT4
+    assert radar_interface.trigger_msg_tracks == 0x507
+
+    active_dat = bytes.fromhex("bc047efcc1fe8b00")
+    empty_dat = bytes.fromhex("bcfff80000000081")
+    packets = [(addr, active_dat if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    radar_data = radar_interface.update([0, packets])
+    point = next(point for point in radar_data.points if point.trackId == 35)
+
+    assert point.measured
+    assert point.dRel == pytest.approx(7.1875)
+    assert point.yRel == pytest.approx(1.625)
+    assert point.vRel == pytest.approx(-0.734375)
+    assert math.isnan(point.aRel)
+
+    # EN: Confirm that the long-range sample survives the filter and converts
+    #     radar-left-negative to openpilot-left-positive coordinates.
+    # KO: 장거리 샘플의 필터 통과와 레이더 좌측 음수 좌표가 openpilot 좌측
+    #     양수 좌표로 변환되는지 확인함.
+    long_range_dat = bytes.fromhex("b664eafa00cd230b")
+    packets = [(addr, long_range_dat if addr == 0x506 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    radar_data = radar_interface.update([0, packets])
+    point = next(point for point in radar_data.points if point.trackId == 38)
+
+    assert point.dRel == pytest.approx(161.4625)
+    assert point.yRel == pytest.approx(3.0)
+
+    # EN: A state-0 raw detection must not enter a stable tracked-object slot.
+    # KO: 상태 0인 raw detection이 안정적인 추적 객체 슬롯에 들어오지 않음을 확인함.
+    raw_detection = bytes.fromhex("d702f4fc200000e4")
+    packets = [(addr, raw_detection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    radar_data = radar_interface.update([0, packets])
+    assert not radar_data.points
+
+    # EN: A real confirmed track beyond the former 205 m limit remains valid.
+    # KO: 기존 205m 상한을 넘는 실제 확정 트랙도 유효하게 유지됨.
+    confirmed_213m_track = bytes.fromhex("35854c0780f163e0")
+    packets = [(addr, confirmed_213m_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    radar_data = radar_interface.update([0, packets])
+    point = next(point for point in radar_data.points if point.trackId == 35)
+    assert point.dRel == pytest.approx(213.275)
+    assert point.yRel == pytest.approx(-3.75)
+
+    # EN: The 325 m boundary is rejected, leaving ample separation from the
+    #     409.55 m empty-slot sentinel.
+    # KO: 325m 경계값을 제외해 409.55m 빈 슬롯 값과 충분한 간격을 확보함.
+    boundary_track = bytes.fromhex("bccb200000000300")
+    packets = [(addr, boundary_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    radar_data = radar_interface.update([0, packets])
+    assert not radar_data.points
+
+    # EN: The wider profile keeps a real stable track at 4.875 m, covering more
+    #     of the outer adjacent lane than the conservative 4.5 m profile.
+    # KO: 넓어진 필터에서 4.875m의 실제 안정 트랙을 유지해 보수적인 4.5m
+    #     설정보다 바깥쪽 인접 차선을 더 넓게 포함함.
+    outer_lane_track = bytes.fromhex("d80b66f640000300")
+    packets = [(addr, outer_lane_track if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    radar_data = radar_interface.update([0, packets])
+    point = next(point for point in radar_data.points if point.trackId == 35)
+    assert point.yRel == pytest.approx(4.875)
+
+    # EN: Tracks beyond the widened envelope are rejected as roadside clutter;
+    #     this payload differs only in lateral distance (-7.0 m).
+    # KO: 넓어진 범위를 벗어난 트랙은 도로변 잡음으로 제외함. 이 payload는
+    #     횡방향 거리(-7.0m)만 다름.
+    far_side_reflection = bytes.fromhex("d80b66f200000300")
+    packets = [(addr, far_side_reflection if addr == 0x503 else empty_dat, 1) for addr in range(0x500, 0x508)]
+    radar_data = radar_interface.update([0, packets])
+    assert not radar_data.points
 
 
 class TestRadarGroup3:
