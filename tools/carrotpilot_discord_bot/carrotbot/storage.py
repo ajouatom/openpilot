@@ -173,6 +173,23 @@ class Storage:
       )
       self._db.commit()
 
+  def save_discord_members(self, members: list[tuple[str, str, str, str, str]]) -> None:
+    if not members:
+      return
+    rows = [
+      (user_id, username[:100], display_name[:100], roles[:500], updated_at)
+      for user_id, username, display_name, roles, updated_at in members
+    ]
+    with self._lock:
+      self._db.executemany(
+        "INSERT INTO discord_members(user_id, username, display_name, roles, updated_at) "
+        + "VALUES(?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+        + "username=excluded.username, display_name=excluded.display_name, roles=excluded.roles, "
+        + "updated_at=excluded.updated_at WHERE excluded.updated_at >= discord_members.updated_at",
+        rows,
+      )
+      self._db.commit()
+
   @staticmethod
   def _search_terms(text: str) -> set[str]:
     normalized = text.casefold()
