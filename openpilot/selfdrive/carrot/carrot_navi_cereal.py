@@ -17,6 +17,8 @@ MEDIA_REQUEST_POLL_SECONDS = 0.25
 MAX_AHEAD_LANES = 8
 MAX_LANE_VALUES = 16
 MAX_ROUTE_POINTS = 256
+MAX_ROAD_LIMIT_KPH = 200
+ROAD_LIMIT_STEP_KPH = 10
 WEB_BOOTSTRAP_KIND = "web_render"
 WEB_BOOTSTRAP_IMAGE_KIND = "web_image"
 
@@ -56,6 +58,16 @@ def _integer(value: Any, default: int = 0,
   if maximum is not None:
     parsed = min(maximum, parsed)
   return parsed
+
+
+def _valid_road_limit_kph(value: Any) -> int | None:
+  if value is None:
+    return None
+  road_limit = _integer(value)
+  return road_limit if (
+    0 < road_limit <= MAX_ROAD_LIMIT_KPH
+    and road_limit % ROAD_LIMIT_STEP_KPH == 0
+  ) else None
 
 
 def _text(value: Any, maximum: int) -> str:
@@ -143,7 +155,8 @@ def build_carrot_navi_payload(snapshot: dict[str, Any], publish_mono_ns: int | N
   sdi = _dict(speed.get("sdi"))
   secondary_sdi = _dict(speed.get("sdi_secondary"))
   section = _dict(speed.get("section"))
-  road_limit_valid = speed.get("road_limit_kph") is not None
+  road_limit_kph = _valid_road_limit_kph(speed.get("road_limit_kph"))
+  road_limit_valid = road_limit_kph is not None
 
   traffic_record = _record(snapshot, "traffic_signal")
   traffic = _dict(traffic_record.get("value")) if traffic_record.get("present") else {}
@@ -199,7 +212,7 @@ def build_carrot_navi_payload(snapshot: dict[str, Any], publish_mono_ns: int | N
       "meta": _meta(speed_record),
       "currentKph": _finite(speed.get("current_kph"), minimum=0.0, maximum=300.0),
       "roadLimitValid": road_limit_valid,
-      "roadLimitKph": _integer(speed.get("road_limit_kph"), minimum=0, maximum=300),
+      "roadLimitKph": _integer(road_limit_kph, minimum=0, maximum=MAX_ROAD_LIMIT_KPH),
       "sdiPresent": bool(sdi),
       "sdiType": _integer(sdi.get("type"), default=-1, minimum=-1, maximum=100_000),
       "sdiDistanceM": _integer(sdi.get("distance_m"), minimum=0, maximum=2_000_000),
