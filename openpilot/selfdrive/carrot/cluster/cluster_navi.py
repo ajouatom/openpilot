@@ -24,6 +24,8 @@ STATUS_TTL_S = 10.0
 ROUTE_TTL_S = 30.0
 TRAFFIC_TTL_S = 60.0
 MAX_ROUTE_POINTS = 256
+MAX_ROAD_LIMIT_KPH = 200
+ROAD_LIMIT_STEP_KPH = 10
 
 
 def resolve_navi_speed_limit(
@@ -56,6 +58,16 @@ def _int(obj: Any, name: str, default: int = 0) -> int:
         return int(_get(obj, name, default))
     except (TypeError, ValueError):
         return default
+
+
+def _valid_road_limit_kph(item: Any) -> int | None:
+    if not bool(_get(item, "roadLimitValid")):
+        return None
+    road_limit = _int(item, "roadLimitKph")
+    return road_limit if (
+        0 < road_limit <= MAX_ROAD_LIMIT_KPH
+        and road_limit % ROAD_LIMIT_STEP_KPH == 0
+    ) else None
 
 
 def _float(obj: Any, name: str, default: float = 0.0) -> float:
@@ -191,7 +203,7 @@ def parse_carrot_navi(
             speed = NaviSpeedInfo(
                 meta=speed_meta,
                 current_kph=max(0.0, _float(speed_item, "currentKph")),
-                road_limit_kph=max(0, _int(speed_item, "roadLimitKph")) if bool(_get(speed_item, "roadLimitValid")) else None,
+                road_limit_kph=_valid_road_limit_kph(speed_item),
                 sdi_type=_int(speed_item, "sdiType", -1) if bool(_get(speed_item, "sdiPresent")) else None,
                 sdi_distance_m=max(0, _int(speed_item, "sdiDistanceM")) if bool(_get(speed_item, "sdiPresent")) else None,
                 sdi_speed_limit_kph=max(0, _int(speed_item, "sdiSpeedLimitKph")) if bool(_get(speed_item, "sdiPresent")) else None,

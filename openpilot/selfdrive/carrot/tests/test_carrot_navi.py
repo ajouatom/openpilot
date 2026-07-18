@@ -859,3 +859,41 @@ def test_payload_projects_primary_and_secondary_sdi_for_consumers():
   assert speed["secondarySdiPresent"] is True
   assert (speed["secondarySdiType"], speed["secondarySdiDistanceM"]) == (22, 93)
   assert (speed["secondarySdiBlockType"], speed["secondarySdiBlockDistanceM"]) == (3, 80)
+
+
+def test_payload_rejects_encoded_or_invalid_road_limit():
+  def speed_payload(road_limit):
+    return build_carrot_navi_payload({
+      "generation": 1,
+      "session_id": "session",
+      "connected": True,
+      "items": {
+        "speed": {
+          "present": True,
+          "sequence": 9,
+          "source_timestamp_ms": 1234,
+          "received_mono_ns": 5678,
+          "value": {"road_limit_kph": road_limit},
+        },
+      },
+    }, publish_mono_ns=999)["speed"]
+
+  speed = speed_payload(60)
+  assert speed["roadLimitValid"] is True
+  assert speed["roadLimitKph"] == 60
+
+  speed = speed_payload(320)
+  assert speed["roadLimitValid"] is False
+  assert speed["roadLimitKph"] == 0
+
+  speed = speed_payload(520)
+  assert speed["roadLimitValid"] is False
+  assert speed["roadLimitKph"] == 0
+
+  speed = speed_payload(1020)
+  assert speed["roadLimitValid"] is False
+  assert speed["roadLimitKph"] == 0
+
+  speed = speed_payload(300)
+  assert speed["roadLimitValid"] is False
+  assert speed["roadLimitKph"] == 0

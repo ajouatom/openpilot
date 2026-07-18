@@ -6,6 +6,8 @@ from typing import Any
 
 
 MAX_ROUTE_POINTS = 256
+MAX_ROAD_LIMIT_KPH = 200
+ROAD_LIMIT_STEP_KPH = 10
 
 
 @dataclass(frozen=True)
@@ -126,6 +128,16 @@ def _meta(item: Any) -> tuple[bool, int]:
   return bool(_get(meta, "present", False)), max(0, _int(meta, "sequence"))
 
 
+def _valid_road_limit_kph(item: Any) -> int | None:
+  if not bool(_get(item, "roadLimitValid", False)):
+    return None
+  road_limit = _int(item, "roadLimitKph")
+  return road_limit if (
+    0 < road_limit <= MAX_ROAD_LIMIT_KPH
+    and road_limit % ROAD_LIMIT_STEP_KPH == 0
+  ) else None
+
+
 def _guidance(item: Any, enabled: bool) -> NaviGuidanceControl:
   present, sequence = _meta(item)
   present = present and enabled
@@ -215,10 +227,7 @@ def parse_carrot_navi_control(data: Any) -> CarrotNaviControl | None:
 
   speed_item = _get(data, "speed")
   speed_present, speed_sequence = _meta(speed_item)
-  road_limit_valid = speed_present and bool(_get(speed_item, "roadLimitValid", False))
-  road_limit_kph = _int(speed_item, "roadLimitKph") if road_limit_valid else None
-  if road_limit_kph is not None and not 0 < road_limit_kph <= 200:
-    road_limit_kph = None
+  road_limit_kph = _valid_road_limit_kph(speed_item) if speed_present else None
 
   sdi_present = speed_present and bool(_get(speed_item, "sdiPresent", False)) and not off_route
   secondary_sdi_present = (

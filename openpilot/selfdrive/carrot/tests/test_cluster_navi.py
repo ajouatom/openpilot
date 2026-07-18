@@ -84,6 +84,29 @@ def _parse_speed_only_navi(speed_value: dict, sequence: int = 1):
   return state
 
 
+def _parse_cereal_speed_only_navi(road_limit_kph: int):
+  payload = {
+    "schemaVersion": 1,
+    "generation": 1,
+    "sessionId": "session",
+    "connected": True,
+    "speed": {
+      "meta": {
+        "present": True,
+        "sequence": 1,
+        "sourceTimestampMillis": 1001,
+        "receivedMonoTimeNanos": 100_000_000_000,
+      },
+      "currentKph": 42,
+      "roadLimitValid": True,
+      "roadLimitKph": road_limit_kph,
+    },
+  }
+  state = parse_carrot_navi(_namespace(payload), now=100.1)
+  assert state is not None
+  return state
+
+
 def test_parse_and_expire_live_navi_groups_independently():
   snapshot = {
     "generation": 9,
@@ -161,6 +184,22 @@ def test_navi_speed_limit_unknown_clears_legacy_navigation_default():
   assert navi_unknown.speed is not None
   assert navi_unknown.speed.road_limit_kph is None
   assert resolve_navi_speed_limit(30, "n", navi_unknown) == (None, None)
+
+
+def test_navi_encoded_speed_limit_clears_legacy_navigation_default():
+  navi_encoded = _parse_cereal_speed_only_navi(1020)
+
+  assert navi_encoded.speed is not None
+  assert navi_encoded.speed.road_limit_kph is None
+  assert resolve_navi_speed_limit(30, "n", navi_encoded) == (None, None)
+
+
+def test_navi_invalid_speed_limit_clears_legacy_navigation_default():
+  navi_invalid = _parse_cereal_speed_only_navi(300)
+
+  assert navi_invalid.speed is not None
+  assert navi_invalid.speed.road_limit_kph is None
+  assert resolve_navi_speed_limit(30, "n", navi_invalid) == (None, None)
 
 
 def test_disconnected_snapshot_clears_live_navi():
