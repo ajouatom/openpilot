@@ -1,6 +1,6 @@
 import math
 import pyray as rl
-from openpilot.system.ui.lib.application import gui_app, FontWeight
+from openpilot.system.ui.lib.application import FONT_SCALE, FontWeight, font_fallback, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 
 
@@ -8,6 +8,7 @@ _OUTLINE_UNIT_OFFSETS = tuple(
   (math.cos(math.radians(deg)), math.sin(math.radians(deg)))
   for deg in range(0, 360, 45)
 )
+_RAW_DRAW_TEXT_EX = getattr(getattr(rl, "rl", None), "DrawTextEx", None)
 
 
 def draw_text_raw(font, text, x, y, font_size, color):
@@ -74,18 +75,30 @@ def draw_text_ui_style(text: str,
   draw_size = float(font_size)
   position = rl.Vector2(float(draw_x), float(draw_y))
 
+  # The pyray wrapper encodes Python strings and converts every argument on each
+  # call. Styled text can submit the same string up to ten times, so use the raw
+  # CFFI symbol when available and prepare its immutable arguments once.
+  draw_text_ex = _RAW_DRAW_TEXT_EX
+  if draw_text_ex is not None:
+    font = font_fallback(font)
+    draw_text = text.encode("utf-8")
+    draw_size *= FONT_SCALE
+  else:
+    draw_text_ex = rl.draw_text_ex
+    draw_text = text
+
   if border_width > 0.0:
     for unit_x, unit_y in _OUTLINE_UNIT_OFFSETS:
       position.x = float(draw_x + border_width * unit_x)
       position.y = float(draw_y + border_width * unit_y)
-      rl.draw_text_ex(font, text, position, draw_size, 0, border_color)
+      draw_text_ex(font, draw_text, position, draw_size, 0, border_color)
 
   if shadow_offset != 0.0:
     position.x = float(draw_x + shadow_offset)
     position.y = float(draw_y + shadow_offset)
-    rl.draw_text_ex(font, text, position, draw_size, 0, shadow_color)
+    draw_text_ex(font, draw_text, position, draw_size, 0, shadow_color)
 
   position.x = float(draw_x)
   position.y = float(draw_y)
-  rl.draw_text_ex(font, text, position, draw_size, 0, color)
+  draw_text_ex(font, draw_text, position, draw_size, 0, color)
 
