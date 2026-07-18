@@ -165,8 +165,10 @@ class Storage:
   ) -> None:
     with self._lock:
       self._db.execute(
-        "INSERT OR REPLACE INTO discord_members(user_id, username, display_name, roles, updated_at) "
-        + "VALUES(?, ?, ?, ?, ?)",
+        "INSERT INTO discord_members(user_id, username, display_name, roles, updated_at) "
+        + "VALUES(?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+        + "username=excluded.username, display_name=excluded.display_name, roles=excluded.roles, "
+        + "updated_at=excluded.updated_at WHERE excluded.updated_at >= discord_members.updated_at",
         (user_id, username[:100], display_name[:100], roles[:500], updated_at),
       )
       self._db.commit()
