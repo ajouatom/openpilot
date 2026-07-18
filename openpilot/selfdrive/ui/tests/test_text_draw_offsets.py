@@ -31,6 +31,7 @@ def text_draw_module(monkeypatch):
   raylib.Color = Color
   raylib.Vector2 = Vector2
   raylib.BLACK = Color(0, 0, 0, 255)
+  raylib.rl = SimpleNamespace(DrawTextEx=None)
   raylib.draw_text_ex = lambda font, text, position, font_size, spacing, color: draw_calls.append(
     (font, text, SimpleNamespace(x=position.x, y=position.y), font_size, spacing, color),
   )
@@ -39,8 +40,10 @@ def text_draw_module(monkeypatch):
     sys.modules,
     "openpilot.system.ui.lib.application",
     SimpleNamespace(
+      FONT_SCALE=1.242,
       gui_app=SimpleNamespace(font=lambda weight: ("font", weight)),
       FontWeight=SimpleNamespace(DISPLAY=1),
+      font_fallback=lambda font: font,
     ),
   )
   monkeypatch.setitem(
@@ -180,3 +183,111 @@ def test_draw_call_does_not_recompute_trigonometry(text_draw_module, monkeypatch
   )
 
   assert len(draw_calls) == 9
+
+
+@pytest.mark.parametrize(("text_value", "scale"), [("speed", 1.16), ("속도", 1.242)])
+def test_raw_draw_path_encodes_once_and_preserves_scaled_geometry(
+  text_draw_module, monkeypatch, text_value, scale,
+):
+  module, wrapper_calls = text_draw_module
+  raw_calls = []
+  fallback_calls = []
+  encode_calls = []
+  base_x, base_y = 100.0, 200.0
+
+  class TrackingText(str):
+    def encode(self, encoding="utf-8", errors="strict"):
+      encode_calls.append((encoding, errors))
+      return super().encode(encoding, errors)
+
+  def raw_draw_text_ex(font, text, position, font_size, spacing, color):
+    raw_calls.append(
+      (font, text, id(text), SimpleNamespace(x=position.x, y=position.y), font_size, spacing, color, id(position)),
+    )
+
+  def fallback(font):
+    fallback_calls.append(font)
+    return "fallback-font"
+
+  monkeypatch.setattr(module, "_RAW_DRAW_TEXT_EX", raw_draw_text_ex)
+  monkeypatch.setattr(module, "FONT_SCALE", scale)
+  monkeypatch.setattr(module, "font_fallback", fallback)
+  monkeypatch.setattr(module, "get_text_draw_pos", lambda *args, **kwargs: (base_x, base_y, None))
+
+  text = TrackingText(text_value)
+  main_color = module.rl.Color(1, 2, 3, 4)
+  border_color = module.rl.Color(5, 6, 7, 8)
+  shadow_color = module.rl.Color(9, 10, 11, 12)
+  module.draw_text_ui_style(
+    text,
+    0,
+    0,
+    50,
+    main_color,
+    font="original-font",
+    border_width=1.0,
+    shadow_offset=4.0,
+    border_color=border_color,
+    shadow_color=shadow_color,
+  )
+
+  assert wrapper_calls == []
+  assert encode_calls == [("utf-8", "strict")]
+  assert fallback_calls == ["original-font"]
+  assert len(raw_calls) == 10
+  assert all(call[0] == "fallback-font" for call in raw_calls)
+  assert all(call[1] == text_value.encode() for call in raw_calls)
+  assert len({call[2] for call in raw_calls}) == 1
+  assert len({call[7] for call in raw_calls}) == 1
+  assert all(call[4] == 50.0 * scale for call in raw_calls)
+  assert all(call[5] == 0 for call in raw_calls)
+
+  for call, (unit_x, unit_y) in zip(raw_calls[:8], module._OUTLINE_UNIT_OFFSETS, strict=True):
+    assert (call[3].x, call[3].y) == (base_x + unit_x, base_y + unit_y)
+    assert call[6] == border_color
+
+  assert (raw_calls[8][3].x, raw_calls[8][3].y) == (base_x + 4.0, base_y + 4.0)
+  assert raw_calls[8][6] == shadow_color
+  assert (raw_calls[9][3].x, raw_calls[9][3].y) == (base_x, base_y)
+  assert raw_calls[9][6] == main_color
+
+
+def test_missing_raw_symbol_keeps_pyray_wrapper_path(text_draw_module, monkeypatch):
+  module, draw_calls = text_draw_module
+  monkeypatch.setattr(module, "_RAW_DRAW_TEXT_EX", None)
+  monkeypatch.setattr(module, "font_fallback", lambda _: pytest.fail("wrapper path owns font fallback"))
+  monkeypatch.setattr(module, "get_text_draw_pos", lambda *args, **kwargs: (10.0, 20.0, None))
+
+  module.draw_text_ui_style(
+    "speed",
+    0,
+    0,
+    50,
+    module.rl.Color(1, 2, 3, 4),
+    font="font",
+    border_width=0,
+    shadow_offset=0,
+  )
+
+  assert len(draw_calls) == 1
+  assert draw_calls[0][0] == "font"
+  assert draw_calls[0][1] == "speed"
+  assert draw_calls[0][3] == 50.0
+
+
+def test_empty_text_skips_both_draw_paths(text_draw_module, monkeypatch):
+  module, wrapper_calls = text_draw_module
+  encode_calls = []
+
+  class EmptyTrackingText(str):
+    def encode(self, encoding="utf-8", errors="strict"):
+      encode_calls.append((encoding, errors))
+      return super().encode(encoding, errors)
+
+  monkeypatch.setattr(module, "_RAW_DRAW_TEXT_EX", lambda *args: pytest.fail("empty text must not draw"))
+  monkeypatch.setattr(module, "font_fallback", lambda _: pytest.fail("empty text must not select a font"))
+
+  module.draw_text_ui_style(EmptyTrackingText(""), 0, 0, 50, module.rl.Color(1, 2, 3, 4))
+
+  assert encode_calls == []
+  assert wrapper_calls == []
