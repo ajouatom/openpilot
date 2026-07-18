@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -145,7 +146,31 @@ Match the language of the final answer to the user's question.
 - For a short or ambiguous follow-up, continue in the language used by the user in the most recent conversational question.
 - Keep necessary carrotpilot setting names, commands, and code identifiers unchanged.
 This language rule applies to clarification questions, error messages, device-log findings, and final synthesized answers as well.
+
+Carrotpilot vocabulary rule:
+- When a user asks about using the dashboard, instrument-panel, gauge-cluster, or stock SCC speed as the cruise target, search `SpeedFromPCM` in `openpilot/selfdrive/carrot_settings.json` first, then verify its behavior in `openpilot/selfdrive/car/cruise.py`.
+- In this context, "dashboard speed" usually means the vehicle's stock cruise set speed or cluster speed, not a software dashboard UI.
 """
+
+
+def _answer_language(question: str, history: list[tuple[str, str]]) -> str:
+  def detect(text: str) -> str | None:
+    hangul_count = len(re.findall(r"[가-힣]", text))
+    latin_count = len(re.findall(r"[A-Za-z]", text))
+    if hangul_count >= 4:
+      return "Korean"
+    if latin_count >= 3:
+      return "English"
+    return None
+
+  current = detect(question)
+  if current is not None:
+    return current
+  for previous_question, _ in reversed(history):
+    previous = detect(previous_question)
+    if previous is not None:
+      return previous
+  return "Korean"
 
 
 class SupportAgent:
@@ -174,10 +199,12 @@ class SupportAgent:
     clean_history = [(q, a) for q, a in history if not _looks_like_tool_arguments(a)]
     history_text = "\n".join(f"이전 질문: {q}\n이전 답변: {a[:800]}" for q, a in clean_history[-3:]) or "이전 대화 없음"
     profile_text = json.dumps(member_profile or {}, ensure_ascii=False)
+    answer_language = _answer_language(question, clean_history)
     user_input = (
       f"현재 저장소: branch={info['branch']}, commit={info['commit']}\n"
       + f"현재 한국 날짜와 시간: {korea_now.isoformat(timespec='seconds')}\n"
       + f"Discord 프로필 메타데이터(참고용): {profile_text}\n"
+      + f"Required final-answer language: {answer_language}\n"
       + f"최근 대화:\n{history_text}\n\n사용자 질문:\n{question}"
     )
     images = image_urls or []
