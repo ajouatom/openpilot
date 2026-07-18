@@ -1,11 +1,15 @@
 from dataclasses import replace
 
+import numpy as np
+
 from openpilot.selfdrive.carrot.radar_lead_model import (
   MODEL_FEATURE_NAMES,
   RadarLeadContext,
   RadarLeadDecisionFilter,
   RadarLeadFeatureBuilder,
   RadarLeadPrediction,
+  RadarLeadModel,
+  anticipatory_eligibility,
 )
 from openpilot.selfdrive.carrot.radar_object_fusion import FusedRadarObject
 
@@ -42,6 +46,30 @@ def context(time_s: float) -> RadarLeadContext:
 def uncertain_lane_context(time_s: float) -> RadarLeadContext:
   sample = context(time_s)
   return replace(sample, lane_probs=(0.2, 0.45, 0.35, 0.2))
+
+
+def test_anticipatory_eligibility_requires_sustained_lane_inward_motion() -> None:
+  matrix = np.zeros((1, len(MODEL_FEATURE_NAMES)), dtype=np.float32)
+  values = {
+    "d_rel": 20.0, "v_lead": 15.0, "track_age": 12.0,
+    "d_path": 2.4, "future_d_path": 1.8,
+    "h8_present": 1.0, "h8_dt": 0.4, "h8_d_path": 2.7,
+    "h12_present": 1.0, "h12_dt": 0.6, "h12_d_path": 2.9,
+    "lane1_prob": 0.9, "lane2_prob": 0.9,
+  }
+  for name, value in values.items():
+    matrix[0, MODEL_FEATURE_NAMES.index(name)] = value
+
+  assert anticipatory_eligibility(matrix, np).tolist() == [True]
+
+  matrix[0, MODEL_FEATURE_NAMES.index("h8_d_path")] = 2.4
+  assert anticipatory_eligibility(matrix, np).tolist() == [False]
+
+
+def test_anticipatory_probability_remap_preserves_decision_threshold() -> None:
+  result = RadarLeadModel._remap_probability(np.asarray([0.9], dtype=np.float32), 0.9, 0.82)
+
+  np.testing.assert_allclose(result, (0.82,), rtol=1e-6)
 
 
 def test_feature_builder_keeps_identity_and_one_second_history() -> None:
