@@ -39,7 +39,7 @@ def test_reads_and_redacts_json_attachment() -> None:
     size = 80
 
     async def read(self) -> bytes:
-      return b'{"CruiseButtonMode": 1, "ApiToken": "secret-value", "ip": "10.0.0.3"}'
+      return b'{"CruiseButtonMode": 1, "ApiToken": "secret-value", "ip": "10.0.0.3", "note": "dongle c12f3d0cc306ec8d"}'
 
   message = SimpleNamespace(content="check this", attachments=[FakeAttachment()])
   bot = object.__new__(CarrotPilotBot)
@@ -50,3 +50,5 @@ def test_reads_and_redacts_json_attachment() -> None:
   assert "CruiseButtonMode" in texts[0]
   assert "secret-value" not in texts[0]
   assert "10.0.0.3" not in texts[0]
+  assert "c12f3d0cc306ec8d" not in texts[0]
+  assert "****ec8d" in texts[0]

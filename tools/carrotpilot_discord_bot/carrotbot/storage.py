@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+import re
 import sqlite3
 import threading
 
@@ -35,8 +36,22 @@ class Storage:
         ON answers(question_key, commit_hash, model);
       CREATE INDEX IF NOT EXISTS answers_history
         ON answers(channel_id, id DESC);
+      CREATE TABLE IF NOT EXISTS discord_messages (
+        message_id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        author_id TEXT NOT NULL,
+        author_name TEXT NOT NULL,
+        author_is_bot INTEGER NOT NULL,
+        content TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS discord_messages_recent
+        ON discord_messages(created_at DESC);
       """
     )
+    discord_columns = {str(row[1]) for row in self._db.execute("PRAGMA table_info(discord_messages)").fetchall()}
+    if "author_id" not in discord_columns:
+      self._db.execute("ALTER TABLE discord_messages ADD COLUMN author_id TEXT NOT NULL DEFAULT ''")
     self._db.commit()
 
   @staticmethod
@@ -100,3 +115,87 @@ class Storage:
         (channel_id, limit),
       ).fetchall()
     return [(str(question), str(answer)) for question, answer in reversed(rows)]
+
+  def save_discord_message(
+    self,
+    message_id: str,
+    channel_id: str,
+    author_id: str,
+    author_name: str,
+    author_is_bot: bool,
+    content: str,
+    created_at: str,
+  ) -> None:
+    content = content.strip()
+    if not content:
+      return
+    with self._lock:
+      self._db.execute(
+        "INSERT OR REPLACE INTO discord_messages(message_id, created_at, channel_id, author_id, author_name, author_is_bot, content) "
+        + "VALUES(?, ?, ?, ?, ?, ?, ?)",
+        (message_id, created_at, channel_id, author_id, author_name[:100], int(author_is_bot), content[:6000]),
+      )
+      self._db.commit()
+
+  @staticmethod
+  def _search_terms(text: str) -> set[str]:
+    normalized = text.casefold()
+    terms = {item for item in re.findall(r"[a-z0-9_+-]{2,}", normalized)}
+    for chunk in re.findall(r"[가-힣]{2,}", normalized):
+      terms.add(chunk)
+      for size in (2, 3):
+        terms.update(chunk[index : index + size] for index in range(len(chunk) - size + 1))
+    return terms
+
+  def similar_discord_context(
+    self,
+    question: str,
+    exclude_channel_id: str,
+    priority_user_ids: frozenset[str] = frozenset(),
+    limit: int = 8,
+  ) -> list[str]:
+    query_terms = self._search_terms(question)
+    if not query_terms:
+      return []
+    with self._lock:
+      rows = self._db.execute(
+        "SELECT created_at, channel_id, author_id, author_name, content FROM discord_messages "
+        + "WHERE author_is_bot=0 AND channel_id<>? ORDER BY created_at DESC LIMIT 2500",
+        (exclude_channel_id,),
+      ).fetchall()
+
+    ranked: list[tuple[float, str, str, str]] = []
+    normalized_question = self.normalize_question(question)
+    for created_at, channel_id, author_id, author_name, content in rows:
+      message_terms = self._search_terms(str(content))
+      shared = query_terms.intersection(message_terms)
+      if not shared:
+        continue
+      score = sum(min(len(term), 8) for term in shared) / max(len(query_terms), 1)
+      normalized_content = self.normalize_question(str(content))
+      if normalized_question in normalized_content or normalized_content in normalized_question:
+        score += 5.0
+      priority = str(author_id) in priority_user_ids
+      if priority:
+        score += 25.0
+      label = f"[priority member] {author_name}" if priority else str(author_name)
+      ranked.append((score, str(created_at), label, str(content)))
+
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    results: list[str] = []
+    seen: set[str] = set()
+    for _, created_at, author_name, content in ranked:
+      key = self.normalize_question(content)
+      if key in seen:
+        continue
+      seen.add(key)
+      date_text = created_at[:10]
+      results.append(f"[{date_text}] {author_name}: {content[:1200]}")
+      if len(results) >= limit:
+        break
+    return results
+
+  def discord_message_count(self) -> int:
+    with self._lock:
+      row = self._db.execute("SELECT COUNT(*) FROM discord_messages").fetchone()
+    return int(row[0]) if row else 0
