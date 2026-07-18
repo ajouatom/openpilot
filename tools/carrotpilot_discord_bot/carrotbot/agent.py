@@ -140,6 +140,7 @@ SPEED_INSTRUCTIONS = """
 
 LANGUAGE_INSTRUCTIONS = """
 Match the language of the final answer to the user's question.
+- An explicit request such as `영어로 답해줘`, `answer in English`, `한국어로 답해줘`, or `answer in Korean` overrides automatic language detection.
 - If the current question is primarily English, answer entirely in natural English.
 - If the current question is primarily Korean, answer in Korean.
 - If the question mixes languages, use the dominant natural language of the user's prose; do not let code, setting names, log text, or identifiers determine the language.
@@ -166,6 +167,19 @@ Discord conversation rules:
 
 def _answer_language(question: str, history: list[tuple[str, str]]) -> str:
   def detect(text: str) -> str | None:
+    normalized = " ".join(text.casefold().split())
+    if (
+      re.search(r"(?:영어|영문)(?:로|으로).{0,16}(?:답|대답|답변|설명|작성|말)", normalized)
+      or re.search(r"(?:답|대답|답변|설명|작성|말).{0,16}(?:영어|영문)(?:로|으로)", normalized)
+      or re.search(r"\b(?:answer|reply|respond|write)\s+in\s+english\b", normalized)
+    ):
+      return "English"
+    if (
+      re.search(r"(?:한국어|한글)(?:로|으로).{0,16}(?:답|대답|답변|설명|작성|말)", normalized)
+      or re.search(r"(?:답|대답|답변|설명|작성|말).{0,16}(?:한국어|한글)(?:로|으로)", normalized)
+      or re.search(r"\b(?:answer|reply|respond|write)\s+in\s+korean\b", normalized)
+    ):
+      return "Korean"
     hangul_count = len(re.findall(r"[가-힣]", text))
     latin_count = len(re.findall(r"[A-Za-z]", text))
     if hangul_count >= 4:
