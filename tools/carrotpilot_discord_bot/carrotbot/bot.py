@@ -110,14 +110,24 @@ class CarrotPilotBot(discord.Client):
     self._save_discord_member(message.author, message.created_at.isoformat())
 
   def _save_discord_member(self, member: discord.Member | discord.User, updated_at: str) -> None:
-    if member.bot:
+    profile = self._discord_member_row(member, updated_at)
+    if profile is None:
       return
+    self.storage.save_discord_member(*profile)
+
+  @staticmethod
+  def _discord_member_row(
+    member: discord.Member | discord.User,
+    updated_at: str,
+  ) -> tuple[str, str, str, str, str] | None:
+    if member.bot:
+      return None
     roles = [
       role.name
       for role in getattr(member, "roles", [])
       if getattr(role, "name", "") != "@everyone"
     ]
-    self.storage.save_discord_member(
+    return (
       str(member.id),
       member.name,
       member.display_name,
@@ -129,12 +139,16 @@ class CarrotPilotBot(discord.Client):
     saved = 0
     now = datetime.now(UTC).isoformat()
     for guild in self.guilds:
+      profiles: list[tuple[str, str, str, str, str]] = []
       try:
         async for member in guild.fetch_members(limit=None):
-          self._save_discord_member(member, now)
-          saved += 1
+          profile = self._discord_member_row(member, now)
+          if profile is not None:
+            profiles.append(profile)
       except (discord.Forbidden, discord.HTTPException):
         log.warning("Could not fetch Discord members guild=%s", guild.id, exc_info=True)
+      await asyncio.to_thread(self.storage.save_discord_members, profiles)
+      saved += len(profiles)
     return saved
 
   async def _sync_discord_history(self) -> None:

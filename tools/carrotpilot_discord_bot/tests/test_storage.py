@@ -81,6 +81,16 @@ def test_member_profile_sync_does_not_replace_new_name_with_old_history(tmp_path
   assert "뿌앙_꾸앙/K5" in results[0]
 
 
+def test_batch_member_profile_sync(tmp_path: Path) -> None:
+  storage = Storage(tmp_path / "bot.sqlite3")
+  storage.save_discord_members([
+    ("778", "ppuang", "뿌앙_꾸앙/K5", "C4", "2026-07-18T02:00:00+00:00"),
+    ("779", "driver", "EV6 Driver", "C3", "2026-07-18T02:00:00+00:00"),
+  ])
+
+  assert "뿌앙_꾸앙/K5" in storage.discord_member_context("뿌앙꾸앙 차량")[0]
+
+
 def test_member_mention_lookup_uses_user_id(tmp_path: Path) -> None:
   storage = Storage(tmp_path / "bot.sqlite3")
   storage.save_discord_message(
