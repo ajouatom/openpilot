@@ -70,6 +70,17 @@ def test_member_alias_lookup_ignores_punctuation_and_needs_no_saved_message(tmp_
   assert "no indexed messages" in results[0]
 
 
+def test_member_profile_sync_does_not_replace_new_name_with_old_history(tmp_path: Path) -> None:
+  storage = Storage(tmp_path / "bot.sqlite3")
+  storage.save_discord_member("778", "ppuang", "뿌앙_꾸앙/K5", "C4", "2026-07-18T02:00:00+00:00")
+  storage.save_discord_member("778", "ppuang", "예전별명", "C4", "2026-07-17T02:00:00+00:00")
+
+  results = storage.discord_member_context("뿌앙꾸앙 차량")
+
+  assert results
+  assert "뿌앙_꾸앙/K5" in results[0]
+
+
 def test_member_mention_lookup_uses_user_id(tmp_path: Path) -> None:
   storage = Storage(tmp_path / "bot.sqlite3")
   storage.save_discord_message(
