@@ -190,6 +190,44 @@ def test_close_parallel_object_with_tiny_lateral_motion_never_activates_cutin() 
   assert not decision.cutin_candidates
 
 
+def test_close_stationary_reflection_never_activates_cutin() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)
+  decision = None
+  obj = replace(
+    fused(y_rel=2.2, yv_rel=-0.3, d_rel=4.8),
+    v_rel=-20.0, v_lead=0.0, front_v_rel=-20.0, corner_v_rel=-20.0,
+  )
+  for frame in range(10):
+    sample = builder.update(context(frame * 0.05), (obj,))[0]
+    sample = replace(sample, d_path=1.7, d_path_future=1.5)
+    decision = decision_filter.update(frame * 0.05, (
+      RadarLeadPrediction(sample, lead_prob=0.0, cutin_prob=0.99, risk_prob=0.99),
+    ))
+
+  assert decision is not None
+  assert not decision.cutin_candidates
+
+
+def test_close_slow_in_lane_cutin_remains_usable() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)
+  decision = None
+  obj = replace(
+    fused(corner_id=None, y_rel=1.45, yv_rel=-0.2, d_rel=3.3),
+    v_rel=-0.1, v_lead=0.2, front_v_rel=-0.1,
+  )
+  for frame in range(10):
+    sample = builder.update(context(frame * 0.05), (obj,))[0]
+    sample = replace(sample, d_path=1.33, d_path_future=1.32)
+    decision = decision_filter.update(frame * 0.05, (
+      RadarLeadPrediction(sample, lead_prob=0.0, cutin_prob=0.99, risk_prob=0.99),
+    ))
+
+  assert decision is not None
+  assert decision.cutin_candidates
+
+
 def test_inside_object_moving_outward_never_activates_cutin() -> None:
   builder = RadarLeadFeatureBuilder()
   decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)

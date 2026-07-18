@@ -637,7 +637,7 @@ class RadarLeadDecisionFilter:
       inside_not_moving_out = current_d_path <= 1.8 and future_d_path <= current_d_path + 0.15
       directional_cutin = inside_not_moving_out or projected_lane_entry
       cutin_control_usable = (
-        (obj.d_rel < 12.0 or obj.v_lead > 2.0)
+        (obj.v_lead > 2.0 or abs(obj.y_rel) < 2.0)
         and (obj.d_rel < 12.0 or lane_direction_reliable or current_d_path < 1.5)
       )
       cutin_evidence = (
