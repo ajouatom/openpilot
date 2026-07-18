@@ -7,7 +7,7 @@ import discord
 
 from carrotbot.agent import SupportAgent
 from carrotbot.config import Config
-from carrotbot.device_logs import contains_dongle_id
+from carrotbot.device_logs import contains_dongle_id, redact_attachment_text
 from carrotbot.repository import Repository
 from carrotbot.storage import Storage
 from carrotbot.text import make_thread_name, split_discord_message
@@ -19,6 +19,19 @@ log = logging.getLogger(__name__)
 IMAGE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 MAX_QUESTION_IMAGES = 4
+TEXT_CONTENT_TYPES = {
+  "application/json",
+  "application/toml",
+  "application/x-yaml",
+  "text/csv",
+  "text/plain",
+  "text/tab-separated-values",
+  "text/yaml",
+}
+TEXT_SUFFIXES = (".json", ".txt", ".log", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".csv", ".tsv")
+MAX_TEXT_ATTACHMENTS = 4
+MAX_ATTACHMENT_BYTES = 128 * 1024
+MAX_TOTAL_ATTACHMENT_BYTES = 256 * 1024
 
 
 class CarrotPilotBot(discord.Client):
@@ -90,6 +103,8 @@ class CarrotPilotBot(discord.Client):
       return content
     if self._image_urls(message):
       return "첨부된 오류 이미지를 확인해 주세요."
+    if self._text_attachment_candidates(message):
+      return "첨부된 설정 또는 로그 파일을 확인해 주세요."
     return None
 
   @staticmethod
@@ -103,6 +118,44 @@ class CarrotPilotBot(discord.Client):
         if len(urls) >= MAX_QUESTION_IMAGES:
           break
     return urls
+
+  @staticmethod
+  def _text_attachment_candidates(message: discord.Message) -> list[discord.Attachment]:
+    attachments: list[discord.Attachment] = []
+    for attachment in message.attachments:
+      content_type = (attachment.content_type or "").split(";", 1)[0].lower()
+      filename = attachment.filename.lower()
+      if content_type in TEXT_CONTENT_TYPES or filename.endswith(TEXT_SUFFIXES):
+        attachments.append(attachment)
+        if len(attachments) >= MAX_TEXT_ATTACHMENTS:
+          break
+    return attachments
+
+  async def _attachment_texts(self, message: discord.Message) -> list[str]:
+    results: list[str] = []
+    total_bytes = 0
+    for attachment in self._text_attachment_candidates(message):
+      filename = attachment.filename.replace("\n", " ").replace("\r", " ")[:160]
+      declared_size = int(getattr(attachment, "size", 0) or 0)
+      if declared_size > MAX_ATTACHMENT_BYTES:
+        results.append(f"Attachment `{filename}` was skipped because it exceeds 128 KB.")
+        continue
+      try:
+        data = await attachment.read()
+      except (discord.HTTPException, OSError):
+        log.warning("Failed to read Discord attachment filename=%s", filename, exc_info=True)
+        results.append(f"Attachment `{filename}` could not be read.")
+        continue
+      if len(data) > MAX_ATTACHMENT_BYTES:
+        results.append(f"Attachment `{filename}` was skipped because it exceeds 128 KB.")
+        continue
+      if total_bytes + len(data) > MAX_TOTAL_ATTACHMENT_BYTES:
+        results.append("Remaining text attachments were skipped because the 256 KB total limit was reached.")
+        break
+      total_bytes += len(data)
+      text = data.decode("utf-8-sig", errors="replace")
+      results.append(f"Attachment: {filename}\n{redact_attachment_text(text)}")
+    return results
 
   @staticmethod
   def _member_profile(message: discord.Message) -> dict[str, object]:
@@ -121,6 +174,7 @@ class CarrotPilotBot(discord.Client):
     if question is None:
       return
     image_urls = self._image_urls(message)
+    attachment_texts = await self._attachment_texts(message)
     if not self._repository_ready:
       await message.reply("저장소를 준비하고 있습니다. 잠시 후 다시 질문해 주세요.", mention_author=False)
       return
@@ -166,7 +220,7 @@ class CarrotPilotBot(discord.Client):
     cache_model = f"{self.config.openai_model}@bot-{BOT_VERSION}"
     history = self.storage.recent_history(context_id)
     uses_device_logs = contains_dongle_id(question) or any(contains_dongle_id(item[0]) for item in history)
-    cached = None if image_urls or uses_device_logs else self.storage.cached_answer(question, info["commit"], cache_model)
+    cached = None if image_urls or attachment_texts or uses_device_logs else self.storage.cached_answer(question, info["commit"], cache_model)
     if cached is not None:
       self.storage.save_answer(
         context_id,
@@ -192,6 +246,7 @@ class CarrotPilotBot(discord.Client):
           history,
           self._member_profile(message),
           image_urls,
+          attachment_texts,
         )
       self.storage.save_answer(
         context_id,
@@ -200,7 +255,7 @@ class CarrotPilotBot(discord.Client):
         answer,
         info["commit"],
         cache_model,
-        cacheable=not image_urls and not uses_device_logs,
+        cacheable=not image_urls and not attachment_texts and not uses_device_logs,
       )
       await self._send_answer(target_channel, answer, reply_to)
       log.info("Answered user=%s daily_count=%d", message.author.id, used)

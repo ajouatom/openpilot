@@ -52,6 +52,14 @@ def _redact_json(value: Any) -> Any:
   return value
 
 
+def redact_attachment_text(text: str) -> str:
+  try:
+    value = json.loads(text)
+  except json.JSONDecodeError:
+    return _redact_text(text)
+  return json.dumps(_redact_json(value), ensure_ascii=False, indent=2, sort_keys=True)
+
+
 def _timestamp(path: Path) -> str:
   return datetime.fromtimestamp(path.stat().st_mtime).astimezone().isoformat(timespec="seconds")
 

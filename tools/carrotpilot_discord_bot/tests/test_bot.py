@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 from carrotbot.bot import CarrotPilotBot
@@ -18,7 +19,7 @@ def test_image_attachments_become_question_inputs() -> None:
   assert bot._question_from(message) == "첨부된 오류 이미지를 확인해 주세요."
 
 
-def test_non_image_attachment_without_text_is_ignored() -> None:
+def test_text_attachment_without_message_becomes_a_question() -> None:
   message = SimpleNamespace(
     content="",
     attachments=[
@@ -28,4 +29,24 @@ def test_non_image_attachment_without_text_is_ignored() -> None:
   bot = object.__new__(CarrotPilotBot)
   bot.config = SimpleNamespace(require_mention=False)
 
-  assert bot._question_from(message) is None
+  assert bot._question_from(message) == "첨부된 설정 또는 로그 파일을 확인해 주세요."
+
+
+def test_reads_and_redacts_json_attachment() -> None:
+  class FakeAttachment:
+    content_type = "application/json"
+    filename = "params.json"
+    size = 80
+
+    async def read(self) -> bytes:
+      return b'{"CruiseButtonMode": 1, "ApiToken": "secret-value", "ip": "10.0.0.3"}'
+
+  message = SimpleNamespace(content="check this", attachments=[FakeAttachment()])
+  bot = object.__new__(CarrotPilotBot)
+
+  texts = asyncio.run(bot._attachment_texts(message))
+
+  assert len(texts) == 1
+  assert "CruiseButtonMode" in texts[0]
+  assert "secret-value" not in texts[0]
+  assert "10.0.0.3" not in texts[0]
