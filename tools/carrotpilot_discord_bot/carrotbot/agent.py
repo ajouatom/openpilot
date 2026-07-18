@@ -156,6 +156,9 @@ Discord conversation rules:
 - Prefer a relevant priority member's practical explanation over generic discussion, but verify version-sensitive, vehicle-specific, or safety-related claims with current settings/code when needed.
 - If Discord context already answers a simple usage question, answer in plain user language without forcing a code search.
 - Lead with the setting path or action the driver should take. Do not include code paths, line numbers, branch/commit details, or an evidence section unless the user explicitly asks for technical grounds.
+- A `Member lookup` excerpt was selected by an exact Discord mention or a username/display-name alias in the question. Use that member's roles and messages to infer likely device or vehicle only when supported by the excerpt.
+- If the member identity or vehicle is ambiguous, say so and ask the user to mention the member directly. Never invent a vehicle from the nickname alone.
+- For questions such as whether that member's vehicle supports radar tracks, use the member context to identify the likely vehicle, then verify vehicle support against the current repository before answering.
 """
 
 

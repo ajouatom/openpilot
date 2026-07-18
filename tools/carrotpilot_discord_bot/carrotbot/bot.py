@@ -86,11 +86,18 @@ class CarrotPilotBot(discord.Client):
     content = redact_attachment_text(message.content.strip()) if message.content.strip() else ""
     if not content:
       return
+    roles = [
+      role.name
+      for role in getattr(message.author, "roles", [])
+      if getattr(role, "name", "") != "@everyone"
+    ]
     self.storage.save_discord_message(
       str(message.id),
       str(message.channel.id),
       str(message.author.id),
       message.author.display_name,
+      message.author.name,
+      ", ".join(roles),
       message.author.bot,
       content,
       message.created_at.isoformat(),
@@ -267,11 +274,18 @@ class CarrotPilotBot(discord.Client):
     info = await asyncio.to_thread(self.repository.repo_info)
     cache_model = f"{self.config.openai_model}@bot-{BOT_VERSION}"
     history = self.storage.recent_history(context_id)
-    discord_context = self.storage.similar_discord_context(
+    mentioned_user_ids = frozenset(
+      str(member.id)
+      for member in message.mentions
+      if not member.bot
+    )
+    member_context = self.storage.discord_member_context(question, mentioned_user_ids)
+    general_context = self.storage.similar_discord_context(
       question,
       context_id,
       self.config.priority_discord_user_ids,
     )
+    discord_context = (member_context + general_context)[:10]
     uses_device_logs = contains_dongle_id(question) or any(contains_dongle_id(item[0]) for item in history)
     cached = None if image_urls or attachment_texts or uses_device_logs else self.storage.cached_answer(question, info["commit"], cache_model)
     if cached is not None:

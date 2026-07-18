@@ -22,11 +22,11 @@ def test_quota_cache_and_history(tmp_path: Path) -> None:
 def test_similar_discord_context_prioritizes_configured_member(tmp_path: Path) -> None:
   storage = Storage(tmp_path / "bot.sqlite3")
   storage.save_discord_message(
-    "1", "old-thread", "100", "일반회원", False,
+    "1", "old-thread", "100", "일반회원", "normal-user", "C4", False,
     "크루즈 목표속도는 버튼으로 바꾸세요.", "2026-07-17T01:00:00+00:00",
   )
   storage.save_discord_message(
-    "2", "trusted-thread", "200", "CarrotMaster", False,
+    "2", "trusted-thread", "200", "CarrotMaster", "carrot-master", "당근, C4", False,
     "계기판 속도를 쓰려면 SpeedFromPCM 설정을 확인하세요.", "2026-07-16T01:00:00+00:00",
   )
 
@@ -40,3 +40,31 @@ def test_similar_discord_context_prioritizes_configured_member(tmp_path: Path) -
   assert "[priority member] CarrotMaster" in results[0]
   assert "SpeedFromPCM" in results[0]
   assert storage.discord_message_count() == 2
+
+
+def test_member_alias_lookup_returns_profile_and_messages(tmp_path: Path) -> None:
+  storage = Storage(tmp_path / "bot.sqlite3")
+  storage.save_discord_message(
+    "10", "thread", "777", "뿌앙꾸앙/싼타페TM21년/C4", "ppuang", "당근, C4", False,
+    "제 차량은 싼타페 TM 2021년식입니다.", "2026-07-18T01:00:00+00:00",
+  )
+
+  results = storage.discord_member_context("뿌앙꾸앙의 차량은 레이더트랙을 지원하나요?")
+
+  assert results
+  assert "뿌앙꾸앙/싼타페TM21년/C4" in results[0]
+  assert "싼타페 TM 2021년식" in results[0]
+  assert "user_id=****" in results[0]
+
+
+def test_member_mention_lookup_uses_user_id(tmp_path: Path) -> None:
+  storage = Storage(tmp_path / "bot.sqlite3")
+  storage.save_discord_message(
+    "11", "thread", "888", "별명", "stable-user", "C3", False,
+    "아이오닉5를 사용합니다.", "2026-07-18T01:00:00+00:00",
+  )
+
+  results = storage.discord_member_context("이 사람 차량은 무엇인가요?", frozenset({"888"}))
+
+  assert results
+  assert "아이오닉5" in results[0]

@@ -42,6 +42,8 @@ class Storage:
         channel_id TEXT NOT NULL,
         author_id TEXT NOT NULL,
         author_name TEXT NOT NULL,
+        author_username TEXT NOT NULL,
+        author_roles TEXT NOT NULL,
         author_is_bot INTEGER NOT NULL,
         content TEXT NOT NULL
       );
@@ -52,6 +54,10 @@ class Storage:
     discord_columns = {str(row[1]) for row in self._db.execute("PRAGMA table_info(discord_messages)").fetchall()}
     if "author_id" not in discord_columns:
       self._db.execute("ALTER TABLE discord_messages ADD COLUMN author_id TEXT NOT NULL DEFAULT ''")
+    if "author_username" not in discord_columns:
+      self._db.execute("ALTER TABLE discord_messages ADD COLUMN author_username TEXT NOT NULL DEFAULT ''")
+    if "author_roles" not in discord_columns:
+      self._db.execute("ALTER TABLE discord_messages ADD COLUMN author_roles TEXT NOT NULL DEFAULT ''")
     self._db.commit()
 
   @staticmethod
@@ -122,6 +128,8 @@ class Storage:
     channel_id: str,
     author_id: str,
     author_name: str,
+    author_username: str,
+    author_roles: str,
     author_is_bot: bool,
     content: str,
     created_at: str,
@@ -131,9 +139,12 @@ class Storage:
       return
     with self._lock:
       self._db.execute(
-        "INSERT OR REPLACE INTO discord_messages(message_id, created_at, channel_id, author_id, author_name, author_is_bot, content) "
-        + "VALUES(?, ?, ?, ?, ?, ?, ?)",
-        (message_id, created_at, channel_id, author_id, author_name[:100], int(author_is_bot), content[:6000]),
+        "INSERT OR REPLACE INTO discord_messages(message_id, created_at, channel_id, author_id, author_name, author_username, author_roles, author_is_bot, content) "
+        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+          message_id, created_at, channel_id, author_id, author_name[:100], author_username[:100],
+          author_roles[:500], int(author_is_bot), content[:6000],
+        ),
       )
       self._db.commit()
 
@@ -199,3 +210,56 @@ class Storage:
     with self._lock:
       row = self._db.execute("SELECT COUNT(*) FROM discord_messages").fetchone()
     return int(row[0]) if row else 0
+
+  @staticmethod
+  def _member_aliases(username: str, display_name: str) -> set[str]:
+    aliases = {username.casefold().strip(), display_name.casefold().strip()}
+    aliases.update(
+      part.casefold().strip()
+      for part in re.split(r"[/|·]", display_name)
+      if len(part.strip()) >= 2
+    )
+    return {alias for alias in aliases if len(alias) >= 2}
+
+  def discord_member_context(
+    self,
+    question: str,
+    mentioned_user_ids: frozenset[str] = frozenset(),
+    limit_members: int = 2,
+  ) -> list[str]:
+    normalized_question = self.normalize_question(question)
+    query_terms = self._search_terms(question)
+    with self._lock:
+      rows = self._db.execute(
+        "SELECT created_at, author_id, author_name, author_username, author_roles, content "
+        + "FROM discord_messages WHERE author_is_bot=0 ORDER BY created_at DESC LIMIT 4000"
+      ).fetchall()
+
+    matched_ids: list[str] = []
+    profiles: dict[str, tuple[str, str, str]] = {}
+    messages: dict[str, list[tuple[float, str, str]]] = {}
+    for created_at, author_id, display_name, username, roles, content in rows:
+      author_id = str(author_id)
+      aliases = self._member_aliases(str(username), str(display_name))
+      alias_match = any(alias in normalized_question for alias in aliases)
+      if author_id not in mentioned_user_ids and not alias_match:
+        continue
+      if author_id not in profiles:
+        profiles[author_id] = (str(display_name), str(username), str(roles))
+        matched_ids.append(author_id)
+      shared = query_terms.intersection(self._search_terms(str(content)))
+      score = float(sum(min(len(term), 8) for term in shared))
+      messages.setdefault(author_id, []).append((score, str(created_at), str(content)))
+
+    results: list[str] = []
+    for author_id in matched_ids[:limit_members]:
+      display_name, username, roles = profiles[author_id]
+      ranked = sorted(messages.get(author_id, []), key=lambda item: (item[0], item[1]), reverse=True)
+      excerpts = [f"- [{created_at[:10]}] {content[:900]}" for _, created_at, content in ranked[:5]]
+      masked_id = f"****{author_id[-4:]}" if len(author_id) >= 4 else "****"
+      results.append(
+        f"Member lookup: {display_name} (@{username}), user_id={masked_id}, roles={roles or 'none'}\n"
+        + "Messages by this member:\n"
+        + ("\n".join(excerpts) if excerpts else "- no indexed messages")
+      )
+    return results
