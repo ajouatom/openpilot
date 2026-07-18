@@ -32,7 +32,7 @@ def text_draw_module(monkeypatch):
   raylib.Vector2 = Vector2
   raylib.BLACK = Color(0, 0, 0, 255)
   raylib.draw_text_ex = lambda font, text, position, font_size, spacing, color: draw_calls.append(
-    (font, text, position, font_size, spacing, color),
+    (font, text, SimpleNamespace(x=position.x, y=position.y), font_size, spacing, color),
   )
   monkeypatch.setitem(sys.modules, "pyray", raylib)
   monkeypatch.setitem(
@@ -92,6 +92,10 @@ def test_text_outline_positions_match_legacy_geometry(text_draw_module, monkeypa
   )
 
   assert len(draw_calls) == 10
+  assert all(call[0] == "font" for call in draw_calls)
+  assert all(call[1] == "speed" for call in draw_calls)
+  assert all(call[3] == 50.0 and type(call[3]) is float for call in draw_calls)
+  assert all(call[4] == 0 for call in draw_calls)
   legacy_offsets = tuple(
     (math.cos(math.radians(deg)), math.sin(math.radians(deg)))
     for deg in range(0, 360, 45)
@@ -117,8 +121,40 @@ def test_zero_border_and_shadow_draw_only_main_text(text_draw_module, monkeypatc
   module.draw_text_ui_style("speed", 0, 0, 50, main_color, font="font", border_width=0, shadow_offset=0)
 
   assert len(draw_calls) == 1
+  assert draw_calls[0][0] == "font"
+  assert draw_calls[0][1] == "speed"
+  assert draw_calls[0][3] == 50.0 and type(draw_calls[0][3]) is float
+  assert draw_calls[0][4] == 0
   assert (draw_calls[0][2].x, draw_calls[0][2].y) == (10.0, 20.0)
   assert draw_calls[0][5] == main_color
+
+
+def test_styled_text_reuses_one_draw_position(text_draw_module, monkeypatch):
+  module, draw_calls = text_draw_module
+  monkeypatch.setattr(module, "get_text_draw_pos", lambda *args, **kwargs: (10.0, 20.0, None))
+  vector_constructions = []
+
+  class TrackingVector2:
+    def __init__(self, x, y):
+      vector_constructions.append((x, y))
+      self.x = x
+      self.y = y
+
+  monkeypatch.setattr(module.rl, "Vector2", TrackingVector2)
+
+  module.draw_text_ui_style(
+    "speed",
+    0,
+    0,
+    50,
+    module.rl.Color(1, 2, 3, 4),
+    font="font",
+    border_width=3,
+    shadow_offset=4,
+  )
+
+  assert len(draw_calls) == 10
+  assert vector_constructions == [(10.0, 20.0)]
 
 
 def test_draw_call_does_not_recompute_trigonometry(text_draw_module, monkeypatch):

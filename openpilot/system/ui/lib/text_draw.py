@@ -71,15 +71,21 @@ def draw_text_ui_style(text: str,
     font = gui_app.font(FontWeight.DISPLAY)
 
   draw_x, draw_y, _ = get_text_draw_pos(font, text, x, y, font_size, align, y_offset)
+  draw_size = float(font_size)
+  position = rl.Vector2(float(draw_x), float(draw_y))
 
   if border_width > 0.0:
     for unit_x, unit_y in _OUTLINE_UNIT_OFFSETS:
-      ox = border_width * unit_x
-      oy = border_width * unit_y
-      draw_text_raw(font, text, draw_x + ox, draw_y + oy, font_size, border_color)
+      position.x = float(draw_x + border_width * unit_x)
+      position.y = float(draw_y + border_width * unit_y)
+      rl.draw_text_ex(font, text, position, draw_size, 0, border_color)
 
   if shadow_offset != 0.0:
-    draw_text_raw(font, text, draw_x + shadow_offset, draw_y + shadow_offset, font_size, shadow_color)
+    position.x = float(draw_x + shadow_offset)
+    position.y = float(draw_y + shadow_offset)
+    rl.draw_text_ex(font, text, position, draw_size, 0, shadow_color)
 
-  draw_text_raw(font, text, draw_x, draw_y, font_size, color)
+  position.x = float(draw_x)
+  position.y = float(draw_y)
+  rl.draw_text_ex(font, text, position, draw_size, 0, color)
 

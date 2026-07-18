@@ -356,6 +356,62 @@ def test_device_info_updates_only_on_first_frame_or_new_service_frame(hud_module
   assert len(refreshes) == 3
 
 
+def test_device_display_cache_follows_service_receive_frames(hud_module):
+  module, fake_ui_state = hud_module
+  renderer = object.__new__(module.HudRenderer)
+  renderer._device_info_loaded = False
+  renderer._device_info_recv_frames = (-1, -1)
+  renderer.is_cruise_set = True
+  renderer.set_speed = 10
+  renderer.speed = 20
+  device_state = SimpleNamespace(
+    freeSpacePercent=55.0,
+    memoryUsagePercent=20,
+    cpuTempC=[40.0, 42.0],
+    cpuUsagePercent=[10.0, 20.0],
+  )
+  peripheral_state = SimpleNamespace(voltage=12_500)
+
+  class FakeSubMaster(dict):
+    pass
+
+  sm = FakeSubMaster(deviceState=device_state, peripheralState=peripheral_state)
+  sm.recv_frame = {"carState": 1, "deviceState": 10, "peripheralState": 20}
+  fake_ui_state.started_frame = 2
+  fake_ui_state.sm = sm
+
+  renderer._update_state()
+  assert renderer._device_info_recv_frames == (10, 20)
+  assert (
+    renderer._cpu_temp_text,
+    renderer._memory_usage_text,
+    renderer._disk_usage_text,
+    renderer._voltage_text,
+  ) == ("41°C", "20%", "45%", "12.5V")
+
+  device_state.cpuTempC = [50.0]
+  device_state.memoryUsagePercent = 30
+  device_state.freeSpacePercent = 40.0
+  peripheral_state.voltage = 13_250
+  renderer._update_state()
+  assert (
+    renderer._cpu_temp_text,
+    renderer._memory_usage_text,
+    renderer._disk_usage_text,
+    renderer._voltage_text,
+  ) == ("41°C", "20%", "45%", "12.5V")
+
+  sm.recv_frame["deviceState"] = 11
+  renderer._update_state()
+  assert renderer._device_info_recv_frames == (11, 20)
+  assert (
+    renderer._cpu_temp_text,
+    renderer._memory_usage_text,
+    renderer._disk_usage_text,
+    renderer._voltage_text,
+  ) == ("50°C", "30%", "60%", "13.2V")
+
+
 def test_incomplete_device_info_is_retried(hud_module):
   module, fake_ui_state = hud_module
   renderer = object.__new__(module.HudRenderer)
@@ -379,6 +435,60 @@ def test_incomplete_device_info_is_retried(hud_module):
   assert renderer._cpu_temp == pytest.approx(41.0)
   assert renderer._cpu_usage == pytest.approx(15.0)
   assert renderer._voltage == pytest.approx(12.5)
+  assert renderer._cpu_temp_text == "41°C"
+  assert renderer._memory_usage_text == "20%"
+  assert renderer._disk_usage_text == "45%"
+  assert renderer._voltage_text == "12.5V"
+
+
+def test_round_box_reuses_scratch_rectangle_without_changing_draw_geometry(hud_module, monkeypatch):
+  module, _ = hud_module
+  renderer = object.__new__(module.HudRenderer)
+  renderer._round_box_rect = module.rl.Rectangle(0, 0, 0, 0)
+  fill_color = module.rl.Color(1, 2, 3, 4)
+  line_color = module.rl.Color(5, 6, 7, 8)
+  calls = []
+
+  def snapshot(kind, rect, *args):
+    calls.append((kind, id(rect), (rect.x, rect.y, rect.width, rect.height), args))
+
+  monkeypatch.setattr(module.rl, "draw_rectangle_rounded", lambda rect, *args: snapshot("fill", rect, *args))
+  monkeypatch.setattr(module.rl, "draw_rectangle_rounded_lines_ex", lambda rect, *args: snapshot("line", rect, *args))
+
+  renderer._draw_round_box(1, 2, 3, 4, fill_color, line_color, 0.25, 8, 2)
+  renderer._draw_round_box(5, 6, 7, 8, fill_color, line_color, 0.5, 4, 3)
+
+  assert [call[0] for call in calls] == ["fill", "line", "fill", "line"]
+  assert len({call[1] for call in calls}) == 1
+  assert [call[2] for call in calls] == [
+    (1.0, 2.0, 3.0, 4.0),
+    (1.0, 2.0, 3.0, 4.0),
+    (5.0, 6.0, 7.0, 8.0),
+    (5.0, 6.0, 7.0, 8.0),
+  ]
+  assert calls[0][3] == (0.25, 8, fill_color)
+  assert calls[1][3] == (0.25, 8, 2.0, line_color)
+  assert calls[2][3] == (0.5, 4, fill_color)
+  assert calls[3][3] == (0.5, 4, 3.0, line_color)
+
+
+@pytest.mark.parametrize(("value", "expected_text", "expected_color_name"), (
+  (4.9, "  -", "WHITE_220"),
+  (5.0, "5", "TPMS_LOW"),
+  (5.1, "5", "TPMS_LOW"),
+  (30.9, "31", "TPMS_LOW"),
+  (31.0, "31", "WHITE_220"),
+  (31.1, "31", "WHITE_220"),
+  (59.9, "60", "WHITE_220"),
+  (60.0, "60", "WHITE_220"),
+  (60.1, "  -", "WHITE_220"),
+))
+def test_tpms_legacy_display_boundaries(hud_module, value, expected_text, expected_color_name):
+  module, _ = hud_module
+  renderer = object.__new__(module.HudRenderer)
+
+  assert renderer._get_tpms_text(value) == expected_text
+  assert renderer._get_tpms_color(value) == getattr(module.COLORS, expected_color_name)
 
 
 def test_date_text_formats_only_when_minute_key_changes(hud_module, monkeypatch):
