@@ -1,0 +1,4 @@
+config/bot.env
+data/
+repos/
+*.sqlite3

@@ -1,0 +1,7 @@
+config/
+data/
+repos/
+tests/
+**/__pycache__/
+*.sqlite3
+*.zip
