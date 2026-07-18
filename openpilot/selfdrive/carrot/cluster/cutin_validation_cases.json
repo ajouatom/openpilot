@@ -276,6 +276,17 @@
       "scene": "Stopped object id 33 at 7.65 m must not trigger cut-in audio"
     },
     {
+      "id": "ioniq9-1c1-25-close-stationary-reflection",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "front",
+      "window": [4.8, 6.7],
+      "expected": "clear",
+      "target_track_ids": [44],
+      "forbidden_lead_two_ids": [44],
+      "scene": "Close stationary front-radar reflection outside the lane must not trigger repeated cut-in audio"
+    },
+    {
       "id": "ioniq5-aa5-3-stationary-114m",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
       "log": "00000aa5--26e26ea9a8--3/rlog.zst",
