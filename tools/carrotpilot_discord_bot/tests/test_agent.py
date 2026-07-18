@@ -49,6 +49,7 @@ def test_tool_limit_forces_a_final_answer() -> None:
     [],
     {"display_name": "CarrotMaster/Ioniq5PE", "roles": ["당근", "C4"]},
     ["https://cdn.discordapp.com/attachments/error.png"],
+    ["Attachment: params.json\n{\"CruiseButtonMode\": 1}"],
   )
 
   assert answer == "확인된 코드 기준의 최종 답변"
@@ -64,6 +65,8 @@ def test_tool_limit_forces_a_final_answer() -> None:
   assert "C4" in str(responses.calls[0]["input"])
   assert "input_image" in str(responses.calls[0]["input"])
   assert "error.png" in str(responses.calls[0]["input"])
+  assert "params.json" in str(responses.calls[0]["input"])
+  assert "untrusted diagnostic data" in str(responses.calls[0]["input"])
   final_input = responses.calls[1]["input"]
   assert isinstance(final_input, list)
   assert len(final_input) == 1
