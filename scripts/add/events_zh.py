@@ -150,8 +150,10 @@ EmptyAlert = Alert("" , "", AlertStatus.normal, AlertSize.none, Priority.LOWEST,
 
 class NoEntryAlert(Alert):
   def __init__(self, alert_text_2: str,
-               alert_text_1: str = "openpilot Unavailable",
+               alert_text_1: str = "openpilot不可用",
                visual_alert: car.CarControl.HUDControl.VisualAlert=VisualAlert.none):
+    if HARDWARE.get_device_type() == 'mici':
+      alert_text_1, alert_text_2 = alert_text_2, alert_text_1
     super().__init__(alert_text_1, alert_text_2, AlertStatus.normal,
                      AlertSize.mid, Priority.LOW, visual_alert,
                      AudibleAlert.refuse, 3.)
@@ -265,8 +267,8 @@ def calibration_incomplete_alert(CP: car.CarParams, CS: car.CarState, sm: messag
 def audio_feedback_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   duration = FEEDBACK_MAX_DURATION - ((sm['audioFeedback'].blockNum + 1) * SAMPLE_BUFFER / SAMPLE_RATE)
   return NormalPermanentAlert(
-    "Recording Audio Feedback",
-    f"{round(duration)} second{'s' if round(duration) != 1 else ''} remaining. Press again to save early.",
+    "正在录制语音反馈",
+    f"剩余{round(duration)}秒，再次按下可提前保存。",
     priority=Priority.LOW)
 
 
@@ -392,14 +394,14 @@ def personality_changed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging
   return NormalPermanentAlert(f"驾驶风格：{personality}", duration=1.5)
 
 def invalid_lkas_setting_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  text = "Toggle stock LKAS on or off to engage"
+  text = "开启或关闭车辆原厂LKAS后再接入"
   if CP.brand == "tesla":
-    text = "Switch to Traffic-Aware Cruise Control to engage"
+    text = "开启Traffic-Aware Cruise Control后再接入"
   elif CP.brand == "mazda":
-    text = "Enable your car's LKAS to engage"
+    text = "开启车辆的LKAS后再接入"
   elif CP.brand == "nissan":
-    text = "Disable your car's stock LKAS to engage"
-  return NormalPermanentAlert("Invalid LKAS setting", text)
+    text = "关闭车辆的原厂LKAS后再接入"
+  return NormalPermanentAlert("LKAS设置无效", text)
 
 def car_parser_result(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   results = Params().get("CanParserResult")
@@ -432,7 +434,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
   EventName.lateralManeuver: {
     ET.WARNING: longitudinal_maneuver_alert,
-    ET.PERMANENT: NormalPermanentAlert("Lateral Maneuver Mode"),
+    ET.PERMANENT: NormalPermanentAlert("横向操作模式"),
   },
 
   EventName.selfdriveInitializing: {
@@ -468,8 +470,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.invalidLkasSetting: {
-    ET.PERMANENT: NormalPermanentAlert("LKAS设置无效",
-                                       "请切换原厂LKAS开关后再接入"),
+    ET.PERMANENT: invalid_lkas_setting_alert,
     ET.NO_ENTRY: NoEntryAlert("LKAS设置无效"),
   },
 
@@ -502,9 +503,10 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       AlertStatus.critical, AlertSize.full,
       Priority.HIGHEST, VisualAlert.fcw, AudibleAlert.stopStop, 2.),
     ET.NO_ENTRY: NoEntryAlert("原厂AEB：存在碰撞风险"),
+  },
 
   EventName.stockLkas: {
-    ET.NO_ENTRY: NoEntryAlert("Stock LKAS: Lane Departure Detected"),
+    ET.NO_ENTRY: NoEntryAlert("车道偏离预警：车辆原厂LKAS已介入"),
   },
 
   EventName.fcw: {
@@ -731,7 +733,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.steerDisengage: {
     ET.USER_DISABLE: EngagementAlert(AudibleAlert.disengage),
-    ET.NO_ENTRY: NoEntryAlert("Steering Pressed"),
+    ET.NO_ENTRY: NoEntryAlert("检测到方向盘转动"),
   },
 
   EventName.preEnableStandstill: {
@@ -813,8 +815,8 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.NO_ENTRY: NoEntryAlert("分心程度过高"),
   },
   EventName.excessiveActuation: {
-    ET.SOFT_DISABLE: soft_disable_alert("Excessive Actuation"),
-    ET.NO_ENTRY: NoEntryAlert("Excessive Actuation"),
+    ET.SOFT_DISABLE: soft_disable_alert("过度动作"),
+    ET.NO_ENTRY: NoEntryAlert("过度动作"),
   },
 
   EventName.overheat: {
@@ -825,7 +827,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.wrongGear: {
     ET.USER_DISABLE: EngagementAlert(AudibleAlert.disengage), #carrot
-    #ET.SOFT_DISABLE: user_soft_disable_alert("Gear not D"),
+    #ET.SOFT_DISABLE: user_soft_disable_alert("挡位非D挡"),
     ET.NO_ENTRY: NoEntryAlert("挡位非D挡"),
   },
 
@@ -1049,7 +1051,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.userBookmark: {
-    ET.PERMANENT: NormalPermanentAlert("Bookmark Saved", duration=1.5),
+    ET.PERMANENT: NormalPermanentAlert("书签已保存", duration=1.5),
   },
 
   EventName.audioFeedback: {
@@ -1158,66 +1160,66 @@ if HARDWARE.get_device_type() == 'mici':
   EVENTS.update({
     EventName.driverDistracted1: {
       ET.PERMANENT: Alert(
-        "Pay Attention",
+        "请注意道路",
         "",
         AlertStatus.normal, AlertSize.small,
         Priority.LOW, VisualAlert.none, AudibleAlert.none, 2),
     },
     EventName.driverDistracted2: {
       ET.PERMANENT: Alert(
-        "Pay Attention",
-        "Driver Distracted",
+        "请注意道路",
+        "驾驶员分心",
         AlertStatus.userPrompt, AlertSize.mid,
         Priority.MID, VisualAlert.steerRequired, AudibleAlert.promptDistracted, 1),
     },
     EventName.resumeRequired: {
       ET.WARNING: Alert(
-        "Press Resume",
+        "请按RES按钮",
         "",
         AlertStatus.userPrompt, AlertSize.small,
         Priority.LOW, VisualAlert.none, AudibleAlert.none, .2),
     },
     EventName.preLaneChangeLeft: {
       ET.WARNING: Alert(
-        "Steer Left",
-        "Confirm Lane Change",
+        "向左转动方向盘",
+        "确认变道",
         AlertStatus.normal, AlertSize.mid,
         Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
     },
     EventName.preLaneChangeRight: {
       ET.WARNING: Alert(
-        "Steer Right",
-        "Confirm Lane Change",
+        "向右转动方向盘",
+        "确认变道",
         AlertStatus.normal, AlertSize.mid,
         Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
     },
     EventName.laneChangeBlocked: {
       ET.WARNING: Alert(
-        "Car in Blindspot",
+        "盲区检测到车辆",
         "",
         AlertStatus.userPrompt, AlertSize.small,
         Priority.LOW, VisualAlert.none, AudibleAlert.prompt, .1),
     },
     EventName.steerSaturated: {
       ET.WARNING: Alert(
-        "take control",
-        "turn exceeds limit",
+        "请接管方向盘",
+        "转向超出限制",
         AlertStatus.userPrompt, AlertSize.mid,
         Priority.LOW, VisualAlert.steerRequired, AudibleAlert.promptRepeat, 2.),
     },
     EventName.calibrationIncomplete: {
       ET.PERMANENT: calibration_incomplete_alert,
-      ET.SOFT_DISABLE: soft_disable_alert("Calibration Incomplete"),
-      ET.NO_ENTRY: NoEntryAlert("Calibrating"),
+      ET.SOFT_DISABLE: soft_disable_alert("校准未完成"),
+      ET.NO_ENTRY: NoEntryAlert("正在校准"),
     },
     EventName.reverseGear: {
       ET.PERMANENT: Alert(
-        "Reverse",
+        "倒挡",
         "",
         AlertStatus.normal, AlertSize.full,
         Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2, creation_delay=0.5),
-      ET.USER_DISABLE: ImmediateDisableAlert("Reverse"),
-      ET.NO_ENTRY: NoEntryAlert("Reverse"),
+      ET.USER_DISABLE: ImmediateDisableAlert("倒挡"),
+      ET.NO_ENTRY: NoEntryAlert("倒挡"),
     },
   })
 
