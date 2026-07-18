@@ -55,6 +55,7 @@ class Config:
   database_path: Path
   device_logs_path: Path | None
   priority_discord_user_ids: frozenset[str]
+  index_all_discord_channels: bool
 
   @classmethod
   def from_env(cls) -> Config:
@@ -84,4 +85,5 @@ class Config:
         else None
       ),
       priority_discord_user_ids=_id_set("PRIORITY_DISCORD_USER_IDS"),
+      index_all_discord_channels=_bool("INDEX_ALL_DISCORD_CHANNELS", False),
     )

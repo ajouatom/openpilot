@@ -141,17 +141,35 @@ class Storage:
     content: str,
     created_at: str,
   ) -> None:
-    content = content.strip()
-    if not content:
+    self.save_discord_messages([
+      (
+        message_id, channel_id, author_id, author_name, author_username, author_roles,
+        author_is_bot, content, created_at,
+      ),
+    ])
+
+  def save_discord_messages(
+    self,
+    messages: list[tuple[str, str, str, str, str, str, bool, str, str]],
+  ) -> None:
+    rows = [
+      (
+        message_id, created_at, channel_id, author_id, author_name[:100], author_username[:100],
+        author_roles[:500], int(author_is_bot), content.strip()[:6000],
+      )
+      for (
+        message_id, channel_id, author_id, author_name, author_username, author_roles,
+        author_is_bot, content, created_at,
+      ) in messages
+      if content.strip()
+    ]
+    if not rows:
       return
     with self._lock:
-      self._db.execute(
+      self._db.executemany(
         "INSERT OR REPLACE INTO discord_messages(message_id, created_at, channel_id, author_id, author_name, author_username, author_roles, author_is_bot, content) "
         + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-          message_id, created_at, channel_id, author_id, author_name[:100], author_username[:100],
-          author_roles[:500], int(author_is_bot), content[:6000],
-        ),
+        rows,
       )
       self._db.commit()
 

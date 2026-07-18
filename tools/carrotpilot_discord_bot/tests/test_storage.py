@@ -42,6 +42,20 @@ def test_similar_discord_context_prioritizes_configured_member(tmp_path: Path) -
   assert storage.discord_message_count() == 2
 
 
+def test_batch_discord_message_archive(tmp_path: Path) -> None:
+  storage = Storage(tmp_path / "bot.sqlite3")
+  storage.save_discord_messages([
+    ("1", "general", "100", "회원", "member", "C4", False, "싼타페TM 레이더트랙 설정", "2026-07-18T01:00:00+00:00"),
+    ("2", "general", "101", "회원2", "member2", "", False, "EnableRadarTracks를 확인하세요", "2026-07-18T01:01:00+00:00"),
+  ])
+
+  results = storage.similar_discord_context("싼타페TM 레이더트랙", "current")
+
+  assert storage.discord_message_count() == 2
+  assert results
+  assert "싼타페TM 레이더트랙 설정" in results[0]
+
+
 def test_member_alias_lookup_returns_profile_and_messages(tmp_path: Path) -> None:
   storage = Storage(tmp_path / "bot.sqlite3")
   storage.save_discord_message(

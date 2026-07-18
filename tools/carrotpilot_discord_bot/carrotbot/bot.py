@@ -86,15 +86,23 @@ class CarrotPilotBot(discord.Client):
 
   def _archive_discord_message(self, message: discord.Message) -> None:
     self._archive_discord_member(message)
+    row = self._discord_message_row(message)
+    if row is not None:
+      self.storage.save_discord_messages([row])
+
+  @staticmethod
+  def _discord_message_row(
+    message: discord.Message,
+  ) -> tuple[str, str, str, str, str, str, bool, str, str] | None:
     content = redact_attachment_text(message.content.strip()) if message.content.strip() else ""
     if not content:
-      return
+      return None
     roles = [
       role.name
       for role in getattr(message.author, "roles", [])
       if getattr(role, "name", "") != "@everyone"
     ]
-    self.storage.save_discord_message(
+    return (
       str(message.id),
       str(message.channel.id),
       str(message.author.id),
@@ -166,15 +174,31 @@ class CarrotPilotBot(discord.Client):
     except (discord.Forbidden, discord.HTTPException):
       log.warning("Could not list archived Discord threads", exc_info=True)
 
+    if self.config.index_all_discord_channels:
+      known_ids = {source.id for source in sources}
+      for guild in self.guilds:
+        for text_channel in guild.text_channels:
+          if text_channel.id not in known_ids:
+            sources.append(text_channel)
+            known_ids.add(text_channel.id)
+          for thread in text_channel.threads:
+            if thread.id not in known_ids:
+              sources.append(thread)
+              known_ids.add(thread.id)
+
     saved = 0
     for source in sources:
-      history_limit = 120 if source.id == channel.id else 60
+      history_limit = 120 if source.id == channel.id else (60 if isinstance(source, discord.Thread) else 300)
+      rows: list[tuple[str, str, str, str, str, str, bool, str, str]] = []
       try:
         async for item in source.history(limit=history_limit, oldest_first=False):
-          self._archive_discord_message(item)
-          saved += 1
+          row = self._discord_message_row(item)
+          if row is not None:
+            rows.append(row)
       except (discord.Forbidden, discord.HTTPException):
-        log.warning("Could not read Discord history channel=%s", source.id, exc_info=True)
+        log.debug("Could not read Discord history channel=%s", source.id)
+      await asyncio.to_thread(self.storage.save_discord_messages, rows)
+      saved += len(rows)
     log.info("Discord history sync completed: sources=%d messages=%d", len(sources), saved)
 
   async def _update_repository_loop(self) -> None:
@@ -269,12 +293,16 @@ class CarrotPilotBot(discord.Client):
 
   async def on_message(self, message: discord.Message) -> None:
     # Keep a server-wide display-name directory, but store message content only
-    # for the configured question channel and its threads.
+    # for channels explicitly enabled by configuration.
     if message.guild is not None:
-      self._archive_discord_member(message)
+      if self.config.index_all_discord_channels:
+        self._archive_discord_message(message)
+      else:
+        self._archive_discord_member(message)
     if not self._allowed_channel(message.channel):
       return
-    self._archive_discord_message(message)
+    if not self.config.index_all_discord_channels:
+      self._archive_discord_message(message)
     if message.author.bot:
       return
     question = self._question_from(message)
