@@ -17,6 +17,9 @@ function isWebSettingsItemVisible(item) {
   if (item?.component) {
     return Boolean(globalThis.WebSettingsComponents?.isVisible?.(item.component, WEB_SPEC_BY_KEY));
   }
+  // Actions execute UI/API operations and intentionally have no persisted
+  // backend field in webSettingsSpec.
+  if (item?.type === "action") return true;
   return Boolean(getWebSettingsField(item));
 }
 
@@ -45,7 +48,7 @@ function setWebSettingValue(item, value) {
 
 function renderWebSettingsItem(item) {
   if (item?.component) return globalThis.WebSettingsComponents?.render?.(item.component, item) || "";
-  const field = getWebSettingsField(item);
+  const field = getWebSettingsField(item) || (item?.type === "action" ? {} : null);
   if (!field) return "";
   const title = webSettingsText(item.titleKey);
   const desc = webSettingsText(item.descKey);
