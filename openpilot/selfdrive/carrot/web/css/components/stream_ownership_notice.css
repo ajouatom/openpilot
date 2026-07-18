@@ -1,0 +1,207 @@
+.stream-ownership-notice {
+  --stream-ownership-text: var(--md-on-surface);
+  --stream-ownership-feature-color: var(--md-on-surface);
+  --stream-ownership-title-color: color-mix(in srgb, var(--md-on-surface-var) 82%, var(--md-surface));
+  --stream-ownership-description-color: color-mix(in srgb, var(--md-on-surface-var) 78%, transparent);
+  --stream-ownership-font-weight: 700;
+  --stream-ownership-overlay-bg: color-mix(in srgb, var(--md-surface) 84%, var(--drive-workspace-bg));
+  --stream-ownership-max-width: 42ch;
+  --stream-ownership-feature-size-min: 30px;
+  --stream-ownership-feature-size-max: 50px;
+  --stream-ownership-title-size-min: 34px;
+  --stream-ownership-title-size-max: 58px;
+  --stream-ownership-description-size: 14px;
+  --stream-ownership-copy-gap: var(--sp-sm);
+  --stream-ownership-action-gap: var(--sp-lg);
+  --stream-ownership-action-row-gap: var(--sp-sm);
+  --stream-ownership-action-min-height: 46px;
+  --stream-ownership-action-max-width: 280px;
+  --stream-ownership-action-font-size: 16px;
+  --stream-ownership-secondary-bg: color-mix(in srgb, var(--md-surface-cont-h) 86%, transparent);
+  --stream-ownership-fog-neutral: color-mix(in srgb, var(--md-on-surface-var) 7%, transparent);
+  --stream-ownership-fog-accent: color-mix(in srgb, var(--md-primary) 8%, transparent);
+  --stream-ownership-fog-blur: 64px;
+  --stream-ownership-fog-duration: 14s;
+  --stream-ownership-fog-start-opacity: 0.62;
+  --stream-ownership-fog-active-opacity: 1;
+  position: absolute;
+  z-index: var(--drive-layer-overlay);
+  isolation: isolate;
+  inset: 0;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
+  place-items: safe center;
+  padding: clamp(var(--sp-md), 4cqi, var(--sp-2xl));
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--stream-ownership-overlay-bg);
+  color: var(--stream-ownership-text);
+  pointer-events: auto;
+}
+
+.stream-ownership-notice::before,
+.stream-ownership-notice::after {
+  position: absolute;
+  border-radius: var(--r-round);
+  content: "";
+  filter: blur(var(--stream-ownership-fog-blur));
+  opacity: var(--stream-ownership-fog-active-opacity);
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+
+.stream-ownership-notice::before {
+  inset: 6% 12%;
+  background: var(--stream-ownership-fog-neutral);
+  animation: stream-ownership-fog-neutral var(--stream-ownership-fog-duration) var(--ease-standard) infinite alternate;
+}
+
+.stream-ownership-notice::after {
+  right: 22%;
+  bottom: 18%;
+  width: 24%;
+  height: 30%;
+  background: var(--stream-ownership-fog-accent);
+  animation: stream-ownership-fog-accent var(--stream-ownership-fog-duration) var(--ease-standard) infinite alternate-reverse;
+}
+
+.stream-ownership-notice[hidden] {
+  display: none !important;
+}
+
+.stream-ownership-notice__body {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(100%, var(--stream-ownership-max-width));
+  margin-block: auto;
+  place-items: center;
+  gap: var(--stream-ownership-action-gap);
+  text-align: center;
+}
+
+.stream-ownership-notice__copy {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  gap: var(--stream-ownership-copy-gap);
+}
+
+.stream-ownership-notice__feature,
+.stream-ownership-notice__title,
+.stream-ownership-notice__description {
+  max-inline-size: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  word-break: keep-all;
+}
+
+.stream-ownership-notice__feature,
+.stream-ownership-notice__title {
+  font-weight: var(--stream-ownership-font-weight);
+}
+
+.stream-ownership-notice__feature {
+  color: var(--stream-ownership-feature-color);
+  font-size: clamp(
+    var(--stream-ownership-feature-size-min),
+    5cqi,
+    var(--stream-ownership-feature-size-max)
+  );
+  line-height: 1.06;
+  letter-spacing: -0.05em;
+}
+
+.stream-ownership-notice__title {
+  color: var(--stream-ownership-title-color);
+  font-size: clamp(
+    var(--stream-ownership-title-size-min),
+    6.5cqi,
+    var(--stream-ownership-title-size-max)
+  );
+  line-height: 1.02;
+  letter-spacing: -0.055em;
+}
+
+.stream-ownership-notice__description {
+  color: var(--stream-ownership-description-color);
+  font-size: var(--stream-ownership-description-size);
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.stream-ownership-notice__actions {
+  display: grid;
+  width: min(100%, var(--stream-ownership-action-max-width));
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--stream-ownership-action-row-gap);
+}
+
+.stream-ownership-notice__actions[data-layout="split"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stream-ownership-notice__action {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--stream-ownership-action-min-height);
+  margin: 0;
+  padding-inline: var(--sp-lg);
+  overflow: hidden;
+  font-size: var(--stream-ownership-action-font-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-ownership-notice__action--secondary {
+  background: var(--stream-ownership-secondary-bg);
+  color: var(--stream-ownership-text);
+}
+
+.stream-ownership-notice__action:disabled {
+  opacity: var(--state-disabled-opacity);
+  cursor: not-allowed;
+}
+
+.stream-ownership-notice[data-pending="true"] .stream-ownership-notice__action:disabled {
+  cursor: wait;
+}
+
+@keyframes stream-ownership-fog-neutral {
+  from {
+    opacity: var(--stream-ownership-fog-start-opacity);
+    transform: translate(-4%, 3%) scale(0.9);
+  }
+  to {
+    opacity: var(--stream-ownership-fog-active-opacity);
+    transform: translate(4%, -3%) scale(1.08);
+  }
+}
+
+@keyframes stream-ownership-fog-accent {
+  from {
+    transform: translate(8%, 6%) scale(0.88);
+  }
+  to {
+    transform: translate(-8%, -6%) scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-ownership-notice::before,
+  .stream-ownership-notice::after {
+    animation: none;
+    will-change: auto;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .stream-ownership-notice {
+    --stream-ownership-title-color: var(--md-on-surface);
+    --stream-ownership-fog-start-opacity: 0.3;
+    --stream-ownership-fog-active-opacity: 0.42;
+  }
+}

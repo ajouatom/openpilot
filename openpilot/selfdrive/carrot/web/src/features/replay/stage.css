@@ -1,0 +1,882 @@
+/* Replay-only chrome and adaptive transport layout. */
+
+.carrot-stage__replayViewport {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.carrot-stage.is-replay {
+  --carrot-replay-titlebar-height: 52px;
+  --carrot-replay-bottom-control-height: 44px;
+  --carrot-replay-content-right: 0px;
+}
+
+.carrot-stage.is-replay[data-replay-insights-layout="side"].is-replay-insights-open {
+  --carrot-replay-content-right: calc(min(var(--carrot-replay-insights-panel-width), 42%) + var(--sp-sm));
+}
+
+.carrot-stage.is-replay .carrot-stage__replayViewport {
+  inset: var(--carrot-replay-titlebar-height) var(--carrot-replay-content-right) 0 0;
+  transition: right var(--motion-medium) var(--ease-standard);
+}
+
+.carrot-stage.is-replay .carrot-stage__video,
+.carrot-stage.is-replay .carrot-stage__videoHold,
+.carrot-stage.is-replay .carrot-stage__canvas,
+.carrot-stage.is-replay .carrot-stage__hud {
+  top: var(--carrot-replay-titlebar-height);
+  left: 0;
+}
+
+.carrot-stage.is-replay:not(.is-replay-hud-visible) .carrot-stage__hud,
+.carrot-stage.is-replay:not(.is-replay-hud-visible) .carrot-nav-hud {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* The replay toggle owns HUD widgets only. The fixed top/bottom fades live on
+ * .chud itself and intentionally remain visible in either toggle state. */
+.carrot-stage.is-replay .chud-zone {
+  transition: opacity var(--motion-quick) var(--ease-standard), visibility var(--motion-quick) var(--ease-standard);
+}
+
+.carrot-stage.is-replay:not(.is-replay-hud-visible) .chud-zone {
+  opacity: 0;
+  visibility: hidden;
+}
+
+body.carrot-replay-active:not(.carrot-replay-hud-visible) #driveHudCard {
+  display: none !important;
+}
+
+.carrot-stage.is-replay .carrot-stage__alert {
+  inset: var(--carrot-replay-titlebar-height) var(--carrot-replay-content-right) 0 0;
+}
+
+html[lang^="ko"] .carrot-replay-controls__status {
+  word-break: keep-all;
+}
+
+html[lang^="en"] .carrot-replay-controls__status {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+html[lang^="zh"] .carrot-replay-controls__status {
+  line-break: strict;
+  word-break: break-all;
+}
+
+.carrot-replay-controls {
+  --carrot-replay-progress: 0%;
+  position: absolute;
+  inset: 0;
+  z-index: var(--drive-layer-transport);
+  pointer-events: none;
+}
+
+.carrot-replay-controls[hidden] {
+  display: none !important;
+}
+
+.carrot-replay-controls__header {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  max-width: min(70vw, 560px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+.carrot-replay-controls__heading {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 7px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+  background: rgba(8, 12, 16, 0.70);
+  backdrop-filter: blur(10px) saturate(118%);
+  -webkit-backdrop-filter: blur(10px) saturate(118%);
+}
+
+.carrot-replay-controls__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carrot-replay-controls__title {
+  color: #fff;
+  font-size: var(--fs-title-xs);
+  line-height: 1.2;
+}
+
+.carrot-replay-controls__status {
+  display: -webkit-box;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: var(--fs-label-sm);
+  font-weight: 700;
+  line-height: 1.3;
+  text-wrap: balance;
+  white-space: pre-line;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.carrot-replay-controls__transport {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  width: min(72vw, 760px);
+  min-width: 360px;
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(7, 10, 14, 0.88);
+  backdrop-filter: blur(16px) saturate(122%);
+  -webkit-backdrop-filter: blur(16px) saturate(122%);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.carrot-replay-controls__timeline {
+  position: relative;
+  height: clamp(58px, 8.5vw, 82px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 11px;
+  background: linear-gradient(135deg, #1b2229, #0c1116);
+  isolation: isolate;
+}
+
+.carrot-replay-controls__thumbnail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 58%;
+  opacity: 0;
+  filter: saturate(0.82) contrast(1.04) brightness(0.76);
+  transform: scale(1.01);
+  transition: opacity 0.16s ease;
+  user-select: none;
+  pointer-events: none;
+}
+
+.carrot-replay-controls__thumbnail.is-ready {
+  opacity: 1;
+}
+
+.carrot-replay-controls__timelineShade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--md-primary) 18%, transparent) 0 var(--carrot-replay-progress),
+      rgba(0, 0, 0, 0.52) var(--carrot-replay-progress) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.18));
+  pointer-events: none;
+}
+
+.carrot-replay-controls__timeline::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: var(--carrot-replay-progress);
+  width: 2px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.34), 0 0 12px rgba(255, 178, 104, 0.62);
+  transform: translateX(-1px);
+  pointer-events: none;
+}
+
+.carrot-replay-controls__seek {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0.001;
+  cursor: pointer;
+}
+
+.carrot-replay-controls__transportRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 2px;
+}
+
+.carrot-replay-controls__timeGroup {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.carrot-replay-controls__time {
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.64);
+  font: 800 var(--fs-label-sm)/1.3 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.carrot-replay-controls__time--current {
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.carrot-replay-controls__timeSeparator {
+  color: rgba(255, 255, 255, 0.30);
+  font-size: var(--fs-label-sm);
+}
+
+.carrot-stage.is-replay .carrot-stage__controlBtn--sound,
+.carrot-stage.is-replay .carrot-stage__controlBtn--record {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .carrot-replay-controls__header {
+    top: 9px;
+    left: 9px;
+    max-width: calc(100% - 18px);
+  }
+
+  .carrot-replay-controls__heading {
+    max-width: calc(100vw - 78px);
+  }
+
+  .carrot-replay-controls__transport {
+    bottom: 9px;
+    width: calc(100% - 18px);
+    min-width: 0;
+    gap: 7px;
+    padding: 7px;
+    border-radius: 14px;
+  }
+
+  .carrot-replay-controls__timeline {
+    height: clamp(56px, 16vw, 72px);
+  }
+
+  .carrot-replay-controls__time {
+    font-size: var(--fs-label-sm);
+  }
+
+}
+
+/* Replay transport follows familiar video-player behavior without wrapping the
+   shared WebRTC video element. Controls stay compact and slide away while the
+   recording is playing; pointer/touch activity brings them back. */
+.carrot-replay-controls__header {
+  top: 0;
+  left: 0;
+  right: 0;
+  width: auto;
+  max-width: none;
+  min-height: 52px;
+  box-sizing: border-box;
+  gap: 10px;
+  padding: 4px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--md-stroke-soft);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--md-surface-cont) 96%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px) saturate(122%);
+  -webkit-backdrop-filter: blur(14px) saturate(122%);
+  transition: opacity var(--carrot-media-chrome-fade), transform var(--carrot-media-chrome-fade);
+}
+
+.carrot-replay-controls__heading {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.carrot-replay-controls__hudToggle {
+  cursor: pointer;
+}
+
+.carrot-stage__controlBtn--hud[hidden] {
+  display: none !important;
+}
+
+.carrot-replay-controls__hudToggle:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--md-primary) 78%, transparent);
+  outline-offset: 2px;
+}
+
+.carrot-replay-controls__hudToggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.carrot-replay-controls__hudToggle > span {
+  pointer-events: none;
+}
+
+.carrot-stage__controlBtn--hud.is-active {
+  border-color: color-mix(in srgb, var(--md-primary) 64%, rgba(255, 255, 255, 0.18));
+  background: color-mix(in srgb, var(--md-primary) 13%, var(--md-surface-cont-h));
+  color: var(--md-primary);
+}
+
+.carrot-replay-controls__headerActions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.carrot-replay-controls__segmentSelect {
+  height: var(--control-min-height);
+  min-height: var(--control-min-height);
+}
+
+.carrot-replay-controls__title {
+  grid-area: title;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.98);
+  font: 850 var(--fs-title-xs)/1.3 var(--font-sans);
+  letter-spacing: -0.015em;
+}
+
+.carrot-replay-controls__status {
+  grid-area: status;
+  display: block;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.70);
+  font-size: var(--fs-label-sm);
+  font-weight: 720;
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-line-clamp: 1;
+}
+
+.carrot-replay-controls__segmentPicker {
+  position: relative;
+  flex: 1 1 auto;
+  width: min(100%, 560px);
+  min-width: 0;
+}
+
+.carrot-replay-controls__segmentPicker[hidden] {
+  display: none !important;
+}
+
+.carrot-replay-controls__segmentPicker::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  width: 0;
+  height: 0;
+  border: 4px solid transparent;
+  border-top-color: rgba(255, 255, 255, 0.68);
+  transform: translateY(-1px);
+  pointer-events: none;
+}
+
+.carrot-replay-controls__segmentSelect {
+  width: 100%;
+  height: var(--control-min-height);
+  min-height: var(--control-min-height);
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0 30px 0 12px;
+  overflow: hidden;
+  outline: none;
+  font-size: var(--fs-label-sm);
+  line-height: 1.3;
+  text-align: left;
+  text-align-last: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.carrot-replay-controls__segmentSelect:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.carrot-replay-controls__segmentSelect:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.carrot-replay-controls__segmentSelect option {
+  background: #11171d;
+  color: #fff;
+}
+
+.carrot-replay-controls__close {
+  flex: 0 0 auto;
+  align-self: center;
+  height: var(--control-min-height);
+  min-height: var(--control-min-height);
+  padding-inline: var(--sp-md);
+  white-space: nowrap;
+}
+
+.carrot-replay-controls__transport {
+  left: 14px;
+  right: auto;
+  width: min(var(--carrot-media-preview-max-width), calc(100% - 186px - var(--carrot-replay-content-right, 0px)));
+  max-width: var(--carrot-media-preview-max-width);
+  min-width: 0;
+  height: var(--carrot-replay-bottom-control-height);
+  margin: 0;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: translateY(0);
+  transition: opacity var(--carrot-media-chrome-fade), transform var(--carrot-media-chrome-fade);
+}
+
+.carrot-replay-controls__timeline {
+  height: var(--carrot-replay-bottom-control-height);
+  box-sizing: border-box;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  border-radius: 8px;
+}
+
+.carrot-replay-controls__filmstrip {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #0c1116;
+}
+
+.carrot-replay-controls__filmstrip img {
+  position: relative;
+  inset: auto;
+  min-width: 0;
+  width: auto;
+  height: 100%;
+  flex: 1 1 0;
+  object-fit: cover;
+  object-position: center 58%;
+  filter: saturate(0.84) contrast(1.04) brightness(0.78);
+  transform: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.carrot-replay-controls__filmstrip .carrot-replay-controls__thumbnail {
+  width: 100%;
+}
+
+.carrot-replay-controls__timelineShade {
+  border-radius: 7px;
+}
+
+.carrot-replay-controls__scrubPreview {
+  position: absolute;
+  left: var(--carrot-replay-preview-left, 50%);
+  bottom: calc(100% + 9px);
+  z-index: 6;
+  width: clamp(190px, 22vw, 240px);
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 9px;
+  background: var(--popup-bg, #090d12);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.46);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.carrot-replay-controls__scrubPreview.is-pinned {
+  border-color: color-mix(in srgb, var(--md-primary) 72%, #fff);
+}
+
+.carrot-replay-controls__scrubPreview[hidden] {
+  display: none !important;
+}
+
+.carrot-replay-controls__scrubEventInfo {
+  --event-color: var(--carrot-replay-insights-event);
+  min-height: 46px;
+  min-width: 0;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-rows: minmax(18px, auto) minmax(17px, auto);
+  grid-template-areas:
+    "icon title"
+    "icon meta";
+  gap: 0 7px;
+  align-content: center;
+  align-items: center;
+  margin: 0 0 5px;
+  padding: 6px 7px;
+  border: 1px solid color-mix(in srgb, var(--event-color) 24%, var(--md-stroke-soft));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--event-color) 10%, var(--md-surface-cont-h));
+}
+
+.carrot-replay-controls__scrubEventInfo[hidden] {
+  display: none !important;
+}
+
+.carrot-replay-controls__scrubEventInfo[data-category="control"] { --event-color: var(--carrot-replay-insights-control); }
+.carrot-replay-controls__scrubEventInfo[data-category="driver"] { --event-color: var(--carrot-replay-insights-driver); }
+.carrot-replay-controls__scrubEventInfo[data-category="vehicle"] { --event-color: var(--carrot-replay-insights-vehicle); }
+.carrot-replay-controls__scrubEventInfo[data-category="carrot"] { --event-color: var(--carrot-replay-insights-carrot); }
+.carrot-replay-controls__scrubEventInfo[data-category="warning"] { --event-color: var(--carrot-replay-insights-warning); }
+.carrot-replay-controls__scrubEventInfo[data-category="turn"] { --event-color: var(--carrot-replay-insights-turn); }
+.carrot-replay-controls__scrubEventInfo[data-category="nav"] { --event-color: var(--carrot-replay-insights-nav); }
+
+.carrot-replay-controls__scrubEventIcon {
+  grid-area: icon;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--event-color) 26%, rgba(255, 255, 255, 0.05));
+  color: var(--event-color);
+  line-height: 0;
+}
+
+.carrot-replay-controls__scrubEventIcon svg {
+  display: block;
+  width: 17px;
+  height: 17px;
+}
+
+.carrot-replay-controls__scrubEventInfo strong,
+.carrot-replay-controls__scrubEventInfo > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carrot-replay-controls__scrubEventInfo strong {
+  grid-area: title;
+  color: #fff;
+  font-size: var(--fs-body-sm);
+  line-height: 1.4;
+}
+
+.carrot-replay-controls__scrubEventInfo > span:last-child {
+  grid-area: meta;
+  color: rgba(255, 255, 255, 0.64);
+  font: 750 var(--fs-label-sm)/1.35 var(--font-mono);
+}
+
+.carrot-replay-controls__scrubPreview img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #111820;
+}
+
+.carrot-replay-controls__scrubEvents {
+  position: relative;
+  height: 18px;
+  margin-top: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.46);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.carrot-replay-controls__scrubEvents::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  left: var(--carrot-replay-scrub-event-cursor, 50%);
+  width: 1px;
+  background: rgba(255, 255, 255, 0.92);
+  transform: translateX(-0.5px);
+  pointer-events: none;
+}
+
+.carrot-replay-controls__scrubEvents[hidden] { display: none !important; }
+.carrot-replay-controls__scrubEvents canvas { display: block; width: 100%; height: 100%; pointer-events: none; }
+
+.carrot-replay-controls__scrubPreview > span {
+  display: block;
+  padding: 4px 2px 1px;
+  color: #fff;
+  font: 900 var(--fs-title-xs)/1.3 var(--font-mono);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.carrot-stage.is-replay-loading .carrot-replay-controls__segmentNav,
+.carrot-stage.is-replay.is-loading .carrot-replay-controls__segmentNav {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.carrot-stage.is-replay-loading .carrot-replay-controls__transport,
+.carrot-stage.is-replay-loading .carrot-replay-controls__timeOverlay,
+.carrot-stage.is-replay-loading .carrot-stage__controls,
+.carrot-stage.is-replay.is-loading .carrot-replay-controls__transport,
+.carrot-stage.is-replay.is-loading .carrot-replay-controls__timeOverlay,
+.carrot-stage.is-replay.is-loading .carrot-stage__controls {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Top band, horizontally centred in the content area.
+   Every other candidate is taken: the stage centre holds the segment nav and the
+   canvas paints lane lines, the road path and the lead radar box fanning DOWN
+   from the vanishing point, while the bottom holds the transport, the filmstrip
+   and - crucially - the event summary card and cluster popover, which are on
+   screen for 2.4 s after every single event rather than only while scrubbing.
+   The band between the titlebar and the horizon is the one region none of that
+   reaches, and the titlebar does not fade with the chrome, so it stays stable. */
+.carrot-replay-controls__timeOverlay {
+  position: absolute;
+  top: calc(var(--carrot-replay-titlebar-height, 52px) + 10px);
+  bottom: auto;
+  left: 0;
+  right: var(--carrot-replay-content-right, 0px);
+  z-index: 2;
+  width: max-content;
+  max-width: calc(100% - 28px - var(--carrot-replay-content-right, 0px));
+  margin-inline: auto;
+  padding: 0;
+  opacity: 0.3;
+  transform: none;
+  pointer-events: none;
+  transition: right var(--motion-medium) var(--ease-standard), opacity 0.18s ease;
+}
+
+.carrot-replay-controls__timeOverlay .carrot-replay-controls__timeGroup {
+  width: auto;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: clamp(6px, 1.2vw, 14px);
+  white-space: nowrap;
+}
+
+/* Elapsed and duration are one readout, so they share one size. Shrinking the
+   duration to buy width made the pair read as two unrelated figures; the top
+   band has the room the stage centre did not, so the block can stay whole. */
+.carrot-replay-controls__timeOverlay .carrot-replay-controls__time {
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: clamp(52px, 8.6vw, 120px);
+  font-weight: 760;
+  line-height: 0.86;
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, 0.72);
+}
+
+.carrot-replay-controls__timeOverlay .carrot-replay-controls__timeSeparator {
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: clamp(40px, 6.6vw, 92px);
+  font-weight: 420;
+  line-height: 1;
+  opacity: 0.52;
+}
+
+/* Narrow stages: the centred stamp reaches back into the top-left HUD toggle,
+   so drop it below that row. There is ample sky left above the horizon. */
+@media (max-width: 460px) {
+  .carrot-replay-controls__timeOverlay {
+    top: calc(var(--carrot-replay-titlebar-height, 52px) + var(--control-min-height, 44px) + 14px);
+  }
+}
+
+/* Short stages put the centred nav close to the bottom, so shed the stamp's
+   scale rather than let it run into the nav. */
+@media (max-height: 520px) {
+  .carrot-replay-controls__timeOverlay .carrot-replay-controls__time {
+    font-size: clamp(32px, 5.4vw, 58px);
+  }
+
+  .carrot-replay-controls__timeOverlay .carrot-replay-controls__timeSeparator {
+    font-size: clamp(24px, 4.2vw, 44px);
+  }
+}
+
+.carrot-stage.is-replay .carrot-stage__controls {
+  right: calc(14px + var(--carrot-replay-content-right, 0px));
+  bottom: 14px;
+  flex: 0 0 auto;
+  transition: opacity var(--carrot-media-chrome-fade), transform var(--carrot-media-chrome-fade);
+}
+
+.carrot-stage.is-replay .carrot-replay-controls__segmentNav {
+  inset: var(--carrot-replay-titlebar-height, 0px) var(--carrot-replay-content-right, 0px) 0 0;
+  width: max-content;
+  height: max-content;
+  margin: auto;
+  transform: scale(1);
+}
+
+.carrot-stage.is-replay-controls-hidden .carrot-replay-controls__transport {
+  opacity: 0;
+  transform: translateY(calc(100% + 22px));
+  pointer-events: none;
+}
+
+/* The stamp deliberately does NOT fade with the chrome: it is the one readout
+   that must survive controls auto-hide. Its anchor is the titlebar, which also
+   stays, so it needs no repositioning when the rest of the chrome leaves. */
+
+.carrot-stage.is-replay-controls-hidden .carrot-replay-controls__segmentNav {
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+}
+
+.carrot-stage.is-replay-controls-hidden .carrot-stage__controls {
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+}
+
+@media (max-width: 700px) {
+  .carrot-stage.is-replay {
+    --carrot-replay-titlebar-height: 48px;
+    --carrot-replay-bottom-control-height: 42px;
+  }
+
+  .carrot-replay-controls__header {
+    min-height: 48px;
+    gap: 6px;
+    padding: 2px 7px;
+  }
+
+  .carrot-replay-controls__title {
+    font-size: var(--fs-title-xs);
+  }
+
+  .carrot-replay-controls__status {
+    font-size: var(--fs-label-sm);
+  }
+
+  .carrot-replay-controls__segmentPicker {
+    width: min(100%, 360px);
+  }
+
+  .carrot-replay-controls__segmentSelect {
+    padding-left: 8px;
+    font-size: var(--fs-label-sm);
+  }
+
+  .carrot-replay-controls__transport {
+    left: 9px;
+    right: auto;
+    width: min(var(--carrot-media-preview-max-width), calc(100% - 160px - var(--carrot-replay-content-right, 0px)));
+    max-width: var(--carrot-media-preview-max-width);
+    gap: 4px;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  .carrot-replay-controls__timeline {
+    height: var(--carrot-replay-bottom-control-height);
+  }
+
+  .carrot-replay-controls__scrubPreview {
+    width: clamp(164px, 46vw, 210px);
+  }
+
+  .carrot-replay-controls__timeOverlay {
+    top: calc(var(--carrot-replay-titlebar-height, 52px) + 6px);
+    max-width: calc(100% - 18px - var(--carrot-replay-content-right, 0px));
+  }
+
+  .carrot-stage.is-replay .carrot-stage__controls {
+    right: calc(9px + var(--carrot-replay-content-right, 0px));
+    bottom: 9px;
+    --carrot-stage-control-gap: 6px;
+  }
+
+  .carrot-stage.is-replay .carrot-stage__controlBtn {
+    padding-inline: 10px;
+  }
+}
+
+.carrot-stage.is-replay {
+  touch-action: pan-y;
+}
+
+.carrot-stage.is-replay-scrubbing {
+  cursor: ew-resize;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.carrot-stage__controlBtn--replay-speed[hidden] {
+  display: none !important;
+}
+
+.carrot-stage__controlBtn--replay-speed:disabled {
+  opacity: 0.46;
+  cursor: wait;
+}
+
+@media (max-width: 340px) {
+  .carrot-replay-controls__transport {
+    width: min(var(--carrot-media-preview-max-width), calc(100% - 150px));
+  }
+
+  .carrot-stage.is-replay .carrot-stage__controlBtn {
+    padding-inline: 9px;
+  }
+}

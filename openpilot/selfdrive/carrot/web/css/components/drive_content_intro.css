@@ -1,18 +1,75 @@
 .drive-content-intro {
+  --drive-content-intro-bg: color-mix(in srgb, var(--md-surface) 84%, var(--drive-workspace-bg));
+  --drive-content-intro-feature-color: var(--md-on-surface);
+  --drive-content-intro-status-color: color-mix(in srgb, var(--md-on-surface-var) 82%, var(--md-surface));
+  --drive-content-intro-max-width: 42ch;
+  --drive-content-intro-feature-size-min: 30px;
+  --drive-content-intro-feature-size-max: 50px;
+  --drive-content-intro-status-size-min: 34px;
+  --drive-content-intro-status-size-max: 58px;
+  --drive-content-intro-font-weight: 700;
+  --drive-content-intro-copy-gap: var(--sp-sm);
+  --drive-content-intro-action-gap: var(--sp-lg);
+  --drive-content-intro-action-min-height: 46px;
+  --drive-content-intro-action-max-width: 280px;
+  --drive-content-intro-action-font-size: 16px;
+  --drive-content-intro-fog-neutral: color-mix(in srgb, var(--md-on-surface-var) 7%, transparent);
+  --drive-content-intro-fog-accent: color-mix(in srgb, var(--md-primary) 8%, transparent);
+  --drive-content-intro-fog-blur: 64px;
+  --drive-content-intro-fog-duration: 14s;
+  --drive-content-intro-fog-start-opacity: 0.62;
+  --drive-content-intro-fog-active-opacity: 1;
+  --drive-content-intro-fog-idle-opacity: 0.58;
+  --drive-content-intro-enter-distance: 10px;
+  --drive-content-intro-exit-distance: -6px;
   position: absolute;
   z-index: var(--drive-layer-overlay);
+  isolation: isolate;
   inset: 0;
   display: grid;
   min-width: 0;
   min-height: 0;
+  container-type: inline-size;
   place-items: center;
-  padding: var(--sp-lg);
+  padding: clamp(var(--sp-lg), 4cqi, var(--sp-2xl));
   overflow: hidden;
   background: var(--drive-content-intro-bg);
-  color: var(--md-on-surface);
+  color: var(--drive-content-intro-feature-color);
   opacity: 1;
   pointer-events: none;
   transition: opacity var(--motion-base) var(--ease-emphasized);
+}
+
+.drive-content-intro::before,
+.drive-content-intro::after {
+  position: absolute;
+  border-radius: var(--r-round);
+  content: "";
+  filter: blur(var(--drive-content-intro-fog-blur));
+  opacity: var(--drive-content-intro-fog-active-opacity);
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+
+.drive-content-intro::before {
+  inset: 6% 12%;
+  background: var(--drive-content-intro-fog-neutral);
+  animation: drive-content-intro-fog-neutral var(--drive-content-intro-fog-duration) var(--ease-standard) infinite alternate;
+}
+
+.drive-content-intro::after {
+  right: 22%;
+  bottom: 18%;
+  width: 24%;
+  height: 30%;
+  background: var(--drive-content-intro-fog-accent);
+  animation: drive-content-intro-fog-accent var(--drive-content-intro-fog-duration) var(--ease-standard) infinite alternate-reverse;
+}
+
+.drive-content-intro[data-busy="false"]::before,
+.drive-content-intro[data-busy="false"]::after {
+  animation-play-state: paused;
+  opacity: var(--drive-content-intro-fog-idle-opacity);
 }
 
 .drive-content-intro[hidden] {
@@ -20,10 +77,12 @@
 }
 
 .drive-content-intro__body {
+  position: relative;
+  z-index: 1;
   display: grid;
   width: min(100%, var(--drive-content-intro-max-width));
   place-items: center;
-  gap: 0;
+  gap: var(--drive-content-intro-action-gap);
   text-align: center;
   opacity: 1;
   transform: translateY(0);
@@ -32,37 +91,56 @@
     transform var(--motion-medium) var(--ease-emphasized);
 }
 
+.drive-content-intro__copy {
+  display: grid;
+  place-items: center;
+  gap: var(--drive-content-intro-copy-gap);
+}
+
+.drive-content-intro__action {
+  width: min(100%, var(--drive-content-intro-action-max-width));
+  min-height: var(--drive-content-intro-action-min-height);
+  margin: 0;
+  padding-inline: var(--sp-lg);
+  font-size: var(--drive-content-intro-action-font-size);
+  pointer-events: auto;
+}
+
 .drive-content-intro[data-motion="entering"],
 .drive-content-intro[data-motion="leaving"] {
   opacity: 0;
 }
 
-.drive-content-intro__label {
-  margin-bottom: var(--sp-sm);
-  color: var(--drive-content-intro-accent);
-  font-size: var(--fs-label-sm);
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.06em;
-}
-
-.drive-content-intro__title {
+.drive-content-intro__feature,
+.drive-content-intro__status {
   max-inline-size: 100%;
-  margin-bottom: var(--sp-xs);
-  font-size: clamp(var(--fs-title-sm), 2vw, var(--fs-title-lg));
-  font-weight: 700;
-  line-height: 1.35;
+  margin: 0;
+  font-weight: var(--drive-content-intro-font-weight);
   overflow-wrap: anywhere;
+  text-wrap: balance;
   word-break: keep-all;
 }
 
-.drive-content-intro__detail {
-  max-inline-size: 100%;
-  color: var(--md-on-surface-var);
-  font-size: var(--fs-body-sm);
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-  word-break: keep-all;
+.drive-content-intro__feature {
+  color: var(--drive-content-intro-feature-color);
+  font-size: clamp(
+    var(--drive-content-intro-feature-size-min),
+    5cqi,
+    var(--drive-content-intro-feature-size-max)
+  );
+  line-height: 1.06;
+  letter-spacing: -0.05em;
+}
+
+.drive-content-intro__status {
+  color: var(--drive-content-intro-status-color);
+  font-size: clamp(
+    var(--drive-content-intro-status-size-min),
+    6.5cqi,
+    var(--drive-content-intro-status-size-max)
+  );
+  line-height: 1.02;
+  letter-spacing: -0.055em;
 }
 
 .drive-content-intro[data-motion="entering"] .drive-content-intro__body {
@@ -80,14 +158,43 @@
   transition-timing-function: var(--ease-emphasized-accelerate);
 }
 
-.drive-content-intro[data-state="disabled"] .drive-content-intro__label,
-.drive-content-intro[data-state="unavailable"] .drive-content-intro__label {
-  color: color-mix(in srgb, var(--drive-content-intro-accent) 56%, var(--md-on-surface-var));
+@keyframes drive-content-intro-fog-neutral {
+  from {
+    opacity: var(--drive-content-intro-fog-start-opacity);
+    transform: translate(-4%, 3%) scale(0.9);
+  }
+  to {
+    opacity: var(--drive-content-intro-fog-active-opacity);
+    transform: translate(4%, -3%) scale(1.08);
+  }
+}
+
+@keyframes drive-content-intro-fog-accent {
+  from {
+    transform: translate(8%, 6%) scale(0.88);
+  }
+  to {
+    transform: translate(-8%, -6%) scale(1.12);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .drive-content-intro,
   .drive-content-intro__body {
     transition-duration: 0ms;
+  }
+
+  .drive-content-intro::before,
+  .drive-content-intro::after {
+    animation: none;
+    will-change: auto;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .drive-content-intro {
+    --drive-content-intro-status-color: var(--md-on-surface);
+    --drive-content-intro-fog-start-opacity: 0.3;
+    --drive-content-intro-fog-active-opacity: 0.42;
   }
 }

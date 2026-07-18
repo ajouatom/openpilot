@@ -7,19 +7,17 @@ var setCarrotVisionPhase = window.CarrotVisionSetPhase;
 var setCarrotVisionState = window.CarrotVisionSetState;
 
 const RTC_STATS_POLL_MS = 5000;
-const RTC_CLIENT_ID_STORAGE_KEY = "carrot_vision_client_id";
-const RTC_CLIENT_ID = (() => {
-  try {
-    const existing = sessionStorage.getItem(RTC_CLIENT_ID_STORAGE_KEY);
-    if (existing) return existing;
-    const generated = globalThis.crypto?.randomUUID?.()
-      || `carrot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-    sessionStorage.setItem(RTC_CLIENT_ID_STORAGE_KEY, generated);
-    return generated;
-  } catch {
-    return `carrot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+const RTC_STREAM_BUSY_CODE = "carrot_vision_busy";
+const RTC_CLIENT_ID = String(window.CarrotStreamIdentity?.clientId
+  || `carrot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+
+class CarrotVisionStreamBusyError extends Error {
+  constructor(message = "Carrot Vision is active on another device.") {
+    super(message);
+    this.name = "CarrotVisionStreamBusyError";
+    this.code = RTC_STREAM_BUSY_CODE;
   }
-})();
+}
 const RTC_RAW_STATS_HISTORY_MAX = 60;
 const RTC_RAW_STATS_KEEP_TYPES = new Set([
   "candidate-pair",
@@ -648,6 +646,59 @@ let RTC_WAIT_TRACK_T = null;
 let RTC_WAIT_FIRST_FRAME_T = null;
 let RTC_WAIT_FIRST_FRAME_PC = null;
 let RTC_FAIL_COUNT = 0;
+
+function rtcOwnershipBlocked() {
+  return Boolean(CARROT_VISION_STATE?.ownership?.blocked);
+}
+
+function rtcSetOwnershipBlocked(blocked, code = "", reason = "vision ownership") {
+  setCarrotVisionState({
+    ownership: {
+      blocked: Boolean(blocked),
+      code: blocked ? String(code || RTC_STREAM_BUSY_CODE) : "",
+    },
+  }, { reason, silent: true });
+}
+
+function rtcPrepareOwnershipRetry(reason = "passive ownership retry") {
+  if (!rtcOwnershipBlocked()) return false;
+  rtcSetOwnershipBlocked(false, "", reason);
+  rtcCancelRetry();
+  rtcCancelRecovery();
+  return true;
+}
+
+async function rtcTakeOwnership(reason = "user takeover action") {
+  rtcPrepareOwnershipRetry(reason);
+  rtcCancelRetry();
+  rtcCancelRecovery();
+  if (!shouldRunCarrotVisionRealtime()) return false;
+  await rtcDisconnect({ keepVideo: true });
+  startCarrotVisionHealthWatch();
+  await rtcConnectOnce({ force: true, takeover: true });
+  return !rtcOwnershipBlocked();
+}
+
+function rtcMarkOwnershipBusy(message = "") {
+  rtcSetOwnershipBlocked(true, RTC_STREAM_BUSY_CODE, "vision stream busy");
+  rtcCancelRetry();
+  rtcCancelRecovery();
+  rtcDisarmTrackTimeout();
+  rtcDisarmFirstFrameTimeout();
+  const pendingPc = RTC_PENDING_PC;
+  if (pendingPc) rtcClosePeer(pendingPc);
+  stopCarrotVisionHealthWatch();
+  stopRtcPerfPolling();
+  setCarrotVisionPhase(CARROT_VISION_PHASE.BUSY, {
+    reason: "vision stream busy",
+    statusText: getUIText("vision_stream_busy", "Carrot Vision is active on another device."),
+    detailText: "",
+    rtc: { state: "busy", pending: false, liveTrack: false, pcLabel: "none", trackSeen: false },
+    updateRtcStatus: true,
+  });
+  rtcTrace("ownership_busy", { message: String(message || "") });
+}
+
 function rtcHasLiveTrack() {
   const video = getRtcVideoElement();
   const stream = video?.srcObject;
@@ -799,6 +850,7 @@ function rtcConnectionLooksLive(pc = RTC_PC) {
 function rtcCanResumeWithoutReconnect() {
   return Boolean(
     shouldRunCarrotVisionRealtime() &&
+    !rtcOwnershipBlocked() &&
     RTC_PC &&
     !RTC_PENDING_PC &&
     !_rtcConnecting &&
@@ -823,6 +875,7 @@ function rtcNudgePlayback(pc, video, reason = "decode stalled while RTP advances
 }
 
 function requestCarrotVisionRecovery(reason, options = {}) {
+  if (rtcOwnershipBlocked()) return false;
   const force = Boolean(options.force);
   const allowConnecting = Boolean(options.allowConnecting);
   const allowPending = Boolean(options.allowPending);
@@ -989,7 +1042,7 @@ function rtcBindVideoEvents() {
 }
 
 function rtcScheduleRetry(ms = RTC_RETRY_BASE_MS) {
-  if (!shouldRunCarrotVisionRealtime()) return;
+  if (!shouldRunCarrotVisionRealtime() || rtcOwnershipBlocked()) return;
   rtcCancelRetry();
   const backoff = Math.min(ms * Math.pow(1.5, RTC_FAIL_COUNT), 30000);
   RTC_FAIL_COUNT = Math.min(RTC_FAIL_COUNT + 1, 20);
@@ -1112,9 +1165,13 @@ let _rtcConnecting = false;
 
 async function rtcConnectOnce(options = {}) {
   const force = Boolean(options.force);
+  const takeover = options.takeover === true;
   if (!shouldRunCarrotVisionRealtime()) return;
+  if (rtcOwnershipBlocked() && !takeover) return;
   if (_rtcConnecting || RTC_PENDING_PC) return;
   if (!force && RTC_PC && (RTC_PC.connectionState === "connected" || RTC_PC.connectionState === "connecting") && rtcHasLiveTrack()) return;
+
+  if (takeover) rtcSetOwnershipBlocked(false, "", "vision takeover requested");
 
   _rtcConnecting = true;
   let previousPc = RTC_PC;
@@ -1125,6 +1182,7 @@ async function rtcConnectOnce(options = {}) {
     rtcCancelRecovery();
     rtcTrace("connect_start", {
       force,
+      takeover,
       hasPreviousPc: Boolean(previousPc),
       hasLiveTrack: rtcHasLiveTrack(),
     }, previousPc || RTC_PC);
@@ -1304,9 +1362,8 @@ async function rtcConnectOnce(options = {}) {
       cameras: ["road"],
       bridge_services_in: [],
       bridge_services_out: [],
-      // Scope replacement cleanup to this browser tab. One hotspot viewer must
-      // never retire another device's healthy stream.
       client_id: RTC_CLIENT_ID,
+      takeover,
       carrot_state: true,
     };
 
@@ -1316,12 +1373,20 @@ async function rtcConnectOnce(options = {}) {
       body: JSON.stringify(body),
     }, RTC_STREAM_FETCH_TIMEOUT_MS);
 
+    const responseText = await response.text().catch(() => "");
+    let responsePayload = null;
+    try {
+      responsePayload = responseText ? JSON.parse(responseText) : null;
+    } catch (_) {}
     if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error("stream http " + response.status + " " + text);
+      if (response.status === 409 && responsePayload?.code === RTC_STREAM_BUSY_CODE) {
+        throw new CarrotVisionStreamBusyError(responsePayload?.error || responseText);
+      }
+      throw new Error("stream http " + response.status + " " + responseText);
     }
 
-    const answer = await response.json();
+    rtcSetOwnershipBlocked(false, "", "vision stream accepted");
+    const answer = responsePayload;
     if (!answer || !answer.sdp) throw new Error("bad answer");
     rtcTrace("answer_received", {
       remoteSdpBytes: answer.sdp?.length || 0,
@@ -1338,6 +1403,10 @@ async function rtcConnectOnce(options = {}) {
     });
     rtcArmTrackTimeout(RTC_INITIAL_TRACK_TIMEOUT_MS, pc);
   } catch (e) {
+    if (e instanceof CarrotVisionStreamBusyError || e?.code === RTC_STREAM_BUSY_CODE) {
+      rtcMarkOwnershipBusy(e?.message || "");
+      return;
+    }
     rtcTrace("connect_error", {
       message: e?.message || String(e),
     }, RTC_PENDING_PC || previousPc || RTC_PC);
@@ -1349,7 +1418,7 @@ async function rtcConnectOnce(options = {}) {
 }
 
 function startCarrotVisionHealthWatch() {
-  if (CARROT_VISION_HEALTH_T) return;
+  if (CARROT_VISION_HEALTH_T || rtcOwnershipBlocked()) return;
   CARROT_VISION_HEALTH_T = setInterval(checkCarrotVisionHealth, CARROT_VISION_HEALTH_POLL_MS);
 }
 
@@ -1360,7 +1429,7 @@ function stopCarrotVisionHealthWatch() {
 }
 
 function checkCarrotVisionHealth() {
-  if (!shouldRunCarrotVisionRealtime()) {
+  if (!shouldRunCarrotVisionRealtime() || rtcOwnershipBlocked()) {
     stopCarrotVisionHealthWatch();
     return;
   }
@@ -1385,7 +1454,10 @@ function checkCarrotVisionHealth() {
 
 
 function rtcShouldConnect() {
-  return shouldRunCarrotVisionRealtime() && !_rtcConnecting && (!RTC_PC || !rtcHasLiveTrack());
+  return shouldRunCarrotVisionRealtime()
+    && !rtcOwnershipBlocked()
+    && !_rtcConnecting
+    && (!RTC_PC || !rtcHasLiveTrack());
 }
 
 function rtcResetFailCount() {
@@ -1432,6 +1504,9 @@ window.CarrotVisionRtc = {
   handleVisibilityChange: rtcHandleVisibilityChange,
   reportCameraRenderable: rtcReportCameraRenderable,
   reportPresentedFrame: rtcReportCameraPresentedFrame,
+  prepareOwnershipRetry: rtcPrepareOwnershipRetry,
+  takeOwnership: rtcTakeOwnership,
+  ownershipBlocked: rtcOwnershipBlocked,
   rawStatsHistory: () => RTC_RAW_STATS_HISTORY.slice(-RTC_RAW_STATS_HISTORY_MAX),
   resetFailCount: rtcResetFailCount,
   scheduleResumeIfConnected: rtcScheduleResumeIfConnected,
@@ -1461,7 +1536,10 @@ Object.assign(window, {
   rtcExitPictureInPicture,
   rtcHandleVisibilityChange,
   rtcHasLiveTrack,
+  rtcOwnershipBlocked,
   rtcRawStatsHistory: () => RTC_RAW_STATS_HISTORY.slice(-RTC_RAW_STATS_HISTORY_MAX),
+  rtcPrepareOwnershipRetry,
+  rtcTakeOwnership,
   rtcResetFailCount,
   rtcScheduleResumeIfConnected,
   rtcShouldConnect,

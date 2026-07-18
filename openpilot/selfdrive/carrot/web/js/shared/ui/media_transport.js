@@ -246,15 +246,15 @@ window.CarrotMediaTransport = Object.freeze({
 
     function categoryColor(category) {
       const variables = {
-        control: "--carrot-replay-insights-control",
-        driver: "--carrot-replay-insights-driver",
-        vehicle: "--carrot-replay-insights-vehicle",
-        carrot: "--carrot-replay-insights-carrot",
-        warning: "--carrot-replay-insights-warning",
-        turn: "--carrot-replay-insights-turn",
-        nav: "--carrot-replay-insights-nav",
+        control: "--carrot-replay-event-control",
+        driver: "--carrot-replay-event-driver",
+        vehicle: "--carrot-replay-event-vehicle",
+        carrot: "--carrot-replay-event-carrot",
+        warning: "--carrot-replay-event-warning",
+        turn: "--carrot-replay-event-turn",
+        nav: "--carrot-replay-event-nav",
       };
-      const property = variables[category] || "--carrot-replay-insights-event";
+      const property = variables[category] || "--carrot-replay-event-default";
       return window.getComputedStyle?.(scrubEvents || root).getPropertyValue(property).trim() || "#ffad66";
     }
 

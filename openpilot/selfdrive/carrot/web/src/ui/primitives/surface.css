@@ -1,0 +1,16 @@
+.card {
+  background: var(--md-surface-cont);
+  border: 1px solid var(--md-stroke-soft);
+  border-radius: var(--r-md);
+  padding: var(--sp-lg);
+  margin-bottom: var(--sp-lg);
+}
+
+.value-surface {
+  background: var(--md-surface-cont);
+  border: 1px solid var(--md-stroke-soft);
+  padding: var(--sp-sm) var(--sp-md);
+  border-radius: var(--control-radius);
+  font-size: var(--fs-body-sm);
+  color: var(--md-on-surface-var);
+}

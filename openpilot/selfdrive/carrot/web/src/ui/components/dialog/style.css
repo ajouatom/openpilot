@@ -1,0 +1,372 @@
+.app-dialog {
+  position: fixed;
+  /* Anchor to the *visual* viewport, not the layout viewport. With the
+     on-screen keyboard open, inset:0 centered the sheet in the full-screen
+     height — so it floated up behind the keyboard (the near-square/landscape
+     case never hit the bottom-sheet fallback below). viewport.js keeps
+     --app-vv-top / --app-vv-height in sync with visualViewport, so centering
+     here always lands in the visible area above the keyboard. Same pattern as
+     .setting-search-panel. */
+  top: var(--app-vv-top, 0px);
+  left: 0;
+  right: 0;
+  height: var(--app-vv-height, 100dvh);
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-lg);
+  pointer-events: none;
+}
+
+#appDialog {
+  z-index: calc(var(--z-modal) + 10);
+}
+
+.app-dialog[hidden] {
+  display: none !important;
+}
+
+.app-dialog.is-open {
+  pointer-events: auto;
+}
+
+.app-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: var(--popup-backdrop);
+  opacity: 0;
+  backdrop-filter: blur(2px) saturate(106%);
+  -webkit-backdrop-filter: blur(2px) saturate(106%);
+  transition: opacity var(--motion-base) var(--ease-linear);
+}
+
+.app-dialog__sheet {
+  position: relative;
+  z-index: 1;
+  width: min(100%, var(--dialog-sheet-width));
+  max-height: var(--dialog-sheet-max-height);
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-lg);
+  border: 1px solid var(--popup-border-color);
+  border-radius: var(--popup-radius);
+  background: var(--popup-bg);
+  box-shadow: var(--popup-shadow);
+  opacity: 0;
+  transform: translateY(14px) scale(0.985);
+  transition:
+    opacity var(--motion-base) var(--ease-emphasized),
+    transform var(--motion-medium) var(--ease-emphasized);
+}
+
+.app-dialog.is-open .app-dialog__backdrop,
+.app-dialog.is-open .app-dialog__sheet {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.app-dialog__head {
+  margin-bottom: var(--sp-sm);
+  flex-shrink: 0;
+}
+
+.app-dialog__title {
+  font-size: var(--fs-title-sm);
+  font-weight: 800;
+  color: var(--md-on-surface);
+}
+
+.app-dialog__body {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-md);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.app-dialog__metaList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-dialog__metaLine {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-md);
+  line-height: 1.5;
+}
+
+.app-dialog__metaSubtle {
+  margin-top: 4px;
+  color: color-mix(in srgb, var(--md-on-surface-var) 82%, var(--md-outline));
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app-dialog__choices {
+  display: grid;
+  gap: 6px;
+  margin-top: var(--sp-md);
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding-right: 2px;
+}
+
+.app-dialog__choices[hidden] {
+  display: none !important;
+}
+
+.app-dialog__choiceBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: var(--dialog-choice-radius);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: var(--control-min-height);
+  font-size: var(--fs-label-md);
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.app-dialog__choiceBtn.is-current {
+  border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-stroke-soft));
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 74%, var(--md-primary-state));
+  color: var(--md-on-surface);
+  font-weight: 800;
+}
+
+/* Unified popup item look: compact boxed rows matching the branch picker.
+   Value grids remain a separate compact control for short numeric choices. */
+.app-dialog__choices--list {
+  gap: var(--sp-sm);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.app-dialog__choices--list .app-dialog__choiceBtn--action {
+  justify-content: space-between;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.25;
+  min-height: 48px;
+  padding: var(--sp-md) var(--sp-lg);
+  border: 1px solid var(--popup-item-border);
+  border-radius: var(--popup-item-radius);
+  background: var(--popup-item-bg);
+  box-shadow: none;
+}
+
+.app-dialog__choices--list .app-dialog__choiceBtn--action:hover,
+.app-dialog__choices--list .app-dialog__choiceBtn--action:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  outline: none;
+}
+
+.app-dialog__choices--list .app-dialog__choiceBtn--action:active {
+  transform: translateY(1px);
+}
+
+.app-dialog__choices--list .app-dialog__choiceBtn--action.is-current {
+  border-color: var(--popup-item-active-border);
+  background: var(--popup-item-active-bg);
+  color: var(--md-primary);
+  font-weight: 850;
+}
+
+/* Selected indicator — checkmark (branch picker uses a "현재" badge; the check
+   is the dialog's equivalent affordance). */
+.app-dialog__choices--list .app-dialog__choiceBtn--action.is-current::after {
+  content: "";
+  display: block;
+  width: 6px;
+  height: 11px;
+  margin-left: 12px;
+  border-right: 2px solid color-mix(in srgb, var(--md-primary) 82%, var(--md-on-surface));
+  border-bottom: 2px solid color-mix(in srgb, var(--md-primary) 82%, var(--md-on-surface));
+  transform: rotate(45deg);
+  flex: 0 0 auto;
+}
+
+.app-dialog__choices--value-grid {
+  grid-template-columns: repeat(var(--app-dialog-choice-columns, 5), minmax(0, 1fr));
+  gap: 6px;
+}
+
+.app-dialog__choices--value-grid .app-dialog__choiceBtn--value {
+  min-height: 42px;
+  padding: 0 6px;
+  justify-content: center;
+  border: 1px solid var(--popup-item-border);
+  border-radius: var(--popup-item-radius);
+  background: var(--popup-item-bg);
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-dialog__choices--value-grid .app-dialog__choiceBtn--value:hover,
+.app-dialog__choices--value-grid .app-dialog__choiceBtn--value:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--popup-item-bg) 90%, var(--md-primary));
+  outline: none;
+}
+
+.app-dialog__choices--value-grid .app-dialog__choiceBtn--value.is-current {
+  border-color: var(--popup-item-active-border);
+  background: var(--popup-item-active-bg);
+  color: var(--md-primary);
+  font-weight: 850;
+}
+
+.app-dialog__inputWrap {
+  margin-top: var(--sp-md);
+}
+
+.app-dialog__inputWrap[hidden] {
+  display: none !important;
+}
+
+.app-dialog__input {
+  width: 100%;
+  min-width: 0;
+}
+
+.app-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: var(--sp-md);
+  flex-shrink: 0;
+}
+
+.app-dialog__actions .smallBtn,
+.app-dialog__actions .btn {
+  border-radius: var(--dialog-control-radius);
+}
+
+.app-dialog--choice-grid .app-dialog__sheet,
+.app-dialog--choice-value-grid .app-dialog__sheet {
+  width: min(100%, var(--dialog-sheet-width));
+  max-height: min(82dvh, 640px);
+  padding: var(--sp-lg);
+}
+
+.app-dialog--choice-grid .app-dialog__body,
+.app-dialog--choice-value-grid .app-dialog__body {
+  flex: 0 0 auto;
+  font-size: var(--fs-label-sm);
+  line-height: 1.4;
+}
+
+#appDialogConfirm.btn--filled {
+  background: var(--md-action-filled);
+  border-color: color-mix(in srgb, var(--md-action-filled) 78%, var(--md-outline-var));
+  color: var(--md-on-action-filled);
+  box-shadow: none;
+}
+
+#appDialogConfirm.btn--filled:hover,
+#appDialogConfirm.btn--filled:focus-visible {
+  background: color-mix(in srgb, var(--md-action-filled) 88%, #fff);
+  border-color: color-mix(in srgb, var(--md-action-filled) 84%, var(--md-outline-var));
+  color: var(--md-on-action-filled);
+}
+
+#appDialogConfirm.btn--filled:active {
+  background: color-mix(in srgb, var(--md-action-filled) 86%, #2a1204);
+}
+
+@media (max-width: 640px) and (aspect-ratio < 13/10) {
+  .app-dialog {
+    align-items: center;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 8px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-dialog__sheet {
+    width: calc(100vw - 16px);
+    max-height: var(--dialog-sheet-mobile-max-height);
+    padding: 14px;
+    border-radius: var(--dialog-sheet-radius-mobile);
+    transform: translateY(10px) scale(0.985);
+  }
+
+  .app-dialog__head {
+    margin-bottom: 6px;
+  }
+
+  .app-dialog__title {
+    font-size: var(--fs-title-xs);
+  }
+
+  .app-dialog__body {
+    font-size: var(--fs-body-sm);
+  }
+
+  .app-dialog__choiceBtn {
+    min-height: 42px;
+  }
+
+  .app-dialog__choiceBtn--value {
+    min-height: 40px;
+  }
+
+  /* Form dialogs (stream key, mapbox token, device actions, …) render as the
+     SAME centered floating card as every other dialog — no full-width bottom
+     sheet jammed onto the keyboard. They inherit the mobile card sheet above
+     (side margins, all corners rounded, full border) and the right-aligned
+     flex actions from .app-dialog__actions. Because .app-dialog is anchored to
+     --app-vv-height, the card floats just above the on-screen keyboard when one
+     is open, and simply centers when there is none — consistent across phone,
+     foldable and desktop (no keyboard-toolbar dependency). */
+}
+
+.app-dialog--form .app-dialog__body[hidden] {
+  display: none !important;
+}
+
+.app-dialog--form .app-dialog__inputWrap {
+  display: grid;
+  gap: var(--sp-xs);
+  margin-top: var(--sp-sm);
+}
+
+/* Any dialog that shows a text input (prompt OR form) centers when no keyboard
+   is up (desktop, keyboard-less devices, or before the field focuses), and hugs
+   just above the on-screen keyboard with a consistent gap when it is — toggled
+   by html[data-kb-open] from viewport.js. --kb-inset is the exact keyboard
+   height incl. the Samsung toolbar on Chromium (VirtualKeyboard API), 0
+   elsewhere (where --app-vv-height already excludes the keyboard). One shared
+   --kb-gap keeps this consistent with the terminal and search panel. */
+.app-dialog--input {
+  align-items: center;
+}
+
+html[data-kb-open="1"] .app-dialog--input {
+  align-items: flex-end;
+  padding-bottom: calc(var(--kb-gap) + var(--kb-inset) + env(safe-area-inset-bottom, 0px));
+}
+
+.app-dialog__inputError {
+  color: var(--md-error);
+  font-size: var(--fs-label-sm);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.app-dialog__inputError[hidden] {
+  display: none !important;
+}

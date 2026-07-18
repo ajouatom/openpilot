@@ -13,12 +13,73 @@ let deviceSshStatus = null;
 let deviceSshRefreshTimer = null;
 let deviceSshRefreshInFlight = false;
 let deviceTabLoaded = false;
+const deviceValueRepository = window.CarrotSettingsRuntime?.values || null;
+const DEVICE_VALUE_CACHE_PREFIX = "__device__:";
 
 function mergeDeviceParamValues(values) {
   if (values && typeof values === "object") {
     deviceParamValues = { ...deviceParamValues, ...values };
+    deviceValueRepository?.applyValues?.(values);
   }
   return deviceParamValues;
+}
+
+function getDeviceGroupParamNames(groupId) {
+  if (groupId === "Device") return DEVICE_INFO_PARAMS.slice();
+  if (groupId === "Software") return DEVICE_SOFTWARE_PARAMS.slice();
+  if (groupId === "Toggles") {
+    const names = DEVICE_TOGGLES.map((entry) => entry.param);
+    DEVICE_TOGGLES.forEach((entry) => {
+      if (entry.confirmedParam) names.push(entry.confirmedParam);
+    });
+    names.push("LongitudinalPersonality");
+    return names;
+  }
+  if (groupId === "Developer") {
+    return [
+      ...DEVICE_DEVELOPER_TOGGLES.map((entry) => entry.param),
+      "GithubUsername",
+      "GithubSshKeys",
+    ];
+  }
+  return [];
+}
+
+function getCachedDeviceGroupValues(groupId) {
+  const names = getDeviceGroupParamNames(groupId);
+  if (!names.length || !names.every((name) => Object.prototype.hasOwnProperty.call(deviceParamValues, name))) {
+    return null;
+  }
+  return Object.fromEntries(names.map((name) => [name, deviceParamValues[name]]));
+}
+
+function normalizeDeviceSshStatus(status) {
+  if (!status || typeof status !== "object") return null;
+  return {
+    username: status.username || "",
+    has_keys: Boolean(status.has_keys),
+    key_count: Number(status.key_count || 0),
+    fingerprints: Array.isArray(status.fingerprints) ? status.fingerprints : [],
+    updated_at: status.updated_at || "",
+  };
+}
+
+function hydrateDeviceSettingsSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return false;
+  mergeDeviceParamValues(snapshot.device_values || {});
+  if (snapshot.device_network && typeof snapshot.device_network === "object") {
+    deviceNetworkInfo = { ...snapshot.device_network };
+  }
+  const sshStatus = normalizeDeviceSshStatus(snapshot.device_ssh);
+  if (sshStatus) {
+    deviceSshStatus = sshStatus;
+    mergeDeviceParamValues({
+      GithubUsername: sshStatus.username,
+      GithubSshKeys: sshStatus.has_keys ? "1" : "",
+      SshKeyStatus: sshStatus,
+    });
+  }
+  return true;
 }
 
 function getDeviceTypeValue(values = deviceParamValues) {
@@ -81,28 +142,24 @@ function syncSettingTabState(tab = CURRENT_SETTING_TAB) {
 }
 
 async function loadDeviceParams(groupId, force = false) {
-  if (!force && deviceGroupLoadPromises.has(groupId)) return deviceGroupLoadPromises.get(groupId);
+  if (deviceGroupLoadPromises.has(groupId)) return deviceGroupLoadPromises.get(groupId);
 
   const promise = (async () => {
+    const names = getDeviceGroupParamNames(groupId);
     let values = {};
-    if (groupId === "Device") {
-      values = await bulkGet(DEVICE_INFO_PARAMS);
-    } else if (groupId === "Software") {
-      values = await bulkGet(DEVICE_SOFTWARE_PARAMS);
-    } else if (groupId === "Toggles") {
-      const names = DEVICE_TOGGLES.map((entry) => entry.param);
-      DEVICE_TOGGLES.forEach((entry) => {
-        if (entry.confirmedParam) names.push(entry.confirmedParam);
+    if (names.length && deviceValueRepository?.loadGroup) {
+      values = await deviceValueRepository.loadGroup(`${DEVICE_VALUE_CACHE_PREFIX}${groupId}`, {
+        names,
+        force,
+        fetchMissing: bulkGet,
       });
-      names.push("LongitudinalPersonality");
+      const latest = deviceValueRepository.peekValues?.(names);
+      if (latest?.complete) values = latest.values;
+    } else if (names.length) {
       values = await bulkGet(names);
-    } else if (groupId === "Developer") {
-      values = await bulkGet([
-        ...DEVICE_DEVELOPER_TOGGLES.map((entry) => entry.param),
-        "GithubUsername",
-        "GithubSshKeys",
-      ]);
-      values.SshKeyStatus = await loadDeviceSshStatus(false);
+    }
+    if (groupId === "Developer") {
+      values.SshKeyStatus = await loadDeviceSshStatus(!force);
     }
     return mergeDeviceParamValues(values);
   })().catch((err) => {
@@ -158,11 +215,9 @@ function renderDeviceGroups(options = {}) {
   ) {
     Array.from(groupContainer.children).forEach((button, index) => {
       const entry = groupEntries[index];
-      button.className = "btn groupBtn";
-      if (entry.group.id === CURRENT_DEVICE_GROUP) button.classList.add("active");
-      button.dataset.deviceGroup = entry.group.id;
-      button.innerHTML = `<span class="setting-group-label">${escapeHtml(entry.label)}</span>`;
-      button.onclick = () => selectDeviceGroup(entry.group.id);
+      button.classList.remove("ui-stagger-item");
+      button.classList.toggle("active", entry.group.id === CURRENT_DEVICE_GROUP);
+      button.style.removeProperty("--i");
     });
     if (typeof scheduleSettingOverflowSync === "function") scheduleSettingOverflowSync(groupContainer);
     return;
@@ -209,7 +264,7 @@ async function renderDeviceTab(options = {}) {
   syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
   if (!deviceTabLoaded) {
     deviceTabLoaded = true;
-    loadDeviceParams("Device", true).then(() => {
+    loadDeviceParams("Device", false).then(() => {
       if (CURRENT_SETTING_TAB === "device") renderDeviceGroups({ animateGroups: false });
     });
   }
@@ -220,7 +275,7 @@ async function renderDeviceTab(options = {}) {
 
 async function selectDeviceGroup(groupId, pushHistory = true) {
   CURRENT_DEVICE_GROUP = groupId || CURRENT_DEVICE_GROUP;
-  renderDeviceGroups();
+  renderDeviceGroups({ animateGroups: false });
   syncSettingTabState("device");
   syncDeviceGroupChrome(CURRENT_DEVICE_GROUP);
   // Same history-based navigation as the CarrotPilot tab: an "items" entry lets
@@ -323,10 +378,30 @@ async function refreshDeviceSshPanel() {
 
 async function getDeviceGroupValues(groupId) {
   if (groupId === "Network") {
-    await loadDeviceNetwork(false);
+    await loadDeviceNetwork(true);
     return deviceParamValues;
   }
-  return loadDeviceParams(groupId, true);
+  const cached = getCachedDeviceGroupValues(groupId);
+  if (cached) {
+    // Stale-while-revalidate: render the prepared values now and let the
+    // repository decide whether a background bulk read is actually needed.
+    const previous = JSON.stringify(cached);
+    loadDeviceParams(groupId, false).then((values) => {
+      const latest = getCachedDeviceGroupValues(groupId) || values;
+      if (
+        JSON.stringify(latest) !== previous &&
+        CURRENT_SETTING_TAB === "device" &&
+        CURRENT_DEVICE_GROUP === groupId
+      ) {
+        renderDeviceItems(groupId, false, {
+          silentRefresh: true,
+          preparedValues: latest,
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+    return cached;
+  }
+  return loadDeviceParams(groupId, false);
 }
 
 async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) {
@@ -351,7 +426,11 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
     itemsContainer.innerHTML = `<div class="muted mt-md text-center">${escapeHtml(getUIText("loading", "Loading..."))}</div>`;
   }
 
-  const values = await getDeviceGroupValues(groupId);
+  const values = options.preparedValues || await (
+    silentRefresh && groupId === "Network"
+      ? loadDeviceNetwork(false).then(() => deviceParamValues)
+      : getDeviceGroupValues(groupId)
+  );
 
   if (CURRENT_SETTING_TAB !== "device" || CURRENT_DEVICE_GROUP !== groupId) {
     syncDeviceNetworkRefresh();
@@ -363,9 +442,15 @@ async function renderDeviceItems(groupId, showItemsScreen = true, options = {}) 
   // (setting-section-block > setting-group-card > setting-group-card__body) so
   // the device submenu looks identical, not the old flat rows.
   const deviceItemsHtml = renderDeviceGroupItems(groupId, values);
-  itemsContainer.innerHTML = deviceItemsHtml
+  const nextHtml = deviceItemsHtml
     ? `<div class="setting-section-block"><div class="setting-group-card"><div class="setting-group-card__body">${deviceItemsHtml}</div></div></div>`
     : `<div class="muted mt-md text-center">-</div>`;
+  if (silentRefresh && itemsContainer.innerHTML === nextHtml) {
+    syncDeviceNetworkRefresh();
+    syncDeviceSshRefresh();
+    return;
+  }
+  itemsContainer.innerHTML = nextHtml;
   if (!silentRefresh && options.animateItems !== false && !willSlide) {
     applyDeviceItemsStagger(itemsContainer);
   }
@@ -526,6 +611,10 @@ async function switchSettingTab(tab) {
         animateItems: false,
         scrollMode: "restore",
       });
+      // Device renders its group list with stagger on tab entry. Recreate the
+      // CarrotPilot list after restoring its detail so the split-layout tabs
+      // use the same entrance behavior without animating ordinary drill-in.
+      if (typeof renderGroups === "function") renderGroups({ animateGroups: true });
       return;
     }
   }
@@ -566,8 +655,24 @@ window.addEventListener("carrot:languagechange", () => {
 window.addEventListener("carrot:paramchange", (event) => {
   const name = event.detail?.name;
   if (!name) return;
-  mergeDeviceParamValues({ [name]: event.detail?.value });
+  const value = event.detail?.value;
+  mergeDeviceParamValues({ [name]: value });
+  DEVICE_GROUPS.forEach((group) => {
+    if (getDeviceGroupParamNames(group.id).includes(name)) {
+      deviceValueRepository?.setValue?.(name, value, `${DEVICE_VALUE_CACHE_PREFIX}${group.id}`);
+    }
+  });
 });
+
+window.addEventListener("carrot:settings-store", (event) => {
+  if (event.detail?.status === "ready") {
+    hydrateDeviceSettingsSnapshot(event.detail.snapshot);
+  }
+});
+
+if (window.CarrotSettingsStore?.status === "ready") {
+  hydrateDeviceSettingsSnapshot(window.CarrotSettingsStore.peek?.());
+}
 
 document.addEventListener("visibilitychange", syncDeviceNetworkRefresh);
 document.addEventListener("visibilitychange", syncDeviceSshRefresh);

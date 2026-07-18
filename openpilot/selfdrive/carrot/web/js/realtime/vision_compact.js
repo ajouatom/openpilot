@@ -30,6 +30,9 @@ window.CarrotVisionCompact = (() => {
     ["aLeadTau", "f32"], ["modelProb", "f32"], ["radar", "bool"],
     ["radarTrackId", "i32"], ["jLead", "f32"], ["score", "f32"],
   ];
+  const tpms = [
+    ["fl", "f32"], ["fr", "f32"], ["rl", "f32"], ["rr", "f32"],
+  ];
 
   const schemas = new Map([
     [1, ["carState", [
@@ -39,6 +42,8 @@ window.CarrotVisionCompact = (() => {
       ["brakeLights", "bool"], ["leftBlindspot", "bool"], ["rightBlindspot", "bool"],
       ["leftLaneLine", "i16"], ["rightLaneLine", "i16"],
       ["gearShifter", "enumname", ["unknown", "park", "drive", "neutral", "reverse", "sport", "low", "brake", "eco", "manumatic"]],
+      ["leftBlinker", "bool"], ["rightBlinker", "bool"],
+      ["fuelGauge", "f32"], ["ureaGauge", "f32"], ["tpms", "struct", tpms],
     ]]],
     [2, ["controlsState", [
       ["enabled", "bool"], ["vCruiseCluster", "f32"], ["activeLaneLine", "bool"],

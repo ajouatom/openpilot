@@ -4,7 +4,7 @@ import json
 from aiohttp import WSMsgType, web
 
 from .bridge import CarrotNaviWebBridge
-from .protocol import MEDIA_WIRE_VERSION
+from .protocol import MEDIA_WIRE_VERSION, SESSION_BUSY_CODE, SESSION_WIRE_VERSION
 
 
 APP_KEY = "carrot_navi_web_bridge"
@@ -40,6 +40,10 @@ async def api_capabilities(_request: web.Request) -> web.Response:
     "supportsMediaSource": True,
     "supportsWebRTC": False,
     "browserPipeline": "server-fmp4-v1",
+    "sessionProtocolVersion": SESSION_WIRE_VERSION,
+    "sessionPolicy": "single-viewer-last-entry-wins",
+    "sessionTakeoverChannel": "state",
+    "sessionBusyCode": SESSION_BUSY_CODE,
   })
 
 
@@ -65,13 +69,18 @@ async def _serve_ws(request: web.Request, media: bool) -> web.WebSocketResponse:
   bridge = _bridge(request)
   if not bridge.stream_allowed(force=True):
     raise web.HTTPConflict(text="Carrot Navi web stream is unavailable while Cluster HUD is active")
+  raw_client_id = str(request.query.get("client_id", "")).strip()[:128]
+  client_id = f"client:{raw_client_id}" if raw_client_id else f"remote:{request.remote or '-'}"
+  takeover = str(request.query.get("takeover", "0")).lower() in ("1", "true", "yes")
   ws = web.WebSocketResponse(heartbeat=20, max_msg_size=8 * 1024 * 1024, compress=False)
   await ws.prepare(request)
   if media:
     include_map = request.query.get("map", "1").lower() not in ("0", "false", "no")
-    await bridge.register_media(ws, include_map=include_map)
+    registered = await bridge.register_media(ws, client_id, include_map=include_map)
   else:
-    await bridge.register_state(ws)
+    registered = await bridge.register_state(ws, client_id, takeover=takeover)
+  if not registered:
+    return ws
   try:
     async for message in ws:
       if message.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.ERROR):

@@ -47,6 +47,13 @@ RADAR_LEAD_SCHEMA = (
   ("score", "f32"),
 )
 
+TPMS_SCHEMA = (
+  ("fl", "f32"),
+  ("fr", "f32"),
+  ("rl", "f32"),
+  ("rr", "f32"),
+)
+
 
 # This is deliberately a display schema, not a second cereal transport. Every
 # field consumed by Carrot Vision is retained, while unused model tensors and
@@ -69,6 +76,11 @@ SERVICE_SCHEMAS: dict[str, tuple[int, tuple[tuple[Any, ...], ...]]] = {
     ("leftLaneLine", "i16"),
     ("rightLaneLine", "i16"),
     ("gearShifter", ("enum", ("unknown", "park", "drive", "neutral", "reverse", "sport", "low", "brake", "eco", "manumatic"))),
+    ("leftBlinker", "bool"),
+    ("rightBlinker", "bool"),
+    ("fuelGauge", "f32"),
+    ("ureaGauge", "f32"),
+    ("tpms", ("struct", TPMS_SCHEMA)),
   )),
   "controlsState": (2, (
     ("enabled", "bool", ("deprecated", "enabled")),

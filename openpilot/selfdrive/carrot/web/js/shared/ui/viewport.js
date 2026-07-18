@@ -9,7 +9,7 @@
      tall/square = compact chrome, split layout disabled
 
    Keep the CSS media query copies in responsive.css, layout_tokens.css, and
-   settings/device.css in sync with LAYOUT_WIDE_QUERY. */
+   src/features/settings/styles/device.css in sync with LAYOUT_WIDE_QUERY. */
 const LAYOUT_WIDE_QUERY = "(min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px)";
 const LAYOUT_WIDE_MIN_WIDTH = 640;
 const LAYOUT_WIDE_MIN_HEIGHT = 650;

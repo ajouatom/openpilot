@@ -18,7 +18,6 @@ const langLabel = document.getElementById("langLabel");
 const btnSettingLang = document.getElementById("btnSettingLang");
 
 // Quick link
-const btnQuickLinkWeb = document.getElementById("btnQuickLinkWeb");
 const quickLink = document.getElementById("toolsQuickLink");
 const chipQuickLabel = document.getElementById("toolsQuickLinkTitle");
 const btnSaveQuickLink = document.getElementById("btnToolsQuickLink");
@@ -76,14 +75,12 @@ const PAGE_ELEMENTS = {
   carrot: document.getElementById("pageCarrot"),
 };
 
-// Current car labels (used by car page logic in app_pages.js)
+// Current car label (used by car page logic in app_pages.js)
 const curCarLabelCar = document.getElementById("curCarLabelCar");
-const curCarLabelSetting = document.getElementById("curCarLabelSetting");
 
 // Setting page sub-elements
 const settingTitle = document.getElementById("settingTitle");
 const btnBackGroups = document.getElementById("btnBackGroups");
-const settingCarRow = document.getElementById("settingCarRow");
 const settingScreenHost = document.getElementById("settingScreenHost");
 const screenGroups = document.getElementById("settingScreenGroups");
 const screenItems = document.getElementById("settingScreenItems");

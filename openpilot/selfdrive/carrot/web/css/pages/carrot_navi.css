@@ -165,7 +165,6 @@
 /* At 50% and below, preserve the limited road-view area for driving content.
    Alerts, connection actions, replay controls, and stage controls remain. */
 html.is-drive-workspace-compact-primary body[data-page="carrot"] #driveHudCard,
-html.is-drive-workspace-compact-primary body[data-page="carrot"] #carrotMiniHud,
-.carrot-stage.is-drive-workspace-compact-primary .carrot-stage__debug {
+html.is-drive-workspace-compact-primary body[data-page="carrot"] #carrotMiniHud {
   display: none !important;
 }

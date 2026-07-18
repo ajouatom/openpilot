@@ -1,10 +1,17 @@
+from html.parser import HTMLParser
 import json
 import os
+import posixpath
+import re
+from typing import Final
+from urllib.parse import unquote, unquote_plus, urlsplit, urlunsplit
 
 from aiohttp import web
 
 from ..config import SOUND_ASSETS_DIR, TRAINING_ASSETS_DIR, WEB_DIR
+from ..services.asset_manifest import AssetManifestError, AssetManifestLoader, inject_asset_manifest
 from ..services.params import get_param_values
+from ..services.static_assets import fingerprint_static_asset
 from ..services.web_settings import read_web_settings, web_settings_client_spec
 from .intro.state import intro_bootstrap
 
@@ -13,6 +20,34 @@ _LANGUAGES_JSON_PATH = os.path.join(
   os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
   "ui", "translations", "languages.json",
 )
+_HTML_AMPERSAND_RE: Final = re.compile(r"&(?:amp|#0*38|#x0*26);", re.IGNORECASE)
+_EXCLUDED_ASSET_PREFIXES: Final = (
+  "/support-terminal-assets/",
+  "/js/vendor/",
+  "/css/vendor/",
+)
+_ASSET_MANIFEST_LOADER = AssetManifestLoader()
+
+
+class _StartTagLocator(HTMLParser):
+  def __init__(self, html: str) -> None:
+    super().__init__(convert_charrefs=False)
+    self._line_offsets = [0, *(index + 1 for index, char in enumerate(html) if char == "\n")]
+    self.spans: list[tuple[int, int]] = []
+
+  def _record_start_tag(self) -> None:
+    raw_tag = self.get_starttag_text()
+    if raw_tag is None:
+      return
+    line, column = self.getpos()
+    start = self._line_offsets[line - 1] + column
+    self.spans.append((start, start + len(raw_tag)))
+
+  def handle_starttag(self, _tag: str, _attrs: list[tuple[str, str | None]]) -> None:
+    self._record_start_tag()
+
+  def handle_startendtag(self, _tag: str, _attrs: list[tuple[str, str | None]]) -> None:
+    self._record_start_tag()
 
 
 def _load_device_languages() -> list:
@@ -22,11 +57,11 @@ def _load_device_languages() -> list:
     with open(_LANGUAGES_JSON_PATH, "r", encoding="utf-8") as f:
       mapping = json.load(f)  # e.g. {"English": "main_en", ...}
     return [{"code": code, "name": name} for name, code in mapping.items()]
-  except Exception:
+  except Exception:  # noqa: BROAD_EXCEPT_OK - device language discovery is best-effort
     return []
 
 
-def _build_bootstrap_payload() -> dict:
+def _build_bootstrap_payload() -> dict:  # noqa: DICT_OK - serialized mixed-shape client bootstrap
   try:
     device_values = get_param_values(
       ["LanguageSetting", "SoundLanguageSetting"],
@@ -34,14 +69,14 @@ def _build_bootstrap_payload() -> dict:
     )
     device_language = device_values.get("LanguageSetting", "")
     sound_language = device_values.get("SoundLanguageSetting", "auto")
-  except Exception:
+  except Exception:  # noqa: BROAD_EXCEPT_OK - optional native Params backend varies by device
     device_language = ""
     sound_language = "auto"
   # Injected (not fetched) so the client can gate on the very first render —
   # a separate request would let the home page paint before the intro takes over.
   try:
     intro = intro_bootstrap()
-  except Exception:
+  except Exception:  # noqa: BROAD_EXCEPT_OK - intro failure must not block index delivery
     # Never let the intro decision keep the page from loading.
     intro = {"shouldShow": False, "reason": "bootstrap_error"}
 
@@ -64,10 +99,119 @@ def _inject_bootstrap(html: str) -> str:
   return script + html
 
 
+def _fingerprinted_asset_url(raw_url: str, web_root: str) -> str | None:
+  decoded_url = _HTML_AMPERSAND_RE.sub("&", raw_url)
+  if decoded_url.startswith("//"):
+    return None
+  try:
+    parts = urlsplit(decoded_url)
+  except ValueError:
+    return None
+  if parts.scheme or parts.netloc:
+    return None
+
+  decoded_path = unquote(parts.path)
+  policy_path = posixpath.normpath("/" + decoded_path.lstrip("/").replace("\\", "/"))
+  if any(policy_path.startswith(prefix) for prefix in _EXCLUDED_ASSET_PREFIXES):
+    return None
+  fingerprint = fingerprint_static_asset(web_root, decoded_path)
+  if fingerprint is None:
+    return None
+
+  query_pairs = [
+    pair for pair in parts.query.split("&")
+    if unquote_plus(pair.partition("=")[0]) != "v"
+  ] if parts.query else []
+  query_pairs.append(f"v={fingerprint}")
+  rewritten = urlunsplit(("", "", parts.path, "&".join(query_pairs), parts.fragment))
+  return rewritten.replace("&", "&amp;")
+
+
+def _rewrite_start_tag_asset_urls(raw_tag: str, web_root: str) -> str:
+  replacements: list[tuple[int, int, str]] = []
+  length = len(raw_tag)
+  index = 1
+  while index < length and not raw_tag[index].isspace() and raw_tag[index] not in "/>":
+    index += 1
+
+  while index < length:
+    while index < length and raw_tag[index].isspace():
+      index += 1
+    if index >= length or raw_tag[index] in "/>":
+      break
+
+    name_start = index
+    while index < length and not raw_tag[index].isspace() and raw_tag[index] not in "/>=":
+      index += 1
+    if name_start == index:
+      index += 1
+      continue
+    attribute_name = raw_tag[name_start:index]
+    while index < length and raw_tag[index].isspace():
+      index += 1
+    if index >= length or raw_tag[index] != "=":
+      continue
+
+    index += 1
+    while index < length and raw_tag[index].isspace():
+      index += 1
+    if index >= length:
+      break
+    if raw_tag[index] in "'\"":
+      quote = raw_tag[index]
+      value_start = index + 1
+      value_end = raw_tag.find(quote, value_start)
+      if value_end < 0:
+        value_end = length
+        index = length
+      else:
+        index = value_end + 1
+    else:
+      value_start = index
+      while index < length and not raw_tag[index].isspace() and raw_tag[index] != ">":
+        index += 1
+      value_end = index
+
+    if attribute_name.casefold() not in ("src", "href"):
+      continue
+    rewritten = _fingerprinted_asset_url(raw_tag[value_start:value_end], web_root)
+    if rewritten is not None:
+      replacements.append((value_start, value_end, rewritten))
+
+  if not replacements:
+    return raw_tag
+  pieces: list[str] = []
+  previous_end = 0
+  for value_start, value_end, rewritten in replacements:
+    pieces.extend((raw_tag[previous_end:value_start], rewritten))
+    previous_end = value_end
+  pieces.append(raw_tag[previous_end:])
+  return "".join(pieces)
+
+
+def _rewrite_index_asset_urls(html: str, web_root: str) -> str:
+  locator = _StartTagLocator(html)
+  locator.feed(html)
+  locator.close()
+  pieces: list[str] = []
+  previous_end = 0
+  for tag_start, tag_end in locator.spans:
+    pieces.append(html[previous_end:tag_start])
+    pieces.append(_rewrite_start_tag_asset_urls(html[tag_start:tag_end], web_root))
+    previous_end = tag_end
+  pieces.append(html[previous_end:])
+  return "".join(pieces)
+
+
 async def handle_index(request: web.Request) -> web.Response:
   index_path = os.path.join(WEB_DIR, "index.html")
-  with open(index_path, "r", encoding="utf-8") as f:
-    html = _inject_bootstrap(f.read())
+  try:
+    manifest = _ASSET_MANIFEST_LOADER.load(WEB_DIR)
+    with open(index_path, "r", encoding="utf-8") as f:
+      html = inject_asset_manifest(f.read(), manifest)
+  except AssetManifestError as error:
+    raise web.HTTPServiceUnavailable(text="Asset manifest unavailable") from error
+  html = _inject_bootstrap(_rewrite_index_asset_urls(html, WEB_DIR))
   response = web.Response(text=html, content_type="text/html")
   response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
   response.headers["Pragma"] = "no-cache"

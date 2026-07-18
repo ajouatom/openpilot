@@ -1,540 +1,3 @@
-/* ── Switch (toggle atom) ─────────────────────────────────────
-   The one switch used across the app. Compose it inside any row:
-
-     <label class="row">
-       <span class="row__text">…</span>
-       <span class="c-switch">
-         <input class="c-switch__input" type="checkbox">
-         <span class="c-switch__track" aria-hidden="true"></span>
-       </span>
-     </label>
-
-   Size comes from --switch-w / --switch-h (tokens.css). Dense surfaces
-   add `.c-switch--sm`. Disabled state is driven by the native `:disabled`
-   on the input, so callers only toggle the attribute. */
-.c-switch {
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 var(--switch-w);
-  width: var(--switch-w);
-  height: var(--switch-h);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.c-switch--sm {
-  --switch-w: 44px;
-  --switch-h: 28px;
-}
-
-.c-switch__input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.c-switch__track {
-  position: absolute;
-  inset: 0;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 52%, transparent);
-  border-radius: var(--r-round);
-  background: var(--md-surface-cont-h);
-  transition: background var(--motion-quick) var(--ease-standard),
-              border-color var(--motion-quick) var(--ease-standard);
-}
-
-.c-switch__track::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 4px;
-  /* -8px keeps the 4px inset; -2px compensates the track's 1px border on each
-     side, which shrinks the ::after containing block (padding box) below the
-     token size. Without it the thumb sits 1px low and overshoots 2px when on. */
-  width: calc(var(--switch-h) - 10px);
-  height: calc(var(--switch-h) - 10px);
-  border-radius: var(--r-round);
-  background: var(--md-on-surface-var);
-  box-shadow: var(--shadow-1);
-  transform: translateY(-50%);
-  transition: transform var(--motion-base) var(--ease-standard),
-              background var(--motion-quick) var(--ease-standard);
-}
-
-.c-switch__input:checked + .c-switch__track {
-  border-color: color-mix(in srgb, var(--md-primary) 74%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-primary) 80%, var(--md-surface-cont-h));
-}
-
-.c-switch__input:checked + .c-switch__track::after {
-  transform: translate(calc(var(--switch-w) - var(--switch-h)), -50%);
-  background: var(--md-on-primary);
-}
-
-.c-switch__input:focus-visible + .c-switch__track {
-  outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: var(--focus-ring-offset);
-}
-
-.c-switch__input:disabled + .c-switch__track {
-  opacity: var(--state-disabled-opacity);
-}
-
-/* ── Close button (X atom) ───────────────────────────────────
-   The one close/dismiss control used across the app. Drop it into any
-   overlay, modal, or panel header:
-
-     <button class="c-close" type="button" aria-label="Close">
-       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
-     </button>
-
-   Size/radius come from --close-size / --close-radius (tokens.css).
-   Tight surfaces add `.c-close--sm`. The rounded-square surface reads on
-   both plain panels and over video; positioning is left to the caller. */
-.c-close {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--close-size);
-  height: var(--close-size);
-  padding: 0;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 40%, transparent);
-  border-radius: var(--close-radius);
-  background: color-mix(in srgb, var(--md-surface-cont) 82%, #000);
-  color: var(--md-on-surface);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: background var(--motion-quick) var(--ease-standard),
-              color var(--motion-quick) var(--ease-standard),
-              border-color var(--motion-quick) var(--ease-standard),
-              transform var(--motion-quick) var(--ease-standard);
-}
-
-.c-close svg {
-  width: var(--close-icon);
-  height: var(--close-icon);
-  display: block;
-}
-
-.c-close svg path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
-.c-close:hover {
-  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont));
-  border-color: color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
-  color: var(--md-on-surface);
-}
-
-.c-close:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: var(--focus-ring-offset);
-}
-
-.c-close:active {
-  transform: scale(0.94);
-}
-
-.c-close--sm {
-  --close-size: 26px;
-  --close-icon: 14px;
-  --close-radius: 8px;
-}
-
-/* ── App Toast / Dialog ──────────────────────────────────── */
-.app-toast-host {
-  position: fixed;
-  left: var(--sp-lg);
-  right: var(--sp-lg);
-  bottom: calc(var(--nav-bar-height) + 18px + env(safe-area-inset-bottom, 0px));
-  z-index: var(--z-toast);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-sm);
-  pointer-events: none;
-}
-
-body[data-page="terminal"] .app-toast-host {
-  top: auto;
-  bottom: var(--terminal-toast-bottom, calc(var(--nav-bar-height) + 96px + env(safe-area-inset-bottom, 0px)));
-  left: var(--terminal-toast-left, var(--sp-lg));
-  right: auto;
-  width: var(--terminal-toast-width, calc(100vw - (var(--sp-lg) * 2)));
-  z-index: calc(var(--z-toast) - 2);
-}
-
-.app-toast {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: min(100%, 440px);
-  padding: 14px 18px;
-  border: 1px solid var(--toast-border);
-  border-radius: var(--toast-radius);
-  background: var(--toast-bg);
-  color: var(--toast-fg);
-  box-shadow: var(--toast-shadow);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.45;
-  opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.2s ease, transform 0.26s cubic-bezier(0.2, 0, 0, 1);
-}
-
-.app-toast.is-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Round tone icon — the only part that changes color between tones. */
-.app-toast__icon {
-  flex: none;
-  width: var(--toast-icon-size);
-  height: var(--toast-icon-size);
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--toast-icon-default);
-  color: var(--toast-icon-fg);
-  font: 900 14px/1 system-ui, sans-serif;
-}
-
-.app-toast__msg {
-  flex: 1;
-  min-width: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.app-toast.is-info    .app-toast__icon { background: var(--toast-icon-info); }
-.app-toast.is-success .app-toast__icon { background: var(--toast-icon-success); }
-.app-toast.is-warn    .app-toast__icon { background: var(--toast-icon-warn); }
-.app-toast.is-error   .app-toast__icon { background: var(--toast-icon-error); }
-
-.app-dialog {
-  position: fixed;
-  /* Anchor to the *visual* viewport, not the layout viewport. With the
-     on-screen keyboard open, inset:0 centered the sheet in the full-screen
-     height — so it floated up behind the keyboard (the near-square/landscape
-     case never hit the bottom-sheet fallback below). viewport.js keeps
-     --app-vv-top / --app-vv-height in sync with visualViewport, so centering
-     here always lands in the visible area above the keyboard. Same pattern as
-     .setting-search-panel. */
-  top: var(--app-vv-top, 0px);
-  left: 0;
-  right: 0;
-  height: var(--app-vv-height, 100dvh);
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--sp-lg);
-  pointer-events: none;
-}
-
-#appDialog {
-  z-index: calc(var(--z-modal) + 10);
-}
-
-.app-dialog[hidden] {
-  display: none !important;
-}
-
-.app-dialog.is-open {
-  pointer-events: auto;
-}
-
-.app-dialog__backdrop {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  padding: 0;
-  background: var(--popup-backdrop);
-  opacity: 0;
-  backdrop-filter: blur(2px) saturate(106%);
-  -webkit-backdrop-filter: blur(2px) saturate(106%);
-  transition: opacity var(--motion-base) var(--ease-linear);
-}
-
-.app-dialog__sheet {
-  position: relative;
-  z-index: 1;
-  width: min(100%, var(--dialog-sheet-width));
-  max-height: var(--dialog-sheet-max-height);
-  display: flex;
-  flex-direction: column;
-  padding: var(--sp-lg);
-  border: 1px solid var(--popup-border-color);
-  border-radius: var(--popup-radius);
-  background: var(--popup-bg);
-  box-shadow: var(--popup-shadow);
-  opacity: 0;
-  transform: translateY(14px) scale(0.985);
-  transition:
-    opacity var(--motion-base) var(--ease-emphasized),
-    transform var(--motion-medium) var(--ease-emphasized);
-}
-
-.app-dialog.is-open .app-dialog__backdrop,
-.app-dialog.is-open .app-dialog__sheet {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-.app-dialog__head {
-  margin-bottom: var(--sp-sm);
-  flex-shrink: 0;
-}
-
-.app-dialog__title {
-  font-size: var(--fs-title-sm);
-  font-weight: 800;
-  color: var(--md-on-surface);
-}
-
-.app-dialog__body {
-  color: var(--md-on-surface-var);
-  font-size: var(--fs-body-md);
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.app-dialog__metaList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.app-dialog__metaLine {
-  color: var(--md-on-surface-var);
-  font-size: var(--fs-body-md);
-  line-height: 1.5;
-}
-
-.app-dialog__metaSubtle {
-  margin-top: 4px;
-  color: color-mix(in srgb, var(--md-on-surface-var) 82%, var(--md-outline));
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.app-dialog__choices {
-  display: grid;
-  gap: 6px;
-  margin-top: var(--sp-md);
-  overflow-y: auto;
-  min-height: 0;
-  flex: 1 1 auto;
-  padding-right: 2px;
-}
-
-.app-dialog__choices[hidden] {
-  display: none !important;
-}
-
-.app-dialog__choiceBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-width: 0;
-  padding: 0 12px;
-  border-radius: var(--dialog-choice-radius);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-height: var(--control-min-height);
-  font-size: var(--fs-label-md);
-  font-weight: 800;
-  letter-spacing: 0;
-}
-
-.app-dialog__choiceBtn.is-current {
-  border-color: color-mix(in srgb, var(--md-primary) 56%, var(--md-stroke-soft));
-  background: color-mix(in srgb, var(--md-surface-cont-hh) 74%, var(--md-primary-state));
-  color: var(--md-on-surface);
-  font-weight: 800;
-}
-
-/* Unified popup item look: compact boxed rows matching the branch picker.
-   Value grids remain a separate compact control for short numeric choices. */
-.app-dialog__choices--list {
-  gap: var(--sp-sm);
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.app-dialog__choices--list .app-dialog__choiceBtn--action {
-  justify-content: space-between;
-  text-align: left;
-  white-space: normal;
-  line-height: 1.25;
-  min-height: 48px;
-  padding: var(--sp-md) var(--sp-lg);
-  border: 1px solid var(--popup-item-border);
-  border-radius: var(--popup-item-radius);
-  background: var(--popup-item-bg);
-  box-shadow: none;
-}
-
-.app-dialog__choices--list .app-dialog__choiceBtn--action:hover,
-.app-dialog__choices--list .app-dialog__choiceBtn--action:focus-visible {
-  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
-  outline: none;
-}
-
-.app-dialog__choices--list .app-dialog__choiceBtn--action:active {
-  transform: translateY(1px);
-}
-
-.app-dialog__choices--list .app-dialog__choiceBtn--action.is-current {
-  border-color: var(--popup-item-active-border);
-  background: var(--popup-item-active-bg);
-  color: var(--md-primary);
-  font-weight: 850;
-}
-
-/* Selected indicator — checkmark (branch picker uses a "현재" badge; the check
-   is the dialog's equivalent affordance). */
-.app-dialog__choices--list .app-dialog__choiceBtn--action.is-current::after {
-  content: "";
-  display: block;
-  width: 6px;
-  height: 11px;
-  margin-left: 12px;
-  border-right: 2px solid color-mix(in srgb, var(--md-primary) 82%, var(--md-on-surface));
-  border-bottom: 2px solid color-mix(in srgb, var(--md-primary) 82%, var(--md-on-surface));
-  transform: rotate(45deg);
-  flex: 0 0 auto;
-}
-
-.app-dialog__choices--value-grid {
-  grid-template-columns: repeat(var(--app-dialog-choice-columns, 5), minmax(0, 1fr));
-  gap: 6px;
-}
-
-.app-dialog__choices--value-grid .app-dialog__choiceBtn--value {
-  min-height: 42px;
-  padding: 0 6px;
-  justify-content: center;
-  border: 1px solid var(--popup-item-border);
-  border-radius: var(--popup-item-radius);
-  background: var(--popup-item-bg);
-  text-align: center;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.app-dialog__choices--value-grid .app-dialog__choiceBtn--value:hover,
-.app-dialog__choices--value-grid .app-dialog__choiceBtn--value:focus-visible {
-  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--popup-item-bg) 90%, var(--md-primary));
-  outline: none;
-}
-
-.app-dialog__choices--value-grid .app-dialog__choiceBtn--value.is-current {
-  border-color: var(--popup-item-active-border);
-  background: var(--popup-item-active-bg);
-  color: var(--md-primary);
-  font-weight: 850;
-}
-
-.app-dialog__inputWrap {
-  margin-top: var(--sp-md);
-}
-
-.app-dialog__inputWrap[hidden] {
-  display: none !important;
-}
-
-.app-dialog__input {
-  width: 100%;
-  min-width: 0;
-}
-
-.app-dialog__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: var(--sp-md);
-  flex-shrink: 0;
-}
-
-.app-dialog__actions .smallBtn,
-.app-dialog__actions .btn {
-  border-radius: var(--dialog-control-radius);
-}
-
-.app-dialog--choice-grid .app-dialog__sheet,
-.app-dialog--choice-value-grid .app-dialog__sheet {
-  width: min(100%, var(--dialog-sheet-width));
-  max-height: min(82dvh, 640px);
-  padding: var(--sp-lg);
-}
-
-.app-dialog--choice-grid .app-dialog__body,
-.app-dialog--choice-value-grid .app-dialog__body {
-  flex: 0 0 auto;
-  font-size: var(--fs-label-sm);
-  line-height: 1.4;
-}
-
-@media (max-width: 640px) and (aspect-ratio < 13/10) {
-  .app-dialog {
-    align-items: center;
-    padding: calc(12px + env(safe-area-inset-top, 0px)) 8px calc(12px + env(safe-area-inset-bottom, 0px));
-  }
-
-  .app-dialog__sheet {
-    width: calc(100vw - 16px);
-    max-height: var(--dialog-sheet-mobile-max-height);
-    padding: 14px;
-    border-radius: var(--dialog-sheet-radius-mobile);
-    transform: translateY(10px) scale(0.985);
-  }
-
-  .app-dialog__head {
-    margin-bottom: 6px;
-  }
-
-  .app-dialog__title {
-    font-size: var(--fs-title-xs);
-  }
-
-  .app-dialog__body {
-    font-size: var(--fs-body-sm);
-  }
-
-  .app-dialog__choiceBtn {
-    min-height: 42px;
-  }
-
-  .app-dialog__choiceBtn--value {
-    min-height: 40px;
-  }
-
-  /* Form dialogs (stream key, mapbox token, device actions, …) render as the
-     SAME centered floating card as every other dialog — no full-width bottom
-     sheet jammed onto the keyboard. They inherit the mobile card sheet above
-     (side margins, all corners rounded, full border) and the right-aligned
-     flex actions from .app-dialog__actions. Because .app-dialog is anchored to
-     --app-vv-height, the card floats just above the on-screen keyboard when one
-     is open, and simply centers when there is none — consistent across phone,
-     foldable and desktop (no keyboard-toolbar dependency). */
-}
-
 .app-branch-picker__sheet {
   width: min(100%, 500px);
   max-height: min(72vh, 560px);
@@ -644,7 +107,6 @@ body[data-page="terminal"] .app-toast-host {
   text-align: left;
   font-family: var(--font-mono);
   font-size: var(--fs-body-sm);
-  border-color: var(--popup-item-border);
   border-radius: var(--popup-item-radius);
   background: var(--popup-item-bg);
 }
@@ -694,52 +156,6 @@ body[data-page="terminal"] .app-toast-host {
 .app-car-picker__item {
   font-family: var(--font-sans);
   font-size: var(--fs-body-md);
-}
-
-/* ── Surface Card (only HUD, WebRTC, output) ──────────────── */
-.card {
-  background: var(--md-surface-cont);
-  border: 1px solid var(--md-stroke-soft);
-  border-radius: var(--r-md);
-  padding: var(--sp-lg);
-  margin-bottom: var(--sp-lg);
-}
-
-/* ── Buttons: boxed controls by default ────────────────────
-   Generic button primitives stay boxed. Fully rounded controls must opt in
-   through a dedicated semantic class. */
-.btn {
-  padding: 10px 20px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
-  background: var(--md-surface-cont-h);
-  color: var(--md-on-surface);
-  border-radius: var(--control-radius);
-  cursor: pointer;
-  font-size: var(--fs-label-lg);
-  font-weight: 750;
-  min-height: var(--control-min-height);
-  box-sizing: border-box;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
-  letter-spacing: 0.1px;
-}
-
-.btn:hover,
-.btn:focus-visible {
-  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
-  outline: none;
-}
-
-.btn:active {
-  background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
-  transform: translateY(1px);
-}
-
-.btn.active {
-  border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
-  background: var(--md-primary-state);
-  color: var(--md-primary);
-  font-weight: 850;
 }
 
 .git-pull-btn {
@@ -794,152 +210,6 @@ body[data-page="terminal"] .app-toast-host {
 .git-pull-btn.has-git-error {
   border-color: color-mix(in srgb, var(--md-error) 54%, var(--md-outline-var));
 }
-
-.smallBtn {
-  padding: var(--sp-sm) var(--sp-md);
-  border-radius: var(--control-radius);
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
-  background: var(--md-surface-cont-h);
-  color: var(--md-on-surface);
-  cursor: pointer;
-  font-size: var(--fs-label-lg);
-  font-weight: 750;
-  min-height: 44px;
-  box-sizing: border-box;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
-}
-
-.smallBtn:hover,
-.smallBtn:focus-visible {
-  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
-  outline: none;
-}
-
-.smallBtn:active {
-  background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
-  transform: translateY(1px);
-}
-
-.btn--filled,
-.smallBtn.btn--filled {
-  background: var(--md-action-filled);
-  border-color: color-mix(in srgb, var(--md-action-filled) 78%, var(--md-outline-var));
-  color: var(--md-on-action-filled);
-}
-
-#appDialogConfirm.btn--filled {
-  background: var(--md-action-filled);
-  border-color: color-mix(in srgb, var(--md-action-filled) 78%, var(--md-outline-var));
-  color: var(--md-on-action-filled);
-  box-shadow: none;
-}
-
-#appDialogConfirm.btn--filled:hover,
-#appDialogConfirm.btn--filled:focus-visible {
-  background: color-mix(in srgb, var(--md-action-filled) 88%, #fff);
-  border-color: color-mix(in srgb, var(--md-action-filled) 84%, var(--md-outline-var));
-  color: var(--md-on-action-filled);
-}
-
-#appDialogConfirm.btn--filled:active {
-  background: color-mix(in srgb, var(--md-action-filled) 86%, #2a1204);
-}
-
-.btn--danger {
-  color: var(--md-error);
-}
-
-.btn--danger:active {
-  background: var(--md-error-cont);
-  color: var(--md-on-error-cont);
-}
-
-/* ── Dropdown menus ──────────────────────────────────────── */
-.ui-dropdown-menu {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.ui-dropdown-menu__button {
-  appearance: none;
-  -webkit-appearance: none;
-  min-width: 42px;
-  min-height: 42px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
-  border-radius: 8px;
-  background: var(--md-surface-cont);
-  color: var(--md-on-surface);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
-}
-
-.ui-dropdown-menu__button:hover,
-.ui-dropdown-menu__button:focus-visible,
-.ui-dropdown-menu.is-open .ui-dropdown-menu__button {
-  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
-  outline: none;
-}
-
-.ui-dropdown-menu__button:active {
-  transform: translateY(1px);
-}
-
-.ui-dropdown-menu__panel {
-  min-width: 156px;
-  display: grid;
-  gap: 6px;
-  padding: var(--sp-sm);
-  border: 1px solid var(--popup-border-color);
-  border-radius: var(--popup-radius);
-  background: var(--popup-bg);
-  color: var(--md-on-surface);
-  box-shadow: var(--popup-shadow);
-}
-
-.ui-dropdown-menu__panel[hidden] {
-  display: none !important;
-}
-
-.ui-dropdown-menu__item {
-  width: 100%;
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--popup-item-border);
-  border-radius: var(--popup-item-radius);
-  background: var(--popup-item-bg);
-  color: var(--md-on-surface);
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease;
-}
-
-.ui-dropdown-menu__item:hover,
-.ui-dropdown-menu__item:focus-visible {
-  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
-  background: color-mix(in srgb, var(--popup-item-bg) 90%, var(--md-primary));
-  color: var(--md-on-surface);
-  outline: none;
-}
-
 /* ── Utility ──────────────────────────────────────────────── */
 .row-between {
   display: flex;
@@ -1015,8 +285,35 @@ body[data-page="terminal"] .app-toast-host {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.ui-action-grid--fixed-four {
+  --ui-action-columns: 4;
+  --ui-action-gap: clamp(4px, 1vw, 8px);
+  grid-template-columns: repeat(var(--ui-action-columns), minmax(0, 1fr));
+}
+
+.ui-action-grid--fixed-four > .btn,
+.ui-action-grid--fixed-four > .smallBtn,
+.ui-action-grid--fixed-four > .ui-action-grid__slot > .btn,
+.ui-action-grid--fixed-four > .ui-action-grid__slot > .smallBtn {
+  justify-content: center;
+  padding-inline: clamp(4px, 1.4vw, 12px);
+  overflow: hidden;
+  font-size: clamp(9px, 2.4vw, var(--fs-body-sm));
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-action-grid__slot {
+  position: relative;
+  min-width: 0;
+  min-height: 46px;
+}
+
 .ui-action-grid > .btn,
-.ui-action-grid > .smallBtn {
+.ui-action-grid > .smallBtn,
+.ui-action-grid > .ui-action-grid__slot > .btn,
+.ui-action-grid > .ui-action-grid__slot > .smallBtn {
   width: 100%;
   min-width: 0;
   min-height: 46px;
@@ -1038,14 +335,80 @@ body[data-page="terminal"] .app-toast-host {
 .ui-action-grid > .btn:hover,
 .ui-action-grid > .btn:focus-visible,
 .ui-action-grid > .smallBtn:hover,
-.ui-action-grid > .smallBtn:focus-visible {
+.ui-action-grid > .smallBtn:focus-visible,
+.ui-action-grid > .ui-action-grid__slot > .btn:hover,
+.ui-action-grid > .ui-action-grid__slot > .btn:focus-visible,
+.ui-action-grid > .ui-action-grid__slot > .smallBtn:hover,
+.ui-action-grid > .ui-action-grid__slot > .smallBtn:focus-visible {
   border-color: color-mix(in srgb, var(--md-primary) 36%, var(--md-outline-var));
   background: color-mix(in srgb, var(--md-surface-cont-h) 92%, var(--md-primary));
 }
 
 .ui-action-grid > .btn:active,
-.ui-action-grid > .smallBtn:active {
+.ui-action-grid > .smallBtn:active,
+.ui-action-grid > .ui-action-grid__slot > .btn:active,
+.ui-action-grid > .ui-action-grid__slot > .smallBtn:active {
   background: var(--md-surface-cont-h);
+}
+
+.ui-action-grid__slot--affordance > .btn {
+  padding-inline-end: 44px;
+}
+
+.ui-action-grid__affordance {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  z-index: 1;
+  width: 40px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--popup-item-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--md-on-surface-var);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-body-sm);
+  font-weight: 900;
+  line-height: 1;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.ui-action-grid__affordance:hover,
+.ui-action-grid__affordance:focus-visible {
+  background: var(--popup-item-active-bg);
+  color: var(--md-primary);
+  outline: none;
+}
+
+.ui-action-grid__affordance:active {
+  background: var(--md-primary-state);
+}
+
+.ui-action-grid__affordance svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.14s ease;
+}
+
+.ui-action-grid__slot.is-open .ui-action-grid__affordance {
+  background: var(--popup-item-active-bg);
+  color: var(--md-primary);
+}
+
+.ui-action-grid__slot.is-open .ui-action-grid__affordance svg {
+  transform: rotate(180deg);
 }
 
 .ui-action-grid > .btn--filled {
@@ -1200,48 +563,6 @@ body[data-page="terminal"] .app-toast-host {
   }
 }
 
-.app-dialog--form .app-dialog__body[hidden] {
-  display: none !important;
-}
-
-.app-dialog--form .app-dialog__inputWrap {
-  display: grid;
-  gap: var(--sp-xs);
-  margin-top: var(--sp-sm);
-}
-
-/* Form dialogs anchor to the bottom of the visible area (which is
-   --app-vv-height = above the on-screen keyboard) so the floating card sits
-   just above the keyboard — the input auto-focuses and the keyboard opens
-   immediately — instead of floating centered far above it. The container's
-   bottom padding gives the breathing gap between card and keyboard. */
-/* Any dialog that shows a text input (prompt OR form) centers when no keyboard
-   is up (desktop, keyboard-less devices, or before the field focuses), and hugs
-   just above the on-screen keyboard with a consistent gap when it is — toggled
-   by html[data-kb-open] from viewport.js. --kb-inset is the exact keyboard
-   height incl. the Samsung toolbar on Chromium (VirtualKeyboard API), 0
-   elsewhere (where --app-vv-height already excludes the keyboard). One shared
-   --kb-gap keeps this consistent with the terminal and search panel. */
-.app-dialog--input {
-  align-items: center;
-}
-
-html[data-kb-open="1"] .app-dialog--input {
-  align-items: flex-end;
-  padding-bottom: calc(var(--kb-gap) + var(--kb-inset) + env(safe-area-inset-bottom, 0px));
-}
-
-.app-dialog__inputError {
-  color: var(--md-error);
-  font-size: var(--fs-label-sm);
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.app-dialog__inputError[hidden] {
-  display: none !important;
-}
-
 .ui-action-grid > .git-pull-btn {
   justify-content: space-between;
 }
@@ -1389,44 +710,6 @@ html[data-kb-open="1"] .app-dialog--input {
   transform: translateY(1px);
 }
 
-/* ── Value surface ────────────────────────────────────────── */
-.value-surface {
-  background: var(--md-surface-cont);
-  border: 1px solid var(--md-stroke-soft);
-  padding: var(--sp-sm) var(--sp-md);
-  border-radius: var(--control-radius);
-  font-size: var(--fs-body-sm);
-  color: var(--md-on-surface-var);
-}
-
-.val {
-  min-width: 84px;
-  text-align: center;
-  font-weight: 700;
-  font-family: var(--font-mono);
-  color: var(--md-on-surface);
-}
-
-/* ── Input ─────────────────────────────────────────────────── */
-.input-text {
-  flex: 1;
-  min-width: 200px;
-  padding: var(--sp-md) var(--sp-lg);
-  border-radius: var(--r-md);
-  border: 1px solid var(--md-outline-var);
-  background: var(--md-surface-cont);
-  color: var(--md-on-surface);
-  font-size: var(--fs-body-md);
-  font-family: var(--font-mono);
-  box-sizing: border-box;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.input-text:focus {
-  border-color: var(--md-primary);
-}
-
 /* ── Button Rows ──────────────────────────────────────────── */
 .btnRow {
   display: flex;
@@ -1467,47 +750,6 @@ pre {
    These are small reusable pieces. Prefer them over hand-rolled
    versions in page CSS. Pattern usage is documented next to each.
    ════════════════════════════════════════════════════════════════ */
-
-/* ── Chip ──────────────────────────────────────────────────────
-   A compact status/info tag. Two variants:
-
-     .chip                    neutral, surface tone (default)
-     .chip.chip--accent       primary-tinted (e.g. "selected", counts)
-     .chip.chip--danger       error-tinted    (e.g. "failed")
-
-   Pattern:
-     <span class="chip">3 segments</span>
-     <span class="chip chip--accent">선택됨</span>
-
-   Replaces: ad-hoc .dashcam-chip (page-local) and similar.
-*/
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 22px;
-  padding: 2px 10px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
-  border-radius: var(--r-round);
-  background: color-mix(in srgb, var(--md-surface-cont-h) 80%, var(--md-surface-cont));
-  color: var(--md-on-surface-var);
-  font-size: var(--fs-label-sm);
-  font-weight: 750;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.chip--accent {
-  border-color: color-mix(in srgb, var(--md-primary) 38%, transparent);
-  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
-  color: color-mix(in srgb, var(--md-primary) 70%, var(--md-on-surface));
-}
-
-.chip--danger {
-  border-color: color-mix(in srgb, var(--md-error) 42%, transparent);
-  background: color-mix(in srgb, var(--md-error) 12%, var(--md-surface-cont-h));
-  color: color-mix(in srgb, var(--md-error) 70%, var(--md-on-surface));
-}
 
 /* ── Skeleton ──────────────────────────────────────────────────
    Loading placeholder. Apply to a box of fixed size; the shimmer
@@ -1625,27 +867,6 @@ pre {
 
 .empty-state__action {
   margin-top: 6px;
-}
-
-/* ── Status Chip Variants (semantic) ───────────────────────────
-   Built on .chip; adds success / warning / info tones. Use these
-   instead of inline color overrides. */
-.chip--success {
-  border-color: color-mix(in srgb, var(--md-success) 42%, transparent);
-  background: var(--md-success-cont);
-  color: var(--md-on-success-cont);
-}
-
-.chip--warning {
-  border-color: color-mix(in srgb, var(--md-warning) 42%, transparent);
-  background: var(--md-warning-cont);
-  color: var(--md-on-warning-cont);
-}
-
-.chip--info {
-  border-color: color-mix(in srgb, var(--md-info) 42%, transparent);
-  background: var(--md-info-cont);
-  color: var(--md-on-info-cont);
 }
 
 /* ── Visually Hidden ───────────────────────────────────────────

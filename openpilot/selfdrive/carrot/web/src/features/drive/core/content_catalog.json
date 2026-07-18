@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "primary": "vision",
+    "secondary": "navigation"
+  },
+  "contents": [
+    {
+      "id": "vision",
+      "labelKey": "web_settings_carrot_vision",
+      "supportedSlots": ["primary", "secondary"],
+      "supportedSources": ["live", "replay"],
+      "singleton": true
+    },
+    {
+      "id": "navigation",
+      "labelKey": "web_settings_navigation",
+      "supportedSlots": ["primary", "secondary"],
+      "supportedSources": ["live", "replay"],
+      "singleton": true
+    },
+    {
+      "id": "drive_insights",
+      "labelKey": "web_drive_layout_content_drive_insights",
+      "supportedSlots": ["primary", "secondary"],
+      "supportedSources": ["live", "replay"],
+      "singleton": true
+    }
+  ]
+}

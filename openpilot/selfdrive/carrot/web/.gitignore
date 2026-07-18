@@ -1,0 +1,8 @@
+# Precompressed static asset siblings generated at server startup
+# (Tier A delivery optimization). Regenerated automatically, never committed.
+*.gz
+*.br
+
+# Local web build dependencies. Generated browser bundles are committed because
+# the device serves this source tree directly and does not run Node at startup.
+node_modules/

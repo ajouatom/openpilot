@@ -1,0 +1,229 @@
+.c-switch {
+  --switch-w: 52px;
+  --switch-h: 32px;
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 var(--switch-w);
+  width: var(--switch-w);
+  height: var(--switch-h);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.c-switch--sm {
+  --switch-w: 44px;
+  --switch-h: 28px;
+}
+
+.c-switch__input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.c-switch__track {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 52%, transparent);
+  border-radius: var(--r-round);
+  background: var(--md-surface-cont-h);
+  transition: background var(--motion-quick) var(--ease-standard),
+              border-color var(--motion-quick) var(--ease-standard);
+}
+
+.c-switch__track::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  /* -8px keeps the 4px inset; -2px compensates the track's 1px border on each
+     side, which shrinks the ::after containing block (padding box) below the
+     token size. Without it the thumb sits 1px low and overshoots 2px when on. */
+  width: calc(var(--switch-h) - 10px);
+  height: calc(var(--switch-h) - 10px);
+  border-radius: var(--r-round);
+  background: var(--md-on-surface-var);
+  box-shadow: var(--shadow-1);
+  transform: translateY(-50%);
+  transition: transform var(--motion-base) var(--ease-standard),
+              background var(--motion-quick) var(--ease-standard);
+}
+
+.c-switch__input:checked + .c-switch__track {
+  border-color: color-mix(in srgb, var(--md-primary) 74%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 80%, var(--md-surface-cont-h));
+}
+
+.c-switch__input:checked + .c-switch__track::after {
+  transform: translate(calc(var(--switch-w) - var(--switch-h)), -50%);
+  background: var(--md-on-primary);
+}
+
+.c-switch__input:focus-visible + .c-switch__track {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.c-switch__input:disabled + .c-switch__track {
+  opacity: var(--state-disabled-opacity);
+}
+
+.c-close {
+  --close-size: 32px;
+  --close-icon: 16px;
+  --close-radius: 10px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--close-size);
+  height: var(--close-size);
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 40%, transparent);
+  border-radius: var(--close-radius);
+  background: color-mix(in srgb, var(--md-surface-cont) 82%, #000);
+  color: var(--md-on-surface);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--motion-quick) var(--ease-standard),
+              color var(--motion-quick) var(--ease-standard),
+              border-color var(--motion-quick) var(--ease-standard),
+              transform var(--motion-quick) var(--ease-standard);
+}
+
+.c-close svg {
+  width: var(--close-icon);
+  height: var(--close-icon);
+  display: block;
+}
+
+.c-close svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.c-close:hover {
+  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont));
+  border-color: color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
+  color: var(--md-on-surface);
+}
+
+.c-close:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.c-close:active {
+  transform: scale(0.94);
+}
+
+.c-close--sm {
+  --close-size: 26px;
+  --close-icon: 14px;
+  --close-radius: 8px;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+  border-radius: var(--control-radius);
+  cursor: pointer;
+  font-size: var(--fs-label-lg);
+  font-weight: 750;
+  min-height: var(--control-min-height);
+  box-sizing: border-box;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
+  letter-spacing: 0.1px;
+}
+
+.btn:hover,
+.btn:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  outline: none;
+}
+
+.btn:active {
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
+  transform: translateY(1px);
+}
+
+.btn.active {
+  border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+  background: var(--md-primary-state);
+  color: var(--md-primary);
+  font-weight: 850;
+}
+
+.smallBtn {
+  padding: var(--sp-sm) var(--sp-md);
+  border-radius: var(--control-radius);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+  cursor: pointer;
+  font-size: var(--fs-label-lg);
+  font-weight: 750;
+  min-height: 44px;
+  box-sizing: border-box;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
+}
+
+.smallBtn:hover,
+.smallBtn:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  outline: none;
+}
+
+.smallBtn:active {
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-primary));
+  transform: translateY(1px);
+}
+
+.btn--filled,
+.smallBtn.btn--filled {
+  background: var(--md-action-filled);
+  border-color: color-mix(in srgb, var(--md-action-filled) 78%, var(--md-outline-var));
+  color: var(--md-on-action-filled);
+}
+
+.btn--danger {
+  color: var(--md-error);
+}
+
+.btn--danger:active {
+  background: var(--md-error-cont);
+  color: var(--md-on-error-cont);
+}
+
+.val {
+  min-width: 84px;
+  text-align: center;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--md-on-surface);
+}
+
+.input-text {
+  flex: 1;
+  min-width: 200px;
+  padding: var(--sp-md) var(--sp-lg);
+  border-radius: var(--r-md);
+  border: 1px solid var(--md-outline-var);
+  background: var(--md-surface-cont);
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-md);
+  font-family: var(--font-mono);
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.input-text:focus {
+  border-color: var(--md-primary);
+}
