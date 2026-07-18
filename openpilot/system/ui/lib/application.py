@@ -963,6 +963,8 @@ class GuiApplication:
     codepoints = set(range(32, 127))
     if font_weight in (FontWeight.DISPLAY, FontWeight.UNIFONT):
       codepoints.update(range(0xAC00, 0xD7A4))
+      codepoints.update(range(0x4E00, 0xA000))
+      codepoints.update(range(0x3400, 0x4DC0))
     return sorted(codepoints)
 
   @staticmethod
