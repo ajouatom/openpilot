@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 import logging
 
 import discord
@@ -38,6 +39,7 @@ class CarrotPilotBot(discord.Client):
   def __init__(self, config: Config):
     intents = discord.Intents.default()
     intents.message_content = True
+    intents.members = True
     super().__init__(intents=intents)
     self.config = config
     self.repository = Repository(
@@ -105,31 +107,34 @@ class CarrotPilotBot(discord.Client):
     )
 
   def _archive_discord_member(self, message: discord.Message) -> None:
-    if message.author.bot:
+    self._save_discord_member(message.author, message.created_at.isoformat())
+
+  def _save_discord_member(self, member: discord.Member | discord.User, updated_at: str) -> None:
+    if member.bot:
       return
     roles = [
       role.name
-      for role in getattr(message.author, "roles", [])
+      for role in getattr(member, "roles", [])
       if getattr(role, "name", "") != "@everyone"
     ]
     self.storage.save_discord_member(
-      str(message.author.id),
-      message.author.name,
-      message.author.display_name,
+      str(member.id),
+      member.name,
+      member.display_name,
       ", ".join(roles),
-      message.created_at.isoformat(),
+      updated_at,
     )
 
   async def _sync_discord_member_profiles(self) -> int:
     saved = 0
+    now = datetime.now(UTC).isoformat()
     for guild in self.guilds:
-      for channel in guild.text_channels[:60]:
-        try:
-          async for item in channel.history(limit=30, oldest_first=False):
-            self._archive_discord_member(item)
-            saved += 1
-        except (discord.Forbidden, discord.HTTPException):
-          log.debug("Could not read Discord member profiles channel=%s", channel.id)
+      try:
+        async for member in guild.fetch_members(limit=None):
+          self._save_discord_member(member, now)
+          saved += 1
+      except (discord.Forbidden, discord.HTTPException):
+        log.warning("Could not fetch Discord members guild=%s", guild.id, exc_info=True)
     return saved
 
   async def _sync_discord_history(self) -> None:
