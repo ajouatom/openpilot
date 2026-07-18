@@ -49,6 +49,13 @@ class Storage:
       );
       CREATE INDEX IF NOT EXISTS discord_messages_recent
         ON discord_messages(created_at DESC);
+      CREATE TABLE IF NOT EXISTS discord_members (
+        user_id TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        roles TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
       """
     )
     discord_columns = {str(row[1]) for row in self._db.execute("PRAGMA table_info(discord_messages)").fetchall()}
@@ -148,6 +155,22 @@ class Storage:
       )
       self._db.commit()
 
+  def save_discord_member(
+    self,
+    user_id: str,
+    username: str,
+    display_name: str,
+    roles: str,
+    updated_at: str,
+  ) -> None:
+    with self._lock:
+      self._db.execute(
+        "INSERT OR REPLACE INTO discord_members(user_id, username, display_name, roles, updated_at) "
+        + "VALUES(?, ?, ?, ?, ?)",
+        (user_id, username[:100], display_name[:100], roles[:500], updated_at),
+      )
+      self._db.commit()
+
   @staticmethod
   def _search_terms(text: str) -> set[str]:
     normalized = text.casefold()
@@ -213,12 +236,11 @@ class Storage:
 
   @staticmethod
   def _member_aliases(username: str, display_name: str) -> set[str]:
-    aliases = {username.casefold().strip(), display_name.casefold().strip()}
-    aliases.update(
-      part.casefold().strip()
-      for part in re.split(r"[/|·]", display_name)
-      if len(part.strip()) >= 2
-    )
+    def compact(value: str) -> str:
+      return re.sub(r"[^0-9a-z가-힣]+", "", value.casefold())
+
+    aliases = {compact(username), compact(display_name)}
+    aliases.update(compact(part) for part in re.split(r"[/|·]", display_name))
     return {alias for alias in aliases if len(alias) >= 2}
 
   def discord_member_context(
@@ -227,10 +249,13 @@ class Storage:
     mentioned_user_ids: frozenset[str] = frozenset(),
     limit_members: int = 2,
   ) -> list[str]:
-    normalized_question = self.normalize_question(question)
+    normalized_question = re.sub(r"[^0-9a-z가-힣]+", "", question.casefold())
     query_terms = self._search_terms(question)
     with self._lock:
-      rows = self._db.execute(
+      profile_rows = self._db.execute(
+        "SELECT user_id, display_name, username, roles FROM discord_members ORDER BY updated_at DESC"
+      ).fetchall()
+      message_rows = self._db.execute(
         "SELECT created_at, author_id, author_name, author_username, author_roles, content "
         + "FROM discord_messages WHERE author_is_bot=0 ORDER BY created_at DESC LIMIT 4000"
       ).fetchall()
@@ -238,15 +263,27 @@ class Storage:
     matched_ids: list[str] = []
     profiles: dict[str, tuple[str, str, str]] = {}
     messages: dict[str, list[tuple[float, str, str]]] = {}
-    for created_at, author_id, display_name, username, roles, content in rows:
+    for author_id, display_name, username, roles in profile_rows:
       author_id = str(author_id)
       aliases = self._member_aliases(str(username), str(display_name))
       alias_match = any(alias in normalized_question for alias in aliases)
       if author_id not in mentioned_user_ids and not alias_match:
         continue
+      profiles[author_id] = (str(display_name), str(username), str(roles))
+      matched_ids.append(author_id)
+
+    # Keep compatibility with databases populated before the member directory existed.
+    for created_at, author_id, display_name, username, roles, content in message_rows:
+      author_id = str(author_id)
       if author_id not in profiles:
+        aliases = self._member_aliases(str(username), str(display_name))
+        alias_match = any(alias in normalized_question for alias in aliases)
+        if author_id not in mentioned_user_ids and not alias_match:
+          continue
         profiles[author_id] = (str(display_name), str(username), str(roles))
         matched_ids.append(author_id)
+      if author_id not in profiles:
+        continue
       shared = query_terms.intersection(self._search_terms(str(content)))
       score = float(sum(min(len(term), 8) for term in shared))
       messages.setdefault(author_id, []).append((score, str(created_at), str(content)))

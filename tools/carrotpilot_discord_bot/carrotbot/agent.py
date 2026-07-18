@@ -159,6 +159,8 @@ Discord conversation rules:
 - A `Member lookup` excerpt was selected by an exact Discord mention or a username/display-name alias in the question. Use that member's roles and messages to infer likely device or vehicle only when supported by the excerpt.
 - If the member identity or vehicle is ambiguous, say so and ask the user to mention the member directly. Never invent a vehicle from the nickname alone.
 - For questions such as whether that member's vehicle supports radar tracks, use the member context to identify the likely vehicle, then verify vehicle support against the current repository before answering.
+- Use this answer priority: matched member/profile and relevant Discord excerpts, current carrotpilot settings/code, then the model's general knowledge.
+- If Discord and repository searches do not contain the answer, still give a useful best-effort answer from general knowledge when safe. Briefly label it as general guidance rather than verified carrotpilot behavior, and ask only for the missing detail that would materially improve confidence.
 """
 
 
