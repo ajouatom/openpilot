@@ -21,6 +21,7 @@ from openpilot.selfdrive.carrot.radar_lead_simulator import (
   aligned_video_time_s,
   candidate_track_id,
   comparison_summary,
+  lead_comparison_series,
   _copy_track_points,
   _route_replay_module,
   export_training_dataset,
@@ -256,6 +257,32 @@ def test_comparison_summary_counts_exact_radar_ids() -> None:
 
   assert summary["lead_one_matches"] == 1
   assert summary["lead_two_matches"] == 1
+
+
+def test_lead_comparison_series_contains_current_radard_and_model_distances() -> None:
+  sample = frame(
+    (point(10, 31.0, 0.2, 20.0), point(21, 18.0, 0.6, 18.0, "corner235")),
+    RecordedLead(True, True, 10, 30.5, 0.2, 0.0, 20.0, 0.0, 0.9, 1.0),
+    RecordedLead(True, True, 22, 42.0, 0.4, 0.0, 18.0, 0.0, 0.8, 0.9),
+  )
+
+  class RadardSelector:
+    def select(self, _frame, frame_index=None):
+      return Selection(Candidate(21, 1.0, "current radard lead"), None)
+
+  class ModelSelector:
+    def select(self, _frame, frame_index=None):
+      return Selection(
+        Candidate(10, 1.0, "model lead", d_rel=30.8, y_rel=0.2),
+        Candidate(21, 0.9, "model cutin"),
+      )
+
+  values = lead_comparison_series([sample], RadardSelector(), ModelSelector())[0]
+
+  assert values.radard_one is not None and values.radard_one.d_rel == 18.0
+  assert values.radard_two is None
+  assert values.model_one is not None and values.model_one.d_rel == 30.8
+  assert values.model_two is not None and values.model_two.d_rel == 18.0
 
 
 def test_manual_labels_round_trip_and_training_export(tmp_path: Path) -> None:

@@ -1,8 +1,8 @@
 # Cut-in Route Validation Set
 
-Last validated: 2026-07-16
+Last validated: 2026-07-18
 
-This document records the 16-case route-based regression set used for the S50 cut-in
+This document records the route-based regression set used for the S50 cut-in
 logic in `radard.py` and the offline evaluator used by `cluster_replay_usb.py`.
 All paths are below `W:\routes`.
 
@@ -10,7 +10,7 @@ All paths are below `W:\routes`.
 
 Use this document as the human checklist: the table says which video interval
 to inspect and whether current code should detect a cut-in. The executable case
-list is `cutin_validation_cases.json`; run all 16 current-code checks from the
+list is `cutin_validation_cases.json`; run all current-code checks from the
 repository root with:
 
 ```powershell
@@ -29,6 +29,15 @@ Run one matching case while changing the logic:
 The script checks only `NEW CUT-IN`, returns exit code 1 on a regression, and
 does not count stored `radarState.leadsCutIn`. After it passes, use the replay
 commands below to inspect the video, `leadOne`, and detection timing manually.
+
+Validate a radar lead model against the same detect/clear scenes and compare its
+first activation with current radard and the deployed model using:
+
+```powershell
+.\.venv\Scripts\python.exe `
+  openpilot\selfdrive\carrot\validate_radar_lead_model.py `
+  --model openpilot\selfdrive\carrot\models\radar_lead_multitask.npz
+```
 
 ## Sequential Video Review
 

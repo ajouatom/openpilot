@@ -75,6 +75,49 @@ def test_previous_match_bridges_small_distance_gate_jitter() -> None:
   assert held is not None and held.prediction.features.radar_object.front_track_id == 40
 
 
+def test_high_probability_vision_can_replace_farther_previous_match() -> None:
+  matcher = VisionRadarMatcher()
+  farther = prediction(43, 0.41, 0.1, 0.1, d_rel=29.1, v_lead=9.2)
+  closer = prediction(34, -0.07, 0.1, 0.1, d_rel=19.7, v_lead=8.5)
+  farther = replace(farther, features=replace(
+    farther.features,
+    radar_object=replace(farther.features.radar_object, front_d_rel=29.1, front_v_rel=-0.9),
+  ))
+  closer = replace(closer, features=replace(
+    closer.features,
+    radar_object=replace(closer.features.radar_object, front_d_rel=19.7, front_v_rel=-1.5),
+  ))
+
+  initial = VisionLeadContext(0.99, 29.1, 0.41, 9.2, 0.0, 2.37, 0.25, 1.2)
+  assert matcher.match_context(initial, (farther,), 10.0).prediction is farther
+
+  motorcycle_scene = VisionLeadContext(0.993, 25.6, -0.075, 10.48, 0.0, 2.37, 0.25, 1.2)
+  match = matcher.match_context(motorcycle_scene, (farther, closer), 10.0)
+  assert match is not None
+  assert match.prediction is closer
+
+
+def test_stable_in_lane_closer_second_match_wins_for_small_target() -> None:
+  matcher = VisionRadarMatcher()
+  farther = prediction(43, 0.10, 0.1, 0.1, d_rel=29.4, v_lead=9.13)
+  closer = prediction(34, -0.14, 0.1, 0.1, d_rel=20.3, v_lead=8.69)
+  farther = replace(farther, features=replace(
+    farther.features,
+    radar_object=replace(farther.features.radar_object, front_d_rel=29.4, front_v_rel=-0.73),
+  ))
+  closer = replace(closer, features=replace(
+    closer.features,
+    radar_object=replace(closer.features.radar_object, front_d_rel=20.3, front_v_rel=-1.17),
+  ))
+  # The closer motorcycle is just outside the normal 25% distance gate, but
+  # is a stable, sane second match more than halfway to the vision estimate.
+  vision = VisionLeadContext(0.994, 27.94, -0.053, 10.16, 0.0, 2.54, 0.26, 1.22)
+
+  match = matcher.match_context(vision, (farther, closer), 9.9)
+  assert match is not None
+  assert match.prediction is closer
+
+
 def test_scc_can_supply_vision_matched_lead_one() -> None:
   matcher = VisionRadarMatcher()
   scc = prediction(0, 0.1, 0.1, 0.1, front=False, scc=True, d_rel=20.0, v_lead=18.0)
