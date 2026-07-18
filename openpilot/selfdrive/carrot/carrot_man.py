@@ -64,7 +64,7 @@ BROADCAST_REMOTE_INTERVAL = 0.2
 BROADCAST_NETWORK_ERROR_RETRY_INTERVAL = 5.0
 BROADCAST_NETWORK_ERROR_LOG_INTERVAL = 30.0
 AUTO_ONROAD_TMUX_DELAY_SECONDS = float(os.environ.get("CARROT_AUTO_ONROAD_TMUX_DELAY_SECONDS", "60"))
-CARROT_TMUX_SEND_ONROAD_DELAY_SECONDS = float(os.environ.get("CARROT_TMUX_SEND_ONROAD_DELAY_SECONDS", "5"))
+CARROT_CAN_ERROR_TMUX_DELAY_SECONDS = float(os.environ.get("CARROT_CAN_ERROR_TMUX_DELAY_SECONDS", "5"))
 CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS = 60.0
 DISCORD_TMUX_FILE_MAX_BYTES = 8 * 1024 * 1024
 EXCEPTION_DISCORD_WEBHOOK_KEY = b"carrot-exception-v1"
@@ -103,7 +103,7 @@ def reset_carrot_exception_tmux_send_queue() -> None:
     _carrot_exception_tmux_send_queued = False
 
 
-def queue_carrot_exception_tmux_send(context: str = "") -> bool:
+def queue_carrot_exception_tmux_send(context: str = "", reason: str = "tmux_send") -> bool:
   global _carrot_exception_tmux_send_queued
 
   with _carrot_exception_tmux_send_lock:
@@ -113,23 +113,23 @@ def queue_carrot_exception_tmux_send(context: str = "") -> bool:
       if current in (None, "", b""):
         put_nonblocking = getattr(params, "put_nonblocking", None)
         if callable(put_nonblocking):
-          put_nonblocking("CarrotException", "tmux_send")
+          put_nonblocking("CarrotException", reason)
         else:
-          params.put("CarrotException", "tmux_send")
+          params.put("CarrotException", reason)
         _carrot_exception_tmux_send_queued = True
-        print(f"[carrot_man] CarrotException tmux_send queued: {context or 'exception'}")
-      elif current == "tmux_send":
+        print(f"[carrot_man] CarrotException {reason} queued: {context or 'exception'}")
+        return True
+      elif current == reason:
         _carrot_exception_tmux_send_queued = True
-      return _carrot_exception_tmux_send_queued
+        return True
+      return False
     except Exception as e:
-      print(f"[carrot_man] failed to queue CarrotException tmux_send: {e}")
+      print(f"[carrot_man] failed to queue CarrotException {reason}: {e}")
       return False
 
 
-def carrot_tmux_send_ready(carrot_exception: str | None, onroad_start_at: float | None, now: float) -> bool:
-  return carrot_exception != "tmux_send" or (
-    onroad_start_at is not None and now - onroad_start_at >= CARROT_TMUX_SEND_ONROAD_DELAY_SECONDS
-  )
+def carrot_can_error_send_ready(detected_at: float | None, now: float, is_onroad: bool) -> bool:
+  return is_onroad and detected_at is not None and now - detected_at >= CARROT_CAN_ERROR_TMUX_DELAY_SECONDS
 
 
 def carrot_can_error(car_name: str | bytes | None, car_state_seen: bool, car_state, radar_state_seen: bool, radar_state) -> bool:
@@ -1212,6 +1212,7 @@ class CarrotMan:
     onroad_tmux_next_attempt_at = 0.0
     pending_tmux_reason = None
     pending_tmux_next_attempt_at = 0.0
+    can_error_detected_at = None
     can_error_tmux_requested = False
 
     print("#########carrot_cmd_zmq: thread started...")
@@ -1246,15 +1247,21 @@ class CarrotMan:
             is_tmux_sent = False
             onroad_tmux_captured = False
             onroad_tmux_next_attempt_at = 0.0
+            can_error_detected_at = None
 
           network_type = self.sm['deviceState'].networkType # if not force_wifi else NetworkType.wifi
           networkConnected = False if network_type == NetworkType.none else True
 
-          if is_onroad and not can_error_tmux_requested and carrot_can_error(
-            self.params.get("CarName"), self.sm.seen['carState'], self.sm['carState'],
-            self.sm.seen['radarState'], self.sm['radarState'],
-          ):
-            can_error_tmux_requested = queue_carrot_exception_tmux_send("CAN error")
+          if is_onroad and not can_error_tmux_requested:
+            if can_error_detected_at is None and carrot_can_error(
+              self.params.get("CarName"), self.sm.seen['carState'], self.sm['carState'],
+              self.sm.seen['radarState'], self.sm['radarState'],
+            ):
+              can_error_detected_at = now
+              print("[carrot_man] CAN error detected; waiting 5s before tmux capture")
+
+            if carrot_can_error_send_ready(can_error_detected_at, now, is_onroad):
+              can_error_tmux_requested = queue_carrot_exception_tmux_send("CAN error", reason="can_error")
 
           if AUTO_ONROAD_DIAGNOSTICS and onroad_start_at is not None and not is_tmux_sent:
             onroad_elapsed = now - onroad_start_at
@@ -1281,7 +1288,16 @@ class CarrotMan:
                 else:
                   onroad_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
           carrot_exception = self.params.get("CarrotException")
-          if carrot_exception in ["exception", "log", "tmux_send"] and carrot_tmux_send_ready(carrot_exception, onroad_start_at, now) \
+          if not is_onroad and (carrot_exception == "can_error" or pending_tmux_reason == "can_error"):
+            if carrot_exception == "can_error":
+              self.params.put("CarrotException", "")
+            pending_tmux_reason = None
+            pending_tmux_next_attempt_at = 0.0
+            reset_carrot_exception_tmux_send_queue()
+            carrot_exception = None
+            print("[carrot_man] CAN error tmux canceled after going offroad")
+
+          if carrot_exception in ["exception", "log", "tmux_send", "can_error"] \
               and pending_tmux_reason is None and now >= pending_tmux_next_attempt_at:
             if self.make_tmux_data():
               pending_tmux_reason = carrot_exception

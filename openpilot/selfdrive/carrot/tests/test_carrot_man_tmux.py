@@ -1,23 +1,22 @@
 from types import SimpleNamespace
 
 from openpilot.selfdrive.carrot.carrot_man import (
-  CARROT_TMUX_SEND_ONROAD_DELAY_SECONDS,
+  CARROT_CAN_ERROR_TMUX_DELAY_SECONDS,
   carrot_can_error,
-  carrot_tmux_send_ready,
+  carrot_can_error_send_ready,
 )
 
 
-def test_tmux_send_waits_for_five_seconds_onroad():
-  start = 100.0
+def test_can_error_send_waits_for_five_seconds_after_detection():
+  detected_at = 100.0
 
-  assert not carrot_tmux_send_ready("tmux_send", None, start + 10.0)
-  assert not carrot_tmux_send_ready("tmux_send", start, start + CARROT_TMUX_SEND_ONROAD_DELAY_SECONDS - 0.01)
-  assert carrot_tmux_send_ready("tmux_send", start, start + CARROT_TMUX_SEND_ONROAD_DELAY_SECONDS)
+  assert not carrot_can_error_send_ready(None, detected_at + 10.0, True)
+  assert not carrot_can_error_send_ready(detected_at, detected_at + CARROT_CAN_ERROR_TMUX_DELAY_SECONDS - 0.01, True)
+  assert carrot_can_error_send_ready(detected_at, detected_at + CARROT_CAN_ERROR_TMUX_DELAY_SECONDS, True)
 
 
-def test_other_exception_reasons_are_not_delayed():
-  assert carrot_tmux_send_ready("exception", None, 0.0)
-  assert carrot_tmux_send_ready("log", None, 0.0)
+def test_can_error_send_is_canceled_offroad():
+  assert not carrot_can_error_send_ready(100.0, 110.0, False)
 
 
 def test_can_error_ignores_mock_car():
