@@ -139,6 +139,8 @@ class CANParser:
     self.vl: dict[int | str, dict[str, float]] = VLDict(self)
     self.vl_all: dict[int | str, dict[str, list[float]]] = {}
     self.ts_nanos: dict[int | str, dict[str, int]] = {}
+    # Latest raw payload for each message that passed counter/checksum validation.
+    self.dat: dict[int, bytes] = {}
     self.addresses: set[int] = set()
     self.message_states: dict[int, MessageState] = {}
     self.seen_addresses: set[int] = set()
@@ -246,6 +248,7 @@ class CANParser:
           continue
         if state.parse(t, dat):
           updated_addrs.add(address)
+          self.dat[address] = bytes(dat)
 
           vl_addr = self.vl[address]
           vl_all_addr = self.vl_all[address]

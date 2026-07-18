@@ -79,6 +79,21 @@ class TestCanParserPacker:
     ret = parser.update([])
     assert len(ret) == 0
 
+  def test_parser_stores_last_valid_raw_data(self):
+    msgs = [("STEERING_CONTROL", 0)]
+    packer = CANPacker("honda_civic_touring_2016_can_generated")
+    parser = CANParser("honda_civic_touring_2016_can_generated", msgs, 0)
+
+    valid_msg = packer.make_can_msg("STEERING_CONTROL", 0, {"COUNTER": 0})
+    parser.update([0, [valid_msg]])
+    assert parser.dat[valid_msg[0]] == valid_msg[1]
+
+    invalid_dat = bytearray(valid_msg[1])
+    invalid_dat[4] = (invalid_dat[4] & 0xF0) | ((invalid_dat[4] + 1) & 0x0F)
+    invalid_msg = (valid_msg[0], bytes(invalid_dat), valid_msg[2])
+    parser.update([0, [invalid_msg]])
+    assert parser.dat[valid_msg[0]] == valid_msg[1]
+
   def test_parser_counter_can_valid(self):
     """
     Tests number of allowed bad counters + ensures CAN stays invalid
