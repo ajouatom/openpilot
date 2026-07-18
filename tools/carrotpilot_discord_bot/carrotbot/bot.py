@@ -83,6 +83,7 @@ class CarrotPilotBot(discord.Client):
       self._history_sync_task = asyncio.create_task(self._sync_discord_history())
 
   def _archive_discord_message(self, message: discord.Message) -> None:
+    self._archive_discord_member(message)
     content = redact_attachment_text(message.content.strip()) if message.content.strip() else ""
     if not content:
       return
@@ -103,7 +104,37 @@ class CarrotPilotBot(discord.Client):
       message.created_at.isoformat(),
     )
 
+  def _archive_discord_member(self, message: discord.Message) -> None:
+    if message.author.bot:
+      return
+    roles = [
+      role.name
+      for role in getattr(message.author, "roles", [])
+      if getattr(role, "name", "") != "@everyone"
+    ]
+    self.storage.save_discord_member(
+      str(message.author.id),
+      message.author.name,
+      message.author.display_name,
+      ", ".join(roles),
+      message.created_at.isoformat(),
+    )
+
+  async def _sync_discord_member_profiles(self) -> int:
+    saved = 0
+    for guild in self.guilds:
+      for channel in guild.text_channels[:60]:
+        try:
+          async for item in channel.history(limit=30, oldest_first=False):
+            self._archive_discord_member(item)
+            saved += 1
+        except (discord.Forbidden, discord.HTTPException):
+          log.debug("Could not read Discord member profiles channel=%s", channel.id)
+    return saved
+
   async def _sync_discord_history(self) -> None:
+    profile_count = await self._sync_discord_member_profiles()
+    log.info("Discord member profile sync completed: observations=%d", profile_count)
     channel = self.get_channel(self.config.discord_channel_id)
     if not isinstance(channel, discord.TextChannel):
       log.warning("Discord history sync skipped: configured channel is unavailable or not a text channel")
@@ -218,6 +249,10 @@ class CarrotPilotBot(discord.Client):
     }
 
   async def on_message(self, message: discord.Message) -> None:
+    # Keep a server-wide display-name directory, but store message content only
+    # for the configured question channel and its threads.
+    if message.guild is not None:
+      self._archive_discord_member(message)
     if not self._allowed_channel(message.channel):
       return
     self._archive_discord_message(message)

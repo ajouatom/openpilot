@@ -57,6 +57,19 @@ def test_member_alias_lookup_returns_profile_and_messages(tmp_path: Path) -> Non
   assert "user_id=****" in results[0]
 
 
+def test_member_alias_lookup_ignores_punctuation_and_needs_no_saved_message(tmp_path: Path) -> None:
+  storage = Storage(tmp_path / "bot.sqlite3")
+  storage.save_discord_member(
+    "778", "ppuang", "뿌앙_꾸앙/K5 dl3 pe 2023/공짜롱컨", "C4", "2026-07-18T01:00:00+00:00",
+  )
+
+  results = storage.discord_member_context("뿌앙꾸앙의 차량은 레이더트랙을 지원하나요?")
+
+  assert results
+  assert "뿌앙_꾸앙/K5 dl3 pe 2023/공짜롱컨" in results[0]
+  assert "no indexed messages" in results[0]
+
+
 def test_member_mention_lookup_uses_user_id(tmp_path: Path) -> None:
   storage = Storage(tmp_path / "bot.sqlite3")
   storage.save_discord_message(
