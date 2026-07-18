@@ -26,6 +26,22 @@ TRAFFIC_TTL_S = 60.0
 MAX_ROUTE_POINTS = 256
 
 
+def resolve_navi_speed_limit(
+    base_limit_kph: int | None,
+    base_source: str | None,
+    navi: NaviLiveState | None,
+) -> tuple[int | None, str | None]:
+    if base_source == "v":
+        return base_limit_kph, base_source
+    if navi is None or navi.speed is None:
+        return base_limit_kph, base_source
+
+    navi_limit = navi.speed.road_limit_kph
+    if navi_limit is not None and navi_limit > 0:
+        return navi_limit, "n"
+    return None, None
+
+
 def _get(obj: Any, name: str, default: Any = None) -> Any:
     if isinstance(obj, dict):
         return obj.get(name, default)
