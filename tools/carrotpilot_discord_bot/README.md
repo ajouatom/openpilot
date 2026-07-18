@@ -1,7 +1,7 @@
 # CarrotPilot Discord 지원 봇 — Synology 설치
 
-이 봇은 지정한 Discord 채널의 한국어 질문을 받고, Synology에 복제한
-`ajouatom/openpilot`의 `carrot-wip` 브랜치에서 관련 설정과 코드를 읽은 뒤 답합니다.
+이 봇은 지정한 Discord 채널의 한국어·영어 질문을 받고, 해당 질문 채널의 기존 대화와
+Synology에 복제한 `ajouatom/openpilot`의 `carrot-wip` 브랜치를 함께 참고해 답합니다.
 저장소 수정, 임의 셸 실행, 외부 포트 개방 기능은 없습니다.
 
 ## 준비물
@@ -69,6 +69,13 @@ OPENAI_API_KEY=OpenAI_Platform에서_만든_API_Key
 DISCORD_CHANNEL_ID=복사한_숫자_채널_ID
 ```
 
+특정 회원의 답변을 우선 참고하려면 Discord 개발자 모드에서 그 회원을 우클릭해
+`사용자 ID 복사`를 누른 뒤 다음처럼 입력합니다. 여러 명은 쉼표로 구분합니다.
+
+```env
+PRIORITY_DISCORD_USER_IDS=123456789012345678,234567890123456789
+```
+
 나머지 값은 처음에는 그대로 둡니다. 저장한 `bot.env`를 Synology의
 `docker/carrotpilot-bot/config` 폴더에 업로드합니다. `bot.env.example`은 남겨도 됩니다.
 
@@ -122,8 +129,20 @@ Discord 질문 채널에 다음 메시지를 보냅니다.
 - `DAILY_QUESTION_LIMIT=100`: 사용자 한 명의 하루 질문 한도입니다.
 - `GIT_UPDATE_MINUTES=60`: 소스 갱신 주기입니다.
 - `OPENAI_MODEL=gpt-5-mini`: 비용과 품질에 따라 변경할 수 있습니다.
+- `PRIORITY_DISCORD_USER_IDS=`: 유사 대화 검색에서 먼저 참고할 회원의 Discord 사용자 ID입니다.
 
 동일 질문과 동일 커밋의 답변은 SQLite 캐시를 재사용해 API 비용을 줄입니다.
+
+## Discord 대화 참고
+
+봇은 지정된 질문 채널, 활성 스레드, 최근 보관 스레드의 메시지를 로컬 SQLite에 색인합니다.
+새 질문과 비슷한 기존 대화가 있으면 커뮤니티 설명을 먼저 참고하고, 단순 사용법 질문은
+코드 검색을 강제하지 않습니다. 설정 버전, 차종 차이, 안전 관련 내용은 현재 설정과 코드로
+추가 확인합니다. 서버의 다른 채널은 검색하지 않습니다.
+
+`PRIORITY_DISCORD_USER_IDS`에 등록된 회원의 관련 메시지는 일반 회원 메시지보다 먼저
+선택됩니다. 닉네임은 바뀔 수 있으므로 반드시 숫자 사용자 ID를 사용하세요. 기존 대화는
+Discord의 `Read Message History` 권한이 있어야 읽을 수 있습니다.
 
 ## 장치 로그 진단
 

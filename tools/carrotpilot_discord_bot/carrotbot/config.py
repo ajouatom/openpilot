@@ -32,6 +32,13 @@ def _bool(name: str, default: bool) -> bool:
   raise ValueError(f"{name}은 true 또는 false여야 합니다: {raw}")
 
 
+def _id_set(name: str) -> frozenset[str]:
+  values = {item.strip() for item in os.getenv(name, "").split(",") if item.strip()}
+  if any(not item.isdigit() for item in values):
+    raise ValueError(f"{name}은 쉼표로 구분한 Discord 숫자 ID 목록이어야 합니다.")
+  return frozenset(values)
+
+
 @dataclass(frozen=True)
 class Config:
   discord_token: str
@@ -47,6 +54,7 @@ class Config:
   repo_path: Path
   database_path: Path
   device_logs_path: Path | None
+  priority_discord_user_ids: frozenset[str]
 
   @classmethod
   def from_env(cls) -> Config:
@@ -75,4 +83,5 @@ class Config:
         if os.getenv("DEVICE_LOGS_PATH", "").strip()
         else None
       ),
+      priority_discord_user_ids=_id_set("PRIORITY_DISCORD_USER_IDS"),
     )

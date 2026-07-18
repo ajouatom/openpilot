@@ -55,6 +55,8 @@ class CarrotPilotBot(discord.Client):
     )
     self._repository_ready = False
     self._updater_task: asyncio.Task[None] | None = None
+    self._history_sync_task: asyncio.Task[None] | None = None
+    self._history_sync_started = False
 
   async def on_ready(self) -> None:
     log.info(
@@ -76,6 +78,47 @@ class CarrotPilotBot(discord.Client):
       )
     if self._updater_task is None or self._updater_task.done():
       self._updater_task = asyncio.create_task(self._update_repository_loop())
+    if not self._history_sync_started:
+      self._history_sync_started = True
+      self._history_sync_task = asyncio.create_task(self._sync_discord_history())
+
+  def _archive_discord_message(self, message: discord.Message) -> None:
+    content = redact_attachment_text(message.content.strip()) if message.content.strip() else ""
+    if not content:
+      return
+    self.storage.save_discord_message(
+      str(message.id),
+      str(message.channel.id),
+      str(message.author.id),
+      message.author.display_name,
+      message.author.bot,
+      content,
+      message.created_at.isoformat(),
+    )
+
+  async def _sync_discord_history(self) -> None:
+    channel = self.get_channel(self.config.discord_channel_id)
+    if not isinstance(channel, discord.TextChannel):
+      log.warning("Discord history sync skipped: configured channel is unavailable or not a text channel")
+      return
+    sources: list[discord.TextChannel | discord.Thread] = [channel, *channel.threads]
+    try:
+      async for thread in channel.archived_threads(limit=30):
+        if all(existing.id != thread.id for existing in sources):
+          sources.append(thread)
+    except (discord.Forbidden, discord.HTTPException):
+      log.warning("Could not list archived Discord threads", exc_info=True)
+
+    saved = 0
+    for source in sources:
+      history_limit = 120 if source.id == channel.id else 60
+      try:
+        async for item in source.history(limit=history_limit, oldest_first=False):
+          self._archive_discord_message(item)
+          saved += 1
+      except (discord.Forbidden, discord.HTTPException):
+        log.warning("Could not read Discord history channel=%s", source.id, exc_info=True)
+    log.info("Discord history sync completed: sources=%d messages=%d", len(sources), saved)
 
   async def _update_repository_loop(self) -> None:
     while not self.is_closed():
@@ -168,7 +211,10 @@ class CarrotPilotBot(discord.Client):
     }
 
   async def on_message(self, message: discord.Message) -> None:
-    if message.author.bot or not self._allowed_channel(message.channel):
+    if not self._allowed_channel(message.channel):
+      return
+    self._archive_discord_message(message)
+    if message.author.bot:
       return
     question = self._question_from(message)
     if question is None:
@@ -182,9 +228,11 @@ class CarrotPilotBot(discord.Client):
     if question in {"!상태", "!status"}:
       info = await asyncio.to_thread(self.repository.repo_info)
       logs_status = "연결됨" if self.repository.device_logs.is_available() else "미연결"
+      discord_messages = self.storage.discord_message_count()
       await message.reply(
         f"정상 동작 중 · bot `{BOT_VERSION}` · `{info['branch']}` / "
-        + f"`{info['commit']}` · `{self.config.openai_model}` · 장치 로그 `{logs_status}`",
+        + f"`{info['commit']}` · `{self.config.openai_model}` · 장치 로그 `{logs_status}` "
+        + f"· Discord 대화 `{discord_messages}개`",
         mention_author=False,
       )
       return
@@ -219,6 +267,11 @@ class CarrotPilotBot(discord.Client):
     info = await asyncio.to_thread(self.repository.repo_info)
     cache_model = f"{self.config.openai_model}@bot-{BOT_VERSION}"
     history = self.storage.recent_history(context_id)
+    discord_context = self.storage.similar_discord_context(
+      question,
+      context_id,
+      self.config.priority_discord_user_ids,
+    )
     uses_device_logs = contains_dongle_id(question) or any(contains_dongle_id(item[0]) for item in history)
     cached = None if image_urls or attachment_texts or uses_device_logs else self.storage.cached_answer(question, info["commit"], cache_model)
     if cached is not None:
@@ -247,6 +300,7 @@ class CarrotPilotBot(discord.Client):
           self._member_profile(message),
           image_urls,
           attachment_texts,
+          discord_context,
         )
       self.storage.save_answer(
         context_id,
