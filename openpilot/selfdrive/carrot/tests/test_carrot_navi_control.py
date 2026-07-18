@@ -101,6 +101,24 @@ def test_off_route_suppresses_distance_based_control():
   assert not control.current.present
 
 
+def test_control_rejects_encoded_or_invalid_road_limit():
+  encoded = parse_carrot_navi_control(_message(speed={
+    "meta": _meta(5),
+    "roadLimitValid": True,
+    "roadLimitKph": 1020,
+  }))
+  assert encoded is not None
+  assert encoded.speed.road_limit_kph is None
+
+  invalid = parse_carrot_navi_control(_message(speed={
+    "meta": _meta(6),
+    "roadLimitValid": True,
+    "roadLimitKph": 300,
+  }))
+  assert invalid is not None
+  assert invalid.speed.road_limit_kph is None
+
+
 def test_disconnected_or_wrong_schema_is_rejected():
   assert parse_carrot_navi_control(_message(connected=False)) is None
   assert parse_carrot_navi_control(_message(schemaVersion=2)) is None
