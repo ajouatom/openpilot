@@ -7,6 +7,8 @@ REMOTE_NAME="${REMOTE_NAME:-origin}"
 RELEASE_REMOTE_URL="${RELEASE_REMOTE_URL:-}"
 VERSION="${VERSION:-carrot_v$(date +%y%m%d)}"
 MIN_FREE_AFTER_BACKUP_KB="${MIN_FREE_AFTER_BACKUP_KB:-524288}"
+RELEASE_PUSH_BATCH_MB="${RELEASE_PUSH_BATCH_MB:-32}"
+RELEASE_PUSH_RETRIES="${RELEASE_PUSH_RETRIES:-3}"
 
 DRY_RUN=0
 RECOVER_ONLY=0
@@ -15,6 +17,7 @@ BACKUP_READY=0
 BACKUP_TMP=""
 RECOVERY_SCRIPT_COPY="${BUILD_CARROT_RECOVERY_COPY:-}"
 ASKPASS_FILE=""
+GIT_AUTH_CONFIG=()
 
 log() {
   printf '[build_carrot] %s\n' "$*"
@@ -46,7 +49,7 @@ Options:
 
 Environment variables with the same names can also be used:
 SOURCE_DIR, BACKUP_DIR, REMOTE_NAME, RELEASE_REMOTE_URL, VERSION, and
-MIN_FREE_AFTER_BACKUP_KB.
+MIN_FREE_AFTER_BACKUP_KB, RELEASE_PUSH_BATCH_MB, and RELEASE_PUSH_RETRIES.
 EOF
 }
 
@@ -223,6 +226,9 @@ if [[ -e /data/params/d/IsOnroad ]]; then
 fi
 
 git -C "$SOURCE_DIR" check-ref-format --branch "$VERSION" >/dev/null || die "invalid release branch: $VERSION"
+[[ "$RELEASE_PUSH_BATCH_MB" =~ ^[1-9][0-9]*$ ]] || die "RELEASE_PUSH_BATCH_MB must be a positive integer"
+[[ "$RELEASE_PUSH_RETRIES" =~ ^[1-9][0-9]*$ ]] || die "RELEASE_PUSH_RETRIES must be a positive integer"
+RELEASE_PUSH_BATCH_BYTES=$((RELEASE_PUSH_BATCH_MB * 1024 * 1024))
 
 if [[ "$PROMPT_GITHUB_TOKEN" -eq 1 && -z "${GITHUB_TOKEN:-}" ]]; then
   read -r -s -p "GitHub token: " GITHUB_TOKEN
@@ -242,8 +248,16 @@ EOF
   export BUILD_CARROT_GITHUB_TOKEN="$GITHUB_TOKEN"
   export GIT_ASKPASS="$ASKPASS_FILE"
   export GIT_TERMINAL_PROMPT=0
+  GIT_AUTH_CONFIG=(-c credential.helper=)
   unset GITHUB_TOKEN
 fi
+
+git_release() {
+  # Release refs never introduce new LFS content, and this repository doesn't
+  # use LFS file locking. Keep the LFS hook enabled for object verification,
+  # but skip the lock API which requires a separate authentication round-trip.
+  git "${GIT_AUTH_CONFIG[@]}" -c lfs.locksverify=false "$@"
+}
 
 if [[ -n "$RELEASE_REMOTE_URL" ]]; then
   PUSH_TARGET="$RELEASE_REMOTE_URL"
@@ -254,18 +268,18 @@ else
   REMOTE_LABEL="$REMOTE_NAME"
 fi
 
-git -C "$SOURCE_DIR" ls-remote "$PUSH_TARGET" HEAD >/dev/null || die "cannot access release remote: $REMOTE_LABEL"
+git_release -C "$SOURCE_DIR" ls-remote "$PUSH_TARGET" HEAD >/dev/null || die "cannot access release remote: $REMOTE_LABEL"
 
 SOURCE_COMMIT="$(git -C "$SOURCE_DIR" rev-parse HEAD)"
-PREFLIGHT_REFS="$(git -C "$SOURCE_DIR" ls-remote --heads "$PUSH_TARGET" "refs/heads/$VERSION")"
+PREFLIGHT_REFS="$(git_release -C "$SOURCE_DIR" ls-remote --heads "$PUSH_TARGET" "refs/heads/$VERSION")"
 PREFLIGHT_SHA="$(printf '%s\n' "$PREFLIGHT_REFS" | awk 'NR == 1 {print $1}')"
 if [[ -n "$PREFLIGHT_SHA" ]]; then
-  git -C "$SOURCE_DIR" push --dry-run \
+  git_release -C "$SOURCE_DIR" push --dry-run \
     --force-with-lease="refs/heads/$VERSION:$PREFLIGHT_SHA" \
-    "$PUSH_TARGET" "$SOURCE_COMMIT:refs/heads/$VERSION" >/dev/null 2>&1 || die "GitHub token does not have push access"
+    "$PUSH_TARGET" "$SOURCE_COMMIT:refs/heads/$VERSION" >/dev/null || die "release remote rejected the preflight push"
 else
-  git -C "$SOURCE_DIR" push --dry-run \
-    "$PUSH_TARGET" "$SOURCE_COMMIT:refs/heads/$VERSION" >/dev/null 2>&1 || die "GitHub token does not have push access"
+  git_release -C "$SOURCE_DIR" push --dry-run \
+    "$PUSH_TARGET" "$SOURCE_COMMIT:refs/heads/$VERSION" >/dev/null || die "release remote rejected the preflight push"
 fi
 
 log "Source:  $SOURCE_DIR"
@@ -308,24 +322,103 @@ rm -rf -- .sconsign.dblite Jenkinsfile release/
 rm -f -- openpilot/selfdrive/modeld/models/*.onnx
 touch prebuilt
 
-git add -f -A
-git diff --cached --quiet && die "release cleanup produced no changes"
-git commit -m "$VERSION"
-
 BIG_FILES="$(find . -type f -not -path './.git/*' -size +95M -print)"
 [[ -z "$BIG_FILES" ]] || die "files exceeding the GitHub size limit were found:\n$BIG_FILES"
 
-RELEASE_COMMIT="$(git rev-parse HEAD)"
-REMOTE_REFS="$(git ls-remote --heads "$PUSH_TARGET" "refs/heads/$VERSION")"
-REMOTE_SHA="$(printf '%s\n' "$REMOTE_REFS" | awk 'NR == 1 {print $1}')"
+REMOTE_SHA="$PREFLIGHT_SHA"
 
-if [[ -n "$REMOTE_SHA" ]]; then
-  log "Updating existing branch $VERSION with force-with-lease"
-  git push --force-with-lease="refs/heads/$VERSION:$REMOTE_SHA" "$PUSH_TARGET" "HEAD:refs/heads/$VERSION"
-else
-  log "Pushing new branch $VERSION"
-  git push "$PUSH_TARGET" "HEAD:refs/heads/$VERSION"
+push_release_head() {
+  local label="$1"
+  local current_sha attempt remote_after
+
+  current_sha="$(git rev-parse HEAD)"
+  for ((attempt = 1; attempt <= RELEASE_PUSH_RETRIES; attempt++)); do
+    log "Pushing $label (attempt $attempt/$RELEASE_PUSH_RETRIES)"
+    if [[ -n "$REMOTE_SHA" ]]; then
+      if git_release push --force-with-lease="refs/heads/$VERSION:$REMOTE_SHA" \
+          "$PUSH_TARGET" "HEAD:refs/heads/$VERSION"; then
+        REMOTE_SHA="$current_sha"
+        return 0
+      fi
+    elif git_release push "$PUSH_TARGET" "HEAD:refs/heads/$VERSION"; then
+      REMOTE_SHA="$current_sha"
+      return 0
+    fi
+
+    # The server can update the ref even when the client loses the HTTP
+    # response. Treat that case as success before retrying.
+    remote_after="$(git_release ls-remote --heads "$PUSH_TARGET" "refs/heads/$VERSION" 2>/dev/null | awk 'NR == 1 {print $1}' || true)"
+    if [[ "$remote_after" == "$current_sha" ]]; then
+      log "$label reached the remote despite the interrupted response"
+      REMOTE_SHA="$current_sha"
+      return 0
+    fi
+
+    if (( attempt < RELEASE_PUSH_RETRIES )); then
+      log "$label push failed; retrying"
+      sleep $((attempt * 2))
+    fi
+  done
+  die "failed to push $label after $RELEASE_PUSH_RETRIES attempts"
+}
+
+BATCH_INDEX=0
+BATCH_BYTES=0
+BATCH_PATHS=()
+
+commit_release_batch() {
+  ((${#BATCH_PATHS[@]} > 0)) || return 0
+
+  git add -f -A -- "${BATCH_PATHS[@]}"
+  BATCH_PATHS=()
+  BATCH_BYTES=0
+  git diff --cached --quiet && return 0
+
+  BATCH_INDEX=$((BATCH_INDEX + 1))
+  git commit -m "$VERSION build batch $BATCH_INDEX"
+  push_release_head "release batch $BATCH_INDEX"
+}
+
+# Stage build products in bounded batches. Each intermediate push seeds the
+# remote with the next group of blobs, avoiding one large HTTP request. The
+# commits are squashed below, so the final release branch still has one commit.
+mapfile -d '' -t RELEASE_PATHS < <(
+  {
+    git diff --name-only -z
+    git ls-files --others -z
+  } | sort -zu
+)
+((${#RELEASE_PATHS[@]} > 0)) || die "release cleanup produced no changes"
+
+for path in "${RELEASE_PATHS[@]}"; do
+  path_bytes=0
+  if [[ -e "$path" || -L "$path" ]]; then
+    path_bytes="$(stat -c '%s' -- "$path")"
+  fi
+
+  if ((${#BATCH_PATHS[@]} > 0 && BATCH_BYTES + path_bytes > RELEASE_PUSH_BATCH_BYTES)); then
+    commit_release_batch
+  fi
+  BATCH_PATHS+=("$path")
+  BATCH_BYTES=$((BATCH_BYTES + path_bytes))
+done
+commit_release_batch
+
+# Catch files created or changed while the batches were being committed.
+git add -f -A
+if ! git diff --cached --quiet; then
+  BATCH_INDEX=$((BATCH_INDEX + 1))
+  git commit -m "$VERSION build batch $BATCH_INDEX"
+  push_release_head "release batch $BATCH_INDEX"
 fi
+
+# Replace the temporary batch history with the original single release commit.
+# All large blobs already exist on the remote, so this final force-with-lease
+# push only transfers the final commit and tree metadata.
+git reset --soft "$SOURCE_COMMIT"
+git commit -m "$VERSION"
+RELEASE_COMMIT="$(git rev-parse HEAD)"
+push_release_head "final release commit"
 
 log "Release pushed: $VERSION @ $RELEASE_COMMIT"
 log "Automatic source restoration will run now"
