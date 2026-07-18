@@ -1,5 +1,4 @@
 import time
-from collections import deque
 import pyray as rl
 from dataclasses import dataclass
 from openpilot.common.constants import CV
@@ -59,6 +58,21 @@ class Colors:
   HEADER_GRADIENT_START = rl.Color(0, 0, 0, 114)
   HEADER_GRADIENT_END = rl.BLANK
   CARROT_GREEN = rl.Color(0, 203, 0, 255)
+  BLACK_90 = rl.Color(0, 0, 0, 90)
+  RED_180 = rl.Color(255, 0, 0, 180)
+  GREEN_190 = rl.Color(0, 255, 0, 190)
+  GREEN_200 = rl.Color(0, 255, 0, 200)
+  GREEN_210 = rl.Color(0, 255, 0, 210)
+  BLUE_210 = rl.Color(0, 120, 255, 210)
+  RED_200 = rl.Color(255, 0, 0, 200)
+  RED_210 = rl.Color(255, 0, 0, 210)
+  YELLOW_210 = rl.Color(255, 255, 0, 210)
+  WHITE_210 = rl.Color(255, 255, 255, 210)
+  WHITE_220 = rl.Color(255, 255, 255, 220)
+  TPMS_LOW = rl.Color(255, 90, 90, 220)
+  ORANGE_200 = rl.Color(255, 165, 0, 200)
+  ORANGE_230 = rl.Color(255, 165, 0, 230)
+  RED_SOLID = rl.Color(255, 0, 0, 255)
 
 
 UI_CONFIG = UIConfig()
@@ -193,8 +207,13 @@ class HudRenderer(Widget):
     self._voltage = 0.0
     self._device_info_loaded = False
     self._device_info_recv_frames = (-1, -1)
+    self._cpu_temp_text = "0°C"
+    self._memory_usage_text = "0%"
+    self._disk_usage_text = "100%"
+    self._voltage_text = "0.0V"
     self._plot_renderer = None
     self._render_timings = HudRenderTimings()
+    self._round_box_rect = rl.Rectangle(0.0, 0.0, 0.0, 0.0)
 
     self._hud_params_next_refresh_time = 0.0
     self._show_device_state = 0
@@ -380,7 +399,11 @@ class HudRenderer(Widget):
                       roundness=0.25,
                       segments=8,
                       line_thickness=2):
-    rect = rl.Rectangle(float(x), float(y), float(w), float(h))
+    rect = self._round_box_rect
+    rect.x = float(x)
+    rect.y = float(y)
+    rect.width = float(w)
+    rect.height = float(h)
     rl.draw_rectangle_rounded(rect, roundness, segments, fill_color)
     if line_color is not None and line_thickness > 0:
       rl.draw_rectangle_rounded_lines_ex(rect, roundness, segments, float(line_thickness), line_color)
@@ -397,7 +420,7 @@ class HudRenderer(Widget):
       0.0,
       tint,
     )
-  
+
   def _get_gear_text(self) -> str:
     sm = ui_state.sm
 
@@ -457,18 +480,18 @@ class HudRenderer(Widget):
     try:
       mode_val = int(ui_state.sm["longitudinalPlan"].myDrivingMode)
     except Exception:
-      return "", rl.Color(255, 255, 255, 200)
+      return "", COLORS.WHITE_TRANSLUCENT
 
     if mode_val == 1:   # eco
-      return tr("eco"), rl.Color(0, 255, 0, 200)
+      return tr("eco"), COLORS.GREEN_200
     if mode_val == 2:   # safe
-      return tr("safe"), rl.Color(255, 165, 0, 200)
+      return tr("safe"), COLORS.ORANGE_200
     if mode_val == 3:   # normal
-      return tr("norm"), rl.Color(255, 255, 255, 200)
+      return tr("norm"), COLORS.WHITE_TRANSLUCENT
     if mode_val == 4:   # high
-      return tr("high"), rl.Color(255, 0, 0, 200)
+      return tr("high"), COLORS.RED_200
 
-    return "", rl.Color(255, 255, 255, 200)
+    return "", COLORS.WHITE_TRANSLUCENT
 
   def _update_device_info(self):
     sm = ui_state.sm
@@ -508,6 +531,10 @@ class HudRenderer(Widget):
     except Exception:
       loaded = False
 
+    self._cpu_temp_text = f"{self._cpu_temp:.0f}°C"
+    self._memory_usage_text = f"{self._memory_usage}%"
+    self._disk_usage_text = f"{100 - self._free_space:.0f}%"
+    self._voltage_text = f"{self._voltage:.1f}V"
     self._device_info_loaded = loaded
 
   def _get_active_carrot(self) -> int:
@@ -652,7 +679,7 @@ class HudRenderer(Widget):
       if ov.speed_color_mode == 1:
         ov_color = rl.GREEN
       elif ov.speed_color_mode == 2:
-        ov_color = rl.Color(255, 165, 0, 230)
+        ov_color = COLORS.ORANGE_230
       else:
         ov_color = rl.GREEN
 
@@ -731,7 +758,7 @@ class HudRenderer(Widget):
     mode_text, mode_color = self._get_driving_mode_text_and_color()
     if self._debug_speed_panel:
       mode_text = "safe"
-      mode_color = rl.Color(255, 165, 0, 230)
+      mode_color = COLORS.ORANGE_230
 
     # driving mode
     if mode_text:
@@ -784,7 +811,7 @@ class HudRenderer(Widget):
         dy - ddy * (i + 1) + 2,
         70,
         ddy - 2,
-        rl.Color(0, 255, 0, 210),
+        COLORS.GREEN_210,
         line_color=rl.WHITE,
         roundness=0.12,
         segments=4,
@@ -798,7 +825,7 @@ class HudRenderer(Widget):
 
     self._draw_round_box(
       gx - 35, gy - 70, 70, 80,
-      rl.Color(0, 255, 0, 210),
+      COLORS.GREEN_210,
       line_color=rl.WHITE,
       roundness=0.20,
       segments=8,
@@ -837,7 +864,7 @@ class HudRenderer(Widget):
     elif active_carrot >= 1:
       self._draw_round_box(
         dx - 55, dy - 38, 110, 48,
-        rl.Color(0, 120, 255, 210),
+        COLORS.BLUE_210,
         line_color=rl.WHITE,
         roundness=0.25,
         segments=8,
@@ -867,22 +894,22 @@ class HudRenderer(Widget):
     dy = by + 175
 
     disp_speed = 0
-    limit_color = rl.Color(0, 255, 0, 210)
+    limit_color = COLORS.GREEN_210
     label = "LIMIT"
 
     if x_spd_limit > 0 and x_sign_type != 22:
       disp_speed = int(x_spd_limit if ui_state.is_metric else (x_spd_limit * KM_TO_MILE + 0.5))
       label = "CAM"
       if self._blink_timer <= 8:
-        limit_color = rl.Color(255, 0, 0, 210)
+        limit_color = COLORS.RED_210
       else:
-        limit_color = rl.Color(255, 255, 0, 210)
+        limit_color = COLORS.YELLOW_210
     else:
       disp_speed = int(road_limit_speed if ui_state.is_metric else (road_limit_speed * KM_TO_MILE + 0.5))
       if self.speed > disp_speed + 2:
-        limit_color = rl.Color(255, 0, 0, 210)
+        limit_color = COLORS.RED_210
       else:
-        limit_color = rl.Color(255, 255, 255, 210)
+        limit_color = COLORS.WHITE_210
 
     draw_text_ui_style(
       label, dx, dy - 45, 30, rl.WHITE,
@@ -915,9 +942,9 @@ class HudRenderer(Widget):
 
     stroke_color = rl.WHITE
     if cam_detected and self._blink_timer > 8:
-      bg_color = rl.Color(255, 0, 0, 180)
+      bg_color = COLORS.RED_180
     else:
-      bg_color = rl.Color(0, 0, 0, 90)
+      bg_color = COLORS.BLACK_90
 
     if self._show_device_state > 0:
       self._draw_round_box(
@@ -944,20 +971,20 @@ class HudRenderer(Widget):
 
     dx = bx - 35
     dy = by - 200
-    ok_color = rl.Color(0, 255, 0, 190)
+    ok_color = COLORS.GREEN_190
 
     # CPU
-    cpu_fill = rl.Color(255, 0, 0, 255) if (self._cpu_temp > 80 and self._blink_timer <= 8) else ok_color
+    cpu_fill = COLORS.RED_SOLID if (self._cpu_temp > 80 and self._blink_timer <= 8) else ok_color
     self._draw_round_box(dx - 65, dy - 38, 130, 90, cpu_fill, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
     draw_text_ui_style("CPU", dx, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
-    draw_text_ui_style(f"{self._cpu_temp:.0f}°C", dx, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
+    draw_text_ui_style(self._cpu_temp_text, dx, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
 
     # MEM
     dx2 = dx + 150
-    mem_fill = rl.Color(255, 0, 0, 255) if (self._memory_usage > 85 and self._blink_timer <= 8) else ok_color
+    mem_fill = COLORS.RED_SOLID if (self._memory_usage > 85 and self._blink_timer <= 8) else ok_color
     self._draw_round_box(dx2 - 65, dy - 38, 130, 90, mem_fill, line_color=rl.WHITE, roundness=0.16, segments=8, line_thickness=2)
     draw_text_ui_style("MEM", dx2, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
-    draw_text_ui_style(f"{self._memory_usage}%", dx2, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
+    draw_text_ui_style(self._memory_usage_text, dx2, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
 
     # DISK / VOLT
     dx3 = dx2 + 150
@@ -965,10 +992,10 @@ class HudRenderer(Widget):
 
     if self._disp_timer < 32:
       draw_text_ui_style("DISK", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
-      draw_text_ui_style(f"{100 - self._free_space:.0f}%", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
+      draw_text_ui_style(self._disk_usage_text, dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
     else:
       draw_text_ui_style("VOLT", dx3, dy - 5, 25, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
-      draw_text_ui_style(f"{self._voltage:.1f}V", dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
+      draw_text_ui_style(self._voltage_text, dx3, dy + 40, 40, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=4.0, align="center_bottom")
 
   def _draw_date_time(self, rect: rl.Rectangle) -> None:
     show_datetime = self._show_date_time
@@ -1010,10 +1037,10 @@ class HudRenderer(Widget):
 
   def _get_tpms_color(self, tpms: float) -> rl.Color:
     if tpms < 5 or tpms > 60:
-      return rl.Color(255, 255, 255, 220)
+      return COLORS.WHITE_220
     if tpms < 31:
-      return rl.Color(255, 90, 90, 220)
-    return rl.Color(255, 255, 255, 220)
+      return COLORS.TPMS_LOW
+    return COLORS.WHITE_220
 
   def _get_tpms_text(self, tpms: float) -> str:
     if tpms < 5 or tpms > 60:
@@ -1145,7 +1172,8 @@ class HudRenderer(Widget):
     if remain_sec <= 0:
       return ""
 
-    eta_tm = time.localtime(time.time() + remain_sec)
+    # Arrival time is wall-clock based; monotonic time cannot be converted to local time.
+    eta_tm = time.localtime(time.time() + remain_sec)  # noqa: TID251
     remain_min = remain_sec / 60.0
     return f"도착: {remain_min:.1f}분({eta_tm.tm_hour:02d}:{eta_tm.tm_min:02d})"
 
