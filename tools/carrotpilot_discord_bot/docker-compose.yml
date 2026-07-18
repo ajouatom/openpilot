@@ -1,0 +1,21 @@
+services:
+  carrotpilot-bot:
+    build: .
+    container_name: carrotpilot-discord-bot
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ./config/bot.env
+    volumes:
+      - ./data:/data
+      - ./repos:/repos
+      - ./carrotbot:/app/carrotbot:ro
+      - /volume1/openpilot/carrot-wip:/device-logs:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 768m
