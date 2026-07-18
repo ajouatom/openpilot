@@ -71,7 +71,7 @@ class DeviceLogs:
   def is_available(self) -> bool:
     return self.root is not None and self.root.is_dir()
 
-  def _device_folder(self, dongle_id: str) -> Path:
+  def _device_folders(self, dongle_id: str) -> list[Path]:
     normalized = dongle_id.strip().lower()
     if not re.fullmatch(r"[0-9a-f]{16}", normalized):
       raise DeviceLogError("동글 ID는 영문 a~f와 숫자로 된 16자리 값이어야 합니다.")
@@ -83,9 +83,7 @@ class DeviceLogs:
     ]
     if not matches:
       raise DeviceLogError("해당 동글 ID의 업로드 로그를 찾지 못했습니다. 장치가 최근 로그를 전송했는지 확인해 주세요.")
-    if len(matches) > 1:
-      raise DeviceLogError("같은 동글 ID의 폴더가 여러 개라서 자동 선택할 수 없습니다.")
-    return matches[0]
+    return matches
 
   @staticmethod
   def _select(files: list[Path], offset: int) -> Path | None:
@@ -132,13 +130,23 @@ class DeviceLogs:
     except ValueError as exc:
       raise DeviceLogError("로그 날짜는 YYYY-MM-DD 형식이어야 합니다.") from exc
     date_token = parsed_date.strftime("%Y%m%d")
-    folder = self._device_folder(dongle_id)
-    log_file = self._select(list(folder.glob(f"onroad-{date_token}-*.txt")), session_offset)
+    folders = self._device_folders(dongle_id)
+    dated_logs = [
+      log_file
+      for folder in folders
+      for log_file in folder.glob(f"onroad-{date_token}-*.txt")
+    ]
+    log_file = self._select(dated_logs, session_offset)
     if log_file is None:
       raise DeviceLogError(
         f"{requested_date} 날짜의 onroad 로그가 없습니다. 과거 날짜의 로그는 대신 사용하지 않습니다. "
         + "장치가 해당 날짜 로그를 전송했는지 확인해 주세요."
       )
+
+    # A dongle can appear under several historical vehicle folders. Select the
+    # requested date's newest session across all folders, then pair settings
+    # with the vehicle folder that owns that session.
+    folder = log_file.parent
 
     # 같은 세션 이름의 설정 파일을 우선하고, 없으면 동일 순번의 최신 설정을 사용한다.
     session = log_file.name.removeprefix("onroad-").split("-carrot", 1)[0]
