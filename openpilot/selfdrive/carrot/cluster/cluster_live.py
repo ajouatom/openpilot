@@ -19,7 +19,7 @@ from cluster_models import (
     NaviGuidanceImage,
     NaviTrafficLightInfo,
 )
-from cluster_navi import fresh_carrot_navi, parse_carrot_navi
+from cluster_navi import fresh_carrot_navi, parse_carrot_navi, resolve_navi_speed_limit
 from cluster_navi_source import NaviIpcMediaSource
 from cluster_route_replay import RouteLogParser, finite_float, frame_to_state, safe_get, safe_optional_float
 from cluster_utils import clamp
@@ -362,13 +362,11 @@ class OpenpilotLiveSource:
         )
         external_nav_active = (active_carrot is not None and active_carrot > 0.0) or navi_guidance_active
 
-        speed_limit_kph = state.speed_limit_kph
-        speed_limit_source = state.speed_limit_source
-        if speed_limit_kph is None and navi_live is not None and navi_live.speed is not None:
-            navi_limit = navi_live.speed.road_limit_kph
-            if navi_limit is not None and navi_limit > 0:
-                speed_limit_kph = navi_limit
-                speed_limit_source = "n"
+        speed_limit_kph, speed_limit_source = resolve_navi_speed_limit(
+            state.speed_limit_kph,
+            state.speed_limit_source,
+            navi_live,
+        )
 
         cruise_override_kph = None
         cruise_override_label = None

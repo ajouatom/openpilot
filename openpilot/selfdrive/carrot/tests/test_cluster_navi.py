@@ -15,7 +15,7 @@ CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_config import RADAR_TO_CAMERA_M, VEHICLE_LENGTH_M
-from cluster_navi import fresh_carrot_navi, parse_carrot_navi
+from cluster_navi import fresh_carrot_navi, parse_carrot_navi, resolve_navi_speed_limit
 from cluster_navi_overlay import merge_navi_overlay_state
 from cluster_navi_source import (
   DecodedH264Frame,
@@ -68,6 +68,20 @@ def _decoded_yuv_frame(value: bytes) -> DecodedH264Frame:
     planes=(value * 4, b"\x80", b"\x80"),
     strides=(2, 1, 1),
   )
+
+
+def _parse_speed_only_navi(speed_value: dict, sequence: int = 1):
+  payload = build_carrot_navi_payload({
+    "generation": sequence,
+    "session_id": "session",
+    "connected": True,
+    "items": {
+      "speed": _record(speed_value, sequence, 100.0),
+    },
+  }, publish_mono_ns=100_100_000_000)
+  state = parse_carrot_navi(_namespace(payload), now=100.1)
+  assert state is not None
+  return state
 
 
 def test_parse_and_expire_live_navi_groups_independently():
@@ -131,6 +145,22 @@ def test_parse_and_expire_live_navi_groups_independently():
   after_all_expiry, next_expiry = fresh_carrot_navi(after_live_expiry, now=160.1)
   assert after_all_expiry is None
   assert next_expiry == float("inf")
+
+
+def test_navi_speed_limit_overrides_legacy_navigation_default_but_not_vehicle_limit():
+  navi_50 = _parse_speed_only_navi({"current_kph": 42, "road_limit_kph": 50})
+
+  assert resolve_navi_speed_limit(30, "n", navi_50) == (50, "n")
+  assert resolve_navi_speed_limit(None, None, navi_50) == (50, "n")
+  assert resolve_navi_speed_limit(80, "v", navi_50) == (80, "v")
+
+
+def test_navi_speed_limit_unknown_clears_legacy_navigation_default():
+  navi_unknown = _parse_speed_only_navi({"current_kph": 42})
+
+  assert navi_unknown.speed is not None
+  assert navi_unknown.speed.road_limit_kph is None
+  assert resolve_navi_speed_limit(30, "n", navi_unknown) == (None, None)
 
 
 def test_disconnected_snapshot_clears_live_navi():
