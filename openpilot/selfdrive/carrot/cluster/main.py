@@ -81,6 +81,7 @@ from cluster_simulator import ClusterSimulator, RandomInputSource
 from cluster_system_monitor import ClusterProcessCoreUsageSampler, NetworkAddressProvider
 from cluster_usb_display import TuringUsbDisplay, find_supported_usb_product, product_id_for_hud_mode
 from cluster_usb_pipeline import AsyncJpegUsbPipeline
+from openpilot.selfdrive.controls.lib.cutin_alert import CutinAlertCandidate, CutinAlertTracker
 
 DEFAULT_FPS = 0.0
 DEFAULT_USB_BRIGHTNESS = 80
@@ -145,13 +146,29 @@ def route_log_kind_for_path(path: Path, fallback: str) -> str:
     return fallback
 
 
-def route_state_has_cutin(state: object) -> bool:
+def route_state_cutin_candidates(state: object) -> tuple[CutinAlertCandidate, ...]:
     detected_vehicles = getattr(state, "detected_vehicles", ()) or ()
-    if any(bool(getattr(vehicle, "cut_in", False)) for vehicle in detected_vehicles):
-        return True
+    candidates = tuple(
+        CutinAlertCandidate(
+            int(-1 if getattr(vehicle, "radar_track_id", None) is None else getattr(vehicle, "radar_track_id")),
+            float(getattr(vehicle, "longitudinal_m", 0.0) or 0.0),
+            float(getattr(vehicle, "lateral_m", 0.0) or 0.0),
+            float(getattr(vehicle, "relative_speed_mps", 0.0) or 0.0),
+        )
+        for vehicle in detected_vehicles
+        if bool(getattr(vehicle, "cut_in", False))
+    )
+    if candidates:
+        return candidates
     overlay = getattr(state, "route_overlay", None)
     cutin_status = str(getattr(overlay, "cutin_status", "") or "").upper()
-    return "CUTIN" in cutin_status and ": YES" in cutin_status
+    if "CUTIN" in cutin_status and ": YES" in cutin_status:
+        return (CutinAlertCandidate(-1, 0.0, 0.0, 0.0),)
+    return ()
+
+
+def route_state_has_cutin(state: object) -> bool:
+    return bool(route_state_cutin_candidates(state))
 
 
 def play_cutin_alert() -> None:
@@ -829,7 +846,7 @@ def run_demo(
     active_route_overlay_mode = route_overlay_mode
     route_next_retry_time = 0.0
     route_end_waiting = False
-    route_cutin_active = False
+    route_cutin_alert_tracker = CutinAlertTracker()
     route_options = {
         "show_recorded_cutins": os.environ.get(ROUTE_SHOW_RECORDED_CUTINS_ENV) == "1",
         "front_radar_only": os.environ.get(ROUTE_FRONT_RADAR_ONLY_ENV) == "1",
@@ -868,7 +885,7 @@ def run_demo(
         nonlocal route_source
         nonlocal route_path, active_route_log_kind
         nonlocal route_playback_base_s, route_wall_base_time, route_paused
-        nonlocal route_next_retry_time, route_end_waiting, route_cutin_active
+        nonlocal route_next_retry_time, route_end_waiting
 
         new_path = new_path.resolve()
         new_log_kind = route_log_kind_for_path(new_path, active_route_log_kind)
@@ -895,7 +912,7 @@ def run_demo(
         route_paused = paused
         route_next_retry_time = 0.0
         route_end_waiting = False
-        route_cutin_active = False
+        route_cutin_alert_tracker.reset()
         if old_source is not None:
             old_source.close()
         print(
@@ -1235,7 +1252,7 @@ def run_demo(
                                     playback_seconds = 0.0
                             elif option_name == "pause_on_cutin":
                                 if not option_value:
-                                    route_cutin_active = False
+                                    route_cutin_alert_tracker.reset()
                             elif option_name == "show_route_overlay":
                                 active_route_overlay_mode = "compact" if option_value else "off"
                             elif option_name == "road_camera":
@@ -1251,7 +1268,7 @@ def run_demo(
                             playback_seconds = action.seek_s
                             route_paused = True
                             route_end_waiting = False
-                            route_cutin_active = False
+                            route_cutin_alert_tracker.reset()
 
                         requested_path = Path(action.open_path) if action.open_path is not None else None
                         if requested_path is None and (action.previous_log or action.next_log):
@@ -1299,7 +1316,7 @@ def run_demo(
                         playback_seconds = seek_s
                         route_paused = True
                         route_end_waiting = False
-                        route_cutin_active = False
+                        route_cutin_alert_tracker.reset()
                     if next_corner_lateral_offset_m != route_active_corner_lateral_offset_m:
                         route_active_corner_lateral_offset_m = next_corner_lateral_offset_m
                         route_source.corner_lateral_offset_m = route_active_corner_lateral_offset_m
@@ -1345,9 +1362,9 @@ def run_demo(
                         keep_video=keep_camera_video,
                     ),
                 )
-                cutin_active = route_state_has_cutin(state)
+                cutin_candidates = route_state_cutin_candidates(state)
                 if route_options["pause_on_cutin"]:
-                    if cutin_active and not route_cutin_active:
+                    if route_cutin_alert_tracker.update(cutin_candidates):
                         route_paused = True
                         route_playback_base_s = playback_seconds
                         route_wall_base_time = now
@@ -1356,9 +1373,8 @@ def run_demo(
                             f"CUT-IN detected at {playback_seconds:.2f}s; replay paused",
                             flush=True,
                         )
-                    route_cutin_active = cutin_active
                 else:
-                    route_cutin_active = False
+                    route_cutin_alert_tracker.reset()
                 source_status = route_source.status_text(playback_seconds, route_loop)
                 if route_end_waiting:
                     source_status += " | waiting for next log"
