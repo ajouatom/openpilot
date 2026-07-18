@@ -186,20 +186,29 @@ function launch {
   mkdir -p "$PYDEPS"
   export PYTHONPATH="$PYDEPS:$PWD${PYTHONPATH:+:$PYTHONPATH}"
 
-  # Build the Params registry before any external Python service imports it.
-  # This is independent of the full-build and prebuilt checks below.
-  if ! bash "$DIR/scripts/ensure_params_build.sh"; then
-    echo "Params registry build failed, not starting openpilot."
-    while true; do sleep 1; done
+  # Keep recovery access available even when an OS update or source build fails.
+  if [ ! -f /data/params/d/GithubSshKeys ]; then
+    echo -n openpilot > /data/params/d/GithubUsername
+    cat /usr/comma/setup_keys > /data/params/d/GithubSshKeys
   fi
-
+  if [ "$(cat /data/params/d/SshEnabled 2>/dev/null)" != "1" ]; then
+    echo -n 1 > /data/params/d/SshEnabled
+  fi
   start_carrot_recovery
-  start_carrot_web
 
   # hardware specific init
   if [ -f /AGNOS ]; then
     agnos_init
   fi
+
+  # AGNOS must be current before SCons loads its Python and native build
+  # dependencies. Build Params before any long-running carrot service imports it.
+  if ! bash "$DIR/scripts/ensure_params_build.sh"; then
+    echo "Params registry build failed, not starting openpilot."
+    while true; do sleep 1; done
+  fi
+
+  start_carrot_web
 
 
   FORCE_REBUILD=0
@@ -261,17 +270,6 @@ function launch {
     cp -f $DIR/scripts/add/events_zh.py $DIR/openpilot/selfdrive/selfdrived/events.py
   elif [ "${LANG}" = "en" ] && [[ "${GITSTAT}" == *"modified:   openpilot/selfdrive/selfdrived/events.py"* ]]; then
     cp -f $DIR/scripts/add/events_en.py $DIR/openpilot/selfdrive/selfdrived/events.py
-  fi
-
-  # openpilot default ssh key installer
-  if [ ! -f /data/params/d/GithubSshKeys ]; then
-    echo -n openpilot > /data/params/d/GithubUsername
-    cat /usr/comma/setup_keys > /data/params/d/GithubSshKeys
-  fi
-
-  # always ssh enable
-  if [ "$(cat /data/params/d/SshEnabled 2>/dev/null)" = "0" ]; then
-    echo -n 1 > /data/params/d/SshEnabled
   fi
 
   # start manager

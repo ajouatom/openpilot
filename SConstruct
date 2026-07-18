@@ -41,7 +41,19 @@ assert arch in [
 ]
 
 pkg_names = ['bzip2', 'capnproto', 'eigen', 'ffmpeg', 'libjpeg', 'libyuv', 'ncurses', 'zeromq', 'zstd']
-pkgs = [importlib.import_module(name) for name in pkg_names]
+pkgs = []
+for name in pkg_names:
+  try:
+    pkgs.append(importlib.import_module(name))
+  except ModuleNotFoundError as e:
+    # Some C3-compatible TICI images ship the system bzip2 headers/library but
+    # build Python without the optional bz2 extension. The bzip2 dependency
+    # package imports that extension while SCons is loading, so fall back to
+    # the system copy on larch64. Official AGNOS continues using the package.
+    if arch == "larch64" and name == "bzip2" and e.name == "bz2":
+      print("Python bz2 module unavailable; using the larch64 system bzip2 library.")
+      continue
+    raise
 
 
 # ***** enforce a whitelist of system libraries *****

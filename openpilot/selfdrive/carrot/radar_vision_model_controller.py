@@ -158,8 +158,6 @@ class VisionRadarMatcher:
       aliases = frozenset(prediction.features.aliases)
       if holding_previous and not aliases & self.last_aliases:
         continue
-      if aliases & self.last_aliases:
-        score *= 2.0
       candidates.append((prediction, score, radar_d, radar_y, radar_v))
 
     if not candidates:
@@ -200,7 +198,21 @@ class VisionRadarMatcher:
       self.low_probability_hold_frames = 0
       return None
 
+    ranked = sorted(candidates, key=lambda candidate: (candidate[1], -abs(candidate[2] - vision_d)), reverse=True)
     selected = max(usable, key=lambda candidate: (candidate[1], -abs(candidate[2] - vision_d)))
+    # Mirror radard's closer second-match rule for small targets whose radar
+    # distance can sit just outside the normal vision-distance gate.
+    if len(ranked) > 1 and ranked[0][0] is selected[0]:
+      closer = ranked[1]
+      closer_features = closer[0].features
+      if (
+        closer_features.track_age > 5
+        and closer_features.in_lane_prob > 0.3
+        and vision_d * 0.5 < closer[2] < selected[2]
+        and abs(closer[3] - vision_y) < 2.0
+        and velocity_sane(closer)
+      ):
+        selected = closer
     self.last_aliases = frozenset(selected[0].features.aliases)
     self.low_probability_hold_frames = self.low_probability_hold_frames + 1 if holding_previous else 0
     return VisionMatch(selected[0], probability, selected[1])

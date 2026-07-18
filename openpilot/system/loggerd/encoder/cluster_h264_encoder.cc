@@ -757,11 +757,23 @@ ClusterH264InputBuffer ClusterH264Encoder::acquire_nv12_input(const ClusterH264P
     .data = reinterpret_cast<uint8_t*>(buf->addr),
     .size = buf->len,
     .index = index,
+    .dmabuf_fd = buf->fd,
   };
 }
 
 void ClusterH264Encoder::submit_nv12_input(unsigned int index, uint64_t timestamp_us,
                                             const ClusterH264PacketCallback &on_packet) {
+  submit_nv12_input_with_sync(index, timestamp_us, on_packet, false);
+}
+
+void ClusterH264Encoder::submit_nv12_input_dmabuf(unsigned int index, uint64_t timestamp_us,
+                                                   const ClusterH264PacketCallback &on_packet) {
+  submit_nv12_input_with_sync(index, timestamp_us, on_packet, true);
+}
+
+void ClusterH264Encoder::submit_nv12_input_with_sync(unsigned int index, uint64_t timestamp_us,
+                                                      const ClusterH264PacketCallback &on_packet,
+                                                      bool dmabuf_written) {
   if (index >= CLUSTER_H264_INPUT_BUFFER_COUNT || !input_acquired_[index]) {
     throw std::runtime_error("cluster H264 encoder input buffer is not acquired");
   }
@@ -769,6 +781,9 @@ void ClusterH264Encoder::submit_nv12_input(unsigned int index, uint64_t timestam
   bool queued = false;
   try {
     auto stage_start = std::chrono::steady_clock::now();
+    if (dmabuf_written && input_buffers_[index].sync(VISIONBUF_SYNC_FROM_DEVICE) != 0) {
+      throw std::runtime_error("cluster H264 encoder failed to invalidate DMA-BUF input cache");
+    }
     if (input_buffers_[index].sync(VISIONBUF_SYNC_TO_DEVICE) != 0) {
       throw std::runtime_error("cluster H264 encoder failed to sync input to device");
     }

@@ -175,6 +175,49 @@ class CutinContinuity:
   active: bool
 
 
+@dataclass(frozen=True)
+class LeadPlotValue:
+  track_id: int
+  d_rel: float
+
+
+@dataclass(frozen=True)
+class LeadComparisonFrame:
+  radard_one: LeadPlotValue | None
+  radard_two: LeadPlotValue | None
+  model_one: LeadPlotValue | None
+  model_two: LeadPlotValue | None
+
+
+def _candidate_plot_value(frame: RadarFrame, candidate: Candidate | None) -> LeadPlotValue | None:
+  if candidate is None:
+    return None
+  distance = candidate.d_rel
+  if distance is None:
+    point = next((point for point in frame.points if point.track_id == candidate.track_id), None)
+    distance = point.d_rel if point is not None else None
+  if distance is None or not math.isfinite(distance) or distance <= 0.0:
+    return None
+  return LeadPlotValue(candidate.track_id, float(distance))
+
+
+def lead_comparison_series(
+  frames: list[RadarFrame], radard_selector: LeadSelector, model_selector: LeadSelector,
+) -> tuple[LeadComparisonFrame, ...]:
+  """Return current-radard and model control-facing distance histories."""
+  result = []
+  for index, frame in enumerate(frames):
+    radard = radard_selector.select(frame, index)
+    model = model_selector.select(frame, index)
+    result.append(LeadComparisonFrame(
+      radard_one=_candidate_plot_value(frame, radard.lead_one),
+      radard_two=_candidate_plot_value(frame, radard.lead_two),
+      model_one=_candidate_plot_value(frame, model.lead_one),
+      model_two=_candidate_plot_value(frame, model.lead_two),
+    ))
+  return tuple(result)
+
+
 def cutin_continuity_series(
   frames: list[RadarFrame], selector: LeadSelector, bridge_gap_s: float = 1.0, retain_s: float = 2.0,
 ) -> tuple[CutinContinuity | None, ...]:
@@ -1623,6 +1666,7 @@ class SimulatorUI:
     log_path: Path,
     include_scc_fusion: bool = False,
     review: ValidationReview | None = None,
+    radard_selector: LeadSelector | None = None,
   ) -> None:
     import pyray as rl
     self.rl = rl
@@ -1655,6 +1699,7 @@ class SimulatorUI:
     self.range_anchor: tuple[int, str, int | None] | None = None
     self.label_status = f"labels: {labels.count()} loaded"
     self.review = review
+    self.radard_selector = radard_selector
     self.review_events: dict[int, tuple[str, ...]] = {}
     self.review_handled: set[int] = set()
     self.review_status = ""
@@ -1664,6 +1709,10 @@ class SimulatorUI:
     self.lead_max_drop_s: list[float] = []
     self.lead_current_drop_s: list[float] = []
     self.lead_two_continuity: tuple[CutinContinuity | None, ...] = ()
+    self.lead_comparison = (
+      lead_comparison_series(self.frames, self.radard_selector, self.selector)
+      if self.radard_selector is not None else ()
+    )
     fusion = RadarObjectFusion(include_scc=include_scc_fusion)
     self.fused_frames = tuple(fusion.update(frame.mono_time_s, frame.points) for frame in frames)
     self.video_path = qcamera_path_for_log(log_path)
@@ -1885,6 +1934,23 @@ class SimulatorUI:
     )
     self._draw_text(display_label, label_x, rect.y - 1.0, 13, color)
 
+  def _draw_radard_candidate(
+    self, map_rect: Any, frame: RadarFrame, candidate: Candidate | None, color: Any, radius: float, label: str,
+    label_above: bool,
+  ) -> None:
+    if candidate is None:
+      return
+    point = self._track_point(frame, candidate.track_id)
+    distance = point.d_rel if point is not None else candidate.d_rel
+    lateral = point.y_rel if point is not None else candidate.y_rel
+    if distance is None or lateral is None or distance <= 0.0 or distance > self.forward_range_m:
+      return
+    position = self._world_to_screen(map_rect, distance, lateral)
+    self.rl.draw_circle_lines(int(position.x), int(position.y), radius, color)
+    self.rl.draw_circle_lines(int(position.x), int(position.y), radius + 1.0, color)
+    label_y = position.y - radius - 14.0 if label_above else position.y + radius + 2.0
+    self._draw_text(label, position.x + radius + 4.0, label_y, 13, color)
+
   def _candidate_visible(self, candidate: Candidate | None) -> bool:
     if candidate is None:
       return False
@@ -2012,13 +2078,17 @@ class SimulatorUI:
     else:
       self._draw_candidate(rect, frame, selection.lead_one, self._color(self.GREEN), 23.0, "1")
       self._draw_candidate(rect, frame, selection.lead_two, self._color(self.PURPLE), 29.0, "2")
+    if self.radard_selector is not None:
+      radard = self.radard_selector.select(frame, self.index)
+      self._draw_radard_candidate(rect, frame, radard.lead_one, self._color(self.CYAN), 14.0, "R1", True)
+      self._draw_radard_candidate(rect, frame, radard.lead_two, self._color(self.PURPLE), 18.0, "R2", False)
     if self.review is None:
       self._draw_manual_label(rect, frame, "leadOne", self._color(self.ORANGE), 18.0)
       self._draw_manual_label(rect, frame, "leadTwo", self._color(self.YELLOW), 22.0)
 
     point_legend = "fused objects" if self.show_fused_objects else "radar points"
     extras = f"   {point_legend} enabled" if self.show_radar_points else ""
-    legend = f"boxes: leadOne orange / leadTwo yellow{extras}"
+    legend = f"boxes: model L1 orange / L2 yellow   circles: current radard L1 cyan / L2 purple{extras}"
     self._draw_text(legend, rect.x + 18, rect.y + rect.height - 24, 14, self._color(self.MUTED))
 
   @staticmethod
@@ -2071,6 +2141,12 @@ class SimulatorUI:
       line("MODEL RESULT", self.MUTED, 15, 22)
       line("leadOne  " + self._candidate_text(frame, selection.lead_one), self.ORANGE, 17, 24)
       line("leadTwo  " + self._candidate_text(frame, selection.lead_two), self.YELLOW, 17, 31)
+
+    if self.radard_selector is not None:
+      radard = self.radard_selector.select(frame, self.index)
+      line("CURRENT RADARD RESULT", self.MUTED, 15, 22)
+      line("leadOne  " + self._candidate_text(frame, radard.lead_one), self.CYAN, 15, 22)
+      line("leadTwo  " + self._candidate_text(frame, radard.lead_two), self.PURPLE, 15, 29)
 
     if self.show_recorded_one or self.show_recorded_two:
       line("RECORDED RADARSTATE", self.MUTED, 15, 22)
@@ -2164,8 +2240,8 @@ class SimulatorUI:
     self.filter_checkboxes = {}
     multitask = self.selector.name.startswith(("multitask:", "hybrid:"))
     controls = (
-      ("recorded_one", "REC L1", self.show_recorded_one),
-      ("recorded_two", "REC L2", self.show_recorded_two),
+      ("recorded_one", "LOG L1", self.show_recorded_one),
+      ("recorded_two", "LOG L2", self.show_recorded_two),
       ("front", "LEAD" if multitask else "FRONT", self.show_front_candidates),
       ("corner", "CUTIN" if multitask else "CORNER", self.show_corner_candidates),
       ("external", "EXT", self.show_external_candidates),
@@ -2202,6 +2278,7 @@ class SimulatorUI:
   def _draw_timeline(self, width: int, height: int) -> Any:
     rl = self.rl
     rect = rl.Rectangle(24.0, float(height - 38), float(width - 48), 13.0)
+    plot_rect = self._draw_lead_comparison_plot(width, rect.y) if self.review is not None else None
     rl.draw_rectangle_rounded(rect, 1.0, 8, self._color((55, 65, 75, 255)))
     if self.review is not None and self.times[-1] > 0.0:
       for index in self.review_events:
@@ -2221,9 +2298,77 @@ class SimulatorUI:
     if self.review is not None:
       lead_one_text, lead_one_lost = self._lead_continuity_text()
       lead_two_text, lead_two_lost = self._lead_two_continuity_text()
-      self._draw_text(lead_one_text, rect.x, rect.y - 40, 13, self._color(self.RED if lead_one_lost else self.GREEN))
-      self._draw_text(lead_two_text, rect.x, rect.y - 23, 13, self._color(self.RED if lead_two_lost else self.PURPLE))
+      text_y = plot_rect.y - 40.0 if plot_rect is not None else rect.y - 40.0
+      self._draw_text(lead_one_text, rect.x, text_y, 13, self._color(self.RED if lead_one_lost else self.GREEN))
+      self._draw_text(lead_two_text, rect.x, text_y + 17.0, 13, self._color(self.RED if lead_two_lost else self.PURPLE))
     self._draw_text(state, rect.x + rect.width - 85, rect.y - 23, 15, self._color(self.TEXT))
+    return rect
+
+  def _draw_lead_comparison_plot(self, width: int, timeline_y: float) -> Any:
+    rl = self.rl
+    rect = rl.Rectangle(24.0, timeline_y - 154.0, float(width - 48), 130.0)
+    rl.draw_rectangle_rec(rect, self._color((11, 15, 20, 255)))
+    rl.draw_rectangle_lines_ex(rect, 1.0, self._color(self.GRID))
+
+    legend = (
+      ("CURRENT RADARD L1", "radard_one", self.CYAN),
+      ("CURRENT RADARD L2", "radard_two", self.PURPLE),
+      ("MODEL L1", "model_one", self.ORANGE),
+      ("MODEL L2", "model_two", self.YELLOW),
+    )
+    legend_x = rect.x + 10.0
+    current = self.lead_comparison[self.index]
+    for label, field, color_value in legend:
+      value = getattr(current, field)
+      value_text = "--" if value is None else f"{value.d_rel:.0f}m"
+      item = f"{label} {value_text}"
+      rl.draw_line_ex(
+        rl.Vector2(legend_x, rect.y + 13.0), rl.Vector2(legend_x + 18.0, rect.y + 13.0),
+        3.0, self._color(color_value),
+      )
+      self._draw_text(item, legend_x + 24.0, rect.y + 5.0, 13, self._color(color_value))
+      legend_x += self._measure_text(item, 13) + 52.0
+
+    graph_top = rect.y + 29.0
+    graph_bottom = rect.y + rect.height - 9.0
+    graph_height = graph_bottom - graph_top
+    max_distance = 100.0
+    for distance in (0.0, 50.0, 100.0):
+      y = graph_bottom - graph_height * distance / max_distance
+      rl.draw_line_ex(rl.Vector2(rect.x + 38.0, y), rl.Vector2(rect.x + rect.width - 8.0, y), 1.0, self._color(self.GRID))
+      self._draw_text(f"{int(distance)}m", rect.x + 5.0, y - 7.0, 11, self._color(self.MUTED))
+
+    plot_left = rect.x + 38.0
+    plot_width = rect.width - 46.0
+    total_time = max(self.times[-1], 1e-3)
+    max_gap_s = 0.15
+    for _, field, color_value in legend:
+      previous: tuple[float, float, LeadPlotValue] | None = None
+      color = self._color(color_value)
+      for frame, values in zip(self.frames, self.lead_comparison, strict=True):
+        value = getattr(values, field)
+        if value is None:
+          previous = None
+          continue
+        x = plot_left + plot_width * min(max(frame.time_s / total_time, 0.0), 1.0)
+        y = graph_bottom - graph_height * min(value.d_rel, max_distance) / max_distance
+        if previous is not None:
+          previous_time, previous_x, previous_value = previous
+          if value.track_id == previous_value.track_id and frame.time_s - previous_time <= max_gap_s:
+            previous_y = graph_bottom - graph_height * min(previous_value.d_rel, max_distance) / max_distance
+            rl.draw_line_ex(rl.Vector2(previous_x, previous_y), rl.Vector2(x, y), 2.0, color)
+        previous = (frame.time_s, x, value)
+
+      value = getattr(current, field)
+      if value is not None:
+        x = plot_left + plot_width * min(max(self.times[self.index] / total_time, 0.0), 1.0)
+        y = graph_bottom - graph_height * min(value.d_rel, max_distance) / max_distance
+        rl.draw_circle_v(rl.Vector2(x, y), 4.0, color)
+
+    cursor_x = plot_left + plot_width * min(max(self.playback_time / total_time, 0.0), 1.0)
+    rl.draw_line_ex(
+      rl.Vector2(cursor_x, graph_top), rl.Vector2(cursor_x, graph_bottom), 1.5, self._color(self.TEXT),
+    )
     return rect
 
   def _save_labels(self) -> None:
@@ -2396,11 +2541,12 @@ class SimulatorUI:
         height = rl.get_screen_height()
         panel_width = min(510.0, max(430.0, width * 0.35))
         content_width = float(width) - panel_width - 30.0
-        content_height = float(height) - (100.0 if self.review is not None else 65.0)
+        content_height = float(height) - (250.0 if self.review is not None else 65.0)
         video_height = max(230.0, content_height * 0.57)
         video_rect = rl.Rectangle(12.0, 12.0, content_width, video_height)
         map_rect = rl.Rectangle(12.0, video_rect.y + video_rect.height + 8.0, content_width, content_height - video_height - 8.0)
-        panel_rect = rl.Rectangle(float(width) - panel_width - 10.0, 12.0, panel_width, float(height) - 65.0)
+        panel_height = content_height if self.review is not None else float(height) - 65.0
+        panel_rect = rl.Rectangle(float(width) - panel_width - 10.0, 12.0, panel_width, panel_height)
         frame = self.frames[self.index]
         selection = self.selector.select(frame, self.index)
 
@@ -2561,6 +2707,7 @@ def main() -> int:
   if args.model is not None and args.teacher_current_radard and not args.hybrid:
     raise SystemExit("--model and --teacher-current-radard cannot be used together")
   selector: LeadSelector
+  radard_selector: LeadSelector | None = None
   if args.hybrid:
     args.model = args.model or DEFAULT_MULTITASK_MODEL
     selector = MultitaskLeadSelector(
@@ -2582,6 +2729,9 @@ def main() -> int:
     selector = CurrentRadardTeacher(frames, current_cutin_track_ids(args.rlog, frames))
   else:
     selector = SimpleLeadSelector()
+  if review is not None and not isinstance(selector, CurrentRadardTeacher):
+    print("Recomputing current radard comparison ...", flush=True)
+    radard_selector = CurrentRadardTeacher(frames, current_cutin_track_ids(args.rlog, frames))
   label_path = args.labels or args.rlog.with_name(args.rlog.name + ".lead-labels.json")
   labels = ManualLabels.load(label_path, len(frames))
   print_summary(args.rlog, frames, selector)
@@ -2606,7 +2756,7 @@ def main() -> int:
   display_name = f"{args.rlog.parent.name}/{args.rlog.name}"
   SimulatorUI(
     frames, selector, display_name, labels, label_path, args.rlog, include_scc_fusion=args.fusion_scc,
-    review=review,
+    review=review, radard_selector=radard_selector,
   ).run(args.start, args.paused, args.screenshot)
   return 0
 

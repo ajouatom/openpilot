@@ -158,6 +158,7 @@ def _feature_names() -> tuple[str, ...]:
 
 
 MODEL_FEATURE_NAMES = _feature_names()
+MODEL_FEATURE_INDICES = {name: index for index, name in enumerate(MODEL_FEATURE_NAMES)}
 H8_Y_RATE_INDEX = MODEL_FEATURE_NAMES.index("h8_y_rate")
 H12_Y_RATE_INDEX = MODEL_FEATURE_NAMES.index("h12_y_rate")
 H8_DT_INDEX = MODEL_FEATURE_NAMES.index("h8_dt")
@@ -168,6 +169,60 @@ H8_PRESENT_INDEX = MODEL_FEATURE_NAMES.index("h8_present")
 H12_PRESENT_INDEX = MODEL_FEATURE_NAMES.index("h12_present")
 LANE1_PROB_INDEX = MODEL_FEATURE_NAMES.index("lane1_prob")
 LANE2_PROB_INDEX = MODEL_FEATURE_NAMES.index("lane2_prob")
+
+ANTICIPATORY_FEATURE_NAMES = (
+  "d_rel", "v_lead", "v_rel", "track_age", "has_front", "has_corner", "trusted", "match_confidence",
+  "abs_y_rel", "abs_d_path", "abs_future_d_path", "d_path_reduction", "instant_inward",
+  "h8_lane_inward", "h12_lane_inward", "lane1_prob", "lane2_prob", "model0_prob", "model0_y_std",
+)
+
+
+def anticipatory_feature_matrix(matrix, np):
+  """Return compact, engineered early cut-in features from base model rows."""
+  def column(name: str):
+    return matrix[:, MODEL_FEATURE_INDICES[name]]
+
+  d_path = column("d_path")
+  abs_d_path = np.abs(d_path)
+  abs_future_d_path = np.abs(column("future_d_path"))
+  side = np.where(d_path >= 0.0, 1.0, -1.0)
+  h8_dt = np.maximum(column("h8_dt"), 1e-3)
+  h12_dt = np.maximum(column("h12_dt"), 1e-3)
+  return np.column_stack((
+    column("d_rel"), column("v_lead"), column("v_rel"), column("track_age"),
+    column("has_front"), column("has_corner"), column("trusted"), column("match_confidence"),
+    np.abs(column("y_rel")), abs_d_path, abs_future_d_path, abs_d_path - abs_future_d_path,
+    -side * column("yv_rel"),
+    (np.abs(column("h8_d_path")) - abs_d_path) / h8_dt,
+    (np.abs(column("h12_d_path")) - abs_d_path) / h12_dt,
+    column("lane1_prob"), column("lane2_prob"), column("model0_prob"), column("model0_y_std"),
+  )).astype(np.float32)
+
+
+def _anticipatory_eligibility_from_values(matrix, values, np):
+  distance = values[:, 0]
+  v_lead = values[:, 1]
+  track_age = values[:, 3]
+  abs_d_path = values[:, 9]
+  abs_future_d_path = values[:, 10]
+  reduction = values[:, 11]
+  h8_lane_inward = values[:, 13]
+  h12_lane_inward = values[:, 14]
+  lane_reliable = (values[:, 15] > 0.5) & (values[:, 16] > 0.5)
+  return (
+    (distance > 2.5) & (distance < 60.0) & (v_lead > 2.0) & (track_age >= 7.0)
+    & (abs_d_path > 1.15) & (abs_d_path < 4.2)
+    & (abs_future_d_path < 2.5) & (reduction > 0.10)
+    & (matrix[:, H8_PRESENT_INDEX] > 0.5) & (matrix[:, H12_PRESENT_INDEX] > 0.5)
+    & ((distance < 12.0) | lane_reliable)
+    & (h8_lane_inward > 0.12) & (h8_lane_inward < 3.2)
+    & (h12_lane_inward > 0.12) & (h12_lane_inward < 3.2)
+  )
+
+
+def anticipatory_eligibility(matrix, np):
+  """Limit the auxiliary classifier to stable, lane-inward radar motion."""
+  return _anticipatory_eligibility_from_values(matrix, anticipatory_feature_matrix(matrix, np), np)
 
 
 def object_aliases(obj: FusedRadarObject) -> tuple[str, ...]:
@@ -374,6 +429,15 @@ class RadarLeadModel:
         ))
         self.stationary_threshold = float(model["stationary_threshold"].reshape(-1)[0])
         self.thresholds[2] = 0.5
+      self.anticipatory_model = None
+      if "anticipatory_w" in model.files:
+        anticipatory_names = tuple(str(value) for value in model["anticipatory_feature_names"].tolist())
+        if anticipatory_names != ANTICIPATORY_FEATURE_NAMES:
+          raise RuntimeError("anticipatory radar lead model schema mismatch")
+        self.anticipatory_model = tuple(model[f"anticipatory_{name}"].astype(np.float32) for name in (
+          "mean", "std", "w", "b", "calibration",
+        ))
+        self.anticipatory_threshold = float(model["anticipatory_threshold"].reshape(-1)[0])
 
   @staticmethod
   def _relative_probability(probability, threshold):
@@ -383,6 +447,18 @@ class RadarLeadModel:
     threshold = float(np.clip(threshold, 1e-6, 1.0 - 1e-6))
     relative_logit = np.log(probability / (1.0 - probability)) - math.log(threshold / (1.0 - threshold))
     return 1.0 / (1.0 + np.exp(-np.clip(relative_logit, -30.0, 30.0)))
+
+  @staticmethod
+  def _remap_probability(probability, source_threshold: float, target_threshold: float):
+    import numpy as np
+
+    probability = np.clip(probability, 1e-6, 1.0 - 1e-6)
+    source_threshold = float(np.clip(source_threshold, 1e-6, 1.0 - 1e-6))
+    target_threshold = float(np.clip(target_threshold, 1e-6, 1.0 - 1e-6))
+    logits = np.log(probability / (1.0 - probability))
+    logits -= math.log(source_threshold / (1.0 - source_threshold))
+    logits += math.log(target_threshold / (1.0 - target_threshold))
+    return 1.0 / (1.0 + np.exp(-np.clip(logits, -30.0, 30.0)))
 
   def predict(self, features: Sequence[RadarLeadFeatures]) -> tuple[RadarLeadPrediction, ...]:
     if not features:
@@ -395,6 +471,20 @@ class RadarLeadModel:
     logits = hidden2 @ self.w3 + self.b3
     logits = logits * self.calibration[:, 0] + self.calibration[:, 1]
     probabilities = 1.0 / (1.0 + np.exp(-np.clip(logits, -30.0, 30.0)))
+    if self.anticipatory_model is not None:
+      mean, std, weights, bias, calibration = self.anticipatory_model
+      anticipatory_values = anticipatory_feature_matrix(matrix, np)
+      anticipatory_logits = ((anticipatory_values - mean) / std) @ weights + bias.reshape(-1)[0]
+      calibration = calibration.reshape(-1)
+      anticipatory_logits = anticipatory_logits * calibration[0] + calibration[1]
+      anticipatory_probabilities = 1.0 / (1.0 + np.exp(-np.clip(anticipatory_logits, -30.0, 30.0)))
+      anticipatory_probabilities = self._remap_probability(
+        anticipatory_probabilities, self.anticipatory_threshold, CUTIN_TEMPORAL_THRESHOLD_MAX,
+      )
+      anticipatory_probabilities = np.where(
+        _anticipatory_eligibility_from_values(matrix, anticipatory_values, np), anticipatory_probabilities, 0.0,
+      )
+      probabilities[:, 1] = np.maximum(probabilities[:, 1], anticipatory_probabilities)
     if self.stationary_model is not None:
       mean, std, w1, b1, w2, b2, w3, b3, calibration = self.stationary_model
       stationary_hidden = np.maximum(((matrix - mean) / std) @ w1 + b1, 0.0)

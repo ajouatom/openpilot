@@ -295,6 +295,59 @@ def test_fast_changing_stroked_text_can_bypass_texture_cache(monkeypatch):
   assert len(direct_draws) == 9
 
 
+def test_raw_stroked_text_preserves_draw_order_positions_and_colors(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._raw_stroked_text_enabled = True
+  renderer._font = object()
+  renderer._korean_font = None
+  renderer._text_measure_cache = {}
+  calls = []
+
+  class Position:
+    def __init__(self, x, y):
+      self.x = x
+      self.y = y
+
+  def draw_text_ex(font, text, position, size, spacing, color):
+    calls.append((font, text, position.x, position.y, size, spacing, color))
+
+  renderer._raw_draw_text_ex = draw_text_ex
+  monkeypatch.setattr(cluster_renderer.rl, "Vector2", Position)
+  monkeypatch.setattr(cluster_renderer, "rl_color", lambda color: color)
+  monkeypatch.setattr(renderer, "_measure_text", lambda *_args: (40.0, 20.0))
+  monkeypatch.setattr(
+    renderer,
+    "_draw_text",
+    lambda *_args: pytest.fail("raw stroked-text path must bypass the pyray wrapper"),
+  )
+
+  renderer._draw_text_with_stroke(
+    "NAVI",
+    100.0,
+    50.0,
+    25.0,
+    (0, 255, 0),
+    (0, 0, 0),
+    2,
+    anchor="center",
+  )
+
+  assert [(call[2], call[3]) for call in calls] == [
+    (78.0, 40.0),
+    (82.0, 40.0),
+    (80.0, 38.0),
+    (80.0, 42.0),
+    (78.0, 38.0),
+    (82.0, 38.0),
+    (78.0, 42.0),
+    (82.0, 42.0),
+    (80.0, 40.0),
+  ]
+  assert [call[6] for call in calls] == [(0, 0, 0)] * 8 + [(0, 255, 0)]
+  assert all(call[1] == b"NAVI" for call in calls)
+  assert all(call[4:6] == (25.0, 1.0) for call in calls)
+
+
 def test_cluster_autorun_falls_back_only_for_h264_initialization(monkeypatch):
   cluster_autorun = _import_cluster_autorun(monkeypatch)
   carrot_package = importlib.import_module("selfdrive.carrot")
@@ -644,6 +697,49 @@ def test_native_h264_direct_input_lease_submits_or_cancels():
 
   assert calls[-2:] == ["acquire", ("cancel", 3)]
   assert pipeline._native_frame_index == 1
+
+
+def test_native_h264_direct_input_lease_exposes_dmabuf_fd():
+  pipeline = _new_h264_pipeline()
+  calls = []
+
+  def acquire_dmabuf(_handle, address_out, size_out, index_out, fd_out, _callback, _opaque):
+    ctypes.cast(address_out, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(0x56780000)
+    ctypes.cast(size_out, ctypes.POINTER(ctypes.c_size_t))[0] = 16384
+    ctypes.cast(index_out, ctypes.POINTER(ctypes.c_uint32))[0] = 5
+    ctypes.cast(fd_out, ctypes.POINTER(ctypes.c_int))[0] = 42
+    calls.append("acquire_dmabuf")
+    return 0
+
+  def cancel(_handle, index):
+    calls.append(("cancel", index))
+    return 0
+
+  def submit_dmabuf(_handle, index, timestamp_us, _callback, _opaque):
+    calls.append(("submit_dmabuf", index, timestamp_us))
+    return 0
+
+  pipeline._native_lib = types.SimpleNamespace(
+    cluster_h264_encoder_bridge_acquire_nv12_input_dmabuf=acquire_dmabuf,
+    cluster_h264_encoder_bridge_submit_nv12_input_dmabuf=submit_dmabuf,
+    cluster_h264_encoder_bridge_cancel_nv12_input=cancel,
+  )
+  pipeline._native_handle = 1
+  pipeline._native_callback = object()
+  pipeline._native_has_direct_input = True
+  pipeline._native_has_dmabuf_input = True
+  pipeline._native_input_bytesused = 16384
+
+  with pipeline.native_nv12_input_buffer() as input_buffer:
+    assert (
+      input_buffer.address,
+      input_buffer.size,
+      input_buffer.index,
+      input_buffer.dmabuf_fd,
+    ) == (0x56780000, 16384, 5, 42)
+    pipeline.submit_native_nv12_dmabuf_input(input_buffer)
+
+  assert calls == ["acquire_dmabuf", ("submit_dmabuf", 5, 0)]
 
 
 def test_gles_direct_readback_restores_gl_state():

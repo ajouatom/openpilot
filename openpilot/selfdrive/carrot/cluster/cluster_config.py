@@ -101,6 +101,11 @@ CLUSTER_LIVE_FPS_BY_MODE = {
     5: 50.0,
     6: 60.0,
 }
+H264_AUTO_BITRATE_REFERENCE_FPS = 30
+H264_AUTO_BITRATE_REFERENCE_BPS = 7_000_000
+H264_AUTO_BITRATE_MIN_BPS = 1_000_000
+H264_AUTO_BITRATE_MAX_BPS = 14_000_000
+H264_AUTO_BITRATE_GRANULARITY_BPS = 1_000
 
 LIGHT_CLUSTER_THEME = ClusterTheme(
     name="light",
@@ -197,6 +202,25 @@ def normalize_cluster_live_fps(value: object) -> float:
     except (TypeError, ValueError):
         return 0.0
     return CLUSTER_LIVE_FPS_BY_MODE.get(mode, 0.0)
+
+
+def resolved_usb_h264_bitrate(requested_bitrate: str, target_fps: float, h264_fps: int) -> str:
+    text = requested_bitrate.strip()
+    if text.lower() != "auto":
+        return text
+    source_fps = int(max(1, round(target_fps if target_fps > 0 else float(h264_fps))))
+    denominator = H264_AUTO_BITRATE_REFERENCE_FPS * H264_AUTO_BITRATE_GRANULARITY_BPS
+    bitrate_bps = (
+        (source_fps * H264_AUTO_BITRATE_REFERENCE_BPS + denominator // 2)
+        // denominator
+        * H264_AUTO_BITRATE_GRANULARITY_BPS
+    )
+    bitrate_bps = int(max(H264_AUTO_BITRATE_MIN_BPS, min(H264_AUTO_BITRATE_MAX_BPS, bitrate_bps)))
+    if bitrate_bps % 1_000_000 == 0:
+        return f"{bitrate_bps // 1_000_000}M"
+    if bitrate_bps % 1_000 == 0:
+        return f"{bitrate_bps // 1_000}k"
+    return str(bitrate_bps)
 
 
 def normalize_cluster_encoder_mode(value: object) -> int:

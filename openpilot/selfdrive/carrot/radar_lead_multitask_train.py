@@ -398,6 +398,7 @@ def main() -> int:
   initial_parameters: dict[str, np.ndarray] | None = None
   initial_thresholds: np.ndarray | None = None
   initial_calibration: np.ndarray | None = None
+  auxiliary_model_arrays: dict[str, np.ndarray] = {}
   if args.init_model is not None:
     with np.load(args.init_model, allow_pickle=False) as initial:
       if tuple(str(value) for value in initial["feature_names"].tolist()) != MODEL_FEATURE_NAMES:
@@ -411,6 +412,10 @@ def main() -> int:
       }
       initial_thresholds = initial["thresholds"].astype(np.float32)
       initial_calibration = initial["calibration"].astype(np.float32)
+      auxiliary_model_arrays = {
+        name: initial[name].copy() for name in initial.files
+        if name.startswith(("stationary_", "anticipatory_"))
+      }
     hidden = (initial_parameters["w1"].shape[1], initial_parameters["w2"].shape[1])
   else:
     mean = data.features[train_indices].mean(axis=0, dtype=np.float64).astype(np.float32)
@@ -524,6 +529,7 @@ def main() -> int:
     head_names=np.asarray(MODEL_HEADS),
     mean=mean, std=std, thresholds=thresholds, calibration=calibration,
     metrics=np.asarray(json.dumps(metrics, sort_keys=True)),
+    **auxiliary_model_arrays,
     **model.parameters,
   )
   print(f"model written: {output} ({output.stat().st_size / 1024.0:.1f} KiB)")
