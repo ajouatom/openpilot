@@ -52,3 +52,28 @@ def test_reads_and_redacts_json_attachment() -> None:
   assert "10.0.0.3" not in texts[0]
   assert "c12f3d0cc306ec8d" not in texts[0]
   assert "****ec8d" in texts[0]
+
+
+def test_save_discord_member_uses_current_display_name_and_roles() -> None:
+  saved: dict[str, str] = {}
+
+  class FakeStorage:
+    def save_discord_member(self, user_id, username, display_name, roles, updated_at) -> None:
+      saved.update(
+        user_id=user_id, username=username, display_name=display_name, roles=roles, updated_at=updated_at,
+      )
+
+  member = SimpleNamespace(
+    id=778,
+    name="ppuang",
+    display_name="뿌앙_꾸앙/K5 dl3 pe 2023/공짜롱컨",
+    bot=False,
+    roles=[SimpleNamespace(name="@everyone"), SimpleNamespace(name="C4")],
+  )
+  bot = object.__new__(CarrotPilotBot)
+  bot.storage = FakeStorage()
+
+  bot._save_discord_member(member, "2026-07-18T12:00:00+00:00")
+
+  assert saved["display_name"] == "뿌앙_꾸앙/K5 dl3 pe 2023/공짜롱컨"
+  assert saved["roles"] == "C4"

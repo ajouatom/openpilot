@@ -55,7 +55,9 @@ docker/carrotpilot-bot/
 Discord에서 `사용자 설정 → 고급 → 개발자 모드`를 켭니다.
 `#carrotpilot-질문` 채널을 마우스 오른쪽 버튼으로 클릭하고 `채널 ID 복사`를 누릅니다.
 
-Discord Developer Portal의 Bot 페이지에서는 `Message Content Intent`를 켭니다.
+Discord Developer Portal의 Bot 페이지에서는 `Message Content Intent`와
+`Server Members Intent`를 모두 켭니다. 회원 Intent는 다른 채널의 대화를 읽지 않고도
+서버 회원의 현재 표시명과 역할을 찾아 별명 질문에 활용하기 위해 필요합니다.
 봇 권한은 `View Channel`, `Send Messages`, `Read Message History`, `Embed Links`,
 `Create Public Threads`, `Send Messages in Threads`가 필요합니다.
 
