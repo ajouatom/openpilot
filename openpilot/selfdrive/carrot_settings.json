@@ -2696,17 +2696,17 @@
     {
       "group": "주행튜닝",
       "name": "StoppingAccel",
-      "title": "정지시작가속도x0.01(0)",
+      "title": "정지시작가속도x0.01(-50)",
       "descr": "정지시작가속도 조정, 0: 기존방식",
       "egroup": "LONG",
-      "etitle": "StoppingStartAccelx0.01(0)",
+      "etitle": "StoppingStartAccelx0.01(-50)",
       "edescr": "stopping acceleration, 0: Traditional method",
       "cgroup": "纵向控制",
-      "ctitle": "停止起步加速度 x0.01(0)",
+      "ctitle": "停止起步加速度 x0.01(-50)",
       "cdescr": "停止加速度，0: 传统方式",
       "min": -100,
       "max": 0,
-      "default": 0,
+      "default": -50,
       "unit": 10
     },
     {

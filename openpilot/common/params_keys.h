@@ -232,7 +232,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     {"MapTurnSpeedFactor", {PERSISTENT, INT, "90"}},
     {"ModelTurnSpeedFactor", {PERSISTENT, INT, "0"}},
-    {"StoppingAccel", {PERSISTENT, INT, "0"}},
+    {"StoppingAccel", {PERSISTENT, INT, "-50"}},
     {"AutoSpeedUptoRoadSpeedLimit", {PERSISTENT, INT, "0"}},
     {"AutoRoadSpeedAdjust", {PERSISTENT, INT, "50"}},
 
