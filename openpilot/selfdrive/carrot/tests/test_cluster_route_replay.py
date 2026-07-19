@@ -6,6 +6,7 @@ import sys
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
+from cluster_live import OpenpilotLiveSource
 from cluster_route_replay import RawCornerObject, RouteLogParser, adjacent_route_log_path
 
 
@@ -136,6 +137,19 @@ def test_recorded_cutin_prompt_is_timestamped_for_replay_alert():
   assert frame.recorded_cutin_active
   assert frame.recorded_cutin_sound
   assert any(detection.cut_in for detection in frame.detected_vehicles)
+
+
+def test_live_selfdrive_state_passes_event_timestamp():
+  calls = []
+  source = object.__new__(OpenpilotLiveSource)
+  source.sm = {"selfdriveState": SimpleNamespace(enabled=True)}
+  source.parser = SimpleNamespace(
+    _update_selfdrive_state=lambda data, event_t: calls.append((data, event_t)),
+  )
+
+  source._apply_service_update("selfdriveState", 12.5)
+
+  assert calls == [(source.sm["selfdriveState"], 12.5)]
 
 
 def test_live_calibration_height_is_not_overwritten_by_camera_odometry():
