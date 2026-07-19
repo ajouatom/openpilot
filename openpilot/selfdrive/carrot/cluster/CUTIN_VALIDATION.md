@@ -1,9 +1,9 @@
 # Cut-in Route Validation Set
 
-Last validated: 2026-07-18
+Last validated: 2026-07-19
 
 This document records the route-based regression set used for the S50 cut-in
-logic in `radard.py` and the offline evaluator used by `cluster_replay_usb.py`.
+logic in `radard.py` and the standalone offline validation tools.
 All paths are below `W:\routes`.
 
 ## How To Use This File
@@ -28,7 +28,8 @@ Run one matching case while changing the logic:
 
 The script checks only `NEW CUT-IN`, returns exit code 1 on a regression, and
 does not count stored `radarState.leadsCutIn`. After it passes, use the replay
-commands below to inspect the video, `leadOne`, and detection timing manually.
+commands below to inspect the video, `leadOne`, and the decision recorded by the
+device. `cluster_replay_usb.py` does not recompute cut-ins.
 
 Validate a radar lead model against the same detect/clear scenes and compare its
 first activation with current radard and the deployed model using:
@@ -49,9 +50,10 @@ Review all 16 labeled windows in order:
 ```
 
 Each replay starts three seconds before its labeled window, ends three seconds
-after it, and then opens the next case. Stored cut-ins are off by default. Add
-`--show-recorded-cutins` only for old-versus-current comparison, or use
-`--output both` to render to the PC and USB display together.
+after it, and then opens the next case. Stored `radarState.leadsCutIn` decisions
+are always shown. The replay pauses and plays its PC alert at the prompt event
+recorded in `selfdriveState`. Use `--output both` to render to the PC and USB
+display together.
 
 Resume at a particular case, or keep each replay open until manually closed:
 
@@ -71,9 +73,10 @@ Resume at a particular case, or keep each replay open until manually closed:
   the validation window.
 - A negative case passes when the current-code evaluator produces no cut-in in
   the validation window.
-- Stored `radarState.leadsCutIn` decisions are not part of the pass/fail result.
-  Add `--show-recorded-cutins` only when comparing the old stored decision with
-  the current evaluator.
+- Stored `radarState.leadsCutIn` decisions are not part of the executable
+  validation pass/fail result. They are always shown by `cluster_replay_usb.py`;
+  use `validate_cutin_routes.py` or `radar_lead_validation_review.py` when the
+  current code must be recalculated from log inputs.
 - Results outside a listed validation window are not labeled by this document.
   They must be checked against video before being treated as true or false.
 

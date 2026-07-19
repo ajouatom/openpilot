@@ -64,8 +64,7 @@ def test_replay_uses_raw_object_identity_when_corner_slot_is_reused():
 
 
 def test_recorded_cutin_display_requires_current_leads_cutin_membership():
-  parser = RouteLogParser()
-  parser.show_recorded_cutins = True
+  parser = RouteLogParser(recompute_cutins=False)
   corner_lead = radar_lead(2540)
 
   parser._update_radar_state(SimpleNamespace(
@@ -87,6 +86,56 @@ def test_recorded_cutin_display_requires_current_leads_cutin_membership():
   lead_two = next(d for d in parser.radar_detections if d.radar_track_id == 2540)
   assert lead_two.label == "L2 CUT-IN"
   assert lead_two.cut_in
+  assert parser.recorded_cutin_ids == {2540}
+  assert parser.cutin_debug_text.startswith("LOG CUT-IN: YES | id2540")
+
+
+def test_route_playback_does_not_run_offline_cutin_recomputation():
+  parser = RouteLogParser(recompute_cutins=False)
+
+  def fail_if_called(*_args):
+    raise AssertionError("offline cut-in recomputation must be disabled for route playback")
+
+  parser._update_offline_cutin = fail_if_called
+  parser._update_live_tracks(SimpleNamespace(points=()), 1.0)
+
+
+def test_recorded_cutin_remains_visible_in_front_radar_only_mode():
+  parser = RouteLogParser(recompute_cutins=False)
+  parser.front_radar_only = True
+  corner_lead = radar_lead(2540)
+
+  parser._update_radar_state(SimpleNamespace(
+    leadOne=radar_lead(62, d_rel=60.0, y_rel=0.0),
+    leadTwo=corner_lead,
+    leadsCutIn=[corner_lead],
+  ), 1.0)
+
+  recorded = next(d for d in parser.radar_detections if d.radar_track_id == 2540)
+  assert recorded.label == "L2 CUT-IN"
+  assert recorded.cut_in
+
+
+def test_recorded_cutin_prompt_is_timestamped_for_replay_alert():
+  parser = RouteLogParser(recompute_cutins=False)
+  corner_lead = radar_lead(2540)
+  parser._update_radar_state(SimpleNamespace(
+    leadOne=radar_lead(62, d_rel=60.0, y_rel=0.0),
+    leadTwo=corner_lead,
+    leadsCutIn=[corner_lead],
+  ), 1.0)
+
+  parser._update_selfdrive_state(SimpleNamespace(
+    alertSound="prompt",
+    alertType="audioPrompt/warning",
+  ), 1.01)
+
+  assert parser.recorded_cutin_sound
+  assert parser.recorded_cutin_sound_t == 1.01
+  frame = parser._frame_from_car_state(SimpleNamespace(), 1.07)
+  assert frame.recorded_cutin_active
+  assert frame.recorded_cutin_sound
+  assert any(detection.cut_in for detection in frame.detected_vehicles)
 
 
 def test_live_calibration_height_is_not_overwritten_by_camera_odometry():

@@ -470,6 +470,8 @@ class ClusterUiState:
     cruise_override_kph: float | None = None
     cruise_override_label: str | None = None
     cruise_override_color_mode: int = 0
+    recorded_cutin_active: bool = False
+    recorded_cutin_sound: bool = False
 
 
 @dataclass(frozen=True, slots=True)

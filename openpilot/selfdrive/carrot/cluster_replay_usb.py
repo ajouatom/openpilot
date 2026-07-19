@@ -101,7 +101,7 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
         "--pause-on-cutin",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Play a Windows alert and pause when any cut-in detector becomes active",
+        help="Play a Windows alert and pause when radarState.leadsCutIn becomes active",
     )
     parser.add_argument("--route-overlay", choices=("off", "compact", "full"), default="compact", help="Replay camera/data detail level")
     parser.add_argument(
@@ -110,15 +110,24 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
         default="separate",
         help="Place replay debug and seek controls in a separate PC window by default",
     )
-    parser.add_argument("--show-recorded-cutins", action="store_true", help="Show cut-in decisions stored in the original radarState")
+    parser.add_argument(
+        "--show-recorded-cutins",
+        action="store_true",
+        help="Compatibility option; recorded radarState cut-ins are always shown",
+    )
     parser.add_argument("--front-radar-only", action="store_true", help="Ignore corner radar data and replay as a front-radar-only vehicle")
     parser.add_argument(
         "--cutin-radar-source",
         choices=("corner", "front"),
         default="corner",
-        help="Radar tracks used by the offline current-code cut-in evaluator",
+        help="Compatibility option; route playback always uses logged radarState cut-ins",
     )
-    parser.add_argument("--cutin-sensitivity", type=float, default=50.0, help="Sensitivity used by the offline current-code cut-in evaluator")
+    parser.add_argument(
+        "--cutin-sensitivity",
+        type=float,
+        default=50.0,
+        help="Compatibility option; route playback does not recompute cut-ins",
+    )
     parser.add_argument("--camera-view-mode", type=int, choices=(0, 1, 2), default=2, help="Cluster camera view mode (default: 2, road camera background)")
     parser.add_argument("--usb-brightness", type=int, default=None, help="Manual USB display brightness 0-100")
     parser.add_argument("--profile-render", action="store_true", help="Print render/USB timing profile")
@@ -139,10 +148,7 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
 
 def main() -> None:
     args, passthrough = parse_args(sys.argv[1:])
-    if args.show_recorded_cutins:
-        os.environ["CLUSTER_ROUTE_SHOW_RECORDED_CUTINS"] = "1"
-    else:
-        os.environ.pop("CLUSTER_ROUTE_SHOW_RECORDED_CUTINS", None)
+    os.environ["CLUSTER_ROUTE_SHOW_RECORDED_CUTINS"] = "1"
     if args.front_radar_only:
         os.environ["CLUSTER_ROUTE_FRONT_RADAR_ONLY"] = "1"
     else:
