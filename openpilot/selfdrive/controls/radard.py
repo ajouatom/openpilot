@@ -116,6 +116,11 @@ def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
   return 0.0 if diff > 50.0 else math.exp(-diff)
 
+
+def is_vision_radar_lateral_match_sane(radar_y_rel: float, vision_y_rel: float, d_path: float) -> bool:
+  return abs(radar_y_rel - vision_y_rel) < 2.0 or abs(d_path) < 2.4
+
+
 def clamp(x: float, lo: float, hi: float) -> float:
   return float(np.clip(x, lo, hi))
 
@@ -614,6 +619,8 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, lead_p
   for t in tracks.values():
     s1, s2 = score_pair(t)
     t.score = s1
+    if not is_vision_radar_lateral_match_sane(t.yRel, -float(lead.y[0]), t.dPath):
+      continue
 
     if s1 > first_score:
       second_track, second_score = first_track, first_score
@@ -645,7 +652,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, lead_p
         best_track = first_track
       elif lead_prob > 0.4 and first_track.selected_count > 0:
         best_track = first_track
-    elif lead_prob > 0.6:
+    elif lead_prob > 0.6 and abs(first_track.dPath) < 2.4:
       best_track = first_track
 
   # B) stopped-car-like (only if not chosen yet)

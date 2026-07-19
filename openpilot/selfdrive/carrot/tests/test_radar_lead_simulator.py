@@ -9,6 +9,7 @@ import numpy as np
 from openpilot.selfdrive.carrot.radar_lead_simulator import (
   MODEL_FEATURE_NAMES,
   Candidate,
+  CurrentRadardTeacher,
   MLPLeadSelector,
   ManualLabels,
   ModelLead,
@@ -75,6 +76,19 @@ def test_simple_selector_matches_model_lead() -> None:
   )))
 
   assert candidate_track_id(selected.lead_one) == 10
+
+
+def test_current_radard_teacher_rejects_adjacent_lane_distance_match() -> None:
+  frames = [replace(frame((
+      point(35, 9.6, 2.8, 13.8),
+      point(36, 6.7, -0.6, 13.0),
+    )), model_leads=(ModelLead(0.999, 11.12, -0.1, 13.5, 0.0, 1.0, 2.0, 2.0),))
+    for _ in range(4)
+  ]
+
+  selected = CurrentRadardTeacher(frames).select(frames[-1], len(frames) - 1)
+
+  assert candidate_track_id(selected.lead_one) == 36
 
 
 def test_validation_review_rearms_cutin_track_after_it_clears() -> None:

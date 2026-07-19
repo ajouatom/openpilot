@@ -650,6 +650,12 @@ class CurrentRadardTeacher:
         * self._laplacian(point.v_lead, lead.v, lead.v_std)
       )
       scored.append((score, wide_score, point))
+    scored = [
+      item for item in scored
+      if abs(item[2].y_rel + lead.y) < 2.0 or abs(states[item[2].track_id].d_path) < 2.4
+    ]
+    if not scored:
+      return None
     scored.sort(key=lambda item: item[0], reverse=True)
     first_score, _, first = scored[0]
     if first_score < 1e-4:
@@ -674,7 +680,7 @@ class CurrentRadardTeacher:
         best = first
       elif lateral_sane(first) and lead_prob > 0.4 and states[first.track_id].selected_count > 0:
         best = first
-      elif lead_prob > 0.6:
+      elif lead_prob > 0.6 and abs(states[first.track_id].d_path) < 2.4:
         best = first
     if best is None and distance_sane(first) and lateral_sane(first, wide=True):
       if second is not None and distance_sane(second) and lateral_sane(second) and velocity_sane(second):

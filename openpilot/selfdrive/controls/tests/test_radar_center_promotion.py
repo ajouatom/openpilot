@@ -1,4 +1,4 @@
-from openpilot.selfdrive.controls.radard import is_radar_center_promotion_safe
+from openpilot.selfdrive.controls.radard import is_radar_center_promotion_safe, is_vision_radar_lateral_match_sane
 
 
 def lead(d_rel: float, y_rel: float, d_path: float, v_rel: float) -> dict:
@@ -11,6 +11,13 @@ def lead(d_rel: float, y_rel: float, d_path: float, v_rel: float) -> dict:
 
 
 class TestRadarCenterPromotion:
+  def test_vision_radar_lateral_match_rejects_adjacent_lane_distance_match(self):
+    assert not is_vision_radar_lateral_match_sane(2.8, -0.1, 3.3)
+
+  def test_vision_radar_lateral_match_keeps_curved_path_and_real_cutin(self):
+    assert is_vision_radar_lateral_match_sane(2.8, -0.1, 0.4)
+    assert is_vision_radar_lateral_match_sane(2.8, 2.5, 3.0)
+
   def test_accepts_close_lead(self):
     assert is_radar_center_promotion_safe(lead(30.0, -0.4, 0.2, 2.0))
 
