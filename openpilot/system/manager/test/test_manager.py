@@ -44,8 +44,7 @@ class TestManager:
     params.put("ClusterHud", "1")
     assert process.should_run(False, params, CP)
 
-  @pytest.mark.parametrize("cluster_hud", (1, 2))
-  def test_cluster_hud_excludes_carrot_vision_processes(self, cluster_hud):
+  def test_cluster_hud_excludes_carrot_vision_processes(self):
     CP = car.CarParams.new_message()
     CP.notCar = False
     params = Params()
@@ -56,10 +55,22 @@ class TestManager:
     assert managed_processes["carrot_webrtcd"].should_run(True, params, CP)
     assert managed_processes["carrot_vision_encoderd"].should_run(True, params, CP)
 
-    params.put("ClusterHud", str(cluster_hud))
+    params.put("ClusterHud", "1")
     assert managed_processes["carrot_cluster"].should_run(True, params, CP)
     assert not managed_processes["carrot_webrtcd"].should_run(True, params, CP)
     assert not managed_processes["carrot_vision_encoderd"].should_run(True, params, CP)
+
+  def test_removed_cluster_hud_mode_is_inactive(self):
+    CP = car.CarParams.new_message()
+    CP.notCar = False
+    params = Params()
+    params.put("DisableDM", "2")
+    params.put_bool("CarrotVisionActive", True)
+    params.put("ClusterHud", "2")
+
+    assert not managed_processes["carrot_cluster"].should_run(True, params, CP)
+    assert managed_processes["carrot_webrtcd"].should_run(True, params, CP)
+    assert managed_processes["carrot_vision_encoderd"].should_run(True, params, CP)
 
   def test_blacklisted_procs(self):
     # TODO: ensure there are blacklisted procs until we have a dedicated test

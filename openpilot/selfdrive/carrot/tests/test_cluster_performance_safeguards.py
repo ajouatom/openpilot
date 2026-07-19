@@ -25,6 +25,7 @@ from cluster_h264_pipeline import (
 )
 import cluster_renderer
 from cluster_renderer import ClusterUiRenderer
+from cluster_usb_display import product_id_for_hud_mode
 
 
 def test_tici_decoded_buffer_releases_fd_and_capture_lease_once():
@@ -115,7 +116,7 @@ def _new_h264_pipeline() -> H264UsbPipeline:
   )
 
 
-def test_cluster_autorun_defaults_to_normal_scheduler_and_keeps_affinity(monkeypatch):
+def test_cluster_autorun_uses_selected_affinity(monkeypatch):
   module_name = "openpilot.selfdrive.carrot.cluster_autorun"
   cluster_autorun = _import_cluster_autorun(monkeypatch)
   affinity_calls = []
@@ -127,28 +128,31 @@ def test_cluster_autorun_defaults_to_normal_scheduler_and_keeps_affinity(monkeyp
   )
 
   try:
-    assert cluster_autorun.AUTORUN_DEFAULT_ENV["CLUSTER_REALTIME"] == "0"
     cluster_autorun._configure_autorun_affinity()
     assert affinity_calls == [[1, 2, 3, 4]]
   finally:
     sys.modules.pop(module_name, None)
 
 
-def test_cluster_run_explicitly_drops_realtime_and_keeps_affinity(monkeypatch):
+def test_cluster_hud_mode_two_has_no_usb_product_mapping():
+  assert product_id_for_hud_mode(1) == 0x0092
+  assert product_id_for_hud_mode(2) is None
+
+
+@pytest.mark.parametrize("legacy_realtime_env", ("0", "1"))
+def test_cluster_run_always_applies_core_mode_and_priority(monkeypatch, legacy_realtime_env):
   cluster_run = importlib.import_module("openpilot.selfdrive.carrot.cluster_run")
   realtime_module = types.ModuleType("openpilot.common.realtime")
   calls = []
-  realtime_module.config_realtime_process = lambda *_args: calls.append("realtime")
-  realtime_module.drop_realtime = lambda: calls.append("drop")
-  realtime_module.set_core_affinity = lambda cores: calls.append(("affinity", cores))
+  realtime_module.config_realtime_process = lambda cores, priority: calls.append((cores, priority))
   monkeypatch.setitem(sys.modules, "openpilot.common.realtime", realtime_module)
-  monkeypatch.setenv("CLUSTER_REALTIME", "0")
+  monkeypatch.setenv("CLUSTER_REALTIME", legacy_realtime_env)
   monkeypatch.setattr(cluster_run, "_resolved_realtime_cores", lambda: [1, 2, 3, 4])
-  monkeypatch.setattr(cluster_run.gc, "enable", lambda: calls.append("gc_enable"))
+  monkeypatch.setattr(cluster_run, "_resolved_realtime_priority", lambda: 37)
 
-  cluster_run.configure_cluster_realtime()
+  cluster_run.configure_cluster_scheduling()
 
-  assert calls == ["gc_enable", "drop", ("affinity", [1, 2, 3, 4])]
+  assert calls == [([1, 2, 3, 4], 37)]
 
 
 def test_git_status_remote_disabled_never_starts_git_worker(tmp_path, monkeypatch):

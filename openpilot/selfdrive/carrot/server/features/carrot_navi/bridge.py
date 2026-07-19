@@ -70,7 +70,7 @@ class CarrotNaviWebBridge:
     try:
       self._stream_allowed = bool(
         self._params is not None
-        and self._params.get_int("ClusterHud") not in (1, 2)
+        and self._params.get_int("ClusterHud") != 1
       )
     except Exception:
       self._stream_allowed = False
