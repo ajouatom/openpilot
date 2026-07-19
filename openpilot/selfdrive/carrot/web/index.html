@@ -1,6 +1,7 @@
 <!doctype html>
 <html class="notranslate" translate="no">
 <head>
+  <script id="carrotAssetManifest" type="application/json"></script>
   <meta charset="utf-8" />
   <meta name="google" content="notranslate" />
   <!-- Let keyboard-heavy pages follow the visible content viewport instead of
@@ -75,7 +76,8 @@
       display: none !important;
     }
 
-    html[data-carrot-start-page="carrot"]:not([data-carrot-bootstrapped]) #pageCarrot,
+    /* Keep the Drive page hidden until DriveWorkspaceRuntime has applied the
+       saved orientation/mode. Its unsynchronized base layout is Vision-only. */
     html[data-carrot-start-page="setting"]:not([data-carrot-bootstrapped]) #pageSetting,
     html[data-carrot-start-page="logs"]:not([data-carrot-bootstrapped]) #pageLogs {
       display: block !important;
@@ -111,35 +113,30 @@
       background: color-mix(in srgb, var(--md-primary) 14%, transparent) !important;
     }
   </style>
-  <link rel="stylesheet" href="/css/tokens.css?v=2607-65" />
+  <link rel="stylesheet" href="/css/generated/design-tokens.css" />
+  <link rel="stylesheet" href="/css/tokens.css?v=2607-72" />
   <link rel="stylesheet" href="/css/layout_tokens.css?v=2607-42" />
   <link rel="stylesheet" href="/css/hud_card.css?v=2605-03" />
   <link rel="stylesheet" href="/css/base.css?v=2607-40" />
   <link rel="stylesheet" href="/css/layout.css?v=2605-08" />
-  <link rel="stylesheet" href="/css/components.css?v=2607-54" />
+  <link rel="stylesheet" href="/css/generated/design-system.css" />
+  <link rel="stylesheet" href="/css/generated/drive.css" />
+  <link rel="stylesheet" href="/css/generated/replay.css" />
+  <link rel="stylesheet" href="/css/components.css?v=2607-55" />
   <link rel="stylesheet" href="/css/components/media_transport.css?v=2607-04" />
   <link rel="stylesheet" href="/css/components/nav_status_badges.css?v=2607-05" />
-  <link rel="stylesheet" href="/css/components/drive_content_intro.css?v=2607-03" />
-  <link rel="stylesheet" href="/css/components/drive_workspace.css?v=2607-06" />
-  <link rel="stylesheet" href="/css/pages/logs.css?v=2607-58" />
+  <link rel="stylesheet" href="/css/components/drive_content_intro.css?v=2607-05" />
+  <link rel="stylesheet" href="/css/components/drive_workspace.css?v=2607-08" />
+  <link rel="stylesheet" href="/css/generated/logs.css" />
   <link rel="stylesheet" href="/css/vendor/xterm.css?v=550" />
-  <link rel="stylesheet" href="/css/pages/terminal.css?v=2607-104" />
-  <link rel="stylesheet" href="/css/pages/settings/base.css?v=2606-21" />
-  <link rel="stylesheet" href="/css/pages/settings/panels.css?v=2607-44" />
-  <link rel="stylesheet" href="/css/pages/settings/device.css?v=2607-52" />
-  <link rel="stylesheet" href="/css/pages/settings/youtube_live.css?v=2607-51" />
-  <link rel="stylesheet" href="/css/pages/settings/token_card.css?v=2607-08" />
-  <link rel="stylesheet" href="/css/pages/tools/base.css?v=2607-56" />
-  <link rel="stylesheet" href="/css/pages/tools/qr.css?v=2605-40" />
-  <link rel="stylesheet" href="/css/pages/tools/main.css?v=2607-44" />
-  <link rel="stylesheet" href="/css/pages/tools/drive_layout.css?v=2607-05" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2607-82" />
-  <link rel="stylesheet" href="/css/pages/drive_replay.css?v=2607-20" />
-  <link rel="stylesheet" href="/css/components/replay_insights.css?v=2607-39" />
+  <link rel="stylesheet" href="/css/generated/terminal.css" />
+  <link rel="stylesheet" href="/css/generated/settings.css" />
+  <link rel="stylesheet" href="/css/generated/tools.css" />
+  <link rel="stylesheet" href="/css/pages/drive.css?v=2607-84" />
   <link rel="stylesheet" href="/css/pages/carrot_navi.css?v=2607-14" />
   <link rel="stylesheet" href="/css/components/mini_hud.css?v=2607-88" />
   <link rel="stylesheet" href="/css/responsive.css?v=2607-44" />
-  <link rel="stylesheet" href="/css/pages/intro.css?v=2607-96" />
+  <link rel="stylesheet" href="/css/generated/intro.css" />
   <link rel="stylesheet" href="/css/vendor/plyr.css?v=3.7.8" />
 </head>
 
@@ -211,19 +208,11 @@
         <h2 id="settingTitle" style="margin:0; font-size:var(--fs-headline); font-weight:700; cursor:pointer;"><span id="settingTitleText">Setting</span></h2>
       </div>
 
-      <div class="muted mb-sm" id="settingsMeta">loading...</div>
+      <div class="muted mb-sm" id="settingsMeta" hidden aria-live="polite"></div>
 
       <div id="settingScreenHost" class="screen-host">
         <!-- Groups Screen -->
         <div id="settingScreenGroups" class="screen">
-          <div id="settingCarRow" class="mb-md setting-car-entry" role="button" tabindex="0" aria-label="차량 선택 열기">
-            <div class="setting-car-entry__text">
-              <div id="settingCarEyebrow" class="setting-car-entry__eyebrow">차량 선택</div>
-              <div id="curCarLabelSetting" class="setting-car-entry__value">-</div>
-            </div>
-            <span class="setting-car-entry__chevron" aria-hidden="true"></span>
-          </div>
-
           <div id="settingTabBar" class="setting-tabbar" role="tablist" aria-label="Setting categories">
             <button type="button" class="setting-tab" id="settingTabDevice" data-setting-tab="device" role="tab" aria-selected="false">
               <span id="settingTabDeviceLabel">디바이스</span>
@@ -281,9 +270,11 @@
       </div>
 
       <div class="tools-scroll-stack">
-        <div class="tools-quick-actions ui-action-grid ui-action-grid--quick mb-md">
-          <a id="btnQuickLinkWeb" class="btn btn--filled" href="#" aria-disabled="true">CarrotMan</a>
-          <button id="btnDeviceInfo" class="btn btn--filled" type="button">Carrot Info</button>
+        <div id="toolsPrimaryActions" class="tools-primary-actions ui-action-grid ui-action-grid--quick mb-md" role="group" aria-label="Tools shortcuts">
+          <button id="btnToolsCarSelect" class="btn" type="button">Car Select</button>
+          <button id="btnToolsLanguage" class="btn" type="button" aria-haspopup="dialog">Language</button>
+          <button id="btnToolsWebSettings" class="btn" type="button">Web Settings</button>
+          <button id="btnDeviceInfo" class="btn" type="button">Info</button>
         </div>
 
         <div class="section tools-group is-open" data-tools-group="git">
@@ -440,6 +431,39 @@
               <span id="logsScreenTitle">화면녹화</span>
             </button>
           </div>
+          <div id="logsMenu" class="ui-dropdown-menu logs-menu">
+            <button id="logsMenuButton" class="ui-dropdown-menu__button logs-menu__button" type="button"
+                    aria-haspopup="menu" aria-expanded="false" aria-controls="logsMenuPanel"
+                    aria-label="로그 메뉴" title="로그 메뉴">
+              <span class="ui-menu-icon" aria-hidden="true">
+                <span class="ui-menu-icon__line"></span>
+                <span class="ui-menu-icon__line"></span>
+                <span class="ui-menu-icon__line"></span>
+              </span>
+            </button>
+            <div id="logsMenuPanel" class="ui-dropdown-menu__panel logs-menu__panel" role="menu" hidden>
+              <div class="logs-menu__group" role="group" aria-labelledby="logsSortGroupLabel">
+                <div id="logsSortGroupLabel" class="logs-menu__label">정렬</div>
+                <button id="logsSortAsc" class="ui-dropdown-menu__item logs-menu__item" type="button"
+                        role="menuitemradio" aria-checked="false" data-logs-menu-action="sort_asc">
+                  <span id="logsSortAscLabel">정렬: 오름차순</span>
+                </button>
+                <button id="logsSortDesc" class="ui-dropdown-menu__item logs-menu__item" type="button"
+                        role="menuitemradio" aria-checked="false" data-logs-menu-action="sort_desc">
+                  <span id="logsSortDescLabel">정렬: 내림차순</span>
+                </button>
+              </div>
+              <div class="logs-menu__group" role="group" aria-labelledby="logsRecentUploadLabel">
+                <div id="logsRecentUploadLabel" class="logs-menu__label">최근 로그 전송</div>
+                <button id="logsUploadRecent2" class="ui-dropdown-menu__item logs-menu__item" type="button"
+                        role="menuitem" data-logs-menu-action="upload_recent" data-limit="2">최근 2개 전송</button>
+                <button id="logsUploadRecent5" class="ui-dropdown-menu__item logs-menu__item" type="button"
+                        role="menuitem" data-logs-menu-action="upload_recent" data-limit="5">최근 5개 전송</button>
+                <button id="logsUploadRecent10" class="ui-dropdown-menu__item logs-menu__item" type="button"
+                        role="menuitem" data-logs-menu-action="upload_recent" data-limit="10">최근 10개 전송</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <section id="logsDashcamPanel" class="logs-panel" aria-labelledby="logsTabDashcam">
@@ -494,10 +518,6 @@
           </div>
         </div>
 
-        <div class="carrot-stage__topbar">
-          <div id="carrotStageStatus" class="carrot-stage__status">waiting stream...</div>
-        </div>
-        <div id="carrotStageDebug" class="carrot-stage__debug">LD:- LT:- SR:-</div>
         <div id="carrotReplayControls" class="carrot-replay-controls" hidden aria-label="Drive replay controls">
           <div class="carrot-replay-controls__header">
             <div class="carrot-replay-controls__heading">
@@ -509,10 +529,6 @@
               <button id="btnCarrotReplayClose" class="carrot-replay-controls__close smallBtn" type="button" aria-label="Close replay">닫기</button>
             </div>
           </div>
-          <label id="carrotReplayHudControl" class="carrot-replay-controls__hudToggle" for="carrotReplayHudToggle">
-            <input id="carrotReplayHudToggle" type="checkbox">
-            <span id="carrotReplayHudToggleLabel">HUD</span>
-          </label>
           <div id="carrotReplaySegmentNav" class="carrot-replay-controls__segmentNav carrot-media-action-group" role="group" aria-label="Replay playback controls" hidden>
             <button id="btnCarrotReplayPrevious" class="carrot-replay-controls__segmentBtn carrot-media-action-button carrot-media-action-button--previous" type="button" aria-label="Previous segment">
               <svg viewBox="0 0 36 36" aria-hidden="true"><path d="M11 10h3v16h-3zm4 8 12-8v16z"></path></svg>
@@ -565,11 +581,11 @@
         </div>
         <aside id="carrotReplayInsights" class="carrot-replay-insights" aria-label="Replay details" aria-hidden="true">
           <div class="carrot-replay-insights__tabbar">
-            <div class="carrot-replay-insights__tabs" role="tablist" aria-label="Replay detail type">
-              <button id="carrotReplayInsightsEventsTab" class="carrot-replay-insights__tab smallBtn is-active" type="button" role="tab" aria-selected="true" aria-controls="carrotReplayInsightsEventsPanel" tabindex="0" data-replay-insights-tab="events">Events</button>
-              <button id="carrotReplayInsightsGraphsTab" class="carrot-replay-insights__tab smallBtn" type="button" role="tab" aria-selected="false" aria-controls="carrotReplayInsightsGraphsPanel" tabindex="-1" data-replay-insights-tab="graphs">Graphs</button>
-              <button id="carrotReplayInsightsSensorsTab" class="carrot-replay-insights__tab smallBtn" type="button" role="tab" aria-selected="false" aria-controls="carrotReplayInsightsSensorsPanel" tabindex="-1" data-replay-insights-tab="sensors">Forward</button>
-              <button id="carrotReplayInsightsAdvancedTab" class="carrot-replay-insights__tab smallBtn" type="button" role="tab" aria-selected="false" aria-controls="carrotReplayInsightsAdvancedPanel" tabindex="-1" data-replay-insights-tab="advanced">Analysis</button>
+            <div class="carrot-replay-insights__tabs c-segmented-control" role="tablist" aria-label="Replay detail type">
+              <button id="carrotReplayInsightsEventsTab" class="carrot-replay-insights__tab c-segmented-control__item smallBtn is-active" type="button" role="tab" aria-selected="true" aria-controls="carrotReplayInsightsEventsPanel" tabindex="0" data-replay-insights-tab="events">Events</button>
+              <button id="carrotReplayInsightsGraphsTab" class="carrot-replay-insights__tab c-segmented-control__item smallBtn" type="button" role="tab" aria-selected="false" aria-controls="carrotReplayInsightsGraphsPanel" tabindex="-1" data-replay-insights-tab="graphs">Graphs</button>
+              <button id="carrotReplayInsightsSensorsTab" class="carrot-replay-insights__tab c-segmented-control__item smallBtn" type="button" role="tab" aria-selected="false" aria-controls="carrotReplayInsightsSensorsPanel" tabindex="-1" data-replay-insights-tab="sensors">Forward</button>
+              <button id="carrotReplayInsightsAdvancedTab" class="carrot-replay-insights__tab c-segmented-control__item smallBtn" type="button" role="tab" aria-selected="false" aria-controls="carrotReplayInsightsAdvancedPanel" tabindex="-1" data-replay-insights-tab="advanced">Analysis</button>
             </div>
           </div>
           <div class="carrot-replay-insights__body">
@@ -580,55 +596,55 @@
               <button id="btnCarrotReplayEventFollow" class="carrot-replay-insights__follow smallBtn" type="button" hidden>Jump to current</button>
             </section>
             <section id="carrotReplayInsightsGraphsPanel" class="carrot-replay-insights__panel" role="tabpanel" aria-labelledby="carrotReplayInsightsGraphsTab" aria-hidden="true" tabindex="0" data-replay-insights-panel="graphs">
-              <div class="carrot-replay-insights__graphs">
-                  <div class="carrot-replay-insights__graph" data-replay-graph="speed" aria-label="Speed graph">
-                    <div class="carrot-replay-insights__graphHead"><strong id="carrotReplaySpeedGraphLabel">Speed</strong><output>--.- km/h</output></div>
-                    <svg viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.8"></polyline></svg>
-                    <i class="carrot-replay-insights__cursor" aria-hidden="true"></i>
+              <div class="carrot-replay-insights__graphs telemetry-graphs">
+                  <div class="carrot-replay-insights__graph telemetry-graph" data-replay-graph="speed" data-telemetry-metric="speed" data-telemetry-tone="info" aria-label="Speed graph">
+                    <div class="carrot-replay-insights__graphHead telemetry-graph__head"><strong id="carrotReplaySpeedGraphLabel">Speed</strong><output>--.- km/h</output></div>
+                    <svg class="telemetry-graph__plot" viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.8"></polyline></svg>
+                    <i class="carrot-replay-insights__cursor telemetry-graph__cursor" aria-hidden="true"></i>
                   </div>
-                  <div class="carrot-replay-insights__graph" data-replay-graph="steer" aria-label="Steering angle graph">
-                    <div class="carrot-replay-insights__graphHead"><strong id="carrotReplaySteerGraphLabel">Steering</strong><output>--.--°</output></div>
-                    <svg viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.6"></polyline></svg>
-                    <i class="carrot-replay-insights__cursor" aria-hidden="true"></i>
+                  <div class="carrot-replay-insights__graph telemetry-graph" data-replay-graph="steer" data-telemetry-metric="steering" data-telemetry-tone="primary" aria-label="Steering angle graph">
+                    <div class="carrot-replay-insights__graphHead telemetry-graph__head"><strong id="carrotReplaySteerGraphLabel">Steering</strong><output>--.--°</output></div>
+                    <svg class="telemetry-graph__plot" viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.6"></polyline></svg>
+                    <i class="carrot-replay-insights__cursor telemetry-graph__cursor" aria-hidden="true"></i>
                   </div>
-                  <div class="carrot-replay-insights__graph" data-replay-graph="accel" aria-label="Acceleration graph">
-                    <div class="carrot-replay-insights__graphHead"><strong id="carrotReplayAccelGraphLabel">Acceleration</strong><output>--.-- m/s²</output></div>
-                    <svg viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.6"></polyline></svg>
-                    <i class="carrot-replay-insights__cursor" aria-hidden="true"></i>
+                  <div class="carrot-replay-insights__graph telemetry-graph" data-replay-graph="accel" data-telemetry-metric="acceleration" data-telemetry-tone="success" aria-label="Acceleration graph">
+                    <div class="carrot-replay-insights__graphHead telemetry-graph__head"><strong id="carrotReplayAccelGraphLabel">Acceleration</strong><output>--.-- m/s²</output></div>
+                    <svg class="telemetry-graph__plot" viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.6"></polyline></svg>
+                    <i class="carrot-replay-insights__cursor telemetry-graph__cursor" aria-hidden="true"></i>
                   </div>
-                  <div class="carrot-replay-insights__graph" data-replay-graph="lead" aria-label="Lead distance graph">
-                    <div class="carrot-replay-insights__graphHead"><strong id="carrotReplayLeadGraphLabel">Lead distance</strong><output>--.- m</output></div>
-                    <svg viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.6"></polyline></svg>
-                    <i class="carrot-replay-insights__cursor" aria-hidden="true"></i>
+                  <div class="carrot-replay-insights__graph telemetry-graph" data-replay-graph="lead" data-telemetry-metric="lead_distance" data-telemetry-tone="warning" aria-label="Lead distance graph">
+                    <div class="carrot-replay-insights__graphHead telemetry-graph__head"><strong id="carrotReplayLeadGraphLabel">Lead distance</strong><output>--.- m</output></div>
+                    <svg class="telemetry-graph__plot" viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true"><polyline points="" fill="none" stroke-width="1.6"></polyline></svg>
+                    <i class="carrot-replay-insights__cursor telemetry-graph__cursor" aria-hidden="true"></i>
                   </div>
               </div>
             </section>
             <section id="carrotReplayInsightsSensorsPanel" class="carrot-replay-insights__panel carrot-replay-insights__panel--sensors" role="tabpanel" aria-labelledby="carrotReplayInsightsSensorsTab" aria-hidden="true" tabindex="0" data-replay-insights-panel="sensors">
-              <div id="carrotReplaySensorTopview" class="carrot-replay-sensor" aria-labelledby="carrotReplaySensorTitle">
-                <div class="carrot-replay-sensor__head">
+              <div id="carrotReplaySensorTopview" class="carrot-replay-sensor telemetry-forward" aria-labelledby="carrotReplaySensorTitle">
+                <div class="carrot-replay-sensor__head telemetry-forward__head">
                   <strong id="carrotReplaySensorTitle">Forward perception</strong>
                   <span id="carrotReplaySensorStatus">--</span>
                 </div>
-                <div id="carrotReplaySensorLegend" class="carrot-replay-sensor__legend" aria-label="Sensor sources"></div>
-                <div id="carrotReplaySensorViewport" class="carrot-replay-sensor__viewport" role="region" tabindex="0" aria-labelledby="carrotReplaySensorTitle">
-                  <div id="carrotReplaySensorPlot" class="carrot-replay-sensor__plot">
-                    <canvas id="carrotReplaySensorCanvas" aria-label="Forward perception"></canvas>
-                    <svg id="carrotReplaySensorEgo" class="carrot-replay-sensor__ego" viewBox="0 0 24 40" aria-hidden="true" focusable="false">
-                      <rect class="carrot-replay-sensor__egoMirror" x="1.4" y="11.4" width="2.9" height="3.2" rx="1.1" />
-                      <rect class="carrot-replay-sensor__egoMirror" x="19.7" y="11.4" width="2.9" height="3.2" rx="1.1" />
+                <div id="carrotReplaySensorLegend" class="carrot-replay-sensor__legend telemetry-forward__legend" aria-label="Sensor sources"></div>
+                <div id="carrotReplaySensorViewport" class="carrot-replay-sensor__viewport telemetry-forward__viewport" role="region" tabindex="0" aria-labelledby="carrotReplaySensorTitle">
+                  <div id="carrotReplaySensorPlot" class="carrot-replay-sensor__plot telemetry-forward__plot">
+                    <canvas id="carrotReplaySensorCanvas" class="telemetry-forward__canvas" aria-label="Forward perception"></canvas>
+                    <svg id="carrotReplaySensorEgo" class="carrot-replay-sensor__ego telemetry-forward__ego" viewBox="0 0 24 40" aria-hidden="true" focusable="false">
+                      <rect class="carrot-replay-sensor__egoMirror telemetry-forward__ego-mirror" x="1.4" y="11.4" width="2.9" height="3.2" rx="1.1" />
+                      <rect class="carrot-replay-sensor__egoMirror telemetry-forward__ego-mirror" x="19.7" y="11.4" width="2.9" height="3.2" rx="1.1" />
                       <path d="M12 1.6c2.2 0 3.6.5 4.4 1.5l2.3 2.9c1 1.3 1.5 2.9 1.5 4.7v20.1c0 2.4-.6 4.1-1.9 5.2l-1.7 1.5c-1.2 1-2.8 1.4-4.6 1.4s-3.4-.4-4.6-1.4l-1.7-1.5c-1.3-1.1-1.9-2.8-1.9-5.2V10.7c0-1.8.5-3.4 1.5-4.7l2.3-2.9C8.4 2.1 9.8 1.6 12 1.6z" />
-                      <path class="carrot-replay-sensor__egoGlass" d="M8.8 10.4h6.4l1.5 4.4H7.3z" />
-                      <path class="carrot-replay-sensor__egoGlass" d="M7.7 28h8.6l-1.1 3.6H8.8z" />
+                      <path class="carrot-replay-sensor__egoGlass telemetry-forward__ego-glass" d="M8.8 10.4h6.4l1.5 4.4H7.3z" />
+                      <path class="carrot-replay-sensor__egoGlass telemetry-forward__ego-glass" d="M7.7 28h8.6l-1.1 3.6H8.8z" />
                     </svg>
-                    <div id="carrotReplaySensorTooltip" class="carrot-replay-sensor__tooltip" hidden>
-                      <span class="carrot-replay-sensor__tooltipIcon" aria-hidden="true"></span>
-                      <strong class="carrot-replay-sensor__tooltipTitle"></strong>
-                      <span class="carrot-replay-sensor__tooltipState"></span>
-                      <dl class="carrot-replay-sensor__tooltipRows"></dl>
+                    <div id="carrotReplaySensorTooltip" class="carrot-replay-sensor__tooltip telemetry-forward__tooltip" hidden>
+                      <span class="carrot-replay-sensor__tooltipIcon telemetry-forward__tooltip-icon" aria-hidden="true"></span>
+                      <strong class="carrot-replay-sensor__tooltipTitle telemetry-forward__tooltip-title"></strong>
+                      <span class="carrot-replay-sensor__tooltipState telemetry-forward__tooltip-state"></span>
+                      <dl class="carrot-replay-sensor__tooltipRows telemetry-forward__tooltip-rows"></dl>
                     </div>
                   </div>
                 </div>
-                <div id="carrotReplaySensorMessage" class="carrot-replay-sensor__message" role="status">LOADING</div>
+                <div id="carrotReplaySensorMessage" class="carrot-replay-sensor__message telemetry-forward__message" role="status">LOADING</div>
               </div>
             </section>
             <section id="carrotReplayInsightsAdvancedPanel" class="carrot-replay-insights__panel" role="tabpanel" aria-labelledby="carrotReplayInsightsAdvancedTab" aria-hidden="true" tabindex="0" data-replay-insights-panel="advanced">
@@ -683,14 +699,16 @@
             </section>
           </div>
         </aside>
-        <div class="carrot-stage__controls" role="group" aria-label="Sound, display and recording controls">
+        <div class="carrot-stage__controls" role="group" aria-label="Sound, HUD, display and recording controls">
+          <label id="carrotReplayHudControl" class="carrot-stage__controlBtn carrot-stage__controlBtn--hud carrot-replay-controls__hudToggle" for="carrotReplayHudToggle" hidden>
+            <input id="carrotReplayHudToggle" type="checkbox">
+            <span id="carrotReplayHudToggleLabel">HUD</span>
+          </label>
           <button id="btnWebSound" class="carrot-stage__controlBtn carrot-stage__controlBtn--sound" type="button" aria-label="Web sound">Sound</button>
           <button id="btnCarrotReplaySpeed" class="carrot-stage__controlBtn carrot-stage__controlBtn--replay-speed" type="button" aria-label="Replay speed" hidden>1×</button>
           <button id="btnDisplayModeCycle" class="carrot-stage__controlBtn carrot-stage__controlBtn--display" type="button" aria-label="Display mode">Normal</button>
           <button id="btnRecordToggle" class="carrot-stage__controlBtn carrot-stage__controlBtn--record" type="button" aria-label="Record">Record</button>
         </div>
-
-          <div id="carrotStageMeta" class="carrot-stage__meta">model:- road:- cal:-</div>
         </div>
         <div id="carrotNaviDivider" class="carrot-navi-divider" data-drive-workspace-divider role="separator" aria-orientation="vertical" aria-label="Resize Carrot Navi" aria-valuemin="30" aria-valuemax="70" aria-valuenow="70" tabindex="0" hidden>
           <span aria-hidden="true"></span>
@@ -801,83 +819,7 @@
       </div>
     </div>
     <button id="carrotRtcPerfHoldTarget" class="carrot-rtc-perf-hold-target" type="button" aria-label="Hold HUD to toggle Carrot Vision diagnostic summary"></button>
-    <div class="hudWrap" id="hudRoot">
-      <div class="hudMetricBar" role="presentation">
-        <div class="hudMetricCell">
-          <span class="hudMetricIcon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path fill="currentColor" d="M15 13.76V5a3 3 0 1 0-6 0v8.76A5 5 0 1 0 15 13.76M11 5a1 1 0 1 1 2 0v9.66l.59.3A3 3 0 1 1 10.41 15l.59-.34z"/>
-            </svg>
-          </span>
-          <span id="hudCpuVal" class="hudMetricValue">--°</span>
-        </div>
-        <div class="hudMetricDivider" aria-hidden="true"></div>
-        <div class="hudMetricCell">
-          <span class="hudMetricIcon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path fill="currentColor" d="M7 7h10v10H7zm-2 2H3v6h2zm16 0h-2v6h2zM9 3H7v2h2zm4 0h-2v2h2zm4 0h-2v2h2zm-8 16H7v2h2zm4 0h-2v2h2zm4 0h-2v2h2z"/>
-            </svg>
-          </span>
-          <span id="hudMemVal" class="hudMetricValue">--%</span>
-        </div>
-        <div class="hudMetricDivider" aria-hidden="true"></div>
-        <div class="hudMetricCell">
-          <span class="hudMetricIcon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path id="hudAuxIconPath" fill="currentColor" d="M11 21h-1l1-7H8.5a.5.5 0 0 1-.39-.81L13 3h1l-1 7h2.5a.5.5 0 0 1 .39.81z"/>
-            </svg>
-          </span>
-          <span id="hudDiskVal" class="hudMetricValue">--.-V</span>
-        </div>
-      </div>
-
-      <div class="hudBody">
-        <div class="hudSpeedColumn">
-          <div id="hudSpeedLabel" class="hudSectionLabel">현재속도</div>
-          <div id="hudSpeed" class="hudSpeedValue">--</div>
-        </div>
-        <div class="hudBodyDivider" aria-hidden="true"></div>
-        <div class="hudSupportColumn">
-          <div id="hudSetSpeedLabel" class="hudSectionLabel">설정속도</div>
-          <div id="hudSetSpeed" class="hudSetSpeedValue">--</div>
-          <div class="hudInlineDivider" aria-hidden="true"></div>
-          <div class="hudSupportLine">
-            <span id="hudTempReason" class="hudSupportKey">TEMP</span>
-            <span id="hudTempSpeed" class="hudSupportValue">--</span>
-          </div>
-          <div class="hudInlineDivider" aria-hidden="true"></div>
-          <div class="hudSupportDetail">
-            <div class="hudGapStatus">
-              <div id="hudBars" class="hudGapBars">
-                <div class="hudGapBar"></div>
-                <div class="hudGapBar"></div>
-                <div class="hudGapBar"></div>
-                <div class="hudGapBar"></div>
-              </div>
-              <div id="hudGapNum" class="hudGapText">(--)</div>
-            </div>
-          </div>
-          <!-- 기어: 설정속도 칼럼 우측 빈 공간(중앙)에 절대배치 -->
-          <div class="hudGearStatus hudGearStatus--floating">
-            <div id="hudGearStep" class="hudGearStep" hidden>1</div>
-            <div id="hudGearLabel" class="hudGearLabel">GEAR</div>
-            <div id="hudGear" class="hudGearValue">P</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="hudBottomStrip">
-        <div class="hudSignalSlot">
-          <span id="hudSignalDot" class="hudSignalDot" aria-hidden="true"></span>
-        </div>
-        <div class="hudMetricDivider" aria-hidden="true"></div>
-        <div id="hudDriveMode" class="hudBottomSegment">일반</div>
-        <div class="hudMetricDivider" aria-hidden="true"></div>
-        <div id="hudRoadLimitDisplay" class="hudBottomSegment">LIMIT --</div>
-        <div class="hudMetricDivider" aria-hidden="true"></div>
-        <div id="hudConnectivity" class="hudBottomSegment">--</div>
-      </div>
-    </div>
+    <!-- 구 초록 HUD(#hudRoot)는 신규 Carrot HUD 오버레이로 대체되어 제거됨. #driveHudCard 셸은 boot(DriveVisionHudContent)에 필요해 유지. -->
   </div>
 
   <video id="rtcVideo" class="rtcVideo rtcVideo--shared" autoplay playsinline muted disablepictureinpicture></video>
@@ -980,127 +922,71 @@
     </div>
   </div>
 
+  <script src="/js/generated/app.js"></script>
+  <script src="/js/generated/drive.js"></script>
   <script src="/js/vendor/plyr.min.js?v=3.7.8"></script>
   <script src="/js/vendor/qrcode-generator.js?v=1.4.4"></script>
   <script src="/js/vendor/jsQR.js?v=1.4.0"></script>
   <script src="/js/translations/registry.js?v=2605-09"></script>
-  <script src="/js/translations/ko.js?v=2607-93"></script>
-  <script src="/js/translations/en.js?v=2607-90"></script>
-  <script src="/js/translations/zh.js?v=2607-90"></script>
-  <script src="/js/realtime/drive_contents/vision/hud_renderer.js?v=2607-45"></script>
-  <script src="/js/realtime/drive_contents/vision/hud_content.js?v=2607-05"></script>
-  <script src="/js/shared/constants.js?v=2604-72"></script>
+  <script src="/js/translations/ko.js?v=2607-102"></script>
+  <script src="/js/translations/en.js?v=2607-99"></script>
+  <script src="/js/translations/zh.js?v=2607-99"></script>
+  <script src="/js/shared/constants.js?v=2607-01"></script>
   <script src="/js/shared/dom.js?v=2607-01"></script>
   <script src="/js/shared/utils.js?v=2604-71"></script>
-  <script src="/js/shared/i18n.js?v=2607-06"></script>
+  <script src="/js/shared/i18n.js?v=2607-08"></script>
   <script src="/js/shared/api.js?v=2604-73"></script>
+  <script src="/js/generated/settings.js"></script>
   <script src="/js/shared/setting_diff.js?v=2605-01"></script>
   <script src="/js/shared/activity.js?v=2604-04"></script>
-  <script src="/js/shared/ui/focus_trap.js?v=2605-15"></script>
-  <script src="/js/shared/ui/dialog.js?v=2607-44"></script>
   <script src="/js/shared/ui/setting_form.js?v=2607-03"></script>
   <script src="/js/shared/ui/viewport.js?v=2607-56"></script>
   <script src="/js/shared/ui/effects.js?v=2604-72"></script>
   <script src="/js/shared/ui/media_transport.js?v=2607-16"></script>
-  <script src="/js/shared/ui/navigation.js?v=2607-43"></script>
+  <script src="/js/shared/ui/navigation.js?v=2607-47"></script>
   <script src="/js/pages/car.js?v=2607-01"></script>
   <script src="/js/pages/setting_youtube_live.js?v=2607-51"></script>
   <script src="/js/pages/setting_mapbox_tokens.js?v=2607-06"></script>
   <script src="/js/shared/ui/nav_status_badges.js?v=2607-02"></script>
-  <script src="/js/pages/setting.js?v=2607-51"></script>
+  <script src="/js/pages/setting.js?v=2607-60"></script>
   <script src="/js/pages/setting_device_config.js?v=2605-06"></script>
   <script src="/js/pages/setting_device_render.js?v=2607-51"></script>
   <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
   <script src="/js/pages/setting_device_actions.js?v=2607-52"></script>
-  <script src="/js/pages/setting_device.js?v=2607-02"></script>
-  <script src="/js/shared/drive_layout_spec.js?v=2607-03"></script>
-  <script src="/js/pages/tools_web_settings_schema.js?v=2607-58"></script>
-  <script src="/js/pages/tools_web_settings_state.js?v=2607-53"></script>
-  <script src="/js/pages/web_settings/components.js?v=2607-01"></script>
-  <script src="/js/pages/tools_web_settings_render.js?v=2607-53"></script>
-  <script src="/js/pages/web_settings/drive_layout.js?v=2607-05"></script>
-  <script src="/js/pages/tools_web_settings.js?v=2607-55"></script>
+  <script src="/js/pages/setting_device.js?v=2607-03"></script>
   <script src="/js/realtime/web_sound.js?v=2607-51"></script>
-  <script src="/js/pages/tools_notifications.js?v=2607-42"></script>
-  <script src="/js/pages/tools.js?v=2607-44"></script>
-  <script src="/js/pages/tools_settings_qr.js?v=2605-11"></script>
+  <script src="/js/generated/tools.js"></script>
   <script src="/js/pages/branch.js?v=2604-82"></script>
-  <script src="/js/pages/logs/shared.js?v=2607-15"></script>
-  <script src="/js/pages/logs/dashcam.js?v=2607-16"></script>
-  <script src="/js/pages/logs/screenrecord.js?v=2605-15"></script>
+  <script src="/js/generated/logs.js"></script>
   <script src="/js/vendor/xterm-addon-shim.js?v=1"></script>
   <script src="/js/vendor/xterm.js?v=553"></script>
   <script src="/js/vendor/xterm-addon-webgl.js?v=016"></script>
   <script src="/js/vendor/xterm-addon-canvas.js?v=005"></script>
-  <script src="/js/pages/terminal.js?v=2607-103"></script>
-  <script src="/js/shared/ui/terminal_typing_indicator.js?v=2607-01"></script>
-  <script src="/js/pages/support_terminal.js?v=2607-26"></script>
+  <script src="/js/generated/terminal.js"></script>
+  <script src="/js/generated/terminal-shared.js"></script>
+  <script src="/js/generated/terminal-support.js"></script>
   <script src="/js/realtime/mini_hud_model.js?v=2607-85"></script>
   <script src="/js/realtime/mini_hud_mode.js?v=2607-51"></script>
   <script src="/js/realtime/mini_hud.js?v=2607-89"></script>
-  <script src="/js/realtime/vision_state.js?v=2607-04"></script>
-  <script src="/js/realtime/vision_compact.js?v=2607-05"></script>
-  <script src="/js/realtime/vision_rtc.js?v=2607-24"></script>
-  <script src="/js/realtime/vision_raw.js?v=2607-16"></script>
-  <script src="/js/realtime/app_realtime.js?v=2607-58"></script>
-  <script src="/js/realtime/replay_insights_model.js?v=2607-05"></script>
-  <script src="/js/realtime/replay_insights_renderers.js?v=2607-01"></script>
-  <script src="/js/realtime/replay_insights_data.js?v=2607-09"></script>
-  <script src="/js/realtime/replay_sensor_topview.js?v=2607-11"></script>
-  <script src="/js/realtime/replay_insights.js?v=2607-40"></script>
-  <script src="/js/realtime/replay_client.js?v=2607-08"></script>
-  <script src="/js/realtime/vision_replay.js?v=2607-37"></script>
+  <script src="/js/realtime/vision_state.js?v=2607-07"></script>
+  <script src="/js/realtime/vision_compact.js?v=2607-06"></script>
+  <script src="/js/realtime/vision_rtc.js?v=2607-28"></script>
+  <script src="/js/realtime/vision_raw.js?v=2607-20"></script>
+  <script src="/js/realtime/app_realtime.js?v=2607-63"></script>
+  <script src="/js/generated/replay.js"></script>
+  <script src="/js/realtime/replay_client.js?v=2607-09"></script>
+  <script src="/js/realtime/vision_replay.js?v=2607-41"></script>
   <script src="/js/realtime/vision_diag.js?v=2607-01"></script>
   <script src="/js/pages/vision_background.js?v=2605-01"></script>
   <script src="/js/realtime/vision_webgl2.js?v=2607-04"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/overlay_primitives.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/overlay.js?v=2607-13"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/footer_state.js?v=2607-02"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/overlay_store.js?v=2607-03"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/lifecycle.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/compositor.js?v=2607-02"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/mse.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/transport.js?v=2607-02"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/health.js?v=2607-05"></script>
-  <script src="/js/realtime/drive_workspace.js?v=2607-18"></script>
-  <script src="/js/realtime/drive_workspace_runtime.js?v=2607-02"></script>
-  <script src="/js/realtime/drive_content.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_content_intro.js?v=2607-02"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/split.js?v=2607-16"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/runtime.js?v=2607-44"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/facade.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/carrot_navi/content.js?v=2607-03"></script>
-  <script src="/js/realtime/drive_contents/vision/replay_render_bridge.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/replay_render_controller.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/hud_layout.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/hud_canvas.js?v=2607-02"></script>
-  <script src="/js/realtime/drive_contents/vision/hud_model.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/hud_rtc_perf.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/road_overlay_policy.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/road_overlay_projection.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/road_overlay_geometry_renderer.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/road_overlay_aux_renderer.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/road_overlay_lead_model.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/road_overlay_lead_renderer.js?v=2607-01"></script>
-  <script src="/js/realtime/home_drive.js?v=2607-88"></script>
-  <script src="/js/realtime/drive_contents/vision/facade.js?v=2607-01"></script>
-  <script src="/js/realtime/drive_contents/vision/content.js?v=2607-05"></script>
+  <script src="/js/realtime/drive_content_intro.js?v=2607-04"></script>
+  <script src="/js/realtime/home_drive.js?v=2607-96"></script>
   <!-- 인트로 무대. 최초 1회만 쓰이며, 서버가 shouldShow 로 판단한다. -->
   <div class="intro" id="introDeck" hidden></div>
   <div class="intro-curtain" id="introCurtain"></div>
 
-  <script src="/js/intro/intro_i18n.js?v=2607-92"></script>
-  <script src="/js/intro/intro_registry.js?v=2607-91"></script>
-  <script src="/js/intro/intro_api.js?v=2607-91"></script>
-  <script src="/js/intro/steps/step0_welcome.js?v=2607-91"></script>
-  <script src="/js/intro/steps/step0b_restore.js?v=2607-91"></script>
-  <script src="/js/intro/steps/step2_car.js?v=2607-91"></script>
-  <script src="/js/intro/steps/step3_hda.js?v=2607-91"></script>
-  <script src="/js/intro/steps/step4_control.js?v=2607-91"></script>
-  <script src="/js/intro/steps/step5_legal.js?v=2607-91"></script>
-  <script src="/js/intro/steps/step6_outro.js?v=2607-91"></script>
-  <script src="/js/intro/intro.js?v=2607-92"></script>
-  <script src="/js/app.js?v=2606-11"></script>
+  <script src="/js/generated/intro.js"></script>
+  <script src="/js/app.js?v=2607-13"></script>
   <script src="/models/page_models.js?v=2607-01"></script>
 </body>
 </html>

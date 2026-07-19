@@ -2,177 +2,90 @@
 
 // Setting page — groups, items, value cache, search, screen layout.
 
-let settingsLoadPromise = null;
-let settingValueWarmupTimer = null;
-let settingValueWarmupPromise = null;
+let settingsEntryViewPromise = null;
+let settingInitialLoadingTimer = null;
 let settingRestoreRefreshTimer = null;
-const SETTING_VALUES_TTL_MS = 60000;
-const settingValueCache = new Map();
-const settingGroupValueCache = new Map();
-const settingGroupValuePromises = new Map();
-const settingPopularValuesState = {
-  loaded: false,
-  loadPromise: null,
-  carKey: "",
-  values: {},
-  fetchedAt: 0,
-};
+const SETTING_INITIAL_SKELETON_ROWS = 5;
+const SETTING_INITIAL_SKELETON_DELAY_MS = 140;
+const carrotSettingsRuntime = window.CarrotSettingsRuntime;
+if (
+  !carrotSettingsRuntime?.aux ||
+  !carrotSettingsRuntime?.catalog ||
+  !carrotSettingsRuntime?.derived ||
+  !carrotSettingsRuntime?.entry ||
+  !carrotSettingsRuntime?.view ||
+  !carrotSettingsRuntime?.values
+) {
+  throw new Error("CarrotSettingsRuntime is unavailable");
+}
+const settingAuxState = carrotSettingsRuntime.aux;
+const settingCatalogState = carrotSettingsRuntime.catalog;
+const settingDerivedRuntime = carrotSettingsRuntime.derived;
+const settingEntryRuntime = carrotSettingsRuntime.entry;
+const settingViewRuntime = carrotSettingsRuntime.view;
+const settingValueRepository = carrotSettingsRuntime.values;
+const SETTING_VALUES_TTL_MS = settingValueRepository.defaultTtlMs;
 
-const SETTING_FAVORITES_GROUP = "__setting_favorites__";
-const SETTING_PROFILES_DIVIDER = "__setting_profiles_divider__";
-const SETTING_PROFILE_GROUP_PREFIX = "__setting_profile__:";
-const SETTING_CATEGORY_DIVIDER_PREFIX = "__setting_category__:";
+const SETTING_FAVORITES_GROUP = settingDerivedRuntime.ids.favoritesGroup;
 const SETTING_FAVORITES_LONG_PRESS_MS = 620;
 const SETTING_FAVORITES_MOVE_TOLERANCE = 10;
-const settingFavoritesState = {
-  names: [],
-  loaded: false,
-  loadPromise: null,
-};
-const settingProfilesState = {
-  profiles: [],
-  loaded: false,
-  loadPromise: null,
-};
 const settingProfileSectionExpandedState = new Map();
+const settingProfileMenuActions = new WeakMap();
+const settingProfileMenuControllers = new Map();
 let settingSoundSampleAudio = null;
+
+function getSettingDerivedModel() {
+  return settingDerivedRuntime.getModel({
+    catalog: SETTINGS,
+    favorites: settingAuxState.favorites.get(),
+    profiles: settingAuxState.profiles.get(),
+    language: LANG,
+    labels: {
+      favorites: getSettingFavoritesLabel(),
+      profiles: getSettingProfilesLabel(),
+    },
+  });
+}
 
 function isSettingFavoritesGroup(group) {
   return group === SETTING_FAVORITES_GROUP;
 }
 
-function isSettingProfilesDivider(entry) {
-  return entry?.group === SETTING_PROFILES_DIVIDER || entry === SETTING_PROFILES_DIVIDER;
-}
-
-function isSettingCategoryDivider(entry) {
-  return String(entry?.group || "").startsWith(SETTING_CATEGORY_DIVIDER_PREFIX);
-}
-
-function isSettingAnyDivider(entry) {
-  return isSettingProfilesDivider(entry) || isSettingCategoryDivider(entry);
-}
-
 // 대>중>소 노드(카테고리/그룹/섹션)의 현재 언어 라벨. ko/en/zh 직접 보유 노드용.
 function settingNodeLabel(node) {
-  if (!node) return "";
-  if (LANG === "zh") return node.zh || node.en || node.ko || "";
-  if (LANG === "ko") return node.ko || node.en || node.zh || "";
-  return node.en || node.ko || node.zh || "";
-}
-
-// /api/settings 의 categories(대>중>소)가 있으면 groups/items_by_group 를
-// 중-group id 키 기준으로 정규화한다. 각 항목엔 소-섹션 라벨을 __section 으로 부착.
-// categories 가 없으면(구버전) 아무것도 바꾸지 않아 기존 평면 UI 로 폴백.
-function normalizeSettingCategories(j) {
-  if (!j || !Array.isArray(j.categories) || !j.categories.length) return;
-  const idx = {};
-  Object.values(j.items_by_group || {}).forEach((list) => {
-    (list || []).forEach((it) => { if (it && it.name) idx[it.name] = it; });
-  });
-  const flatGroups = [];
-  const newItemsByGroup = {};
-  j.categories.forEach((cat) => {
-    (cat.groups || []).forEach((g) => {
-      flatGroups.push({ group: g.id, ko: g.ko, en: g.en, zh: g.zh, count: g.count, category: cat.id });
-      const items = [];
-      (g.sections || []).forEach((sec) => {
-        // 라벨이 없어도(단일 직속 섹션) 카드는 만들도록 항상 객체로 둔다.
-        const secLabel = { id: sec.id, ko: sec.ko, en: sec.en, zh: sec.zh };
-        (sec.items || []).forEach((name) => {
-          const def = idx[name];
-          if (def) items.push(Object.assign({}, def, { __section: secLabel }));
-        });
-      });
-      newItemsByGroup[g.id] = items;
-    });
-  });
-  j.groups = flatGroups;
-  j.items_by_group = newItemsByGroup;
+  return settingDerivedRuntime.localizedNodeLabel(node, LANG);
 }
 
 function settingProfileGroup(profileId) {
-  return SETTING_PROFILE_GROUP_PREFIX + String(profileId || "");
+  return getSettingDerivedModel().profileGroup(profileId);
 }
 
 function isSettingProfileGroup(group) {
-  return String(group || "").startsWith(SETTING_PROFILE_GROUP_PREFIX);
-}
-
-function getSettingProfileIdFromGroup(group) {
-  return isSettingProfileGroup(group) ? String(group).slice(SETTING_PROFILE_GROUP_PREFIX.length) : "";
+  return getSettingDerivedModel().isProfileGroup(group);
 }
 
 function getSettingProfileById(profileId) {
-  const id = String(profileId || "");
-  return settingProfilesState.profiles.find((profile) => profile?.id === id) || null;
+  return getSettingDerivedModel().getProfileById(profileId);
 }
 
 function getSettingProfileByGroup(group) {
-  return getSettingProfileById(getSettingProfileIdFromGroup(group));
-}
-
-function normalizeSettingFavoriteNames(names) {
-  const out = [];
-  const seen = new Set();
-  (Array.isArray(names) ? names : []).forEach((item) => {
-    const name = String(item || "").trim();
-    if (!name || seen.has(name)) return;
-    seen.add(name);
-    out.push(name);
-  });
-  return out;
+  return getSettingDerivedModel().getProfileByGroup(group);
 }
 
 function findSettingItemByName(name) {
-  const target = String(name || "").trim();
-  if (!target || !SETTINGS?.items_by_group) return null;
-
-  for (const [group, list] of Object.entries(SETTINGS.items_by_group)) {
-    const item = (list || []).find((entry) => entry?.name === target);
-    if (item) return { group, item };
-  }
-  return null;
-}
-
-function getFavoriteSettingEntries() {
-  return settingFavoritesState.names
-    .map((name) => findSettingItemByName(name))
-    .filter(Boolean);
-}
-
-function getSettingGroupOrderIndex(group) {
-  const groups = SETTINGS?.groups || [];
-  const index = groups.findIndex((entry) => entry?.group === group);
-  return index >= 0 ? index : 9999;
-}
-
-function getSettingItemOrderIndex(group, name) {
-  const list = SETTINGS?.items_by_group?.[group] || [];
-  const index = list.findIndex((entry) => entry?.name === name);
-  return index >= 0 ? index : 9999;
+  return getSettingDerivedModel().findItemByName(name);
 }
 
 function getProfileSettingEntries(profile) {
-  const values = profile?.values || {};
-  return Object.keys(values)
-    .map((name) => findSettingItemByName(name))
-    .filter(Boolean)
-    .sort((a, b) => {
-      const groupDelta = getSettingGroupOrderIndex(a.group) - getSettingGroupOrderIndex(b.group);
-      if (groupDelta) return groupDelta;
-      const itemDelta = getSettingItemOrderIndex(a.group, a.item.name) - getSettingItemOrderIndex(b.group, b.item.name);
-      if (itemDelta) return itemDelta;
-      return String(a.item.name).localeCompare(String(b.item.name));
-    });
+  return getSettingDerivedModel().getProfileEntries(profile);
 }
 
 function getValidSettingFavoriteNames() {
-  return getFavoriteSettingEntries().map((entry) => entry.item.name).filter(Boolean);
+  return getSettingDerivedModel().getValidFavoriteNames();
 }
 
 function isSettingFavorite(name) {
-  return settingFavoritesState.names.includes(String(name || "").trim());
+  return settingAuxState.favorites.get().includes(String(name || "").trim());
 }
 
 function getSettingFavoritesLabel() {
@@ -184,118 +97,27 @@ function getSettingProfilesLabel() {
 }
 
 function getSettingGroupsForDisplay() {
-  const out = [
-    {
-      group: SETTING_FAVORITES_GROUP,
-      count: getFavoriteSettingEntries().length,
-      virtual: true,
-    },
-  ];
-  const cats = SETTINGS?.categories;
-  if (Array.isArray(cats) && cats.length) {
-    cats.forEach((cat) => {
-      out.push({
-        group: SETTING_CATEGORY_DIVIDER_PREFIX + (cat.id || ""),
-        label: settingNodeLabel(cat),
-        divider: true,
-        virtual: true,
-      });
-      (cat.groups || []).forEach((g) => {
-        out.push({ group: g.id, ko: g.ko, en: g.en, zh: g.zh, count: g.count, category: cat.id });
-      });
-    });
-  } else {
-    out.push(...(SETTINGS?.groups || []));
-  }
-  const profiles = settingProfilesState.profiles || [];
-  if (profiles.length) {
-    out.push({
-      group: SETTING_PROFILES_DIVIDER,
-      label: getSettingProfilesLabel(),
-      divider: true,
-      virtual: true,
-    });
-    profiles.forEach((profile) => {
-      out.push({
-        group: settingProfileGroup(profile.id),
-        count: getProfileSettingEntries(profile).length,
-        label: profile.name,
-        profile,
-        virtual: true,
-      });
-    });
-  }
-  return out;
+  return getSettingDerivedModel().getGroupsForDisplay();
 }
 
 function getSettingItemEntriesForGroup(group) {
-  if (isSettingFavoritesGroup(group)) return getFavoriteSettingEntries();
-  const profile = getSettingProfileByGroup(group);
-  if (profile) return getProfileSettingEntries(profile);
-  return (SETTINGS?.items_by_group?.[group] || []).map((item) => ({ group, item }));
-}
-
-function normalizeSettingPopularValues(payload) {
-  const values = payload?.popular_values;
-  return values && typeof values === "object" && !Array.isArray(values) ? values : {};
+  return getSettingDerivedModel().getItemEntriesForGroup(group);
 }
 
 async function loadSettingPopularValues(force = false) {
-  if (!force && settingPopularValuesState.loaded) return settingPopularValuesState.values;
-  if (!force && settingPopularValuesState.loadPromise) return settingPopularValuesState.loadPromise;
-
-  settingPopularValuesState.loadPromise = getJson("/api/setting_popular_values")
-    .then((payload) => {
-      settingPopularValuesState.loaded = true;
-      settingPopularValuesState.carKey = String(payload?.car_key || "");
-      settingPopularValuesState.fetchedAt = Number(payload?.fetched_at || 0);
-      settingPopularValuesState.values = normalizeSettingPopularValues(payload);
-      return settingPopularValuesState.values;
-    })
-    .catch(() => {
-      settingPopularValuesState.loaded = true;
-      settingPopularValuesState.carKey = "";
-      settingPopularValuesState.fetchedAt = 0;
-      settingPopularValuesState.values = {};
-      return settingPopularValuesState.values;
-    })
-    .finally(() => {
-      settingPopularValuesState.loadPromise = null;
-    });
-
-  return settingPopularValuesState.loadPromise;
+  return settingAuxState.popular.load(force);
 }
 
 function getSettingPopularValue(name) {
-  const entry = settingPopularValuesState.values?.[String(name || "")];
-  return entry && typeof entry === "object" ? entry : null;
+  return settingAuxState.popular.getValue(name);
 }
 
 async function loadSettingFavorites(force = false) {
-  if (!force && settingFavoritesState.loaded) return settingFavoritesState.names;
-  if (!force && settingFavoritesState.loadPromise) return settingFavoritesState.loadPromise;
-
-  settingFavoritesState.loadPromise = getJson("/api/setting_favorites")
-    .then((payload) => {
-      settingFavoritesState.loaded = true;
-      settingFavoritesState.names = normalizeSettingFavoriteNames(payload?.favorites || []);
-      return settingFavoritesState.names;
-    })
-    .catch(() => {
-      settingFavoritesState.loaded = true;
-      settingFavoritesState.names = [];
-      return settingFavoritesState.names;
-    })
-    .finally(() => {
-      settingFavoritesState.loadPromise = null;
-    });
-
-  return settingFavoritesState.loadPromise;
+  return settingAuxState.favorites.load(force);
 }
 
 function invalidateSettingFavoriteRenderState() {
-  settingGroupValueCache.delete(SETTING_FAVORITES_GROUP);
-  settingGroupValuePromises.delete(SETTING_FAVORITES_GROUP);
+  settingValueRepository.invalidateGroup(SETTING_FAVORITES_GROUP);
   const itemsBox = document.getElementById("items");
   if (itemsBox?.dataset.renderedGroup === SETTING_FAVORITES_GROUP) {
     delete itemsBox.dataset.renderedGroup;
@@ -331,24 +153,24 @@ function refreshSettingFavoriteChrome(options = {}) {
 }
 
 async function persistSettingFavorites(nextNames) {
+  const normalized = settingAuxState.favorites.normalize(nextNames);
   const payload = await postJson("/api/setting_favorites", {
-    favorites: normalizeSettingFavoriteNames(nextNames),
+    favorites: normalized,
   });
-  settingFavoritesState.names = normalizeSettingFavoriteNames(payload?.favorites || nextNames);
-  return settingFavoritesState.names;
+  return settingAuxState.favorites.replace(payload?.favorites || normalized);
 }
 
 async function toggleSettingFavorite(name) {
   const cleanName = String(name || "").trim();
   if (!cleanName || !findSettingItemByName(cleanName)) return;
 
-  const previous = settingFavoritesState.names.slice();
+  const previous = settingAuxState.favorites.get().slice();
   const exists = previous.includes(cleanName);
   const next = exists
     ? previous.filter((entry) => entry !== cleanName)
     : [...previous, cleanName];
 
-  settingFavoritesState.names = normalizeSettingFavoriteNames(next);
+  settingAuxState.favorites.replace(next);
   invalidateSettingFavoriteRenderState();
   refreshSettingFavoriteChrome({ animateGroups: false });
 
@@ -370,7 +192,7 @@ async function toggleSettingFavorite(name) {
       ? getUIText("setting_favorite_removed", "Removed from favorites")
       : getUIText("setting_favorite_added", "Added to favorites"));
   } catch (e) {
-    settingFavoritesState.names = previous;
+    settingAuxState.favorites.replace(previous);
     invalidateSettingFavoriteRenderState();
     refreshSettingFavoriteChrome({ animateGroups: false });
     if (isSettingFavoritesGroup(CURRENT_GROUP)) {
@@ -389,28 +211,12 @@ function getSettingGroupParamNames(group) {
 }
 
 function cacheSettingValue(name, value, group = null) {
-  if (!name) return;
-  const loadedAt = Date.now();
-  settingValueCache.set(name, { value, loadedAt });
-  if (!group) return;
-  const cachedGroup = settingGroupValueCache.get(group);
-  if (!cachedGroup) return;
-  cachedGroup.values[name] = value;
-  cachedGroup.loadedAt = loadedAt;
+  settingValueRepository.setValue(name, value, group);
 }
 
-function primeSettingGroupValueCache(group, values) {
-  if (!group) return;
-  const loadedAt = Date.now();
-  const snapshot = { values: { ...(values || {}) }, loadedAt };
-  settingGroupValueCache.set(group, snapshot);
-  Object.entries(snapshot.values).forEach(([name, value]) => {
-    settingValueCache.set(name, { value, loadedAt });
-  });
-}
-
-function applyRestoredSettingValuesToRenderedItems(values) {
+function applyRestoredSettingValuesToRenderedItems(values, options = {}) {
   if (!values || typeof values !== "object") return false;
+  const animate = options.animate !== false;
   let updated = false;
   document.querySelectorAll(".setting[data-setting-name]").forEach((row) => {
     const name = row.dataset.settingName;
@@ -418,8 +224,10 @@ function applyRestoredSettingValuesToRenderedItems(values) {
     const valueButton = row.querySelector(".val");
     if (!valueButton) return;
     syncSettingControlState(row, values[name]);
-    row.classList.add("is-restored-live");
-    window.setTimeout(() => row.classList.remove("is-restored-live"), 900);
+    if (animate) {
+      row.classList.add("is-restored-live");
+      window.setTimeout(() => row.classList.remove("is-restored-live"), 900);
+    }
     updated = true;
   });
   return updated;
@@ -429,183 +237,202 @@ async function fetchSettingGroupValues(group, options = {}) {
   if (!group) return {};
   const profile = getSettingProfileByGroup(group);
   if (profile) return { ...(profile.values || {}) };
-  const force = options.force === true;
-  const ttlMs = Number.isFinite(options.ttlMs) ? options.ttlMs : SETTING_VALUES_TTL_MS;
   const names = getSettingGroupParamNames(group);
-  if (!names.length) {
-    primeSettingGroupValueCache(group, {});
-    return {};
+  const loadOptions = {
+    names,
+    force: options.force === true,
+    ttlMs: Number.isFinite(options.ttlMs) ? options.ttlMs : SETTING_VALUES_TTL_MS,
+    fetchMissing: bulkGet,
+  };
+  const cached = options.force !== true
+    ? settingValueRepository.peekValues?.(names)
+    : null;
+  if (cached?.complete) {
+    settingValueRepository.loadGroup(group, loadOptions).then((freshValues) => {
+      if (CURRENT_GROUP === group && isCarrotSettingTabActive()) {
+        const latest = settingValueRepository.peekValues?.(names);
+        applyRestoredSettingValuesToRenderedItems(
+          latest?.complete ? latest.values : freshValues,
+          { animate: false },
+        );
+      }
+    }).catch(() => {});
+    return { ...cached.values };
   }
+  return settingValueRepository.loadGroup(group, loadOptions);
+}
 
-  const cachedGroup = settingGroupValueCache.get(group);
-  if (!force && cachedGroup && hasFreshPageData(cachedGroup.loadedAt, ttlMs)) {
-    return { ...cachedGroup.values };
+function commitSettingsCatalog(catalog, snapshot = null) {
+  if (!catalog || typeof catalog !== "object") return null;
+  const prepared = settingCatalogState.commit(catalog, snapshot);
+  if (prepared.changed || SETTINGS !== prepared.catalog) {
+    SETTINGS = prepared.catalog;
+    UNIT_CYCLE = SETTINGS.unit_cycle || UNIT_CYCLE;
+    settingValueRepository.clear();
+    rebuildSettingSearchEntries();
   }
+  settingValueRepository.applyValues({
+    ...(snapshot?.values || {}),
+    ...(snapshot?.device_values || {}),
+  });
+  return SETTINGS;
+}
 
-  if (!force && settingGroupValuePromises.has(group)) {
-    return settingGroupValuePromises.get(group);
-  }
+const settingEntryController = settingEntryRuntime.createController({
+  snapshotStore: carrotSettingsRuntime.store,
+  getPreparedCatalog: () => SETTINGS,
+  loadLegacyCatalog: () => getJson("/api/settings"),
+  loadLegacyAuxiliary: (force) => Promise.allSettled([
+    loadSettingFavorites(force),
+    loadSettingProfiles(force),
+    loadSettingPopularValues(force),
+  ]),
+  commitCatalog: commitSettingsCatalog,
+});
 
-  const assembledValues = {};
-  const missingNames = [];
-  names.forEach((name) => {
-    const cachedValue = settingValueCache.get(name);
-    if (!force && cachedValue && hasFreshPageData(cachedValue.loadedAt, ttlMs)) {
-      assembledValues[name] = cachedValue.value;
-    } else {
-      missingNames.push(name);
+function scheduleSettingInitialLoadingState() {
+  if (SETTINGS || settingInitialLoadingTimer) return;
+  settingInitialLoadingTimer = window.setTimeout(() => {
+    settingInitialLoadingTimer = null;
+    if (SETTINGS || CURRENT_PAGE !== "setting") return;
+
+    const list = document.getElementById("groupList");
+    const page = document.getElementById("pageSetting");
+    if (!list || list.childElementCount) return;
+
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < SETTING_INITIAL_SKELETON_ROWS; index += 1) {
+      const row = document.createElement("div");
+      row.className = "setting-group-skeleton";
+      row.setAttribute("aria-hidden", "true");
+      const line = document.createElement("span");
+      line.className = "setting-group-skeleton__line";
+      row.appendChild(line);
+      fragment.appendChild(row);
     }
-  });
+    list.dataset.settingsLoading = "true";
+    list.appendChild(fragment);
+    page?.setAttribute("aria-busy", "true");
+  }, SETTING_INITIAL_SKELETON_DELAY_MS);
+}
 
-  if (!missingNames.length) {
-    primeSettingGroupValueCache(group, assembledValues);
-    return assembledValues;
+function clearSettingInitialLoadingState() {
+  if (settingInitialLoadingTimer) {
+    window.clearTimeout(settingInitialLoadingTimer);
+    settingInitialLoadingTimer = null;
   }
 
-  const loadPromise = (async () => {
-    const fetchedValues = await bulkGet(missingNames);
-    const nextValues = { ...assembledValues, ...(fetchedValues || {}) };
-    primeSettingGroupValueCache(group, nextValues);
-    return { ...nextValues };
-  })().finally(() => {
-    settingGroupValuePromises.delete(group);
-  });
-
-  settingGroupValuePromises.set(group, loadPromise);
-  return loadPromise;
-}
-
-async function warmupSettingGroupValues() {
-  if (!SETTINGS?.groups?.length) return;
-  const groups = SETTINGS.groups
-    .map((entry) => entry.group)
-    .filter(Boolean)
-    .filter((group) => group !== CURRENT_GROUP);
-
-  for (const group of groups) {
-    try {
-      await fetchSettingGroupValues(group, { ttlMs: SETTING_VALUES_TTL_MS });
-    } catch {}
-    await new Promise((resolve) => window.setTimeout(resolve, 24));
+  const list = document.getElementById("groupList");
+  if (list?.dataset.settingsLoading === "true") {
+    list.replaceChildren();
+    delete list.dataset.settingsLoading;
   }
+  document.getElementById("pageSetting")?.removeAttribute("aria-busy");
 }
 
-function scheduleSettingGroupValueWarmup(delay = 220) {
-  if (!SETTINGS?.groups?.length || settingValueWarmupTimer || settingValueWarmupPromise) return;
-  settingValueWarmupTimer = window.setTimeout(() => {
-    settingValueWarmupTimer = null;
-    requestIdleTask(() => {
-      settingValueWarmupPromise = warmupSettingGroupValues()
-        .catch(() => {})
-        .finally(() => {
-          settingValueWarmupPromise = null;
-        });
-    }, 1200);
-  }, Math.max(0, delay));
-}
-
-async function loadSettings(options = {}) {
-  const background = options.background === true;
-  const force = options.force === true;
+async function presentSettingsEntry(catalog, options = {}) {
+  const reusePreparedData = options.reusePreparedData === true;
+  const animateOnEnter = options.animateOnEnter === true;
   const meta = document.getElementById("settingsMeta");
 
-  if (SETTINGS && !force) {
-    await loadSettingFavorites();
-    await loadSettingProfiles();
-    await loadSettingPopularValues(true);
-    renderGroups({ animateGroups: false });
-    syncSettingSearchFabState();
-    if (!background && CURRENT_PAGE === "setting" && typeof syncSettingViewportLayout === "function") {
-      await syncSettingViewportLayout({ animateChrome: false, animateItems: false });
-    }
-    return SETTINGS;
+  if (meta) {
+    meta.textContent = `path: ${catalog.path} | has_params: ${catalog.has_params} | type_api: ${catalog.has_param_type}`;
+    meta.hidden = !DEBUG_UI;
+  }
+  if (!DEBUG_UI) {
+    const groupMeta = document.getElementById("groupMeta");
+    if (groupMeta) groupMeta.style.display = "none";
+    const carMeta = document.getElementById("carMeta");
+    if (carMeta) carMeta.style.display = "none";
   }
 
-  if (!force && settingsLoadPromise) return settingsLoadPromise;
-  if (!background && meta) meta.textContent = getUIText("loading", "Loading...");
+  clearSettingInitialLoadingState();
+  rebuildSettingSearchEntries();
+  syncSettingSearchFabState();
 
-  settingsLoadPromise = (async () => {
-    const j = await getJson("/api/settings");
-
-    normalizeSettingCategories(j);
-    SETTINGS = j;
-    UNIT_CYCLE = j.unit_cycle || UNIT_CYCLE;
-    settingValueCache.clear();
-    settingGroupValueCache.clear();
-    settingGroupValuePromises.clear();
-    await loadSettingFavorites(force);
-    await loadSettingProfiles(force);
-    await loadSettingPopularValues(force);
-    rebuildSettingSearchEntries();
-
-    if (meta) {
-      meta.textContent = `path: ${j.path} | has_params: ${j.has_params} | type_api: ${j.has_param_type}`;
-      if (!DEBUG_UI) {
-        meta.style.display = "none";
-      }
-    }
-
-    if (!DEBUG_UI) {
-      const gm = document.getElementById("groupMeta");
-      if (gm) gm.style.display = "none";
-      const cm = document.getElementById("carMeta");
-      if (cm) cm.style.display = "none";
-    }
-
-    renderGroups();
-    syncSettingSearchFabState();
-    scheduleSettingGroupValueWarmup(260);
-
-    if (!background || CURRENT_PAGE === "setting") {
-      CURRENT_GROUP = null;
-      if (isCompactLandscapeMode()) {
-        const initialGroup = getLandscapeDefaultSettingGroup();
-        if (initialGroup) await activateSettingGroup(initialGroup, false);
-        else showSettingScreen("groups", false);
-      } else {
-        showSettingScreen("groups", false);
-      }
-      if (settingSearchPanel && !settingSearchPanel.hidden) {
-        renderSettingSearchResults(settingSearchInput?.value || "");
-      }
-    }
-
-    return SETTINGS;
-  })().catch((e) => {
-    settingSearchEntries = [];
-    if (!background && meta) meta.textContent = "Failed: " + (e?.message || "unknown");
-    throw e;
-  }).finally(() => {
-    settingsLoadPromise = null;
+  if (CURRENT_GROUP && !getSettingDerivedModel().getGroupMeta(CURRENT_GROUP)) {
+    CURRENT_GROUP = null;
+    CURRENT_SETTING_DETAIL = null;
+  }
+  const animateLayout = animateOnEnter || !reusePreparedData;
+  await syncSettingViewportLayout({
+    animateChrome: animateLayout,
+    animateItems: animateLayout,
   });
+  if (settingSearchPanel && !settingSearchPanel.hidden) {
+    renderSettingSearchResults(settingSearchInput?.value || "");
+  }
 
-  return settingsLoadPromise;
+  if (reusePreparedData) {
+    // Popular values are already available from the snapshot. Refresh them
+    // after the re-entry paint and retain the prepared values on failure.
+    loadSettingPopularValues(true).catch(() => {});
+  }
+  return catalog;
+}
+
+function loadSettings(options = {}) {
+  if (settingsEntryViewPromise) return settingsEntryViewPromise;
+  const force = options.force === true;
+  const animateOnEnter = options.animateOnEnter === true;
+  const reusePreparedData = Boolean(SETTINGS) && !force;
+  if (!reusePreparedData) scheduleSettingInitialLoadingState();
+
+  const task = settingEntryController.prepare({ force })
+    .then(({ catalog }) => presentSettingsEntry(catalog, {
+      reusePreparedData,
+      animateOnEnter,
+    }))
+    .catch((e) => {
+      const meta = document.getElementById("settingsMeta");
+      settingSearchEntries = [];
+      clearSettingInitialLoadingState();
+      if (meta) {
+        meta.textContent = "Failed: " + (e?.message || "unknown");
+        meta.hidden = false;
+      }
+      throw e;
+    });
+
+  const tracked = task.finally(() => {
+    if (settingsEntryViewPromise === tracked) settingsEntryViewPromise = null;
+  });
+  settingsEntryViewPromise = tracked;
+  return tracked;
 }
 
 let settingOverflowSyncRaf = 0;
 let settingOverflowSyncTimer = 0;
 let settingOverflowResizeObserver = null;
 
-function measureSettingGroupButtonOverflow(button) {
-  if (!button) return;
-  const labelEl = button.querySelector(".setting-group-label");
-  if (!labelEl) return;
-  const buttonWidth = button.clientWidth || 0;
-  if (buttonWidth <= 0) return;
-  const shift = Math.min(0, buttonWidth - labelEl.scrollWidth - 8);
-  button.style.setProperty("--setting-label-shift", `${shift}px`);
-  button.classList.toggle("is-overflowing", shift < 0);
-}
-
 function syncSettingGroupLabelOverflow(root = document) {
   const scope = root && typeof root.querySelectorAll === "function" ? root : document;
+  let buttons;
   if (scope.matches?.("#groupList .groupBtn, #deviceGroupList .groupBtn")) {
-    measureSettingGroupButtonOverflow(scope);
+    buttons = [scope];
+  } else {
+    const selector = (scope.id === "groupList" || scope.id === "deviceGroupList")
+      ? ".groupBtn"
+      : "#groupList .groupBtn, #deviceGroupList .groupBtn";
+    buttons = Array.from(scope.querySelectorAll(selector));
   }
-  const selector = (scope.id === "groupList" || scope.id === "deviceGroupList")
-    ? ".groupBtn"
-    : "#groupList .groupBtn, #deviceGroupList .groupBtn";
-  scope.querySelectorAll(selector).forEach(measureSettingGroupButtonOverflow);
+  if (!buttons.length) return;
+
+  // Read every button's geometry first, then apply all writes, so a full group
+  // list settles in one reflow instead of one reflow per button (read/write
+  // interleaving previously thrashed layout ~18 times).
+  const writes = [];
+  for (const button of buttons) {
+    const labelEl = button.querySelector(".setting-group-label");
+    if (!labelEl) continue;
+    const buttonWidth = button.clientWidth || 0;
+    if (buttonWidth <= 0) continue;
+    writes.push([button, Math.min(0, buttonWidth - labelEl.scrollWidth - 8)]);
+  }
+  for (const [button, shift] of writes) {
+    button.style.setProperty("--setting-label-shift", `${shift}px`);
+    button.classList.toggle("is-overflowing", shift < 0);
+  }
 }
 
 function syncSettingOverflow(root = document) {
@@ -657,109 +484,29 @@ function initSettingOverflowObservers() {
 function renderGroups(options = {}) {
   const box = document.getElementById("groupList");
   const animateGroups = options.animateGroups !== false;
-  const groups = getSettingGroupsForDisplay();
-  const signature = groups.map((g) => isSettingAnyDivider(g) ? `div:${g.label || ""}` : `${g.group}:${g.count ?? ""}:${g.label || ""}`).join("|");
-
-  function setGroupButtonLabel(button, label, count) {
-    const text = Number.isFinite(Number(count)) ? `${label} (${count})` : label;
-    button.title = text;
-    button.innerHTML = `<span class="setting-group-label">${escapeHtml(text)}</span>`;
-    requestAnimationFrame(() => measureSettingGroupButtonOverflow(button));
-  }
-
-  if (!animateGroups && box.dataset.groupsSignature === signature && box.children.length === groups.length) {
-    Array.from(box.children).forEach((button, index) => {
-      const g = groups[index];
-      if (isSettingAnyDivider(g)) {
-        button.className = isSettingCategoryDivider(g) ? "setting-profile-divider setting-category-divider" : "setting-profile-divider";
-        button.innerHTML = `<span></span><strong>${escapeHtml(g.label || getSettingProfilesLabel())}</strong><span></span>`;
-        button.removeAttribute("data-group");
-        button.onclick = null;
-        return;
-      }
-      const label = getSettingGroupLabel(g.group);
-      button.className = "btn groupBtn";
-      if (isSettingFavoritesGroup(g.group)) button.classList.add("groupBtn--favorites");
-      if (isSettingProfileGroup(g.group)) button.classList.add("groupBtn--profile");
-      if (g.group === CURRENT_GROUP) button.classList.add("active");
-      button.dataset.group = g.group;
-      setGroupButtonLabel(button, label, g.count);
-      button.onclick = () => selectGroup(g.group);
+  if (!box) return;
+  if (box.dataset.settingGroupSelectionBound !== "1") {
+    box.dataset.settingGroupSelectionBound = "1";
+    box.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-group]");
+      if (!button || !box.contains(button)) return;
+      selectGroup(button.dataset.group);
     });
-    scheduleSettingOverflowSync(box);
-    return;
   }
 
-  box.innerHTML = "";
-  box.dataset.groupsSignature = signature;
-
-  groups.forEach(g => {
-    if (isSettingAnyDivider(g)) {
-      const divider = document.createElement("div");
-      const base = animateGroups ? "setting-profile-divider ui-stagger-item" : "setting-profile-divider";
-      divider.className = isSettingCategoryDivider(g) ? base + " setting-category-divider" : base;
-      if (animateGroups) divider.style.setProperty("--i", String(box.children.length));
-      divider.innerHTML = `<span></span><strong>${escapeHtml(g.label || getSettingProfilesLabel())}</strong><span></span>`;
-      box.appendChild(divider);
-      return;
-    }
-
-    const label = getSettingGroupLabel(g.group);
-
-    const b = document.createElement("button");
-    b.className = animateGroups ? "btn groupBtn ui-stagger-item" : "btn groupBtn";
-    if (isSettingFavoritesGroup(g.group)) b.classList.add("groupBtn--favorites");
-    if (isSettingProfileGroup(g.group)) b.classList.add("groupBtn--profile");
-    if (animateGroups) b.style.setProperty("--i", String(box.children.length));
-    if (g.group === CURRENT_GROUP) b.classList.add("active");
-    b.dataset.group = g.group;
-    setGroupButtonLabel(b, label, g.count);
-    b.onclick = () => selectGroup(g.group);
-    box.appendChild(b);
+  const plan = settingViewRuntime.createGroupPlan({
+    groups: getSettingGroupsForDisplay(),
+    currentGroup: CURRENT_GROUP,
+    ids: settingDerivedRuntime.ids,
+    profilesLabel: getSettingProfilesLabel(),
+    getGroupLabel: getSettingGroupLabel,
   });
+  settingViewRuntime.renderGroupList(box, plan, { animate: animateGroups });
   scheduleSettingOverflowSync(box);
 }
 
-function getSettingGroupMeta(group) {
-  if (isSettingFavoritesGroup(group)) {
-    return {
-      group,
-      egroup: "Favorites",
-      count: getFavoriteSettingEntries().length,
-      virtual: true,
-    };
-  }
-  const profile = getSettingProfileByGroup(group);
-  if (profile) {
-    return {
-      group,
-      egroup: profile.name,
-      count: getProfileSettingEntries(profile).length,
-      profile,
-      virtual: true,
-    };
-  }
-  const groups = SETTINGS?.groups || [];
-  return groups.find((entry) => entry.group === group) || null;
-}
-
 function getSettingGroupLabel(group) {
-  if (isSettingFavoritesGroup(group)) return getSettingFavoritesLabel();
-  const profile = getSettingProfileByGroup(group);
-  if (profile) return profile.name;
-  const meta = getSettingGroupMeta(group);
-  if (!meta) return group;
-  if (meta.ko || meta.en || meta.zh) return settingNodeLabel(meta);
-  if (LANG === "zh") return meta.cgroup || meta.egroup || meta.group;
-  if (LANG === "ko") return meta.group || meta.egroup || group;
-  return meta.egroup || meta.group || group;
-}
-
-function getSettingItemContextLabel(group, item) {
-  const groupLabel = getSettingGroupLabel(group);
-  const sectionLabel = item?.__section ? settingNodeLabel(item.__section) : "";
-  if (!sectionLabel || sectionLabel === groupLabel) return groupLabel;
-  return `${groupLabel} > ${sectionLabel}`;
+  return getSettingDerivedModel().getGroupLabel(group);
 }
 
 const SETTING_CONTROL_OVERRIDES = {
@@ -976,10 +723,6 @@ function getSettingPopularDisplayEntry(p, entry) {
   return { ...entry, top_values: topValues };
 }
 
-function getSettingPopularCarKeyLabel() {
-  return String(settingPopularValuesState.carKey || "").trim() || getUIText("setting_popular_value_my_model", "내 차종");
-}
-
 function getSettingPopularPrimaryCount(entry) {
   const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
   const count = Number(values[0]?.count ?? entry?.top_count ?? entry?.count ?? 0);
@@ -999,10 +742,6 @@ function getSettingPopularSummaryValues(entry) {
   });
 
   return tiedValues.length <= 2 ? tiedValues : [];
-}
-
-function hasSettingPopularClearTop(entry) {
-  return getSettingPopularSummaryValues(entry).length > 0;
 }
 
 function renderSettingPopularChipText(p, entry) {
@@ -1043,7 +782,7 @@ function renderSettingPopularChipHtml(p, entry) {
 }
 
 function getSettingPopularDetailTitle() {
-  const carKey = String(settingPopularValuesState.carKey || "").trim();
+  const carKey = String(settingAuxState.popular.getState().carKey || "").trim();
   if (carKey) return getUIText("setting_popular_value_car_title", "{car} 인기값", { car: carKey });
   return getUIText("setting_popular_value_title", "내 차종 인기값");
 }
@@ -1086,7 +825,7 @@ function renderSettingPopularDetailHtml(p, entry) {
     `;
   }).join("");
 
-  const updated = formatSettingPopularUpdated(settingPopularValuesState.fetchedAt);
+  const updated = formatSettingPopularUpdated(settingAuxState.popular.getState().fetchedAt);
   const updatedHtml = updated
     ? `<div class="setting-popular-detail__updated" style="margin-top:8px;font-size:11px;color:var(--md-on-surface-var,#8a8f98)">${escapeHtml(getUIText("setting_popular_value_updated", "최근 업데이트: {time}", { time: updated }))}</div>`
     : "";
@@ -1170,17 +909,6 @@ function setSettingItemsTitle(label) {
     <span class="setting-title-backIcon" aria-hidden="true">${settingChevronSvg("left")}</span>
     <span class="setting-title-text">${safeLabel}</span>
   `;
-}
-
-function getLanguageSettingOptions() {
-  const options = Array.isArray(window.CarrotDeviceLanguageOptions) ? window.CarrotDeviceLanguageOptions : [];
-  return options.length
-    ? options
-    : [
-        { code: "en", name: "English" },
-        { code: "ko", name: "한국어" },
-        { code: "zh-CHS", name: "中文（简体）" },
-      ];
 }
 
 function getSoundLanguageSettingOptions() {
@@ -1309,6 +1037,23 @@ function getLandscapeDefaultSettingGroup() {
   return match?.group || CURRENT_GROUP || groups[0]?.group || null;
 }
 
+function primeSettingsSnapshotForFirstEntry(snapshot = window.CarrotSettingsStore?.peek?.()) {
+  const catalog = settingEntryController.primeSnapshot(snapshot);
+  if (!catalog || !isCompactLandscapeMode()) return catalog;
+
+  const initialGroup = getLandscapeDefaultSettingGroup();
+  if (initialGroup) fetchSettingGroupValues(initialGroup).catch(() => {});
+  return catalog;
+}
+
+window.addEventListener("carrot:settings-store", (event) => {
+  if (event.detail?.status === "ready") primeSettingsSnapshotForFirstEntry();
+});
+
+if (window.CarrotSettingsStore?.status === "ready") {
+  queueMicrotask(() => primeSettingsSnapshotForFirstEntry());
+}
+
 function syncSettingSearchFabState() {
   const isOpen = Boolean(settingSearchPanel && !settingSearchPanel.hidden);
   if (settingPageRoot) settingPageRoot.classList.toggle("setting-search-open", isOpen);
@@ -1318,42 +1063,13 @@ function syncSettingSearchFabState() {
   }
 }
 
-function normalizeSettingProfiles(profiles) {
-  return (Array.isArray(profiles) ? profiles : [])
-    .filter((profile) => profile && profile.id && profile.name && profile.values)
-    .map((profile) => ({
-      ...profile,
-      values: { ...(profile.values || {}) },
-      meta: { ...(profile.meta || {}) },
-    }));
-}
-
 async function loadSettingProfiles(force = false) {
-  if (!force && settingProfilesState.loaded) return settingProfilesState.profiles;
-  if (!force && settingProfilesState.loadPromise) return settingProfilesState.loadPromise;
-
-  settingProfilesState.loadPromise = getJson("/api/setting_profiles")
-    .then((payload) => {
-      settingProfilesState.loaded = true;
-      settingProfilesState.profiles = normalizeSettingProfiles(payload?.profiles || []);
-      return settingProfilesState.profiles;
-    })
-    .catch(() => {
-      settingProfilesState.loaded = true;
-      settingProfilesState.profiles = [];
-      return settingProfilesState.profiles;
-    })
-    .finally(() => {
-      settingProfilesState.loadPromise = null;
-    });
-
-  return settingProfilesState.loadPromise;
+  return settingAuxState.profiles.load(force);
 }
 
 function updateSettingProfilesFromPayload(payload) {
   if (!payload || !Array.isArray(payload.profiles)) return;
-  settingProfilesState.loaded = true;
-  settingProfilesState.profiles = normalizeSettingProfiles(payload.profiles);
+  settingAuxState.profiles.replace(payload.profiles);
 }
 
 function formatSettingProfileDate(value) {
@@ -1486,18 +1202,16 @@ async function deleteSettingProfile(profile) {
   }
 }
 
-function closeSettingProfileActionMenus(exceptPanel = null) {
-  document.querySelectorAll(".setting-profile-menu.is-open").forEach((menu) => {
-    if (exceptPanel && menu === exceptPanel) return;
-    menu.classList.remove("is-open");
-    const button = menu.querySelector(".setting-profile-menu__button");
-    const panel = menu.querySelector(".setting-profile-menu__panel");
-    if (button) button.setAttribute("aria-expanded", "false");
-    if (panel) {
-      panel.hidden = true;
-      panel.setAttribute("aria-hidden", "true");
-    }
+function closeSettingProfileActionMenus(exceptMenu = null) {
+  settingProfileMenuControllers.forEach((controller, menu) => {
+    if (exceptMenu && menu === exceptMenu) return;
+    controller.close();
   });
+}
+
+function destroySettingProfileActionMenus() {
+  settingProfileMenuControllers.forEach((controller) => controller.destroy());
+  settingProfileMenuControllers.clear();
 }
 
 function settingProfileActionIcon(kind) {
@@ -1525,11 +1239,7 @@ function makeSettingProfileMenuItem({ label, icon = "info", onClick, className =
     ${settingProfileActionIcon(icon)}
     <span>${settingsDiffEscape(label)}</span>
   `;
-  button.onclick = (event) => {
-    event.stopPropagation();
-    closeSettingProfileActionMenus();
-    if (typeof onClick === "function") onClick();
-  };
+  if (typeof onClick === "function") settingProfileMenuActions.set(button, onClick);
   return button;
 }
 
@@ -1627,6 +1337,7 @@ function appendSettingProfileHeader(profile, container) {
 
   const menu = document.createElement("div");
   menu.className = "setting-profile-menu ui-dropdown-menu";
+  menu.addEventListener("click", (event) => event.stopPropagation());
   const menuBtn = document.createElement("button");
   menuBtn.type = "button";
   menuBtn.className = "setting-profile-menu__button ui-dropdown-menu__button";
@@ -1660,17 +1371,28 @@ function appendSettingProfileHeader(profile, container) {
     onClick: () => deleteSettingProfile(profile),
     className: "setting-profile-menu__item--danger",
   }));
-  menuBtn.onclick = (event) => {
-    event.stopPropagation();
-    const nextOpen = !menu.classList.contains("is-open");
-    closeSettingProfileActionMenus(menu);
-    menu.classList.toggle("is-open", nextOpen);
-    menuBtn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
-    menuPanel.hidden = !nextOpen;
-    menuPanel.setAttribute("aria-hidden", nextOpen ? "false" : "true");
-  };
   menu.appendChild(menuBtn);
   menu.appendChild(menuPanel);
+  const menuApi = window.CarrotUI?.menu;
+  if (typeof menuApi?.mount === "function") {
+    const controller = menuApi.mount({
+      root: menu,
+      trigger: menuBtn,
+      panel: menuPanel,
+      itemSelector: ".setting-profile-menu__item",
+      beforeOpen: () => {
+        closeSettingProfileActionMenus(menu);
+        return true;
+      },
+      onSelect: (item) => {
+        const action = settingProfileMenuActions.get(item);
+        if (typeof action === "function") {
+          Promise.resolve().then(() => action()).catch(() => {});
+        }
+      },
+    });
+    settingProfileMenuControllers.set(menu, controller);
+  }
 
   const rows = document.createElement("div");
   rows.className = "setting-profile-card__rows";
@@ -1753,64 +1475,12 @@ function mountSettingSearchOverlay() {
   }
 }
 
-function makeSettingSearchEntry({ source, profile = null, group, item }) {
-  const groupLabel = getSettingGroupLabel(group);
-  const contextGroupLabel = getSettingItemContextLabel(group, item);
-  const title = formatItemText(item, "title", "etitle", "");
-  const descr = formatItemText(item, "descr", "edescr", "");
-  const isProfile = source === "profile" && profile?.id;
-  const profileName = isProfile ? String(profile.name || "") : "";
-  const sourceLabel = isProfile
-    ? getUIText("setting_search_source_profile", "Profile")
-    : getUIText("setting_search_source_carrot", "CarrotPilot");
-  const contextLabel = isProfile
-    ? `${profileName} / ${contextGroupLabel}`
-    : contextGroupLabel;
-
-  return {
-    source: isProfile ? "profile" : "carrot",
-    sourceLabel,
-    profileId: isProfile ? profile.id : "",
-    profileName,
-    group: isProfile ? settingProfileGroup(profile.id) : group,
-    originalGroup: group,
-    groupLabel,
-    contextGroupLabel,
-    contextLabel,
-    name: item.name,
-    title,
-    descr,
-    haystack: [sourceLabel, profileName, groupLabel, contextGroupLabel, item.name, title, descr].join("\n").toLowerCase(),
-  };
-}
-
 function rebuildSettingSearchEntries() {
-  const groups = SETTINGS?.groups || [];
-  const entries = [];
-
-  groups.forEach((groupMeta) => {
-    const group = groupMeta.group;
-    const groupLabel = getSettingGroupLabel(group);
-    const list = SETTINGS?.items_by_group?.[group] || [];
-
-    list.forEach((item) => {
-      entries.push(makeSettingSearchEntry({ source: "carrot", group, item }));
-    });
+  settingSearchEntries = getSettingDerivedModel().buildSearchEntries({
+    carrot: getUIText("setting_search_source_carrot", "CarrotPilot"),
+    profile: getUIText("setting_search_source_profile", "Profile"),
   });
-
-  (settingProfilesState.profiles || []).forEach((profile) => {
-    getProfileSettingEntries(profile).forEach((entry) => {
-      entries.push(makeSettingSearchEntry({
-        source: "profile",
-        profile,
-        group: entry.group,
-        item: entry.item,
-      }));
-    });
-  });
-
-  settingSearchEntries = entries;
-  return entries;
+  return settingSearchEntries;
 }
 
 function getSettingSearchEntries() {
@@ -2023,7 +1693,6 @@ async function selectSettingDetail(group, name, pushHistory = true) {
     detailName: targetName,
     scrollMode: "top",
     animateItems: false,
-    forceValues: true,
   }), "forward");
 }
 
@@ -2377,19 +2046,12 @@ window.addEventListener("keydown", (e) => {
     closeSettingSearchPanel({ syncHistory: true });
     return;
   }
-  if (e.key === "Escape" && document.querySelector(".setting-profile-menu.is-open")) {
-    closeSettingProfileActionMenus();
-    return;
-  }
   if (e.key === "Escape" && settingFabMenuOpen) {
     closeSettingFabMenu();
   }
 });
 
 document.addEventListener("pointerdown", (e) => {
-  if (!(e.target instanceof Element) || !e.target.closest(".setting-profile-menu")) {
-    closeSettingProfileActionMenus();
-  }
   if (settingFabMenuOpen && settingFabMenu && !settingFabMenu.contains(e.target)) {
     closeSettingFabMenu();
   }
@@ -2573,6 +2235,27 @@ function selectGroup(group, pushHistory = true) {
   activateSettingGroup(group, shouldPush, options).catch((e) => console.log("[Setting] selectGroup failed:", e));
 }
 
+function bindSettingProfileSectionToggle(rendered, stateKey) {
+  const { section, header } = rendered || {};
+  if (!section || !header) return;
+  header.onclick = () => {
+    const nextExpanded = section.classList.contains("is-collapsed");
+    section.classList.remove("is-expanding", "is-collapsing");
+    if (section.__settingProfileMotionTimer) {
+      window.clearTimeout(section.__settingProfileMotionTimer);
+    }
+    void section.offsetWidth;
+    section.classList.toggle("is-collapsed", !nextExpanded);
+    section.classList.add(nextExpanded ? "is-expanding" : "is-collapsing");
+    settingProfileSectionExpandedState.set(stateKey, nextExpanded);
+    header.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+    section.__settingProfileMotionTimer = window.setTimeout(() => {
+      section.classList.remove("is-expanding", "is-collapsing");
+      section.__settingProfileMotionTimer = null;
+    }, 280);
+  };
+}
+
 async function renderItems(group, options = {}) {
   if (!isCarrotSettingTabActive()) return;
   const meta = document.getElementById("groupMeta");
@@ -2584,6 +2267,7 @@ async function renderItems(group, options = {}) {
   const animateItems = options.animateItems !== false;
   const allowHidden = options.allowHidden === true;
   const requestedScrollTop = Number.isFinite(options.scrollTop) ? options.scrollTop : null;
+  destroySettingProfileActionMenus();
   itemsBox.innerHTML = "";
   delete itemsBox.dataset.renderedGroup;
   delete itemsBox.dataset.renderedDetail;
@@ -2625,17 +2309,10 @@ async function renderItems(group, options = {}) {
   }
 
   if (!list.length && detailMode) {
-    const empty = document.createElement("div");
-    empty.className = "setting-favorites-empty";
-    const emptyTitle = document.createElement("div");
-    emptyTitle.className = "setting-favorites-empty__title";
-    emptyTitle.textContent = getUIText("setting_not_found", "Setting not found");
-    const emptyDesc = document.createElement("div");
-    emptyDesc.className = "setting-favorites-empty__desc";
-    emptyDesc.textContent = detailName;
-    empty.appendChild(emptyTitle);
-    empty.appendChild(emptyDesc);
-    itemsBox.appendChild(empty);
+    settingViewRuntime.renderEmptyState(itemsBox, {
+      title: getUIText("setting_not_found", "Setting not found"),
+      description: detailName,
+    });
     itemsBox.dataset.renderedGroup = group;
     itemsBox.dataset.renderedDetail = detailName;
     requestAnimationFrame(resetSettingItemsViewport);
@@ -2643,20 +2320,13 @@ async function renderItems(group, options = {}) {
   }
 
   if (!list.length && isSettingFavoritesGroup(group)) {
-    const empty = document.createElement("div");
-    empty.className = "setting-favorites-empty";
-    const emptyTitle = document.createElement("div");
-    emptyTitle.className = "setting-favorites-empty__title";
-    emptyTitle.textContent = getUIText("setting_favorites_empty_title", "No favorites");
-    const emptyDesc = document.createElement("div");
-    emptyDesc.className = "setting-favorites-empty__desc";
-    emptyDesc.textContent = getUIText(
-      "setting_favorites_empty_desc",
-      "Long press a setting to add it. Long press again to remove it.",
-    );
-    empty.appendChild(emptyTitle);
-    empty.appendChild(emptyDesc);
-    itemsBox.appendChild(empty);
+    settingViewRuntime.renderEmptyState(itemsBox, {
+      title: getUIText("setting_favorites_empty_title", "No favorites"),
+      description: getUIText(
+        "setting_favorites_empty_desc",
+        "Long press a setting to add it. Long press again to remove it.",
+      ),
+    });
     itemsBox.dataset.renderedGroup = group;
     requestAnimationFrame(resetSettingItemsViewport);
     return;
@@ -2664,130 +2334,35 @@ async function renderItems(group, options = {}) {
 
   if (profile && !detailMode) appendSettingProfileHeader(profile, itemsBox);
 
-  const profileSectionCounts = new Map();
-  if (profile) {
-    entries.forEach((entry) => {
-      profileSectionCounts.set(entry.group, (profileSectionCounts.get(entry.group) || 0) + 1);
-    });
-  }
-  let lastProfileGroup = "";
-  let currentProfileSectionBody = null;
-  let lastCategorySectionKey = null;
-  let currentCategoryCardBody = null;
+  // Keep layout decisions independent from row controls: the plan opens a new
+  // detail/favorites/category/profile container only where the structure changes.
+  const itemLayout = settingViewRuntime.createItemLayoutPlan({
+    entries,
+    group,
+    detailMode,
+    profile,
+    favoriteMode: isSettingFavoritesGroup(group),
+    getSectionLabel: settingNodeLabel,
+    getGroupLabel: getSettingGroupLabel,
+    getProfileSectionExpanded: (stateKey) => settingProfileSectionExpandedState.has(stateKey)
+      ? settingProfileSectionExpandedState.get(stateKey)
+      : true,
+  });
+  let currentItemContainer = itemsBox;
 
-  if (detailMode && list.length) {
-    const detailBlock = document.createElement("section");
-    detailBlock.className = animateItems ? "setting-section-block ui-stagger-item" : "setting-section-block";
-    if (animateItems) detailBlock.style.setProperty("--i", "1");
-    const detailCard = document.createElement("div");
-    detailCard.className = "setting-group-card";
-    const detailBody = document.createElement("div");
-    detailBody.className = "setting-group-card__body";
-    detailCard.appendChild(detailBody);
-    detailBlock.appendChild(detailCard);
-    itemsBox.appendChild(detailBlock);
-    currentCategoryCardBody = detailBody;
-  }
-
-  // 즐겨찾기도 다른 하위메뉴와 같은 카드 박스(공통분모: setting-section-block +
-  // setting-group-card)에 담는다. 즐겨찾기는 소-섹션이 섞여 있으므로 단일 카드 1개로.
-  if (!detailMode && isSettingFavoritesGroup(group) && list.length) {
-    const favBlock = document.createElement("section");
-    favBlock.className = animateItems ? "setting-section-block ui-stagger-item" : "setting-section-block";
-    if (animateItems) favBlock.style.setProperty("--i", "1");
-    const favCard = document.createElement("div");
-    favCard.className = "setting-group-card";
-    const favBody = document.createElement("div");
-    favBody.className = "setting-group-card__body";
-    favCard.appendChild(favBody);
-    favBlock.appendChild(favCard);
-    itemsBox.appendChild(favBlock);
-    currentCategoryCardBody = favBody;
-  }
-
-  list.forEach((p, index) => {
+  itemLayout.rows.forEach((rowPlan) => {
+    const { item: p, index, originGroup } = rowPlan;
     const name = p.name;
-    const originGroup = entries[index]?.group || group;
     getSettingUnitIndex(name);
 
-    // 카테고리 모드: 소-섹션마다 카드(그룹박스) 생성 (프로필/즐겨찾기 뷰 제외).
-    // 라벨이 있으면 카드 제목으로, 없으면(단일 직속 섹션) 제목 없는 카드.
-    if (!detailMode && !profile && !isSettingFavoritesGroup(group) && p.__section) {
-      const secKey = p.__section.id || "";
-      if (secKey !== lastCategorySectionKey) {
-        lastCategorySectionKey = secKey;
-        const sectionBlock = document.createElement("section");
-        sectionBlock.className = animateItems ? "setting-section-block ui-stagger-item" : "setting-section-block";
-        sectionBlock.dataset.settingSectionId = secKey;
-        if (animateItems) sectionBlock.style.setProperty("--i", String(Math.min(index + 1, 14)));
-        const cardLabel = settingNodeLabel(p.__section);
-        if (cardLabel) {
-          const cardTitle = document.createElement("div");
-          cardTitle.className = "setting-group-card__title";
-          cardTitle.textContent = cardLabel;
-          sectionBlock.appendChild(cardTitle);
-        }
-        const card = document.createElement("div");
-        card.className = "setting-group-card";
-        const cardBody = document.createElement("div");
-        cardBody.className = "setting-group-card__body";
-        card.appendChild(cardBody);
-        sectionBlock.appendChild(card);
-        itemsBox.appendChild(sectionBlock);
-        currentCategoryCardBody = cardBody;
+    if (rowPlan.section) {
+      const renderedSection = settingViewRuntime.appendItemSection(itemsBox, rowPlan.section, {
+        animate: animateItems,
+      });
+      currentItemContainer = renderedSection?.body || itemsBox;
+      if (rowPlan.section.kind === "profile") {
+        bindSettingProfileSectionToggle(renderedSection, rowPlan.section.key);
       }
-    }
-
-    if (!detailMode && profile && originGroup !== lastProfileGroup) {
-      lastProfileGroup = originGroup;
-      const section = document.createElement("div");
-      section.className = animateItems ? "setting-section-block setting-profile-section ui-stagger-item" : "setting-section-block setting-profile-section";
-      if (animateItems) section.style.setProperty("--i", String(Math.min(index + 1, 14)));
-      const stateKey = `${profile.id}:${originGroup}`;
-      const expanded = settingProfileSectionExpandedState.has(stateKey)
-        ? settingProfileSectionExpandedState.get(stateKey)
-        : true;
-      const sectionLabel = getSettingGroupLabel(originGroup);
-      const sectionCount = profileSectionCounts.get(originGroup) || 0;
-      section.classList.toggle("is-collapsed", !expanded);
-
-      const header = document.createElement("button");
-      header.type = "button";
-      header.className = "setting-profile-section__header";
-      header.setAttribute("aria-expanded", expanded ? "true" : "false");
-      header.innerHTML = `
-        <span class="setting-profile-section__label">${settingsDiffEscape(sectionLabel)}</span>
-        <span class="setting-profile-section__count">${settingsDiffEscape(sectionCount)}</span>
-        <svg class="setting-profile-section__chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="m6 9 6 6 6-6"></path>
-        </svg>
-      `;
-      const body = document.createElement("div");
-      body.className = "setting-profile-section__body";
-      const bodyInner = document.createElement("div");
-      bodyInner.className = "setting-group-card setting-group-card__body setting-profile-section__bodyInner";
-      header.onclick = () => {
-        const wasCollapsed = section.classList.contains("is-collapsed");
-        const nextExpanded = wasCollapsed;
-        section.classList.remove("is-expanding", "is-collapsing");
-        if (section.__settingProfileMotionTimer) {
-          window.clearTimeout(section.__settingProfileMotionTimer);
-        }
-        void section.offsetWidth;
-        section.classList.toggle("is-collapsed", !nextExpanded);
-        section.classList.add(nextExpanded ? "is-expanding" : "is-collapsing");
-        settingProfileSectionExpandedState.set(stateKey, nextExpanded);
-        header.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
-        section.__settingProfileMotionTimer = window.setTimeout(() => {
-          section.classList.remove("is-expanding", "is-collapsing");
-          section.__settingProfileMotionTimer = null;
-        }, 280);
-      };
-      body.appendChild(bodyInner);
-      section.appendChild(header);
-      section.appendChild(body);
-      itemsBox.appendChild(section);
-      currentProfileSectionBody = bodyInner;
     }
 
     const title = formatItemText(p, "title", "etitle", "");
@@ -3014,7 +2589,7 @@ async function renderItems(group, options = {}) {
     el.classList.add("setting--has-actions");
     el.appendChild(actions);
 
-    (currentProfileSectionBody || currentCategoryCardBody || itemsBox).appendChild(el);
+    currentItemContainer.appendChild(el);
 
     const cur = (name in values) ? values[name] : p.default;
     syncSettingControlState(el, cur);
@@ -3578,19 +3153,8 @@ window.addEventListener("carrot:paramsrestored", (event) => {
   const values = event.detail?.values;
   if (!values || typeof values !== "object") return;
   const changedNames = new Set(Object.keys(values));
-  Object.entries(values).forEach(([name, value]) => cacheSettingValue(name, value));
+  settingValueRepository.applyValues(values);
   applyRestoredSettingValuesToRenderedItems(values);
-  for (const [group, cachedGroup] of settingGroupValueCache.entries()) {
-    if (!cachedGroup?.values) continue;
-    let touched = false;
-    changedNames.forEach((name) => {
-      if (name in cachedGroup.values) {
-        cachedGroup.values[name] = values[name];
-        touched = true;
-      }
-    });
-    if (touched) cachedGroup.loadedAt = Date.now();
-  }
 
   if (!CURRENT_GROUP || !isCarrotSettingTabActive()) return;
   const currentNames = new Set(getSettingGroupParamNames(CURRENT_GROUP));
@@ -3602,7 +3166,6 @@ window.addEventListener("carrot:paramsrestored", (event) => {
     settingRestoreRefreshTimer = null;
     renderItems(CURRENT_GROUP, {
       detailName: CURRENT_SETTING_DETAIL || "",
-      forceValues: true,
       scrollMode: "restore",
       scrollTop: currentTop,
       animateItems: false,

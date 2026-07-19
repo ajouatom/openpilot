@@ -1,0 +1,26 @@
+.ui-popover {
+  position: relative;
+}
+
+.ui-popover__panel {
+  min-width: 156px;
+  padding: var(--sp-sm) var(--sp-md);
+  border: 1px solid var(--popup-border-color);
+  border-radius: var(--popup-radius);
+  background: var(--popup-bg);
+  color: var(--md-on-surface);
+  box-shadow: var(--popup-shadow);
+}
+
+.ui-popover__panel[hidden] {
+  display: none !important;
+}
+
+.ui-popover__text {
+  display: block;
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-sm);
+  font-weight: 750;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}

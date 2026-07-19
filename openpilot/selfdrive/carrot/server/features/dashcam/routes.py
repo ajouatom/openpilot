@@ -9,24 +9,43 @@ from aiohttp import web
 
 from ...config import DASHCAM_ROOT
 from . import upload, upload_jobs
-from .catalog import build_routes, segment_file_summary, source_rlog, source_video
+from .catalog import (
+  build_routes,
+  compute_segment_times,
+  invalidate_segment_time_cache,
+  route_time_bounds,
+  segment_file_summary,
+  segment_is_complete,
+  source_rlog,
+  source_video,
+)
 from .ffmpeg import browser_video, ensure_preview, ensure_thumbnail
 from .paths import (
   file_size_label,
+  relative_time,
   route_name,
   safe_segment,
   segment_dir,
   segment_index,
 )
 
-ROUTE_CACHE_TTL = 15.0
+# Safety net only. The route-name index is normally invalidated precisely by the
+# recording directory's mtime (adding/removing a segment folder bumps realdata's
+# mtime), so fresh segments show up immediately and an idle logs view never
+# rescans. This max age just forces an eventual rebuild on the rare filesystem
+# that fails to update a directory mtime.
+ROUTE_CACHE_MAX_AGE = 300.0
 DASHCAM_ROUTE_LIMIT_DEFAULT = 40
 DASHCAM_ROUTE_LIMIT_MAX = 200
 DASHCAM_SEGMENT_LIMIT_DEFAULT = 10
 DASHCAM_SEGMENT_LIMIT_MAX = 2000
 DASHCAM_OFFSET_MAX = 1000000
+DASHCAM_RECENT_UPLOAD_LIMITS = frozenset((2, 5, 10))
 _route_cache_lock = threading.Lock()
-_route_cache = {"time": 0.0, "routes": []}
+# "sig" starts as a unique sentinel so it never equals a real signature tuple and
+# the first call always builds. "routes" stays None until populated so an empty
+# index (no footage) is still cached instead of rebuilt every request.
+_route_cache: dict = {"time": 0.0, "sig": object(), "routes": None}
 
 
 def client_replay_source_description(segment: str) -> dict:
@@ -68,20 +87,96 @@ async def request_upload_segments(request: web.Request) -> list[str]:
   segments = [safe_segment(str(seg)) for seg in segments if seg]
   if not segments:
     raise web.HTTPBadRequest(text="missing segments")
+  incomplete = await asyncio.to_thread(
+    lambda: [segment for segment in segments if not segment_is_complete(segment)]
+  )
+  if incomplete:
+    raise web.HTTPConflict(text=f"segment is still recording or incomplete: {incomplete[0]}")
   return segments
 
 
+def _realdata_signature() -> tuple | None:
+  """Cheap change token for the recording directory (one stat). It changes
+  whenever a segment folder is added or removed, because POSIX updates a
+  directory's mtime when its entries change. Writes to files *inside* a segment
+  do not affect it, which is exactly right: the index only holds folder names,
+  and per-segment times are hydrated live on every request."""
+  try:
+    st = os.stat(DASHCAM_ROOT)
+  except OSError:
+    return None
+  return (st.st_mtime_ns, st.st_size)
+
+
 def cached_dashcam_routes() -> list[dict]:
+  sig = _realdata_signature()
   now = time.monotonic()
   with _route_cache_lock:
-    if now - float(_route_cache.get("time") or 0.0) < ROUTE_CACHE_TTL:
-      return list(_route_cache.get("routes") or [])
+    cached = _route_cache.get("routes")
+    fresh = (now - float(_route_cache.get("time") or 0.0)) < ROUTE_CACHE_MAX_AGE
+    if cached is not None and fresh and sig == _route_cache.get("sig"):
+      return list(cached)
 
+  # The segment set changed (or first build), so any memoized end epochs for the
+  # previous state — including the segment that was still recording last time —
+  # must be dropped before the fresh page hydration re-stats what it needs.
+  invalidate_segment_time_cache()
   routes = build_routes()
   with _route_cache_lock:
     _route_cache["time"] = time.monotonic()
+    _route_cache["sig"] = sig
     _route_cache["routes"] = routes
   return list(routes)
+
+
+def _newest_first_segments(routes: list[dict]):
+  for entry in routes:
+    yield from reversed(entry.get("segmentFolders") or [])
+
+
+def visible_dashcam_routes() -> list[dict]:
+  """Return the cached catalog without the currently-writing tail.
+
+  Completeness is deliberately evaluated outside the five-minute name cache:
+  removing rlog.lock changes the segment directory, not the realdata root, so a
+  completed segment must become visible on the next frontend refresh.
+  """
+  routes = cached_dashcam_routes()
+  hidden: set[str] = set()
+  for segment in _newest_first_segments(routes):
+    if segment_is_complete(segment):
+      break
+    hidden.add(segment)
+
+  if not hidden:
+    return routes
+
+  visible: list[dict] = []
+  for entry in routes:
+    segments = [segment for segment in entry.get("segmentFolders") or [] if segment not in hidden]
+    if not segments:
+      continue
+    item = dict(entry)
+    item["segmentFolders"] = segments
+    item["segmentCount"] = len(segments)
+    visible.append(item)
+  return visible
+
+
+def recent_completed_dashcam_segments(limit: int) -> list[str]:
+  """Newest completed segments across route groups, independent of UI sort."""
+  count = int(limit)
+  if count not in DASHCAM_RECENT_UPLOAD_LIMITS:
+    raise ValueError("unsupported recent log limit")
+
+  completed: list[str] = []
+  for segment in _newest_first_segments(cached_dashcam_routes()):
+    if not segment_is_complete(segment):
+      continue
+    completed.append(segment)
+    if len(completed) >= count:
+      break
+  return completed
 
 
 def bounded_query_int(request: web.Request, name: str, default: int, maximum: int) -> int:
@@ -98,27 +193,47 @@ def normalized_sort(request: web.Request) -> str:
 
 
 def route_with_segment_page(entry: dict, segment_offset: int = 0, segment_limit: int = DASHCAM_SEGMENT_LIMIT_DEFAULT, sort: str = "asc") -> dict:
-  segments = list(entry.get("segmentFolders") or [])
-  if sort == "desc":
-    segments = list(reversed(segments))
-  total = len(segments)
+  # NOTE: this stat()s the qcamera files for the page's segments (plus the route
+  # head/tail for the time range), so it must run off the event loop — callers
+  # invoke it inside asyncio.to_thread.
+  segments_asc = list(entry.get("segmentFolders") or [])  # ascending by segment index
+  total = len(segments_asc)
   offset = max(0, min(segment_offset, total))
   limit = max(1, min(DASHCAM_SEGMENT_LIMIT_MAX, segment_limit))
   end = min(offset + limit, total)
-  page_segments = segments[offset:end]
+
+  # Map the requested display window back to an ascending slice so we only stat
+  # the segments actually returned. "desc" shows newest-first, i.e. the tail of
+  # the ascending list.
+  if sort == "desc":
+    asc_start = max(0, total - end)
+    asc_end = max(0, total - offset)
+  else:
+    asc_start = offset
+    asc_end = end
+  page_asc = segments_asc[asc_start:asc_end]
+  seed = segments_asc[asc_start - 1] if asc_start > 0 else None
+  page_times = compute_segment_times(page_asc, seed_segment=seed)
+  page_segments = list(reversed(page_asc)) if sort == "desc" else page_asc
+
+  route_start, route_end = route_time_bounds(segments_asc)
+
   result = dict(entry)
   result["segmentFolders"] = page_segments
-  all_segment_times = entry.get("segmentTimes") or {}
   result["segmentTimes"] = {
-    segment: all_segment_times[segment]
+    segment: page_times[segment]
     for segment in page_segments
-    if segment in all_segment_times
+    if segment in page_times
   }
   result["segmentCount"] = int(entry.get("segmentCount") or total)
   result["segmentOffset"] = offset
   result["segmentLimit"] = limit
   result["segmentsNextOffset"] = end if end < total else None
   result["segmentsHasMore"] = end < total
+  result["routeStartEpoch"] = route_start
+  result["routeEndEpoch"] = route_end
+  result["latestModifiedEpoch"] = route_end
+  result["latestModifiedLabel"] = relative_time(route_end)
   return result
 
 
@@ -129,6 +244,28 @@ def find_dashcam_route(routes: list[dict], route: str) -> dict | None:
     if entry.get("route") == route:
       return entry
   return None
+
+
+def _routes_page_payload(offset: int, limit: int, segment_limit: int, sort: str) -> dict:
+  """Build the /api/dashcam/routes response. Runs in a worker thread because the
+  cheap name-only index build and the per-page segment stat()s both touch disk."""
+  routes = visible_dashcam_routes()
+  total = len(routes)
+  end = min(offset + limit, total)
+  return {
+    "ok": True,
+    "routes": [
+      route_with_segment_page(entry, 0, segment_limit, sort)
+      for entry in routes[offset:end]
+    ],
+    "root": DASHCAM_ROOT,
+    "offset": offset,
+    "limit": limit,
+    "segmentLimit": segment_limit,
+    "total": total,
+    "nextOffset": end if end < total else None,
+    "hasMore": end < total,
+  }
 
 
 async def api_dashcam_routes(request: web.Request) -> web.Response:
@@ -142,25 +279,31 @@ async def api_dashcam_routes(request: web.Request) -> web.Response:
       DASHCAM_SEGMENT_LIMIT_MAX,
     )
     sort = normalized_sort(request)
-    routes = await asyncio.to_thread(cached_dashcam_routes)
-    total = len(routes)
-    end = min(offset + limit, total)
-    return web.json_response({
-      "ok": True,
-      "routes": [
-        route_with_segment_page(entry, 0, segment_limit, sort)
-        for entry in routes[offset:end]
-      ],
-      "root": DASHCAM_ROOT,
-      "offset": offset,
-      "limit": limit,
-      "segmentLimit": segment_limit,
-      "total": total,
-      "nextOffset": end if end < total else None,
-      "hasMore": end < total,
-    })
+    payload = await asyncio.to_thread(_routes_page_payload, offset, limit, segment_limit, sort)
+    return web.json_response(payload)
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+def _segments_page_payload(route: str, offset: int, limit: int, sort: str) -> dict | None:
+  """Build the /api/dashcam/segments response, or None when the route is gone.
+  Runs in a worker thread for the same disk-access reason as the routes page."""
+  routes = visible_dashcam_routes()
+  entry = find_dashcam_route(routes, route)
+  if not entry:
+    return None
+  page = route_with_segment_page(entry, offset, limit, sort)
+  return {
+    "ok": True,
+    "route": route,
+    "segments": page["segmentFolders"],
+    "segmentTimes": page["segmentTimes"],
+    "offset": page["segmentOffset"],
+    "limit": page["segmentLimit"],
+    "total": page["segmentCount"],
+    "nextOffset": page["segmentsNextOffset"],
+    "hasMore": page["segmentsHasMore"],
+  }
 
 
 async def api_dashcam_segments(request: web.Request) -> web.Response:
@@ -169,21 +312,28 @@ async def api_dashcam_segments(request: web.Request) -> web.Response:
     offset = bounded_query_int(request, "offset", 0, DASHCAM_OFFSET_MAX)
     limit = bounded_query_int(request, "limit", DASHCAM_SEGMENT_LIMIT_DEFAULT, DASHCAM_SEGMENT_LIMIT_MAX)
     sort = normalized_sort(request)
-    routes = await asyncio.to_thread(cached_dashcam_routes)
-    entry = find_dashcam_route(routes, route)
-    if not entry:
+    payload = await asyncio.to_thread(_segments_page_payload, route, offset, limit, sort)
+    if payload is None:
       return web.json_response({"ok": False, "error": "route not found"}, status=404)
-    page = route_with_segment_page(entry, offset, limit, sort)
+    return web.json_response(payload)
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_dashcam_recent_segments(request: web.Request) -> web.Response:
+  try:
+    limit = int(request.query.get("limit", "") or 0)
+  except (TypeError, ValueError):
+    limit = 0
+  if limit not in DASHCAM_RECENT_UPLOAD_LIMITS:
+    return web.json_response({"ok": False, "error": "limit must be one of 2, 5, 10"}, status=400)
+  try:
+    segments = await asyncio.to_thread(recent_completed_dashcam_segments, limit)
     return web.json_response({
       "ok": True,
-      "route": route,
-      "segments": page["segmentFolders"],
-      "segmentTimes": page["segmentTimes"],
-      "offset": page["segmentOffset"],
-      "limit": page["segmentLimit"],
-      "total": page["segmentCount"],
-      "nextOffset": page["segmentsNextOffset"],
-      "hasMore": page["segmentsHasMore"],
+      "requested": limit,
+      "count": len(segments),
+      "segments": segments,
     })
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
@@ -364,6 +514,7 @@ async def api_dashcam_upload_cancel(request: web.Request) -> web.Response:
 def register(app: web.Application) -> None:
   app.router.add_get("/api/dashcam/routes", api_dashcam_routes)
   app.router.add_get("/api/dashcam/segments/{route}", api_dashcam_segments)
+  app.router.add_get("/api/dashcam/recent", api_dashcam_recent_segments)
   app.router.add_get("/api/dashcam/thumbnail/{segment}", api_dashcam_thumbnail)
   app.router.add_get("/api/dashcam/preview/{segment}", api_dashcam_preview)
   app.router.add_get("/api/dashcam/video/{segment}", api_dashcam_video)

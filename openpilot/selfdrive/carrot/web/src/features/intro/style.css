@@ -1,0 +1,698 @@
+/* ═══════════════════════════════════════════════════════════
+   CarrotPilot 인트로
+
+   전제: tokens.css / base.css / components.css 가 먼저 로드됨.
+   토큰(색·간격·모션·타입)은 전부 레포 것을 소비하고 재정의하지 않는다.
+
+   ⚠ 다만 .btn 아톰(components.css:711)은 쓰지 않는다.
+     지시: "버튼 디자인이나 외곽 쓰지 말고 텍스트 위주로 타이포".
+     인트로는 전체화면 단독 서피스이므로 테두리 대신 타이포그래피로
+     위계를 만든다. 색/간격/모션은 여전히 토큰을 따르므로 앱과 어긋나지 않는다.
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  /* ═══ 인트로 타입 스케일 ═══════════════════════════════════
+     역할마다 크기를 하나만 둔다. 같은 역할이면 어느 단계에서든 같은 크기.
+     각 단계가 알아서 크기를 정하지 않으므로 일관성이 깨질 자리가 없다.
+
+       display    단계 제목 · 순환 인사말
+       option     주 선택지 (언어 · HDA · 프리셋 · 시작하기)
+       option-sm  목록 선택지 (제조사 · 모델) — 행이 많아 한 단 아래
+       meta       목록 행의 보조 수치 (모델 개수)
+       desc       선택지 아래 설명
+       lead       본문
+       ghost      보조 액션 (설정 불러오기 · 이전)
+
+     앱 스케일(--fs-*)을 무시하는 게 아니라 의도적으로 확장한다:
+     --fs-headline(24px) 은 앱 화면용이고, 인트로는 전체화면 단독
+     서피스라 그 위 단계가 필요하다. 아래 단계(desc/ghost)는 앱 토큰과
+     같은 값대로 수렴한다. */
+  --intro-display:   clamp(32px, 6.4vw, 54px);
+  --intro-option:    clamp(22px, 3.6vw, 30px);
+  --intro-option-sm: clamp(19px, 2.9vw, 24px);
+  --intro-meta:      clamp(15px, 2.1vw, 18px);
+  --intro-desc:      clamp(14px, 1.9vw, 16px);
+  --intro-lead:      clamp(16px, 2.2vw, 19px);
+  --intro-ghost:     clamp(14px, 1.9vw, 16px);
+
+  --intro-icon-size: clamp(88px, 16vw, 124px);
+
+  /* --motion-long(380ms) 은 페이지 전환용. 개막/폐막은 시네마틱하게
+     의도적으로 더 길다. */
+  --intro-curtain-ms: 900ms;
+  --intro-col-width: 460px;
+  --intro-col-width-wide: 540px;
+}
+
+/* ── 무대 ─────────────────────────────────────────────────── */
+.intro {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  z-index: var(--z-overlay);
+  background: var(--md-surface);
+}
+
+/* 비네트 + 중앙 온기. primary 토큰에서 파생 — 하드코딩 없음. */
+.intro::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background:
+    radial-gradient(120% 85% at 50% 40%,
+      color-mix(in srgb, var(--md-primary) 9%, transparent) 0%, transparent 60%),
+    radial-gradient(145% 115% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.72) 100%);
+}
+
+/* ── 개막/폐막 커튼 ───────────────────────────────────────── */
+.intro-curtain {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-overlay) + 10);
+  background: #000;
+  pointer-events: none;
+  opacity: 0;
+}
+.intro-curtain.is-opening {
+  animation: intro-curtain-up var(--intro-curtain-ms) var(--ease-emphasized) both;
+}
+.intro-curtain.is-closing {
+  animation: intro-curtain-down var(--intro-curtain-ms) var(--ease-emphasized-accelerate) both;
+  pointer-events: auto;
+}
+@keyframes intro-curtain-up   { from { opacity: 1; } to { opacity: 0; } }
+@keyframes intro-curtain-down { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── pane = 화면 하나. 컨텐츠 정중앙. ─────────────────────── */
+.intro-pane {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: clamp(var(--sp-xl), 6vw, 56px);
+  /* 실제 앱에서는 viewport.js 가 --app-vv-height 를 visualViewport 로
+     갱신한다. 100vh 금지 — 키보드를 따라가지 않는다. */
+  height: var(--app-vv-height, 100dvh);
+  padding-bottom: calc(clamp(var(--sp-xl), 6vw, 56px) + var(--kb-inset));
+  will-change: transform, opacity;
+}
+
+.intro-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--sp-xl);
+  width: min(100%, var(--intro-col-width));
+  /* 한국어는 어절 중간에서 끊지 않는다. 중국어는 예외(아래). */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.intro-col[lang="zh"] { word-break: normal; }
+
+/* 넓은 화면 분기 — 레포 컨벤션과 동일.
+   ⚠ viewport.js:13 LAYOUT_WIDE_QUERY 의 사본이다. 그쪽 주석이 사본 위치를
+     나열하고 있으니(responsive.css / layout_tokens.css / src/features/settings/styles/device.css)
+     레포 이관 시 pages/intro.css 를 그 목록에 추가할 것. */
+@media (min-aspect-ratio: 13/10),
+       (horizontal-viewport-segments: 2),
+       (vertical-viewport-segments: 2),
+       (min-width: 640px) and (min-height: 650px) {
+  .intro-col { width: min(100%, var(--intro-col-width-wide)); }
+}
+
+/* 개막(첫 판)에만 컨텐츠가 순서대로 떠오른다.
+   판 자체에 .is-first 를 붙이므로 다음 단계로 딸려가지 않는다.
+   로고는 등장 후 부유(float)까지 이어져야 해서 따로 둔다. */
+.intro-pane.is-first .intro-col > *:not(.intro-logo) {
+  animation: intro-rise 720ms var(--ease-emphasized) both;
+}
+.intro-pane.is-first .intro-col > *:nth-child(2) { animation-delay: 280ms; }
+.intro-pane.is-first .intro-col > *:nth-child(3) { animation-delay: 400ms; }
+.intro-pane.is-first .intro-col > *:nth-child(4) { animation-delay: 500ms; }
+@keyframes intro-rise {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── 타이포 ───────────────────────────────────────────────── */
+.intro-title {
+  margin: 0;
+  font-size: var(--intro-display);
+  line-height: 1.12;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  color: var(--md-on-surface);
+}
+.intro-lead {
+  margin: 0;
+  font-size: var(--intro-lead);
+  line-height: 1.55;
+  color: var(--md-outline-var);
+  max-width: 32ch;
+  text-wrap: balance;
+}
+.intro-lead b { color: var(--md-on-surface-var); font-weight: 700; }
+
+/* ── 로고 / 아이콘 ────────────────────────────────────────── */
+.intro-logo {
+  width: clamp(140px, 26vw, 200px);
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 20px 50px color-mix(in srgb, var(--md-primary) 28%, transparent));
+  animation: intro-float 5.5s ease-in-out infinite;
+}
+/* 첫 판에서는 떠오른 다음 부유가 이어진다 (애니메이션 2개를 연달아) */
+.intro-pane.is-first .intro-logo {
+  animation: intro-rise 720ms var(--ease-emphasized) 120ms both,
+             intro-float 5.5s ease-in-out 1.4s infinite;
+}
+@keyframes intro-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
+.intro-icon { width: var(--intro-icon-size); height: auto; color: var(--md-primary); }
+.intro-icon .stroke {
+  fill: none; stroke: currentColor; stroke-width: 5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.intro-icon .soft {
+  fill: none; stroke: var(--md-outline-var); stroke-width: 5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* ── 선택지: 테두리 없음. 타이포로만 위계를 만든다. ────────
+   상태 표현:
+     기본   회색(--md-outline-var)
+     hover  흰색으로 올라옴
+     선택   primary + 왼쪽 여백에 얇은 표식
+   Material 3 상태 레이어(--state-hover) 대신 색 대비를 쓴다 —
+   면(surface)이 없으므로 레이어를 깔 자리가 없다. */
+.intro-opts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-lg);
+  width: 100%;
+}
+.intro-opts--inline {
+  flex-direction: row;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--sp-xl);
+}
+
+.intro-opt {
+  appearance: none;
+  background: none;
+  border: 0;
+  min-height: var(--control-min-height);
+  padding: var(--sp-xs) 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--intro-option);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--md-outline-var);
+  cursor: pointer;
+  text-align: center;
+  transition: color var(--motion-base) var(--ease-standard);
+  -webkit-tap-highlight-color: transparent;
+}
+.intro-opt:hover { color: var(--md-on-surface); }
+.intro-opt:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 6px;
+  border-radius: var(--r-xs);
+}
+.intro-opt.is-picked { color: var(--md-primary); }
+
+/* 설명이 붙는 선택지는 좌측 정렬 — 문장이 길어 가운데 정렬이 읽기 나쁘다 */
+.intro-opt--desc { text-align: left; }
+.intro-opt__d {
+  display: block;
+  margin-top: var(--sp-xs);
+  font-size: var(--intro-desc);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--md-outline-var) 82%, transparent);
+  transition: color var(--motion-base) var(--ease-standard);
+}
+.intro-opt:hover .intro-opt__d,
+.intro-opt.is-picked .intro-opt__d {
+  color: var(--md-outline-var);
+}
+
+/* 목록형(차량 제조사/모델) — 행이 많아 크기를 한 단 낮춘다 */
+.intro-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: min(48dvh, 380px);
+  padding-inline: var(--sp-md);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+  gap: var(--sp-sm);
+}
+.intro-list .intro-opt {
+  font-size: var(--intro-option-sm);
+  text-align: left;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-md);
+  min-height: var(--control-min-height);
+}
+/* 목록 안의 되돌아가기 행 — 선택지가 아니라 이동이므로 확실히 낮은 위계.
+   상단 "이전" 은 스크롤 중일 때 손이 안 닿아서 목록 안에도 길을 둔다.
+
+   ⚠ .intro-list .intro-opt 가 justify-content: space-between 이라
+     그대로 두면 "←" 와 글자가 양 끝으로 밀린다 (실제로 그랬다).
+     이 행은 수치가 없으므로 flex-start 로 되돌린다. */
+.intro-opt--up {
+  justify-content: flex-start;
+  gap: var(--sp-sm);
+  font-size: var(--intro-meta);
+  font-weight: 600;
+  color: color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  padding-bottom: var(--sp-sm);
+  margin-bottom: var(--sp-xs);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 18%, transparent);
+}
+.intro-opt--up::before { content: "←"; }
+.intro-opt--up:hover { color: var(--md-primary); }
+
+/* ── 법적 고지 본문 ──
+   다른 단계는 가운데 정렬이지만 이건 훑는 글이 아니라 읽는 글이다.
+   가운데 정렬이면 줄 시작점이 흔들려 읽기 나쁘다. 의도적 예외이며
+   크기·색·간격은 그대로 토큰을 따른다. */
+.intro-legal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-md);
+  width: 100%;
+  max-height: min(46dvh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.intro-lead--legal {
+  text-align: left;
+  max-width: none;
+  font-size: var(--intro-desc);
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+/* 보조 수치는 행 이름보다 조용하되 읽히긴 해야 한다.
+   행과 같은 색 계열을 쓰고 크기로만 위계를 만든다 (약 0.75×). */
+.intro-list__count {
+  flex: none;
+  font-size: var(--intro-meta);
+  font-weight: 500;
+  color: color-mix(in srgb, var(--md-outline-var) 76%, transparent);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--motion-base) var(--ease-standard);
+}
+.intro-opt:hover .intro-list__count { color: var(--md-outline-var); }
+
+/* 보조 액션 — 본 선택지보다 확실히 아래 위계 */
+.intro-ghost {
+  appearance: none;
+  background: none;
+  border: 0;
+  min-height: var(--control-min-height);
+  padding: var(--sp-xs) 0;
+  font-family: inherit;
+  font-size: var(--intro-ghost);
+  font-weight: 600;
+  color: color-mix(in srgb, var(--md-outline-var) 78%, transparent);
+  cursor: pointer;
+  transition: color var(--motion-base) var(--ease-standard);
+  -webkit-tap-highlight-color: transparent;
+}
+.intro-ghost:hover { color: var(--md-primary); }
+.intro-ghost:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 4px;
+  border-radius: var(--r-xs);
+}
+
+/* 진행 액션(시작하기) — 유일하게 primary 로 채운 텍스트 */
+.intro-cta {
+  appearance: none;
+  background: none;
+  border: 0;
+  min-height: var(--control-min-height);
+  padding: var(--sp-sm) 0;
+  font-family: inherit;
+  font-size: var(--intro-option);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--md-primary);
+  cursor: pointer;
+  transition: opacity var(--motion-base) var(--ease-standard);
+  -webkit-tap-highlight-color: transparent;
+}
+.intro-cta:hover { opacity: 0.78; }
+.intro-cta:disabled { opacity: 0.4; cursor: default; }
+.intro-cta:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 6px;
+  border-radius: var(--r-xs);
+}
+
+/* ── 이전으로 (임의 전진은 없음) ──────────────────────────
+   화면 좌상단 고정. 컨텐츠 흐름을 건드리지 않으면서 항상 같은 자리. */
+.intro-back {
+  position: absolute;
+  top: max(var(--sp-lg), env(safe-area-inset-top, 0px));
+  left: var(--sp-lg);
+  z-index: 4;
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: var(--sp-sm) var(--sp-md) var(--sp-sm) 0;
+  font-family: inherit;
+  font-size: var(--intro-ghost);
+  font-weight: 600;
+  color: color-mix(in srgb, var(--md-outline-var) 72%, transparent);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+  transition: color var(--motion-base) var(--ease-standard),
+              opacity var(--motion-base) var(--ease-standard);
+  -webkit-tap-highlight-color: transparent;
+}
+.intro-back:hover { color: var(--md-on-surface); }
+.intro-back:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 4px;
+  border-radius: var(--r-xs);
+}
+.intro-back[hidden] { display: none; }
+.intro-back svg { width: 16px; height: 16px; }
+
+/* 터미널 dry-run 표시. 실제 단계 컴포넌트와 레이아웃에는 관여하지 않는
+   셸 메타정보라 pane 가장자리에만 둔다. */
+.intro-preview-note {
+  position: absolute;
+  top: max(var(--sp-lg), env(safe-area-inset-top, 0px));
+  left: 50%;
+  z-index: 4;
+  max-width: calc(100% - 11rem);
+  transform: translateX(-50%);
+  color: var(--md-primary);
+  font-size: var(--fs-label-sm);
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.intro-close {
+  position: absolute;
+  top: max(var(--sp-lg), env(safe-area-inset-top, 0px));
+  right: var(--sp-lg);
+  z-index: 4;
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: var(--sp-sm) 0 var(--sp-sm) var(--sp-md);
+  color: var(--md-on-surface);
+  font: inherit;
+  font-size: var(--intro-ghost);
+  font-weight: 650;
+  cursor: pointer;
+}
+.intro-close:hover { color: var(--md-primary); }
+.intro-close:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 4px;
+  border-radius: var(--r-xs);
+}
+
+/* ── 언어 순환 (0단계) ────────────────────────────────────── */
+.intro-cycler { position: relative; height: calc(var(--intro-display) * 1.4); width: 100%; }
+.intro-cyc {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: var(--intro-display);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--md-on-surface);
+  opacity: 0;
+}
+.intro-cyc.is-on { animation: intro-cyc 1800ms var(--ease-emphasized) both; }
+@keyframes intro-cyc {
+  0%        { opacity: 0; transform: translateY(12px); }
+  16%, 74%  { opacity: 1; transform: none; }
+  100%      { opacity: 0; transform: translateY(-12px); }
+}
+
+/* 오류 — 기존 토스트는 z-index 150 이라 인트로(--z-overlay 220) 뒤에
+   가려진다. 그래서 인트로 안에 직접 띄운다. */
+.intro-error {
+  margin: 0;
+  font-size: var(--intro-desc);
+  line-height: 1.5;
+  color: var(--md-error);
+  max-width: 34ch;
+}
+
+/* ── 휴대폰 세로 화면 ─────────────────────────────────────
+   단계 종류와 관계없이 중앙 축을 유지한다. 기본 규칙에서 읽기용으로
+   왼쪽 정렬한 설명·목록·고지도 세로 화면에서는 같은 중앙 축에 맞춘다. */
+@media (orientation: portrait) and (max-width: 640px) {
+  .intro-opt--desc,
+  .intro-lead--legal,
+  .intro-list .intro-opt { text-align: center; }
+  .intro-list .intro-opt { justify-content: center; }
+}
+
+/* 작은 화면에서도 장식과 실제 조작 요소가 붙어 보이지 않게 단계의 성격에
+   따라 간격을 나눈다. 내용이 많은 단계는 장식을 먼저 줄이고, 목록과 고지
+   본문만 기존의 내부 스크롤을 사용한다. */
+@media (orientation: portrait) and (max-width: 480px) {
+  .intro-pane {
+    padding-top: max(clamp(24px, 5vh, 36px), env(safe-area-inset-top, 0px));
+    padding-right: max(var(--sp-xl), env(safe-area-inset-right, 0px));
+    padding-bottom: calc(max(clamp(24px, 5vh, 36px), env(safe-area-inset-bottom, 0px)) + var(--kb-inset));
+    padding-left: max(var(--sp-xl), env(safe-area-inset-left, 0px));
+  }
+
+  .intro-col { gap: clamp(20px, 3.6vh, 28px); }
+  .intro-logo { width: clamp(124px, 42vw, 170px); }
+  .intro-opts { gap: clamp(16px, 2.8vh, 22px); }
+  .intro-opt { padding-block: var(--sp-sm); }
+  .intro-preview-note { max-width: calc(100% - 8rem); }
+
+  .intro-pane:is([data-intro-step="welcome"], [data-intro-step="outro"]) .intro-col {
+    gap: clamp(24px, 4.4vh, 34px);
+  }
+  .intro-pane:is([data-intro-step="car"], [data-intro-step="control"], [data-intro-step="legal"]) .intro-icon {
+    width: clamp(76px, 24vw, 96px);
+  }
+}
+
+/* 높이가 짧은 소형 휴대폰은 버튼 간격은 유지하고 장식과 바깥 여백을 줄인다. */
+@media (orientation: portrait) and (max-width: 480px) and (max-height: 620px) {
+  .intro-pane {
+    padding-top: max(var(--sp-xl), env(safe-area-inset-top, 0px));
+    padding-bottom: calc(max(var(--sp-xl), env(safe-area-inset-bottom, 0px)) + var(--kb-inset));
+  }
+  .intro-col { gap: var(--sp-lg); }
+  .intro-logo { width: clamp(108px, 36vw, 140px); }
+  .intro-icon { width: clamp(72px, 22vw, 88px); }
+  .intro-opts { gap: var(--sp-md); }
+  .intro-list { max-height: min(42dvh, 250px); }
+  .intro-legal { max-height: min(40dvh, 230px); }
+}
+
+/* ── 낮은 가로 화면 ───────────────────────────────────────
+   같은 단계 DOM을 장식/내용 2열로 재배치한다. 단순한 시작·완료 단계는
+   시각 요소를 키우고, 목록·고지·제어 단계는 본문 폭을 더 확보한다. */
+@media (orientation: landscape) and (max-height: 820px) {
+  :root {
+    --intro-display:   clamp(28px, 7vh, 42px);
+    --intro-option:    clamp(19px, 5.5vh, 25px);
+    --intro-option-sm: clamp(17px, 4.8vh, 21px);
+    --intro-meta:      clamp(13px, 3.8vh, 16px);
+    --intro-desc:      clamp(13px, 3.8vh, 15px);
+    --intro-lead:      clamp(14px, 4.2vh, 18px);
+    --intro-ghost:     clamp(13px, 3.8vh, 15px);
+    --intro-icon-size: clamp(82px, 29vh, 124px);
+  }
+
+  .intro-pane {
+    display: block;
+    overflow: hidden;
+    padding-top: max(clamp(16px, 4vh, 32px), env(safe-area-inset-top, 0px));
+    padding-right: max(clamp(20px, 4vw, 40px), env(safe-area-inset-right, 0px));
+    padding-bottom: calc(max(clamp(16px, 4vh, 32px), env(safe-area-inset-bottom, 0px)) + var(--kb-inset));
+    padding-left: max(clamp(20px, 4vw, 40px), env(safe-area-inset-left, 0px));
+  }
+
+  .intro-col {
+    display: grid;
+    grid-template-columns: minmax(96px, 0.7fr) minmax(280px, 1.3fr);
+    grid-template-rows: repeat(3, min-content);
+    align-content: center;
+    align-items: center;
+    justify-items: center;
+    column-gap: clamp(var(--sp-xl), 4.5vw, 52px);
+    row-gap: clamp(var(--sp-md), 3vh, var(--sp-xl));
+    width: min(100%, 820px);
+    min-height: 100%;
+    margin-inline: auto;
+  }
+
+  .intro-col > .intro-logo,
+  .intro-col > .intro-icon {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-self: center;
+    justify-self: center;
+  }
+
+  .intro-col > :not(.intro-logo):not(.intro-icon) {
+    grid-column: 2;
+    width: min(100%, 560px);
+    min-width: 0;
+  }
+
+  /* 선택·목록 단계는 제목부터 선택지까지 같은 왼쪽 축을 사용한다.
+     시작/완료 단계는 기존의 중앙 정렬을 유지한다. */
+  .intro-pane:is(
+    [data-intro-step="restore"],
+    [data-intro-step="car"],
+    [data-intro-step="hda"],
+    [data-intro-step="control"],
+    [data-intro-step="legal"]
+  ) :is(.intro-title, .intro-lead) {
+    max-width: none;
+    text-align: left;
+  }
+  .intro-pane[data-intro-step="legal"] .intro-cta { text-align: left; }
+
+  .intro-logo { width: clamp(112px, 22vw, 180px); }
+  .intro-opts { gap: clamp(var(--sp-md), 2.8vh, var(--sp-lg)); }
+  .intro-opts--inline { gap: clamp(var(--sp-lg), 3vw, var(--sp-xl)); }
+  .intro-opt { padding-block: var(--sp-xs); }
+  .intro-opt__d { margin-top: var(--sp-xs); line-height: 1.4; }
+  .intro-list { max-height: min(62dvh, 300px); }
+  .intro-legal { max-height: min(56dvh, 260px); gap: var(--sp-sm); }
+  .intro-lead--legal { line-height: 1.5; }
+  .intro-cycler { height: calc(var(--intro-display) * 1.25); }
+
+  /* 시작/완료는 내용이 짧으므로 화면의 중심부를 더 여유 있게 사용한다. */
+  .intro-pane:is([data-intro-step="welcome"], [data-intro-step="outro"]) {
+    --intro-display: clamp(32px, 9vh, 46px);
+    --intro-option: clamp(21px, 6vh, 28px);
+    --intro-lead: clamp(15px, 4.6vh, 20px);
+    --intro-icon-size: clamp(104px, 36vh, 148px);
+  }
+  .intro-pane:is([data-intro-step="welcome"], [data-intro-step="outro"]) .intro-col {
+    grid-template-columns: minmax(120px, 0.75fr) minmax(300px, 1.25fr);
+    column-gap: clamp(32px, 4.5vw, 52px);
+    row-gap: clamp(var(--sp-lg), 3.6vh, 28px);
+    width: min(100%, 720px);
+  }
+
+  /* 긴 목록과 설명은 우측 내용 열에 더 많은 폭을 배정한다. */
+  .intro-pane:is([data-intro-step="car"], [data-intro-step="control"], [data-intro-step="legal"]) .intro-col {
+    grid-template-columns: minmax(88px, 0.55fr) minmax(320px, 1.45fr);
+    width: min(100%, 920px);
+  }
+
+  .intro-back,
+  .intro-preview-note,
+  .intro-close {
+    top: max(var(--sp-sm), env(safe-area-inset-top, 0px));
+  }
+  .intro-back { left: max(var(--sp-md), env(safe-area-inset-left, 0px)); }
+  .intro-close { right: max(var(--sp-md), env(safe-area-inset-right, 0px)); }
+}
+
+/* 폭이 좁은 가로 화면은 열 최소 폭과 장식을 먼저 줄인다. */
+@media (orientation: landscape) and (max-height: 820px) and (max-width: 640px) {
+  .intro-pane {
+    padding-right: max(var(--sp-md), env(safe-area-inset-right, 0px));
+    padding-left: max(var(--sp-md), env(safe-area-inset-left, 0px));
+  }
+  .intro-col,
+  .intro-pane:is([data-intro-step="welcome"], [data-intro-step="outro"]) .intro-col,
+  .intro-pane:is([data-intro-step="car"], [data-intro-step="control"], [data-intro-step="legal"]) .intro-col {
+    grid-template-columns: minmax(72px, 0.5fr) minmax(240px, 1.5fr);
+    column-gap: clamp(var(--sp-md), 4vw, 28px);
+    width: min(100%, 590px);
+  }
+  .intro-logo { width: clamp(86px, 20vw, 120px); }
+  .intro-icon { width: clamp(72px, 22vh, 96px); }
+  .intro-preview-note { max-width: calc(100% - 9rem); }
+}
+
+/* 극단적으로 좁은 가로 창은 장식보다 조작 가능 영역을 우선한다. */
+@media (orientation: landscape) and (max-height: 820px) and (max-width: 520px) {
+  .intro-col,
+  .intro-pane:is([data-intro-step="welcome"], [data-intro-step="outro"]) .intro-col,
+  .intro-pane:is([data-intro-step="car"], [data-intro-step="control"], [data-intro-step="legal"]) .intro-col {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(100%, 440px);
+  }
+  .intro-col > .intro-logo,
+  .intro-col > .intro-icon { display: none; }
+  .intro-col > :not(.intro-logo):not(.intro-icon) { grid-column: 1; }
+}
+
+/* 16:9 휴대폰을 주소창까지 포함해 가로로 쓸 때의 최저 높이 구간. */
+@media (orientation: landscape) and (max-height: 380px) {
+  :root {
+    --intro-display:   clamp(24px, 8vh, 30px);
+    --intro-option:    clamp(17px, 5.5vh, 21px);
+    --intro-option-sm: clamp(16px, 5vh, 19px);
+    --intro-meta:      13px;
+    --intro-desc:      clamp(12px, 3.8vh, 14px);
+    --intro-lead:      clamp(13px, 4.2vh, 15px);
+    --intro-ghost:     13px;
+    --intro-icon-size: clamp(62px, 25vh, 88px);
+  }
+
+  .intro-pane {
+    padding-top: max(var(--sp-md), env(safe-area-inset-top, 0px));
+    padding-bottom: calc(max(var(--sp-md), env(safe-area-inset-bottom, 0px)) + var(--kb-inset));
+  }
+  .intro-col {
+    row-gap: var(--sp-xs);
+    column-gap: clamp(var(--sp-lg), 5vw, 48px);
+  }
+  .intro-logo { width: clamp(88px, 22vw, 138px); }
+  .intro-opts,
+  .intro-opts--inline { gap: var(--sp-sm); }
+  .intro-opt { line-height: 1.2; }
+  .intro-opt__d { line-height: 1.3; }
+  .intro-lead { line-height: 1.35; }
+  .intro-list { max-height: min(68dvh, 240px); gap: var(--sp-xs); }
+  .intro-legal { max-height: min(60dvh, 210px); gap: var(--sp-xs); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-curtain.is-opening,
+  .intro-curtain.is-closing,
+  .intro-pane.is-first .intro-col > *,
+  .intro-pane.is-first .intro-logo,
+  .intro-logo,
+  .intro-cyc.is-on {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+}

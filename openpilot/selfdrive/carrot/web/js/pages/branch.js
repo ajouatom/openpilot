@@ -7,6 +7,7 @@ let ORIGIN_USERNAME = "origin";
 let BRANCH_REMOTE_NAMES = ["origin"];
 let BRANCH_REMOTE_OWNERS = Object.create(null);
 let BRANCH_GROUP_OPEN = Object.create(null);
+let branchPickerCloseTimer = null;
 
 
 function openBranchPicker() {

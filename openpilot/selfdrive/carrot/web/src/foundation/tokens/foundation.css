@@ -1,0 +1,53 @@
+/* Stable design scales shared by every Carrot web surface. */
+:root {
+  --sp-xs: 4px;
+  --sp-sm: 8px;
+  --sp-md: 12px;
+  --sp-lg: 16px;
+  --sp-xl: 24px;
+  --sp-2xl: 32px;
+
+  --r-xs: 4px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 28px;
+  --r-2xl: 32px;
+  --r-round: 999px;
+
+  --motion-instant: 80ms;
+  --motion-quick: 140ms;
+  --motion-base: 180ms;
+  --motion-medium: 240ms;
+  --motion-long: 380ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --ease-linear: linear;
+
+  --z-base: 1;
+  --z-sticky: 50;
+  --z-rail: 100;
+  --z-nav: 120;
+  --z-fab: 130;
+  --z-popover: 150;
+  --z-modal: 170;
+  --z-toast: 200;
+  --z-overlay: 220;
+
+  --font-sans: "Roboto", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "Roboto Mono", SFMono-Regular, Menlo, monospace;
+  --fs-headline: 24px;
+  --fs-title-lg: 20px;
+  --fs-title-md: 18px;
+  --fs-title-sm: 16px;
+  --fs-title-xs: 14px;
+  --fs-body-lg: 18px;
+  --fs-body-md: 16px;
+  --fs-body-sm: 14px;
+  --fs-label-lg: 16px;
+  --fs-label-md: 14px;
+  --fs-label-sm: 13px;
+  --fs-nav: clamp(13px, 3.8vw, 16px);
+  --fs-nav-desktop: clamp(14px, 1.1vw, 17px);
+}

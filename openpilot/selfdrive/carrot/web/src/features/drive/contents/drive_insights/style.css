@@ -1,0 +1,93 @@
+.drive-insights,
+.drive-insights-surface {
+  --drive-insights-surface: var(--md-surface);
+  --drive-insights-panel: var(--md-surface-cont);
+  --drive-insights-line: color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  --drive-insights-muted: var(--md-on-surface-var);
+  --drive-insights-grid-color: color-mix(in srgb, var(--md-outline-var) 24%, transparent);
+  --drive-insights-graph-speed: var(--md-info-strong);
+  --drive-insights-graph-acceleration: var(--md-success-strong);
+  --drive-insights-graph-steering: var(--md-primary);
+  --drive-insights-graph-lead_distance: var(--md-warning);
+  --drive-insights-forward-grid: color-mix(in srgb, var(--md-outline-var) 26%, transparent);
+  --drive-insights-forward-grid-minor: color-mix(in srgb, var(--md-outline-var) 12%, transparent);
+  --drive-insights-forward-grid-label: color-mix(in srgb, var(--md-on-surface-var) 56%, transparent);
+  --drive-insights-forward-grid-font: 600 10px var(--font-mono);
+  --drive-insights-forward-lane: color-mix(in srgb, var(--md-on-surface-var) 54%, transparent);
+  --drive-insights-forward-ego-fill: color-mix(in srgb, var(--md-primary) 24%, transparent);
+  --drive-insights-forward-ego-stroke: var(--md-primary);
+  --drive-insights-forward-lead: var(--md-primary);
+  --drive-insights-forward-radar: var(--md-info);
+  --drive-insights-forward-neutral: var(--md-outline-var);
+  --drive-insights-forward-text: var(--md-on-surface);
+}
+
+.drive-insights {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--sp-sm);
+  padding: var(--sp-sm);
+  overflow: hidden;
+  background: var(--drive-insights-surface);
+  color: var(--md-on-surface);
+  container-type: inline-size;
+}
+
+.drive-insights__tabs {
+  z-index: 2;
+}
+
+.drive-insights__views {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.drive-insights__view {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.drive-insights__view[hidden] {
+  display: none !important;
+}
+
+.drive-insights__graph {
+  height: 100%;
+}
+
+.drive-insights__forward {
+  --telemetry-forward-plot-min-height: 341px;
+}
+
+.drive-insights__state {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.drive-insights__state .c-state-surface {
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+
+.drive-insights__state .drive-insights__status {
+  --state-surface-feature-size-min: 18px;
+  --state-surface-feature-size-max: 24px;
+  --state-surface-title-size-min: 22px;
+  --state-surface-title-size-max: 32px;
+  --state-surface-description-size: 12px;
+  --state-surface-max-width: 36ch;
+}

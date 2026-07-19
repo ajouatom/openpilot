@@ -27,6 +27,7 @@ from openpilot.cereal import messaging, log
 
 
 CARROT_VISION_ACTIVE_PARAM = "CarrotVisionActive"
+CARROT_VISION_BUSY_CODE = "carrot_vision_busy"
 _carrot_vision_params: Any | None = None
 _carrot_vision_active: bool | None = None
 _carrot_vision_mode = False
@@ -347,6 +348,7 @@ class StreamRequestBody:
   bridge_services_in: list[str] = field(default_factory=list)
   bridge_services_out: list[str] = field(default_factory=list)
   client_id: str = ""
+  takeover: bool = False
   carrot_state: bool = False
 
 
@@ -360,6 +362,18 @@ def _stream_sessions_for_client(stream_dict: dict[str, StreamSession], client_ke
           if getattr(session, "client_key", "") == client_key]
 
 
+def _carrot_vision_road_sessions(
+  stream_dict: dict[str, StreamSession],
+  client_key: str,
+) -> tuple[list[StreamSession], list[StreamSession]]:
+  road_sessions = [session for session in stream_dict.values()
+                   if getattr(session, "uses_road_camera", False)]
+  owned = [session for session in road_sessions
+           if getattr(session, "client_key", "") == client_key]
+  foreign = [session for session in road_sessions if session not in owned]
+  return owned, foreign
+
+
 async def get_stream(request: 'web.Request'):
   stream_dict, debug_mode = request.app['streams'], request.app['debug']
 
@@ -370,37 +384,53 @@ async def get_stream(request: 'web.Request'):
     bridge_services_in=raw_body.get("bridge_services_in", []),
     bridge_services_out=raw_body.get("bridge_services_out", []),
     client_id=str(raw_body.get("client_id", "")),
+    takeover=bool(raw_body.get("takeover", False)),
     carrot_state=bool(raw_body.get("carrot_state", False)),
   )
   async with request.app['stream_lock']:
     client_key = _stream_client_key(body.client_id, request.remote)
-    old_sessions = _stream_sessions_for_client(stream_dict, client_key)
-    foreign_sessions = [session for session in stream_dict.values() if session not in old_sessions]
-    webrtcd_log("info", "get_stream request from %s cameras=%s old_sessions=%s", request.remote, body.cameras,
-                [getattr(old, "identifier", "?") for old in old_sessions])
+    road_requested = _carrot_vision_mode and "road" in body.cameras
+    if road_requested:
+      old_sessions, foreign_sessions = _carrot_vision_road_sessions(stream_dict, client_key)
+    elif _carrot_vision_mode:
+      old_sessions, foreign_sessions = [], []
+    else:
+      old_sessions = _stream_sessions_for_client(stream_dict, client_key)
+      foreign_sessions = []
+    webrtcd_log("info", "get_stream request from %s cameras=%s takeover=%s old_sessions=%s", request.remote,
+                body.cameras, body.takeover, [getattr(old, "identifier", "?") for old in old_sessions])
 
     # One road-video peer keeps RTP/packetization bounded. Other devices can use
     # the HUD/state relay concurrently, but a second Vision viewer must wait until
     # the current owner stops instead of multiplying real-time work on-device.
-    if _carrot_vision_mode and foreign_sessions:
+    if road_requested and foreign_sessions and not body.takeover:
       webrtcd_log("warning", "get_stream rejected busy owner=%s requester=%s",
                   [getattr(session, "identifier", "?") for session in foreign_sessions], client_key)
-      raise web.HTTPConflict(text="Carrot Vision is already active on another client")
+      raise web.HTTPConflict(
+        text=json.dumps({
+          "ok": False,
+          "code": CARROT_VISION_BUSY_CODE,
+          "error": "Carrot Vision is already active on another client",
+        }),
+        content_type="application/json",
+      )
 
-    # Register the replacement before retiring the old peer. This keeps the
-    # encoder activity signal continuously true during reconnect without
-    # starting a second RTP sender.
     session = StreamSession(body.sdp, body.cameras, body.bridge_services_in, body.bridge_services_out,
                             debug_mode, client_key=client_key, carrot_state=body.carrot_state)
     session.stream_dict = stream_dict
-    stream_dict[session.identifier] = session
-    _sync_carrot_vision_active(stream_dict)
 
-    for old in old_sessions:
+    replaced_sessions = old_sessions + (foreign_sessions if body.takeover else [])
+    for old in replaced_sessions:
       try:
         await old.stop()
+        stream_dict.pop(getattr(old, "identifier", ""), None)
       except Exception:
         webrtcd_log("exception", "Failed stopping replaced session %s", getattr(old, "identifier", "?"))
+        await session.post_run_cleanup()
+        raise web.HTTPInternalServerError(text="Failed replacing active Carrot Vision session") from None
+
+    stream_dict[session.identifier] = session
+    _sync_carrot_vision_active(stream_dict)
 
     try:
       answer = await session.get_answer()

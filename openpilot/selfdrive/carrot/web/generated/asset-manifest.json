@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "id": "app.asset-url",
+      "kind": "bundle",
+      "source": "src/entries/app.js",
+      "path": "js/generated/app.js",
+      "hash": "a9a376e9813c93c31c0764136fa4f98ee290431df9e973c5e766c7a0896ad493"
+    },
+    {
+      "id": "drive.runtime",
+      "kind": "bundle",
+      "source": "src/entries/drive.js",
+      "path": "js/generated/drive.js",
+      "hash": "f4a3f1a5cd291be9f9e01767f5e3a1deb839a5b8fb3af92af977afa076ad800b"
+    },
+    {
+      "id": "replay.runtime",
+      "kind": "bundle",
+      "source": "src/entries/replay.js",
+      "path": "js/generated/replay.js",
+      "hash": "1390302940c03869563a947aea08e9407e29dd00a5e583a8f0f0d7cd4fa52c12"
+    },
+    {
+      "id": "settings.store",
+      "kind": "bundle",
+      "source": "src/entries/settings.js",
+      "path": "js/generated/settings.js",
+      "hash": "bbce78fd5db3e709368bf900015cb569945da1cad8f120d3932c152ca54b43e9"
+    },
+    {
+      "id": "tools.runtime",
+      "kind": "bundle",
+      "source": "src/entries/tools.js",
+      "path": "js/generated/tools.js",
+      "hash": "7e636c7e5c51f382c0befd11faa6c1294cb39f81f819776db9141cde693137fd"
+    },
+    {
+      "id": "logs.runtime",
+      "kind": "bundle",
+      "source": "src/entries/logs.js",
+      "path": "js/generated/logs.js",
+      "hash": "0f44ad83125c5fd9f2a6eac5724e70c02cbbcaa07c87f3906faf7fdf1cb48f19"
+    },
+    {
+      "id": "terminal.runtime",
+      "kind": "bundle",
+      "source": "src/entries/terminal.js",
+      "path": "js/generated/terminal.js",
+      "hash": "4515d91426b99de8f461a4d78791a91127ec80e237f482f91499af6bd718c6f1"
+    },
+    {
+      "id": "terminal.shared",
+      "kind": "bundle",
+      "source": "src/entries/terminal_shared.js",
+      "path": "js/generated/terminal-shared.js",
+      "hash": "da889314cb2e9f083eda21371a92e8ddef317a7701f3cdca140ffcfdfeabf59b"
+    },
+    {
+      "id": "terminal.support",
+      "kind": "bundle",
+      "source": "src/entries/terminal_support.js",
+      "path": "js/generated/terminal-support.js",
+      "hash": "47ea0f582a4f40c53349213a7f99776d35f7d1bb44ab0f6bb5ccff2169787023"
+    },
+    {
+      "id": "terminal.guest",
+      "kind": "bundle",
+      "source": "src/entries/terminal_guest.js",
+      "path": "js/generated/terminal-guest.js",
+      "hash": "d2601c53cb5fb40122cd1e794ab8aadb9c45579e6b19404dffe6b443e64a2bfb"
+    },
+    {
+      "id": "intro.runtime",
+      "kind": "bundle",
+      "source": "src/entries/intro.js",
+      "path": "js/generated/intro.js",
+      "hash": "55a2e10651637ddc952418d3e5d2d45f38c626a711492824d3a38bc5f24e3664"
+    },
+    {
+      "id": "design-tokens.styles",
+      "kind": "bundle",
+      "source": "src/entries/design_tokens.css",
+      "path": "css/generated/design-tokens.css",
+      "hash": "8c3deb22d669b914f2a46648c8a44d8c91f82b1fac7c27c4c0ffe06e56cf8c2b"
+    },
+    {
+      "id": "design-system.styles",
+      "kind": "bundle",
+      "source": "src/entries/design_system.css",
+      "path": "css/generated/design-system.css",
+      "hash": "880c0e1074baa6782ab5803bcb2af10349febbb86985075cd3ac410909e77f60"
+    },
+    {
+      "id": "drive.styles",
+      "kind": "bundle",
+      "source": "src/entries/drive.css",
+      "path": "css/generated/drive.css",
+      "hash": "636f271958730ff8bcf492e1817d5af885134b9c69a6ca3f64d9e46115c390a5"
+    },
+    {
+      "id": "replay.styles",
+      "kind": "bundle",
+      "source": "src/entries/replay.css",
+      "path": "css/generated/replay.css",
+      "hash": "81319a26b34cd564bbe28f186660c4f1fa1f674ed125bb835cf156cb633513e3"
+    },
+    {
+      "id": "settings.styles",
+      "kind": "bundle",
+      "source": "src/entries/settings.css",
+      "path": "css/generated/settings.css",
+      "hash": "009c303bbd82bdf9e555cbbb884828748b17039b00a6d705afade05a0c109146"
+    },
+    {
+      "id": "tools.styles",
+      "kind": "bundle",
+      "source": "src/entries/tools.css",
+      "path": "css/generated/tools.css",
+      "hash": "509f94d62484675f6ef38735be885f253aae57a0806d0543abd02dc90e7c81d5"
+    },
+    {
+      "id": "logs.styles",
+      "kind": "bundle",
+      "source": "src/entries/logs.css",
+      "path": "css/generated/logs.css",
+      "hash": "8e92c04a8e6b91ac9d4922bd7a9df6c42831f9cd48a9c0082c304a79374d0c8a"
+    },
+    {
+      "id": "terminal.styles",
+      "kind": "bundle",
+      "source": "src/entries/terminal.css",
+      "path": "css/generated/terminal.css",
+      "hash": "a9aecb2203d8fa58852a4a0a3dfb46f9cd95eca263ba428d105fe635caa9758f"
+    },
+    {
+      "id": "terminal.guest-styles",
+      "kind": "bundle",
+      "source": "src/entries/terminal_guest.css",
+      "path": "css/generated/terminal-guest.css",
+      "hash": "34712d13cfc153448800e53ced1f0150c3dd2240f08aa82cc601b8dd41685160"
+    },
+    {
+      "id": "intro.styles",
+      "kind": "bundle",
+      "source": "src/entries/intro.css",
+      "path": "css/generated/intro.css",
+      "hash": "2bab523e68f30faadee22c63ed8d6fad0703696194c4bcae8b4a66af6bf2104a"
+    },
+    {
+      "id": "vision.webgl2.worker",
+      "kind": "worker",
+      "path": "js/realtime/vision_webgl2_worker.js",
+      "hash": "b491f3f8a33b13e74c0d17371dcbe29ded4607b3edd3a1e9e37dae56cf585dfe"
+    },
+    {
+      "id": "navigation.media.worker",
+      "kind": "worker",
+      "path": "js/realtime/drive_contents/carrot_navi/worker.js",
+      "hash": "a411dea9a7a158ffbcc3b9c81a530a1d7a43d57c60153ab9a9b7f575191b64a8"
+    },
+    {
+      "id": "replay.sensor.worker",
+      "kind": "worker",
+      "path": "js/realtime/replay_sensor_worker.js",
+      "hash": "81d0751a22b0b097f74d458589fb87c0440bf9160d5314747a92a9d877b40db4"
+    },
+    {
+      "id": "replay.advanced.worker",
+      "kind": "worker",
+      "path": "js/realtime/replay_advanced_worker.js",
+      "hash": "bf1ea74891dc6bc49d9ffccdf7061863b795c6eb5576409be1f7309282dee44d"
+    },
+    {
+      "id": "replay.log.worker",
+      "kind": "worker",
+      "path": "js/realtime/replay_log_worker.js",
+      "hash": "00a093634fcce7ee1d41b214e9db4b225f3a0ba5e3df7105d6ddbba85da0fa7d"
+    },
+    {
+      "id": "replay.video.worker",
+      "kind": "worker",
+      "path": "js/realtime/replay_video_worker.js",
+      "hash": "44f7b14f7f9ec88b40924b668d05fe08bb96bb508276098d393aaff8b0e9d357"
+    }
+  ]
+}

@@ -114,15 +114,6 @@ function renderQuickLinkUI() {
     btnSaveQuickLink.setAttribute("aria-disabled", hasUrl ? "false" : "true");
   }
 
-  if (btnQuickLinkWeb) {
-    if (hasUrl) {
-      btnQuickLinkWeb.href = QUICK_LINK_URL;
-      btnQuickLinkWeb.setAttribute("aria-disabled", "false");
-    } else {
-      btnQuickLinkWeb.removeAttribute("href");
-      btnQuickLinkWeb.setAttribute("aria-disabled", "true");
-    }
-  }
 }
 
 function setServerStateStatus() {}

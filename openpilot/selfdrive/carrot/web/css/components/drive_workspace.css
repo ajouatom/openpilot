@@ -18,6 +18,34 @@
 }
 
 .drive-workspace {
+  --drive-workspace-bg: #020407;
+}
+
+.drive-workspace > [data-drive-workspace-parking] {
+  display: none !important;
+}
+
+.drive-workspace__aux {
+  --drive-workspace-aux-bg: #0b0e12;
+}
+
+.drive-workspace {
+  --drive-workspace-resize-mask: rgba(4, 8, 12, 0.1);
+  --drive-workspace-settle-mask: rgba(4, 8, 12, 0.07);
+  --drive-workspace-layout-duration: 0ms;
+  --drive-workspace-layout-ease: cubic-bezier(0.22, 0.82, 0.22, 1);
+  --drive-workspace-split-ease: cubic-bezier(0.16, 0.74, 0.2, 1);
+  --drive-workspace-resize-duration: 160ms;
+  --drive-workspace-settle-duration: 240ms;
+  --drive-workspace-feedback-in-duration: 70ms;
+  --drive-workspace-feedback-out-duration: 160ms;
+  --drive-workspace-resize-blur: 5px;
+  --drive-workspace-settle-blur: 2px;
+  --drive-workspace-ratio-color: rgba(255, 255, 255, 0.92);
+  --drive-workspace-ratio-font-size: clamp(34px, 5.2vw, 68px);
+  --drive-workspace-ratio-font-weight: 900;
+  --drive-workspace-ratio-letter-spacing: -0.04em;
+  --drive-workspace-ratio-shadow: 0 2px 18px rgba(0, 0, 0, 0.72);
   --drive-workspace-divider-width: 0px;
   --drive-workspace-secondary-width: 0px;
   --drive-workspace-divider-height: 0px;
@@ -52,8 +80,11 @@
 
 .drive-workspace > [data-drive-workspace-slot] {
   position: relative;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   isolation: isolate;
 }
 
@@ -70,6 +101,17 @@
 .drive-workspace > [data-drive-workspace-slot="secondary"] {
   grid-column: 3;
   grid-row: 1;
+}
+
+/* Recorded replay owns Vision independently of the user's live split choices. */
+.drive-workspace > .carrot-stage.is-replay {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
 .drive-workspace.is-drive-workspace-vertical > [data-drive-workspace-divider] {

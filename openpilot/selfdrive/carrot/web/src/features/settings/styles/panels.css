@@ -1,0 +1,656 @@
+
+.setting-search-panel {
+  --setting-search-form-width: clamp(320px, 42vw, 520px);
+  --setting-search-results-width: min(72vw, 760px);
+  --setting-search-results-max-height: 680px;
+  position: fixed;
+  top: var(--app-vv-top, 0px);
+  right: 0;
+  bottom: auto;
+  left: 0;
+  width: 100vw;
+  height: var(--app-vv-height, 100dvh);
+  min-height: 0;
+  box-sizing: border-box;
+  z-index: 171;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) var(--sp-lg) calc(var(--app-nav-bottom-gap, var(--nav-bar-height)) + 18px + var(--kb-inset) + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+
+.setting-search-panel::before {
+  content: none;
+}
+
+.setting-search-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0;
+  width: min(var(--setting-search-form-width), calc(100vw - 40px));
+  min-height: clamp(56px, 7vh, 62px);
+  padding-left: 20px;
+  border: 1px solid color-mix(in srgb, var(--md-primary) 26%, var(--md-stroke-soft));
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--md-surface-cont) 76%, transparent);
+  backdrop-filter: blur(10px) saturate(112%);
+  -webkit-backdrop-filter: blur(10px) saturate(112%);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.26);
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+}
+
+.setting-search-backdrop[hidden],
+.setting-search-panel[hidden] {
+  display: none !important;
+}
+
+.setting-search-form:focus-within {
+  border-color: color-mix(in srgb, var(--md-primary) 46%, var(--md-stroke-strong));
+}
+
+.setting-search-form__input {
+  min-width: 0;
+  min-height: 56px;
+  border: 0;
+  background: transparent;
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-md);
+  outline: none;
+}
+
+.setting-search-form__submit {
+  width: 56px;
+  height: 100%;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--md-stroke-soft) 42%, transparent);
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
+  background: transparent;
+  color: var(--md-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.setting-search-form__submit:active {
+  background: color-mix(in srgb, var(--md-primary) 12%, transparent);
+}
+
+.setting-search-form__submit svg {
+  width: 20px;
+  height: 20px;
+}
+
+.setting-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: min(var(--setting-search-results-width), calc(100vw - 40px));
+  min-height: 0;
+  padding: 0 4px 12px;
+  max-height: var(--setting-search-results-max-height);
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 8px 18px;
+  scrollbar-gutter: stable;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.setting-search-results:empty {
+  display: none;
+}
+
+.setting-search-section {
+  display: grid;
+  gap: var(--sp-sm);
+  padding: 0 0 var(--sp-lg);
+}
+
+.setting-search-section__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 4px;
+  color: var(--md-primary);
+  font-size: var(--fs-title-sm);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.setting-search-section__title strong {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-md);
+  font-weight: 800;
+}
+
+.setting-search-section__body {
+  overflow: hidden;
+  background: var(--md-surface-cont);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-1);
+}
+
+.page--setting #groupList,
+.page--setting #deviceGroupList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--setting-menu-list-gap);
+}
+
+.page--setting .setting-group-skeleton {
+  display: flex;
+  align-items: center;
+  min-height: var(--setting-menu-item-min-height);
+  padding: 0 var(--setting-menu-item-padding-inline);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+  border-radius: var(--control-radius);
+  background: var(--md-surface-cont);
+}
+
+.page--setting .setting-group-skeleton__line {
+  width: clamp(92px, 52%, 180px);
+  height: 12px;
+  border-radius: var(--r-round);
+  background: color-mix(in srgb, var(--md-on-surface-var) 14%, transparent);
+  animation: setting-skeleton-pulse 1.25s ease-in-out infinite alternate;
+}
+
+@keyframes setting-skeleton-pulse {
+  from { opacity: 0.42; }
+  to { opacity: 0.82; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page--setting .setting-group-skeleton__line {
+    animation: none;
+    opacity: 0.62;
+  }
+}
+
+.page--setting #groupList .groupBtn,
+.page--setting #deviceGroupList .groupBtn {
+  display: flex;
+  align-items: center;
+  min-height: var(--setting-menu-item-min-height);
+  margin-bottom: 0;
+  padding: 0 var(--setting-menu-item-padding-inline);
+  font-size: 14px;
+  line-height: 1.18;
+}
+
+.page--setting #groupList .groupBtn--favorites {
+  border-color: color-mix(in srgb, #7dd3fc 34%, var(--md-outline-var));
+  background: color-mix(in srgb, #7dd3fc 7%, var(--md-surface-cont-h));
+}
+
+.page--setting #groupList .groupBtn--favorites.active {
+  border-color: color-mix(in srgb, #7dd3fc 64%, var(--md-outline-var));
+  color: color-mix(in srgb, #bae6fd 82%, var(--md-on-surface));
+}
+
+.page--setting #groupList .groupBtn--profile {
+  border-color: var(--setting-profile-outline);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+}
+
+.page--setting #groupList .groupBtn--profile.active {
+  border-color: color-mix(in srgb, var(--md-primary) 48%, var(--md-outline-var));
+  background: var(--md-primary-state);
+  color: var(--md-primary);
+}
+
+.setting-profile-divider {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px 4px;
+  color: var(--md-on-surface-var);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.setting-profile-divider span {
+  height: 1px;
+  background: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+}
+
+.setting-profile-divider strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-profile-section {
+  --setting-profile-accent: var(--md-primary, #ffab66);
+  --setting-profile-divider: color-mix(in srgb, var(--setting-profile-accent) 34%, var(--md-outline-var));
+  min-width: 0;
+  border-top: 0;
+  scroll-margin-top: calc(var(--setting-profile-section-sticky-top, 64px) + 8px);
+}
+
+.setting-profile-section + .setting-profile-section {
+  border-top: 0;
+}
+
+.setting-profile-section__header {
+  position: static;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--setting-profile-accent);
+  font: inherit;
+  font-size: var(--fs-title-sm);
+  font-weight: 900;
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.setting-profile-section__header:hover,
+.setting-profile-section__header:focus-visible {
+  background: transparent;
+  color: color-mix(in srgb, var(--setting-profile-accent) 82%, var(--md-on-surface));
+  outline: none;
+}
+
+.setting-profile-section__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-profile-section__count {
+  min-width: 0;
+  padding: 2px 0;
+  color: var(--setting-profile-accent);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.setting-profile-section__chevron {
+  width: 18px;
+  height: 18px;
+  color: color-mix(in srgb, var(--setting-profile-accent) 84%, var(--md-on-surface));
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.16s ease;
+}
+
+.setting-profile-section.is-collapsed .setting-profile-section__chevron {
+  transform: rotate(-90deg);
+}
+
+.setting-profile-section__body {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateY(0);
+  will-change: grid-template-rows, opacity, transform;
+}
+
+.setting-profile-section.is-collapsed .setting-profile-section__body {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+}
+
+.setting-profile-section__bodyInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.setting-profile-section.is-collapsing .setting-profile-section__body {
+  pointer-events: none;
+  animation: setting-profile-section-fold 0.24s cubic-bezier(.2, 0, 0, 1) both;
+}
+
+.setting-profile-section.is-expanding .setting-profile-section__body {
+  animation: setting-profile-section-fold 0.24s cubic-bezier(.2, 0, 0, 1) reverse both;
+}
+
+.setting-profile-panel {
+  --setting-profile-accent: var(--md-primary, #ffab66);
+  --setting-profile-ink: var(--md-on-surface);
+  --setting-profile-section-sticky-top: 68px;
+  min-width: 0;
+  color: var(--setting-profile-ink);
+  animation: setting-profile-toolbar-enter 0.2s cubic-bezier(.2, 0, 0, 1) both;
+}
+
+/* ── 프로필 관리 카드 (Material 3 / One UI) ──
+   .setting-group-card 위에 얹는다. 세로 패딩은 헤더/행이 직접 갖는다 —
+   .setting-group-card 의 `padding: 0 var(--sp-lg)` 가 소스 순서상 뒤에 와서
+   단축속성으로 상하 패딩을 0 으로 덮어쓰므로 여기서 세로값을 주지 않는다. */
+.setting-profile-manage-card {
+  min-width: 0;
+  display: grid;
+  gap: 0;
+}
+
+/* ── 라벨/값 행 — 설정 리스트의 .setting 행과 동일한 hairline 리듬 ── */
+.setting-profile-card__rows {
+  min-width: 0;
+  display: grid;
+}
+
+/* 첫 행(이름)은 카드 상단과 맞닿으므로 구분선 제거 + 상단 여백 */
+.setting-profile-card__rows > .setting-profile-row:first-child {
+  border-top: none;
+  padding-top: var(--sp-md);
+}
+
+.setting-profile-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-md);
+  min-height: 52px;
+  padding: var(--sp-sm) 0;
+  border-top: 1px solid color-mix(in srgb, var(--md-stroke-soft) 32%, transparent);
+}
+
+.setting-profile-row:last-child {
+  padding-bottom: var(--sp-md);
+}
+
+.setting-profile-row__label {
+  flex: 0 0 auto;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-md);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.setting-profile-row__value {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-sm);
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting-profile-row__value a {
+  color: var(--md-primary);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.setting-profile-row--name .setting-profile-row__label {
+  color: var(--md-primary);
+  font-size: var(--fs-title-sm);
+  font-weight: 900;
+}
+
+/* ── 이름 편집 — Material filled text field ── */
+.setting-profile-name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 var(--sp-md);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 30%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 60%, transparent);
+  color: var(--md-on-surface);
+  font: inherit;
+  font-size: var(--fs-body-sm);
+  font-weight: 800;
+  text-align: right;
+  outline: none;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+}
+
+.setting-profile-name-input:focus {
+  border-color: color-mix(in srgb, var(--md-primary) 58%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 82%, var(--md-primary));
+}
+
+.setting-profile-name-input.is-saving {
+  color: color-mix(in srgb, var(--md-on-surface) 72%, var(--md-primary));
+}
+
+/* ── ⋮ 메뉴 (카드 우상단 오버플로우) ── */
+.setting-profile-menu {
+  flex: 0 0 auto;
+}
+
+.setting-profile-menu__button {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  border-color: color-mix(in srgb, var(--md-outline-var) 24%, transparent);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 48%, transparent);
+}
+
+.setting-profile-menu__button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.setting-profile-menu__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 9;
+  min-width: 168px;
+}
+
+.setting-profile-menu__item .setting-profile-action__icon {
+  width: 18px;
+  height: 18px;
+}
+
+.setting-profile-menu__item--primary,
+.setting-profile-menu__item--primary .setting-profile-action__icon {
+  color: var(--md-primary);
+}
+
+.setting-profile-menu__item--danger,
+.setting-profile-menu__item--danger .setting-profile-action__icon {
+  color: var(--md-error);
+}
+
+.setting-profile-action__icon {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.setting-toolbar-action {
+  min-width: 56px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  border-radius: 8px;
+  background: var(--md-surface-cont);
+  color: var(--md-on-surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
+}
+
+.setting-toolbar-action:hover,
+.setting-toolbar-action:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 38%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, var(--md-primary));
+  outline: none;
+}
+
+.setting-toolbar-action:active {
+  transform: translateY(1px);
+}
+
+.setting-toolbar-action--primary {
+  border-color: color-mix(in srgb, var(--md-primary) 76%, var(--md-outline-var));
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+}
+
+.setting-toolbar-action--danger {
+  color: var(--md-error);
+}
+
+@keyframes setting-profile-toolbar-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes setting-item-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes setting-profile-section-fold {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setting-profile-panel,
+  .page--setting #groupList > .groupBtn.ui-stagger-item,
+  .page--setting #deviceGroupList > .groupBtn.ui-stagger-item,
+  .page--setting #items > .setting.ui-stagger-item,
+  .page--setting #items > .setting-section-block.ui-stagger-item,
+  .page--setting #items > .setting-group-card.ui-stagger-item,
+  .page--setting #items > .setting-profile-section.ui-stagger-item,
+  .page--setting #deviceItems > .setting.ui-stagger-item,
+  .setting-profile-section.is-collapsing .setting-profile-section__body,
+  .setting-profile-section.is-expanding .setting-profile-section__body {
+    animation: none;
+  }
+
+  .setting-profile-section__header,
+  .setting-profile-section__chevron,
+  .setting-toolbar-action {
+    transition: none;
+  }
+}
+
+/* ── 대(category) 구분 헤더 — carrot_settings.json menu 기반 그룹목록 ── */
+.setting-category-divider {
+  padding-top: var(--sp-lg);
+}
+
+.setting-category-divider strong {
+  color: var(--md-primary);
+  font-size: var(--fs-label-md);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.setting-category-divider span {
+  background: color-mix(in srgb, var(--md-primary) 30%, transparent);
+}
+
+/* ── 소(subgroup) 그룹박스 카드 — Material 3 / One UI ──
+   항목 화면에서 소-섹션을 둥근 카드로 묶는다. 카드 배경은 페이지(--md-surface)
+   보다 한 단계 밝은 surface-cont. 행(.setting)은 카드 안에서 hairline 으로 구분되고
+   :last-child 는 자동으로 선이 사라진다. */
+.setting-section-block {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 var(--sp-lg);
+}
+
+.setting-group-card {
+  background: var(--md-surface-cont);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+  border-radius: var(--r-xl);
+  padding: 0 var(--sp-lg);
+  margin: 0;
+  box-shadow: var(--shadow-1);
+}
+
+.setting-group-card__title {
+  padding: 0 2px;
+  color: var(--md-primary);
+  font-size: var(--fs-title-sm);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.setting-group-card__body > .setting {
+  margin-left: calc(-1 * var(--sp-lg));
+  margin-right: calc(-1 * var(--sp-lg));
+  border-radius: 0;
+  padding-left: var(--sp-lg);
+  padding-right: var(--sp-lg);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 32%, transparent);
+}
+
+.setting-group-card__body > .setting:first-child {
+  border-top-left-radius: calc(var(--r-xl) - 1px);
+  border-top-right-radius: calc(var(--r-xl) - 1px);
+}
+
+.setting-group-card__body > .setting:last-child {
+  border-bottom-left-radius: calc(var(--r-xl) - 1px);
+  border-bottom-right-radius: calc(var(--r-xl) - 1px);
+  border-bottom: none;
+}

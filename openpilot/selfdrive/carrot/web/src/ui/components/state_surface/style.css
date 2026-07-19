@@ -1,0 +1,304 @@
+.c-state-surface {
+  --state-surface-text: var(--md-on-surface);
+  --state-surface-feature-color: var(--md-on-surface);
+  --state-surface-title-color: color-mix(in srgb, var(--md-on-surface-var) 82%, var(--md-surface));
+  --state-surface-description-color: color-mix(in srgb, var(--md-on-surface-var) 78%, transparent);
+  --state-surface-font-weight: 700;
+  --state-surface-overlay-bg: color-mix(in srgb, var(--md-surface) 84%, var(--drive-workspace-bg));
+  --state-surface-max-width: 42ch;
+  --state-surface-feature-size-min: 30px;
+  --state-surface-feature-size-max: 50px;
+  --state-surface-title-size-min: 34px;
+  --state-surface-title-size-max: 58px;
+  --state-surface-description-size: 14px;
+  --state-surface-copy-gap: var(--sp-sm);
+  --state-surface-action-gap: var(--sp-lg);
+  --state-surface-action-row-gap: var(--sp-sm);
+  --state-surface-action-min-height: 46px;
+  --state-surface-action-max-width: 280px;
+  --state-surface-action-font-size: 16px;
+  --state-surface-secondary-bg: color-mix(in srgb, var(--md-surface-cont-h) 86%, transparent);
+  --state-surface-status-accent: var(--md-outline-var);
+  --state-surface-fog-neutral: color-mix(in srgb, var(--md-on-surface-var) 7%, transparent);
+  --state-surface-fog-accent: color-mix(in srgb, var(--md-primary) 8%, transparent);
+  --state-surface-fog-blur: 64px;
+  --state-surface-fog-duration: 14s;
+  --state-surface-fog-start-opacity: 0.62;
+  --state-surface-fog-active-opacity: 1;
+  position: absolute;
+  z-index: var(--drive-layer-overlay);
+  isolation: isolate;
+  inset: 0;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
+  place-items: safe center;
+  padding: clamp(var(--sp-md), 4cqi, var(--sp-2xl));
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--state-surface-overlay-bg);
+  color: var(--state-surface-text);
+  pointer-events: auto;
+}
+
+.c-state-surface::before,
+.c-state-surface::after {
+  position: absolute;
+  border-radius: var(--r-round);
+  content: "";
+  filter: blur(var(--state-surface-fog-blur));
+  opacity: var(--state-surface-fog-active-opacity);
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+
+.c-state-surface::before {
+  inset: 6% 12%;
+  background: var(--state-surface-fog-neutral);
+  animation: state-surface-fog-neutral var(--state-surface-fog-duration) var(--ease-standard) infinite alternate;
+}
+
+.c-state-surface::after {
+  right: 22%;
+  bottom: 18%;
+  width: 24%;
+  height: 30%;
+  background: var(--state-surface-fog-accent);
+  animation: state-surface-fog-accent var(--state-surface-fog-duration) var(--ease-standard) infinite alternate-reverse;
+}
+
+.c-state-surface[hidden] {
+  display: none !important;
+}
+
+.c-state-surface--info {
+  --state-surface-status-accent: var(--md-info);
+}
+
+.c-state-surface--warning {
+  --state-surface-status-accent: var(--md-warning);
+}
+
+.c-state-surface--error {
+  --state-surface-status-accent: var(--md-error);
+}
+
+.c-state-surface__body {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(100%, var(--state-surface-max-width));
+  margin-block: auto;
+  place-items: center;
+  gap: var(--state-surface-action-gap);
+  text-align: center;
+}
+
+.c-state-surface__copy {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  gap: var(--state-surface-copy-gap);
+}
+
+.c-state-surface__feature,
+.c-state-surface__title,
+.c-state-surface__description {
+  max-inline-size: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  word-break: keep-all;
+}
+
+.c-state-surface__feature,
+.c-state-surface__title {
+  font-weight: var(--state-surface-font-weight);
+}
+
+.c-state-surface__feature {
+  color: var(--state-surface-feature-color);
+  font-size: clamp(
+    var(--state-surface-feature-size-min),
+    5cqi,
+    var(--state-surface-feature-size-max)
+  );
+  line-height: 1.06;
+  letter-spacing: -0.05em;
+}
+
+.c-state-surface__title {
+  color: var(--state-surface-title-color);
+  font-size: clamp(
+    var(--state-surface-title-size-min),
+    6.5cqi,
+    var(--state-surface-title-size-max)
+  );
+  line-height: 1.02;
+  letter-spacing: -0.055em;
+}
+
+.c-state-surface__description {
+  color: var(--state-surface-description-color);
+  font-size: var(--state-surface-description-size);
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.c-state-surface__actions {
+  display: grid;
+  width: min(100%, var(--state-surface-action-max-width));
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--state-surface-action-row-gap);
+}
+
+.c-state-surface__actions[data-layout="single"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.c-state-surface__actions[data-layout="split"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.c-state-surface__action {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--state-surface-action-min-height);
+  margin: 0;
+  padding-inline: var(--sp-lg);
+  overflow: hidden;
+  font-size: var(--state-surface-action-font-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-state-surface__action--primary,
+.c-state-surface__action:where([data-tone="primary"]) {
+  background: var(--md-action-filled);
+  border-color: color-mix(in srgb, var(--md-action-filled) 78%, var(--md-outline-var));
+  color: var(--md-on-action-filled);
+}
+
+.c-state-surface__action--secondary,
+.c-state-surface__action:where([data-tone="secondary"]) {
+  background: var(--state-surface-secondary-bg);
+  color: var(--state-surface-text);
+}
+
+.c-state-surface__action--danger,
+.c-state-surface__action:where([data-tone="danger"]) {
+  border-color: color-mix(in srgb, var(--md-error) 54%, var(--md-outline-var));
+  background: var(--md-error-cont);
+  color: var(--md-on-error-cont);
+}
+
+.c-state-surface__action:disabled {
+  opacity: var(--state-disabled-opacity);
+  cursor: not-allowed;
+}
+
+.c-state-surface[data-pending="true"] .c-state-surface__action:disabled {
+  cursor: wait;
+}
+
+.c-state-surface--compact {
+  place-items: start center;
+  padding: var(--sp-sm);
+  overflow: visible;
+  background: transparent;
+  pointer-events: none;
+}
+
+.c-state-surface--compact::before,
+.c-state-surface--compact::after {
+  display: none;
+}
+
+.c-state-surface--compact .c-state-surface__body {
+  width: min(100%, 560px);
+  margin: 0;
+  padding: 10px 14px;
+  place-items: stretch;
+  gap: var(--sp-sm);
+  border: 1px solid color-mix(in srgb, var(--state-surface-status-accent) 54%, var(--md-outline-var));
+  border-left-width: 3px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 94%, transparent);
+  box-shadow: 0 8px 24px #00000052;
+  text-align: left;
+  pointer-events: auto;
+}
+
+.c-state-surface--compact .c-state-surface__copy {
+  place-items: start;
+  gap: 2px;
+}
+
+.c-state-surface--compact .c-state-surface__feature {
+  font-size: 12px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.c-state-surface--compact .c-state-surface__title {
+  font-size: 15px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.c-state-surface--compact .c-state-surface__description {
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.c-state-surface--compact .c-state-surface__feature,
+.c-state-surface--compact .c-state-surface__title,
+.c-state-surface--compact .c-state-surface__description {
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.c-state-surface--compact .c-state-surface__actions {
+  width: 100%;
+  max-width: none;
+  pointer-events: auto;
+}
+
+@keyframes state-surface-fog-neutral {
+  from {
+    opacity: var(--state-surface-fog-start-opacity);
+    transform: translate(-4%, 3%) scale(0.9);
+  }
+  to {
+    opacity: var(--state-surface-fog-active-opacity);
+    transform: translate(4%, -3%) scale(1.08);
+  }
+}
+
+@keyframes state-surface-fog-accent {
+  from {
+    transform: translate(8%, 6%) scale(0.88);
+  }
+  to {
+    transform: translate(-8%, -6%) scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-state-surface::before,
+  .c-state-surface::after {
+    animation: none;
+    will-change: auto;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .c-state-surface {
+    --state-surface-title-color: var(--md-on-surface);
+    --state-surface-fog-start-opacity: 0.3;
+    --state-surface-fog-active-opacity: 0.42;
+  }
+}

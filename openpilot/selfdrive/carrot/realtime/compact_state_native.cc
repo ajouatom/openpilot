@@ -275,6 +275,14 @@ void encode_car_state(std::string &out, const DynamicReader &value) {
   append_i16(out, value, "leftLaneLine");
   append_i16(out, value, "rightLaneLine");
   append_enum(out, value, "gearShifter");
+  append_bool(out, value, "leftBlinker");
+  append_bool(out, value, "rightBlinker");
+  append_f32(out, value, "fuelGauge");
+  append_f32(out, value, "ureaGauge");
+  append_f32(out, value, "tpms", "fl");
+  append_f32(out, value, "tpms", "fr");
+  append_f32(out, value, "tpms", "rl");
+  append_f32(out, value, "tpms", "rr");
 }
 
 void encode_controls_state(std::string &out, const DynamicReader &value) {

@@ -1,0 +1,71 @@
+.c-segmented-control {
+  --segmented-control-gap: var(--sp-xs);
+  --segmented-control-padding: 0;
+  --segmented-control-item-min-height: var(--control-min-height);
+  --segmented-control-item-padding: var(--sp-sm) var(--sp-md);
+  --segmented-control-item-flex: 1 0 max-content;
+  --segmented-control-item-font-size: inherit;
+  --segmented-control-item-radius: var(--control-radius);
+  --segmented-control-item-border: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  --segmented-control-item-bg: var(--md-surface-cont-h);
+  --segmented-control-item-fg: var(--md-on-surface-var);
+  --segmented-control-selected-border: var(--md-outline);
+  --segmented-control-selected-bg: var(--md-surface-cont-hh);
+  --segmented-control-selected-fg: var(--md-on-surface);
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  gap: var(--segmented-control-gap);
+  padding: var(--segmented-control-padding);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.c-segmented-control__item {
+  appearance: none;
+  flex: var(--segmented-control-item-flex);
+  min-width: 0;
+  min-height: var(--segmented-control-item-min-height);
+  padding: var(--segmented-control-item-padding);
+  border: 1px solid var(--segmented-control-item-border);
+  border-radius: var(--segmented-control-item-radius);
+  background: var(--segmented-control-item-bg);
+  color: var(--segmented-control-item-fg);
+  font: inherit;
+  font-size: var(--segmented-control-item-font-size);
+  font-weight: 750;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.c-segmented-control__item:hover {
+  border-color: var(--segmented-control-selected-border);
+  color: var(--segmented-control-selected-fg);
+}
+
+.c-segmented-control__item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.c-segmented-control__item[aria-selected="true"],
+.c-segmented-control__item[aria-pressed="true"],
+.c-segmented-control__item.is-active,
+.c-segmented-control__item.is-selected {
+  border-color: var(--segmented-control-selected-border);
+  background: var(--segmented-control-selected-bg);
+  color: var(--segmented-control-selected-fg);
+}
+
+.c-segmented-control__item:disabled,
+.c-segmented-control__item[aria-disabled="true"] {
+  opacity: var(--state-disabled-opacity);
+  cursor: not-allowed;
+  pointer-events: none;
+}

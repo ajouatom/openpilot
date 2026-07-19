@@ -2,6 +2,24 @@
 
 const DEBUG_UI = false;
 
+const CARROT_STREAM_CLIENT_STORAGE_KEY = "carrot_stream_client_id";
+const CARROT_STREAM_CLIENT_ID = (() => {
+  try {
+    const existing = sessionStorage.getItem(CARROT_STREAM_CLIENT_STORAGE_KEY);
+    if (existing) return existing;
+    const generated = globalThis.crypto?.randomUUID?.()
+      || `carrot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    sessionStorage.setItem(CARROT_STREAM_CLIENT_STORAGE_KEY, generated);
+    return generated;
+  } catch (_) {
+    return `carrot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  }
+})();
+
+window.CarrotStreamIdentity = Object.freeze({
+  clientId: CARROT_STREAM_CLIENT_ID,
+});
+
 const LANG_STORAGE_KEY = "carrot_web_lang";
 const LANG_EMOJI = {
   ko: "🇰🇷",

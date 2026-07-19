@@ -228,8 +228,6 @@ function renderUIText() {
   setNavText("btnTools", s.tools);
   setNavText("btnLogs", s.logs);
   setNavText("btnTerminal", s.terminal);
-  setText("btnQuickLinkWeb", "CarrotMan");
-
   setText("carrotTitle", "CarrotPilot");
 
   // Car Select
@@ -242,7 +240,6 @@ function renderUIText() {
   setText("settingTitleText", s.setting);
   setText("settingTabDeviceLabel", getUIText("setting_tab_device", "Device"));
   setText("settingTabCarrotLabel", getUIText("setting_tab_carrot", "CarrotPilot"));
-  setText("settingCarEyebrow", s.car_select);
   setText("btnBackGroups", s.back);
   setText("groupsTitle", s.groups);
   setText("itemsTitle", s.items);
@@ -253,7 +250,10 @@ function renderUIText() {
   setText("userSystemTitle", getUIText("user_system", "User / System"));
   setText("toolsQuickLinkTitle", getUIText("quick_link", "Link"));
   setText("userSettingsTitle", getUIText("section_settings_backup", "Settings"));
-  setText("btnDeviceInfo", getUIText("carrot_info", "Carrot Info"));
+  setText("btnToolsCarSelect", getUIText("car_select", "Car Select"));
+  setText("btnToolsLanguage", getUIText("language", "Language"));
+  setText("btnToolsWebSettings", getUIText("web_settings", "Web Settings"));
+  setText("btnDeviceInfo", getUIText("info", "Info"));
   setText("btnGitBranch", "change branch");
   setText("btnGitResetRepo", "reset repo");
   setText("btnDeviceLang", "Device Lang");
