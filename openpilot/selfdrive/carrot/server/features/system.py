@@ -8,7 +8,12 @@ from aiohttp import web
 from ..live_runtime.broker import RealtimeBroker
 from ..live_runtime.normalize import to_transport_safe
 from ..config import OFFROAD_ASSETS_DIR
-from ..services.device_info import get_calibration_status, get_device_network
+from ..services.device_info import (
+  DEVICE_NETWORK_REFRESH_INTERVAL_SEC,
+  get_calibration_status,
+  get_device_network_snapshot,
+  refresh_device_network,
+)
 from ..services.params import HAS_PARAMS, Params, restore_param_values_validated
 from ..services.settings import get_settings_cached
 from ..services.time_sync import TIME_SYNC_DEBUG_DEFAULT, sync_system_time_from_browser
@@ -234,7 +239,7 @@ async def api_time_sync(request: web.Request) -> web.Response:
 async def api_device_network(request: web.Request) -> web.Response:
   try:
     force = request.query.get("force") == "1"
-    network = await asyncio.to_thread(get_device_network, force)
+    network = await asyncio.to_thread(refresh_device_network) if force else get_device_network_snapshot()
     return web.json_response({"ok": True, "network": network})
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
@@ -335,7 +340,32 @@ async def api_set_default(request: web.Request) -> web.Response:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
+async def device_network_context(app: web.Application):
+  async def refresh_loop() -> None:
+    while True:
+      try:
+        await asyncio.to_thread(refresh_device_network)
+      except asyncio.CancelledError:
+        raise
+      except Exception as exc:
+        print(f"[device_network] background refresh failed: {exc}")
+      await asyncio.sleep(DEVICE_NETWORK_REFRESH_INTERVAL_SEC)
+
+  task = asyncio.create_task(refresh_loop(), name="device-network-refresh")
+  app["device_network_refresh_task"] = task
+  try:
+    yield
+  finally:
+    task.cancel()
+    try:
+      await task
+    except asyncio.CancelledError:
+      pass
+    app.pop("device_network_refresh_task", None)
+
+
 def register(app: web.Application) -> None:
+  app.cleanup_ctx.append(device_network_context)
   app.router.add_get("/api/heartbeat_status", api_heartbeat_status)
   app.router.add_get("/api/live_runtime", api_live_runtime)
   app.router.add_get("/api/device_network", api_device_network)

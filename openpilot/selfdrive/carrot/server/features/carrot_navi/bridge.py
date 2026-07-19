@@ -117,20 +117,37 @@ class CarrotNaviWebBridge:
   def record_client_diagnostic(self, peer: str, diagnostic: dict[str, Any]) -> None:
     self._client_diagnostics[str(peer or "-")[:128]] = (time.monotonic(), diagnostic)
 
-  async def register_state(self, ws: web.WebSocketResponse) -> None:
+  async def register_state(self, ws: web.WebSocketResponse, client_id: str, *, takeover: bool = False) -> bool:
     initial_wire = None
     if self._last_state_wire is not None and time.monotonic() - self._last_state_at <= STATE_STALE_SECONDS:
       initial_wire = self._last_state_wire
-    await self._clients.register_state(ws, initial_wire)
+    registered = await self._clients.register_state(ws, client_id, takeover=takeover, initial_wire=initial_wire)
+    if not registered:
+      return False
     await self._ensure_poll_task()
+    return True
 
-  async def register_media(self, ws: web.WebSocketResponse, include_map: bool = True) -> None:
+  async def register_media(
+    self,
+    ws: web.WebSocketResponse,
+    client_id: str,
+    *,
+    include_map: bool = True,
+  ) -> bool:
     bootstrap = self._media.bootstrap(include_map=include_map)
-    await self._clients.register_media(ws, include_map=include_map, bootstrap=bootstrap)
+    registered = await self._clients.register_media(
+      ws,
+      client_id,
+      include_map=include_map,
+      bootstrap=bootstrap,
+    )
+    if not registered:
+      return False
     await self._ensure_poll_task()
     self._ensure_sockets()
     if not bootstrap or (include_map and not self._media.initialization_present):
       self._request_media_bootstrap()
+    return True
 
   async def unregister(self, ws: web.WebSocketResponse) -> None:
     await self._clients.unregister(ws)

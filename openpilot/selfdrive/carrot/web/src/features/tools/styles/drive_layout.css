@@ -1,0 +1,224 @@
+.drive-layout-setting {
+  display: grid;
+  gap: var(--sp-md);
+  padding: var(--sp-md);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 48%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--md-surface-cont) 88%, transparent);
+}
+
+.drive-layout-setting__header,
+.drive-layout-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-md);
+}
+
+.drive-layout-setting__header h3 {
+  margin: 0;
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-sm);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.drive-layout-segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--sp-xs);
+  min-width: 0;
+}
+
+.drive-layout-segmented button {
+  min-height: var(--drive-layout-segment-height);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 84%, transparent);
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 800;
+  line-height: 1.15;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.drive-layout-segmented button {
+  min-width: 0;
+  padding: var(--sp-xs) var(--sp-sm);
+}
+
+.drive-layout-segmented--compact button {
+  min-width: 48px;
+}
+
+.drive-layout-segmented button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--md-primary) 58%, var(--md-outline-var));
+  background: var(--md-primary-state);
+  color: var(--md-primary);
+}
+
+.drive-layout-segmented button:focus-visible,
+.drive-layout-content-selects select:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+
+.drive-layout-content-selects {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--sp-sm);
+}
+
+.drive-layout-content-selects label {
+  display: grid;
+  min-width: 0;
+  gap: var(--sp-xs);
+}
+
+.drive-layout-content-selects label > span {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.drive-layout-content-selects select {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--drive-layout-segment-height);
+  padding: 0 var(--sp-sm);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 84%, transparent);
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-sm);
+  font-weight: 750;
+}
+
+.drive-layout-content-swap {
+  display: grid;
+  align-self: end;
+  width: var(--drive-layout-segment-height);
+  min-width: var(--drive-layout-segment-height);
+  height: var(--drive-layout-segment-height);
+  padding: 0;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 84%, transparent);
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  cursor: pointer;
+}
+
+.drive-layout-content-swap:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 1px;
+}
+
+.drive-layout-preview {
+  display: grid;
+  grid-template-columns:
+    minmax(0, var(--drive-layout-preview-area-1-size, 1fr))
+    var(--drive-layout-preview-divider-size)
+    minmax(0, var(--drive-layout-preview-area-2-size, 1fr));
+  width: 100%;
+  aspect-ratio: var(--drive-layout-preview-landscape-aspect);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 62%, transparent);
+  border-radius: var(--r-md);
+  background: var(--md-surface);
+}
+
+.drive-layout-setting[data-orientation="vertical"] .drive-layout-preview {
+  justify-self: center;
+  width: min(62%, 280px);
+  aspect-ratio: 4 / 3;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows:
+    minmax(0, var(--drive-layout-preview-area-1-size, 1fr))
+    var(--drive-layout-preview-divider-size)
+    minmax(0, var(--drive-layout-preview-area-2-size, 1fr));
+}
+
+.drive-layout-setting[data-mode="area_1"] .drive-layout-preview,
+.drive-layout-setting[data-mode="area_2"] .drive-layout-preview {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.drive-layout-setting[data-orientation="vertical"][data-mode="area_1"] .drive-layout-preview,
+.drive-layout-setting[data-orientation="vertical"][data-mode="area_2"] .drive-layout-preview {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.drive-layout-setting[data-mode="area_1"] .drive-layout-preview__divider,
+.drive-layout-setting[data-mode="area_2"] .drive-layout-preview__divider,
+.drive-layout-setting[data-mode="area_1"] .drive-layout-preview__area[data-area="area_2"],
+.drive-layout-setting[data-mode="area_2"] .drive-layout-preview__area[data-area="area_1"] {
+  display: none;
+}
+
+.drive-layout-preview__area {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-content: center;
+  gap: var(--sp-xs);
+  padding: var(--sp-sm);
+  text-align: center;
+}
+
+.drive-layout-preview__area[data-area="area_1"] {
+  background: var(--drive-layout-area-1-surface);
+}
+
+.drive-layout-preview__area[data-area="area_2"] {
+  background: var(--drive-layout-area-2-surface);
+}
+
+.drive-layout-preview__area span {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 700;
+}
+
+.drive-layout-preview__area strong {
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-sm);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.drive-layout-preview__divider {
+  background: color-mix(in srgb, var(--md-outline-var) 72%, transparent);
+}
+
+.drive-layout-setting__controls {
+  display: grid;
+  gap: var(--sp-sm);
+}
+
+.drive-layout-control-row > span {
+  flex: 0 0 auto;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 800;
+}
+
+.drive-layout-control-row .drive-layout-segmented {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 640px) {
+  .drive-layout-control-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--sp-xs);
+  }
+}

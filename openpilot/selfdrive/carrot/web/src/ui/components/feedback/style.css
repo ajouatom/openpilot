@@ -1,0 +1,70 @@
+.app-toast-host {
+  position: fixed;
+  left: var(--sp-lg);
+  right: var(--sp-lg);
+  bottom: calc(var(--nav-bar-height) + 18px + env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-sm);
+  pointer-events: none;
+}
+
+body[data-page="terminal"] .app-toast-host {
+  top: auto;
+  bottom: var(--terminal-toast-bottom, calc(var(--nav-bar-height) + 96px + env(safe-area-inset-bottom, 0px)));
+  left: var(--terminal-toast-left, var(--sp-lg));
+  right: auto;
+  width: var(--terminal-toast-width, calc(100vw - (var(--sp-lg) * 2)));
+  z-index: calc(var(--z-toast) - 2);
+}
+
+.app-toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 440px);
+  padding: 14px 18px;
+  border: 1px solid var(--toast-border);
+  border-radius: var(--toast-radius);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--toast-shadow);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.2s ease, transform 0.26s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.app-toast.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Round tone icon — the only part that changes color between tones. */
+.app-toast__icon {
+  flex: none;
+  width: var(--toast-icon-size);
+  height: var(--toast-icon-size);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--toast-icon-default);
+  color: var(--toast-icon-fg);
+  font: 900 14px/1 system-ui, sans-serif;
+}
+
+.app-toast__msg {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app-toast.is-info    .app-toast__icon { background: var(--toast-icon-info); }
+.app-toast.is-success .app-toast__icon { background: var(--toast-icon-success); }
+.app-toast.is-warn    .app-toast__icon { background: var(--toast-icon-warn); }
+.app-toast.is-error   .app-toast__icon { background: var(--toast-icon-error); }

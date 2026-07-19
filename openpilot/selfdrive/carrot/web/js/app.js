@@ -137,3 +137,14 @@ if (typeof window.bootstrapWebStartPage === "function") {
 } else {
   showPage("carrot", false);
 }
+
+// The settings bundle normally starts its no-store snapshot while later
+// scripts are parsed. Keep an after-first-paint fallback for partial/rolling
+// deployments where an older bundle has not started it yet.
+requestAnimationFrame(() => {
+  window.setTimeout(() => {
+    if (window.CarrotSettingsStore?.status === "idle") {
+      window.CarrotSettingsStore.preload?.();
+    }
+  }, 0);
+});

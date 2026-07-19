@@ -779,15 +779,17 @@ CARROT_DATA_DIR = os.environ.get("CARROT_DATA_DIR", "/data/carrot")
 SUPPORT_GUEST_DIR = str(WEB_DIR / "support_terminal")
 SUPPORT_GUEST_HTML_PATH = os.path.join(SUPPORT_GUEST_DIR, "guest.html")
 SUPPORT_GUEST_ASSETS = {
+  "design-tokens.css": str(WEB_DIR / "css" / "generated" / "design-tokens.css"),
+  "design-system.css": str(WEB_DIR / "css" / "generated" / "design-system.css"),
   "tokens.css": str(WEB_DIR / "css" / "tokens.css"),
   "layout_tokens.css": str(WEB_DIR / "css" / "layout_tokens.css"),
   "base.css": str(WEB_DIR / "css" / "base.css"),
   "layout.css": str(WEB_DIR / "css" / "layout.css"),
   "components.css": str(WEB_DIR / "css" / "components.css"),
-  "terminal.css": str(WEB_DIR / "css" / "pages" / "terminal.css"),
-  "terminal_typing_indicator.js": str(WEB_DIR / "js" / "shared" / "ui" / "terminal_typing_indicator.js"),
-  "guest.css": os.path.join(SUPPORT_GUEST_DIR, "guest.css"),
-  "guest.js": os.path.join(SUPPORT_GUEST_DIR, "guest.js"),
+  "terminal.css": str(WEB_DIR / "css" / "generated" / "terminal.css"),
+  "terminal_typing_indicator.js": str(WEB_DIR / "js" / "generated" / "terminal-shared.js"),
+  "guest.css": str(WEB_DIR / "css" / "generated" / "terminal-guest.css"),
+  "guest.js": str(WEB_DIR / "js" / "generated" / "terminal-guest.js"),
   "xterm.css": str(WEB_DIR / "css" / "vendor" / "xterm.css"),
   "xterm.js": str(WEB_DIR / "js" / "vendor" / "xterm.js"),
   "xterm-addon-shim.js": str(WEB_DIR / "js" / "vendor" / "xterm-addon-shim.js"),
@@ -1562,12 +1564,14 @@ HTML_PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Carrot Recovery</title>
+<link rel="stylesheet" href="/css/generated/design-tokens.css">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/layout_tokens.css">
 <link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/generated/design-system.css">
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/vendor/xterm.css">
-<link rel="stylesheet" href="/css/pages/terminal.css?v=2607-104">
+<link rel="stylesheet" href="/css/generated/terminal.css">
 <style>
 /* recovery has none of the app's nav chrome (side rail / bottom bar). The reused
    terminal.css reserves space for them (left: var(--nav-rail-width) on wide
@@ -1690,16 +1694,16 @@ HTML_PAGE = """<!doctype html>
   <script src="/js/shared/dom.js"></script>
   <script src="/js/shared/utils.js"></script>
   <script src="/js/shared/i18n.js"></script>
-  <script src="/js/shared/ui/dialog.js"></script>
+  <script src="/js/generated/app.js"></script>
   <script src="/js/shared/ui/viewport.js"></script>
   <script src="/js/vendor/xterm-addon-shim.js"></script>
   <script src="/js/vendor/xterm.js"></script>
   <script src="/js/vendor/xterm-addon-webgl.js"></script>
   <script src="/js/vendor/xterm-addon-canvas.js"></script>
-  <script src="/js/pages/terminal.js"></script>
-  <script src="/js/shared/ui/terminal_typing_indicator.js?v=2607-01"></script>
+  <script src="/js/generated/terminal.js"></script>
+  <script src="/js/generated/terminal-shared.js"></script>
   <script src="/recovery-api.js"></script>
-  <script src="/js/pages/support_terminal.js?v=2607-26"></script>
+  <script src="/js/generated/terminal-support.js"></script>
   <script src="/recovery.js"></script>
 </body>
 </html>
@@ -1901,7 +1905,7 @@ RECOVERY_JS = """\"use strict\";
     btn.addEventListener(\"click\", function (e) { e.stopPropagation(); onTool(btn.dataset.tool); });
   });
 
-  // Boot the reused terminal (pages/terminal.js defines initTerminalPage).
+  // Boot the reused generated terminal runtime.
   function boot() {
     if (typeof initTerminalPage === \"function\") initTerminalPage();
     else setTimeout(boot, 30);

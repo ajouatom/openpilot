@@ -23,23 +23,11 @@ let carPickerCloseTimer = null;
 let carPickerMode = "makers";
 let carPickerMaker = null;
 
-function updateSettingCarEntryState(label) {
-  if (!settingCarRow) return;
-  const text = String(label || "").trim();
-  const isEmpty = !text || text === "-";
-  settingCarRow.classList.toggle("is-empty", isEmpty);
-  settingCarRow.setAttribute("aria-label", isEmpty
-    ? getUIText("open_car_select", "Open car select")
-    : getUIText("open_car_select_named", "Open car select for {name}", { name: text }));
-}
-
 function applyCurrentCarLabel(label, { persist = true, blank = false } = {}) {
   const text = String(label || "").trim();
   if (text) {
     currentCarLastKnownLabel = text;
     if (curCarLabelCar) curCarLabelCar.textContent = text;
-    if (curCarLabelSetting) curCarLabelSetting.textContent = text;
-    updateSettingCarEntryState(text);
     if (persist) {
       try {
         localStorage.setItem(CURRENT_CAR_CACHE_KEY, text);
@@ -50,15 +38,11 @@ function applyCurrentCarLabel(label, { persist = true, blank = false } = {}) {
 
   if (currentCarLastKnownLabel) {
     if (curCarLabelCar) curCarLabelCar.textContent = currentCarLastKnownLabel;
-    if (curCarLabelSetting) curCarLabelSetting.textContent = currentCarLastKnownLabel;
-    updateSettingCarEntryState(currentCarLastKnownLabel);
     return;
   }
 
   if (blank) {
     if (curCarLabelCar) curCarLabelCar.textContent = "-";
-    if (curCarLabelSetting) curCarLabelSetting.textContent = "-";
-    updateSettingCarEntryState("-");
   }
 }
 
@@ -95,7 +79,6 @@ function resolveCurrentCarLabel(values) {
 }
 
 restoreCurrentCarLabelFromCache();
-updateSettingCarEntryState(curCarLabelSetting?.textContent || curCarLabelCar?.textContent || "-");
 
 function parseRecordStateValue(value) {
   return (
@@ -291,7 +274,7 @@ function closeCarPicker(immediate = false) {
 
 function syncCarPickerChrome() {
   if (!appCarPickerTitle || !appCarPickerMeta || !appCarPickerClose) return;
-  const currentLabel = String(curCarLabelSetting?.textContent || curCarLabelCar?.textContent || "").trim() || "-";
+  const currentLabel = String(curCarLabelCar?.textContent || "").trim() || "-";
   if (carPickerMode === "models" && carPickerMaker) {
     appCarPickerTitle.textContent = carPickerMaker;
     const arr = (CARS?.makers && CARS.makers[carPickerMaker]) ? CARS.makers[carPickerMaker] : [];
@@ -377,6 +360,15 @@ window.openCarPickerFlow = () => {
     appAlert(e?.message || String(e), { title: getUIText("error", "Error") });
   });
 };
+
+window.CarrotCurrentCar = Object.freeze({
+  getLabel() {
+    return String(currentCarLastKnownLabel || document.getElementById("curCarLabelCar")?.textContent || "").trim();
+  },
+  refresh(options = {}) {
+    return loadCurrentCar(options);
+  },
+});
 
 if (appCarPickerBackdrop) appCarPickerBackdrop.onclick = () => closeCarPicker();
 if (appCarPickerClose) {
@@ -486,8 +478,7 @@ async function onSelectCar(maker, modelOnly, fullLine) {
 
   if (typeof applyCurrentCarLabel === "function") applyCurrentCarLabel(modelOnly);
   else {
-    curCarLabelCar.textContent = modelOnly;
-    curCarLabelSetting.textContent = modelOnly;
+    if (curCarLabelCar) curCarLabelCar.textContent = modelOnly;
   }
   closeCarPicker(true);
 

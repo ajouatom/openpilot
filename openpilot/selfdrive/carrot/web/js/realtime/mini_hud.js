@@ -47,7 +47,7 @@
   let resizeObserver = null;
   let temperatureUnit = loadTemperatureUnit();
   // Detail-row labels (TIM / DST / GAP / temp source) are ALWAYS shown at full
-  // length. The label chip already reserves a fixed width (--mini-alert-label-width
+  // length. The label chip already reserves a fixed width (--runtime-mini-alert-label-width
   // = detailFont * DETAIL_LABEL_UNIT), so a 3-char label costs no extra room versus
   // a 1-char one — the earlier "collapse to one letter on narrow layouts" behavior
   // only left the reserved chip half-empty, so it was dropped.
@@ -252,8 +252,8 @@
     // must shrink the same tokens as narrow layouts instead of overflowing.
     const layoutScale = clamp(Math.min(width / 404, rect.height / 650), 0.46, 1);
     const style = root.style;
-    style.setProperty("--mini-ui-scale", layoutScale.toFixed(4));
-    style.setProperty("--mini-detail-height", `${(220 * layoutScale).toFixed(1)}px`);
+    style.setProperty("--runtime-mini-ui-scale", layoutScale.toFixed(4));
+    style.setProperty("--runtime-mini-detail-height", `${(220 * layoutScale).toFixed(1)}px`);
 
     const topCells = root.querySelectorAll(".carrot-mini-hud__top-cell");
     const tempCellWidth = contentWidth(topCells[0], width * 0.50);
@@ -348,24 +348,24 @@
     const modeSize = limitSize;
     const modeFont = Math.max(1, Math.min(72, modeSize * 0.80 / modeUnit, modeSize * 0.25));
 
-    style.setProperty("--mini-top-font", `${Math.min(tempFont, sourceFont).toFixed(1)}px`);
-    style.setProperty("--mini-speed-slot-width", `${speedColWidth.toFixed(1)}px`);
-    style.setProperty("--mini-set-slot-width", `${cruiseColWidth.toFixed(1)}px`);
-    style.setProperty("--mini-speed-gap", `${speedGap.toFixed(1)}px`);
-    style.setProperty("--mini-gear-left", `${gearLeft.toFixed(1)}px`);
-    style.setProperty("--mini-gear-bottom", `${gearBottom.toFixed(1)}px`);
-    style.setProperty("--mini-gear-font", `${gearFont.toFixed(1)}px`);
-    style.setProperty("--mini-gear-height", `${gearHeight.toFixed(1)}px`);
-    style.setProperty("--mini-speed-font", `${speedSize.toFixed(1)}px`);
-    style.setProperty("--mini-set-font", `${cruiseSize.toFixed(1)}px`);
-    style.setProperty("--mini-speed-scale-x", speedScaleX.toFixed(4));
-    style.setProperty("--mini-set-scale-x", cruiseScaleX.toFixed(4));
-    style.setProperty("--mini-limit-size", `${limitSize.toFixed(1)}px`);
-    style.setProperty("--mini-limit-font", `${limitNumberFont.toFixed(1)}px`);
-    style.setProperty("--mini-limit-caption-font", `${limitCaptionFont.toFixed(1)}px`);
-    style.setProperty("--mini-limit-label-font", `${limitLabelFont.toFixed(1)}px`);
-    style.setProperty("--mini-badge-font", `${badgeFont.toFixed(1)}px`);
-    style.setProperty("--mini-alert-font", `${detailFont.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-top-font", `${Math.min(tempFont, sourceFont).toFixed(1)}px`);
+    style.setProperty("--runtime-mini-speed-slot-width", `${speedColWidth.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-set-slot-width", `${cruiseColWidth.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-speed-gap", `${speedGap.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-gear-left", `${gearLeft.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-gear-bottom", `${gearBottom.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-gear-font", `${gearFont.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-gear-height", `${gearHeight.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-speed-font", `${speedSize.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-set-font", `${cruiseSize.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-speed-scale-x", speedScaleX.toFixed(4));
+    style.setProperty("--runtime-mini-set-scale-x", cruiseScaleX.toFixed(4));
+    style.setProperty("--runtime-mini-limit-size", `${limitSize.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-limit-font", `${limitNumberFont.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-limit-caption-font", `${limitCaptionFont.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-limit-label-font", `${limitLabelFont.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-badge-font", `${badgeFont.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-alert-font", `${detailFont.toFixed(1)}px`);
     // Auto-fit the detail label instead of a small fixed ratio. The chip reserves
     // detailLabelUnit(2.24)x the value width, but a 3-char label only needs ~2
     // units, so we can size the label up until it fills the chip — capped at 0.78x
@@ -374,10 +374,10 @@
     const labelChipInner = detailFont * detailLabelUnit * 0.88;
     const labelUnit = Math.max(1, measure("GAP", 100) / 100);
     const labelFont = Math.max(1, Math.min(detailFont * 0.78, labelChipInner / labelUnit));
-    style.setProperty("--mini-alert-label-font", `${labelFont.toFixed(1)}px`);
-    style.setProperty("--mini-alert-label-width", `${(detailFont * detailLabelUnit).toFixed(1)}px`);
-    style.setProperty("--mini-mode-size", `${modeSize.toFixed(1)}px`);
-    style.setProperty("--mini-mode-font", `${modeFont.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-alert-label-font", `${labelFont.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-alert-label-width", `${(detailFont * detailLabelUnit).toFixed(1)}px`);
+    style.setProperty("--runtime-mini-mode-size", `${modeSize.toFixed(1)}px`);
+    style.setProperty("--runtime-mini-mode-font", `${modeFont.toFixed(1)}px`);
   }
 
   function scheduleLayout() {

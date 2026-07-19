@@ -1,6 +1,7 @@
 "use strict";
 
 window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
+  const REPLAY_HUD_SETTING_KEY = "replay_hud_visible";
   const stageEl = document.getElementById("carrotStage");
   const videoEl = document.getElementById("carrotRoadVideo");
   const controlsEl = document.getElementById("carrotReplayControls");
@@ -23,6 +24,7 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
   const scrubEventsCanvasEl = document.getElementById("carrotReplayScrubEventsCanvas");
   const titleEl = document.getElementById("carrotReplayTitle");
   const statusEl = document.getElementById("carrotReplayStatus");
+  const hudControlEl = document.getElementById("carrotReplayHudControl");
   const hudToggleEl = document.getElementById("carrotReplayHudToggle");
   const hudToggleLabelEl = document.getElementById("carrotReplayHudToggleLabel");
   const segmentPickerEl = document.getElementById("carrotReplaySegmentPicker");
@@ -58,7 +60,6 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     token: 0,
     requestToken: 0,
     previousVisionActive: false,
-    previousDisplayModeIndex: 1,
     route: "",
     segment: "",
     segments: [],
@@ -78,7 +79,9 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     rafId: null,
     abortController: null,
     clientSession: null,
-    hudVisible: false,
+    hudVisible: typeof window.getWebSettingByKey === "function"
+      ? Boolean(window.getWebSettingByKey(REPLAY_HUD_SETTING_KEY, false))
+      : Boolean(window.CarrotWebSettingsState?.[REPLAY_HUD_SETTING_KEY]),
     timelineReady: false,
   };
 
@@ -194,12 +197,26 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     insights?.syncTime?.(Number(videoEl?.currentTime || 0), replayDuration());
   }
 
-  function setReplayHudVisible(visible) {
+  function setReplayHudVisible(visible, options = {}) {
     state.hudVisible = Boolean(visible);
     if (hudToggleEl) hudToggleEl.checked = state.hudVisible;
+    hudControlEl?.classList.toggle("is-active", state.hudVisible);
     stageEl?.classList.toggle("is-replay-hud-visible", state.hudVisible);
     document.body?.classList.toggle("carrot-replay-hud-visible", state.active && state.hudVisible);
     if (state.active) window.requestCarrotVisionRender?.({ reason: "replay HUD visibility changed" });
+    if (options.persist === true) {
+      const request = window.setWebSettingByKey?.(REPLAY_HUD_SETTING_KEY, state.hudVisible);
+      request?.catch?.(() => {});
+    }
+  }
+
+  function syncReplayHudFromServer(event) {
+    const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [];
+    if (keys.length && !keys.includes(REPLAY_HUD_SETTING_KEY)) return;
+    const visible = typeof window.getWebSettingByKey === "function"
+      ? window.getWebSettingByKey(REPLAY_HUD_SETTING_KEY, false)
+      : window.CarrotWebSettingsState?.[REPLAY_HUD_SETTING_KEY];
+    setReplayHudVisible(Boolean(visible));
   }
 
   function syncReplayLabels() {
@@ -227,7 +244,12 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
 
   function setReplayUiVisible(visible) {
     const show = Boolean(visible);
+    let workspaceManaged = false;
+    if (show && typeof window.DriveWorkspaceRuntime?.setReplayPresentation === "function") {
+      workspaceManaged = window.DriveWorkspaceRuntime.setReplayPresentation(true) === true;
+    }
     if (controlsEl) controlsEl.hidden = !show;
+    if (hudControlEl) hudControlEl.hidden = !show;
     if (speedButton) speedButton.hidden = !show;
     stageEl?.classList.toggle("is-replay", show);
     stageEl?.classList.toggle("is-replay-loading", show && state.loading);
@@ -236,10 +258,15 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     document.body?.classList.toggle("carrot-replay-hud-visible", show && state.hudVisible);
     insights?.setActive?.(show && state.timelineReady);
     syncSegmentNavigation();
+    if (!show && typeof window.DriveWorkspaceRuntime?.setReplayPresentation === "function") {
+      window.DriveWorkspaceRuntime.setReplayPresentation(false);
+      workspaceManaged = true;
+    }
     if (!show && controlsHideTimer != null) {
       window.clearTimeout(controlsHideTimer);
       controlsHideTimer = null;
     }
+    return workspaceManaged;
   }
 
   function loadReplayInsights(options, signal) {
@@ -475,6 +502,7 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
         window.CarrotVisionRaw?.applyCompactFrames?.(Array.from(latestByService.values()), {
           reason: "recorded replay",
           render,
+          flushHud: true,
         }),
       ) || 0;
     } else if (reset && render) {
@@ -680,7 +708,6 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     const requestToken = hasSuppliedRequestToken ? suppliedRequestToken : ++state.requestToken;
     const wasActive = state.active;
     const previousVisionActive = state.previousVisionActive;
-    const previousDisplayModeIndex = state.previousDisplayModeIndex;
     const preserveVisionSession = options.preserveVisionSession === true;
     let restorePreviousVision = previousVisionActive;
     state.token += 1;
@@ -699,7 +726,6 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     cancelPlaybackTick();
     setReplayUiVisible(false);
     insights?.reset?.();
-    if (!preserveVisionSession) setReplayHudVisible(false);
 
     if (options.returnToLogs !== false && typeof showPage === "function") {
       showPage("logs", true);
@@ -724,8 +750,6 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     transport?.reset();
 
     if (preserveVisionSession) return true;
-
-    window.DriveVisionFacade?.display?.setModeIndex?.(previousDisplayModeIndex, { persist: false });
 
     if (wasActive && typeof window.CarrotVisionSyncAvailability === "function") {
       const liveAvailable = await window.CarrotVisionSyncAvailability().catch(() => Boolean(window.CarrotVisionState?.available));
@@ -762,9 +786,6 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     const previousVisionActive = state.active
       ? state.previousVisionActive
       : Boolean(window.isCarrotVisionActive?.());
-    const previousDisplayModeIndex = state.active
-      ? state.previousDisplayModeIndex
-      : Number(window.DriveVisionFacade?.display?.getModeIndex?.() ?? 1);
     if (state.active) {
       await stop({
         returnToLogs: false,
@@ -784,7 +805,6 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     state.seekHoldUntilMs = 0;
     state.hasRenderableFrame = false;
     state.previousVisionActive = previousVisionActive;
-    state.previousDisplayModeIndex = previousDisplayModeIndex;
     state.route = route;
     state.segment = segment;
     state.segments = segments;
@@ -798,9 +818,10 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     state.previewSource = null;
     state.previewsRequested = false;
     state.abortController = new AbortController();
-    window.DriveContentVision?.activate?.({ reason: "recorded replay" });
-    setReplayUiVisible(true);
-    window.DriveVisionFacade?.display?.setModeIndex?.(1, { persist: false });
+    const workspaceManaged = setReplayUiVisible(true);
+    if (!workspaceManaged) {
+      window.DriveContentVision?.activate?.({ reason: "recorded replay" });
+    }
     syncTransport();
 
     window.CarrotVisionSetActive?.(true, {
@@ -871,6 +892,7 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
           manifest: state.manifest,
           records: state.records,
           durationMs: state.manifest.durationMs,
+          routeId: state.route || state.segment || null,
           decodeRecord,
           onSeek: seekReplayTo,
           onPause: pauseReplayAtCurrentTime,
@@ -1015,7 +1037,7 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     navigateToSegment(targetSegment).catch(() => syncSegmentNavigation());
   });
   hudToggleEl?.addEventListener("change", () => {
-    setReplayHudVisible(hudToggleEl.checked);
+    setReplayHudVisible(hudToggleEl.checked, { persist: true });
     revealReplayControls();
   });
   stageEl?.addEventListener("pointerdown", handleStageScrubStart, { passive: true });
@@ -1045,8 +1067,9 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     videoEl?.pause?.();
   });
   window.addEventListener("carrot:languagechange", syncReplayLabels);
+  window.addEventListener("carrot:websettingschange", syncReplayHudFromServer);
 
-  setReplayHudVisible(false);
+  setReplayHudVisible(state.hudVisible);
   syncReplayLabels();
   return {
     isActive: () => state.active,

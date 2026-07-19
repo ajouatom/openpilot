@@ -1,0 +1,11 @@
+import "./i18n.js";
+import "./registry.js";
+import "./api.js";
+import "./steps/welcome.js";
+import "./steps/restore.js";
+import "./steps/car.js";
+import "./steps/hda.js";
+import "./steps/control.js";
+import "./steps/legal.js";
+import "./steps/outro.js";
+import "./shell.js";

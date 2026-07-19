@@ -3,9 +3,9 @@
 self.importScripts("/js/vendor/fzstd.js?v=0.1.1", "/js/realtime/raw_capnp.js?v=2607-03");
 
 const rawCapnp = self.CarrotRawCapnp;
+const replayHudServices = new Set(rawCapnp?.HUD_SERVICES || []);
 const compactServices = new Set([
-  "carState", "controlsState", "deviceState", "peripheralState",
-  "carrotMan", "selfdriveState", "gpsLocationExternal", "longitudinalPlan",
+  ...replayHudServices,
   "modelV2", "liveCalibration", "roadCameraState", "lateralPlan",
   "radarState", "carControl", "liveDelay", "liveTorqueParameters", "liveParameters",
 ]);
@@ -401,7 +401,11 @@ class ReplayLogBuilder {
       return;
     }
     if (event.valid) this.eventIndexer.ingest(event);
-    if (!event.valid || !compactServices.has(event.service)) return;
+    if (!compactServices.has(event.service)) return;
+    // carrot-wip route replay keeps the latest decoded HUD state even when an
+    // Event validity bit is down. Validity describes source health; discarding
+    // the value here leaves the entire replay HUD permanently uninitialized.
+    if (!event.valid && !replayHudServices.has(event.service)) return;
     const intervalNs = serviceIntervalsNs[event.service] || 50_000_000;
     const bucket = Math.floor(event.logMonoTime / intervalNs);
     const serviceBuckets = this.selected.get(event.service);
