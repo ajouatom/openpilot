@@ -15,9 +15,18 @@ fi
 echo "$$" > "$PID_FILE"
 export CARROT_WEB_EXTERNAL=1
 
-cd "$DIR" || exit 1
-
 while true; do
+  # The updater can replace /data/openpilot while this watchdog survives. In
+  # that case its cwd points at the deleted checkout, and a logical `cd` can
+  # keep using that stale inode when $PWD still has the same path. Re-enter the
+  # physical checkout before every launch so Python always starts in the
+  # current tree.
+  if ! cd -P -- "$DIR"; then
+    echo "[carrot_web] checkout unavailable at ${DIR}; retrying in ${RESTART_DELAY}s"
+    sleep "$RESTART_DELAY"
+    continue
+  fi
+
   echo "[carrot_web] starting external carrot_server on port ${PORT}"
   "$PY_BIN" -m openpilot.selfdrive.carrot.carrot_server --host 0.0.0.0 --port "$PORT"
   rc=$?
