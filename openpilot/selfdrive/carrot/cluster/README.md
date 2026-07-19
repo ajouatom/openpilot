@@ -275,16 +275,15 @@ debug UI before navi data has arrived. When output is gated off,
 remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
-Manager autostart sets `CLUSTER_REALTIME=0` by default and explicitly restores
-`SCHED_OTHER`. CPU affinity remains enabled: `ClusterHudCoreMode=0` maps to cores
-`1,2,3,4`, while mode `1` maps to all initially allowed CPU cores. Set
-`CLUSTER_REALTIME=1` only for an explicit diagnostic override; in that mode,
-`ClusterHudPriority` controls the common openpilot realtime helper priority with
-range `1..99`, default `10`.
+Manager autostart always configures the cluster process through openpilot's
+realtime helper. `ClusterHudCoreMode=0` maps to cores `1,2,3,4`, while mode `1`
+maps to all initially allowed CPU cores. `ClusterHudPriority` always controls
+the FIFO priority with range `1..99`, default `10`; `CLUSTER_REALTIME` is no
+longer read.
 Changing either param makes the running HUD exit so `cluster_autorun` can
 relaunch it with the new affinity/scheduler settings, without a whole system restart.
-Explicit `CLUSTER_REALTIME`, `CLUSTER_REALTIME_CORES`, or
-`CLUSTER_REALTIME_PRIORITY` environment values still win.
+Explicit `CLUSTER_REALTIME_CORES` or `CLUSTER_REALTIME_PRIORITY` environment
+values still override the corresponding Params.
 On TICI, the HUD reads the local Git branch directly but does not start remote
 `ls-remote` or `fetch` work. PC/window runs retain the periodic remote status.
 Native H.264 callback output is queued as complete access units. The bounded
@@ -460,11 +459,11 @@ lane color codes, the current lane markings use that color first
 (`+10=white`, `+20=yellow`) before falling back to the cluster model colors.
 The planned path draws `longitudinalPlan.desiredDistance` as a magenta
 horizontal bar across the current lane width at the matching forward position.
-Changing `ClusterHud` to another supported mode or `0` makes the running HUD
-exit; cleanup sends TURZX brightness zero before releasing the USB device.
-When autorun passes a HUD mode, USB open is pinned to that mode's TURZX PID
-(`1 -> 0x0092`, `2 -> 0x0123`) so a second connected TURZX panel is not opened
-by the vendor library's generic device scan.
+Changing `ClusterHud` away from supported mode `1`, including legacy value `2`
+or `0`, makes the running HUD exit; cleanup sends TURZX brightness zero before
+releasing the USB device. When autorun passes HUD mode `1`, USB open is pinned
+to TURZX PID `0x0092` so a second connected TURZX panel is not opened by the
+vendor library's generic device scan.
 If frame or H264 chunk writes report that the USB device was disconnected, the
 active HUD exits instead of trying to recover in-process. Autorun calls the
 launcher in non-exiting mode so the error returns to the watcher loop, letting

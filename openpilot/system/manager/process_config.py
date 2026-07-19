@@ -88,7 +88,7 @@ def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
 
 def cluster_hud_active(params: Params) -> bool:
   try:
-    return params.get_int("ClusterHud") in (1, 2)
+    return params.get_int("ClusterHud") == 1
   except Exception:
     return False
 
