@@ -187,6 +187,7 @@ ROUTE_CUTIN_SENSITIVITY_ENV = "CLUSTER_ROUTE_CUTIN_SENSITIVITY"
 ROUTE_CUTIN_RADAR_SOURCE_CORNER = "corner"
 ROUTE_CUTIN_RADAR_SOURCE_FRONT = "front"
 REPLAY_CUTIN_DT = 0.05
+RECORDED_CUTIN_REPLAY_HOLD_S = 0.08
 REPLAY_CUTIN_STICKY_FRAMES = int(0.7 / REPLAY_CUTIN_DT)
 REPLAY_CUTIN_OUTPUT_HOLD_FRAMES = max(1, int(round(0.5 / REPLAY_CUTIN_DT)))
 REPLAY_CUTIN_OUTPUT_HOLD_DREL_M = 3.0
@@ -523,6 +524,8 @@ class RouteReplayFrame:
     lateral_plan_curvatures: tuple[float, ...] = ()
     lateral_plan_curvature_rates: tuple[float, ...] = ()
     cutin_debug_text: str = "NEW CUTIN: waiting"
+    recorded_cutin_active: bool = False
+    recorded_cutin_sound: bool = False
 
 
 @dataclass
@@ -704,7 +707,7 @@ def route_log_preload_worker(
         except OSError:
             pass
     log_schema = load_openpilot_log_schema()
-    parser = RouteLogParser(corner_source)
+    parser = RouteLogParser(corner_source, recompute_cutins=False)
     first_t: float | None = None
     while True:
         command, generation, file_index, file_path_text = requests.get()
@@ -1105,6 +1108,8 @@ class RouteReplaySource:
         gear_text = frame.gear_text or "--"
         gap_text = "--" if frame.cruise_gap is None else f"{frame.cruise_gap:d}"
         data_lines = (
+            f"device cutin {'YES' if frame.recorded_cutin_active else 'NO'}   "
+            f"sound {'PROMPT' if frame.recorded_cutin_sound else '--'}",
             f"t {shown_time:6.1f}/{self.duration:6.1f}s   seg {segment_label}",
             f"vEgo {state.speed_kph:5.1f} km/h   aEgo {state.accel_mps2:+.2f} m/s2",
             f"steer {frame.steering_angle_deg or 0.0:+.1f} deg   limit {limit_text}   cruise {cruise_text}",
@@ -1309,10 +1314,14 @@ class RouteLogParser:
         corner_source: str = ROUTE_CORNER_SOURCE_LIVE,
         reconstruct_corner_live_tracks: bool = False,
         cutin_radar_source: str | None = None,
+        recompute_cutins: bool = True,
     ) -> None:
         self.corner_source = route_corner_source_or_default(corner_source)
         self.reconstruct_corner_live_tracks = reconstruct_corner_live_tracks
-        self.show_recorded_cutins = os.environ.get(ROUTE_SHOW_RECORDED_CUTINS_ENV) == "1"
+        # Normal route playback shows the radarState emitted on the device.
+        # Focused validation tools can still opt into offline recomputation.
+        self.show_recorded_cutins = True
+        self.recompute_cutins = recompute_cutins
         self.front_radar_only = os.environ.get(ROUTE_FRONT_RADAR_ONLY_ENV) == "1"
         self.cutin_radar_source = cutin_radar_source or os.environ.get(
             ROUTE_CUTIN_RADAR_SOURCE_ENV, ROUTE_CUTIN_RADAR_SOURCE_CORNER
@@ -1349,6 +1358,10 @@ class RouteLogParser:
         self.cutin_output_hold_reference: tuple[float, float, float] | None = None
         self.cutin_debug_text = f"NEW CUTIN {self.cutin_radar_source.upper()} S{self.cutin_sensitivity:.0f}: waiting"
         self.recorded_cutin_ids: set[int] = set()
+        self.recorded_cutin_sound = False
+        self.recorded_cutin_t = -999.0
+        self.recorded_cutin_sound_t = -999.0
+        self.recorded_cutin_detections: tuple[DetectedVehicle, ...] = ()
         self.lead_one_status = False
         self.lead_one_d_rel = 0.0
         self.lead_one_v_rel = 0.0
@@ -1510,7 +1523,7 @@ class RouteLogParser:
             elif event_type == "controlsState":
                 self._update_controls_state(event.controlsState)
             elif event_type == "selfdriveState":
-                self._update_selfdrive_state(event.selfdriveState)
+                self._update_selfdrive_state(event.selfdriveState, event_t)
             elif event_type == "carControl":
                 self._update_car_control(event.carControl)
             elif event_type == "deviceState":
@@ -1599,7 +1612,7 @@ class RouteLogParser:
             lane_change,
             lane_change_phase,
         )
-        if event_t - self.cutin_detection_t < 0.15:
+        if self.recompute_cutins and event_t - self.cutin_detection_t < 0.15:
             detected_vehicles = tuple((*detected_vehicles, *self.cutin_detections))
         radar_points = self._radar_points_from_current_state(event_t)
         tpms = tpms_info_from_car_state(car_state)
@@ -1715,6 +1728,8 @@ class RouteLogParser:
             lateral_plan_curvatures=self.lateral_plan_curvatures,
             lateral_plan_curvature_rates=self.lateral_plan_curvature_rates,
             cutin_debug_text=self.cutin_debug_text,
+            recorded_cutin_active=event_t - self.recorded_cutin_t <= RECORDED_CUTIN_REPLAY_HOLD_S,
+            recorded_cutin_sound=event_t - self.recorded_cutin_sound_t <= RECORDED_CUTIN_REPLAY_HOLD_S,
         )
 
     def _display_speed_kph_from_car_state(self, car_state: Any, fallback_speed_mps: float) -> float:
@@ -1960,10 +1975,19 @@ class RouteLogParser:
             self.controls_curvature_m_inv = curvature
             self.controls_curvature_source = "controlsState"
 
-    def _update_selfdrive_state(self, selfdrive_state: Any) -> None:
+    def _update_selfdrive_state(self, selfdrive_state: Any, event_t: float) -> None:
         enabled = safe_get(selfdrive_state, "enabled", None)
         if enabled is not None:
             self.selfdrive_enabled = bool(enabled)
+        alert_sound = str(safe_get(selfdrive_state, "alertSound", "none") or "none").lower()
+        alert_type = str(safe_get(selfdrive_state, "alertType", "") or "").lower()
+        self.recorded_cutin_sound = bool(
+            self.recorded_cutin_ids
+            and alert_sound == "prompt"
+            and alert_type.startswith("audioprompt/")
+        )
+        if self.recorded_cutin_sound:
+            self.recorded_cutin_sound_t = event_t
         cruise_gap = self._cruise_gap_from_personality(safe_get(selfdrive_state, "personality"))
         if cruise_gap is not None:
             self.cruise_gap = cruise_gap
@@ -2002,9 +2026,10 @@ class RouteLogParser:
         self.lead_one_radar = bool(lead_one is not None and safe_get(lead_one, "radar", False))
         lead_one_track_id = safe_optional_int(lead_one, "radarTrackId") if lead_one is not None else None
         self.lead_one_track_id = lead_one_track_id if lead_one_track_id is not None else -1
-        self.recorded_cutin_ids = set() if self.front_radar_only else {
+        recorded_cutin_leads = tuple(safe_get(radar_state, "leadsCutIn", ()) or ())
+        self.recorded_cutin_ids = {
             track_id
-            for lead in (safe_get(radar_state, "leadsCutIn", ()) or ())
+            for lead in recorded_cutin_leads
             if bool(safe_get(lead, "status", False))
             for track_id in [safe_optional_int(lead, "radarTrackId")]
             if track_id is not None
@@ -2061,8 +2086,7 @@ class RouteLogParser:
                     radar_track_id=track_id,
                 )
             )
-        recorded_cutins = safe_get(radar_state, "leadsCutIn", ()) if self.show_recorded_cutins and not self.front_radar_only else ()
-        for lead in recorded_cutins or ():
+        for lead in recorded_cutin_leads:
             if not bool(safe_get(lead, "status", False)):
                 continue
             d_rel = safe_float(lead, "dRel", 0.0)
@@ -2106,6 +2130,35 @@ class RouteLogParser:
             )
         self.radar_detections = tuple(detections)
         self.radar_detection_t = event_t
+        if not self.recompute_cutins:
+            active_leads = tuple(
+                lead for lead in recorded_cutin_leads
+                if bool(safe_get(lead, "status", False))
+            )
+            if active_leads:
+                current_cutins = tuple(detection for detection in detections if detection.cut_in)
+                if current_cutins:
+                    self.recorded_cutin_detections = current_cutins
+                self.recorded_cutin_t = event_t
+                lead = active_leads[0]
+                track_id = safe_optional_int(lead, "radarTrackId")
+                self.cutin_debug_text = (
+                    f"LOG CUT-IN: YES | id{track_id if track_id is not None else -1} "
+                    f"x {safe_float(lead, 'dRel', 0.0):.1f}m "
+                    f"y {safe_float(lead, 'yRel', 0.0):+.1f}m"
+                )
+            else:
+                held = event_t - self.recorded_cutin_t <= RECORDED_CUTIN_REPLAY_HOLD_S
+                if held and self.recorded_cutin_detections:
+                    held_ids = {detection.radar_track_id for detection in self.recorded_cutin_detections}
+                    self.radar_detections = tuple(
+                        detection for detection in self.radar_detections
+                        if detection.radar_track_id not in held_ids
+                    ) + self.recorded_cutin_detections
+                    self.cutin_debug_text = "LOG CUT-IN: YES | recorded event hold"
+                else:
+                    self.recorded_cutin_detections = ()
+                    self.cutin_debug_text = "LOG CUT-IN: NO"
 
     def _update_can_detections(self, can_messages: Any, event_t: float, source_service: str = "can") -> None:
         if self.front_radar_only:
@@ -2152,8 +2205,9 @@ class RouteLogParser:
                 self.raw_corner_tracker.live_tracks_at(event_t, self.current_speed_kph / 3.6),
                 raw_corner_only=True,
             )
-        cutin_input = ReconstructedLiveTracks(tracks) if self.reconstruct_corner_live_tracks else live_tracks
-        self._update_offline_cutin(cutin_input, event_t)
+        if self.recompute_cutins:
+            cutin_input = ReconstructedLiveTracks(tracks) if self.reconstruct_corner_live_tracks else live_tracks
+            self._update_offline_cutin(cutin_input, event_t)
         points: dict[str, RadarPoint] = {}
         for index, track in enumerate(tracks):
             point = live_track_to_radar_point(
@@ -2896,6 +2950,9 @@ class RouteLogParser:
 
         if event_t - self.radar_detection_t < 0.8:
             for vehicle in self.radar_detections:
+                if vehicle.source == "radarState" and vehicle.cut_in:
+                    detections.append(vehicle)
+                    continue
                 if vehicle_is_blocked_by_near_road_edge(vehicle, lane_values):
                     continue
                 if (
@@ -3572,6 +3629,8 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         lateral_plan_curvature_rates=frame.lateral_plan_curvature_rates,
         display_speed_kph=frame.display_speed_kph,
         traffic_state=frame.traffic_state,
+        recorded_cutin_active=frame.recorded_cutin_active,
+        recorded_cutin_sound=frame.recorded_cutin_sound,
     )
 
 
@@ -3771,6 +3830,8 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         lateral_plan_curvatures=discrete.lateral_plan_curvatures,
         lateral_plan_curvature_rates=discrete.lateral_plan_curvature_rates,
         cutin_debug_text=discrete.cutin_debug_text,
+        recorded_cutin_active=discrete.recorded_cutin_active,
+        recorded_cutin_sound=discrete.recorded_cutin_sound,
     )
 
 

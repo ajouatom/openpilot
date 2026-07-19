@@ -73,7 +73,6 @@ from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
 from cluster_renderer import ClusterUiRenderer
 from cluster_route_replay import (
     ROUTE_FRONT_RADAR_ONLY_ENV,
-    ROUTE_SHOW_RECORDED_CUTINS_ENV,
     RouteReplaySource,
     adjacent_route_log_path,
 )
@@ -157,18 +156,23 @@ def route_state_cutin_candidates(state: object) -> tuple[CutinAlertCandidate, ..
         )
         for vehicle in detected_vehicles
         if bool(getattr(vehicle, "cut_in", False))
+        and str(getattr(vehicle, "source", "")) == "radarState"
     )
     if candidates:
         return candidates
-    overlay = getattr(state, "route_overlay", None)
-    cutin_status = str(getattr(overlay, "cutin_status", "") or "").upper()
-    if "CUTIN" in cutin_status and ": YES" in cutin_status:
-        return (CutinAlertCandidate(-1, 0.0, 0.0, 0.0),)
+    if bool(getattr(state, "recorded_cutin_active", False)):
+        return (CutinAlertCandidate(-2, 0.0, 0.0, 0.0),)
     return ()
 
 
 def route_state_has_cutin(state: object) -> bool:
     return bool(route_state_cutin_candidates(state))
+
+
+def route_state_recorded_cutin_sound_candidates(state: object) -> tuple[CutinAlertCandidate, ...]:
+    if not bool(getattr(state, "recorded_cutin_sound", False)):
+        return ()
+    return (CutinAlertCandidate(-2, 0.0, 0.0, 0.0),)
 
 
 def play_cutin_alert() -> None:
@@ -848,7 +852,6 @@ def run_demo(
     route_end_waiting = False
     route_cutin_alert_tracker = CutinAlertTracker()
     route_options = {
-        "show_recorded_cutins": os.environ.get(ROUTE_SHOW_RECORDED_CUTINS_ENV) == "1",
         "front_radar_only": os.environ.get(ROUTE_FRONT_RADAR_ONLY_ENV) == "1",
         "route_loop": route_loop,
         "pause_on_cutin": route_pause_on_cutin,
@@ -1236,10 +1239,7 @@ def run_demo(
                             if option_name not in route_options:
                                 continue
                             route_options[option_name] = option_value
-                            if option_name == "show_recorded_cutins":
-                                os.environ[ROUTE_SHOW_RECORDED_CUTINS_ENV] = "1" if option_value else "0"
-                                reload_parser_options = True
-                            elif option_name == "front_radar_only":
+                            if option_name == "front_radar_only":
                                 os.environ[ROUTE_FRONT_RADAR_ONLY_ENV] = "1" if option_value else "0"
                                 reload_parser_options = True
                             elif option_name == "route_loop":
@@ -1362,15 +1362,14 @@ def run_demo(
                         keep_video=keep_camera_video,
                     ),
                 )
-                cutin_candidates = route_state_cutin_candidates(state)
                 if route_options["pause_on_cutin"]:
-                    if route_cutin_alert_tracker.update(cutin_candidates):
+                    if route_cutin_alert_tracker.update(route_state_recorded_cutin_sound_candidates(state)):
                         route_paused = True
                         route_playback_base_s = playback_seconds
                         route_wall_base_time = now
                         play_cutin_alert()
                         print(
-                            f"CUT-IN detected at {playback_seconds:.2f}s; replay paused",
+                            f"LOG CUT-IN at {playback_seconds:.2f}s; replay paused",
                             flush=True,
                         )
                 else:

@@ -188,6 +188,46 @@ def test_controller_reports_control_unusable_cutin_without_lead_two() -> None:
   assert output.leads_cutin[0]["radarTrackId"] == 32
 
 
+def test_controller_suppresses_low_speed_out_of_lane_cutin() -> None:
+  side_cutin = prediction(49, 2.2, 0.1, 0.99, d_rel=3.0, v_lead=1.8)
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(
+        True,
+        RadarLeadDecision((), (side_cutin,)),
+        (side_cutin,),
+        0.1,
+      )
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  output = controller.update(0.0, 0.45, (), vision_model(8.0, 0.0, 1.0))
+
+  assert output.lead_two is None
+  assert output.leads_cutin == ()
+
+
+def test_controller_suppresses_submeter_cutin_return() -> None:
+  bumper_return = prediction(46, 0.0, 0.1, 0.99, d_rel=0.25, v_lead=0.1)
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(
+        True,
+        RadarLeadDecision((), (bumper_return,)),
+        (bumper_return,),
+        0.1,
+      )
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  output = controller.update(0.0, 5.0, (), vision_model(8.0, 0.0, 5.0))
+
+  assert output.lead_two is None
+  assert output.leads_cutin == ()
+
+
 def test_controller_hides_cutin_behind_primary_lead() -> None:
   primary = prediction(35, -0.3, 0.95, 0.1, d_rel=3.55, v_lead=0.0)
   primary = replace(primary, features=replace(

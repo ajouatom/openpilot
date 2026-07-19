@@ -15,7 +15,6 @@ WINDOW_HEIGHT = 520
 UPDATE_INTERVAL_S = 0.1
 LAST_FOLDER_FILE = Path.home() / ".cluster_replay_usb_last_folder"
 OPTION_LABELS = (
-    ("show_recorded_cutins", "show-recorded-cutins"),
     ("front_radar_only", "front-radar-only"),
     ("route_loop", "route-loop"),
     ("pause_on_cutin", "pause-on-cutin"),
@@ -354,7 +353,7 @@ def _draw_replay_tools(
 
     x = debug_rect.x + 16
     y = debug_rect.y + 14
-    screen.blit(small_font.render("CURRENT CODE CUT-IN", True, muted), (x, y))
+    screen.blit(small_font.render("LOG RADARSTATE CUT-IN", True, muted), (x, y))
     y += 25
     cutin = str(state.get("cutin_status") or "waiting")
     cutin_color = amber if ": YES" in cutin else text

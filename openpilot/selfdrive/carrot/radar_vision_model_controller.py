@@ -23,6 +23,9 @@ STEALTH_LEAD_HOLD_S = 0.5
 PRIMARY_STEALTH_HOLD_S = 0.75
 PRIMARY_STEALTH_MAX_DPATH_M = 2.2
 PRIMARY_STEALTH_MIN_LEAD_PROB = 0.8
+CUTIN_REPORT_MIN_DREL_M = 1.0
+LOW_SPEED_CUTIN_MAX_EGO_MPS = 3.0
+LOW_SPEED_CUTIN_MAX_DPATH_M = 1.5
 
 
 def _finite(value: Any, fallback: float = 0.0) -> float:
@@ -322,6 +325,16 @@ class VisionModelRadarController:
     )
 
   @staticmethod
+  def _cutin_report_usable(prediction: RadarLeadPrediction, v_ego: float) -> bool:
+    obj = prediction.features.radar_object
+    if obj.d_rel <= CUTIN_REPORT_MIN_DREL_M:
+      return False
+    return not (
+      v_ego < LOW_SPEED_CUTIN_MAX_EGO_MPS
+      and abs(prediction.features.d_path) > LOW_SPEED_CUTIN_MAX_DPATH_M
+    )
+
+  @staticmethod
   def _pick_side(leads: list[dict[str, Any]]) -> dict[str, Any] | None:
     return min(
       (lead for lead in leads if lead["dRel"] > 5.0 and abs(lead["dPath"]) < 3.5),
@@ -369,7 +382,11 @@ class VisionModelRadarController:
     primary_d_rel = lead_one.get("dRel") if lead_one is not None else None
     relevant_cutin_pairs = [
       (prediction, lead) for prediction, lead in cutin_pairs
-      if lead is not None and cutin_is_ahead_of_primary(float(lead["dRel"]), primary_d_rel)
+      if (
+        lead is not None
+        and cutin_is_ahead_of_primary(float(lead["dRel"]), primary_d_rel)
+        and self._cutin_report_usable(prediction, v_ego)
+      )
     ]
     external_pairs = [
       (prediction, self._lead_from_prediction(prediction, prediction.external_prob, v_ego))
