@@ -11,7 +11,7 @@ from ..services.vision_diag import record_stream_proxy_event
 def _cluster_hud_active(request: web.Request) -> bool:
   params = request.app.get("params")
   try:
-    return params is not None and params.get_int("ClusterHud") in (1, 2)
+    return params is not None and params.get_int("ClusterHud") == 1
   except Exception:
     return False
 

@@ -32,9 +32,6 @@ NETLINK_KOBJECT_UEVENT = 15
 AUTORUN_FPS_ENV = "CLUSTER_AUTORUN_FPS"
 REALTIME_CORES_ENV = "CLUSTER_REALTIME_CORES"
 REALTIME_PRIORITY_ENV = "CLUSTER_REALTIME_PRIORITY"
-AUTORUN_DEFAULT_ENV = {
-    "CLUSTER_REALTIME": "0",
-}
 DEFAULT_REALTIME_CORES = [1, 2, 3, 4]
 DEFAULT_REALTIME_PRIORITY = 10
 CORE_MODE_DEDICATED = 0
@@ -75,15 +72,6 @@ def _ensure_cluster_paths() -> None:
         path_text = str(path)
         if path_text not in sys.path:
             sys.path.insert(0, path_text)
-
-
-def _apply_autorun_defaults() -> None:
-    for key, value in AUTORUN_DEFAULT_ENV.items():
-        os.environ.setdefault(key, value)
-
-
-def _cluster_realtime_enabled() -> bool:
-    return os.environ.get("CLUSTER_REALTIME", "0").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _normalize_core_mode(value: object) -> int:
@@ -164,11 +152,7 @@ def _configure_autorun_affinity() -> None:
     try:
         cores = _cluster_realtime_cores()
         allowed_cores = _set_current_process_affinity(cores)
-        print(
-            f"[cluster_autorun] affinity configured cores={allowed_cores or cores} "
-            f"realtime={'on' if _cluster_realtime_enabled() else 'off'}",
-            flush=True,
-        )
+        print(f"[cluster_autorun] affinity configured cores={allowed_cores or cores}", flush=True)
     except Exception as exc:
         print(f"[cluster_autorun] failed to set core affinity: {exc}", flush=True)
 
@@ -577,7 +561,6 @@ def _wait_for_hud_output_allowed(params: Params, expected_product_id: int) -> in
 def main() -> None:
     _configure_autorun_locale()
     _ensure_cluster_paths()
-    _apply_autorun_defaults()
     from cluster_usb_display import find_supported_usb_product, product_id_for_hud_mode, product_label
 
     params = Params()

@@ -1077,7 +1077,7 @@ class YouTubeLiveService:
     selected_process = processes.get(selected_youtube_encoder, {"running": False, "pids": []})
     return {
       "cluster": {
-        "enabled": cluster_param in (1, 2),
+        "enabled": cluster_param == 1,
         "param": cluster_param,
         **processes.get("carrot_cluster", {"running": False, "pids": []}),
       },
