@@ -484,7 +484,7 @@ class OpenpilotLiveSource:
         elif service == "controlsState":
             self.parser._update_controls_state(data)
         elif service == "selfdriveState":
-            self.parser._update_selfdrive_state(data)
+            self.parser._update_selfdrive_state(data, event_t)
         elif service == "carControl":
             self.parser._update_car_control(data)
         elif service == "deviceState":
