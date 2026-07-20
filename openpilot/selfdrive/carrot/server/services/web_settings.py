@@ -6,6 +6,8 @@ import re
 import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from openpilot.selfdrive.carrot.web_upload import DEFAULT_WEB_UPLOAD_URL, normalize_base_url
+
 from ..config import CARROT_WEB_SETTINGS_PATH, WEB_DIR
 
 
@@ -313,6 +315,17 @@ def _normalize_kmap_url(value: Any) -> str:
   return url or "https://jominki354.github.io/kmap/"
 
 
+def _normalize_web_upload_url(value: Any) -> str:
+  try:
+    return normalize_base_url(value, DEFAULT_WEB_UPLOAD_URL)
+  except ValueError:
+    return DEFAULT_WEB_UPLOAD_URL
+
+
+def _normalize_stripped(value: Any) -> str:
+  return str(value or "").strip()
+
+
 def _normalize_drive_split_ratio(value: Any, fallback: float) -> str:
   try:
     ratio = float(value)
@@ -386,6 +399,8 @@ WEB_SETTINGS_SPEC: List[_Field] = [
   _Field("kmap_overlay_heading_up", "bool", False),
   _Field("kmap_overlay_curvature_color", "bool", False),
   _Field("kmap_map_type", "enum", "roadmap", choices={"roadmap", "satellite", "hybrid"}),
+  _Field("web_upload_url", "str", DEFAULT_WEB_UPLOAD_URL, normalize=_normalize_web_upload_url),
+  _Field("web_upload_token", "str", "", normalize=_normalize_stripped),
   # Remote support last-used settings, persisted so the owner's choices survive a
   # reload. Stored as strings via the enum type (numeric values are parsed back
   # to ints client-side). Command permission defaults to "approve_each" so a
@@ -403,9 +418,18 @@ DEFAULT_WEB_SETTINGS: Dict[str, Any] = {f.key: f.default for f in WEB_SETTINGS_S
 
 def sanitize_web_settings(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
   raw = raw or {}
+  legacy_aliases = {
+    "web_upload_url": "toss_upload_url",
+    "web_upload_token": "toss_upload_token",
+  }
   settings: Dict[str, Any] = {}
   for field in WEB_SETTINGS_SPEC:
-    value = raw.get(field.key, field.default) if isinstance(raw, dict) else field.default
+    if isinstance(raw, dict) and field.key in raw:
+      value = raw[field.key]
+    elif isinstance(raw, dict) and legacy_aliases.get(field.key) in raw:
+      value = raw[legacy_aliases[field.key]]
+    else:
+      value = field.default
     settings[field.key] = _normalize_content_id(value) if field.key in _DRIVE_LAYOUT_CONTENT_KEYS else field.coerce(value)
   catalog = load_drive_content_catalog()
   for orientation in ("horizontal", "vertical"):

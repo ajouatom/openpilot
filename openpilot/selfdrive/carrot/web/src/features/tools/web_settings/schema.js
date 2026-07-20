@@ -69,6 +69,16 @@ const WEB_SETTINGS_GROUPS = [
     keepWhenEmpty: true,
     items: [],
   },
+  {
+    id: "upload",
+    labelKey: "web_settings_upload",
+    items: [
+      {
+        id: "web_upload",
+        component: "web-upload",
+      },
+    ],
+  },
 ];
 
 window.WEB_SETTINGS_GROUPS = WEB_SETTINGS_GROUPS;

@@ -322,6 +322,40 @@
   line-height: 1.2;
 }
 
+.web-upload-settings {
+  display: grid;
+  gap: var(--sp-sm);
+}
+
+.web-settings-row--field {
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 44%);
+}
+
+.web-settings-text {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 84%, transparent);
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-sm);
+}
+
+.web-upload-settings__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  min-height: 40px;
+}
+
+.web-upload-settings__status {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  overflow-wrap: anywhere;
+}
+
 .app-dialog--tools-qr .app-dialog__sheet {
   width: min(calc(100vw - 32px), 520px);
   max-height: min(calc(100dvh - 32px), 720px);
