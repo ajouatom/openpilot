@@ -65,6 +65,9 @@ The Carrot receiver and hardened Container Manager configuration live in
 `tools/carrot_upload_server`. DSM exposes it through an HTTPS reverse proxy from
 `https://shind0.synology.me` to loopback `127.0.0.1:18080`. Dashcam files retain
 the original `/volume1/openpilot/routes/<CarName> <DongleID>/<segment>` layout;
-tmux files use `/volume1/openpilot/tmux/<GitBranch>/<CarName> <DongleID>/`.
+tmux files retain the FTP-era
+`/volume1/openpilot/<GitBranch>/<CarName> <DongleID>/` layout. Private manifests,
+sessions, and quota state remain under `/volume1/openpilot/tmux/.state`.
 
-The application does not need DSM FTP, WebDAV, or a shared user credential.
+The application does not need DSM FTP, WebDAV, or a shared user credential. The
+receiver never scans or deletes the existing Openpilot tree.

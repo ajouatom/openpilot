@@ -1,7 +1,7 @@
 services:
   carrot-upload:
     build: .
-    image: carrot-upload:1.0.2
+    image: carrot-upload:1.0.3
     restart: unless-stopped
     init: true
     environment:
@@ -20,8 +20,7 @@ services:
     group_add:
       - "101"
     volumes:
-      - /volume1/openpilot/routes:/data/openpilot/routes
-      - /volume1/openpilot/tmux:/data/openpilot/tmux
+      - /volume1/openpilot:/data/openpilot
     read_only: true
     tmpfs:
       - /tmp:size=64m
