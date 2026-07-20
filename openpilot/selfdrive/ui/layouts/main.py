@@ -1,3 +1,4 @@
+import time
 import pyray as rl
 from enum import IntEnum
 import openpilot.cereal.messaging as messaging
@@ -6,6 +7,7 @@ from openpilot.selfdrive.ui.layouts.sidebar import Sidebar, SIDEBAR_WIDTH
 from openpilot.selfdrive.ui.layouts.home import HomeLayout
 from openpilot.selfdrive.ui.layouts.settings.settings import SettingsLayout, PanelType
 from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
+from openpilot.selfdrive.ui.carrot_param_cache import TimedSnapshotCache, read_screen_record
 from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.system.ui.widgets import Widget
 from openpilot.selfdrive.ui.layouts.onboarding import OnboardingWindow
@@ -42,19 +44,23 @@ class MainLayout(Widget):
     self._onboarding_window = OnboardingWindow()
     if not self._onboarding_window.completed:
       gui_app.push_widget(self._onboarding_window)
-    # carrot_man    
+    # carrot_man
     self._last_carrot_cmd_idx = -1
+    self._screen_record_param = TimedSnapshotCache(
+      gui_app.is_recording(),
+      lambda: read_screen_record(ui_state.params),
+    )
 
-  @staticmethod
-  def _sync_screen_record_state(requested: bool) -> bool:
+  def _sync_screen_record_state(self, requested: bool) -> bool:
     recording = gui_app.is_recording()
     if requested != recording:
       ui_state.params.put_bool_nonblocking("ScreenRecord", recording)
+      self._screen_record_param.store_pending(recording, time.monotonic())
     return recording
 
   def _handle_carrot_record_cmd(self, sm) -> bool:
-    screen_record = ui_state.params.get_bool("ScreenRecord")
-    if screen_record:
+    screen_record = self._screen_record_param.refresh(time.monotonic())
+    if screen_record and ui_state.started:
       gui_app.start_recording()
     else:
       gui_app.stop_recording()
@@ -74,10 +80,9 @@ class MainLayout(Widget):
       return recording
     print(f"CarrotMan command received: {cmd} {arg} (index {cmd_idx})")
     self._last_carrot_cmd_idx = cmd_idx
-    
+
     if not ui_state.started:
-      gui_app.stop_recording()
-      return self._sync_screen_record_state(screen_record)
+      return recording
 
 
     if cmd != "RECORD":
@@ -90,9 +95,9 @@ class MainLayout(Widget):
       gui_app.stop_recording()
     elif arg == "TOGGLE":
       gui_app.toggle_recording()
-      
+
     return self._sync_screen_record_state(screen_record)
-    
+
   def _render(self, _):
     self._handle_onroad_transition()
     self._render_main_content()

@@ -8,6 +8,7 @@ from openpilot.cereal import messaging, car, log
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.ui.carrot_param_cache import RealtimeUiParamSnapshot, TimedSnapshotCache, read_realtime_ui_params
 from openpilot.selfdrive.ui.lib.prime_state import PrimeState
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.hardware import HARDWARE, PC
@@ -75,9 +76,15 @@ class UIState:
     self._started_prev: bool = False
 
     # Core state variables
-    self.is_metric: bool = self.params.get_bool("IsMetric")
+    self._realtime_params = TimedSnapshotCache(
+      RealtimeUiParamSnapshot(),
+      lambda: read_realtime_ui_params(self.params),
+    )
+    realtime_params = self._realtime_params.refresh(time.monotonic())
+    self.is_metric: bool = realtime_params.is_metric
     self.is_release = self.params.get_bool("IsReleaseBranch")
-    self.always_on_dm: bool = self.params.get_bool("AlwaysOnDM")
+    self.always_on_dm: bool = realtime_params.always_on_dm
+    self._record_audio_param: bool = realtime_params.record_audio
     self.started: bool = False
     self.ignition: bool = False
     self.recording_audio: bool = False
@@ -148,10 +155,11 @@ class UIState:
     self.started = self.sm["deviceState"].started and self.ignition
 
     # Update recording audio state
-    self.recording_audio = self.params.get_bool("RecordAudio") and self.started
-
-    self.is_metric = self.params.get_bool("IsMetric")
-    self.always_on_dm = self.params.get_bool("AlwaysOnDM")
+    realtime_params = self._realtime_params.refresh(time.monotonic())
+    self._record_audio_param = realtime_params.record_audio
+    self.recording_audio = self._record_audio_param and self.started
+    self.is_metric = realtime_params.is_metric
+    self.always_on_dm = realtime_params.always_on_dm
 
   def _update_status(self) -> None:
     if self.started and self.sm.updated["selfdriveState"]:

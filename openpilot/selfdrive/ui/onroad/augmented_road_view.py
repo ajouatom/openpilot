@@ -4,6 +4,7 @@ import pyray as rl
 from openpilot.cereal import log, messaging
 from msgq.visionipc import VisionStreamType
 from openpilot.selfdrive.ui import UI_BORDER_SIZE
+from openpilot.selfdrive.ui.carrot_param_cache import BorderParamSnapshot, TimedSnapshotCache, read_border_params
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.onroad.alert_renderer import AlertRenderer
 from openpilot.selfdrive.ui.onroad.driver_state import DriverStateRenderer
@@ -55,6 +56,10 @@ class AugmentedRoadView(CameraView):
     # uiDebug.plotMode용 ShowPlotMode 캐시 — 파일 읽기라 매 프레임 금지, ~2초 스로틀
     self._plot_mode = 0
     self._plot_mode_next_t = 0.0
+    self._border_params = TimedSnapshotCache(
+      BorderParamSnapshot(),
+      lambda: read_border_params(ui_state.params, ui_state.params_memory),
+    )
 
   def _refresh_plot_mode(self, now: float) -> None:
     if now < self._plot_mode_next_t:
@@ -284,6 +289,7 @@ class AugmentedRoadView(CameraView):
       self._draw_border(rect)
       return
 
+    border_params = self._border_params.refresh(time.monotonic())
     car_state = sm["carState"]
 
     x = float(rect.x)
@@ -432,22 +438,12 @@ class AugmentedRoadView(CameraView):
     bottom_left = ""
     bottom_right = ""
 
-    car_name = ui_state.params.get("CarName") or ""
-
-    if ui_state.params.get_int("HyundaiCameraSCC") > 0:
-      car_name += "(CAMERA SCC)"
-    else:
-      try:
-        if sm.alive["carParams"] and sm["carParams"].openpilotLongitudinalControl:
-          car_name += " - OP Long"
-      except Exception:
-        pass
-
-    nnff_model_name = ui_state.params.get("NNFFModelName") or ""
-    if len(nnff_model_name) > 0:
-      car_name += ",NNFF"
-
-    top_left = car_name
+    top_left = border_params.top_left
+    try:
+      if sm.alive["carParams"] and sm["carParams"].openpilotLongitudinalControl:
+        top_left = border_params.top_left_op_long
+    except Exception:
+      pass
 
     try:
       top_right_parts = []
@@ -467,8 +463,7 @@ class AugmentedRoadView(CameraView):
 
       if sm.alive["liveParameters"]:
         lp = sm["liveParameters"]
-        custom_sr = ui_state.params.get_float("CustomSR") / 10.0
-        top_right_parts.append(f"SR({lp.steerRatio:.1f},{custom_sr:.1f})")
+        top_right_parts.append(f"SR({lp.steerRatio:.1f},{border_params.custom_sr:.1f})")
 
       top_right = ", ".join(top_right_parts)
     except Exception:
@@ -479,9 +474,8 @@ class AugmentedRoadView(CameraView):
       lat_plan = sm["lateralPlan"]
       bottom = str(lat_plan.latDebugText)
 
-    bottom_left = ui_state.params.get("GitBranch") or ""
-
-    bottom_right = ui_state.params_memory.get("NetworkAddress") or ""
+    bottom_left = border_params.bottom_left
+    bottom_right = border_params.bottom_right
 
     # text positions
     top_text_y = y + line_margin
