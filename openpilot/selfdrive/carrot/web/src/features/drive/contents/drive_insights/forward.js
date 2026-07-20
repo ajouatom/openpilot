@@ -11,6 +11,7 @@ export const DRIVE_INSIGHTS_FORWARD_MAX_DISTANCE_M = 100;
 const FORWARD_SHAPES = Object.freeze(["circle", "square", "diamond", "triangle"]);
 const FORWARD_TONES = Object.freeze(["lead", "accent", "neutral"]);
 const FORWARD_HALF_WIDTH_M = 12;
+const FORWARD_LATERAL_CUTOFF_RATIO = 1.3;
 const FORWARD_LATERAL_VIEW_RATIO = 0.45;
 const FORWARD_GRID_MAJOR_STEP_M = 20;
 const FORWARD_GRID_MINOR_STEP_M = 10;
@@ -50,7 +51,10 @@ export function projectDriveInsightsForwardPoint(point, viewport = {}) {
   const width = Math.max(1, finiteNumber(viewport.width) ?? 1);
   const height = Math.max(1, finiteNumber(viewport.height) ?? 1);
   const maxDistanceM = Math.max(1, finiteNumber(viewport.maxDistanceM) ?? DRIVE_INSIGHTS_FORWARD_MAX_DISTANCE_M);
+  // Same bound as the replay forward view: targets far outside the drawn
+  // corridor would otherwise pile up against the left and right edges.
   if (xM === null || yM === null || xM < 0 || xM > maxDistanceM) return null;
+  if (Math.abs(yM) > FORWARD_HALF_WIDTH_M * FORWARD_LATERAL_CUTOFF_RATIO) return null;
   const farY = height * 0.16;
   const egoY = Math.max(height * 0.5, height - 46);
   const longitudinalScale = (egoY - farY) / maxDistanceM;
@@ -78,6 +82,9 @@ function normalizedEntities(snapshot) {
         yM,
         relativeSpeedMps: finiteNumber(entry?.relativeSpeedMps),
         measured: kind === "radar" ? entry?.measured === true : null,
+        // A radar entry the normalizer matched to a radarState lead, or any
+        // vision lead: these are the targets the planner is actually following.
+        selected: kind === "lead" || entry?.selected === true,
       }));
     }
   };
@@ -104,7 +111,11 @@ function normalizePresentation(entity, presentation) {
       ...(scoped?.meta && typeof scoped.meta === "object" ? scoped.meta : {}),
     },
   };
-  const selected = combined.selected === true;
+  // Presentation overrides win, but the entity's own state is the default so
+  // leads stand out without every caller having to supply a presentation map.
+  const selected = combined.selected === undefined
+    ? entity.selected === true
+    : combined.selected === true;
   const fallbackRadius = entity.kind === "lead" ? 6 : 4;
   const radiusPx = boundedNumber(combined.radiusPx, selected ? Math.max(7, fallbackRadius) : fallbackRadius, 2, 14);
   const tone = FORWARD_TONES.includes(combined.tone)
@@ -353,7 +364,14 @@ export function createDriveInsightsForwardRenderer(options = {}) {
   if (!root || !documentRoot?.createElement || typeof root.append !== "function") return null;
   const target = options.target || documentRoot.defaultView || globalThis;
   root.classList?.add("drive-insights__forward");
-  const surface = createTelemetryForwardSurface({ root, document: documentRoot });
+  const surface = createTelemetryForwardSurface({
+    root,
+    document: documentRoot,
+    target,
+    // A short viewport scrolls the plot; keep the ego end visible the way the
+    // replay forward view does, without stealing a scroll the reader started.
+    anchorBottom: true,
+  });
   if (!surface) return null;
   const { canvas, ego } = surface.elements;
   const context = canvas.getContext?.("2d") || null;
@@ -501,7 +519,11 @@ export function createDriveInsightsForwardRenderer(options = {}) {
   function resize(rect) {
     if (destroyed) return false;
     lastRect = rect && typeof rect === "object" ? rect : null;
-    return paint();
+    const painted = paint();
+    // Layout handed us a new size; keep the ego end of the plot in view unless
+    // the reader has scrolled away from it.
+    surface.anchorBottom();
+    return painted;
   }
 
   function scene() {
@@ -527,6 +549,7 @@ export function createDriveInsightsForwardRenderer(options = {}) {
     for (const [eventTarget, name, listener] of listeners.splice(0)) {
       eventTarget.removeEventListener?.(name, listener);
     }
+    surface.destroy?.();
     root.replaceChildren?.();
     return true;
   }

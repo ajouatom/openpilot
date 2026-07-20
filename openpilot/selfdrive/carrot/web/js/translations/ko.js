@@ -362,6 +362,7 @@ window.CarrotTranslations.register("ko", {
     web_start_page: "시작 메뉴",
     web_start_page_desc: "Carrot Web 접속 시 처음 열 메뉴를 선택합니다.",
     web_start_page_last: "마지막 탭",
+    mini_hud_section_limit: "구간단속",
     web_mini_hud_enabled: "미니 HUD",
     web_mini_hud_enabled_desc: "좁은 창이나 멀티윈도우에서 간략한 주행 HUD를 표시합니다.",
     web_vision_fullscreen_default: "당근비전 전체화면",

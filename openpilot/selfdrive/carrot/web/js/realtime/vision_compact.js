@@ -12,6 +12,10 @@ window.CarrotVisionCompact = (() => {
     "modelV2", "liveCalibration", "roadCameraState", "lateralPlan",
     "radarState", "carControl", "liveDelay", "liveTorqueParameters", "liveParameters",
   ];
+  // Kept out of OVERLAY_SERVICES so the always-on overlay group does not pay
+  // for a full radar track list. Decoded frames still land in the overlay
+  // state; only the subscription is opt-in via the "tracks" activity channel.
+  const TRACK_SERVICES = ["liveTracks"];
 
   const xyz = [
     ["x", "u16cmlist"],
@@ -19,9 +23,18 @@ window.CarrotVisionCompact = (() => {
     ["z", "i16mmlist"],
   ];
   const velocity = [["x", "i16cmlist"]];
+  // y/v arrive as single-sample lists (see MODEL_LEAD_SCHEMA); the wire shape
+  // is identical to any other f32 list, so "f32list" reads them unchanged.
   const modelLead = [
     ["prob", "f32"],
     ["x", "u16cmlist"],
+    ["y", "f32list"],
+    ["v", "f32list"],
+  ];
+  const radarPoint = [
+    ["trackId", "u32"], ["dRel", "f32"], ["yRel", "f32"], ["vRel", "f32"],
+    ["measured", "bool"],
+    ["radarSource", "enumname", ["frontRadar", "scc", "corner235", "corner180"]],
   ];
   const radarLead = [
     ["dRel", "f32"], ["yRel", "f32"], ["vRel", "f32"], ["aRel", "f32"],
@@ -103,6 +116,8 @@ window.CarrotVisionCompact = (() => {
       ["leadRight", "struct", radarLead], ["leadLeft", "struct", radarLead],
       ["leadsLeft", "structlist", radarLead], ["leadsCenter", "structlist", radarLead],
       ["leadsRight", "structlist", radarLead],
+      ["leadsLeft2", "structlist", radarLead], ["leadsRight2", "structlist", radarLead],
+      ["leadsCutIn", "structlist", radarLead],
     ]]],
     [14, ["carControl", [
       ["latActive", "bool"], ["longActive", "bool"],
@@ -116,6 +131,7 @@ window.CarrotVisionCompact = (() => {
       ["frictionCoefficientFiltered", "f32"], ["calPerc", "i8"],
     ]]],
     [17, ["liveParameters", [["angleOffsetDeg", "f32"], ["steerRatio", "f32"]]]],
+    [18, ["liveTracks", [["points", "structlist", radarPoint]]]],
   ]);
 
   class Cursor {
@@ -274,5 +290,5 @@ window.CarrotVisionCompact = (() => {
     }));
   }
 
-  return { HUD_SERVICES, OVERLAY_SERVICES, decodeFrame, decodeFrames, catalog };
+  return { HUD_SERVICES, OVERLAY_SERVICES, TRACK_SERVICES, decodeFrame, decodeFrames, catalog };
 })();

@@ -249,6 +249,21 @@ def _limited_items(value: Any, limit: int | None = None) -> list[Any]:
   return items
 
 
+def _first_sample(value: Any) -> float | None:
+  """Read sample [0] of a capnp list field, tolerating scalars and empties."""
+  if value is None:
+    return None
+  direct = safe_float(value)
+  if direct is not None:
+    return direct
+  try:
+    for item in value:
+      return safe_float(item)
+  except Exception:
+    return None
+  return None
+
+
 def _update_xyz_payload(payload: dict[str, Any], source: Any) -> dict[str, Any]:
   _fill_list(_ensure_list(payload, "x"), safe_get(source, "x"), limit=33)
   _fill_list(_ensure_list(payload, "y"), safe_get(source, "y"), limit=33)
@@ -277,10 +292,10 @@ def _sync_leads_payloads(target: list[Any], source: Any, limit: int = 4) -> list
   for idx, lead in enumerate(items):
     payload = target[idx] if idx < len(target) and isinstance(target[idx], dict) else {}
     payload["prob"] = safe_float(safe_get(lead, "prob"))
-    payload["x"] = safe_float(safe_get(lead, "x"))
-    payload["y"] = safe_float(safe_get(lead, "y"))
-    payload["v"] = safe_float(safe_get(lead, "v"))
-    payload["a"] = safe_float(safe_get(lead, "a"))
+    # leadsV3 x/y/v/a are List(Float32) predictions (t = 0..10s), not scalars.
+    # safe_float() on the list yields None, which silently emptied every lead.
+    for name in ("x", "y", "v", "a"):
+      payload[name] = _first_sample(safe_get(lead, name))
     if idx < len(target):
       target[idx] = payload
     else:
@@ -433,9 +448,8 @@ def _build_radar_state(service: Any, previous: dict[str, Any] | None = None) -> 
   p["leadTwo"] = _radar_lead(safe_get(service, "leadTwo"))
   p["leadLeft"] = _radar_lead(safe_get(service, "leadLeft"))
   p["leadRight"] = _radar_lead(safe_get(service, "leadRight"))
-  _sync_radar_payloads(_ensure_list(p, "leadsLeft"), safe_get(service, "leadsLeft"), limit=6)
-  _sync_radar_payloads(_ensure_list(p, "leadsCenter"), safe_get(service, "leadsCenter"), limit=6)
-  _sync_radar_payloads(_ensure_list(p, "leadsRight"), safe_get(service, "leadsRight"), limit=6)
+  for name in ("leadsLeft", "leadsCenter", "leadsRight", "leadsLeft2", "leadsRight2", "leadsCutIn"):
+    _sync_radar_payloads(_ensure_list(p, name), safe_get(service, name), limit=6)
   return p
 
 

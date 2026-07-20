@@ -23,6 +23,9 @@ RAW_OPTIONAL_SERVICES: tuple[str, ...] = (
   "peripheralState",
   "wideRoadCameraState",
   "carControl",
+  # Per-target radar tracks. Requested only while the Drive Insights forward
+  # view is open, so the device opens this socket on demand rather than always.
+  "liveTracks",
 )
 
 DEFAULT_RAW_SERVICES: tuple[str, ...] = RAW_CORE_SERVICES + RAW_OPTIONAL_SERVICES
