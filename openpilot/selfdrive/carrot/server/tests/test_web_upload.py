@@ -34,6 +34,16 @@ def test_carrot_runtime_contains_no_legacy_ftp_code():
   assert findings == []
 
 
+def test_carrot_man_sends_diagnostics_to_dsm_and_carrot_logs():
+  carrot_man = (Path(__file__).resolve().parents[2] / "carrot_man.py").read_text(encoding="utf-8")
+  assert "def send_tmux_web(" in carrot_man
+  assert "def send_tmux_carrot_logs(" in carrot_man
+  assert 'self.send_tmux_carrot_logs("onroad", send_settings = True)' in carrot_man
+  assert "self.send_tmux_carrot_logs(pending_tmux_reason, send_settings = False)" in carrot_man
+  assert 'self.send_tmux_carrot_logs("tmux_send")' in carrot_man
+  assert "using tmux web fallback" not in carrot_man
+
+
 def test_web_upload_settings_support_legacy_values_and_environment_override(monkeypatch):
   clear_upload_env(monkeypatch)
   assert web_upload.web_upload_settings({
@@ -72,6 +82,13 @@ def test_tmux_target_falls_back_to_direct_web_endpoint_without_token(monkeypatch
   clear_upload_env(monkeypatch)
   monkeypatch.setenv("CARROT_TMUX_WEB_UPLOAD_URL", "https://tmux.example/upload/")
   assert web_upload.tmux_web_target({}) == ("https://tmux.example/upload", {})
+
+
+def test_carrot_logs_target_is_independent_from_dsm_token(monkeypatch):
+  clear_upload_env(monkeypatch)
+  monkeypatch.setenv("CARROT_WEB_UPLOAD_TOKEN", "dsm-token")
+  monkeypatch.setenv("CARROT_TMUX_WEB_UPLOAD_URL", "https://tmux.example/upload/")
+  assert web_upload.carrot_logs_web_target() == ("https://tmux.example/upload", {})
 
 
 def test_sync_session_is_issued_automatically_from_device_metadata():
@@ -189,7 +206,8 @@ def test_web_settings_migrate_previous_upload_keys():
 
 @pytest.mark.parametrize("previous_url", [
   "https://op.wjcloud.kr",
-  "https://upload.shind0.synology.me",
+  "https://shind0.synology.me",
+  "https://SHIND0.synology.me",
 ])
 def test_web_settings_migrate_previous_default_server(previous_url):
   settings = web_settings.sanitize_web_settings({"web_upload_url": previous_url})

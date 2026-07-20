@@ -10,9 +10,15 @@ upload session automatically using its Dongle ID, and the server binds that
 session to the Dongle ID and source IP. The same server handles dashcam files
 and tmux diagnostics.
 
+Tmux diagnostics are also sent independently to
+`https://tmux.carrotpilot.app/upload`, which creates the Discord `carrot_logs`
+forum entry. The automatic onroad report includes both `tmux.log` and
+`toggle_values.json`; exception and manual reports include the tmux log. A DSM
+failure does not redirect or suppress this independent Carrot Logs copy.
+
 In Carrot Web, **Tools > Web settings > Web upload** contains only:
 
-- Upload server (default: `https://shind0.synology.me`)
+- Upload server (default: `https://upload.shind0.synology.me`)
 - Test connection
 
 An operator may override the base URL with `CARROT_WEB_UPLOAD_URL`. The
@@ -56,7 +62,7 @@ The receiver and hardened Container Manager configuration live in
 proxy:
 
 1. Run the container on loopback `127.0.0.1:18080`.
-2. Proxy `https://shind0.synology.me:443` to
+2. Proxy `https://upload.shind0.synology.me:443` to
    `http://127.0.0.1:18080` and assign a trusted certificate.
 3. Verify public health, automatic session creation, a real segment upload,
    exact returned file sizes, completion manifest, and a tmux upload.
