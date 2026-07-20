@@ -315,6 +315,26 @@
       "expected": "stationary",
       "target_track_ids": [41, 48],
       "scene": "Rainy night stationary queue approached from 99 m"
+    },
+    {
+      "id": "santafe-d3-6-left-cutin",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002d3--74e5ed8754--6/rlog.zst",
+      "source": "front+corner",
+      "window": [41.3, 43.3],
+      "expected": "detect",
+      "target_track_ids": [52, 1018],
+      "scene": "Close left vehicle enters while a center lead remains active"
+    },
+    {
+      "id": "santafe-d3-7-adjacent-left",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002d3--74e5ed8754--7/rlog.zst",
+      "source": "front+corner",
+      "window": [19.5, 21.0],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [44, 1011],
+      "scene": "Left adjacent vehicle remains in its lane"
     }
   ]
 }
