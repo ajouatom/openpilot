@@ -315,17 +315,11 @@ def test_blind_spot_segment_vectorization_preserves_fill_outline_order(model_ren
     assert outline[3] == 2.0
 
 
-@pytest.mark.parametrize("mask", range(16))
-def test_blind_spot_state_mask_uses_stable_bits(model_renderer_module, mask):
-  module = model_renderer_module
-  state = tuple(bool(mask & (1 << bit)) for bit in range(4))
-  assert module.ModelRenderer._blind_spot_state_mask_carrot(*state) == mask
-
-
-def test_blind_spot_state_valid_distinguishes_inactive_from_missing_input(model_renderer_module):
+def test_blind_spot_invalid_input_skips_draw(model_renderer_module):
   module = model_renderer_module
   renderer = object.__new__(module.ModelRenderer)
-  car_state = SimpleNamespace(leftBlindspot=False, rightBlindspot=False, vEgo=10.0)
+  renderer._carrot_lane_barrier_vertices = [np.ones((4, 2), dtype=np.float32), np.ones((4, 2), dtype=np.float32)]
+  car_state = SimpleNamespace(leftBlindspot=True, rightBlindspot=False, vEgo=10.0)
   radar_state = SimpleNamespace(
     leadLeft=SimpleNamespace(status=False, dRel=100.0),
     leadRight=SimpleNamespace(status=False, dRel=100.0),
@@ -343,7 +337,12 @@ def test_blind_spot_state_valid_distinguishes_inactive_from_missing_input(model_
       self.valid = dict.fromkeys(self, True)
 
   sm = BlindSpotSubMaster()
-  assert renderer._draw_blind_spot_carrot(sm) == (0, True)
+  draws = []
+  renderer._update_blind_spot_barriers_carrot = lambda *_args, **_kwargs: None
+  renderer._draw_blind_spot_segments_carrot = lambda *_args: draws.append("left")
+  renderer._draw_blind_spot_carrot(sm)
+  assert draws == ["left"]
 
   sm.valid["radarState"] = False
-  assert renderer._draw_blind_spot_carrot(sm) == (0, False)
+  renderer._draw_blind_spot_carrot(sm)
+  assert draws == ["left"]

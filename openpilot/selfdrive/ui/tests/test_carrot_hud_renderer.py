@@ -159,13 +159,19 @@ def test_direct_hud_param_reads_are_isolated_to_refresh():
   ]
 
 
-def test_hud_render_timings_reset(hud_module):
-  module, _ = hud_module
-  timings = module.HudRenderTimings(1, 2, 3, 4, 5, 6, 7, True)
+def test_hud_renderer_has_no_subsection_profiling():
+  tree = ast.parse(HUD_RENDERER_PATH.read_text(encoding="utf-8"))
 
-  timings.reset()
-
-  assert timings == module.HudRenderTimings()
+  assert not any(
+    isinstance(node, ast.ClassDef) and node.name == "HudRenderTimings"
+    for node in ast.walk(tree)
+  )
+  assert not any(
+    isinstance(node, ast.Call)
+    and isinstance(node.func, ast.Attribute)
+    and node.func.attr == "monotonic_ns"
+    for node in ast.walk(tree)
+  )
 
 
 def test_initial_cruise_gap_preserves_legacy_fallback(hud_module):
@@ -288,10 +294,9 @@ def test_speed_limit_snapshot_reads_submaster_once(hud_module):
   assert fake_ui_state.sm.calls == 1
 
 
-def test_speed_panel_reuses_one_snapshot_and_records_subsection_timings(hud_module, monkeypatch):
+def test_speed_panel_reuses_one_snapshot(hud_module, monkeypatch):
   module, _ = hud_module
   renderer = object.__new__(module.HudRenderer)
-  renderer._render_timings = module.HudRenderTimings()
   renderer._blink_timer = 15
   renderer._disp_timer = 63
   speed_limit_info = (80, 2, 90)
@@ -306,8 +311,6 @@ def test_speed_panel_reuses_one_snapshot_and_records_subsection_timings(hud_modu
   monkeypatch.setattr(renderer, "_draw_carrot_speed_limit_box", lambda bx, by, info: (calls.append("limit"), snapshots.append(info)))
   monkeypatch.setattr(renderer, "_draw_carrot_device_state", lambda bx, by: calls.append("device"))
   monkeypatch.setattr(renderer, "_draw_turn_info_hud", lambda rect: calls.append("navigation"))
-  timestamps = iter((0, 10_000_000, 13_000_000, 20_000_000))
-  monkeypatch.setattr(module.time, "monotonic_ns", lambda: next(timestamps))
 
   renderer._draw_set_speed_carrot(module.rl.Rectangle(10, 20, 1000, 600))
 
@@ -316,9 +319,6 @@ def test_speed_panel_reuses_one_snapshot_and_records_subsection_timings(hud_modu
   assert snapshots[1] is speed_limit_info
   assert renderer._blink_timer == 0
   assert renderer._disp_timer == 0
-  assert renderer._render_timings.speed_time_millis == pytest.approx(10.0)
-  assert renderer._render_timings.status_time_millis == pytest.approx(3.0)
-  assert renderer._render_timings.navigation_time_millis == pytest.approx(7.0)
 
 
 def test_device_info_updates_only_on_first_frame_or_new_service_frame(hud_module, monkeypatch):
@@ -542,10 +542,9 @@ def test_date_text_formats_only_when_minute_key_changes(hud_module, monkeypatch)
   assert len(draw_calls) == 8
 
 
-def test_render_resets_and_publishes_exact_frame_timings(hud_module, monkeypatch):
+def test_render_draws_each_hud_section_in_order(hud_module, monkeypatch):
   module, _ = hud_module
   renderer = object.__new__(module.HudRenderer)
-  renderer._render_timings = module.HudRenderTimings(99, 99, 99, 99, 99, 99, 99, True)
   renderer.is_cruise_available = False
   renderer._show_plot_mode = 6
   renderer._font_display = object()
@@ -561,13 +560,6 @@ def test_render_resets_and_publishes_exact_frame_timings(hud_module, monkeypatch
   monkeypatch.setattr(renderer, "_draw_cruise_speed_animation", lambda rect: calls.append("animation"))
   monkeypatch.setattr(module.rl, "draw_rectangle_gradient_v", lambda *args: calls.append("header"))
   monkeypatch.setattr(module.time, "monotonic", lambda: 12.5)
-  timestamps = iter((
-    0, 2_000_000,
-    10_000_000, 13_000_000,
-    20_000_000, 25_000_000,
-    30_000_000, 37_000_000,
-  ))
-  monkeypatch.setattr(module.time, "monotonic_ns", lambda: next(timestamps))
 
   renderer._render(module.rl.Rectangle(0, 0, 1000, 600))
 
@@ -580,13 +572,3 @@ def test_render_resets_and_publishes_exact_frame_timings(hud_module, monkeypatch
     "tpms",
     "animation",
   ]
-  assert renderer._render_timings == module.HudRenderTimings(
-    header_time_millis=2.0,
-    speed_time_millis=0.0,
-    status_time_millis=0.0,
-    navigation_time_millis=0.0,
-    button_time_millis=3.0,
-    plot_time_millis=5.0,
-    aux_time_millis=7.0,
-    valid=True,
-  )

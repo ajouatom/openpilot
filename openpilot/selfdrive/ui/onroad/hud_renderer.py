@@ -88,28 +88,6 @@ class SetSpeedOverrideState:
   force_persist: bool
 
 
-@dataclass
-class HudRenderTimings:
-  header_time_millis: float = 0.0
-  speed_time_millis: float = 0.0
-  status_time_millis: float = 0.0
-  navigation_time_millis: float = 0.0
-  button_time_millis: float = 0.0
-  plot_time_millis: float = 0.0
-  aux_time_millis: float = 0.0
-  valid: bool = False
-
-  def reset(self) -> None:
-    self.header_time_millis = 0.0
-    self.speed_time_millis = 0.0
-    self.status_time_millis = 0.0
-    self.navigation_time_millis = 0.0
-    self.button_time_millis = 0.0
-    self.plot_time_millis = 0.0
-    self.aux_time_millis = 0.0
-    self.valid = False
-
-
 class SetSpeedOverride:
 
   def compute(self, sm, set_speed_kph: float) -> SetSpeedOverrideState:
@@ -212,7 +190,6 @@ class HudRenderer(Widget):
     self._disk_usage_text = "100%"
     self._voltage_text = "0.0V"
     self._plot_renderer = None
-    self._render_timings = HudRenderTimings()
     self._round_box_rect = rl.Rectangle(0.0, 0.0, 0.0, 0.0)
 
     self._hud_params_next_refresh_time = 0.0
@@ -224,10 +201,6 @@ class HudRenderer(Widget):
     self._date_time_minute_key: tuple[int, int, int, int, int] | None = None
     self._date_time_text = ""
     self._date_text = ""
-
-  @property
-  def render_timings(self) -> HudRenderTimings:
-    return self._render_timings
 
   def _refresh_hud_params(self, now: float) -> None:
     if now < self._hud_params_next_refresh_time:
@@ -293,11 +266,9 @@ class HudRenderer(Widget):
 
   def _render(self, rect: rl.Rectangle) -> None:
     """Render HUD elements to the screen."""
-    self._render_timings.reset()
     self._refresh_hud_params(time.monotonic())
 
     # Draw the header background
-    header_start = time.monotonic_ns()
     rl.draw_rectangle_gradient_v(
       int(rect.x),
       int(rect.y),
@@ -306,35 +277,23 @@ class HudRenderer(Widget):
       COLORS.HEADER_GRADIENT_START,
       COLORS.HEADER_GRADIENT_END,
     )
-    header_end = time.monotonic_ns()
-    self._render_timings.header_time_millis = (header_end - header_start) * 1e-6
 
     if self.is_cruise_available:
       self._draw_set_speed_carrot(rect)
 
     #self._draw_current_speed(rect)
 
-    button_start = time.monotonic_ns()
     button_x = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
     button_y = rect.y + UI_CONFIG.border_size
     self._exp_button.render(rl.Rectangle(button_x, button_y, UI_CONFIG.button_size, UI_CONFIG.button_size))
-    button_end = time.monotonic_ns()
-    self._render_timings.button_time_millis = (button_end - button_start) * 1e-6
 
-    plot_start = time.monotonic_ns()
     if self._plot_renderer is None:
       self._plot_renderer = PlotRenderer()
     self._plot_renderer.draw(rect, self._font_display, self._show_plot_mode)
-    plot_end = time.monotonic_ns()
-    self._render_timings.plot_time_millis = (plot_end - plot_start) * 1e-6
 
-    aux_start = time.monotonic_ns()
     self._draw_date_time(rect)
     self._draw_tpms_top_right(rect)
     self._draw_cruise_speed_animation(rect)
-    render_end = time.monotonic_ns()
-    self._render_timings.aux_time_millis = (render_end - aux_start) * 1e-6
-    self._render_timings.valid = True
 
   def user_interacting(self) -> bool:
     return self._exp_button.is_pressed
@@ -1337,8 +1296,6 @@ class HudRenderer(Widget):
       )
 
   def _draw_set_speed_carrot(self, rect: rl.Rectangle) -> None:
-    speed_start = time.monotonic_ns()
-
     self._blink_timer = (self._blink_timer + 1) % 16
     self._disp_timer = (self._disp_timer + 1) % 64
 
@@ -1350,19 +1307,12 @@ class HudRenderer(Widget):
     self._draw_carrot_main_background(bx, by, speed_limit_info)
     self._draw_carrot_traffic_light(bx, by)
     self._draw_carrot_speed_panel(bx, by)
-    speed_end = time.monotonic_ns()
 
     self._draw_carrot_lower_status(bx, by)
     self._draw_carrot_speed_limit_box(bx, by, speed_limit_info)
     self._draw_carrot_device_state(bx, by)
-    status_end = time.monotonic_ns()
 
     self._draw_turn_info_hud(rect)
-    navigation_end = time.monotonic_ns()
-
-    self._render_timings.speed_time_millis = (speed_end - speed_start) * 1e-6
-    self._render_timings.status_time_millis = (status_end - speed_end) * 1e-6
-    self._render_timings.navigation_time_millis = (navigation_end - status_end) * 1e-6
 
 
 
