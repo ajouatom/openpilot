@@ -1,6 +1,5 @@
 import math
 import colorsys
-import time
 import numpy as np
 import pyray as rl
 from openpilot.cereal import messaging, car, log
@@ -20,11 +19,6 @@ MAX_DRAW_DISTANCE = 100.0
 CARROT_PARAM_REFRESH_INTERVAL = 1.0
 
 LaneChangeState = log.LaneChangeState
-
-BLIND_SPOT_LEFT_MASK = 1 << 0
-BLIND_SPOT_RIGHT_MASK = 1 << 1
-BLIND_SPOT_LEFT_ASSIST_MASK = 1 << 2
-BLIND_SPOT_RIGHT_ASSIST_MASK = 1 << 3
 
 THROTTLE_COLORS = [
   rl.Color(13, 248, 122, 102),   # HSLF(148/360, 0.94, 0.51, 0.4)
@@ -67,26 +61,6 @@ class RadarLeadInfo:
   has_future_point: bool = False
 
 
-@dataclass
-class ModelRenderTimings:
-  path_time_millis: float = 0.0
-  lane_time_millis: float = 0.0
-  blind_spot_time_millis: float = 0.0
-  radar_time_millis: float = 0.0
-  valid: bool = False
-  blind_spot_state_mask: int = 0
-  blind_spot_state_valid: bool = False
-
-  def reset(self) -> None:
-    self.path_time_millis = 0.0
-    self.lane_time_millis = 0.0
-    self.blind_spot_time_millis = 0.0
-    self.radar_time_millis = 0.0
-    self.valid = False
-    self.blind_spot_state_mask = 0
-    self.blind_spot_state_valid = False
-
-
 class ModelRenderer(Widget):
   def __init__(self):
     super().__init__()
@@ -104,7 +78,6 @@ class ModelRenderer(Widget):
     self._lane_lines = [ModelPoints() for _ in range(4)]
     self._road_edges = [ModelPoints() for _ in range(2)]
     self._acceleration_x = np.empty((0,), dtype=np.float32)
-    self._render_timings = ModelRenderTimings()
 
     # Transform matrix (3x3 for car space to screen space)
     self._car_space_transform = np.zeros((3, 3), dtype=np.float32)
@@ -130,12 +103,7 @@ class ModelRenderer(Widget):
     self._car_space_transform = transform.astype(np.float32)
     self._transform_dirty = True
 
-  @property
-  def render_timings(self) -> ModelRenderTimings:
-    return self._render_timings
-
   def _render(self, rect: rl.Rectangle):
-    self._render_timings.reset()
     sm = ui_state.sm
 
     # Check if data is up-to-date
@@ -177,23 +145,10 @@ class ModelRenderer(Widget):
     self._draw_carrot_overlays(sm)
 
   def _draw_carrot_overlays(self, sm) -> None:
-    path_start = time.monotonic_ns()
     self._draw_path_carrot(sm)
-    lane_start = time.monotonic_ns()
     self._draw_lane_lines_carrot(sm)
-    blind_spot_start = time.monotonic_ns()
-    blind_spot_state_mask, blind_spot_state_valid = self._draw_blind_spot_carrot(sm)
-    radar_start = time.monotonic_ns()
+    self._draw_blind_spot_carrot(sm)
     self._draw_radar_info_carrot(sm)
-    render_end = time.monotonic_ns()
-
-    self._render_timings.path_time_millis = (lane_start - path_start) * 1e-6
-    self._render_timings.lane_time_millis = (blind_spot_start - lane_start) * 1e-6
-    self._render_timings.blind_spot_time_millis = (radar_start - blind_spot_start) * 1e-6
-    self._render_timings.radar_time_millis = (render_end - radar_start) * 1e-6
-    self._render_timings.valid = True
-    self._render_timings.blind_spot_state_mask = blind_spot_state_mask
-    self._render_timings.blind_spot_state_valid = blind_spot_state_valid
 
   def _update_raw_points(self, model):
     """Update raw 3D points from model data"""
@@ -1174,28 +1129,10 @@ class ModelRenderer(Widget):
     return left_blindspot, right_blindspot, left_assist, right_assist
 
 
-  @staticmethod
-  def _blind_spot_state_mask_carrot(
-    left_blindspot: bool,
-    right_blindspot: bool,
-    left_assist: bool,
-    right_assist: bool,
-  ) -> int:
-    return (
-      (BLIND_SPOT_LEFT_MASK if left_blindspot else 0) |
-      (BLIND_SPOT_RIGHT_MASK if right_blindspot else 0) |
-      (BLIND_SPOT_LEFT_ASSIST_MASK if left_assist else 0) |
-      (BLIND_SPOT_RIGHT_ASSIST_MASK if right_assist else 0)
-    )
-
-
-  def _draw_blind_spot_carrot(self, sm) -> tuple[int, bool]:
+  def _draw_blind_spot_carrot(self, sm) -> None:
     input_services = ("modelV2", "carState", "radarState")
     if not all(sm.valid[service] for service in input_services):
-      return 0, False
-    # Match the actual draw gate. A temporarily non-alive service can still
-    # render its last valid sample, so that executed branch remains attributable.
-    state_valid = True
+      return
 
     car_state = sm['carState']
     radar_state = sm['radarState']
@@ -1204,11 +1141,8 @@ class ModelRenderer(Widget):
     left_blindspot, right_blindspot, left_assist, right_assist = self._blind_spot_draw_state_carrot(
       car_state, radar_state, meta,
     )
-    state_mask = self._blind_spot_state_mask_carrot(
-      left_blindspot, right_blindspot, left_assist, right_assist,
-    )
     if not (left_blindspot or right_blindspot or left_assist or right_assist):
-      return state_mask, state_valid
+      return
 
     warn_color = rl.Color(255, 215, 0, 150)
     assist_color = rl.Color(0, 204, 0, 150)
@@ -1227,8 +1161,6 @@ class ModelRenderer(Widget):
       self._draw_blind_spot_segments_carrot(self._carrot_lane_barrier_vertices[1], warn_color)
     elif right_assist:
       self._draw_blind_spot_segments_carrot(self._carrot_lane_barrier_vertices[1], assist_color)
-
-    return state_mask, state_valid
 
 
   def _draw_radar_info_carrot(self, sm):

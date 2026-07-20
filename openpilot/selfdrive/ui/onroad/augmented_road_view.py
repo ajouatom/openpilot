@@ -144,23 +144,6 @@ class AugmentedRoadView(CameraView):
     ud.hudTimeMillis = hud_ms
     ud.alertTimeMillis = alert_ms
     ud.extrasTimeMillis = extras_ms
-    model_timings = self.model_renderer.render_timings
-    ud.modelPathTimeMillis = model_timings.path_time_millis
-    ud.modelLaneTimeMillis = model_timings.lane_time_millis
-    ud.modelBlindSpotTimeMillis = model_timings.blind_spot_time_millis
-    ud.modelRadarTimeMillis = model_timings.radar_time_millis
-    ud.modelTimingValid = model_timings.valid
-    ud.modelBlindSpotStateMask = model_timings.blind_spot_state_mask
-    ud.modelBlindSpotStateValid = model_timings.blind_spot_state_valid
-    hud_timings = self._hud_renderer.render_timings
-    ud.hudHeaderTimeMillis = hud_timings.header_time_millis
-    ud.hudSpeedTimeMillis = hud_timings.speed_time_millis
-    ud.hudStatusTimeMillis = hud_timings.status_time_millis
-    ud.hudNavigationTimeMillis = hud_timings.navigation_time_millis
-    ud.hudButtonTimeMillis = hud_timings.button_time_millis
-    ud.hudPlotTimeMillis = hud_timings.plot_time_millis
-    ud.hudAuxTimeMillis = hud_timings.aux_time_millis
-    ud.hudTimingValid = hud_timings.valid
     ud.plotMode = self._plot_mode
     ud.recording = gui_app.is_recording()
     self._pm.send('uiDebug', msg)

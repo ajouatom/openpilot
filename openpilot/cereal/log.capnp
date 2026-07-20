@@ -2376,23 +2376,22 @@ struct UIDebug {
   extrasTimeMillis      @6 :Float32;
   plotMode              @7 :UInt8;   # ShowPlotMode (~2초 스로틀 캐시, 0=off)
   recording             @8 :Bool;    # 화면 녹화 중 여부
-  modelPathTimeMillis      @9 :Float32;
-  modelLaneTimeMillis      @10 :Float32;
-  modelBlindSpotTimeMillis @11 :Float32;
-  modelRadarTimeMillis     @12 :Float32;
-  modelTimingValid         @13 :Bool;
-  hudHeaderTimeMillis      @14 :Float32;
-  hudSpeedTimeMillis       @15 :Float32;
-  hudStatusTimeMillis      @16 :Float32;
-  hudNavigationTimeMillis  @17 :Float32;
-  hudButtonTimeMillis      @18 :Float32;
-  hudPlotTimeMillis        @19 :Float32;
-  hudAuxTimeMillis         @20 :Float32;
-  hudTimingValid           @21 :Bool;
-  # bit 0=left BSM, bit 1=right BSM, bit 2=left assist, bit 3=right assist
-  modelBlindSpotStateMask  @22 :UInt8;
-  # false distinguishes unavailable inputs/legacy logs from a valid inactive mask
-  modelBlindSpotStateValid @23 :Bool;
+  # 상세 프로파일링 필드는 과거 로그와의 호환성을 위해 번호와 타입만 보존한다.
+  modelPathTimeMillisDEPRECATED       @9 :Float32;
+  modelLaneTimeMillisDEPRECATED       @10 :Float32;
+  modelBlindSpotTimeMillisDEPRECATED  @11 :Float32;
+  modelRadarTimeMillisDEPRECATED      @12 :Float32;
+  modelTimingValidDEPRECATED          @13 :Bool;
+  hudHeaderTimeMillisDEPRECATED       @14 :Float32;
+  hudSpeedTimeMillisDEPRECATED        @15 :Float32;
+  hudStatusTimeMillisDEPRECATED       @16 :Float32;
+  hudNavigationTimeMillisDEPRECATED   @17 :Float32;
+  hudButtonTimeMillisDEPRECATED       @18 :Float32;
+  hudPlotTimeMillisDEPRECATED         @19 :Float32;
+  hudAuxTimeMillisDEPRECATED          @20 :Float32;
+  hudTimingValidDEPRECATED            @21 :Bool;
+  modelBlindSpotStateMaskDEPRECATED   @22 :UInt8;
+  modelBlindSpotStateValidDEPRECATED  @23 :Bool;
 }
 
 struct ManagerState {
