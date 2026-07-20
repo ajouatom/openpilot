@@ -6,6 +6,7 @@ export const DRIVE_INSIGHTS_GRAPH_METRICS = Object.freeze([
     label: "Speed",
     unit: "km/h",
     digits: 1,
+    minimumSpan: 20,
     value(snapshot) {
       const speedMps = finiteNumber(snapshot?.ego?.speedMps);
       return speedMps === null ? null : speedMps * 3.6;
@@ -16,6 +17,7 @@ export const DRIVE_INSIGHTS_GRAPH_METRICS = Object.freeze([
     label: "Steering",
     unit: "°",
     digits: 2,
+    minimumSpan: 20,
     value(snapshot) { return snapshot?.ego?.steeringAngleDeg; },
   }),
   Object.freeze({
@@ -23,6 +25,7 @@ export const DRIVE_INSIGHTS_GRAPH_METRICS = Object.freeze([
     label: "Acceleration",
     unit: "m/s²",
     digits: 2,
+    minimumSpan: 2,
     value(snapshot) { return snapshot?.ego?.accelMps2; },
   }),
   Object.freeze({
@@ -30,6 +33,7 @@ export const DRIVE_INSIGHTS_GRAPH_METRICS = Object.freeze([
     label: "Lead distance",
     unit: "m",
     digits: 1,
+    minimumSpan: 20,
     value(snapshot) {
       const leads = Array.isArray(snapshot?.leads) ? snapshot.leads : [];
       let nearest = null;
@@ -91,6 +95,7 @@ function graphMetrics(presentation) {
         : `drive_insights_graph_${metric.id}`,
       unit: typeof value.unit === "string" ? value.unit : metric.unit,
       digits,
+      minimumSpan: finiteNumber(value.minimumSpan) ?? metric.minimumSpan ?? 0,
       value: typeof value.value === "function" ? value.value : metric.value,
     });
   });
@@ -117,16 +122,25 @@ export function createDriveInsightsGraphModel(windowValue, options = {}) {
     const numericValues = values.map(({ value }) => value);
     let minimum = numericValues.length ? Math.min(...numericValues) : null;
     let maximum = numericValues.length ? Math.max(...numericValues) : null;
-    if (minimum !== null && maximum !== null && Math.abs(maximum - minimum) < 1e-9) {
-      const padding = Math.max(1, Math.abs(minimum) * 0.05);
-      minimum -= padding;
-      maximum += padding;
+    // Autoscaling to the exact data range turns a steady signal into a wall of
+    // noise, because a 0.2 km/h ripple gets stretched over the full card
+    // height. Hold the axis open to a metric-specific minimum span instead.
+    if (minimum !== null && maximum !== null) {
+      const span = maximum - minimum;
+      const minimumSpan = finiteNumber(metric.minimumSpan) ?? 0;
+      const wanted = Math.max(minimumSpan, 1e-6);
+      if (span < wanted) {
+        const midpoint = (minimum + maximum) / 2;
+        minimum = midpoint - wanted / 2;
+        maximum = midpoint + wanted / 2;
+      }
     }
     return Object.freeze({
       id: metric.id,
       label: metric.label,
       unit: metric.unit,
       digits: metric.digits,
+      minimumSpan: finiteNumber(metric.minimumSpan) ?? 0,
       current: numericValues.length ? numericValues.at(-1) : null,
       minimum,
       maximum,
@@ -183,25 +197,50 @@ function canvasSize(canvas, target) {
   return { width, height, dpr };
 }
 
-function drawMetric(context, canvas, metric, model, card, options, target) {
+const RANGE_SHRINK_RATIO = 0.6;
+const RANGE_SHRINK_STEP = 0.12;
+
+// The window is a moving 10 s slice, so when an old peak scrolls out the raw
+// min/max snaps and the whole trace jumps. Grow the drawn axis immediately but
+// let it contract slowly, so the line moves and the axis mostly does not.
+function stabilizeRange(previous, minimum, maximum) {
+  if (minimum === null || maximum === null) return null;
+  if (!previous) return { minimum, maximum };
+  let nextMinimum = Math.min(previous.minimum, minimum);
+  let nextMaximum = Math.max(previous.maximum, maximum);
+  const wantedSpan = maximum - minimum;
+  const currentSpan = nextMaximum - nextMinimum;
+  if (wantedSpan > 0 && currentSpan > wantedSpan / RANGE_SHRINK_RATIO) {
+    nextMinimum += (minimum - nextMinimum) * RANGE_SHRINK_STEP;
+    nextMaximum += (maximum - nextMaximum) * RANGE_SHRINK_STEP;
+  }
+  return { minimum: nextMinimum, maximum: nextMaximum };
+}
+
+function drawMetric(context, canvas, metric, model, card, options, target, ranges) {
   if (!context) return;
   const { width, height, dpr } = canvasSize(canvas, target);
   context.setTransform?.(dpr, 0, 0, dpr, 0, 0);
   context.clearRect?.(0, 0, width, height);
   const lineColor = cssValue(options, card, "--graph-color");
-  if (!lineColor || metric.values.length < 2 || metric.minimum === null || metric.maximum === null) return;
+  if (!lineColor || metric.values.length < 2 || metric.minimum === null || metric.maximum === null) {
+    if (!metric.values.length) ranges?.delete(metric.id);
+    return;
+  }
+  const bounds = stabilizeRange(ranges?.get(metric.id), metric.minimum, metric.maximum);
+  ranges?.set(metric.id, bounds);
   const start = finiteNumber(model?.startTimestampMs) ?? metric.values[0].timestampMs;
   const end = finiteNumber(model?.endTimestampMs) ?? metric.values.at(-1).timestampMs;
   const duration = Math.max(1, end - start);
-  const range = Math.max(1e-9, metric.maximum - metric.minimum);
+  const range = Math.max(1e-9, bounds.maximum - bounds.minimum);
   context.strokeStyle = lineColor;
   context.lineWidth = metric.id === "speed" ? 1.8 : 1.6;
-  context.lineJoin = "miter";
-  context.lineCap = "butt";
+  context.lineJoin = "round";
+  context.lineCap = "round";
   context.beginPath?.();
   metric.values.forEach((sample, index) => {
     const x = Math.max(0, Math.min(width, (sample.timestampMs - start) / duration * width));
-    const y = height - ((sample.value - metric.minimum) / range * Math.max(1, height - 4)) - 2;
+    const y = height - ((sample.value - bounds.minimum) / range * Math.max(1, height - 4)) - 2;
     if (index === 0) context.moveTo?.(x, y);
     else context.lineTo?.(x, y);
   });
@@ -225,6 +264,7 @@ export function createDriveInsightsGraphRenderer(options = {}) {
     context: card.canvas.getContext?.("2d") || null,
   }]));
   let model = createDriveInsightsGraphModel(null, { presentation: options.presentation });
+  const ranges = new Map();
   let destroyed = false;
 
   root.classList?.add("drive-insights__graph");
@@ -241,7 +281,7 @@ export function createDriveInsightsGraphRenderer(options = {}) {
       const card = cards.get(metric.id);
       if (!card) continue;
       card.output.textContent = metric.current === null ? "--" : metric.current.toFixed(metric.digits);
-      drawMetric(card.context, card.canvas, metric, model, card.card, options, target);
+      drawMetric(card.context, card.canvas, metric, model, card.card, options, target, ranges);
     }
     return true;
   }
@@ -275,6 +315,7 @@ export function createDriveInsightsGraphRenderer(options = {}) {
   function destroy() {
     if (destroyed) return false;
     destroyed = true;
+    ranges.clear();
     cards.clear();
     root.replaceChildren?.();
     return true;

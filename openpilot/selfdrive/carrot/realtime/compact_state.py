@@ -21,9 +21,27 @@ MODEL_VELOCITY_SCHEMA = (
   ("x", "i16_cm_list"),
 )
 
+# Only sample [0] of each leadsV3 track is drawn, so y/v ride along as
+# first-element lists instead of the full 6-entry prediction arrays. Without
+# them the browser cannot place a lead laterally (schema.js drops any lead
+# whose y is missing) and Drive Insights renders no lead distance at all.
 MODEL_LEAD_SCHEMA = (
   ("prob", "f32"),
   ("x", "u16_cm_list"),
+  ("y", "f32_first_list"),
+  ("v", "f32_first_list"),
+)
+
+# liveTracks (Car.RadarData) points. This is the only source that tells the
+# browser which radar saw a target, so Drive Insights needs it to separate
+# front / SCC / corner returns instead of showing SCC leads alone.
+RADAR_POINT_SCHEMA = (
+  ("trackId", "u32"),
+  ("dRel", "f32"),
+  ("yRel", "f32"),
+  ("vRel", "f32"),
+  ("measured", "bool"),
+  ("radarSource", ("enum", ("frontRadar", "scc", "corner235", "corner180"))),
 )
 
 RADAR_LEAD_SCHEMA = (
@@ -196,6 +214,11 @@ SERVICE_SCHEMAS: dict[str, tuple[int, tuple[tuple[Any, ...], ...]]] = {
     ("leadsLeft", ("struct_list", RADAR_LEAD_SCHEMA)),
     ("leadsCenter", ("struct_list", RADAR_LEAD_SCHEMA)),
     ("leadsRight", ("struct_list", RADAR_LEAD_SCHEMA)),
+    # Second-adjacent lanes and cut-in candidates. Usually empty (1 byte each),
+    # so they cost nothing until targets actually appear there.
+    ("leadsLeft2", ("struct_list", RADAR_LEAD_SCHEMA)),
+    ("leadsRight2", ("struct_list", RADAR_LEAD_SCHEMA)),
+    ("leadsCutIn", ("struct_list", RADAR_LEAD_SCHEMA)),
   )),
   "carControl": (14, (
     ("latActive", "bool"),
@@ -220,6 +243,9 @@ SERVICE_SCHEMAS: dict[str, tuple[int, tuple[tuple[Any, ...], ...]]] = {
     ("angleOffsetDeg", "f32"),
     ("steerRatio", "f32"),
   )),
+  "liveTracks": (18, (
+    ("points", ("struct_list", RADAR_POINT_SCHEMA)),
+  )),
 }
 
 CARROT_STATE_SERVICES = tuple(SERVICE_SCHEMAS.keys())
@@ -234,6 +260,9 @@ COMPACT_SERVICE_INTERVALS = {
   "longitudinalPlan": 0.05,
   "carControl": 0.03,
   "radarState": 0.05,
+  # A full track list is far larger than a lead struct, and it only feeds the
+  # Drive Insights forward view, so it runs at half the radarState cadence.
+  "liveTracks": 0.1,
   "lateralPlan": 0.05,
   "carrotMan": 0.1,
   "roadCameraState": 0.25,

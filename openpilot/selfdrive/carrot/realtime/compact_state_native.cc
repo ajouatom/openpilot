@@ -206,6 +206,29 @@ void append_model_leads(std::string &out, const DynamicReader &reader) {
     const auto lead = list[i].as<capnp::DynamicStruct>();
     append_f32(out, lead, "prob");
     append_quantized_list_value(out, find_value(lead, "x"), 100.0f, 0, UINT16_MAX, false);
+    // Mirrors MODEL_LEAD_SCHEMA in compact_state.py: sample [0] only.
+    append_first_f32_list(out, lead, "y");
+    append_first_f32_list(out, lead, "v");
+  }
+}
+
+void append_radar_points(std::string &out, const DynamicReader &reader) {
+  const auto value = find_value(reader, "points");
+  if (!value.has_value()) {
+    append_scalar(out, static_cast<uint8_t>(0));
+    return;
+  }
+  const auto list = value->as<capnp::DynamicList>();
+  const uint8_t size = std::min<size_t>(list.size(), UINT8_MAX);
+  append_scalar(out, size);
+  for (uint8_t i = 0; i < size; ++i) {
+    const auto point = list[i].as<capnp::DynamicStruct>();
+    append_u32(out, point, "trackId");
+    append_f32(out, point, "dRel");
+    append_f32(out, point, "yRel");
+    append_f32(out, point, "vRel");
+    append_bool(out, point, "measured");
+    append_enum(out, point, "radarSource");
   }
 }
 
@@ -404,6 +427,9 @@ void encode_radar_state(std::string &out, const DynamicReader &value) {
   append_radar_lead_list(out, value, "leadsLeft");
   append_radar_lead_list(out, value, "leadsCenter");
   append_radar_lead_list(out, value, "leadsRight");
+  append_radar_lead_list(out, value, "leadsLeft2");
+  append_radar_lead_list(out, value, "leadsRight2");
+  append_radar_lead_list(out, value, "leadsCutIn");
 }
 
 void encode_car_control(std::string &out, const DynamicReader &value) {
@@ -432,6 +458,7 @@ uint8_t service_id(const std::string &service) {
   if (service == "liveDelay") return 15;
   if (service == "liveTorqueParameters") return 16;
   if (service == "liveParameters") return 17;
+  if (service == "liveTracks") return 18;
   throw std::invalid_argument("unsupported compact state service");
 }
 
@@ -463,7 +490,7 @@ void encode_service(std::string &out, const std::string &service, const DynamicR
   } else if (service == "liveParameters") {
     append_f32(out, value, "angleOffsetDeg");
     append_f32(out, value, "steerRatio");
-  }
+  } else if (service == "liveTracks") append_radar_points(out, value);
 }
 
 }  // namespace

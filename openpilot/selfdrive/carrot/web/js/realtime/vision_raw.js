@@ -16,7 +16,19 @@ const RAW_STATE_UPDATED_AT = Object.create(null);
 window.CarrotStateUpdatedAt = RAW_STATE_UPDATED_AT;
 const RAW_STATE_RECEIVED_AT_MONOTONIC = Object.create(null);
 window.CarrotStateReceivedAtMonotonic = RAW_STATE_RECEIVED_AT_MONOTONIC;
-const RAW_OVERLAY_HUD_ONLY_SERVICES = new Set(["roadCameraState", "liveDelay", "liveTorqueParameters", "liveParameters"]);
+// Subscribed only while something holds a "tracks" lease, but stored and
+// routed exactly like an overlay service once it arrives.
+const RAW_TRACK_SERVICES = window.CarrotVisionCompact?.TRACK_SERVICES || [];
+const RAW_OVERLAY_HUD_ONLY_SERVICES = new Set([
+  "roadCameraState", "liveDelay", "liveTorqueParameters", "liveParameters",
+  // Drive Insights reads this through the live state provider; the camera
+  // overlay never draws it, so it must not force an overlay repaint.
+  "liveTracks",
+]);
+
+function isOverlayStateService(service) {
+  return RAW_OVERLAY_SERVICES.includes(service) || RAW_TRACK_SERVICES.includes(service);
+}
 const COMPACT_STATE_MODE = "carrot-state-v1";
 let COMPACT_OVERLAY_WS = null;
 let COMPACT_OVERLAY_RETRY_T = null;
@@ -131,6 +143,7 @@ function compactDesiredServices() {
     (COMPACT_OVERLAY_REQUESTED && shouldRunCarrotVisionRealtime())
     || isCarrotDriveDataRequested("overlay")
   ) services.push(...RAW_OVERLAY_SERVICES);
+  if (isCarrotDriveDataRequested("tracks")) services.push(...RAW_TRACK_SERVICES);
   return Array.from(new Set(services));
 }
 
@@ -161,7 +174,7 @@ function applyCompactFrame(service, decoded, options = {}) {
     hudDirty = true;
     applied = true;
   }
-  if (RAW_OVERLAY_SERVICES.includes(service)) {
+  if (isOverlayStateService(service)) {
     if (service === "modelV2") rememberModelFrame(decoded);
     RAW_OVERLAY_STATE[service] = decoded;
     window.CarrotOverlayState = RAW_OVERLAY_STATE;
@@ -199,7 +212,7 @@ function applyCompactFrames(frames, options = {}) {
   for (const frame of list) {
     const service = frame?.service;
     const isHud = RAW_HUD_SERVICES.includes(service);
-    const isOverlay = RAW_OVERLAY_SERVICES.includes(service);
+    const isOverlay = isOverlayStateService(service);
     if (!isHud && !isOverlay) continue;
     if (!applyCompactFrame(service, frame.decoded, {
       render: false,
@@ -606,7 +619,7 @@ function compactOverlayConnect() {
       const frames = window.CarrotVisionCompact?.decodeFrames?.(data)
         || [window.CarrotVisionCompact?.decodeFrame?.(data)].filter(Boolean);
       for (const frame of frames) {
-        if (!frame || (!RAW_HUD_SERVICES.includes(frame.service) && !RAW_OVERLAY_SERVICES.includes(frame.service))) continue;
+        if (!frame || (!RAW_HUD_SERVICES.includes(frame.service) && !isOverlayStateService(frame.service))) continue;
         applyCompactFrame(frame.service, frame.decoded);
       }
       if (!frames.length) return;

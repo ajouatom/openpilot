@@ -362,6 +362,7 @@ window.CarrotTranslations.register("en", {
     web_start_page: "Start menu",
     web_start_page_desc: "Choose which menu opens first when Carrot Web loads.",
     web_start_page_last: "Last tab",
+    mini_hud_section_limit: "SECTION",
     web_mini_hud_enabled: "Mini HUD",
     web_mini_hud_enabled_desc: "Show a compact driving HUD on narrow or multi-window layouts.",
     web_vision_fullscreen_default: "Vision fullscreen",

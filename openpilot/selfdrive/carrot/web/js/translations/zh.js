@@ -362,6 +362,7 @@ window.CarrotTranslations.register("zh", {
     web_start_page: "启动菜单",
     web_start_page_desc: "选择 Carrot Web 加载时首先打开的菜单。",
     web_start_page_last: "上次标签",
+    mini_hud_section_limit: "区间测速",
     web_mini_hud_enabled: "迷你 HUD",
     web_mini_hud_enabled_desc: "在窄窗口或多窗口布局中显示精简驾驶 HUD。",
     web_vision_fullscreen_default: "视觉全屏",

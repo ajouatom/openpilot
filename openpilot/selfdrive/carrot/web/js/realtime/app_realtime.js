@@ -947,7 +947,11 @@ function scheduleCarrotVisionPageReturnConnect(reason = "page return") {
 function syncCarrotRealtimeLifecycle(forceFetch = false) {
   const nextHudActive = shouldRunCarrotHudRealtime();
   const nextDriveDataActive = shouldRunCarrotDriveDataRealtime();
-  const nextDriveDataActivitySignature = `${isCarrotDriveDataRequested("hud") ? 1 : 0}|${isCarrotDriveDataRequested("overlay") ? 1 : 0}`;
+  const nextDriveDataActivitySignature = [
+    isCarrotDriveDataRequested("hud") ? 1 : 0,
+    isCarrotDriveDataRequested("overlay") ? 1 : 0,
+    isCarrotDriveDataRequested("tracks") ? 1 : 0,
+  ].join("|");
   const nextVisionWanted = isCarrotPageVisible()
     && isCarrotVisionContentRuntimeWanted()
     && isCarrotVisionActive();
