@@ -137,6 +137,13 @@ def test_web_api_url_quotes_every_path_component():
   assert web_upload.api_url(
     "https://upload.example/",
     "upload",
+    "TEST device-id",
+    "route|0",
+    "qlog.zst",
+  ) == "https://upload.example/api/v1/upload/TEST%20device-id/route%7C0/qlog.zst"
+  assert web_upload.api_url(
+    "https://upload.example/",
+    "upload",
     "car name/id",
     "route|0",
     "qlog.zst",
@@ -385,12 +392,19 @@ def test_dashcam_upload_uses_automatic_session_only_for_carrot(tmp_path: Path, m
     calls.append(("session", base_url, metadata["dongleId"], purpose))
     return "automatic-session"
 
-  async def fake_folder(local_folder, device_id, remote_path, base_url, token, should_cancel):
-    calls.append(("upload", device_id, remote_path, base_url, token))
+  async def fake_folder(local_folder, directory, remote_path, base_url, token, should_cancel):
+    calls.append(("upload", directory, remote_path, base_url, token))
     return True
 
   async def fake_complete(base_url, token, payload):
-    calls.append(("complete", base_url, token, payload["target"]))
+    calls.append((
+      "complete",
+      base_url,
+      token,
+      payload["target"],
+      payload["remoteBasePath"],
+      [item["remotePath"] for item in payload["results"]],
+    ))
     return {"ok": True}
 
   monkeypatch.setattr(upload_jobs, "create_web_upload_session", fake_session)
@@ -401,7 +415,34 @@ def test_dashcam_upload_uses_automatic_session_only_for_carrot(tmp_path: Path, m
   assert calls == [
     ("session", "https://carrot.example", "device-id", "dashcam"),
     ("upload", "device-id", segment, "https://carrot.example", "automatic-session"),
-    ("complete", "https://carrot.example", "automatic-session", "carrot"),
+    (
+      "complete",
+      "https://carrot.example",
+      "automatic-session",
+      "carrot",
+      "https://carrot.example/routes/TEST device-id/",
+      ["https://carrot.example/routes/TEST device-id/test-segment"],
+    ),
+  ]
+
+  monkeypatch.setattr(upload, "resolve_upload_target", lambda: {
+    "kind": "toss", "base_url": "https://toss.example", "token": "toss-token",
+  })
+  calls.clear()
+  result = asyncio.run(upload_jobs.run_upload_segments([segment]))
+  assert result["ok"] is True
+  assert result["remoteBasePath"] == "https://toss.example/routes/TEST device-id/"
+  assert result["results"][0]["remotePath"] == "https://toss.example/routes/TEST device-id/test-segment"
+  assert calls == [
+    ("upload", "TEST device-id", segment, "https://toss.example", "toss-token"),
+    (
+      "complete",
+      "https://toss.example",
+      "toss-token",
+      "toss",
+      "https://toss.example/routes/TEST device-id/",
+      ["https://toss.example/routes/TEST device-id/test-segment"],
+    ),
   ]
 
   monkeypatch.setattr(upload, "resolve_upload_target", lambda: {
@@ -411,6 +452,38 @@ def test_dashcam_upload_uses_automatic_session_only_for_carrot(tmp_path: Path, m
   with pytest.raises(RuntimeError, match="Toss upload token"):
     asyncio.run(upload_jobs.run_upload_segments([segment]))
   assert calls == []
+
+
+def test_dashcam_toss_empty_car_name_keeps_none_directory_policy(tmp_path: Path, monkeypatch):
+  segment = "test-segment"
+  (tmp_path / "qlog.zst").write_bytes(b"log")
+  monkeypatch.setattr(upload_jobs, "HAS_PARAMS", False)
+  monkeypatch.setattr(upload_jobs, "segment_dir", lambda _segment: str(tmp_path))
+  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda _path: [])
+  monkeypatch.setattr(upload_jobs, "route_name", lambda _segment: "test-route")
+  monkeypatch.setattr(upload_jobs, "segment_index", lambda _segment: 0)
+  monkeypatch.setattr(upload, "resolve_upload_target", lambda: {
+    "kind": "toss", "base_url": "https://toss.example", "token": "toss-token",
+  })
+  monkeypatch.setattr(upload, "upload_metadata", lambda _params: {
+    "carName": "", "dongleId": "device-id",
+  })
+  uploaded_directories = []
+
+  async def fake_folder(local_folder, directory, remote_path, base_url, token, should_cancel):
+    uploaded_directories.append(directory)
+    return True
+
+  async def fake_complete(base_url, token, payload):
+    return {"ok": True}
+
+  monkeypatch.setattr(upload_jobs, "upload_folder_to_web", fake_folder)
+  monkeypatch.setattr(upload_jobs, "send_web_upload_complete", fake_complete)
+  result = asyncio.run(upload_jobs.run_upload_segments([segment]))
+
+  assert uploaded_directories == ["none device-id"]
+  assert result["remoteBasePath"] == "https://toss.example/routes/none device-id/"
+  assert result["results"][0]["remotePath"] == "https://toss.example/routes/none device-id/test-segment"
 
 
 class FakeResponse:
