@@ -882,6 +882,15 @@ class CarrotMan:
     print(f"[carrot_man] {label}: status={response.status_code} {response.text}")
     return response
 
+  def _tmux_toss_only(self):
+    """Return True when tmux diagnostics must stay exclusively on Toss."""
+    try:
+      upload_settings = read_web_settings()
+    except Exception:
+      upload_settings = {}
+    target, _, _ = selected_upload_settings(upload_settings)
+    return target == "toss"
+
   def send_tmux_web(self, tmux_why, send_settings=False):
     try:
       try:
@@ -899,7 +908,7 @@ class CarrotMan:
           raise RuntimeError("Toss upload token is not configured")
         session_token = configured_token
       url, headers = tmux_web_target(upload_settings, session_token)
-      return self._post_tmux_target("DSM tmux upload", url, headers, payload, send_settings)
+      return self._post_tmux_target("selected tmux upload", url, headers, payload, send_settings)
     except Exception as e:
       print(f"web tmux sending error...: {e}")
       traceback.print_exc()
@@ -907,6 +916,9 @@ class CarrotMan:
 
   def send_tmux_carrot_logs(self, tmux_why, send_settings=False):
     """Send the independent copy consumed by the Discord carrot_logs forum."""
+    if self._tmux_toss_only():
+      print("[carrot_man] carrot_logs upload skipped: Toss-only target selected")
+      return None
     try:
       payload = self._tmux_upload_payload(tmux_why)
       url, headers = carrot_logs_web_target()
@@ -1000,6 +1012,9 @@ class CarrotMan:
     return "\n".join(lines)[:1900]
 
   def send_tmux_discord(self, tmux_why, web_ok=False, web_response=None, send_settings=False):
+    if self._tmux_toss_only():
+      print("[carrot_man] discord tmux skipped: Toss-only target selected")
+      return False
     url = self._tmux_discord_webhook_url()
     if not url:
       return False

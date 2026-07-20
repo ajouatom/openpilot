@@ -19,12 +19,15 @@ In Carrot Web, open **Tools > Web settings > Log upload** and select:
 public health and requests a temporary test session. Toss testing sends its
 configured Bearer token to the Toss health endpoint.
 
-Tmux diagnostics are also sent independently to
-`https://tmux.carrotpilot.app/upload`, which creates the Discord `carrot_logs`
-forum entry. The automatic onroad report includes both `tmux.log` and
-`toggle_values.json`; exception and manual reports include the tmux log. A DSM
-or selected-target failure does not redirect or suppress this independent
-Carrot Logs copy.
+When **Carrot server** is selected, tmux diagnostics are also sent independently
+to `https://tmux.carrotpilot.app/upload`, which creates the Discord
+`carrot_logs` forum entry. The automatic onroad report includes both `tmux.log`
+and `toggle_values.json`; exception and manual reports include the tmux log. A
+Carrot DSM failure does not suppress this independent Carrot Logs copy.
+
+When **Toss server** is selected, tmux diagnostics are exclusive to Toss:
+`carrot_logs` and the direct Discord webhook are both skipped, and a Toss
+failure never falls back to a Carrot endpoint.
 
 Operator overrides are target-specific:
 

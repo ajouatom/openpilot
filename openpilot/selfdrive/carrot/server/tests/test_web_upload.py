@@ -54,9 +54,12 @@ def test_carrot_man_sends_diagnostics_to_selected_target_and_carrot_logs():
   assert "using tmux web fallback" not in carrot_man
   assert "selected_upload_settings(upload_settings)" in carrot_man
   assert "Toss upload token is not configured" in carrot_man
+  assert "def _tmux_toss_only(" in carrot_man
+  assert "carrot_logs upload skipped: Toss-only target selected" in carrot_man
+  assert "discord tmux skipped: Toss-only target selected" in carrot_man
 
 
-def test_carrot_man_selected_tmux_target_and_independent_carrot_logs(monkeypatch):
+def test_carrot_man_toss_is_exclusive_and_carrot_keeps_extra_targets(monkeypatch):
   manager = carrot_man_module.CarrotMan.__new__(carrot_man_module.CarrotMan)
   manager._tmux_upload_payload = lambda tmux_why: {"tmux_why": tmux_why, "dongle_id": "device"}
   posted = []
@@ -64,31 +67,41 @@ def test_carrot_man_selected_tmux_target_and_independent_carrot_logs(monkeypatch
     (label, url, headers, payload, send_settings),
   ) or label
 
-  monkeypatch.setattr(carrot_man_module, "read_web_settings", lambda: {
+  toss_settings = {
     "log_upload_target": "toss",
     "toss_upload_url": "https://toss.example",
     "toss_upload_token": "toss-token",
-  })
+  }
+  monkeypatch.setattr(carrot_man_module, "read_web_settings", lambda: toss_settings)
   monkeypatch.setattr(
     carrot_man_module,
     "create_web_upload_session_sync",
     lambda *_args, **_kwargs: pytest.fail("Toss must not request a Carrot automatic session"),
   )
-  assert manager.send_tmux_web("manual") == "DSM tmux upload"
+  assert manager.send_tmux_web("manual") == "selected tmux upload"
   assert posted.pop()[:3] == (
-    "DSM tmux upload",
+    "selected tmux upload",
     "https://toss.example/api/v1/tmux/upload",
     {"Authorization": "Bearer toss-token"},
   )
 
-  monkeypatch.setattr(carrot_man_module, "read_web_settings", lambda: {
-    "log_upload_target": "toss",
-    "toss_upload_url": "https://toss.example",
-    "toss_upload_token": "",
-  })
+  monkeypatch.setattr(
+    carrot_man_module,
+    "carrot_logs_web_target",
+    lambda: pytest.fail("Toss must not resolve the Carrot Logs endpoint"),
+  )
+  manager._tmux_discord_webhook_url = lambda: pytest.fail("Toss must not resolve the Discord webhook")
+  assert manager.send_tmux_carrot_logs("manual") is None
+  assert manager.send_tmux_discord("manual") is False
+  assert posted == []
+
+  monkeypatch.setattr(carrot_man_module, "read_web_settings", lambda: {**toss_settings, "toss_upload_token": ""})
   assert manager.send_tmux_web("manual") is None
   assert posted == []
 
+  monkeypatch.setattr(carrot_man_module, "read_web_settings", lambda: {
+    "log_upload_target": "carrot", "web_upload_url": "https://carrot.example",
+  })
   monkeypatch.setattr(carrot_man_module, "carrot_logs_web_target", lambda: ("https://logs.example/upload", {}))
   assert manager.send_tmux_carrot_logs("manual") == "carrot_logs upload"
   assert posted.pop()[:3] == ("carrot_logs upload", "https://logs.example/upload", {})
