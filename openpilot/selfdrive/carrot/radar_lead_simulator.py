@@ -67,6 +67,8 @@ RADAR_TO_CAMERA = 1.52
 DEFAULT_FORWARD_RANGE_M = 100.0
 DEFAULT_VALIDATION_CASES = Path(__file__).resolve().parent / "cluster" / "cutin_validation_cases.json"
 DEFAULT_MULTITASK_MODEL = Path(__file__).resolve().parent / "models" / "radar_lead_multitask.npz"
+CURRENT_RADARD_CORNER_CENTER_MIN_AGE = 5
+CURRENT_RADARD_CORNER_CENTER_UNMATCHED_MAX_DREL = 45.0
 
 
 @dataclass(frozen=True)
@@ -578,6 +580,9 @@ class TeacherTrackState:
   d_path: float = 0.0
   in_lane_prob: float = 0.0
   lane_half_width: float = 1.8
+  d_rel: float | None = None
+  y_rel: float | None = None
+  v_lead: float | None = None
 
 
 class CurrentRadardTeacher:
@@ -709,14 +714,28 @@ class CurrentRadardTeacher:
           state.stopped_count = max(0, state.stopped_count - 1)
     return best
 
-  @staticmethod
-  def _center_candidate(point: RadarPoint, state: TeacherTrackState) -> bool:
+  @classmethod
+  def _center_candidate(
+    cls,
+    point: RadarPoint,
+    state: TeacherTrackState,
+    front_points: list[RadarPoint],
+  ) -> bool:
     in_lane_min = 0.45 if point.d_rel > 60.0 else 0.30
     d_path_limit = 0.9 if point.d_rel > 60.0 else 1.2
     if state.in_lane_prob <= in_lane_min or abs(state.d_path) >= d_path_limit:
       return False
     if point.d_rel > 100.0:
       return False
+    if cls._is_corner(point) and state.age < CURRENT_RADARD_CORNER_CENTER_MIN_AGE:
+      return False
+    if cls._is_corner(point) and point.d_rel > CURRENT_RADARD_CORNER_CENTER_UNMATCHED_MAX_DREL:
+      matched_front = any(
+        abs(front.d_rel - point.d_rel) <= 3.0 and abs(front.v_rel - point.v_rel) <= 2.0
+        for front in front_points
+      )
+      if not matched_front:
+        return False
     radar_only_limit = 0.75 if point.d_rel > 80.0 else (0.9 if point.d_rel > 60.0 else 1.1)
     return state.age > 3 and point.d_rel > 0.8 and point.v_lead > 2.0 and abs(state.d_path) < radar_only_limit
 
@@ -741,7 +760,17 @@ class CurrentRadardTeacher:
           states.pop(track_id)
       for point in frame.points:
         state = states.setdefault(point.track_id, TeacherTrackState())
-        state.age = state.age + 1 if point.measured else 0
+        discontinuous = (
+          state.d_rel is not None and (
+            abs(point.d_rel - state.d_rel) > 5.0
+            or abs(point.y_rel - state.y_rel) > 2.0
+            or abs(point.v_lead - state.v_lead) > 7.0
+          )
+        )
+        state.age = 1 if point.measured and discontinuous else state.age + 1 if point.measured else 0
+        state.d_rel = point.d_rel
+        state.y_rel = point.y_rel
+        state.v_lead = point.v_lead
         state.d_path, state.in_lane_prob, state.lane_half_width = self._lane_state(frame, point)
 
       raw_prob = frame.model_leads[0].probability if frame.model_leads else 0.0
@@ -771,7 +800,8 @@ class CurrentRadardTeacher:
         elif len(frame.lane_probs) > 2 and frame.lane_probs[1] > 0.5 and frame.lane_probs[2] > 0.5:
           center = [
             point for point in frame.points
-            if point.track_id != lead_one_id and self._center_candidate(point, states[point.track_id])
+            if point.track_id != lead_one_id
+            and self._center_candidate(point, states[point.track_id], front_points)
           ]
           if center:
             external = min(center, key=lambda point: point.d_rel)

@@ -101,6 +101,7 @@ RADAR_CENTER_PROMOTION_RECEDING_VREL = 0.5
 CORNER_FRONT_MATCH_DREL = 3.0
 CORNER_FRONT_MATCH_VREL = 2.0
 CORNER_CENTER_MIN_AGE = int(0.25 / DT_MDL)
+CORNER_CENTER_UNMATCHED_MAX_DREL = 45.0
 CORNER_STOPPED_MIN_AGE = int(0.35 / DT_MDL)
 CORNER_STOPPED_MIN_DREL = 5.0
 CORNER_STOPPED_MAX_DREL = 120.0
@@ -294,6 +295,7 @@ class Track:
       # optional: also reset filter init when track is not measured
       self._vLead_filt_init = False
     elif track_discontinuous:
+      self.cnt = 0
       self.selected_count = 0
       self.is_stopped_car_count = 0
       self.cut_in_count = 0
@@ -1027,11 +1029,12 @@ class RadarD:
 
     return self._is_center_lead_candidate(t)
 
-  def _is_corner_center_candidate(self, t: Track) -> bool:
+  def _is_corner_center_candidate(self, t: Track, matched_front: bool = False) -> bool:
     return (
       self._is_corner_track(t) and
       t.cnt >= CORNER_CENTER_MIN_AGE and
       3.0 < t.dRel < RADAR_ONLY_CENTER_MAX_DREL and
+      (matched_front or t.dRel <= CORNER_CENTER_UNMATCHED_MAX_DREL) and
       t.vLead > 2.0 and
       self._corner_in_lane_ok(t)
     )
@@ -1395,7 +1398,7 @@ class RadarD:
     front_left_list, front_right_list = [], []
     corner_left_list, corner_right_list = [], []
     center_list, cutin_list = [], []
-    corner_center_list, corner_stopped_list = [], []
+    corner_stopped_list = []
     for c in tracks.values():
       y_rel_neg = - c.yRel
       is_corner = self._is_corner_track(c)
@@ -1403,12 +1406,11 @@ class RadarD:
       # center
       if self._is_center_lead_candidate(c):
         c.cut_in_count = max(c.cut_in_count - 1, 0)
-        if c.cnt > 3:
+        center_usable = not is_corner or self._is_corner_center_candidate(c, matching_front is not None)
+        if c.cnt > 3 and center_usable:
           ld = self._corner_lead_from_track(c, lead_prob, float(-lead_msg.y[0])) if is_corner else c.get_RadarState(lead_prob, float(-lead_msg.y[0]))
           ld['modelProb'] = 0.01
           center_list.append(ld)
-          if self._is_corner_center_candidate(c):
-            corner_center_list.append(ld)
 
       if self._is_corner_stopped_candidate(c, matched_front=matching_front is not None):
         corner_stopped_list.append(self._corner_stopped_lead_from_track(c, lead_prob))
