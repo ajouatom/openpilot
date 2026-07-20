@@ -322,178 +322,38 @@
   line-height: 1.2;
 }
 
-.web-settings-input {
-  width: min(220px, 48vw);
-  min-width: 140px;
-  min-height: 34px;
+.web-upload-settings {
+  display: grid;
+  gap: var(--sp-sm);
+}
+
+.web-settings-row--field {
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 44%);
+}
+
+.web-settings-text {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
   padding: 0 11px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--md-surface-cont-h) 84%, transparent);
   color: var(--md-on-surface);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: var(--fs-label-sm);
 }
 
-.web-settings-input:focus-visible {
-  outline: 2px solid var(--md-primary);
-  outline-offset: 1px;
-}
-
-.web-settings-action {
-  min-height: 34px;
-  padding: 0 16px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--md-surface-cont-h) 84%, transparent);
-  color: var(--md-on-surface);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.2;
-  cursor: pointer;
-}
-
-.web-settings-action:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-/* ── Toss connection test popup ─────────────────────────── */
-.toss-test-pop {
-  position: fixed;
-  inset: 0;
-  z-index: calc(var(--z-modal, 170) + 30);
+.web-upload-settings__actions {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: color-mix(in srgb, #000 46%, transparent);
+  gap: var(--sp-sm);
+  min-height: 40px;
 }
 
-.toss-test-pop__card {
-  width: min(100%, 360px);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 55%, transparent);
-  border-radius: 14px;
-  background: var(--md-surface-cont-h);
-  color: var(--md-on-surface);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
-}
-
-.toss-test-pop__title {
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.toss-test-pop__steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.toss-test-step {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  min-height: 20px;
-}
-
-.toss-test-step__icon {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 800;
-  border: 2px solid color-mix(in srgb, var(--md-outline-var) 65%, transparent);
-  color: transparent;
-}
-
-.toss-test-step[data-state="running"] .toss-test-step__icon {
-  border-color: color-mix(in srgb, var(--md-primary) 35%, transparent);
-  border-top-color: var(--md-primary);
-  animation: tossTestSpin 0.8s linear infinite;
-}
-
-.toss-test-step[data-state="ok"] .toss-test-step__icon {
-  border-color: var(--md-success);
-  background: var(--md-success);
-  color: #fff;
-}
-
-.toss-test-step[data-state="fail"] .toss-test-step__icon {
-  border-color: var(--md-danger);
-  background: var(--md-danger);
-  color: #fff;
-}
-
-.toss-test-step[data-state="skip"] .toss-test-step__icon {
+.web-upload-settings__status {
   color: var(--md-on-surface-var);
-  border-style: dashed;
-}
-
-.toss-test-step[data-state="skip"] .toss-test-step__label,
-.toss-test-step[data-state="pending"] .toss-test-step__label {
-  opacity: 0.55;
-}
-
-.toss-test-step__note {
-  margin-left: auto;
-  max-width: 55%;
-  font-size: 11px;
-  color: var(--md-on-surface-var);
-  text-align: right;
-  word-break: break-all;
-}
-
-.toss-test-step[data-state="fail"] .toss-test-step__note {
-  color: var(--md-danger);
-}
-
-@keyframes tossTestSpin {
-  to { transform: rotate(360deg); }
-}
-
-.toss-test-pop__result {
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  word-break: break-all;
-}
-
-.toss-test-pop__result.is-ok {
-  background: color-mix(in srgb, var(--md-success) 16%, transparent);
-  color: var(--md-success);
-}
-
-.toss-test-pop__result.is-fail {
-  background: color-mix(in srgb, var(--md-danger) 14%, transparent);
-  color: var(--md-danger);
-}
-
-.toss-test-pop__close {
-  align-self: flex-end;
-  min-height: 34px;
-  padding: 0 18px;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 68%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--md-surface-cont-hh) 84%, transparent);
-  color: var(--md-on-surface);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
+  font-size: var(--fs-label-sm);
+  overflow-wrap: anywhere;
 }
 
 .app-dialog--tools-qr .app-dialog__sheet {

@@ -116,12 +116,14 @@
 }
 
 @media (max-width: 420px) {
-  .web-settings-row--select {
+  .web-settings-row--select,
+  .web-settings-row--field {
     grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
   }
 
-  .web-settings-select {
+  .web-settings-select,
+  .web-settings-text {
     width: 100%;
     min-width: 0;
   }

@@ -10,7 +10,6 @@ import time
 import numpy as np
 from datetime import datetime
 
-from ftplib import FTP
 from openpilot.cereal import log
 import openpilot.cereal.messaging as messaging
 from openpilot.common.realtime import Ratekeeper

@@ -7,6 +7,8 @@ from urllib.parse import quote
 
 from aiohttp import web
 
+from openpilot.selfdrive.carrot.web_upload import check_web_upload_health
+
 from ...config import DASHCAM_ROOT
 from . import upload, upload_jobs
 from .catalog import (
@@ -474,6 +476,16 @@ async def api_dashcam_upload_start(request: web.Request) -> web.Response:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
+async def api_dashcam_upload_test(request: web.Request) -> web.Response:
+  try:
+    base_url, token = upload.upload_target_settings()
+    result = await check_web_upload_health(base_url, token)
+    status = 200 if result.get("ok") else 502
+    return web.json_response({"target": "web", "url": base_url, **result}, status=status)
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
 async def api_dashcam_upload_job(request: web.Request) -> web.Response:
   job_id = (request.query.get("id") or request.match_info.get("job_id") or "").strip()
   if not job_id:
@@ -522,6 +534,7 @@ def register(app: web.Application) -> None:
   app.router.add_get("/api/dashcam/replay-source/{segment}/{kind}", api_dashcam_replay_source_file)
   app.router.add_get("/api/dashcam/download/{segment}/{kind}", api_dashcam_download)
   app.router.add_post("/api/dashcam/upload/summary", api_dashcam_upload_summary)
+  app.router.add_post("/api/dashcam/upload/test", api_dashcam_upload_test)
   app.router.add_post("/api/dashcam/upload/start", api_dashcam_upload_start)
   app.router.add_post("/api/dashcam/upload/test", api_dashcam_upload_test)
   app.router.add_get("/api/dashcam/upload/job", api_dashcam_upload_job)

@@ -7,6 +7,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from openpilot.selfdrive.carrot.web_upload import send_web_upload_complete, upload_folder_to_web
+
 from ...services.params import HAS_PARAMS, Params
 from . import upload
 from .catalog import segment_file_summary
@@ -170,33 +172,31 @@ def create_job(segments: list[str]) -> dict[str, Any]:
 
 async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = None) -> dict[str, Any]:
   params = Params() if HAS_PARAMS else None
-  target = upload.resolve_upload_target()  # raises if toss is selected but not configured
-  is_toss = target.get("kind") == "toss"
+  base_url, token = upload.upload_target_settings()
+  if not token:
+    raise RuntimeError("web upload token is not configured")
   meta = upload.upload_metadata(params)
   car_selected = meta.get("carName") or "none"
   dongle_id = meta.get("dongleId") or "unknown"
   directory = f"{car_selected} {dongle_id}".strip()
-  remote_base_path = f"routes/{directory}/".replace("\\", "/")
-  if is_toss:
-    remote_base_path = f"{target['base_url']}/{remote_base_path}"
+  remote_base_path = f"{base_url}/routes/{directory}/".replace("\\", "/")
   total = len(segments)
   results: list[Any] = [None] * total  # filled by index so order matches input
 
   if job:
     job["upload_meta"] = meta
     job["remote_base_path"] = remote_base_path
-    job["upload_target"] = target.get("kind")
+    job["upload_target"] = "web"
     job["partial_results"] = []
     progress(job, message="Preparing upload", current=0, total=total, percent=0)
 
   ensure_not_canceled(job)
 
-  # Upload segments in parallel with bounded concurrency. Each
-  # upload_folder_to_ftp() opens its own FTP connection, so concurrent calls
-  # are safe. Concurrency is kept small because the NAS is shared across all
-  # users; tune with CARROT_FTP_CONCURRENCY (default 3).
+  # Upload segments in parallel with bounded concurrency. Each segment uses an
+  # independent HTTPS session. Keep the limit small because the upload service
+  # and its backing storage are shared across devices.
   try:
-    concurrency = max(1, min(6, int(os.environ.get("CARROT_FTP_CONCURRENCY", "3") or "3")))
+    concurrency = max(1, min(6, int(os.environ.get("CARROT_WEB_UPLOAD_CONCURRENCY", "3") or "3")))
   except Exception:
     concurrency = 3
   sem = asyncio.Semaphore(concurrency)
@@ -214,24 +214,14 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
       try:
         segment_path = segment_dir(segment)
         files = await asyncio.to_thread(segment_file_summary, segment_path)
-        cancel_check = (lambda: is_cancel_requested(job)) if job else None
-        if is_toss:
-          ok = await upload.upload_folder_to_toss(
-            segment_path,
-            directory,
-            segment,
-            target["base_url"],
-            target["token"],
-            cancel_check,
-          )
-        else:
-          ok = await asyncio.to_thread(
-            upload.upload_folder_to_ftp,
-            segment_path,
-            directory,
-            segment,
-            cancel_check,
-          )
+        ok = await upload_folder_to_web(
+          segment_path,
+          directory,
+          segment,
+          base_url,
+          token,
+          (lambda: is_cancel_requested(job)) if job else None,
+        )
         results[idx0] = {
           "segment": segment,
           "route": route_name(segment),
@@ -273,7 +263,7 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
     "uploaded": ok_count,
     "total": len(results),
     "uploadedAt": uploaded_at,
-    "target": target.get("kind"),
+    "target": "web",
     "remoteBasePath": remote_base_path,
     "meta": meta,
     "results": results,
@@ -284,20 +274,12 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
   if job:
     progress(job, message="Sending notification", current=total, total=total, percent=98)
   ensure_not_canceled(job)
-  if is_toss:
-    # Toss uploads notify the toss server itself; the carrot Discord webhook
-    # must not receive them.
-    response_payload["tossComplete"] = await upload.send_toss_complete(
-      target["base_url"],
-      target["token"],
-      response_payload,
-    )
-    response_payload["discord"] = {"configured": False, "ok": False, "skipped": True}
-  else:
-    response_payload["discord"] = await upload.send_discord_webhook(
-      upload.discord_webhook_url(params),
-      response_payload,
-    )
+  response_payload["webComplete"] = await send_web_upload_complete(
+    base_url,
+    token,
+    response_payload,
+  )
+  response_payload["discord"] = {"configured": False, "ok": False, "skipped": True}
   return response_payload
 
 
@@ -316,7 +298,7 @@ async def run_job(job: dict[str, Any]) -> None:
       "uploaded": ok_count,
       "total": total,
       "uploadedAt": uploaded_at,
-      "target": job.get("upload_target") or "carrot",
+      "target": job.get("upload_target") or "web",
       "remoteBasePath": job.get("remote_base_path") or "",
       "meta": job.get("upload_meta") or {},
       "results": results,

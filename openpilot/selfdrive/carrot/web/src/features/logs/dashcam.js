@@ -20,7 +20,7 @@ import {
 
 // Logs page — Dashcam tab.
 // Route + segment virtual listing, FFmpeg thumb/preview lazy load,
-// segment selection, FTP upload (with cancel/resume), segment menu, player.
+// segment selection, web upload (with cancel/resume), segment menu, player.
 
 const DASHCAM_UPLOAD_JOB_STORAGE_KEY = "carrot_dashcam_upload_job_id";
 const DASHCAM_SORT_STORAGE_KEY = "carrot_dashcam_segment_sort";
