@@ -319,9 +319,10 @@ def _normalize_kmap_url(value: Any) -> str:
 def _normalize_web_upload_url(value: Any) -> str:
   try:
     url = normalize_base_url(value, DEFAULT_WEB_UPLOAD_URL)
-    # Migrate the short-lived token-based default shipped before automatic
-    # sessions. Otherwise existing devices would keep calling the old server.
-    if url in {"https://op.wjcloud.kr", "https://upload.shind0.synology.me"}:
+    # Migrate defaults used before the upload receiver moved to its dedicated
+    # HTTPS virtual host. The main shind0 host serves Carrot Web and returns an
+    # HTML 404 for upload API paths.
+    if url.casefold() in {"https://op.wjcloud.kr", "https://shind0.synology.me"}:
       return DEFAULT_WEB_UPLOAD_URL
     return url
   except ValueError:

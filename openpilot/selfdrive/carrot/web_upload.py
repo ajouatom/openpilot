@@ -11,7 +11,7 @@ from typing import Any
 from aiohttp import ClientSession, ClientTimeout
 
 
-DEFAULT_WEB_UPLOAD_URL = "https://shind0.synology.me"
+DEFAULT_WEB_UPLOAD_URL = "https://upload.shind0.synology.me"
 DEFAULT_TOSS_UPLOAD_URL = "https://op.wjcloud.kr"
 DEFAULT_TMUX_WEB_UPLOAD_URL = "https://tmux.carrotpilot.app/upload"
 UPLOAD_TARGETS = {"carrot", "toss"}
@@ -87,6 +87,20 @@ def tmux_web_target(
 
   # Preserve the upstream Carrot tmux fallback only for the default Carrot
   # target. Toss must never leak diagnostics to the Carrot endpoint.
+  direct_url = normalize_base_url(
+    os.environ.get("CARROT_TMUX_WEB_UPLOAD_URL", ""),
+    DEFAULT_TMUX_WEB_UPLOAD_URL,
+  )
+  return direct_url, {}
+
+
+def carrot_logs_web_target() -> tuple[str, dict[str, str]]:
+  """Return the independent Carrot Logs receiver used by the Discord forum.
+
+  This target must not depend on the DSM upload token. Diagnostics are sent to
+  both destinations, so a configured DSM token must never redirect this copy
+  away from the Carrot Logs service.
+  """
   direct_url = normalize_base_url(
     os.environ.get("CARROT_TMUX_WEB_UPLOAD_URL", ""),
     DEFAULT_TMUX_WEB_UPLOAD_URL,

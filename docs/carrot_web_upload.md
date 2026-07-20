@@ -7,9 +7,10 @@ FTP connection, account, password, port, or fallback path.
 
 In Carrot Web, open **Tools > Web settings > Log upload** and select:
 
-- **Carrot server** (default): `https://shind0.synology.me`. Normal users do not
-  enter a token. The device requests a short-lived session using its Dongle ID;
-  the Carrot server binds that session to the device and source IP.
+- **Carrot server** (default): `https://upload.shind0.synology.me`.
+  Normal users do not enter a token. The device requests a short-lived session
+  using its Dongle ID; the Carrot server binds that session to the device and
+  source IP.
 - **Toss server** (optional): `https://op.wjcloud.kr`. Toss keeps an independent
   URL and access token. The client never requests an automatic Carrot session
   from Toss and never falls back from Toss to a Carrot endpoint.
@@ -18,13 +19,20 @@ In Carrot Web, open **Tools > Web settings > Log upload** and select:
 public health and requests a temporary test session. Toss testing sends its
 configured Bearer token to the Toss health endpoint.
 
+Tmux diagnostics are also sent independently to
+`https://tmux.carrotpilot.app/upload`, which creates the Discord `carrot_logs`
+forum entry. The automatic onroad report includes both `tmux.log` and
+`toggle_values.json`; exception and manual reports include the tmux log. A DSM
+or selected-target failure does not redirect or suppress this independent
+Carrot Logs copy.
+
 Operator overrides are target-specific:
 
 - `CARROT_WEB_UPLOAD_URL`
 - `CARROT_WEB_UPLOAD_TOKEN` (private Carrot deployment escape hatch)
 - `CARROT_TOSS_UPLOAD_URL`
 - `CARROT_TOSS_UPLOAD_TOKEN`
-- `CARROT_TMUX_WEB_UPLOAD_URL` (Carrot tmux-only web fallback)
+- `CARROT_TMUX_WEB_UPLOAD_URL` (independent Carrot Logs endpoint)
 - `CARROT_WEB_UPLOAD_CONCURRENCY` (1-6, default 3)
 
 ## Shared upload API
@@ -63,11 +71,20 @@ files are never deleted automatically.
 
 The Carrot receiver and hardened Container Manager configuration live in
 `tools/carrot_upload_server`. DSM exposes it through an HTTPS reverse proxy from
-`https://shind0.synology.me` to loopback `127.0.0.1:18080`. Dashcam files retain
-the original `/volume1/openpilot/routes/<CarName> <DongleID>/<segment>` layout;
+`https://upload.shind0.synology.me` to loopback `127.0.0.1:18080`. Dashcam files
+retain the original `/volume1/openpilot/routes/<CarName> <DongleID>/<segment>`
+layout;
 tmux files retain the FTP-era
 `/volume1/openpilot/<GitBranch>/<CarName> <DongleID>/` layout. Private manifests,
 sessions, and quota state remain under `/volume1/openpilot/tmux/.state`.
+
+1. Run the container on loopback `127.0.0.1:18080`.
+2. Proxy `https://upload.shind0.synology.me:443` to
+   `http://127.0.0.1:18080` and assign a trusted certificate.
+3. Verify public health, automatic session creation, a real segment upload,
+   exact returned file sizes, completion manifest, and a tmux upload.
+4. Then delete the old transfer account, disable the DSM FTP service, and
+   remove its router/firewall rule if nothing else uses it.
 
 The application does not need DSM FTP, WebDAV, or a shared user credential. The
 receiver never scans or deletes the existing Openpilot tree.

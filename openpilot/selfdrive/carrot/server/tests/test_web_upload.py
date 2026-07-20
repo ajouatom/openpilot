@@ -6,6 +6,7 @@ from typing import cast
 import pytest
 from aiohttp import web
 
+from openpilot.selfdrive.carrot import carrot_man as carrot_man_module
 from openpilot.selfdrive.carrot import web_upload
 from openpilot.selfdrive.carrot.server.features.dashcam import routes, upload, upload_jobs
 from openpilot.selfdrive.carrot.server.services import web_settings
@@ -41,6 +42,56 @@ def test_carrot_runtime_contains_no_legacy_ftp_code():
     if any(term in text for term in legacy_terms):
       findings.append(str(path.relative_to(carrot_root)))
   assert findings == []
+
+
+def test_carrot_man_sends_diagnostics_to_selected_target_and_carrot_logs():
+  carrot_man = (Path(__file__).resolve().parents[2] / "carrot_man.py").read_text(encoding="utf-8")
+  assert "def send_tmux_web(" in carrot_man
+  assert "def send_tmux_carrot_logs(" in carrot_man
+  assert 'self.send_tmux_carrot_logs("onroad", send_settings = True)' in carrot_man
+  assert "self.send_tmux_carrot_logs(pending_tmux_reason, send_settings = False)" in carrot_man
+  assert 'self.send_tmux_carrot_logs("tmux_send")' in carrot_man
+  assert "using tmux web fallback" not in carrot_man
+  assert "selected_upload_settings(upload_settings)" in carrot_man
+  assert "Toss upload token is not configured" in carrot_man
+
+
+def test_carrot_man_selected_tmux_target_and_independent_carrot_logs(monkeypatch):
+  manager = carrot_man_module.CarrotMan.__new__(carrot_man_module.CarrotMan)
+  manager._tmux_upload_payload = lambda tmux_why: {"tmux_why": tmux_why, "dongle_id": "device"}
+  posted = []
+  manager._post_tmux_target = lambda label, url, headers, payload, send_settings=False: posted.append(
+    (label, url, headers, payload, send_settings),
+  ) or label
+
+  monkeypatch.setattr(carrot_man_module, "read_web_settings", lambda: {
+    "log_upload_target": "toss",
+    "toss_upload_url": "https://toss.example",
+    "toss_upload_token": "toss-token",
+  })
+  monkeypatch.setattr(
+    carrot_man_module,
+    "create_web_upload_session_sync",
+    lambda *_args, **_kwargs: pytest.fail("Toss must not request a Carrot automatic session"),
+  )
+  assert manager.send_tmux_web("manual") == "DSM tmux upload"
+  assert posted.pop()[:3] == (
+    "DSM tmux upload",
+    "https://toss.example/api/v1/tmux/upload",
+    {"Authorization": "Bearer toss-token"},
+  )
+
+  monkeypatch.setattr(carrot_man_module, "read_web_settings", lambda: {
+    "log_upload_target": "toss",
+    "toss_upload_url": "https://toss.example",
+    "toss_upload_token": "",
+  })
+  assert manager.send_tmux_web("manual") is None
+  assert posted == []
+
+  monkeypatch.setattr(carrot_man_module, "carrot_logs_web_target", lambda: ("https://logs.example/upload", {}))
+  assert manager.send_tmux_carrot_logs("manual") == "carrot_logs upload"
+  assert posted.pop()[:3] == ("carrot_logs upload", "https://logs.example/upload", {})
 
 
 def test_upload_targets_keep_carrot_sessions_and_toss_credentials_separate(monkeypatch):
@@ -107,6 +158,15 @@ def test_tmux_target_falls_back_to_direct_web_endpoint_without_token(monkeypatch
   clear_upload_env(monkeypatch)
   monkeypatch.setenv("CARROT_TMUX_WEB_UPLOAD_URL", "https://tmux.example/upload/")
   assert web_upload.tmux_web_target({}) == ("https://tmux.example/upload", {})
+
+
+def test_carrot_logs_target_is_independent_from_dsm_token(monkeypatch):
+  clear_upload_env(monkeypatch)
+  monkeypatch.setenv("CARROT_WEB_UPLOAD_TOKEN", "dsm-token")
+  monkeypatch.setenv("CARROT_TOSS_UPLOAD_URL", "https://toss.example")
+  monkeypatch.setenv("CARROT_TOSS_UPLOAD_TOKEN", "toss-token")
+  monkeypatch.setenv("CARROT_TMUX_WEB_UPLOAD_URL", "https://tmux.example/upload/")
+  assert web_upload.carrot_logs_web_target() == ("https://tmux.example/upload", {})
 
 
 def test_sync_session_is_issued_automatically_from_device_metadata():
@@ -214,7 +274,7 @@ def test_tmux_web_post_sends_multipart_and_closes_files(tmp_path: Path):
 def test_web_settings_default_to_carrot_and_preserve_toss_credentials():
   defaults = web_settings.sanitize_web_settings({})
   assert defaults["log_upload_target"] == "carrot"
-  assert defaults["web_upload_url"] == "https://shind0.synology.me"
+  assert defaults["web_upload_url"] == "https://upload.shind0.synology.me"
   assert defaults["toss_upload_url"] == "https://op.wjcloud.kr"
   assert defaults["toss_upload_token"] == ""
   assert "web_upload_token" not in defaults
@@ -233,7 +293,8 @@ def test_web_settings_default_to_carrot_and_preserve_toss_credentials():
 
 @pytest.mark.parametrize("previous_url", [
   "https://op.wjcloud.kr",
-  "https://upload.shind0.synology.me",
+  "https://shind0.synology.me",
+  "https://SHIND0.synology.me",
 ])
 def test_web_settings_migrate_previous_default_server(previous_url):
   settings = web_settings.sanitize_web_settings({"web_upload_url": previous_url})

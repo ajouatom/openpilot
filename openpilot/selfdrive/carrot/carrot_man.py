@@ -37,6 +37,7 @@ from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
 from openpilot.selfdrive.carrot.carrot_navi_control import CarrotNaviControl, parse_carrot_navi_control
 from openpilot.selfdrive.carrot.server.services.web_settings import read_web_settings
 from openpilot.selfdrive.carrot.web_upload import (
+  carrot_logs_web_target,
   create_web_upload_session_sync,
   post_tmux_web,
   selected_upload_settings,
@@ -833,7 +834,7 @@ class CarrotMan:
       print(f"TMUX creation error: {e}")
       return False
 
-  def send_tmux_web(self, tmux_why, send_settings=False):
+  def _tmux_upload_payload(self, tmux_why):
     def get_private_ip_by_iface(name="wlan0"):
       addrs = psutil.net_if_addrs().get(name, [])
 
@@ -851,11 +852,7 @@ class CarrotMan:
       v = Params().get(key) or ""
       return v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
 
-    try:
-      upload_settings = read_web_settings()
-    except Exception:
-      upload_settings = {}
-    payload = {
+    return {
       "tmux_why"           : tmux_why,
       "car_name"          : _pstr("CarName"),
       "git_branch"        : _pstr("GitBranch"),
@@ -868,43 +865,54 @@ class CarrotMan:
       "local_ip"          : get_private_ip_by_iface("wlan0"),
     }
 
+  def _post_tmux_target(self, label, url, headers, payload, send_settings=False):
+    settings_path = None
+    if send_settings:
+      self.save_toggle_values()
+      settings_path = "/data/toggle_values.json"
+
+    response = post_tmux_web(
+      url,
+      headers,
+      payload,
+      "/data/media/tmux.log",
+      settings_path,
+      requests.post,
+    )
+    print(f"[carrot_man] {label}: status={response.status_code} {response.text}")
+    return response
+
+  def send_tmux_web(self, tmux_why, send_settings=False):
     try:
-      target, base_url, configured_token = selected_upload_settings(upload_settings)
       try:
-        if target == "carrot":
-          session_token = configured_token or create_web_upload_session_sync(
-            base_url, payload, requests.post, "tmux",
-          )
-        else:
-          if not configured_token:
-            raise RuntimeError("Toss upload token is not configured")
-          session_token = configured_token
-        url, headers = tmux_web_target(upload_settings, session_token)
-      except Exception as session_error:
-        if target != "carrot":
-          raise
-        # Keep Carrot diagnostics available during a server rollout. Toss must
-        # never fall back to the Carrot diagnostics endpoint.
-        print(f"web upload session error, using tmux web fallback: {session_error}")
-        url, headers = tmux_web_target(upload_settings)
-
-      settings_path = None
-      if send_settings:
-        self.save_toggle_values()
-        settings_path = "/data/toggle_values.json"
-
-      response = post_tmux_web(
-        url,
-        headers,
-        payload,
-        "/data/media/tmux.log",
-        settings_path,
-        requests.post,
-      )
-      print(response.status_code, response.text)
-      return response
+        upload_settings = read_web_settings()
+      except Exception:
+        upload_settings = {}
+      payload = self._tmux_upload_payload(tmux_why)
+      target, base_url, configured_token = selected_upload_settings(upload_settings)
+      if target == "carrot":
+        session_token = configured_token or create_web_upload_session_sync(
+          base_url, payload, requests.post, "tmux",
+        )
+      else:
+        if not configured_token:
+          raise RuntimeError("Toss upload token is not configured")
+        session_token = configured_token
+      url, headers = tmux_web_target(upload_settings, session_token)
+      return self._post_tmux_target("DSM tmux upload", url, headers, payload, send_settings)
     except Exception as e:
       print(f"web tmux sending error...: {e}")
+      traceback.print_exc()
+      return None
+
+  def send_tmux_carrot_logs(self, tmux_why, send_settings=False):
+    """Send the independent copy consumed by the Discord carrot_logs forum."""
+    try:
+      payload = self._tmux_upload_payload(tmux_why)
+      url, headers = carrot_logs_web_target()
+      return self._post_tmux_target("carrot_logs upload", url, headers, payload, send_settings)
+    except Exception as e:
+      print(f"carrot_logs tmux sending error...: {e}")
       traceback.print_exc()
       return None
 
@@ -1207,8 +1215,10 @@ class CarrotMan:
             if onroad_tmux_captured and networkConnected and now >= onroad_tmux_next_attempt_at:
               web_response = self.send_tmux_web("onroad", send_settings = True)
               web_ok = web_response is not None and getattr(web_response, "ok", False)
-              if web_ok:
-                print("[carrot_man] onroad tmux web upload complete")
+              carrot_logs_response = self.send_tmux_carrot_logs("onroad", send_settings = True)
+              carrot_logs_ok = carrot_logs_response is not None and getattr(carrot_logs_response, "ok", False)
+              if web_ok or carrot_logs_ok:
+                print(f"[carrot_man] onroad tmux upload complete: web_ok={web_ok}, carrot_logs_ok={carrot_logs_ok}")
                 is_tmux_sent = True
               else:
                 onroad_tmux_next_attempt_at = now + CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS
@@ -1235,9 +1245,11 @@ class CarrotMan:
           if pending_tmux_reason is not None and networkConnected and now >= pending_tmux_next_attempt_at:
             web_response = self.send_tmux_web(pending_tmux_reason, send_settings = False)
             web_ok = web_response is not None and getattr(web_response, "ok", False)
+            carrot_logs_response = self.send_tmux_carrot_logs(pending_tmux_reason, send_settings = False)
+            carrot_logs_ok = carrot_logs_response is not None and getattr(carrot_logs_response, "ok", False)
             discord_ok = self.send_tmux_discord(pending_tmux_reason, web_ok, web_response)
-            if web_ok or discord_ok:
-              print(f"[carrot_man] tmux upload complete for {pending_tmux_reason}: web_ok={web_ok}, discord_ok={discord_ok}")
+            if web_ok or carrot_logs_ok or discord_ok:
+              print(f"[carrot_man] tmux upload complete for {pending_tmux_reason}: web_ok={web_ok}, carrot_logs_ok={carrot_logs_ok}, discord_ok={discord_ok}")
               if pending_tmux_reason == "exception":
                 self.params.put_bool("CarrotExceptionSent", True)
               self.params.put("CarrotException", "")
@@ -1266,9 +1278,11 @@ class CarrotMan:
           tmux_created = self.make_tmux_data()
           web_response = self.send_tmux_web("tmux_send") if tmux_created else None
           web_ok = web_response is not None and getattr(web_response, "ok", False)
+          carrot_logs_response = self.send_tmux_carrot_logs("tmux_send") if tmux_created else None
+          carrot_logs_ok = carrot_logs_response is not None and getattr(carrot_logs_response, "ok", False)
           discord_ok = self.send_tmux_discord("tmux_send", web_ok, web_response) if tmux_created else False
-          result = "success" if web_ok or discord_ok else "failed"
-          echo = json.dumps({"tmux_send": True, "result": result, "web_ok": web_ok, "discord_ok": discord_ok})
+          result = "success" if web_ok or carrot_logs_ok or discord_ok else "failed"
+          echo = json.dumps({"tmux_send": True, "result": result, "web_ok": web_ok, "carrot_logs_ok": carrot_logs_ok, "discord_ok": discord_ok})
           socket.send(echo.encode())
       except Exception as e:
         print(f"carrot_cmd_zmq error: {e}")
