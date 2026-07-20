@@ -7,7 +7,12 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from openpilot.selfdrive.carrot.web_upload import send_web_upload_complete, upload_folder_to_web
+from openpilot.selfdrive.carrot.web_upload import (
+  create_web_upload_session,
+  send_web_upload_complete,
+  upload_device_id,
+  upload_folder_to_web,
+)
 
 from ...services.params import HAS_PARAMS, Params
 from . import upload
@@ -174,13 +179,16 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
   params = Params() if HAS_PARAMS else None
   target = upload.resolve_upload_target()
   base_url, token = target["base_url"], target["token"]
-  if not token:
-    raise RuntimeError(f"{target['kind']} upload token is not configured")
   meta = upload.upload_metadata(params)
+  device_id = upload_device_id(meta)
   car_selected = meta.get("carName") or "none"
-  dongle_id = meta.get("dongleId") or "unknown"
-  directory = f"{car_selected} {dongle_id}".strip()
-  remote_base_path = f"{base_url}/routes/{directory}/".replace("\\", "/")
+  storage_directory = f"{car_selected} {device_id}".strip()
+  if not token:
+    if target["kind"] == "carrot":
+      token = await create_web_upload_session(base_url, meta, "dashcam")
+    else:
+      raise RuntimeError("Toss upload token is not configured")
+  remote_base_path = f"{base_url}/routes/{storage_directory}/".replace("\\", "/")
   total = len(segments)
   results: list[Any] = [None] * total  # filled by index so order matches input
 
@@ -217,7 +225,7 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
         files = await asyncio.to_thread(segment_file_summary, segment_path)
         ok = await upload_folder_to_web(
           segment_path,
-          directory,
+          device_id,
           segment,
           base_url,
           token,
@@ -265,6 +273,7 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
     "total": len(results),
     "uploadedAt": uploaded_at,
     "target": target["kind"],
+    "deviceId": device_id,
     "remoteBasePath": remote_base_path,
     "meta": meta,
     "results": results,

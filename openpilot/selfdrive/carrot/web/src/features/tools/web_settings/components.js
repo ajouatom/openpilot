@@ -38,7 +38,7 @@ globalThis.WebSettingsComponents = (() => {
 })();
 
 globalThis.WebSettingsComponents.register("web-upload", {
-  settingKeys: ["log_upload_target", "web_upload_url", "web_upload_token", "toss_upload_url", "toss_upload_token"],
+  settingKeys: ["log_upload_target", "web_upload_url", "toss_upload_url", "toss_upload_token"],
   render() {
     const text = (key, fallback) => getUIText(key) || fallback;
     const target = String(getWebSettingByKey("log_upload_target", "carrot") || "carrot");
@@ -64,8 +64,7 @@ globalThis.WebSettingsComponents.register("web-upload", {
             <option value="toss" ${target === "toss" ? "selected" : ""}>${escapeHtml(text("web_log_upload_target_toss", "Toss server"))}</option>
           </select>
         </label>
-        ${field("carrot", "web_upload_url", "url", "web_upload_url", "Carrot upload server", "web_upload_url_desc", "Carrot HTTPS API base URL")}
-        ${field("carrot", "web_upload_token", "password", "web_upload_token", "Carrot access token", "web_upload_token_desc", "Bearer token issued by the Carrot server")}
+        ${field("carrot", "web_upload_url", "url", "web_upload_url", "Carrot upload server", "web_upload_url_desc", "Carrot HTTPS API base URL with automatic sessions")}
         ${field("toss", "toss_upload_url", "url", "web_toss_upload_url", "Toss server URL", "web_toss_upload_url_desc", "Toss HTTPS API base URL")}
         ${field("toss", "toss_upload_token", "password", "web_toss_upload_token", "Toss access token", "web_toss_upload_token_desc", "Bearer token issued by the Toss server")}
         <div class="web-upload-settings__actions">

@@ -318,7 +318,12 @@ def _normalize_kmap_url(value: Any) -> str:
 
 def _normalize_web_upload_url(value: Any) -> str:
   try:
-    return normalize_base_url(value, DEFAULT_WEB_UPLOAD_URL)
+    url = normalize_base_url(value, DEFAULT_WEB_UPLOAD_URL)
+    # Migrate the short-lived token-based default shipped before automatic
+    # sessions. Otherwise existing devices would keep calling the old server.
+    if url in {"https://op.wjcloud.kr", "https://upload.shind0.synology.me"}:
+      return DEFAULT_WEB_UPLOAD_URL
+    return url
   except ValueError:
     return DEFAULT_WEB_UPLOAD_URL
 
@@ -412,7 +417,6 @@ WEB_SETTINGS_SPEC: List[_Field] = [
   # Keep the upstream Carrot Web API configuration intact. Toss remains an
   # additional target with independent credentials.
   _Field("web_upload_url", "str", DEFAULT_WEB_UPLOAD_URL, normalize=_normalize_web_upload_url),
-  _Field("web_upload_token", "str", "", normalize=_normalize_stripped),
   _Field("toss_upload_url", "str", DEFAULT_TOSS_UPLOAD_URL, normalize=_normalize_toss_upload_url),
   _Field("toss_upload_token", "str", "", normalize=_normalize_stripped),
   # Remote support last-used settings, persisted so the owner's choices survive a

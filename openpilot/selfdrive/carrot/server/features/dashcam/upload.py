@@ -9,6 +9,7 @@ from openpilot.system.hardware import HARDWARE
 from openpilot.selfdrive.carrot.web_upload import selected_upload_settings
 
 from ...config import DASHCAM_DEFAULT_DISCORD_KEY, DASHCAM_DEFAULT_DISCORD_WEBHOOK
+from ...services.params import HAS_PARAMS, Params
 from ...services.web_settings import read_web_settings
 
 
@@ -75,6 +76,10 @@ def upload_metadata(params: Any) -> dict[str, str]:
     "commit": git_text(["rev-parse", "--short", "HEAD"], "unknown"),
     "commitDate": git_text(["show", "-s", "--date=format:%Y-%m-%d %H:%M:%S", "--format=%cd", "HEAD"], "unknown"),
   }
+
+
+def current_upload_metadata() -> dict[str, str]:
+  return upload_metadata(Params() if HAS_PARAMS else None)
 
 
 def decode_obfuscated(value: str, key: str) -> str:

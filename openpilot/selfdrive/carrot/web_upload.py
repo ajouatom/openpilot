@@ -11,7 +11,7 @@ from typing import Any
 from aiohttp import ClientSession, ClientTimeout
 
 
-DEFAULT_WEB_UPLOAD_URL = "https://op.wjcloud.kr"
+DEFAULT_WEB_UPLOAD_URL = "https://shind0.synology.me"
 DEFAULT_TOSS_UPLOAD_URL = "https://op.wjcloud.kr"
 DEFAULT_TMUX_WEB_UPLOAD_URL = "https://tmux.carrotpilot.app/upload"
 UPLOAD_TARGETS = {"carrot", "toss"}
@@ -38,10 +38,9 @@ def web_upload_settings(settings: Mapping[str, Any] | None = None) -> tuple[str,
     or str(settings.get("web_upload_url") or "").strip()
     or DEFAULT_WEB_UPLOAD_URL
   )
-  token = (
-    os.environ.get("CARROT_WEB_UPLOAD_TOKEN", "").strip()
-    or str(settings.get("web_upload_token") or "").strip()
-  )
+  # Normal Carrot users receive a short-lived session automatically. Keep the
+  # environment override for private Carrot deployments using a static token.
+  token = os.environ.get("CARROT_WEB_UPLOAD_TOKEN", "").strip()
   return normalize_base_url(base_url), token
 
 
@@ -75,8 +74,12 @@ def api_url(base_url: str, *parts: str) -> str:
   return f"{base_url}/api/v1/{quoted}"
 
 
-def tmux_web_target(settings: Mapping[str, Any] | None = None) -> tuple[str, dict[str, str]]:
-  target, base_url, token = selected_upload_settings(settings)
+def tmux_web_target(
+  settings: Mapping[str, Any] | None = None,
+  session_token: str = "",
+) -> tuple[str, dict[str, str]]:
+  target, base_url, configured_token = selected_upload_settings(settings)
+  token = str(session_token or configured_token).strip()
   if token:
     return api_url(base_url, "tmux", "upload"), {"Authorization": f"Bearer {token}"}
   if target == "toss":
@@ -89,6 +92,70 @@ def tmux_web_target(settings: Mapping[str, Any] | None = None) -> tuple[str, dic
     DEFAULT_TMUX_WEB_UPLOAD_URL,
   )
   return direct_url, {}
+
+
+def upload_device_id(metadata: Mapping[str, Any]) -> str:
+  for key in ("dongleId", "dongle_id", "deviceId", "device_id", "serial", "device_serial"):
+    value = str(metadata.get(key) or "").strip()
+    if value and value.lower() not in {"unknown", "none"}:
+      return value
+  return "unknown"
+
+
+def _session_payload(metadata: Mapping[str, Any], purpose: str) -> dict[str, str]:
+  payload = {str(key): str(value or "")[:160] for key, value in metadata.items()}
+  payload["deviceId"] = upload_device_id(metadata)
+  payload["purpose"] = purpose
+  return payload
+
+
+def _session_token(body: Any) -> str:
+  token = str((body or {}).get("token") or "").strip() if isinstance(body, Mapping) else ""
+  if not token:
+    raise RuntimeError("upload server did not issue a session")
+  return token
+
+
+async def create_web_upload_session(
+  base_url: str,
+  metadata: Mapping[str, Any],
+  purpose: str = "dashcam",
+) -> str:
+  timeout = ClientTimeout(total=12)
+  async with ClientSession(timeout=timeout) as session:
+    async with session.post(api_url(base_url, "session"), json=_session_payload(metadata, purpose)) as resp:
+      text = await resp.text()
+      try:
+        body = json.loads(text)
+      except Exception:
+        body = None
+      if not 200 <= resp.status < 300 or not (body or {}).get("ok"):
+        error = str((body or {}).get("error") or text or "")[:300]
+        raise RuntimeError(f"upload session HTTP {resp.status}: {error}")
+      return _session_token(body)
+
+
+def create_web_upload_session_sync(
+  base_url: str,
+  metadata: Mapping[str, Any],
+  post: Callable[..., Any],
+  purpose: str = "tmux",
+) -> str:
+  response = post(
+    api_url(base_url, "session"),
+    json=_session_payload(metadata, purpose),
+    timeout=12,
+  )
+  try:
+    body = response.json()
+  except Exception:
+    body = None
+  status = int(getattr(response, "status_code", 0) or 0)
+  if not 200 <= status < 300 or not (body or {}).get("ok"):
+    text = str(getattr(response, "text", "") or "")[:300]
+    error = str((body or {}).get("error") or text)[:300]
+    raise RuntimeError(f"upload session HTTP {status}: {error}")
+  return _session_token(body)
 
 
 def post_tmux_web(
@@ -122,14 +189,13 @@ async def check_web_upload_health(base_url: str, token: str) -> dict[str, Any]:
   def elapsed_ms() -> int:
     return int((time.monotonic() - started) * 1000)
 
-  if not token:
-    return {"ok": False, "error": "web upload token is not configured", "elapsed_ms": elapsed_ms()}
   try:
     timeout = ClientTimeout(total=12)
     async with ClientSession(timeout=timeout) as session:
+      headers = {"Authorization": f"Bearer {token}"} if token else {}
       async with session.get(
         api_url(base_url, "health"),
-        headers={"Authorization": f"Bearer {token}"},
+        headers=headers,
       ) as resp:
         text = await resp.text()
         if resp.status == 200:
@@ -157,7 +223,7 @@ async def upload_folder_to_web(
   except OSError as e:
     raise RuntimeError(f"cannot read segment folder: {e}") from e
   if not token:
-    raise RuntimeError("web upload token is not configured")
+    raise RuntimeError("upload session is not configured")
 
   headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/octet-stream"}
   timeout = ClientTimeout(total=None, connect=20, sock_read=180)
@@ -165,6 +231,7 @@ async def upload_folder_to_web(
     for filename in entries:
       local_path = os.path.join(local_folder, filename)
       url = api_url(base_url, "upload", directory, remote_path, filename)
+      file_size = os.path.getsize(local_path)
       sent = 0
 
       async def send_file(path: str = local_path):
@@ -184,7 +251,7 @@ async def upload_folder_to_web(
       for _attempt in range(2):
         check_cancel()
         try:
-          async with session.put(url, data=send_file()) as resp:
+          async with session.put(url, data=send_file(), headers={"X-File-Size": str(file_size)}) as resp:
             text = await resp.text()
             try:
               body = json.loads(text)
@@ -210,7 +277,7 @@ async def upload_folder_to_web(
 
 async def send_web_upload_complete(base_url: str, token: str, payload: dict[str, Any]) -> dict[str, Any]:
   if not token:
-    return {"ok": False, "error": "web upload token is not configured"}
+    return {"ok": False, "error": "upload session is not configured"}
   try:
     timeout = ClientTimeout(total=12)
     async with ClientSession(timeout=timeout) as session:
