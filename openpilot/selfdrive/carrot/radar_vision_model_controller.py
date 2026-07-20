@@ -15,7 +15,15 @@ RADAR_TO_CAMERA = 1.52
 VISION_LEAD_MIN_PROB = 0.5
 VISION_LEAD_HOLD_MIN_PROB = 0.35
 VISION_LEAD_HOLD_MAX_FRAMES = 10
-VISION_MATCH_DISTANCE_HYSTERESIS_M = 0.75
+VISION_MATCH_DISTANCE_HYSTERESIS_M = 2.0
+VISION_MATCH_LONG_RANGE_M = 45.0
+VISION_MATCH_FRESH_MAX_DPATH_M = 3.0
+VISION_MATCH_HELD_MAX_DPATH_M = 4.0
+CORNER_STATIONARY_MIN_VISION_PROB = 0.65
+CORNER_STATIONARY_MIN_TRACK_AGE = 8
+CORNER_STATIONARY_MAX_DPATH_M = 0.75
+CORNER_STATIONARY_MIN_IN_LANE_PROB = 0.65
+CORNER_STATIONARY_MAX_VLEAD_MPS = 4.0
 STEALTH_LEAD_MIN_TRACK_AGE = 7
 STEALTH_LEAD_MAX_DPATH_M = 1.0
 STEALTH_LEAD_MIN_IN_LANE_PROB = 0.55
@@ -113,6 +121,41 @@ class VisionRadarMatcher:
     v_rel = obj.front_v_rel if obj.front_v_rel is not None else obj.v_rel
     return float(d_rel), float(obj.y_rel), float(obj.v_lead if obj.front_v_rel is None else v_ego + v_rel)
 
+  @staticmethod
+  def _corner_stationary_vehicle_evidence(
+    prediction: RadarLeadPrediction,
+    predictions: tuple[RadarLeadPrediction, ...],
+    vision_lead: VisionLeadContext,
+    held_identity: bool = False,
+  ) -> bool:
+    """Accept slow corner data only when a second radar sees the same object."""
+    features = prediction.features
+    obj = features.radar_object
+    if (
+      obj.corner_track_id is None
+      or vision_lead.probability < (
+        VISION_LEAD_HOLD_MIN_PROB + 0.20 if held_identity else CORNER_STATIONARY_MIN_VISION_PROB
+      )
+      or features.track_age < CORNER_STATIONARY_MIN_TRACK_AGE
+      or not 8.0 < obj.d_rel < 110.0
+      or not -1.0 < obj.v_lead < CORNER_STATIONARY_MAX_VLEAD_MPS
+      or abs(features.d_path) >= CORNER_STATIONARY_MAX_DPATH_M
+      or features.in_lane_prob < CORNER_STATIONARY_MIN_IN_LANE_PROB
+      or abs(obj.d_rel - vision_lead.d_rel) >= max(8.0, min(24.0, 1.5 * abs(vision_lead.x_std)))
+      or abs(obj.y_rel - vision_lead.y_rel) >= max(2.0, min(3.0, 1.5 * abs(vision_lead.y_std)))
+    ):
+      return False
+    if obj.front_track_id is not None or obj.scc_track_id is not None:
+      return True
+    return any(
+      other is not prediction
+      and (other.features.radar_object.front_track_id is not None or other.features.radar_object.scc_track_id is not None)
+      and abs(other.features.radar_object.d_rel - obj.d_rel) < 6.0
+      and abs(other.features.radar_object.y_rel - obj.y_rel) < 2.4
+      and -1.0 < other.features.radar_object.v_lead < 5.0
+      for other in predictions
+    )
+
   def match_context(
     self,
     vision_lead: VisionLeadContext | None,
@@ -145,10 +188,17 @@ class VisionRadarMatcher:
     )
     probability, vision_d, vision_y, vision_v, x_std, y_std, v_std = vision
 
+    prediction_list = tuple(predictions)
+    corner_stationary_ids: set[int] = set()
     candidates: list[tuple[RadarLeadPrediction, float, float, float, float]] = []
-    for prediction in predictions:
+    for prediction in prediction_list:
       obj = prediction.features.radar_object
-      if obj.front_track_id is None and obj.scc_track_id is None:
+      aliases = frozenset(prediction.features.aliases)
+      held_identity = bool(aliases & self.last_aliases)
+      corner_stationary = self._corner_stationary_vehicle_evidence(
+        prediction, prediction_list, vision_lead, held_identity,
+      )
+      if obj.front_track_id is None and obj.scc_track_id is None and not corner_stationary:
         continue
       radar_d, radar_y, radar_v = self._radar_values(prediction, v_ego)
       if not 0.5 < radar_d < 180.0:
@@ -158,9 +208,17 @@ class VisionRadarMatcher:
         * _laplacian(radar_y, vision_y, y_std)
         * _laplacian(radar_v, vision_v, v_std)
       )
-      aliases = frozenset(prediction.features.aliases)
+      if (
+        radar_d > VISION_MATCH_LONG_RANGE_M
+        and abs(prediction.features.d_path) > (
+          VISION_MATCH_HELD_MAX_DPATH_M if held_identity else VISION_MATCH_FRESH_MAX_DPATH_M
+        )
+      ):
+        continue
       if holding_previous and not aliases & self.last_aliases:
         continue
+      if corner_stationary:
+        corner_stationary_ids.add(id(prediction))
       candidates.append((prediction, score, radar_d, radar_y, radar_v))
 
     if not candidates:
@@ -176,6 +234,8 @@ class VisionRadarMatcher:
 
     def velocity_sane(candidate: tuple[RadarLeadPrediction, float, float, float, float]) -> bool:
       prediction, _, _, _, radar_v = candidate
+      if id(prediction) in corner_stationary_ids:
+        return True
       velocity_error = abs(radar_v - vision_v)
       if velocity_error < velocity_tolerance:
         return True
@@ -193,7 +253,7 @@ class VisionRadarMatcher:
         max(5.0, vision_d * 0.25)
         + (VISION_MATCH_DISTANCE_HYSTERESIS_M if frozenset(candidate[0].features.aliases) & self.last_aliases else 0.0)
       )
-      and abs(candidate[3] - vision_y) < 2.0
+      and abs(candidate[3] - vision_y) < (3.0 if id(candidate[0]) in corner_stationary_ids else 2.0)
       and velocity_sane(candidate)
     ]
     if not usable:
@@ -202,7 +262,14 @@ class VisionRadarMatcher:
       return None
 
     ranked = sorted(candidates, key=lambda candidate: (candidate[1], -abs(candidate[2] - vision_d)), reverse=True)
-    selected = max(usable, key=lambda candidate: (candidate[1], -abs(candidate[2] - vision_d)))
+    selected = max(usable, key=lambda candidate: (
+      bool(
+        id(candidate[0]) in corner_stationary_ids
+        and frozenset(candidate[0].features.aliases) & self.last_aliases
+      ),
+      candidate[1],
+      -abs(candidate[2] - vision_d),
+    ))
     # Mirror radard's closer second-match rule for small targets whose radar
     # distance can sit just outside the normal vision-distance gate.
     if len(ranked) > 1 and ranked[0][0] is selected[0]:

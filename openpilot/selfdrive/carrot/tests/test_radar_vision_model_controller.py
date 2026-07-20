@@ -75,6 +75,46 @@ def test_previous_match_bridges_small_distance_gate_jitter() -> None:
   assert held is not None and held.prediction.features.radar_object.front_track_id == 40
 
 
+def test_long_range_off_path_target_does_not_match_vision() -> None:
+  matcher = VisionRadarMatcher()
+  ghost = prediction(46, -11.6, 0.1, 0.1, d_rel=64.0, v_lead=16.2)
+  ghost = replace(ghost, features=replace(
+    ghost.features,
+    d_path=-4.65,
+    d_path_future=-5.47,
+    in_lane_prob=0.0,
+    radar_object=replace(ghost.features.radar_object, front_d_rel=64.0, front_v_rel=-0.8),
+  ))
+  vision = VisionLeadContext(0.54, 81.0, -11.0, 16.0, 0.0, 10.0, 2.0, 3.0)
+
+  assert matcher.match_context(vision, (ghost,), 17.0) is None
+
+
+def test_slow_corner_track_can_match_stationary_vision_with_front_corroboration() -> None:
+  matcher = VisionRadarMatcher()
+  corner = prediction(1012, 7.6, 0.0, 0.0, front=False, d_rel=85.1, v_lead=2.4)
+  corner = replace(corner, features=replace(
+    corner.features,
+    track_age=14,
+    d_path=0.35,
+    d_path_future=-0.67,
+    in_lane_prob=0.77,
+  ))
+  front = prediction(60, 7.3, 0.0, 0.0, d_rel=84.7, v_lead=0.2)
+  front = replace(front, features=replace(
+    front.features,
+    track_age=18,
+    d_path=0.12,
+    in_lane_prob=0.92,
+    radar_object=replace(front.features.radar_object, front_d_rel=84.7, front_v_rel=-21.1),
+  ))
+  vision = VisionLeadContext(0.66, 91.5, 8.3, 17.7, 0.0, 11.3, 2.0, 3.2)
+
+  match = matcher.match_context(vision, (corner, front), 21.3)
+  assert match is not None
+  assert match.prediction.features.radar_object.corner_track_id == 1012
+
+
 def test_high_probability_vision_can_replace_farther_previous_match() -> None:
   matcher = VisionRadarMatcher()
   farther = prediction(43, 0.41, 0.1, 0.1, d_rel=29.1, v_lead=9.2)

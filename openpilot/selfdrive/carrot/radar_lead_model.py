@@ -617,6 +617,18 @@ class RadarLeadDecisionFilter:
         and future_d_path < (2.25 if close_fused_cutin else midrange_future_limit)
         and future_d_path + (0.15 if close_fused_cutin else 0.20) < current_d_path
       )
+      decisive_fused_entry = (
+        obj.front_track_id is not None and obj.corner_track_id is not None
+        and prediction.features.track_age >= 7
+        and 8.0 < obj.d_rel < 35.0 and obj.v_lead > 2.0
+        and lane_history_ready and lane_direction_reliable
+        and 2.8 < current_d_path < 3.4 and abs(obj.y_rel) < 4.5
+        and 0.8 <= instant_inward_speed < 3.0
+        and sustained_inward
+        and future_d_path < 2.15
+        and future_d_path + 0.60 < current_d_path
+        and prediction.cutin_prob >= max(0.72, cutin_threshold - 0.10)
+      )
       front_only_inward_cutin = (
         obj.front_track_id is not None and obj.corner_track_id is None
         and prediction.features.track_age >= 12
@@ -628,7 +640,8 @@ class RadarLeadDecisionFilter:
       )
       effective_cutin_prob = max(
         prediction.cutin_prob,
-        min(0.95, cutin_threshold + 0.08) if fused_inward_cutin or front_only_inward_cutin else 0.0,
+        min(0.95, cutin_threshold + 0.08)
+        if fused_inward_cutin or decisive_fused_entry or front_only_inward_cutin else 0.0,
       )
       state.cutin_ema = max(effective_cutin_prob, 0.60 * state.cutin_ema + 0.40 * effective_cutin_prob)
       projected_lane_entry = (
@@ -656,9 +669,12 @@ class RadarLeadDecisionFilter:
         state.cutin_hit_aliases = frozenset()
       required_cutin_hits = 2 if close_geometry or fused_inward_cutin else 3
       urgent = (
-        reliable and close_geometry and obj.d_rel < 4.5
-        and obj.front_track_id is not None and obj.corner_track_id is not None
-        and prediction.cutin_prob >= max(0.85, cutin_threshold + 0.15)
+        decisive_fused_entry
+        or (
+          reliable and close_geometry and obj.d_rel < 4.5
+          and obj.front_track_id is not None and obj.corner_track_id is not None
+          and prediction.cutin_prob >= max(0.85, cutin_threshold + 0.15)
+        )
       )
       if state.lead_hits >= 2:
         state.lead_active_until = time_s + 0.35
