@@ -38,11 +38,10 @@ globalThis.WebSettingsComponents = (() => {
 })();
 
 globalThis.WebSettingsComponents.register("web-upload", {
-  settingKeys: ["web_upload_url", "web_upload_token"],
+  settingKeys: ["web_upload_url"],
   render() {
     const text = (key, fallback) => getUIText(key) || fallback;
     const url = String(getWebSettingByKey("web_upload_url", "") || "");
-    const token = String(getWebSettingByKey("web_upload_token", "") || "");
     return `
       <div class="web-upload-settings">
         <label class="web-settings-row web-settings-row--field">
@@ -51,13 +50,6 @@ globalThis.WebSettingsComponents.register("web-upload", {
             <span class="web-settings-row__desc">${escapeHtml(text("web_upload_url_desc", "HTTPS API base URL"))}</span>
           </span>
           <input class="web-settings-text" data-web-upload-field="web_upload_url" type="url" inputmode="url" value="${escapeHtml(url)}" />
-        </label>
-        <label class="web-settings-row web-settings-row--field">
-          <span class="web-settings-row__copy">
-            <span class="web-settings-row__title">${escapeHtml(text("web_upload_token", "Access token"))}</span>
-            <span class="web-settings-row__desc">${escapeHtml(text("web_upload_token_desc", "Bearer token issued by the upload server"))}</span>
-          </span>
-          <input class="web-settings-text" data-web-upload-field="web_upload_token" type="password" autocomplete="new-password" value="${escapeHtml(token)}" />
         </label>
         <div class="web-upload-settings__actions">
           <button class="btn btn-secondary web-upload-settings__test" type="button">${escapeHtml(text("web_upload_test", "Test connection"))}</button>

@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 from aiohttp import web
 
-from openpilot.selfdrive.carrot.web_upload import check_web_upload_health
+from openpilot.selfdrive.carrot.web_upload import check_web_upload_health, create_web_upload_session
 
 from ...config import DASHCAM_ROOT
 from . import upload, upload_jobs
@@ -480,6 +480,9 @@ async def api_dashcam_upload_test(request: web.Request) -> web.Response:
   try:
     base_url, token = upload.upload_target_settings()
     result = await check_web_upload_health(base_url, token)
+    if result.get("ok") and not token:
+      await create_web_upload_session(base_url, upload.current_upload_metadata(), "test")
+      result["session"] = "automatic"
     status = 200 if result.get("ok") else 502
     return web.json_response({"target": "web", "url": base_url, **result}, status=status)
   except Exception as e:

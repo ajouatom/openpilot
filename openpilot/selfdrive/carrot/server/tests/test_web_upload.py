@@ -39,7 +39,7 @@ def test_web_upload_settings_support_legacy_values_and_environment_override(monk
   assert web_upload.web_upload_settings({
     "toss_upload_url": "https://legacy.example/",
     "toss_upload_token": "legacy-token",
-  }) == ("https://legacy.example", "legacy-token")
+  }) == ("https://legacy.example", "")
 
   monkeypatch.setenv("CARROT_WEB_UPLOAD_URL", "https://env.example/root/")
   monkeypatch.setenv("CARROT_WEB_UPLOAD_TOKEN", "env-token")
@@ -59,20 +59,91 @@ def test_web_api_url_quotes_every_path_component():
   ) == "https://upload.example/api/v1/upload/car%20name%2Fid/route%7C0/qlog.zst"
 
 
-def test_tmux_target_uses_authenticated_web_api_when_token_exists(monkeypatch):
+def test_tmux_target_uses_automatic_session_token(monkeypatch):
   clear_upload_env(monkeypatch)
   url, headers = web_upload.tmux_web_target({
     "web_upload_url": "https://upload.example",
-    "web_upload_token": "secret",
-  })
+  }, "automatic-session")
   assert url == "https://upload.example/api/v1/tmux/upload"
-  assert headers == {"Authorization": "Bearer secret"}
+  assert headers == {"Authorization": "Bearer automatic-session"}
 
 
 def test_tmux_target_falls_back_to_direct_web_endpoint_without_token(monkeypatch):
   clear_upload_env(monkeypatch)
   monkeypatch.setenv("CARROT_TMUX_WEB_UPLOAD_URL", "https://tmux.example/upload/")
   assert web_upload.tmux_web_target({}) == ("https://tmux.example/upload", {})
+
+
+def test_sync_session_is_issued_automatically_from_device_metadata():
+  captured = {}
+
+  class Response:
+    status_code = 200
+    text = '{"ok":true}'
+
+    @staticmethod
+    def json():
+      return {"ok": True, "token": "short-lived-session"}
+
+  def fake_post(url, *, json, timeout):
+    captured.update({"url": url, "json": json, "timeout": timeout})
+    return Response()
+
+  token = web_upload.create_web_upload_session_sync(
+    "https://upload.example",
+    {"dongle_id": "0123456789abcdef", "car_name": "TEST"},
+    fake_post,
+  )
+  assert token == "short-lived-session"
+  assert captured == {
+    "url": "https://upload.example/api/v1/session",
+    "json": {
+      "dongle_id": "0123456789abcdef",
+      "car_name": "TEST",
+      "deviceId": "0123456789abcdef",
+      "purpose": "tmux",
+    },
+    "timeout": 12,
+  }
+
+
+def test_async_session_is_issued_automatically(monkeypatch):
+  captured = {}
+
+  class Response:
+    status = 200
+
+    async def text(self):
+      return '{"ok":true,"token":"dashcam-session"}'
+
+  class Context:
+    async def __aenter__(self):
+      return Response()
+
+    async def __aexit__(self, exc_type, exc, tb):
+      return False
+
+  class Session:
+    def __init__(self, *args, **kwargs):
+      pass
+
+    async def __aenter__(self):
+      return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+      return False
+
+    def post(self, url, *, json):
+      captured.update({"url": url, "json": json})
+      return Context()
+
+  monkeypatch.setattr(web_upload, "ClientSession", Session)
+  token = asyncio.run(web_upload.create_web_upload_session(
+    "https://upload.example", {"dongleId": "0123456789abcdef"}, "dashcam",
+  ))
+  assert token == "dashcam-session"
+  assert captured["json"]["deviceId"] == "0123456789abcdef"
+  assert captured["json"]["purpose"] == "dashcam"
 
 
 def test_tmux_web_post_sends_multipart_and_closes_files(tmp_path: Path):
@@ -111,9 +182,18 @@ def test_web_settings_migrate_previous_upload_keys():
     "toss_upload_token": "legacy-token",
   })
   assert settings["web_upload_url"] == "https://legacy.example"
-  assert settings["web_upload_token"] == "legacy-token"
+  assert "web_upload_token" not in settings
   assert "toss_upload_url" not in settings
   assert "toss_upload_token" not in settings
+
+
+@pytest.mark.parametrize("previous_url", [
+  "https://op.wjcloud.kr",
+  "https://upload.shind0.synology.me",
+])
+def test_web_settings_migrate_previous_default_server(previous_url):
+  settings = web_settings.sanitize_web_settings({"web_upload_url": previous_url})
+  assert settings["web_upload_url"] == web_upload.DEFAULT_WEB_UPLOAD_URL
 
 
 class FakeResponse:
@@ -126,16 +206,17 @@ class FakeResponse:
 
 
 class FakeRequestContext:
-  def __init__(self, session, url, data):
+  def __init__(self, session, url, data, headers):
     self.session = session
     self.url = url
     self.data = data
+    self.headers = headers
 
   async def __aenter__(self):
     content = bytearray()
     async for chunk in self.data:
       content.extend(chunk)
-    self.session.requests.append((self.url, bytes(content)))
+    self.session.requests.append((self.url, bytes(content), self.headers))
     size_delta = self.session.size_deltas.pop(0) if self.session.size_deltas else 0
     return FakeResponse(200, {"ok": True, "size": len(content) + size_delta})
 
@@ -159,8 +240,8 @@ class FakeSession:
   async def __aexit__(self, exc_type, exc, tb):
     return False
 
-  def put(self, url, data):
-    return FakeRequestContext(self, url, data)
+  def put(self, url, data, headers=None):
+    return FakeRequestContext(self, url, data, headers or {})
 
 
 def test_dashcam_web_upload_streams_and_verifies_every_file(tmp_path: Path, monkeypatch):
@@ -185,6 +266,7 @@ def test_dashcam_web_upload_streams_and_verifies_every_file(tmp_path: Path, monk
     "https://upload.example/api/v1/upload/car%20name%20dongle%2Fid/2026-07-20--00-00-00%7C0/qlog.zst",
   ]
   assert [request[1] for request in session.requests] == [b"camera-data", b"log-data"]
+  assert [request[2]["X-File-Size"] for request in session.requests] == ["11", "8"]
 
 
 def test_dashcam_web_upload_retries_size_mismatch(tmp_path: Path, monkeypatch):
@@ -203,12 +285,12 @@ def test_dashcam_web_upload_retries_size_mismatch(tmp_path: Path, monkeypatch):
   assert len(FakeSession.instances[-1].requests) == 2
 
 
-def test_dashcam_web_upload_requires_token_before_network(tmp_path: Path, monkeypatch):
+def test_dashcam_web_upload_requires_session_before_network(tmp_path: Path, monkeypatch):
   (tmp_path / "qlog.zst").write_bytes(b"data")
   FakeSession.instances = []
   monkeypatch.setattr(web_upload, "ClientSession", FakeSession)
 
-  with pytest.raises(RuntimeError, match="token is not configured"):
+  with pytest.raises(RuntimeError, match="session is not configured"):
     asyncio.run(web_upload.upload_folder_to_web(
       str(tmp_path),
       "device",

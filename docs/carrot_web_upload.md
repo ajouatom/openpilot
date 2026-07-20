@@ -1,59 +1,71 @@
 # Carrot web upload
 
-Carrot diagnostics and dashcam logs use HTTP(S) only. The client contains no
+Carrot diagnostics and dashcam logs use HTTP(S) only. The runtime contains no
 FTP connection, account, password, port, or fallback path.
 
-## Client configuration
+## User experience
 
-In Carrot Web, open **Tools > Web settings > Web upload** and set:
+There is no account setup and no token field. A device requests a short-lived
+upload session automatically using its Dongle ID, and the server binds that
+session to the Dongle ID and source IP. The same server handles dashcam files
+and tmux diagnostics.
 
-- Upload server: the API base URL (default: `https://op.wjcloud.kr`)
-- Access token: the Bearer token issued by that server
+In Carrot Web, **Tools > Web settings > Web upload** contains only:
 
-Use **Test connection** before uploading logs. The same configured server and
-token are used for dashcam files and tmux diagnostics. Until a shared token is
-configured, tmux diagnostics retain the existing web-only endpoint at
-`https://tmux.carrotpilot.app/upload`; dashcam upload fails closed instead of
-falling back to another protocol.
+- Upload server (default: `https://shind0.synology.me`)
+- Test connection
 
-Deployments may override the saved settings with:
+An operator may override the base URL with `CARROT_WEB_UPLOAD_URL`. The
+`CARROT_WEB_UPLOAD_TOKEN` environment variable remains an operator-only escape
+hatch for a private server; it is not stored or shown in Carrot Web.
 
-- `CARROT_WEB_UPLOAD_URL`
-- `CARROT_WEB_UPLOAD_TOKEN`
-- `CARROT_TMUX_WEB_UPLOAD_URL` (tmux-only web fallback)
-- `CARROT_WEB_UPLOAD_CONCURRENCY` (1-6, default 3)
+Uploads use three concurrent HTTPS streams per device by default, configurable
+from one to six with `CARROT_WEB_UPLOAD_CONCURRENCY`. There is no bandwidth
+throttle.
 
-## Required web API
+## API and protection policy
 
-Authenticated routes use `Authorization: Bearer <token>`.
+- `GET /api/v1/health` is public and reports readiness and limits.
+- `POST /api/v1/session` validates a Dongle ID and returns a random,
+  short-lived session bound to that device and source IP.
+- `PUT /api/v1/upload/{device}/{segment}/{filename}` streams one file. The
+  client sends `X-File-Size`; the server writes to a temporary file, verifies
+  the exact size, fsyncs it, and atomically renames it.
+- `POST /api/v1/complete` stores the completed dashcam-upload manifest.
+- `POST /api/v1/tmux/upload` accepts the tmux log and optional settings file as
+  multipart data.
 
-- `GET /api/v1/health` returns HTTP 200 when the service and storage are ready.
-- `PUT /api/v1/upload/{device}/{segment}/{filename}` accepts a streamed
-  `application/octet-stream` body and returns `{"ok": true, "size": N}`.
-  The client compares `size` with the bytes actually sent and retries once on
-  failure or mismatch.
-- `POST /api/v1/complete` accepts the completed dashcam-upload summary as JSON.
-- `POST /api/v1/tmux/upload` accepts multipart fields `files[0]` (tmux log),
-  optional `files[1]` (settings), and device metadata.
+The deployed defaults are:
 
-Every path component is percent-encoded by the client. The server must decode,
-validate, and confine it to the intended storage root.
+- 1 GiB per Dongle ID per UTC day
+- 8 GiB per source IP per UTC day
+- no transfer-speed limit
+- 3 concurrent uploads per device and 16 globally
+- 512 MiB maximum per dashcam file and 16 MiB per tmux request
+- 10 GiB free-space floor; existing files are never deleted automatically
+- strict device, segment, filename, file-type, and path-confinement checks
 
-## DSM cutover
+Uploaded content has no public download route and is never executed. The DSM
+container runs without root privileges, with a read-only root filesystem and a
+single writable data volume.
 
-No DSM FTP option is required by the client. If the HTTPS upload service already
-writes to DSM storage, DSM only needs the shared-folder permission used by that
-service and the HTTPS reverse proxy/API route.
+## DSM deployment and cutover
 
-Before deleting the old DSM account:
+The receiver and hardened Container Manager configuration live in
+`tools/carrot_upload_server`. DSM should expose it only through an HTTPS reverse
+proxy:
 
-1. Save the upload URL and token in Carrot Web.
-2. Run **Test connection** and confirm success.
-3. Upload one small completed segment and confirm every returned file size.
-4. Trigger one tmux diagnostic and confirm it appears on the web server.
-5. Delete the old FTP account, disable the DSM FTP service, and remove the 8021
-   router/firewall rule if nothing else uses it.
+1. Run the container on loopback `127.0.0.1:18080`.
+2. Proxy `https://shind0.synology.me:443` to
+   `http://127.0.0.1:18080` and assign a trusted certificate.
+3. Verify public health, automatic session creation, a real segment upload,
+   exact returned file sizes, completion manifest, and a tmux upload.
+4. Then delete the old transfer account, disable the DSM FTP service, and
+   remove its router/firewall rule if nothing else uses it.
 
-For a self-hosted DSM reverse proxy, allow long-lived streamed PUT requests and
-set the request-body limit above the largest camera file. A DSM WebDAV toggle by
-itself does not implement the API contract above.
+The application does not need DSM FTP, WebDAV, or a shared user credential.
+DSM keeps the original remote layout. Dashcam files go to
+`/volume1/openpilot/routes/<CarName> <DongleID>/<segment>`, while tmux files go
+to `/volume1/openpilot/tmux/<GitBranch>/<CarName> <DongleID>/`. The private
+`/volume1/openpilot/tmux/.state` directory holds manifests, sessions, and quota
+state. The web receiver never scans or deletes the existing Openpilot tree.

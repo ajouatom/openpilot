@@ -36,7 +36,12 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
 from openpilot.selfdrive.carrot.carrot_navi_control import CarrotNaviControl, parse_carrot_navi_control
 from openpilot.selfdrive.carrot.server.services.web_settings import read_web_settings
-from openpilot.selfdrive.carrot.web_upload import post_tmux_web, tmux_web_target
+from openpilot.selfdrive.carrot.web_upload import (
+  create_web_upload_session_sync,
+  post_tmux_web,
+  tmux_web_target,
+  web_upload_settings,
+)
 
 from openpilot.common.gps import get_gps_location_service
 
@@ -850,8 +855,6 @@ class CarrotMan:
       upload_settings = read_web_settings()
     except Exception:
       upload_settings = {}
-    url, headers = tmux_web_target(upload_settings)
-
     payload = {
       "tmux_why"           : tmux_why,
       "car_name"          : _pstr("CarName"),
@@ -866,6 +869,18 @@ class CarrotMan:
     }
 
     try:
+      base_url, configured_token = web_upload_settings(upload_settings)
+      try:
+        session_token = configured_token or create_web_upload_session_sync(
+          base_url, payload, requests.post, "tmux",
+        )
+        url, headers = tmux_web_target(upload_settings, session_token)
+      except Exception as session_error:
+        # Keep diagnostics available during a server rollout. This fallback is
+        # HTTP(S)-only and contains no legacy transfer protocol or credentials.
+        print(f"web upload session error, using tmux web fallback: {session_error}")
+        url, headers = tmux_web_target(upload_settings)
+
       settings_path = None
       if send_settings:
         self.save_toggle_values()
