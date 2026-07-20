@@ -335,6 +335,16 @@
       "expected": "clear",
       "forbidden_lead_two_ids": [44, 1011],
       "scene": "Left adjacent vehicle remains in its lane"
+    },
+    {
+      "id": "azera-b1-14-right-cutin",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "front+corner",
+      "window": [5.5, 6.5],
+      "expected": "detect",
+      "target_track_ids": [47, 1004],
+      "scene": "Close right vehicle enters while a center lead remains active"
     }
   ]
 }
