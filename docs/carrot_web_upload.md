@@ -66,6 +66,6 @@ proxy:
 The application does not need DSM FTP, WebDAV, or a shared user credential.
 DSM keeps the original remote layout. Dashcam files go to
 `/volume1/openpilot/routes/<CarName> <DongleID>/<segment>`, while tmux files go
-to `/volume1/openpilot/tmux/<GitBranch>/<CarName> <DongleID>/`. The private
+to `/volume1/openpilot/<GitBranch>/<CarName> <DongleID>/`. The private
 `/volume1/openpilot/tmux/.state` directory holds manifests, sessions, and quota
 state. The web receiver never scans or deletes the existing Openpilot tree.

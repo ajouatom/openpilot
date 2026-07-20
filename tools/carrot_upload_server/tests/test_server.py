@@ -179,12 +179,13 @@ def test_tmux_multipart_upload(tmp_path: Path):
       assert body["ok"] is True
       assert body["files"] == 2
       tmux_logs = list(
-        (tmp_path / "uploads" / "tmux" / "carrot__wip" / f"TEST {DEVICE}").glob(
+        (tmp_path / "uploads" / "carrot__wip" / f"TEST {DEVICE}").glob(
           "can_error-*-carrot__wip.txt",
         ),
       )
       assert len(tmux_logs) == 1
       assert tmux_logs[0].read_bytes() == b"tmux output"
+      assert not (tmp_path / "uploads" / "tmux" / "carrot__wip").exists()
 
   asyncio.run(run())
 

@@ -460,7 +460,9 @@ class UploadService:
     if not self._has_disk_space(self.config.max_tmux_bytes):
       raise web.HTTPInsufficientStorage(text="not enough free storage")
     await self._enter_upload(device)
-    destination = self._path("tmux", session["git_branch"], self._storage_directory(session))
+    # Keep the original FTP-era remote layout so existing DSM workflows and
+    # operators continue to find diagnostics at openpilot/<GitBranch>/....
+    destination = self._path(session["git_branch"], self._storage_directory(session))
     destination.mkdir(parents=True, exist_ok=True)
     temp_dir = destination / f".carrot-incoming-{secrets.token_hex(12)}"
     temp_dir.mkdir(parents=True, exist_ok=False)

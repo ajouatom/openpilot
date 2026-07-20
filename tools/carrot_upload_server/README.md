@@ -17,10 +17,10 @@ are never removed automatically.
 1. Copy this directory to `/volume1/docker/carrot-upload`.
 2. Create a Container Manager project from `compose.dsm.yml`.
 3. The compose file runs as DSM UID 1026/GID 100 (with the DSM administrators
-   ACL group, GID 101) and bind-mounts only the
-   existing `/volume1/openpilot/routes` folder and the dedicated
-   `/volume1/openpilot/tmux` folder. No DSM password or FTP login is passed to
-   the container. Adjust the numeric UID only if this DSM account changes.
+   ACL group, GID 101) and bind-mounts the existing `/volume1/openpilot`
+   folder so tmux diagnostics retain their original branch-based path. No DSM
+   password or FTP login is passed to the container. Adjust the numeric UID
+   only if this DSM account changes.
 4. Add DSM reverse proxy `https://shind0.synology.me:443` to
    `http://127.0.0.1:18080` and assign a trusted certificate for that hostname.
 5. Keep port 18080 bound to loopback. Do not publish the upload directory.
@@ -30,8 +30,9 @@ tmux upload before disabling the old transfer service and removing its account.
 
 Dashcam files retain the original FTP-era layout at
 `/volume1/openpilot/routes/<CarName> <DongleID>/<segment>`. Tmux files use
-`/volume1/openpilot/tmux/<GitBranch>/<CarName> <DongleID>/<reason>-<time>-<branch>.txt`;
-the extra `tmux` boundary prevents the receiver from mounting source trees.
-Completion manifests and quota/session state stay in the hidden
+`/volume1/openpilot/<GitBranch>/<CarName> <DongleID>/<reason>-<time>-<branch>.txt`.
+Strict server-side path validation confines web writes to the expected route
+and branch/device layouts, and there is no public download API. Completion
+manifests and quota/session state stay in the hidden
 `/volume1/openpilot/tmux/.state` directory. The receiver never scans or deletes
 the existing Openpilot tree.
