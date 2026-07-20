@@ -518,6 +518,38 @@ def test_midrange_fast_adjacent_lane_change_is_not_forced_active() -> None:
   assert not decision.cutin_candidates
 
 
+def test_decisive_fused_entry_activates_before_crossing_lane_line() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)
+  sample = None
+  for frame in range(16):
+    obj = fused(y_rel=4.0 - frame * 0.05, yv_rel=-1.4, d_rel=24.0)
+    sample = builder.update(context(frame * 0.05), (obj,))[0]
+    decision_filter.update(frame * 0.05, (RadarLeadPrediction(sample, 0.0, 0.05, 0.05),))
+
+  assert sample is not None
+  values = list(sample.values)
+  for name, value in {
+    "h8_present": 1.0,
+    "h12_present": 1.0,
+    "h8_dt": 0.4,
+    "h12_dt": 0.6,
+    "h8_y_rate": -1.4,
+    "h12_y_rate": -1.4,
+    "h8_d_path": 3.7,
+    "h12_d_path": 4.0,
+    "lane1_prob": 0.9,
+    "lane2_prob": 0.9,
+  }.items():
+    values[MODEL_FEATURE_NAMES.index(name)] = value
+  sample = replace(sample, values=tuple(values), track_age=16, d_path=3.0, d_path_future=1.9)
+  decision = decision_filter.update(0.80, (
+    RadarLeadPrediction(sample, lead_prob=0.0, cutin_prob=0.78, risk_prob=0.78),
+  ))
+
+  assert decision.cutin_candidates
+
+
 def test_sticky_cutin_expires_after_last_directional_evidence() -> None:
   builder = RadarLeadFeatureBuilder()
   decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)
