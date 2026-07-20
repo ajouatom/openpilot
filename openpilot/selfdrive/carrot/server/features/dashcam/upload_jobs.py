@@ -172,9 +172,10 @@ def create_job(segments: list[str]) -> dict[str, Any]:
 
 async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = None) -> dict[str, Any]:
   params = Params() if HAS_PARAMS else None
-  base_url, token = upload.upload_target_settings()
+  target = upload.resolve_upload_target()
+  base_url, token = target["base_url"], target["token"]
   if not token:
-    raise RuntimeError("web upload token is not configured")
+    raise RuntimeError(f"{target['kind']} upload token is not configured")
   meta = upload.upload_metadata(params)
   car_selected = meta.get("carName") or "none"
   dongle_id = meta.get("dongleId") or "unknown"
@@ -186,7 +187,7 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
   if job:
     job["upload_meta"] = meta
     job["remote_base_path"] = remote_base_path
-    job["upload_target"] = "web"
+    job["upload_target"] = target["kind"]
     job["partial_results"] = []
     progress(job, message="Preparing upload", current=0, total=total, percent=0)
 
@@ -263,7 +264,7 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
     "uploaded": ok_count,
     "total": len(results),
     "uploadedAt": uploaded_at,
-    "target": "web",
+    "target": target["kind"],
     "remoteBasePath": remote_base_path,
     "meta": meta,
     "results": results,
@@ -298,7 +299,7 @@ async def run_job(job: dict[str, Any]) -> None:
       "uploaded": ok_count,
       "total": total,
       "uploadedAt": uploaded_at,
-      "target": job.get("upload_target") or "web",
+      "target": job.get("upload_target") or "carrot",
       "remoteBasePath": job.get("remote_base_path") or "",
       "meta": job.get("upload_meta") or {},
       "results": results,

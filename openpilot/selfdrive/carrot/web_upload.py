@@ -12,7 +12,9 @@ from aiohttp import ClientSession, ClientTimeout
 
 
 DEFAULT_WEB_UPLOAD_URL = "https://op.wjcloud.kr"
+DEFAULT_TOSS_UPLOAD_URL = "https://op.wjcloud.kr"
 DEFAULT_TMUX_WEB_UPLOAD_URL = "https://tmux.carrotpilot.app/upload"
+UPLOAD_TARGETS = {"carrot", "toss"}
 
 
 def normalize_base_url(value: Any, default: str = "") -> str:
@@ -25,19 +27,44 @@ def normalize_base_url(value: Any, default: str = "") -> str:
 
 
 def web_upload_settings(settings: Mapping[str, Any] | None = None) -> tuple[str, str]:
+  """Return the upstream Carrot Web API settings.
+
+  Toss credentials intentionally do not fall back into this path: the selected
+  target owns its own URL/token so changing one target cannot redirect the other.
+  """
   settings = settings or {}
   base_url = (
     os.environ.get("CARROT_WEB_UPLOAD_URL", "").strip()
     or str(settings.get("web_upload_url") or "").strip()
-    or str(settings.get("toss_upload_url") or "").strip()
     or DEFAULT_WEB_UPLOAD_URL
   )
   token = (
     os.environ.get("CARROT_WEB_UPLOAD_TOKEN", "").strip()
     or str(settings.get("web_upload_token") or "").strip()
+  )
+  return normalize_base_url(base_url), token
+
+
+def toss_upload_settings(settings: Mapping[str, Any] | None = None) -> tuple[str, str]:
+  settings = settings or {}
+  base_url = (
+    os.environ.get("CARROT_TOSS_UPLOAD_URL", "").strip()
+    or str(settings.get("toss_upload_url") or "").strip()
+    or DEFAULT_TOSS_UPLOAD_URL
+  )
+  token = (
+    os.environ.get("CARROT_TOSS_UPLOAD_TOKEN", "").strip()
     or str(settings.get("toss_upload_token") or "").strip()
   )
   return normalize_base_url(base_url), token
+
+
+def selected_upload_settings(settings: Mapping[str, Any] | None = None) -> tuple[str, str, str]:
+  settings = settings or {}
+  target = str(settings.get("log_upload_target") or "carrot").strip().lower()
+  target = target if target in UPLOAD_TARGETS else "carrot"
+  base_url, token = toss_upload_settings(settings) if target == "toss" else web_upload_settings(settings)
+  return target, base_url, token
 
 
 def api_url(base_url: str, *parts: str) -> str:
@@ -49,10 +76,14 @@ def api_url(base_url: str, *parts: str) -> str:
 
 
 def tmux_web_target(settings: Mapping[str, Any] | None = None) -> tuple[str, dict[str, str]]:
-  base_url, token = web_upload_settings(settings)
+  target, base_url, token = selected_upload_settings(settings)
   if token:
     return api_url(base_url, "tmux", "upload"), {"Authorization": f"Bearer {token}"}
+  if target == "toss":
+    raise ValueError("Toss upload token is not configured")
 
+  # Preserve the upstream Carrot tmux fallback only for the default Carrot
+  # target. Toss must never leak diagnostics to the Carrot endpoint.
   direct_url = normalize_base_url(
     os.environ.get("CARROT_TMUX_WEB_UPLOAD_URL", ""),
     DEFAULT_TMUX_WEB_UPLOAD_URL,

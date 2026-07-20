@@ -70,8 +70,8 @@ const WEB_SETTINGS_GROUPS = [
     items: [],
   },
   {
-    id: "upload",
-    labelKey: "web_settings_upload",
+    id: "log_upload",
+    labelKey: "web_settings_log_upload",
     items: [
       {
         id: "web_upload",

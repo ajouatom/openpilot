@@ -1,26 +1,30 @@
 # Carrot web upload
 
-Carrot diagnostics and dashcam logs use HTTP(S) only. The client contains no
-FTP connection, account, password, port, or fallback path.
+Carrot diagnostics and dashcam logs use HTTP(S) only. The default target is
+**Carrot**, with **Toss** available as an additional selectable target. Both
+paths use the same streamed Web API engine, so upstream Carrot upload fixes
+also apply to Toss without mixing their URLs or credentials.
 
 ## Client configuration
 
-In Carrot Web, open **Tools > Web settings > Web upload** and set:
+In Carrot Web, open **Tools > Web settings > Web upload** and choose:
 
-- Upload server: the API base URL (default: `https://op.wjcloud.kr`)
-- Access token: the Bearer token issued by that server
+- **Carrot server** (default): uses `web_upload_url` and `web_upload_token`.
+- **Toss server**: uses independent `toss_upload_url` and
+  `toss_upload_token` values (default URL: `https://op.wjcloud.kr`).
 
-Use **Test connection** before uploading logs. The same configured server and
-token are used for dashcam files and tmux diagnostics. Until a shared token is
-configured, tmux diagnostics retain the existing web-only endpoint at
-`https://tmux.carrotpilot.app/upload`; dashcam upload fails closed instead of
-falling back to another protocol.
+Use **Test connection** after selecting a target. The test, dashcam files,
+completion notification, and tmux diagnostics all use only the selected
+target. Carrot retains its web-only tmux fallback when its token is absent;
+Toss never falls back to a Carrot endpoint.
 
 Deployments may override the saved settings with:
 
 - `CARROT_WEB_UPLOAD_URL`
 - `CARROT_WEB_UPLOAD_TOKEN`
-- `CARROT_TMUX_WEB_UPLOAD_URL` (tmux-only web fallback)
+- `CARROT_TOSS_UPLOAD_URL`
+- `CARROT_TOSS_UPLOAD_TOKEN`
+- `CARROT_TMUX_WEB_UPLOAD_URL` (Carrot tmux-only web fallback)
 - `CARROT_WEB_UPLOAD_CONCURRENCY` (1-6, default 3)
 
 ## Required web API

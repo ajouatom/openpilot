@@ -6,7 +6,7 @@ import re
 import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from openpilot.selfdrive.carrot.web_upload import DEFAULT_WEB_UPLOAD_URL, normalize_base_url
+from openpilot.selfdrive.carrot.web_upload import DEFAULT_TOSS_UPLOAD_URL, DEFAULT_WEB_UPLOAD_URL, normalize_base_url
 
 from ..config import CARROT_WEB_SETTINGS_PATH, WEB_DIR
 
@@ -15,6 +15,7 @@ WEB_PRIMARY_PAGES = {"last", "carrot", "setting", "tools", "logs", "terminal"}
 WEB_LANGUAGES = {"", "en", "ko", "zh"}
 WEB_REPLAY_INSIGHTS_TABS = {"events", "graphs", "sensors", "advanced"}
 WEB_DRIVE_LAYOUT_MODES = {"split", "area_1", "area_2"}
+LOG_UPLOAD_TARGETS = {"carrot", "toss"}
 
 DRIVE_CONTENT_CATALOG_PATH = os.path.join(
   WEB_DIR,
@@ -322,6 +323,13 @@ def _normalize_web_upload_url(value: Any) -> str:
     return DEFAULT_WEB_UPLOAD_URL
 
 
+def _normalize_toss_upload_url(value: Any) -> str:
+  try:
+    return normalize_base_url(value, DEFAULT_TOSS_UPLOAD_URL)
+  except ValueError:
+    return DEFAULT_TOSS_UPLOAD_URL
+
+
 def _normalize_stripped(value: Any) -> str:
   return str(value or "").strip()
 
@@ -400,8 +408,13 @@ WEB_SETTINGS_SPEC: List[_Field] = [
   _Field("kmap_overlay_curvature_color", "bool", False),
   _Field("kmap_map_type", "enum", "roadmap", choices={"roadmap", "satellite", "hybrid"}),
   _Field("nav_hud_enabled", "bool", True),
+  _Field("log_upload_target", "enum", "carrot", choices=LOG_UPLOAD_TARGETS),
+  # Keep the upstream Carrot Web API configuration intact. Toss remains an
+  # additional target with independent credentials.
   _Field("web_upload_url", "str", DEFAULT_WEB_UPLOAD_URL, normalize=_normalize_web_upload_url),
   _Field("web_upload_token", "str", "", normalize=_normalize_stripped),
+  _Field("toss_upload_url", "str", DEFAULT_TOSS_UPLOAD_URL, normalize=_normalize_toss_upload_url),
+  _Field("toss_upload_token", "str", "", normalize=_normalize_stripped),
   # Remote support last-used settings, persisted so the owner's choices survive a
   # reload. Stored as strings via the enum type (numeric values are parsed back
   # to ints client-side). Command permission defaults to "approve_each" so a
@@ -419,18 +432,9 @@ DEFAULT_WEB_SETTINGS: Dict[str, Any] = {f.key: f.default for f in WEB_SETTINGS_S
 
 def sanitize_web_settings(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
   raw = raw or {}
-  legacy_aliases = {
-    "web_upload_url": "toss_upload_url",
-    "web_upload_token": "toss_upload_token",
-  }
   settings: Dict[str, Any] = {}
   for field in WEB_SETTINGS_SPEC:
-    if isinstance(raw, dict) and field.key in raw:
-      value = raw[field.key]
-    elif isinstance(raw, dict) and legacy_aliases.get(field.key) in raw:
-      value = raw[legacy_aliases[field.key]]
-    else:
-      value = field.default
+    value = raw.get(field.key, field.default) if isinstance(raw, dict) else field.default
     settings[field.key] = _normalize_content_id(value) if field.key in _DRIVE_LAYOUT_CONTENT_KEYS else field.coerce(value)
   catalog = load_drive_content_catalog()
   for orientation in ("horizontal", "vertical"):
