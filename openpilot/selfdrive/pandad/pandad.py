@@ -11,6 +11,7 @@ from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.pandad.panda_helpers import connect_all_pandas, pandas_include_internal
 
 
 def get_expected_signature(panda: Panda) -> bytes:
@@ -29,36 +30,44 @@ def flash_panda(panda_serial: str) -> Panda:
     HARDWARE.recover_internal_panda()
     raise
 
-  fw_signature = get_expected_signature(panda)
-  internal_panda = panda.is_internal()
+  try:
+    fw_signature = get_expected_signature(panda)
+    internal_panda = panda.is_internal()
 
-  panda_version = "bootstub" if panda.bootstub else panda.get_version()
-  panda_signature = b"" if panda.bootstub else panda.get_signature()
-  cloudlog.warning(f"Panda {panda_serial} connected, version: {panda_version}, signature {panda_signature.hex()[:16]}, expected {fw_signature.hex()[:16]}")
+    panda_version = "bootstub" if panda.bootstub else panda.get_version()
+    panda_signature = b"" if panda.bootstub else panda.get_signature()
+    cloudlog.warning(f"Panda {panda_serial} connected, version: {panda_version}, signature {panda_signature.hex()[:16]}, expected {fw_signature.hex()[:16]}")
 
-  if panda.bootstub or panda_signature != fw_signature:
-    cloudlog.info("Panda firmware out of date, update required")
-    panda.flash()
-    cloudlog.info("Done flashing")
+    if panda.bootstub or panda_signature != fw_signature:
+      cloudlog.info("Panda firmware out of date, update required")
+      panda.flash()
+      cloudlog.info("Done flashing")
 
-  if panda.bootstub:
-    bootstub_version = panda.get_version()
-    cloudlog.info(f"Flashed firmware not booting, flashing development bootloader. {bootstub_version=}, {internal_panda=}")
-    if internal_panda:
-      HARDWARE.recover_internal_panda()
-    panda.recover(reset=(not internal_panda))
-    cloudlog.info("Done flashing bootstub")
+    if panda.bootstub:
+      bootstub_version = panda.get_version()
+      cloudlog.info(f"Flashed firmware not booting, flashing development bootloader. {bootstub_version=}, {internal_panda=}")
+      if internal_panda:
+        HARDWARE.recover_internal_panda()
+      panda.recover(reset=(not internal_panda))
+      cloudlog.info("Done flashing bootstub")
 
-  if panda.bootstub:
-    cloudlog.info("Panda still not booting, exiting")
-    raise AssertionError
+    if panda.bootstub:
+      cloudlog.info("Panda still not booting, exiting")
+      raise AssertionError
 
-  panda_signature = panda.get_signature()
-  if panda_signature != fw_signature:
-    cloudlog.info("Version mismatch after flashing, exiting")
-    raise AssertionError
+    panda_signature = panda.get_signature()
+    if panda_signature != fw_signature:
+      cloudlog.info("Version mismatch after flashing, exiting")
+      raise AssertionError
 
-  return panda
+    return panda
+  except Exception:
+    panda.close()
+    raise
+
+
+def flash_all_pandas(panda_serials: list[str]) -> list[Panda]:
+  return connect_all_pandas(panda_serials, flash_panda)
 
 
 def main() -> None:
@@ -80,6 +89,7 @@ def main() -> None:
   no_internal_panda_count = 0
 
   while not do_exit:
+    pandas: list[Panda] = []
     try:
       count += 1
       cloudlog.event("pandad.flash_and_connect", count=count)
@@ -110,35 +120,36 @@ def main() -> None:
 
       cloudlog.info(f"{len(panda_serials)} panda(s) found, connecting - {panda_serials}")
 
-      # Flash the first panda
-      panda_serial = panda_serials[0]
-      panda = flash_panda(panda_serial)
+      # Flash every panda. C3 uses an internal DOS plus a USB red panda, while
+      # C3X/C4 normally have a single internal panda.
+      pandas = flash_all_pandas(panda_serials)
 
       # Ensure internal panda is present if expected
-      if HARDWARE.has_internal_panda() and not panda.is_internal():
+      if HARDWARE.has_internal_panda() and not pandas_include_internal(pandas):
         cloudlog.error("Internal panda is missing, trying again")
         no_internal_panda_count += 1
         continue
       no_internal_panda_count = 0
 
-      # log panda fw version
-      params.put("PandaSignatures", panda.get_signature())
+      panda_serials = [panda.get_usb_serial() for panda in pandas]
+
+      # log panda fw versions
+      params.put("PandaSignatures", b','.join(panda.get_signature() for panda in pandas))
 
       # check health for lost heartbeat
-      health = panda.health()
-      if health["heartbeat_lost"]:
-        params.put_bool("PandaHeartbeatLost", True)
-        cloudlog.event("heartbeat lost", deviceState=health, serial=panda.get_usb_serial())
-      if health["som_reset_triggered"]:
-        params.put_bool("PandaSomResetTriggered", True)
-        cloudlog.event("panda.som_reset_triggered", health=health, serial=panda.get_usb_serial())
+      for panda in pandas:
+        health = panda.health()
+        if health["heartbeat_lost"]:
+          params.put_bool("PandaHeartbeatLost", True)
+          cloudlog.event("heartbeat lost", deviceState=health, serial=panda.get_usb_serial())
+        if health["som_reset_triggered"]:
+          params.put_bool("PandaSomResetTriggered", True)
+          cloudlog.event("panda.som_reset_triggered", health=health, serial=panda.get_usb_serial())
 
-      if first_run:
-        # reset panda to ensure we're in a good state
-        cloudlog.info(f"Resetting panda {panda.get_usb_serial()}")
-        panda.reset(reconnect=True)
-
-      panda.close()
+        if first_run:
+          # reset pandas to ensure they're in a good state
+          cloudlog.info(f"Resetting panda {panda.get_usb_serial()}")
+          panda.reset(reconnect=True)
     # TODO: wrap all panda exceptions in a base panda exception
     except (usb1.USBErrorNoDevice, usb1.USBErrorPipe):
       # a panda was disconnected while setting everything up. let's try again
@@ -150,12 +161,15 @@ def main() -> None:
     except Exception:
       cloudlog.exception("pandad.uncaught_exception")
       continue
+    finally:
+      for panda in pandas:
+        panda.close()
 
     first_run = False
 
     # run pandad with all connected serials as arguments
     os.environ['MANAGER_DAEMON'] = 'pandad'
-    process = subprocess.Popen(["./pandad", panda_serial], cwd=os.path.join(BASEDIR, "openpilot/selfdrive/pandad"))
+    process = subprocess.Popen(["./pandad", *panda_serials], cwd=os.path.join(BASEDIR, "openpilot/selfdrive/pandad"))
     process.wait()
 
 
