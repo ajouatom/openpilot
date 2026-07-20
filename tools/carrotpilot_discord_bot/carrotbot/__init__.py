@@ -1,1 +1,0 @@
-"""CarrotPilot Discord support bot."""
