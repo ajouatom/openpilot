@@ -12,8 +12,6 @@ from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.version import RELEASE_BRANCHES
 
-from openpilot.system.ui.widgets.network import WifiManagerUI, WifiManager
-
 HEAD_BUTTON_FONT_SIZE = 40
 HOME_PADDING = 8
 
@@ -97,9 +95,6 @@ class MiciHomeLayout(Widget):
 
     self._ip_address = "Offline"
 
-    self.wifi_manager = WifiManager()
-    self.wifi_manager_ui = WifiManagerUI(self.wifi_manager)
-
     self._settings_icon = IconWidget("icons_mici/settings.png", (48, 48), opacity=0.9)
     self._experimental_icon = IconWidget("icons_mici/experimental_mode.png", (48, 48))
     self._mic_icon = IconWidget("icons_mici/microphone.png", (32, 46))
@@ -126,9 +121,12 @@ class MiciHomeLayout(Widget):
   def _update_params(self):
     self._experimental_mode = ui_state.params.get_bool("ExperimentalMode")
 
-  def _update_state(self):
-    self.wifi_manager_ui._update_state()
+  @staticmethod
+  def _read_network_address(params_memory) -> str:
+    address = (params_memory.get("NetworkAddress") or "").strip()
+    return address if address and address != "0.0.0.0" else "Offline"
 
+  def _update_state(self):
     if self.is_pressed and not self._is_pressed_prev:
       self._mouse_down_t = time.monotonic()
     elif not self.is_pressed and self._is_pressed_prev:
@@ -148,8 +146,7 @@ class MiciHomeLayout(Widget):
     if rl.get_time() - self._last_refresh > 5.0:
       # Update version text
       self._version_text = self._get_version_text()
-      ip = self.wifi_manager_ui.ip_address
-      self._ip_address = ip if ip else "Offline"
+      self._ip_address = self._read_network_address(ui_state.params_memory)
       self._last_refresh = rl.get_time()
       self._update_params()
 
