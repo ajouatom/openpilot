@@ -17,7 +17,11 @@ export const CSS = `
 }
 /* 구 HUD 완전 배제 — 신규 오버레이가 대체. DOM은 남겨둔다(그래야 DriveVisionHudContent가
  * 생성되고 그 update를 래핑해 실데이터를 받음). !important로 표시만 차단. */
-#driveHudCard, #carrotMiniHud { display:none !important; }
+#driveHudCard { display:none !important; }
+/* 미니 HUD는 구 HUD가 아니라 별개 기능(웹설정 > HUD > 미니 HUD)이다. 평소에는 이 오버레이가
+ * 화면을 차지하므로 함께 숨기되, 미니 HUD 모드가 실제로 켜졌을 때는 그 자체가 유일한 표시
+ * surface이므로 차단하면 안 된다(차단하면 다른 UI는 visibility:hidden 이라 화면이 통째로 빈다). */
+html:not([data-carrot-mini-hud="1"]) #carrotMiniHud { display:none !important; }
 
 .chud{
   position:absolute; pointer-events:none; z-index:7; isolation:isolate;

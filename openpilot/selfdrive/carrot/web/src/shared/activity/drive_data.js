@@ -1,4 +1,8 @@
-const DRIVE_DATA_CHANNELS = Object.freeze(["hud", "overlay"]);
+const DRIVE_DATA_CHANNELS = Object.freeze(["hud", "overlay", "tracks"]);
+// "tracks" carries a full radar track list and is far heavier than the other
+// channels, so an unqualified lease never opts into it. Only a caller that
+// names the channel gets it.
+const DRIVE_DATA_DEFAULT_CHANNELS = Object.freeze(["hud", "overlay"]);
 const DRIVE_DATA_ACTIVITY_EVENT = "carrot:drivedataactivitychange";
 
 class DriveDataActivityError extends Error {
@@ -10,7 +14,7 @@ class DriveDataActivityError extends Error {
 }
 
 function normalizeChannels(request = {}) {
-  if (request === "hud+overlay") return DRIVE_DATA_CHANNELS;
+  if (request === "hud+overlay") return DRIVE_DATA_DEFAULT_CHANNELS;
   if (typeof request === "string") request = { [request]: true };
   if (Array.isArray(request)) {
     request = Object.fromEntries(request.map((channel) => [channel, true]));
@@ -22,11 +26,11 @@ function normalizeChannels(request = {}) {
   const hasExplicitChannel = DRIVE_DATA_CHANNELS.some((channel) => (
     Object.prototype.hasOwnProperty.call(request, channel)
   ));
-  const channels = DRIVE_DATA_CHANNELS.filter((channel) => (
-    hasExplicitChannel ? request[channel] === true : true
-  ));
+  const channels = hasExplicitChannel
+    ? DRIVE_DATA_CHANNELS.filter((channel) => request[channel] === true)
+    : DRIVE_DATA_DEFAULT_CHANNELS;
   if (!channels.length) {
-    throw new DriveDataActivityError("EMPTY_LEASE", "drive data lease must request hud or overlay data");
+    throw new DriveDataActivityError("EMPTY_LEASE", "drive data lease must request at least one channel");
   }
   return Object.freeze(channels);
 }
@@ -41,7 +45,7 @@ function createDriveDataActivity(options = {}) {
   const eventName = String(options.eventName || DRIVE_DATA_ACTIVITY_EVENT);
   const leases = new Map();
   const listeners = new Set();
-  const channelCounts = { hud: 0, overlay: 0 };
+  const channelCounts = Object.fromEntries(DRIVE_DATA_CHANNELS.map((channel) => [channel, 0]));
   let nextLeaseId = 0;
   let revision = 0;
   let destroyed = false;
@@ -49,7 +53,7 @@ function createDriveDataActivity(options = {}) {
     revision,
     active: false,
     leaseCount: 0,
-    counts: Object.freeze({ hud: 0, overlay: 0 }),
+    counts: Object.freeze({ ...channelCounts }),
   });
 
   function assertAlive(operation) {
@@ -155,8 +159,7 @@ function createDriveDataActivity(options = {}) {
     destroyed = true;
     const changed = leases.size > 0;
     leases.clear();
-    channelCounts.hud = 0;
-    channelCounts.overlay = 0;
+    for (const channel of DRIVE_DATA_CHANNELS) channelCounts[channel] = 0;
     if (changed) publish();
     listeners.clear();
     return true;
@@ -186,6 +189,7 @@ function installDriveDataActivityFacade(target = globalThis, options = {}) {
 export {
   DRIVE_DATA_ACTIVITY_EVENT,
   DRIVE_DATA_CHANNELS,
+  DRIVE_DATA_DEFAULT_CHANNELS,
   DriveDataActivityError,
   createDriveDataActivity,
   installDriveDataActivityFacade,

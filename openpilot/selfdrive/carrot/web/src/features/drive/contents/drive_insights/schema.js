@@ -1,6 +1,8 @@
 import { normalizeTelemetryForwardSource } from "../../../telemetry/forward_sources.js";
 
 const RADAR_TO_CAMERA_M = 1.52;
+// Matches the replay forward view, so the same drive shows the same marks.
+const MODEL_LEAD_MIN_CONFIDENCE = 0.5;
 
 export const DRIVE_INSIGHTS_ENTITY_SOURCES = Object.freeze([
   "vision",
@@ -149,6 +151,10 @@ function normalizeModelLeads(model, egoSpeedMps) {
     const sourceX = finiteOrNull(arrayValue(lead?.x));
     const sourceY = finiteOrNull(arrayValue(lead?.y));
     if (sourceX === null || sourceY === null) return [];
+    const confidence = unitIntervalOrNull(lead?.confidence ?? lead?.probability ?? lead?.prob);
+    // leadsV3 always carries its full slot count, so unconfident entries are
+    // padding rather than targets. Drawing them puts ghosts on the view.
+    if (confidence !== null && confidence < MODEL_LEAD_MIN_CONFIDENCE) return [];
     const absoluteSpeed = finiteOrNull(arrayValue(lead?.v));
     return [Object.freeze({
       id: entityId(lead?.id ?? lead?.trackId, "vision", index),
@@ -158,7 +164,7 @@ function normalizeModelLeads(model, egoSpeedMps) {
       relativeSpeedMps: absoluteSpeed !== null && modelSpeedMps !== null
         ? absoluteSpeed - modelSpeedMps
         : null,
-      confidence: unitIntervalOrNull(lead?.confidence ?? lead?.probability ?? lead?.prob),
+      confidence,
     })];
   }));
 }
@@ -192,48 +198,91 @@ function unpackLiveTracks(value) {
   return tracks;
 }
 
+function radarTrackKey(value) {
+  const trackId = finiteOrNull(
+    typeof value === "number" ? value : Number.parseFloat(String(value ?? "")),
+  );
+  return trackId !== null && trackId >= 0 ? String(trackId) : null;
+}
+
+// radarState leads are fused products of the very tracks liveTracks reports, so
+// a lead and its originating track describe one vehicle. Match them on track id
+// the way the replay view does; otherwise the same car draws twice - once as a
+// "fusion" lead and once under its real radar source.
 function normalizeRadar(overlayState) {
   const radarState = overlayState?.radarState || {};
-  const candidates = [];
-  for (const key of RADAR_LEAD_KEYS) {
-    const lead = radarState?.[key];
-    if (lead && lead.status !== false) candidates.push({ value: lead, origin: "radarState" });
-  }
+  const leads = [];
+  const appendLead = (lead) => {
+    if (!lead || lead.status === false) return;
+    const xM = finiteOrNull(lead?.xM ?? lead?.dRel);
+    const yM = finiteOrNull(lead?.yM ?? lead?.yRel);
+    if (xM === null || yM === null) return;
+    leads.push({ value: lead, xM, yM, trackKey: radarTrackKey(lead?.radarTrackId) });
+  };
+  for (const key of RADAR_LEAD_KEYS) appendLead(radarState?.[key]);
   for (const key of RADAR_LIST_KEYS) {
-    for (const lead of Array.isArray(radarState?.[key]) ? radarState[key] : []) {
-      if (lead && lead.status !== false) candidates.push({ value: lead, origin: "radarState" });
-    }
-  }
-  for (const track of unpackLiveTracks(overlayState?.liveTracks)) {
-    candidates.push({ value: track, origin: "liveTracks" });
+    for (const lead of Array.isArray(radarState?.[key]) ? radarState[key] : []) appendLead(lead);
   }
 
+  const leadTrackKeys = new Set(leads.map(({ trackKey }) => trackKey).filter(Boolean));
+  const matchedTrackKeys = new Set();
   const seen = new Set();
   const radar = [];
-  for (const candidate of candidates) {
-    const value = candidate.value;
-    const xM = finiteOrNull(value?.xM ?? value?.dRel);
-    const yM = finiteOrNull(value?.yM ?? value?.yRel);
-    if (xM === null || yM === null) continue;
-    const measured = typeof value?.measured === "boolean" ? value.measured : Boolean(value?.radar);
-    const fallbackSource = candidate.origin === "liveTracks" ? "front" : "fusion";
-    const source = entitySource(value?.entitySource ?? value?.radarSource, fallbackSource);
-    const sourceId = value?.id ?? value?.trackId ?? value?.radarTrackId;
-    const stableIndex = radar.length;
-    const id = entityId(sourceId, source, stableIndex);
-    const dedupeKey = sourceId !== undefined && sourceId !== null && String(sourceId).trim()
-      ? `${source}:${String(sourceId)}`
-      : `${candidate.origin}:${stableIndex}`;
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
+
+  const push = (entry) => {
+    if (seen.has(entry.dedupeKey)) return;
+    seen.add(entry.dedupeKey);
     radar.push(Object.freeze({
-      id,
+      id: entry.id,
+      source: entry.source,
+      xM: entry.xM,
+      yM: entry.yM,
+      relativeSpeedMps: entry.relativeSpeedMps,
+      measured: entry.measured,
+      selected: entry.selected,
+    }));
+  };
+
+  for (const track of unpackLiveTracks(overlayState?.liveTracks)) {
+    const xM = finiteOrNull(track?.xM ?? track?.dRel);
+    const yM = finiteOrNull(track?.yM ?? track?.yRel);
+    if (xM === null || yM === null) continue;
+    const trackKey = radarTrackKey(track?.trackId);
+    const selected = trackKey !== null && leadTrackKeys.has(trackKey);
+    if (selected) matchedTrackKeys.add(trackKey);
+    const source = entitySource(track?.entitySource ?? track?.radarSource, "front");
+    const stableIndex = radar.length;
+    push({
+      id: entityId(track?.id ?? track?.trackId, source, stableIndex),
       source,
       xM,
       yM,
+      relativeSpeedMps: finiteOrNull(track?.relativeSpeedMps ?? track?.vRel),
+      measured: typeof track?.measured === "boolean" ? track.measured : Boolean(track?.radar),
+      selected,
+      dedupeKey: trackKey !== null ? `track:${trackKey}` : `liveTracks:${stableIndex}`,
+    });
+  }
+
+  // Only leads with no matching track need their own mark; a matched lead was
+  // already drawn above and keeps its real radar source colour.
+  for (const lead of leads) {
+    if (lead.trackKey !== null && matchedTrackKeys.has(lead.trackKey)) continue;
+    const value = lead.value;
+    const source = entitySource(value?.entitySource ?? value?.radarSource, "fusion");
+    const stableIndex = radar.length;
+    push({
+      id: entityId(value?.id ?? value?.radarTrackId, source, stableIndex),
+      source,
+      xM: lead.xM,
+      yM: lead.yM,
       relativeSpeedMps: finiteOrNull(value?.relativeSpeedMps ?? value?.vRel),
-      measured,
-    }));
+      measured: typeof value?.measured === "boolean" ? value.measured : Boolean(value?.radar),
+      selected: true,
+      dedupeKey: lead.trackKey !== null
+        ? `lead:${lead.trackKey}`
+        : `lead:${lead.xM.toFixed(1)}:${lead.yM.toFixed(1)}`,
+    });
   }
   return Object.freeze(radar);
 }

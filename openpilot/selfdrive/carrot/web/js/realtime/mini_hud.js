@@ -42,8 +42,10 @@
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   const TEMPERATURE_UNIT_KEY = "carrot.miniHud.temperatureUnit.v1";
+  const LAYOUT_RETRY_MS = 250;
   let latestModel = null;
   let layoutRaf = 0;
+  let layoutRetryTimer = 0;
   let resizeObserver = null;
   let temperatureUnit = loadTemperatureUnit();
   // Detail-row labels (TIM / DST / GAP / temp source) are ALWAYS shown at full
@@ -113,6 +115,12 @@
     // own currentLang() is module-private, so we read the DOM instead of it.
     const raw = String(document.documentElement.lang || "en").toLowerCase();
     return raw.split(/[-_]/)[0] || "en";
+  }
+
+  function uiText(key, fallback) {
+    const table = window.CarrotTranslations?.strings?.[currentLang()] || {};
+    const value = table[key];
+    return typeof value === "string" && value ? value : fallback;
   }
 
   function localizedDriveMode(model) {
@@ -186,7 +194,7 @@
 
     setHidden(elements.limitZone, !limitVisible);
     setText(elements.limit, model.roadLimit);
-    setText(elements.limitLabel, model.alert?.section ? "구간단속" : "");
+    setText(elements.limitLabel, model.alert?.section ? uiText("mini_hud_section_limit", "SECTION") : "");
     setHidden(elements.limitLabel, !model.alert?.section);
     setText(elements.limitBadge, model.alert?.badge || "");
     setHidden(elements.limitBadge, !model.alert?.badge);
@@ -244,7 +252,7 @@
     // Degenerate frame during activation — skip so we never bake a 1px font from
     // a not-yet-laid-out root; a later resize/render tick re-runs the layout.
     if (rect.width < 40 || rect.height < 40) {
-      scheduleLayout();
+      scheduleLayoutRetry();
       return;
     }
     const width = Math.max(1, rect.width);
@@ -383,6 +391,17 @@
   function scheduleLayout() {
     if (layoutRaf) return;
     layoutRaf = requestAnimationFrame(applyLayout);
+  }
+
+  // A degenerate root rect can persist (viewport narrower than the 40px probe,
+  // or a frame that never resolves). Re-arming on rAF then spins a core at
+  // 60fps forever with nothing to measure, so back off to a slow poll instead.
+  function scheduleLayoutRetry() {
+    if (layoutRaf || layoutRetryTimer) return;
+    layoutRetryTimer = setTimeout(() => {
+      layoutRetryTimer = 0;
+      scheduleLayout();
+    }, LAYOUT_RETRY_MS);
   }
 
   function init() {

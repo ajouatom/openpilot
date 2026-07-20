@@ -140,6 +140,7 @@ export function createDriveInsightsRuntime(options = {}) {
   let sourceAdapter = null;
   let sourceUnsubscribe = null;
   let dataLease = null;
+  let trackLease = null;
   let staleTimer = null;
   let lastSnapshot = null;
   let replayInput = options.replayInput || null;
@@ -228,6 +229,24 @@ export function createDriveInsightsRuntime(options = {}) {
     return render();
   }
 
+  // Radar track lists are only drawn by the forward view, so the heavier
+  // "tracks" subscription follows the visible view instead of the runtime.
+  function syncTrackLease() {
+    const wanted = active
+      && sourceKind === DRIVE_INSIGHTS_HISTORY_SOURCE.LIVE
+      && view === DRIVE_INSIGHTS_VIEW.FORWARD;
+    if (wanted === Boolean(trackLease?.active)) return false;
+    if (!wanted) {
+      trackLease?.release?.();
+      trackLease = null;
+      return true;
+    }
+    const activity = options.activity || target.CarrotDriveDataActivity;
+    if (!activity?.acquire) return false;
+    trackLease = activity.acquire({ owner: "drive_insights_forward", tracks: true });
+    return true;
+  }
+
   function stopSource() {
     sourceUnsubscribe?.();
     sourceUnsubscribe = null;
@@ -235,6 +254,8 @@ export function createDriveInsightsRuntime(options = {}) {
     sourceAdapter = null;
     dataLease?.release?.();
     dataLease = null;
+    trackLease?.release?.();
+    trackLease = null;
     if (staleTimer !== null && clearIntervalFn) clearIntervalFn(staleTimer);
     staleTimer = null;
   }
@@ -254,6 +275,7 @@ export function createDriveInsightsRuntime(options = {}) {
       showWaiting();
       return false;
     }
+    syncTrackLease();
     sourceUnsubscribe = sourceAdapter.subscribe?.((snapshot) => ingestLive(snapshot)) || null;
     const initial = sourceAdapter.snapshot?.();
     if (initial) ingestLive(initial);
@@ -295,6 +317,7 @@ export function createDriveInsightsRuntime(options = {}) {
       panel.hidden = !selected;
     }
     segmented.sync();
+    syncTrackLease();
     render();
     return changed;
   }
@@ -366,6 +389,7 @@ export function createDriveInsightsRuntime(options = {}) {
       forward: forwardRenderer.status(),
       stateSurface: stateSurface.snapshot(),
       leaseActive: Boolean(dataLease?.active),
+      trackLeaseActive: Boolean(trackLease?.active),
     });
   }
 

@@ -164,7 +164,13 @@
 
 /* At 50% and below, preserve the limited road-view area for driving content.
    Alerts, connection actions, replay controls, and stage controls remain. */
-html.is-drive-workspace-compact-primary body[data-page="carrot"] #driveHudCard,
-html.is-drive-workspace-compact-primary body[data-page="carrot"] #carrotMiniHud {
+html.is-drive-workspace-compact-primary body[data-page="carrot"] #driveHudCard {
+  display: none !important;
+}
+
+/* ...but not while compact-HUD mode owns the screen. mini_hud.css hides the
+   topbar, .wrap and #driveHudCard and leaves #carrotMiniHud as the only visible
+   surface, so display:none-ing it here left the whole page blank. */
+html.is-drive-workspace-compact-primary:not([data-carrot-mini-hud="1"]) body[data-page="carrot"] #carrotMiniHud {
   display: none !important;
 }

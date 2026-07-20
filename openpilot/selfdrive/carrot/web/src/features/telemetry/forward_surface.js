@@ -1,5 +1,95 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 
+// The plot keeps a minimum height, so a short viewport scrolls. Its bottom edge
+// is where the ego car and the nearest targets are drawn, and its top is empty
+// far distance - so a layout change that leaves the scroller at the top hides
+// everything that matters. Re-pin to the bottom on layout changes, but never
+// while the reader has deliberately scrolled somewhere else.
+const BOTTOM_ANCHOR_THRESHOLD_PX = 24;
+const USER_SCROLL_QUIET_MS = 350;
+const PROGRAMMATIC_SCROLL_QUIET_MS = 120;
+
+function createBottomAnchor(viewport, target, enabled) {
+  const noop = Object.freeze({
+    anchor: () => false,
+    isAnchored: () => false,
+    observe: () => false,
+    destroy: () => false,
+  });
+  // Opt-in: the replay view already pins itself every frame while playing
+  // (see replay/forward.js scrollNearPinned), so it must not get a second
+  // mechanism competing for the same scrollTop.
+  if (!enabled) return noop;
+  if (!viewport || typeof viewport.addEventListener !== "function") return noop;
+  const view = target || viewport.ownerDocument?.defaultView || globalThis;
+  const now = () => Number(view.performance?.now?.() ?? Date.now());
+
+  let anchored = true;
+  let lastUserScrollAt = Number.NEGATIVE_INFINITY;
+  let programmaticUntil = Number.NEGATIVE_INFINITY;
+  let observer = null;
+  let destroyed = false;
+
+  function overflow() {
+    return Math.max(0, (viewport.scrollHeight || 0) - (viewport.clientHeight || 0));
+  }
+
+  function distanceFromBottom() {
+    return overflow() - (viewport.scrollTop || 0);
+  }
+
+  function onScroll() {
+    if (destroyed) return;
+    // Our own scrollTop writes also fire scroll; they must not be read back as
+    // the reader choosing a position.
+    if (now() < programmaticUntil) return;
+    lastUserScrollAt = now();
+    anchored = distanceFromBottom() <= BOTTOM_ANCHOR_THRESHOLD_PX;
+  }
+
+  function anchor(force = false) {
+    if (destroyed) return false;
+    if (!force) {
+      if (!anchored) return false;
+      // Don't fight an in-flight scroll gesture / inertia.
+      if (now() - lastUserScrollAt < USER_SCROLL_QUIET_MS) return false;
+    }
+    const next = overflow();
+    if (Math.abs((viewport.scrollTop || 0) - next) < 1) return false;
+    programmaticUntil = now() + PROGRAMMATIC_SCROLL_QUIET_MS;
+    viewport.scrollTop = next;
+    if (force) anchored = true;
+    return true;
+  }
+
+  viewport.addEventListener("scroll", onScroll, { passive: true });
+
+  function observe(...elements) {
+    if (destroyed) return false;
+    const Observer = view.ResizeObserver;
+    if (typeof Observer !== "function") return false;
+    observer ||= new Observer(() => anchor());
+    let attached = false;
+    for (const element of elements) {
+      if (!element) continue;
+      observer.observe(element);
+      attached = true;
+    }
+    return attached;
+  }
+
+  function destroy() {
+    if (destroyed) return false;
+    destroyed = true;
+    viewport.removeEventListener?.("scroll", onScroll);
+    observer?.disconnect?.();
+    observer = null;
+    return true;
+  }
+
+  return Object.freeze({ anchor, isAnchored: () => anchored, observe, destroy });
+}
+
 function append(parent, ...children) {
   if (typeof parent?.append === "function") parent.append(...children);
   else for (const child of children) parent?.appendChild?.(child);
@@ -124,6 +214,15 @@ export function createTelemetryForwardSurface(options = {}) {
   const elements = decorate(options.adopt ? adoptedElements(options) : createdElements(options.root, options));
   if (!elements?.root || !elements.canvas) return null;
 
+  const view = options.target
+    || options.document?.defaultView
+    || elements.root.ownerDocument?.defaultView
+    || globalThis;
+  const bottomAnchor = createBottomAnchor(elements.viewport, view, options.anchorBottom === true);
+  // Resolution changes, orientation flips, legend rewraps - anything that
+  // resizes the scroller or its content re-pins the ego end into view.
+  bottomAnchor.observe(elements.viewport, elements.plot);
+
   function setHeader(title, status = "", warning = false) {
     if (elements.title) elements.title.textContent = title;
     if (elements.status) {
@@ -153,6 +252,8 @@ export function createTelemetryForwardSurface(options = {}) {
     });
     elements.legend.replaceChildren(...items);
     if (label) elements.legend.setAttribute("aria-label", label);
+    // A rewrapped legend changes the viewport height without a window resize.
+    bottomAnchor.anchor();
   }
 
   function hideTooltip() {
@@ -198,5 +299,8 @@ export function createTelemetryForwardSurface(options = {}) {
     setLegend,
     showTooltip,
     hideTooltip,
+    anchorBottom: bottomAnchor.anchor,
+    isAnchoredToBottom: bottomAnchor.isAnchored,
+    destroy: bottomAnchor.destroy,
   });
 }
