@@ -1,6 +1,6 @@
 "use strict";
 
-self.importScripts("/js/vendor/fzstd.js?v=0.1.1", "/js/realtime/raw_capnp.js?v=2607-03");
+self.importScripts("/js/vendor/fzstd.js?v=0.1.1", "/js/realtime/raw_capnp.js?v=2607-06");
 
 const rawCapnp = self.CarrotRawCapnp;
 const TRACK_STRIDE = 8;

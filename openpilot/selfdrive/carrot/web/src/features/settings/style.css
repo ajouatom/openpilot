@@ -1,5 +1,14 @@
+/* Import order is the cascade order. The six files below replace the former
+   device.css and appear in exactly the order its sections did, so the built
+   stylesheet is unchanged. */
 @import "./styles/base.css";
 @import "./styles/panels.css";
-@import "./styles/device.css";
+@import "./styles/search_and_dialogs.css";
+@import "./styles/layout.css";
+@import "./styles/item_row.css";
+@import "./styles/popular_values.css";
+@import "./styles/item_chrome.css";
+@import "./styles/device_tab.css";
 @import "./styles/youtube_live.css";
 @import "./styles/token_card.css";
+@import "./styles/change_history.css";

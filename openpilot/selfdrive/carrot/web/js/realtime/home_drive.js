@@ -2302,6 +2302,21 @@ window.HomeDrive = (() => {
     const projectionReady = Boolean(cameraProfileReady && calibration);
     const transform = getStageTransform(videoWidth, videoHeight, stageWidth, stageHeight, calibration || VIEW_FROM_DEVICE);
     applyStageTransform(transform);
+    // AR 오버레이는 독립 canvas 를 쓰지만 좌표계는 반드시 같아야 한다. 스스로
+    // 다시 계산하면 표지가 차선/경로 오버레이와 미세하게 어긋난다. 읽기 전용
+    // 스냅샷만 노출하고 렌더 경로는 건드리지 않는다.
+    window.CarrotVisionStageTransform = Object.freeze({
+      calibTransform: transform.calibTransform,
+      scale: transform.scale,
+      tx: transform.tx,
+      ty: transform.ty,
+      videoWidth,
+      videoHeight,
+      stageWidth,
+      stageHeight,
+      projectionReady,
+      updatedAt: performance.now(),
+    });
     const viewport = visionViewport.apply({
       renderViewport,
       renderWidth: stageWidth,
@@ -2505,6 +2520,9 @@ window.HomeDrive = (() => {
     resetReplayState: resetReplayVisualState,
     mergePendingRenderState,
     flushScheduledRender,
+    notifyPresentedFrame: (metadata) => (
+      window.CarrotVisionFrameSync?.noteReplayPresentedFrame?.(metadata)
+    ),
   }) || null;
   if (!replayRenderController) return {};
 

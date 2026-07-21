@@ -67,15 +67,16 @@ function renderWebSettingsItem(item) {
   const desc = webSettingsText(item.descKey);
 
   if (field.type === "bool") {
-    const checked = Boolean(getWebSettingValue(item));
+    const disabled = item.disabled === true;
+    const checked = disabled ? false : Boolean(getWebSettingValue(item));
     return `
-      <label class="web-settings-row web-settings-row--toggle" data-web-setting="${escapeHtml(item.id)}">
+      <label class="web-settings-row web-settings-row--toggle ${disabled ? "web-settings-row--disabled" : ""}" data-web-setting="${escapeHtml(item.id)}" ${disabled ? 'aria-disabled="true"' : ""}>
         <span class="web-settings-row__copy">
           <span class="web-settings-row__title">${escapeHtml(title)}</span>
           <span class="web-settings-row__desc">${escapeHtml(desc)}</span>
         </span>
         <span class="c-switch c-switch--sm">
-          <input class="c-switch__input" type="checkbox" ${checked ? "checked" : ""} />
+          <input class="c-switch__input" type="checkbox" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />
           <span class="c-switch__track" aria-hidden="true"></span>
         </span>
       </label>`;

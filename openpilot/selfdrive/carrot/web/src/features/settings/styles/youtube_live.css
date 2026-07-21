@@ -1,4 +1,4 @@
-﻿.youtube-live-section {
+.youtube-live-section {
   display: grid;
   gap: var(--sp-md);
   margin: 0;
@@ -81,14 +81,14 @@
 .page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch__track,
 .page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch__input:checked + .c-switch__track {
   opacity: 1;
-  border-color: color-mix(in srgb, #000 84%, var(--md-outline-var));
-  background: #000;
+  border-color: color-mix(in srgb, var(--setting-shade) 84%, var(--md-outline-var));
+  background: var(--setting-shade);
 }
 
 .page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch__track::after,
 .page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch__input:checked + .c-switch__track::after {
   transform: none;
-  background: color-mix(in srgb, var(--md-on-surface-var) 42%, #000);
+  background: color-mix(in srgb, var(--md-on-surface-var) 42%, var(--setting-shade));
   box-shadow: none;
 }
 

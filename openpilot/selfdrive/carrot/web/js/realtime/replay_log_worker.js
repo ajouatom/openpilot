@@ -1,6 +1,6 @@
 "use strict";
 
-self.importScripts("/js/vendor/fzstd.js?v=0.1.1", "/js/realtime/raw_capnp.js?v=2607-03");
+self.importScripts("/js/vendor/fzstd.js?v=0.1.1", "/js/realtime/raw_capnp.js?v=2607-07");
 
 const rawCapnp = self.CarrotRawCapnp;
 const replayHudServices = new Set(rawCapnp?.HUD_SERVICES || []);
@@ -8,9 +8,21 @@ const compactServices = new Set([
   ...replayHudServices,
   "modelV2", "liveCalibration", "roadCameraState", "lateralPlan",
   "radarState", "carControl", "liveDelay", "liveTorqueParameters", "liveParameters",
+  // AR anchor inputs use the same decoded display subset as live compact state.
+  "liveTracks", "cameraOdometry", "livePose", "carrotNavi",
+]);
+// These services are already emitted at the display/camera cadence. Keep each
+// recorded sample instead of forcing it through epoch-aligned 50 ms buckets:
+// logger jitter around a bucket edge otherwise merges one frame and leaves the
+// following video frame with stale geometry.
+const frameCriticalServices = new Set([
+  "modelV2", "lateralPlan", "cameraOdometry", "livePose",
 ]);
 const serviceIntervalsNs = {
   modelV2: 50_000_000,
+  liveTracks: 100_000_000,
+  cameraOdometry: 50_000_000,
+  livePose: 50_000_000,
   carState: 30_000_000,
   controlsState: 30_000_000,
   longitudinalPlan: 50_000_000,
@@ -18,6 +30,7 @@ const serviceIntervalsNs = {
   radarState: 50_000_000,
   lateralPlan: 50_000_000,
   carrotMan: 100_000_000,
+  carrotNavi: 500_000_000,
   roadCameraState: 250_000_000,
   deviceState: 500_000_000,
   peripheralState: 500_000_000,
@@ -40,6 +53,12 @@ const categoryCooldownNs = {
   turn: 1_500_000_000,
   nav: 7_000_000_000,
 };
+
+function replaySelectionKey(service, logMonoTime) {
+  if (frameCriticalServices.has(service)) return logMonoTime;
+  const intervalNs = serviceIntervalsNs[service] || 50_000_000;
+  return Math.floor(logMonoTime / intervalNs);
+}
 
 function enumName(value, names) {
   if (typeof value === "string") return value.split(".").pop() || "";
@@ -406,12 +425,12 @@ class ReplayLogBuilder {
     // Event validity bit is down. Validity describes source health; discarding
     // the value here leaves the entire replay HUD permanently uninitialized.
     if (!event.valid && !replayHudServices.has(event.service)) return;
-    const intervalNs = serviceIntervalsNs[event.service] || 50_000_000;
-    const bucket = Math.floor(event.logMonoTime / intervalNs);
+    const bucket = replaySelectionKey(event.service, event.logMonoTime);
     const serviceBuckets = this.selected.get(event.service);
     const previous = serviceBuckets.get(bucket);
-    // Keep the latest timestamp in each display bucket even when logger socket
-    // drain order is not globally monotonic.
+    // Keep the latest timestamp in each selection slot even when logger socket
+    // drain order is not globally monotonic. Frame-critical slots are exact
+    // timestamps; slower HUD services still use bounded display buckets.
     if (!previous || event.logMonoTime >= previous.logMonoTime) {
       serviceBuckets.set(bucket, event);
     }

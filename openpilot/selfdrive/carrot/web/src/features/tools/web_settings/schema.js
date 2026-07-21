@@ -59,6 +59,12 @@ const WEB_SETTINGS_GROUPS = [
         titleKey: "web_vision_fullscreen_default",
         descKey: "web_vision_fullscreen_default_desc",
       },
+      {
+        id: "vision_ar_enabled",
+        titleKey: "web_vision_ar_enabled",
+        descKey: "web_vision_ar_enabled_desc",
+        disabled: true,
+      },
     ],
   },
   {

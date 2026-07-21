@@ -1,0 +1,435 @@
+/* Device tab: tab bar, device rows, SSH key dialog and the disabled treatment
+   for controls the web cannot drive.
+   Split out of the former device.css; rule order is unchanged. */
+
+
+/* Device tab inside Settings. Uses the existing Carrot tokens and stays scoped
+   to the setting page so logs/tools styles cannot leak into it. */
+
+.setting-tabbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 var(--sp-md);
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 44%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--md-surface-cont) 88%, var(--setting-shade));
+}
+
+.setting-tab {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(var(--r-md) - 4px);
+  background: transparent;
+  color: var(--md-on-surface-var);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, transform 0.12s ease;
+}
+
+.setting-tab.is-active {
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+}
+
+.setting-tab:active {
+  transform: translateY(1px);
+}
+
+.page--setting #carrotTabContent[hidden],
+.page--setting #deviceTabContent[hidden],
+.page--setting #items[hidden],
+.page--setting #deviceItems[hidden] {
+  display: none !important;
+}
+
+.page--setting.setting-tab-device .page-fab-layer--setting {
+  display: none;
+}
+
+.page--setting #deviceItems .ctrl {
+  display: flex;
+  grid-template-columns: none;
+  gap: var(--sp-sm);
+  justify-content: flex-end;
+  align-items: center;
+  width: auto;
+}
+
+.page--setting #deviceItems .smallBtn,
+.page--setting #deviceItems .val {
+  width: auto;
+  min-width: 78px;
+  max-width: none;
+}
+
+.page--setting #deviceItems .device-value {
+  max-width: min(56vw, 320px);
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page--setting #deviceItems .device-version-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+.page--setting #deviceItems .device-version-value span {
+  display: block;
+  max-width: min(56vw, 320px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page--setting #deviceItems .device-ssh-control {
+  width: min(68vw, 720px);
+  min-width: 0;
+}
+
+.device-ssh-form {
+  width: 100%;
+  min-width: 0;
+}
+
+.app-dialog--device-ssh .app-dialog__sheet {
+  width: min(520px, calc(100vw - 28px));
+  max-height: min(560px, calc(100dvh - 28px));
+}
+
+.app-dialog--device-ssh .app-dialog__body {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.device-ssh-dialog {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.device-ssh-dialog__empty {
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  border-radius: var(--r-sm);
+  color: var(--md-on-surface-var);
+  font-weight: 800;
+  text-align: center;
+}
+
+.device-ssh-key-list {
+  display: grid;
+  gap: 8px;
+}
+
+.device-ssh-key-list__item {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 72%, transparent);
+}
+
+.device-ssh-key-list__item span {
+  color: color-mix(in srgb, var(--md-primary) 78%, var(--md-on-surface));
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.device-ssh-key-list__item code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--md-on-surface);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.page--setting #deviceItems .settingTop > :first-child {
+  min-width: 0;
+}
+
+.page--setting #deviceItems .ctrl {
+  min-width: 0;
+}
+
+.page--setting #deviceItems .title {
+  font-size: 16px;
+  line-height: 1.22;
+}
+
+.page--setting #deviceItems .descr {
+  font-size: 13px;
+  line-height: 1.36;
+}
+
+.page--setting #deviceItems .smallBtn {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.page--setting #deviceItems .device-setting {
+  overflow: hidden;
+}
+
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
+  .page--setting #deviceItems .device-ssh-control {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.device-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-md);
+  width: 100%;
+  cursor: pointer;
+}
+
+.device-toggle__text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.device-toggle--readonly {
+  width: auto;
+  cursor: default;
+  pointer-events: none;
+}
+
+.device-setting--disabled {
+  cursor: pointer;
+}
+
+.device-setting--disabled .title,
+.device-setting--disabled .descr,
+.device-setting--disabled .device-value {
+  color: color-mix(in srgb, var(--md-on-surface-var) 42%, var(--setting-disabled-ink));
+}
+
+.page--setting #deviceItems .device-setting--disabled .ctrl .smallBtn,
+.page--setting #deviceItems .device-setting--disabled .ctrl .val,
+.page--setting #deviceItems .device-setting button.is-device-disabled {
+  border-color: color-mix(in srgb, var(--md-outline-var) 28%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont-h) 42%, var(--setting-disabled-surface-top)),
+    color-mix(in srgb, var(--md-surface-cont) 40%, var(--setting-disabled-surface-bottom))
+  );
+  color: color-mix(in srgb, var(--md-on-surface-var) 46%, var(--setting-disabled-label));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.018);
+  filter: grayscale(1) saturate(0.35);
+  opacity: 0.76;
+}
+
+.page--setting #deviceItems .device-setting--disabled .ctrl .smallBtn:hover,
+.page--setting #deviceItems .device-setting--disabled .ctrl .smallBtn:focus-visible,
+.page--setting #deviceItems .device-setting button.is-device-disabled:hover,
+.page--setting #deviceItems .device-setting button.is-device-disabled:focus-visible {
+  border-color: color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--md-surface-cont-h) 46%, var(--setting-disabled-surface-top-hover)),
+    color-mix(in srgb, var(--md-surface-cont) 42%, var(--setting-disabled-surface-bottom-hover))
+  );
+  color: color-mix(in srgb, var(--md-on-surface-var) 52%, var(--setting-disabled-label-hover));
+  outline: none;
+}
+
+.device-setting--disabled .c-switch__track,
+.device-setting--disabled .c-switch__input:checked + .c-switch__track {
+  /* Device rows carry their own explicit gray for the disabled look, so
+     cancel the generic c-switch disabled opacity to avoid double-dimming. */
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--md-outline-var) 36%, transparent);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 54%, var(--setting-disabled-track));
+}
+
+.device-setting--disabled .c-switch__track::after,
+.device-setting--disabled .c-switch__input:checked + .c-switch__track::after {
+  background: color-mix(in srgb, var(--md-on-surface-var) 54%, var(--setting-disabled-knob));
+}
+
+.device-setting button:disabled,
+.device-setting select:disabled {
+  opacity: 0.56;
+  cursor: default;
+}
+
+.device-select {
+  min-width: min(240px, 44vw);
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid var(--md-outline-var);
+  border-radius: var(--r-sm);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-md);
+  outline: none;
+}
+
+.device-tab-error {
+  padding: var(--sp-lg);
+  color: var(--md-error);
+  font-weight: 700;
+  text-align: center;
+}
+
+.wifi-view-status {
+  min-width: 72px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 52%, transparent);
+  border-radius: var(--r-sm);
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+}
+
+.wifi-view-status.is-connected {
+  border-color: color-mix(in srgb, var(--md-primary) 78%, var(--md-outline-var));
+  color: var(--md-primary);
+}
+
+.training-guide-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-md);
+  background: var(--popup-backdrop);
+}
+
+.training-guide-modal__surface {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: min(100%, 960px);
+  height: min(100%, 540px);
+  overflow: hidden;
+  border: 1px solid var(--popup-border-color);
+  border-radius: var(--popup-radius);
+  background: var(--setting-media-backdrop);
+  box-shadow: var(--popup-shadow);
+}
+
+.training-guide-modal__image {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  background: var(--setting-media-backdrop);
+}
+
+/* Visuals come from the shared .c-close atom; this only pins it to the
+   modal's top-right corner. */
+.training-guide-modal__close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+}
+
+.training-guide-modal__bar {
+  display: grid;
+  grid-template-columns: minmax(92px, auto) 1fr minmax(92px, auto);
+  gap: var(--sp-sm);
+  align-items: center;
+  padding: var(--sp-sm);
+  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  background: color-mix(in srgb, var(--md-surface-cont) 82%, var(--setting-shade));
+}
+
+.training-guide-modal__count {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-md);
+  font-weight: 800;
+  text-align: center;
+}
+
+.device-info-modal__surface {
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(100%, 760px);
+  height: min(100%, 620px);
+  background: var(--popup-bg);
+}
+
+.device-info-modal__header {
+  padding: var(--sp-md) calc(var(--sp-xl) + 42px) var(--sp-sm) var(--sp-md);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  color: var(--md-on-surface);
+  font-size: var(--fs-title-lg);
+  font-weight: 900;
+}
+
+.device-info-modal__body {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-md);
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-md);
+  line-height: 1.45;
+}
+
+.device-info-modal__body h2,
+.device-info-modal__body h3,
+.device-info-modal__body h5 {
+  margin: 0 0 var(--sp-sm);
+  color: var(--md-primary);
+}
+
+.device-info-modal__body p {
+  margin: 0 0 var(--sp-sm);
+}
+
+/* Portrait (phone): anchor the settings FAB as page-relative ABSOLUTE flow,
+   the same approach landscape already uses. As position:fixed the FAB was
+   captured by .page-active's transform (an ancestor transform is the
+   containing block for fixed children), so it followed the page geometry ??
+   --app-vv-height settling on load, page transitions ??and drifted up/down.
+   As a normal absolute child of the page it simply sits at the page's
+   bottom-right and stays put. The page already excludes the nav bar + safe
+   area from its height, so the offset here is just the small visual gap. */
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
+  .page.page--setting > .page-fab-layer--setting {
+    position: absolute;
+    top: auto;
+    left: auto;
+    right: max(var(--sp-lg), env(safe-area-inset-right, 0px));
+    bottom: calc(10px + var(--sp-lg));
+    width: auto;
+    height: auto;
+    display: flex;
+    justify-content: flex-end;
+    z-index: 130;
+    pointer-events: none;
+  }
+
+  .page.page--setting > .page-fab-layer--setting .setting-fab-menu {
+    position: relative;
+    right: auto;
+    left: auto;
+    bottom: auto;
+  }
+}

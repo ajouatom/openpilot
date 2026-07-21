@@ -19,6 +19,7 @@ import {
   installDriveInsightsContentGlobal,
 } from "./contents/drive_insights/content.js";
 import { installDriveInsightsRuntimeFacade } from "./contents/drive_insights/runtime.js";
+import { TEMPORARY_TELEMETRY_SURFACES } from "../telemetry/temporary_surface_flags.js";
 
 export const NAVIGATION_CONTENT_ID = "navigation";
 export const DRIVE_CONTENT_FACTORY_IDS = Object.freeze([
@@ -26,6 +27,19 @@ export const DRIVE_CONTENT_FACTORY_IDS = Object.freeze([
   NAVIGATION_CONTENT_ID,
   DRIVE_INSIGHTS_CONTENT_ID,
 ]);
+
+function createTemporarilyDisabledDriveInsights(target) {
+  const driveContentApi = target.DriveContent;
+  if (typeof driveContentApi?.create !== "function") return null;
+  return driveContentApi.create(DRIVE_INSIGHTS_CONTENT_ID, {
+    mount() {},
+    activate() { return true; },
+    deactivate() { return true; },
+    resize() { return false; },
+    status() { return { temporarilyDisabled: true }; },
+    destroy() {},
+  });
+}
 
 export function createDriveContentFactories(target = globalThis, options = {}) {
   const vision = createVisionContentDescriptor({
@@ -48,6 +62,12 @@ export function createDriveContentFactories(target = globalThis, options = {}) {
       return content ? installCarrotNaviContentGlobal(target, content) : null;
     },
     [DRIVE_INSIGHTS_CONTENT_ID](context = {}) {
+      if (!TEMPORARY_TELEMETRY_SURFACES.driveInsights) {
+        return installDriveInsightsContentGlobal(
+          target,
+          createTemporarilyDisabledDriveInsights(target),
+        );
+      }
       const runtime = driveInsightsOptions.runtime
         || installDriveInsightsRuntimeFacade(target, driveInsightsOptions);
       if (!runtime) return null;

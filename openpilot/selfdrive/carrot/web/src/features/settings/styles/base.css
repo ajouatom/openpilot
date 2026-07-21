@@ -2,11 +2,45 @@
    Keep spacing tokens in layout_tokens.css; this file only applies them to
    the setting page's concrete screens and controls. */
 
+/* Settings-local palette.
+   Every value here is byte-identical to the literal it replaced, so naming
+   them changes nothing on screen — it only keeps raw hex out of rule bodies
+   and puts the one-off ramps in a single reviewable place. Colours that match
+   an existing role (info, success, primary) reference the shared token
+   instead and are absent from this block. Promote an entry into
+   foundation/tokens/semantic.css once a second feature needs it.
+   Declared on :root rather than .page--setting because the training guide
+   modal renders outside the settings page subtree. */
+:root {
+  --setting-fab-accent: #ffab66;
+  --setting-fab-accent-pressed: #ff9c4a;
+  --setting-on-fab-accent: #111;
+  --setting-restored-ink: #a9e8b2;
+  --setting-info-ink: #bae6fd;
+
+  /* Pure black, used to darken a surface via color-mix and as the letterbox
+     backdrop behind guide images. Not a themed role. */
+  --setting-shade: #000;
+  --setting-media-backdrop: #000;
+
+  /* Device-tab controls the web cannot drive: a fixed neutral ramp that must
+     stay readable while clearly reading as unavailable. */
+  --setting-disabled-ink: #474d55;
+  --setting-disabled-label: #505761;
+  --setting-disabled-label-hover: #58606a;
+  --setting-disabled-surface-top: #22272e;
+  --setting-disabled-surface-bottom: #171b20;
+  --setting-disabled-surface-top-hover: #262b32;
+  --setting-disabled-surface-bottom-hover: #191d22;
+  --setting-disabled-track: #2f343a;
+  --setting-disabled-knob: #6a7078;
+}
+
 .page--setting {
   --setting-menu-list-gap: 6px;
   --setting-menu-item-min-height: 46px;
   --setting-menu-item-padding-inline: 12px;
-  --setting-profile-accent: var(--md-primary, #ffab66);
+  --setting-profile-accent: var(--md-primary, var(--setting-fab-accent));
   --setting-profile-ink: var(--md-on-surface);
   --setting-profile-surface: var(--md-surface-cont-h);
   --setting-profile-outline: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
@@ -37,9 +71,9 @@
 }
 
 .page--setting .setting.is-restored-live .val {
-  border-color: color-mix(in srgb, #8fdc9b 62%, var(--md-outline-var));
-  background: color-mix(in srgb, #8fdc9b 14%, var(--md-surface-cont-h));
-  color: color-mix(in srgb, #a9e8b2 82%, var(--md-on-surface));
+  border-color: color-mix(in srgb, var(--md-success) 62%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-success) 14%, var(--md-surface-cont-h));
+  color: color-mix(in srgb, var(--setting-restored-ink) 82%, var(--md-on-surface));
 }
 
 .page--setting #groupList > .groupBtn.ui-stagger-item,
@@ -155,7 +189,7 @@ body[data-page="setting"] .page-fab-layer--setting .setting-fab-menu {
   padding: 0 16px;
   border: 1px solid color-mix(in srgb, var(--md-outline-var) 84%, transparent);
   border-radius: var(--control-radius);
-  background: color-mix(in srgb, var(--md-surface-cont) 92%, #000);
+  background: color-mix(in srgb, var(--md-surface-cont) 92%, var(--setting-shade));
   color: var(--md-on-surface);
   font-size: var(--fs-body-sm);
   font-weight: 800;
@@ -219,9 +253,9 @@ body[data-page="setting"] .page-fab-layer--setting .setting-fab-menu {
 }
 
 .fab--setting-menu {
-  background: #ffab66;
-  border-color: #ffab66;
-  color: #111;
+  background: var(--setting-fab-accent);
+  border-color: var(--setting-fab-accent);
+  color: var(--setting-on-fab-accent);
   box-shadow: 0 12px 28px rgba(255, 135, 58, 0.22);
   transition:
     background 0.18s ease,
@@ -232,9 +266,9 @@ body[data-page="setting"] .page-fab-layer--setting .setting-fab-menu {
 
 .fab--setting-menu.active,
 .fab--setting-menu:active {
-  background: #ff9c4a;
-  border-color: #ff9c4a;
-  color: #111;
+  background: var(--setting-fab-accent-pressed);
+  border-color: var(--setting-fab-accent-pressed);
+  color: var(--setting-on-fab-accent);
   box-shadow: 0 12px 30px rgba(255, 135, 58, 0.3);
 }
 

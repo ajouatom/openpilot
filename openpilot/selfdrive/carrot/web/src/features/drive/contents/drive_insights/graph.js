@@ -217,12 +217,11 @@ function stabilizeRange(previous, minimum, maximum) {
   return { minimum: nextMinimum, maximum: nextMaximum };
 }
 
-function drawMetric(context, canvas, metric, model, card, options, target, ranges) {
+function drawMetric(context, canvas, metric, model, lineColor, target, ranges) {
   if (!context) return;
   const { width, height, dpr } = canvasSize(canvas, target);
   context.setTransform?.(dpr, 0, 0, dpr, 0, 0);
   context.clearRect?.(0, 0, width, height);
-  const lineColor = cssValue(options, card, "--graph-color");
   if (!lineColor || metric.values.length < 2 || metric.minimum === null || metric.maximum === null) {
     if (!metric.values.length) ranges?.delete(metric.id);
     return;
@@ -266,22 +265,35 @@ export function createDriveInsightsGraphRenderer(options = {}) {
   let model = createDriveInsightsGraphModel(null, { presentation: options.presentation });
   const ranges = new Map();
   let destroyed = false;
+  let colorsReadAtMs = Number.NEGATIVE_INFINITY;
 
   root.classList?.add("drive-insights__graph");
+  function refreshLineColors(force = false) {
+    const now = Number(target.performance?.now?.() ?? Date.now());
+    if (!force && now - colorsReadAtMs < 1000) return false;
+    colorsReadAtMs = now;
+    for (const card of cards.values()) {
+      card.lineColor = cssValue(options, card.card, "--graph-color");
+    }
+    return true;
+  }
+
   for (const metric of metrics) {
     const card = cards.get(metric.id);
-    if (!card) continue;
-    card.card.setAttribute?.("aria-label", card.label.textContent);
+    if (card) card.card.setAttribute?.("aria-label", card.label.textContent);
   }
+  refreshLineColors(true);
 
   function paint() {
     if (destroyed) return false;
+    refreshLineColors();
     root.dataset.state = model.state;
     for (const metric of model.metrics) {
       const card = cards.get(metric.id);
       if (!card) continue;
-      card.output.textContent = metric.current === null ? "--" : metric.current.toFixed(metric.digits);
-      drawMetric(card.context, card.canvas, metric, model, card.card, options, target, ranges);
+      const output = metric.current === null ? "--" : metric.current.toFixed(metric.digits);
+      if (card.output.textContent !== output) card.output.textContent = output;
+      drawMetric(card.context, card.canvas, metric, model, card.lineColor, target, ranges);
     }
     return true;
   }
@@ -305,6 +317,7 @@ export function createDriveInsightsGraphRenderer(options = {}) {
       card.card.setAttribute?.("aria-label", card.label.textContent);
       card.unit.textContent = metric.unit;
     }
+    refreshLineColors(true);
     return true;
   }
 

@@ -397,6 +397,7 @@ WEB_SETTINGS_SPEC: List[_Field] = [
   _Field("mini_hud_enabled", "bool", False),
   _Field("web_language", "str", "", normalize=_normalize_language),
   _Field("vision_fullscreen_default", "bool", False),
+  _Field("vision_ar_enabled", "bool", False),
   _Field("vision_display_mode", "enum", "normal", choices={"fit", "normal", "crop"}),
   _Field("replay_hud_visible", "bool", False),
   _Field("replay_insights_tab", "enum", "events", choices=WEB_REPLAY_INSIGHTS_TABS),

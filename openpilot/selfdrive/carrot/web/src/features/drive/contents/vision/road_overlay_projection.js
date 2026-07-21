@@ -18,9 +18,6 @@ function finiteNumber(value, fallback = 0) {
 export function createRoadOverlayProjection(options = {}) {
   const projectPoint = options.projectPoint;
   const projectPointPrecise = options.projectPointPrecise;
-  const isRecordedReplayActive = typeof options.isRecordedReplayActive === "function"
-    ? options.isRecordedReplayActive
-    : () => false;
   const maxDrawDistance = finiteNumber(options.maxDrawDistance, 100);
 
   if (typeof projectPoint !== "function" || typeof projectPointPrecise !== "function") {
@@ -152,12 +149,9 @@ export function createRoadOverlayProjection(options = {}) {
 
   function smoothRibbon(key, ribbon, alpha) {
     if (!key || !ribbon?.polygon?.length) return ribbon;
-    // Replay samples already follow the recorded timeline. Frame EMA would
-    // intentionally lag the geometry after seek or skipped browser frames.
-    if (isRecordedReplayActive()) {
-      temporalRibbonState.delete(key);
-      return ribbon;
-    }
+    // Live and replay share the same temporal filter. Replay seek/reset already
+    // clears this state, so bypassing it only makes recorded 20 Hz geometry
+    // snap between samples while the video keeps advancing.
     const previous = temporalRibbonState.get(key);
     const left = smoothPointListTemporal(previous?.left, ribbon.left, alpha);
     const right = smoothPointListTemporal(previous?.right, ribbon.right, alpha);

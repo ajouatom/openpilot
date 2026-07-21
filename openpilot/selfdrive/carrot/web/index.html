@@ -2,6 +2,13 @@
 <html class="notranslate" translate="no">
 <head>
   <script id="carrotAssetManifest" type="application/json"></script>
+  <!-- Do not add ?v= to .js or .css here. The server rewrites every local
+       script/style URL with a SHA-256 of the file's contents when it serves
+       this page (server/features/static.py), dropping any v= that was already
+       there. A hand-maintained version is therefore inert, and bumping one
+       looks like cache busting while doing nothing. The remaining ?v= values
+       are on assets the fingerprinter skips: /js/vendor/, /css/vendor/,
+       /support-terminal-assets/ and non-JS/CSS files such as images. -->
   <meta charset="utf-8" />
   <meta name="google" content="notranslate" />
   <!-- Let keyboard-heavy pages follow the visible content viewport instead of
@@ -114,28 +121,28 @@
     }
   </style>
   <link rel="stylesheet" href="/css/generated/design-tokens.css" />
-  <link rel="stylesheet" href="/css/tokens.css?v=2607-72" />
-  <link rel="stylesheet" href="/css/layout_tokens.css?v=2607-42" />
-  <link rel="stylesheet" href="/css/hud_card.css?v=2605-03" />
-  <link rel="stylesheet" href="/css/base.css?v=2607-40" />
-  <link rel="stylesheet" href="/css/layout.css?v=2605-08" />
+  <link rel="stylesheet" href="/css/tokens.css" />
+  <link rel="stylesheet" href="/css/layout_tokens.css" />
+  <link rel="stylesheet" href="/css/hud_card.css" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/layout.css" />
   <link rel="stylesheet" href="/css/generated/design-system.css" />
   <link rel="stylesheet" href="/css/generated/drive.css" />
   <link rel="stylesheet" href="/css/generated/replay.css" />
-  <link rel="stylesheet" href="/css/components.css?v=2607-55" />
-  <link rel="stylesheet" href="/css/components/media_transport.css?v=2607-04" />
-  <link rel="stylesheet" href="/css/components/nav_status_badges.css?v=2607-05" />
-  <link rel="stylesheet" href="/css/components/drive_content_intro.css?v=2607-05" />
-  <link rel="stylesheet" href="/css/components/drive_workspace.css?v=2607-08" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/components/media_transport.css" />
+  <link rel="stylesheet" href="/css/components/nav_status_badges.css" />
+  <link rel="stylesheet" href="/css/components/drive_content_intro.css" />
+  <link rel="stylesheet" href="/css/components/drive_workspace.css" />
   <link rel="stylesheet" href="/css/generated/logs.css" />
   <link rel="stylesheet" href="/css/vendor/xterm.css?v=550" />
   <link rel="stylesheet" href="/css/generated/terminal.css" />
   <link rel="stylesheet" href="/css/generated/settings.css" />
   <link rel="stylesheet" href="/css/generated/tools.css" />
-  <link rel="stylesheet" href="/css/pages/drive.css?v=2607-84" />
-  <link rel="stylesheet" href="/css/pages/carrot_navi.css?v=2607-15" />
-  <link rel="stylesheet" href="/css/components/mini_hud.css?v=2607-88" />
-  <link rel="stylesheet" href="/css/responsive.css?v=2607-44" />
+  <link rel="stylesheet" href="/css/pages/drive.css" />
+  <link rel="stylesheet" href="/css/pages/carrot_navi.css" />
+  <link rel="stylesheet" href="/css/components/mini_hud.css" />
+  <link rel="stylesheet" href="/css/responsive.css" />
   <link rel="stylesheet" href="/css/generated/intro.css" />
   <link rel="stylesheet" href="/css/vendor/plyr.css?v=3.7.8" />
 </head>
@@ -189,6 +196,12 @@
                 <path fill="currentColor" d="M12 5V2L7 7l5 5V9c3.31 0 6 2.69 6 6 0 1.01-.25 1.96-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 15c0-4.42-3.58-8-8-8m-6 4.74A7.93 7.93 0 0 0 4 15c0 4.42 3.58 8 8 8v-2c-3.31 0-6-2.69-6-6 0-1.01.25-1.96.7-2.8z"/>
               </svg>
               <span id="settingFabResetDefaultsLabel">설정 초기화</span>
+            </button>
+            <button id="btnSettingFabFingerprint" class="setting-fab-action" type="button" role="menuitem">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M12 2a9 9 0 0 0-9 9c0 1.4.3 2.7.9 3.9l1.8-.9A7 7 0 0 1 12 4a7 7 0 0 1 7 7c0 2.6-.6 5-1.7 7.2l1.8.9A16 16 0 0 0 21 11a9 9 0 0 0-9-9m0 4a5 5 0 0 0-5 5c0 3.1-.8 6-2.2 8.5l1.7 1A19 19 0 0 0 9 11a3 3 0 0 1 6 0c0 3.4-.9 6.6-2.5 9.4l1.7 1A21 21 0 0 0 17 11a5 5 0 0 0-5-5m0 4a1 1 0 0 0-1 1 17 17 0 0 1-2.6 9l1.7 1A19 19 0 0 0 13 11a1 1 0 0 0-1-1"/>
+              </svg>
+              <span id="settingFabFingerprintLabel">설정 지문</span>
             </button>
             <button id="btnSettingFabSearch" class="setting-fab-action" type="button" role="menuitem">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -927,36 +940,36 @@
   <script src="/js/vendor/plyr.min.js?v=3.7.8"></script>
   <script src="/js/vendor/qrcode-generator.js?v=1.4.4"></script>
   <script src="/js/vendor/jsQR.js?v=1.4.0"></script>
-  <script src="/js/translations/registry.js?v=2605-09"></script>
-  <script src="/js/translations/ko.js?v=2607-103"></script>
-  <script src="/js/translations/en.js?v=2607-100"></script>
-  <script src="/js/translations/zh.js?v=2607-100"></script>
-  <script src="/js/shared/constants.js?v=2607-01"></script>
-  <script src="/js/shared/dom.js?v=2607-01"></script>
-  <script src="/js/shared/utils.js?v=2604-71"></script>
-  <script src="/js/shared/i18n.js?v=2607-08"></script>
-  <script src="/js/shared/api.js?v=2604-73"></script>
+  <script src="/js/translations/registry.js"></script>
+  <script src="/js/translations/ko.js"></script>
+  <script src="/js/translations/en.js"></script>
+  <script src="/js/translations/zh.js"></script>
+  <script src="/js/shared/constants.js"></script>
+  <script src="/js/shared/dom.js"></script>
+  <script src="/js/shared/utils.js"></script>
+  <script src="/js/shared/i18n.js"></script>
+  <script src="/js/shared/api.js"></script>
   <script src="/js/generated/settings.js"></script>
-  <script src="/js/shared/setting_diff.js?v=2605-01"></script>
-  <script src="/js/shared/activity.js?v=2604-04"></script>
-  <script src="/js/shared/ui/setting_form.js?v=2607-03"></script>
-  <script src="/js/shared/ui/viewport.js?v=2607-56"></script>
-  <script src="/js/shared/ui/effects.js?v=2604-72"></script>
-  <script src="/js/shared/ui/media_transport.js?v=2607-16"></script>
-  <script src="/js/shared/ui/navigation.js?v=2607-47"></script>
-  <script src="/js/pages/car.js?v=2607-01"></script>
-  <script src="/js/pages/setting_youtube_live.js?v=2607-51"></script>
-  <script src="/js/pages/setting_mapbox_tokens.js?v=2607-06"></script>
-  <script src="/js/shared/ui/nav_status_badges.js?v=2607-02"></script>
-  <script src="/js/pages/setting.js?v=2607-60"></script>
-  <script src="/js/pages/setting_device_config.js?v=2605-06"></script>
-  <script src="/js/pages/setting_device_render.js?v=2607-51"></script>
-  <script src="/js/pages/setting_device_network.js?v=2605-01"></script>
-  <script src="/js/pages/setting_device_actions.js?v=2607-52"></script>
-  <script src="/js/pages/setting_device.js?v=2607-03"></script>
-  <script src="/js/realtime/web_sound.js?v=2607-51"></script>
+  <script src="/js/shared/setting_diff.js"></script>
+  <script src="/js/shared/activity.js"></script>
+  <script src="/js/shared/ui/setting_form.js"></script>
+  <script src="/js/shared/ui/viewport.js"></script>
+  <script src="/js/shared/ui/effects.js"></script>
+  <script src="/js/shared/ui/media_transport.js"></script>
+  <script src="/js/shared/ui/navigation.js"></script>
+  <script src="/js/pages/car.js"></script>
+  <script src="/js/pages/setting_youtube_live.js"></script>
+  <script src="/js/pages/setting_mapbox_tokens.js"></script>
+  <script src="/js/shared/ui/nav_status_badges.js"></script>
+  <script src="/js/pages/setting.js"></script>
+  <script src="/js/pages/setting_device_config.js"></script>
+  <script src="/js/pages/setting_device_render.js"></script>
+  <script src="/js/pages/setting_device_network.js"></script>
+  <script src="/js/pages/setting_device_actions.js"></script>
+  <script src="/js/pages/setting_device.js"></script>
+  <script src="/js/realtime/web_sound.js"></script>
   <script src="/js/generated/tools.js"></script>
-  <script src="/js/pages/branch.js?v=2604-82"></script>
+  <script src="/js/pages/branch.js"></script>
   <script src="/js/generated/logs.js"></script>
   <script src="/js/vendor/xterm-addon-shim.js?v=1"></script>
   <script src="/js/vendor/xterm.js?v=553"></script>
@@ -965,28 +978,28 @@
   <script src="/js/generated/terminal.js"></script>
   <script src="/js/generated/terminal-shared.js"></script>
   <script src="/js/generated/terminal-support.js"></script>
-  <script src="/js/realtime/mini_hud_model.js?v=2607-85"></script>
-  <script src="/js/realtime/mini_hud_mode.js?v=2607-51"></script>
-  <script src="/js/realtime/mini_hud.js?v=2607-91"></script>
-  <script src="/js/realtime/vision_state.js?v=2607-07"></script>
-  <script src="/js/realtime/vision_compact.js?v=2607-06"></script>
-  <script src="/js/realtime/vision_rtc.js?v=2607-28"></script>
-  <script src="/js/realtime/vision_raw.js?v=2607-20"></script>
-  <script src="/js/realtime/app_realtime.js?v=2607-63"></script>
+  <script src="/js/realtime/mini_hud_model.js"></script>
+  <script src="/js/realtime/mini_hud_mode.js"></script>
+  <script src="/js/realtime/mini_hud.js"></script>
+  <script src="/js/realtime/vision_state.js"></script>
+  <script src="/js/realtime/vision_compact.js"></script>
+  <script src="/js/realtime/vision_rtc.js"></script>
+  <script src="/js/realtime/vision_raw.js"></script>
+  <script src="/js/realtime/app_realtime.js"></script>
   <script src="/js/generated/replay.js"></script>
-  <script src="/js/realtime/replay_client.js?v=2607-09"></script>
-  <script src="/js/realtime/vision_replay.js?v=2607-41"></script>
-  <script src="/js/realtime/vision_diag.js?v=2607-01"></script>
-  <script src="/js/pages/vision_background.js?v=2605-01"></script>
-  <script src="/js/realtime/vision_webgl2.js?v=2607-04"></script>
-  <script src="/js/realtime/drive_content_intro.js?v=2607-04"></script>
-  <script src="/js/realtime/home_drive.js?v=2607-96"></script>
+  <script src="/js/realtime/replay_client.js"></script>
+  <script src="/js/realtime/vision_replay.js"></script>
+  <script src="/js/realtime/vision_diag.js"></script>
+  <script src="/js/pages/vision_background.js"></script>
+  <script src="/js/realtime/vision_webgl2.js"></script>
+  <script src="/js/realtime/drive_content_intro.js"></script>
+  <script src="/js/realtime/home_drive.js"></script>
   <!-- 인트로 무대. 최초 1회만 쓰이며, 서버가 shouldShow 로 판단한다. -->
   <div class="intro" id="introDeck" hidden></div>
   <div class="intro-curtain" id="introCurtain"></div>
 
   <script src="/js/generated/intro.js"></script>
-  <script src="/js/app.js?v=2607-13"></script>
+  <script src="/js/app.js"></script>
   <script src="/models/page_models.js?v=2607-01"></script>
 </body>
 </html>

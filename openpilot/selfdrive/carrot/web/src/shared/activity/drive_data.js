@@ -1,7 +1,7 @@
-const DRIVE_DATA_CHANNELS = Object.freeze(["hud", "overlay", "tracks"]);
-// "tracks" carries a full radar track list and is far heavier than the other
-// channels, so an unqualified lease never opts into it. Only a caller that
-// names the channel gets it.
+const DRIVE_DATA_CHANNELS = Object.freeze(["hud", "overlay", "tracks", "ar"]);
+// "tracks" (radar track list) and "ar" (20Hz odometry + pose) are far heavier
+// than the base channels, so an unqualified lease never opts into them.
+// Only a caller that names the channel gets it.
 const DRIVE_DATA_DEFAULT_CHANNELS = Object.freeze(["hud", "overlay"]);
 const DRIVE_DATA_ACTIVITY_EVENT = "carrot:drivedataactivitychange";
 
