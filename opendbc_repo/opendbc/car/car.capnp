@@ -376,6 +376,7 @@ struct RadarData @0x888ad6581cf0aacb {
       scc @1;
       corner235 @2;
       corner180 @3;
+      corner430 @4;
     }
   }
 

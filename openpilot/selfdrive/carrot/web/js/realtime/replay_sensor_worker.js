@@ -6,7 +6,7 @@ const rawCapnp = self.CarrotRawCapnp;
 const TRACK_STRIDE = 8;
 const SAMPLE_INTERVAL_MS = 50;
 const MAX_DURATION_MS = 3 * 60 * 1000;
-const radarSourceCode = Object.freeze({ frontRadar: 0, scc: 1, corner235: 2, corner180: 3 });
+const radarSourceCode = Object.freeze({ frontRadar: 0, scc: 1, corner235: 2, corner180: 3, corner430: 4 });
 
 function appendBytes(left, right) {
   if (!left?.byteLength) return right;
@@ -26,7 +26,7 @@ function compactLiveTracks(decoded, availability) {
     if (!Number.isFinite(dRel) || !Number.isFinite(yRel) || !Number.isFinite(vRel)) continue;
     const rawSource = point?.radarSource;
     const source = Number.isFinite(Number(rawSource))
-      ? Math.max(0, Math.min(3, Number(rawSource)))
+      ? Math.max(0, Math.min(4, Number(rawSource)))
       : (radarSourceCode[String(rawSource)] ?? 0);
     if (source === 0) availability.front = true;
     else if (source === 1) availability.scc = true;

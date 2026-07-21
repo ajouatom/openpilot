@@ -37,8 +37,10 @@ CORNER_OBJECT_430_RIGHT_START_ADDR = 0x440
 CORNER_OBJECT_430_MSG_COUNT_PER_SIDE = 8
 CORNER_OBJECT_430_SLOTS_PER_MSG = 7
 CORNER_OBJECT_430_TRACK_ID_OFFSET = 300
+CORNER_OBJECT_430_RADAR_SOURCE = 'corner430'
 CORNER_OBJECT_430_DBC = 'hyundai_canfd_corner_radar_430_generated'
 CORNER_OBJECT_430_EMPTY_RAW_VALUES = (0x010d1f40, 0x00010d1f)
+CORNER_OBJECT_430_DISTANCE_SCALE = 0.05
 CORNER_OBJECT_430_DEFAULT_DISTANCE_RAW_MIN = 2520  # 126.0 m
 CORNER_OBJECT_430_DEFAULT_DISTANCE_RAW_MAX = 2600  # 130.0 m
 CORNER_OBJECT_430_MAX_DREL = 120.0
@@ -55,7 +57,7 @@ CORNER_OBJECT_430_WEAK_MIN_SUPPORT = 3
 CORNER_OBJECT_430_CLUSTER_RAW_GAP = 200
 CORNER_OBJECT_430_TRACK_MATCH_MAX_DREL_DELTA = 3.0
 CORNER_OBJECT_430_MAX_ABS_VREL = 20.0
-CORNER_OBJECT_430_MAX_ABS_YVREL = 3.0
+CORNER_OBJECT_430_MAX_ABS_YVREL = 1.2
 CORNER_OBJECT_430_VREL_ALPHA = 0.35
 CORNER_OBJECT_430_YVREL_ALPHA = 0.35
 CORNER_OBJECT_430_LATERAL_CELL_MSG_WEIGHT = 0.35
@@ -67,10 +69,11 @@ CORNER_OBJECT_430_MIN_ABS_YREL = 0.8
 CORNER_OBJECT_430_MAX_ABS_YREL = 4.2
 CORNER_OBJECT_430_HISTORY_SIZE = 8
 CORNER_OBJECT_430_MIN_HISTORY = 5
-CORNER_OBJECT_430_MIN_INWARD_YREL_DELTA = 0.35
+CORNER_OBJECT_430_MIN_INWARD_YREL_DELTA = 0.30
 CORNER_OBJECT_430_MIN_RECENT_INWARD_YREL_DELTA = 0.05
-CORNER_OBJECT_430_MIN_INWARD_RATIO = 0.65
-CORNER_OBJECT_430_INWARD_CENTER_ABS_YREL = 1.55
+CORNER_OBJECT_430_MIN_INWARD_RATIO = 0.60
+CORNER_OBJECT_430_INWARD_CENTER_ABS_YREL = 1.65
+CORNER_OBJECT_430_PUBLISH_MAX_ABS_YREL = 1.85
 CORNER_OBJECT_430_INWARD_KEEP_YVREL_ABS_YREL = 2.2
 CORNER_OBJECT_430_EARLY_INWARD_NONCENTER_FRAMES = 2
 CORNER_OBJECT_430_SIDE_KEEP_ABS_YREL = 2.0
@@ -289,6 +292,7 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id] = structs.RadarData.RadarPoint()
         self.pts[t_id].measured = False
         self.pts[t_id].trackId = t_id
+        self.pts[t_id].radarSource = CORNER_OBJECT_430_RADAR_SOURCE
 
     self.frame = 0
 
@@ -612,7 +616,7 @@ class RadarInterface(RadarInterfaceBase):
             int(msg[f"{prefix}META_BYTE_2"]),
             int(msg[f"{prefix}META_BYTE_3"]),
           )
-          d_rel = distance_raw * 0.05
+          d_rel = distance_raw * CORNER_OBJECT_430_DISTANCE_SCALE
           default_distance = CORNER_OBJECT_430_DEFAULT_DISTANCE_RAW_MIN <= distance_raw <= CORNER_OBJECT_430_DEFAULT_DISTANCE_RAW_MAX
           base_valid = (
             raw not in CORNER_OBJECT_430_EMPTY_RAW_VALUES and
@@ -779,9 +783,13 @@ class RadarInterface(RadarInterfaceBase):
           if abs(y_rel) < CORNER_OBJECT_430_SIDE_KEEP_ABS_YREL:
             y_rel = math.copysign(CORNER_OBJECT_430_SIDE_KEEP_ABS_YREL, y_rel)
         self.corner_object_430_prev_yv_rel[t_id] = yv_rel
+        if inward_center_candidate and abs(y_rel) > CORNER_OBJECT_430_PUBLISH_MAX_ABS_YREL:
+          self._clear_point(t_id)
+          continue
 
         self.pts[t_id].measured = True
         self.pts[t_id].trackId = t_id
+        self.pts[t_id].radarSource = CORNER_OBJECT_430_RADAR_SOURCE
         self.pts[t_id].dRel = d_rel
         self.pts[t_id].yRel = y_rel
         self.pts[t_id].vRel = v_rel
