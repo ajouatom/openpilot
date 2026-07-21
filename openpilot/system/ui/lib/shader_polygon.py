@@ -212,6 +212,7 @@ def draw_polygon(origin_rect: rl.Rectangle, points: np.ndarray,
   """
   if len(points) < 3:
     return
+  assert (color is not None) != (gradient is not None), "Either color or gradient must be provided"
 
   # Initialize shader on-demand
   state = ShaderState.get_instance()
@@ -231,6 +232,17 @@ def draw_polygon(origin_rect: rl.Rectangle, points: np.ndarray,
   rl.begin_shader_mode(state.shader)
   rl.draw_triangle_strip(tri_strip, len(tri_strip), rl.WHITE)
   rl.end_shader_mode()
+
+
+def draw_polygon_solid(points: np.ndarray, color: rl.Color):
+  """Draw a solid ribbon on the current rlgl batch; call outside custom shader mode."""
+  if len(points) < 3:
+    return
+
+  pts = np.ascontiguousarray(points, dtype=np.float32)
+  assert pts.ndim == 2 and pts.shape[1] == 2, "points must be (N,2)"
+  tri_strip = triangulate(pts)
+  rl.draw_triangle_strip(tri_strip, len(tri_strip), color)
 
 
 def cleanup_shader_resources():
