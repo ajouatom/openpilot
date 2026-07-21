@@ -287,6 +287,17 @@
       "scene": "Close stationary front-radar reflection outside the lane must not trigger repeated cut-in audio"
     },
     {
+      "id": "k5-247-38-close-front-ghost",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "window": [21.5, 23.3],
+      "expected": "clear",
+      "target_track_ids": [50],
+      "forbidden_lead_two_ids": [50],
+      "scene": "Close front-radar ghost must not become a cut-in from lane-center motion alone"
+    },
+    {
       "id": "ioniq5-aa5-3-stationary-114m",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
       "log": "00000aa5--26e26ea9a8--3/rlog.zst",

@@ -401,6 +401,37 @@ def test_front_only_close_parallel_track_is_not_forced_active() -> None:
   assert not decision.cutin_candidates
 
 
+def test_front_only_close_track_requires_raw_lateral_motion() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.90)
+  decision = None
+  for frame in range(24):
+    sample = builder.update(context(frame * 0.05), (
+      fused(corner_id=None, y_rel=1.8, yv_rel=0.0, d_rel=3.5),
+    ))[0]
+    values = list(sample.values)
+    values[MODEL_FEATURE_NAMES.index("h8_present")] = 1.0
+    values[MODEL_FEATURE_NAMES.index("h12_present")] = 1.0
+    values[MODEL_FEATURE_NAMES.index("h8_dt")] = 0.4
+    values[MODEL_FEATURE_NAMES.index("h12_dt")] = 0.6
+    values[MODEL_FEATURE_NAMES.index("h8_y_rate")] = 0.0
+    values[MODEL_FEATURE_NAMES.index("h12_y_rate")] = 0.0
+    values[MODEL_FEATURE_NAMES.index("h8_d_path")] = 1.8
+    values[MODEL_FEATURE_NAMES.index("h12_d_path")] = 1.9
+    sample = replace(
+      sample,
+      values=tuple(values),
+      d_path=1.6,
+      d_path_future=1.55,
+    )
+    decision = decision_filter.update(frame * 0.05, (
+      RadarLeadPrediction(sample, lead_prob=0.0, cutin_prob=0.0, risk_prob=0.0),
+    ))
+
+  assert decision is not None
+  assert not decision.cutin_candidates
+
+
 def test_close_cutin_evidence_does_not_accumulate_across_sensor_ids() -> None:
   builder = RadarLeadFeatureBuilder()
   decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)
