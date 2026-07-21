@@ -20,6 +20,7 @@ import {
   setDashcamLoadingMoreUi,
   setDashcamSort,
   showDashcamRouteMenu,
+  showDashcamRouteReport,
   showDashcamSegmentMenu,
   startDashcamAutoRefresh,
   toggleDashcamRouteSelectAll,
@@ -561,6 +562,9 @@ function bindLogsPage() {
       } else if (action === "route-menu") {
         ev.stopPropagation();
         showDashcamRouteMenu(route).catch(() => {});
+      } else if (action === "route-report") {
+        ev.stopPropagation();
+        showDashcamRouteReport(route).catch(() => {});
       } else if (action === "select-route") {
         const shouldClear = actionEl.dataset.selected === "1";
         toggleDashcamRouteSelectAll(route, shouldClear).catch(() => {});
