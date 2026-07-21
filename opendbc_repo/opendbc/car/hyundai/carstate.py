@@ -371,6 +371,8 @@ class CarState(CarStateBase):
     if self.CP.flags & (HyundaiFlags.HYBRID | HyundaiFlags.EV):
       gear = cp.vl["ELECT_GEAR"]["Elect_Gear_Shifter"]
       ret.gearStep = cp.vl["ELECT_GEAR"]["Elect_Gear_Step"]
+      if self.CP.carFingerprint == CAR.HYUNDAI_CASPER_EV:
+        ret.gearStep = 0
     elif self.CP.flags & HyundaiFlags.FCEV:
       gear = cp.vl["EMS20"]["HYDROGEN_GEAR_SHIFTER"]
     elif self.CP.flags & HyundaiFlags.CLUSTER_GEARS:
