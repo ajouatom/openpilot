@@ -7,7 +7,7 @@ CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_live import OpenpilotLiveSource
-from cluster_route_replay import RawCornerObject, RouteLogParser, adjacent_route_log_path
+from cluster_route_replay import RawCornerObject, RouteLogParser, adjacent_route_log_path, model_lead_detections_from_model_v2
 
 
 def corner_object(t, slot, object_id, age, x, y, vx, vy):
@@ -150,6 +150,30 @@ def test_live_selfdrive_state_passes_event_timestamp():
   source._apply_service_update("selfdriveState", 12.5)
 
   assert calls == [(source.sm["selfdriveState"], 12.5)]
+
+
+def model_lead(probability, distance=50.0):
+  return SimpleNamespace(
+    prob=probability,
+    x=(distance,),
+    y=(0.0,),
+    v=(15.0,),
+    a=(0.0,),
+    xStd=(1.0,),
+    yStd=(0.5,),
+  )
+
+
+def test_model_lead_display_hides_low_probability_candidates():
+  model = SimpleNamespace(
+    leadsV3=(model_lead(0.49), model_lead(0.50, 60.0)),
+    velocity=SimpleNamespace(x=(20.0,)),
+  )
+
+  detections = model_lead_detections_from_model_v2(model)
+
+  assert [d.label for d in detections] == ["M2"]
+  assert detections[0].probability == 0.50
 
 
 def test_live_calibration_height_is_not_overwritten_by_camera_odometry():
