@@ -20,6 +20,7 @@ CUTIN_TEMPORAL_THRESHOLD_MAX = 0.82
 CUTIN_ACTIVE_CURRENT_MIN = 0.20
 CUTIN_STICKY_MAX_S = 0.75
 EXTERNAL_ACTIVE_CURRENT_MIN = 0.20
+CORNER_ONLY_CUTIN_MAX_DREL_M = 30.0
 HISTORY_OFFSETS = (1, 2, 4, 8, 12, 16, 20)
 MAX_HISTORY_FRAMES = max(HISTORY_OFFSETS) + 2
 
@@ -161,6 +162,8 @@ MODEL_FEATURE_NAMES = _feature_names()
 MODEL_FEATURE_INDICES = {name: index for index, name in enumerate(MODEL_FEATURE_NAMES)}
 H8_Y_RATE_INDEX = MODEL_FEATURE_NAMES.index("h8_y_rate")
 H12_Y_RATE_INDEX = MODEL_FEATURE_NAMES.index("h12_y_rate")
+H8_D_RATE_INDEX = MODEL_FEATURE_NAMES.index("h8_d_rate")
+H12_D_RATE_INDEX = MODEL_FEATURE_NAMES.index("h12_d_rate")
 H8_DT_INDEX = MODEL_FEATURE_NAMES.index("h8_dt")
 H12_DT_INDEX = MODEL_FEATURE_NAMES.index("h12_dt")
 H8_D_PATH_INDEX = MODEL_FEATURE_NAMES.index("h8_d_path")
@@ -247,11 +250,33 @@ class RadarLeadFeatureBuilder:
     self.frame_index = 0
     self._aliases: dict[str, _ObjectHistory] = {}
 
-  def _history_for(self, aliases: tuple[str, ...]) -> _ObjectHistory:
+  @staticmethod
+  def _history_is_continuous(
+    history: _ObjectHistory, context: RadarLeadContext, obj: FusedRadarObject,
+  ) -> bool:
+    if not history.observations:
+      return True
+    previous = history.observations[-1]
+    dt = context.time_s - previous.time_s
+    if dt <= 0.0 or dt > 0.6:
+      return False
+    predicted_d = previous.d_rel + previous.v_rel * dt
+    predicted_y = previous.y_rel + previous.yv_rel * dt
+    d_tolerance = max(8.0, 2.0 + 8.0 * dt)
+    y_tolerance = max(3.0, 1.0 + 4.0 * dt)
+    return abs(obj.d_rel - predicted_d) <= d_tolerance and abs(obj.y_rel - predicted_y) <= y_tolerance
+
+  def _history_for(
+    self, aliases: tuple[str, ...], context: RadarLeadContext, obj: FusedRadarObject,
+  ) -> _ObjectHistory:
     matches = {id(state): state for alias in aliases if (state := self._aliases.get(alias)) is not None}
-    if matches:
-      state = max(matches.values(), key=lambda candidate: len(candidate.observations))
-      for other in matches.values():
+    continuous = {
+      identity: state for identity, state in matches.items()
+      if self._history_is_continuous(state, context, obj)
+    }
+    if continuous:
+      state = max(continuous.values(), key=lambda candidate: len(candidate.observations))
+      for other in continuous.values():
         if other is state:
           continue
         for observation in other.observations:
@@ -260,6 +285,10 @@ class RadarLeadFeatureBuilder:
         for alias, candidate in tuple(self._aliases.items()):
           if candidate is other:
             self._aliases[alias] = state
+    elif matches:
+      # Radar track IDs are finite and can be reused for another physical target.
+      # A generation suffix also isolates the temporal decision state.
+      state = _ObjectHistory(f"{aliases[0]}@{self.frame_index}")
     else:
       state = _ObjectHistory(aliases[0])
     for alias in aliases:
@@ -376,7 +405,7 @@ class RadarLeadFeatureBuilder:
     output: list[RadarLeadFeatures] = []
     for obj in current:
       aliases = object_aliases(obj)
-      history = self._history_for(aliases)
+      history = self._history_for(aliases, context, obj)
       values, d_path, future_d_path, in_lane_prob = self._values(context, current, obj, history)
       output.append(RadarLeadFeatures(
         object_id=history.object_id,
@@ -574,6 +603,8 @@ class RadarLeadDecisionFilter:
       instant_inward_speed = -side_sign * obj.yv_rel
       h8_inward_speed = -side_sign * prediction.features.values[H8_Y_RATE_INDEX]
       h12_inward_speed = -side_sign * prediction.features.values[H12_Y_RATE_INDEX]
+      h8_d_rate = prediction.features.values[H8_D_RATE_INDEX]
+      h12_d_rate = prediction.features.values[H12_D_RATE_INDEX]
       raw_historical_inward = (
         0.15 < h8_inward_speed < 3.0 or 0.15 < h12_inward_speed < 3.0
       )
@@ -652,12 +683,39 @@ class RadarLeadDecisionFilter:
         and 0.20 < h8_lane_inward < 3.2
         and 0.20 < h12_lane_inward < 3.2
       )
+      front_only_very_close_cutin = (
+        obj.front_track_id is not None and obj.corner_track_id is None
+        and prediction.features.track_age >= 12
+        and 2.0 < obj.d_rel <= 4.5 and obj.v_lead > -0.5
+        and lane_history_ready and lane_direction_reliable
+        and 0.65 < current_d_path < 1.35 and abs(obj.y_rel) < 1.6
+        and future_d_path + 0.05 < current_d_path
+        and 0.20 < h8_inward_speed < 1.5
+        and 0.20 < h12_inward_speed < 1.5
+        and 0.20 < h8_lane_inward < 1.5
+        and 0.20 < h12_lane_inward < 1.5
+        and abs(h8_d_rate) < 1.5 and abs(h12_d_rate) < 1.5
+      )
+      front_only_close_approach = (
+        obj.front_track_id is not None and obj.corner_track_id is None
+        and prediction.features.track_age >= 12
+        and 5.5 < obj.d_rel < 9.0 and obj.v_lead > 2.0 and obj.v_rel < -0.5
+        and lane_history_ready and lane_direction_reliable
+        and 2.2 < current_d_path < 3.1 and abs(obj.y_rel) < 3.2
+        and history_projected_d_path < 2.7
+        and h8_d_rate < -0.2 and h12_d_rate < -0.2
+        and 0.35 < h8_inward_speed < 2.0
+        and 0.35 < h12_inward_speed < 2.0
+        and 0.35 < h8_lane_inward < 2.0
+        and 0.35 < h12_lane_inward < 2.0
+      )
+      midrange_d_path_limit = 2.25 if obj.d_rel < 20.0 else 2.85
       front_only_midrange_cutin = (
         obj.front_track_id is not None and obj.corner_track_id is None
         and prediction.features.track_age >= 12
         and 12.0 <= obj.d_rel < 50.0 and obj.v_lead > 2.0
         and lane_history_ready and lane_direction_reliable
-        and 1.8 < current_d_path < 2.7 and decision_future_d_path < 2.15
+        and 1.8 < current_d_path < midrange_d_path_limit and decision_future_d_path < 2.15
         and decision_future_d_path + 0.20 < current_d_path
         and 0.20 < history_inward_speed < 2.5
         and 0.20 < h8_inward_speed < 3.2
@@ -668,7 +726,10 @@ class RadarLeadDecisionFilter:
       effective_cutin_prob = max(
         prediction.cutin_prob,
         min(0.95, cutin_threshold + 0.08)
-        if fused_inward_cutin or decisive_fused_entry or front_only_inward_cutin or front_only_midrange_cutin else 0.0,
+        if (
+          fused_inward_cutin or decisive_fused_entry or front_only_inward_cutin
+          or front_only_very_close_cutin or front_only_close_approach or front_only_midrange_cutin
+        ) else 0.0,
       )
       state.cutin_ema = max(effective_cutin_prob, 0.60 * state.cutin_ema + 0.40 * effective_cutin_prob)
       projected_lane_entry = (
@@ -676,13 +737,24 @@ class RadarLeadDecisionFilter:
         and (sustained_inward or front_only_midrange_cutin)
       )
       inside_not_moving_out = current_d_path <= 1.8 and future_d_path <= current_d_path + 0.15
-      directional_cutin = inside_not_moving_out or projected_lane_entry
+      directional_cutin = inside_not_moving_out or projected_lane_entry or front_only_close_approach
+      corner_only = (
+        obj.corner_track_id is not None
+        and obj.front_track_id is None and obj.scc_track_id is None
+      )
+      front_only_close_range_noise = (
+        obj.front_track_id is not None and obj.corner_track_id is None
+        and obj.d_rel < 12.0 and lane_history_ready
+        and h8_d_rate > 0.75 and h12_d_rate > 0.75
+      )
       cutin_control_usable = (
         (obj.v_lead > 2.0 or abs(obj.y_rel) < 2.0)
         and (obj.d_rel < 12.0 or lane_direction_reliable or current_d_path < 1.5)
+        and (not corner_only or obj.d_rel < CORNER_ONLY_CUTIN_MAX_DREL_M)
+        and not front_only_close_range_noise
       )
       cutin_evidence = (
-        (reliable or front_only_midrange_cutin)
+        (reliable or front_only_close_approach or front_only_midrange_cutin)
         and cutin_control_usable and directional_cutin and effective_cutin_prob >= cutin_threshold
       )
       current_aliases = frozenset(prediction.features.aliases)
@@ -696,7 +768,9 @@ class RadarLeadDecisionFilter:
       else:
         state.cutin_hits = 0
         state.cutin_hit_aliases = frozenset()
-      required_cutin_hits = 2 if close_geometry or fused_inward_cutin else 3
+      required_cutin_hits = 2 if (
+        close_geometry or fused_inward_cutin or front_only_very_close_cutin or front_only_close_approach
+      ) else 3
       urgent = (
         decisive_fused_entry
         or (
@@ -728,6 +802,10 @@ class RadarLeadDecisionFilter:
       sticky_distance_sane = obj.d_rel < 20.0 or (
         obj.front_track_id is not None and obj.corner_track_id is not None
         and obj.d_rel < 50.0 and abs(obj.y_rel) < 2.7
+      ) or (
+        obj.front_track_id is not None and obj.corner_track_id is None
+        and obj.d_rel < 50.0 and lane_direction_reliable
+        and not front_only_close_range_noise
       )
       sticky_cutin_geometry = (
         same_cutin_sensor and sticky_distance_sane and current_d_path < 2.5

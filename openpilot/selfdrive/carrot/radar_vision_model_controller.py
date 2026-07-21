@@ -25,10 +25,12 @@ CORNER_STATIONARY_MAX_DPATH_M = 0.75
 CORNER_STATIONARY_MIN_IN_LANE_PROB = 0.65
 CORNER_STATIONARY_MAX_VLEAD_MPS = 4.0
 STEALTH_LEAD_MIN_TRACK_AGE = 7
+STEALTH_LEAD_MAX_DREL_M = 50.0
 STEALTH_LEAD_MAX_DPATH_M = 1.0
 STEALTH_LEAD_MIN_IN_LANE_PROB = 0.55
 STEALTH_LEAD_HOLD_S = 0.5
 PRIMARY_STEALTH_HOLD_S = 0.75
+PRIMARY_STEALTH_MAX_DREL_M = 60.0
 PRIMARY_STEALTH_MAX_DPATH_M = 2.2
 PRIMARY_STEALTH_MIN_LEAD_PROB = 0.8
 CUTIN_REPORT_MIN_DREL_M = 1.0
@@ -301,6 +303,7 @@ class VisionModelRadarController:
 
   def __init__(self) -> None:
     self.runtime = RadarLeadRuntime()
+    self.last_runtime_result = None
     self.matcher = VisionRadarMatcher()
     self.stealth_aliases: frozenset[str] = frozenset()
     self.stealth_hold_until = 0.0
@@ -356,7 +359,13 @@ class VisionModelRadarController:
       # Unmatched stationary front returns are commonly tunnel/gantry ghosts.
       # A stopped object still becomes leadOne when vision matches it; do not
       # independently feed a radar-only stationary ghost to MPC as leadTwo.
-      return 1.0 < obj.d_rel < 160.0 and obj.v_lead > 2.0
+      return (
+        1.0 < obj.d_rel < 60.0 and obj.v_lead > 2.0
+        and prediction.features.track_age >= STEALTH_LEAD_MIN_TRACK_AGE
+        and abs(prediction.features.d_path) < 1.5
+        and prediction.features.in_lane_prob >= 0.40
+        and abs(prediction.features.d_path_future) <= abs(prediction.features.d_path) + 0.35
+      )
     if obj.d_rel <= 2.0 or obj.d_rel >= 120.0:
       return False
     if obj.v_lead > 2.0:
@@ -373,7 +382,7 @@ class VisionModelRadarController:
     obj = prediction.features.radar_object
     return (
       (obj.front_track_id is not None or obj.scc_track_id is not None)
-      and 1.0 < obj.d_rel < 160.0
+      and 1.0 < obj.d_rel < STEALTH_LEAD_MAX_DREL_M
       and obj.v_lead > 2.0
       and prediction.features.track_age >= STEALTH_LEAD_MIN_TRACK_AGE
       and abs(prediction.features.d_path) < STEALTH_LEAD_MAX_DPATH_M
@@ -385,10 +394,19 @@ class VisionModelRadarController:
     obj = prediction.features.radar_object
     return (
       (obj.front_track_id is not None or obj.scc_track_id is not None)
-      and 1.0 < obj.d_rel < 160.0
+      and 1.0 < obj.d_rel < PRIMARY_STEALTH_MAX_DREL_M
       and prediction.features.track_age >= STEALTH_LEAD_MIN_TRACK_AGE
       and abs(prediction.features.d_path) < PRIMARY_STEALTH_MAX_DPATH_M
+      and abs(prediction.features.d_path_future) <= abs(prediction.features.d_path) + 0.35
       and prediction.lead_prob >= PRIMARY_STEALTH_MIN_LEAD_PROB
+    )
+
+  @classmethod
+  def _cutin_control_usable(cls, prediction: RadarLeadPrediction, v_ego: float) -> bool:
+    obj = prediction.features.radar_object
+    return (
+      cls._cutin_report_usable(prediction, v_ego)
+      and 2.0 < obj.d_rel < 60.0 and obj.v_lead > 2.0
     )
 
   @staticmethod
@@ -422,6 +440,7 @@ class VisionModelRadarController:
 
   def update(self, time_s: float, v_ego: float, points: Any, model: Any) -> RadarLeadModelOutput:
     result = self.runtime.update(time_s, v_ego, points, model)
+    self.last_runtime_result = result
     if not result.available:
       return RadarLeadModelOutput(False, result.error)
 
@@ -504,7 +523,7 @@ class VisionModelRadarController:
     external_leads = tuple(lead for _, lead in external_pairs if lead is not None)
     lead_two = next((
       lead for prediction, lead in relevant_cutin_pairs
-      if not matches_primary(prediction) and self._external_control_usable(prediction)
+      if not matches_primary(prediction) and self._cutin_control_usable(prediction, v_ego)
     ), None)
     if lead_two is None:
       lead_two = next((

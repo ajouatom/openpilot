@@ -6,6 +6,9 @@ from types import SimpleNamespace
 
 import numpy as np
 
+import openpilot.selfdrive.carrot.radar_lead_simulator as radar_simulator
+from openpilot.selfdrive.carrot.radar_vision_model_controller import RadarLeadModelOutput
+
 from openpilot.selfdrive.carrot.radar_lead_simulator import (
   MODEL_FEATURE_NAMES,
   Candidate,
@@ -16,6 +19,7 @@ from openpilot.selfdrive.carrot.radar_lead_simulator import (
   RadarFrame,
   RadarPoint,
   RecordedLead,
+  ProductionHybridLeadSelector,
   SimpleLeadSelector,
   Selection,
   ValidationReview,
@@ -76,6 +80,42 @@ def test_simple_selector_matches_model_lead() -> None:
   )))
 
   assert candidate_track_id(selected.lead_one) == 10
+
+
+def test_production_hybrid_selector_uses_device_controller_output(monkeypatch, tmp_path: Path) -> None:
+  lead_one = {
+    "status": True, "radarTrackId": 10, "modelProb": 0.9, "score": 0.9,
+    "dRel": 30.0, "yRel": 0.2,
+  }
+  lead_two = {
+    "status": True, "radarTrackId": 20, "modelProb": 0.8, "score": 0.8,
+    "dRel": 18.0, "yRel": -1.5,
+  }
+
+  class FakeDeviceController:
+    def __init__(self) -> None:
+      self.runtime = None
+      self.last_runtime_result = None
+
+    def update(self, time_s, v_ego, points, model):
+      assert points[0].trackId == 10
+      assert model.leadsV3[0].prob == 0.9
+      self.runtime.model = SimpleNamespace(thresholds=(0.5, 0.5, 0.5))
+      self.last_runtime_result = SimpleNamespace(available=True, predictions=())
+      return RadarLeadModelOutput(
+        True, lead_one=lead_one, lead_two=lead_two, lead_cutin=lead_two, leads_cutin=(lead_two,),
+      )
+
+  monkeypatch.setattr(radar_simulator, "VisionModelRadarController", FakeDeviceController)
+  selector = ProductionHybridLeadSelector(tmp_path / "unused-model.npz", [frame((
+    point(10, 30.0, 0.2, 20.0),
+  ))])
+  selected = selector.select(frame(()), 0)
+
+  assert candidate_track_id(selected.lead_one) == 10
+  assert candidate_track_id(selected.lead_two) == 20
+  assert selected.lead_two is not None and selected.lead_two.reason == "MLP active cutin"
+  assert tuple(candidate.track_id for candidate in selected.active_cutin_candidates) == (20,)
 
 
 def test_current_radard_teacher_rejects_adjacent_lane_distance_match() -> None:
@@ -334,6 +374,21 @@ def test_lead_comparison_series_contains_current_radard_and_model_distances() ->
   assert values.radard_two is None
   assert values.model_one is not None and values.model_one.d_rel == 30.8
   assert values.model_two is not None and values.model_two.d_rel == 18.0
+
+
+def test_lead_comparison_series_keeps_model_history_without_radard_comparison() -> None:
+  sample = frame((point(10, 31.0, 0.2, 20.0),))
+
+  class ModelSelector:
+    def select(self, _frame, frame_index=None):
+      return Selection(Candidate(10, 1.0, "model lead", d_rel=30.8, y_rel=0.2), None)
+
+  values = lead_comparison_series([sample], None, ModelSelector())[0]
+
+  assert values.radard_one is None
+  assert values.radard_two is None
+  assert values.model_one is not None and values.model_one.d_rel == 30.8
+  assert values.model_two is None
 
 
 def test_manual_labels_round_trip_and_training_export(tmp_path: Path) -> None:
