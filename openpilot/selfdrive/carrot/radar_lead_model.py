@@ -640,10 +640,24 @@ class RadarLeadDecisionFilter:
         and 0.20 < h8_lane_inward < 3.2
         and 0.20 < h12_lane_inward < 3.2
       )
+      front_only_midrange_cutin = (
+        obj.front_track_id is not None and obj.corner_track_id is None
+        and prediction.features.track_age >= 12
+        and 12.0 <= obj.d_rel < 50.0 and obj.v_lead > 2.0
+        and lane_history_ready and lane_direction_reliable
+        and 1.8 < current_d_path < 2.7 and future_d_path < 2.15
+        and future_d_path + 0.20 < current_d_path
+        and 0.12 < instant_inward_speed < 2.5
+        and 0.20 < h8_inward_speed < 3.2
+        and 0.20 < h12_inward_speed < 3.2
+        and 0.20 < h8_lane_inward < 3.2
+        and 0.20 < h12_lane_inward < 3.2
+        and prediction.cutin_prob >= 0.25
+      )
       effective_cutin_prob = max(
         prediction.cutin_prob,
         min(0.95, cutin_threshold + 0.08)
-        if fused_inward_cutin or decisive_fused_entry or front_only_inward_cutin else 0.0,
+        if fused_inward_cutin or decisive_fused_entry or front_only_inward_cutin or front_only_midrange_cutin else 0.0,
       )
       state.cutin_ema = max(effective_cutin_prob, 0.60 * state.cutin_ema + 0.40 * effective_cutin_prob)
       projected_lane_entry = (
@@ -656,7 +670,8 @@ class RadarLeadDecisionFilter:
         and (obj.d_rel < 12.0 or lane_direction_reliable or current_d_path < 1.5)
       )
       cutin_evidence = (
-        reliable and cutin_control_usable and directional_cutin and effective_cutin_prob >= cutin_threshold
+        (reliable or front_only_midrange_cutin)
+        and cutin_control_usable and directional_cutin and effective_cutin_prob >= cutin_threshold
       )
       current_aliases = frozenset(prediction.features.aliases)
       if cutin_evidence:

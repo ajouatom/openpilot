@@ -42,7 +42,7 @@ The controller additionally requires a raw-corner identity, at least seven frame
 
 ## Cut-in regression
 
-The 39 maintained detect/clear video-review cases pass 39/39. The v13 candidate introduced no activation in the maintained right-curve, parallel-adjacent, close-pass, point-jump, stopped-traffic, close stationary-reflection, near-field front-radar ghost, or tunnel-ghost clear scenes.
+The 40 maintained detect/clear video-review cases pass 40/40. The v13 candidate introduced no activation in the maintained right-curve, parallel-adjacent, close-pass, point-jump, stopped-traffic, close stationary-reflection, near-field front-radar ghost, or tunnel-ghost clear scenes.
 
 The anticipatory labels use a later current-radard confirmation only when the same front/corner alias was already moving consistently toward the lane. They look back at most 0.8 seconds and never overwrite manual negative labels. This added 142 soft-positive training rows and 126 validation rows. It does not copy the current-radard decision time directly; it teaches the stable motion immediately before that decision.
 
@@ -58,6 +58,8 @@ The weak test labels are derived from the current-radard confirmation and theref
 The safety override handles a moving object only when front and raw-corner radar identify the same stable object. Inside 8 m it uses the strict near-range geometry directly. From 8-20 m it additionally requires `abs(dPath) > 1.8 m` and consistent inward lateral motion over 0.4 and 0.6 seconds. Closing objects may qualify at predicted `dPath < 2.2 m`; objects holding range or pulling away wait until `dPath < 1.85 m`. This recovered `carnival-5b-15-truck`, `ioniq9-a7-22-truck`, and `santafe-421-1-truck` without triggering any maintained clear case or prematurely promoting the faster adjacent vehicle in `carnival-5b-18-early`.
 
 The front-only close-range override requires raw `yRel` history and lane-relative history to agree on inward motion. This prevents path or lane-center motion from promoting a nearly stationary 3-5 m front-radar reflection while preserving genuinely fast close cut-ins.
+
+Front-only vehicles at 12-50 m use a separate strict override. It requires a model cut-in score of at least 0.25 plus matching instantaneous, 0.4-second, and 0.6-second raw and lane-relative inward motion before three-frame confirmation. This detects `pv5-129-8-right-front-cutin` before vision promotes the vehicle to `leadOne` without relaxing the close-range ghost filter.
 
 For objects still outside the path (`abs(dPath) > 1.8 m`), cut-in persistence accumulates only while predicted `dPath` decreases by at least 0.03 m. This rejects high model probabilities for adjacent vehicles that are parallel or moving away, including the false activation at 41.5 seconds in `carnival-5b-15-truck`.
 
