@@ -635,6 +635,8 @@ class RadarLeadDecisionFilter:
         and 2.5 < obj.d_rel < 12.0 and obj.v_lead > 2.0
         and lane_history_ready and lane_direction_reliable
         and 0.75 < current_d_path <= 1.8 and abs(obj.y_rel) < 2.3
+        and 0.20 < h8_inward_speed < 3.2
+        and 0.20 < h12_inward_speed < 3.2
         and 0.20 < h8_lane_inward < 3.2
         and 0.20 < h12_lane_inward < 3.2
       )
