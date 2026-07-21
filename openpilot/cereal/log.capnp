@@ -2365,6 +2365,33 @@ struct Sentinel {
 
 struct UIDebug {
   drawTimeMillis @0 :Float32;
+  # carrot: 구간별 계측 (계측 전용 — draw 41.6ms의 내역을 재기 위함).
+  # 합계가 drawTimeMillis보다 작을 수 있다 — scissor begin/end(배치 flush),
+  # 캘리브레이션 등 미귀속 구간은 total에만 포함된다.
+  cameraTimeMillis      @1 :Float32;
+  modelTimeMillis       @2 :Float32;
+  driverStateTimeMillis @3 :Float32;
+  hudTimeMillis         @4 :Float32;
+  alertTimeMillis       @5 :Float32;
+  extrasTimeMillis      @6 :Float32;
+  plotMode              @7 :UInt8;   # ShowPlotMode (~2초 스로틀 캐시, 0=off)
+  recording             @8 :Bool;    # 화면 녹화 중 여부
+  # 상세 프로파일링 필드는 과거 로그와의 호환성을 위해 번호와 타입만 보존한다.
+  modelPathTimeMillisDEPRECATED       @9 :Float32;
+  modelLaneTimeMillisDEPRECATED       @10 :Float32;
+  modelBlindSpotTimeMillisDEPRECATED  @11 :Float32;
+  modelRadarTimeMillisDEPRECATED      @12 :Float32;
+  modelTimingValidDEPRECATED          @13 :Bool;
+  hudHeaderTimeMillisDEPRECATED       @14 :Float32;
+  hudSpeedTimeMillisDEPRECATED        @15 :Float32;
+  hudStatusTimeMillisDEPRECATED       @16 :Float32;
+  hudNavigationTimeMillisDEPRECATED   @17 :Float32;
+  hudButtonTimeMillisDEPRECATED       @18 :Float32;
+  hudPlotTimeMillisDEPRECATED         @19 :Float32;
+  hudAuxTimeMillisDEPRECATED          @20 :Float32;
+  hudTimingValidDEPRECATED            @21 :Bool;
+  modelBlindSpotStateMaskDEPRECATED   @22 :UInt8;
+  modelBlindSpotStateValidDEPRECATED  @23 :Bool;
 }
 
 struct ManagerState {
