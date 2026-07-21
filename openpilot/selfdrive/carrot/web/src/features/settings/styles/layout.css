@@ -1,0 +1,398 @@
+/* Settings page layout: screen host, group/detail split and its breakpoints.
+   Split out of the former device.css; rule order is unchanged. */
+
+
+@media (min-width: 769px) and (min-aspect-ratio: 13/10), (min-width: 769px) and (horizontal-viewport-segments: 2), (min-width: 769px) and (vertical-viewport-segments: 2), (min-width: 769px) and (min-height: 650px) {
+  .setting-search-panel {
+    --setting-search-form-width: clamp(360px, 34vw, 540px);
+    --setting-search-results-width: min(64vw, 820px);
+    --setting-search-results-max-height: 680px;
+    gap: 14px;
+    padding-top: calc(22px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--app-nav-bottom-gap, var(--nav-bar-height-desktop)) + 18px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
+  .page--setting .settingTop {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page--setting .ctrl {
+    justify-content: flex-start;
+  }
+
+  .page--setting .val {
+    min-width: 100px;
+  }
+
+  .setting-search-panel {
+    --setting-search-form-width: calc(100vw - 28px);
+    --setting-search-results-width: calc(100vw - 28px);
+    --setting-search-results-max-height: 560px;
+    gap: 12px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 12px calc(var(--app-nav-bottom-gap, var(--nav-bar-height)) + 14px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .setting-search-form {
+    width: min(var(--setting-search-form-width), calc(100vw - 28px));
+  }
+
+}
+
+/* Portrait at ANY width (phone / foldable / tablet / wide window): the
+   group?봧tems slide in runSettingScreenSlide() assumes both screens are
+   stacked as position:absolute; inset:0 inside the host so the transition is
+   pure transform. That overlap must exist for every portrait width ??not just
+   ??40px ??otherwise the screens fall back to normal flow and the submenu
+   appears to slide in vertically / only after the slide finishes. Landscape
+   has its own absolute-overlap block below, so the two together leave no gap.
+   Narrow layout (aspect-ratio < 13/10) covers portrait phones AND near-square
+   foldables ??the complement of the wide (>= 13/10) split block below, so the
+   two stay mutually exclusive and exhaustive (no square-aspect gap). */
+@media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
+  .page--setting #settingScreenItems {
+    padding-top: 0;
+  }
+
+  .page--setting #settingScreenItems.setting-screen-items--profile {
+    padding-top: 0;
+    --setting-profile-panel-sticky-top: 0px;
+    --setting-profile-section-sticky-top: 72px;
+  }
+
+  .page--setting #settingScreenItems.setting-screen-items--profile #items {
+    padding-top: 0;
+  }
+
+  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-row {
+    min-height: 46px;
+    gap: var(--sp-sm);
+  }
+
+  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-action__icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .page--setting #settingScreenItems.setting-screen-items--profile .setting-profile-section__header {
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+
+  .page--setting #settingScreenItems.setting-screen-items--profile > .row-between.mb-sm {
+    display: grid;
+  }
+
+  /* ?? ?몃줈(phone): ?ㅼ젙??酉고룷??怨좎젙 ?믪씠濡? ???붾㈃??absolute inset:0 濡?'??긽' 寃뱀퀜
+     媛곸옄 ?대? ?ㅽ겕濡ㅼ떆?⑤떎 ???④퀎 ?꾪솚???쒖닔 transform(?덉씠?꾩썐 蹂??0)?대씪 ?앹뿉
+     ?붾뱾由?源쒕컯?꾩씠 援ъ“?곸쑝濡??앷린吏 ?딅뒗?? (媛濡?split 紐⑤뱶? ?숈씪 ?먮━) ?? */
+  .page.page--setting {
+    display: flex;
+    flex-direction: column;
+    height: calc(var(--app-vv-height, 100dvh) - var(--nav-bar-height) - env(safe-area-inset-bottom, 0px));
+    min-block-size: 0;
+    padding-bottom: 0;
+    overflow: hidden;
+  }
+
+  .page.page--setting > #settingsMeta {
+    flex: 0 0 auto;
+  }
+
+  .page.page--setting > #settingScreenHost {
+    flex: 1 1 auto;
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenGroups,
+  .page.page--setting > #settingScreenHost > #settingScreenItems {
+    position: absolute;
+    inset: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+    padding-bottom: calc(var(--nav-bar-height) + 24px + env(safe-area-inset-bottom, 0px));
+    will-change: transform;
+  }
+
+  /* 理쒖긽??洹몃９ ?붾㈃? ??낵 泥?踰꾪듉???좊챸?섍쾶 ?좎??쒕떎.
+     ?ㅽ겕濡?媛?μ옄由??섏씠?쒕뒗 ?섏쐞 ?ㅼ젙 ?붾㈃?먮쭔 ?곸슜?쒕떎. */
+  .page.page--setting > #settingScreenHost > #settingScreenGroups {
+    -webkit-mask-image: none;
+            mask-image: none;
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenItems {
+    /* #000 in a mask is an alpha channel, not a colour: black means fully
+       opaque. Theme independent, so it must not become a surface token. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
+  }
+
+}
+
+@media (max-height: 760px) {
+  .setting-search-panel {
+    --setting-search-results-max-height: 620px;
+    gap: 10px;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
+}
+
+/* Wide layout ??two-column split (group list | detail). Complement of the
+   narrow single-column block above; only engages at aspect-ratio >= 13/10 so
+   near-square foldables don't get the cramped split. */
+@media (min-aspect-ratio: 13/10), (horizontal-viewport-segments: 2), (vertical-viewport-segments: 2), (min-width: 640px) and (min-height: 650px) {
+  .page.page--setting {
+    --setting-landscape-left-width: clamp(208px, 28vw, 260px);
+    --setting-landscape-gap: 12px;
+    --setting-landscape-page-inset: var(--setting-landscape-content-inset, var(--page-rail-content-inset, 24px));
+    --setting-landscape-fab-reserve: calc(var(--fab-size, 56px) + 18px);
+    --setting-landscape-scroll-pad-bottom: 4px;
+    display: flex;
+    flex-direction: column;
+    max-width: none;
+    margin: 0;
+    min-height: var(--page-content-height, calc(var(--app-vv-height, 100dvh) - 24px));
+    height: var(--page-content-height, calc(var(--app-vv-height, 100dvh) - 24px));
+    padding: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .page.page--setting > #settingsMeta {
+    flex: 0 0 auto;
+    margin: var(--setting-landscape-page-inset) var(--setting-landscape-page-inset) 12px;
+    padding: 0;
+  }
+
+  .page.page--setting > #settingScreenHost {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: var(--setting-landscape-left-width) minmax(0, 1fr);
+    column-gap: 14px;
+    align-items: stretch;
+    width: 100%;
+    min-height: 0;
+    margin: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    position: relative;
+    padding: 0;
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenGroups,
+  .page.page--setting > #settingScreenHost > #settingScreenItems {
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    overflow: auto;
+    box-sizing: border-box;
+    scrollbar-gutter: stable;
+    transition: none;
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenGroups {
+    -webkit-mask-image: none;
+            mask-image: none;
+  }
+
+  /* 媛濡쒕え?쒕룄 ?섏쐞 ?ㅼ젙 ?붾㈃?먮쭔 ?ㅽ겕濡?媛?μ옄由??섏씠?쒕? ?좎??쒕떎. */
+  .page.page--setting > #settingScreenHost > #settingScreenItems {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 6px), transparent 100%);
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenGroups {
+    position: relative;
+    align-self: stretch;
+    margin-left: 0;
+    padding:
+      var(--setting-landscape-page-inset)
+      8px
+      calc(var(--setting-landscape-page-inset) + var(--setting-landscape-fab-reserve))
+      var(--setting-landscape-page-inset);
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenItems {
+    min-width: 0;
+    padding:
+      var(--setting-landscape-page-inset)
+      var(--setting-landscape-page-inset)
+      var(--setting-landscape-page-inset)
+      var(--setting-landscape-page-inset);
+  }
+
+  .page.page--setting > #settingScreenHost > #settingScreenItems.setting-screen-items--profile {
+    padding-top: 0;
+    --setting-profile-panel-sticky-top: 0px;
+    --setting-profile-section-sticky-top: 68px;
+  }
+
+  .page--setting.setting-layout-split #groupList {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .page--setting.setting-layout-split .groupBtn,
+  .page--setting.setting-layout-split .setting-group-skeleton {
+    margin-bottom: 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 9px 12px;
+  }
+
+  .page--setting.setting-layout-split .groupBtn {
+    font-size: 14px;
+    line-height: 1.16;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+    text-overflow: clip;
+    touch-action: pan-x pan-y;
+  }
+
+  .page--setting.setting-layout-split .groupBtn::-webkit-scrollbar {
+    display: none;
+  }
+
+  .page--setting.setting-layout-split #groupList .groupBtn .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn .setting-group-label {
+    display: inline-block;
+    min-width: max-content;
+    transform: translateX(0);
+    will-change: transform;
+  }
+
+  .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:hover .setting-group-label,
+  .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:focus .setting-group-label,
+  .page--setting.setting-layout-split #groupList .groupBtn.is-overflowing:active .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:hover .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:focus .setting-group-label,
+  .page--setting.setting-layout-split #deviceGroupList .groupBtn.is-overflowing:active .setting-group-label {
+    animation: setting-left-text-pan 4.2s ease-in-out 1;
+  }
+
+  .page.page--setting > .page-fab-layer--setting {
+    position: absolute;
+    top: auto;
+    left: var(--setting-landscape-page-inset);
+    bottom: var(--setting-landscape-page-inset);
+    width: var(--setting-landscape-left-width);
+    max-width: 100%;
+    height: auto;
+    display: flex;
+    justify-content: flex-end;
+    z-index: 70;
+    pointer-events: none;
+  }
+
+  .page.page--setting > .page-fab-layer--setting .fab {
+    position: relative;
+    inset: auto;
+    display: inline-flex;
+    opacity: 1 !important;
+    visibility: visible !important;
+    margin-right: 0;
+    pointer-events: auto;
+  }
+
+  /* Reset the flow-positioning transform, but exempt the click bounce: CSS
+     animations are overridden by !important author rules, so the blanket
+     `transform: none !important` previously killed the FAB bounce in landscape
+     only (portrait has no such reset). Lifting it while .is-bouncing lets the
+     setting-fab-bounce keyframes play; it returns on animationend. */
+  .page.page--setting > .page-fab-layer--setting .fab:not(.is-bouncing) {
+    transform: none !important;
+  }
+
+  /* Flow the menu inside the page-anchored absolute layer instead of leaving it
+     viewport-fixed. A position:fixed element re-anchors to the page's transform
+     during page transitions (the page briefly gets will-change/transform), so
+     when the transition ends the FAB snaps by the nav-rail width ??that is the
+     "jumps to another spot then returns" jitter. Page-relative flow stays put. */
+  .page.page--setting > .page-fab-layer--setting .setting-fab-menu {
+    position: relative;
+    right: auto;
+    left: auto;
+    bottom: auto;
+  }
+
+  .page--setting.setting-layout-split #settingScreenItems .title {
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.18;
+  }
+
+  .page--setting.setting-layout-split #settingScreenItems .name {
+    font-size: 12px;
+    line-height: 1.28;
+  }
+
+  .page--setting.setting-layout-split #settingScreenItems .muted,
+  .page--setting.setting-layout-split #settingScreenItems .descr {
+    font-size: 13px;
+    line-height: 1.38;
+  }
+
+  .page--setting.setting-layout-split #settingScreenItems .setting {
+    overflow: hidden;
+  }
+
+  .page--setting.setting-layout-split #settingScreenItems .settingTop {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: start;
+  }
+
+  .page--setting.setting-layout-split #settingScreenItems .settingTop > :first-child {
+    min-width: 0;
+  }
+
+  .page--setting.setting-layout-split #settingScreenItems .title,
+  .page--setting.setting-layout-split #settingScreenItems .name,
+  .page--setting.setting-layout-split #settingScreenItems .muted,
+  .page--setting.setting-layout-split #settingScreenItems .descr {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .page--setting.setting-layout-split #settingScreenItems .setting-copy {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .setting-search-panel {
+    --setting-search-form-width: min(76vw, 540px);
+    --setting-search-results-width: min(82vw, 760px);
+    --setting-search-results-max-height: 680px;
+    gap: 10px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(var(--app-nav-bottom-gap, 0px) + 12px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 760px) and (min-aspect-ratio: 13/10), (max-width: 760px) and (horizontal-viewport-segments: 2), (max-width: 760px) and (vertical-viewport-segments: 2), (min-width: 640px) and (max-width: 760px) and (min-height: 650px) {
+  .page.page--setting {
+    --setting-landscape-left-width: clamp(184px, 27vw, 220px);
+  }
+
+  .page.page--setting > #settingScreenHost {
+    column-gap: 10px;
+  }
+
+  .page--setting.setting-layout-split #settingScreenItems .settingTop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+}

@@ -16,6 +16,8 @@ window.CarrotVisionCompact = (() => {
   // for a full radar track list. Decoded frames still land in the overlay
   // state; only the subscription is opt-in via the "tracks" activity channel.
   const TRACK_SERVICES = ["liveTracks"];
+  // AR 앵커 입력. 20Hz 라 "ar" 임대가 있을 때만 구독한다.
+  const AR_SERVICES = ["cameraOdometry", "livePose", "carrotNavi"];
 
   const xyz = [
     ["x", "u16cmlist"],
@@ -31,6 +33,42 @@ window.CarrotVisionCompact = (() => {
     ["y", "f32list"],
     ["v", "f32list"],
   ];
+  const xyzMeasurement = [
+    ["x", "f32"], ["y", "f32"], ["z", "f32"],
+    ["xStd", "f32"], ["yStd", "f32"], ["zStd", "f32"], ["valid", "bool"],
+  ];
+  const naviGuidance = [
+    ["present","bool"], ["distanceM","i32"], ["timeSec","i32"], ["turnType","i32"],
+    ["roadName","text"], ["mainText","text"], ["pointValid","bool"],
+    ["latitude","f64"], ["longitude","f64"],
+  ];
+  const naviVehicle = [
+    ["present","bool"], ["latitude","f64"], ["longitude","f64"],
+    ["headingDeg","f32"], ["speedKph","f32"], ["roadName","text"],
+  ];
+  const naviLane = [
+    ["present","bool"], ["count","i16"], ["distanceM","i32"],
+    ["visible","bool"], ["available","i16list"],
+  ];
+  const naviSpeed = [
+    ["roadLimitValid","bool"], ["roadLimitKph","i16"],
+    ["sdiPresent","bool"], ["sdiType","i32"], ["sdiDistanceM","i32"], ["sdiSpeedLimitKph","i16"],
+    ["sectionPresent","bool"], ["sectionActive","bool"], ["sectionSpeedLimitKph","i16"],
+    ["sectionAverageKph","f32"], ["sectionRemainingDistanceM","f32"], ["sectionProgress","f32"],
+  ];
+  const naviSignal = [
+    ["visible","bool"], ["distanceM","i32"],
+    ["redValid","bool"], ["redOn","bool"], ["leftValid","bool"], ["leftOn","bool"],
+    ["greenValid","bool"], ["greenOn","bool"], ["rightValid","bool"], ["rightOn","bool"],
+    ["uturnValid","bool"], ["uturnOn","bool"],
+  ];
+  const naviCrossroad = [["visible","bool"], ["distanceM","i32"], ["imageCode","i32"]];
+  const naviRoute = [
+    ["present","bool"], ["remainingDistanceM","i32"],
+    ["remainingTimeSec","i32"], ["totalDistanceM","i32"],
+    ["polyline","coordlist"],
+  ];
+  const naviStatus = [["guidanceActive","bool"], ["offRoute","bool"], ["routePresent","bool"]];
   const radarPoint = [
     ["trackId", "u32"], ["dRel", "f32"], ["yRel", "f32"], ["vRel", "f32"],
     ["measured", "bool"],
@@ -87,6 +125,8 @@ window.CarrotVisionCompact = (() => {
       ["latitude", "f64"], ["longitude", "f64"], ["speed", "f32"],
       ["bearingDeg", "f32"], ["bearingAccuracyDeg", "f32"], ["speedAccuracy", "f32"],
       ["hasFix", "bool"],
+      ["altitude", "f64"], ["horizontalAccuracy", "f32"],
+      ["verticalAccuracy", "f32"], ["unixTimestampMillis", "f64"],
     ]]],
     [8, ["longitudinalPlan", [
       ["accels", "f32list"], ["speeds", "f32list"], ["jerks", "f32list"],
@@ -98,6 +138,8 @@ window.CarrotVisionCompact = (() => {
       ["velocity", "struct", velocity], ["laneLines", "structlist", xyz],
       ["laneLineProbs", "f32list"], ["roadEdges", "structlist", xyz],
       ["roadEdgeStds", "f32list"], ["leadsV3", "structlist", modelLead],
+      ["laneLineStds", "f32list"], ["frameAge", "i32"],
+      ["frameDropPerc", "f32"], ["modelExecutionTime", "f32"],
     ]]],
     [10, ["liveCalibration", [
       ["calStatus", "enumname", ["uncalibrated", "calibrated", "invalid", "recalibrating"]],
@@ -106,6 +148,7 @@ window.CarrotVisionCompact = (() => {
     ]]],
     [11, ["roadCameraState", [
       ["frameId", "u32"], ["sensor", "enumname", ["unknown", "ar0231", "ox03c10", "os04c10"]],
+      ["timestampEof", "u64"],
     ]]],
     [12, ["lateralPlan", [
       ["useLaneLines", "bool"], ["latDebugText", "text"], ["position", "struct", xyz],
@@ -132,6 +175,30 @@ window.CarrotVisionCompact = (() => {
     ]]],
     [17, ["liveParameters", [["angleOffsetDeg", "f32"], ["steerRatio", "f32"]]]],
     [18, ["liveTracks", [["points", "structlist", radarPoint]]]],
+    [19, ["cameraOdometry", [
+      ["frameId", "u32"], ["timestampEof", "u64"],
+      ["trans", "f32list"], ["rot", "f32list"],
+      ["transStd", "f32list"], ["rotStd", "f32list"],
+    ]]],
+    [21, ["carrotNavi", [
+      ["schemaVersion","u16"], ["generation","u64"], ["sessionId","text"],
+      ["publishMonoTimeNanos","u64"], ["connected","bool"],
+      ["vehicle","struct",naviVehicle],
+      ["guidanceCurrent","struct",naviGuidance],
+      ["guidanceNext","struct",naviGuidance],
+      ["laneCurrent","struct",naviLane],
+      ["speed","struct",naviSpeed],
+      ["trafficSignal","struct",naviSignal],
+      ["crossroad","struct",naviCrossroad],
+      ["route","struct",naviRoute],
+      ["navigationStatus","struct",naviStatus],
+    ]]],
+    [20, ["livePose", [
+      ["orientationNED", "struct", xyzMeasurement],
+      ["angularVelocityDevice", "struct", xyzMeasurement],
+      ["inputsOK", "bool"], ["posenetOK", "bool"], ["sensorsOK", "bool"],
+      ["timestamp", "u64"],
+    ]]],
   ]);
 
   class Cursor {
@@ -151,6 +218,13 @@ window.CarrotVisionCompact = (() => {
     readU16() { this.ensure(2); const v = this.view.getUint16(this.offset, true); this.offset += 2; return v; }
     readI32() { this.ensure(4); const v = this.view.getInt32(this.offset, true); this.offset += 4; return v; }
     readU32() { this.ensure(4); const v = this.view.getUint32(this.offset, true); this.offset += 4; return v; }
+    readU64() {
+      this.ensure(8);
+      // 나노초 타임스탬프는 2^53 을 넘을 수 있어 BigInt 로 읽는다.
+      const v = this.view.getBigUint64(this.offset, true);
+      this.offset += 8;
+      return Number(v);
+    }
     readF32() { this.ensure(4); const v = this.view.getFloat32(this.offset, true); this.offset += 4; return v; }
     readF64() { this.ensure(8); const v = this.view.getFloat64(this.offset, true); this.offset += 8; return v; }
 
@@ -167,6 +241,26 @@ window.CarrotVisionCompact = (() => {
       this.ensure(length * 4);
       const out = new Array(length);
       for (let index = 0; index < length; index += 1) out[index] = this.readF32();
+      return out;
+    }
+
+    readInt16List() {
+      const length = this.readU16();
+      this.ensure(length * 2);
+      const out = new Array(length);
+      for (let index = 0; index < length; index += 1) out[index] = this.readI16();
+      return out;
+    }
+
+    readCoordList() {
+      // u8 count + f64 앵커 + (count-1) x f32 델타
+      const n = this.readU8();
+      if (!n) return [];
+      const lat0 = this.readF64(), lon0 = this.readF64();
+      const out = [{ latitude: lat0, longitude: lon0 }];
+      for (let i = 1; i < n; i += 1) {
+        out.push({ latitude: lat0 + this.readF32(), longitude: lon0 + this.readF32() });
+      }
       return out;
     }
 
@@ -190,11 +284,14 @@ window.CarrotVisionCompact = (() => {
       case "u16": return cursor.readU16();
       case "i32": return cursor.readI32();
       case "u32": return cursor.readU32();
+      case "u64": return cursor.readU64();
       case "f32": return cursor.readF32();
       case "f64": return cursor.readF64();
       case "text": return cursor.readText();
       case "enumname": return nestedSchema[cursor.readU8()] || nestedSchema[0] || "unknown";
       case "f32list": return cursor.readFloat32List();
+      case "i16list": return cursor.readInt16List();
+      case "coordlist": return cursor.readCoordList();
       case "u16cmlist": return cursor.readQuantizedList(false, 100);
       case "i16cmlist": return cursor.readQuantizedList(true, 100);
       case "i16mmlist": return cursor.readQuantizedList(true, 1000);
@@ -290,5 +387,5 @@ window.CarrotVisionCompact = (() => {
     }));
   }
 
-  return { HUD_SERVICES, OVERLAY_SERVICES, TRACK_SERVICES, decodeFrame, decodeFrames, catalog };
+  return { HUD_SERVICES, OVERLAY_SERVICES, TRACK_SERVICES, AR_SERVICES, decodeFrame, decodeFrames, catalog };
 })();

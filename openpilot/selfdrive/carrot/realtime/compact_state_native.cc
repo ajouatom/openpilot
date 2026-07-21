@@ -7,6 +7,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <capnp/dynamic.h>
 #include <capnp/serialize.h>
@@ -87,10 +88,24 @@ void append_i32(std::string &out, const DynamicReader &reader, Names... names) {
 }
 
 template <typename... Names>
+void append_u16(std::string &out, const DynamicReader &reader, Names... names) {
+  const auto value = find_value(reader, names...);
+  const uint64_t number = value.has_value() ? value->template as<uint64_t>() : 0;
+  append_scalar(out, static_cast<uint16_t>(std::min<uint64_t>(number, UINT16_MAX)));
+}
+
+template <typename... Names>
 void append_u32(std::string &out, const DynamicReader &reader, Names... names) {
   const auto value = find_value(reader, names...);
   const uint64_t number = value.has_value() ? value->template as<uint64_t>() : 0;
   append_scalar(out, static_cast<uint32_t>(std::min<uint64_t>(number, UINT32_MAX)));
+}
+
+template <typename... Names>
+void append_u64(std::string &out, const DynamicReader &reader, Names... names) {
+  const auto value = find_value(reader, names...);
+  const uint64_t number = value.has_value() ? value->template as<uint64_t>() : 0;
+  append_scalar(out, number);
 }
 
 template <typename... Names>
@@ -209,6 +224,234 @@ void append_model_leads(std::string &out, const DynamicReader &reader) {
     // Mirrors MODEL_LEAD_SCHEMA in compact_state.py: sample [0] only.
     append_first_f32_list(out, lead, "y");
     append_first_f32_list(out, lead, "v");
+  }
+}
+
+void append_xyz_measurement(std::string &out, const DynamicReader &reader, const char *name) {
+  const auto m = find_struct(reader, name);
+  if (!m.has_value()) {
+    for (int i = 0; i < 6; ++i) append_scalar(out, 0.0f);
+    append_scalar(out, static_cast<uint8_t>(0));
+    return;
+  }
+  for (const char *k : {"x", "y", "z", "xStd", "yStd", "zStd"}) append_f32(out, *m, k);
+  append_bool(out, *m, "valid");
+}
+
+void encode_camera_odometry(std::string &out, const DynamicReader &value) {
+  append_u32(out, value, "frameId");
+  append_u64(out, value, "timestampEof");
+  append_f32_list(out, value, "trans");
+  append_f32_list(out, value, "rot");
+  append_f32_list(out, value, "transStd");
+  append_f32_list(out, value, "rotStd");
+}
+
+void encode_live_pose(std::string &out, const DynamicReader &value) {
+  append_xyz_measurement(out, value, "orientationNED");
+  append_xyz_measurement(out, value, "angularVelocityDevice");
+  append_bool(out, value, "inputsOK");
+  append_bool(out, value, "posenetOK");
+  append_bool(out, value, "sensorsOK");
+  append_u64(out, value, "timestamp");
+}
+
+// ── carrotNavi 압축 서브셋 (compact_state.py 와 1:1) ──────────────
+void append_navi_present(std::string &out, const std::optional<DynamicReader> &item) {
+  bool present = false;
+  if (item.has_value()) {
+    const auto meta = find_struct(*item, "meta");
+    if (meta.has_value()) {
+      const auto v = find_value(*meta, "present");
+      present = v.has_value() && v->as<bool>();
+    }
+  }
+  append_scalar(out, static_cast<uint8_t>(present ? 1 : 0));
+}
+
+void append_navi_guidance(std::string &out, const DynamicReader &navi, const char *name) {
+  const auto g = find_struct(navi, name);
+  append_navi_present(out, g);
+  if (!g.has_value()) {
+    append_scalar(out, static_cast<int32_t>(0));   // distanceM
+    append_scalar(out, static_cast<int32_t>(0));   // timeSec
+    append_scalar(out, static_cast<int32_t>(0));   // turnType
+    append_scalar(out, static_cast<uint16_t>(0));  // roadName
+    append_scalar(out, static_cast<uint16_t>(0));  // mainText
+    append_scalar(out, static_cast<uint8_t>(0));   // pointValid
+    append_scalar(out, 0.0);                       // latitude
+    append_scalar(out, 0.0);                       // longitude
+    return;
+  }
+  append_i32(out, *g, "distanceM");
+  append_i32(out, *g, "timeSec");
+  append_i32(out, *g, "turnType");
+  append_text(out, *g, "roadName");
+  append_text(out, *g, "mainText");
+  append_bool(out, *g, "pointValid");
+  append_f64(out, *g, "latitude");
+  append_f64(out, *g, "longitude");
+}
+
+void append_i16_list(std::string &out, const DynamicReader &reader, const char *name) {
+  const auto value = find_value(reader, name);
+  if (!value.has_value()) {
+    append_scalar(out, static_cast<uint16_t>(0));
+    return;
+  }
+  const auto list = value->as<capnp::DynamicList>();
+  const uint16_t size = std::min<size_t>(list.size(), UINT16_MAX);
+  append_scalar(out, size);
+  for (uint16_t i = 0; i < size; ++i) {
+    const auto raw = list[i].as<int64_t>();
+    append_scalar(out, static_cast<int16_t>(std::clamp<int64_t>(raw, INT16_MIN, INT16_MAX)));
+  }
+}
+
+void append_navi_lane(std::string &out, const DynamicReader &navi, const char *name) {
+  const auto lane = find_struct(navi, name);
+  append_navi_present(out, lane);
+  if (!lane.has_value()) {
+    append_scalar(out, static_cast<int16_t>(0));
+    append_scalar(out, static_cast<int32_t>(0));
+    append_scalar(out, static_cast<uint8_t>(0));
+    append_scalar(out, static_cast<uint16_t>(0));
+    return;
+  }
+  append_i16(out, *lane, "count");
+  append_i32(out, *lane, "distanceM");
+  append_bool(out, *lane, "visible");
+  append_i16_list(out, *lane, "available");
+}
+
+// 경로 폴리라인. compact_state.py 의 coord_list 와 1:1.
+// u8 count + f64 앵커(lat,lon) + (count-1) x f32 델타.
+constexpr size_t kRoutePolylineLimit = 64;
+
+void append_coord_list(std::string &out, const DynamicReader &reader, const char *name) {
+  const auto value = find_value(reader, name);
+  std::vector<std::pair<double, double>> coords;
+  if (value.has_value()) {
+    const auto list = value->as<capnp::DynamicList>();
+    const size_t n = std::min<size_t>(list.size(), kRoutePolylineLimit);
+    coords.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+      const auto c = list[i].as<capnp::DynamicStruct>();
+      const auto la = find_value(c, "latitude");
+      const auto lo = find_value(c, "longitude");
+      if (!la.has_value() || !lo.has_value()) continue;
+      const double lat = la->as<double>(), lon = lo->as<double>();
+      if (std::isfinite(lat) && std::isfinite(lon)) coords.emplace_back(lat, lon);
+    }
+  }
+  append_scalar(out, static_cast<uint8_t>(coords.size()));
+  if (coords.empty()) return;
+  append_scalar(out, coords[0].first);
+  append_scalar(out, coords[0].second);
+  for (size_t i = 1; i < coords.size(); ++i) {
+    append_scalar(out, static_cast<float>(coords[i].first - coords[0].first));
+    append_scalar(out, static_cast<float>(coords[i].second - coords[0].second));
+  }
+}
+
+void encode_carrot_navi(std::string &out, const DynamicReader &value) {
+  append_u16(out, value, "schemaVersion");
+  append_u64(out, value, "generation");
+  append_text(out, value, "sessionId");
+  append_u64(out, value, "publishMonoTimeNanos");
+  append_bool(out, value, "connected");
+
+  // vehicle
+  const auto veh = find_struct(value, "vehicle");
+  append_navi_present(out, veh);
+  if (veh.has_value()) {
+    append_f64(out, *veh, "latitude");
+    append_f64(out, *veh, "longitude");
+    append_f32(out, *veh, "headingDeg");
+    append_f32(out, *veh, "speedKph");
+    append_text(out, *veh, "roadName");
+  } else {
+    append_scalar(out, 0.0); append_scalar(out, 0.0);
+    append_scalar(out, 0.0f); append_scalar(out, 0.0f);
+    append_scalar(out, static_cast<uint16_t>(0));
+  }
+
+  append_navi_guidance(out, value, "guidanceCurrent");
+  append_navi_guidance(out, value, "guidanceNext");
+  append_navi_lane(out, value, "laneCurrent");
+
+  // speed
+  const auto sp = find_struct(value, "speed");
+  if (sp.has_value()) {
+    append_bool(out, *sp, "roadLimitValid");
+    append_i16(out, *sp, "roadLimitKph");
+    append_bool(out, *sp, "sdiPresent");
+    append_i32(out, *sp, "sdiType");
+    append_i32(out, *sp, "sdiDistanceM");
+    append_i16(out, *sp, "sdiSpeedLimitKph");
+    append_bool(out, *sp, "sectionPresent");
+    append_bool(out, *sp, "sectionActive");
+    append_i16(out, *sp, "sectionSpeedLimitKph");
+    append_f32(out, *sp, "sectionAverageKph");
+    append_f32(out, *sp, "sectionRemainingDistanceM");
+    append_f32(out, *sp, "sectionProgress");
+  } else {
+    append_scalar(out, static_cast<uint8_t>(0)); append_scalar(out, static_cast<int16_t>(0));
+    append_scalar(out, static_cast<uint8_t>(0)); append_scalar(out, static_cast<int32_t>(0));
+    append_scalar(out, static_cast<int32_t>(0)); append_scalar(out, static_cast<int16_t>(0));
+    append_scalar(out, static_cast<uint8_t>(0)); append_scalar(out, static_cast<uint8_t>(0));
+    append_scalar(out, static_cast<int16_t>(0));
+    append_scalar(out, 0.0f); append_scalar(out, 0.0f); append_scalar(out, 0.0f);
+  }
+
+  // trafficSignal
+  const auto sg = find_struct(value, "trafficSignal");
+  if (sg.has_value()) {
+    append_bool(out, *sg, "visible");
+    append_i32(out, *sg, "distanceM");
+    for (const char *k : {"redValid","redOn","leftValid","leftOn","greenValid","greenOn",
+                          "rightValid","rightOn","uturnValid","uturnOn"}) {
+      append_bool(out, *sg, k);
+    }
+  } else {
+    append_scalar(out, static_cast<uint8_t>(0));
+    append_scalar(out, static_cast<int32_t>(0));
+    for (int i = 0; i < 10; ++i) append_scalar(out, static_cast<uint8_t>(0));
+  }
+
+  // crossroad
+  const auto cr = find_struct(value, "crossroad");
+  if (cr.has_value()) {
+    append_bool(out, *cr, "visible");
+    append_i32(out, *cr, "distanceM");
+    append_i32(out, *cr, "imageCode");
+  } else {
+    append_scalar(out, static_cast<uint8_t>(0));
+    append_scalar(out, static_cast<int32_t>(0));
+    append_scalar(out, static_cast<int32_t>(0));
+  }
+
+  // route
+  const auto rt = find_struct(value, "route");
+  append_navi_present(out, rt);
+  if (rt.has_value()) {
+    append_i32(out, *rt, "remainingDistanceM");
+    append_i32(out, *rt, "remainingTimeSec");
+    append_i32(out, *rt, "totalDistanceM");
+    append_coord_list(out, *rt, "polyline");
+  } else {
+    for (int i = 0; i < 3; ++i) append_scalar(out, static_cast<int32_t>(0));
+    append_scalar(out, static_cast<uint8_t>(0));
+  }
+
+  // navigationStatus
+  const auto st = find_struct(value, "navigationStatus");
+  if (st.has_value()) {
+    append_bool(out, *st, "guidanceActive");
+    append_bool(out, *st, "offRoute");
+    append_bool(out, *st, "routePresent");
+  } else {
+    for (int i = 0; i < 3; ++i) append_scalar(out, static_cast<uint8_t>(0));
   }
 }
 
@@ -370,6 +613,10 @@ void encode_gps(std::string &out, const DynamicReader &value) {
   append_f32(out, value, "bearingAccuracyDeg");
   append_f32(out, value, "speedAccuracy");
   append_bool(out, value, "hasFix");
+  append_f64(out, value, "altitude");
+  append_f32(out, value, "horizontalAccuracy");
+  append_f32(out, value, "verticalAccuracy");
+  append_f64(out, value, "unixTimestampMillis");
 }
 
 void encode_longitudinal_plan(std::string &out, const DynamicReader &value) {
@@ -399,6 +646,10 @@ void encode_model_v2(std::string &out, const DynamicReader &value) {
   append_xyz_list(out, value, "roadEdges");
   append_f32_list(out, value, "roadEdgeStds");
   append_model_leads(out, value);
+  append_f32_list(out, value, "laneLineStds");
+  append_i32(out, value, "frameAge");
+  append_f32(out, value, "frameDropPerc");
+  append_f32(out, value, "modelExecutionTime");
 }
 
 void encode_live_calibration(std::string &out, const DynamicReader &value) {
@@ -459,6 +710,9 @@ uint8_t service_id(const std::string &service) {
   if (service == "liveTorqueParameters") return 16;
   if (service == "liveParameters") return 17;
   if (service == "liveTracks") return 18;
+  if (service == "cameraOdometry") return 19;
+  if (service == "livePose") return 20;
+  if (service == "carrotNavi") return 21;
   throw std::invalid_argument("unsupported compact state service");
 }
 
@@ -476,6 +730,7 @@ void encode_service(std::string &out, const std::string &service, const DynamicR
   else if (service == "roadCameraState") {
     append_u32(out, value, "frameId");
     append_enum(out, value, "sensor");
+    append_u64(out, value, "timestampEof");
   } else if (service == "lateralPlan") encode_lateral_plan(out, value);
   else if (service == "radarState") encode_radar_state(out, value);
   else if (service == "carControl") encode_car_control(out, value);
@@ -491,6 +746,9 @@ void encode_service(std::string &out, const std::string &service, const DynamicR
     append_f32(out, value, "angleOffsetDeg");
     append_f32(out, value, "steerRatio");
   } else if (service == "liveTracks") append_radar_points(out, value);
+  else if (service == "cameraOdometry") encode_camera_odometry(out, value);
+  else if (service == "livePose") encode_live_pose(out, value);
+  else if (service == "carrotNavi") encode_carrot_navi(out, value);
 }
 
 }  // namespace

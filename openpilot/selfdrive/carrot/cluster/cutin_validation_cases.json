@@ -407,6 +407,46 @@
       "expected": "clear",
       "required_lead_one_ids": [60, 61, 1012],
       "scene": "Corner and front corroboration should acquire the slow vehicle near 85 m"
+    },
+    {
+      "id": "palisade-c21-8-close-left-pass",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front+corner",
+      "window": [11.4, 13.2],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [32],
+      "scene": "Close left vehicle passes longitudinally without entering the ego lane"
+    },
+    {
+      "id": "palisade-c21-8-right-cutin-31",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front+corner",
+      "window": [30.4, 31.4],
+      "expected": "detect",
+      "target_track_ids": [51],
+      "scene": "Right front-radar track enters with missing instantaneous lateral velocity"
+    },
+    {
+      "id": "palisade-c21-8-right-cutin-56",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front+corner",
+      "window": [56.2, 56.9],
+      "expected": "detect",
+      "target_track_ids": [34],
+      "scene": "Right cut-in should be detected from sustained history before lane crossing"
+    },
+    {
+      "id": "palisade-c21-9-right-cutin-14",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front+corner",
+      "window": [13.8, 15.0],
+      "expected": "detect",
+      "target_track_ids": [40],
+      "scene": "Right vehicle enters while front radar reports zero lateral velocity"
     }
   ]
 }

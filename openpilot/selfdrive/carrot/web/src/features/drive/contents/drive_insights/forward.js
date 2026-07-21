@@ -332,29 +332,35 @@ function drawForwardGrid(context, scene, palette) {
   }
 }
 
-function drawForwardScene(context, scene, palette) {
+function drawForwardBackground(context, scene, palette) {
   if (!context) return;
-  const { width, height, maxDistanceM } = scene;
-  context.clearRect?.(0, 0, width, height);
+  const { height } = scene;
   drawForwardGrid(context, scene, palette);
-  if (palette.lane) {
-    context.strokeStyle = palette.lane;
-    context.lineWidth = 1.5;
-    for (const offset of scene.laneOffsetsM) {
-      const near = projectDriveInsightsForwardPoint({ xM: 0, yM: offset }, scene);
-      if (!near) continue;
-      context.beginPath?.();
-      context.moveTo?.(near.x, 0);
-      context.lineTo?.(near.x, height);
-      context.stroke?.();
-    }
+  if (!palette.lane) return;
+  context.strokeStyle = palette.lane;
+  context.lineWidth = 1.5;
+  for (const offset of scene.laneOffsetsM) {
+    const near = projectDriveInsightsForwardPoint({ xM: 0, yM: offset }, scene);
+    if (!near) continue;
+    context.beginPath?.();
+    context.moveTo?.(near.x, 0);
+    context.lineTo?.(near.x, height);
+    context.stroke?.();
   }
+}
 
-  for (const entity of scene.entities.filter(({ selected }) => !selected)) {
-    drawEntity(context, entity, palette, scene);
-  }
-  for (const entity of scene.entities.filter(({ selected }) => selected)) {
-    drawEntity(context, entity, palette, scene);
+function drawForwardScene(context, scene, palette, background = null) {
+  if (!context) return;
+  const { width, height } = scene;
+  context.clearRect?.(0, 0, width, height);
+  if (background && typeof context.drawImage === "function") {
+    context.drawImage(background, 0, 0, background.width, background.height, 0, 0, width, height);
+  } else drawForwardBackground(context, scene, palette);
+
+  for (const selected of [false, true]) {
+    for (const entity of scene.entities) {
+      if (entity.selected === selected) drawEntity(context, entity, palette, scene);
+    }
   }
 }
 
@@ -379,6 +385,12 @@ export function createDriveInsightsForwardRenderer(options = {}) {
   let lastPresentation = null;
   let lastRect = null;
   let currentScene = createDriveInsightsForwardScene(null, { width: 1, height: 1 });
+  let palette = cssPalette(options, root);
+  let paletteReadAtMs = Number.NEGATIVE_INFINITY;
+  const backgroundCanvas = documentRoot.createElement("canvas");
+  const backgroundContext = backgroundCanvas.getContext?.("2d") || null;
+  let backgroundKey = "";
+  let lastHeaderKey = "";
   const listeners = [];
   const pointer = { x: 0, y: 0, active: false };
   let tooltipTimer = null;
@@ -388,8 +400,19 @@ export function createDriveInsightsForwardRenderer(options = {}) {
     return typeof options.text === "function" ? options.text(key, fallback) : fallback;
   }
 
+  function refreshPalette(force = false) {
+    const now = Number(target.performance?.now?.() ?? Date.now());
+    if (!force && now - paletteReadAtMs < 1000) return palette;
+    paletteReadAtMs = now;
+    palette = cssPalette(options, root);
+    return palette;
+  }
+
   function syncLabels() {
     if (destroyed) return false;
+    refreshPalette(true);
+    backgroundKey = "";
+    lastHeaderKey = "";
     const title = uiText("drive_insights_forward_title", "Forward perception");
     surface.setHeader(title, `${DRIVE_INSIGHTS_FORWARD_MAX_DISTANCE_M} m`);
     surface.setLegend(TELEMETRY_FORWARD_SOURCE_ORDER.map((source) => {
@@ -437,7 +460,6 @@ export function createDriveInsightsForwardRenderer(options = {}) {
     }
     if (tooltipTimer !== null) target.clearTimeout?.(tooltipTimer);
     tooltipTimer = null;
-    const palette = cssPalette(options, root);
     const lateral = entity.yM;
     const magnitude = Math.abs(lateral);
     const rows = [
@@ -486,8 +508,31 @@ export function createDriveInsightsForwardRenderer(options = {}) {
     showEntityTooltip(hitAt(pointer.x, pointer.y));
   }
 
+  function prepareBackground(scene, size) {
+    if (!backgroundContext) return null;
+    const key = [
+      size.pixelWidth,
+      size.pixelHeight,
+      scene.maxDistanceM,
+      palette.grid,
+      palette.gridMinor,
+      palette.gridLabel,
+      palette.gridFont,
+      palette.lane,
+    ].join("|");
+    if (key === backgroundKey) return backgroundCanvas;
+    backgroundKey = key;
+    if (backgroundCanvas.width !== size.pixelWidth) backgroundCanvas.width = size.pixelWidth;
+    if (backgroundCanvas.height !== size.pixelHeight) backgroundCanvas.height = size.pixelHeight;
+    backgroundContext.setTransform?.(size.dpr, 0, 0, size.dpr, 0, 0);
+    backgroundContext.clearRect?.(0, 0, size.width, size.height);
+    drawForwardBackground(backgroundContext, scene, palette);
+    return backgroundCanvas;
+  }
+
   function paint() {
     if (destroyed) return false;
+    refreshPalette();
     const measuredRect = canvas.getBoundingClientRect?.() || {};
     const rect = Number(measuredRect.width) > 1 && Number(measuredRect.height) > 1
       ? measuredRect
@@ -498,13 +543,15 @@ export function createDriveInsightsForwardRenderer(options = {}) {
     context?.setTransform?.(size.dpr, 0, 0, size.dpr, 0, 0);
     currentScene = createDriveInsightsForwardScene(lastSnapshot, size, lastPresentation);
     root.dataset.state = currentScene.state;
-    ego.style.top = `${currentScene.ego.y}px`;
-    surface.setHeader(
-      uiText("drive_insights_forward_title", "Forward perception"),
-      `${currentScene.maxDistanceM} m`,
-      currentScene.state === "stale",
-    );
-    drawForwardScene(context, currentScene, cssPalette(options, root));
+    const egoTop = `${currentScene.ego.y}px`;
+    if (ego.style.top !== egoTop) ego.style.top = egoTop;
+    const title = uiText("drive_insights_forward_title", "Forward perception");
+    const headerKey = `${title}|${currentScene.maxDistanceM}|${currentScene.state}`;
+    if (headerKey !== lastHeaderKey) {
+      lastHeaderKey = headerKey;
+      surface.setHeader(title, `${currentScene.maxDistanceM} m`, currentScene.state === "stale");
+    }
+    drawForwardScene(context, currentScene, palette, prepareBackground(currentScene, size));
     refreshTooltip();
     return true;
   }

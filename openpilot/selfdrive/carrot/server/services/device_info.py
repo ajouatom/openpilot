@@ -43,40 +43,68 @@ def get_calibration_status() -> Dict[str, Any]:
   except Exception:
     return {"calibrated": False, "pitch": None, "yaw": None}
 
+# Single source for the Device tab's parameters.
+#
+# The group -> parameter mapping used to exist twice: here as a flat default
+# map, and again in web/js/pages/setting_device_config.js as four arrays. The
+# two never disagreed, but nothing stopped them from doing so silently. The
+# groups below are shipped to the browser in the settings snapshot so the web
+# reads its parameter names from this list instead of restating them.
+#
+# Order matters: it is the order the rows are rendered in.
+DEVICE_SETTING_GROUPS: tuple[tuple[str, tuple[tuple[str, Any], ...]], ...] = (
+  ("Device", (
+    ("DeviceType", "unknown"),
+    ("DongleId", ""),
+    ("HardwareSerial", ""),
+    ("LanguageSetting", "main_en"),
+    ("SoftwareMenu", 1),
+  )),
+  ("Software", (
+    ("UpdaterCurrentDescription", ""),
+    ("UpdaterState", ""),
+    ("UpdateAvailable", False),
+    ("UpdaterFetchAvailable", False),
+    ("UpdateFailedCount", 0),
+    ("UpdaterTargetBranch", ""),
+    ("GitBranch", ""),
+    ("UpdaterAvailableBranches", ""),
+    ("LastUpdateTime", ""),
+    ("UpdaterNewDescription", ""),
+  )),
+  ("Toggles", (
+    ("OpenpilotEnabledToggle", False),
+    ("ExperimentalMode", False),
+    ("ExperimentalModeConfirmed", False),
+    ("DisengageOnAccelerator", False),
+    ("IsLdwEnabled", False),
+    ("AlwaysOnDM", False),
+    ("RecordFront", False),
+    ("RecordAudio", False),
+    ("IsMetric", False),
+    ("LongitudinalPersonality", 1),
+  )),
+  ("Developer", (
+    ("AdbEnabled", False),
+    ("SshEnabled", False),
+    ("JoystickDebugMode", False),
+    ("LongitudinalManeuverMode", False),
+    ("AlphaLongitudinalEnabled", False),
+    ("GithubUsername", ""),
+    ("GithubSshKeys", ""),
+  )),
+)
+
 DEVICE_SETTING_DEFAULTS: Dict[str, Any] = {
-  "DeviceType": "unknown",
-  "DongleId": "",
-  "HardwareSerial": "",
-  "LanguageSetting": "main_en",
-  "SoftwareMenu": 1,
-  "UpdaterCurrentDescription": "",
-  "UpdaterState": "",
-  "UpdateAvailable": False,
-  "UpdaterFetchAvailable": False,
-  "UpdateFailedCount": 0,
-  "UpdaterTargetBranch": "",
-  "GitBranch": "",
-  "UpdaterAvailableBranches": "",
-  "LastUpdateTime": "",
-  "UpdaterNewDescription": "",
-  "OpenpilotEnabledToggle": False,
-  "ExperimentalMode": False,
-  "ExperimentalModeConfirmed": False,
-  "DisengageOnAccelerator": False,
-  "IsLdwEnabled": False,
-  "AlwaysOnDM": False,
-  "RecordFront": False,
-  "RecordAudio": False,
-  "IsMetric": False,
-  "LongitudinalPersonality": 1,
-  "AdbEnabled": False,
-  "SshEnabled": False,
-  "JoystickDebugMode": False,
-  "LongitudinalManeuverMode": False,
-  "AlphaLongitudinalEnabled": False,
-  "GithubUsername": "",
-  "GithubSshKeys": "",
+  name: default
+  for _group, entries in DEVICE_SETTING_GROUPS
+  for name, default in entries
 }
+
+
+def get_device_setting_group_names() -> Dict[str, list]:
+  """Group -> parameter names, for the browser to read its groups from."""
+  return {group: [name for name, _default in entries] for group, entries in DEVICE_SETTING_GROUPS}
 
 DEVICE_NETWORK_REFRESH_INTERVAL_SEC = 15.0
 _network_cache_lock = threading.Lock()

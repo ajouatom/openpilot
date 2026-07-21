@@ -19,15 +19,29 @@ window.CarrotStateReceivedAtMonotonic = RAW_STATE_RECEIVED_AT_MONOTONIC;
 // Subscribed only while something holds a "tracks" lease, but stored and
 // routed exactly like an overlay service once it arrives.
 const RAW_TRACK_SERVICES = window.CarrotVisionCompact?.TRACK_SERVICES || [];
+// AR 앵커 입력. "ar" 임대가 있을 때만 구독한다.
+const RAW_AR_SERVICES = window.CarrotVisionCompact?.AR_SERVICES || [];
+// vision_compact.js 는 번들이 아니라 index.html 의 수동 ?v= 로만 캐시가 갱신된다.
+// 버전을 안 올리면 옛 파일이 로드되어 이 목록이 조용히 비고, cameraOdometry 가
+// 오버레이 상태에 영영 도착하지 않는다(원인 찾기 매우 어려움). 시끄럽게 알린다.
+if (window.CarrotVisionCompact && !RAW_AR_SERVICES.length) {
+  console.warn("[carrot] vision_compact.js 가 구버전입니다 — index.html 의 ?v= 를 올리세요. AR 입력이 비활성화됩니다.");
+}
 const RAW_OVERLAY_HUD_ONLY_SERVICES = new Set([
   "roadCameraState", "liveDelay", "liveTorqueParameters", "liveParameters",
   // Drive Insights reads this through the live state provider; the camera
   // overlay never draws it, so it must not force an overlay repaint.
   "liveTracks",
+  // AR 오버레이가 자체 스케줄로 그리므로 카메라 오버레이를 다시 칠하지 않는다.
+  "cameraOdometry",
+  "livePose",
+  "carrotNavi",
 ]);
 
 function isOverlayStateService(service) {
-  return RAW_OVERLAY_SERVICES.includes(service) || RAW_TRACK_SERVICES.includes(service);
+  return RAW_OVERLAY_SERVICES.includes(service)
+    || RAW_TRACK_SERVICES.includes(service)
+    || RAW_AR_SERVICES.includes(service);
 }
 const COMPACT_STATE_MODE = "carrot-state-v1";
 let COMPACT_OVERLAY_WS = null;
@@ -42,6 +56,18 @@ const RTP_FRAME_HISTORY = new Map();
 const RTP_FRAME_HISTORY_LIMIT = 96;
 let PRESENTED_VIDEO_FRAME_ID = null;
 let LAST_PRESENTED_RTP_TIMESTAMP = null;
+
+function publishPresentedFrame(detail = {}) {
+  return window.DriveVisionPresentedFrames?.publish?.({
+    ...detail,
+    frameId: Number.isFinite(PRESENTED_VIDEO_FRAME_ID) ? PRESENTED_VIDEO_FRAME_ID : null,
+  }) || null;
+}
+
+function subscribePresentedFrame(listener) {
+  const unsubscribe = window.DriveVisionPresentedFrames?.subscribe?.(listener);
+  return typeof unsubscribe === "function" ? unsubscribe : () => false;
+}
 
 function rememberModelFrame(model) {
   const frameId = Number(model?.frameId);
@@ -61,19 +87,26 @@ function notePresentedVideoFrame(metadata) {
   LAST_PRESENTED_RTP_TIMESTAMP = rtpTimestamp;
   if (rtpTimestamp != null && RTP_FRAME_HISTORY.has(rtpTimestamp)) {
     PRESENTED_VIDEO_FRAME_ID = RTP_FRAME_HISTORY.get(rtpTimestamp);
-    return;
+  } else {
+    // requestVideoFrameCallback.rtpTimestamp is optional. mediaTime remains a
+    // guarded compatibility fallback for browsers which do not expose it.
+    const mediaTime = Number(metadata?.mediaTime);
+    const roadFrameId = Number(RAW_OVERLAY_STATE?.roadCameraState?.frameId);
+    const inferred = Math.round(mediaTime / 0.05);
+    PRESENTED_VIDEO_FRAME_ID = Number.isFinite(inferred)
+      && Number.isFinite(roadFrameId)
+      && Math.abs(roadFrameId - inferred) <= 120
+      ? inferred
+      : null;
   }
+  publishPresentedFrame({ source: "live", metadata: metadata || null });
+}
 
-  // requestVideoFrameCallback.rtpTimestamp is optional. mediaTime remains a
-  // guarded compatibility fallback for browsers which do not expose it.
-  const mediaTime = Number(metadata?.mediaTime);
+function noteReplayPresentedFrame(metadata = {}) {
   const roadFrameId = Number(RAW_OVERLAY_STATE?.roadCameraState?.frameId);
-  const inferred = Math.round(mediaTime / 0.05);
-  PRESENTED_VIDEO_FRAME_ID = Number.isFinite(inferred)
-    && Number.isFinite(roadFrameId)
-    && Math.abs(roadFrameId - inferred) <= 120
-    ? inferred
-    : null;
+  PRESENTED_VIDEO_FRAME_ID = Number.isFinite(roadFrameId) ? roadFrameId : null;
+  LAST_PRESENTED_RTP_TIMESTAMP = null;
+  return publishPresentedFrame({ source: "replay", metadata });
 }
 
 function noteRtpFrameMapping(rtpTimestampValue, frameIdValue) {
@@ -90,6 +123,7 @@ function noteRtpFrameMapping(rtpTimestampValue, frameIdValue) {
   if (LAST_PRESENTED_RTP_TIMESTAMP === normalizedTimestamp) {
     PRESENTED_VIDEO_FRAME_ID = frameId >>> 0;
     emitCarrotRenderRequest({ overlayDirty: true, hudDirty: false });
+    publishPresentedFrame({ source: "live", reason: "late-rtp-mapping" });
   }
 }
 
@@ -120,9 +154,18 @@ function resetFrameSynchronization() {
 
 window.CarrotVisionFrameSync = {
   notePresentedVideoFrame,
+  noteReplayPresentedFrame,
   noteRtpFrameMapping,
+  subscribePresented: subscribePresentedFrame,
   reset: resetFrameSynchronization,
   selectModel: selectSynchronizedModel,
+  status() {
+    return Object.freeze({
+      presentedVideoFrameId: PRESENTED_VIDEO_FRAME_ID,
+      lastPresentedRtpTimestamp: LAST_PRESENTED_RTP_TIMESTAMP,
+      channel: window.DriveVisionPresentedFrames?.status?.() || null,
+    });
+  },
 };
 
 function clearCompactFirstDataTimer() {
@@ -144,6 +187,7 @@ function compactDesiredServices() {
     || isCarrotDriveDataRequested("overlay")
   ) services.push(...RAW_OVERLAY_SERVICES);
   if (isCarrotDriveDataRequested("tracks")) services.push(...RAW_TRACK_SERVICES);
+  if (isCarrotDriveDataRequested("ar")) services.push(...RAW_AR_SERVICES);
   return Array.from(new Set(services));
 }
 
@@ -184,7 +228,16 @@ function applyCompactFrame(service, decoded, options = {}) {
     overlayDirty = !RAW_OVERLAY_HUD_ONLY_SERVICES.has(service);
     applied = true;
   }
-  if (applied) {
+  // Vision owns the latency-sensitive presentation request. Schedule it before
+  // notifying auxiliary data consumers so an insights subscriber can never
+  // delay the camera overlay's place in the browser task queue.
+  if (applied && options.render !== false) {
+    emitCarrotRenderRequest({
+      hudDirty,
+      overlayDirty,
+    });
+  }
+  if (applied && options.notifyProvider !== false) {
     try {
       const providerSnapshot = window.CarrotDriveLiveStateProvider?.noteServiceReceived?.(service);
       const receivedAt = Number(providerSnapshot?.receivedAtMonotonic?.[service]);
@@ -192,12 +245,6 @@ function applyCompactFrame(service, decoded, options = {}) {
     } catch (error) {
       console.warn("[compact state] provider receipt rejected", error);
     }
-  }
-  if (applied && options.render !== false) {
-    emitCarrotRenderRequest({
-      hudDirty,
-      overlayDirty,
-    });
   }
   return applied;
 }
@@ -208,6 +255,7 @@ function applyCompactFrames(frames, options = {}) {
   let hudReady = false;
   let overlayReady = false;
   let overlayDirty = false;
+  const appliedServices = [];
 
   for (const frame of list) {
     const service = frame?.service;
@@ -218,8 +266,10 @@ function applyCompactFrames(frames, options = {}) {
       render: false,
       markHud: false,
       updateVisionState: false,
+      notifyProvider: false,
     })) continue;
     applied += 1;
+    appliedServices.push(service);
     hudReady = hudReady || isHud;
     overlayReady = overlayReady || isOverlay;
     overlayDirty = overlayDirty || (isOverlay && !RAW_OVERLAY_HUD_ONLY_SERVICES.has(service));
@@ -243,6 +293,27 @@ function applyCompactFrames(frames, options = {}) {
   }
   if (applied && options.render !== false) {
     emitCarrotRenderRequest({ hudDirty: hudReady, overlayDirty });
+  }
+  // A decoded websocket/replay batch is one coherent state transition. Publish
+  // it once instead of synchronously repainting Drive Insights per service.
+  if (appliedServices.length && options.notifyProvider !== false) {
+    try {
+      const provider = window.CarrotDriveLiveStateProvider;
+      let providerSnapshot = null;
+      if (typeof provider?.noteServicesReceived === "function") {
+        providerSnapshot = provider.noteServicesReceived(appliedServices);
+      } else {
+        for (const service of appliedServices) {
+          providerSnapshot = provider?.noteServiceReceived?.(service) || providerSnapshot;
+        }
+      }
+      for (const service of appliedServices) {
+        const receivedAt = Number(providerSnapshot?.receivedAtMonotonic?.[service]);
+        if (Number.isFinite(receivedAt)) RAW_STATE_RECEIVED_AT_MONOTONIC[service] = receivedAt;
+      }
+    } catch (error) {
+      console.warn("[compact state] provider batch receipt rejected", error);
+    }
   }
   return applied;
 }
@@ -618,11 +689,8 @@ function compactOverlayConnect() {
       const data = event.data instanceof Blob ? await event.data.arrayBuffer() : event.data;
       const frames = window.CarrotVisionCompact?.decodeFrames?.(data)
         || [window.CarrotVisionCompact?.decodeFrame?.(data)].filter(Boolean);
-      for (const frame of frames) {
-        if (!frame || (!RAW_HUD_SERVICES.includes(frame.service) && !isOverlayStateService(frame.service))) continue;
-        applyCompactFrame(frame.service, frame.decoded);
-      }
-      if (!frames.length) return;
+      const applied = applyCompactFrames(frames, { reason: "compact websocket batch" });
+      if (!applied) return;
       firstDataReceived = true;
       clearCompactFirstDataTimer();
       COMPACT_OVERLAY_READY = true;

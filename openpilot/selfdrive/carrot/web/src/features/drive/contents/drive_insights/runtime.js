@@ -12,6 +12,10 @@ import {
   DRIVE_INSIGHTS_HISTORY_STATE,
   createDriveInsightsHistory,
 } from "./history.js";
+import {
+  DRIVE_INSIGHTS_RENDER_CADENCE_MS,
+  createDriveInsightsRenderScheduler,
+} from "./scheduler.js";
 import { createDriveInsightsLiveSource } from "./source_live.js";
 import { createDriveInsightsReplaySource } from "./source_replay.js";
 
@@ -146,6 +150,19 @@ export function createDriveInsightsRuntime(options = {}) {
   let replayInput = options.replayInput || null;
   let lastError = null;
   let generation = 0;
+  let queuedLiveSnapshot = null;
+
+  function viewCadenceMs() {
+    return view === DRIVE_INSIGHTS_VIEW.FORWARD
+      ? DRIVE_INSIGHTS_RENDER_CADENCE_MS.forward
+      : DRIVE_INSIGHTS_RENDER_CADENCE_MS.graph;
+  }
+
+  const renderScheduler = options.renderScheduler || createDriveInsightsRenderScheduler({
+    target,
+    onFlush: () => flushLiveUpdate(),
+  });
+  if (!renderScheduler) return null;
 
   function showWaiting() {
     stateSurface.show(STATE_SURFACE_STATE.LOADING, {
@@ -203,6 +220,19 @@ export function createDriveInsightsRuntime(options = {}) {
     return render();
   }
 
+  function flushLiveUpdate() {
+    if (!active || sourceKind !== DRIVE_INSIGHTS_HISTORY_SOURCE.LIVE) return false;
+    const snapshot = queuedLiveSnapshot || sourceAdapter?.snapshot?.();
+    queuedLiveSnapshot = null;
+    return snapshot ? ingestLive(snapshot) : false;
+  }
+
+  function scheduleLiveUpdate(snapshot = null, scheduleOptions = {}) {
+    if (!active || sourceKind !== DRIVE_INSIGHTS_HISTORY_SOURCE.LIVE) return false;
+    if (snapshot && typeof snapshot === "object") queuedLiveSnapshot = snapshot;
+    return renderScheduler.request(viewCadenceMs(), scheduleOptions);
+  }
+
   function rebuildReplay() {
     if (!sourceAdapter || sourceKind !== DRIVE_INSIGHTS_HISTORY_SOURCE.REPLAY) return false;
     const context = sourceContext();
@@ -248,6 +278,8 @@ export function createDriveInsightsRuntime(options = {}) {
   }
 
   function stopSource() {
+    renderScheduler.cancel();
+    queuedLiveSnapshot = null;
     sourceUnsubscribe?.();
     sourceUnsubscribe = null;
     sourceAdapter?.destroy?.();
@@ -276,9 +308,11 @@ export function createDriveInsightsRuntime(options = {}) {
       return false;
     }
     syncTrackLease();
-    sourceUnsubscribe = sourceAdapter.subscribe?.((snapshot) => ingestLive(snapshot)) || null;
+    sourceUnsubscribe = typeof sourceAdapter.subscribeUpdates === "function"
+      ? sourceAdapter.subscribeUpdates(() => scheduleLiveUpdate())
+      : sourceAdapter.subscribe?.((snapshot) => scheduleLiveUpdate(snapshot)) || null;
     const initial = sourceAdapter.snapshot?.();
-    if (initial) ingestLive(initial);
+    if (initial) scheduleLiveUpdate(initial, { immediate: true });
     else showWaiting();
     if (setIntervalFn) staleTimer = setIntervalFn(syncSurface, 250);
     return true;
@@ -318,7 +352,11 @@ export function createDriveInsightsRuntime(options = {}) {
     }
     segmented.sync();
     syncTrackLease();
-    render();
+    if (active && sourceKind === DRIVE_INSIGHTS_HISTORY_SOURCE.LIVE) {
+      scheduleLiveUpdate(null, { immediate: true });
+    } else {
+      render();
+    }
     return changed;
   }
 
@@ -388,6 +426,7 @@ export function createDriveInsightsRuntime(options = {}) {
       graph: graphRenderer.status(),
       forward: forwardRenderer.status(),
       stateSurface: stateSurface.snapshot(),
+      renderScheduler: renderScheduler.status(),
       leaseActive: Boolean(dataLease?.active),
       trackLeaseActive: Boolean(trackLease?.active),
     });
@@ -402,6 +441,7 @@ export function createDriveInsightsRuntime(options = {}) {
     }
     segmented.destroy();
     stateSurface.destroy();
+    renderScheduler.destroy();
     graphRenderer.destroy();
     forwardRenderer.destroy();
     history.reset("runtime-destroyed");

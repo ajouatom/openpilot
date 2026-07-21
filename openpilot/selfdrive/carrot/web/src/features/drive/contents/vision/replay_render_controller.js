@@ -6,6 +6,7 @@ export function createReplayRenderController(options = {}) {
   const resetReplayState = options.resetReplayState;
   const mergePendingRenderState = options.mergePendingRenderState;
   const flushScheduledRender = options.flushScheduledRender;
+  const notifyPresentedFrame = options.notifyPresentedFrame;
 
   if (
     typeof isReplayActive !== "function"
@@ -15,6 +16,7 @@ export function createReplayRenderController(options = {}) {
     || typeof resetReplayState !== "function"
     || typeof mergePendingRenderState !== "function"
     || typeof flushScheduledRender !== "function"
+    || typeof notifyPresentedFrame !== "function"
   ) {
     return null;
   }
@@ -32,6 +34,13 @@ export function createReplayRenderController(options = {}) {
     // Replay invokes this after applying the rlog samples for the presented
     // media frame, so render synchronously against that exact frame.
     flushScheduledRender();
+    notifyPresentedFrame({
+      source: "replay",
+      mediaTime: Number.isFinite(Number(renderOptions.mediaTime))
+        ? Number(renderOptions.mediaTime)
+        : null,
+      reason: String(renderOptions.reason || "replay video frame"),
+    });
     return true;
   }
 
