@@ -779,10 +779,7 @@ def run_demo(
         flush=True,
     )
     renderer.set_profile_enabled(profile_render)
-    git_status_provider = GitBranchStatusProvider(
-        Path(__file__).resolve().parent,
-        remote_enabled=not TICI,
-    )
+    git_status_provider = GitBranchStatusProvider(Path(__file__).resolve().parent)
     network_address_provider = NetworkAddressProvider()
     cluster_core_usage_sampler = (
         ClusterProcessCoreUsageSampler(debug=cluster_core_usage_debug)

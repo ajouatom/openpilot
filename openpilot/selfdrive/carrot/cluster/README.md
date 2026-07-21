@@ -284,8 +284,10 @@ Changing either param makes the running HUD exit so `cluster_autorun` can
 relaunch it with the new affinity/scheduler settings, without a whole system restart.
 Explicit `CLUSTER_REALTIME_CORES` or `CLUSTER_REALTIME_PRIORITY` environment
 values still override the corresponding Params.
-On TICI, the HUD reads the local Git branch directly but does not start remote
-`ls-remote` or `fetch` work. PC/window runs retain the periodic remote status.
+The HUD reads the local Git branch immediately on every platform and refreshes
+the upstream update state asynchronously at most every 60 seconds. The Git
+worker changes itself to `SCHED_OTHER` before `ls-remote`/`fetch`, so TICI does
+not run those commands in the render process's FIFO scheduling class.
 Native H.264 callback output is queued as complete access units. The bounded
 queue retains the latest codec config, keyframe, and frame without waiting for
 USB; stale access units are dropped and reported instead of failing the run.
@@ -332,10 +334,12 @@ all four gap bars stay visible, sit close together, and bottom-align to the
 vehicle while inactive bars are gray and active bars use `#bb3d91`. Cruise set
 speed and `km/h` use the same font size and color; paused cruise keeps the set
 speed but draws it gray, and inactive cruise draws gray `--- km/h`. The
-lane-change icon is not drawn; the LFA icon uses
+separate lane-change icon is not drawn. The LFA icon uses
 `selfdrive/assets/icons_mici/carrot_wheel_org.png`, rotates by
 `-carState.steeringAngleDeg`, and recolors its white pixels green when LFA is
-active.
+active. When `controlsState.activeLaneLine` is true, the fixed
+`carrot_wheel_lane.png` left/right lane overlay is drawn in the same position
+and color contract as the C4 HUD.
 When `--fps` is omitted, `ClusterHudLiveFps` controls the render limit and is
 polled about once per second while running: `0` uncapped diagnostic mode, `1`
 10 Hz default, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
