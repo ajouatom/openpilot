@@ -700,6 +700,10 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
           <div class="dashcam-route-title">${title}</div>
           <div class="dashcam-route-subtitle">${dateLabel}</div>
         </div>
+        <button class="smallBtn dashcam-report-btn" type="button" data-action="route-report" data-route="${routeAttr}" title="${escapeHtml(getUIText("route_report", "주행 리포트"))}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2m2 12h2v3H7zm4-6h2v9h-2zm4 3h2v6h-2z"/></svg>
+          <span>${escapeHtml(getUIText("route_report", "주행 리포트"))}</span>
+        </button>
         <button class="dashcam-expand-btn" type="button" data-action="toggle-route" data-route="${routeAttr}" aria-expanded="${expanded ? "true" : "false"}" title="${escapeHtml(expanded ? getUIText("collapse", "Collapse") : getUIText("show_segments", "Show segments"))}">
           <svg viewBox="0 0 24 24"><path fill="currentColor" d="${expanded ? "M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z" : "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"}"/></svg>
         </button>
@@ -707,6 +711,10 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
       <div class="dashcam-segments ${expanded ? "" : "is-collapsed"}">
         <div class="dashcam-selection-row">
           <span class="dashcam-selection-count">${escapeHtml(getUIText("selected_count", "{count} selected", { count: selected.length }))}</span>
+          <button class="smallBtn dashcam-report-btn dashcam-report-btn--row" type="button" data-action="route-report" data-route="${routeAttr}" title="${escapeHtml(getUIText("route_report", "주행 리포트"))}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2m2 12h2v3H7zm4-6h2v9h-2zm4 3h2v6h-2z"/></svg>
+            <span>${escapeHtml(getUIText("route_report", "주행 리포트"))}</span>
+          </button>
           <button class="smallBtn" type="button" data-action="select-route" data-route="${routeAttr}" data-selected="${allSelected ? "1" : "0"}">${escapeHtml(selectLabel)}</button>
           <button class="smallBtn btn--filled" type="button" data-action="upload-selected" data-route="${routeAttr}" ${selected.length ? "" : "disabled"}>${escapeHtml(getUIText("upload_selected", "Upload selected"))}</button>
           <button class="smallBtn dashcam-group-menu-btn" type="button" data-action="route-menu" data-route="${routeAttr}" aria-label="${escapeHtml(getUIText("group_menu", "Group menu"))}" title="${escapeHtml(getUIText("group_menu", "Group menu"))}">
@@ -1742,6 +1750,193 @@ async function showDashcamRouteMenu(route) {
   if (selected === "range") await showDashcamRangeSelect(route);
 }
 
+const DASHCAM_REPORT_CAUSE_LABELS = {
+  brake: ["report_cause_brake", "브레이크"],
+  gas: ["report_cause_gas", "가속페달"],
+  button: ["report_cause_button", "버튼취소"],
+  steer: ["report_cause_steer", "조향"],
+  other: ["report_cause_other", "기타"],
+};
+
+function dashcamReportEventTimes(obj) {
+  const items = obj?.items || [];
+  if (!items.length) return "";
+  const shown = items.map((it) => {
+    const peak = (it.peak != null) ? ` <em>${escapeHtml(String(it.peak))}</em>` : "";
+    return `<span class="drpt-chip">${escapeHtml(it.clock || "-")}${peak}</span>`;
+  }).join("");
+  const more = (obj.count > items.length)
+    ? `<span class="drpt-chip drpt-chip--more">＋${obj.count - items.length}</span>`
+    : "";
+  return `<div class="drpt-chips">${shown}${more}</div>`;
+}
+
+function dashcamReportEventRow(labelKey, fallback, obj, cls) {
+  const count = obj?.count || 0;
+  const label = escapeHtml(getUIText(labelKey, fallback));
+  const unit = escapeHtml(getUIText("report_unit_times", "회"));
+  return `<div class="drpt-evt ${cls}">
+    <div class="drpt-evt-head"><span class="drpt-evt-label">${label}</span><span class="drpt-evt-count">${count}${unit}</span></div>
+    ${count ? dashcamReportEventTimes(obj) : ""}
+  </div>`;
+}
+
+// 주행시간 구성비율 막대바 색상 (라벨/시간 글자색과 동일 계열).
+const DASHCAM_REPORT_BAR = {
+  autoFill: "#7dd3fc", autoStroke: "#3b82f6",   // 자동: 하늘색 채우기 / 파란 테두리
+  manualStroke: "#ff5a5a",                       // 수동 그룹: 빨간 테두리
+  gasFill: "#ffd54a",                            // 수동 Gas: 노란색
+  brakeFill: "#ff8c1a",                          // 수동 Brake: 주황색
+  otherFill: "rgba(255,90,90,0.35)",             // 수동 기타(코스팅)
+};
+
+// 자동/수동(Gas·Brake·기타) 구성비를 가로 스택 막대로. 가로(landscape)에서 배너
+// 전체 폭(100%)을 쓰는 별도 줄로 표시된다.
+function dashcamReportBar(t) {
+  const auto = Math.max(0, Number(t.autoSec) || 0);
+  const manual = Math.max(0, Number(t.manualSec) || 0);
+  let gas = Math.max(0, Number(t.manualGasSec) || 0);
+  let brake = Math.max(0, Number(t.manualBrakeSec) || 0);
+  const barTotal = auto + manual;
+  if (barTotal <= 0) return "";
+  if (gas + brake > manual && gas + brake > 0) { const s = manual / (gas + brake); gas *= s; brake *= s; }
+  const other = Math.max(0, manual - gas - brake);
+  const C = DASHCAM_REPORT_BAR;
+
+  const autoSeg = auto > 0
+    ? `<div class="drpt-bar-seg drpt-bar-seg--auto" style="flex:${auto} 1 0%;background:${C.autoFill};border-color:${C.autoStroke}"></div>`
+    : "";
+  const manualSegs = [
+    gas > 0 ? `<div class="drpt-bar-seg drpt-bar-seg--gas" style="flex:${gas} 1 0%;background:${C.gasFill}"></div>` : "",
+    brake > 0 ? `<div class="drpt-bar-seg drpt-bar-seg--brake" style="flex:${brake} 1 0%;background:${C.brakeFill}"></div>` : "",
+    other > 0 ? `<div class="drpt-bar-seg drpt-bar-seg--other" style="flex:${other} 1 0%;background:${C.otherFill}"></div>` : "",
+  ].join("");
+  const manualGroup = manual > 0
+    ? `<div class="drpt-bar-group" style="flex:${manual} 1 0%;border-color:${C.manualStroke}">${manualSegs}</div>`
+    : "";
+
+  return `<div class="drpt-bar-wrap"><div class="drpt-bar">${autoSeg}${manualGroup}</div></div>`;
+}
+
+function dashcamReportHtml(rep) {
+  if (!rep || !rep.ok) {
+    return `<div class="drpt-empty">${escapeHtml(getUIText("report_failed", "리포트를 불러오지 못했습니다."))}</div>`;
+  }
+  const t = rep.time || {};
+  const d = rep.distance || {};
+  const ev = rep.events || {};
+  const ex = rep.extras || {};
+  const u = (k, f) => escapeHtml(getUIText(k, f));
+
+  if (!rep.hasData) {
+    return `<div class="drpt-empty">${u("report_no_data", "이 주행에는 분석할 로그 데이터가 없습니다.")}</div>`;
+  }
+
+  const causes = ex.disengageCauses || {};
+  const causeSummary = Object.keys(DASHCAM_REPORT_CAUSE_LABELS)
+    .filter((k) => causes[k])
+    .map((k) => `${u(DASHCAM_REPORT_CAUSE_LABELS[k][0], DASHCAM_REPORT_CAUSE_LABELS[k][1])} ${causes[k]}`)
+    .join(" · ");
+
+  const disengageTimes = (ex.disengageItems || []).length
+    ? `<div class="drpt-chips">${ex.disengageItems.map((it) => {
+        const c = DASHCAM_REPORT_CAUSE_LABELS[it.cause] || ["report_cause_other", it.cause];
+        return `<span class="drpt-chip">${escapeHtml(it.clock || "-")} <em>${u(c[0], c[1])}</em></span>`;
+      }).join("")}</div>`
+    : "";
+
+  const warn = ex.warnCounts || {};
+  const unitT = u("report_unit_times", "회");
+
+  return `<div class="drpt">
+    <section class="drpt-sec">
+      <h4 class="drpt-h">${u("report_sec_time", "주행 시간")}</h4>
+      <div class="drpt-total">
+        <span class="drpt-total-val">${escapeHtml(t.totalHms || "00:00:00")}</span>
+        <span class="drpt-total-sub">${escapeHtml(t.startClock || "-")} ~ ${escapeHtml(t.endClock || "-")}</span>
+      </div>
+      <div class="drpt-tdetail">
+        <div class="drpt-tgrp drpt-tgrp--auto">
+          <div class="drpt-kv drpt-kv--c-auto"><span>${u("report_auto", "자동 주행")}</span><b>${escapeHtml(t.autoEnabledHms || "-")} (${escapeHtml(String(t.autoRatioPct ?? 0))}%)</b></div>
+        </div>
+        <div class="drpt-tgrp drpt-tgrp--manual">
+          <div class="drpt-kv drpt-kv--c-manual"><span>${u("report_manual", "수동 주행")}</span><b>${escapeHtml(t.manualHms || "-")} (${escapeHtml(String(t.manualRatioPct ?? 0))}%)</b></div>
+          <div class="drpt-kv drpt-kv--sub drpt-kv--c-gas"><span>${u("report_manual_gas", "수동 Gas")}</span><b>${escapeHtml(t.manualGasMs || "-")}</b></div>
+          <div class="drpt-kv drpt-kv--sub drpt-kv--c-brake"><span>${u("report_manual_brake", "수동 Brake")}</span><b>${escapeHtml(t.manualBrakeMs || "-")}</b></div>
+        </div>
+      </div>
+      ${dashcamReportBar(t)}
+    </section>
+
+    <section class="drpt-sec">
+      <h4 class="drpt-h">${u("report_sec_dist", "주행 거리 / 속도")}</h4>
+      <div class="drpt-grid drpt-grid--dist">
+        <div><small>${u("report_dist_total", "총 거리")}</small><b>${escapeHtml(String(d.totalKm ?? 0))} km</b></div>
+        <div><small>${u("report_dist_auto", "자동")}</small><b>${escapeHtml(String(d.autoKm ?? 0))} km</b></div>
+        <div><small>${u("report_dist_manual", "수동")}</small><b>${escapeHtml(String(d.manualKm ?? 0))} km</b></div>
+      </div>
+      <div class="drpt-grid drpt-grid--spd">
+        <div><small>${u("report_speed_avg", "평균")}</small><b>${escapeHtml(String(d.avgSpeedKmh ?? 0))} km/h</b></div>
+        <div><small>${u("report_speed_max", "최고")}</small><b>${escapeHtml(String(d.maxSpeedKmh ?? 0))} km/h</b></div>
+      </div>
+    </section>
+
+    <section class="drpt-sec">
+      <h4 class="drpt-h">${u("report_sec_events", "특이 사항 (급/과 가감속)")}</h4>
+      ${dashcamReportEventRow("report_hard_accel", "급가속", ev.hardAccel, "is-hard is-accel")}
+      ${dashcamReportEventRow("report_over_accel", "과가속", ev.overAccel, "is-over is-accel")}
+      ${dashcamReportEventRow("report_hard_decel", "급감속", ev.hardDecel, "is-hard is-decel")}
+      ${dashcamReportEventRow("report_over_decel", "과감속", ev.overDecel, "is-over is-decel")}
+    </section>
+
+    <section class="drpt-sec">
+      <h4 class="drpt-h">${u("report_sec_extra", "추가 지표")}</h4>
+      <div class="drpt-evt">
+        <div class="drpt-evt-head"><span class="drpt-evt-label">${u("report_disengage", "자동→수동 개입")}</span><span class="drpt-evt-count">${ex.disengageCount || 0}${unitT}</span></div>
+        ${causeSummary ? `<div class="drpt-sub2">${escapeHtml(causeSummary)}</div>` : ""}
+        ${disengageTimes}
+      </div>
+      <div class="drpt-kv"><span>${u("report_stops", "정차")}</span><b>${ex.stopCount || 0}${unitT}</b><small>${u("report_stop_time", "총 정차")} ${escapeHtml(t.stopMs || "-")}</small></div>
+      <div class="drpt-kv"><span>${u("report_steer_ovr", "자동 중 조향개입")}</span><b>${ex.steerOverrideCount || 0}${unitT}</b><small>${escapeHtml(t.steerOverrideMs || "-")}</small></div>
+      <div class="drpt-kv"><span>${u("report_corner", "하드코너링")}</span><b>${ex.cornerCount || 0}${unitT}</b><small>${u("report_max_lat", "최대횡가속")} ${escapeHtml(String(ex.maxLatAccel ?? 0))} m/s²</small></div>
+      <div class="drpt-kv"><span>${u("report_warns", "경고")}</span><b></b><small>FCW ${warn.fcw || 0} · LDW ${warn.ldw || 0} · ${u("report_warn_dm", "주시태만")} ${warn.driverDistracted || 0}</small></div>
+    </section>
+
+    <div class="drpt-foot">${u("report_source", "분석 소스")}: ${escapeHtml((rep.source || "-").toUpperCase())} · ${escapeHtml(String(rep.segments || 0))} ${u("report_segments", "세그먼트")}</div>
+  </div>`;
+}
+
+async function showDashcamRouteReport(route) {
+  if (!route) return;
+  const title = `${getUIText("route_report", "주행 리포트")} · ${dashcamRouteTitle(route)}`;
+  openAppDialog({
+    mode: "alert",
+    html: true,
+    title,
+    messageHtml: `<div class="drpt-loading">${escapeHtml(getUIText("report_analyzing", "로그 분석 중… (주행 길이에 따라 수십 초 소요될 수 있음)"))}</div>`,
+    confirmLabel: getUIText("cancel", "취소"),
+  });
+  let rep;
+  try {
+    rep = await getJson(`/api/dashcam/report/${encodeURIComponent(route)}`);
+  } catch (e) {
+    openAppDialog({
+      mode: "alert",
+      title,
+      message: `${getUIText("report_failed", "리포트를 불러오지 못했습니다.")}${e?.message ? ` (${e.message})` : ""}`,
+      confirmLabel: getUIText("close", "닫기"),
+    });
+    return;
+  }
+  openAppDialog({
+    mode: "alert",
+    html: true,
+    title,
+    messageHtml: dashcamReportHtml(rep),
+    confirmLabel: getUIText("close", "닫기"),
+  });
+}
+
 export {
   cancelDashcamRouteRender,
   dashcamDefaultRouteHeight,
@@ -1762,6 +1957,7 @@ export {
   setDashcamLoadingMoreUi,
   setDashcamSort,
   showDashcamRouteMenu,
+  showDashcamRouteReport,
   showDashcamSegmentMenu,
   startDashcamAutoRefresh,
   toggleDashcamRouteSelectAll,
