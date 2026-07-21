@@ -3,6 +3,7 @@ from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
+from opendbc.car.hyundai.angle_steering import HyundaiAngleSteering
 from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
@@ -20,15 +21,6 @@ from openpilot.common.params import Params
 MAX_ANGLE = 85
 MAX_ANGLE_FRAMES = 89
 MAX_ANGLE_CONSECUTIVE_FRAMES = 2
-DRIVER_TORQUE_FILTER_TAU = 0.12
-PRE_OVERRIDE_PREDICTION_TIME = 0.15
-PRE_OVERRIDE_START_RATIO = 0.90
-PRE_OVERRIDE_FULL_RATIO = 1.05
-PRE_OVERRIDE_RAW_MIN_RATIO = 0.70
-PRE_OVERRIDE_FILTERED_MIN_RATIO = 0.65
-PRE_OVERRIDE_MIN_RATE_RATIO = 0.50
-PRE_OVERRIDE_CONFIRM_FRAMES = 2
-PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
 LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
 MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
 
@@ -165,15 +157,8 @@ class CarController(CarControllerBase):
     self.apply_angle_last = 0
     self.lkas_max_torque = 0
     self.angle_max_torque = 250
-    self.steering_pressed_prev = False
-    self.recovering_from_override = False
-    self.full_recovery_frames = 0
-    self.repeated_override_count = 0
-    self.override_latched = False
-    self.override_release_frames = 0
-    self.driver_torque_filtered = 0.0
-    self.driver_torque_filtered_prev = 0.0
-    self.pre_override_frames = 0
+    self.angle_steering = HyundaiAngleSteering(self.angle_max_torque, self.params.ANGLE_MIN_TORQUE,
+                                               self.params.STEER_THRESHOLD)
 
     self.lkas11_active = False
 
@@ -273,122 +258,23 @@ class CarController(CarControllerBase):
     if angle_control:
       apply_steer_req = CC.latActive
 
-    angle_torque_cap = self.angle_max_torque
-
-    steering_pressed_rising = CS.out.steeringPressed and not self.steering_pressed_prev
-    if steering_pressed_rising:
-      if 0 < self.full_recovery_frames < int(5.0 / DT_CTRL):
-        self.repeated_override_count = min(self.repeated_override_count + 1, 3)
-      self.full_recovery_frames = 0
-      self.recovering_from_override = True
-
-    torque_threshold = max(self.params.STEER_THRESHOLD, 1.0)
-    # Filter signed torque so alternating sensor noise cancels out before its
-    # magnitude is used for pre-override prediction.
-    driver_torque = float(CS.out.steeringTorque)
-    driver_torque_abs = abs(driver_torque)
-    if not CC.latActive:
-      self.driver_torque_filtered = driver_torque
-      self.driver_torque_filtered_prev = driver_torque
-      self.pre_override_frames = 0
+    if angle_control:
+      apply_angle, self.lkas_max_torque = self.angle_steering.update(
+        CC.latActive,
+        float(actuators.steeringAngleDeg),
+        apply_angle,
+        float(CS.out.steeringAngleDeg),
+        float(CS.out.steeringTorque),
+        float(CS.out.steeringTorqueEps),
+        bool(CS.out.steeringPressed),
+        float(CS.out.vEgoRaw),
+      )
     else:
-      torque_filter_alpha = DT_CTRL / (DRIVER_TORQUE_FILTER_TAU + DT_CTRL)
-      self.driver_torque_filtered_prev = self.driver_torque_filtered
-      self.driver_torque_filtered += torque_filter_alpha * (driver_torque - self.driver_torque_filtered)
-
-    driver_torque_filtered_abs = abs(self.driver_torque_filtered)
-    driver_torque_filtered_prev_abs = abs(self.driver_torque_filtered_prev)
-    driver_torque_rate = max(0.0, (driver_torque_filtered_abs - driver_torque_filtered_prev_abs) / DT_CTRL)
-    torque_ratio = driver_torque_filtered_abs / torque_threshold
-    raw_torque_ratio = driver_torque_abs / torque_threshold
-    predicted_torque_ratio = (
-      driver_torque_filtered_abs + driver_torque_rate * PRE_OVERRIDE_PREDICTION_TIME
-    ) / torque_threshold
-    pre_override_candidate = (
-      CC.latActive and
-      not CS.out.steeringPressed and
-      raw_torque_ratio > PRE_OVERRIDE_RAW_MIN_RATIO and
-      torque_ratio > PRE_OVERRIDE_FILTERED_MIN_RATIO and
-      predicted_torque_ratio > PRE_OVERRIDE_START_RATIO and
-      driver_torque_rate > torque_threshold * PRE_OVERRIDE_MIN_RATE_RATIO
-    )
-    self.pre_override_frames = self.pre_override_frames + 1 if pre_override_candidate else 0
-    pre_override_yield = 0.0
-    if self.pre_override_frames >= PRE_OVERRIDE_CONFIRM_FRAMES:
-      pre_override_yield = float(np.interp(
-        predicted_torque_ratio,
-        [PRE_OVERRIDE_START_RATIO, PRE_OVERRIDE_FULL_RATIO],
-        [0.0, 1.0],
-      ))
-    recovery_allowed = False
-
-    if CS.out.steeringPressed:
-      # Start yielding immediately when driver override is confirmed.
-      self.override_latched = True
-      self.override_release_frames = 0
-      torque_delta = -20.0
-    elif pre_override_yield > 0.0:
-      # Start handing off gently before steeringPressed flips to avoid a sharp torque drop.
-      torque_delta = PRE_OVERRIDE_MAX_TORQUE_DELTA * pre_override_yield
-    elif self.lkas_max_torque >= self.angle_max_torque:
-      # Once fully recovered, hold full authority until the next driver override.
-      torque_delta = 0.0
-    elif self.override_latched:
-      # Hold reduced authority until driver torque stays below 60% for 0.2 seconds.
-      self.override_release_frames = self.override_release_frames + 1 if torque_ratio < 0.6 else 0
-      if self.override_release_frames >= int(0.2 / DT_CTRL):
-        self.override_latched = False
-        self.override_release_frames = 0
-        recovery_allowed = True
-      else:
-        torque_delta = 0.0
-    else:
-      recovery_allowed = True
-
-    if recovery_allowed:
-      # Use one-second model uncertainty to set the base torque recovery time.
-      # Missing or invalid model data falls back to a moderate 1.5-second recovery.
-      y_std_1s = 0.2
-      if CS.modelV2 is not None and len(CS.modelV2.position.yStd) > 10:
-        model_y_std_1s = float(CS.modelV2.position.yStd[10])
-        if np.isfinite(model_y_std_1s) and model_y_std_1s >= 0.0:
-          y_std_1s = model_y_std_1s
-
-      recovery_time = float(np.interp(y_std_1s, [0.1, 0.2, 0.3, 0.4], [0.5, 0.8, 1.5, 3.0]))
-      recovery_time = max(recovery_time, float(np.interp(
-        self.repeated_override_count,
-        [0, 1, 2, 3],
-        [0.1, 1.0, 2.0, 3.0],
-      )))
-      base_rate_up = (self.angle_max_torque - self.params.ANGLE_MIN_TORQUE) * DT_CTRL / recovery_time
-
-      # During recovery, taper the rate to zero. Only steeringPressed can reduce authority.
-      torque_delta = base_rate_up * float(np.interp(torque_ratio, [0.6, 0.8], [1.0, 0.0]))
-    self.lkas_max_torque = float(np.clip(self.lkas_max_torque + torque_delta,
-                                         self.params.ANGLE_MIN_TORQUE, angle_torque_cap))
-
-    if not CS.out.steeringPressed and self.recovering_from_override and self.lkas_max_torque >= self.angle_max_torque:
-      self.recovering_from_override = False
-      self.full_recovery_frames = 1
-    elif not CS.out.steeringPressed and self.full_recovery_frames > 0:
-      self.full_recovery_frames += 1
-      if self.full_recovery_frames >= int(5.0 / DT_CTRL):
-        self.full_recovery_frames = 0
-        self.repeated_override_count = 0
+      self.angle_steering.reset()
 
     if not CC.latActive:
       apply_torque = 0
       self.lkas_max_torque = 0
-      self.recovering_from_override = False
-      self.full_recovery_frames = 0
-      self.repeated_override_count = 0
-      self.override_latched = False
-      self.override_release_frames = 0
-      self.driver_torque_filtered = 0.0
-      self.driver_torque_filtered_prev = 0.0
-      self.pre_override_frames = 0
-
-    self.steering_pressed_prev = CS.out.steeringPressed if CC.latActive else False
 
     self.apply_angle_last = apply_angle
 
