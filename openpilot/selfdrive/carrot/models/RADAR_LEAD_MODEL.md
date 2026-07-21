@@ -1,12 +1,12 @@
-# Radar lead model v13
+# Radar lead model v14
 
 ## Runtime layout
 
-- Base network: deployed v6 lead, cut-in, and moving-external outputs.
+- Base network: v14 artifact with the v6 lead/moving-external outputs and a distilled v14 cut-in output.
 - Stationary network: v11 external classifier, evaluated only when `abs(vLead) < 1.8 m/s`.
 - Anticipatory cut-in network: v13 geometry-gated 19-input logistic classifier.
 - The stationary score is normalized against its own threshold before it is combined with the base external score.
-- Base lead/cut-in/external weights, calibration, and thresholds are unchanged from v12.
+- Base lead/external weights and every calibration/threshold are unchanged from v13. Only the base cut-in output column was fine-tuned.
 - The anticipatory score can only raise cut-in probability after stable identity, 0.4/0.6-second inward lane-relative motion, usable lane confidence, distance, speed, and future-path gates all pass.
 
 The model contains two small `121 -> 64 -> 32` MLPs and one `19 -> 1` classifier. In the full Python replay path over a 1,200-frame route, median processing changed from 1.25 to 1.35 ms per frame. The approximately 0.10 ms/frame increase at 20 Hz is about 2 ms of CPU time per second.
@@ -42,7 +42,16 @@ The controller additionally requires a raw-corner identity, at least seven frame
 
 ## Cut-in regression
 
-The 53 maintained detect/clear video-review cases pass 53/53. This count covers only the labeled windows in `cutin_validation_cases.json`; it is a regression gate, not a claim about unlabeled portions of every route. The v13 candidate introduced no activation in the maintained right-curve, parallel-adjacent, roadside-pass, close-pass, point-jump, stopped-traffic, close stationary-reflection, near-field front-radar ghost, or tunnel-ghost clear scenes.
+The 53 maintained detect/clear video-review cases pass 53/53. This count covers only the labeled windows in `cutin_validation_cases.json`; it is a regression gate, not a claim about unlabeled portions of every route. The v14 candidate introduced no activation in the maintained right-curve, parallel-adjacent, roadside-pass, close-pass, point-jump, stopped-traffic, close stationary-reflection, near-field front-radar ghost, or tunnel-ghost clear scenes.
+
+v14 fine-tunes only the base cut-in output with 389 video-reviewed frames from eight logs listed in `radar_lead_annotations_v14.json`. Non-manual rows are distilled toward the v13 output instead of relearning the weak current-radard teacher. Eleven newer route cases from different logs remain explicitly held out in that file and pass 11/11. The full maintained video suite passes 53/53.
+
+At the unchanged base cut-in threshold of 0.90, the untouched 30-log test split changed as follows. These are base-head group metrics before the production temporal and geometry gates:
+
+| Model | Precision | Recall | True positives | False positives | False negatives |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| v13 base cut-in | 28.8% | 35.7% | 40 | 99 | 72 |
+| v14 distilled base cut-in | 29.3% | 42.9% | 48 | 116 | 64 |
 
 The anticipatory labels use a later current-radard confirmation only when the same front/corner alias was already moving consistently toward the lane. They look back at most 0.8 seconds and never overwrite manual negative labels. This added 142 soft-positive training rows and 126 validation rows. It does not copy the current-radard decision time directly; it teaches the stable motion immediately before that decision.
 
@@ -84,7 +93,7 @@ populate `leadTwo`. A model object is allowed to match `leadOne` and also appear
 as `leadTwo`; consumers already evaluate both leads, and preserving the model
 decision avoids hiding a real cut-in transition.
 
-The v13 anticipatory classifier is independent from the base heads. Its output
+The v13 anticipatory classifier retained by v14 is independent from the base heads. Its output
 is threshold-remapped to the production temporal threshold and combined only
 inside the strict eligibility gate, so leadOne, external/stationary scoring,
 and the existing cut-in probability remain unchanged elsewhere.
@@ -93,6 +102,6 @@ and the existing cut-in probability remain unchanged elsewhere.
 
 Use `radar_lead_corpus.py` to scan, select, and export weak teacher labels. `radar_lead_anticipatory_dataset.py` adds same-identity soft early labels and can produce a compact set containing all positives, hard negatives, and sampled easy negatives. `radar_lead_anticipatory_train.py` trains and appends the gated auxiliary arrays without changing the base artifact. `validate_radar_lead_model.py` compares current radard, the deployed baseline, and a candidate over every maintained video case.
 
-The general trainer preserves both `stationary_*` and `anticipatory_*` arrays when a base head is fine-tuned. The stationary v11 run used a maximum positive weight of 5; larger automatic weighting produced unacceptable false positives.
+The general trainer preserves both `stationary_*` and `anticipatory_*` arrays when a base head is fine-tuned. For v14, `--distill-init --preserve-calibration --train-head cutin --head-only` preserves the initialized behavior outside manual corrections. The stationary v11 run used a maximum positive weight of 5; larger automatic weighting produced unacceptable false positives.
 
-Model SHA-256: `3878f25c72397e70263eadab54bda97d6fa995b1b217bdb1ef7f0151191acd3a`
+Model SHA-256: `1b3265041aefddbdcb50867aeb2385c4de89adc573b2ca0b4acf2795ab8f058f`
