@@ -438,6 +438,22 @@ def test_front_only_close_approach_rejects_parallel_pass_with_weak_lateral_drift
   assert not decision.cutin_candidates
 
 
+def test_front_only_close_approach_rejects_fast_closing_roadside_track() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.90)
+  decision = None
+  for frame in range(24):
+    sample = builder.update(context(frame * 0.05), (
+      fused(corner_id=None, y_rel=3.4 - frame * 0.035, yv_rel=0.0, d_rel=10.0 - frame * 0.18),
+    ))[0]
+    decision = decision_filter.update(frame * 0.05, (
+      RadarLeadPrediction(sample, lead_prob=0.0, cutin_prob=0.0, risk_prob=0.0),
+    ))
+
+  assert decision is not None
+  assert not decision.cutin_candidates
+
+
 def test_front_only_close_range_noise_does_not_activate_raw_cutin() -> None:
   builder = RadarLeadFeatureBuilder()
   decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.70)

@@ -230,7 +230,6 @@ class VisionRadarMatcher:
 
     velocity_tolerance = max(
       5.0,
-      3.0 * abs(v_std),
       abs(vision_v) * (0.3 + 0.2 * min(max((probability - 0.8) / 0.18, 0.0), 1.0)),
     )
 
