@@ -24,7 +24,22 @@ function mergeDeviceParamValues(values) {
   return deviceParamValues;
 }
 
-function getDeviceGroupParamNames(groupId) {
+// Which parameters each device group reads. The server owns this list
+// (services/device_info.py) and ships it in the settings snapshot, so the two
+// sides cannot drift apart. The local arrays remain only as a fallback for a
+// server that predates the snapshot field.
+let deviceGroupParamNames = null;
+
+function hydrateDeviceGroupParamNames(groups) {
+  if (!groups || typeof groups !== "object") return;
+  const next = {};
+  Object.entries(groups).forEach(([groupId, names]) => {
+    if (Array.isArray(names) && names.length) next[groupId] = names.map(String);
+  });
+  if (Object.keys(next).length) deviceGroupParamNames = next;
+}
+
+function getLocalDeviceGroupParamNames(groupId) {
   if (groupId === "Device") return DEVICE_INFO_PARAMS.slice();
   if (groupId === "Software") return DEVICE_SOFTWARE_PARAMS.slice();
   if (groupId === "Toggles") {
@@ -43,6 +58,11 @@ function getDeviceGroupParamNames(groupId) {
     ];
   }
   return [];
+}
+
+function getDeviceGroupParamNames(groupId) {
+  const fromServer = deviceGroupParamNames?.[groupId];
+  return Array.isArray(fromServer) ? fromServer.slice() : getLocalDeviceGroupParamNames(groupId);
 }
 
 function getCachedDeviceGroupValues(groupId) {
@@ -66,6 +86,7 @@ function normalizeDeviceSshStatus(status) {
 
 function hydrateDeviceSettingsSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return false;
+  hydrateDeviceGroupParamNames(snapshot.device_groups);
   mergeDeviceParamValues(snapshot.device_values || {});
   if (snapshot.device_network && typeof snapshot.device_network === "object") {
     deviceNetworkInfo = { ...snapshot.device_network };

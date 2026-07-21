@@ -7,9 +7,13 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "check": "npm run build"
+    "check": "npm run build && npm run test",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "test:ar-three": "node --test tests/ar_scope.test.mjs tests/ar_anchor_store.test.mjs tests/ar_compose_probe.test.mjs tests/ar_frame_sync.test.mjs tests/ar_position_quality.test.mjs tests/ar_performance_policy.test.mjs tests/ar_responsive.test.mjs tests/compact_ar_wire_contract.test.mjs tests/presented_frame_channel.test.mjs tests/presented_frame_bridge_contract.test.mjs tests/replay_render_controller.test.mjs tests/token_preview_contract.test.mjs tests/three_signboard.test.mjs tests/three_projection.test.mjs tests/three_renderer.test.mjs tests/three_runtime.test.mjs",
+    "test:settings": "node --test \"tests/settings_*.test.mjs\""
   },
   "devDependencies": {
-    "esbuild": "0.28.1"
+    "esbuild": "0.28.1",
+    "three": "0.185.0"
   }
 }

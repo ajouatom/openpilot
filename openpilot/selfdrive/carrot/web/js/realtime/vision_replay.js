@@ -473,6 +473,24 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
     return record.frames;
   }
 
+  function presentAppliedState(result, options = {}) {
+    if (!result?.applied && !result?.reset) return false;
+    const rendered = window.DriveVisionFacade?.replay?.renderVideoFrame?.({
+      force: Boolean(result.reset),
+      resetTemporal: Boolean(result.resetTemporal),
+      mediaTime: Number.isFinite(Number(options.mediaTime)) ? Number(options.mediaTime) : null,
+      reason: String(options.reason || "replay state applied"),
+    });
+    if (rendered) return true;
+    window.requestCarrotVisionRender?.({
+      force: Boolean(result.reset),
+      overlayDirty: true,
+      hudDirty: true,
+      reason: String(options.reason || "replay state applied"),
+    });
+    return false;
+  }
+
   function applyAt(timeMs, options = {}) {
     if (!state.active || !state.records.length) return { applied: 0, reset: false, resetTemporal: false };
     const targetMs = Math.max(0, Number(timeMs) || 0);
@@ -501,14 +519,22 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
       applied = Number(
         window.CarrotVisionRaw?.applyCompactFrames?.(Array.from(latestByService.values()), {
           reason: "recorded replay",
-          render,
+          // Replay presentation is synchronized below after the complete
+          // batch has been applied. Per-service render requests would race
+          // the visible video frame and bypass the shared presented channel.
+          render: false,
           flushHud: true,
         }),
       ) || 0;
-    } else if (reset && render) {
-      window.requestCarrotVisionRender?.({ reason: "replay seek" });
     }
-    return { applied, reset, resetTemporal };
+    const result = { applied, reset, resetTemporal };
+    if (render) {
+      presentAppliedState(result, {
+        mediaTime: targetMs / 1000,
+        reason: options.reason || (reset ? "replay seek" : "replay state applied"),
+      });
+    }
+    return result;
   }
 
   function playbackTick(_now, metadata = null) {
@@ -521,18 +547,10 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
       { render: false },
     );
     if (result.applied || result.reset) {
-      const rendered = window.DriveVisionFacade?.replay?.renderVideoFrame?.({
-        force: result.reset,
-        resetTemporal: result.resetTemporal,
+      presentAppliedState(result, {
+        mediaTime: Number.isFinite(mediaTime) ? mediaTime : Number(videoEl.currentTime || 0),
+        reason: "replay video frame",
       });
-      if (!rendered) {
-        window.requestCarrotVisionRender?.({
-          force: result.reset,
-          overlayDirty: true,
-          hudDirty: true,
-          reason: "replay video frame",
-        });
-      }
     }
     syncTransport();
     schedulePlaybackTick();
@@ -1074,6 +1092,17 @@ window.CarrotVisionReplay = window.CarrotVisionReplay || (() => {
   return {
     isActive: () => state.active,
     isReady: () => state.active && state.ready,
+    status: () => Object.freeze({
+      active: state.active,
+      ready: state.ready,
+      loading: state.loading,
+      route: state.route || null,
+      segment: state.segment || null,
+      currentTime: Number(videoEl?.currentTime || 0),
+      duration: replayDuration(),
+      timelineReady: state.timelineReady,
+      services: Object.freeze({ ...(state.manifest?.services || {}) }),
+    }),
     reportRenderable,
     shouldHoldFrameDuringSeek,
     start,

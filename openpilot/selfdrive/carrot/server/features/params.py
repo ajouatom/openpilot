@@ -5,6 +5,16 @@ import os
 from aiohttp import web
 
 from ..config import PARAMS_BACKUP_PATH
+from ..services.param_changes import (
+  append_param_change,
+  count_changes_since,
+  observe_param_values,
+  param_fingerprint,
+  read_fingerprint_baseline,
+  read_param_changes,
+  verify_param_changes,
+  write_fingerprint_baseline,
+)
 from ..services.params import (
   HAS_PARAMS,
   ParamKeyType,
@@ -20,6 +30,7 @@ from ..services.params import (
   set_param_value,
 )
 from ..services.settings import get_settings_cached
+from .system import is_drive_engaged
 
 
 async def api_params_bulk(request: web.Request) -> web.Response:
@@ -50,6 +61,11 @@ async def api_params_bulk(request: web.Request) -> web.Response:
       except Exception:
         values[n] = 0
 
+  # Picks up values the driving code changed behind our back, so the history
+  # can explain them. Restricted to catalog settings, so synthetic keys like
+  # GitPullTime and hardware values like DeviceType -- which change on every
+  # read -- never appear in the change history.
+  observe_param_values(values, allowed=set(by_name))
   return web.json_response({"ok": True, "values": values})
 
 
@@ -61,6 +77,7 @@ async def api_param_set(request: web.Request) -> web.Response:
 
   name = body.get("name")
   value = body.get("value")
+  source = body.get("source")
 
   if not name:
     return web.json_response({"ok": False, "error": "missing name"}, status=400)
@@ -70,6 +87,13 @@ async def api_param_set(request: web.Request) -> web.Response:
   try:
     _, _, by_name, _ = get_settings_cached()
     p = by_name.get(name)
+  except Exception:
+    pass
+
+  # Read the old value before writing so the history can show what it replaced.
+  previous = None
+  try:
+    previous = get_param_values([name], {name: (p or {}).get("default")}).get(name)
   except Exception:
     pass
 
@@ -88,7 +112,83 @@ async def api_param_set(request: web.Request) -> web.Response:
 
   try:
     set_param_value(name, value, p)
-    return web.json_response({"ok": True, "name": name, "value": value, "has_params": HAS_PARAMS})
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+  # Changing settings while driving stays allowed on purpose; the history just
+  # records that it happened. append_param_change never raises, so a log
+  # problem cannot turn a successful write into a reported failure.
+  if previous != value:
+    append_param_change(
+      name,
+      previous,
+      value,
+      source=source,
+      engaged=is_drive_engaged(request),
+    )
+
+  return web.json_response({"ok": True, "name": name, "value": value, "has_params": HAS_PARAMS})
+
+
+async def api_param_changes(request: web.Request) -> web.Response:
+  try:
+    limit = int(request.query.get("limit", "50"))
+  except Exception:
+    limit = 50
+  name = str(request.query.get("name", "")).strip()
+  source = str(request.query.get("source", "")).strip()
+  changes = await asyncio.to_thread(read_param_changes, max(0, min(limit, 500)), name, source)
+  return web.json_response({"ok": True, "changes": changes})
+
+
+async def api_param_changes_verify(request: web.Request) -> web.Response:
+  """Re-walk the hash chain. Hashing is pointless if nothing ever checks it."""
+  return web.json_response(await asyncio.to_thread(verify_param_changes))
+
+
+async def api_param_fingerprint(request: web.Request) -> web.Response:
+  """One short digest of every setting, plus how it compares to the saved
+  reference, so the user does not have to remember or write the code down."""
+  def build() -> dict:
+    _data, _groups, by_name, _groups_list = get_settings_cached()
+    values = get_param_values(
+      list(by_name),
+      {name: meta.get("default", 0) for name, meta in by_name.items()},
+    )
+    result = param_fingerprint(values)
+
+    baseline = read_fingerprint_baseline()
+    if baseline is None:
+      # First look: adopt the current state as the reference so future visits
+      # can say "changed since / unchanged" without the user setting it up.
+      baseline = write_fingerprint_baseline(result["fingerprint"])
+    result["baseline"] = baseline
+    result["changed"] = result["fingerprint"] != baseline.get("fingerprint")
+    result["changed_count"] = (
+      count_changes_since(int(baseline.get("ts") or 0), allowed=set(by_name))
+      if result["changed"] else 0
+    )
+    return {"ok": True, **result}
+
+  try:
+    return web.json_response(await asyncio.to_thread(build))
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def api_param_fingerprint_baseline(request: web.Request) -> web.Response:
+  """Set the current settings as the reference to compare against from now on."""
+  def build() -> dict:
+    _data, _groups, by_name, _groups_list = get_settings_cached()
+    values = get_param_values(
+      list(by_name),
+      {name: meta.get("default", 0) for name, meta in by_name.items()},
+    )
+    fingerprint = param_fingerprint(values)["fingerprint"]
+    return {"ok": True, "baseline": write_fingerprint_baseline(fingerprint)}
+
+  try:
+    return web.json_response(await asyncio.to_thread(build))
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
@@ -197,6 +297,10 @@ async def api_params_restore_json(request: web.Request) -> web.Response:
 def register(app: web.Application) -> None:
   app.router.add_get("/api/params_bulk", api_params_bulk)
   app.router.add_post("/api/param_set", api_param_set)
+  app.router.add_get("/api/param_changes", api_param_changes)
+  app.router.add_get("/api/param_changes/verify", api_param_changes_verify)
+  app.router.add_get("/api/param_fingerprint", api_param_fingerprint)
+  app.router.add_post("/api/param_fingerprint/baseline", api_param_fingerprint_baseline)
   app.router.add_post("/api/params_restore", api_params_restore)
   app.router.add_get("/api/params_qr_dependency", api_params_qr_dependency)
   app.router.add_post("/api/params_qr_dependency/ensure", api_params_qr_dependency_ensure)

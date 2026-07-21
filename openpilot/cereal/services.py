@@ -96,7 +96,7 @@ _services: dict[str, tuple] = {
 
   "carrotMan": (True, 0.),
   "navInstructionCarrot": (True, 1., 10),
-  "carrotNavi": (False, 2.),
+  "carrotNavi": (True, 2.),
   "carrotNaviMedia": (False, 20., None, QueueSize.BIG),
 
   # debug

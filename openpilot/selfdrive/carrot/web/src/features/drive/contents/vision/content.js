@@ -8,6 +8,10 @@ import {
   getDriveVisionHudContent,
   installDriveVisionHudContentFacade,
 } from "./hud_content.js";
+import {
+  createVisionArActivationGate,
+  installArRuntimeFacade,
+} from "./ar/index.js";
 
 export const VISION_CONTENT_ID = "vision";
 export const VISION_COMPATIBILITY_ROOT_ID = "carrotStage";
@@ -74,6 +78,18 @@ export function createDriveVisionContent(options = {}) {
     || typeof hud?.activate !== "function"
   ) return null;
 
+  const arGate = createVisionArActivationGate({
+    target,
+    createRuntime: () => installArRuntimeFacade(target, {
+      document: target?.document,
+      host: compatibilityRoot,
+      /* 합성 40m 표지는 테스트 주입에서만 허용한다. 제품/리플레이에서는 실제
+       * CarrotNavi event가 없으면 아무 마커도 만들지 않는다. */
+      calibrationProbe: options.arCalibrationProbe === true,
+      probeDistanceM: 40,
+    }),
+  });
+
   let mountedHostRoot = null;
   let hostContext = Object.freeze({
     slot: String(options.context?.slot || options.slot || "primary"),
@@ -108,9 +124,11 @@ export function createDriveVisionContent(options = {}) {
       hud.activate({ ...context, host: nextHostContext, renderRoot: compatibilityRoot });
       const changed = runtime.setActive(true, context);
       renderer.lifecycle.resize();
+      arGate.activateVision();
       return changed;
     },
     deactivate(deactivateOptions = {}) {
+      arGate.deactivateVision();
       hud.deactivate(deactivateOptions);
       return runtime.setActive(false, deactivateOptions);
     },
@@ -118,6 +136,7 @@ export function createDriveVisionContent(options = {}) {
       if (!runtime.isActive?.()) return false;
       renderer.lifecycle.resize();
       hud.resize();
+      arGate.resize();
       return true;
     },
     status() {
@@ -130,6 +149,7 @@ export function createDriveVisionContent(options = {}) {
         replayActive: Boolean(target?.CarrotVisionReplay?.isActive?.()),
         hud: hud.status(),
         renderer: renderer.status(),
+        ar: arGate.status(),
       };
     },
     destroy() {
@@ -140,6 +160,7 @@ export function createDriveVisionContent(options = {}) {
         );
         compatibilityRegistration = null;
       }
+      arGate.destroy();
       hud.destroy();
       runtime.setActive(false, { keepWarm: false, reason: "content destroyed" });
       mountedHostRoot = null;

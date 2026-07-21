@@ -4,6 +4,7 @@ import { installDriveVisionHudRendererFacade } from "./hud_renderer.js";
 import { installDriveVisionHudContentFacade } from "./hud_content.js";
 import { installDriveVisionReplayRenderBridgeFacade } from "./replay_render_bridge.js";
 import { installDriveVisionReplayRenderControllerFacade } from "./replay_render_controller.js";
+import { installDriveVisionPresentedFrameChannelFacade } from "./presented_frame_channel.js";
 import { installDriveVisionHudLayoutFacade } from "./hud_layout.js";
 import { installDriveVisionHudCanvasFacade } from "./hud_canvas.js";
 import { installDriveVisionHudModelFacade } from "./hud_model.js";
@@ -41,6 +42,7 @@ export function installDriveVisionLeafFacades(target = globalThis, options = {})
   const installed = Object.freeze({
     hudRenderer,
     hudContent,
+    presentedFrames: installDriveVisionPresentedFrameChannelFacade(target),
     replayRenderBridge: installDriveVisionReplayRenderBridgeFacade(target),
     replayRenderController: installDriveVisionReplayRenderControllerFacade(target),
     hudLayout: installDriveVisionHudLayoutFacade(target),
@@ -141,6 +143,7 @@ export * from "./hud_rtc_perf.js";
 export * from "./registry_adapter.js";
 export * from "./replay_render_bridge.js";
 export * from "./replay_render_controller.js";
+export * from "./presented_frame_channel.js";
 export * from "./road_overlay_aux_renderer.js";
 export * from "./road_overlay_geometry_renderer.js";
 export * from "./road_overlay_lead_model.js";

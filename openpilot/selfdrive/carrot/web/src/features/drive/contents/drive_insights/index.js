@@ -3,6 +3,7 @@ export * from "./forward.js";
 export * from "./graph.js";
 export * from "./history.js";
 export * from "./runtime.js";
+export * from "./scheduler.js";
 export * from "./schema.js";
 export * from "./source_live.js";
 export * from "./source_replay.js";

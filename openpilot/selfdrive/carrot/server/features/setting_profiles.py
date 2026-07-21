@@ -1,6 +1,7 @@
 from aiohttp import web
 
 from ..services.setting_profiles import (
+  SettingProfileError,
   apply_setting_profile,
   create_setting_profile,
   delete_setting_profile,
@@ -8,6 +9,11 @@ from ..services.setting_profiles import (
   read_setting_profiles,
   update_setting_profile,
 )
+
+
+def _rejected(error: SettingProfileError) -> web.Response:
+  # A coded rejection the UI can translate, so the user never sees the raw text.
+  return web.json_response({"ok": False, "error": str(error), "error_code": error.code}, status=400)
 
 
 async def get_setting_profiles(request: web.Request) -> web.Response:
@@ -22,6 +28,8 @@ async def create_setting_profile_route(request: web.Request) -> web.Response:
   try:
     profile = create_setting_profile(body.get("name", ""))
     return web.json_response({"ok": True, "profile": profile, **read_setting_profiles()})
+  except SettingProfileError as e:
+    return _rejected(e)
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=400)
 
@@ -39,6 +47,8 @@ async def update_setting_profile_route(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "profile": profile, **read_setting_profiles()})
   except KeyError as e:
     return web.json_response({"ok": False, "error": str(e)}, status=404)
+  except SettingProfileError as e:
+    return _rejected(e)
   except Exception as e:
     return web.json_response({"ok": False, "error": str(e)}, status=400)
 

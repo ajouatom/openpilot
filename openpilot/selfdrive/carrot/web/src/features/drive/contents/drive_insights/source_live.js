@@ -67,21 +67,30 @@ export function createDriveInsightsLiveSource({ provider } = {}) {
   const sourceProvider = requireProvider(provider);
   let providerSnapshot = sourceProvider.snapshot();
   let normalizedSnapshot = normalizeDriveInsightsLiveSnapshot(providerSnapshot);
+  let normalizedProviderSnapshot = providerSnapshot;
   let context = liveContext(providerSnapshot);
   let destroyed = false;
   const listeners = new Set();
+  const updateListeners = new Set();
 
   const stopProvider = sourceProvider.subscribe((nextProviderSnapshot) => {
     if (destroyed) return;
     providerSnapshot = nextProviderSnapshot && typeof nextProviderSnapshot === "object"
       ? nextProviderSnapshot
       : sourceProvider.snapshot();
-    normalizedSnapshot = normalizeDriveInsightsLiveSnapshot(providerSnapshot);
     context = liveContext(providerSnapshot);
-    for (const listener of [...listeners]) listener(normalizedSnapshot);
+    for (const listener of [...updateListeners]) listener();
+    if (listeners.size) {
+      const next = snapshot();
+      for (const listener of [...listeners]) listener(next);
+    }
   });
 
   function snapshot() {
+    if (normalizedProviderSnapshot !== providerSnapshot) {
+      normalizedSnapshot = normalizeDriveInsightsLiveSnapshot(providerSnapshot);
+      normalizedProviderSnapshot = providerSnapshot;
+    }
     return normalizedSnapshot;
   }
 
@@ -97,6 +106,20 @@ export function createDriveInsightsLiveSource({ provider } = {}) {
     };
   }
 
+  // Low-rate renderers use this dirty signal and normalize only the latest
+  // provider snapshot when their independent presentation clock fires.
+  function subscribeUpdates(listener) {
+    if (destroyed) throw new Error("Drive Insights live source is destroyed");
+    if (typeof listener !== "function") throw new TypeError("Drive Insights live update listener must be a function");
+    updateListeners.add(listener);
+    let active = true;
+    return () => {
+      if (!active) return false;
+      active = false;
+      return updateListeners.delete(listener);
+    };
+  }
+
   function sourceContext() {
     return context;
   }
@@ -105,9 +128,10 @@ export function createDriveInsightsLiveSource({ provider } = {}) {
     if (destroyed) return false;
     destroyed = true;
     listeners.clear();
+    updateListeners.clear();
     if (typeof stopProvider === "function") stopProvider();
     return true;
   }
 
-  return Object.freeze({ snapshot, subscribe, context: sourceContext, destroy });
+  return Object.freeze({ snapshot, subscribe, subscribeUpdates, context: sourceContext, destroy });
 }

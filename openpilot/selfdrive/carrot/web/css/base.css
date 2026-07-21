@@ -526,6 +526,45 @@ body:has(.page-transitioning) {
   line-height: 1.4;
 }
 
+/* Collapsed detail of the parameters the server could not classify. */
+.settings-diff-invalid {
+  margin-top: 8px;
+}
+
+.settings-diff-invalid__summary {
+  color: color-mix(in srgb, var(--md-danger) 78%, var(--md-on-surface));
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.settings-diff-invalid__list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.settings-diff-invalid__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.settings-diff-invalid__key {
+  color: var(--md-on-surface);
+  font-weight: 800;
+}
+
+.settings-diff-invalid__reason {
+  color: var(--md-on-surface-var);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 640px), (aspect-ratio < 13/10) {
   .settings-diff-summary {
     grid-template-columns: repeat(4, minmax(0, 1fr));

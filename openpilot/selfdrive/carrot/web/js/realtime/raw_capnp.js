@@ -19,6 +19,8 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
   const OVERLAY_SERVICES = [
     "modelV2",
     "liveCalibration",
+    "cameraOdometry",
+    "livePose",
     "roadCameraState",
     "lateralPlan",
     "radarState",
@@ -204,6 +206,22 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
       },
     },
   };
+  // LivePose.XYZMeasurement: float32 6개(슬롯 0..5) 뒤 Bool → 비트 192(=24바이트)
+  // 중첩 스키마도 반드시 { fields: ... } 래퍼가 있어야 한다.
+  // decodeStruct 가 schema.fields 를 순회하므로, 래퍼가 없으면 예외 없이
+  // 빈 객체가 나와서 원인을 찾기 매우 어렵다(XYZT_SCHEMA 와 같은 모양).
+  const XYZ_MEASUREMENT_SCHEMA = {
+    fields: {
+      x: { kind: "float32", offset: 0 },
+      y: { kind: "float32", offset: 1 },
+      z: { kind: "float32", offset: 2 },
+      xStd: { kind: "float32", offset: 3 },
+      yStd: { kind: "float32", offset: 4 },
+      zStd: { kind: "float32", offset: 5 },
+      valid: { kind: "bool", offset: 192 },
+    },
+  };
+
 
   const XYZT_SCHEMA = {
     fields: {
@@ -301,6 +319,37 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
         roadEdgeStds: { kind: "list<float32>", offset: 10 },
         leadsV3: { kind: "list<struct>", offset: 12, schema: LEAD_V3_SCHEMA },
         meta: { kind: "struct", offset: 8, schema: MODEL_META_SCHEMA },
+      },
+    },
+    cameraOdometry: {
+      // capnp 오프셋은 ordinal 순 배치 규칙으로 산출했다.
+      //   @0..@3 이 pointer(List) → ptr 0..3
+      //   @4 frameId(UInt32) → 32bit 슬롯 0
+      //   @5 timestampEof(UInt64) → 64bit 슬롯 1 (앞 4바이트는 hole)
+      // 값이 틀리면 조용히 이상해지므로 ar/replay_guard 가 범위를 검사한다.
+      fields: {
+        trans: { kind: "list<float32>", offset: 0 },
+        rot: { kind: "list<float32>", offset: 1 },
+        transStd: { kind: "list<float32>", offset: 2 },
+        rotStd: { kind: "list<float32>", offset: 3 },
+        frameId: { kind: "uint32", offset: 0 },
+        timestampEof: { kind: "uint64", offset: 1 },
+      },
+    },
+    livePose: {
+      //   @0..@3 XYZMeasurement(struct) → ptr 0..3
+      //   @4..@6 Bool → 비트 0,1,2
+      //   @7 debugFilterState(struct) → ptr 4
+      //   @8 timestamp(UInt64) → 64bit 슬롯 1 (슬롯 0은 bool 이 점유)
+      fields: {
+        orientationNED: { kind: "struct", offset: 0, schema: XYZ_MEASUREMENT_SCHEMA },
+        velocityDevice: { kind: "struct", offset: 1, schema: XYZ_MEASUREMENT_SCHEMA },
+        accelerationDevice: { kind: "struct", offset: 2, schema: XYZ_MEASUREMENT_SCHEMA },
+        angularVelocityDevice: { kind: "struct", offset: 3, schema: XYZ_MEASUREMENT_SCHEMA },
+        inputsOK: { kind: "bool", offset: 0 },
+        posenetOK: { kind: "bool", offset: 1 },
+        sensorsOK: { kind: "bool", offset: 2 },
+        timestamp: { kind: "uint64", offset: 1 },
       },
     },
     liveCalibration: {
@@ -414,9 +463,137 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     },
   };
 
+  const NAVI_ITEM_META_SCHEMA = {
+    fields: {
+      present: { kind: "bool", offset: 0 },
+    },
+  };
+
+  const NAVI_VEHICLE_SCHEMA = {
+    fields: {
+      meta: { kind: "struct", offset: 0, schema: NAVI_ITEM_META_SCHEMA },
+      latitude: { kind: "float64", offset: 0 },
+      longitude: { kind: "float64", offset: 1 },
+      headingDeg: { kind: "float32", offset: 4 },
+      speedKph: { kind: "float32", offset: 5 },
+      roadName: { kind: "text", offset: 1 },
+    },
+  };
+
+  const NAVI_GUIDANCE_SCHEMA = {
+    fields: {
+      meta: { kind: "struct", offset: 0, schema: NAVI_ITEM_META_SCHEMA },
+      distanceM: { kind: "int32", offset: 0 },
+      timeSec: { kind: "int32", offset: 1 },
+      turnType: { kind: "int32", offset: 2 },
+      roadName: { kind: "text", offset: 1 },
+      mainText: { kind: "text", offset: 2 },
+      pointValid: { kind: "bool", offset: 96 },
+      latitude: { kind: "float64", offset: 2 },
+      longitude: { kind: "float64", offset: 3 },
+    },
+  };
+
+  const NAVI_LANE_SCHEMA = {
+    fields: {
+      meta: { kind: "struct", offset: 0, schema: NAVI_ITEM_META_SCHEMA },
+      count: { kind: "int16", offset: 0 },
+      distanceM: { kind: "int32", offset: 1 },
+      visible: { kind: "bool", offset: 16 },
+      available: { kind: "list<int16>", offset: 3 },
+    },
+  };
+
+  const NAVI_SPEED_SCHEMA = {
+    fields: {
+      roadLimitValid: { kind: "bool", offset: 32 },
+      roadLimitKph: { kind: "int16", offset: 3 },
+      sdiPresent: { kind: "bool", offset: 33 },
+      sdiType: { kind: "int32", offset: 2 },
+      sdiDistanceM: { kind: "int32", offset: 3 },
+      sdiSpeedLimitKph: { kind: "int16", offset: 8 },
+      sectionPresent: { kind: "bool", offset: 34 },
+      sectionActive: { kind: "bool", offset: 35 },
+      sectionSpeedLimitKph: { kind: "int16", offset: 9 },
+      sectionAverageKph: { kind: "float32", offset: 5 },
+      sectionRemainingDistanceM: { kind: "float32", offset: 7 },
+      sectionProgress: { kind: "float32", offset: 9 },
+    },
+  };
+
+  const NAVI_SIGNAL_SCHEMA = {
+    fields: {
+      visible: { kind: "bool", offset: 0 },
+      distanceM: { kind: "int32", offset: 1 },
+      redValid: { kind: "bool", offset: 1 },
+      redOn: { kind: "bool", offset: 2 },
+      leftValid: { kind: "bool", offset: 3 },
+      leftOn: { kind: "bool", offset: 4 },
+      greenValid: { kind: "bool", offset: 5 },
+      greenOn: { kind: "bool", offset: 6 },
+      rightValid: { kind: "bool", offset: 7 },
+      rightOn: { kind: "bool", offset: 8 },
+      uturnValid: { kind: "bool", offset: 9 },
+      uturnOn: { kind: "bool", offset: 10 },
+    },
+  };
+
+  const NAVI_CROSSROAD_SCHEMA = {
+    fields: {
+      visible: { kind: "bool", offset: 0 },
+      distanceM: { kind: "int32", offset: 1 },
+      imageCode: { kind: "int32", offset: 2 },
+    },
+  };
+
+  const NAVI_COORDINATE_SCHEMA = {
+    fields: {
+      latitude: { kind: "float64", offset: 0 },
+      longitude: { kind: "float64", offset: 1 },
+    },
+  };
+
+  const NAVI_ROUTE_SCHEMA = {
+    fields: {
+      meta: { kind: "struct", offset: 0, schema: NAVI_ITEM_META_SCHEMA },
+      remainingDistanceM: { kind: "int32", offset: 0 },
+      remainingTimeSec: { kind: "int32", offset: 1 },
+      totalDistanceM: { kind: "int32", offset: 4 },
+      polyline: { kind: "list<struct>", offset: 1, schema: NAVI_COORDINATE_SCHEMA },
+    },
+  };
+
+  const NAVI_STATUS_SCHEMA = {
+    fields: {
+      guidanceActive: { kind: "bool", offset: 0 },
+      offRoute: { kind: "bool", offset: 1 },
+      routePresent: { kind: "bool", offset: 2 },
+    },
+  };
+
+  const CARROT_NAVI_SCHEMA = {
+    fields: {
+      schemaVersion: { kind: "uint16", offset: 0 },
+      generation: { kind: "uint64", offset: 1 },
+      sessionId: { kind: "text", offset: 0 },
+      publishMonoTimeNanos: { kind: "uint64", offset: 2 },
+      connected: { kind: "bool", offset: 16 },
+      vehicle: { kind: "struct", offset: 1, schema: NAVI_VEHICLE_SCHEMA },
+      guidanceCurrent: { kind: "struct", offset: 2, schema: NAVI_GUIDANCE_SCHEMA },
+      guidanceNext: { kind: "struct", offset: 3, schema: NAVI_GUIDANCE_SCHEMA },
+      laneCurrent: { kind: "struct", offset: 4, schema: NAVI_LANE_SCHEMA },
+      speed: { kind: "struct", offset: 6, schema: NAVI_SPEED_SCHEMA },
+      trafficSignal: { kind: "struct", offset: 7, schema: NAVI_SIGNAL_SCHEMA },
+      crossroad: { kind: "struct", offset: 8, schema: NAVI_CROSSROAD_SCHEMA },
+      route: { kind: "struct", offset: 9, schema: NAVI_ROUTE_SCHEMA },
+      navigationStatus: { kind: "struct", offset: 10, schema: NAVI_STATUS_SCHEMA },
+    },
+  };
+
   const REPLAY_SCHEMAS = {
     ...HUD_SCHEMAS,
     ...OVERLAY_SCHEMAS,
+    carrotNavi: CARROT_NAVI_SCHEMA,
     driverMonitoringState: DRIVER_MONITORING_SCHEMA,
     qRoadEncodeIdx: {
       fields: {
@@ -441,12 +618,17 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     [23, "longitudinalPlan"],
     [47, "gpsLocationExternal"],
     [60, "liveParameters"],
+    [62, "cameraOdometry"],
     [63, "lateralPlan"],
     [73, "modelV2"],
     [78, "peripheralState"],
     [88, "qRoadEncodeIdx"],
     [92, "liveTorqueParameters"],
     [105, "carrotMan"],
+    [106, "carrotNavi"],
+    // 판별자는 @N 이 아니라 "union 멤버를 @N 순으로 정렬했을 때의 순번"이다.
+    // 삭제된 멤버가 남긴 @N 구멍 때문에 둘이 어긋난다(livePose 는 @129 인데 127).
+    [127, "livePose"],
     [128, "selfdriveState"],
     [129, "liveTracks"],
     [144, "liveDelay"],
@@ -637,6 +819,8 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
         return message.view.getInt8(base + offset);
       case "int16":
         return message.view.getInt16(base + offset * 2, true);
+      case "uint16":
+        return message.view.getUint16(base + offset * 2, true);
       case "bool": {
         const byteOffset = Math.floor(offset / 8);
         const bitIndex = offset % 8;
@@ -674,6 +858,21 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     const out = [];
     for (let i = 0; i < listRef.elementCount; i++) {
       out.push(message.view.getFloat32(byteOffset + i * 4, true));
+    }
+    return out;
+  }
+
+  function readInt16List(message, structRef, slotIndex) {
+    const listRef = readListSlot(message, structRef, slotIndex);
+    if (!listRef) return [];
+    if (listRef.elementSizeCode !== 3) {
+      throw new Error(`unexpected int16 list size code ${listRef.elementSizeCode}`);
+    }
+    const segment = getSegment(message, listRef.segmentIndex);
+    const byteOffset = segment.byteOffset + listRef.wordOffset * 8;
+    const out = [];
+    for (let i = 0; i < listRef.elementCount; i++) {
+      out.push(message.view.getInt16(byteOffset + i * 2, true));
     }
     return out;
   }
@@ -738,6 +937,7 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
       case "bool":
       case "int8":
       case "int16":
+      case "uint16":
       case "uint32":
       case "uint64":
       case "int32":
@@ -755,6 +955,8 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
         return readText(message, structRef, fieldSpec.offset);
       case "list<float32>":
         return readFloat32List(message, structRef, fieldSpec.offset);
+      case "list<int16>":
+        return readInt16List(message, structRef, fieldSpec.offset);
       case "struct": {
         const nestedRef = readStructSlot(message, structRef, fieldSpec.offset);
         return nestedRef ? decodeStruct(message, nestedRef, fieldSpec.schema) : null;
@@ -805,6 +1007,14 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     if (service === "controlsState" && decoded?.torqueState) {
       Object.assign(decoded, decoded.torqueState);
       delete decoded.torqueState;
+    }
+    if (service === "carrotNavi") {
+      for (const key of ["vehicle", "guidanceCurrent", "guidanceNext", "laneCurrent", "route"]) {
+        const value = decoded?.[key];
+        if (!value || typeof value !== "object") continue;
+        value.present = value.meta?.present === true;
+        delete value.meta;
+      }
     }
     return { service, logMonoTime, valid, decoded };
   }
