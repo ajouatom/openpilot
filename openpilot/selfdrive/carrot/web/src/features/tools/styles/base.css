@@ -277,6 +277,11 @@
   cursor: pointer;
 }
 
+.web-settings-row--disabled {
+  cursor: not-allowed;
+  opacity: var(--state-disabled-opacity);
+}
+
 .web-settings-row--select {
   cursor: default;
 }

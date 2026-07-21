@@ -22,6 +22,15 @@ MAX_SETTING_PROFILES = 40
 MAX_PROFILE_NAME_LEN = 40
 
 
+class SettingProfileError(ValueError):
+  """A rejected profile operation carrying a stable code the UI can translate,
+  so the user does not see a raw English message."""
+
+  def __init__(self, code: str, message: str) -> None:
+    self.code = code
+    super().__init__(message)
+
+
 def _now_iso() -> str:
   return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -183,9 +192,14 @@ def get_setting_profile(profile_id: str) -> Optional[Dict[str, Any]]:
 def create_setting_profile(name: str) -> Dict[str, Any]:
   clean_name = _clean_name(name)
   if not clean_name:
-    raise ValueError("missing profile name")
+    raise SettingProfileError("PROFILE_NAME_REQUIRED", "missing profile name")
 
   data = read_setting_profiles()
+  # write_setting_profiles keeps only the first MAX profiles, so appending past
+  # the limit would silently drop the new one while still reporting success.
+  # Fail loudly instead so the UI can tell the user the limit is reached.
+  if len(data["profiles"]) >= MAX_SETTING_PROFILES:
+    raise SettingProfileError("PROFILE_LIMIT", "profile limit reached")
   now = _now_iso()
   profile = {
     "id": uuid.uuid4().hex,
@@ -193,7 +207,9 @@ def create_setting_profile(name: str) -> Dict[str, Any]:
     "created_at": now,
     "updated_at": now,
     "meta": read_git_profile_meta(),
-    "values": snapshot_current_setting_values(),
+    # Clean here so the returned profile matches what write_setting_profiles
+    # stores; otherwise the caller sees keys that were dropped on disk.
+    "values": _clean_values(snapshot_current_setting_values()),
   }
   data["profiles"].append(profile)
   write_setting_profiles(data)
@@ -208,10 +224,16 @@ def update_setting_profile(profile_id: str, updates: Dict[str, Any]) -> Dict[str
     if "name" in updates:
       name = _clean_name(updates.get("name"))
       if not name:
-        raise ValueError("missing profile name")
+        raise SettingProfileError("PROFILE_NAME_REQUIRED", "missing profile name")
       profile["name"] = name
     if "values" in updates:
-      profile["values"] = _clean_values(updates.get("values"))
+      cleaned = _clean_values(updates.get("values"))
+      # A profile with no values is dropped by _sanitize_profile on the next
+      # read, so an update that cleans down to nothing would delete the profile
+      # as a side effect. Reject it rather than lose the profile.
+      if not cleaned:
+        raise SettingProfileError("PROFILE_NO_VALUES", "no valid values to save")
+      profile["values"] = cleaned
     profile["updated_at"] = _now_iso()
     write_setting_profiles(data)
     return profile
@@ -240,4 +262,4 @@ def apply_setting_profile(profile_id: str, values: Optional[Dict[str, Any]] = No
   if profile is None:
     raise KeyError("profile not found")
   restore_values = _clean_values(values) if values is not None else profile["values"]
-  return restore_param_values_validated(restore_values)
+  return restore_param_values_validated(restore_values, source="profile")

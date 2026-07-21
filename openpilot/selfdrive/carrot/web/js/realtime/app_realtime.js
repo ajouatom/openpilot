@@ -951,6 +951,7 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
     isCarrotDriveDataRequested("hud") ? 1 : 0,
     isCarrotDriveDataRequested("overlay") ? 1 : 0,
     isCarrotDriveDataRequested("tracks") ? 1 : 0,
+    isCarrotDriveDataRequested("ar") ? 1 : 0,
   ].join("|");
   const nextVisionWanted = isCarrotPageVisible()
     && isCarrotVisionContentRuntimeWanted()

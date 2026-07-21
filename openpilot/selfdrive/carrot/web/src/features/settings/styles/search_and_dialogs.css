@@ -1,0 +1,116 @@
+/* Settings-diff dialog, profile apply sheet and the search result list.
+   Split out of the former device.css; rule order is unchanged. */
+
+.app-dialog--settings-diff .app-dialog__sheet {
+  width: min(calc(100vw - 24px), 520px);
+  max-height: min(calc(100dvh - 24px), 680px);
+  overflow: hidden;
+}
+
+.app-dialog--settings-diff .app-dialog__body {
+  min-height: 0;
+  overflow: auto;
+  white-space: normal;
+}
+
+.setting-profile-apply {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.setting-profile-apply__title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* setting-content-enter(opacity 0?? + translateY 4px??) ?쒓굅 ??
+   ?④퀎 ?꾪솚???앸굹硫??꾪솚 以?`animation:none` ?듭젣媛 ?由??? ???좊땲硫붿씠?섏씠 ?ъ깮??
+   肄섑뀗痢좉? ??踰??섏씠??源쒕컯)+4px ?몃줈 ?먰봽(?섎떒 ?꾩븘???붾뱾)?섎뜕 吏곸젒 ?먯씤?댁뿀??
+   醫뚯슦 ?щ씪?대뱶媛 ?대? ?붾㈃ 吏꾩엯???쒗쁽?섎?濡?蹂꾨룄 肄섑뀗痢?吏꾩엯 ?좊땲硫붿씠?섏? 遺덊븘?뷀븯?? */
+
+.setting-search-result {
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 32%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.setting-search-section__body > .setting-search-result:last-child {
+  border-bottom: 0;
+}
+
+.setting-search-result:hover,
+.setting-search-result:focus-visible {
+  background: color-mix(in srgb, var(--md-surface-cont) 88%, var(--md-primary));
+  outline: none;
+}
+
+.setting-search-result:active {
+  transform: translateY(1px);
+}
+
+.setting-search-result--empty {
+  cursor: default;
+  color: var(--md-on-surface-var);
+  border: 1px solid var(--popup-item-border);
+  border-radius: var(--popup-item-radius);
+  background: var(--popup-item-bg);
+}
+
+.setting-search-result__group {
+  color: var(--md-primary);
+  font-size: var(--fs-label-md);
+  font-weight: 700;
+}
+
+.setting-search-result__title {
+  margin-top: 4px;
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-lg);
+  font-weight: 700;
+}
+
+.setting-search-result__name {
+  margin-top: 2px;
+  color: var(--md-outline);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-md);
+}
+
+.setting-search-result__descr {
+  margin-top: 6px;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  display: block;
+  overflow: visible;
+}
+
+.setting-search-result__mark {
+  background: color-mix(in srgb, var(--md-primary) 20%, transparent);
+  color: var(--md-primary);
+  padding: 0 1px;
+  border-radius: 4px;
+}
+
+.page--setting.setting-search-open .fab--setting-search {
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+}
+
+.page--setting.setting-search-open #settingScreenHost,
+.page--setting.setting-search-open #settingsMeta {
+  pointer-events: none;
+}

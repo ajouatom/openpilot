@@ -63,6 +63,9 @@ window.CarrotReplaySensorTopview = window.CarrotReplaySensorTopview || (() => {
     leadLabel: "rgba(238, 242, 248, 0.96)",
     plate: "#090c10",
   };
+  const gridCanvas = document.createElement("canvas");
+  const gridContext = gridCanvas.getContext?.("2d") || null;
+  let gridCacheKey = "";
 
   function canvasToken(name, fallback) {
     const value = window.getComputedStyle?.(document.documentElement)?.getPropertyValue(name)?.trim();
@@ -96,6 +99,7 @@ window.CarrotReplaySensorTopview = window.CarrotReplaySensorTopview || (() => {
     palette.label = withAlpha(ink, 0.50);
     palette.leadLabel = withAlpha(ink, 0.96);
     palette.plate = canvasToken("--md-surface", "#090c10");
+    gridCacheKey = "";
   }
 
   function toneColor(tone) {
@@ -374,13 +378,14 @@ window.CarrotReplaySensorTopview = window.CarrotReplaySensorTopview || (() => {
   }
 
   function resizeCanvas(size) {
-    if (!canvasEl) return;
+    if (!canvasEl) return 1;
     const pixelRatio = Math.min(2, Math.max(1, Number(window.devicePixelRatio) || 1));
     const width = Math.round(size.width * pixelRatio);
     const height = Math.round(size.height * pixelRatio);
     if (canvasEl.width !== width) canvasEl.width = width;
     if (canvasEl.height !== height) canvasEl.height = height;
     state.ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    return pixelRatio;
   }
 
   // The two ends are anchored differently on purpose.
@@ -480,6 +485,34 @@ window.CarrotReplaySensorTopview = window.CarrotReplaySensorTopview || (() => {
     }
   }
 
+  function drawGridLayer(ctx, size, pixelRatio) {
+    if (!gridContext || typeof ctx.drawImage !== "function") {
+      drawGrid(ctx, size);
+      return;
+    }
+    const pixelWidth = Math.max(1, Math.round(size.width * pixelRatio));
+    const pixelHeight = Math.max(1, Math.round(size.height * pixelRatio));
+    const key = [
+      pixelWidth,
+      pixelHeight,
+      state.rangeM,
+      state.monoFont,
+      palette.grid,
+      palette.gridMinor,
+      palette.lane,
+      palette.label,
+    ].join("|");
+    if (key !== gridCacheKey) {
+      gridCacheKey = key;
+      if (gridCanvas.width !== pixelWidth) gridCanvas.width = pixelWidth;
+      if (gridCanvas.height !== pixelHeight) gridCanvas.height = pixelHeight;
+      gridContext.setTransform?.(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      gridContext.clearRect?.(0, 0, size.width, size.height);
+      drawGrid(gridContext, size);
+    }
+    ctx.drawImage(gridCanvas, 0, 0, pixelWidth, pixelHeight, 0, 0, size.width, size.height);
+  }
+
   // The ego marker is static chrome, so it lives in the DOM as an inline SVG
   // (matching the app's icon language) instead of being hand-carved from canvas
   // paths. Only its anchor tracks the projection.
@@ -487,7 +520,8 @@ window.CarrotReplaySensorTopview = window.CarrotReplaySensorTopview || (() => {
   // lands flush with the viewport bottom with no gap to spare.
   function syncEgo(size) {
     if (!egoEl) return;
-    egoEl.style.top = `${nearY(size)}px`;
+    const top = `${nearY(size)}px`;
+    if (egoEl.style.top !== top) egoEl.style.top = top;
   }
 
   function pathForShape(ctx, x, y, shape, radius) {
@@ -724,11 +758,11 @@ window.CarrotReplaySensorTopview = window.CarrotReplaySensorTopview || (() => {
     prepare();
     if (!initializeContext()) return;
     const size = viewportSize();
-    resizeCanvas(size);
+    const pixelRatio = resizeCanvas(size);
     const ctx = state.ctx;
     ctx.clearRect(0, 0, size.width, size.height);
 
-    drawGrid(ctx, size);
+    drawGridLayer(ctx, size, pixelRatio);
     syncEgo(size);
 
     const vision = interpolatedVisionAt(state.series.modelV2, state.currentMs);

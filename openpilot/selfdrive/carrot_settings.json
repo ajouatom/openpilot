@@ -614,7 +614,8 @@
       "min": -150,
       "max": 150,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "distanceCm"
     },
     {
       "group": "조향일반",
@@ -982,7 +983,8 @@
       "min": 0,
       "max": 2500,
       "default": 0,
-      "unit": 50
+      "unit": 50,
+      "display_unit": "distanceCm"
     },
     {
       "group": "크루즈",
@@ -998,7 +1000,8 @@
       "min": 0,
       "max": 10,
       "default": 2,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "speedKph"
     },
     {
       "group": "크루즈",
@@ -1062,7 +1065,8 @@
       "min": 30,
       "max": 200,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "percent"
     },
     {
       "group": "가속설정",
@@ -1190,7 +1194,8 @@
       "min": 400,
       "max": 1000,
       "default": 600,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "distanceCm"
     },
     {
       "group": "주행튜닝",
@@ -1222,7 +1227,8 @@
       "min": -600,
       "max": 600,
       "default": -150,
-      "unit": 100
+      "unit": 100,
+      "display_unit": "distanceCm"
     },
     {
       "group": "주행튜닝",
@@ -1334,7 +1340,8 @@
       "min": 0,
       "max": 200,
       "default": 100,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "percent"
     },
     {
       "group": "감속제어",
@@ -1350,7 +1357,8 @@
       "min": 50,
       "max": 300,
       "default": 100,
-      "unit": 5
+      "unit": 5,
+      "display_unit": "percent"
     },
     {
       "group": "조향일반",
@@ -1382,7 +1390,8 @@
       "min": 0,
       "max": 100,
       "default": 20,
-      "unit": 5
+      "unit": 5,
+      "display_unit": "speedKph"
     },
     {
       "group": "조향일반",
@@ -1526,7 +1535,8 @@
       "min": 1,
       "max": 100,
       "default": 10,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "speedKph"
     },
     {
       "group": "버튼설정",
@@ -1558,7 +1568,8 @@
       "min": 1,
       "max": 100,
       "default": 10,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "speedKph"
     },
     {
       "group": "버튼설정",
@@ -1574,7 +1585,8 @@
       "min": 0,
       "max": 160,
       "default": 10,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "speedKph"
     },
     {
       "group": "버튼설정",
@@ -1590,7 +1602,8 @@
       "min": 1,
       "max": 160,
       "default": 10,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "speedKph"
     },
     {
       "group": "버튼설정",
@@ -1606,7 +1619,8 @@
       "min": 1,
       "max": 160,
       "default": 10,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "speedKph"
     },
     {
       "group": "버튼설정",
@@ -1622,7 +1636,8 @@
       "min": 1,
       "max": 160,
       "default": 10,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "speedKph"
     },
     {
       "group": "버튼설정",
@@ -1638,7 +1653,8 @@
       "min": 1,
       "max": 160,
       "default": 10,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "speedKph"
     },
     {
       "group": "버튼설정",
@@ -1686,7 +1702,8 @@
       "min": 0,
       "max": 200,
       "default": 0,
-      "unit": 5
+      "unit": 5,
+      "display_unit": "speedKph"
     },
     {
       "group": "오토크루즈",
@@ -1702,7 +1719,8 @@
       "min": 0,
       "max": 200,
       "default": 30,
-      "unit": 5
+      "unit": 5,
+      "display_unit": "speedKph"
     },
     {
       "group": "오토크루즈",
@@ -1878,7 +1896,8 @@
       "min": 0,
       "max": 3000,
       "default": 60,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "timeMin"
     },
     {
       "group": "시작",
@@ -1942,7 +1961,8 @@
       "min": 0,
       "max": 200,
       "default": 0,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "percent"
     },
     {
       "group": "감속제어",
@@ -1958,7 +1978,8 @@
       "min": -1,
       "max": 100,
       "default": 0,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "percent"
     },
     {
       "group": "크루즈",
@@ -1990,7 +2011,9 @@
       "min": -120,
       "max": 120,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "percent",
+      "risk": "high"
     },
     {
       "group": "화면",
@@ -2134,7 +2157,8 @@
       "min": 0,
       "max": 15,
       "default": 9,
-      "unit": 1
+      "unit": 1,
+      "control": "select"
     },
     {
       "group": "화면패스",
@@ -2150,7 +2174,8 @@
       "min": 0,
       "max": 20,
       "default": 12,
-      "unit": 1
+      "unit": 1,
+      "control": "select"
     },
     {
       "group": "화면패스",
@@ -2166,7 +2191,8 @@
       "min": 0,
       "max": 19,
       "default": 1,
-      "unit": 1
+      "unit": 1,
+      "control": "select"
     },
     {
       "group": "화면패스",
@@ -2182,7 +2208,8 @@
       "min": 0,
       "max": 15,
       "default": 11,
-      "unit": 1
+      "unit": 1,
+      "control": "select"
     },
     {
       "group": "화면패스",
@@ -2198,7 +2225,8 @@
       "min": 0,
       "max": 20,
       "default": 3,
-      "unit": 1
+      "unit": 1,
+      "control": "select"
     },
     {
       "group": "화면",
@@ -2214,7 +2242,8 @@
       "min": 0,
       "max": 8,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "control": "select"
     },
     {
       "group": "레인모드",
@@ -2230,7 +2259,8 @@
       "min": 0,
       "max": 200,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "speedKph"
     },
     {
       "group": "레인모드",
@@ -2246,7 +2276,8 @@
       "min": 0,
       "max": 200,
       "default": 0,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "speedKph"
     },
     {
       "group": "레인모드",
@@ -2262,7 +2293,8 @@
       "min": 0,
       "max": 500,
       "default": 0,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "distanceCm"
     },
     {
       "group": "조향일반",
@@ -2515,7 +2547,8 @@
       "cgroup": "启动设置",
       "ctitle": "声音语言",
       "cdescr": "选择提示音使用的语言。自动会跟随设备语言设置。",
-      "default": "auto"
+      "default": "auto",
+      "control": "select"
     },
     {
       "group": "시작",
@@ -2531,7 +2564,8 @@
       "min": 5,
       "max": 200,
       "default": 0,
-      "unit": 5
+      "unit": 5,
+      "display_unit": "percent"
     },
     {
       "group": "시작",
@@ -2547,7 +2581,8 @@
       "min": 5,
       "max": 200,
       "default": 0,
-      "unit": 5
+      "unit": 5,
+      "display_unit": "percent"
     },
     {
       "group": "차량간격",
@@ -2659,7 +2694,8 @@
       "min": 20,
       "max": 100,
       "default": 0,
-      "unit": 5
+      "unit": 5,
+      "display_unit": "percent"
     },
     {
       "group": "차량간격",
@@ -2675,7 +2711,8 @@
       "min": 0,
       "max": 100,
       "default": 50,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "percent"
     },
     {
       "group": "감속제어",
@@ -2691,7 +2728,8 @@
       "min": 10,
       "max": 200,
       "default": 30,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "speedKph"
     },
     {
       "group": "주행튜닝",
@@ -2771,7 +2809,8 @@
       "min": 3,
       "max": 20,
       "default": 6,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "timeSec"
     },
     {
       "group": "감속제어",
@@ -2803,7 +2842,8 @@
       "min": -1,
       "max": 100,
       "default": -1,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "speedKph"
     },
     {
       "group": "감속제어",
@@ -2819,7 +2859,8 @@
       "min": 1,
       "max": 50,
       "default": 1,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "timeSec"
     },
     {
       "group": "감속제어",
@@ -2835,7 +2876,8 @@
       "min": 10,
       "max": 100,
       "default": 35,
-      "unit": 5
+      "unit": 5,
+      "display_unit": "speedKph"
     },
     {
       "group": "감속제어",
@@ -2899,7 +2941,8 @@
       "min": 50,
       "max": 300,
       "default": 100,
-      "unit": 10
+      "unit": 10,
+      "display_unit": "percent"
     },
     {
       "group": "감속제어",
@@ -2931,7 +2974,8 @@
       "min": 80,
       "max": 120,
       "default": 105,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "percent"
     },
     {
       "group": "화면",
@@ -2947,7 +2991,8 @@
       "min": 0,
       "max": 100,
       "default": 100,
-      "unit": 5
+      "unit": 5,
+      "display_unit": "percent"
     },
     {
       "group": "화면",
@@ -3027,7 +3072,8 @@
       "min": 0,
       "max": 100,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "display_unit": "percent"
     },
     {
       "group": "외부 HUD",
@@ -3075,7 +3121,25 @@
       "min": 0,
       "max": 2,
       "default": 1,
-      "unit": 1
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": [
+          "자동",
+          "다크",
+          "라이트"
+        ],
+        "en": [
+          "Auto",
+          "Dark",
+          "Light"
+        ],
+        "zh": [
+          "自动",
+          "深色",
+          "浅色"
+        ]
+      }
     },
     {
       "group": "외부 HUD",
@@ -3091,7 +3155,22 @@
       "min": 0,
       "max": 1,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": [
+          "일반 지도",
+          "위성 지도"
+        ],
+        "en": [
+          "Normal map",
+          "Satellite map"
+        ],
+        "zh": [
+          "普通地图",
+          "卫星地图"
+        ]
+      }
     },
     {
       "group": "외부 HUD",
@@ -3107,7 +3186,27 @@
       "min": 0,
       "max": 3,
       "default": 1,
-      "unit": 1
+      "unit": 1,
+      "options": {
+        "ko": [
+          "5 FPS",
+          "10 FPS",
+          "20 FPS",
+          "30 FPS"
+        ],
+        "en": [
+          "5 FPS",
+          "10 FPS",
+          "20 FPS",
+          "30 FPS"
+        ],
+        "zh": [
+          "5 FPS",
+          "10 FPS",
+          "20 FPS",
+          "30 FPS"
+        ]
+      }
     },
     {
       "group": "외부 HUD",
@@ -3139,7 +3238,8 @@
       "min": 0,
       "max": 5,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "control": "select"
     },
     {
       "group": "외부 HUD",
@@ -3155,7 +3255,8 @@
       "min": 0,
       "max": 4,
       "default": 4,
-      "unit": 1
+      "unit": 1,
+      "control": "select"
     },
     {
       "group": "외부 HUD",

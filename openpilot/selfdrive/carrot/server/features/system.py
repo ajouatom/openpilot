@@ -103,7 +103,7 @@ def _select_live_runtime_services(snapshot: dict[str, Any]) -> dict[str, Any]:
   return out
 
 
-def _is_drive_engaged(request: web.Request) -> bool:
+def is_drive_engaged(request: web.Request) -> bool:
   broker: RealtimeBroker | None = request.app.get("realtime_broker")
   snapshot = broker.last_snapshot if broker is not None and isinstance(broker.last_snapshot, dict) else {}
   services = snapshot.get("services") if isinstance(snapshot, dict) else {}
@@ -118,7 +118,7 @@ def _is_drive_engaged(request: web.Request) -> bool:
 
 
 def _reject_if_engaged(request: web.Request) -> web.Response | None:
-  if not _is_drive_engaged(request):
+  if not is_drive_engaged(request):
     return None
   return web.json_response({"ok": False, "error": "Disengage first"}, status=409)
 
@@ -320,7 +320,7 @@ async def api_set_default(request: web.Request) -> web.Response:
       for name, meta in by_name.items()
       if _is_carrot_default_reset_param(name, meta)
     }
-    restored = restore_param_values_validated(values)
+    restored = restore_param_values_validated(values, source="reset_defaults")
     result = restored.get("result") or {}
     ok = int(result.get("fail_cnt") or 0) == 0
     applied_values = {

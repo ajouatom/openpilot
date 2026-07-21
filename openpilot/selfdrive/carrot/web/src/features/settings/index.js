@@ -4,10 +4,34 @@ import { createSettingsCatalogState } from "./catalog.js";
 import {
   createSettingsDerivedModel,
   createSettingsDerivedModelMemo,
+  localizedSettingItemText,
   localizedSettingNodeLabel,
   SETTING_DERIVED_IDS,
 } from "./derived_model.js";
 import { createSettingsEntryController } from "./entry_controller.js";
+import {
+  CHANGE_SOURCE_LABEL_KEYS,
+  formatChangeTimestamp,
+  renderSettingHistoryHtml,
+  toIsoTimestamp,
+} from "./history/change_history.js";
+import {
+  renderPopularChipHtml,
+  renderPopularChipText,
+  renderPopularDetailHtml,
+} from "./popular/popular_render.js";
+import {
+  buildPopularDisplayEntry,
+  comparePopularItems,
+  isPopularValueInRange,
+  normalizePopularNumericValue,
+  popularPrimaryCount,
+  popularSummaryValues,
+} from "./popular/popular_values.js";
+import { renderFingerprintSummary } from "./fingerprint/fingerprint_summary.js";
+import { collectRestoredValues, selectProfileApplyValues } from "./profiles/apply_plan.js";
+import { getSettingRiskLevel, renderSettingRiskBadge } from "./risk.js";
+import { highlightSearchText } from "./search/highlight.js";
 import {
   appendSettingsItemSection,
   createSettingsGroupRenderPlan,
@@ -51,9 +75,34 @@ export function installSettingsRuntimeFacade(target = globalThis, options = {}) 
       createModel: createSettingsDerivedModel,
       getModel: derivedModelMemo.get,
       localizedNodeLabel: localizedSettingNodeLabel,
+      localizedItemText: localizedSettingItemText,
       ids: SETTING_DERIVED_IDS,
     }),
     entry: Object.freeze({ createController: createSettingsEntryController }),
+    profiles: Object.freeze({
+      selectApplyValues: selectProfileApplyValues,
+      collectRestoredValues,
+    }),
+    search: Object.freeze({ highlight: highlightSearchText }),
+    fingerprint: Object.freeze({ renderSummary: renderFingerprintSummary }),
+    risk: Object.freeze({ level: getSettingRiskLevel, renderBadge: renderSettingRiskBadge }),
+    popular: Object.freeze({
+      normalizeNumeric: normalizePopularNumericValue,
+      isInRange: isPopularValueInRange,
+      compareItems: comparePopularItems,
+      buildDisplayEntry: buildPopularDisplayEntry,
+      primaryCount: popularPrimaryCount,
+      summaryValues: popularSummaryValues,
+      renderChipText: renderPopularChipText,
+      renderChipHtml: renderPopularChipHtml,
+      renderDetailHtml: renderPopularDetailHtml,
+    }),
+    history: Object.freeze({
+      renderHtml: renderSettingHistoryHtml,
+      formatTimestamp: formatChangeTimestamp,
+      toIso: toIsoTimestamp,
+      sourceLabelKeys: CHANGE_SOURCE_LABEL_KEYS,
+    }),
     view: Object.freeze({
       appendItemSection: appendSettingsItemSection,
       createGroupPlan: createSettingsGroupRenderPlan,

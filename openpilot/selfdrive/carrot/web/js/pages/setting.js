@@ -18,6 +18,11 @@ if (
 ) {
   throw new Error("CarrotSettingsRuntime is unavailable");
 }
+// Row markup, step behaviour and segment keyboard support all come from the
+// shared UI bundle. Fail here rather than at the first render of every row.
+if (!window.CarrotUI?.settingRow?.createControl || !window.CarrotUI?.numericStepper?.create) {
+  throw new Error("Carrot setting row components are unavailable");
+}
 const settingAuxState = carrotSettingsRuntime.aux;
 const settingCatalogState = carrotSettingsRuntime.catalog;
 const settingDerivedRuntime = carrotSettingsRuntime.derived;
@@ -54,6 +59,12 @@ function isSettingFavoritesGroup(group) {
 // 대>중>소 노드(카테고리/그룹/섹션)의 현재 언어 라벨. ko/en/zh 직접 보유 노드용.
 function settingNodeLabel(node) {
   return settingDerivedRuntime.localizedNodeLabel(node, LANG);
+}
+
+// A parameter item stores its title in title/etitle/ctitle, not ko/en/zh, so
+// it needs the item text resolver, not the node label one.
+function settingItemTitle(item, fallback = "") {
+  return settingDerivedRuntime.localizedItemText(item, "title", "etitle", fallback, LANG);
 }
 
 function settingProfileGroup(profileId) {
@@ -509,22 +520,13 @@ function getSettingGroupLabel(group) {
   return getSettingDerivedModel().getGroupLabel(group);
 }
 
-const SETTING_CONTROL_OVERRIDES = {
-  ShowPathMode: { kind: "select" },
-  ShowPathColor: { kind: "select" },
-  ShowPathColorCruiseOff: { kind: "select" },
-  ShowPathModeLane: { kind: "select" },
-  ShowPathColorLane: { kind: "select" },
-  ShowPlotMode: { kind: "select" },
-  ClusterHudScreenMode: { kind: "select" },
-  ClusterHudRadarInfo: { kind: "select" },
-  ClusterNaviMapTheme: { kind: "select" },
-  ClusterNaviMapType: { kind: "select" },
-  SoundLanguageSetting: { kind: "select" },
-};
+// Control kinds a parameter may declare via its "control" field.
+const SETTING_CONTROL_KINDS = ["toggle", "segmented", "select", "slider"];
 
 function getSettingControlConfig(p) {
-  const override = SETTING_CONTROL_OVERRIDES[p?.name] || {};
+  // A parameter pins its control with a "control" field in
+  // carrot_settings.json; otherwise the kind is inferred from its range below.
+  const override = SETTING_CONTROL_KINDS.includes(p?.control) ? { kind: p.control } : {};
   const min = Number(p?.min);
   const max = Number(p?.max);
   const unit = Math.max(1, Number(p?.unit) || 1);
@@ -556,86 +558,41 @@ const SETTING_DISPLAY_UNIT_TYPES = Object.freeze({
   degree: "deg",
 });
 
-const SETTING_PARAM_DISPLAY_TYPES = Object.freeze({
-  PathOffset: "distanceCm",
-  CruiseOnDist: "distanceCm",
-  CruiseEcoControl: "speedKph",
-  StopDistanceCarrot: "distanceCm",
-  TrafficStopDistanceAdjust: "distanceCm",
-  AutoTurnControlSpeedTurn: "speedKph",
-  CruiseSpeedUnit: "speedKph",
-  CruiseSpeedUnitBasic: "speedKph",
-  CruiseSpeed1: "speedKph",
-  CruiseSpeed2: "speedKph",
-  CruiseSpeed3: "speedKph",
-  CruiseSpeed4: "speedKph",
-  CruiseSpeed5: "speedKph",
-  AutoGasTokSpeed: "speedKph",
-  AutoGasCancelSpeed: "speedKph",
-  MaxTimeOffroadMin: "timeMin",
-  AutoSpeedUptoRoadSpeedLimit: "percent",
-  AutoRoadSpeedAdjust: "percent",
-  ApplyModelSpeed: "percent",
-  UseLaneLineSpeed: "speedKph",
-  UseLaneLineCurveSpeed: "speedKph",
-  AdjustLaneOffset: "distanceCm",
-  SoundVolumeAdjust: "percent",
-  SoundVolumeAdjustEngage: "percent",
-  AutoCurveSpeedLowerLimit: "speedKph",
-  AutoNaviSpeedCtrlEnd: "timeSec",
-  AutoNaviSpeedBumpTime: "timeSec",
-  AutoNaviSpeedBumpSpeed: "speedKph",
-  AutoRoadSpeedLimitOffset: "speedKph",
-  AutoCurveSpeedFactor: "percent",
-  MapTurnSpeedFactor: "percent",
-  AutoNaviSpeedSafetyFactor: "percent",
-  RadarReactionFactor: "percent",
-  SteerRatioRate: "percent",
-  DynamicTFollowLC: "percent",
-  TFollowDecelBoost: "percent",
-  ShowCustomBrightness: "percent",
-  ClusterHudBrightness: "percent",
-});
 
 function getSettingDisplayType(name) {
-  const key = String(name || "").trim();
-  return SETTING_PARAM_DISPLAY_TYPES[key] || "raw";
+  // The unit is declared by the parameter itself in carrot_settings.json, so
+  // adding a parameter no longer means editing a table in here as well.
+  const declared = findSettingItemByName(String(name || "").trim())?.item?.display_unit;
+  return declared && declared in SETTING_DISPLAY_UNIT_TYPES ? declared : "raw";
 }
 
 function getSettingDisplayUnit(name) {
   return SETTING_DISPLAY_UNIT_TYPES[getSettingDisplayType(name)] || "";
 }
 
-function getClusterNaviMapOptionLabel(name, value) {
-  const labels = {
-    ClusterNaviMapTheme: {
-      ko: ["자동", "다크", "라이트"],
-      en: ["Auto", "Dark", "Light"],
-      zh: ["自动", "深色", "浅色"],
-    },
-    ClusterNaviMapType: {
-      ko: ["일반 지도", "위성 지도"],
-      en: ["Normal map", "Satellite map"],
-      zh: ["普通地图", "卫星地图"],
-    },
-    ClusterNaviMapFps: {
-      ko: ["5 FPS", "10 FPS", "20 FPS", "30 FPS"],
-      en: ["5 FPS", "10 FPS", "20 FPS", "30 FPS"],
-      zh: ["5 FPS", "10 FPS", "20 FPS", "30 FPS"],
-    },
-  };
-  const values = labels[String(name || "")];
-  if (!values) return null;
+// A parameter can name its choices with an "options" block in
+// carrot_settings.json: { ko: [...], en: [...], zh: [...] } indexed from min.
+// Without it the raw number is shown, which is the behaviour for most
+// parameters.
+function getDeclaredSettingOptionLabel(name, value) {
+  const item = findSettingItemByName(String(name || "").trim())?.item;
+  const options = item?.options;
+  if (!options) return null;
+
   const language = LANG === "zh" ? "zh" : (LANG === "ko" ? "ko" : "en");
-  return values[language][Number(value)] ?? null;
+  const labels = options[language] || options.en || options.ko;
+  if (!Array.isArray(labels)) return null;
+
+  const index = Number(value) - Number(item.min ?? 0);
+  return Number.isInteger(index) ? (labels[index] ?? null) : null;
 }
 
 function formatSettingDisplayValue(p, value) {
   if (String(p?.name || "") === "SoundLanguageSetting") {
     return getSoundLanguageSettingOptionLabel(value);
   }
-  const mapOptionLabel = getClusterNaviMapOptionLabel(p?.name, value);
-  if (mapOptionLabel !== null) return mapOptionLabel;
+  const declaredOptionLabel = getDeclaredSettingOptionLabel(p?.name, value);
+  if (declaredOptionLabel !== null) return declaredOptionLabel;
   const text = String(value);
   const unit = getSettingDisplayUnit(p?.name);
   return unit ? `${text}${unit}` : text;
@@ -664,121 +621,53 @@ function formatSettingPopularValue(p, raw) {
   return formatSettingDisplayValue(p, raw);
 }
 
+// Popular-value maths (normalize / range / order / display entry) is pure and
+// lives in features/settings/popular/popular_values.js. These wrappers inject
+// the app's value formatter and locale.
+function popularCompareOptions(p) {
+  return {
+    formatValue: (raw) => formatSettingPopularValue(p, raw),
+    locale: LANG === "ko" ? "ko-KR" : undefined,
+  };
+}
+
 function normalizeSettingPopularNumericValue(p, raw) {
-  if (raw === null || raw === undefined || raw === "") return null;
-  const min = Number(p?.min);
-  const max = Number(p?.max);
-  const text = String(raw).trim().toLowerCase();
-  if (min === 0 && max === 1) {
-    if (text === "1" || text === "true" || text === "on") return 1;
-    if (text === "0" || text === "false" || text === "off") return 0;
-  }
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
+  return carrotSettingsRuntime.popular.normalizeNumeric(p, raw);
 }
 
 function isSettingPopularValueInRange(p, raw) {
-  const min = Number(p?.min);
-  const max = Number(p?.max);
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return true;
-  const value = normalizeSettingPopularNumericValue(p, raw);
-  if (value === null) return false;
-  return value >= min && value <= max;
-}
-
-function compareSettingPopularValueItems(p, a, b, aIndex = 0, bIndex = 0) {
-  const aCount = Number(a?.count ?? 0);
-  const bCount = Number(b?.count ?? 0);
-  const safeACount = Number.isFinite(aCount) ? aCount : 0;
-  const safeBCount = Number.isFinite(bCount) ? bCount : 0;
-  if (safeACount !== safeBCount) return safeBCount - safeACount;
-
-  const aValue = normalizeSettingPopularNumericValue(p, a?.value);
-  const bValue = normalizeSettingPopularNumericValue(p, b?.value);
-  if (aValue !== null && bValue !== null && aValue !== bValue) return aValue - bValue;
-  if (aValue !== null && bValue === null) return -1;
-  if (aValue === null && bValue !== null) return 1;
-
-  const aText = formatSettingPopularValue(p, a?.value);
-  const bText = formatSettingPopularValue(p, b?.value);
-  const textOrder = aText.localeCompare(bText, LANG === "ko" ? "ko-KR" : undefined, { numeric: true, sensitivity: "base" });
-  if (textOrder !== 0) return textOrder;
-
-  return aIndex - bIndex;
+  return carrotSettingsRuntime.popular.isInRange(p, raw);
 }
 
 function getSettingPopularDisplayEntry(p, entry) {
-  if (!entry || typeof entry !== "object") return null;
-  const sample = Number(entry?.sample ?? entry?.sample_count ?? 0);
-  if (!Number.isFinite(sample) || sample < 1) return null;
-  if (!isSettingPopularValueInRange(p, entry?.value)) return null;
-  const topValues = Array.isArray(entry?.top_values)
-    ? entry.top_values.map((item, index) => ({ item, index })).filter(({ item }) => {
-      const count = Number(item?.count ?? 0);
-      return Number.isFinite(count) && count > 0 && isSettingPopularValueInRange(p, item?.value);
-    }).sort((a, b) => compareSettingPopularValueItems(p, a.item, b.item, a.index, b.index))
-      .slice(0, 10)
-      .map(({ item }) => item)
-    : [];
-  return { ...entry, top_values: topValues };
+  return carrotSettingsRuntime.popular.buildDisplayEntry(p, entry, popularCompareOptions(p));
 }
 
 function getSettingPopularPrimaryCount(entry) {
-  const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
-  const count = Number(values[0]?.count ?? entry?.top_count ?? entry?.count ?? 0);
-  return Number.isFinite(count) ? count : 0;
+  return carrotSettingsRuntime.popular.primaryCount(entry);
 }
 
 function getSettingPopularSummaryValues(entry) {
-  const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
-  if (!values.length) return [];
+  return carrotSettingsRuntime.popular.summaryValues(entry);
+}
 
-  const topCount = getSettingPopularPrimaryCount(entry);
-  if (topCount < 2) return [];
-
-  const tiedValues = values.filter((item) => {
-    const count = Number(item?.count ?? 0);
-    return Number.isFinite(count) && count === topCount;
-  });
-
-  return tiedValues.length <= 2 ? tiedValues : [];
+// Popular-value chip/detail rendering lives in
+// features/settings/popular/popular_render.js; these inject the app's value
+// formatter, translator, escape and the aux-derived title/updated strings.
+function popularRenderOptions(p) {
+  return {
+    formatValue: (raw) => formatSettingPopularValue(p, raw),
+    text: getUIText,
+    escape: escapeHtml,
+  };
 }
 
 function renderSettingPopularChipText(p, entry) {
-  const summaryValues = getSettingPopularSummaryValues(entry);
-  if (!summaryValues.length) return "";
-  const sample = getSettingPopularPrimaryCount(entry);
-  const values = summaryValues.map((item) => formatSettingPopularValue(p, item?.value)).filter(Boolean);
-  if (!sample || !values.length) return "";
-  const label = getUIText("setting_popular_value_chip_label", "내 차종 인기값");
-  if (values.length === 1) {
-    return getUIText("setting_popular_value_chip", "{label} ({sample}대) {value}", {
-      label,
-      sample,
-      value: values[0],
-    });
-  }
-  return getUIText("setting_popular_value_chip_tied", "{label} (각 {sample}대) {values}", {
-    label,
-    sample,
-    values: values.join(" · "),
-  });
+  return carrotSettingsRuntime.popular.renderChipText(entry, popularRenderOptions(p));
 }
 
 function renderSettingPopularChipHtml(p, entry) {
-  const summaryValues = getSettingPopularSummaryValues(entry);
-  if (!summaryValues.length) return "";
-  const sample = getSettingPopularPrimaryCount(entry);
-  const values = summaryValues.map((item) => formatSettingPopularValue(p, item?.value)).filter(Boolean);
-  if (!sample || !values.length) return "";
-  const sampleText = values.length === 1
-    ? getUIText("setting_popular_value_chip_sample", "{sample}대", { sample })
-    : getUIText("setting_popular_value_chip_each_sample", "각 {sample}대", { sample });
-  return `
-    <span class="setting-popular-value-chip__car">${escapeHtml(getUIText("setting_popular_value_chip_label", "내 차종 인기값"))}</span>
-    <span class="setting-popular-value-chip__label">(</span><span class="setting-popular-value-chip__accent">${escapeHtml(sampleText)}</span><span class="setting-popular-value-chip__label">)</span>
-    <span class="setting-popular-value-chip__accent">${escapeHtml(values.join(" · "))}</span>
-  `;
+  return carrotSettingsRuntime.popular.renderChipHtml(entry, popularRenderOptions(p));
 }
 
 function getSettingPopularDetailTitle() {
@@ -801,77 +690,72 @@ function formatSettingPopularUpdated(epochSec) {
 }
 
 function renderSettingPopularDetailHtml(p, entry) {
-  const values = Array.isArray(entry?.top_values) ? entry.top_values : [];
-  if (!values.length) {
-    return `<div class="setting-popular-detail"><div class="setting-popular-detail__empty">${escapeHtml(getUIText("setting_popular_value_empty", "표시할 설정값이 없습니다."))}</div></div>`;
-  }
-
-  const counts = values.map((item) => Number(item?.count ?? 0)).filter((count) => Number.isFinite(count) && count > 0);
-  const maxCount = Math.max(1, ...counts);
-
-  const rows = values.map((item) => {
-    const value = formatSettingPopularValue(p, item?.value);
-    const count = Number(item?.count ?? 0);
-    const width = Math.max(4, Math.min(100, Math.round((Math.max(0, count) / maxCount) * 100)));
-    return `
-      <button type="button" class="setting-popular-detail__row" style="--setting-popular-width:${width}%" data-setting-popular-value="${escapeHtml(item?.value ?? "")}">
-        <span class="setting-popular-detail__marker" aria-hidden="true"></span>
-        <span class="setting-popular-detail__main">
-          <span class="setting-popular-detail__value">${escapeHtml(value)}</span>
-          ${values.length > 1 ? `<span class="setting-popular-detail__bar" aria-hidden="true"></span>` : ""}
-        </span>
-        <span class="setting-popular-detail__count">${escapeHtml(`${count}대`)}</span>
-      </button>
-    `;
-  }).join("");
-
-  const updated = formatSettingPopularUpdated(settingAuxState.popular.getState().fetchedAt);
-  const updatedHtml = updated
-    ? `<div class="setting-popular-detail__updated" style="margin-top:8px;font-size:11px;color:var(--md-on-surface-var,#8a8f98)">${escapeHtml(getUIText("setting_popular_value_updated", "최근 업데이트: {time}", { time: updated }))}</div>`
-    : "";
-
-  return `
-    <div class="setting-popular-detail${values.length <= 1 ? " setting-popular-detail--single" : ""}">
-      <div class="setting-popular-detail__head">
-        <span class="setting-popular-detail__name">${escapeHtml(getSettingPopularDetailTitle())}</span>
-        <span class="setting-popular-detail__range">${escapeHtml(getUIText("setting_popular_value_common_values", "많이 쓰는 값"))}</span>
-      </div>
-      <div class="setting-popular-detail__rows">${rows}</div>
-      ${updatedHtml}
-    </div>
-  `;
+  return carrotSettingsRuntime.popular.renderDetailHtml(entry, {
+    ...popularRenderOptions(p),
+    title: getSettingPopularDetailTitle(),
+    updatedText: formatSettingPopularUpdated(settingAuxState.popular.getState().fetchedAt),
+  });
 }
 
+// The step multiplier lives on the device, not in the browser. Keeping it in
+// localStorage meant it was lost on every browser switch and on every "clear
+// your cache" instruction, which is advice this project hands out often.
 const SETTING_UNIT_STORAGE_KEY = "carrot.settingUnitIndex.v1";
-let settingUnitIndexStore = null;
+let settingUnitIndexHydrated = false;
 
-function getSettingUnitIndexStore() {
-  if (settingUnitIndexStore) return settingUnitIndexStore;
-  try {
-    settingUnitIndexStore = JSON.parse(localStorage.getItem(SETTING_UNIT_STORAGE_KEY) || "{}") || {};
-  } catch (_) {
-    settingUnitIndexStore = {};
+function hydrateSettingUnitIndex(units) {
+  if (units && typeof units === "object") {
+    Object.entries(units).forEach(([name, index]) => {
+      const value = Number(index);
+      if (Number.isInteger(value) && value > 0 && value < UNIT_CYCLE.length) UNIT_INDEX[name] = value;
+    });
   }
-  return settingUnitIndexStore;
+  // Runs even when the server sent nothing, so an older server (or an empty
+  // store) still gets whatever the browser was holding.
+  if (settingUnitIndexHydrated) return;
+  settingUnitIndexHydrated = true;
+  migrateLocalSettingUnitIndex();
+}
+
+// One-time lift of whatever the browser still holds, so nobody loses the
+// multipliers they had set before this moved to the server.
+function migrateLocalSettingUnitIndex() {
+  let stored = null;
+  try {
+    stored = JSON.parse(localStorage.getItem(SETTING_UNIT_STORAGE_KEY) || "null");
+  } catch (_) {
+    stored = null;
+  }
+  if (!stored || typeof stored !== "object") return;
+
+  const units = {};
+  Object.entries(stored).forEach(([name, index]) => {
+    const value = Number(index);
+    if (!Number.isInteger(value) || value <= 0 || value >= UNIT_CYCLE.length) return;
+    if (name in UNIT_INDEX) return;
+    UNIT_INDEX[name] = value;
+    units[name] = value;
+  });
+
+  try {
+    localStorage.removeItem(SETTING_UNIT_STORAGE_KEY);
+  } catch (_) {}
+  if (Object.keys(units).length) {
+    postJson("/api/setting_unit_index", { units }).catch(() => {});
+  }
 }
 
 function saveSettingUnitIndex(name, index) {
   const key = String(name || "").trim();
   if (!key) return;
-  try {
-    const store = getSettingUnitIndexStore();
-    store[key] = index;
-    localStorage.setItem(SETTING_UNIT_STORAGE_KEY, JSON.stringify(store));
-  } catch (_) {}
+  postJson("/api/setting_unit_index", { units: { [key]: index } }).catch(() => {
+    showAppToast(getUIText("setting_unit_save_failed", "배율을 저장하지 못했습니다."), { tone: "error" });
+  });
 }
 
 function getSettingUnitIndex(name) {
   const key = String(name || "").trim();
   if (!key) return 0;
-  if (!(key in UNIT_INDEX)) {
-    const saved = Number(getSettingUnitIndexStore()[key]);
-    UNIT_INDEX[key] = Number.isInteger(saved) && saved >= 0 && saved < UNIT_CYCLE.length ? saved : 0;
-  }
   if (!Number.isInteger(UNIT_INDEX[key]) || UNIT_INDEX[key] < 0 || UNIT_INDEX[key] >= UNIT_CYCLE.length) {
     UNIT_INDEX[key] = 0;
   }
@@ -990,10 +874,22 @@ function syncSettingControlState(row, value) {
   const slider = row.querySelector(".setting-slider__input");
   if (slider) slider.value = text;
 
-  row.querySelectorAll(".setting-segment").forEach((button) => {
+  const segments = row.querySelectorAll(".setting-segment");
+  segments.forEach((button) => {
     button.classList.toggle("is-active", String(button.dataset.value) === text);
     button.setAttribute("aria-pressed", String(button.dataset.value) === text ? "true" : "false");
   });
+  if (segments.length) {
+    // Selection moved, so the keyboard entry point has to move with it.
+    // create() returns the already-mounted controller and re-syncs it.
+    const group = row.querySelector(".setting-segments");
+    if (group) {
+      window.CarrotUI?.segmentedControl?.create(group, {
+        itemSelector: ".setting-segment",
+        selectedAttribute: "aria-pressed",
+      });
+    }
+  }
 
   const select = row.querySelector(".setting-select");
   if (select) {
@@ -1038,6 +934,7 @@ function getLandscapeDefaultSettingGroup() {
 }
 
 function primeSettingsSnapshotForFirstEntry(snapshot = window.CarrotSettingsStore?.peek?.()) {
+  hydrateSettingUnitIndex(snapshot?.unit_index);
   const catalog = settingEntryController.primeSnapshot(snapshot);
   if (!catalog || !isCompactLandscapeMode()) return catalog;
 
@@ -1159,13 +1056,14 @@ async function applySettingProfile(profile) {
   if (selected <= 0 || !ok) return;
 
   try {
-    const result = await postJson("/api/setting_profiles/apply", { id: profile.id, values: profile.values || {} });
-    const failed = new Set((result.result?.fails || []).map((entry) => String(entry?.key || "")).filter(Boolean));
-    const restoredValues = {};
-    (result.preview?.entries || []).forEach((entry) => {
-      if (!entry?.apply || failed.has(String(entry.key))) return;
-      restoredValues[entry.key] = entry.value;
-    });
+    // Send only what the preview marked for apply, not the whole profile. The
+    // server still re-checks each value, so an entry that quietly became
+    // identical is skipped there; the 162 unchanged parameters are just no
+    // longer shipped and re-read on every apply. Selection logic is pure and
+    // tested in features/settings/profiles/apply_plan.js.
+    const applyValues = carrotSettingsRuntime.profiles.selectApplyValues(preview, profile.values);
+    const result = await postJson("/api/setting_profiles/apply", { id: profile.id, values: applyValues });
+    const restoredValues = carrotSettingsRuntime.profiles.collectRestoredValues(result);
     if (Object.keys(restoredValues).length) {
       window.dispatchEvent(new CustomEvent("carrot:paramsrestored", {
         detail: { source: "setting_profile", values: restoredValues },
@@ -1354,16 +1252,18 @@ function appendSettingProfileHeader(profile, container) {
   menuPanel.setAttribute("role", "menu");
   menuPanel.setAttribute("aria-hidden", "true");
   menuPanel.hidden = true;
+  // Order: search, apply, delete. Search is the low-stakes, most-used action
+  // so it leads; the destructive delete is last, away from the others.
+  menuPanel.appendChild(makeSettingProfileMenuItem({
+    label: getUIText("setting_profile_search", "Search Profile"),
+    icon: "search",
+    onClick: () => openSettingSearchPanel({ scope: { type: "profile", profileId: profile.id } }).catch(() => {}),
+  }));
   menuPanel.appendChild(makeSettingProfileMenuItem({
     label: getUIText("apply", "Apply"),
     icon: "apply",
     onClick: () => applySettingProfile(profile),
     className: "setting-profile-menu__item--primary",
-  }));
-  menuPanel.appendChild(makeSettingProfileMenuItem({
-    label: getUIText("setting_profile_search", "Search Profile"),
-    icon: "search",
-    onClick: () => openSettingSearchPanel({ scope: { type: "profile", profileId: profile.id } }).catch(() => {}),
   }));
   menuPanel.appendChild(makeSettingProfileMenuItem({
     label: getUIText("delete", "Delete"),
@@ -1487,17 +1387,10 @@ function getSettingSearchEntries() {
   return settingSearchEntries;
 }
 
+// Pure highlight logic (and its escaping guarantees) live in
+// features/settings/search/highlight.js; this passes the app's escapeHtml in.
 function highlightSettingSearchText(text, query) {
-  const raw = String(text ?? "");
-  const q = String(query || "").trim().toLowerCase();
-  if (!raw || !q) return escapeHtml(raw);
-
-  const lower = raw.toLowerCase();
-  const start = lower.indexOf(q);
-  if (start < 0) return escapeHtml(raw);
-
-  const end = start + q.length;
-  return `${escapeHtml(raw.slice(0, start))}<mark class="setting-search-result__mark">${escapeHtml(raw.slice(start, end))}</mark>${escapeHtml(raw.slice(end))}`;
+  return carrotSettingsRuntime.search.highlight(text, query, { escape: escapeHtml });
 }
 
 function getSettingSearchScopeLabel() {
@@ -1979,6 +1872,99 @@ if (btnSettingFabProfileAdd) {
   };
 }
 
+// One screen that answers "is my configuration still what it was, and can I
+// trust the change history?" — the two questions nobody could answer while
+// settings were drifting.
+if (btnSettingFabFingerprint) {
+  btnSettingFabFingerprint.onclick = async () => {
+    closeSettingFabMenu();
+    try {
+      const [fingerprint, integrity, recent] = await Promise.all([
+        getJson("/api/param_fingerprint"),
+        getJson("/api/param_changes/verify"),
+        // Over-fetch so 12 real settings remain after synthetic keys are dropped.
+        getJson("/api/param_changes?limit=60").catch(() => ({ changes: [] })),
+      ]);
+      // Show only real settings, dropping any leftover records for synthetic
+      // keys (GitPullTime) or hardware values (DeviceType) already in the log
+      // from before they were filtered out. This hides them without a reboot.
+      const settingChanges = (recent.changes || [])
+        .filter((record) => findSettingItemByName(record?.name))
+        .slice(0, 12);
+      // Each row is shown by its human title (not the internal key) and its
+      // value is formatted the same way the settings screen shows it (units,
+      // ON/OFF), so a non-developer reads "타이어공기압 표시  꺼짐 → 켜짐"
+      // instead of "ShowTpms  0 → 1".
+      const historyHtml = carrotSettingsRuntime.history.renderHtml(settingChanges, {
+        escape: escapeHtml,
+        text: getUIText,
+        locale: LANG === "ko" ? "ko-KR" : undefined,
+        withName: true,
+        displayName: (record) => {
+          const item = findSettingItemByName(record?.name)?.item;
+          return settingItemTitle(item, record?.name || "") || record?.name || "";
+        },
+        formatValue: (value) => String(value ?? ""),
+        formatFor: (record, value) => {
+          const item = findSettingItemByName(record?.name)?.item;
+          return item ? formatSettingPopularValue(item, value) : String(value ?? "");
+        },
+      });
+      // Summary (code + one-line meaning + count/integrity note) is a pure,
+      // tested module; the page only supplies the fetched data and formatters.
+      const summaryHtml = carrotSettingsRuntime.fingerprint.renderSummary(
+        {
+          fingerprint: fingerprint.fingerprint,
+          count: fingerprint.count,
+          integrity,
+          baseline: fingerprint.baseline,
+          changed: fingerprint.changed,
+          changed_count: fingerprint.changed_count,
+        },
+        { escape: escapeHtml, text: getUIText },
+      );
+      // "지금을 기준으로" saves the current settings as the reference. The
+      // dialog has no per-button hook, so the click is delegated while it is
+      // open and detached when it closes.
+      const onBaselineSave = async (event) => {
+        const button = event.target.closest("[data-setting-fingerprint-save]");
+        if (!button) return;
+        button.disabled = true;
+        try {
+          await postJson("/api/param_fingerprint/baseline", {});
+          const status = button.parentElement?.querySelector(".setting-fingerprint__status");
+          if (status) {
+            status.className = "setting-fingerprint__status setting-fingerprint__status--same";
+            status.textContent = getUIText("setting_fingerprint_same", "기준과 같아요");
+          }
+          button.remove();
+          showAppToast(getUIText("setting_fingerprint_saved", "지금 설정을 기준으로 저장했어요"));
+        } catch (err) {
+          button.disabled = false;
+          showAppToast(err?.message || getUIText("failed", "Failed"), { tone: "error" });
+        }
+      };
+      document.addEventListener("click", onBaselineSave);
+      try {
+        await openAppDialog({
+          mode: "alert",
+          title: getUIText("setting_fingerprint_title", "내 설정 코드"),
+          html: true,
+          messageHtml: summaryHtml
+            + `<div class="setting-fingerprint-history">`
+            + `<div class="setting-fingerprint-history__title">`
+            + `${escapeHtml(getUIText("setting_fingerprint_recent", "최근 바뀐 설정"))}</div>${historyHtml}</div>`,
+          confirmLabel: getUIText("ok", "OK"),
+        });
+      } finally {
+        document.removeEventListener("click", onBaselineSave);
+      }
+    } catch (e) {
+      showAppToast(e?.message || getUIText("failed", "Failed"), { tone: "error" });
+    }
+  };
+}
+
 if (btnSettingFabResetDefaults) {
   btnSettingFabResetDefaults.onclick = async () => {
     closeSettingFabMenu();
@@ -2384,9 +2370,14 @@ async function renderItems(group, options = {}) {
 
     const left = document.createElement("div");
     left.className = "setting-copy";
+    // A "risk" field on the parameter (carrot_settings.json) renders a warning
+    // badge next to its title — declared in data, so no code change is needed
+    // to mark a parameter risky.
+    const riskBadge = carrotSettingsRuntime.risk.renderBadge(p, { escape: escapeHtml, text: getUIText });
     left.innerHTML = `
       <div class="setting-title-row">
         ${settingMarqueeHtml(title, "title")}
+        ${riskBadge}
         ${renderSettingFavoriteMark(name)}
       </div>
       ${settingMarqueeHtml(name, "name")}
@@ -2395,111 +2386,32 @@ async function renderItems(group, options = {}) {
 
     const controlConfig = getSettingControlConfig(p);
     const compactNumeric = controlConfig.kind === "slider";
-    const ctrl = document.createElement("div");
-    ctrl.className = `ctrl ctrl--${compactNumeric ? "value" : controlConfig.kind}`;
+    // The markup comes from the shared component; this file keeps the wiring.
+    const control = window.CarrotUI.settingRow.createControl({
+      document,
+      kind: compactNumeric ? "stepper" : controlConfig.kind,
+      label: title || name,
+      valueLabel: getUIText("setting_value_edit", "Edit value"),
+      previousLabel: getUIText("setting_value_previous", "Previous value"),
+      nextLabel: getUIText("setting_value_next", "Next value"),
+      optionValues: controlConfig.kind === "segmented" ? getSettingOptionValues(name, controlConfig) : [],
+      optionLabel: (optionValue) => getSettingOptionLabel(name, optionValue),
+      min: controlConfig.min,
+      max: controlConfig.max,
+      step: controlConfig.unit,
+    });
 
-    const val = document.createElement("button");
-    val.type = "button";
-    val.className = compactNumeric ? "value-surface val setting-value-compact" : "value-surface val";
-    val.setAttribute("aria-label", getUIText("setting_value_edit", "Edit value"));
-
-    let btnMinus = null;
-    let btnPlus = null;
-    let unitBtn = null;
-    let sliderInput = null;
-    let toggleInput = null;
-    let selectInput = null;
-    const segmentButtons = [];
-
-    if (controlConfig.kind === "toggle") {
-      const switchLabel = document.createElement("label");
-      switchLabel.className = "c-switch";
-      toggleInput = document.createElement("input");
-      toggleInput.type = "checkbox";
-      toggleInput.className = "c-switch__input";
-      toggleInput.setAttribute("aria-label", title || name);
-      const switchTrack = document.createElement("span");
-      switchTrack.className = "c-switch__track";
-      switchLabel.appendChild(toggleInput);
-      switchLabel.appendChild(switchTrack);
-      ctrl.appendChild(switchLabel);
-      ctrl.appendChild(val);
-    } else if (controlConfig.kind === "segmented") {
-      const segmentWrap = document.createElement("div");
-      segmentWrap.className = "setting-segments";
-      getSettingOptionValues(name, controlConfig).forEach((optionValue) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "setting-segment";
-        button.dataset.value = String(optionValue);
-        button.textContent = getSettingOptionLabel(name, optionValue);
-        button.setAttribute("aria-pressed", "false");
-        segmentButtons.push(button);
-        segmentWrap.appendChild(button);
-      });
-      ctrl.appendChild(segmentWrap);
-      ctrl.appendChild(val);
-    } else if (controlConfig.kind === "select") {
-      selectInput = document.createElement("button");
-      selectInput.type = "button";
-      selectInput.className = "setting-select setting-select--button";
-      selectInput.setAttribute("aria-label", title || name);
-      selectInput.setAttribute("aria-haspopup", "dialog");
-      ctrl.appendChild(selectInput);
-      ctrl.appendChild(val);
-    } else if (compactNumeric) {
-      btnMinus = document.createElement("button");
-      btnMinus.type = "button";
-      btnMinus.className = "smallBtn setting-value-arrow setting-value-arrow--prev";
-      btnMinus.textContent = "-";
-      btnMinus.setAttribute("aria-label", getUIText("setting_value_previous", "Previous value"));
-
-      btnPlus = document.createElement("button");
-      btnPlus.type = "button";
-      btnPlus.className = "smallBtn setting-value-arrow setting-value-arrow--next";
-      btnPlus.textContent = "+";
-      btnPlus.setAttribute("aria-label", getUIText("setting_value_next", "Next value"));
-
-      unitBtn = document.createElement("button");
-      unitBtn.type = "button";
-      unitBtn.className = "setting-unit-cycle";
-      setSettingUnitButtonLabel(unitBtn, name);
-
-      ctrl.appendChild(btnMinus);
-      ctrl.appendChild(val);
-      ctrl.appendChild(btnPlus);
-    } else {
-      const sliderWrap = document.createElement("div");
-      sliderWrap.className = "setting-slider";
-      sliderInput = document.createElement("input");
-      sliderInput.type = "range";
-      sliderInput.className = "setting-slider__input";
-      sliderInput.min = String(controlConfig.min);
-      sliderInput.max = String(controlConfig.max);
-      sliderInput.step = String(controlConfig.unit);
-      sliderInput.setAttribute("aria-label", title || name);
-      sliderWrap.appendChild(sliderInput);
-
-      btnMinus = document.createElement("button");
-      btnMinus.type = "button";
-      btnMinus.className = "smallBtn setting-step setting-step--minus";
-      btnMinus.textContent = "-";
-
-      btnPlus = document.createElement("button");
-      btnPlus.type = "button";
-      btnPlus.className = "smallBtn setting-step setting-step--plus";
-      btnPlus.textContent = "+";
-
-      unitBtn = document.createElement("button");
-      unitBtn.type = "button";
-      unitBtn.className = "setting-unit-cycle";
-      setSettingUnitButtonLabel(unitBtn, name);
-
-      ctrl.appendChild(sliderWrap);
-      ctrl.appendChild(btnMinus);
-      ctrl.appendChild(val);
-      ctrl.appendChild(btnPlus);
-    }
+    const ctrl = control.ctrl;
+    const val = control.value;
+    const btnMinus = control.minusButton;
+    const btnPlus = control.plusButton;
+    const unitBtn = control.unitButton;
+    const sliderInput = control.sliderInput;
+    const toggleInput = control.toggleInput;
+    const selectInput = control.selectInput;
+    const segmentGroup = control.segmentGroup;
+    const segmentButtons = control.segmentButtons;
+    if (unitBtn) setSettingUnitButtonLabel(unitBtn, name);
 
     const popularEntry = getSettingPopularDisplayEntry(p, getSettingPopularValue(name));
     const popularText = renderSettingPopularChipText(p, popularEntry);
@@ -2522,6 +2434,16 @@ async function renderItems(group, options = {}) {
       popularDetail.className = "setting-popular-detail-block";
       popularDetail.innerHTML = renderSettingPopularDetailHtml(p, popularEntry);
       el.appendChild(popularDetail);
+    }
+
+    // Modification history sits below the popular values, using the same block
+    // structure. It is fetched after paint so the detail screen never waits on
+    // it, and it reloads itself whenever this parameter is written.
+    let historyBlock = null;
+    if (detailMode) {
+      historyBlock = document.createElement("div");
+      historyBlock.className = "setting-history-detail-block";
+      el.appendChild(historyBlock);
     }
 
     // Footer actions row: optional unit-cycle (배율) plus a reset-to-default
@@ -2617,7 +2539,44 @@ async function renderItems(group, options = {}) {
       return next;
     }
 
-    async function commitSettingValue(next) {
+    async function refreshSettingHistory() {
+      if (!historyBlock || profile) return;
+      const runtimeHistory = carrotSettingsRuntime.history;
+      if (!runtimeHistory) return;
+      try {
+        const payload = await getJson(`/api/param_changes?name=${encodeURIComponent(name)}&limit=10`);
+        historyBlock.innerHTML = runtimeHistory.renderHtml(payload.changes, {
+          escape: escapeHtml,
+          text: getUIText,
+          locale: LANG === "ko" ? "ko-KR" : undefined,
+          formatValue: (value) => formatSettingDisplayValue(p, value),
+        });
+        bindSettingHistoryUndo();
+      } catch (_) {
+        // History is supplementary: a failed read must not disturb the screen.
+        historyBlock.innerHTML = "";
+      }
+    }
+
+    function bindSettingHistoryUndo() {
+      historyBlock?.querySelectorAll("[data-setting-history-undo]").forEach((button) => {
+        button.onclick = async (event) => {
+          event.stopPropagation();
+          const target = normalizeSettingValue(button.dataset.settingHistoryUndo);
+          if (target === null) return;
+          button.disabled = true;
+          try {
+            // The undo is itself a change, so it is recorded rather than
+            // erasing the entry it reverses.
+            await commitSettingValue(target, { source: "undo" });
+          } finally {
+            button.disabled = false;
+          }
+        };
+      });
+    }
+
+    async function commitSettingValue(next, commitOptions = {}) {
       try {
         if (profile) {
           const nextValues = { ...(profile.values || {}), [name]: next };
@@ -2628,13 +2587,14 @@ async function renderItems(group, options = {}) {
             profile.values = nextValues;
           }
         } else {
-          await setParam(name, next);
+          await setParam(name, next, commitOptions);
         }
         syncSettingControlState(el, next);
         val.dataset.committedValue = String(next);
         if (!profile) {
           cacheSettingValue(name, next, group);
           if (originGroup !== group) cacheSettingValue(name, next, originGroup);
+          refreshSettingHistory();
         }
       } catch (e) {
         showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
@@ -2672,110 +2632,22 @@ async function renderItems(group, options = {}) {
     }
 
     bindPopularDetailRows();
+    if (historyBlock) refreshSettingHistory();
 
-    async function applyDelta(sign) {
-      const step = getSettingUnitValue(name);
-      let curv = Number(val.dataset.rawValue);
-      if (Number.isNaN(curv)) curv = Number(p.default);
-
-      let next = curv + sign * step;
-      next = clamp(next, Number(p.min), Number(p.max));
-
-      if (Number.isInteger(Number(p.min)) && Number.isInteger(Number(p.max)) && Number.isInteger(step)) {
-        next = Math.round(next);
-      }
-
-      await commitSettingValue(next);
-    }
-
-    let deltaBusy = false;
-    async function requestDelta(sign) {
-      if (deltaBusy) return;
-      deltaBusy = true;
-      try {
-        await applyDelta(sign);
-      } finally {
-        deltaBusy = false;
-      }
-    }
-
-    function bindDeltaButton(button, sign) {
-      if (!button) return;
-
-      let holdTimer = null;
-      let repeatTimer = null;
-      let pointerActive = false;
-      let activePointerId = null;
-      let suppressClickUntil = 0;
-      const holdDelayMs = 900;
-      const repeatDelayMs = 160;
-      const clickSuppressMs = 450;
-
-      function clearTimers() {
-        if (holdTimer) {
-          clearTimeout(holdTimer);
-          holdTimer = null;
-        }
-        if (repeatTimer) {
-          clearTimeout(repeatTimer);
-          repeatTimer = null;
-        }
-      }
-
-      function stopHold() {
-        clearTimers();
-        pointerActive = false;
-        button.classList.remove("is-holding");
-        if (activePointerId !== null && typeof button.releasePointerCapture === "function") {
-          try {
-            button.releasePointerCapture(activePointerId);
-          } catch (_) {
-            /* pointer capture may already be released by the browser */
-          }
-        }
-        activePointerId = null;
-      }
-
-      function repeatDelta() {
-        if (!pointerActive) return;
-        requestDelta(sign);
-        repeatTimer = window.setTimeout(repeatDelta, repeatDelayMs);
-      }
-
-      button.addEventListener("pointerdown", (event) => {
-        if (event.button !== undefined && event.button !== 0) return;
-        event.stopPropagation();
-        event.preventDefault();
-        stopHold();
-        pointerActive = true;
-        activePointerId = event.pointerId;
-        suppressClickUntil = Date.now() + clickSuppressMs;
-        button.classList.add("is-holding");
-        if (typeof button.setPointerCapture === "function") {
-          try {
-            button.setPointerCapture(activePointerId);
-          } catch (_) {
-            /* pointer capture is best-effort for repeated input */
-          }
-        }
-        requestDelta(sign);
-        holdTimer = window.setTimeout(repeatDelta, holdDelayMs);
-      });
-
-      button.addEventListener("pointerup", (event) => {
-        event.stopPropagation();
-        suppressClickUntil = Date.now() + clickSuppressMs;
-        stopHold();
-      });
-      button.addEventListener("pointercancel", stopHold);
-      button.addEventListener("lostpointercapture", stopHold);
-      button.addEventListener("click", (event) => {
-        event.stopPropagation();
-        if (Date.now() < suppressClickUntil) {
-          event.preventDefault();
-          return;
-        }
-        requestDelta(sign);
+    // The −/+ buttons run on the shared commit gesture: a press only records
+    // where it started and the value is written on release, so a scroll that
+    // happens to begin on a button is handed back to the browser untouched.
+    // Step size still comes from the per-parameter x1 multiplier.
+    function bindDeltaButtons() {
+      if (!btnMinus && !btnPlus) return;
+      window.CarrotUI.numericStepper.create({
+        minusButton: btnMinus,
+        plusButton: btnPlus,
+        getValue: () => Number(val.dataset.rawValue),
+        getFallback: () => Number(p.default),
+        getStep: () => getSettingUnitValue(name),
+        getRange: () => ({ min: Number(p.min), max: Number(p.max) }),
+        commit: (next) => commitSettingValue(next),
       });
     }
 
@@ -2843,8 +2715,7 @@ async function renderItems(group, options = {}) {
       };
     }
 
-    bindDeltaButton(btnMinus, -1);
-    bindDeltaButton(btnPlus, +1);
+    bindDeltaButtons();
 
     val.onclick = (event) => {
       event.stopPropagation();
@@ -2862,6 +2733,18 @@ async function renderItems(group, options = {}) {
         commitSettingValue(next);
       };
     });
+
+    // Reuse the app's segmented control for keyboard behaviour: roving
+    // tabindex plus arrow / Home / End navigation, which these buttons never
+    // had. No onActivate is passed on purpose — moving focus must not write a
+    // value. Activation stays with the native click, which Enter and Space
+    // already produce on a <button>.
+    if (segmentGroup && segmentButtons.length) {
+      window.CarrotUI?.segmentedControl?.create(segmentGroup, {
+        itemSelector: ".setting-segment",
+        selectedAttribute: "aria-pressed",
+      });
+    }
 
     if (selectInput) {
       selectInput.onclick = (event) => {
@@ -2897,6 +2780,7 @@ async function renderItems(group, options = {}) {
   scheduleSettingOverflowSync(itemsBox);
   window.CarrotMapboxTokenSettings?.sync?.();
   window.CarrotYouTubeLiveSettings?.sync?.();
+  syncSettingLiveRefresh();
 
   if (pendingSettingFocus?.group === group) {
     requestAnimationFrame(() => focusSettingItem(pendingSettingFocus.name));
@@ -3191,3 +3075,77 @@ if (window.visualViewport) {
 
 initSettingOverflowObservers();
 
+
+// ── Live value refresh ──────────────────────────────────────────────
+// Parameters are not only written by this screen: the steering-wheel gap
+// button changes MyDrivingMode and LongitudinalPersonality directly from the
+// driving process (car/cruise.py). Without a refresh the settings screen keeps
+// showing the cached value for the whole TTL, so the list can disagree with
+// the device — and, now, with the change history right below it.
+//
+// Only the group currently on screen is re-read, and only while that screen is
+// actually visible, so this costs one small bulk read every few seconds at
+// most and nothing at all when the page is in the background.
+const SETTING_LIVE_REFRESH_MS = 5000;
+let settingLiveRefreshTimer = null;
+let settingLiveRefreshInFlight = false;
+
+function shouldRefreshSettingValues() {
+  return (
+    CURRENT_PAGE === "setting" &&
+    isCarrotSettingTabActive() &&
+    !document.hidden &&
+    Boolean(CURRENT_GROUP) &&
+    hasRenderedSettingItems(CURRENT_GROUP) &&
+    !getSettingProfileByGroup(CURRENT_GROUP)
+  );
+}
+
+function stopSettingLiveRefresh() {
+  if (!settingLiveRefreshTimer) return;
+  window.clearTimeout(settingLiveRefreshTimer);
+  settingLiveRefreshTimer = null;
+}
+
+function scheduleSettingLiveRefresh(delay = SETTING_LIVE_REFRESH_MS) {
+  stopSettingLiveRefresh();
+  if (!shouldRefreshSettingValues()) return;
+  settingLiveRefreshTimer = window.setTimeout(() => {
+    settingLiveRefreshTimer = null;
+    refreshSettingValuesFromDevice().catch(() => {});
+  }, delay);
+}
+
+async function refreshSettingValuesFromDevice() {
+  if (!shouldRefreshSettingValues() || settingLiveRefreshInFlight) {
+    syncSettingLiveRefresh();
+    return;
+  }
+
+  const group = CURRENT_GROUP;
+  settingLiveRefreshInFlight = true;
+  try {
+    const values = await fetchSettingGroupValues(group, { force: true });
+    // The user may have navigated while the read was in flight.
+    if (CURRENT_GROUP === group && shouldRefreshSettingValues()) {
+      applyRestoredSettingValuesToRenderedItems(values, { animate: false });
+    }
+  } finally {
+    settingLiveRefreshInFlight = false;
+    syncSettingLiveRefresh();
+  }
+}
+
+function syncSettingLiveRefresh() {
+  if (shouldRefreshSettingValues()) scheduleSettingLiveRefresh();
+  else stopSettingLiveRefresh();
+}
+
+// Coming back to the tab is the moment a stale value is most likely and most
+// visible, so refresh immediately rather than waiting out the interval.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopSettingLiveRefresh();
+  else scheduleSettingLiveRefresh(0);
+});
+window.addEventListener("carrot:pagechange", () => scheduleSettingLiveRefresh(0));
+syncSettingLiveRefresh();

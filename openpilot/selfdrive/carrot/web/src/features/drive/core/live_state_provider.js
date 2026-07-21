@@ -85,6 +85,9 @@ function runtimeCacheMatches(cache, rawHudState, rawOverlayState, liveServices) 
     && refs.rawLiveTorqueParameters === rawOverlayState?.liveTorqueParameters
     && refs.rawLiveParameters === rawOverlayState?.liveParameters
     && refs.rawLiveTracks === rawOverlayState?.liveTracks
+    && refs.rawCameraOdometry === rawOverlayState?.cameraOdometry
+    && refs.rawLivePose === rawOverlayState?.livePose
+    && refs.rawCarrotNavi === rawOverlayState?.carrotNavi
     && refs.liveCarState === liveServices?.carState
     && refs.liveControlsState === liveServices?.controlsState
     && refs.liveDeviceState === liveServices?.deviceState
@@ -125,6 +128,9 @@ function captureRuntimeRefs(rawHudState, rawOverlayState, liveServices) {
     rawLiveTorqueParameters: rawOverlayState?.liveTorqueParameters,
     rawLiveParameters: rawOverlayState?.liveParameters,
     rawLiveTracks: rawOverlayState?.liveTracks,
+    rawCameraOdometry: rawOverlayState?.cameraOdometry,
+    rawLivePose: rawOverlayState?.livePose,
+    rawCarrotNavi: rawOverlayState?.carrotNavi,
     liveCarState: liveServices?.carState,
     liveControlsState: liveServices?.controlsState,
     liveDeviceState: liveServices?.deviceState,
@@ -308,24 +314,32 @@ function createLiveStateProvider(options = {}) {
   }
 
   function noteServiceReceived(service, noteOptions = {}) {
+    return noteServicesReceived([service], noteOptions);
+  }
+
+  function noteServicesReceived(services, noteOptions = {}) {
     assertAlive("note service receipt");
-    const serviceName = String(service || "").trim();
-    if (!serviceName) {
+    const serviceNames = Array.from(new Set(
+      (Array.isArray(services) ? services : [services])
+        .map((service) => String(service || "").trim())
+        .filter(Boolean),
+    ));
+    if (!serviceNames.length) {
       throw new LiveStateProviderError("INVALID_SERVICE", "live state service name is required");
     }
     const timestampMs = readClock();
     if (noteOptions?.clear === true) {
-      if (serviceName === "*") {
+      if (serviceNames.includes("*")) {
         for (const key of Object.keys(receivedAt)) {
           if (key !== LIVE_RUNTIME_RECEIPT_KEY) delete receivedAt[key];
         }
       } else {
-        delete receivedAt[serviceName];
+        for (const serviceName of serviceNames) delete receivedAt[serviceName];
       }
       mergeCache.refs = null;
       mergeCache.result = null;
     } else {
-      receivedAt[serviceName] = timestampMs;
+      for (const serviceName of serviceNames) receivedAt[serviceName] = timestampMs;
       everReceived = true;
     }
     return publish(timestampMs);
@@ -379,6 +393,7 @@ function createLiveStateProvider(options = {}) {
   return Object.freeze({
     nowMs,
     noteServiceReceived,
+    noteServicesReceived,
     noteLiveRuntimeReceived,
     snapshot,
     subscribe,

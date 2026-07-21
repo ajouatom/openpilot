@@ -1,4 +1,6 @@
 import { adoptTelemetryGraphSurface } from "../telemetry/graph_surface.js";
+import { createLatestOnlyRenderScheduler } from "../telemetry/render_scheduler.js";
+import { TEMPORARY_TELEMETRY_SURFACES } from "../telemetry/temporary_surface_flags.js";
 import { createSegmentedControl } from "../../ui/components/segmented_control/segmented_control.js";
 
 "use strict";
@@ -25,11 +27,32 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
   const eventCountEl = document.getElementById("carrotReplayInsightsEventCount");
   const graphCountEl = document.getElementById("carrotReplayInsightsGraphCount");
   const invalidCountEl = document.getElementById("carrotReplayInsightsInvalidCount");
-  const tabEls = Array.from(document.querySelectorAll("[data-replay-insights-tab]"));
-  const panelEls = Array.from(document.querySelectorAll("[data-replay-insights-panel]"));
+  const replaySurfaceEnabled = (name) => (
+    name !== "graphs" || TEMPORARY_TELEMETRY_SURFACES.replayGraphs
+  ) && (
+    name !== "sensors" || TEMPORARY_TELEMETRY_SURFACES.replayForward
+  );
+  const allTabEls = Array.from(document.querySelectorAll("[data-replay-insights-tab]"));
+  const allPanelEls = Array.from(document.querySelectorAll("[data-replay-insights-panel]"));
+  const tabEls = allTabEls.filter((element) => replaySurfaceEnabled(element.dataset.replayInsightsTab));
+  const panelEls = allPanelEls.filter((element) => replaySurfaceEnabled(element.dataset.replayInsightsPanel));
+  for (const element of allTabEls) {
+    if (replaySurfaceEnabled(element.dataset.replayInsightsTab)) continue;
+    element.hidden = true;
+    element.setAttribute("aria-hidden", "true");
+  }
+  for (const element of allPanelEls) {
+    if (replaySurfaceEnabled(element.dataset.replayInsightsPanel)) continue;
+    element.hidden = true;
+    element.setAttribute("aria-hidden", "true");
+  }
   const graphEls = new Map(Array.from(document.querySelectorAll("[data-replay-graph]")).map((element) => (
     [element.dataset.replayGraph, element]
   )));
+  const graphUi = new Map(Array.from(graphEls, ([name, element]) => [name, {
+    cursor: element.querySelector(".carrot-replay-insights__cursor"),
+    output: element.querySelector("output"),
+  }]));
   adoptTelemetryGraphSurface(
     rootEl?.querySelector?.(".carrot-replay-insights__graphs"),
     Array.from(graphEls.values()),
@@ -57,7 +80,9 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
   const rendererRegistry = window.CarrotReplayRendererRegistry;
   const sensorTopview = window.CarrotReplaySensorTopview;
   const TAB_SETTING_KEY = "replay_insights_tab";
-  const TAB_NAMES = new Set(["events", "graphs", "sensors", "advanced"]);
+  const TAB_NAMES = new Set(
+    ["events", "graphs", "sensors", "advanced"].filter(replaySurfaceEnabled),
+  );
   const POLICY = Object.freeze({
     indexChunkSize: 220,
     graphPointLimit: 560,
@@ -71,6 +96,9 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     shortLayoutMaxHeight: 560,
     eventScrollContextMaxItems: 2,
     eventScrollSafeInsetPx: 12,
+    // Replay video presentation owns the frame clock. Detail canvases consume
+    // the latest playback time independently and never run in that hot path.
+    playbackSurfaceCadenceMs: 50,
   });
   const CATEGORY_META = Object.freeze({
     control: { labelKey: "replay_category_control", fallback: "Control" },
@@ -231,6 +259,11 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
   let tabControl = null;
   let pendingTabPreference = "";
   let tabPreferenceWriting = false;
+  const playbackSurfaceScheduler = createLatestOnlyRenderScheduler({
+    target: window,
+    cadenceMs: POLICY.playbackSurfaceCadenceMs,
+    onFlush: () => flushSyncedTime(),
+  });
 
   function normalizeTabName(name) {
     const candidate = String(name || "").trim().toLowerCase();
@@ -569,7 +602,7 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
       syncContainerLayout();
       renderRail();
       if (state.activeTab === "advanced" && state.advancedTrack) drawAdvancedTrack(state.advancedTrack);
-      sensorTopview?.resize?.();
+      if (TEMPORARY_TELEMETRY_SURFACES.replayForward) sensorTopview?.resize?.();
       scrollCurrentEventIntoView();
     });
   }
@@ -581,7 +614,9 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     rootEl?.classList.toggle("is-open", state.open);
     rootEl?.setAttribute("aria-hidden", state.open ? "false" : "true");
     syncDockOpenState();
-    sensorTopview?.setVisible?.(state.open && state.activeTab === "sensors");
+    if (TEMPORARY_TELEMETRY_SURFACES.replayForward) {
+      sensorTopview?.setVisible?.(state.open && state.activeTab === "sensors");
+    }
     if (!state.open) {
       closeCluster();
     } else {
@@ -607,11 +642,20 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
       element.classList.toggle("is-active", selected);
       element.setAttribute("aria-hidden", selected ? "false" : "true");
     });
-    if (nextName === "graphs") ensureSummarySeries();
-    if (nextName === "advanced") ensureAdvancedCatalog();
+    if (nextName === "graphs") {
+      ensureSummarySeries();
+      graphEls.forEach((_element, graphName) => syncGraphValue(graphName, state.currentSeconds));
+    }
+    if (nextName === "advanced") {
+      ensureAdvancedCatalog();
+      syncAdvancedCurrent();
+    }
     if (nextName === "events") scrollCurrentEventIntoView();
     syncFollowButton();
-    sensorTopview?.setVisible?.(state.open && nextName === "sensors");
+    if (TEMPORARY_TELEMETRY_SURFACES.replayForward) {
+      sensorTopview?.setVisible?.(state.open && nextName === "sensors");
+      if (nextName === "sensors") sensorTopview?.syncTime?.(state.currentSeconds);
+    }
     if (options.persist && changed) persistTabPreference(nextName);
   }
 
@@ -666,6 +710,7 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
   }
 
   function resetData() {
+    playbackSurfaceScheduler?.cancel?.();
     state.recordsProcessed = 0;
     state.indexingProgress = 0;
     state.indexing = false;
@@ -695,7 +740,7 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     state.records = [];
     state.decodeRecord = null;
     state.rawStats = null;
-    sensorTopview?.reset?.();
+    if (TEMPORARY_TELEMETRY_SURFACES.replayForward) sensorTopview?.reset?.();
     railEl?.replaceChildren();
     state.timelineCanvas = null;
     state.timelineGroups = [];
@@ -788,10 +833,12 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
   }
 
   function renderGraphs() {
+    if (!TEMPORARY_TELEMETRY_SURFACES.replayGraphs) return;
     graphEls.forEach((_element, name) => renderGraph(name));
   }
 
   function ensureSummarySeries() {
+    if (!TEMPORARY_TELEMETRY_SURFACES.replayGraphs) return;
     if (state.summarySeriesStatus === "ready" || state.summarySeriesStatus === "loading") return;
     if (!state.records.length || !state.decodeRecord || typeof dataTracks?.buildSummarySeries !== "function") return;
     const token = ++state.summaryToken;
@@ -1315,14 +1362,14 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
   }
 
   function syncGraphValue(name, seconds) {
-    const graphEl = graphEls.get(name);
-    if (!graphEl) return;
-    const cursor = graphEl.querySelector(".carrot-replay-insights__cursor");
-    if (cursor) cursor.style.left = `${state.durationSeconds > 0 ? Math.max(0, Math.min(100, seconds / state.durationSeconds * 100)) : 0}%`;
+    const ui = graphUi.get(name);
+    if (!ui) return;
+    const cursorLeft = `${state.durationSeconds > 0 ? Math.max(0, Math.min(100, seconds / state.durationSeconds * 100)) : 0}%`;
+    if (ui.cursor && ui.cursor.style.left !== cursorLeft) ui.cursor.style.left = cursorLeft;
     const sample = model?.nearestSample?.(state.series[name] || [], seconds * 1000) || null;
-    const output = graphEl.querySelector("output");
     const format = GRAPH_FORMAT[name];
-    if (output && format) output.textContent = formatValue(sample?.value, format.digits, format.unit);
+    const output = format ? formatValue(sample?.value, format.digits, format.unit) : "";
+    if (ui.output && ui.output.textContent !== output) ui.output.textContent = output;
   }
 
   function selectedAdvancedEntry() {
@@ -1889,15 +1936,15 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     else syncTime(state.currentSeconds);
   }
 
-  function syncTime(seconds, durationSeconds = state.durationSeconds) {
-    if (!state.active) return;
-    state.currentSeconds = Math.max(0, Number(seconds) || 0);
-    if (Number.isFinite(Number(durationSeconds)) && Number(durationSeconds) > 0) {
-      state.durationSeconds = Number(durationSeconds);
+  function flushSyncedTime() {
+    if (!state.active) return false;
+    if (state.open && state.activeTab === "graphs") {
+      graphEls.forEach((_element, name) => syncGraphValue(name, state.currentSeconds));
+    } else if (state.open && state.activeTab === "sensors") {
+      sensorTopview?.syncTime?.(state.currentSeconds);
+    } else if (state.open && state.activeTab === "advanced") {
+      syncAdvancedCurrent();
     }
-    graphEls.forEach((_element, name) => syncGraphValue(name, state.currentSeconds));
-    sensorTopview?.syncTime?.(state.currentSeconds);
-    syncAdvancedCurrent();
     const reviewEvent = selectedReviewEventAt(state.currentSeconds);
     clearSelectionOutsideReview(reviewEvent);
     const currentEvent = stabilizedPlaybackEvent(
@@ -1909,6 +1956,18 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     const currentAgeSeconds = currentEvent ? state.currentSeconds - currentEvent.timeMs / 1000 : Infinity;
     if (currentEvent && currentAgeSeconds >= 0 && currentAgeSeconds <= POLICY.summaryWindowSeconds) showSummary(currentEvent);
     else clearSummary();
+    return true;
+  }
+
+  function syncTime(seconds, durationSeconds = state.durationSeconds, options = {}) {
+    if (!state.active) return false;
+    state.currentSeconds = Math.max(0, Number(seconds) || 0);
+    if (Number.isFinite(Number(durationSeconds)) && Number(durationSeconds) > 0) {
+      state.durationSeconds = Number(durationSeconds);
+    }
+    if (!playbackSurfaceScheduler) return flushSyncedTime();
+    playbackSurfaceScheduler.request(POLICY.playbackSurfaceCadenceMs, options);
+    return true;
   }
 
   function syncLabels() {
@@ -1968,7 +2027,7 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     renderAdvancedCatalog();
     if (state.advancedTrack) renderAdvancedTrack();
     if (state.snapshotCurrent) renderAdvancedSnapshot(state.snapshotCurrent);
-    sensorTopview?.syncLabels?.();
+    if (TEMPORARY_TELEMETRY_SURFACES.replayForward) sensorTopview?.syncLabels?.();
     syncCounts();
     syncTime(state.currentSeconds);
   }
@@ -1987,7 +2046,9 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     state.records = records;
     state.decodeRecord = decodeRecord;
     state.rawStats = options.manifest && typeof options.manifest === "object" ? options.manifest : null;
-    sensorTopview?.load?.({ records, decodeRecord, manifest: state.rawStats });
+    if (TEMPORARY_TELEMETRY_SURFACES.replayForward) {
+      sensorTopview?.load?.({ records, decodeRecord, manifest: state.rawStats });
+    }
     selectTab(state.activeTab);
     const hasServerEventIndex = Array.isArray(options.events) || Array.isArray(state.rawStats?.eventIndex);
     const serverEvents = Array.isArray(options.events) ? options.events : state.rawStats?.eventIndex;
@@ -2190,6 +2251,7 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     previewEventAt,
     setPreviewVisible,
     selectEventById,
+    renderStatus: () => playbackSurfaceScheduler?.status?.() || null,
     eventCount: () => state.events.length,
   };
 })();

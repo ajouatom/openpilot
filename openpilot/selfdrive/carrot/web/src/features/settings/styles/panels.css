@@ -191,13 +191,13 @@
 }
 
 .page--setting #groupList .groupBtn--favorites {
-  border-color: color-mix(in srgb, #7dd3fc 34%, var(--md-outline-var));
-  background: color-mix(in srgb, #7dd3fc 7%, var(--md-surface-cont-h));
+  border-color: color-mix(in srgb, var(--md-info) 34%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-info) 7%, var(--md-surface-cont-h));
 }
 
 .page--setting #groupList .groupBtn--favorites.active {
-  border-color: color-mix(in srgb, #7dd3fc 64%, var(--md-outline-var));
-  color: color-mix(in srgb, #bae6fd 82%, var(--md-on-surface));
+  border-color: color-mix(in srgb, var(--md-info) 64%, var(--md-outline-var));
+  color: color-mix(in srgb, var(--setting-info-ink) 82%, var(--md-on-surface));
 }
 
 .page--setting #groupList .groupBtn--profile {
@@ -238,7 +238,7 @@
 }
 
 .setting-profile-section {
-  --setting-profile-accent: var(--md-primary, #ffab66);
+  --setting-profile-accent: var(--md-primary, var(--setting-fab-accent));
   --setting-profile-divider: color-mix(in srgb, var(--setting-profile-accent) 34%, var(--md-outline-var));
   min-width: 0;
   border-top: 0;
@@ -344,7 +344,7 @@
 }
 
 .setting-profile-panel {
-  --setting-profile-accent: var(--md-primary, #ffab66);
+  --setting-profile-accent: var(--md-primary, var(--setting-fab-accent));
   --setting-profile-ink: var(--md-on-surface);
   --setting-profile-section-sticky-top: 68px;
   min-width: 0;

@@ -4,11 +4,17 @@ import os
 from aiohttp import web
 
 from ..config import UNIT_CYCLE
-from ..services.device_info import get_device_network_snapshot, get_device_setting_values
+from ..services.device_info import (
+  get_device_network_snapshot,
+  get_device_setting_group_names,
+  get_device_setting_values,
+)
+from ..services.param_changes import observe_param_values
 from ..services.params import HAS_PARAMS, ParamKeyType, Params, get_param_values
 from ..services.popular_values import read_popular_values_memory, schedule_popular_value_refresh
 from ..services.setting_favorites import read_setting_favorites
 from ..services.setting_profiles import read_setting_profiles
+from ..services.setting_unit_index import read_setting_unit_index, update_setting_unit_index
 from ..services.settings import get_settings_cached, settings_cache
 from ..services.ssh_keys import get_ssh_key_status
 
@@ -35,17 +41,26 @@ def _settings_snapshot_payload() -> dict:
     list(by_name),
     {name: meta.get("default", 0) for name, meta in by_name.items()},
   )
+  # Entering settings is exactly when a value changed elsewhere would confuse
+  # the user, so this is the read worth comparing against what we last knew.
+  observe_param_values(values)
   ssh_status = get_ssh_key_status()
   return {
     "ok": True,
     "settings": _settings_catalog_payload(cache_parts),
     "values": values,
     "device_values": get_device_setting_values(ssh_status),
+    # The web reads its Device tab parameter names from here rather than
+    # restating them, so the two lists cannot drift apart.
+    "device_groups": get_device_setting_group_names(),
     "device_network": get_device_network_snapshot(),
     "device_ssh": ssh_status,
     "favorites": read_setting_favorites().get("favorites", []),
     "profiles": read_setting_profiles().get("profiles", []),
     "popular": read_popular_values_memory(),
+    # Shipped with the snapshot so restoring the step multipliers costs no
+    # extra round trip on first entry.
+    "unit_index": read_setting_unit_index().get("units", {}),
   }
 
 
@@ -92,6 +107,26 @@ async def api_settings_snapshot(request: web.Request) -> web.Response:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
+async def api_setting_unit_index(request: web.Request) -> web.Response:
+  units = await asyncio.to_thread(read_setting_unit_index)
+  return web.json_response({"ok": True, "units": units.get("units", {})})
+
+
+async def api_setting_unit_index_update(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+  except Exception:
+    return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+
+  try:
+    saved = await asyncio.to_thread(update_setting_unit_index, body)
+    return web.json_response({"ok": True, "units": saved.get("units", {})})
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
 def register(app: web.Application) -> None:
   app.router.add_get("/api/settings", api_settings)
   app.router.add_get("/api/settings/snapshot", api_settings_snapshot)
+  app.router.add_get("/api/setting_unit_index", api_setting_unit_index)
+  app.router.add_post("/api/setting_unit_index", api_setting_unit_index_update)

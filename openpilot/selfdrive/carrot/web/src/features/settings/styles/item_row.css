@@ -1,0 +1,396 @@
+/* One setting row and its controls: label, value, segments, select, slider,
+   step buttons, multiplier and the footer action row.
+   Split out of the former device.css; rule order is unchanged. */
+
+/* Robust two-column layout for every width / orientation / language: the text
+   column shrinks (min-width:0) while the control column keeps its intrinsic
+   width, so right-side controls can never be pushed off-screen by long titles
+   (e.g. ko/zh). The media queries below still refine the gap and the
+   single-column wrap; this base rule fills the gaps they don't cover
+   (notably portrait wider than 640px). */
+.page--setting #settingScreenItems .settingTop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-md);
+  align-items: start;
+}
+
+.page--setting #settingScreenItems .settingTop > :first-child {
+  min-width: 0;
+}
+
+/* Long descriptions / range legends with no break opportunities (e.g. English
+   "0:stock,1,2:REC,..." ??unlike CJK, Latin runs without spaces don't break)
+   must wrap instead of forcing the row wider than the viewport, which would
+   push the right-side control off-screen. CJK wraps per-character on its own,
+   which is why this only surfaced in English. The landscape split layout
+   already applies this; promote it to every layout. */
+.page--setting #settingScreenItems .title,
+.page--setting #settingScreenItems .name,
+.page--setting #settingScreenItems .muted,
+.page--setting #settingScreenItems .descr {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Safety net: never let a single item bleed past its box and drag the control
+   column with it (matches the known-good split layout). The title/name marquees
+   keep their own inner overflow-x scroller, so this does not clip them. */
+.page--setting #settingScreenItems .setting {
+  overflow: hidden;
+}
+
+.page--setting #settingScreenItems .ctrl {
+  --setting-control-side: 42px;
+  --setting-control-value: 88px;
+  --setting-control-gap: 6px;
+  display: grid;
+  grid-template-columns: var(--setting-control-side) var(--setting-control-value) var(--setting-control-side);
+  gap: var(--setting-control-gap);
+  justify-content: end;
+  align-items: center;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.page--setting #settingScreenItems .ctrl > :nth-child(1) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.page--setting #settingScreenItems .ctrl > :nth-child(2) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.page--setting #settingScreenItems .ctrl > :nth-child(3) {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.page--setting #settingScreenItems .ctrl > :nth-child(4) {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: stretch;
+  width: 100%;
+}
+
+.page--setting #settingScreenItems .smallBtn {
+  width: 100%;
+  min-width: var(--setting-control-side);
+  padding-inline: 9px;
+}
+
+.page--setting #settingScreenItems .val {
+  width: 100%;
+  min-width: var(--setting-control-value);
+  max-width: var(--setting-control-value);
+}
+
+.page--setting #settingScreenItems .ctrl--toggle,
+.page--setting #settingScreenItems .ctrl--value,
+.page--setting #settingScreenItems .ctrl--segmented,
+.page--setting #settingScreenItems .ctrl--select {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: auto;
+}
+
+.page--setting #settingScreenItems .ctrl--value {
+  display: inline-grid;
+  grid-template-columns: 38px minmax(66px, auto) 38px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 54%, transparent);
+  border-radius: var(--r-md);
+  background: var(--md-surface-cont-h);
+}
+
+.page--setting #settingScreenItems .ctrl--value > :nth-child(1),
+.page--setting #settingScreenItems .ctrl--value > :nth-child(2),
+.page--setting #settingScreenItems .ctrl--value > :nth-child(3) {
+  grid-row: 1;
+}
+
+.page--setting #settingScreenItems .ctrl--value .val {
+  position: relative;
+  width: auto;
+  min-width: 66px;
+  max-width: min(120px, 34vw);
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  border-radius: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.page--setting #settingScreenItems .setting-value-compact {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 72%, var(--md-surface-cont-h));
+  color: var(--md-on-surface);
+  box-shadow: none;
+  font-weight: 900;
+}
+
+.page--setting #settingScreenItems .setting-value-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  min-width: 38px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-sm);
+  font-weight: 900;
+  line-height: 1;
+  touch-action: manipulation;
+}
+
+.page--setting #settingScreenItems .setting-value-arrow:active,
+.page--setting #settingScreenItems .setting-value-arrow.is-holding,
+.page--setting #settingScreenItems .setting-step:active,
+.page--setting #settingScreenItems .setting-step.is-holding {
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-on-surface));
+}
+
+.page--setting #settingScreenItems .setting-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.page--setting #settingScreenItems .setting-icon path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.page--setting #settingScreenItems .ctrl--toggle .val,
+.page--setting #settingScreenItems .ctrl--segmented .val,
+.page--setting #settingScreenItems .ctrl--select .val {
+  display: none;
+}
+
+.page--setting #settingScreenItems .setting-segment:focus-visible,
+.page--setting #settingScreenItems .setting-select:focus-visible,
+.page--setting #settingScreenItems .setting-slider__input:focus-visible {
+  outline: var(--focus-ring-width, 2px) solid var(--focus-ring-color, var(--md-primary));
+  outline-offset: 2px;
+}
+
+.page--setting #settingScreenItems .setting-segments {
+  display: inline-flex;
+  max-width: min(216px, 100%);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 54%, transparent);
+  border-radius: var(--r-md);
+  background: var(--md-surface-cont-h);
+}
+
+.page--setting #settingScreenItems .setting-segment {
+  min-width: 38px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  background: transparent;
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 800;
+}
+
+.page--setting #settingScreenItems .setting-segment:last-child {
+  border-right: 0;
+}
+
+.page--setting #settingScreenItems .setting-segment.is-active {
+  background: var(--md-primary-state);
+  color: var(--md-primary);
+}
+
+.page--setting #settingScreenItems .setting-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 54%, transparent);
+  border-radius: var(--r-md);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+  font-family: inherit;
+  font-size: var(--fs-label-sm);
+  font-weight: 850;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+}
+
+.page--setting #settingScreenItems .ctrl--slider {
+  grid-template-columns: var(--setting-control-side) var(--setting-control-value) var(--setting-control-side);
+}
+
+.page--setting #settingScreenItems .ctrl--slider .setting-slider {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  width: 100%;
+}
+
+.page--setting #settingScreenItems .ctrl--slider .setting-step--minus {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.page--setting #settingScreenItems .ctrl--slider .val {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.page--setting #settingScreenItems .ctrl--slider .setting-step--plus {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.page--setting #settingScreenItems .setting-slider__input {
+  width: 100%;
+  accent-color: var(--md-primary);
+  /* Vertical gestures stay with the scrolling list; only horizontal drags
+     reach the slider. Without this a scroll that starts on the track moves
+     the value, which is worst for parameters whose thumb sits mid-range. */
+  touch-action: pan-y;
+}
+
+.page--setting #settingScreenItems .setting {
+  position: relative;
+}
+
+.page--setting #settingScreenItems .setting--has-unit-cycle {
+  padding-bottom: var(--sp-md);
+}
+
+.page--setting #settingScreenItems .setting-unit-cycle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 8px 0 0 auto;
+  min-width: 54px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 54%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 72%, var(--md-surface-cont-h));
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-sm);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+
+.page--setting #settingScreenItems .setting-unit-cycle:active {
+  border-color: color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-on-surface));
+  color: var(--md-on-surface);
+}
+
+/* Footer actions row ??holds the optional unit-cycle (諛곗쑉) and the
+   reset-to-default (湲곕낯媛? button, right-aligned under the item. */
+.page--setting #settingScreenItems .setting--has-actions {
+  padding-bottom: var(--sp-md);
+}
+
+.page--setting #settingScreenItems .setting-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.page--setting #settingScreenItems .setting-popular-value-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 3px;
+  min-width: 0;
+  max-width: min(360px, 52vw);
+  min-height: 18px;
+  margin-right: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--md-on-surface-var) 42%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: 0;
+  text-align: left;
+  white-space: nowrap;
+  box-shadow: none;
+  opacity: 0.74;
+}
+
+.page--setting #settingScreenItems .setting-popular-value-chip__car {
+  min-width: 0;
+  max-width: 170px;
+  overflow: hidden;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page--setting #settingScreenItems .setting-popular-value-chip__accent {
+  color: color-mix(in srgb, var(--md-primary) 56%, var(--md-on-surface-var));
+  font-weight: 800;
+}
+
+.page--setting #settingScreenItems .setting-popular-value-chip__label {
+  color: inherit;
+}
+
+.page--setting #settingScreenItems .setting-actions .setting-unit-cycle {
+  margin: 0;
+}
+
+.page--setting #settingScreenItems .setting-default-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 54%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 72%, var(--md-surface-cont-h));
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-sm);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+
+.page--setting #settingScreenItems .setting-default-reset:active {
+  border-color: color-mix(in srgb, var(--md-outline-var) 68%, transparent);
+  background: color-mix(in srgb, var(--md-surface-cont-hh) 88%, var(--md-on-surface));
+  color: var(--md-on-surface);
+}

@@ -36,6 +36,7 @@ class RawWsHub:
   SEND_TIMEOUT = 0.75
   COMPACT_BATCH_WINDOW = COMPACT_BATCH_WINDOW_SECONDS
   MIN_POLL_SLEEP = 0.002
+  EMPTY_READ_RETRY = 0.01
   IDLE_SLEEP = 0.03
   IDLE_STOP_SEC = 5.0
 
@@ -61,6 +62,17 @@ class RawWsHub:
 
   def _throttle_interval(self, service: str) -> float:
     return compact_service_interval(service)
+
+  def _next_read_delay(self, interval: float, *, payload_received: bool) -> float:
+    """Keep a missed poll from consuming a complete display interval.
+
+    Cereal publishers and this shared poll loop are not phase locked. Advancing
+    a 20 Hz service by another 50 ms when receive() returns None can therefore
+    discard every other model/lateralPlan frame. A short bounded retry catches
+    the next publication without restoring the old continuous 4 ms polling.
+    """
+    cadence = max(self.MIN_POLL_SLEEP, float(interval))
+    return cadence if payload_received else min(cadence, self.EMPTY_READ_RETRY)
 
   def client_count(self, service: str | None = None) -> int:
     if service is None:
@@ -273,7 +285,6 @@ class RawWsHub:
           if now < self._next_read_time.get(service, 0.0):
             continue
           interval = self._throttle_interval(service)
-          self._next_read_time[service] = now + interval
 
           sock = self._sockets.get(service)
           if sock is None:
@@ -281,14 +292,18 @@ class RawWsHub:
               sock = self.messaging.sub_sock(service, conflate=True)
               self._sockets[service] = sock
             except Exception:
+              self._next_read_time[service] = now + self.IDLE_SLEEP
               continue
 
           try:
             payload = sock.receive(non_blocking=True)
           except Exception:
+            self._next_read_time[service] = now + self.EMPTY_READ_RETRY
             continue
           if payload is None:
+            self._next_read_time[service] = now + self._next_read_delay(interval, payload_received=False)
             continue
+          self._next_read_time[service] = now + self._next_read_delay(interval, payload_received=True)
           self._broadcast_payload(service, payload, self._clients.get(service, set()))
 
         next_due = min(

@@ -1,0 +1,196 @@
+/* Fleet popular-value block on a setting detail screen.
+   Split out of the former device.css; rule order is unchanged. */
+
+
+.setting-popular-detail {
+  display: grid;
+  gap: 12px;
+  min-width: min(360px, calc(100vw - 56px));
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block {
+  width: min(520px, 100%);
+  margin-top: 12px;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail {
+  gap: 9px;
+  min-width: 0;
+  width: 100%;
+}
+
+.setting-popular-detail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.setting-popular-detail__name {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__name {
+  color: color-mix(in srgb, var(--md-on-surface-var) 66%, transparent);
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.setting-popular-detail__range {
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-on-surface-var) 8%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface-var) 58%, transparent);
+  font-size: 10px;
+  font-weight: 820;
+  line-height: 20px;
+}
+
+.setting-popular-detail__rows {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 32%, transparent);
+  border-radius: var(--r-md);
+  background: var(--md-surface-cont);
+}
+
+.setting-popular-detail__row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-stroke-soft) 40%, transparent);
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: transparent;
+  color: var(--md-on-surface);
+  font-family: inherit;
+  font-size: var(--fs-body-sm);
+  font-weight: 850;
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__rows {
+  gap: 6px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row {
+  grid-template-columns: 18px minmax(0, 1fr) 48px;
+  min-height: 48px;
+  padding: 8px 11px;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 16%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--md-surface-cont) 54%, transparent);
+  color: color-mix(in srgb, var(--md-on-surface) 82%, transparent);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__row:active {
+  border-color: color-mix(in srgb, var(--md-primary) 24%, var(--md-outline-var));
+  background: color-mix(in srgb, var(--md-primary) 9%, var(--md-surface-cont));
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail--single .setting-popular-detail__row {
+  min-height: 44px;
+}
+
+.setting-popular-detail__row:last-child {
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 16%, transparent);
+}
+
+.setting-popular-detail__count {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-sm);
+  font-weight: 850;
+}
+
+.setting-popular-detail__marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.setting-popular-detail__marker::before {
+  content: "";
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-primary) 46%, var(--md-on-surface-var));
+  opacity: 0.72;
+}
+
+.setting-popular-detail__main {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.setting-popular-detail__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__value {
+  color: color-mix(in srgb, var(--md-primary) 68%, var(--md-on-surface));
+  font-size: 13px;
+  font-weight: 860;
+}
+
+.setting-popular-detail__count {
+  text-align: right;
+}
+
+.page--setting #settingScreenItems .setting-popular-detail-block .setting-popular-detail__count {
+  color: color-mix(in srgb, var(--md-on-surface-var) 66%, transparent);
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.setting-popular-detail__bar {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--md-on-surface-var) 10%, transparent);
+}
+
+.setting-popular-detail__bar::after {
+  content: "";
+  display: block;
+  width: var(--setting-popular-width, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--md-primary) 52%, var(--md-on-surface-var));
+  opacity: 0.78;
+}
+
+.setting-popular-detail__empty {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-body-sm);
+  font-weight: 750;
+}
