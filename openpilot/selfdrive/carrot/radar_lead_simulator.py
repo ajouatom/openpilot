@@ -20,6 +20,7 @@ import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterable, Protocol
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -56,6 +57,11 @@ try:
   from openpilot.selfdrive.carrot.radar_lead_controller import RadarLeadModelController
 except ModuleNotFoundError:
   from radar_lead_controller import RadarLeadModelController
+
+try:
+  from openpilot.selfdrive.carrot.radar_lead_runtime import RadarLeadRuntime
+except ModuleNotFoundError:
+  from radar_lead_runtime import RadarLeadRuntime
 
 try:
   from openpilot.selfdrive.carrot.radar_vision_model_controller import PRIMARY_STEALTH_HOLD_S, STEALTH_LEAD_HOLD_S, VisionModelRadarController, VisionRadarMatcher, cutin_is_ahead_of_primary
@@ -204,12 +210,12 @@ def _candidate_plot_value(frame: RadarFrame, candidate: Candidate | None) -> Lea
 
 
 def lead_comparison_series(
-  frames: list[RadarFrame], radard_selector: LeadSelector, model_selector: LeadSelector,
+  frames: list[RadarFrame], radard_selector: LeadSelector | None, model_selector: LeadSelector,
 ) -> tuple[LeadComparisonFrame, ...]:
-  """Return current-radard and model control-facing distance histories."""
+  """Return model and optional current-radard control-facing distance histories."""
   result = []
   for index, frame in enumerate(frames):
-    radard = radard_selector.select(frame, index)
+    radard = radard_selector.select(frame, index) if radard_selector is not None else Selection(None, None)
     model = model_selector.select(frame, index)
     result.append(LeadComparisonFrame(
       radard_one=_candidate_plot_value(frame, radard.lead_one),
@@ -1679,6 +1685,139 @@ class MultitaskLeadSelector:
     return self.selections[frame_index]
 
 
+def _production_point(point: RadarPoint) -> SimpleNamespace:
+  return SimpleNamespace(
+    trackId=point.track_id,
+    dRel=point.d_rel,
+    yRel=point.y_rel,
+    vRel=point.v_rel,
+    aRel=point.a_rel,
+    yvRel=point.yv_rel,
+    vLead=point.v_lead,
+    aLead=point.a_lead,
+    jLead=point.j_lead,
+    measured=point.measured,
+    radarSource=point.source,
+  )
+
+
+def _production_xy(points: tuple[tuple[float, float], ...]) -> SimpleNamespace:
+  return SimpleNamespace(
+    x=tuple(point[0] for point in points),
+    y=tuple(point[1] for point in points),
+  )
+
+
+def _production_model(frame: RadarFrame) -> SimpleNamespace:
+  leads = tuple(SimpleNamespace(
+    prob=lead.probability,
+    x=(lead.x,),
+    y=(lead.y,),
+    v=(lead.v,),
+    a=(lead.a,),
+    xStd=(lead.x_std,),
+    yStd=(lead.y_std,),
+    vStd=(lead.v_std,),
+  ) for lead in frame.model_leads)
+  return SimpleNamespace(
+    position=_production_xy(frame.path),
+    laneLines=tuple(_production_xy(line) for line in frame.lane_lines),
+    laneLineProbs=frame.lane_probs,
+    leadsV3=leads,
+  )
+
+
+def _output_candidate(lead: dict[str, Any] | None, reason: str) -> Candidate | None:
+  if lead is None or not lead.get("status", False):
+    return None
+  return Candidate(
+    track_id=int(lead["radarTrackId"]),
+    score=float(lead.get("modelProb", lead.get("score", 0.0))),
+    reason=reason,
+    d_rel=float(lead.get("dRel", 0.0)),
+    y_rel=float(lead.get("yRel", 0.0)),
+  )
+
+
+class ProductionHybridLeadSelector:
+  """Replay the exact on-device model controller over normalized log inputs."""
+
+  def __init__(self, model_path: Path, frames: list[RadarFrame]) -> None:
+    self.name = f"hybrid:{model_path.stem}"
+    controller = VisionModelRadarController()
+    controller.runtime = RadarLeadRuntime(model_path=model_path, include_scc=True)
+    selections: list[Selection] = []
+    for frame in frames:
+      output = controller.update(
+        frame.mono_time_s,
+        frame.v_ego,
+        tuple(_production_point(point) for point in frame.points),
+        _production_model(frame),
+      )
+      result = controller.last_runtime_result
+      if not output.available or result is None or not result.available:
+        selections.append(Selection(None, None))
+        continue
+
+      def prediction_track_id(prediction: Any) -> int:
+        obj = prediction.features.radar_object
+        return next(value for value in (
+          obj.front_track_id, obj.scc_track_id, obj.corner_track_id,
+        ) if value is not None)
+
+      model = controller.runtime.model
+      assert model is not None
+      raw_cutins = tuple(
+        Candidate(
+          prediction_track_id(prediction), prediction.cutin_prob, "MLP fused cutin",
+          float(model.thresholds[1]), d_rel=prediction.features.radar_object.d_rel,
+          y_rel=prediction.features.radar_object.y_rel,
+        )
+        for prediction in sorted(result.predictions, key=lambda value: value.cutin_prob, reverse=True)[:2]
+        if prediction.cutin_prob >= MLP_CANDIDATE_FLOOR
+      )
+      raw_external = tuple(
+        Candidate(
+          prediction_track_id(prediction), prediction.external_prob, "MLP fused external",
+          float(model.thresholds[2]), d_rel=prediction.features.radar_object.d_rel,
+          y_rel=prediction.features.radar_object.y_rel,
+        )
+        for prediction in sorted(result.predictions, key=lambda value: value.external_prob, reverse=True)[:2]
+        if prediction.external_prob >= MLP_CANDIDATE_FLOOR
+      )
+      active_cutins = tuple(
+        candidate for lead in output.leads_cutin
+        if (candidate := _output_candidate(lead, "MLP active cutin")) is not None
+      )
+      active_external = tuple(
+        candidate for lead in (output.lead_external,)
+        if (candidate := _output_candidate(lead, "MLP active external")) is not None
+      )
+      cutin_ids = {candidate.track_id for candidate in active_cutins}
+      external_ids = {candidate.track_id for candidate in active_external}
+      lead_two_id = int(output.lead_two["radarTrackId"]) if output.lead_two is not None else None
+      lead_two_reason = (
+        "MLP active cutin" if lead_two_id in cutin_ids
+        else "MLP active external" if lead_two_id in external_ids
+        else "MLP active stealth"
+      )
+      selections.append(Selection(
+        lead_one=_output_candidate(output.lead_one, "vision-radar Laplacian match"),
+        lead_two=_output_candidate(output.lead_two, lead_two_reason),
+        front_candidates=(),
+        corner_candidates=raw_cutins,
+        active_cutin_candidates=active_cutins,
+        external_candidates=raw_external,
+        active_external_candidates=active_external,
+      ))
+    self.selections = tuple(selections)
+
+  def select(self, frame: RadarFrame, frame_index: int | None = None) -> Selection:
+    if frame_index is None:
+      raise ValueError("production hybrid selector requires a frame index")
+    return self.selections[frame_index]
+
+
 class SimulatorUI:
   BG = (14, 18, 23, 255)
   PANEL = (22, 28, 35, 255)
@@ -1747,7 +1886,7 @@ class SimulatorUI:
     self.lead_two_continuity: tuple[CutinContinuity | None, ...] = ()
     self.lead_comparison = (
       lead_comparison_series(self.frames, self.radard_selector, self.selector)
-      if self.radard_selector is not None else ()
+      if self.review is not None else ()
     )
     fusion = RadarObjectFusion(include_scc=include_scc_fusion)
     self.fused_frames = tuple(fusion.update(frame.mono_time_s, frame.points) for frame in frames)
@@ -2124,7 +2263,8 @@ class SimulatorUI:
 
     point_legend = "fused objects" if self.show_fused_objects else "radar points"
     extras = f"   {point_legend} enabled" if self.show_radar_points else ""
-    legend = f"boxes: model L1 orange / L2 yellow   circles: current radard L1 cyan / L2 purple{extras}"
+    comparison_legend = "   circles: current radard L1 cyan / L2 purple" if self.radard_selector is not None else ""
+    legend = f"boxes: model L1 orange / L2 yellow{comparison_legend}{extras}"
     self._draw_text(legend, rect.x + 18, rect.y + rect.height - 24, 14, self._color(self.MUTED))
 
   @staticmethod
@@ -2347,8 +2487,10 @@ class SimulatorUI:
     rl.draw_rectangle_lines_ex(rect, 1.0, self._color(self.GRID))
 
     legend = (
-      ("CURRENT RADARD L1", "radard_one", self.CYAN),
-      ("CURRENT RADARD L2", "radard_two", self.PURPLE),
+      *((
+        ("CURRENT RADARD L1", "radard_one", self.CYAN),
+        ("CURRENT RADARD L2", "radard_two", self.PURPLE),
+      ) if self.radard_selector is not None else ()),
       ("MODEL L1", "model_one", self.ORANGE),
       ("MODEL L2", "model_two", self.YELLOW),
     )
@@ -2390,7 +2532,7 @@ class SimulatorUI:
         y = graph_bottom - graph_height * min(value.d_rel, max_distance) / max_distance
         if previous is not None:
           previous_time, previous_x, previous_value = previous
-          if value.track_id == previous_value.track_id and frame.time_s - previous_time <= max_gap_s:
+          if frame.time_s - previous_time <= max_gap_s:
             previous_y = graph_bottom - graph_height * min(previous_value.d_rel, max_distance) / max_distance
             rl.draw_line_ex(rl.Vector2(previous_x, previous_y), rl.Vector2(x, y), 2.0, color)
         previous = (frame.time_s, x, value)
@@ -2577,7 +2719,8 @@ class SimulatorUI:
         height = rl.get_screen_height()
         panel_width = min(510.0, max(430.0, width * 0.35))
         content_width = float(width) - panel_width - 30.0
-        content_height = float(height) - (250.0 if self.review is not None else 65.0)
+        timeline_height = 250.0 if self.review is not None else 65.0
+        content_height = float(height) - timeline_height
         video_height = max(230.0, content_height * 0.57)
         video_rect = rl.Rectangle(12.0, 12.0, content_width, video_height)
         map_rect = rl.Rectangle(12.0, video_rect.y + video_rect.height + 8.0, content_width, content_height - video_height - 8.0)
@@ -2636,6 +2779,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument(
     "--hybrid", action="store_true",
     help="use independent vision-radar leadOne with model cut-in/external leadTwo",
+  )
+  parser.add_argument(
+    "--compare-radard", action="store_true",
+    help="recompute and display the current radard result and distance graph (slow)",
   )
   parser.add_argument("--validation-case", help="auto-review one case id from the maintained validation set")
   parser.add_argument("--validation-root", type=Path, default=Path(r"W:\routes"), help="validation route root")
@@ -2746,9 +2893,7 @@ def main() -> int:
   radard_selector: LeadSelector | None = None
   if args.hybrid:
     args.model = args.model or DEFAULT_MULTITASK_MODEL
-    selector = MultitaskLeadSelector(
-      args.model, frames, include_scc=True, vision_match_primary=True,
-    )
+    selector = ProductionHybridLeadSelector(args.model, frames)
   elif args.model is not None:
     try:
       import numpy as np
@@ -2765,7 +2910,7 @@ def main() -> int:
     selector = CurrentRadardTeacher(frames, current_cutin_track_ids(args.rlog, frames))
   else:
     selector = SimpleLeadSelector()
-  if review is not None and not isinstance(selector, CurrentRadardTeacher):
+  if args.compare_radard and review is not None and not isinstance(selector, CurrentRadardTeacher):
     print("Recomputing current radard comparison ...", flush=True)
     radard_selector = CurrentRadardTeacher(frames, current_cutin_track_ids(args.rlog, frames))
   label_path = args.labels or args.rlog.with_name(args.rlog.name + ".lead-labels.json")

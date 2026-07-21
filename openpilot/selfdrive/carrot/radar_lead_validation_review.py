@@ -35,6 +35,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
   parser.add_argument("--case", action="append", default=[], help="case-id substring; repeat to select more")
   parser.add_argument("--expected", choices=("all", "detect", "clear", "stationary"), default="all")
+  parser.add_argument(
+    "--compare-radard", action="store_true",
+    help="also recompute and display the current radard result and graph (slow)",
+  )
   parser.add_argument("--list", action="store_true")
   return parser.parse_args()
 
@@ -74,14 +78,17 @@ def main() -> int:
       f"source={case['source']}  {case['scene']}{grouped_note}",
       flush=True,
     )
-    result = subprocess.run([
+    command = [
       sys.executable, str(SIMULATOR),
       "--validation-case", str(case["id"]),
       "--validation-root", str(args.root),
       "--validation-cases", str(args.cases),
       "--model", str(args.model),
       "--hybrid",
-    ], check=False)
+    ]
+    if args.compare_radard:
+      command.append("--compare-radard")
+    result = subprocess.run(command, check=False)
     if result.returncode != 0:
       return result.returncode
   duplicate_count = len(cases) - len(case_groups)

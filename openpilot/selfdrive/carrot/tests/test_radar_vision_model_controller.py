@@ -357,6 +357,47 @@ def test_controller_rejects_stationary_front_external_as_lead_two() -> None:
   assert output.lead_external is None
 
 
+def test_controller_rejects_long_range_unmatched_external_as_lead_two() -> None:
+  ghost = prediction(51, 0.2, 0.0, 0.0, external_prob=0.99, d_rel=89.0)
+  ghost = replace(ghost, features=replace(
+    ghost.features, d_path=0.1, d_path_future=0.2, in_lane_prob=0.9, track_age=12,
+  ))
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(True, RadarLeadDecision((), (), (ghost,)), (ghost,), 0.1)
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  output = controller.update(0.0, 20.0, (), vision_model(40.0, 0.0, 18.0))
+
+  assert output.lead_two is None
+  assert output.lead_external is None
+
+
+def test_controller_rejects_external_track_moving_out_of_lane() -> None:
+  ghost = prediction(51, -1.0, 0.0, 0.0, external_prob=0.99, d_rel=35.0)
+  ghost = replace(ghost, features=replace(
+    ghost.features,
+    d_path=-1.0,
+    d_path_future=-2.4,
+    in_lane_prob=0.45,
+    track_age=12,
+    radar_object=replace(ghost.features.radar_object, corner_track_id=1000),
+  ))
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(True, RadarLeadDecision((), (), (ghost,)), (ghost,), 0.1)
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  output = controller.update(0.0, 20.0, (), vision_model(60.0, 0.0, 18.0))
+
+  assert output.lead_two is None
+  assert output.lead_external is None
+
+
 def test_controller_rejects_stationary_unmatched_front_stealth_lead_two() -> None:
   ghost = prediction(40, 0.2, 1.0, 0.0, v_lead=0.0, d_rel=22.0)
   ghost = replace(ghost, features=replace(
@@ -370,6 +411,23 @@ def test_controller_rejects_stationary_unmatched_front_stealth_lead_two() -> Non
   controller = VisionModelRadarController()
   controller.runtime = Runtime()
   output = controller.update(0.0, 17.0, (), vision_model(75.0, 0.0, 18.0))
+
+  assert output.lead_two is None
+
+
+def test_controller_rejects_distant_unmatched_stealth_lead_two() -> None:
+  ghost = prediction(62, 0.1, 1.0, 0.0, v_lead=20.0, d_rel=57.0)
+  ghost = replace(ghost, features=replace(
+    ghost.features, d_path=0.1, d_path_future=0.1, in_lane_prob=0.9, track_age=12,
+  ))
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(True, RadarLeadDecision((ghost,), ()), (ghost,), 0.1)
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  output = controller.update(0.0, 20.0, (), vision_model(80.0, 0.0, 18.0))
 
   assert output.lead_two is None
 
