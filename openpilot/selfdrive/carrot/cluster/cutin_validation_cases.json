@@ -75,6 +75,16 @@
       "scene": "Close right vehicle enters using front radar only before becoming leadOne"
     },
     {
+      "id": "palisade-bef-2-roadside-pass",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "window": [49.2, 50.1],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [37],
+      "scene": "Close right roadside vehicle is passed without entering the ego lane"
+    },
+    {
       "id": "carnival-6a-27-close",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "0000006a--f0976fc330--27/rlog.zst",
@@ -299,8 +309,9 @@
       "source": "front+corner",
       "window": [0.0, 6.0],
       "expected": "clear",
+      "forbidden_lead_one_ids": [61],
       "forbidden_lead_two_ids": [40, 51],
-      "scene": "Tunnel reflection near 22 m must not become a stationary leadTwo"
+      "scene": "Tunnel reflections must not become a vision-matched leadOne or stationary leadTwo"
     },
     {
       "id": "ioniq5-cd2-4-stopped-false-cutin",

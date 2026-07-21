@@ -42,7 +42,7 @@ The controller additionally requires a raw-corner identity, at least seven frame
 
 ## Cut-in regression
 
-The 52 maintained detect/clear video-review cases pass 52/52. This count covers only the labeled windows in `cutin_validation_cases.json`; it is a regression gate, not a claim about unlabeled portions of every route. The v13 candidate introduced no activation in the maintained right-curve, parallel-adjacent, close-pass, point-jump, stopped-traffic, close stationary-reflection, near-field front-radar ghost, or tunnel-ghost clear scenes.
+The 53 maintained detect/clear video-review cases pass 53/53. This count covers only the labeled windows in `cutin_validation_cases.json`; it is a regression gate, not a claim about unlabeled portions of every route. The v13 candidate introduced no activation in the maintained right-curve, parallel-adjacent, roadside-pass, close-pass, point-jump, stopped-traffic, close stationary-reflection, near-field front-radar ghost, or tunnel-ghost clear scenes.
 
 The anticipatory labels use a later current-radard confirmation only when the same front/corner alias was already moving consistently toward the lane. They look back at most 0.8 seconds and never overwrite manual negative labels. This added 142 soft-positive training rows and 126 validation rows. It does not copy the current-radard decision time directly; it teaches the stable motion immediately before that decision.
 

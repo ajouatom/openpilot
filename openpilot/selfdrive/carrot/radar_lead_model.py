@@ -701,9 +701,9 @@ class RadarLeadDecisionFilter:
         and prediction.features.track_age >= 12
         and 5.5 < obj.d_rel < 9.0 and obj.v_lead > 2.0 and obj.v_rel < -0.5
         and lane_history_ready and lane_direction_reliable
-        and 2.2 < current_d_path < 3.1 and abs(obj.y_rel) < 3.2
-        and history_projected_d_path < 2.7
-        and h8_d_rate < -0.2 and h12_d_rate < -0.2
+        and 2.2 < current_d_path < 2.7 and abs(obj.y_rel) < 3.2
+        and history_projected_d_path < 2.5
+        and -3.0 < h8_d_rate < -0.2 and -3.0 < h12_d_rate < -0.2
         and 0.35 < h8_inward_speed < 2.0
         and 0.35 < h12_inward_speed < 2.0
         and 0.35 < h8_lane_inward < 2.0

@@ -90,6 +90,25 @@ def test_long_range_off_path_target_does_not_match_vision() -> None:
   assert matcher.match_context(vision, (ghost,), 17.0) is None
 
 
+def test_large_vision_velocity_std_does_not_match_stationary_front_reflection() -> None:
+  matcher = VisionRadarMatcher()
+  reflection = prediction(61, 1.0, 0.0, 0.0, d_rel=61.3, v_lead=0.7)
+  reflection = replace(reflection, features=replace(
+    reflection.features,
+    track_age=23,
+    d_path=1.04,
+    in_lane_prob=0.7,
+    radar_object=replace(
+      reflection.features.radar_object,
+      front_d_rel=61.3,
+      front_v_rel=-14.0,
+    ),
+  ))
+  vision = VisionLeadContext(0.86, 81.9, -0.3, 10.3, 0.0, 11.6, 0.5, 4.0)
+
+  assert matcher.match_context(vision, (reflection,), 14.7) is None
+
+
 def test_slow_corner_track_can_match_stationary_vision_with_front_corroboration() -> None:
   matcher = VisionRadarMatcher()
   corner = prediction(1012, 7.6, 0.0, 0.0, front=False, d_rel=85.1, v_lead=2.4)
