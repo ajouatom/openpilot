@@ -11,7 +11,7 @@ CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_config import CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA, EGO_FORWARD_M, LIGHT_CLUSTER_THEME, VEHICLE_LENGTH_M
-from cluster_models import ClusterUiState, DetectedVehicle, LaneMarking, RadarPoint
+from cluster_models import ClusterUiState, DetectedVehicle, LaneMarking, ModelPathPoint, RadarPoint
 import cluster_renderer
 from cluster_renderer import ClusterUiRenderer
 import cluster_scene
@@ -56,6 +56,15 @@ def _cluster_state(**changes) -> ClusterUiState:
     lanes=(LaneMarking(-1.8), LaneMarking(1.8)),
   )
   return replace(state, **changes)
+
+
+def _max_scene_forward_m(strips) -> float:
+  return max(
+    point.y
+    for strip in strips
+    for side in (strip.left, strip.right)
+    for point in side
+  )
 
 
 def test_scene_cache_key_covers_every_cluster_scene_state_access() -> None:
@@ -136,6 +145,43 @@ def test_road_camera_keeps_longitudinal_render_distance_one_to_one() -> None:
   assert detected_box.center.x == pytest.approx(2.25)
   assert detected_box.center.y == pytest.approx(EGO_FORWARD_M + 40.0 + VEHICLE_LENGTH_M * 0.5)
   assert detected_box.longitudinal_m == 40.0
+
+
+def test_model_road_geometry_matches_vehicle_longitudinal_scale() -> None:
+  raw_forward_points = (0.0, 20.0, 40.0)
+  left_lane = tuple(ModelPathPoint(forward_m, -1.8) for forward_m in raw_forward_points)
+  right_lane = tuple(ModelPathPoint(forward_m, 1.8) for forward_m in raw_forward_points)
+  path = tuple(ModelPathPoint(forward_m, 0.0) for forward_m in raw_forward_points)
+  left_edge = tuple(ModelPathPoint(forward_m, -3.6) for forward_m in raw_forward_points)
+  vehicle = DetectedVehicle("V", 40.0, 0.0, source="modelV2", probability=0.9)
+  for camera_view_mode, expected_relative_forward_m in (
+    (0, 20.0),
+    (CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA, 40.0),
+  ):
+    state = _cluster_state(
+      camera_view_mode=camera_view_mode,
+      lanes=(
+        LaneMarking(-0.5, model_points=left_lane),
+        LaneMarking(0.5, model_points=right_lane),
+      ),
+      highlight_lane="left",
+      highlight_lane_offset=0.0,
+      model_path=path,
+      left_road_edge_points=left_edge,
+      left_road_edge_confidence=1.0,
+      detected_vehicles=(vehicle,),
+    )
+
+    scene = build_cluster_scene(state)
+    expected_forward_m = EGO_FORWARD_M + expected_relative_forward_m
+    vehicle_box = next(box for box in scene.vehicles if box.label == "V")
+
+    assert vehicle_box.center.y == pytest.approx(expected_forward_m)
+    assert _max_scene_forward_m(scene.lane_markings) == pytest.approx(expected_forward_m)
+    assert _max_scene_forward_m(scene.highlight_lanes) == pytest.approx(expected_forward_m)
+    assert _max_scene_forward_m(scene.road_edges) == pytest.approx(expected_forward_m)
+    unblocked_scene = build_cluster_scene(replace(state, detected_vehicles=()))
+    assert _max_scene_forward_m(unblocked_scene.planned_path) == pytest.approx(expected_forward_m)
 
 
 def test_raw_corner_points_remain_visible_when_vehicle_boxes_are_hidden() -> None:

@@ -206,7 +206,7 @@ LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
 LANE_CHANGE_MODEL_DIRECT_ONLY = True
-ROUTE_REPLAY_USE_LANE_CHANGE_ANIMATION = False
+ROUTE_REPLAY_USE_LANE_CHANGE_ANIMATION = True
 LANE_LINE_PROBABILITY_MIN = 0.4
 MODEL_DIRECT_LANE_SETTLE_MIN_PROGRESS = 0.65
 LONGITUDINAL_PERSONALITY_GAPS = {
@@ -426,6 +426,7 @@ class RouteReplayFrame:
     gear_text: str | None
     cruise_gap: int | None
     lfa_active: bool | None
+    active_lane_line: bool | None
     left_signal: bool
     right_signal: bool
     left_blindspot: bool
@@ -1374,6 +1375,7 @@ class RouteLogParser:
         self.cruise_kph: int | None = None
         self.cruise_gap: int | None = None
         self.lfa_active: bool | None = None
+        self.active_lane_line: bool | None = None
         self.selfdrive_enabled: bool | None = None
         self.controls_enabled: bool | None = None
         self.lane_width_m = DEFAULT_LANE_WIDTH_M
@@ -1630,6 +1632,7 @@ class RouteLogParser:
             gear_text=gear_text,
             cruise_gap=cruise_gap,
             lfa_active=self.lfa_active,
+            active_lane_line=self.active_lane_line,
             left_signal=left_signal,
             right_signal=right_signal,
             left_blindspot=left_blindspot,
@@ -1964,6 +1967,10 @@ class RouteLogParser:
         enabled = safe_get(controls_state, "enabled", None)
         if enabled is not None:
             self.controls_enabled = bool(enabled)
+
+        active_lane_line = safe_get(controls_state, "activeLaneLine", None)
+        if active_lane_line is not None:
+            self.active_lane_line = bool(active_lane_line)
 
         desired_curvature = safe_optional_float(controls_state, "desiredCurvature")
         if desired_curvature is not None and abs(desired_curvature) < 0.05:
@@ -3536,6 +3543,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         gear_text=frame.gear_text,
         cruise_gap=frame.cruise_gap,
         lfa_active=frame.lfa_active,
+        active_lane_line=frame.active_lane_line,
         left_signal=frame.left_signal,
         right_signal=frame.right_signal,
         left_blindspot=frame.left_blindspot,
@@ -3734,6 +3742,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         cruise_gap=discrete.cruise_gap,
         traffic_state=discrete.traffic_state,
         lfa_active=discrete.lfa_active,
+        active_lane_line=discrete.active_lane_line,
         left_signal=discrete.left_signal,
         right_signal=discrete.right_signal,
         left_blindspot=discrete.left_blindspot,
@@ -3856,8 +3865,11 @@ def lanes_for_frame(
         left_inner = frame.left_lane_offset + lane_grid_offset
         right_inner = frame.right_lane_offset + lane_grid_offset
 
-    left_inner_visible = frame.left_lane_visible
-    right_inner_visible = frame.right_lane_visible
+    # Model lane probabilities intentionally fade during a lane change. The
+    # animated grid owns visual continuity for that interval, so its current
+    # lane boundaries must remain visible while the grid moves.
+    left_inner_visible = frame.left_lane_visible or use_animated_lane_grid
+    right_inner_visible = frame.right_lane_visible or use_animated_lane_grid
     road_edge_shift = lane_grid_offset if use_animated_lane_grid else 0.0
     left_road_edge_offset = shifted_optional_offset(frame.left_road_edge_offset, road_edge_shift)
     right_road_edge_offset = shifted_optional_offset(frame.right_road_edge_offset, road_edge_shift)
@@ -3889,7 +3901,9 @@ def lanes_for_frame(
             )
             color = model_lane_color_for_index(index, frame.lane_change)
             style = model_lane_style_for_index(index)
-            visible = frame.extra_left_lane_visible
+            visible = frame.extra_left_lane_visible or (
+                use_animated_lane_grid and frame.lane_change == "left"
+            )
             width = 5
         elif index == 3:
             offset = model_lane_offset_for_index(
@@ -3902,7 +3916,9 @@ def lanes_for_frame(
             )
             color = model_lane_color_for_index(index, frame.lane_change)
             style = model_lane_style_for_index(index)
-            visible = frame.extra_right_lane_visible
+            visible = frame.extra_right_lane_visible or (
+                use_animated_lane_grid and frame.lane_change == "right"
+            )
             width = 5
         else:
             offset = model_lane_offset_for_index(
@@ -3950,7 +3966,7 @@ def lanes_for_frame(
                 left_outer,
                 left_outer_color,
                 "solid",
-                visible=frame.extra_left_lane_visible and lane_offset_inside_road_edges(
+                visible=(frame.extra_left_lane_visible or use_animated_lane_grid) and lane_offset_inside_road_edges(
                     left_outer,
                     left_road_edge_offset,
                     right_road_edge_offset,
@@ -4018,7 +4034,7 @@ def lanes_for_frame(
                 right_outer,
                 right_outer_color,
                 "dashed",
-                visible=frame.extra_right_lane_visible and lane_offset_inside_road_edges(
+                visible=(frame.extra_right_lane_visible or use_animated_lane_grid) and lane_offset_inside_road_edges(
                     right_outer,
                     left_road_edge_offset,
                     right_road_edge_offset,

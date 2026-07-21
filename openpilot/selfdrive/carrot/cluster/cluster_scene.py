@@ -270,6 +270,7 @@ ModelLineStripCacheKey = tuple[
     ModelLineStripPointKey,
     float,
     float,
+    float,
     str,
     bool,
     ModelLineStripGeometrySpecs,
@@ -402,7 +403,20 @@ def longitudinal_render_distance_scale(state: ClusterUiState) -> float:
 
 
 def render_scene_forward_m(relative_forward_m: float, state: ClusterUiState) -> float:
-    return data_scene_forward_m(relative_forward_m * longitudinal_render_distance_scale(state))
+    return render_scene_forward_m_for_scale(
+        relative_forward_m,
+        longitudinal_render_distance_scale(state),
+    )
+
+
+def render_scene_forward_m_for_scale(relative_forward_m: float, longitudinal_scale: float) -> float:
+    scale = max(0.001, float(longitudinal_scale))
+    return data_scene_forward_m(relative_forward_m * scale)
+
+
+def render_relative_forward_m_from_scene(forward_m: float, longitudinal_scale: float) -> float:
+    scale = max(0.001, float(longitudinal_scale))
+    return scene_data_relative_forward_m(forward_m) / scale
 
 
 def detected_vehicle_scene_forward_m(vehicle: DetectedVehicle, state: ClusterUiState) -> float:
@@ -482,28 +496,30 @@ def strip_between_model_lines(
     steps: int,
     color: Color,
     height_m: float,
+    longitudinal_scale: float = 1.0,
     extend_before_model: bool = False,
 ) -> MeshStrip | None:
     if len(left_points) < 2 or len(right_points) < 2:
         return None
 
-    relative_start_m = max(0.0, scene_data_relative_forward_m(start_m))
+    scale = max(0.001, float(longitudinal_scale))
+    relative_start_m = max(0.0, render_relative_forward_m_from_scene(start_m, scale))
     if not extend_before_model:
         relative_start_m = max(relative_start_m, left_points[0].forward_m, right_points[0].forward_m)
     relative_end_m = min(
-        scene_data_relative_forward_m(end_m),
+        render_relative_forward_m_from_scene(end_m, scale),
         left_points[-1].forward_m,
         right_points[-1].forward_m,
     )
-    scene_start_m = start_m if extend_before_model else data_scene_forward_m(relative_start_m)
-    scene_end_m = min(end_m, data_scene_forward_m(relative_end_m))
+    scene_start_m = start_m if extend_before_model else render_scene_forward_m_for_scale(relative_start_m, scale)
+    scene_end_m = min(end_m, render_scene_forward_m_for_scale(relative_end_m, scale))
     if scene_end_m <= scene_start_m + 1.0:
         return None
 
     left: list[Vec3] = []
     right: list[Vec3] = []
     for forward_m in sample_range(scene_start_m, scene_end_m, steps):
-        relative_forward_m = scene_data_relative_forward_m(forward_m)
+        relative_forward_m = render_relative_forward_m_from_scene(forward_m, scale)
         left_lateral = (
             left_points[0].lateral_m + left_lateral_shift_m
             if extend_before_model and relative_forward_m < left_points[0].forward_m
@@ -560,6 +576,7 @@ def lane_floor_strip(
             road_steps,
             color,
             height_m,
+            longitudinal_scale=longitudinal_render_distance_scale(state),
             extend_before_model=True,
         )
         if model_strip is not None:
@@ -607,11 +624,11 @@ def model_line_centerline(
     end_m: float,
     height_m: float,
     lateral_shift_m: float = 0.0,
+    longitudinal_scale: float = 1.0,
 ) -> tuple[Vec3, ...]:
     centerline: list[Vec3] = []
-    ego_forward_m = EGO_FORWARD_M
     for point in model_points:
-        forward_m = ego_forward_m + point.forward_m
+        forward_m = render_scene_forward_m_for_scale(point.forward_m, longitudinal_scale)
         if start_m <= forward_m <= end_m:
             centerline.append(Vec3(point.lateral_m + lateral_shift_m, forward_m, height_m))
     return tuple(centerline)
@@ -756,6 +773,7 @@ def lane_marking_segments_for_marking(
     start_m: float,
     end_m: float,
     extend_before_model: bool = False,
+    longitudinal_scale: float = 1.0,
 ) -> tuple[tuple[Vec3, ...], ...]:
     if marking.model_points:
         centerline = model_line_centerline(
@@ -764,6 +782,7 @@ def lane_marking_segments_for_marking(
             end_m,
             0.0,
             marking.model_lateral_shift_m,
+            longitudinal_scale,
         )
         if len(centerline) < 2:
             if not extend_before_model:
@@ -1181,9 +1200,11 @@ def cached_model_line_strip_groups(
     specs: tuple[tuple[int, Color, float], ...],
     style: str,
     extend_before_model: bool,
+    longitudinal_scale: float = 1.0,
     profile_add: ProfileAdd | None = None,
     profile_prefix: str = "scene.model_line",
 ) -> ModelLineStripGroups:
+    scale = max(0.001, float(longitudinal_scale))
     cache_start_m = model_line_cache_start_m(start_m)
     cache_end_m = model_line_cache_end_m(end_m)
     geometry_specs = model_line_geometry_specs(specs)
@@ -1194,6 +1215,7 @@ def cached_model_line_strip_groups(
         point_key,
         cache_start_m,
         cache_end_m,
+        scale,
         style,
         extend_before_model,
         geometry_specs,
@@ -1206,7 +1228,13 @@ def cached_model_line_strip_groups(
 
     profile_scene_add_elapsed(profile_add, f"{profile_prefix}.miss", 0.0)
     profile_stage = profile_scene_start(profile_add)
-    centerline = model_line_centerline(render_points, cache_start_m, cache_end_m, 0.0)
+    centerline = model_line_centerline(
+        render_points,
+        cache_start_m,
+        cache_end_m,
+        0.0,
+        longitudinal_scale=scale,
+    )
     profile_scene_add(profile_add, f"{profile_prefix}.centerline", profile_stage)
     if len(centerline) < 2:
         groups: ModelLineStripGroups = None if extend_before_model else tuple(() for _ in geometry_specs)
@@ -1379,6 +1407,7 @@ def model_line_strip_groups(
     specs: tuple[tuple[int, Color, float], ...],
     style: str,
     extend_before_model: bool,
+    longitudinal_scale: float = 1.0,
     profile_add: ProfileAdd | None = None,
     profile_prefix: str = "scene.model_line",
 ) -> ModelLineStripGroups:
@@ -1389,6 +1418,7 @@ def model_line_strip_groups(
         specs,
         style,
         extend_before_model,
+        longitudinal_scale,
         profile_add,
         profile_prefix,
     )
@@ -1448,7 +1478,11 @@ def model_path_lateral_at_forward(state: ClusterUiState, relative_forward_m: flo
 
 
 def model_path_world_x(state: ClusterUiState, lane_width_m: float, forward_m: float) -> float | None:
-    lateral_m = model_path_lateral_at_forward(state, scene_data_relative_forward_m(forward_m))
+    relative_forward_m = render_relative_forward_m_from_scene(
+        forward_m,
+        longitudinal_render_distance_scale(state),
+    )
+    lateral_m = model_path_lateral_at_forward(state, relative_forward_m)
     if lateral_m is None:
         return None
     ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
@@ -1460,7 +1494,7 @@ def model_path_end_m(state: ClusterUiState, lane_width_m: float, blockers: tuple
     if len(state.model_path) < 2:
         return None
     last_forward_m = state.model_path[-1].forward_m
-    end_m = min(PATH_END_M, data_scene_forward_m(last_forward_m))
+    end_m = min(PATH_END_M, render_scene_forward_m(last_forward_m, state))
     if end_m <= PATH_START_M + 0.6:
         return None
 
@@ -1486,8 +1520,12 @@ def model_path_centerline(
     end_m = model_path_end_m(state, lane_width_m, blockers)
     if end_m is None:
         return ()
-    relative_start_m = max(0.0, scene_data_relative_forward_m(PATH_START_M))
-    relative_end_m = max(relative_start_m, scene_data_relative_forward_m(end_m))
+    longitudinal_scale = longitudinal_render_distance_scale(state)
+    relative_start_m = max(0.0, render_relative_forward_m_from_scene(PATH_START_M, longitudinal_scale))
+    relative_end_m = max(
+        relative_start_m,
+        render_relative_forward_m_from_scene(end_m, longitudinal_scale),
+    )
     model_points = tuple(
         point
         for point in state.model_path
@@ -1506,7 +1544,11 @@ def model_path_centerline(
         ego_offset = clamp(state.ego_lane_offset, -1.25, 1.25)
         ego_x_m = road_world_x(ego_offset, EGO_FORWARD_M, state.steering, lane_width_m)
         points = [
-            Vec3(ego_x_m + point.lateral_m, data_scene_forward_m(point.forward_m), PATH_HEIGHT_M)
+            Vec3(
+                ego_x_m + point.lateral_m,
+                render_scene_forward_m_for_scale(point.forward_m, longitudinal_scale),
+                PATH_HEIGHT_M,
+            )
             for point in model_points
         ]
     return tuple(points) if len(points) >= 2 else ()
@@ -3093,6 +3135,7 @@ def road_edge_model_strips(
     side: float,
     start_m: float,
     end_m: float,
+    longitudinal_scale: float = 1.0,
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
     profile_add: ProfileAdd | None = None,
 ) -> tuple[MeshStrip, ...]:
@@ -3109,6 +3152,7 @@ def road_edge_model_strips(
         specs,
         "solid",
         True,
+        longitudinal_scale,
         profile_add,
         "scene.road_model",
     )
@@ -3221,6 +3265,8 @@ def road_edge_strips(
     theme: ClusterTheme = LIGHT_CLUSTER_THEME,
     profile_add: ProfileAdd | None = None,
 ) -> tuple[MeshStrip, ...]:
+    longitudinal_scale = longitudinal_render_distance_scale(state)
+
     def default_road_edge_strips() -> tuple[MeshStrip, ...]:
         default_color = road_edge_color(None, 1.0, theme)
         left_offset, right_offset = road_surface_offsets(state, route_mode)
@@ -3262,7 +3308,9 @@ def road_edge_strips(
                     -1.0,
                     road_start_m,
                     road_end_m,
+                    longitudinal_scale,
                     theme,
+                    profile_add,
                 )
             )
         elif state.left_road_edge_offset is not None:
@@ -3289,6 +3337,7 @@ def road_edge_strips(
                     1.0,
                     road_start_m,
                     road_end_m,
+                    longitudinal_scale,
                     theme,
                     profile_add,
                 )
@@ -3423,6 +3472,7 @@ def build_cluster_scene(
 ) -> ClusterScene:
     profile_stage = profile_scene_start(profile_add)
     lane_width_m = max(2.4, min(4.6, state.lane_width_m or DEFAULT_LANE_WIDTH_M))
+    longitudinal_scale = longitudinal_render_distance_scale(state)
     all_raw_corner_points = raw_corner_radar_points(state.radar_points)
     raw_corner_active = bool(all_raw_corner_points)
     raw_corner_points = corner_radar_points_for_cluster_display(all_raw_corner_points, state, lane_width_m)
@@ -3538,6 +3588,7 @@ def build_cluster_scene(
                 marking_specs,
                 marking.style,
                 True,
+                longitudinal_scale,
                 profile_add,
                 "scene.lane_model",
             )

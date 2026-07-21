@@ -284,8 +284,10 @@ Changing either param makes the running HUD exit so `cluster_autorun` can
 relaunch it with the new affinity/scheduler settings, without a whole system restart.
 Explicit `CLUSTER_REALTIME_CORES` or `CLUSTER_REALTIME_PRIORITY` environment
 values still override the corresponding Params.
-On TICI, the HUD reads the local Git branch directly but does not start remote
-`ls-remote` or `fetch` work. PC/window runs retain the periodic remote status.
+The HUD reads the local Git branch immediately on every platform and refreshes
+the upstream update state asynchronously at most every 60 seconds. The Git
+worker changes itself to `SCHED_OTHER` before `ls-remote`/`fetch`, so TICI does
+not run those commands in the render process's FIFO scheduling class.
 Native H.264 callback output is queued as complete access units. The bounded
 queue retains the latest codec config, keyframe, and frame without waiting for
 USB; stale access units are dropped and reported instead of failing the run.
@@ -331,11 +333,19 @@ ratio and is taller than before while the gap bars keep their own size/spacing;
 all four gap bars stay visible, sit close together, and bottom-align to the
 vehicle while inactive bars are gray and active bars use `#bb3d91`. Cruise set
 speed and `km/h` use the same font size and color; paused cruise keeps the set
-speed but draws it gray, and inactive cruise draws gray `--- km/h`. The
-lane-change icon is not drawn; the LFA icon uses
+speed but draws it gray, and inactive cruise draws gray `--- km/h`. The orange
+deceleration override keeps the selected `carrotMan.desiredSource` control
+value unchanged but annotates its displayed origin: navigation camera `cam:n`,
+vehicle/HDA camera `cam:v`, vehicle-side route curvature `route:v`, and
+comma-model turn prediction `turn:c`. Navigation TBT turn control displays
+`turn:n`; the label font scales down slightly for longer values such as
+`section:n` instead of dropping the origin suffix. The separate lane-change
+icon is not drawn. The LFA icon uses
 `selfdrive/assets/icons_mici/carrot_wheel_org.png`, rotates by
 `-carState.steeringAngleDeg`, and recolors its white pixels green when LFA is
-active.
+active. When `controlsState.activeLaneLine` is true, the fixed
+`carrot_wheel_lane.png` left/right lane overlay is drawn in the same position
+and color contract as the C4 HUD.
 When `--fps` is omitted, `ClusterHudLiveFps` controls the render limit and is
 polled about once per second while running: `0` uncapped diagnostic mode, `1`
 10 Hz default, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
@@ -404,11 +414,13 @@ detected positions. The older fixed rear-tire-depth 2D arrow/label is removed.
 The default drive camera sits closer to the ego roof, lower than the earlier
 high view, tilted downward, shifted `5m` forward, and uses a `31` degree
 vertical field of view so nearby vehicles retain a useful apparent size.
-Detected vehicles, radar points, and desired-distance markers
-compress signed longitudinal placement by `0.5` in the rendered scene only, so
-actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Distance labels keep
-the actual signed longitudinal values. The ego vehicle is drawn half a vehicle
-length behind the raw `0m` reference so its front bumper aligns to that
+Detected vehicles, radar points, desired-distance markers, model lane markings,
+the model-derived lane-change floor, model road edges, and the model planned
+path compress signed longitudinal placement by `0.5` in the rendered 3D scene,
+so actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Road-camera mode
+keeps those overlays at `1:1` for image alignment. Distance labels and all
+lateral coordinates keep their actual values. The ego vehicle is drawn half a
+vehicle length behind the raw `0m` reference so its front bumper aligns to that
 reference. The temporary radar-zero, lane-start, and ego-zero debug marker bars
 are no longer rendered.
 `ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` uses a

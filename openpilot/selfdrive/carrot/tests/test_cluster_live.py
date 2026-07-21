@@ -1,0 +1,58 @@
+from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
+import sys
+
+import pytest
+
+
+CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
+sys.path.insert(0, str(CLUSTER_DIR))
+
+from cluster_live import OpenpilotLiveSource, deceleration_source_display_label, standby_state
+
+
+@pytest.mark.parametrize(
+  ("source", "expected"),
+  (
+    ("cam", "cam:n"),
+    ("hda", "cam:v"),
+    ("route", "route:v"),
+    ("vturn", "turn:c"),
+    ("model", "turn:c"),
+    ("atc", "turn:n"),
+    ("section", "section:n"),
+    ("longsource:c", "longsource:c"),
+    ("custom-source", "custom-s"),
+    (None, "apply"),
+  ),
+)
+def test_deceleration_source_display_label(source, expected) -> None:
+  assert deceleration_source_display_label(source) == expected
+
+
+@pytest.mark.parametrize(
+  ("desired_source", "expected_label"),
+  (
+    ("cam", "cam:n"),
+    ("hda", "cam:v"),
+    ("route", "route:v"),
+    ("model", "turn:c"),
+  ),
+)
+def test_live_deceleration_override_adds_source_origin(desired_source, expected_label) -> None:
+  source = object.__new__(OpenpilotLiveSource)
+  source._max_lateral_accel = 3.0
+  source._energy_gauge_label = "fuel"
+  source._carrot_navi_media = None
+  source._current_carrot_navi = lambda _now: None
+  carrot_man = SimpleNamespace(activeCarrot=3, desiredSpeed=55.0, desiredSource=desired_source)
+  source._service_data = lambda service: carrot_man if service == "carrotMan" else None
+  source._service_alive = lambda _service: False
+  state = replace(standby_state(), cruise_kph=100, cruise_display_state="engaged")
+
+  decorated = source._with_live_hud_state(state)
+
+  assert decorated.cruise_override_kph == 55.0
+  assert decorated.cruise_override_label == expected_label
+  assert decorated.cruise_override_color_mode == 2
