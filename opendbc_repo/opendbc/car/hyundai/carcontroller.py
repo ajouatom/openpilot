@@ -771,8 +771,14 @@ class HyundaiJerk:
       self.cb_upper = self.cb_lower = 0.0
     else:
       if CP.flags & HyundaiFlags.CANFD:
+        # Keep deceleration authority after the MPC jerk settles to zero. Stock SCC raises the
+        # lower jerk limit with the raw acceleration request instead of relying on jerk alone.
+        jerk_l_base = 1.2
+        jerk_l_raw = np.clip(jerk_l_base + 2.0 * max(0.0, -accel - 2.8), jerk_l_base, jerk_max_l)
+        jerk_l_mpc = np.clip(-self.jerk * 4.0, jerk_l_base, jerk_max_l)
+
         self.jerk_u = min(max(self.jerk_u_min, self.jerk * 2.0), jerk_max_u)
-        self.jerk_l = min(max(1.0, -self.jerk * 4.0), jerk_max_l)
+        self.jerk_l = max(jerk_l_raw, jerk_l_mpc)
         self.cb_upper = self.cb_lower = 0.0
       else:
         self.jerk_u = min(max(self.jerk_u_min, self.jerk * 2.0), jerk_max_u)
