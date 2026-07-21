@@ -5906,11 +5906,15 @@ class ClusterUiRenderer:
             )
             override_text = str(int(round(state.cruise_override_kph)))
             override_label = state.cruise_override_label or ""
+            override_label_font_size = CRUISE_OVERRIDE_LABEL_FONT_SIZE * min(
+                1.0,
+                8.0 / max(8, len(override_label)),
+            )
             self._draw_text_with_stroke(
                 override_label,
                 CRUISE_OVERRIDE_SPEED_CENTER_X,
                 CRUISE_OVERRIDE_LABEL_CENTER_Y,
-                CRUISE_OVERRIDE_LABEL_FONT_SIZE,
+                override_label_font_size,
                 override_color,
                 (0, 0, 0),
                 2,
