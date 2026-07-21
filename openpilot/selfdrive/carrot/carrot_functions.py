@@ -7,6 +7,7 @@ import numpy as np
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.constants import CV
 from openpilot.common.filter_simple import MyMovingAverage
+from openpilot.selfdrive.carrot.t_follow import ramp_t_follow
 from openpilot.selfdrive.selfdrived.events import Events
 
 EventName = log.OnroadEvent.EventName
@@ -332,9 +333,7 @@ class CarrotPlanner:
   def apply_t_follow(self, t_follow, adjust_t_follow=0.0):
     # t_follow가 급격히 증가하면 목표거리도 급격히 증가하여 강한 감속을 유도할 수 있으므로
     # 증가 방향만 천천히 반영
-    if t_follow > self.t_follow_last:
-      rise_rate = 0.45 if self._tf_decel_extra > 0.02 else 0.1
-      t_follow = min(t_follow, self.t_follow_last + rise_rate * DT_MDL)
+    t_follow = ramp_t_follow(t_follow, self.t_follow_last, self._tf_decel_extra, DT_MDL)
 
     self.t_follow_last = float(t_follow)
     return float(t_follow + adjust_t_follow)
