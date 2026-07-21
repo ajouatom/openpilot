@@ -593,6 +593,18 @@ class RadarLeadDecisionFilter:
         prediction.features.values[LANE1_PROB_INDEX] > 0.5
         and prediction.features.values[LANE2_PROB_INDEX] > 0.5
       )
+      history_inward_speed = min(
+        h8_inward_speed, h12_inward_speed, h8_lane_inward, h12_lane_inward,
+      )
+      history_projected_d_path = max(
+        0.0, current_d_path - min(2.5, max(0.0, history_inward_speed)) * 0.5,
+      )
+      decision_future_d_path = (
+        min(future_d_path, history_projected_d_path)
+        if obj.front_track_id is not None and obj.corner_track_id is None
+        and lane_history_ready and lane_direction_reliable
+        else future_d_path
+      )
       historical_inward = raw_historical_inward if obj.d_rel < 12.0 or not lane_history_ready else (
         lane_direction_reliable
         and raw_historical_inward
@@ -632,7 +644,7 @@ class RadarLeadDecisionFilter:
       front_only_inward_cutin = (
         obj.front_track_id is not None and obj.corner_track_id is None
         and prediction.features.track_age >= 12
-        and 2.5 < obj.d_rel < 12.0 and obj.v_lead > 2.0
+        and 4.5 < obj.d_rel < 12.0 and obj.v_lead > 2.0
         and lane_history_ready and lane_direction_reliable
         and 0.75 < current_d_path <= 1.8 and abs(obj.y_rel) < 2.3
         and 0.20 < h8_inward_speed < 3.2
@@ -645,14 +657,13 @@ class RadarLeadDecisionFilter:
         and prediction.features.track_age >= 12
         and 12.0 <= obj.d_rel < 50.0 and obj.v_lead > 2.0
         and lane_history_ready and lane_direction_reliable
-        and 1.8 < current_d_path < 2.7 and future_d_path < 2.15
-        and future_d_path + 0.20 < current_d_path
-        and 0.12 < instant_inward_speed < 2.5
+        and 1.8 < current_d_path < 2.7 and decision_future_d_path < 2.15
+        and decision_future_d_path + 0.20 < current_d_path
+        and 0.20 < history_inward_speed < 2.5
         and 0.20 < h8_inward_speed < 3.2
         and 0.20 < h12_inward_speed < 3.2
         and 0.20 < h8_lane_inward < 3.2
         and 0.20 < h12_lane_inward < 3.2
-        and prediction.cutin_prob >= 0.25
       )
       effective_cutin_prob = max(
         prediction.cutin_prob,
@@ -661,7 +672,8 @@ class RadarLeadDecisionFilter:
       )
       state.cutin_ema = max(effective_cutin_prob, 0.60 * state.cutin_ema + 0.40 * effective_cutin_prob)
       projected_lane_entry = (
-        future_d_path < 2.25 and future_d_path + 0.15 < current_d_path and sustained_inward
+        decision_future_d_path < 2.25 and decision_future_d_path + 0.15 < current_d_path
+        and (sustained_inward or front_only_midrange_cutin)
       )
       inside_not_moving_out = current_d_path <= 1.8 and future_d_path <= current_d_path + 0.15
       directional_cutin = inside_not_moving_out or projected_lane_entry
