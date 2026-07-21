@@ -408,11 +408,13 @@ detected positions. The older fixed rear-tire-depth 2D arrow/label is removed.
 The default drive camera sits closer to the ego roof, lower than the earlier
 high view, tilted downward, shifted `5m` forward, and uses a `31` degree
 vertical field of view so nearby vehicles retain a useful apparent size.
-Detected vehicles, radar points, and desired-distance markers
-compress signed longitudinal placement by `0.5` in the rendered scene only, so
-actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Distance labels keep
-the actual signed longitudinal values. The ego vehicle is drawn half a vehicle
-length behind the raw `0m` reference so its front bumper aligns to that
+Detected vehicles, radar points, desired-distance markers, model lane markings,
+the model-derived lane-change floor, model road edges, and the model planned
+path compress signed longitudinal placement by `0.5` in the rendered 3D scene,
+so actual `20m` and `-10m` draw at rendered `10m` and `-5m`. Road-camera mode
+keeps those overlays at `1:1` for image alignment. Distance labels and all
+lateral coordinates keep their actual values. The ego vehicle is drawn half a
+vehicle length behind the raw `0m` reference so its front bumper aligns to that
 reference. The temporary radar-zero, lane-start, and ego-zero debug marker bars
 are no longer rendered.
 `ClusterHudCameraViewMode=0` keeps this current camera. Mode `1` uses a
