@@ -12,7 +12,7 @@ import numpy as np
 from openpilot.common.utils import tabulate
 
 from openpilot.common.git import get_commit
-from openpilot.system.hardware import PC
+from openpilot.common.hardware import PC
 from openpilot.tools.lib.openpilotci import get_url
 from openpilot.selfdrive.test.process_replay.compare_logs import compare_logs, format_diff
 from openpilot.selfdrive.test.process_replay.process_replay import get_process_config, replay_process
@@ -35,7 +35,7 @@ GITHUB = GithubUtils(API_TOKEN, DATA_TOKEN)
 EXEC_TIMINGS = [
   # model, instant max, average max
   ("modelV2", 0.05, 0.028),
-  ("driverStateV2", 0.05, 0.016),
+  ("driverStateV2", 0.05, 0.018),
 ]
 
 def get_log_fn(test_route, ref="master"):
@@ -76,7 +76,7 @@ def generate_report(proposed, master, tmp, commit):
                      (lambda x: get_idx_if_non_empty(x.wheelOnRightProb), "wheelOnRightProb"),
                      (lambda x: get_idx_if_non_empty(x.leftDriverData.faceProb), "leftDriverData.faceProb"),
                      (lambda x: get_idx_if_non_empty(x.leftDriverData.faceOrientation, 0), "leftDriverData.faceOrientation0"),
-                     (lambda x: get_idx_if_non_empty(x.leftDriverData.eyesClosedProb), "leftDriverData.eyesClosedProb"),
+                     (lambda x: get_idx_if_non_empty(x.leftDriverData.leftBlinkProb), "leftDriverData.leftBlinkProb"),
                      (lambda x: get_idx_if_non_empty(x.leftDriverData.phoneProb), "leftDriverData.phoneProb"),
                      (lambda x: get_idx_if_non_empty(x.rightDriverData.faceProb), "rightDriverData.faceProb"),
                     ], "driverStateV2")

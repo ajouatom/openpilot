@@ -2,7 +2,7 @@
 import gc
 import os
 
-from openpilot.system.hardware import TICI
+from openpilot.common.hardware import TICI
 from openpilot.common.realtime import set_core_affinity
 from openpilot.selfdrive.ui.carrot_ui_sched import ensure_ui_sched_other
 from openpilot.system.ui.lib.application import gui_app

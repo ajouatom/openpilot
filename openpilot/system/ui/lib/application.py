@@ -20,13 +20,13 @@ from typing import NamedTuple
 from importlib.resources import as_file
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.swaglog import cloudlog
-from openpilot.system.hardware import HARDWARE, PC
+from openpilot.common.hardware import HARDWARE, PC
 from openpilot.system.ui.lib.multilang import multilang
 from openpilot.common.realtime import Ratekeeper
 import datetime
 
 #_DEFAULT_FPS = int(os.getenv("FPS", {'tizi': 20}.get(HARDWARE.get_device_type(), 60)))
-_DEFAULT_FPS = 20 
+_DEFAULT_FPS = 20
 FPS_LOG_INTERVAL = 5  # Seconds between logging FPS drops
 FPS_DROP_THRESHOLD = 0.9  # FPS drop threshold for triggering a warning
 FPS_CRITICAL_THRESHOLD = 0.5  # Critical threshold for triggering strict actions
@@ -312,7 +312,7 @@ class GuiApplication:
     self._record_dir.mkdir(parents=True, exist_ok=True)
     name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + ".mp4"
     return self._record_dir / name
-  
+
   def start_recording(self):
     if self._record_enabled:
       return
@@ -423,7 +423,7 @@ class GuiApplication:
     self._ffmpeg_proc = None
     self._ffmpeg_queue = None
     self._ffmpeg_thread = None
-    self._ffmpeg_stop_event = None  
+    self._ffmpeg_stop_event = None
 
   @property
   def frame(self):
@@ -891,9 +891,9 @@ class GuiApplication:
             try:
               self._ffmpeg_queue.put_nowait(data)  # Async write via background thread
             except queue.Full:
-              pass          
+              pass
             rl.unload_image(image)
-            
+
           if self._record_enabled:
             if (time.monotonic() - self._record_t0) >= self._record_max_sec:
               self.stop_recording()

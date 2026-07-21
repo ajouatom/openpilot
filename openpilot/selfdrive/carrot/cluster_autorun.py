@@ -11,7 +11,7 @@ import traceback
 from pathlib import Path
 
 from openpilot.common.params import Params
-from openpilot.system.hardware import TICI
+from openpilot.common.hardware import TICI
 
 
 CARROT_DIR = Path(__file__).resolve().parent

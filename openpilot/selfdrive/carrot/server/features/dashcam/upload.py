@@ -5,7 +5,7 @@ from typing import Any
 
 from aiohttp import ClientSession, ClientTimeout
 
-from openpilot.system.hardware import HARDWARE
+from openpilot.common.hardware import HARDWARE
 from openpilot.selfdrive.carrot.web_upload import web_upload_settings
 
 from ...config import DASHCAM_DEFAULT_DISCORD_KEY, DASHCAM_DEFAULT_DISCORD_WEBHOOK

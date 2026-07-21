@@ -1,6 +1,5 @@
 import os
 from collections import defaultdict
-
 from opendbc.car.tests.car_diff import format_diff, format_numeric_diffs
 from openpilot.selfdrive.test.process_replay.compare_logs import compare_logs
 from openpilot.selfdrive.test.process_replay.process_replay import PROC_REPLAY_DIR
@@ -49,6 +48,8 @@ def diff_format(diffs, ref, new, field) -> list[str]:
   msg_type = field.split(".")[0]
   ref_ts = [(m.logMonoTime, MsgWrap(m)) for m in ref.get(msg_type, [])]
   new_wrapped = [MsgWrap(m) for m in new.get(msg_type, [])]
+  if not ref_ts or not new_wrapped:
+    return format_numeric_diffs(diffs)
   return format_diff(diffs, ref_ts, new_wrapped, field)
 
 

@@ -3,7 +3,8 @@
 import math
 import numpy as np
 
-from openpilot.cereal import messaging, car
+from openpilot.cereal import messaging
+from opendbc.car.structs import car
 from opendbc.car.vehicle_model import VehicleModel
 from openpilot.common.realtime import DT_CTRL, Ratekeeper
 from openpilot.common.params import Params
@@ -47,7 +48,7 @@ def joystickd_thread():
 
     if CC.longActive:
       actuators.accel = 4.0 * float(np.clip(joystick_axes[0], -1, 1))
-      actuators.longControlState = LongCtrlState.pid if sm['carState'].vEgo > CP.vEgoStopping else LongCtrlState.stopping
+      actuators.longControlState = LongCtrlState.pid if sm['carState'].vEgo > 0.1 else LongCtrlState.stopping
       CC.cruiseControl.resume = actuators.accel > 0.0
 
     if CC.latActive:

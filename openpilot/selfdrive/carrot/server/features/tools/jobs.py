@@ -346,7 +346,7 @@ def result_from_log(job: Dict[str, Any], rc: int, **extra: Any) -> Dict[str, Any
 # -----------------------
 def get_branch_prefix() -> str:
   try:
-    from openpilot.system.hardware import HARDWARE
+    from openpilot.common.hardware import HARDWARE
     return "c4" if HARDWARE.get_device_type() == "mici" else "c3"
   except Exception:
     return "c3"

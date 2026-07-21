@@ -67,7 +67,7 @@ def _sound_directory(params: Params) -> str:
 
 def _is_tizi() -> bool:
   try:
-    from openpilot.system.hardware import HARDWARE
+    from openpilot.common.hardware import HARDWARE
     return HARDWARE.get_device_type() == "tizi"
   except Exception:
     return False

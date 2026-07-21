@@ -8,7 +8,7 @@
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/qt/maps/map_helpers.h"
 #include "selfdrive/navd/map_renderer.h"
-#include "system/hardware/hw.h"
+#include "common/hardware/hw.h"
 
 void customMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg) {
     QByteArray localMsg = msg.toLocal8Bit();
@@ -16,7 +16,7 @@ void customMessageHandler(QtMsgType type, const QMessageLogContext& context, con
     const char* function = context.function ? context.function : "";
     int line = context.line;
 
-    // ¸Þ½ÃÁö Å¸ÀÔ¿¡ µû¶ó Ãâ·Â Çü½Ä ¼³Á¤
+    // ï¿½Þ½ï¿½ï¿½ï¿½ Å¸ï¿½Ô¿ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     switch (type) {
     case QtDebugMsg:
         printf("Debug: %s (%s:%d, %s)\n", localMsg.constData(), file, line, function);

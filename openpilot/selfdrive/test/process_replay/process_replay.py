@@ -12,10 +12,10 @@ from typing import Any
 from collections.abc import Callable, Iterable
 from tqdm import tqdm
 import capnp
-from openpilot.system.hardware.hw import Paths
+from openpilot.common.hardware.hw import Paths
 
 import openpilot.cereal.messaging as messaging
-from openpilot.cereal import car
+from opendbc.car.structs import car
 from openpilot.cereal.services import SERVICE_LIST
 from msgq.visionipc import VisionIpcServer, get_endpoint_name as vipc_get_endpoint_name
 from opendbc.car.can_definitions import CanData
@@ -191,9 +191,9 @@ class ProcessContainer:
     params = Params()
     for k, v in params_config.items():
       if isinstance(v, bool):
-        params.put_bool(k, v)
+        params.put_bool(k, v, block=True)
       else:
-        params.put(k, v)
+        params.put(k, v, block=True)
 
     self.environ_config = environ_config
 
@@ -215,8 +215,7 @@ class ProcessContainer:
 
   def _start_process(self):
     if self.capture is not None:
-      self.process.launcher = LauncherWithCapture(self.capture, self.process.launcher)
-    self.process.prepare()
+      self.process.launcher = LauncherWithCapture(self.capture, self.process.launcher)  # ty: ignore[invalid-assignment]  # intentional wrapper
     self.process.start()
 
   def start(
@@ -372,7 +371,7 @@ def get_car_params_callback(rc, pm, msgs, fingerprint):
 
     CP = get_car(can_recv, lambda _msgs: None, lambda obd: None, params.get_bool("AlphaLongitudinalEnabled"), False, cached_params=cached_params).CP
 
-  params.put("CarParams", CP.to_bytes())
+  params.put("CarParams", CP.to_bytes(), block=True)
 
 
 def card_rcv_callback(msg, cfg, frame):
@@ -631,10 +630,10 @@ def replay_process(
   fingerprint: str | None = None, return_all_logs: bool = False, custom_params: dict[str, Any] | None = None,
   captured_output_store: dict[str, dict[str, str]] | None = None, disable_progress: bool = False
 ) -> list[capnp._DynamicStructReader]:
-  if isinstance(cfg, Iterable):
-    cfgs = list(cfg)
-  else:
+  if isinstance(cfg, ProcessConfig):
     cfgs = [cfg]
+  else:
+    cfgs = list(cfg)
 
   all_msgs = migrate_all(lr,
                          manager_states=True,

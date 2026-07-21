@@ -86,9 +86,7 @@ def start_juggler(fn=None, dbc=None, layout=None, route_or_segment_name=None, pl
   cmd = f'{PLOTJUGGLER_BIN} --buffer_size {MAX_STREAMING_BUFFER_SIZE} --plugin_folders {INSTALL_DIR}{extra_args}'
   with tempfile.TemporaryDirectory() as schema_root:
     tmp_cereal = os.path.join(schema_root, "cereal")
-    tmp_opendbc = os.path.join(schema_root, "opendbc")
     os.mkdir(tmp_cereal)
-    os.mkdir(tmp_opendbc)
     for schema in ("log.capnp", "deprecated.capnp", "custom.capnp"):
       with open(os.path.join(BASEDIR, "openpilot", "cereal", schema)) as src:
         contents = src.read()
@@ -96,13 +94,9 @@ def start_juggler(fn=None, dbc=None, layout=None, route_or_segment_name=None, pl
       contents = contents.replace('import "/car.capnp"', 'import "car.capnp"')
       with open(os.path.join(tmp_cereal, schema), "w") as dst:
         dst.write(contents)
-    with open(os.path.join(BASEDIR, "opendbc_repo", "opendbc", "car", "car.capnp")) as src:
-      contents = src.read()
-    contents = contents.replace('import "/include/c++.capnp"', 'import "./include/c++.capnp"')
-    with open(os.path.join(tmp_cereal, "car.capnp"), "w") as dst:
-      dst.write(contents)
     os.symlink(os.path.join(BASEDIR, "openpilot", "cereal", "include"), os.path.join(tmp_cereal, "include"), target_is_directory=True)
-    os.symlink(os.path.join(BASEDIR, "opendbc_repo", "opendbc", "dbc"), os.path.join(tmp_opendbc, "dbc"), target_is_directory=True)
+    os.symlink(os.path.join(BASEDIR, "opendbc_repo", "opendbc", "car", "car.capnp"), os.path.join(tmp_cereal, "car.capnp"))
+    os.symlink(os.path.join(BASEDIR, "opendbc_repo", "opendbc"), os.path.join(schema_root, "opendbc"), target_is_directory=True)
     env["BASEDIR"] = schema_root
     subprocess.call(cmd, shell=True, env=env, cwd=juggle_dir)
 

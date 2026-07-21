@@ -15,7 +15,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
 
 from openpilot.system import micd
-from openpilot.system.hardware import HARDWARE
+from openpilot.common.hardware import HARDWARE
 
 SAMPLE_RATE = 48000
 SAMPLE_BUFFER = 4096 # (approx 100ms)

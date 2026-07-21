@@ -1168,7 +1168,7 @@ struct EncodeIndex {
   }
 }
 
-struct AndroidLogEntry {
+struct OperatingSystemLogEntry {
   id @0 :UInt8;
   ts @1 :UInt64;
   priority @2 :UInt8;
@@ -2598,7 +2598,7 @@ struct Event {
     rawAudioData @147 :AudioData;
 
     # systems stuff
-    androidLog @20 :AndroidLogEntry;
+    operatingSystemLog @20 :OperatingSystemLogEntry;
     managerState @78 :ManagerState;
     uploaderState @79 :UploaderState;
     procLog @33 :ProcLog;

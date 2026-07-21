@@ -5,10 +5,11 @@ import pyray as rl
 import random
 import string
 from dataclasses import dataclass
-from openpilot.cereal import messaging, log, car
+from openpilot.cereal import messaging, log
+from opendbc.car.structs import car
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.common.filter_simple import BounceFilter, FirstOrderFilter
-from openpilot.system.hardware import TICI
+from openpilot.common.hardware import TICI
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel

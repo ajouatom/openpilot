@@ -7,7 +7,6 @@ from collections import namedtuple
 from enum import Enum
 from multiprocessing import Process, Queue, Value
 from abc import ABC, abstractmethod
-
 from opendbc.car.honda.values import CruiseButtons
 from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
@@ -40,7 +39,7 @@ class SimulatorBridge(ABC):
   def __init__(self, dual_camera, high_quality):
     set_params_enabled()
     self.params = Params()
-    self.params.put_bool("AlphaLongitudinalEnabled", True)
+    self.params.put_bool("AlphaLongitudinalEnabled", True, block=True)
 
     self.rk = Ratekeeper(100, None)
 
@@ -95,7 +94,7 @@ Ignition: {self.simulator_state.ignition} Engaged: {self.simulator_state.is_enga
     """)
 
   @abstractmethod
-  def spawn_world(self, q: Queue) -> World:
+  def spawn_world(self, q: Queue, /) -> World:
     pass
 
   def _run(self, q: Queue):

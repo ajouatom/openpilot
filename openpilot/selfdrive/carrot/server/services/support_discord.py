@@ -12,7 +12,7 @@ from aiohttp import ClientSession, ClientTimeout
 from .params import get_param_values
 
 try:
-  from openpilot.system.hardware import HARDWARE
+  from openpilot.common.hardware import HARDWARE
 except Exception:
   HARDWARE = None
 

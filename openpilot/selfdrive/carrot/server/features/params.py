@@ -50,7 +50,7 @@ async def api_params_bulk(request: web.Request) -> web.Response:
   )
   if "DeviceType" in req_names:
     try:
-      from openpilot.system.hardware import HARDWARE
+      from openpilot.common.hardware import HARDWARE
       values["DeviceType"] = HARDWARE.get_device_type()
     except Exception:
       values["DeviceType"] = "unknown"

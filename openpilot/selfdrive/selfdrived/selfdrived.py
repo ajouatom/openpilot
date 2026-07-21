@@ -28,7 +28,7 @@ from openpilot.selfdrive.controls.lib.cutin_alert import (
   is_stationary_lead_alert_candidate,
 )
 
-from openpilot.system.hardware import HARDWARE
+from openpilot.common.hardware import HARDWARE
 from openpilot.system.version import get_build_metadata
 
 REPLAY = "REPLAY" in os.environ

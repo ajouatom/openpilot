@@ -1,5 +1,4 @@
 
-CM_ "IMPORT _community.dbc";
 VERSION ""
 
 
@@ -308,7 +307,7 @@ CM_ SG_ 481 ACCAlwaysOne "Usually 1 if the car is equipped with ACC";
 CM_ SG_ 562 FrictionBrakeUnavailable "1 when ACC brake control is unavailable. Stays high if brake command messages are blocked for a period of time";
 CM_ SG_ 497 SystemPowerMode "Describes ignition";
 CM_ SG_ 497 SystemBackUpPowerMode "Describes ignition + preconditioning mode, noisy";
-CM_ SG_ 501 PRNDL2 "When ManualMode is Active, Value is 13=L1 12=L2 11=L3 ... 4=L10";
+CM_ SG_ 501 PRNDL2 "When ManualMode is Active, Value is 13=L1 12=L2 11=L3 ... 5=Full 70kW Paddle Regen Unlocked for Gen2 Bolts 4=L10";
 CM_ SG_ 532 UserBrakePressure "can be lower than other brake position signals when the brakes are pre-filled from ACC braking and the user presses on the brakes. user-only pressure?";
 CM_ SG_ 608 ClusterSpeed "Cluster speed signal seems to match dash on newer cars, but is a lower rate and can be noisier.";
 CM_ SG_ 761 UserBrakePressure2 "Similar to BRAKE_RELATED->UserBrakePressure";
@@ -328,7 +327,7 @@ VAL_ 481 DistanceButton 1 "Active" 0 "Inactive" ;
 VAL_ 481 LKAButton 1 "Active" 0 "Inactive" ;
 VAL_ 481 ACCButtons 6 "Cancel" 5 "Main" 3 "Set" 2 "Resume" 1 "None" ;
 VAL_ 481 DriveModeButton 1 "Active" 0 "Inactive" ;
-VAL_ 452 CruiseState 4 "Standstill" 3 "Faulted" 2 "Standby" 1 "Active" 0 "Off" ;
+VAL_ 452 CruiseState 4 "Standstill" 3 "Faulted" 1 "Active" 0 "Off" ;
 VAL_ 309 PRNDL 3 "R" 2 "D" 1 "N" 0 "P" ;
 VAL_ 309 ESPButton 1 "Active" 0 "Inactive" ;
 VAL_ 384 LKASteeringCmdActive 1 "Active" 0 "Inactive" ;
@@ -348,6 +347,6 @@ VAL_ 715 GasRegenCmdActive 1 "Active" 0 "Inactive" ;
 VAL_ 320 Intellibeam 1 "Active" 0 "Inactive" ;
 VAL_ 320 HighBeamsActive 1 "Active" 0 "Inactive" ;
 VAL_ 320 HighBeamsTemporary 1 "Active" 0 "Inactive" ;
-VAL_ 501 PRNDL2 6 "L" 4 "D" 3 "N" 2 "R" 1 "P" 0 "Shifting";
+VAL_ 501 PRNDL2 7 "L3" 6 "L" 5 "L2" 4 "D" 3 "N" 2 "R" 1 "P" 0 "Shifting";
 VAL_ 501 TransmissionState 11 "Shifting" 10 "Reverse" 9 "Forward" 8 "Disengaged";
 VAL_ 501 ManualMode 1 "Active" 0 "Inactive"

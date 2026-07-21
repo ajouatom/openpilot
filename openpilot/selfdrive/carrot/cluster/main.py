@@ -97,7 +97,7 @@ HUD_MODE_PARAM_POLL_SECONDS = 1.0
 HUD_MIRROR_PARAM_POLL_SECONDS = 1.0
 
 try:
-    from openpilot.system.hardware import TICI
+    from openpilot.common.hardware import TICI
 except Exception:
     TICI = False
 

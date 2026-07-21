@@ -21,7 +21,7 @@ from .vision_test import LOG_PATH as VISION_TEST_LOG_PATH
 from .vision_test import get_status as get_vision_test_status
 
 try:
-  from openpilot.system.hardware import HARDWARE
+  from openpilot.common.hardware import HARDWARE
 except Exception:
   HARDWARE = None
 

@@ -7,7 +7,7 @@ from openpilot.common.file_chunker import chunk_file, get_chunk_targets, get_exi
 from openpilot.common.transformations.camera import _ar_ox_fisheye, _os_fisheye
 from openpilot.common.transformations.model import MEDMODEL_INPUT_SIZE, DM_INPUT_SIZE
 from openpilot.selfdrive.modeld.constants import ModelConstants
-from openpilot.selfdrive.modeld.helpers import TG_INPUT_DEVICES_PATH, usbgpu_enabled, usbgpu_present, modeld_pkl_path
+from openpilot.selfdrive.modeld.helpers import TG_INPUT_DEVICES_PATH, usbgpu_present, modeld_pkl_path
 
 
 CAMERA_CONFIGS = [
@@ -54,7 +54,7 @@ tg_devices = { # which device to put jit inputs to at runtime
   },
 }
 
-USBGPU = usbgpu_enabled() and usbgpu_present() # or release # TODO always build big model on release
+USBGPU = usbgpu_present() # or release # TODO always build big model on release
 if USBGPU:
   usbgpu_tg_flags = f'DEBUG=2 DEV=USB+AMD:LLVM WARP_DEV={tg_backend} FLOAT16=1 JIT_BATCH_SIZE=0 GMMU=0'
   # the USB+AMD GPU takes an exclusive flock; serialize all targets that touch it
@@ -79,7 +79,7 @@ compile_modeld_script = [
   File(f"{modeld_dir}/compile_modeld.py"),
   File(f"{modeld_dir}/get_model_metadata.py"),
   File("#openpilot/system/camerad/cameras/nv12_info.py"),
-  File("#openpilot/system/hardware/hw.py"),
+  File("#openpilot/common/hardware/hw.py"),
 ]
 model_w, model_h = MEDMODEL_INPUT_SIZE
 frame_skip = ModelConstants.MODEL_RUN_FREQ // ModelConstants.MODEL_CONTEXT_FREQ

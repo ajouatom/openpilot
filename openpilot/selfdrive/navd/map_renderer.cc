@@ -11,7 +11,7 @@
 #include "common/timing.h"
 #include "common/swaglog.h"
 #include "selfdrive/ui/qt/maps/map_helpers.h"
-#include "system/hardware/hw.h"
+#include "common/hardware/hw.h"
 
 
 const float DEFAULT_ZOOM = 13.5; // Don't go below 13 or features will start to disappear
@@ -134,7 +134,7 @@ void MapRenderer::msgUpdate() {
       float bearing = carrotMan.getXPosAngle();
       float lat = carrotMan.getXPosLat();
       float lon = carrotMan.getXPosLon();
-        
+
       updatePosition(get_point_along_line(lat, lon, bearing, MAP_OFFSET), bearing);
       // TODO: use the static rendering mode instead
       // retry render a few times

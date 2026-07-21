@@ -11,7 +11,7 @@ from openpilot.common.utils import sudo_write
 from openpilot.common.realtime import config_realtime_process, Ratekeeper
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.gpio import gpiochip_get_ro_value_fd, gpioevent_data
-from openpilot.system.hardware import HARDWARE
+from openpilot.common.hardware import HARDWARE
 
 from openpilot.system.sensord.sensors.i2c_sensor import Sensor
 from openpilot.system.sensord.sensors.lsm6ds3_accel import LSM6DS3_Accel

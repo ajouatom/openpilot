@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from aiohttp import web
 
-from openpilot.system.hardware import HARDWARE
+from openpilot.common.hardware import HARDWARE
 
 from ...config import PARAMS_BACKUP_PATH
 from ...services.git_state import did_git_pull_update, write_git_pull_time

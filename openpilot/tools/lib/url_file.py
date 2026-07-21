@@ -9,7 +9,7 @@ from urllib3.response import BaseHTTPResponse
 from urllib3.util import Timeout
 
 from openpilot.common.utils import atomic_write
-from openpilot.system.hardware.hw import Paths
+from openpilot.common.hardware.hw import Paths
 from urllib3.exceptions import MaxRetryError
 
 #  Cache chunk size
@@ -21,7 +21,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def hash_url(link: str) -> str:
-  return md5((link.split("?")[0]).encode('utf-8')).hexdigest()
+  return md5(link.split("?", maxsplit=1)[0].encode('utf-8')).hexdigest()
 
 
 def prune_cache(new_entry: str | None = None) -> None:

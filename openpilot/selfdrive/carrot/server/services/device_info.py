@@ -122,7 +122,7 @@ def get_device_setting_values(ssh_status: Dict[str, Any] | None = None) -> Dict[
   ]
   values = get_param_values(names, DEVICE_SETTING_DEFAULTS)
   try:
-    from openpilot.system.hardware import HARDWARE
+    from openpilot.common.hardware import HARDWARE
     values["DeviceType"] = HARDWARE.get_device_type()
   except Exception:
     values["DeviceType"] = DEVICE_SETTING_DEFAULTS["DeviceType"]

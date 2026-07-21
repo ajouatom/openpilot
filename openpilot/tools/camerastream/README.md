@@ -7,7 +7,7 @@
 ### On the device
 SSH into the device and run following in separate terminals:
 
-`cd /data/openpilot/cereal/messaging && ./bridge`
+`cd /data/openpilot && ./openpilot/cereal/messaging/bridge`
 
 `cd /data/openpilot/system/loggerd && ./encoderd`
 
@@ -18,8 +18,8 @@ Note that both the device and your PC must be on the same openpilot commit.
 Alternatively paste this as a single command:
 ```
 (
-  cd /data/openpilot/cereal/messaging/
-  ./bridge &
+  cd /data/openpilot
+  ./openpilot/cereal/messaging/bridge &
 
   cd /data/openpilot/system/camerad/
   ./camerad &
@@ -39,28 +39,28 @@ Decode the stream with `compressed_vipc.py`:
 
 To actually display the stream, run `watch3` in separate terminal:
 
-```cd ~/openpilot/selfdrive/ui/ && ./watch3```
+```cd ~/openpilot/selfdrive/ui/ && ./watch3.py```
 
 ## compressed_vipc.py usage
 ```
 $ python3 compressed_vipc.py -h
-usage: compressed_vipc.py [-h] [--nvidia] [--cams CAMS] [--silent] addr
+usage: compressed_vipc.py [-h] [--cams CAMS] [--server SERVER] [--silent] addr
 
 Decode video streams and broadcast on VisionIPC
 
 positional arguments:
-  addr         Address of comma three
+  addr             Address of comma three
 
 options:
-  -h, --help   show this help message and exit
-  --nvidia     Use nvidia instead of ffmpeg
-  --cams CAMS  Cameras to decode
-  --silent     Suppress debug output
+  -h, --help       show this help message and exit
+  --cams CAMS      Cameras to decode
+  --server SERVER  choose vipc server name
+  --silent         Suppress debug output
 ```
 
 
 ## Example:
 ```
 cd ~/openpilot/tools/camerastream && ./compressed_vipc.py comma-ffffffff --cams 0
-cd ~/openpilot/selfdrive/ui/ && ./watch3
+cd ~/openpilot/selfdrive/ui/ && ./watch3.py
 ```

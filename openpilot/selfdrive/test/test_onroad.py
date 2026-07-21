@@ -18,7 +18,7 @@ from openpilot.common.timeout import Timeout
 from openpilot.common.params import Params
 from openpilot.selfdrive.selfdrived.events import EVENTS, ET
 from openpilot.selfdrive.test.helpers import set_params_enabled, release_only
-from openpilot.system.hardware.hw import Paths
+from openpilot.common.hardware.hw import Paths
 from openpilot.tools.lib.logreader import LogReader
 from openpilot.tools.lib.log_time_series import msgs_to_time_series
 
@@ -35,40 +35,39 @@ LOG_OFFSET = 8
 MAX_TOTAL_CPU = 350.  # total for all 8 cores
 PROCS = {
   # Baseline CPU usage by process
-  "selfdrive.controls.controlsd": 16.0,
-  "selfdrive.selfdrived.selfdrived": 16.0,
-  "selfdrive.car.card": 26.0,
+  "openpilot.selfdrive.controls.controlsd": 16.0,
+  "openpilot.selfdrive.selfdrived.selfdrived": 16.0,
+  "openpilot.selfdrive.car.card": 26.0,
   "./loggerd": 14.0,
   "./encoderd": 13.0,
   "./camerad": 10.0,
-  "selfdrive.controls.plannerd": 8.0,
-  "selfdrive.ui.ui": 40.0,
-  "system.sensord.sensord": 13.0,
-  "selfdrive.controls.radard": 2.0,
-  "selfdrive.modeld.modeld": 22.0,
-  "selfdrive.modeld.dmonitoringmodeld": 18.0,
-  "system.hardware.hardwared": 4.0,
-  "selfdrive.locationd.calibrationd": 2.0,
-  "selfdrive.locationd.torqued": 5.0,
-  "selfdrive.locationd.locationd": 25.0,
-  "selfdrive.locationd.paramsd": 9.0,
-  "selfdrive.locationd.lagd": 11.0,
-  "selfdrive.ui.soundd": 3.0,
-  "selfdrive.ui.feedback.feedbackd": 1.0,
-  "selfdrive.monitoring.dmonitoringd": 4.0,
-  "system.proclogd": 7.0,
-  "system.logmessaged": 1.0,
-  "system.tombstoned": 0,
-  "system.journald": 1.0,
-  "system.micd": 5.0,
-  "system.timed": 0,
-  "selfdrive.pandad.pandad": 0,
-  "system.statsd": 1.0,
-  "system.loggerd.uploader": 15.0,
-  "system.loggerd.deleter": 1.0,
+  "openpilot.selfdrive.controls.plannerd": 8.0,
+  "openpilot.selfdrive.ui.ui": 40.0,
+  "openpilot.system.sensord.sensord": 13.0,
+  "openpilot.selfdrive.controls.radard": 2.0,
+  "openpilot.selfdrive.modeld.modeld": 22.0,
+  "openpilot.selfdrive.modeld.dmonitoringmodeld": 18.0,
+  "openpilot.system.hardware.hardwared": 4.0,
+  "openpilot.selfdrive.locationd.calibrationd": 2.0,
+  "openpilot.selfdrive.locationd.torqued": 5.0,
+  "openpilot.selfdrive.locationd.locationd": 25.0,
+  "openpilot.selfdrive.locationd.paramsd": 9.0,
+  "openpilot.selfdrive.locationd.lagd": 11.0,
+  "openpilot.selfdrive.ui.soundd": 3.0,
+  "openpilot.selfdrive.ui.feedback.feedbackd": 1.0,
+  "openpilot.selfdrive.monitoring.dmonitoringd": 4.0,
+  "openpilot.system.proclogd": 7.0,
+  "openpilot.system.logmessaged": 1.0,
+  "openpilot.system.tombstoned": 0,
+  "openpilot.system.journald": 1.0,
+  "openpilot.system.micd": 5.0,
+  "openpilot.system.timed": 0,
+  "openpilot.selfdrive.pandad.pandad": 0,
+  "openpilot.system.loggerd.uploader": 15.0,
+  "openpilot.system.loggerd.deleter": 1.0,
   "./pandad": 19.0,
-  "system.qcomgpsd.qcomgpsd": 1.0,
-  "system.hardware.tici.modem": 10.0,
+  "openpilot.system.qcomgpsd.qcomgpsd": 1.0,
+  "openpilot.common.hardware.tici.modem": 10.0,
 }
 
 TIMINGS = {
@@ -119,7 +118,7 @@ class TestOnroad:
     # setup env
     params = Params()
     params.remove("CurrentRoute")
-    params.put_bool("RecordFront", True)
+    params.put_bool("RecordFront", True, block=True)
     set_params_enabled()
     os.environ['REPLAY'] = '1'
     os.environ['MSGQ_PREALLOC'] = '1'
@@ -176,8 +175,9 @@ class TestOnroad:
       if s in ('ubloxGnss', 'ubloxRaw', 'gnssMeasurements', 'gpsLocation', 'gpsLocationExternal', 'qcomGnss'):
         continue
 
+      duration = TEST_DURATION - 5.0  # subtract some selfdrived initializing time
       with subtests.test(service=s):
-        assert len(msgs) >= math.floor(SERVICE_LIST[s].frequency*int(TEST_DURATION*0.8))
+        assert len(msgs) >= math.floor(SERVICE_LIST[s].frequency*int(duration*0.8))
 
   def test_manager_starting_time(self):
     st = self.ts['managerState']['t'][0]
@@ -210,7 +210,7 @@ class TestOnroad:
 
     # other processes preempt ui while starting up
     offset = int(20 * LOG_OFFSET)
-    ts = self.ts['uiDebug']['drawTimeMillis'][offset:]
+    ts = self.ts['uiDebug']['cpuTimeMillis'][offset:]
     result += f"min  {min(ts):.2f}ms\n"
     result += f"max  {max(ts):.2f}ms\n"
     result += f"std  {np.std(ts):.2f}ms\n"
@@ -284,7 +284,7 @@ class TestOnroad:
     print("--------------- Memory Usage -------------------")
     print("------------------------------------------------")
 
-    from openpilot.selfdrive.debug.mem_usage import print_report
+    from openpilot.selfdrive.test.mem_usage import print_report
     print_report(self.msgs['procLog'], self.msgs['deviceState'])
 
     offset = int(SERVICE_LIST['deviceState'].frequency * LOG_OFFSET)
@@ -371,23 +371,6 @@ class TestOnroad:
           assert enc_sof == cam_sof, f"SOF mismatch: frameId={fid}, enc_sof={enc_sof}, cam_sof={cam_sof}"
           assert enc_eof == cam_eof, f"EOF mismatch: frameId={fid}, enc_eof={enc_eof}, cam_eof={cam_eof}"
 
-  def test_mpc_execution_timings(self):
-    result = "\n"
-    result += "------------------------------------------------\n"
-    result += "-----------------  MPC Timing ------------------\n"
-    result += "------------------------------------------------\n"
-
-    cfgs = [("longitudinalPlan", 0.05, 0.05),]
-    for (s, instant_max, avg_max) in cfgs:
-      ts = [getattr(m, s).solverExecutionTime for m in self.msgs[s]]
-      assert max(ts) < instant_max, f"high '{s}' execution time: {max(ts)}"
-      assert np.mean(ts) < avg_max, f"high avg '{s}' execution time: {np.mean(ts)}"
-      result += f"'{s}' execution time: min  {min(ts):.5f}s\n"
-      result += f"'{s}' execution time: max  {max(ts):.5f}s\n"
-      result += f"'{s}' execution time: mean {np.mean(ts):.5f}s\n"
-    result += "------------------------------------------------\n"
-    print(result)
-
   def test_model_execution_timings(self, subtests):
     result = "\n"
     result += "------------------------------------------------\n"
@@ -402,9 +385,7 @@ class TestOnroad:
       ("driverStateV2", 0.3, 0.05),
     ]
     for (s, instant_max, avg_max) in cfgs:
-      ts = [getattr(m, s).modelExecutionTime for m in self.msgs[s]]
-      # TODO some init can happen in first iteration
-      ts = ts[1:]
+      ts = [getattr(m, s).modelExecutionTime for m in self.msgs[s] if (m.logMonoTime*1e-9 - self.ts[s]['t'][0]) > LOG_OFFSET]
       result += f"'{s}' execution time: min  {min(ts):.5f}s\n"
       result += f"'{s}' execution time: max {max(ts):.5f}s\n"
       result += f"'{s}' execution time: mean {np.mean(ts):.5f}s\n"

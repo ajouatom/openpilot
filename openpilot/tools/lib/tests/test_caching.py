@@ -6,7 +6,7 @@ import tempfile
 import pytest
 
 from openpilot.selfdrive.test.helpers import http_server_context
-from openpilot.system.hardware.hw import Paths
+from openpilot.common.hardware.hw import Paths
 from openpilot.tools.lib.url_file import URLFile, prune_cache
 import openpilot.tools.lib.url_file as url_file_module
 
@@ -16,7 +16,7 @@ class CachingTestRequestHandler(http.server.BaseHTTPRequestHandler):
 
   def do_GET(self):
     if self.FILE_EXISTS:
-      self.send_response(206 if "Range" in self.headers else 200, b'1234')
+      self.send_response(206 if "Range" in self.headers else 200, '1234')
     else:
       self.send_response(404)
     self.end_headers()

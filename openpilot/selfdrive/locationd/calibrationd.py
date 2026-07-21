@@ -13,7 +13,7 @@ from typing import NoReturn
 
 from openpilot.cereal import log, car
 import openpilot.cereal.messaging as messaging
-from openpilot.system.hardware import HARDWARE
+from openpilot.common.hardware import HARDWARE
 from openpilot.common.constants import CV
 from openpilot.common.params import Params
 from openpilot.common.realtime import config_realtime_process

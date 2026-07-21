@@ -3,7 +3,7 @@ from panda import Panda, PandaDFU
 
 if __name__ == "__main__":
   try:
-    from openpilot.system.hardware import HARDWARE
+    from openpilot.common.hardware import HARDWARE
     HARDWARE.recover_internal_panda()
     Panda.wait_for_dfu(None, 5)
   except Exception:

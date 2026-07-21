@@ -4,7 +4,8 @@ import os
 import random
 from PIL import Image, ImageDraw, ImageFont
 
-from openpilot.cereal import log, car
+from openpilot.cereal import log
+from opendbc.car.structs import car
 from openpilot.cereal.messaging import SubMaster
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
@@ -63,7 +64,7 @@ class TestAlerts:
 
     for alert in ALERTS:
       if not isinstance(alert, Alert):
-        alert = alert(self.CP, self.CS, self.sm, metric=False, soft_disable_time=100, personality=log.LongitudinalPersonality.standard)
+        alert = alert(self.CP, self.CS, self.sm, False, 100, log.LongitudinalPersonality.standard)
 
       # for full size alerts, both text fields wrap the text,
       # so it's unlikely that they  would go past the max width

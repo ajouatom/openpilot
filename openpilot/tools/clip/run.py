@@ -11,6 +11,7 @@ import itertools
 import numpy as np
 import tqdm
 from argparse import ArgumentParser
+from collections.abc import Callable
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -138,7 +139,7 @@ def iter_segment_frames(camera_paths, start_time, end_time, fps=20, use_qcam=Fal
   frames_per_seg = fps * 60
   start_frame, end_frame = int(start_time * fps), int(end_time * fps)
   current_seg: int = -1
-  seg_frames: FrameReader | np.ndarray | None = None
+  get_frame: Callable[[int], np.ndarray] | None = None
 
   for global_idx in range(start_frame, end_frame):
     seg_idx, local_idx = global_idx // frames_per_seg, global_idx % frames_per_seg
@@ -157,12 +158,12 @@ def iter_segment_frames(camera_paths, start_time, end_time, fps=20, use_qcam=Fal
         if result.returncode != 0:
           raise RuntimeError(f"ffmpeg failed: {result.stderr.decode()}")
         seg_frames = np.frombuffer(result.stdout, dtype=np.uint8).reshape(-1, w * h * 3 // 2)
+        get_frame = seg_frames.__getitem__
       else:
-        seg_frames = FrameReader(path, pix_fmt="nv12")
+        get_frame = FrameReader(path, pix_fmt="nv12").get
 
-    assert seg_frames is not None
-    frame = seg_frames[local_idx] if use_qcam else seg_frames.get(local_idx)
-    yield global_idx, frame
+    assert get_frame is not None
+    yield global_idx, get_frame(local_idx)
 
 
 class FrameQueue:
@@ -219,7 +220,7 @@ def load_route_metadata(route):
   params = Params()
   for entry in init_data.params.entries:
     try:
-      params.put(entry.key, params.cpp2python(entry.key, entry.value))
+      params.put(entry.key, params.cpp2python(entry.key, entry.value), block=True)
     except UnknownKeyName:
       pass
 
@@ -312,8 +313,15 @@ def clip(route: Route, output: str, start: int, end: int, headless: bool = True,
     camera_paths = route.qcamera_paths() if use_qcam else route.camera_paths()
     frame_queue = FrameQueue(camera_paths, start, end, fps=FRAMERATE, use_qcam=use_qcam)
 
+    ecamera_paths = route.ecamera_paths() if not use_qcam else []
+    wide_frame_queue: FrameQueue | None = None
+    if any(p for p in ecamera_paths[seg_start:seg_end] if p):
+      wide_frame_queue = FrameQueue(ecamera_paths, start, end, fps=FRAMERATE)
+
     vipc = VisionIpcServer("camerad")
     vipc.create_buffers(VisionStreamType.VISION_STREAM_ROAD, 4, frame_queue.frame_w, frame_queue.frame_h)
+    if wide_frame_queue:
+      vipc.create_buffers(VisionStreamType.VISION_STREAM_WIDE_ROAD, 4, wide_frame_queue.frame_w, wide_frame_queue.frame_h)
     vipc.start_listener()
 
     patch_submaster(message_chunks, ui_state)
@@ -326,11 +334,14 @@ def clip(route: Route, output: str, start: int, end: int, headless: bool = True,
 
     frame_idx = 0
     with tqdm.tqdm(total=len(message_chunks), desc="Rendering", unit="frame") as pbar:
-      for should_render in gui_app.render():
+      for should_render, _, _ in gui_app.render():
         if frame_idx >= len(message_chunks):
           break
         _, frame_bytes = frame_queue.get()
         vipc.send(VisionStreamType.VISION_STREAM_ROAD, frame_bytes, frame_idx, int(frame_idx * 5e7), int(frame_idx * 5e7))
+        if wide_frame_queue:
+          _, wide_bytes = wide_frame_queue.get()
+          vipc.send(VisionStreamType.VISION_STREAM_WIDE_ROAD, wide_bytes, frame_idx, int(frame_idx * 5e7), int(frame_idx * 5e7))
         ui_state.update()
         if should_render:
           road_view.render()
@@ -340,6 +351,8 @@ def clip(route: Route, output: str, start: int, end: int, headless: bool = True,
     timer.lap("render")
 
     frame_queue.stop()
+    if wide_frame_queue:
+      wide_frame_queue.stop()
     gui_app.close()
     timer.lap("ffmpeg")
 

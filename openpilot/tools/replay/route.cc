@@ -4,8 +4,8 @@
 #include <filesystem>
 #include <regex>
 
-#include "third_party/json11/json11.hpp"
-#include "system/hardware/hw.h"
+#include "json11/json11.hpp"
+#include "common/hardware/hw.h"
 #include "tools/replay/py_downloader.h"
 #include "tools/replay/replay.h"
 #include "tools/replay/util.h"
@@ -123,7 +123,7 @@ bool Route::loadFromServer() {
   if (json.is_object() && json["error"].is_string()) {
     const std::string &error = json["error"].string_value();
     if (error == "unauthorized") {
-      rWarning(">> Unauthorized. Authenticate with tools/lib/auth.py <<");
+      rWarning(">> Unauthorized. Authenticate with openpilot/tools/lib/auth.py <<");
       err_ = RouteLoadError::Unauthorized;
     } else if (error == "not_found") {
       rWarning("The specified route could not be found on the server.");

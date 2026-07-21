@@ -2,7 +2,7 @@
 set -e
 
 SCRIPT_DIR=$(dirname "$0")
-BASEDIR=$(realpath "$SCRIPT_DIR/../../")
+BASEDIR=$(realpath "$SCRIPT_DIR/../../../")
 cd $BASEDIR
 
 # tests that our build system's dependencies are configured properly,
@@ -13,7 +13,7 @@ cd $BASEDIR
 
 cd $BASEDIR/opendbc_repo/
 scons --clean
-scons --no-cache --random -j$(nproc)
+scons --no-cache --random
 if ! scons -q; then
   echo "FAILED: all build products not up to date after first pass."
   exit 1

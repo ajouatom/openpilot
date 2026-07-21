@@ -2,7 +2,7 @@
 
 #include "common/watchdog.h"
 #include "common/util.h"
-#include "system/hardware/hw.h"
+#include "common/hardware/hw.h"
 
 const std::string watchdog_fn_prefix = Path::shm_path() + "/wd_";  // + <pid>
 
