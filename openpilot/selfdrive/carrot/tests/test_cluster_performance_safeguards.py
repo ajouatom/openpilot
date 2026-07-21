@@ -24,6 +24,7 @@ from cluster_h264_pipeline import (
   NATIVE_ACCESS_UNIT_QUEUE_MAX,
 )
 import cluster_renderer
+from cluster_live import standby_state
 from cluster_renderer import ClusterUiRenderer
 from cluster_usb_display import product_id_for_hud_mode
 
@@ -169,6 +170,88 @@ def test_git_status_remote_disabled_never_starts_git_worker(tmp_path, monkeypatc
   assert provider.status().branch == "performance"
   assert provider.status().detail == ""
   assert provider._worker is None
+
+
+def test_git_status_remote_enabled_starts_background_refresh(tmp_path, monkeypatch):
+  git_dir = tmp_path / ".git"
+  git_dir.mkdir()
+  (git_dir / "HEAD").write_text("ref: refs/heads/navigation\n", encoding="utf-8")
+  provider = GitBranchStatusProvider(tmp_path)
+  refreshed = []
+  monkeypatch.setattr(provider, "_refresh", lambda: refreshed.append(True))
+
+  assert provider.status().branch == "navigation"
+  assert provider._worker is not None
+  provider._worker.join(timeout=1.0)
+  assert refreshed == [True]
+
+
+def test_lfa_icon_uses_active_color_rotation_and_c4_lane_overlay(monkeypatch):
+  renderer = ClusterUiRenderer()
+  inactive_texture = object()
+  active_texture = object()
+  lane_texture = object()
+  renderer._lfa_texture = inactive_texture
+  renderer._lfa_active_texture = active_texture
+  renderer._lfa_lane_texture = lane_texture
+  draws = []
+
+  def record_draw(texture, center_x, bottom_y, width, height, tint, alpha=None, rotation_deg=0.0):
+    draws.append((texture, center_x, bottom_y, width, height, tint, alpha, rotation_deg))
+    return texture is not None
+
+  monkeypatch.setattr(renderer, "_draw_bottom_aligned_texture_icon", record_draw)
+  state = replace(
+    standby_state(),
+    lfa_active=True,
+    steering_angle_deg=23.5,
+    active_lane_line=True,
+  )
+
+  renderer._draw_lfa_status_icon(state, 100.0)
+
+  assert draws[0][0] is active_texture
+  assert draws[0][7] == -23.5
+  assert draws[1][0] is lane_texture
+  assert draws[1][3] == cluster_renderer.LFA_STATUS_ICON_SIZE * 2.0
+  assert draws[1][7] == 0.0
+
+
+def test_lane_floor_keeps_blinking_after_physical_signal_ends(monkeypatch):
+  renderer = ClusterUiRenderer()
+  times = iter((100.0, 100.75, 101.0))
+  monkeypatch.setattr(cluster_renderer.time, "perf_counter", lambda: next(times))
+  state = replace(
+    standby_state(),
+    lane_change="left",
+    lane_change_phase="changing",
+    highlight_lane="left",
+    highlight_lane_offset=-1.0,
+    left_signal=False,
+  )
+
+  assert renderer._highlight_lane_lit(state, (False, False))
+  assert not renderer._highlight_lane_lit(state, (False, False))
+  assert renderer._highlight_lane_lit(state, (False, False))
+
+  idle = replace(state, lane_change=None, lane_change_phase="idle", highlight_lane=None, highlight_lane_offset=None)
+  renderer._highlight_lane_lit(idle, (False, False))
+  assert renderer._lane_highlight_side is None
+  assert renderer._lane_highlight_started_at is None
+
+
+def test_navi_screen_keeps_bottom_status_footer(monkeypatch):
+  renderer = ClusterUiRenderer(screen_mode=cluster_renderer.CLUSTER_SCREEN_MODE_NAVI)
+  calls = []
+  monkeypatch.setattr(cluster_renderer.rl, "rl_push_matrix", lambda: None)
+  monkeypatch.setattr(cluster_renderer.rl, "rl_scalef", lambda *_args: None)
+  monkeypatch.setattr(cluster_renderer.rl, "rl_pop_matrix", lambda: None)
+  monkeypatch.setattr(renderer, "_draw_navi_dashboard", lambda _state: calls.append("navi"))
+  monkeypatch.setattr(renderer, "_draw_status_footer", lambda _state: calls.append("footer"))
+
+  renderer._draw_hud(object(), (False, False))
+
+  assert calls == ["navi", "footer"]
 
 
 def test_renderer_fonts_use_bilinear_filter_without_mipmaps(tmp_path, monkeypatch):

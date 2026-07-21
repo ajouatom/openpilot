@@ -13,6 +13,14 @@ GIT_STATUS_REFRESH_SECONDS = 60.0
 GIT_COMMAND_TIMEOUT_SECONDS = 4.0
 
 
+def drop_git_worker_realtime_priority() -> None:
+    """Keep periodic network/storage checks out of the render thread's FIFO class."""
+    try:
+        os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
+    except (AttributeError, OSError, ValueError):
+        pass
+
+
 def find_git_root(start: Path) -> Path | None:
     path = start.resolve()
     candidates = (path, *path.parents)
@@ -89,6 +97,7 @@ class GitBranchStatusProvider:
             return self._status
 
     def _refresh(self) -> None:
+        drop_git_worker_realtime_priority()
         status = self._read_status()
         with self._lock:
             self._status = status

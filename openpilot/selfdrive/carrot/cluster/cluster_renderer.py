@@ -93,6 +93,7 @@ TRAFFIC_RED_ICON_PATH = SELFDRIVE_DIR / "assets" / "images" / "traffic_red.png"
 TRAFFIC_GREEN_ICON_PATH = SELFDRIVE_DIR / "assets" / "images" / "traffic_green.png"
 FOLLOW_VEHICLE_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_cruse_gap_trimmed.png"
 LFA_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_wheel_org.png"
+LFA_LANE_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "carrot_wheel_lane.png"
 WIFI_ICON_PATH = SELFDRIVE_DIR / "assets" / "icons_mici" / "settings" / "network" / "wifi_strength_full.png"
 ROUTE_CONTROL_PANEL_X = 340.0
 ROUTE_CONTROL_PANEL_Y = DESIGN_HEIGHT - 74.0
@@ -192,6 +193,8 @@ WIFI_STATUS_CENTER_X = 100
 WIFI_STATUS_ICON_SIZE = 48.0
 LFA_STATUS_CENTER_X = 37
 LFA_STATUS_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
+LFA_LANE_ICON_WIDTH_SCALE = 2.0
+LFA_LANE_ICON_TOP_OFFSET = 3.0
 TOP_STATUS_CENTER_Y = 55.0
 TOP_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
 DRIVE_STATUS_BOX_RADIUS = 8.0 * DRIVE_STATUS_SCALE
@@ -831,6 +834,7 @@ class ClusterUiRenderer:
         self._follow_vehicle_texture = None
         self._lfa_texture = None
         self._lfa_active_texture = None
+        self._lfa_lane_texture = None
         self._wifi_texture = None
         self._navi_guidance_texture = None
         self._navi_guidance_hash = ""
@@ -848,6 +852,8 @@ class ClusterUiRenderer:
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
         self._hazard_signal_started_at: float | None = None
+        self._lane_highlight_side: str | None = None
+        self._lane_highlight_started_at: float | None = None
         self._triangle_strip_point_cache: OrderedDict[
             tuple[int, int],
             tuple[tuple[Vec3, ...], tuple[Vec3, ...], object, int],
@@ -1080,6 +1086,9 @@ class ClusterUiRenderer:
         if self._lfa_active_texture is not None:
             rl.unload_texture(self._lfa_active_texture)
             self._lfa_active_texture = None
+        if self._lfa_lane_texture is not None:
+            rl.unload_texture(self._lfa_lane_texture)
+            self._lfa_lane_texture = None
         if self._wifi_texture is not None:
             rl.unload_texture(self._wifi_texture)
             self._wifi_texture = None
@@ -2369,6 +2378,8 @@ class ClusterUiRenderer:
             self._lfa_texture = self._load_icon_texture(LFA_ICON_PATH, "LFA")
         if self._lfa_active_texture is None:
             self._lfa_active_texture = self._load_lfa_active_texture()
+        if self._lfa_lane_texture is None:
+            self._lfa_lane_texture = self._load_icon_texture(LFA_LANE_ICON_PATH, "LFA lane mode")
         if self._wifi_texture is None:
             self._wifi_texture = self._load_icon_texture(WIFI_ICON_PATH, "Wi-Fi")
 
@@ -3290,6 +3301,7 @@ class ClusterUiRenderer:
             screen_mode = self.screen_mode
             if screen_mode == CLUSTER_SCREEN_MODE_NAVI:
                 self._draw_navi_dashboard(state)
+                self._draw_status_footer(state)
                 return
             navi_debug_active = state.navi_debug is not None
             navi_live_active = (
@@ -3314,6 +3326,7 @@ class ClusterUiRenderer:
                     DEBUG_PLOT_FULL_H,
                 )
                 self._profile_add("hud.debug_plot_full", profile_stage)
+                self._draw_status_footer(state)
                 return
 
             profile_stage = self._profile_start()
@@ -3398,16 +3411,19 @@ class ClusterUiRenderer:
                 profile_stage = self._profile_start()
                 self._draw_route_overlay(state.route_overlay)
                 self._profile_add("hud.route_overlay", profile_stage)
-            profile_stage = self._profile_start()
-            self._draw_git_status(state.git_status, state.network_address, state.actual_fps)
-            self._profile_add("hud.git_status", profile_stage)
-            profile_stage = self._profile_start()
-            self._draw_cluster_core_usage(state.cluster_core_usage_text)
-            self._profile_add("hud.cluster_core_usage", profile_stage)
+            self._draw_status_footer(state)
         finally:
             profile_stage = self._profile_start()
             rl.rl_pop_matrix()
             self._profile_add("hud.pop_matrix", profile_stage)
+
+    def _draw_status_footer(self, state: ClusterUiState) -> None:
+        profile_stage = self._profile_start()
+        self._draw_git_status(state.git_status, state.network_address, state.actual_fps)
+        self._profile_add("hud.git_status", profile_stage)
+        profile_stage = self._profile_start()
+        self._draw_cluster_core_usage(state.cluster_core_usage_text)
+        self._profile_add("hud.cluster_core_usage", profile_stage)
 
     def _draw_route_replay_controls(
         self,
@@ -5798,11 +5814,11 @@ class ClusterUiRenderer:
     def _draw_lfa_status_icon(self, state: ClusterUiState, bottom_y: float) -> None:
         theme = self._current_theme()
         active = bool(state.lfa_active)
-        texture = self._lfa_texture
+        texture = self._lfa_active_texture if active and self._lfa_active_texture is not None else self._lfa_texture
         tint = WHITE if active else theme.muted
         alpha = 255 if active else 190
         rotation_deg = -float(state.steering_angle_deg or 0.0)
-        if self._draw_outlined_bottom_aligned_texture_icon(
+        drew_wheel = self._draw_bottom_aligned_texture_icon(
             texture,
             LFA_STATUS_CENTER_X,
             bottom_y,
@@ -5811,10 +5827,21 @@ class ClusterUiRenderer:
             tint,
             alpha,
             rotation_deg,
-        ):
+        )
+        if state.active_lane_line:
+            self._draw_bottom_aligned_texture_icon(
+                self._lfa_lane_texture,
+                LFA_STATUS_CENTER_X,
+                bottom_y - LFA_LANE_ICON_TOP_OFFSET,
+                LFA_STATUS_ICON_SIZE * LFA_LANE_ICON_WIDTH_SCALE,
+                LFA_STATUS_ICON_SIZE,
+                GREEN if active else theme.muted,
+                alpha,
+            )
+        if drew_wheel:
             return
 
-        outline = WHITE if active else theme.muted
+        outline = GREEN if active else theme.muted
         fill_alpha = 46 if active else 26
         center = rl.Vector2(LFA_STATUS_CENTER_X, bottom_y - LFA_STATUS_ICON_SIZE * 0.5)
         scale = TOP_ICON_SIZE / 34.0
@@ -5879,11 +5906,15 @@ class ClusterUiRenderer:
             )
             override_text = str(int(round(state.cruise_override_kph)))
             override_label = state.cruise_override_label or ""
+            override_label_font_size = CRUISE_OVERRIDE_LABEL_FONT_SIZE * min(
+                1.0,
+                8.0 / max(8, len(override_label)),
+            )
             self._draw_text_with_stroke(
                 override_label,
                 CRUISE_OVERRIDE_SPEED_CENTER_X,
                 CRUISE_OVERRIDE_LABEL_CENTER_Y,
-                CRUISE_OVERRIDE_LABEL_FONT_SIZE,
+                override_label_font_size,
                 override_color,
                 (0, 0, 0),
                 2,
@@ -6198,13 +6229,32 @@ class ClusterUiRenderer:
             self._turn_signal_lit("right", state.right_signal, now),
         )
 
-    @staticmethod
-    def _highlight_lane_lit(state: ClusterUiState, signal_lights: tuple[bool, bool]) -> bool:
+    def _highlight_lane_lit(self, state: ClusterUiState, signal_lights: tuple[bool, bool]) -> bool:
         left_signal_lit, right_signal_lit = signal_lights
-        if state.highlight_lane == "left":
-            return left_signal_lit
-        if state.highlight_lane == "right":
-            return right_signal_lit
+        side = state.highlight_lane if state.highlight_lane in ("left", "right") else None
+        if side is not None and state.highlight_lane_offset is not None:
+            now = time.perf_counter()
+            if side != self._lane_highlight_side or self._lane_highlight_started_at is None:
+                self._lane_highlight_side = side
+                self._lane_highlight_started_at = now
+
+            signal_active = state.left_signal if side == "left" else state.right_signal
+            signal_lit = left_signal_lit if side == "left" else right_signal_lit
+            signal_started_at = (
+                self._hazard_signal_started_at
+                if state.left_signal and state.right_signal
+                else self._left_turn_signal_started_at
+                if side == "left"
+                else self._right_turn_signal_started_at
+            )
+            if signal_started_at is not None:
+                self._lane_highlight_started_at = signal_started_at
+            if signal_active:
+                return signal_lit
+            return blink_visible(now, self._lane_highlight_started_at, float("inf"))
+
+        self._lane_highlight_side = None
+        self._lane_highlight_started_at = None
         if state.left_signal != state.right_signal:
             return left_signal_lit if state.left_signal else right_signal_lit
         return True

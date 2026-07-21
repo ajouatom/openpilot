@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -7,7 +8,14 @@ CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_live import OpenpilotLiveSource
-from cluster_route_replay import RawCornerObject, RouteLogParser, adjacent_route_log_path, model_lead_detections_from_model_v2
+from cluster_models import ModelPathPoint
+from cluster_route_replay import (
+  RawCornerObject,
+  RouteLogParser,
+  adjacent_route_log_path,
+  frame_to_state,
+  model_lead_detections_from_model_v2,
+)
 
 
 def corner_object(t, slot, object_id, age, x, y, vx, vy):
@@ -150,6 +158,52 @@ def test_live_selfdrive_state_passes_event_timestamp():
   source._apply_service_update("selfdriveState", 12.5)
 
   assert calls == [(source.sm["selfdriveState"], 12.5)]
+
+
+def test_controls_active_lane_line_reaches_cluster_state():
+  parser = RouteLogParser()
+  parser._update_controls_state(SimpleNamespace(activeLaneLine=True))
+
+  frame = parser._frame_from_car_state(SimpleNamespace(), 1.0)
+  state = frame_to_state(frame)
+
+  assert frame.active_lane_line is True
+  assert state.active_lane_line is True
+
+
+def test_lane_change_animation_keeps_target_floor_and_lane_grid_without_blinker():
+  parser = RouteLogParser()
+  base = parser._frame_from_car_state(SimpleNamespace(), 1.0)
+  lane_lines = tuple(
+    (
+      ModelPathPoint(0.0, lateral_m),
+      ModelPathPoint(30.0, lateral_m),
+    )
+    for lateral_m in (-5.4, -1.8, 1.8, 5.4)
+  )
+  frame = replace(
+    base,
+    lane_change="left",
+    lane_change_phase="changing",
+    lane_change_progress=0.5,
+    left_signal=False,
+    right_signal=False,
+    left_lane_visible=False,
+    right_lane_visible=False,
+    extra_left_lane_visible=False,
+    extra_right_lane_visible=False,
+    left_road_edge_offset=-2.0,
+    right_road_edge_offset=2.0,
+    model_lane_lines=lane_lines,
+  )
+
+  state = frame_to_state(frame)
+
+  assert state.highlight_lane == "left"
+  assert state.highlight_lane_offset == -1.0
+  assert state.ego_lane_offset == -0.5
+  assert [lane.offset for lane in state.lanes] == [-1.5, -0.5, 0.5, 1.5]
+  assert [lane.visible for lane in state.lanes] == [True, True, True, False]
 
 
 def model_lead(probability, distance=50.0):
