@@ -1,0 +1,49 @@
+{
+  "version": 2,
+  "description": "Video-reviewed v14 cut-in corrections. Cases outside logs remain held out for route regression validation.",
+  "logs": {
+    "000001c1--f5225bd6f1--25/rlog.zst": [
+      {"start_s": 4.8, "end_s": 6.7, "cutin": null}
+    ],
+    "00000247--b445287f3d--38/rlog.zst": [
+      {"start_s": 21.5, "end_s": 23.3, "cutin": null}
+    ],
+    "00000129--fc54fff840--8/rlog.zst": [
+      {"start_s": 34.4, "end_s": 35.5, "cutin": 49}
+    ],
+    "000001d6--b3030f2f2e--28/rlog.zst": [
+      {"start_s": 23.3, "end_s": 25.0, "cutin": 36}
+    ],
+    "000002d3--74e5ed8754--6/rlog.zst": [
+      {"start_s": 41.3, "end_s": 43.3, "cutin": 52},
+      {"start_s": 50.8, "end_s": 52.2, "cutin": null},
+      {"start_s": 57.0, "end_s": 58.7, "cutin": null}
+    ],
+    "000002d3--74e5ed8754--7/rlog.zst": [
+      {"start_s": 19.5, "end_s": 21.0, "cutin": null}
+    ],
+    "00000c21--f9485787d6--8/rlog.zst": [
+      {"start_s": 11.4, "end_s": 13.2, "cutin": null},
+      {"start_s": 30.4, "end_s": 31.4, "cutin": 51},
+      {"start_s": 56.2, "end_s": 56.9, "cutin": 34}
+    ],
+    "00000c21--f9485787d6--9/rlog.zst": [
+      {"start_s": 10.2, "end_s": 11.0, "cutin": null},
+      {"start_s": 12.5, "end_s": 13.4, "cutin": null},
+      {"start_s": 13.8, "end_s": 15.0, "cutin": 40}
+    ]
+  },
+  "held_out_case_ids": [
+    "palisade-bef-2-roadside-pass",
+    "carnival-6a-27-close",
+    "ioniq9-192-7-adjacent-42",
+    "gv80-218-2-adjacent-pass-54",
+    "gv80-218-6-parallel-truck",
+    "k8-221-18-persistent-late",
+    "ioniq9-1b9-2-stopped",
+    "ioniq9-1b9-26-tunnel-ghost",
+    "ioniq5-cd2-4-stopped-false-cutin",
+    "azera-b1-14-right-cutin",
+    "ioniq9-1ce-11-right-cutin"
+  ]
+}

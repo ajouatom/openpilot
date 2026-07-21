@@ -160,6 +160,18 @@ def sigmoid(logits: np.ndarray) -> np.ndarray:
   return 1.0 / (1.0 + np.exp(-np.clip(logits, -30.0, 30.0)))
 
 
+def distill_nonmanual_head(
+  data: TrainingData, head: int, probabilities: np.ndarray, weight: float,
+) -> TrainingData:
+  """Keep an initialized head stable outside video-reviewed manual corrections."""
+  labels = data.labels.copy()
+  weights = data.weights.copy()
+  distill = (~data.manual[:, head]) & (weights[:, head] > 0.0)
+  labels[distill, head] = probabilities[distill]
+  weights[distill, head] = weight
+  return TrainingData(data.features, labels, weights, data.groups, data.manual)
+
+
 class MultiHeadMLP:
   def __init__(self, inputs: int, hidden1: int, hidden2: int, seed: int) -> None:
     rng = np.random.default_rng(seed)
@@ -353,6 +365,16 @@ def parse_args() -> argparse.Namespace:
     help="train the external head only on candidates with |vLead| < 1.8 m/s",
   )
   parser.add_argument("--init-model", type=Path, help="fine-tune an existing compatible multitask model")
+  parser.add_argument(
+    "--distill-init", action="store_true",
+    help="train non-manual rows toward the initialized head output instead of replacing it with the weak teacher",
+  )
+  parser.add_argument("--distill-weight", type=float, default=0.25)
+  parser.add_argument(
+    "--preserve-calibration", action="store_true",
+    help="retain the initialized calibration and threshold for the trained head",
+  )
+  parser.add_argument("--model-version", type=int, default=0, help="artifact version; defaults to the initialized version")
   parser.add_argument("--cache", type=Path, help="reuse the parsed train/validation arrays")
   parser.add_argument("--seed", type=int, default=42)
   return parser.parse_args()
@@ -364,6 +386,12 @@ def main() -> int:
     raise SystemExit("--head-only requires --train-head and --init-model")
   if args.stationary_external and args.train_head != "external":
     raise SystemExit("--stationary-external requires --train-head external")
+  if args.distill_init and (args.train_head == "all" or args.init_model is None):
+    raise SystemExit("--distill-init requires --train-head and --init-model")
+  if args.distill_weight <= 0.0:
+    raise SystemExit("--distill-weight must be positive")
+  if args.preserve_calibration and (args.train_head == "all" or args.init_model is None):
+    raise SystemExit("--preserve-calibration requires --train-head and --init-model")
   sources = [*args.datasets, *args.validation_dataset]
   cached = load_cache(args.cache, sources) if args.cache is not None else None
   if cached is not None:
@@ -398,6 +426,7 @@ def main() -> int:
   initial_parameters: dict[str, np.ndarray] | None = None
   initial_thresholds: np.ndarray | None = None
   initial_calibration: np.ndarray | None = None
+  initial_version = 6
   auxiliary_model_arrays: dict[str, np.ndarray] = {}
   if args.init_model is not None:
     with np.load(args.init_model, allow_pickle=False) as initial:
@@ -412,6 +441,7 @@ def main() -> int:
       }
       initial_thresholds = initial["thresholds"].astype(np.float32)
       initial_calibration = initial["calibration"].astype(np.float32)
+      initial_version = int(initial["version"][0])
       auxiliary_model_arrays = {
         name: initial[name].copy() for name in initial.files
         if name.startswith(("stationary_", "anticipatory_"))
@@ -423,6 +453,13 @@ def main() -> int:
     std[std < 1e-5] = 1.0
     hidden = args.hidden
   features = ((data.features - mean) / std).astype(np.float32)
+  if args.distill_init:
+    assert initial_parameters is not None
+    selected_head = MODEL_HEADS.index(args.train_head)
+    hidden1 = np.maximum(features @ initial_parameters["w1"] + initial_parameters["b1"], 0.0)
+    hidden2 = np.maximum(hidden1 @ initial_parameters["w2"] + initial_parameters["b2"], 0.0)
+    initial_probabilities = sigmoid(hidden2 @ initial_parameters["w3"][:, selected_head] + initial_parameters["b3"][selected_head])
+    data = distill_nonmanual_head(data, selected_head, initial_probabilities, args.distill_weight)
   positive_weights = np.ones(len(MODEL_HEADS), dtype=np.float32)
   for head in range(len(MODEL_HEADS)):
     valid = data.weights[train_indices, head] > 0.0
@@ -493,7 +530,10 @@ def main() -> int:
   thresholds = np.zeros(len(MODEL_HEADS), dtype=np.float32)
   metrics: dict[str, Any] = {"validation_loss": best_loss, "best_epoch": best_epoch}
   for head_index, name in enumerate(MODEL_HEADS):
-    preserve_head = args.init_model is not None and args.train_head != "all" and name != args.train_head
+    preserve_head = (
+      args.init_model is not None and args.train_head != "all"
+      and (name != args.train_head or args.preserve_calibration)
+    )
     if preserve_head:
       assert initial_calibration is not None and initial_thresholds is not None
       scale, bias = (float(value) for value in initial_calibration[head_index])
@@ -524,7 +564,7 @@ def main() -> int:
   output.parent.mkdir(parents=True, exist_ok=True)
   np.savez_compressed(
     output,
-    version=np.asarray([6], dtype=np.int32),
+    version=np.asarray([args.model_version or initial_version], dtype=np.int32),
     feature_names=np.asarray(MODEL_FEATURE_NAMES),
     head_names=np.asarray(MODEL_HEADS),
     mean=mean, std=std, thresholds=thresholds, calibration=calibration,
