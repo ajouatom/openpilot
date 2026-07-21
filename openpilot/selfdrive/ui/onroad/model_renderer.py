@@ -474,6 +474,7 @@ class ModelRenderer(Widget):
     self._carrot_active_lane_line = False
     self._carrot_long_active = False
     self._carrot_use_lane_line_speed_apply = 0
+    self._carrot_tire_trajectory = 0
 
     self._carrot_path_draw_seq = 0.0
     self._carrot_pos_t = 0.0
@@ -539,6 +540,7 @@ class ModelRenderer(Widget):
     self._carrot_show_path_mode_lane = ui_state.params.get_int("ShowPathModeLane")
     self._carrot_show_path_color_lane = ui_state.params.get_int("ShowPathColorLane")
     self._carrot_show_path_color_cruise_off = ui_state.params.get_int("ShowPathColorCruiseOff")
+    self._carrot_tire_trajectory = ui_state.params.get_int("CarrotTireTrajectory")
     self._carrot_params_next_refresh_time = now + CARROT_PARAM_REFRESH_INTERVAL
 
 
@@ -1678,3 +1680,117 @@ class ModelRenderer(Widget):
       self._draw_animated_path_carrot(sm, show_path_mode, show_path_color, brake_valid)
 
     self._draw_path_end_overlay_carrot()
+    self._draw_tire_trajectory_carrot(sm)
+
+  @staticmethod
+  def _tire_grad_color(d: float, a: int) -> rl.Color:
+    # danger 0(중앙)->1(차선밟음): 초록 -> 노랑 -> 빨강 멀티스톱
+    d = max(0.0, min(1.5, d))
+    if d <= 0.10:
+      r, g = 0.0, 200.0
+    elif d <= 0.60:
+      f = (d - 0.10) / 0.50
+      r, g = f * 255.0, 200.0
+    elif d <= 1.00:
+      f = (d - 0.60) / 0.40
+      r, g = 255.0, 200.0 - f * 200.0
+    else:
+      r, g = 255.0, 0.0
+    return rl.Color(int(r), int(g), 0, a)
+
+  def _draw_tire_trajectory_carrot(self, sm):
+    """타이어 궤적: 모델 예측 경로 위에 차폭(±0.9m) 타이어 트랙을 그라데이션 밴드로 그리고,
+    차선 중앙 대비 편차(danger_ratio)에 따라 초록->빨강으로 색을 바꾼다. 이탈 임박 시 펄스.
+    하단에 L/R/C 방향 + 편차(m) 표시. CarrotTireTrajectory 토글로만 노출된다."""
+    if self._carrot_tire_trajectory <= 0:
+      return
+    if not sm.valid['modelV2']:
+      return
+
+    model = sm['modelV2']
+    lane_lines = model.laneLines
+    probs = model.laneLineProbs
+    if len(lane_lines) < 3 or len(probs) < 3:
+      return
+
+    left_y, right_y = lane_lines[1].y, lane_lines[2].y
+    if len(left_y) == 0 or len(right_y) == 0:
+      return
+
+    # 차량 중심에서 좌/우 차선까지 거리(m). openpilot 모델 +Y=좌측 이므로 우측은 부호 반전.
+    left_m = float(left_y[0])
+    right_m = -float(right_y[0])
+    # 한쪽 차선 인식이 약하면 기본 차선폭(3.0m)으로 반대쪽 추정.
+    if probs[1] < 0.3 and probs[2] > 0.3:
+      left_m = 3.0 - right_m
+    elif probs[2] < 0.3 and probs[1] > 0.3:
+      right_m = 3.0 - left_m
+    total = left_m + right_m
+    if total < 0.5:
+      total = 3.0
+
+    # drift>0 => 차량이 좌측 차선쪽으로 치우침(좌측 타이어가 좌측 차선에 근접).
+    drift = (right_m - left_m) / 2.0
+    limit = max(0.1, total / 2.0 - 0.9)   # 타이어(차폭 절반 0.9m)가 차선을 밟는 지점을 1.0
+    danger = abs(drift) / limit
+
+    if drift > 0.02:
+      dir_label = "L"
+    elif drift < -0.02:
+      dir_label = "R"
+    else:
+      dir_label = "C"
+    dist_str = f"{abs(drift):.2f}"
+
+    # 모델 예측 주행경로. 선행차가 있으면 그 거리까지만, 없으면 최대 40m.
+    path = self._path.raw_points
+    if path.shape[0] < 5:
+      return
+    max_dist = 40.0
+    radar_state = sm['radarState'] if sm.valid['radarState'] else None
+    if radar_state is not None and radar_state.leadOne.status:
+      d_rel = float(radar_state.leadOne.dRel)
+      if 3.0 < d_rel < max_dist:
+        max_dist = d_rel
+    max_idx = self._get_path_length_idx(path[:, 0], max_dist)
+    if max_idx < 5:
+      return
+
+    # 색상: 치우친 쪽 = danger 그라데이션, 반대쪽 = 초록. 심한 이탈 시 좌/우 밴드 펄스.
+    green = rl.Color(0, 200, 0, 255)
+    warn = abs(drift) >= 0.5
+    pulse = warn and (int(rl.get_time() * 1000) % 800 < 400)
+    if warn:
+      side = rl.Color(255, 0, 0, 255) if pulse else rl.Color(255, 100, 0, 220)
+      color_left = side if drift > 0.0 else green
+      color_right = side if drift < 0.0 else green
+    elif drift > 0.02:
+      color_left, color_right = self._tire_grad_color(danger, 255), green
+    elif drift < -0.02:
+      color_left, color_right = green, self._tire_grad_color(danger, 255)
+    else:
+      color_left = color_right = green
+
+    # 타이어 트랙 밴드: 경로중심 ±0.9m 위치에 얇은 리본. 원근투영으로 폭은 자동 축소.
+    # 화면 좌측 타이어 = +Y(y_shift=+0.9), 우측 = -Y. 아래(가까움)=진하게 위(멀리)=투명.
+    band_half = 0.16
+    for y_shift, col in ((0.9, color_left), (-0.9, color_right)):
+      ribbon = self._map_line_to_polygon(path, band_half, 1.22, max_idx, max_dist, True, y_shift)
+      if ribbon.size == 0:
+        continue
+      grad = Gradient(
+        start=(0.0, 1.0),  # 경로 하단(차량 근처)
+        end=(0.0, 0.0),    # 경로 상단(원거리)
+        colors=[rl.Color(col.r, col.g, col.b, col.a), rl.Color(col.r, col.g, col.b, 0)],
+        stops=[0.0, 1.0],
+      )
+      draw_polygon(self._rect, ribbon, gradient=grad)
+
+    # 하단 L/R/C + 편차(m) 텍스트 (경로 시작점 부근에 투영).
+    if danger < 1.5:
+      base = self._map_to_screen(3.0, float(path[0, 1]), float(path[0, 2]) + self._path_offset_z)
+      if base is not None:
+        tx, ty = base
+        white = rl.Color(255, 255, 255, 255)
+        draw_text_ui_style(dir_label, tx, ty - 56.0, 72, white, font=self._font_display, align="center", y_offset=0.0)
+        draw_text_ui_style(dist_str, tx, ty + 18.0, 52, white, font=self._font_display, align="center", y_offset=0.0)
