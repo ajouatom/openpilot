@@ -227,10 +227,23 @@ SPEED_GEAR_FONT_SIZE = 48.0
 SPEED_EV_CENTER_X = 181.0
 SPEED_EV_CENTER_Y = SPEED_VALUE_CENTER_Y
 SPEED_EV_FONT_SIZE = 28.0
-SPEED_MODEL_TRAFFIC_RED_CENTER_X = SPEED_VALUE_CENTER_X
-SPEED_MODEL_TRAFFIC_GREEN_CENTER_X = SPEED_MODEL_TRAFFIC_RED_CENTER_X - 38.0
+SPEED_MODEL_TRAFFIC_CENTER_X = SPEED_VALUE_CENTER_X - 38.0
 SPEED_MODEL_TRAFFIC_CENTER_Y = SPEED_PANEL_Y - 9.0
 SPEED_MODEL_TRAFFIC_ICON_SIZE = 34.0
+SPEED_DRIVING_MODE_GAP = 5.0
+SPEED_DRIVING_MODE_X = SPEED_MODEL_TRAFFIC_CENTER_X + SPEED_MODEL_TRAFFIC_ICON_SIZE * 0.5 + SPEED_DRIVING_MODE_GAP
+SPEED_DRIVING_MODE_Y = SPEED_MODEL_TRAFFIC_CENTER_Y - 15.0
+SPEED_DRIVING_MODE_W = 72.0
+SPEED_DRIVING_MODE_H = 30.0
+SPEED_DRIVING_MODE_CENTER_X = SPEED_DRIVING_MODE_X + SPEED_DRIVING_MODE_W * 0.5
+SPEED_DRIVING_MODE_CENTER_Y = SPEED_DRIVING_MODE_Y + SPEED_DRIVING_MODE_H * 0.5
+SPEED_DRIVING_MODE_FONT_SIZE = 21.0
+SPEED_DRIVING_MODE_STYLES = {
+    1: ("연비", (0, 255, 0, 200)),
+    2: ("안전", (255, 165, 0, 200)),
+    3: ("일반", (255, 255, 255, 200)),
+    4: ("고속", (255, 0, 0, 200)),
+}
 SIDE_GAUGE_TOP = 88
 SIDE_GAUGE_BOTTOM = 186
 SIDE_GAUGE_LOWER_TOP = 248
@@ -5895,6 +5908,7 @@ class ClusterUiRenderer:
             2,
             anchor="center",
         )
+        self._draw_driving_mode_indicator(state)
         self._draw_model_traffic_state(state.traffic_state)
         self._draw_cruise_gap_badge(state.cruise_gap)
         self._draw_speed_gear_badge(state)
@@ -5951,6 +5965,33 @@ class ClusterUiRenderer:
                 anchor="center",
             )
 
+    def _draw_driving_mode_indicator(self, state: ClusterUiState) -> None:
+        style = SPEED_DRIVING_MODE_STYLES.get(state.driving_mode)
+        if style is None:
+            return
+        text, color = style
+        self._rounded_rect(
+            SPEED_DRIVING_MODE_X,
+            SPEED_DRIVING_MODE_Y,
+            SPEED_DRIVING_MODE_W,
+            SPEED_DRIVING_MODE_H,
+            8.0,
+            color,
+            WHITE,
+            2.0,
+        )
+        self._draw_text_with_stroke(
+            text,
+            SPEED_DRIVING_MODE_CENTER_X,
+            SPEED_DRIVING_MODE_CENTER_Y,
+            SPEED_DRIVING_MODE_FONT_SIZE,
+            WHITE,
+            (5, 9, 12),
+            2,
+            anchor="center",
+            cache=True,
+        )
+
     def _draw_model_traffic_state(self, traffic_state: int) -> None:
         if traffic_state not in (1, 2):
             return
@@ -5959,10 +6000,9 @@ class ClusterUiRenderer:
         if texture is None:
             return
         size = SPEED_MODEL_TRAFFIC_ICON_SIZE
-        center_x = SPEED_MODEL_TRAFFIC_RED_CENTER_X if red_light else SPEED_MODEL_TRAFFIC_GREEN_CENTER_X
         source = rl.Rectangle(0.0, 0.0, float(texture.width), float(texture.height))
         destination = rl.Rectangle(
-            center_x - size * 0.5,
+            SPEED_MODEL_TRAFFIC_CENTER_X - size * 0.5,
             SPEED_MODEL_TRAFFIC_CENTER_Y - size * 0.5,
             size,
             size,
