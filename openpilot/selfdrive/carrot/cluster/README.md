@@ -346,6 +346,14 @@ icon is not drawn. The LFA icon uses
 active. When `controlsState.activeLaneLine` is true, the fixed
 `carrot_wheel_lane.png` left/right lane overlay is drawn in the same position
 and color contract as the C4 HUD.
+When `carState.evModeValid` and `carState.evModeActive` are both true, the HUD
+shows a compact green `EV` indicator between the vehicle speed and cruise-set
+speed in the normal HUD. Full navigation mode intentionally omits it. It is
+also omitted when the decoded EV state is off, or for unsupported vehicles,
+invalid samples, and stale `carState` data.
+Hyundai/Kia CAN-FD hybrids enable this capability only when both `0xFA` and
+`0x230` are present on ECAN with DLC32. The four-bit power-flow mode in `0x230`
+shows `EV` for observed values 1, 2, and 6; all other values remain hidden.
 When `--fps` is omitted, `ClusterHudLiveFps` controls the render limit and is
 polled about once per second while running: `0` uncapped diagnostic mode, `1`
 10 Hz default, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.

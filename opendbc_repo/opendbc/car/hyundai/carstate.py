@@ -8,7 +8,9 @@ from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.hyundaicanfd import CanBus
-from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags
+from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags, \
+                                       EV_MODE_ACTIVE_VALUES, EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC, EV_MODE_STATUS_MSG, \
+                                       EV_MODE_STATUS_SIGNAL
 from opendbc.car.interfaces import CarStateBase
 
 from openpilot.common.params import Params
@@ -30,6 +32,22 @@ GearShifter = structs.CarState.GearShifter
 
 READY_COUNT_OK = 200
 TRAILER_DISCONNECT_GRACE_FRAMES = int(5.0 / DT_CTRL)
+EV_MODE_STATUS_TIMEOUT_NS = 500_000_000
+
+
+def _get_ev_mode_state(cp: CANParser) -> tuple[bool, bool]:
+  timestamps = cp.ts_nanos.get(EV_MODE_STATUS_MSG)
+  if timestamps is None:
+    return False, False
+
+  timestamp = timestamps.get(EV_MODE_STATUS_SIGNAL, 0)
+  dat = cp.dat.get(EV_MODE_STATUS_ADDR, b"")
+  # The update timestamp advances even when the whole ECAN bus is silent.
+  # last_nonempty_nanos would leave the final decoded state valid forever.
+  age = cp._last_update_nanos - timestamp
+  valid = timestamp > 0 and len(dat) == EV_MODE_STATUS_DLC and not cp.bus_timeout and 0 <= age <= EV_MODE_STATUS_TIMEOUT_NS
+  active = valid and int(cp.vl[EV_MODE_STATUS_MSG][EV_MODE_STATUS_SIGNAL]) in EV_MODE_ACTIVE_VALUES
+  return active, valid
 
 
 NUMERIC_TO_TZ = {
@@ -504,6 +522,9 @@ class CarState(CarStateBase):
 
     ret = structs.CarState()
 
+    if self.CP.extFlags & HyundaiExtFlags.EV_MODE_STATUS_230:
+      ret.evModeActive, ret.evModeValid = _get_ev_mode_state(cp)
+
     self.is_metric = cp.vl["CRUISE_BUTTONS_ALT"]["DISTANCE_UNIT"] != 1
     speed_factor = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
 
@@ -789,10 +810,17 @@ class CarState(CarStateBase):
         ("CRUISE_BUTTONS", 50)
       ]
 
+    CAN = CanBus(CP)
+    pt_parser = CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CAN.ECAN)
+    if CP.extFlags & HyundaiExtFlags.EV_MODE_STATUS_230:
+      # Display-only while the signal is fleet-validated: checksum and freshness
+      # gate the value without making a counter/alive fault disable controls.
+      pt_parser._add_message(EV_MODE_STATUS_MSG, math.nan, ignore_counter=True)
+
     return {
-      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
-      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).CAM),
-      Bus.alt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).ACAN),
+      Bus.pt: pt_parser,
+      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CAN.CAM),
+      Bus.alt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CAN.ACAN),
     }
 
   def get_can_parsers(self, CP):

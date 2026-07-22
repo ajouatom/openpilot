@@ -468,6 +468,8 @@ class ClusterUiState:
     fuel_gauge: float | None = None
     energy_gauge_label: Literal["fuel", "battery"] = "fuel"
     urea_gauge: float | None = None
+    ev_mode_valid: bool = False
+    ev_mode_active: bool = False
     cruise_override_kph: float | None = None
     cruise_override_label: str | None = None
     cruise_override_color_mode: int = 0
