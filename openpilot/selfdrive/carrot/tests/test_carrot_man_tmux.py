@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from openpilot.selfdrive.carrot.carrot_man import (
   CARROT_CAN_ERROR_TMUX_DELAY_SECONDS,
   carrot_can_error,
+  carrot_can_error_sources,
   carrot_can_error_send_ready,
 )
 
@@ -36,3 +37,12 @@ def test_can_error_detects_car_and_radar_errors():
   assert carrot_can_error("HYUNDAI_SONATA", True, invalid_car_state, True, radar_ok)
   assert carrot_can_error("HYUNDAI_SONATA", True, valid_car_state, True, radar_error)
   assert not carrot_can_error("HYUNDAI_SONATA", False, invalid_car_state, False, radar_error)
+
+
+def test_can_error_ignores_stale_previous_onroad_state():
+  stale_invalid_car_state = SimpleNamespace(canTimeout=True, canValid=False)
+  stale_radar_error = SimpleNamespace(radarErrors=SimpleNamespace(canError=True))
+
+  assert carrot_can_error_sources(
+    "HYUNDAI_SONATA", False, stale_invalid_car_state, False, stale_radar_error,
+  ) == (False, False)

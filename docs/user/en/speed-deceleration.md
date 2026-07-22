@@ -284,6 +284,8 @@ Near a complete stop, the current code uses a fixed -2.0 m instead of the user v
 | Slowing with turn mode 0 | Future-model speed, applied-model speed, separate ATC |
 | Unwanted traffic-light stop/go | Detection mode, driving mode, model decision |
 
+Automatic CAN diagnostic logs are generated only when currently received vehicle or radar state from the present onroad session reports an actual error. CAN timeouts from the previous drive's shutdown are not used, and capture occurs five seconds after detection to include the immediate aftermath. When investigating a speed or deceleration issue, upload the affected drive from Carrot Web even if no automatic diagnostic log was generated.
+
 ## Code references
 
 - Event/limit/bump/turn candidate selection: `openpilot/selfdrive/carrot/carrot_serv.py`

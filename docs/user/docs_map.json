@@ -101,6 +101,7 @@
       "id": "carrot-web-pages",
       "description": "Carrot Web 주행·화면녹화·도구·로그·터미널 화면",
       "code_paths": [
+        "openpilot/selfdrive/carrot/carrot_man.py",
         "openpilot/selfdrive/carrot/web/index.html",
         "openpilot/selfdrive/carrot/web/js/pages/car.js",
         "openpilot/selfdrive/carrot/web/js/shared/ui/navigation.js",

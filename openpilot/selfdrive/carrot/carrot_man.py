@@ -135,15 +135,21 @@ def carrot_can_error_send_ready(detected_at: float | None, now: float, is_onroad
   return is_onroad and detected_at is not None and now - detected_at >= CARROT_CAN_ERROR_TMUX_DELAY_SECONDS
 
 
-def carrot_can_error(car_name: str | bytes | None, car_state_seen: bool, car_state, radar_state_seen: bool, radar_state) -> bool:
+def carrot_can_error_sources(car_name: str | bytes | None, car_state_current: bool, car_state,
+                             radar_state_current: bool, radar_state) -> tuple[bool, bool]:
   if isinstance(car_name, bytes):
     car_name = car_name.decode("utf-8", errors="ignore")
   if not car_name or car_name.strip().upper() == "MOCK":
-    return False
+    return False, False
 
-  car_can_error = car_state_seen and (car_state.canTimeout or not car_state.canValid)
-  radar_can_error = radar_state_seen and radar_state.radarErrors.canError
-  return car_can_error or radar_can_error
+  car_can_error = car_state_current and (car_state.canTimeout or not car_state.canValid)
+  radar_can_error = radar_state_current and radar_state.radarErrors.canError
+  return car_can_error, radar_can_error
+
+
+def carrot_can_error(car_name: str | bytes | None, car_state_current: bool, car_state,
+                     radar_state_current: bool, radar_state) -> bool:
+  return any(carrot_can_error_sources(car_name, car_state_current, car_state, radar_state_current, radar_state))
 
 ################ CarrotNavi
 ## 국가법령정보센터: 도로설계기준
@@ -1139,6 +1145,7 @@ class CarrotMan:
         return socket, poller
 
     socket, poller = setup_socket()
+    can_sm = messaging.SubMaster(['carState', 'radarState'])
     isOnroadCount = 0
     is_tmux_sent = False
     onroad_start_at = None
@@ -1148,6 +1155,8 @@ class CarrotMan:
     pending_tmux_next_attempt_at = 0.0
     can_error_detected_at = None
     can_error_tmux_requested = False
+    current_onroad_car_state_seen = False
+    current_onroad_radar_state_seen = False
 
     print("#########carrot_cmd_zmq: thread started...")
     while True:
@@ -1163,6 +1172,7 @@ class CarrotMan:
           json_obj = None
 
         if json_obj is None:
+          can_sm.update(0)
           is_onroad = self.params.get_bool("IsOnroad")
           if is_onroad:
             if onroad_start_at is None:
@@ -1171,10 +1181,16 @@ class CarrotMan:
               is_tmux_sent = False
               onroad_tmux_captured = False
               onroad_tmux_next_attempt_at = 0.0
+              can_error_detected_at = None
+              can_error_tmux_requested = False
+              current_onroad_car_state_seen = False
+              current_onroad_radar_state_seen = False
               if AUTO_ONROAD_DIAGNOSTICS:
                 self.show_panda_debug = True
             else:
               isOnroadCount += 1
+              current_onroad_car_state_seen |= can_sm.updated['carState']
+              current_onroad_radar_state_seen |= can_sm.updated['radarState']
           else:
             isOnroadCount = 0
             onroad_start_at = None
@@ -1182,20 +1198,34 @@ class CarrotMan:
             onroad_tmux_captured = False
             onroad_tmux_next_attempt_at = 0.0
             can_error_detected_at = None
+            can_error_tmux_requested = False
+            current_onroad_car_state_seen = False
+            current_onroad_radar_state_seen = False
 
           network_type = self.sm['deviceState'].networkType # if not force_wifi else NetworkType.wifi
           networkConnected = False if network_type == NetworkType.none else True
 
           if is_onroad and not can_error_tmux_requested:
-            if can_error_detected_at is None and carrot_can_error(
-              self.params.get("CarName"), self.sm.seen['carState'], self.sm['carState'],
-              self.sm.seen['radarState'], self.sm['radarState'],
-            ):
+            car_state_current = current_onroad_car_state_seen and can_sm.alive['carState']
+            radar_state_current = current_onroad_radar_state_seen and can_sm.alive['radarState']
+            car_can_error, radar_can_error = carrot_can_error_sources(
+              self.params.get("CarName"), car_state_current, can_sm['carState'],
+              radar_state_current, can_sm['radarState'],
+            )
+            if can_error_detected_at is None and (car_can_error or radar_can_error):
               can_error_detected_at = now
-              print("[carrot_man] CAN error detected; waiting 5s before tmux capture")
+              sources = []
+              if car_can_error:
+                sources.append(f"carState(canTimeout={can_sm['carState'].canTimeout}, canValid={can_sm['carState'].canValid})")
+              if radar_can_error:
+                sources.append("radarState(radarErrors.canError=True)")
+              print(f"[carrot_man] current onroad CAN error detected from {', '.join(sources)}; "
+                    f"waiting {CARROT_CAN_ERROR_TMUX_DELAY_SECONDS:g}s before tmux capture")
 
             if carrot_can_error_send_ready(can_error_detected_at, now, is_onroad):
-              can_error_tmux_requested = queue_carrot_exception_tmux_send("CAN error", reason="can_error")
+              can_error_tmux_requested = queue_carrot_exception_tmux_send(
+                "CAN error observed in current onroad state", reason="can_error",
+              )
 
           if AUTO_ONROAD_DIAGNOSTICS and onroad_start_at is not None and not is_tmux_sent:
             onroad_elapsed = now - onroad_start_at
