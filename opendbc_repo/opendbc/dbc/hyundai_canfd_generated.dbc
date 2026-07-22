@@ -698,6 +698,14 @@ BO_ 543 RADAR_0x21f: 32 FRONT_RADAR
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
 
+BO_ 560 HCU_STATUS_230: 32 XXX
+ SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
+ SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
+ SG_ HYBRID_POWER_FLOW_MODE : 170|4@1+ (1,0) [0|15] "" XXX
+
+CM_ BO_ 560 "Hyundai/Kia CAN-FD hybrid power-flow status observed on ECAN at 10 Hz; ACAN 0x230/DLC16 is an unrelated radar frame.";
+CM_ SG_ 560 HYBRID_POWER_FLOW_MODE "Reverse-engineered enum; observed values 1, 2, and 6 correspond to the OEM EV indicator being on.";
+
 BO_ 576 RADAR_0x240: 16 FRONT_RADAR
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX

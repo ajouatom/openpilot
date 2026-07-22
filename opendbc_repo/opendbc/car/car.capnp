@@ -263,6 +263,8 @@ struct CarState {
   ureaGauge @82 :Float32; # diesel exhaust fluid/urea tank level from 0.0 to 1.0
   cruiseSpeedBigStep @83 :Bool; # VW: cruise +/- button is a stage-2 (swipe/long) press -> use big increment
   steeringCurvature @84 :Float32; # VW MEB: measured road curvature from EPS (QFK_01), rad/m. Used for closed-loop curvature correction.
+  evModeActive @85 :Bool; # decoded hybrid power-flow mode calls for the EV indicator
+  evModeValid @86 :Bool; # evModeActive is backed by a fresh, checksum-valid CAN frame of the expected bus and length
 
   struct Tpms {
     fl @0 :Float32;
