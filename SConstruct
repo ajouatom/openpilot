@@ -278,6 +278,7 @@ if arch != "larch64":
   SConscript([
     'openpilot/tools/replay/SConscript',
     'openpilot/tools/cabana/SConscript',
+    'openpilot/tools/jotpluggler/SConscript',
   ])
 
 
