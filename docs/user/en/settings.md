@@ -43,6 +43,18 @@ Carrot Web provides:
 
 A full reset or a backup from another vehicle can change many values at once. Save the current settings as both a profile and a file first.
 
+### Per-setting detailed guides
+
+Select the body of a setting, outside its value control, to open its detail screen. The **Detailed guide** panel reads only the relevant section from the `docs/user/en` Markdown files installed on the device.
+
+- It uses the on-device document without requiring GitHub or internet access.
+- Select the **Detailed guide** heading to collapse or expand it.
+- A documentation read failure does not disable viewing or changing the setting.
+- Korean and English Carrot Web sessions use their matching guide language.
+- Until a Chinese guide exists, Chinese titles and short descriptions remain Chinese while the detailed panel explicitly falls back to English.
+
+Several parameters in the same subsection can share one explanation. If a short catalog description and the detailed guide differ, diagnose the current branch against this code-owned guide.
+
 ## Reading values and defaults
 
 Each entry in `carrot_settings.json` contains:
@@ -89,6 +101,7 @@ The current `carrot_settings.json` contains **165 parameters**. Every entry is a
 
 These 107 settings can affect vehicle motion. Change one item at a time.
 
+<a id="start-auto"></a>
 ### Startup and auto — 8 settings
 
 | Section | Parameters | Purpose |
@@ -114,6 +127,7 @@ Select a section title for the code-based state machine, units, and application 
 
 The result depends heavily on whether the car uses stock SCC and which button message the vehicle accepts. Diagnose unexpected behavior with the normal `CruiseButtonMode=0` behavior first.
 
+<a id="vehicle-steering"></a>
 ### Vehicle steering — 36 settings
 
 | Section | Parameters | Purpose |
@@ -163,6 +177,7 @@ A lower `AutoNaviSpeedDecelRate` begins slowing farther away. `AutoNaviSpeedSafe
 
 `LongTuning*`, `LongActuatorDelay`, and `StoppingAccel` are advanced settings that directly affect vehicles using openpilot longitudinal control. Some have no effect when stock ACC remains responsible for acceleration and braking.
 
+<a id="vehicle-hardware"></a>
 ## Vehicle and hardware
 
 These 14 settings describe the car and harness configuration. Do not enable them merely as a display experiment.
@@ -180,6 +195,7 @@ These 14 settings describe the car and harness configuration. Do not enable them
 
 See [Radar tracks and corner radar](radar.md) before changing radar modes.
 
+<a id="display"></a>
 ## Display
 
 Display contains 33 settings. Most on-road display settings are easy to reverse; external-HUD settings include hardware and performance choices.
@@ -193,6 +209,7 @@ Display contains 33 settings. Most on-road display settings are easy to reverse;
 
 An APN label remaining in the `ShowRouteInfo` description refers to route-input state. It is not an indication that CarrotMan or CarrotLink is supported.
 
+<a id="system"></a>
 ## System
 
 The 11 system settings cover recording, power, network, maps, sound, and software menus.

@@ -8,9 +8,15 @@
         "openpilot/selfdrive/carrot_settings.json",
         "openpilot/common/params_keys.h",
         "openpilot/selfdrive/carrot/server/services/params.py",
+        "openpilot/selfdrive/carrot/server/services/setting_docs.py",
         "openpilot/selfdrive/carrot/server/services/settings.py",
         "openpilot/selfdrive/carrot/server/features/settings.py",
         "openpilot/selfdrive/carrot/web/js/pages/setting.js",
+        "openpilot/selfdrive/carrot/web/js/translations/ko.js",
+        "openpilot/selfdrive/carrot/web/js/translations/en.js",
+        "openpilot/selfdrive/carrot/web/js/translations/zh.js",
+        "openpilot/selfdrive/carrot/web/src/features/settings/documentation.js",
+        "openpilot/selfdrive/carrot/web/src/features/settings/styles/documentation.css",
         "openpilot/selfdrive/carrot/web/js/shared/setting_diff.js"
       ],
       "doc_sets": [

@@ -10,6 +10,7 @@ A radar fitted to the vehicle does not guarantee that carrotpilot can read the r
 > [!WARNING]
 > An unverified radar configuration can cause dashboard warnings, CAN faults, incorrect lead selection, or false cut-in detection. Record the original values and test one setting at a time only when the exact vehicle configuration has been validated.
 
+<a id="front-radar"></a>
 ## Front radar tracks
 
 `EnableRadarTracks` selects the source and processing used for front lead information.
@@ -25,6 +26,7 @@ A radar fitted to the vehicle does not guarantee that carrotpilot can read the r
 
 On non-CAN FD Hyundai/Kia vehicles, a positive value attempts to enable radar tracks during startup and stores the result in `EnableRadarTracksResult`. Confirm both the activation result and actual incoming tracks; physical radar presence alone is not enough.
 
+<a id="corner-radar"></a>
 ## Corner radar
 
 | `EnableCornerRadar` | Meaning |
@@ -35,6 +37,7 @@ On non-CAN FD Hyundai/Kia vehicles, a positive value attempts to enable radar tr
 
 Corner-radar objects are created only when the vehicle code recognizes a supported message group. The cut-in processing in mode `2` currently focuses on Hyundai-family implementations and must not be generalized to other manufacturers.
 
+<a id="lead-fusion"></a>
 ## Combining vision and radar leads
 
 | `RadarLeadModelMode` | Meaning |
