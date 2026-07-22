@@ -1,0 +1,262 @@
+# 설정 이해하기
+
+[English](../en/settings.md)
+
+> [!NOTE]
+> 이 문서는 `carrot-wip` 코드와 함께 관리하는 사용자 설명서 원본입니다. 사용자 동작이 바뀌면 관련 코드·테스트와 같은 변경에서 이 문서도 갱신합니다.
+
+carrotpilot의 세부 설정은 **Carrot Web에서 모두 확인하고 변경하는 것**을 기준으로 합니다. 장치 자체의 기본 설정 화면은 Wi-Fi, 장치 정보, openpilot 기본 토글과 소프트웨어 업데이트에 사용하고, 아래에서 설명하는 `carrot_settings.json`의 파라미터는 Carrot Web의 **설정** 화면에서 관리합니다.
+
+> [!IMPORTANT]
+> **현재 지원 상태**
+>
+> - 설정 변경에 사용하는 인터페이스: **Carrot Web**
+> - 당근맨(CarrotMan): 현재 사용자용 앱·외부 연동으로 지원하지 않음
+> - CarrotLink: 현재 지원하지 않음
+> - 예전 문서의 CarrotMan·CarrotLink 접속·설정 안내는 현재 사용 방법이 아님
+>
+> 코드나 메시지 내부에 `carrotMan`이라는 이름이 남아 있을 수 있지만, 사용자용 CarrotMan 앱을 지원한다는 뜻은 아닙니다.
+
+## Carrot Web 접속
+
+1. comma 장치와 휴대폰 또는 PC를 같은 네트워크에 연결합니다.
+2. 브라우저에서 `http://장치-IP:7000`을 엽니다.
+3. 상단 메뉴에서 **설정**을 선택합니다.
+
+예를 들어 장치 IP가 `192.168.0.25`라면 다음 주소를 사용합니다.
+
+    http://192.168.0.25:7000
+
+접속 문제와 다른 화면의 설명은 [Carrot Web](https://github.com/ajouatom/openpilot/wiki/Guide-Carrot-Web)을 참고하세요.
+
+## 설정 화면 사용법
+
+Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
+
+- **분류 탐색**: 대분류, 중분류, 세부 구역 순서로 설정을 찾습니다.
+- **검색**: 화면 제목이나 파라미터 이름으로 원하는 항목을 찾습니다.
+- **즐겨찾기**: 설정 항목을 길게 눌러 추가하거나 제거합니다.
+- **프로필**: 현재 설정 묶음을 이름을 붙여 저장하고 다시 적용합니다.
+- **설정 비교**: 프로필이나 백업의 값과 현재 값을 비교한 뒤 적용합니다.
+- **초기화**: 전체 설정을 카탈로그 기본값으로 되돌립니다.
+- **파일·QR 백업**: 도구 화면에서 설정을 보관하거나 복원합니다.
+
+전체 초기화나 다른 차량의 백업 적용은 많은 값을 한꺼번에 바꿉니다. 먼저 현재 설정을 별도 프로필과 파일로 보관하세요.
+
+## 숫자와 기본값 읽는 법
+
+`carrot_settings.json`의 각 항목에는 다음 정보가 들어 있습니다.
+
+| 필드 | 의미 |
+|---|---|
+| `name` | 코드와 Params에서 사용하는 고유 이름 |
+| `title` | Carrot Web에 표시되는 한국어 제목 |
+| `descr` | 값의 방향, 모드 번호와 주의사항 |
+| `min` / `max` | 입력 가능한 범위 |
+| `unit` | `+`와 `-` 버튼으로 한 번에 움직이는 단위 |
+| `default` | 설정 카탈로그가 사용하는 초기 기준값 |
+
+### 현재 값이 가장 우선입니다
+
+업데이트 후에도 장치에 저장된 영구 설정은 유지될 수 있습니다. JSON의 `default`, 제목 괄호 안 숫자, 다른 사용자의 설정값보다 **내 장치의 Carrot Web에 표시된 현재 값**을 먼저 기록하세요.
+
+`default`는 모든 차량에 권장되는 튜닝값이라는 뜻이 아닙니다. 차종 기본 튜닝, 기존 Params와 브랜치에 따라 실제 시작값이 다를 수 있습니다.
+
+### 배율과 단위를 확인합니다
+
+| 표시 예 | 저장값 | 실제 의미 |
+|---|---:|---:|
+| `TFollowGap1 x0.01s` | `110` | 1.10초 |
+| `SteerActuatorDelay` | `30` | 0.30초 |
+| `LateralTorqueAccelFactor x0.001` | `2500` | 2.500 |
+| `StopDistanceCarrot` | `600` | 6.00m(600cm) 기준 값 |
+| 비율 `%` | `105` | 105% |
+
+항목 이름과 설명에 적힌 `x0.01`, `x0.001`, `cm`, `km/h`, `%`를 생략하면 값의 크기를 잘못 이해할 수 있습니다.
+
+## 전체 설정 지도
+
+현재 `carrot-wip`의 `carrot_settings.json`에는 **165개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
+
+| 대분류 | 항목 수 | 중분류 |
+|---|---:|---|
+| 주행 제어 | 107 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
+| 차량·하드웨어 | 14 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조 |
+| 화면 표시 | 33 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
+| 시스템 | 11 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
+
+## 주행 제어
+
+주행 제어는 차량 움직임에 영향을 줄 수 있는 107개 항목입니다. 한 번에 여러 값을 변경하지 마세요.
+
+### 시작·오토 — 8개
+
+| 세부 구역 | 파라미터 | 용도 |
+|---|---|---|
+| 시작 동작 | `AlwaysLateral`, `AutoEngage`, `DisableMinSteerSpeed` | 상시 조향, 주행 시작 시 자동 활성화, 저속 조향 제한 |
+| 오토크루즈 | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | 크루즈 자동 활성화와 가속 페달 입력 시 동작 |
+
+- `AlwaysLateral`: 크루즈가 켜져 있지 않아도 조향 제어를 허용합니다.
+- `AutoEngage`: `0` 끄기, `1` 조향 ON, `2` 조향 ON과 크루즈 대기입니다.
+- `AutoCruiseControl`: 현대·기아 차량용 오토크루즈와 소프트홀드 관련 설정입니다.
+- `DisableMinSteerSpeed`: SMDPS 장착 차량의 저속 조향 제한과 관련된 차량별 설정입니다.
+
+### 버튼·프리셋 — 15개
+
+아래 표의 **세부 구역 제목을 누르면** 실제 코드 기준의 버튼 상태기계, 속도 단위와 적용 조건을 설명한 페이지로 이동합니다.
+
+| 세부 구역 | 파라미터 | 용도 |
+|---|---|---|
+| [버튼 모드](buttons-presets.md#button-modes) | `CruiseButtonMode`, `CancelButtonMode`, `LfaButtonMode`, `PaddleMode` | 크루즈, 캔슬, LFA와 패들 버튼의 동작 지정 |
+| [속도 단위](buttons-presets.md#speed-units) | `CruiseSpeedUnit`, `CruiseSpeedUnitBasic`, `CruiseButtonLongDelay` | 짧게·길게 누를 때의 속도 변경 단위와 판정 시간 |
+| [버튼 테스트](buttons-presets.md#button-spam) | `CruiseButtonTest1`, `CruiseButtonTest2`, `CruiseButtonTest3` | 순정 SCC 목표속도 동기화용 버튼 메시지 값 |
+| [속도 프리셋](buttons-presets.md#speed-presets) | `CruiseSpeed1`, `CruiseSpeed2`, `CruiseSpeed3`, `CruiseSpeed4`, `CruiseSpeed5` | 사용자3 모드에서 사용하는 속도 테이블 |
+
+버튼 설정은 순정 SCC 사용 여부와 차량 버튼 메시지에 따라 체감이 크게 다릅니다. 버튼이 예상과 다르게 작동하면 사용자 모드보다 `CruiseButtonMode=0`의 일반 동작에서 먼저 확인하세요.
+
+### 차량 조향 — 36개
+
+| 세부 구역 | 파라미터 | 용도 |
+|---|---|---|
+| 중앙 보정 | `PathOffset`, `CameraYawTrimDeg` | 레인모드 경로의 좌우 위치와 카메라 YAW 미세 보정 |
+| 조향감 | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | 조향 시점, 평활화, 일시중지 각도와 조향비 |
+| 차로 변경·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `AutoTurnControl`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 조건과 ATC 동작 |
+| 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | 레인모드 MPC 가중치와 차선 사용 조건 |
+| 고급 토크·토크 계수 | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | 커스텀 토크 제어 계수 |
+| 고급 토크·조향 제한 | `CustomSteerMax`, `CustomSteerDeltaUp`, `CustomSteerDeltaDown`, `CustomSteerDeltaUpLC`, `CustomSteerDeltaDownLC` | 최대 조향 토크와 토크 변화율 제한 |
+
+`SteerActuatorDelay`는 높을수록 더 일찍 조향하도록 보상하고, `LatSmoothSec`는 높을수록 부드러워지는 대신 반응이 늦어질 수 있습니다. 두 값을 동시에 바꾸면 원인을 구분하기 어렵습니다.
+
+`LateralTorqueCustom`과 `CustomSteer*` 계열은 차량의 기본 조향 튜닝과 안전 제한에 영향을 줄 수 있는 고급 항목입니다. 차종별 검증값과 복구 방법이 없으면 변경하지 마세요.
+
+### 속도·감속 — 18개
+
+아래 표의 **세부 구역 제목을 누르면** 카메라 감속 계산, 제한속도 연동과 커브·신호 로직을 설명한 페이지로 이동합니다.
+
+| 세부 구역 | 파라미터 | 용도 |
+|---|---|---|
+| [과속카메라](speed-deceleration.md#speed-camera) | `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode` | 안전운전 이벤트의 대상, 감속 시점과 목표 속도 |
+| [도로 제한속도](speed-deceleration.md#road-speed-limit) | `AutoRoadSpeedLimitOffset`, `AutoRoadSpeedAdjust`, `AutoSpeedUptoRoadSpeedLimit` | 도로 제한속도에 맞춘 목표 속도 조절 |
+| [과속방지턱](speed-deceleration.md#speed-bump) | `AutoNaviSpeedBumpTime`, `AutoNaviSpeedBumpSpeed` | 방지턱 감속 완료 시점과 통과 속도 |
+| [커브·턴](speed-deceleration.md#curve-turn) | `AutoCurveSpeedFactor`, `AutoCurveSpeedLowerLimit`, `TurnSpeedControlMode`, `MapTurnSpeedFactor`, `ModelTurnSpeedFactor`, `ApplyModelSpeed` | 모델 곡률과 경로를 이용한 커브·턴 속도 |
+| [신호감지](speed-deceleration.md#traffic-light) | `TrafficLightDetectMode`, `TrafficStopDistanceAdjust` | 신호 정지·출발 감지와 정지 위치 보정 |
+
+`AutoNaviSpeedCtrlMode`는 `0` 미사용, `1` 과속카메라, `2` 과속카메라+방지턱, `3` 과속카메라+방지턱+이동식카메라입니다.
+
+`AutoNaviSpeedDecelRate`는 값이 낮을수록 더 먼 거리에서 감속을 시작하며, `AutoNaviSpeedSafetyFactor`는 감속 목표에 적용하는 제한속도 비율입니다. 감속이 이상하면 값부터 바꾸지 말고 이벤트 종류, 제한속도와 남은 거리가 정상 수신되는지 먼저 확인하세요.
+
+`TrafficLightDetectMode`는 `0` 미사용, `1` 정지만 감지, `2` 정지와 출발을 모두 감지합니다. 모델 판단에 의존하므로 운전자가 항상 직접 확인해야 합니다.
+
+### 크루즈·차간 — 30개
+
+아래 표의 **세부 구역 제목을 누르면** 실제 코드 기준의 계산 방식, 값의 방향과 주의사항을 설명한 페이지로 이동합니다.
+
+| 세부 구역 | 파라미터 | 용도 |
+|---|---|---|
+| [가속 성향·드라이브 모드](cruise-gap.md#driving-mode) | `MyDrivingMode`, `MyDrivingModeAuto` | 연비, 안전, 일반, 고속 모드와 자동 전환 |
+| [가속 성향·속도별 가속값](cruise-gap.md#acceleration-table) | `CruiseMaxVals0`, `CruiseMaxVals1`, `CruiseMaxVals2`, `CruiseMaxVals3`, `CruiseMaxVals4`, `CruiseMaxVals5`, `CruiseMaxVals6` | 속도 구간별 최대 가속 성향 |
+| [정차·재출발](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | 정지 위치, 정지 진입과 재출발 특성 |
+| [가감속 튜닝](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | 종방향 제어 계수와 차량 반응 지연 |
+| [차간거리](cruise-gap.md#following-gap) | `TFollowGap1`, `TFollowGap2`, `TFollowGap3`, `TFollowGap4`, `DynamicTFollow`, `DynamicTFollowLC`, `EnableSpeedTF`, `TFollowDecelBoost` | 차간 단계별 시간, 동적 차간과 감속 여유 |
+| [선행차 반응](cruise-gap.md#lead-response) | `JLeadFactor3`, `RadarReactionFactor` | 선행차 변화에 대한 반응 특성 |
+| [당근 크루즈](cruise-gap.md#carrot-cruise) | `CruiseEcoControl`, `CarrotCruiseDecel`, `CarrotCruiseAtcDecel` | 연비 제어와 당근 크루즈 감속 특성 |
+
+`MyDrivingMode`는 `1` 연비, `2` 안전, `3` 일반, `4` 고속 모드입니다. 고속 모드는 신호 감지를 무시하고 가속 성향을 높이므로 모드 이름만 보고 선택하지 말고 설명을 확인하세요.
+
+`TFollowGap1`~`TFollowGap4`는 저장값에 `0.01초`를 곱한 시간 간격입니다. 값을 줄이면 선행차와 가까워집니다. `DynamicTFollow` 관련 기능은 고정 차간에서 기준 동작을 확인한 다음 적용하세요.
+
+`LongTuning*`, `LongActuatorDelay`, `StoppingAccel`은 openpilot이 가감속을 제어하는 차량에서 직접적인 영향을 줄 수 있는 고급 항목입니다. 순정 ACC 차량에서는 관련 없는 항목도 있습니다.
+
+## 차량·하드웨어
+
+차량·하드웨어 14개 항목은 차종과 하네스 구성을 결정하는 설정입니다. 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
+
+| 중분류 | 파라미터 | 용도 |
+|---|---|---|
+| 현대·기아 | `HyundaiCameraSCC`, `IsLdwsCar`, `HapticFeedbackWhenSpeedCamera` | SCC 연결 방식, LDWS 차량과 카메라 구간 햅틱 |
+| CANFD·HDA | `CanfdHDA2`, `CanfdDebug`, `HDPuse` | HDA2 차량과 CAN FD 디버그·HDP 기능 |
+| 레이더 | `EnableRadarTracks`, `EnableCornerRadar`, `RadarLeadModelMode` | SCC 레이더, 레이더 트랙, 코너 레이더와 리드 선택 방식 |
+| 운전자 모니터링 | `DisableDM`, `MuteDoor`, `MuteSeatbelt` | 운전자 모니터링과 일부 차량 경고음 처리 |
+| 차량 보조 | `MaxAngleFrames`, `SpeedFromPCM` | 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |
+
+> [!CAUTION]
+> `HyundaiCameraSCC`, `CanfdHDA2`, `EnableRadarTracks`, `RadarLeadModelMode`, `SpeedFromPCM`은 잘못 설정하면 차량 인식, SCC, 레이더와 가감속 동작이 달라질 수 있습니다. 차종, 연식, HDA 구성, 하네스 연결 위치와 순정 ACC 사용 여부를 확인한 뒤 변경하세요.
+
+- `HyundaiCameraSCC`: 현대·기아 차량의 롱컨, 크루즈 동기화와 CAN FD 배선 구성에 따라 모드가 달라집니다.
+- `CanfdHDA2`: HDA2 차량에서만 활성화합니다.
+- `EnableRadarTracks`: SCC 사용부터 레이더 트랙과 저속 SCC 조합까지 여러 모드가 있으므로 차량별 검증이 필요합니다.
+- `RadarLeadModelMode`: 변경 후 차량 또는 장치 재시작이 필요한 리드 선택 방식입니다.
+- `DisableDM`: 운전자 모니터링을 비활성화할 수 있는 안전 관련 항목이며 재부팅이 필요합니다.
+- `SpeedFromPCM`: 비롱컨 순정 SCC의 버튼 스패밍과 커브·카메라 감속 방식에 영향을 줍니다.
+
+## 화면 표시
+
+화면 표시에는 33개 항목이 있습니다. 일반 화면 항목은 비교적 되돌리기 쉽지만, 외부 HUD는 별도 하드웨어와 성능 설정을 포함합니다.
+
+| 중분류 | 파라미터 | 용도 |
+|---|---|---|
+| 정보 표시 | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode` | 주행 화면의 디버그, 타이어, 시간, 차선, 레이더와 경로 정보 |
+| 경로 표시 | `ShowPathMode`, `ShowPathColor`, `ShowPathColorCruiseOff`, `ShowPathModeLane`, `ShowPathColorLane` | 레인리스·레인모드·크루즈 OFF 상태의 경로 모양과 색상 |
+| 밝기·주행화면 | `ShowCustomBrightness`, `ShowModelView` | 주행 중 밝기와 카메라·모델 표시 조합 |
+| 외부 HUD·기본 | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudMirror`, `ClusterHudTheme`, `ClusterNaviMapTheme`, `ClusterNaviMapType`, `ClusterNaviMapFps` | TURZX 외부 HUD, 밝기, 미러링과 지도 테마 |
+| 외부 HUD·화면·카메라 | `ClusterHudEncoder`, `ClusterHudLiveFps`, `ClusterHudScreenMode`, `ClusterHudCameraViewMode` | 인코더, 전송 FPS와 화면·카메라 구성 |
+| 외부 HUD·레이더 표시 | `ClusterHudRadarInfo`, `ClusterHudRadarDisplay`, `ClusterHudRadarSourceColor` | 외부 HUD의 레이더 정보와 색상 |
+| 외부 HUD·성능·디버그 | `ClusterHudCoreMode`, `ClusterHudPriority`, `ClusterHudDebug` | CPU 코어, 프로세스 우선순위와 진단 정보 |
+
+`ShowRouteInfo` 설명에 남아 있는 APN 표기는 경로 정보 입력 상태를 뜻합니다. 이를 CarrotMan 또는 CarrotLink 지원 안내로 해석하면 안 됩니다.
+
+`ShowCustomBrightness=0`은 주변 밝기에 따른 자동 조절이고, `ShowModelView`는 카메라와 모델 표시 조합을 선택합니다. `ClusterHud` 계열은 지원되는 외부 HUD를 연결한 경우에만 사용하세요.
+
+## 시스템
+
+시스템에는 녹화, 전원, 네트워크, 지도, 소리와 소프트웨어 메뉴를 다루는 11개 항목이 있습니다.
+
+| 중분류 | 파라미터 | 용도 |
+|---|---|---|
+| 녹화·전원 | `RecordRoadCam`, `MaxTimeOffroadMin` | 도로 카메라 저장과 시동 OFF 후 자동 전원 종료 시간 |
+| YouTube 라이브 | `CarrotYouTubeLive`, `CarrotYouTubeQuality`, `CarrotYouTubeTimestamp` | 카메라 영상 송출, 품질과 타임스탬프 |
+| 네트워크·지도 | `HotspotOnBoot`, `MapboxStyle` | 부팅 시 핫스팟과 지도 배경 스타일 |
+| 사운드 | `SoundLanguageSetting`, `SoundVolumeAdjust`, `SoundVolumeAdjustEngage` | 안내음 언어와 일반·인게이지 볼륨 |
+| 소프트웨어 | `SoftwareMenu` | Carrot Web의 소프트웨어 메뉴 활성화 |
+
+- `RecordRoadCam`: `0` 녹화 안 함, `1` 일반 카메라, `2` 일반+광각 카메라입니다. 저장 공간 사용량을 확인하세요.
+- `MaxTimeOffroadMin`: 시동이 꺼진 뒤 장치가 자동으로 꺼질 때까지의 시간입니다.
+- `CarrotYouTubeLive`: 네트워크 사용량, 발열과 개인정보 노출 가능성을 함께 확인하세요.
+- `HotspotOnBoot`: USIM을 장착한 장치에서 자동 핫스팟을 사용할 때의 설정입니다.
+- `SoftwareMenu`: 메모리 문제가 있을 때 끌 수 있는 Carrot Web 메뉴 설정입니다.
+
+## 위험도별로 접근하기
+
+### 비교적 쉽게 되돌릴 수 있는 설정
+
+- 화면 정보, 경로 모양·색상
+- 밝기와 사운드
+- 즐겨찾기와 프로필
+
+### 주행 동작을 바꾸는 설정
+
+- 상시 조향과 오토인게이지
+- 버튼 모드와 자동 턴
+- 커브·카메라·신호 감속
+- 차간거리, 정지와 가감속 튜닝
+- 조향 지연, 평활화와 토크 계수
+
+### 차량 구성을 확인해야 하는 설정
+
+- `HyundaiCameraSCC`, `CanfdHDA2`
+- `EnableRadarTracks`, `RadarLeadModelMode`
+- `SpeedFromPCM`, `DisableMinSteerSpeed`
+- `LateralTorqueCustom`, `CustomSteer*`
+- `DisableDM`
+
+## 안전한 변경 순서
+
+1. Carrot Web에서 현재 값을 확인합니다.
+2. 기준 프로필과 파일 백업을 모두 만듭니다.
+3. 변경할 파라미터 이름, 이전 값과 변경 이유를 기록합니다.
+4. 한 번에 한 항목만 `unit` 한 단계만큼 바꿉니다.
+5. 재부팅 안내가 나오면 차량이 꺼진 오프로드 상태에서 재부팅합니다.
+6. 허용된 시험 환경의 같은 조건에서 결과를 반복 확인합니다.
+7. 나빠지거나 판단하기 어렵다면 즉시 이전 값 또는 기준 프로필로 복원합니다.
+
+조향과 가감속의 실제 조정 순서는 [튜닝 입문](https://github.com/ajouatom/openpilot/wiki/Guide-Tuning)을 참고하세요.

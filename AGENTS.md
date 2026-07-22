@@ -15,3 +15,19 @@
   `docs/cluster_road_camera_map_flicker_analysis.md`. The hardware H.264 map and TICI road camera
   both use `samplerExternalOES` on texture unit 0; each external image must be rebound immediately
   before every draw, not only when its source frame changes.
+
+# User documentation policy
+
+- `docs/user/ko/` and `docs/user/en/` are the paired canonical sources for public carrotpilot user
+  documentation. The Wiki should link to these files instead of copying their detailed contents.
+- When a change affects user-visible behavior, settings, defaults, units, presets, vehicle-control
+  behavior, radar behavior, or the Carrot Web settings interface, update the mapped Korean and
+  English user documents and focused tests in the same change even when the user did not explicitly
+  request docs.
+- Use `docs/user/docs_map.json` to find the documents associated with changed code. Run
+  `python tools/docs/check_user_docs.py --base <base-ref>` before publishing.
+- Refactors, logging-only changes, performance work with unchanged behavior, and test-only changes
+  normally do not require user-documentation edits. For a pull request that changes mapped code
+  without docs, record a concrete `Docs-Not-Needed: <reason>` in the PR body.
+- Do not place private, internal-only, credential-bearing, or non-public feature documentation in
+  `docs/user/` or link it from the public Wiki.

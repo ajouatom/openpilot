@@ -1,0 +1,29 @@
+name: user docs
+
+on:
+  pull_request:
+  push:
+    branches:
+      - carrot-wip
+  workflow_dispatch:
+
+jobs:
+  check_user_docs:
+    name: check mapped user docs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install documentation test dependency
+        run: python -m pip install pytest
+      - name: Check code and user documentation changes
+        env:
+          DOCS_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python tools/docs/check_user_docs.py --base "$DOCS_BASE_SHA"
+      - name: Test user documentation checker
+        run: python -m pytest -q -o addopts='' --confcutdir=tools/docs/tests tools/docs/tests/test_check_user_docs.py

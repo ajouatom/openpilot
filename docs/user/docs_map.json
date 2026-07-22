@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "settings-catalog-and-web",
+      "description": "설정 카탈로그, 기본값, 단위와 Carrot Web 설정 화면",
+      "code_paths": [
+        "openpilot/selfdrive/carrot_settings.json",
+        "openpilot/common/params_keys.h",
+        "openpilot/selfdrive/carrot/server/services/params.py",
+        "openpilot/selfdrive/carrot/server/services/settings.py",
+        "openpilot/selfdrive/carrot/server/features/settings.py",
+        "openpilot/selfdrive/carrot/web/js/pages/setting.js",
+        "openpilot/selfdrive/carrot/web/js/shared/setting_diff.js"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/settings.md",
+          "docs/user/en/settings.md"
+        ]
+      ]
+    },
+    {
+      "id": "intro-presets",
+      "description": "최초 설정과 차량 제어 프리셋",
+      "code_paths": [
+        "openpilot/selfdrive/carrot/server/features/intro/presets.py",
+        "openpilot/selfdrive/carrot/server/features/intro/state.py"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/settings.md",
+          "docs/user/en/settings.md"
+        ]
+      ]
+    },
+    {
+      "id": "cruise-buttons-and-shared-control",
+      "description": "크루즈 버튼, 속도 프리셋과 공용 크루즈 동작",
+      "code_paths": [
+        "openpilot/selfdrive/car/cruise.py",
+        "opendbc_repo/opendbc/car/hyundai/carcontroller.py"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/buttons-presets.md",
+          "docs/user/en/buttons-presets.md"
+        ],
+        [
+          "docs/user/ko/speed-deceleration.md",
+          "docs/user/en/speed-deceleration.md"
+        ],
+        [
+          "docs/user/ko/cruise-gap.md",
+          "docs/user/en/cruise-gap.md"
+        ]
+      ]
+    },
+    {
+      "id": "speed-deceleration",
+      "description": "카메라, 제한속도, 방지턱, 커브와 턴 감속",
+      "code_paths": [
+        "openpilot/selfdrive/carrot/carrot_serv.py",
+        "openpilot/selfdrive/carrot/carrot_man.py",
+        "openpilot/selfdrive/controls/lib/desire_helper.py"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/speed-deceleration.md",
+          "docs/user/en/speed-deceleration.md"
+        ]
+      ]
+    },
+    {
+      "id": "longitudinal-and-gap",
+      "description": "종방향 제어, 정차·재출발과 차간거리",
+      "code_paths": [
+        "openpilot/selfdrive/carrot/carrot_functions.py",
+        "openpilot/selfdrive/controls/lib/longitudinal_planner.py",
+        "openpilot/selfdrive/controls/lib/longitudinal_mpc_lib/long_mpc.py",
+        "openpilot/selfdrive/controls/lib/longcontrol.py"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/cruise-gap.md",
+          "docs/user/en/cruise-gap.md"
+        ],
+        [
+          "docs/user/ko/speed-deceleration.md",
+          "docs/user/en/speed-deceleration.md"
+        ]
+      ]
+    },
+    {
+      "id": "radar",
+      "description": "전방 레이더 트랙, 코너 레이더와 선행차 결합",
+      "code_paths": [
+        "openpilot/selfdrive/controls/radard.py",
+        "opendbc_repo/opendbc/car/hyundai/radar_interface.py"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/radar.md",
+          "docs/user/en/radar.md"
+        ]
+      ]
+    }
+  ]
+}
