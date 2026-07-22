@@ -98,6 +98,55 @@
       ]
     },
     {
+      "id": "carrot-web-pages",
+      "description": "Carrot Web 주행·화면녹화·도구·로그·터미널 화면",
+      "code_paths": [
+        "openpilot/selfdrive/carrot/web/index.html",
+        "openpilot/selfdrive/carrot/web/js/pages/car.js",
+        "openpilot/selfdrive/carrot/web/js/shared/ui/navigation.js",
+        "openpilot/selfdrive/carrot/web/src/features/drive/factory_catalog.js",
+        "openpilot/selfdrive/carrot/web/src/features/drive/core/*",
+        "openpilot/selfdrive/carrot/web/src/features/drive/contents/vision/*",
+        "openpilot/selfdrive/carrot/web/src/features/logs/index.js",
+        "openpilot/selfdrive/carrot/web/src/features/logs/layout.js",
+        "openpilot/selfdrive/carrot/web/src/features/logs/runtime.js",
+        "openpilot/selfdrive/carrot/web/src/features/logs/screenrecord.js",
+        "openpilot/selfdrive/carrot/web/src/features/replay/*",
+        "openpilot/selfdrive/carrot/web/src/features/tools/*",
+        "openpilot/selfdrive/carrot/web/src/features/terminal/runtime.js",
+        "openpilot/selfdrive/carrot/web/src/features/terminal/support_owner.js",
+        "openpilot/selfdrive/carrot/server/features/screenrecord/*",
+        "openpilot/selfdrive/carrot/server/features/tools/*",
+        "openpilot/selfdrive/carrot/server/features/terminal.py",
+        "openpilot/selfdrive/carrot/server/features/support_terminal.py"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/carrot-web.md",
+          "docs/user/en/carrot-web.md"
+        ]
+      ]
+    },
+    {
+      "id": "dashcam-log-sharing",
+      "description": "Carrot Web 대시캠 구간 선택과 분석 로그 전송",
+      "code_paths": [
+        "openpilot/selfdrive/carrot/web/src/features/logs/dashcam.js",
+        "openpilot/selfdrive/carrot/server/features/dashcam/catalog.py",
+        "openpilot/selfdrive/carrot/server/features/dashcam/paths.py",
+        "openpilot/selfdrive/carrot/server/features/dashcam/routes.py",
+        "openpilot/selfdrive/carrot/server/features/dashcam/upload.py",
+        "openpilot/selfdrive/carrot/server/features/dashcam/upload_jobs.py",
+        "openpilot/selfdrive/carrot/web_upload.py"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/dashcam-log-sharing.md",
+          "docs/user/en/dashcam-log-sharing.md"
+        ]
+      ]
+    },
+    {
       "id": "radar",
       "description": "전방 레이더 트랙, 코너 레이더와 선행차 결합",
       "code_paths": [
