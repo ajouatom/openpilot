@@ -1076,6 +1076,12 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   EventName.audioPrompt: {
      ET.WARNING: EngagementAlert(AudibleAlert.prompt),
   },
+  EventName.radarCutin: {
+     ET.WARNING: EngagementAlert(AudibleAlert.radarCutin),
+  },
+  EventName.radarStationaryLead: {
+     ET.WARNING: EngagementAlert(AudibleAlert.radarStationaryLead),
+  },
   EventName.audioRefuse: {
      ET.WARNING: EngagementAlert(AudibleAlert.refuse),
   },
