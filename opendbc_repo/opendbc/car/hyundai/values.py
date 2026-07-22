@@ -151,6 +151,7 @@ class HyundaiExtFlags(IntFlag):
   CORNER_RADAR_OBJECTS_180 = 2 ** 13  # 0x180-0x184 bus 1 two-slot raw corner/front radar objects
   CORNER_RADAR_OBJECTS_430 = 2 ** 14  # 0x430-0x437 left + 0x440-0x447 right IONIQ 9 corner radar bins
   RADAR_GROUP4 = 2 ** 15  # 0x500-0x507 Denso DNMWR006 stable radar tracks
+  EV_MODE_STATUS_230 = 2 ** 16  # ECAN 0x230/DLC32 exposes the hybrid power-flow mode used for the EV indicator
 
 class Footnote(Enum):
   CANFD = CarFootnote(
@@ -1014,6 +1015,15 @@ CAN_GEARS = {
 
 CANFD_CAR = CAR.with_flags(HyundaiFlags.CANFD)
 CANFD_RADAR_SCC_CAR = CAR.with_flags(HyundaiFlags.RADAR_SCC)  # TODO: merge with UNSUPPORTED_LONGITUDINAL_CAR
+
+CANFD_HYBRID_STATUS_ADDR = 0xFA
+CANFD_HYBRID_STATUS_DLC = 32
+
+EV_MODE_STATUS_ADDR = 0x230
+EV_MODE_STATUS_DLC = 32
+EV_MODE_STATUS_MSG = "HCU_STATUS_230"
+EV_MODE_STATUS_SIGNAL = "HYBRID_POWER_FLOW_MODE"
+EV_MODE_ACTIVE_VALUES = frozenset((1, 2, 6))
 
 CANFD_UNSUPPORTED_LONGITUDINAL_CAR = CAR.with_flags(HyundaiFlags.CANFD_NO_RADAR_DISABLE)  # TODO: merge with UNSUPPORTED_LONGITUDINAL_CAR
 
