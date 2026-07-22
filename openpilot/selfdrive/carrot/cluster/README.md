@@ -354,6 +354,13 @@ invalid samples, and stale `carState` data.
 Hyundai/Kia CAN-FD hybrids enable this capability only when both `0xFA` and
 `0x230` are present on ECAN with DLC32. The four-bit power-flow mode in `0x230`
 shows `EV` for observed values 1, 2, and 6; all other values remain hidden.
+The normal HUD also shows the current `longitudinalPlan.myDrivingMode` beside
+the model traffic-state icon above vehicle speed: `1` eco in green, `2` safe
+in orange, `3` normal in white, and `4` high speed in red. Unknown modes and
+missing, invalid, or stale longitudinal plans hide the badge. The red and
+green traffic-state icons share the slot immediately to its left and remain
+independent of driving mode. Full navigation mode omits both speed-mode
+indicators.
 When `--fps` is omitted, `ClusterHudLiveFps` controls the render limit and is
 polled about once per second while running: `0` uncapped diagnostic mode, `1`
 10 Hz default, `2` 20 Hz, `3` 30 Hz, `4` 40 Hz, `5` 50 Hz, and `6` 60 Hz.
