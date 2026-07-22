@@ -10,7 +10,7 @@ import pytest
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
-from cluster_config import CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA, EGO_FORWARD_M, LIGHT_CLUSTER_THEME, VEHICLE_LENGTH_M
+from cluster_config import CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA, EGO_FORWARD_M, GREEN, LIGHT_CLUSTER_THEME, VEHICLE_LENGTH_M
 from cluster_models import ClusterUiState, DetectedVehicle, LaneMarking, ModelPathPoint, RadarPoint
 import cluster_renderer
 from cluster_renderer import ClusterUiRenderer
@@ -93,13 +93,93 @@ def test_renderer_reuses_scene_when_only_hud_state_changes(monkeypatch) -> None:
   monkeypatch.setattr(cluster_renderer, "build_cluster_scene", build_scene)
   state = _cluster_state()
   first = renderer._scene_for_state(state, True, LIGHT_CLUSTER_THEME)
-  hud_only = renderer._scene_for_state(replace(state, center_clock_text="12:34"), True, LIGHT_CLUSTER_THEME)
+  hud_only = renderer._scene_for_state(
+    replace(state, center_clock_text="12:34", ev_mode_valid=True, ev_mode_active=True),
+    True,
+    LIGHT_CLUSTER_THEME,
+  )
   changed_world = renderer._scene_for_state(replace(state, steering=0.1), True, LIGHT_CLUSTER_THEME)
 
-  assert cluster_scene_state_key(state) == cluster_scene_state_key(replace(state, center_clock_text="12:34"))
+  assert cluster_scene_state_key(state) == cluster_scene_state_key(
+    replace(state, center_clock_text="12:34", ev_mode_valid=True, ev_mode_active=True)
+  )
   assert first is hud_only
   assert changed_world is not first
   assert len(scenes) == 2
+
+
+@pytest.mark.parametrize(
+  ("valid", "active", "expected_draws"),
+  ((False, False, 0), (False, True, 0), (True, False, 0), (True, True, 1)),
+)
+def test_ev_mode_indicator_draws_green_only_when_valid_and_active(valid, active, expected_draws) -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  draws = []
+  renderer._draw_text_with_stroke = lambda *args, **kwargs: draws.append((args, kwargs))
+
+  renderer._draw_ev_mode_indicator(_cluster_state(ev_mode_valid=valid, ev_mode_active=active))
+
+  assert len(draws) == expected_draws
+  if draws:
+    args, kwargs = draws[0]
+    assert args[0] == "EV"
+    assert args[1:4] == (
+      cluster_renderer.SPEED_EV_CENTER_X,
+      cluster_renderer.SPEED_EV_CENTER_Y,
+      cluster_renderer.SPEED_EV_FONT_SIZE,
+    )
+    assert args[4] == GREEN
+    assert kwargs == {"anchor": "center", "cache": True}
+
+
+def test_ev_mode_indicator_fits_between_three_digit_speeds() -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._current_theme = lambda: LIGHT_CLUSTER_THEME
+  renderer._speed_bg_texture = None
+  draws = []
+  renderer._draw_text_with_stroke = lambda *args, **kwargs: draws.append((args, kwargs))
+
+  state = _cluster_state(
+    speed_kph=260.0,
+    display_speed_kph=260.0,
+    cruise_kph=260,
+    cruise_display_state="engaged",
+    ev_mode_valid=True,
+    ev_mode_active=True,
+  )
+  renderer._draw_speed_block(state)
+
+  speed = next(args for args, _ in draws if args[0] == "260" and args[1] == cluster_renderer.SPEED_VALUE_CENTER_X)
+  cruise = next(args for args, _ in draws if args[0] == "260" and args[1] == cluster_renderer.CRUISE_SET_SPEED_CENTER_X)
+  ev = next(args for args, _ in draws if args[0] == "EV")
+
+  # Width ratios measured from the bundled cluster font. Include each 2D stroke
+  # and preserve visible separation at the real three-digit domain maximum.
+  speed_width = speed[3] * (138.89345 / 77.056)
+  cruise_width = cruise[3] * (83.78001 / 46.4)
+  ev_width = ev[3] * (30.4 / 24.0)
+  speed_right = speed[1] + speed_width * 0.5 + speed[6]
+  ev_left = ev[1] - ev_width * 0.5 - ev[6]
+  ev_right = ev[1] + ev_width * 0.5 + ev[6]
+  cruise_left = cruise[1] - cruise_width * 0.5 - cruise[6]
+
+  assert ev[1:4] == (181.0, cluster_renderer.SPEED_VALUE_CENTER_Y, 28.0)
+  assert ev_left - speed_right >= 3.0
+  assert cruise_left - ev_right >= 3.0
+
+
+def test_full_navi_does_not_draw_ev_mode_indicator() -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._current_theme = lambda: SimpleNamespace(text=(1, 2, 3), muted=(4, 5, 6))
+  renderer._draw_navi_media = lambda *_args, **_kwargs: False
+  renderer._draw_text = lambda *_args, **_kwargs: None
+  draws = []
+  renderer._draw_ev_mode_indicator = lambda *args, **kwargs: draws.append((args, kwargs))
+
+  state = _cluster_state(ev_mode_valid=True, ev_mode_active=True)
+  renderer._draw_navi_left_band(state, None, {})
+
+  assert draws == []
 
 
 def test_longitudinal_render_distance_is_halved_without_changing_lateral_data() -> None:

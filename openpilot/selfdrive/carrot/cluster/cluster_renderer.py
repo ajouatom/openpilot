@@ -223,6 +223,10 @@ SPEED_GEAR_W = 45.0
 SPEED_GEAR_H = 58.0
 SPEED_GEAR_CENTER_Y = SPEED_PANEL_Y + SPEED_PANEL_H - SPEED_GEAR_H * 0.5
 SPEED_GEAR_FONT_SIZE = 48.0
+# A compact EV telltale fits between three-digit vehicle and cruise-set speeds.
+SPEED_EV_CENTER_X = 181.0
+SPEED_EV_CENTER_Y = SPEED_VALUE_CENTER_Y
+SPEED_EV_FONT_SIZE = 28.0
 SPEED_MODEL_TRAFFIC_RED_CENTER_X = SPEED_VALUE_CENTER_X
 SPEED_MODEL_TRAFFIC_GREEN_CENTER_X = SPEED_MODEL_TRAFFIC_RED_CENTER_X - 38.0
 SPEED_MODEL_TRAFFIC_CENTER_Y = SPEED_PANEL_Y - 9.0
@@ -5894,6 +5898,7 @@ class ClusterUiRenderer:
         self._draw_model_traffic_state(state.traffic_state)
         self._draw_cruise_gap_badge(state.cruise_gap)
         self._draw_speed_gear_badge(state)
+        self._draw_ev_mode_indicator(state)
         self._draw_camera_tpms(state)
 
         if self._cruise_set_visible(state) and state.cruise_override_kph is not None:
@@ -6000,6 +6005,27 @@ class ClusterUiRenderer:
             SPEED_GEAR_CENTER_Y,
             SPEED_GEAR_FONT_SIZE,
             color,
+            (5, 9, 12),
+            2,
+            anchor="center",
+            cache=True,
+        )
+
+    def _draw_ev_mode_indicator(
+        self,
+        state: ClusterUiState,
+        center_x: float = SPEED_EV_CENTER_X,
+        center_y: float = SPEED_EV_CENTER_Y,
+        font_size: float = SPEED_EV_FONT_SIZE,
+    ) -> None:
+        if not (state.ev_mode_valid and state.ev_mode_active):
+            return
+        self._draw_text_with_stroke(
+            "EV",
+            center_x,
+            center_y,
+            font_size,
+            GREEN,
             (5, 9, 12),
             2,
             anchor="center",

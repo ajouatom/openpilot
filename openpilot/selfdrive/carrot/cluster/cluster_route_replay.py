@@ -464,6 +464,8 @@ class RouteReplayFrame:
     radar_points: tuple[RadarPoint, ...] = ()
     corner_radar_supported: bool = False
     tpms: TpmsInfo = TpmsInfo()
+    ev_mode_valid: bool = False
+    ev_mode_active: bool = False
     display_speed_kph: float | None = None
     traffic_state: int = 0
     planned_speed_kph: float | None = None
@@ -1618,6 +1620,8 @@ class RouteLogParser:
             detected_vehicles = tuple((*detected_vehicles, *self.cutin_detections))
         radar_points = self._radar_points_from_current_state(event_t)
         tpms = tpms_info_from_car_state(car_state)
+        ev_mode_valid = bool(safe_get(car_state, "evModeValid", False))
+        ev_mode_active = ev_mode_valid and bool(safe_get(car_state, "evModeActive", False))
 
         return RouteReplayFrame(
             t=event_t,
@@ -1670,6 +1674,8 @@ class RouteLogParser:
             radar_points=radar_points,
             corner_radar_supported=self.corner_radar_active_for_display(),
             tpms=tpms,
+            ev_mode_valid=ev_mode_valid,
+            ev_mode_active=ev_mode_active,
             display_speed_kph=display_speed_kph,
             traffic_state=self.traffic_state,
             planned_speed_kph=self.planned_speed_kph,
@@ -3579,6 +3585,8 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         radar_points=frame.radar_points,
         corner_radar_supported=frame.corner_radar_supported,
         tpms=frame.tpms,
+        ev_mode_valid=frame.ev_mode_valid,
+        ev_mode_active=frame.ev_mode_valid and frame.ev_mode_active,
         planned_speed_kph=frame.planned_speed_kph,
         planned_accel_mps2=frame.planned_accel_mps2,
         planned_curvature_m_inv=frame.planned_curvature_m_inv,
@@ -3782,6 +3790,8 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         radar_points=discrete.radar_points,
         corner_radar_supported=discrete.corner_radar_supported,
         tpms=discrete.tpms,
+        ev_mode_valid=discrete.ev_mode_valid,
+        ev_mode_active=discrete.ev_mode_valid and discrete.ev_mode_active,
         planned_speed_kph=lerp_optional(left.planned_speed_kph, right.planned_speed_kph),
         planned_accel_mps2=lerp_optional(left.planned_accel_mps2, right.planned_accel_mps2),
         planned_curvature_m_inv=lerp_optional(left.planned_curvature_m_inv, right.planned_curvature_m_inv),
