@@ -1,11 +1,11 @@
 import os
 import imgui
 import libusb
-from opendbc import get_generated_dbcs
 from opendbc.car import Bus
 from opendbc.car.fingerprints import MIGRATION
 from opendbc.car.values import PLATFORMS
 from openpilot.common.basedir import BASEDIR
+from openpilot.tools.jotpluggler.dbc_generation import get_jotpluggler_generated_dbcs
 
 Import('env', 'arch', 'common', 'messaging', 'visionipc', 'cereal', 'replay_lib')
 
@@ -25,7 +25,7 @@ def materialize_generated_dbcs(target, source, env):
     if name.endswith('.dbc'):
       os.unlink(os.path.join(out_dir, name))
 
-  for name, content in sorted(get_generated_dbcs().items()):
+  for name, content in sorted(get_jotpluggler_generated_dbcs().items()):
     with open(os.path.join(out_dir, f"{name}.dbc"), "w") as f:
       f.write(content)
 
