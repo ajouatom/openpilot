@@ -6,6 +6,8 @@
 
 | 주제 | 한국어 | English |
 |---|---|---|
+| Carrot Web | [Carrot Web 사용 설명서](ko/carrot-web.md) | [Carrot Web User Guide](en/carrot-web.md) |
+| 분석 로그 전송 | [분석용 대시캠 로그 전송](ko/dashcam-log-sharing.md) | [Sending Dashcam Logs for Analysis](en/dashcam-log-sharing.md) |
 | 설정 | [설정 이해하기](ko/settings.md) | [Understanding Settings](en/settings.md) |
 | 버튼·프리셋 | [버튼·프리셋](ko/buttons-presets.md) | [Buttons and Presets](en/buttons-presets.md) |
 | 속도·감속 | [속도·감속](ko/speed-deceleration.md) | [Speed and Deceleration](en/speed-deceleration.md) |
