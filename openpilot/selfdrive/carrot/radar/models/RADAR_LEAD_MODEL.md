@@ -50,9 +50,9 @@ The controller additionally requires a raw-corner identity, at least seven frame
 
 ## Cut-in regression
 
-The 53 maintained detect/clear video-review cases pass 53/53. This count covers only the labeled windows in `cutin_validation_cases.json`; it is a regression gate, not a claim about unlabeled portions of every route. The v14 candidate introduced no activation in the maintained right-curve, parallel-adjacent, roadside-pass, close-pass, point-jump, stopped-traffic, close stationary-reflection, near-field front-radar ghost, or tunnel-ghost clear scenes.
+The current production controller passes 51/54 maintained detect/clear video-review cases. This count covers only the labeled windows in `cutin_validation_cases.json`; it is a regression gate, not a claim about unlabeled portions of every route. The three known failures are one missing `leadOne` takeover after a detected close Carnival cut-in and two missed Palisade C21 right cut-ins. The maintained right-curve, parallel-adjacent, roadside-pass, close-pass, point-jump, stopped-traffic, close stationary-reflection, near-field front-radar ghost, and tunnel-ghost clear scenes remain clear.
 
-v14 fine-tunes only the base cut-in output with 389 video-reviewed frames from eight logs listed in `radar_lead_annotations_v14.json`. Non-manual rows are distilled toward the v13 output instead of relearning the weak current-radard teacher. Eleven newer route cases from different logs remain explicitly held out in that file and pass 11/11. The full maintained video suite passes 53/53.
+v14 fine-tunes only the base cut-in output with 389 video-reviewed frames from eight logs listed in `radar_lead_annotations_v14.json`. Non-manual rows are distilled toward the v13 output instead of relearning the weak current-radard teacher. Eleven newer route cases from different logs remain explicitly held out in that file and pass 11/11. At the v14 checkpoint the then-current 53-case suite passed 53/53; the expanded production-controller suite now passes 51/54 as described above.
 
 At the unchanged base cut-in threshold of 0.90, the untouched 30-log test split changed as follows. These are base-head group metrics before the production temporal and geometry gates:
 

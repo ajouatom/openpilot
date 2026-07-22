@@ -1,6 +1,6 @@
 # Cut-in Route Validation Set
 
-Last validated: 2026-07-19
+Last validated: 2026-07-22
 
 This document records the route-based regression set used for the S50 cut-in
 logic in `radard.py` and the standalone offline validation tools.
@@ -37,7 +37,7 @@ first activation with current radard and the deployed model using:
 ```powershell
 .\.venv\Scripts\python.exe `
   openpilot\selfdrive\carrot\validate_radar_lead_model.py `
-  --model openpilot\selfdrive\carrot\models\radar_lead_multitask.npz
+  --model openpilot\selfdrive\carrot\radar\models\radar_lead_multitask.npz
 ```
 
 ## Sequential Video Review
@@ -214,11 +214,12 @@ first even though lead acquisition can still occur:
 - `ioniq9-a7-22-truck`: `leadTwo` id 56 at 20.58 s and `leadOne` id 56 at
   22.74 s, but no model cut-in from 20-29 s.
 
-The production-controller regression run on 2026-07-21 passed all 52 maintained
-detect/clear windows. This includes target-ID and leadOne-takeover continuity
-checks for the close Carnival, PV5 front-only, and Ioniq 9 left cut-in scenes.
-Only the listed windows are labeled; new reports must be added to
-`cutin_validation_cases.json` before a later change can be called regression-safe.
+The production-controller regression run on 2026-07-22 passed 51 of 54
+maintained detect/clear windows. The remaining failures are the close Carnival
+cut-in completing without the required `leadOne` takeover and two Palisade C21
+right cut-ins that are still missed. Only the listed windows are labeled; new
+reports must be added to `cutin_validation_cases.json` before a later change can
+be called regression-safe.
 
 ## Unit Coverage
 
