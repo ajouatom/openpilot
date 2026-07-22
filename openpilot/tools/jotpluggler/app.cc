@@ -3,7 +3,8 @@
 #include "tools/jotpluggler/common.h"
 #include "tools/jotpluggler/internal.h"
 #include "tools/jotpluggler/map.h"
-#include "system/hardware/hw.h"
+#include "tools/jotpluggler/thumbnail.h"
+#include "common/hardware/hw.h"
 #include "imgui_impl_glfw.h"
 
 #include "imgui_internal.h"
@@ -27,7 +28,7 @@
 #include <unordered_set>
 #include <unistd.h>
 
-#include "third_party/json11/json11.hpp"
+#include "json11/json11.hpp"
 
 namespace fs = std::filesystem;
 
@@ -324,7 +325,7 @@ void configure_style() {
   plot_style.LegendInnerPadding = ImVec2(6.0f, 3.0f);
   plot_style.LegendSpacing = ImVec2(7.0f, 2.0f);
   plot_style.PlotPadding = ImVec2(4.0f, 8.0f);
-  plot_style.FitPadding = ImVec2(0.02f, 0.4f);
+  plot_style.FitPadding = ImVec2(0.02f, static_cast<float>(PLOT_Y_PADDING_FRACTION));
 
   ImPlot::MapInputDefault();
   ImPlotInputMap &input_map = ImPlot::GetInputMap();
@@ -1033,10 +1034,12 @@ bool apply_special_item_to_pane(WorkspaceTab *tab, TabUiState *tab_state, int pa
     if (pane.title == UNTITLED_PANE_TITLE || previous_kind != PaneKind::Plot) {
       pane.title = spec->label;
     }
-  } else {
+  } else if (spec->kind == PaneKind::Camera) {
     pane.title = spec->label;
     resize_tab_pane_state(tab_state, tab->panes.size());
     tab_state->camera_panes[static_cast<size_t>(pane_index)].fit_to_pane = true;
+  } else {
+    pane.title = spec->label;
   }
   tab_state->active_pane_index = pane_index;
   return true;
@@ -1334,20 +1337,6 @@ bool apply_pane_menu_action(AppSession *session, UiState *state, int pane_index,
       layout_changed = true;
       success_status = "Plot view reset";
       break;
-    case PaneMenuActionKind::ResetHorizontal:
-      reset_shared_range(state, *session);
-      state->follow_latest = session->data_mode == SessionDataMode::Stream;
-      state->suppress_range_side_effects = true;
-      clamp_shared_range(state, *session);
-      persist_shared_range_to_tab(tab, *state);
-      layout_changed = true;
-      success_status = "Horizontal zoom reset";
-      break;
-    case PaneMenuActionKind::ResetVertical:
-      clear_pane_vertical_limits(&tab->panes[static_cast<size_t>(pane_index)]);
-      layout_changed = true;
-      success_status = "Vertical zoom reset";
-      break;
     case PaneMenuActionKind::Clear:
       clear_pane(tab, pane_index);
       tab_state->active_pane_index = pane_index;
@@ -1579,6 +1568,8 @@ void draw_pane_windows(AppSession *session, UiState *state) {
       }
       if (pane.kind == PaneKind::Map) {
         draw_map_pane(session, state, &pane, static_cast<int>(i));
+      } else if (pane.kind == PaneKind::Thumbnail) {
+        draw_thumbnail_pane(session, state);
       } else if (pane.kind == PaneKind::Camera) {
         draw_camera_pane(session, state, tab_state, static_cast<int>(i), pane);
       } else {
@@ -1861,6 +1852,7 @@ int run(const Options &options) {
   for (std::unique_ptr<CameraFeedView> &feed : session.pane_camera_feeds) {
     feed = std::make_unique<CameraFeedView>();
   }
+  session.thumbnail_view = std::make_unique<ThumbnailView>();
   sync_camera_feeds(&session);
 
   if (session.async_route_loading) {
@@ -1906,6 +1898,7 @@ int run(const Options &options) {
   for (std::unique_ptr<CameraFeedView> &feed : session.pane_camera_feeds) {
     feed.reset();
   }
+  session.thumbnail_view.reset();
   return 0;
   } catch (const std::exception &err) {
     std::cerr << err.what() << "\n";
