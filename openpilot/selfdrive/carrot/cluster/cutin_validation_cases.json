@@ -453,6 +453,16 @@
       "scene": "Left adjacent vehicle remains in its lane"
     },
     {
+      "id": "santafe-df-9-adjacent-right-56",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "front+corner",
+      "window": [56.2, 56.6],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [42],
+      "scene": "Close right adjacent vehicle remains outside the ego lane"
+    },
+    {
       "id": "azera-b1-14-right-cutin",
       "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
       "log": "000000b1--b241e88f9b--14/rlog.zst",
