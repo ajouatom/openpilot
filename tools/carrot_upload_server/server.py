@@ -19,11 +19,6 @@ from typing import Any
 
 from aiohttp import web
 
-try:
-  from .viewer import ROUTE_VIEWER_KEY, RouteViewer
-except ImportError:
-  from viewer import ROUTE_VIEWER_KEY, RouteViewer
-
 
 GIB = 1024 * 1024 * 1024
 MIB = 1024 * 1024
@@ -59,11 +54,6 @@ class Config:
   session_issue_limit: int = 30
   session_issue_window_seconds: int = 10 * 60
   trusted_proxy_networks: tuple[str, ...] = ("127.0.0.0/8", "::1/128", "172.16.0.0/12")
-  route_admin_key: str = ""
-  public_base_url: str = ""
-  video_cache_root: Path | None = None
-  ffmpeg_binary: str = "ffmpeg"
-  video_cache_max_bytes: int = 10 * GIB
 
   @classmethod
   def from_env(cls) -> Config:
@@ -79,11 +69,6 @@ class Config:
       session_ttl_seconds=_env_int("CARROT_SESSION_TTL_SECONDS", 4 * 60 * 60, 60),
       concurrent_per_device=_env_int("CARROT_CONCURRENT_PER_DEVICE", 3, 1),
       concurrent_global=_env_int("CARROT_CONCURRENT_GLOBAL", 16, 1),
-      route_admin_key=os.environ.get("CARROT_ROUTE_ADMIN_KEY", "").strip(),
-      public_base_url=os.environ.get("CARROT_PUBLIC_BASE_URL", "").strip(),
-      video_cache_root=Path(os.environ.get("CARROT_ROUTE_VIDEO_CACHE", str(root / "tmux/.state/route_video_cache"))),
-      ffmpeg_binary=os.environ.get("CARROT_FFMPEG_BINARY", "ffmpeg").strip() or "ffmpeg",
-      video_cache_max_bytes=_env_int("CARROT_ROUTE_VIDEO_CACHE_BYTES", 10 * GIB, 128 * MIB),
     )
 
 
@@ -591,26 +576,14 @@ async def security_headers(request: web.Request, handler):
 
 
 def create_app(config: Config | None = None, *, start_cleanup: bool = True) -> web.Application:
-  config = config or Config.from_env()
-  service = UploadService(config)
+  service = UploadService(config or Config.from_env())
   app = web.Application(client_max_size=service.config.max_file_bytes + MIB, middlewares=[security_headers])
   app[UPLOAD_SERVICE_KEY] = service
-  viewer = RouteViewer(
-    storage_root=config.storage_root,
-    db_path=config.db_path,
-    admin_key=config.route_admin_key,
-    public_base_url=config.public_base_url,
-    video_cache_root=config.video_cache_root,
-    ffmpeg_binary=config.ffmpeg_binary,
-    video_cache_max_bytes=config.video_cache_max_bytes,
-  )
-  app[ROUTE_VIEWER_KEY] = viewer
   app.router.add_get("/api/v1/health", service.health)
   app.router.add_post("/api/v1/session", service.create_session)
   app.router.add_put("/api/v1/upload/{device}/{segment}/{filename}", service.upload_file)
   app.router.add_post("/api/v1/complete", service.complete)
   app.router.add_post("/api/v1/tmux/upload", service.tmux_upload)
-  viewer.register(app)
   if start_cleanup:
     app.on_startup.append(_start_cleanup)
     app.on_cleanup.append(_stop_cleanup)
