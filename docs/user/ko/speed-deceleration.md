@@ -391,6 +391,8 @@ Carrot Web 기본값 복원에 쓰이는 `carrot_settings.json`과 Params 최초
 | 턴 모드 0인데 감속 | `ModelTurnSpeedFactor`, `ApplyModelSpeed`, 별도 ATC 확인 |
 | 신호에서 불필요한 정지·출발 | `TrafficLightDetectMode`, 주행 모드, 모델 판단 확인 |
 
+CAN 오류로 자동 전송되는 진단 로그는 현재 온로드에서 새로 수신 중인 차량 또는 레이더 상태가 실제 오류를 보고할 때만 생성됩니다. 이전 주행 종료 과정의 CAN timeout은 사용하지 않으며, 오류 뒤의 상황을 포함하도록 감지 5초 후 캡처합니다. 따라서 속도·감속 이상을 분석할 때 자동 진단 로그가 없더라도 필요한 주행 구간은 Carrot Web에서 별도로 전송해야 합니다.
+
 ## 코드 기준
 
 - 카메라·도로 제한·방지턱·턴 후보 선택: `openpilot/selfdrive/carrot/carrot_serv.py`
