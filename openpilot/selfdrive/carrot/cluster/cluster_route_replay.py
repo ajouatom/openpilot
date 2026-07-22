@@ -1990,8 +1990,10 @@ class RouteLogParser:
         alert_type = str(safe_get(selfdrive_state, "alertType", "") or "").lower()
         self.recorded_cutin_sound = bool(
             self.recorded_cutin_ids
-            and alert_sound == "prompt"
-            and alert_type.startswith("audioprompt/")
+            and (
+                (alert_sound == "prompt" and alert_type.startswith("audioprompt/"))
+                or (alert_sound == "radarcutin" and alert_type.startswith("radarcutin/"))
+            )
         )
         if self.recorded_cutin_sound:
             self.recorded_cutin_sound_t = event_t

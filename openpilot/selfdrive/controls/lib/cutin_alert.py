@@ -7,6 +7,11 @@ CUTIN_ALERT_REID_MAX_VREL_MPS = 2.5
 CUTIN_ALERT_SAME_ID_MAX_DREL_M = 3.0
 CUTIN_ALERT_SAME_ID_MAX_YREL_M = 1.0
 CUTIN_ALERT_SAME_ID_MAX_VREL_MPS = 5.0
+STATIONARY_ALERT_MIN_DREL_M = 0.8
+STATIONARY_ALERT_MAX_DREL_M = 130.0
+STATIONARY_ALERT_MAX_VLEAD_MPS = 3.0 / 3.6
+STATIONARY_ALERT_MIN_VEGO_MPS = 4.0
+STATIONARY_ALERT_DROPOUT_FRAMES = 50
 
 
 @dataclass(frozen=True)
@@ -46,3 +51,45 @@ class CutinAlertTracker:
 
   def reset(self) -> None:
     self.previous = ()
+
+
+def is_stationary_lead_alert_candidate(*, status: bool, radar: bool, d_rel: float,
+                                       v_lead: float, v_ego: float) -> bool:
+  return (
+    status and radar and
+    STATIONARY_ALERT_MIN_DREL_M < d_rel < STATIONARY_ALERT_MAX_DREL_M and
+    abs(v_lead) < STATIONARY_ALERT_MAX_VLEAD_MPS and
+    v_ego > STATIONARY_ALERT_MIN_VEGO_MPS
+  )
+
+
+class StationaryLeadAlertTracker:
+  """Alert once for a newly selected stationary radar object."""
+
+  def __init__(self, dropout_frames: int = STATIONARY_ALERT_DROPOUT_FRAMES) -> None:
+    self.dropout_frames = dropout_frames
+    self.previous: tuple[CutinAlertCandidate, ...] = ()
+    self.missing_frames = 0
+
+  def update(self, candidates: tuple[CutinAlertCandidate, ...], enabled: bool = True) -> bool:
+    if not enabled:
+      self.reset()
+      return False
+
+    if not candidates:
+      self.missing_frames += 1
+      if self.missing_frames >= self.dropout_frames:
+        self.previous = ()
+      return False
+
+    alert = any(
+      not any(CutinAlertTracker._same_object(candidate, previous) for previous in self.previous)
+      for candidate in candidates
+    )
+    self.previous = candidates
+    self.missing_frames = 0
+    return alert
+
+  def reset(self) -> None:
+    self.previous = ()
+    self.missing_frames = 0

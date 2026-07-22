@@ -528,6 +528,8 @@ struct CarControl {
       audio10 @33;
 
       nnff @34;
+      radarCutin @35;
+      radarStationaryLead @36;
     }
   }
 

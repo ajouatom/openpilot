@@ -1,7 +1,7 @@
 import csv
 import gzip
 
-from openpilot.selfdrive.carrot.radar_lead_anticipatory_dataset import augment_file, augment_rows, compact_rows
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_anticipatory_dataset import augment_file, augment_rows, compact_rows
 
 
 def row(time_s: float, cutin: float = 0.0, source: str = "teacher", **values: float | str) -> dict[str, str]:

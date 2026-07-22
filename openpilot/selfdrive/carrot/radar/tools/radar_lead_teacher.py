@@ -10,11 +10,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
-from openpilot.selfdrive.carrot.radar_lead_simulator import (
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   CurrentRadardTeacher,
   ManualLabels,
   current_cutin_track_ids,

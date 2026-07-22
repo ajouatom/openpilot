@@ -147,6 +147,24 @@ def test_recorded_cutin_prompt_is_timestamped_for_replay_alert():
   assert any(detection.cut_in for detection in frame.detected_vehicles)
 
 
+def test_dedicated_cutin_sound_is_timestamped_for_replay_alert():
+  parser = RouteLogParser(recompute_cutins=False)
+  corner_lead = radar_lead(2540)
+  parser._update_radar_state(SimpleNamespace(
+    leadOne=radar_lead(62, d_rel=60.0, y_rel=0.0),
+    leadTwo=corner_lead,
+    leadsCutIn=[corner_lead],
+  ), 1.0)
+
+  parser._update_selfdrive_state(SimpleNamespace(
+    alertSound="radarCutin",
+    alertType="radarCutin/warning",
+  ), 1.01)
+
+  assert parser.recorded_cutin_sound
+  assert parser.recorded_cutin_sound_t == 1.01
+
+
 def test_live_selfdrive_state_passes_event_timestamp():
   calls = []
   source = object.__new__(OpenpilotLiveSource)

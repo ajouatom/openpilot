@@ -21,7 +21,12 @@ from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
 from openpilot.selfdrive.selfdrived.state import StateMachine
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 from openpilot.selfdrive.controls.lib.latcontrol import MIN_LATERAL_CONTROL_SPEED
-from openpilot.selfdrive.controls.lib.cutin_alert import CutinAlertCandidate, CutinAlertTracker
+from openpilot.selfdrive.controls.lib.cutin_alert import (
+  CutinAlertCandidate,
+  CutinAlertTracker,
+  StationaryLeadAlertTracker,
+  is_stationary_lead_alert_candidate,
+)
 
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.version import get_build_metadata
@@ -130,6 +135,7 @@ class SelfdriveD:
     self.recalibrating_seen = False
     self.dm_lockout_set = False
     self.cutin_audio_tracker = CutinAlertTracker()
+    self.stationary_lead_audio_tracker = StationaryLeadAlertTracker()
     self.dm_uncertain_alerted = False
     self.state_machine = StateMachine()
     self.rk = Ratekeeper(100, print_delay_threshold=None)
@@ -204,8 +210,29 @@ class SelfdriveD:
       )
       for lead in self.sm['radarState'].leadsCutIn
     ) if cutin_enabled else ()
-    if self.cutin_audio_tracker.update(cutin_candidates, cutin_enabled):
-      self.events.add(EventName.audioPrompt)
+    cutin_alert = self.cutin_audio_tracker.update(cutin_candidates, cutin_enabled)
+    if cutin_alert:
+      self.events.add(EventName.radarCutin)
+
+    stationary_candidates = tuple(
+      CutinAlertCandidate(
+        int(lead.radarTrackId),
+        float(lead.dRel),
+        float(lead.yRel),
+        float(lead.vLead),
+      )
+      for lead in (self.sm['radarState'].leadOne, self.sm['radarState'].leadTwo)
+      if is_stationary_lead_alert_candidate(
+        status=bool(lead.status),
+        radar=bool(lead.radar),
+        d_rel=float(lead.dRel),
+        v_lead=float(lead.vLead),
+        v_ego=float(CS.vEgo),
+      )
+    ) if cutin_enabled else ()
+    stationary_alert = self.stationary_lead_audio_tracker.update(stationary_candidates, cutin_enabled)
+    if stationary_alert and not cutin_alert:
+      self.events.add(EventName.radarStationaryLead)
 
     # Block resume if cruise never previously enabled
     resume_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)

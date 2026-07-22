@@ -1,15 +1,15 @@
 from dataclasses import replace
 from types import SimpleNamespace
 
-from openpilot.selfdrive.carrot.radar_lead_model import RadarLeadDecision, VisionLeadContext
-from openpilot.selfdrive.carrot.radar_lead_runtime import RadarLeadRuntimeResult
-from openpilot.selfdrive.carrot.radar_lead_simulator import (
+from openpilot.selfdrive.carrot.radar.radar_lead_model import RadarLeadDecision, VisionLeadContext
+from openpilot.selfdrive.carrot.radar.radar_lead_runtime import RadarLeadRuntimeResult
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   Candidate,
   Selection,
   cutin_continuity_series,
   validation_review_events,
 )
-from openpilot.selfdrive.carrot.radar_vision_model_controller import VisionModelRadarController, VisionRadarMatcher
+from openpilot.selfdrive.carrot.radar.radar_vision_model_controller import VisionModelRadarController, VisionRadarMatcher
 from openpilot.selfdrive.carrot.tests.test_radar_lead_controller import prediction
 
 
@@ -175,6 +175,66 @@ def test_stable_in_lane_closer_second_match_wins_for_small_target() -> None:
   match = matcher.match_context(vision, (farther, closer), 9.9)
   assert match is not None
   assert match.prediction is closer
+
+
+def test_corner_backed_previous_match_resists_closer_second_match_jitter() -> None:
+  matcher = VisionRadarMatcher()
+  farther = prediction(33, -10.0, 1.0, 0.0, d_rel=84.5, v_lead=17.3)
+  closer = prediction(52, -6.4, 1.0, 0.0, d_rel=62.7, v_lead=22.9)
+  farther = replace(farther, features=replace(
+    farther.features,
+    aliases=("front:33", "corner:1007"),
+    d_path=0.5,
+    radar_object=replace(
+      farther.features.radar_object,
+      front_d_rel=84.5,
+      front_v_rel=-2.7,
+      corner_track_id=1007,
+      corner_d_rel=84.5,
+      corner_y_rel=-10.0,
+      corner_v_rel=-2.7,
+    ),
+  ))
+  closer = replace(closer, features=replace(
+    closer.features,
+    d_path=-0.7,
+    radar_object=replace(closer.features.radar_object, front_d_rel=62.7, front_v_rel=2.9),
+  ))
+
+  initial = VisionLeadContext(0.90, 80.1, -8.9, 19.0, 0.0, 5.0, 1.0, 3.0)
+  assert matcher.match_context(initial, (farther,), 20.0).prediction is farther
+
+  jitter = VisionLeadContext(0.94, 76.3, -8.3, 18.7, 0.0, 5.0, 1.0, 3.0)
+  match = matcher.match_context(jitter, (farther, closer), 20.0)
+  assert match is not None
+  assert match.prediction is farther
+
+
+def test_corner_backed_previous_match_bridges_lateral_vision_jitter() -> None:
+  matcher = VisionRadarMatcher()
+  target = prediction(52, -5.7, 1.0, 0.0, d_rel=60.0, v_lead=23.4)
+  target = replace(target, features=replace(
+    target.features,
+    aliases=("front:52", "corner:1000"),
+    d_path=-1.0,
+    radar_object=replace(
+      target.features.radar_object,
+      front_d_rel=60.0,
+      front_v_rel=3.4,
+      corner_track_id=1000,
+      corner_d_rel=60.0,
+      corner_y_rel=-5.7,
+      corner_v_rel=3.4,
+    ),
+  ))
+
+  initial = VisionLeadContext(0.96, 70.0, -7.0, 20.0, 0.0, 7.0, 1.2, 3.0)
+  assert matcher.match_context(initial, (target,), 20.0) is not None
+
+  lateral_jitter = VisionLeadContext(0.95, 75.8, -8.0, 19.5, 0.0, 6.6, 1.3, 3.0)
+  match = matcher.match_context(lateral_jitter, (target,), 20.0)
+  assert match is not None
+  assert match.prediction is target
 
 
 def test_scc_can_supply_vision_matched_lead_one() -> None:

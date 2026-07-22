@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from openpilot.selfdrive.carrot.radar_lead_model import (
+from openpilot.selfdrive.carrot.radar.radar_lead_model import (
   CUTIN_TEMPORAL_THRESHOLD_MAX,
   RadarLeadContext,
   RadarLeadDecision,
@@ -19,7 +19,7 @@ from openpilot.selfdrive.carrot.radar_lead_model import (
   RadarLeadPrediction,
   VisionLeadContext,
 )
-from openpilot.selfdrive.carrot.radar_object_fusion import RadarObjectFusion
+from openpilot.selfdrive.carrot.radar.radar_object_fusion import RadarObjectFusion
 
 
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "models" / "radar_lead_multitask.npz"

@@ -15,11 +15,11 @@ from typing import Any
 
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
-from openpilot.selfdrive.carrot.radar_lead_simulator import MODEL_FEATURE_NAMES
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import MODEL_FEATURE_NAMES
 
 
 SOURCE_FEATURE_NAMES = ("source_front", "source_scc", "source_corner235", "source_corner180")

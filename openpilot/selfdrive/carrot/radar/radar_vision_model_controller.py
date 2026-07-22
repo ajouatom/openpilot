@@ -7,8 +7,8 @@ import math
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from openpilot.selfdrive.carrot.radar_lead_model import RadarLeadPrediction, VisionLeadContext
-from openpilot.selfdrive.carrot.radar_lead_runtime import RadarLeadRuntime
+from openpilot.selfdrive.carrot.radar.radar_lead_model import RadarLeadPrediction, VisionLeadContext
+from openpilot.selfdrive.carrot.radar.radar_lead_runtime import RadarLeadRuntime
 
 
 RADAR_TO_CAMERA = 1.52
@@ -19,6 +19,8 @@ VISION_MATCH_DISTANCE_HYSTERESIS_M = 2.0
 VISION_MATCH_LONG_RANGE_M = 45.0
 VISION_MATCH_FRESH_MAX_DPATH_M = 3.0
 VISION_MATCH_HELD_MAX_DPATH_M = 4.0
+VISION_MATCH_CORNER_HOLD_MAX_DPATH_M = 2.2
+VISION_MATCH_CORNER_HOLD_MIN_SCORE_RATIO = 0.15
 CORNER_STATIONARY_MIN_VISION_PROB = 0.65
 CORNER_STATIONARY_MIN_TRACK_AGE = 8
 CORNER_STATIONARY_MAX_DPATH_M = 0.75
@@ -122,6 +124,25 @@ class VisionRadarMatcher:
     d_rel = obj.front_d_rel if obj.front_d_rel is not None else obj.d_rel
     v_rel = obj.front_v_rel if obj.front_v_rel is not None else obj.v_rel
     return float(d_rel), float(obj.y_rel), float(obj.v_lead if obj.front_v_rel is None else v_ego + v_rel)
+
+  @staticmethod
+  def _corner_corroborated(
+    prediction: RadarLeadPrediction, predictions: tuple[RadarLeadPrediction, ...],
+  ) -> bool:
+    """Return whether a front target is also observed by a corner radar."""
+    obj = prediction.features.radar_object
+    if obj.corner_track_id is not None:
+      return True
+    if obj.front_track_id is None:
+      return False
+    return any(
+      other is not prediction
+      and other.features.radar_object.corner_track_id is not None
+      and abs(other.features.radar_object.d_rel - obj.d_rel) < 4.0
+      and abs(other.features.radar_object.y_rel - obj.y_rel) < 2.5
+      and abs(other.features.radar_object.v_lead - obj.v_lead) < 4.0
+      for other in predictions
+    )
 
   @staticmethod
   def _corner_stationary_vehicle_evidence(
@@ -254,7 +275,16 @@ class VisionRadarMatcher:
         max(5.0, vision_d * 0.25)
         + (VISION_MATCH_DISTANCE_HYSTERESIS_M if frozenset(candidate[0].features.aliases) & self.last_aliases else 0.0)
       )
-      and abs(candidate[3] - vision_y) < (3.0 if id(candidate[0]) in corner_stationary_ids else 2.0)
+      and abs(candidate[3] - vision_y) < (
+        3.0 if (
+          id(candidate[0]) in corner_stationary_ids
+          or (
+            frozenset(candidate[0].features.aliases) & self.last_aliases
+            and abs(candidate[0].features.d_path) < VISION_MATCH_CORNER_HOLD_MAX_DPATH_M
+            and self._corner_corroborated(candidate[0], prediction_list)
+          )
+        ) else 2.0
+      )
       and velocity_sane(candidate)
     ]
     if not usable:
@@ -271,9 +301,28 @@ class VisionRadarMatcher:
       candidate[1],
       -abs(candidate[2] - vision_d),
     ))
+    # A small vehicle can make the vision distance alternate between two radar
+    # returns. Keep the previous identity when front and corner radar still
+    # corroborate it and the vision match remains sane.
+    held_corner_candidates = [
+      candidate for candidate in usable
+      if (
+        frozenset(candidate[0].features.aliases) & self.last_aliases
+        and abs(candidate[0].features.d_path) < VISION_MATCH_CORNER_HOLD_MAX_DPATH_M
+        and self._corner_corroborated(candidate[0], prediction_list)
+      )
+    ]
+    if held_corner_candidates:
+      held_corner = max(held_corner_candidates, key=lambda candidate: candidate[1])
+      if held_corner[1] >= selected[1] * VISION_MATCH_CORNER_HOLD_MIN_SCORE_RATIO:
+        selected = held_corner
+    selected_is_held_corner = bool(
+      frozenset(selected[0].features.aliases) & self.last_aliases
+      and self._corner_corroborated(selected[0], prediction_list)
+    )
     # Mirror radard's closer second-match rule for small targets whose radar
     # distance can sit just outside the normal vision-distance gate.
-    if len(ranked) > 1 and ranked[0][0] is selected[0]:
+    if not selected_is_held_corner and len(ranked) > 1 and ranked[0][0] is selected[0]:
       closer = ranked[1]
       closer_features = closer[0].features
       if (

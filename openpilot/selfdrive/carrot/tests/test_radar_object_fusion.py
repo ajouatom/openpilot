@@ -1,5 +1,5 @@
-from openpilot.selfdrive.carrot.radar_lead_simulator import RadarPoint
-from openpilot.selfdrive.carrot.radar_object_fusion import RadarObjectFusion
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import RadarPoint
+from openpilot.selfdrive.carrot.radar.radar_object_fusion import RadarObjectFusion
 
 
 def point(track_id: int, d_rel: float, y_rel: float, v_rel: float, source: str) -> RadarPoint:

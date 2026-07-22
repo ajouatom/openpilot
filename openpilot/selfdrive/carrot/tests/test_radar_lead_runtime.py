@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from openpilot.selfdrive.carrot.radar_lead_runtime import runtime_context
+from openpilot.selfdrive.carrot.radar.radar_lead_runtime import runtime_context
 
 
 class IntegerIndexOnlyList:

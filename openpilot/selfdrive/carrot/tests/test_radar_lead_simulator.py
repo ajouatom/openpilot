@@ -6,10 +6,10 @@ from types import SimpleNamespace
 
 import numpy as np
 
-import openpilot.selfdrive.carrot.radar_lead_simulator as radar_simulator
-from openpilot.selfdrive.carrot.radar_vision_model_controller import RadarLeadModelOutput
+import openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator as radar_simulator
+from openpilot.selfdrive.carrot.radar.radar_vision_model_controller import RadarLeadModelOutput
 
-from openpilot.selfdrive.carrot.radar_lead_simulator import (
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   MODEL_FEATURE_NAMES,
   Candidate,
   CurrentRadardTeacher,
@@ -35,7 +35,7 @@ from openpilot.selfdrive.carrot.radar_lead_simulator import (
   resolved_recorded_track_id,
   validation_review_events,
 )
-from openpilot.selfdrive.carrot.radar_lead_train import (
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_train import (
   TrainingData,
   combine_training_and_validation,
   fit_probability_calibration,

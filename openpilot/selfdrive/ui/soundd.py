@@ -74,6 +74,8 @@ sound_list: dict[int, tuple[str, int | None, float]] = {
   AudibleAlert.audio8: ("audio_8.wav", None, MAX_VOLUME),
   AudibleAlert.audio9: ("audio_9.wav", None, MAX_VOLUME),
   AudibleAlert.audio10: ("audio_10.wav", None, MAX_VOLUME),
+  AudibleAlert.radarCutin: ("radar_cutin.wav", 1, MAX_VOLUME),
+  AudibleAlert.radarStationaryLead: ("radar_stationary_lead.wav", 1, MAX_VOLUME),
 }
 if HARDWARE.get_device_type() == "tizi":
   sound_list.update({
@@ -236,7 +238,7 @@ class Soundd:
     data_out[:frames, 0] = self.get_sound_data(frames)
 
   def update_alert(self, new_alert):
-    current_alert_played_once = self.current_alert == AudibleAlert.none or self.current_sound_frame > len(self.loaded_sounds[self.current_alert])
+    current_alert_played_once = self.current_alert == AudibleAlert.none or self.current_sound_frame >= len(self.loaded_sounds[self.current_alert])
     if self.current_alert != new_alert and (new_alert != AudibleAlert.none or current_alert_played_once):
       self.current_alert = new_alert
       self.current_sound_frame = 0
