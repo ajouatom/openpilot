@@ -2,6 +2,8 @@ import copy
 import json
 import os
 import random
+import re
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from openpilot.cereal import log, car
@@ -15,6 +17,11 @@ from openpilot.selfdrive.test.process_replay.process_replay import CONFIGS
 AlertSize = log.SelfdriveState.AlertSize
 
 OFFROAD_ALERTS_PATH = os.path.join(BASEDIR, "openpilot/selfdrive/selfdrived/alerts_offroad.json")
+LOCALIZED_EVENTS_PATHS = (
+  Path(BASEDIR) / "scripts/add/events_ko.py",
+  Path(BASEDIR) / "scripts/add/events_zh.py",
+)
+EVENT_KEY_PATTERN = re.compile(r"^\s*EventName\.(\w+)\s*:", re.MULTILINE)
 
 # TODO: add callback alerts
 ALERTS = []
@@ -44,6 +51,16 @@ class TestAlerts:
       if not name.endswith("DEPRECATED"):
         fail_msg = f"{name} @{e} not in EVENTS"
         assert e in EVENTS.keys(), fail_msg
+
+  def test_localized_events_defined(self):
+    expected = {
+      name for name in log.OnroadEvent.EventName.schema.enumerants
+      if not name.endswith("DEPRECATED")
+    }
+
+    for path in LOCALIZED_EVENTS_PATHS:
+      localized = set(EVENT_KEY_PATTERN.findall(path.read_text(encoding="utf-8")))
+      assert not (missing := expected - localized), f"{path.name} missing event definitions: {sorted(missing)}"
 
   # ensure alert text doesn't exceed allowed width
   def test_alert_text_length(self):
