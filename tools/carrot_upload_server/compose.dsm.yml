@@ -1,7 +1,7 @@
 services:
   carrot-upload:
     build: .
-    image: carrot-upload:1.1.0
+    image: carrot-upload:1.0.3
     restart: unless-stopped
     init: true
     environment:
@@ -14,10 +14,6 @@ services:
       CARROT_SESSION_TTL_SECONDS: "14400"
       CARROT_CONCURRENT_PER_DEVICE: "3"
       CARROT_CONCURRENT_GLOBAL: "16"
-      CARROT_ROUTE_ADMIN_KEY: "${CARROT_ROUTE_ADMIN_KEY:-}"
-      CARROT_PUBLIC_BASE_URL: "${CARROT_PUBLIC_BASE_URL:-https://upload.shind0.synology.me}"
-      CARROT_ROUTE_VIDEO_CACHE: /data/openpilot/tmux/.state/route_video_cache
-      CARROT_ROUTE_VIDEO_CACHE_BYTES: "10737418240"
     ports:
       - "127.0.0.1:18080:8080"
     user: "1026:100"
