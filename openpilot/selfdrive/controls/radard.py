@@ -1531,7 +1531,7 @@ class RadarD:
 # fuses camera and radar data for best lead detection
 def main() -> None:
   if Params().get_int("RadarLeadModelMode") == 1:
-    from openpilot.selfdrive.carrot.radard_model import main as model_main
+    from openpilot.selfdrive.carrot.radar.radard_model import main as model_main
     model_main()
     return
 

@@ -11,16 +11,16 @@ import sys
 
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
-from openpilot.selfdrive.carrot.radar_lead_model import (
+from openpilot.selfdrive.carrot.radar.radar_lead_model import (
   ANTICIPATORY_FEATURE_NAMES,
   anticipatory_eligibility,
   anticipatory_feature_matrix,
 )
-from openpilot.selfdrive.carrot.radar_lead_multitask_train import (
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_multitask_train import (
   Adam,
   choose_threshold,
   fit_calibration,

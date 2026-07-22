@@ -346,6 +346,17 @@
       "scene": "Close front-radar ghost must not become a cut-in from lane-center motion alone"
     },
     {
+      "id": "k5-247-38-late-parallel",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "window": [54.8, 57.0],
+      "expected": "clear",
+      "target_track_ids": [35, 52],
+      "forbidden_lead_two_ids": [35, 52],
+      "scene": "Parallel front-radar tracks briefly drift toward the path without cutting in"
+    },
+    {
       "id": "pv5-129-8-right-front-cutin",
       "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
       "log": "00000129--fc54fff840--8/rlog.zst",

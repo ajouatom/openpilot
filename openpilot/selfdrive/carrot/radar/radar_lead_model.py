@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 try:
-  from openpilot.selfdrive.carrot.radar_object_fusion import FusedRadarObject
+  from openpilot.selfdrive.carrot.radar.radar_object_fusion import FusedRadarObject
 except ModuleNotFoundError:
   from radar_object_fusion import FusedRadarObject
 
@@ -627,6 +627,10 @@ class RadarLeadDecisionFilter:
       history_inward_speed = min(
         h8_inward_speed, h12_inward_speed, h8_lane_inward, h12_lane_inward,
       )
+      history_inward_consistent = (
+        abs(h8_inward_speed - h12_inward_speed) < 0.35
+        and abs(h8_lane_inward - h12_lane_inward) < 0.40
+      )
       history_projected_d_path = max(
         0.0, current_d_path - min(2.5, max(0.0, history_inward_speed)) * 0.5,
       )
@@ -722,6 +726,7 @@ class RadarLeadDecisionFilter:
         and 0.20 < h12_inward_speed < 3.2
         and 0.20 < h8_lane_inward < 3.2
         and 0.20 < h12_lane_inward < 3.2
+        and history_inward_consistent
       )
       effective_cutin_prob = max(
         prediction.cutin_prob,

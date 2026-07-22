@@ -15,11 +15,11 @@ from typing import Any
 
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
-from openpilot.selfdrive.carrot.radar_lead_model import MODEL_FEATURE_NAMES, MODEL_HEADS
+from openpilot.selfdrive.carrot.radar.radar_lead_model import MODEL_FEATURE_NAMES, MODEL_HEADS
 
 
 @dataclass(frozen=True)
@@ -156,6 +156,26 @@ def random_group_split(data: TrainingData, fraction: float, seed: int) -> tuple[
   return np.flatnonzero(~validation), np.flatnonzero(validation)
 
 
+def manual_context_indices(
+  data: TrainingData, train_indices: np.ndarray, head: int, context_ratio: float, seed: int,
+) -> np.ndarray:
+  """Keep every manually reviewed frame plus a deterministic sample of ordinary frames."""
+  if context_ratio <= 0.0:
+    return train_indices
+  manual_rows = train_indices[data.manual[train_indices, head] & (data.weights[train_indices, head] > 0.0)]
+  manual_groups = np.unique(data.groups[manual_rows])
+  if not len(manual_groups):
+    raise ValueError("manual context sampling requires manual labels for the selected head")
+
+  all_groups = np.unique(data.groups[train_indices])
+  context_groups = np.setdiff1d(all_groups, manual_groups, assume_unique=True)
+  context_count = min(len(context_groups), round(len(manual_groups) * context_ratio))
+  rng = np.random.default_rng(seed)
+  selected_context = rng.choice(context_groups, context_count, replace=False) if context_count else np.empty(0, dtype=all_groups.dtype)
+  selected_groups = np.concatenate((manual_groups, selected_context))
+  return train_indices[np.isin(data.groups[train_indices], selected_groups)]
+
+
 def sigmoid(logits: np.ndarray) -> np.ndarray:
   return 1.0 / (1.0 + np.exp(-np.clip(logits, -30.0, 30.0)))
 
@@ -285,21 +305,31 @@ def group_metrics(
   threshold: float, max_outputs: int,
 ) -> dict[str, float | int]:
   tp = fp = fn = none_correct = none_groups = target_groups = 0
-  for group in np.unique(groups):
-    indices = np.flatnonzero((groups == group) & (weights > 0.0))
-    if not len(indices):
-      continue
+  valid_indices = np.flatnonzero(weights > 0.0)
+  if len(valid_indices):
+    order = np.argsort(groups[valid_indices], kind="stable")
+    ordered_indices = valid_indices[order]
+    ordered_groups = groups[ordered_indices]
+    starts = np.r_[0, np.flatnonzero(ordered_groups[1:] != ordered_groups[:-1]) + 1]
+    ends = np.r_[starts[1:], len(ordered_indices)]
+  else:
+    ordered_indices = np.empty(0, dtype=np.int64)
+    starts = ends = np.empty(0, dtype=np.int64)
+
+  for start, end in zip(starts, ends, strict=True):
+    indices = ordered_indices[start:end]
     ranked = indices[np.argsort(probabilities[indices])[::-1]]
-    selected = set(ranked[probabilities[ranked] >= threshold][:max_outputs].tolist())
-    targets = set(indices[labels[indices] > 0.5].tolist())
-    tp += len(selected & targets)
-    fp += len(selected - targets)
-    fn += len(targets - selected)
-    if targets:
+    selected = ranked[probabilities[ranked] >= threshold][:max_outputs]
+    target_count = int(np.count_nonzero(labels[indices] > 0.5))
+    true_selected = int(np.count_nonzero(labels[selected] > 0.5))
+    tp += true_selected
+    fp += len(selected) - true_selected
+    fn += target_count - true_selected
+    if target_count:
       target_groups += 1
     else:
       none_groups += 1
-      none_correct += int(not selected)
+      none_correct += int(not len(selected))
   precision = tp / max(tp + fp, 1)
   recall = tp / max(tp + fn, 1)
   return {
@@ -371,8 +401,16 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument("--distill-weight", type=float, default=0.25)
   parser.add_argument(
+    "--manual-context-ratio", type=float, default=0.0,
+    help="keep all manual groups and this many ordinary groups per manual group in the training split",
+  )
+  parser.add_argument(
     "--preserve-calibration", action="store_true",
     help="retain the initialized calibration and threshold for the trained head",
+  )
+  parser.add_argument(
+    "--head-threshold", type=float,
+    help="override the calibrated runtime threshold for --train-head after validation",
   )
   parser.add_argument("--model-version", type=int, default=0, help="artifact version; defaults to the initialized version")
   parser.add_argument("--cache", type=Path, help="reuse the parsed train/validation arrays")
@@ -390,8 +428,16 @@ def main() -> int:
     raise SystemExit("--distill-init requires --train-head and --init-model")
   if args.distill_weight <= 0.0:
     raise SystemExit("--distill-weight must be positive")
+  if args.manual_context_ratio < 0.0:
+    raise SystemExit("--manual-context-ratio must be non-negative")
+  if args.manual_context_ratio > 0.0 and args.train_head == "all":
+    raise SystemExit("--manual-context-ratio requires --train-head")
   if args.preserve_calibration and (args.train_head == "all" or args.init_model is None):
     raise SystemExit("--preserve-calibration requires --train-head and --init-model")
+  if args.head_threshold is not None and args.train_head == "all":
+    raise SystemExit("--head-threshold requires --train-head")
+  if args.head_threshold is not None and not 0.0 < args.head_threshold < 1.0:
+    raise SystemExit("--head-threshold must be between zero and one")
   sources = [*args.datasets, *args.validation_dataset]
   cached = load_cache(args.cache, sources) if args.cache is not None else None
   if cached is not None:
@@ -423,6 +469,13 @@ def main() -> int:
     train_indices = np.flatnonzero(train_mask[focused])
     validation_indices = np.flatnonzero(validation_mask[focused])
     validation_kind += ", stationary external"
+  if args.manual_context_ratio > 0.0:
+    original_train_rows = len(train_indices)
+    selected_head = MODEL_HEADS.index(args.train_head)
+    train_indices = manual_context_indices(
+      data, train_indices, selected_head, args.manual_context_ratio, args.seed,
+    )
+    validation_kind += f", manual context {args.manual_context_ratio:g}:1 ({len(train_indices)}/{original_train_rows} train rows)"
   initial_parameters: dict[str, np.ndarray] | None = None
   initial_thresholds: np.ndarray | None = None
   initial_calibration: np.ndarray | None = None
@@ -553,6 +606,12 @@ def main() -> int:
       threshold, head_metrics = choose_threshold(
         calibrated[:, head_index], validation_labels[:, head_index], validation_weights[:, head_index],
         data.groups[validation_indices], head_index,
+      )
+    if name == args.train_head and args.head_threshold is not None:
+      threshold = args.head_threshold
+      head_metrics = group_metrics(
+        calibrated[:, head_index], validation_labels[:, head_index], validation_weights[:, head_index],
+        data.groups[validation_indices], threshold, 2,
       )
     thresholds[head_index] = threshold
     metrics[name] = {"threshold": threshold, **head_metrics}

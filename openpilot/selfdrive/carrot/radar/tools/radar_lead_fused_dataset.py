@@ -13,18 +13,18 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
-from openpilot.selfdrive.carrot.radar_lead_model import (
+from openpilot.selfdrive.carrot.radar.radar_lead_model import (
   MODEL_FEATURE_NAMES,
   RadarLeadContext,
   RadarLeadFeatureBuilder,
   VisionLeadContext,
   object_contains_track,
 )
-from openpilot.selfdrive.carrot.radar_lead_simulator import (
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   CurrentRadardTeacher,
   ManualLabels,
   RadarFrame,
@@ -32,11 +32,11 @@ from openpilot.selfdrive.carrot.radar_lead_simulator import (
   current_cutin_track_ids,
   load_frames,
 )
-from openpilot.selfdrive.carrot.radar_object_fusion import RadarObjectFusion
+from openpilot.selfdrive.carrot.radar.radar_object_fusion import RadarObjectFusion
 
 
 RLOG_PATTERN = re.compile(r"^rlog(?:\.\d+)?\.(?:zst|bz2)$", re.IGNORECASE)
-DEFAULT_ANNOTATIONS = Path(__file__).with_name("radar_lead_annotations.json")
+DEFAULT_ANNOTATIONS = Path(__file__).resolve().parents[1] / "data" / "radar_lead_annotations.json"
 METADATA_COLUMNS = (
   "frame", "time_s", "object_id", "aliases", "front_track_id", "corner_track_id", "scc_track_id",
   "lead_label", "cutin_label", "external_label",
@@ -78,14 +78,38 @@ def _cutin_targets(
   return set(weak_cutin_ids[frame_index]), "teacher"
 
 
-def apply_annotations(
-  labels: ManualLabels, frames: list[RadarFrame], log_path: Path, annotations_path: Path,
-) -> int:
+def _annotation_entries(log_path: Path, annotations_path: Path) -> list[dict[str, Any]]:
   if not annotations_path.is_file():
-    return 0
+    return []
   payload = json.loads(annotations_path.read_text(encoding="utf-8"))
   normalized_log = f"{log_path.parent.name}/{log_path.name}".replace("\\", "/")
-  entries = next((value for key, value in payload.get("logs", {}).items() if normalized_log.endswith(key)), [])
+  return next((value for key, value in payload.get("logs", {}).items() if normalized_log.endswith(key)), [])
+
+
+def candidate_cutin_overrides(
+  frames: list[RadarFrame], entries: list[dict[str, Any]],
+) -> tuple[list[dict[int, bool]], int]:
+  overrides: list[dict[int, bool]] = [{} for _ in frames]
+  applied = 0
+  for entry in entries:
+    if "cutin_candidate" not in entry or "cutin_label" not in entry:
+      continue
+    start_s = float(entry.get("start_s", 0.0))
+    end_s = float(entry.get("end_s", start_s))
+    track_id = int(entry["cutin_candidate"])
+    label = bool(entry["cutin_label"])
+    for frame_index, frame in enumerate(frames):
+      if start_s <= frame.time_s <= end_s:
+        overrides[frame_index][track_id] = label
+        applied += 1
+  return overrides, applied
+
+
+def apply_annotations(
+  labels: ManualLabels, frames: list[RadarFrame], log_path: Path, annotations_path: Path,
+  entries: list[dict[str, Any]] | None = None,
+) -> int:
+  entries = _annotation_entries(log_path, annotations_path) if entries is None else entries
   applied = 0
   for entry in entries:
     start_s = float(entry.get("start_s", 0.0))
@@ -118,7 +142,10 @@ def export_fused_dataset(
   if front_only:
     frames = [replace(frame, points=tuple(point for point in frame.points if point.source == "frontRadar")) for frame in frames]
   labels = labels or ManualLabels.load(log_path.with_name(log_path.name + ".lead-labels.json"), len(frames))
-  annotation_count = apply_annotations(labels, frames, log_path, annotations_path)
+  annotation_entries = _annotation_entries(log_path, annotations_path)
+  annotation_count = apply_annotations(labels, frames, log_path, annotations_path, annotation_entries)
+  cutin_overrides, candidate_annotation_count = candidate_cutin_overrides(frames, annotation_entries)
+  annotation_count += candidate_annotation_count
   weak_cutin_ids = current_cutin_track_ids(log_path, frames, ("front",) if front_only else ("corner", "front"))
   teacher = CurrentRadardTeacher(frames, weak_cutin_ids)
   fusion = RadarObjectFusion(include_scc=include_scc)
@@ -146,17 +173,22 @@ def export_fused_dataset(
       lead_targets, lead_source = _role_targets(frame_index, labels, teacher, "leadOne")
       external_targets, external_source = _role_targets(frame_index, labels, teacher, "leadTwo")
       cutin_targets, cutin_source = _cutin_targets(frame_index, labels, weak_cutin_ids)
+      frame_cutin_overrides = cutin_overrides[frame_index]
       # External is the radar-only leadTwo role. Keep it distinct from both the
       # vision-matched leadOne role and the dedicated cut-in role.
       external_targets -= lead_targets | cutin_targets
       lead_valid = _targets_available(lead_targets, samples)
-      cutin_valid = _targets_available(cutin_targets, samples)
+      override_valid = any(
+        object_contains_track(sample.radar_object, track_id)
+        for track_id in frame_cutin_overrides for sample in samples
+      )
+      cutin_valid = _targets_available(cutin_targets, samples) or override_valid
       external_valid = _targets_available(external_targets, samples)
       stats["invalid_lead_groups"] += int(not lead_valid)
       stats["invalid_cutin_groups"] += int(not cutin_valid)
       stats["invalid_external_groups"] += int(not external_valid)
       stats["manual_lead_groups"] += int(lead_source == "manual")
-      stats["manual_cutin_groups"] += int(cutin_source == "manual")
+      stats["manual_cutin_groups"] += int(cutin_source == "manual" or bool(frame_cutin_overrides))
       stats["manual_external_groups"] += int(external_source == "manual")
       if not lead_valid and not cutin_valid and not external_valid:
         continue
@@ -164,13 +196,23 @@ def export_fused_dataset(
       for sample in samples:
         obj = sample.radar_object
         lead_label = int(lead_valid and any(object_contains_track(obj, target) for target in lead_targets))
-        cutin_label = int(cutin_valid and any(object_contains_track(obj, target) for target in cutin_targets))
+        object_overrides = [
+          label for track_id, label in frame_cutin_overrides.items()
+          if object_contains_track(obj, track_id)
+        ]
+        # Video-reviewed candidates are manual ground truth for the existing
+        # trainer, but remain candidate-specific instead of replacing the frame.
+        row_cutin_source = "manual" if object_overrides else cutin_source
+        cutin_label = (
+          int(any(object_overrides)) if object_overrides else
+          int(cutin_valid and any(object_contains_track(obj, target) for target in cutin_targets))
+        )
         external_label = int(external_valid and any(object_contains_track(obj, target) for target in external_targets))
         # Missing cut-ins in the heuristic teacher are weak negatives. Video-confirmed manual
         # labels carry enough weight to correct both teacher false positives and false negatives.
         lead_weight = 6.0 if lead_source == "manual" else (1.0 if lead_valid else 0.0)
         cutin_weight = (
-          10.0 if cutin_source == "manual" else
+          10.0 if row_cutin_source in ("manual", "video") else
           (1.0 if cutin_label else 0.08) if cutin_valid else 0.0
         )
         external_weight = (
@@ -192,7 +234,7 @@ def export_fused_dataset(
           "cutin_weight": f"{cutin_weight:.3f}",
           "external_weight": f"{external_weight:.3f}",
           "lead_source": lead_source,
-          "cutin_source": cutin_source,
+          "cutin_source": row_cutin_source,
           "external_source": external_source,
         }
         row.update({name: f"{value:.6g}" for name, value in zip(MODEL_FEATURE_NAMES, sample.values, strict=True)})

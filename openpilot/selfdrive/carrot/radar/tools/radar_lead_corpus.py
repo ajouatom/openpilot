@@ -17,12 +17,12 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
 RLOG_NAMES = {"rlog.zst", "rlog.1.zst"}
-DEFAULT_GOLD_CASES = Path(__file__).resolve().parent / "cluster" / "cutin_validation_cases.json"
+DEFAULT_GOLD_CASES = Path(__file__).resolve().parents[2] / "cluster" / "cutin_validation_cases.json"
 SCENARIO_TAGS = (
   "stationary-selected", "stationary-center", "stationary-side", "recorded-cutin",
   "side-motion", "night", "congestion", "curve", "highway", "front-only", "corner",
@@ -169,7 +169,7 @@ def _radar_source(point: Any) -> str:
 
 def profile_log(log_path: Path) -> LogProfile:
   # Import through the simulator helper so cluster-local imports work on Windows too.
-  from openpilot.selfdrive.carrot.radar_lead_simulator import _route_replay_module
+  from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import _route_replay_module
 
   replay = _route_replay_module()
   schema = replay.load_openpilot_log_schema()
@@ -639,7 +639,10 @@ def parse_args() -> argparse.Namespace:
   build.add_argument("--splits", nargs="+", choices=("train", "validation", "test"), default=("train", "validation", "test"))
   build.add_argument("--workers", type=int, default=1)
   build.add_argument("--timeout", type=float, default=600.0)
-  build.add_argument("--annotations", type=Path, default=Path(__file__).with_name("radar_lead_annotations.json"))
+  build.add_argument(
+    "--annotations", type=Path,
+    default=Path(__file__).resolve().parents[1] / "data" / "radar_lead_annotations.json",
+  )
   build.add_argument("--fusion-scc", action="store_true")
   build.add_argument("--front-only", action="store_true")
   build.add_argument("--force", action="store_true")
@@ -652,7 +655,7 @@ def main() -> int:
     print(json.dumps(_scan_one(str(args.rlog)), ensure_ascii=True))
     return 0
   if args.command == "_export-one":
-    from openpilot.selfdrive.carrot.radar_lead_fused_dataset import export_fused_dataset
+    from openpilot.selfdrive.carrot.radar.tools.radar_lead_fused_dataset import export_fused_dataset
     result = {
       "log": str(args.rlog.resolve()),
       "dataset": str(args.output.resolve()),

@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 
-from openpilot.selfdrive.carrot.radar_lead_controller import RadarLeadModelController
-from openpilot.selfdrive.carrot.radar_lead_model import RadarLeadDecision, RadarLeadFeatures, RadarLeadPrediction
-from openpilot.selfdrive.carrot.radar_lead_runtime import RadarLeadRuntimeResult
-from openpilot.selfdrive.carrot.radar_object_fusion import FusedRadarObject
+from openpilot.selfdrive.carrot.radar.radar_lead_controller import RadarLeadModelController
+from openpilot.selfdrive.carrot.radar.radar_lead_model import RadarLeadDecision, RadarLeadFeatures, RadarLeadPrediction
+from openpilot.selfdrive.carrot.radar.radar_lead_runtime import RadarLeadRuntimeResult
+from openpilot.selfdrive.carrot.radar.radar_object_fusion import FusedRadarObject
 
 
 def prediction(

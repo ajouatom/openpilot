@@ -7,7 +7,7 @@ from openpilot.cereal import car, log, messaging
 from openpilot.common.params import Params
 from openpilot.common.realtime import Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
-from openpilot.selfdrive.carrot.radar_vision_model_controller import RadarLeadModelOutput, VisionModelRadarController
+from openpilot.selfdrive.carrot.radar.radar_vision_model_controller import RadarLeadModelOutput, VisionModelRadarController
 
 
 EMPTY_LEAD = {

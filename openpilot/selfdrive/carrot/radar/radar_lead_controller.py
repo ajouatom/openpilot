@@ -7,8 +7,8 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-from openpilot.selfdrive.carrot.radar_lead_model import RadarLeadPrediction
-from openpilot.selfdrive.carrot.radar_lead_runtime import RadarLeadRuntime
+from openpilot.selfdrive.carrot.radar.radar_lead_model import RadarLeadPrediction
+from openpilot.selfdrive.carrot.radar.radar_lead_runtime import RadarLeadRuntime
 
 
 def _cloudlog(level: str, message: str) -> None:

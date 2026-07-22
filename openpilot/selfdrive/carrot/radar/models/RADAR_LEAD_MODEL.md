@@ -1,5 +1,13 @@
 # Radar lead model v14
 
+## Source layout
+
+- `carrot/radar/`: on-device runtime, fusion, and vision matching.
+- `carrot/radar/models/`: deployed model and training manifest.
+- `carrot/radar/data/`: manual annotations used for retraining.
+- `carrot/radar/tools/`: dataset, training, simulator, and validation utilities.
+- The legacy root launchers remain as small compatibility scripts for existing PC commands.
+
 ## Runtime layout
 
 - Base network: v14 artifact with the v6 lead/moving-external outputs and a distilled v14 cut-in output.

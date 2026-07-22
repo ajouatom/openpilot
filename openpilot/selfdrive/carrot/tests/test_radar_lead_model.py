@@ -2,7 +2,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from openpilot.selfdrive.carrot.radar_lead_model import (
+from openpilot.selfdrive.carrot.radar.radar_lead_model import (
   MODEL_FEATURE_NAMES,
   RadarLeadContext,
   RadarLeadDecisionFilter,
@@ -11,7 +11,7 @@ from openpilot.selfdrive.carrot.radar_lead_model import (
   RadarLeadModel,
   anticipatory_eligibility,
 )
-from openpilot.selfdrive.carrot.radar_object_fusion import FusedRadarObject
+from openpilot.selfdrive.carrot.radar.radar_object_fusion import FusedRadarObject
 
 
 def fused(
@@ -546,6 +546,32 @@ def test_front_only_midrange_track_uses_strict_model_and_motion_evidence() -> No
 
   assert decision is not None
   assert decision.cutin_candidates
+
+
+def test_front_only_midrange_inconsistent_history_is_not_promoted() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)
+  decision = None
+  for frame in range(5):
+    sample = builder.update(context(frame * 0.05), (
+      fused(corner_id=None, y_rel=-1.85, yv_rel=0.25, d_rel=40.5),
+    ))[0]
+    values = list(sample.values)
+    values[MODEL_FEATURE_NAMES.index("h8_present")] = 1.0
+    values[MODEL_FEATURE_NAMES.index("h12_present")] = 1.0
+    values[MODEL_FEATURE_NAMES.index("h8_dt")] = 0.4
+    values[MODEL_FEATURE_NAMES.index("h12_dt")] = 0.6
+    values[MODEL_FEATURE_NAMES.index("h8_y_rate")] = 1.0
+    values[MODEL_FEATURE_NAMES.index("h12_y_rate")] = 0.4
+    values[MODEL_FEATURE_NAMES.index("h8_d_path")] = -2.80
+    values[MODEL_FEATURE_NAMES.index("h12_d_path")] = -2.70
+    sample = replace(sample, values=tuple(values), track_age=15, d_path=-2.34, d_path_future=-2.05)
+    decision = decision_filter.update(frame * 0.05, (
+      RadarLeadPrediction(sample, lead_prob=0.0, cutin_prob=0.29, risk_prob=0.29),
+    ))
+
+  assert decision is not None
+  assert not decision.cutin_candidates
 
 
 def test_confirmed_front_only_midrange_cutin_stays_active_during_brief_probability_drop() -> None:

@@ -47,6 +47,14 @@ Corner-radar objects are created only when the vehicle code recognizes a support
 
 `RadarLeadModelMode=1` takes effect after the vehicle or device is restarted. It changes model lead selection independently of whether raw radar tracks are available, so do not change several radar options at once.
 
+The hybrid method confirms a front-radar-only cut-in only when its lateral motion remains consistent across multiple history intervals. A previously matched small target corroborated by both front and corner radar is retained through brief lateral vision jitter to reduce lead dropouts.
+
+## Radar detection sounds
+
+When openpilot is enabled, a newly confirmed cut-in plays a two-tone high cue. A newly selected stationary radar lead plays a lower two-tone cue while the ego vehicle is moving above about 14 km/h. A continuously tracked object sounds only once, and short radar dropouts do not immediately retrigger it. On the speakerless C3X Lite, the same events use distinct GPIO buzzer patterns.
+
+The stationary cue requires a radar-confirmed lead below 3 km/h and does not use a vision-only lead. These cues report the selected radar result; they do not change lead selection or longitudinal control. A higher-priority safety alert can take precedence over either cue.
+
 ## Relationship to harness presets
 
 The first-run presets currently start with these values:

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from openpilot.selfdrive.carrot.radar_lead_corpus import (
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_corpus import (
   LogProfile,
   route_group,
   scenario_tags,
