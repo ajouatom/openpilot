@@ -27,7 +27,7 @@ libs.insert(0, logger_lib)
 env.Program('loggerd', ['loggerd.cc'], LIBS=libs, FRAMEWORKS=frameworks)
 env.Program('encoderd', ['encoderd.cc'], LIBS=libs + ["jpeg"], FRAMEWORKS=frameworks)
 env.Program('bootlog.cc', LIBS=libs, FRAMEWORKS=frameworks)
-if arch != "Darwin":
+if arch == "aarch64":
   env.SharedLibrary(
     'cluster_h264_encoder_bridge',
     ['encoder/cluster_h264_encoder_bridge.cc', 'encoder/cluster_h264_encoder.cc'],

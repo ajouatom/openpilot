@@ -6,7 +6,7 @@
 #include <sstream>
 #include <stdexcept>
 
-#include "third_party/json11/json11.hpp"
+#include "json11/json11.hpp"
 
 namespace fs = std::filesystem;
 
@@ -62,6 +62,8 @@ json11::Json workspace_node_to_json(const WorkspaceNode &node, const WorkspaceTa
     };
     if (pane.kind == PaneKind::Map) {
       obj["kind"] = "map";
+    } else if (pane.kind == PaneKind::Thumbnail) {
+      obj["kind"] = "thumbnail";
     } else if (pane.kind == PaneKind::Camera) {
       obj["kind"] = "camera";
       obj["camera_view"] = camera_view_spec(pane.camera_view).layout_name;

@@ -46,11 +46,11 @@ const char *special_item_label(std::string_view item_id) {
 }
 
 bool pane_kind_is_special(PaneKind kind) {
-  return kind == PaneKind::Map || kind == PaneKind::Camera;
+  return kind == PaneKind::Map || kind == PaneKind::Thumbnail || kind == PaneKind::Camera;
 }
 
 bool is_default_special_title(std::string_view title) {
-  if (title == "Map") return true;
+  if (title == "Map" || title == "Thumbnail") return true;
   return std::any_of(kCameraViewSpecs.begin(), kCameraViewSpecs.end(), [&](const CameraViewSpec &spec) {
     return title == spec.label;
   });
@@ -137,6 +137,14 @@ bool env_flag_enabled(const char *name, bool default_value) {
   }
   const std::string value = lowercase_copy(util::strip(raw));
   return !(value == "0" || value == "false" || value == "no" || value == "off");
+}
+
+bool app_begin_popup(const char *str_id, ImGuiWindowFlags flags) {
+  return ImGui::BeginPopup(str_id, flags | ImGuiWindowFlags_NoMove);
+}
+
+bool app_begin_popup_modal(const char *name, bool *p_open, ImGuiWindowFlags flags) {
+  return ImGui::BeginPopupModal(name, p_open, flags | ImGuiWindowFlags_NoMove);
 }
 
 void open_external_url(std::string_view url) {

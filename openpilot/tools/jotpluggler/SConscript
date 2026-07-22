@@ -1,13 +1,12 @@
 import os
+import subprocess
+import bootstrap_icons
 import imgui
 import libusb
-from opendbc.car import Bus
-from opendbc.car.fingerprints import MIGRATION
-from opendbc.car.values import PLATFORMS
+from opendbc import get_generated_dbcs
 from openpilot.common.basedir import BASEDIR
-from openpilot.tools.jotpluggler.dbc_generation import get_jotpluggler_generated_dbcs
 
-Import('env', 'arch', 'common', 'messaging', 'visionipc', 'cereal', 'replay_lib')
+Import('env', 'arch', 'common', 'messaging', 'visionipc', 'cereal', 'replay_lib', 'ffmpeg_libs')
 
 jot_env = env.Clone()
 jot_env["LIBPATH"] += [imgui.MESA_DIR, libusb.LIB_DIR]
@@ -15,6 +14,7 @@ jot_env["CPPPATH"] += [imgui.INCLUDE_DIR, libusb.INCLUDE_DIR]
 jot_env["CXXFLAGS"] += [
   "-DGLFW_INCLUDE_NONE",
   '-DJOTP_REPO_ROOT=\'"%s"\'' % os.path.realpath(BASEDIR),
+  '-DBOOTSTRAP_ICONS_TTF=\'"%s"\'' % bootstrap_icons.TTF_PATH,
 ]
 
 def materialize_generated_dbcs(target, source, env):
@@ -25,7 +25,7 @@ def materialize_generated_dbcs(target, source, env):
     if name.endswith('.dbc'):
       os.unlink(os.path.join(out_dir, name))
 
-  for name, content in sorted(get_jotpluggler_generated_dbcs().items()):
+  for name, content in sorted(get_generated_dbcs().items()):
     with open(os.path.join(out_dir, f"{name}.dbc"), "w") as f:
       f.write(content)
 
@@ -35,6 +35,10 @@ def materialize_generated_dbcs(target, source, env):
   return None
 
 def write_car_fingerprint_to_dbc_header(target, source, env):
+  from opendbc.car import Bus
+  from opendbc.car.values import PLATFORMS
+  from opendbc.car.fingerprints import MIGRATION
+
   pairs = {}
 
   for name, platform in sorted(PLATFORMS.items()):
@@ -77,16 +81,35 @@ def write_car_fingerprint_to_dbc_header(target, source, env):
 
   return None
 
+def generate_event_extractors(target, source, env):
+  subprocess.check_call([
+    "python3",
+    "openpilot/tools/jotpluggler/generate_event_extractors.py",
+    os.path.realpath(BASEDIR),
+    str(target[0]),
+  ])
+  return None
+
 generated_dbc_stamp = jot_env.Command(f"generated_dbcs/.stamp", [], materialize_generated_dbcs)
 car_fingerprint_to_dbc = jot_env.Command("car_fingerprint_to_dbc.h", [], write_car_fingerprint_to_dbc_header)
+event_extractors = jot_env.Command("generated_event_extractors.h", [
+    "generate_event_extractors.py",
+    jot_env.Glob("#openpilot/cereal/*.capnp"),
+    jot_env.Glob("#openpilot/cereal/include/*.capnp"),
+    "#opendbc_repo/opendbc/car/car.capnp",
+    "#opendbc_repo/opendbc/car/include/c++.capnp",
+  ],
+  generate_event_extractors,
+)
 
-libs = [replay_lib, common, messaging, visionipc, cereal, File(f"{imgui.LIB_DIR}/libimgui.a"), File(f"{imgui.LIB_DIR}/libglfw3.a"),
-        "avformat", "avcodec", "avutil", "x264", "yuv", "z", "bz2", "zstd", "m", "pthread", "usb-1.0"]
+libs = [replay_lib, common, messaging, visionipc, cereal, File(f"{imgui.LIB_DIR}/libimgui.a"), File(f"{imgui.LIB_DIR}/libglfw3.a")] + \
+        ffmpeg_libs + ["bz2", "zstd", "m", "pthread", "usb-1.0"]
 if arch == "Darwin":
   jot_env["FRAMEWORKS"] = ["OpenGL", "Cocoa", "IOKit", "CoreFoundation", "CoreVideo", "CoreMedia", "VideoToolbox"]
 else:
-  libs += ["GL", "dl", "va", "va-drm", "drm"]
+  libs += ["GL", "dl"]
 
 program = jot_env.Program("jotpluggler", jot_env.Glob("*.cc"), LIBS=libs)
 jot_env.Depends(program, generated_dbc_stamp)
 jot_env.Depends(program, car_fingerprint_to_dbc)
+jot_env.Depends(program, event_extractors)

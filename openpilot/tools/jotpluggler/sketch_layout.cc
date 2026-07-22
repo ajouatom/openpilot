@@ -2,13 +2,14 @@
 #include "tools/jotpluggler/car_fingerprint_to_dbc.h"
 #include "tools/jotpluggler/common.h"
 
-#include <capnp/dynamic.h>
+#include <kj/exception.h>
 
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <initializer_list>
 #include <map>
 #include <mutex>
 #include <limits>
@@ -22,7 +23,7 @@
 #include <utility>
 
 #include "common/util.h"
-#include "third_party/json11/json11.hpp"
+#include "json11/json11.hpp"
 #include "tools/replay/logreader.h"
 #include "tools/replay/py_downloader.h"
 
@@ -50,47 +51,7 @@ struct SegmentLogs {
   std::string qcamera;
 };
 
-enum class ScalarKind {
-  None,
-  Bool,
-  Int,
-  UInt,
-  Float,
-  Enum,
-};
-
-enum class ResolvedNodeKind {
-  Ignore,
-  Scalar,
-  Struct,
-  List,
-};
-
-struct ResolvedNode {
-  ResolvedNodeKind kind = ResolvedNodeKind::Ignore;
-  ScalarKind scalar_kind = ScalarKind::None;
-  int fixed_slot = -1;
-  bool has_field = false;
-  capnp::StructSchema::Field field;
-  std::string segment;
-  std::string path;
-  bool skip_large_scalar_list = false;
-  std::vector<ResolvedNode> children;
-  std::unique_ptr<ResolvedNode> element;
-};
-
-struct ResolvedService {
-  uint16_t event_which = 0;
-  capnp::StructSchema::Field union_field;
-  std::string service_name;
-  int valid_slot = -1;
-  int log_mono_time_slot = -1;
-  int seconds_slot = -1;
-  ResolvedNode payload;
-};
-
 struct SchemaIndex {
-  std::vector<std::optional<ResolvedService>> by_which;
   size_t fixed_series_count = 0;
   std::vector<std::string> fixed_paths;
 
@@ -111,11 +72,33 @@ struct SeriesAccumulator {
   std::unordered_map<std::string, EnumInfo> enum_info;
 };
 
+void append_fixed_scalar_point(RouteSeries *series, double tm, double value);
+void append_dynamic_scalar_point(const std::string &path, double tm, double value, SeriesAccumulator *series);
+RouteSeries *ensure_list_scalar_series(const std::string &base_path, size_t index, SeriesAccumulator *series);
+void append_can_frame(CanServiceKind service,
+                      uint8_t bus,
+                      uint32_t address,
+                      uint16_t bus_time,
+                      capnp::Data::Reader dat,
+                      double tm,
+                      SeriesAccumulator *series);
+void decode_can_frame(const dbc::Database *can_dbc,
+                      const std::string &service_name,
+                      uint8_t bus,
+                      uint32_t address,
+                      const uint8_t *raw,
+                      size_t data_size,
+                      double tm,
+                      SeriesAccumulator *series);
+
+#include "tools/jotpluggler/generated_event_extractors.h"
+
 struct LoadedRouteArtifacts {
   std::vector<RouteSeries> series;
   std::vector<CanMessageData> can_messages;
   std::vector<LogEntry> logs;
   std::vector<TimelineEntry> timeline;
+  std::vector<ThumbnailFrame> thumbnails;
   std::unordered_map<std::string, EnumInfo> enum_info;
 };
 
@@ -204,6 +187,18 @@ struct LoadStats {
   RouteLoadProgressCallback progress;
   mutable std::mutex progress_mutex;
 };
+
+// Skip individual messages that our local Cap'n Proto schema can't project,
+// such as logs recorded by a newer build.
+template <typename Fn>
+void with_parseable_event(kj::ArrayPtr<const capnp::word> data, Fn &&fn) {
+  try {
+    capnp::FlatArrayMessageReader event_reader(data);
+    fn(event_reader.getRoot<cereal::Event>());
+  } catch (const kj::Exception &) {
+    return;
+  }
+}
 
 std::string curve_label(std::string_view series_name) {
   return std::string(series_name.empty() ? std::string_view{"plot"} : series_name);
@@ -438,7 +433,7 @@ std::array<uint8_t, 3> parse_color(std::string_view color) {
   return out;
 }
 
-uint8_t android_priority_to_level(uint8_t priority) {
+uint8_t operating_system_priority_to_level(uint8_t priority) {
   switch (priority) {
     case 2:
     case 3:
@@ -497,7 +492,7 @@ void append_timeline_entry(std::vector<TimelineEntry> *timeline, double mono_tim
   });
 }
 
-double android_wall_time_seconds(uint64_t timestamp) {
+double operating_system_wall_time_seconds(uint64_t timestamp) {
   if (timestamp == 0) return 0.0;
   if (timestamp > 1000000000000ULL) return static_cast<double>(timestamp) / 1.0e9;
   if (timestamp > 1000000000ULL) return static_cast<double>(timestamp) / 1.0e6;
@@ -615,13 +610,13 @@ void append_log_event(cereal::Event::Which which,
       logs->push_back(std::move(entry));
       break;
     }
-    case cereal::Event::Which::ANDROID_LOG: {
-      const auto android = event.getAndroidLog();
-      auto entry = make_entry(LogOrigin::Android, android_priority_to_level(android.getPriority()));
-      entry.wall_time = android_wall_time_seconds(android.getTs());
-      entry.source = android.hasTag() ? android.getTag().cStr() : "android";
-      entry.message = android.hasMessage() ? android.getMessage().cStr() : std::string();
-      entry.context = "pid=" + std::to_string(android.getPid()) + ", tid=" + std::to_string(android.getTid());
+    case cereal::Event::Which::OPERATING_SYSTEM_LOG: {
+      const auto operating_system_log = event.getOperatingSystemLog();
+      auto entry = make_entry(LogOrigin::OperatingSystem, operating_system_priority_to_level(operating_system_log.getPriority()));
+      entry.wall_time = operating_system_wall_time_seconds(operating_system_log.getTs());
+      entry.source = operating_system_log.hasTag() ? operating_system_log.getTag().cStr() : "operating_system";
+      entry.message = operating_system_log.hasMessage() ? operating_system_log.getMessage().cStr() : std::string();
+      entry.context = "pid=" + std::to_string(operating_system_log.getPid()) + ", tid=" + std::to_string(operating_system_log.getTid());
       if (!entry.message.empty()) {
         std::string err;
         if (const auto p = json11::Json::parse(entry.message, err); err.empty() && p.is_object()) {
@@ -629,10 +624,10 @@ void append_log_event(cereal::Event::Which which,
           if (p["SYSLOG_IDENTIFIER"].is_string() && !p["SYSLOG_IDENTIFIER"].string_value().empty())
             entry.source = p["SYSLOG_IDENTIFIER"].string_value();
           if (auto pri = json_int_value(p["PRIORITY"]); pri.has_value())
-            entry.level = android_priority_to_level(*pri);
+            entry.level = operating_system_priority_to_level(*pri);
           if (auto ts = json_u64_value(p["__REALTIME_TIMESTAMP"]); ts.has_value())
-            entry.wall_time = android_wall_time_seconds(*ts);
-          entry.context = format_journal_context(p, android.getPid(), android.getTid());
+            entry.wall_time = operating_system_wall_time_seconds(*ts);
+          entry.context = format_journal_context(p, operating_system_log.getPid(), operating_system_log.getTid());
         }
       }
       logs->push_back(std::move(entry));
@@ -666,11 +661,11 @@ std::vector<TimelineEntry> extract_segment_timeline(const std::vector<Event> &ev
     if (event_record.which != cereal::Event::Which::SELFDRIVE_STATE) {
       continue;
     }
-    capnp::FlatArrayMessageReader event_reader(event_record.data);
-    const cereal::Event::Reader event = event_reader.getRoot<cereal::Event>();
-    const auto sd = event.getSelfdriveState();
-    const double mono_time = static_cast<double>(event.getLogMonoTime()) / 1.0e9;
-    append_timeline_entry(&timeline, mono_time, alert_status_to_timeline_type(sd.getAlertStatus(), sd.getEnabled()));
+    with_parseable_event(event_record.data, [&](const cereal::Event::Reader &event) {
+      const auto sd = event.getSelfdriveState();
+      const double mono_time = static_cast<double>(event.getLogMonoTime()) / 1.0e9;
+      append_timeline_entry(&timeline, mono_time, alert_status_to_timeline_type(sd.getAlertStatus(), sd.getEnabled()));
+    });
   }
 
   return timeline;
@@ -682,21 +677,40 @@ std::vector<LogEntry> extract_segment_logs(const std::vector<Event> &events) {
   std::string last_alert_key;
 
   for (const Event &event_record : events) {
-    capnp::FlatArrayMessageReader event_reader(event_record.data);
-    const cereal::Event::Reader event = event_reader.getRoot<cereal::Event>();
-    append_log_event(event_record.which, event, 0.0, &logs, &last_alert_key);
+    with_parseable_event(event_record.data, [&](const cereal::Event::Reader &event) {
+      append_log_event(event_record.which, event, 0.0, &logs, &last_alert_key);
+    });
   }
 
   return logs;
+}
+
+std::vector<ThumbnailFrame> extract_segment_thumbnails(const std::vector<Event> &events, int segment) {
+  std::vector<ThumbnailFrame> thumbnails;
+  for (const Event &event_record : events) {
+    if (event_record.which != cereal::Event::Which::THUMBNAIL) continue;
+    with_parseable_event(event_record.data, [&](const cereal::Event::Reader &event) {
+      const auto thumbnail = event.getThumbnail();
+      const auto jpeg = thumbnail.getThumbnail();
+      if (jpeg.size() == 0) return;
+      const uint64_t timestamp = thumbnail.getTimestampEof();
+      ThumbnailFrame frame;
+      frame.timestamp = static_cast<double>(timestamp != 0 ? timestamp : event.getLogMonoTime()) / 1.0e9;
+      frame.segment = segment;
+      frame.jpeg.assign(jpeg.begin(), jpeg.end());
+      thumbnails.push_back(std::move(frame));
+    });
+  }
+  return thumbnails;
 }
 
 RouteMetadata extract_segment_metadata(const std::vector<Event> &events) {
   RouteMetadata metadata;
   for (const Event &event_record : events) {
     if (event_record.which != cereal::Event::Which::CAR_PARAMS) continue;
-    capnp::FlatArrayMessageReader event_reader(event_record.data);
-    const cereal::Event::Reader event = event_reader.getRoot<cereal::Event>();
-    metadata.car_fingerprint = event.getCarParams().getCarFingerprint().cStr();
+    with_parseable_event(event_record.data, [&](const cereal::Event::Reader &event) {
+      metadata.car_fingerprint = event.getCarParams().getCarFingerprint().cStr();
+    });
     if (!metadata.car_fingerprint.empty()) break;
   }
   return metadata;
@@ -802,6 +816,8 @@ Pane parse_dock_area(const json11::Json &dock_area_node) {
   const std::string kind = dock_area_node["kind"].string_value();
   if (kind == "map") {
     pane.kind = PaneKind::Map;
+  } else if (kind == "thumbnail") {
+    pane.kind = PaneKind::Thumbnail;
   } else if (kind == "camera") {
     pane.kind = PaneKind::Camera;
     const std::string camera_view = dock_area_node["camera_view"].string_value();
@@ -885,125 +901,11 @@ SketchLayout parse_layout(const fs::path &layout_path) {
   return layout;
 }
 
-ScalarKind scalar_kind_for_type(const capnp::Type &type) {
-  if (type.isBool()) return ScalarKind::Bool;
-  if (type.isInt8() || type.isInt16() || type.isInt32() || type.isInt64()) {
-    return ScalarKind::Int;
-  }
-  if (type.isUInt8() || type.isUInt16() || type.isUInt32() || type.isUInt64()) {
-    return ScalarKind::UInt;
-  }
-  if (type.isFloat32() || type.isFloat64()) {
-    return ScalarKind::Float;
-  }
-  if (type.isEnum()) return ScalarKind::Enum;
-  return ScalarKind::None;
-}
-
-ResolvedNode build_resolved_type(const capnp::Type &type,
-                                 bool has_field,
-                                 capnp::StructSchema::Field field,
-                                 std::string segment,
-                                 std::string path,
-                                 size_t *next_fixed_slot,
-                                 std::vector<std::string> *fixed_paths,
-                                 bool dynamic_path = false) {
-  ResolvedNode node;
-  node.has_field = has_field;
-  node.field = field;
-  node.segment = std::move(segment);
-  node.path = std::move(path);
-  node.scalar_kind = scalar_kind_for_type(type);
-  if (node.scalar_kind != ScalarKind::None) {
-    node.kind = ResolvedNodeKind::Scalar;
-    if (!dynamic_path) {
-      node.fixed_slot = static_cast<int>((*next_fixed_slot)++);
-      fixed_paths->push_back(node.path);
-    }
-    return node;
-  }
-
-  if (type.isStruct()) {
-    node.kind = ResolvedNodeKind::Struct;
-    for (auto child : type.asStruct().getFields()) {
-      const std::string child_segment = child.getProto().getName().cStr();
-      node.children.push_back(build_resolved_type(
-        child.getType(),
-        true,
-        child,
-        child_segment,
-        node.path + "/" + child_segment,
-        next_fixed_slot,
-        fixed_paths,
-        dynamic_path));
-    }
-    return node;
-  }
-
-  if (type.isList()) {
-    const capnp::Type element_type = type.asList().getElementType();
-    if (element_type.isText() || element_type.isData() || element_type.isInterface() || element_type.isAnyPointer()) {
-      node.kind = ResolvedNodeKind::Ignore;
-      return node;
-    }
-    node.kind = ResolvedNodeKind::List;
-    node.skip_large_scalar_list = scalar_kind_for_type(element_type) != ScalarKind::None;
-    node.element = std::make_unique<ResolvedNode>(
-      build_resolved_type(element_type,
-                          false,
-                          capnp::StructSchema::Field(),
-                          "",
-                          node.path,
-                          next_fixed_slot,
-                          fixed_paths,
-                          true));
-    return node;
-  }
-
-  node.kind = ResolvedNodeKind::Ignore;
-  return node;
-}
-
-int register_fixed_series_path(const std::string &path,
-                               size_t *next_fixed_slot,
-                               std::vector<std::string> *fixed_paths) {
-  const int slot = static_cast<int>((*next_fixed_slot)++);
-  fixed_paths->push_back(path);
-  return slot;
-}
-
 const SchemaIndex &SchemaIndex::instance() {
   static const SchemaIndex index = [] {
     SchemaIndex out;
-    const auto event_schema = capnp::Schema::from<cereal::Event>().asStruct();
-    uint16_t max_discriminant = 0;
-    for (auto union_field : event_schema.getUnionFields()) {
-      max_discriminant = std::max<uint16_t>(max_discriminant, union_field.getProto().getDiscriminantValue());
-    }
-    out.by_which.resize(static_cast<size_t>(max_discriminant) + 1);
-    size_t next_fixed_slot = 0;
-    for (auto union_field : event_schema.getUnionFields()) {
-      ResolvedService service;
-      service.event_which = union_field.getProto().getDiscriminantValue();
-      service.union_field = union_field;
-      service.service_name = union_field.getProto().getName().cStr();
-      service.valid_slot = register_fixed_series_path(
-        "/" + service.service_name + "/valid", &next_fixed_slot, &out.fixed_paths);
-      service.log_mono_time_slot = register_fixed_series_path(
-        "/" + service.service_name + "/logMonoTime", &next_fixed_slot, &out.fixed_paths);
-      service.seconds_slot = register_fixed_series_path(
-        "/" + service.service_name + "/t", &next_fixed_slot, &out.fixed_paths);
-      service.payload = build_resolved_type(
-        union_field.getType(),
-        false,
-        capnp::StructSchema::Field(),
-        service.service_name,
-        "/" + service.service_name,
-        &next_fixed_slot,
-        &out.fixed_paths);
-      out.by_which[service.event_which] = std::move(service);
-    }
-    out.fixed_series_count = next_fixed_slot;
+    out.fixed_paths = static_event_fixed_paths();
+    out.fixed_series_count = out.fixed_paths.size();
     return out;
   }();
   return index;
@@ -1011,45 +913,6 @@ const SchemaIndex &SchemaIndex::instance() {
 
 bool is_absolute_curve(const std::string &name) {
   return !name.empty() && name.front() == '/';
-}
-
-std::optional<double> scalar_value_to_double(const capnp::DynamicValue::Reader &value, ScalarKind kind) {
-  switch (kind) {
-    case ScalarKind::Bool:
-      return value.as<bool>() ? 1.0 : 0.0;
-    case ScalarKind::Int:
-      return static_cast<double>(value.as<int64_t>());
-    case ScalarKind::UInt:
-      return static_cast<double>(value.as<uint64_t>());
-    case ScalarKind::Float:
-      return value.as<double>();
-    case ScalarKind::Enum:
-      return static_cast<double>(value.as<capnp::DynamicEnum>().getRaw());
-    case ScalarKind::None:
-      return std::nullopt;
-  }
-  return std::nullopt;
-}
-
-void capture_enum_info(const std::string &path,
-                       const capnp::DynamicValue::Reader &value,
-                       SeriesAccumulator *series) {
-  if (series->enum_info.find(path) != series->enum_info.end()) {
-    return;
-  }
-
-  const auto dynamic_enum = value.as<capnp::DynamicEnum>();
-  EnumInfo info;
-  for (auto enumerant : dynamic_enum.getSchema().getEnumerants()) {
-    const uint16_t ordinal = enumerant.getOrdinal();
-    if (ordinal >= info.names.size()) {
-      info.names.resize(static_cast<size_t>(ordinal) + 1);
-    }
-    info.names[ordinal] = enumerant.getProto().getName().cStr();
-  }
-  if (!info.names.empty()) {
-    series->enum_info.emplace(path, std::move(info));
-  }
 }
 
 void append_scalar_point(RouteSeries *series,
@@ -1182,91 +1045,9 @@ void append_dynamic_scalar_point(const std::string &path, double tm, double valu
   append_scalar_point(ensure_dynamic_series(path, series), path, tm, value);
 }
 
-void append_scalar_value(const ResolvedNode &node,
-                         const std::string *path_override,
-                         const capnp::DynamicValue::Reader &raw_value,
-                         double tm,
-                         double value,
-                         SeriesAccumulator *series) {
-  if (path_override == nullptr && node.fixed_slot >= 0) {
-    if (node.scalar_kind == ScalarKind::Enum) {
-      capture_enum_info(node.path, raw_value, series);
-    }
-    append_fixed_scalar_point(&series->fixed_series[static_cast<size_t>(node.fixed_slot)], tm, value);
-    return;
-  }
-
-  const std::string &path = path_override != nullptr ? *path_override : node.path;
-  if (node.scalar_kind == ScalarKind::Enum) {
-    capture_enum_info(path, raw_value, series);
-  }
-  append_dynamic_scalar_point(path, tm, value, series);
-}
-
-void append_fast_node(const ResolvedNode &node,
-                      const capnp::DynamicValue::Reader &value,
-                      double tm,
-                      SeriesAccumulator *series,
-                      const std::string *path_override = nullptr) {
-  switch (node.kind) {
-    case ResolvedNodeKind::Scalar: {
-      if (std::optional<double> scalar = scalar_value_to_double(value, node.scalar_kind); scalar.has_value()) {
-        append_scalar_value(node, path_override, value, tm, *scalar, series);
-      }
-      return;
-    }
-    case ResolvedNodeKind::Struct: {
-      const capnp::DynamicStruct::Reader reader = value.as<capnp::DynamicStruct>();
-      for (const ResolvedNode &child : node.children) {
-        if (!child.has_field || !reader.has(child.field)) continue;
-        if (path_override == nullptr) {
-          append_fast_node(child, reader.get(child.field), tm, series, nullptr);
-        } else {
-          const std::string child_path = child.segment.empty() ? *path_override : (*path_override + "/" + child.segment);
-          append_fast_node(child, reader.get(child.field), tm, series, &child_path);
-        }
-      }
-      return;
-    }
-    case ResolvedNodeKind::List: {
-      if (!node.element) {
-        return;
-      }
-      const capnp::DynamicList::Reader list = value.as<capnp::DynamicList>();
-      if (list.size() == 0) {
-        return;
-      }
-      if (node.skip_large_scalar_list && list.size() > 16) {
-        return;
-      }
-      const std::string &base_path = path_override != nullptr ? *path_override : node.path;
-      if (node.element->kind == ResolvedNodeKind::Scalar) {
-        for (uint i = 0; i < list.size(); ++i) {
-          if (std::optional<double> scalar = scalar_value_to_double(list[i], node.element->scalar_kind); scalar.has_value()) {
-            RouteSeries *item_series = ensure_list_scalar_series(base_path, i, series);
-            if (node.element->scalar_kind == ScalarKind::Enum && !item_series->path.empty()) {
-              capture_enum_info(item_series->path, list[i], series);
-            }
-            append_fixed_scalar_point(item_series, tm, *scalar);
-          }
-        }
-        return;
-      }
-      for (uint i = 0; i < list.size(); ++i) {
-        const std::string item_path = base_path + "/" + std::to_string(i);
-        append_fast_node(*node.element, list[i], tm, series, &item_path);
-      }
-      return;
-    }
-    case ResolvedNodeKind::Ignore:
-      return;
-  }
-}
-
 void append_event_fast(cereal::Event::Which which,
                        int32_t eidx_segnum,
                        kj::ArrayPtr<const capnp::word> data,
-                       const SchemaIndex &schema,
                        const dbc::Database *can_dbc,
                        bool skip_raw_can,
                        double time_offset,
@@ -1274,69 +1055,14 @@ void append_event_fast(cereal::Event::Which which,
   if (eidx_segnum != -1) {
     return;
   }
-  const uint16_t which_index = static_cast<uint16_t>(which);
-  if (which_index >= schema.by_which.size() || !schema.by_which[which_index].has_value()) {
-    return;
-  }
-  const ResolvedService &service = *schema.by_which[which_index];
-  capnp::FlatArrayMessageReader event_reader(data);
-  const cereal::Event::Reader event = event_reader.getRoot<cereal::Event>();
-  const double tm = static_cast<double>(event.getLogMonoTime()) / 1.0e9 - time_offset;
-  append_fixed_scalar_point(&series->fixed_series[static_cast<size_t>(service.valid_slot)],
-                            tm,
-                            event.getValid() ? 1.0 : 0.0);
-  append_fixed_scalar_point(&series->fixed_series[static_cast<size_t>(service.log_mono_time_slot)],
-                            tm,
-                            static_cast<double>(event.getLogMonoTime()));
-  append_fixed_scalar_point(&series->fixed_series[static_cast<size_t>(service.seconds_slot)],
-                            tm,
-                            tm);
-  if (service.service_name == "can" || service.service_name == "sendcan") {
-    const CanServiceKind can_service = service.service_name == "can"
-      ? CanServiceKind::Can
-      : CanServiceKind::Sendcan;
-    auto decode_message = [&](uint8_t bus, uint32_t address, const auto &dat_reader) {
-      const auto bytes = dat_reader.begin();
-      decode_can_frame(can_dbc, service.service_name, bus, address, bytes, dat_reader.size(), tm, series);
-    };
-    if (service.service_name == "can") {
-      for (const auto &msg : event.getCan()) {
-        append_can_frame(can_service,
-                         static_cast<uint8_t>(msg.getSrc()),
-                         msg.getAddress(),
-                         msg.getDeprecated().getBusTime(),
-                         msg.getDat(),
-                         tm,
-                         series);
-        if (!skip_raw_can) continue;
-        decode_message(static_cast<uint8_t>(msg.getSrc()), msg.getAddress(), msg.getDat());
-      }
-    } else {
-      for (const auto &msg : event.getSendcan()) {
-        append_can_frame(can_service,
-                         static_cast<uint8_t>(msg.getSrc()),
-                         msg.getAddress(),
-                         msg.getDeprecated().getBusTime(),
-                         msg.getDat(),
-                         tm,
-                         series);
-        if (!skip_raw_can) continue;
-        decode_message(static_cast<uint8_t>(msg.getSrc()), msg.getAddress(), msg.getDat());
-      }
-    }
-    if (skip_raw_can) {
-      return;
-    }
-  }
-
-  const capnp::DynamicStruct::Reader dynamic_event(event);
-  append_fast_node(service.payload, dynamic_event.get(service.union_field), tm, series);
+  with_parseable_event(data, [&](const cereal::Event::Reader &event) {
+    append_event_static_reader(which, event, can_dbc, skip_raw_can, time_offset, series);
+  });
 }
 
 void append_events_fast_range(const std::vector<Event> &events,
                               size_t begin,
                               size_t end,
-                              const SchemaIndex &schema,
                               const dbc::Database *can_dbc,
                               bool skip_raw_can,
                               SeriesAccumulator *series) {
@@ -1345,7 +1071,6 @@ void append_events_fast_range(const std::vector<Event> &events,
     append_event_fast(event_record.which,
                       event_record.eidx_segnum,
                       event_record.data,
-                      schema,
                       can_dbc,
                       skip_raw_can,
                       0.0,
@@ -1464,6 +1189,7 @@ RouteData build_route_data(std::vector<RouteSeries> &&series_list,
                            std::vector<CanMessageData> &&can_messages,
                            std::vector<LogEntry> &&logs,
                            std::vector<TimelineEntry> &&timeline,
+                           std::vector<ThumbnailFrame> &&thumbnails,
                            std::unordered_map<std::string, EnumInfo> &&enum_info,
                            std::string car_fingerprint,
                            std::string dbc_name) {
@@ -1530,6 +1256,14 @@ RouteData build_route_data(std::vector<RouteSeries> &&series_list,
     route_data.x_min = timeline.front().start_time;
     route_data.x_max = timeline.back().end_time;
   }
+  std::sort(thumbnails.begin(), thumbnails.end(), [](const ThumbnailFrame &a, const ThumbnailFrame &b) {
+    return a.timestamp < b.timestamp;
+  });
+  if (!route_data.has_time_range && !thumbnails.empty()) {
+    route_data.has_time_range = true;
+    route_data.x_min = thumbnails.front().timestamp;
+    route_data.x_max = thumbnails.back().timestamp;
+  }
 
   if (route_data.has_time_range) {
     const double time_offset = route_data.x_min;
@@ -1551,6 +1285,9 @@ RouteData build_route_data(std::vector<RouteSeries> &&series_list,
       entry.start_time -= time_offset;
       entry.end_time -= time_offset;
     }
+    for (ThumbnailFrame &thumbnail : thumbnails) {
+      thumbnail.timestamp -= time_offset;
+    }
     route_data.x_max -= time_offset;
     route_data.x_min = 0.0;
   }
@@ -1568,6 +1305,7 @@ RouteData build_route_data(std::vector<RouteSeries> &&series_list,
     merged_timeline.push_back(std::move(entry));
   }
   route_data.timeline = std::move(merged_timeline);
+  route_data.thumbnails = std::move(thumbnails);
   std::sort(can_messages.begin(), can_messages.end(), [](const CanMessageData &a, const CanMessageData &b) {
     return std::make_tuple(a.id.service, a.id.bus, a.id.address)
          < std::make_tuple(b.id.service, b.id.bus, b.id.address);
@@ -1778,7 +1516,7 @@ SeriesAccumulator extract_segment_series(const std::vector<Event> &events,
   const size_t chunk_count = extract_chunk_count(events.size(), worker_budget, segment_workers);
   if (chunk_count <= 1 || events.empty()) {
     SeriesAccumulator series = make_series_accumulator(schema);
-    append_events_fast_range(events, 0, events.size(), schema, can_dbc, skip_raw_can, &series);
+    append_events_fast_range(events, 0, events.size(), can_dbc, skip_raw_can, &series);
     return series;
   }
 
@@ -1795,10 +1533,10 @@ SeriesAccumulator extract_segment_series(const std::vector<Event> &events,
     workers.emplace_back([&, chunk]() {
       const size_t begin = chunk * events_per_chunk;
       const size_t end = std::min(events.size(), begin + events_per_chunk);
-      append_events_fast_range(events, begin, end, schema, can_dbc, skip_raw_can, &chunk_results[chunk]);
+      append_events_fast_range(events, begin, end, can_dbc, skip_raw_can, &chunk_results[chunk]);
     });
   }
-  append_events_fast_range(events, 0, std::min(events.size(), events_per_chunk), schema, can_dbc, skip_raw_can, &chunk_results[0]);
+  append_events_fast_range(events, 0, std::min(events.size(), events_per_chunk), can_dbc, skip_raw_can, &chunk_results[0]);
   for (std::thread &worker : workers) {
     worker.join();
   }
@@ -1821,6 +1559,7 @@ LoadedRouteArtifacts load_route_series_parallel(
     SeriesAccumulator series;
     std::vector<LogEntry> logs;
     std::vector<TimelineEntry> timeline;
+    std::vector<ThumbnailFrame> thumbnails;
   };
 
   const std::vector<std::pair<int, SegmentLogs>> segment_list(segments.begin(), segments.end());
@@ -1883,6 +1622,7 @@ LoadedRouteArtifacts load_route_series_parallel(
       results[index].series = extract_segment_series(reader.events, schema, can_dbc, skip_raw_can, worker_budget, segment_workers);
       results[index].logs = extract_segment_logs(reader.events);
       results[index].timeline = extract_segment_timeline(reader.events);
+      results[index].thumbnails = extract_segment_thumbnails(reader.events, segment_number);
       segment_stats.extract_seconds = std::chrono::duration<double>(LoadStats::Clock::now() - extract_start).count();
       segment_stats.event_count = reader.events.size();
       segment_stats.series_count = populated_series_count(results[index].series);
@@ -1909,6 +1649,7 @@ LoadedRouteArtifacts load_route_series_parallel(
   }
   std::vector<LogEntry> logs;
   std::vector<TimelineEntry> timeline;
+  std::vector<ThumbnailFrame> thumbnails;
   for (SegmentResult &result : results) {
     if (!result.logs.empty()) {
       logs.insert(logs.end(),
@@ -1920,12 +1661,18 @@ LoadedRouteArtifacts load_route_series_parallel(
                       std::make_move_iterator(result.timeline.begin()),
                       std::make_move_iterator(result.timeline.end()));
     }
+    if (!result.thumbnails.empty()) {
+      thumbnails.insert(thumbnails.end(),
+                        std::make_move_iterator(result.thumbnails.begin()),
+                        std::make_move_iterator(result.thumbnails.end()));
+    }
   }
   LoadedRouteArtifacts artifacts;
   artifacts.series = collect_series(std::move(merged));
   artifacts.can_messages = std::move(merged.can_messages);
   artifacts.logs = std::move(logs);
   artifacts.timeline = std::move(timeline);
+  artifacts.thumbnails = std::move(thumbnails);
   artifacts.enum_info = std::move(merged.enum_info);
   stats->merge_end = LoadStats::Clock::now();
   return artifacts;
@@ -1987,10 +1734,7 @@ struct StreamAccumulator::Impl {
       return;
     }
     detected_dbc_name = next_dbc;
-    can_dbc.reset();
-    if (!detected_dbc_name.empty()) {
-      can_dbc.emplace(resolve_dbc_path(detected_dbc_name));
-    }
+    can_dbc = load_dbc_by_name(detected_dbc_name);
   }
 };
 
@@ -2008,35 +1752,34 @@ void StreamAccumulator::setDbcName(const std::string &dbc_name) {
   impl_->refresh_dbc();
 }
 
-void StreamAccumulator::appendEvent(cereal::Event::Which which, kj::ArrayPtr<const capnp::word> data) {
-  capnp::FlatArrayMessageReader event_reader(data);
-  const cereal::Event::Reader event = event_reader.getRoot<cereal::Event>();
-  const double boot_time = static_cast<double>(event.getLogMonoTime()) / 1.0e9;
-  if (!impl_->time_offset.has_value()) {
-    impl_->time_offset = boot_time;
-  }
-  if (which == cereal::Event::Which::CAR_PARAMS) {
-    const std::string fingerprint = event.getCarParams().getCarFingerprint().cStr();
-    if (!fingerprint.empty() && fingerprint != impl_->car_fingerprint) {
-      impl_->car_fingerprint = fingerprint;
-      impl_->refresh_dbc();
+void StreamAccumulator::appendEvent(kj::ArrayPtr<const capnp::word> data) {
+  with_parseable_event(data, [&](const cereal::Event::Reader &event) {
+    const cereal::Event::Which which = event.which();
+    const double boot_time = static_cast<double>(event.getLogMonoTime()) / 1.0e9;
+    if (!impl_->time_offset.has_value()) {
+      impl_->time_offset = boot_time;
     }
-  }
+    if (which == cereal::Event::Which::CAR_PARAMS) {
+      const std::string fingerprint = event.getCarParams().getCarFingerprint().cStr();
+      if (!fingerprint.empty() && fingerprint != impl_->car_fingerprint) {
+        impl_->car_fingerprint = fingerprint;
+        impl_->refresh_dbc();
+      }
+    }
 
-  append_event_fast(which,
-                    -1,
-                    data,
-                    impl_->schema,
-                    impl_->can_dbc ? &*impl_->can_dbc : nullptr,
-                    true,
-                    *impl_->time_offset,
-                    &impl_->series);
-  append_log_event(which, event, *impl_->time_offset, &impl_->logs, &impl_->last_alert_key);
-  if (which == cereal::Event::Which::SELFDRIVE_STATE) {
-    const auto sd = event.getSelfdriveState();
-    append_timeline_entry(&impl_->timeline, boot_time - *impl_->time_offset,
-                          alert_status_to_timeline_type(sd.getAlertStatus(), sd.getEnabled()));
-  }
+    append_event_static_reader(which,
+                               event,
+                               impl_->can_dbc ? &*impl_->can_dbc : nullptr,
+                               impl_->can_dbc.has_value(),
+                               *impl_->time_offset,
+                               &impl_->series);
+    append_log_event(which, event, *impl_->time_offset, &impl_->logs, &impl_->last_alert_key);
+    if (which == cereal::Event::Which::SELFDRIVE_STATE) {
+      const auto sd = event.getSelfdriveState();
+      append_timeline_entry(&impl_->timeline, boot_time - *impl_->time_offset,
+                            alert_status_to_timeline_type(sd.getAlertStatus(), sd.getEnabled()));
+    }
+  });
 }
 
 void StreamAccumulator::appendCanFrames(CanServiceKind service, const std::vector<LiveCanFrame> &frames) {
@@ -2126,17 +1869,16 @@ RouteData load_route_data(const std::string &route_name,
 
   const RouteMetadata metadata = detect_route_metadata(segments, route.selector);
   const std::string resolved_dbc = !dbc_name.empty() ? dbc_name : detect_dbc_for_fingerprint(metadata.car_fingerprint);
-  const std::optional<dbc::Database> can_dbc = resolved_dbc.empty()
-    ? std::nullopt
-    : std::optional<dbc::Database>(std::in_place, resolve_dbc_path(resolved_dbc));
+  const std::optional<dbc::Database> can_dbc = load_dbc_by_name(resolved_dbc);
 
   const SchemaIndex &schema = SchemaIndex::instance();
   LoadedRouteArtifacts artifacts = load_route_series_parallel(segments, schema, can_dbc ? &*can_dbc : nullptr,
-                                                             route.selector, !resolved_dbc.empty(), &stats);
+                                                             route.selector, can_dbc.has_value(), &stats);
   RouteData route_data = build_route_data(std::move(artifacts.series),
                                           std::move(artifacts.can_messages),
                                           std::move(artifacts.logs),
                                           std::move(artifacts.timeline),
+                                          std::move(artifacts.thumbnails),
                                           std::move(artifacts.enum_info),
                                           metadata.car_fingerprint,
                                           resolved_dbc);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cereal/gen/cpp/log.capnp.h"
+#include "openpilot/cereal/gen/cpp/log.capnp.h"
 #include "imgui.h"
 #include "tools/jotpluggler/dbc.h"
 #include "tools/jotpluggler/util.h"
@@ -81,6 +81,7 @@ struct Curve {
 enum class PaneKind : uint8_t {
   Plot,
   Map,
+  Thumbnail,
   Camera,
 };
 
@@ -141,9 +142,15 @@ struct CameraFeedIndex {
   std::vector<CameraFrameIndexEntry> entries;
 };
 
+struct ThumbnailFrame {
+  double timestamp = 0.0;
+  int segment = -1;
+  std::vector<uint8_t> jpeg;
+};
+
 enum class LogOrigin : uint8_t {
   Log,
-  Android,
+  OperatingSystem,
   Alert,
 };
 
@@ -276,7 +283,10 @@ struct RouteIdentifier {
   std::string display_slice() const {
     const int begin = slice_explicit ? slice_begin : available_begin;
     const int end = slice_explicit ? slice_end : available_end;
-    if (end < 0 || end == begin) {
+    if (end < 0) {
+      return std::to_string(begin) + ":";
+    }
+    if (end == begin) {
       return std::to_string(begin);
     }
     return std::to_string(begin) + ":" + std::to_string(end);
@@ -315,6 +325,7 @@ struct RouteData {
   CameraFeedIndex driver_camera;
   CameraFeedIndex wide_road_camera;
   CameraFeedIndex qroad_camera;
+  std::vector<ThumbnailFrame> thumbnails;
   GpsTrace gps_trace;
   std::vector<LogEntry> logs;
   std::vector<TimelineEntry> timeline;
@@ -378,7 +389,7 @@ public:
   StreamAccumulator &operator=(const StreamAccumulator &) = delete;
 
   void setDbcName(const std::string &dbc_name);
-  void appendEvent(cereal::Event::Which which, kj::ArrayPtr<const capnp::word> data);
+  void appendEvent(kj::ArrayPtr<const capnp::word> data);
   void appendCanFrames(CanServiceKind service, const std::vector<LiveCanFrame> &frames);
   StreamExtractBatch takeBatch();
   const std::string &carFingerprint() const;
@@ -442,6 +453,7 @@ bool icon_menu_item(const char *glyph,
 
 class AsyncRouteLoader;
 class CameraFeedView;
+class ThumbnailView;
 class StreamPoller;
 class MapDataManager;
 
@@ -483,6 +495,7 @@ struct AppSession {
   std::unique_ptr<AsyncRouteLoader> route_loader;
   std::unique_ptr<StreamPoller> stream_poller;
   std::array<std::unique_ptr<CameraFeedView>, 4> pane_camera_feeds;
+  std::unique_ptr<ThumbnailView> thumbnail_view;
   std::unique_ptr<MapDataManager> map_data;
   bool async_route_loading = false;
   double next_stream_custom_refresh_time = 0.0;
@@ -877,6 +890,23 @@ public:
   void update(double tracker_time);
   void draw(float width, bool loading);
   void drawSized(ImVec2 size, bool loading, bool fit_to_pane = false);
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+class ThumbnailView {
+public:
+  ThumbnailView();
+  ~ThumbnailView();
+
+  ThumbnailView(const ThumbnailView &) = delete;
+  ThumbnailView &operator=(const ThumbnailView &) = delete;
+
+  void setThumbnails(const std::vector<ThumbnailFrame> &thumbnails);
+  void update(double tracker_time);
+  void drawSized(ImVec2 size, bool loading);
 
 private:
   struct Impl;
