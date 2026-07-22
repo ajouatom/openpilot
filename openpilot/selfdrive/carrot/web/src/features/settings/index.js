@@ -10,6 +10,11 @@ import {
 } from "./derived_model.js";
 import { createSettingsEntryController } from "./entry_controller.js";
 import {
+  createSettingDocumentationClient,
+  normalizeSettingDocLanguage,
+  renderSettingDocMarkdown,
+} from "./documentation.js";
+import {
   CHANGE_SOURCE_LABEL_KEYS,
   formatChangeTimestamp,
   renderSettingHistoryHtml,
@@ -62,6 +67,9 @@ export function installSettingsRuntimeFacade(target = globalThis, options = {}) 
     now: options.now,
   });
   const aux = createSettingsAuxState(options.auxLoaders || createSettingsAuxLoaders(normalizedTarget));
+  const documentation = createSettingDocumentationClient({
+    fetchImpl: typeof normalizedTarget.fetch === "function" ? normalizedTarget.fetch.bind(normalizedTarget) : null,
+  });
   const derivedModelMemo = createSettingsDerivedModelMemo();
   store.subscribe((state) => {
     if (state.status === "ready" && state.snapshot) aux.hydrateSnapshot(state.snapshot);
@@ -79,6 +87,12 @@ export function installSettingsRuntimeFacade(target = globalThis, options = {}) 
       ids: SETTING_DERIVED_IDS,
     }),
     entry: Object.freeze({ createController: createSettingsEntryController }),
+    docs: Object.freeze({
+      load: documentation.load,
+      clear: documentation.clear,
+      normalizeLanguage: normalizeSettingDocLanguage,
+      renderMarkdown: renderSettingDocMarkdown,
+    }),
     profiles: Object.freeze({
       selectApplyValues: selectProfileApplyValues,
       collectRestoredValues,

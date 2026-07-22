@@ -12,6 +12,7 @@ if (
   !carrotSettingsRuntime?.aux ||
   !carrotSettingsRuntime?.catalog ||
   !carrotSettingsRuntime?.derived ||
+  !carrotSettingsRuntime?.docs ||
   !carrotSettingsRuntime?.entry ||
   !carrotSettingsRuntime?.view ||
   !carrotSettingsRuntime?.values
@@ -26,6 +27,7 @@ if (!window.CarrotUI?.settingRow?.createControl || !window.CarrotUI?.numericStep
 const settingAuxState = carrotSettingsRuntime.aux;
 const settingCatalogState = carrotSettingsRuntime.catalog;
 const settingDerivedRuntime = carrotSettingsRuntime.derived;
+const settingDocumentationRuntime = carrotSettingsRuntime.docs;
 const settingEntryRuntime = carrotSettingsRuntime.entry;
 const settingViewRuntime = carrotSettingsRuntime.view;
 const settingValueRepository = carrotSettingsRuntime.values;
@@ -1589,6 +1591,61 @@ async function selectSettingDetail(group, name, pushHistory = true) {
   }), "forward");
 }
 
+function createSettingDocumentationBlock(name, renderToken) {
+  const details = document.createElement("details");
+  details.className = "setting-doc-detail is-loading";
+  details.open = true;
+
+  const summary = document.createElement("summary");
+  summary.className = "setting-doc-detail__summary";
+  const title = document.createElement("span");
+  title.className = "setting-doc-detail__title";
+  title.textContent = getUIText("setting_doc_title", "Detailed guide");
+  const format = document.createElement("span");
+  format.className = "setting-doc-detail__format";
+  format.textContent = "MD";
+  summary.append(title, format);
+
+  const body = document.createElement("div");
+  body.className = "setting-doc-detail__body";
+  body.setAttribute("aria-live", "polite");
+  body.textContent = getUIText("setting_doc_loading", "Loading guide...");
+  details.append(summary, body);
+
+  settingDocumentationRuntime.load(name, LANG).then((payload) => {
+    if (renderToken !== settingRenderToken || !details.isConnected) return;
+    if (!payload?.available || !payload.markdown) {
+      details.remove();
+      return;
+    }
+
+    body.replaceChildren();
+    if (payload.fallback) {
+      const fallback = document.createElement("div");
+      fallback.className = "setting-doc-detail__fallback";
+      fallback.textContent = getUIText(
+        "setting_doc_language_fallback",
+        "This detailed guide is currently shown in English.",
+      );
+      body.appendChild(fallback);
+    }
+
+    const article = document.createElement("article");
+    article.className = "setting-doc-markdown";
+    article.innerHTML = settingDocumentationRuntime.renderMarkdown(payload.markdown);
+    body.appendChild(article);
+    details.classList.remove("is-loading", "is-error");
+    details.dataset.docSource = `${payload.source || ""}#${payload.anchor || ""}`;
+  }).catch(() => {
+    if (renderToken !== settingRenderToken || !details.isConnected) return;
+    details.classList.remove("is-loading");
+    details.classList.add("is-error");
+    body.textContent = getUIText("setting_doc_load_failed", "The detailed guide could not be loaded.");
+  });
+
+  return details;
+}
+
 function settingMarqueeHtml(text, className) {
   const safe = escapeHtml(text);
   return `<div class="${className} setting-marquee"><span class="setting-marquee__content">${safe}</span></div>`;
@@ -2434,6 +2491,10 @@ async function renderItems(group, options = {}) {
       popularDetail.className = "setting-popular-detail-block";
       popularDetail.innerHTML = renderSettingPopularDetailHtml(p, popularEntry);
       el.appendChild(popularDetail);
+    }
+
+    if (detailMode) {
+      el.appendChild(createSettingDocumentationBlock(name, renderToken));
     }
 
     // Modification history sits below the popular values, using the same block

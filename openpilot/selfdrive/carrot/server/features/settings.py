@@ -13,6 +13,7 @@ from ..services.param_changes import observe_param_values
 from ..services.params import HAS_PARAMS, ParamKeyType, Params, get_param_values
 from ..services.popular_values import read_popular_values_memory, schedule_popular_value_refresh
 from ..services.setting_favorites import read_setting_favorites
+from ..services.setting_docs import load_setting_doc
 from ..services.setting_profiles import read_setting_profiles
 from ..services.setting_unit_index import read_setting_unit_index, update_setting_unit_index
 from ..services.settings import get_settings_cached, settings_cache
@@ -125,8 +126,28 @@ async def api_setting_unit_index_update(request: web.Request) -> web.Response:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
+async def api_setting_doc(request: web.Request) -> web.Response:
+  name = str(request.query.get("name") or "").strip()
+  if not name:
+    return web.json_response({"ok": False, "error": "missing setting name"}, status=400)
+
+  language = str(request.query.get("lang") or "en")
+  try:
+    payload = await asyncio.to_thread(load_setting_doc, name, language)
+  except Exception as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+  if payload is None:
+    return web.json_response({"ok": True, "available": False, "name": name}, status=404)
+
+  response = web.json_response({"ok": True, "available": True, **payload})
+  response.headers["Cache-Control"] = "no-cache"
+  return response
+
+
 def register(app: web.Application) -> None:
   app.router.add_get("/api/settings", api_settings)
   app.router.add_get("/api/settings/snapshot", api_settings_snapshot)
+  app.router.add_get("/api/settings/doc", api_setting_doc)
   app.router.add_get("/api/setting_unit_index", api_setting_unit_index)
   app.router.add_post("/api/setting_unit_index", api_setting_unit_index_update)
