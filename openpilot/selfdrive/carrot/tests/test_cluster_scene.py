@@ -94,14 +94,14 @@ def test_renderer_reuses_scene_when_only_hud_state_changes(monkeypatch) -> None:
   state = _cluster_state()
   first = renderer._scene_for_state(state, True, LIGHT_CLUSTER_THEME)
   hud_only = renderer._scene_for_state(
-    replace(state, center_clock_text="12:34", ev_mode_valid=True, ev_mode_active=True),
+    replace(state, center_clock_text="12:34", ev_mode_valid=True, ev_mode_active=True, driving_mode=2),
     True,
     LIGHT_CLUSTER_THEME,
   )
   changed_world = renderer._scene_for_state(replace(state, steering=0.1), True, LIGHT_CLUSTER_THEME)
 
   assert cluster_scene_state_key(state) == cluster_scene_state_key(
-    replace(state, center_clock_text="12:34", ev_mode_valid=True, ev_mode_active=True)
+    replace(state, center_clock_text="12:34", ev_mode_valid=True, ev_mode_active=True, driving_mode=2)
   )
   assert first is hud_only
   assert changed_world is not first
@@ -168,15 +168,111 @@ def test_ev_mode_indicator_fits_between_three_digit_speeds() -> None:
   assert cruise_left - ev_right >= 3.0
 
 
-def test_full_navi_does_not_draw_ev_mode_indicator() -> None:
+@pytest.mark.parametrize(
+  ("mode", "label", "color"),
+  (
+    (1, "연비", (0, 255, 0, 200)),
+    (2, "안전", (255, 165, 0, 200)),
+    (3, "일반", (255, 255, 255, 200)),
+    (4, "고속", (255, 0, 0, 200)),
+  ),
+)
+def test_driving_mode_indicator_matches_c3x_style(mode, label, color) -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  boxes = []
+  texts = []
+  renderer._rounded_rect = lambda *args, **kwargs: boxes.append((args, kwargs))
+  renderer._draw_text_with_stroke = lambda *args, **kwargs: texts.append((args, kwargs))
+
+  renderer._draw_driving_mode_indicator(_cluster_state(driving_mode=mode))
+
+  assert boxes == [((
+    cluster_renderer.SPEED_DRIVING_MODE_X,
+    cluster_renderer.SPEED_DRIVING_MODE_Y,
+    cluster_renderer.SPEED_DRIVING_MODE_W,
+    cluster_renderer.SPEED_DRIVING_MODE_H,
+    8.0,
+    color,
+    cluster_renderer.WHITE,
+    2.0,
+  ), {})]
+  assert texts == [((
+    label,
+    cluster_renderer.SPEED_DRIVING_MODE_CENTER_X,
+    cluster_renderer.SPEED_DRIVING_MODE_CENTER_Y,
+    cluster_renderer.SPEED_DRIVING_MODE_FONT_SIZE,
+    cluster_renderer.WHITE,
+    (5, 9, 12),
+    2,
+  ), {"anchor": "center", "cache": True})]
+
+
+@pytest.mark.parametrize("mode", (None, 0, 5))
+def test_driving_mode_indicator_hides_unknown_values(mode) -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  draws = []
+  renderer._rounded_rect = lambda *args, **kwargs: draws.append((args, kwargs))
+  renderer._draw_text_with_stroke = lambda *args, **kwargs: draws.append((args, kwargs))
+
+  renderer._draw_driving_mode_indicator(_cluster_state(driving_mode=mode))
+
+  assert draws == []
+
+
+@pytest.mark.parametrize("traffic_state", (1, 2))
+def test_traffic_states_share_the_slot_beside_driving_mode(monkeypatch, traffic_state) -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._traffic_red_texture = SimpleNamespace(width=56, height=56)
+  renderer._traffic_green_texture = SimpleNamespace(width=56, height=56)
+  draws = []
+  monkeypatch.setattr(cluster_renderer.rl, "draw_texture_pro", lambda *args: draws.append(args))
+
+  renderer._draw_model_traffic_state(traffic_state)
+
+  assert len(draws) == 1
+  destination = draws[0][2]
+  assert destination.x == pytest.approx(
+    cluster_renderer.SPEED_MODEL_TRAFFIC_CENTER_X - cluster_renderer.SPEED_MODEL_TRAFFIC_ICON_SIZE * 0.5
+  )
+  assert destination.y == pytest.approx(
+    cluster_renderer.SPEED_MODEL_TRAFFIC_CENTER_Y - cluster_renderer.SPEED_MODEL_TRAFFIC_ICON_SIZE * 0.5
+  )
+  assert destination.width == pytest.approx(cluster_renderer.SPEED_MODEL_TRAFFIC_ICON_SIZE)
+  assert destination.height == pytest.approx(cluster_renderer.SPEED_MODEL_TRAFFIC_ICON_SIZE)
+  traffic_right = destination.x + destination.width
+  assert cluster_renderer.SPEED_DRIVING_MODE_X - traffic_right == pytest.approx(
+    cluster_renderer.SPEED_DRIVING_MODE_GAP
+  )
+
+
+def test_speed_block_draws_driving_mode_before_traffic_state() -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._current_theme = lambda: LIGHT_CLUSTER_THEME
+  renderer._speed_bg_texture = None
+  renderer._draw_text_with_stroke = lambda *_args, **_kwargs: None
+  renderer._draw_cruise_gap_badge = lambda *_args, **_kwargs: None
+  renderer._draw_speed_gear_badge = lambda *_args, **_kwargs: None
+  renderer._draw_ev_mode_indicator = lambda *_args, **_kwargs: None
+  renderer._draw_camera_tpms = lambda *_args, **_kwargs: None
+  order = []
+  renderer._draw_driving_mode_indicator = lambda *_args, **_kwargs: order.append("driving_mode")
+  renderer._draw_model_traffic_state = lambda *_args, **_kwargs: order.append("traffic")
+
+  renderer._draw_speed_block(_cluster_state(driving_mode=2, traffic_state=2))
+
+  assert order == ["driving_mode", "traffic"]
+
+
+def test_full_navi_does_not_draw_speed_mode_indicators() -> None:
   renderer = object.__new__(ClusterUiRenderer)
   renderer._current_theme = lambda: SimpleNamespace(text=(1, 2, 3), muted=(4, 5, 6))
   renderer._draw_navi_media = lambda *_args, **_kwargs: False
   renderer._draw_text = lambda *_args, **_kwargs: None
   draws = []
   renderer._draw_ev_mode_indicator = lambda *args, **kwargs: draws.append((args, kwargs))
+  renderer._draw_driving_mode_indicator = lambda *args, **kwargs: draws.append((args, kwargs))
 
-  state = _cluster_state(ev_mode_valid=True, ev_mode_active=True)
+  state = _cluster_state(ev_mode_valid=True, ev_mode_active=True, driving_mode=2)
   renderer._draw_navi_left_band(state, None, {})
 
   assert draws == []

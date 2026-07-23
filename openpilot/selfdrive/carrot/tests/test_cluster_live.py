@@ -56,3 +56,22 @@ def test_live_deceleration_override_adds_source_origin(desired_source, expected_
   assert decorated.cruise_override_kph == 55.0
   assert decorated.cruise_override_label == expected_label
   assert decorated.cruise_override_color_mode == 2
+
+
+@pytest.mark.parametrize(
+  ("alive", "valid", "expected"),
+  ((True, True, 2), (True, False, None), (False, True, None), (False, False, None)),
+)
+def test_live_driving_mode_requires_alive_valid_longitudinal_plan(alive, valid, expected) -> None:
+  source = object.__new__(OpenpilotLiveSource)
+  source._max_lateral_accel = 3.0
+  source._energy_gauge_label = "fuel"
+  source._carrot_navi_media = None
+  source._current_carrot_navi = lambda _now: None
+  source._service_data = lambda _service: None
+  source._service_alive = lambda service: alive if service == "longitudinalPlan" else False
+  source._service_valid = lambda service: valid if service == "longitudinalPlan" else True
+
+  decorated = source._with_live_hud_state(replace(standby_state(), driving_mode=2))
+
+  assert decorated.driving_mode == expected

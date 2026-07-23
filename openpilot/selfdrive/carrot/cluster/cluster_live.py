@@ -396,6 +396,13 @@ class OpenpilotLiveSource:
         cruise_override_kph = None
         cruise_override_label = None
         cruise_override_color_mode = 0
+        driving_mode = (
+            state.driving_mode
+            if state.driving_mode in (1, 2, 3, 4)
+            and self._service_alive("longitudinalPlan")
+            and self._service_valid("longitudinalPlan")
+            else None
+        )
         if state.cruise_kph is not None and state.cruise_display_state != "off":
             # Keep this priority and the thresholds in sync with mici's SetSpeedOverride.
             longitudinal_plan = self._service_data("longitudinalPlan")
@@ -426,6 +433,7 @@ class OpenpilotLiveSource:
             fuel_gauge=fuel_gauge,
             energy_gauge_label=energy_gauge_label,
             urea_gauge=urea_gauge,
+            driving_mode=driving_mode,
             cruise_override_kph=cruise_override_kph,
             cruise_override_label=cruise_override_label,
             cruise_override_color_mode=cruise_override_color_mode,
@@ -505,7 +513,7 @@ class OpenpilotLiveSource:
         elif service == "carrotNavi":
             self._update_carrot_navi(data)
         elif service == "longitudinalPlan":
-            self.parser._update_longitudinal_plan(data)
+            self.parser._update_longitudinal_plan(data, self._service_valid(service))
         elif service == "controlsState":
             self.parser._update_controls_state(data)
         elif service == "selfdriveState":
