@@ -423,6 +423,15 @@
             "MaxAngleFrames",
             "SpeedFromPCM"
           ]
+        },
+        {
+          "id": "VEH_DEVICE",
+          "ko": "기기 하드웨어",
+          "en": "Device Hardware",
+          "zh": "设备硬件",
+          "params": [
+            "HardwareC3xLite"
+          ]
         }
       ]
     },
@@ -2440,6 +2449,24 @@
       "max": 1,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "HardwareC3xLite",
+      "title": "C3X Lite 하드웨어",
+      "descr": "C3X Lite에서만 켜세요. 스피커·앰프 대신 GPIO 부저를 사용하며 오디오·로그 기록 프로세스를 끕니다. 변경 후 기기를 재부팅하세요.",
+      "egroup": "START",
+      "etitle": "C3X Lite Hardware",
+      "edescr": "Enable only on C3X Lite. Uses the GPIO buzzer instead of the speaker/amplifier and disables audio and logging processes. Reboot the device after changing.",
+      "cgroup": "启动设置",
+      "ctitle": "C3X Lite 硬件",
+      "cdescr": "仅在 C3X Lite 上启用。使用 GPIO 蜂鸣器代替扬声器/功放，并停用音频和日志记录进程。更改后请重启设备。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "시작",

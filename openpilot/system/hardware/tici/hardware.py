@@ -22,6 +22,11 @@ NetworkType = log.DeviceState.NetworkType
 NetworkStrength = log.DeviceState.NetworkStrength
 
 
+def is_c3x_lite() -> bool:
+  from openpilot.common.params import Params
+  return Params().get_bool("HardwareC3xLite")
+
+
 def affine_irq(val, action):
   irqs = get_irqs_for_action(action)
   if len(irqs) == 0:
@@ -61,7 +66,9 @@ def get_default_route_iface():
 class Tici(HardwareBase):
   @cached_property
   def amplifier(self):
-    if self.get_device_type() == "mici":
+    # C3X Lite has no audio output hardware. Avoid probing the missing
+    # amplifier, since the normal I2C retry backoff delays startup.
+    if self.get_device_type() == "mici" or is_c3x_lite():
       return None
     return Amplifier()
 
