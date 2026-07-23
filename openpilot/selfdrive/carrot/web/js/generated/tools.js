@@ -31,7 +31,6 @@
     <span class="web-settings-row__copy">
       <span class="web-settings-row__title-line">
         <span class="web-settings-row__title">${escapeHtml(t)}</span>
-        ${s?`<span class="chip web-settings-row__lock">${escapeHtml(s)}</span>`:""}
       </span>
       ${e?`<span class="web-settings-row__desc">${escapeHtml(e)}</span>`:""}
     </span>`}function ls(t){if(t?.component)return globalThis.WebSettingsComponents?.render?.(t.component,t)||"";let e=An(t)||(t?.type==="action"?{}:null);if(!e)return"";let s=k(t.titleKey),a=k(t.descKey),i=rs(t),l=t.disabled===!0||!!i;if(e.type==="bool"){let p=l?!1:!!bt(t);return`

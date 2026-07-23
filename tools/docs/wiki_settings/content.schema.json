@@ -1,0 +1,501 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ajouatom/openpilot/blob/carrot-wip/tools/docs/wiki_settings/content.schema.json",
+  "title": "Carrot Wiki published setting content",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "source",
+    "locale",
+    "identity",
+    "sections",
+    "notices",
+    "relations",
+    "lifecycle",
+    "review"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "locale": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+    },
+    "identity": {
+      "$ref": "#/$defs/identity"
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "contains": {
+        "type": "object",
+        "required": ["kind"],
+        "properties": {
+          "kind": {
+            "const": "overview"
+          }
+        }
+      },
+      "minContains": 1,
+      "maxContains": 1,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/overviewSection"
+          },
+          {
+            "$ref": "#/$defs/behaviorSection"
+          },
+          {
+            "$ref": "#/$defs/usageSection"
+          },
+          {
+            "$ref": "#/$defs/referenceSection"
+          }
+        ]
+      }
+    },
+    "scope": {
+      "$ref": "#/$defs/scope"
+    },
+    "notices": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/$defs/notice"
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relation"
+      }
+    },
+    "media": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/media"
+      }
+    },
+    "lifecycle": {
+      "$ref": "#/$defs/lifecycle"
+    },
+    "review": {
+      "$ref": "#/$defs/review"
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalogCommit",
+        "wikiCommit",
+        "generatedAt",
+        "contentHash"
+      ],
+      "properties": {
+        "catalogCommit": {
+          "$ref": "#/$defs/commit"
+        },
+        "wikiCommit": {
+          "$ref": "#/$defs/commit"
+        },
+        "generatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "param",
+        "title",
+        "summary"
+      ],
+      "properties": {
+        "param": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        }
+      }
+    },
+    "tokenBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "token",
+        "markdown"
+      ],
+      "properties": {
+        "token": {
+          "type": "string"
+        },
+        "markdown": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000
+        }
+      }
+    },
+    "overviewSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "blocks"
+      ],
+      "properties": {
+        "kind": {
+          "const": "overview"
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/tokenBlock"
+              },
+              {
+                "properties": {
+                  "token": {
+                    "enum": [
+                      "overview.type",
+                      "overview.default",
+                      "overview.range",
+                      "overview.step",
+                      "overview.unit",
+                      "overview.options",
+                      "overview.menu",
+                      "overview.status"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "behaviorSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "blocks"
+      ],
+      "properties": {
+        "kind": {
+          "const": "behavior"
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/tokenBlock"
+              },
+              {
+                "properties": {
+                  "token": {
+                    "enum": [
+                      "behavior.change",
+                      "behavior.conditions",
+                      "behavior.scope"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "usageSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "blocks"
+      ],
+      "properties": {
+        "kind": {
+          "const": "usage"
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/tokenBlock"
+              },
+              {
+                "properties": {
+                  "token": {
+                    "enum": [
+                      "usage.adjust",
+                      "usage.apply",
+                      "usage.verify",
+                      "usage.recover",
+                      "usage.restart"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "referenceSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "blocks"
+      ],
+      "properties": {
+        "kind": {
+          "const": "reference"
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/tokenBlock"
+              },
+              {
+                "properties": {
+                  "token": {
+                    "enum": [
+                      "reference.example",
+                      "reference.technical"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "vehicles": {
+          "$ref": "#/$defs/stringList"
+        },
+        "hardware": {
+          "$ref": "#/$defs/stringList"
+        },
+        "software": {
+          "$ref": "#/$defs/stringList"
+        },
+        "regions": {
+          "$ref": "#/$defs/stringList"
+        },
+        "modes": {
+          "$ref": "#/$defs/stringList"
+        },
+        "connections": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
+    },
+    "notice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level",
+        "section",
+        "markdown"
+      ],
+      "properties": {
+        "level": {
+          "enum": [
+            "NOTE",
+            "TIP",
+            "IMPORTANT",
+            "WARNING",
+            "CAUTION"
+          ]
+        },
+        "section": {
+          "enum": [
+            "overview",
+            "behavior",
+            "usage",
+            "reference"
+          ]
+        },
+        "markdown": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "target"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "related",
+            "depends_on",
+            "conflicts_with",
+            "overrides",
+            "replaces"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "url",
+        "alt"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "image",
+            "video",
+            "gif",
+            "diagram"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "alt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "caption": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "durationSeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "active",
+            "experimental",
+            "deprecated"
+          ]
+        },
+        "introduced": {
+          "type": "string",
+          "minLength": 1
+        },
+        "changed": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reviewedForCommit"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "current",
+            "needs_review"
+          ]
+        },
+        "reviewedForCommit": {
+          "$ref": "#/$defs/commit"
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "current"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "reviewedAt"
+        ]
+      }
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{7,40}$"
+    },
+    "stringList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      }
+    }
+  }
+}

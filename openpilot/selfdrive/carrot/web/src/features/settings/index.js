@@ -12,8 +12,20 @@ import { createSettingsEntryController } from "./entry_controller.js";
 import {
   createSettingDocumentationClient,
   normalizeSettingDocLanguage,
-  renderSettingDocMarkdown,
+  resolveSettingDocumentationIndexUrl,
 } from "./documentation.js";
+import {
+  createSettingContextPanel,
+  resolveSettingContextTabIndex,
+  SETTING_CONTEXT_HISTORY_FETCH_LIMIT,
+  SETTING_CONTEXT_HISTORY_PREVIEW_LIMIT,
+  SETTING_CONTEXT_TABS,
+} from "./context_panel.js";
+import {
+  createSettingDocumentationView,
+  renderSettingDocumentationAst,
+  settingDocumentationPlainText,
+} from "./documentation_renderer.js";
 import {
   CHANGE_SOURCE_LABEL_KEYS,
   formatChangeTimestamp,
@@ -69,6 +81,7 @@ export function installSettingsRuntimeFacade(target = globalThis, options = {}) 
   const aux = createSettingsAuxState(options.auxLoaders || createSettingsAuxLoaders(normalizedTarget));
   const documentation = createSettingDocumentationClient({
     fetchImpl: typeof normalizedTarget.fetch === "function" ? normalizedTarget.fetch.bind(normalizedTarget) : null,
+    indexUrl: resolveSettingDocumentationIndexUrl(),
   });
   const derivedModelMemo = createSettingsDerivedModelMemo();
   store.subscribe((state) => {
@@ -90,8 +103,18 @@ export function installSettingsRuntimeFacade(target = globalThis, options = {}) 
     docs: Object.freeze({
       load: documentation.load,
       clear: documentation.clear,
+      diagnostics: documentation.diagnostics,
       normalizeLanguage: normalizeSettingDocLanguage,
-      renderMarkdown: renderSettingDocMarkdown,
+      createView: createSettingDocumentationView,
+      renderAst: renderSettingDocumentationAst,
+      plainText: settingDocumentationPlainText,
+    }),
+    context: Object.freeze({
+      create: createSettingContextPanel,
+      resolveTabIndex: resolveSettingContextTabIndex,
+      tabs: SETTING_CONTEXT_TABS,
+      historyFetchLimit: SETTING_CONTEXT_HISTORY_FETCH_LIMIT,
+      historyPreviewLimit: SETTING_CONTEXT_HISTORY_PREVIEW_LIMIT,
     }),
     profiles: Object.freeze({
       selectApplyValues: selectProfileApplyValues,

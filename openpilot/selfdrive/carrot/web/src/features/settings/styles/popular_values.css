@@ -174,19 +174,34 @@
   width: 100%;
   max-width: 260px;
   height: 5px;
+  appearance: none;
   overflow: hidden;
+  border: 0;
   border-radius: 999px;
   background: color-mix(in srgb, var(--md-on-surface-var) 10%, transparent);
 }
 
-.setting-popular-detail__bar::after {
-  content: "";
-  display: block;
-  width: var(--setting-popular-width, 0%);
-  height: 100%;
+.setting-popular-detail__bar::-webkit-progress-bar {
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--md-on-surface-var) 10%, transparent);
+}
+
+.setting-popular-detail__bar::-webkit-progress-value {
   border-radius: inherit;
   background: color-mix(in srgb, var(--md-primary) 52%, var(--md-on-surface-var));
   opacity: 0.78;
+}
+
+.setting-popular-detail__bar::-moz-progress-bar {
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--md-primary) 52%, var(--md-on-surface-var));
+  opacity: 0.78;
+}
+
+.setting-popular-detail__updated {
+  margin-top: var(--sp-sm);
+  color: color-mix(in srgb, var(--md-on-surface-var) 54%, transparent);
+  font-size: var(--fs-label-sm);
 }
 
 .setting-popular-detail__empty {

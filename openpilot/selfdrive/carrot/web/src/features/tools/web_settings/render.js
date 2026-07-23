@@ -72,7 +72,6 @@ function renderWebSettingsCopy(title, desc, lockLabel = "") {
     <span class="web-settings-row__copy">
       <span class="web-settings-row__title-line">
         <span class="web-settings-row__title">${escapeHtml(title)}</span>
-        ${lockLabel ? `<span class="chip web-settings-row__lock">${escapeHtml(lockLabel)}</span>` : ""}
       </span>
       ${desc ? `<span class="web-settings-row__desc">${escapeHtml(desc)}</span>` : ""}
     </span>`;

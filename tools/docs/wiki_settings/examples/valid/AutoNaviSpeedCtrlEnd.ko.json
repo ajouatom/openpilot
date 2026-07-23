@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "catalogCommit": "f4d55966a5029b69c072a2e8cf345dd5c700be87",
+    "wikiCommit": "4df4ce7fa70c12cb59dc130d28994cc1b194115a",
+    "generatedAt": "2026-07-23T12:00:00+09:00",
+    "contentHash": "c124becabeea4efe96493a521821efc4a2b2e989b4449fbaf47a72c8535f739a"
+  },
+  "locale": "ko",
+  "identity": {
+    "param": "AutoNaviSpeedCtrlEnd",
+    "title": "과속카메라 감속 완료 시간",
+    "summary": "과속카메라에 접근할 때 목표속도에 도달하는 시점을 조정합니다."
+  },
+  "sections": [
+    {
+      "kind": "overview",
+      "blocks": [
+        {
+          "token": "overview.type",
+          "markdown": "숫자"
+        },
+        {
+          "token": "overview.default",
+          "markdown": "`6초`"
+        },
+        {
+          "token": "overview.range",
+          "markdown": "`3~20초`"
+        },
+        {
+          "token": "overview.menu",
+          "markdown": "설정 > 주행 제어 > 속도·감속 > 과속카메라"
+        }
+      ]
+    },
+    {
+      "kind": "behavior",
+      "blocks": [
+        {
+          "token": "behavior.change",
+          "markdown": "**높이면:** 더 일찍 감속을 완료합니다. **낮추면:** 카메라에 더 가까워진 뒤 감속을 완료합니다."
+        }
+      ]
+    },
+    {
+      "kind": "usage",
+      "blocks": [
+        {
+          "token": "usage.adjust",
+          "markdown": "감속이 너무 늦거나 지나치게 일찍 끝날 때 조금씩 조정합니다."
+        },
+        {
+          "token": "usage.verify",
+          "markdown": "변경 후 같은 종류의 감속 구간에서 동작을 확인합니다."
+        }
+      ]
+    }
+  ],
+  "notices": [
+    {
+      "level": "NOTE",
+      "section": "reference",
+      "markdown": "카메라 통과 후 시간을 의미하지 않습니다."
+    }
+  ],
+  "relations": [],
+  "lifecycle": {
+    "status": "active"
+  },
+  "review": {
+    "status": "current",
+    "reviewedForCommit": "f4d55966a5029b69c072a2e8cf345dd5c700be87",
+    "reviewedAt": "2026-07-23T12:00:00+09:00"
+  }
+}
