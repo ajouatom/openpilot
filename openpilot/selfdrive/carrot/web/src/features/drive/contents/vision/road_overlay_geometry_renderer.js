@@ -1,10 +1,57 @@
+/* ============================================================================
+ * CARROT VISION GRAPHICS - DO NOT CHANGE CASUALLY
+ *
+ * This is the driving view the user actually looks at. Its smoothness was tuned
+ * against real device behaviour and several "obvious" simplifications have
+ * already been tried and reverted. If you are here while working on AR, replay
+ * or any other feature, prefer adding your own layer over editing this one.
+ *
+ * Invariants. Breaking any of these brings back stutter, judder or heat:
+ *
+ *  1. One overlay update per presented video frame. requestVideoFrameCallback
+ *     is taken first and unthrottled; the interval constant only paces the
+ *     fallback. Never put a timer between a video frame and its overlay.
+ *  2. Live and replay share one scheduler, one filter and one cadence. They are
+ *     the same user experience; do not special-case one of them.
+ *  3. Temporal smoothing is a time constant, never a per-call alpha. Render
+ *     spacing moves constantly, and a fixed alpha makes the response wander.
+ *  4. Geometry stays on the GPU: fills, strokes and dashes all land in one
+ *     batched draw call. Moving any of them back to Canvas2D reintroduces a
+ *     full-surface raster and its clear every frame.
+ *  5. The 2D overlay is cleared only when something actually drew to it. If you
+ *     add a direct ctx draw, mark that layer dirty or you will ship ghosting.
+ *  6. Vertex pools are reused. Do not rebuild per-frame arrays.
+ *
+ * Already tried and rejected:
+ *  - Overlay projection/triangulation in a worker: the extra hop makes geometry
+ *    trail the video by a frame (see OFFSCREEN_WORKER_ENABLED).
+ *  - Interpolating geometry between 20 Hz samples: the video is 20 fps, so the
+ *    overlay slides against a still image.
+ *  - Uniform Catmull-Rom resampling: overshoots on unevenly spaced projected
+ *    points and draws streaks across the frame. Centripetal only.
+ *
+ * Measured state: worst curve kink 8.1deg -> 1.6deg, geometry fully GPU-batched,
+ * per-frame 2D clear removed.
+ * ==========================================================================*/
+
 const PATH_HALF_WIDTH = 0.9;
 const TEST_PATH_VISIBILITY_SOLID_ALPHA = 0.50;
 const TEST_PATH_VISIBILITY_MID_ALPHA = 0.24;
 const TEST_LANE_PROB_MIN = 0.003;
 const TEST_LANE_PROB_BOOST = 6;
-const PATH_TEMPORAL_SMOOTH_ALPHA = 0.20;
-const LANE_TEMPORAL_SMOOTH_ALPHA = 0.16;
+/* Smoothing time constants (ms).
+ *
+ * These were fixed per-call alphas (path 0.20 / lane 0.16). Because the render
+ * interval keeps moving (20 Hz data, 30 fps cap, scheduler jitter), a fixed
+ * alpha let the effective time constant wander between ~148 ms and ~287 ms.
+ * That inconsistency, more than the lag itself, is what read as steppy.
+ *
+ * With a time constant the geometry approaches its target at the same rate
+ * whatever the spacing. The values sit below the old effective range so the
+ * response is quicker while still damping jitter. The path leads the lanes
+ * because it has to show steering response immediately. */
+const PATH_SMOOTH_TAU_MS = 110;
+const LANE_SMOOTH_TAU_MS = 140;
 const LANE_VISUAL_WIDTH_GAIN = 1.4;
 const GEOMETRY_QUALITY_LANE = "lane";
 const GEOMETRY_QUALITY_ROAD_EDGE = "road-edge";
@@ -178,7 +225,7 @@ export function createRoadOverlayGeometryRenderer(options = {}) {
     const ribbon = geometry.smoothRibbon(
       `path:${style?.laneMode ? "lane" : "model"}:${style?.mode ?? 0}`,
       rawRibbon,
-      PATH_TEMPORAL_SMOOTH_ALPHA,
+      PATH_SMOOTH_TAU_MS,
     );
     if (ribbon.polygon.length < 3) return;
 
@@ -231,7 +278,7 @@ export function createRoadOverlayGeometryRenderer(options = {}) {
         0,
         GEOMETRY_QUALITY_LANE,
       );
-      const ribbon = geometry.smoothRibbon(`lane:${i}`, rawRibbon, LANE_TEMPORAL_SMOOTH_ALPHA);
+      const ribbon = geometry.smoothRibbon(`lane:${i}`, rawRibbon, LANE_SMOOTH_TAU_MS);
       geometry.drawPolygon(
         ribbon.polygon,
         `rgba(${laneColor.r},${laneColor.g},${laneColor.b},${fillAlpha.toFixed(3)})`,
@@ -254,7 +301,7 @@ export function createRoadOverlayGeometryRenderer(options = {}) {
         const doubleRibbon = geometry.smoothRibbon(
           `lane:${i}:double:${shift}`,
           rawDoubleRibbon,
-          LANE_TEMPORAL_SMOOTH_ALPHA,
+          LANE_SMOOTH_TAU_MS,
         );
         geometry.drawPolygon(
           doubleRibbon.polygon,

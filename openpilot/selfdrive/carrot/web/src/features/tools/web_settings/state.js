@@ -1,5 +1,11 @@
 "use strict";
 
+import {
+  getWebSettingCapabilitySpec as resolveWebSettingCapabilitySpec,
+  readWebCapabilityEnabled,
+  readWebSettingUnlocked,
+} from "../../../shared/web/capabilities.js";
+
 // Web settings state + API. The backend spec (bootstrap.webSettingsSpec) is the
 // single source of truth for each key's type/default; this module derives its
 // defaults and normalization from it instead of re-declaring them. Server-backed
@@ -14,8 +20,13 @@ const WEB_PRIMARY_PAGES = new Set(["carrot", "setting", "tools", "logs", "termin
 const WEB_SETTINGS_SPEC = Array.isArray(window.__CARROT_BOOTSTRAP__?.webSettingsSpec)
   ? window.__CARROT_BOOTSTRAP__.webSettingsSpec
   : [];
+const WEB_CAPABILITIES_SPEC = Array.isArray(window.__CARROT_BOOTSTRAP__?.webCapabilitiesSpec)
+  ? window.__CARROT_BOOTSTRAP__.webCapabilitiesSpec
+  : [];
 const WEB_SPEC_BY_KEY = Object.create(null);
 WEB_SETTINGS_SPEC.forEach((field) => { if (field && field.key) WEB_SPEC_BY_KEY[field.key] = field; });
+window.CarrotWebSettingsSpec = WEB_SETTINGS_SPEC;
+window.CarrotWebCapabilitiesSpec = WEB_CAPABILITIES_SPEC;
 
 const WEB_SETTING_DEFAULTS = Object.create(null);
 WEB_SETTINGS_SPEC.forEach((field) => { if (field && field.key) WEB_SETTING_DEFAULTS[field.key] = field.default; });
@@ -50,7 +61,9 @@ function normalizeWebSettingValue(key, value) {
 }
 
 const webSettingsState = {};
+const webCapabilitiesState = {};
 window.CarrotWebSettingsState = webSettingsState;
+window.CarrotWebCapabilitiesState = webCapabilitiesState;
 
 let webSettingsLoaded = false;
 let webSettingsLoadPromise = null;
@@ -88,9 +101,26 @@ function applyWebSettings(settings = {}) {
   return webSettingsState;
 }
 
+function applyWebCapabilities(capabilities = {}, settings = webSettingsState) {
+  WEB_CAPABILITIES_SPEC.forEach((descriptor) => {
+    if (!descriptor?.id) return;
+    const value = Object.prototype.hasOwnProperty.call(capabilities, descriptor.id)
+      ? capabilities[descriptor.id]
+      : settings?.[descriptor.settingKey];
+    webCapabilitiesState[descriptor.id] = Boolean(value);
+  });
+  return webCapabilitiesState;
+}
+
 function changedWebSettingKeys(previous = {}) {
   return webSettingKnownKeys().filter((key) => (
     !Object.is(previous[key], webSettingsState[key])
+  ));
+}
+
+function changedWebCapabilityIds(previous = {}) {
+  return Object.keys(webCapabilitiesState).filter((id) => (
+    !Object.is(previous[id], webCapabilitiesState[id])
   ));
 }
 
@@ -110,7 +140,27 @@ function dispatchWebSettingsChange(keys, detail = {}) {
   return true;
 }
 
+function dispatchWebCapabilitiesChange(ids, detail = {}) {
+  const changedIds = [...new Set((ids || []).filter((id) => typeof id === "string" && id))];
+  if (!changedIds.length) return false;
+  window.dispatchEvent(new CustomEvent("carrot:webcapabilitieschange", {
+    detail: {
+      ...detail,
+      id: changedIds[0],
+      ids: changedIds,
+      value: webCapabilitiesState[changedIds[0]],
+      values: Object.fromEntries(changedIds.map((id) => [id, webCapabilitiesState[id]])),
+      capabilities: { ...webCapabilitiesState },
+    },
+  }));
+  return true;
+}
+
 applyWebSettings(window.__CARROT_BOOTSTRAP__?.webSettings || {});
+applyWebCapabilities(
+  window.__CARROT_BOOTSTRAP__?.webCapabilities || {},
+  webSettingsState,
+);
 
 async function requestWebSettings(method = "GET", body = null) {
   const options = { method };
@@ -135,11 +185,16 @@ async function loadWebSettings(force = false) {
   webSettingsLoadPromise = requestWebSettings("GET")
     .then((payload) => {
       const previous = { ...webSettingsState };
+      const previousCapabilities = { ...webCapabilitiesState };
       webSettingsLoaded = true;
       const settings = applyWebSettings(payload?.settings || {});
+      applyWebCapabilities(payload?.capabilities || {}, settings);
       dispatchWebSettingsChange(changedWebSettingKeys(previous), {
         source: "load",
         pending: false,
+      });
+      dispatchWebCapabilitiesChange(changedWebCapabilityIds(previousCapabilities), {
+        source: "load",
       });
       return settings;
     })
@@ -155,6 +210,18 @@ function getWebSettingByKey(key, fallback = undefined) {
     return fallback;
   }
   return webSettingsState[key] ?? fallback ?? WEB_SETTING_DEFAULTS[key];
+}
+
+function isWebCapabilityEnabled(capabilityId) {
+  return readWebCapabilityEnabled(capabilityId, window);
+}
+
+function isWebSettingUnlocked(key) {
+  return readWebSettingUnlocked(key, window);
+}
+
+function getWebSettingCapabilitySpec(key) {
+  return resolveWebSettingCapabilitySpec(key, window);
 }
 
 async function setWebSettingsByKeys(updates = {}) {
@@ -188,10 +255,15 @@ async function setWebSettingsByKeys(updates = {}) {
   try {
     const payload = await requestWebSettings("POST", normalizedUpdates);
     const beforeServer = { ...webSettingsState };
+    const beforeCapabilities = { ...webCapabilitiesState };
     applyWebSettings(payload?.settings || normalizedUpdates);
+    applyWebCapabilities(payload?.capabilities || {}, webSettingsState);
     dispatchWebSettingsChange([...keys, ...changedWebSettingKeys(beforeServer)], {
       source: "server",
       pending: false,
+    });
+    dispatchWebCapabilitiesChange(changedWebCapabilityIds(beforeCapabilities), {
+      source: "server",
     });
   } catch (err) {
     Object.assign(webSettingsState, previous);
@@ -240,6 +312,9 @@ window.getWebSettingByKey = getWebSettingByKey;
 window.setWebSettingByKey = setWebSettingByKey;
 window.setWebSettingsByKeys = setWebSettingsByKeys;
 window.registerWebSettingsGuard = registerWebSettingsGuard;
+window.isWebCapabilityEnabled = isWebCapabilityEnabled;
+window.isWebSettingUnlocked = isWebSettingUnlocked;
+window.getWebSettingCapabilitySpec = getWebSettingCapabilitySpec;
 window.getWebStartPage = getWebStartPage;
 window.getWebStartPageSetting = getWebStartPageSetting;
 window.setWebStartPage = setWebStartPage;
@@ -247,14 +322,20 @@ window.recordWebLastPage = recordWebLastPage;
 
 export {
   WEB_SETTINGS_SPEC,
+  WEB_CAPABILITIES_SPEC,
   WEB_SPEC_BY_KEY,
   WEB_SETTING_DEFAULTS,
   webSettingsState,
+  webCapabilitiesState,
   webSettingKnownKeys,
   normalizeWebSettingValue,
   applyWebSettings,
+  applyWebCapabilities,
   loadWebSettings,
   getWebSettingByKey,
+  isWebCapabilityEnabled,
+  isWebSettingUnlocked,
+  getWebSettingCapabilitySpec,
   setWebSettingByKey,
   setWebSettingsByKeys,
   registerWebSettingsGuard,

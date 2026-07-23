@@ -13,14 +13,14 @@
       "kind": "bundle",
       "source": "src/entries/drive.js",
       "path": "js/generated/drive.js",
-      "hash": "1b34d57de8a66aad8ec9a701fa172421e844eab0d305a4810aaec97eb5ba9112"
+      "hash": "c410cc83a302a425014a5be9bf26daf296d5bc9f3fc1bd5652ac7ccedbb759e5"
     },
     {
       "id": "replay.runtime",
       "kind": "bundle",
       "source": "src/entries/replay.js",
       "path": "js/generated/replay.js",
-      "hash": "aec16edea7780e163369d4ece109bdf7156da6259ca18ac43577df7217446e8f"
+      "hash": "4cbaae72cbb30b6539763da870737ec46c6a53c8b5ac5527cd4459560fc853fc"
     },
     {
       "id": "settings.store",
@@ -34,14 +34,14 @@
       "kind": "bundle",
       "source": "src/entries/tools.js",
       "path": "js/generated/tools.js",
-      "hash": "caeb7581f5f10a30b1fe5e505509d2014f1f24be30343a96c6d40649e9e879dd"
+      "hash": "dc9f4435afd20394b34971e2af8d7fb4d088525010d5ee1ca65b509807e05ae4"
     },
     {
       "id": "logs.runtime",
       "kind": "bundle",
       "source": "src/entries/logs.js",
       "path": "js/generated/logs.js",
-      "hash": "9703c5837ee67d3f57987b0d412120400b14660fe15299c388f8017a1340d1cf"
+      "hash": "7bae37baf28fac8db656991bbe9fa135effe8976fbfb0de1dbb7d29c9a03de3d"
     },
     {
       "id": "terminal.runtime",
@@ -97,7 +97,7 @@
       "kind": "bundle",
       "source": "src/entries/drive.css",
       "path": "css/generated/drive.css",
-      "hash": "636f271958730ff8bcf492e1817d5af885134b9c69a6ca3f64d9e46115c390a5"
+      "hash": "9724c053f25b6b40d41ce17d7a4d2733bfab55b13dbf319aa961925c907145e4"
     },
     {
       "id": "replay.styles",
@@ -111,21 +111,21 @@
       "kind": "bundle",
       "source": "src/entries/settings.css",
       "path": "css/generated/settings.css",
-      "hash": "b3a0a8053d55b3c5d7c9a0e582d2ac88de1ffe4161e4eb66dd8683358242be5c"
+      "hash": "2feeefc34dc42958845163cdd4e0eba50f6d07d4e10fab37f00959eb5d2ca0cc"
     },
     {
       "id": "tools.styles",
       "kind": "bundle",
       "source": "src/entries/tools.css",
       "path": "css/generated/tools.css",
-      "hash": "749a308e1870eeb1e949ae98e96590512b7cc92f8301ee2a905f03ded32d4c35"
+      "hash": "eb58da5edcc129d39debda032d6f80ecd1d05b5c1d919d018ed7d8dca703cae2"
     },
     {
       "id": "logs.styles",
       "kind": "bundle",
       "source": "src/entries/logs.css",
       "path": "css/generated/logs.css",
-      "hash": "5e927e982e391d57fdac502b3c8d90f39c48a39106ea8341a7596603d3473b8a"
+      "hash": "429e840b0f7f84867d6e7e5afaf5cf617d578b776c33937f688010bdd0b20e1c"
     },
     {
       "id": "terminal.styles",
@@ -164,7 +164,7 @@
       "id": "drive.vision.ar.worker",
       "kind": "worker",
       "path": "js/realtime/drive_contents/vision/ar/worker.js",
-      "hash": "8c24829c4c8239b68105d3b0239967d8716bb93f1c0ecf4970d4b0f0d1ca275e"
+      "hash": "cac13c14439a3c89590ff7f6e529e02e17c7fd449bb65c9fa3554000f933a7b7"
     },
     {
       "id": "replay.sensor.worker",
@@ -182,7 +182,13 @@
       "id": "replay.log.worker",
       "kind": "worker",
       "path": "js/realtime/replay_log_worker.js",
-      "hash": "9bf3cf39c1687b39067f9bf7a376ec150c7fc2f54990e94a53502a1fe886fef7"
+      "hash": "84db58b1a03c7f8a631f9a43acbe96bb264fbfbce67d78a7dc47852bcaed5ef2"
+    },
+    {
+      "id": "logs.route-summary.worker",
+      "kind": "worker",
+      "path": "js/realtime/route_summary_worker.js",
+      "hash": "bcf1c6f3144d441d083c8571bf1156213e140a2a8397e663d22da5993721923e"
     },
     {
       "id": "replay.video.worker",

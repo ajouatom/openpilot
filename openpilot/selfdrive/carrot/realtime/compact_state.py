@@ -90,22 +90,39 @@ NAVI_SPEED_SCHEMA = (
   ("sdiType", "i32"),
   ("sdiDistanceM", "i32"),
   ("sdiSpeedLimitKph", "i16"),
+  ("sdiSectionType", "i32"),
+  ("sdiBlockType", "i32"),
+  ("sdiBlockSpeedKph", "i16"),
+  ("sdiBlockDistanceM", "i32"),
+  ("secondarySdiPresent", "bool"),
+  ("secondarySdiType", "i32"),
+  ("secondarySdiDistanceM", "i32"),
+  ("secondarySdiSpeedLimitKph", "i16"),
+  ("secondarySdiSectionType", "i32"),
+  ("secondarySdiBlockType", "i32"),
+  ("secondarySdiBlockSpeedKph", "i16"),
+  ("secondarySdiBlockDistanceM", "i32"),
   ("sectionPresent", "bool"),
   ("sectionActive", "bool"),
   ("sectionSpeedLimitKph", "i16"),
   ("sectionAverageKph", "f32"),
+  ("sectionOverallAverageKph", "f32"),
   ("sectionRemainingDistanceM", "f32"),
+  ("sectionRemainingTimeSec", "i32"),
   ("sectionProgress", "f32"),
+  ("sectionSuspended", "bool"),
+  ("sectionOffRoute", "bool"),
 )
 
 NAVI_SIGNAL_SCHEMA = (
   ("visible", "bool"),
   ("distanceM", "i32"),
-  ("redValid", "bool"), ("redOn", "bool"),
-  ("leftValid", "bool"), ("leftOn", "bool"),
-  ("greenValid", "bool"), ("greenOn", "bool"),
-  ("rightValid", "bool"), ("rightOn", "bool"),
-  ("uturnValid", "bool"), ("uturnOn", "bool"),
+  ("redValid", "bool"), ("redOn", "bool"), ("redRemainSec", "i16"),
+  ("leftValid", "bool"), ("leftOn", "bool"), ("leftRemainSec", "i16"),
+  ("greenValid", "bool"), ("greenOn", "bool"), ("greenRemainSec", "i16"),
+  ("rightValid", "bool"), ("rightOn", "bool"), ("rightRemainSec", "i16"),
+  ("uturnValid", "bool"), ("uturnOn", "bool"), ("uturnRemainSec", "i16"),
+  ("uiCounterValid", "bool"), ("uiCounterRemainSec", "i16"),
 )
 
 NAVI_CROSSROAD_SCHEMA = (
@@ -118,6 +135,7 @@ NAVI_ROUTE_SCHEMA = (
   ("present", "bool", ("meta", "present")),
   ("remainingDistanceM", "i32"),
   ("remainingTimeSec", "i32"),
+  ("movedDistanceM", "i32"),
   ("totalDistanceM", "i32"),
   ("polyline", "coord_list"),
 )
@@ -192,6 +210,11 @@ SERVICE_SCHEMAS: dict[str, tuple[int, tuple[tuple[Any, ...], ...]]] = {
     ("fuelGauge", "f32"),
     ("ureaGauge", "f32"),
     ("tpms", ("struct", TPMS_SCHEMA)),
+    # Appended (schema-evolution: keep at the end so shorter recorded frames stay
+    # decodable). Cluster parity: green EV telltale (car.capnp evModeActive@85 /
+    # evModeValid@86).
+    ("evModeValid", "bool"),
+    ("evModeActive", "bool"),
   )),
   "controlsState": (2, (
     ("enabled", "bool", ("deprecated", "enabled")),
@@ -273,6 +296,9 @@ SERVICE_SCHEMAS: dict[str, tuple[int, tuple[tuple[Any, ...], ...]]] = {
     ("xState", "i32"),
     ("trafficState", "i32"),
     ("longitudinalPlanSource", ("enum", ("cruise", "lead0", "lead1", "lead2", "e2e"))),
+    # Appended (kept at the end for schema evolution). Cluster parity: eco cruise
+    # override telltale (log.capnp longitudinalPlan.cruiseTarget@44).
+    ("cruiseTarget", "f32"),
   )),
   "modelV2": (9, (
     ("frameId", "u32"),
@@ -377,6 +403,7 @@ SERVICE_SCHEMAS: dict[str, tuple[int, tuple[tuple[Any, ...], ...]]] = {
     ("guidanceCurrent", ("struct", NAVI_GUIDANCE_SCHEMA)),
     ("guidanceNext", ("struct", NAVI_GUIDANCE_SCHEMA)),
     ("laneCurrent", ("struct", NAVI_LANE_SCHEMA)),
+    ("laneAhead", ("struct_list", NAVI_LANE_SCHEMA)),
     ("speed", ("struct", NAVI_SPEED_SCHEMA)),
     ("trafficSignal", ("struct", NAVI_SIGNAL_SCHEMA)),
     ("crossroad", ("struct", NAVI_CROSSROAD_SCHEMA)),
@@ -385,6 +412,8 @@ SERVICE_SCHEMAS: dict[str, tuple[int, tuple[tuple[Any, ...], ...]]] = {
   )),
   "livePose": (20, (
     ("orientationNED", ("struct", XYZ_MEASUREMENT_SCHEMA)),
+    ("velocityDevice", ("struct", XYZ_MEASUREMENT_SCHEMA)),
+    ("accelerationDevice", ("struct", XYZ_MEASUREMENT_SCHEMA)),
     ("angularVelocityDevice", ("struct", XYZ_MEASUREMENT_SCHEMA)),
     ("inputsOK", "bool"),
     ("posenetOK", "bool"),

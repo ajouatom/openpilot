@@ -1,13 +1,14 @@
 /* Pure 3D road-frame math for world-anchored AR markers.
  *
- * Device coordinates follow openpilot: +x forward, +y left, +z up.
+ * Road coordinates are route-local FLU: +x forward, +y left, +z up.
+ * This is deliberately not called openpilot Device, which is FRD.
  * Marker coordinates follow the approved preview: +x right, +y up, -z
  * forward. Keeping this contract in one module prevents projection, anchor
  * propagation, and Three placement from inventing different axis rules.
  */
 
 const EPSILON = 1e-9;
-const DEVICE_UP = Object.freeze([0, 0, 1]);
+const ROUTE_UP = Object.freeze([0, 0, 1]);
 
 function finite(value, fallback = 0) {
   const number = Number(value);
@@ -39,9 +40,9 @@ function normalize(value, fallback) {
   return vector.map((component) => component / length);
 }
 
-export function roadFrameFromForward(forwardValue, preferredUpValue = DEVICE_UP) {
+export function roadFrameFromForward(forwardValue, preferredUpValue = ROUTE_UP) {
   const forward = normalize(forwardValue, [1, 0, 0]);
-  let preferredUp = normalize(preferredUpValue, DEVICE_UP);
+  let preferredUp = normalize(preferredUpValue, ROUTE_UP);
 
   // Remove the forward component from up. A near-vertical path needs a
   // deterministic fallback, even though a real road should never reach it.
@@ -49,16 +50,16 @@ export function roadFrameFromForward(forwardValue, preferredUpValue = DEVICE_UP)
     component - forward[index] * dot(preferredUp, forward)
   ));
   if (Math.hypot(...up) <= EPSILON) {
-    preferredUp = Math.abs(forward[2]) < 0.9 ? DEVICE_UP : [0, 1, 0];
+    preferredUp = Math.abs(forward[2]) < 0.9 ? ROUTE_UP : [0, 1, 0];
     up = preferredUp.map((component, index) => (
       component - forward[index] * dot(preferredUp, forward)
     ));
   }
-  up = normalize(up, DEVICE_UP);
+  up = normalize(up, ROUTE_UP);
 
-  // forward x up points to the driver's right in openpilot device axes.
+  // forward x up points to the driver's right (negative y) in route FLU.
   const right = normalize(cross(forward, up), [0, -1, 0]);
-  const orthogonalUp = normalize(cross(right, forward), DEVICE_UP);
+  const orthogonalUp = normalize(cross(right, forward), ROUTE_UP);
   return Object.freeze({
     forward: Object.freeze(forward),
     right: Object.freeze(right),
@@ -80,10 +81,23 @@ export function roadFrameFromHeading(headingRad = 0, pitchRad = 0) {
 export function roadFrameForAnchor(anchor) {
   if (!anchor) return roadFrameFromHeading();
   const forward = vector3(anchor.roadForward);
-  const up = vector3(anchor.roadUp, DEVICE_UP);
+  const up = vector3(anchor.roadUp, ROUTE_UP);
   return forward
     ? roadFrameFromForward(forward, up)
     : roadFrameFromHeading(anchor.headingRad, anchor.pitchRad);
+}
+
+/**
+ * Presentation-only face frame. Route fields remain the immutable semantic
+ * direction; upright signs may add a separately bounded view-facing frame.
+ */
+export function faceFrameForAnchor(anchor) {
+  if (!anchor) return roadFrameFromHeading();
+  const forward = vector3(anchor.faceForward);
+  const up = vector3(anchor.faceUp, ROUTE_UP);
+  return forward
+    ? roadFrameFromForward(forward, up)
+    : roadFrameForAnchor(anchor);
 }
 
 /**
@@ -102,7 +116,7 @@ export function uprightRoadFrameForAnchor(anchor) {
     horizontalForward[0] = Math.cos(heading);
     horizontalForward[1] = Math.sin(heading);
   }
-  return roadFrameFromForward(horizontalForward, DEVICE_UP);
+  return roadFrameFromForward(horizontalForward, ROUTE_UP);
 }
 
 export function roadFrameFields(frame) {
@@ -116,6 +130,16 @@ export function roadFrameFields(frame) {
       normalized.forward[2],
       Math.hypot(normalized.forward[0], normalized.forward[1]),
     ),
+  });
+}
+
+export function faceFrameFields(frame) {
+  const normalized = roadFrameFromForward(frame?.forward, frame?.up);
+  return Object.freeze({
+    faceForward: normalized.forward,
+    faceRight: normalized.right,
+    faceUp: normalized.up,
+    faceHeadingRad: Math.atan2(normalized.forward[1], normalized.forward[0]),
   });
 }
 
@@ -170,7 +194,13 @@ export function constrainedBillboardAnchor(anchor, maxYawRad = Math.PI / 10) {
   const toAnchor = [finite(anchor.x), finite(anchor.y), finite(anchor.z)];
   const vertical = dot(toAnchor, frame.up);
   const planar = toAnchor.map((component, index) => component - frame.up[index] * vertical);
-  if (Math.hypot(...planar) <= EPSILON) return Object.freeze({ ...anchor });
+  if (Math.hypot(...planar) <= EPSILON) {
+    return Object.freeze({
+      ...anchor,
+      ...faceFrameFields(frame),
+      billboardYawRad: 0,
+    });
+  }
 
   const targetForward = normalize(planar, frame.forward);
   const sine = dot(frame.up, cross(frame.forward, targetForward));
@@ -184,7 +214,7 @@ export function constrainedBillboardAnchor(anchor, maxYawRad = Math.PI / 10) {
   );
   return Object.freeze({
     ...anchor,
-    ...roadFrameFields(billboardFrame),
+    ...faceFrameFields(billboardFrame),
     billboardYawRad: appliedYaw,
   });
 }

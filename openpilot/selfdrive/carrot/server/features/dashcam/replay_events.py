@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from typing import Any
 
 
-REPLAY_EVENT_INDEX_VERSION = 1
+REPLAY_EVENT_INDEX_VERSION = 2
+
+_NAV_APPROACH_THRESHOLDS_M = (300, 200, 100, 50, 20)
 
 _CATEGORY_COOLDOWN_NS = {
   "control": 500_000_000,
@@ -50,6 +52,29 @@ def _text(value: Any, name: str, default: str = "") -> str:
   return _text_value(_get(value, name, default))
 
 
+def _float(value: Any, name: str, default: float = 0.0) -> float:
+  try:
+    return float(_get(value, name, default))
+  except Exception:
+    return default
+
+
+def _present(value: Any) -> bool:
+  if value is None:
+    return False
+  meta = _get(value, "meta")
+  if meta is not None:
+    return _bool(meta, "present")
+  return _bool(value, "present")
+
+
+def _int_list(value: Any, name: str, limit: int = 16) -> tuple[int, ...]:
+  try:
+    return tuple(int(item) for item in tuple(_get(value, name, ()))[:limit])
+  except Exception:
+    return ()
+
+
 @dataclass(slots=True)
 class _IndexedEvent:
   log_mono_ns: int
@@ -79,6 +104,7 @@ class ReplayEventIndexer:
     self._last_event_ns: dict[str, int] = {}
     self._sessions: dict[str, _Session] = {}
     self._last_lane_direction = ""
+    self._has_carrot_navi = False
     self._finalized = False
 
   def _push(
@@ -439,6 +465,283 @@ class ReplayEventIndexer:
       )
       self._last_lane_direction = ""
 
+  @staticmethod
+  def _guidance_key(guidance: Any) -> str:
+    if not _present(guidance):
+      return ""
+    turn_type = _int(guidance, "turnType")
+    if _bool(guidance, "pointValid"):
+      point = f"{_float(guidance, 'latitude'):.7f},{_float(guidance, 'longitude'):.7f}"
+    else:
+      point = _text(guidance, "mainText") or _text(guidance, "roadName")
+    return f"{turn_type}|{point}"
+
+  def _push_guidance(self, guidance: Any, slot: str, log_mono_ns: int) -> None:
+    key = self._guidance_key(guidance)
+    state_key = f"carrotNavi.guidance.{slot}"
+    previous_key = str(self._previous.get(state_key) or "")
+    previous_next = str(self._previous.get("carrotNavi.guidance.next") or "")
+    self._previous[state_key] = key
+
+    if not key:
+      if previous_key:
+        self._push(
+          log_mono_ns,
+          "nav",
+          f"navigation_maneuver_{slot}_cleared",
+          dedupe_key=slot,
+          cooldown_ns=0,
+        )
+      if slot == "current":
+        self._previous.pop("carrotNavi.guidance.currentDistance", None)
+      return
+
+    distance_m = max(0, _int(guidance, "distanceM"))
+    turn_type = _int(guidance, "turnType")
+    title = _text(guidance, "mainText") or _text(guidance, "roadName")
+    road_name = _text(guidance, "roadName")
+    params = {
+      "turnType": turn_type,
+      "distanceM": distance_m,
+      "roadName": road_name,
+    }
+    if slot == "current" and key == previous_next and key != previous_key:
+      params["promotedFromNext"] = True
+    if key != previous_key:
+      self._push(
+        log_mono_ns,
+        "nav",
+        f"navigation_maneuver_{slot}",
+        params=params,
+        source_title=title,
+        source_detail=road_name if road_name != title else "",
+        dedupe_key=key,
+        cooldown_ns=0,
+      )
+
+    if slot != "current" or distance_m <= 0:
+      return
+    distance_key = "carrotNavi.guidance.currentDistance"
+    previous_distance = self._previous.get(distance_key)
+    self._previous[distance_key] = (key, distance_m)
+    thresholds: list[int] = []
+    if not isinstance(previous_distance, tuple) or previous_distance[0] != key:
+      eligible = [threshold for threshold in _NAV_APPROACH_THRESHOLDS_M if distance_m <= threshold]
+      if eligible:
+        thresholds.append(min(eligible))
+    else:
+      before_m = int(previous_distance[1])
+      if distance_m < before_m:
+        thresholds.extend(
+          threshold
+          for threshold in _NAV_APPROACH_THRESHOLDS_M
+          if before_m > threshold >= distance_m
+        )
+    for threshold_m in thresholds:
+      self._push(
+        log_mono_ns,
+        "nav",
+        "navigation_approach",
+        params={**params, "thresholdM": threshold_m},
+        source_title=title,
+        source_detail=road_name if road_name != title else "",
+        dedupe_key=f"{key}:{threshold_m}",
+        cooldown_ns=0,
+      )
+
+  def _ingest_lane_guidance(self, lane: Any, log_mono_ns: int) -> None:
+    visible = _present(lane) and _bool(lane, "visible")
+    available = _int_list(lane, "available")
+    lane_key = (
+      _int(lane, "count"),
+      _int(lane, "currentLane"),
+      _int(lane, "turnCode"),
+      available,
+    )
+    previous_visible = self._previous.get("carrotNavi.lane.visible")
+    previous_key = self._previous.get("carrotNavi.lane.key")
+    self._previous["carrotNavi.lane.visible"] = visible
+    self._previous["carrotNavi.lane.key"] = lane_key
+    if visible and (previous_visible is not True or lane_key != previous_key):
+      self._push(
+        log_mono_ns,
+        "nav",
+        "lane_guidance_shown" if previous_visible is not True else "lane_guidance_changed",
+        params={
+          "laneCount": lane_key[0],
+          "currentLane": lane_key[1],
+          "turnCode": lane_key[2],
+          "available": list(available),
+          "distanceM": max(0, _int(lane, "distanceM")),
+        },
+        dedupe_key=str(lane_key),
+        cooldown_ns=0,
+      )
+    elif not visible and previous_visible is True:
+      self._push(log_mono_ns, "nav", "lane_guidance_hidden", cooldown_ns=0)
+
+  def _ingest_speed_alert(self, speed: Any, log_mono_ns: int, secondary: bool = False) -> None:
+    prefix = "secondarySdi" if secondary else "sdi"
+    source = "secondary" if secondary else "primary"
+    present = _bool(speed, f"{prefix}Present")
+    alert_key = (
+      _int(speed, f"{prefix}Type"),
+      _int(speed, f"{prefix}SpeedLimitKph"),
+      _int(speed, f"{prefix}SectionType"),
+      _int(speed, f"{prefix}BlockType"),
+    )
+    state_key = f"carrotNavi.speedAlert.{source}"
+    previous = self._previous.get(state_key)
+    self._previous[state_key] = (present, alert_key)
+    params = {
+      "source": source,
+      "sdiType": alert_key[0],
+      "speedLimitKph": alert_key[1],
+      "distanceM": max(0, _int(speed, f"{prefix}DistanceM")),
+      "sectionType": alert_key[2],
+      "blockType": alert_key[3],
+    }
+    if present and (not isinstance(previous, tuple) or previous[0] is not True):
+      self._push(log_mono_ns, "nav", "speed_alert_shown", params=params, dedupe_key=f"{source}:{alert_key}", cooldown_ns=0)
+    elif present and isinstance(previous, tuple) and previous[0] is True and previous[1] != alert_key:
+      self._push(log_mono_ns, "nav", "speed_alert_changed", params=params, dedupe_key=f"{source}:{alert_key}", cooldown_ns=0)
+    elif not present and isinstance(previous, tuple) and previous[0] is True:
+      self._push(log_mono_ns, "nav", "speed_alert_cleared", params={"source": source}, cooldown_ns=0)
+
+  def _ingest_navigation_speed(self, speed: Any, log_mono_ns: int) -> None:
+    self._ingest_speed_alert(speed, log_mono_ns)
+    self._ingest_speed_alert(speed, log_mono_ns, secondary=True)
+
+    road_limit = _int(speed, "roadLimitKph") if _bool(speed, "roadLimitValid") else 0
+    previous_limit = self._previous.get("carrotNavi.roadLimitKph")
+    self._previous["carrotNavi.roadLimitKph"] = road_limit
+    if previous_limit is not None and previous_limit > 0 and road_limit > 0 and road_limit != previous_limit:
+      self._push(
+        log_mono_ns,
+        "nav",
+        "road_speed_limit_changed",
+        params={"from": previous_limit, "value": road_limit},
+        dedupe_key=str(road_limit),
+        cooldown_ns=0,
+      )
+
+    section_active = _bool(speed, "sectionPresent") and _bool(speed, "sectionActive")
+    previous_active = self._previous.get("carrotNavi.section.active")
+    self._previous["carrotNavi.section.active"] = section_active
+    section_params = {
+      "speedLimitKph": _int(speed, "sectionSpeedLimitKph"),
+      "averageKph": round(_float(speed, "sectionAverageKph"), 1),
+      "remainingDistanceM": round(max(0.0, _float(speed, "sectionRemainingDistanceM")), 1),
+    }
+    if section_active and previous_active is not True:
+      self._push(log_mono_ns, "nav", "section_control_started", params=section_params, cooldown_ns=0)
+    elif not section_active and previous_active is True:
+      self._push(log_mono_ns, "nav", "section_control_ended", cooldown_ns=0)
+    if section_active:
+      self._transition(
+        "carrotNavi.section.suspended", _bool(speed, "sectionSuspended"), log_mono_ns,
+        "nav", "section_control_suspended", "section_control_resumed", params=section_params,
+      )
+      self._transition(
+        "carrotNavi.section.offRoute", _bool(speed, "sectionOffRoute"), log_mono_ns,
+        "nav", "section_control_off_route", "section_control_recovered", params=section_params,
+      )
+
+  def _ingest_traffic_signal(self, signal: Any, log_mono_ns: int) -> None:
+    visible = _bool(signal, "visible")
+    signal_key = tuple(
+      (_bool(signal, f"{name}Valid"), _bool(signal, f"{name}On"))
+      for name in ("red", "left", "green", "right", "uturn")
+    )
+    previous_visible = self._previous.get("carrotNavi.signal.visible")
+    previous_key = self._previous.get("carrotNavi.signal.key")
+    self._previous["carrotNavi.signal.visible"] = visible
+    self._previous["carrotNavi.signal.key"] = signal_key
+    params = {
+      "distanceM": max(0, _int(signal, "distanceM")),
+      "red": signal_key[0][1] if signal_key[0][0] else None,
+      "left": signal_key[1][1] if signal_key[1][0] else None,
+      "green": signal_key[2][1] if signal_key[2][0] else None,
+      "right": signal_key[3][1] if signal_key[3][0] else None,
+      "uturn": signal_key[4][1] if signal_key[4][0] else None,
+    }
+    if visible and (previous_visible is not True or signal_key != previous_key):
+      self._push(
+        log_mono_ns,
+        "nav",
+        "traffic_signal_shown" if previous_visible is not True else "traffic_signal_changed",
+        params=params,
+        dedupe_key=str(signal_key),
+        cooldown_ns=0,
+      )
+    elif not visible and previous_visible is True:
+      self._push(log_mono_ns, "nav", "traffic_signal_hidden", cooldown_ns=0)
+
+  def _ingest_crossroad(self, crossroad: Any, log_mono_ns: int) -> None:
+    visible = _bool(crossroad, "visible")
+    image_code = _int(crossroad, "imageCode")
+    previous_visible = self._previous.get("carrotNavi.crossroad.visible")
+    previous_code = self._previous.get("carrotNavi.crossroad.imageCode")
+    self._previous["carrotNavi.crossroad.visible"] = visible
+    self._previous["carrotNavi.crossroad.imageCode"] = image_code
+    if visible and (previous_visible is not True or image_code != previous_code):
+      self._push(
+        log_mono_ns,
+        "nav",
+        "crossroad_guidance_shown" if previous_visible is not True else "crossroad_guidance_changed",
+        params={"imageCode": image_code, "distanceM": max(0, _int(crossroad, "distanceM"))},
+        dedupe_key=str(image_code),
+        cooldown_ns=0,
+      )
+    elif not visible and previous_visible is True:
+      self._push(log_mono_ns, "nav", "crossroad_guidance_hidden", cooldown_ns=0)
+
+  def _ingest_carrotNavi(self, value: Any, log_mono_ns: int) -> None:
+    connected = _bool(value, "connected")
+    if connected:
+      self._has_carrot_navi = True
+    previous_connected = self._previous.get("carrotNavi.connected")
+    self._previous["carrotNavi.connected"] = connected
+    if previous_connected is not None and connected != previous_connected:
+      self._push(
+        log_mono_ns,
+        "nav",
+        "navi_connected" if connected else "navi_disconnected",
+        cooldown_ns=0,
+      )
+
+    # generation advances with snapshots; only sessionId identifies a route session.
+    session_key = _text(value, "sessionId")
+    previous_session = self._previous.get("carrotNavi.session")
+    self._previous["carrotNavi.session"] = session_key
+    if previous_session and session_key and session_key != previous_session:
+      self._push(log_mono_ns, "nav", "navigation_session_changed", cooldown_ns=0)
+
+    status = _get(value, "navigationStatus")
+    active = connected and _bool(status, "guidanceActive") and _bool(status, "routePresent")
+    previous_active = self._previous.get("carrotNavi.navigation.active")
+    self._previous["carrotNavi.navigation.active"] = active
+    if active and previous_active is not True:
+      self._push(log_mono_ns, "nav", "navigation_active", cooldown_ns=0)
+    elif not active and previous_active is True:
+      self._push(log_mono_ns, "nav", "navigation_ended", cooldown_ns=0)
+
+    off_route = connected and _bool(status, "offRoute")
+    previous_off_route = self._previous.get("carrotNavi.navigation.offRoute")
+    self._previous["carrotNavi.navigation.offRoute"] = off_route
+    if off_route and previous_off_route is not True:
+      self._push(log_mono_ns, "nav", "navigation_off_route", cooldown_ns=0)
+    elif not off_route and previous_off_route is True:
+      self._push(log_mono_ns, "nav", "navigation_route_recovered", cooldown_ns=0)
+
+    source = value if connected else None
+    self._push_guidance(_get(source, "guidanceCurrent"), "current", log_mono_ns)
+    self._push_guidance(_get(source, "guidanceNext"), "next", log_mono_ns)
+    self._ingest_lane_guidance(_get(source, "laneCurrent"), log_mono_ns)
+    self._ingest_navigation_speed(_get(source, "speed"), log_mono_ns)
+    self._ingest_traffic_signal(_get(source, "trafficSignal"), log_mono_ns)
+    self._ingest_crossroad(_get(source, "crossroad"), log_mono_ns)
+
   def _ingest_carrotMan(self, value: Any, log_mono_ns: int) -> None:
     self._changed(
       "carrotMan.activeCarrot", _int(value, "activeCarrot"), log_mono_ns,
@@ -524,7 +827,12 @@ class ReplayEventIndexer:
       self._sessions.clear()
 
     normalized: list[dict[str, Any]] = []
-    for item in sorted(self._events, key=lambda event: event.log_mono_ns):
+    indexed_events = (
+      item
+      for item in self._events
+      if not (self._has_carrot_navi and item.event_type == "navigation_maneuver")
+    )
+    for item in sorted(indexed_events, key=lambda event: event.log_mono_ns):
       time_ms = round((item.log_mono_ns - base_log_mono_ns) / 1_000_000)
       if time_ms < 0 or time_ms > duration_ms:
         continue
@@ -536,6 +844,18 @@ class ReplayEventIndexer:
         "params": item.params,
         "sourceTitle": item.source_title,
         "sourceDetail": item.source_detail,
+        "sourceTag": (
+          "CarrotMan" if item.event_type in {
+            "carrot_mode_changed", "carrot_speed_control_start", "carrot_speed_control_end",
+            "carrot_turn_control_start", "carrot_turn_control_end", "carrot_command_received",
+            "navigation_maneuver",
+          }
+          else "CarrotNavi" if item.event_type.startswith((
+            "navigation_", "navi_", "lane_guidance_", "speed_alert_", "road_speed_",
+            "section_control_", "traffic_signal_", "crossroad_guidance_",
+          ))
+          else ""
+        ),
       })
     return normalized
 

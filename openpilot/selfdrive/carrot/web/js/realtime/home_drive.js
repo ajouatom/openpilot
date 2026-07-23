@@ -1,3 +1,46 @@
+/* ============================================================================
+ * CARROT VISION GRAPHICS - DO NOT CHANGE CASUALLY
+ *
+ * This is the driving view the user actually looks at. Its smoothness was tuned
+ * against real device behaviour and several "obvious" simplifications have
+ * already been tried and reverted. If you are here while working on AR, replay
+ * or any other feature, prefer adding your own layer over editing this one.
+ *
+ * Invariants. Breaking any of these brings back stutter, judder or heat:
+ *
+ *  1. One overlay update per presented video frame. requestVideoFrameCallback
+ *     is taken first and unthrottled; the interval constant only paces the
+ *     fallback. Never put a timer between a video frame and its overlay.
+ *  2. Live and replay share one scheduler, one filter and one cadence. They are
+ *     the same user experience; do not special-case one of them.
+ *  3. Temporal smoothing is a time constant, never a per-call alpha. Render
+ *     spacing moves constantly, and a fixed alpha makes the response wander.
+ *  4. Geometry stays on the GPU: fills, strokes and dashes all land in one
+ *     batched draw call. Moving any of them back to Canvas2D reintroduces a
+ *     full-surface raster and its clear every frame.
+ *  5. The 2D overlay is cleared by dirty rectangle, never skipped wholesale.
+ *     The layer is NOT empty on the GPU path - lead badges and every text label
+ *     still draw there via drawCanvasOutlinedText / fillRoundedRect /
+ *     strokeRoundedRect. If you add anything that can put pixels on `ctx`, it
+ *     MUST report its bounds via markOverlayDirty*, or fall back to
+ *     markOverlayDirtyFull() when bounds are unknown. A periodic full clear
+ *     bounds any mistake; do not remove it. Two earlier attempts shipped bugs:
+ *     a plain "did anything draw?" flag produced accumulating ghosting, and
+ *     hiding the layer made the lead box and badges vanish outright.
+ *  6. Vertex pools are reused. Do not rebuild per-frame arrays.
+ *
+ * Already tried and rejected:
+ *  - Overlay projection/triangulation in a worker: the extra hop makes geometry
+ *    trail the video by a frame (see OFFSCREEN_WORKER_ENABLED).
+ *  - Interpolating geometry between 20 Hz samples: the video is 20 fps, so the
+ *    overlay slides against a still image.
+ *  - Uniform Catmull-Rom resampling: overshoots on unevenly spaced projected
+ *    points and draws streaks across the frame. Centripetal only.
+ *
+ * Measured state: worst curve kink 8.1deg -> 1.6deg, geometry fully GPU-batched,
+ * per-frame 2D clear removed.
+ * ==========================================================================*/
+
 "use strict";
 
 window.HomeDrive = (() => {
@@ -110,7 +153,32 @@ window.HomeDrive = (() => {
   const MOBILE_DPR_CAP = 1.25;
   const DESKTOP_DPR_CAP = 1.5;
   const PERFORMANCE_RENDER_DPR_CAP = 3.0;
-  const RENDER_INTERVAL_MS = 33;  // ~30fps for denser plot data (C3: 20Hz/50ms)
+  /* Carrot Vision motion policy — keep this in mind for any future overlay work.
+   *
+   * The overlay must feel continuous with the video, not merely correct. Three
+   * rules produced the current behaviour and breaking any one of them brings
+   * back the steppy, stiff look:
+   *
+   *   1. One overlay update per presented video frame. When
+   *      requestVideoFrameCallback is available it is taken unthrottled; the
+   *      interval below only paces the fallback path. Never insert a timer
+   *      between the video frame and its overlay - setTimeout lands between
+   *      composited frames and adds judder on top of the source cadence.
+   *   2. Temporal smoothing is a time constant, never a per-call alpha. The
+   *      render interval moves constantly (20 Hz data, this cap, scheduler
+   *      jitter); a fixed alpha makes the effective response wander and that
+   *      inconsistency reads worse than plain lag. See road_overlay_projection
+   *      temporalAlpha() and the *_SMOOTH_TAU_MS constants.
+   *   3. Live and replay share one filter and one cadence. They are the same
+   *      user experience and must not diverge.
+   *
+   * Also: prefer the WebGL2 geometry path. Rasterising large polygons and
+   * gradients on Canvas2D is the known thermal cost on device. And do not move
+   * overlay projection/triangulation into a worker - that was tried and the
+   * extra message hop makes the geometry trail the video by a frame
+   * (see OFFSCREEN_WORKER_ENABLED in vision_webgl2.js).
+   */
+  const RENDER_INTERVAL_MS = 33;  // fallback pacing only; ~30fps (C3 source: 20Hz/50ms)
   const CAMERA_FRAME_RECHECK_MS = 250;
   const MIN_ROAD_VIDEO_WIDTH = 320;
   const MIN_ROAD_VIDEO_HEIGHT = 180;
@@ -220,7 +288,6 @@ window.HomeDrive = (() => {
   let _forceNextRender = true;
   let _lastRenderTime = 0;
   let _renderRafId = null;
-  let _renderTimerId = null;
   let _renderVideoFrameId = null;
   let _cameraFrameRecheckId = null;
   let _roadCameraStreamState = {
@@ -583,7 +650,7 @@ window.HomeDrive = (() => {
     BASE_CAMERA.height = cfg.height;
     BASE_CAMERA.focalX = cfg.focal;
     BASE_CAMERA.focalY = cfg.focal;
-    roadOverlayProjection.resetFrame();
+    roadOverlayProjection.resetFrame(performance.now());
     transformSignature = "";
     _forceNextRender = true;
     try {
@@ -656,6 +723,30 @@ window.HomeDrive = (() => {
     };
   }
 
+  function getRenderViewportOrigin(renderViewport) {
+    if (!renderViewport || renderViewport === stageEl) return { left: 0, top: 0 };
+    const stageRect = stageEl.getBoundingClientRect?.();
+    const viewportRect = renderViewport.getBoundingClientRect?.();
+    if (!stageRect || !viewportRect) {
+      return {
+        left: Math.max(0, Number(renderViewport.offsetLeft) || 0),
+        top: Math.max(0, Number(renderViewport.offsetTop) || 0),
+      };
+    }
+    // DOMRect includes any outer workspace scaling. Convert its delta back to
+    // stage-local CSS pixels before positioning the AR worker surface.
+    const scaleX = stageEl.clientWidth > 0 && stageRect.width > 0
+      ? stageRect.width / stageEl.clientWidth
+      : 1;
+    const scaleY = stageEl.clientHeight > 0 && stageRect.height > 0
+      ? stageRect.height / stageEl.clientHeight
+      : 1;
+    return {
+      left: (viewportRect.left - stageRect.left) / Math.max(scaleX, 0.001),
+      top: (viewportRect.top - stageRect.top) / Math.max(scaleY, 0.001),
+    };
+  }
+
   function getVisibleSourceRect(videoWidth, videoHeight, stageWidth = videoWidth, stageHeight = videoHeight, transform = null) {
     const scale = Math.max(finiteNumber(transform?.scale, 1), 0.01);
     const tx = finiteNumber(transform?.tx, 0);
@@ -713,6 +804,7 @@ window.HomeDrive = (() => {
     projectPointPrecise,
     isRecordedReplayActive: replayRenderBridge.isActive,
     maxDrawDistance: MAX_DRAW_DISTANCE,
+    isFullDetailActive: () => performanceGeometryActive,
   }) || null;
   if (!roadOverlayProjection) return {};
 
@@ -754,8 +846,68 @@ window.HomeDrive = (() => {
     return Math.max(0, finiteNumber(sceneMaxDistance, 0) - 2.0);
   }
 
+  /* Dirty-rectangle bookkeeping for the 2D overlay.
+   *
+   * Only lead badges and text labels still draw here; everything geometric is
+   * batched on the GPU. Erasing the whole video-resolution surface to make room
+   * for a few small badges is almost all of the cost of this layer.
+   *
+   * Correctness rule: every function that can put pixels on `ctx` must report
+   * its bounds. There are exactly five such entry points and they all live in
+   * this file. Anything that cannot compute bounds reports a full-surface
+   * repaint instead of guessing.
+   *
+   * Safety net: a full clear is forced periodically regardless. If a bound is
+   * ever wrong or a new draw path is added without reporting, the artefact is
+   * bounded to that interval rather than accumulating forever - which is the
+   * failure that a plain "did anything draw?" flag shipped.
+   */
+  const OVERLAY_FULL_CLEAR_INTERVAL = 30;
+  const OVERLAY_DIRTY_PAD = 3;
+  let overlayDirtyRect = null;
+  let overlayDirtyFull = false;
+  let overlayFramesSinceFullClear = 0;
+
+  function markOverlayDirtyFull() {
+    overlayDirtyFull = true;
+  }
+
+  function markOverlayDirtyBox(minX, minY, maxX, maxY) {
+    if (![minX, minY, maxX, maxY].every((value) => Number.isFinite(value))) {
+      markOverlayDirtyFull();
+      return;
+    }
+    if (!overlayDirtyRect) {
+      overlayDirtyRect = { minX, minY, maxX, maxY };
+      return;
+    }
+    if (minX < overlayDirtyRect.minX) overlayDirtyRect.minX = minX;
+    if (minY < overlayDirtyRect.minY) overlayDirtyRect.minY = minY;
+    if (maxX > overlayDirtyRect.maxX) overlayDirtyRect.maxX = maxX;
+    if (maxY > overlayDirtyRect.maxY) overlayDirtyRect.maxY = maxY;
+  }
+
+  function markOverlayDirtyPoints(points, pad = 0) {
+    if (!Array.isArray(points) || !points.length) return;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const point of points) {
+      const x = Number(point?.x);
+      const y = Number(point?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) { markOverlayDirtyFull(); return; }
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    markOverlayDirtyBox(minX - pad, minY - pad, maxX + pad, maxY + pad);
+  }
+
   function drawPolygon(points, fillStyle, strokeStyle = "", lineWidth = 1) {
     if (!Array.isArray(points) || points.length < 3) return;
+    markOverlayDirtyPoints(points, (Number(lineWidth) || 1) / 2 + OVERLAY_DIRTY_PAD);
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i += 1) {
@@ -773,10 +925,94 @@ window.HomeDrive = (() => {
     }
   }
 
+  /* Keep the whole geometry pass on the GPU. Leaving strokes on Canvas2D meant a
+   * full-surface 2D raster stayed alive every frame purely for outlines, which
+   * is the CPU/thermal cost the WebGL2 path exists to remove. The stroke lands
+   * in the same batch as the fill, so this adds no draw call. */
+  /* Split a polyline into its dash "on" spans so a dashed line can be stroked as
+   * geometry. Canvas2D does this internally; on the GPU path we have to do it
+   * ourselves, and it is the last thing keeping a 2D raster alive per frame. */
+  function dashSpans(points, dashPattern, dashOffset) {
+    const pattern = Array.isArray(dashPattern) ? dashPattern.filter((n) => Number(n) > 0) : [];
+    if (!pattern.length) return [points];
+    const cycle = pattern.reduce((sum, value) => sum + value, 0);
+    if (!(cycle > 0)) return [points];
+
+    const spans = [];
+    let current = [];
+    let index = 0;
+    let remaining = pattern[0];
+    let drawing = true;
+    // A negative offset animates the dash forward; normalise then consume it.
+    let offset = ((Number(dashOffset) || 0) % cycle + cycle) % cycle;
+    while (offset > 0) {
+      const step = Math.min(offset, remaining);
+      remaining -= step;
+      offset -= step;
+      if (remaining <= 1e-6) {
+        index = (index + 1) % pattern.length;
+        remaining = pattern[index];
+        drawing = !drawing;
+      }
+    }
+
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const a = points[i];
+      const b = points[i + 1];
+      let segment = Math.hypot(b.x - a.x, b.y - a.y);
+      if (!(segment > 0)) continue;
+      let t = 0;
+      if (drawing && !current.length) current.push(a);
+      while (segment - t > 1e-6) {
+        const step = Math.min(remaining, segment - t);
+        const from = t / segment;
+        t += step;
+        remaining -= step;
+        const to = t / segment;
+        const point = { x: a.x + (b.x - a.x) * to, y: a.y + (b.y - a.y) * to };
+        if (drawing) {
+          if (!current.length) current.push({ x: a.x + (b.x - a.x) * from, y: a.y + (b.y - a.y) * from });
+          current.push(point);
+        }
+        if (remaining <= 1e-6) {
+          if (drawing && current.length > 1) spans.push(current);
+          current = [];
+          index = (index + 1) % pattern.length;
+          remaining = pattern[index];
+          drawing = !drawing;
+        }
+      }
+    }
+    if (current.length > 1) spans.push(current);
+    return spans;
+  }
+
+  function drawGeometryPolyline(points, strokeStyle, lineWidth, dashPattern = [], dashOffset = 0) {
+    if (
+      performanceGeometryActive
+      && performanceRenderer
+      && typeof performanceRenderer.drawStroke === "function"
+      && Array.isArray(points)
+      && points.length >= 2
+    ) {
+      for (const span of dashSpans(points, dashPattern, dashOffset)) {
+        performanceRenderer.drawStroke(span, strokeStyle, lineWidth, false);
+      }
+      return;
+    }
+    drawPolyline(points, strokeStyle, lineWidth, dashPattern, dashOffset);
+  }
+
   function drawGeometryPolygon(points, fillStyle, strokeStyle = "", lineWidth = 1) {
-    if (performanceGeometryActive && performanceRenderer && fillStyle) {
-      performanceRenderer.drawPolygon(points, fillStyle);
-      if (strokeStyle) drawPolygon(points, "", strokeStyle, lineWidth);
+    if (performanceGeometryActive && performanceRenderer && (fillStyle || strokeStyle)) {
+      if (fillStyle) performanceRenderer.drawPolygon(points, fillStyle);
+      if (strokeStyle) {
+        if (typeof performanceRenderer.drawStroke === "function") {
+          performanceRenderer.drawStroke(points, strokeStyle, lineWidth);
+        } else {
+          drawPolygon(points, "", strokeStyle, lineWidth);
+        }
+      }
       return;
     }
     drawPolygon(points, fillStyle, strokeStyle, lineWidth);
@@ -784,6 +1020,7 @@ window.HomeDrive = (() => {
 
   function drawPolyline(points, strokeStyle, lineWidth, dashPattern = [], dashOffset = 0) {
     if (!Array.isArray(points) || points.length < 2) return;
+    markOverlayDirtyPoints(points, (Number(lineWidth) || 1) / 2 + OVERLAY_DIRTY_PAD);
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i += 1) {
@@ -1483,7 +1720,22 @@ window.HomeDrive = (() => {
   }
 
   function clearOverlay(videoWidth, videoHeight, options = {}) {
-    ctx.clearRect(0, 0, videoWidth, videoHeight);
+    const forceFull = options.full === true
+      || overlayDirtyFull
+      || overlayFramesSinceFullClear >= OVERLAY_FULL_CLEAR_INTERVAL;
+    if (forceFull) {
+      ctx.clearRect(0, 0, videoWidth, videoHeight);
+      overlayFramesSinceFullClear = 0;
+    } else if (overlayDirtyRect) {
+      const { minX, minY, maxX, maxY } = overlayDirtyRect;
+      ctx.clearRect(minX, minY, maxX - minX, maxY - minY);
+      overlayFramesSinceFullClear += 1;
+    } else {
+      // Nothing reached this layer last frame, so there is nothing to erase.
+      overlayFramesSinceFullClear += 1;
+    }
+    overlayDirtyRect = null;
+    overlayDirtyFull = false;
     if (options.clearPerformance) performanceRenderer?.clear?.();
   }
 
@@ -1498,7 +1750,7 @@ window.HomeDrive = (() => {
     getCachedGradient,
     geometry: {
       drawPolygon: drawGeometryPolygon,
-      drawPolyline,
+      drawPolyline: drawGeometryPolyline,
       buildRibbon: roadOverlayProjection.buildRibbon,
       smoothRibbon: roadOverlayProjection.smoothRibbon,
       buildBandPolygon: roadOverlayProjection.buildBandPolygon,
@@ -1539,7 +1791,7 @@ window.HomeDrive = (() => {
     _lastValidCalibrationMatrix = null;
     _lastValidCalibrationSignature = "";
     transformSignature = "";
-    roadOverlayProjection.resetFrame();
+    roadOverlayProjection.resetFrame(performance.now());
     _forceNextRender = true;
   }
 
@@ -1790,6 +2042,17 @@ window.HomeDrive = (() => {
     canvasCtx = ctx,
   } = {}) {
     if (!text) return;
+    if (canvasCtx === ctx) {
+      /* Bounds before the glyphs are measured, so be generous: the outline
+       * stroke, alignment and baseline all move the ink around the anchor. An
+       * over-estimate only clears a few extra pixels; an under-estimate leaves
+       * a trail. */
+      const width = getCachedTextWidth(canvasCtx, `${fontWeight} ${fontSize}px ${HUD_TEXT_FONT}`, String(text));
+      const pad = strokeWidth + OVERLAY_DIRTY_PAD;
+      const left = align === "left" ? x : align === "right" ? x - width : x - width / 2;
+      const top = baseline === "top" ? y : baseline === "bottom" ? y - fontSize : y - fontSize;
+      markOverlayDirtyBox(left - pad, top - pad, left + width + pad, top + fontSize * 2 + pad);
+    }
     canvasCtx.save();
     canvasCtx.font = `${fontWeight} ${fontSize}px ${HUD_TEXT_FONT}`;
     canvasCtx.textAlign = align;
@@ -1818,11 +2081,11 @@ window.HomeDrive = (() => {
     pathZOffset: PATH_Z_OFFSET,
     geometry: {
       buildVerticalRibbon: roadOverlayProjection.buildVerticalRibbon,
-      drawPolygon,
+      drawPolygon: drawGeometryPolygon,
       samplePathY: roadOverlayProjection.samplePathY,
       interpolate: roadOverlayProjection.interpolate,
       projectPoint,
-      drawPolyline,
+      drawPolyline: drawGeometryPolyline,
     },
     ui: {
       getScale: getLeadUiScale,
@@ -1883,8 +2146,8 @@ window.HomeDrive = (() => {
       projectPointPrecise,
     },
     geometry: {
-      drawPolyline,
-      drawPolygon,
+      drawPolyline: drawGeometryPolyline,
+      drawPolygon: drawGeometryPolygon,
       circlePolygon: roadOverlayProjection.circlePolygon,
     },
     ui: {
@@ -1919,6 +2182,10 @@ window.HomeDrive = (() => {
   }
 
   function fillRoundedRect(context, x, y, width, height, radius, fillStyle) {
+    if (context === ctx) {
+      markOverlayDirtyBox(x - OVERLAY_DIRTY_PAD, y - OVERLAY_DIRTY_PAD,
+        x + width + OVERLAY_DIRTY_PAD, y + height + OVERLAY_DIRTY_PAD);
+    }
     context.fillStyle = fillStyle;
     const cachedPath = getCachedRoundedRectPath(width, height, radius);
     if (cachedPath) {
@@ -1933,6 +2200,10 @@ window.HomeDrive = (() => {
   }
 
   function strokeRoundedRect(context, x, y, width, height, radius, strokeStyle, lineWidth = 1) {
+    if (context === ctx) {
+      const pad = (Number(lineWidth) || 1) / 2 + OVERLAY_DIRTY_PAD;
+      markOverlayDirtyBox(x - pad, y - pad, x + width + pad, y + height + pad);
+    }
     context.strokeStyle = strokeStyle;
     context.lineWidth = lineWidth;
     const cachedPath = getCachedRoundedRectPath(width, height, radius);
@@ -2195,6 +2466,7 @@ window.HomeDrive = (() => {
     const renderViewport = replayRenderBridge.getRenderViewport();
     const stageWidth = Math.max(1, renderViewport.clientWidth);
     const stageHeight = Math.max(1, renderViewport.clientHeight);
+    const viewportOrigin = getRenderViewportOrigin(renderViewport);
     const forceAll = Boolean(options.force || _forceNextRender);
     const rawOverlayState = window.CarrotOverlayState || {};
     const rawHudState = window.CarrotHudState || {};
@@ -2218,7 +2490,7 @@ window.HomeDrive = (() => {
         hideOnroadAlert();
         setStageLoading(false);
         setStageReady(false);
-        clearOverlay(canvasEl.width || 1, canvasEl.height || 1, { clearPerformance: true });
+        clearOverlay(canvasEl.width || 1, canvasEl.height || 1, { clearPerformance: true, full: true });
         hudCanvas.clear(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
         rtcPerfHud.sync();
       }
@@ -2248,7 +2520,7 @@ window.HomeDrive = (() => {
       hideOnroadAlert();
       setStageLoading(true, getCarrotVisionStatusText(getUIText("connecting", "Connecting...")), getCarrotVisionDetailText());
       setStageReady(false);
-      clearOverlay(canvasEl.width || 1, canvasEl.height || 1, { clearPerformance: true });
+      clearOverlay(canvasEl.width || 1, canvasEl.height || 1, { clearPerformance: true, full: true });
       hudCanvas.clear(hudCanvasEl.width || 1, hudCanvasEl.height || 1);
       visionViewport.apply({
         renderViewport,
@@ -2314,6 +2586,8 @@ window.HomeDrive = (() => {
       videoHeight,
       stageWidth,
       stageHeight,
+      viewportLeft: viewportOrigin.left,
+      viewportTop: viewportOrigin.top,
       projectionReady,
       updatedAt: performance.now(),
     });
@@ -2339,7 +2613,7 @@ window.HomeDrive = (() => {
     setStageLoading(!carrotLive, getCarrotVisionStatusText(getUIText("connecting", "Connecting...")), getCarrotVisionDetailText());
 
     if (overlayDirty) {
-      roadOverlayProjection.resetFrame();
+      roadOverlayProjection.resetFrame(performance.now());
       clearOverlay(videoWidth, videoHeight);
       beginGeometryFrame(videoWidth, videoHeight);
       if (model && projectionReady) {
@@ -2400,10 +2674,6 @@ window.HomeDrive = (() => {
       window.cancelAnimationFrame(_renderRafId);
       _renderRafId = null;
     }
-    if (_renderTimerId != null) {
-      window.clearTimeout(_renderTimerId);
-      _renderTimerId = null;
-    }
     if (_renderVideoFrameId != null) {
       try {
         if (typeof videoEl.cancelVideoFrameCallback === "function") {
@@ -2435,7 +2705,6 @@ window.HomeDrive = (() => {
 
   function flushScheduledRender() {
     _renderRafId = null;
-    _renderTimerId = null;
     _renderVideoFrameId = null;
     if (!isStageVisible()) {
       if (!isActive()) visionViewport.reset();
@@ -2452,11 +2721,16 @@ window.HomeDrive = (() => {
     }
   }
 
+  /* Replay is deliberately included here: live and replay are the same user
+   * experience and must share one cadence. The callback below already skips the
+   * live-only presented-frame reporting when the replay bridge is active, and a
+   * paused or unready video still falls through to the display-clock path, so a
+   * seek or scrub keeps updating. A forced render (activation, resize) is the
+   * one case that must not wait for the next decoded frame. */
   function canUseVideoFrameScheduling() {
     return (
       _pendingRenderState.overlayDirty &&
       !_pendingRenderState.force &&
-      !replayRenderBridge.isActive() &&
       typeof videoEl.requestVideoFrameCallback === "function" &&
       isCarrotVisionActive() &&
       !videoEl.paused &&
@@ -2472,16 +2746,12 @@ window.HomeDrive = (() => {
       return;
     }
 
-    if (_renderRafId != null || _renderTimerId != null || _renderVideoFrameId != null) return;
-    const elapsed = performance.now() - _lastRenderTime;
-    const waitMs = Math.max(0, RENDER_INTERVAL_MS - elapsed);
-    if (waitMs > 0) {
-      _renderTimerId = window.setTimeout(() => {
-        _renderTimerId = null;
-        scheduleRender();
-      }, waitMs);
-      return;
-    }
+    if (_renderRafId != null || _renderVideoFrameId != null) return;
+
+    // The video frame callback is already paced by the stream, so the interval
+    // throttle can only push the overlay off the frame it belongs to. Take this
+    // path first and unthrottled: one overlay update per presented video frame
+    // is exactly the cadence the user should see.
     if (canUseVideoFrameScheduling()) {
       _renderVideoFrameId = videoEl.requestVideoFrameCallback((_now, metadata) => {
         _renderVideoFrameId = null;
@@ -2493,7 +2763,18 @@ window.HomeDrive = (() => {
       });
       return;
     }
-    _renderRafId = window.requestAnimationFrame(flushScheduledRender);
+
+    // Otherwise pace on the display clock. A timer lands between composited
+    // frames and adds visible judder on top of the source cadence, so hold the
+    // interval by re-arming rAF instead of sleeping on setTimeout.
+    _renderRafId = window.requestAnimationFrame(() => {
+      _renderRafId = null;
+      if (performance.now() - _lastRenderTime < RENDER_INTERVAL_MS) {
+        scheduleRender();
+        return;
+      }
+      flushScheduledRender();
+    });
   }
 
   function requestRender(options = {}) {

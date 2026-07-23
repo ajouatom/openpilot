@@ -13,4 +13,5 @@ def test_vision_ar_is_explicit_opt_in():
     "key": "vision_ar_enabled",
     "type": "bool",
     "default": False,
+    "requiresCapability": "web_lab",
   }

@@ -6,12 +6,17 @@
  * 원래 상태로 되돌아간다.
  */
 
+import { readWebSettingUnlocked } from "../../../../../shared/web/capabilities.js";
+
 export const VISION_AR_SETTING_KEY = "vision_ar_enabled";
-// Ship the unfinished renderer for review without exposing it to users.
-export const VISION_AR_AVAILABLE = false;
+export const VISION_AR_AVAILABLE = true;
 
 export function readVisionArEnabled(target = globalThis) {
   if (!VISION_AR_AVAILABLE) return false;
+  const unlocked = typeof target?.isWebSettingUnlocked === "function"
+    ? target.isWebSettingUnlocked(VISION_AR_SETTING_KEY)
+    : readWebSettingUnlocked(VISION_AR_SETTING_KEY, target);
+  if (!unlocked) return false;
   if (typeof target?.getWebSettingByKey === "function") {
     return Boolean(target.getWebSettingByKey(VISION_AR_SETTING_KEY, false));
   }
@@ -81,6 +86,7 @@ export function createVisionArActivationGate(options = {}) {
   }
 
   target?.addEventListener?.("carrot:websettingschange", onWebSettingsChange);
+  target?.addEventListener?.("carrot:webcapabilitieschange", sync);
   documentRoot?.addEventListener?.("visibilitychange", onVisibilityChange);
 
   function activateVision() {
@@ -116,6 +122,7 @@ export function createVisionArActivationGate(options = {}) {
     destroyed = true;
     visionActive = false;
     target?.removeEventListener?.("carrot:websettingschange", onWebSettingsChange);
+    target?.removeEventListener?.("carrot:webcapabilitieschange", sync);
     documentRoot?.removeEventListener?.("visibilitychange", onVisibilityChange);
     disposeRuntime();
     return true;

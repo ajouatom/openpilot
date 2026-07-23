@@ -35,7 +35,7 @@ except ImportError:
   encode_compact_frame_native = None
 
 
-REPLAY_CACHE_VERSION = 7
+REPLAY_CACHE_VERSION = 8
 REPLAY_TIMELINE_VERSION = 3
 REPLAY_TIMELINE_MAGIC = b"CVR1"
 REPLAY_TIMELINE_HEADER = struct.Struct("<4sHHII")

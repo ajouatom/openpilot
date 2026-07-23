@@ -104,10 +104,265 @@ function createCarrotReplayEventIcon(category) {
   return svg;
 }
 
+const CARROT_MEDIA_SHORTCUT_BLOCK_SELECTOR = [
+  "input",
+  "textarea",
+  "select",
+  "button",
+  "a[href]",
+  "summary",
+  "[contenteditable]:not([contenteditable='false'])",
+  "[role='textbox']",
+  "[role='slider']",
+  "[role='tab']",
+  "[role='button']",
+].join(", ");
+
+function createCarrotMediaInputController(options = {}) {
+  const media = options.media;
+  const stage = options.stage;
+  if (!media || !stage) return null;
+
+  const thresholdPx = Math.max(1, Number(options.dragThresholdPx) || 8);
+  const dragSpanSeconds = Math.max(1, Number(options.dragSpanSeconds) || 20);
+  const rates = (Array.isArray(options.rates) ? options.rates : [0.5, 1, 2])
+    .map(Number)
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const blockedPointerSelector = String(options.blockedPointerSelector || [
+    "button",
+    "input",
+    "select",
+    "a",
+    ".plyr__controls",
+    ".carrot-media-action-group",
+  ].join(", "));
+  let disposed = false;
+  let suppressClickUntil = 0;
+  let seekFrame = null;
+  const drag = {
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    startTime: 0,
+    pendingTime: null,
+    active: false,
+    cancelled: false,
+    resumeAfter: false,
+  };
+
+  const duration = () => {
+    const value = typeof options.getDuration === "function"
+      ? Number(options.getDuration())
+      : Number(media.duration);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  };
+  const canInteract = () => !disposed
+    && (typeof options.canInteract !== "function" || options.canInteract() !== false);
+  const notifyInteraction = () => options.onInteract?.();
+  const seekTo = (seconds) => {
+    if (!canInteract()) return false;
+    const total = duration();
+    if (total <= 0) return false;
+    const target = Math.max(0, Math.min(total, Number(seconds) || 0));
+    media.currentTime = target;
+    options.onSeek?.(target);
+    notifyInteraction();
+    return true;
+  };
+  const togglePlayback = () => {
+    if (!canInteract()) return false;
+    if (typeof options.onTogglePlayback === "function") {
+      options.onTogglePlayback();
+    } else if (media.paused || media.ended) {
+      if (media.ended) media.currentTime = 0;
+      const result = media.play();
+      result?.catch?.(() => {});
+    } else {
+      media.pause();
+    }
+    notifyInteraction();
+    return true;
+  };
+  const adjustRate = (direction) => {
+    if (!rates.length || !canInteract()) return false;
+    const currentRate = Number(media.playbackRate) || 1;
+    let currentIndex = rates.indexOf(currentRate);
+    if (currentIndex < 0) {
+      currentIndex = rates.reduce((bestIndex, rate, index) => (
+        Math.abs(rate - currentRate) < Math.abs(rates[bestIndex] - currentRate) ? index : bestIndex
+      ), 0);
+    }
+    const nextIndex = Math.max(0, Math.min(rates.length - 1, currentIndex + direction));
+    if (nextIndex === currentIndex) return false;
+    const nextRate = rates[nextIndex];
+    if (typeof options.onRate === "function") options.onRate(nextRate);
+    else media.playbackRate = nextRate;
+    notifyInteraction();
+    return true;
+  };
+  const activateAdjacent = (direction) => {
+    const canMove = direction < 0 ? options.canPrevious : options.canNext;
+    const activate = direction < 0 ? options.onPrevious : options.onNext;
+    if (typeof activate !== "function" || (typeof canMove === "function" && !canMove())) return false;
+    activate();
+    notifyInteraction();
+    return true;
+  };
+  const shortcutBlocked = (target) => target instanceof Element
+    && Boolean(target.closest(options.shortcutBlockSelector || CARROT_MEDIA_SHORTCUT_BLOCK_SELECTOR));
+  const onKeydown = (event) => {
+    if (!canInteract() || document.hidden || event.defaultPrevented || event.isComposing) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || shortcutBlocked(event.target)) return;
+
+    let handled = false;
+    if (event.code === "Space" || event.code === "KeyK") {
+      if (event.repeat) return;
+      handled = togglePlayback();
+    } else if (event.code === "ArrowLeft") {
+      handled = seekTo(Number(media.currentTime || 0) - 5);
+    } else if (event.code === "ArrowRight") {
+      handled = seekTo(Number(media.currentTime || 0) + 5);
+    } else if (event.code === "KeyJ") {
+      handled = seekTo(Number(media.currentTime || 0) - 10);
+    } else if (event.code === "KeyL") {
+      handled = seekTo(Number(media.currentTime || 0) + 10);
+    } else if (event.code === "Home") {
+      handled = seekTo(0);
+    } else if (event.code === "End") {
+      handled = seekTo(duration());
+    } else if (event.shiftKey && event.code === "Comma") {
+      if (event.repeat) return;
+      handled = adjustRate(-1);
+    } else if (event.shiftKey && event.code === "Period") {
+      if (event.repeat) return;
+      handled = adjustRate(1);
+    } else if (event.shiftKey && event.code === "KeyP") {
+      if (event.repeat) return;
+      handled = activateAdjacent(-1);
+    } else if (event.shiftKey && event.code === "KeyN") {
+      if (event.repeat) return;
+      handled = activateAdjacent(1);
+    }
+    if (handled && event.cancelable) event.preventDefault();
+  };
+
+  const resetDrag = () => {
+    if (seekFrame != null) window.cancelAnimationFrame(seekFrame);
+    seekFrame = null;
+    drag.pointerId = null;
+    drag.startX = 0;
+    drag.startY = 0;
+    drag.startTime = 0;
+    drag.pendingTime = null;
+    drag.active = false;
+    drag.cancelled = false;
+    drag.resumeAfter = false;
+    stage.classList.remove("is-media-scrubbing");
+  };
+  const applyDragPosition = () => {
+    seekFrame = null;
+    const target = Number(drag.pendingTime);
+    drag.pendingTime = null;
+    if (Number.isFinite(target)) seekTo(target);
+  };
+  const queueDragPosition = (target) => {
+    drag.pendingTime = target;
+    if (seekFrame == null) seekFrame = window.requestAnimationFrame(applyDragPosition);
+  };
+  const pointerTargetBlocked = (target) => target instanceof Element
+    && Boolean(target.closest(blockedPointerSelector));
+  const onPointerDown = (event) => {
+    if (!canInteract() || event.isPrimary === false || duration() <= 0) return;
+    if ((event.pointerType === "mouse" && event.button !== 0) || pointerTargetBlocked(event.target)) return;
+    resetDrag();
+    drag.pointerId = event.pointerId;
+    drag.startX = event.clientX;
+    drag.startY = event.clientY;
+    drag.startTime = Number(media.currentTime || 0);
+    try { stage.setPointerCapture?.(event.pointerId); } catch {}
+  };
+  const onPointerMove = (event) => {
+    if (event.pointerId !== drag.pointerId || drag.cancelled) return;
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (!drag.active) {
+      if (Math.abs(deltaY) > thresholdPx && Math.abs(deltaY) >= Math.abs(deltaX)) {
+        drag.cancelled = true;
+        return;
+      }
+      if (Math.abs(deltaX) < thresholdPx || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+      drag.active = true;
+      drag.resumeAfter = !media.paused && !media.ended;
+      if (drag.resumeAfter) media.pause();
+      stage.classList.add("is-media-scrubbing");
+      options.onScrubStart?.();
+      notifyInteraction();
+    }
+    if (event.cancelable) event.preventDefault();
+    const width = Math.max(1, Number(stage.clientWidth || 0));
+    const total = duration();
+    const span = Math.min(total, dragSpanSeconds);
+    queueDragPosition(Math.max(0, Math.min(total, drag.startTime + (deltaX / width) * span)));
+  };
+  const finishPointer = (event) => {
+    if (event?.pointerId !== drag.pointerId) return;
+    try {
+      if (stage.hasPointerCapture?.(event.pointerId)) stage.releasePointerCapture(event.pointerId);
+    } catch {}
+    if (seekFrame != null) {
+      window.cancelAnimationFrame(seekFrame);
+      seekFrame = null;
+      applyDragPosition();
+    }
+    const wasActive = drag.active;
+    const resumeAfter = drag.resumeAfter;
+    if (wasActive) {
+      suppressClickUntil = performance.now() + 420;
+      options.onScrubEnd?.();
+    }
+    resetDrag();
+    if (wasActive && resumeAfter && canInteract() && media.paused && !media.ended) {
+      const result = media.play();
+      result?.catch?.(() => {});
+    }
+  };
+  const onClickCapture = (event) => {
+    if (performance.now() >= suppressClickUntil) return;
+    if (event.cancelable) event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+
+  document.addEventListener("keydown", onKeydown);
+  stage.addEventListener("pointerdown", onPointerDown, { passive: true });
+  stage.addEventListener("pointermove", onPointerMove, { passive: false });
+  stage.addEventListener("pointerup", finishPointer, { passive: true });
+  stage.addEventListener("pointercancel", finishPointer, { passive: true });
+  stage.addEventListener("lostpointercapture", finishPointer, { passive: true });
+  stage.addEventListener("click", onClickCapture, true);
+
+  return Object.freeze({
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      resetDrag();
+      document.removeEventListener("keydown", onKeydown);
+      stage.removeEventListener("pointerdown", onPointerDown);
+      stage.removeEventListener("pointermove", onPointerMove);
+      stage.removeEventListener("pointerup", finishPointer);
+      stage.removeEventListener("pointercancel", finishPointer);
+      stage.removeEventListener("lostpointercapture", finishPointer);
+      stage.removeEventListener("click", onClickCapture, true);
+    },
+    seekTo,
+    togglePlayback,
+  });
+}
+
 window.CarrotMediaTransport = Object.freeze({
   autoHideDelay: carrotMediaAutoHideDelay,
   createActionButton: createCarrotMediaActionButton,
   createEventIcon: createCarrotReplayEventIcon,
+  createInputController: createCarrotMediaInputController,
   createSegmentButton: createCarrotMediaSegmentButton,
   setActionState: setCarrotMediaActionState,
   create(options = {}) {

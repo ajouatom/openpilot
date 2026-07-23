@@ -15,8 +15,9 @@ export function createLevelGauge(doc, {
   ariaLabel = label,
   hideWhenUnavailable = false,
 }) {
+  // viewBox 하단을 라벨(y=361) 아래로 넉넉히 두어 굵고 큰 라벨이 잘리지 않게 한다.
   const root = svg(doc, "svg", {
-    class: "chud-level", viewBox: "0 216 62 146", role: "img", "aria-label": ariaLabel,
+    class: "chud-level", viewBox: "0 216 62 156", role: "img", "aria-label": ariaLabel,
   });
   const frame = svg(doc, "rect", {
     class: "chud-level-frame", x: 1, y: TOP, width: 60, height: BOTTOM - TOP, rx: 18,
@@ -25,11 +26,11 @@ export function createLevelGauge(doc, {
     class: "chud-level-fill", x: 9, y: BOTTOM - 8, width: 44, height: 0, rx: 13,
   });
   const valueText = svg(doc, "text", {
-    class: "chud-level-value", x: 31, y: TOP - 16, "font-size": 17,
+    class: "chud-level-value", x: 31, y: TOP - 16, "font-size": 20,
     "text-anchor": "middle", "dominant-baseline": "central",
   });
   const labelText = svg(doc, "text", {
-    class: "chud-level-label", x: 31, y: BOTTOM + 15, "font-size": 17,
+    class: "chud-level-label", x: 31, y: BOTTOM + 15, "font-size": 20,
     "text-anchor": "middle", "dominant-baseline": "central",
   });
   setText(labelText, label);

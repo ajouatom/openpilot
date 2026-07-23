@@ -216,6 +216,12 @@ On Hyundai/Kia CAN-FD hybrids, the external HUD's green `EV` indicator is enable
 
 The normal external HUD also shows the current driving mode beside the traffic-state dot above vehicle speed. `MyDrivingMode` value `1` is a green Eco badge, `2` an orange Safe badge, `3` a white Normal badge, and `4` a red High badge. The badge is hidden for an unavailable, invalid, or stale `longitudinalPlan` and for values outside that range; full navigation omits it. The adjacent red or green dot is an independent model traffic-state indicator, not a driving-mode state.
 
+### Carrot Vision AR and replay navigation events
+
+Carrot Vision provides separate **Show AR** and **AR debug** controls outside the `carrot_settings.json` catalog. **Show AR** overlays driving guidance on the Vision video and requests the additional real-time data only while it is enabled. **AR debug** adds a troubleshooting panel with sign, anchor, and draw counts, the current blocking reason, and copyable history.
+
+The Replay event timeline also identifies Carrot Navi connection and route-session changes, current and next maneuvers, lane guidance, road-safety alerts, average-speed zones, traffic signals, and intersection guidance. These entries are labels for reviewing transitions recorded in the replay.
+
 <a id="system"></a>
 ## System
 

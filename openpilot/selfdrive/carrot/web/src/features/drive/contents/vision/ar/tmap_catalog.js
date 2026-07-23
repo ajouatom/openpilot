@@ -9,7 +9,7 @@
  * 의미가 확정되지 않은 코드는 UNKNOWN 으로 떨어뜨리고 과장하지 않는다.
  */
 
-import { AR_MARKER_KIND } from "./tokens.js";
+import { AR_MARKER_KIND, AR_PRODUCT_MARKERS } from "./tokens.js";
 // tone 은 문자열 리터럴로 쓰지 않는다. "turn" 같은 존재하지 않는 톤이
 // 조용히 폴백되어 색이 틀렸던 적이 있다. 상수를 쓰면 오타가 즉시 드러난다.
 import { AR_TONE } from "./design_tokens.js";
@@ -116,6 +116,8 @@ export function classifySdiType(sdiType) {
 
 export function classifyTrafficSignal(signal) {
   if (!signal || signal.visible !== true) return null;
+  const distanceM = Number(signal.distanceM);
+  if (!Number.isFinite(distanceM) || distanceM <= 0) return null;
   const lamps = [];
   const push = (id, valid, on, remain) => {
     if (valid !== true) return;
@@ -126,14 +128,18 @@ export function classifyTrafficSignal(signal) {
   push("green", signal.greenValid, signal.greenOn, signal.greenRemainSec);
   push("right", signal.rightValid, signal.rightOn, signal.rightRemainSec);
   push("uturn", signal.uturnValid, signal.uturnOn, signal.uturnRemainSec);
-  return lamps.length ? Object.freeze({ lamps: Object.freeze(lamps), distanceM: Number(signal.distanceM) || 0 }) : null;
+  return lamps.length ? Object.freeze({
+    lamps: Object.freeze(lamps),
+    distanceM,
+    counterRemainSec: signal.uiCounterValid === true ? Number(signal.uiCounterRemainSec) || 0 : 0,
+  }) : null;
 }
 
 /* ── 차선 안내 ───────────────────────────────────────────── */
 
 /** available[] 에서 권장 차선군의 중심 오프셋(m)을 추정한다.
  *  주의: 지도 기준 N번 차선이 아니다. "권장 차선군"의 상대 위치일 뿐이다. */
-export function laneGroupOffsetM(lane, laneWidthM = 3.5) {
+export function laneGroupGeometry(lane, laneWidthM = 3.5) {
   const available = Array.isArray(lane?.available) ? lane.available : [];
   const count = Number(lane?.count) || available.length;
   if (!count || !available.length) return null;
@@ -144,7 +150,16 @@ export function laneGroupOffsetM(lane, laneWidthM = 3.5) {
   // 차선 index 는 좌→우. 우리 좌표계는 +y 가 좌측이므로 부호를 뒤집는다.
   const centerIndex = (count - 1) / 2;
   const offsetM = -(mean - centerIndex) * laneWidthM;
-  return offsetM === 0 ? 0 : offsetM;
+  const span = Math.max(...picked) - Math.min(...picked) + 1;
+  return Object.freeze({
+    offsetM: offsetM === 0 ? 0 : offsetM,
+    widthM: Math.max(1, span) * laneWidthM,
+    selectedCount: picked.length,
+  });
+}
+
+export function laneGroupOffsetM(lane, laneWidthM = 3.5) {
+  return laneGroupGeometry(lane, laneWidthM)?.offsetM ?? null;
 }
 
 /* ── 데이터 종류 → 마커 descriptor ────────────────────────── */
@@ -154,10 +169,21 @@ export const AR_SOURCE = Object.freeze({
   GUIDANCE_NEXT: "guidanceNext",
   LANE: "lane",
   SDI: "sdi",
+  SDI_SECONDARY: "sdiSecondary",
   SECTION: "section",
   TRAFFIC_SIGNAL: "trafficSignal",
   CROSSROAD: "crossroad",
   DESTINATION: "destination",
+});
+
+// Only CarrotNavi carries an event distance plus route/point context suitable
+// for a persistent world marker. CarrotMan/stock values remain valid HUD
+// fallbacks, but promoting them to AR would invent a coordinate and make the
+// marker follow the camera.
+export const AR_NAV_SOURCE_QUALITY = Object.freeze({
+  CARROT_NAVI: "world-anchor",
+  CARROT_MAN: "hud-only",
+  STOCK_NAVI: "hud-only",
 });
 
 /**
@@ -187,6 +213,9 @@ export function describeMarkers(navi, options = {}) {
       return { source, kind: AR_MARKER_KIND.DESTINATION_PIN, distanceM, point,
                tone: AR_TONE.DESTINATION, label: item.mainText || item.roadName || "", turn };
     }
+    // Straight-ahead guidance is persistent Navi state rather than a useful
+    // world event. Keep it out of AR while preserving lane/SDI markers.
+    if (turn.direction === D.STRAIGHT) return null;
     if (turn.family === F.NOTIFICATION || turn.family === F.UNKNOWN) return null;
     return {
       source, kind: AR_MARKER_KIND.TURN_GATE, distanceM, point, tone: AR_TONE.GUIDE,
@@ -205,37 +234,61 @@ export function describeMarkers(navi, options = {}) {
   if (cur && cur.kind === AR_MARKER_KIND.TURN_GATE && cur.turn.sign !== 0) {
     add({ source: AR_SOURCE.GUIDANCE_CURRENT, kind: AR_MARKER_KIND.COMMIT_ARROW,
           distanceM: Math.max(0, cur.distanceM - 6), tone: AR_TONE.GUIDE,
+          eventDistanceM: cur.distanceM,
           turn: cur.turn, curvature: cur.turn.curvature, label: "" });
   }
 
-  // 차선 안내
-  const lane = navi?.laneCurrent;
-  if (lane && lane.present !== false && lane.visible === true) {
-    const offset = laneGroupOffsetM(lane, laneWidthM);
-    if (offset !== null) {
-      add({ source: AR_SOURCE.LANE, kind: AR_MARKER_KIND.LANE_BAND,
-            distanceM: Number(lane.distanceM) || 0, tone: AR_TONE.LANE,
-            laneOffsetM: offset, laneWidthM, label: "" });
+  // 권장 차선 데이터와 BAND 구현은 보존하지만, 실차 화면에서 의미가 직관적이지
+  // 않다는 사용자 판정에 따라 제품 노출은 정책 토큰으로 비활성화한다.
+  if (AR_PRODUCT_MARKERS.laneBand) {
+    // current가 비었을 때 laneAhead 중 가장 가까운 명시 안내 하나만 사용한다.
+    const explicitLane = (item) => item && item.present !== false && item.visible === true
+      && Number.isFinite(Number(item.distanceM)) && Number(item.distanceM) > 0;
+    const lane = explicitLane(navi?.laneCurrent)
+      ? navi.laneCurrent
+      : (Array.isArray(navi?.laneAhead) ? navi.laneAhead : [])
+        .filter(explicitLane)
+        .sort((a, b) => Number(a.distanceM) - Number(b.distanceM))[0];
+    if (lane) {
+      const geometry = laneGroupGeometry(lane, laneWidthM);
+      if (geometry) {
+        add({ source: AR_SOURCE.LANE, kind: AR_MARKER_KIND.LANE_BAND,
+              distanceM: Number(lane.distanceM), tone: AR_TONE.LANE,
+              laneOffsetM: geometry.offsetM, laneWidthM: geometry.widthM,
+              selectedLaneCount: geometry.selectedCount, label: "" });
+      }
     }
   }
 
-  // SDI (단속/과속방지턱/경찰)
+  // SDI (단속/과속방지턱/경찰). primary/secondary는 별도 identity를 쓴다.
   const speed = navi?.speed;
-  if (speed?.sdiPresent === true) {
-    const sdi = classifySdiType(speed.sdiType);
-    if (sdi.family) {
-      add({ source: AR_SOURCE.SDI, kind: AR_MARKER_KIND.CAUTION_SIGN,
-            distanceM: Number(speed.sdiDistanceM) || 0, tone: AR_TONE.CAUTION,
-            sdiFamily: sdi.family, speedLimitKph: Number(speed.sdiSpeedLimitKph) || 0,
-            label: String(Number(speed.sdiSpeedLimitKph) || "") });
-    }
-  }
+  const addSdi = (prefix, source) => {
+    if (speed?.[`${prefix}Present`] !== true) return;
+    const distanceM = Number(speed[`${prefix}DistanceM`]);
+    const sdi = classifySdiType(speed[`${prefix}Type`]);
+    // The section gate below owns section semantics and avoids a duplicate
+    // caution sign for one event.
+    if (!sdi.family || sdi.family === SDI_FAMILY.SECTION || !Number.isFinite(distanceM) || distanceM <= 0) return;
+    const speedLimitKph = Number(speed[`${prefix}SpeedLimitKph`]) || 0;
+    add({ source, kind: AR_MARKER_KIND.CAUTION_SIGN, distanceM, tone: AR_TONE.CAUTION,
+          sdiFamily: sdi.family, speedLimitKph,
+          blockType: Number(speed[`${prefix}BlockType`]) || 0,
+          blockDistanceM: Number(speed[`${prefix}BlockDistanceM`]) || 0,
+          label: String(speedLimitKph || "") });
+  };
+  addSdi("sdi", AR_SOURCE.SDI);
+  addSdi("secondarySdi", AR_SOURCE.SDI_SECONDARY);
   // 구간단속은 별도 게이트(진입/진행 표시)
-  if (speed?.sectionPresent === true) {
+  const sectionDistanceM = Number(speed?.sectionRemainingDistanceM);
+  if (speed?.sectionPresent === true && speed.sectionOffRoute !== true
+      && Number.isFinite(sectionDistanceM) && sectionDistanceM > 0) {
     add({ source: AR_SOURCE.SECTION, kind: AR_MARKER_KIND.SECTION_GATE,
-          distanceM: Number(speed.sectionRemainingDistanceM) || 0, tone: AR_TONE.RESTRICT,
+          distanceM: sectionDistanceM, tone: AR_TONE.RESTRICT,
           active: speed.sectionActive === true,
           averageKph: Number(speed.sectionAverageKph) || 0,
+          overallAverageKph: Number(speed.sectionOverallAverageKph) || 0,
+          remainingTimeSec: Number(speed.sectionRemainingTimeSec) || 0,
+          suspended: speed.sectionSuspended === true,
           limitKph: Number(speed.sectionSpeedLimitKph) || 0,
           progress: Number(speed.sectionProgress) || 0, laneWidthM });
   }
@@ -244,12 +297,13 @@ export function describeMarkers(navi, options = {}) {
   const signal = classifyTrafficSignal(navi?.trafficSignal);
   if (signal) {
     add({ source: AR_SOURCE.TRAFFIC_SIGNAL, kind: AR_MARKER_KIND.SIGNAL_HEAD,
-          distanceM: signal.distanceM, tone: AR_TONE.CAUTION, lamps: signal.lamps, label: "" });
+          distanceM: signal.distanceM, tone: AR_TONE.CAUTION, lamps: signal.lamps,
+          counterRemainSec: signal.counterRemainSec, label: "" });
   }
 
   // 교차로 프리뷰
   const crossroad = navi?.crossroad;
-  if (crossroad?.visible === true) {
+  if (crossroad?.visible === true && Number(crossroad.distanceM) > 0) {
     add({ source: AR_SOURCE.CROSSROAD, kind: AR_MARKER_KIND.CROSSROAD_CARD,
           distanceM: Number(crossroad.distanceM) || 0, tone: AR_TONE.GUIDE,
           imageCode: Number(crossroad.imageCode) || 0, label: "" });

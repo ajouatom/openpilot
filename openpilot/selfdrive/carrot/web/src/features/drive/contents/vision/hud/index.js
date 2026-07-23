@@ -34,7 +34,10 @@ function num(value) {
 // 실 payload(js/realtime/vision_raw.js):
 //  vEgoKph, vSetKph, tfGap, gear, gearStep, speedLimitKph, isMetric, driveMode...
 // 속도류는 항상 kph로 옴 → isMetric=false면 mph 변환.
-function mapPayload(p = {}) {
+// Exported for tests: the single normalization every HUD payload passes through,
+// shared identically by live (당근비전) and replay (both feed RAW_HUD_STATE →
+// deriveCompactHudPayload → CarrotHudOverlay.update → mapPayload → widgets).
+export function mapPayload(p = {}) {
   const metric = p.isMetric !== false;
   const toUnit = (kph) => (kph == null ? null : Math.round(metric ? kph : kph * 0.621371));
   const speed = num(p.vEgoKph ?? p.speed);
@@ -45,6 +48,8 @@ function mapPayload(p = {}) {
   const gear = gearStep != null && gearStep > 0
     ? String(Math.round(gearStep))
     : (p.gear == null ? null : String(p.gear).trim().toUpperCase().slice(0, 2));
+  const override = p.cruiseOverride && typeof p.cruiseOverride === "object" ? p.cruiseOverride : null;
+  const overrideKph = override != null ? num(override.kph) : null;
   return {
     speed: toUnit(speed),
     // 크루즈 off면 0/음수로 오므로 숨김
@@ -52,6 +57,12 @@ function mapPayload(p = {}) {
     gap: gap != null && gap > 0 ? Math.round(gap) : null,
     gear,
     speedLimit: limit != null && limit > 0 ? toUnit(limit) : null,
+    // 클러스터 패리티: EV 텔테일 / LFA 레인 초록 날개 / 크루즈 오버라이드(감속=주황·eco=초록)
+    evActive: p.evActive === true,
+    activeLaneLine: p.activeLaneLine === true,
+    cruiseOverride: overrideKph != null && overrideKph > 0
+      ? { kph: toUnit(overrideKph), label: override.label == null ? "" : String(override.label), mode: num(override.mode) ?? 0 }
+      : null,
     lfaActive: p.latActive ?? p.lfaActive,
     steerAngle: num(p.steeringAngleDeg),
     accel: num(p.aEgo ?? p.accel),
@@ -130,6 +141,8 @@ export function createHudOverlay(doc) {
       data.speedLimit != null && data.speedLimit > 0,
       data.leftBlinker,
       data.rightBlinker,
+      // 레인 날개는 LFA 폭을 바꾸므로 등장/소멸 시 재배치 판정이 필요하다.
+      data.activeLaneLine,
       data.fuelGauge != null && data.fuelGauge > 0 && data.fuelGauge <= 1,
       data.ureaGauge != null && data.ureaGauge > 0 && data.ureaGauge <= 1,
     ].join(":");

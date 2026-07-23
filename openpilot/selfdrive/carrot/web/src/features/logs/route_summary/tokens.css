@@ -1,0 +1,32 @@
+.route-summary,
+.route-summary-state {
+  --route-summary-gap: var(--sp-md);
+  --route-summary-section-gap: var(--sp-sm);
+  --route-summary-radius: var(--r-md);
+  --route-summary-radius-small: var(--r-sm);
+  --route-summary-border: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
+  --route-summary-divider: color-mix(in srgb, var(--md-outline-var) 30%, transparent);
+  --route-summary-surface: var(--md-surface-cont-l);
+  --route-summary-surface-raised: var(--md-surface-cont-h);
+  --route-summary-text: var(--md-on-surface);
+  --route-summary-muted: color-mix(in srgb, var(--md-on-surface-var) 76%, transparent);
+  --route-summary-accent: var(--md-primary);
+  --route-summary-accent-soft: var(--md-primary-state-soft);
+  --route-summary-auto: var(--md-info);
+  --route-summary-manual: var(--md-error);
+  --route-summary-manual-soft: color-mix(in srgb, var(--md-error) 35%, transparent);
+  --route-summary-gas: var(--md-warning);
+  --route-summary-brake: var(--md-primary);
+  --route-summary-event-over: var(--md-warning);
+  --route-summary-event-over-soft: var(--md-warning-cont);
+  --route-summary-event-hard: var(--md-error);
+  --route-summary-event-hard-soft: color-mix(in srgb, var(--md-error-cont) 24%, var(--md-surface-cont-h));
+  --route-summary-danger: var(--md-error);
+  --route-summary-danger-soft: color-mix(in srgb, var(--md-error-cont) 24%, var(--md-surface-cont-h));
+  --route-summary-progress-track: var(--md-surface-cont-h);
+  --route-summary-progress-fill: var(--md-primary);
+  --route-summary-progress-height: var(--sp-xs);
+  --route-summary-progress-motion: var(--motion-medium);
+  --route-summary-progress-cycle: calc(var(--motion-long) + var(--motion-long) + var(--motion-long));
+  --route-summary-distribution-height: var(--sp-lg);
+}

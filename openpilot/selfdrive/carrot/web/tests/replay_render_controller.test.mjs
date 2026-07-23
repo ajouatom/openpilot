@@ -32,8 +32,43 @@ test("replay presents only after the exact frame has flushed", () => {
     "reset-frame",
     ["merge", { force: true, overlayDirty: true, hudDirty: true }],
     "flush",
-    ["present", { source: "replay", mediaTime: 2.25, reason: "seek" }],
+    ["present", {
+      source: "replay",
+      mediaTime: 2.25,
+      reason: "seek",
+      discontinuity: true,
+      discontinuityReason: "replay-seek",
+    }],
   ]);
+});
+
+test("ordinary replay frames do not announce a timeline discontinuity", () => {
+  const { calls, controller } = fixture();
+  controller.renderVideoFrame({ mediaTime: 2.5, reason: "replay video frame" });
+  assert.deepEqual(calls.at(-1), ["present", {
+    source: "replay",
+    mediaTime: 2.5,
+    reason: "replay video frame",
+    discontinuity: false,
+    discontinuityReason: null,
+  }]);
+});
+
+test("presentation-only replay frames notify AR without repainting unchanged 2D overlays", () => {
+  const { calls, controller } = fixture();
+  controller.renderVideoFrame({
+    mediaTime: 2.55,
+    reason: "replay video frame",
+    overlayDirty: false,
+    hudDirty: false,
+  });
+  assert.deepEqual(calls, [["present", {
+    source: "replay",
+    mediaTime: 2.55,
+    reason: "replay video frame",
+    discontinuity: false,
+    discontinuityReason: null,
+  }]]);
 });
 
 test("replay does not publish a frame while its surface is inactive", () => {

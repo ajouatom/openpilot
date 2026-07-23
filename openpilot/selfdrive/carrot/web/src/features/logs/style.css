@@ -651,7 +651,15 @@
   flex: 1;
 }
 
+.dashcam-segment-topline {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs);
+}
+
 .dashcam-segment-badge {
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   min-height: 22px;
@@ -662,6 +670,20 @@
   color: var(--md-on-surface-var);
   font-size: 11px;
   font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashcam-segment-read-status {
+  min-width: 0;
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.dashcam-segment-read-status[hidden] {
+  display: none;
 }
 
 .dashcam-segment-name {
@@ -701,6 +723,11 @@
 .dashcam-group-menu-btn svg {
   width: 18px;
   height: 18px;
+}
+
+.dashcam-group-menu-btn--row {
+  display: inline-flex;
+  margin-left: auto;
 }
 
 .logs-loading-list {
@@ -1080,6 +1107,17 @@
   z-index: 5;
 }
 
+/* The log player uses the same persistent previous/play/next transport as the
+   drive replay. Plyr's own centre overlay would duplicate that control. */
+.dashcam-player-frame .plyr__control--overlaid {
+  display: none !important;
+}
+
+.dashcam-player-transport {
+  z-index: 4;
+  pointer-events: auto;
+}
+
 .dashcam-player-frame .plyr:-webkit-full-screen,
 .dashcam-player-frame .plyr:fullscreen,
 .dashcam-player-frame .plyr.plyr--fullscreen-active {
@@ -1121,7 +1159,7 @@
   margin: auto;
 }
 
-.dashcam-player-overlay--dashcam .dashcam-player-dialog {
+.dashcam-player-overlay--dashcam .dashcam-player-dialog:not(.dashcam-player-dialog--browsable) {
   width: min(84vw, 760px);
   max-width: min(96vw, 920px);
   max-height: min(84vh, 760px);
@@ -1156,12 +1194,8 @@
   transition: opacity .2s ease, transform .2s ease;
 }
 
-.dashcam-player-overlay.is-controls-hidden:not(.is-menu-open):not(.is-action-open) .dashcam-player-top {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-
 .dashcam-player-toast {
+  display: none;
   position: absolute;
   top: 50%;
   left: 50%;
@@ -1466,6 +1500,7 @@
     display: flex;
     flex-direction: column;
     padding-top: 8px;
+    padding-right: 0;
   }
 
   .dashcam-route-head {
@@ -1488,12 +1523,23 @@
     min-height: 0;
     height: 100%;
     flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch;
+    justify-content: center;
+    align-items: center;
     gap: 6px;
+    box-sizing: border-box;
     overflow-y: auto;
-    padding: 8px 8px 8px 10px;
+    padding: 8px;
     border-left: 1px solid color-mix(in srgb, var(--md-outline-var) 38%, transparent);
+    scrollbar-width: none;
+    text-align: center;
+  }
+
+  .dashcam-selection-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dashcam-selection-row .dashcam-group-menu-btn--row {
+    margin-left: 0;
   }
 
   .dashcam-segment-list {
@@ -1543,21 +1589,36 @@
 
   .dashcam-segment-tile--compact .dashcam-segment-body {
     min-width: 0;
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 8px;
   }
 
+  .dashcam-segment-tile--compact .dashcam-segment-topline {
+    display: contents;
+  }
+
   .dashcam-segment-tile--compact .dashcam-segment-badge {
-    flex: 0 0 auto;
+    grid-column: 1;
+    grid-row: 1;
     min-height: 20px;
     padding-inline: 7px;
     font-size: 10.5px;
   }
 
   .dashcam-segment-tile--compact .dashcam-segment-name {
+    min-width: 0;
+    grid-column: 2;
+    grid-row: 1;
     margin-top: 0;
     font-size: 12.5px;
+  }
+
+  .dashcam-segment-tile--compact .dashcam-segment-read-status {
+    grid-column: 3;
+    grid-row: 1;
+    margin-left: 0;
   }
 
   .dashcam-segment-tile--compact .dashcam-menu-btn {
@@ -1636,246 +1697,4 @@
   .dashcam-player-title {
     font-size: 12.5px;
   }
-}
-
-
-
-/* ════════════ 주행 리포트 (Driving report) ════════════ */
-.dashcam-report-btn {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding-inline: 12px;
-  border-radius: var(--r-sm);
-  font-size: 12.5px;
-  font-weight: 800;
-  white-space: nowrap;
-  color: var(--md-primary);
-  background: color-mix(in srgb, var(--md-primary) 12%, transparent);
-}
-.dashcam-report-btn:hover {
-  background: color-mix(in srgb, var(--md-primary) 20%, transparent);
-}
-.dashcam-report-btn svg {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-}
-
-/* 방향별로 딱 하나만 노출:
-   - 세로(portrait): 헤더의 .dashcam-report-btn 사용, row 버전은 숨김.
-   - 가로(landscape): 헤더(.dashcam-route-head)가 display:none 이므로 헤더 버튼이
-     사라지고, selection-row 액션 열의 --row 버전이 대신 노출된다. */
-.dashcam-report-btn--row {
-  display: none;
-}
-@media (orientation: landscape) {
-  .dashcam-report-btn--row {
-    display: inline-flex;
-    justify-content: center;
-  }
-}
-
-/* NOTE: 리포트는 공용 다이얼로그 body(.app-dialog__body, white-space:pre-wrap)에
-   messageHtml로 주입된다. 소스 개행/들여쓰기가 그대로 공백으로 렌더되어 큰 빈 줄이
-   생기므로 .drpt 계열은 white-space를 normal로 되돌린다(자식에 상속). 또한 다이얼로그
-   body가 이미 스크롤 컨테이너라 .drpt 자체 max-height/overflow는 두지 않는다. */
-.drpt-loading,
-.drpt-empty {
-  padding: 22px 10px;
-  text-align: center;
-  color: var(--md-on-surface-var);
-  font-size: 14px;
-  font-weight: 700;
-  white-space: normal;
-}
-
-.drpt {
-  white-space: normal;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  text-align: left;
-}
-.drpt-sec {
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 70%, transparent);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: var(--md-surface-cont-l);
-  break-inside: avoid;   /* 가로 멀티컬럼에서 섹션이 컬럼 경계로 잘리지 않게 */
-}
-.drpt-h {
-  margin: 0 0 6px;
-  font-size: 11.5px;
-  font-weight: 850;
-  letter-spacing: .02em;
-  color: var(--md-on-surface-var);
-  text-transform: uppercase;
-  opacity: .9;
-}
-.drpt-total {
-  display: flex;
-  align-items: baseline;
-  gap: 6px 10px;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-.drpt-total-val {
-  font-size: 30px;
-  line-height: 1.0;
-  font-weight: 900;
-  color: var(--md-primary);
-  font-variant-numeric: tabular-nums;
-}
-.drpt-total-sub {
-  font-size: 12px;
-  color: var(--md-on-surface-var);
-  opacity: .9;
-  font-variant-numeric: tabular-nums;
-}
-.drpt-kv {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 4px 0;
-  font-size: 13px;
-  border-top: 1px dashed color-mix(in srgb, var(--md-outline-var) 55%, transparent);
-}
-.drpt-kv:first-of-type { border-top: 0; }
-.drpt-kv > span { flex: 0 0 auto; color: var(--md-on-surface-var); font-weight: 750; min-width: 92px; }
-.drpt-kv > b { font-weight: 900; font-variant-numeric: tabular-nums; }
-.drpt-kv > small { color: var(--md-on-surface-var); opacity: .8; font-size: 11.5px; margin-left: auto; text-align: right; }
-.drpt-kv--sub { padding-left: 12px; font-size: 12px; }
-.drpt-kv--sub > span { min-width: 78px; }
-
-/* 주행시간 세부: 자동/수동 그룹. 세로는 그대로 세로 스택, 가로는 배너로 재배치 */
-.drpt-tdetail { display: flex; flex-direction: column; }
-.drpt-tgrp--manual { border-top: 1px dashed color-mix(in srgb, var(--md-outline-var) 55%, transparent); }
-
-/* 라벨/시간 글자색 = 구성비율 막대 색상(자동:파랑, 수동:빨강, Gas:노랑, Brake:주황) */
-.drpt-kv--c-auto > span, .drpt-kv--c-auto > b { color: #5fa8ff; }
-.drpt-kv--c-manual > span, .drpt-kv--c-manual > b { color: #ff6b6b; }
-.drpt-kv--c-gas > span, .drpt-kv--c-gas > b { color: #ffd54a; }
-.drpt-kv--c-brake > span, .drpt-kv--c-brake > b { color: #ff9d3c; }
-
-/* 구성비율 막대: 세로는 숨김(공간 부족), 가로 배너에서만 가로 스택 막대로 노출.
-   폭은 배너 전체 폭(100%)까지 최대한 길게 사용한다. */
-.drpt-bar-wrap { display: none; }
-.drpt-bar {
-  width: 100%;
-  height: 18px;
-  display: flex;
-  flex-direction: row;
-  overflow: hidden;
-  border-radius: 6px;
-}
-.drpt-bar > *:not(:first-child) { border-left: 1px solid rgba(9, 12, 16, 0.55); }
-.drpt-bar-seg--auto { border: 2px solid transparent; }
-.drpt-bar-group {
-  display: flex;
-  flex-direction: row;
-  border: 2px solid transparent;
-}
-.drpt-bar-group > *:not(:first-child) { border-left: 1px solid rgba(9, 12, 16, 0.55); }
-
-.drpt-grid {
-  display: grid;
-  gap: 7px;
-}
-/* 거리/속도는 두 줄로 분리: 위=총거리/자동/수동(3), 아래=평균/최고(2) */
-.drpt-grid--dist { grid-template-columns: repeat(3, 1fr); }
-.drpt-grid--spd { grid-template-columns: repeat(2, 1fr); margin-top: 7px; }
-.drpt-grid > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 7px 8px;
-  border-radius: 8px;
-  background: var(--md-surface-cont);
-}
-.drpt-grid small { font-size: 10.5px; color: var(--md-on-surface-var); opacity: .85; }
-.drpt-grid b { font-size: 15px; font-weight: 900; font-variant-numeric: tabular-nums; }
-
-.drpt-evt {
-  padding: 6px 0;
-  border-top: 1px dashed color-mix(in srgb, var(--md-outline-var) 55%, transparent);
-}
-.drpt-evt:first-of-type { border-top: 0; }
-.drpt-evt-head { display: flex; align-items: center; gap: 8px; }
-.drpt-evt-label { font-weight: 800; font-size: 13px; }
-.drpt-evt-count {
-  margin-left: auto;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
-  padding: 1px 10px;
-  border-radius: 999px;
-  font-size: 12.5px;
-  background: var(--md-surface-cont-h);
-}
-.drpt-evt.is-hard .drpt-evt-count { color: var(--md-on-primary); background: var(--md-error); }
-.drpt-evt.is-over .drpt-evt-count { color: var(--md-primary); background: color-mix(in srgb, var(--md-primary) 18%, transparent); }
-.drpt-evt.is-accel .drpt-evt-label::before { content: "▲ "; color: var(--md-error); }
-.drpt-evt.is-decel .drpt-evt-label::before { content: "▼ "; color: var(--md-primary); }
-
-.drpt-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-.drpt-chip {
-  font-size: 11px;
-  font-weight: 750;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--md-surface-cont);
-  color: var(--md-on-surface);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.drpt-chip em { font-style: normal; opacity: .7; }
-.drpt-chip--more { opacity: .7; }
-.drpt-sub2 { margin-top: 5px; font-size: 12px; font-weight: 750; color: var(--md-on-surface-var); }
-.drpt-foot { text-align: center; font-size: 11px; color: var(--md-on-surface-var); opacity: .8; padding-top: 2px; }
-
-/* ── 가로(landscape): 넓은 폭 활용 ─────────────────────────────────────────
-   세로와 다른 배치로, 리포트를 담은 다이얼로그 시트를 넓히고(:has 로 리포트가 든
-   시트만 타겟) 섹션들을 2단 멀티컬럼으로 흘려 좌우 공간을 채운다. */
-@media (orientation: landscape) {
-  .app-dialog__sheet:has(.drpt) { --dialog-sheet-width: min(92vw, 1100px); }
-  .drpt {
-    display: block;
-    columns: 2;
-    column-gap: 10px;
-  }
-  .drpt-sec { margin: 0 0 10px; }
-  .drpt-total-val { font-size: 34px; }
-  /* 주행시간 배너: 헤더 풀폭 / 그 아래 [좌: 총계 크게] + [우: 자동 줄, 수동 줄] */
-  .drpt-sec:first-child {
-    column-span: all;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    column-gap: 30px;
-    row-gap: 4px;
-  }
-  .drpt-sec:first-child .drpt-h { flex: 0 0 100%; }
-  .drpt-sec:first-child .drpt-total { flex: 0 0 auto; margin: 0; }
-  .drpt-sec:first-child .drpt-tdetail { flex: 0 1 auto; min-width: 0; row-gap: 2px; }
-  /* 구성비율 막대: 총계/자동·수동 줄 아래에 배너 전체 폭을 쓰는 가로 스택 막대로 별도 줄 배치 */
-  .drpt-sec:first-child .drpt-bar-wrap {
-    display: flex;
-    flex: 0 0 100%;
-    margin-top: 6px;
-  }
-  /* 자동/수동 줄: border-top 제거, 라벨 폭 축소 */
-  .drpt-sec:first-child .drpt-tgrp--manual { border-top: 0; }
-  .drpt-sec:first-child .drpt-kv { border-top: 0; padding: 2px 0; width: auto; }
-  .drpt-sec:first-child .drpt-kv > span { min-width: 0; margin-right: 6px; }
-  /* 수동 줄: 수동 주행 + 수동 Gas + 수동 Brake 를 한 줄에 인라인 */
-  .drpt-sec:first-child .drpt-tgrp--manual {
-    display: flex;
-    flex-flow: row wrap;
-    align-items: baseline;
-    gap: 2px 18px;
-  }
-  .drpt-sec:first-child .drpt-tgrp--manual .drpt-kv { display: inline-flex; }
-  .drpt-sec:first-child .drpt-tgrp--manual .drpt-kv--sub { padding-left: 0; }
 }
