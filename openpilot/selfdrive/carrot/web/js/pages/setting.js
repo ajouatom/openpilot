@@ -13,6 +13,7 @@ if (
   !carrotSettingsRuntime?.catalog ||
   !carrotSettingsRuntime?.derived ||
   !carrotSettingsRuntime?.docs ||
+  !carrotSettingsRuntime?.context ||
   !carrotSettingsRuntime?.entry ||
   !carrotSettingsRuntime?.view ||
   !carrotSettingsRuntime?.values
@@ -28,6 +29,7 @@ const settingAuxState = carrotSettingsRuntime.aux;
 const settingCatalogState = carrotSettingsRuntime.catalog;
 const settingDerivedRuntime = carrotSettingsRuntime.derived;
 const settingDocumentationRuntime = carrotSettingsRuntime.docs;
+const settingContextRuntime = carrotSettingsRuntime.context;
 const settingEntryRuntime = carrotSettingsRuntime.entry;
 const settingViewRuntime = carrotSettingsRuntime.view;
 const settingValueRepository = carrotSettingsRuntime.values;
@@ -1591,59 +1593,47 @@ async function selectSettingDetail(group, name, pushHistory = true) {
   }), "forward");
 }
 
-function createSettingDocumentationBlock(name, renderToken) {
-  const details = document.createElement("details");
-  details.className = "setting-doc-detail is-loading";
-  details.open = true;
-
-  const summary = document.createElement("summary");
-  summary.className = "setting-doc-detail__summary";
-  const title = document.createElement("span");
-  title.className = "setting-doc-detail__title";
-  title.textContent = getUIText("setting_doc_title", "Detailed guide");
-  const format = document.createElement("span");
-  format.className = "setting-doc-detail__format";
-  format.textContent = "MD";
-  summary.append(title, format);
-
-  const body = document.createElement("div");
-  body.className = "setting-doc-detail__body";
-  body.setAttribute("aria-live", "polite");
-  body.textContent = getUIText("setting_doc_loading", "Loading guide...");
-  details.append(summary, body);
-
+function loadSettingDocumentationPanel(contextPanel, name, renderToken) {
+  contextPanel.setLoading(
+    "description",
+    getUIText("setting_doc_loading", "Loading guide..."),
+  );
   settingDocumentationRuntime.load(name, LANG).then((payload) => {
-    if (renderToken !== settingRenderToken || !details.isConnected) return;
-    if (!payload?.available || !payload.markdown) {
-      details.remove();
+    if (renderToken !== settingRenderToken || !contextPanel.root.isConnected) return;
+    if (!payload?.available || !Array.isArray(payload.ast)) {
+      contextPanel.setEmpty(
+        "description",
+        getUIText("setting_context_description_empty", "No detailed description is available yet."),
+      );
       return;
     }
 
-    body.replaceChildren();
+    const content = document.createElement("div");
+    content.className = "setting-context__documentation";
     if (payload.fallback) {
       const fallback = document.createElement("div");
-      fallback.className = "setting-doc-detail__fallback";
+      fallback.className = "setting-doc-language-fallback";
       fallback.textContent = getUIText(
         "setting_doc_language_fallback",
         "This detailed guide is currently shown in English.",
       );
-      body.appendChild(fallback);
+      content.appendChild(fallback);
     }
 
-    const article = document.createElement("article");
-    article.className = "setting-doc-markdown";
-    article.innerHTML = settingDocumentationRuntime.renderMarkdown(payload.markdown);
-    body.appendChild(article);
-    details.classList.remove("is-loading", "is-error");
-    details.dataset.docSource = `${payload.source || ""}#${payload.anchor || ""}`;
+    const article = settingDocumentationRuntime.renderAst(document, payload.ast, {
+      text: getUIText,
+    });
+    content.appendChild(article);
+    contextPanel.root.dataset.docSource = `${payload.source || ""}#${payload.anchor || ""}`;
+    contextPanel.root.dataset.docContentSource = payload.content_source || "";
+    contextPanel.setContent("description", content);
   }).catch(() => {
-    if (renderToken !== settingRenderToken || !details.isConnected) return;
-    details.classList.remove("is-loading");
-    details.classList.add("is-error");
-    body.textContent = getUIText("setting_doc_load_failed", "The detailed guide could not be loaded.");
+    if (renderToken !== settingRenderToken || !contextPanel.root.isConnected) return;
+    contextPanel.setEmpty(
+      "description",
+      getUIText("setting_doc_load_failed", "The detailed guide could not be loaded."),
+    );
   });
-
-  return details;
 }
 
 function settingMarqueeHtml(text, className) {
@@ -2485,26 +2475,43 @@ async function renderItems(group, options = {}) {
     el.appendChild(d);
 
     const popularTopValues = Array.isArray(popularEntry?.top_values) ? popularEntry.top_values : [];
+    let contextPanel = null;
     let popularDetail = null;
-    if (detailMode && popularTopValues.length) {
-      popularDetail = document.createElement("div");
-      popularDetail.className = "setting-popular-detail-block";
-      popularDetail.innerHTML = renderSettingPopularDetailHtml(p, popularEntry);
-      el.appendChild(popularDetail);
-    }
-
-    if (detailMode) {
-      el.appendChild(createSettingDocumentationBlock(name, renderToken));
-    }
-
-    // Modification history sits below the popular values, using the same block
-    // structure. It is fetched after paint so the detail screen never waits on
-    // it, and it reloads itself whenever this parameter is written.
     let historyBlock = null;
+    let historyFullBlock = null;
     if (detailMode) {
+      contextPanel = settingContextRuntime.create({
+        document,
+        text: getUIText,
+        locale: settingDocumentationRuntime.normalizeLanguage(LANG),
+      });
+      if (popularTopValues.length) {
+        popularDetail = document.createElement("div");
+        popularDetail.className = "setting-popular-detail-block";
+        popularDetail.innerHTML = renderSettingPopularDetailHtml(p, popularEntry);
+        contextPanel.setContent("popular", popularDetail);
+      } else {
+        contextPanel.setEmpty(
+          "popular",
+          getUIText("setting_context_popular_empty", "No popular-value data is available yet."),
+        );
+      }
+
       historyBlock = document.createElement("div");
       historyBlock.className = "setting-history-detail-block";
-      el.appendChild(historyBlock);
+      historyFullBlock = document.createElement("div");
+      historyFullBlock.className = "setting-history-detail-block";
+      if (profile) {
+        contextPanel.setEmpty(
+          "history",
+          getUIText("setting_context_history_empty", "No changes have been recorded yet."),
+        );
+      } else {
+        contextPanel.setLoading(
+          "history",
+          getUIText("setting_context_loading", "Loading..."),
+        );
+      }
     }
 
     // Footer actions row: optional unit-cycle (배율) plus a reset-to-default
@@ -2573,6 +2580,13 @@ async function renderItems(group, options = {}) {
     el.appendChild(actions);
 
     currentItemContainer.appendChild(el);
+    if (contextPanel) {
+      // The setting control and its supplementary information are independent
+      // surfaces. Keep the context panel outside the setting card so the DOM
+      // structure matches the visual hierarchy at every viewport size.
+      itemsBox.appendChild(contextPanel.root);
+      loadSettingDocumentationPanel(contextPanel, name, renderToken);
+    }
 
     const cur = (name in values) ? values[name] : p.default;
     syncSettingControlState(el, cur);
@@ -2601,26 +2615,48 @@ async function renderItems(group, options = {}) {
     }
 
     async function refreshSettingHistory() {
-      if (!historyBlock || profile) return;
+      if (!contextPanel || !historyBlock || !historyFullBlock || profile) return;
       const runtimeHistory = carrotSettingsRuntime.history;
       if (!runtimeHistory) return;
       try {
-        const payload = await getJson(`/api/param_changes?name=${encodeURIComponent(name)}&limit=10`);
-        historyBlock.innerHTML = runtimeHistory.renderHtml(payload.changes, {
+        const payload = await getJson(
+          `/api/param_changes?name=${encodeURIComponent(name)}`
+          + `&limit=${settingContextRuntime.historyFetchLimit}`,
+        );
+        const changes = Array.isArray(payload.changes) ? payload.changes : [];
+        const summaryChanges = changes.slice(0, settingContextRuntime.historyPreviewLimit);
+        const renderOptions = {
           escape: escapeHtml,
           text: getUIText,
-          locale: LANG === "ko" ? "ko-KR" : undefined,
+          locale: settingDocumentationRuntime.normalizeLanguage(LANG),
           formatValue: (value) => formatSettingDisplayValue(p, value),
-        });
+        };
+        historyBlock.innerHTML = runtimeHistory.renderHtml(summaryChanges, renderOptions);
+        historyFullBlock.innerHTML = runtimeHistory.renderHtml(changes, renderOptions);
+        contextPanel.setHistoryContent(
+          historyBlock,
+          changes.length > summaryChanges.length ? historyFullBlock : null,
+          {
+            count: changes.length,
+            summaryCount: summaryChanges.length,
+            emptyMessage: getUIText(
+              "setting_context_history_empty",
+              "No changes have been recorded yet.",
+            ),
+          },
+        );
         bindSettingHistoryUndo();
       } catch (_) {
         // History is supplementary: a failed read must not disturb the screen.
-        historyBlock.innerHTML = "";
+        contextPanel.setEmpty(
+          "history",
+          getUIText("setting_context_history_empty", "No changes have been recorded yet."),
+        );
       }
     }
 
     function bindSettingHistoryUndo() {
-      historyBlock?.querySelectorAll("[data-setting-history-undo]").forEach((button) => {
+      contextPanel?.root.querySelectorAll("[data-setting-history-undo]").forEach((button) => {
         button.onclick = async (event) => {
           event.stopPropagation();
           const target = normalizeSettingValue(button.dataset.settingHistoryUndo);

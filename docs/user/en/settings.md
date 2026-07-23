@@ -45,15 +45,23 @@ A full reset or a backup from another vehicle can change many values at once. Sa
 
 ### Per-setting detailed guides
 
-Select the body of a setting, outside its value control, to open its detail screen. The **Detailed guide** panel reads only the relevant section from the `docs/user/en` Markdown files installed on the device.
+Select the body of a setting, outside its value control, to open its detail screen. The information box below the existing setting box always shows **Description**, **Popular**, and **History** tabs, with **Description** selected by default. A tab remains available and shows an empty state when it has no data.
 
-- It uses the on-device document without requiring GitHub or internet access.
-- Select the **Detailed guide** heading to collapse or expand it.
-- A documentation read failure does not disable viewing or changing the setting.
+- **Description** first uses the setting guide for the current language from the validated GitHub published content.
+- Content is shown only when both the published index and guide-page hashes match.
+- If the request or validation fails, Carrot Web uses the last validated browser copy.
+- If neither a validated remote version nor a validated browser copy exists, it shows an empty state instead of using an on-device document.
+- **Popular** shows the collected value distribution as a reference, not as a recommendation.
+- **History** shows the latest three changes first and offers the full history when more records exist.
+- Network or documentation processing failures do not disable viewing or changing the setting.
 - Korean and English Carrot Web sessions use their matching guide language.
 - Until a Chinese guide exists, Chinese titles and short descriptions remain Chinese while the detailed panel explicitly falls back to English.
+- `User Guide > Understanding Settings > All Settings` in the GitHub Wiki lists every
+  setting with the same menu hierarchy, order, and current-language title as Carrot Web.
 
-Several parameters in the same subsection can share one explanation. If a short catalog description and the detailed guide differ, diagnose the current branch against this code-owned guide.
+The information box stays vertically below the existing setting box in both portrait and landscape layouts. Multiplier and default actions keep their existing position and behavior inside the setting box.
+
+Validated published guides are generated against the current setting code's defaults, ranges, and options. If a short catalog description and the detailed guide differ, diagnose the issue together with the current branch's setting code.
 
 ## Reading values and defaults
 

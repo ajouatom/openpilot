@@ -312,15 +312,6 @@
   overflow-wrap: anywhere;
 }
 
-.web-settings-row__lock {
-  --chip-font-size: 11px;
-  flex: 0 0 auto;
-  min-height: 20px;
-  padding-inline: var(--sp-sm);
-  border-color: color-mix(in srgb, var(--md-outline-var) 54%, transparent);
-  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, transparent);
-}
-
 .web-settings-row__desc,
 .web-settings-empty {
   color: var(--md-on-surface-var);

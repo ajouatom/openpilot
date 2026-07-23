@@ -31,3 +31,14 @@
   without docs, record a concrete `Docs-Not-Needed: <reason>` in the PR body.
 - Do not place private, internal-only, credential-bearing, or non-public feature documentation in
   `docs/user/` or link it from the public Wiki.
+
+# Settings Wiki authoring
+
+- Before editing generated settings Wiki content or its generator, read
+  `tools/docs/wiki_settings/AUTHORING_GUIDE.md` completely.
+- In an existing generated Wiki setting page, edit only the matching `CARROT:MANUAL` region.
+  Preserve every `CARROT:*` marker and never hand-edit `CARROT:AUTO` content.
+- Verify behavior against the current `carrot-wip` implementation instead of inferring it from the
+  parameter name. Run the Wiki validator and focused generator tests after editing.
+- Generated setting pages carry the same authoring-guide URL in a hidden `CARROT:AUTHORING` marker
+  so an agent working from the Wiki checkout alone can discover the canonical rules.

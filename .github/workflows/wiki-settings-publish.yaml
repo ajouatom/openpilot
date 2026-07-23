@@ -1,0 +1,100 @@
+name: cp-set-wiki
+
+on:
+  push:
+    branches:
+      - carrot-wip
+    paths:
+      - "openpilot/selfdrive/carrot_settings.json"
+      - "tools/docs/wiki_settings/**"
+      - ".github/workflows/wiki-settings-publish.yaml"
+  gollum:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki-settings-sync
+  cancel-in-progress: false
+
+jobs:
+  synchronize:
+    name: validate and synchronize Wiki
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out trusted carrot-wip code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'push' && github.sha || 'carrot-wip' }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Resolve source revisions
+        id: source
+        run: |
+          echo "catalog=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out current Wiki
+        env:
+          WIKI_URL: https://github.com/${{ github.repository }}.wiki.git
+        run: |
+          git clone "$WIKI_URL" "$RUNNER_TEMP/carrot-wiki"
+          git -C "$RUNNER_TEMP/carrot-wiki" config user.name "github-actions[bot]"
+          git -C "$RUNNER_TEMP/carrot-wiki" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Validate candidate before any write
+        run: |
+          python tools/docs/wiki_settings/ci_check.py \
+            --wiki-dir "$RUNNER_TEMP/carrot-wiki" \
+            --output-dir "$RUNNER_TEMP/wiki-settings-report/preflight" \
+            --catalog-commit "${{ steps.source.outputs.catalog }}" \
+            --wiki-commit "$(git -C "$RUNNER_TEMP/carrot-wiki" rev-parse HEAD)"
+
+      - name: Synchronize generated Wiki regions
+        run: |
+          python tools/docs/wiki_settings/generate.py \
+            --wiki-dir "$RUNNER_TEMP/carrot-wiki" \
+            --write \
+            --output-dir "$RUNNER_TEMP/carrot-wiki" \
+            --catalog-commit "${{ steps.source.outputs.catalog }}"
+
+      - name: Validate synchronized Wiki
+        run: |
+          python tools/docs/wiki_settings/ci_check.py \
+            --wiki-dir "$RUNNER_TEMP/carrot-wiki" \
+            --output-dir "$RUNNER_TEMP/wiki-settings-report/synchronized" \
+            --catalog-commit "${{ steps.source.outputs.catalog }}"
+
+      - name: Push synchronized Wiki when changed
+        env:
+          WIKI_PUSH_URL: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git
+        run: |
+          git -C "$RUNNER_TEMP/carrot-wiki" add -A
+          if git -C "$RUNNER_TEMP/carrot-wiki" diff --cached --quiet; then
+            echo "Wiki already synchronized."
+          else
+            git -C "$RUNNER_TEMP/carrot-wiki" commit -m "chore: sync carrot settings"
+            git -C "$RUNNER_TEMP/carrot-wiki" push "$WIKI_PUSH_URL" HEAD
+          fi
+
+      - name: Add validation report to job summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/wiki-settings-report/preflight/summary.md" ]; then
+            cat "$RUNNER_TEMP/wiki-settings-report/preflight/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload synchronization report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wiki-settings-sync-${{ github.run_number }}
+          path: ${{ runner.temp }}/wiki-settings-report
+          if-no-files-found: warn
+          retention-days: 30

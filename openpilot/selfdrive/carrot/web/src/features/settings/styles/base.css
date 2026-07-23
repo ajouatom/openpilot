@@ -45,6 +45,10 @@
   --setting-profile-surface: var(--md-surface-cont-h);
   --setting-profile-outline: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
   --setting-profile-toolbar-height: 58px;
+  --setting-card-surface: var(--md-surface-cont);
+  --setting-card-outline: color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+  --setting-card-radius: var(--r-xl);
+  --setting-card-shadow: var(--shadow-1);
 }
 
 .page--setting #settingScreenHost.setting-screen-transitioning {
