@@ -956,6 +956,11 @@ def test_default_and_road_camera_share_fixed_tpms_status(monkeypatch, camera_vie
   car_rect = next(rect for rect in rects if rect[2:4] == (TPMS_STATUS_CAR_W, TPMS_STATUS_CAR_H))
   assert car_rect[0] + car_rect[2] * 0.5 == pytest.approx(TPMS_STATUS_CENTER_X)
   assert car_rect[1] + car_rect[3] * 0.5 == pytest.approx(TPMS_STATUS_CAR_CENTER_Y)
+  wheel_rects = [rect for rect in rects if rect[2:4] == (6.0, 17.0)]
+  left_protrusion = car_rect[0] - min(rect[0] for rect in wheel_rects)
+  right_protrusion = max(rect[0] + rect[2] for rect in wheel_rects) - (car_rect[0] + car_rect[2])
+  assert left_protrusion == pytest.approx(5.0)
+  assert right_protrusion == pytest.approx(left_protrusion)
 
 
 def test_tpms_status_hides_when_all_pressures_are_missing(monkeypatch):

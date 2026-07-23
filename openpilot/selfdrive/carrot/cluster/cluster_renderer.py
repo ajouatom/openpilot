@@ -2700,7 +2700,10 @@ class ClusterUiRenderer:
         car_y = TPMS_STATUS_CAR_CENTER_Y - TPMS_STATUS_CAR_H * 0.5
         wheel_w = 6.0
         wheel_h = 17.0
-        for wheel_x in (car_x - 5.0, car_x + TPMS_STATUS_CAR_W):
+        wheel_body_overlap = 1.0
+        wheel_left_x = car_x - wheel_w + wheel_body_overlap
+        wheel_right_x = car_x + TPMS_STATUS_CAR_W - wheel_body_overlap
+        for wheel_x in (wheel_left_x, wheel_right_x):
             self._rounded_rect(wheel_x, car_y + 12.0, wheel_w, wheel_h, 1.3, wheel_fill)
             self._rounded_rect(wheel_x, car_y + 47.0, wheel_w, wheel_h, 1.3, wheel_fill)
 
