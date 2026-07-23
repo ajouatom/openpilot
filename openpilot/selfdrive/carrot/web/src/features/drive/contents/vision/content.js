@@ -12,6 +12,7 @@ import {
   createVisionArActivationGate,
   installArRuntimeFacade,
 } from "./ar/index.js";
+import { createArDebugOverlay } from "./ar/debug/index.js";
 
 export const VISION_CONTENT_ID = "vision";
 export const VISION_COMPATIBILITY_ROOT_ID = "carrotStage";
@@ -78,17 +79,70 @@ export function createDriveVisionContent(options = {}) {
     || typeof hud?.activate !== "function"
   ) return null;
 
+  // Diagnostic: skip the world-pose projection (steps 11/12) and render from
+  // the stored route-relative anchor — the pre-worldPose path. If signs reappear
+  // with this on, the fault is world-pose projection, not anchor creation.
+  //
+  // The replay view is an in-app screen, so editing the browser URL would drop
+  // the selected route. Instead this is a live flag that can be toggled from the
+  // devtools console mid-replay, no reload needed:
+  //   carrotArBypassWorld(true)   // signs render from route-relative anchor
+  //   carrotArBypassWorld(false)  // back to world-pose projection
+  //   carrotArBypassWorld()       // read current state
+  // Initial value still honours ?ar_bypass_world=1 and a persisted localStorage
+  // flag, so a reload keeps whatever was set.
+  const bypassInitial = (() => {
+    try {
+      if (new URLSearchParams(target?.location?.search || "").get("ar_bypass_world") === "1") return true;
+      return target?.localStorage?.getItem?.("ar_bypass_world") === "1";
+    } catch {
+      return false;
+    }
+  })();
+  if (typeof target.__carrotArBypassWorld !== "boolean") {
+    target.__carrotArBypassWorld = bypassInitial;
+  }
+  if (typeof target.carrotArBypassWorld !== "function") {
+    target.carrotArBypassWorld = (next) => {
+      if (next === undefined) return target.__carrotArBypassWorld === true;
+      target.__carrotArBypassWorld = next === true;
+      try { target.localStorage?.setItem?.("ar_bypass_world", next === true ? "1" : "0"); } catch {}
+      return target.__carrotArBypassWorld;
+    };
+  }
+  const bypassWorldAnchor = () => target.__carrotArBypassWorld === true;
+
   const arGate = createVisionArActivationGate({
     target,
     createRuntime: () => installArRuntimeFacade(target, {
       document: target?.document,
       host: compatibilityRoot,
-      /* 합성 40m 표지는 테스트 주입에서만 허용한다. 제품/리플레이에서는 실제
-       * CarrotNavi event가 없으면 아무 마커도 만들지 않는다. */
-      calibrationProbe: options.arCalibrationProbe === true,
+      /* 합성 표지는 createArRuntime()을 직접 만드는 진단 harness에서만
+       * diagnosticProbe=true로 허용한다. 제품/리플레이 entry는 항상 차단한다. */
+      diagnosticProbe: false,
+      bypassWorldAnchor,
       probeDistanceM: 40,
     }),
   });
+
+  /* AR 진단 오버레이. 웹 설정 "AR 디버그"(vision_ar_debug)가 켜져 있을 때만
+   * 스테이지 안에 패널을 만들고, 꺼져 있으면 DOM도 타이머도 남기지 않는다. */
+  const debugOverlay = createArDebugOverlay({
+    target,
+    document: target?.document,
+    mountRoot: compatibilityRoot || hostRoot,
+  });
+  if (typeof target.CarrotArLog !== "object" || target.CarrotArLog === null) {
+    // 버튼 복사가 막히는 환경(비보안 컨텍스트 등)을 위한 콘솔 경로.
+    target.CarrotArLog = Object.freeze({
+      text: () => debugOverlay.logText(),
+      json: () => debugOverlay.json(),
+      snapshot: () => debugOverlay.snapshot(),
+      capture: (settings) => debugOverlay.captureStart(settings),
+      stopCapture: () => debugOverlay.captureStop(),
+      captureStatus: () => debugOverlay.captureStatus(),
+    });
+  }
 
   let mountedHostRoot = null;
   let hostContext = Object.freeze({
@@ -125,9 +179,11 @@ export function createDriveVisionContent(options = {}) {
       const changed = runtime.setActive(true, context);
       renderer.lifecycle.resize();
       arGate.activateVision();
+      debugOverlay.activate();
       return changed;
     },
     deactivate(deactivateOptions = {}) {
+      debugOverlay.deactivate();
       arGate.deactivateVision();
       hud.deactivate(deactivateOptions);
       return runtime.setActive(false, deactivateOptions);
@@ -160,6 +216,7 @@ export function createDriveVisionContent(options = {}) {
         );
         compatibilityRegistration = null;
       }
+      debugOverlay.destroy();
       arGate.destroy();
       hud.destroy();
       runtime.setActive(false, { keepWarm: false, reason: "content destroyed" });

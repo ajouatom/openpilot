@@ -27,6 +27,39 @@ export {
   installArRuntimeFacade,
 } from "./runtime.js";
 
+export {
+  AR_CLOCK_DOMAIN,
+  AR_TIMELINE_DISCONTINUITY,
+  createArTimelineTracker,
+} from "./timeline.js";
+
+export {
+  CAMERA_ODOMETRY_POSE_DELAY_MS,
+  AR_PRESENTED_CLOCK_CONFIDENCE,
+  cameraOdometryObservationTimestampNs,
+  createCameraOdometryTimeline,
+  createPresentedFrameClockMapper,
+} from "./pose_timeline.js";
+
+export {
+  AR_TRACKING_STATE,
+  AR_TRACKING_LIMITS,
+  createArTrackingState,
+} from "./tracking_state.js";
+
+export {
+  AR_WORLD_POSE_LIMITS,
+  createDeviceWorldPose,
+  normalizeQuaternion,
+  multiplyQuaternions,
+  quaternionFromRotationVector,
+  rotateVectorByQuaternion,
+  quaternionToRotationMatrix,
+  worldFromDeviceMatrix,
+  devicePointToWorld,
+  worldPointToDevice,
+} from "./world_pose.js";
+
 
 export {
   AR_HOLD_STATE,
@@ -38,6 +71,7 @@ export {
 
 export {
   AR_ANCHOR_SOURCE_MODE,
+  AR_ANCHOR_LIFECYCLE_STATE,
   AR_CONTINUOUS_LIMITS,
   naviFixIdentity,
   naviSourceIdentity,
@@ -51,14 +85,45 @@ export {
 } from "./frame_sync.js";
 
 export {
-  calibratedTransform,
   projectPoint,
+  projectRouteFluPoint,
+  routeFluProjectionDepth,
   pointOnPath,
   gateCorners,
   projectCorners,
 } from "./projection.js";
 
+export {
+  AR_MARKER_VISIBILITY_STATE,
+  markerStateReason,
+  markerViewportState,
+} from "./marker_state.js";
+
 export { geoAnchor, routeDistanceAnchor, routeTangentHeading } from "./geo.js";
+export {
+  AR_DISCOVERY_POLICY,
+  discoveryRangeM,
+  isWithinDiscoveryRange,
+} from "./discovery.js";
+export {
+  AR_ANCHOR_HANDOFF_POLICY,
+  handoffProgress,
+  planWorldAnchorHandoff,
+  publicHandoffState,
+  sampleWorldAnchorHandoff,
+} from "./anchor_handoff.js";
+export {
+  AR_ROAD_HEIGHT_SOURCE,
+  AR_ROAD_OBSERVATION_LIMITS,
+  UNKNOWN_ROAD_HEIGHT,
+  modelRoadObservation,
+  limitedRoadLateralCorrection,
+} from "./road_observation.js";
+export {
+  AR_ROUTE_MATCH_LIMITS,
+  createRouteMatcher,
+  matchRoutePosition,
+} from "./route_matcher.js";
 
 export {
   blendRoadFrames,
@@ -82,9 +147,26 @@ export {
 
 export { describeMarkers, classifyTurnType, classifySdiType } from "./tmap_catalog.js";
 
-export { markerIdentity, markerLifecycleSlot } from "./marker_identity.js";
+export {
+  AR_MARKER_IDENTITY_LIMITS,
+  createMarkerIdentityTracker,
+  markerIdentity,
+  markerLifecycleSlot,
+} from "./marker_identity.js";
 
 export { deviceFromCalibMatrix, odometryInDeviceFrame } from "./odometry.js";
+
+export {
+  AR_COORDINATE_FRAME,
+  AR_LIVE_POSE_FRAMES,
+  assertCoordinateFrame,
+  deviceFrdVectorToRouteFlu,
+  routeFluVectorToDeviceFrd,
+  modelPositionFrdToRouteFlu,
+  deviceOdometryFrdToRouteFlu,
+} from "./coordinate_frames.js";
+
+export { AR_TRACE_LIMITS, createArTrace } from "./trace.js";
 
 export {
   AR_TOKEN_PREVIEW_CONTRACT,

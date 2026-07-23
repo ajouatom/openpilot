@@ -124,10 +124,6 @@
   white-space: nowrap;
 }
 
-.page--setting.setting-layout-split #settingScreenItems .setting-title-backIcon {
-  display: none;
-}
-
 .page--setting #settingScreenItems #groupMeta {
   padding-bottom: 3px;
   color: var(--md-on-surface-var);

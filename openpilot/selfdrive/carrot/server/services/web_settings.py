@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from openpilot.selfdrive.carrot.web_upload import DEFAULT_TOSS_UPLOAD_URL, DEFAULT_WEB_UPLOAD_URL, normalize_base_url
 
 from ..config import CARROT_WEB_SETTINGS_PATH, WEB_DIR
+from .web_capabilities import is_known_web_capability
 
 
 WEB_PRIMARY_PAGES = {"last", "carrot", "setting", "tools", "logs", "terminal"}
@@ -362,7 +363,7 @@ class _Field:
   """One web setting. Type/default and ordinary validation live here. Drive
   content choices and pair normalization are derived from the source catalog."""
 
-  __slots__ = ("key", "type", "default", "choices", "normalize")
+  __slots__ = ("key", "type", "default", "choices", "normalize", "requires_capability")
 
   def __init__(
     self,
@@ -371,12 +372,16 @@ class _Field:
     default: Any,
     choices: Optional[set] = None,
     normalize: Optional[Callable[[Any], Any]] = None,
+    requires_capability: Optional[str] = None,
   ) -> None:
+    if requires_capability is not None and not is_known_web_capability(requires_capability):
+      raise ValueError(f"unknown web capability for {key}: {requires_capability}")
     self.key = key
     self.type = type
     self.default = default
     self.choices = choices
     self.normalize = normalize
+    self.requires_capability = requires_capability
 
   def coerce(self, value: Any) -> Any:
     if self.type == "bool":
@@ -396,8 +401,10 @@ WEB_SETTINGS_SPEC: List[_Field] = [
   _Field("start_page", "enum", "last", choices=WEB_PRIMARY_PAGES),
   _Field("mini_hud_enabled", "bool", False),
   _Field("web_language", "str", "", normalize=_normalize_language),
+  _Field("web_lab_enabled", "bool", False),
   _Field("vision_fullscreen_default", "bool", False),
-  _Field("vision_ar_enabled", "bool", False),
+  _Field("vision_ar_enabled", "bool", False, requires_capability="web_lab"),
+  _Field("vision_ar_debug", "bool", False, requires_capability="web_lab"),
   _Field("vision_display_mode", "enum", "normal", choices={"fit", "normal", "crop"}),
   _Field("replay_hud_visible", "bool", False),
   _Field("replay_insights_tab", "enum", "events", choices=WEB_REPLAY_INSIGHTS_TABS),
@@ -462,12 +469,22 @@ def web_settings_client_spec() -> List[Dict[str, Any]]:
   catalog_choices = [descriptor["id"] for descriptor in load_drive_content_catalog()["contents"]]
   for field in WEB_SETTINGS_SPEC:
     entry: Dict[str, Any] = {"key": field.key, "type": field.type, "default": field.default}
+    if field.requires_capability:
+      entry["requiresCapability"] = field.requires_capability
     if field.key in _DRIVE_LAYOUT_CONTENT_KEYS:
       entry["choices"] = list(catalog_choices)
     elif field.type == "enum" and field.choices:
       entry["choices"] = sorted(field.choices)
     spec.append(entry)
   return spec
+
+
+def web_setting_defaults_for_capability(capability_id: str) -> Dict[str, Any]:
+  return {
+    field.key: copy.deepcopy(field.default)
+    for field in WEB_SETTINGS_SPEC
+    if field.requires_capability == capability_id
+  }
 
 
 def read_web_settings() -> Dict[str, Any]:

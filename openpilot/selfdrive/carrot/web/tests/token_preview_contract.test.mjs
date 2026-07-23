@@ -1,13 +1,21 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  AR_BADGE_M,
+  AR_BAR_ASPECT,
+  AR_BASE_M,
   AR_EMPHASIS,
   AR_FORM,
+  AR_LEGIBILITY,
   AR_OPACITY,
   AR_PALETTE,
+  AR_RATIO,
   AR_SCALE,
   AR_SHAPE,
+  AR_SIGN_HEIGHT_M,
   AR_TEXTURE,
   AR_TOKEN_PREVIEW_CONTRACT,
   AR_TONE,
@@ -15,7 +23,15 @@ import {
   AR_TYPE,
 } from "../src/features/drive/contents/vision/ar/design_tokens.js";
 import { AR_MARKER_KIND } from "../src/features/drive/contents/vision/ar/tokens.js";
-import { signboardFromMarker } from "../src/features/drive/contents/vision/ar/signboard.js";
+import {
+  describeSignboard,
+  signboardFromMarker,
+} from "../src/features/drive/contents/vision/ar/signboard.js";
+import {
+  createThreeSignboardGroup,
+  disposeThreeSignboardGroup,
+} from "../src/features/drive/contents/vision/ar/three_adapter.js";
+import { signboardLayout } from "../src/features/drive/contents/vision/ar/three_signboard_layout.js";
 
 const U = Object.freeze({
   right: "\uc6b0\ud68c\uc804",
@@ -30,6 +46,113 @@ const U = Object.freeze({
   section: "\uad6c\uac04 \ud3c9\uade0 58",
   arrival: "\ub3c4\ucc29",
 });
+
+const APPROVED_SCENARIOS = Object.freeze([
+  ["right-turn", { kind: AR_MARKER_KIND.TURN_GATE, distanceM: 80, turn: { direction: "right", sign: 1 }, label: U.teheran }],
+  ["left-turn", { kind: AR_MARKER_KIND.TURN_GATE, distanceM: 197, turn: { direction: "left", sign: -1 }, label: U.bangbae }],
+  ["straight", { kind: AR_MARKER_KIND.TURN_GATE, distanceM: 1200, turn: { direction: "straight", sign: 0 }, label: U.gangnam }],
+  ["camera", { kind: AR_MARKER_KIND.CAUTION_SIGN, distanceM: 500, sdiFamily: "camera" }],
+  ["bump", { kind: AR_MARKER_KIND.CAUTION_SIGN, distanceM: 120, sdiFamily: "bump" }],
+  ["section", { kind: AR_MARKER_KIND.SECTION_GATE, distanceM: 1500, limitKph: 60, averageKph: 58 }],
+  ["speed", { kind: AR_MARKER_KIND.SPEED_SIGN, speedLimitKph: 60 }],
+  ["lane", { kind: AR_MARKER_KIND.LANE_BAND, distanceM: 160, laneWidthM: 3.5, laneOffsetM: 0 }],
+  ["destination", { kind: AR_MARKER_KIND.DESTINATION_PIN, distanceM: 420 }],
+]);
+
+const SNAPSHOT_KEYS = Object.freeze([
+  "kind", "tone", "shape", "phase", "primary", "secondary", "turnSign",
+  "chevronCount", "distanceM", "widthM", "heightM", "mountHeightM",
+  "depthM", "radiusM", "opacity", "scale", "surface",
+]);
+
+function canonicalize(value) {
+  if (typeof value === "number") return +value.toFixed(6);
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, item]) => item !== undefined && typeof item !== "function")
+      .map(([key, item]) => [key, canonicalize(item)]),
+  );
+}
+
+function descriptorSnapshot(descriptor) {
+  return Object.fromEntries(
+    SNAPSHOT_KEYS.filter((key) => descriptor[key] !== undefined)
+      .map((key) => [key, descriptor[key]]),
+  );
+}
+
+function componentSnapshot(shape) {
+  const descriptor = describeSignboard({ shape, primary: "snapshot", phase: "precise" });
+  const textureFactory = () => ({ dispose() {} });
+  const group = createThreeSignboardGroup(descriptor, {
+    textureFactory,
+    shadowTextureFactory: textureFactory,
+  });
+  const snapshot = {
+    layout: signboardLayout(descriptor),
+    group: {
+      kind: group.userData.kind,
+      shape: group.userData.shape,
+      children: group.children.map((child) => ({
+        name: child.name,
+        geometry: child.geometry.type,
+        size: {
+          width: child.geometry.parameters.width,
+          height: child.geometry.parameters.height,
+        },
+        position: [child.position.x, child.position.y, child.position.z],
+        rotation: [child.rotation.x, child.rotation.y, child.rotation.z],
+        material: {
+          transparent: child.material.transparent,
+          depthWrite: child.material.depthWrite,
+          opacity: child.material.opacity,
+          side: child.material.side,
+        },
+      })),
+    },
+  };
+  disposeThreeSignboardGroup(group);
+  return snapshot;
+}
+
+function approvedPreviewSnapshot() {
+  const shapes = [
+    AR_SHAPE.BAR, AR_SHAPE.DIAMOND, AR_SHAPE.CIRCLE, AR_SHAPE.BAND, AR_SHAPE.PIN,
+  ];
+  return canonicalize({
+    provenance: AR_TOKEN_PREVIEW_CONTRACT,
+    tokens: {
+      baseM: AR_BASE_M,
+      ratio: AR_RATIO,
+      scale: AR_SCALE,
+      tone: AR_TONE,
+      shape: AR_SHAPE,
+      toneShape: AR_TONE_SHAPE,
+      palette: AR_PALETTE,
+      signHeightM: AR_SIGN_HEIGHT_M,
+      barAspect: AR_BAR_ASPECT,
+      badgeM: AR_BADGE_M,
+      form: AR_FORM,
+      texture: AR_TEXTURE,
+      typography: AR_TYPE,
+      opacity: AR_OPACITY,
+      legibility: AR_LEGIBILITY,
+      emphasis: AR_EMPHASIS,
+    },
+    scenarios: Object.fromEntries(APPROVED_SCENARIOS.map(([id, marker]) => [
+      id,
+      descriptorSnapshot(signboardFromMarker({ ...marker, phase: "precise" })),
+    ])),
+    components: Object.fromEntries(shapes.map((shape) => [shape, componentSnapshot(shape)])),
+  });
+}
+
+const APPROVED_PREVIEW_GOLDEN = JSON.parse(readFileSync(
+  new URL("./fixtures/ar_token_preview_snapshot.json", import.meta.url),
+  "utf8",
+));
 
 test("approved self-contained preview identity and design token values stay fixed", () => {
   assert.deepEqual(AR_TOKEN_PREVIEW_CONTRACT, {
@@ -128,6 +251,18 @@ test("all nine approved preview scenarios resolve to the same content and silhou
     assert.equal(descriptor.secondary, secondary);
     assert.equal(descriptor.palette, AR_PALETTE[tone]);
   }
+});
+
+test("approved preview full token and Three component graph matches its golden snapshot", () => {
+  const snapshot = approvedPreviewSnapshot();
+  const digest = createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+
+  assert.deepEqual(snapshot.provenance, APPROVED_PREVIEW_GOLDEN.canonicalSource);
+  assert.equal(
+    digest,
+    APPROVED_PREVIEW_GOLDEN.snapshotSha256,
+    `approved preview snapshot changed: ${digest}`,
+  );
 });
 
 test("approved lane scenario remains the exact BAND component in product metadata", () => {

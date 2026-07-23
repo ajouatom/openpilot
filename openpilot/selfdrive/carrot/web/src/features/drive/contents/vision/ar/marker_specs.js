@@ -5,10 +5,10 @@
  * 형태의 mesh spec 을 돌려준다. Three.js 어댑터와 기존 WebGL2 오버레이가
  * 같은 spec 을 소비하므로, Three.js 도입 여부를 나중에 바꿔도 모델은 살아남는다.
  *
- * 좌표계: 도로 로컬(오른손), 원점은 앵커 지점의 노면.
+ * 좌표계: route-local FLU(오른손), 원점은 앵커 지점의 노면.
  *   +x = 진행 방향 전방, +y = 좌측, +z = 위
- * (Carrot modelV2 의 device frame 과 축 의미를 맞춰 둔 것이다. 최종 투영은
- *  projection.js 가 calibration 을 적용해 수행한다.)
+ * openpilot Device/Calibrated FRD와 같은 frame이 아니다. 최종 투영 경계가
+ * FLU→FRD를 정확히 한 번 적용한 뒤 calibration을 사용한다.
  */
 
 import { AR_GEOMETRY, AR_MARKER_KIND, arClamp, resolveLaneWidthM } from "./tokens.js";

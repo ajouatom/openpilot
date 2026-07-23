@@ -50,7 +50,37 @@ test("fresh frame-linked sources allow precise draw and bounded hold", () => {
   assert.equal(sync.canHoldAnchor, true);
   assert.equal(sync.naviUsable, true);
   assert.equal(sync.modelAgeMs, 50);
+  assert.equal(sync.odometryAgeMs, 100);
+  assert.equal(sync.odometryPoseDelayMs, 100);
   assert.equal(sync.naviAgeMs, 1_000);
+});
+
+test("presented camera time evaluates the delayed odometry observation instead of raw EOF", () => {
+  const input = freshInput();
+  input.presentedClock = {
+    targetTimestampNs: 10_020_000_000,
+    confidence: "exact-frame",
+  };
+  const sync = evaluateFrameSync(input);
+
+  assert.equal(sync.presentedTargetTimestampNs, 10_020_000_000);
+  assert.equal(sync.presentedClockConfidence, "exact-frame");
+  assert.equal(sync.odometryAgeMs, 120);
+  assert.equal(sync.canHoldAnchor, true);
+});
+
+test("presented frame id is the model sync target when live state has moved ahead", () => {
+  const input = freshInput();
+  input.modelV2.frameId = 97;
+  input.presentedClock = {
+    sourceFrameId: 97,
+    targetTimestampNs: 10_000_000_000,
+    confidence: "exact-frame",
+  };
+  const sync = evaluateFrameSync(input);
+
+  assert.equal(sync.frameIdGap, 0);
+  assert.equal(sync.canDrawPrecise, true);
 });
 
 test("a three-frame replay model gap remains inside the precise AR window", () => {
@@ -63,27 +93,27 @@ test("a three-frame replay model gap remains inside the precise AR window", () =
   assert.equal(sync.canDrawPrecise, true);
 });
 
-test("a four-frame model gap still leaves precise AR and enters bounded hold", () => {
+test("a nine-frame model gap hides precise AR and enters bounded hold", () => {
   const input = freshInput();
-  input.modelV2.frameId = 96;
+  input.modelV2.frameId = 91;
   const sync = evaluateFrameSync(input);
 
-  assert.equal(sync.frameIdGap, 4);
+  assert.equal(sync.frameIdGap, 9);
   assert.equal(sync.state, AR_SYNC_STATE.FRAME_GAP);
   assert.equal(sync.canDrawPrecise, false);
   assert.equal(sync.canHoldAnchor, true);
-  assert.match(sync.reasons.join(" | "), /frame gap 4 > 3/);
+  assert.match(sync.reasons.join(" | "), /frame gap 9 > 8/);
 });
 
 test("a stale model receipt hides precise AR even when frame ids still match", () => {
   const input = freshInput();
-  input.receivedAtMonotonic.modelV2 = 9_800;
+  input.receivedAtMonotonic.modelV2 = 9_600;
   const sync = evaluateFrameSync(input);
 
   assert.equal(sync.state, AR_SYNC_STATE.STALE);
   assert.equal(sync.canDrawPrecise, false);
   assert.equal(sync.canHoldAnchor, true);
-  assert.match(sync.reasons.join(" | "), /model age 200ms/);
+  assert.match(sync.reasons.join(" | "), /model age 400ms/);
 });
 
 test("replay media time does not expire paused frame receipts on wall clock", () => {
@@ -108,13 +138,13 @@ test("replay media time does not expire paused frame receipts on wall clock", ()
 
 test("stale calibration is not replaced by the last known projection", () => {
   const input = freshInput();
-  input.receivedAtMonotonic.liveCalibration = 4_000;
+  input.receivedAtMonotonic.liveCalibration = -15_000;
   const sync = evaluateFrameSync(input);
 
   assert.equal(sync.state, AR_SYNC_STATE.STALE);
   assert.equal(sync.calibrated, true);
   assert.equal(sync.canDrawPrecise, false);
-  assert.match(sync.reasons.join(" | "), /calibration age 6000ms/);
+  assert.match(sync.reasons.join(" | "), /calibration age 25000ms/);
 });
 
 test("calibrated status without a valid current rpy still hides precise AR", () => {
@@ -131,14 +161,14 @@ test("calibrated status without a valid current rpy still hides precise AR", () 
 test("a repeatedly received but old Navi payload cannot create markers", () => {
   const input = freshInput();
   input.receivedAtMonotonic.carrotNavi = 9_990;
-  input.carrotNavi.publishMonoTimeNanos = 6_000_000_000;
+  input.carrotNavi.publishMonoTimeNanos = 1_000_000_000;
   const sync = evaluateFrameSync(input);
 
   assert.equal(sync.state, AR_SYNC_STATE.OK);
   assert.equal(sync.canDrawPrecise, true);
   assert.equal(sync.naviUsable, false);
-  assert.equal(sync.naviAgeMs, 4_000);
-  assert.match(sync.reasons.join(" | "), /navi age 4000ms/);
+  assert.equal(sync.naviAgeMs, 9_000);
+  assert.match(sync.reasons.join(" | "), /navi age 9000ms/);
 });
 
 test("missing odometry receipt disables hold without blocking a fresh anchor", () => {

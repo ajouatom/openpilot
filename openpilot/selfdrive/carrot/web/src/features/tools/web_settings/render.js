@@ -4,7 +4,9 @@ import { WEB_SETTINGS_GROUPS } from "./schema.js";
 import {
   WEB_SPEC_BY_KEY,
   WEB_SETTING_DEFAULTS,
+  getWebSettingCapabilitySpec,
   getWebSettingByKey,
+  isWebSettingUnlocked,
   setWebSettingByKey,
 } from "./state.js";
 
@@ -59,22 +61,37 @@ function setWebSettingValue(item, value) {
   return setWebSettingByKey(item.id, value);
 }
 
+function webSettingLockLabel(item) {
+  if (isWebSettingUnlocked(item.id)) return "";
+  const capability = getWebSettingCapabilitySpec(item.id);
+  return webSettingsText(capability?.lockedLabelKey || "web_feature_locked");
+}
+
+function renderWebSettingsCopy(title, desc, lockLabel = "") {
+  return `
+    <span class="web-settings-row__copy">
+      <span class="web-settings-row__title-line">
+        <span class="web-settings-row__title">${escapeHtml(title)}</span>
+        ${lockLabel ? `<span class="chip web-settings-row__lock">${escapeHtml(lockLabel)}</span>` : ""}
+      </span>
+      ${desc ? `<span class="web-settings-row__desc">${escapeHtml(desc)}</span>` : ""}
+    </span>`;
+}
+
 function renderWebSettingsItem(item) {
   if (item?.component) return globalThis.WebSettingsComponents?.render?.(item.component, item) || "";
   const field = getWebSettingsField(item) || (item?.type === "action" ? {} : null);
   if (!field) return "";
   const title = webSettingsText(item.titleKey);
   const desc = webSettingsText(item.descKey);
+  const lockLabel = webSettingLockLabel(item);
+  const disabled = item.disabled === true || Boolean(lockLabel);
 
   if (field.type === "bool") {
-    const disabled = item.disabled === true;
     const checked = disabled ? false : Boolean(getWebSettingValue(item));
     return `
       <label class="web-settings-row web-settings-row--toggle ${disabled ? "web-settings-row--disabled" : ""}" data-web-setting="${escapeHtml(item.id)}" ${disabled ? 'aria-disabled="true"' : ""}>
-        <span class="web-settings-row__copy">
-          <span class="web-settings-row__title">${escapeHtml(title)}</span>
-          <span class="web-settings-row__desc">${escapeHtml(desc)}</span>
-        </span>
+        ${renderWebSettingsCopy(title, desc, lockLabel)}
         <span class="c-switch c-switch--sm">
           <input class="c-switch__input" type="checkbox" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />
           <span class="c-switch__track" aria-hidden="true"></span>
@@ -93,12 +110,9 @@ function renderWebSettingsItem(item) {
         </option>
       `).join("");
     return `
-      <label class="web-settings-row web-settings-row--select" data-web-setting="${escapeHtml(item.id)}">
-        <span class="web-settings-row__copy">
-          <span class="web-settings-row__title">${escapeHtml(title)}</span>
-          <span class="web-settings-row__desc">${escapeHtml(desc)}</span>
-        </span>
-        <select class="web-settings-select" aria-label="${escapeHtml(title)}">
+      <label class="web-settings-row web-settings-row--select ${disabled ? "web-settings-row--disabled" : ""}" data-web-setting="${escapeHtml(item.id)}" ${disabled ? 'aria-disabled="true"' : ""}>
+        ${renderWebSettingsCopy(title, desc, lockLabel)}
+        <select class="web-settings-select" aria-label="${escapeHtml(title)}" ${disabled ? "disabled" : ""}>
           ${options}
         </select>
       </label>`;
@@ -133,9 +147,8 @@ function renderWebSettingsItem(item) {
   }
 
   return `
-    <div class="web-settings-row" data-web-setting="${escapeHtml(item.id)}">
-      <div class="web-settings-row__title">${escapeHtml(title)}</div>
-      ${desc ? `<div class="web-settings-row__desc">${escapeHtml(desc)}</div>` : ""}
+    <div class="web-settings-row ${disabled ? "web-settings-row--disabled" : ""}" data-web-setting="${escapeHtml(item.id)}" ${disabled ? 'aria-disabled="true"' : ""}>
+      ${renderWebSettingsCopy(title, desc, lockLabel)}
     </div>`;
 }
 

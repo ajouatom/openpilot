@@ -1,18 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { AR_MARKER_KIND } from "../src/features/drive/contents/vision/ar/tokens.js";
+import {
+  AR_MARKER_KIND,
+  markerSupportHeightM,
+} from "../src/features/drive/contents/vision/ar/tokens.js";
 import { AR_TONE } from "../src/features/drive/contents/vision/ar/design_tokens.js";
 import {
   describeSignboard,
   signboardFromMarker,
 } from "../src/features/drive/contents/vision/ar/signboard.js";
-import { pointOnPath, projectPoint } from "../src/features/drive/contents/vision/ar/projection.js";
+import { pointOnPath, projectRouteFluPoint } from "../src/features/drive/contents/vision/ar/projection.js";
 import { createMarkerPresentationFilter } from "../src/features/drive/contents/vision/ar/presentation_filter.js";
 import {
   createThreeArRenderer,
+  markerProjectionState,
   markerScreenMetrics,
-  stageUprightAnchor,
+  uprightPresentationAnchor,
 } from "../src/features/drive/contents/vision/ar/three_adapter.js";
 
 function fakeSurface() {
@@ -44,7 +48,7 @@ function fakeWebglRenderer() {
   };
 }
 
-function frame({ laneWidthM = 3.5, nowMs = 0 } = {}) {
+function frame({ laneWidthM = 3.5, nowMs = 0, diagnosticsEnabled = false } = {}) {
   const modelPosition = {
     x: [0, 20, 40, 60, 80],
     y: [0, 0.2, 0.8, 1.8, 3.2],
@@ -66,10 +70,11 @@ function frame({ laneWidthM = 3.5, nowMs = 0 } = {}) {
   });
   return {
     nowMs,
+    diagnosticsEnabled,
     stage: {
       calibTransform: [
-        [960, -1000, 0],
-        [540, 0, -1000],
+        [960, 1000, 0],
+        [540, 0, 1000],
         [1, 0, 0],
       ],
       scale: 1,
@@ -99,8 +104,24 @@ function frame({ laneWidthM = 3.5, nowMs = 0 } = {}) {
   };
 }
 
+function fakePaintContext() {
+  const gradient = { addColorStop() {} };
+  return {
+    clearRect() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {},
+    arcTo() {}, closePath() {}, fill() {}, stroke() {}, strokeText() {},
+    fillText() {}, translate() {}, rotate() {}, arc() {}, fillRect() {},
+    createLinearGradient() { return gradient; },
+    createRadialGradient() { return gradient; },
+    measureText(text) { return { width: String(text || "").length * 24 }; },
+  };
+}
+
 function fakeTexture() {
-  return { dispose() {} };
+  const context = fakePaintContext();
+  return {
+    image: { width: 0, height: 0, getContext: () => context },
+    dispose() {},
+  };
 }
 
 test("presentation filter smooths lateral pose, road direction and scale without delaying distance", () => {
@@ -116,14 +137,18 @@ test("presentation filter smooths lateral pose, road direction and scale without
   assert.ok(next.scale > 1 && next.scale < 1.8);
 });
 
-test("presentation filter snaps instead of dragging across a large lateral discontinuity", () => {
+test("presentation filter eases logged route corrections but snaps a severe discontinuity", () => {
   const filter = createMarkerPresentationFilter();
   filter.update({ x: 40, y: 0, z: 0, headingRad: 0 }, 1, 0);
-  const snapped = filter.update({ x: 39, y: 4, z: 0, headingRad: 0.4 }, 1.5, 50);
+  const eased = filter.update({ x: 39, y: 5.5, z: 0, headingRad: 0.4 }, 1.5, 50);
+  const snapped = filter.update({ x: 38, y: 20, z: 0, headingRad: 0.8 }, 2, 100);
 
-  assert.equal(snapped.anchor.y, 4);
-  assert.equal(snapped.anchor.headingRad, 0.4);
-  assert.equal(snapped.scale, 1.5);
+  assert.ok(eased.anchor.y > 0 && eased.anchor.y < 5.5);
+  assert.ok(eased.anchor.headingRad > 0 && eased.anchor.headingRad < 0.4);
+  assert.ok(eased.scale > 1 && eased.scale < 1.5);
+  assert.equal(snapped.anchor.y, 20);
+  assert.equal(snapped.anchor.headingRad, 0.8);
+  assert.equal(snapped.scale, 2);
 });
 
 test("screen metrics follow the marker road-up axis on an incline", () => {
@@ -143,7 +168,27 @@ test("screen metrics follow the marker road-up axis on an incline", () => {
   assert.equal(metrics.opticalWidthM, descriptor.widthM);
 });
 
-test("stage-up correction keeps face above support on Carrot Vision mirrored axes", () => {
+test("product support and face scaling lower the sign without moving its anchor", () => {
+  const currentFrame = frame();
+  const descriptor = currentFrame.signs[0].descriptor;
+  const anchor = currentFrame.signs[0].anchor;
+  const approved = markerScreenMetrics(descriptor, anchor, currentFrame.stage);
+  const supportHeightM = markerSupportHeightM(descriptor);
+  const product = markerScreenMetrics(descriptor, anchor, currentFrame.stage, { supportHeightM });
+  const compact = markerScreenMetrics(descriptor, anchor, currentFrame.stage, {
+    supportHeightM,
+    presentationScale: 0.5,
+  });
+
+  assert.ok(approved && product && compact);
+  assert.ok(product.centerY > approved.centerY);
+  assert.equal(product.heightPx, approved.heightPx);
+  assert.ok(compact.centerY > product.centerY);
+  assert.ok(compact.heightPx < product.heightPx);
+  assert.deepEqual(anchor, currentFrame.signs[0].anchor);
+});
+
+test("explicit FLU projection keeps face above support without screen-space correction", () => {
   const currentFrame = frame();
   const stage = {
     ...currentFrame.stage,
@@ -154,9 +199,9 @@ test("stage-up correction keeps face above support on Carrot Vision mirrored axe
     ],
   };
   const source = { x: 40, y: 0.8, z: 0.1, headingRad: 0.04 };
-  const corrected = stageUprightAnchor(source, stage, 0);
+  const corrected = uprightPresentationAnchor(source, 0);
   const projectStage = (point) => {
-    const projected = projectPoint(stage.calibTransform, point.x, point.y, point.z);
+    const projected = projectRouteFluPoint(stage.calibTransform, point.x, point.y, point.z);
     return {
       x: projected.x * stage.scale + stage.tx,
       y: projected.y * stage.scale + stage.ty,
@@ -164,17 +209,18 @@ test("stage-up correction keeps face above support on Carrot Vision mirrored axe
   };
   const base = projectStage(corrected);
   const top = projectStage({
-    x: corrected.x + corrected.roadUp[0] * 4,
-    y: corrected.y + corrected.roadUp[1] * 4,
-    z: corrected.z + corrected.roadUp[2] * 4,
+    x: corrected.x + corrected.faceUp[0] * 4,
+    y: corrected.y + corrected.faceUp[1] * 4,
+    z: corrected.z + corrected.faceUp[2] * 4,
   });
   const right = projectStage({
-    x: corrected.x + corrected.roadRight[0],
-    y: corrected.y + corrected.roadRight[1],
-    z: corrected.z + corrected.roadRight[2],
+    x: corrected.x + corrected.faceRight[0],
+    y: corrected.y + corrected.faceRight[1],
+    z: corrected.z + corrected.faceRight[2],
   });
 
-  assert.equal(corrected.stageUpFlipped, true);
+  assert.equal("stageUpFlipped" in corrected, false);
+  assert.equal(corrected.headingRad, source.headingRad);
   assert.ok(top.y < base.y, "the sign face must render above its support");
   assert.ok(right.x > base.x, "local right must remain screen-right so labels are readable");
 });
@@ -203,6 +249,96 @@ test("screen metrics remove an upright sign before it grows across the lower dri
   assert.ok(safe);
 });
 
+test("projection diagnostics distinguish behind-camera and near-plane markers", () => {
+  const currentFrame = frame();
+  const descriptor = currentFrame.signs[0].descriptor;
+  assert.equal(
+    markerProjectionState(descriptor, { x: -4, y: 0, z: 0, headingRad: 0 }, currentFrame.stage).state,
+    "behind-camera",
+  );
+  assert.equal(
+    markerProjectionState(descriptor, { x: 4, y: 0, z: 0, headingRad: 0 }, currentFrame.stage).state,
+    "near-plane",
+  );
+  assert.equal(
+    markerProjectionState(descriptor, { x: 40, y: 0, z: 0, headingRad: 0 }, currentFrame.stage).state,
+    "active-candidate",
+  );
+});
+
+test("BAND projection measures its longitudinal road footprint", () => {
+  const currentFrame = frame();
+  const lane = currentFrame.signs[1];
+  const projection = markerProjectionState(lane.descriptor, {
+    ...lane.anchor,
+    z: -1,
+    roadForward: [0.995, 0, -0.1],
+    roadUp: [0.1, 0, 0.995],
+  }, currentFrame.stage);
+
+  assert.equal(projection.state, "active-candidate");
+  assert.equal(projection.metrics.opticalHeightM, lane.descriptor.heightM);
+  assert.equal(projection.metrics.opticalWidthM, lane.descriptor.widthM);
+  assert.ok(projection.metrics.heightPx > 0.5);
+  assert.ok(projection.metrics.widthPx > 0.5);
+});
+
+test("BAND far-legibility scaling grows only its road length", () => {
+  const currentFrame = frame();
+  const lane = currentFrame.signs[1];
+  const base = markerProjectionState(lane.descriptor, lane.anchor, currentFrame.stage);
+  const extended = markerProjectionState(lane.descriptor, lane.anchor, currentFrame.stage, {
+    presentationHeightScale: 5,
+    presentationWidthScale: 1,
+  });
+
+  assert.equal(base.state, "active-candidate");
+  assert.equal(extended.state, "active-candidate");
+  assert.equal(extended.metrics.opticalHeightM, base.metrics.opticalHeightM * 5);
+  assert.equal(extended.metrics.opticalWidthM, base.metrics.opticalWidthM);
+  // Scaling extends the far edge away from the fixed road anchor, so screen
+  // growth is intentionally sub-linear and the unchanged physical width is
+  // slightly smaller at the new face centre.
+  assert.ok(extended.metrics.heightPx > base.metrics.heightPx * 3);
+  assert.ok(extended.metrics.widthPx < base.metrics.widthPx);
+});
+
+test("LANE_BAND is legible far away and cannot remain visible after projection explodes", () => {
+  const renderer = createThreeArRenderer({
+    surface: fakeSurface(),
+    rendererFactory: fakeWebglRenderer,
+    textureFactory: fakeTexture,
+    shadowTextureFactory: fakeTexture,
+  });
+  const distant = frame({ nowMs: 0, diagnosticsEnabled: true });
+  distant.signs = [{
+    ...distant.signs[1],
+    distanceM: 280,
+    anchor: { ...distant.signs[1].anchor, x: 280 },
+  }];
+  const unassisted = markerScreenMetrics(
+    distant.signs[0].descriptor,
+    distant.signs[0].anchor,
+    distant.stage,
+  );
+  assert.equal(renderer.render(distant), true);
+  const distantBand = renderer.status().markers[0];
+  assert.equal(distantBand.visibilityState, "active-visible");
+  assert.ok(distantBand.screen.heightPx >= 24);
+  assert.ok(distantBand.screen.heightPx > unassisted.heightPx * 10);
+  assert.ok(distantBand.screen.widthPx < 100);
+
+  const near = frame({ nowMs: 100, diagnosticsEnabled: true });
+  near.signs = [{
+    ...near.signs[1],
+    distanceM: 10,
+    anchor: { ...near.signs[1].anchor, x: 10, y: 30 },
+  }];
+  assert.equal(renderer.render(near), true);
+  assert.notEqual(renderer.status().markers[0]?.visibilityState, "active-visible");
+  renderer.destroy();
+});
+
 test("Three renderer draws approved upright and BAND components in one scene", () => {
   const surface = fakeSurface();
   const webgl = fakeWebglRenderer();
@@ -214,18 +350,26 @@ test("Three renderer draws approved upright and BAND components in one scene", (
     shadowTextureFactory: fakeTexture,
   });
 
-  assert.equal(renderer.render(frame({ nowMs: 0 })), true);
+  assert.equal(renderer.render(frame({ nowMs: 0, diagnosticsEnabled: true })), true);
   assert.equal(webgl.renders, 1);
   assert.deepEqual(webgl.sizes, [[1920, 1080, false]]);
   assert.equal(renderer.status().backend, "three");
   assert.equal(renderer.status().drawn, 2);
   assert.equal(renderer.status().textureCount, 2);
+  assert.equal(renderer.status().cacheCreates, 2);
+  assert.equal(renderer.status().markers.length, 2);
+  assert.ok(renderer.status().markers.some((marker) => marker.visible && marker.screen?.centerX !== null));
+  assert.equal(renderer.status().visibilityStates["active-visible"], 2);
   assert.equal(faceTextureCount, 2);
 
-  // 같은 slot에서 geometry가 바뀌면 새 BAND로 원자 교체하고 이전 것은 남기지 않는다.
+  // Mutable BAND dimensions update inside the existing marker entry.
   assert.equal(renderer.render(frame({ laneWidthM: 4.0, nowMs: 50 })), true);
   assert.equal(renderer.status().textureCount, 2);
-  assert.equal(faceTextureCount, 3);
+  assert.equal(renderer.status().cacheCreates, 2);
+  assert.equal(renderer.status().cacheDisposes, 0);
+  assert.equal(renderer.status().geometryUpdates, 1);
+  assert.equal(renderer.status().groupRebuilds, 0);
+  assert.equal(faceTextureCount, 2);
 
   // 사용하지 않은 geometry는 한 프레임 누락에 폐기하지 않고 grace 뒤 정리한다.
   assert.equal(renderer.render(frame({ laneWidthM: 4.0, nowMs: 1_000 })), true);
@@ -234,6 +378,63 @@ test("Three renderer draws approved upright and BAND components in one scene", (
   assert.equal(renderer.destroy(), true);
   assert.equal(webgl.disposed, true);
   assert.equal(webgl.contextReleased, true);
+});
+
+test("one marker repaints phase, text and geometry without restarting its cache lifecycle", () => {
+  const surface = fakeSurface();
+  const webgl = fakeWebglRenderer();
+  let faceTextureCount = 0;
+  const renderer = createThreeArRenderer({
+    surface,
+    rendererFactory: () => webgl,
+    textureFactory: () => { faceTextureCount += 1; return fakeTexture(); },
+    shadowTextureFactory: fakeTexture,
+  });
+  const first = frame({ nowMs: 0 });
+  first.signs = [{
+    ...first.signs[0],
+    markerId: "maneuver-42",
+    eventKey: "mutable-alias-a",
+    lifecycleSlot: "guidance:next",
+  }];
+  const settled = frame({ nowMs: 220 });
+  settled.signs = [{ ...first.signs[0] }];
+  const updated = frame({ nowMs: 270 });
+  updated.signs = [{
+    ...first.signs[0],
+    eventKey: "mutable-alias-b",
+    lifecycleSlot: "guidance:primary",
+    distanceM: 15,
+    descriptor: Object.freeze({
+      ...describeSignboard({
+        tone: AR_TONE.GUIDE,
+        primary: "15m",
+        secondary: "updated road",
+        turnSign: 1,
+        phase: "commit",
+      }),
+      kind: AR_MARKER_KIND.TURN_GATE,
+    }),
+  }];
+
+  assert.equal(renderer.render(first), true);
+  assert.equal(renderer.render(settled), true);
+  const beforeUpdateAlpha = renderer.status().minimumVisibilityAlpha;
+  assert.ok(beforeUpdateAlpha > 0.01);
+  assert.equal(renderer.render(updated), true);
+
+  const status = renderer.status();
+  assert.equal(status.textureCount, 1);
+  assert.equal(status.cacheCreates, 1);
+  assert.equal(status.cacheDisposes, 0);
+  assert.equal(status.contentRepaints, 1);
+  assert.equal(status.geometryUpdates, 1);
+  assert.equal(status.groupRebuilds, 0);
+  assert.equal(status.lifecycleTransitions, 1);
+  assert.equal(status.lifecycleReplacements, 0);
+  assert.ok(status.minimumVisibilityAlpha >= beforeUpdateAlpha);
+  assert.equal(faceTextureCount, 1);
+  renderer.destroy();
 });
 
 test("Three renderer keeps a sharp-turn sign readable while applying overlap selection", () => {
@@ -245,7 +446,7 @@ test("Three renderer keeps a sharp-turn sign readable while applying overlap sel
     textureFactory: fakeTexture,
     shadowTextureFactory: fakeTexture,
   });
-  const currentFrame = frame({ nowMs: 0 });
+  const currentFrame = frame({ nowMs: 0, diagnosticsEnabled: true });
   const primary = {
     ...currentFrame.signs[0],
     eventKey: "primary",
@@ -266,6 +467,146 @@ test("Three renderer keeps a sharp-turn sign readable while applying overlap sel
   assert.equal(renderer.status().billboarded, 1);
   assert.equal(renderer.status().farRouteAnchors, 1);
   assert.equal(renderer.status().textureCount, 1);
+  assert.equal(renderer.status().visibilityStates["active-suppressed"], 1);
+  assert.equal(
+    renderer.status().markers.some((marker) => marker.visibilityState === "active-suppressed"),
+    true,
+  );
+  renderer.destroy();
+});
+
+test("offscreen markers retain their cache and resume the existing fade state", () => {
+  const surface = fakeSurface();
+  const renderer = createThreeArRenderer({
+    surface,
+    rendererFactory: fakeWebglRenderer,
+    textureFactory: fakeTexture,
+    shadowTextureFactory: fakeTexture,
+  });
+  const visible = frame({ nowMs: 0, diagnosticsEnabled: true });
+  visible.signs = [visible.signs[0]];
+  const settled = { ...visible, nowMs: 220 };
+  assert.equal(renderer.render(visible), true);
+  assert.equal(renderer.render(settled), true);
+  const before = renderer.status().minimumVisibilityAlpha;
+
+  const offscreen = {
+    ...visible,
+    nowMs: 270,
+    signs: [{ ...visible.signs[0], anchor: { x: 40, y: 100, z: 0, headingRad: 0 } }],
+  };
+  assert.equal(renderer.render(offscreen), true);
+  assert.equal(renderer.status().drawn, 0);
+  assert.equal(renderer.status().visibilityStates["active-offscreen"], 1);
+  assert.equal(renderer.status().cacheDisposes, 0);
+  assert.equal(renderer.status().textureCount, 1);
+
+  assert.equal(renderer.render({ ...visible, nowMs: 320 }), true);
+  assert.equal(renderer.status().cacheCreates, 1);
+  assert.equal(renderer.status().cacheDisposes, 0);
+  assert.ok(renderer.status().minimumVisibilityAlpha >= before);
+  renderer.destroy();
+});
+
+test("an offscreen cached marker cannot resurrect as a passing fade", () => {
+  const renderer = createThreeArRenderer({
+    surface: fakeSurface(),
+    rendererFactory: fakeWebglRenderer,
+    textureFactory: fakeTexture,
+    shadowTextureFactory: fakeTexture,
+  });
+  const visible = frame({ nowMs: 0, diagnosticsEnabled: true });
+  visible.signs = [{
+    ...visible.signs[0], markerId: "no-resurrection", eventKey: "no-resurrection",
+    anchor: { x: 40, y: 0, z: 0, headingRad: 0 },
+  }];
+  assert.equal(renderer.render(visible), true);
+  assert.equal(renderer.render({ ...visible, nowMs: 220 }), true);
+
+  const offscreen = {
+    ...visible,
+    nowMs: 270,
+    signs: [{ ...visible.signs[0], anchor: { x: 40, y: 100, z: 0, headingRad: 0 } }],
+  };
+  assert.equal(renderer.render(offscreen), true);
+  assert.equal(renderer.status().drawn, 0);
+
+  const nearPlane = {
+    ...visible,
+    nowMs: 320,
+    signs: [{ ...visible.signs[0], anchor: { x: 6, y: 0, z: 0, headingRad: 0 } }],
+  };
+  assert.equal(renderer.render(nearPlane), true);
+  assert.equal(renderer.status().drawn, 0);
+  assert.equal(renderer.status().visibilityStates["near-plane"], 1);
+  assert.equal(renderer.status().visibilityStates.passing, undefined);
+  assert.equal(renderer.status().cacheDisposes, 0);
+  renderer.destroy();
+});
+
+test("overlap priority changes wait for the bounded selection hysteresis", () => {
+  const renderer = createThreeArRenderer({
+    surface: fakeSurface(),
+    rendererFactory: fakeWebglRenderer,
+    textureFactory: fakeTexture,
+    shadowTextureFactory: fakeTexture,
+  });
+  const initial = frame({ nowMs: 0, diagnosticsEnabled: true });
+  const next = {
+    ...initial.signs[0], markerId: "next", eventKey: "next",
+    lifecycleSlot: "guidance:next", source: "guidanceNext",
+  };
+  initial.signs = [next];
+  assert.equal(renderer.render(initial), true);
+
+  const current = {
+    ...next, markerId: "current", eventKey: "current",
+    lifecycleSlot: "guidance:primary", source: "guidanceCurrent",
+  };
+  const takeover = { ...initial, nowMs: 100, signs: [next, current] };
+  assert.equal(renderer.render(takeover), true);
+  assert.equal(
+    renderer.status().markers.find((marker) => marker.visible)?.markerId,
+    "next",
+  );
+
+  assert.equal(renderer.render({ ...takeover, nowMs: 500 }), true);
+  assert.equal(
+    renderer.status().markers.find((marker) => marker.visible)?.markerId,
+    "current",
+  );
+  renderer.destroy();
+});
+
+test("a near-plane upright marker hides its stale pre-clip pose but keeps its cache", () => {
+  const renderer = createThreeArRenderer({
+    surface: fakeSurface(),
+    rendererFactory: fakeWebglRenderer,
+    textureFactory: fakeTexture,
+    shadowTextureFactory: fakeTexture,
+  });
+  const visible = frame({ nowMs: 0, diagnosticsEnabled: true });
+  visible.signs = [{
+    ...visible.signs[0], markerId: "passing", eventKey: "passing",
+    anchor: { x: 9, y: 0, z: 0, headingRad: 0 },
+  }];
+  assert.equal(renderer.render(visible), true);
+  assert.equal(renderer.render({ ...visible, nowMs: 220 }), true);
+
+  const near = {
+    ...visible,
+    signs: [{ ...visible.signs[0], anchor: { x: 6, y: 0, z: 0, headingRad: 0 } }],
+  };
+  for (const nowMs of [270, 520, 770]) renderer.render({ ...near, nowMs });
+  assert.equal(renderer.status().drawn, 0);
+  assert.equal(renderer.status().visibilityStates["near-plane"], 1);
+  assert.equal(renderer.status().visibilityStates.passing, undefined);
+  assert.equal(renderer.status().cacheDisposes, 0);
+  assert.equal(renderer.status().textureCount, 1);
+
+  assert.equal(renderer.render({ ...visible, nowMs: 1800, signs: [] }), true);
+  assert.equal(renderer.status().textureCount, 0);
+  assert.equal(renderer.status().cacheDisposes, 1);
   renderer.destroy();
 });
 
@@ -290,6 +631,31 @@ test("Three renderer fades the last anchored scene instead of clearing one bad f
   assert.equal(webgl.renders, 3);
   assert.equal(webgl.clears, 0);
   assert.equal(renderer.status().lastReason, "transient model gap");
+  renderer.destroy();
+});
+
+test("tracking confidence reduces the anchored scene without using the abrupt legacy held alpha", () => {
+  const surface = fakeSurface();
+  const webgl = fakeWebglRenderer();
+  const renderer = createThreeArRenderer({
+    surface,
+    rendererFactory: () => webgl,
+    textureFactory: fakeTexture,
+    shadowTextureFactory: fakeTexture,
+  });
+  const tracked = frame({ nowMs: 0 });
+  tracked.tracking = { state: "tracking", alpha: 1 };
+  const coasting = frame({ nowMs: 100 });
+  coasting.sync = { canDrawPrecise: false, reasons: ["short input gap"] };
+  coasting.held = true;
+  coasting.tracking = { state: "coasting", alpha: 0.84 };
+
+  assert.equal(renderer.render(tracked), true);
+  assert.equal(renderer.status().trackingAlpha, 1);
+  assert.equal(renderer.render(coasting), true);
+  assert.equal(renderer.status().trackingAlpha, 0.84);
+  assert.equal(renderer.status().cacheCreates, 2);
+  assert.equal(renderer.status().cacheDisposes, 0);
   renderer.destroy();
 });
 
@@ -323,6 +689,9 @@ test("a marker replacement in the same lifecycle slot never cross-fades two sign
   assert.equal(renderer.render(replacement), true);
   assert.equal(renderer.status().drawn, 1);
   assert.equal(renderer.status().textureCount, 1);
+  assert.equal(renderer.status().cacheCreates, 2);
+  assert.equal(renderer.status().cacheDisposes, 1);
+  assert.equal(renderer.status().lifecycleReplacements, 1);
   renderer.destroy();
 });
 

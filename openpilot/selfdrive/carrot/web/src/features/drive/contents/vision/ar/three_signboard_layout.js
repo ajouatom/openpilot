@@ -17,6 +17,42 @@ function finitePositive(value, fallback) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
+function bandPitch(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return -Math.PI / 2;
+  return Math.max(-Math.PI / 2, Math.min(0, number));
+}
+
+function stableTrig(value, fn) {
+  const result = fn(value);
+  return Math.abs(result) < 1e-12 ? 0 : result;
+}
+
+/**
+ * Keep the BAND's near edge at one road anchor while its readable length is
+ * scaled. This is the surface equivalent of keeping an upright sign's pole
+ * base fixed: far-legibility may change geometry, never the world anchor.
+ */
+export function scaledBandFacePosition(face, scale = 1) {
+  const lengthScale = Math.max(0.01, Number(scale) || 1);
+  const rotationXRad = bandPitch(face?.rotationXRad);
+  const cosPitch = stableTrig(rotationXRad, Math.cos);
+  const sinPitch = stableTrig(rotationXRad, Math.sin);
+  const heightM = finitePositive(face?.heightM, 1);
+  const baseHalfLengthM = heightM / 2;
+  const scaledHalfLengthM = heightM * lengthScale / 2;
+  const roadLiftM = (Number(face?.yM) || 0) - cosPitch * baseHalfLengthM;
+  const nearEdgeZM = (Number(face?.zM) || 0) - sinPitch * baseHalfLengthM;
+  return Object.freeze({
+    xM: Number(face?.xM) || 0,
+    yM: roadLiftM + cosPitch * scaledHalfLengthM,
+    zM: nearEdgeZM + sinPitch * scaledHalfLengthM,
+    rotationXRad,
+    cosPitch,
+    sinPitch,
+  });
+}
+
 export function signboardLayout(descriptor, options = {}) {
   if (!descriptor) throw new TypeError("signboard descriptor is required");
 
@@ -24,15 +60,40 @@ export function signboardLayout(descriptor, options = {}) {
   const heightM = finitePositive(descriptor.heightM, 1);
 
   if (descriptor.shape === AR_SHAPE.BAND) {
+    // The immutable preview remains a road-flat -pi/2 plane. Product runtime
+    // may provide a bounded viewing pitch so a distant lane cue does not
+    // collapse into a one-pixel horizon line. The near edge stays on the same
+    // road anchor for both forms.
+    const productPitch = Number(options.surfacePitchRad);
+    const hasProductPitch = Number.isFinite(productPitch);
+    const rotationXRad = hasProductPitch ? bandPitch(productPitch) : -Math.PI / 2;
+    if (!hasProductPitch) {
+      return Object.freeze({
+        coordinateSystem: "preview-y-up",
+        face: Object.freeze({
+          widthM,
+          heightM,
+          xM: 0,
+          yM: AR_FORM[AR_SHAPE.BAND].liftM,
+          zM: -heightM * 0.35,
+          rotationXRad,
+        }),
+        shadow: null,
+        pole: null,
+      });
+    }
+    const cosPitch = stableTrig(rotationXRad, Math.cos);
+    const sinPitch = stableTrig(rotationXRad, Math.sin);
+    const nearEdgeZM = heightM * 0.15;
     return Object.freeze({
       coordinateSystem: "preview-y-up",
       face: Object.freeze({
         widthM,
         heightM,
         xM: 0,
-        yM: AR_FORM[AR_SHAPE.BAND].liftM,
-        zM: -heightM * 0.35,
-        rotationXRad: -Math.PI / 2,
+        yM: AR_FORM[AR_SHAPE.BAND].liftM + cosPitch * heightM / 2,
+        zM: nearEdgeZM + sinPitch * heightM / 2,
+        rotationXRad,
       }),
       shadow: null,
       pole: null,
@@ -44,8 +105,10 @@ export function signboardLayout(descriptor, options = {}) {
   const baseSupportHeightM = isPin
     ? Math.max(0, heightM - faceHeightM / 2)
     : finitePositive(descriptor.mountHeightM, AR_FORM.mountHeightM);
-  const mountLiftM = Math.max(0, Number(options.mountLiftM) || 0);
-  const supportHeightM = baseSupportHeightM + mountLiftM;
+  const requestedSupportHeightM = Number(options.supportHeightM);
+  const supportHeightM = Number.isFinite(requestedSupportHeightM) && requestedSupportHeightM >= 0
+    ? requestedSupportHeightM
+    : baseSupportHeightM;
 
   return Object.freeze({
     coordinateSystem: "preview-y-up",

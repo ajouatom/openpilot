@@ -220,14 +220,31 @@ async function toggleRecord() {
   recordTogglePending = true;
   try {
     await setParam("ScreenRecord", next);
-    await waitMs(650);
-    recordTogglePending = false;
-    await loadRecordState({ force: true });
   } catch (e) {
+    // A disconnected response can be ambiguous: the device may have accepted
+    // the write before the browser saw the failure. Confirm the stored value
+    // once before reporting a false recording error.
+    recordTogglePending = false;
+    try {
+      const observed = await loadRecordState({ force: true });
+      if (observed === next) return;
+    } catch {}
     applyRecordFabState(prev);
     showAppToast((UI_STRINGS[LANG].record || "Failed to toggle record: ") + e.message, { tone: "error" });
-  } finally {
-    recordTogglePending = false;
+    return;
+  }
+
+  // The parameter write is authoritative. A transient follow-up read must not
+  // turn a recording that already started into an error in the web UI.
+  applyRecordFabState(next);
+  recordStateLoadedAt = Date.now();
+  await waitMs(650);
+  recordTogglePending = false;
+  try {
+    await loadRecordState({ force: true });
+  } catch {
+    applyRecordFabState(next);
+    recordStateLoadedAt = Date.now();
   }
 }
 

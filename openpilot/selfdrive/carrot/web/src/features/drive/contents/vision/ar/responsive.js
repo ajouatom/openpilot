@@ -194,6 +194,7 @@ export function planMarker({
   projectedWidthPx: measuredWidthPx = null,
   descriptorScale = null,
   minimumWorldScale = 1,
+  maximumWorldScale = AR_RENDER.farLegibilityScaleMax,
   canvas,
   confidence = "high",
 } = {}) {
@@ -208,10 +209,11 @@ export function planMarker({
   const lodByPhase = phase === AR_PHASE.PREVIEW || phase === AR_PHASE.APPROACH ? "flat" : tier.lod;
   const tokenScale = finite(descriptorScale, null);
   const emphasisScale = distanceEmphasisScale(distanceM, egoSpeedMps);
-  // Preview descriptors encode phase emphasis in their geometry. Production
-  // cancels it so one placed marker retains one physical metre size.
+  // Preview descriptors encode a discrete phase emphasis in their geometry.
+  // Production replaces it with the continuous distance emphasis so phase
+  // boundaries cannot make one world marker pop to a new physical size.
   const geometryScale = tokenScale !== null && tokenScale > 0
-    ? 1 / tokenScale
+    ? emphasisScale / tokenScale
     : 1;
   const effectiveHeightM = finite(worldHeightM, 0) * geometryScale;
   const effectiveWidthM = worldWidthM === null
@@ -230,10 +232,10 @@ export function planMarker({
       ? null
       : finite(measuredWidthPx, 0) * geometryScale,
     canvas: size,
-    // Do not shrink nearby world objects into HUD cards. A small bounded
-    // enlargement is allowed only when a distant marker is hard to read.
-    scaleMin: arClamp(finite(minimumWorldScale, 1), 0.5, 1),
-    scaleMax: AR_RENDER.farLegibilityScaleMax,
+    // The scale remains attached to world geometry, but each viewport tier may
+    // bound a near object and enlarge a distant one for driver legibility.
+    scaleMin: arClamp(finite(minimumWorldScale, 1), 0.2, 1),
+    scaleMax: Math.max(1, finite(maximumWorldScale, AR_RENDER.farLegibilityScaleMax)),
   });
   let alpha = AR_RENDER.alphaByConfidence[confidence] ?? AR_RENDER.alphaByConfidence.low;
 
@@ -249,8 +251,9 @@ export function planMarker({
   // 덮어도 놓친다. 최종 투영 크기 자체로 안전 한도 초과를 판정한다.
   const overflow = heightOverflow || widthOverflow;
   if (overflow) {
-    if (phase === AR_PHASE.COMMIT) visible = false;
-    else alpha = Math.min(alpha, AR_RENDER.alphaByConfidence.low);
+    // A near COMMIT marker transitions into the renderer's explicit PASSING
+    // fade. Hiding it here would produce a one-frame disappearance first.
+    alpha = Math.min(alpha, AR_RENDER.alphaByConfidence.low);
   }
 
   // 원거리에서는 셰브런을 줄여 시각적 노이즈를 낮춘다.
@@ -263,10 +266,14 @@ export function planMarker({
     phase,
     lod: lodByPhase,
     chevronCount,
-    // The group geometry already contains descriptorScale. This matrix scale
-    // cancels that preview-only phase factor, then applies only the bounded
-    // far-distance legibility assist.
+    // The descriptor geometry already contains its discrete token scale. This
+    // factor replaces it with continuous phase emphasis, then applies the
+    // bounded viewport legibility scale.
     worldScale: geometryScale * scale.scale,
+    // Filter the final physical emphasis rather than the inverse descriptor
+    // scale. Runtime adapters divide by the current token scale only at draw
+    // time, so a discrete phase descriptor update cannot resize the marker.
+    presentationScale: emphasisScale * scale.scale,
     distanceScale: emphasisScale,
     geometryScale,
     projectedPx: scale.projectedPx,
@@ -295,6 +302,7 @@ export function selectVisibleMarkers(candidates = [], canvas, options = {}) {
   const preferredKeys = options.preferredKeys instanceof Set
     ? options.preferredKeys
     : new Set(options.preferredKeys || []);
+  const preferContinuity = options.preferContinuity === true;
   const order = {
     [AR_PHASE.COMMIT]: 0,
     [AR_PHASE.PRECISE]: 1,
@@ -314,14 +322,15 @@ export function selectVisibleMarkers(candidates = [], canvas, options = {}) {
   const sorted = candidates
     .filter((candidate) => candidate && candidate.plan && candidate.plan.visible)
     .sort((a, b) => {
+      const preferredA = preferredKeys.has(a.key) ? 0 : 1;
+      const preferredB = preferredKeys.has(b.key) ? 0 : 1;
+      if (preferContinuity && preferredA !== preferredB) return preferredA - preferredB;
       const phaseA = order[a.plan.phase] ?? 9;
       const phaseB = order[b.plan.phase] ?? 9;
       if (phaseA !== phaseB) return phaseA - phaseB;
       const sourceA = sourceOrder[a.item?.source || a.source] ?? 9;
       const sourceB = sourceOrder[b.item?.source || b.source] ?? 9;
       if (sourceA !== sourceB) return sourceA - sourceB;
-      const preferredA = preferredKeys.has(a.key) ? 0 : 1;
-      const preferredB = preferredKeys.has(b.key) ? 0 : 1;
       if (preferredA !== preferredB) return preferredA - preferredB;
       const distanceDelta = finite(a.distanceM, Infinity) - finite(b.distanceM, Infinity);
       if (distanceDelta !== 0) return distanceDelta;

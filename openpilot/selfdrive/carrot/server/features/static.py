@@ -12,6 +12,7 @@ from ..config import SOUND_ASSETS_DIR, TRAINING_ASSETS_DIR, WEB_DIR
 from ..services.asset_manifest import AssetManifestError, AssetManifestLoader, inject_asset_manifest
 from ..services.params import get_param_values
 from ..services.static_assets import fingerprint_static_asset
+from ..services.web_capabilities import resolve_web_capabilities, web_capability_client_spec
 from ..services.web_settings import read_web_settings, web_settings_client_spec
 from .intro.state import intro_bootstrap
 
@@ -80,9 +81,12 @@ def _build_bootstrap_payload() -> dict:  # noqa: DICT_OK - serialized mixed-shap
     # Never let the intro decision keep the page from loading.
     intro = {"shouldShow": False, "reason": "bootstrap_error"}
 
+  web_settings = read_web_settings()
   return {
-    "webSettings": read_web_settings(),
+    "webSettings": web_settings,
     "webSettingsSpec": web_settings_client_spec(),
+    "webCapabilities": resolve_web_capabilities(web_settings),
+    "webCapabilitiesSpec": web_capability_client_spec(),
     "deviceLanguage": device_language,
     "soundLanguage": sound_language,
     "deviceLanguages": _load_device_languages(),

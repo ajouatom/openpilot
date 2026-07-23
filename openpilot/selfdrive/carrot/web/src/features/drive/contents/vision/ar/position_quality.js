@@ -21,6 +21,16 @@ function validCoordinate(latitude, longitude) {
     && lon >= -180 && lon <= 180;
 }
 
+function validRoutePolyline(polyline) {
+  if (!Array.isArray(polyline)) return false;
+  let validPoints = 0;
+  for (const point of polyline) {
+    if (validCoordinate(point?.latitude, point?.longitude)) validPoints += 1;
+    if (validPoints >= 2) return true;
+  }
+  return false;
+}
+
 function receiptAgeMs(nowMs, receipts, service) {
   const now = finite(nowMs);
   const received = finite(receipts?.[service]);
@@ -40,12 +50,22 @@ export function evaluateGeoPositionQuality(input = {}, limits = AR_POSITION_QUAL
   const vehicle = input.naviVehicle;
   const gps = input.gpsLocationExternal;
   const reasons = [];
+  const routeReasons = [];
 
-  if (input.naviUsable !== true) reasons.push("Navi 위치 source 비활성");
+  if (input.naviUsable !== true) {
+    reasons.push("Navi 위치 source 비활성");
+    routeReasons.push("Navi 경로 source 비활성");
+  }
   const naviCoordinateValid = vehicle?.present !== false
     && validCoordinate(vehicle?.latitude, vehicle?.longitude)
     && finite(vehicle?.headingDeg) !== null;
-  if (!naviCoordinateValid) reasons.push("TMap vehicle 좌표/방향 없음");
+  if (!naviCoordinateValid) {
+    reasons.push("TMap vehicle 좌표/방향 없음");
+    routeReasons.push("TMap vehicle 좌표/방향 없음");
+  }
+  const routePolylineValid = validRoutePolyline(input.naviRoutePolyline);
+  if (!routePolylineValid) routeReasons.push("TMap route polyline 없음");
+  const canUseRoute = routeReasons.length === 0;
 
   const replayClock = input.clockDomain === "replay-media";
   const gpsAgeMs = replayClock && gps ? 0 : receiptAgeMs(
@@ -103,14 +123,31 @@ export function evaluateGeoPositionQuality(input = {}, limits = AR_POSITION_QUAL
     }
   }
 
+  // These are observation covariances, not a request to average the sources.
+  // TMap remains the map-aligned observation; Comma GPS accuracy and the
+  // measured cross-source separation determine how strongly it may correct
+  // the local world pose.
+  const positionSigmaM = horizontalAccuracyM === null || separationM === null
+    ? null
+    : Math.hypot(horizontalAccuracyM, separationM * 0.5);
+  const headingSigmaDeg = shouldCheckBearing
+    && bearingAccuracyDeg !== null
+    && headingDisagreementDeg !== null
+    ? Math.hypot(bearingAccuracyDeg, headingDisagreementDeg * 0.5)
+    : null;
+
   return Object.freeze({
     canUseGeo: reasons.length === 0,
-    fallback: reasons.length ? "model-path" : null,
+    canUseRoute,
+    fallback: reasons.length ? (canUseRoute ? "navi-route" : "model-path") : null,
     gpsAgeMs,
     horizontalAccuracyM,
     separationM,
     bearingAccuracyDeg,
     headingDisagreementDeg,
+    positionSigmaM,
+    headingSigmaDeg,
     reasons: Object.freeze(reasons),
+    routeReasons: Object.freeze(routeReasons),
   });
 }

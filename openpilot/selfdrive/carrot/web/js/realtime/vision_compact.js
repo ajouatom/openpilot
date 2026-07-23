@@ -53,19 +53,27 @@ window.CarrotVisionCompact = (() => {
   const naviSpeed = [
     ["roadLimitValid","bool"], ["roadLimitKph","i16"],
     ["sdiPresent","bool"], ["sdiType","i32"], ["sdiDistanceM","i32"], ["sdiSpeedLimitKph","i16"],
+    ["sdiSectionType","i32"], ["sdiBlockType","i32"], ["sdiBlockSpeedKph","i16"], ["sdiBlockDistanceM","i32"],
+    ["secondarySdiPresent","bool"], ["secondarySdiType","i32"], ["secondarySdiDistanceM","i32"],
+    ["secondarySdiSpeedLimitKph","i16"], ["secondarySdiSectionType","i32"], ["secondarySdiBlockType","i32"],
+    ["secondarySdiBlockSpeedKph","i16"], ["secondarySdiBlockDistanceM","i32"],
     ["sectionPresent","bool"], ["sectionActive","bool"], ["sectionSpeedLimitKph","i16"],
-    ["sectionAverageKph","f32"], ["sectionRemainingDistanceM","f32"], ["sectionProgress","f32"],
+    ["sectionAverageKph","f32"], ["sectionOverallAverageKph","f32"], ["sectionRemainingDistanceM","f32"],
+    ["sectionRemainingTimeSec","i32"], ["sectionProgress","f32"], ["sectionSuspended","bool"], ["sectionOffRoute","bool"],
   ];
   const naviSignal = [
     ["visible","bool"], ["distanceM","i32"],
-    ["redValid","bool"], ["redOn","bool"], ["leftValid","bool"], ["leftOn","bool"],
-    ["greenValid","bool"], ["greenOn","bool"], ["rightValid","bool"], ["rightOn","bool"],
-    ["uturnValid","bool"], ["uturnOn","bool"],
+    ["redValid","bool"], ["redOn","bool"], ["redRemainSec","i16"],
+    ["leftValid","bool"], ["leftOn","bool"], ["leftRemainSec","i16"],
+    ["greenValid","bool"], ["greenOn","bool"], ["greenRemainSec","i16"],
+    ["rightValid","bool"], ["rightOn","bool"], ["rightRemainSec","i16"],
+    ["uturnValid","bool"], ["uturnOn","bool"], ["uturnRemainSec","i16"],
+    ["uiCounterValid","bool"], ["uiCounterRemainSec","i16"],
   ];
   const naviCrossroad = [["visible","bool"], ["distanceM","i32"], ["imageCode","i32"]];
   const naviRoute = [
     ["present","bool"], ["remainingDistanceM","i32"],
-    ["remainingTimeSec","i32"], ["totalDistanceM","i32"],
+    ["remainingTimeSec","i32"], ["movedDistanceM","i32"], ["totalDistanceM","i32"],
     ["polyline","coordlist"],
   ];
   const naviStatus = [["guidanceActive","bool"], ["offRoute","bool"], ["routePresent","bool"]];
@@ -95,6 +103,9 @@ window.CarrotVisionCompact = (() => {
       ["gearShifter", "enumname", ["unknown", "park", "drive", "neutral", "reverse", "sport", "low", "brake", "eco", "manumatic"]],
       ["leftBlinker", "bool"], ["rightBlinker", "bool"],
       ["fuelGauge", "f32"], ["ureaGauge", "f32"], ["tpms", "struct", tpms],
+      // Appended (must match compact_state.py / native order). Green EV telltale.
+      // Decoder is append-tolerant, so shorter recorded frames stay decodable.
+      ["evModeValid", "bool"], ["evModeActive", "bool"],
     ]]],
     [2, ["controlsState", [
       ["enabled", "bool"], ["vCruiseCluster", "f32"], ["activeLaneLine", "bool"],
@@ -132,6 +143,8 @@ window.CarrotVisionCompact = (() => {
       ["accels", "f32list"], ["speeds", "f32list"], ["jerks", "f32list"],
       ["tFollow", "f32"], ["desiredDistance", "f32"], ["myDrivingMode", "i32"],
       ["xState", "i32"], ["trafficState", "i32"], ["longitudinalPlanSource", "u8"],
+      // Appended (must match compact_state.py / native order). Eco cruise override.
+      ["cruiseTarget", "f32"],
     ]]],
     [9, ["modelV2", [
       ["frameId", "u32"], ["frameIdExtra", "u32"], ["position", "struct", xyz],
@@ -187,6 +200,7 @@ window.CarrotVisionCompact = (() => {
       ["guidanceCurrent","struct",naviGuidance],
       ["guidanceNext","struct",naviGuidance],
       ["laneCurrent","struct",naviLane],
+      ["laneAhead","structlist",naviLane],
       ["speed","struct",naviSpeed],
       ["trafficSignal","struct",naviSignal],
       ["crossroad","struct",naviCrossroad],
@@ -195,6 +209,8 @@ window.CarrotVisionCompact = (() => {
     ]]],
     [20, ["livePose", [
       ["orientationNED", "struct", xyzMeasurement],
+      ["velocityDevice", "struct", xyzMeasurement],
+      ["accelerationDevice", "struct", xyzMeasurement],
       ["angularVelocityDevice", "struct", xyzMeasurement],
       ["inputsOK", "bool"], ["posenetOK", "bool"], ["sensorsOK", "bool"],
       ["timestamp", "u64"],
@@ -306,9 +322,15 @@ window.CarrotVisionCompact = (() => {
     }
   }
 
-  function readSchema(cursor, schema) {
+  function readSchema(cursor, schema, frameEnd) {
     const out = {};
     for (const [name, type, nestedSchema] of schema) {
+      // Append-tolerant top-level decode: a frame encoded/recorded with an older
+      // (shorter) schema stops exactly at its byte boundary, so newly appended
+      // trailing fields are simply absent (undefined) rather than throwing.
+      // Every frame is length-prefixed, so frameEnd is an exact boundary. Nested
+      // structs pass no frameEnd and stay strict.
+      if (frameEnd != null && cursor.offset >= frameEnd) break;
       out[name] = readField(cursor, type, nestedSchema);
     }
     return out;
@@ -331,8 +353,10 @@ window.CarrotVisionCompact = (() => {
     const definition = schemas.get(serviceId);
     if (!definition) throw new Error(`unknown compact state service ${serviceId}`);
     const [service, schema] = definition;
-    const decoded = readSchema(cursor, schema);
-    if (cursor.offset !== bytes.byteLength) throw new Error(`compact state trailing bytes for ${service}`);
+    const decoded = readSchema(cursor, schema, bytes.byteLength);
+    // Append-only evolution: a newer encoder may add trailing fields this decoder
+    // doesn't know — ignore those extra bytes rather than rejecting the frame.
+    // Mid-field truncation is still caught by Cursor.ensure().
     return { service, sequence, decoded, byteLength: bytes.byteLength };
   }
 

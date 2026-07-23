@@ -1,0 +1,74 @@
+{
+  "$schema": "carrot-ar-replay-baseline/v1",
+  "baseline": {
+    "route": "00001d9f--28e0608712--0",
+    "capturedFromCommit": "ca2f48b8",
+    "capturedOn": "2026-07-21",
+    "nominalVideoFps": 20,
+    "source": "user-reviewed Carrot Vision replay",
+    "visualReviewRequired": true
+  },
+  "requiredServices": [
+    "roadCameraState",
+    "modelV2",
+    "cameraOdometry",
+    "liveCalibration",
+    "livePose",
+    "carrotNavi"
+  ],
+  "reviewWindows": [
+    {
+      "id": "left-turn-at-segment-start",
+      "startMs": 0,
+      "endMs": 8000,
+      "maneuver": "left",
+      "preRollAvailable": false,
+      "observedIssues": [
+        "late-appearance",
+        "mirror-or-axis-inversion",
+        "vertical-placement",
+        "blink",
+        "not-world-locked"
+      ]
+    },
+    {
+      "id": "right-turn-around-23s",
+      "startMs": 18000,
+      "endMs": 30000,
+      "maneuver": "right",
+      "preRollAvailable": true,
+      "observedIssues": [
+        "spatial-jitter",
+        "vertical-placement",
+        "blink",
+        "not-world-locked"
+      ]
+    }
+  ],
+  "currentImplementation": {
+    "coordinateLabel": "device-flu-in-ar-code",
+    "openpilotCoordinateContract": "device-frd",
+    "cameraOdometryPoseDelayAppliedMs": 0,
+    "presentationClock": "independent-raf-over-presented-frame",
+    "targetSpatialFps": 30,
+    "anchorModel": "mutable-vehicle-relative",
+    "timelineDiscontinuityMs": 250,
+    "anchorMaxStepMs": 200,
+    "nearUprightMarkerDepthM": 8,
+    "productMountLiftM": 1.05
+  },
+  "comparisonContract": {
+    "sameRouteAndWindows": true,
+    "sameViewportAndDisplayMode": true,
+    "sameArTokenPreview": "D:/Carrot/ARmap/docs/carrot_ar_token_preview.html",
+    "fakeCalibrationProbeAllowed": false,
+    "screenPixelClampAllowed": false,
+    "manualChecks": [
+      "text-and-chevron-not-mirrored",
+      "face-above-pole",
+      "marker-approaches-as-a-fixed-road-object",
+      "no-hard-blink-across-short-source-gaps",
+      "left-and-right-markers-follow-the-intended-route-branch"
+    ]
+  }
+}

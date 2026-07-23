@@ -1,7 +1,7 @@
 "use strict";
 
 window.CarrotReplayClient = (() => {
-  const LOG_WORKER_URL = "/js/realtime/replay_log_worker.js?v=2607-10";
+  const LOG_WORKER_URL = "/js/realtime/replay_log_worker.js?v=2607-12";
   const VIDEO_WORKER_URL = "/js/realtime/replay_video_worker.js?v=2607-02";
   const MSE_BASELINE = 'video/mp4; codecs="avc1.42e01e, mp4a.40.2"';
   const MSE_TYPES = [

@@ -18,11 +18,14 @@ from .catalog import (
   route_time_bounds,
   segment_file_summary,
   segment_is_complete,
+  source_qlog,
   source_rlog,
   source_video,
 )
 from .ffmpeg import browser_video, ensure_preview, ensure_thumbnail
 from .report import build_route_report
+from .read_state import read_dashcam_read_state, write_dashcam_recent_segment
+from .summary_sources import build_route_summary_source
 from .paths import (
   file_size_label,
   relative_time,
@@ -334,6 +337,27 @@ async def api_dashcam_report(request: web.Request) -> web.Response:
     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
+async def api_dashcam_summary_source(request: web.Request) -> web.Response:
+  """Describe route logs for client-side summary analysis without parsing them."""
+  try:
+    route = request.match_info.get("route", "")
+
+    def build_payload():
+      entry = find_dashcam_route(visible_dashcam_routes(), route)
+      if entry is None:
+        return None
+      return build_route_summary_source(route, list(entry.get("segmentFolders") or []))
+
+    payload = await asyncio.to_thread(build_payload)
+    if payload is None:
+      return web.json_response({"ok": False, "error": "route not found"}, status=404)
+    return web.json_response(payload, headers={"Cache-Control": "no-store"})
+  except web.HTTPException as e:
+    return web.json_response({"ok": False, "error": e.text or e.reason}, status=e.status)
+  except Exception:
+    return web.json_response({"ok": False, "error": "summary source unavailable"}, status=500)
+
+
 async def api_dashcam_recent_segments(request: web.Request) -> web.Response:
   try:
     limit = int(request.query.get("limit", "") or 0)
@@ -396,6 +420,11 @@ async def api_dashcam_replay_source_file(request: web.Request) -> web.StreamResp
   kind = (request.match_info.get("kind", "") or "").strip()
   if kind == "rlog":
     path, name = source_rlog(segment_path)
+    content_type = "application/zstd" if name.endswith(".zst") else (
+      "application/x-bzip2" if name.endswith(".bz2") else "application/octet-stream"
+    )
+  elif kind == "qlog":
+    path, name = source_qlog(segment_path)
     content_type = "application/zstd" if name.endswith(".zst") else (
       "application/x-bzip2" if name.endswith(".bz2") else "application/octet-stream"
     )
@@ -526,10 +555,32 @@ async def api_dashcam_upload_cancel(request: web.Request) -> web.Response:
   return web.json_response(result, status=status)
 
 
+async def api_dashcam_read_state(request: web.Request) -> web.Response:
+  state = await asyncio.to_thread(read_dashcam_read_state)
+  return web.json_response({"ok": True, **state})
+
+
+async def api_dashcam_read_state_update(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+  except Exception:
+    body = {}
+  if not isinstance(body, dict):
+    return web.json_response({"ok": False, "error": "bad request"}, status=400)
+  try:
+    state = await asyncio.to_thread(write_dashcam_recent_segment, body.get("recentSegment"))
+  except ValueError as e:
+    return web.json_response({"ok": False, "error": str(e)}, status=400)
+  return web.json_response({"ok": True, **state})
+
+
 def register(app: web.Application) -> None:
   app.router.add_get("/api/dashcam/routes", api_dashcam_routes)
+  app.router.add_get("/api/dashcam/read-state", api_dashcam_read_state)
+  app.router.add_post("/api/dashcam/read-state", api_dashcam_read_state_update)
   app.router.add_get("/api/dashcam/segments/{route}", api_dashcam_segments)
   app.router.add_get("/api/dashcam/report/{route}", api_dashcam_report)
+  app.router.add_get("/api/dashcam/summary-source/{route}", api_dashcam_summary_source)
   app.router.add_get("/api/dashcam/recent", api_dashcam_recent_segments)
   app.router.add_get("/api/dashcam/thumbnail/{segment}", api_dashcam_thumbnail)
   app.router.add_get("/api/dashcam/preview/{segment}", api_dashcam_preview)

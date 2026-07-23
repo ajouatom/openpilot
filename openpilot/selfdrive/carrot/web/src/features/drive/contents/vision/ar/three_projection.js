@@ -1,4 +1,9 @@
-import { roadFrameForAnchor } from "./road_frame.js";
+import { faceFrameForAnchor } from "./road_frame.js";
+import {
+  AR_COORDINATE_FRAME,
+  assertCoordinateFrame,
+  routeFluVectorToDeviceFrd,
+} from "./coordinate_frames.js";
 
 /* Pure matrix contracts shared by the Three adapter and static tests.
  *
@@ -34,8 +39,12 @@ function combineRow(a, aScale, b, bScale) {
  *   stageY = projectedY * scale + ty
  */
 export function stageProjectionMatrix(stage, viewport = {}) {
-  const transform = stage?.calibTransform;
-  if (!validMat3(transform)) return null;
+  const frdTransform = stage?.calibTransform;
+  if (!validMat3(frdTransform)) return null;
+
+  // Three world objects use route FLU. Compose calibTransform(FRD) with the
+  // one explicit FLU->FRD basis conversion before building clip space.
+  const transform = frdTransform.map((row) => [Number(row[0]), -Number(row[1]), -Number(row[2])]);
 
   const width = Math.max(1, finite(viewport.width, stage?.stageWidth) || 1);
   const height = Math.max(1, finite(viewport.height, stage?.stageHeight) || 1);
@@ -60,16 +69,19 @@ export function stageProjectionMatrix(stage, viewport = {}) {
   ]);
 }
 
-/** Map approved-preview local axes into openpilot device coordinates. */
+/** Map approved-preview local axes into the AR route-local FLU world. */
 export function markerWorldMatrix(anchor, scale = 1) {
   if (!anchor) return null;
+  if (anchor.coordinateFrame !== undefined) {
+    assertCoordinateFrame(anchor, AR_COORDINATE_FRAME.ROUTE_FLU, "marker anchor");
+  }
   const x = finite(anchor.x);
   const y = finite(anchor.y);
   const z = finite(anchor.z, 0);
   if (x === null || y === null) return null;
 
   const worldScale = Math.max(0.001, finite(scale, 1));
-  const frame = roadFrameForAnchor(anchor);
+  const frame = faceFrameForAnchor(anchor);
   const right = frame.right.map((value) => value * worldScale);
   const up = frame.up.map((value) => value * worldScale);
   const backward = frame.forward.map((value) => -value * worldScale);
@@ -92,4 +104,10 @@ export function transformPointRowMajor(matrix, point, w = 1) {
     + matrix[row * 4 + 2] * vector[2]
     + matrix[row * 4 + 3] * vector[3]
   )));
+}
+
+/** Test/diagnostic helper exposing the exact FLU -> FRD projection boundary. */
+export function routeFluPointInDeviceFrd(point) {
+  const vector = routeFluVectorToDeviceFrd([point?.x, point?.y, point?.z]);
+  return vector && Object.freeze({ x: vector[0], y: vector[1], z: vector[2] });
 }

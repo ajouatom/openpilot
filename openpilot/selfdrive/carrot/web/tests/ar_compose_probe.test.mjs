@@ -19,6 +19,8 @@ test("field probe uses the approved token-preview GUIDE/BAR component", () => {
   assert.equal(signs[0].descriptor.shape, AR_SHAPE.BAR);
   assert.equal(signs[0].descriptor.primary, "40m");
   assert.match(signs[0].descriptor.secondary, /AR 표시 확인/);
+  assert.doesNotMatch(signs[0].descriptor.secondary, /직진/);
+  assert.equal(signs[0].descriptor.turnSign, 0);
 });
 
 test("idle Navi may show the explicit field probe", () => {
