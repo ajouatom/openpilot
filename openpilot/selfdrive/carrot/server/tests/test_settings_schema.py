@@ -19,14 +19,31 @@ KNOWN_RISK_LEVELS = {"high", "medium"}
 
 
 @pytest.fixture(scope="module")
-def params():
+def settings():
   with SETTINGS_PATH.open(encoding="utf-8") as f:
-    return json.load(f)["params"]
+    return json.load(f)
+
+
+@pytest.fixture(scope="module")
+def params(settings):
+  return settings["params"]
 
 
 def test_the_catalogue_is_readable_and_populated(params):
   assert len(params) > 100
   assert all(isinstance(p.get("name"), str) and p["name"] for p in params)
+
+
+def test_c3x_lite_hardware_setting_is_exposed(settings, params):
+  by_name = {p["name"]: p for p in params}
+  c3x_lite = by_name["HardwareC3xLite"]
+  assert (c3x_lite["min"], c3x_lite["max"], c3x_lite["default"]) == (0, 1, 0)
+  assert c3x_lite["control"] == "toggle"
+  assert c3x_lite["risk"] == "high"
+
+  vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
+  device_hardware = next(group for group in vehicle["groups"] if group["id"] == "VEH_DEVICE")
+  assert device_hardware["params"] == ["HardwareC3xLite"]
 
 
 def test_parameter_names_are_unique(params):
