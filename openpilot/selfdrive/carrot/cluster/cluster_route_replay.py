@@ -468,6 +468,7 @@ class RouteReplayFrame:
     ev_mode_active: bool = False
     display_speed_kph: float | None = None
     traffic_state: int = 0
+    driving_mode: int | None = None
     planned_speed_kph: float | None = None
     planned_accel_mps2: float | None = None
     planned_curvature_m_inv: float | None = None
@@ -1448,6 +1449,7 @@ class RouteLogParser:
         self.longitudinal_plan_allow_throttle: bool | None = None
         self.longitudinal_plan_allow_brake: bool | None = None
         self.traffic_state = 0
+        self.driving_mode: int | None = None
         self.longitudinal_t_follow_s: float | None = None
         self.longitudinal_desired_distance_m: float | None = None
         self.longitudinal_v_target_kph: float | None = None
@@ -1523,7 +1525,10 @@ class RouteLogParser:
             elif event_type in ("navInstructionCarrot", "navInstruction"):
                 self._update_nav_instruction(getattr(event, event_type), event_t)
             elif event_type == "longitudinalPlan":
-                self._update_longitudinal_plan(event.longitudinalPlan)
+                self._update_longitudinal_plan(
+                    event.longitudinalPlan,
+                    bool(safe_get(event, "valid", True)),
+                )
             elif event_type == "controlsState":
                 self._update_controls_state(event.controlsState)
             elif event_type == "selfdriveState":
@@ -1678,6 +1683,7 @@ class RouteLogParser:
             ev_mode_active=ev_mode_active,
             display_speed_kph=display_speed_kph,
             traffic_state=self.traffic_state,
+            driving_mode=self.driving_mode,
             planned_speed_kph=self.planned_speed_kph,
             planned_accel_mps2=self.planned_accel_mps2,
             planned_curvature_m_inv=self.model_action_curvature_m_inv,
@@ -1886,7 +1892,7 @@ class RouteLogParser:
             self.nav_speed_limit_kph = None
             self.nav_speed_limit_t = -999.0
 
-    def _update_longitudinal_plan(self, longitudinal_plan: Any) -> None:
+    def _update_longitudinal_plan(self, longitudinal_plan: Any, valid: bool = True) -> None:
         self.longitudinal_plan_source = enum_text(
             safe_get(longitudinal_plan, "longitudinalPlanSource", self.longitudinal_plan_source or "")
         ) or self.longitudinal_plan_source
@@ -1914,6 +1920,8 @@ class RouteLogParser:
         traffic_state = safe_optional_int(longitudinal_plan, "trafficState")
         if traffic_state in (0, 1, 2):
             self.traffic_state = traffic_state
+        driving_mode = safe_optional_int(longitudinal_plan, "myDrivingMode")
+        self.driving_mode = driving_mode if valid and driving_mode in (1, 2, 3, 4) else None
         t_follow = safe_optional_float(longitudinal_plan, "tFollow")
         if t_follow is not None and 0.0 <= t_follow <= 5.0:
             self.longitudinal_t_follow_s = t_follow
@@ -3647,6 +3655,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         lateral_plan_curvature_rates=frame.lateral_plan_curvature_rates,
         display_speed_kph=frame.display_speed_kph,
         traffic_state=frame.traffic_state,
+        driving_mode=frame.driving_mode,
         recorded_cutin_active=frame.recorded_cutin_active,
         recorded_cutin_sound=frame.recorded_cutin_sound,
     )
@@ -3751,6 +3760,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         gear_text=discrete.gear_text,
         cruise_gap=discrete.cruise_gap,
         traffic_state=discrete.traffic_state,
+        driving_mode=discrete.driving_mode,
         lfa_active=discrete.lfa_active,
         active_lane_line=discrete.active_lane_line,
         left_signal=discrete.left_signal,
