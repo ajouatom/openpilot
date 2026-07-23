@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 
 from openpilot.selfdrive.carrot import web_upload
+from openpilot.selfdrive.carrot.server.features.dashcam import upload
+from openpilot.selfdrive.carrot.server.features.dashcam import upload_jobs
 from openpilot.selfdrive.carrot.server.services import dashcam_upload_report
 from openpilot.selfdrive.carrot.server.services import web_settings
 
@@ -129,6 +131,46 @@ def test_dashcam_upload_report_does_not_merge_nonconsecutive_segments():
 
   report = dashcam_upload_report.upload_share_text({"remoteBasePath": f"{base}/", "results": results})
   assert "### Open & Analyze" not in report
+
+
+def test_dashcam_upload_completion_notifies_web_server_and_discord(monkeypatch):
+  segment = "00000cfb--69588de3d7--10"
+  notifications = []
+
+  async def fake_upload_folder(*args, **kwargs):
+    return True
+
+  async def fake_web_complete(base_url, token, payload):
+    notifications.append(("web", base_url, token, payload["results"][0]["segment"]))
+    return {"ok": True, "status": 200}
+
+  async def fake_discord(webhook_url, payload):
+    notifications.append(("discord", webhook_url, payload["shareText"]))
+    return {"configured": True, "ok": True, "status": 204}
+
+  monkeypatch.setattr(upload_jobs, "HAS_PARAMS", False)
+  monkeypatch.setattr(upload, "upload_target_settings", lambda: ("https://upload.example", "session-token"))
+  monkeypatch.setattr(upload, "upload_metadata", lambda params: {
+    "carName": "TEST_CAR",
+    "dongleId": "0123456789abcdef",
+  })
+  monkeypatch.setattr(upload, "upload_share_text", lambda payload: "shared upload report")
+  monkeypatch.setattr(upload, "discord_webhook_url", lambda params: "https://discord.example/webhook")
+  monkeypatch.setattr(upload, "send_discord_webhook", fake_discord)
+  monkeypatch.setattr(upload_jobs, "segment_dir", lambda value: "/tmp/segment")
+  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda value: [])
+  monkeypatch.setattr(upload_jobs, "upload_folder_to_web", fake_upload_folder)
+  monkeypatch.setattr(upload_jobs, "send_web_upload_complete", fake_web_complete)
+
+  result = asyncio.run(upload_jobs.run_upload_segments([segment]))
+
+  assert result["ok"] is True
+  assert result["webComplete"] == {"ok": True, "status": 200}
+  assert result["discord"] == {"configured": True, "ok": True, "status": 204}
+  assert notifications == [
+    ("web", "https://upload.example", "session-token", segment),
+    ("discord", "https://discord.example/webhook", "shared upload report"),
+  ]
 
 
 def test_tmux_target_uses_automatic_session_token(monkeypatch):

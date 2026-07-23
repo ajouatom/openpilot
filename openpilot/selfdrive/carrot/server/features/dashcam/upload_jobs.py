@@ -285,7 +285,10 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
     token,
     response_payload,
   )
-  response_payload["discord"] = {"configured": False, "ok": False, "skipped": True}
+  response_payload["discord"] = await upload.send_discord_webhook(
+    upload.discord_webhook_url(params),
+    response_payload,
+  )
   return response_payload
 
 
