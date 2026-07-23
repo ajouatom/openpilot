@@ -188,9 +188,33 @@ def write_po(path: str | Path, header: POEntry | None, entries: list[POEntry]) -
 
 # ──── String extraction (replaces xgettext) ────
 
-def extract_strings(files: list[str], basedir: str) -> list[POEntry]:
-  """Extract tr/trn/tr_noop calls from Python source files."""
+def extract_strings(files: list[str], basedir: str,
+                    translation_call_args: dict[str, tuple[tuple[int, ...], tuple[str, ...]]] | None = None) -> list[POEntry]:
+  """Extract translation calls and configured literal call arguments."""
   seen: dict[str, POEntry] = {}
+  translation_call_args = translation_call_args or {}
+
+  def add_entry(msgid: str, ref: str, flagged: bool = False, msgid_plural: str = "") -> None:
+    if not msgid:
+      return
+    if msgid in seen:
+      existing = seen[msgid]
+      if ref not in existing.source_refs:
+        existing.source_refs.append(ref)
+      if flagged and 'python-format' not in existing.flags:
+        existing.flags.append('python-format')
+      if msgid_plural and not existing.msgid_plural:
+        existing.msgid_plural = msgid_plural
+        existing.msgstr_plural = {0: '', 1: ''}
+      return
+
+    seen[msgid] = POEntry(
+      msgid=msgid,
+      msgid_plural=msgid_plural,
+      source_refs=[ref],
+      flags=['python-format'] if flagged else [],
+      msgstr_plural={0: '', 1: ''} if msgid_plural else {},
+    )
 
   for filepath in files:
     full = os.path.join(basedir, filepath)
@@ -213,22 +237,25 @@ def extract_strings(files: list[str], basedir: str) -> list[POEntry]:
       else:
         continue
 
+      ref = f'{filepath}:{node.lineno}'
+
+      if name in translation_call_args:
+        positions, keywords = translation_call_args[name]
+        values = [node.args[i] for i in positions if i < len(node.args)]
+        values.extend(kw.value for kw in node.keywords if kw.arg in keywords)
+        for value in values:
+          if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            add_entry(value.value, ref)
+
       if name not in ('tr', 'trn', 'tr_noop'):
         continue
 
-      ref = f'{filepath}:{node.lineno}'
       is_flagged = name in ('tr', 'trn')
 
       if name in ('tr', 'tr_noop'):
         if not node.args or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str):
           continue
-        msgid = node.args[0].value
-        if msgid in seen:
-          if ref not in seen[msgid].source_refs:
-            seen[msgid].source_refs.append(ref)
-        else:
-          flags = ['python-format'] if is_flagged else []
-          seen[msgid] = POEntry(msgid=msgid, source_refs=[ref], flags=flags)
+        add_entry(node.args[0].value, ref, is_flagged)
 
       elif name == 'trn':
         if len(node.args) < 2:
@@ -238,17 +265,7 @@ def extract_strings(files: list[str], basedir: str) -> list[POEntry]:
           continue
         if not (isinstance(a2, ast.Constant) and isinstance(a2.value, str)):
           continue
-        msgid, msgid_plural = a1.value, a2.value
-        if msgid in seen:
-          if ref not in seen[msgid].source_refs:
-            seen[msgid].source_refs.append(ref)
-        else:
-          flags = ['python-format'] if is_flagged else []
-          seen[msgid] = POEntry(
-            msgid=msgid, msgid_plural=msgid_plural,
-            source_refs=[ref], flags=flags,
-            msgstr_plural={0: '', 1: ''},
-          )
+        add_entry(a1.value, ref, is_flagged, a2.value)
 
   return list(seen.values())
 

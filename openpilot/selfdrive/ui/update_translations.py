@@ -7,6 +7,21 @@ from openpilot.selfdrive.ui.translations.potools import extract_strings, generat
 
 LANGUAGES_FILE = os.path.join(str(TRANSLATIONS_DIR), "languages.json")
 POT_FILE = os.path.join(str(TRANSLATIONS_DIR), "app.pot")
+ALERTS_FILE = "openpilot/selfdrive/selfdrived/events.py"
+
+# Alert text is translated when Events.create_alerts() returns an alert. These
+# constructor arguments are no-op source markers for the PO extractor.
+ALERT_TRANSLATION_CALL_ARGS = {
+  "Alert": ((0, 1), ("alert_text_1", "alert_text_2")),
+  "NoEntryAlert": ((0,), ("alert_text_1", "alert_text_2")),
+  "SoftDisableAlert": ((0,), ()),
+  "UserSoftDisableAlert": ((0,), ()),
+  "ImmediateDisableAlert": ((0,), ()),
+  "NormalPermanentAlert": ((0, 1), ("alert_text_1", "alert_text_2")),
+  "StartupAlert": ((0, 1), ("alert_text_1", "alert_text_2")),
+  "soft_disable_alert": ((0,), ()),
+  "user_soft_disable_alert": ((0,), ()),
+}
 
 
 def update_translations():
@@ -18,9 +33,15 @@ def update_translations():
     for filename in filenames:
       if filename.endswith(".py"):
         files.append(os.path.relpath(os.path.join(root, filename), BASEDIR))
-
   # Extract translatable strings and generate .pot template
-  entries = extract_strings(files, BASEDIR)
+  entries_by_msgid = {entry.msgid: entry for entry in extract_strings(files, BASEDIR)}
+  for entry in extract_strings([ALERTS_FILE], BASEDIR, ALERT_TRANSLATION_CALL_ARGS):
+    if entry.msgid in entries_by_msgid:
+      current = entries_by_msgid[entry.msgid]
+      current.source_refs = sorted(set(current.source_refs + entry.source_refs))
+    else:
+      entries_by_msgid[entry.msgid] = entry
+  entries = list(entries_by_msgid.values())
   generate_pot(entries, POT_FILE)
 
   # Generate/update translation files for each language

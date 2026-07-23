@@ -255,23 +255,6 @@ function launch {
     fi
   fi
 
-  # events language init
-  #LANG=$(cat ${PARAMS_ROOT}/d/LanguageSetting)
-  LANG=$(cat /data/params/d/LanguageSetting)
-  GITSTAT=$(git status)
-
-  # events.py ?쒓?濡?蹂寃?諛??뚯씪??援먯껜???곹깭?몄? ?뺤씤
-  if [ "${LANG}" = "ko" ] && [[ ! "${GITSTAT}" == *"modified:   openpilot/selfdrive/selfdrived/events.py"* ]]; then
-    cp -f $DIR/openpilot/selfdrive/selfdrived/events.py $DIR/scripts/add/events_en.py
-    cp -f $DIR/scripts/add/events_ko.py $DIR/openpilot/selfdrive/selfdrived/events.py
-  elif [ "${LANG}" = "zh-CHS" ] && [[ ! "${GITSTAT}" == *"modified:   openpilot/selfdrive/selfdrived/events.py"* ]]; then
-    # Backup current events.py (assumed English) and install Simplified Chinese events
-    cp -f $DIR/openpilot/selfdrive/selfdrived/events.py $DIR/scripts/add/events_en.py
-    cp -f $DIR/scripts/add/events_zh.py $DIR/openpilot/selfdrive/selfdrived/events.py
-  elif [ "${LANG}" = "en" ] && [[ "${GITSTAT}" == *"modified:   openpilot/selfdrive/selfdrived/events.py"* ]]; then
-    cp -f $DIR/scripts/add/events_en.py $DIR/openpilot/selfdrive/selfdrived/events.py
-  fi
-
   # start manager
   cd openpilot/system/manager
   if [ "$FORCE_REBUILD" = "1" ] || [ ! -f $DIR/prebuilt ]; then

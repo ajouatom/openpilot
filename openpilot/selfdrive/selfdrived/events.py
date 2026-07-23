@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import bisect
+import copy
 import math
 import os
 from enum import IntEnum
@@ -15,6 +16,7 @@ from openpilot.selfdrive.locationd.calibrationd import MIN_SPEED_FILTER
 from openpilot.system.micd import SAMPLE_RATE, SAMPLE_BUFFER
 from openpilot.selfdrive.ui.feedback.feedbackd import FEEDBACK_MAX_DURATION
 from openpilot.system.hardware import HARDWARE
+from openpilot.system.ui.lib.multilang import tr, trn, tr_noop
 
 AlertSize = log.SelfdriveState.AlertSize
 AlertStatus = log.SelfdriveState.AlertStatus
@@ -89,6 +91,12 @@ class Events:
           if not isinstance(alert, Alert):
             alert = alert(*callback_args)
 
+          # Static alerts are shared objects in EVENTS. Translate a copy so the
+          # canonical English text remains available when the language changes.
+          alert = copy.copy(alert)
+          alert.alert_text_1 = tr(alert.alert_text_1)
+          alert.alert_text_2 = tr(alert.alert_text_2)
+
           if DT_CTRL * (self.event_counters[e] + 1) >= alert.creation_delay:
             alert.alert_type = f"{EVENT_NAME[e]}/{et}"
             alert.event_type = et
@@ -150,7 +158,7 @@ EmptyAlert = Alert("" , "", AlertStatus.normal, AlertSize.none, Priority.LOWEST,
 
 class NoEntryAlert(Alert):
   def __init__(self, alert_text_2: str,
-               alert_text_1: str = "openpilot Unavailable",
+               alert_text_1: str = tr_noop("openpilot Unavailable"),
                visual_alert: car.CarControl.HUDControl.VisualAlert=VisualAlert.none):
     if HARDWARE.get_device_type() == 'mici':
       alert_text_1, alert_text_2 = alert_text_2, alert_text_1
@@ -161,7 +169,7 @@ class NoEntryAlert(Alert):
 
 class SoftDisableAlert(Alert):
   def __init__(self, alert_text_2: str):
-    super().__init__("TAKE CONTROL IMMEDIATELY", alert_text_2,
+    super().__init__(tr_noop("TAKE CONTROL IMMEDIATELY"), alert_text_2,
                      AlertStatus.userPrompt, AlertSize.full,
                      Priority.MID, VisualAlert.steerRequired,
                      AudibleAlert.warningSoft, 2.),
@@ -171,12 +179,12 @@ class SoftDisableAlert(Alert):
 class UserSoftDisableAlert(SoftDisableAlert):
   def __init__(self, alert_text_2: str):
     super().__init__(alert_text_2),
-    self.alert_text_1 = "openpilot will disengage"
+    self.alert_text_1 = tr_noop("openpilot will disengage")
 
 
 class ImmediateDisableAlert(Alert):
   def __init__(self, alert_text_2: str):
-    super().__init__("TAKE CONTROL IMMEDIATELY", alert_text_2,
+    super().__init__(tr_noop("TAKE CONTROL IMMEDIATELY"), alert_text_2,
                      AlertStatus.critical, AlertSize.full,
                      Priority.HIGHEST, VisualAlert.steerRequired,
                      AudibleAlert.warningImmediate, 4.),
@@ -198,7 +206,7 @@ class NormalPermanentAlert(Alert):
 
 
 class StartupAlert(Alert):
-  def __init__(self, alert_text_1: str, alert_text_2: str = "Always keep hands on wheel and eyes on road", alert_status=AlertStatus.normal):
+  def __init__(self, alert_text_1: str, alert_text_2: str = tr_noop("Always keep hands on wheel and eyes on road"), alert_status=AlertStatus.normal):
     alert_size = AlertSize.mid
     if HARDWARE.get_device_type() == 'mici':
       if alert_text_2 == "Always keep hands on wheel and eyes on road":
@@ -244,31 +252,33 @@ def startup_master_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubM
   return StartupAlert("WARNING: This branch is not tested", branch, alert_status=AlertStatus.userPrompt)
 
 def below_engage_speed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  return NoEntryAlert(f"Drive above {get_display_speed(CP.minEnableSpeed, metric)} to engage")
+  return NoEntryAlert(tr("Drive above {speed} to engage").format(speed=get_display_speed(CP.minEnableSpeed, metric)))
 
 
 def below_steer_speed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   return Alert(
-    f"Steer Assist Unavailable Below {get_display_speed(CP.minSteerSpeed, metric)}",
+    tr("Steer Assist Unavailable Below {speed}").format(speed=get_display_speed(CP.minSteerSpeed, metric)),
     "",
     AlertStatus.userPrompt, AlertSize.small,
     Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 0.4)
 
 
 def calibration_incomplete_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  first_word = 'Recalibrating' if sm['liveCalibration'].calStatus == log.LiveCalibrationData.Status.recalibrating else 'Calibrating'
+  first_word = tr("Recalibrating") if sm['liveCalibration'].calStatus == log.LiveCalibrationData.Status.recalibrating else tr("Calibrating")
   return Alert(
-    f"{first_word}: {sm['liveCalibration'].calPerc:.0f}%",
-    f"Drive Above {get_display_speed(MIN_SPEED_FILTER, metric)}",
+    tr("{calibration_state}: {percent:.0f}%").format(calibration_state=first_word, percent=sm['liveCalibration'].calPerc),
+    tr("Drive Above {speed}").format(speed=get_display_speed(MIN_SPEED_FILTER, metric)),
     AlertStatus.normal, AlertSize.mid,
     Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2)
 
 
 def audio_feedback_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   duration = FEEDBACK_MAX_DURATION - ((sm['audioFeedback'].blockNum + 1) * SAMPLE_BUFFER / SAMPLE_RATE)
+  seconds = round(duration)
   return NormalPermanentAlert(
     "Recording Audio Feedback",
-    f"{round(duration)} second{'s' if round(duration) != 1 else ''} remaining. Press again to save early.",
+    trn("{seconds} second remaining. Press again to save early.",
+        "{seconds} seconds remaining. Press again to save early.", seconds).format(seconds=seconds),
     priority=Priority.LOW)
 
 
@@ -291,13 +301,13 @@ def torque_nn_load_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubM
 
 def out_of_space_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   full_perc = round(100. - sm['deviceState'].freeSpacePercent)
-  return NormalPermanentAlert("Out of Storage", f"{full_perc}% full")
+  return NormalPermanentAlert("Out of Storage", tr("{percent}% full").format(percent=full_perc))
 
 
 def posenet_invalid_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   mdl = sm['modelV2'].velocity.x[0] if len(sm['modelV2'].velocity.x) else math.nan
   err = CS.vEgo - mdl
-  msg = f"Speed Error: {err:.1f} m/s"
+  msg = tr("Speed Error: {error:.1f} m/s").format(error=err)
   return NoEntryAlert(msg, alert_text_1="Posenet Speed Invalid")
 
 
@@ -323,23 +333,23 @@ def calibration_invalid_alert(CP: car.CarParams, CS: car.CarState, sm: messaging
   rpy = sm['liveCalibration'].rpyCalib
   yaw = math.degrees(rpy[2] if len(rpy) == 3 else math.nan)
   pitch = math.degrees(rpy[1] if len(rpy) == 3 else math.nan)
-  angles = f"Remount Device (Pitch: {pitch:.1f}°, Yaw: {yaw:.1f}°)"
+  angles = tr("Remount Device (Pitch: {pitch:.1f}°, Yaw: {yaw:.1f}°)").format(pitch=pitch, yaw=yaw)
   return NormalPermanentAlert("Calibration Invalid", angles)
 
 
 def paramsd_invalid_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   if not sm['liveParameters'].angleOffsetValid:
     angle_offset_deg = sm['liveParameters'].angleOffsetDeg
-    title = "Steering misalignment detected"
-    text = f"Angle offset too high (Offset: {angle_offset_deg:.1f}°)"
+    title = tr("Steering misalignment detected")
+    text = tr("Angle offset too high (Offset: {angle_offset:.1f}°)").format(angle_offset=angle_offset_deg)
   elif not sm['liveParameters'].steerRatioValid:
     steer_ratio = sm['liveParameters'].steerRatio
-    title = "Steer ratio mismatch"
-    text = f"Steering rack geometry may be off (Ratio: {steer_ratio:.1f})"
+    title = tr("Steer ratio mismatch")
+    text = tr("Steering rack geometry may be off (Ratio: {steer_ratio:.1f})").format(steer_ratio=steer_ratio)
   elif not sm['liveParameters'].stiffnessFactorValid:
     stiffness_factor = sm['liveParameters'].stiffnessFactor
-    title = "Abnormal tire stiffness"
-    text = f"Check tires, pressure, or alignment (Factor: {stiffness_factor:.1f})"
+    title = tr("Abnormal tire stiffness")
+    text = tr("Check tires, pressure, or alignment (Factor: {stiffness_factor:.1f})").format(stiffness_factor=stiffness_factor)
   else:
     return NoEntryAlert("paramsd Temporary Error")
 
@@ -349,33 +359,33 @@ def overheat_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster,
   cpu = max(sm['deviceState'].cpuTempC, default=0.)
   gpu = max(sm['deviceState'].gpuTempC, default=0.)
   temp = max((cpu, gpu, sm['deviceState'].memoryTempC))
-  return NormalPermanentAlert("System Overheated", f"{temp:.0f} °C")
+  return NormalPermanentAlert("System Overheated", tr("{temperature:.0f} °C").format(temperature=temp))
 
 
 def low_memory_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  return NormalPermanentAlert("Low Memory", f"{sm['deviceState'].memoryUsagePercent}% used")
+  return NormalPermanentAlert("Low Memory", tr("{percent}% used").format(percent=sm['deviceState'].memoryUsagePercent))
 
 
 def high_cpu_usage_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   x = max(sm['deviceState'].cpuUsagePercent, default=0.)
-  return NormalPermanentAlert("High CPU Usage", f"{x}% used")
+  return NormalPermanentAlert("High CPU Usage", tr("{percent}% used").format(percent=x))
 
 
 def modeld_lagging_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  return NormalPermanentAlert("Driving Model Lagging", f"{sm['modelV2'].frameDropPerc:.1f}% frames dropped")
+  return NormalPermanentAlert("Driving Model Lagging", tr("{percent:.1f}% frames dropped").format(percent=sm['modelV2'].frameDropPerc))
 
 
 def wrong_car_mode_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  text = "Enable Adaptive Cruise to Engage"
+  text = tr("Enable Adaptive Cruise to Engage")
   if CP.brand == "honda":
-    text = "Enable Main Switch to Engage"
+    text = tr("Enable Main Switch to Engage")
   return NoEntryAlert(text)
 
 
 def joystick_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   gb = sm['carControl'].actuators.accel / 4.
   steer = sm['carControl'].actuators.torque
-  vals = f"Gas: {round(gb * 100.)}%, Steer: {round(steer * 100.)}%"
+  vals = tr("Gas: {gas}%, Steer: {steer}%").format(gas=round(gb * 100.), steer=round(steer * 100.))
   return NormalPermanentAlert("Joystick Mode", vals)
 
 
@@ -391,17 +401,17 @@ def longitudinal_maneuver_alert(CP: car.CarParams, CS: car.CarState, sm: messagi
 
 def personality_changed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   personality = str(personality).title()
-  return NormalPermanentAlert(f"Driving Personality: {personality}", duration=1.5)
+  return NormalPermanentAlert(tr("Driving Personality: {personality}").format(personality=personality), duration=1.5)
 
 
 def invalid_lkas_setting_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  text = "Toggle stock LKAS on or off to engage"
+  text = tr("Toggle stock LKAS on or off to engage")
   if CP.brand == "tesla":
-    text = "Switch to Traffic-Aware Cruise Control to engage"
+    text = tr("Switch to Traffic-Aware Cruise Control to engage")
   elif CP.brand == "mazda":
-    text = "Enable your car's LKAS to engage"
+    text = tr("Enable your car's LKAS to engage")
   elif CP.brand == "nissan":
-    text = "Disable your car's stock LKAS to engage"
+    text = tr("Disable your car's stock LKAS to engage")
   return NormalPermanentAlert("Invalid LKAS setting", text)
 
 def car_parser_result(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
