@@ -1,0 +1,393 @@
+/* One native information surface below the unchanged setting row.
+   Description, popular values and history share the same tabs and content box
+   at every viewport size; only one panel is exposed at a time. */
+
+.page--setting #settingScreenItems .setting-context {
+  width: 100%;
+  min-width: 0;
+  margin: 14px 0 var(--sp-md);
+  overflow: hidden;
+  border: 1px solid var(--setting-card-outline);
+  border-radius: var(--setting-card-radius);
+  background: var(--setting-card-surface);
+  box-shadow: var(--setting-card-shadow);
+}
+
+.page--setting #settingScreenItems .setting-context__tabs {
+  --segmented-control-gap: 0;
+  --segmented-control-padding: 0;
+  --segmented-control-item-min-height: var(--control-min-height);
+  --segmented-control-item-padding: 0 var(--sp-sm);
+  --segmented-control-item-flex: 1 1 0;
+  --segmented-control-item-font-size: var(--fs-label-md);
+  --segmented-control-item-radius: 0;
+  --segmented-control-item-border: transparent;
+  --segmented-control-item-bg: transparent;
+  --segmented-control-item-fg: color-mix(in srgb, var(--md-on-surface-var) 72%, transparent);
+  --segmented-control-selected-border: transparent;
+  --segmented-control-selected-bg:
+    color-mix(in srgb, var(--md-primary) 11%, var(--md-surface-cont-h));
+  --segmented-control-selected-fg: var(--md-primary);
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid var(--setting-card-outline);
+  border-radius: var(--setting-card-radius) var(--setting-card-radius) 0 0;
+  background: color-mix(in srgb, var(--md-surface-cont-h) 72%, var(--setting-card-surface));
+}
+
+.page--setting #settingScreenItems .setting-context__tab {
+  position: relative;
+  gap: 5px;
+  overflow: hidden;
+  font-family: inherit;
+  font-weight: 850;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color var(--motion-quick) var(--ease-standard),
+    background var(--motion-quick) var(--ease-standard),
+    color var(--motion-quick) var(--ease-standard);
+}
+
+.page--setting #settingScreenItems .setting-context__tab:not(:last-child) {
+  border-right-color: color-mix(in srgb, var(--setting-card-outline) 62%, transparent);
+}
+
+.page--setting #settingScreenItems .setting-context__tab:first-child {
+  border-top-left-radius: var(--setting-card-radius);
+}
+
+.page--setting #settingScreenItems .setting-context__tab:last-child {
+  border-top-right-radius: var(--setting-card-radius);
+}
+
+.page--setting #settingScreenItems .setting-context__tab:hover {
+  background: color-mix(in srgb, var(--md-on-surface) 5%, var(--md-surface-cont-h));
+  color: var(--md-on-surface);
+}
+
+.page--setting #settingScreenItems .setting-context__tab[aria-selected="true"] {
+  border-color: var(--segmented-control-selected-border);
+  background: var(--segmented-control-selected-bg);
+  color: var(--segmented-control-selected-fg);
+}
+
+.page--setting #settingScreenItems .setting-context__tab:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+
+.page--setting #settingScreenItems .setting-context__tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page--setting #settingScreenItems .setting-context__tab-count {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding-inline: 5px;
+  border-radius: 999px;
+  background: var(--md-surface-cont-hh);
+  color: var(--md-on-surface-var);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 850;
+}
+
+.page--setting #settingScreenItems
+  .setting-context__tab[aria-selected="true"]
+  .setting-context__tab-count {
+  background: color-mix(in srgb, var(--md-primary) 16%, var(--md-surface-cont-hh));
+  color: var(--md-primary);
+}
+
+.page--setting #settingScreenItems .setting-context__panel {
+  min-width: 0;
+}
+
+.page--setting #settingScreenItems .setting-context__panel[hidden] {
+  display: none;
+}
+
+.page--setting #settingScreenItems .setting-context__content {
+  min-width: 0;
+  min-height: 168px;
+  padding: clamp(var(--sp-md), 2.5vw, var(--sp-lg));
+  color: var(--md-on-surface-var);
+}
+
+.page--setting #settingScreenItems .setting-context__state {
+  display: grid;
+  min-height: 136px;
+  align-content: center;
+  justify-items: center;
+  padding: var(--sp-lg);
+  color: color-mix(in srgb, var(--md-on-surface-var) 58%, transparent);
+  text-align: center;
+}
+
+.page--setting #settingScreenItems .setting-context__state strong {
+  max-width: 34rem;
+  font-size: var(--fs-label-md);
+  font-weight: 780;
+  line-height: 1.45;
+  text-wrap: balance;
+}
+
+.page--setting #settingScreenItems .setting-context__state--loading strong {
+  animation: setting-context-loading 1.2s ease-in-out infinite alternate;
+}
+
+.page--setting #settingScreenItems .setting-context .setting-popular-detail-block,
+.page--setting #settingScreenItems .setting-context .setting-history-detail-block {
+  width: 100%;
+  margin: 0;
+}
+
+.page--setting #settingScreenItems .setting-context .setting-popular-detail {
+  width: 100%;
+  min-width: 0;
+}
+
+.page--setting #settingScreenItems .setting-context .setting-popular-detail__rows {
+  gap: 6px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.page--setting #settingScreenItems .setting-context .setting-popular-detail__row {
+  grid-template-columns: 18px minmax(0, 1fr) minmax(44px, auto);
+  min-height: 46px;
+  padding: 7px 11px;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--md-surface-cont-l) 62%, transparent);
+  font-size: var(--fs-label-md);
+}
+
+.page--setting #settingScreenItems .setting-context .setting-popular-detail__row:last-child {
+  border-bottom-color: color-mix(in srgb, var(--md-outline-var) 22%, transparent);
+}
+
+.page--setting #settingScreenItems .setting-context .setting-popular-detail__row:active {
+  border-color: color-mix(in srgb, var(--md-primary) 32%, var(--md-outline-var));
+  background: var(--md-primary-state-soft);
+}
+
+.page--setting #settingScreenItems .setting-context .setting-popular-detail__updated {
+  margin-top: var(--sp-sm);
+  color: color-mix(in srgb, var(--md-on-surface-var) 54%, transparent);
+  font-size: var(--fs-label-sm);
+}
+
+.page--setting #settingScreenItems .setting-context__history-summary {
+  display: grid;
+  gap: var(--sp-md);
+}
+
+.page--setting #settingScreenItems .setting-context__more {
+  width: 100%;
+  min-height: var(--control-min-height);
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  border-radius: var(--control-radius);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface-var);
+  font-family: inherit;
+  font-size: var(--fs-label-md);
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.page--setting #settingScreenItems .setting-context__more:hover,
+.page--setting #settingScreenItems .setting-context__more:focus-visible {
+  border-color: color-mix(in srgb, var(--md-primary) 42%, var(--md-outline-var));
+  background: var(--md-primary-state-soft);
+}
+
+.setting-context__history-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-width: 100%;
+  max-height: min(82dvh, 720px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 54%, transparent);
+  border-radius: var(--r-lg);
+  background: var(--md-surface-cont);
+  color: var(--md-on-surface);
+  box-shadow: var(--shadow-4);
+}
+
+.setting-context__history-dialog::backdrop {
+  background: rgb(0 0 0 / 0.68);
+  backdrop-filter: blur(2px);
+}
+
+.setting-context__dialog-header {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-md);
+  padding: 8px var(--sp-md);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-outline-var) 24%, transparent);
+}
+
+.setting-context__dialog-header h3 {
+  margin: 0;
+  font-size: var(--fs-body-md);
+  font-weight: 880;
+}
+
+.setting-context__dialog-close {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  border-radius: var(--control-radius);
+  background: var(--md-surface-cont-h);
+  color: var(--md-on-surface);
+  font-family: inherit;
+  font-size: 21px;
+  cursor: pointer;
+}
+
+.setting-context__dialog-body {
+  max-height: calc(min(82dvh, 720px) - 56px);
+  overflow: auto;
+  padding: var(--sp-md);
+  overscroll-behavior: contain;
+}
+
+.setting-context__dialog-body .setting-history-detail__head {
+  display: none;
+}
+
+.page--setting #settingScreenItems .setting-doc-ast details {
+  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 24%, transparent);
+}
+
+.page--setting #settingScreenItems .setting-doc-ast details > summary {
+  display: flex;
+  min-height: var(--control-min-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-md);
+  cursor: pointer;
+  color: var(--md-on-surface);
+  font-weight: 820;
+  list-style: none;
+}
+
+.page--setting #settingScreenItems .setting-doc-ast details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.page--setting #settingScreenItems .setting-doc-ast details > summary::after {
+  content: "+";
+  color: color-mix(in srgb, var(--md-on-surface-var) 58%, transparent);
+  font-size: 18px;
+}
+
+.page--setting #settingScreenItems .setting-doc-ast details[open] > summary::after {
+  content: "−";
+}
+
+.page--setting #settingScreenItems .setting-doc-callout__label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--md-on-surface);
+  font-size: var(--fs-label-sm);
+  font-weight: 880;
+}
+
+.page--setting #settingScreenItems .setting-doc-markdown img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin: var(--sp-md) auto;
+  border-radius: var(--r-sm);
+}
+
+.page--setting #settingScreenItems .setting-doc-task-item {
+  list-style: none;
+}
+
+.page--setting #settingScreenItems .setting-doc-task {
+  margin-right: var(--sp-sm);
+  accent-color: var(--md-primary);
+}
+
+.page--setting #settingScreenItems .setting-doc-markdown [data-align="center"] {
+  text-align: center;
+}
+
+.page--setting #settingScreenItems .setting-doc-markdown [data-align="right"] {
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .page--setting #settingScreenItems .setting-context {
+    margin-top: 12px;
+  }
+
+  .page--setting #settingScreenItems .setting-context__tabs {
+    --segmented-control-item-min-height: 42px;
+    --segmented-control-item-padding: 0 var(--sp-xs);
+    --segmented-control-item-font-size: var(--fs-label-sm);
+  }
+
+  .page--setting #settingScreenItems .setting-context__content {
+    min-height: 152px;
+    padding: var(--sp-md);
+  }
+
+  .setting-context__history-dialog {
+    width: 100%;
+    max-height: 82dvh;
+    margin: auto 0 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+  }
+
+  .setting-context__dialog-body {
+    max-height: calc(82dvh - 56px);
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .page--setting #settingScreenItems .setting-context__content {
+    min-height: 132px;
+  }
+
+  .setting-context__history-dialog {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .setting-context__dialog-body {
+    max-height: calc(100dvh - 72px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page--setting #settingScreenItems .setting-context__state--loading strong {
+    animation: none;
+  }
+}
+
+@keyframes setting-context-loading {
+  from { opacity: 0.48; }
+  to { opacity: 0.86; }
+}

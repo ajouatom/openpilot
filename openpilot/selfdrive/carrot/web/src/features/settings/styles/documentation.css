@@ -1,83 +1,5 @@
-/* Code-owned Markdown guide shown only on a setting's detail screen. */
-.page--setting #settingScreenItems .setting-doc-detail {
-  width: 100%;
-  margin-top: 14px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 34%, transparent);
-  border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--md-surface-cont) 82%, transparent);
-}
-
-.page--setting #settingScreenItems .setting-doc-detail__summary {
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  color: var(--md-on-surface);
-  cursor: pointer;
-  list-style: none;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.page--setting #settingScreenItems .setting-doc-detail__summary::-webkit-details-marker {
-  display: none;
-}
-
-.page--setting #settingScreenItems .setting-doc-detail__summary::after {
-  content: "";
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  margin-left: 2px;
-  border-right: 2px solid color-mix(in srgb, var(--md-on-surface-var) 72%, transparent);
-  border-bottom: 2px solid color-mix(in srgb, var(--md-on-surface-var) 72%, transparent);
-  transform: rotate(45deg) translateY(-2px);
-  transition: transform 160ms ease;
-}
-
-.page--setting #settingScreenItems .setting-doc-detail[open] .setting-doc-detail__summary::after {
-  transform: rotate(225deg) translate(-1px, -1px);
-}
-
-.page--setting #settingScreenItems .setting-doc-detail__title {
-  min-width: 0;
-  flex: 1 1 auto;
-  font-size: var(--fs-body-sm);
-  font-weight: 850;
-}
-
-.page--setting #settingScreenItems .setting-doc-detail__format {
-  flex: 0 0 auto;
-  min-height: 20px;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--md-primary) 12%, transparent);
-  color: color-mix(in srgb, var(--md-primary) 78%, var(--md-on-surface));
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 850;
-  line-height: 20px;
-}
-
-.page--setting #settingScreenItems .setting-doc-detail__body {
-  min-width: 0;
-  padding: 14px;
-  border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
-  color: var(--md-on-surface-var);
-  font-size: var(--fs-label-sm);
-  line-height: 1.58;
-  overflow-wrap: anywhere;
-}
-
-.page--setting #settingScreenItems .setting-doc-detail.is-loading .setting-doc-detail__body,
-.page--setting #settingScreenItems .setting-doc-detail.is-error .setting-doc-detail__body {
-  color: color-mix(in srgb, var(--md-on-surface-var) 58%, transparent);
-  text-align: center;
-}
-
-.page--setting #settingScreenItems .setting-doc-detail__fallback {
+/* Verified remote Wiki AST shown only on a setting's detail screen. */
+.page--setting #settingScreenItems .setting-doc-language-fallback {
   margin-bottom: 12px;
   padding: 9px 11px;
   border-left: 3px solid var(--md-primary);
@@ -218,10 +140,4 @@
   margin: 14px 0;
   border: 0;
   border-top: 1px solid color-mix(in srgb, var(--md-outline-var) 28%, transparent);
-}
-
-@media (max-width: 640px) {
-  .page--setting #settingScreenItems .setting-doc-detail__body {
-    padding: 12px;
-  }
 }

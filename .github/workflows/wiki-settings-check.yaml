@@ -1,0 +1,73 @@
+name: wiki settings check
+
+on:
+  pull_request:
+    branches:
+      - carrot-wip
+    paths:
+      - "openpilot/selfdrive/carrot_settings.json"
+      - "tools/docs/wiki_settings/**"
+      - "docs/user/ko/**"
+      - "docs/user/en/**"
+      - "docs/user/docs_map.json"
+      - ".github/workflows/wiki-settings-check.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki-settings-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: read-only catalog and Wiki diff
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out candidate code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check out current Wiki without write credentials
+        id: wiki
+        env:
+          WIKI_URL: https://github.com/${{ github.repository }}.wiki.git
+        run: |
+          git clone --depth 1 "$WIKI_URL" "$RUNNER_TEMP/carrot-wiki"
+          echo "sha=$(git -C "$RUNNER_TEMP/carrot-wiki" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate and validate Wiki changes
+        env:
+          CATALOG_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          WIKI_COMMIT: ${{ steps.wiki.outputs.sha }}
+        run: |
+          python tools/docs/wiki_settings/ci_check.py \
+            --wiki-dir "$RUNNER_TEMP/carrot-wiki" \
+            --output-dir "$RUNNER_TEMP/wiki-settings-report" \
+            --catalog-commit "$CATALOG_COMMIT" \
+            --wiki-commit "$WIKI_COMMIT"
+
+      - name: Add report to job summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/wiki-settings-report/summary.md" ]; then
+            cat "$RUNNER_TEMP/wiki-settings-report/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload read-only report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wiki-settings-report-${{ github.event.pull_request.number || github.run_number }}
+          path: ${{ runner.temp }}/wiki-settings-report
+          if-no-files-found: error
+          retention-days: 14

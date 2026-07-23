@@ -36,14 +36,15 @@ test("the chip html carries the car label and accent spans", () => {
   assert.match(html, /setting-popular-value-chip__accent">1</);
 });
 
-test("the detail lists every candidate with a percentage-width bar", () => {
+test("the detail lists every candidate with a semantic progress bar", () => {
   const entry = { top_values: [{ value: 1, count: 10 }, { value: 2, count: 5 }] };
   const html = renderPopularDetailHtml(entry, { ...opts, title: "Casper EV 인기값" });
   assert.match(html, /setting-popular-detail__name">Casper EV 인기값/);
   assert.equal(html.match(/setting-popular-detail__row"/g).length, 2);
-  assert.match(html, /--setting-popular-width:100%/);
-  assert.match(html, /--setting-popular-width:50%/);
+  assert.match(html, /<progress[^>]+max="10"[^>]+value="10"/);
+  assert.match(html, /<progress[^>]+max="10"[^>]+value="5"/);
   assert.match(html, /data-setting-popular-value="1"/);
+  assert.doesNotMatch(html, /style=/);
 });
 
 test("the detail bar is omitted when there is a single value", () => {
@@ -64,6 +65,7 @@ test("the updated line appears only when a time is supplied", () => {
   const withTime = renderPopularDetailHtml(entry, { ...opts, updatedText: "2026-07-20 20:00" });
   assert.match(withTime, /setting-popular-detail__updated/);
   assert.match(withTime, /최근 업데이트: 2026-07-20 20:00/);
+  assert.doesNotMatch(withTime, /style=/);
 });
 
 test("values, title and raw data-value are escaped", () => {

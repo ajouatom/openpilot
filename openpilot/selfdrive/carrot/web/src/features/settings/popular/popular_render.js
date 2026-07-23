@@ -89,21 +89,24 @@ export function renderPopularDetailHtml(entry, options = {}) {
   const rows = values.map((item) => {
     const value = formatValue(item?.value);
     const count = Number(item?.count ?? 0);
-    const width = Math.max(4, Math.min(100, Math.round((Math.max(0, count) / maxCount) * 100)));
+    const normalizedCount = Number.isFinite(count) ? Math.max(0, count) : 0;
+    const countText = text("setting_popular_value_chip_sample", "{sample} vehicles", {
+      sample: normalizedCount,
+    });
     return `
-      <button type="button" class="setting-popular-detail__row" style="--setting-popular-width:${width}%" data-setting-popular-value="${escape(item?.value ?? "")}">
+      <button type="button" class="setting-popular-detail__row" data-setting-popular-value="${escape(item?.value ?? "")}">
         <span class="setting-popular-detail__marker" aria-hidden="true"></span>
         <span class="setting-popular-detail__main">
           <span class="setting-popular-detail__value">${escape(value)}</span>
-          ${values.length > 1 ? `<span class="setting-popular-detail__bar" aria-hidden="true"></span>` : ""}
+          ${values.length > 1 ? `<progress class="setting-popular-detail__bar" max="${maxCount}" value="${normalizedCount}" aria-label="${escape(countText)}"></progress>` : ""}
         </span>
-        <span class="setting-popular-detail__count">${escape(`${count}대`)}</span>
+        <span class="setting-popular-detail__count">${escape(countText)}</span>
       </button>
     `;
   }).join("");
 
   const updatedHtml = updatedText
-    ? `<div class="setting-popular-detail__updated" style="margin-top:8px;font-size:11px;color:var(--md-on-surface-var,#8a8f98)">${escape(text("setting_popular_value_updated", "최근 업데이트: {time}", { time: updatedText }))}</div>`
+    ? `<div class="setting-popular-detail__updated">${escape(text("setting_popular_value_updated", "최근 업데이트: {time}", { time: updatedText }))}</div>`
     : "";
 
   return `

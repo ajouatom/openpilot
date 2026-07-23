@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "catalogCommit": "f4d55966",
+    "wikiCommit": "4df4ce7",
+    "generatedAt": "2026-07-23T12:00:00+09:00",
+    "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "locale": "ko",
+  "identity": {
+    "param": "AlwaysLateral",
+    "title": "상시 조향",
+    "summary": "크루즈가 꺼져 있어도 조향 제어를 허용합니다."
+  },
+  "sections": [
+    {
+      "kind": "vehicles",
+      "blocks": [
+        {
+          "token": "vehicles.only",
+          "markdown": "특정 차량"
+        }
+      ]
+    }
+  ],
+  "notices": [],
+  "relations": [],
+  "lifecycle": {
+    "status": "active"
+  },
+  "review": {
+    "status": "needs_review",
+    "reviewedForCommit": "f4d55966"
+  }
+}

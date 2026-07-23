@@ -87,7 +87,7 @@ The Settings page is divided into `Device` and `carrotpilot` tabs.
 - Search by setting name or description.
 - Long-press a setting to add or remove it from Favorites.
 - Profiles save a group of values and allow selected values to be applied later.
-- A setting detail page can show popular values, recent change history, and the code-owned detailed guide.
+- A setting detail page can show popular values, recent change history, and a verified Wiki guide.
 - Risky settings display a warning, and some settings take effect only after reboot.
 - Resetting defaults changes many values; make a backup first.
 

@@ -619,12 +619,12 @@
 }
 
 .setting-group-card {
-  background: var(--md-surface-cont);
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 22%, transparent);
-  border-radius: var(--r-xl);
+  background: var(--setting-card-surface);
+  border: 1px solid var(--setting-card-outline);
+  border-radius: var(--setting-card-radius);
   padding: 0 var(--sp-lg);
   margin: 0;
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--setting-card-shadow);
 }
 
 .setting-group-card__title {
