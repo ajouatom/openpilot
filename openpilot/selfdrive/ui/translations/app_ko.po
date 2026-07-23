@@ -52,15 +52,27 @@ msgstr "<br><br>스티어링 지연 보정이 {}% 완료되었습니다."
 msgid "ADD"
 msgstr "추가"
 
-#: system/ui/widgets/network.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "AEB: Risk of Collision"
+msgstr "추돌 위험: 긴급제동 작동"
+
+#: openpilot/system/ui/widgets/network.py
 msgid "APN Setting"
 msgstr "APN 설정"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Abnormal tire stiffness"
+msgstr "타이어 강성 이상"
 
 #: openpilot/selfdrive/ui/widgets/offroad_alerts.py
 msgid "Acknowledge Excessive Actuation"
 msgstr "과도한 작동을 확인"
 
-#: system/ui/widgets/network.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Adaptive Cruise Disabled"
+msgstr "어뎁티브크루즈를 활성화하세요"
+
+#: openpilot/system/ui/widgets/network.py
 msgid "Advanced"
 msgstr "고급"
 
@@ -72,38 +84,70 @@ msgstr "공격적"
 msgid "Agree"
 msgstr "동의"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Always keep hands on wheel and eyes on road"
+msgstr "항상 핸들을 잡고 도로를 주시하세요"
+
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Always-On Driver Monitoring"
 msgstr "운전자 모니터링 항상 켜짐"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Angle offset too high (Offset: {angle_offset:.1f}°)"
+msgstr "각도 옵셋이 너무 높음 (옵셋: {angle_offset:.1f}°)"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Are you sure you want to power off?"
-msgstr "정말 전원을 끄시겠습니까?"
+msgstr "Are you sure you want to power off?"
 
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Are you sure you want to reboot?"
-msgstr "정말 재시작하시겠습니까?"
+msgstr "Are you sure you want to reboot?"
 
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Are you sure you want to reset calibration?"
-msgstr "정말 보정을 재설정하시겠습니까?"
+msgstr "Are you sure you want to reset calibration?"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "Are you sure you want to uninstall?"
-msgstr "정말 제거하시겠습니까?"
+msgstr "Are you sure you want to uninstall?"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "BRAKE!"
+msgstr "브레이크!"
 
 #: openpilot/selfdrive/ui/layouts/onboarding.py
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Back"
 msgstr "뒤로"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Be ready to take over at any time"
+msgstr "오픈파일럿 사용준비 완료"
 
 #: openpilot/selfdrive/ui/widgets/prime.py
 msgid "Become a comma prime member at connect.comma.ai"
 msgstr "connect.comma.ai에서 comma prime 회원이 되세요"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Bookmark Saved"
+msgstr "북마크 저장됨"
+
 #: openpilot/selfdrive/ui/widgets/pairing_dialog.py
 msgid "Bookmark connect.comma.ai to your home screen to use it like an app"
 msgstr "connect.comma.ai를 홈 화면에 추가하여 앱처럼 사용하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "CAN Bus Disconnected"
+msgstr "CAN Bus 연결 끈김"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "CAN Bus Disconnected: Check Connections"
+msgstr "CAN Bus 오류 : 장치를 점검하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "CAN Error: Check Connections!!"
+msgstr "CAN 오류: 연결을 확인하세요"
 
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "CHANGE"
@@ -118,22 +162,74 @@ msgid "CHILL MODE ON"
 msgstr "안정적 모드 켜짐"
 
 #: openpilot/selfdrive/ui/layouts/sidebar.py
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "CONNECT"
 msgstr "연결"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "CONNECTING..."
 msgstr "연결 중..."
 
-#: system/ui/widgets/confirm_dialog.py
-#: system/ui/widgets/keyboard.py
-#: system/ui/widgets/network.py
-#: system/ui/widgets/option_dialog.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Calibrating"
+msgstr "캘리브레이션"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Calibration Incomplete"
+msgstr "캘리브레이션이 완료되지않았습니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Calibration Invalid"
+msgstr "캘리브레이션 오류"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Calibration Invalid: Remount Device & Recalibrate"
+msgstr "캘리브레이션 오류 : 장치 위치 변경 후 캘리브레이션을 다시 하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Calibration in Progress"
+msgstr "캘리브레이션이 진행중입니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Camera Frame Rate Low"
+msgstr "카메라 프레임 낮음"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Camera Frame Rate Low: Reboot Your Device"
+msgstr "카메라 프레임 낮음"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Camera Malfunction"
+msgstr "카메라 오작동"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Camera Malfunction: Reboot Your Device"
+msgstr "카메라 오작동: 장치를 재부팅 하세요"
+
+#: openpilot/system/ui/widgets/confirm_dialog.py
+#: openpilot/system/ui/widgets/keyboard.py
+#: openpilot/system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/option_dialog.py
 msgid "Cancel"
 msgstr "취소"
 
-#: system/ui/widgets/network.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Cancel Pressed"
+msgstr "Cancel 버튼을 눌렀습니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Car Detected in Blindspot"
+msgstr "사각지대에 차량이 감지되니 대기하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Car Unrecognized"
+msgstr "배선연결상태를 확인하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Car in Blindspot"
+msgstr "사각지대에 차량이 감지되니 대기하세요"
+
+#: openpilot/system/ui/widgets/network.py
 msgid "Cellular Metered"
 msgstr "종량제 셀룰러"
 
@@ -141,9 +237,21 @@ msgstr "종량제 셀룰러"
 msgid "Change Language"
 msgstr "언어 변경"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Changing Lanes"
+msgstr "차선을 변경합니다"
+
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Changing this setting will restart openpilot if the car is powered on."
 msgstr "차량 전원이 켜져 있으면 이 설정을 변경할 때 openpilot이 재시작됩니다."
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Check Hardware"
+msgstr "장치를 점검하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Check tires, pressure, or alignment (Factor: {stiffness_factor:.1f})"
+msgstr "타이어, 공기압 또는 얼라인먼트 점검 (인자: {stiffness_factor:.1f})"
 
 #: openpilot/selfdrive/ui/widgets/pairing_dialog.py
 msgid "Click \"add new device\" and scan the QR code on the right"
@@ -153,13 +261,53 @@ msgstr "\"add new device\"를 눌러 오른쪽의 QR 코드를 스캔하세요"
 msgid "Close"
 msgstr "닫기"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Communication Issue Between Processes"
+msgstr "장치 프로세스 동작오류"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Confirm Lane Change"
+msgstr "차선 변경 확인"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Controls Mismatch"
+msgstr "컨트롤 불일치"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Cruise Fault: Restart the Car"
+msgstr "크루즈 오류 : 차량을 재가동 하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Cruise Fault: Restart the car to engage"
+msgstr "크루즈 오류 : 차량을 재가동 하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Cruise Is Off"
+msgstr "크루즈 해제됨"
+
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "Current Version"
 msgstr "현재 버전"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "DISENGAGE IMMEDIATELY"
+msgstr "조향제어가 해제됩니다"
+
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "DOWNLOAD"
 msgstr "다운로드"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Dashcam Mode"
+msgstr "대시캠 모드"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Dashcam mode"
+msgstr "대시캠 모드"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Dashcam mode for unsupported car"
+msgstr "대시캠 모드 : 호환되지않는 차량"
 
 #: openpilot/selfdrive/ui/layouts/onboarding.py
 msgid "Decline"
@@ -176,6 +324,18 @@ msgstr "개발자"
 #: openpilot/selfdrive/ui/layouts/settings/settings.py
 msgid "Device"
 msgstr "장치"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Device Fell Off Mount"
+msgstr "장치가 마운트에서 떨어짐"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Device Remount Detected: Recalibrating"
+msgstr "장치 위치변경이 감지되어 캘리브레이션이 다시 진행중입니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Disable your car's stock LKAS to engage"
+msgstr "활성화 하려면 LKAS를 끄세요"
 
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Disengage on Accelerator Pedal"
@@ -197,23 +357,63 @@ msgstr "해제 후 캘리브레이션 재설정"
 msgid "Display speed in km/h instead of mph."
 msgstr "속도를 mph 대신 km/h로 표시합니다."
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Distraction Level Too High"
+msgstr "방해 수준이 너무높습니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Donate logs to Twilsonco to get it added!"
+msgstr "Donate logs to Twilsonco to get it added!"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Dongle ID"
 msgstr "동글 ID"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Door Open"
+msgstr "도어 열림"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "Download"
 msgstr "다운로드"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Drive Above {speed}"
+msgstr "{speed} 이상의 속도로 주행하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Drive above {speed} to engage"
+msgstr "{speed} 이상의 속도에서 활성됩니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Drive to Calibrate"
+msgstr "주행 하여 보정하세요"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Driver Camera"
 msgstr "운전자 카메라"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Driver Distracted"
+msgstr "운전자 도로주시 불안"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Driver Unresponsive"
+msgstr "운전자 응답없음"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Driving Model Lagging"
+msgstr "주행모델 지연됨"
 
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Driving Personality"
 msgstr "주행 성향"
 
-#: system/ui/widgets/network.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Driving Personality: {personality}"
+msgstr "운전 성향: {personality}"
+
+#: openpilot/system/ui/widgets/network.py
 msgid "EDIT"
 msgstr "편집"
 
@@ -229,6 +429,18 @@ msgstr "ETH"
 msgid "EXPERIMENTAL MODE ON"
 msgstr "실험 모드 켜짐"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Electronic Stability Control Active"
+msgstr "ESC 동작됨"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Electronic Stability Control Disabled"
+msgstr "ESC 해제됨"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Emergency Braking: Risk of Collision"
+msgstr "추돌 위험: 긴급제동 작동"
+
 #: openpilot/selfdrive/ui/layouts/settings/developer.py
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Enable"
@@ -238,11 +450,19 @@ msgstr "사용"
 msgid "Enable ADB"
 msgstr "ADB 사용"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Enable Adaptive Cruise to Engage"
+msgstr "크루즈 버튼으로 활성화됩니다"
+
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Enable Lane Departure Warnings"
 msgstr "차선 이탈 경고 사용"
 
-#: system/ui/widgets/network.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Enable Main Switch to Engage"
+msgstr "메인 스위치로 활성화됩니다"
+
+#: openpilot/system/ui/widgets/network.py
 msgid "Enable Roaming"
 msgstr "로밍 사용"
 
@@ -250,7 +470,7 @@ msgstr "로밍 사용"
 msgid "Enable SSH"
 msgstr "SSH 사용"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Enable Tethering"
 msgstr "테더링 사용"
 
@@ -266,19 +486,27 @@ msgstr "openpilot 사용"
 msgid "Enable the openpilot longitudinal control (alpha) toggle to allow Experimental mode."
 msgstr "실험 모드를 사용하려면 openpilot 롱컨 제어(알파) 토글을 켜세요."
 
-#: system/ui/widgets/network.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Enable your car's LKAS to engage"
+msgstr "활성화 하려면 LKAS를 켜세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Ensure road ahead is clear"
+msgstr "전방 도로에 장애물이 없는지 확인하세요"
+
+#: openpilot/system/ui/widgets/network.py
 msgid "Enter APN"
 msgstr "APN 입력"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Enter SSID"
 msgstr "SSID 입력"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Enter new tethering password"
 msgstr "새 테더링 비밀번호 입력"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Enter password"
 msgstr "비밀번호 입력"
 
@@ -286,9 +514,13 @@ msgstr "비밀번호 입력"
 msgid "Enter your GitHub username"
 msgstr "GitHub 사용자 이름 입력"
 
-#: system/ui/widgets/list_view.py
+#: openpilot/system/ui/widgets/list_view.py
 msgid "Error"
 msgstr "오류"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Excessive Actuation"
+msgstr "과도한 동작"
 
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Experimental Mode"
@@ -298,9 +530,13 @@ msgstr "실험 모드"
 msgid "Experimental mode is currently unavailable on this car since the car's stock ACC is used for longitudinal control."
 msgstr "이 차량은 롱컨 제어에 순정 ACC를 사용하므로 현재 실험 모드를 사용할 수 없습니다."
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "FORGETTING..."
 msgstr "삭제 중..."
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Fan Malfunction"
+msgstr "FAN 오작동"
 
 #: openpilot/selfdrive/ui/widgets/setup.py
 msgid "Finish Setup"
@@ -314,17 +550,25 @@ msgstr "파이어호스"
 msgid "Firehose Mode"
 msgstr "파이어호스 모드"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Forget"
 msgstr "삭제"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Forget Wi-Fi Network \"{}\"?"
-msgstr "Wi‑Fi 네트워크 \"{}\"를 삭제하시겠습니까?"
+msgstr "Forget Wi-Fi Network \"{}\"?"
 
 #: openpilot/selfdrive/ui/layouts/sidebar.py
 msgid "GOOD"
 msgstr "양호"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Gas: {gas}%, Steer: {steer}%"
+msgstr "Gas: {gas}%, Steer: {steer}%"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Gear not D"
+msgstr "기어를 [D]로 변경하세요"
 
 #: openpilot/selfdrive/ui/widgets/pairing_dialog.py
 msgid "Go to https://connect.comma.ai on your phone"
@@ -334,15 +578,23 @@ msgstr "휴대폰에서 https://connect.comma.ai 에 접속하세요"
 msgid "HIGH"
 msgstr "높음"
 
-#: system/ui/widgets/network.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Harness Relay Malfunction"
+msgstr "하네스 릴레이 오작동"
+
+#: openpilot/system/ui/widgets/network.py
 msgid "Hidden Network"
 msgstr "숨겨진 네트워크"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "High CPU Usage"
+msgstr "CPU 사용량이 높습니다"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "INSTALL"
 msgstr "설치"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "IP Address"
 msgstr "IP 주소"
 
@@ -350,9 +602,25 @@ msgstr "IP 주소"
 msgid "Install Update"
 msgstr "업데이트 설치"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Invalid LKAS setting"
+msgstr "잘못된 LKAS 설정"
+
 #: openpilot/selfdrive/ui/layouts/settings/developer.py
 msgid "Joystick Debug Mode"
 msgstr "조이스틱 디버그 모드"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Joystick Mode"
+msgstr "조이스틱 모드"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "LKAS Fault: Restart the Car"
+msgstr "LKAS 오류 : 차량을 재가동 하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "LKAS Fault: Restart the car to engage"
+msgstr "LKAS 오류 : 차량을 재가동 하세요"
 
 #: openpilot/selfdrive/ui/widgets/ssh_key.py
 msgid "LOADING"
@@ -362,35 +630,62 @@ msgstr "로딩 중"
 msgid "LTE"
 msgstr "LTE"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Lane Departure Detected"
+msgstr "차선이탈"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Lateral Maneuver Mode"
+msgstr "조향 제어 모드"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Likely Hardware Issue"
+msgstr "장치를 점검하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
 #: openpilot/selfdrive/ui/layouts/settings/developer.py
 msgid "Longitudinal Maneuver Mode"
 msgstr "롱컨 기동 모드"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Low Battery"
+msgstr "배터리 부족"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Low Communication Rate Between Processes"
+msgstr "장치 프로세스 통신속도 오류"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Low Memory"
+msgstr "메모리 부족"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Low Memory: Reboot Your Device"
+msgstr "메모리 부족 : 장치를 재부팅 하세요"
+
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "MAX"
-msgstr "최대"
-msgid "eco"
-msgstr "연비"
-
-msgid "safe"
-msgstr "안전"
-
-msgid "high"
-msgstr "고속"
-
-msgid "norm"
-msgstr "일반"
-
-msgid "carrot"
-msgstr "당근"
+msgstr ""
 
 #: openpilot/selfdrive/ui/widgets/setup.py
 msgid "Maximize your training data uploads to improve openpilot's driving models."
 msgstr "학습 데이터 업로드를 최대화하여 openpilot의 주행 모델을 개선하세요."
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Model uncertain at this speed"
+msgstr "속도를 줄여주세요"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "N/A"
 msgstr "해당 없음"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "NNFF Torque Controller loaded"
+msgstr "NNFF Torque Controller loaded"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "NNFF Torque Controller not available"
+msgstr "NNFF Torque Controller not available"
 
 #: openpilot/selfdrive/ui/layouts/sidebar.py
 msgid "NO"
@@ -413,8 +708,8 @@ msgid "OFFLINE"
 msgstr "오프라인"
 
 #: openpilot/selfdrive/ui/layouts/sidebar.py
-#: system/ui/widgets/confirm_dialog.py
-#: system/ui/widgets/html_render.py
+#: openpilot/system/ui/widgets/confirm_dialog.py
+#: openpilot/system/ui/widgets/html_render.py
 msgid "OK"
 msgstr "확인"
 
@@ -425,6 +720,10 @@ msgstr "온라인"
 #: openpilot/selfdrive/ui/widgets/setup.py
 msgid "Open"
 msgstr "열기"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Out of Storage"
+msgstr "저장공간 부족"
 
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "PAIR"
@@ -459,25 +758,65 @@ msgstr "장치를 귀하의 comma 계정에 페어링하세요"
 msgid "Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer."
 msgstr "장치를 comma connect(connect.comma.ai)와 페어링하고 comma 프라임 혜택을 받으세요."
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Parking Brake Engaged"
+msgstr "주차 브레이크를 해제하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Pay Attention"
+msgstr "도로를 주시하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Pedal Pressed"
+msgstr "브레이크 감지됨"
+
 #: openpilot/selfdrive/ui/widgets/setup.py
 msgid "Please connect to Wi-Fi to complete initial pairing"
 msgstr "초기 페어링을 완료하려면 Wi‑Fi에 연결하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Posenet Speed Invalid"
+msgstr "Posenet 속도 잘못됨"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Possible Hardware Issue"
+msgstr "장치를 점검하세요"
 
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Power Off"
 msgstr "전원 끄기"
 
-#: system/ui/widgets/network.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Press Resume"
+msgstr "정지 상태를 종료하려면 RES버튼을 누르세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Press Resume to Exit Brake Hold"
+msgstr "브레이크 홀드를 해제하려면 RES를 누르세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Press Resume to Exit Standstill"
+msgstr "정지 상태를 종료하려면 RES버튼을 누르세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Press Set to Engage"
+msgstr "SET 버튼으로 활성화됩니다"
+
+#: openpilot/system/ui/widgets/network.py
 msgid "Prevent large data uploads when on a metered Wi-Fi connection"
 msgstr "종량제 Wi‑Fi 연결 시 대용량 업로드 방지"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Prevent large data uploads when on a metered cellular connection"
 msgstr "종량제 셀룰러 연결 시 대용량 업로드 방지"
 
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Preview the driver facing camera to ensure that driver monitoring has good visibility. (vehicle must be off)"
 msgstr "운전자 모니터링의 가시성을 확인하기 위해 운전자 카메라를 미리 봅니다. (차량은 꺼져 있어야 합니다)"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Process Not Running"
+msgstr "프로세스가 실행되지 않았습니다"
 
 #: openpilot/selfdrive/ui/widgets/pairing_dialog.py
 msgid "QR Code Error"
@@ -495,6 +834,14 @@ msgstr "재설정"
 msgid "REVIEW"
 msgstr "검토"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Radar Error: Restart the Car"
+msgstr "레이더 오류 : 차량을 재가동 하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Radar Temporarily Unavailable"
+msgstr "레이더 일시적 사용불가"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Reboot"
 msgstr "재시작"
@@ -506,6 +853,14 @@ msgstr "장치 재시작"
 #: openpilot/selfdrive/ui/widgets/offroad_alerts.py
 msgid "Reboot and Update"
 msgstr "재시작 및 업데이트"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Reboot your Device"
+msgstr "장치를 재부팅 하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Recalibrating"
+msgstr "캘리브레이션을 다시"
 
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Record and Upload Driver Camera"
@@ -519,6 +874,10 @@ msgstr "마이크 오디오 기록 및 업로드"
 msgid "Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."
 msgstr "주행 중 마이크 오디오를 기록하고 저장합니다. 오디오는 comma connect의 대시캠 영상에 포함됩니다."
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Recording Audio Feedback"
+msgstr "오디오 피드백 녹음"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Regulatory"
 msgstr "규제 정보"
@@ -527,6 +886,10 @@ msgstr "규제 정보"
 msgid "Relaxed"
 msgstr "편안한"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Release Brake to Engage"
+msgstr "브레이크 해제 후 활성화하세요"
+
 #: openpilot/selfdrive/ui/widgets/prime.py
 msgid "Remote access"
 msgstr "원격 액세스"
@@ -534,6 +897,14 @@ msgstr "원격 액세스"
 #: openpilot/selfdrive/ui/widgets/prime.py
 msgid "Remote snapshots"
 msgstr "원격 스냅샷"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Remount Detected: Recalibrating"
+msgstr "장치 위치변경 감지되어 캘리브레이션이 다시 진행중입니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Remount Device (Pitch: {pitch:.1f}°, Yaw: {yaw:.1f}°)"
+msgstr "장치 재장착 (Pitch: {pitch:.1f}°, Yaw: {yaw:.1f}°)"
 
 #: openpilot/selfdrive/ui/widgets/ssh_key.py
 msgid "Request timed out"
@@ -547,6 +918,24 @@ msgstr "재설정"
 msgid "Reset Calibration"
 msgstr "캘리브레이션 재설정"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Resume Driving Manually"
+msgstr "장치를 재부팅 하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Reverse"
+msgstr "기어 [R] 상태"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid ""
+"Reverse\n"
+"Gear"
+msgstr "기어 [R] 상태"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Reverse Gear"
+msgstr "기어 [R] 상태"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Review Training Guide"
 msgstr "학습 가이드 검토"
@@ -554,6 +943,10 @@ msgstr "학습 가이드 검토"
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Review the rules, features, and limitations of openpilot"
 msgstr "openpilot의 규칙, 기능 및 제한을 검토"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Risk of Collision"
+msgstr "추돌 위험"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "SELECT"
@@ -563,11 +956,19 @@ msgstr "선택"
 msgid "SSH Keys"
 msgstr "SSH 키"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Scanning Wi-Fi networks..."
 msgstr "Wi‑Fi 네트워크 검색 중..."
 
-#: system/ui/widgets/option_dialog.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Seatbelt Unlatched"
+msgstr "안전벨트를 착용해주세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Security Key Not Available"
+msgstr "보안키 사용불가"
+
+#: openpilot/system/ui/widgets/option_dialog.py
 msgid "Select"
 msgstr "선택"
 
@@ -579,26 +980,127 @@ msgstr "브랜치 선택"
 msgid "Select a language"
 msgstr "언어 선택"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Selfdrive Process Lagging: Reboot Your Device"
+msgstr "Selfdrive 프로세스 지연됨: 장치를 재부팅 하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Sensor Data Invalid"
+msgstr "센서 데이터 오류"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "Serial"
 msgstr "시리얼"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Slow down to engage"
+msgstr "속도를 줄인 후 활성화하세요"
 
 #: openpilot/selfdrive/ui/widgets/offroad_alerts.py
 msgid "Snooze Update"
 msgstr "업데이트 나중에 알림"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "SoftHold"
+msgstr "SoftHold"
+
 #: openpilot/selfdrive/ui/layouts/settings/settings.py
 msgid "Software"
 msgstr "소프트웨어"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Speed Error: {error:.1f} m/s"
+msgstr "Speed Error: {error:.1f} m/s"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Speed Too High"
+msgstr "속도가 너무 높습니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Speed too low"
+msgstr "속도를 높이고 활성화하세요"
 
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Standard"
 msgstr "표준"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steer Assist Unavailable Below {speed}"
+msgstr "{speed} 이상의 속도에서 조향 됩니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steer Left"
+msgstr "좌측 차선이 안전한지 확인하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steer Left to Start Lane Change Once Safe"
+msgstr "좌측 차선이 안전한지 확인하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steer Right"
+msgstr "우측 차선이 안전한지 확인하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steer Right to Start Lane Change Once Safe"
+msgstr "우측 차선이 안전한지 확인하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steer ratio mismatch"
+msgstr "조향비 불일치"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steering Assist Temporarily Unavailable"
+msgstr "조향제어 일시적 사용불가"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steering Pressed"
+msgstr "스티어링 감지됨"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steering Temporarily Unavailable"
+msgstr "조향제어 일시적 사용불가"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steering misalignment detected"
+msgstr "스티어링 오정렬 감지"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Steering rack geometry may be off (Ratio: {steer_ratio:.1f})"
+msgstr "스티어링 랙 구조가 틀어짐 (비율: {steer_ratio:.1f})"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Stock AEB: Risk of Collision"
+msgstr "추돌 위험: 차량 AEB 작동"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Stock LKAS: Lane Departure Detected"
+msgstr "차선 이탈 감지: 차량 LKAS 모드"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Switch to Traffic-Aware Cruise Control to engage"
+msgstr "활성화 하려면 Traffic-Aware Cruise Control을 켜세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "System Initializing"
+msgstr "시스템이 준비중입니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "System Lagging"
+msgstr "시스템 지연됨"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "System Overheated"
+msgstr "장치 과열됨"
+
 #: openpilot/selfdrive/ui/onroad/alert_renderer.py
 msgid "System Unresponsive"
 msgstr "시스템 응답 없음"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "TAKE CONTROL"
+msgstr "핸들을 잡아주세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
 #: openpilot/selfdrive/ui/onroad/alert_renderer.py
 msgid "TAKE CONTROL IMMEDIATELY"
 msgstr "즉시 수동 조작하세요"
@@ -607,17 +1109,45 @@ msgstr "즉시 수동 조작하세요"
 msgid "TEMP"
 msgstr "온도"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Take Control"
+msgstr "핸들을 잡아주세요"
+
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "Target Branch"
 msgstr "대상 브랜치"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Tethering Password"
 msgstr "테더링 비밀번호"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Toggle stock LKAS on or off to engage"
+msgstr "활성화 하려면 차량의 LKAS 상태를 확인하세요"
 
 #: openpilot/selfdrive/ui/layouts/settings/settings.py
 msgid "Toggles"
 msgstr "토글"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Touch Steering Wheel"
+msgstr "핸들을 잡아주세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Touch Steering Wheel: No Face Detected"
+msgstr "핸들을 잡아주세요 : 운전자 인식 불가"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Turn Exceeds Steering Limit"
+msgstr "회전이 조향 한도를 초과함"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Turning Left"
+msgstr "좌회전 합니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Turning Right"
+msgstr "우회전 합니다"
 
 #: openpilot/selfdrive/ui/layouts/settings/developer.py
 msgid "UI Debug Mode"
@@ -631,6 +1161,10 @@ msgstr "제거"
 msgid "UPDATE"
 msgstr "업데이트"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "USB Error: Reboot Your Device"
+msgstr "USB 오류 : 장치를 재부팅 하세요"
+
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "Uninstall"
 msgstr "제거"
@@ -638,6 +1172,10 @@ msgstr "제거"
 #: openpilot/selfdrive/ui/layouts/sidebar.py
 msgid "Unknown"
 msgstr "알수없음"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Unknown Vehicle Variant"
+msgstr "CAN 오류 : 장치를 점검하세요"
 
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "Updates are only downloaded while the car is off."
@@ -663,6 +1201,22 @@ msgstr "차량"
 msgid "VIEW"
 msgstr "보기"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Vehicle Sensors Calibrating"
+msgstr "차량 센서 보정"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Vehicle Sensors Invalid"
+msgstr "차량 센서 정보가 유효하지 않습니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Vehicle Steering Time Limit"
+msgstr "차량 조향제어 시간 제한"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "WARNING: This branch is not tested"
+msgstr "경고: 이 브랜치는 테스트되지 않았습니다"
+
 #: openpilot/selfdrive/ui/onroad/alert_renderer.py
 msgid "Waiting to start"
 msgstr "시작 대기 중"
@@ -679,11 +1233,11 @@ msgstr "이 옵션을 켜면 가속 페달을 밟을 때 openpilot이 해제됩�
 msgid "Wi-Fi"
 msgstr "Wi‑Fi"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Wi-Fi Network Metered"
 msgstr "Wi‑Fi 네트워크 종량제"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "Wrong password"
 msgstr "비밀번호가 올바르지 않습니다"
 
@@ -707,7 +1261,7 @@ msgstr "확인 중..."
 msgid "comma prime"
 msgstr "comma 프라임"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "default"
 msgstr "기본값"
 
@@ -719,6 +1273,10 @@ msgstr "아래"
 msgid "downloading..."
 msgstr "다운로드 중..."
 
+#: openpilot/selfdrive/ui/onroad/hud_renderer.py
+msgid "eco"
+msgstr "연비"
+
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "failed to check for update"
 msgstr "업데이트 확인 실패"
@@ -727,15 +1285,19 @@ msgstr "업데이트 확인 실패"
 msgid "finalizing update..."
 msgstr "업데이트 마무리 중..."
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "for \"{}\""
 msgstr "\"{}\"용"
+
+#: openpilot/selfdrive/ui/onroad/hud_renderer.py
+msgid "high"
+msgstr "고속"
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "km/h"
 msgstr "km/h"
 
-#: system/ui/widgets/network.py
+#: openpilot/system/ui/widgets/network.py
 msgid "leave blank for automatic configuration"
 msgstr "자동 구성을 사용하려면 비워 두세요"
 
@@ -743,9 +1305,21 @@ msgstr "자동 구성을 사용하려면 비워 두세요"
 msgid "left"
 msgstr "왼쪽"
 
-#: system/ui/widgets/network.py
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "locationd Permanent Error"
+msgstr "locationd 오류"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "locationd Temporary Error"
+msgstr "locationd 일시적 오류"
+
+#: openpilot/system/ui/widgets/network.py
 msgid "metered"
 msgstr "종량제"
+
+#: openpilot/selfdrive/ui/layouts/settings/toggles.py
+msgid "moreRelaxed"
+msgstr ""
 
 #: openpilot/selfdrive/ui/onroad/hud_renderer.py
 msgid "mph"
@@ -755,14 +1329,23 @@ msgstr "mph"
 msgid "never"
 msgstr "없음"
 
+#: openpilot/selfdrive/ui/onroad/hud_renderer.py
+msgid "norm"
+msgstr "일반"
+
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "now"
 msgstr "지금"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "openpilot Canceled"
+msgstr "오픈파일럿 사용불가"
 
 #: openpilot/selfdrive/ui/layouts/settings/developer.py
 msgid "openpilot Longitudinal Control (Alpha)"
 msgstr "openpilot 롱컨 제어(알파)"
 
+#: openpilot/selfdrive/selfdrived/events.py
 #: openpilot/selfdrive/ui/onroad/alert_renderer.py
 msgid "openpilot Unavailable"
 msgstr "openpilot 사용 불가"
@@ -775,11 +1358,35 @@ msgstr "openpilot 롱컨 제어는 향후 업데이트에서 제공될 수 있�
 msgid "openpilot requires the device to be mounted within 4° left or right and within 5° up or 9° down."
 msgstr "openpilot은 장치를 좌우 4°, 위쪽 5°, 아래쪽 9° 이내로 장착해야 합니다."
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "openpilot will disengage"
+msgstr "오픈파일럿이 해제됩니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "paramsd Permanent Error"
+msgstr "paramsd 오류"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "paramsd Temporary Error"
+msgstr "paramsd 일시적 오류"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid "right"
 msgstr "오른쪽"
 
-#: system/ui/widgets/network.py
+#: openpilot/selfdrive/ui/onroad/hud_renderer.py
+msgid "safe"
+msgstr "안전"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "take control"
+msgstr "핸들을 잡아주세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "turn exceeds limit"
+msgstr "회전이 조향 한도를 초과함"
+
+#: openpilot/system/ui/widgets/network.py
 msgid "unmetered"
 msgstr "비종량제"
 
@@ -798,6 +1405,31 @@ msgstr "최신입니다. 마지막 확인: {}"
 #: openpilot/selfdrive/ui/layouts/settings/software.py
 msgid "update available"
 msgstr "업데이트 가능"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "{calibration_state}: {percent:.0f}%"
+msgstr "{calibration_state} 진행중 : {percent:.0f}%"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "{percent:.1f}% frames dropped"
+msgstr "{percent:.1f}% frames dropped"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "{percent}% full"
+msgstr "{percent}% full"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "{percent}% used"
+msgstr "{percent}% used"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "{seconds} second remaining. Press again to save early."
+msgid_plural "{seconds} seconds remaining. Press again to save early."
+msgstr[0] "{seconds} second remaining. Press again to save early."
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "{temperature:.0f} °C"
+msgstr "{temperature:.0f} °C"
 
 #: openpilot/selfdrive/ui/layouts/home.py
 msgid "{} ALERT"
@@ -827,6 +1459,10 @@ msgstr[0] "현재까지 귀하의 주행 {}구간이 학습 데이터셋에 포�
 #: openpilot/selfdrive/ui/widgets/prime.py
 msgid "✓ SUBSCRIBED"
 msgstr "✓ 구독됨"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "신호가바뀌었어요."
+msgstr "신호가바뀌었어요."
 
 #: openpilot/selfdrive/ui/widgets/setup.py
 msgid "🔥 Firehose Mode 🔥"

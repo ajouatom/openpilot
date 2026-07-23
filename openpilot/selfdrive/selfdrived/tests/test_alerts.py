@@ -2,26 +2,24 @@ import copy
 import json
 import os
 import random
-import re
-from pathlib import Path
+import string
 from PIL import Image, ImageDraw, ImageFont
 
 from openpilot.cereal import log, car
 from openpilot.cereal.messaging import SubMaster
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
-from openpilot.selfdrive.selfdrived.events import Alert, EVENTS, ET
+import openpilot.selfdrive.selfdrived.events as events_module
+from openpilot.selfdrive.selfdrived.events import Alert, Events, EVENTS, ET
 from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.selfdrive.test.process_replay.process_replay import CONFIGS
+from openpilot.selfdrive.ui.translations.potools import extract_strings, parse_po
+from openpilot.selfdrive.ui.update_translations import ALERTS_FILE, ALERT_TRANSLATION_CALL_ARGS
+from openpilot.system.ui.lib.multilang import TRANSLATIONS_DIR
 
 AlertSize = log.SelfdriveState.AlertSize
 
 OFFROAD_ALERTS_PATH = os.path.join(BASEDIR, "openpilot/selfdrive/selfdrived/alerts_offroad.json")
-LOCALIZED_EVENTS_PATHS = (
-  Path(BASEDIR) / "scripts/add/events_ko.py",
-  Path(BASEDIR) / "scripts/add/events_zh.py",
-)
-EVENT_KEY_PATTERN = re.compile(r"^\s*EventName\.(\w+)\s*:", re.MULTILINE)
 
 # TODO: add callback alerts
 ALERTS = []
@@ -52,15 +50,51 @@ class TestAlerts:
         fail_msg = f"{name} @{e} not in EVENTS"
         assert e in EVENTS.keys(), fail_msg
 
-  def test_localized_events_defined(self):
-    expected = {
-      name for name in log.OnroadEvent.EventName.schema.enumerants
-      if not name.endswith("DEPRECATED")
-    }
+  def test_alerts_translated_at_creation(self, monkeypatch):
+    event_name = log.OnroadEvent.EventName.startup
+    source_alert = EVENTS[event_name][ET.PERMANENT]
+    monkeypatch.setattr(events_module, "tr", lambda text: f"translated:{text}" if text else text)
 
-    for path in LOCALIZED_EVENTS_PATHS:
-      localized = set(EVENT_KEY_PATTERN.findall(path.read_text(encoding="utf-8")))
-      assert not (missing := expected - localized), f"{path.name} missing event definitions: {sorted(missing)}"
+    events = Events()
+    events.add(event_name)
+    translated_alert, = events.create_alerts([ET.PERMANENT])
+
+    assert translated_alert is not source_alert
+    assert translated_alert.alert_text_1 == f"translated:{source_alert.alert_text_1}"
+    assert translated_alert.alert_text_2 == f"translated:{source_alert.alert_text_2}"
+    assert not source_alert.alert_text_1.startswith("translated:")
+
+  def test_alert_translation_catalogs_complete(self):
+    alert_entries = extract_strings([ALERTS_FILE], BASEDIR, ALERT_TRANSLATION_CALL_ARGS)
+    alert_sources = {entry.msgid for entry in alert_entries}
+    formatter = string.Formatter()
+
+    for language in ("ko", "zh-CHS"):
+      _, entries = parse_po(TRANSLATIONS_DIR / f"app_{language}.po")
+      catalog = {entry.msgid: entry for entry in entries}
+      assert not (missing := alert_sources - catalog.keys()), f"{language} missing alert translations: {sorted(missing)}"
+
+      untranslated = {
+        source for source in alert_sources
+        if not catalog[source].msgstr and not any(catalog[source].msgstr_plural.values())
+      }
+      assert not untranslated, f"{language} has untranslated alerts: {sorted(untranslated)}"
+
+      for source in alert_sources:
+        source_fields = {field for _, field, _, _ in formatter.parse(source) if field}
+        translations = ([catalog[source].msgstr] if catalog[source].msgstr else catalog[source].msgstr_plural.values())
+        for translation in translations:
+          translated_fields = {field for _, field, _, _ in formatter.parse(translation) if field}
+          assert source_fields == translated_fields, f"{language} placeholder mismatch: {source!r} -> {translation!r}"
+
+  def test_no_legacy_event_source_swapping(self):
+    launch_script = os.path.join(BASEDIR, "launch_chffrplus.sh")
+    with open(launch_script, encoding="utf-8") as f:
+      launch_source = f.read()
+
+    for filename in ("events_ko.py", "events_zh.py", "events_en.py"):
+      assert filename not in launch_source
+      assert not os.path.exists(os.path.join(BASEDIR, "scripts", "add", filename))
 
   # ensure alert text doesn't exceed allowed width
   def test_alert_text_length(self):
