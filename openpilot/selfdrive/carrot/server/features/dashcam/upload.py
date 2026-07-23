@@ -9,6 +9,11 @@ from openpilot.system.hardware import HARDWARE
 from openpilot.selfdrive.carrot.web_upload import web_upload_settings
 
 from ...config import DASHCAM_DEFAULT_DISCORD_KEY, DASHCAM_DEFAULT_DISCORD_WEBHOOK
+from ...services.dashcam_upload_report import (
+  discord_content,
+  upload_message_lines as upload_message_lines,
+  upload_share_text as upload_share_text,
+)
 from ...services.params import HAS_PARAMS, Params
 from ...services.web_settings import read_web_settings
 
@@ -107,65 +112,6 @@ def discord_webhook_url(params: Any) -> str:
   if os.environ.get("CARROT_DISCORD_WEBHOOK_DISABLE", "").strip().lower() in {"1", "true", "yes", "on"}:
     return ""
   return decode_obfuscated(DASHCAM_DEFAULT_DISCORD_WEBHOOK, DASHCAM_DEFAULT_DISCORD_KEY)
-
-
-def upload_message_lines(payload: dict[str, Any], max_results: int | None = None) -> list[str]:
-  meta = payload.get("meta") or {}
-  commit = str(meta.get("commit") or "").strip()
-  commit_date = meta.get("commitDate") or "unknown"
-  commit_text = (
-    f"[{commit}](https://github.com/ajouatom/openpilot/commit/{commit})"
-    if commit and commit != "unknown"
-    else "unknown"
-  )
-  uploaded = [item for item in payload.get("results") or [] if item.get("ok")]
-  failed = [item for item in payload.get("results") or [] if not item.get("ok")]
-  lines = [
-    "# Carrot Dashcam Upload",
-    "### Upload",
-    f"- Time: {payload.get('uploadedAt') or ''}",
-    f"- Path: {payload.get('remoteBasePath') or ''}",
-    "### Device",
-    f"- Car name: {meta.get('carName') or 'none'}",
-    f"- DongleId: {meta.get('dongleId') or 'unknown'}",
-    f"- Serial: {meta.get('serial') or 'unknown'}",
-    f"- Branch: {meta.get('branch') or 'unknown'}",
-    f"- Commit: {commit_text} ({commit_date})",
-    "### Result",
-  ]
-
-  result_items = uploaded + failed
-  visible_items = result_items if max_results is None else result_items[:max_results]
-  for item in visible_items:
-    if item.get("ok"):
-      lines.append(f"- {item.get('segment')} OK")
-    else:
-      error = str(item.get("error") or "").strip()
-      suffix = f": {error}" if error else ""
-      lines.append(f"- {item.get('segment')} FAILED{suffix}")
-
-  hidden_count = len(result_items) - len(visible_items)
-  if hidden_count > 0:
-    lines.append(f"- ... +{hidden_count} more")
-  if not result_items:
-    lines.append("- none")
-  return lines
-
-
-def upload_share_text(payload: dict[str, Any]) -> str:
-  return "\n".join(upload_message_lines(payload)).strip()
-
-
-def discord_content(payload: dict[str, Any]) -> str:
-  content = "\n".join(upload_message_lines(payload, max_results=24)).strip()
-  if len(content) <= 1900:
-    return content
-
-  content = "\n".join(upload_message_lines(payload, max_results=10)).strip()
-  if len(content) <= 1900:
-    return content
-
-  return "\n".join(upload_message_lines(payload, max_results=3)).strip()[:1900]
 
 
 async def send_discord_webhook(url: str, payload: dict[str, Any]) -> dict[str, Any]:
