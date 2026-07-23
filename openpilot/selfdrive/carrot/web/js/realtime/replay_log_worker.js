@@ -43,7 +43,10 @@ const serviceIntervalsNs = {
 };
 const BATCH_WINDOW_MS = 12;
 const MAX_DURATION_MS = 3 * 60 * 1000;
-const EVENT_INDEX_VERSION = 1;
+const EVENT_INDEX_VERSION = 2;
+const NAV_APPROACH_THRESHOLDS_M = Object.freeze([300, 200, 100, 50, 20]);
+const NAVI_PREROLL_MAX_AGE_NS = 1_500_000_000;
+const NAVI_PREROLL_LOOKAHEAD_NS = 750_000_000;
 const categoryCooldownNs = {
   control: 500_000_000,
   driver: 800_000_000,
@@ -65,6 +68,15 @@ function enumName(value, names) {
   return names[Number(value)] || "";
 }
 
+function finiteNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function naviPresent(value) {
+  return Boolean(value && typeof value === "object" && value.present === true);
+}
+
 class ReplayEventIndexer {
   constructor() {
     this.events = [];
@@ -72,6 +84,7 @@ class ReplayEventIndexer {
     this.lastEventAt = new Map();
     this.sessions = new Map();
     this.lastLaneDirection = "";
+    this.hasCarrotNavi = false;
   }
 
   push(logMonoTime, category, type, options = {}) {
@@ -90,24 +103,26 @@ class ReplayEventIndexer {
       params: { ...(options.params || {}) },
       sourceTitle: String(options.sourceTitle || "").trim(),
       sourceDetail: String(options.sourceDetail || "").trim(),
+      sourceTag: String(options.sourceTag || "").trim(),
     });
   }
 
-  transition(key, value, time, category, onType, offType = "", params = null) {
+  transition(key, value, time, category, onType, offType = "", params = null, sourceTag = "") {
     const previous = this.previous.get(key);
     this.previous.set(key, value);
     if (previous == null || previous === value) return;
     const type = value ? onType : offType;
-    if (type) this.push(time, category, type, { params });
+    if (type) this.push(time, category, type, { params, sourceTag });
   }
 
-  changed(key, value, time, category, type, ignore = []) {
+  changed(key, value, time, category, type, ignore = [], sourceTag = "") {
     const previous = this.previous.get(key);
     this.previous.set(key, value);
     if (previous == null || previous === value || ignore.includes(value)) return;
     this.push(time, category, type, {
       params: { from: previous, value },
       dedupeKey: String(value),
+      sourceTag,
     });
   }
 
@@ -154,6 +169,7 @@ class ReplayEventIndexer {
     else if (service === "controlsState") this.ingestControls(value, time);
     else if (service === "longitudinalPlan") this.ingestLongitudinal(value, time);
     else if (service === "lateralPlan") this.ingestLateral(value, time);
+    else if (service === "carrotNavi") this.ingestCarrotNavi(value, time);
     else if (service === "carrotMan") this.ingestCarrot(value, time);
     else if (service === "driverMonitoringState") this.ingestDriver(value, time);
   }
@@ -280,11 +296,220 @@ class ReplayEventIndexer {
     }
   }
 
+  pushNavi(time, type, options = {}) {
+    this.push(time, "nav", type, { ...options, sourceTag: "CarrotNavi" });
+  }
+
+  guidanceKey(guidance) {
+    if (!naviPresent(guidance)) return "";
+    const turnType = Math.trunc(finiteNumber(guidance.turnType));
+    const point = guidance.pointValid
+      ? `${finiteNumber(guidance.latitude).toFixed(7)},${finiteNumber(guidance.longitude).toFixed(7)}`
+      : String(guidance.mainText || guidance.roadName || "").trim();
+    return `${turnType}|${point}`;
+  }
+
+  ingestNaviGuidance(guidance, slot, time) {
+    const key = this.guidanceKey(guidance);
+    const stateKey = `carrotNavi.guidance.${slot}`;
+    const previousKey = String(this.previous.get(stateKey) || "");
+    const previousNext = String(this.previous.get("carrotNavi.guidance.next") || "");
+    this.previous.set(stateKey, key);
+
+    if (!key) {
+      if (previousKey) this.pushNavi(time, `navigation_maneuver_${slot}_cleared`, { dedupeKey: slot, cooldownNs: 0 });
+      if (slot === "current") this.previous.delete("carrotNavi.guidance.currentDistance");
+      return;
+    }
+
+    const distanceM = Math.max(0, Math.trunc(finiteNumber(guidance.distanceM)));
+    const turnType = Math.trunc(finiteNumber(guidance.turnType));
+    const title = String(guidance.mainText || guidance.roadName || "").trim();
+    const roadName = String(guidance.roadName || "").trim();
+    const params = { turnType, distanceM, roadName };
+    if (slot === "current" && key === previousNext && key !== previousKey) params.promotedFromNext = true;
+    if (key !== previousKey) {
+      this.pushNavi(time, `navigation_maneuver_${slot}`, {
+        params,
+        sourceTitle: title,
+        sourceDetail: roadName !== title ? roadName : "",
+        dedupeKey: key,
+        cooldownNs: 0,
+      });
+    }
+
+    if (slot !== "current" || distanceM <= 0) return;
+    const distanceKey = "carrotNavi.guidance.currentDistance";
+    const previousDistance = this.previous.get(distanceKey);
+    this.previous.set(distanceKey, [key, distanceM]);
+    const thresholds = [];
+    if (!Array.isArray(previousDistance) || previousDistance[0] !== key) {
+      const eligible = NAV_APPROACH_THRESHOLDS_M.filter((threshold) => distanceM <= threshold);
+      if (eligible.length) thresholds.push(Math.min(...eligible));
+    } else if (distanceM < previousDistance[1]) {
+      thresholds.push(...NAV_APPROACH_THRESHOLDS_M.filter((threshold) => previousDistance[1] > threshold && threshold >= distanceM));
+    }
+    for (const thresholdM of thresholds) {
+      this.pushNavi(time, "navigation_approach", {
+        params: { ...params, thresholdM },
+        sourceTitle: title,
+        sourceDetail: roadName !== title ? roadName : "",
+        dedupeKey: `${key}:${thresholdM}`,
+        cooldownNs: 0,
+      });
+    }
+  }
+
+  ingestNaviLane(lane, time) {
+    const visible = naviPresent(lane) && Boolean(lane.visible);
+    const available = Array.isArray(lane?.available) ? lane.available.map((item) => Math.trunc(finiteNumber(item))).slice(0, 16) : [];
+    const laneKey = JSON.stringify([Math.trunc(finiteNumber(lane?.count)), available]);
+    const previousVisible = this.previous.get("carrotNavi.lane.visible");
+    const previousKey = this.previous.get("carrotNavi.lane.key");
+    this.previous.set("carrotNavi.lane.visible", visible);
+    this.previous.set("carrotNavi.lane.key", laneKey);
+    if (visible && (previousVisible !== true || laneKey !== previousKey)) {
+      this.pushNavi(time, previousVisible !== true ? "lane_guidance_shown" : "lane_guidance_changed", {
+        params: {
+          laneCount: Math.trunc(finiteNumber(lane.count)),
+          available,
+          distanceM: Math.max(0, Math.trunc(finiteNumber(lane.distanceM))),
+        },
+        dedupeKey: laneKey,
+        cooldownNs: 0,
+      });
+    } else if (!visible && previousVisible === true) {
+      this.pushNavi(time, "lane_guidance_hidden", { cooldownNs: 0 });
+    }
+  }
+
+  ingestNaviSpeed(speed, time) {
+    const present = Boolean(speed?.sdiPresent);
+    const alertKey = JSON.stringify([
+      Math.trunc(finiteNumber(speed?.sdiType)),
+      Math.trunc(finiteNumber(speed?.sdiSpeedLimitKph)),
+    ]);
+    const previousAlert = this.previous.get("carrotNavi.speedAlert.primary");
+    this.previous.set("carrotNavi.speedAlert.primary", [present, alertKey]);
+    const params = {
+      source: "primary",
+      sdiType: Math.trunc(finiteNumber(speed?.sdiType)),
+      speedLimitKph: Math.trunc(finiteNumber(speed?.sdiSpeedLimitKph)),
+      distanceM: Math.max(0, Math.trunc(finiteNumber(speed?.sdiDistanceM))),
+    };
+    if (present && (!Array.isArray(previousAlert) || previousAlert[0] !== true)) {
+      this.pushNavi(time, "speed_alert_shown", { params, dedupeKey: `primary:${alertKey}`, cooldownNs: 0 });
+    } else if (present && previousAlert[0] === true && previousAlert[1] !== alertKey) {
+      this.pushNavi(time, "speed_alert_changed", { params, dedupeKey: `primary:${alertKey}`, cooldownNs: 0 });
+    } else if (!present && Array.isArray(previousAlert) && previousAlert[0] === true) {
+      this.pushNavi(time, "speed_alert_cleared", { params: { source: "primary" }, cooldownNs: 0 });
+    }
+
+    const roadLimit = speed?.roadLimitValid ? Math.trunc(finiteNumber(speed.roadLimitKph)) : 0;
+    const previousLimit = this.previous.get("carrotNavi.roadLimitKph");
+    this.previous.set("carrotNavi.roadLimitKph", roadLimit);
+    if (previousLimit > 0 && roadLimit > 0 && roadLimit !== previousLimit) {
+      this.pushNavi(time, "road_speed_limit_changed", {
+        params: { from: previousLimit, value: roadLimit },
+        dedupeKey: String(roadLimit),
+        cooldownNs: 0,
+      });
+    }
+
+    const sectionActive = Boolean(speed?.sectionPresent && speed?.sectionActive);
+    const previousActive = this.previous.get("carrotNavi.section.active");
+    this.previous.set("carrotNavi.section.active", sectionActive);
+    const sectionParams = {
+      speedLimitKph: Math.trunc(finiteNumber(speed?.sectionSpeedLimitKph)),
+      averageKph: Math.round(finiteNumber(speed?.sectionAverageKph) * 10) / 10,
+      remainingDistanceM: Math.round(Math.max(0, finiteNumber(speed?.sectionRemainingDistanceM)) * 10) / 10,
+    };
+    if (sectionActive && previousActive !== true) this.pushNavi(time, "section_control_started", { params: sectionParams, cooldownNs: 0 });
+    else if (!sectionActive && previousActive === true) this.pushNavi(time, "section_control_ended", { cooldownNs: 0 });
+  }
+
+  ingestNaviSignal(signal, time) {
+    const visible = Boolean(signal?.visible);
+    const names = ["red", "left", "green", "right", "uturn"];
+    const signalKey = JSON.stringify(names.map((name) => [Boolean(signal?.[`${name}Valid`]), Boolean(signal?.[`${name}On`])]));
+    const previousVisible = this.previous.get("carrotNavi.signal.visible");
+    const previousKey = this.previous.get("carrotNavi.signal.key");
+    this.previous.set("carrotNavi.signal.visible", visible);
+    this.previous.set("carrotNavi.signal.key", signalKey);
+    const params = { distanceM: Math.max(0, Math.trunc(finiteNumber(signal?.distanceM))) };
+    for (const name of names) params[name] = signal?.[`${name}Valid`] ? Boolean(signal[`${name}On`]) : null;
+    if (visible && (previousVisible !== true || signalKey !== previousKey)) {
+      this.pushNavi(time, previousVisible !== true ? "traffic_signal_shown" : "traffic_signal_changed", {
+        params,
+        dedupeKey: signalKey,
+        cooldownNs: 0,
+      });
+    } else if (!visible && previousVisible === true) {
+      this.pushNavi(time, "traffic_signal_hidden", { cooldownNs: 0 });
+    }
+  }
+
+  ingestNaviCrossroad(crossroad, time) {
+    const visible = Boolean(crossroad?.visible);
+    const imageCode = Math.trunc(finiteNumber(crossroad?.imageCode));
+    const previousVisible = this.previous.get("carrotNavi.crossroad.visible");
+    const previousCode = this.previous.get("carrotNavi.crossroad.imageCode");
+    this.previous.set("carrotNavi.crossroad.visible", visible);
+    this.previous.set("carrotNavi.crossroad.imageCode", imageCode);
+    if (visible && (previousVisible !== true || imageCode !== previousCode)) {
+      this.pushNavi(time, previousVisible !== true ? "crossroad_guidance_shown" : "crossroad_guidance_changed", {
+        params: { imageCode, distanceM: Math.max(0, Math.trunc(finiteNumber(crossroad?.distanceM))) },
+        dedupeKey: String(imageCode),
+        cooldownNs: 0,
+      });
+    } else if (!visible && previousVisible === true) {
+      this.pushNavi(time, "crossroad_guidance_hidden", { cooldownNs: 0 });
+    }
+  }
+
+  ingestCarrotNavi(value, time) {
+    const connected = Boolean(value.connected);
+    if (connected) this.hasCarrotNavi = true;
+    const previousConnected = this.previous.get("carrotNavi.connected");
+    this.previous.set("carrotNavi.connected", connected);
+    if (previousConnected != null && connected !== previousConnected) {
+      this.pushNavi(time, connected ? "navi_connected" : "navi_disconnected", { cooldownNs: 0 });
+    }
+
+    // generation advances with published snapshots; it is not a route/session
+    // identity and must never create one visible event every few seconds.
+    const sessionKey = String(value.sessionId || "").trim();
+    const previousSession = this.previous.get("carrotNavi.session");
+    this.previous.set("carrotNavi.session", sessionKey);
+    if (previousSession && sessionKey && sessionKey !== previousSession) this.pushNavi(time, "navigation_session_changed", { cooldownNs: 0 });
+
+    const status = value.navigationStatus || {};
+    const active = connected && Boolean(status.guidanceActive) && Boolean(status.routePresent);
+    const previousActive = this.previous.get("carrotNavi.navigation.active");
+    this.previous.set("carrotNavi.navigation.active", active);
+    if (active && previousActive !== true) this.pushNavi(time, "navigation_active", { cooldownNs: 0 });
+    else if (!active && previousActive === true) this.pushNavi(time, "navigation_ended", { cooldownNs: 0 });
+
+    const offRoute = connected && Boolean(status.offRoute);
+    const previousOffRoute = this.previous.get("carrotNavi.navigation.offRoute");
+    this.previous.set("carrotNavi.navigation.offRoute", offRoute);
+    if (offRoute && previousOffRoute !== true) this.pushNavi(time, "navigation_off_route", { cooldownNs: 0 });
+    else if (!offRoute && previousOffRoute === true) this.pushNavi(time, "navigation_route_recovered", { cooldownNs: 0 });
+
+    const source = connected ? value : {};
+    this.ingestNaviGuidance(source.guidanceCurrent, "current", time);
+    this.ingestNaviGuidance(source.guidanceNext, "next", time);
+    this.ingestNaviLane(source.laneCurrent, time);
+    this.ingestNaviSpeed(source.speed, time);
+    this.ingestNaviSignal(source.trafficSignal, time);
+    this.ingestNaviCrossroad(source.crossroad, time);
+  }
+
   ingestCarrot(value, time) {
-    this.changed("carrotMan.activeCarrot", Number(value.activeCarrot) || 0, time, "carrot", "carrot_mode_changed");
-    this.transition("carrotMan.speedControl", Number(value.xSpdType) > 0, time, "carrot", "carrot_speed_control_start", "carrot_speed_control_end");
+    this.changed("carrotMan.activeCarrot", Number(value.activeCarrot) || 0, time, "carrot", "carrot_mode_changed", [], "CarrotMan");
+    this.transition("carrotMan.speedControl", Number(value.xSpdType) > 0, time, "carrot", "carrot_speed_control_start", "carrot_speed_control_end", null, "CarrotMan");
     const turnInfo = Number(value.xTurnInfo) || 0;
-    this.transition("carrotMan.turnControl", turnInfo !== 0, time, "carrot", "carrot_turn_control_start", "carrot_turn_control_end", { turnInfo });
+    this.transition("carrotMan.turnControl", turnInfo !== 0, time, "carrot", "carrot_turn_control_start", "carrot_turn_control_end", { turnInfo }, "CarrotMan");
     const commandIndex = Number(value.carrotCmdIndex) || 0;
     const previousCommand = this.previous.get("carrotMan.commandIndex");
     this.previous.set("carrotMan.commandIndex", commandIndex);
@@ -294,6 +519,7 @@ class ReplayEventIndexer {
       this.push(time, "carrot", "carrot_command_received", {
         params: { command, argument },
         sourceDetail: [command, argument].filter(Boolean).join(" "),
+        sourceTag: "CarrotMan",
         dedupeKey: `${commandIndex}:${command}:${argument}`,
         cooldownNs: 0,
       });
@@ -306,6 +532,7 @@ class ReplayEventIndexer {
       this.push(time, "nav", "navigation_maneuver", {
         params: { turnInfo, distanceM: Math.max(0, Number(value.xDistToTurn) || 0) },
         sourceTitle: title,
+        sourceTag: "CarrotMan",
         dedupeKey: navKey,
       });
     }
@@ -335,6 +562,7 @@ class ReplayEventIndexer {
     }
     this.sessions.clear();
     return this.events
+      .filter((event) => !(this.hasCarrotNavi && event.type === "navigation_maneuver"))
       .sort((left, right) => left.logMonoTime - right.logMonoTime)
       .map((event, index) => ({
         id: `event-${Math.max(0, Math.round((event.logMonoTime - baseMonoTime) / 1_000_000))}-${index}`,
@@ -344,6 +572,7 @@ class ReplayEventIndexer {
         params: event.params,
         sourceTitle: event.sourceTitle,
         sourceDetail: event.sourceDetail,
+        sourceTag: event.sourceTag,
       }))
       .filter((event) => event.timeMs >= 0 && event.timeMs <= durationMs);
   }
@@ -452,6 +681,15 @@ class ReplayLogBuilder {
 
     const baseMonoTime = indexes[0]?.logMonoTime || events[0].logMonoTime;
     const timestampBase = indexes[0]?.timestampSof || 0;
+    const naviEvents = events.filter((event) => event.service === "carrotNavi");
+    const previousNaviCandidates = naviEvents.filter((event) => (
+      event.logMonoTime <= baseMonoTime && baseMonoTime - event.logMonoTime <= NAVI_PREROLL_MAX_AGE_NS
+    ));
+    const previousNavi = previousNaviCandidates[previousNaviCandidates.length - 1];
+    const lookaheadNavi = naviEvents.find((event) => (
+      event.logMonoTime > baseMonoTime && event.logMonoTime - baseMonoTime <= NAVI_PREROLL_LOOKAHEAD_NS
+    ));
+    const naviSeedEvent = previousNavi || lookaheadNavi || null;
     const frameVideoTime = new Map();
     let cameraDurationMs = 0;
     for (const item of indexes) {
@@ -466,6 +704,8 @@ class ReplayLogBuilder {
     const sequences = new Map();
     const batches = new Map();
     const serviceCounts = {};
+    let naviSeedFrame = null;
+    let naviSeedSourceTimeMs = null;
     let lastSampleMs = 0;
     for (const event of events) {
       let videoTimeMs = Math.round((event.logMonoTime - baseMonoTime) / 1_000_000);
@@ -479,6 +719,10 @@ class ReplayLogBuilder {
       sequences.set(event.service, sequence);
       serviceCounts[event.service] = (serviceCounts[event.service] || 0) + 1;
       const frame = { service: event.service, sequence, decoded: event.decoded, byteLength: 0 };
+      if (event === naviSeedEvent) {
+        naviSeedFrame = frame;
+        naviSeedSourceTimeMs = Math.round((event.logMonoTime - baseMonoTime) / 1_000_000);
+      }
       const batchKey = Math.floor(videoTimeMs / BATCH_WINDOW_MS);
       if (!batches.has(batchKey)) batches.set(batchKey, new Map());
       const pending = batches.get(batchKey);
@@ -496,6 +740,12 @@ class ReplayLogBuilder {
         frames.push(item.frame);
       }
       records.push({ timeMs, frames });
+    }
+    const hasZeroNavi = records.some((record) => (
+      record.timeMs === 0 && record.frames.some((frame) => frame.service === "carrotNavi")
+    ));
+    if (naviSeedFrame && !hasZeroNavi) {
+      records.unshift({ timeMs: 0, frames: [naviSeedFrame] });
     }
     this.selectedEventCount = events.length;
     const durationMs = Math.max(cameraDurationMs, lastSampleMs);
@@ -522,6 +772,11 @@ class ReplayLogBuilder {
         eventIndex,
         eventCategoryCounts,
         eventTypeCounts,
+        preRollServices: naviSeedFrame ? ["carrotNavi"] : [],
+        preRollMode: naviSeedFrame
+          ? (naviSeedEvent.logMonoTime <= baseMonoTime ? "previous" : "bounded-lookahead")
+          : "none",
+        preRollSourceTimeMs: naviSeedSourceTimeMs,
         rawFirstMonoTimeNanos: String(baseMonoTime),
         rawParseStatus: this.partialReason || this.decodeErrorCount ? "partial" : "complete",
         rawParseError: this.partialReason,

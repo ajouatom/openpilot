@@ -1,10 +1,16 @@
 from aiohttp import web
 
+from ..services.web_capabilities import resolve_web_capabilities
 from ..services.web_settings import read_web_settings, update_web_settings
 
 
 async def get_web_settings(request: web.Request) -> web.Response:
-  return web.json_response({"ok": True, "settings": read_web_settings()})
+  settings = read_web_settings()
+  return web.json_response({
+    "ok": True,
+    "settings": settings,
+    "capabilities": resolve_web_capabilities(settings),
+  })
 
 
 async def set_web_settings(request: web.Request) -> web.Response:
@@ -15,7 +21,11 @@ async def set_web_settings(request: web.Request) -> web.Response:
   if not isinstance(body, dict):
     return web.json_response({"ok": False, "error": "bad request"}, status=400)
   settings = update_web_settings(body)
-  return web.json_response({"ok": True, "settings": settings})
+  return web.json_response({
+    "ok": True,
+    "settings": settings,
+    "capabilities": resolve_web_capabilities(settings),
+  })
 
 
 def register(app: web.Application) -> None:

@@ -10,20 +10,22 @@ let carScreenTransitionToken = 0;
 
 
 function disableViewportZoomGestures() {
-  const preventGesture = (e) => e.preventDefault();
+  const preventGesture = (e) => {
+    if (e.cancelable) e.preventDefault();
+  };
 
   ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
     document.addEventListener(type, preventGesture, { passive: false });
   });
 
   document.addEventListener("touchmove", (e) => {
-    if (e.touches && e.touches.length > 1) e.preventDefault();
+    if (e.cancelable && e.touches && e.touches.length > 1) e.preventDefault();
   }, { passive: false });
 
   let lastTouchEnd = 0;
   document.addEventListener("touchend", (e) => {
     const now = Date.now();
-    if (now - lastTouchEnd <= 300) e.preventDefault();
+    if (e.cancelable && now - lastTouchEnd <= 300) e.preventDefault();
     lastTouchEnd = now;
   }, { passive: false });
 }
@@ -876,7 +878,10 @@ function goBackUnlessSettingSplit() {
 
 if (btnBackGroups) btnBackGroups.onclick = goBackUnlessSettingSplit;
 settingTitle.onclick = goBackUnlessSettingSplit;
-if (itemsTitle) itemsTitle.onclick = goBackUnlessSettingSplit;
+// The item title is the submenu back control in both layouts. In the split
+// layout the group rail remains visible, but the control must still unwind a
+// nested detail/history entry (or return to the previous page from a group).
+if (itemsTitle) itemsTitle.onclick = () => history.back();
 
 btnBackBranch.onclick = () => history.back();
 branchTitle.onclick = () => history.back();

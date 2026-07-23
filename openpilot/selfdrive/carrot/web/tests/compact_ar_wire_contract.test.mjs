@@ -16,6 +16,8 @@ const arContract = {
     "brakeHoldActive", "softHoldActive", "carrotCruise", "gearStep", "useLaneLineSpeed",
     "brakeLights", "leftBlindspot", "rightBlindspot", "leftLaneLine", "rightLaneLine",
     "gearShifter", "leftBlinker", "rightBlinker", "fuelGauge", "ureaGauge", "tpms",
+    // Appended for the cluster-parity EV telltale (kept at the end).
+    "evModeValid", "evModeActive",
   ]],
   selfdriveState: [6, [
     "enabled", "personality", "alertStatus", "alertSize", "alertType", "alertText1", "alertText2",
@@ -37,11 +39,12 @@ const arContract = {
   ]],
   cameraOdometry: [19, ["frameId", "timestampEof", "trans", "rot", "transStd", "rotStd"]],
   livePose: [20, [
-    "orientationNED", "angularVelocityDevice", "inputsOK", "posenetOK", "sensorsOK", "timestamp",
+    "orientationNED", "velocityDevice", "accelerationDevice", "angularVelocityDevice",
+    "inputsOK", "posenetOK", "sensorsOK", "timestamp",
   ]],
   carrotNavi: [21, [
     "schemaVersion", "generation", "sessionId", "publishMonoTimeNanos", "connected", "vehicle",
-    "guidanceCurrent", "guidanceNext", "laneCurrent", "speed", "trafficSignal", "crossroad",
+    "guidanceCurrent", "guidanceNext", "laneCurrent", "laneAhead", "speed", "trafficSignal", "crossroad",
     "route", "navigationStatus",
   ]],
 };
@@ -52,15 +55,20 @@ const nestedContract = {
   NAVI_LANE_SCHEMA: ["present", "count", "distanceM", "visible", "available"],
   NAVI_SPEED_SCHEMA: [
     "roadLimitValid", "roadLimitKph", "sdiPresent", "sdiType", "sdiDistanceM", "sdiSpeedLimitKph",
+    "sdiSectionType", "sdiBlockType", "sdiBlockSpeedKph", "sdiBlockDistanceM",
+    "secondarySdiPresent", "secondarySdiType", "secondarySdiDistanceM", "secondarySdiSpeedLimitKph",
+    "secondarySdiSectionType", "secondarySdiBlockType", "secondarySdiBlockSpeedKph", "secondarySdiBlockDistanceM",
     "sectionPresent", "sectionActive", "sectionSpeedLimitKph", "sectionAverageKph",
-    "sectionRemainingDistanceM", "sectionProgress",
+    "sectionOverallAverageKph", "sectionRemainingDistanceM", "sectionRemainingTimeSec", "sectionProgress",
+    "sectionSuspended", "sectionOffRoute",
   ],
   NAVI_SIGNAL_SCHEMA: [
-    "visible", "distanceM", "redValid", "redOn", "leftValid", "leftOn", "greenValid",
-    "greenOn", "rightValid", "rightOn", "uturnValid", "uturnOn",
+    "visible", "distanceM", "redValid", "redOn", "redRemainSec", "leftValid", "leftOn", "leftRemainSec",
+    "greenValid", "greenOn", "greenRemainSec", "rightValid", "rightOn", "rightRemainSec",
+    "uturnValid", "uturnOn", "uturnRemainSec", "uiCounterValid", "uiCounterRemainSec",
   ],
   NAVI_CROSSROAD_SCHEMA: ["visible", "distanceM", "imageCode"],
-  NAVI_ROUTE_SCHEMA: ["present", "remainingDistanceM", "remainingTimeSec", "totalDistanceM", "polyline"],
+  NAVI_ROUTE_SCHEMA: ["present", "remainingDistanceM", "remainingTimeSec", "movedDistanceM", "totalDistanceM", "polyline"],
   NAVI_STATUS_SCHEMA: ["guidanceActive", "offRoute", "routePresent"],
   XYZ_MEASUREMENT_SCHEMA: ["x", "y", "z", "xStd", "yStd", "zStd", "valid"],
 };
@@ -226,7 +234,8 @@ test("native AR encoders retain the shared field sequence and route limit", () =
   assertTokensInOrder(navi, arContract.carrotNavi[1], "encode_carrot_navi");
   assertTokensInOrder(functionBody(nativeSource, "append_navi_guidance"), nestedContract.NAVI_GUIDANCE_SCHEMA.slice(1), "native guidance");
   assertTokensInOrder(navi, nestedContract.NAVI_VEHICLE_SCHEMA.slice(1), "native vehicle");
-  assertTokensInOrder(functionBody(nativeSource, "append_navi_lane"), nestedContract.NAVI_LANE_SCHEMA.slice(1), "native lane");
+  assertTokensInOrder(functionBody(nativeSource, "append_navi_lane_value"), nestedContract.NAVI_LANE_SCHEMA.slice(1), "native lane");
+  assert.match(functionBody(nativeSource, "append_navi_lane_list"), /append_navi_lane_value/);
   assertTokensInOrder(navi, nestedContract.NAVI_SPEED_SCHEMA, "native speed");
   assertTokensInOrder(navi, nestedContract.NAVI_SIGNAL_SCHEMA, "native signal");
   assertTokensInOrder(navi, nestedContract.NAVI_CROSSROAD_SCHEMA, "native crossroad");

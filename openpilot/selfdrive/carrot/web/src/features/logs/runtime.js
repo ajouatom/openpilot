@@ -1,5 +1,11 @@
 "use strict";
 
+import { createDashcamPlayerSession } from "./dashcam_player_session.js";
+import {
+  createLogsPlayerDialog,
+  createLogsPlayerSegmentList,
+  normalizeLogsPlayerSegments,
+} from "./player/components.js";
 import {
   cancelDashcamRouteRender,
   dashcamDefaultRouteHeight,
@@ -8,6 +14,7 @@ import {
   dashcamSortDirection,
   dashcamState,
   dashcamWindowNeedsRender,
+  loadDashcamReadState,
   loadDashcamRoutes,
   markDashcamScrollBusy,
   maybeLoadMoreDashcamRoutes,
@@ -20,7 +27,6 @@ import {
   setDashcamLoadingMoreUi,
   setDashcamSort,
   showDashcamRouteMenu,
-  showDashcamRouteReport,
   showDashcamSegmentMenu,
   startDashcamAutoRefresh,
   toggleDashcamRouteSelectAll,
@@ -274,34 +280,70 @@ function logsEmptyStateHtml(type = "dashcam") {
 function openLogsVideoPlayer(title, src, options = {}) {
   const overlay = document.createElement("div");
   const kind = String(options.kind || "video").replace(/[^a-z0-9_-]/gi, "");
-  const sendButton = typeof options.onSend === "function"
+  const playerSegments = normalizeLogsPlayerSegments(options.segments);
+  const segmentSession = playerSegments.length && options.currentGroup
+    ? createDashcamPlayerSession({
+        group: options.currentGroup,
+        segments: playerSegments.map((segment) => segment.id),
+        activeSegment: options.activeSegment,
+        previousSegment: options.previousSegment,
+      })
+    : null;
+  const hasSendAction = typeof options.onSegmentSend === "function" || typeof options.onSend === "function";
+  const hasMenuAction = typeof options.onSegmentMenu === "function" || typeof options.onMenu === "function";
+  const sendButton = hasSendAction
     ? `<button class="dashcam-menu-btn dashcam-player-action dashcam-player-send" type="button" aria-label="${escapeHtml(getUIText("log_upload", "Upload Logs"))}" title="${escapeHtml(getUIText("log_upload", "Upload Logs"))}">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg>
       </button>`
     : "";
-  const menuButton = typeof options.onMenu === "function"
+  const menuButton = hasMenuAction
     ? `<button class="dashcam-menu-btn dashcam-player-action dashcam-player-menu" type="button" aria-label="${escapeHtml(getUIText("segment_menu", "Segment menu"))}" title="${escapeHtml(getUIText("segment_menu", "Segment menu"))}">
         <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4m0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/></svg>
       </button>`
     : "";
+  let segmentItems = playerSegments;
+  let segmentItemById = new Map(segmentItems.map((segment) => [segment.id, segment]));
+  const initialSegmentId = segmentSession?.snapshot().activeSegment || "";
+  const fallbackMedia = Object.freeze({
+    id: "",
+    name: title || "Video",
+    timeLabel: "",
+    title: title || "Video",
+    subtitle: String(options.subtitle || ""),
+    src: String(src || ""),
+    thumbnailSrc: "",
+  });
+  let currentMedia = segmentItemById.get(initialSegmentId) || fallbackMedia;
   overlay.className = `dashcam-player-overlay dashcam-player-overlay--${kind}`;
-  overlay.innerHTML = `<div class="dashcam-player-dialog" role="dialog" aria-modal="true">
-    <div class="dashcam-player-frame">
-      <video class="dashcam-player-video" playsinline webkit-playsinline disablepictureinpicture disableremoteplayback controlslist="nodownload noplaybackrate noremoteplayback"></video>
-      <div class="dashcam-player-toast" aria-live="polite"></div>
-      <div class="dashcam-player-top">
-        <div class="dashcam-player-heading">
-          <div class="dashcam-player-title">${escapeHtml(title || "Video")}</div>
-          <div class="dashcam-player-subtitle"${options.subtitle ? "" : " hidden"}>${escapeHtml(options.subtitle || "")}</div>
-        </div>
-        ${sendButton}
-        ${menuButton}
-        <button class="dashcam-player-close c-close" type="button" aria-label="${escapeHtml(getUIText("close", "Close"))}" title="${escapeHtml(getUIText("close", "Close"))}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
-        </button>
+  const playerDialog = createLogsPlayerDialog({
+    currentGroup: options.currentGroup,
+    labels: {
+      browser: getUIText("segment_browser", "Segments"),
+      currentGroup: getUIText("current_group", "Current group"),
+      segmentCount: getUIText("segment_count", "{count} segments"),
+    },
+  });
+  playerDialog.frame.innerHTML = `
+    <video class="dashcam-player-video" playsinline webkit-playsinline disablepictureinpicture disableremoteplayback controlslist="nodownload noplaybackrate noremoteplayback"></video>
+    <div class="dashcam-player-toast" aria-live="polite"></div>
+    <div class="dashcam-player-transport carrot-media-action-group" role="group" aria-label="${escapeHtml(getUIText("replay_playback_controls", "Playback controls"))}"></div>
+    <div class="dashcam-player-top">
+      <div class="dashcam-player-heading">
+        <div class="dashcam-player-title">${escapeHtml(currentMedia.title)}</div>
+        <div class="dashcam-player-subtitle"${currentMedia.subtitle ? "" : " hidden"}>${escapeHtml(currentMedia.subtitle)}</div>
       </div>
-    </div>
-  </div>`;
+      ${sendButton}
+      ${menuButton}
+      <button class="dashcam-player-close c-close" type="button" aria-label="${escapeHtml(getUIText("close", "Close"))}" title="${escapeHtml(getUIText("close", "Close"))}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>`;
+  const playerTitle = playerDialog.frame.querySelector(".dashcam-player-title");
+  if (playerTitle) {
+    playerTitle.id = "dashcamPlayerDialogTitle";
+    playerDialog.dialog.setAttribute("aria-labelledby", playerTitle.id);
+  }
+  overlay.append(playerDialog.dialog);
   const videoEl = overlay.querySelector("video");
   videoEl.controls = false;
   videoEl.removeAttribute("controls");
@@ -312,11 +354,34 @@ function openLogsVideoPlayer(title, src, options = {}) {
   let suppressToasts = true;
   let player = null;
   let topActionPending = false;
+  let navigationPending = false;
+  let closed = false;
+  let mediaSwitchToken = 0;
+  let inputController = null;
+  let segmentList = null;
+  const transportEl = overlay.querySelector(".dashcam-player-transport");
+  const mediaTransport = window.CarrotMediaTransport;
+  let previousButton = null;
+  let transportPlayButton = null;
+  let nextButton = null;
+  const downloadUrlFor = (value) => {
+    const target = String(value || "");
+    return target + (target.includes("?") ? "&" : "?") + "download=1";
+  };
+  const activeSegmentId = () => segmentSession?.snapshot().activeSegment || "";
+  const resolveSubtitle = () => {
+    const duration = Number(player?.duration ?? videoEl.duration);
+    if (segmentSession && typeof options.subtitleForSegmentDuration === "function") {
+      return options.subtitleForSegmentDuration(activeSegmentId(), duration) || currentMedia.subtitle;
+    }
+    if (typeof options.subtitleForDuration === "function") {
+      return options.subtitleForDuration(duration) || currentMedia.subtitle;
+    }
+    return currentMedia.subtitle;
+  };
   const updateSubtitle = () => {
     if (!subtitleEl) return;
-    const resolved = typeof options.subtitleForDuration === "function"
-      ? options.subtitleForDuration(videoEl.duration)
-      : options.subtitle;
+    const resolved = resolveSubtitle();
     subtitleEl.textContent = resolved || "";
     subtitleEl.hidden = !resolved;
   };
@@ -329,10 +394,194 @@ function openLogsVideoPlayer(title, src, options = {}) {
     toastTimer = window.setTimeout(() => toastEl.classList.remove("is-visible"), 850);
   };
   const close = () => {
+    if (closed) return;
+    closed = true;
+    try { options.onClose?.(activeSegmentId()); } catch {}
+    mediaSwitchToken += 1;
     if (toastTimer) window.clearTimeout(toastTimer);
+    inputController?.dispose?.();
+    inputController = null;
     try { player?.destroy?.(); } catch {}
     overlay.remove();
   };
+  const runNavigationAction = (handler) => {
+    if (navigationPending || typeof handler !== "function") return;
+    navigationPending = true;
+    Promise.resolve()
+      .then(() => handler({ close }))
+      .catch((error) => {
+        if (typeof showAppToast === "function") showAppToast(error?.message || String(error), { tone: "error" });
+      })
+      .finally(() => { navigationPending = false; });
+  };
+  const syncNavigationState = () => {
+    if (!previousButton || !nextButton) return;
+    if (segmentSession) {
+      const state = segmentSession.snapshot();
+      previousButton.disabled = !state.canMovePrevious;
+      nextButton.disabled = !state.canMoveNext;
+      return;
+    }
+    previousButton.disabled = typeof options.onPrevious !== "function";
+    nextButton.disabled = typeof options.onNext !== "function";
+  };
+  const syncTransportPlayState = () => {
+    if (!transportPlayButton || !mediaTransport?.setActionState) return;
+    const paused = (typeof player?.paused === "boolean" ? player.paused : videoEl.paused)
+      || (typeof player?.ended === "boolean" ? player.ended : videoEl.ended);
+    mediaTransport.setActionState(transportPlayButton, paused ? "play" : "pause", {
+      label: paused
+        ? getUIText("replay_play", "Play replay")
+        : getUIText("replay_pause", "Pause replay"),
+    });
+    transportPlayButton.setAttribute("aria-pressed", String(!paused));
+  };
+  const toggleTransportPlayback = async () => {
+    try {
+      const ended = typeof player?.ended === "boolean" ? player.ended : videoEl.ended;
+      const paused = typeof player?.paused === "boolean" ? player.paused : videoEl.paused;
+      if (ended) {
+        if (player) player.currentTime = 0;
+        else videoEl.currentTime = 0;
+      }
+      if (paused || ended) {
+        const playResult = player?.play ? player.play() : videoEl.play();
+        if (playResult && typeof playResult.then === "function") await playResult;
+      } else if (player?.pause) {
+        player.pause();
+      } else {
+        videoEl.pause();
+      }
+    } catch (error) {
+      if (typeof showAppToast === "function") {
+        showAppToast(error?.message || getUIText("playback_failed", "Playback failed"), { tone: "error" });
+      }
+    } finally {
+      window.requestAnimationFrame(syncTransportPlayState);
+    }
+  };
+  const requestCurrentPlayback = (token) => {
+    const start = () => {
+      if (closed || token !== mediaSwitchToken) return;
+      const result = player?.play ? player.play() : videoEl.play();
+      if (result && typeof result.catch === "function") result.catch(() => {});
+    };
+    window.setTimeout(() => {
+      if (closed || token !== mediaSwitchToken) return;
+      const media = player?.media || videoEl;
+      if (media.readyState >= 2) start();
+      else media.addEventListener("canplay", start, { once: true });
+    }, 0);
+  };
+  const applyCurrentMedia = (media, optionsForChange = {}) => {
+    if (!media?.src || closed) return false;
+    const autoplay = optionsForChange.autoplay !== false;
+    currentMedia = media;
+    mediaSwitchToken += 1;
+    const token = mediaSwitchToken;
+    if (playerTitle) playerTitle.textContent = currentMedia.title || currentMedia.name;
+    updateSubtitle();
+    if (player) {
+      player.source = {
+        type: "video",
+        title: currentMedia.title || currentMedia.name,
+        sources: [{ src: currentMedia.src, type: "video/mp4" }],
+      };
+      player.download = downloadUrlFor(currentMedia.src);
+    } else {
+      videoEl.src = currentMedia.src;
+      videoEl.load();
+    }
+    if (autoplay) requestCurrentPlayback(token);
+    return true;
+  };
+  const applySegmentResult = (result, autoplay = true) => {
+    if (!result?.changed) return false;
+    const media = segmentItemById.get(result.state.activeSegment);
+    if (!media) return false;
+    segmentList?.setActive(result.state.activeSegment, true);
+    syncNavigationState();
+    applyCurrentMedia(media, { autoplay });
+    options.onSegmentChange?.(result.state.activeSegment);
+    return true;
+  };
+  const selectPlayerSegment = (segmentId) => {
+    if (!segmentSession) return false;
+    return applySegmentResult(segmentSession.select(segmentId));
+  };
+  const movePlayerSegment = (offset) => {
+    if (!segmentSession) return false;
+    return applySegmentResult(segmentSession.move(offset));
+  };
+  if (segmentSession && playerDialog.segmentHost) {
+    segmentList = createLogsPlayerSegmentList(segmentItems, {
+      activeSegmentId: activeSegmentId(),
+      labels: {
+        segments: getUIText("segment_browser", "Segments"),
+        reading: getUIText("segment_reading", "Reading"),
+        recent: getUIText("segment_recently_read", "Recently viewed"),
+      },
+      onSelect: selectPlayerSegment,
+      statusFor: (segmentId) => segmentSession.statusFor(segmentId),
+    });
+    playerDialog.segmentHost.hidden = false;
+    playerDialog.segmentHost.append(segmentList.element);
+  }
+  if (transportEl && mediaTransport?.createActionButton) {
+    previousButton = mediaTransport.createActionButton("previous", {
+      label: getUIText("replay_previous_segment", "Previous segment"),
+      disabled: segmentSession ? !segmentSession.snapshot().canMovePrevious : typeof options.onPrevious !== "function",
+      onActivate: () => runNavigationAction(segmentSession ? () => movePlayerSegment(-1) : options.onPrevious),
+    });
+    transportPlayButton = mediaTransport.createActionButton("play", {
+      playLabel: getUIText("replay_play", "Play replay"),
+      pauseLabel: getUIText("replay_pause", "Pause replay"),
+      onActivate: toggleTransportPlayback,
+    });
+    nextButton = mediaTransport.createActionButton("next", {
+      label: getUIText("replay_next_segment", "Next segment"),
+      disabled: segmentSession ? !segmentSession.snapshot().canMoveNext : typeof options.onNext !== "function",
+      onActivate: () => runNavigationAction(segmentSession ? () => movePlayerSegment(1) : options.onNext),
+    });
+    transportEl.append(previousButton, transportPlayButton, nextButton);
+    ["pointerdown", "mousedown", "touchstart"].forEach((eventName) => {
+      transportEl.addEventListener(eventName, (event) => event.stopPropagation(), { passive: true });
+    });
+    ["play", "pause", "ended"].forEach((eventName) => {
+      videoEl.addEventListener(eventName, syncTransportPlayState);
+    });
+    transportPlayButton.setAttribute("aria-keyshortcuts", "Space K");
+    previousButton.setAttribute("aria-keyshortcuts", "Shift+P");
+    nextButton.setAttribute("aria-keyshortcuts", "Shift+N");
+    syncTransportPlayState();
+  } else if (transportEl) {
+    transportEl.hidden = true;
+  }
+  inputController = mediaTransport?.createInputController?.({
+    media: videoEl,
+    stage: playerDialog.frame,
+    rates: [0.5, 1, 1.5, 2],
+    canInteract: () => !closed && overlay.isConnected,
+    canPrevious: () => Boolean(previousButton && !previousButton.disabled),
+    canNext: () => Boolean(nextButton && !nextButton.disabled),
+    onTogglePlayback: () => transportPlayButton?.click(),
+    onPrevious: () => previousButton?.click(),
+    onNext: () => nextButton?.click(),
+    onRate: (rate) => {
+      if (player) player.speed = rate;
+      else videoEl.playbackRate = rate;
+    },
+    onSeek: syncTransportPlayState,
+    blockedPointerSelector: [
+      "button",
+      "input",
+      "select",
+      "a",
+      ".plyr__controls",
+      ".dashcam-player-top",
+      ".dashcam-player-transport",
+    ].join(", "),
+  }) || null;
   overlay.addEventListener("click", (ev) => {
     if (ev.target === overlay) close();
   });
@@ -344,8 +593,6 @@ function openLogsVideoPlayer(title, src, options = {}) {
     const trigger = event.currentTarget;
     trigger.disabled = true;
     overlay.classList.add(stateClass);
-    overlay.classList.remove("is-controls-hidden");
-    player?.toggleControls?.(true);
     Promise.resolve()
       .then(() => handler({ close }))
       .catch((error) => {
@@ -358,36 +605,44 @@ function openLogsVideoPlayer(title, src, options = {}) {
       });
   };
   overlay.querySelector(".dashcam-player-send")?.addEventListener("click", (event) => {
-    runTopAction(event, options.onSend, "is-action-open");
+    const targetSegment = activeSegmentId();
+    const handler = typeof options.onSegmentSend === "function"
+      ? ({ close: closePlayer } = {}) => options.onSegmentSend(targetSegment, { close: closePlayer })
+      : options.onSend;
+    runTopAction(event, handler, "is-action-open");
   });
   overlay.querySelector(".dashcam-player-menu")?.addEventListener("click", (event) => {
-    runTopAction(event, options.onMenu, "is-menu-open");
+    const targetSegment = activeSegmentId();
+    const handler = typeof options.onSegmentMenu === "function"
+      ? ({ close: closePlayer } = {}) => options.onSegmentMenu(targetSegment, { close: closePlayer })
+      : options.onMenu;
+    runTopAction(event, handler, "is-menu-open");
   });
   document.body.appendChild(overlay);
   requestAnimationFrame(() => {
+    if (closed) return;
     overlay.classList.add("is-open");
     try {
       player = new Plyr(videoEl, {
         controls: ["play", "progress", "current-time", "duration", "settings", "fullscreen", "download"],
-        hideControls: true,
+        hideControls: false,
         seekTime: 5,
         settings: ["speed"],
         speed: { selected: 1, options: [0.5, 1, 1.5, 2] },
         keyboard: { focused: true, global: false },
         fullscreen: { enabled: true, fallback: true, iosNative: true },
-        urls: { download: downloadUrl },
+        urls: { download: downloadUrlFor(currentMedia.src) },
       });
       videoEl.controls = false;
       videoEl.removeAttribute("controls");
       player.source = {
         type: "video",
-        title: title || "Video",
-        sources: [{ src, type: "video/mp4" }],
+        title: currentMedia.title || currentMedia.name,
+        sources: [{ src: currentMedia.src, type: "video/mp4" }],
       };
       player.once("ready", () => {
         const container = player.elements?.container || overlay;
-        player.on("controlshidden", () => overlay.classList.add("is-controls-hidden"));
-        player.on("controlsshown", () => overlay.classList.remove("is-controls-hidden"));
+        if (transportEl && transportEl.parentElement !== container) container.appendChild(transportEl);
         const bindBtn = (sel, label) => {
           container.querySelectorAll(sel).forEach((btn) => btn.addEventListener("click", () => showToast(label)));
         };
@@ -411,8 +666,38 @@ function openLogsVideoPlayer(title, src, options = {}) {
       // browser's native video transport as the fallback.
       videoEl.controls = true;
       videoEl.setAttribute("controls", "");
-      videoEl.src = src;
+      videoEl.src = currentMedia.src;
     }
+  });
+  const updateSegments = (values) => {
+    if (!segmentSession || closed) return null;
+    const nextItems = normalizeLogsPlayerSegments(values);
+    if (!nextItems.length) return segmentSession.snapshot();
+    const previousActive = activeSegmentId();
+    const previousSource = currentMedia.src;
+    segmentItems = nextItems;
+    segmentItemById = new Map(segmentItems.map((segment) => [segment.id, segment]));
+    const result = segmentSession.replaceSegments(segmentItems.map((segment) => segment.id), {
+      activeSegment: previousActive,
+    });
+    const nextMedia = segmentItemById.get(result.state.activeSegment);
+    segmentList?.render(segmentItems, result.state.activeSegment);
+    syncNavigationState();
+    if (nextMedia) {
+      if (result.state.activeSegment !== previousActive || nextMedia.src !== previousSource) {
+        applyCurrentMedia(nextMedia, { autoplay: false });
+      } else {
+        currentMedia = nextMedia;
+        if (playerTitle) playerTitle.textContent = currentMedia.title || currentMedia.name;
+        updateSubtitle();
+      }
+    }
+    return result.state;
+  };
+  return Object.freeze({
+    close,
+    isOpen: () => !closed && overlay.isConnected,
+    updateSegments,
   });
 }
 
@@ -562,9 +847,6 @@ function bindLogsPage() {
       } else if (action === "route-menu") {
         ev.stopPropagation();
         showDashcamRouteMenu(route).catch(() => {});
-      } else if (action === "route-report") {
-        ev.stopPropagation();
-        showDashcamRouteReport(route).catch(() => {});
       } else if (action === "select-route") {
         const shouldClear = actionEl.dataset.selected === "1";
         toggleDashcamRouteSelectAll(route, shouldClear).catch(() => {});
@@ -612,6 +894,7 @@ function initLogsPage() {
   bindLogsPage();
   activateLogsTab(logsActiveTab, { load: false });
   startDashcamAutoRefresh();
+  loadDashcamReadState().catch(() => {});
   resumeDashcamUploadJobIfNeeded().catch(() => {});
   if (logsActiveTab === "screen") {
     if (!screenrecordState.initialized) {

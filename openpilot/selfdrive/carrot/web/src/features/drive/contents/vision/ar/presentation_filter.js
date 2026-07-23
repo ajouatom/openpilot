@@ -9,6 +9,8 @@
 import { AR_RENDER } from "./tokens.js";
 import {
   blendRoadFrames,
+  faceFrameFields,
+  faceFrameForAnchor,
   roadFrameFields,
   roadFrameForAnchor,
 } from "./road_frame.js";
@@ -65,9 +67,10 @@ export function createMarkerPresentationFilter(options = {}) {
     const positionAlpha = halfLifeAlpha(dtMs, limits.positionHalfLifeMs);
     const orientationAlpha = halfLifeAlpha(dtMs, limits.orientationHalfLifeMs);
     const scaleAlpha = halfLifeAlpha(dtMs, limits.scaleHalfLifeMs);
+    const hasFaceFrame = Array.isArray(anchor.faceForward);
     const frame = blendRoadFrames(
-      roadFrameForAnchor(state.anchor),
-      roadFrameForAnchor(anchor),
+      hasFaceFrame ? faceFrameForAnchor(state.anchor) : roadFrameForAnchor(state.anchor),
+      hasFaceFrame ? faceFrameForAnchor(anchor) : roadFrameForAnchor(anchor),
       orientationAlpha,
     );
     const filteredAnchor = Object.freeze({
@@ -76,7 +79,7 @@ export function createMarkerPresentationFilter(options = {}) {
       x: finite(anchor.x),
       y: finite(state.anchor.y) + (finite(anchor.y) - finite(state.anchor.y)) * positionAlpha,
       z: finite(state.anchor.z) + (finite(anchor.z) - finite(state.anchor.z)) * positionAlpha,
-      ...roadFrameFields(frame),
+      ...(hasFaceFrame ? faceFrameFields(frame) : roadFrameFields(frame)),
     });
     const targetScale = Math.max(0.001, finite(scale, state.scale));
     const filteredScale = state.scale + (targetScale - state.scale) * scaleAlpha;

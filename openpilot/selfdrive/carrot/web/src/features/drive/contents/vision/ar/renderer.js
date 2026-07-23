@@ -25,7 +25,7 @@ const AR_RIBBON = Object.freeze({
   fadePower: 1.6,      // 클수록 빨리 옅어진다
 });
 import { paintSignboard, textureSizeFor } from "./signboard.js";
-import { projectPoint, pointOnPath } from "./projection.js";
+import { projectRouteFluPoint, pointOnPath } from "./projection.js";
 import { planMarker, resolveArCanvasSize } from "./responsive.js";
 
 function finite(v, fallback = null) {
@@ -160,8 +160,8 @@ export function createArRenderer(options = {}) {
 
     for (const { x, y, z } of samples) {
       const centerY = y + offsetM;
-      const l = toStage(projectPoint(T, x, centerY + half, z), stage);
-      const r = toStage(projectPoint(T, x, centerY - half, z), stage);
+      const l = toStage(projectRouteFluPoint(T, x, centerY + half, z), stage);
+      const r = toStage(projectRouteFluPoint(T, x, centerY - half, z), stage);
       if (!l || !r) continue;
       left.push(l);
       right.push(r);
@@ -224,9 +224,9 @@ export function createArRenderer(options = {}) {
     if (!T || !descriptor || !anchor) return null;
     const mount = finite(descriptor.mountHeightM, 2.56);
     const half = descriptor.heightM / 2;
-    const centerPt = toStage(projectPoint(T, anchor.x, anchor.y, anchor.z + mount + half), stage);
-    const basePt = toStage(projectPoint(T, anchor.x, anchor.y, anchor.z + mount), stage);
-    const groundPt = toStage(projectPoint(T, anchor.x, anchor.y, anchor.z), stage);
+    const centerPt = toStage(projectRouteFluPoint(T, anchor.x, anchor.y, anchor.z + mount + half), stage);
+    const basePt = toStage(projectRouteFluPoint(T, anchor.x, anchor.y, anchor.z + mount), stage);
+    const groundPt = toStage(projectRouteFluPoint(T, anchor.x, anchor.y, anchor.z), stage);
     if (!centerPt || !basePt) return null;
     const halfPx = Math.abs(centerPt.y - basePt.y);
     if (!(halfPx > 0.5)) return null;
@@ -341,7 +341,9 @@ export function createArRenderer(options = {}) {
       const measured = measureScreenHeight(item.descriptor, anchor, stage);
       if (!measured) {
         stats.skipped += 1;
-        stats.skips.push(`${item.distanceM}m: 투영 실패(카메라 뒤/화면 밖)`);
+        // 좌표를 함께 남긴다. y가 크면 화면 밖(FOV), x가 작거나 음수면 카메라 뒤다.
+        stats.skips.push(`${item.distanceM}m: 투영 실패(x${
+          Math.round(finite(anchor.x, 0))} y${Math.round(finite(anchor.y, 0))})`);
         continue;
       }
       const plan = planMarker({

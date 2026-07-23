@@ -249,6 +249,8 @@ void encode_camera_odometry(std::string &out, const DynamicReader &value) {
 
 void encode_live_pose(std::string &out, const DynamicReader &value) {
   append_xyz_measurement(out, value, "orientationNED");
+  append_xyz_measurement(out, value, "velocityDevice");
+  append_xyz_measurement(out, value, "accelerationDevice");
   append_xyz_measurement(out, value, "angularVelocityDevice");
   append_bool(out, value, "inputsOK");
   append_bool(out, value, "posenetOK");
@@ -308,8 +310,7 @@ void append_i16_list(std::string &out, const DynamicReader &reader, const char *
   }
 }
 
-void append_navi_lane(std::string &out, const DynamicReader &navi, const char *name) {
-  const auto lane = find_struct(navi, name);
+void append_navi_lane_value(std::string &out, const std::optional<DynamicReader> &lane) {
   append_navi_present(out, lane);
   if (!lane.has_value()) {
     append_scalar(out, static_cast<int16_t>(0));
@@ -322,6 +323,25 @@ void append_navi_lane(std::string &out, const DynamicReader &navi, const char *n
   append_i32(out, *lane, "distanceM");
   append_bool(out, *lane, "visible");
   append_i16_list(out, *lane, "available");
+}
+
+void append_navi_lane(std::string &out, const DynamicReader &navi, const char *name) {
+  append_navi_lane_value(out, find_struct(navi, name));
+}
+
+void append_navi_lane_list(std::string &out, const DynamicReader &navi, const char *name) {
+  const auto value = find_value(navi, name);
+  if (!value.has_value()) {
+    append_scalar(out, static_cast<uint8_t>(0));
+    return;
+  }
+  const auto list = value->as<capnp::DynamicList>();
+  const uint8_t size = static_cast<uint8_t>(std::min<size_t>(list.size(), UINT8_MAX));
+  append_scalar(out, size);
+  for (uint8_t i = 0; i < size; ++i) {
+    const std::optional<DynamicReader> lane = list[i].as<capnp::DynamicStruct>();
+    append_navi_lane_value(out, lane);
+  }
 }
 
 // 경로 폴리라인. compact_state.py 의 coord_list 와 1:1.
@@ -379,6 +399,7 @@ void encode_carrot_navi(std::string &out, const DynamicReader &value) {
   append_navi_guidance(out, value, "guidanceCurrent");
   append_navi_guidance(out, value, "guidanceNext");
   append_navi_lane(out, value, "laneCurrent");
+  append_navi_lane_list(out, value, "laneAhead");
 
   // speed
   const auto sp = find_struct(value, "speed");
@@ -389,19 +410,43 @@ void encode_carrot_navi(std::string &out, const DynamicReader &value) {
     append_i32(out, *sp, "sdiType");
     append_i32(out, *sp, "sdiDistanceM");
     append_i16(out, *sp, "sdiSpeedLimitKph");
+    append_i32(out, *sp, "sdiSectionType");
+    append_i32(out, *sp, "sdiBlockType");
+    append_i16(out, *sp, "sdiBlockSpeedKph");
+    append_i32(out, *sp, "sdiBlockDistanceM");
+    append_bool(out, *sp, "secondarySdiPresent");
+    append_i32(out, *sp, "secondarySdiType");
+    append_i32(out, *sp, "secondarySdiDistanceM");
+    append_i16(out, *sp, "secondarySdiSpeedLimitKph");
+    append_i32(out, *sp, "secondarySdiSectionType");
+    append_i32(out, *sp, "secondarySdiBlockType");
+    append_i16(out, *sp, "secondarySdiBlockSpeedKph");
+    append_i32(out, *sp, "secondarySdiBlockDistanceM");
     append_bool(out, *sp, "sectionPresent");
     append_bool(out, *sp, "sectionActive");
     append_i16(out, *sp, "sectionSpeedLimitKph");
     append_f32(out, *sp, "sectionAverageKph");
+    append_f32(out, *sp, "sectionOverallAverageKph");
     append_f32(out, *sp, "sectionRemainingDistanceM");
+    append_i32(out, *sp, "sectionRemainingTimeSec");
     append_f32(out, *sp, "sectionProgress");
+    append_bool(out, *sp, "sectionSuspended");
+    append_bool(out, *sp, "sectionOffRoute");
   } else {
     append_scalar(out, static_cast<uint8_t>(0)); append_scalar(out, static_cast<int16_t>(0));
     append_scalar(out, static_cast<uint8_t>(0)); append_scalar(out, static_cast<int32_t>(0));
     append_scalar(out, static_cast<int32_t>(0)); append_scalar(out, static_cast<int16_t>(0));
+    append_scalar(out, static_cast<int32_t>(0)); append_scalar(out, static_cast<int32_t>(0));
+    append_scalar(out, static_cast<int16_t>(0)); append_scalar(out, static_cast<int32_t>(0));
+    append_scalar(out, static_cast<uint8_t>(0)); append_scalar(out, static_cast<int32_t>(0));
+    append_scalar(out, static_cast<int32_t>(0)); append_scalar(out, static_cast<int16_t>(0));
+    append_scalar(out, static_cast<int32_t>(0)); append_scalar(out, static_cast<int32_t>(0));
+    append_scalar(out, static_cast<int16_t>(0)); append_scalar(out, static_cast<int32_t>(0));
     append_scalar(out, static_cast<uint8_t>(0)); append_scalar(out, static_cast<uint8_t>(0));
     append_scalar(out, static_cast<int16_t>(0));
     append_scalar(out, 0.0f); append_scalar(out, 0.0f); append_scalar(out, 0.0f);
+    append_scalar(out, static_cast<int32_t>(0)); append_scalar(out, 0.0f);
+    append_scalar(out, static_cast<uint8_t>(0)); append_scalar(out, static_cast<uint8_t>(0));
   }
 
   // trafficSignal
@@ -409,14 +454,22 @@ void encode_carrot_navi(std::string &out, const DynamicReader &value) {
   if (sg.has_value()) {
     append_bool(out, *sg, "visible");
     append_i32(out, *sg, "distanceM");
-    for (const char *k : {"redValid","redOn","leftValid","leftOn","greenValid","greenOn",
-                          "rightValid","rightOn","uturnValid","uturnOn"}) {
-      append_bool(out, *sg, k);
-    }
+    append_bool(out, *sg, "redValid"); append_bool(out, *sg, "redOn"); append_i16(out, *sg, "redRemainSec");
+    append_bool(out, *sg, "leftValid"); append_bool(out, *sg, "leftOn"); append_i16(out, *sg, "leftRemainSec");
+    append_bool(out, *sg, "greenValid"); append_bool(out, *sg, "greenOn"); append_i16(out, *sg, "greenRemainSec");
+    append_bool(out, *sg, "rightValid"); append_bool(out, *sg, "rightOn"); append_i16(out, *sg, "rightRemainSec");
+    append_bool(out, *sg, "uturnValid"); append_bool(out, *sg, "uturnOn"); append_i16(out, *sg, "uturnRemainSec");
+    append_bool(out, *sg, "uiCounterValid"); append_i16(out, *sg, "uiCounterRemainSec");
   } else {
     append_scalar(out, static_cast<uint8_t>(0));
     append_scalar(out, static_cast<int32_t>(0));
-    for (int i = 0; i < 10; ++i) append_scalar(out, static_cast<uint8_t>(0));
+    for (int i = 0; i < 5; ++i) {
+      append_scalar(out, static_cast<uint8_t>(0));
+      append_scalar(out, static_cast<uint8_t>(0));
+      append_scalar(out, static_cast<int16_t>(0));
+    }
+    append_scalar(out, static_cast<uint8_t>(0));
+    append_scalar(out, static_cast<int16_t>(0));
   }
 
   // crossroad
@@ -437,10 +490,11 @@ void encode_carrot_navi(std::string &out, const DynamicReader &value) {
   if (rt.has_value()) {
     append_i32(out, *rt, "remainingDistanceM");
     append_i32(out, *rt, "remainingTimeSec");
+    append_i32(out, *rt, "movedDistanceM");
     append_i32(out, *rt, "totalDistanceM");
     append_coord_list(out, *rt, "polyline");
   } else {
-    for (int i = 0; i < 3; ++i) append_scalar(out, static_cast<int32_t>(0));
+    for (int i = 0; i < 4; ++i) append_scalar(out, static_cast<int32_t>(0));
     append_scalar(out, static_cast<uint8_t>(0));
   }
 
@@ -549,6 +603,10 @@ void encode_car_state(std::string &out, const DynamicReader &value) {
   append_f32(out, value, "tpms", "fr");
   append_f32(out, value, "tpms", "rl");
   append_f32(out, value, "tpms", "rr");
+  // Appended at the end to match compact_state.py / vision_compact.js (schema
+  // evolution: order must stay identical across all three). Green EV telltale.
+  append_bool(out, value, "evModeValid");
+  append_bool(out, value, "evModeActive");
 }
 
 void encode_controls_state(std::string &out, const DynamicReader &value) {
@@ -629,6 +687,9 @@ void encode_longitudinal_plan(std::string &out, const DynamicReader &value) {
   append_i32(out, value, "xState");
   append_i32(out, value, "trafficState");
   append_enum(out, value, "longitudinalPlanSource");
+  // Appended at the end to match compact_state.py / vision_compact.js. Eco
+  // cruise override telltale.
+  append_f32(out, value, "cruiseTarget");
 }
 
 void encode_model_v2(std::string &out, const DynamicReader &value) {

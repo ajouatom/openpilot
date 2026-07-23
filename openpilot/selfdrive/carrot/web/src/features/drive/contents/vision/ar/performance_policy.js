@@ -1,10 +1,10 @@
 /* 접속 브라우저 Worker의 AR 처리시간 정책.
  *
  * 단일 느린 frame에는 반응하지 않는다. 일정 window에서 frame budget을 넘긴 비율이
- * 충분히 높을 때만 20→15fps로 한 번 강등한다. 느린 기기에서 15fps가 계속
- * 빠듯하다는 이유만으로 정상 WebGL context를 영구 종료하지 않는다. 실제 renderer
- * 오류와 context loss만 fail-closed하고, 성능 부족은 최신 프레임 우선 백프레셔가
- * 흡수한다. 강등은 세션 동안 유지해 20/15 왕복 떨림을 막는다.
+ * 충분히 높을 때만 30→15fps로 강등한다. 복구는 target 30fps budget에 대한 충분한
+ * headroom이 긴 window 동안 확인될 때만 허용해 30/15 왕복 떨림을 막는다. 정상
+ * WebGL context는 성능 부족만으로 종료하지 않고 최신 프레임 우선 백프레셔가
+ * 흡수한다. 실제 renderer 오류와 context loss만 fail-closed한다.
  */
 
 import { AR_RENDER } from "./tokens.js";
@@ -34,10 +34,21 @@ export function createRenderPerformancePolicy(options = {}) {
     degradeWindowFrames,
     positiveInteger(options.degradeSlowFrames, defaults.degradeSlowFrames),
   );
+  const recoverBudgetRatio = positiveNumber(options.recoverBudgetRatio, defaults.recoverBudgetRatio);
+  const recoverWindowFrames = positiveInteger(
+    options.recoverWindowFrames,
+    defaults.recoverWindowFrames,
+  );
+  const recoverFastFrames = Math.min(
+    recoverWindowFrames,
+    positiveInteger(options.recoverFastFrames, defaults.recoverFastFrames),
+  );
   let level = "target";
   let fps = targetFps;
   let samples = [];
+  let recoverySamples = [];
   let totalFrames = 0;
+  let transitions = 0;
   let lastWorkMs = 0;
   let averageWorkMs = 0;
 
@@ -52,7 +63,10 @@ export function createRenderPerformancePolicy(options = {}) {
       averageWorkMs,
       sampledFrames: samples.length,
       slowFrames: samples.reduce((count, slow) => count + Number(slow), 0),
+      recoverySampledFrames: recoverySamples.length,
+      fastFrames: recoverySamples.reduce((count, fast) => count + Number(fast), 0),
       totalFrames,
+      transitions,
       failed: false,
     });
   }
@@ -71,12 +85,27 @@ export function createRenderPerformancePolicy(options = {}) {
     samples.push(slow);
     if (samples.length > degradeWindowFrames) samples.shift();
 
+    const fastForTarget = duration <= (1000 / targetFps) * recoverBudgetRatio;
+    recoverySamples.push(fastForTarget);
+    if (recoverySamples.length > recoverWindowFrames) recoverySamples.shift();
+
     const slowFrames = samples.reduce((count, value) => count + Number(value), 0);
     if (level === "target" && samples.length === degradeWindowFrames
         && slowFrames >= degradeSlowFrames && degradedFps < targetFps) {
       level = "degraded";
       fps = degradedFps;
       samples = [];
+      recoverySamples = [];
+      transitions += 1;
+    } else if (level === "degraded" && recoverySamples.length === recoverWindowFrames) {
+      const fastFrames = recoverySamples.reduce((count, value) => count + Number(value), 0);
+      if (fastFrames >= recoverFastFrames) {
+        level = "target";
+        fps = targetFps;
+        samples = [];
+        recoverySamples = [];
+        transitions += 1;
+      }
     }
 
     return snapshot();

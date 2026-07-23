@@ -34,6 +34,7 @@ CARROT_LEGACY_STATE_DIR = "/data/openpilot/openpilot/selfdrive/carrot/data/state
 CARROT_GIT_STATE_PATH = os.path.join(CARROT_STATE_DIR, "git.json")
 CARROT_TOOL_JOBS_STATE_PATH = os.path.join(CARROT_STATE_DIR, "tool_jobs.json")
 CARROT_WEB_SETTINGS_PATH = os.path.join(CARROT_STATE_DIR, "web_settings.json")
+CARROT_DASHCAM_READ_STATE_PATH = os.path.join(CARROT_STATE_DIR, "dashcam_read_state.json")
 CARROT_SETTING_FAVORITES_PATH = os.path.join(CARROT_STATE_DIR, "setting_favorites.json")
 CARROT_SETTING_PROFILES_PATH = os.path.join(CARROT_STATE_DIR, "setting_profiles.json")
 CARROT_PARAM_CHANGES_PATH = os.path.join(CARROT_STATE_DIR, "param_changes.jsonl")

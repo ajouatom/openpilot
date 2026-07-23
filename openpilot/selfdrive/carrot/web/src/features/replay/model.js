@@ -15,7 +15,7 @@ window.CarrotReplayInsightsModel = window.CarrotReplayInsightsModel || (() => {
     const previous = {};
     const lastEventAt = new Map();
 
-    function pushEvent({ timeMs, category, type, params = {}, sourceTitle = "", sourceDetail = "", dedupeKey = "" }) {
+    function pushEvent({ timeMs, category, type, params = {}, sourceTitle = "", sourceDetail = "", sourceTag = "", dedupeKey = "" }) {
       const key = `${category}:${type}:${dedupeKey}`;
       const cooldownMs = POLICY.eventCooldownMs[category] || 1500;
       const lastTimeMs = Number(lastEventAt.get(key));
@@ -29,6 +29,7 @@ window.CarrotReplayInsightsModel = window.CarrotReplayInsightsModel || (() => {
         params: { ...params },
         sourceTitle: String(sourceTitle || "").trim(),
         sourceDetail: String(sourceDetail || "").trim(),
+        sourceTag: String(sourceTag || "").trim(),
       });
     }
 
@@ -98,6 +99,7 @@ window.CarrotReplayInsightsModel = window.CarrotReplayInsightsModel || (() => {
             type: "navigation_maneuver",
             params: { turnInfo, distanceM },
             sourceTitle: title,
+            sourceTag: "CarrotMan",
             dedupeKey: navKey,
           });
         }

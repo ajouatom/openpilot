@@ -142,7 +142,21 @@ function scheduleScreenrecordWindowRender() {
 
 function openScreenrecordPlayer(id, name) {
   if (!id) return;
-  openLogsVideoPlayer(name || getUIText("logs_screenrecord", "Screen Record"), screenrecordApiPath("video", id), { kind: "screenrecord" });
+  const videos = screenrecordState.videos || [];
+  const position = videos.findIndex((video) => String(video?.id || "") === String(id));
+  const previous = position > 0 ? videos[position - 1] : null;
+  const next = position >= 0 && position < videos.length - 1 ? videos[position + 1] : null;
+  openLogsVideoPlayer(name || getUIText("logs_screenrecord", "Screen Record"), screenrecordApiPath("video", id), {
+    kind: "screenrecord",
+    onPrevious: previous ? ({ close } = {}) => {
+      close?.();
+      openScreenrecordPlayer(previous.id || "", previous.name || "");
+    } : null,
+    onNext: next ? ({ close } = {}) => {
+      close?.();
+      openScreenrecordPlayer(next.id || "", next.name || "");
+    } : null,
+  });
 }
 
 function screenrecordVideoRowHtml(video, index = 0) {

@@ -1,0 +1,224 @@
+/* AR 진단 패널.
+ *
+ * 앱의 팝업 표면 언어를 따른다: --md-* 색, --sp-* 간격, --r-* 반경, --font-sans
+ * 로 읽고 --font-mono 는 수치에만. 스테이지 안에 붙어 리플레이/주행 화면에서만
+ * 보이며, 리플레이의 타이틀바/인사이트 패널만큼 자동으로 비켜 앉는다.
+ */
+
+.ar-debug {
+  --ar-debug-gap: var(--sp-xs, 4px);
+  --ar-debug-label: var(--md-on-surface-var, #9aa5b1);
+  --ar-debug-rule: var(--md-outline-var, rgba(255, 255, 255, 0.12));
+
+  position: absolute;
+  top: calc(var(--carrot-replay-titlebar-height, 0px) + var(--sp-sm, 8px));
+  right: calc(var(--carrot-replay-content-right, 0px) + var(--sp-sm, 8px));
+  z-index: var(--drive-layer-transport, 60);
+
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(292px, calc(100% - 2 * var(--sp-sm, 8px)));
+  max-height: min(76%, 500px);
+  padding: var(--sp-sm, 10px);
+
+  border: 1px solid var(--md-stroke-soft, rgba(255, 255, 255, 0.10));
+  border-radius: var(--r-md, 12px);
+  background: color-mix(in srgb, var(--md-surface-cont, #12171d) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-4, 0 8px 28px rgba(0, 0, 0, 0.45));
+
+  color: var(--md-on-surface, #e8eef4);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 11.5px;
+  line-height: 1.5;
+
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ar-debug[hidden] { display: none; }
+
+/* ── 헤더 ─────────────────────────────────────────── */
+
+.ar-debug__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs, 6px);
+  flex: 0 0 auto;
+  min-width: 0;
+  padding-bottom: var(--sp-xs, 6px);
+  border-bottom: 1px solid var(--ar-debug-rule);
+}
+
+/* 상태 배지. 점 하나보다 읽기 쉽고 앱의 chip 언어와 맞는다. */
+.ar-debug__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 2px 8px;
+  border-radius: var(--r-round, 999px);
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ar-debug__badgeDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: var(--r-round, 999px);
+  background: currentColor;
+}
+
+.ar-debug__action {
+  flex: 0 0 auto;
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 4px 9px;
+  border: 1px solid var(--md-outline, rgba(255, 255, 255, 0.22));
+  border-radius: var(--r-sm, 8px);
+  background: transparent;
+  color: var(--md-on-surface-var, #c6d0da);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  transition: background var(--dur-quick, 120ms) var(--ease-standard, ease),
+              color var(--dur-quick, 120ms) var(--ease-standard, ease);
+}
+
+.ar-debug__action:hover {
+  background: var(--md-primary-state-soft, rgba(255, 255, 255, 0.10));
+  color: var(--md-on-surface, #e8eef4);
+}
+
+.ar-debug__action:active { background: var(--md-primary-state-strong, rgba(255, 255, 255, 0.18)); }
+
+.ar-debug__action--capture {
+  border-color: color-mix(in srgb, var(--md-primary, #14bc68) 64%, transparent);
+  color: var(--md-primary, #14bc68);
+  white-space: nowrap;
+}
+
+.ar-debug__action--capture[data-capture-state="preparing"],
+.ar-debug__action--capture[data-capture-state="running"],
+.ar-debug__action--capture[data-capture-state="saving"] {
+  background: color-mix(in srgb, var(--md-primary, #14bc68) 18%, transparent);
+}
+
+.ar-debug__action:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+/* ── 본문 스크롤 영역 ─────────────────────────────── */
+
+.ar-debug__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  pointer-events: auto;
+  user-select: text;
+  scrollbar-width: thin;
+  scrollbar-color: var(--md-outline, rgba(255, 255, 255, 0.22)) transparent;
+}
+
+.ar-debug__body::-webkit-scrollbar { width: 6px; }
+.ar-debug__body::-webkit-scrollbar-thumb {
+  border-radius: var(--r-round, 999px);
+  background: var(--md-outline, rgba(255, 255, 255, 0.22));
+}
+
+/* ── 섹션 / 행 ────────────────────────────────────── */
+
+.ar-debug__sectionLabel {
+  margin: var(--sp-sm, 9px) 0 3px;
+  color: var(--ar-debug-label);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.ar-debug__sectionLabel:first-child { margin-top: var(--sp-xs, 5px); }
+
+.ar-debug__row {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--sp-sm, 10px);
+  padding: 1px 0;
+  min-width: 0;
+}
+
+/* 값이 긴 항목은 라벨 아래로 흘려 두 줄을 쓴다(잘림 방지). */
+.ar-debug__row--wide { grid-template-columns: minmax(0, 1fr); gap: 0; }
+
+.ar-debug__key {
+  color: var(--ar-debug-label);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.ar-debug__value {
+  min-width: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ar-debug__row--wide .ar-debug__value {
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--md-on-surface-var, #c6d0da);
+}
+
+.ar-debug__value--ok { color: var(--md-success, #4ade80); }
+.ar-debug__value--warn { color: var(--md-warning, #fbbf24); }
+.ar-debug__value--idle { color: var(--md-on-surface-var, #94a3b8); }
+.ar-debug__value--off { color: var(--md-outline, #64748b); }
+
+/* ── 사유 ─────────────────────────────────────────── */
+
+.ar-debug__reason {
+  flex: 0 0 auto;
+  margin-top: var(--sp-xs, 6px);
+  padding-top: var(--sp-xs, 6px);
+  border-top: 1px solid var(--ar-debug-rule);
+  color: var(--md-warning, #fbbf24);
+  font-size: 10.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.ar-debug__reason[hidden] { display: none; }
+
+/* ── 푸터(수집 상태) ──────────────────────────────── */
+
+.ar-debug__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-xs, 6px);
+  flex: 0 0 auto;
+  margin-top: var(--sp-xs, 6px);
+  padding-top: var(--sp-xs, 6px);
+  border-top: 1px solid var(--ar-debug-rule);
+  color: var(--ar-debug-label);
+  font-size: 9.5px;
+}
+
+.ar-debug__footCount { margin-left: auto; font-family: var(--font-mono, monospace); }

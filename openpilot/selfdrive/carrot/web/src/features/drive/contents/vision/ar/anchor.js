@@ -22,10 +22,13 @@ import {
   rotateByRotationVector,
   rotateRoadFrame,
 } from "./road_frame.js";
+import { AR_COORDINATE_FRAME, assertCoordinateFrame } from "./coordinate_frames.js";
 
 export const AR_HOLD_LIMITS = Object.freeze({
-  maxHoldMs: 1500,
-  maxDriftM: 1.0,
+  // 일단 보이는 게 우선: 새 model fix 없이도 더 오래(odometry로) 유지하고,
+  // 더 큰 drift까지 그린 채로 둔다.
+  maxHoldMs: 3500,
+  maxDriftM: 2.5,
   /* 적분 자체를 신뢰할 수 없는 dt. 탭 전환·끊김 후 되돌아온 경우
    * dt 가 크게 튀는데, 그걸 그대로 적분하면 표지가 순간이동한다. */
   maxStepMs: 200,
@@ -45,7 +48,7 @@ function finite(v, fallback = null) {
 /**
  * 자차가 dt 동안 움직였을 때, 세상에 고정된 점의 자차 기준 좌표를 갱신한다.
  *
- * 좌표계는 openpilot device frame: x 전방, y 좌측, z 상방.
+ * 좌표계는 AR route-local FLU: x 전방, y 좌측, z 상방.
  * cameraOdometry.trans 는 자차 속도(m/s), rot 은 각속도(rad/s).
  *
  * 자차가 앞으로 가면 점은 가까워지고(x 감소), 자차가 좌회전(+yaw)하면
@@ -54,6 +57,10 @@ function finite(v, fallback = null) {
 export function advanceAnchor(anchor, odometry, dtSeconds) {
   const dt = finite(dtSeconds, 0);
   if (!anchor || !odometry || !(dt > 0)) return anchor || null;
+  // Pure legacy fixtures may omit metadata; any declared frame is strict.
+  if (odometry.coordinateFrame !== undefined) {
+    assertCoordinateFrame(odometry, AR_COORDINATE_FRAME.ROUTE_FLU, "anchor odometry");
+  }
 
   const trans = Array.isArray(odometry.trans) ? odometry.trans : [];
   const rot = Array.isArray(odometry.rot) ? odometry.rot : [];
@@ -66,7 +73,7 @@ export function advanceAnchor(anchor, odometry, dtSeconds) {
     -finite(rot[2], 0) * dt,
   ];
 
-  // A static world point seen from the next device frame is the inverse ego
+  // A static world point seen from the next route-local frame is the inverse ego
   // motion: first remove translation, then apply the inverse 3D rotation.
   const position = rotateByRotationVector([
     finite(anchor.x, 0) - vx * dt,
@@ -147,7 +154,7 @@ export function createAnchorHold(options = {}) {
    * @param input.nowMs      단조 증가 시각
    * @param input.fresh      canDrawPrecise 일 때의 앵커 배열. 아니면 null.
    * @param input.canHold    sync.canHoldAnchor (odometry 를 믿어도 되는가)
-   * @param input.odometry   overlayState.cameraOdometry
+   * @param input.odometry   route-local FLU로 변환된 cameraOdometry
    */
   function update(input = {}) {
     const now = finite(input.nowMs, null);
@@ -178,12 +185,12 @@ export function createAnchorHold(options = {}) {
       return { state, anchors: null, holdMs, driftM, reason };
     }
 
-    // 3) dt 가 비정상이면 적분하지 않고 놓는다(탭 전환·긴 끊김).
+    // 3) 큰 scheduling gap은 seek가 아니다. 앵커는 유지하고 이 구간만
+    // 적분하지 않는다. 실제 seek/domain/session 경계 reset은 runtime 계약이 맡는다.
     if (dtMs > limits.maxStepMs) {
-      reset();
-      state = AR_HOLD_STATE.DROPPED;
-      reason = `프레임 간격 ${Math.round(dtMs)}ms — 적분 불가`;
-      return { state, anchors: null, holdMs, driftM, reason };
+      state = AR_HOLD_STATE.HELD;
+      reason = `프레임 간격 ${Math.round(dtMs)}ms — 앵커 유지, 적분 생략`;
+      return { state, anchors, holdMs, driftM, reason };
     }
 
     const dt = Math.max(0, dtMs) / 1000;

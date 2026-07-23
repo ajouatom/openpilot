@@ -15,6 +15,7 @@ from .paths import (
 
 DASHCAM_SEGMENT_SECONDS = 60
 RLOG_SOURCE_NAMES = ("rlog.zst", "rlog.bz2", "rlog")
+QLOG_SOURCE_NAMES = ("qlog.zst", "qlog.bz2", "qlog")
 _MODERN_ROUTE_PATTERN = re.compile(r"^([0-9a-fA-F]{8})--([0-9a-fA-F]{10})$")
 
 # A finished segment's recording end time never changes, so once we've stat'd a
@@ -65,6 +66,15 @@ def source_rlog(segment_dir_path: str) -> tuple[str, str]:
     if os.path.isfile(path) and os.path.getsize(path) > 0:
       return path, name
   raise web.HTTPNotFound(text="rlog not found")
+
+
+def source_qlog(segment_dir_path: str) -> tuple[str, str]:
+  """Return the reduced-frequency recorded log without parsing it."""
+  for name in QLOG_SOURCE_NAMES:
+    path = os.path.join(segment_dir_path, name)
+    if os.path.isfile(path) and os.path.getsize(path) > 0:
+      return path, name
+  raise web.HTTPNotFound(text="qlog not found")
 
 
 def route_creation_key(route: str) -> tuple[int, int, str, str]:

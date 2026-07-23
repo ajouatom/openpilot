@@ -293,7 +293,16 @@
   gap: 3px;
 }
 
+.web-settings-row__title-line {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-xs) var(--sp-sm);
+}
+
 .web-settings-row__title {
+  min-width: 0;
   color: var(--md-on-surface);
   font-size: var(--fs-body-sm);
   font-weight: 800;
@@ -301,6 +310,15 @@
   white-space: normal;
   word-break: keep-all;
   overflow-wrap: anywhere;
+}
+
+.web-settings-row__lock {
+  --chip-font-size: 11px;
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding-inline: var(--sp-sm);
+  border-color: color-mix(in srgb, var(--md-outline-var) 54%, transparent);
+  background: color-mix(in srgb, var(--md-surface-cont-h) 88%, transparent);
 }
 
 .web-settings-row__desc,

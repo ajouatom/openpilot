@@ -18,24 +18,35 @@ test("isolated slow frames do not lower the Three AR cadence", () => {
   assert.equal(policy.status().failed, false);
 });
 
-test("sustained 30fps budget misses degrade once to 20fps", () => {
+test("sustained 30fps budget misses degrade to the low-load 15fps tier", () => {
   const policy = createRenderPerformancePolicy();
   const status = observeMany(policy, 12, 36);
 
   assert.equal(status.level, "degraded");
-  assert.equal(status.fps, 20);
+  assert.equal(status.fps, 15);
   assert.equal(status.sampledFrames, 0);
   assert.equal(status.failed, false);
 
-  assert.equal(observeMany(policy, 60, 18).fps, 20);
+  assert.equal(status.transitions, 1);
 });
 
-test("sustained 20fps budget misses stay degraded instead of killing AR", () => {
+test("sustained 15fps budget misses stay degraded instead of killing AR", () => {
   const policy = createRenderPerformancePolicy();
   observeMany(policy, 12, 36);
   const status = observeMany(policy, 30, 55);
 
   assert.equal(status.level, "degraded");
-  assert.equal(status.fps, 20);
+  assert.equal(status.fps, 15);
   assert.equal(status.failed, false);
+});
+
+test("degraded rendering recovers only after sustained target-budget headroom", () => {
+  const policy = createRenderPerformancePolicy();
+  observeMany(policy, 12, 36);
+
+  assert.equal(observeMany(policy, 60, 28).fps, 15, "fitting 15fps alone must not oscillate");
+  const recovered = observeMany(policy, 60, 18);
+  assert.equal(recovered.level, "target");
+  assert.equal(recovered.fps, 30);
+  assert.equal(recovered.transitions, 2);
 });

@@ -63,7 +63,11 @@ const WEB_SETTINGS_GROUPS = [
         id: "vision_ar_enabled",
         titleKey: "web_vision_ar_enabled",
         descKey: "web_vision_ar_enabled_desc",
-        disabled: true,
+      },
+      {
+        id: "vision_ar_debug",
+        titleKey: "web_vision_ar_debug",
+        descKey: "web_vision_ar_debug_desc",
       },
     ],
   },

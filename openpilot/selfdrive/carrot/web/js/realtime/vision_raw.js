@@ -52,15 +52,20 @@ let COMPACT_OVERLAY_REQUESTED = false;
 let COMPACT_FIRST_DATA_T = null;
 const MODEL_FRAME_HISTORY = [];
 const MODEL_FRAME_HISTORY_LIMIT = 64;
+const ROAD_FRAME_HISTORY = [];
+const ROAD_FRAME_HISTORY_LIMIT = 96;
 const RTP_FRAME_HISTORY = new Map();
 const RTP_FRAME_HISTORY_LIMIT = 96;
 let PRESENTED_VIDEO_FRAME_ID = null;
 let LAST_PRESENTED_RTP_TIMESTAMP = null;
 
 function publishPresentedFrame(detail = {}) {
+  const frame = presentedRoadFrame(PRESENTED_VIDEO_FRAME_ID);
   return window.DriveVisionPresentedFrames?.publish?.({
     ...detail,
     frameId: Number.isFinite(PRESENTED_VIDEO_FRAME_ID) ? PRESENTED_VIDEO_FRAME_ID : null,
+    cameraTimestampEof: frame?.timestampEof ?? null,
+    clockMappingConfidence: frame?.confidence ?? "unmapped",
   }) || null;
 }
 
@@ -100,6 +105,41 @@ function notePresentedVideoFrame(metadata) {
       : null;
   }
   publishPresentedFrame({ source: "live", metadata: metadata || null });
+}
+
+function rememberRoadCameraFrame(cameraState) {
+  const frameId = Number(cameraState?.frameId);
+  const timestampEof = Number(cameraState?.timestampEof);
+  if (!Number.isFinite(frameId) || !Number.isFinite(timestampEof) || timestampEof <= 0) return;
+  const sample = Object.freeze({ frameId, timestampEof });
+  const previous = ROAD_FRAME_HISTORY[ROAD_FRAME_HISTORY.length - 1];
+  if (previous?.frameId === frameId) ROAD_FRAME_HISTORY[ROAD_FRAME_HISTORY.length - 1] = sample;
+  else {
+    ROAD_FRAME_HISTORY.push(sample);
+    if (ROAD_FRAME_HISTORY.length > ROAD_FRAME_HISTORY_LIMIT) ROAD_FRAME_HISTORY.shift();
+  }
+}
+
+function presentedRoadFrame(frameIdValue) {
+  const frameId = Number(frameIdValue);
+  if (!Number.isFinite(frameId) || !ROAD_FRAME_HISTORY.length) return null;
+  let nearest = null;
+  for (let index = ROAD_FRAME_HISTORY.length - 1; index >= 0; index -= 1) {
+    const candidate = ROAD_FRAME_HISTORY[index];
+    if (candidate.frameId === frameId) {
+      return Object.freeze({ ...candidate, confidence: "exact-frame" });
+    }
+    if (!nearest || Math.abs(candidate.frameId - frameId) < Math.abs(nearest.frameId - frameId)) {
+      nearest = candidate;
+    }
+  }
+  const frameGap = frameId - nearest.frameId;
+  if (Math.abs(frameGap) > 3) return null;
+  return Object.freeze({
+    frameId,
+    timestampEof: nearest.timestampEof + frameGap * 50_000_000,
+    confidence: "estimated-frame",
+  });
 }
 
 function noteReplayPresentedFrame(metadata = {}) {
@@ -147,6 +187,7 @@ function selectSynchronizedModel() {
 
 function resetFrameSynchronization() {
   MODEL_FRAME_HISTORY.length = 0;
+  ROAD_FRAME_HISTORY.length = 0;
   RTP_FRAME_HISTORY.clear();
   PRESENTED_VIDEO_FRAME_ID = null;
   LAST_PRESENTED_RTP_TIMESTAMP = null;
@@ -179,7 +220,16 @@ function compactStateActive() {
   return COMPACT_OVERLAY_READY;
 }
 
+function recordedReplayActive() {
+  return Boolean(window.CarrotVisionReplay?.isActive?.());
+}
+
 function compactDesiredServices() {
+  // Recorded replay owns the whole compact-state timeline. Keeping the live
+  // socket open here lets current-device carrotNavi/cameraOdometry samples
+  // overwrite recorded samples between replay records, which presents as AR
+  // blinking and impossible clock-age jumps.
+  if (recordedReplayActive()) return [];
   const services = [];
   if (shouldRunCarrotHudData()) services.push(...RAW_HUD_SERVICES);
   if (
@@ -220,6 +270,7 @@ function applyCompactFrame(service, decoded, options = {}) {
   }
   if (isOverlayStateService(service)) {
     if (service === "modelV2") rememberModelFrame(decoded);
+    if (service === "roadCameraState") rememberRoadCameraFrame(decoded);
     RAW_OVERLAY_STATE[service] = decoded;
     window.CarrotOverlayState = RAW_OVERLAY_STATE;
     if (options.updateVisionState !== false) {
@@ -231,7 +282,7 @@ function applyCompactFrame(service, decoded, options = {}) {
   // Vision owns the latency-sensitive presentation request. Schedule it before
   // notifying auxiliary data consumers so an insights subscriber can never
   // delay the camera overlay's place in the browser task queue.
-  if (applied && options.render !== false) {
+  if (applied && options.render !== false && (hudDirty || overlayDirty)) {
     emitCarrotRenderRequest({
       hudDirty,
       overlayDirty,
@@ -291,7 +342,7 @@ function applyCompactFrames(frames, options = {}) {
       },
     }, { reason: options.reason || "compact batch", silent: true });
   }
-  if (applied && options.render !== false) {
+  if (applied && options.render !== false && (hudReady || overlayDirty)) {
     emitCarrotRenderRequest({ hudDirty: hudReady, overlayDirty });
   }
   // A decoded websocket/replay batch is one coherent state transition. Publish
@@ -585,6 +636,9 @@ function deriveCompactHudPayload(state) {
     tfBars: tfGap,
     gear: vehiclePayload.gear ?? compactHudGear(state),
     gearStep: vehiclePayload.gearStep ?? gearStep,
+    evActive: vehiclePayload.evActive,
+    activeLaneLine: vehiclePayload.activeLaneLine,
+    cruiseOverride: vehiclePayload.cruiseOverride,
     lfaActive: vehiclePayload.lfaActive,
     steeringAngleDeg: vehiclePayload.steeringAngleDeg,
     aEgo: vehiclePayload.aEgo,
@@ -679,6 +733,10 @@ function compactOverlayConnect() {
 
   ws.onmessage = async (event) => {
     try {
+      // A Blob conversion may complete after replay has started and the socket
+      // has been closed. Reject both sides of that async boundary so no late
+      // live sample can leak into recorded state.
+      if (recordedReplayActive()) return;
       if (typeof event.data === "string") {
         const hello = JSON.parse(event.data);
         if (hello?.mode !== COMPACT_STATE_MODE) {
@@ -687,6 +745,7 @@ function compactOverlayConnect() {
         return;
       }
       const data = event.data instanceof Blob ? await event.data.arrayBuffer() : event.data;
+      if (recordedReplayActive()) return;
       const frames = window.CarrotVisionCompact?.decodeFrames?.(data)
         || [window.CarrotVisionCompact?.decodeFrame?.(data)].filter(Boolean);
       const applied = applyCompactFrames(frames, { reason: "compact websocket batch" });

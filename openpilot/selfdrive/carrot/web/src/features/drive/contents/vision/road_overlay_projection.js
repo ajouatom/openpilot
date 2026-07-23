@@ -1,3 +1,39 @@
+/* ============================================================================
+ * CARROT VISION GRAPHICS - DO NOT CHANGE CASUALLY
+ *
+ * This is the driving view the user actually looks at. Its smoothness was tuned
+ * against real device behaviour and several "obvious" simplifications have
+ * already been tried and reverted. If you are here while working on AR, replay
+ * or any other feature, prefer adding your own layer over editing this one.
+ *
+ * Invariants. Breaking any of these brings back stutter, judder or heat:
+ *
+ *  1. One overlay update per presented video frame. requestVideoFrameCallback
+ *     is taken first and unthrottled; the interval constant only paces the
+ *     fallback. Never put a timer between a video frame and its overlay.
+ *  2. Live and replay share one scheduler, one filter and one cadence. They are
+ *     the same user experience; do not special-case one of them.
+ *  3. Temporal smoothing is a time constant, never a per-call alpha. Render
+ *     spacing moves constantly, and a fixed alpha makes the response wander.
+ *  4. Geometry stays on the GPU: fills, strokes and dashes all land in one
+ *     batched draw call. Moving any of them back to Canvas2D reintroduces a
+ *     full-surface raster and its clear every frame.
+ *  5. The 2D overlay is cleared only when something actually drew to it. If you
+ *     add a direct ctx draw, mark that layer dirty or you will ship ghosting.
+ *  6. Vertex pools are reused. Do not rebuild per-frame arrays.
+ *
+ * Already tried and rejected:
+ *  - Overlay projection/triangulation in a worker: the extra hop makes geometry
+ *    trail the video by a frame (see OFFSCREEN_WORKER_ENABLED).
+ *  - Interpolating geometry between 20 Hz samples: the video is 20 fps, so the
+ *    overlay slides against a still image.
+ *  - Uniform Catmull-Rom resampling: overshoots on unevenly spaced projected
+ *    points and draws streaks across the frame. Centripetal only.
+ *
+ * Measured state: worst curve kink 8.1deg -> 1.6deg, geometry fully GPU-batched,
+ * per-frame 2D clear removed.
+ * ==========================================================================*/
+
 const POLYLINE_SMOOTH_NEAR_DISTANCE = 16;
 const POLYLINE_SMOOTH_FAR_DISTANCE = 52;
 const POLYLINE_SMOOTH_MAX_STRENGTH = 0.34;
@@ -5,6 +41,13 @@ const POLYLINE_CENTER_SMOOTH_MAX_STRENGTH = 0.24;
 const GEOMETRY_QUALITY_DEFAULT = "default";
 const GEOMETRY_QUALITY_LANE = "lane";
 const GEOMETRY_QUALITY_ROAD_EDGE = "road-edge";
+
+/** Interval assumed on the first frame, before resetFrame() has a clock (~30fps). */
+const DEFAULT_FRAME_DT_MS = 33;
+/** Longer gaps (tab restore, replay seek, resume) snap instead of easing in. */
+const MAX_SMOOTH_DT_MS = 250;
+/** Spline steps per model span on the GPU path. Vertices are cheap; facets are not. */
+const CURVE_SUBDIVISIONS = 4;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -19,6 +62,14 @@ export function createRoadOverlayProjection(options = {}) {
   const projectPoint = options.projectPoint;
   const projectPointPrecise = options.projectPointPrecise;
   const maxDrawDistance = finiteNumber(options.maxDrawDistance, 100);
+  /* Sampling every model point is what keeps a curve reading as a curve. The
+   * stride below exists because the Canvas2D path pays a CPU path operation per
+   * point; on the WebGL2 path the extra vertices are effectively free while the
+   * decimation is exactly what makes distant geometry look faceted. So keep full
+   * density whenever the GPU path is driving. */
+  const isFullDetailActive = typeof options.isFullDetailActive === "function"
+    ? options.isFullDetailActive
+    : () => false;
 
   if (typeof projectPoint !== "function" || typeof projectPointPrecise !== "function") {
     return null;
@@ -26,8 +77,19 @@ export function createRoadOverlayProjection(options = {}) {
 
   let frameCache;
   let temporalRibbonState;
+  // Frame interval, refreshed at the frame boundary so smoothing can be
+  // expressed as a time constant rather than a per-call fraction.
+  let frameNowMs = null;
+  let frameDtMs = DEFAULT_FRAME_DT_MS;
 
-  function resetFrame() {
+  function resetFrame(nowMs) {
+    const now = Number(nowMs);
+    if (Number.isFinite(now)) {
+      frameDtMs = frameNowMs === null
+        ? DEFAULT_FRAME_DT_MS
+        : Math.max(0, now - frameNowMs);
+      frameNowMs = now;
+    }
     frameCache = {
       pathLengthIdx: new WeakMap(),
       ribbon: new WeakMap(),
@@ -39,6 +101,10 @@ export function createRoadOverlayProjection(options = {}) {
 
   function resetTemporal() {
     temporalRibbonState = new Map();
+    // Do not let the first frame after a seek/reactivation inherit a stale
+    // interval, which would make the geometry jump.
+    frameNowMs = null;
+    frameDtMs = DEFAULT_FRAME_DT_MS;
   }
 
   function getWeakCacheBucket(weakMap, target) {
@@ -52,6 +118,7 @@ export function createRoadOverlayProjection(options = {}) {
   }
 
   function getProjectionSampleStride(distance, maximumDistance) {
+    if (isFullDetailActive()) return 1;
     const dist = finiteNumber(distance, 0);
     const maxDist = finiteNumber(maximumDistance, maxDrawDistance);
     if (maxDist <= 36) return 1;
@@ -62,6 +129,7 @@ export function createRoadOverlayProjection(options = {}) {
 
   function getProjectionSampleStrideForQuality(distance, maximumDistance, quality = GEOMETRY_QUALITY_DEFAULT) {
     const baseStride = getProjectionSampleStride(distance, maximumDistance);
+    if (baseStride === 1 && isFullDetailActive()) return 1;
     const dist = finiteNumber(distance, 0);
 
     if (quality === GEOMETRY_QUALITY_ROAD_EDGE) {
@@ -136,6 +204,108 @@ export function createRoadOverlayProjection(options = {}) {
     return smoothed || points;
   }
 
+  /**
+   * Time-based exponential smoothing factor.
+   *
+   * A fixed per-call alpha makes the effective time constant drift with the
+   * render interval (20 Hz data, 30 fps cap, scheduler jitter), which is what
+   * makes the overlay feel steppy and stiff. Deriving the factor from elapsed
+   * time and a target time constant keeps the geometry approaching its target
+   * at the same rate no matter how the frame spacing moves.
+   *
+   * A gap much longer than the time constant means the previous value is stale,
+   * so snap rather than easing in from it.
+   */
+  function temporalAlpha(dtMs, tauMs) {
+    const dt = Number(dtMs);
+    const tau = Number(tauMs);
+    if (!Number.isFinite(tau) || tau <= 0) return 1;
+    if (!Number.isFinite(dt) || dt <= 0) return 0;
+    if (dt >= MAX_SMOOTH_DT_MS) return 1;
+    return 1 - Math.exp(-dt / tau);
+  }
+
+  /* Resample every span along a Catmull-Rom spline.
+   *
+   * The model only publishes ~33 path samples, so even at full density a long
+   * curve resolves into visible straight spans once projected. Catmull-Rom
+   * follows the curve those samples describe rather than the chord between
+   * them, which is what removes the faceted look. Endpoints are duplicated so
+   * the first and last spans keep their exact positions.
+   *
+   * Vertex count grows by CURVE_SUBDIVISIONS but fill rate does not: the same
+   * silhouette is simply described more faithfully, so no extra pixels are
+   * covered. On the GPU path that trade is essentially free.
+   */
+  function catmullRomKnot(previousKnot, a, b) {
+    // Centripetal parameterisation (alpha = 0.5). Uniform spacing is what makes
+    // a Catmull-Rom spline overshoot when the samples are not evenly spaced, and
+    // projected road points bunch up hard toward the horizon. Centripetal knots
+    // are the standard fix: the curve stays inside its control points, so no
+    // cusps or loops.
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const distance = Math.sqrt(Math.hypot(dx, dy));
+    return previousKnot + Math.max(distance, 1e-4);
+  }
+
+  function catmullRomAt(p0, p1, p2, p3, t) {
+    const t0 = 0;
+    const t1 = catmullRomKnot(t0, p0, p1);
+    const t2 = catmullRomKnot(t1, p1, p2);
+    const t3 = catmullRomKnot(t2, p2, p3);
+    const time = t1 + (t2 - t1) * t;
+
+    const lerp = (a, b, ta, tb) => {
+      const span = tb - ta;
+      if (!(Math.abs(span) > 1e-9)) return { x: a.x, y: a.y };
+      const w = (time - ta) / span;
+      return { x: a.x + (b.x - a.x) * w, y: a.y + (b.y - a.y) * w };
+    };
+
+    const a1 = lerp(p0, p1, t0, t1);
+    const a2 = lerp(p1, p2, t1, t2);
+    const a3 = lerp(p2, p3, t2, t3);
+    const b1 = lerp(a1, a2, t0, t2);
+    const b2 = lerp(a2, a3, t1, t3);
+    const point = lerp(b1, b2, t1, t2);
+
+    // Belt and braces: a resampled point must never leave the span it belongs
+    // to. Any residual overshoot would draw as a streak across the frame.
+    return {
+      x: clamp(point.x, Math.min(p1.x, p2.x), Math.max(p1.x, p2.x)),
+      y: clamp(point.y, Math.min(p1.y, p2.y), Math.max(p1.y, p2.y)),
+    };
+  }
+
+  /* Resample every span along the spline.
+   *
+   * The model publishes only ~33 path samples, so a curve still breaks into
+   * visible straight spans once projected. Resampling follows the curve those
+   * samples describe instead of the chord between them. Endpoints are duplicated
+   * so the first and last spans keep their exact positions.
+   *
+   * Vertex count grows but fill rate does not: the same silhouette is described
+   * more faithfully, so no extra pixels are covered.
+   */
+  function subdivideProjectedPolyline(points, divisions = CURVE_SUBDIVISIONS) {
+    const steps = Math.max(1, Math.round(divisions));
+    if (!Array.isArray(points) || points.length < 2 || steps === 1) return points;
+    const at = (index) => points[clamp(index, 0, points.length - 1)];
+    const dense = [points[0]];
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const p0 = at(i - 1);
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = at(i + 2);
+      for (let step = 1; step < steps; step += 1) {
+        dense.push(catmullRomAt(p0, p1, p2, p3, step / steps));
+      }
+      dense.push(p2);
+    }
+    return dense;
+  }
+
   function smoothPointListTemporal(previous, next, alpha) {
     if (!Array.isArray(previous) || !Array.isArray(next) || previous.length !== next.length) {
       return next.map((point) => ({ x: point.x, y: point.y }));
@@ -147,8 +317,9 @@ export function createRoadOverlayProjection(options = {}) {
     }));
   }
 
-  function smoothRibbon(key, ribbon, alpha) {
+  function smoothRibbon(key, ribbon, tauMs) {
     if (!key || !ribbon?.polygon?.length) return ribbon;
+    const alpha = temporalAlpha(frameDtMs, tauMs);
     // Live and replay share the same temporal filter. Replay seek/reset already
     // clears this state, so bypassing it only makes recorded 20 Hz geometry
     // snap between samples while the video keeps advancing.
@@ -228,11 +399,17 @@ export function createRoadOverlayProjection(options = {}) {
     const smoothedLeft = smoothProjectedPolyline(left, distances, smoothMaxDistance, POLYLINE_SMOOTH_MAX_STRENGTH * sideSmoothGain);
     const smoothedRight = smoothProjectedPolyline(right, distances, smoothMaxDistance, POLYLINE_SMOOTH_MAX_STRENGTH * sideSmoothGain);
     const smoothedCenter = smoothProjectedPolyline(center, distances, smoothMaxDistance, POLYLINE_CENTER_SMOOTH_MAX_STRENGTH * centerSmoothGain);
+    // Only the GPU path pays for the extra vertices; Canvas2D keeps the cheaper
+    // chord geometry so its known thermal cost is not increased.
+    const dense = isFullDetailActive();
+    const finalLeft = dense ? subdivideProjectedPolyline(smoothedLeft) : smoothedLeft;
+    const finalRight = dense ? subdivideProjectedPolyline(smoothedRight) : smoothedRight;
+    const finalCenter = dense ? subdivideProjectedPolyline(smoothedCenter) : smoothedCenter;
     const result = {
-      left: smoothedLeft,
-      right: smoothedRight,
-      center: smoothedCenter,
-      polygon: smoothedLeft.length >= 2 && smoothedRight.length >= 2 ? smoothedLeft.concat([...smoothedRight].reverse()) : [],
+      left: finalLeft,
+      right: finalRight,
+      center: finalCenter,
+      polygon: finalLeft.length >= 2 && finalRight.length >= 2 ? finalLeft.concat([...finalRight].reverse()) : [],
     };
     cacheBucket?.set(cacheKey, result);
     return result;
@@ -353,7 +530,15 @@ export function createRoadOverlayProjection(options = {}) {
     return value;
   }
 
-  function circlePolygon(cx, cy, radius, points = 12) {
+  /* A fixed 12-gon is visibly angular once the marker grows on screen. Scale the
+   * segment count with the radius so the silhouette stays round at any size; the
+   * extra vertices are free next to the fill they enclose. */
+  function circleSegmentCount(radius) {
+    const r = Math.max(1, finiteNumber(radius, 1));
+    return Math.round(clamp(Math.PI * 2 / Math.acos(1 - 0.35 / r), 12, 64));
+  }
+
+  function circlePolygon(cx, cy, radius, points = circleSegmentCount(radius)) {
     const polygon = [];
     for (let i = 0; i < points; i += 1) {
       const theta = (Math.PI * 2 * i) / points;

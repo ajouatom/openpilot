@@ -10,6 +10,7 @@ export const COLORS = Object.freeze({
   carrot: "#14bc68",   // GREEN (20,188,104)
   blue: "#2684ff",     // BLUE (38,132,255)
   amber: "#f4ac36",    // AMBER (244,172,54)
+  override: "#b87018", // CRUISE_OVERRIDE_APPLY_COLOR (184,112,24) — 감속 오버라이드 주황
   limit: "#de4840",    // RED (222,72,64)
   stroke: "#05090c",   // 텍스트 외곽선
 });

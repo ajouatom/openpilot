@@ -39,6 +39,7 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
         vEgoCluster: { kind: "float32", offset: 14 },     // @44 32-bit slot 14
         vCruiseCluster: { kind: "float32", offset: 19 },  // @54 32-bit slot 19
         steeringAngleDeg: { kind: "float32", offset: 4 }, // @7  32-bit slot 4
+        yawRate: { kind: "float32", offset: 9 },           // @22 32-bit slot 9
         brakeHoldActive: { kind: "bool", offset: 356 },   // @38 bool bit 356
         softHoldActive: { kind: "int16", offset: 42 },    // @60 int16 slot 42
         carrotCruise: { kind: "int16", offset: 60 },      // @73 int16 slot 60
@@ -168,6 +169,7 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
       fields: {
         state: { kind: "enum", offset: 0, values: ["disabled", "preEnabled", "enabled", "softDisabling", "overriding"] },
         enabled: { kind: "bool", offset: 16 },
+        active: { kind: "bool", offset: 17 },
         engageable: { kind: "bool", offset: 18 },
         experimentalMode: { kind: "bool", offset: 19 },
         personality: { kind: "enum", offset: 5 },
@@ -590,9 +592,26 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     },
   };
 
+  const ONROAD_EVENT_SCHEMA = {
+    fields: {
+      // Keep this numeric. Summary policy owns the small set of EventName
+      // ordinals it groups instead of duplicating the full presentation enum.
+      name: { kind: "enum", offset: 0 },
+    },
+  };
+
   const REPLAY_SCHEMAS = {
     ...HUD_SCHEMAS,
     ...OVERLAY_SCHEMAS,
+    initData: { fields: { wallTimeNanos: { kind: "uint64", offset: 1 } } },
+    clocks: { fields: { wallTimeNanos: { kind: "uint64", offset: 3 } } },
+    carParams: {
+      fields: {
+        wheelbase: { kind: "float32", offset: 5 },
+        steerRatio: { kind: "float32", offset: 7 },
+      },
+    },
+    onroadEvents: { rootKind: "list<struct>", schema: ONROAD_EVENT_SCHEMA },
     carrotNavi: CARROT_NAVI_SCHEMA,
     driverMonitoringState: DRIVER_MONITORING_SCHEMA,
     qRoadEncodeIdx: {
@@ -608,6 +627,7 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
   // cereal Event union discriminants from the checked-in log.capnp schema.
   // These are wire discriminants, not the explicit @field ordinals.
   const EVENT_SERVICE_BY_DISCRIMINANT = new Map([
+    [0, "initData"],
     [1, "roadCameraState"],
     [5, "deviceState"],
     [6, "controlsState"],
@@ -616,10 +636,12 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     [21, "carState"],
     [22, "carControl"],
     [23, "longitudinalPlan"],
+    [34, "clocks"],
     [47, "gpsLocationExternal"],
     [60, "liveParameters"],
     [62, "cameraOdometry"],
     [63, "lateralPlan"],
+    [67, "carParams"],
     [73, "modelV2"],
     [78, "peripheralState"],
     [88, "qRoadEncodeIdx"],
@@ -631,6 +653,7 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     [127, "livePose"],
     [128, "selfdriveState"],
     [129, "liveTracks"],
+    [132, "onroadEvents"],
     [144, "liveDelay"],
     [149, "driverMonitoringState"],
   ]);
@@ -987,7 +1010,7 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     return decoded;
   }
 
-  function decodeReplayEvent(data, expectedService = "", excludedService = "") {
+  function decodeReplayEvent(data, expectedService = "", excludedService = "", includedServices = null) {
     const message = parseMessage(data);
     const eventRef = readStructPointer(message, 0, 0);
     if (!eventRef) return null;
@@ -998,12 +1021,20 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
     if (!service) return null;
     if (expectedService && service !== expectedService) return null;
     if (excludedService && service === excludedService) return null;
-    const payloadRef = readStructSlot(message, eventRef, 0);
-    if (!payloadRef) return null;
+    if (includedServices?.has && !includedServices.has(service)) return null;
     const logMonoTime = readScalar(message, eventRef, "uint64", 0);
     // Event.valid has a wire default of true, so the stored bit is inverted.
     const valid = !readScalar(message, eventRef, "bool", 80);
-    const decoded = decodeStruct(message, payloadRef, REPLAY_SCHEMAS[service]);
+    const schema = REPLAY_SCHEMAS[service];
+    let decoded;
+    if (schema?.rootKind === "list<struct>") {
+      decoded = readStructList(message, eventRef, 0)
+        .map((itemRef) => decodeStruct(message, itemRef, schema.schema));
+    } else {
+      const payloadRef = readStructSlot(message, eventRef, 0);
+      if (!payloadRef) return null;
+      decoded = decodeStruct(message, payloadRef, schema);
+    }
     if (service === "controlsState" && decoded?.torqueState) {
       Object.assign(decoded, decoded.torqueState);
       delete decoded.torqueState;

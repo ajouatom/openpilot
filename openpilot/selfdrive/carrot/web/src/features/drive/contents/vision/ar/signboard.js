@@ -402,12 +402,15 @@ export function signboardFromMarker(marker = {}) {
       return withKind(describeSignboard({
         ...common, tone: AR_TONE.CAUTION, primary: dist,
         secondary: marker.sdiFamily === "bump" ? "과속방지턱"
-          : marker.sdiFamily === "police" ? "경찰" : "단속카메라",
+          : marker.sdiFamily === "police" ? "경찰"
+            : marker.sdiFamily === "camera" ? "단속카메라" : "도로 주의",
       }));
     case "section_gate":
       return withKind(describeSignboard({
         ...common, tone: AR_TONE.RESTRICT, primary: String(marker.limitKph || ""),
-        secondary: `구간 평균 ${Math.round(marker.averageKph || 0)}`,
+        secondary: marker.suspended
+          ? "구간단속 일시중지"
+          : `구간 평균 ${Math.round(marker.averageKph || marker.overallAverageKph || 0)}`,
       }));
     case "speed_sign":
       return withKind(describeSignboard({
@@ -422,7 +425,9 @@ export function signboardFromMarker(marker = {}) {
       const NAME = { red: "정지", green: "직진", left: "좌회전", right: "우회전", uturn: "유턴" };
       return withKind(describeSignboard({
         ...common, tone: AR_TONE.CAUTION, primary: NAME[on.id] || "신호",
-        secondary: on.remainSec > 0 ? `${Math.round(on.remainSec)}초` : dist,
+        secondary: (on.remainSec > 0 || marker.counterRemainSec > 0)
+          ? `${Math.round(on.remainSec || marker.counterRemainSec)}초`
+          : dist,
       }));
     }
     case "crossroad_card":

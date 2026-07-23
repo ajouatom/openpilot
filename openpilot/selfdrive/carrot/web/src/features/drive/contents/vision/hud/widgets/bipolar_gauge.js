@@ -47,11 +47,11 @@ export function createBipolarGauge(doc, { label, ariaLabel }) {
     "clip-path": `url(#${clipId})`,
   });
   const valueText = svg(doc, "text", {
-    class: "chud-gauge-value", x: 31, y: VALUE_Y, "font-size": 17,
+    class: "chud-gauge-value", x: 31, y: VALUE_Y, "font-size": 20,
     "text-anchor": "middle", "dominant-baseline": "central",
   });
   const labelText = svg(doc, "text", {
-    class: "chud-gauge-label", x: 31, y: LABEL_Y, "font-size": 17,
+    class: "chud-gauge-label", x: 31, y: LABEL_Y, "font-size": 20,
     "text-anchor": "middle", "dominant-baseline": "central", fill: "#fff",
   });
   setText(labelText, label);

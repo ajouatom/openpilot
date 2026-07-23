@@ -18,11 +18,19 @@ import { createThreeArRenderer } from "./three_adapter.js";
 import { AR_HOLD_STATE } from "./anchor.js";
 import { createContinuousAnchorStore } from "./anchor_store.js";
 import { composeFrame } from "./compose.js";
+import { createMarkerIdentityTracker } from "./marker_identity.js";
+import { createRouteMatcher } from "./route_matcher.js";
 import { createRenderPerformancePolicy } from "./performance_policy.js";
+import { createDeviceWorldPose } from "./world_pose.js";
 
 let renderer = null;
 let anchorStore = null;
 let performancePolicy = null;
+let identityTracker = null;
+let routeMatcher = null;
+let worldPoseTracker = null;
+let worldPoseEpoch = null;
+let retainedComposeSources = { navi: null, modelPosition: null };
 let failed = "";
 
 function reply(message) {
@@ -45,6 +53,11 @@ function init(canvas, performanceOptions) {
     });
     if (!renderer) throw new Error("renderer 생성 실패");
     anchorStore = createContinuousAnchorStore();
+    identityTracker = createMarkerIdentityTracker();
+    routeMatcher = createRouteMatcher();
+    worldPoseTracker = createDeviceWorldPose();
+    worldPoseEpoch = null;
+    retainedComposeSources = { navi: null, modelPosition: null };
     performancePolicy = createRenderPerformancePolicy(performanceOptions);
     reply({ type: "ready", backend: "three" });
   } catch (error) {
@@ -61,10 +74,40 @@ function drawFrame(payload = {}) {
   const workStartedAt = workerNowMs();
   if (payload.timelineDiscontinuity === true) {
     anchorStore.reset();
+    identityTracker.reset();
+    routeMatcher.reset();
     renderer.reset?.();
   }
-  const composition = composeFrame(payload.composeInput || {});
-  const composeInput = payload.composeInput || {};
+  const requestedWorldEpoch = String(payload.worldPoseEpoch || "uninitialized");
+  if (payload.timelineDiscontinuity === true || worldPoseEpoch !== requestedWorldEpoch) {
+    worldPoseTracker.reset({
+      epoch: requestedWorldEpoch,
+      reason: payload.timelineDiscontinuityReason || "navigation/session epoch initialized",
+    });
+    worldPoseEpoch = requestedWorldEpoch;
+  }
+  const worldPose = payload.deviceOdometry
+    ? worldPoseTracker.update({
+      timestampNs: payload.worldPoseTargetTimestampNs,
+      odometry: payload.deviceOdometry,
+      livePose: payload.livePose,
+      geographicObservation: payload.geographicObservation,
+      trackingState: payload.tracking?.state,
+    })
+    : worldPoseTracker.status();
+  const sourceUpdate = payload.sourceUpdate || {};
+  if (Object.prototype.hasOwnProperty.call(sourceUpdate, "navi")) {
+    retainedComposeSources.navi = sourceUpdate.navi;
+  }
+  if (Object.prototype.hasOwnProperty.call(sourceUpdate, "modelPosition")) {
+    retainedComposeSources.modelPosition = sourceUpdate.modelPosition;
+  }
+  const composeInput = {
+    ...(payload.composeInput || {}),
+    navi: retainedComposeSources.navi,
+    modelPosition: retainedComposeSources.modelPosition,
+  };
+  const composition = composeFrame(composeInput, { identityTracker, routeMatcher });
   const isProbe = composition.signs.length > 0
     && composition.signs.every((item) => item?.source === "calibrationProbe");
   const heldResult = anchorStore.update({
@@ -72,18 +115,31 @@ function drawFrame(payload = {}) {
     navi: composeInput.navi,
     probe: isProbe,
     candidates: composition.fresh,
+    activeMarkers: composition.signs,
+    lifecycleAuthoritative: isProbe || (
+      Boolean(composeInput.navi) && composeInput.naviUsable !== false
+    ),
     modelPosition: composeInput.modelPosition,
     valid: isProbe || !composeInput.navi || composeInput.naviUsable !== false,
     canHold: payload.canHoldAnchor === true,
-    precise: payload.sync?.canDrawPrecise === true,
-    odometry: payload.cameraOdometry,
+    precise: payload.tracking?.canCreateAnchor === true,
+    trackingState: payload.tracking?.state,
+    trackingRecovered: payload.tracking?.recovered === true,
+    retainAnchor: payload.tracking?.retainAnchor === true,
+    trackingUncertaintyM: payload.tracking?.uncertainty?.lateralM,
+    reason: payload.tracking?.reasons?.[0] || "",
+    odometry: payload.routeOdometry,
+    worldPose,
   });
 
   const ok = renderer.render({
-    nowMs: payload.nowMs,
+    nowMs: payload.presentationNowMs ?? payload.nowMs,
+    diagnosticsEnabled: payload.diagnosticsEnabled === true,
     clockDomain: payload.clockDomain,
     stage: payload.stage,
     sync: payload.sync,
+    tracking: payload.tracking,
+    deviceWorldPose: worldPose,
     held: heldResult.state === AR_HOLD_STATE.HELD,
     modelPosition: composeInput.modelPosition,
     egoSpeedMps: composeInput.egoSpeedMps,
@@ -94,13 +150,18 @@ function drawFrame(payload = {}) {
   const performance = performancePolicy.observe(workerNowMs() - workStartedAt);
   reply({
     type: "drawn",
+    traceFrameId: payload.traceFrameId ?? null,
+    debugFrame: payload.debugFrame || null,
     ok,
     composition: Object.freeze({
       signCount: composition.signs.length,
       anchoredCount: composition.fresh?.length || 0,
       sources: Object.freeze(composition.signs.map((item) => item.source || "unknown")),
+      diag: composition.diag || null,
     }),
     hold: anchorStore.status(payload.nowMs),
+    tracking: payload.tracking || null,
+    worldPose,
     renderer: renderer.status(),
     performance,
   });
@@ -124,12 +185,22 @@ self.onmessage = (event) => {
       break;
     case "reset":
       anchorStore?.reset();
+      identityTracker?.reset();
+      routeMatcher?.reset();
       renderer?.reset?.();
+      worldPoseTracker?.reset({ epoch: "uninitialized", reason: "worker reset" });
+      worldPoseEpoch = null;
+      retainedComposeSources = { navi: null, modelPosition: null };
       break;
     case "destroy":
       renderer?.destroy();
       renderer = null;
       anchorStore = null;
+      identityTracker = null;
+      routeMatcher = null;
+      worldPoseTracker = null;
+      worldPoseEpoch = null;
+      retainedComposeSources = { navi: null, modelPosition: null };
       performancePolicy = null;
       break;
     default:

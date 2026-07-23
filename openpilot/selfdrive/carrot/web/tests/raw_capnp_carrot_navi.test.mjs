@@ -112,6 +112,129 @@ test("replay log builder retains carrotNavi in its browser timeline", () => {
   assert.equal(timeline.records[0].frames.length, 1);
   assert.equal(timeline.records[0].frames[0].service, "carrotNavi");
   assert.equal(timeline.records[0].frames[0].decoded.guidanceCurrent.distanceM, 197);
+  assert.equal(timeline.metadata.eventIndexVersion, 2);
+  assert.ok(timeline.metadata.eventIndex.some((event) => (
+    event.type === "navigation_maneuver_current" && event.sourceTag === "CarrotNavi"
+  )));
+});
+
+test("replay event index tags CarrotNavi and suppresses duplicate CarrotMan guidance", () => {
+  const workerSource = fs.readFileSync(
+    path.join(webRoot, "js", "realtime", "replay_log_worker.js"),
+    "utf8",
+  );
+  const context = {
+    AbortController,
+    ArrayBuffer,
+    DataView,
+    Map,
+    Set,
+    TextDecoder,
+    Uint8Array,
+    clearTimeout,
+    console,
+    fetch: globalThis.fetch,
+    setTimeout,
+    CarrotRawCapnp: globalThis.CarrotRawCapnp,
+    fzstd: {},
+    importScripts() {},
+    postMessage() {},
+  };
+  context.self = context;
+  vm.createContext(context);
+  vm.runInContext(workerSource, context, { filename: "replay_log_worker.js" });
+
+  const events = vm.runInContext(`(() => {
+    const indexer = new ReplayEventIndexer();
+    indexer.ingest({
+      service: "carrotMan",
+      logMonoTime: 1000000000,
+      decoded: { xTurnInfo: 1, xDistToTurn: 240, szTBTMainText: "legacy turn" },
+    });
+    const navi = {
+      service: "carrotNavi",
+      logMonoTime: 1100000000,
+      decoded: {
+        connected: true,
+        sessionId: "route-1",
+        generation: 1,
+        navigationStatus: { guidanceActive: true, routePresent: true, offRoute: false },
+        guidanceCurrent: {
+          present: true,
+          distanceM: 230,
+          turnType: 13,
+          mainText: "right turn",
+          roadName: "test road",
+          pointValid: false,
+        },
+      },
+    };
+    indexer.ingest(navi);
+    indexer.ingest({
+      ...navi,
+      logMonoTime: 1200000000,
+      decoded: { ...navi.decoded, generation: 2 },
+    });
+    return indexer.finalize(1000000000, 1000);
+  })()`, context);
+
+  assert.equal(events.some((event) => event.type === "navigation_maneuver"), false);
+  const current = events.find((event) => event.type === "navigation_maneuver_current");
+  assert.equal(current.sourceTag, "CarrotNavi");
+  assert.equal(current.sourceTitle, "right turn");
+  assert.equal(events.some((event) => event.type === "navigation_session_changed"), false);
+});
+
+test("replay timeline seeds nearby CarrotNavi state at video start", () => {
+  const workerSource = fs.readFileSync(
+    path.join(webRoot, "js", "realtime", "replay_log_worker.js"),
+    "utf8",
+  );
+  const context = {
+    AbortController,
+    ArrayBuffer,
+    DataView,
+    Map,
+    Set,
+    TextDecoder,
+    Uint8Array,
+    clearTimeout,
+    console,
+    fetch: globalThis.fetch,
+    setTimeout,
+    CarrotRawCapnp: globalThis.CarrotRawCapnp,
+    fzstd: {},
+    importScripts() {},
+    postMessage() {},
+  };
+  context.self = context;
+  vm.createContext(context);
+  vm.runInContext(workerSource, context, { filename: "replay_log_worker.js" });
+
+  const timeline = vm.runInContext(`(() => {
+    const builder = new ReplayLogBuilder(1);
+    builder.cameraIndexes.push({
+      frameId: 1,
+      segmentNum: 1,
+      segmentId: 1,
+      logMonoTime: 1000000000,
+      timestampSof: 1000000000,
+    });
+    builder.selected.get("carrotNavi").set(2, {
+      service: "carrotNavi",
+      logMonoTime: 1400000000,
+      decoded: { connected: true, sessionId: "seed-route" },
+    });
+    return builder.finish();
+  })()`, context);
+
+  assert.deepEqual(Array.from(timeline.metadata.preRollServices), ["carrotNavi"]);
+  assert.equal(timeline.metadata.preRollMode, "bounded-lookahead");
+  assert.equal(timeline.metadata.preRollSourceTimeMs, 400);
+  assert.equal(timeline.records[0].timeMs, 0);
+  assert.equal(timeline.records[0].frames[0].service, "carrotNavi");
+  assert.equal(timeline.records[0].frames[0].decoded.sessionId, "seed-route");
+  assert.equal(timeline.records.at(-1).timeMs, 400);
 });
 
 test("replay selection preserves every frame-critical geometry sample", () => {

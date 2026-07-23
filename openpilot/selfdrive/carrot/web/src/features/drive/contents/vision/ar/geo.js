@@ -1,4 +1,4 @@
-/* 위경도 → 자차 기준 좌표. ARmap 식 "월드에 박힌" 마커의 근거.
+/* 위경도 → route-local FLU 좌표. ARmap 식 "월드에 박힌" 마커의 근거.
  *
  * 왜 필요한가:
  *   지금까지 마커는 modelV2 경로 위에 얹혔다. 그 경로는 카메라가 실제로 보는
@@ -16,6 +16,9 @@
  *   띄우는 높이는 descriptor.mountHeightM 이 따로 담당한다. 고도를 아는 척하지 않는다.
  */
 
+import { AR_COORDINATE_FRAME } from "./coordinate_frames.js";
+import { UNKNOWN_ROAD_HEIGHT } from "./road_observation.js";
+
 /** 위도 1도의 거리(m). 지구를 구로 본 근사. 수백 m 범위에서는 오차가 무시된다. */
 const M_PER_DEG_LAT = 111320;
 
@@ -26,9 +29,9 @@ export const AR_GEO_LIMITS = Object.freeze({
   routeSlackRatio: 1.2,
   routeSlackM: 30,
   /** 안내점에서 이 거리 안의 route segment만 방향 근거로 쓴다. */
-  maxTangentSnapM: 80,
-  /** 차량을 route polyline에 붙일 때 허용하는 최대 시작 오차. */
-  maxRouteStartSnapM: 100,
+  maxTangentSnapM: 140,
+  /** 차량을 route polyline에 붙일 때 허용하는 최대 시작 오차. 완화: 보이기 우선. */
+  maxRouteStartSnapM: 160,
   /** 회전 지점에서 이 거리만큼 이후 경로를 보고 실제 진출 방향을 정한다. */
   maneuverLookAheadM: 12,
 });
@@ -54,7 +57,7 @@ export function enuOffset(fromLat, fromLon, toLat, toLon) {
 }
 
 /**
- * 동/북 → 자차 기준(x 전방, y 좌측).
+ * 동/북 → route-local FLU(x 전방, y 좌측, z 상방).
  *
  * heading 은 진북 기준 시계방향 도(degree). 즉 자차 전방 단위벡터는
  * ENU 에서 (sin h, cos h) 이고, 좌측은 그것을 반시계로 90도 돌린 (-cos h, sin h).
@@ -70,7 +73,8 @@ export function toVehicleFrame(east, north, headingDeg) {
   return {
     x: e * s + n * c,        // 전방
     y: n * s - e * c,        // 좌측
-    z: 0,                    // 고도 정보 없음 — 노면으로 둔다
+    ...UNKNOWN_ROAD_HEIGHT,  // 고도 정보 없음 — unknown flat 노면으로 둔다
+    coordinateFrame: AR_COORDINATE_FRAME.ROUTE_FLU,
   };
 }
 
@@ -182,20 +186,25 @@ export function routeTangentHeading(vehicle, point, polyline, opts = {}) {
  * 구간에만 같은 TMap 좌표계의 route polyline을 사용한다. 가까워져 model path가
  * 닿으면 anchor_store가 비전 경로 쪽으로 연속 보정한다.
  */
-export function routeDistanceAnchor(vehicle, polyline, routeDistanceM, opts = {}) {
-  if (!vehicle || vehicle.present === false) return null;
-  if (!Array.isArray(polyline) || polyline.length < 2) return null;
-  const distanceM = finite(routeDistanceM);
-  if (distanceM === null || !(distanceM > 0) || distanceM > AR_GEO_LIMITS.maxRangeM) return null;
+/** route_matcher가 승인한 시작 세그먼트(정밀 힌트). 좌표계는 points와 동일. */
+function routeMatchStart(suppliedMatch, pointCount) {
+  if (!(suppliedMatch
+    && suppliedMatch.routePointCount === pointCount
+    && Number.isInteger(suppliedMatch.index)
+    && suppliedMatch.index > 0
+    && suppliedMatch.index < pointCount)) return null;
+  return {
+    index: suppliedMatch.index,
+    t: suppliedMatch.t,
+    x: suppliedMatch.x,
+    y: suppliedMatch.y,
+    snapDistanceM: suppliedMatch.snapDistanceM,
+    alongTrackM: suppliedMatch.alongTrackM,
+  };
+}
 
-  const points = [];
-  for (const point of polyline) {
-    const offset = enuOffset(vehicle.latitude, vehicle.longitude, point?.latitude, point?.longitude);
-    const local = offset && toVehicleFrame(offset.east, offset.north, vehicle.headingDeg);
-    if (local) points.push(local);
-  }
-  if (points.length < 2) return null;
-
+/** 자체 최근접 세그먼트 검색. match가 없거나 그 start가 실패했을 때의 안전망. */
+function nearestRouteSegmentStart(points) {
   let start = null;
   for (let index = 1; index < points.length; index += 1) {
     const a = points[index - 1];
@@ -204,8 +213,8 @@ export function routeDistanceAnchor(vehicle, polyline, routeDistanceM, opts = {}
     const dy = b.y - a.y;
     const length2 = dx * dx + dy * dy;
     if (!(length2 > 0.01)) continue;
-    // The ordered route should initially head broadly forward. Reject a nearby
-    // reverse segment from the opposite carriageway or an already passed leg.
+    // 명백히 뒤로 가는 세그먼트만 건너뛴다. route_matcher가 heading/progress를
+    // 승인하지 못한 프레임에서도 최소한 "앞쪽 최근접"으로는 표지를 세운다.
     if (dx < -Math.sqrt(length2) * 0.25) continue;
     const t = Math.max(0, Math.min(1, -(a.x * dx + a.y * dy) / length2));
     const x = a.x + dx * t;
@@ -215,10 +224,11 @@ export function routeDistanceAnchor(vehicle, polyline, routeDistanceM, opts = {}
       start = { index, t, x, y, snapDistanceM };
     }
   }
+  return start;
+}
 
-  const maxSnapM = finite(opts.maxRouteStartSnapM) ?? AR_GEO_LIMITS.maxRouteStartSnapM;
-  if (!start || start.snapDistanceM > maxSnapM) return null;
-
+/** start에서 routeDistanceM만큼 걸어 자차 앞의 앵커를 만든다. 실패 시 null. */
+function walkRouteToAnchor(points, start, distanceM) {
   let remaining = distanceM;
   let segmentStart = { x: start.x, y: start.y };
   for (let index = start.index; index < points.length; index += 1) {
@@ -236,15 +246,49 @@ export function routeDistanceAnchor(vehicle, polyline, routeDistanceM, opts = {}
         return Object.freeze({
           x,
           y,
-          z: 0,
+          ...UNKNOWN_ROAD_HEIGHT,
           rangeM,
           headingRad: Math.atan2(dy, dx),
+          routeStartIndex: start.index,
+          routeAlongTrackM: finite(start.alongTrackM),
           routeDerived: true,
+          coordinateFrame: AR_COORDINATE_FRAME.ROUTE_FLU,
         });
       }
       remaining -= length;
     }
     segmentStart = segmentEnd;
+  }
+  return null;
+}
+
+export function routeDistanceAnchor(vehicle, polyline, routeDistanceM, opts = {}) {
+  if (!vehicle || vehicle.present === false) return null;
+  if (!Array.isArray(polyline) || polyline.length < 2) return null;
+  const distanceM = finite(routeDistanceM);
+  if (distanceM === null || !(distanceM > 0) || distanceM > AR_GEO_LIMITS.maxRangeM) return null;
+
+  const points = [];
+  for (const point of polyline) {
+    const offset = enuOffset(vehicle.latitude, vehicle.longitude, point?.latitude, point?.longitude);
+    const local = offset && toVehicleFrame(offset.east, offset.north, vehicle.headingDeg);
+    if (local) points.push(local);
+  }
+  if (points.length < 2) return null;
+
+  const maxSnapM = finite(opts.maxRouteStartSnapM) ?? AR_GEO_LIMITS.maxRouteStartSnapM;
+
+  // 일단 보이는 게 우선: matcher가 준 정밀 가지를 먼저 시도하고, 그 start로
+  // 앵커를 못 만들면(짧은 가지를 걸어 벗어나거나 자차 뒤로 계산되면) 자체
+  // 최근접 검색으로 재시도한다. route와 전방거리가 유효하면 표지를 지우지 않는다.
+  const candidateStarts = [
+    routeMatchStart(opts.routeMatch, points.length),
+    nearestRouteSegmentStart(points),
+  ];
+  for (const start of candidateStarts) {
+    if (!start || start.snapDistanceM > maxSnapM) continue;
+    const anchor = walkRouteToAnchor(points, start, distanceM);
+    if (anchor) return anchor;
   }
   return null;
 }

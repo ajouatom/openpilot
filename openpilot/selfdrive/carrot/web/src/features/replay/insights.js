@@ -2,6 +2,11 @@ import { adoptTelemetryGraphSurface } from "../telemetry/graph_surface.js";
 import { createLatestOnlyRenderScheduler } from "../telemetry/render_scheduler.js";
 import { TEMPORARY_TELEMETRY_SURFACES } from "../telemetry/temporary_surface_flags.js";
 import { createSegmentedControl } from "../../ui/components/segmented_control/segmented_control.js";
+import {
+  isUserVisibleReplayEvent,
+  navigationManeuverLabel,
+  replayEventDisplayTitle,
+} from "./navigation_event.js";
 
 "use strict";
 
@@ -198,6 +203,37 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     driver_attention_restored: ["replay_event_driver_attention_restored", "Driver attention restored"],
     driver_distracted: ["replay_event_driver_distracted", "Driver distraction detected"],
     navigation_maneuver: ["replay_event_navigation", "Navigation guidance"],
+    navi_connected: ["replay_event_navi_connected", "Navigation connected"],
+    navi_disconnected: ["replay_event_navi_disconnected", "Navigation disconnected"],
+    navigation_session_changed: ["replay_event_navigation_session_changed", "Route session changed"],
+    navigation_active: ["replay_event_navigation_active", "Route guidance active"],
+    navigation_ended: ["replay_event_navigation_ended", "Route guidance ended"],
+    navigation_off_route: ["replay_event_navigation_off_route", "Off route"],
+    navigation_route_recovered: ["replay_event_navigation_route_recovered", "Route recovered"],
+    navigation_maneuver_current: ["replay_event_navigation_current", "Current maneuver"],
+    navigation_maneuver_next: ["replay_event_navigation_next", "Next maneuver"],
+    navigation_maneuver_current_cleared: ["replay_event_navigation_current_cleared", "Current maneuver cleared"],
+    navigation_maneuver_next_cleared: ["replay_event_navigation_next_cleared", "Next maneuver cleared"],
+    navigation_approach: ["replay_event_navigation_approach", "Approaching maneuver"],
+    lane_guidance_shown: ["replay_event_lane_guidance_shown", "Lane guidance shown"],
+    lane_guidance_changed: ["replay_event_lane_guidance_changed", "Lane guidance changed"],
+    lane_guidance_hidden: ["replay_event_lane_guidance_hidden", "Lane guidance ended"],
+    speed_alert_shown: ["replay_event_speed_alert_shown", "Road speed alert"],
+    speed_alert_changed: ["replay_event_speed_alert_changed", "Road speed alert changed"],
+    speed_alert_cleared: ["replay_event_speed_alert_cleared", "Road speed alert ended"],
+    road_speed_limit_changed: ["replay_event_road_speed_limit_changed", "Road speed limit changed"],
+    section_control_started: ["replay_event_section_control_started", "Average-speed zone started"],
+    section_control_ended: ["replay_event_section_control_ended", "Average-speed zone ended"],
+    section_control_suspended: ["replay_event_section_control_suspended", "Average-speed guidance paused"],
+    section_control_resumed: ["replay_event_section_control_resumed", "Average-speed guidance resumed"],
+    section_control_off_route: ["replay_event_section_control_off_route", "Average-speed route lost"],
+    section_control_recovered: ["replay_event_section_control_recovered", "Average-speed route recovered"],
+    traffic_signal_shown: ["replay_event_traffic_signal_shown", "Traffic signal guidance shown"],
+    traffic_signal_changed: ["replay_event_traffic_signal_changed", "Traffic signal changed"],
+    traffic_signal_hidden: ["replay_event_traffic_signal_hidden", "Traffic signal guidance ended"],
+    crossroad_guidance_shown: ["replay_event_crossroad_guidance_shown", "Intersection guidance shown"],
+    crossroad_guidance_changed: ["replay_event_crossroad_guidance_changed", "Intersection guidance changed"],
+    crossroad_guidance_hidden: ["replay_event_crossroad_guidance_hidden", "Intersection guidance ended"],
   });
   const GRAPH_FORMAT = Object.freeze({
     speed: { digits: 1, unit: " km/h" },
@@ -492,7 +528,16 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
 
   function eventTitle(event) {
     if (event?.type === "system_alert") return event.sourceTitle || text("replay_event_system_alert", "Driving alert");
-    if (event?.type === "navigation_maneuver") return event.sourceTitle || text("replay_event_navigation", "Route guidance");
+    if (["navigation_maneuver", "navigation_maneuver_current", "navigation_maneuver_next"].includes(event?.type)) {
+      return navigationManeuverLabel(event, text)
+        || event.sourceTitle
+        || text(EVENT_TITLE_META[event.type]?.[0] || "replay_event_navigation", EVENT_TITLE_META[event.type]?.[1] || "Route guidance");
+    }
+    if (event?.type === "navigation_approach" && Number(event.params?.thresholdM) > 0) {
+      return navigationManeuverLabel(event, text) || text("replay_event_navigation_approach_value", "Maneuver within {distance} m", {
+        distance: numberText(event.params.thresholdM, 0),
+      });
+    }
     const value = event?.params?.value;
     const dynamic = {
       gear_changed: ["replay_event_gear_value", "Gear: {value}"],
@@ -515,12 +560,18 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
   }
 
   function eventDetail(event) {
-    if (event?.sourceDetail) return event.sourceDetail;
-    if (event?.type === "navigation_maneuver" && Number(event.params?.distanceM) > 0) {
-      return text("replay_event_distance", "{distance} m ahead", {
-        distance: numberText(Math.round(event.params.distanceM), 0),
-      });
+    if (["navigation_maneuver", "navigation_maneuver_current", "navigation_maneuver_next", "navigation_approach"].includes(event?.type)) {
+      const distance = Number(event.params?.thresholdM || event.params?.distanceM);
+      const distanceDetail = distance > 0
+        ? text("replay_event_distance", "{distance} m ahead", { distance: numberText(Math.round(distance), 0) })
+        : "";
+      const sourceText = [event.sourceTitle, event.sourceDetail]
+        .map((value) => String(value || "").trim())
+        .filter((value, index, values) => value && values.indexOf(value) === index)
+        .join(" · ");
+      return [distanceDetail, sourceText].filter(Boolean).join(" · ");
     }
+    if (event?.sourceDetail) return event.sourceDetail;
     if (event?.type === "vehicle_button_pressed" && event.params?.button) {
       return "";
     }
@@ -837,6 +888,10 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     graphEls.forEach((_element, name) => renderGraph(name));
   }
 
+  function eventDisplayTitle(event) {
+    return replayEventDisplayTitle(eventTitle(event), String(event?.sourceTag || "").trim());
+  }
+
   function ensureSummarySeries() {
     if (!TEMPORARY_TELEMETRY_SURFACES.replayGraphs) return;
     if (state.summarySeriesStatus === "ready" || state.summarySeriesStatus === "loading") return;
@@ -866,12 +921,12 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     button.type = "button";
     button.dataset.eventId = event.id;
     button.dataset.category = event.category;
-    button.setAttribute("aria-label", `${formatTime(event.timeMs / 1000)} ${eventTitle(event)}`);
+    button.setAttribute("aria-label", `${formatTime(event.timeMs / 1000)} ${eventDisplayTitle(event)}`);
     const copy = document.createElement("span");
     if (compact) {
       const time = document.createElement("time");
       time.textContent = formatTime(event.timeMs / 1000);
-      copy.textContent = eventTitle(event);
+      copy.textContent = eventDisplayTitle(event);
       button.append(time, copy);
     } else {
       const marker = document.createElement("span");
@@ -879,7 +934,7 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
       marker.setAttribute("aria-hidden", "true");
       copy.className = "carrot-replay-insights__eventCopy";
       const title = document.createElement("strong");
-      title.textContent = eventTitle(event);
+      title.textContent = eventDisplayTitle(event);
       const detail = document.createElement("span");
       const detailText = eventDetail(event);
       if (detailText) detail.textContent = detailText;
@@ -1167,10 +1222,10 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
       if (icon) summaryIconEl.replaceChildren(icon);
       else summaryIconEl.replaceChildren();
     }
-    if (summaryTitleEl) summaryTitleEl.textContent = eventTitle(event);
+    if (summaryTitleEl) summaryTitleEl.textContent = eventDisplayTitle(event);
     if (summaryMetaEl) {
       const detail = eventDetail(event);
-      summaryMetaEl.textContent = detail ? `${formatTime(event.timeMs / 1000)} · ${detail}` : formatTime(event.timeMs / 1000);
+      summaryMetaEl.textContent = [formatTime(event.timeMs / 1000), detail].filter(Boolean).join(" · ");
     }
     summaryEl.hidden = false;
   }
@@ -1920,7 +1975,7 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
     return {
       id: event.id,
       category: event.category,
-      title: eventTitle(event),
+      title: eventDisplayTitle(event),
       meta: eventDetail(event)
         ? `${formatTime(event.timeMs / 1000)} · ${eventDetail(event)}`
         : formatTime(event.timeMs / 1000),
@@ -2056,7 +2111,7 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
       state.eventSource = "index";
       syncEventSourceNotice();
       state.events = serverEvents
-        .filter((event) => event && Number.isFinite(Number(event.timeMs)))
+        .filter((event) => event && Number.isFinite(Number(event.timeMs)) && isUserVisibleReplayEvent(event))
         .map((event, index) => ({
           id: String(event.id || `event-${Math.round(Number(event.timeMs) || 0)}-${index}`),
           timeMs: Math.max(0, Number(event.timeMs) || 0),
@@ -2065,6 +2120,7 @@ window.CarrotReplayInsights = window.CarrotReplayInsights || (() => {
           params: event.params && typeof event.params === "object" ? { ...event.params } : {},
           sourceTitle: String(event.sourceTitle || "").trim(),
           sourceDetail: String(event.sourceDetail || "").trim(),
+          sourceTag: String(event.sourceTag || "").trim(),
         }))
         .sort((left, right) => left.timeMs - right.timeMs);
       state.services = new Set([

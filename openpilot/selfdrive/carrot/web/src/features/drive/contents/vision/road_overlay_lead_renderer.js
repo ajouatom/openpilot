@@ -270,7 +270,7 @@ export function createRoadOverlayLeadRenderer(options = {}) {
           const vectorColor = vSigned >= 0 ? "rgba(35,213,93,0.94)" : "rgba(255,59,48,0.94)";
           const uiScale = ui.getScale(videoWidth, videoHeight);
           geometry.drawPolyline([center, future], vectorColor, Math.max(3.0 * uiScale, 1.6));
-          geometry.drawPolygon(geometry.circlePolygon(future.x, future.y, Math.max(10 * uiScale, 5), 12), vectorColor);
+          geometry.drawPolygon(geometry.circlePolygon(future.x, future.y, Math.max(10 * uiScale, 5)), vectorColor);
         }
 
         let badgeColor = "rgba(255,59,48,0.96)";

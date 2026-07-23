@@ -1,11 +1,13 @@
-/* cameraOdometry pose vectors are expressed in the calibrated/model frame.
- * World anchors live in openpilot's device frame (+x forward, +y left, +z up),
- * so applying the raw vectors directly mixes pitch/yaw into the wrong axes.
+/* cameraOdometry pose vectors are expressed in the calibrated/model FRD frame.
+ * This module performs only calibrated FRD -> Device FRD. Conversion into the
+ * AR route-local FLU frame belongs to coordinate_frames.js.
  *
  * This is the JavaScript equivalent of locationd's:
  *   device_from_calib = rot_from_euler(liveCalibration.rpyCalib)
  *   vector_device = device_from_calib @ vector_calib
  */
+
+import { AR_COORDINATE_FRAME } from "./coordinate_frames.js";
 
 function finiteVector3(value) {
   if (!Array.isArray(value) || value.length < 3) return null;
@@ -64,6 +66,7 @@ export function odometryInDeviceFrame(odometry, rpyCalib) {
     rot,
     ...(transStd ? { transStd } : {}),
     ...(rotStd ? { rotStd } : {}),
-    coordinateFrame: "device",
+    sourceCoordinateFrame: AR_COORDINATE_FRAME.CALIBRATED_FRD,
+    coordinateFrame: AR_COORDINATE_FRAME.DEVICE_FRD,
   });
 }

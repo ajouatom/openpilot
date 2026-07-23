@@ -12,6 +12,13 @@
  * "시간" 기준으로도 검사할 수 있다.
  */
 
+import {
+  CAMERA_ODOMETRY_POSE_DELAY_MS,
+  cameraOdometryObservationTimestampNs,
+} from "./pose_timeline.js";
+
+export { CAMERA_ODOMETRY_POSE_DELAY_MS } from "./pose_timeline.js";
+
 export const AR_SYNC_STATE = Object.freeze({
   OK: "ok",
   STALE: "stale",           // 데이터가 오래됨
@@ -25,13 +32,16 @@ export const AR_SYNC_STATE = Object.freeze({
  * 월드 앵커 전체가 점멸했기 때문에, 150ms까지 허용하고 그 이상은 기존 bounded
  * hold로 넘긴다. */
 export const AR_SYNC_LIMITS = Object.freeze({
-  maxFrameIdGap: 3,          // roadCameraState.frameId ↔ modelV2.frameId
-  maxModelAgeMs: 120,
-  maxOdometryAgeMs: 120,
-  maxOdometryFrameGap: 3,
-  maxPoseAgeMs: 250,
-  maxCalibrationAgeMs: 5000,
-  maxNaviAgeMs: 3000,
+  // 일단 보이는 게 우선(테스트·퍼블리싱 공통): 동기화/신선도 gate를 넉넉히
+  // 완화한다. 값이 조금 오래되거나 프레임 갭이 커도 표지를 지우지 않고,
+  // 정밀도 저하는 tracking/hold의 연속 보정과 fade가 흡수한다.
+  maxFrameIdGap: 8,          // roadCameraState.frameId ↔ modelV2.frameId
+  maxModelAgeMs: 350,
+  maxOdometryAgeMs: 350,
+  maxOdometryFrameGap: 8,
+  maxPoseAgeMs: 700,
+  maxCalibrationAgeMs: 20000,
+  maxNaviAgeMs: 8000,
   /* cameraOdometry 신뢰도.
    *
    * 처음엔 transStd 에 절대 상한(0.5 m/s)을 뒀는데, 실측에서 0.632 가 나와
@@ -42,8 +52,8 @@ export const AR_SYNC_LIMITS = Object.freeze({
    * 불확실성의 각도**로 판단한다(atan2(transStd[1], trans[0]) < 0.25°).
    * 같은 기준을 쓴다. AR 앵커도 결국 "각도가 얼마나 흔들리나"의 문제다.
    */
-  maxVelAngleStd: 0.25 * Math.PI / 180,   // calibrationd MAX_VEL_ANGLE_STD
-  maxRotStd: 0.05,                        // rad/s. 회전 std 는 속도 의존이 약하다.
+  maxVelAngleStd: 0.8 * Math.PI / 180,    // 완화: 실측 0.3~0.4°에서 막히던 것을 허용
+  maxRotStd: 0.12,                        // rad/s. 회전 std 는 속도 의존이 약하다.
 });
 
 const NS_PER_MS = 1e6;
@@ -95,6 +105,7 @@ export function isPosePlausible(pose) {
 }
 
 function finite(value) {
+  if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -179,6 +190,11 @@ export function evaluateFrameSync(input = {}, limits = AR_SYNC_LIMITS) {
   const receipts = input.receivedAtMonotonic;
   const nowMs = input.nowMs;
   const replayClock = input.clockDomain === "replay-media";
+  const presentedTargetCandidate = finite(input.presentedClock?.targetTimestampNs);
+  const presentedTargetTimestampNs = presentedTargetCandidate > 0
+    ? presentedTargetCandidate
+    : null;
+  const cameraTargetTimestampNs = presentedTargetTimestampNs ?? finite(cam?.timestampEof);
   const reasons = [];
 
   if (!cam || !model) {
@@ -187,13 +203,17 @@ export function evaluateFrameSync(input = {}, limits = AR_SYNC_LIMITS) {
       frameIdGap: null, modelAgeMs: null, odometryAgeMs: null, odometryUsable: false,
       poseAgeMs: null, calibrationAgeMs: null, naviAgeMs: null,
       poseOk: false, calibrated: false, calibrationPlausible: false, naviUsable: false,
+      presentedClockConfidence: input.presentedClock?.confidence || "unmapped",
+      presentedTargetTimestampNs,
+      odometryPoseDelayMs: CAMERA_ODOMETRY_POSE_DELAY_MS,
       clockDomain: input.clockDomain === "replay-media" ? "replay-media" : "live-monotonic",
       canDrawPrecise: false, canHoldAnchor: false,
     });
   }
 
   // 1) 영상 프레임 ↔ model 프레임
-  const camFrame = finite(cam.frameId);
+  const presentedFrameId = finite(input.presentedClock?.sourceFrameId);
+  const camFrame = presentedFrameId ?? finite(cam.frameId);
   const modelFrame = finite(model.frameId);
   const frameIdGap = camFrame !== null && modelFrame !== null
     ? Math.abs(camFrame - modelFrame) : null;
@@ -230,7 +250,11 @@ export function evaluateFrameSync(input = {}, limits = AR_SYNC_LIMITS) {
   let odometryAgeMs = null;
   let odometryUsable = false;
   if (odo) {
-    const odometrySourceAgeMs = nanosDeltaMs(cam.timestampEof, odo.timestampEof);
+    const odometryObservationTimestampNs = cameraOdometryObservationTimestampNs(odo);
+    const odometrySourceAgeMs = nanosDeltaMs(
+      cameraTargetTimestampNs,
+      odometryObservationTimestampNs,
+    );
     const odometryReceiptAgeMs = replayClock
       ? null
       : serviceReceiptAgeMs(nowMs, receipts, "cameraOdometry");
@@ -268,7 +292,7 @@ export function evaluateFrameSync(input = {}, limits = AR_SYNC_LIMITS) {
   const poseReceiptAgeMs = replayClock
     ? null
     : serviceReceiptAgeMs(nowMs, receipts, "livePose");
-  const poseSourceAgeMs = nanosDeltaMs(cam.timestampEof, pose?.timestamp);
+  const poseSourceAgeMs = nanosDeltaMs(cameraTargetTimestampNs, pose?.timestamp);
   const poseAgeMs = replayClock
     ? Math.abs(poseSourceAgeMs ?? 0)
     : poseReceiptAgeMs === null
@@ -312,21 +336,25 @@ export function evaluateFrameSync(input = {}, limits = AR_SYNC_LIMITS) {
   if (navi) {
     const offRoute = navi.navigationStatus?.offRoute === true;
     const active = navi.navigationStatus?.guidanceActive === true;
+    const routePresent = navi.navigationStatus?.routePresent === true;
     const naviReceiptAgeMs = replayClock
       ? null
       : serviceReceiptAgeMs(nowMs, receipts, "carrotNavi");
-    const naviSourceAgeMs = nanosDeltaMs(cam.timestampEof, navi.publishMonoTimeNanos);
+    const naviSourceAgeMs = nanosDeltaMs(cameraTargetTimestampNs, navi.publishMonoTimeNanos);
     naviAgeMs = replayClock
       ? Math.abs(naviSourceAgeMs ?? 0)
       : naviReceiptAgeMs === null
         ? null
         : Math.max(naviReceiptAgeMs, Math.abs(naviSourceAgeMs ?? 0));
     const fresh = naviAgeMs !== null && naviAgeMs <= limits.maxNaviAgeMs;
-    naviUsable = navi.connected === true && active && !offRoute && fresh;
+    // 일단 보이는 게 우선: connected 소켓 플래그는 리플레이/연결 blip에서 자주
+    // 꺼지지만 안내가 활성(또는 경로 존재)이면 표지 데이터는 유효하다. connected는
+    // 요구하지 않고, off-route와 신선도(fresh)만 실제 차단 조건으로 둔다.
+    naviUsable = (active || routePresent) && !offRoute && fresh;
     if (!replayClock && naviReceiptAgeMs === null) reasons.push("navi 수신시각 없음");
     else if (!fresh) reasons.push(`navi age ${naviAgeMs.toFixed(0)}ms`);
-    if (navi.connected !== true || !active || offRoute) {
-      reasons.push("navi off-route/미연결/비활성");
+    if ((!active && !routePresent) || offRoute) {
+      reasons.push("navi off-route/안내없음");
     }
   }
 
@@ -345,6 +373,9 @@ export function evaluateFrameSync(input = {}, limits = AR_SYNC_LIMITS) {
     calibrated,
     calibrationPlausible,
     naviUsable,
+    presentedClockConfidence: input.presentedClock?.confidence || "unmapped",
+    presentedTargetTimestampNs,
+    odometryPoseDelayMs: CAMERA_ODOMETRY_POSE_DELAY_MS,
     clockDomain: replayClock ? "replay-media" : "live-monotonic",
     /** 정밀(도로 접지) 앵커를 그려도 되는가. */
     canDrawPrecise: state === AR_SYNC_STATE.OK && calibrated && calibrationPlausible,

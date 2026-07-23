@@ -1,0 +1,44 @@
+.dashcam-player-dialog,
+.dashcam-segment-read-status {
+  --logs-player-status-reading-surface: var(--md-primary);
+  --logs-player-status-reading-ink: var(--md-on-primary);
+  --logs-player-status-recent-surface: var(--md-primary-state-soft);
+  --logs-player-status-recent-ink: var(--md-primary);
+  --logs-player-status-recent-border: color-mix(in srgb, var(--md-primary) 36%, transparent);
+}
+
+.dashcam-player-dialog {
+  --logs-player-dialog-radius: var(--r-md);
+  --logs-player-dialog-border: color-mix(in srgb, var(--md-outline-var) 42%, transparent);
+  --logs-player-dialog-surface: var(--md-surface-cont);
+  --logs-player-dialog-wide: 88rem;
+  --logs-player-dialog-max-height: 40rem;
+  --logs-player-dialog-landscape-aspect: 12 / 5;
+  --logs-player-dialog-portrait-wide: 42rem;
+  --logs-player-dialog-portrait-max-height: 42rem;
+  --logs-player-dialog-portrait-viewport-height: 80dvh;
+  --logs-player-browser-pane-width: clamp(15.5rem, 22dvw, 19.5rem);
+  --logs-player-browser-pane-compact-width: clamp(15rem, 31dvw, 16.5rem);
+  --logs-player-browser-divider: color-mix(in srgb, var(--md-outline-var) 34%, transparent);
+  --logs-player-browser-surface: var(--md-surface-cont);
+  --logs-player-section-padding-inline: var(--sp-md);
+  --logs-player-section-padding-block: var(--sp-sm);
+  --logs-player-summary-gap: var(--sp-sm);
+  --logs-player-summary-count-surface: var(--md-primary-state-soft);
+  --logs-player-summary-count-ink: var(--md-primary);
+  --logs-player-summary-muted: color-mix(in srgb, var(--md-on-surface-var) 72%, transparent);
+  --logs-player-segment-list-gap: var(--sp-xs);
+  --logs-player-segment-list-padding: var(--sp-sm);
+  --logs-player-segment-item-min-height: 4.5rem;
+  --logs-player-segment-item-padding: var(--sp-xs);
+  --logs-player-segment-item-radius: var(--r-sm);
+  --logs-player-segment-item-surface: color-mix(in srgb, var(--md-on-surface) 3%, transparent);
+  --logs-player-segment-item-hover: color-mix(in srgb, var(--md-on-surface) 7%, transparent);
+  --logs-player-segment-item-active: var(--md-primary-state-soft);
+  --logs-player-segment-item-border: color-mix(in srgb, var(--md-outline-var) 28%, transparent);
+  --logs-player-segment-item-active-border: color-mix(in srgb, var(--md-primary) 62%, var(--md-outline-var));
+  --logs-player-segment-thumb-width: 5.5rem;
+  --logs-player-segment-thumb-radius: var(--r-xs);
+  --logs-player-segment-thumb-surface: var(--md-surface-cont-h);
+  --logs-player-segment-muted: color-mix(in srgb, var(--md-on-surface-var) 70%, transparent);
+}
