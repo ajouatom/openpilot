@@ -138,6 +138,7 @@
         "openpilot/selfdrive/carrot/server/features/dashcam/routes.py",
         "openpilot/selfdrive/carrot/server/features/dashcam/upload.py",
         "openpilot/selfdrive/carrot/server/features/dashcam/upload_jobs.py",
+        "openpilot/selfdrive/carrot/server/services/dashcam_upload_report.py",
         "openpilot/selfdrive/carrot/web_upload.py"
       ],
       "doc_sets": [

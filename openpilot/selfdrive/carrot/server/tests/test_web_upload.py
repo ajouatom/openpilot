@@ -9,6 +9,7 @@ from aiohttp import web
 from openpilot.selfdrive.carrot import carrot_man as carrot_man_module
 from openpilot.selfdrive.carrot import web_upload
 from openpilot.selfdrive.carrot.server.features.dashcam import routes, upload, upload_jobs
+from openpilot.selfdrive.carrot.server.services import dashcam_upload_report
 from openpilot.selfdrive.carrot.server.services import web_settings
 
 
@@ -148,6 +149,67 @@ def test_web_api_url_quotes_every_path_component():
     "route|0",
     "qlog.zst",
   ) == "https://upload.example/api/v1/upload/car%20name%2Fid/route%7C0/qlog.zst"
+
+
+def test_dashcam_upload_report_links_public_segment_and_quotes_storage_directory():
+  payload = {
+    "uploadedAt": "2026-07-23 11:17:18",
+    "remoteBasePath": "https://upload.example/routes/HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3/",
+    "meta": {
+      "carName": "HYUNDAI_IONIQ_5_PE",
+      "dongleId": "8b06424f3adf2bd3",
+      "commit": "79a2a542",
+    },
+    "results": [{
+      "segment": "00000cfb--69588de3d7--10",
+      "route": "00000cfb--69588de3d7",
+      "segmentIndex": 10,
+      "ok": True,
+      "remotePath": "https://upload.example/routes/HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3/00000cfb--69588de3d7--10",
+    }],
+  }
+
+  report = dashcam_upload_report.upload_share_text(payload)
+  assert "HYUNDAI_IONIQ_5_PE%208b06424f3adf2bd3" in report
+  assert "[00000cfb--69588de3d7--10 OK · Open](https://upload.example/routes/" in report
+  assert "### Open & Analyze" not in report
+
+
+def test_dashcam_upload_report_adds_one_slice_link_for_consecutive_segments():
+  base = "https://upload.example/routes/TEST CAR 0123456789abcdef"
+  results = [
+    {
+      "segment": f"00000cfb--69588de3d7--{index}",
+      "route": "00000cfb--69588de3d7",
+      "segmentIndex": index,
+      "ok": True,
+      "remotePath": f"{base}/00000cfb--69588de3d7--{index}",
+    }
+    for index in (10, 11, 12)
+  ]
+
+  report = dashcam_upload_report.upload_share_text({"remoteBasePath": f"{base}/", "results": results})
+  assert "### Open & Analyze" in report
+  assert "Segments 10–12 (3 logs) · Web/Video/Tools" in report
+  assert "https://upload.example/routes/TEST%20CAR%200123456789abcdef/00000cfb--69588de3d7--10:13" in report
+  assert report.count(" OK · Open]") == 3
+
+
+def test_dashcam_upload_report_does_not_merge_nonconsecutive_segments():
+  base = "https://upload.example/routes/TEST CAR 0123456789abcdef"
+  results = [
+    {
+      "segment": f"00000cfb--69588de3d7--{index}",
+      "route": "00000cfb--69588de3d7",
+      "segmentIndex": index,
+      "ok": True,
+      "remotePath": f"{base}/00000cfb--69588de3d7--{index}",
+    }
+    for index in (10, 12)
+  ]
+
+  report = dashcam_upload_report.upload_share_text({"remoteBasePath": f"{base}/", "results": results})
+  assert "### Open & Analyze" not in report
 
 
 def test_tmux_target_uses_automatic_session_token(monkeypatch):
