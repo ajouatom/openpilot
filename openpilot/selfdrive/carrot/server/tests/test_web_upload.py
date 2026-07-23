@@ -212,6 +212,78 @@ def test_dashcam_upload_report_does_not_merge_nonconsecutive_segments():
   assert "### Open & Analyze" not in report
 
 
+def test_dashcam_upload_completion_notifies_web_server_and_discord(monkeypatch):
+  segment = "00000cfb--69588de3d7--10"
+  notifications = []
+
+  async def fake_upload_folder(*args, **kwargs):
+    return True
+
+  async def fake_web_complete(base_url, token, payload):
+    notifications.append(("web", base_url, token, payload["results"][0]["segment"]))
+    return {"ok": True, "status": 200}
+
+  async def fake_discord(webhook_url, payload):
+    notifications.append(("discord", webhook_url, payload["shareText"]))
+    return {"configured": True, "ok": True, "status": 204}
+
+  monkeypatch.setattr(upload_jobs, "HAS_PARAMS", False)
+  monkeypatch.setattr(upload, "resolve_upload_target", lambda: {
+    "kind": "carrot", "base_url": "https://upload.example", "token": "session-token",
+  })
+  monkeypatch.setattr(upload, "upload_metadata", lambda params: {
+    "carName": "TEST_CAR",
+    "dongleId": "0123456789abcdef",
+  })
+  monkeypatch.setattr(upload, "upload_share_text", lambda payload: "shared upload report")
+  monkeypatch.setattr(upload, "discord_webhook_url", lambda params: "https://discord.example/webhook")
+  monkeypatch.setattr(upload, "send_discord_webhook", fake_discord)
+  monkeypatch.setattr(upload_jobs, "segment_dir", lambda value: "/tmp/segment")
+  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda value: [])
+  monkeypatch.setattr(upload_jobs, "upload_folder_to_web", fake_upload_folder)
+  monkeypatch.setattr(upload_jobs, "send_web_upload_complete", fake_web_complete)
+
+  result = asyncio.run(upload_jobs.run_upload_segments([segment]))
+
+  assert result["ok"] is True
+  assert result["webComplete"] == {"ok": True, "status": 200}
+  assert result["discord"] == {"configured": True, "ok": True, "status": 204}
+  assert notifications == [
+    ("web", "https://upload.example", "session-token", segment),
+    ("discord", "https://discord.example/webhook", "shared upload report"),
+  ]
+
+
+def test_dashcam_toss_completion_never_uses_discord(monkeypatch):
+  segment = "00000cfb--69588de3d7--10"
+
+  async def fake_upload_folder(*args, **kwargs):
+    return True
+
+  async def fake_web_complete(base_url, token, payload):
+    return {"ok": True, "status": 200}
+
+  monkeypatch.setattr(upload_jobs, "HAS_PARAMS", False)
+  monkeypatch.setattr(upload, "resolve_upload_target", lambda: {
+    "kind": "toss", "base_url": "https://toss.example", "token": "toss-token",
+  })
+  monkeypatch.setattr(upload, "upload_metadata", lambda params: {
+    "carName": "TEST_CAR", "dongleId": "0123456789abcdef",
+  })
+  monkeypatch.setattr(upload, "upload_share_text", lambda payload: "shared upload report")
+  monkeypatch.setattr(upload, "discord_webhook_url", lambda params: pytest.fail("Toss must not resolve Discord"))
+  monkeypatch.setattr(upload, "send_discord_webhook", lambda *args: pytest.fail("Toss must not send Discord"))
+  monkeypatch.setattr(upload_jobs, "segment_dir", lambda value: "/tmp/segment")
+  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda value: [])
+  monkeypatch.setattr(upload_jobs, "upload_folder_to_web", fake_upload_folder)
+  monkeypatch.setattr(upload_jobs, "send_web_upload_complete", fake_web_complete)
+
+  result = asyncio.run(upload_jobs.run_upload_segments([segment]))
+
+  assert result["ok"] is True
+  assert result["discord"] == {"configured": False, "ok": False, "skipped": True}
+
+
 def test_tmux_target_uses_automatic_session_token(monkeypatch):
   clear_upload_env(monkeypatch)
   url, headers = web_upload.tmux_web_target({
