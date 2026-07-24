@@ -65,7 +65,6 @@ from cluster_models import (
     NaviLiveState,
     NaviTrafficLightInfo,
     RouteOverlay,
-    TpmsInfo,
 )
 from cluster_scene import (
     ClusterScene,
@@ -153,9 +152,6 @@ CORNER_RADAR_COIN_STOPPED_SIDE = (68, 74, 80)
 CORNER_RADAR_COIN_STOPPED_RING = (205, 212, 218)
 CORNER_RADAR_COIN_STOPPED_MAX_SPEED_KPH = 3.0
 TPMS_LOW_PRESSURE_PSI = 31.0
-TPMS_BADGE_WIDTH = 46.0
-TPMS_BADGE_HEIGHT = 37.5
-TPMS_BADGE_FONT_SIZE = 25.5
 TURN_SIGNAL_LEFT_CENTER_X = 610
 TURN_SIGNAL_RIGHT_CENTER_X = 1310
 TURN_SIGNAL_CENTER_Y = 72
@@ -191,6 +187,9 @@ TOP_CRUISE_FONT_SIZE = 27.0 * DRIVE_STATUS_SCALE
 TOP_CRUISE_UNIT_FONT_SIZE = TOP_CRUISE_FONT_SIZE
 WIFI_STATUS_CENTER_X = 100
 WIFI_STATUS_ICON_SIZE = 48.0
+NAV_STATUS_CENTER_X = WIFI_STATUS_CENTER_X
+NAV_STATUS_CENTER_Y = 99.0
+NAV_STATUS_FONT_SIZE = 22.0
 LFA_STATUS_CENTER_X = 37
 LFA_STATUS_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
 LFA_LANE_ICON_WIDTH_SCALE = 2.0
@@ -266,15 +265,14 @@ NAVI_LIVE_PANEL_Y = 1
 NAVI_LIVE_PANEL_H = DESIGN_HEIGHT - 2
 NAVI_WORLD_VIEW_SHIFT_X = (DESIGN_WIDTH - NAVI_LIVE_PANEL_X) * 0.5
 NAVI_MAP_BACKGROUND = (0, 0, 0, 255)
-NAVI_ACTIVE_LABEL_X = NAVI_LIVE_PANEL_X - 12.0
-NAVI_ACTIVE_LABEL_Y = DESIGN_HEIGHT - 18.0
-CAMERA_TPMS_CENTER_X = NAVI_ACTIVE_LABEL_X - 50.0
-CAMERA_TPMS_CENTER_Y = NAVI_ACTIVE_LABEL_Y - 45.0
-CAMERA_TPMS_COLUMN_OFFSET = 30.0
-CAMERA_TPMS_ROW_OFFSET = 14.0
-CAMERA_TPMS_CAR_W = 15.0
-CAMERA_TPMS_CAR_H = 34.0
-CAMERA_TPMS_FONT_SIZE = 16.0
+TPMS_STATUS_CENTER_X = NAVI_LIVE_PANEL_X - 62.0
+TPMS_STATUS_VALUE_CENTER_Y = 431.5
+TPMS_STATUS_CAR_CENTER_Y = 429.5
+TPMS_STATUS_COLUMN_OFFSET = 40.5
+TPMS_STATUS_ROW_OFFSET = 20.5
+TPMS_STATUS_CAR_W = 40.0
+TPMS_STATUS_CAR_H = 75.0
+TPMS_STATUS_FONT_SIZE = 21.0
 NAVI_LIVE_ICON_X = NAVI_LIVE_PANEL_X + 72
 NAVI_LIVE_ICON_Y = NAVI_LIVE_PANEL_Y + 99
 NAVI_LIVE_ICON_SIZE = 78.0
@@ -2648,8 +2646,6 @@ class ClusterUiRenderer:
                 state.radar_source_color_mode,
             )
             self._profile_add("draw_scene.vehicle_badges", profile_stage)
-            if scene.vehicles:
-                self._draw_ego_tpms(scene.vehicles[0], state.tpms, camera, scene.scene_shift_x_m)
         finally:
             if view_shift_x > 0.0:
                 rl.rl_pop_matrix()
@@ -2682,112 +2678,102 @@ class ClusterUiRenderer:
             return camera_signal_center_x - signal_center_x
         return -self._world_view_shift_design_x(state)
 
-    def _draw_ego_tpms(
-        self,
-        vehicle: VehicleBox,
-        tpms: TpmsInfo,
-        camera,
-        scene_shift_x_m: float,
-    ) -> None:
-        pressures = (tpms.fl, tpms.fr, tpms.rl, tpms.rr)
-        if not any(value is not None for value in pressures):
-            return
-
-        lateral_m = vehicle.width_m * 0.60
-        longitudinal_m = vehicle.length_m * 0.31
-        wheels = (
-            (-lateral_m, longitudinal_m, tpms.fl),
-            (lateral_m, longitudinal_m, tpms.fr),
-            (-lateral_m, -longitudinal_m, tpms.rl),
-            (lateral_m, -longitudinal_m, tpms.rr),
-        )
-        for local_x, local_y, pressure in wheels:
-            anchor = rl.Vector3(
-                vehicle.center.x + vehicle.right_x * local_x + vehicle.forward_x * local_y + scene_shift_x_m,
-                vehicle.center.y + vehicle.right_y * local_x + vehicle.forward_y * local_y,
-                0.25,
-            )
-            screen = world_to_screen_label_anchor(anchor, camera, self.width, self.height)
-            if screen is None:
-                continue
-
-            center_x = clamp(screen.x + (-18.0 if local_x < 0.0 else 18.0), TPMS_BADGE_WIDTH * 0.5 + 4.0, self.width - TPMS_BADGE_WIDTH * 0.5 - 4.0)
-            center_y = clamp(screen.y, TPMS_BADGE_HEIGHT * 0.5 + 4.0, self.height - TPMS_BADGE_HEIGHT * 0.5 - 4.0)
-            self._draw_tpms_badge(pressure, center_x, center_y)
-
-    def _draw_camera_tpms(self, state: ClusterUiState) -> None:
-        if state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
-            return
-
+    def _draw_tpms_status(self, state: ClusterUiState) -> None:
         tpms = state.tpms
         pressures = (tpms.fl, tpms.fr, tpms.rl, tpms.rr)
         if not any(value is not None for value in pressures):
             return
 
-        car_x = CAMERA_TPMS_CENTER_X - CAMERA_TPMS_CAR_W * 0.5
-        car_y = CAMERA_TPMS_CENTER_Y - CAMERA_TPMS_CAR_H * 0.5
+        theme = self._current_theme()
+        if theme.is_dark:
+            body_fill = (0, 0, 0, 255)
+            body_outline = (168, 179, 187, 237)
+            wheel_fill = (133, 144, 153, 229)
+            glass_fill = (70, 142, 162, 197)
+        else:
+            body_fill = (245, 248, 252, 255)
+            body_outline = (95, 106, 115, 237)
+            wheel_fill = (90, 101, 110, 229)
+            glass_fill = (154, 225, 244, 197)
+
+        car_x = TPMS_STATUS_CENTER_X - TPMS_STATUS_CAR_W * 0.5
+        car_y = TPMS_STATUS_CAR_CENTER_Y - TPMS_STATUS_CAR_H * 0.5
+        wheel_w = 6.0
+        wheel_h = 17.0
+        wheel_body_overlap = 1.0
+        wheel_left_x = car_x - wheel_w + wheel_body_overlap
+        wheel_right_x = car_x + TPMS_STATUS_CAR_W - wheel_body_overlap
+        for wheel_x in (wheel_left_x, wheel_right_x):
+            self._rounded_rect(wheel_x, car_y + 12.0, wheel_w, wheel_h, 1.3, wheel_fill)
+            self._rounded_rect(wheel_x, car_y + 47.0, wheel_w, wheel_h, 1.3, wheel_fill)
+
         self._rounded_rect(
             car_x,
             car_y,
-            CAMERA_TPMS_CAR_W,
-            CAMERA_TPMS_CAR_H,
-            5.0,
-            (8, 15, 22, 225),
-            (235, 242, 248, 235),
-            1.2,
+            TPMS_STATUS_CAR_W,
+            TPMS_STATUS_CAR_H,
+            6.5,
+            body_fill,
+            body_outline,
+            2.0,
         )
-        self._rounded_rect(car_x + 3.0, car_y + 5.0, CAMERA_TPMS_CAR_W - 6.0, 10.0, 3.0, (105, 214, 242, 210))
-        wheel_w = 3.0
-        wheel_h = 8.0
-        for wheel_x in (car_x - wheel_w + 0.5, car_x + CAMERA_TPMS_CAR_W - 0.5):
-            self._rounded_rect(wheel_x, car_y + 5.0, wheel_w, wheel_h, 1.2, (5, 9, 12, 245))
-            self._rounded_rect(wheel_x, car_y + CAMERA_TPMS_CAR_H - wheel_h - 5.0, wheel_w, wheel_h, 1.2, (5, 9, 12, 245))
+        self._rounded_rect(
+            car_x + 7.0,
+            car_y + 11.0,
+            TPMS_STATUS_CAR_W - 14.0,
+            24.0,
+            0.0,
+            glass_fill,
+        )
+        rl.draw_line_ex(
+            rl.Vector2(car_x + 4.0, car_y + 49.0),
+            rl.Vector2(car_x + TPMS_STATUS_CAR_W - 4.0, car_y + 49.0),
+            2.0,
+            rl_color(body_outline),
+        )
 
         badge_positions = (
-            (CAMERA_TPMS_CENTER_X - CAMERA_TPMS_COLUMN_OFFSET, CAMERA_TPMS_CENTER_Y - CAMERA_TPMS_ROW_OFFSET, tpms.fl),
-            (CAMERA_TPMS_CENTER_X + CAMERA_TPMS_COLUMN_OFFSET, CAMERA_TPMS_CENTER_Y - CAMERA_TPMS_ROW_OFFSET, tpms.fr),
-            (CAMERA_TPMS_CENTER_X - CAMERA_TPMS_COLUMN_OFFSET, CAMERA_TPMS_CENTER_Y + CAMERA_TPMS_ROW_OFFSET, tpms.rl),
-            (CAMERA_TPMS_CENTER_X + CAMERA_TPMS_COLUMN_OFFSET, CAMERA_TPMS_CENTER_Y + CAMERA_TPMS_ROW_OFFSET, tpms.rr),
+            (
+                TPMS_STATUS_CENTER_X - TPMS_STATUS_COLUMN_OFFSET,
+                TPMS_STATUS_VALUE_CENTER_Y - TPMS_STATUS_ROW_OFFSET,
+                tpms.fl,
+            ),
+            (
+                TPMS_STATUS_CENTER_X + TPMS_STATUS_COLUMN_OFFSET,
+                TPMS_STATUS_VALUE_CENTER_Y - TPMS_STATUS_ROW_OFFSET,
+                tpms.fr,
+            ),
+            (
+                TPMS_STATUS_CENTER_X - TPMS_STATUS_COLUMN_OFFSET,
+                TPMS_STATUS_VALUE_CENTER_Y + TPMS_STATUS_ROW_OFFSET,
+                tpms.rl,
+            ),
+            (
+                TPMS_STATUS_CENTER_X + TPMS_STATUS_COLUMN_OFFSET,
+                TPMS_STATUS_VALUE_CENTER_Y + TPMS_STATUS_ROW_OFFSET,
+                tpms.rr,
+            ),
         )
         for center_x, center_y, pressure in badge_positions:
             self._draw_compact_tpms_value(pressure, center_x, center_y)
 
     def _draw_compact_tpms_value(self, pressure: float | None, center_x: float, center_y: float) -> None:
+        theme = self._current_theme()
         low = pressure is not None and pressure < TPMS_LOW_PRESSURE_PSI
         text = "--" if pressure is None else f"{pressure:.0f}"
-        color = RED if low else WHITE
+        color = RED if low else theme.world_label_text
         if pressure is None:
-            color = (175, 182, 190)
+            color = theme.muted
         self._draw_text_with_stroke(
             text,
             center_x,
             center_y,
-            CAMERA_TPMS_FONT_SIZE,
+            TPMS_STATUS_FONT_SIZE,
             color,
-            (5, 9, 12),
+            theme.world_label_shadow,
             2,
             anchor="center",
         )
-
-    def _draw_tpms_badge(self, pressure: float | None, center_x: float, center_y: float) -> None:
-        low = pressure is not None and pressure < TPMS_LOW_PRESSURE_PSI
-        text = "--" if pressure is None else f"{pressure:.0f}"
-        outline = (*RED, 235) if low else (105, 214, 242, 210)
-        text_color = (*RED, 255) if low else (245, 250, 255, 255)
-        if pressure is None:
-            outline = (120, 130, 140, 170)
-            text_color = (175, 182, 190, 220)
-        self._rounded_rect(
-            center_x - TPMS_BADGE_WIDTH * 0.5,
-            center_y - TPMS_BADGE_HEIGHT * 0.5,
-            TPMS_BADGE_WIDTH,
-            TPMS_BADGE_HEIGHT,
-            8.0,
-            (8, 15, 22, 218),
-            outline,
-            1.5,
-        )
-        self._draw_text(text, center_x, center_y, TPMS_BADGE_FONT_SIZE, text_color, anchor="center")
 
     def _draw_strip(self, strip: MeshStrip) -> None:
         count = min(len(strip.left), len(strip.right))
@@ -3546,14 +3532,14 @@ class ClusterUiRenderer:
         navi_connected = bool(state.navi_dashboard is not None and state.navi_dashboard.connected)
         if state.external_nav_active or navi_connected:
             self._draw_text_with_stroke(
-                "NAVI",
-                NAVI_ACTIVE_LABEL_X,
-                NAVI_ACTIVE_LABEL_Y,
-                27.0,
+                "NAV",
+                NAV_STATUS_CENTER_X,
+                NAV_STATUS_CENTER_Y,
+                NAV_STATUS_FONT_SIZE,
                 GREEN,
                 (10, 13, 16),
                 2,
-                anchor="right",
+                anchor="center",
                 cache=True,
             )
 
@@ -5913,7 +5899,7 @@ class ClusterUiRenderer:
         self._draw_cruise_gap_badge(state.cruise_gap)
         self._draw_speed_gear_badge(state)
         self._draw_ev_mode_indicator(state)
-        self._draw_camera_tpms(state)
+        self._draw_tpms_status(state)
 
         if self._cruise_set_visible(state) and state.cruise_override_kph is not None:
             override_color = (
