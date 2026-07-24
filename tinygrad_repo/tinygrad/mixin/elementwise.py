@@ -1,7 +1,7 @@
 import math, functools, operator
 from typing import TYPE_CHECKING, Literal, Self
 from tinygrad.uop import Ops
-from tinygrad.dtype import dtypes, ConstType, PyConst, least_upper_dtype, least_upper_float
+from tinygrad.dtype import dtypes, ConstType, PyConst, least_upper_dtype
 from tinygrad.helpers import argfix, polyN
 from tinygrad.mixin.creation import CreationMixin
 
@@ -45,7 +45,14 @@ class ElementwiseMixin(CreationMixin):
     """
     return self.cast(dtypes.bool).ne(True)
 
-  def contiguous(self, *args, **kwargs) -> Self: raise NotImplementedError
+  def contiguous(self, **kwargs) -> Self:
+    """
+    Returns a contiguous tensor.
+    """
+    if self.dtype in dtypes.weaks: raise RuntimeError(f"cannot create storage for weak dtype {self.dtype}")
+    uop = self._uop
+    if uop.op is Ops.CONTIGUOUS or self.device is None or uop.has_buffer_identity(): return self._wrap_uop(uop)
+    return self._wrap_uop(uop.alu(Ops.CONTIGUOUS, **kwargs))
 
   def contiguous_backward(self) -> Self:
     """
@@ -61,7 +68,7 @@ class ElementwiseMixin(CreationMixin):
     print(Tensor([-3., -2., -1., 0., 1., 2., 3.]).neg().numpy())
     ```
     """
-    return self.logical_not() if self.dtype.scalar() == dtypes.bool else self * (-1)
+    return self.logical_not() if self.dtype == dtypes.bool else self * (-1)
 
   def _check_dtype(self) -> None:
     if not (dtypes.is_bool(self.dtype) or dtypes.is_int(self.dtype)):
@@ -433,9 +440,6 @@ class ElementwiseMixin(CreationMixin):
   def threefry(self, seed: Self) -> Self:
     return self.alu(Ops.THREEFRY, seed)
 
-  def _ensure_float(self) -> Self:
-    return self if self.is_floating_point() else self.cast(least_upper_float(self.dtype))
-
   def reciprocal(self) -> Self:
     """
     Computes `1/x` element-wise.
@@ -444,7 +448,7 @@ class ElementwiseMixin(CreationMixin):
     print(Tensor([1., 2., 3., 4.]).reciprocal().numpy())
     ```
     """
-    return self._ensure_float().alu(Ops.RECIPROCAL)
+    return self.alu(Ops.RECIPROCAL)
 
   def trunc(self) -> Self:
     """
@@ -464,7 +468,7 @@ class ElementwiseMixin(CreationMixin):
     print(Tensor([1., 2., 3., 4.]).sqrt().numpy())
     ```
     """
-    return self._ensure_float().alu(Ops.SQRT)
+    return self.alu(Ops.SQRT)
 
   def sin(self) -> Self:
     """
@@ -474,7 +478,7 @@ class ElementwiseMixin(CreationMixin):
     print(Tensor([0., math.pi/2, math.pi, 3*math.pi/2, 2*math.pi]).sin().numpy())
     ```
     """
-    return self._ensure_float().alu(Ops.SIN)
+    return self.alu(Ops.SIN)
 
   def cos(self) -> Self:
     """
@@ -511,7 +515,7 @@ class ElementwiseMixin(CreationMixin):
     print(Tensor([1., 2., 4., 8.]).log2().numpy())
     ```
     """
-    return self._ensure_float().alu(Ops.LOG2)
+    return self.alu(Ops.LOG2)
 
   def exp2(self) -> Self:
     """
@@ -523,7 +527,7 @@ class ElementwiseMixin(CreationMixin):
     print(Tensor([0., 1., 2., 3.]).exp2().numpy())
     ```
     """
-    return self._ensure_float().alu(Ops.EXP2)
+    return self.alu(Ops.EXP2)
 
   def pow(self, x: Self | ConstType, reverse: bool = False) -> Self:
     """
@@ -542,7 +546,7 @@ class ElementwiseMixin(CreationMixin):
     """
     base, exponent = self._broadcasted(x, reverse=reverse)
     # TODO: int pow
-    if not base.is_floating_point() and not isinstance(x, ElementwiseMixin) and not (isinstance(x, int) and x >= 0):
+    if not base.is_floating_point() and isinstance(x, ConstType) and not (isinstance(x, int) and x >= 0):
       raise RuntimeError("base needs to be float")
     ret = base.alu(Ops.POW, exponent)
     # NOTE: pow(int, float) -> int
@@ -627,6 +631,7 @@ class ElementwiseMixin(CreationMixin):
     print(Tensor([float('nan')]).isclose(Tensor([float('nan')]), equal_nan=True).numpy())
     ```
     """
+    other = self.ufix(other)
     is_finite_close = self.isfinite() & other.isfinite() & ((self - other).abs() <= atol + rtol * other.abs())
     is_infinite_close = (self.isinf() | other.isinf()) & self.eq(other)
     is_nan_close = (self.isnan() & other.isnan()) & equal_nan
@@ -1067,7 +1072,7 @@ class ElementwiseMixin(CreationMixin):
     print(Tensor([1., 2., 3.]).lerp(Tensor([4., 5., 6.]), 0.5).numpy())
     ```
     """
-    if self.dtype == dtypes.uint8 and isinstance(weight, ElementwiseMixin):
+    if self.dtype == dtypes.uint8 and not isinstance(weight, ConstType):
       w_i = (weight * (1<<(W_PREC:=7)) + 0.5).cast(dtypes.int16)
       return (self+(((end - self).cast(dtypes.int8) * w_i + (1<<W_PREC-1)).cast(dtypes.uint16) >> W_PREC)).cast(dtypes.uint8)
     return self + (end - self) * weight

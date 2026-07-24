@@ -20,6 +20,7 @@ include-package-data = true
 packages = [
   'tinygrad',
   'tinygrad.codegen',
+  'tinygrad.codegen.decomp',
   'tinygrad.codegen.opt',
   'tinygrad.codegen.late',
   'tinygrad.engine',
@@ -110,6 +111,7 @@ docs = [
   "black",
   "numpy",
 ]
+mesa = ["tinymesa==25.2.7.2"]
 
 
 [tool.mutmut]
@@ -159,7 +161,6 @@ norecursedirs = [
   ".git",
 ]
 timeout = 300
-timeout_method = "thread"
 timeout_func_only = true
 testpaths = ["test"]
 filterwarnings = [

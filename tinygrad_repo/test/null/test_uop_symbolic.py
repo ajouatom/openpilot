@@ -9,7 +9,7 @@ from tinygrad.uop.symbolic import sym, commutative, pm_simplify_valid, pm_move_w
 from tinygrad.uop.validate import uops_to_z3
 
 def check_uop_against_string(self, v:UOp, s:str):
-  sym_vars = {v.render():v for v in v.toposort() if v.op in (Ops.DEFINE_VAR, Ops.RANGE, Ops.SPECIAL)}
+  sym_vars = {v.render():v for v in v.toposort() if v.op in (Ops.RANGE, Ops.SPECIAL, Ops.PARAM)}
   s_eval = eval(s, sym_vars)
   if isinstance(s_eval, int) and v.dtype==dtypes.weakint: s_eval = UOp.const(dtypes.weakint, s_eval)
   elif isinstance(s_eval, (bool, int, float)): s_eval = UOp.const(dtypes.from_py(s_eval), s_eval)
@@ -825,6 +825,26 @@ class TestSymbolic(unittest.TestCase):
     self.helper_test_variable((x//10)*10 + x%10, 0, 119, "(a*10+(a+b//5)//2*10+(b+a*5)%10)")
     self.helper_test_variable((x//10)*2 + (x//5)%2, 0, 23, "(a*3+b//5)")
 
+  def test_div_mod_recombine_merged_quotient(self):
+    # recombine finds the quotient base//div even when stored merged as base0//(d0*div), including with an offset
+    x = Variable("x", 0, 199)
+    self.helper_test_variable(((x//3)%4)*2 + ((x//12)%5)*8, 0, 38, "x//3%20*2")  # nested-merged quotient
+    self.helper_test_variable(((x//3 + 1)%4) + ((x+3)//12)*4, 1, 67, "x//3+1")   # offset-merged quotient
+
+  def test_div_mod_recombine_negative_div(self):
+    # partial recombine only needs d>0, div can be negative: (x%div) + ((x//div)%d)*div -> x%(div*d)
+    x = Variable("x", 0, 199)
+    self.helper_test_variable(x%(-3) + ((x//(-3))%5)*(-3), -14, 0, "x%-15")
+
+  def test_div_mod_recombine_shifted_quotient(self):
+    # when vmin<0 blocks const reduction on the mod side, the quotient is stored const-shifted: (x-50)//3 -> (x+1)//3 - 17.
+    # recombine only needs a quotient of some b congruent to base mod div, so the shift folds into the result
+    x = Variable("x", 0, 100)
+    y = Variable("y", 0, 99)
+    self.helper_test_variable((x-50)%3 + ((x-50)//3)*3, -50, 50, "(x+-50)")                # shifted literal quotient
+    self.helper_test_variable((x-50)%3 + (((x-50)//3)%5)*3, 0, 14, "((x+-50)%15)")         # shift inside the partial's mod
+    self.helper_test_variable(((y-50)//5)%4 + ((y-50)//20)*4, -10, 9, "(y//5+-10)")        # merged and shifted
+
   def test_div_mod_recombine_in_additive_sum(self):
     x = Variable("x", 0, 31)
     y = Variable("y", 0, 5)
@@ -898,7 +918,7 @@ class TestSymbolic(unittest.TestCase):
     # CAST(bool -> int) != c (c not in {0,1})  ->  always True (CAST is 0 or 1)
     self.helper_test_variable(cond.cast(dtypes.int).ne(2), 1, 1, "True")
     self.helper_test_variable(cond.cast(dtypes.int).ne(-1), 1, 1, "True")
-    # CAST(bool -> weakint) folds too
+    # CAST(bool -> index) folds too
     self.helper_test_variable(cond.cast(dtypes.weakint).ne(0), 0, 1, "(a<2)")
     self.helper_test_variable(cond.cast(dtypes.weakint).ne(1), 0, 1, "((a<2)!=True)")
 
@@ -956,8 +976,8 @@ class TestSymbolic(unittest.TestCase):
     expr = cond.where(a, b).cast(dtypes.half)
 
     # TODO: copied from render, render does not support cast
-    glbl = UOp.param(0, dtypes.int.ptr(1))
-    uops = get_uops(UOp(Ops.STORE, dtypes.void, (glbl.index(UOp.const(dtypes.int, 0), ptr=True), expr)).sink())
+    glbl = UOp.param(0, dtypes.int, (1,))
+    uops = get_uops(UOp(Ops.STORE, src=(glbl.index(UOp.const(dtypes.int, 0)), expr)).sink())
     rewritten_uop = [uop for uop in uops if uop.op is Ops.STORE][0].src[1]
 
     # the vars are now scalar PARAMs
@@ -1269,15 +1289,15 @@ class TestInvalidIndex(unittest.TestCase):
     self.assertIs((UOp.invalid()<Variable("a",0,10)).simplify().dtype, dtypes.bool)
 
   def test_alu_invalid_vconst(self):
-    c1 = UOp.const(dtypes.weakint.vec(4), (1, 1, Invalid, Invalid))
-    c2 = UOp.const(dtypes.weakint.vec(4), (1, Invalid, 1, 1))
-    self.assertIs((c1+c2).simplify(), UOp.const(dtypes.weakint.vec(4), (2, Invalid, Invalid, Invalid)))
+    c1 = UOp.const(dtypes.weakint, (1, 1, Invalid, Invalid))
+    c2 = UOp.const(dtypes.weakint, (1, Invalid, 1, 1))
+    self.assertIs((c1+c2).simplify(), UOp.const(dtypes.weakint, (2, Invalid, Invalid, Invalid)))
 
 class TestStoreLoadFolding(unittest.TestCase):
   """Tests for store(index, load(index)) -> NOOP rule. This rule matches patterns that EMERGE during simplification."""
   def test_store_load_folding(self):
     # store(idx, load(idx)) -> NOOP, including emergent patterns like store(idx, load(idx) + 0)
-    buf = UOp.param(0, dtypes.int.ptr())
+    buf = UOp.param(0, dtypes.int, (1,))
     index = buf.index(UOp.const(dtypes.weakint, 0))
     # Direct: store(idx, load(idx)) -> NOOP
     self.assertEqual(graph_rewrite(index.store(index.load()), sym).op, Ops.NOOP)
@@ -1290,14 +1310,14 @@ class TestStoreLoadFolding(unittest.TestCase):
 
 class TestMoveWhereOnLoad(unittest.TestCase):
   def test_bool_index_preserves_dtype(self):
-    buf = UOp.param(0, dtypes.bool.ptr(8))
+    buf = UOp.param(0, dtypes.bool, (8,))
     a = Variable("a", 0, 7)
     r = UOp.range(8, 0)
     # cond has a range that the rewrite can move into the valid: gate (a<4) goes into load valid
     cond = (a < 4) & (r < 2)
     valid = (a < 2)  # pre-existing valid on the load (to pass can_move check for the r-only clause)
-    idx = buf.index(a.valid(valid), ptr=True)
-    expr = cond.where(idx, 0)
+    idx = buf.index(a.valid(valid))
+    expr = cond.where(idx, idx.const_like(0))
     out = graph_rewrite(expr, pm_move_where_on_load)
     # any WHERE in the rewritten graph must have matched-dtype branches
     for u in out.toposort():
@@ -1335,10 +1355,10 @@ class TestGatedUopGivenValid(unittest.TestCase):
 
     idx0 = (r0 + uconst(-1)) // uconst(3)
     idx1 = r0 % uconst(3)
-    idx:UOp = (r0 < 3).where(UOp(Ops.STACK, dtypes.weakint.vec(2), (idx0, idx1)), UOp.invalid())
+    idx:UOp = (r0 < 3).where(UOp(Ops.STACK, src=(idx0, idx1)), UOp.invalid())
     idx = graph_rewrite(idx, pm_simplify_valid)
     # independent simplification: (r0-1)//3 -> (r0+2)//3 - 1, and r0%3 -> r0 when r0 in [0,2]
-    expected_vec = UOp(Ops.STACK, dtypes.weakint.vec(2), ((r0 + uconst(2)) // uconst(3) + uconst(-1), r0))
+    expected_vec = UOp(Ops.STACK, src=((r0 + uconst(2)) // uconst(3) + uconst(-1), r0))
     self.assertEqual(idx, (r0 < 3).where(expected_vec, UOp.invalid()))
 
 class TestRangeSplitting(unittest.TestCase):
@@ -1347,10 +1367,10 @@ class TestRangeSplitting(unittest.TestCase):
     from tinygrad.codegen.simplify import pm_split_ranges, pm_flatten_range
     r0 = UOp.range(uconst(8), 0)
     # create a simple expression using the range with mod: store range%2 to a buffer
-    buf = UOp.param(0, dtypes.int.ptr())
+    buf = UOp.param(0, dtypes.int, (1,))
     val = (r0 % uconst(2)).cast(dtypes.int)
-    store = UOp(Ops.STORE, dtypes.void, (buf.index(uconst(0)), val))
-    sink = UOp(Ops.SINK, dtypes.void, (UOp(Ops.END, dtypes.void, (store, r0)),))
+    store = UOp(Ops.STORE, src=(buf.index(uconst(0)), val))
+    sink = UOp(Ops.SINK, src=(UOp(Ops.END, src=(store, r0)),))
     # count RANGEs before
     ranges_before = len([u for u in sink.toposort() if u.op is Ops.RANGE])
     # apply the range splitting optimization

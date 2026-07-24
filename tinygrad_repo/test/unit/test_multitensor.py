@@ -78,8 +78,9 @@ class TestMultiTensor(unittest.TestCase):
     self.assertEqual(Y.device, devices_2)
     np.testing.assert_equal(X.numpy(), Y.numpy())
 
-    with self.assertRaises(AssertionError):
-      _ = Tensor(X.uop, dtype=dtypes.float)
+    Z = Tensor(X.uop, dtype=dtypes.float)
+    self.assertEqual(Z.dtype, dtypes.float)
+    np.testing.assert_equal(Z.numpy(), [1.0, 2.0])
 
   def test_sharded_arange(self):
     sharded_arange = Tensor.arange(1000).clone().shard(devices_2, 0)
@@ -207,7 +208,7 @@ class TestMultiTensor(unittest.TestCase):
     out.numpy()
 
   def test_backprop_conv(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       conv = nn.Conv2d(3, 16, 3)
       for p in get_parameters(conv): p.shard_(devices_2)
       optim = nn.optim.Adam(get_parameters(conv))
@@ -511,7 +512,7 @@ class TestMultiTensor(unittest.TestCase):
   def test_full_like_on_shard_axis(self): self.test_full_like_on_shard(0)
 
   def test_dropout_on_shard(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       X = Tensor.ones(256).to(devices_2)
       output = X.dropout(0.5).numpy()
       unique, counts = np.unique(output, return_counts=True)
@@ -519,7 +520,7 @@ class TestMultiTensor(unittest.TestCase):
       assert 96 < counts[0] < 160, counts[0]
 
   def test_dropout_on_shard_axis(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       X = Tensor.ones(512).shard(devices_2, axis=0)
       output = X.dropout(0.5).numpy()
       unique, counts = np.unique(output, return_counts=True)
@@ -601,8 +602,8 @@ class TestShrinkMultiTensorShardedAxis(unittest.TestCase):
       np.testing.assert_allclose((a+a).numpy(), (b+b).numpy(), rtol=1e-7, atol=1e-3)
       np.testing.assert_equal((a+1).numpy(), (b+1).numpy())
       np.testing.assert_equal((1+a).numpy(), (1+b).numpy())
-      np.testing.assert_allclose((a.where(a+a, a)).numpy(), (b.where(b+b, b)).numpy(), rtol=1e-7, atol=1e-3)
-      np.testing.assert_allclose((a.where(1, 0)).numpy(), (b.where(1, 0)).numpy(), rtol=1e-7, atol=1e-3)
+      np.testing.assert_allclose((a.bool().where(a+a, a)).numpy(), (b.bool().where(b+b, b)).numpy(), rtol=1e-7, atol=1e-3)
+      np.testing.assert_allclose((a.bool().where(1, 0)).numpy(), (b.bool().where(1, 0)).numpy(), rtol=1e-7, atol=1e-3)
 
       # reduce
       np.testing.assert_allclose(a.max().numpy(), b.max().numpy(), rtol=1e-7, atol=1e-3)
@@ -664,7 +665,7 @@ class TestBatchNorm(unittest.TestCase):
   def setUp(self): pass
 
   def test_unsynced_backprop_conv_bn(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       from extra.lr_scheduler import OneCycleLR
 
       convs = [nn.Conv2d(3, 16, 3), nn.Conv2d(3, 16, 3)]
@@ -709,7 +710,7 @@ class TestBatchNorm(unittest.TestCase):
           bn_ts.append(bni)
         return bn_ts[0].cat(*bn_ts[1:])
 
-    with Tensor.train():
+    with Context(TRAINING=1):
       conv = nn.Conv2d(3, 16, 3)
       bn = BatchNorm(16)
 
@@ -731,7 +732,7 @@ class TestBatchNorm(unittest.TestCase):
     from examples.hlb_cifar10 import UnsyncedBatchNorm
     GPUS = (d1, d2)
 
-    with Tensor.train():
+    with Context(TRAINING=1):
       conv = nn.Conv2d(3, 16, 3)
       bn = UnsyncedBatchNorm(16, num_devices=len(GPUS))
 
@@ -756,7 +757,7 @@ class TestBatchNorm(unittest.TestCase):
     devices = [f"{Device.DEFAULT}:{i}" for i in range(4)]
     x = Tensor.arange(4096).reshape(8, 8, 8, 8).clone().realize().shard(devices, axis=0)
 
-    with Tensor.train(is_training):
+    with Context(TRAINING=is_training):
       bns = []
       for _ in range(len(devices)):
         bn = nn.BatchNorm2d(8)
@@ -777,7 +778,7 @@ class TestBatchNorm(unittest.TestCase):
     devices = [f"{Device.DEFAULT}:{i}" for i in range(4)]
     x = Tensor.ones(8, 8, 8, 8).contiguous().realize().shard(devices, axis=0)
 
-    with Tensor.train():
+    with Context(TRAINING=1):
       synced_bn = BatchNorm2d(8)
       unsynced_bn = UnsyncedBatchNorm(8, num_devices=len(devices))
 

@@ -44,23 +44,23 @@ ptx_matcher = PatternMatcher([
   (UPat.var('x', dtype=dtypes.bool)<UPat.var('y'), lambda x,y: (x^True)&y),
   # upcast to float32 all the ops that don't support half
   (UPat(doesnt_support_half, dtype=dtypes.half, name="x"),
-    lambda x: (UOp(x.op, dtypes.float32, tuple(vv.cast(dtypes.float32) for vv in x.src), x.arg).cast(dtypes.half))),
+    lambda x: (UOp(x.op, src=tuple(vv.cast(dtypes.float32) for vv in x.src), arg=x.arg).cast(dtypes.half))),
   # load/store bool -> uint8 (only for memory, not registers)
   (UPat(Ops.LOAD, dtypes.bool, src=(UPat(name="idx"),), name="x", allow_any_len=True),
    lambda x,idx: UOp(x.op, dtypes.uint8, x.src[0:1] + ((x.src[1].cast(dtypes.uint8),) if len(x.src) >= 2 else ()) + x.src[2:]).cast(dtypes.bool) \
      if idx.addrspace != AddrSpace.REG else None),
   (UPat(Ops.STORE, src=(UPat(name="idx"), UPat(dtype=dtypes.bool)), name="x", allow_any_len=True),
-   lambda x,idx: UOp(x.op, dtypes.void, (x.src[0], x.src[1].cast(dtypes.uint8))+x.src[2:]) if idx.addrspace != AddrSpace.REG else None),
+   lambda x,idx: UOp(x.op, src=(x.src[0], x.src[1].cast(dtypes.uint8))+x.src[2:]) if idx.addrspace != AddrSpace.REG else None),
   # ptx shr and shl instructions require y to be uint
-  (UPat.var("x") << UPat.var("y"), lambda x,y: UOp(Ops.SHL, x.dtype, (x,y.cast(dtypes.uint))) if y.dtype != dtypes.uint else None),
-  (UPat.var("x") >> UPat.var("y"), lambda x,y: UOp(Ops.SHR, x.dtype, (x,y.cast(dtypes.uint))) if y.dtype != dtypes.uint else None),
+  (UPat.var("x") << UPat.var("y"), lambda x,y: UOp(Ops.SHL, src=(x,y.cast(dtypes.uint))) if y.dtype != dtypes.uint else None),
+  (UPat.var("x") >> UPat.var("y"), lambda x,y: UOp(Ops.SHR, src=(x,y.cast(dtypes.uint))) if y.dtype != dtypes.uint else None),
 ])
 
 def mem_type(x:UOp) -> str: return 'shared' if x.addrspace == AddrSpace.LOCAL else 'global'
 
 def render_wmma(ctx: "PTXRenderer", wmma: UOp):
   assert ctx.wmma_r, "registry values for wmma must be populated"
-  (N, M, K), dtype_in, dtype_out = wmma.arg[1], wmma.arg[2], wmma.arg[3]
+  (N, M, K), dtype_in, dtype_out = wmma.arg[0], wmma.arg[1], wmma.dtype
 
   for src, regs in zip(wmma.src, ctx.wmma_r):
     for i, reg in enumerate(regs): # pack input and acc registers
@@ -125,6 +125,9 @@ string_rewrite = PatternMatcher([
     ctx.code_for_op[Ops.ADD](ctx.r[r], ctx.r[r], "1", dtypes.int, ctx.types[dtypes.int]),
     ctx.code_for_op[Ops.CMPLT](ctx.r[x], ctx.r[r], ctx.r[r.src[0]], dtypes.int, ctx.types[dtypes.int]),
     f"@{ctx.r[x]} bra LOOP_{ctx.r[r][1:]};"]),
+  (UPat(Ops.LOOP, name="l"), lambda ctx, l: f"WAITLOOP_{ctx.uops.index(l)}:"),
+  (UPat(Ops.END, src=(UPat(), UPat(Ops.LOOP, name="l"), UPat(name="c"))), lambda ctx, l, c:
+    f"@{ctx.r[c]} bra WAITLOOP_{ctx.uops.index(l)};"),
   (UPat(Ops.IF, name="x"), lambda ctx, x: f"@!{ctx.r[x.src[0]]} bra IF_{ctx.r[x.src[0]][1:]}_{ctx.uops.index(x)};"),
   (UPat(Ops.ENDIF, name="x"), lambda ctx, x: f"IF_{ctx.r[x.src[0].src[0]][1:]}_{ctx.uops.index(x.src[0])}:"),
   (UPat(Ops.WMMA, name="x"), lambda ctx, x: list(render_wmma(ctx, x))),
@@ -175,7 +178,7 @@ class PTXRenderer(Renderer):
 
     def ssa(prefix:str, u:UOp|None=None, dtype:str|None=None) -> str:
       nonlocal c
-      prefix += f"_{dtype if dtype is not None else self.types[unwrap(u).dtype.base]}_"
+      prefix += f"_{dtype if dtype is not None else self.types[unwrap(u).dtype]}_"
       c[prefix] += 1
       return f"%{prefix}{c[prefix]-1}"
 
@@ -192,7 +195,7 @@ class PTXRenderer(Renderer):
         r[u] = [cast(str,r[x]) for x in u.src]
         continue
       if u.op is Ops.BUFFER and u.addrspace == AddrSpace.REG:
-        r[u] = [ssa("reg", u, self.types[u.dtype.base.scalar()]) for _ in range(u.max_numel())]
+        r[u] = [ssa("reg", u, self.types[u.dtype.scalar()]) for _ in range(u.max_numel())]
         continue
       if u.op in {Ops.INDEX, Ops.SHRINK, Ops.LOAD} and u.src[0].addrspace in (AddrSpace.REG, AddrSpace.ALU):
         # on REG, INDEX/SHRINK pick the register (must be CONST) and LOAD is a noop
@@ -213,7 +216,8 @@ class PTXRenderer(Renderer):
         Ops.PARAM: ("dat", "u64" if u.addrspace is AddrSpace.GLOBAL else None), **{op: ("alu", None) for op in GroupOp.ALU}}.get(u.op, (None, None))
       if prefix: r[u] = ssa(prefix, u, dtype)
 
-      if (l:=cast(str|list[str], string_rewrite.rewrite(u, ctx=self))) is None:
+      l: str|list[str]|None = string_rewrite.rewrite(u, ctx=self)
+      if l is None:
         raise RuntimeError(f"failed to render {u.op} with {u.dtype} srcs {[x.dtype for x in u.src]}")
       kernel.extend([l] if isinstance(l, str) else l)
 

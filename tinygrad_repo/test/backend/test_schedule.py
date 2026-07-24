@@ -2,10 +2,8 @@
 # schedule confirms the right things are capable of fusing
 # NOTE: this has overlap with external_test_opt.py
 
-import unittest
+import unittest, time
 import numpy as np
-from typing import cast
-from hypothesis import assume, given, strategies as strat
 
 from tinygrad import nn, dtypes, Device, Tensor, Variable
 from tinygrad.uop.ops import UOp, Ops, UPat
@@ -86,25 +84,6 @@ class TestSchedule(unittest.TestCase):
     # two REDUCEs sharing the same RANGE at different nesting depths must NOT merge
     x = Tensor.arange(768).reshape(3, 256).float()
     np.testing.assert_allclose((x.sum(axis=1) + x.sum(axis=1).sum()).numpy(), x.numpy().sum(axis=1) + x.numpy().sum(axis=1).sum())
-
-  @unittest.skip("disabling subbuffer manually isn't supported anymore")
-  def test_bitcast_disable_subbufer(self):
-    x = cast(UOp, Tensor.empty(1, dtype=dtypes.float32).realize().uop)
-    a = x.alu(Ops.EXP2).cast(dtypes.int32, True, allow_buffer_view=False)
-    b = x.cast(dtypes.int32, True, allow_buffer_view=False)
-    b = a.alu(Ops.ADD, b)
-    check_schedule(b, 1)
-
-  @given(strat.sampled_from(dtypes.all), strat.sampled_from(dtypes.all))
-  @unittest.skip("kernel count depends on input")
-  def test_cast_padded_const(self, dt1, dt2):
-    assume(dt1 in supported_dtypes and dt2 in supported_dtypes)
-    a = Tensor(1, dtype=dt1).reshape(1, 1).pad(((1, 1), None))
-    casted_view = a.cast(dt2)
-    run_linear(*check_schedule(casted_view, 0))
-    realized_const_view = casted_view.contiguous()
-    run_linear(*check_schedule(realized_const_view, 1))
-    np.testing.assert_equal(realized_const_view.numpy(), [[0], [1], [0]])
 
   def test_fuse_assign_contiguous(self):
     x = Tensor.zeros(4, 4, dtype=dtypes.int).contiguous().realize()
@@ -187,6 +166,13 @@ class TestSchedule(unittest.TestCase):
     self.assertEqual(t.device, dev)
     np.testing.assert_equal(t[:64].numpy(), np.arange(64).cumsum())
 
+  def test_copy_multi_scalar(self):
+    devs = ("CPU:0", "CPU:1")
+    x = Tensor.ones(2, device="CPU").shard(devs, axis=0).realize()
+    out = (x.sum()*2).reshape(1).to("CPU")
+    run_linear(*check_schedule(out, 5))
+    np.testing.assert_equal(out.numpy(), [4.])
+
 class TestLimitBufs(unittest.TestCase):
   @unittest.skipIf(DEV.interface.startswith("MOCK") and Device.DEFAULT == "NV", "crashes in ocelot")
   def test_limit_bufs_with_var(self):
@@ -210,6 +196,20 @@ class TestLimitBufs(unittest.TestCase):
         a, b = Tensor.rand(N).realize(), Tensor.rand(N).realize()
         base = (idx >= i).where(a + b, base)
       assert all(x > 0 for x in base.tolist())
+
+  def test_limit_bufs_linear_scaling(self):
+    def sched_time(n):
+      with Context(TRACK_MATCH_STATS=0, DEBUG=0):
+        bufs = [Tensor.ones(16).contiguous().realize() for _ in range(4)]
+        root = bufs[0]
+        for i in range(n): root = root + bufs[i % 4]
+        with Context(MAX_KERNEL_BUFFERS=8, SCACHE=0):
+          st = time.perf_counter()
+          root.schedule_linear()
+          return time.perf_counter() - st
+    sched_time(400)
+    t1, t2 = min(sched_time(400) for _ in range(3)), min(sched_time(1600) for _ in range(3))
+    self.assertLess(t2/t1, 8, f"{t1*1e3:.1f}ms -> {t2*1e3:.1f}ms")
 
 class TestSwizzle(unittest.TestCase):
   def test_swizzle_simple(self):
@@ -468,6 +468,14 @@ class TestCopyFolding(unittest.TestCase):
     b = a.shrink(((0, 4),)).reshape(2, 2).permute(1, 0).to("CPU")
     b.realize()
     self.assertListEqual(b.tolist(), [[0, 2], [1, 3]])
+
+  def test_permute_copy_to_device(self):
+    b = Tensor([[0, 1, 2, 3], [4, 5, 6, 7]], device="CPU").permute(1, 0).to("PYTHON")
+    self.assertListEqual(b.tolist(), [[0, 4], [1, 5], [2, 6], [3, 7]])
+
+  def test_flip_copy_to_device(self):
+    b = Tensor([0, 1, 2, 3], device="CPU").flip(0).to("PYTHON")
+    self.assertListEqual(b.tolist(), [3, 2, 1, 0])
 
 class TestUOpBecome(unittest.TestCase):
   def test_setitem_offset(self):
