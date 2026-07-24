@@ -170,7 +170,7 @@
       "id": "replay.sensor.worker",
       "kind": "worker",
       "path": "js/realtime/replay_sensor_worker.js",
-      "hash": "7c594c60f6d03eeea9462673a254d1368393aa3e146320363193b5e850f7a142"
+      "hash": "2df54be5aa0c15f199b56ca8be20ecfd329ba5741cc7c0ef631c7cb891d020d3"
     },
     {
       "id": "replay.advanced.worker",

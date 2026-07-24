@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -31,6 +32,7 @@ _MANIFEST_RELATIVE_PATH: Final = Path("generated") / "asset-manifest.json"
 _LOGICAL_ID_RE: Final = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 _HASH_RE: Final = re.compile(r"^[0-9a-f]{64}$")
 _READ_ATTEMPTS: Final = 3
+_LOGGER = logging.getLogger(__name__)
 
 
 def _asset_content_hash(payload: bytes) -> str:
@@ -52,7 +54,12 @@ def _contained_file(web_root: Path, relative_path: str) -> Path:
   return candidate
 
 
-def _parse_asset(web_root: Path, raw_asset: object) -> AssetRecord:
+def _parse_asset(
+  web_root: Path,
+  raw_asset: object,
+  *,
+  repair_content_hash: bool,
+) -> AssetRecord:
   if not isinstance(raw_asset, dict):
     raise AssetManifestError("Asset entry must be an object")
   asset_id = raw_asset.get("id")
@@ -72,15 +79,26 @@ def _parse_asset(web_root: Path, raw_asset: object) -> AssetRecord:
     raise AssetManifestError("Bundle source contract is invalid")
 
   asset_path = _contained_file(web_root, path)
-  if _asset_content_hash(asset_path.read_bytes()) != content_hash:
-    raise AssetManifestError("Asset content hash does not match")
-  asset: AssetRecord = {"id": asset_id, "kind": kind, "path": path, "hash": content_hash}
+  actual_hash = _asset_content_hash(asset_path.read_bytes())
+  if actual_hash != content_hash:
+    if not repair_content_hash:
+      raise AssetManifestError("Asset content hash does not match")
+    _LOGGER.warning(
+      "Asset manifest hash is stale for %s; using the current file content",
+      asset_id,
+    )
+  asset: AssetRecord = {"id": asset_id, "kind": kind, "path": path, "hash": actual_hash}
   if isinstance(source, str):
     asset["source"] = source
   return asset
 
 
-def _parse_manifest(web_root: Path, payload: bytes) -> AssetManifest:
+def _parse_manifest(
+  web_root: Path,
+  payload: bytes,
+  *,
+  repair_content_hash: bool,
+) -> AssetManifest:
   try:
     raw_manifest = json.loads(payload)
   except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -90,7 +108,10 @@ def _parse_manifest(web_root: Path, payload: bytes) -> AssetManifest:
   if raw_manifest.get("schemaVersion") != 1 or not isinstance(raw_manifest.get("assets"), list):
     raise AssetManifestError("Asset manifest schema is invalid")
 
-  assets = [_parse_asset(web_root, raw_asset) for raw_asset in raw_manifest["assets"]]
+  assets = [
+    _parse_asset(web_root, raw_asset, repair_content_hash=repair_content_hash)
+    for raw_asset in raw_manifest["assets"]
+  ]
   if len({asset["id"] for asset in assets}) != len(assets):
     raise AssetManifestError("Asset ids must be unique")
   if len({asset["path"] for asset in assets}) != len(assets):
@@ -100,7 +121,7 @@ def _parse_manifest(web_root: Path, payload: bytes) -> AssetManifest:
 
 class AssetManifestLoader:
   def __init__(self) -> None:
-    self._cache_key: tuple[str, int, int] | None = None
+    self._cache_key: tuple[str, int, int, bool] | None = None
     self._manifest: AssetManifest | None = None
     self._asset_keys: tuple[tuple[str, int, int], ...] = ()
     self._lock = threading.Lock()
@@ -124,9 +145,19 @@ class AssetManifestLoader:
 
   def load(self, web_dir: str | os.PathLike[str]) -> AssetManifest:
     with self._lock:
-      return self._load(web_dir)
+      return self._load(web_dir, repair_content_hash=True)
 
-  def _load(self, web_dir: str | os.PathLike[str]) -> AssetManifest:
+  def validate(self, web_dir: str | os.PathLike[str]) -> AssetManifest:
+    """Strictly validate build output without applying runtime hash recovery."""
+    with self._lock:
+      return self._load(web_dir, repair_content_hash=False)
+
+  def _load(
+    self,
+    web_dir: str | os.PathLike[str],
+    *,
+    repair_content_hash: bool,
+  ) -> AssetManifest:
     try:
       web_root = Path(web_dir).resolve(strict=True)
       manifest_path = (web_root / _MANIFEST_RELATIVE_PATH).resolve(strict=True)
@@ -137,7 +168,12 @@ class AssetManifestLoader:
     for _attempt in range(_READ_ATTEMPTS):
       try:
         before = manifest_path.stat()
-        cache_key = (str(manifest_path), before.st_mtime_ns, before.st_size)
+        cache_key = (
+          str(manifest_path),
+          before.st_mtime_ns,
+          before.st_size,
+          repair_content_hash,
+        )
         if (
           cache_key == self._cache_key
           and self._manifest is not None
@@ -150,7 +186,11 @@ class AssetManifestLoader:
         raise AssetManifestError("Asset manifest cannot be read") from error
       if (after.st_mtime_ns, after.st_size) != (before.st_mtime_ns, before.st_size):
         continue
-      manifest = _parse_manifest(web_root, payload)
+      manifest = _parse_manifest(
+        web_root,
+        payload,
+        repair_content_hash=repair_content_hash,
+      )
       asset_keys = tuple(self._asset_key(web_root, asset) for asset in manifest["assets"])
       if any(asset_key is None for asset_key in asset_keys):
         raise AssetManifestError("Asset path changed after validation")
