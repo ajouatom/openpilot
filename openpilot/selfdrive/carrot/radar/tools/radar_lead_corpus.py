@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -349,7 +350,7 @@ def _dataset_filename(log_path: Path) -> str:
 
 def _export_subprocess(
   log_path: Path, output_path: Path, annotations: Path, include_scc: bool,
-  front_only: bool, timeout_s: float,
+  front_only: bool, sensor_mode: str, enable_radar_tracks: int | None, timeout_s: float,
 ) -> dict[str, Any]:
   command = [
     sys.executable, str(Path(__file__).resolve()), "_export-one", str(log_path),
@@ -359,11 +360,18 @@ def _export_subprocess(
     command.append("--fusion-scc")
   if front_only:
     command.append("--front-only")
+  command.extend(("--sensor-mode", sensor_mode))
+  if enable_radar_tracks is not None:
+    command.extend(("--enable-radar-tracks", str(enable_radar_tracks)))
   try:
-    process = subprocess.run(
-      command, cwd=REPO_ROOT, capture_output=True, text=True,
-      timeout=timeout_s, check=False,
-    )
+    with tempfile.TemporaryDirectory(prefix="radar-dataset-") as temporary_dir:
+      environment = os.environ.copy()
+      environment["TMP"] = temporary_dir
+      environment["TEMP"] = temporary_dir
+      process = subprocess.run(
+        command, cwd=REPO_ROOT, capture_output=True, text=True, env=environment,
+        timeout=timeout_s, check=False,
+      )
   except subprocess.TimeoutExpired:
     output_path.unlink(missing_ok=True)
     return {"log": str(log_path), "error": f"dataset timeout after {timeout_s:.0f}s"}
@@ -550,7 +558,8 @@ def write_selection(
 
 def build_datasets(
   selection_path: Path, output_root: Path, splits: list[str], workers: int,
-  timeout_s: float, annotations: Path, include_scc: bool, front_only: bool, force: bool,
+  timeout_s: float, annotations: Path, include_scc: bool, front_only: bool,
+  sensor_mode: str, enable_radar_tracks: int | None, force: bool,
 ) -> int:
   selection = json.loads(selection_path.read_text(encoding="utf-8"))
   total_errors = 0
@@ -564,12 +573,21 @@ def build_datasets(
       manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     else:
       manifest = {
-        "version": 3,
+        "version": 4,
         "selection": str(selection_path.resolve()),
         "split": split,
+        "sensor_mode": sensor_mode,
+        "enable_radar_tracks": enable_radar_tracks,
+        "include_scc": include_scc,
         "datasets": [],
         "errors": [],
       }
+    if (
+      manifest.get("sensor_mode", "fused") != sensor_mode
+      or manifest.get("enable_radar_tracks") != enable_radar_tracks
+      or bool(manifest.get("include_scc", False)) != include_scc
+    ):
+      raise SystemExit(f"{manifest_path} was built with different radar source settings; use --force or another output directory")
     completed = {
       str(item["log"]).lower(): item for item in manifest.get("datasets", [])
       if Path(item["dataset"]).is_file()
@@ -588,7 +606,7 @@ def build_datasets(
           output_path = output_dir / _dataset_filename(log_path)
           futures[executor.submit(
             _export_subprocess, log_path, output_path, annotations,
-            include_scc, front_only, timeout_s,
+            include_scc, front_only, sensor_mode, enable_radar_tracks, timeout_s,
           )] = log_path
         results = [future.result() for future in as_completed(futures)]
       for result in results:
@@ -624,6 +642,8 @@ def parse_args() -> argparse.Namespace:
   export_one.add_argument("--annotations", required=True, type=Path)
   export_one.add_argument("--fusion-scc", action="store_true")
   export_one.add_argument("--front-only", action="store_true")
+  export_one.add_argument("--sensor-mode", choices=("fused", "front", "corner"), default="fused")
+  export_one.add_argument("--enable-radar-tracks", type=int, default=None)
   select = subparsers.add_parser("select", help="select balanced train/validation/test logs")
   select.add_argument("--inventory", required=True, type=Path)
   select.add_argument("--output", required=True, type=Path)
@@ -645,6 +665,8 @@ def parse_args() -> argparse.Namespace:
   )
   build.add_argument("--fusion-scc", action="store_true")
   build.add_argument("--front-only", action="store_true")
+  build.add_argument("--sensor-mode", choices=("fused", "front", "corner"), default="fused")
+  build.add_argument("--enable-radar-tracks", type=int, default=None)
   build.add_argument("--force", action="store_true")
   return parser.parse_args()
 
@@ -662,6 +684,7 @@ def main() -> int:
       "stats": export_fused_dataset(
         args.rlog, args.output, include_scc=args.fusion_scc,
         front_only=args.front_only, annotations_path=args.annotations,
+        sensor_mode=args.sensor_mode, enable_radar_tracks=args.enable_radar_tracks,
       ),
     }
     print(json.dumps(result, ensure_ascii=True))
@@ -671,7 +694,8 @@ def main() -> int:
   if args.command == "build":
     return build_datasets(
       args.selection, args.output_dir, args.splits, args.workers, args.timeout,
-      args.annotations, args.fusion_scc, args.front_only, args.force,
+      args.annotations, args.fusion_scc, args.front_only,
+      args.sensor_mode, args.enable_radar_tracks, args.force,
     )
   if args.validation_fraction < 0.0 or args.test_fraction < 0.0 or args.validation_fraction + args.test_fraction >= 1.0:
     raise SystemExit("validation/test fractions must be non-negative and sum to less than 1")

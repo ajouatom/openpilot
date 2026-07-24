@@ -1,8 +1,6 @@
 from openpilot.selfdrive.controls.lib.cutin_alert import (
   CutinAlertCandidate,
   CutinAlertTracker,
-  StationaryLeadAlertTracker,
-  is_stationary_lead_alert_candidate,
 )
 
 
@@ -49,37 +47,4 @@ def test_cutin_alert_resets_when_disabled_or_empty() -> None:
   assert not tracker.update((lead,), enabled=False)
   assert tracker.update((lead,))
   assert not tracker.update(())
-  assert tracker.update((lead,))
-
-
-def test_stationary_alert_candidate_requires_moving_ego_and_radar() -> None:
-  base = dict(status=True, radar=True, d_rel=80.0, v_lead=0.2, v_ego=20.0)
-
-  assert is_stationary_lead_alert_candidate(**base)
-  assert not is_stationary_lead_alert_candidate(**(base | {"radar": False}))
-  assert not is_stationary_lead_alert_candidate(**(base | {"v_ego": 3.9}))
-  assert not is_stationary_lead_alert_candidate(**(base | {"v_lead": 1.0}))
-  assert not is_stationary_lead_alert_candidate(**(base | {"d_rel": 140.0}))
-
-
-def test_stationary_alert_ignores_short_dropout_and_realerts_after_clear() -> None:
-  tracker = StationaryLeadAlertTracker(dropout_frames=3)
-  lead = candidate(40, 80.0, 0.2, 0.2)
-
-  assert tracker.update((lead,))
-  assert not tracker.update((candidate(40, 79.0, 0.2, 0.2),))
-  assert not tracker.update(())
-  assert not tracker.update((candidate(41, 78.5, 0.1, 0.1),))
-  assert not tracker.update(())
-  assert not tracker.update(())
-  assert not tracker.update(())
-  assert tracker.update((candidate(50, 60.0, 0.0, 0.0),))
-
-
-def test_stationary_alert_resets_when_disabled() -> None:
-  tracker = StationaryLeadAlertTracker()
-  lead = candidate(40, 80.0, 0.2, 0.2)
-
-  assert tracker.update((lead,))
-  assert not tracker.update((lead,), enabled=False)
   assert tracker.update((lead,))

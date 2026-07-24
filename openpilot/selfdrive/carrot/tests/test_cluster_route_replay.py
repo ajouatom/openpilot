@@ -12,8 +12,10 @@ from cluster_models import ModelPathPoint
 from cluster_route_replay import (
   RawCornerObject,
   RouteLogParser,
+  StableCornerObjectTracker,
   adjacent_route_log_path,
   blend_frames,
+  corner_track_label,
   frame_to_state,
   model_lead_detections_from_model_v2,
 )
@@ -48,6 +50,12 @@ def radar_lead(track_id, d_rel=25.0, y_rel=2.0):
   )
 
 
+def test_corner_430_track_labels_preserve_radar_group():
+  assert corner_track_label(300, "corner430") == "CR430_000"
+  assert corner_track_label(411, "corner430") == "CR430_111"
+  assert corner_track_label(1204, "corner430") == "CR430_T1204"
+
+
 def test_replay_uses_raw_object_identity_when_corner_slot_is_reused():
   parser = RouteLogParser()
   old_object = corner_object(13.969, 2, 108, 255, 3.6, -4.65, -4.10, -0.20)
@@ -71,6 +79,20 @@ def test_replay_uses_raw_object_identity_when_corner_slot_is_reused():
   )))
 
   assert moved_track_id == new_track_id
+
+
+def test_reconstructed_corner_tracks_include_filtered_lead_dynamics():
+  tracker = StableCornerObjectTracker()
+  output = ()
+  for index in range(14):
+    t = index * 0.05
+    vx = index * 0.08
+    tracker.update(corner_object(t, 1, 46, index + 1, 12.0 + vx * t, 2.0, vx, 0.0))
+    output = tracker.live_tracks_at(t, 15.0)
+
+  assert len(output) == 1
+  assert output[0].aLead > 0.05
+  assert output[0].jLead != 0.0
 
 
 def test_recorded_cutin_display_requires_current_leads_cutin_membership():

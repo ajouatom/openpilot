@@ -61,7 +61,7 @@ export function normalizeTelemetryForwardSource(value, fallback = "unknown") {
   if (["vision", "model", "camera"].includes(source)) return "vision";
   if (["front", "frontradar", "front_radar", "radar", "live_tracks"].includes(source)) return "front";
   if (source === "scc") return "scc";
-  if (["corner", "corner235", "corner180"].includes(source)) return "corner";
+  if (["corner", "corner235", "corner180", "corner430"].includes(source)) return "corner";
   if (source === "fusion") return "fusion";
   if (source === "lead") return "lead";
   return Object.prototype.hasOwnProperty.call(TELEMETRY_FORWARD_SOURCE_STYLE, fallback)

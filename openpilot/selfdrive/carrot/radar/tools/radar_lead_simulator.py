@@ -18,10 +18,11 @@ import math
 import shutil
 import sys
 import threading
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Iterable, Protocol
+from typing import Any, Protocol
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
@@ -64,9 +65,28 @@ except ModuleNotFoundError:
   from radar_lead_runtime import RadarLeadRuntime
 
 try:
-  from openpilot.selfdrive.carrot.radar.radar_vision_model_controller import PRIMARY_STEALTH_HOLD_S, STEALTH_LEAD_HOLD_S, VisionModelRadarController, VisionRadarMatcher, cutin_is_ahead_of_primary
+  from openpilot.selfdrive.carrot.radar.radar_sensor_objects import (
+    match_corner_to_front_identity,
+  )
 except ModuleNotFoundError:
-  from radar_vision_model_controller import PRIMARY_STEALTH_HOLD_S, STEALTH_LEAD_HOLD_S, VisionModelRadarController, VisionRadarMatcher, cutin_is_ahead_of_primary
+  from radar_sensor_objects import match_corner_to_front_identity
+
+try:
+  from openpilot.selfdrive.carrot.radar.radar_vision_model_controller import (
+    PRIMARY_STEALTH_HOLD_S,
+    STEALTH_LEAD_HOLD_S,
+    VisionModelRadarController,
+    VisionRadarMatcher,
+    cutin_is_ahead_of_primary,
+  )
+except ModuleNotFoundError:
+  from radar_vision_model_controller import (
+    PRIMARY_STEALTH_HOLD_S,
+    STEALTH_LEAD_HOLD_S,
+    VisionModelRadarController,
+    VisionRadarMatcher,
+    cutin_is_ahead_of_primary,
+  )
 
 
 RADAR_TO_CAMERA = 1.52
@@ -75,6 +95,8 @@ RADAR_ROOT = Path(__file__).resolve().parents[1]
 CARROT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_VALIDATION_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.json"
 DEFAULT_MULTITASK_MODEL = RADAR_ROOT / "models" / "radar_lead_multitask.npz"
+DEFAULT_FRONT_MODEL = RADAR_ROOT / "models" / "radar_lead_front.npz"
+DEFAULT_CORNER_MODEL = RADAR_ROOT / "models" / "radar_lead_corner.npz"
 CURRENT_RADARD_CORNER_CENTER_MIN_AGE = 5
 CURRENT_RADARD_CORNER_CENTER_UNMATCHED_MAX_DREL = 45.0
 
@@ -145,10 +167,21 @@ class Candidate:
   decision_threshold: float = 0.0
   d_rel: float | None = None
   y_rel: float | None = None
+  track_aliases: tuple[int, ...] = ()
 
   @property
   def eligible(self) -> bool:
     return self.score >= self.decision_threshold
+
+
+def candidate_track_ids(candidate: Candidate | None) -> frozenset[int]:
+  if candidate is None:
+    return frozenset()
+  return frozenset((candidate.track_id, *candidate.track_aliases))
+
+
+def candidate_matches_targets(candidate: Candidate | None, targets: set[int]) -> bool:
+  return candidate is not None and (not targets or bool(candidate_track_ids(candidate) & targets))
 
 
 @dataclass(frozen=True)
@@ -157,9 +190,11 @@ class Selection:
   lead_two: Candidate | None
   front_candidates: tuple[Candidate, ...] = ()
   corner_candidates: tuple[Candidate, ...] = ()
+  decision_cutin_candidates: tuple[Candidate, ...] = ()
   active_cutin_candidates: tuple[Candidate, ...] = ()
   external_candidates: tuple[Candidate, ...] = ()
   active_external_candidates: tuple[Candidate, ...] = ()
+  lead_two_tentative: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -172,6 +207,7 @@ class ValidationReview:
   scene: str
   target_track_ids: tuple[int, ...] = ()
   forbidden_lead_two_ids: tuple[int, ...] = ()
+  validation_stage: str = "output"
 
 
 @dataclass(frozen=True)
@@ -238,7 +274,9 @@ def cutin_continuity_series(
     lead_two = selector.select(frame, index).lead_two
     track_id = (
       lead_two.track_id
-      if lead_two is not None and lead_two.reason.endswith("active cutin")
+      if lead_two is not None and lead_two.reason.endswith(
+        ("active cutin", "tentative cutin", "confirmed cutin"),
+      )
       else None
     )
     active_ids.append(track_id)
@@ -326,24 +364,49 @@ def validation_review_events(
       continue
 
     primary_track_id = selection.lead_one.track_id if selection.lead_one is not None else None
+    decision_review = review is not None and review.validation_stage == "decision"
+    reviewed_cutins = (
+      selection.decision_cutin_candidates
+      if decision_review
+      else selection.active_cutin_candidates
+    )
     current_cutins = {
-      candidate.track_id for candidate in selection.active_cutin_candidates
+      candidate.track_id for candidate in reviewed_cutins
       if candidate.track_id != primary_track_id
-      and (candidate.score >= CUTIN_ACTIVE_CURRENT_MIN or candidate.track_id in previous_cutins)
+      and (
+        decision_review
+        or candidate.score >= CUTIN_ACTIVE_CURRENT_MIN
+        or candidate.track_id in previous_cutins
+      )
     }
-    if (
-      selection.lead_two is not None
-      and selection.lead_two.track_id != primary_track_id
-      and selection.lead_two.reason.endswith("active cutin")
-      and (selection.lead_two.score >= CUTIN_ACTIVE_CURRENT_MIN or selection.lead_two.track_id in previous_cutins)
-    ):
-      current_cutins.add(selection.lead_two.track_id)
+    if not decision_review:
+      if (
+        selection.lead_two is not None
+        and selection.lead_two.track_id != primary_track_id
+        and selection.lead_two.reason.endswith(
+          ("active cutin", "tentative cutin", "confirmed cutin"),
+        )
+        and (
+          selection.lead_two.score >= CUTIN_ACTIVE_CURRENT_MIN
+          or selection.lead_two.track_id in previous_cutins
+        )
+      ):
+        current_cutins.add(selection.lead_two.track_id)
     new_cutins = {
       track_id for track_id in current_cutins - previous_cutins
       if frame.time_s - last_cutin_event_time.get(track_id, -math.inf) >= 1.0
     }
     if new_cutins:
-      events.extend(f"CUT-IN id {track_id}" for track_id in sorted(new_cutins))
+      for track_id in sorted(new_cutins):
+        lead_two_matches = (
+          selection.lead_two is not None
+          and track_id in candidate_track_ids(selection.lead_two)
+        )
+        if lead_two_matches and selection.lead_two_tentative is not None:
+          state = "TENTATIVE" if selection.lead_two_tentative else "CONFIRMED"
+          events.append(f"CUT-IN {state} id {track_id}")
+        else:
+          events.append(f"CUT-IN id {track_id}")
       last_cutin_event_time.update((track_id, frame.time_s) for track_id in new_cutins)
     previous_cutins = current_cutins
 
@@ -425,7 +488,7 @@ class ManualLabels:
     self.values = values or {}
 
   @classmethod
-  def load(cls, path: Path, frame_count: int) -> "ManualLabels":
+  def load(cls, path: Path, frame_count: int) -> ManualLabels:
     if not path.is_file():
       return cls()
     with path.open("r", encoding="utf-8") as source:
@@ -1044,6 +1107,17 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   ]
 
 
+def front_only_frames(frames: list[RadarFrame]) -> tuple[list[RadarFrame], int]:
+  """Remove corner-radar inputs so replay follows the production front-only path."""
+  filtered: list[RadarFrame] = []
+  removed = 0
+  for frame in frames:
+    points = tuple(point for point in frame.points if not point.source.startswith("corner"))
+    removed += len(frame.points) - len(points)
+    filtered.append(replace(frame, points=points))
+  return filtered, removed
+
+
 def current_cutin_track_ids(
   log_path: Path,
   frames: list[RadarFrame],
@@ -1517,7 +1591,7 @@ class MultitaskLeadSelector:
     primary_hold_until = 0.0
     displaced_primary_aliases: frozenset[str] = frozenset()
     displaced_primary_hold_until = 0.0
-    for frame_index, frame in enumerate(frames):
+    for frame in frames:
       objects = fusion.update(frame.mono_time_s, frame.points)
       context = RadarLeadContext(
         time_s=frame.mono_time_s,
@@ -1594,16 +1668,13 @@ class MultitaskLeadSelector:
             )
         primary_aliases = frozenset()
 
-      def matches_primary(prediction: Any) -> bool:
-        return bool(primary_aliases & frozenset(prediction.features.aliases))
+      def matches_primary(prediction: Any, aliases: frozenset[str] = primary_aliases) -> bool:
+        return bool(aliases & frozenset(prediction.features.aliases))
       primary_d_rel = lead_one.d_rel if lead_one is not None else None
 
-      def cutin_relevant(prediction: Any) -> bool:
-        return cutin_is_ahead_of_primary(prediction.features.radar_object.d_rel, primary_d_rel)
+      def cutin_relevant(prediction: Any, primary_distance: float | None = primary_d_rel) -> bool:
+        return cutin_is_ahead_of_primary(prediction.features.radar_object.d_rel, primary_distance)
 
-      active_leads = [] if vision_matcher is not None else [
-        Candidate(track_id(value), value.lead_prob, "MLP active lead") for value in decision.lead_candidates
-      ]
       active_cutins = [
         Candidate(track_id(value), value.cutin_prob, "MLP active cutin")
         for value in decision.cutin_candidates if not matches_primary(value) and cutin_relevant(value)
@@ -1729,7 +1800,11 @@ def _production_model(frame: RadarFrame) -> SimpleNamespace:
   )
 
 
-def _output_candidate(lead: dict[str, Any] | None, reason: str) -> Candidate | None:
+def _output_candidate(
+  lead: dict[str, Any] | None,
+  reason: str,
+  track_aliases: tuple[int, ...] = (),
+) -> Candidate | None:
   if lead is None or not lead.get("status", False):
     return None
   return Candidate(
@@ -1738,16 +1813,34 @@ def _output_candidate(lead: dict[str, Any] | None, reason: str) -> Candidate | N
     reason=reason,
     d_rel=float(lead.get("dRel", 0.0)),
     y_rel=float(lead.get("yRel", 0.0)),
+    track_aliases=track_aliases,
   )
 
 
 class ProductionHybridLeadSelector:
   """Replay the exact on-device model controller over normalized log inputs."""
 
-  def __init__(self, model_path: Path, frames: list[RadarFrame]) -> None:
-    self.name = f"hybrid:{model_path.stem}"
+  def __init__(
+    self, model_path: Path, frames: list[RadarFrame], corner_model_path: Path | None = None,
+  ) -> None:
+    front_model_path = Path(model_path)
+    corner_model_path = Path(corner_model_path) if corner_model_path is not None else front_model_path
     controller = VisionModelRadarController()
-    controller.runtime = RadarLeadRuntime(model_path=model_path, include_scc=True)
+    has_front = any(point.source == "frontRadar" for frame in frames for point in frame.points)
+    has_scc = any(point.source == "scc" for frame in frames for point in frame.points)
+    has_corner = any(point.source.startswith("corner") for frame in frames for point in frame.points)
+    self.name = (
+      f"hybrid:{front_model_path.stem}+{corner_model_path.stem}"
+      if has_corner else f"hybrid:{front_model_path.stem}:front-only"
+    )
+    enable_radar_tracks = 2 if has_front and has_scc else 1 if has_front else 0
+    controller.runtime = RadarLeadRuntime(
+      front_model_path=front_model_path,
+      corner_model_path=corner_model_path,
+      include_scc=True,
+      enable_radar_tracks=enable_radar_tracks,
+      corner_radar_enabled=has_corner,
+    )
     selections: list[Selection] = []
     for frame in frames:
       output = controller.update(
@@ -1767,47 +1860,145 @@ class ProductionHybridLeadSelector:
           obj.front_track_id, obj.scc_track_id, obj.corner_track_id,
         ) if value is not None)
 
-      model = controller.runtime.model
-      assert model is not None
+      all_predictions = tuple(getattr(result, "predictions", ()))
+      front_predictions = tuple(getattr(result, "front_predictions", ())) or tuple(
+        prediction for prediction in all_predictions
+        if (
+          prediction.features.radar_object.front_track_id is not None
+          or prediction.features.radar_object.scc_track_id is not None
+        )
+      )
+      corner_predictions = tuple(getattr(result, "corner_predictions", ())) or tuple(
+        prediction for prediction in all_predictions
+        if prediction.features.radar_object.corner_track_id is not None
+      )
+      use_corner = has_corner
+      secondary_predictions = corner_predictions if use_corner else front_predictions
+      secondary_model = (
+        controller.runtime.corner_model if use_corner else controller.runtime.front_model
+      ) or controller.runtime.model
+      secondary_filter = (
+        controller.runtime.corner_decisions if use_corner else controller.runtime.front_decisions
+      )
+      assert secondary_model is not None
+      source_name = "corner" if use_corner else "front"
+      cutin_threshold = (
+        float(secondary_filter.cutin_threshold)
+        if secondary_filter is not None
+        else max(0.5, min(CUTIN_TEMPORAL_THRESHOLD_MAX, float(secondary_model.thresholds[1])))
+      )
+      external_threshold = (
+        float(secondary_filter.external_threshold)
+        if secondary_filter is not None
+        else max(0.5, float(secondary_model.thresholds[2]))
+      )
+
+      alias_by_track_id: dict[int, set[int]] = {}
+
+      def prediction_ids(prediction: Any) -> set[int]:
+        obj = prediction.features.radar_object
+        return {
+          int(track_id)
+          for track_id in (obj.front_track_id, obj.scc_track_id, obj.corner_track_id)
+          if track_id is not None
+        }
+
+      def register_aliases(
+        track_ids: set[int],
+        aliases_by_track: dict[int, set[int]] = alias_by_track_id,
+      ) -> None:
+        if not track_ids:
+          return
+        merged = set(track_ids)
+        for track_id in track_ids:
+          merged.update(aliases_by_track.get(track_id, ()))
+        for track_id in merged:
+          aliases_by_track[track_id] = set(merged)
+
+      for prediction in front_predictions:
+        register_aliases(prediction_ids(prediction))
+      for prediction in corner_predictions:
+        track_ids = prediction_ids(prediction)
+        matched = match_corner_to_front_identity(prediction, front_predictions)
+        if matched is not None:
+          track_ids.update(prediction_ids(matched))
+        register_aliases(track_ids)
+
+      def aliases_for(
+        track_id: int,
+        aliases_by_track: dict[int, set[int]] = alias_by_track_id,
+      ) -> tuple[int, ...]:
+        return tuple(sorted(set(aliases_by_track.get(track_id, ())) - {track_id}))
+
       raw_cutins = tuple(
         Candidate(
-          prediction_track_id(prediction), prediction.cutin_prob, "MLP fused cutin",
-          float(model.thresholds[1]), d_rel=prediction.features.radar_object.d_rel,
+          prediction_track_id(prediction), prediction.cutin_prob, f"MLP {source_name} cutin",
+          cutin_threshold, d_rel=prediction.features.radar_object.d_rel,
           y_rel=prediction.features.radar_object.y_rel,
+          track_aliases=aliases_for(prediction_track_id(prediction)),
         )
-        for prediction in sorted(result.predictions, key=lambda value: value.cutin_prob, reverse=True)[:2]
+        for prediction in sorted(secondary_predictions, key=lambda value: value.cutin_prob, reverse=True)[:2]
         if prediction.cutin_prob >= MLP_CANDIDATE_FLOOR
       )
       raw_external = tuple(
         Candidate(
-          prediction_track_id(prediction), prediction.external_prob, "MLP fused external",
-          float(model.thresholds[2]), d_rel=prediction.features.radar_object.d_rel,
+          prediction_track_id(prediction), prediction.external_prob, f"MLP {source_name} external",
+          external_threshold, d_rel=prediction.features.radar_object.d_rel,
           y_rel=prediction.features.radar_object.y_rel,
+          track_aliases=aliases_for(prediction_track_id(prediction)),
         )
-        for prediction in sorted(result.predictions, key=lambda value: value.external_prob, reverse=True)[:2]
+        for prediction in sorted(secondary_predictions, key=lambda value: value.external_prob, reverse=True)[:2]
         if prediction.external_prob >= MLP_CANDIDATE_FLOOR
+      )
+      decision_cutins = tuple(
+        Candidate(
+          prediction_track_id(prediction), prediction.cutin_prob, "MLP decision cutin",
+          cutin_threshold, d_rel=prediction.features.radar_object.d_rel,
+          y_rel=prediction.features.radar_object.y_rel,
+          track_aliases=aliases_for(prediction_track_id(prediction)),
+        )
+        for prediction in getattr(getattr(result, "decision", None), "cutin_candidates", ())
       )
       active_cutins = tuple(
         candidate for lead in output.leads_cutin
-        if (candidate := _output_candidate(lead, "MLP active cutin")) is not None
+        if (candidate := _output_candidate(
+          lead, "MLP active cutin", aliases_for(int(lead["radarTrackId"])),
+        )) is not None
       )
       active_external = tuple(
         candidate for lead in (output.lead_external,)
-        if (candidate := _output_candidate(lead, "MLP active external")) is not None
+        if lead is not None
+        if (candidate := _output_candidate(
+          lead, "MLP active external", aliases_for(int(lead["radarTrackId"])),
+        )) is not None
       )
       cutin_ids = {candidate.track_id for candidate in active_cutins}
       external_ids = {candidate.track_id for candidate in active_external}
       lead_two_id = int(output.lead_two["radarTrackId"]) if output.lead_two is not None else None
       lead_two_reason = (
-        "MLP active cutin" if lead_two_id in cutin_ids
+        (
+          "MLP tentative cutin"
+          if output.lead_two_tentative
+          else "MLP confirmed cutin"
+        ) if lead_two_id in cutin_ids
         else "MLP active external" if lead_two_id in external_ids
         else "MLP active stealth"
       )
       selections.append(Selection(
-        lead_one=_output_candidate(output.lead_one, "vision-radar Laplacian match"),
-        lead_two=_output_candidate(output.lead_two, lead_two_reason),
+        lead_one=_output_candidate(
+          output.lead_one,
+          "vision-radar Laplacian match",
+          aliases_for(int(output.lead_one["radarTrackId"])) if output.lead_one is not None else (),
+        ),
+        lead_two=_output_candidate(
+          output.lead_two,
+          lead_two_reason,
+          aliases_for(int(output.lead_two["radarTrackId"])) if output.lead_two is not None else (),
+        ),
+        lead_two_tentative=output.lead_two_tentative if lead_two_id in cutin_ids else None,
         front_candidates=(),
         corner_candidates=raw_cutins,
+        decision_cutin_candidates=decision_cutins,
         active_cutin_candidates=active_cutins,
         external_candidates=raw_external,
         active_external_candidates=active_external,
@@ -2252,6 +2443,16 @@ class SimulatorUI:
       # even when the raw probability slider hides the instantaneous candidate.
       self._draw_candidate(rect, frame, selection.lead_one, self._color(self.ORANGE), 40.0, "leadOne")
       self._draw_candidate(rect, frame, selection.lead_two, self._color(self.YELLOW), 48.0, "leadTwo")
+      if self.review is not None and self.review.validation_stage == "decision":
+        targets = set(self.review.target_track_ids)
+        decision = next(
+          (
+            candidate for candidate in selection.decision_cutin_candidates
+            if candidate_matches_targets(candidate, targets)
+          ),
+          next(iter(selection.decision_cutin_candidates), None),
+        )
+        self._draw_candidate(rect, frame, decision, self._color(self.PURPLE), 56.0, "cutin decision")
     else:
       self._draw_candidate(rect, frame, selection.lead_one, self._color(self.GREEN), 23.0, "1")
       self._draw_candidate(rect, frame, selection.lead_two, self._color(self.PURPLE), 29.0, "2")
@@ -2319,6 +2520,16 @@ class SimulatorUI:
       line("MODEL RESULT", self.MUTED, 15, 22)
       line("leadOne  " + self._candidate_text(frame, selection.lead_one), self.ORANGE, 17, 24)
       line("leadTwo  " + self._candidate_text(frame, selection.lead_two), self.YELLOW, 17, 31)
+      if self.review is not None and self.review.validation_stage == "decision":
+        targets = set(self.review.target_track_ids)
+        decision = next(
+          (
+            candidate for candidate in selection.decision_cutin_candidates
+            if candidate_matches_targets(candidate, targets)
+          ),
+          next(iter(selection.decision_cutin_candidates), None),
+        )
+        line("decision  " + self._candidate_text(frame, decision), self.PURPLE, 15, 24)
 
     if self.radard_selector is not None:
       radard = self.radard_selector.select(frame, self.index)
@@ -2770,6 +2981,8 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--export-dataset", type=Path, help="export candidate-ranking training CSV or CSV.GZ")
   parser.add_argument("--manual-only", action="store_true", help="dataset: use only manually labeled frames")
   parser.add_argument("--model", type=Path, help="trained MLP .npz to compare instead of simple-v0")
+  parser.add_argument("--front-model", type=Path, help="hybrid: front/SCC source model")
+  parser.add_argument("--corner-model", type=Path, help="hybrid: corner-radar source model")
   parser.add_argument(
     "--fusion-scc", action="store_true",
     help="allow SCC-only fallback objects in fused view (disabled by default)",
@@ -2785,6 +2998,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument(
     "--compare-radard", action="store_true",
     help="recompute and display the current radard result and distance graph (slow)",
+  )
+  parser.add_argument(
+    "--front-only", action="store_true",
+    help="remove corner-radar points and replay the production front-only path",
   )
   parser.add_argument("--validation-case", help="auto-review one case id from the maintained validation set")
   parser.add_argument("--validation-root", type=Path, default=Path(r"W:\routes"), help="validation route root")
@@ -2808,6 +3025,7 @@ def resolve_validation_case(
   review = ValidationReview(
     case_id=str(case["id"]), expected=str(case["expected"]), source=str(case["source"]),
     start_s=float(window[0]), end_s=float(window[1]), scene=str(case["scene"]),
+    validation_stage=str(case.get("validation_stage", "output")),
     target_track_ids=tuple(int(value) for value in case.get("target_track_ids", ())),
     forbidden_lead_two_ids=tuple(int(value) for value in case.get("forbidden_lead_two_ids", ())),
   )
@@ -2877,7 +3095,10 @@ def main() -> int:
     if args.rlog is not None:
       raise SystemExit("do not provide rlog together with --validation-case")
     args.rlog, review = resolve_validation_case(args.validation_cases, args.validation_root, args.validation_case)
-    args.model = args.model or DEFAULT_MULTITASK_MODEL
+    if args.model is None and args.front_model is None:
+      args.front_model = DEFAULT_FRONT_MODEL if DEFAULT_FRONT_MODEL.is_file() else DEFAULT_MULTITASK_MODEL
+    if args.corner_model is None:
+      args.corner_model = DEFAULT_CORNER_MODEL if DEFAULT_CORNER_MODEL.is_file() else args.front_model
     args.start = 0.0 if args.start is None else args.start
   if args.rlog is None:
     raise SystemExit("rlog or --validation-case is required")
@@ -2887,15 +3108,27 @@ def main() -> int:
 
   print(f"Loading {args.rlog} ...", flush=True)
   frames = load_frames(args.rlog)
+  if args.front_only:
+    frames, removed_corner_points = front_only_frames(frames)
+    print(f"Front-only replay: removed {removed_corner_points} corner-radar points.", flush=True)
   if args.model is not None and not args.model.is_file():
     raise SystemExit(f"model file does not exist: {args.model}")
+  for name in ("front_model", "corner_model"):
+    path = getattr(args, name)
+    if path is not None and not path.is_file():
+      raise SystemExit(f"{name.replace('_', '-')} file does not exist: {path}")
   if args.model is not None and args.teacher_current_radard and not args.hybrid:
     raise SystemExit("--model and --teacher-current-radard cannot be used together")
   selector: LeadSelector
   radard_selector: LeadSelector | None = None
   if args.hybrid:
-    args.model = args.model or DEFAULT_MULTITASK_MODEL
-    selector = ProductionHybridLeadSelector(args.model, frames)
+    front_model = args.front_model or args.model or (
+      DEFAULT_FRONT_MODEL if DEFAULT_FRONT_MODEL.is_file() else DEFAULT_MULTITASK_MODEL
+    )
+    corner_model = args.corner_model or args.model or (
+      DEFAULT_CORNER_MODEL if DEFAULT_CORNER_MODEL.is_file() else front_model
+    )
+    selector = ProductionHybridLeadSelector(front_model, frames, corner_model)
   elif args.model is not None:
     try:
       import numpy as np

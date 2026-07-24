@@ -30,6 +30,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   _copy_track_points,
   _route_replay_module,
   export_training_dataset,
+  front_only_frames,
   qcamera_path_for_log,
   resolve_validation_case,
   resolved_recorded_track_id,
@@ -82,6 +83,21 @@ def test_simple_selector_matches_model_lead() -> None:
   assert candidate_track_id(selected.lead_one) == 10
 
 
+def test_front_only_frames_remove_corner_points_without_changing_other_inputs() -> None:
+  original = frame((
+    point(10, 30.0, 0.2, 20.0),
+    point(1010, 29.5, 0.3, 20.0, "corner235"),
+    point(0, 31.0, 0.1, 20.0, "scc"),
+  ))
+
+  filtered, removed = front_only_frames([original])
+
+  assert removed == 1
+  assert [point.source for point in filtered[0].points] == ["frontRadar", "scc"]
+  assert filtered[0].model_leads == original.model_leads
+  assert filtered[0].recorded_one == original.recorded_one
+
+
 def test_production_hybrid_selector_uses_device_controller_output(monkeypatch, tmp_path: Path) -> None:
   lead_one = {
     "status": True, "radarTrackId": 10, "modelProb": 0.9, "score": 0.9,
@@ -112,9 +128,11 @@ def test_production_hybrid_selector_uses_device_controller_output(monkeypatch, t
   ))])
   selected = selector.select(frame(()), 0)
 
+  assert selector.name.endswith(":front-only")
   assert candidate_track_id(selected.lead_one) == 10
   assert candidate_track_id(selected.lead_two) == 20
-  assert selected.lead_two is not None and selected.lead_two.reason == "MLP active cutin"
+  assert selected.lead_two is not None and selected.lead_two.reason == "MLP confirmed cutin"
+  assert selected.lead_two_tentative is False
   assert tuple(candidate.track_id for candidate in selected.active_cutin_candidates) == (20,)
 
 
@@ -190,6 +208,65 @@ def test_validation_review_rearms_cutin_track_after_it_clears() -> None:
   assert validation_review_events(frames, Selector(), review) == {
     2: ("CUT-IN id 20",),
     5: ("CUT-IN id 20",),
+  }
+
+
+def test_validation_review_labels_production_cutin_confirmation_state() -> None:
+  frames = [replace(frame(()), mono_time_s=0.0, time_s=0.0, model_leads=())]
+  cutin = Candidate(20, 0.9, "MLP tentative cutin")
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      return Selection(
+        None,
+        cutin,
+        active_cutin_candidates=(cutin,),
+        lead_two_tentative=True,
+      )
+
+  review = ValidationReview("case", "detect", "corner", 0.0, 1.0, "scene")
+  assert validation_review_events(frames, Selector(), review) == {
+    0: ("CUT-IN TENTATIVE id 20",),
+  }
+
+
+def test_validation_review_labels_confirmed_production_cutin() -> None:
+  frames = [replace(frame(()), mono_time_s=0.0, time_s=0.0, model_leads=())]
+  cutin = Candidate(21, 0.9, "MLP confirmed cutin")
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      return Selection(
+        None,
+        cutin,
+        active_cutin_candidates=(cutin,),
+        lead_two_tentative=False,
+      )
+
+  review = ValidationReview("case", "detect", "corner", 0.0, 1.0, "scene")
+  assert validation_review_events(frames, Selector(), review) == {
+    0: ("CUT-IN CONFIRMED id 21",),
+  }
+
+
+def test_validation_review_uses_internal_decision_stage_when_requested() -> None:
+  frames = [replace(frame(()), mono_time_s=float(index), time_s=float(index), model_leads=()) for index in range(3)]
+  internal_cutin = Candidate(1024, 0.42, "MLP decision cutin", track_aliases=(52,))
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      return (
+        Selection(None, None, decision_cutin_candidates=(internal_cutin,))
+        if int(frame_index) == 1
+        else Selection(None, None)
+      )
+
+  review = ValidationReview(
+    "decision", "detect", "corner", 0.0, 2.0, "scene",
+    target_track_ids=(52, 1024), validation_stage="decision",
+  )
+  assert validation_review_events(frames, Selector(), review) == {
+    1: ("CUT-IN id 1024",),
   }
 
 

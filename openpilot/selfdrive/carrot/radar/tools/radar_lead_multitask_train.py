@@ -413,6 +413,7 @@ def parse_args() -> argparse.Namespace:
     help="override the calibrated runtime threshold for --train-head after validation",
   )
   parser.add_argument("--model-version", type=int, default=0, help="artifact version; defaults to the initialized version")
+  parser.add_argument("--sensor-mode", choices=("fused", "front", "corner"), default="fused")
   parser.add_argument("--cache", type=Path, help="reuse the parsed train/validation arrays")
   parser.add_argument("--seed", type=int, default=42)
   return parser.parse_args()
@@ -497,7 +498,9 @@ def main() -> int:
       initial_version = int(initial["version"][0])
       auxiliary_model_arrays = {
         name: initial[name].copy() for name in initial.files
-        if name.startswith(("stationary_", "anticipatory_"))
+        # The stationary head belongs to external-object detection. Cut-in
+        # auxiliary heads must be retrained with the new cut-in ground truth.
+        if name.startswith("stationary_")
       }
     hidden = (initial_parameters["w1"].shape[1], initial_parameters["w2"].shape[1])
   else:
@@ -628,6 +631,7 @@ def main() -> int:
     head_names=np.asarray(MODEL_HEADS),
     mean=mean, std=std, thresholds=thresholds, calibration=calibration,
     metrics=np.asarray(json.dumps(metrics, sort_keys=True)),
+    sensor_mode=np.asarray(args.sensor_mode),
     **auxiliary_model_arrays,
     **model.parameters,
   )

@@ -7,6 +7,8 @@ from openpilot.cereal import car, log, messaging
 from openpilot.common.params import Params
 from openpilot.common.realtime import Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
+from opendbc.car.hyundai.values import HyundaiExtFlags
+from openpilot.selfdrive.carrot.radar.radar_lead_runtime import RadarLeadRuntime
 from openpilot.selfdrive.carrot.radar.radar_vision_model_controller import RadarLeadModelOutput, VisionModelRadarController
 
 
@@ -36,11 +38,33 @@ def empty_lead() -> dict:
   return EMPTY_LEAD.copy()
 
 
+CORNER_RADAR_FLAGS = int(
+  HyundaiExtFlags.CORNER_RADAR_OBJECTS_235
+  | HyundaiExtFlags.CORNER_RADAR_OBJECTS_180
+  | HyundaiExtFlags.CORNER_RADAR_OBJECTS_430
+)
+
+
+def corner_radar_enabled(CP: car.CarParams, enable_corner_radar: int) -> bool:
+  return (
+    CP.brand == "hyundai"
+    and enable_corner_radar > 0
+    and bool(int(CP.extFlags) & CORNER_RADAR_FLAGS)
+  )
+
+
 class ModelRadarD:
   """Build radarState with vision-matched leadOne and model secondary leads."""
 
-  def __init__(self) -> None:
-    self.controller = VisionModelRadarController()
+  def __init__(self, CP: car.CarParams) -> None:
+    params = Params()
+    radar_reaction_factor = params.get_float("RadarReactionFactor") * 0.01
+    self.controller = VisionModelRadarController(radar_reaction_factor)
+    self.controller.runtime = RadarLeadRuntime(
+      include_scc=True,
+      enable_radar_tracks=params.get_int("EnableRadarTracks"),
+      corner_radar_enabled=corner_radar_enabled(CP, params.get_int("EnableCornerRadar")),
+    )
     self.radar_state = log.RadarState.new_message()
     self.radar_state_valid = False
 
@@ -79,7 +103,7 @@ def main() -> None:
   config_realtime_process(5, Priority.CTRL_LOW)
 
   cloudlog.info("model radard is waiting for CarParams")
-  messaging.log_from_bytes(Params().get("CarParams", block=True), car.CarParams)
+  CP = messaging.log_from_bytes(Params().get("CarParams", block=True), car.CarParams)
   cloudlog.info("model radard got CarParams")
 
   sm = messaging.SubMaster(
@@ -87,7 +111,7 @@ def main() -> None:
     ignore_alive=["livePose"], ignore_valid=["livePose"],
   )
   pm = messaging.PubMaster(["radarState"])
-  radar = ModelRadarD()
+  radar = ModelRadarD(CP)
 
   while True:
     sm.update()

@@ -166,7 +166,7 @@ Open all maintained cases as a visual playlist using the bundled three-head
 radar model:
 
 ```powershell
-py -3.12 openpilot/selfdrive/carrot/radar_lead_validation_review.py
+py -3.12 openpilot/selfdrive/carrot/radar/tools/radar_lead_validation_review.py
 ```
 
 Each unique route starts at 0 seconds and plays through the full log. Multiple
@@ -184,7 +184,7 @@ radard recomputation and are disabled by default. Enable that slower comparison
 only when needed:
 
 ```powershell
-py -3.12 openpilot/selfdrive/carrot/radar_lead_validation_review.py --compare-radard
+py -3.12 openpilot/selfdrive/carrot/radar/tools/radar_lead_validation_review.py --compare-radard
 ```
 
 The `--hybrid` replay path directly executes the on-device
@@ -195,14 +195,14 @@ the final lead or cut-in policy.
 Review only positive or negative cases:
 
 ```powershell
-py -3.12 openpilot/selfdrive/carrot/radar_lead_validation_review.py --expected detect
-py -3.12 openpilot/selfdrive/carrot/radar_lead_validation_review.py --expected clear
+py -3.12 openpilot/selfdrive/carrot/radar/tools/radar_lead_validation_review.py --expected detect
+py -3.12 openpilot/selfdrive/carrot/radar/tools/radar_lead_validation_review.py --expected clear
 ```
 
 Review one matching case directly:
 
 ```powershell
-py -3.12 openpilot/selfdrive/carrot/radar_lead_simulator.py `
+py -3.12 openpilot/selfdrive/carrot/radar/tools/radar_lead_simulator.py `
   --validation-case ioniq9-a7-22-truck
 ```
 
@@ -214,12 +214,24 @@ first even though lead acquisition can still occur:
 - `ioniq9-a7-22-truck`: `leadTwo` id 56 at 20.58 s and `leadOne` id 56 at
   22.74 s, but no model cut-in from 20-29 s.
 
-The production-controller regression run on 2026-07-22 passed 51 of 54
-maintained detect/clear windows. The remaining failures are the close Carnival
-cut-in completing without the required `leadOne` takeover and two Palisade C21
-right cut-ins that are still missed. Only the listed windows are labeled; new
-reports must be added to `cutin_validation_cases.json` before a later change can
-be called regression-safe.
+The source-separated production-controller regression run on 2026-07-24 passed
+all 71 maintained windows: 28/28 corner, 8/8 front-only, and 35/35
+front-plus-corner windows. The deployed front and corner models keep independent
+feature history and decision filters. On a corner-equipped vehicle, cut-in and
+secondary decisions come from the corner model; front matching happens only
+after selection to obtain control-quality longitudinal values. Only the listed
+windows are labeled; new reports must be added to
+`cutin_validation_cases.json` before a later change can be called
+regression-safe.
+
+The Carnival `carnival-5b-18-early` window is deadline-checked: corner id 1013
+must be selected by 5.60 s. A separate clear window verifies that the same
+physical vehicle is not reported as a late cut-in after it has already become
+`leadOne`.
+
+The Carnival `carnival-5b-15-truck` scene also contains two explicit clear
+windows at 42.3-43.6 s and 44.8-46.1 s. Weak lane-relative jitter must not
+activate id 39/1071 there; the real inward entry remains detected at 47.11 s.
 
 ## Unit Coverage
 

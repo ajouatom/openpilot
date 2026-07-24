@@ -2,27 +2,36 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import RadarPoi
 from openpilot.selfdrive.carrot.radar.radar_object_fusion import RadarObjectFusion
 
 
-def point(track_id: int, d_rel: float, y_rel: float, v_rel: float, source: str) -> RadarPoint:
-  return RadarPoint(track_id, d_rel, y_rel, v_rel, 0.0, 0.0, 20.0 + v_rel, True, source)
+def point(
+  track_id: int, d_rel: float, y_rel: float, v_rel: float, source: str,
+  a_lead: float = 0.0, j_lead: float = 0.0,
+) -> RadarPoint:
+  return RadarPoint(
+    track_id, d_rel, y_rel, v_rel, 0.0, 0.0, 20.0 + v_rel, True, source,
+    a_lead=a_lead, j_lead=j_lead,
+  )
 
 
-def test_confirmed_pair_uses_corner_lateral_and_range_weighted_distance() -> None:
+def test_confirmed_pair_uses_front_longitudinal_and_corner_lateral_values() -> None:
   fusion = RadarObjectFusion()
   outputs = ()
   for index in range(4):
     outputs = fusion.update(index * 0.05, (
-      point(40, 8.0 + (0.5 if index == 3 else 0.0), 1.1, -1.0, "frontRadar"),
-      point(1000, 7.0, 2.4, -1.0, "corner180"),
+      point(40, 8.0 + (0.5 if index == 3 else 0.0), 1.1, -1.0, "frontRadar", 0.8, -0.2),
+      point(1000, 7.0, 2.4, -1.0, "corner180", -1.4, 2.5),
     ))
 
   fused = next(obj for obj in outputs if obj.front_track_id == 40 and obj.corner_track_id == 1000)
   assert fused.y_rel == 2.4
   assert fused.lateral_source == "corner180"
-  assert fused.distance_source == "corner-weighted"
-  assert fused.d_rel < 8.5
+  assert fused.distance_source == "frontRadar"
+  assert fused.d_rel == 8.5
+  assert fused.v_rel == -1.0
+  assert fused.a_lead == 0.8
+  assert fused.j_lead == -0.2
 
 
-def test_far_pair_prefers_front_distance() -> None:
+def test_far_pair_keeps_front_distance_exactly() -> None:
   fusion = RadarObjectFusion(confirm_frames=1)
   outputs = fusion.update(0.0, (
     point(40, 90.0, 0.4, -1.0, "frontRadar"),
@@ -30,8 +39,8 @@ def test_far_pair_prefers_front_distance() -> None:
   ))
 
   fused = next(obj for obj in outputs if obj.corner_track_id == 1000)
-  assert fused.distance_source == "front-weighted"
-  assert abs(fused.d_rel - 90.0) < abs(fused.d_rel - 88.8)
+  assert fused.distance_source == "frontRadar"
+  assert fused.d_rel == 90.0
 
 
 def test_scc_is_excluded_by_default_and_only_standalone_without_front_tracks() -> None:

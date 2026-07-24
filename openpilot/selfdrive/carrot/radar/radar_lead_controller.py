@@ -9,6 +9,7 @@ from typing import Any
 
 from openpilot.selfdrive.carrot.radar.radar_lead_model import RadarLeadPrediction
 from openpilot.selfdrive.carrot.radar.radar_lead_runtime import RadarLeadRuntime
+from openpilot.selfdrive.carrot.radar.radar_lead_tau import RadarLeadTauTracker
 
 
 def _cloudlog(level: str, message: str) -> None:
@@ -59,14 +60,15 @@ class RadarLeadModelOutput:
 class RadarLeadModelController:
   """Owns model inference, temporal decisions, and radarState selection."""
 
-  def __init__(self) -> None:
+  def __init__(self, radar_reaction_factor: float = 1.0) -> None:
     self.runtime = RadarLeadRuntime()
+    self.lead_tau = RadarLeadTauTracker(radar_reaction_factor)
     self.frames = 0
     self.time_ms = 0.0
     self.last_error = ""
 
-  @staticmethod
   def _lead_from_prediction(
+    self,
     prediction: RadarLeadPrediction,
     probability: float,
   ) -> dict[str, Any] | None:
@@ -87,7 +89,7 @@ class RadarLeadModelController:
       "vLeadK": float(obj.v_lead),
       "aLead": float(obj.a_lead),
       "aLeadK": float(obj.a_lead),
-      "aLeadTau": 1.5,
+      "aLeadTau": self.lead_tau.value(prediction),
       "jLead": float(obj.j_lead),
       "vLat": float(obj.yv_rel),
       "status": True,
@@ -229,14 +231,15 @@ class RadarLeadModelController:
       _cloudlog("error", f"radar lead model error: {result.error}")
     self.last_error = result.error
     if self.frames % 100 == 0:
-      _cloudlog("info",
-        f"radar lead model available={result.available} avg={self.time_ms / 100.0:.3f}ms "
-        f"points={len(result.predictions)} lead={len(result.decision.lead_candidates)} "
-        f"cutin={len(result.decision.cutin_candidates)} external={len(result.decision.external_candidates)}"
-      )
+      message = f"radar lead model available={result.available} avg={self.time_ms / 100.0:.3f}ms "
+      message += f"points={len(result.predictions)} lead={len(result.decision.lead_candidates)} "
+      message += f"cutin={len(result.decision.cutin_candidates)} external={len(result.decision.external_candidates)}"
+      _cloudlog("info", message)
       self.time_ms = 0.0
     if not result.available:
       return RadarLeadModelOutput(False, result.error, lead_one=self._lead_from_vision(model, v_ego))
+
+    self.lead_tau.update(time_s, result.predictions)
 
     left: list[dict[str, Any]] = []
     center: list[dict[str, Any]] = []

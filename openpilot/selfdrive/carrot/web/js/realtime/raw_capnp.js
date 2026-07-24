@@ -290,7 +290,7 @@ carrotRawCapnpGlobal.CarrotRawCapnp = (() => {
       radarSource: {
         kind: "enum",
         offset: 15,
-        values: ["frontRadar", "scc", "corner235", "corner180"],
+        values: ["frontRadar", "scc", "corner235", "corner180", "corner430"],
       },
     },
   };

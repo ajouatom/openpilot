@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export fused radar objects with separate lead and cut-in labels."""
+"""Export source-specific radar objects with separate lead and cut-in labels."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import gzip
 import json
 import re
 import sys
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +23,7 @@ from openpilot.selfdrive.carrot.radar.radar_lead_model import (
   VisionLeadContext,
   object_contains_track,
 )
+from openpilot.selfdrive.carrot.radar.radar_sensor_objects import independent_radar_objects
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   CurrentRadardTeacher,
   ManualLabels,
@@ -105,6 +105,25 @@ def candidate_cutin_overrides(
   return overrides, applied
 
 
+def frame_cutin_targets(
+  frames: list[RadarFrame], entries: list[dict[str, Any]],
+) -> tuple[list[set[int] | None], int]:
+  """Return exact manual cut-in targets for fully reviewed frame ranges."""
+  targets: list[set[int] | None] = [None for _ in frames]
+  applied = 0
+  for entry in entries:
+    if "cutin_targets" not in entry:
+      continue
+    start_s = float(entry.get("start_s", 0.0))
+    end_s = float(entry.get("end_s", start_s))
+    entry_targets = {int(value) for value in entry["cutin_targets"]}
+    for frame_index, frame in enumerate(frames):
+      if start_s <= frame.time_s <= end_s:
+        targets[frame_index] = entry_targets if targets[frame_index] is None else targets[frame_index] | entry_targets
+        applied += 1
+  return targets, applied
+
+
 def apply_annotations(
   labels: ManualLabels, frames: list[RadarFrame], log_path: Path, annotations_path: Path,
   entries: list[dict[str, Any]] | None = None,
@@ -130,6 +149,47 @@ def _targets_available(targets: set[int], samples: tuple[Any, ...]) -> bool:
   return not targets or all(any(object_contains_track(sample.radar_object, track_id) for sample in samples) for track_id in targets)
 
 
+def _object_track_ids(obj: Any) -> set[int]:
+  return {
+    int(track_id) for track_id in (obj.front_track_id, obj.corner_track_id, obj.scc_track_id)
+    if track_id is not None
+  }
+
+
+def _label_aliases(objects: tuple[Any, ...]) -> tuple[frozenset[int], ...]:
+  """Build same-vehicle ID groups used only to transfer offline labels."""
+  return tuple(
+    frozenset(track_ids)
+    for obj in objects
+    if (track_ids := _object_track_ids(obj))
+  )
+
+
+def _expand_targets(targets: set[int], aliases: tuple[frozenset[int], ...]) -> set[int]:
+  expanded = set(targets)
+  for target in targets:
+    expanded.update(next((group for group in aliases if target in group), ()))
+  return expanded
+
+
+def _translate_targets(
+  targets: set[int], aliases: tuple[frozenset[int], ...], samples: tuple[Any, ...],
+) -> set[int]:
+  available = {
+    track_id
+    for sample in samples
+    for track_id in _object_track_ids(sample.radar_object)
+  }
+  translated: set[int] = set()
+  for target in targets:
+    alternatives = next((group for group in aliases if target in group), frozenset((target,)))
+    translated.add(
+      target if target in available
+      else next((track_id for track_id in alternatives if track_id in available), target)
+    )
+  return translated
+
+
 def export_fused_dataset(
   log_path: Path,
   output_path: Path,
@@ -137,18 +197,34 @@ def export_fused_dataset(
   include_scc: bool = False,
   front_only: bool = False,
   annotations_path: Path = DEFAULT_ANNOTATIONS,
-) -> dict[str, int]:
-  frames = load_frames(log_path)
+  reviewed_cutin_only: bool = False,
+  sensor_mode: str = "fused",
+  enable_radar_tracks: int | None = None,
+) -> dict[str, Any]:
   if front_only:
-    frames = [replace(frame, points=tuple(point for point in frame.points if point.source == "frontRadar")) for frame in frames]
+    sensor_mode = "front"
+    include_scc = False
+    enable_radar_tracks = 1
+  if sensor_mode not in ("fused", "front", "corner"):
+    raise ValueError(f"unknown radar sensor mode: {sensor_mode}")
+  frames = load_frames(log_path)
   labels = labels or ManualLabels.load(log_path.with_name(log_path.name + ".lead-labels.json"), len(frames))
   annotation_entries = _annotation_entries(log_path, annotations_path)
   annotation_count = apply_annotations(labels, frames, log_path, annotations_path, annotation_entries)
   cutin_overrides, candidate_annotation_count = candidate_cutin_overrides(frames, annotation_entries)
-  annotation_count += candidate_annotation_count
-  weak_cutin_ids = current_cutin_track_ids(log_path, frames, ("front",) if front_only else ("corner", "front"))
+  exact_cutin_targets, target_annotation_count = frame_cutin_targets(frames, annotation_entries)
+  annotation_count += candidate_annotation_count + target_annotation_count
+  cutin_sources = {
+    "front": ("front",),
+    "corner": ("corner",),
+    "fused": ("corner", "front"),
+  }[sensor_mode]
+  weak_cutin_ids = current_cutin_track_ids(log_path, frames, cutin_sources)
   teacher = CurrentRadardTeacher(frames, weak_cutin_ids)
-  fusion = RadarObjectFusion(include_scc=include_scc)
+  feature_fusion = RadarObjectFusion(include_scc=include_scc) if sensor_mode == "fused" else None
+  # This association object never supplies model features. It only translates
+  # a reviewed front ID to the corresponding corner ID, or vice versa.
+  label_association = RadarObjectFusion(include_scc=True)
   feature_builder = RadarLeadFeatureBuilder()
   output_path.parent.mkdir(parents=True, exist_ok=True)
   opener = gzip.open if output_path.suffix.lower() == ".gz" else open
@@ -158,22 +234,52 @@ def export_fused_dataset(
     "manual_lead_groups": 0, "manual_cutin_groups": 0, "manual_external_groups": 0,
     "invalid_lead_groups": 0, "invalid_cutin_groups": 0, "invalid_external_groups": 0,
     "annotations": annotation_count,
+    "sensor_mode": sensor_mode,
   }
   with opener(output_path, "wt", newline="", encoding="utf-8") as output:
     writer = csv.DictWriter(output, fieldnames=[*METADATA_COLUMNS, *MODEL_FEATURE_NAMES])
     writer.writeheader()
     for frame_index, frame in enumerate(frames):
+      associated_objects = tuple(label_association.update(frame.mono_time_s, frame.points))
+      aliases = _label_aliases(associated_objects)
+      if sensor_mode == "fused":
+        assert feature_fusion is not None
+        raw_objects = tuple(feature_fusion.update(frame.mono_time_s, frame.points))
+      else:
+        independent = independent_radar_objects(
+          frame.points,
+          include_scc=include_scc,
+          enable_radar_tracks=enable_radar_tracks,
+        )
+        raw_objects = independent.front if sensor_mode == "front" else independent.corner
       objects = tuple(
-        obj for obj in fusion.update(frame.mono_time_s, frame.points)
+        obj for obj in raw_objects
         if 0.75 < obj.d_rel < 160.0 and abs(obj.y_rel) < 12.0
       )
       samples = feature_builder.update(_context(frame), objects)
+      # Keep sensor-specific temporal feature history warm before a reviewed range.
+      if reviewed_cutin_only and exact_cutin_targets[frame_index] is None:
+        continue
       if not samples:
         continue
       lead_targets, lead_source = _role_targets(frame_index, labels, teacher, "leadOne")
       external_targets, external_source = _role_targets(frame_index, labels, teacher, "leadTwo")
       cutin_targets, cutin_source = _cutin_targets(frame_index, labels, weak_cutin_ids)
       frame_cutin_overrides = cutin_overrides[frame_index]
+      reviewed_targets = exact_cutin_targets[frame_index]
+      if reviewed_targets is not None:
+        cutin_targets = set(reviewed_targets)
+        cutin_source = "manual"
+      lead_targets = _translate_targets(lead_targets, aliases, samples)
+      external_targets = _translate_targets(external_targets, aliases, samples)
+      cutin_targets = _translate_targets(cutin_targets, aliases, samples)
+      frame_cutin_overrides = {
+        alias: label
+        for track_id, label in frame_cutin_overrides.items()
+        for alias in _expand_targets({track_id}, aliases)
+      }
+      if reviewed_targets is not None:
+        reviewed_targets = _translate_targets(set(reviewed_targets), aliases, samples)
       # External is the radar-only leadTwo role. Keep it distinct from both the
       # vision-matched leadOne role and the dedicated cut-in role.
       external_targets -= lead_targets | cutin_targets
@@ -182,7 +288,11 @@ def export_fused_dataset(
         object_contains_track(sample.radar_object, track_id)
         for track_id in frame_cutin_overrides for sample in samples
       )
-      cutin_valid = _targets_available(cutin_targets, samples) or override_valid
+      cutin_valid = (
+        _targets_available(reviewed_targets, samples)
+        if reviewed_targets is not None
+        else _targets_available(cutin_targets, samples) or override_valid
+      )
       external_valid = _targets_available(external_targets, samples)
       stats["invalid_lead_groups"] += int(not lead_valid)
       stats["invalid_cutin_groups"] += int(not cutin_valid)
@@ -202,8 +312,10 @@ def export_fused_dataset(
         ]
         # Video-reviewed candidates are manual ground truth for the existing
         # trainer, but remain candidate-specific instead of replacing the frame.
-        row_cutin_source = "manual" if object_overrides else cutin_source
+        row_cutin_source = "manual" if reviewed_targets is not None or object_overrides else cutin_source
         cutin_label = (
+          int(any(object_contains_track(obj, target) for target in reviewed_targets))
+          if reviewed_targets is not None else
           int(any(object_overrides)) if object_overrides else
           int(cutin_valid and any(object_contains_track(obj, target) for target in cutin_targets))
         )
@@ -262,17 +374,23 @@ def _evenly_spaced(items: list[Path], count: int) -> list[Path]:
 
 def _dataset_name(path: Path) -> str:
   parent = re.sub(r"[^A-Za-z0-9_.-]+", "_", path.parent.name)
-  return f"{parent}_{path.name}.fused.csv.gz"
+  return f"{parent}_{path.name}.csv.gz"
 
 
 def parse_args() -> argparse.Namespace:
-  parser = argparse.ArgumentParser(description="Build fused lead/cut-in datasets from rlogs")
+  parser = argparse.ArgumentParser(description="Build source-specific lead/cut-in datasets from rlogs")
   parser.add_argument("roots", nargs="+", type=Path)
   parser.add_argument("--output-dir", required=True, type=Path)
   parser.add_argument("--max-logs", type=int, default=0)
   parser.add_argument("--force", action="store_true")
   parser.add_argument("--fusion-scc", action="store_true")
   parser.add_argument("--front-only", action="store_true", help="augment/train without corner or SCC points")
+  parser.add_argument("--sensor-mode", choices=("fused", "front", "corner"), default="fused")
+  parser.add_argument(
+    "--enable-radar-tracks", type=int, default=None,
+    help="front mode SCC policy matching the device EnableRadarTracks value",
+  )
+  parser.add_argument("--reviewed-cutin-only", action="store_true", help="write only fully reviewed cut-in frames")
   parser.add_argument("--annotations", type=Path, default=DEFAULT_ANNOTATIONS)
   return parser.parse_args()
 
@@ -292,7 +410,8 @@ def main() -> int:
       else:
         stats = export_fused_dataset(
           log_path, output, include_scc=args.fusion_scc, front_only=args.front_only,
-          annotations_path=args.annotations,
+          annotations_path=args.annotations, reviewed_cutin_only=args.reviewed_cutin_only,
+          sensor_mode=args.sensor_mode, enable_radar_tracks=args.enable_radar_tracks,
         )
       manifest["datasets"].append({"log": str(log_path), "dataset": str(output), "stats": stats})
     except Exception as exc:

@@ -3,7 +3,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import Candidate, Selection
-from openpilot.selfdrive.carrot.radar.tools.radar_lead_fused_dataset import candidate_cutin_overrides
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_fused_dataset import (
+  _label_aliases,
+  _translate_targets,
+  candidate_cutin_overrides,
+  frame_cutin_targets,
+)
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_video_review import (
   ReviewEvent,
   _inventory_logs,
@@ -16,6 +21,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_video_review import (
   export_annotations,
   mark_event,
 )
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_dataset import validation_annotations
 
 from openpilot.selfdrive.carrot.tests.test_radar_lead_simulator import frame, point
 
@@ -185,6 +191,64 @@ def test_candidate_cutin_overrides_only_label_reviewed_track() -> None:
 
   assert overrides == [{50: False}]
   assert count == 1
+
+
+def test_frame_cutin_targets_define_exact_reviewed_objects() -> None:
+  frames = [frame((point(50, 20.0, 1.0, 10.0), point(60, 25.0, -1.0, 11.0)))]
+  entries = [{"start_s": 0.0, "end_s": 0.1, "cutin_targets": [50, 1050]}]
+
+  targets, count = frame_cutin_targets(frames, entries)
+
+  assert targets == [{50, 1050}]
+  assert count == 1
+
+
+def test_frame_cutin_targets_support_clear_windows() -> None:
+  frames = [frame((point(50, 20.0, 1.0, 10.0),))]
+  entries = [{"start_s": 0.0, "end_s": 0.1, "cutin_targets": []}]
+
+  targets, count = frame_cutin_targets(frames, entries)
+
+  assert targets == [set()]
+  assert count == 1
+
+
+def test_source_specific_label_translation_uses_matching_sensor_id() -> None:
+  associated = SimpleNamespace(front_track_id=50, corner_track_id=1050, scc_track_id=None)
+  front = SimpleNamespace(front_track_id=50, corner_track_id=None, scc_track_id=None)
+  corner = SimpleNamespace(front_track_id=None, corner_track_id=1050, scc_track_id=None)
+  aliases = _label_aliases((associated,))
+
+  assert _translate_targets({50}, aliases, (SimpleNamespace(radar_object=corner),)) == {1050}
+  assert _translate_targets({1050}, aliases, (SimpleNamespace(radar_object=front),)) == {50}
+
+
+def test_source_specific_label_translation_keeps_unmatched_target_invalid() -> None:
+  corner = SimpleNamespace(front_track_id=None, corner_track_id=1050, scc_track_id=None)
+
+  assert _translate_targets({50}, (), (SimpleNamespace(radar_object=corner),)) == {50}
+
+
+def test_validation_annotations_exclude_detect_without_target_id() -> None:
+  cases = [
+    {"id": "broad", "log": "route/rlog.zst", "window": [1.0, 2.0], "expected": "detect"},
+    {
+      "id": "exact",
+      "log": "route/rlog.zst",
+      "window": [3.0, 3.25],
+      "label_window": [3.0, 4.0],
+      "expected": "detect",
+      "target_track_ids": [42],
+    },
+    {"id": "clear", "log": "route/rlog.zst", "window": [5.0, 6.0], "expected": "clear"},
+  ]
+
+  annotations = validation_annotations(cases)
+
+  assert annotations["logs"]["route/rlog.zst"] == [
+    {"start_s": 3.0, "end_s": 4.0, "cutin_targets": [42], "validation_case": "exact"},
+    {"start_s": 5.0, "end_s": 6.0, "cutin_targets": [], "validation_case": "clear"},
+  ]
 
 
 def test_mark_event_accepts_visual_time_correction(tmp_path: Path) -> None:
