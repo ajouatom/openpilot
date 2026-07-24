@@ -12,6 +12,7 @@ from typing import Any
 from urllib.request import urlopen
 
 from ..config import CARROT_YOUTUBE_LIVE_SECRET_PATH, CARROT_YOUTUBE_LIVE_STATE_PATH
+from .youtube_profiles import YOUTUBE_PROFILES, youtube_profile
 
 
 REPO_ROOT = Path("/data/openpilot")
@@ -20,42 +21,17 @@ LOG_PATH = Path("/tmp/carrot-youtube-test.log")
 TIMEOUT_SECONDS = 10 * 60
 RUNNER_MODULE = "openpilot.selfdrive.carrot.server.services.youtube_test"
 YOUTUBE_STATUS_URL = "http://127.0.0.1:7000/api/youtube_live/status"
-YOUTUBE_SOURCE = "youtubeRoadEncodeData"
+YOUTUBE_SOURCE = youtube_profile(0).source
 
 _CAMERAD_SPEC = {
   "cmd": [str(REPO_ROOT / "openpilot/system/camerad/camerad")],
   "cwd": str(REPO_ROOT),
   "match": "openpilot/system/camerad/camerad",
 }
+_ENCODER_PATH = str(REPO_ROOT / "openpilot/system/loggerd/encoderd")
 _QUALITY_SPECS = {
-  0: {
-    "name": "youtube_low_encoderd",
-    "label": "low",
-    "cmd": [str(REPO_ROOT / "openpilot/system/loggerd/encoderd"), "--youtube-low"],
-    "cwd": str(REPO_ROOT),
-    "match": "openpilot/system/loggerd/encoderd\x00--youtube-low",
-  },
-  1: {
-    "name": "youtube_medium_encoderd",
-    "label": "medium",
-    "cmd": [str(REPO_ROOT / "openpilot/system/loggerd/encoderd"), "--youtube-medium"],
-    "cwd": str(REPO_ROOT),
-    "match": "openpilot/system/loggerd/encoderd\x00--youtube-medium",
-  },
-  2: {
-    "name": "youtube_encoderd",
-    "label": "high",
-    "cmd": [str(REPO_ROOT / "openpilot/system/loggerd/encoderd"), "--youtube"],
-    "cwd": str(REPO_ROOT),
-    "match": "openpilot/system/loggerd/encoderd\x00--youtube\x00",
-  },
-  3: {
-    "name": "youtube_wide_encoderd",
-    "label": "wide",
-    "cmd": [str(REPO_ROOT / "openpilot/system/loggerd/encoderd"), "--youtube-wide"],
-    "cwd": str(REPO_ROOT),
-    "match": "openpilot/system/loggerd/encoderd\x00--youtube-wide",
-  },
+  quality: profile.encoder_spec(_ENCODER_PATH, cwd=str(REPO_ROOT))
+  for quality, profile in YOUTUBE_PROFILES.items()
 }
 _CONFLICT_MATCHES = {
   "camerad": _CAMERAD_SPEC["match"],
@@ -70,7 +46,7 @@ def _params():
 
 
 def _quality_spec(value: int) -> dict[str, Any]:
-  return dict(_QUALITY_SPECS.get(int(value), _QUALITY_SPECS[0]))
+  return dict(_QUALITY_SPECS[youtube_profile(value).quality])
 
 
 def _set_snapshot_active(active: bool) -> None:

@@ -3,9 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 from openpilot.selfdrive.carrot.server.services import youtube_live
+from openpilot.selfdrive.carrot.server.services import youtube_profiles
 from openpilot.selfdrive.carrot.server.services import youtube_test
 
 
@@ -84,6 +83,12 @@ def test_all_profiles_use_dedicated_youtube_source_and_encoder():
     assert command_flag in spec["match"]
 
 
+def test_invalid_quality_falls_back_to_low_profile():
+  assert youtube_profiles.youtube_profile(None).quality == 0
+  assert youtube_profiles.youtube_profile("invalid").quality == 0
+  assert youtube_profiles.youtube_profile(99).quality == 0
+
+
 def test_manager_keeps_youtube_encoders_separate_from_carrot_vision():
   config = PROCESS_CONFIG.read_text(encoding="utf-8")
   for process_name, command_flag in PROFILE_COMMANDS.values():
@@ -125,15 +130,14 @@ def test_resource_observation_does_not_change_cluster_or_vision_state(monkeypatc
 
   assert reads == ["ClusterHud", "DisableDM", youtube_live.YOUTUBE_QUALITY_PARAM]
   assert status["cluster"]["running"] is True
+  assert status["cluster"]["active"] is True
   assert status["carrot_vision"]["webrtcd_running"] is False
+  assert status["carrot_vision"]["configured"] is True
+  assert status["carrot_vision"]["active"] is False
   assert status["youtube_encoder"]["selected"] == "youtube_medium_encoderd"
   assert status["youtube_encoder"]["running"] is True
 
 
-@pytest.mark.xfail(
-  strict=True,
-  reason="2/10 must require an exact runtime resolution contract",
-)
 def test_runtime_resolution_rejects_1280x800_for_1280x720_target():
   service = object.__new__(youtube_live.YouTubeLiveService)
   service._frame_width = 1280
@@ -142,10 +146,6 @@ def test_runtime_resolution_rejects_1280x800_for_1280x720_target():
   assert service._frame_matches_target({"width": 1280, "height": 720}) is False
 
 
-@pytest.mark.xfail(
-  strict=True,
-  reason="2/10 must distinguish declared FPS from observed source FPS",
-)
 def test_status_separates_declared_and_observed_frame_rates(monkeypatch, tmp_path):
   monkeypatch.setattr(
     youtube_live,
@@ -176,10 +176,6 @@ def test_status_separates_declared_and_observed_frame_rates(monkeypatch, tmp_pat
   assert status["observed_frame_fps"] == 0.0
 
 
-@pytest.mark.xfail(
-  strict=True,
-  reason="2/10 must warn only when Carrot Vision processes are actually running",
-)
 def test_carrot_vision_warning_requires_an_active_process(monkeypatch):
   service = object.__new__(youtube_live.YouTubeLiveService)
   service._transport_connected = False
