@@ -3,8 +3,12 @@ import test from "node:test";
 
 import { createSpeedPanel } from "../src/features/drive/contents/vision/hud/widgets/speed_panel.js";
 import { createLfaIcon } from "../src/features/drive/contents/vision/hud/widgets/lfa_icon.js";
+import { createSdiAlert } from "../src/features/drive/contents/vision/hud/widgets/sdi_alert.js";
 import { mapPayload } from "../src/features/drive/contents/vision/hud/index.js";
-import { deriveVehicleHudPayload } from "../src/features/drive/contents/vision/hud/data_bridge.js";
+import {
+  deriveVehicleHudPayload,
+  withVehicleHudFields,
+} from "../src/features/drive/contents/vision/hud/data_bridge.js";
 import { COLORS } from "../src/features/drive/contents/vision/hud/tokens.js";
 
 /* Minimal DOM stub — enough for the SVG/DOM helpers the widgets use.
@@ -63,7 +67,7 @@ function findByClass(root, cls) {
   return null;
 }
 
-const isVisible = (node) => node != null && node.style.display !== "none";
+const isVisible = (node) => node != null && node.style.display !== "none" && !node.hasAttribute?.("hidden");
 
 /* Mirrors the live/replay glue in js/realtime/vision_raw.js deriveCompactHudPayload:
  * the vehicle-derived fields (evActive/activeLaneLine/cruiseOverride) are spread
@@ -71,33 +75,57 @@ const isVisible = (node) => node != null && node.style.display !== "none";
  * the identical cereal-state shape, so one fixture exercises both. */
 function renderFromCereal(state) {
   const vehicle = deriveVehicleHudPayload(state);
-  const flat = {
+  const flat = withVehicleHudFields({
     vEgoKph: Number(state.carState?.vEgoCluster ?? state.carState?.vEgo),
     vSetKph: Number(state.carState?.vCruiseCluster),
     isMetric: true,
     gear: vehicle.gear,
     gearStep: vehicle.gearStep,
-    evActive: vehicle.evActive,
-    activeLaneLine: vehicle.activeLaneLine,
-    cruiseOverride: vehicle.cruiseOverride,
     latActive: vehicle.lfaActive,
-  };
+  }, vehicle);
   const data = mapPayload(flat);
   const panel = createSpeedPanel(doc);
   const lfa = createLfaIcon(doc);
+  const sdi = createSdiAlert(doc);
   panel.update(data);
   lfa.update(data);
+  sdi.update(data);
   return {
     data,
     ev: findByClass(panel.el, "chud-t-ev"),
+    trafficLights: panel.el.children.filter((node) => (
+      (node.getAttribute?.("class") || "").split(/\s+/).includes("chud-speed-traffic")
+    )),
     overrideSpeed: findByClass(panel.el, "chud-t-override"),
     overrideLabel: findByClass(panel.el, "chud-t-override-label"),
     speed: findByClass(panel.el, "chud-t-speed"),
     lane: findByClass(lfa.el, "chud-lfa-lane"),
+    sdi: sdi.el,
+    sdiLabel: findByClass(sdi.el, "chud-sdi-label"),
+    sdiSpeed: findByClass(sdi.el, "chud-sdi-speed"),
+    sdiDistance: findByClass(sdi.el, "chud-sdi-distance"),
+    sdiCountdown: findByClass(sdi.el, "chud-sdi-countdown"),
   };
 }
 
 // 당근비전(라이브): EV 켜짐 + 레인모드 + 감속(카메라) 오버라이드.
+test("live and replay traffic lights render from the active planner state", () => {
+  const red = renderFromCereal({
+    longitudinalPlan: { trafficState: 1 },
+    carrotMan: { trafficState: 0 },
+  });
+  assert.equal(red.trafficLights.length, 2);
+  assert.ok(isVisible(red.trafficLights[0]), "red light visible");
+  assert.ok(!isVisible(red.trafficLights[1]), "green light hidden");
+
+  const green = renderFromCereal({
+    longitudinalPlan: { trafficState: 2 },
+    carrotMan: { trafficState: 0 },
+  });
+  assert.ok(!isVisible(green.trafficLights[0]), "red light hidden");
+  assert.ok(isVisible(green.trafficLights[1]), "green light visible");
+});
+
 test("live: EV + green lane wings + orange decel override all render", () => {
   const r = renderFromCereal({
     carState: { vEgoCluster: 53, vCruiseCluster: 88, evModeValid: true, evModeActive: true, gearShifter: "drive" },
@@ -150,4 +178,37 @@ test("non-metric: override speed converts to mph", () => {
   const override = findByClass(panel.el, "chud-t-override");
   assert.equal(override.textContent, String(Math.round(100 * 0.621371))); // 62
   assert.equal(findByClass(panel.el, "chud-t-override-label").textContent, "section:n");
+});
+
+test("CAM/SDI renders independently with speed, distance and countdown", () => {
+  const r = renderFromCereal({
+    carState: { vEgoCluster: 53, vCruiseCluster: 88, gearShifter: "drive" },
+    carrotMan: {
+      desiredSpeed: 200,
+      desiredSource: "road",
+      xSpdType: 1,
+      xSpdLimit: 60,
+      xSpdDist: 420,
+      xSpdCountDown: 8,
+      szSdiDescr: "Speed camera",
+    },
+  });
+  assert.ok(isVisible(r.sdi));
+  assert.equal(r.sdiLabel.textContent, "Speed camera");
+  assert.equal(r.sdiSpeed.textContent, "60");
+  assert.equal(r.sdiDistance.textContent, "420 m");
+  assert.equal(r.sdiCountdown.textContent, "8s");
+  assert.ok(!isVisible(r.overrideSpeed), "neutral desiredSpeed must not become an orange override");
+});
+
+test("CAM/SDI converts speed and distance in non-metric mode", () => {
+  const vehicle = deriveVehicleHudPayload({
+    carrotMan: { xSpdType: 4, xSpdLimit: 80, xSpdDist: 1609.344, xSpdCountDown: 100 },
+  });
+  const data = mapPayload({ isMetric: false, sdiAlert: vehicle.sdiAlert });
+  const sdi = createSdiAlert(doc);
+  sdi.update(data);
+  assert.equal(findByClass(sdi.el, "chud-sdi-speed").textContent, String(Math.round(80 * 0.621371)));
+  assert.equal(findByClass(sdi.el, "chud-sdi-distance").textContent, "1.0 mi");
+  assert.ok(!isVisible(findByClass(sdi.el, "chud-sdi-countdown")));
 });

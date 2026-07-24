@@ -249,6 +249,34 @@ class WikiSettingsGeneratorTest(unittest.TestCase):
       self.assertIn(custom_manual_text, migrated.pages["KO-ParamA.md"])
       self.assertIn(legacy_name, migrated.page_changes["removed"])
 
+  def test_windows_crlf_checkout_keeps_managed_pages_recognizable(self):
+    with tempfile.TemporaryDirectory() as temp:
+      root = Path(temp)
+      catalog_path = write_catalog(root, catalog(
+        [param("ParamA")],
+        [leaf("GROUP_A", ["ParamA"])],
+      ))
+      wiki = root / "wiki"
+      initial = GENERATOR.generate(
+        catalog_path,
+        locales=("ko", "en", "zh"),
+        catalog_commit=COMMIT,
+        generated_at=STAMP,
+      )
+      GENERATOR.write_result(initial, wiki)
+      page = wiki / "KO-ParamA.md"
+      page.write_bytes(page.read_bytes().replace(b"\n", b"\r\n"))
+
+      regenerated = GENERATOR.generate(
+        catalog_path,
+        wiki_dir=wiki,
+        locales=("ko", "en", "zh"),
+        catalog_commit=COMMIT,
+        generated_at=STAMP,
+      )
+      self.assertIn("KO-ParamA.md", regenerated.pages)
+      self.assertEqual(regenerated.setting_changes["added"], [])
+
   def test_add_change_move_remove_diff_and_manual_move(self):
     with tempfile.TemporaryDirectory() as temp:
       root = Path(temp)
@@ -415,12 +443,15 @@ class WikiSettingsGeneratorTest(unittest.TestCase):
           generated_at=STAMP,
         )
 
-  def test_existing_sidebar_keeps_its_structure_and_adds_one_catalog_link(self):
+  def test_existing_sidebar_keeps_its_structure_and_adds_the_korean_web_menu_tree(self):
     with tempfile.TemporaryDirectory() as temp:
       root = Path(temp)
       catalog_path = write_catalog(root, catalog(
-        [param("ParamA")],
-        [leaf("GROUP_A", ["ParamA"])],
+        [param("ParamA"), param("ParamB")],
+        [
+          leaf("GROUP_A", ["ParamA"]),
+          leaf("GROUP_B", ["ParamB"]),
+        ],
       ))
       wiki = root / "wiki"
       wiki.mkdir()
@@ -446,11 +477,19 @@ class WikiSettingsGeneratorTest(unittest.TestCase):
         generated_at=STAMP,
       )
       sidebar = first.pages[GENERATOR.SIDEBAR_NAME]
-      catalog_line = (
+      catalog_begin = (
         "    - [[전체 설정|Settings-Catalog]] "
-        "<!-- CARROT:SETTINGS-CATALOG -->"
+        "<!-- CARROT:SETTINGS-CATALOG:BEGIN -->"
       )
-      self.assertEqual(sidebar.count(catalog_line), 1)
+      catalog_end = "<!-- CARROT:SETTINGS-CATALOG:END -->"
+      self.assertEqual(sidebar.count(catalog_begin), 1)
+      self.assertEqual(sidebar.count(catalog_end), 1)
+      self.assertIn("      - 루트", sidebar)
+      self.assertIn(r"        - GROUP\_A 한글", sidebar)
+      self.assertIn("          - [[ParamA|KO-ParamA]]", sidebar)
+      self.assertIn(r"        - GROUP\_B 한글", sidebar)
+      self.assertIn("          - [[ParamB|KO-ParamB]]", sidebar)
+      self.assertLess(sidebar.index("[[ParamA|KO-ParamA]]"), sidebar.index("[[ParamB|KO-ParamB]]"))
       self.assertIn("    - [버튼·프리셋 상세]", sidebar)
       self.assertNotIn(GENERATOR.SIDEBAR_NAME, first.index["pages"])
 
@@ -461,7 +500,43 @@ class WikiSettingsGeneratorTest(unittest.TestCase):
         locales=("ko", "en", "zh"),
         catalog_commit=COMMIT,
       )
-      self.assertEqual(second.pages[GENERATOR.SIDEBAR_NAME].count(catalog_line), 1)
+      second_sidebar = second.pages[GENERATOR.SIDEBAR_NAME]
+      self.assertEqual(second_sidebar.count(catalog_begin), 1)
+      self.assertEqual(second_sidebar.count(catalog_end), 1)
+      self.assertEqual(second_sidebar.count("[[ParamA|KO-ParamA]]"), 1)
+
+  def test_existing_sidebar_migrates_the_legacy_single_catalog_link(self):
+    with tempfile.TemporaryDirectory() as temp:
+      root = Path(temp)
+      catalog_path = write_catalog(root, catalog(
+        [param("ParamA")],
+        [leaf("GROUP_A", ["ParamA"])],
+      ))
+      wiki = root / "wiki"
+      wiki.mkdir()
+      (wiki / GENERATOR.SIDEBAR_NAME).write_text(
+        "## carrotpilot Wiki\n\n"
+        "- 사용 설명서\n"
+        "  - [설정 이해하기](https://example.com/settings.md)\n"
+        "    - [[전체 설정|Settings-Catalog]] <!-- CARROT:SETTINGS-CATALOG -->\n"
+        "    - [버튼·프리셋 상세](https://example.com/buttons.md)\n",
+        encoding="utf-8",
+        newline="\n",
+      )
+
+      result = GENERATOR.generate(
+        catalog_path,
+        wiki_dir=wiki,
+        locales=("ko", "en", "zh"),
+        catalog_commit=COMMIT,
+        generated_at=STAMP,
+      )
+      sidebar = result.pages[GENERATOR.SIDEBAR_NAME]
+      self.assertNotIn(GENERATOR.SIDEBAR_CATALOG_MARKER, sidebar)
+      self.assertEqual(sidebar.count(GENERATOR.SIDEBAR_CATALOG_BEGIN_MARKER), 1)
+      self.assertEqual(sidebar.count(GENERATOR.SIDEBAR_CATALOG_END_MARKER), 1)
+      self.assertIn("[[ParamA|KO-ParamA]]", sidebar)
+      self.assertIn("    - [버튼·프리셋 상세]", sidebar)
 
   def test_unmanaged_catalog_files_are_not_overwritten(self):
     with tempfile.TemporaryDirectory() as temp:

@@ -1,10 +1,20 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  createCruiseOverrideHold,
   deriveVehicleHudPayload,
   deriveCruiseOverride,
+  deriveSdiAlert,
+  isCruiseDisplayVisible,
+  resolveCruiseKph,
+  resolveTrafficState,
+  vehicleHudSignature,
+  withVehicleHudFields,
 } from "../src/features/drive/contents/vision/hud/data_bridge.js";
+
+const rawSource = readFileSync(new URL("../js/realtime/vision_raw.js", import.meta.url), "utf8");
 
 // Cluster parity: carState.evModeValid & evModeActive drive the green EV telltale.
 test("EV telltale requires both valid and active", () => {
@@ -19,6 +29,73 @@ test("active lane line is tri-state (true/false/null)", () => {
   assert.equal(deriveVehicleHudPayload({ controlsState: { activeLaneLine: true } }).activeLaneLine, true);
   assert.equal(deriveVehicleHudPayload({ controlsState: { activeLaneLine: false } }).activeLaneLine, false);
   assert.equal(deriveVehicleHudPayload({}).activeLaneLine, null);
+});
+
+test("traffic light keeps an active planner state when carrotMan carries zero", () => {
+  assert.equal(resolveTrafficState({
+    longitudinalPlan: { trafficState: 1 },
+    carrotMan: { trafficState: 0 },
+  }), 1);
+  assert.equal(resolveTrafficState({
+    longitudinalPlan: { trafficState: 2 },
+    carrotMan: { trafficState: 0 },
+  }), 2);
+});
+
+test("traffic light falls back to carrotMan and rejects unknown states", () => {
+  assert.equal(resolveTrafficState({
+    longitudinalPlan: { trafficState: 0 },
+    carrotMan: { trafficState: 1 },
+  }), 1);
+  assert.equal(resolveTrafficState({ carrotMan: { trafficState: 2 } }), 2);
+  assert.equal(resolveTrafficState({ longitudinalPlan: { trafficState: 9 } }), 0);
+  assert.equal(deriveVehicleHudPayload({
+    longitudinalPlan: { trafficState: 2 },
+    carrotMan: { trafficState: 0 },
+  }).trafficState, 2);
+});
+
+test("LFA activity follows carControl lateral actuation before engagement fallbacks", () => {
+  assert.equal(deriveVehicleHudPayload({
+    carControl: { latActive: false },
+    selfdriveState: { enabled: true },
+  }).lfaActive, false);
+  assert.equal(deriveVehicleHudPayload({
+    carControl: { latActive: true },
+    selfdriveState: { enabled: false },
+  }).lfaActive, true);
+  assert.equal(deriveVehicleHudPayload({ selfdriveState: { enabled: true } }).lfaActive, true);
+});
+
+test("set speed skips zero and sentinel values before using cluster fallbacks", () => {
+  assert.equal(resolveCruiseKph({
+    carState: { vCruiseCluster: 0 },
+    controlsState: { vCruiseCluster: 88 },
+  }), 88);
+  assert.equal(resolveCruiseKph({
+    carState: { vCruiseCluster: 255, vCruise: 77 },
+  }), 77);
+  assert.equal(resolveCruiseKph({
+    carState: { cruiseState: { available: true, speedCluster: 20 } },
+  }), 72);
+  assert.equal(resolveCruiseKph({
+    carState: { cruiseState: { available: false, speedCluster: 20 } },
+  }), null);
+  assert.equal(resolveCruiseKph({
+    carState: { vCruiseCluster: 88, cruiseState: { available: false } },
+  }), null);
+});
+
+test("cruise display gate mirrors cluster enabled and paused states", () => {
+  assert.equal(isCruiseDisplayVisible({
+    carState: { vCruiseCluster: 88 },
+    selfdriveState: { enabled: false },
+  }), false);
+  assert.equal(isCruiseDisplayVisible({
+    carState: { vCruiseCluster: 88 },
+    selfdriveState: { enabled: true },
+  }), true);
+  assert.equal(isCruiseDisplayVisible({ carState: { vCruiseCluster: 88 } }), true);
 });
 
 test("cruise override is null when cruise is off or sentinel", () => {
@@ -60,4 +137,161 @@ test("eco override (green, mode 1) wins when cruiseTarget exceeds the set speed"
 test("no override when desiredSpeed is not below the set speed", () => {
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 88 } }), null);
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 95 } }), null);
+});
+
+test("orange override survives a short live or replay sample gap", () => {
+  const hold = createCruiseOverrideHold();
+  const orange = { kph: 70, label: "cam:n", mode: 2 };
+  assert.deepEqual(hold.update(orange, { clockMs: 1000, clockKey: "replay:a", active: true }), orange);
+  assert.deepEqual(hold.update(null, { clockMs: 3499, clockKey: "replay:a", active: true }), orange);
+  assert.equal(hold.update(null, { clockMs: 3501, clockKey: "replay:a", active: true }), null);
+});
+
+test("orange override hold resets on seek, source clock change, or cruise off", () => {
+  const orange = { kph: 70, label: "cam:n", mode: 2 };
+
+  const seek = createCruiseOverrideHold();
+  seek.update(orange, { clockMs: 5000, clockKey: "replay:a", active: true });
+  assert.equal(seek.update(null, { clockMs: 1000, clockKey: "replay:a", active: true }), null);
+
+  const segment = createCruiseOverrideHold();
+  segment.update(orange, { clockMs: 1000, clockKey: "replay:a", active: true });
+  assert.equal(segment.update(null, { clockMs: 1100, clockKey: "replay:b", active: true }), null);
+
+  const cruise = createCruiseOverrideHold();
+  cruise.update(orange, { clockMs: 1000, clockKey: "live", active: true });
+  assert.equal(cruise.update(null, { clockMs: 1100, clockKey: "live", active: false }), null);
+});
+
+test("eco override replaces orange immediately and is never held", () => {
+  const hold = createCruiseOverrideHold();
+  const orange = { kph: 70, label: "cam:n", mode: 2 };
+  const eco = { kph: 95, label: "eco", mode: 1 };
+  hold.update(orange, { clockMs: 1000, clockKey: "live", active: true });
+  assert.deepEqual(hold.update(eco, { clockMs: 1100, clockKey: "live", active: true }), eco);
+  assert.equal(hold.update(null, { clockMs: 1200, clockKey: "live", active: true }), null);
+});
+
+test("all carrot/MICI deceleration sources keep their cluster display origin", () => {
+  const cases = {
+    cam: "cam:n",
+    section: "section:n",
+    bump: "bump:n",
+    police: "police:n",
+    waze: "waze:n",
+    road: "road:n",
+    atc: "turn:n",
+    atc2: "turn:n",
+    hda: "cam:v",
+    route: "route:v",
+    gas: "gas:v",
+    vturn: "turn:c",
+    model: "turn:c",
+  };
+  for (const [source, label] of Object.entries(cases)) {
+    assert.equal(deriveCruiseOverride({
+      carState: { vCruiseCluster: 88 },
+      carrotMan: { desiredSpeed: 70, desiredSource: source },
+    }).label, label, source);
+  }
+});
+
+test("SDI alert remains available before an orange cruise override begins", () => {
+  const state = {
+    carState: { vCruiseCluster: 80 },
+    carrotMan: {
+      desiredSpeed: 200,
+      desiredSource: "road",
+      xSpdType: 1,
+      xSpdLimit: 60,
+      xSpdDist: 420,
+      xSpdCountDown: 8,
+      szSdiDescr: "Speed camera",
+    },
+  };
+  assert.equal(deriveCruiseOverride(state), null);
+  assert.deepEqual(deriveSdiAlert(state), {
+    type: 1,
+    family: "camera",
+    label: "Speed camera",
+    speedLimitKph: 60,
+    distanceM: 420,
+    countdownS: 8,
+  });
+  assert.deepEqual(deriveVehicleHudPayload(state).sdiAlert, deriveSdiAlert(state));
+});
+
+test("SDI families and sentinel values are normalized", () => {
+  for (const [type, family, label] of [
+    [4, "section", "SECTION"],
+    [22, "bump", "BUMP"],
+    [100, "police", "POLICE"],
+    [101, "waze", "WAZE"],
+  ]) {
+    assert.equal(deriveSdiAlert({
+      carrotMan: { xSpdType: type, xSpdLimit: 50, xSpdDist: 200, xSpdCountDown: 100 },
+    }).family, family);
+    assert.equal(deriveSdiAlert({
+      carrotMan: { xSpdType: type, xSpdLimit: 50, xSpdDist: 200, xSpdCountDown: 100 },
+    }).label, label);
+  }
+  assert.equal(deriveSdiAlert({ carrotMan: { xSpdType: -1, xSpdLimit: 60 } }), null);
+  assert.equal(deriveSdiAlert({ carrotMan: { xSpdType: 1, xSpdLimit: 0, xSpdDist: -1 } }), null);
+});
+
+test("cruise override is hidden while cluster cruise display is off", () => {
+  assert.equal(deriveCruiseOverride({
+    carState: { vCruiseCluster: 88 },
+    selfdriveState: { enabled: false },
+    carrotMan: { desiredSpeed: 70, desiredSource: "cam" },
+  }), null);
+});
+
+test("final presentation payload retains cluster-only fields", () => {
+  const payload = withVehicleHudFields(
+    { vEgoKph: 52, gear: "D" },
+    {
+      evActive: true,
+      activeLaneLine: false,
+      cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
+    },
+  );
+  assert.deepEqual(payload, {
+    vEgoKph: 52,
+    gear: "D",
+    evActive: true,
+    activeLaneLine: false,
+    cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
+    sdiAlert: null,
+    trafficState: 0,
+  });
+});
+
+test("cluster-only changes produce distinct presentation signatures", () => {
+  const base = { evActive: false, activeLaneLine: null, cruiseOverride: null, sdiAlert: null };
+  assert.notEqual(vehicleHudSignature(base), vehicleHudSignature({ ...base, evActive: true }));
+  assert.notEqual(vehicleHudSignature(base), vehicleHudSignature({ ...base, activeLaneLine: false }));
+  assert.notEqual(
+    vehicleHudSignature(base),
+    vehicleHudSignature({ ...base, cruiseOverride: { kph: 77, label: "cam:n", mode: 2 } }),
+  );
+  assert.notEqual(
+    vehicleHudSignature(base),
+    vehicleHudSignature({
+      ...base,
+      sdiAlert: { type: 1, family: "camera", label: "CAM", speedLimitKph: 60, distanceM: 420 },
+    }),
+  );
+});
+
+test("classic live and replay glue uses the shared fields and one lifecycle sink", () => {
+  assert.match(rawSource, /CarrotHudDataBridge\?\.withVehicleHudFields\?\.\(basePayload,\s*j\)/);
+  assert.match(rawSource, /CarrotHudDataBridge\?\.vehicleHudSignature\?\.\(payload\)/);
+  assert.match(rawSource, /createCruiseOverrideHold\?\.\(\)/);
+  assert.match(rawSource, /const trafficState = Number\(vehiclePayload\.trafficState\)/);
+  assert.match(rawSource, /payload\.cruiseOverride = stabilizedHudCruiseOverride\(payload\.cruiseOverride,\s*payload\)/);
+  assert.match(
+    rawSource,
+    /if \(window\.DriveVisionHudContent\?\.update\) window\.DriveVisionHudContent\.update\(payload\);[\s\S]*else window\.CarrotHudOverlay\?\.update\?\.\(payload\);/,
+  );
 });

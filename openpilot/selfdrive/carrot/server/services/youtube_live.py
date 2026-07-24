@@ -15,26 +15,17 @@ from ..config import CARROT_YOUTUBE_LIVE_SECRET_PATH, CARROT_YOUTUBE_LIVE_STATE_
 from .youtube_live_captions import Cea608TimestampInjector
 from .youtube_live_muxer import H264FlvMuxer, pyav_capabilities
 from .youtube_live_transport import LibrtmpClient, RtmpSink, librtmp_capabilities
+from .youtube_profiles import YOUTUBE_PROFILES, youtube_profile
 
 
 YOUTUBE_LIVE_PARAM = "CarrotYouTubeLive"
 YOUTUBE_QUALITY_PARAM = "CarrotYouTubeQuality"
 YOUTUBE_TIMESTAMP_PARAM = "CarrotYouTubeTimestamp"
-# YouTube modes use dedicated encoders so qcamera and Carrot Vision's shared
-# livestream resolution/bitrate remain unchanged.
-SOURCE_BY_QUALITY = {
-  0: "youtubeRoadEncodeData",
-  1: "youtubeRoadEncodeData",
-  2: "youtubeRoadEncodeData",
-  3: "youtubeRoadEncodeData",
-}
-QUALITY_LABELS = {0: "low", 1: "medium", 2: "high", 3: "wide"}
-QUALITY_TARGETS = {
-  0: {"width": 854, "height": 480, "video_kbps": 750, "gop_seconds": 2},
-  1: {"width": 1280, "height": 720, "video_kbps": 2000, "gop_seconds": 2},
-  2: {"width": 1920, "height": 1080, "video_kbps": 4200, "gop_seconds": 2},
-  3: {"width": 1280, "height": 720, "video_kbps": 2700, "gop_seconds": 2},
-}
+# Compatibility views for the existing API and tests. The authoritative
+# profile definition lives in youtube_profiles.py.
+SOURCE_BY_QUALITY = {quality: profile.source for quality, profile in YOUTUBE_PROFILES.items()}
+QUALITY_LABELS = {quality: profile.label for quality, profile in YOUTUBE_PROFILES.items()}
+QUALITY_TARGETS = {quality: profile.target for quality, profile in YOUTUBE_PROFILES.items()}
 YOUTUBE_RTMPS_BASE = "rtmps://a.rtmps.youtube.com:443/live2"
 YOUTUBE_RTMPS_HOST = "a.rtmps.youtube.com"
 YOUTUBE_RTMPS_PORT = 443
@@ -64,15 +55,15 @@ _PROCESS_MATCHES = {
   "carrot_cluster": "selfdrive.carrot.cluster_autorun",
   "webrtcd": "system.webrtc.carrot_webrtcd",
   "stream_encoderd": "encoderd\x00--carrot-vision-road",
-  "youtube_low_encoderd": "encoderd\x00--youtube-low",
-  "youtube_medium_encoderd": "encoderd\x00--youtube-medium",
-  "youtube_encoderd": "encoderd\x00--youtube\x00",
-  "youtube_wide_encoderd": "encoderd\x00--youtube-wide",
+  **{
+    profile.process_name: f"encoderd\x00{profile.encoder_flag}\x00"
+    for profile in YOUTUBE_PROFILES.values()
+  },
 }
 
 
 def _now() -> float:
-  return time.time()
+  return time.time()  # noqa: TID251 - persisted timestamps require wall-clock time
 
 
 def _mono() -> float:
@@ -119,7 +110,7 @@ def _extract_stream_key(value: str) -> str:
   raw = str(value or "").strip()
   if not raw:
     return ""
-  if raw.startswith("rtmp://") or raw.startswith("rtmps://"):
+  if raw.startswith(("rtmp://", "rtmps://")):
     return raw.rstrip("/").rsplit("/", 1)[-1].strip()
   return raw
 
@@ -207,7 +198,7 @@ class YouTubeLiveService:
     self._last_frame_id: int | None = None
     self._frame_width = 526
     self._frame_height = 330
-    self._frame_fps = 20
+    self._frame_fps = youtube_profile(0).fps
     self._bytes_sent = 0
     self._session_started_bytes = 0
     self._restart_count = 0
@@ -269,6 +260,8 @@ class YouTubeLiveService:
     resource_status = self._resource_status()
     warnings = self._warnings(resource_status)
     target = self._quality_target()
+    declared_frame_fps = int(target.get("fps") or youtube_profile(0).fps)
+    observed_frame_fps = float(source_recent.get("fps") or 0.0) if running else 0.0
     warmup_age_sec = round(mono - self._warmup_started_mono, 1) if self._warmup_started_mono and not running else 0.0
     return {
       "state": self._state,
@@ -290,6 +283,7 @@ class YouTubeLiveService:
       "requested_quality": self._param_int(YOUTUBE_QUALITY_PARAM, 0),
       "target_width": target.get("width"),
       "target_height": target.get("height"),
+      "target_fps": target.get("fps"),
       "target_video_kbps": target.get("video_kbps"),
       "target_gop_seconds": target.get("gop_seconds"),
       "timestamp_caption_enabled": self._param_bool(YOUTUBE_TIMESTAMP_PARAM),
@@ -328,7 +322,11 @@ class YouTubeLiveService:
       "last_frame_id": self._last_frame_id,
       "frame_width": self._frame_width,
       "frame_height": self._frame_height,
-      "frame_fps": self._frame_fps,
+      # frame_fps is retained for the existing UI. It is the encoder contract,
+      # while observed_frame_fps reports the source rate measured at runtime.
+      "frame_fps": declared_frame_fps,
+      "declared_frame_fps": declared_frame_fps,
+      "observed_frame_fps": observed_frame_fps,
       "frame_matches_target": self._frame_matches_target(target),
       "source_warmup_sec": warmup_age_sec,
       "source_warmup_frames": self._warmup_frames if not running else 0,
@@ -710,17 +708,16 @@ class YouTubeLiveService:
     return self._messaging
 
   def _current_source(self) -> str:
-    quality = self._current_quality()
-    return SOURCE_BY_QUALITY.get(quality, SOURCE_BY_QUALITY[0])
+    return youtube_profile(self._current_quality()).source
 
   def _current_quality(self) -> int:
-    return self._param_int(YOUTUBE_QUALITY_PARAM, 0)
+    return youtube_profile(self._param_int(YOUTUBE_QUALITY_PARAM, 0)).quality
 
   def _quality_label(self) -> str:
-    return QUALITY_LABELS.get(self._param_int(YOUTUBE_QUALITY_PARAM, 0), "standard")
+    return youtube_profile(self._current_quality()).label
 
   def _quality_target(self) -> dict[str, int]:
-    return dict(QUALITY_TARGETS.get(self._current_quality(), {}))
+    return dict(youtube_profile(self._current_quality()).target)
 
   def _frame_matches_target(self, target: dict[str, Any] | None = None) -> bool | None:
     target = target if target is not None else self._quality_target()
@@ -728,7 +725,7 @@ class YouTubeLiveService:
     target_height = int(target.get("height") or 0)
     if target_width <= 0 or target_height <= 0:
       return None
-    return self._frame_width >= target_width and self._frame_height >= target_height
+    return self._frame_width == target_width and self._frame_height == target_height
 
   def _source_warmup_required_kbps(self, target: dict[str, Any] | None = None) -> int:
     target = target if target is not None else self._quality_target()
@@ -758,7 +755,7 @@ class YouTubeLiveService:
     target = self._quality_target()
     target_width = int(target.get("width") or 0)
     target_height = int(target.get("height") or 0)
-    if target_width > 0 and target_height > 0 and (width < target_width or height < target_height):
+    if target_width > 0 and target_height > 0 and (width != target_width or height != target_height):
       self._reset_source_warmup()
       return False
 
@@ -949,6 +946,7 @@ class YouTubeLiveService:
     self._log("connecting to YouTube RTMPS")
     rtmp_url = f"{YOUTUBE_RTMPS_BASE}/{stream_key}"
     transport = LibrtmpClient(rtmp_url)
+    self._frame_fps = youtube_profile(self._current_quality()).fps
     try:
       await asyncio.to_thread(transport.connect)
       sink = RtmpSink(transport)
@@ -1068,26 +1066,29 @@ class YouTubeLiveService:
     cluster_param = self._param_int("ClusterHud", 0)
     disable_dm = self._param_int("DisableDM", 0)
     quality = self._param_int(YOUTUBE_QUALITY_PARAM, 0)
-    selected_youtube_encoder = {
-      0: "youtube_low_encoderd",
-      1: "youtube_medium_encoderd",
-      2: "youtube_encoderd",
-      3: "youtube_wide_encoderd",
-    }.get(quality, "youtube_low_encoderd")
+    selected_youtube_encoder = youtube_profile(quality).process_name
     selected_process = processes.get(selected_youtube_encoder, {"running": False, "pids": []})
+    cluster_process = processes.get("carrot_cluster", {"running": False, "pids": []})
+    vision_webrtc = processes.get("webrtcd", {"running": False, "pids": []})
+    vision_encoder = processes.get("stream_encoderd", {"running": False, "pids": []})
+    vision_active = bool(vision_webrtc.get("running") or vision_encoder.get("running"))
     return {
       "cluster": {
         "enabled": cluster_param == 1,
+        "configured": cluster_param == 1,
+        "active": bool(cluster_process.get("running")),
         "param": cluster_param,
-        **processes.get("carrot_cluster", {"running": False, "pids": []}),
+        **cluster_process,
       },
       "carrot_vision": {
         "enabled": disable_dm == 2,
+        "configured": disable_dm == 2,
+        "active": vision_active,
         "disable_dm": disable_dm,
-        "webrtcd_running": bool(processes.get("webrtcd", {}).get("running")),
-        "stream_encoderd_running": bool(processes.get("stream_encoderd", {}).get("running")),
-        "webrtcd_pids": list(processes.get("webrtcd", {}).get("pids") or []),
-        "stream_encoderd_pids": list(processes.get("stream_encoderd", {}).get("pids") or []),
+        "webrtcd_running": bool(vision_webrtc.get("running")),
+        "stream_encoderd_running": bool(vision_encoder.get("running")),
+        "webrtcd_pids": list(vision_webrtc.get("pids") or []),
+        "stream_encoderd_pids": list(vision_encoder.get("pids") or []),
       },
       "youtube_encoder": {
         "selected": selected_youtube_encoder,
@@ -1101,30 +1102,37 @@ class YouTubeLiveService:
       return warnings
     cluster = resource_status.get("cluster") if isinstance(resource_status, dict) else {}
     vision = resource_status.get("carrot_vision") if isinstance(resource_status, dict) else {}
-    if cluster and cluster.get("enabled"):
+    if cluster and cluster.get("active", cluster.get("running")):
       warnings.append("Cluster HUD is enabled; monitor overall load and temperature during simultaneous use.")
-    if vision and vision.get("enabled"):
+    vision_active = bool(
+      vision
+      and (
+        vision.get("active")
+        or vision.get("webrtcd_running")
+        or vision.get("stream_encoderd_running")
+      )
+    )
+    if vision_active:
       warnings.append("Carrot Vision is enabled; simultaneous streaming increases network and memory bandwidth use.")
     youtube_encoder = resource_status.get("youtube_encoder") if isinstance(resource_status, dict) else {}
     if not (youtube_encoder and youtube_encoder.get("running")):
       warnings.append("The selected YouTube encoder is waiting to start onroad.")
     target = self._quality_target()
+    target_width = int(target.get("width") or 0)
     target_height = int(target.get("height") or 0)
-    if target_height > 0 and self._last_frame_mono and self._frame_height < target_height:
-      warnings.append(
-        f"YouTube encoder target is {target.get('width')}x{target_height}, "
-        f"but current frames are {self._frame_width}x{self._frame_height}."
-      )
+    if target_width > 0 and target_height > 0 and self._last_frame_mono and not self._frame_matches_target(target):
+      actual_resolution = f"{self._frame_width}x{self._frame_height}"
+      warnings.append(f"YouTube encoder target is {target_width}x{target_height}, but current frames are {actual_resolution}.")
     target_kbps = int(target.get("video_kbps") or 0)
     if self._transport_connected and self._started_mono and target_kbps > 0:
       mono = _mono()
       age = mono - self._started_mono
       session_bytes = max(0, self._bytes_sent - self._session_started_bytes)
       estimated_kbps = int((session_bytes * 8 / 1000) / max(1.0, age))
-      if age >= SOURCE_WARMUP_SECONDS and estimated_kbps < self._source_warmup_required_kbps(target):
+      required_kbps = self._source_warmup_required_kbps(target)
+      if age >= SOURCE_WARMUP_SECONDS and estimated_kbps < required_kbps:
         warnings.append(
-          f"YouTube ingest may be starved: current bitrate is below "
-          f"{self._source_warmup_required_kbps(target)} kbps for target {target_kbps} kbps."
+          f"YouTube ingest may be starved: current bitrate is below {required_kbps} kbps for target {target_kbps} kbps."
         )
     return warnings
 

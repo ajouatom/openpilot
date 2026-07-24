@@ -6,6 +6,15 @@ function finite(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function optionalBoolean(value) {
+  return value == null ? null : Boolean(value);
+}
+
+function validCruiseKph(value) {
+  const number = finite(value);
+  return number != null && number > 0 && number < 250 ? number : null;
+}
+
 function level(value) {
   const number = finite(value);
   return number != null && number >= 0 && number <= 1 ? number : null;
@@ -14,6 +23,11 @@ function level(value) {
 function pressure(value) {
   const number = finite(value);
   return number != null && number >= 5 && number <= 100 ? number : null;
+}
+
+function trafficSignalState(value) {
+  const state = finite(value);
+  return state === 1 || state === 2 ? state : 0;
 }
 
 function gearLabel(value) {
@@ -41,6 +55,137 @@ function tpmsPayload(value) {
   return Object.values(payload).some((pressure) => pressure != null) ? payload : null;
 }
 
+function cruiseOverridePayload(value) {
+  if (!value || typeof value !== "object") return null;
+  const kph = finite(value.kph);
+  if (kph == null || kph <= 0) return null;
+  return {
+    kph,
+    label: value.label == null ? "" : String(value.label),
+    mode: finite(value.mode) ?? 0,
+  };
+}
+
+export const CRUISE_OVERRIDE_HOLD_MS = 2500;
+
+// Presentation-only grace for short service/sample gaps. The caller supplies
+// the live monotonic clock or replay media clock, so pausing a replay does not
+// expire the telltale and seeking never carries an old value into a new scene.
+export function createCruiseOverrideHold(options = {}) {
+  const configuredHoldMs = finite(options.holdMs);
+  const holdMs = configuredHoldMs != null && configuredHoldMs >= 0
+    ? configuredHoldMs
+    : CRUISE_OVERRIDE_HOLD_MS;
+  let held = null;
+  let lastSeenMs = null;
+  let lastClockMs = null;
+  let clockKey = null;
+
+  function reset() {
+    held = null;
+    lastSeenMs = null;
+    lastClockMs = null;
+    clockKey = null;
+  }
+
+  function update(value, context = {}) {
+    const next = cruiseOverridePayload(value);
+    const clockMs = finite(context.clockMs);
+    const nextClockKey = String(context.clockKey || "live");
+    if (context.active === false || clockMs == null) {
+      reset();
+      return context.active === false ? null : next;
+    }
+
+    if (clockKey !== nextClockKey || (lastClockMs != null && clockMs < lastClockMs)) {
+      reset();
+    }
+    clockKey = nextClockKey;
+    lastClockMs = clockMs;
+
+    if (next) {
+      if (next.mode === 2) {
+        held = next;
+        lastSeenMs = clockMs;
+      } else {
+        held = null;
+        lastSeenMs = null;
+      }
+      return next;
+    }
+
+    const ageMs = lastSeenMs == null ? null : clockMs - lastSeenMs;
+    if (held && ageMs != null && ageMs >= 0 && ageMs <= holdMs) return held;
+    held = null;
+    lastSeenMs = null;
+    return null;
+  }
+
+  function status() {
+    return Object.freeze({
+      held: held ? { ...held } : null,
+      lastSeenMs,
+      lastClockMs,
+      clockKey,
+      holdMs,
+    });
+  }
+
+  return Object.freeze({ update, reset, status });
+}
+
+function sdiAlertPayload(value) {
+  if (!value || typeof value !== "object") return null;
+  const type = finite(value.type);
+  if (type == null || type < 0) return null;
+  const speedLimitKph = finite(value.speedLimitKph);
+  const distanceM = finite(value.distanceM);
+  const countdownS = finite(value.countdownS);
+  return {
+    type: Math.trunc(type),
+    family: String(value.family || "camera"),
+    label: String(value.label || "CAM").trim().slice(0, 24),
+    speedLimitKph: speedLimitKph != null && speedLimitKph > 0 ? speedLimitKph : null,
+    distanceM: distanceM != null && distanceM >= 0 ? distanceM : null,
+    countdownS: countdownS != null && countdownS > 0 && countdownS < 100 ? countdownS : null,
+  };
+}
+
+// The classic realtime bridge rebuilds a compact payload before presenting it.
+// Keep the cluster-only fields in one shared rule so live and replay cannot
+// silently drop them at that boundary.
+export function withVehicleHudFields(payload = {}, source = {}) {
+  return {
+    ...payload,
+    evActive: source.evActive === true,
+    activeLaneLine: source.activeLaneLine == null
+      ? null
+      : source.activeLaneLine === true,
+    cruiseOverride: cruiseOverridePayload(source.cruiseOverride),
+    sdiAlert: sdiAlertPayload(source.sdiAlert),
+    trafficState: trafficSignalState(source.trafficState ?? payload.trafficState),
+  };
+}
+
+// Stable fragment for the classic HUD change detector. activeLaneLine is
+// deliberately tri-state: unknown and explicitly disabled are different.
+export function vehicleHudSignature(payload = {}) {
+  const override = cruiseOverridePayload(payload.cruiseOverride);
+  const sdi = sdiAlertPayload(payload.sdiAlert);
+  return [
+    payload.evActive === true ? 1 : 0,
+    payload.activeLaneLine == null ? "-" : (payload.activeLaneLine === true ? 1 : 0),
+    override?.kph ?? "-",
+    override?.label ?? "-",
+    override?.mode ?? "-",
+    sdi?.type ?? "-",
+    sdi?.speedLimitKph ?? "-",
+    sdi?.distanceM ?? "-",
+    sdi?.countdownS ?? "-",
+    sdi?.label ?? "-",
+  ].join(":");
+}
+
 // Cluster parity: cluster_live.py deceleration_source_display_label.
 const DECEL_SOURCE_LABELS = Object.freeze({
   cam: "cam:n", section: "section:n", bump: "bump:n", police: "police:n",
@@ -56,16 +201,96 @@ function decelerationSourceLabel(source) {
   return DECEL_SOURCE_LABELS[normalized] || normalized.slice(0, 8);
 }
 
+const SDI_FAMILIES = Object.freeze({
+  4: "section",
+  22: "bump",
+  100: "police",
+  101: "waze",
+});
+
+const SDI_LABELS = Object.freeze({
+  camera: "CAM",
+  section: "SECTION",
+  bump: "BUMP",
+  police: "POLICE",
+  waze: "WAZE",
+});
+
+// Camera/SDI information is separate from the final cruise override. It stays
+// visible while an event is known, even before desiredSpeed starts reducing the
+// cruise set speed.
+export function deriveSdiAlert(state = {}) {
+  const carrotMan = state.carrotMan || {};
+  const rawType = finite(carrotMan.xSpdType);
+  if (rawType == null || rawType < 0) return null;
+
+  const type = Math.trunc(rawType);
+  const family = SDI_FAMILIES[type] || "camera";
+  const speedLimitKph = finite(carrotMan.xSpdLimit);
+  const rawDistanceM = finite(carrotMan.xSpdDist);
+  const rawCountdownS = finite(carrotMan.xSpdCountDown);
+  const description = String(carrotMan.szSdiDescr || "").trim();
+  const distanceM = rawDistanceM != null && rawDistanceM >= 0 ? rawDistanceM : null;
+  const countdownS = rawCountdownS != null && rawCountdownS > 0 && rawCountdownS < 100
+    ? rawCountdownS
+    : null;
+
+  if (!(speedLimitKph > 0) && distanceM == null && !description) return null;
+  return sdiAlertPayload({
+    type,
+    family,
+    label: description || SDI_LABELS[family] || SDI_LABELS.camera,
+    speedLimitKph,
+    distanceM,
+    countdownS,
+  });
+}
+
+// Cluster parity: prefer the cluster-facing set speed, but treat zero/sentinel
+// values as unavailable instead of letting nullish-coalescing pin the HUD to 0.
+// The final cruiseState fallbacks also support non-compact/raw callers.
+export function resolveCruiseKph(state = {}) {
+  const carState = state.carState || {};
+  const controlsState = state.controlsState || {};
+  const cruiseState = carState.cruiseState || {};
+  if (cruiseState.available === false) return null;
+  const direct = [
+    carState.vCruiseCluster,
+    carState.vCruise,
+    controlsState.vCruiseCluster,
+    controlsState.vCruise,
+  ];
+  for (const value of direct) {
+    const kph = validCruiseKph(value);
+    if (kph != null) return kph;
+  }
+
+  for (const value of [cruiseState.speedCluster, cruiseState.speed]) {
+    const speedMps = finite(value);
+    if (speedMps != null && speedMps > 0.1 && speedMps < 70) return speedMps * 3.6;
+  }
+  return null;
+}
+
+// Cluster cruise_display_state is off when the current control state explicitly
+// says disabled. With no control sample, a valid set speed remains a paused
+// display and may still carry the cluster override telltale.
+export function isCruiseDisplayVisible(state = {}, cruiseKph = resolveCruiseKph(state)) {
+  if (validCruiseKph(cruiseKph) == null) return false;
+  const selfdriveEnabled = optionalBoolean(state.selfdriveState?.enabled);
+  if (selfdriveEnabled != null) return selfdriveEnabled;
+  const controlsEnabled = optionalBoolean(state.controlsState?.enabled);
+  if (controlsEnabled != null) return controlsEnabled;
+  return state.carState?.cruiseState?.available !== false;
+}
+
 // Cruise set-speed override telltale. Mirrors cluster_live.py priority/thresholds:
 //   mode 1 (eco, green)    = longitudinalPlan.cruiseTarget above the set speed
 //   mode 2 (decel, orange) = carrotMan.desiredSpeed below the set speed, with source label
 // Returns { kph, label, mode } in kph, or null. Shared by live and replay.
 export function deriveCruiseOverride(state = {}) {
-  const carState = state.carState || {};
-  const controlsState = state.controlsState || {};
-  const cruiseKph = finite(carState.vCruiseCluster ?? controlsState.vCruiseCluster);
-  // Cruise off/paused shows 0 or a large sentinel; only override an engaged set speed.
-  if (cruiseKph == null || cruiseKph <= 0 || cruiseKph >= 250) return null;
+  const cruiseKph = resolveCruiseKph(state);
+  if (!isCruiseDisplayVisible(state, cruiseKph)) return null;
 
   const cruiseTarget = finite(state.longitudinalPlan?.cruiseTarget);
   if (cruiseTarget != null && cruiseTarget > cruiseKph + 0.5) {
@@ -77,6 +302,16 @@ export function deriveCruiseOverride(state = {}) {
     return { kph: desiredSpeed, label: decelerationSourceLabel(state.carrotMan?.desiredSource), mode: 2 };
   }
   return null;
+}
+
+// The cluster follows longitudinalPlan while the comma HUD follows carrotMan.
+// Compact/replay samples can update those services at different moments, and
+// carrotMan commonly carries an explicit 0 that must not mask an active planner
+// signal. Prefer an active cluster state, then fall back to an active HUD state.
+export function resolveTrafficState(state = {}) {
+  const plannerState = trafficSignalState(state.longitudinalPlan?.trafficState);
+  if (plannerState !== 0) return plannerState;
+  return trafficSignalState(state.carrotMan?.trafficState);
 }
 
 // Decoded compact and raw replay state intentionally converge here. UI widgets
@@ -98,6 +333,7 @@ export function deriveVehicleHudPayload(state = {}) {
   const activeLaneLine = controlsState.activeLaneLine == null
     ? null
     : Boolean(controlsState.activeLaneLine);
+  const latActive = optionalBoolean(carControl.latActive);
 
   return {
     gear,
@@ -105,7 +341,11 @@ export function deriveVehicleHudPayload(state = {}) {
     evActive,
     activeLaneLine,
     cruiseOverride: deriveCruiseOverride(state),
-    lfaActive: Boolean(selfdriveState.enabled ?? controlsState.enabled ?? carControl.latActive),
+    sdiAlert: deriveSdiAlert(state),
+    trafficState: resolveTrafficState(state),
+    // The cluster wheel follows lateral actuation, not overall engagement.
+    // Older recordings without carControl retain the legacy state fallback.
+    lfaActive: latActive ?? Boolean(selfdriveState.enabled ?? controlsState.enabled),
     steeringAngleDeg: finite(carState.steeringAngleDeg ?? carControl.actuators?.steeringAngleDeg),
     aEgo: finite(carState.aEgo ?? carControl.actuators?.accel),
     steerOutput: finite(
@@ -121,4 +361,14 @@ export function deriveVehicleHudPayload(state = {}) {
   };
 }
 
-export const CarrotHudDataBridge = Object.freeze({ deriveVehicleHudPayload, deriveCruiseOverride });
+export const CarrotHudDataBridge = Object.freeze({
+  deriveVehicleHudPayload,
+  deriveCruiseOverride,
+  createCruiseOverrideHold,
+  deriveSdiAlert,
+  resolveTrafficState,
+  resolveCruiseKph,
+  isCruiseDisplayVisible,
+  withVehicleHudFields,
+  vehicleHudSignature,
+});
