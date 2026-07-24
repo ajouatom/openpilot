@@ -68,15 +68,17 @@ export function createSpeedPanel(doc) {
     opacity: 235 / 255,
     preserveAspectRatio: "none",
   });
+  // 신호등은 한 번에 하나만 켜지므로 빨강/초록을 같은 자리에 겹쳐 둔다(토글 시 위치 안 바뀜).
+  const TRAFFIC_CENTER_X = SPEED_X - 38;
   const redLight = trafficIcon(doc, {
     uri: TRAFFIC_RED_URI,
     crop: "72 7 52 52",
-    centerX: SPEED_X,
+    centerX: TRAFFIC_CENTER_X,
   });
   const greenLight = trafficIcon(doc, {
     uri: TRAFFIC_GREEN_URI,
     crop: "132 7 52 52",
-    centerX: SPEED_X - 38,
+    centerX: TRAFFIC_CENTER_X,
   });
   const speed = svg(doc, "text", {
     class: "chud-t-speed",

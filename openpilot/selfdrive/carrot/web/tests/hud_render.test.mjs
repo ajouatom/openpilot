@@ -4,12 +4,13 @@ import test from "node:test";
 import { createSpeedPanel } from "../src/features/drive/contents/vision/hud/widgets/speed_panel.js";
 import { createLfaIcon } from "../src/features/drive/contents/vision/hud/widgets/lfa_icon.js";
 import { createSdiAlert } from "../src/features/drive/contents/vision/hud/widgets/sdi_alert.js";
+import { createDriveModeBadge } from "../src/features/drive/contents/vision/hud/widgets/drive_mode.js";
 import { mapPayload } from "../src/features/drive/contents/vision/hud/index.js";
 import {
   deriveVehicleHudPayload,
   withVehicleHudFields,
 } from "../src/features/drive/contents/vision/hud/data_bridge.js";
-import { COLORS } from "../src/features/drive/contents/vision/hud/tokens.js";
+import { COLORS, DRIVE_MODE_COLORS } from "../src/features/drive/contents/vision/hud/tokens.js";
 
 /* Minimal DOM stub — enough for the SVG/DOM helpers the widgets use.
  * The widgets only touch: create(NS), setAttribute, className, textContent,
@@ -87,11 +88,16 @@ function renderFromCereal(state) {
   const panel = createSpeedPanel(doc);
   const lfa = createLfaIcon(doc);
   const sdi = createSdiAlert(doc);
+  const driveMode = createDriveModeBadge(doc);
   panel.update(data);
   lfa.update(data);
   sdi.update(data);
+  driveMode.update(data);
   return {
     data,
+    driveMode: driveMode.el,
+    driveModeBox: findByClass(driveMode.el, "chud-drive-mode-box"),
+    driveModeLabel: findByClass(driveMode.el, "chud-drive-mode-label"),
     ev: findByClass(panel.el, "chud-t-ev"),
     trafficLights: panel.el.children.filter((node) => (
       (node.getAttribute?.("class") || "").split(/\s+/).includes("chud-speed-traffic")
@@ -156,6 +162,20 @@ test("replay: eco (green) override renders; EV and lane correctly hidden", () =>
   assert.equal(r.overrideSpeed.textContent, "95");
   assert.equal(r.overrideLabel.textContent, "eco");
   assert.equal(r.overrideSpeed.style.fill, COLORS.carrot); // green (eco, mode 1)
+});
+
+// 주행모드 배지: myDrivingMode 1..4 는 색/라벨 표시, 그 외는 숨김.
+test("drive mode badge renders per myDrivingMode (1..4) and hides otherwise", () => {
+  for (const modeKey of Object.keys(DRIVE_MODE_COLORS)) {
+    const mode = Number(modeKey);
+    const r = renderFromCereal({ longitudinalPlan: { myDrivingMode: mode } });
+    assert.equal(r.data.drivingMode, mode);
+    assert.ok(isVisible(r.driveMode), `mode ${mode} visible`);
+    assert.equal(r.driveModeBox.style.fill, DRIVE_MODE_COLORS[mode]);
+    assert.ok(r.driveModeLabel.textContent.length > 0, `mode ${mode} has a label`);
+  }
+  assert.ok(!isVisible(renderFromCereal({ longitudinalPlan: { myDrivingMode: 0 } }).driveMode), "mode 0 hidden");
+  assert.ok(!isVisible(renderFromCereal({}).driveMode), "no mode hidden");
 });
 
 // 주행 전/대기 화면: 조건 미충족 → 신규 3종 전부 숨김(스크린샷 상태).

@@ -4,6 +4,8 @@ import threading
 from fractions import Fraction
 from typing import Any, BinaryIO
 
+from .youtube_h264 import avc_decoder_configuration, normalize_access_unit
+
 
 H264_CODEC = "h264"
 AAC_CODEC = "aac"
@@ -12,59 +14,8 @@ AUDIO_BITRATE = 128_000
 AUDIO_SAMPLES = 1_024
 
 
-def _annexb_nalus(payload: bytes) -> list[bytes]:
-  starts: list[tuple[int, int]] = []
-  index = 0
-  size = len(payload)
-  while index + 3 <= size:
-    if index + 4 <= size and payload[index:index + 4] == b"\x00\x00\x00\x01":
-      starts.append((index, 4))
-      index += 4
-    elif payload[index:index + 3] == b"\x00\x00\x01":
-      starts.append((index, 3))
-      index += 3
-    else:
-      index += 1
-
-  nalus = []
-  for position, (offset, start_size) in enumerate(starts):
-    start = offset + start_size
-    end = starts[position + 1][0] if position + 1 < len(starts) else size
-    while end > start and payload[end - 1] == 0:
-      end -= 1
-    if end > start:
-      nalus.append(payload[start:end])
-  return nalus
-
-
-def _avc_decoder_configuration(codec_header: bytes) -> bytes:
-  if codec_header[:1] == b"\x01" and not codec_header.startswith((b"\x00\x00\x01", b"\x00\x00\x00\x01")):
-    return bytes(codec_header)
-  nalus = _annexb_nalus(codec_header)
-  sps_units = [nalu for nalu in nalus if nalu and nalu[0] & 0x1F == 7]
-  pps_units = [nalu for nalu in nalus if nalu and nalu[0] & 0x1F == 8]
-  if not sps_units or not pps_units or len(sps_units[0]) < 4:
-    raise ValueError("H.264 codec header has no SPS/PPS")
-  if len(sps_units) > 31 or len(pps_units) > 255:
-    raise ValueError("H.264 codec header has too many parameter sets")
-
-  first_sps = sps_units[0]
-  result = bytearray((1, first_sps[1], first_sps[2], first_sps[3], 0xFF, 0xE0 | len(sps_units)))
-  for sps in sps_units:
-    result.extend(len(sps).to_bytes(2, "big"))
-    result.extend(sps)
-  result.append(len(pps_units))
-  for pps in pps_units:
-    result.extend(len(pps).to_bytes(2, "big"))
-    result.extend(pps)
-  return bytes(result)
-
-
-def _annexb_to_avcc(payload: bytes) -> bytes:
-  nalus = _annexb_nalus(payload)
-  if not nalus:
-    return bytes(payload)
-  return b"".join(len(nalu).to_bytes(4, "big") + nalu for nalu in nalus)
+def _cfr_timestamp_ms(packet_index: int, fps: int) -> int:
+  return max(0, int(packet_index)) * 1_000 // max(1, int(fps))
 
 
 def pyav_capabilities() -> dict[str, Any]:
@@ -110,7 +61,7 @@ class H264FlvMuxer:
     self._fps = max(1, int(fps))
     self._video_time_base = Fraction(1, self._fps)
     self._audio_time_base = Fraction(1, AUDIO_RATE)
-    self._video_config = _avc_decoder_configuration(codec_header)
+    self._video_config = avc_decoder_configuration(codec_header)
     self._audio_codec = av.CodecContext.create(AAC_CODEC, "w")
     self._audio_codec.sample_rate = AUDIO_RATE
     self._audio_codec.layout = "stereo"
@@ -134,22 +85,27 @@ class H264FlvMuxer:
         raise RuntimeError("FLV muxer is closed")
       if not payload:
         return
+      access_unit = normalize_access_unit(payload)
+      if self._packet_index == 0 and not access_unit.is_idr:
+        raise ValueError("first H.264 access unit is not an IDR frame")
+      if self._packet_index > 0 and keyframe and not access_unit.is_idr:
+        raise ValueError("H.264 frame marked as keyframe has no IDR NAL")
 
       if timestamp_ms is None:
-        video_ms = int(self._packet_index * 1000 / self._fps)
+        video_ms = _cfr_timestamp_ms(self._packet_index, self._fps)
       else:
         video_ms = max(0, int(timestamp_ms))
-      # FLV/RTMP timestamps must be non-decreasing
-      if video_ms < self._last_video_ms:
-        video_ms = self._last_video_ms
+      # Every video access unit needs a distinct, increasing FLV timestamp.
+      if self._packet_index > 0 and video_ms <= self._last_video_ms:
+        video_ms = self._last_video_ms + 1
       self._last_video_ms = video_ms
 
       # keep the silent audio track filled up to the current video time so a
       # dropped-frame gap stays A/V aligned
       self._mux_silence_until(int(video_ms * AUDIO_RATE / 1000))
 
-      frame_header = b"\x17" if keyframe else b"\x27"
-      self._write_tag(9, video_ms, frame_header + b"\x01\x00\x00\x00" + _annexb_to_avcc(payload))
+      frame_header = b"\x17" if access_unit.is_idr else b"\x27"
+      self._write_tag(9, video_ms, frame_header + b"\x01\x00\x00\x00" + access_unit.avcc)
       self._packet_index += 1
 
   def close(self) -> None:

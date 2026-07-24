@@ -30,6 +30,13 @@ function trafficSignalState(value) {
   return state === 1 || state === 2 ? state : 0;
 }
 
+// Cluster driving-mode telltale: longitudinalPlan.myDrivingMode 1..4 (연비/안전/일반/고속).
+// Anything outside 1..4 means "no badge".
+function drivingModeState(value) {
+  const mode = finite(value);
+  return mode === 1 || mode === 2 || mode === 3 || mode === 4 ? mode : null;
+}
+
 function gearLabel(value) {
   const raw = String(value || "").trim().toLowerCase();
   const labels = {
@@ -164,6 +171,7 @@ export function withVehicleHudFields(payload = {}, source = {}) {
     cruiseOverride: cruiseOverridePayload(source.cruiseOverride),
     sdiAlert: sdiAlertPayload(source.sdiAlert),
     trafficState: trafficSignalState(source.trafficState ?? payload.trafficState),
+    drivingMode: drivingModeState(source.drivingMode ?? payload.drivingMode),
   };
 }
 
@@ -183,6 +191,7 @@ export function vehicleHudSignature(payload = {}) {
     sdi?.distanceM ?? "-",
     sdi?.countdownS ?? "-",
     sdi?.label ?? "-",
+    drivingModeState(payload.drivingMode) ?? "-",
   ].join(":");
 }
 
@@ -343,6 +352,7 @@ export function deriveVehicleHudPayload(state = {}) {
     cruiseOverride: deriveCruiseOverride(state),
     sdiAlert: deriveSdiAlert(state),
     trafficState: resolveTrafficState(state),
+    drivingMode: drivingModeState(state.longitudinalPlan?.myDrivingMode),
     // The cluster wheel follows lateral actuation, not overall engagement.
     // Older recordings without carControl retain the legacy state fallback.
     lfaActive: latActive ?? Boolean(selfdriveState.enabled ?? controlsState.enabled),

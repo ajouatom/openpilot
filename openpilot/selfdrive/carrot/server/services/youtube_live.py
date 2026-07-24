@@ -12,9 +12,11 @@ from pathlib import Path
 from typing import Any
 
 from ..config import CARROT_YOUTUBE_LIVE_SECRET_PATH, CARROT_YOUTUBE_LIVE_STATE_PATH
+from .youtube_h264 import validate_stream_start
 from .youtube_live_captions import Cea608TimestampInjector
 from .youtube_live_muxer import H264FlvMuxer, pyav_capabilities
 from .youtube_live_transport import LibrtmpClient, RtmpSink, librtmp_capabilities
+from .youtube_live_writer import RtmpFrameWriter
 from .youtube_profiles import YOUTUBE_PROFILES, youtube_profile
 
 
@@ -30,7 +32,6 @@ YOUTUBE_RTMPS_BASE = "rtmps://a.rtmps.youtube.com:443/live2"
 YOUTUBE_RTMPS_HOST = "a.rtmps.youtube.com"
 YOUTUBE_RTMPS_PORT = 443
 NO_FRAME_STOP_SECONDS = 8.0
-START_BACKOFF_SECONDS = 5.0
 STATUS_WRITE_MIN_INTERVAL = 5.0
 BACKOFF_BASE_SECONDS = 3.0
 BACKOFF_MAX_SECONDS = 60.0
@@ -50,6 +51,10 @@ EVENT_LOG_MAX = 50
 PROC_CACHE_SECONDS = 5.0
 NET_CHECK_UP_INTERVAL_SECONDS = 8.0
 NET_CHECK_DOWN_INTERVAL_SECONDS = 2.0
+ACTIVE_LOOP_PERIOD_SECONDS = 0.01
+IDLE_LOOP_PERIOD_SECONDS = 0.25
+RTMP_FRAME_QUEUE_MAX = 30
+RTMP_FRAME_QUEUE_MAX_BYTES = 4 * 1024 * 1024
 
 _PROCESS_MATCHES = {
   "carrot_cluster": "selfdrive.carrot.cluster_autorun",
@@ -70,6 +75,11 @@ def _mono() -> float:
   # Monotonic clock for durations/intervals — immune to wall-clock jumps
   # (comma syncs system time from GPS/NTP after boot, which can step the clock).
   return time.monotonic()
+
+
+def _loop_delay(started_mono: float, finished_mono: float, *, active: bool) -> float:
+  period = ACTIVE_LOOP_PERIOD_SECONDS if active else IDLE_LOOP_PERIOD_SECONDS
+  return max(0.0, period - max(0.0, finished_mono - started_mono))
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -166,6 +176,9 @@ class YouTubeLiveService:
     self._transport_connected = False
     self._rtmp_sink: RtmpSink | None = None
     self._muxer: H264FlvMuxer | None = None
+    self._writer: RtmpFrameWriter | None = None
+    self._writer_backpressure_restarts = 0
+    self._writer_discarded_frames = 0
     self._caption_injector = Cea608TimestampInjector()
     self._messaging: Any | None = None
     self._socket: Any | None = None
@@ -249,6 +262,7 @@ class YouTubeLiveService:
     elapsed = max(1.0, mono - self._started_mono) if self._started_mono and running else 1.0
     session_bytes = max(0, self._bytes_sent - self._session_started_bytes) if running else 0
     rtmp_sink = self._rtmp_sink if running else None
+    writer = self._writer if running else None
     mux_input_bytes = rtmp_sink.bytes_accepted if rtmp_sink is not None else 0
     mux_pending_bytes = rtmp_sink.pending_bytes if rtmp_sink is not None else 0
     mux_input_kbps = int((mux_input_bytes * 8 / 1000) / elapsed) if running else 0
@@ -306,6 +320,18 @@ class YouTubeLiveService:
       "rtmp_drain_calls": rtmp_sink.drain_calls if rtmp_sink is not None else 0,
       "rtmp_partial_writes": rtmp_sink.partial_writes if rtmp_sink is not None else 0,
       "rtmp_write_ratio": round(session_bytes / mux_input_bytes, 3) if mux_input_bytes > 0 else None,
+      "rtmp_writer_pending_frames": writer.pending_frames if writer is not None else 0,
+      "rtmp_writer_capacity": writer.capacity if writer is not None else RTMP_FRAME_QUEUE_MAX,
+      "rtmp_writer_high_watermark": writer.high_watermark if writer is not None else 0,
+      "rtmp_writer_pending_bytes": writer.pending_bytes if writer is not None else 0,
+      "rtmp_writer_capacity_bytes": writer.capacity_bytes if writer is not None else RTMP_FRAME_QUEUE_MAX_BYTES,
+      "rtmp_writer_high_watermark_bytes": writer.high_watermark_bytes if writer is not None else 0,
+      "rtmp_writer_frames_written": writer.frames_written if writer is not None else 0,
+      "rtmp_writer_last_write_ms": writer.last_write_ms if writer is not None else 0,
+      "rtmp_writer_max_write_ms": writer.max_write_ms if writer is not None else 0,
+      "rtmp_writer_error": writer.error if writer is not None else "",
+      "rtmp_writer_backpressure_restarts": self._writer_backpressure_restarts,
+      "rtmp_writer_discarded_frames": self._writer_discarded_frames,
       "stream_source_kbps": stream_source_kbps,
       "stream_source_fps": stream_source_fps,
       "stream_source_frames": self._stream_source_frames if running else 0,
@@ -464,16 +490,15 @@ class YouTubeLiveService:
 
   async def _run(self) -> None:
     while not self._stop_event.is_set():
+      tick_started_mono = _mono()
       try:
         await self._tick()
       except asyncio.CancelledError:
         raise
       except Exception as exc:
-        self._last_error = str(exc)
-        self._set_state("error")
-        await self._stop_stream()
-        await asyncio.sleep(START_BACKOFF_SECONDS)
-      await asyncio.sleep(0.02 if self._transport else 0.25)
+        await self._enter_backoff(str(exc), reason="service loop failure")
+      delay = _loop_delay(tick_started_mono, _mono(), active=self._transport is not None)
+      await asyncio.sleep(delay)
 
   async def _tick(self) -> None:
     if not self._param_enabled():
@@ -512,7 +537,15 @@ class YouTubeLiveService:
       self._set_state("error")
       return
 
-    await self._refresh_network()
+    if self._transport is None and self._next_retry_mono and _mono() < self._next_retry_mono:
+      self._set_state("backoff")
+      return
+
+    # The active RTMP session is the authoritative live-network signal. A
+    # separate reachability probe may take 1.5s on a weak hotspot, so only run
+    # it while disconnected.
+    if self._transport is None:
+      await self._refresh_network()
 
     current_source = self._current_source()
     current_quality = self._current_quality()
@@ -524,20 +557,25 @@ class YouTubeLiveService:
       await self._stop_stream()
       self._reset_source_warmup()
 
-    if self._next_retry_mono and _mono() < self._next_retry_mono:
-      self._set_state("backoff")
+    writer = self._writer
+    if self._transport is not None and writer is not None and writer.error:
+      await self._enter_backoff(
+        f"YouTube RTMPS publish failed: {writer.error}",
+        reason="RTMPS publish failed",
+      )
       return
 
     if self._transport is not None and (_mono() - self._conn_checked_mono) >= CONNECTED_CHECK_INTERVAL_SECONDS:
-      # rate-limited probe; write failures surface the same condition anyway
+      # Skip the check while RTMP_Write owns the handle instead of waiting for
+      # the network stall timeout on the source-ingestion path.
       self._conn_checked_mono = _mono()
-      if not await asyncio.to_thread(self._transport.is_connected):
-        self._transport_connected = False
-        self._last_error = "YouTube RTMPS connection closed"
-        await self._stop_stream()
+      connected = self._transport.try_is_connected()
+      if connected is False:
+        await self._enter_backoff(
+          "YouTube RTMPS connection closed",
+          reason="RTMPS connection closed",
+        )
         # source is fine — keep warmup so the reconnect stays a few seconds
-        self._schedule_backoff("RTMPS connection closed")
-        self._set_state("backoff")
         return
 
     warmup_ready = False
@@ -567,9 +605,12 @@ class YouTubeLiveService:
 
     if not data:
       if self._transport is not None and self._last_frame_mono and _mono() - self._last_frame_mono > NO_FRAME_STOP_SECONDS:
-        self._last_error = f"no {self._current_source()} frames"
-        await self._stop_stream()
-        self._schedule_backoff("frame timeout")
+        await self._enter_backoff(
+          f"no {self._current_source()} frames",
+          reason="frame timeout",
+        )
+        self._reset_source_warmup()
+        return
       if self._transport is None and self._last_frame_mono and _mono() - self._last_frame_mono > SOURCE_GAP_RESET_SECONDS:
         # a real source gap (encoder stopped), not just an empty poll between frames
         self._reset_source_warmup()
@@ -589,6 +630,12 @@ class YouTubeLiveService:
       if not keyframe or not header:
         self._set_state("waiting_keyframe")
         return
+      try:
+        validate_stream_start(header, data)
+      except ValueError as exc:
+        self._last_error = f"H.264 stream start rejected: {exc}"
+        self._set_state("waiting_keyframe")
+        return
       if not self._net_ok:
         # Hold the first connect until the network is actually reachable so we
         # never open a degraded session (first boot / hotspot re-attach).
@@ -597,15 +644,18 @@ class YouTubeLiveService:
       if self._last_start_mono and (_mono() - self._last_start_mono) < MIN_RECONNECT_INTERVAL_SECONDS:
         # Avoid hammering YouTube with rapid reconnects (it rejects them and it
         # spins the state machine); hold briefly between start attempts.
+        self._next_retry_mono = max(
+          self._next_retry_mono,
+          self._last_start_mono + MIN_RECONNECT_INTERVAL_SECONDS,
+        )
         self._set_state("backoff")
         return
       try:
         await self._start_stream(stream_key, codec_header=header, width=width, height=height)
       except Exception as exc:
-        self._last_error = f"YouTube RTMPS start failed: {exc}"
+        error = f"YouTube RTMPS start failed: {exc}"
         # network/YouTube failure, not a source problem — keep warmup
-        self._schedule_backoff("RTMPS start failed")
-        self._set_state("backoff")
+        await self._enter_backoff(error, reason="RTMPS start failed")
         return
 
     data = self._caption_injector.inject(
@@ -621,6 +671,14 @@ class YouTubeLiveService:
   def _set_state(self, state: str) -> None:
     self._state = state
     self._write_status()
+
+  async def _enter_backoff(self, error: str, *, reason: str) -> None:
+    self._transport_connected = False
+    self._last_error = str(error or reason)
+    self._log(self._last_error, "warn")
+    await self._stop_stream()
+    self._schedule_backoff(reason)
+    self._set_state("backoff")
 
   def _write_status(self, *, force: bool = False) -> None:
     mono = _mono()
@@ -852,14 +910,13 @@ class YouTubeLiveService:
     if (mono - self._starved_since_mono) < UPLOAD_STARVED_SECONDS:
       return False
     self._starved_since_mono = 0.0
-    self._last_error = f"upload starved: {upload_kbps} kbps below required {required_kbps} kbps"
-    self._log(f"upload starved ({upload_kbps} kbps < {required_kbps} kbps); reconnecting", "warn")
-    await self._stop_stream()
     # keep source warmup: the encoder is proven stable, only the network is bad.
-    # skipping the 15s re-warmup keeps the reconnect gap at a few seconds, well
-    # inside YouTube's keep-alive window, so the broadcast is never split.
-    self._schedule_backoff("upload starved")
-    self._set_state("backoff")
+    # skipping a full source re-warmup keeps the reconnect gap at a few seconds,
+    # well inside YouTube's keep-alive window, so the broadcast is never split.
+    await self._enter_backoff(
+      f"upload starved: {upload_kbps} kbps below required {required_kbps} kbps",
+      reason="upload starved",
+    )
     return True
 
   async def _refresh_network(self) -> None:
@@ -958,6 +1015,12 @@ class YouTubeLiveService:
         width=width,
         height=height,
       )
+      writer = RtmpFrameWriter(
+        muxer,
+        max_frames=RTMP_FRAME_QUEUE_MAX,
+        max_bytes=RTMP_FRAME_QUEUE_MAX_BYTES,
+      )
+      writer.start()
     except Exception:
       await asyncio.to_thread(transport.close)
       raise
@@ -965,6 +1028,7 @@ class YouTubeLiveService:
     self._transport_connected = True
     self._rtmp_sink = sink
     self._muxer = muxer
+    self._writer = writer
     self._started_at = _now()
     self._started_mono = _mono()
     self._session_started_bytes = self._bytes_sent
@@ -980,27 +1044,32 @@ class YouTubeLiveService:
 
   async def _write_frame(self, payload: bytes, *, keyframe: bool) -> bool:
     transport = self._transport
-    muxer = self._muxer
-    if transport is None or muxer is None:
+    writer = self._writer
+    if transport is None or writer is None:
       return False
-    # no per-frame is_connected probe: librtmp's write raises the same
-    # "connection is closed" condition and the except path handles it
-    try:
-      # Index-based CFR timestamps (muxer default). With conflate=False every
-      # 20fps frame is delivered, so frame-index == real time, and YouTube Live
-      # gets the constant frame rate it needs. (Monotonic/wall-clock PTS produced
-      # jittery VFR timing that left YouTube stuck "preparing".)
-      await asyncio.to_thread(muxer.mux, payload, keyframe=keyframe)
-      self._bytes_sent = self._session_started_bytes + transport.bytes_written
-      if self._started_mono and _mono() - self._started_mono >= STREAM_STABLE_SECONDS:
-        self._consecutive_failures = 0
-      return True
-    except Exception as exc:
-      self._transport_connected = False
-      self._last_error = f"YouTube RTMPS publish failed: {exc}"
-      self._schedule_backoff("RTMPS publish failed")
-      await self._stop_stream()
+    # Never block source ingestion behind a network write. H.264 frames still
+    # remain strictly ordered; if the bounded queue fills, restart from a fresh
+    # keyframe instead of accumulating seconds of stale dependent frames.
+    if not writer.enqueue(payload, keyframe=keyframe):
+      reason = writer.last_rejection or "RTMP writer rejected a frame"
+      if "backlog" in reason:
+        self._writer_backpressure_restarts += 1
+      await self._enter_backoff(
+        f"YouTube RTMPS publish failed: {reason}",
+        reason="RTMPS publish failed",
+      )
       return False
+
+    self._bytes_sent = self._session_started_bytes + transport.bytes_written
+    if (
+      self._started_mono
+      and _mono() - self._started_mono >= STREAM_STABLE_SECONDS
+      and writer.frames_written > 0
+      and writer.pending_frames <= max(1, writer.capacity // 2)
+      and writer.pending_bytes <= writer.capacity_bytes // 2
+    ):
+      self._consecutive_failures = 0
+    return True
 
   async def _stop_stream(self) -> None:
     transport = self._transport
@@ -1009,11 +1078,18 @@ class YouTubeLiveService:
     self._rtmp_sink = None
     muxer = self._muxer
     self._muxer = None
-    if transport is None and muxer is None:
+    writer = self._writer
+    self._writer = None
+    if transport is None and muxer is None and writer is None:
       self._started_at = 0.0
       self._started_mono = 0.0
       return
     self._set_state("stopping")
+    if writer is not None:
+      try:
+        self._writer_discarded_frames += await writer.stop()
+      except Exception:
+        pass
     if muxer is not None:
       try:
         await asyncio.to_thread(muxer.close)

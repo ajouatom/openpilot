@@ -11,6 +11,7 @@ import { applyHudDegradation, createHudLayoutObserver } from "./layout.js";
 import { createSpeedPanel } from "./widgets/speed_panel.js";
 import { createSpeedLimitSign } from "./widgets/speed_limit_sign.js";
 import { createSdiAlert } from "./widgets/sdi_alert.js";
+import { createDriveModeBadge } from "./widgets/drive_mode.js";
 import { createClock } from "./widgets/clock.js";
 import { createWifiIcon } from "./widgets/wifi_icon.js";
 import { createLfaIcon } from "./widgets/lfa_icon.js";
@@ -96,6 +97,7 @@ export function mapPayload(p = {}) {
       ? { kph: toUnit(overrideKph), label: override.label == null ? "" : String(override.label), mode: num(override.mode) ?? 0 }
       : null,
     sdiAlert: mapSdiAlert(p.sdiAlert, metric, toUnit),
+    drivingMode: num(p.drivingMode),
     lfaActive: p.latActive ?? p.lfaActive,
     steerAngle: num(p.steeringAngleDeg),
     accel: num(p.aEgo ?? p.accel),
@@ -121,6 +123,9 @@ export function createHudOverlay(doc) {
   const limit = createSpeedLimitSign(doc);
   const sdi = createSdiAlert(doc);
   const speed = createSpeedPanel(doc);
+  // 주행모드 배지는 패널 좌표(클러스터 1:1)에 얹으므로 speed 패널 SVG 안에 마운트한다.
+  const driveMode = createDriveModeBadge(doc);
+  speed.el.appendChild(driveMode.el);
   const accel = createAccelGauge(doc);
   const steer = createSteerGauge(doc);
   const fuel = createLevelGauge(doc, {
@@ -156,7 +161,7 @@ export function createHudOverlay(doc) {
     bottomRight: zoneBR,
   };
 
-  const widgets = [lfa, wifi, clock, limit, sdi, speed, accel, steer, fuel, def, tpms, turn];
+  const widgets = [lfa, wifi, clock, limit, sdi, speed, driveMode, accel, steer, fuel, def, tpms, turn];
   const suppressions = new Set();
   let visibilitySignature = "";
   let layoutObserver = null;
