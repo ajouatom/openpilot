@@ -107,6 +107,22 @@ def sound_asset_dir_for_language(lang: str | bytes | None) -> str:
     return "sounds_chs"
   return "sounds_eng"
 
+def resolve_sound_path(sound_dir: str, fallback_dir: str, filename: str) -> str:
+  path = os.path.join(sound_dir, filename)
+  if os.path.exists(path):
+    return path
+
+  fallback_path = os.path.join(fallback_dir, filename)
+  if os.path.exists(fallback_path):
+    return fallback_path
+
+  prompt_path = os.path.join(fallback_dir, "prompt.wav")
+  if os.path.exists(prompt_path):
+    cloudlog.error(f"soundd missing asset {filename}, using prompt.wav")
+    return prompt_path
+
+  raise FileNotFoundError(f"soundd missing assets: {path}, {fallback_path}, and {prompt_path}")
+
 def check_selfdrive_timeout_alert(sm):
   ss_missing = time.monotonic() - sm.recv_time['selfdriveState']
 
@@ -168,9 +184,7 @@ class Soundd:
     # Load all sounds
     for sound in sound_list:
       filename, play_count, volume = sound_list[sound]
-      path = os.path.join(sound_dir, filename)
-      if not os.path.exists(path):
-        path = os.path.join(fallback_dir, filename)
+      path = resolve_sound_path(sound_dir, fallback_dir, filename)
       wavefile = wave.open(path, 'r')
 
       #assert wavefile.getnchannels() == 1
@@ -237,7 +251,15 @@ class Soundd:
     data_out[:frames, 0] = self.get_sound_data(frames)
 
   def update_alert(self, new_alert):
-    current_alert_played_once = self.current_alert == AudibleAlert.none or self.current_sound_frame >= len(self.loaded_sounds[self.current_alert])
+    if new_alert != AudibleAlert.none and new_alert not in self.loaded_sounds:
+      cloudlog.error(f"soundd received unsupported alert {new_alert}")
+      new_alert = AudibleAlert.none
+
+    current_alert_played_once = (
+      self.current_alert == AudibleAlert.none or
+      self.current_alert not in self.loaded_sounds or
+      self.current_sound_frame >= len(self.loaded_sounds[self.current_alert])
+    )
     if self.current_alert != new_alert and (new_alert != AudibleAlert.none or current_alert_played_once):
       self.current_alert = new_alert
       self.current_sound_frame = 0
