@@ -5,6 +5,7 @@ var setCarrotVisionState = window.CarrotVisionSetState;
 
 let LAST_HUD_PAYLOAD_SIGNATURE = "";
 const COMPACT_FIRST_DATA_TIMEOUT_MS = 8000;
+let HUD_CRUISE_OVERRIDE_HOLD = null;
 
 const RAW_HUD_SERVICES = window.CarrotVisionCompact?.HUD_SERVICES || [];
 const RAW_HUD_STATE = Object.create(null);
@@ -440,6 +441,7 @@ function drivingHudUpdateFromCarPayload(j) {
       : null,
     sdiAlert: j.sdiAlert && typeof j.sdiAlert === "object" ? j.sdiAlert : null,
   };
+  payload.cruiseOverride = stabilizedHudCruiseOverride(payload.cruiseOverride, payload);
 
   const miniHudPayload = window.CarrotMiniHudModel?.build?.(
     payload,
@@ -506,6 +508,45 @@ function drivingHudUpdateFromCarPayload(j) {
     if (window.DriveVisionHudContent?.update) window.DriveVisionHudContent.update(payload);
     else window.CarrotHudOverlay?.update?.(payload);
   } catch {}
+}
+
+function hudCruiseOverrideClock() {
+  const replay = window.CarrotVisionReplay?.status?.();
+  const replayTime = Number(replay?.currentTime);
+  if (replay?.active === true && Number.isFinite(replayTime)) {
+    return {
+      clockMs: replayTime * 1000,
+      clockKey: `replay:${replay.route || ""}:${replay.segment || ""}`,
+    };
+  }
+  const clockMs = Number(window.performance?.now?.());
+  return {
+    clockMs: Number.isFinite(clockMs) ? clockMs : Date.now(),
+    clockKey: "live",
+  };
+}
+
+function hudCruiseDisplayVisible(payload) {
+  const hasRawCruiseState = Object.prototype.hasOwnProperty.call(RAW_HUD_STATE, "carState")
+    || Object.prototype.hasOwnProperty.call(RAW_HUD_STATE, "controlsState")
+    || Object.prototype.hasOwnProperty.call(RAW_HUD_STATE, "selfdriveState");
+  const sharedGate = window.CarrotHudDataBridge?.isCruiseDisplayVisible;
+  if (hasRawCruiseState && typeof sharedGate === "function") {
+    return sharedGate(RAW_HUD_STATE);
+  }
+  const setSpeed = Number(payload?.vSetKph);
+  return Number.isFinite(setSpeed) && setSpeed > 0 && setSpeed < 250;
+}
+
+function stabilizedHudCruiseOverride(value, payload) {
+  if (!HUD_CRUISE_OVERRIDE_HOLD) {
+    HUD_CRUISE_OVERRIDE_HOLD = window.CarrotHudDataBridge?.createCruiseOverrideHold?.() || null;
+  }
+  if (!HUD_CRUISE_OVERRIDE_HOLD) return value;
+  return HUD_CRUISE_OVERRIDE_HOLD.update(value, {
+    ...hudCruiseOverrideClock(),
+    active: hudCruiseDisplayVisible(payload),
+  });
 }
 
 function averageFiniteMetric(values) {
@@ -658,8 +699,8 @@ function deriveCompactHudPayload(state) {
     && Number.isFinite(Number(carState?.gearStep)) && Number(carState.gearStep) > 0
     ? Math.round(Number(carState.gearStep))
     : null;
-  const trafficState = Number(carrotMan?.trafficState ?? state?.longitudinalPlan?.trafficState);
   const vehiclePayload = window.CarrotHudDataBridge?.deriveVehicleHudPayload?.(state) || {};
+  const trafficState = Number(vehiclePayload.trafficState);
   const cruiseKph = compactHudCruiseKph(state);
   return {
     cpuTempC,

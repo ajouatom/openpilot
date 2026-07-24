@@ -3,11 +3,13 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  createCruiseOverrideHold,
   deriveVehicleHudPayload,
   deriveCruiseOverride,
   deriveSdiAlert,
   isCruiseDisplayVisible,
   resolveCruiseKph,
+  resolveTrafficState,
   vehicleHudSignature,
   withVehicleHudFields,
 } from "../src/features/drive/contents/vision/hud/data_bridge.js";
@@ -27,6 +29,30 @@ test("active lane line is tri-state (true/false/null)", () => {
   assert.equal(deriveVehicleHudPayload({ controlsState: { activeLaneLine: true } }).activeLaneLine, true);
   assert.equal(deriveVehicleHudPayload({ controlsState: { activeLaneLine: false } }).activeLaneLine, false);
   assert.equal(deriveVehicleHudPayload({}).activeLaneLine, null);
+});
+
+test("traffic light keeps an active planner state when carrotMan carries zero", () => {
+  assert.equal(resolveTrafficState({
+    longitudinalPlan: { trafficState: 1 },
+    carrotMan: { trafficState: 0 },
+  }), 1);
+  assert.equal(resolveTrafficState({
+    longitudinalPlan: { trafficState: 2 },
+    carrotMan: { trafficState: 0 },
+  }), 2);
+});
+
+test("traffic light falls back to carrotMan and rejects unknown states", () => {
+  assert.equal(resolveTrafficState({
+    longitudinalPlan: { trafficState: 0 },
+    carrotMan: { trafficState: 1 },
+  }), 1);
+  assert.equal(resolveTrafficState({ carrotMan: { trafficState: 2 } }), 2);
+  assert.equal(resolveTrafficState({ longitudinalPlan: { trafficState: 9 } }), 0);
+  assert.equal(deriveVehicleHudPayload({
+    longitudinalPlan: { trafficState: 2 },
+    carrotMan: { trafficState: 0 },
+  }).trafficState, 2);
 });
 
 test("LFA activity follows carControl lateral actuation before engagement fallbacks", () => {
@@ -111,6 +137,39 @@ test("eco override (green, mode 1) wins when cruiseTarget exceeds the set speed"
 test("no override when desiredSpeed is not below the set speed", () => {
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 88 } }), null);
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 95 } }), null);
+});
+
+test("orange override survives a short live or replay sample gap", () => {
+  const hold = createCruiseOverrideHold();
+  const orange = { kph: 70, label: "cam:n", mode: 2 };
+  assert.deepEqual(hold.update(orange, { clockMs: 1000, clockKey: "replay:a", active: true }), orange);
+  assert.deepEqual(hold.update(null, { clockMs: 3499, clockKey: "replay:a", active: true }), orange);
+  assert.equal(hold.update(null, { clockMs: 3501, clockKey: "replay:a", active: true }), null);
+});
+
+test("orange override hold resets on seek, source clock change, or cruise off", () => {
+  const orange = { kph: 70, label: "cam:n", mode: 2 };
+
+  const seek = createCruiseOverrideHold();
+  seek.update(orange, { clockMs: 5000, clockKey: "replay:a", active: true });
+  assert.equal(seek.update(null, { clockMs: 1000, clockKey: "replay:a", active: true }), null);
+
+  const segment = createCruiseOverrideHold();
+  segment.update(orange, { clockMs: 1000, clockKey: "replay:a", active: true });
+  assert.equal(segment.update(null, { clockMs: 1100, clockKey: "replay:b", active: true }), null);
+
+  const cruise = createCruiseOverrideHold();
+  cruise.update(orange, { clockMs: 1000, clockKey: "live", active: true });
+  assert.equal(cruise.update(null, { clockMs: 1100, clockKey: "live", active: false }), null);
+});
+
+test("eco override replaces orange immediately and is never held", () => {
+  const hold = createCruiseOverrideHold();
+  const orange = { kph: 70, label: "cam:n", mode: 2 };
+  const eco = { kph: 95, label: "eco", mode: 1 };
+  hold.update(orange, { clockMs: 1000, clockKey: "live", active: true });
+  assert.deepEqual(hold.update(eco, { clockMs: 1100, clockKey: "live", active: true }), eco);
+  assert.equal(hold.update(null, { clockMs: 1200, clockKey: "live", active: true }), null);
 });
 
 test("all carrot/MICI deceleration sources keep their cluster display origin", () => {
@@ -204,6 +263,7 @@ test("final presentation payload retains cluster-only fields", () => {
     activeLaneLine: false,
     cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
     sdiAlert: null,
+    trafficState: 0,
   });
 });
 
@@ -227,6 +287,9 @@ test("cluster-only changes produce distinct presentation signatures", () => {
 test("classic live and replay glue uses the shared fields and one lifecycle sink", () => {
   assert.match(rawSource, /CarrotHudDataBridge\?\.withVehicleHudFields\?\.\(basePayload,\s*j\)/);
   assert.match(rawSource, /CarrotHudDataBridge\?\.vehicleHudSignature\?\.\(payload\)/);
+  assert.match(rawSource, /createCruiseOverrideHold\?\.\(\)/);
+  assert.match(rawSource, /const trafficState = Number\(vehiclePayload\.trafficState\)/);
+  assert.match(rawSource, /payload\.cruiseOverride = stabilizedHudCruiseOverride\(payload\.cruiseOverride,\s*payload\)/);
   assert.match(
     rawSource,
     /if \(window\.DriveVisionHudContent\?\.update\) window\.DriveVisionHudContent\.update\(payload\);[\s\S]*else window\.CarrotHudOverlay\?\.update\?\.\(payload\);/,

@@ -25,6 +25,11 @@ function pressure(value) {
   return number != null && number >= 5 && number <= 100 ? number : null;
 }
 
+function trafficSignalState(value) {
+  const state = finite(value);
+  return state === 1 || state === 2 ? state : 0;
+}
+
 function gearLabel(value) {
   const raw = String(value || "").trim().toLowerCase();
   const labels = {
@@ -61,6 +66,74 @@ function cruiseOverridePayload(value) {
   };
 }
 
+export const CRUISE_OVERRIDE_HOLD_MS = 2500;
+
+// Presentation-only grace for short service/sample gaps. The caller supplies
+// the live monotonic clock or replay media clock, so pausing a replay does not
+// expire the telltale and seeking never carries an old value into a new scene.
+export function createCruiseOverrideHold(options = {}) {
+  const configuredHoldMs = finite(options.holdMs);
+  const holdMs = configuredHoldMs != null && configuredHoldMs >= 0
+    ? configuredHoldMs
+    : CRUISE_OVERRIDE_HOLD_MS;
+  let held = null;
+  let lastSeenMs = null;
+  let lastClockMs = null;
+  let clockKey = null;
+
+  function reset() {
+    held = null;
+    lastSeenMs = null;
+    lastClockMs = null;
+    clockKey = null;
+  }
+
+  function update(value, context = {}) {
+    const next = cruiseOverridePayload(value);
+    const clockMs = finite(context.clockMs);
+    const nextClockKey = String(context.clockKey || "live");
+    if (context.active === false || clockMs == null) {
+      reset();
+      return context.active === false ? null : next;
+    }
+
+    if (clockKey !== nextClockKey || (lastClockMs != null && clockMs < lastClockMs)) {
+      reset();
+    }
+    clockKey = nextClockKey;
+    lastClockMs = clockMs;
+
+    if (next) {
+      if (next.mode === 2) {
+        held = next;
+        lastSeenMs = clockMs;
+      } else {
+        held = null;
+        lastSeenMs = null;
+      }
+      return next;
+    }
+
+    const ageMs = lastSeenMs == null ? null : clockMs - lastSeenMs;
+    if (held && ageMs != null && ageMs >= 0 && ageMs <= holdMs) return held;
+    held = null;
+    lastSeenMs = null;
+    return null;
+  }
+
+  function status() {
+    return Object.freeze({
+      held: held ? { ...held } : null,
+      lastSeenMs,
+      lastClockMs,
+      clockKey,
+      holdMs,
+    });
+  }
+
+  return Object.freeze({ update, reset, status });
+}
+
 function sdiAlertPayload(value) {
   if (!value || typeof value !== "object") return null;
   const type = finite(value.type);
@@ -90,6 +163,7 @@ export function withVehicleHudFields(payload = {}, source = {}) {
       : source.activeLaneLine === true,
     cruiseOverride: cruiseOverridePayload(source.cruiseOverride),
     sdiAlert: sdiAlertPayload(source.sdiAlert),
+    trafficState: trafficSignalState(source.trafficState ?? payload.trafficState),
   };
 }
 
@@ -230,6 +304,16 @@ export function deriveCruiseOverride(state = {}) {
   return null;
 }
 
+// The cluster follows longitudinalPlan while the comma HUD follows carrotMan.
+// Compact/replay samples can update those services at different moments, and
+// carrotMan commonly carries an explicit 0 that must not mask an active planner
+// signal. Prefer an active cluster state, then fall back to an active HUD state.
+export function resolveTrafficState(state = {}) {
+  const plannerState = trafficSignalState(state.longitudinalPlan?.trafficState);
+  if (plannerState !== 0) return plannerState;
+  return trafficSignalState(state.carrotMan?.trafficState);
+}
+
 // Decoded compact and raw replay state intentionally converge here. UI widgets
 // consume this stable payload and never need to know the cereal layout.
 export function deriveVehicleHudPayload(state = {}) {
@@ -258,6 +342,7 @@ export function deriveVehicleHudPayload(state = {}) {
     activeLaneLine,
     cruiseOverride: deriveCruiseOverride(state),
     sdiAlert: deriveSdiAlert(state),
+    trafficState: resolveTrafficState(state),
     // The cluster wheel follows lateral actuation, not overall engagement.
     // Older recordings without carControl retain the legacy state fallback.
     lfaActive: latActive ?? Boolean(selfdriveState.enabled ?? controlsState.enabled),
@@ -279,7 +364,9 @@ export function deriveVehicleHudPayload(state = {}) {
 export const CarrotHudDataBridge = Object.freeze({
   deriveVehicleHudPayload,
   deriveCruiseOverride,
+  createCruiseOverrideHold,
   deriveSdiAlert,
+  resolveTrafficState,
   resolveCruiseKph,
   isCruiseDisplayVisible,
   withVehicleHudFields,

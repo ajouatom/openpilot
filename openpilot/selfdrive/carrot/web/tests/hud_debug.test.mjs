@@ -22,6 +22,11 @@ test("HUD debug snapshot stays compact and separates source, derivation and disp
   const root = {
     ...diagnosticNode(),
     querySelector: (selector) => nodes[selector] || null,
+    querySelectorAll: (selector) => (
+      selector === ".chud-speed-traffic"
+        ? [diagnosticNode(), { ...diagnosticNode(), hidden: true }]
+        : []
+    ),
   };
   const target = {
     CarrotHudState: {
@@ -32,10 +37,12 @@ test("HUD debug snapshot stays compact and separates source, derivation and disp
         evModeActive: true,
       },
       controlsState: { enabled: true, vCruiseCluster: 87, activeLaneLine: true },
+      longitudinalPlan: { trafficState: 2 },
       carControl: { latActive: true },
       carrotMan: {
         desiredSpeed: 77,
         desiredSource: "cam",
+        trafficState: 0,
         xSpdType: 1,
         xSpdLimit: 60,
         xSpdDist: 420,
@@ -47,6 +54,7 @@ test("HUD debug snapshot stays compact and separates source, derivation and disp
       deriveVehicleHudPayload: () => ({
         evActive: true,
         activeLaneLine: true,
+        trafficState: 2,
         cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
         sdiAlert: { type: 1, family: "camera", speedLimitKph: 60, distanceM: 420, countdownS: 8 },
       }),
@@ -85,9 +93,14 @@ test("HUD debug snapshot stays compact and separates source, derivation and disp
   assert.equal(report.source.controlsState.vCruiseCluster, 87);
   assert.equal(report.source.carControl.latActive, true);
   assert.equal(report.source.carrotMan.xSpdDist, 420);
+  assert.equal(report.source.carrotMan.trafficState, 0);
+  assert.equal(report.source.longitudinalPlan.trafficState, 2);
+  assert.equal(report.derived.trafficState, 2);
   assert.equal(report.derived.cruiseOverride.kph, 77);
   assert.equal(report.presentation.overlay.data.activeLaneLine, true);
   assert.equal(report.dom.cruiseOverride.text, "77");
   assert.match(report.dom.sdiAlert.text, /Speed camera/);
+  assert.equal(report.dom.trafficRed.present, true);
+  assert.equal(report.dom.trafficGreen.hidden, true);
   assert.ok(JSON.stringify(report).length < 5000);
 });

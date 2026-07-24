@@ -93,6 +93,9 @@ function renderFromCereal(state) {
   return {
     data,
     ev: findByClass(panel.el, "chud-t-ev"),
+    trafficLights: panel.el.children.filter((node) => (
+      (node.getAttribute?.("class") || "").split(/\s+/).includes("chud-speed-traffic")
+    )),
     overrideSpeed: findByClass(panel.el, "chud-t-override"),
     overrideLabel: findByClass(panel.el, "chud-t-override-label"),
     speed: findByClass(panel.el, "chud-t-speed"),
@@ -106,6 +109,23 @@ function renderFromCereal(state) {
 }
 
 // 당근비전(라이브): EV 켜짐 + 레인모드 + 감속(카메라) 오버라이드.
+test("live and replay traffic lights render from the active planner state", () => {
+  const red = renderFromCereal({
+    longitudinalPlan: { trafficState: 1 },
+    carrotMan: { trafficState: 0 },
+  });
+  assert.equal(red.trafficLights.length, 2);
+  assert.ok(isVisible(red.trafficLights[0]), "red light visible");
+  assert.ok(!isVisible(red.trafficLights[1]), "green light hidden");
+
+  const green = renderFromCereal({
+    longitudinalPlan: { trafficState: 2 },
+    carrotMan: { trafficState: 0 },
+  });
+  assert.ok(!isVisible(green.trafficLights[0]), "red light hidden");
+  assert.ok(isVisible(green.trafficLights[1]), "green light visible");
+});
+
 test("live: EV + green lane wings + orange decel override all render", () => {
   const r = renderFromCereal({
     carState: { vEgoCluster: 53, vCruiseCluster: 88, evModeValid: true, evModeActive: true, gearShifter: "drive" },
