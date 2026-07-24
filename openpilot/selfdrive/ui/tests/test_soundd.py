@@ -1,7 +1,13 @@
 from openpilot.cereal import car
 from openpilot.cereal import messaging
 from openpilot.cereal.messaging import SubMaster, PubMaster
-from openpilot.selfdrive.ui.soundd import SELFDRIVE_STATE_TIMEOUT, Soundd, check_selfdrive_timeout_alert, sound_list
+from openpilot.selfdrive.ui.soundd import (
+  SELFDRIVE_STATE_TIMEOUT,
+  Soundd,
+  check_selfdrive_timeout_alert,
+  resolve_sound_path,
+  sound_list,
+)
 
 import os
 import time
@@ -13,6 +19,16 @@ AudibleAlert = car.CarControl.HUDControl.AudibleAlert
 
 
 class TestSoundd:
+  def test_missing_sound_asset_falls_back_to_english_prompt(self, tmp_path):
+    sound_dir = tmp_path / "sounds"
+    fallback_dir = tmp_path / "sounds_eng"
+    sound_dir.mkdir()
+    fallback_dir.mkdir()
+    prompt_path = fallback_dir / "prompt.wav"
+    prompt_path.touch()
+
+    assert resolve_sound_path(str(sound_dir), str(fallback_dir), "missing.wav") == str(prompt_path)
+
   def test_radar_alert_sound_assets(self):
     expected = {
       AudibleAlert.radarCutin: ("prompt.wav", 1.506),
@@ -37,6 +53,16 @@ class TestSoundd:
 
     assert soundd.current_alert == AudibleAlert.none
     assert soundd.current_sound_frame == 0
+
+  def test_unsupported_alert_is_ignored(self):
+    soundd = Soundd.__new__(Soundd)
+    soundd.current_alert = AudibleAlert.none
+    soundd.current_sound_frame = 0
+    soundd.loaded_sounds = {}
+
+    soundd.update_alert(AudibleAlert.radarStationaryLead)
+
+    assert soundd.current_alert == AudibleAlert.none
 
   def test_check_selfdrive_timeout_alert(self):
     sm = SubMaster(['selfdriveState'])
