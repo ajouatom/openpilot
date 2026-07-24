@@ -6,6 +6,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import threading
 from typing import Final, Literal, NotRequired, TypedDict
 
 
@@ -101,8 +102,31 @@ class AssetManifestLoader:
   def __init__(self) -> None:
     self._cache_key: tuple[str, int, int] | None = None
     self._manifest: AssetManifest | None = None
+    self._asset_keys: tuple[tuple[str, int, int], ...] = ()
+    self._lock = threading.Lock()
+
+  @staticmethod
+  def _asset_key(web_root: Path, asset: AssetRecord) -> tuple[str, int, int] | None:
+    try:
+      asset_path = _contained_file(web_root, asset["path"])
+      metadata = asset_path.stat()
+    except (AssetManifestError, OSError):
+      return None
+    return str(asset_path), metadata.st_mtime_ns, metadata.st_size
+
+  def _cached_assets_unchanged(self, web_root: Path) -> bool:
+    if self._manifest is None or len(self._asset_keys) != len(self._manifest["assets"]):
+      return False
+    return all(
+      self._asset_key(web_root, asset) == expected
+      for asset, expected in zip(self._manifest["assets"], self._asset_keys, strict=True)
+    )
 
   def load(self, web_dir: str | os.PathLike[str]) -> AssetManifest:
+    with self._lock:
+      return self._load(web_dir)
+
+  def _load(self, web_dir: str | os.PathLike[str]) -> AssetManifest:
     try:
       web_root = Path(web_dir).resolve(strict=True)
       manifest_path = (web_root / _MANIFEST_RELATIVE_PATH).resolve(strict=True)
@@ -114,7 +138,11 @@ class AssetManifestLoader:
       try:
         before = manifest_path.stat()
         cache_key = (str(manifest_path), before.st_mtime_ns, before.st_size)
-        if cache_key == self._cache_key and self._manifest is not None:
+        if (
+          cache_key == self._cache_key
+          and self._manifest is not None
+          and self._cached_assets_unchanged(web_root)
+        ):
           return self._manifest
         payload = manifest_path.read_bytes()
         after = manifest_path.stat()
@@ -123,8 +151,12 @@ class AssetManifestLoader:
       if (after.st_mtime_ns, after.st_size) != (before.st_mtime_ns, before.st_size):
         continue
       manifest = _parse_manifest(web_root, payload)
+      asset_keys = tuple(self._asset_key(web_root, asset) for asset in manifest["assets"])
+      if any(asset_key is None for asset_key in asset_keys):
+        raise AssetManifestError("Asset path changed after validation")
       self._cache_key = cache_key
       self._manifest = manifest
+      self._asset_keys = tuple(asset_key for asset_key in asset_keys if asset_key is not None)
       return manifest
     raise AssetManifestError("Asset manifest changed while reading")
 
