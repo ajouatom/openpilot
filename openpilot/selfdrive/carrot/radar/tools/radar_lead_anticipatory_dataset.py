@@ -9,13 +9,14 @@ import csv
 import gzip
 import json
 import math
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 
-DEFAULT_LOOKBACK_S = 0.8
-ANTICIPATORY_WEIGHT = 0.8
+DEFAULT_LOOKBACK_S = 1.0
+ANTICIPATORY_WEIGHT = 1.0
 
 
 @dataclass
@@ -45,23 +46,23 @@ def _geometry_allows_anticipation(row: dict[str, str]) -> bool:
   distance = _number(row, "d_rel")
   d_path = abs(_number(row, "d_path"))
   future_d_path = abs(_number(row, "future_d_path"))
+  h4_dt = max(_number(row, "h4_dt"), 1e-3)
   h8_dt = max(_number(row, "h8_dt"), 1e-3)
-  h12_dt = max(_number(row, "h12_dt"), 1e-3)
+  h4_lane_inward = (abs(_number(row, "h4_d_path")) - d_path) / h4_dt
   h8_lane_inward = (abs(_number(row, "h8_d_path")) - d_path) / h8_dt
-  h12_lane_inward = (abs(_number(row, "h12_d_path")) - d_path) / h12_dt
-  lanes_reliable = _number(row, "lane1_prob") > 0.5 and _number(row, "lane2_prob") > 0.5
+  lanes_reliable = _number(row, "lane1_prob") > 0.35 and _number(row, "lane2_prob") > 0.35
   return (
-    2.5 < distance < 60.0
-    and _number(row, "v_lead") > 2.0
-    and _number(row, "track_age") >= 7.0
-    and 1.15 < d_path < 4.2
-    and future_d_path < 2.5
-    and future_d_path + 0.10 < d_path
+    2.0 < distance < 65.0
+    and (_number(row, "v_lead") > 1.0 or (distance < 12.0 and _number(row, "v_lead") > -0.5))
+    and _number(row, "track_age") >= 5.0
+    and 0.65 < d_path < 4.8
+    and future_d_path < 3.4
+    and future_d_path + 0.05 < d_path
+    and _number(row, "h4_present") > 0.5
     and _number(row, "h8_present") > 0.5
-    and _number(row, "h12_present") > 0.5
     and (distance < 12.0 or lanes_reliable)
-    and 0.12 < h8_lane_inward < 3.2
-    and 0.12 < h12_lane_inward < 3.2
+    and 0.06 < h4_lane_inward < 3.5
+    and 0.06 < h8_lane_inward < 3.5
   )
 
 

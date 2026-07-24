@@ -6,7 +6,7 @@ const rawCapnp = self.CarrotRawCapnp;
 const TRACK_STRIDE = 8;
 const SAMPLE_INTERVAL_MS = 50;
 const MAX_DURATION_MS = 3 * 60 * 1000;
-const radarSourceCode = Object.freeze({ frontRadar: 0, scc: 1, corner235: 2, corner180: 3 });
+const radarSourceCode = Object.freeze({ frontRadar: 0, scc: 1, corner235: 2, corner180: 3, corner430: 4 });
 
 function appendBytes(left, right) {
   if (!left?.byteLength) return right;

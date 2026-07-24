@@ -292,6 +292,7 @@ class TestCornerRadar430CandidateFilter:
     points = {point.trackId: point for point in radar_data.points}
 
     assert points[300].measured
+    assert str(points[300].radarSource) == "corner430"
     assert points[300].dRel == pytest.approx(50.1)
     assert points[300].yRel == pytest.approx(2.0)
     assert points[300].yvRel == 0.0

@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Protocol
+from typing import Protocol
 
 
 class RadarPointLike(Protocol):
@@ -63,34 +64,11 @@ class _PairState:
   quality_hits: int = 0
   misses: int = 0
   distance_offset: float = 0.0
-  fused_d_rel: float | None = None
-  fused_v_rel: float = 0.0
-  last_time_s: float | None = None
   quality: float = 0.0
 
 
 def _finite_or(value: float, fallback: float) -> float:
   return value if math.isfinite(value) else fallback
-
-
-def _corner_distance_weight(source: str, distance: float) -> float:
-  if source == "corner180":
-    if distance < 10.0:
-      return 0.82
-    if distance < 20.0:
-      return 0.72
-    if distance < 40.0:
-      return 0.55
-  else:
-    if distance < 10.0:
-      return 0.58
-    if distance < 20.0:
-      return 0.55
-    if distance < 40.0:
-      return 0.45
-  if distance < 80.0:
-    return 0.25
-  return 0.10
 
 
 class RadarObjectFusion:
@@ -195,44 +173,21 @@ class RadarObjectFusion:
   def _pair_confirmed(self, state: _PairState) -> bool:
     return state.quality_hits >= self.confirm_frames and state.quality >= 0.55 and state.misses == 0
 
-  @staticmethod
-  def _robust_weight(base_weight: float, innovation: float, scale: float) -> float:
-    return base_weight / (1.0 + (innovation / max(scale, 0.05)) ** 2)
-
   def _fuse_pair(
-    self, time_s: float, front: RadarPointLike, corner: RadarPointLike, state: _PairState,
+    self, front: RadarPointLike, corner: RadarPointLike, state: _PairState,
   ) -> FusedRadarObject:
-    aligned_corner_d = corner.d_rel + state.distance_offset
-    corner_weight = _corner_distance_weight(corner.source, min(front.d_rel, aligned_corner_d))
-    front_weight = 1.0 - corner_weight
-    if state.fused_d_rel is None or state.last_time_s is None:
-      fused_d_rel = front.d_rel * front_weight + aligned_corner_d * corner_weight
-    else:
-      dt = min(max(time_s - state.last_time_s, 0.0), 0.2)
-      predicted_d_rel = state.fused_d_rel + state.fused_v_rel * dt
-      front_weight = self._robust_weight(front_weight, front.d_rel - predicted_d_rel, 0.55)
-      corner_weight = self._robust_weight(corner_weight, aligned_corner_d - predicted_d_rel, 0.35)
-      total_weight = max(front_weight + corner_weight, 1e-3)
-      measurement = (front.d_rel * front_weight + aligned_corner_d * corner_weight) / total_weight
-      fused_d_rel = predicted_d_rel + 0.72 * (measurement - predicted_d_rel)
-      fused_d_rel = min(
-        max(fused_d_rel, min(front.d_rel, aligned_corner_d) - 0.75),
-        max(front.d_rel, aligned_corner_d) + 0.75,
-      )
-    fused_v_rel = front.v_rel * 0.75 + corner.v_rel * 0.25
-    state.fused_d_rel = fused_d_rel
-    state.fused_v_rel = fused_v_rel
-    state.last_time_s = time_s
+    # Association is deliberate, measurement averaging is not. Front radar is
+    # the longitudinal source used by control; corner radar supplies the more
+    # useful lateral position and motion for cut-in classification.
     confidence = min(1.0, state.quality_hits / max(self.confirm_frames + 2, 1)) * state.quality
-    distance_source = "corner-weighted" if corner_weight > front_weight else "front-weighted"
     return FusedRadarObject(
       object_id=f"fc:{front.track_id}:{corner.track_id}",
-      d_rel=fused_d_rel,
+      d_rel=front.d_rel,
       y_rel=corner.y_rel,
-      v_rel=fused_v_rel,
+      v_rel=front.v_rel,
       a_rel=_finite_or(front.a_rel, corner.a_rel),
       yv_rel=corner.yv_rel,
-      v_lead=front.v_lead * 0.75 + corner.v_lead * 0.25,
+      v_lead=front.v_lead,
       front_track_id=front.track_id,
       corner_track_id=corner.track_id,
       scc_track_id=None,
@@ -242,7 +197,7 @@ class RadarObjectFusion:
       corner_y_rel=corner.y_rel,
       front_v_rel=front.v_rel,
       corner_v_rel=corner.v_rel,
-      distance_source=distance_source,
+      distance_source="frontRadar",
       lateral_source=corner.source,
       match_confidence=confidence,
       pair_age=state.quality_hits,
@@ -288,7 +243,7 @@ class RadarObjectFusion:
     used_front = {front.track_id for front, _, state in matched if self._pair_confirmed(state)}
     used_corner = {corner.track_id for _, corner, state in matched if self._pair_confirmed(state)}
     objects = [
-      self._fuse_pair(time_s, front, corner, state)
+      self._fuse_pair(front, corner, state)
       for front, corner, state in matched
       if self._pair_confirmed(state)
     ]

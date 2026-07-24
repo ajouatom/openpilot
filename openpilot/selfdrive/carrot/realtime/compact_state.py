@@ -152,7 +152,7 @@ RADAR_POINT_SCHEMA = (
   ("yRel", "f32"),
   ("vRel", "f32"),
   ("measured", "bool"),
-  ("radarSource", ("enum", ("frontRadar", "scc", "corner235", "corner180"))),
+  ("radarSource", ("enum", ("frontRadar", "scc", "corner235", "corner180", "corner430"))),
 )
 
 RADAR_LEAD_SCHEMA = (

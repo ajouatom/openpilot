@@ -4,11 +4,23 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
-from openpilot.selfdrive.carrot.radar.radar_lead_model import RadarLeadPrediction, VisionLeadContext
+from openpilot.selfdrive.carrot.radar.radar_lead_model import (
+  CUTIN_VEHICLE_HALF_WIDTH_M,
+  MODEL_FEATURE_NAMES,
+  RadarLeadPrediction,
+  VisionLeadContext,
+)
 from openpilot.selfdrive.carrot.radar.radar_lead_runtime import RadarLeadRuntime
+from openpilot.selfdrive.carrot.radar.radar_lead_tau import RadarLeadTauTracker
+from openpilot.selfdrive.carrot.radar.radar_sensor_objects import (
+  NEAR_SIDE_NO_FRONT_MATCH_DREL_M,
+  match_corner_to_front_identity,
+  post_match_corner_to_front,
+)
 
 
 RADAR_TO_CAMERA = 1.52
@@ -16,8 +28,7 @@ VISION_LEAD_MIN_PROB = 0.5
 VISION_LEAD_HOLD_MIN_PROB = 0.35
 VISION_LEAD_HOLD_MAX_FRAMES = 10
 VISION_MATCH_DISTANCE_HYSTERESIS_M = 2.0
-VISION_MATCH_LONG_RANGE_M = 45.0
-VISION_MATCH_FRESH_MAX_DPATH_M = 3.0
+VISION_MATCH_FRESH_MAX_DPATH_M = 2.0
 VISION_MATCH_HELD_MAX_DPATH_M = 4.0
 VISION_MATCH_CORNER_HOLD_MAX_DPATH_M = 2.2
 VISION_MATCH_CORNER_HOLD_MIN_SCORE_RATIO = 0.15
@@ -33,11 +44,16 @@ STEALTH_LEAD_MIN_IN_LANE_PROB = 0.55
 STEALTH_LEAD_HOLD_S = 0.5
 PRIMARY_STEALTH_HOLD_S = 0.75
 PRIMARY_STEALTH_MAX_DREL_M = 60.0
-PRIMARY_STEALTH_MAX_DPATH_M = 2.2
+PRIMARY_STEALTH_MAX_DPATH_M = 1.8
 PRIMARY_STEALTH_MIN_LEAD_PROB = 0.8
 CUTIN_REPORT_MIN_DREL_M = 1.0
 LOW_SPEED_CUTIN_MAX_EGO_MPS = 3.0
 LOW_SPEED_CUTIN_MAX_DPATH_M = 1.5
+TENTATIVE_CUTIN_MODEL_PROB = 0.49
+TENTATIVE_CUTIN_FALLBACK_HALF_WIDTH_M = 1.5
+PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 3.5
+PRIMARY_DUPLICATE_MAX_YREL_DELTA_M = 1.4
+LANE_HALF_WIDTH_FEATURE_INDEX = MODEL_FEATURE_NAMES.index("lane_half_width")
 
 
 def _finite(value: Any, fallback: float = 0.0) -> float:
@@ -77,6 +93,7 @@ class RadarLeadModelOutput:
   error: str = ""
   lead_one: dict[str, Any] | None = None
   lead_two: dict[str, Any] | None = None
+  lead_two_tentative: bool = False
   lead_cutin: dict[str, Any] | None = None
   lead_external: dict[str, Any] | None = None
   lead_left: dict[str, Any] | None = None
@@ -179,11 +196,47 @@ class VisionRadarMatcher:
       for other in predictions
     )
 
+  @staticmethod
+  def _front_stationary_vehicle_evidence(
+    prediction: RadarLeadPrediction,
+    corroboration_predictions: tuple[RadarLeadPrediction, ...],
+    vision_lead: VisionLeadContext,
+    held_identity: bool = False,
+  ) -> bool:
+    """Use a mature corner return to confirm a slow front-radar target."""
+    features = prediction.features
+    obj = features.radar_object
+    if (
+      (obj.front_track_id is None and obj.scc_track_id is None)
+      or vision_lead.probability < (
+        VISION_LEAD_HOLD_MIN_PROB + 0.20 if held_identity else CORNER_STATIONARY_MIN_VISION_PROB
+      )
+      or features.track_age < 2
+      or not 8.0 < obj.d_rel < 110.0
+      or not -1.0 < obj.v_lead < CORNER_STATIONARY_MAX_VLEAD_MPS
+      or abs(features.d_path) >= CORNER_STATIONARY_MAX_DPATH_M
+      or features.in_lane_prob < CORNER_STATIONARY_MIN_IN_LANE_PROB
+      or abs(obj.d_rel - vision_lead.d_rel) >= max(8.0, min(24.0, 1.5 * abs(vision_lead.x_std)))
+      or abs(obj.y_rel - vision_lead.y_rel) >= max(2.0, min(3.0, 1.5 * abs(vision_lead.y_std)))
+    ):
+      return False
+    return any(
+      other.features.radar_object.corner_track_id is not None
+      and other.features.track_age >= CORNER_STATIONARY_MIN_TRACK_AGE
+      and abs(other.features.radar_object.d_rel - obj.d_rel) < 6.0
+      and abs(other.features.radar_object.y_rel - obj.y_rel) < 2.4
+      and -1.0 < other.features.radar_object.v_lead < 5.0
+      and abs(other.features.d_path) < CORNER_STATIONARY_MAX_DPATH_M
+      and other.features.in_lane_prob >= CORNER_STATIONARY_MIN_IN_LANE_PROB
+      for other in corroboration_predictions
+    )
+
   def match_context(
     self,
     vision_lead: VisionLeadContext | None,
     predictions: Iterable[RadarLeadPrediction],
     v_ego: float,
+    corroboration_predictions: Iterable[RadarLeadPrediction] = (),
   ) -> VisionMatch | None:
     if vision_lead is None or vision_lead.d_rel <= 0.5:
       self.last_aliases = frozenset()
@@ -212,6 +265,8 @@ class VisionRadarMatcher:
     probability, vision_d, vision_y, vision_v, x_std, y_std, v_std = vision
 
     prediction_list = tuple(predictions)
+    corroboration_list = tuple(corroboration_predictions)
+    evidence_predictions = prediction_list + corroboration_list
     corner_stationary_ids: set[int] = set()
     candidates: list[tuple[RadarLeadPrediction, float, float, float, float]] = []
     for prediction in prediction_list:
@@ -219,7 +274,10 @@ class VisionRadarMatcher:
       aliases = frozenset(prediction.features.aliases)
       held_identity = bool(aliases & self.last_aliases)
       corner_stationary = self._corner_stationary_vehicle_evidence(
-        prediction, prediction_list, vision_lead, held_identity,
+        prediction, evidence_predictions, vision_lead, held_identity,
+      )
+      front_stationary = self._front_stationary_vehicle_evidence(
+        prediction, corroboration_list, vision_lead, held_identity,
       )
       if obj.front_track_id is None and obj.scc_track_id is None and not corner_stationary:
         continue
@@ -231,16 +289,13 @@ class VisionRadarMatcher:
         * _laplacian(radar_y, vision_y, y_std)
         * _laplacian(radar_v, vision_v, v_std)
       )
-      if (
-        radar_d > VISION_MATCH_LONG_RANGE_M
-        and abs(prediction.features.d_path) > (
-          VISION_MATCH_HELD_MAX_DPATH_M if held_identity else VISION_MATCH_FRESH_MAX_DPATH_M
-        )
+      if abs(prediction.features.d_path) > (
+        VISION_MATCH_HELD_MAX_DPATH_M if held_identity else VISION_MATCH_FRESH_MAX_DPATH_M
       ):
         continue
       if holding_previous and not aliases & self.last_aliases:
         continue
-      if corner_stationary:
+      if corner_stationary or front_stationary:
         corner_stationary_ids.add(id(prediction))
       candidates.append((prediction, score, radar_d, radar_y, radar_v))
 
@@ -281,7 +336,7 @@ class VisionRadarMatcher:
           or (
             frozenset(candidate[0].features.aliases) & self.last_aliases
             and abs(candidate[0].features.d_path) < VISION_MATCH_CORNER_HOLD_MAX_DPATH_M
-            and self._corner_corroborated(candidate[0], prediction_list)
+            and self._corner_corroborated(candidate[0], evidence_predictions)
           )
         ) else 2.0
       )
@@ -309,7 +364,7 @@ class VisionRadarMatcher:
       if (
         frozenset(candidate[0].features.aliases) & self.last_aliases
         and abs(candidate[0].features.d_path) < VISION_MATCH_CORNER_HOLD_MAX_DPATH_M
-        and self._corner_corroborated(candidate[0], prediction_list)
+        and self._corner_corroborated(candidate[0], evidence_predictions)
       )
     ]
     if held_corner_candidates:
@@ -318,7 +373,7 @@ class VisionRadarMatcher:
         selected = held_corner
     selected_is_held_corner = bool(
       frozenset(selected[0].features.aliases) & self.last_aliases
-      and self._corner_corroborated(selected[0], prediction_list)
+      and self._corner_corroborated(selected[0], evidence_predictions)
     )
     # Mirror radard's closer second-match rule for small targets whose radar
     # distance can sit just outside the normal vision-distance gate.
@@ -337,20 +392,27 @@ class VisionRadarMatcher:
     self.low_probability_hold_frames = self.low_probability_hold_frames + 1 if holding_previous else 0
     return VisionMatch(selected[0], probability, selected[1])
 
-  def match(self, model: Any, predictions: Iterable[RadarLeadPrediction], v_ego: float) -> VisionMatch | None:
+  def match(
+    self,
+    model: Any,
+    predictions: Iterable[RadarLeadPrediction],
+    v_ego: float,
+    corroboration_predictions: Iterable[RadarLeadPrediction] = (),
+  ) -> VisionMatch | None:
     values = self._vision_lead(model)
     vision = None if values is None else VisionLeadContext(
       probability=values[0], d_rel=values[1], y_rel=values[2], v=values[3], a=0.0,
       x_std=values[4], y_std=values[5], v_std=values[6],
     )
-    return self.match_context(vision, predictions, v_ego)
+    return self.match_context(vision, predictions, v_ego, corroboration_predictions)
 
 
 class VisionModelRadarController:
   """Conventional vision/radar primary selection with model cut-in/external output."""
 
-  def __init__(self) -> None:
+  def __init__(self, radar_reaction_factor: float = 1.0) -> None:
     self.runtime = RadarLeadRuntime()
+    self.lead_tau = RadarLeadTauTracker(radar_reaction_factor)
     self.last_runtime_result = None
     self.matcher = VisionRadarMatcher()
     self.stealth_aliases: frozenset[str] = frozenset()
@@ -359,15 +421,18 @@ class VisionModelRadarController:
     self.primary_hold_until = 0.0
     self.displaced_primary_aliases: frozenset[str] = frozenset()
     self.displaced_primary_hold_until = 0.0
+    self.primary_alias_expiry: dict[str, float] = {}
 
-  @staticmethod
   def _lead_from_prediction(
+    self,
     prediction: RadarLeadPrediction,
     probability: float,
     v_ego: float,
     prefer_front: bool = False,
+    control_prediction: RadarLeadPrediction | None = None,
   ) -> dict[str, Any] | None:
-    obj = prediction.features.radar_object
+    control = control_prediction or prediction
+    obj = control.features.radar_object
     track_id = next((
       track_id for track_id in (obj.front_track_id, obj.scc_track_id, obj.corner_track_id)
       if track_id is not None
@@ -382,14 +447,14 @@ class VisionModelRadarController:
     return {
       "dRel": float(d_rel),
       "yRel": float(obj.y_rel),
-      "dPath": float(prediction.features.d_path),
+      "dPath": float(control.features.d_path),
       "vRel": float(v_rel),
       "aRel": float(obj.a_rel),
       "vLead": float(v_lead),
       "vLeadK": float(v_lead),
       "aLead": float(obj.a_lead),
       "aLeadK": float(obj.a_lead),
-      "aLeadTau": 1.5,
+      "aLeadTau": self.lead_tau.value(control),
       "jLead": float(obj.j_lead),
       "vLat": float(obj.yv_rel),
       "status": True,
@@ -417,7 +482,14 @@ class VisionModelRadarController:
     if obj.d_rel <= 2.0 or obj.d_rel >= 120.0:
       return False
     if obj.v_lead > 2.0:
-      return abs(prediction.features.d_path) < 2.4
+      return (
+        obj.d_rel < 60.0
+        and prediction.features.track_age >= STEALTH_LEAD_MIN_TRACK_AGE
+        and obj.v_rel < 2.0
+        and abs(prediction.features.d_path) < 2.4
+        and prediction.features.in_lane_prob >= 0.35
+        and abs(prediction.features.d_path_future) <= abs(prediction.features.d_path) + 0.35
+      )
     return (
       prediction.features.track_age >= 7
       and abs(obj.v_lead) < 1.8
@@ -468,6 +540,57 @@ class VisionModelRadarController:
     )
 
   @staticmethod
+  def _cutin_is_tentative(
+    prediction: RadarLeadPrediction,
+    front_identity: RadarLeadPrediction | None,
+  ) -> bool:
+    obj = prediction.features.radar_object
+    return (
+      obj.corner_track_id is not None
+      and obj.d_rel >= NEAR_SIDE_NO_FRONT_MATCH_DREL_M
+      and front_identity is None
+    )
+
+  @staticmethod
+  def _tentative_cutin_has_lane_intrusion(prediction: RadarLeadPrediction) -> bool:
+    values = prediction.features.values
+    lane_half_width = (
+      abs(values[LANE_HALF_WIDTH_FEATURE_INDEX])
+      if len(values) > LANE_HALF_WIDTH_FEATURE_INDEX
+      else TENTATIVE_CUTIN_FALLBACK_HALF_WIDTH_M
+    )
+    return abs(prediction.features.d_path) <= lane_half_width + CUTIN_VEHICLE_HALF_WIDTH_M
+
+  @staticmethod
+  def _lead_duplicates_primary(
+    lead: dict[str, Any],
+    primary: dict[str, Any] | None,
+  ) -> bool:
+    if primary is None:
+      return False
+    return (
+      abs(float(lead["dRel"]) - float(primary["dRel"])) < PRIMARY_DUPLICATE_MAX_DREL_DELTA_M
+      and abs(float(lead["yRel"]) - float(primary["yRel"])) < PRIMARY_DUPLICATE_MAX_YREL_DELTA_M
+    )
+
+  @staticmethod
+  def _tentative_cutin_control(lead: dict[str, Any], v_ego: float) -> dict[str, Any]:
+    """Keep real range while preventing an uncorroborated early cue from braking hard."""
+    softened = dict(lead)
+    softened.update({
+      "vRel": 0.0,
+      "aRel": 0.0,
+      "vLead": v_ego,
+      "vLeadK": v_ego,
+      "aLead": 0.0,
+      "aLeadK": 0.0,
+      "aLeadTau": max(float(softened["aLeadTau"]), 1.5),
+      "jLead": 0.0,
+      "modelProb": min(float(softened["modelProb"]), TENTATIVE_CUTIN_MODEL_PROB),
+    })
+    return softened
+
+  @staticmethod
   def _pick_side(leads: list[dict[str, Any]]) -> dict[str, Any] | None:
     return min(
       (lead for lead in leads if lead["dRel"] > 5.0 and abs(lead["dPath"]) < 3.5),
@@ -492,25 +615,89 @@ class VisionModelRadarController:
     if not result.available:
       return RadarLeadModelOutput(False, result.error)
 
-    vision_match = self.matcher.match(model, result.predictions, v_ego)
+    self.lead_tau.update(time_s, result.predictions)
+
+    front_predictions = result.front_predictions or tuple(
+      prediction for prediction in result.predictions
+      if (
+        prediction.features.radar_object.front_track_id is not None
+        or prediction.features.radar_object.scc_track_id is not None
+      )
+    )
+    corner_predictions = result.corner_predictions or tuple(
+      prediction for prediction in result.predictions
+      if prediction.features.radar_object.corner_track_id is not None
+    )
+    corner_front_matches = {
+      prediction.features.object_id: post_match_corner_to_front(prediction, front_predictions)
+      for prediction in corner_predictions
+    }
+    corner_front_identity_matches = {
+      prediction.features.object_id: match_corner_to_front_identity(prediction, front_predictions)
+      for prediction in corner_predictions
+    }
+
+    def control_prediction(prediction: RadarLeadPrediction) -> RadarLeadPrediction:
+      return corner_front_matches.get(prediction.features.object_id) or prediction
+
+    def association_aliases(prediction: RadarLeadPrediction) -> frozenset[str]:
+      identity = corner_front_identity_matches.get(prediction.features.object_id)
+      return (
+        frozenset(prediction.features.aliases)
+        if identity is None
+        else frozenset(prediction.features.aliases) | frozenset(identity.features.aliases)
+      )
+
+    # The primary lead is always identified from the independently evaluated
+    # front/SCC stream. Corner predictions never compete in this match.
+    vision_match = self.matcher.match(
+      model, front_predictions, v_ego, corroboration_predictions=corner_predictions,
+    )
     lead_one = (
       self._lead_from_prediction(vision_match.prediction, vision_match.probability, v_ego, prefer_front=True)
       if vision_match is not None else None
     )
 
-    primary_aliases = frozenset(vision_match.prediction.features.aliases) if vision_match is not None else frozenset()
+    primary_aliases = set(vision_match.prediction.features.aliases) if vision_match is not None else set()
+    for prediction in corner_predictions:
+      identity = corner_front_identity_matches.get(prediction.features.object_id)
+      if identity is not None and primary_aliases.intersection(identity.features.aliases):
+        primary_aliases.update(association_aliases(prediction))
+    primary_aliases = frozenset(primary_aliases)
     if primary_aliases:
+      for alias in primary_aliases:
+        self.primary_alias_expiry[alias] = time_s + PRIMARY_STEALTH_HOLD_S
       if self.primary_aliases and not primary_aliases & self.primary_aliases:
         self.displaced_primary_aliases = self.primary_aliases
         self.displaced_primary_hold_until = time_s + PRIMARY_STEALTH_HOLD_S
       self.primary_aliases = primary_aliases
       self.primary_hold_until = time_s + PRIMARY_STEALTH_HOLD_S
+    self.primary_alias_expiry = {
+      alias: expiry for alias, expiry in self.primary_alias_expiry.items()
+      if time_s <= expiry
+    }
 
     def matches_primary(prediction: RadarLeadPrediction) -> bool:
-      return bool(primary_aliases & frozenset(prediction.features.aliases))
+      return bool(primary_aliases & association_aliases(prediction))
+
+    recent_primary_aliases = set(primary_aliases)
+    recent_primary_aliases.update(self.primary_alias_expiry)
+    if time_s <= self.primary_hold_until:
+      recent_primary_aliases.update(self.primary_aliases)
+    if time_s <= self.displaced_primary_hold_until:
+      recent_primary_aliases.update(self.displaced_primary_aliases)
+
+    def matches_recent_primary(prediction: RadarLeadPrediction) -> bool:
+      return bool(recent_primary_aliases.intersection(association_aliases(prediction)))
 
     cutin_pairs = [
-      (prediction, self._lead_from_prediction(prediction, prediction.cutin_prob, v_ego))
+      (
+        prediction,
+        self._lead_from_prediction(
+          prediction, prediction.cutin_prob, v_ego,
+          control_prediction=control_prediction(prediction),
+        ),
+      )
       for prediction in result.decision.cutin_candidates
     ]
     primary_d_rel = lead_one.get("dRel") if lead_one is not None else None
@@ -520,31 +707,53 @@ class VisionModelRadarController:
         lead is not None
         and cutin_is_ahead_of_primary(float(lead["dRel"]), primary_d_rel)
         and self._cutin_report_usable(prediction, v_ego)
+        and (
+          not self._cutin_is_tentative(
+            prediction,
+            corner_front_identity_matches.get(prediction.features.object_id),
+          )
+          or self._tentative_cutin_has_lane_intrusion(prediction)
+        )
       )
     ]
     external_pairs = [
-      (prediction, self._lead_from_prediction(prediction, prediction.external_prob, v_ego))
+      (
+        prediction,
+        self._lead_from_prediction(
+          prediction, prediction.external_prob, v_ego,
+          control_prediction=control_prediction(prediction),
+        ),
+      )
       for prediction in result.decision.external_candidates
       if self._external_control_usable(prediction)
     ]
     stealth_pairs = [
-      (prediction, self._lead_from_prediction(prediction, prediction.lead_prob, v_ego, prefer_front=True))
+      (
+        prediction,
+        self._lead_from_prediction(
+          prediction, prediction.lead_prob, v_ego, prefer_front=True,
+          control_prediction=control_prediction(prediction),
+        ),
+      )
       for prediction in result.decision.lead_candidates
       if not matches_primary(prediction) and self._stealth_control_usable(prediction)
     ]
     stealth_pairs.sort(key=lambda pair: pair[0].features.radar_object.d_rel)
     if stealth_pairs:
-      self.stealth_aliases = frozenset(stealth_pairs[0][0].features.aliases)
+      self.stealth_aliases = association_aliases(stealth_pairs[0][0])
       self.stealth_hold_until = time_s + STEALTH_LEAD_HOLD_S
     elif self.stealth_aliases and time_s <= self.stealth_hold_until:
       held_prediction = next((
         prediction for prediction in result.predictions
-        if self.stealth_aliases & frozenset(prediction.features.aliases)
+        if self.stealth_aliases & association_aliases(prediction)
         and not matches_primary(prediction)
         and self._stealth_control_usable(prediction)
       ), None)
       if held_prediction is not None:
-        held_lead = self._lead_from_prediction(held_prediction, held_prediction.lead_prob, v_ego, prefer_front=True)
+        held_lead = self._lead_from_prediction(
+          held_prediction, held_prediction.lead_prob, v_ego, prefer_front=True,
+          control_prediction=control_prediction(held_prediction),
+        )
         if held_lead is not None:
           stealth_pairs = [(held_prediction, held_lead)]
     else:
@@ -555,7 +764,7 @@ class VisionModelRadarController:
     hold_until = self.displaced_primary_hold_until if primary_aliases else self.primary_hold_until
     if hold_aliases and time_s <= hold_until:
       held_primary = next((
-        prediction for prediction in result.predictions
+        prediction for prediction in front_predictions
         if hold_aliases & frozenset(prediction.features.aliases)
         and not matches_primary(prediction)
         and self._primary_hold_usable(prediction)
@@ -566,17 +775,37 @@ class VisionModelRadarController:
           primary_hold_pair = (held_primary, held_lead)
     # Report independent cut-in decisions even when they are not safe leadTwo
     # control inputs, but do not re-report the vision-matched primary object as
-    # a separate cut-in.
-    cutin_leads = tuple(lead for prediction, lead in relevant_cutin_pairs if not matches_primary(prediction))
-    external_leads = tuple(lead for _, lead in external_pairs if lead is not None)
-    lead_two = next((
+    # a separate cut-in after a brief vision target-ID change.
+    cutin_leads = tuple(
       lead for prediction, lead in relevant_cutin_pairs
-      if not matches_primary(prediction) and self._cutin_control_usable(prediction, v_ego)
+      if not matches_recent_primary(prediction)
+    )
+    independent_external_pairs = tuple(
+      (prediction, lead) for prediction, lead in external_pairs
+      if (
+        lead is not None
+        and not matches_recent_primary(prediction)
+        and not self._lead_duplicates_primary(lead, lead_one)
+      )
+    )
+    external_leads = tuple(lead for _, lead in independent_external_pairs)
+    lead_two_pair = next((
+      (prediction, lead) for prediction, lead in relevant_cutin_pairs
+      if not matches_recent_primary(prediction) and self._cutin_control_usable(prediction, v_ego)
     ), None)
+    lead_two_tentative = False
+    lead_two = None
+    if lead_two_pair is not None:
+      lead_two_prediction, lead_two = lead_two_pair
+      lead_two_tentative = self._cutin_is_tentative(
+        lead_two_prediction,
+        corner_front_identity_matches.get(lead_two_prediction.features.object_id),
+      )
+      if lead_two_tentative:
+        lead_two = self._tentative_cutin_control(lead_two, v_ego)
     if lead_two is None:
       lead_two = next((
-        lead for prediction, lead in external_pairs
-        if lead is not None and not matches_primary(prediction)
+        lead for _, lead in independent_external_pairs
       ), None)
     if lead_two is None and primary_hold_pair is not None:
       lead_two = primary_hold_pair[1]
@@ -586,11 +815,18 @@ class VisionModelRadarController:
     left: list[dict[str, Any]] = []
     center: list[dict[str, Any]] = []
     right: list[dict[str, Any]] = []
-    for prediction in result.predictions:
+    matched_front_predictions = {
+      id(matched) for matched in corner_front_identity_matches.values() if matched is not None
+    }
+    display_predictions = tuple(
+      prediction for prediction in front_predictions if id(prediction) not in matched_front_predictions
+    ) + corner_predictions
+    for prediction in display_predictions:
       lead = self._lead_from_prediction(
         prediction,
         max(prediction.lead_prob, prediction.cutin_prob, prediction.external_prob),
         v_ego,
+        control_prediction=control_prediction(prediction),
       )
       if lead is None:
         continue
@@ -608,6 +844,7 @@ class VisionModelRadarController:
       available=True,
       lead_one=lead_one,
       lead_two=lead_two,
+      lead_two_tentative=lead_two_tentative,
       lead_cutin=cutin_leads[0] if cutin_leads else None,
       lead_external=external_leads[0] if external_leads else None,
       lead_left=self._pick_side(left),

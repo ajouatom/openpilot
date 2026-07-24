@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the radar event tones used by soundd."""
+"""Generate the radar cut-in tone."""
 
 from array import array
 import math
@@ -37,7 +37,6 @@ def write_alert(path: Path, tones: tuple[tuple[float, float], ...]) -> None:
 def main() -> None:
   output_dir = Path(__file__).resolve().parent.parent / "sounds_eng"
   write_alert(output_dir / "radar_cutin.wav", ((1400.0, 0.140), (1900.0, 0.180)))
-  write_alert(output_dir / "radar_stationary_lead.wav", ((1050.0, 0.130), (1350.0, 0.150)))
 
 
 if __name__ == "__main__":

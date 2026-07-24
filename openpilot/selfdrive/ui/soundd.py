@@ -74,8 +74,7 @@ sound_list: dict[int, tuple[str, int | None, float]] = {
   AudibleAlert.audio8: ("audio_8.wav", None, MAX_VOLUME),
   AudibleAlert.audio9: ("audio_9.wav", None, MAX_VOLUME),
   AudibleAlert.audio10: ("audio_10.wav", None, MAX_VOLUME),
-  AudibleAlert.radarCutin: ("radar_cutin.wav", 1, MAX_VOLUME),
-  AudibleAlert.radarStationaryLead: ("radar_stationary_lead.wav", 1, MAX_VOLUME),
+  AudibleAlert.radarCutin: ("prompt.wav", 1, MAX_VOLUME),
 }
 if HARDWARE.get_device_type() == "tizi":
   sound_list.update({

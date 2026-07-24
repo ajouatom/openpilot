@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import math
 from collections import deque
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Iterable, Sequence
 
 try:
   from openpilot.selfdrive.carrot.radar.radar_object_fusion import FusedRadarObject
@@ -19,8 +19,10 @@ MODEL_HEADS = ("lead", "cutin", "external")
 CUTIN_TEMPORAL_THRESHOLD_MAX = 0.82
 CUTIN_ACTIVE_CURRENT_MIN = 0.20
 CUTIN_STICKY_MAX_S = 0.75
+CUTIN_VEHICLE_HALF_WIDTH_M = 0.90
 EXTERNAL_ACTIVE_CURRENT_MIN = 0.20
 CORNER_ONLY_CUTIN_MAX_DREL_M = 30.0
+FRONT_ONLY_CUTIN_MIN_DREL_M = 5.0
 HISTORY_OFFSETS = (1, 2, 4, 8, 12, 16, 20)
 MAX_HISTORY_FRAMES = max(HISTORY_OFFSETS) + 2
 
@@ -66,6 +68,8 @@ class RadarLeadPrediction:
   cutin_prob: float
   risk_prob: float
   external_prob: float = 0.0
+  base_cutin_prob: float = 0.0
+  temporal_cutin_prob: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -160,16 +164,14 @@ def _feature_names() -> tuple[str, ...]:
 
 MODEL_FEATURE_NAMES = _feature_names()
 MODEL_FEATURE_INDICES = {name: index for index, name in enumerate(MODEL_FEATURE_NAMES)}
-H8_Y_RATE_INDEX = MODEL_FEATURE_NAMES.index("h8_y_rate")
-H12_Y_RATE_INDEX = MODEL_FEATURE_NAMES.index("h12_y_rate")
-H8_D_RATE_INDEX = MODEL_FEATURE_NAMES.index("h8_d_rate")
-H12_D_RATE_INDEX = MODEL_FEATURE_NAMES.index("h12_d_rate")
+H4_DT_INDEX = MODEL_FEATURE_NAMES.index("h4_dt")
 H8_DT_INDEX = MODEL_FEATURE_NAMES.index("h8_dt")
-H12_DT_INDEX = MODEL_FEATURE_NAMES.index("h12_dt")
+H4_D_PATH_INDEX = MODEL_FEATURE_NAMES.index("h4_d_path")
 H8_D_PATH_INDEX = MODEL_FEATURE_NAMES.index("h8_d_path")
-H12_D_PATH_INDEX = MODEL_FEATURE_NAMES.index("h12_d_path")
+H4_PRESENT_INDEX = MODEL_FEATURE_NAMES.index("h4_present")
 H8_PRESENT_INDEX = MODEL_FEATURE_NAMES.index("h8_present")
 H12_PRESENT_INDEX = MODEL_FEATURE_NAMES.index("h12_present")
+LANE_HALF_WIDTH_INDEX = MODEL_FEATURE_NAMES.index("lane_half_width")
 LANE1_PROB_INDEX = MODEL_FEATURE_NAMES.index("lane1_prob")
 LANE2_PROB_INDEX = MODEL_FEATURE_NAMES.index("lane2_prob")
 
@@ -178,6 +180,96 @@ ANTICIPATORY_FEATURE_NAMES = (
   "abs_y_rel", "abs_d_path", "abs_future_d_path", "d_path_reduction", "instant_inward",
   "h8_lane_inward", "h12_lane_inward", "lane1_prob", "lane2_prob", "model0_prob", "model0_y_std",
 )
+
+
+def _temporal_feature_names() -> tuple[str, ...]:
+  names = [
+    "v_ego", "object_count", "track_age",
+    "has_front", "has_corner", "has_scc", "trusted", "match_confidence", "pair_age",
+    "d_rel", "v_rel", "yv_rel", "v_lead", "ttc",
+    "abs_y_rel", "abs_d_path", "abs_future_d_path", "d_path_reduction", "instant_inward",
+    "lane_half_width", "in_lane_prob", "future_in_lane_prob", "lane1_prob", "lane2_prob",
+    "model0_prob", "model0_d_delta", "model0_y_delta", "model0_x_std", "model0_y_std",
+    "sensor_d_delta", "sensor_y_delta", "sensor_v_delta",
+  ]
+  for offset in HISTORY_OFFSETS:
+    prefix = f"h{offset}"
+    names.extend((
+      f"{prefix}_present", f"{prefix}_dt", f"{prefix}_abs_d_path",
+      f"{prefix}_lane_inward", f"{prefix}_lateral_inward",
+      f"{prefix}_yv_inward", f"{prefix}_d_rate",
+    ))
+  return tuple(names)
+
+
+TEMPORAL_CUTIN_FEATURE_NAMES = _temporal_feature_names()
+
+
+def temporal_cutin_feature_matrix(matrix, np):
+  """Return compact current and multi-scale trajectory features for cut-in inference."""
+  def column(name: str):
+    return matrix[:, MODEL_FEATURE_INDICES[name]]
+
+  d_path = column("d_path")
+  abs_d_path = np.abs(d_path)
+  abs_future_d_path = np.abs(column("future_d_path"))
+  side = np.where(d_path >= 0.0, 1.0, -1.0)
+  values = [
+    column("v_ego"), column("object_count"), column("track_age"),
+    column("has_front"), column("has_corner"), column("has_scc"), column("trusted"),
+    column("match_confidence"), column("pair_age"),
+    column("d_rel"), column("v_rel"), column("yv_rel"), column("v_lead"), column("ttc"),
+    np.abs(column("y_rel")), abs_d_path, abs_future_d_path, abs_d_path - abs_future_d_path,
+    -side * column("yv_rel"), column("lane_half_width"), column("in_lane_prob"),
+    column("future_in_lane_prob"), column("lane1_prob"), column("lane2_prob"),
+    column("model0_prob"), column("model0_d") - column("d_rel"),
+    column("model0_y") - column("y_rel"), column("model0_x_std"), column("model0_y_std"),
+    column("sensor_d_delta"), column("sensor_y_delta"), column("sensor_v_delta"),
+  ]
+  for offset in HISTORY_OFFSETS:
+    prefix = f"h{offset}"
+    dt = np.maximum(column(f"{prefix}_dt"), 1e-3)
+    values.extend((
+      column(f"{prefix}_present"), column(f"{prefix}_dt"), np.abs(column(f"{prefix}_d_path")),
+      (np.abs(column(f"{prefix}_d_path")) - abs_d_path) / dt,
+      -side * column(f"{prefix}_y_rate"),
+      -side * column(f"{prefix}_yv_rel"),
+      column(f"{prefix}_d_rate"),
+    ))
+  return np.column_stack(values).astype(np.float32)
+
+
+def _temporal_cutin_eligibility_from_values(matrix, values, np):
+  """Apply only physical sensor and lane sanity; leave scenario classification to the MLP."""
+  distance = values[:, 9]
+  track_age = values[:, 2]
+  v_lead = values[:, 12]
+  abs_d_path = values[:, 15]
+  abs_future_d_path = values[:, 16]
+  lane_reliable = (values[:, 22] > 0.35) & (values[:, 23] > 0.35)
+  h4_base = 32 + HISTORY_OFFSETS.index(4) * 7
+  h8_base = 32 + HISTORY_OFFSETS.index(8) * 7
+  h4_present = values[:, h4_base] > 0.5
+  h8_present = values[:, h8_base] > 0.5
+  h4_inward = values[:, h4_base + 3]
+  h8_inward = values[:, h8_base + 3]
+  future_inward = values[:, 17]
+  plausible_motion = (
+    ((h4_inward > 0.06) & (h8_inward > 0.06))
+    | ((future_inward > 0.08) & ((h4_inward > 0.02) | (h8_inward > 0.02)))
+  )
+  return (
+    (distance > 2.0) & (distance < 65.0) & (track_age >= 5.0)
+    & ((v_lead > 1.0) | ((distance < 12.0) & (v_lead > -0.5)))
+    & (abs_d_path > 0.65) & (abs_d_path < 4.8) & (abs_future_d_path < 3.4)
+    & h4_present & h8_present & ((distance < 12.0) | lane_reliable)
+    & plausible_motion
+  )
+
+
+def temporal_cutin_eligibility(matrix, np):
+  values = temporal_cutin_feature_matrix(matrix, np)
+  return _temporal_cutin_eligibility_from_values(matrix, values, np)
 
 
 def anticipatory_feature_matrix(matrix, np):
@@ -450,6 +542,7 @@ class RadarLeadModel:
       self.b3 = model["b3"].astype(np.float32)
       self.calibration = model["calibration"].astype(np.float32)
       self.thresholds = model["thresholds"].astype(np.float32)
+      self.sensor_mode = str(model["sensor_mode"].item()) if "sensor_mode" in model.files else "fused"
       self.external_threshold = float(self.thresholds[2])
       self.stationary_model = None
       if "stationary_w1" in model.files:
@@ -467,6 +560,16 @@ class RadarLeadModel:
           "mean", "std", "w", "b", "calibration",
         ))
         self.anticipatory_threshold = float(model["anticipatory_threshold"].reshape(-1)[0])
+      self.temporal_cutin_model = None
+      self.cutin_temporal_only = bool(model["cutin_temporal_only"].reshape(-1)[0]) if "cutin_temporal_only" in model.files else False
+      if "temporal_cutin_w1" in model.files:
+        temporal_names = tuple(str(value) for value in model["temporal_cutin_feature_names"].tolist())
+        if temporal_names != TEMPORAL_CUTIN_FEATURE_NAMES:
+          raise RuntimeError("temporal cut-in radar lead model schema mismatch")
+        self.temporal_cutin_model = tuple(model[f"temporal_cutin_{name}"].astype(np.float32) for name in (
+          "mean", "std", "w1", "b1", "w2", "b2", "w3", "b3", "calibration",
+        ))
+        self.temporal_cutin_threshold = float(model["temporal_cutin_threshold"].reshape(-1)[0])
 
   @staticmethod
   def _relative_probability(probability, threshold):
@@ -514,6 +617,28 @@ class RadarLeadModel:
         _anticipatory_eligibility_from_values(matrix, anticipatory_values, np), anticipatory_probabilities, 0.0,
       )
       probabilities[:, 1] = np.maximum(probabilities[:, 1], anticipatory_probabilities)
+    base_cutin_probabilities = probabilities[:, 1].copy()
+    temporal_probabilities = np.zeros(len(features), dtype=np.float32)
+    if self.temporal_cutin_model is not None:
+      mean, std, w1, b1, w2, b2, w3, b3, calibration = self.temporal_cutin_model
+      temporal_values = temporal_cutin_feature_matrix(matrix, np)
+      temporal_hidden = np.maximum(((temporal_values - mean) / std) @ w1 + b1, 0.0)
+      temporal_hidden = np.maximum(temporal_hidden @ w2 + b2, 0.0)
+      temporal_logits = temporal_hidden @ w3 + b3.reshape(-1)[0]
+      calibration = calibration.reshape(-1)
+      temporal_logits = temporal_logits * calibration[0] + calibration[1]
+      temporal_probabilities = 1.0 / (1.0 + np.exp(-np.clip(temporal_logits, -30.0, 30.0)))
+      temporal_probabilities = self._remap_probability(
+        temporal_probabilities, self.temporal_cutin_threshold, CUTIN_TEMPORAL_THRESHOLD_MAX,
+      )
+      temporal_probabilities = np.where(
+        _temporal_cutin_eligibility_from_values(matrix, temporal_values, np), temporal_probabilities, 0.0,
+      )
+      probabilities[:, 1] = (
+        temporal_probabilities
+        if self.cutin_temporal_only
+        else np.maximum(probabilities[:, 1], temporal_probabilities)
+      )
     if self.stationary_model is not None:
       mean, std, w1, b1, w2, b2, w3, b3, calibration = self.stationary_model
       stationary_hidden = np.maximum(((matrix - mean) / std) @ w1 + b1, 0.0)
@@ -530,18 +655,21 @@ class RadarLeadModel:
       )
       probabilities[:, 2] = external_probabilities
     output = []
-    for sample, (lead_prob, cutin_prob, external_prob) in zip(features, probabilities, strict=True):
+    for sample, (lead_prob, cutin_prob, external_prob), base_cutin_prob, temporal_cutin_prob in zip(
+      features, probabilities, base_cutin_probabilities, temporal_probabilities, strict=True,
+    ):
       closing = max(0.0, -sample.radar_object.v_rel)
       ttc_risk = min(1.0, closing / 8.0) * min(1.0, 25.0 / max(sample.radar_object.d_rel, 1.0))
       risk_prob = float(max(cutin_prob, lead_prob * ttc_risk, external_prob * ttc_risk))
       output.append(RadarLeadPrediction(
         sample, float(lead_prob), float(cutin_prob), risk_prob, float(external_prob),
+        float(base_cutin_prob), float(temporal_cutin_prob),
       ))
     return tuple(output)
 
 
 class RadarLeadDecisionFilter:
-  """Identity-aware hysteresis for stable lead and cut-in decisions."""
+  """Model-owned decisions with small physical gates and identity hysteresis."""
 
   def __init__(
     self, lead_threshold: float = 0.65, cutin_threshold: float = 0.70, external_threshold: float = 0.65,
@@ -556,214 +684,184 @@ class RadarLeadDecisionFilter:
     sample = prediction.features
     obj = sample.radar_object
     return obj.trusted_for_control or (sample.track_age >= 5 and obj.corner_track_id is not None) or (
-      sample.track_age >= 5 and obj.front_track_id is not None and abs(sample.d_path) < 1.8
+      sample.track_age >= 5 and (obj.front_track_id is not None or obj.scc_track_id is not None)
+      and abs(sample.d_path) < 1.8
     )
 
-  def update(self, time_s: float, predictions: Iterable[RadarLeadPrediction]) -> RadarLeadDecision:
-    # Sensor aliases can briefly merge while front/corner associations change.
-    # Process only the strongest current sample for an identity so sticky state
-    # cannot be applied to several different radar points in the same frame.
-    strongest: dict[str, RadarLeadPrediction] = {}
+  @staticmethod
+  def _group_predictions(predictions: Iterable[RadarLeadPrediction]) -> tuple[RadarLeadPrediction, ...]:
+    grouped: dict[str, list[RadarLeadPrediction]] = {}
     for prediction in predictions:
-      object_id = prediction.features.object_id
-      previous = strongest.get(object_id)
-      # External/stationary scoring must not change which physical sample owns
-      # the lead and cut-in temporal state for an already fused identity.
-      if previous is None or max(prediction.lead_prob, prediction.cutin_prob) > max(
-        previous.lead_prob, previous.cutin_prob,
-      ):
-        strongest[object_id] = prediction
-    current = tuple(strongest.values())
+      grouped.setdefault(prediction.features.object_id, []).append(prediction)
+
+    current: list[RadarLeadPrediction] = []
+    for samples in grouped.values():
+      owner = max(samples, key=lambda item: max(item.lead_prob, item.base_cutin_prob, item.external_prob))
+      temporal_prob = max(item.temporal_cutin_prob for item in samples)
+      if temporal_prob > owner.temporal_cutin_prob:
+        owner = replace(
+          owner,
+          temporal_cutin_prob=temporal_prob,
+          cutin_prob=max(owner.cutin_prob, temporal_prob),
+          risk_prob=max(owner.risk_prob, temporal_prob),
+        )
+      current.append(owner)
+    return tuple(current)
+
+  @staticmethod
+  def _cutin_geometry(prediction: RadarLeadPrediction) -> tuple[bool, bool, bool, bool, bool]:
+    """Return (usable, strong, holdable, near-corner, predicted-entry)."""
+    sample = prediction.features
+    obj = sample.radar_object
+    current_d_path = abs(sample.d_path)
+    future_d_path = abs(sample.d_path_future)
+    lane_half_width = min(2.2, max(1.5, sample.values[LANE_HALF_WIDTH_INDEX]))
+    body_entry_limit = lane_half_width + CUTIN_VEHICLE_HALF_WIDTH_M
+    lane_reliable = (
+      sample.values[LANE1_PROB_INDEX] > 0.35
+      and sample.values[LANE2_PROB_INDEX] > 0.35
+    )
+
+    has_front = obj.front_track_id is not None or obj.scc_track_id is not None
+    corner_only = obj.corner_track_id is not None and not has_front
+    front_only = has_front and obj.corner_track_id is None
+    distance_sane = 1.0 < obj.d_rel < 65.0 and (
+      not corner_only or obj.d_rel < CORNER_ONLY_CUTIN_MAX_DREL_M
+    ) and (not front_only or obj.d_rel >= FRONT_ONLY_CUTIN_MIN_DREL_M)
+    speed_sane = obj.v_lead > 1.0 or (obj.d_rel < 12.0 and obj.v_lead > -0.5)
+    if not distance_sane or not speed_sane or sample.track_age < 5:
+      return False, False, False, False, False
+    if obj.d_rel >= 12.0 and not lane_reliable:
+      return False, False, False, False, False
+
+    side = 1.0 if sample.d_path >= 0.0 else -1.0
+    instant_inward = -side * obj.yv_rel
+    history_inward: list[float] = []
+    for present_index, dt_index, d_path_index in (
+      (H4_PRESENT_INDEX, H4_DT_INDEX, H4_D_PATH_INDEX),
+      (H8_PRESENT_INDEX, H8_DT_INDEX, H8_D_PATH_INDEX),
+    ):
+      if sample.values[present_index] > 0.5:
+        dt = max(1e-3, sample.values[dt_index])
+        history_inward.append((abs(sample.values[d_path_index]) - current_d_path) / dt)
+
+    future_inward = current_d_path - future_d_path
+    history_supports_inward = bool(history_inward) and max(history_inward) > 0.05
+    history_strongly_outward = bool(history_inward) and max(history_inward) < -0.25
+    inward = future_inward > 0.08 or instant_inward > 0.08 or history_supports_inward
+    strongly_outward = (
+      future_inward < -0.40
+      and instant_inward < -0.10
+      and (not history_inward or history_strongly_outward)
+    )
+    body_entering_lane = min(current_d_path, future_d_path) <= body_entry_limit + 0.15
+    near_corner_anticipation = (
+      corner_only
+      and 5.0 <= obj.d_rel < 12.0
+      and current_d_path <= body_entry_limit + 0.80
+      and len(history_inward) >= 2
+      and min(history_inward) > 0.25
+    )
+    predicted_entry = (
+      current_d_path > body_entry_limit + 0.15
+      and future_d_path <= body_entry_limit
+      and inward
+    )
+    center_in_lane = current_d_path <= lane_half_width + 0.15
+    holdable = (
+      current_d_path <= body_entry_limit + 0.60
+      and future_d_path <= current_d_path + 0.35
+      and not strongly_outward
+    )
+    usable = (
+      (body_entering_lane or near_corner_anticipation)
+      and not strongly_outward
+      and (inward or center_in_lane)
+    )
+
+    # Front radar lateral/range noise is largest in the immediate near field.
+    # Require established history there; fused or corner-confirmed targets do not
+    # need this extra sensor-quality gate.
+    front_only_near = front_only and obj.d_rel < 8.0
+    if front_only_near and (sample.track_age < 8 or len(history_inward) < 2):
+      usable = False
+
+    strong = (
+      usable
+      and inward
+      and future_d_path <= body_entry_limit
+      and sample.track_age >= 8
+      and (obj.d_rel < 12.0 or lane_reliable)
+    )
+    return usable, strong, holdable, near_corner_anticipation, predicted_entry
+
+  def update(self, time_s: float, predictions: Iterable[RadarLeadPrediction]) -> RadarLeadDecision:
+    current = self._group_predictions(predictions)
     seen: set[str] = set()
     lead_active: list[RadarLeadPrediction] = []
     cutin_active: list[RadarLeadPrediction] = []
     external_active: list[RadarLeadPrediction] = []
+
     for prediction in current:
       object_id = prediction.features.object_id
       seen.add(object_id)
       state = self._states.setdefault(object_id, _DecisionState())
       state.last_seen = time_s
-      state.lead_ema = max(prediction.lead_prob, 0.65 * state.lead_ema + 0.35 * prediction.lead_prob)
-      state.external_ema = max(prediction.external_prob, 0.65 * state.external_ema + 0.35 * prediction.external_prob)
       reliable = self._reliable(prediction)
+
+      state.lead_ema = max(prediction.lead_prob, 0.65 * state.lead_ema + 0.35 * prediction.lead_prob)
+      state.external_ema = max(
+        prediction.external_prob, 0.65 * state.external_ema + 0.35 * prediction.external_prob,
+      )
       state.lead_hits = state.lead_hits + 1 if reliable and state.lead_ema >= self.lead_threshold else 0
-      state.external_hits = state.external_hits + 1 if reliable and state.external_ema >= self.external_threshold else 0
+      state.external_hits = (
+        state.external_hits + 1
+        if reliable and state.external_ema >= self.external_threshold
+        else 0
+      )
+
+      (
+        cutin_usable,
+        strong_cutin_geometry,
+        holdable_cutin_geometry,
+        near_corner_anticipation,
+        predicted_cutin_entry,
+      ) = self._cutin_geometry(prediction)
       obj = prediction.features.radar_object
-      inward = abs(prediction.features.d_path_future) + 0.15 < abs(prediction.features.d_path)
-      close_future_limit = 2.5 if obj.d_rel < 8.0 else 2.2
-      close_geometry = (
-        obj.d_rel < 12.0 and inward and abs(prediction.features.d_path_future) < close_future_limit
-      )
-      close_threshold = 0.62 if obj.d_rel < 8.0 else 0.70
-      cutin_threshold = min(self.cutin_threshold, close_threshold) if close_geometry else self.cutin_threshold
-      current_d_path = abs(prediction.features.d_path)
-      future_d_path = abs(prediction.features.d_path_future)
-      close_fused_cutin = obj.d_rel < 8.0
-      side_sign = 1.0 if prediction.features.d_path >= 0.0 else -1.0
-      instant_inward_speed = -side_sign * obj.yv_rel
-      h8_inward_speed = -side_sign * prediction.features.values[H8_Y_RATE_INDEX]
-      h12_inward_speed = -side_sign * prediction.features.values[H12_Y_RATE_INDEX]
-      h8_d_rate = prediction.features.values[H8_D_RATE_INDEX]
-      h12_d_rate = prediction.features.values[H12_D_RATE_INDEX]
-      raw_historical_inward = (
-        0.15 < h8_inward_speed < 3.0 or 0.15 < h12_inward_speed < 3.0
-      )
-      h8_dt = max(1e-3, prediction.features.values[H8_DT_INDEX])
-      h12_dt = max(1e-3, prediction.features.values[H12_DT_INDEX])
-      h8_lane_inward = (
-        abs(prediction.features.values[H8_D_PATH_INDEX]) - current_d_path
-      ) / h8_dt
-      h12_lane_inward = (
-        abs(prediction.features.values[H12_D_PATH_INDEX]) - current_d_path
-      ) / h12_dt
-      lane_history_ready = (
-        prediction.features.values[H8_PRESENT_INDEX] > 0.5
-        and prediction.features.values[H12_PRESENT_INDEX] > 0.5
-      )
-      lane_direction_reliable = (
-        prediction.features.values[LANE1_PROB_INDEX] > 0.5
-        and prediction.features.values[LANE2_PROB_INDEX] > 0.5
-      )
-      history_inward_speed = min(
-        h8_inward_speed, h12_inward_speed, h8_lane_inward, h12_lane_inward,
-      )
-      history_inward_consistent = (
-        abs(h8_inward_speed - h12_inward_speed) < 0.35
-        and abs(h8_lane_inward - h12_lane_inward) < 0.40
-      )
-      history_projected_d_path = max(
-        0.0, current_d_path - min(2.5, max(0.0, history_inward_speed)) * 0.5,
-      )
-      decision_future_d_path = (
-        min(future_d_path, history_projected_d_path)
-        if obj.front_track_id is not None and obj.corner_track_id is None
-        and lane_history_ready and lane_direction_reliable
-        else future_d_path
-      )
-      historical_inward = raw_historical_inward if obj.d_rel < 12.0 or not lane_history_ready else (
-        lane_direction_reliable
-        and raw_historical_inward
-        and h8_lane_inward > 0.15
-        and h12_lane_inward > 0.15
-      )
-      sustained_inward = (
-        0.15 < instant_inward_speed < 3.0
-        and historical_inward
-      )
-      midrange_future_limit = 2.2 if obj.v_rel < -0.5 else 1.85
-      fused_inward_cutin = (
-        obj.front_track_id is not None and obj.corner_track_id is not None
-        and prediction.features.track_age >= 7
-        and 2.5 < obj.d_rel < 50.0 and obj.v_lead > 2.0
-        and (
-          obj.d_rel < 20.0
-          or (abs(obj.y_rel) < 2.7 and current_d_path < 2.1 and instant_inward_speed < 0.8)
-        )
-        and (1.2 if close_fused_cutin else 1.8) < current_d_path < (4.2 if close_fused_cutin else 3.2)
-        and sustained_inward
-        and future_d_path < (2.25 if close_fused_cutin else midrange_future_limit)
-        and future_d_path + (0.15 if close_fused_cutin else 0.20) < current_d_path
-      )
-      decisive_fused_entry = (
-        obj.front_track_id is not None and obj.corner_track_id is not None
-        and prediction.features.track_age >= 7
-        and 8.0 < obj.d_rel < 35.0 and obj.v_lead > 2.0
-        and lane_history_ready and lane_direction_reliable
-        and 2.8 < current_d_path < 3.4 and abs(obj.y_rel) < 4.5
-        and 0.8 <= instant_inward_speed < 3.0
-        and sustained_inward
-        and future_d_path < 2.15
-        and future_d_path + 0.60 < current_d_path
-        and prediction.cutin_prob >= max(0.72, cutin_threshold - 0.10)
-      )
-      front_only_inward_cutin = (
-        obj.front_track_id is not None and obj.corner_track_id is None
-        and prediction.features.track_age >= 12
-        and 4.5 < obj.d_rel < 12.0 and obj.v_lead > 2.0
-        and lane_history_ready and lane_direction_reliable
-        and 0.75 < current_d_path <= 1.8 and abs(obj.y_rel) < 2.3
-        and 0.20 < h8_inward_speed < 3.2
-        and 0.20 < h12_inward_speed < 3.2
-        and 0.20 < h8_lane_inward < 3.2
-        and 0.20 < h12_lane_inward < 3.2
-      )
-      front_only_very_close_cutin = (
-        obj.front_track_id is not None and obj.corner_track_id is None
-        and prediction.features.track_age >= 12
-        and 2.0 < obj.d_rel <= 4.5 and obj.v_lead > -0.5
-        and lane_history_ready and lane_direction_reliable
-        and 0.65 < current_d_path < 1.35 and abs(obj.y_rel) < 1.6
-        and future_d_path + 0.05 < current_d_path
-        and 0.20 < h8_inward_speed < 1.5
-        and 0.20 < h12_inward_speed < 1.5
-        and 0.20 < h8_lane_inward < 1.5
-        and 0.20 < h12_lane_inward < 1.5
-        and abs(h8_d_rate) < 1.5 and abs(h12_d_rate) < 1.5
-      )
-      front_only_close_approach = (
-        obj.front_track_id is not None and obj.corner_track_id is None
-        and prediction.features.track_age >= 12
-        and 5.5 < obj.d_rel < 9.0 and obj.v_lead > 2.0 and obj.v_rel < -0.5
-        and lane_history_ready and lane_direction_reliable
-        and 2.2 < current_d_path < 2.7 and abs(obj.y_rel) < 3.2
-        and history_projected_d_path < 2.5
-        and -3.0 < h8_d_rate < -0.2 and -3.0 < h12_d_rate < -0.2
-        and 0.35 < h8_inward_speed < 2.0
-        and 0.35 < h12_inward_speed < 2.0
-        and 0.35 < h8_lane_inward < 2.0
-        and 0.35 < h12_lane_inward < 2.0
-      )
-      midrange_d_path_limit = 2.25 if obj.d_rel < 20.0 else 2.85
-      front_only_midrange_cutin = (
-        obj.front_track_id is not None and obj.corner_track_id is None
-        and prediction.features.track_age >= 12
-        and 12.0 <= obj.d_rel < 50.0 and obj.v_lead > 2.0
-        and lane_history_ready and lane_direction_reliable
-        and 1.8 < current_d_path < midrange_d_path_limit and decision_future_d_path < 2.15
-        and decision_future_d_path + 0.20 < current_d_path
-        and 0.20 < history_inward_speed < 2.5
-        and 0.20 < h8_inward_speed < 3.2
-        and 0.20 < h12_inward_speed < 3.2
-        and 0.20 < h8_lane_inward < 3.2
-        and 0.20 < h12_lane_inward < 3.2
-        and history_inward_consistent
+      side = 1.0 if prediction.features.d_path >= 0.0 else -1.0
+      close_history_inward = []
+      for present_index, dt_index, d_path_index in (
+        (H4_PRESENT_INDEX, H4_DT_INDEX, H4_D_PATH_INDEX),
+        (H8_PRESENT_INDEX, H8_DT_INDEX, H8_D_PATH_INDEX),
+      ):
+        if prediction.features.values[present_index] > 0.5:
+          dt = max(1e-3, prediction.features.values[dt_index])
+          close_history_inward.append(
+            (abs(prediction.features.values[d_path_index]) - abs(prediction.features.d_path)) / dt
+          )
+      close_corner_entry = (
+        obj.corner_track_id is not None
+        and obj.front_track_id is None
+        and obj.scc_track_id is None
+        and obj.d_rel < 6.0
+        and obj.v_lead > 2.0
+        and strong_cutin_geometry
+        and -side * obj.yv_rel > 0.25
+        and len(close_history_inward) >= 2
+        and min(close_history_inward) > 0.25
+        and prediction.base_cutin_prob >= 0.95
       )
       effective_cutin_prob = max(
         prediction.cutin_prob,
-        min(0.95, cutin_threshold + 0.08)
-        if (
-          fused_inward_cutin or decisive_fused_entry or front_only_inward_cutin
-          or front_only_very_close_cutin or front_only_close_approach or front_only_midrange_cutin
-        ) else 0.0,
+        self.cutin_threshold if close_corner_entry else 0.0,
       )
-      state.cutin_ema = max(effective_cutin_prob, 0.60 * state.cutin_ema + 0.40 * effective_cutin_prob)
-      projected_lane_entry = (
-        decision_future_d_path < 2.25 and decision_future_d_path + 0.15 < current_d_path
-        and (sustained_inward or front_only_midrange_cutin)
-      )
-      inside_not_moving_out = current_d_path <= 1.8 and future_d_path <= current_d_path + 0.15
-      directional_cutin = inside_not_moving_out or projected_lane_entry or front_only_close_approach
-      corner_only = (
-        obj.corner_track_id is not None
-        and obj.front_track_id is None and obj.scc_track_id is None
-      )
-      front_only_close_range_noise = (
-        obj.front_track_id is not None and obj.corner_track_id is None
-        and obj.d_rel < 12.0 and lane_history_ready
-        and h8_d_rate > 0.75 and h12_d_rate > 0.75
-      )
-      cutin_control_usable = (
-        (obj.v_lead > 2.0 or abs(obj.y_rel) < 2.0)
-        and (obj.d_rel < 12.0 or lane_direction_reliable or current_d_path < 1.5)
-        and (not corner_only or obj.d_rel < CORNER_ONLY_CUTIN_MAX_DREL_M)
-        and not front_only_close_range_noise
-      )
-      cutin_evidence = (
-        (reliable or front_only_close_approach or front_only_midrange_cutin)
-        and cutin_control_usable and directional_cutin and effective_cutin_prob >= cutin_threshold
-      )
+      state.cutin_ema = max(effective_cutin_prob, 0.65 * state.cutin_ema)
       current_aliases = frozenset(prediction.features.aliases)
-      if cutin_evidence:
+      cutin_entry_threshold = min(
+        self.cutin_threshold,
+        0.50 if near_corner_anticipation else 0.75 if predicted_cutin_entry else self.cutin_threshold,
+      )
+      if cutin_usable and effective_cutin_prob >= cutin_entry_threshold:
         state.cutin_hits = (
           state.cutin_hits + 1
           if state.cutin_hits > 0 and state.cutin_hit_aliases.intersection(current_aliases)
@@ -773,55 +871,44 @@ class RadarLeadDecisionFilter:
       else:
         state.cutin_hits = 0
         state.cutin_hit_aliases = frozenset()
-      required_cutin_hits = 2 if (
-        close_geometry or fused_inward_cutin or front_only_very_close_cutin or front_only_close_approach
-      ) else 3
-      urgent = (
-        decisive_fused_entry
-        or (
-          reliable and close_geometry and obj.d_rel < 4.5
-          and obj.front_track_id is not None and obj.corner_track_id is not None
-          and prediction.cutin_prob >= max(0.85, cutin_threshold + 0.15)
-        )
-      )
+
       if state.lead_hits >= 2:
         state.lead_active_until = time_s + 0.35
-      if state.cutin_hits >= required_cutin_hits or urgent:
+      immediate_cutin = (
+        strong_cutin_geometry and prediction.cutin_prob >= (
+          min(self.cutin_threshold, 0.75)
+          if predicted_cutin_entry
+          else max(0.92, self.cutin_threshold + 0.08)
+        )
+      )
+      if state.cutin_hits >= 2 or immediate_cutin:
         state.cutin_active_until = time_s + 0.45
         state.cutin_evidence_time = time_s
-        state.cutin_aliases = frozenset(prediction.features.aliases)
+        state.cutin_aliases = current_aliases
       if state.external_hits >= 2:
         state.external_active_until = time_s + 0.35
+
       if state.lead_ema < 0.25:
         state.lead_active_until = min(state.lead_active_until, time_s + 0.10)
-      if state.cutin_ema < 0.25 or future_d_path > current_d_path + 0.5:
+      if not holdable_cutin_geometry:
         state.cutin_active_until = min(state.cutin_active_until, time_s + 0.10)
       if state.external_ema < 0.25:
         state.external_active_until = min(state.external_active_until, time_s + 0.10)
-      if time_s <= state.lead_active_until:
+
+      if time_s < state.lead_active_until:
         lead_active.append(prediction)
-      # Sticky state belongs to a fused object identity, but a sensor track ID can
-      # be reassociated. Never expose a newly associated low-probability point as
-      # a cut-in solely because the previous object was active.
-      same_cutin_sensor = bool(state.cutin_aliases.intersection(prediction.features.aliases))
-      sticky_distance_sane = obj.d_rel < 20.0 or (
-        obj.front_track_id is not None and obj.corner_track_id is not None
-        and obj.d_rel < 50.0 and abs(obj.y_rel) < 2.7
-      ) or (
-        obj.front_track_id is not None and obj.corner_track_id is None
-        and obj.d_rel < 50.0 and lane_direction_reliable
-        and not front_only_close_range_noise
-      )
-      sticky_cutin_geometry = (
-        same_cutin_sensor and sticky_distance_sane and current_d_path < 2.5
-        and future_d_path <= current_d_path + 0.30
+
+      same_cutin_sensor = bool(state.cutin_aliases.intersection(current_aliases))
+      sticky_cutin = (
+        same_cutin_sensor
+        and holdable_cutin_geometry
         and time_s <= state.cutin_evidence_time + CUTIN_STICKY_MAX_S
       )
-      cutin_is_active = time_s <= state.cutin_active_until and (
-        effective_cutin_prob >= CUTIN_ACTIVE_CURRENT_MIN or sticky_cutin_geometry
+      cutin_is_active = time_s < state.cutin_active_until and (
+        effective_cutin_prob >= CUTIN_ACTIVE_CURRENT_MIN or sticky_cutin
       )
       if cutin_is_active:
-        if sticky_cutin_geometry:
+        if sticky_cutin:
           state.cutin_active_until = min(
             max(state.cutin_active_until, time_s + 0.20),
             state.cutin_evidence_time + CUTIN_STICKY_MAX_S,
@@ -832,14 +919,21 @@ class RadarLeadDecisionFilter:
           cutin_prob=active_cutin_prob,
           risk_prob=max(prediction.risk_prob, active_cutin_prob),
         ))
-      if time_s <= state.external_active_until and prediction.external_prob >= EXTERNAL_ACTIVE_CURRENT_MIN:
+
+      if time_s < state.external_active_until and prediction.external_prob >= EXTERNAL_ACTIVE_CURRENT_MIN:
         external_active.append(prediction)
+
     for object_id, state in tuple(self._states.items()):
       if object_id not in seen and time_s - state.last_seen > 0.5:
         self._states.pop(object_id, None)
+
     return RadarLeadDecision(
-      lead_candidates=tuple(sorted(lead_active, key=lambda item: (-item.lead_prob, item.features.radar_object.d_rel))[:2]),
-      cutin_candidates=tuple(sorted(cutin_active, key=lambda item: (-item.risk_prob, item.features.radar_object.d_rel))[:2]),
+      lead_candidates=tuple(sorted(
+        lead_active, key=lambda item: (-item.lead_prob, item.features.radar_object.d_rel),
+      )[:2]),
+      cutin_candidates=tuple(sorted(
+        cutin_active, key=lambda item: (-item.risk_prob, item.features.radar_object.d_rel),
+      )[:2]),
       external_candidates=tuple(sorted(
         external_active, key=lambda item: (-item.external_prob, item.features.radar_object.d_rel),
       )[:2]),

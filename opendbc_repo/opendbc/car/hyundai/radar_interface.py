@@ -9,7 +9,6 @@ from opendbc.car.interfaces import RadarInterfaceBase
 from opendbc.car.hyundai.values import DBC, HyundaiFlags, HyundaiExtFlags
 from openpilot.common.params import Params
 from opendbc.car.hyundai.hyundaicanfd import CanBus
-from openpilot.common.filter_simple import MyMovingAverage
 
 SCC_TID = 0
 RADAR_START_ADDR = 0x500
@@ -19,7 +18,7 @@ RADAR_GROUP4_MAX_LONG_DIST = 325.0
 RADAR_GROUP4_MAX_YREL = 6.0
 RADAR_START_ADDR_CANFD1 = 0x210
 RADAR_MSG_COUNT1 = 16
-RADAR_START_ADDR_CANFD2 = 0x3A5 # Group 2, Group 1: 0x210 2Í∞úÏî©?àÏñ¥???ºÎã® Î≥¥Î•ò.
+RADAR_START_ADDR_CANFD2 = 0x3A5  # Group 2; Group 1 uses two 0x210 messages. Pending validation.
 RADAR_MSG_COUNT2 = 32
 RADAR_START_ADDR_CANFD3 = 0x400
 RADAR_MSG_COUNT3 = 30
@@ -289,6 +288,7 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id] = structs.RadarData.RadarPoint()
         self.pts[t_id].measured = False
         self.pts[t_id].trackId = t_id
+        self.pts[t_id].radarSource = "corner430"
 
     self.frame = 0
 
@@ -470,7 +470,7 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].yvRel = 0.0
 
       t_id += 1
-    # radar group1?Ä ?òÎÇò??msg??2Í∞úÏùò ?àÏù¥?îÍ? ?§Ïñ¥?àÏùå.
+    # Radar group 1 carries two messages per object.
     if self.radar_group1:
       for addr in range(self.radar_start_addr, self.radar_start_addr + self.radar_msg_count):
         msg = self.rcp_tracks.vl[f"RADAR_TRACK_{addr:x}"]

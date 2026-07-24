@@ -15,8 +15,7 @@ AudibleAlert = car.CarControl.HUDControl.AudibleAlert
 class TestSoundd:
   def test_radar_alert_sound_assets(self):
     expected = {
-      AudibleAlert.radarCutin: ("radar_cutin.wav", 0.320),
-      AudibleAlert.radarStationaryLead: ("radar_stationary_lead.wav", 0.280),
+      AudibleAlert.radarCutin: ("prompt.wav", 1.506),
     }
     sound_dir = os.path.join(BASEDIR, "openpilot", "selfdrive", "assets", "sounds_eng")
 

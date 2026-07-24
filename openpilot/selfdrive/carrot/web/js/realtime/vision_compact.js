@@ -80,7 +80,7 @@ window.CarrotVisionCompact = (() => {
   const radarPoint = [
     ["trackId", "u32"], ["dRel", "f32"], ["yRel", "f32"], ["vRel", "f32"],
     ["measured", "bool"],
-    ["radarSource", "enumname", ["frontRadar", "scc", "corner235", "corner180"]],
+    ["radarSource", "enumname", ["frontRadar", "scc", "corner235", "corner180", "corner430"]],
   ];
   const radarLead = [
     ["dRel", "f32"], ["yRel", "f32"], ["vRel", "f32"], ["aRel", "f32"],

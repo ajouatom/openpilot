@@ -9,6 +9,7 @@ def row(time_s: float, cutin: float = 0.0, source: str = "teacher", **values: fl
     "time_s": str(time_s), "object_id": "front:40", "aliases": "front:40;corner:1003",
     "cutin_label": str(cutin), "cutin_weight": "1.0" if cutin else "0.08", "cutin_source": source,
     "d_rel": "20", "v_lead": "15", "track_age": "12", "d_path": "2.4", "future_d_path": "1.8",
+    "h4_present": "1", "h4_dt": "0.2", "h4_d_path": "2.55",
     "h8_present": "1", "h8_dt": "0.4", "h8_d_path": "2.7",
     "h12_present": "1", "h12_dt": "0.6", "h12_d_path": "2.9",
     "lane1_prob": "0.9", "lane2_prob": "0.9",
@@ -30,7 +31,7 @@ def test_anticipatory_label_requires_later_same_identity_confirmation() -> None:
 
 
 def test_anticipatory_label_rejects_parallel_motion() -> None:
-  rows = [row(0.5, h8_d_path=2.41, h12_d_path=2.42), row(1.0, 1.0)]
+  rows = [row(0.5, h4_d_path=2.405, h8_d_path=2.41, h12_d_path=2.42), row(1.0, 1.0)]
 
   augment_rows(rows)
 
