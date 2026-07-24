@@ -6,6 +6,15 @@ function finite(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function optionalBoolean(value) {
+  return value == null ? null : Boolean(value);
+}
+
+function validCruiseKph(value) {
+  const number = finite(value);
+  return number != null && number > 0 && number < 250 ? number : null;
+}
+
 function level(value) {
   const number = finite(value);
   return number != null && number >= 0 && number <= 1 ? number : null;
@@ -94,16 +103,51 @@ function decelerationSourceLabel(source) {
   return DECEL_SOURCE_LABELS[normalized] || normalized.slice(0, 8);
 }
 
+// Cluster parity: prefer the cluster-facing set speed, but treat zero/sentinel
+// values as unavailable instead of letting nullish-coalescing pin the HUD to 0.
+// The final cruiseState fallbacks also support non-compact/raw callers.
+export function resolveCruiseKph(state = {}) {
+  const carState = state.carState || {};
+  const controlsState = state.controlsState || {};
+  const cruiseState = carState.cruiseState || {};
+  if (cruiseState.available === false) return null;
+  const direct = [
+    carState.vCruiseCluster,
+    carState.vCruise,
+    controlsState.vCruiseCluster,
+    controlsState.vCruise,
+  ];
+  for (const value of direct) {
+    const kph = validCruiseKph(value);
+    if (kph != null) return kph;
+  }
+
+  for (const value of [cruiseState.speedCluster, cruiseState.speed]) {
+    const speedMps = finite(value);
+    if (speedMps != null && speedMps > 0.1 && speedMps < 70) return speedMps * 3.6;
+  }
+  return null;
+}
+
+// Cluster cruise_display_state is off when the current control state explicitly
+// says disabled. With no control sample, a valid set speed remains a paused
+// display and may still carry the cluster override telltale.
+export function isCruiseDisplayVisible(state = {}, cruiseKph = resolveCruiseKph(state)) {
+  if (validCruiseKph(cruiseKph) == null) return false;
+  const selfdriveEnabled = optionalBoolean(state.selfdriveState?.enabled);
+  if (selfdriveEnabled != null) return selfdriveEnabled;
+  const controlsEnabled = optionalBoolean(state.controlsState?.enabled);
+  if (controlsEnabled != null) return controlsEnabled;
+  return state.carState?.cruiseState?.available !== false;
+}
+
 // Cruise set-speed override telltale. Mirrors cluster_live.py priority/thresholds:
 //   mode 1 (eco, green)    = longitudinalPlan.cruiseTarget above the set speed
 //   mode 2 (decel, orange) = carrotMan.desiredSpeed below the set speed, with source label
 // Returns { kph, label, mode } in kph, or null. Shared by live and replay.
 export function deriveCruiseOverride(state = {}) {
-  const carState = state.carState || {};
-  const controlsState = state.controlsState || {};
-  const cruiseKph = finite(carState.vCruiseCluster ?? controlsState.vCruiseCluster);
-  // Cruise off/paused shows 0 or a large sentinel; only override an engaged set speed.
-  if (cruiseKph == null || cruiseKph <= 0 || cruiseKph >= 250) return null;
+  const cruiseKph = resolveCruiseKph(state);
+  if (!isCruiseDisplayVisible(state, cruiseKph)) return null;
 
   const cruiseTarget = finite(state.longitudinalPlan?.cruiseTarget);
   if (cruiseTarget != null && cruiseTarget > cruiseKph + 0.5) {
@@ -136,6 +180,7 @@ export function deriveVehicleHudPayload(state = {}) {
   const activeLaneLine = controlsState.activeLaneLine == null
     ? null
     : Boolean(controlsState.activeLaneLine);
+  const latActive = optionalBoolean(carControl.latActive);
 
   return {
     gear,
@@ -143,7 +188,9 @@ export function deriveVehicleHudPayload(state = {}) {
     evActive,
     activeLaneLine,
     cruiseOverride: deriveCruiseOverride(state),
-    lfaActive: Boolean(selfdriveState.enabled ?? controlsState.enabled ?? carControl.latActive),
+    // The cluster wheel follows lateral actuation, not overall engagement.
+    // Older recordings without carControl retain the legacy state fallback.
+    lfaActive: latActive ?? Boolean(selfdriveState.enabled ?? controlsState.enabled),
     steeringAngleDeg: finite(carState.steeringAngleDeg ?? carControl.actuators?.steeringAngleDeg),
     aEgo: finite(carState.aEgo ?? carControl.actuators?.accel),
     steerOutput: finite(
@@ -162,6 +209,8 @@ export function deriveVehicleHudPayload(state = {}) {
 export const CarrotHudDataBridge = Object.freeze({
   deriveVehicleHudPayload,
   deriveCruiseOverride,
+  resolveCruiseKph,
+  isCruiseDisplayVisible,
   withVehicleHudFields,
   vehicleHudSignature,
 });

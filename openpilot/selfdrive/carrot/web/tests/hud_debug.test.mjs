@@ -30,7 +30,8 @@ test("HUD debug snapshot stays compact and separates source, derivation and disp
         evModeValid: true,
         evModeActive: true,
       },
-      controlsState: { enabled: true, activeLaneLine: true },
+      controlsState: { enabled: true, vCruiseCluster: 87, activeLaneLine: true },
+      carControl: { latActive: true },
       carrotMan: { desiredSpeed: 77, desiredSource: "cam" },
     },
     CarrotHudDataBridge: {
@@ -71,6 +72,8 @@ test("HUD debug snapshot stays compact and separates source, derivation and disp
   assert.equal(report.replay.currentTime, 12.3);
   assert.deepEqual(report.replay.services, ["carState", "carrotMan", "controlsState"]);
   assert.equal(report.source.carState.evModeActive, true);
+  assert.equal(report.source.controlsState.vCruiseCluster, 87);
+  assert.equal(report.source.carControl.latActive, true);
   assert.equal(report.derived.cruiseOverride.kph, 77);
   assert.equal(report.presentation.overlay.data.activeLaneLine, true);
   assert.equal(report.dom.cruiseOverride.text, "77");

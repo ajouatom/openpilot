@@ -603,13 +603,28 @@ function compactHudSpeedLimitKph(state) {
 
 function compactHudTemp(state) {
   const desiredSpeed = Number(state?.carrotMan?.desiredSpeed);
-  const vCruise = Number(state?.carState?.vCruiseCluster ?? state?.controlsState?.vCruiseCluster);
+  const vCruise = compactHudCruiseKph(state);
   if (!Number.isFinite(desiredSpeed)) return null;
   return {
     speed: desiredSpeed,
     source: Number.isFinite(vCruise) && desiredSpeed >= vCruise ? (state?.carrotMan?.desiredSource || "") : "",
     is_decel: Number.isFinite(vCruise) ? desiredSpeed < vCruise : false,
   };
+}
+
+function compactHudCruiseKph(state) {
+  const sharedResolver = window.CarrotHudDataBridge?.resolveCruiseKph;
+  if (typeof sharedResolver === "function") return sharedResolver(state);
+  for (const value of [
+    state?.carState?.vCruiseCluster,
+    state?.carState?.vCruise,
+    state?.controlsState?.vCruiseCluster,
+    state?.controlsState?.vCruise,
+  ]) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0 && number < 250) return number;
+  }
+  return null;
 }
 
 function compactHudGear(state) {
@@ -639,13 +654,14 @@ function deriveCompactHudPayload(state) {
     : null;
   const trafficState = Number(carrotMan?.trafficState ?? state?.longitudinalPlan?.trafficState);
   const vehiclePayload = window.CarrotHudDataBridge?.deriveVehicleHudPayload?.(state) || {};
+  const cruiseKph = compactHudCruiseKph(state);
   return {
     cpuTempC,
     memPct: Number(deviceState?.memoryUsagePercent),
     diskPct: null,
     voltageV: Number.isFinite(voltageMv) ? voltageMv / 1000.0 : null,
     vEgo,
-    vSetKph: Number(carState?.vCruiseCluster ?? controlsState?.vCruiseCluster),
+    vSetKph: cruiseKph,
     temp: compactHudTemp(state),
     redDot: false,
     tlight: trafficState === 1 ? "red" : (trafficState === 2 ? "green" : "off"),

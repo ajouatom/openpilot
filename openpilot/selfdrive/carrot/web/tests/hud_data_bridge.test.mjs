@@ -5,6 +5,8 @@ import test from "node:test";
 import {
   deriveVehicleHudPayload,
   deriveCruiseOverride,
+  isCruiseDisplayVisible,
+  resolveCruiseKph,
   vehicleHudSignature,
   withVehicleHudFields,
 } from "../src/features/drive/contents/vision/hud/data_bridge.js";
@@ -24,6 +26,49 @@ test("active lane line is tri-state (true/false/null)", () => {
   assert.equal(deriveVehicleHudPayload({ controlsState: { activeLaneLine: true } }).activeLaneLine, true);
   assert.equal(deriveVehicleHudPayload({ controlsState: { activeLaneLine: false } }).activeLaneLine, false);
   assert.equal(deriveVehicleHudPayload({}).activeLaneLine, null);
+});
+
+test("LFA activity follows carControl lateral actuation before engagement fallbacks", () => {
+  assert.equal(deriveVehicleHudPayload({
+    carControl: { latActive: false },
+    selfdriveState: { enabled: true },
+  }).lfaActive, false);
+  assert.equal(deriveVehicleHudPayload({
+    carControl: { latActive: true },
+    selfdriveState: { enabled: false },
+  }).lfaActive, true);
+  assert.equal(deriveVehicleHudPayload({ selfdriveState: { enabled: true } }).lfaActive, true);
+});
+
+test("set speed skips zero and sentinel values before using cluster fallbacks", () => {
+  assert.equal(resolveCruiseKph({
+    carState: { vCruiseCluster: 0 },
+    controlsState: { vCruiseCluster: 88 },
+  }), 88);
+  assert.equal(resolveCruiseKph({
+    carState: { vCruiseCluster: 255, vCruise: 77 },
+  }), 77);
+  assert.equal(resolveCruiseKph({
+    carState: { cruiseState: { available: true, speedCluster: 20 } },
+  }), 72);
+  assert.equal(resolveCruiseKph({
+    carState: { cruiseState: { available: false, speedCluster: 20 } },
+  }), null);
+  assert.equal(resolveCruiseKph({
+    carState: { vCruiseCluster: 88, cruiseState: { available: false } },
+  }), null);
+});
+
+test("cruise display gate mirrors cluster enabled and paused states", () => {
+  assert.equal(isCruiseDisplayVisible({
+    carState: { vCruiseCluster: 88 },
+    selfdriveState: { enabled: false },
+  }), false);
+  assert.equal(isCruiseDisplayVisible({
+    carState: { vCruiseCluster: 88 },
+    selfdriveState: { enabled: true },
+  }), true);
+  assert.equal(isCruiseDisplayVisible({ carState: { vCruiseCluster: 88 } }), true);
 });
 
 test("cruise override is null when cruise is off or sentinel", () => {
@@ -65,6 +110,14 @@ test("eco override (green, mode 1) wins when cruiseTarget exceeds the set speed"
 test("no override when desiredSpeed is not below the set speed", () => {
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 88 } }), null);
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 95 } }), null);
+});
+
+test("cruise override is hidden while cluster cruise display is off", () => {
+  assert.equal(deriveCruiseOverride({
+    carState: { vCruiseCluster: 88 },
+    selfdriveState: { enabled: false },
+    carrotMan: { desiredSpeed: 70, desiredSource: "cam" },
+  }), null);
 });
 
 test("final presentation payload retains cluster-only fields", () => {

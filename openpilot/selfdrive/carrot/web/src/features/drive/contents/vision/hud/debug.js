@@ -10,6 +10,7 @@ function selectedSourceState(state = {}) {
   const longitudinalPlan = state.longitudinalPlan || {};
   const carrotMan = state.carrotMan || {};
   const selfdriveState = state.selfdriveState || {};
+  const carControl = state.carControl || {};
   return {
     services: {
       carState: own(state, "carState"),
@@ -17,16 +18,19 @@ function selectedSourceState(state = {}) {
       longitudinalPlan: own(state, "longitudinalPlan"),
       carrotMan: own(state, "carrotMan"),
       selfdriveState: own(state, "selfdriveState"),
+      carControl: own(state, "carControl"),
     },
     carState: {
       vEgoCluster: carState.vEgoCluster ?? null,
       vCruiseCluster: carState.vCruiseCluster ?? null,
+      vCruise: carState.vCruise ?? null,
       evModeValid: carState.evModeValid ?? null,
       evModeActive: carState.evModeActive ?? null,
       gearShifter: carState.gearShifter ?? null,
     },
     controlsState: {
       enabled: controlsState.enabled ?? null,
+      vCruiseCluster: controlsState.vCruiseCluster ?? null,
       activeLaneLine: controlsState.activeLaneLine ?? null,
     },
     longitudinalPlan: {
@@ -38,6 +42,9 @@ function selectedSourceState(state = {}) {
     },
     selfdriveState: {
       enabled: selfdriveState.enabled ?? null,
+    },
+    carControl: {
+      latActive: carControl.latActive ?? null,
     },
   };
 }
