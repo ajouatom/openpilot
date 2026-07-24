@@ -19,6 +19,7 @@ import { createTurnSignal } from "./widgets/turn_signal.js";
 import { createLevelGauge } from "./widgets/level_gauge.js";
 import { createTpmsBadge } from "./widgets/tpms_badge.js";
 import { CarrotHudDataBridge } from "./data_bridge.js";
+import { createHudDebugFacade } from "./debug.js";
 import { COLORS } from "./tokens.js";
 import { el } from "./dom.js";
 
@@ -127,6 +128,7 @@ export function createHudOverlay(doc) {
   let layoutObserver = null;
   let active = false;
   let destroyed = false;
+  let lastData = null;
 
   function syncVisibility() {
     const hidden = destroyed || !active || suppressions.size > 0;
@@ -155,6 +157,7 @@ export function createHudOverlay(doc) {
   function update(payload) {
     if (destroyed || !payload) return false;
     const data = mapPayload(payload);
+    lastData = data;
     for (const w of widgets) w.update(data);
     const nextVisibilitySignature = [
       data.speedLimit != null && data.speedLimit > 0,
@@ -221,6 +224,7 @@ export function createHudOverlay(doc) {
       destroyed,
       visible: !root.hidden,
       suppressions: Object.freeze(Array.from(suppressions)),
+      data: lastData,
     });
   }
 
@@ -284,11 +288,13 @@ export function installCarrotHudOverlay(target = globalThis, options = {}) {
     if (changed) {
       installed.delete(target);
       if (target.CarrotHudOverlay === overlay) target.CarrotHudOverlay = null;
+      if (target.CarrotHudDebug) target.CarrotHudDebug = null;
     }
     return changed;
   };
 
   target.CarrotHudOverlay = overlay;
+  target.CarrotHudDebug = createHudDebugFacade(target, overlay);
   installed.set(target, overlay);
   target.DriveVisionHudContent?.syncPresentation?.();
   return overlay;
