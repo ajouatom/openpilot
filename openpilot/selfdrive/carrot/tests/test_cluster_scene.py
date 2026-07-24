@@ -253,7 +253,7 @@ def test_speed_block_draws_driving_mode_before_traffic_state() -> None:
   renderer._draw_cruise_gap_badge = lambda *_args, **_kwargs: None
   renderer._draw_speed_gear_badge = lambda *_args, **_kwargs: None
   renderer._draw_ev_mode_indicator = lambda *_args, **_kwargs: None
-  renderer._draw_camera_tpms = lambda *_args, **_kwargs: None
+  renderer._draw_tpms_status = lambda *_args, **_kwargs: None
   order = []
   renderer._draw_driving_mode_indicator = lambda *_args, **_kwargs: order.append("driving_mode")
   renderer._draw_model_traffic_state = lambda *_args, **_kwargs: order.append("traffic")
