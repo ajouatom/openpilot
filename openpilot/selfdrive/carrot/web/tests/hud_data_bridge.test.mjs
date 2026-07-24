@@ -264,6 +264,7 @@ test("final presentation payload retains cluster-only fields", () => {
     cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
     sdiAlert: null,
     trafficState: 0,
+    drivingMode: null,
   });
 });
 

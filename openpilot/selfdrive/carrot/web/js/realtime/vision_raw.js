@@ -702,7 +702,7 @@ function deriveCompactHudPayload(state) {
   const vehiclePayload = window.CarrotHudDataBridge?.deriveVehicleHudPayload?.(state) || {};
   const trafficState = Number(vehiclePayload.trafficState);
   const cruiseKph = compactHudCruiseKph(state);
-  return {
+  const payload = {
     cpuTempC,
     memPct: Number(deviceState?.memoryUsagePercent),
     diskPct: null,
@@ -711,14 +711,13 @@ function deriveCompactHudPayload(state) {
     vSetKph: cruiseKph,
     temp: compactHudTemp(state),
     redDot: false,
+    // 구 hud_renderer/mini HUD용 문자열. 신규 오버레이용 numeric trafficState 등
+    // 클러스터 전용 필드는 아래 withVehicleHudFields 가 vehiclePayload 로부터 일괄 채운다.
     tlight: trafficState === 1 ? "red" : (trafficState === 2 ? "green" : "off"),
     tfGap,
     tfBars: tfGap,
     gear: vehiclePayload.gear ?? compactHudGear(state),
     gearStep: vehiclePayload.gearStep ?? gearStep,
-    evActive: vehiclePayload.evActive,
-    activeLaneLine: vehiclePayload.activeLaneLine,
-    cruiseOverride: vehiclePayload.cruiseOverride,
     lfaActive: vehiclePayload.lfaActive,
     steeringAngleDeg: vehiclePayload.steeringAngleDeg,
     aEgo: vehiclePayload.aEgo,
@@ -734,8 +733,21 @@ function deriveCompactHudPayload(state) {
     speedLimitOver: Number.isFinite(vEgo) && Number.isFinite(speedLimitKph) ? (vEgo * 3.6) > speedLimitKph : false,
     speedLimitBlink: Number.isFinite(Number(carrotMan?.xSpdLimit)) && Number(carrotMan.xSpdLimit) > 0
       && Number(carrotMan?.xSpdType) !== 22 && Number(carrotMan?.xSpdType) !== 4,
-    sdiAlert: vehiclePayload.sdiAlert,
     apm: Number(carrotMan?.activeCarrot) >= 2 ? "APN" : (Number(carrotMan?.activeCarrot) >= 1 ? "APM" : ""),
+  };
+
+  // 클러스터 전용 필드(evActive/activeLaneLine/cruiseOverride/sdiAlert/trafficState)를
+  // 한 곳에서 채워 "한 필드만 누락" 회귀를 원천 차단한다(이전 trafficState 누락처럼).
+  // 브리지 미로드 시(부팅 극초기) 동등한 폴백으로 채운다.
+  const withVehicleHudFields = window.CarrotHudDataBridge?.withVehicleHudFields;
+  if (typeof withVehicleHudFields === "function") return withVehicleHudFields(payload, vehiclePayload);
+  return {
+    ...payload,
+    evActive: vehiclePayload.evActive === true,
+    activeLaneLine: vehiclePayload.activeLaneLine == null ? null : vehiclePayload.activeLaneLine === true,
+    cruiseOverride: vehiclePayload.cruiseOverride ?? null,
+    sdiAlert: vehiclePayload.sdiAlert ?? null,
+    trafficState: Number.isFinite(trafficState) ? trafficState : 0,
   };
 }
 

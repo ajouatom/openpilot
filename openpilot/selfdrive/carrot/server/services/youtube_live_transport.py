@@ -142,8 +142,9 @@ class LibrtmpClient:
 
   @property
   def bytes_written(self) -> int:
-    with self._lock:
-      return self._bytes_written
+    # Diagnostic progress reads must not wait behind a blocked RTMP_Write.
+    # CPython integer replacement is atomic; a one-sample stale value is fine.
+    return self._bytes_written
 
   def connect(self) -> None:
     with self._lock:
@@ -193,6 +194,17 @@ class LibrtmpClient:
   def is_connected(self) -> bool:
     with self._lock:
       return bool(self._handle and self._library.RTMP_IsConnected(self._handle))
+
+  def try_is_connected(self) -> bool | None:
+    # A network write owns the same librtmp handle and may be blocked until the
+    # tunnel timeout. Health polling must not wait behind that write because it
+    # would stall source ingestion and defeat the bounded writer queue.
+    if not self._lock.acquire(blocking=False):
+      return None
+    try:
+      return bool(self._handle and self._library.RTMP_IsConnected(self._handle))
+    finally:
+      self._lock.release()
 
   def close(self) -> None:
     with self._lock:

@@ -12,13 +12,17 @@ from typing import Any
 from urllib.request import urlopen
 
 from ..config import CARROT_YOUTUBE_LIVE_SECRET_PATH, CARROT_YOUTUBE_LIVE_STATE_PATH
+from .youtube_h264 import validate_stream_start
 from .youtube_profiles import YOUTUBE_PROFILES, youtube_profile
 
 
 REPO_ROOT = Path("/data/openpilot")
 STATE_PATH = Path("/tmp/carrot-youtube-test-state.json")
 LOG_PATH = Path("/tmp/carrot-youtube-test.log")
+REPORT_PATH = Path("/tmp/carrot-youtube-test-report.json")
 TIMEOUT_SECONDS = 10 * 60
+VERIFY_TIMEOUT_SECONDS = 75
+VERIFY_STABLE_SECONDS = 10
 RUNNER_MODULE = "openpilot.selfdrive.carrot.server.services.youtube_test"
 YOUTUBE_STATUS_URL = "http://127.0.0.1:7000/api/youtube_live/status"
 YOUTUBE_SOURCE = youtube_profile(0).source
@@ -190,8 +194,142 @@ def _format_duration(seconds: float) -> str:
   return f"{seconds // 3600:02d}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
 
 
-def print_status() -> int:
-  status = get_status()
+def _diagnose_status(status: dict[str, Any]) -> dict[str, Any]:
+  youtube = status.get("youtube") if isinstance(status.get("youtube"), dict) else {}
+  failures: list[str] = []
+  warnings = [str(item) for item in youtube.get("warnings") or [] if str(item).strip()]
+  children = status.get("children") if isinstance(status.get("children"), dict) else {}
+
+  if not status.get("runner_alive"):
+    failures.append("test runner is not running")
+  for name, child in children.items():
+    if not isinstance(child, dict) or not child.get("alive"):
+      failures.append(f"{name} is not running")
+
+  state = str(youtube.get("state") or "")
+  if state != "live":
+    failures.append(f"YouTube state is {state or 'unknown'}")
+  if not youtube.get("transport_connected"):
+    failures.append("RTMPS transport is not connected")
+  if youtube.get("frame_matches_target") is False:
+    failures.append("encoder frame size does not match the selected profile")
+
+  target_fps = max(1, int(youtube.get("target_fps") or youtube.get("declared_frame_fps") or 20))
+  source_fps = float(youtube.get("stream_source_recent_fps") or 0)
+  minimum_fps = target_fps * 0.75
+  if source_fps < minimum_fps:
+    failures.append(f"source rate is {source_fps:.1f} fps (minimum {minimum_fps:.1f})")
+
+  target_kbps = max(1, int(youtube.get("target_video_kbps") or 1))
+  upload_kbps = int(youtube.get("upload_recent_kbps") or 0)
+  minimum_upload_kbps = int(target_kbps * 0.55)
+  if upload_kbps < minimum_upload_kbps:
+    failures.append(f"upload rate is {upload_kbps} kbps (minimum {minimum_upload_kbps} kbps)")
+
+  frames_written = int(youtube.get("rtmp_writer_frames_written") or 0)
+  if frames_written <= 0:
+    failures.append("RTMP writer has not published a frame")
+  writer_error = str(youtube.get("rtmp_writer_error") or "").strip()
+  if writer_error:
+    failures.append(f"RTMP writer error: {writer_error}")
+
+  pending_frames = int(youtube.get("rtmp_writer_pending_frames") or 0)
+  capacity_frames = max(1, int(youtube.get("rtmp_writer_capacity") or 1))
+  pending_bytes = int(youtube.get("rtmp_writer_pending_bytes") or 0)
+  capacity_bytes = max(1, int(youtube.get("rtmp_writer_capacity_bytes") or 1))
+  if pending_frames >= capacity_frames or pending_bytes >= capacity_bytes:
+    failures.append("RTMP writer backlog reached its limit")
+  elif pending_frames >= capacity_frames * 0.8 or pending_bytes >= capacity_bytes * 0.8:
+    warnings.append("RTMP writer backlog is above 80%")
+
+  last_frame_age_ms = youtube.get("last_frame_age_ms")
+  if last_frame_age_ms is not None and int(last_frame_age_ms) > 2_000:
+    failures.append(f"last source frame is {int(last_frame_age_ms)} ms old")
+  error = str(status.get("error") or youtube.get("last_error") or "").strip()
+  if error:
+    failures.append(error)
+
+  failures = list(dict.fromkeys(failures))
+  warnings = list(dict.fromkeys(warnings))
+  return {
+    "healthy": not failures,
+    "verdict": "pass" if not failures else "fail",
+    "failures": failures,
+    "warnings": warnings,
+    "thresholds": {
+      "minimum_source_fps": round(minimum_fps, 1),
+      "minimum_upload_kbps": minimum_upload_kbps,
+    },
+  }
+
+
+def _compact_report(status: dict[str, Any]) -> dict[str, Any]:
+  youtube = status.get("youtube") if isinstance(status.get("youtube"), dict) else {}
+  youtube_fields = (
+    "state",
+    "quality",
+    "target_width",
+    "target_height",
+    "target_fps",
+    "target_video_kbps",
+    "frame_width",
+    "frame_height",
+    "frame_matches_target",
+    "stream_source_recent_fps",
+    "stream_source_recent_kbps",
+    "stream_source_keyframes",
+    "upload_recent_kbps",
+    "estimated_kbps",
+    "transport_connected",
+    "rtmp_writer_pending_frames",
+    "rtmp_writer_capacity",
+    "rtmp_writer_high_watermark",
+    "rtmp_writer_pending_bytes",
+    "rtmp_writer_capacity_bytes",
+    "rtmp_writer_high_watermark_bytes",
+    "rtmp_writer_frames_written",
+    "rtmp_writer_last_write_ms",
+    "rtmp_writer_max_write_ms",
+    "rtmp_writer_error",
+    "rtmp_writer_backpressure_restarts",
+    "rtmp_writer_discarded_frames",
+    "restart_count",
+    "consecutive_failures",
+    "retry_in_sec",
+    "last_frame_age_ms",
+    "last_error",
+    "warnings",
+    "log_tail",
+  )
+  return {
+    "version": 1,
+    "captured_at": time.time(),  # noqa: TID251 - report needs a shareable wall-clock timestamp
+    "diagnosis": _diagnose_status(status),
+    "test": {
+      "status": status.get("status"),
+      "runner_alive": bool(status.get("runner_alive")),
+      "quality": status.get("quality_label") or status.get("quality"),
+      "children": status.get("children"),
+      "vipc_streams": status.get("vipc_streams"),
+      "device": status.get("device"),
+    },
+    "youtube": {field: youtube.get(field) for field in youtube_fields},
+    "runner_log_tail": _tail_log(40),
+  }
+
+
+def _write_report(status: dict[str, Any]) -> dict[str, Any]:
+  report = _compact_report(status)
+  temp_path = REPORT_PATH.with_suffix(".tmp")
+  temp_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+  temp_path.replace(REPORT_PATH)
+  return report
+
+
+def print_status(status: dict[str, Any] | None = None) -> int:
+  status = status or get_status()
+  report = _write_report(status)
+  diagnosis = report["diagnosis"]
   started_mono = float(status.get("started_mono") or 0)
   elapsed = _format_duration(time.monotonic() - started_mono) if started_mono else "00:00:00"
   quality = str(status.get("quality_label") or _quality_spec(int(status.get("quality") or 0))["label"])
@@ -211,7 +349,23 @@ def print_status() -> int:
   drain_calls = youtube.get("rtmp_drain_calls") or 0
   pending_bytes = youtube.get("mux_pending_bytes") or 0
   print(f"  upload           {upload_kbps} kbps / drains={drain_calls} / pending={pending_bytes} B")
+  writer_pending = int(youtube.get("rtmp_writer_pending_frames") or 0)
+  writer_capacity = int(youtube.get("rtmp_writer_capacity") or 0)
+  writer_pending_bytes = int(youtube.get("rtmp_writer_pending_bytes") or 0)
+  writer_capacity_bytes = int(youtube.get("rtmp_writer_capacity_bytes") or 0)
+  last_write_ms = int(youtube.get("rtmp_writer_last_write_ms") or 0)
+  max_write_ms = int(youtube.get("rtmp_writer_max_write_ms") or 0)
+  print(
+    f"  writer           {writer_pending}/{writer_capacity} frames / " +
+    f"{writer_pending_bytes}/{writer_capacity_bytes} B / write={last_write_ms}ms max={max_write_ms}ms"
+  )
+  print(f"  verdict          {diagnosis['verdict']}")
+  for failure in diagnosis["failures"]:
+    print(f"  fail             {failure}")
+  for warning in diagnosis["warnings"]:
+    print(f"  warning          {warning}")
   print(f"  log              {status['log_path']}")
+  print(f"  report           {REPORT_PATH}")
   error = str(status.get("error") or youtube.get("last_error") or "").strip()
   if error:
     print(f"  error            {error}")
@@ -254,7 +408,7 @@ def _cleanup_owned_processes(state: dict[str, Any]) -> None:
     _terminate_pid(int(children.get(name) or 0), str(spec["match"]))
 
 
-def start_test() -> int:
+def start_test(*, announce_next_step: bool = True) -> int:
   status = get_status()
   if status["runner_alive"]:
     print("[youtube-test] already running")
@@ -302,8 +456,11 @@ def start_test() -> int:
     time.sleep(0.25)
     status = get_status()
     if status.get("status") == "running":
-      print("[youtube-test] ready; wait 40 seconds, then run 'carrot youtube-test status'")
-      return print_status()
+      if announce_next_step:
+        print("[youtube-test] ready; run 'carrot youtube-test status' after the upload metrics settle")
+        return print_status(status)
+      print("[youtube-test] pipeline ready; collecting verification metrics")
+      return 0
     if status.get("status") == "error":
       print(f"[youtube-test] failed: {status.get('error') or 'unknown error'}", file=sys.stderr)
       return 1
@@ -335,6 +492,51 @@ def stop_test() -> int:
     _write_state(state)
   print("[youtube-test] stopped")
   return 0
+
+
+def verify_test() -> int:
+  if get_status().get("runner_alive"):
+    print("[youtube-test] refused: stop the active test before one-shot verification", file=sys.stderr)
+    return 1
+
+  started = False
+  result = 1
+  try:
+    start_result = start_test(announce_next_step=False)
+    started = bool(get_status().get("runner_alive"))
+    if start_result != 0:
+      return 1
+    deadline = time.monotonic() + VERIFY_TIMEOUT_SECONDS
+    stable_since = 0.0
+    final_status = get_status()
+
+    while time.monotonic() < deadline:
+      final_status = get_status()
+      if final_status.get("status") == "error" or not final_status.get("runner_alive"):
+        break
+      diagnosis = _diagnose_status(final_status)
+      if diagnosis["healthy"]:
+        if not stable_since:
+          stable_since = time.monotonic()
+        elif time.monotonic() - stable_since >= VERIFY_STABLE_SECONDS:
+          result = 0
+          break
+      else:
+        stable_since = 0.0
+      time.sleep(1.0)
+
+    print_status(final_status)
+    if result == 0:
+      print(f"[youtube-test] verification passed ({VERIFY_STABLE_SECONDS}s stable)")
+    else:
+      print(f"[youtube-test] verification failed; attach {REPORT_PATH}", file=sys.stderr)
+  except KeyboardInterrupt:
+    result = 130
+    print("[youtube-test] verification interrupted", file=sys.stderr)
+  finally:
+    if started:
+      stop_test()
+  return result
 
 
 def print_logs(lines: int) -> int:
@@ -372,7 +574,11 @@ def _wait_for_youtube_keyframe(sock: Any, timeout: float) -> dict[str, int]:
     if not data:
       continue
     frames += 1
-    if header:
+    try:
+      validate_stream_start(header, data)
+    except ValueError:
+      continue
+    else:
       return {
         "frames": frames,
         "header_bytes": len(header),
@@ -507,7 +713,8 @@ def _run_test(quality: int) -> int:
 
 def run_command(args: list[str]) -> int:
   if args and args[0].lower() in {"help", "-h", "--help"}:
-    print("Usage: carrot youtube-test [start|status|logs|stop] [--lines N]")
+    print("Usage: carrot youtube-test [verify|start|status|logs|stop] [--lines N]")
+    print("  verify  Run one complete test, save a compact report, then stop")
     print("  start   Start an offroad YouTube camera test")
     print("  status  Show encoder and upload diagnostics")
     print("  logs    Show recent test process logs")
@@ -515,13 +722,15 @@ def run_command(args: list[str]) -> int:
     return 0
 
   parser = argparse.ArgumentParser(prog="carrot youtube-test", add_help=False)
-  parser.add_argument("action", nargs="?", default="start", choices=("start", "status", "logs", "stop"))
+  parser.add_argument("action", nargs="?", default="start", choices=("verify", "start", "status", "logs", "stop"))
   parser.add_argument("--lines", type=int, default=80)
   try:
     options = parser.parse_args(args)
   except SystemExit:
     return 2
 
+  if options.action == "verify":
+    return verify_test()
   if options.action == "start":
     return start_test()
   if options.action == "status":
