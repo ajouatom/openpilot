@@ -1,3 +1,4 @@
+import asyncio
 from html.parser import HTMLParser
 import json
 import os
@@ -9,7 +10,12 @@ from urllib.parse import unquote, unquote_plus, urlsplit, urlunsplit
 from aiohttp import web
 
 from ..config import SOUND_ASSETS_DIR, TRAINING_ASSETS_DIR, WEB_DIR
-from ..services.asset_manifest import AssetManifestError, AssetManifestLoader, inject_asset_manifest
+from ..services.asset_manifest import (
+  AssetManifest,
+  AssetManifestError,
+  AssetManifestLoader,
+  inject_asset_manifest,
+)
 from ..services.params import get_param_values
 from ..services.static_assets import fingerprint_static_asset
 from ..services.web_capabilities import resolve_web_capabilities, web_capability_client_spec
@@ -28,6 +34,52 @@ _EXCLUDED_ASSET_PREFIXES: Final = (
   "/css/vendor/",
 )
 _ASSET_MANIFEST_LOADER = AssetManifestLoader()
+_INDEX_RETRY_DELAYS: Final = (0.0, 0.05, 0.1, 0.2, 0.4)
+_EMPTY_ASSET_MANIFEST: Final[AssetManifest] = {"schemaVersion": 1, "assets": []}
+_ASSET_RECOVERY_HTML: Final = """<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="refresh" content="1">
+  <title>Carrot Web</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      align-items: center;
+      background: #0b1016;
+      color: #e8edf3;
+      display: flex;
+      font: 600 16px/1.5 system-ui, sans-serif;
+      justify-content: center;
+      margin: 0;
+      min-height: 100vh;
+    }
+    main { text-align: center; }
+    i {
+      animation: spin .8s linear infinite;
+      border: 3px solid #34404d;
+      border-radius: 50%;
+      border-top-color: #ff9f5a;
+      display: block;
+      height: 28px;
+      margin: 0 auto 16px;
+      width: 28px;
+    }
+    small { color: #8d99a6; display: block; font-weight: 500; margin-top: 4px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { i { animation: none; } }
+  </style>
+</head>
+<body>
+  <main role="status" aria-live="polite">
+    <i aria-hidden="true"></i>
+    Carrot Web 업데이트 적용 중
+    <small>Applying update…</small>
+  </main>
+</body>
+</html>
+"""
 
 
 class _StartTagLocator(HTMLParser):
@@ -207,19 +259,57 @@ def _rewrite_index_asset_urls(html: str, web_root: str) -> str:
   return "".join(pieces)
 
 
-async def handle_index(request: web.Request) -> web.Response:
+def _render_index_html(manifest: AssetManifest) -> str:
   index_path = os.path.join(WEB_DIR, "index.html")
+  with open(index_path, encoding="utf-8") as f:
+    html = inject_asset_manifest(f.read(), manifest)
+  return _rewrite_index_asset_urls(html, WEB_DIR)
+
+
+def _load_index_html() -> str:
+  return _render_index_html(_ASSET_MANIFEST_LOADER.load(WEB_DIR))
+
+
+def _load_index_html_without_manifest() -> str:
+  # The manifest is a cache-busting and dynamic-worker catalog, not a reason
+  # to take the entire web UI offline. Direct index assets are still
+  # fingerprinted from their actual content by _rewrite_index_asset_urls().
+  return _render_index_html(_EMPTY_ASSET_MANIFEST)
+
+
+async def _load_index_after_update() -> tuple[str, bool] | None:
+  for delay in _INDEX_RETRY_DELAYS:
+    if delay:
+      await asyncio.sleep(delay)
+    try:
+      return await asyncio.to_thread(_load_index_html), False
+    except (AssetManifestError, OSError, UnicodeError):
+      continue
   try:
-    manifest = _ASSET_MANIFEST_LOADER.load(WEB_DIR)
-    with open(index_path, "r", encoding="utf-8") as f:
-      html = inject_asset_manifest(f.read(), manifest)
-  except AssetManifestError as error:
-    raise web.HTTPServiceUnavailable(text="Asset manifest unavailable") from error
-  html = _inject_bootstrap(_rewrite_index_asset_urls(html, WEB_DIR))
+    return await asyncio.to_thread(_load_index_html_without_manifest), True
+  except (AssetManifestError, OSError, UnicodeError):
+    return None
+
+
+async def handle_index(request: web.Request) -> web.Response:
+  loaded = await _load_index_after_update()
+  if loaded is None:
+    response = web.Response(
+      status=503,
+      text=_ASSET_RECOVERY_HTML,
+      content_type="text/html",
+    )
+    response.headers["Retry-After"] = "1"
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Carrot-Asset-Status"] = "recovering"
+    return response
+  html, manifest_degraded = loaded
+  html = _inject_bootstrap(html)
   response = web.Response(text=html, content_type="text/html")
   response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
   response.headers["Pragma"] = "no-cache"
   response.headers["Expires"] = "0"
+  response.headers["X-Carrot-Asset-Status"] = "degraded" if manifest_degraded else "ready"
   return response
 
 
