@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   deriveVehicleHudPayload,
   deriveCruiseOverride,
+  deriveSdiAlert,
   isCruiseDisplayVisible,
   resolveCruiseKph,
   vehicleHudSignature,
@@ -112,6 +113,73 @@ test("no override when desiredSpeed is not below the set speed", () => {
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 95 } }), null);
 });
 
+test("all carrot/MICI deceleration sources keep their cluster display origin", () => {
+  const cases = {
+    cam: "cam:n",
+    section: "section:n",
+    bump: "bump:n",
+    police: "police:n",
+    waze: "waze:n",
+    road: "road:n",
+    atc: "turn:n",
+    atc2: "turn:n",
+    hda: "cam:v",
+    route: "route:v",
+    gas: "gas:v",
+    vturn: "turn:c",
+    model: "turn:c",
+  };
+  for (const [source, label] of Object.entries(cases)) {
+    assert.equal(deriveCruiseOverride({
+      carState: { vCruiseCluster: 88 },
+      carrotMan: { desiredSpeed: 70, desiredSource: source },
+    }).label, label, source);
+  }
+});
+
+test("SDI alert remains available before an orange cruise override begins", () => {
+  const state = {
+    carState: { vCruiseCluster: 80 },
+    carrotMan: {
+      desiredSpeed: 200,
+      desiredSource: "road",
+      xSpdType: 1,
+      xSpdLimit: 60,
+      xSpdDist: 420,
+      xSpdCountDown: 8,
+      szSdiDescr: "Speed camera",
+    },
+  };
+  assert.equal(deriveCruiseOverride(state), null);
+  assert.deepEqual(deriveSdiAlert(state), {
+    type: 1,
+    family: "camera",
+    label: "Speed camera",
+    speedLimitKph: 60,
+    distanceM: 420,
+    countdownS: 8,
+  });
+  assert.deepEqual(deriveVehicleHudPayload(state).sdiAlert, deriveSdiAlert(state));
+});
+
+test("SDI families and sentinel values are normalized", () => {
+  for (const [type, family, label] of [
+    [4, "section", "SECTION"],
+    [22, "bump", "BUMP"],
+    [100, "police", "POLICE"],
+    [101, "waze", "WAZE"],
+  ]) {
+    assert.equal(deriveSdiAlert({
+      carrotMan: { xSpdType: type, xSpdLimit: 50, xSpdDist: 200, xSpdCountDown: 100 },
+    }).family, family);
+    assert.equal(deriveSdiAlert({
+      carrotMan: { xSpdType: type, xSpdLimit: 50, xSpdDist: 200, xSpdCountDown: 100 },
+    }).label, label);
+  }
+  assert.equal(deriveSdiAlert({ carrotMan: { xSpdType: -1, xSpdLimit: 60 } }), null);
+  assert.equal(deriveSdiAlert({ carrotMan: { xSpdType: 1, xSpdLimit: 0, xSpdDist: -1 } }), null);
+});
+
 test("cruise override is hidden while cluster cruise display is off", () => {
   assert.equal(deriveCruiseOverride({
     carState: { vCruiseCluster: 88 },
@@ -135,16 +203,24 @@ test("final presentation payload retains cluster-only fields", () => {
     evActive: true,
     activeLaneLine: false,
     cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
+    sdiAlert: null,
   });
 });
 
 test("cluster-only changes produce distinct presentation signatures", () => {
-  const base = { evActive: false, activeLaneLine: null, cruiseOverride: null };
+  const base = { evActive: false, activeLaneLine: null, cruiseOverride: null, sdiAlert: null };
   assert.notEqual(vehicleHudSignature(base), vehicleHudSignature({ ...base, evActive: true }));
   assert.notEqual(vehicleHudSignature(base), vehicleHudSignature({ ...base, activeLaneLine: false }));
   assert.notEqual(
     vehicleHudSignature(base),
     vehicleHudSignature({ ...base, cruiseOverride: { kph: 77, label: "cam:n", mode: 2 } }),
+  );
+  assert.notEqual(
+    vehicleHudSignature(base),
+    vehicleHudSignature({
+      ...base,
+      sdiAlert: { type: 1, family: "camera", label: "CAM", speedLimitKph: 60, distanceM: 420 },
+    }),
   );
 });
 

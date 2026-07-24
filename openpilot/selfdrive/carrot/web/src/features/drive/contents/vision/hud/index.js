@@ -10,6 +10,7 @@ import { injectStyle } from "./style.js";
 import { applyHudDegradation, createHudLayoutObserver } from "./layout.js";
 import { createSpeedPanel } from "./widgets/speed_panel.js";
 import { createSpeedLimitSign } from "./widgets/speed_limit_sign.js";
+import { createSdiAlert } from "./widgets/sdi_alert.js";
 import { createClock } from "./widgets/clock.js";
 import { createWifiIcon } from "./widgets/wifi_icon.js";
 import { createLfaIcon } from "./widgets/lfa_icon.js";
@@ -30,6 +31,36 @@ function num(value) {
   if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function formatDistance(distanceM, metric) {
+  const distance = num(distanceM);
+  if (distance == null || distance < 0) return "";
+  if (metric) {
+    if (distance < 1000) return `${Math.round(distance)} m`;
+    return `${(distance / 1000).toFixed(distance < 10000 ? 1 : 0)} km`;
+  }
+  const feet = distance * 3.28084;
+  if (feet < 5280) return `${Math.round(feet)} ft`;
+  const miles = feet / 5280;
+  return `${miles.toFixed(miles < 10 ? 1 : 0)} mi`;
+}
+
+function mapSdiAlert(value, metric, toUnit) {
+  if (!value || typeof value !== "object") return null;
+  const type = num(value.type);
+  if (type == null || type < 0) return null;
+  const speedLimitKph = num(value.speedLimitKph);
+  const countdownS = num(value.countdownS);
+  return {
+    type: Math.trunc(type),
+    family: String(value.family || "camera"),
+    label: String(value.label || "CAM"),
+    speedLimit: speedLimitKph != null && speedLimitKph > 0 ? toUnit(speedLimitKph) : null,
+    speedUnit: metric ? "km/h" : "mph",
+    distanceText: formatDistance(value.distanceM, metric),
+    countdownS: countdownS != null && countdownS > 0 && countdownS < 100 ? countdownS : null,
+  };
 }
 
 // 실 payload(js/realtime/vision_raw.js):
@@ -64,6 +95,7 @@ export function mapPayload(p = {}) {
     cruiseOverride: overrideKph != null && overrideKph > 0
       ? { kph: toUnit(overrideKph), label: override.label == null ? "" : String(override.label), mode: num(override.mode) ?? 0 }
       : null,
+    sdiAlert: mapSdiAlert(p.sdiAlert, metric, toUnit),
     lfaActive: p.latActive ?? p.lfaActive,
     steerAngle: num(p.steeringAngleDeg),
     accel: num(p.aEgo ?? p.accel),
@@ -87,6 +119,7 @@ export function createHudOverlay(doc) {
   const wifi = createWifiIcon(doc);
   const clock = createClock(doc);
   const limit = createSpeedLimitSign(doc);
+  const sdi = createSdiAlert(doc);
   const speed = createSpeedPanel(doc);
   const accel = createAccelGauge(doc);
   const steer = createSteerGauge(doc);
@@ -102,9 +135,10 @@ export function createHudOverlay(doc) {
   const tpms = createTpmsBadge(doc);
   const turn = createTurnSignal(doc);
 
+  const limitRow = el(doc, "div", { class: "chud-limit-row" }, [limit.el, sdi.el]);
   const zoneTL = el(doc, "div", { class: "chud-zone chud-zone--tl" }, [
     el(doc, "div", { class: "chud-row" }, [lfa.el, wifi.el, clock.el]),
-    limit.el,
+    limitRow,
   ]);
   const zoneTC = el(doc, "div", { class: "chud-zone chud-zone--tc" }, [turn.el]);
   const zoneTR = el(doc, "div", { class: "chud-zone chud-zone--tr" }, [
@@ -122,7 +156,7 @@ export function createHudOverlay(doc) {
     bottomRight: zoneBR,
   };
 
-  const widgets = [lfa, wifi, clock, limit, speed, accel, steer, fuel, def, tpms, turn];
+  const widgets = [lfa, wifi, clock, limit, sdi, speed, accel, steer, fuel, def, tpms, turn];
   const suppressions = new Set();
   let visibilitySignature = "";
   let layoutObserver = null;
@@ -165,6 +199,9 @@ export function createHudOverlay(doc) {
       data.rightBlinker,
       // 레인 날개는 LFA 폭을 바꾸므로 등장/소멸 시 재배치 판정이 필요하다.
       data.activeLaneLine,
+      data.sdiAlert?.type ?? "-",
+      data.sdiAlert?.speedLimit ?? "-",
+      data.sdiAlert?.distanceText ?? "-",
       data.fuelGauge != null && data.fuelGauge > 0 && data.fuelGauge <= 1,
       data.ureaGauge != null && data.ureaGauge > 0 && data.ureaGauge <= 1,
     ].join(":");

@@ -39,6 +39,11 @@ function selectedSourceState(state = {}) {
     carrotMan: {
       desiredSpeed: carrotMan.desiredSpeed ?? null,
       desiredSource: carrotMan.desiredSource ?? null,
+      xSpdType: carrotMan.xSpdType ?? null,
+      xSpdLimit: carrotMan.xSpdLimit ?? null,
+      xSpdDist: carrotMan.xSpdDist ?? null,
+      xSpdCountDown: carrotMan.xSpdCountDown ?? null,
+      szSdiDescr: carrotMan.szSdiDescr ?? null,
     },
     selfdriveState: {
       enabled: selfdriveState.enabled ?? null,
@@ -113,6 +118,7 @@ export function createHudDebugFacade(target = globalThis, overlay = target.Carro
         lane: nodeState(target, root?.querySelector?.(".chud-lfa-lane")),
         cruiseOverride: nodeState(target, root?.querySelector?.(".chud-t-override"), { text: true }),
         cruiseOverrideLabel: nodeState(target, root?.querySelector?.(".chud-t-override-label"), { text: true }),
+        sdiAlert: nodeState(target, root?.querySelector?.(".chud-sdi"), { text: true }),
       },
     };
   }

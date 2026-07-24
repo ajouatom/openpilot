@@ -428,6 +428,7 @@ function drivingHudUpdateFromCarPayload(j) {
     speedLimitKph: j.speedLimitKph,
     speedLimitOver: j.speedLimitOver,
     speedLimitBlink: j.speedLimitBlink,
+    sdiAlert: j.sdiAlert,
     apm: j.apm,
   };
   const payload = window.CarrotHudDataBridge?.withVehicleHudFields?.(basePayload, j) || {
@@ -437,6 +438,7 @@ function drivingHudUpdateFromCarPayload(j) {
     cruiseOverride: j.cruiseOverride && typeof j.cruiseOverride === "object"
       ? j.cruiseOverride
       : null,
+    sdiAlert: j.sdiAlert && typeof j.sdiAlert === "object" ? j.sdiAlert : null,
   };
 
   const miniHudPayload = window.CarrotMiniHudModel?.build?.(
@@ -470,6 +472,10 @@ function drivingHudUpdateFromCarPayload(j) {
       payload.cruiseOverride?.kph ?? "-",
       payload.cruiseOverride?.label ?? "-",
       payload.cruiseOverride?.mode ?? "-",
+      payload.sdiAlert?.type ?? "-",
+      payload.sdiAlert?.speedLimitKph ?? "-",
+      payload.sdiAlert?.distanceM ?? "-",
+      payload.sdiAlert?.countdownS ?? "-",
     ].join(":"),
     payload.lfaActive ? 1 : 0,
     Math.round(Number(payload.steeringAngleDeg) || 0), // 1° 단위로만 갱신
@@ -687,6 +693,7 @@ function deriveCompactHudPayload(state) {
     speedLimitOver: Number.isFinite(vEgo) && Number.isFinite(speedLimitKph) ? (vEgo * 3.6) > speedLimitKph : false,
     speedLimitBlink: Number.isFinite(Number(carrotMan?.xSpdLimit)) && Number(carrotMan.xSpdLimit) > 0
       && Number(carrotMan?.xSpdType) !== 22 && Number(carrotMan?.xSpdType) !== 4,
+    sdiAlert: vehiclePayload.sdiAlert,
     apm: Number(carrotMan?.activeCarrot) >= 2 ? "APN" : (Number(carrotMan?.activeCarrot) >= 1 ? "APM" : ""),
   };
 }
