@@ -119,7 +119,13 @@ def frame_cutin_targets(
     entry_targets = {int(value) for value in entry["cutin_targets"]}
     for frame_index, frame in enumerate(frames):
       if start_s <= frame.time_s <= end_s:
-        targets[frame_index] = entry_targets if targets[frame_index] is None else targets[frame_index] | entry_targets
+        current_targets = targets[frame_index]
+        if not entry_targets or current_targets == set():
+          # An explicit reviewed clear window overrides an overlapping broad
+          # detection window regardless of annotation order.
+          targets[frame_index] = set()
+        else:
+          targets[frame_index] = entry_targets if current_targets is None else current_targets | entry_targets
         applied += 1
   return targets, applied
 

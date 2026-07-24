@@ -19,6 +19,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   ProductionHybridLeadSelector,
   candidate_matches_targets,
   current_cutin_track_ids,
+  front_only_frames,
   load_frames,
 )
 
@@ -39,6 +40,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
   parser.add_argument("--case", action="append", default=[])
   parser.add_argument("--expected", choices=("detect", "clear"))
+  parser.add_argument(
+    "--front-only", action="store_true",
+    help="remove corner points and validate front/front+corner scenes through the front-only device path",
+  )
   parser.add_argument(
     "--compare-radard", action="store_true",
     help="also recompute current radard cut-ins (slow)",
@@ -236,6 +241,7 @@ def main() -> int:
   cases = [
     case for case in payload["cases"]
     if case["expected"] in ("detect", "clear")
+    and (not args.front_only or case["source"] in ("front", "front+corner"))
     and (args.expected is None or case["expected"] == args.expected)
     and (not filters or any(value in case["id"].lower() for value in filters))
   ]
@@ -257,6 +263,8 @@ def main() -> int:
     if path not in cache:
       print(f"loading {path.name} ...", flush=True)
       frames = load_frames(path)
+      if args.front_only:
+        frames, _ = front_only_frames(frames)
       baseline = None if args.no_baseline else ProductionHybridLeadSelector(baseline_front, frames, baseline_corner)
       candidate = ProductionHybridLeadSelector(args.front_model, frames, args.corner_model)
       radard_ids = (

@@ -587,7 +587,7 @@
       "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
       "log": "000001ce--d184d0265e--26/rlog.zst",
       "source": "front+corner",
-      "window": [49.91, 50.11],
+      "window": [49.0, 50.11],
       "expected": "clear",
       "required_lead_one_ids": [40],
       "require_lead_one_continuous": true,

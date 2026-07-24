@@ -51,6 +51,8 @@ In model mode, `EnableRadarTracks` also selects the front-model input. Values `-
 
 The front and corner models do not share history or decision state. Vehicles with corner radar use the front model for `leadOne` and the corner model for cut-in and secondary leads; without corner radar, the front model also owns the secondary decision. When a front point matches a selected corner candidate, its control-quality distance, speed, and acceleration are used. A side candidate inside 5 m keeps the corner measurement instead of the noisy near-field front lateral position, while identity association still prevents the same vehicle from being reported twice.
 
+The front and corner model artifacts are trained and validated separately. Passing `--front-only` to the PC validator removes corner points and exercises the same front-only path used by a device without corner radar.
+
 A fresh radar point outside the current driving path is not associated with `leadOne`, even when vision range uncertainty is large. A secondary candidate at the same position as `leadOne` is removed as a duplicate. An unmatched distant corner candidate is not reported even as a tentative cut-in until the vehicle body reaches the lane boundary, reducing false detections from parallel and adjacent-lane traffic.
 
 The source-separated model method confirms a front-radar-only cut-in only when its lateral motion remains consistent across multiple history intervals. A previously matched small target corroborated by both front and corner radar is retained through brief lateral vision jitter to reduce lead dropouts.
