@@ -213,6 +213,18 @@ def test_frame_cutin_targets_support_clear_windows() -> None:
   assert count == 1
 
 
+def test_frame_cutin_targets_clear_overrides_overlapping_detection() -> None:
+  frames = [frame((point(50, 20.0, 1.0, 10.0),))]
+  detection = {"start_s": 0.0, "end_s": 0.1, "cutin_targets": [50]}
+  clear = {"start_s": 0.0, "end_s": 0.1, "cutin_targets": []}
+
+  for entries in ((detection, clear), (clear, detection)):
+    targets, count = frame_cutin_targets(frames, list(entries))
+
+    assert targets == [set()]
+    assert count == 2
+
+
 def test_source_specific_label_translation_uses_matching_sensor_id() -> None:
   associated = SimpleNamespace(front_track_id=50, corner_track_id=1050, scc_track_id=None)
   front = SimpleNamespace(front_track_id=50, corner_track_id=None, scc_track_id=None)
