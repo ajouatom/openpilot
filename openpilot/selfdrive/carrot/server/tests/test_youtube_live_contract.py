@@ -10,6 +10,7 @@ from openpilot.selfdrive.carrot.server.services import youtube_test
 
 OPENPILOT_ROOT = Path(__file__).resolve().parents[4]
 LOGGERD_HEADER = OPENPILOT_ROOT / "system/loggerd/loggerd.h"
+V4L_ENCODER = OPENPILOT_ROOT / "system/loggerd/encoder/v4l_encoder.cc"
 PROCESS_CONFIG = OPENPILOT_ROOT / "system/manager/process_config.py"
 
 PROFILE_FUNCTIONS = {
@@ -144,6 +145,18 @@ def test_runtime_resolution_rejects_1280x800_for_1280x720_target():
   service._frame_height = 800
 
   assert service._frame_matches_target({"width": 1280, "height": 720}) is False
+
+
+def test_native_youtube_crop_keeps_the_declared_output_size():
+  source = V4L_ENCODER.read_text(encoding="utf-8")
+  youtube_block = source.split("if (youtube_road) {", 1)[1].split('LOGD("in buffer size', 1)[0]
+
+  assert "selection.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;" in youtube_block
+  assert "selection.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;" not in youtube_block
+  assert "out_height = aspect_height" not in youtube_block
+  assert "fmt_out.fmt.pix_mp.height" not in youtube_block
+  assert "scaling full frame to exact %dx%d" in youtube_block
+  assert "YouTube encoder output contract rejected" in source
 
 
 def test_status_separates_declared_and_observed_frame_rates(monkeypatch, tmp_path):
