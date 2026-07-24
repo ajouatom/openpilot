@@ -56,8 +56,9 @@ Select the body of a setting, outside its value control, to open its detail scre
 - Network or documentation processing failures do not disable viewing or changing the setting.
 - Korean and English Carrot Web sessions use their matching guide language.
 - Until a Chinese guide exists, Chinese titles and short descriptions remain Chinese while the detailed panel explicitly falls back to English.
-- `User Guide > Understanding Settings > All Settings` in the GitHub Wiki lists every
-  setting with the same menu hierarchy, order, and current-language title as Carrot Web.
+- In the GitHub Wiki sidebar, `User Guide > Understanding Settings > All Settings` follows
+  Carrot Web's Korean menu hierarchy and order. The central settings catalog remains the
+  multilingual Korean, English, and Chinese directory.
 
 The information box stays vertically below the existing setting box in both portrait and landscape layouts. Multiplier and default actions keep their existing position and behavior inside the setting box.
 

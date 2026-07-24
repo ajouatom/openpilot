@@ -15,8 +15,8 @@ export const CSS = `
   font-style:normal;
   font-weight:900;
 }
-/* 구 HUD 완전 배제 — 신규 오버레이가 대체. DOM은 남겨둔다(그래야 DriveVisionHudContent가
- * 생성되고 그 update를 래핑해 실데이터를 받음). !important로 표시만 차단. */
+/* 구 HUD 완전 배제 — 신규 오버레이가 대체. 기존 DOM은 호환 수명주기 루트로만 남기고
+ * 실데이터 렌더는 신규 오버레이 하나가 담당한다. !important로 표시를 차단. */
 #driveHudCard { display:none !important; }
 /* 미니 HUD는 구 HUD가 아니라 별개 기능(웹설정 > HUD > 미니 HUD)이다. 평소에는 이 오버레이가
  * 화면을 차지하므로 함께 숨기되, 미니 HUD 모드가 실제로 켜졌을 때는 그 자체가 유일한 표시
@@ -33,7 +33,7 @@ html:not([data-carrot-mini-hud="1"]) #carrotMiniHud { display:none !important; }
   container-type:size; container-name:chud;
   --chud-font:"CarrotClusterHud", "Segoe UI", system-ui, sans-serif;
   --chud-weight:900;
-  --chud-white:#fff; --chud-carrot:#14bc68; --chud-limit:#de4840; --chud-stroke:#05090c;
+  --chud-white:#fff; --chud-carrot:#14bc68; --chud-limit:#de4840; --chud-amber:#f4ac36; --chud-stroke:#05090c;
   --chud-muted:#96a0ac;
 }
 .chud::before,.chud::after{
@@ -131,9 +131,51 @@ html:not([data-carrot-mini-hud="1"]) #carrotMiniHud { display:none !important; }
   font-variant-numeric:tabular-nums;display:flex;align-items:center;height:clamp(24px,4.8cqw,48px)}
 
 /* 제한속도 */
+.chud-limit-row{display:flex;align-items:center;gap:clamp(8px,1.8cqw,18px)}
 .chud-limit{width:clamp(46px,8cqw,84px);height:auto;display:block;
   margin-left:clamp(2px,1.2cqw,10px);filter:drop-shadow(0 3px 7px rgba(0,0,0,.5))}
 .chud-limit-num{font-family:var(--chud-font);font-weight:900;fill:#0d1116}
+
+.chud-sdi{
+  min-width:clamp(126px,18cqw,210px);max-width:clamp(170px,28cqw,270px);
+  min-height:clamp(52px,7.4cqw,78px);box-sizing:border-box;
+  display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;
+  align-items:center;column-gap:clamp(8px,1.4cqw,14px);padding:clamp(7px,1.2cqw,12px) clamp(10px,1.8cqw,16px);
+  border:2px solid color-mix(in srgb,var(--chud-limit) 74%,#fff 26%);
+  border-radius:clamp(14px,2.2cqw,24px);
+  background:linear-gradient(145deg,rgba(28,34,39,.92),rgba(8,13,17,.82));
+  box-shadow:0 4px 14px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.10);
+  color:#fff;font-family:var(--chud-font);font-weight:var(--chud-weight);
+  font-variant-numeric:tabular-nums;
+}
+.chud-sdi[data-family="section"],.chud-sdi[data-family="bump"]{
+  border-color:color-mix(in srgb,var(--chud-amber) 82%,#fff 18%);
+}
+.chud-sdi[data-family="police"],.chud-sdi[data-family="waze"]{
+  border-color:color-mix(in srgb,var(--chud-limit) 82%,#fff 18%);
+}
+.chud-sdi.is-imminent{background:linear-gradient(145deg,rgba(111,43,34,.94),rgba(31,15,14,.88))}
+.chud-sdi-label{
+  grid-column:1;grid-row:1;color:var(--chud-amber);font-size:clamp(13px,2.1cqw,21px);
+  line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  -webkit-text-stroke:1px var(--chud-stroke);paint-order:stroke fill;
+}
+.chud-sdi-value{
+  grid-column:2;grid-row:1 / span 2;display:flex;align-items:baseline;justify-content:flex-end;
+  gap:clamp(3px,.5cqw,6px);white-space:nowrap;
+}
+.chud-sdi-speed{
+  font-size:clamp(28px,4.8cqw,48px);line-height:.9;
+  -webkit-text-stroke:2px var(--chud-stroke);paint-order:stroke fill;
+}
+.chud-sdi-unit{color:var(--chud-muted);font-size:clamp(10px,1.5cqw,15px);line-height:1}
+.chud-sdi-meta{
+  grid-column:1;grid-row:2;display:flex;align-items:center;gap:clamp(5px,.8cqw,9px);
+  color:#fff;font-size:clamp(12px,1.8cqw,18px);line-height:1;white-space:nowrap;
+}
+.chud-sdi-countdown::before{
+  content:"·";margin-right:clamp(5px,.8cqw,9px);color:var(--chud-muted);
+}
 
 /* 속도판 */
 .chud-speed{display:block;width:clamp(180px,30cqw,384px);height:auto}
@@ -176,6 +218,8 @@ html:not([data-carrot-mini-hud="1"]) #carrotMiniHud { display:none !important; }
   .chud-wifi{width:clamp(28px,10cqw,40px);height:clamp(28px,10cqw,40px)}
   .chud-clock{font-size:clamp(28px,10cqw,40px);height:clamp(28px,10cqw,40px)}
   .chud-limit{width:clamp(52px,16cqw,68px)}
+  .chud-limit-row{align-items:flex-start;gap:clamp(7px,2.5cqw,12px)}
+  .chud-sdi{min-width:clamp(122px,42cqw,178px);max-width:clamp(150px,50cqw,206px)}
   /* 이 구간은 제한속도 표지가 커져 밴드 중심이 내려가므로 topCenter 하강값을 보정. */
   .chud-zone--tc{padding-top:clamp(60px,15cqw,86px)}
   .chud-turn{width:clamp(132px,42cqw,200px)}

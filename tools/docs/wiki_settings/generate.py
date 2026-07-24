@@ -45,6 +45,8 @@ WIKI_PAGE_UNSAFE_RE = re.compile(r'[\x00-\x1f<>:"/\\|?*#%[\]{}]+')
 WIKI_PAGE_WHITESPACE_RE = re.compile(r"\s+")
 WIKI_PAGE_DASH_RE = re.compile(r"-+")
 SIDEBAR_CATALOG_MARKER = "<!-- CARROT:SETTINGS-CATALOG -->"
+SIDEBAR_CATALOG_BEGIN_MARKER = "<!-- CARROT:SETTINGS-CATALOG:BEGIN -->"
+SIDEBAR_CATALOG_END_MARKER = "<!-- CARROT:SETTINGS-CATALOG:END -->"
 SIDEBAR_GUIDE_LABEL = "설정 이해하기"
 SIDEBAR_CATALOG_LABEL = "전체 설정"
 SETTING_BLOCK_RE = re.compile(
@@ -667,20 +669,80 @@ def _render_catalog_page(
   return "\n".join(lines)
 
 
-def _render_sidebar(existing: str) -> str:
+def _render_sidebar_catalog(
+  settings: list[CatalogSetting],
+  leaves: list[MenuLeaf],
+  indent: str,
+) -> list[str]:
+  lines = [
+    f"{indent}- [[{SIDEBAR_CATALOG_LABEL}|{CATALOG_PAGE_NAME.removesuffix('.md')}]] "
+    f"{SIDEBAR_CATALOG_BEGIN_MARKER}"
+  ]
+  previous_labels: tuple[str, ...] = ()
+  rendered_settings = 0
+  for leaf in leaves:
+    leaf_settings = [setting for setting in settings if setting.leaf.id == leaf.id]
+    if not leaf_settings:
+      continue
+    current_labels = leaf.labels["ko"]
+    common = 0
+    while (
+      common < len(previous_labels)
+      and common < len(current_labels)
+      and previous_labels[common] == current_labels[common]
+    ):
+      common += 1
+    for depth, label in enumerate(current_labels[common:], start=common):
+      item_indent = f"{indent}{'  ' * (depth + 1)}"
+      lines.append(f"{item_indent}- {_markdown_text(label)}")
+    setting_indent = f"{indent}{'  ' * (len(current_labels) + 1)}"
+    for setting in leaf_settings:
+      title = _markdown_text(setting.raw[LOCALE_FIELDS["ko"][0]]).replace("|", r"\|")
+      target = setting.page_name("ko").removesuffix(".md")
+      lines.append(f"{setting_indent}- [[{title}|{target}]]")
+      rendered_settings += 1
+    previous_labels = current_labels
+
+  if not rendered_settings:
+    raise GenerationError(f"{SIDEBAR_NAME}: cannot render an empty settings tree")
+  lines[-1] = f"{lines[-1]} {SIDEBAR_CATALOG_END_MARKER}"
+  return lines
+
+
+def _render_sidebar(
+  existing: str,
+  settings: list[CatalogSetting],
+  leaves: list[MenuLeaf],
+) -> str:
   normalized = existing.replace("\r\n", "\n").replace("\r", "\n")
   lines = normalized.splitlines()
-  marker_lines = [index for index, line in enumerate(lines) if SIDEBAR_CATALOG_MARKER in line]
-  if len(marker_lines) > 1:
-    raise GenerationError(f"{SIDEBAR_NAME}: contains more than one settings catalog marker")
+  begin_lines = [
+    index for index, line in enumerate(lines) if SIDEBAR_CATALOG_BEGIN_MARKER in line
+  ]
+  end_lines = [
+    index for index, line in enumerate(lines) if SIDEBAR_CATALOG_END_MARKER in line
+  ]
+  legacy_lines = [
+    index for index, line in enumerate(lines) if SIDEBAR_CATALOG_MARKER in line
+  ]
+  if len(begin_lines) > 1 or len(end_lines) > 1 or len(legacy_lines) > 1:
+    raise GenerationError(f"{SIDEBAR_NAME}: contains duplicate settings catalog markers")
+  if bool(begin_lines) != bool(end_lines):
+    raise GenerationError(f"{SIDEBAR_NAME}: contains an incomplete settings catalog block")
+  if begin_lines and legacy_lines:
+    raise GenerationError(f"{SIDEBAR_NAME}: mixes legacy and current settings catalog markers")
 
-  if marker_lines:
-    marker_index = marker_lines[0]
+  if begin_lines:
+    begin_index = begin_lines[0]
+    end_index = end_lines[0]
+    if begin_index > end_index:
+      raise GenerationError(f"{SIDEBAR_NAME}: settings catalog markers are out of order")
+    indent = re.match(r"^\s*", lines[begin_index]).group(0)
+    lines[begin_index:end_index + 1] = _render_sidebar_catalog(settings, leaves, indent)
+  elif legacy_lines:
+    marker_index = legacy_lines[0]
     indent = re.match(r"^\s*", lines[marker_index]).group(0)
-    lines[marker_index] = (
-      f"{indent}- [[{SIDEBAR_CATALOG_LABEL}|{CATALOG_PAGE_NAME.removesuffix('.md')}]] "
-      f"{SIDEBAR_CATALOG_MARKER}"
-    )
+    lines[marker_index:marker_index + 1] = _render_sidebar_catalog(settings, leaves, indent)
   else:
     guide_lines = [
       index for index, line in enumerate(lines)
@@ -693,10 +755,10 @@ def _render_sidebar(existing: str) -> str:
     guide_index = guide_lines[0]
     parent_indent = re.match(r"^\s*", lines[guide_index]).group(0)
     child_indent = f"{parent_indent}  "
-    lines.insert(
-      guide_index + 1,
-      f"{child_indent}- [[{SIDEBAR_CATALOG_LABEL}|{CATALOG_PAGE_NAME.removesuffix('.md')}]] "
-      f"{SIDEBAR_CATALOG_MARKER}",
+    lines[guide_index + 1:guide_index + 1] = _render_sidebar_catalog(
+      settings,
+      leaves,
+      child_indent,
     )
   return "\n".join(lines) + "\n"
 
@@ -707,7 +769,8 @@ def _read_candidate_pages(wiki_dir: Path | None) -> dict[str, str]:
   pages: dict[str, str] = {}
   for path in wiki_dir.glob("*.md"):
     try:
-      pages[path.name] = path.read_bytes().decode("utf-8")
+      text = path.read_bytes().decode("utf-8")
+      pages[path.name] = text.replace("\r\n", "\n").replace("\r", "\n")
     except UnicodeDecodeError as error:
       raise GenerationError(f"Wiki page must be UTF-8: {path}: {error}") from error
   return pages
@@ -956,8 +1019,8 @@ def generate(
       generated_by_locale[(locale, metadata.param)] = metadata
   pages[CATALOG_PAGE_NAME] = _render_catalog_page(settings, leaves, requested_locales)
   existing_sidebar = existing_pages.get(SIDEBAR_NAME)
-  if existing_sidebar is not None:
-    pages[SIDEBAR_NAME] = _render_sidebar(existing_sidebar)
+  if existing_sidebar is not None and "ko" in requested_locales:
+    pages[SIDEBAR_NAME] = _render_sidebar(existing_sidebar, settings, leaves)
 
   canonical_locale = "en" if "en" in requested_locales else requested_locales[0]
   canonical_settings = {

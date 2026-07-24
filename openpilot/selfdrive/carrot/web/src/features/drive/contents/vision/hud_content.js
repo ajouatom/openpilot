@@ -20,10 +20,20 @@ export function createDriveVisionHudContent(options = {}) {
   let destroyed = false;
   let lastPayload = null;
 
-  function viewportOrientation() {
+  function presentationOverlay() {
+    return target.CarrotHudOverlay || null;
+  }
+
+  function viewportSize() {
     const viewport = target.visualViewport;
-    const width = Number(viewport?.width || documentRoot.documentElement.clientWidth || target.innerWidth || 0);
-    const height = Number(viewport?.height || documentRoot.documentElement.clientHeight || target.innerHeight || 0);
+    return {
+      width: Number(viewport?.width || documentRoot.documentElement.clientWidth || target.innerWidth || 0),
+      height: Number(viewport?.height || documentRoot.documentElement.clientHeight || target.innerHeight || 0),
+    };
+  }
+
+  function viewportOrientation() {
+    const { width, height } = viewportSize();
     return height >= width ? "vertical" : "horizontal";
   }
 
@@ -31,6 +41,16 @@ export function createDriveVisionHudContent(options = {}) {
     if (initialized || destroyed) return false;
     renderer.init();
     initialized = true;
+    return true;
+  }
+
+  function syncPresentation() {
+    const overlay = presentationOverlay();
+    if (!overlay) return false;
+    for (const reason of suppressions) overlay.setSuppressed?.(reason, true);
+    if (active && !destroyed) overlay.activate?.();
+    else overlay.deactivate?.();
+    if (lastPayload) overlay.update?.(lastPayload);
     return true;
   }
 
@@ -62,16 +82,21 @@ export function createDriveVisionHudContent(options = {}) {
     const changed = !active;
     mounted = true;
     active = true;
-    ensureInitialized();
-    if (lastPayload) renderer.update(lastPayload);
+    const overlay = presentationOverlay();
+    if (!syncPresentation()) {
+      ensureInitialized();
+      if (lastPayload) renderer.update(lastPayload);
+    }
     syncVisibility();
-    renderer.relayout?.();
+    if (overlay?.relayout) overlay.relayout(viewportSize());
+    else renderer.relayout?.();
     return changed;
   }
 
   function deactivate() {
     const changed = active;
     active = false;
+    presentationOverlay()?.deactivate?.();
     syncVisibility();
     return changed;
   }
@@ -79,15 +104,21 @@ export function createDriveVisionHudContent(options = {}) {
   function resize() {
     if (destroyed || !active) return false;
     syncVisibility();
-    renderer.relayout?.();
+    const overlay = presentationOverlay();
+    if (overlay?.relayout) overlay.relayout(viewportSize());
+    else renderer.relayout?.();
     return true;
   }
 
   function update(payload) {
     if (!payload || destroyed) return false;
     lastPayload = payload;
-    ensureInitialized();
-    renderer.update(payload);
+    const overlay = presentationOverlay();
+    if (overlay?.update) overlay.update(payload);
+    else {
+      ensureInitialized();
+      renderer.update(payload);
+    }
     syncVisibility();
     return true;
   }
@@ -103,18 +134,24 @@ export function createDriveVisionHudContent(options = {}) {
     const key = String(reason || "external");
     if (value) suppressions.add(key);
     else suppressions.delete(key);
+    presentationOverlay()?.setSuppressed?.(key, Boolean(value));
     if (key === "replay-insights") root.classList.toggle("is-replay-suppressed", Boolean(value));
     return syncVisibility();
   }
 
   function renderText() {
     if (destroyed) return false;
-    ensureInitialized();
-    renderer.renderText?.();
+    const overlay = presentationOverlay();
+    if (overlay?.update && lastPayload) overlay.update(lastPayload);
+    else {
+      ensureInitialized();
+      renderer.renderText?.();
+    }
     return true;
   }
 
   function status() {
+    const presentation = presentationOverlay()?.status?.() || null;
     return Object.freeze({
       mounted,
       active,
@@ -123,6 +160,7 @@ export function createDriveVisionHudContent(options = {}) {
       orientation: viewportOrientation(),
       visible: !root.hidden && !root.classList.contains("is-vision-hud-suppressed"),
       suppressions: Object.freeze(Array.from(suppressions)),
+      presentation,
     });
   }
 
@@ -133,6 +171,7 @@ export function createDriveVisionHudContent(options = {}) {
     destroyed = true;
     lastPayload = null;
     suppressions.clear();
+    presentationOverlay()?.destroy?.();
     root.classList.remove("is-replay-suppressed", "driveHudCard--loading");
     syncVisibility();
     return true;
@@ -161,6 +200,7 @@ export function createDriveVisionHudContent(options = {}) {
     setLoading,
     setSuppressed,
     renderText,
+    syncPresentation,
     status,
     destroy,
   });

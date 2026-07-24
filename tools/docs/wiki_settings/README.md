@@ -33,7 +33,8 @@ Wiki의 설정별 설명은 장문 가이드를 복사하지 않는다. 필요�
 - 설정별 파일명·페이지 제목·목록과 메뉴 계층은 Carrot Web이 각 언어에서 실제로
   표시하는 `title`, `etitle`, `ctitle`과 `menu` 구조를 기준으로 한다.
 - 기존 수동 Wiki 문서는 수정하지 않는다. `_Sidebar.md`에는 기존 구조를 유지한 채
-  `사용 설명서 > 설정 이해하기 > 전체 설정` 링크 한 줄만 생성기가 관리한다.
+  `사용 설명서 > 설정 이해하기 > 전체 설정` 아래에 Carrot Web과 같은 순서의
+  한국어 메뉴 계층과 설정 링크를 생성기가 관리한다.
 - 로케일 제목이 바뀌면 파라미터를 기준으로 페이지를 이동하고 `MANUAL` 영역을
   보존한다. 같은 이름의 비관리 Wiki 페이지가 있으면 덮어쓰지 않고 실패한다.
 - Wiki 편집은 자유롭게 할 수 있지만 Carrot Web에는 생성·검증된 자동 영역만 표시한다.
@@ -63,7 +64,7 @@ python -m unittest discover -s tools/docs/wiki_settings/tests -p "test_*.py" -v
 
 `.github/workflows/wiki-settings-check.yaml`은 `carrot-wip` 대상 Pull Request에서 공개 Wiki를 쓰기 자격 증명 없이 읽고 `ci_check.py`를 실행한다. 저장소 권한은 `contents: read`만 사용하며 `summary.json`, `summary.md`, `pages.diff`만 GitHub Actions Artifact로 올린다.
 
-`.github/workflows/wiki-settings-publish.yaml`은 GitHub Actions에서 `cp-set-wiki`로 표시된다. `carrot-wip` 설정 변경, Wiki `gollum`, 수동 실행에서만 동작하며, 신뢰된 기본 브랜치의 생성기와 검사기를 사용해 실제 GitHub Wiki의 자동 영역·전체 설정 목록·사이드바 링크와 `Settings-Catalog.json`을 한 Wiki 커밋으로 동기화한다. 개발 브랜치나 별도의 생성물 브랜치는 만들지 않는다.
+`.github/workflows/wiki-settings-publish.yaml`은 GitHub Actions에서 `cp-set-wiki`로 표시된다. `carrot-wip` 설정 변경, Wiki `gollum`, 수동 실행에서만 동작하며, 신뢰된 기본 브랜치의 생성기와 검사기를 사용해 실제 GitHub Wiki의 자동 영역·전체 설정 목록·한국어 사이드바 설정 트리와 `Settings-Catalog.json`을 한 Wiki 커밋으로 동기화한다. 개발 브랜치나 별도의 생성물 브랜치는 만들지 않는다.
 
 Carrot Web 조회 기준:
 
