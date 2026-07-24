@@ -7,7 +7,7 @@ from ..registry import register_command
 @register_command(
   name="youtube-test",
   summary="Run the YouTube camera pipeline while the device is offroad.",
-  usage="carrot youtube-test [start|status|logs|stop] [--lines N]",
+  usage="carrot youtube-test [verify|start|status|logs|stop] [--lines N]",
 )
 def run(args: list[str]) -> int:
   return youtube_test.run_command(args)

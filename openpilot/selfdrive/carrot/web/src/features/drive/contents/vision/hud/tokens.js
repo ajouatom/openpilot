@@ -15,6 +15,15 @@ export const COLORS = Object.freeze({
   stroke: "#05090c",   // 텍스트 외곽선
 });
 
+// 주행모드 배지 색 — 클러스터 SPEED_DRIVING_MODE_STYLES 그대로(배경 α는 style.js).
+// 1 연비(0,255,0) / 2 안전(255,165,0) / 3 일반(255,255,255) / 4 고속(255,0,0).
+export const DRIVE_MODE_COLORS = Object.freeze({
+  1: "#00ff00",
+  2: "#ffa500",
+  3: "#ffffff",
+  4: "#ff0000",
+});
+
 // 가독성 하한(px): 이 값 아래로는 축소하지 않고 degradation에서 숨긴다.
 export const MIN_PX = Object.freeze({
   speedPanel: 150,

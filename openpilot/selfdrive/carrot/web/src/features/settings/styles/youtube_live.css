@@ -87,7 +87,10 @@
 
 .page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch__track::after,
 .page--setting #settingScreenItems .youtube-timestamp-disabled .c-switch__input:checked + .c-switch__track::after {
-  transform: none;
+  /* Keep the shared switch thumb vertically centered while pinning the
+     locked-off state to the left. `none` also removed translateY(-50%) and
+     pushed half of the thumb below the track. */
+  transform: translateY(-50%);
   background: color-mix(in srgb, var(--md-on-surface-var) 42%, var(--setting-shade));
   box-shadow: none;
 }

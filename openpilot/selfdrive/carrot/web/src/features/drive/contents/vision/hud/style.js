@@ -190,6 +190,12 @@ html:not([data-carrot-mini-hud="1"]) #carrotMiniHud { display:none !important; }
 .chud-t-ev{font-weight:var(--chud-weight);fill:var(--chud-carrot);stroke-width:3}
 .chud-t-override{font-weight:var(--chud-weight);stroke-width:2}
 .chud-t-override-label{font-weight:800;stroke-width:2}
+/* 주행모드 배지(연비/안전/일반/고속) — 색은 위젯이 mode별 인라인(fill), 배경 α는 여기서(200/255) */
+.chud-drive-mode-box{fill-opacity:.784;stroke:#fff;stroke-width:2;stroke-linejoin:round}
+/* 흰 글자 + 두꺼운 어두운 외곽선으로 어느 배경(흰 '일반' 포함)에서도 또렷·강조. */
+.chud-drive-mode-label{font-family:var(--chud-font);font-weight:var(--chud-weight);fill:#fff;
+  paint-order:stroke;stroke:var(--chud-stroke);stroke-width:3;stroke-linejoin:round;
+  letter-spacing:.02em}
 .chud-gear-box{fill:rgba(5,9,12,.82);stroke:#fff;stroke-width:3}
 .chud-gear-box.is-muted{stroke:var(--chud-muted)}
 .chud-speed-traffic{overflow:visible}
