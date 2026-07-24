@@ -41,6 +41,44 @@ function tpmsPayload(value) {
   return Object.values(payload).some((pressure) => pressure != null) ? payload : null;
 }
 
+function cruiseOverridePayload(value) {
+  if (!value || typeof value !== "object") return null;
+  const kph = finite(value.kph);
+  if (kph == null || kph <= 0) return null;
+  return {
+    kph,
+    label: value.label == null ? "" : String(value.label),
+    mode: finite(value.mode) ?? 0,
+  };
+}
+
+// The classic realtime bridge rebuilds a compact payload before presenting it.
+// Keep the cluster-only fields in one shared rule so live and replay cannot
+// silently drop them at that boundary.
+export function withVehicleHudFields(payload = {}, source = {}) {
+  return {
+    ...payload,
+    evActive: source.evActive === true,
+    activeLaneLine: source.activeLaneLine == null
+      ? null
+      : source.activeLaneLine === true,
+    cruiseOverride: cruiseOverridePayload(source.cruiseOverride),
+  };
+}
+
+// Stable fragment for the classic HUD change detector. activeLaneLine is
+// deliberately tri-state: unknown and explicitly disabled are different.
+export function vehicleHudSignature(payload = {}) {
+  const override = cruiseOverridePayload(payload.cruiseOverride);
+  return [
+    payload.evActive === true ? 1 : 0,
+    payload.activeLaneLine == null ? "-" : (payload.activeLaneLine === true ? 1 : 0),
+    override?.kph ?? "-",
+    override?.label ?? "-",
+    override?.mode ?? "-",
+  ].join(":");
+}
+
 // Cluster parity: cluster_live.py deceleration_source_display_label.
 const DECEL_SOURCE_LABELS = Object.freeze({
   cam: "cam:n", section: "section:n", bump: "bump:n", police: "police:n",
@@ -121,4 +159,9 @@ export function deriveVehicleHudPayload(state = {}) {
   };
 }
 
-export const CarrotHudDataBridge = Object.freeze({ deriveVehicleHudPayload, deriveCruiseOverride });
+export const CarrotHudDataBridge = Object.freeze({
+  deriveVehicleHudPayload,
+  deriveCruiseOverride,
+  withVehicleHudFields,
+  vehicleHudSignature,
+});

@@ -4,7 +4,10 @@ import test from "node:test";
 import { createSpeedPanel } from "../src/features/drive/contents/vision/hud/widgets/speed_panel.js";
 import { createLfaIcon } from "../src/features/drive/contents/vision/hud/widgets/lfa_icon.js";
 import { mapPayload } from "../src/features/drive/contents/vision/hud/index.js";
-import { deriveVehicleHudPayload } from "../src/features/drive/contents/vision/hud/data_bridge.js";
+import {
+  deriveVehicleHudPayload,
+  withVehicleHudFields,
+} from "../src/features/drive/contents/vision/hud/data_bridge.js";
 import { COLORS } from "../src/features/drive/contents/vision/hud/tokens.js";
 
 /* Minimal DOM stub — enough for the SVG/DOM helpers the widgets use.
@@ -71,17 +74,14 @@ const isVisible = (node) => node != null && node.style.display !== "none";
  * the identical cereal-state shape, so one fixture exercises both. */
 function renderFromCereal(state) {
   const vehicle = deriveVehicleHudPayload(state);
-  const flat = {
+  const flat = withVehicleHudFields({
     vEgoKph: Number(state.carState?.vEgoCluster ?? state.carState?.vEgo),
     vSetKph: Number(state.carState?.vCruiseCluster),
     isMetric: true,
     gear: vehicle.gear,
     gearStep: vehicle.gearStep,
-    evActive: vehicle.evActive,
-    activeLaneLine: vehicle.activeLaneLine,
-    cruiseOverride: vehicle.cruiseOverride,
     latActive: vehicle.lfaActive,
-  };
+  }, vehicle);
   const data = mapPayload(flat);
   const panel = createSpeedPanel(doc);
   const lfa = createLfaIcon(doc);

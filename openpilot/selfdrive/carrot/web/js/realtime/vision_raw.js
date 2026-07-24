@@ -398,7 +398,7 @@ function drivingHudUpdateFromCarPayload(j) {
     ? Boolean(Number(j.isMetric))
     : (runtimeIsMetric == null ? true : Boolean(Number(runtimeIsMetric)));
   const vEgoKph = (typeof j.vEgo === "number" && isFinite(j.vEgo)) ? j.vEgo * 3.6 : null;
-  const payload = {
+  const basePayload = {
     isMetric,
     cpuTempC: j.cpuTempC,
     memPct: j.memPct,
@@ -430,6 +430,14 @@ function drivingHudUpdateFromCarPayload(j) {
     speedLimitBlink: j.speedLimitBlink,
     apm: j.apm,
   };
+  const payload = window.CarrotHudDataBridge?.withVehicleHudFields?.(basePayload, j) || {
+    ...basePayload,
+    evActive: j.evActive === true,
+    activeLaneLine: j.activeLaneLine == null ? null : j.activeLaneLine === true,
+    cruiseOverride: j.cruiseOverride && typeof j.cruiseOverride === "object"
+      ? j.cruiseOverride
+      : null,
+  };
 
   const miniHudPayload = window.CarrotMiniHudModel?.build?.(
     payload,
@@ -456,6 +464,13 @@ function drivingHudUpdateFromCarPayload(j) {
     payload.tfBars ?? "-",
     payload.gear ?? "-",
     payload.gearStep ?? "-",
+    window.CarrotHudDataBridge?.vehicleHudSignature?.(payload) || [
+      payload.evActive ? 1 : 0,
+      payload.activeLaneLine == null ? "-" : (payload.activeLaneLine ? 1 : 0),
+      payload.cruiseOverride?.kph ?? "-",
+      payload.cruiseOverride?.label ?? "-",
+      payload.cruiseOverride?.mode ?? "-",
+    ].join(":"),
     payload.lfaActive ? 1 : 0,
     Math.round(Number(payload.steeringAngleDeg) || 0), // 1° 단위로만 갱신
     Math.round((Number(payload.aEgo) || 0) * 20),      // 0.05 단위
@@ -479,10 +494,12 @@ function drivingHudUpdateFromCarPayload(j) {
   ].join("|");
   if (payloadSignature === LAST_HUD_PAYLOAD_SIGNATURE) return;
   LAST_HUD_PAYLOAD_SIGNATURE = payloadSignature;
-  // Both live and replay publish the same normalized payload to independent
-  // presentation sinks. Neither sink wraps or owns the other one's lifecycle.
-  try { window.CarrotHudOverlay?.update?.(payload); } catch {}
-  try { window.DriveVisionHudContent?.update?.(payload); } catch {}
+  // DriveVisionHudContent owns the visible HUD lifecycle. The direct overlay
+  // fallback is only for a partial/failed platform bootstrap.
+  try {
+    if (window.DriveVisionHudContent?.update) window.DriveVisionHudContent.update(payload);
+    else window.CarrotHudOverlay?.update?.(payload);
+  } catch {}
 }
 
 function averageFiniteMetric(values) {

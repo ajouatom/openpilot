@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   deriveVehicleHudPayload,
   deriveCruiseOverride,
+  vehicleHudSignature,
+  withVehicleHudFields,
 } from "../src/features/drive/contents/vision/hud/data_bridge.js";
+
+const rawSource = readFileSync(new URL("../js/realtime/vision_raw.js", import.meta.url), "utf8");
 
 // Cluster parity: carState.evModeValid & evModeActive drive the green EV telltale.
 test("EV telltale requires both valid and active", () => {
@@ -60,4 +65,41 @@ test("eco override (green, mode 1) wins when cruiseTarget exceeds the set speed"
 test("no override when desiredSpeed is not below the set speed", () => {
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 88 } }), null);
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 95 } }), null);
+});
+
+test("final presentation payload retains cluster-only fields", () => {
+  const payload = withVehicleHudFields(
+    { vEgoKph: 52, gear: "D" },
+    {
+      evActive: true,
+      activeLaneLine: false,
+      cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
+    },
+  );
+  assert.deepEqual(payload, {
+    vEgoKph: 52,
+    gear: "D",
+    evActive: true,
+    activeLaneLine: false,
+    cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
+  });
+});
+
+test("cluster-only changes produce distinct presentation signatures", () => {
+  const base = { evActive: false, activeLaneLine: null, cruiseOverride: null };
+  assert.notEqual(vehicleHudSignature(base), vehicleHudSignature({ ...base, evActive: true }));
+  assert.notEqual(vehicleHudSignature(base), vehicleHudSignature({ ...base, activeLaneLine: false }));
+  assert.notEqual(
+    vehicleHudSignature(base),
+    vehicleHudSignature({ ...base, cruiseOverride: { kph: 77, label: "cam:n", mode: 2 } }),
+  );
+});
+
+test("classic live and replay glue uses the shared fields and one lifecycle sink", () => {
+  assert.match(rawSource, /CarrotHudDataBridge\?\.withVehicleHudFields\?\.\(basePayload,\s*j\)/);
+  assert.match(rawSource, /CarrotHudDataBridge\?\.vehicleHudSignature\?\.\(payload\)/);
+  assert.match(
+    rawSource,
+    /if \(window\.DriveVisionHudContent\?\.update\) window\.DriveVisionHudContent\.update\(payload\);[\s\S]*else window\.CarrotHudOverlay\?\.update\?\.\(payload\);/,
+  );
 });

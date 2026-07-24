@@ -15,8 +15,8 @@ export const CSS = `
   font-style:normal;
   font-weight:900;
 }
-/* 구 HUD 완전 배제 — 신규 오버레이가 대체. DOM은 남겨둔다(그래야 DriveVisionHudContent가
- * 생성되고 그 update를 래핑해 실데이터를 받음). !important로 표시만 차단. */
+/* 구 HUD 완전 배제 — 신규 오버레이가 대체. 기존 DOM은 호환 수명주기 루트로만 남기고
+ * 실데이터 렌더는 신규 오버레이 하나가 담당한다. !important로 표시를 차단. */
 #driveHudCard { display:none !important; }
 /* 미니 HUD는 구 HUD가 아니라 별개 기능(웹설정 > HUD > 미니 HUD)이다. 평소에는 이 오버레이가
  * 화면을 차지하므로 함께 숨기되, 미니 HUD 모드가 실제로 켜졌을 때는 그 자체가 유일한 표시
