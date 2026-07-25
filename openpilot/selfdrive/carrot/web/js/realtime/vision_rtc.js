@@ -8,8 +8,19 @@ var setCarrotVisionState = window.CarrotVisionSetState;
 
 const RTC_STATS_POLL_MS = 5000;
 const RTC_STREAM_BUSY_CODE = "carrot_vision_busy";
-const RTC_CLIENT_ID = String(window.CarrotStreamIdentity?.clientId
+const RTC_DEVICE_ID = String(window.CarrotStreamIdentity?.deviceId
+  || window.CarrotStreamIdentity?.clientId
   || `carrot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+const RTC_TAB_ID = String(window.CarrotStreamIdentity?.tabId || "");
+const RTC_CLIENT_ID = RTC_DEVICE_ID;
+
+function rtcCreateAttemptId() {
+  try {
+    const generated = window.CarrotStreamIdentity?.createAttemptId?.();
+    if (generated) return String(generated).slice(0, 128);
+  } catch (_) {}
+  return `carrot-attempt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`.slice(0, 128);
+}
 
 class CarrotVisionStreamBusyError extends Error {
   constructor(message = "Carrot Vision is active on another device.") {
@@ -1174,6 +1185,7 @@ async function rtcConnectOnce(options = {}) {
   if (takeover) rtcSetOwnershipBlocked(false, "", "vision takeover requested");
 
   _rtcConnecting = true;
+  const attemptId = rtcCreateAttemptId();
   let previousPc = RTC_PC;
   try {
     rtcCancelRetry();
@@ -1183,6 +1195,9 @@ async function rtcConnectOnce(options = {}) {
     rtcTrace("connect_start", {
       force,
       takeover,
+      deviceId: RTC_DEVICE_ID,
+      tabId: RTC_TAB_ID,
+      attemptId,
       hasPreviousPc: Boolean(previousPc),
       hasLiveTrack: rtcHasLiveTrack(),
     }, previousPc || RTC_PC);
@@ -1217,6 +1232,7 @@ async function rtcConnectOnce(options = {}) {
     rtcPcLabel(pc);
     pc.__carrotTrackSeen = false;
     pc.__carrotCreatedAtMs = Date.now();
+    pc.__carrotAttemptId = attemptId;
     RTC_PENDING_PC = pc;
     setCarrotVisionPhase(CARROT_VISION_PHASE.RTC_CONNECTING, {
       reason: "rtc peer created",
@@ -1363,6 +1379,9 @@ async function rtcConnectOnce(options = {}) {
       bridge_services_in: [],
       bridge_services_out: [],
       client_id: RTC_CLIENT_ID,
+      device_id: RTC_DEVICE_ID,
+      tab_id: RTC_TAB_ID,
+      attempt_id: attemptId,
       takeover,
       carrot_state: true,
     };

@@ -1,10 +1,33 @@
 import asyncio
 import json
+import re
+from dataclasses import dataclass, field
 from typing import Any
 
 from aiohttp import web
 
 from openpilot.system.webrtc import webrtcd
+
+
+_STREAM_IDENTIFIER_PATTERN = re.compile(r"[^a-zA-Z0-9._:-]+")
+
+
+def normalize_stream_identifier(value: Any) -> str:
+  return _STREAM_IDENTIFIER_PATTERN.sub("-", str(value or "").strip()).strip("-")[:128]
+
+
+@dataclass(frozen=True)
+class CarrotStreamRequestBody:
+  sdp: str
+  cameras: list[str]
+  bridge_services_in: list[str] = field(default_factory=list)
+  bridge_services_out: list[str] = field(default_factory=list)
+  client_id: str = ""
+  device_id: str = ""
+  tab_id: str = ""
+  attempt_id: str = ""
+  takeover: bool = False
+  carrot_state: bool = False
 
 
 class CarrotStreamSession(webrtcd.StreamSession):
@@ -116,27 +139,33 @@ async def get_stream(request: web.Request):
   stream_dict, debug_mode = request.app["streams"], request.app["debug"]
 
   raw_body = await request.json()
-  body = webrtcd.StreamRequestBody(
+  body = CarrotStreamRequestBody(
     sdp=raw_body["sdp"],
     cameras=raw_body["cameras"],
     bridge_services_in=raw_body.get("bridge_services_in", []),
     bridge_services_out=raw_body.get("bridge_services_out", []),
-    client_id=str(raw_body.get("client_id", "")),
+    client_id=normalize_stream_identifier(raw_body.get("client_id", "")),
+    device_id=normalize_stream_identifier(raw_body.get("device_id", "")),
+    tab_id=normalize_stream_identifier(raw_body.get("tab_id", "")),
+    attempt_id=normalize_stream_identifier(raw_body.get("attempt_id", "")),
     takeover=bool(raw_body.get("takeover", False)),
     carrot_state=bool(raw_body.get("carrot_state", False)),
   )
 
   async with request.app["stream_lock"]:
     await prune_ended_stream_sessions(stream_dict)
-    client_key = webrtcd._stream_client_key(body.client_id, request.remote)
+    device_id = body.device_id or body.client_id
+    client_key = webrtcd._stream_client_key(device_id, request.remote)
     road_requested = "road" in body.cameras
     if road_requested:
       old_sessions, foreign_sessions = webrtcd._carrot_vision_road_sessions(stream_dict, client_key)
     else:
       old_sessions, foreign_sessions = [], []
 
-    webrtcd.webrtcd_log("info", "Carrot Vision stream request from %s cameras=%s takeover=%s old_sessions=%s",
-                        request.remote, body.cameras, body.takeover,
+    stream_request_log = "Carrot Vision stream request from %s cameras=%s device=%s tab=%s attempt=%s takeover=%s old_sessions=%s"
+    webrtcd.webrtcd_log("info", stream_request_log,
+                        request.remote, body.cameras, device_id or "legacy-remote",
+                        body.tab_id or "-", body.attempt_id or "-", body.takeover,
                         [getattr(old, "identifier", "?") for old in old_sessions])
 
     if road_requested and foreign_sessions and not body.takeover:
@@ -161,6 +190,9 @@ async def get_stream(request: web.Request):
       carrot_state=body.carrot_state,
     )
     session.stream_dict = stream_dict
+    session.device_id = device_id
+    session.tab_id = body.tab_id
+    session.attempt_id = body.attempt_id
 
     replaced_sessions = old_sessions + (foreign_sessions if body.takeover else [])
     for old in replaced_sessions:

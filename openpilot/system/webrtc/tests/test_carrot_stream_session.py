@@ -16,8 +16,26 @@ class TestCarrotStreamSession:
     self.loop.stop()
     self.loop.close()
 
+  def test_stream_identifiers_are_bounded_and_log_safe(self):
+    raw = "  device\nwith spaces/" + ("x" * 160)
+    normalized = carrot_session.normalize_stream_identifier(raw)
+
+    assert normalized.startswith("device-with-spaces-")
+    assert "\n" not in normalized
+    assert " " not in normalized
+    assert len(normalized) == 128
+
   @staticmethod
-  def _stream_request(mocker, streams, *, client_id: str, takeover: bool = False):
+  def _stream_request(
+    mocker,
+    streams,
+    *,
+    client_id: str,
+    device_id: str | None = None,
+    tab_id: str = "",
+    attempt_id: str = "",
+    takeover: bool = False,
+  ):
     request = mocker.Mock()
     request.remote = "192.168.0.2"
     request.app = {
@@ -25,12 +43,17 @@ class TestCarrotStreamSession:
       "debug": False,
       "stream_lock": asyncio.Lock(),
     }
-    request.json = mocker.AsyncMock(return_value={
+    payload = {
       "sdp": "offer",
       "cameras": ["road"],
       "client_id": client_id,
+      "tab_id": tab_id,
+      "attempt_id": attempt_id,
       "takeover": takeover,
-    })
+    }
+    if device_id is not None:
+      payload["device_id"] = device_id
+    request.json = mocker.AsyncMock(return_value=payload)
     return request
 
   @staticmethod
@@ -69,9 +92,16 @@ class TestCarrotStreamSession:
 
   def test_rejects_foreign_road_session_without_takeover(self, mocker):
     owner = self._stream_session(mocker, "owner")
-    owner.client_key = "client:owner"
+    owner.client_key = "client:owner-device"
     streams = {owner.identifier: owner}
-    request = self._stream_request(mocker, streams, client_id="viewer")
+    request = self._stream_request(
+      mocker,
+      streams,
+      client_id="legacy-viewer-tab",
+      device_id="viewer-device",
+      tab_id="viewer-tab",
+      attempt_id="attempt-1",
+    )
     session_factory = mocker.patch.object(carrot_session, "CarrotStreamSession")
 
     with pytest.raises(web.HTTPConflict) as exc_info:
@@ -80,6 +110,49 @@ class TestCarrotStreamSession:
     assert json.loads(exc_info.value.text)["code"] == webrtcd.CARROT_VISION_BUSY_CODE
     owner.stop.assert_not_awaited()
     session_factory.assert_not_called()
+
+  def test_same_device_replaces_previous_tab_and_attempt(self, mocker):
+    owner = self._stream_session(mocker, "owner")
+    owner.client_key = "client:viewer-device"
+    owner.tab_id = "old-tab"
+    owner.attempt_id = "old-attempt"
+    replacement = self._stream_session(mocker, "replacement")
+    streams = {owner.identifier: owner}
+    request = self._stream_request(
+      mocker,
+      streams,
+      client_id="legacy-new-tab",
+      device_id="viewer-device",
+      tab_id="new-tab",
+      attempt_id="new-attempt",
+    )
+    mocker.patch.object(carrot_session, "CarrotStreamSession", return_value=replacement)
+
+    response = self.loop.run_until_complete(carrot_session.get_stream(request))
+
+    assert response.status == 200
+    owner.stop.assert_awaited_once()
+    replacement.start.assert_called_once()
+    assert replacement.device_id == "viewer-device"
+    assert replacement.tab_id == "new-tab"
+    assert replacement.attempt_id == "new-attempt"
+    assert owner.identifier not in streams
+
+  def test_legacy_client_id_still_replaces_same_client(self, mocker):
+    owner = self._stream_session(mocker, "owner")
+    owner.client_key = "client:legacy-viewer"
+    replacement = self._stream_session(mocker, "replacement")
+    streams = {owner.identifier: owner}
+    request = self._stream_request(mocker, streams, client_id="legacy-viewer")
+    mocker.patch.object(carrot_session, "CarrotStreamSession", return_value=replacement)
+
+    response = self.loop.run_until_complete(carrot_session.get_stream(request))
+
+    assert response.status == 200
+    owner.stop.assert_awaited_once()
+    replacement.start.assert_called_once()
+    assert replacement.device_id == "legacy-viewer"
+    assert owner.identifier not in streams
 
   def test_prunes_ended_owner_before_ownership_check(self, mocker):
     owner = self._stream_session(mocker, "owner")
