@@ -15,6 +15,10 @@ import { installDriveVisionRoadOverlayGeometryRendererFacade } from "./road_over
 import { installDriveVisionRoadOverlayAuxRendererFacade } from "./road_overlay_aux_renderer.js";
 import { installDriveVisionRoadOverlayLeadModelFacade } from "./road_overlay_lead_model.js";
 import { installDriveVisionRoadOverlayLeadRendererFacade } from "./road_overlay_lead_renderer.js";
+import { installDriveVisionSessionPolicyFacade } from "./session_policy.js";
+import { installDriveVisionSessionControllerFacade } from "./session_controller.js";
+import { installDriveVisionConnectionTransactionFacade } from "./connection_transaction.js";
+import { installDriveVisionNetworkRecoveryFacade } from "./network_recovery.js";
 import { finalizeDriveVisionFacade } from "./facade.js";
 import {
   finalizeDriveVisionCompatibility,
@@ -55,6 +59,10 @@ export function installDriveVisionLeafFacades(target = globalThis, options = {})
     roadOverlayAuxRenderer: installDriveVisionRoadOverlayAuxRendererFacade(target),
     roadOverlayLeadModel: installDriveVisionRoadOverlayLeadModelFacade(target),
     roadOverlayLeadRenderer: installDriveVisionRoadOverlayLeadRendererFacade(target),
+    sessionPolicy: installDriveVisionSessionPolicyFacade(target),
+    sessionController: installDriveVisionSessionControllerFacade(target),
+    connectionTransactions: installDriveVisionConnectionTransactionFacade(target),
+    networkRecovery: installDriveVisionNetworkRecoveryFacade(target),
   });
   installedTargets.set(target, installed);
 
@@ -150,3 +158,7 @@ export * from "./road_overlay_lead_model.js";
 export * from "./road_overlay_lead_renderer.js";
 export * from "./road_overlay_policy.js";
 export * from "./road_overlay_projection.js";
+export * from "./connection_transaction.js";
+export * from "./network_recovery.js";
+export * from "./session_controller.js";
+export * from "./session_policy.js";
