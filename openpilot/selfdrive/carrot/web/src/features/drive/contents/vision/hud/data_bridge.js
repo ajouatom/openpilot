@@ -141,23 +141,6 @@ export function createCruiseOverrideHold(options = {}) {
   return Object.freeze({ update, reset, status });
 }
 
-function sdiAlertPayload(value) {
-  if (!value || typeof value !== "object") return null;
-  const type = finite(value.type);
-  if (type == null || type < 0) return null;
-  const speedLimitKph = finite(value.speedLimitKph);
-  const distanceM = finite(value.distanceM);
-  const countdownS = finite(value.countdownS);
-  return {
-    type: Math.trunc(type),
-    family: String(value.family || "camera"),
-    label: String(value.label || "CAM").trim().slice(0, 24),
-    speedLimitKph: speedLimitKph != null && speedLimitKph > 0 ? speedLimitKph : null,
-    distanceM: distanceM != null && distanceM >= 0 ? distanceM : null,
-    countdownS: countdownS != null && countdownS > 0 && countdownS < 100 ? countdownS : null,
-  };
-}
-
 // The classic realtime bridge rebuilds a compact payload before presenting it.
 // Keep the cluster-only fields in one shared rule so live and replay cannot
 // silently drop them at that boundary.
@@ -169,7 +152,6 @@ export function withVehicleHudFields(payload = {}, source = {}) {
       ? null
       : source.activeLaneLine === true,
     cruiseOverride: cruiseOverridePayload(source.cruiseOverride),
-    sdiAlert: sdiAlertPayload(source.sdiAlert),
     trafficState: trafficSignalState(source.trafficState ?? payload.trafficState),
     drivingMode: drivingModeState(source.drivingMode ?? payload.drivingMode),
   };
@@ -179,18 +161,12 @@ export function withVehicleHudFields(payload = {}, source = {}) {
 // deliberately tri-state: unknown and explicitly disabled are different.
 export function vehicleHudSignature(payload = {}) {
   const override = cruiseOverridePayload(payload.cruiseOverride);
-  const sdi = sdiAlertPayload(payload.sdiAlert);
   return [
     payload.evActive === true ? 1 : 0,
     payload.activeLaneLine == null ? "-" : (payload.activeLaneLine === true ? 1 : 0),
     override?.kph ?? "-",
     override?.label ?? "-",
     override?.mode ?? "-",
-    sdi?.type ?? "-",
-    sdi?.speedLimitKph ?? "-",
-    sdi?.distanceM ?? "-",
-    sdi?.countdownS ?? "-",
-    sdi?.label ?? "-",
     drivingModeState(payload.drivingMode) ?? "-",
   ].join(":");
 }
@@ -208,51 +184,6 @@ function decelerationSourceLabel(source) {
   if (!normalized) return "apply";
   if (normalized.endsWith(":n") || normalized.endsWith(":v") || normalized.endsWith(":c")) return normalized;
   return DECEL_SOURCE_LABELS[normalized] || normalized.slice(0, 8);
-}
-
-const SDI_FAMILIES = Object.freeze({
-  4: "section",
-  22: "bump",
-  100: "police",
-  101: "waze",
-});
-
-const SDI_LABELS = Object.freeze({
-  camera: "CAM",
-  section: "SECTION",
-  bump: "BUMP",
-  police: "POLICE",
-  waze: "WAZE",
-});
-
-// Camera/SDI information is separate from the final cruise override. It stays
-// visible while an event is known, even before desiredSpeed starts reducing the
-// cruise set speed.
-export function deriveSdiAlert(state = {}) {
-  const carrotMan = state.carrotMan || {};
-  const rawType = finite(carrotMan.xSpdType);
-  if (rawType == null || rawType < 0) return null;
-
-  const type = Math.trunc(rawType);
-  const family = SDI_FAMILIES[type] || "camera";
-  const speedLimitKph = finite(carrotMan.xSpdLimit);
-  const rawDistanceM = finite(carrotMan.xSpdDist);
-  const rawCountdownS = finite(carrotMan.xSpdCountDown);
-  const description = String(carrotMan.szSdiDescr || "").trim();
-  const distanceM = rawDistanceM != null && rawDistanceM >= 0 ? rawDistanceM : null;
-  const countdownS = rawCountdownS != null && rawCountdownS > 0 && rawCountdownS < 100
-    ? rawCountdownS
-    : null;
-
-  if (!(speedLimitKph > 0) && distanceM == null && !description) return null;
-  return sdiAlertPayload({
-    type,
-    family,
-    label: description || SDI_LABELS[family] || SDI_LABELS.camera,
-    speedLimitKph,
-    distanceM,
-    countdownS,
-  });
 }
 
 // Cluster parity: prefer the cluster-facing set speed, but treat zero/sentinel
@@ -350,7 +281,6 @@ export function deriveVehicleHudPayload(state = {}) {
     evActive,
     activeLaneLine,
     cruiseOverride: deriveCruiseOverride(state),
-    sdiAlert: deriveSdiAlert(state),
     trafficState: resolveTrafficState(state),
     drivingMode: drivingModeState(state.longitudinalPlan?.myDrivingMode),
     // The cluster wheel follows lateral actuation, not overall engagement.
@@ -375,7 +305,6 @@ export const CarrotHudDataBridge = Object.freeze({
   deriveVehicleHudPayload,
   deriveCruiseOverride,
   createCruiseOverrideHold,
-  deriveSdiAlert,
   resolveTrafficState,
   resolveCruiseKph,
   isCruiseDisplayVisible,

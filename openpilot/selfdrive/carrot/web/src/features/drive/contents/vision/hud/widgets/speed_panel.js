@@ -28,7 +28,7 @@ const OVERRIDE_X = 331.6;       // SPEED_PANEL_X + 392*0.8
 const OVERRIDE_SPEED_Y = 319;   // SPEED_PANEL_Y + 30*0.8
 const OVERRIDE_LABEL_Y = 291.8; // SPEED_PANEL_Y - 4*0.8
 const OVERRIDE_SPEED_FS = 41.6; // 52*0.8
-const OVERRIDE_LABEL_FS = 20;   // 25*0.8
+const OVERRIDE_LABEL_FS = 24;   // 가독성 위해 클러스터(25*0.8=20)보다 소폭 확대
 
 function trafficIcon(doc, { uri, crop, centerX }) {
   const size = 34;
@@ -138,6 +138,9 @@ export function createSpeedPanel(doc) {
     el.setAttribute("y", String(cy + CAP * fs));
   }
 
+  // 오버라이드 마지막 값(비활성 시 회색으로 유지하기 위함).
+  let lastOverride = null;
+
   function update(data = {}) {
     const speedValue = Number(data.speed);
     const speedText = Number.isFinite(speedValue) ? String(Math.max(0, Math.round(speedValue))) : "0";
@@ -171,19 +174,26 @@ export function createSpeedPanel(doc) {
       setText(ev, "EV");
     }
 
+    // 오버라이드: 비활성/사라지는 조건에서도 숨기지 않고 "마지막 값을 회색"으로 유지(요청).
     const override = data.cruiseOverride;
     const overrideKph = override != null ? Number(override.kph) : null;
-    const hasOverride = Number.isFinite(overrideKph) && overrideKph > 0;
-    overrideSpeed.style.display = hasOverride ? "" : "none";
-    overrideLabel.style.display = hasOverride ? "" : "none";
-    if (hasOverride) {
-      // color_mode 1 = eco(초록) / 2 = 감속소스(주황) / 그 외 = 흰색
-      const color = override.mode === 1 ? COLORS.carrot : override.mode === 2 ? COLORS.override : COLORS.white;
+    const active = Number.isFinite(overrideKph) && overrideKph > 0;
+    if (active) {
+      lastOverride = { kph: Math.round(overrideKph), label: override.label || "", mode: override.mode };
+    }
+    const show = lastOverride != null;
+    overrideSpeed.style.display = show ? "" : "none";
+    overrideLabel.style.display = show ? "" : "none";
+    if (show) {
+      // 활성: mode 1 eco(초록) / 2 감속(주황) / 그 외 흰색. 비활성: 회색(muted).
+      const color = !active
+        ? COLORS.muted
+        : lastOverride.mode === 1 ? COLORS.carrot : lastOverride.mode === 2 ? COLORS.override : COLORS.white;
       place(overrideSpeed, OVERRIDE_SPEED_Y, OVERRIDE_SPEED_FS);
-      setText(overrideSpeed, String(Math.round(overrideKph)));
+      setText(overrideSpeed, String(lastOverride.kph));
       overrideSpeed.style.fill = color;
       place(overrideLabel, OVERRIDE_LABEL_Y, OVERRIDE_LABEL_FS);
-      setText(overrideLabel, override.label || "");
+      setText(overrideLabel, lastOverride.label);
       overrideLabel.style.fill = color;
     }
   }

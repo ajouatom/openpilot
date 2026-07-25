@@ -878,14 +878,8 @@ let _carrotDriveDataRealtimeActive = false;
 let _carrotDriveDataActivitySignature = "0|0";
 let _carrotVisionRealtimeActive = false;
 let _carrotVisionRealtimeBlockReason = "";
-let _carrotVisionPageReturnConnectT = null;
-
-function cancelCarrotVisionPageReturnConnect() {
-  if (_carrotVisionPageReturnConnectT != null) {
-    window.clearTimeout(_carrotVisionPageReturnConnectT);
-    _carrotVisionPageReturnConnectT = null;
-  }
-}
+let _carrotVisionLifecycleController = null;
+let _carrotVisionNetworkRecoveryController = null;
 
 function recordCarrotVisionLifecycleEvent(event, detail = {}) {
   try {
@@ -901,50 +895,271 @@ function canReuseCarrotVisionConnection() {
   }
 }
 
-function scheduleCarrotVisionPageReturnConnect(reason = "page return") {
-  cancelCarrotVisionPageReturnConnect();
-  if (!shouldRunCarrotVisionRealtime()) return;
-  window.CarrotVisionRtc?.prepareOwnershipRetry?.(reason);
+function getCarrotVisionLifecyclePageState() {
+  const page = window.DriveVisionSessionPolicy?.page;
+  if (!page) return "hidden";
+  return isCarrotPageVisible() ? page.VISIBLE : page.HIDDEN;
+}
 
-  if (canReuseCarrotVisionConnection()) {
-    recordCarrotVisionLifecycleEvent("page_return_reconnect_skipped", { reason, reused: true });
+function presentCarrotVisionWaitingState(blockReason = getCarrotVisionRealtimeBlockReason()) {
+  if (!blockReason || blockReason === "recorded-replay") return;
+  setCarrotVisionPhase(CARROT_VISION_PHASE.STARTING, {
+    reason: blockReason,
+    statusText: getCarrotVisionRuntimeWaitStatus(blockReason),
+    detailText: getCarrotVisionRuntimeWaitDetail(blockReason),
+    updateRtcStatus: false,
+  });
+}
+
+function presentCarrotVisionInactiveState(reason = "vision lifecycle idle") {
+  setCarrotVisionPhase(CARROT_VISION_STATE.available ? CARROT_VISION_PHASE.INACTIVE : CARROT_VISION_PHASE.UNAVAILABLE, {
+    reason,
+    updateRtcStatus: false,
+    render: false,
+  });
+}
+
+async function stopCarrotVisionLifecycleResources(context, stopped = false) {
+  const reason = context?.detail?.reason || (stopped ? "vision lifecycle stopped" : "vision lifecycle suspended");
+  recordCarrotVisionLifecycleEvent(stopped ? "lifecycle_stop_start" : "lifecycle_suspend_start", {
+    reason,
+    revision: context?.revision ?? null,
+  });
+  rtcExitPictureInPicture();
+  if (!stopped && isCarrotVisionActive()) rtcCaptureVideoHoldFrame();
+  stopCarrotVisionHealthWatch();
+  stopRtcPerfPolling();
+  rtcCancelRetry();
+  rtcCancelRecovery();
+  rtcDisarmTrackTimeout();
+  rtcDisarmFirstFrameTimeout();
+  rtcCancelResumeCheck();
+  await rawOverlayDisconnectAll().catch(() => {});
+  await rtcDisconnect({ keepVideo: !stopped }).catch(() => {});
+
+  const state = _carrotVisionLifecycleController?.snapshot?.() || context?.state;
+  const networkUnreachable = state?.network === window.DriveVisionSessionPolicy?.network?.UNREACHABLE;
+  if (state?.requested && state?.page === window.DriveVisionSessionPolicy?.page?.VISIBLE
+      && (!state?.sourceAvailable || networkUnreachable)) {
+    presentCarrotVisionWaitingState(
+      !state?.sourceAvailable ? _carrotVisionRealtimeBlockReason : "server-check",
+    );
+  } else if (stopped || !state?.requested) {
+    presentCarrotVisionInactiveState(reason);
+  }
+  requestCarrotVisionRender({ reason });
+  recordCarrotVisionLifecycleEvent(stopped ? "lifecycle_stop_complete" : "lifecycle_suspend_complete", {
+    reason,
+    revision: context?.revision ?? null,
+  });
+}
+
+async function ensureCarrotVisionRunning(context = {}) {
+  const state = _carrotVisionLifecycleController?.snapshot?.() || context.state;
+  if (state?.desired !== window.DriveVisionSessionPolicy?.desired?.RUNNING || !shouldRunCarrotVisionRealtime()) return;
+
+  const reason = context.detail?.reason || "vision lifecycle running";
+  recordCarrotVisionLifecycleEvent("lifecycle_running_start", {
+    reason,
+    freshSession: Boolean(context.detail?.freshSession),
+    revision: context.revision ?? null,
+  });
+  _carrotVisionRealtimeActive = true;
+  window.CarrotVisionRtc?.prepareOwnershipRetry?.(reason);
+  startCarrotVisionHealthWatch();
+  startRtcPerfPolling(true);
+
+  if (canReuseCarrotVisionConnection() && !context.detail?.freshSession) {
     rtcScheduleResumeIfConnected(reason);
-    startCarrotVisionHealthWatch();
-    startRtcPerfPolling(true);
-    requestCarrotVisionRender();
+    requestCarrotVisionRender({ reason });
+    recordCarrotVisionLifecycleEvent("lifecycle_running_reused", { reason });
     return;
+  }
+
+  setCarrotVisionPhase(CARROT_VISION_PHASE.STARTING, {
+    reason,
+    updateRtcStatus: false,
+  });
+  rtcCancelRetry();
+  rtcCancelRecovery();
+  rtcDisarmTrackTimeout();
+  rtcDisarmFirstFrameTimeout();
+  rtcResetFailCount();
+
+  if (context.detail?.freshSession) {
+    stopCarrotVisionHealthWatch();
+    await rawOverlayDisconnectAll().catch(() => {});
+    await rtcDisconnect({ keepVideo: true }).catch(() => {});
+    if (_carrotVisionLifecycleController?.snapshot?.().desired !== window.DriveVisionSessionPolicy?.desired?.RUNNING) return;
+    startCarrotVisionHealthWatch();
   }
 
   const shouldConnect = typeof window.CarrotVisionRtc?.shouldConnect === "function"
     ? window.CarrotVisionRtc.shouldConnect()
     : rtcShouldConnect();
-  if (!shouldConnect) {
-    recordCarrotVisionLifecycleEvent("page_return_reconnect_skipped", { reason, reused: false, busy: true });
+  if (shouldConnect) {
+    await rtcConnectOnce({ force: Boolean(context.detail?.freshSession) }).catch(() => {});
+  } else {
     rtcScheduleResumeIfConnected(reason);
-    startCarrotVisionHealthWatch();
-    startRtcPerfPolling(true);
-    requestCarrotVisionRender();
+  }
+  requestCarrotVisionRender({ reason });
+  recordCarrotVisionLifecycleEvent("lifecycle_running_complete", {
+    reason,
+    revision: context.revision ?? null,
+  });
+}
+
+function getCarrotVisionLifecycleController() {
+  if (_carrotVisionLifecycleController) return _carrotVisionLifecycleController;
+  const controllerApi = window.DriveVisionLifecycleController;
+  const policy = window.DriveVisionSessionPolicy;
+  if (!controllerApi?.create || !policy?.effect) {
+    throw new Error("Carrot Vision lifecycle controller is unavailable");
+  }
+
+  _carrotVisionLifecycleController = controllerApi.create({
+    handlers: {
+      [policy.effect.ENSURE_RUNNING]: ensureCarrotVisionRunning,
+      [policy.effect.ENSURE_SUSPENDED]: (context) => stopCarrotVisionLifecycleResources(context, false),
+      [policy.effect.ENSURE_STOPPED]: (context) => stopCarrotVisionLifecycleResources(context, true),
+      [policy.effect.SCHEDULE_RECOVERY]: ensureCarrotVisionRunning,
+    },
+    onTransition(transition) {
+      _carrotVisionRealtimeActive = transition.state.desired === policy.desired.RUNNING;
+      recordCarrotVisionLifecycleEvent("lifecycle_transition", {
+        input: transition.type,
+        desired: transition.state.desired,
+        phase: transition.state.phase,
+        revision: transition.state.revision,
+        reason: transition.detail?.reason || "",
+      });
+    },
+    onEffect(effect) {
+      recordCarrotVisionLifecycleEvent("lifecycle_effect", {
+        effect: effect.effect,
+        revision: effect.revision,
+        reason: effect.detail?.reason || "",
+      });
+    },
+    onError(error, effect) {
+      console.error("[vision lifecycle]", effect?.effect || "effect", error);
+      recordCarrotVisionLifecycleEvent("lifecycle_effect_error", {
+        effect: effect?.effect || "",
+        error: String(error?.message || error || ""),
+      });
+    },
+  });
+  window.CarrotVisionLifecycle = _carrotVisionLifecycleController;
+  return _carrotVisionLifecycleController;
+}
+
+async function probeCarrotVisionServer({ signal } = {}) {
+  const target = new URL("/index.html", window.location.href);
+  target.searchParams.set("_vision_reachability", String(Date.now()));
+  await fetch(target, {
+    method: "HEAD",
+    cache: "no-store",
+    credentials: "same-origin",
+    signal,
+  });
+  // Any HTTP response proves that the current local Carrot Web origin is
+  // reachable. WebRTC negotiation owns service-level HTTP error handling.
+  return { ok: true };
+}
+
+function presentCarrotVisionNetworkRecoveryState(status) {
+  if (!status?.enabled || !isCarrotVisionActive() || !isCarrotPageVisible()) return;
+  if (status.reachable === true) {
+    rtcStatusSet("server-reachable");
     return;
   }
 
-  recordCarrotVisionLifecycleEvent("page_return_reconnect_scheduled", { reason });
-  _carrotVisionPageReturnConnectT = window.setTimeout(async () => {
-    _carrotVisionPageReturnConnectT = null;
-    if (!shouldRunCarrotVisionRealtime()) return;
-    recordCarrotVisionLifecycleEvent("page_return_reconnect_start", { reason });
-    rtcCancelRetry();
-    rtcCancelRecovery();
-    rtcDisarmTrackTimeout();
-    rtcDisarmFirstFrameTimeout();
-    stopCarrotVisionHealthWatch();
-    await rawOverlayDisconnectAll().catch(() => {});
-    await rtcDisconnect({ keepVideo: true }).catch(() => {});
-    startCarrotVisionHealthWatch();
-    await rtcConnectOnce({ force: true }).catch(() => {});
-  }, 200);
+  const checking = status.state === window.DriveVisionNetworkRecovery?.state?.CHECKING;
+  rtcStatusSet(checking ? "server-check" : "server-unreachable");
+  setCarrotVisionPhase(CARROT_VISION_PHASE.STARTING, {
+    reason: checking ? "server reachability check" : "server unreachable backoff",
+    statusText: getCarrotVisionRuntimeWaitStatus("server-check"),
+    detailText: getCarrotVisionRuntimeWaitDetail("server-check"),
+    updateRtcStatus: false,
+  });
 }
 
-function syncCarrotRealtimeLifecycle(forceFetch = false) {
+function getCarrotVisionNetworkRecoveryController() {
+  if (_carrotVisionNetworkRecoveryController) return _carrotVisionNetworkRecoveryController;
+  const recoveryApi = window.DriveVisionNetworkRecovery;
+  const policy = window.DriveVisionSessionPolicy;
+  if (!recoveryApi?.create || !policy?.network) {
+    throw new Error("Carrot Vision network recovery controller is unavailable");
+  }
+
+  _carrotVisionNetworkRecoveryController = recoveryApi.create({
+    probe: probeCarrotVisionServer,
+    onState(status, detail) {
+      window.CarrotVisionNetworkRecoveryState = status;
+      recordCarrotVisionLifecycleEvent("network_recovery_state", {
+        state: status.state,
+        reachable: status.reachable,
+        failureCount: status.failureCount,
+        originClassification: status.originClassification,
+        reason: detail?.reason || status.lastReason || "",
+      });
+
+      if (status.enabled && status.reachable !== null) {
+        getCarrotVisionLifecycleController().updateInputs({
+          network: status.reachable ? policy.network.REACHABLE : policy.network.UNREACHABLE,
+        }, {
+          reason: status.reachable ? "server probe reachable" : "server probe unreachable",
+        });
+      }
+      presentCarrotVisionNetworkRecoveryState(status);
+    },
+  });
+  window.CarrotVisionNetworkRecovery = _carrotVisionNetworkRecoveryController;
+  window.CarrotVisionNetworkRecoveryState = _carrotVisionNetworkRecoveryController.snapshot();
+  return _carrotVisionNetworkRecoveryController;
+}
+
+function syncCarrotVisionLifecycleInputs(options = {}) {
+  const controller = getCarrotVisionLifecycleController();
+  const policy = window.DriveVisionSessionPolicy;
+  const blockReason = getCarrotVisionRealtimeBlockReason();
+  const sourceAvailable = !blockReason;
+  const requested = Boolean(isCarrotVisionActive() && isCarrotVisionContentRuntimeWanted());
+  const page = options.skipPage ? controller.snapshot().page : getCarrotVisionLifecyclePageState();
+  const networkEnabled = requested && sourceAvailable && page === policy.page.VISIBLE;
+  const networkRecovery = getCarrotVisionNetworkRecoveryController();
+  networkRecovery.setEnabled(networkEnabled, {
+    reason: networkEnabled ? "vision server reachability required" : "vision network recovery idle",
+    force: networkEnabled && Boolean(options.forceFetch),
+  });
+  const networkStatus = networkRecovery.snapshot();
+  const inputs = {
+    requested,
+    sourceAvailable,
+  };
+  if (!options.skipPage) inputs.page = page;
+  if (networkEnabled) {
+    inputs.network = networkStatus.reachable === true
+      ? policy.network.REACHABLE
+      : policy.network.UNREACHABLE;
+  }
+  const state = controller.updateInputs(inputs, {
+    reason: options.reason || "vision lifecycle sync",
+    restored: Boolean(options.restored),
+    freshSession: Boolean(options.freshSession),
+    forceFetch: Boolean(options.forceFetch),
+  });
+
+  _carrotVisionRealtimeActive = state.desired === window.DriveVisionSessionPolicy.desired.RUNNING;
+  _carrotVisionRealtimeBlockReason = blockReason;
+  if (state.requested && state.page === policy.page.VISIBLE
+      && (!sourceAvailable || state.network === policy.network.UNREACHABLE)) {
+    presentCarrotVisionWaitingState(!sourceAvailable ? blockReason : "server-check");
+  }
+  return state;
+}
+
+function syncCarrotRealtimeLifecycle(forceFetch = false, options = {}) {
   const nextHudActive = shouldRunCarrotHudRealtime();
   const nextDriveDataActive = shouldRunCarrotDriveDataRealtime();
   const nextDriveDataActivitySignature = [
@@ -953,173 +1168,112 @@ function syncCarrotRealtimeLifecycle(forceFetch = false) {
     isCarrotDriveDataRequested("tracks") ? 1 : 0,
     isCarrotDriveDataRequested("ar") ? 1 : 0,
   ].join("|");
-  const nextVisionWanted = isCarrotPageVisible()
-    && isCarrotVisionContentRuntimeWanted()
-    && isCarrotVisionActive();
-  const nextVisionBlockReason = getCarrotVisionRealtimeBlockReason();
-  const nextVisionActive = nextVisionWanted && !nextVisionBlockReason;
 
   const hudLifecycleChanged = nextHudActive !== _carrotHudRealtimeActive;
   const dataLifecycleChanged = nextDriveDataActive !== _carrotDriveDataRealtimeActive
     || nextDriveDataActivitySignature !== _carrotDriveDataActivitySignature;
-  const visionLifecycleChanged = nextVisionActive !== _carrotVisionRealtimeActive
-    || nextVisionBlockReason !== _carrotVisionRealtimeBlockReason;
-
-  if (!hudLifecycleChanged && !dataLifecycleChanged && !visionLifecycleChanged && !forceFetch) {
-    if (nextVisionActive) startCarrotVisionHealthWatch();
-    else stopCarrotVisionHealthWatch();
-    if (nextVisionActive && rtcShouldConnect()) {
-      rtcConnectOnce().catch(() => {});
-    }
-    if (nextVisionActive) scheduleRtcPerfPolling();
-    if (nextHudActive) _hudScheduleRender();
-    return;
-  }
 
   _carrotHudRealtimeActive = nextHudActive;
   _carrotDriveDataRealtimeActive = nextDriveDataActive;
   _carrotDriveDataActivitySignature = nextDriveDataActivitySignature;
-  _carrotVisionRealtimeActive = nextVisionActive;
-  _carrotVisionRealtimeBlockReason = nextVisionBlockReason;
 
-  if (nextDriveDataActive) {
-    console.log("[perf] carrot drive data realtime -> active");
-    rawHudConnectAll();
-    startLiveRuntimeStateFetch(forceFetch, 100);
-    if (nextHudActive) _hudMarkDirty();
-    else _hudStopRenderLoop();
-  } else {
-    console.log("[perf] carrot drive data realtime -> idle");
-    _hudStopRenderLoop();
-    stopLiveRuntimeStateFetch();
-    rawHudDisconnectAll();
+  if (hudLifecycleChanged || dataLifecycleChanged || forceFetch) {
+    if (nextDriveDataActive) {
+      console.log("[perf] carrot drive data realtime -> active");
+      rawHudConnectAll();
+      startLiveRuntimeStateFetch(forceFetch, 100);
+      if (nextHudActive) _hudMarkDirty();
+      else _hudStopRenderLoop();
+    } else {
+      console.log("[perf] carrot drive data realtime -> idle");
+      _hudStopRenderLoop();
+      stopLiveRuntimeStateFetch();
+      rawHudDisconnectAll();
+    }
+  } else if (nextHudActive) {
+    _hudScheduleRender();
   }
 
-  if (!visionLifecycleChanged && !forceFetch) {
-    emitCarrotRenderRequest({ force: true, overlayDirty: true, hudDirty: true });
-    return;
-  }
+  const previousVisionActive = _carrotVisionRealtimeActive;
+  const previousBlockReason = _carrotVisionRealtimeBlockReason;
+  const lifecycleState = syncCarrotVisionLifecycleInputs({
+    forceFetch,
+    skipPage: Boolean(options.skipVisionPage),
+    reason: forceFetch ? "vision lifecycle refresh" : "vision lifecycle sync",
+  });
+  const visionLifecycleChanged = previousVisionActive !== _carrotVisionRealtimeActive
+    || previousBlockReason !== _carrotVisionRealtimeBlockReason;
 
-  if (nextVisionActive) {
-    console.log("[perf] carrot vision realtime -> active");
-    recordCarrotVisionLifecycleEvent("vision_realtime_active", {
+  if (hudLifecycleChanged || dataLifecycleChanged || visionLifecycleChanged || forceFetch) {
+    recordCarrotVisionLifecycleEvent("vision_lifecycle_synced", {
+      desired: lifecycleState.desired,
+      blockReason: _carrotVisionRealtimeBlockReason,
       forceFetch: Boolean(forceFetch),
       page: document.body?.dataset?.page || "",
     });
-    startCarrotVisionHealthWatch();
-    setCarrotVisionPhase(CARROT_VISION_PHASE.STARTING, {
-      reason: "vision lifecycle active",
-      updateRtcStatus: false,
-    });
-    // Staged startup: keep the shared compact WS on HUD fields here.
-    // Expanding it to the overlay services (including modelV2) competes with the
-    // WebRTC first-frame/keyframe for the same link and viewer CPU. Overlay
-    // data does not affect reaching "ready" (that comes from the camera video
-    // frame), so we defer it until the first frame renders — see the
-    // carrot:visionstatechange listener below. This gives the keyframe a clean
-    // window so first-frame-waiting resolves fast.
-    startRtcPerfPolling(true);
-    if (rtcShouldConnect()) {
-      rtcCancelRetry();
-      rtcResetFailCount();
-      if (forceFetch) scheduleCarrotVisionPageReturnConnect("vision lifecycle active");
-      else rtcConnectOnce().catch(() => {});
-    }
-  } else {
-    cancelCarrotVisionPageReturnConnect();
-    if (nextVisionWanted && nextVisionBlockReason) {
-      console.log("[perf] carrot vision realtime -> waiting", nextVisionBlockReason);
-      if (nextVisionBlockReason !== "recorded-replay") {
-        setCarrotVisionPhase(CARROT_VISION_PHASE.STARTING, {
-          reason: nextVisionBlockReason,
-          statusText: getCarrotVisionRuntimeWaitStatus(nextVisionBlockReason),
-          detailText: getCarrotVisionRuntimeWaitDetail(nextVisionBlockReason),
-          updateRtcStatus: false,
-        });
-      }
-      rtcCancelRetry();
-      rtcCancelRecovery();
-      rtcDisarmTrackTimeout();
-      rtcCancelResumeCheck();
-    } else {
-      console.log("[perf] carrot vision realtime -> idle");
-      recordCarrotVisionLifecycleEvent("vision_realtime_idle", {
-        wanted: Boolean(nextVisionWanted),
-        blockReason: nextVisionBlockReason || "",
-        page: document.body?.dataset?.page || "",
-      });
-      setCarrotVisionPhase(CARROT_VISION_STATE.available ? CARROT_VISION_PHASE.INACTIVE : CARROT_VISION_PHASE.UNAVAILABLE, {
-        reason: "vision lifecycle idle",
-        updateRtcStatus: false,
-        render: false,
-      });
-    }
-    stopCarrotVisionHealthWatch();
-    stopRtcPerfPolling();
-    rawOverlayDisconnectAll();
-    rtcDisconnect({ keepVideo: true }).catch(() => {});
+    emitCarrotRenderRequest({ force: true, overlayDirty: true, hudDirty: true });
   }
-
-  emitCarrotRenderRequest({ force: true, overlayDirty: true, hudDirty: true });
 }
 
 document.addEventListener("visibilitychange", () => {
-  recordCarrotVisionLifecycleEvent("visibility_change", {
-    state: document.visibilityState,
-    page: document.body?.dataset?.page || "",
-    visionActive: Boolean(isCarrotVisionActive()),
+  const policy = window.DriveVisionSessionPolicy;
+  getCarrotVisionLifecycleController().dispatch(
+    document.hidden ? policy.event.PAGE_HIDDEN : policy.event.PAGE_VISIBLE,
+    {
+      reason: document.hidden ? "visibility hidden" : "visibility visible",
+      visibility: document.visibilityState,
+    },
+  );
+  recordCarrotVisionLifecycleEvent("visibility_input", {
+    visibility: document.visibilityState,
   });
-  rtcHandleVisibilityChange();
-  syncCarrotRealtimeLifecycle(false);
+  syncCarrotRealtimeLifecycle(false, { skipVisionPage: true });
 });
 
 window.addEventListener("offline", () => {
-  recordCarrotVisionLifecycleEvent("network_offline", {
-    page: document.body?.dataset?.page || "",
-    visionActive: Boolean(isCarrotVisionActive()),
+  getCarrotVisionNetworkRecoveryController().noteBrowserHint(false, "browser offline hint");
+  recordCarrotVisionLifecycleEvent("network_input", {
+    state: "offline",
   });
-  rtcStatusSet("offline");
 });
 
 window.addEventListener("online", () => {
-  recordCarrotVisionLifecycleEvent("network_online", {
-    page: document.body?.dataset?.page || "",
-    visionActive: Boolean(isCarrotVisionActive()),
+  getCarrotVisionNetworkRecoveryController().noteBrowserHint(true, "browser online hint");
+  recordCarrotVisionLifecycleEvent("network_input", {
+    state: "online",
   });
-  syncCarrotRealtimeLifecycle(false);
-  rtcScheduleResumeIfConnected("network resumed");
 });
 
 function handleCarrotVisionPageSuspend(eventName, detail = {}) {
-  recordCarrotVisionLifecycleEvent(eventName, {
-    page: document.body?.dataset?.page || "",
-    visibility: document.visibilityState,
-    visionActive: Boolean(isCarrotVisionActive()),
-    ...detail,
-  });
-  cancelCarrotVisionPageReturnConnect();
-  rtcExitPictureInPicture();
-  if (!isCarrotVisionActive()) return;
-  rtcCaptureVideoHoldFrame();
-  stopCarrotVisionHealthWatch();
-  rawOverlayDisconnectAll().catch(() => {});
-  if (isCarrotPageActive()) {
-    rtcDisconnect({ keepVideo: true }).catch(() => {});
-  }
+  const policy = window.DriveVisionSessionPolicy;
+  getCarrotVisionLifecycleController().dispatch(
+    detail.persisted ? policy.event.PAGE_FROZEN : policy.event.PAGE_HIDDEN,
+    {
+      ...detail,
+      reason: eventName,
+      freshSession: Boolean(detail.persisted),
+    },
+  );
+  recordCarrotVisionLifecycleEvent("page_suspend_input", { eventName, ...detail });
+  syncCarrotRealtimeLifecycle(false, { skipVisionPage: true });
 }
 
 function handleCarrotVisionPageResume(eventName, detail = {}) {
-  recordCarrotVisionLifecycleEvent(eventName, {
-    page: document.body?.dataset?.page || "",
-    visibility: document.visibilityState,
-    visionActive: Boolean(isCarrotVisionActive()),
-    ...detail,
-  });
-  if (!isCarrotPageActive() || !isCarrotVisionActive()) return;
-  syncCarrotVisionAvailability().catch(() => {});
-  fetchLiveRuntimeState(true).catch(() => {});
-  syncCarrotRealtimeLifecycle(true);
-  scheduleCarrotVisionPageReturnConnect(eventName);
+  const policy = window.DriveVisionSessionPolicy;
+  getCarrotVisionLifecycleController().dispatch(
+    detail.persisted ? policy.event.PAGE_RESTORED : policy.event.PAGE_VISIBLE,
+    {
+      ...detail,
+      reason: eventName,
+      freshSession: Boolean(detail.persisted),
+    },
+  );
+  recordCarrotVisionLifecycleEvent("page_resume_input", { eventName, ...detail });
+  if (isCarrotPageActive() && isCarrotVisionActive()) {
+    syncCarrotVisionAvailability().catch(() => {});
+    fetchLiveRuntimeState(true).catch(() => {});
+  }
+  syncCarrotRealtimeLifecycle(true, { skipVisionPage: true });
 }
 
 window.addEventListener("pagehide", (event) => {
@@ -1129,10 +1283,17 @@ window.addEventListener("pageshow", (event) => {
   handleCarrotVisionPageResume("pageshow", { persisted: Boolean(event?.persisted) });
 });
 window.addEventListener("focus", () => {
-  handleCarrotVisionPageResume("window_focus");
+  if (!document.hidden) {
+    getCarrotVisionLifecycleController().dispatch(
+      window.DriveVisionSessionPolicy.event.WINDOW_FOCUS,
+      { reason: "window focus" },
+    );
+  }
+  syncCarrotRealtimeLifecycle(false);
+  getCarrotVisionNetworkRecoveryController().requestCheck("window focus");
 });
 window.addEventListener("blur", () => {
-  recordCarrotVisionLifecycleEvent("window_blur", {
+  recordCarrotVisionLifecycleEvent("window_blur_input", {
     page: document.body?.dataset?.page || "",
     visionActive: Boolean(isCarrotVisionActive()),
   });
@@ -1146,15 +1307,10 @@ document.addEventListener("resume", () => {
 
 window.addEventListener("carrot:pagechange", (event) => {
   const page = event?.detail?.page || "";
-  recordCarrotVisionLifecycleEvent("page_change", {
+  recordCarrotVisionLifecycleEvent("page_change_input", {
     page,
     visionActive: Boolean(isCarrotVisionActive()),
   });
-  if (page === "carrot" && isCarrotVisionActive()) {
-    scheduleCarrotVisionPageReturnConnect("page changed to carrot");
-  } else {
-    cancelCarrotVisionPageReturnConnect();
-  }
   syncCarrotRealtimeLifecycle(true);
 });
 
