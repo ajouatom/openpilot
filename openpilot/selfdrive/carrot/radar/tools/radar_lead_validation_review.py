@@ -44,6 +44,35 @@ def print_trajectory_evaluation_table(report_path: Path) -> None:
       + f"{values['fn']} | {values['tn']} | "
       + f"{values['manual_actual_agree']}/{values['manual_actual_scorable']} |"
     )
+  comparison = report.get("carrot_wip_comparison")
+  if comparison is None:
+    return
+
+  def print_comparison(title: str, values: dict) -> None:
+    print(f"\n{title}")
+    print("| implementation | source | labels | precision | recall | F1 | TP | FP | FN | TN |")
+    print("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    for implementation in ("carrot_wip", "path_occupancy"):
+      for source in ("front", "corner"):
+        row = values[implementation][source]
+        print(
+          f"| {implementation} | {source} | {row['labels']} | "
+          + f"{float(row['precision']):.3f} | {float(row['recall']):.3f} | "
+          + f"{float(row['f1']):.3f} | {row['tp']} | {row['fp']} | "
+          + f"{row['fn']} | {row['tn']} |"
+        )
+
+  print_comparison(
+    "carrot-wip 9088829005 vs path-occupancy final decisions (manual labels)",
+    {
+      "carrot_wip": comparison["carrot_wip"]["summary"],
+      "path_occupancy": comparison["path_occupancy"]["summary"],
+    },
+  )
+  print_comparison(
+    "Same scorable windows with measured future path entry as truth",
+    comparison["actual_future_summary"],
+  )
 
 
 def parse_args() -> argparse.Namespace:

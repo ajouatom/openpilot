@@ -6519,5 +6519,5628 @@
         "manual_matches_actual": true
       }
     ]
+  },
+  "carrot_wip_comparison": {
+    "basis": "identical held-out manual windows; carrot-wip production decision versus occupancy final shadow decision after leadOne-distance post-processing",
+    "baseline_revision": "9088829005",
+    "carrot_wip": {
+      "implementation": "carrot-wip",
+      "logs": 34,
+      "summary": {
+        "front": {
+          "labels": 106,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "accuracy": 0.839622641509434,
+          "tp": 0,
+          "fp": 8,
+          "fn": 9,
+          "tn": 89
+        },
+        "corner": {
+          "labels": 200,
+          "precision": 0.2,
+          "recall": 0.034482758620689655,
+          "f1": 0.0588235294117647,
+          "accuracy": 0.84,
+          "tp": 1,
+          "fp": 4,
+          "fn": 28,
+          "tn": 167
+        }
+      },
+      "rows": [
+        {
+          "label_id": "manual-00000218-000p50-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-013p55-corner-1009",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-024p00-corner-1018",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-027p20-corner-1022",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-034p50-corner-1024",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-042p15-corner-1036",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-046p40-corner-1040",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9593032598495483,
+          "scored_frames": 15
+        },
+        {
+          "label_id": "manual-00000218-051p85-corner-1047",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-056p40-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-000p20-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-004p05-corner-1010",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-031p05-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-038p30-corner-1050",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000218-049p55-corner-1069",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006d-028p60-corner-1009",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-000p25-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-000p35-corner-1007",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-000p70-corner-1002",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9987693428993225,
+          "scored_frames": 10
+        },
+        {
+          "label_id": "manual-000000b1-005p35-corner-1001",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-007p30-corner-1033",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-030p10-front-36",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-030p20-front-59",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-040p40-front-32",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-040p80-front-39",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-040p95-front-48",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-041p00-front-41",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9993250370025635,
+          "scored_frames": 5
+        },
+        {
+          "label_id": "manual-000000b1-041p40-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000b1-051p15-corner-1073",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-001p60-corner-1002",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-002p05-corner-1003",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-002p60-corner-1003",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-004p25-corner-1006",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-005p85-corner-1005",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-006p25-corner-1003",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-007p25-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-010p20-corner-1011",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-013p00-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-014p15-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-014p40-corner-1013",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-053p45-corner-1043",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-054p50-corner-1044",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-015p75-corner-1000",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-017p30-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-019p35-corner-1001",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-025p75-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000000cf-025p80-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000aa5-000p15-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000aa5-000p20-front-47",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000aa5-000p25-front-34",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000aa5-001p90-front-50",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000aa5-002p45-front-36",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9970520734786987,
+          "scored_frames": 4
+        },
+        {
+          "label_id": "manual-00000aa5-002p95-front-35",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9956955909729004,
+          "scored_frames": 4
+        },
+        {
+          "label_id": "manual-00000aa5-004p75-front-44",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000aa5-006p05-front-54",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000aa5-006p35-front-57",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cd0-000p15-front-37",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cd0-000p55-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cd0-001p50-front-63",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cd0-001p60-front-60",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cd0-002p05-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cd0-015p35-front-39",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cd0-015p90-front-43",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cd0-016p50-corner-1002",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cd0-017p20-corner-1002",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cd2-056p20-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cfb-017p75-corner-1015",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cfb-022p85-corner-1017",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cfb-025p50-corner-1025",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000cfb-036p80-corner-1028",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000018f-000p25-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000018f-010p10-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000018f-019p15-front-41",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000018f-054p70-corner-1164",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000192-020p00-corner-1019",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000192-024p15-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000192-032p30-corner-1036",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000192-040p30-corner-1040",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000192-046p90-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000192-047p20-corner-1049",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001a5-002p05-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001a5-027p40-corner-1014",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001a5-057p20-corner-1034",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001a7-038p65-corner-1044",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001a7-000p25-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001a7-001p60-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001a7-003p25-corner-1004",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001a7-036p20-corner-1068",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001a7-036p75-corner-1071",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001a7-041p60-corner-1084",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-001p30-corner-1003",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-001p35-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-001p45-corner-1002",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-003p15-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-007p40-corner-1009",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-007p70-corner-1010",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-010p20-corner-1017",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-014p90-corner-1024",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-016p45-corner-1027",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-023p50-corner-1032",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-036p00-corner-1034",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-037p50-corner-1037",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-041p20-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-023p80-corner-1008",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-032p25-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-038p20-corner-1054",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-043p85-corner-1055",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-049p80-corner-1073",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001b9-050p20-corner-1076",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-000p35-corner-1002",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-004p00-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-010p75-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-014p20-corner-1007",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-017p00-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-019p35-corner-1009",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-024p50-corner-1014",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-024p80-corner-1015",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-025p20-corner-1012",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-028p70-corner-1018",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-032p35-corner-1021",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-043p20-corner-1033",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-043p40-corner-1034",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-050p00-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-054p85-corner-1063",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-057p35-corner-1073",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-059p70-corner-1076",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001c1-059p90-corner-1077",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001ce-000p25-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001ce-014p70-corner-1000",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001ce-000p45-corner-1006",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.998529314994812,
+          "scored_frames": 4
+        },
+        {
+          "label_id": "manual-000001ce-002p85-corner-1011",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9955136179924011,
+          "scored_frames": 1
+        },
+        {
+          "label_id": "manual-000001ce-005p20-corner-1025",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001ce-030p40-corner-1087",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001d6-000p25-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001d6-012p60-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000001d6-035p80-corner-1016",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-000p15-front-33",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-001p30-front-58",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-008p60-front-49",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-009p20-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-011p15-front-32",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-012p60-front-39",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-020p40-front-51",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-024p30-front-34",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-031p30-front-50",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-032p85-front-62",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-033p40-front-42",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-035p15-front-56",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-037p65-front-62",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-037p80-front-49",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-038p35-front-38",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-038p70-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-040p10-front-55",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000bef-041p70-front-57",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9982126951217651,
+          "scored_frames": 3
+        },
+        {
+          "label_id": "manual-00000c21-000p15-front-37",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-000p45-front-52",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-001p05-front-56",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9975118637084961,
+          "scored_frames": 1
+        },
+        {
+          "label_id": "manual-00000c21-001p20-front-51",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-001p45-front-32",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-002p05-front-35",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-017p35-front-40",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-017p70-front-48",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-018p35-front-60",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-019p15-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-019p50-front-45",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-024p95-front-47",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-029p60-front-58",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-029p80-front-40",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-031p50-front-46",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-032p65-front-61",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-032p75-front-63",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-033p15-front-62",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-058p05-front-59",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-000p15-front-44",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-000p20-front-41",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-000p30-front-34",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-000p35-front-39",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-000p60-front-51",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-001p10-front-37",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-001p40-front-49",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-004p15-front-35",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-006p00-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-006p20-front-56",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-006p90-front-51",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-007p95-front-54",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-008p70-front-40",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9968895316123962,
+          "scored_frames": 1
+        },
+        {
+          "label_id": "manual-00000c21-009p25-front-50",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9964823722839355,
+          "scored_frames": 3
+        },
+        {
+          "label_id": "manual-00000c21-012p10-front-52",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-013p65-front-58",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-024p40-front-61",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-024p85-front-40",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-025p30-front-59",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000c21-033p40-front-63",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002d3-009p95-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002d3-011p65-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002d3-040p10-corner-1000",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002d3-040p45-corner-1018",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002d3-052p75-corner-1079",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002d3-004p60-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002d3-007p15-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002d3-018p15-corner-1013",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-000p60-corner-1006",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-000p75-corner-1004",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-001p75-corner-1007",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-004p80-corner-1013",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-029p05-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-031p10-corner-1025",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-034p05-corner-1030",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-039p20-corner-1042",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-042p90-corner-1045",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-047p55-corner-1053",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-049p90-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-050p30-corner-1055",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-000002df-054p60-corner-1057",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.996569037437439,
+          "scored_frames": 5
+        },
+        {
+          "label_id": "manual-0000005b-000p25-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-000p60-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-001p15-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-001p20-corner-1004",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-008p30-corner-1006",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-009p05-corner-1022",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-014p05-corner-1029",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-014p25-corner-1033",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-018p05-corner-1003",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-018p10-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-025p75-corner-1049",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-034p35-corner-1067",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-038p95-corner-1059",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-039p40-corner-1071",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-012p05-corner-1013",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-012p15-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-012p90-corner-1055",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-013p50-corner-1045",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-013p60-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-015p45-corner-1003",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-015p50-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-015p75-corner-1084",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-016p95-corner-1083",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-019p25-corner-1055",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-019p55-corner-1052",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-020p30-corner-1094",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-020p35-corner-1013",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-020p40-corner-1063",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-020p70-front-59",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-020p70-corner-1089",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-022p35-corner-1094",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-022p70-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-023p00-corner-1083",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-023p90-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-026p00-corner-1106",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-026p35-corner-1105",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-026p75-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-027p15-corner-1106",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-040p30-corner-1138",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-040p50-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-040p85-corner-1089",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-041p50-corner-1111",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-041p90-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-042p55-corner-1089",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-042p75-corner-1111",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-043p10-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-044p30-corner-1111",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-047p30-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-048p25-corner-1089",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-049p45-corner-1111",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-051p50-corner-1160",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-052p00-corner-1111",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-056p00-corner-1153",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000005b-057p95-corner-1165",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-000p30-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-006p40-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-006p45-corner-1002",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-009p50-corner-1009",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-009p60-corner-1004",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-012p90-corner-1010",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-016p45-corner-1008",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-023p80-corner-1013",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-026p00-corner-1012",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-040p70-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-0000006a-054p90-corner-1023",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000247-001p20-front-55",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000247-003p65-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000247-006p85-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000247-006p90-front-50",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000247-010p95-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000247-024p20-front-62",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000247-026p05-front-44",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000247-033p90-front-38",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000247-045p05-front-52",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000247-050p10-front-35",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000216-049p60-corner-1133",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000221-002p25-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000221-045p20-corner-1003",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-000p15-front-32",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-000p25-front-49",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-000p35-front-47",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-000p40-front-37",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-000p70-front-43",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-001p20-front-54",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-001p40-front-51",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-001p45-front-63",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-001p60-front-34",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-001p85-front-52",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-005p85-front-54",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9995279312133789,
+          "scored_frames": 7
+        },
+        {
+          "label_id": "manual-00000129-012p05-front-48",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-019p60-front-55",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-023p25-front-55",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        },
+        {
+          "label_id": "manual-00000129-033p50-front-36",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 0
+        }
+      ]
+    },
+    "path_occupancy": {
+      "implementation": "path-occupancy",
+      "logs": 34,
+      "summary": {
+        "front": {
+          "labels": 106,
+          "precision": 0.09090909090909091,
+          "recall": 0.1111111111111111,
+          "f1": 0.09999999999999999,
+          "accuracy": 0.8301886792452831,
+          "tp": 1,
+          "fp": 10,
+          "fn": 8,
+          "tn": 87
+        },
+        "corner": {
+          "labels": 200,
+          "precision": 0.6428571428571429,
+          "recall": 0.3103448275862069,
+          "f1": 0.4186046511627907,
+          "accuracy": 0.875,
+          "tp": 9,
+          "fp": 5,
+          "fn": 20,
+          "tn": 166
+        }
+      },
+      "rows": [
+        {
+          "label_id": "manual-00000218-000p50-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 23
+        },
+        {
+          "label_id": "manual-00000218-013p55-corner-1009",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8529282212257385,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000218-024p00-corner-1018",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9281932711601257,
+          "scored_frames": 15
+        },
+        {
+          "label_id": "manual-00000218-027p20-corner-1022",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.961051344871521,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-00000218-034p50-corner-1024",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9178557991981506,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000218-042p15-corner-1036",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 22
+        },
+        {
+          "label_id": "manual-00000218-046p40-corner-1040",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9593032598495483,
+          "scored_frames": 22
+        },
+        {
+          "label_id": "manual-00000218-051p85-corner-1047",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000218-056p40-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9635106325149536,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-00000218-000p20-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-00000218-004p05-corner-1010",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9027149677276611,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-00000218-031p05-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9440404772758484,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-00000218-038p30-corner-1050",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-00000218-049p55-corner-1069",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000006d-028p60-corner-1009",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.4935190677642822,
+          "scored_frames": 15
+        },
+        {
+          "label_id": "manual-000000b1-000p25-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-000000b1-000p35-corner-1007",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 11
+        },
+        {
+          "label_id": "manual-000000b1-000p70-corner-1002",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9987693428993225,
+          "scored_frames": 10
+        },
+        {
+          "label_id": "manual-000000b1-005p35-corner-1001",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000000b1-007p30-corner-1033",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 15
+        },
+        {
+          "label_id": "manual-000000b1-030p10-front-36",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9579339027404785,
+          "scored_frames": 8
+        },
+        {
+          "label_id": "manual-000000b1-030p20-front-59",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9826402068138123,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-000000b1-040p40-front-32",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.5281787514686584,
+          "scored_frames": 15
+        },
+        {
+          "label_id": "manual-000000b1-040p80-front-39",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9838100671768188,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-000000b1-040p95-front-48",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 21
+        },
+        {
+          "label_id": "manual-000000b1-041p00-front-41",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9993250370025635,
+          "scored_frames": 8
+        },
+        {
+          "label_id": "manual-000000b1-041p40-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9906638860702515,
+          "scored_frames": 9
+        },
+        {
+          "label_id": "manual-000000b1-051p15-corner-1073",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.49486714601516724,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000000cf-001p60-corner-1002",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.29156699776649475,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-000000cf-002p05-corner-1003",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.27289921045303345,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000000cf-002p60-corner-1003",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.27289921045303345,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-000000cf-004p25-corner-1006",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.6159847378730774,
+          "scored_frames": 8
+        },
+        {
+          "label_id": "manual-000000cf-005p85-corner-1005",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.2689017057418823,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000000cf-006p25-corner-1003",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000000cf-007p25-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.0,
+          "scored_frames": 36
+        },
+        {
+          "label_id": "manual-000000cf-010p20-corner-1011",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 12
+        },
+        {
+          "label_id": "manual-000000cf-013p00-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-000000cf-014p15-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000000cf-014p40-corner-1013",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.5852201581001282,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000000cf-053p45-corner-1043",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8043120503425598,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-000000cf-054p50-corner-1044",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8926651477813721,
+          "scored_frames": 28
+        },
+        {
+          "label_id": "manual-000000cf-015p75-corner-1000",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9322265386581421,
+          "scored_frames": 35
+        },
+        {
+          "label_id": "manual-000000cf-017p30-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.36536934971809387,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000000cf-019p35-corner-1001",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.7597113251686096,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000000cf-025p75-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-000000cf-025p80-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-00000aa5-000p15-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-00000aa5-000p20-front-47",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 3
+        },
+        {
+          "label_id": "manual-00000aa5-000p25-front-34",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-00000aa5-001p90-front-50",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.25911766290664673,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000aa5-002p45-front-36",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9970520734786987,
+          "scored_frames": 8
+        },
+        {
+          "label_id": "manual-00000aa5-002p95-front-35",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9956955909729004,
+          "scored_frames": 12
+        },
+        {
+          "label_id": "manual-00000aa5-004p75-front-44",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.6020511984825134,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000aa5-006p05-front-54",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7924996018409729,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000aa5-006p35-front-57",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9815089106559753,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-00000cd0-000p15-front-37",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8165401816368103,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-00000cd0-000p55-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.3679858446121216,
+          "scored_frames": 3
+        },
+        {
+          "label_id": "manual-00000cd0-001p50-front-63",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.2848200798034668,
+          "scored_frames": 6
+        },
+        {
+          "label_id": "manual-00000cd0-001p60-front-60",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8205878734588623,
+          "scored_frames": 19
+        },
+        {
+          "label_id": "manual-00000cd0-002p05-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-00000cd0-015p35-front-39",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8543093800544739,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-00000cd0-015p90-front-43",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7881965637207031,
+          "scored_frames": 12
+        },
+        {
+          "label_id": "manual-00000cd0-016p50-corner-1002",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-00000cd0-017p20-corner-1002",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000cd2-056p20-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000cfb-017p75-corner-1015",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-00000cfb-022p85-corner-1017",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 28
+        },
+        {
+          "label_id": "manual-00000cfb-025p50-corner-1025",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 10
+        },
+        {
+          "label_id": "manual-00000cfb-036p80-corner-1028",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.32704123854637146,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000018f-000p25-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 19
+        },
+        {
+          "label_id": "manual-0000018f-010p10-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.276058554649353,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-0000018f-019p15-front-41",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.0,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-0000018f-054p70-corner-1164",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000192-020p00-corner-1019",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000192-024p15-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9382811784744263,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000192-032p30-corner-1036",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.2747803330421448,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000192-040p30-corner-1040",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8809235095977783,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-00000192-046p90-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000192-047p20-corner-1049",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9770301580429077,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-000001a5-002p05-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7132248282432556,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001a5-027p40-corner-1014",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001a5-057p20-corner-1034",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9474939107894897,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-000001a7-038p65-corner-1044",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.27433013916015625,
+          "scored_frames": 4
+        },
+        {
+          "label_id": "manual-000001a7-000p25-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-000001a7-001p60-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-000001a7-003p25-corner-1004",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 9
+        },
+        {
+          "label_id": "manual-000001a7-036p20-corner-1068",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9256830215454102,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-000001a7-036p75-corner-1071",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9585663676261902,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-000001a7-041p60-corner-1084",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001b9-001p30-corner-1003",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.5325044989585876,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-000001b9-001p35-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-000001b9-001p45-corner-1002",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7818111777305603,
+          "scored_frames": 7
+        },
+        {
+          "label_id": "manual-000001b9-003p15-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9892336130142212,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-000001b9-007p40-corner-1009",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9027433395385742,
+          "scored_frames": 10
+        },
+        {
+          "label_id": "manual-000001b9-007p70-corner-1010",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8251584768295288,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-000001b9-010p20-corner-1017",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7982166409492493,
+          "scored_frames": 23
+        },
+        {
+          "label_id": "manual-000001b9-014p90-corner-1024",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9204631447792053,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001b9-016p45-corner-1027",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8043851852416992,
+          "scored_frames": 8
+        },
+        {
+          "label_id": "manual-000001b9-023p50-corner-1032",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8989639282226562,
+          "scored_frames": 9
+        },
+        {
+          "label_id": "manual-000001b9-036p00-corner-1034",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9102321863174438,
+          "scored_frames": 10
+        },
+        {
+          "label_id": "manual-000001b9-037p50-corner-1037",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.910236656665802,
+          "scored_frames": 11
+        },
+        {
+          "label_id": "manual-000001b9-041p20-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8477773070335388,
+          "scored_frames": 8
+        },
+        {
+          "label_id": "manual-000001b9-023p80-corner-1008",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001b9-032p25-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-000001b9-038p20-corner-1054",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9956212639808655,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001b9-043p85-corner-1055",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.3101843297481537,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001b9-049p80-corner-1073",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.5790855288505554,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001b9-050p20-corner-1076",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 9
+        },
+        {
+          "label_id": "manual-000001c1-000p35-corner-1002",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.6725282073020935,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-000001c1-004p00-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001c1-010p75-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9639331698417664,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-000001c1-014p20-corner-1007",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 15
+        },
+        {
+          "label_id": "manual-000001c1-017p00-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.932360827922821,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001c1-019p35-corner-1009",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7702844738960266,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-000001c1-024p50-corner-1014",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-000001c1-024p80-corner-1015",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 12
+        },
+        {
+          "label_id": "manual-000001c1-025p20-corner-1012",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8240956664085388,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-000001c1-028p70-corner-1018",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-000001c1-032p35-corner-1021",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.989140510559082,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-000001c1-043p20-corner-1033",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.012599551118910313,
+          "scored_frames": 4
+        },
+        {
+          "label_id": "manual-000001c1-043p40-corner-1034",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.41703346371650696,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-000001c1-050p00-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9037543535232544,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001c1-054p85-corner-1063",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7565922737121582,
+          "scored_frames": 11
+        },
+        {
+          "label_id": "manual-000001c1-057p35-corner-1073",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7193665504455566,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-000001c1-059p70-corner-1076",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8605942726135254,
+          "scored_frames": 6
+        },
+        {
+          "label_id": "manual-000001c1-059p90-corner-1077",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9790492057800293,
+          "scored_frames": 4
+        },
+        {
+          "label_id": "manual-000001ce-000p25-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-000001ce-014p70-corner-1000",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001ce-000p45-corner-1006",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.998529314994812,
+          "scored_frames": 9
+        },
+        {
+          "label_id": "manual-000001ce-002p85-corner-1011",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9955136179924011,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-000001ce-005p20-corner-1025",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 10
+        },
+        {
+          "label_id": "manual-000001ce-030p40-corner-1087",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.005973420571535826,
+          "scored_frames": 1
+        },
+        {
+          "label_id": "manual-000001d6-000p25-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-000001d6-012p60-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.4136059284210205,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000001d6-035p80-corner-1016",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 21
+        },
+        {
+          "label_id": "manual-00000bef-000p15-front-33",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-00000bef-001p30-front-58",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-00000bef-008p60-front-49",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.32604530453681946,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-00000bef-009p20-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.6363766193389893,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-00000bef-011p15-front-32",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.007455592509359121,
+          "scored_frames": 24
+        },
+        {
+          "label_id": "manual-00000bef-012p60-front-39",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 9
+        },
+        {
+          "label_id": "manual-00000bef-020p40-front-51",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.00015654589515179396,
+          "scored_frames": 5
+        },
+        {
+          "label_id": "manual-00000bef-024p30-front-34",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000bef-031p30-front-50",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 12
+        },
+        {
+          "label_id": "manual-00000bef-032p85-front-62",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.04266170412302017,
+          "scored_frames": 25
+        },
+        {
+          "label_id": "manual-00000bef-033p40-front-42",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 19
+        },
+        {
+          "label_id": "manual-00000bef-035p15-front-56",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.3187752366065979,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000bef-037p65-front-62",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-00000bef-037p80-front-49",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-00000bef-038p35-front-38",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-00000bef-038p70-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 23
+        },
+        {
+          "label_id": "manual-00000bef-040p10-front-55",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 9
+        },
+        {
+          "label_id": "manual-00000bef-041p70-front-57",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9982126951217651,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-00000c21-000p15-front-37",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.992638349533081,
+          "scored_frames": 3
+        },
+        {
+          "label_id": "manual-00000c21-000p45-front-52",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.4797525703907013,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-00000c21-001p05-front-56",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9975118637084961,
+          "scored_frames": 23
+        },
+        {
+          "label_id": "manual-00000c21-001p20-front-51",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9923779964447021,
+          "scored_frames": 9
+        },
+        {
+          "label_id": "manual-00000c21-001p45-front-32",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000c21-002p05-front-35",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000c21-017p35-front-40",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9946349859237671,
+          "scored_frames": 21
+        },
+        {
+          "label_id": "manual-00000c21-017p70-front-48",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9932706952095032,
+          "scored_frames": 22
+        },
+        {
+          "label_id": "manual-00000c21-018p35-front-60",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7791360020637512,
+          "scored_frames": 23
+        },
+        {
+          "label_id": "manual-00000c21-019p15-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9927567839622498,
+          "scored_frames": 20
+        },
+        {
+          "label_id": "manual-00000c21-019p50-front-45",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9938399195671082,
+          "scored_frames": 22
+        },
+        {
+          "label_id": "manual-00000c21-024p95-front-47",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.4618566930294037,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-00000c21-029p60-front-58",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9225093126296997,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-00000c21-029p80-front-40",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-00000c21-031p50-front-46",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 23
+        },
+        {
+          "label_id": "manual-00000c21-032p65-front-61",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 6
+        },
+        {
+          "label_id": "manual-00000c21-032p75-front-63",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 7
+        },
+        {
+          "label_id": "manual-00000c21-033p15-front-62",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.00011032917245756835,
+          "scored_frames": 12
+        },
+        {
+          "label_id": "manual-00000c21-058p05-front-59",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 6
+        },
+        {
+          "label_id": "manual-00000c21-000p15-front-44",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 10
+        },
+        {
+          "label_id": "manual-00000c21-000p20-front-41",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.915590763092041,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-00000c21-000p30-front-34",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 19
+        },
+        {
+          "label_id": "manual-00000c21-000p35-front-39",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 21
+        },
+        {
+          "label_id": "manual-00000c21-000p60-front-51",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7906458973884583,
+          "scored_frames": 11
+        },
+        {
+          "label_id": "manual-00000c21-001p10-front-37",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9929375052452087,
+          "scored_frames": 20
+        },
+        {
+          "label_id": "manual-00000c21-001p40-front-49",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9884681105613708,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-00000c21-004p15-front-35",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9718918204307556,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000c21-006p00-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.40302005410194397,
+          "scored_frames": 19
+        },
+        {
+          "label_id": "manual-00000c21-006p20-front-56",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 3
+        },
+        {
+          "label_id": "manual-00000c21-006p90-front-51",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.5621291995048523,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-00000c21-007p95-front-54",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.4503776431083679,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-00000c21-008p70-front-40",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9968895316123962,
+          "scored_frames": 13
+        },
+        {
+          "label_id": "manual-00000c21-009p25-front-50",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9964823722839355,
+          "scored_frames": 9
+        },
+        {
+          "label_id": "manual-00000c21-012p10-front-52",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 22
+        },
+        {
+          "label_id": "manual-00000c21-013p65-front-58",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 4
+        },
+        {
+          "label_id": "manual-00000c21-024p40-front-61",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.2728331685066223,
+          "scored_frames": 15
+        },
+        {
+          "label_id": "manual-00000c21-024p85-front-40",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000c21-025p30-front-59",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.44120797514915466,
+          "scored_frames": 28
+        },
+        {
+          "label_id": "manual-00000c21-033p40-front-63",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.016765544191002846,
+          "scored_frames": 8
+        },
+        {
+          "label_id": "manual-000002d3-009p95-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.4031493663787842,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000002d3-011p65-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000002d3-040p10-corner-1000",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000002d3-040p45-corner-1018",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.3750758767127991,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000002d3-052p75-corner-1079",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-000002d3-004p60-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000002d3-007p15-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.3826178312301636,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-000002d3-018p15-corner-1013",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 15
+        },
+        {
+          "label_id": "manual-000002df-000p60-corner-1006",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 22
+        },
+        {
+          "label_id": "manual-000002df-000p75-corner-1004",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 22
+        },
+        {
+          "label_id": "manual-000002df-001p75-corner-1007",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-000002df-004p80-corner-1013",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 23
+        },
+        {
+          "label_id": "manual-000002df-029p05-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-000002df-031p10-corner-1025",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9923007488250732,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-000002df-034p05-corner-1030",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-000002df-039p20-corner-1042",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-000002df-042p90-corner-1045",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-000002df-047p55-corner-1053",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9813077449798584,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-000002df-049p90-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9635647535324097,
+          "scored_frames": 27
+        },
+        {
+          "label_id": "manual-000002df-050p30-corner-1055",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.627245306968689,
+          "scored_frames": 28
+        },
+        {
+          "label_id": "manual-000002df-054p60-corner-1057",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.996569037437439,
+          "scored_frames": 19
+        },
+        {
+          "label_id": "manual-0000005b-000p25-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-0000005b-000p60-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.6452743411064148,
+          "scored_frames": 21
+        },
+        {
+          "label_id": "manual-0000005b-001p15-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-001p20-corner-1004",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.4384528398513794,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-008p30-corner-1006",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.5855837464332581,
+          "scored_frames": 24
+        },
+        {
+          "label_id": "manual-0000005b-009p05-corner-1022",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9780791997909546,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-0000005b-014p05-corner-1029",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9028563499450684,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-0000005b-014p25-corner-1033",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-0000005b-018p05-corner-1003",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.2879595458507538,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-018p10-corner-1041",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 12
+        },
+        {
+          "label_id": "manual-0000005b-025p75-corner-1049",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8794901967048645,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-0000005b-034p35-corner-1067",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.15047553181648254,
+          "scored_frames": 20
+        },
+        {
+          "label_id": "manual-0000005b-038p95-corner-1059",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.30459800362586975,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-039p40-corner-1071",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.2913995087146759,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-012p05-corner-1013",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-012p15-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-012p90-corner-1055",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8680105805397034,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-013p50-corner-1045",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-013p60-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-015p45-corner-1003",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.2984033226966858,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-015p50-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-015p75-corner-1084",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 10
+        },
+        {
+          "label_id": "manual-0000005b-016p95-corner-1083",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.3229444921016693,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-019p25-corner-1055",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8511908054351807,
+          "scored_frames": 22
+        },
+        {
+          "label_id": "manual-0000005b-019p55-corner-1052",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-020p30-corner-1094",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-0000005b-020p35-corner-1013",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-020p40-corner-1063",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.1814456731081009,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-0000005b-020p70-front-59",
+          "source": "front",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-020p70-corner-1089",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-022p35-corner-1094",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 26
+        },
+        {
+          "label_id": "manual-0000005b-022p70-corner-1052",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 24
+        },
+        {
+          "label_id": "manual-0000005b-023p00-corner-1083",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.27273842692375183,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-023p90-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-0000005b-026p00-corner-1106",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 19
+        },
+        {
+          "label_id": "manual-0000005b-026p35-corner-1105",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.1500622034072876,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-0000005b-026p75-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-027p15-corner-1106",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 27
+        },
+        {
+          "label_id": "manual-0000005b-040p30-corner-1138",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9640758633613586,
+          "scored_frames": 28
+        },
+        {
+          "label_id": "manual-0000005b-040p50-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-0000005b-040p85-corner-1089",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.43370044231414795,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-041p50-corner-1111",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.4129698872566223,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-041p90-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-042p55-corner-1089",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.47194164991378784,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-042p75-corner-1111",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.4129698872566223,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-0000005b-043p10-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-0000005b-044p30-corner-1111",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-047p30-corner-1101",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-048p25-corner-1089",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.6816650032997131,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-0000005b-049p45-corner-1111",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.4398905038833618,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-0000005b-051p50-corner-1160",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.1270800679922104,
+          "scored_frames": 15
+        },
+        {
+          "label_id": "manual-0000005b-052p00-corner-1111",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.32272955775260925,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000005b-056p00-corner-1153",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.27203112840652466,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-0000005b-057p95-corner-1165",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.23219799995422363,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000006a-000p30-corner-1001",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-0000006a-006p40-corner-1005",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7638940811157227,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000006a-006p45-corner-1002",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.6678149700164795,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000006a-009p50-corner-1009",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7650469541549683,
+          "scored_frames": 16
+        },
+        {
+          "label_id": "manual-0000006a-009p60-corner-1004",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9539101123809814,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000006a-012p90-corner-1010",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9810616374015808,
+          "scored_frames": 11
+        },
+        {
+          "label_id": "manual-0000006a-016p45-corner-1008",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.6776365637779236,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-0000006a-023p80-corner-1013",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.6594465970993042,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-0000006a-026p00-corner-1012",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.7126066088676453,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-0000006a-040p70-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.1903371810913086,
+          "scored_frames": 31
+        },
+        {
+          "label_id": "manual-0000006a-054p90-corner-1023",
+          "source": "corner",
+          "expected": "detect",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.688936173915863,
+          "scored_frames": 18
+        },
+        {
+          "label_id": "manual-00000247-001p20-front-55",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000247-003p65-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000247-006p85-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000247-006p90-front-50",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.5736053586006165,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000247-010p95-front-46",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000247-024p20-front-62",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 20
+        },
+        {
+          "label_id": "manual-00000247-026p05-front-44",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.2664256691932678,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000247-033p90-front-38",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000247-045p05-front-52",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.5638546347618103,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000247-050p10-front-35",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 29
+        },
+        {
+          "label_id": "manual-00000216-049p60-corner-1133",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.8285744786262512,
+          "scored_frames": 21
+        },
+        {
+          "label_id": "manual-00000221-002p25-corner-1000",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000221-045p20-corner-1003",
+          "source": "corner",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000129-000p15-front-32",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-00000129-000p25-front-49",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 19
+        },
+        {
+          "label_id": "manual-00000129-000p35-front-47",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-00000129-000p40-front-37",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 5
+        },
+        {
+          "label_id": "manual-00000129-000p70-front-43",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-00000129-001p20-front-54",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 23
+        },
+        {
+          "label_id": "manual-00000129-001p40-front-51",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        },
+        {
+          "label_id": "manual-00000129-001p45-front-63",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-00000129-001p60-front-34",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-00000129-001p85-front-52",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.010454385541379452,
+          "scored_frames": 15
+        },
+        {
+          "label_id": "manual-00000129-005p85-front-54",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 0.9995279312133789,
+          "scored_frames": 7
+        },
+        {
+          "label_id": "manual-00000129-012p05-front-48",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9939080476760864,
+          "scored_frames": 26
+        },
+        {
+          "label_id": "manual-00000129-019p60-front-55",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.9943139553070068,
+          "scored_frames": 14
+        },
+        {
+          "label_id": "manual-00000129-023p25-front-55",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 17
+        },
+        {
+          "label_id": "manual-00000129-033p50-front-36",
+          "source": "front",
+          "expected": "clear",
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 0.0,
+          "scored_frames": 30
+        }
+      ]
+    },
+    "actual_future_summary": {
+      "basis": "same scorable manual windows, but expected detect/clear is replaced by measured same-vehicle future path entry",
+      "carrot_wip": {
+        "front": {
+          "labels": 87,
+          "precision": 0.5,
+          "recall": 0.1,
+          "f1": 0.16666666666666669,
+          "accuracy": 0.6551724137931034,
+          "tp": 3,
+          "fp": 3,
+          "fn": 27,
+          "tn": 54
+        },
+        "corner": {
+          "labels": 191,
+          "precision": 0.25,
+          "recall": 0.01818181818181818,
+          "f1": 0.03389830508474576,
+          "accuracy": 0.7015706806282722,
+          "tp": 1,
+          "fp": 3,
+          "fn": 54,
+          "tn": 133
+        }
+      },
+      "path_occupancy": {
+        "front": {
+          "labels": 87,
+          "precision": 0.4444444444444444,
+          "recall": 0.13333333333333333,
+          "f1": 0.20512820512820512,
+          "accuracy": 0.6436781609195402,
+          "tp": 4,
+          "fp": 5,
+          "fn": 26,
+          "tn": 52
+        },
+        "corner": {
+          "labels": 191,
+          "precision": 0.6153846153846154,
+          "recall": 0.14545454545454545,
+          "f1": 0.2352941176470588,
+          "accuracy": 0.7277486910994765,
+          "tp": 8,
+          "fp": 5,
+          "fn": 47,
+          "tn": 131
+        }
+      }
+    }
   }
 }

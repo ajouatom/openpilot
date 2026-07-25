@@ -7,6 +7,10 @@ from openpilot.selfdrive.carrot.radar.tools.radar_trajectory_train import (
   _save_log_rows,
   _track_observations,
 )
+from openpilot.selfdrive.carrot.radar.tools.radar_trajectory_compare import (
+  ComparisonRow,
+  _summary,
+)
 
 
 PATH = ((0.0, 0.0), (100.0, 0.0))
@@ -166,3 +170,19 @@ def test_incremental_log_cache_round_trip_and_fingerprint_guard(tmp_path) -> Non
 
   assert _load_log_rows(cache_path, "vehicle/log/rlog.zst", fingerprint) == rows
   assert _load_log_rows(cache_path, "vehicle/log/rlog.zst", {"size": 124, "mtime_ns": 456}) is None
+
+
+def test_carrot_wip_comparison_summary_is_source_separated() -> None:
+  rows = (
+    ComparisonRow("f-tp", "front", "detect", "detect", True, 0.9, 3),
+    ComparisonRow("f-fp", "front", "clear", "detect", True, 0.8, 2),
+    ComparisonRow("c-tn", "corner", "clear", "clear", False, 0.1, 4),
+  )
+
+  values = _summary(rows)
+
+  assert values["front"]["tp"] == 1
+  assert values["front"]["fp"] == 1
+  assert values["front"]["precision"] == 0.5
+  assert values["corner"]["tn"] == 1
+  assert values["corner"]["fp"] == 0

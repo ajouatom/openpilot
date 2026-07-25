@@ -77,6 +77,8 @@ Front and corner models are trained as separate artifacts. They use only the cur
 
 Full-log validation found that recall at a high-precision CUT-IN threshold is still too low, so automatic `leadTwo` promotion by the new model remains disabled for both front and corner sources. The same features, weights, and post-processing still run on the device and in PC review. Only the high-precision front/SCC `OUT` decision is used to stop a brief stale hold after vision has already lost the `leadOne` match. It never removes the current `leadOne` or reduces time gap, and corner `OUT` remains display/evaluation-only.
 
+`radar_lead_validation_review.py --trajectory-table-only` prints the manual-label evaluation and a side-by-side comparison of the branch-point `carrot-wip` decision with the final path-occupancy shadow decision. It then repeats the comparison using measured future path entry as truth on the same scorable windows, making broadly marked human windows visible separately.
+
 The `PREDICT` slider selects the separate geometric display horizon from 0.25 to 2.0 seconds. That projection combines point history with ego `position.x/y`, `position.yStd`, `laneLines`, `laneLineProbs`, and `laneLineStds`. It also records `yawRate`, steering angle, and steering rate, and displays `yawRate x distance` as the apparent lateral speed that ego rotation can create. It falls back to the predicted ego path when lane confidence is low, and widens the future-position bar as uncertainty grows.
 
 Selecting `CUT-IN`, `CLEAR`, or `STATIONARY` inside a maintained validation window updates that case. A candidate found outside every maintained window is saved separately in `radar_trajectory_labels.json`, so it cannot overwrite existing ground truth.

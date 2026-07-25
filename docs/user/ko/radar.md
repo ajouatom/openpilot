@@ -77,6 +77,8 @@ PC 검증기는 같은 로그에 여러 검증 구간이 있어도 로그 창을
 
 현재 전체 로그 검증에서는 고정밀 CUT-IN 임계값의 재현율이 너무 낮아 새 모델의 자동 `leadTwo` 승격을 front/corner 모두 비활성화했습니다. 모델은 디바이스와 PC에서 같은 특징·가중치·후처리로 계속 추론하고 화면에 표시합니다. 고정밀 검증을 통과한 전방/SCC `OUT`만 비전이 이미 `leadOne` 매칭을 잃은 뒤의 짧은 stale hold를 해제하는 데 사용합니다. 현재 `leadOne`을 직접 제거하거나 TF를 줄이지 않으며, 코너 `OUT`은 표시와 평가에만 사용합니다.
 
+`radar_lead_validation_review.py --trajectory-table-only`는 수동 라벨 평가와 함께 분기점 `carrot-wip` 기존 판정 대 새 path-occupancy 최종 shadow 판정을 표시합니다. 사람이 넓게 지정한 구간의 영향을 확인할 수 있도록, 동일 구간에서 로그의 실제 미래 경로 진입을 정답으로 바꾼 비교표도 이어서 출력합니다.
+
 `PREDICT` 슬라이더는 별도 기하학 표시의 예측 시간을 0.25초에서 2.0초까지 바꿉니다. 이 투영은 포인트의 과거 횡이동, 자차 `position.x/y`, `position.yStd`, `laneLines`, `laneLineProbs`, `laneLineStds`를 함께 사용합니다. `yawRate`, 조향각, 조향각속도도 기록하며 `yawRate x 거리`로 자차 회전이 만들 수 있는 겉보기 횡속도를 표시합니다. 차선 신뢰도가 낮으면 자차 예상 경로를 기준으로 전환하며, 불확실성이 크면 미래 위치의 가로 막대가 넓어집니다.
 
 유지 중인 검증 구간에서 `CUT-IN`, `CLEAR`, `STATIONARY`를 선택하면 기존 검증 항목이 갱신됩니다. 검증 구간 밖에서 발견한 후보는 별도 `radar_trajectory_labels.json`에 저장되므로 기존 정답을 덮어쓰지 않습니다.

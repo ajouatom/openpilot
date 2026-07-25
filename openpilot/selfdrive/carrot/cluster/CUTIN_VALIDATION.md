@@ -286,6 +286,23 @@ windows contained no measured outside-to-inside transition, while 30 front and
 43 corner CLEAR windows did contain one. These labels remain unchanged and are
 review targets, not training corrections.
 
+The exact branch-point `carrot-wip` implementation at `9088829005` and the new
+final shadow decision were also replayed in isolated Python processes over the
+same 34 held-out logs. This comparison includes the `leadOne` distance block,
+not only raw model thresholds:
+
+| truth | source | carrot-wip P / R / F1 | path-occupancy P / R / F1 |
+|---|---|---:|---:|
+| manual CUT-IN/CLEAR | front | 0.000 / 0.000 / 0.000 | 0.091 / 0.111 / 0.100 |
+| manual CUT-IN/CLEAR | corner | 0.200 / 0.034 / 0.059 | 0.643 / 0.310 / 0.419 |
+| measured future entry | front | 0.500 / 0.100 / 0.167 | 0.444 / 0.133 / 0.205 |
+| measured future entry | corner | 0.250 / 0.018 / 0.034 | 0.615 / 0.145 / 0.235 |
+
+Corner improves materially under both truth definitions. Front recall and F1
+increase slightly, but measured-future precision drops from 0.500 to 0.444, so
+front is not treated as control-validated. The complete per-label rows are in
+`radar_path_occupancy_report.json` under `carrot_wip_comparison`.
+
 Automatic trajectory-model `leadTwo` promotion therefore remains disabled for
 both sources. Front/SCC PATH-EXIT alone may cancel a stale-primary hold after
 vision has already lost `leadOne`; it never removes a currently matched
