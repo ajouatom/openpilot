@@ -28,6 +28,7 @@ from openpilot.selfdrive.carrot.radar.radar_trajectory import (
 MODEL_VERSION = 3
 DEFAULT_FRONT_MODEL_PATH = Path(__file__).resolve().parent / "models" / "radar_path_occupancy_front.npz"
 DEFAULT_CORNER_MODEL_PATH = Path(__file__).resolve().parent / "models" / "radar_path_occupancy_corner.npz"
+MIN_FORWARD_ENTRY_DREL_M = 0.5
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,7 @@ class TrajectoryCutinPrediction:
   point: object
   path_exit_probability: float = 0.0
   current_path_occupancy: bool = False
+  forward_horizon_relevant: tuple[bool, ...] = ()
 
   def probability_at(self, horizon_s: float) -> float:
     """Return future path-occupancy probability at the nearest model horizon."""
@@ -153,11 +155,31 @@ class RadarTrajectoryModel:
       values = tuple(float(value) for value in horizon_values)
       if not all(math.isfinite(value) for value in values):
         continue
+      forward_horizon_relevant = tuple(
+        min(
+          trajectory.samples,
+          key=lambda sample: abs(sample.horizon_s - horizon_s),
+        ).d_rel > MIN_FORWARD_ENTRY_DREL_M
+        for horizon_s in TARGET_HORIZONS_S
+      )
       current_path_occupancy = (
         abs(trajectory.d_path)
         <= trajectory.lane_half_width + VEHICLE_HALF_WIDTH_M
       )
-      entry_probability = 0.0 if current_path_occupancy else max(values)
+      entry_probability = (
+        0.0
+        if current_path_occupancy
+        else max(
+          (
+            value
+            for value, forward_relevant in zip(
+              values, forward_horizon_relevant, strict=True,
+            )
+            if forward_relevant
+          ),
+          default=0.0,
+        )
+      )
       path_exit_probability = (
         max(1.0 - value for value in values)
         if current_path_occupancy
@@ -172,6 +194,7 @@ class RadarTrajectoryModel:
         point=point,
         path_exit_probability=path_exit_probability,
         current_path_occupancy=current_path_occupancy,
+        forward_horizon_relevant=forward_horizon_relevant,
       ))
     return tuple(result)
 

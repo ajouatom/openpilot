@@ -217,7 +217,11 @@ lane lines. Point colors are cyan for front radar, purple for corner radar, and
 yellow for SCC. A label such as `1013 IN0.93 OUT0.00 S` means track id 1013,
 future path-entry probability 0.93, path-exit probability 0.00, and stage `S`.
 The detail row retains the raw 0.5/1.0/1.5/2.0-second path-occupancy
-probabilities. The
+probabilities. `IN` takes the maximum only over horizons whose predicted
+longitudinal position remains more than 0.5 m ahead of ego. The detail text
+shows these usable values under `ahead` and prints `--` for a horizon after ego
+has passed the object. This keeps a later behind-ego path crossing visible as a
+raw model diagnostic without treating it as an actionable cut-in. The
 direct-threshold shadow path normally uses these stage codes:
 
 - `S`: selected as the final `leadTwo`
@@ -278,7 +282,7 @@ transition recall remains low:
 | front | 0.923-0.935 | 0.995 | 1.000 / 0.00001 | 0.955 | 0.955 / 0.00074 |
 | corner | 0.934-0.958 | 0.945 | 0.827 / 0.028 | 0.815 | 0.872 / 0.105 |
 
-The held-out manual table was front TP/FP/FN/TN `0/4/9/93` and corner
+The held-out manual table was front TP/FP/FN/TN `0/0/9/97` and corner
 `6/2/23/169`. The actual-future audit agreed with 52 of 87 scorable front
 labels and 131 of 191 scorable corner labels; 19 front and 9 corner labels
 lacked a valid future measurement. Five front and 17 corner manual DETECT
@@ -293,14 +297,15 @@ not only raw model thresholds:
 
 | truth | source | carrot-wip P / R / F1 | path-occupancy P / R / F1 |
 |---|---|---:|---:|
-| manual CUT-IN/CLEAR | front | 0.000 / 0.000 / 0.000 | 0.091 / 0.111 / 0.100 |
-| manual CUT-IN/CLEAR | corner | 0.200 / 0.034 / 0.059 | 0.643 / 0.310 / 0.419 |
-| measured future entry | front | 0.500 / 0.100 / 0.167 | 0.444 / 0.133 / 0.205 |
-| measured future entry | corner | 0.250 / 0.018 / 0.034 | 0.615 / 0.145 / 0.235 |
+| manual CUT-IN/CLEAR | front | 0.000 / 0.000 / 0.000 | 0.333 / 0.111 / 0.167 |
+| manual CUT-IN/CLEAR | corner | 0.200 / 0.034 / 0.059 | 0.818 / 0.310 / 0.450 |
+| measured future entry | front | 0.500 / 0.100 / 0.167 | 0.333 / 0.033 / 0.061 |
+| measured future entry | corner | 0.250 / 0.018 / 0.034 | 0.636 / 0.127 / 0.212 |
 
-Corner improves materially under both truth definitions. Front recall and F1
-increase slightly, but measured-future precision drops from 0.500 to 0.444, so
-front is not treated as control-validated. The complete per-label rows are in
+Corner improves materially under both truth definitions. Front improves
+against the broad manual windows, but its measured-future precision and recall
+remain below the branch-point implementation, so front is not treated as
+control-validated. The complete per-label rows are in
 `radar_path_occupancy_report.json` under `carrot_wip_comparison`.
 
 Automatic trajectory-model `leadTwo` promotion therefore remains disabled for

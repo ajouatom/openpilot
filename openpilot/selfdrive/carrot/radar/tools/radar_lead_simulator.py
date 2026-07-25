@@ -2662,6 +2662,18 @@ class ProductionHybridLeadSelector:
           identity = (prediction.source, track_id, prediction.trajectory.continuity_id)
           point_threshold = trajectory_threshold(prediction)
           raw = "/".join(f"{value:.2f}" for value in prediction.horizon_probabilities)
+          forward_relevance = (
+            prediction.forward_horizon_relevant
+            or tuple(True for _ in prediction.horizon_probabilities)
+          )
+          ahead = "/".join(
+            f"{value:.2f}" if forward_relevant else "--"
+            for value, forward_relevant in zip(
+              prediction.horizon_probabilities,
+              forward_relevance,
+              strict=True,
+            )
+          )
           if is_selected:
             stage = "SELECTED"
             final_detail = "selected as leadTwo"
@@ -2699,7 +2711,7 @@ class ProductionHybridLeadSelector:
             path_exit_score=float(prediction.path_exit_probability),
             current_path_occupancy=bool(prediction.current_path_occupancy),
             stage=stage,
-            detail=f"occupancy .5/1/1.5/2s {raw}; {final_detail}",
+            detail=f"raw .5/1/1.5/2s {raw}; ahead {ahead}; {final_detail}",
           ))
       else:
         diagnostic_filter = secondary_filter or RadarLeadDecisionFilter(
@@ -3562,7 +3574,7 @@ class SimulatorUI:
         else "SCC"
       )
       point_legend = (
-        f"{point_source} points lateral x4: p=model, t=trajectory; "
+        f"{point_source} points lateral x4: IN=ahead-only, raw=all horizons; "
         f"future dots 0.25s to {self.trajectory_horizon_s:.2f}s"
       )
     else:
