@@ -429,7 +429,6 @@ function drivingHudUpdateFromCarPayload(j) {
     speedLimitKph: j.speedLimitKph,
     speedLimitOver: j.speedLimitOver,
     speedLimitBlink: j.speedLimitBlink,
-    sdiAlert: j.sdiAlert,
     apm: j.apm,
   };
   const payload = window.CarrotHudDataBridge?.withVehicleHudFields?.(basePayload, j) || {
@@ -439,7 +438,6 @@ function drivingHudUpdateFromCarPayload(j) {
     cruiseOverride: j.cruiseOverride && typeof j.cruiseOverride === "object"
       ? j.cruiseOverride
       : null,
-    sdiAlert: j.sdiAlert && typeof j.sdiAlert === "object" ? j.sdiAlert : null,
   };
   payload.cruiseOverride = stabilizedHudCruiseOverride(payload.cruiseOverride, payload);
 
@@ -474,10 +472,6 @@ function drivingHudUpdateFromCarPayload(j) {
       payload.cruiseOverride?.kph ?? "-",
       payload.cruiseOverride?.label ?? "-",
       payload.cruiseOverride?.mode ?? "-",
-      payload.sdiAlert?.type ?? "-",
-      payload.sdiAlert?.speedLimitKph ?? "-",
-      payload.sdiAlert?.distanceM ?? "-",
-      payload.sdiAlert?.countdownS ?? "-",
     ].join(":"),
     payload.lfaActive ? 1 : 0,
     Math.round(Number(payload.steeringAngleDeg) || 0), // 1° 단위로만 갱신
@@ -736,7 +730,7 @@ function deriveCompactHudPayload(state) {
     apm: Number(carrotMan?.activeCarrot) >= 2 ? "APN" : (Number(carrotMan?.activeCarrot) >= 1 ? "APM" : ""),
   };
 
-  // 클러스터 전용 필드(evActive/activeLaneLine/cruiseOverride/sdiAlert/trafficState)를
+  // 클러스터 전용 필드(evActive/activeLaneLine/cruiseOverride/trafficState/drivingMode)를
   // 한 곳에서 채워 "한 필드만 누락" 회귀를 원천 차단한다(이전 trafficState 누락처럼).
   // 브리지 미로드 시(부팅 극초기) 동등한 폴백으로 채운다.
   const withVehicleHudFields = window.CarrotHudDataBridge?.withVehicleHudFields;
@@ -746,8 +740,8 @@ function deriveCompactHudPayload(state) {
     evActive: vehiclePayload.evActive === true,
     activeLaneLine: vehiclePayload.activeLaneLine == null ? null : vehiclePayload.activeLaneLine === true,
     cruiseOverride: vehiclePayload.cruiseOverride ?? null,
-    sdiAlert: vehiclePayload.sdiAlert ?? null,
     trafficState: Number.isFinite(trafficState) ? trafficState : 0,
+    drivingMode: vehiclePayload.drivingMode ?? null,
   };
 }
 

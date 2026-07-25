@@ -3,7 +3,6 @@ import test from "node:test";
 
 import { createSpeedPanel } from "../src/features/drive/contents/vision/hud/widgets/speed_panel.js";
 import { createLfaIcon } from "../src/features/drive/contents/vision/hud/widgets/lfa_icon.js";
-import { createSdiAlert } from "../src/features/drive/contents/vision/hud/widgets/sdi_alert.js";
 import { createDriveModeBadge } from "../src/features/drive/contents/vision/hud/widgets/drive_mode.js";
 import { mapPayload } from "../src/features/drive/contents/vision/hud/index.js";
 import {
@@ -87,11 +86,9 @@ function renderFromCereal(state) {
   const data = mapPayload(flat);
   const panel = createSpeedPanel(doc);
   const lfa = createLfaIcon(doc);
-  const sdi = createSdiAlert(doc);
   const driveMode = createDriveModeBadge(doc);
   panel.update(data);
   lfa.update(data);
-  sdi.update(data);
   driveMode.update(data);
   return {
     data,
@@ -106,11 +103,6 @@ function renderFromCereal(state) {
     overrideLabel: findByClass(panel.el, "chud-t-override-label"),
     speed: findByClass(panel.el, "chud-t-speed"),
     lane: findByClass(lfa.el, "chud-lfa-lane"),
-    sdi: sdi.el,
-    sdiLabel: findByClass(sdi.el, "chud-sdi-label"),
-    sdiSpeed: findByClass(sdi.el, "chud-sdi-speed"),
-    sdiDistance: findByClass(sdi.el, "chud-sdi-distance"),
-    sdiCountdown: findByClass(sdi.el, "chud-sdi-countdown"),
   };
 }
 
@@ -200,35 +192,11 @@ test("non-metric: override speed converts to mph", () => {
   assert.equal(findByClass(panel.el, "chud-t-override-label").textContent, "section:n");
 });
 
-test("CAM/SDI renders independently with speed, distance and countdown", () => {
+// 센티넬 desiredSpeed(200)는 주황 오버라이드가 되면 안 된다.
+test("neutral desiredSpeed (200 sentinel) does not become an override", () => {
   const r = renderFromCereal({
     carState: { vEgoCluster: 53, vCruiseCluster: 88, gearShifter: "drive" },
-    carrotMan: {
-      desiredSpeed: 200,
-      desiredSource: "road",
-      xSpdType: 1,
-      xSpdLimit: 60,
-      xSpdDist: 420,
-      xSpdCountDown: 8,
-      szSdiDescr: "Speed camera",
-    },
+    carrotMan: { desiredSpeed: 200, desiredSource: "road" },
   });
-  assert.ok(isVisible(r.sdi));
-  assert.equal(r.sdiLabel.textContent, "Speed camera");
-  assert.equal(r.sdiSpeed.textContent, "60");
-  assert.equal(r.sdiDistance.textContent, "420 m");
-  assert.equal(r.sdiCountdown.textContent, "8s");
-  assert.ok(!isVisible(r.overrideSpeed), "neutral desiredSpeed must not become an orange override");
-});
-
-test("CAM/SDI converts speed and distance in non-metric mode", () => {
-  const vehicle = deriveVehicleHudPayload({
-    carrotMan: { xSpdType: 4, xSpdLimit: 80, xSpdDist: 1609.344, xSpdCountDown: 100 },
-  });
-  const data = mapPayload({ isMetric: false, sdiAlert: vehicle.sdiAlert });
-  const sdi = createSdiAlert(doc);
-  sdi.update(data);
-  assert.equal(findByClass(sdi.el, "chud-sdi-speed").textContent, String(Math.round(80 * 0.621371)));
-  assert.equal(findByClass(sdi.el, "chud-sdi-distance").textContent, "1.0 mi");
-  assert.ok(!isVisible(findByClass(sdi.el, "chud-sdi-countdown")));
+  assert.ok(!isVisible(r.overrideSpeed), "neutral desiredSpeed must not show an override");
 });

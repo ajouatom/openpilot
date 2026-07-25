@@ -17,7 +17,6 @@ test("HUD debug snapshot stays compact and separates source, derivation and disp
     ".chud-lfa-lane": diagnosticNode(),
     ".chud-t-override": diagnosticNode("77"),
     ".chud-t-override-label": diagnosticNode("cam:n"),
-    ".chud-sdi": diagnosticNode("Speed camera60420 m8s"),
   };
   const root = {
     ...diagnosticNode(),
@@ -47,7 +46,6 @@ test("HUD debug snapshot stays compact and separates source, derivation and disp
         xSpdLimit: 60,
         xSpdDist: 420,
         xSpdCountDown: 8,
-        szSdiDescr: "Speed camera",
       },
     },
     CarrotHudDataBridge: {
@@ -56,7 +54,6 @@ test("HUD debug snapshot stays compact and separates source, derivation and disp
         activeLaneLine: true,
         trafficState: 2,
         cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
-        sdiAlert: { type: 1, family: "camera", speedLimitKph: 60, distanceM: 420, countdownS: 8 },
       }),
     },
     CarrotVisionReplay: {
@@ -99,7 +96,6 @@ test("HUD debug snapshot stays compact and separates source, derivation and disp
   assert.equal(report.derived.cruiseOverride.kph, 77);
   assert.equal(report.presentation.overlay.data.activeLaneLine, true);
   assert.equal(report.dom.cruiseOverride.text, "77");
-  assert.match(report.dom.sdiAlert.text, /Speed camera/);
   assert.equal(report.dom.trafficRed.present, true);
   assert.equal(report.dom.trafficGreen.hidden, true);
   assert.ok(JSON.stringify(report).length < 5000);
