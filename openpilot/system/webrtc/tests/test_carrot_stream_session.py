@@ -111,6 +111,29 @@ class TestCarrotStreamSession:
     owner.stop.assert_not_awaited()
     session_factory.assert_not_called()
 
+  def test_explicit_takeover_replaces_healthy_foreign_owner(self, mocker):
+    owner = self._stream_session(mocker, "owner")
+    owner.client_key = "client:other-device"
+    owner.run_task = SimpleNamespace(done=lambda: False)
+    owner.stream.peer_connection.connectionState = "connected"
+    replacement = self._stream_session(mocker, "replacement")
+    streams = {owner.identifier: owner}
+    request = self._stream_request(
+      mocker,
+      streams,
+      client_id="viewer",
+      device_id="viewer-device",
+      takeover=True,
+    )
+    mocker.patch.object(carrot_session, "CarrotStreamSession", return_value=replacement)
+
+    response = self.loop.run_until_complete(carrot_session.get_stream(request))
+
+    assert response.status == 200
+    owner.stop.assert_awaited_once()
+    replacement.start.assert_called_once()
+    assert streams == {replacement.identifier: replacement}
+
   def test_same_device_replaces_previous_tab_and_attempt(self, mocker):
     owner = self._stream_session(mocker, "owner")
     owner.client_key = "client:viewer-device"
@@ -198,6 +221,42 @@ class TestCarrotStreamSession:
     assert carrot_session.stream_session_reclaim_reason(owner, 100.0) is None
     assert carrot_session.stream_session_reclaim_reason(owner, 102.9) is None
     assert carrot_session.stream_session_reclaim_reason(owner, 103.0) == "disconnected-grace-expired"
+
+  def test_recently_disconnected_foreign_owner_remains_protected(self, mocker):
+    owner = self._stream_session(mocker, "owner")
+    owner.client_key = "client:other-device"
+    owner.run_task = SimpleNamespace(done=lambda: False)
+    owner.stream.peer_connection.connectionState = "disconnected"
+    owner._carrot_disconnected_monotonic = 99.0
+    streams = {owner.identifier: owner}
+    request = self._stream_request(mocker, streams, client_id="viewer", device_id="viewer-device")
+    mocker.patch.object(carrot_session.time, "monotonic", return_value=100.0)
+    session_factory = mocker.patch.object(carrot_session, "CarrotStreamSession")
+
+    with pytest.raises(web.HTTPConflict):
+      self.loop.run_until_complete(carrot_session.get_stream(request))
+
+    owner.stop.assert_not_awaited()
+    session_factory.assert_not_called()
+
+  def test_expired_disconnected_foreign_owner_is_reclaimed_before_busy_check(self, mocker):
+    owner = self._stream_session(mocker, "owner")
+    owner.client_key = "client:other-device"
+    owner.run_task = SimpleNamespace(done=lambda: False)
+    owner.stream.peer_connection.connectionState = "disconnected"
+    owner._carrot_disconnected_monotonic = 95.0
+    replacement = self._stream_session(mocker, "replacement")
+    streams = {owner.identifier: owner}
+    request = self._stream_request(mocker, streams, client_id="viewer", device_id="viewer-device")
+    mocker.patch.object(carrot_session.time, "monotonic", return_value=100.0)
+    mocker.patch.object(carrot_session, "CarrotStreamSession", return_value=replacement)
+
+    response = self.loop.run_until_complete(carrot_session.get_stream(request))
+
+    assert response.status == 200
+    owner.stop.assert_awaited_once()
+    replacement.start.assert_called_once()
+    assert streams == {replacement.identifier: replacement}
 
   def test_connection_state_observer_records_disconnect_start(self, mocker):
     session = self._lifecycle_session(mocker)
