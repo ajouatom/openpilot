@@ -1483,6 +1483,7 @@ async function rtcConnectOnce(options = {}) {
         collectRtcPerfStats().catch(() => {});
       }
       if (state === "failed" || state === "closed") {
+        window.CarrotVisionNetworkRecovery?.reportTransportFailure?.(`rtc connection ${state}`);
         rtcRecover("dead", `rtc connection ${state}`, { pc, rtcState: state });
       }
     };
@@ -1503,6 +1504,7 @@ async function rtcConnectOnce(options = {}) {
         collectRtcPerfStats().catch(() => {});
       }
       if (state === "failed" || state === "closed") {
+        window.CarrotVisionNetworkRecovery?.reportTransportFailure?.(`rtc ice ${state}`);
         rtcRecover("dead", `rtc ice ${state}`, { pc, rtcState: `ice-${state}` });
       }
     };
@@ -1593,6 +1595,9 @@ async function rtcConnectOnce(options = {}) {
     rtcTrace("connect_error", {
       message: e?.message || String(e),
     }, pc || RTC_PENDING_PC || previousPc || RTC_PC);
+    window.CarrotVisionNetworkRecovery?.reportTransportFailure?.(
+      e?.message || "rtc connection error",
+    );
     rtcStatusSet("error: " + e.message);
     rtcRecover("dead", e?.message || "rtc connect error", { pc: pc || RTC_PENDING_PC || RTC_PC, rtcState: "error" });
   } finally {

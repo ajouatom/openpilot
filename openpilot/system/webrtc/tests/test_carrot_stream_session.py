@@ -171,6 +171,56 @@ class TestCarrotStreamSession:
     assert owner.identifier not in streams
     assert streams[replacement.identifier] is replacement
 
+  def test_prunes_stalled_negotiation_before_ownership_check(self, mocker):
+    owner = self._stream_session(mocker, "owner")
+    owner.client_key = "client:owner"
+    owner.run_task = SimpleNamespace(done=lambda: False)
+    owner.stream.peer_connection.connectionState = "connecting"
+    owner._carrot_created_monotonic = 10.0
+    replacement = self._stream_session(mocker, "replacement")
+    streams = {owner.identifier: owner}
+    request = self._stream_request(mocker, streams, client_id="viewer")
+    mocker.patch.object(carrot_session.time, "monotonic", return_value=31.0)
+    mocker.patch.object(carrot_session, "CarrotStreamSession", return_value=replacement)
+
+    response = self.loop.run_until_complete(carrot_session.get_stream(request))
+
+    assert response.status == 200
+    owner.stop.assert_awaited_once()
+    replacement.start.assert_called_once()
+    assert owner.identifier not in streams
+
+  def test_disconnected_session_is_reclaimed_only_after_grace_period(self, mocker):
+    owner = self._stream_session(mocker, "owner")
+    owner.run_task = SimpleNamespace(done=lambda: False)
+    owner.stream.peer_connection.connectionState = "disconnected"
+
+    assert carrot_session.stream_session_reclaim_reason(owner, 100.0) is None
+    assert carrot_session.stream_session_reclaim_reason(owner, 102.9) is None
+    assert carrot_session.stream_session_reclaim_reason(owner, 103.0) == "disconnected-grace-expired"
+
+  def test_connection_state_observer_records_disconnect_start(self, mocker):
+    session = self._lifecycle_session(mocker)
+    session._carrot_connected_monotonic = None
+    session._carrot_disconnected_monotonic = None
+    session.stream.peer_connection.connectionState = "disconnected"
+    mocker.patch.object(carrot_session.time, "monotonic", return_value=42.0)
+
+    session._record_carrot_connection_state()
+
+    assert session._carrot_disconnected_monotonic == 42.0
+
+  def test_connected_foreign_session_is_not_reclaimable(self, mocker):
+    owner = self._stream_session(mocker, "owner")
+    owner.run_task = SimpleNamespace(done=lambda: False)
+    owner.stream.peer_connection.connectionState = "connected"
+    owner._carrot_created_monotonic = 1.0
+    owner._carrot_disconnected_monotonic = 9.0
+
+    assert carrot_session.stream_session_reclaim_reason(owner, 1000.0) is None
+    assert owner._carrot_disconnected_monotonic is None
+    assert owner._carrot_connected_monotonic == 1000.0
+
   def test_cleanup_is_idempotent_and_unregisters(self, mocker):
     session = self._lifecycle_session(mocker)
     sync_active = mocker.patch.object(webrtcd, "_sync_carrot_vision_active")

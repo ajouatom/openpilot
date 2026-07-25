@@ -8,7 +8,7 @@ from aiohttp import web
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.webrtc import webrtcd
-from openpilot.system.webrtc.carrot_session import get_stream, on_shutdown
+from openpilot.system.webrtc.carrot_session import get_stream, on_shutdown, stream_session_cleanup_context
 
 
 def carrot_webrtcd_thread(host: str, port: int, debug: bool) -> None:
@@ -22,6 +22,7 @@ def carrot_webrtcd_thread(host: str, port: int, debug: bool) -> None:
   app["streams"] = {}
   app["stream_lock"] = asyncio.Lock()
   app["debug"] = debug
+  app.cleanup_ctx.append(stream_session_cleanup_context)
   app.on_shutdown.append(on_shutdown)
   app.router.add_post("/stream", get_stream)
   app.router.add_post("/notify", webrtcd.post_notify)

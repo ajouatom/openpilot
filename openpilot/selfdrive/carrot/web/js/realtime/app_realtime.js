@@ -879,6 +879,7 @@ let _carrotDriveDataActivitySignature = "0|0";
 let _carrotVisionRealtimeActive = false;
 let _carrotVisionRealtimeBlockReason = "";
 let _carrotVisionLifecycleController = null;
+let _carrotVisionNetworkRecoveryController = null;
 
 function recordCarrotVisionLifecycleEvent(event, detail = {}) {
   try {
@@ -937,8 +938,12 @@ async function stopCarrotVisionLifecycleResources(context, stopped = false) {
   await rtcDisconnect({ keepVideo: !stopped }).catch(() => {});
 
   const state = _carrotVisionLifecycleController?.snapshot?.() || context?.state;
-  if (state?.requested && state?.page === window.DriveVisionSessionPolicy?.page?.VISIBLE && !state?.sourceAvailable) {
-    presentCarrotVisionWaitingState(_carrotVisionRealtimeBlockReason);
+  const networkUnreachable = state?.network === window.DriveVisionSessionPolicy?.network?.UNREACHABLE;
+  if (state?.requested && state?.page === window.DriveVisionSessionPolicy?.page?.VISIBLE
+      && (!state?.sourceAvailable || networkUnreachable)) {
+    presentCarrotVisionWaitingState(
+      !state?.sourceAvailable ? _carrotVisionRealtimeBlockReason : "server-check",
+    );
   } else if (stopped || !state?.requested) {
     presentCarrotVisionInactiveState(reason);
   }
@@ -1048,15 +1053,96 @@ function getCarrotVisionLifecycleController() {
   return _carrotVisionLifecycleController;
 }
 
+async function probeCarrotVisionServer({ signal } = {}) {
+  const target = new URL("/index.html", window.location.href);
+  target.searchParams.set("_vision_reachability", String(Date.now()));
+  await fetch(target, {
+    method: "HEAD",
+    cache: "no-store",
+    credentials: "same-origin",
+    signal,
+  });
+  // Any HTTP response proves that the current local Carrot Web origin is
+  // reachable. WebRTC negotiation owns service-level HTTP error handling.
+  return { ok: true };
+}
+
+function presentCarrotVisionNetworkRecoveryState(status) {
+  if (!status?.enabled || !isCarrotVisionActive() || !isCarrotPageVisible()) return;
+  if (status.reachable === true) {
+    rtcStatusSet("server-reachable");
+    return;
+  }
+
+  const checking = status.state === window.DriveVisionNetworkRecovery?.state?.CHECKING;
+  rtcStatusSet(checking ? "server-check" : "server-unreachable");
+  setCarrotVisionPhase(CARROT_VISION_PHASE.STARTING, {
+    reason: checking ? "server reachability check" : "server unreachable backoff",
+    statusText: getCarrotVisionRuntimeWaitStatus("server-check"),
+    detailText: getCarrotVisionRuntimeWaitDetail("server-check"),
+    updateRtcStatus: false,
+  });
+}
+
+function getCarrotVisionNetworkRecoveryController() {
+  if (_carrotVisionNetworkRecoveryController) return _carrotVisionNetworkRecoveryController;
+  const recoveryApi = window.DriveVisionNetworkRecovery;
+  const policy = window.DriveVisionSessionPolicy;
+  if (!recoveryApi?.create || !policy?.network) {
+    throw new Error("Carrot Vision network recovery controller is unavailable");
+  }
+
+  _carrotVisionNetworkRecoveryController = recoveryApi.create({
+    probe: probeCarrotVisionServer,
+    onState(status, detail) {
+      window.CarrotVisionNetworkRecoveryState = status;
+      recordCarrotVisionLifecycleEvent("network_recovery_state", {
+        state: status.state,
+        reachable: status.reachable,
+        failureCount: status.failureCount,
+        originClassification: status.originClassification,
+        reason: detail?.reason || status.lastReason || "",
+      });
+
+      if (status.enabled && status.reachable !== null) {
+        getCarrotVisionLifecycleController().updateInputs({
+          network: status.reachable ? policy.network.REACHABLE : policy.network.UNREACHABLE,
+        }, {
+          reason: status.reachable ? "server probe reachable" : "server probe unreachable",
+        });
+      }
+      presentCarrotVisionNetworkRecoveryState(status);
+    },
+  });
+  window.CarrotVisionNetworkRecovery = _carrotVisionNetworkRecoveryController;
+  window.CarrotVisionNetworkRecoveryState = _carrotVisionNetworkRecoveryController.snapshot();
+  return _carrotVisionNetworkRecoveryController;
+}
+
 function syncCarrotVisionLifecycleInputs(options = {}) {
   const controller = getCarrotVisionLifecycleController();
+  const policy = window.DriveVisionSessionPolicy;
   const blockReason = getCarrotVisionRealtimeBlockReason();
   const sourceAvailable = !blockReason;
+  const requested = Boolean(isCarrotVisionActive() && isCarrotVisionContentRuntimeWanted());
+  const page = options.skipPage ? controller.snapshot().page : getCarrotVisionLifecyclePageState();
+  const networkEnabled = requested && sourceAvailable && page === policy.page.VISIBLE;
+  const networkRecovery = getCarrotVisionNetworkRecoveryController();
+  networkRecovery.setEnabled(networkEnabled, {
+    reason: networkEnabled ? "vision server reachability required" : "vision network recovery idle",
+    force: networkEnabled && Boolean(options.forceFetch),
+  });
+  const networkStatus = networkRecovery.snapshot();
   const inputs = {
-    requested: Boolean(isCarrotVisionActive() && isCarrotVisionContentRuntimeWanted()),
+    requested,
     sourceAvailable,
   };
-  if (!options.skipPage) inputs.page = getCarrotVisionLifecyclePageState();
+  if (!options.skipPage) inputs.page = page;
+  if (networkEnabled) {
+    inputs.network = networkStatus.reachable === true
+      ? policy.network.REACHABLE
+      : policy.network.UNREACHABLE;
+  }
   const state = controller.updateInputs(inputs, {
     reason: options.reason || "vision lifecycle sync",
     restored: Boolean(options.restored),
@@ -1066,8 +1152,9 @@ function syncCarrotVisionLifecycleInputs(options = {}) {
 
   _carrotVisionRealtimeActive = state.desired === window.DriveVisionSessionPolicy.desired.RUNNING;
   _carrotVisionRealtimeBlockReason = blockReason;
-  if (state.requested && state.page === window.DriveVisionSessionPolicy.page.VISIBLE && !sourceAvailable) {
-    presentCarrotVisionWaitingState(blockReason);
+  if (state.requested && state.page === policy.page.VISIBLE
+      && (!sourceAvailable || state.network === policy.network.UNREACHABLE)) {
+    presentCarrotVisionWaitingState(!sourceAvailable ? blockReason : "server-check");
   }
   return state;
 }
@@ -1144,25 +1231,17 @@ document.addEventListener("visibilitychange", () => {
 });
 
 window.addEventListener("offline", () => {
-  getCarrotVisionLifecycleController().dispatch(
-    window.DriveVisionSessionPolicy.event.NETWORK_UNREACHABLE,
-    { reason: "browser offline" },
-  );
+  getCarrotVisionNetworkRecoveryController().noteBrowserHint(false, "browser offline hint");
   recordCarrotVisionLifecycleEvent("network_input", {
     state: "offline",
   });
-  rtcStatusSet("offline");
 });
 
 window.addEventListener("online", () => {
-  getCarrotVisionLifecycleController().dispatch(
-    window.DriveVisionSessionPolicy.event.NETWORK_REACHABLE,
-    { reason: "browser online" },
-  );
+  getCarrotVisionNetworkRecoveryController().noteBrowserHint(true, "browser online hint");
   recordCarrotVisionLifecycleEvent("network_input", {
     state: "online",
   });
-  syncCarrotRealtimeLifecycle(false);
 });
 
 function handleCarrotVisionPageSuspend(eventName, detail = {}) {
@@ -1211,6 +1290,7 @@ window.addEventListener("focus", () => {
     );
   }
   syncCarrotRealtimeLifecycle(false);
+  getCarrotVisionNetworkRecoveryController().requestCheck("window focus");
 });
 window.addEventListener("blur", () => {
   recordCarrotVisionLifecycleEvent("window_blur_input", {
