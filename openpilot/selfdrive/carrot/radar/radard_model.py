@@ -89,7 +89,13 @@ class ModelRadarD:
     self.radar_state.radarErrors = rr.errors
 
     current_time = 1e-9 * max(sm.logMonoTime.values())
-    output = self.controller.update(current_time, float(sm["carState"].vEgo), rr.points, sm["modelV2"])
+    output = self.controller.update(
+      current_time,
+      float(sm["carState"].vEgo),
+      rr.points,
+      sm["modelV2"],
+      sm["carState"],
+    )
     self._assign_output(self.radar_state, output)
 
   def publish(self, pm: messaging.PubMaster) -> None:

@@ -17,19 +17,33 @@ DEFAULT_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.json"
 DEFAULT_MODEL = RADAR_ROOT / "models" / "radar_lead_multitask.npz"
 DEFAULT_FRONT_MODEL = RADAR_ROOT / "models" / "radar_lead_front.npz"
 DEFAULT_CORNER_MODEL = RADAR_ROOT / "models" / "radar_lead_corner.npz"
+DEFAULT_TRAJECTORY_REPORT = RADAR_ROOT / "models" / "radar_path_occupancy_report.json"
 SIMULATOR = SCRIPT_DIR / "radar_lead_simulator.py"
 
 
 def group_cases_by_log(cases: list[dict]) -> list[list[dict]]:
-  """Keep validation windows intact while opening each physical log once."""
   groups: dict[tuple[str, str], list[dict]] = {}
   for case in cases:
-    key = (
-      str(case["vehicle_folder"]).replace("\\", "/").casefold(),
-      str(case["log"]).replace("\\", "/").casefold(),
-    )
+    key = (str(case["vehicle_folder"]), str(case["log"]))
     groups.setdefault(key, []).append(case)
   return list(groups.values())
+
+
+def print_trajectory_evaluation_table(report_path: Path) -> None:
+  report = json.loads(report_path.read_text(encoding="utf-8"))
+  summary = report["manual_evaluation"]["summary"]
+  print("Manual CUT-IN/CLEAR vs path-occupancy model (labels are validation-only)")
+  print("| model | labels | precision | recall | F1 | accuracy | TP | FP | FN | TN | manual/future |")
+  print("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+  for source in ("front", "corner"):
+    values = summary[source]
+    print(
+      f"| {source} | {values['labels']} | {float(values['precision']):.3f} | "
+      + f"{float(values['recall']):.3f} | {float(values['f1']):.3f} | "
+      + f"{float(values['accuracy']):.3f} | {values['tp']} | {values['fp']} | "
+      + f"{values['fn']} | {values['tn']} | "
+      + f"{values['manual_actual_agree']}/{values['manual_actual_scorable']} |"
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,6 +62,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--case", action="append", default=[], help="case-id substring; repeat to select more")
   parser.add_argument("--expected", choices=("all", "detect", "clear", "stationary"), default="all")
   parser.add_argument(
+    "--prob", type=float,
+    help="initial review probability (0.00-1.00); omitted means reuse the last slider value",
+  )
+  parser.add_argument(
     "--compare-radard", action="store_true",
     help="also recompute and display the current radard result and graph (slow)",
   )
@@ -56,11 +74,28 @@ def parse_args() -> argparse.Namespace:
     help="remove corner-radar points and validate the production front-only path",
   )
   parser.add_argument("--list", action="store_true")
+  parser.add_argument(
+    "--trajectory-table",
+    action="store_true",
+    help="print the saved front/corner manual-label comparison before replay",
+  )
+  parser.add_argument("--trajectory-report", type=Path, default=DEFAULT_TRAJECTORY_REPORT)
+  parser.add_argument(
+    "--trajectory-table-only",
+    action="store_true",
+    help="print the saved trajectory comparison and exit",
+  )
   return parser.parse_args()
 
 
 def main() -> int:
   args = parse_args()
+  if args.prob is not None and not 0.0 <= args.prob <= 1.0:
+    raise SystemExit("--prob must be between 0.00 and 1.00")
+  if args.trajectory_table or args.trajectory_table_only:
+    print_trajectory_evaluation_table(args.trajectory_report)
+    if args.trajectory_table_only:
+      return 0
   payload = json.loads(args.cases.read_text(encoding="utf-8"))
   filters = tuple(value.lower() for value in args.case)
   cases = [
@@ -71,46 +106,58 @@ def main() -> int:
   if not cases:
     print("No validation cases matched.")
     return 2
-  case_groups = group_cases_by_log(cases)
   if args.list:
-    for group in case_groups:
-      case = group[0]
-      extra = f" (+{len(group) - 1} validation windows)" if len(group) > 1 else ""
-      print(f"{case['id']}{extra}: {case['source']} - {case['scene']}")
+    for index, case in enumerate(cases, 1):
+      window = case.get("window", ("?", "?"))
+      verification = "H" if case.get("human_verified", False) else "-"
+      print(
+        f"[{index:02d}/{len(cases):02d}] [{verification}] {case['id']}: "
+        + f"{case['expected']} {case['source']} {window[0]}-{window[1]}s - {case['scene']}"
+      )
     return 0
 
   missing = 0
-  for index, group in enumerate(case_groups, 1):
+  groups = group_cases_by_log(cases)
+  opened_cases = 0
+  opened_logs = 0
+  for index, group in enumerate(groups, 1):
     case = group[0]
     route = args.root / case["vehicle_folder"] / Path(case["log"])
     if not route.is_file():
-      missing += 1
-      print(f"[{index:02d}/{len(case_groups):02d}] MISSING {case['id']}: {route}", flush=True)
+      missing += len(group)
+      print(
+        f"[{index:02d}/{len(groups):02d}] MISSING {len(group)} cases: {route}",
+        flush=True,
+      )
       continue
-    grouped_ids = ", ".join(item["id"] for item in group[1:])
-    grouped_note = f"  grouped={grouped_ids}" if grouped_ids else ""
-    heading = f"\n[{index:02d}/{len(case_groups):02d}] {case['id']}  "
-    heading += f"source={case['source']}  {case['scene']}{grouped_note}"
+    ids = ", ".join(str(item["id"]) for item in group)
+    heading = f"\n[{index:02d}/{len(groups):02d}] {len(group)} cases in one log: {ids}"
     print(heading, flush=True)
     command = [
       sys.executable, str(SIMULATOR),
-      "--validation-case", str(case["id"]),
       "--validation-root", str(args.root),
       "--validation-cases", str(args.cases),
       "--front-model", str(args.model or args.front_model),
       "--corner-model", str(args.model or args.corner_model),
       "--hybrid",
     ]
+    for item in group:
+      command.extend(("--validation-case", str(item["id"])))
     if args.compare_radard:
       command.append("--compare-radard")
     if args.front_only:
       command.append("--front-only")
+    if args.prob is not None:
+      command.extend(("--prob", str(args.prob)))
     result = subprocess.run(command, check=False)
     if result.returncode != 0:
       return result.returncode
-  duplicate_count = len(cases) - len(case_groups)
-  summary = f"\nVisual review complete: {len(case_groups) - missing}/{len(case_groups)} routes opened"
-  summary += f" ({duplicate_count} duplicate validation entries skipped)"
+    opened_logs += 1
+    opened_cases += len(group)
+  summary = (
+    f"\nVisual review complete: {opened_cases}/{len(cases)} labeled windows "
+    + f"in {opened_logs}/{len(groups)} unique logs"
+  )
   print(summary)
   return int(missing > 0)
 

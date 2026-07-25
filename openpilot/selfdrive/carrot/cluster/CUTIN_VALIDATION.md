@@ -171,12 +171,14 @@ py -3.12 openpilot/selfdrive/carrot/radar/tools/radar_lead_validation_review.py
 
 Each unique route starts at 0 seconds and plays through the full log. Multiple
 validation windows that reference the same rlog are grouped, so that physical
-log is opened only once. Playback pauses
-with a two-tone alert only when a model cut-in becomes active. Press Space to
-resume after a cut-in, press R to restart the current log, and close the window
-to open the next case. Only final `leadOne` and `leadTwo` are displayed by
-default; recorded `radarState`, raw radar points, and source-head candidates
-remain available through the display checkboxes.
+log is opened only once. Playback pauses with a two-tone alert when a shadow
+trajectory-model point first reaches the displayed `PROB` threshold. Press
+Space to resume after a cut-in, press R to restart the current log, and close
+the window to open the next case. Seeking backward rearms every later unlabeled
+event, so replaying the same section can alert and pause again. Only final
+`leadOne` and `leadTwo` are displayed by default; recorded `radarState`, raw
+radar points, and source-head candidates remain available through the display
+checkboxes.
 
 The model `leadOne`/`leadTwo` continuity graph remains visible by default. The
 current-radard circles and its two additional graph lines require a full legacy
@@ -199,6 +201,96 @@ py -3.12 openpilot/selfdrive/carrot/radar/tools/radar_lead_validation_review.py 
 py -3.12 openpilot/selfdrive/carrot/radar/tools/radar_lead_validation_review.py --expected clear
 ```
 
+### Reviewing and correcting ground truth
+
+The validation review panel has `CUT-IN`, `CLEAR`, and `STATIONARY` buttons.
+Clicking one updates the current case's `expected` value in
+`cutin_validation_cases.json` immediately and adds `human_verified: true`.
+Use `--list` to audit progress: `[H]` is human verified and `[-]` is still an
+automatically prepared label. Review the resulting Git diff before committing.
+Track IDs and validation windows remain editable directly in the JSON when the
+category alone is not enough.
+
+The review map is laterally enlarged by 4x. Distance runs from 0 m at the bottom
+to 100 m at the top; the thick blue line is the model path and gray lines are
+lane lines. Point colors are cyan for front radar, purple for corner radar, and
+yellow for SCC. A label such as `1013 IN0.93 OUT0.00 S` means track id 1013,
+future path-entry probability 0.93, path-exit probability 0.00, and stage `S`.
+The detail row retains the raw 0.5/1.0/1.5/2.0-second path-occupancy
+probabilities. The
+direct-threshold shadow path normally uses these stage codes:
+
+- `S`: selected as the final `leadTwo`
+- `O`: emitted by the controller but another target was selected
+- `D`: decision was active but was removed by later selection or deduplication
+- `L`: farther away than the current `leadOne`; raw score/history only
+- `P`: below the decision probability
+- `X`: above the PATH-EXIT threshold
+
+The right-side point rows show `IN`, `OUT`, geometric projection `H`, stage,
+distance, lateral position, and the four raw occupancy probabilities. `IN--`
+on the map means that point did not produce a scored model candidate. The
+probability slider controls the green IN highlight and automatic review pauses.
+Changing it rebuilds pause events immediately. Its last value is saved in the
+PC user settings and reused by later logs and invocations; `--prob 0.70`
+overrides the initial value. It does not alter production decisions or the
+on-device threshold. When `leadOne` exists, points behind it retain raw model
+scores and history but are marked `L` and cannot highlight, alert, pause, or
+become a shadow cut-in decision. Orange and yellow boxes and graph lines are
+final model `leadOne` and `leadTwo`; a break in a line means that output was
+absent at that time.
+
+The runner groups all validation rows for the same physical rlog into one
+simulator window. Each maintained window remains visible as an independent
+timeline marker and remains independently editable.
+
+Enable `POINTS` to show current sensor returns and `PATH` to show each point's
+recent history and predicted future positions at 0.25-second intervals. The map
+label `IN` is entry probability, `OUT` is PATH-EXIT probability, and `H` is the
+independent geometric occupancy estimate. The `PREDICT` slider changes the
+trajectory horizon from 0.25 to 2.0 seconds. The uncertainty bar combines radar
+history variance with `position.yStd`, `laneLineStds`, and lane confidence.
+The diagnostics also retain `carState.yawRate`, steering angle, and steering
+rate. `yawRate * dRel` is displayed as ego-rotation lateral speed so turn-induced
+apparent motion can be labeled without hard-rejecting every candidate on a curve.
+Low-confidence lane lines cause a fallback to the model position path.
+
+The three ground-truth buttons update `cutin_validation_cases.json` while the
+playback cursor is inside a maintained window. At a trajectory event outside
+all maintained windows they instead upsert a separate review item in
+`radar_trajectory_labels.json`. This lets trajectory candidates be labeled
+without weakening or overwriting the production regression set.
+
+### Path-occupancy model validation (2026-07-25)
+
+The final self-supervised run discovered every `rlog.zst` and numbered
+`rlog.N.zst`. It reserved all 34 manually labeled logs, requested 1,438
+training logs, loaded 1,356, and recorded 82 corrupt or unaligned logs as
+skipped. Manual labels contributed zero fitting rows. Front training used
+2,127,348 rows from 1,043 logs; corner training used 764,072 rows from 882
+logs.
+
+The four occupancy heads have strong grouped out-of-fold F1, but high-precision
+transition recall remains low:
+
+| source | occupancy F1 range | CUT-IN threshold | CUT-IN precision / recall | PATH-EXIT threshold | PATH-EXIT precision / recall |
+|---|---:|---:|---:|---:|---:|
+| front | 0.923-0.935 | 0.995 | 1.000 / 0.00001 | 0.955 | 0.955 / 0.00074 |
+| corner | 0.934-0.958 | 0.945 | 0.827 / 0.028 | 0.815 | 0.872 / 0.105 |
+
+The held-out manual table was front TP/FP/FN/TN `0/4/9/93` and corner
+`6/2/23/169`. The actual-future audit agreed with 52 of 87 scorable front
+labels and 131 of 191 scorable corner labels; 19 front and 9 corner labels
+lacked a valid future measurement. Five front and 17 corner manual DETECT
+windows contained no measured outside-to-inside transition, while 30 front and
+43 corner CLEAR windows did contain one. These labels remain unchanged and are
+review targets, not training corrections.
+
+Automatic trajectory-model `leadTwo` promotion therefore remains disabled for
+both sources. Front/SCC PATH-EXIT alone may cancel a stale-primary hold after
+vision has already lost `leadOne`; it never removes a currently matched
+`leadOne` or changes time gap. Corner PATH-EXIT remains display-only.
+
 Review one matching case directly:
 
 ```powershell
@@ -214,8 +306,8 @@ first even though lead acquisition can still occur:
 - `ioniq9-a7-22-truck`: `leadTwo` id 56 at 20.58 s and `leadOne` id 56 at
   22.74 s, but no model cut-in from 20-29 s.
 
-The source-separated production-controller regression run on 2026-07-24 passed
-all 71 maintained windows: 28/28 corner, 8/8 front-only, and 35/35
+The source-separated production-controller regression run on 2026-07-25 passed
+all 76 maintained windows: 32/32 corner, 9/9 front-only, and 35/35
 front-plus-corner windows. The deployed front and corner models keep independent
 feature history and decision filters. On a corner-equipped vehicle, cut-in and
 secondary decisions come from the corner model; front matching happens only
@@ -233,11 +325,20 @@ The Carnival `carnival-5b-15-truck` scene also contains two explicit clear
 windows at 42.3-43.6 s and 44.8-46.1 s. Weak lane-relative jitter must not
 activate id 39/1071 there; the real inward entry remains detected at 47.11 s.
 
+The very close Carnival `carnival-6a-27-close` vehicle enters beside the bumper
+at low ego speed while the learned cut-in score is still zero. Sustained inward
+corner history plus physical body intrusion now emits a tentative id 1024 at
+55.86 s instead of waiting for model activation at 57.64 s. Its measured range
+is reported, but longitudinal speed and acceleration are softened to ego speed
+and zero acceleration until the candidate is confirmed.
+
 ## Unit Coverage
 
 The route fixes are supported by focused tests in
-`openpilot/selfdrive/controls/tests/test_front_radar_cutin.py`:
+`openpilot/selfdrive/carrot/tests/test_radar_lead_model.py` and
+`openpilot/selfdrive/carrot/tests/test_radar_vision_model_controller.py`:
 
 - slow sustained radar motion accepts the large-truck cut-in;
+- close sustained corner intrusion is reported tentatively with softened control;
 - lane projection cannot substantially outrun measured radar motion;
 - unreliable far corner tracks cannot start a new cut-in.

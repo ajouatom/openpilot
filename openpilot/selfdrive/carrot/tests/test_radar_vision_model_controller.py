@@ -3,6 +3,10 @@ from types import SimpleNamespace
 
 from openpilot.selfdrive.carrot.radar.radar_lead_model import RadarLeadDecision, VisionLeadContext
 from openpilot.selfdrive.carrot.radar.radar_lead_runtime import RadarLeadRuntimeResult
+from openpilot.selfdrive.carrot.radar.radar_trajectory_model import (
+  RadarTrajectoryRuntimeResult,
+  TrajectoryCutinDecision,
+)
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   Candidate,
   Selection,
@@ -154,6 +158,75 @@ def test_slow_front_track_can_match_stationary_vision_with_corner_corroboration(
   assert match.prediction.features.radar_object.front_track_id == 60
 
 
+def test_stationary_vision_accepts_position_matched_corner_despite_sensor_speed_disagreement() -> None:
+  matcher = VisionRadarMatcher()
+  front = prediction(60, 0.2, 0.0, 0.0, d_rel=54.0, v_lead=13.0)
+  front = replace(front, features=replace(
+    front.features,
+    track_age=18,
+    d_path=0.10,
+    in_lane_prob=0.94,
+    radar_object=replace(front.features.radar_object, front_d_rel=54.0, front_v_rel=-5.0),
+  ))
+  corner = prediction(1012, 0.3, 0.0, 0.0, front=False, d_rel=54.8, v_lead=1.0)
+  corner = replace(corner, features=replace(
+    corner.features,
+    track_age=14,
+    d_path=0.18,
+    in_lane_prob=0.86,
+  ))
+  vision = VisionLeadContext(0.90, 55.0, 0.2, 17.5, 0.0, 3.0, 0.8, 1.5)
+
+  match = matcher.match_context(vision, (front,), 18.0, (corner,))
+
+  assert match is not None
+  assert match.prediction is front
+
+
+def test_stationary_vision_does_not_use_adjacent_moving_corner_as_corroboration() -> None:
+  matcher = VisionRadarMatcher()
+  front = prediction(60, 0.0, 0.0, 0.0, d_rel=54.0, v_lead=0.5)
+  front = replace(front, features=replace(
+    front.features,
+    track_age=18,
+    d_path=0.10,
+    in_lane_prob=0.94,
+    radar_object=replace(front.features.radar_object, front_d_rel=54.0, front_v_rel=-17.5),
+  ))
+  adjacent = prediction(1012, 1.5, 0.0, 0.0, front=False, d_rel=54.8, v_lead=17.0)
+  adjacent = replace(adjacent, features=replace(
+    adjacent.features,
+    track_age=14,
+    d_path=0.18,
+    in_lane_prob=0.86,
+  ))
+  vision = VisionLeadContext(0.90, 55.0, 0.0, 17.5, 0.0, 3.0, 0.8, 1.5)
+
+  assert matcher.match_context(vision, (front,), 18.0, (adjacent,)) is None
+
+
+def test_stationary_vision_does_not_use_distant_moving_corner_as_corroboration() -> None:
+  matcher = VisionRadarMatcher()
+  front = prediction(60, 0.0, 0.0, 0.0, d_rel=54.0, v_lead=0.5)
+  front = replace(front, features=replace(
+    front.features,
+    track_age=18,
+    d_path=0.10,
+    in_lane_prob=0.94,
+    radar_object=replace(front.features.radar_object, front_d_rel=54.0, front_v_rel=-17.5),
+  ))
+  distant = prediction(1012, 0.2, 0.0, 0.0, front=False, d_rel=58.0, v_lead=17.0)
+  distant = replace(distant, features=replace(
+    distant.features,
+    track_age=14,
+    d_path=0.18,
+    in_lane_prob=0.86,
+  ))
+  vision = VisionLeadContext(0.90, 55.0, 0.0, 17.5, 0.0, 3.0, 0.8, 1.5)
+
+  assert matcher.match_context(vision, (front,), 18.0, (distant,)) is None
+
+
 def test_stationary_front_reflection_without_corner_corroboration_stays_rejected() -> None:
   matcher = VisionRadarMatcher()
   front = prediction(60, 7.3, 0.0, 0.0, d_rel=84.7, v_lead=0.2)
@@ -300,6 +373,44 @@ def test_controller_does_not_duplicate_primary_cutin_as_lead_two() -> None:
   assert output.lead_two is None
   assert output.lead_one["radar"]
   assert output.leads_cutin == ()
+
+
+def test_controller_shadow_trajectory_ignores_candidates_behind_lead_one() -> None:
+  front = prediction(40, 0.2, 0.95, 0.1, d_rel=20.0, v_lead=19.0)
+  front = replace(front, features=replace(
+    front.features,
+    radar_object=replace(front.features.radar_object, front_d_rel=20.0),
+  ))
+  near = SimpleNamespace(point=SimpleNamespace(d_rel=15.0))
+  far = SimpleNamespace(point=SimpleNamespace(d_rel=30.0))
+  trajectory_decision = TrajectoryCutinDecision((near, far), (), (near, far))
+  trajectory_result = RadarTrajectoryRuntimeResult(
+    True,
+    {},
+    (near, far),
+    trajectory_decision,
+    front_decision=trajectory_decision,
+    corner_decision=trajectory_decision,
+  )
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(
+        True,
+        RadarLeadDecision((), (), ()),
+        (front,),
+        0.1,
+        front_predictions=(front,),
+        trajectory=trajectory_result,
+      )
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  output = controller.update(0.0, 20.0, (), vision_model(20.0, 0.2, 19.0))
+
+  assert output.lead_one is not None
+  assert controller.last_trajectory_result.predictions == (near, far)
+  assert controller.last_trajectory_result.decision.confirmed == (near,)
 
 
 def test_controller_does_not_duplicate_near_corner_identity_as_primary_cutin() -> None:
@@ -616,6 +727,75 @@ def test_controller_keeps_near_corner_cutin_as_confirmed_direct_control() -> Non
   assert output.lead_two["vLead"] == 6.0
 
 
+def test_controller_softens_provisional_near_corner_cutin() -> None:
+  corner = prediction(1051, -1.3, 0.1, 0.82, front=False, d_rel=4.0, v_lead=6.0)
+  corner = replace(
+    corner,
+    cutin_tentative=True,
+    features=replace(
+      corner.features,
+      radar_object=replace(corner.features.radar_object, a_lead=-2.0),
+    ),
+  )
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(
+        True,
+        RadarLeadDecision((), (corner,)),
+        (corner,),
+        0.1,
+        corner_predictions=(corner,),
+        corner_decision=RadarLeadDecision((), (corner,)),
+      )
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  output = controller.update(0.0, 15.0, (), vision_model(50.0, 0.0, 14.0))
+
+  assert output.lead_two is not None
+  assert output.lead_two_tentative
+  assert output.lead_two["dRel"] == 4.0
+  assert output.lead_two["vLead"] == 15.0
+  assert output.lead_two["aLead"] == 0.0
+  assert output.lead_two["modelProb"] == 0.49
+
+
+def test_controller_reports_low_speed_provisional_corner_entry_without_hard_control() -> None:
+  corner = prediction(1051, -2.5, 0.1, 0.82, front=False, d_rel=4.0, v_lead=6.0)
+  corner = replace(
+    corner,
+    cutin_tentative=True,
+    features=replace(
+      corner.features,
+      d_path=-2.5,
+      radar_object=replace(corner.features.radar_object, a_lead=-2.0),
+    ),
+  )
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(
+        True,
+        RadarLeadDecision((), (corner,)),
+        (corner,),
+        0.1,
+        corner_predictions=(corner,),
+        corner_decision=RadarLeadDecision((), (corner,)),
+      )
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  output = controller.update(0.0, 0.1, (), vision_model(8.0, 0.0, 1.0))
+
+  assert output.leads_cutin[0]["radarTrackId"] == 1051
+  assert output.lead_two is not None
+  assert output.lead_two_tentative
+  assert output.lead_two["vLead"] == 0.1
+  assert output.lead_two["aLead"] == 0.0
+  assert output.lead_two["modelProb"] == 0.49
+
+
 def test_controller_suppresses_low_speed_out_of_lane_cutin() -> None:
   side_cutin = prediction(49, 2.2, 0.1, 0.99, d_rel=3.0, v_lead=1.8)
 
@@ -862,6 +1042,43 @@ def test_controller_moves_recent_primary_to_lead_two_during_brief_vision_mismatc
   assert held.lead_one is None
   assert held.lead_two is not None and held.lead_two["radarTrackId"] == 40
   assert controller.update(0.8, 20.0, (), vision_model(40.0, 0.0, 19.0)).lead_two is None
+
+
+def test_front_path_exit_stops_only_stale_primary_hold() -> None:
+  candidate = prediction(40, 0.2, 0.95, 0.1)
+  candidate = replace(candidate, features=replace(
+    candidate.features, d_path=1.5, in_lane_prob=0.1, track_age=12,
+  ))
+  path_exit = SimpleNamespace(source="frontRadar", track_id=40)
+  trajectory_decision = TrajectoryCutinDecision(
+    (path_exit,), (), (), (path_exit,),
+  )
+  trajectory_result = RadarTrajectoryRuntimeResult(
+    True,
+    {},
+    (path_exit,),
+    trajectory_decision,
+    front_decision=trajectory_decision,
+  )
+
+  class Runtime:
+    def update(self, *_args):
+      return RadarLeadRuntimeResult(
+        True,
+        RadarLeadDecision((), ()),
+        (candidate,),
+        0.1,
+        trajectory=trajectory_result,
+      )
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  matched = controller.update(0.0, 20.0, (), vision_model(12.0, 0.2, 19.0))
+  assert matched.lead_one is not None and matched.lead_two is None
+
+  released = controller.update(0.5, 20.0, (), vision_model(40.0, 0.0, 19.0))
+  assert released.lead_one is None
+  assert released.lead_two is None
 
 
 def test_controller_keeps_displaced_primary_as_lead_two_during_vision_target_switch() -> None:

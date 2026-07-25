@@ -20,6 +20,9 @@ CUTIN_TEMPORAL_THRESHOLD_MAX = 0.82
 CUTIN_ACTIVE_CURRENT_MIN = 0.20
 CUTIN_STICKY_MAX_S = 0.75
 CUTIN_VEHICLE_HALF_WIDTH_M = 0.90
+CLOSE_CORNER_PROVISIONAL_MAX_DREL_M = 5.0
+CLOSE_CORNER_PROVISIONAL_MIN_HISTORY_INWARD_MPS = 0.80
+CLOSE_CORNER_PROVISIONAL_MAX_MODEL_PROB = 0.50
 EXTERNAL_ACTIVE_CURRENT_MIN = 0.20
 CORNER_ONLY_CUTIN_MAX_DREL_M = 30.0
 FRONT_ONLY_CUTIN_MIN_DREL_M = 5.0
@@ -70,6 +73,7 @@ class RadarLeadPrediction:
   external_prob: float = 0.0
   base_cutin_prob: float = 0.0
   temporal_cutin_prob: float = 0.0
+  cutin_tentative: bool = False
 
 
 @dataclass(frozen=True)
@@ -111,6 +115,7 @@ class _DecisionState:
   external_active_until: float = 0.0
   last_seen: float = 0.0
   cutin_aliases: frozenset[str] = field(default_factory=frozenset)
+  cutin_tentative: bool = False
 
 
 def _finite(value: float, fallback: float = 0.0) -> float:
@@ -851,6 +856,25 @@ class RadarLeadDecisionFilter:
         and min(close_history_inward) > 0.25
         and prediction.base_cutin_prob >= 0.95
       )
+      # A corner return can first appear beside the bumper with too little
+      # range history for the temporal model. Report clear body intrusion
+      # immediately, but mark it tentative so the controller cannot use its
+      # raw velocity or acceleration for hard braking.
+      provisional_close_corner_entry = (
+        obj.corner_track_id is not None
+        and obj.front_track_id is None
+        and obj.scc_track_id is None
+        and 1.0 < obj.d_rel < CLOSE_CORNER_PROVISIONAL_MAX_DREL_M
+        and obj.v_lead > 2.0
+        and prediction.features.track_age >= 6
+        and cutin_usable
+        and holdable_cutin_geometry
+        and close_history_inward
+        and max(close_history_inward) > CLOSE_CORNER_PROVISIONAL_MIN_HISTORY_INWARD_MPS
+        and max(prediction.base_cutin_prob, prediction.temporal_cutin_prob)
+          < CLOSE_CORNER_PROVISIONAL_MAX_MODEL_PROB
+        and prediction.cutin_prob < self.cutin_threshold
+      )
       effective_cutin_prob = max(
         prediction.cutin_prob,
         self.cutin_threshold if close_corner_entry else 0.0,
@@ -881,10 +905,12 @@ class RadarLeadDecisionFilter:
           else max(0.92, self.cutin_threshold + 0.08)
         )
       )
-      if state.cutin_hits >= 2 or immediate_cutin:
+      confirmed_cutin = state.cutin_hits >= 2 or immediate_cutin
+      if confirmed_cutin or provisional_close_corner_entry:
         state.cutin_active_until = time_s + 0.45
         state.cutin_evidence_time = time_s
         state.cutin_aliases = current_aliases
+        state.cutin_tentative = provisional_close_corner_entry and not confirmed_cutin
       if state.external_hits >= 2:
         state.external_active_until = time_s + 0.35
 
@@ -913,11 +939,16 @@ class RadarLeadDecisionFilter:
             max(state.cutin_active_until, time_s + 0.20),
             state.cutin_evidence_time + CUTIN_STICKY_MAX_S,
           )
-        active_cutin_prob = max(effective_cutin_prob, state.cutin_ema)
+        active_cutin_prob = max(
+          effective_cutin_prob,
+          state.cutin_ema,
+          self.cutin_threshold if state.cutin_tentative else 0.0,
+        )
         cutin_active.append(replace(
           prediction,
           cutin_prob=active_cutin_prob,
           risk_prob=max(prediction.risk_prob, active_cutin_prob),
+          cutin_tentative=state.cutin_tentative,
         ))
 
       if time_s < state.external_active_until and prediction.external_prob >= EXTERNAL_ACTIVE_CURRENT_MIN:

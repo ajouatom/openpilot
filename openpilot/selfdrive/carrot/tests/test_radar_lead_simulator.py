@@ -19,6 +19,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   RadarFrame,
   RadarPoint,
   RecordedLead,
+  SimulatorUI,
   ProductionHybridLeadSelector,
   SimpleLeadSelector,
   Selection,
@@ -26,16 +27,27 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   aligned_video_time_s,
   candidate_track_id,
   comparison_summary,
+  cutin_stage_series,
   lead_comparison_series,
+  radar_trajectory_series,
+  load_review_probability,
+  save_review_probability,
   _copy_track_points,
+  preferred_radar_points,
   _route_replay_module,
   export_training_dataset,
   front_only_frames,
   qcamera_path_for_log,
   resolve_validation_case,
+  resolve_validation_cases,
   resolved_recorded_track_id,
+  trajectory_review_events,
+  trajectory_model_review_events,
+  upsert_trajectory_review_label,
+  update_validation_case_label,
   validation_review_events,
 )
+from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import group_cases_by_log
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_train import (
   TrainingData,
   combine_training_and_validation,
@@ -98,6 +110,193 @@ def test_front_only_frames_remove_corner_points_without_changing_other_inputs() 
   assert filtered[0].recorded_one == original.recorded_one
 
 
+def test_preferred_radar_points_uses_validation_sensor_source() -> None:
+  radar_frame = frame((
+    point(10, 30.0, 0.2, 20.0),
+    point(1010, 29.5, 0.3, 20.0, "corner235"),
+    point(0, 31.0, 0.1, 20.0, "scc"),
+  ))
+
+  assert [item.track_id for item in preferred_radar_points(radar_frame, "corner")] == [1010]
+  assert [item.track_id for item in preferred_radar_points(radar_frame, "front")] == [10]
+
+
+def test_validation_runner_groups_duplicate_log_cases() -> None:
+  groups = group_cases_by_log([
+    {"id": "first", "vehicle_folder": "CAR", "log": "SEG/rlog.zst"},
+    {"id": "second", "vehicle_folder": "CAR", "log": "SEG/rlog.zst"},
+    {"id": "third", "vehicle_folder": "CAR", "log": "OTHER/rlog.zst"},
+  ])
+
+  assert [[case["id"] for case in group] for group in groups] == [
+    ["first", "second"],
+    ["third"],
+  ]
+
+
+def test_trajectory_review_uses_corner_from_combined_source() -> None:
+  frames = [
+    replace(
+      radar_center_frame((
+        point(1010, 25.0, 4.5 - index * 0.5, 20.0, "corner235"),
+        point(10, 25.0, -4.5 + index * 0.5, 20.0, "frontRadar"),
+      )),
+      mono_time_s=index * 0.25,
+      time_s=index * 0.25,
+      path_y_stds=((0.0, 0.15), (100.0, 0.15)),
+      lane_stds=(0.2, 0.2, 0.2),
+    )
+    for index in range(4)
+  ]
+  trajectories = radar_trajectory_series(frames)
+
+  assert trajectory_review_events(
+    frames, trajectories, ("front+corner",), horizon_s=1.0,
+  ) == {
+    3: ("TRAJECTORY CORNER id 1010 p1.00 t0.19s",),
+  }
+
+
+def test_trajectory_review_merges_same_vehicle_after_track_id_change() -> None:
+  frames = []
+  trajectories = []
+  for index in range(8):
+    track_id = 1010 if index < 4 else 1011
+    sample_point = point(
+      track_id,
+      25.0,
+      4.5 - index * 0.5,
+      20.0,
+      "corner235",
+    )
+    frames.append(replace(
+      radar_center_frame((sample_point,)),
+      mono_time_s=index * 0.25,
+      time_s=index * 0.25,
+    ))
+    is_candidate = index in (3, 7)
+    trajectories.append({
+      ("corner235", track_id): SimpleNamespace(
+        history_count=4,
+        reason="trajectory candidate" if is_candidate else "not entering",
+        time_to_entry_s=0.25 if is_candidate else None,
+        samples=(SimpleNamespace(horizon_s=1.0, occupancy_prob=1.0),),
+      ),
+    })
+
+  assert trajectory_review_events(
+    frames, trajectories, ("corner",), horizon_s=1.0,
+  ) == {
+    3: ("TRAJECTORY CORNER id 1010 p1.00 t0.25s",),
+  }
+
+
+def test_trajectory_model_review_uses_display_probability_threshold() -> None:
+  frames = [
+    replace(
+      frame((point(1010, 25.0, 3.0, 20.0, "corner235"),)),
+      mono_time_s=index * 0.25,
+      time_s=index * 0.25,
+    )
+    for index in range(3)
+  ]
+  scores = (0.40, 0.70, 0.80)
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      score = scores[frame_index]
+      candidate = Candidate(
+        1010, score, "trajectory corner path-entry",
+        d_rel=25.0, y_rel=3.0, horizon_scores=(score, score, score, score),
+      )
+      return Selection(None, None, cutin_diagnostics=(candidate,))
+
+  assert trajectory_model_review_events(frames, Selector(), ("corner",), 0.75) == {
+    2: ("TRAJECTORY MODEL CORNER id 1010 IN0.80 OUT0.00 raw 0.80/0.80/0.80/0.80",),
+  }
+
+
+def test_trajectory_model_review_ignores_candidate_behind_lead_one() -> None:
+  frames = [
+    replace(
+      frame((point(1010, 40.0, 3.0, 20.0, "corner235"),)),
+      mono_time_s=index * 0.25,
+      time_s=index * 0.25,
+    )
+    for index in range(2)
+  ]
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      candidate = Candidate(
+        1010, 1.0, "trajectory corner path-entry",
+        d_rel=40.0, y_rel=3.0, stage="BLOCK-LEAD",
+      )
+      return Selection(None, None, cutin_diagnostics=(candidate,))
+
+  assert trajectory_model_review_events(frames, Selector(), ("corner",), 0.99) == {}
+
+
+def test_review_probability_settings_round_trip(tmp_path: Path) -> None:
+  settings = tmp_path / "review.json"
+
+  assert load_review_probability(settings) == 0.5
+  assert save_review_probability(0.65, settings) is True
+  assert load_review_probability(settings) == 0.65
+
+
+def test_user_rewind_rearms_and_pauses_same_review_event(monkeypatch) -> None:
+  review = ValidationReview("case", "clear", "corner", 0.0, 3.0, "scene")
+  ui = SimulatorUI.__new__(SimulatorUI)
+  ui.frames = [frame(()) for _ in range(4)]
+  ui.times = [0.0, 1.0, 2.0, 3.0]
+  ui.index = 2
+  ui.playback_time = 2.0
+  ui.review = review
+  ui.reviews = (review,)
+  ui.review_events = {2: ("TRAJECTORY MODEL CORNER id 1010 p0.80",)}
+  ui.review_handled = {2}
+  ui.review_suppressed = set()
+  ui.min_candidate_probability = 0.75
+  ui.paused = True
+  alerts = []
+  monkeypatch.setattr(radar_simulator, "play_review_alert", alerts.append)
+
+  ui._user_seek(0.5)
+  assert ui.review_handled == set()
+
+  ui._pause_for_review(0, 2)
+  assert ui.paused is True
+  assert ui.index == 2
+  assert ui.review_handled == {2}
+  assert alerts == [ui.review_events[2]]
+
+
+def test_cutin_stage_series_keeps_model_to_selected_stages_separate() -> None:
+  radar_frame = frame((point(20, 18.0, -1.5, 15.0, "corner235"),))
+  model = Candidate(20, 0.61, "MLP corner cutin", stage="WAIT-CONFIRM")
+  decision = Candidate(20, 0.72, "MLP decision cutin")
+  output = Candidate(20, 0.81, "MLP output cutin")
+  selected = Candidate(20, 0.90, "MLP confirmed cutin")
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      return Selection(
+        None,
+        selected,
+        cutin_diagnostics=(model,),
+        decision_cutin_candidates=(decision,),
+        active_cutin_candidates=(output,),
+      )
+
+  stages = cutin_stage_series((radar_frame,), Selector())
+
+  assert stages[0].model == model
+  assert stages[0].decision == decision
+  assert stages[0].output == output
+  assert stages[0].selected == selected
+
+
 def test_production_hybrid_selector_uses_device_controller_output(monkeypatch, tmp_path: Path) -> None:
   lead_one = {
     "status": True, "radarTrackId": 10, "modelProb": 0.9, "score": 0.9,
@@ -113,9 +312,10 @@ def test_production_hybrid_selector_uses_device_controller_output(monkeypatch, t
       self.runtime = None
       self.last_runtime_result = None
 
-    def update(self, time_s, v_ego, points, model):
+    def update(self, time_s, v_ego, points, model, car_state=None):
       assert points[0].trackId == 10
       assert model.leadsV3[0].prob == 0.9
+      assert car_state is not None
       self.runtime.model = SimpleNamespace(thresholds=(0.5, 0.5, 0.5))
       self.last_runtime_result = SimpleNamespace(available=True, predictions=())
       return RadarLeadModelOutput(
@@ -392,6 +592,157 @@ def test_validation_case_resolves_route_and_review_metadata(tmp_path: Path) -> N
 
   assert route == tmp_path / "routes" / "CAR" / "SEG" / "rlog.zst"
   assert review == ValidationReview("sample-case", "detect", "front", 8.0, 13.0, "test scene")
+
+
+def test_validation_cases_resolve_one_route_without_duplicate_replay(tmp_path: Path) -> None:
+  cases_path = tmp_path / "cases.json"
+  cases_path.write_text(json.dumps({"cases": [
+    {
+      "id": "first", "vehicle_folder": "CAR", "log": "SEG/rlog.zst",
+      "source": "corner", "window": [8.0, 13.0], "expected": "detect",
+      "scene": "first scene",
+    },
+    {
+      "id": "second", "vehicle_folder": "CAR", "log": "SEG/rlog.zst",
+      "source": "corner", "window": [20.0, 24.0], "expected": "clear",
+      "scene": "second scene",
+    },
+  ]}), encoding="utf-8")
+
+  route, reviews = resolve_validation_cases(
+    cases_path, tmp_path / "routes", ("first", "second"),
+  )
+
+  assert route == tmp_path / "routes" / "CAR" / "SEG" / "rlog.zst"
+  assert [review.case_id for review in reviews] == ["first", "second"]
+
+
+def test_validation_case_resolves_human_verified_metadata(tmp_path: Path) -> None:
+  cases_path = tmp_path / "cases.json"
+  cases_path.write_text(json.dumps({"cases": [{
+    "id": "verified", "vehicle_folder": "CAR", "log": "SEG/rlog.zst",
+    "source": "corner", "window": [1.0, 2.0], "expected": "clear",
+    "human_verified": True, "scene": "verified scene",
+  }]}), encoding="utf-8")
+
+  _, review = resolve_validation_case(cases_path, tmp_path / "routes", "verified")
+
+  assert review.human_verified is True
+
+
+def test_update_validation_case_label_marks_only_target_human_verified(tmp_path: Path) -> None:
+  cases_path = tmp_path / "cases.json"
+  cases_path.write_text(json.dumps({"cases": [
+    {"id": "first", "expected": "clear", "scene": "first"},
+    {"id": "second", "expected": "detect", "scene": "second"},
+  ]}, indent=2) + "\n", encoding="utf-8")
+
+  update_validation_case_label(cases_path, "first", "stationary")
+  update_validation_case_label(cases_path, "first", "detect")
+
+  payload = json.loads(cases_path.read_text(encoding="utf-8"))
+  assert payload["cases"][0]["expected"] == "detect"
+  assert payload["cases"][0]["human_verified"] is True
+  assert "human_verified" not in payload["cases"][1]
+  assert cases_path.read_text(encoding="utf-8").count('"human_verified": true') == 1
+
+
+def test_review_label_save_resumes_playback(monkeypatch, tmp_path: Path) -> None:
+  review = ValidationReview("case", "clear", "corner", 0.0, 2.0, "scene")
+  ui = SimulatorUI.__new__(SimulatorUI)
+  ui.review = review
+  ui.reviews = (review,)
+  ui.validation_cases_path = tmp_path / "cases.json"
+  ui.playback_time = 1.0
+  ui.index = 0
+  ui.paused = True
+  ui.review_events = {}
+  ui._review_containing_time = lambda _: review
+  ui._prepare_review_events = lambda: None
+  monkeypatch.setattr(radar_simulator, "update_validation_case_label", lambda *_: None)
+
+  assert ui._set_review_expected("detect") is True
+  assert ui.paused is False
+  assert ui.review.expected == "detect"
+
+
+def test_review_label_save_failure_stays_paused(monkeypatch, tmp_path: Path) -> None:
+  review = ValidationReview("case", "clear", "corner", 0.0, 2.0, "scene")
+  ui = SimulatorUI.__new__(SimulatorUI)
+  ui.review = review
+  ui.reviews = (review,)
+  ui.validation_cases_path = tmp_path / "cases.json"
+  ui.playback_time = 1.0
+  ui.index = 0
+  ui.paused = True
+  ui.review_events = {}
+  ui._review_containing_time = lambda _: review
+  monkeypatch.setattr(
+    radar_simulator,
+    "update_validation_case_label",
+    lambda *_: (_ for _ in ()).throw(OSError("write failed")),
+  )
+
+  assert ui._set_review_expected("detect") is False
+  assert ui.paused is True
+  assert "LABEL SAVE FAILED" in ui.review_status
+
+
+def test_trajectory_event_inside_case_saves_candidate_label(monkeypatch, tmp_path: Path) -> None:
+  review = ValidationReview("case", "detect", "corner", 15.5, 17.5, "scene", human_verified=True)
+  radar_frame = frame((point(1001, 7.0, 3.2, 20.0, "corner235"),))
+  ui = SimulatorUI.__new__(SimulatorUI)
+  ui.review = review
+  ui.reviews = (review,)
+  ui.validation_cases_path = tmp_path / "cutin_validation_cases.json"
+  ui.log_path = tmp_path / "CAR" / "SEG" / "rlog.zst"
+  ui.frames = [radar_frame]
+  ui.index = 0
+  ui.playback_time = 17.29
+  ui.paused = True
+  ui.trajectory_horizon_s = 1.0
+  ui.trajectory_review_labels = {}
+  ui.review_events = {0: ("TRAJECTORY CORNER id 1001 p0.67 t0.75s",)}
+  ui._prepare_review_events = lambda: None
+  monkeypatch.setattr(
+    radar_simulator,
+    "update_validation_case_label",
+    lambda *_: (_ for _ in ()).throw(AssertionError("case label must not change")),
+  )
+  monkeypatch.setattr(
+    radar_simulator,
+    "upsert_trajectory_review_label",
+    lambda *_: "manual-corner-1001",
+  )
+
+  assert ui._set_review_expected("clear") is True
+  assert ui.paused is False
+  assert ui.review.expected == "detect"
+  assert ui.trajectory_review_labels[(0.0, 1001)] == "clear"
+
+
+def test_trajectory_label_upsert_replaces_same_point_and_time(tmp_path: Path) -> None:
+  labels_path = tmp_path / "radar_trajectory_labels.json"
+  log_path = tmp_path / "CAR" / "SEG" / "rlog.zst"
+  log_path.parent.mkdir(parents=True)
+  sample = replace(
+    frame((point(1010, 25.0, 3.0, 20.0, "corner235"),)),
+    time_s=12.34,
+  )
+
+  first_id = upsert_trajectory_review_label(
+    labels_path, log_path, sample, sample.points[0], "detect", 1.0,
+  )
+  second_id = upsert_trajectory_review_label(
+    labels_path, log_path, sample, sample.points[0], "clear", 1.5,
+  )
+  labels = json.loads(labels_path.read_text(encoding="utf-8"))["labels"]
+
+  assert first_id == second_id
+  assert len(labels) == 1
+  assert labels[0]["expected"] == "clear"
+  assert labels[0]["prediction_horizon_s"] == 1.5
+  assert labels[0]["human_verified"] is True
 
 
 def test_simple_selector_uses_distinct_path_candidate_for_lead_two() -> None:

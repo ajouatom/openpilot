@@ -353,6 +353,25 @@ def test_low_model_probability_is_never_promoted_by_motion_rules() -> None:
   assert not decision.cutin_candidates
 
 
+def test_close_corner_body_intrusion_promotes_low_model_as_tentative() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)
+  prediction = cutin_prediction(
+    builder, 0, 0.0, d_path=-2.65, future_d_path=-2.85,
+    d_rel=1.5, yv_rel=-0.2, front_id=None, corner_id=1024, track_age=8,
+  )
+  values = list(prediction.features.values)
+  values[MODEL_FEATURE_NAMES.index("h4_d_path")] = -3.05
+  values[MODEL_FEATURE_NAMES.index("h8_present")] = 0.0
+  prediction = replace(prediction, features=replace(prediction.features, values=tuple(values)))
+
+  decision = decision_filter.update(0.0, (prediction,))
+
+  assert len(decision.cutin_candidates) == 1
+  assert decision.cutin_candidates[0].cutin_tentative
+  assert decision.cutin_candidates[0].cutin_prob == 0.82
+
+
 def test_vehicle_body_entry_allows_detection_before_center_crosses_lane_line() -> None:
   builder = RadarLeadFeatureBuilder()
   decision_filter = RadarLeadDecisionFilter(cutin_threshold=0.82)

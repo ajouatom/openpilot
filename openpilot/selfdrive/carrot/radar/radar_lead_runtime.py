@@ -21,6 +21,11 @@ from openpilot.selfdrive.carrot.radar.radar_lead_model import (
   VisionLeadContext,
 )
 from openpilot.selfdrive.carrot.radar.radar_sensor_objects import independent_radar_objects
+from openpilot.selfdrive.carrot.radar.radar_trajectory import estimated_yaw_rate_rad_s
+from openpilot.selfdrive.carrot.radar.radar_trajectory_model import (
+  RadarTrajectoryRuntime,
+  RadarTrajectoryRuntimeResult,
+)
 
 
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parent / "models" / "radar_lead_multitask.npz"
@@ -57,6 +62,7 @@ class RadarLeadRuntimeResult:
   corner_predictions: tuple[RadarLeadPrediction, ...] = ()
   front_decision: RadarLeadDecision = EMPTY_DECISION
   corner_decision: RadarLeadDecision = EMPTY_DECISION
+  trajectory: RadarTrajectoryRuntimeResult | None = None
 
 
 def _finite(value: Any, fallback: float = 0.0) -> float:
@@ -101,6 +107,20 @@ def runtime_points(points: Iterable[Any]) -> tuple[RuntimeRadarPoint, ...]:
 
 def _xy(data: Any) -> tuple[tuple[float, float], ...]:
   return tuple((_finite(data.x[index]), _finite(data.y[index])) for index in range(min(len(data.x), len(data.y))))
+
+
+def _path_y_stds(model: Any) -> tuple[tuple[float, float], ...]:
+  position = getattr(model, "position", None)
+  xs = getattr(position, "x", ())
+  stds = getattr(position, "yStd", ())
+  return tuple(
+    (_finite(xs[index]), _finite(stds[index], 0.35))
+    for index in range(min(len(xs), len(stds)))
+  )
+
+
+def _lane_stds(model: Any) -> tuple[float, ...]:
+  return tuple(_finite(value) for value in getattr(model, "laneLineStds", ()))
 
 
 def runtime_context(time_s: float, v_ego: float, model: Any) -> RadarLeadContext:
@@ -161,6 +181,7 @@ class RadarLeadRuntime:
     self.model: RadarLeadModel | None = None
     self.front_decisions: RadarLeadDecisionFilter | None = None
     self.corner_decisions: RadarLeadDecisionFilter | None = None
+    self.trajectory = RadarTrajectoryRuntime(corner_radar_enabled=corner_radar_enabled)
     self.load_error = ""
 
   def _load(self) -> bool:
@@ -192,17 +213,48 @@ class RadarLeadRuntime:
       self.load_error = f"{type(exc).__name__}: {exc}"
       return False
 
-  def update(self, time_s: float, v_ego: float, points: Iterable[Any], model: Any) -> RadarLeadRuntimeResult:
+  def update(
+    self,
+    time_s: float,
+    v_ego: float,
+    points: Iterable[Any],
+    model: Any,
+    car_state: Any | None = None,
+  ) -> RadarLeadRuntimeResult:
     started = time.perf_counter()
     if not self._load():
       return RadarLeadRuntimeResult(False, EMPTY_DECISION, (), (time.perf_counter() - started) * 1e3, self.load_error)
     try:
+      normalized_points = runtime_points(points)
       objects = independent_radar_objects(
-        runtime_points(points),
+        normalized_points,
         include_scc=self.include_scc,
         enable_radar_tracks=self.enable_radar_tracks,
       )
       context = runtime_context(time_s, v_ego, model)
+      steering_angle_deg = _finite(getattr(car_state, "steeringAngleDeg", 0.0))
+      steering_rate_deg_s = _finite(getattr(car_state, "steeringRateDeg", 0.0))
+      measured_yaw_rate = _finite(getattr(car_state, "yawRate", 0.0))
+      yaw_rate_estimated = abs(measured_yaw_rate) < 1e-4
+      yaw_rate_rad_s = (
+        estimated_yaw_rate_rad_s(v_ego, steering_angle_deg)
+        if yaw_rate_estimated
+        else measured_yaw_rate
+      )
+      trajectory = self.trajectory.update(
+        time_s,
+        v_ego,
+        normalized_points,
+        context.path,
+        context.lane_lines,
+        context.lane_probs,
+        _path_y_stds(model),
+        _lane_stds(model),
+        steering_angle_deg,
+        steering_rate_deg_s,
+        yaw_rate_rad_s,
+        yaw_rate_estimated,
+      )
       assert self.front_model is not None and self.corner_model is not None
       front_predictions = self.front_model.predict(self.front_features.update(context, objects.front))
       corner_predictions = self.corner_model.predict(self.corner_features.update(context, objects.corner))
@@ -217,7 +269,7 @@ class RadarLeadRuntime:
       predictions = front_predictions + corner_predictions
       return RadarLeadRuntimeResult(
         True, decision, predictions, (time.perf_counter() - started) * 1e3, "",
-        front_predictions, corner_predictions, front_decision, corner_decision,
+        front_predictions, corner_predictions, front_decision, corner_decision, trajectory,
       )
     except Exception as exc:
       return RadarLeadRuntimeResult(

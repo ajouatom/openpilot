@@ -15,10 +15,11 @@ import csv
 import gzip
 import json
 import math
+import os
 import shutil
 import sys
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -65,6 +66,25 @@ except ModuleNotFoundError:
   from radar_lead_runtime import RadarLeadRuntime
 
 try:
+  from openpilot.selfdrive.carrot.radar.radar_trajectory import (
+    RadarTrajectory,
+    RadarTrajectoryAnalyzer,
+    estimated_yaw_rate_rad_s,
+    trajectory_entry_probability,
+    trajectory_sample_at,
+    trajectory_is_review_candidate,
+  )
+except ModuleNotFoundError:
+  from radar_trajectory import (
+    RadarTrajectory,
+    RadarTrajectoryAnalyzer,
+    estimated_yaw_rate_rad_s,
+    trajectory_entry_probability,
+    trajectory_is_review_candidate,
+    trajectory_sample_at,
+  )
+
+try:
   from openpilot.selfdrive.carrot.radar.radar_sensor_objects import (
     match_corner_to_front_identity,
   )
@@ -97,8 +117,15 @@ DEFAULT_VALIDATION_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.jso
 DEFAULT_MULTITASK_MODEL = RADAR_ROOT / "models" / "radar_lead_multitask.npz"
 DEFAULT_FRONT_MODEL = RADAR_ROOT / "models" / "radar_lead_front.npz"
 DEFAULT_CORNER_MODEL = RADAR_ROOT / "models" / "radar_lead_corner.npz"
+DEFAULT_REVIEW_PROBABILITY = 0.5
+REVIEW_SETTINGS_ENV = "CARROT_RADAR_REVIEW_SETTINGS"
 CURRENT_RADARD_CORNER_CENTER_MIN_AGE = 5
 CURRENT_RADARD_CORNER_CENTER_UNMATCHED_MAX_DREL = 45.0
+VALIDATION_EXPECTED_LABELS = ("detect", "clear", "stationary")
+
+
+def _source_mode_name(source: str) -> str:
+  return "corner" if source.startswith("corner") else "front"
 
 
 @dataclass(frozen=True)
@@ -157,6 +184,12 @@ class RadarFrame:
   recorded_one: RecordedLead
   recorded_two: RecordedLead
   video_time_s: float | None = None
+  path_y_stds: tuple[tuple[float, float], ...] = ()
+  lane_stds: tuple[float, ...] = ()
+  steering_angle_deg: float = 0.0
+  steering_rate_deg_s: float = 0.0
+  yaw_rate_rad_s: float = 0.0
+  yaw_rate_estimated: bool = False
 
 
 @dataclass(frozen=True)
@@ -168,6 +201,13 @@ class Candidate:
   d_rel: float | None = None
   y_rel: float | None = None
   track_aliases: tuple[int, ...] = ()
+  base_score: float | None = None
+  temporal_score: float | None = None
+  horizon_scores: tuple[float, ...] = ()
+  path_exit_score: float = 0.0
+  current_path_occupancy: bool = False
+  stage: str = ""
+  detail: str = ""
 
   @property
   def eligible(self) -> bool:
@@ -190,6 +230,7 @@ class Selection:
   lead_two: Candidate | None
   front_candidates: tuple[Candidate, ...] = ()
   corner_candidates: tuple[Candidate, ...] = ()
+  cutin_diagnostics: tuple[Candidate, ...] = ()
   decision_cutin_candidates: tuple[Candidate, ...] = ()
   active_cutin_candidates: tuple[Candidate, ...] = ()
   external_candidates: tuple[Candidate, ...] = ()
@@ -208,6 +249,7 @@ class ValidationReview:
   target_track_ids: tuple[int, ...] = ()
   forbidden_lead_two_ids: tuple[int, ...] = ()
   validation_stage: str = "output"
+  human_verified: bool = False
 
 
 @dataclass(frozen=True)
@@ -235,6 +277,329 @@ class LeadComparisonFrame:
   model_two: LeadPlotValue | None
 
 
+@dataclass(frozen=True)
+class CutinStageFrame:
+  model: Candidate | None
+  decision: Candidate | None
+  output: Candidate | None
+  selected: Candidate | None
+
+
+@dataclass
+class _TrajectoryReviewEpisode:
+  sensor: str
+  last_time_s: float
+  d_rel: float
+  y_rel: float
+  v_rel: float
+  yv_rel: float
+  track_keys: set[tuple[str, int]]
+
+  def update(self, time_s: float, key: tuple[str, int], point: RadarPoint) -> None:
+    self.last_time_s = time_s
+    self.d_rel = point.d_rel
+    self.y_rel = point.y_rel
+    self.v_rel = point.v_rel
+    self.yv_rel = point.yv_rel
+    self.track_keys.add(key)
+
+
+def _trajectory_episode_cost(
+  episode: _TrajectoryReviewEpisode,
+  time_s: float,
+  key: tuple[str, int],
+  point: RadarPoint,
+) -> float | None:
+  source = key[0]
+  sensor = "corner" if source.startswith("corner") else "front"
+  age_s = time_s - episode.last_time_s
+  if sensor != episode.sensor or age_s < -1e-3 or age_s > 2.0:
+    return None
+  if key in episode.track_keys:
+    return -1.0
+  predicted_d = episode.d_rel + episode.v_rel * age_s
+  predicted_y = episode.y_rel + episode.yv_rel * age_s
+  d_error = abs(point.d_rel - predicted_d)
+  y_error = abs(point.y_rel - predicted_y)
+  v_error = abs(point.v_rel - episode.v_rel)
+  d_limit = min(6.0, max(2.0, 0.06 * max(point.d_rel, episode.d_rel)))
+  if d_error > d_limit or y_error > 1.15 or v_error > 4.0:
+    return None
+  return d_error / d_limit + y_error / 1.15 + v_error / 4.0
+
+
+def radar_trajectory_series(
+  frames: Iterable[RadarFrame],
+) -> tuple[dict[tuple[str, int], RadarTrajectory], ...]:
+  analyzer = RadarTrajectoryAnalyzer()
+  values: list[dict[tuple[str, int], RadarTrajectory]] = []
+  for frame in frames:
+    values.append(analyzer.update(
+      frame.time_s,
+      frame.points,
+      frame.path,
+      frame.lane_lines,
+      frame.lane_probs,
+      frame.path_y_stds,
+      frame.lane_stds,
+      frame.steering_angle_deg,
+      frame.steering_rate_deg_s,
+      frame.yaw_rate_rad_s,
+      frame.yaw_rate_estimated,
+    ))
+  return tuple(values)
+
+
+def trajectory_review_events(
+  frames: Sequence[RadarFrame],
+  trajectories: Sequence[dict[tuple[str, int], RadarTrajectory]],
+  sources: Iterable[str],
+  horizon_s: float = 1.0,
+  probability_threshold: float = 0.60,
+) -> dict[int, tuple[str, ...]]:
+  requested = {source.lower() for source in sources}
+  want_corner = any("corner" in source for source in requested)
+  want_front = any("front" in source for source in requested)
+  events: dict[int, tuple[str, ...]] = {}
+  episodes: list[_TrajectoryReviewEpisode] = []
+  for index, (frame, frame_trajectories) in enumerate(zip(frames, trajectories, strict=True)):
+    has_corner = any(source.startswith("corner") for source, _ in frame_trajectories)
+    use_corner = want_corner and has_corner
+    eligible_points: dict[tuple[str, int], RadarPoint] = {}
+    current: dict[tuple[str, int], RadarTrajectory] = {}
+    for key, trajectory in frame_trajectories.items():
+      source, track_id = key
+      source_matches = (
+        source.startswith("corner")
+        if use_corner
+        else source == "frontRadar" and (want_front or not want_corner)
+      )
+      point = next(
+        (item for item in frame.points if item.source == source and item.track_id == track_id),
+        None,
+      )
+      if source_matches and point is not None:
+        eligible_points[key] = point
+      if (
+        source_matches
+        and point is not None
+        and trajectory_is_review_candidate(
+          trajectory, point.d_rel, horizon_s, probability_threshold,
+        )
+      ):
+        current[key] = trajectory
+
+    episodes = [
+      episode for episode in episodes
+      if frame.time_s - episode.last_time_s <= 2.0
+    ]
+    point_episode: dict[tuple[str, int], _TrajectoryReviewEpisode] = {}
+    associations = sorted(
+      (
+        (cost, episode_index, key)
+        for episode_index, episode in enumerate(episodes)
+        for key, point in eligible_points.items()
+        if (cost := _trajectory_episode_cost(episode, frame.time_s, key, point)) is not None
+      ),
+      key=lambda item: item[0],
+    )
+    used_episodes: set[int] = set()
+    used_points: set[tuple[str, int]] = set()
+    for _, episode_index, key in associations:
+      if episode_index in used_episodes or key in used_points:
+        continue
+      episode = episodes[episode_index]
+      episode.update(frame.time_s, key, eligible_points[key])
+      point_episode[key] = episode
+      used_episodes.add(episode_index)
+      used_points.add(key)
+
+    labels: list[str] = []
+    for key, trajectory in sorted(current.items()):
+      source, track_id = key
+      point = eligible_points[key]
+      episode = point_episode.get(key)
+      if episode is None:
+        episode = next(
+          (
+            candidate for candidate in episodes
+            if _trajectory_episode_cost(candidate, frame.time_s, key, point) is not None
+          ),
+          None,
+        )
+      if episode is not None:
+        episode.update(frame.time_s, key, point)
+        continue
+      sensor_name = "corner" if source.startswith("corner") else "front"
+      episodes.append(_TrajectoryReviewEpisode(
+        sensor_name, frame.time_s, point.d_rel, point.y_rel, point.v_rel, point.yv_rel, {key},
+      ))
+      sensor_label = sensor_name.upper()
+      tte = trajectory.time_to_entry_s if trajectory.time_to_entry_s is not None else math.inf
+      probability = trajectory_entry_probability(trajectory, horizon_s)
+      labels.append(
+        f"TRAJECTORY {sensor_label} id {track_id} p{probability:.2f} t{tte:.2f}s"
+      )
+    if labels:
+      events[index] = tuple(labels)
+  return events
+
+
+def trajectory_model_review_events(
+  frames: Sequence[RadarFrame],
+  selector: LeadSelector,
+  sources: Iterable[str],
+  probability_threshold: float,
+) -> dict[int, tuple[str, ...]]:
+  """Create one pause event per physical object from the displayed model probability."""
+  requested = {source.lower() for source in sources}
+  want_corner = any("corner" in source for source in requested)
+  want_front = any("front" in source for source in requested)
+  events: dict[int, tuple[str, ...]] = {}
+  episodes: list[_TrajectoryReviewEpisode] = []
+
+  def mode_for(candidate: Candidate) -> str | None:
+    reason = candidate.reason.lower()
+    if "trajectory corner" in reason:
+      return "corner"
+    if "trajectory front" in reason:
+      return "front"
+    return None
+
+  def source_matches(point: RadarPoint, mode: str) -> bool:
+    return point.source.startswith("corner") if mode == "corner" else point.source in ("frontRadar", "scc")
+
+  for index, frame in enumerate(frames):
+    selection = selector.select(frame, index)
+    eligible: dict[tuple[str, int], tuple[RadarPoint, Candidate, str]] = {}
+    for candidate in selection.cutin_diagnostics:
+      if candidate.stage == "BLOCK-LEAD":
+        continue
+      mode = mode_for(candidate)
+      if mode is None:
+        continue
+      if mode == "corner" and not want_corner:
+        continue
+      if mode == "front" and not (want_front or not want_corner):
+        continue
+      ids = candidate_track_ids(candidate)
+      matching_points = [
+        point for point in frame.points
+        if point.measured and point.track_id in ids and source_matches(point, mode)
+      ]
+      if not matching_points:
+        continue
+      point = min(
+        matching_points,
+        key=lambda value: (
+          abs(value.d_rel - candidate.d_rel) if candidate.d_rel is not None else 0.0,
+          abs(value.y_rel - candidate.y_rel) if candidate.y_rel is not None else 0.0,
+        ),
+      )
+      eligible[(point.source, point.track_id)] = (point, candidate, mode)
+
+    episodes = [
+      episode for episode in episodes
+      if frame.time_s - episode.last_time_s <= 2.0
+    ]
+    point_episode: dict[tuple[str, int], _TrajectoryReviewEpisode] = {}
+    associations = sorted(
+      (
+        (cost, episode_index, key)
+        for episode_index, episode in enumerate(episodes)
+        for key, (point, _, _) in eligible.items()
+        if (cost := _trajectory_episode_cost(episode, frame.time_s, key, point)) is not None
+      ),
+      key=lambda item: item[0],
+    )
+    used_episodes: set[int] = set()
+    used_points: set[tuple[str, int]] = set()
+    for _, episode_index, key in associations:
+      if episode_index in used_episodes or key in used_points:
+        continue
+      episode = episodes[episode_index]
+      point, _, _ = eligible[key]
+      episode.update(frame.time_s, key, point)
+      point_episode[key] = episode
+      used_episodes.add(episode_index)
+      used_points.add(key)
+
+    labels: list[str] = []
+    for key, (point, candidate, mode) in sorted(eligible.items()):
+      if candidate.score < probability_threshold:
+        continue
+      episode = point_episode.get(key)
+      if episode is None:
+        episode = next(
+          (
+            value for value in episodes
+            if _trajectory_episode_cost(value, frame.time_s, key, point) is not None
+          ),
+          None,
+        )
+      if episode is not None:
+        episode.update(frame.time_s, key, point)
+        continue
+      episodes.append(_TrajectoryReviewEpisode(
+        mode, frame.time_s, point.d_rel, point.y_rel, point.v_rel, point.yv_rel, {key},
+      ))
+      raw = (
+        " raw " + "/".join(f"{value:.2f}" for value in candidate.horizon_scores)
+        if candidate.horizon_scores else ""
+      )
+      labels.append(
+        f"TRAJECTORY MODEL {mode.upper()} id {point.track_id} "
+        + f"IN{candidate.score:.2f} OUT{candidate.path_exit_score:.2f}{raw}"
+      )
+    if labels:
+      events[index] = tuple(labels)
+  return events
+
+
+def default_review_settings_path() -> Path:
+  override = os.environ.get(REVIEW_SETTINGS_ENV)
+  if override:
+    return Path(override)
+  config_root = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_CONFIG_HOME")
+  base = Path(config_root) if config_root else Path.home() / ".config"
+  return base / "carrotpilot" / "radar_lead_review.json"
+
+
+def load_review_probability(
+  path: Path | None = None,
+  default: float = DEFAULT_REVIEW_PROBABILITY,
+) -> float:
+  settings_path = path or default_review_settings_path()
+  try:
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    value = float(payload["probability"])
+  except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+    return default
+  return min(max(value, 0.0), 1.0) if math.isfinite(value) else default
+
+
+def save_review_probability(probability: float, path: Path | None = None) -> bool:
+  settings_path = path or default_review_settings_path()
+  value = min(max(float(probability), 0.0), 1.0)
+  try:
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {}
+    if settings_path.is_file():
+      try:
+        loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+          payload.update(loaded)
+      except (OSError, json.JSONDecodeError):
+        pass
+    payload["probability"] = round(value, 4)
+    temporary = settings_path.with_name(settings_path.name + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(settings_path)
+    return True
+  except OSError:
+    return False
+
+
 def _candidate_plot_value(frame: RadarFrame, candidate: Candidate | None) -> LeadPlotValue | None:
   if candidate is None:
     return None
@@ -245,6 +610,47 @@ def _candidate_plot_value(frame: RadarFrame, candidate: Candidate | None) -> Lea
   if distance is None or not math.isfinite(distance) or distance <= 0.0:
     return None
   return LeadPlotValue(candidate.track_id, float(distance))
+
+
+def _highest_score(candidates: Iterable[Candidate]) -> Candidate | None:
+  return max(candidates, key=lambda candidate: candidate.score, default=None)
+
+
+def cutin_stage_series(
+  frames: Iterable[RadarFrame],
+  selector: LeadSelector,
+) -> tuple[CutinStageFrame, ...]:
+  values: list[CutinStageFrame] = []
+  for index, frame in enumerate(frames):
+    selection = selector.select(frame, index)
+    diagnostics = selection.cutin_diagnostics or selection.corner_candidates
+    selected = (
+      selection.lead_two
+      if selection.lead_two is not None and "cutin" in selection.lead_two.reason.lower()
+      else None
+    )
+    values.append(CutinStageFrame(
+      model=_highest_score(diagnostics),
+      decision=_highest_score(selection.decision_cutin_candidates),
+      output=_highest_score(selection.active_cutin_candidates),
+      selected=selected,
+    ))
+  return tuple(values)
+
+
+def preferred_radar_points(frame: RadarFrame, review_source: str | None) -> tuple[RadarPoint, ...]:
+  if review_source is None:
+    return frame.points
+  corner = tuple(point for point in frame.points if point.source.startswith("corner"))
+  front = tuple(point for point in frame.points if point.source == "frontRadar")
+  scc = tuple(point for point in frame.points if point.source == "scc")
+  if "corner" in review_source.lower() and corner:
+    return corner
+  if front:
+    return front
+  if scc:
+    return scc
+  return corner
 
 
 def lead_comparison_series(
@@ -452,6 +858,82 @@ def validation_review_events(
   return events_by_frame
 
 
+def validation_log_review_events(
+  frames: list[RadarFrame],
+  selector: LeadSelector,
+  reviews: Sequence[ValidationReview],
+) -> dict[int, tuple[str, ...]]:
+  if not reviews:
+    return {}
+
+  merged: dict[int, list[str]] = {}
+
+  def merge_events(values: dict[int, tuple[str, ...]], prefix: str = "") -> None:
+    for frame_index, frame_events in values.items():
+      bucket = merged.setdefault(frame_index, [])
+      for event in frame_events:
+        value = prefix + event
+        if value not in bucket:
+          bucket.append(value)
+
+  generic = ValidationReview(
+    "__log__", "detect", reviews[0].source, 0.0, frames[-1].time_s, "full log",
+  )
+  merge_events(validation_review_events(frames, selector, generic))
+  if any(review.validation_stage == "decision" for review in reviews):
+    decision = replace(generic, validation_stage="decision")
+    merge_events(validation_review_events(frames, selector, decision), "DECISION ")
+
+  for review in reviews:
+    start_index = bisect.bisect_left([frame.time_s for frame in frames], review.start_s)
+    end_index = bisect.bisect_right([frame.time_s for frame in frames], review.end_s)
+    targets = set(review.target_track_ids)
+    if review.expected == "stationary":
+      for frame_index in range(start_index, end_index):
+        frame = frames[frame_index]
+        selection = selector.select(frame, frame_index)
+        found = False
+        for role, candidate in (("leadOne", selection.lead_one), ("leadTwo", selection.lead_two)):
+          if candidate is None or (targets and not candidate_matches_targets(candidate, targets)):
+            continue
+          point = next(
+            (
+              item for item in frame.points
+              if item.track_id in candidate_track_ids(candidate)
+              and 0.8 < item.d_rel < 130.0
+              and abs(item.v_lead) * 3.6 < 3.0
+            ),
+            None,
+          )
+          if point is not None:
+            merge_events({
+              frame_index: (
+                f"{review.case_id}: STATIONARY {role} id {candidate.track_id} {point.d_rel:.0f}m",
+              ),
+            })
+            found = True
+            break
+        if found:
+          break
+
+    forbidden = set(review.forbidden_lead_two_ids)
+    previous_forbidden: int | None = None
+    for frame_index in range(start_index, end_index):
+      selection = selector.select(frames[frame_index], frame_index)
+      current = (
+        selection.lead_two.track_id
+        if selection.lead_two is not None and selection.lead_two.track_id in forbidden
+        else None
+      )
+      if current is not None and current != previous_forbidden:
+        merge_events({
+          frame_index: (f"{review.case_id}: FALSE leadTwo id {current}",),
+        })
+      previous_forbidden = current
+
+  return {index: tuple(values) for index, values in merged.items()}
+
+
 def qcamera_path_for_log(log_path: Path) -> Path:
   return log_path.parent / "qcamera.ts"
 
@@ -462,7 +944,7 @@ def play_review_alert(events: tuple[str, ...]) -> None:
     if sys.platform == "win32":
       try:
         import winsound
-        if any(event.startswith("CUT-IN") for event in events):
+        if any("CUT-IN" in event or "TRAJECTORY" in event for event in events):
           winsound.Beep(1400, 140)
           winsound.Beep(1900, 180)
         else:
@@ -967,15 +1449,26 @@ def _xy_points(data: Any) -> tuple[tuple[float, float], ...]:
   return tuple((_finite(xs[index]), _finite(ys[index])) for index in range(min(len(xs), len(ys))))
 
 
+def _x_values(xs: Any, values: Any) -> tuple[tuple[float, float], ...]:
+  return tuple(
+    (_finite(xs[index]), max(0.0, _finite(values[index])))
+    for index in range(min(len(xs), len(values)))
+  )
+
+
 def _copy_model(message: Any) -> tuple[
   tuple[tuple[float, float], ...],
   tuple[tuple[tuple[float, float], ...], ...],
   tuple[float, ...],
   tuple[ModelLead, ...],
+  tuple[tuple[float, float], ...],
+  tuple[float, ...],
 ]:
   path = _xy_points(message.position)
   lane_lines = tuple(_xy_points(line) for line in message.laneLines)
   lane_probs = tuple(_finite(probability) for probability in message.laneLineProbs)
+  path_y_stds = _x_values(message.position.x, getattr(message.position, "yStd", ()))
+  lane_stds = tuple(max(0.0, _finite(value)) for value in getattr(message, "laneLineStds", ()))
   leads: list[ModelLead] = []
   for lead in message.leadsV3:
     if not lead.x or not lead.y or not lead.v or not lead.a:
@@ -990,7 +1483,7 @@ def _copy_model(message: Any) -> tuple[
       y_std=_finite(lead.yStd[0], 1.0) if lead.yStd else 1.0,
       v_std=_finite(lead.vStd[0], 1.0) if lead.vStd else 1.0,
     ))
-  return path, lane_lines, lane_probs, tuple(leads)
+  return path, lane_lines, lane_probs, tuple(leads), path_y_stds, lane_stds
 
 
 def _copy_recorded_lead(lead: Any) -> RecordedLead:
@@ -1022,10 +1515,18 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   latest_points: tuple[RadarPoint, ...] | None = None
   latest_points_ns = 0
   latest_v_ego = 0.0
+  latest_steering_angle_deg = 0.0
+  latest_steering_rate_deg_s = 0.0
+  latest_yaw_rate_rad_s = 0.0
+  latest_yaw_rate_estimated = False
+  latest_steer_ratio = 14.0
+  latest_wheelbase = 2.8
   latest_path: tuple[tuple[float, float], ...] = ()
   latest_lanes: tuple[tuple[tuple[float, float], ...], ...] = ()
   latest_lane_probs: tuple[float, ...] = ()
   latest_model_leads: tuple[ModelLead, ...] = ()
+  latest_path_y_stds: tuple[tuple[float, float], ...] = ()
+  latest_lane_stds: tuple[float, ...] = ()
   latest_model_ns = 0
   latest_model_eof_ns = 0
   qcamera_start_eof_ns = 0
@@ -1059,10 +1560,36 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         for obj in route_replay.decode_raw_corner_objects(event_t, int(can_message.address), bytes(can_message.dat)):
           if route_replay.raw_corner_object_is_valid(obj):
             corner_tracker.update(obj)
+    elif which == "carParams":
+      steer_ratio = _finite(event.carParams.steerRatio)
+      wheelbase = _finite(event.carParams.wheelbase)
+      latest_steer_ratio = steer_ratio if 5.0 <= steer_ratio <= 30.0 else 14.0
+      latest_wheelbase = wheelbase if 1.8 <= wheelbase <= 4.5 else 2.8
     elif which == "carState":
       latest_v_ego = _finite(event.carState.vEgo)
+      latest_steering_angle_deg = _finite(event.carState.steeringAngleDeg)
+      latest_steering_rate_deg_s = _finite(event.carState.steeringRateDeg)
+      measured_yaw_rate = _finite(event.carState.yawRate)
+      latest_yaw_rate_estimated = abs(measured_yaw_rate) < 1e-4
+      latest_yaw_rate_rad_s = (
+        estimated_yaw_rate_rad_s(
+          latest_v_ego,
+          latest_steering_angle_deg,
+          latest_steer_ratio,
+          latest_wheelbase,
+        )
+        if latest_yaw_rate_estimated
+        else measured_yaw_rate
+      )
     elif which == "modelV2":
-      latest_path, latest_lanes, latest_lane_probs, latest_model_leads = _copy_model(event.modelV2)
+      (
+        latest_path,
+        latest_lanes,
+        latest_lane_probs,
+        latest_model_leads,
+        latest_path_y_stds,
+        latest_lane_stds,
+      ) = _copy_model(event.modelV2)
       latest_model_ns = event_ns
       latest_model_eof_ns = int(event.modelV2.timestampEof)
     elif which == "radarState" and latest_points is not None:
@@ -1081,6 +1608,12 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         recorded_one=_copy_recorded_lead(radar_state.leadOne),
         recorded_two=_copy_recorded_lead(radar_state.leadTwo),
         video_time_s=aligned_video_time_s(qcamera_start_eof_ns, latest_model_eof_ns),
+        path_y_stds=latest_path_y_stds,
+        lane_stds=latest_lane_stds,
+        steering_angle_deg=latest_steering_angle_deg,
+        steering_rate_deg_s=latest_steering_rate_deg_s,
+        yaw_rate_rad_s=latest_yaw_rate_rad_s,
+        yaw_rate_estimated=latest_yaw_rate_estimated,
       )))
 
   if not absolute_frames:
@@ -1102,6 +1635,12 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       recorded_one=frame.recorded_one,
       recorded_two=frame.recorded_two,
       video_time_s=frame.video_time_s,
+      path_y_stds=frame.path_y_stds,
+      lane_stds=frame.lane_stds,
+      steering_angle_deg=frame.steering_angle_deg,
+      steering_rate_deg_s=frame.steering_rate_deg_s,
+      yaw_rate_rad_s=frame.yaw_rate_rad_s,
+      yaw_rate_estimated=frame.yaw_rate_estimated,
     )
     for event_ns, frame in absolute_frames
   ]
@@ -1774,10 +2313,14 @@ def _production_point(point: RadarPoint) -> SimpleNamespace:
   )
 
 
-def _production_xy(points: tuple[tuple[float, float], ...]) -> SimpleNamespace:
+def _production_xy(
+  points: tuple[tuple[float, float], ...],
+  y_stds: tuple[float, ...] = (),
+) -> SimpleNamespace:
   return SimpleNamespace(
     x=tuple(point[0] for point in points),
     y=tuple(point[1] for point in points),
+    yStd=y_stds,
   )
 
 
@@ -1792,11 +2335,25 @@ def _production_model(frame: RadarFrame) -> SimpleNamespace:
     yStd=(lead.y_std,),
     vStd=(lead.v_std,),
   ) for lead in frame.model_leads)
+  path_std_by_x = {round(distance, 3): std for distance, std in frame.path_y_stds}
+  path_y_stds = tuple(
+    path_std_by_x.get(round(point[0], 3), 0.35)
+    for point in frame.path
+  )
   return SimpleNamespace(
-    position=_production_xy(frame.path),
+    position=_production_xy(frame.path, path_y_stds),
     laneLines=tuple(_production_xy(line) for line in frame.lane_lines),
     laneLineProbs=frame.lane_probs,
+    laneLineStds=frame.lane_stds,
     leadsV3=leads,
+  )
+
+
+def _production_car_state(frame: RadarFrame) -> SimpleNamespace:
+  return SimpleNamespace(
+    steeringAngleDeg=frame.steering_angle_deg,
+    steeringRateDeg=frame.steering_rate_deg_s,
+    yawRate=frame.yaw_rate_rad_s,
   )
 
 
@@ -1848,6 +2405,7 @@ class ProductionHybridLeadSelector:
         frame.v_ego,
         tuple(_production_point(point) for point in frame.points),
         _production_model(frame),
+        _production_car_state(frame),
       )
       result = controller.last_runtime_result
       if not output.available or result is None or not result.available:
@@ -1882,11 +2440,47 @@ class ProductionHybridLeadSelector:
       )
       assert secondary_model is not None
       source_name = "corner" if use_corner else "front"
+      trajectory_result = getattr(controller, "last_trajectory_result", None)
+      trajectory_available = bool(
+        trajectory_result is not None and trajectory_result.available
+      )
+      trajectory_predictions = (
+        trajectory_result.predictions
+      ) if trajectory_available else ()
+      trajectory_confirmed = (
+        trajectory_result.front_decision.confirmed + trajectory_result.corner_decision.confirmed
+      ) if trajectory_available else ()
+      trajectory_tentative = (
+        trajectory_result.front_decision.tentative + trajectory_result.corner_decision.tentative
+      ) if trajectory_available else ()
+      trajectory_exiting = (
+        trajectory_result.front_decision.exiting + trajectory_result.corner_decision.exiting
+      ) if trajectory_available else ()
+      trajectory_decision = (
+        trajectory_result.corner_decision if use_corner else trajectory_result.front_decision
+      ) if trajectory_available else None
+      trajectory_filter = (
+        controller.runtime.trajectory.corner_filter
+        if use_corner else controller.runtime.trajectory.front_filter
+      ) if trajectory_available else None
       cutin_threshold = (
-        float(secondary_filter.cutin_threshold)
+        float(trajectory_filter.threshold)
+        if trajectory_filter is not None
+        else float(secondary_filter.cutin_threshold)
         if secondary_filter is not None
         else max(0.5, min(CUTIN_TEMPORAL_THRESHOLD_MAX, float(secondary_model.thresholds[1])))
       )
+
+      def trajectory_threshold(
+        prediction: Any,
+        fallback_threshold: float = cutin_threshold,
+      ) -> float:
+        filter_value = (
+          controller.runtime.trajectory.corner_filter
+          if prediction.source.startswith("corner")
+          else controller.runtime.trajectory.front_filter
+        )
+        return float(filter_value.threshold) if filter_value is not None else fallback_threshold
       external_threshold = (
         float(secondary_filter.external_threshold)
         if secondary_filter is not None
@@ -1930,15 +2524,35 @@ class ProductionHybridLeadSelector:
       ) -> tuple[int, ...]:
         return tuple(sorted(set(aliases_by_track.get(track_id, ())) - {track_id}))
 
-      raw_cutins = tuple(
-        Candidate(
-          prediction_track_id(prediction), prediction.cutin_prob, f"MLP {source_name} cutin",
-          cutin_threshold, d_rel=prediction.features.radar_object.d_rel,
-          y_rel=prediction.features.radar_object.y_rel,
-          track_aliases=aliases_for(prediction_track_id(prediction)),
+      raw_cutins = (
+        tuple(
+          Candidate(
+            prediction.track_id,
+            prediction.probability,
+            f"trajectory {_source_mode_name(prediction.source)} path-entry",
+            trajectory_threshold(prediction),
+            d_rel=float(getattr(prediction.point, "d_rel", getattr(prediction.point, "dRel", 0.0))),
+            y_rel=float(getattr(prediction.point, "y_rel", getattr(prediction.point, "yRel", 0.0))),
+            track_aliases=aliases_for(prediction.track_id),
+            horizon_scores=prediction.horizon_probabilities,
+            path_exit_score=prediction.path_exit_probability,
+            current_path_occupancy=prediction.current_path_occupancy,
+          )
+          for prediction in sorted(
+            trajectory_predictions, key=lambda value: value.probability, reverse=True,
+          )
         )
-        for prediction in sorted(secondary_predictions, key=lambda value: value.cutin_prob, reverse=True)[:2]
-        if prediction.cutin_prob >= MLP_CANDIDATE_FLOOR
+        if trajectory_available
+        else tuple(
+          Candidate(
+            prediction_track_id(prediction), prediction.cutin_prob, f"MLP {source_name} cutin",
+            cutin_threshold, d_rel=prediction.features.radar_object.d_rel,
+            y_rel=prediction.features.radar_object.y_rel,
+            track_aliases=aliases_for(prediction_track_id(prediction)),
+          )
+          for prediction in sorted(secondary_predictions, key=lambda value: value.cutin_prob, reverse=True)[:2]
+          if prediction.cutin_prob >= MLP_CANDIDATE_FLOOR
+        )
       )
       raw_external = tuple(
         Candidate(
@@ -1950,14 +2564,32 @@ class ProductionHybridLeadSelector:
         for prediction in sorted(secondary_predictions, key=lambda value: value.external_prob, reverse=True)[:2]
         if prediction.external_prob >= MLP_CANDIDATE_FLOOR
       )
-      decision_cutins = tuple(
-        Candidate(
-          prediction_track_id(prediction), prediction.cutin_prob, "MLP decision cutin",
-          cutin_threshold, d_rel=prediction.features.radar_object.d_rel,
-          y_rel=prediction.features.radar_object.y_rel,
-          track_aliases=aliases_for(prediction_track_id(prediction)),
+      decision_cutins = (
+        tuple(
+          Candidate(
+            prediction.track_id,
+            prediction.probability,
+            "trajectory decision cutin",
+            trajectory_threshold(prediction),
+            d_rel=float(getattr(prediction.point, "d_rel", getattr(prediction.point, "dRel", 0.0))),
+            y_rel=float(getattr(prediction.point, "y_rel", getattr(prediction.point, "yRel", 0.0))),
+            track_aliases=aliases_for(prediction.track_id),
+            horizon_scores=prediction.horizon_probabilities,
+            path_exit_score=prediction.path_exit_probability,
+            current_path_occupancy=prediction.current_path_occupancy,
+          )
+          for prediction in trajectory_confirmed
         )
-        for prediction in getattr(getattr(result, "decision", None), "cutin_candidates", ())
+        if trajectory_decision is not None
+        else tuple(
+          Candidate(
+            prediction_track_id(prediction), prediction.cutin_prob, "MLP decision cutin",
+            cutin_threshold, d_rel=prediction.features.radar_object.d_rel,
+            y_rel=prediction.features.radar_object.y_rel,
+            track_aliases=aliases_for(prediction_track_id(prediction)),
+          )
+          for prediction in getattr(getattr(result, "decision", None), "cutin_candidates", ())
+        )
       )
       active_cutins = tuple(
         candidate for lead in output.leads_cutin
@@ -1984,6 +2616,150 @@ class ProductionHybridLeadSelector:
         else "MLP active external" if lead_two_id in external_ids
         else "MLP active stealth"
       )
+
+      decision_prediction_ids = (
+        tuple(
+          frozenset((prediction.track_id, *aliases_for(prediction.track_id)))
+          for prediction in trajectory_confirmed
+        )
+        if trajectory_decision is not None
+        else tuple(
+          prediction_ids(prediction)
+          for prediction in getattr(getattr(result, "decision", None), "cutin_candidates", ())
+        )
+      )
+      active_candidate_ids = tuple(candidate_track_ids(candidate) for candidate in active_cutins)
+      selected_cutin_ids = (
+        candidate_track_ids(_output_candidate(
+          output.lead_two,
+          lead_two_reason,
+          aliases_for(int(output.lead_two["radarTrackId"])),
+        ))
+        if output.lead_two is not None and "cutin" in lead_two_reason
+        else frozenset()
+      )
+      cutin_diagnostics: list[Candidate] = []
+      if trajectory_available:
+        primary_d_rel = (
+          float(output.lead_one["dRel"])
+          if output.lead_one is not None
+          else None
+        )
+        tentative_ids = {
+          (prediction.source, prediction.track_id, prediction.trajectory.continuity_id)
+          for prediction in trajectory_tentative
+        }
+        exiting_ids = {
+          (prediction.source, prediction.track_id, prediction.trajectory.continuity_id)
+          for prediction in trajectory_exiting
+        }
+        for prediction in trajectory_predictions:
+          track_id = prediction.track_id
+          ids = frozenset((track_id, *aliases_for(track_id)))
+          in_decision = any(ids.intersection(candidate_ids) for candidate_ids in decision_prediction_ids)
+          in_output = any(ids.intersection(candidate_ids) for candidate_ids in active_candidate_ids)
+          is_selected = bool(ids.intersection(selected_cutin_ids))
+          identity = (prediction.source, track_id, prediction.trajectory.continuity_id)
+          point_threshold = trajectory_threshold(prediction)
+          raw = "/".join(f"{value:.2f}" for value in prediction.horizon_probabilities)
+          if is_selected:
+            stage = "SELECTED"
+            final_detail = "selected as leadTwo"
+          elif in_output:
+            stage = "OUTPUT"
+            final_detail = "controller output; another target selected"
+          elif in_decision:
+            stage = "DECISION"
+            final_detail = "confirmed; blocked by controller/dedup"
+          elif identity in tentative_ids:
+            stage = "WAIT-CONFIRM"
+            final_detail = "above tentative threshold; waiting for second hit"
+          elif identity in exiting_ids:
+            stage = "PATH-EXIT"
+            final_detail = f"path exit {prediction.path_exit_probability:.2f}"
+          elif primary_d_rel is not None and float(getattr(
+            prediction.point, "d_rel", getattr(prediction.point, "dRel", math.inf),
+          )) > primary_d_rel:
+            stage = "BLOCK-LEAD"
+            final_detail = f"behind leadOne {primary_d_rel:.1f}m"
+          else:
+            stage = "BLOCK-PROB"
+            final_detail = f"max {prediction.probability:.2f} < {point_threshold:.2f}"
+          cutin_diagnostics.append(Candidate(
+            track_id=track_id,
+            score=float(prediction.probability),
+            reason=f"trajectory {_source_mode_name(prediction.source)} path-entry",
+            decision_threshold=point_threshold,
+            d_rel=float(getattr(prediction.point, "d_rel", getattr(prediction.point, "dRel", 0.0))),
+            y_rel=float(getattr(prediction.point, "y_rel", getattr(prediction.point, "yRel", 0.0))),
+            track_aliases=aliases_for(track_id),
+            base_score=float(prediction.horizon_probabilities[0]),
+            temporal_score=float(prediction.horizon_probabilities[1]),
+            horizon_scores=prediction.horizon_probabilities,
+            path_exit_score=float(prediction.path_exit_probability),
+            current_path_occupancy=bool(prediction.current_path_occupancy),
+            stage=stage,
+            detail=f"occupancy .5/1/1.5/2s {raw}; {final_detail}",
+          ))
+      else:
+        diagnostic_filter = secondary_filter or RadarLeadDecisionFilter(
+          cutin_threshold=cutin_threshold,
+          external_threshold=external_threshold,
+        )
+        for prediction in secondary_predictions:
+          track_id = prediction_track_id(prediction)
+          ids = frozenset(prediction_ids(prediction))
+          usable, strong, holdable, near_corner, predicted_entry = diagnostic_filter._cutin_geometry(prediction)
+          reliable = diagnostic_filter._reliable(prediction)
+          dynamic_threshold = min(
+            cutin_threshold,
+            0.50 if near_corner else 0.75 if predicted_entry else cutin_threshold,
+          )
+          in_decision = any(ids.intersection(candidate_ids) for candidate_ids in decision_prediction_ids)
+          in_output = any(ids.intersection(candidate_ids) for candidate_ids in active_candidate_ids)
+          is_selected = bool(ids.intersection(selected_cutin_ids))
+          sample = prediction.features
+          if is_selected:
+            stage = "SELECTED"
+            detail = "selected as leadTwo"
+          elif in_output:
+            stage = "OUTPUT"
+            detail = "controller output; another target selected"
+          elif in_decision:
+            stage = "DECISION"
+            detail = "decision active; blocked by controller/dedup"
+          elif not reliable:
+            stage = "BLOCK-RELIABILITY"
+            detail = f"age {sample.track_age} not control-reliable"
+          elif not usable:
+            stage = "BLOCK-GEOMETRY"
+            detail = (
+              f"dPath {sample.d_path:+.2f}->{sample.d_path_future:+.2f} "
+              f"yv {sample.radar_object.yv_rel:+.2f} age {sample.track_age}"
+            )
+          elif prediction.cutin_prob < dynamic_threshold:
+            stage = "BLOCK-PROB"
+            detail = f"final {prediction.cutin_prob:.2f} < entry {dynamic_threshold:.2f}"
+          elif not strong and not holdable:
+            stage = "BLOCK-HOLD"
+            detail = "entry geometry is not persistent"
+          else:
+            stage = "WAIT-CONFIRM"
+            detail = "waiting for repeated identity/history confirmation"
+          cutin_diagnostics.append(Candidate(
+            track_id=track_id,
+            score=float(prediction.cutin_prob),
+            reason=f"MLP {source_name} cutin",
+            decision_threshold=dynamic_threshold,
+            d_rel=float(sample.radar_object.d_rel),
+            y_rel=float(sample.radar_object.y_rel),
+            track_aliases=aliases_for(track_id),
+            base_score=float(prediction.base_cutin_prob),
+            temporal_score=float(prediction.temporal_cutin_prob),
+            stage=stage,
+            detail=detail,
+          ))
+
       selections.append(Selection(
         lead_one=_output_candidate(
           output.lead_one,
@@ -1996,8 +2772,17 @@ class ProductionHybridLeadSelector:
           aliases_for(int(output.lead_two["radarTrackId"])) if output.lead_two is not None else (),
         ),
         lead_two_tentative=output.lead_two_tentative if lead_two_id in cutin_ids else None,
-        front_candidates=(),
-        corner_candidates=raw_cutins,
+        front_candidates=tuple(
+          candidate for candidate in raw_cutins if "trajectory front" in candidate.reason
+        ),
+        corner_candidates=tuple(
+          candidate for candidate in raw_cutins
+          if "trajectory corner" in candidate.reason or not trajectory_available
+        ),
+        cutin_diagnostics=tuple(sorted(
+          cutin_diagnostics,
+          key=lambda candidate: (-candidate.score, candidate.d_rel or math.inf),
+        )),
         decision_cutin_candidates=decision_cutins,
         active_cutin_candidates=active_cutins,
         external_candidates=raw_external,
@@ -2034,7 +2819,10 @@ class SimulatorUI:
     log_path: Path,
     include_scc_fusion: bool = False,
     review: ValidationReview | None = None,
+    reviews: tuple[ValidationReview, ...] = (),
+    validation_cases_path: Path | None = None,
     radard_selector: LeadSelector | None = None,
+    initial_probability: float | None = None,
   ) -> None:
     import pyray as rl
     self.rl = rl
@@ -2052,13 +2840,24 @@ class SimulatorUI:
     self.show_front_candidates = review is None
     self.show_corner_candidates = review is None
     self.show_external_candidates = review is None
-    self.show_radar_points = review is None
+    self.show_radar_points = True
+    self.show_trajectories = review is not None or bool(reviews)
     # Raw sensor points are the least ambiguous default for diagnosis. FUSED
     # can still be enabled to inspect the objects actually passed to the model.
     self.show_fused_objects = False
-    self.min_candidate_probability = 0.5
+    self.review_settings_path = default_review_settings_path()
+    self.min_candidate_probability = (
+      min(max(float(initial_probability), 0.0), 1.0)
+      if initial_probability is not None
+      else load_review_probability(self.review_settings_path)
+    )
+    if initial_probability is not None:
+      save_review_probability(self.min_candidate_probability, self.review_settings_path)
     self.filter_checkboxes: dict[str, Any] = {}
+    self.review_label_buttons: dict[str, Any] = {}
     self.probability_slider: Any | None = None
+    self.trajectory_horizon_slider: Any | None = None
+    self.trajectory_horizon_s = 1.0
     self.playback_time = 0.0
     self.labels = labels
     self.label_path = label_path
@@ -2066,10 +2865,14 @@ class SimulatorUI:
     self.selected_role = "leadOne"
     self.range_anchor: tuple[int, str, int | None] | None = None
     self.label_status = f"labels: {labels.count()} loaded"
-    self.review = review
+    self.reviews = reviews or ((review,) if review is not None else ())
+    self.review = review or (self.reviews[0] if self.reviews else None)
+    self.validation_cases_path = validation_cases_path
+    self.trajectory_review_labels = self._load_trajectory_review_labels()
     self.radard_selector = radard_selector
     self.review_events: dict[int, tuple[str, ...]] = {}
     self.review_handled: set[int] = set()
+    self.review_suppressed: set[int] = set()
     self.review_status = ""
     self.lead_expected_prefix: list[int] = [0]
     self.lead_matched_prefix: list[int] = [0]
@@ -2081,6 +2884,11 @@ class SimulatorUI:
       lead_comparison_series(self.frames, self.radard_selector, self.selector)
       if self.review is not None else ()
     )
+    self.cutin_stages = (
+      cutin_stage_series(self.frames, self.selector)
+      if self.review is not None else ()
+    )
+    self.trajectories = radar_trajectory_series(self.frames)
     fusion = RadarObjectFusion(include_scc=include_scc_fusion)
     self.fused_frames = tuple(fusion.update(frame.mono_time_s, frame.points) for frame in frames)
     self.video_path = qcamera_path_for_log(log_path)
@@ -2168,8 +2976,92 @@ class SimulatorUI:
   def _prepare_review_events(self) -> None:
     if self.review is None:
       return
-    self.review_events = validation_review_events(self.frames, self.selector, self.review)
-    self.review_status = "AUTO REVIEW ARMED"
+    if len(self.reviews) > 1:
+      base_events = validation_log_review_events(self.frames, self.selector, self.reviews)
+    else:
+      base_events = validation_review_events(self.frames, self.selector, self.review)
+    sources = tuple(review.source.lower() for review in self.reviews) or (self.review.source.lower(),)
+    has_model_probabilities = any(
+      any("trajectory " in candidate.reason.lower() for candidate in self.selector.select(frame, index).cutin_diagnostics)
+      for index, frame in enumerate(self.frames)
+    )
+    trajectory_events = (
+      trajectory_model_review_events(
+        self.frames, self.selector, sources, self.min_candidate_probability,
+      )
+      if has_model_probabilities
+      else trajectory_review_events(
+        self.frames,
+        self.trajectories,
+        sources,
+        self.trajectory_horizon_s,
+        self.min_candidate_probability,
+      )
+    )
+    merged = {index: list(events) for index, events in base_events.items()}
+    for index, events in trajectory_events.items():
+      bucket = merged.setdefault(index, [])
+      bucket.extend(event for event in events if event not in bucket)
+    self.review_events = {index: tuple(events) for index, events in merged.items()}
+    self.review_suppressed = {
+      index
+      for index, events in trajectory_events.items()
+      if index not in base_events and self._trajectory_events_fully_labeled(index, events)
+    }
+    self.review_handled = set(self.review_suppressed)
+    self.review_status = (
+      f"AUTO REVIEW ARMED  {len(self.reviews)} case(s), "
+      + f"prob {self.min_candidate_probability:.2f}  "
+      + f"unlabeled {len(trajectory_events) - len(self.review_handled)}"
+    )
+
+  @staticmethod
+  def _trajectory_event_track_ids(events: Iterable[str]) -> tuple[int, ...]:
+    track_ids: list[int] = []
+    for event in events:
+      if not event.startswith("TRAJECTORY "):
+        continue
+      tokens = event.replace(":", " ").split()
+      for token_index, token in enumerate(tokens[:-1]):
+        if token != "id":
+          continue
+        try:
+          track_ids.append(int(tokens[token_index + 1]))
+        except ValueError:
+          pass
+    return tuple(track_ids)
+
+  def _trajectory_label_key_at(self, frame_index: int, track_id: int) -> tuple[float, int]:
+    time_key = round(self.frames[frame_index].time_s * 20.0) / 20.0
+    return time_key, track_id
+
+  def _trajectory_events_fully_labeled(self, frame_index: int, events: Iterable[str]) -> bool:
+    track_ids = self._trajectory_event_track_ids(events)
+    return bool(track_ids) and all(
+      self._trajectory_label_key_at(frame_index, track_id) in self.trajectory_review_labels
+      for track_id in track_ids
+    )
+
+  def _review_containing_time(self, time_s: float) -> ValidationReview | None:
+    matches = [
+      review for review in self.reviews
+      if review.start_s <= time_s <= review.end_s
+    ]
+    return min(
+      matches,
+      key=lambda review: (review.end_s - review.start_s, abs((review.start_s + review.end_s) * 0.5 - time_s)),
+      default=None,
+    )
+
+  def _review_for_time(self, time_s: float) -> ValidationReview | None:
+    containing = self._review_containing_time(time_s)
+    if containing is not None:
+      return containing
+    return min(
+      self.reviews,
+      key=lambda review: min(abs(time_s - review.start_s), abs(time_s - review.end_s)),
+      default=None,
+    )
 
   def _pause_for_review(self, previous_index: int, current_index: int) -> None:
     if self.review is None or current_index <= previous_index:
@@ -2182,6 +3074,24 @@ class SimulatorUI:
         self.review_status = f"PAUSED @{self.times[index]:.2f}s: " + " + ".join(self.review_events[index])
         play_review_alert(self.review_events[index])
         return
+
+  def _rearm_review_after(self, frame_index: int) -> None:
+    suppressed = getattr(self, "review_suppressed", set())
+    self.review_handled.difference_update(
+      index
+      for index in self.review_events
+      if index > frame_index and index not in suppressed
+    )
+    self.review_status = (
+      f"AUTO REVIEW REARMED after {self.times[frame_index]:.2f}s  "
+      + f"prob {self.min_candidate_probability:.2f}"
+    )
+
+  def _user_seek(self, time_s: float) -> None:
+    previous_index = self.index
+    self.seek(time_s)
+    if self.index < previous_index:
+      self._rearm_review_after(self.index)
 
   def _color(self, value: tuple[int, int, int, int]) -> Any:
     return self.rl.Color(*value)
@@ -2201,6 +3111,9 @@ class SimulatorUI:
     self.playback_time = min(max(0.0, time_s), self.times[-1])
     self.index = min(bisect.bisect_right(self.times, self.playback_time) - 1, len(self.frames) - 1)
     self.index = max(0, self.index)
+    active_review = self._review_for_time(self.playback_time)
+    if active_review is not None:
+      self.review = active_review
 
   def _track_point(self, frame: RadarFrame, track_id: int) -> RadarPoint | None:
     return next((point for point in frame.points if point.track_id == track_id), None)
@@ -2210,7 +3123,8 @@ class SimulatorUI:
     bottom = map_rect.y + map_rect.height - 34.0
     top = map_rect.y + 34.0
     scale_y = (bottom - top) / self.forward_range_m
-    scale_x = min(map_rect.width / 24.0, scale_y * 2.4)
+    lateral_zoom = 4.0 if self.review is not None else 1.0
+    scale_x = min(map_rect.width / (24.0 / lateral_zoom), scale_y * 2.4 * lateral_zoom)
     return rl.Vector2(map_rect.x + map_rect.width * 0.5 - lateral * scale_x, bottom - distance * scale_y)
 
   def _draw_world_line(self, map_rect: Any, points: tuple[tuple[float, float], ...], color: Any, width: float) -> None:
@@ -2231,17 +3145,149 @@ class SimulatorUI:
       return self._color(self.PURPLE)
     return self._color(self.CYAN)
 
-  def _draw_marker(self, map_rect: Any, frame: RadarFrame, point: RadarPoint) -> None:
+  @staticmethod
+  def _stage_code(stage: str) -> str:
+    return {
+      "SELECTED": "S",
+      "OUTPUT": "O",
+      "DECISION": "D",
+      "WAIT-CONFIRM": "W",
+      "BLOCK-RELIABILITY": "R",
+      "BLOCK-GEOMETRY": "G",
+      "BLOCK-LEAD": "L",
+      "PATH-EXIT": "X",
+      "BLOCK-PROB": "P",
+      "BLOCK-HOLD": "H",
+    }.get(stage, "-")
+
+  def _stage_color(self, stage: str) -> tuple[int, int, int, int]:
+    if stage == "SELECTED":
+      return self.GREEN
+    if stage == "OUTPUT":
+      return self.YELLOW
+    if stage == "DECISION":
+      return self.PURPLE
+    if stage == "WAIT-CONFIRM":
+      return self.CYAN
+    if stage == "PATH-EXIT":
+      return self.YELLOW
+    return self.RED
+
+  @staticmethod
+  def _diagnostic_for_point(selection: Selection, track_id: int) -> Candidate | None:
+    matches = (
+      candidate for candidate in selection.cutin_diagnostics
+      if track_id in candidate_track_ids(candidate)
+    )
+    return max(matches, key=lambda candidate: candidate.score, default=None)
+
+  def _trajectory_for_point(self, point: RadarPoint) -> RadarTrajectory | None:
+    return self.trajectories[self.index].get((point.source, point.track_id))
+
+  def _trajectory_color(self, probability: float, alpha: int = 255) -> Any:
+    if probability >= 0.60:
+      value = self.ORANGE
+    elif probability >= 0.30:
+      value = self.CYAN
+    else:
+      value = self.MUTED
+    return self._color((*value[:3], alpha))
+
+  def _draw_trajectory(
+    self,
+    map_rect: Any,
+    point: RadarPoint,
+    trajectory: RadarTrajectory,
+    show_label: bool = True,
+  ) -> None:
+    rl = self.rl
+    if point.d_rel <= 0.5 or point.d_rel > self.forward_range_m:
+      return
+
+    history = [
+      sample for sample in trajectory.history
+      if sample.d_rel <= self.forward_range_m and sample.age_s > 0.01
+    ]
+    history.sort(key=lambda sample: sample.age_s, reverse=True)
+    previous = None
+    for sample in history:
+      position = self._world_to_screen(map_rect, sample.d_rel, sample.y_rel)
+      if previous is not None:
+        rl.draw_line_ex(previous, position, 1.5, self._color((*self.MUTED[:3], 105)))
+      rl.draw_circle_v(position, 2.4, self._color((*self.MUTED[:3], 125)))
+      previous = position
+
+    current = self._world_to_screen(map_rect, point.d_rel, point.y_rel)
+    if previous is not None:
+      rl.draw_line_ex(previous, current, 1.8, self._color((*self.MUTED[:3], 150)))
+    previous = current
+    selected = trajectory_sample_at(trajectory, self.trajectory_horizon_s)
+    for sample in trajectory.samples:
+      if sample.horizon_s <= 0.0 or sample.horizon_s > self.trajectory_horizon_s + 1e-6:
+        continue
+      position = self._world_to_screen(map_rect, sample.d_rel, sample.y_rel)
+      color = self._trajectory_color(sample.occupancy_prob, 205)
+      rl.draw_line_ex(previous, position, 2.0, color)
+      rl.draw_circle_v(position, 3.2 if sample is not selected else 5.0, color)
+      previous = position
+
+    selected_position = self._world_to_screen(map_rect, selected.d_rel, selected.y_rel)
+    sigma_left = self._world_to_screen(
+      map_rect, selected.d_rel, selected.y_rel - selected.lateral_sigma,
+    )
+    sigma_right = self._world_to_screen(
+      map_rect, selected.d_rel, selected.y_rel + selected.lateral_sigma,
+    )
+    selected_color = self._trajectory_color(selected.occupancy_prob, 220)
+    rl.draw_line_ex(sigma_left, sigma_right, 2.0, selected_color)
+    if show_label:
+      label = f"+{selected.horizon_s:.2f}s t{selected.occupancy_prob:.2f}"
+      self._draw_text(label, selected_position.x + 7.0, selected_position.y - 18.0, 12, selected_color)
+
+  def _draw_marker(
+    self,
+    map_rect: Any,
+    frame: RadarFrame,
+    point: RadarPoint,
+    diagnostic: Candidate | None = None,
+    show_score_label: bool = True,
+  ) -> None:
     rl = self.rl
     if point.d_rel <= 0.5 or point.d_rel > self.forward_range_m or abs(point.y_rel) > 12.0:
       return
     position = self._world_to_screen(map_rect, point.d_rel, point.y_rel)
     color = self._source_color(point.source)
-    radius = 6.0 if point.measured else 4.5
+    radius = 8.0 if self.review is not None else 6.0 if point.measured else 4.5
     rl.draw_circle_v(position, radius, color)
-    if self.show_labels:
-      label = f"{point.track_id} {point.d_rel:.0f}m {point.y_rel:+.1f}"
-      self._draw_text(label, position.x + 8, position.y - 8, 13, self._color(self.MUTED))
+    trajectory = self._trajectory_for_point(point)
+    trajectory_probability = (
+      trajectory_entry_probability(trajectory, self.trajectory_horizon_s)
+      if trajectory is not None else 0.0
+    )
+    above_display_threshold = (
+      diagnostic is not None
+      and diagnostic.stage != "BLOCK-LEAD"
+      and diagnostic.score >= self.min_candidate_probability
+    )
+    if diagnostic is not None and (show_score_label or diagnostic.score >= 0.05):
+      stage_color = self._color(
+        self.GREEN if above_display_threshold else self._stage_color(diagnostic.stage)
+      )
+      rl.draw_circle_lines(int(position.x), int(position.y), radius + 3.0, stage_color)
+      if above_display_threshold:
+        rl.draw_circle_lines(int(position.x), int(position.y), radius + 6.0, stage_color)
+    if diagnostic is not None and show_score_label:
+      label = (
+        f"{'!' if above_display_threshold else ''}{point.track_id} "
+        f"IN{diagnostic.score:.2f} OUT{diagnostic.path_exit_score:.2f}"
+        f" {self._stage_code(diagnostic.stage)}"
+      )
+      if trajectory is not None:
+        label += f" t{trajectory_probability:.2f}"
+      self._draw_text(label, position.x + 11, position.y - 10, 14, stage_color)
+    elif show_score_label and (self.show_labels or self.review is not None):
+      label = f"{point.track_id} IN-- OUT-- h{trajectory_probability:.2f} {point.d_rel:.0f}m"
+      self._draw_text(label, position.x + 11, position.y - 9, 13, self._color(self.MUTED))
 
   def _draw_fused_marker(self, map_rect: Any, obj: FusedRadarObject) -> None:
     if obj.d_rel <= 0.5 or obj.d_rel > self.forward_range_m or abs(obj.y_rel) > 12.0:
@@ -2415,8 +3461,50 @@ class SimulatorUI:
         for obj in self.fused_frames[self.index]:
           self._draw_fused_marker(rect, obj)
       else:
-        for point in frame.points:
-          self._draw_marker(rect, frame, point)
+        visible_points = preferred_radar_points(
+          frame, self.review.source if self.review is not None else None,
+        )
+        selected_ids: set[int] = set()
+        for candidate in (selection.lead_one, selection.lead_two):
+          if candidate is not None:
+            selected_ids.update(candidate_track_ids(candidate))
+        annotation_rows: list[tuple[bool, float, float, tuple[str, int]]] = []
+        point_diagnostics: dict[tuple[str, int], Candidate | None] = {}
+        for point in visible_points:
+          key = (point.source, point.track_id)
+          diagnostic = self._diagnostic_for_point(selection, point.track_id)
+          point_diagnostics[key] = diagnostic
+          trajectory = self._trajectory_for_point(point)
+          trajectory_probability = (
+            trajectory_entry_probability(trajectory, self.trajectory_horizon_s)
+            if trajectory is not None else 0.0
+          )
+          model_probability = diagnostic.score if diagnostic is not None else 0.0
+          selected = point.track_id in selected_ids
+          if diagnostic is not None or selected or trajectory_probability >= 0.30:
+            annotation_rows.append((
+              selected,
+              max(model_probability, trajectory_probability),
+              -point.d_rel,
+              key,
+            ))
+        annotation_rows.sort(reverse=True)
+        annotation_keys = {row[3] for row in annotation_rows}
+        if self.show_trajectories:
+          for point in visible_points:
+            trajectory = self._trajectory_for_point(point)
+            if trajectory is not None:
+              key = (point.source, point.track_id)
+              self._draw_trajectory(rect, point, trajectory, key in annotation_keys)
+        for point in visible_points:
+          key = (point.source, point.track_id)
+          self._draw_marker(
+            rect,
+            frame,
+            point,
+            point_diagnostics[key],
+            key in annotation_keys,
+          )
 
     if self.show_recorded_one:
       self._draw_recorded(rect, frame, frame.recorded_one, self._color(self.ORANGE), 12.0, "L1")
@@ -2464,7 +3552,21 @@ class SimulatorUI:
       self._draw_manual_label(rect, frame, "leadOne", self._color(self.ORANGE), 18.0)
       self._draw_manual_label(rect, frame, "leadTwo", self._color(self.YELLOW), 22.0)
 
-    point_legend = "fused objects" if self.show_fused_objects else "radar points"
+    if self.review is not None:
+      visible_points = preferred_radar_points(
+        frame, self.review.source if self.review is not None else None,
+      )
+      point_source = (
+        "corner" if any(point.source.startswith("corner") for point in visible_points)
+        else "front" if any(point.source == "frontRadar" for point in visible_points)
+        else "SCC"
+      )
+      point_legend = (
+        f"{point_source} points lateral x4: p=model, t=trajectory; "
+        f"future dots 0.25s to {self.trajectory_horizon_s:.2f}s"
+      )
+    else:
+      point_legend = "fused objects" if self.show_fused_objects else "radar points"
     extras = f"   {point_legend} enabled" if self.show_radar_points else ""
     comparison_legend = "   circles: current radard L1 cyan / L2 purple" if self.radard_selector is not None else ""
     legend = f"boxes: model L1 orange / L2 yellow{comparison_legend}{extras}"
@@ -2511,8 +3613,21 @@ class SimulatorUI:
     line(f"input age {frame.input_age_s * 1000:4.0f}ms    model age {frame.model_age_s * 1000:4.0f}ms", self.MUTED, 15, 30)
 
     if self.review is not None:
-      line(f"REPLAY {self.review.case_id}  {self.review.source}", self.PURPLE, 14, 21)
+      review_number = self.reviews.index(self.review) + 1 if self.review in self.reviews else 1
+      line(
+        f"REPLAY CASE {review_number}/{max(len(self.reviews), 1)}  "
+        f"{self.review.case_id}  {self.review.source}",
+        self.PURPLE, 14, 21,
+      )
       line(self.review.scene[:58], self.MUTED, 13, 20)
+      line(
+        (
+          f"LABEL {self.review.expected.upper()} "
+          f"{'HUMAN VERIFIED' if self.review.human_verified else 'UNVERIFIED'}  "
+          f"window {self.review.start_s:.2f}-{self.review.end_s:.2f}s"
+        ),
+        self.YELLOW, 13, 20,
+      )
       status_color = self.YELLOW if self.paused else self.GREEN
       line(self.review_status, status_color, 14, 27)
 
@@ -2530,6 +3645,87 @@ class SimulatorUI:
           next(iter(selection.decision_cutin_candidates), None),
         )
         line("decision  " + self._candidate_text(frame, decision), self.PURPLE, 15, 24)
+
+      visible_points = preferred_radar_points(
+        frame, self.review.source if self.review is not None else None,
+      )
+      point_source = (
+        "CORNER" if any(point.source.startswith("corner") for point in visible_points)
+        else "FRONT" if any(point.source == "frontRadar" for point in visible_points)
+        else "SCC"
+      )
+      line(
+        f"{point_source} MODEL + TRAJECTORY  horizon {self.trajectory_horizon_s:.2f}s",
+        self.MUTED, 14, 21,
+      )
+      line(
+        (
+          f"ego steer {frame.steering_angle_deg:+.0f}deg "
+          f"rate {frame.steering_rate_deg_s:+.0f}deg/s "
+          f"yaw {math.degrees(frame.yaw_rate_rad_s):+.1f}deg/s"
+          f"{' est' if frame.yaw_rate_estimated else ''}"
+        ),
+        self.MUTED, 12, 17,
+      )
+      point_rows = []
+      for point in visible_points:
+        diagnostic = self._diagnostic_for_point(selection, point.track_id)
+        trajectory = self._trajectory_for_point(point)
+        trajectory_probability = (
+          trajectory_entry_probability(trajectory, self.trajectory_horizon_s)
+          if trajectory is not None else 0.0
+        )
+        model_probability = diagnostic.score if diagnostic is not None else 0.0
+        point_rows.append((
+          max(
+            model_probability,
+            diagnostic.path_exit_score if diagnostic is not None else 0.0,
+            trajectory_probability,
+          ),
+          point,
+          diagnostic,
+          trajectory,
+          trajectory_probability,
+        ))
+      point_rows.sort(key=lambda item: (-item[0], item[1].d_rel))
+      for _, point, diagnostic, trajectory, trajectory_probability in point_rows[:6]:
+        model_probability = diagnostic.score if diagnostic is not None else 0.0
+        stage = diagnostic.stage if diagnostic is not None else "NO-MODEL"
+        if trajectory is not None and trajectory.time_to_entry_s is not None:
+          tte = f"{trajectory.time_to_entry_s:.2f}s"
+        else:
+          tte = "--"
+        line(
+          (
+            f"id{point.track_id} IN{model_probability:.2f} "
+            f"OUT{(diagnostic.path_exit_score if diagnostic is not None else 0.0):.2f} "
+            f"H{trajectory_probability:.2f} "
+            f"tte {tte} d{point.d_rel:.0f} y{point.y_rel:+.1f} {stage}"
+          ),
+          self._stage_color(diagnostic.stage) if diagnostic is not None else self.MUTED,
+          13,
+          18,
+        )
+        if trajectory is not None:
+          lane = (
+            f"lane p{trajectory.lane_probability:.2f}"
+            if trajectory.lane_reliable else "path fallback"
+          )
+          model_reason = diagnostic.detail if diagnostic is not None else "not emitted by model"
+          line(
+            (
+              f"  rate {trajectory.d_path_rate:+.2f}m/s "
+              f"sigma {trajectory_sample_at(trajectory, self.trajectory_horizon_s).lateral_sigma:.2f} "
+              f"rot {trajectory.ego_rotation_lateral_speed:.2f} "
+              f"amb {trajectory.turn_ambiguity:.2f}; "
+              f"{lane}; {trajectory.reason}; {model_reason}"
+            )[:72],
+            self.MUTED, 12, 17,
+          )
+        elif diagnostic is not None:
+          line("  no trajectory history; " + diagnostic.detail[:48], self.MUTED, 12, 17)
+      if not point_rows:
+        line("no displayed sensor points", self.MUTED, 13, 20)
 
     if self.radard_selector is not None:
       radard = self.radard_selector.select(frame, self.index)
@@ -2618,12 +3814,64 @@ class SimulatorUI:
           source = {"frontRadar": "F", "scc": "S", "corner235": "C235", "corner180": "C180"}.get(point.source, point.source[:5])
           line(f"{point.track_id:5d}  {source:4s}  d {point.d_rel:5.1f}  y {point.y_rel:+5.1f}  v {point.v_rel:+5.1f}", self.MUTED, 14, 19)
 
+    self._draw_review_label_controls(rect)
     self._draw_filter_controls(rect)
+
+  def _draw_review_label_controls(self, rect: Any) -> None:
+    self.review_label_buttons = {}
+    if self.review is None:
+      return
+
+    rl = self.rl
+    x = rect.x + 20.0
+    y = rect.y + rect.height - 205.0
+    review_point = self._trajectory_event_point()
+    maintained_review = (
+      None if review_point is not None
+      else self._review_containing_time(self.playback_time)
+    )
+    if maintained_review is None and review_point is None:
+      review_point = self._review_event_point()
+    manual_expected = (
+      self.trajectory_review_labels.get(self._trajectory_review_label_key(review_point))
+      if review_point is not None
+      else None
+    )
+    if maintained_review is None:
+      target = f" id{review_point.track_id}" if review_point is not None else ""
+      saved = f"  SAVED {manual_expected.upper()}" if manual_expected else "  UNVERIFIED"
+      heading = f"TRAJECTORY LABEL{target}{saved}  SEPARATE FILE"
+    else:
+      verification = "HUMAN VERIFIED" if maintained_review.human_verified else "UNVERIFIED"
+      heading = f"GROUND TRUTH  {verification}"
+    self._draw_text(heading, x, y, 13, self._color(self.MUTED))
+    y += 21.0
+    labels = (
+      ("detect", "CUT-IN", self.ORANGE),
+      ("clear", "CLEAR", self.GREEN),
+      ("stationary", "STATIONARY", self.CYAN),
+    )
+    button_x = x
+    for expected, label, color_value in labels:
+      width = self._measure_text(label, 13) + 28.0
+      button = rl.Rectangle(button_x, y, width, 25.0)
+      self.review_label_buttons[expected] = button
+      active = (
+        maintained_review.expected == expected
+        if maintained_review is not None
+        else manual_expected == expected
+      )
+      color = self._color(color_value)
+      if active:
+        rl.draw_rectangle_rec(button, self._color((*color_value[:3], 42)))
+      rl.draw_rectangle_lines_ex(button, 2.0 if active else 1.0, color if active else self._color(self.MUTED))
+      self._draw_text(label, button.x + 14.0, button.y + 5.0, 13, color if active else self._color(self.TEXT))
+      button_x += width + 8.0
 
   def _draw_filter_controls(self, rect: Any) -> None:
     rl = self.rl
     x = rect.x + 20.0
-    y = rect.y + rect.height - 105.0
+    y = rect.y + rect.height - (136.0 if self.review is not None else 105.0)
     self._draw_text("DISPLAY FILTERS", x, y, 13, self._color(self.MUTED))
     y += 22.0
     self.filter_checkboxes = {}
@@ -2635,6 +3883,7 @@ class SimulatorUI:
       ("corner", "CUTIN" if multitask else "CORNER", self.show_corner_candidates),
       ("external", "EXT", self.show_external_candidates),
       ("points", "POINTS", self.show_radar_points),
+      ("trajectory", "PATH", self.show_trajectories),
       ("fused", "FUSED", self.show_fused_objects),
     )
     control_x = x
@@ -2664,17 +3913,63 @@ class SimulatorUI:
     rl.draw_line_ex(rl.Vector2(slider_x, track_y), rl.Vector2(knob_x, track_y), 4.0, self._color(self.GREEN))
     rl.draw_circle_v(rl.Vector2(knob_x, track_y), 7.0, self._color(self.TEXT))
 
+    if self.review is not None:
+      horizon_y = slider_y + 29.0
+      self._draw_text(
+        f"PREDICT {self.trajectory_horizon_s:.2f}s",
+        x, horizon_y - 4.0, 13, self._color(self.TEXT),
+      )
+      horizon_x = x + 108.0
+      horizon_width = max(100.0, rect.width - 150.0)
+      self.trajectory_horizon_slider = rl.Rectangle(
+        horizon_x, horizon_y - 7.0, horizon_width, 18.0,
+      )
+      horizon_track_y = horizon_y + 1.0
+      horizon_ratio = (self.trajectory_horizon_s - 0.25) / 1.75
+      horizon_knob_x = horizon_x + horizon_width * horizon_ratio
+      rl.draw_line_ex(
+        rl.Vector2(horizon_x, horizon_track_y),
+        rl.Vector2(horizon_x + horizon_width, horizon_track_y),
+        4.0, self._color(self.GRID),
+      )
+      rl.draw_line_ex(
+        rl.Vector2(horizon_x, horizon_track_y),
+        rl.Vector2(horizon_knob_x, horizon_track_y),
+        4.0, self._color(self.CYAN),
+      )
+      rl.draw_circle_v(
+        rl.Vector2(horizon_knob_x, horizon_track_y), 7.0, self._color(self.TEXT),
+      )
+    else:
+      self.trajectory_horizon_slider = None
+
   def _draw_timeline(self, width: int, height: int) -> Any:
     rl = self.rl
     rect = rl.Rectangle(24.0, float(height - 38), float(width - 48), 13.0)
     plot_rect = self._draw_lead_comparison_plot(width, rect.y) if self.review is not None else None
     rl.draw_rectangle_rounded(rect, 1.0, 8, self._color((55, 65, 75, 255)))
     if self.review is not None and self.times[-1] > 0.0:
+      for review in self.reviews:
+        start_ratio = min(max(review.start_s / self.times[-1], 0.0), 1.0)
+        end_ratio = min(max(review.end_s / self.times[-1], 0.0), 1.0)
+        review_rect = rl.Rectangle(
+          rect.x + rect.width * start_ratio,
+          rect.y - 4.0,
+          max(2.0, rect.width * (end_ratio - start_ratio)),
+          3.0,
+        )
+        color = self.PURPLE if review.expected == "detect" else self.CYAN
+        rl.draw_rectangle_rec(review_rect, self._color((*color[:3], 180)))
       for index in self.review_events:
         event_ratio = min(max(self.times[index] / self.times[-1], 0.0), 1.0)
         marker_x = rect.x + rect.width * event_ratio
         events = self.review_events[index]
-        marker_color = self.PURPLE if any(event.startswith("CUT-IN") for event in events) else self.RED
+        if any("TRAJECTORY" in event for event in events):
+          marker_color = self.ORANGE
+        elif any("CUT-IN" in event for event in events):
+          marker_color = self.PURPLE
+        else:
+          marker_color = self.RED
         rl.draw_line_ex(
           rl.Vector2(marker_x, rect.y - 5.0), rl.Vector2(marker_x, rect.y + rect.height + 5.0),
           2.0, self._color(marker_color),
@@ -2695,7 +3990,7 @@ class SimulatorUI:
 
   def _draw_lead_comparison_plot(self, width: int, timeline_y: float) -> Any:
     rl = self.rl
-    rect = rl.Rectangle(24.0, timeline_y - 154.0, float(width - 48), 130.0)
+    rect = rl.Rectangle(24.0, timeline_y - 214.0, float(width - 48), 190.0)
     rl.draw_rectangle_rec(rect, self._color((11, 15, 20, 255)))
     rl.draw_rectangle_lines_ex(rect, 1.0, self._color(self.GRID))
 
@@ -2721,7 +4016,7 @@ class SimulatorUI:
       legend_x += self._measure_text(item, 13) + 52.0
 
     graph_top = rect.y + 29.0
-    graph_bottom = rect.y + rect.height - 9.0
+    graph_bottom = rect.y + 105.0
     graph_height = graph_bottom - graph_top
     max_distance = 100.0
     for distance in (0.0, 50.0, 100.0):
@@ -2758,8 +4053,55 @@ class SimulatorUI:
 
     cursor_x = plot_left + plot_width * min(max(self.playback_time / total_time, 0.0), 1.0)
     rl.draw_line_ex(
-      rl.Vector2(cursor_x, graph_top), rl.Vector2(cursor_x, graph_bottom), 1.5, self._color(self.TEXT),
+      rl.Vector2(cursor_x, graph_top), rl.Vector2(cursor_x, rect.y + rect.height - 8.0),
+      1.5, self._color(self.TEXT),
     )
+
+    probability_top = rect.y + 121.0
+    probability_bottom = rect.y + rect.height - 9.0
+    probability_height = probability_bottom - probability_top
+    threshold_y = probability_bottom - probability_height * self.min_candidate_probability
+    rl.draw_line_ex(
+      rl.Vector2(plot_left, threshold_y), rl.Vector2(rect.x + rect.width - 8.0, threshold_y),
+      1.0, self._color(self.GRID),
+    )
+    self._draw_text("CUT-IN", rect.x + 5.0, probability_top - 3.0, 11, self._color(self.MUTED))
+    self._draw_text(f"{self.min_candidate_probability:.2f}", rect.x + 5.0, threshold_y - 6.0, 10, self._color(self.MUTED))
+    stage_legend = (
+      ("MODEL", "model", self.CYAN),
+      ("DECISION", "decision", self.PURPLE),
+      ("OUTPUT", "output", self.YELLOW),
+      ("SELECTED", "selected", self.GREEN),
+    )
+    stage_x = rect.x + 70.0
+    current_stage = self.cutin_stages[self.index]
+    for label, field, color_value in stage_legend:
+      candidate = getattr(current_stage, field)
+      value = "--" if candidate is None else f"{candidate.score:.2f}"
+      item = f"{label} {value}"
+      self._draw_text(item, stage_x, probability_top - 2.0, 11, self._color(color_value))
+      stage_x += self._measure_text(item, 11) + 20.0
+
+    for _, field, color_value in stage_legend:
+      previous: tuple[float, float, float] | None = None
+      color = self._color(color_value)
+      for frame, values in zip(self.frames, self.cutin_stages, strict=True):
+        candidate = getattr(values, field)
+        if candidate is None:
+          previous = None
+          continue
+        x = plot_left + plot_width * min(max(frame.time_s / total_time, 0.0), 1.0)
+        score = min(max(candidate.score, 0.0), 1.0)
+        y = probability_bottom - probability_height * score
+        if previous is not None:
+          previous_time, previous_x, previous_y = previous
+          if frame.time_s - previous_time <= max_gap_s:
+            rl.draw_line_ex(rl.Vector2(previous_x, previous_y), rl.Vector2(x, y), 1.8, color)
+        previous = (frame.time_s, x, y)
+      candidate = getattr(current_stage, field)
+      if candidate is not None:
+        y = probability_bottom - probability_height * min(max(candidate.score, 0.0), 1.0)
+        rl.draw_circle_v(rl.Vector2(cursor_x, y), 3.5, color)
     return rect
 
   def _save_labels(self) -> None:
@@ -2774,6 +4116,129 @@ class SimulatorUI:
     value = "NONE" if track_id is None else f"id {track_id}"
     self.label_status = f"frame {self.index + 1} {self.selected_role} = {value}"
     self._save_labels()
+
+  def _set_review_expected(self, expected: str) -> bool:
+    if self.review is None or self.validation_cases_path is None:
+      return False
+
+    trajectory_point = self._trajectory_event_point()
+    maintained_review = (
+      None if trajectory_point is not None
+      else self._review_containing_time(self.playback_time)
+    )
+    try:
+      if trajectory_point is not None:
+        labels_path = self.validation_cases_path.with_name("radar_trajectory_labels.json")
+        saved_target = upsert_trajectory_review_label(
+          labels_path,
+          self.log_path,
+          self.frames[self.index],
+          trajectory_point,
+          expected,
+          self.trajectory_horizon_s,
+        )
+        self.trajectory_review_labels[
+          self._trajectory_review_label_key(trajectory_point)
+        ] = expected
+      elif maintained_review is not None:
+        update_validation_case_label(
+          self.validation_cases_path, maintained_review.case_id, expected,
+        )
+        updated = replace(maintained_review, expected=expected, human_verified=True)
+        self.reviews = tuple(
+          updated if review.case_id == updated.case_id else review
+          for review in self.reviews
+        )
+        self.review = updated
+        saved_target = updated.case_id
+      else:
+        point = self._review_event_point()
+        if point is None:
+          self.review_status = "LABEL SAVE FAILED: no trajectory point at this frame"
+          return False
+        labels_path = self.validation_cases_path.with_name("radar_trajectory_labels.json")
+        saved_target = upsert_trajectory_review_label(
+          labels_path,
+          self.log_path,
+          self.frames[self.index],
+          point,
+          expected,
+          self.trajectory_horizon_s,
+        )
+        self.trajectory_review_labels[self._trajectory_review_label_key(point)] = expected
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+      self.review_status = f"LABEL SAVE FAILED: {exc}"
+      return False
+
+    self._prepare_review_events()
+    self.review_status = (
+      f"LABEL SAVED: {saved_target} = {expected.upper()} (HUMAN VERIFIED)"
+    )
+    self.paused = False
+    return True
+
+  def _trajectory_review_label_key(self, point: RadarPoint) -> tuple[float, int]:
+    return self._trajectory_label_key_at(self.index, point.track_id)
+
+  def _load_trajectory_review_labels(self) -> dict[tuple[float, int], str]:
+    if self.validation_cases_path is None:
+      return {}
+    labels_path = self.validation_cases_path.with_name("radar_trajectory_labels.json")
+    if not labels_path.is_file():
+      return {}
+    try:
+      payload = json.loads(labels_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+      return {}
+
+    vehicle_folder = self.log_path.parent.parent.name
+    relative_log = f"{self.log_path.parent.name}/{self.log_path.name}"
+    labels: dict[tuple[float, int], str] = {}
+    for item in payload.get("labels", ()):
+      if (
+        str(item.get("vehicle_folder", "")) != vehicle_folder
+        or str(item.get("log", "")) != relative_log
+      ):
+        continue
+      try:
+        key = float(item["time_s"]), int(item["track_id"])
+      except (KeyError, TypeError, ValueError):
+        continue
+      labels[key] = str(item.get("expected", ""))
+    return labels
+
+  def _review_event_point(self) -> RadarPoint | None:
+    trajectory_point = self._trajectory_event_point()
+    if trajectory_point is not None:
+      return trajectory_point
+
+    frame = self.frames[self.index]
+    preferred = preferred_radar_points(frame, self.review.source if self.review else None)
+    candidates = []
+    for point in preferred:
+      trajectory = self._trajectory_for_point(point)
+      if trajectory is not None:
+        candidates.append((
+          trajectory_entry_probability(trajectory, self.trajectory_horizon_s),
+          point,
+        ))
+    return max(candidates, key=lambda item: item[0], default=(0.0, None))[1]
+
+  def _trajectory_event_point(self) -> RadarPoint | None:
+    events = self.review_events.get(self.index, ())
+    event_track_ids = self._trajectory_event_track_ids(events)
+    if not event_track_ids:
+      return None
+    frame = self.frames[self.index]
+    unlabeled_track_ids = tuple(
+      track_id for track_id in event_track_ids
+      if self._trajectory_label_key_at(self.index, track_id) not in self.trajectory_review_labels
+    )
+    for track_id in (*unlabeled_track_ids, *event_track_ids):
+      point = next((item for item in frame.points if item.track_id == track_id), None)
+      if point is not None:
+        return point
+    return None
 
   def _nearest_clicked_point(self, map_rect: Any, frame: RadarFrame, mouse: Any) -> RadarPoint | None:
     visible = [
@@ -2808,16 +4273,16 @@ class SimulatorUI:
     shift = rl.is_key_down(rl.KEY_LEFT_SHIFT) or rl.is_key_down(rl.KEY_RIGHT_SHIFT)
     if rl.is_key_pressed(rl.KEY_LEFT):
       self.paused = True
-      self.seek(self.playback_time - (5.0 if shift else 0.05))
+      self._user_seek(self.playback_time - (5.0 if shift else 0.05))
     if rl.is_key_pressed(rl.KEY_RIGHT):
       self.paused = True
-      self.seek(self.playback_time + (5.0 if shift else 0.05))
+      self._user_seek(self.playback_time + (5.0 if shift else 0.05))
     if rl.is_key_pressed(rl.KEY_HOME):
       self.paused = True
-      self.seek(0.0)
+      self._user_seek(0.0)
     if rl.is_key_pressed(rl.KEY_END):
       self.paused = True
-      self.seek(self.times[-1])
+      self._user_seek(self.times[-1])
     if rl.is_key_pressed(rl.KEY_UP):
       self.speed = min(8.0, self.speed * 2.0)
     if rl.is_key_pressed(rl.KEY_DOWN):
@@ -2825,7 +4290,7 @@ class SimulatorUI:
     if rl.is_key_pressed(rl.KEY_L):
       self.show_labels = not self.show_labels
     if rl.is_key_pressed(rl.KEY_R) and self.review is not None:
-      self.review_handled.clear()
+      self.review_handled = set(getattr(self, "review_suppressed", set()))
       self.review_status = "AUTO REVIEW RESTARTED"
       self.paused = False
       self.seek(0.0)
@@ -2866,9 +4331,32 @@ class SimulatorUI:
       and rl.check_collision_point_rec(mouse, self.probability_slider)
     ):
       ratio = (mouse.x - self.probability_slider.x) / self.probability_slider.width
-      self.min_candidate_probability = round(min(max(ratio, 0.0), 1.0) * 20.0) / 20.0
+      probability = round(min(max(ratio, 0.0), 1.0) * 20.0) / 20.0
+      if probability != self.min_candidate_probability:
+        self.min_candidate_probability = probability
+        save_review_probability(probability, self.review_settings_path)
+        self._prepare_review_events()
+      return
+    if (
+      self.trajectory_horizon_slider is not None
+      and rl.is_mouse_button_down(rl.MOUSE_BUTTON_LEFT)
+      and rl.check_collision_point_rec(mouse, self.trajectory_horizon_slider)
+    ):
+      ratio = (
+        (mouse.x - self.trajectory_horizon_slider.x)
+        / self.trajectory_horizon_slider.width
+      )
+      horizon_s = round((0.25 + min(max(ratio, 0.0), 1.0) * 1.75) * 4.0) / 4.0
+      if horizon_s != self.trajectory_horizon_s:
+        self.trajectory_horizon_s = horizon_s
+        self.review_handled.clear()
+        self._prepare_review_events()
       return
     if rl.is_mouse_button_pressed(rl.MOUSE_BUTTON_LEFT):
+      for expected, button in self.review_label_buttons.items():
+        if rl.check_collision_point_rec(mouse, button):
+          self._set_review_expected(expected)
+          return
       for key, checkbox in self.filter_checkboxes.items():
         if not rl.check_collision_point_rec(mouse, checkbox):
           continue
@@ -2884,13 +4372,15 @@ class SimulatorUI:
           self.show_external_candidates = not self.show_external_candidates
         elif key == "points":
           self.show_radar_points = not self.show_radar_points
+        elif key == "trajectory":
+          self.show_trajectories = not self.show_trajectories
         elif key == "fused":
           self.show_fused_objects = not self.show_fused_objects
         return
       if rl.check_collision_point_rec(mouse, timeline):
         self.paused = True
         previous_index = self.index
-        self.seek((mouse.x - timeline.x) / timeline.width * self.times[-1])
+        self._user_seek((mouse.x - timeline.x) / timeline.width * self.times[-1])
         self._pause_for_review(previous_index, self.index)
       elif rl.check_collision_point_rec(mouse, map_rect):
         clicked = self._nearest_clicked_point(map_rect, frame, mouse)
@@ -2904,7 +4394,7 @@ class SimulatorUI:
   def run(self, start_s: float, paused: bool, screenshot: Path | None) -> None:
     rl = self.rl
     rl.set_config_flags(rl.FLAG_WINDOW_RESIZABLE | rl.FLAG_VSYNC_HINT)
-    rl.init_window(1440, 860, "Radar Lead Workbench")
+    rl.init_window(1440, 960, "Radar Lead Workbench")
     rl.set_target_fps(60)
     font_path = Path(__file__).resolve().parents[3] / "assets" / "fonts" / "Inter-Regular.ttf"
     if font_path.is_file():
@@ -2932,9 +4422,9 @@ class SimulatorUI:
         height = rl.get_screen_height()
         panel_width = min(510.0, max(430.0, width * 0.35))
         content_width = float(width) - panel_width - 30.0
-        timeline_height = 250.0 if self.review is not None else 65.0
+        timeline_height = 315.0 if self.review is not None else 65.0
         content_height = float(height) - timeline_height
-        video_height = max(230.0, content_height * 0.57)
+        video_height = max(230.0, content_height * (0.49 if self.review is not None else 0.57))
         video_rect = rl.Rectangle(12.0, 12.0, content_width, video_height)
         map_rect = rl.Rectangle(12.0, video_rect.y + video_rect.height + 8.0, content_width, content_height - video_height - 8.0)
         panel_height = content_height if self.review is not None else float(height) - 65.0
@@ -2975,6 +4465,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("rlog", nargs="?", type=Path, help="rlog, rlog.zst, or rlog.bz2 file")
   parser.add_argument("--start", type=float, help="initial time in seconds")
   parser.add_argument("--paused", action="store_true", help="start paused")
+  parser.add_argument(
+    "--prob", type=float,
+    help="initial review probability (0.00-1.00); default remembers the last slider value",
+  )
   parser.add_argument("--summary", action="store_true", help="print comparison summary without opening a window")
   parser.add_argument("--export-csv", type=Path, help="export one comparison row per radar frame")
   parser.add_argument("--labels", type=Path, help="manual label JSON (default: beside the rlog)")
@@ -3003,33 +4497,182 @@ def parse_args() -> argparse.Namespace:
     "--front-only", action="store_true",
     help="remove corner-radar points and replay the production front-only path",
   )
-  parser.add_argument("--validation-case", help="auto-review one case id from the maintained validation set")
+  parser.add_argument(
+    "--validation-case", action="append",
+    help="auto-review a case id; repeat for cases that share one log",
+  )
   parser.add_argument("--validation-root", type=Path, default=Path(r"W:\routes"), help="validation route root")
   parser.add_argument("--validation-cases", type=Path, default=DEFAULT_VALIDATION_CASES)
   parser.add_argument("--screenshot", type=Path, help="render one frame to PNG and exit")
   return parser.parse_args()
 
 
-def resolve_validation_case(
-  cases_path: Path, route_root: Path, query: str,
-) -> tuple[Path, ValidationReview]:
-  payload = json.loads(cases_path.read_text(encoding="utf-8"))
-  cases = list(payload.get("cases", ()))
-  exact = [case for case in cases if case["id"].lower() == query.lower()]
-  matches = exact or [case for case in cases if query.lower() in case["id"].lower()]
-  if len(matches) != 1:
-    names = ", ".join(case["id"] for case in matches[:8]) or "none"
-    raise SystemExit(f"validation case must match exactly one case; matched: {names}")
-  case = matches[0]
+def _validation_review_from_case(case: dict[str, Any]) -> ValidationReview:
   window = case["window"]
-  review = ValidationReview(
+  return ValidationReview(
     case_id=str(case["id"]), expected=str(case["expected"]), source=str(case["source"]),
     start_s=float(window[0]), end_s=float(window[1]), scene=str(case["scene"]),
     validation_stage=str(case.get("validation_stage", "output")),
     target_track_ids=tuple(int(value) for value in case.get("target_track_ids", ())),
     forbidden_lead_two_ids=tuple(int(value) for value in case.get("forbidden_lead_two_ids", ())),
+    human_verified=bool(case.get("human_verified", False)),
   )
-  return route_root / str(case["vehicle_folder"]) / Path(str(case["log"])), review
+
+
+def resolve_validation_cases(
+  cases_path: Path, route_root: Path, queries: Sequence[str],
+) -> tuple[Path, tuple[ValidationReview, ...]]:
+  payload = json.loads(cases_path.read_text(encoding="utf-8"))
+  cases = list(payload.get("cases", ()))
+  matched_cases: list[dict[str, Any]] = []
+  for query in queries:
+    exact = [case for case in cases if case["id"].lower() == query.lower()]
+    matches = exact or [case for case in cases if query.lower() in case["id"].lower()]
+    if len(matches) != 1:
+      names = ", ".join(case["id"] for case in matches[:8]) or "none"
+      raise SystemExit(f"validation case must match exactly one case; matched: {names}")
+    if matches[0] not in matched_cases:
+      matched_cases.append(matches[0])
+  if not matched_cases:
+    raise SystemExit("at least one validation case is required")
+
+  route_keys = {
+    (str(case["vehicle_folder"]), str(case["log"]))
+    for case in matched_cases
+  }
+  if len(route_keys) != 1:
+    raise SystemExit("repeated --validation-case entries must reference the same rlog")
+  vehicle_folder, log = route_keys.pop()
+  reviews = tuple(
+    sorted(
+      (_validation_review_from_case(case) for case in matched_cases),
+      key=lambda value: (value.start_s, value.end_s, value.case_id),
+    )
+  )
+  return route_root / vehicle_folder / Path(log), reviews
+
+
+def resolve_validation_case(
+  cases_path: Path, route_root: Path, query: str,
+) -> tuple[Path, ValidationReview]:
+  route, reviews = resolve_validation_cases(cases_path, route_root, (query,))
+  return route, reviews[0]
+
+
+def update_validation_case_label(cases_path: Path, case_id: str, expected: str) -> None:
+  expected = expected.lower()
+  if expected not in VALIDATION_EXPECTED_LABELS:
+    raise ValueError(f"invalid validation label: {expected}")
+
+  payload = json.loads(cases_path.read_text(encoding="utf-8"))
+  matches = [case for case in payload.get("cases", ()) if str(case.get("id", "")).lower() == case_id.lower()]
+  if len(matches) != 1:
+    raise ValueError(f"validation case must match exactly once: {case_id}")
+
+  text = cases_path.read_text(encoding="utf-8")
+  lines = text.splitlines(keepends=True)
+  id_token = f'"id": {json.dumps(str(matches[0]["id"]), ensure_ascii=False)}'
+  id_lines = [index for index, line in enumerate(lines) if id_token in line]
+  if len(id_lines) != 1:
+    raise ValueError(f"unable to locate validation case text: {case_id}")
+
+  start = id_lines[0]
+  next_ids = [
+    index for index in range(start + 1, len(lines))
+    if lines[index].lstrip().startswith('"id":')
+  ]
+  end = next_ids[0] if next_ids else len(lines)
+  expected_lines = [
+    index for index in range(start, end)
+    if lines[index].lstrip().startswith('"expected":')
+  ]
+  if len(expected_lines) != 1:
+    raise ValueError(f"unable to locate expected label for: {case_id}")
+
+  expected_index = expected_lines[0]
+  old_line = lines[expected_index]
+  indent = old_line[:len(old_line) - len(old_line.lstrip())]
+  newline = "\r\n" if old_line.endswith("\r\n") else "\n" if old_line.endswith("\n") else ""
+  lines[expected_index] = f'{indent}"expected": "{expected}",{newline}'
+
+  verified_lines = [
+    index for index in range(start, end)
+    if lines[index].lstrip().startswith('"human_verified":')
+  ]
+  if verified_lines:
+    verified_index = verified_lines[0]
+    old_verified = lines[verified_index]
+    verified_indent = old_verified[:len(old_verified) - len(old_verified.lstrip())]
+    verified_newline = "\r\n" if old_verified.endswith("\r\n") else "\n" if old_verified.endswith("\n") else ""
+    comma = "," if old_verified.rstrip("\r\n").endswith(",") else ""
+    lines[verified_index] = f'{verified_indent}"human_verified": true{comma}{verified_newline}'
+  else:
+    lines.insert(expected_index + 1, f'{indent}"human_verified": true,{newline}')
+
+  with cases_path.open("w", encoding="utf-8", newline="") as file:
+    file.write("".join(lines))
+
+
+def upsert_trajectory_review_label(
+  labels_path: Path,
+  log_path: Path,
+  frame: RadarFrame,
+  point: RadarPoint,
+  expected: str,
+  horizon_s: float,
+) -> str:
+  payload: dict[str, Any] = {"version": 1, "labels": []}
+  if labels_path.is_file():
+    payload = json.loads(labels_path.read_text(encoding="utf-8"))
+  labels = list(payload.get("labels", ()))
+  vehicle_folder = log_path.parent.parent.name
+  relative_log = f"{log_path.parent.name}/{log_path.name}"
+  time_key = round(frame.time_s * 20.0) / 20.0
+  source = "corner" if point.source.startswith("corner") else "front"
+  label_id = (
+    f"manual-{log_path.parent.name.split('--')[0]}-"
+    f"{time_key:06.2f}-{source}-{point.track_id}"
+  ).replace(".", "p")
+  entry = {
+    "id": label_id,
+    "vehicle_folder": vehicle_folder,
+    "log": relative_log,
+    "source": source,
+    "time_s": time_key,
+    "window": [max(0.0, time_key - 0.75), time_key + 0.75],
+    "track_id": point.track_id,
+    "expected": expected,
+    "prediction_horizon_s": horizon_s,
+    "human_verified": True,
+  }
+  key = (vehicle_folder, relative_log, time_key, point.track_id)
+  replaced = False
+  for index, item in enumerate(labels):
+    item_key = (
+      str(item.get("vehicle_folder", "")),
+      str(item.get("log", "")),
+      float(item.get("time_s", -1.0)),
+      int(item.get("track_id", -1)),
+    )
+    if item_key == key:
+      labels[index] = entry
+      replaced = True
+      break
+  if not replaced:
+    labels.append(entry)
+  labels.sort(key=lambda item: (
+    str(item.get("vehicle_folder", "")),
+    str(item.get("log", "")),
+    float(item.get("time_s", 0.0)),
+    int(item.get("track_id", -1)),
+  ))
+  payload["labels"] = labels
+  labels_path.parent.mkdir(parents=True, exist_ok=True)
+  labels_path.write_text(
+    json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+  )
+  return label_id
 
 
 def print_summary(log_path: Path, frames: list[RadarFrame], selector: LeadSelector) -> None:
@@ -3090,11 +4733,17 @@ def print_summary(log_path: Path, frames: list[RadarFrame], selector: LeadSelect
 
 def main() -> int:
   args = parse_args()
+  if args.prob is not None and not 0.0 <= args.prob <= 1.0:
+    raise SystemExit("--prob must be between 0.00 and 1.00")
   review: ValidationReview | None = None
+  reviews: tuple[ValidationReview, ...] = ()
   if args.validation_case:
     if args.rlog is not None:
       raise SystemExit("do not provide rlog together with --validation-case")
-    args.rlog, review = resolve_validation_case(args.validation_cases, args.validation_root, args.validation_case)
+    args.rlog, reviews = resolve_validation_cases(
+      args.validation_cases, args.validation_root, args.validation_case,
+    )
+    review = reviews[0]
     if args.model is None and args.front_model is None:
       args.front_model = DEFAULT_FRONT_MODEL if DEFAULT_FRONT_MODEL.is_file() else DEFAULT_MULTITASK_MODEL
     if args.corner_model is None:
@@ -3172,7 +4821,10 @@ def main() -> int:
   display_name = f"{args.rlog.parent.name}/{args.rlog.name}"
   SimulatorUI(
     frames, selector, display_name, labels, label_path, args.rlog, include_scc_fusion=args.fusion_scc,
-    review=review, radard_selector=radard_selector,
+    review=review, reviews=reviews,
+    validation_cases_path=args.validation_cases if review is not None else None,
+    radard_selector=radard_selector,
+    initial_probability=args.prob,
   ).run(args.start, args.paused, args.screenshot)
   return 0
 
