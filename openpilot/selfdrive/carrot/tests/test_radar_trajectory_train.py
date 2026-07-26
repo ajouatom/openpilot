@@ -8,6 +8,10 @@ from openpilot.selfdrive.carrot.radar.radar_trajectory import TRAJECTORY_MODEL_F
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import RadarPoint
 from openpilot.selfdrive.carrot.radar.tools.radar_trajectory_train import (
   Dataset,
+  ENTRY_LATERAL_WEIGHT,
+  ENTRY_LONGITUDINAL_WEIGHT,
+  EXIT_LATERAL_WEIGHT,
+  EXIT_LONGITUDINAL_WEIGHT,
   _downsample_rows,
   _frame_rows,
   _future_targets,
@@ -19,7 +23,9 @@ from openpilot.selfdrive.carrot.radar.tools.radar_trajectory_train import (
   _residual_model_targets,
   _save_log_rows,
   _segment_log_group,
+  _training_head_weights,
   _track_observations,
+  _weighted_quantile,
   evaluation_segments,
 )
 from openpilot.selfdrive.carrot.radar.tools.radar_trajectory_compare import (
@@ -200,6 +206,37 @@ def test_training_learns_residual_over_past_only_kinematic_projection() -> None:
     ),), dtype=np.float32),
     atol=1e-6,
   )
+
+
+def test_training_weights_emphasize_self_supervised_path_transitions() -> None:
+  dataset = Dataset(
+    features=np.zeros((3, 1), dtype=np.float32),
+    labels=np.asarray((
+      (20.0, 20.0, 20.0, 20.0, 3.0, 2.5, 1.7, 1.0),
+      (20.0, 20.0, 20.0, 20.0, 0.0, 1.0, 2.0, 3.0),
+      (20.0, 20.0, 20.0, 20.0, 3.0, 3.0, 3.0, 3.0),
+    ), dtype=np.float32),
+    lane_half_widths=np.full((3, 4), 1.8, dtype=np.float32),
+    valid=np.ones((3, 4), dtype=np.bool_),
+    current_occupancy=np.asarray((False, True, False)),
+    sample_ids=np.asarray(("entry", "exit", "steady")),
+    log_groups=np.asarray(("a", "b", "c")),
+  )
+
+  weights = _training_head_weights(dataset)
+
+  np.testing.assert_allclose(weights[0, :4], ENTRY_LONGITUDINAL_WEIGHT)
+  np.testing.assert_allclose(weights[0, 4:], ENTRY_LATERAL_WEIGHT)
+  np.testing.assert_allclose(weights[1, :4], EXIT_LONGITUDINAL_WEIGHT)
+  np.testing.assert_allclose(weights[1, 4:], EXIT_LATERAL_WEIGHT)
+  np.testing.assert_allclose(weights[2], 1.0)
+
+
+def test_weighted_quantile_gives_transition_rows_more_calibration_influence() -> None:
+  values = np.asarray((1.0, 2.0, 8.0), dtype=np.float32)
+  weights = np.asarray((1.0, 1.0, 4.0), dtype=np.float32)
+
+  assert _weighted_quantile(values, weights, 0.6827) == 8.0
 
 
 def test_group_folds_keep_every_segment_in_exactly_one_fold() -> None:

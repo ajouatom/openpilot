@@ -27,7 +27,7 @@ from openpilot.selfdrive.carrot.radar.radar_trajectory import (
 )
 
 
-MODEL_VERSION = 8
+MODEL_VERSION = 9
 DEFAULT_FRONT_MODEL_PATH = Path(__file__).resolve().parent / "models" / "radar_path_occupancy_front.npz"
 DEFAULT_CORNER_MODEL_PATH = Path(__file__).resolve().parent / "models" / "radar_path_occupancy_corner.npz"
 MIN_FORWARD_ENTRY_DREL_M = 0.5

@@ -30,11 +30,14 @@ The source models and their temporal state are independent:
   and past measured points. The training targets are the physically continuous
   same track's measured x and lane/path-relative y at 0.5, 1.0, 1.5, and 2.0
   seconds. A past-only kinematic projection supplies the base position; the MLP
-  learns its residual and Gaussian standard deviation.
+  learns its residual and Gaussian standard deviation. Rows whose measured
+  future crosses the path boundary receive higher position-loss weight,
+  especially on lateral residuals, using no manual annotation.
 - Production CUT-IN filtering consists of the learned probability threshold,
   0.05 hysteresis, measured inside-state latching, a 0.25-second measured exit,
-  and a 0.35-second missing-track hold. Human CUT-IN/CLEAR labels are validation
-  only and are never training rows.
+  and a 0.35-second missing-track hold. The entry threshold targets 80%
+  precision on grouped self-supervised cross-validation. Human CUT-IN/CLEAR
+  labels are validation only and are never training rows.
 - `leadOne` is selected by matching the first high-probability vision lead to a
   sane front/SCC radar object. Distance, lateral position, and velocity sanity
   checks remain mandatory.

@@ -52,6 +52,11 @@ MAX_NEGATIVE_TO_POSITIVE = 6
 MAX_NEGATIVE_ROWS_WITHOUT_POSITIVE = 1200
 DATASET_CACHE_VERSION = 8
 LOG_CACHE_VERSION = 8
+ENTRY_LONGITUDINAL_WEIGHT = 1.5
+ENTRY_LATERAL_WEIGHT = 4.0
+EXIT_LONGITUDINAL_WEIGHT = 1.25
+EXIT_LATERAL_WEIGHT = 2.0
+ENTRY_TARGET_PRECISION = 0.80
 RLOG_PATTERN = re.compile(r"^rlog(?:\.\d+)?\.zst$", re.IGNORECASE)
 
 
@@ -616,6 +621,21 @@ def _residual_model_targets(dataset: Dataset) -> tuple[np.ndarray, np.ndarray]:
   return targets - kinematic_position_baseline(dataset.features), valid
 
 
+def _training_head_weights(dataset: Dataset) -> np.ndarray:
+  """Emphasize real path transitions without using manual annotations."""
+  horizon_count = len(TARGET_HORIZONS_S)
+  weights = np.concatenate((dataset.valid, dataset.valid), axis=1).astype(np.float32)
+  occupied = _occupancy_targets(dataset) & dataset.valid
+  outside = _outside_targets(dataset) & dataset.valid
+  entry_rows = ~dataset.current_occupancy & np.any(occupied, axis=1)
+  exit_rows = dataset.current_occupancy & np.any(outside, axis=1)
+  weights[entry_rows, :horizon_count] *= ENTRY_LONGITUDINAL_WEIGHT
+  weights[entry_rows, horizon_count:] *= ENTRY_LATERAL_WEIGHT
+  weights[exit_rows, :horizon_count] *= EXIT_LONGITUDINAL_WEIGHT
+  weights[exit_rows, horizon_count:] *= EXIT_LATERAL_WEIGHT
+  return weights
+
+
 def _occupancy_targets(dataset: Dataset) -> np.ndarray:
   horizon_count = len(TARGET_HORIZONS_S)
   future_x = dataset.labels[:, :horizon_count]
@@ -710,7 +730,7 @@ class GaussianPositionMLP:
     self,
     x: np.ndarray,
     y: np.ndarray,
-    valid: np.ndarray,
+    head_weights: np.ndarray,
     learning_rate: float,
     l2_weight: float,
   ) -> float:
@@ -724,7 +744,7 @@ class GaussianPositionMLP:
     log_stds = np.clip(raw_log_stds, -4.0, 3.0)
     residual = means - y
     inverse_variance = np.exp(-2.0 * log_stds)
-    weight = valid.astype(np.float32)
+    weight = head_weights.astype(np.float32)
     denominator = max(float(weight.sum()), 1.0)
     loss = float(np.sum(
       weight * (0.5 * residual * residual * inverse_variance + log_stds),
@@ -842,6 +862,7 @@ def _sigma_calibration(
   dataset: Dataset,
 ) -> np.ndarray:
   _, valid = _model_targets(dataset)
+  weights = _training_head_weights(dataset)
   values = []
   for index in range(means.shape[1]):
     ratios = (
@@ -849,11 +870,32 @@ def _sigma_calibration(
       / np.maximum(stds[valid[:, index], index], 0.05)
     )
     values.append(
-      min(4.0, max(0.25, float(np.quantile(ratios, 0.6827))))
+      min(4.0, max(0.25, _weighted_quantile(
+        ratios, weights[valid[:, index], index], 0.6827,
+      )))
       if len(ratios)
       else 1.0
     )
   return np.asarray(values, dtype=np.float32)
+
+
+def _weighted_quantile(
+  values: np.ndarray,
+  weights: np.ndarray,
+  quantile: float,
+) -> float:
+  """Return a deterministic weighted quantile for task-weighted calibration."""
+  if len(values) == 0:
+    raise ValueError("weighted quantile requires at least one value")
+  order = np.argsort(values, kind="stable")
+  sorted_values = values[order]
+  sorted_weights = np.maximum(weights[order], 0.0)
+  total = float(np.sum(sorted_weights))
+  if total <= 0.0:
+    return float(np.quantile(sorted_values, quantile))
+  cumulative = np.cumsum(sorted_weights)
+  index = int(np.searchsorted(cumulative, min(max(quantile, 0.0), 1.0) * total, side="left"))
+  return float(sorted_values[min(index, len(sorted_values) - 1)])
 
 
 def _event_scores_targets(
@@ -999,6 +1041,8 @@ def _fit_model(
   normalized = (train.features - mean) / std
   validation_x = None if validation is None else (validation.features - mean) / std
   raw_targets, train_valid = _residual_model_targets(train)
+  train_weights = _training_head_weights(train)
+  validation_weights = None if validation is None else _training_head_weights(validation)
   target_mean = np.zeros(raw_targets.shape[1], dtype=np.float32)
   target_std = np.ones(raw_targets.shape[1], dtype=np.float32)
   for index in range(raw_targets.shape[1]):
@@ -1023,7 +1067,7 @@ def _fit_model(
       losses.append(model.update(
         normalized[indices],
         train_targets[indices],
-        train_valid[indices],
+        train_weights[indices],
         learning_rate,
         l2_weight,
       ))
@@ -1036,10 +1080,10 @@ def _fit_model(
         + target_mean
         + kinematic_position_baseline(validation.features)
       )
-      _, validation_valid = _model_targets(validation)
+      assert validation_weights is not None
       absolute_error = np.abs(validation_means - validation.labels)
-      epoch_mae = float(np.sum(absolute_error * validation_valid) / max(
-        float(np.sum(validation_valid)), 1.0,
+      epoch_mae = float(np.sum(absolute_error * validation_weights) / max(
+        float(np.sum(validation_weights)), 1.0,
       ))
       if epoch_mae < best_validation_mae - 1e-6:
         best_validation_mae = epoch_mae
@@ -1130,7 +1174,7 @@ def train_source(
     out_of_fold_probabilities, dataset, "entry",
   )
   entry_threshold, entry_metrics = _choose_threshold(
-    out_of_fold_probabilities, dataset, "entry", target_precision=0.90,
+    out_of_fold_probabilities, dataset, "entry", target_precision=ENTRY_TARGET_PRECISION,
   )
   balanced_exit_threshold, balanced_exit_metrics = _choose_threshold(
     out_of_fold_probabilities, dataset, "exit",
@@ -1167,8 +1211,13 @@ def train_source(
     target_horizons_s=np.asarray(TARGET_HORIZONS_S, dtype=np.float32),
     output_head_names=np.asarray(OUTPUT_HEAD_NAMES),
     training_provenance=np.asarray([
-      "self-supervised same-vehicle measured future x/y distribution; learned residual over past-only kinematics"
+      "self-supervised same-vehicle measured future x/y distribution; transition-weighted residual over past-only kinematics"
     ]),
+    entry_target_precision=np.asarray([ENTRY_TARGET_PRECISION], dtype=np.float32),
+    entry_longitudinal_weight=np.asarray([ENTRY_LONGITUDINAL_WEIGHT], dtype=np.float32),
+    entry_lateral_weight=np.asarray([ENTRY_LATERAL_WEIGHT], dtype=np.float32),
+    exit_longitudinal_weight=np.asarray([EXIT_LONGITUDINAL_WEIGHT], dtype=np.float32),
+    exit_lateral_weight=np.asarray([EXIT_LATERAL_WEIGHT], dtype=np.float32),
     manual_training_rows=np.asarray([0], dtype=np.int32),
     feature_mean=mean.astype(np.float32),
     feature_std=std.astype(np.float32),
@@ -1188,6 +1237,13 @@ def train_source(
     "occupied_rows": int(np.sum(targets & usable)),
     "clear_rows": int(np.sum(~targets & usable)),
     "entry_threshold": entry_threshold,
+    "entry_target_precision": ENTRY_TARGET_PRECISION,
+    "transition_training_weights": {
+      "entry_longitudinal": ENTRY_LONGITUDINAL_WEIGHT,
+      "entry_lateral": ENTRY_LATERAL_WEIGHT,
+      "exit_longitudinal": EXIT_LONGITUDINAL_WEIGHT,
+      "exit_lateral": EXIT_LATERAL_WEIGHT,
+    },
     "entry_cross_validation": entry_metrics,
     "balanced_entry_threshold": balanced_entry_threshold,
     "balanced_entry_cross_validation": balanced_entry_metrics,
