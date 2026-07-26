@@ -46,6 +46,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   upsert_trajectory_review_label,
   update_validation_case_label,
   validation_review_events,
+  trajectory_history_display_y,
 )
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import group_cases_by_log
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_train import (
@@ -110,6 +111,16 @@ def test_front_only_frames_remove_corner_points_without_changing_other_inputs() 
   assert filtered[0].recorded_one == original.recorded_one
 
 
+def test_history_display_reprojects_dpath_onto_current_path() -> None:
+  current = replace(
+    frame(()),
+    path=((0.0, 0.0), (100.0, 10.0)),
+  )
+  old_observation = SimpleNamespace(d_rel=50.0, y_rel=-9.0, d_path=2.0)
+
+  assert trajectory_history_display_y(current, old_observation) == -3.0
+
+
 def test_preferred_radar_points_uses_validation_sensor_source() -> None:
   radar_frame = frame((
     point(10, 30.0, 0.2, 20.0),
@@ -119,6 +130,7 @@ def test_preferred_radar_points_uses_validation_sensor_source() -> None:
 
   assert [item.track_id for item in preferred_radar_points(radar_frame, "corner")] == [1010]
   assert [item.track_id for item in preferred_radar_points(radar_frame, "front")] == [10]
+  assert [item.track_id for item in preferred_radar_points(radar_frame, "front+corner")] == [10, 1010]
 
 
 def test_validation_runner_groups_duplicate_log_cases() -> None:
@@ -153,7 +165,7 @@ def test_trajectory_review_uses_corner_from_combined_source() -> None:
   assert trajectory_review_events(
     frames, trajectories, ("front+corner",), horizon_s=1.0,
   ) == {
-    3: ("TRAJECTORY CORNER id 1010 p1.00 t0.19s",),
+    3: ("TRAJECTORY CORNER id 1010 p0.84 t0.75s",),
   }
 
 
@@ -212,7 +224,7 @@ def test_trajectory_model_review_uses_display_probability_threshold() -> None:
       return Selection(None, None, cutin_diagnostics=(candidate,))
 
   assert trajectory_model_review_events(frames, Selector(), ("corner",), 0.75) == {
-    2: ("TRAJECTORY MODEL CORNER id 1010 IN0.80 OUT0.00 raw 0.80/0.80/0.80/0.80",),
+    2: ("TRAJECTORY MODEL CORNER id 1010 IN0.80 OUT0.00 I 0.80/0.80/0.80/0.80",),
   }
 
 
@@ -345,14 +357,17 @@ def test_marker_display_uses_raw_future_probability_at_selected_horizon() -> Non
   blocked = Candidate(
     1102, 0.0, "trajectory corner path-entry", 0.945,
     horizon_scores=(0.99, 0.99, 0.98, 0.97),
+    out_horizon_scores=(0.01, 0.02, 0.03, 0.04),
     current_path_occupancy=False,
     stage="BLOCK-GEOMETRY",
   )
 
   assert ui._max_future_occupancy_probability(blocked) == 0.99
   assert ui._future_occupancy_at_display_horizon(blocked) == 0.99
+  assert ui._future_out_at_display_horizon(blocked) == 0.01
   ui.trajectory_horizon_s = 2.0
   assert ui._future_occupancy_at_display_horizon(blocked) == 0.97
+  assert ui._future_out_at_display_horizon(blocked) == 0.04
   assert ui._display_probability_threshold(blocked) == 0.945
 
 
@@ -433,6 +448,45 @@ def test_point_diagnostic_keeps_front_and_corner_probabilities_separate() -> Non
   ) == corner
 
 
+def test_review_adds_selected_point_from_other_radar_source() -> None:
+  front_point = point(63, 4.8, 2.15, 10.0)
+  corner_point = point(1083, 2.1, 2.64, 10.0, "corner235")
+  selected = Candidate(63, 1.0, "trajectory confirmed cutin")
+  front_diagnostic = Candidate(
+    63, 1.0, "trajectory front path-entry",
+    decision_threshold=0.915,
+    path_exit_score=0.38,
+    current_path_occupancy=True,
+    stage="SELECTED",
+    source="frontRadar",
+  )
+  corner_diagnostic = Candidate(
+    1083, 0.69, "trajectory corner path-entry",
+    decision_threshold=0.93,
+    path_exit_score=1.0,
+    stage="BELOW",
+    source="corner235",
+  )
+  selection = Selection(
+    None,
+    selected,
+    cutin_diagnostics=(front_diagnostic, corner_diagnostic),
+  )
+  ui = object.__new__(SimulatorUI)
+  ui.review = ValidationReview("case", "detect", "corner", 0.0, 1.0, "scene")
+  radar_frame = frame((front_point, corner_point))
+
+  visible = ui._visible_radar_points(radar_frame, selection)
+
+  assert [(item.source, item.track_id) for item in visible] == [
+    ("corner235", 1083),
+    ("frontRadar", 63),
+  ]
+  assert ui._candidate_text(radar_frame, selected, selection) == (
+    "FRONT id 63  P0=1 IN 1.00 OUT 0.38 ON 0.92  trajectory confirmed cutin"
+  )
+
+
 def test_production_hybrid_selector_uses_device_controller_output(monkeypatch, tmp_path: Path) -> None:
   lead_one = {
     "status": True, "radarTrackId": 10, "modelProb": 0.9, "score": 0.9,
@@ -448,10 +502,16 @@ def test_production_hybrid_selector_uses_device_controller_output(monkeypatch, t
       self.runtime = None
       self.last_runtime_result = None
 
-    def update(self, time_s, v_ego, points, model, car_state=None):
+    def update(
+      self, time_s, v_ego, points, model, car_state=None,
+      live_pose=None, live_pose_age_s=float("inf"),
+    ):
       assert points[0].trackId == 10
       assert model.leadsV3[0].prob == 0.9
       assert car_state is not None
+      assert live_pose is not None
+      assert live_pose.angularVelocityDevice.z == 0.0
+      assert live_pose_age_s == 0.0
       self.runtime.model = SimpleNamespace(thresholds=(0.5, 0.5, 0.5))
       self.last_runtime_result = SimpleNamespace(available=True, predictions=())
       return RadarLeadModelOutput(
@@ -459,9 +519,12 @@ def test_production_hybrid_selector_uses_device_controller_output(monkeypatch, t
       )
 
   monkeypatch.setattr(radar_simulator, "VisionModelRadarController", FakeDeviceController)
-  selector = ProductionHybridLeadSelector(tmp_path / "unused-model.npz", [frame((
-    point(10, 30.0, 0.2, 20.0),
-  ))])
+  source_frame = replace(
+    frame((point(10, 30.0, 0.2, 20.0),)),
+    yaw_rate_source="livePose",
+    yaw_rate_rad_s=0.0,
+  )
+  selector = ProductionHybridLeadSelector(tmp_path / "unused-model.npz", [source_frame])
   selected = selector.select(frame(()), 0)
 
   assert selector.name.endswith(":front-only")
@@ -470,6 +533,20 @@ def test_production_hybrid_selector_uses_device_controller_output(monkeypatch, t
   assert selected.lead_two is not None and selected.lead_two.reason == "MLP confirmed cutin"
   assert selected.lead_two_tentative is False
   assert tuple(candidate.track_id for candidate in selected.active_cutin_candidates) == (20,)
+
+
+def test_production_replay_preserves_zero_live_pose_yaw() -> None:
+  sample = replace(
+    frame(()),
+    yaw_rate_source="livePose",
+    yaw_rate_rad_s=0.0,
+  )
+
+  assert not hasattr(radar_simulator._production_car_state(sample), "yawRate")
+  live_pose = radar_simulator._production_live_pose(sample)
+  assert live_pose is not None
+  assert live_pose.angularVelocityDevice.valid
+  assert live_pose.angularVelocityDevice.z == 0.0
 
 
 def test_current_radard_teacher_rejects_adjacent_lane_distance_match() -> None:
@@ -585,7 +662,7 @@ def test_validation_review_labels_confirmed_production_cutin() -> None:
   }
 
 
-def test_validation_review_uses_internal_decision_stage_when_requested() -> None:
+def test_validation_review_never_pauses_for_internal_decision_stage() -> None:
   frames = [replace(frame(()), mono_time_s=float(index), time_s=float(index), model_leads=()) for index in range(3)]
   internal_cutin = Candidate(1024, 0.42, "MLP decision cutin", track_aliases=(52,))
 
@@ -601,9 +678,7 @@ def test_validation_review_uses_internal_decision_stage_when_requested() -> None
     "decision", "detect", "corner", 0.0, 2.0, "scene",
     target_track_ids=(52, 1024), validation_stage="decision",
   )
-  assert validation_review_events(frames, Selector(), review) == {
-    1: ("CUT-IN id 1024",),
-  }
+  assert validation_review_events(frames, Selector(), review) == {}
 
 
 def test_validation_review_covers_full_log_outside_labeled_window() -> None:

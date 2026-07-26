@@ -444,6 +444,60 @@ def test_controller_uses_trajectory_probability_as_final_lead_two() -> None:
   assert not output.lead_two_tentative
 
 
+def test_controller_selects_nearest_cutin_then_keeps_that_lead_two_identity() -> None:
+  near = prediction(41, 0.2, 0.1, 0.1, d_rel=15.0, v_lead=18.0)
+  far = prediction(42, -2.8, 0.1, 0.1, d_rel=25.0, v_lead=18.0)
+  state = {"near": near, "far": far}
+
+  class Runtime:
+    def update(self, *_args):
+      near_prediction = state["near"]
+      far_prediction = state["far"]
+      trajectory_near = SimpleNamespace(
+        source="frontRadar", track_id=41, probability=0.95,
+        point=SimpleNamespace(d_rel=near_prediction.features.radar_object.d_rel),
+      )
+      trajectory_far = SimpleNamespace(
+        source="frontRadar", track_id=42, probability=0.99,
+        point=SimpleNamespace(d_rel=far_prediction.features.radar_object.d_rel),
+      )
+      # Deliberately put the farther/higher-probability object first. The
+      # controller must use physical range and then retain the chosen identity.
+      trajectory_decision = TrajectoryCutinDecision(
+        (trajectory_far, trajectory_near), (), (trajectory_far, trajectory_near),
+      )
+      trajectory_result = RadarTrajectoryRuntimeResult(
+        True,
+        {},
+        (trajectory_far, trajectory_near),
+        trajectory_decision,
+        front_decision=trajectory_decision,
+      )
+      return RadarLeadRuntimeResult(
+        True,
+        RadarLeadDecision((), ()),
+        (near_prediction, far_prediction),
+        0.1,
+        front_predictions=(near_prediction, far_prediction),
+        trajectory=trajectory_result,
+      )
+
+  controller = VisionModelRadarController()
+  controller.runtime = Runtime()
+  first = controller.update(0.0, 20.0, (), vision_model(60.0, 0.0, 19.0))
+  assert first.lead_two is not None
+  assert first.lead_two["radarTrackId"] == 41
+
+  state["near"] = prediction(41, 0.2, 0.1, 0.1, d_rel=22.0, v_lead=18.0)
+  state["far"] = prediction(42, -2.8, 0.1, 0.1, d_rel=10.0, v_lead=18.0)
+  held = controller.update(0.1, 20.0, (), vision_model(60.0, 0.0, 19.0))
+  assert held.lead_two is not None
+  assert held.lead_two["radarTrackId"] == 41
+  assert held.lead_cutin is not None
+  assert held.lead_cutin["radarTrackId"] == 41
+  assert [lead["radarTrackId"] for lead in held.leads_cutin] == [41, 42]
+
+
 def test_controller_does_not_duplicate_primary_external_as_lead_two() -> None:
   shared = prediction(40, 0.2, 0.95, 0.1, external_prob=0.95)
 
@@ -509,15 +563,27 @@ def test_controller_uses_matched_front_values_for_confirmed_corner_cutin() -> No
     probability=0.99,
     point=SimpleNamespace(d_rel=22.0),
   )
+  front_trajectory_entry = SimpleNamespace(
+    source="frontRadar",
+    track_id=48,
+    probability=0.98,
+    point=SimpleNamespace(d_rel=23.0),
+  )
   trajectory_decision = TrajectoryCutinDecision(
-    (trajectory_entry,), (), (trajectory_entry,),
+    (front_trajectory_entry, trajectory_entry), (),
+    (front_trajectory_entry, trajectory_entry),
   )
   trajectory_result = RadarTrajectoryRuntimeResult(
     True,
     {},
-    (trajectory_entry,),
+    (front_trajectory_entry, trajectory_entry),
     trajectory_decision,
-    corner_decision=trajectory_decision,
+    front_decision=TrajectoryCutinDecision(
+      (front_trajectory_entry,), (), (front_trajectory_entry,),
+    ),
+    corner_decision=TrajectoryCutinDecision(
+      (trajectory_entry,), (), (trajectory_entry,),
+    ),
   )
 
   class Runtime:
@@ -542,6 +608,7 @@ def test_controller_uses_matched_front_values_for_confirmed_corner_cutin() -> No
   assert output.lead_two["dRel"] == 23.0
   assert output.lead_two["vLead"] == 12.0
   assert output.lead_two["aLead"] == -1.2
+  assert len(output.leads_cutin) == 1
 
 
 def test_controller_does_not_fallback_to_legacy_cutin_head() -> None:

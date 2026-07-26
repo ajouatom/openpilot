@@ -4,6 +4,10 @@
 
 - `radar_lead_front.npz`: front-radar and optional SCC input.
 - `radar_lead_corner.npz`: corner-radar input only.
+- `radar_path_occupancy_front.npz`: front-only future x/y distribution and
+  path-occupancy model.
+- `radar_path_occupancy_corner.npz`: corner-radar future x/y distribution and
+  path-occupancy model.
 - `radar_lead_multitask.npz`: retained legacy single-model artifact; it is not selected when both source models exist.
 - `radar_lead_training_manifest.json`: selected corpus logs and train/validation/test split metadata.
 - `../data/radar_lead_annotations_v15.json`: manually reviewed video labels.
@@ -19,20 +23,25 @@ The source models and their temporal state are independent:
 - The front model runs for every vehicle. `EnableRadarTracks=-1/0` supplies SCC,
   `1` supplies front tracks, and `2/3` supplies front tracks plus low-speed SCC.
 - The corner model runs only when supported corner-radar points are present.
-- Each model owns a separate feature-history builder and
-  `RadarLeadDecisionFilter`; probabilities, hit counters, sticky time, and object
-  histories are not shared across sources.
-- The corner decision normally uses the temporal model probability together with
-  lane and body-entry geometry. A corner-only object within 6 m may use a
-  two-frame early path only when its instantaneous, 0.4-second, and 0.6-second
-  lane-relative motion all point inward and the base model score is at least
-  0.95. A single-frame base score cannot activate a cut-in.
+- Each source owns separate conventional lead/external features and separate
+  path-occupancy history. Probabilities and object histories are not averaged
+  across sources.
+- CUT-IN/CUT-OUT is owned by the path-occupancy artifacts. They use only current
+  and past measured points. The training targets are the physically continuous
+  same track's measured x and lane/path-relative y at 0.5, 1.0, 1.5, and 2.0
+  seconds. A past-only kinematic projection supplies the base position; the MLP
+  learns its residual and Gaussian standard deviation.
+- Production CUT-IN filtering consists of the learned probability threshold,
+  0.05 hysteresis, measured inside-state latching, a 0.25-second measured exit,
+  and a 0.35-second missing-track hold. Human CUT-IN/CLEAR labels are validation
+  only and are never training rows.
 - `leadOne` is selected by matching the first high-probability vision lead to a
   sane front/SCC radar object. Distance, lateral position, and velocity sanity
   checks remain mandatory.
-- On vehicles with corner radar, the corner model supplies `leadTwo` cut-in and
-  external candidates. Without corner radar, the front model supplies those
-  candidates.
+- On vehicles with corner radar, the corner path-occupancy model supplies
+  `leadTwo` CUT-IN decisions. Without corner radar, the front path-occupancy
+  model supplies them. The conventional source models remain responsible for
+  primary lead matching and external candidates.
 - A selected corner candidate is matched back to a front object for control
   kinematics when possible. A near-side object inside 5 m keeps the corner
   measurement because near-field front lateral data is too noisy.
@@ -40,11 +49,10 @@ The source models and their temporal state are independent:
   corner object corroborates the same distance and lane position. The published
   lead remains the front object.
 
-The feature history contains current data plus observations approximately 0.05,
-0.1, 0.2, 0.4, 0.6, 0.8, and 1.0 seconds old (`h1`, `h2`, `h4`, `h8`, `h12`,
-`h16`, and `h20` at 20 Hz). Near corner anticipation requires consistent inward
-motion at both `h4` and `h8`, a 5-12 m range, and lane/body geometry support.
-Objects below 5 m require actual body-entry geometry instead of anticipation.
+The path-occupancy feature history samples measured points at fixed ages 0,
+0.25, 0.5, 0.75, and 1.0 seconds. Live inference never receives any future
+measurement. Unmeasured front slots and physically discontinuous reused IDs are
+excluded.
 
 ## Training corpus
 

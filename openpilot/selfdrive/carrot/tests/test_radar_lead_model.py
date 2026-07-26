@@ -6,6 +6,7 @@ from openpilot.selfdrive.carrot.radar.radar_lead_model import (
   MODEL_FEATURE_NAMES,
   RadarLeadContext,
   RadarLeadDecisionFilter,
+  RadarLeadPrimaryExternalDecisionFilter,
   RadarLeadFeatureBuilder,
   RadarLeadPrediction,
   RadarLeadModel,
@@ -370,6 +371,18 @@ def test_close_corner_body_intrusion_promotes_low_model_as_tentative() -> None:
   assert len(decision.cutin_candidates) == 1
   assert decision.cutin_candidates[0].cutin_tentative
   assert decision.cutin_candidates[0].cutin_prob == 0.82
+
+
+def test_production_primary_filter_never_makes_cutin_decisions() -> None:
+  builder = RadarLeadFeatureBuilder()
+  decision_filter = RadarLeadPrimaryExternalDecisionFilter()
+  prediction = cutin_prediction(builder, 0, 1.0)
+
+  first = decision_filter.update(0.0, (prediction,))
+  second = decision_filter.update(0.05, (prediction,))
+
+  assert first.cutin_candidates == ()
+  assert second.cutin_candidates == ()
 
 
 def test_vehicle_body_entry_allows_detection_before_center_crosses_lane_line() -> None:

@@ -10,9 +10,9 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 try:
-  from openpilot.selfdrive.carrot.radar.radar_object_fusion import FusedRadarObject
+  from openpilot.selfdrive.carrot.radar.radar_object import RadarObject
 except ModuleNotFoundError:
-  from radar_object_fusion import FusedRadarObject
+  from radar_object import RadarObject
 
 
 MODEL_HEADS = ("lead", "cutin", "external")
@@ -56,7 +56,7 @@ class RadarLeadContext:
 class RadarLeadFeatures:
   object_id: str
   aliases: tuple[str, ...]
-  radar_object: FusedRadarObject
+  radar_object: RadarObject
   values: tuple[float, ...]
   track_age: int
   d_path: float
@@ -325,7 +325,7 @@ def anticipatory_eligibility(matrix, np):
   return _anticipatory_eligibility_from_values(matrix, anticipatory_feature_matrix(matrix, np), np)
 
 
-def object_aliases(obj: FusedRadarObject) -> tuple[str, ...]:
+def object_aliases(obj: RadarObject) -> tuple[str, ...]:
   aliases: list[str] = []
   if obj.front_track_id is not None:
     aliases.append(f"front:{obj.front_track_id}")
@@ -336,7 +336,7 @@ def object_aliases(obj: FusedRadarObject) -> tuple[str, ...]:
   return tuple(aliases) or (obj.object_id,)
 
 
-def object_contains_track(obj: FusedRadarObject, track_id: int) -> bool:
+def object_contains_track(obj: RadarObject, track_id: int) -> bool:
   return track_id in (obj.front_track_id, obj.corner_track_id, obj.scc_track_id)
 
 
@@ -349,7 +349,7 @@ class RadarLeadFeatureBuilder:
 
   @staticmethod
   def _history_is_continuous(
-    history: _ObjectHistory, context: RadarLeadContext, obj: FusedRadarObject,
+    history: _ObjectHistory, context: RadarLeadContext, obj: RadarObject,
   ) -> bool:
     if not history.observations:
       return True
@@ -364,7 +364,7 @@ class RadarLeadFeatureBuilder:
     return abs(obj.d_rel - predicted_d) <= d_tolerance and abs(obj.y_rel - predicted_y) <= y_tolerance
 
   def _history_for(
-    self, aliases: tuple[str, ...], context: RadarLeadContext, obj: FusedRadarObject,
+    self, aliases: tuple[str, ...], context: RadarLeadContext, obj: RadarObject,
   ) -> _ObjectHistory:
     matches = {id(state): state for alias in aliases if (state := self._aliases.get(alias)) is not None}
     continuous = {
@@ -408,8 +408,8 @@ class RadarLeadFeatureBuilder:
   def _values(
     self,
     context: RadarLeadContext,
-    objects: Sequence[FusedRadarObject],
-    obj: FusedRadarObject,
+    objects: Sequence[RadarObject],
+    obj: RadarObject,
     history: _ObjectHistory,
   ) -> tuple[tuple[float, ...], float, float, float]:
     path_y, d_path, lane_half_width, in_lane_prob = self._lane_state(context, obj.d_rel, obj.y_rel)
@@ -496,7 +496,7 @@ class RadarLeadFeatureBuilder:
     return tuple(_finite(raw[name]) for name in MODEL_FEATURE_NAMES), d_path, future_d_path, in_lane_prob
 
   def update(
-    self, context: RadarLeadContext, objects: Iterable[FusedRadarObject],
+    self, context: RadarLeadContext, objects: Iterable[RadarObject],
   ) -> tuple[RadarLeadFeatures, ...]:
     current = tuple(objects)
     output: list[RadarLeadFeatures] = []
@@ -674,7 +674,7 @@ class RadarLeadModel:
 
 
 class RadarLeadDecisionFilter:
-  """Model-owned decisions with small physical gates and identity hysteresis."""
+  """Legacy offline multitask filter; production CUT-IN is trajectory-owned."""
 
   def __init__(
     self, lead_threshold: float = 0.65, cutin_threshold: float = 0.70, external_threshold: float = 0.65,
@@ -967,5 +967,119 @@ class RadarLeadDecisionFilter:
       )[:2]),
       external_candidates=tuple(sorted(
         external_active, key=lambda item: (-item.external_prob, item.features.radar_object.d_rel),
+      )[:2]),
+    )
+
+
+@dataclass
+class _PrimaryExternalState:
+  lead_ema: float = 0.0
+  external_ema: float = 0.0
+  lead_hits: int = 0
+  external_hits: int = 0
+  lead_active_until: float = 0.0
+  external_active_until: float = 0.0
+  last_seen: float = 0.0
+
+
+class RadarLeadPrimaryExternalDecisionFilter:
+  """Production filter for lead/external heads; CUT-IN is trajectory-owned."""
+
+  def __init__(
+    self,
+    lead_threshold: float = 0.65,
+    external_threshold: float = 0.65,
+  ) -> None:
+    self.lead_threshold = float(lead_threshold)
+    self.external_threshold = float(external_threshold)
+    self._states: dict[str, _PrimaryExternalState] = {}
+
+  @staticmethod
+  def _reliable(prediction: RadarLeadPrediction) -> bool:
+    sample = prediction.features
+    obj = sample.radar_object
+    return (
+      obj.trusted_for_control
+      or (sample.track_age >= 5 and obj.corner_track_id is not None)
+      or (
+        sample.track_age >= 5
+        and (obj.front_track_id is not None or obj.scc_track_id is not None)
+        and abs(sample.d_path) < 1.8
+      )
+    )
+
+  @staticmethod
+  def _group_predictions(
+    predictions: Iterable[RadarLeadPrediction],
+  ) -> tuple[RadarLeadPrediction, ...]:
+    grouped: dict[str, list[RadarLeadPrediction]] = {}
+    for prediction in predictions:
+      grouped.setdefault(prediction.features.object_id, []).append(prediction)
+    return tuple(
+      max(samples, key=lambda item: max(item.lead_prob, item.external_prob))
+      for samples in grouped.values()
+    )
+
+  def update(
+    self,
+    time_s: float,
+    predictions: Iterable[RadarLeadPrediction],
+  ) -> RadarLeadDecision:
+    current = self._group_predictions(predictions)
+    seen: set[str] = set()
+    lead_active: list[RadarLeadPrediction] = []
+    external_active: list[RadarLeadPrediction] = []
+    for prediction in current:
+      object_id = prediction.features.object_id
+      seen.add(object_id)
+      state = self._states.setdefault(object_id, _PrimaryExternalState())
+      state.last_seen = time_s
+      reliable = self._reliable(prediction)
+      state.lead_ema = max(
+        prediction.lead_prob,
+        0.65 * state.lead_ema + 0.35 * prediction.lead_prob,
+      )
+      state.external_ema = max(
+        prediction.external_prob,
+        0.65 * state.external_ema + 0.35 * prediction.external_prob,
+      )
+      state.lead_hits = (
+        state.lead_hits + 1
+        if reliable and state.lead_ema >= self.lead_threshold
+        else 0
+      )
+      state.external_hits = (
+        state.external_hits + 1
+        if reliable and state.external_ema >= self.external_threshold
+        else 0
+      )
+      if state.lead_hits >= 2:
+        state.lead_active_until = time_s + 0.35
+      if state.external_hits >= 2:
+        state.external_active_until = time_s + 0.35
+      if state.lead_ema < 0.25:
+        state.lead_active_until = min(state.lead_active_until, time_s + 0.10)
+      if state.external_ema < 0.25:
+        state.external_active_until = min(state.external_active_until, time_s + 0.10)
+      if time_s < state.lead_active_until:
+        lead_active.append(prediction)
+      if (
+        time_s < state.external_active_until
+        and prediction.external_prob >= EXTERNAL_ACTIVE_CURRENT_MIN
+      ):
+        external_active.append(prediction)
+
+    for object_id, state in tuple(self._states.items()):
+      if object_id not in seen and time_s - state.last_seen > 0.5:
+        self._states.pop(object_id, None)
+    return RadarLeadDecision(
+      lead_candidates=tuple(sorted(
+        lead_active,
+        key=lambda item: (-item.lead_prob, item.features.radar_object.d_rel),
+      )[:2]),
+      cutin_candidates=(),
+      external_candidates=tuple(sorted(
+        external_active,
+        key=lambda item: (-item.external_prob, item.features.radar_object.d_rel),
       )[:2]),
     )

@@ -15,6 +15,7 @@ from openpilot.selfdrive.carrot.radar.radar_lead_model import (
 from openpilot.selfdrive.carrot.radar.radar_lead_runtime import RadarLeadRuntime
 from openpilot.selfdrive.carrot.radar.radar_lead_tau import RadarLeadTauTracker
 from openpilot.selfdrive.carrot.radar.radar_trajectory_model import (
+  trajectory_control_max_d_rel,
   trajectory_decision_ahead_of_primary,
 )
 from openpilot.selfdrive.carrot.radar.radar_sensor_objects import (
@@ -430,6 +431,7 @@ class VisionModelRadarController:
     self.displaced_primary_aliases: frozenset[str] = frozenset()
     self.displaced_primary_hold_until = 0.0
     self.primary_alias_expiry: dict[str, float] = {}
+    self.cutin_lead_two_aliases: frozenset[str] = frozenset()
 
   def _lead_from_prediction(
     self,
@@ -567,8 +569,12 @@ class VisionModelRadarController:
     points: Any,
     model: Any,
     car_state: Any | None = None,
+    live_pose: Any | None = None,
+    live_pose_age_s: float = math.inf,
   ) -> RadarLeadModelOutput:
-    result = self.runtime.update(time_s, v_ego, points, model, car_state)
+    result = self.runtime.update(
+      time_s, v_ego, points, model, car_state, live_pose, live_pose_age_s,
+    )
     self.last_runtime_result = result
     self.last_trajectory_result = result.trajectory
     if not result.available:
@@ -643,18 +649,25 @@ class VisionModelRadarController:
     )
     primary_d_rel = float(lead_one["dRel"]) if lead_one is not None else None
     if result.trajectory is not None and result.trajectory.available:
+      control_max_d_rel = trajectory_control_max_d_rel(v_ego)
       trajectory_result = replace(
         result.trajectory,
-        decision=trajectory_decision_ahead_of_primary(result.trajectory.decision, primary_d_rel),
-        front_decision=trajectory_decision_ahead_of_primary(result.trajectory.front_decision, primary_d_rel),
-        corner_decision=trajectory_decision_ahead_of_primary(result.trajectory.corner_decision, primary_d_rel),
+        decision=trajectory_decision_ahead_of_primary(
+          result.trajectory.decision, primary_d_rel, control_max_d_rel,
+        ),
+        front_decision=trajectory_decision_ahead_of_primary(
+          result.trajectory.front_decision, primary_d_rel, control_max_d_rel,
+        ),
+        corner_decision=trajectory_decision_ahead_of_primary(
+          result.trajectory.corner_decision, primary_d_rel, control_max_d_rel,
+        ),
       )
       result = replace(result, trajectory=trajectory_result)
       self.last_runtime_result = result
       self.last_trajectory_result = trajectory_result
 
     path_exit_predictions = (
-      result.trajectory.front_decision.exiting + result.trajectory.corner_decision.exiting
+      result.trajectory.decision.exiting
       if result.trajectory is not None and result.trajectory.available
       else ()
     )
@@ -756,6 +769,7 @@ class VisionModelRadarController:
         and cutin_is_ahead_of_primary(float(lead["dRel"]), primary_d_rel)
       )
     ]
+    relevant_cutin_pairs.sort(key=lambda pair: float(pair[1]["dRel"]))
     external_pairs = [
       (
         prediction,
@@ -817,10 +831,21 @@ class VisionModelRadarController:
     # Report independent cut-in decisions even when they are not safe leadTwo
     # control inputs, but do not re-report the vision-matched primary object as
     # a separate cut-in after a brief vision target-ID change.
-    cutin_leads = tuple(
-      lead for prediction, lead in relevant_cutin_pairs
+    independent_cutin_pairs = tuple(
+      (prediction, lead)
+      for prediction, lead in relevant_cutin_pairs
       if independent_cutin(prediction, lead)
     )
+    deduplicated_cutin_pairs: list[tuple[RadarLeadPrediction, dict[str, Any]]] = []
+    for pair in independent_cutin_pairs:
+      aliases = association_aliases(pair[0])
+      if any(
+        aliases & association_aliases(existing[0])
+        for existing in deduplicated_cutin_pairs
+      ):
+        continue
+      deduplicated_cutin_pairs.append(pair)
+    independent_cutin_pairs = tuple(deduplicated_cutin_pairs)
     independent_external_pairs = tuple(
       (prediction, lead) for prediction, lead in external_pairs
       if (
@@ -831,9 +856,22 @@ class VisionModelRadarController:
     )
     external_leads = tuple(lead for _, lead in independent_external_pairs)
     lead_two_pair = next((
-      (prediction, lead) for prediction, lead in relevant_cutin_pairs
-      if independent_cutin(prediction, lead)
+      (prediction, lead)
+      for prediction, lead in independent_cutin_pairs
+      if self.cutin_lead_two_aliases & association_aliases(prediction)
     ), None)
+    if lead_two_pair is None:
+      self.cutin_lead_two_aliases = frozenset()
+      lead_two_pair = next(iter(independent_cutin_pairs), None)
+      if lead_two_pair is not None:
+        self.cutin_lead_two_aliases = association_aliases(lead_two_pair[0])
+    selected_cutin_pairs = (
+      (lead_two_pair,)
+      + tuple(pair for pair in independent_cutin_pairs if pair[0] is not lead_two_pair[0])
+      if lead_two_pair is not None
+      else independent_cutin_pairs
+    )
+    cutin_leads = tuple(lead for _, lead in selected_cutin_pairs)
     lead_two = lead_two_pair[1] if lead_two_pair is not None else None
     if lead_two is None:
       lead_two = next((

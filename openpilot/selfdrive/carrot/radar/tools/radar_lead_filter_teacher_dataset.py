@@ -21,7 +21,7 @@ from openpilot.selfdrive.carrot.radar.radar_lead_model import (
   RadarLeadFeatures,
   RadarLeadModel,
 )
-from openpilot.selfdrive.carrot.radar.radar_object_fusion import FusedRadarObject
+from openpilot.selfdrive.carrot.radar.radar_object import RadarObject
 
 
 def _number(row: dict[str, str], name: str, default: float = 0.0) -> float:
@@ -56,7 +56,7 @@ def _sample(row: dict[str, str]) -> RadarLeadFeatures:
   else:
     lateral_source = "scc"
   distance_source = "front" if front_present else "corner" if corner_present else "scc"
-  obj = FusedRadarObject(
+  obj = RadarObject(
     object_id=row["object_id"],
     d_rel=_number(row, "d_rel"),
     y_rel=_number(row, "y_rel"),

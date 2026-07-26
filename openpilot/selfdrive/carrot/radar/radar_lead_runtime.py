@@ -11,17 +11,16 @@ from pathlib import Path
 from typing import Any
 
 from openpilot.selfdrive.carrot.radar.radar_lead_model import (
-  CUTIN_TEMPORAL_THRESHOLD_MAX,
   RadarLeadContext,
   RadarLeadDecision,
-  RadarLeadDecisionFilter,
+  RadarLeadPrimaryExternalDecisionFilter,
   RadarLeadFeatureBuilder,
   RadarLeadModel,
   RadarLeadPrediction,
   VisionLeadContext,
 )
 from openpilot.selfdrive.carrot.radar.radar_sensor_objects import independent_radar_objects
-from openpilot.selfdrive.carrot.radar.radar_trajectory import estimated_yaw_rate_rad_s
+from openpilot.selfdrive.carrot.radar.radar_trajectory import ego_yaw_rate_rad_s
 from openpilot.selfdrive.carrot.radar.radar_trajectory_model import (
   RadarTrajectoryRuntime,
   RadarTrajectoryRuntimeResult,
@@ -160,6 +159,8 @@ class RadarLeadRuntime:
     corner_model_path: Path | None = None,
     corner_radar_enabled: bool = False,
     enable_radar_tracks: int = 1,
+    steer_ratio: float = 14.0,
+    wheelbase: float = 2.8,
   ) -> None:
     # model_path is retained for replay/backward compatibility. Production uses
     # independent model files as soon as both source-specific artifacts exist.
@@ -172,6 +173,8 @@ class RadarLeadRuntime:
     self.include_scc = include_scc
     self.corner_radar_enabled = corner_radar_enabled
     self.enable_radar_tracks = enable_radar_tracks
+    self.steer_ratio = _finite(steer_ratio, 14.0)
+    self.wheelbase = _finite(wheelbase, 2.8)
     self.front_features = RadarLeadFeatureBuilder()
     self.corner_features = RadarLeadFeatureBuilder()
     self.front_model: RadarLeadModel | None = None
@@ -179,8 +182,8 @@ class RadarLeadRuntime:
     # Compatibility for existing replay diagnostics. This always names the
     # front model and is not shared for inference.
     self.model: RadarLeadModel | None = None
-    self.front_decisions: RadarLeadDecisionFilter | None = None
-    self.corner_decisions: RadarLeadDecisionFilter | None = None
+    self.front_decisions: RadarLeadPrimaryExternalDecisionFilter | None = None
+    self.corner_decisions: RadarLeadPrimaryExternalDecisionFilter | None = None
     self.trajectory = RadarTrajectoryRuntime(corner_radar_enabled=corner_radar_enabled)
     self.load_error = ""
 
@@ -197,16 +200,14 @@ class RadarLeadRuntime:
       self.model = self.front_model
       front_thresholds = dict(
         lead_threshold=max(0.5, float(self.front_model.thresholds[0])),
-        cutin_threshold=max(0.5, min(CUTIN_TEMPORAL_THRESHOLD_MAX, float(self.front_model.thresholds[1]))),
         external_threshold=max(0.5, float(self.front_model.thresholds[2])),
       )
       corner_thresholds = dict(
         lead_threshold=max(0.5, float(self.corner_model.thresholds[0])),
-        cutin_threshold=max(0.5, min(CUTIN_TEMPORAL_THRESHOLD_MAX, float(self.corner_model.thresholds[1]))),
         external_threshold=max(0.5, float(self.corner_model.thresholds[2])),
       )
-      self.front_decisions = RadarLeadDecisionFilter(**front_thresholds)
-      self.corner_decisions = RadarLeadDecisionFilter(**corner_thresholds)
+      self.front_decisions = RadarLeadPrimaryExternalDecisionFilter(**front_thresholds)
+      self.corner_decisions = RadarLeadPrimaryExternalDecisionFilter(**corner_thresholds)
       self.load_error = ""
       return True
     except Exception as exc:
@@ -220,6 +221,8 @@ class RadarLeadRuntime:
     points: Iterable[Any],
     model: Any,
     car_state: Any | None = None,
+    live_pose: Any | None = None,
+    live_pose_age_s: float = math.inf,
   ) -> RadarLeadRuntimeResult:
     started = time.perf_counter()
     if not self._load():
@@ -234,12 +237,13 @@ class RadarLeadRuntime:
       context = runtime_context(time_s, v_ego, model)
       steering_angle_deg = _finite(getattr(car_state, "steeringAngleDeg", 0.0))
       steering_rate_deg_s = _finite(getattr(car_state, "steeringRateDeg", 0.0))
-      measured_yaw_rate = _finite(getattr(car_state, "yawRate", 0.0))
-      yaw_rate_estimated = abs(measured_yaw_rate) < 1e-4
-      yaw_rate_rad_s = (
-        estimated_yaw_rate_rad_s(v_ego, steering_angle_deg)
-        if yaw_rate_estimated
-        else measured_yaw_rate
+      yaw_rate_rad_s, yaw_rate_estimated, _ = ego_yaw_rate_rad_s(
+        v_ego,
+        steering_angle_deg,
+        live_pose,
+        live_pose_age_s,
+        self.steer_ratio,
+        self.wheelbase,
       )
       trajectory = self.trajectory.update(
         time_s,

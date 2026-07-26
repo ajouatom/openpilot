@@ -68,22 +68,6 @@ def first_model_cutin(selector, frames, case) -> tuple[float, int] | None:
   return None
 
 
-def first_internal_model_cutin(selector, frames, case) -> tuple[float, int] | None:
-  start, end = (float(value) for value in case["window"])
-  targets = {int(value) for value in case.get("target_track_ids", ())}
-  for index, frame in enumerate(frames):
-    if not start <= frame.time_s <= end:
-      continue
-    selection = selector.select(frame, index)
-    candidates = [
-      candidate for candidate in selection.decision_cutin_candidates
-      if candidate_matches_targets(candidate, targets)
-    ]
-    if candidates:
-      return frame.time_s, candidates[0].track_id
-  return None
-
-
 def control_suppression_status(selector, frames, case) -> tuple[bool, str]:
   if not case.get("require_control_suppressed", False):
     return True, ""
@@ -109,6 +93,7 @@ def first_raw_model_cutin(selector, frames, case) -> tuple[float, int] | None:
     selection = selector.select(frame, index)
     candidates = [
       candidate for candidate in selection.corner_candidates
+      + selection.front_candidates
       if candidate.eligible and candidate_matches_targets(candidate, targets)
     ]
     if candidates:
@@ -276,10 +261,8 @@ def main() -> int:
     if args.compare_radard and source not in source_ids:
       source_ids[source] = current_cutin_track_ids(path, frames, (source,))
     radard_event = first_radard_cutin(frames, source_ids[source], case) if args.compare_radard else None
-    decision_stage = case.get("validation_stage") == "decision"
-    event_fn = first_internal_model_cutin if decision_stage else first_model_cutin
-    baseline_event = event_fn(baseline, frames, case) if baseline is not None else None
-    candidate_event = event_fn(candidate, frames, case)
+    baseline_event = first_model_cutin(baseline, frames, case) if baseline is not None else None
+    candidate_event = first_model_cutin(candidate, frames, case)
     baseline_raw_event = first_raw_model_cutin(baseline, frames, case) if baseline is not None else None
     candidate_raw_event = first_raw_model_cutin(candidate, frames, case)
     deadline_passed, deadline_status = detection_deadline_status(candidate_event, case)

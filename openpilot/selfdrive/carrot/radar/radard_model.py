@@ -64,6 +64,8 @@ class ModelRadarD:
       include_scc=True,
       enable_radar_tracks=params.get_int("EnableRadarTracks"),
       corner_radar_enabled=corner_radar_enabled(CP, params.get_int("EnableCornerRadar")),
+      steer_ratio=float(CP.steerRatio),
+      wheelbase=float(CP.wheelbase),
     )
     self.radar_state = log.RadarState.new_message()
     self.radar_state_valid = False
@@ -89,12 +91,18 @@ class ModelRadarD:
     self.radar_state.radarErrors = rr.errors
 
     current_time = 1e-9 * max(sm.logMonoTime.values())
+    live_pose_age_s = max(
+      0.0,
+      current_time - 1e-9 * int(sm.logMonoTime.get("livePose", 0)),
+    )
     output = self.controller.update(
       current_time,
       float(sm["carState"].vEgo),
       rr.points,
       sm["modelV2"],
       sm["carState"],
+      sm["livePose"],
+      live_pose_age_s,
     )
     self._assign_output(self.radar_state, output)
 

@@ -43,6 +43,11 @@ class ComparisonRow:
   scored_frames: int
 
 
+def _path_occupancy_selected(candidate: Any) -> bool:
+  """Count only the production candidate that became final leadTwo."""
+  return str(getattr(candidate, "stage", "")) == "SELECTED"
+
+
 def _load_labels(path: Path) -> list[ComparisonLabel]:
   payload = json.loads(path.read_text(encoding="utf-8"))
   labels = []
@@ -161,7 +166,7 @@ def evaluate(
         selected = (
           True
           if implementation == "carrot-wip"
-          else best.stage in ("DECISION", "OUTPUT", "SELECTED")
+          else _path_occupancy_selected(best)
         )
         selected_frames[label.label_id].append((frame.time_s, selected))
         scores[label.label_id].append(float(best.score))

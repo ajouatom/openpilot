@@ -10,8 +10,9 @@ from typing import Any
 DEFAULT_HORIZONS_S = tuple(index * 0.25 for index in range(9))
 TARGET_HORIZONS_S = (0.5, 1.0, 1.5, 2.0)
 MODEL_HISTORY_AGES_S = (0.0, 0.25, 0.5, 0.75, 1.0)
-VEHICLE_HALF_WIDTH_M = 0.9
+MODEL_HISTORY_ENDPOINT_TOLERANCE_S = 0.03
 TRACK_CONTINUITY_MAX_GAP_S = 0.35
+LIVE_POSE_MAX_AGE_S = 0.20
 
 POINT_FEATURE_NAMES = (
   "v_ego",
@@ -69,6 +70,7 @@ class RadarTrajectorySample:
   d_path: float
   lateral_sigma: float
   occupancy_prob: float
+  lane_half_width: float = 1.8
 
 
 @dataclass(frozen=True)
@@ -166,7 +168,57 @@ def estimated_yaw_rate_rad_s(
   ratio = max(abs(_finite(steer_ratio, 14.0)), 1.0)
   base = max(abs(_finite(wheelbase, 2.8)), 1.5)
   road_wheel_angle = math.radians(_finite(steering_angle_deg) / ratio)
-  return _finite(v_ego) * math.tan(road_wheel_angle) / base
+  # livePose's device-frame z is negative for a positive/left steering turn.
+  return -_finite(v_ego) * math.tan(road_wheel_angle) / base
+
+
+def live_pose_yaw_rate_rad_s(live_pose: Any | None) -> float | None:
+  """Return validated device-frame yaw rate from livePose."""
+  if live_pose is None:
+    return None
+  angular_velocity = getattr(live_pose, "angularVelocityDevice", None)
+  if (
+    angular_velocity is None
+    or not bool(getattr(angular_velocity, "valid", False))
+    or not bool(getattr(live_pose, "inputsOK", False))
+    or not bool(getattr(live_pose, "sensorsOK", False))
+  ):
+    return None
+  value = _finite(getattr(angular_velocity, "z", math.nan), math.nan)
+  return value if math.isfinite(value) else None
+
+
+def ego_yaw_rate_rad_s(
+  v_ego: float,
+  steering_angle_deg: float,
+  live_pose: Any | None = None,
+  live_pose_age_s: float = math.inf,
+  steer_ratio: float = 14.0,
+  wheelbase: float = 2.8,
+) -> tuple[float, bool, str]:
+  """Select fresh livePose, then the unit-consistent steering fallback."""
+  pose_rate = live_pose_yaw_rate_rad_s(live_pose)
+  if pose_rate is not None and 0.0 <= _finite(live_pose_age_s, math.inf) <= LIVE_POSE_MAX_AGE_S:
+    return pose_rate, False, "livePose"
+  return (
+    estimated_yaw_rate_rad_s(
+      v_ego,
+      steering_angle_deg,
+      steer_ratio,
+      wheelbase,
+    ),
+    True,
+    "steering",
+  )
+
+
+def yaw_compensated_lateral_rate(
+  yv_rel: float,
+  yaw_rate_rad_s: float,
+  d_rel: float,
+) -> float:
+  """Remove livePose/device-yaw motion from the radar lateral rate."""
+  return _finite(yv_rel) - _finite(yaw_rate_rad_s) * max(_finite(d_rel), 0.0)
 
 
 def _line_y(points: Sequence[tuple[float, float]], distance: float) -> float:
@@ -204,6 +256,28 @@ def _interval_probability(center: float, sigma: float, limit: float) -> float:
   return min(
     1.0,
     max(0.0, _normal_cdf((limit - center) / sigma) - _normal_cdf((-limit - center) / sigma)),
+  )
+
+
+def path_occupancy_probability(
+  d_path_mean: float,
+  d_path_sigma: float,
+  lane_half_width: float,
+) -> float:
+  """Probability that a predicted radar-return center lies within the path."""
+  return _interval_probability(d_path_mean, d_path_sigma, lane_half_width)
+
+
+def forward_probability(
+  d_rel_mean: float,
+  d_rel_sigma: float,
+  minimum_d_rel: float = 0.5,
+) -> float:
+  """Probability that a predicted radar return remains ahead of ego."""
+  sigma = max(_finite(d_rel_sigma), 0.05)
+  return min(
+    1.0,
+    max(0.0, _normal_cdf((_finite(d_rel_mean) - minimum_d_rel) / sigma)),
   )
 
 
@@ -269,6 +343,11 @@ def path_relative_state(
 ) -> tuple[float, float, float, bool, float]:
   """Return path center, path-relative lateral position, and current lane metadata."""
   return _lane_state(distance, y_rel, path, lane_lines, lane_probs)
+
+
+def path_center_occupied(d_path: float, lane_half_width: float) -> bool:
+  """Classify the radar return center, not an assumed vehicle body edge."""
+  return abs(d_path) <= lane_half_width
 
 
 def radar_track_continuous(
@@ -343,6 +422,9 @@ class RadarTrajectoryAnalyzer:
       y_rel = radar_point_value(point, "y_rel", "yRel")
       v_rel = radar_point_value(point, "v_rel", "vRel")
       raw_y_rate = radar_point_value(point, "yv_rel", "yvRel")
+      compensated_y_rate = yaw_compensated_lateral_rate(
+        raw_y_rate, yaw_rate_rad_s, d_rel,
+      )
       _, d_path, lane_half_width, lane_reliable, lane_probability = _lane_state(
         d_rel, y_rel, path, lane_lines, lane_probs,
       )
@@ -355,16 +437,18 @@ class RadarTrajectoryAnalyzer:
       ):
         history.clear()
         self._continuity_ids[key] += 1
-      history.append(_HistoryPoint(time_s, d_rel, y_rel, d_path, v_rel, raw_y_rate))
+      history.append(_HistoryPoint(
+        time_s, d_rel, y_rel, d_path, v_rel, compensated_y_rate,
+      ))
       self._last_points[key] = point
       while history and time_s - history[0].time_s > 1.2:
         history.popleft()
 
       fitted_rate, rate_sigma = _linear_rate(tuple(history))
       if len(history) >= 3:
-        d_path_rate = 0.80 * fitted_rate + 0.20 * raw_y_rate
+        d_path_rate = 0.80 * fitted_rate + 0.20 * compensated_y_rate
       else:
-        d_path_rate = raw_y_rate
+        d_path_rate = compensated_y_rate
         rate_sigma = max(rate_sigma, 0.9)
       d_path_rate = min(max(d_path_rate, -5.0), 5.0)
       ego_rotation_lateral_speed = abs(yaw_rate_rad_s) * max(d_rel, 0.0)
@@ -375,7 +459,7 @@ class RadarTrajectoryAnalyzer:
       )
 
       samples: list[RadarTrajectorySample] = []
-      body_limit = lane_half_width + VEHICLE_HALF_WIDTH_M
+      path_limit = lane_half_width
       lane_std = 0.0
       if lane_reliable and len(lane_stds) >= 3:
         lane_std = 0.5 * math.hypot(_finite(lane_stds[1]), _finite(lane_stds[2]))
@@ -394,11 +478,12 @@ class RadarTrajectoryAnalyzer:
           + (lane_std if future_lane_reliable else 0.45) ** 2
           + (rate_sigma * horizon_s) ** 2
         )
-        occupancy = _interval_probability(
-          future_d_path, sigma, future_half_width + VEHICLE_HALF_WIDTH_M,
+        occupancy = path_occupancy_probability(
+          future_d_path, sigma, future_half_width,
         )
         samples.append(RadarTrajectorySample(
           horizon_s, future_d, future_y, future_d_path, sigma, occupancy,
+          future_half_width,
         ))
 
       inward_speed = (
@@ -407,10 +492,10 @@ class RadarTrajectoryAnalyzer:
         else 0.0
       )
       time_to_entry = None
-      if abs(d_path) <= body_limit:
+      if path_center_occupied(d_path, path_limit):
         time_to_entry = 0.0
       elif inward_speed > 0.05:
-        time_to_entry = (abs(d_path) - body_limit) / inward_speed
+        time_to_entry = (abs(d_path) - path_limit) / inward_speed
       entry_probability = max((sample.occupancy_prob for sample in samples), default=0.0)
       if not lane_reliable and abs(d_path) > 3.5:
         reason = "lane-low / path fallback"
@@ -508,6 +593,38 @@ def trajectory_sample_at(
   return min(trajectory.samples, key=lambda sample: abs(sample.horizon_s - horizon_s))
 
 
+def _history_at_age(
+  history: Sequence[RadarTrajectoryHistorySample],
+  age_s: float,
+) -> RadarTrajectoryHistorySample | None:
+  """Interpolate a measured past trajectory at one fixed model age."""
+  if not history:
+    return None
+  ordered = sorted(history, key=lambda sample: sample.age_s)
+  if age_s < ordered[0].age_s - MODEL_HISTORY_ENDPOINT_TOLERANCE_S:
+    return None
+  if age_s > ordered[-1].age_s + MODEL_HISTORY_ENDPOINT_TOLERANCE_S:
+    return None
+  if age_s <= ordered[0].age_s:
+    return ordered[0]
+  if age_s >= ordered[-1].age_s:
+    return ordered[-1]
+  for recent, older in zip(ordered, ordered[1:], strict=False):
+    if age_s > older.age_s:
+      continue
+    span = max(older.age_s - recent.age_s, 1e-6)
+    ratio = (age_s - recent.age_s) / span
+    return RadarTrajectoryHistorySample(
+      age_s=age_s,
+      d_rel=recent.d_rel + ratio * (older.d_rel - recent.d_rel),
+      y_rel=recent.y_rel + ratio * (older.y_rel - recent.y_rel),
+      d_path=recent.d_path + ratio * (older.d_path - recent.d_path),
+      v_rel=recent.v_rel + ratio * (older.v_rel - recent.v_rel),
+      yv_rel=recent.yv_rel + ratio * (older.yv_rel - recent.yv_rel),
+    )
+  return None
+
+
 def trajectory_feature_row(
   trajectory: RadarTrajectory,
 ) -> dict[str, float]:
@@ -529,11 +646,7 @@ def trajectory_feature_row(
     "path_sigma": trajectory.path_sigma,
   }
   for age_s in MODEL_HISTORY_AGES_S:
-    history = min(
-      trajectory.history,
-      key=lambda sample: abs(sample.age_s - age_s),
-      default=None,
-    )
+    history = _history_at_age(trajectory.history, age_s)
     suffix = f"{age_s:.2f}".replace(".", "p")
     row.update({
       f"history_valid_{suffix}": float(history is not None),
@@ -561,7 +674,11 @@ def trajectory_model_feature_row(
     "y_rel": radar_point_value(point, "y_rel", "yRel"),
     "v_rel": v_rel,
     "a_rel": radar_point_value(point, "a_rel", "aRel"),
-    "yv_rel": radar_point_value(point, "yv_rel", "yvRel"),
+    "yv_rel": yaw_compensated_lateral_rate(
+      radar_point_value(point, "yv_rel", "yvRel"),
+      trajectory.yaw_rate_rad_s,
+      d_rel,
+    ),
     "v_lead": radar_point_value(point, "v_lead", "vLead", v_ego + v_rel),
     "a_lead": radar_point_value(point, "a_lead", "aLead"),
     "j_lead": radar_point_value(point, "j_lead", "jLead"),

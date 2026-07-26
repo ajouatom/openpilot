@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from openpilot.selfdrive.carrot.radar.radar_object_fusion import FusedRadarObject
+from openpilot.selfdrive.carrot.radar.radar_object import RadarObject
 
 
 NEAR_SIDE_NO_FRONT_MATCH_DREL_M = 5.0
@@ -25,11 +25,11 @@ POST_MATCH_EXPECTED_DREL_OFFSET_M = 1.25
 
 @dataclass(frozen=True)
 class IndependentRadarObjects:
-  front: tuple[FusedRadarObject, ...]
-  corner: tuple[FusedRadarObject, ...]
+  front: tuple[RadarObject, ...]
+  corner: tuple[RadarObject, ...]
 
   @property
-  def all(self) -> tuple[FusedRadarObject, ...]:
+  def all(self) -> tuple[RadarObject, ...]:
     return self.front + self.corner
 
 
@@ -38,11 +38,11 @@ def _finite(value: float, fallback: float = 0.0) -> float:
   return parsed if math.isfinite(parsed) else fallback
 
 
-def sensor_object(point: Any) -> FusedRadarObject:
+def sensor_object(point: Any) -> RadarObject:
   source = str(point.source)
   is_corner = source.startswith("corner")
   is_scc = source == "scc"
-  return FusedRadarObject(
+  return RadarObject(
     object_id=f"{source}:{point.track_id}",
     d_rel=float(point.d_rel),
     y_rel=float(point.y_rel),
