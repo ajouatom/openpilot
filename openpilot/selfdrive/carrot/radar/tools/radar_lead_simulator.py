@@ -2835,6 +2835,7 @@ class SimulatorUI:
     validation_cases_path: Path | None = None,
     radard_selector: LeadSelector | None = None,
     initial_probability: float | None = None,
+    manual_probability_mode: bool = False,
   ) -> None:
     import pyray as rl
     self.rl = rl
@@ -2858,6 +2859,7 @@ class SimulatorUI:
     # can still be enabled to inspect the objects actually passed to the model.
     self.show_fused_objects = False
     self.review_settings_path = default_review_settings_path()
+    self.device_review_mode = initial_probability is None and not manual_probability_mode
     self.min_candidate_probability = (
       min(max(float(initial_probability), 0.0), 1.0)
       if initial_probability is not None
@@ -2992,24 +2994,27 @@ class SimulatorUI:
       base_events = validation_log_review_events(self.frames, self.selector, self.reviews)
     else:
       base_events = validation_review_events(self.frames, self.selector, self.review)
-    sources = tuple(review.source.lower() for review in self.reviews) or (self.review.source.lower(),)
-    has_model_probabilities = any(
-      any("trajectory " in candidate.reason.lower() for candidate in self.selector.select(frame, index).cutin_diagnostics)
-      for index, frame in enumerate(self.frames)
-    )
-    trajectory_events = (
-      trajectory_model_review_events(
-        self.frames, self.selector, sources, self.min_candidate_probability,
+    if self.device_review_mode:
+      trajectory_events: dict[int, tuple[str, ...]] = {}
+    else:
+      sources = tuple(review.source.lower() for review in self.reviews) or (self.review.source.lower(),)
+      has_model_probabilities = any(
+        any("trajectory " in candidate.reason.lower() for candidate in self.selector.select(frame, index).cutin_diagnostics)
+        for index, frame in enumerate(self.frames)
       )
-      if has_model_probabilities
-      else trajectory_review_events(
-        self.frames,
-        self.trajectories,
-        sources,
-        self.trajectory_horizon_s,
-        self.min_candidate_probability,
+      trajectory_events = (
+        trajectory_model_review_events(
+          self.frames, self.selector, sources, self.min_candidate_probability,
+        )
+        if has_model_probabilities
+        else trajectory_review_events(
+          self.frames,
+          self.trajectories,
+          sources,
+          self.trajectory_horizon_s,
+          self.min_candidate_probability,
+        )
       )
-    )
     merged = {index: list(events) for index, events in base_events.items()}
     for index, events in trajectory_events.items():
       bucket = merged.setdefault(index, [])
@@ -3021,11 +3026,17 @@ class SimulatorUI:
       if index not in base_events and self._trajectory_events_fully_labeled(index, events)
     }
     self.review_handled = set(self.review_suppressed)
-    self.review_status = (
-      f"AUTO REVIEW ARMED  {len(self.reviews)} case(s), "
-      + f"prob {self.min_candidate_probability:.2f}  "
-      + f"unlabeled {len(trajectory_events) - len(self.review_handled)}"
-    )
+    if self.device_review_mode:
+      self.review_status = (
+        f"DEVICE REVIEW ARMED  {len(self.reviews)} case(s), "
+        + f"{len(base_events)} production CUT-IN event(s)"
+      )
+    else:
+      self.review_status = (
+        f"MANUAL PROB REVIEW ARMED  {len(self.reviews)} case(s), "
+        + f"prob {self.min_candidate_probability:.2f}  "
+        + f"unlabeled {len(trajectory_events) - len(self.review_handled)}"
+      )
 
   @staticmethod
   def _trajectory_event_track_ids(events: Iterable[str]) -> tuple[int, ...]:
@@ -3094,9 +3105,13 @@ class SimulatorUI:
       for index in self.review_events
       if index > frame_index and index not in suppressed
     )
+    mode = (
+      "DEVICE OUTPUT"
+      if getattr(self, "device_review_mode", False)
+      else f"MANUAL PROB {self.min_candidate_probability:.2f}"
+    )
     self.review_status = (
-      f"AUTO REVIEW REARMED after {self.times[frame_index]:.2f}s  "
-      + f"prob {self.min_candidate_probability:.2f}"
+      f"AUTO REVIEW REARMED after {self.times[frame_index]:.2f}s  {mode}"
     )
 
   def _user_seek(self, time_s: float) -> None:
@@ -3278,8 +3293,14 @@ class SimulatorUI:
     )
     above_display_threshold = (
       diagnostic is not None
-      and diagnostic.stage != "BLOCK-LEAD"
-      and diagnostic.score >= self.min_candidate_probability
+      and (
+        diagnostic.stage in ("OUTPUT", "SELECTED")
+        if getattr(self, "device_review_mode", False)
+        else (
+          diagnostic.stage != "BLOCK-LEAD"
+          and diagnostic.score >= self.min_candidate_probability
+        )
+      )
     )
     if diagnostic is not None and (show_score_label or diagnostic.score >= 0.05):
       stage_color = self._color(
@@ -3380,6 +3401,8 @@ class SimulatorUI:
   def _candidate_visible(self, candidate: Candidate | None) -> bool:
     if candidate is None:
       return False
+    if getattr(self, "device_review_mode", False):
+      return True
     return not self.selector.name.startswith(("mlp:", "multitask:", "hybrid:")) or candidate.score >= self.min_candidate_probability
 
   def _draw_manual_label(self, map_rect: Any, frame: RadarFrame, role: str, color: Any, radius: float) -> None:
@@ -3914,16 +3937,23 @@ class SimulatorUI:
       control_x += control_width
 
     slider_y = y + 29.0
-    label = f"PROB >= {self.min_candidate_probability:.2f}"
-    self._draw_text(label, x, slider_y - 4.0, 13, self._color(self.TEXT))
-    slider_x = x + 108.0
-    slider_width = max(100.0, rect.width - 150.0)
-    self.probability_slider = rl.Rectangle(slider_x, slider_y - 7.0, slider_width, 18.0)
-    track_y = slider_y + 1.0
-    rl.draw_line_ex(rl.Vector2(slider_x, track_y), rl.Vector2(slider_x + slider_width, track_y), 4.0, self._color(self.GRID))
-    knob_x = slider_x + slider_width * self.min_candidate_probability
-    rl.draw_line_ex(rl.Vector2(slider_x, track_y), rl.Vector2(knob_x, track_y), 4.0, self._color(self.GREEN))
-    rl.draw_circle_v(rl.Vector2(knob_x, track_y), 7.0, self._color(self.TEXT))
+    if getattr(self, "device_review_mode", False):
+      self.probability_slider = None
+      self._draw_text(
+        "AUTO: DEVICE CUT-IN OUTPUT",
+        x, slider_y - 4.0, 13, self._color(self.GREEN),
+      )
+    else:
+      label = f"MANUAL PROB >= {self.min_candidate_probability:.2f}"
+      self._draw_text(label, x, slider_y - 4.0, 13, self._color(self.TEXT))
+      slider_x = x + 138.0
+      slider_width = max(100.0, rect.width - 180.0)
+      self.probability_slider = rl.Rectangle(slider_x, slider_y - 7.0, slider_width, 18.0)
+      track_y = slider_y + 1.0
+      rl.draw_line_ex(rl.Vector2(slider_x, track_y), rl.Vector2(slider_x + slider_width, track_y), 4.0, self._color(self.GRID))
+      knob_x = slider_x + slider_width * self.min_candidate_probability
+      rl.draw_line_ex(rl.Vector2(slider_x, track_y), rl.Vector2(knob_x, track_y), 4.0, self._color(self.GREEN))
+      rl.draw_circle_v(rl.Vector2(knob_x, track_y), 7.0, self._color(self.TEXT))
 
     if self.review is not None:
       horizon_y = slider_y + 29.0
@@ -4072,13 +4102,16 @@ class SimulatorUI:
     probability_top = rect.y + 121.0
     probability_bottom = rect.y + rect.height - 9.0
     probability_height = probability_bottom - probability_top
-    threshold_y = probability_bottom - probability_height * self.min_candidate_probability
-    rl.draw_line_ex(
-      rl.Vector2(plot_left, threshold_y), rl.Vector2(rect.x + rect.width - 8.0, threshold_y),
-      1.0, self._color(self.GRID),
-    )
     self._draw_text("CUT-IN", rect.x + 5.0, probability_top - 3.0, 11, self._color(self.MUTED))
-    self._draw_text(f"{self.min_candidate_probability:.2f}", rect.x + 5.0, threshold_y - 6.0, 10, self._color(self.MUTED))
+    if getattr(self, "device_review_mode", False):
+      self._draw_text("DEVICE", rect.x + 5.0, probability_top + 14.0, 10, self._color(self.GREEN))
+    else:
+      threshold_y = probability_bottom - probability_height * self.min_candidate_probability
+      rl.draw_line_ex(
+        rl.Vector2(plot_left, threshold_y), rl.Vector2(rect.x + rect.width - 8.0, threshold_y),
+        1.0, self._color(self.GRID),
+      )
+      self._draw_text(f"{self.min_candidate_probability:.2f}", rect.x + 5.0, threshold_y - 6.0, 10, self._color(self.MUTED))
     stage_legend = (
       ("MODEL", "model", self.CYAN),
       ("DECISION", "decision", self.PURPLE),
@@ -4479,7 +4512,11 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--paused", action="store_true", help="start paused")
   parser.add_argument(
     "--prob", type=float,
-    help="initial review probability (0.00-1.00); default remembers the last slider value",
+    help="manual raw-probability review threshold (0.00-1.00); omitted follows production CUT-IN output",
+  )
+  parser.add_argument(
+    "--manual-prob", action="store_true",
+    help="manual raw-probability review using the last saved slider value",
   )
   parser.add_argument("--summary", action="store_true", help="print comparison summary without opening a window")
   parser.add_argument("--export-csv", type=Path, help="export one comparison row per radar frame")
@@ -4745,6 +4782,8 @@ def print_summary(log_path: Path, frames: list[RadarFrame], selector: LeadSelect
 
 def main() -> int:
   args = parse_args()
+  if args.prob is not None and args.manual_prob:
+    raise SystemExit("--prob and --manual-prob cannot be used together")
   if args.prob is not None and not 0.0 <= args.prob <= 1.0:
     raise SystemExit("--prob must be between 0.00 and 1.00")
   review: ValidationReview | None = None
@@ -4837,6 +4876,7 @@ def main() -> int:
     validation_cases_path=args.validation_cases if review is not None else None,
     radard_selector=radard_selector,
     initial_probability=args.prob,
+    manual_probability_mode=args.manual_prob,
   ).run(args.start, args.paused, args.screenshot)
   return 0
 

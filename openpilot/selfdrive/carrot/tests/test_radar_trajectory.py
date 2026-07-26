@@ -269,7 +269,7 @@ def test_model_entry_probability_ignores_horizons_after_vehicle_passes_ego() -> 
   analyzer = RadarTrajectoryAnalyzer()
   trajectory = None
   current_point = None
-  for index, (d_rel, y_rel) in enumerate(((3.03, 3.40), (2.69, 3.30), (2.35, 3.20))):
+  for index, (d_rel, y_rel) in enumerate(((3.03, 3.40), (2.69, 3.20), (2.35, 3.00))):
     current_point = point(
       58, d_rel, y_rel, "frontRadar", v_rel=-1.36, yv_rel=-0.08,
     )
@@ -328,6 +328,42 @@ def test_model_entry_probability_is_zero_when_all_horizons_are_behind_ego() -> N
     v_ego=9.36,
   )[0]
 
+  assert prediction.forward_horizon_relevant == (False, False, False, False)
+  assert prediction.probability == 0.0
+
+
+def test_model_entry_probability_is_zero_when_entry_occurs_after_ego_passes() -> None:
+  analyzer = RadarTrajectoryAnalyzer()
+  trajectory = None
+  current_point = None
+  for index, (d_rel, y_rel) in enumerate(((11.0, -8.0), (8.5, -7.5), (6.0, -7.0))):
+    current_point = point(
+      1087, d_rel, y_rel, "corner235", v_rel=-10.0, yv_rel=2.0,
+    )
+    trajectory = analyzer.update(
+      index * 0.25,
+      (current_point,),
+      PATH,
+      LANE_LINES,
+      LANE_PROBS,
+    )[("corner235", 1087)]
+  assert trajectory is not None
+  assert current_point is not None
+  assert trajectory.time_to_entry_s is not None
+  assert trajectory.samples[2].d_rel > 0.5
+
+  model = object.__new__(RadarTrajectoryModel)
+  model.source = "corner"
+  model.probabilities = lambda _matrix: np.asarray(
+    ((0.96, 0.98, 0.98, 0.97),), dtype=np.float32,
+  )
+  prediction = model.predict(
+    {("corner235", 1087): trajectory},
+    (current_point,),
+    v_ego=10.0,
+  )[0]
+
+  assert prediction.horizon_probabilities == pytest.approx((0.96, 0.98, 0.98, 0.97))
   assert prediction.forward_horizon_relevant == (False, False, False, False)
   assert prediction.probability == 0.0
 

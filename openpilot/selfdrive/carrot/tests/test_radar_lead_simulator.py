@@ -245,6 +245,51 @@ def test_review_probability_settings_round_trip(tmp_path: Path) -> None:
   assert load_review_probability(settings) == 0.65
 
 
+def test_device_review_mode_pauses_only_for_production_cutin_output() -> None:
+  frames = [
+    replace(
+      frame((point(10, 20.0, 3.0, 15.0, "corner235"),)),
+      mono_time_s=float(index),
+      time_s=float(index),
+      model_leads=(),
+    )
+    for index in range(2)
+  ]
+  raw = Candidate(
+    10, 1.0, "trajectory corner path-entry",
+    d_rel=20.0, y_rel=3.0, stage="DECISION",
+  )
+  selected = Candidate(20, 0.82, "MLP confirmed cutin")
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      if int(frame_index) == 1:
+        return Selection(
+          None,
+          selected,
+          cutin_diagnostics=(raw,),
+          active_cutin_candidates=(selected,),
+        )
+      return Selection(None, None, cutin_diagnostics=(raw,))
+
+  review = ValidationReview("device", "detect", "corner", 0.0, 1.0, "scene")
+  ui = SimulatorUI.__new__(SimulatorUI)
+  ui.frames = frames
+  ui.selector = Selector()
+  ui.review = review
+  ui.reviews = (review,)
+  ui.device_review_mode = True
+  ui.min_candidate_probability = 0.5
+  ui.trajectory_horizon_s = 1.0
+  ui.trajectories = ()
+  ui.trajectory_review_labels = {}
+
+  ui._prepare_review_events()
+
+  assert ui.review_events == {1: ("CUT-IN id 20",)}
+  assert "DEVICE REVIEW ARMED" in ui.review_status
+
+
 def test_user_rewind_rearms_and_pauses_same_review_event(monkeypatch) -> None:
   review = ValidationReview("case", "clear", "corner", 0.0, 3.0, "scene")
   ui = SimulatorUI.__new__(SimulatorUI)

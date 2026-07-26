@@ -171,11 +171,14 @@ py -3.12 openpilot/selfdrive/carrot/radar/tools/radar_lead_validation_review.py
 
 Each unique route starts at 0 seconds and plays through the full log. Multiple
 validation windows that reference the same rlog are grouped, so that physical
-log is opened only once. Playback pauses with a two-tone alert when a shadow
-trajectory-model point first reaches the displayed `PROB` threshold. Press
-Space to resume after a cut-in, press R to restart the current log, and close
-the window to open the next case. Seeking backward rearms every later unlabeled
-event, so replaying the same section can alert and pause again. Only final
+log is opened only once. Playback pauses with a two-tone alert when the
+production controller first emits a CUT-IN. This default `AUTO: DEVICE CUT-IN
+OUTPUT` mode uses the source-specific model thresholds, temporal filters,
+controller output, and final deduplication; a shadow trajectory probability
+alone cannot pause it. Press Space to resume after a cut-in, press R to restart
+the current log, and close the window to open the next case. Seeking backward
+rearms every later device event, so replaying the same section can alert and
+pause again. Only final
 `leadOne` and `leadTwo` are displayed by default; recorded `radarState`, raw
 radar points, and source-head candidates remain available through the display
 checkboxes.
@@ -233,11 +236,12 @@ direct-threshold shadow path normally uses these stage codes:
 
 The right-side point rows show `IN`, `OUT`, geometric projection `H`, stage,
 distance, lateral position, and the four raw occupancy probabilities. `IN--`
-on the map means that point did not produce a scored model candidate. The
-probability slider controls the green IN highlight and automatic review pauses.
-Changing it rebuilds pause events immediately. Its last value is saved in the
-PC user settings and reused by later logs and invocations; `--prob 0.70`
-overrides the initial value. It does not alter production decisions or the
+on the map means that point did not produce a scored model candidate. With no
+probability option, device mode highlights `OUTPUT`/`SELECTED` points and pauses
+only for production CUT-IN events. `--prob 0.70` enables the separate manual
+raw-probability slider and rebuilds shadow pause events when it changes. The
+last manual value is saved in PC user settings and can be restored with
+`--manual-prob`. Neither manual mode alters production decisions or the
 on-device threshold. When `leadOne` exists, points behind it retain raw model
 scores and history but are marked `L` and cannot highlight, alert, pause, or
 become a shadow cut-in decision. Orange and yellow boxes and graph lines are
@@ -298,9 +302,9 @@ not only raw model thresholds:
 | truth | source | carrot-wip P / R / F1 | path-occupancy P / R / F1 |
 |---|---|---:|---:|
 | manual CUT-IN/CLEAR | front | 0.000 / 0.000 / 0.000 | 0.333 / 0.111 / 0.167 |
-| manual CUT-IN/CLEAR | corner | 0.200 / 0.034 / 0.059 | 0.818 / 0.310 / 0.450 |
+| manual CUT-IN/CLEAR | corner | 0.200 / 0.034 / 0.059 | 0.900 / 0.310 / 0.462 |
 | measured future entry | front | 0.500 / 0.100 / 0.167 | 0.333 / 0.033 / 0.061 |
-| measured future entry | corner | 0.250 / 0.018 / 0.034 | 0.636 / 0.127 / 0.212 |
+| measured future entry | corner | 0.250 / 0.018 / 0.034 | 0.700 / 0.127 / 0.215 |
 
 Corner improves materially under both truth definitions. Front improves
 against the broad manual windows, but its measured-future precision and recall

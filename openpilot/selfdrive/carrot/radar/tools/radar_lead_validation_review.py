@@ -92,7 +92,11 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--expected", choices=("all", "detect", "clear", "stationary"), default="all")
   parser.add_argument(
     "--prob", type=float,
-    help="initial review probability (0.00-1.00); omitted means reuse the last slider value",
+    help="manual raw-probability review threshold (0.00-1.00); omitted follows production CUT-IN output",
+  )
+  parser.add_argument(
+    "--manual-prob", action="store_true",
+    help="manual raw-probability review using the last saved slider value",
   )
   parser.add_argument(
     "--compare-radard", action="store_true",
@@ -119,6 +123,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
   args = parse_args()
+  if args.prob is not None and args.manual_prob:
+    raise SystemExit("--prob and --manual-prob cannot be used together")
   if args.prob is not None and not 0.0 <= args.prob <= 1.0:
     raise SystemExit("--prob must be between 0.00 and 1.00")
   if args.trajectory_table or args.trajectory_table_only:
@@ -176,6 +182,8 @@ def main() -> int:
       command.append("--compare-radard")
     if args.front_only:
       command.append("--front-only")
+    if args.manual_prob:
+      command.append("--manual-prob")
     if args.prob is not None:
       command.extend(("--prob", str(args.prob)))
     result = subprocess.run(command, check=False)

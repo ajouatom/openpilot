@@ -162,6 +162,14 @@ class RadarTrajectoryModel:
         ).d_rel > MIN_FORWARD_ENTRY_DREL_M
         for horizon_s in TARGET_HORIZONS_S
       )
+      time_to_entry_s = trajectory.time_to_entry_s
+      if time_to_entry_s is not None:
+        entry_d_rel = (
+          radar_point_value(point, "d_rel", "dRel")
+          + radar_point_value(point, "v_rel", "vRel") * time_to_entry_s
+        )
+        if entry_d_rel <= MIN_FORWARD_ENTRY_DREL_M:
+          forward_horizon_relevant = tuple(False for _ in TARGET_HORIZONS_S)
       current_path_occupancy = (
         abs(trajectory.d_path)
         <= trajectory.lane_half_width + VEHICLE_HALF_WIDTH_M
