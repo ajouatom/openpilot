@@ -1,3 +1,4 @@
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -248,6 +249,122 @@ def test_probability_filter_has_only_direct_threshold() -> None:
 
   assert decision.confirmed == (high,)
   assert decision.tentative == ()
+
+
+def test_path_in_and_out_probabilities_include_measured_current_state() -> None:
+  trajectory = update_sequence((0.2, 0.3, 0.4), "frontRadar")
+  current_point = point(10, 25.0, 0.4, "frontRadar")
+  model = object.__new__(RadarTrajectoryModel)
+  model.source = "front"
+  model.probabilities = lambda _matrix: np.asarray(
+    ((0.90, 0.70, 0.40, 0.20),), dtype=np.float32,
+  )
+
+  prediction = model.predict(
+    {("frontRadar", 10): trajectory},
+    (current_point,),
+    v_ego=20.0,
+  )[0]
+
+  assert prediction.current_path_occupancy
+  assert prediction.horizon_probabilities == pytest.approx((0.90, 0.70, 0.40, 0.20))
+  assert prediction.path_in_probability == 1.0
+  assert prediction.path_out_probability == pytest.approx(0.80)
+  decision = RadarTrajectoryDecisionFilter(0.70, 0.70).update(0.0, (prediction,))
+  assert decision.confirmed == ()
+  assert decision.exiting == (prediction,)
+
+
+def test_outside_state_has_path_out_one_without_becoming_cutout() -> None:
+  trajectory = update_sequence((4.5, 4.0, 3.5))
+  current_point = point(10, 25.0, 3.5)
+  model = object.__new__(RadarTrajectoryModel)
+  model.source = "corner"
+  model.probabilities = lambda _matrix: np.asarray(
+    ((0.40, 0.72, 0.65, 0.55),), dtype=np.float32,
+  )
+
+  prediction = model.predict(
+    {("corner235", 10): trajectory},
+    (current_point,),
+    v_ego=20.0,
+  )[0]
+
+  assert not prediction.current_path_occupancy
+  assert prediction.path_in_probability == pytest.approx(0.72)
+  assert prediction.path_out_probability == 1.0
+  decision = RadarTrajectoryDecisionFilter(0.70, 0.70).update(0.0, (prediction,))
+  assert decision.confirmed == (prediction,)
+  assert decision.exiting == ()
+
+
+def test_probability_hysteresis_keeps_only_same_continuous_track() -> None:
+  trajectory = update_sequence((4.5, 4.0, 3.5))
+  current_point = point(10, 25.0, 3.5)
+  high = TrajectoryCutinPrediction(
+    10, "corner235", 0.95, (0.95, 0.90, 0.80, 0.70),
+    trajectory, current_point,
+  )
+  lower = replace(high, probability=0.91)
+  below_release = replace(high, probability=0.88)
+  reused_trajectory = replace(trajectory, continuity_id=trajectory.continuity_id + 1)
+  reused = replace(lower, trajectory=reused_trajectory)
+  decision_filter = RadarTrajectoryDecisionFilter(0.94, hysteresis=0.05)
+
+  assert decision_filter.update(0.0, (high,)).confirmed == (high,)
+  assert decision_filter.update(0.1, (lower,)).confirmed == (lower,)
+  assert decision_filter.update(0.2, (below_release,)).confirmed == ()
+  assert decision_filter.update(0.3, (reused,)).confirmed == ()
+
+
+def test_measured_path_crossing_is_a_short_transition_not_a_permanent_label() -> None:
+  trajectory = update_sequence((4.5, 4.0, 3.5))
+  outside = TrajectoryCutinPrediction(
+    10, "corner235", 0.82, (0.82, 0.70, 0.60, 0.55),
+    trajectory, point(10, 25.0, 3.5),
+    path_exit_probability=1.0,
+    current_path_occupancy=False,
+  )
+  inside = replace(
+    outside,
+    probability=1.0,
+    path_exit_probability=0.45,
+    current_path_occupancy=True,
+  )
+  decision_filter = RadarTrajectoryDecisionFilter(
+    0.94, hysteresis=0.05, transition_hold_s=1.0,
+  )
+
+  assert decision_filter.update(0.0, (outside,)).confirmed == ()
+  assert decision_filter.update(0.1, (inside,)).confirmed == (inside,)
+  assert decision_filter.update(1.0, (inside,)).confirmed == (inside,)
+  assert decision_filter.update(1.2, (inside,)).confirmed == ()
+
+  first_seen_inside_filter = RadarTrajectoryDecisionFilter(0.94)
+  assert first_seen_inside_filter.update(0.0, (inside,)).confirmed == ()
+
+
+def test_measured_path_exit_is_held_as_cutout_for_same_continuous_track() -> None:
+  trajectory = update_sequence((0.2, 0.3, 0.4), "frontRadar")
+  inside = TrajectoryCutinPrediction(
+    10, "frontRadar", 1.0, (0.90, 0.85, 0.80, 0.75),
+    trajectory, point(10, 25.0, 0.4, "frontRadar"),
+    path_exit_probability=0.25,
+    current_path_occupancy=True,
+  )
+  outside = replace(
+    inside,
+    probability=0.70,
+    path_exit_probability=1.0,
+    current_path_occupancy=False,
+  )
+  decision_filter = RadarTrajectoryDecisionFilter(
+    0.94, exit_threshold=0.80, transition_hold_s=1.0,
+  )
+
+  assert decision_filter.update(0.0, (inside,)).exiting == ()
+  assert decision_filter.update(0.1, (outside,)).exiting == (outside,)
+  assert decision_filter.update(1.2, (outside,)).exiting == ()
 
 
 def test_probability_filter_reports_path_exit_separately_from_cutin() -> None:

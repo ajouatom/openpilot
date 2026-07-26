@@ -92,11 +92,11 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--expected", choices=("all", "detect", "clear", "stationary"), default="all")
   parser.add_argument(
     "--prob", type=float,
-    help="manual raw-probability review threshold (0.00-1.00); omitted follows production CUT-IN output",
+    help="manual probability display threshold (0.00-1.00); pauses still follow production leadTwo",
   )
   parser.add_argument(
     "--manual-prob", action="store_true",
-    help="manual raw-probability review using the last saved slider value",
+    help="probability display using the last saved slider value; pauses still follow production leadTwo",
   )
   parser.add_argument(
     "--compare-radard", action="store_true",

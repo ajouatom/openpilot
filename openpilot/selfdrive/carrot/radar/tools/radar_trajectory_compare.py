@@ -225,7 +225,7 @@ def merge_results(
   report["carrot_wip_comparison"] = {
     "basis": " ".join((
       "identical held-out manual windows; carrot-wip production decision",
-      "versus occupancy final shadow decision after leadOne-distance post-processing",
+      "versus production path-occupancy decision after final lead selection",
     )),
     "baseline_revision": "9088829005",
     "carrot_wip": baseline,

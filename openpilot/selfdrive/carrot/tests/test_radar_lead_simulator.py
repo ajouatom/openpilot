@@ -287,7 +287,73 @@ def test_device_review_mode_pauses_only_for_production_cutin_output() -> None:
   ui._prepare_review_events()
 
   assert ui.review_events == {1: ("CUT-IN id 20",)}
-  assert "DEVICE REVIEW ARMED" in ui.review_status
+  assert "LEAD2 REVIEW ARMED" in ui.review_status
+
+
+def test_manual_probability_changes_display_but_not_pause_events() -> None:
+  frames = [
+    replace(
+      frame((point(10, 20.0, 3.0, 15.0, "corner235"),)),
+      mono_time_s=float(index),
+      time_s=float(index),
+      model_leads=(),
+    )
+    for index in range(2)
+  ]
+  raw = Candidate(
+    10, 1.0, "trajectory corner path-entry",
+    d_rel=20.0, y_rel=3.0, stage="DECISION",
+  )
+  selected = Candidate(20, 0.82, "MLP confirmed cutin")
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      return (
+        Selection(
+          None,
+          selected,
+          cutin_diagnostics=(raw,),
+          active_cutin_candidates=(selected,),
+        )
+        if int(frame_index) == 1
+        else Selection(None, None, cutin_diagnostics=(raw,))
+      )
+
+  review = ValidationReview("manual-display", "detect", "corner", 0.0, 1.0, "scene")
+  ui = SimulatorUI.__new__(SimulatorUI)
+  ui.frames = frames
+  ui.selector = Selector()
+  ui.review = review
+  ui.reviews = (review,)
+  ui.device_review_mode = False
+  ui.min_candidate_probability = 0.99
+  ui.trajectory_horizon_s = 1.0
+  ui.trajectories = ()
+  ui.trajectory_review_labels = {}
+
+  ui._prepare_review_events()
+
+  assert ui.review_events == {1: ("CUT-IN id 20",)}
+  assert "display prob 0.99" in ui.review_status
+
+
+def test_marker_display_uses_raw_future_probability_at_selected_horizon() -> None:
+  ui = SimulatorUI.__new__(SimulatorUI)
+  ui.device_review_mode = True
+  ui.min_candidate_probability = 0.5
+  ui.trajectory_horizon_s = 0.5
+  blocked = Candidate(
+    1102, 0.0, "trajectory corner path-entry", 0.945,
+    horizon_scores=(0.99, 0.99, 0.98, 0.97),
+    current_path_occupancy=False,
+    stage="BLOCK-GEOMETRY",
+  )
+
+  assert ui._max_future_occupancy_probability(blocked) == 0.99
+  assert ui._future_occupancy_at_display_horizon(blocked) == 0.99
+  ui.trajectory_horizon_s = 2.0
+  assert ui._future_occupancy_at_display_horizon(blocked) == 0.97
+  assert ui._display_probability_threshold(blocked) == 0.945
 
 
 def test_user_rewind_rearms_and_pauses_same_review_event(monkeypatch) -> None:
@@ -320,6 +386,11 @@ def test_user_rewind_rearms_and_pauses_same_review_event(monkeypatch) -> None:
 def test_cutin_stage_series_keeps_model_to_selected_stages_separate() -> None:
   radar_frame = frame((point(20, 18.0, -1.5, 15.0, "corner235"),))
   model = Candidate(20, 0.61, "MLP corner cutin", stage="WAIT-CONFIRM")
+  path_out = Candidate(
+    21, 1.0, "trajectory corner path",
+    path_exit_score=0.73,
+    current_path_occupancy=True,
+  )
   decision = Candidate(20, 0.72, "MLP decision cutin")
   output = Candidate(20, 0.81, "MLP output cutin")
   selected = Candidate(20, 0.90, "MLP confirmed cutin")
@@ -329,7 +400,7 @@ def test_cutin_stage_series_keeps_model_to_selected_stages_separate() -> None:
       return Selection(
         None,
         selected,
-        cutin_diagnostics=(model,),
+        cutin_diagnostics=(model, path_out),
         decision_cutin_candidates=(decision,),
         active_cutin_candidates=(output,),
       )
@@ -337,9 +408,29 @@ def test_cutin_stage_series_keeps_model_to_selected_stages_separate() -> None:
   stages = cutin_stage_series((radar_frame,), Selector())
 
   assert stages[0].model == model
+  assert stages[0].path_out == path_out
   assert stages[0].decision == decision
   assert stages[0].output == output
   assert stages[0].selected == selected
+
+
+def test_point_diagnostic_keeps_front_and_corner_probabilities_separate() -> None:
+  front = Candidate(
+    10, 0.40, "trajectory front path",
+    source="frontRadar",
+  )
+  corner = Candidate(
+    10, 0.95, "trajectory corner path",
+    source="corner235",
+  )
+  selection = Selection(None, None, cutin_diagnostics=(front, corner))
+
+  assert SimulatorUI._diagnostic_for_point(
+    selection, point(10, 20.0, 0.0, 20.0, "frontRadar"),
+  ) == front
+  assert SimulatorUI._diagnostic_for_point(
+    selection, point(10, 20.0, 3.0, 20.0, "corner235"),
+  ) == corner
 
 
 def test_production_hybrid_selector_uses_device_controller_output(monkeypatch, tmp_path: Path) -> None:
@@ -529,6 +620,18 @@ def test_validation_review_covers_full_log_outside_labeled_window() -> None:
   assert validation_review_events(frames, Selector(), review) == {
     4: ("CUT-IN id 59",),
   }
+
+
+def test_validation_review_does_not_pause_for_unselected_active_cutin() -> None:
+  frames = [replace(frame(()), mono_time_s=0.0, time_s=0.0, model_leads=())]
+  active_only = Candidate(59, 0.99, "MLP active cutin")
+
+  class Selector:
+    def select(self, _frame, frame_index=None):
+      return Selection(None, None, active_cutin_candidates=(active_only,))
+
+  review = ValidationReview("full", "detect", "corner", 0.0, 1.0, "scene")
+  assert validation_review_events(frames, Selector(), review) == {}
 
 
 def test_validation_review_does_not_rearm_low_probability_sticky_cutin() -> None:

@@ -367,11 +367,11 @@
         "precision": 0.0,
         "recall": 0.0,
         "f1": 0.0,
-        "accuracy": 0.9150943396226415,
+        "accuracy": 0.6415094339622641,
         "tp": 0,
-        "fp": 0,
+        "fp": 29,
         "fn": 9,
-        "tn": 97,
+        "tn": 68,
         "manual_actual_scorable": 87,
         "manual_actual_unscorable": 19,
         "manual_actual_agree": 52,
@@ -381,14 +381,14 @@
       },
       "corner": {
         "labels": 200,
-        "precision": 0.75,
-        "recall": 0.20689655172413793,
-        "f1": 0.32432432432432434,
-        "accuracy": 0.875,
-        "tp": 6,
-        "fp": 2,
-        "fn": 23,
-        "tn": 169,
+        "precision": 0.24074074074074073,
+        "recall": 0.4482758620689655,
+        "f1": 0.3132530120481928,
+        "accuracy": 0.715,
+        "tp": 13,
+        "fp": 41,
+        "fn": 16,
+        "tn": 130,
         "manual_actual_scorable": 191,
         "manual_actual_unscorable": 9,
         "manual_actual_agree": 131,
@@ -602,8 +602,8 @@
         "label_id": "manual-00000218-004p05-corner-1010",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.4433465600013733,
         "max_path_exit_probability": 0.6352062225341797,
         "horizon_probabilities": [
@@ -802,8 +802,8 @@
         "label_id": "manual-000000b1-030p10-front-36",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.9657405614852905,
         "max_path_exit_probability": 0.07198303937911987,
         "horizon_probabilities": [
@@ -822,8 +822,8 @@
         "label_id": "manual-000000b1-030p20-front-59",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.9546347856521606,
         "max_path_exit_probability": 0.04424852132797241,
         "horizon_probabilities": [
@@ -1082,8 +1082,8 @@
         "label_id": "manual-000000cf-007p25-corner-1005",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.0,
         "max_path_exit_probability": 0.02383178472518921,
         "horizon_probabilities": [
@@ -1182,8 +1182,8 @@
         "label_id": "manual-000000cf-053p45-corner-1043",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.9321584701538086,
         "max_path_exit_probability": 0.8493942767381668,
         "horizon_probabilities": [
@@ -1262,8 +1262,8 @@
         "label_id": "manual-000000cf-019p35-corner-1001",
         "source": "corner",
         "expected": "detect",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8273354172706604,
         "max_path_exit_probability": 0.17657870054244995,
         "horizon_probabilities": [
@@ -1382,8 +1382,8 @@
         "label_id": "manual-00000aa5-001p90-front-50",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.27987122535705566,
         "max_path_exit_probability": 0.8420770317316055,
         "horizon_probabilities": [
@@ -1402,8 +1402,8 @@
         "label_id": "manual-00000aa5-002p45-front-36",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.4364020824432373,
         "max_path_exit_probability": 0.39772045612335205,
         "horizon_probabilities": [
@@ -1442,8 +1442,8 @@
         "label_id": "manual-00000aa5-004p75-front-44",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.6635700464248657,
         "max_path_exit_probability": 0.42779040336608887,
         "horizon_probabilities": [
@@ -1462,8 +1462,8 @@
         "label_id": "manual-00000aa5-006p05-front-54",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.3895120918750763,
         "max_path_exit_probability": 0.6739340722560883,
         "horizon_probabilities": [
@@ -1602,8 +1602,8 @@
         "label_id": "manual-00000cd0-015p35-front-39",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7625797986984253,
         "max_path_exit_probability": 0.2801135182380676,
         "horizon_probabilities": [
@@ -1622,8 +1622,8 @@
         "label_id": "manual-00000cd0-015p90-front-43",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7951422929763794,
         "max_path_exit_probability": 0.30647963285446167,
         "horizon_probabilities": [
@@ -1882,8 +1882,8 @@
         "label_id": "manual-00000192-024p15-corner-1000",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7792950868606567,
         "max_path_exit_probability": 0.3863601088523865,
         "horizon_probabilities": [
@@ -1902,8 +1902,8 @@
         "label_id": "manual-00000192-032p30-corner-1036",
         "source": "corner",
         "expected": "detect",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8346486687660217,
         "max_path_exit_probability": 0.2427126169204712,
         "horizon_probabilities": [
@@ -2022,8 +2022,8 @@
         "label_id": "manual-000001a5-057p20-corner-1034",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7893296480178833,
         "max_path_exit_probability": 0.25520384311676025,
         "horizon_probabilities": [
@@ -2182,8 +2182,8 @@
         "label_id": "manual-000001b9-001p30-corner-1003",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.5325044989585876,
         "max_path_exit_probability": 0.9999014054337749,
         "horizon_probabilities": [
@@ -2262,8 +2262,8 @@
         "label_id": "manual-000001b9-007p40-corner-1009",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.9027433395385742,
         "max_path_exit_probability": 0.9663044959306717,
         "horizon_probabilities": [
@@ -2282,8 +2282,8 @@
         "label_id": "manual-000001b9-007p70-corner-1010",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8251584768295288,
         "max_path_exit_probability": 0.9988064239732921,
         "horizon_probabilities": [
@@ -2342,8 +2342,8 @@
         "label_id": "manual-000001b9-016p45-corner-1027",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8043851852416992,
         "max_path_exit_probability": 0.9883502842858434,
         "horizon_probabilities": [
@@ -2402,8 +2402,8 @@
         "label_id": "manual-000001b9-037p50-corner-1037",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.910236656665802,
         "max_path_exit_probability": 0.973690465092659,
         "horizon_probabilities": [
@@ -2502,8 +2502,8 @@
         "label_id": "manual-000001b9-043p85-corner-1055",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7128135561943054,
         "max_path_exit_probability": 0.4174079895019531,
         "horizon_probabilities": [
@@ -2522,8 +2522,8 @@
         "label_id": "manual-000001b9-049p80-corner-1073",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.5609986186027527,
         "max_path_exit_probability": 0.7251857817173004,
         "horizon_probabilities": [
@@ -2562,8 +2562,8 @@
         "label_id": "manual-000001c1-000p35-corner-1002",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.6725282073020935,
         "max_path_exit_probability": 0.6640462577342987,
         "horizon_probabilities": [
@@ -2642,8 +2642,8 @@
         "label_id": "manual-000001c1-017p00-corner-1001",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8597187995910645,
         "max_path_exit_probability": 0.1207505464553833,
         "horizon_probabilities": [
@@ -2662,8 +2662,8 @@
         "label_id": "manual-000001c1-019p35-corner-1009",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.9447745680809021,
         "max_path_exit_probability": 0.6893532574176788,
         "horizon_probabilities": [
@@ -2722,8 +2722,8 @@
         "label_id": "manual-000001c1-025p20-corner-1012",
         "source": "corner",
         "expected": "detect",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8806042671203613,
         "max_path_exit_probability": 0.4934741258621216,
         "horizon_probabilities": [
@@ -2982,8 +2982,8 @@
         "label_id": "manual-000001ce-002p85-corner-1011",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.4925045967102051,
         "max_path_exit_probability": 0.587421715259552,
         "horizon_probabilities": [
@@ -3062,8 +3062,8 @@
         "label_id": "manual-000001d6-012p60-corner-1001",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8132765293121338,
         "max_path_exit_probability": 0.20453137159347534,
         "horizon_probabilities": [
@@ -3142,8 +3142,8 @@
         "label_id": "manual-00000bef-008p60-front-49",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.32604530453681946,
         "max_path_exit_probability": 0.7579517513513565,
         "horizon_probabilities": [
@@ -3162,8 +3162,8 @@
         "label_id": "manual-00000bef-009p20-front-46",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.6363766193389893,
         "max_path_exit_probability": 0.5231725573539734,
         "horizon_probabilities": [
@@ -3442,8 +3442,8 @@
         "label_id": "manual-00000bef-041p70-front-57",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.0,
         "max_path_exit_probability": 0.041102707386016846,
         "horizon_probabilities": [
@@ -3502,8 +3502,8 @@
         "label_id": "manual-00000c21-001p05-front-56",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.017566610127687454,
         "max_path_exit_probability": 0.007484734058380127,
         "horizon_probabilities": [
@@ -3582,8 +3582,8 @@
         "label_id": "manual-00000c21-017p35-front-40",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.0,
         "max_path_exit_probability": 0.041207075119018555,
         "horizon_probabilities": [
@@ -3602,8 +3602,8 @@
         "label_id": "manual-00000c21-017p70-front-48",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.0,
         "max_path_exit_probability": 0.0315973162651062,
         "horizon_probabilities": [
@@ -3622,8 +3622,8 @@
         "label_id": "manual-00000c21-018p35-front-60",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7791360020637512,
         "max_path_exit_probability": 0.25421828031539917,
         "horizon_probabilities": [
@@ -3642,8 +3642,8 @@
         "label_id": "manual-00000c21-019p15-front-46",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.0,
         "max_path_exit_probability": 0.03219473361968994,
         "horizon_probabilities": [
@@ -3662,8 +3662,8 @@
         "label_id": "manual-00000c21-019p50-front-45",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.0,
         "max_path_exit_probability": 0.01909792423248291,
         "horizon_probabilities": [
@@ -3682,8 +3682,8 @@
         "label_id": "manual-00000c21-024p95-front-47",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.4618566930294037,
         "max_path_exit_probability": 0.5578865706920624,
         "horizon_probabilities": [
@@ -3942,8 +3942,8 @@
         "label_id": "manual-00000c21-001p10-front-37",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.5886992812156677,
         "max_path_exit_probability": 0.045907020568847656,
         "horizon_probabilities": [
@@ -3982,8 +3982,8 @@
         "label_id": "manual-00000c21-004p15-front-35",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.9501304626464844,
         "max_path_exit_probability": 0.10053110122680664,
         "horizon_probabilities": [
@@ -4042,8 +4042,8 @@
         "label_id": "manual-00000c21-006p90-front-51",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.5621291995048523,
         "max_path_exit_probability": 0.57179394364357,
         "horizon_probabilities": [
@@ -4082,8 +4082,8 @@
         "label_id": "manual-00000c21-008p70-front-40",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7012050151824951,
         "max_path_exit_probability": 0.02500540018081665,
         "horizon_probabilities": [
@@ -4102,8 +4102,8 @@
         "label_id": "manual-00000c21-009p25-front-50",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.0,
         "max_path_exit_probability": 0.03702390193939209,
         "horizon_probabilities": [
@@ -4202,8 +4202,8 @@
         "label_id": "manual-00000c21-025p30-front-59",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.44120797514915466,
         "max_path_exit_probability": 0.6697709858417511,
         "horizon_probabilities": [
@@ -4302,8 +4302,8 @@
         "label_id": "manual-000002d3-040p45-corner-1018",
         "source": "corner",
         "expected": "detect",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.6169694066047668,
         "max_path_exit_probability": 0.45832550525665283,
         "horizon_probabilities": [
@@ -4362,8 +4362,8 @@
         "label_id": "manual-000002d3-007p15-corner-1001",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.4491903483867645,
         "max_path_exit_probability": 0.6284504532814026,
         "horizon_probabilities": [
@@ -4682,8 +4682,8 @@
         "label_id": "manual-0000005b-000p60-corner-1005",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.6911535859107971,
         "max_path_exit_probability": 0.444802463054657,
         "horizon_probabilities": [
@@ -4742,8 +4742,8 @@
         "label_id": "manual-0000005b-008p30-corner-1006",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8002728223800659,
         "max_path_exit_probability": 0.44641274213790894,
         "horizon_probabilities": [
@@ -4822,8 +4822,8 @@
         "label_id": "manual-0000005b-018p05-corner-1003",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.4374940097332001,
         "max_path_exit_probability": 0.7195417881011963,
         "horizon_probabilities": [
@@ -4902,8 +4902,8 @@
         "label_id": "manual-0000005b-038p95-corner-1059",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8379501700401306,
         "max_path_exit_probability": 0.31463080644607544,
         "horizon_probabilities": [
@@ -5122,8 +5122,8 @@
         "label_id": "manual-0000005b-019p25-corner-1055",
         "source": "corner",
         "expected": "detect",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7583411931991577,
         "max_path_exit_probability": 0.5238622725009918,
         "horizon_probabilities": [
@@ -5202,8 +5202,8 @@
         "label_id": "manual-0000005b-020p40-corner-1063",
         "source": "corner",
         "expected": "detect",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.5239459872245789,
         "max_path_exit_probability": 0.45962589979171753,
         "horizon_probabilities": [
@@ -5302,8 +5302,8 @@
         "label_id": "manual-0000005b-023p00-corner-1083",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.773858904838562,
         "max_path_exit_probability": 0.2836143374443054,
         "horizon_probabilities": [
@@ -5422,8 +5422,8 @@
         "label_id": "manual-0000005b-040p30-corner-1138",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.854748010635376,
         "max_path_exit_probability": 0.13225096464157104,
         "horizon_probabilities": [
@@ -5462,8 +5462,8 @@
         "label_id": "manual-0000005b-040p85-corner-1089",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.9120413661003113,
         "max_path_exit_probability": 0.3902292251586914,
         "horizon_probabilities": [
@@ -5482,8 +5482,8 @@
         "label_id": "manual-0000005b-041p50-corner-1111",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8402701020240784,
         "max_path_exit_probability": 0.3320598006248474,
         "horizon_probabilities": [
@@ -5522,8 +5522,8 @@
         "label_id": "manual-0000005b-042p55-corner-1089",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8259472846984863,
         "max_path_exit_probability": 0.3737133741378784,
         "horizon_probabilities": [
@@ -5542,8 +5542,8 @@
         "label_id": "manual-0000005b-042p75-corner-1111",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.6678324341773987,
         "max_path_exit_probability": 0.4227217435836792,
         "horizon_probabilities": [
@@ -5622,8 +5622,8 @@
         "label_id": "manual-0000005b-048p25-corner-1089",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.6816650032997131,
         "max_path_exit_probability": 0.41328859329223633,
         "horizon_probabilities": [
@@ -5642,8 +5642,8 @@
         "label_id": "manual-0000005b-049p45-corner-1111",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7986955046653748,
         "max_path_exit_probability": 0.5215297043323517,
         "horizon_probabilities": [
@@ -5682,8 +5682,8 @@
         "label_id": "manual-0000005b-052p00-corner-1111",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.6581459641456604,
         "max_path_exit_probability": 0.41413843631744385,
         "horizon_probabilities": [
@@ -5702,8 +5702,8 @@
         "label_id": "manual-0000005b-056p00-corner-1153",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7074137926101685,
         "max_path_exit_probability": 0.6145264208316803,
         "horizon_probabilities": [
@@ -5722,8 +5722,8 @@
         "label_id": "manual-0000005b-057p95-corner-1165",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8234509825706482,
         "max_path_exit_probability": 0.4555496573448181,
         "horizon_probabilities": [
@@ -5762,8 +5762,8 @@
         "label_id": "manual-0000006a-006p40-corner-1005",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.6397890448570251,
         "max_path_exit_probability": 0.37507182359695435,
         "horizon_probabilities": [
@@ -5782,8 +5782,8 @@
         "label_id": "manual-0000006a-006p45-corner-1002",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.5825570821762085,
         "max_path_exit_probability": 0.4551083445549011,
         "horizon_probabilities": [
@@ -5862,8 +5862,8 @@
         "label_id": "manual-0000006a-016p45-corner-1008",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.16424022614955902,
         "max_path_exit_probability": 0.31332916021347046,
         "horizon_probabilities": [
@@ -5882,8 +5882,8 @@
         "label_id": "manual-0000006a-023p80-corner-1013",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.5187132954597473,
         "max_path_exit_probability": 0.5212908685207367,
         "horizon_probabilities": [
@@ -5902,8 +5902,8 @@
         "label_id": "manual-0000006a-026p00-corner-1012",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7273938059806824,
         "max_path_exit_probability": 0.2966657280921936,
         "horizon_probabilities": [
@@ -5922,8 +5922,8 @@
         "label_id": "manual-0000006a-040p70-corner-1000",
         "source": "corner",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.8105897903442383,
         "max_path_exit_probability": 0.10036766529083252,
         "horizon_probabilities": [
@@ -5942,8 +5942,8 @@
         "label_id": "manual-0000006a-054p90-corner-1023",
         "source": "corner",
         "expected": "detect",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.6894099116325378,
         "max_path_exit_probability": 0.532954752445221,
         "horizon_probabilities": [
@@ -6022,8 +6022,8 @@
         "label_id": "manual-00000247-006p90-front-50",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.4173583686351776,
         "max_path_exit_probability": 0.6414909362792969,
         "horizon_probabilities": [
@@ -6082,8 +6082,8 @@
         "label_id": "manual-00000247-026p05-front-44",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.5230161547660828,
         "max_path_exit_probability": 0.5011919140815735,
         "horizon_probabilities": [
@@ -6122,8 +6122,8 @@
         "label_id": "manual-00000247-045p05-front-52",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.5568690896034241,
         "max_path_exit_probability": 0.7033732235431671,
         "horizon_probabilities": [
@@ -6442,8 +6442,8 @@
         "label_id": "manual-00000129-012p05-front-48",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.7393635511398315,
         "max_path_exit_probability": 0.21699613332748413,
         "horizon_probabilities": [
@@ -6462,8 +6462,8 @@
         "label_id": "manual-00000129-019p60-front-55",
         "source": "front",
         "expected": "clear",
-        "predicted": "clear",
-        "selected": false,
+        "predicted": "detect",
+        "selected": true,
         "max_probability": 0.837466835975647,
         "max_path_exit_probability": 0.23809027671813965,
         "horizon_probabilities": [
@@ -6521,7 +6521,7 @@
     ]
   },
   "carrot_wip_comparison": {
-    "basis": "identical held-out manual windows; carrot-wip production decision versus occupancy final shadow decision after leadOne-distance post-processing",
+    "basis": "identical held-out manual windows; carrot-wip production decision versus production path-occupancy decision after final lead selection",
     "baseline_revision": "9088829005",
     "carrot_wip": {
       "implementation": "carrot-wip",
@@ -9313,25 +9313,25 @@
       "summary": {
         "front": {
           "labels": 106,
-          "precision": 0.3333333333333333,
-          "recall": 0.1111111111111111,
-          "f1": 0.16666666666666666,
-          "accuracy": 0.9056603773584906,
-          "tp": 1,
-          "fp": 2,
-          "fn": 8,
-          "tn": 95
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "accuracy": 0.7830188679245284,
+          "tp": 0,
+          "fp": 14,
+          "fn": 9,
+          "tn": 83
         },
         "corner": {
           "labels": 200,
-          "precision": 0.9,
-          "recall": 0.3103448275862069,
-          "f1": 0.4615384615384615,
-          "accuracy": 0.895,
-          "tp": 9,
-          "fp": 1,
-          "fn": 20,
-          "tn": 170
+          "precision": 0.5789473684210527,
+          "recall": 0.3793103448275862,
+          "f1": 0.45833333333333337,
+          "accuracy": 0.87,
+          "tp": 11,
+          "fp": 8,
+          "fn": 18,
+          "tn": 163
         }
       },
       "rows": [
@@ -9341,16 +9341,16 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 23
         },
         {
           "label_id": "manual-00000218-013p55-corner-1009",
           "source": "corner",
           "expected": "detect",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.8529282212257385,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9386,7 +9386,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 22
         },
         {
@@ -9404,7 +9404,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9422,7 +9422,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 17
         },
         {
@@ -9431,7 +9431,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9027149677276611,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -9449,7 +9449,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 13
         },
         {
@@ -9458,7 +9458,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9476,7 +9476,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -9485,7 +9485,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 11
         },
         {
@@ -9503,7 +9503,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9512,7 +9512,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 15
         },
         {
@@ -9521,7 +9521,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9579339027404785,
+          "max_probability": 1.0,
           "scored_frames": 8
         },
         {
@@ -9530,7 +9530,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9649320840835571,
+          "max_probability": 1.0,
           "scored_frames": 13
         },
         {
@@ -9557,7 +9557,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 21
         },
         {
@@ -9602,7 +9602,7 @@
           "expected": "detect",
           "predicted": "detect",
           "selected": true,
-          "max_probability": 0.27289921045303345,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9611,7 +9611,7 @@
           "expected": "detect",
           "predicted": "detect",
           "selected": true,
-          "max_probability": 0.27289921045303345,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -9629,7 +9629,7 @@
           "expected": "detect",
           "predicted": "detect",
           "selected": true,
-          "max_probability": 0.2689017057418823,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9638,7 +9638,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9647,7 +9647,7 @@
           "expected": "clear",
           "predicted": "detect",
           "selected": true,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 36
         },
         {
@@ -9656,7 +9656,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 12
         },
         {
@@ -9665,7 +9665,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -9674,7 +9674,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9683,7 +9683,7 @@
           "expected": "detect",
           "predicted": "detect",
           "selected": true,
-          "max_probability": 0.5852201581001282,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9692,7 +9692,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.8043120503425598,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -9710,7 +9710,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9322265386581421,
+          "max_probability": 1.0,
           "scored_frames": 35
         },
         {
@@ -9728,7 +9728,7 @@
           "expected": "detect",
           "predicted": "detect",
           "selected": true,
-          "max_probability": 0.7597113251686096,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9737,7 +9737,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -9746,7 +9746,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -9755,7 +9755,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -9764,7 +9764,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 3
         },
         {
@@ -9773,7 +9773,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -9782,7 +9782,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.25911766290664673,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9791,7 +9791,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9369952082633972,
+          "max_probability": 1.0,
           "scored_frames": 8
         },
         {
@@ -9800,7 +9800,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9653473496437073,
+          "max_probability": 1.0,
           "scored_frames": 12
         },
         {
@@ -9809,7 +9809,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.6020511984825134,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9818,7 +9818,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.773484468460083,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9854,7 +9854,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.2848200798034668,
+          "max_probability": 1.0,
           "scored_frames": 6
         },
         {
@@ -9872,7 +9872,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -9881,7 +9881,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.787361204624176,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -9890,7 +9890,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.7881965637207031,
+          "max_probability": 1.0,
           "scored_frames": 12
         },
         {
@@ -9899,7 +9899,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 17
         },
         {
@@ -9908,7 +9908,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9917,7 +9917,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9926,7 +9926,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 13
         },
         {
@@ -9935,7 +9935,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 28
         },
         {
@@ -9944,7 +9944,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 10
         },
         {
@@ -9953,7 +9953,7 @@
           "expected": "detect",
           "predicted": "detect",
           "selected": true,
-          "max_probability": 0.32704123854637146,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9962,7 +9962,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 19
         },
         {
@@ -9971,16 +9971,16 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.276058554649353,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
           "label_id": "manual-0000018f-019p15-front-41",
           "source": "front",
           "expected": "clear",
-          "predicted": "detect",
-          "selected": true,
-          "max_probability": 0.0,
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -9989,7 +9989,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -9998,25 +9998,25 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
           "label_id": "manual-00000192-024p15-corner-1000",
           "source": "corner",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.9382811784744263,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
           "label_id": "manual-00000192-032p30-corner-1036",
           "source": "corner",
           "expected": "detect",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.2747803330421448,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10034,7 +10034,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10043,7 +10043,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9770301580429077,
+          "max_probability": 1.0,
           "scored_frames": 13
         },
         {
@@ -10061,7 +10061,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10070,7 +10070,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9474939107894897,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -10088,7 +10088,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -10097,7 +10097,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -10106,7 +10106,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 9
         },
         {
@@ -10133,7 +10133,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10142,7 +10142,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.5325044989585876,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -10151,7 +10151,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -10169,7 +10169,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9892336130142212,
+          "max_probability": 1.0,
           "scored_frames": 14
         },
         {
@@ -10178,7 +10178,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9027433395385742,
+          "max_probability": 1.0,
           "scored_frames": 10
         },
         {
@@ -10187,7 +10187,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.8251584768295288,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -10205,7 +10205,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9204631447792053,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10214,7 +10214,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.8043851852416992,
+          "max_probability": 1.0,
           "scored_frames": 8
         },
         {
@@ -10241,7 +10241,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.910236656665802,
+          "max_probability": 1.0,
           "scored_frames": 11
         },
         {
@@ -10259,7 +10259,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10268,7 +10268,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -10286,7 +10286,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.3101843297481537,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10295,7 +10295,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.5790855288505554,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10304,7 +10304,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 9
         },
         {
@@ -10313,7 +10313,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.6725282073020935,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -10322,7 +10322,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10340,7 +10340,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 15
         },
         {
@@ -10349,16 +10349,16 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.932360827922821,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
           "label_id": "manual-000001c1-019p35-corner-1009",
           "source": "corner",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.7702844738960266,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -10367,7 +10367,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 13
         },
         {
@@ -10376,7 +10376,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 12
         },
         {
@@ -10385,7 +10385,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.8240956664085388,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -10394,7 +10394,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 14
         },
         {
@@ -10475,7 +10475,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -10484,7 +10484,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10500,9 +10500,9 @@
           "label_id": "manual-000001ce-002p85-corner-1011",
           "source": "corner",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.9539998173713684,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -10511,7 +10511,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 10
         },
         {
@@ -10529,7 +10529,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -10538,7 +10538,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.4136059284210205,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10547,7 +10547,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 21
         },
         {
@@ -10556,7 +10556,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -10565,7 +10565,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -10574,7 +10574,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.32604530453681946,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -10583,7 +10583,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.6363766193389893,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -10592,7 +10592,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 6.476120324805379e-05,
+          "max_probability": 1.0,
           "scored_frames": 24
         },
         {
@@ -10601,7 +10601,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 9
         },
         {
@@ -10610,7 +10610,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.00015654589515179396,
+          "max_probability": 1.0,
           "scored_frames": 5
         },
         {
@@ -10619,7 +10619,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10628,7 +10628,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 12
         },
         {
@@ -10646,7 +10646,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 19
         },
         {
@@ -10664,7 +10664,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 13
         },
         {
@@ -10673,7 +10673,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 14
         },
         {
@@ -10682,7 +10682,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 14
         },
         {
@@ -10691,7 +10691,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 23
         },
         {
@@ -10700,16 +10700,16 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 9
         },
         {
           "label_id": "manual-00000bef-041p70-front-57",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.0,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 13
         },
         {
@@ -10734,9 +10734,9 @@
           "label_id": "manual-00000c21-001p05-front-56",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.017566610127687454,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 23
         },
         {
@@ -10754,7 +10754,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10763,25 +10763,25 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
           "label_id": "manual-00000c21-017p35-front-40",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.0,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 21
         },
         {
           "label_id": "manual-00000c21-017p70-front-48",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.0,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 22
         },
         {
@@ -10790,25 +10790,25 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.7791360020637512,
+          "max_probability": 1.0,
           "scored_frames": 23
         },
         {
           "label_id": "manual-00000c21-019p15-front-46",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.0,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 20
         },
         {
           "label_id": "manual-00000c21-019p50-front-45",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.0,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 22
         },
         {
@@ -10817,7 +10817,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.4618566930294037,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -10835,7 +10835,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -10844,7 +10844,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 23
         },
         {
@@ -10853,7 +10853,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 6
         },
         {
@@ -10862,7 +10862,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 7
         },
         {
@@ -10871,7 +10871,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 1.5448888746050216e-07,
+          "max_probability": 1.0,
           "scored_frames": 12
         },
         {
@@ -10880,7 +10880,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 6
         },
         {
@@ -10889,7 +10889,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 10
         },
         {
@@ -10907,7 +10907,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 19
         },
         {
@@ -10916,7 +10916,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 21
         },
         {
@@ -10932,9 +10932,9 @@
           "label_id": "manual-00000c21-001p10-front-37",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.5886992812156677,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 20
         },
         {
@@ -10943,16 +10943,16 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9546089768409729,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
           "label_id": "manual-00000c21-004p15-front-35",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.9678648114204407,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -10961,7 +10961,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.40302005410194397,
+          "max_probability": 1.0,
           "scored_frames": 19
         },
         {
@@ -10970,7 +10970,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 3
         },
         {
@@ -10979,7 +10979,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.5621291995048523,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -10988,25 +10988,25 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.4503776431083679,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
           "label_id": "manual-00000c21-008p70-front-40",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.7012050151824951,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 13
         },
         {
           "label_id": "manual-00000c21-009p25-front-50",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.0,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 9
         },
         {
@@ -11015,7 +11015,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 22
         },
         {
@@ -11024,7 +11024,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 4
         },
         {
@@ -11042,7 +11042,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11051,7 +11051,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.44120797514915466,
+          "max_probability": 1.0,
           "scored_frames": 28
         },
         {
@@ -11060,7 +11060,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 8
         },
         {
@@ -11078,7 +11078,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11087,7 +11087,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11096,7 +11096,7 @@
           "expected": "detect",
           "predicted": "detect",
           "selected": true,
-          "max_probability": 0.3750758767127991,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11105,7 +11105,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 17
         },
         {
@@ -11114,7 +11114,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11123,7 +11123,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.3826178312301636,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11132,7 +11132,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 15
         },
         {
@@ -11141,7 +11141,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 22
         },
         {
@@ -11150,7 +11150,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 22
         },
         {
@@ -11159,7 +11159,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -11168,7 +11168,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 23
         },
         {
@@ -11177,7 +11177,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -11195,7 +11195,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -11204,7 +11204,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -11213,7 +11213,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 17
         },
         {
@@ -11258,7 +11258,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -11267,7 +11267,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.6452743411064148,
+          "max_probability": 1.0,
           "scored_frames": 21
         },
         {
@@ -11276,7 +11276,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11294,7 +11294,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.5855837464332581,
+          "max_probability": 1.0,
           "scored_frames": 24
         },
         {
@@ -11321,16 +11321,16 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 14
         },
         {
           "label_id": "manual-0000005b-018p05-corner-1003",
           "source": "corner",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.2879595458507538,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11339,7 +11339,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 12
         },
         {
@@ -11366,7 +11366,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.30459800362586975,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11375,7 +11375,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.2913995087146759,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11384,7 +11384,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11393,7 +11393,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11411,7 +11411,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11420,7 +11420,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11438,7 +11438,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11447,7 +11447,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 10
         },
         {
@@ -11463,9 +11463,9 @@
           "label_id": "manual-0000005b-019p25-corner-1055",
           "source": "corner",
           "expected": "detect",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.8511908054351807,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 22
         },
         {
@@ -11474,7 +11474,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11483,7 +11483,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -11492,7 +11492,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11501,25 +11501,25 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.1814456731081009,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
           "label_id": "manual-0000005b-020p70-front-59",
           "source": "front",
           "expected": "detect",
-          "predicted": "detect",
-          "selected": true,
-          "max_probability": 0.0,
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
           "label_id": "manual-0000005b-020p70-corner-1089",
           "source": "corner",
           "expected": "detect",
-          "predicted": "detect",
-          "selected": true,
-          "max_probability": 0.0,
+          "predicted": "clear",
+          "selected": false,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11528,7 +11528,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 26
         },
         {
@@ -11537,7 +11537,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 24
         },
         {
@@ -11546,7 +11546,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.27273842692375183,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11555,7 +11555,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 16
         },
         {
@@ -11564,7 +11564,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 19
         },
         {
@@ -11582,7 +11582,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11591,7 +11591,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 27
         },
         {
@@ -11600,7 +11600,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.9640758633613586,
+          "max_probability": 1.0,
           "scored_frames": 28
         },
         {
@@ -11609,7 +11609,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -11618,7 +11618,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.43370044231414795,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11627,7 +11627,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.4129698872566223,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11636,7 +11636,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11645,7 +11645,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.47194164991378784,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11654,7 +11654,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.4129698872566223,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -11663,7 +11663,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -11672,7 +11672,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11681,7 +11681,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11690,7 +11690,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.6816650032997131,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -11699,7 +11699,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.4398905038833618,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -11717,7 +11717,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.32272955775260925,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11726,16 +11726,16 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.27203112840652466,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
           "label_id": "manual-0000005b-057p95-corner-1165",
           "source": "corner",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.23219799995422363,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11744,7 +11744,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -11753,16 +11753,16 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.7638940811157227,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
           "label_id": "manual-0000006a-006p45-corner-1002",
           "source": "corner",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.6678149700164795,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11798,16 +11798,16 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.6776365637779236,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
           "label_id": "manual-0000006a-023p80-corner-1013",
           "source": "corner",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.6594465970993042,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -11816,7 +11816,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.7126066088676453,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -11825,7 +11825,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.1903371810913086,
+          "max_probability": 1.0,
           "scored_frames": 31
         },
         {
@@ -11834,7 +11834,7 @@
           "expected": "detect",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.688936173915863,
+          "max_probability": 1.0,
           "scored_frames": 18
         },
         {
@@ -11843,7 +11843,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11852,7 +11852,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11861,7 +11861,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11870,7 +11870,7 @@
           "expected": "clear",
           "predicted": "detect",
           "selected": true,
-          "max_probability": 0.5736053586006165,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11879,7 +11879,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11888,7 +11888,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 20
         },
         {
@@ -11897,7 +11897,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.2664256691932678,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11906,16 +11906,16 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
           "label_id": "manual-00000247-045p05-front-52",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.5638546347618103,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11924,7 +11924,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 29
         },
         {
@@ -11942,7 +11942,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11951,7 +11951,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -11960,7 +11960,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 17
         },
         {
@@ -11969,7 +11969,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 19
         },
         {
@@ -11978,7 +11978,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 17
         },
         {
@@ -11987,7 +11987,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 5
         },
         {
@@ -11996,7 +11996,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 17
         },
         {
@@ -12005,7 +12005,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 23
         },
         {
@@ -12014,7 +12014,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         },
         {
@@ -12023,7 +12023,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 17
         },
         {
@@ -12032,7 +12032,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 14
         },
         {
@@ -12057,18 +12057,18 @@
           "label_id": "manual-00000129-012p05-front-48",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.8912442922592163,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 26
         },
         {
           "label_id": "manual-00000129-019p60-front-55",
           "source": "front",
           "expected": "clear",
-          "predicted": "clear",
-          "selected": false,
-          "max_probability": 0.907559335231781,
+          "predicted": "detect",
+          "selected": true,
+          "max_probability": 1.0,
           "scored_frames": 14
         },
         {
@@ -12077,7 +12077,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 17
         },
         {
@@ -12086,7 +12086,7 @@
           "expected": "clear",
           "predicted": "clear",
           "selected": false,
-          "max_probability": 0.0,
+          "max_probability": 1.0,
           "scored_frames": 30
         }
       ]
@@ -12120,24 +12120,24 @@
       "path_occupancy": {
         "front": {
           "labels": 87,
-          "precision": 0.3333333333333333,
-          "recall": 0.03333333333333333,
-          "f1": 0.0606060606060606,
-          "accuracy": 0.6436781609195402,
-          "tp": 1,
+          "precision": 0.8571428571428571,
+          "recall": 0.4,
+          "f1": 0.5454545454545455,
+          "accuracy": 0.7701149425287356,
+          "tp": 12,
           "fp": 2,
-          "fn": 29,
+          "fn": 18,
           "tn": 55
         },
         "corner": {
           "labels": 191,
-          "precision": 0.7,
-          "recall": 0.12727272727272726,
-          "f1": 0.2153846153846154,
-          "accuracy": 0.7329842931937173,
-          "tp": 7,
+          "precision": 0.8421052631578947,
+          "recall": 0.2909090909090909,
+          "f1": 0.4324324324324324,
+          "accuracy": 0.7801047120418848,
+          "tp": 16,
           "fp": 3,
-          "fn": 48,
+          "fn": 39,
           "tn": 133
         }
       }

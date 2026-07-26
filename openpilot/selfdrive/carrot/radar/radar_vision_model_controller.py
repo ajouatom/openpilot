@@ -9,8 +9,6 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from openpilot.selfdrive.carrot.radar.radar_lead_model import (
-  CUTIN_VEHICLE_HALF_WIDTH_M,
-  MODEL_FEATURE_NAMES,
   RadarLeadPrediction,
   VisionLeadContext,
 )
@@ -20,7 +18,6 @@ from openpilot.selfdrive.carrot.radar.radar_trajectory_model import (
   trajectory_decision_ahead_of_primary,
 )
 from openpilot.selfdrive.carrot.radar.radar_sensor_objects import (
-  NEAR_SIDE_NO_FRONT_MATCH_DREL_M,
   match_corner_to_front_identity,
   post_match_corner_to_front,
 )
@@ -51,19 +48,10 @@ PRIMARY_STEALTH_HOLD_S = 0.75
 PRIMARY_STEALTH_MAX_DREL_M = 60.0
 PRIMARY_STEALTH_MAX_DPATH_M = 1.8
 PRIMARY_STEALTH_MIN_LEAD_PROB = 0.8
-CUTIN_REPORT_MIN_DREL_M = 1.0
-LOW_SPEED_CUTIN_MAX_EGO_MPS = 3.0
-LOW_SPEED_CUTIN_MAX_DPATH_M = 1.5
-TENTATIVE_CUTIN_MODEL_PROB = 0.49
-TENTATIVE_CUTIN_FALLBACK_HALF_WIDTH_M = 1.5
 PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 3.5
 PRIMARY_DUPLICATE_MAX_YREL_DELTA_M = 1.4
-LANE_HALF_WIDTH_FEATURE_INDEX = MODEL_FEATURE_NAMES.index("lane_half_width")
-# The self-supervised trajectory model runs on device and in replay as a
-# bit-identical shadow path. Manual validation must pass before it can replace
-# the established control-facing cut-in decision.
-TRAJECTORY_CUTIN_CONTROL_ENABLED = False
-TRAJECTORY_FRONT_PATH_EXIT_HOLD_ENABLED = True
+# The same self-supervised trajectory decision is used by device and replay.
+# Primary matching and other lead roles remain independent.
 
 
 def _finite(value: Any, fallback: float = 0.0) -> float:
@@ -541,57 +529,6 @@ class VisionModelRadarController:
       and prediction.lead_prob >= PRIMARY_STEALTH_MIN_LEAD_PROB
     )
 
-  @classmethod
-  def _cutin_control_usable(cls, prediction: RadarLeadPrediction, v_ego: float) -> bool:
-    obj = prediction.features.radar_object
-    return (
-      cls._cutin_report_usable(prediction, v_ego)
-      and 2.0 < obj.d_rel < 60.0 and obj.v_lead > 2.0
-    )
-
-  @staticmethod
-  def _cutin_report_usable(prediction: RadarLeadPrediction, v_ego: float) -> bool:
-    obj = prediction.features.radar_object
-    if obj.d_rel <= CUTIN_REPORT_MIN_DREL_M:
-      return False
-    # A close corner target with sustained inward motion is already gated as a
-    # provisional vehicle entry by the decision filter. Report it at low ego
-    # speed as well, while _tentative_cutin_control keeps MPC inputs benign.
-    if prediction.cutin_tentative:
-      return True
-    return not (
-      v_ego < LOW_SPEED_CUTIN_MAX_EGO_MPS
-      and abs(prediction.features.d_path) > LOW_SPEED_CUTIN_MAX_DPATH_M
-    )
-
-  @staticmethod
-  def _cutin_is_tentative(
-    prediction: RadarLeadPrediction,
-    front_identity: RadarLeadPrediction | None,
-  ) -> bool:
-    obj = prediction.features.radar_object
-    return (
-      prediction.cutin_tentative
-      or (
-        obj.corner_track_id is not None
-        and obj.d_rel >= NEAR_SIDE_NO_FRONT_MATCH_DREL_M
-        and front_identity is None
-      )
-    )
-
-  @staticmethod
-  def _tentative_cutin_has_lane_intrusion(prediction: RadarLeadPrediction) -> bool:
-    values = prediction.features.values
-    lane_half_width = (
-      abs(values[LANE_HALF_WIDTH_FEATURE_INDEX])
-      if len(values) > LANE_HALF_WIDTH_FEATURE_INDEX
-      else TENTATIVE_CUTIN_FALLBACK_HALF_WIDTH_M
-    )
-    return (
-      abs(prediction.features.d_path)
-      <= lane_half_width + CUTIN_VEHICLE_HALF_WIDTH_M + 0.15
-    )
-
   @staticmethod
   def _lead_duplicates_primary(
     lead: dict[str, Any],
@@ -603,23 +540,6 @@ class VisionModelRadarController:
       abs(float(lead["dRel"]) - float(primary["dRel"])) < PRIMARY_DUPLICATE_MAX_DREL_DELTA_M
       and abs(float(lead["yRel"]) - float(primary["yRel"])) < PRIMARY_DUPLICATE_MAX_YREL_DELTA_M
     )
-
-  @staticmethod
-  def _tentative_cutin_control(lead: dict[str, Any], v_ego: float) -> dict[str, Any]:
-    """Keep real range while preventing an uncorroborated early cue from braking hard."""
-    softened = dict(lead)
-    softened.update({
-      "vRel": 0.0,
-      "aRel": 0.0,
-      "vLead": v_ego,
-      "vLeadK": v_ego,
-      "aLead": 0.0,
-      "aLeadK": 0.0,
-      "aLeadTau": max(float(softened["aLeadTau"]), 1.5),
-      "jLead": 0.0,
-      "modelProb": min(float(softened["modelProb"]), TENTATIVE_CUTIN_MODEL_PROB),
-    })
-    return softened
 
   @staticmethod
   def _pick_side(leads: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -741,8 +661,6 @@ class VisionModelRadarController:
 
     def trajectory_marks_path_exit(prediction: RadarLeadPrediction) -> bool:
       """Use PATH-EXIT only to stop stale lead holding, never to drop leadOne."""
-      if not TRAJECTORY_FRONT_PATH_EXIT_HOLD_ENABLED:
-        return False
       obj = prediction.features.radar_object
       source_tracks = {
         ("frontRadar", obj.front_track_id),
@@ -763,8 +681,7 @@ class VisionModelRadarController:
     trajectory_decision = (
       result.trajectory.decision
       if (
-        TRAJECTORY_CUTIN_CONTROL_ENABLED
-        and result.trajectory is not None
+        result.trajectory is not None
         and result.trajectory.available
       )
       else None
@@ -776,7 +693,7 @@ class VisionModelRadarController:
         if (prediction := trajectory_radar_prediction(trajectory_prediction)) is not None
       )
       if trajectory_decision is not None
-      else result.decision.cutin_candidates
+      else ()
     )
 
     primary_aliases = set(vision_match.prediction.features.aliases) if vision_match is not None else set()
@@ -815,13 +732,8 @@ class VisionModelRadarController:
       prediction: RadarLeadPrediction,
       lead: dict[str, Any],
     ) -> bool:
-      if not matches_recent_primary(prediction):
-        return True
-      # A just-appeared bumper-side corner target can inherit a stale front
-      # alias. Keep it when its measured geometry is plainly not the current
-      # primary; its tentative control values are softened below.
       return (
-        prediction.cutin_tentative
+        not matches_recent_primary(prediction)
         and not self._lead_duplicates_primary(lead, lead_one)
       )
 
@@ -835,19 +747,13 @@ class VisionModelRadarController:
       )
       for prediction in cutin_decision_predictions
     ]
+    # Path occupancy owns the CUT-IN probability and its only temporal
+    # hysteresis. Keep physical leadOne ordering here.
     relevant_cutin_pairs = [
       (prediction, lead) for prediction, lead in cutin_pairs
       if (
         lead is not None
         and cutin_is_ahead_of_primary(float(lead["dRel"]), primary_d_rel)
-        and self._cutin_report_usable(prediction, v_ego)
-        and (
-          not self._cutin_is_tentative(
-            prediction,
-            corner_front_identity_matches.get(prediction.features.object_id),
-          )
-          or self._tentative_cutin_has_lane_intrusion(prediction)
-        )
       )
     ]
     external_pairs = [
@@ -926,18 +832,9 @@ class VisionModelRadarController:
     external_leads = tuple(lead for _, lead in independent_external_pairs)
     lead_two_pair = next((
       (prediction, lead) for prediction, lead in relevant_cutin_pairs
-      if independent_cutin(prediction, lead) and self._cutin_control_usable(prediction, v_ego)
+      if independent_cutin(prediction, lead)
     ), None)
-    lead_two_tentative = False
-    lead_two = None
-    if lead_two_pair is not None:
-      lead_two_prediction, lead_two = lead_two_pair
-      lead_two_tentative = self._cutin_is_tentative(
-        lead_two_prediction,
-        corner_front_identity_matches.get(lead_two_prediction.features.object_id),
-      )
-      if lead_two_tentative:
-        lead_two = self._tentative_cutin_control(lead_two, v_ego)
+    lead_two = lead_two_pair[1] if lead_two_pair is not None else None
     if lead_two is None:
       lead_two = next((
         lead for _, lead in independent_external_pairs
@@ -979,7 +876,7 @@ class VisionModelRadarController:
       available=True,
       lead_one=lead_one,
       lead_two=lead_two,
-      lead_two_tentative=lead_two_tentative,
+      lead_two_tentative=False,
       lead_cutin=cutin_leads[0] if cutin_leads else None,
       lead_external=external_leads[0] if external_leads else None,
       lead_left=self._pick_side(left),

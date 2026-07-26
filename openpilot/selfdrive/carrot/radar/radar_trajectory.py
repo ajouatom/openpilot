@@ -304,7 +304,7 @@ def radar_track_continuous(
 
 
 class RadarTrajectoryAnalyzer:
-  """Build source-specific path-relative trajectories without changing control output."""
+  """Build source-specific, past-only path-relative trajectories for inference."""
 
   def __init__(self, horizons_s: Iterable[float] = DEFAULT_HORIZONS_S) -> None:
     horizons = sorted({_finite(value) for value in horizons_s if _finite(value) >= 0.0})

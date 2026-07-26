@@ -974,8 +974,16 @@ def evaluate_manual_labels(
             for value in source_decision.confirmed
           )
           scores[label.label_id].append((
-            prediction.probability,
-            prediction.path_exit_probability,
+            (
+              prediction.path_in_probability
+              if not prediction.current_path_occupancy
+              else 0.0
+            ),
+            (
+              prediction.path_out_probability
+              if prediction.current_path_occupancy
+              else 0.0
+            ),
             prediction.horizon_probabilities,
             selected,
           ))

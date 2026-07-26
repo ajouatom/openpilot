@@ -29,6 +29,8 @@ MODEL_VERSION = 3
 DEFAULT_FRONT_MODEL_PATH = Path(__file__).resolve().parent / "models" / "radar_path_occupancy_front.npz"
 DEFAULT_CORNER_MODEL_PATH = Path(__file__).resolve().parent / "models" / "radar_path_occupancy_corner.npz"
 MIN_FORWARD_ENTRY_DREL_M = 0.5
+DECISION_HYSTERESIS = 0.05
+MEASURED_TRANSITION_HOLD_S = 1.0
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,16 @@ class TrajectoryCutinPrediction:
   path_exit_probability: float = 0.0
   current_path_occupancy: bool = False
   forward_horizon_relevant: tuple[bool, ...] = ()
+
+  @property
+  def path_in_probability(self) -> float:
+    """Probability of occupying the ego path now or at a relevant future head."""
+    return self.probability
+
+  @property
+  def path_out_probability(self) -> float:
+    """Probability of being outside the ego path now or at a future head."""
+    return self.path_exit_probability
 
   def probability_at(self, horizon_s: float) -> float:
     """Return future path-occupancy probability at the nearest model horizon."""
@@ -67,7 +79,7 @@ def trajectory_decision_ahead_of_primary(
   decision: TrajectoryCutinDecision,
   primary_d_rel: float | None,
 ) -> TrajectoryCutinDecision:
-  """Keep raw scores visible, but do not detect a cut-in behind leadOne."""
+  """Keep raw scores visible, but do not detect farther than leadOne."""
   if primary_d_rel is None or not math.isfinite(primary_d_rel):
     return decision
 
@@ -174,33 +186,32 @@ class RadarTrajectoryModel:
         abs(trajectory.d_path)
         <= trajectory.lane_half_width + VEHICLE_HALF_WIDTH_M
       )
-      entry_probability = (
-        0.0
-        if current_path_occupancy
-        else max(
-          (
-            value
-            for value, forward_relevant in zip(
-              values, forward_horizon_relevant, strict=True,
-            )
-            if forward_relevant
-          ),
-          default=0.0,
-        )
+      future_path_in_probability = max(
+        (
+          value
+          for value, forward_relevant in zip(
+            values, forward_horizon_relevant, strict=True,
+          )
+          if forward_relevant
+        ),
+        default=0.0,
       )
-      path_exit_probability = (
-        max(1.0 - value for value in values)
-        if current_path_occupancy
-        else 0.0
+      path_in_probability = max(
+        float(current_path_occupancy),
+        future_path_in_probability,
+      )
+      path_out_probability = max(
+        float(not current_path_occupancy),
+        max((1.0 - value for value in values), default=0.0),
       )
       result.append(TrajectoryCutinPrediction(
         track_id=radar_point_track_id(point),
         source=radar_point_source(point),
-        probability=entry_probability,
+        probability=path_in_probability,
         horizon_probabilities=values,
         trajectory=trajectory,
         point=point,
-        path_exit_probability=path_exit_probability,
+        path_exit_probability=path_out_probability,
         current_path_occupancy=current_path_occupancy,
         forward_horizon_relevant=forward_horizon_relevant,
       ))
@@ -208,11 +219,32 @@ class RadarTrajectoryModel:
 
 
 class RadarTrajectoryDecisionFilter:
-  """Direct probability threshold with no scenario-specific exceptions."""
+  """Current-state gate plus probability hysteresis, with no scene exceptions."""
 
-  def __init__(self, threshold: float, exit_threshold: float | None = None) -> None:
+  def __init__(
+    self,
+    threshold: float,
+    exit_threshold: float | None = None,
+    hysteresis: float = DECISION_HYSTERESIS,
+    transition_hold_s: float = MEASURED_TRANSITION_HOLD_S,
+  ) -> None:
     self.threshold = float(threshold)
     self.exit_threshold = float(threshold if exit_threshold is None else exit_threshold)
+    self.hysteresis = max(0.0, float(hysteresis))
+    self.transition_hold_s = max(0.0, float(transition_hold_s))
+    self._active_entry: set[tuple[str, int, int]] = set()
+    self._active_exit: set[tuple[str, int, int]] = set()
+    self._previous_occupancy: dict[tuple[str, int, int], bool] = {}
+    self._measured_entry_time: dict[tuple[str, int, int], float] = {}
+    self._measured_exit_time: dict[tuple[str, int, int], float] = {}
+
+  @staticmethod
+  def _identity(prediction: TrajectoryCutinPrediction) -> tuple[str, int, int]:
+    return (
+      prediction.source,
+      prediction.track_id,
+      prediction.trajectory.continuity_id,
+    )
 
   def update(
     self,
@@ -220,18 +252,66 @@ class RadarTrajectoryDecisionFilter:
     predictions: Iterable[TrajectoryCutinPrediction],
   ) -> TrajectoryCutinDecision:
     predictions = tuple(predictions)
+    entry_release = max(0.0, self.threshold - self.hysteresis)
+    exit_release = max(0.0, self.exit_threshold - self.hysteresis)
+    seen = {self._identity(prediction) for prediction in predictions}
+    for prediction in predictions:
+      identity = self._identity(prediction)
+      previous = self._previous_occupancy.get(identity)
+      if previous is False and prediction.current_path_occupancy:
+        self._measured_entry_time[identity] = time_s
+      elif previous is True and not prediction.current_path_occupancy:
+        self._measured_exit_time[identity] = time_s
+      self._previous_occupancy[identity] = prediction.current_path_occupancy
+
+    self._previous_occupancy = {
+      identity: occupied
+      for identity, occupied in self._previous_occupancy.items()
+      if identity in seen
+    }
+    self._measured_entry_time = {
+      identity: transition_time
+      for identity, transition_time in self._measured_entry_time.items()
+      if identity in seen and time_s - transition_time <= self.transition_hold_s
+    }
+    self._measured_exit_time = {
+      identity: transition_time
+      for identity, transition_time in self._measured_exit_time.items()
+      if identity in seen and time_s - transition_time <= self.transition_hold_s
+    }
     confirmed = [
       prediction for prediction in predictions
-      if prediction.probability >= self.threshold
+      if (
+        self._identity(prediction) in self._measured_entry_time
+        or (
+          not prediction.current_path_occupancy
+          and prediction.path_in_probability >= (
+            entry_release
+            if self._identity(prediction) in self._active_entry
+            else self.threshold
+          )
+        )
+      )
     ]
     exiting = [
       prediction for prediction in predictions
-      if prediction.path_exit_probability >= self.exit_threshold
+      if (
+        self._identity(prediction) in self._measured_exit_time
+        or (
+          prediction.current_path_occupancy
+          and prediction.path_out_probability >= (
+            exit_release
+            if self._identity(prediction) in self._active_exit
+            else self.exit_threshold
+          )
+        )
+      )
     ]
+    self._active_entry = {self._identity(prediction) for prediction in confirmed}
+    self._active_exit = {self._identity(prediction) for prediction in exiting}
     tentative: list[TrajectoryCutinPrediction] = []
-    confirmed.sort(key=lambda item: (-item.probability, item.trajectory.time_to_entry_s or 0.0))
-    exiting.sort(key=lambda item: -item.path_exit_probability)
-    tentative.sort(key=lambda item: (-item.probability, item.trajectory.time_to_entry_s or 0.0))
+    confirmed.sort(key=lambda item: (-item.path_in_probability, item.trajectory.time_to_entry_s or 0.0))
+    exiting.sort(key=lambda item: -item.path_out_probability)
     return TrajectoryCutinDecision(predictions, tuple(tentative), tuple(confirmed), tuple(exiting))
 
 

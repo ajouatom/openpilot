@@ -714,8 +714,8 @@
         "window": [56.2, 59.9],
         "expected": "detect",
         "human_verified": true,
-        "forbidden_lead_two_ids": [50, 1080],
-        "scene": "Right vehicle remains in the adjacent lane near the end of the route"
+        "target_track_ids": [50, 1080],
+        "scene": "Right SUV crosses into the ego path near the end of the route"
     },
     {
       "id": "azera-6d-1-adjacent-left-16",

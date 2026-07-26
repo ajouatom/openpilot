@@ -69,6 +69,7 @@ try:
   from openpilot.selfdrive.carrot.radar.radar_trajectory import (
     RadarTrajectory,
     RadarTrajectoryAnalyzer,
+    VEHICLE_HALF_WIDTH_M,
     estimated_yaw_rate_rad_s,
     trajectory_entry_probability,
     trajectory_sample_at,
@@ -78,6 +79,7 @@ except ModuleNotFoundError:
   from radar_trajectory import (
     RadarTrajectory,
     RadarTrajectoryAnalyzer,
+    VEHICLE_HALF_WIDTH_M,
     estimated_yaw_rate_rad_s,
     trajectory_entry_probability,
     trajectory_is_review_candidate,
@@ -118,6 +120,7 @@ DEFAULT_MULTITASK_MODEL = RADAR_ROOT / "models" / "radar_lead_multitask.npz"
 DEFAULT_FRONT_MODEL = RADAR_ROOT / "models" / "radar_lead_front.npz"
 DEFAULT_CORNER_MODEL = RADAR_ROOT / "models" / "radar_lead_corner.npz"
 DEFAULT_REVIEW_PROBABILITY = 0.5
+REVIEW_POINT_TEXT_MAX_DREL_M = 45.0
 REVIEW_SETTINGS_ENV = "CARROT_RADAR_REVIEW_SETTINGS"
 CURRENT_RADARD_CORNER_CENTER_MIN_AGE = 5
 CURRENT_RADARD_CORNER_CENTER_UNMATCHED_MAX_DREL = 45.0
@@ -208,10 +211,19 @@ class Candidate:
   current_path_occupancy: bool = False
   stage: str = ""
   detail: str = ""
+  source: str = ""
 
   @property
   def eligible(self) -> bool:
     return self.score >= self.decision_threshold
+
+  @property
+  def path_in_score(self) -> float:
+    return self.score
+
+  @property
+  def path_out_score(self) -> float:
+    return self.path_exit_score
 
 
 def candidate_track_ids(candidate: Candidate | None) -> frozenset[int]:
@@ -280,6 +292,7 @@ class LeadComparisonFrame:
 @dataclass(frozen=True)
 class CutinStageFrame:
   model: Candidate | None
+  path_out: Candidate | None
   decision: Candidate | None
   output: Candidate | None
   selected: Candidate | None
@@ -624,13 +637,22 @@ def cutin_stage_series(
   for index, frame in enumerate(frames):
     selection = selector.select(frame, index)
     diagnostics = selection.cutin_diagnostics or selection.corner_candidates
+    outside = tuple(
+      candidate for candidate in diagnostics
+      if not candidate.current_path_occupancy
+    )
+    inside = tuple(
+      candidate for candidate in diagnostics
+      if candidate.current_path_occupancy
+    )
     selected = (
       selection.lead_two
       if selection.lead_two is not None and "cutin" in selection.lead_two.reason.lower()
       else None
     )
     values.append(CutinStageFrame(
-      model=_highest_score(diagnostics),
+      model=_highest_score(outside),
+      path_out=max(inside, key=lambda candidate: candidate.path_out_score, default=None),
       decision=_highest_score(selection.decision_cutin_candidates),
       output=_highest_score(selection.active_cutin_candidates),
       selected=selected,
@@ -771,21 +793,13 @@ def validation_review_events(
 
     primary_track_id = selection.lead_one.track_id if selection.lead_one is not None else None
     decision_review = review is not None and review.validation_stage == "decision"
-    reviewed_cutins = (
-      selection.decision_cutin_candidates
-      if decision_review
-      else selection.active_cutin_candidates
-    )
-    current_cutins = {
-      candidate.track_id for candidate in reviewed_cutins
-      if candidate.track_id != primary_track_id
-      and (
-        decision_review
-        or candidate.score >= CUTIN_ACTIVE_CURRENT_MIN
-        or candidate.track_id in previous_cutins
-      )
-    }
-    if not decision_review:
+    if decision_review:
+      current_cutins = {
+        candidate.track_id for candidate in selection.decision_cutin_candidates
+        if candidate.track_id != primary_track_id
+      }
+    else:
+      current_cutins = set()
       if (
         selection.lead_two is not None
         and selection.lead_two.track_id != primary_track_id
@@ -2448,10 +2462,7 @@ class ProductionHybridLeadSelector:
         trajectory_result.predictions
       ) if trajectory_available else ()
       trajectory_confirmed = (
-        trajectory_result.front_decision.confirmed + trajectory_result.corner_decision.confirmed
-      ) if trajectory_available else ()
-      trajectory_tentative = (
-        trajectory_result.front_decision.tentative + trajectory_result.corner_decision.tentative
+        trajectory_result.decision.confirmed
       ) if trajectory_available else ()
       trajectory_exiting = (
         trajectory_result.front_decision.exiting + trajectory_result.corner_decision.exiting
@@ -2537,6 +2548,7 @@ class ProductionHybridLeadSelector:
             horizon_scores=prediction.horizon_probabilities,
             path_exit_score=prediction.path_exit_probability,
             current_path_occupancy=prediction.current_path_occupancy,
+            source=prediction.source,
           )
           for prediction in sorted(
             trajectory_predictions, key=lambda value: value.probability, reverse=True,
@@ -2577,6 +2589,7 @@ class ProductionHybridLeadSelector:
             horizon_scores=prediction.horizon_probabilities,
             path_exit_score=prediction.path_exit_probability,
             current_path_occupancy=prediction.current_path_occupancy,
+            source=prediction.source,
           )
           for prediction in trajectory_confirmed
         )
@@ -2594,7 +2607,9 @@ class ProductionHybridLeadSelector:
       active_cutins = tuple(
         candidate for lead in output.leads_cutin
         if (candidate := _output_candidate(
-          lead, "MLP active cutin", aliases_for(int(lead["radarTrackId"])),
+          lead,
+          "trajectory active cutin" if trajectory_available else "MLP active cutin",
+          aliases_for(int(lead["radarTrackId"])),
         )) is not None
       )
       active_external = tuple(
@@ -2607,15 +2622,14 @@ class ProductionHybridLeadSelector:
       cutin_ids = {candidate.track_id for candidate in active_cutins}
       external_ids = {candidate.track_id for candidate in active_external}
       lead_two_id = int(output.lead_two["radarTrackId"]) if output.lead_two is not None else None
-      lead_two_reason = (
-        (
-          "MLP tentative cutin"
-          if output.lead_two_tentative
-          else "MLP confirmed cutin"
-        ) if lead_two_id in cutin_ids
-        else "MLP active external" if lead_two_id in external_ids
-        else "MLP active stealth"
-      )
+      if lead_two_id in cutin_ids:
+        model_name = "trajectory" if trajectory_available else "MLP"
+        state = "tentative" if output.lead_two_tentative else "confirmed"
+        lead_two_reason = f"{model_name} {state} cutin"
+      elif lead_two_id in external_ids:
+        lead_two_reason = "MLP active external"
+      else:
+        lead_two_reason = "MLP active stealth"
 
       decision_prediction_ids = (
         tuple(
@@ -2645,10 +2659,6 @@ class ProductionHybridLeadSelector:
           if output.lead_one is not None
           else None
         )
-        tentative_ids = {
-          (prediction.source, prediction.track_id, prediction.trajectory.continuity_id)
-          for prediction in trajectory_tentative
-        }
         exiting_ids = {
           (prediction.source, prediction.track_id, prediction.trajectory.continuity_id)
           for prediction in trajectory_exiting
@@ -2660,6 +2670,11 @@ class ProductionHybridLeadSelector:
           in_output = any(ids.intersection(candidate_ids) for candidate_ids in active_candidate_ids)
           is_selected = bool(ids.intersection(selected_cutin_ids))
           identity = (prediction.source, track_id, prediction.trajectory.continuity_id)
+          active_source = (
+            prediction.source.startswith("corner")
+            if use_corner
+            else not prediction.source.startswith("corner")
+          )
           point_threshold = trajectory_threshold(prediction)
           raw = "/".join(f"{value:.2f}" for value in prediction.horizon_probabilities)
           forward_relevance = (
@@ -2682,21 +2697,24 @@ class ProductionHybridLeadSelector:
             final_detail = "controller output; another target selected"
           elif in_decision:
             stage = "DECISION"
-            final_detail = "confirmed; blocked by controller/dedup"
-          elif identity in tentative_ids:
-            stage = "WAIT-CONFIRM"
-            final_detail = "above tentative threshold; waiting for second hit"
+            final_detail = "CUT-IN active; not selected as leadTwo"
           elif identity in exiting_ids:
-            stage = "PATH-EXIT"
-            final_detail = f"path exit {prediction.path_exit_probability:.2f}"
+            stage = "CUT-OUT"
+            final_detail = f"CUT-OUT active {prediction.path_out_probability:.2f}"
+          elif prediction.current_path_occupancy:
+            stage = "IN-PATH"
+            final_detail = "currently inside path; CUT-IN transition not applicable"
+          elif not active_source:
+            stage = "SOURCE-OFF"
+            final_detail = f"{source_name} model owns device CUT-IN"
           elif primary_d_rel is not None and float(getattr(
             prediction.point, "d_rel", getattr(prediction.point, "dRel", math.inf),
           )) > primary_d_rel:
-            stage = "BLOCK-LEAD"
-            final_detail = f"behind leadOne {primary_d_rel:.1f}m"
+            stage = "FARTHER-L1"
+            final_detail = f"farther than leadOne {primary_d_rel:.1f}m"
           else:
-            stage = "BLOCK-PROB"
-            final_detail = f"max {prediction.probability:.2f} < {point_threshold:.2f}"
+            stage = "BELOW"
+            final_detail = f"IN {prediction.path_in_probability:.2f} < ON {point_threshold:.2f}"
           cutin_diagnostics.append(Candidate(
             track_id=track_id,
             score=float(prediction.probability),
@@ -2711,7 +2729,12 @@ class ProductionHybridLeadSelector:
             path_exit_score=float(prediction.path_exit_probability),
             current_path_occupancy=bool(prediction.current_path_occupancy),
             stage=stage,
-            detail=f"raw .5/1/1.5/2s {raw}; ahead {ahead}; {final_detail}",
+            detail=(
+              f"P(.5/1/1.5/2) {raw}; ahead {ahead}; "
+              f"IN {prediction.path_in_probability:.2f} "
+              f"OUT {prediction.path_out_probability:.2f}; {final_detail}"
+            ),
+            source=prediction.source,
           ))
       else:
         diagnostic_filter = secondary_filter or RadarLeadDecisionFilter(
@@ -2994,49 +3017,18 @@ class SimulatorUI:
       base_events = validation_log_review_events(self.frames, self.selector, self.reviews)
     else:
       base_events = validation_review_events(self.frames, self.selector, self.review)
-    if self.device_review_mode:
-      trajectory_events: dict[int, tuple[str, ...]] = {}
-    else:
-      sources = tuple(review.source.lower() for review in self.reviews) or (self.review.source.lower(),)
-      has_model_probabilities = any(
-        any("trajectory " in candidate.reason.lower() for candidate in self.selector.select(frame, index).cutin_diagnostics)
-        for index, frame in enumerate(self.frames)
-      )
-      trajectory_events = (
-        trajectory_model_review_events(
-          self.frames, self.selector, sources, self.min_candidate_probability,
-        )
-        if has_model_probabilities
-        else trajectory_review_events(
-          self.frames,
-          self.trajectories,
-          sources,
-          self.trajectory_horizon_s,
-          self.min_candidate_probability,
-        )
-      )
-    merged = {index: list(events) for index, events in base_events.items()}
-    for index, events in trajectory_events.items():
-      bucket = merged.setdefault(index, [])
-      bucket.extend(event for event in events if event not in bucket)
-    self.review_events = {index: tuple(events) for index, events in merged.items()}
-    self.review_suppressed = {
-      index
-      for index, events in trajectory_events.items()
-      if index not in base_events and self._trajectory_events_fully_labeled(index, events)
-    }
-    self.review_handled = set(self.review_suppressed)
-    if self.device_review_mode:
-      self.review_status = (
-        f"DEVICE REVIEW ARMED  {len(self.reviews)} case(s), "
-        + f"{len(base_events)} production CUT-IN event(s)"
-      )
-    else:
-      self.review_status = (
-        f"MANUAL PROB REVIEW ARMED  {len(self.reviews)} case(s), "
-        + f"prob {self.min_candidate_probability:.2f}  "
-        + f"unlabeled {len(trajectory_events) - len(self.review_handled)}"
-      )
+    self.review_events = dict(base_events)
+    self.review_suppressed = set()
+    self.review_handled = set()
+    display_mode = (
+      "model thresholds"
+      if self.device_review_mode
+      else f"display prob {self.min_candidate_probability:.2f}"
+    )
+    self.review_status = (
+      f"LEAD2 REVIEW ARMED  {len(self.reviews)} case(s), "
+      + f"{len(base_events)} production selection event(s); {display_mode}"
+    )
 
   @staticmethod
   def _trajectory_event_track_ids(events: Iterable[str]) -> tuple[int, ...]:
@@ -3106,12 +3098,12 @@ class SimulatorUI:
       if index > frame_index and index not in suppressed
     )
     mode = (
-      "DEVICE OUTPUT"
+      "AUTO MODEL THRESHOLDS"
       if getattr(self, "device_review_mode", False)
-      else f"MANUAL PROB {self.min_candidate_probability:.2f}"
+      else f"DISPLAY PROB {self.min_candidate_probability:.2f}"
     )
     self.review_status = (
-      f"AUTO REVIEW REARMED after {self.times[frame_index]:.2f}s  {mode}"
+      f"LEAD2 REVIEW REARMED after {self.times[frame_index]:.2f}s  {mode}"
     )
 
   def _user_seek(self, time_s: float) -> None:
@@ -3119,6 +3111,11 @@ class SimulatorUI:
     self.seek(time_s)
     if self.index < previous_index:
       self._rearm_review_after(self.index)
+    elif self.review is not None:
+      self.review_status = (
+        f"MANUAL SEEK @{self.times[self.index]:.2f}s; "
+        "leadTwo pause events remain armed"
+      )
 
   def _color(self, value: tuple[int, int, int, int]) -> Any:
     return self.rl.Color(*value)
@@ -3178,13 +3175,11 @@ class SimulatorUI:
       "SELECTED": "S",
       "OUTPUT": "O",
       "DECISION": "D",
-      "WAIT-CONFIRM": "W",
-      "BLOCK-RELIABILITY": "R",
-      "BLOCK-GEOMETRY": "G",
-      "BLOCK-LEAD": "L",
-      "PATH-EXIT": "X",
-      "BLOCK-PROB": "P",
-      "BLOCK-HOLD": "H",
+      "CUT-OUT": "X",
+      "IN-PATH": "I",
+      "SOURCE-OFF": "F",
+      "FARTHER-L1": "L",
+      "BELOW": "-",
     }.get(stage, "-")
 
   def _stage_color(self, stage: str) -> tuple[int, int, int, int]:
@@ -3194,19 +3189,46 @@ class SimulatorUI:
       return self.YELLOW
     if stage == "DECISION":
       return self.PURPLE
-    if stage == "WAIT-CONFIRM":
-      return self.CYAN
-    if stage == "PATH-EXIT":
-      return self.YELLOW
-    return self.RED
+    if stage == "CUT-OUT":
+      return self.ORANGE
+    if stage == "FARTHER-L1":
+      return self.RED
+    return self.MUTED
 
   @staticmethod
-  def _diagnostic_for_point(selection: Selection, track_id: int) -> Candidate | None:
-    matches = (
+  def _diagnostic_for_point(selection: Selection, point: RadarPoint) -> Candidate | None:
+    exact = tuple(
       candidate for candidate in selection.cutin_diagnostics
-      if track_id in candidate_track_ids(candidate)
+      if candidate.track_id == point.track_id
+      and (not candidate.source or candidate.source == point.source)
     )
-    return max(matches, key=lambda candidate: candidate.score, default=None)
+    if exact:
+      return max(exact, key=lambda candidate: candidate.score)
+    aliases = (
+      candidate for candidate in selection.cutin_diagnostics
+      if point.track_id in candidate_track_ids(candidate)
+      and (not candidate.source or _source_mode_name(candidate.source) == _source_mode_name(point.source))
+    )
+    return max(aliases, key=lambda candidate: candidate.score, default=None)
+
+  @staticmethod
+  def _max_future_occupancy_probability(diagnostic: Candidate) -> float:
+    return max(diagnostic.horizon_scores, default=diagnostic.score)
+
+  def _future_occupancy_at_display_horizon(self, diagnostic: Candidate) -> float:
+    if not diagnostic.horizon_scores:
+      return diagnostic.score
+    horizons_s = (0.5, 1.0, 1.5, 2.0)
+    index = min(
+      range(min(len(horizons_s), len(diagnostic.horizon_scores))),
+      key=lambda value: abs(horizons_s[value] - self.trajectory_horizon_s),
+    )
+    return diagnostic.horizon_scores[index]
+
+  def _display_probability_threshold(self, diagnostic: Candidate) -> float:
+    if getattr(self, "device_review_mode", False) and diagnostic.decision_threshold > 0.0:
+      return diagnostic.decision_threshold
+    return self.min_candidate_probability
 
   def _trajectory_for_point(self, point: RadarPoint) -> RadarTrajectory | None:
     return self.trajectories[self.index].get((point.source, point.track_id))
@@ -3286,40 +3308,42 @@ class SimulatorUI:
     color = self._source_color(point.source)
     radius = 8.0 if self.review is not None else 6.0 if point.measured else 4.5
     rl.draw_circle_v(position, radius, color)
-    trajectory = self._trajectory_for_point(point)
-    trajectory_probability = (
-      trajectory_entry_probability(trajectory, self.trajectory_horizon_s)
-      if trajectory is not None else 0.0
-    )
-    above_display_threshold = (
+    high_path_in_probability = (
       diagnostic is not None
-      and (
-        diagnostic.stage in ("OUTPUT", "SELECTED")
-        if getattr(self, "device_review_mode", False)
-        else (
-          diagnostic.stage != "BLOCK-LEAD"
-          and diagnostic.score >= self.min_candidate_probability
-        )
-      )
+      and not diagnostic.current_path_occupancy
+      and diagnostic.path_in_score >= self._display_probability_threshold(diagnostic)
     )
-    if diagnostic is not None and (show_score_label or diagnostic.score >= 0.05):
-      stage_color = self._color(
-        self.GREEN if above_display_threshold else self._stage_color(diagnostic.stage)
+    if diagnostic is not None:
+      ring_color = (
+        self.GREEN if diagnostic.stage == "SELECTED"
+        else self.RED if diagnostic.stage == "FARTHER-L1"
+        else self.ORANGE if diagnostic.stage == "CUT-OUT"
+        else self.PURPLE if high_path_in_probability
+        else self._stage_color(diagnostic.stage)
       )
-      rl.draw_circle_lines(int(position.x), int(position.y), radius + 3.0, stage_color)
-      if above_display_threshold:
-        rl.draw_circle_lines(int(position.x), int(position.y), radius + 6.0, stage_color)
+      rl.draw_circle_lines(
+        int(position.x), int(position.y), radius + 3.0,
+        self._color(ring_color),
+      )
     if diagnostic is not None and show_score_label:
-      label = (
-        f"{'!' if above_display_threshold else ''}{point.track_id} "
-        f"IN{diagnostic.score:.2f} OUT{diagnostic.path_exit_score:.2f}"
-        f" {self._stage_code(diagnostic.stage)}"
+      future_in = self._future_occupancy_at_display_horizon(diagnostic)
+      current_probability = int(diagnostic.current_path_occupancy)
+      stage_color = self._color(
+        self.GREEN if diagnostic.stage == "SELECTED"
+        else self.RED if diagnostic.stage == "FARTHER-L1"
+        else self.ORANGE if diagnostic.stage == "CUT-OUT"
+        else self.PURPLE if high_path_in_probability
+        else self._stage_color(diagnostic.stage)
       )
-      if trajectory is not None:
-        label += f" t{trajectory_probability:.2f}"
+      label = (
+        f"{point.track_id} P0={current_probability} "
+        f"IN{diagnostic.path_in_score:.2f} OUT{diagnostic.path_out_score:.2f} "
+        f"P{self.trajectory_horizon_s:.2f}={future_in:.2f} "
+        f"{self._stage_code(diagnostic.stage)}"
+      )
       self._draw_text(label, position.x + 11, position.y - 10, 14, stage_color)
-    elif show_score_label and (self.show_labels or self.review is not None):
-      label = f"{point.track_id} IN-- OUT-- h{trajectory_probability:.2f} {point.d_rel:.0f}m"
+    elif show_score_label and self.show_labels:
+      label = f"{point.track_id} P-- {point.d_rel:.0f}m"
       self._draw_text(label, position.x + 11, position.y - 9, 13, self._color(self.MUTED))
 
   def _draw_fused_marker(self, map_rect: Any, obj: FusedRadarObject) -> None:
@@ -3507,7 +3531,7 @@ class SimulatorUI:
         point_diagnostics: dict[tuple[str, int], Candidate | None] = {}
         for point in visible_points:
           key = (point.source, point.track_id)
-          diagnostic = self._diagnostic_for_point(selection, point.track_id)
+          diagnostic = self._diagnostic_for_point(selection, point)
           point_diagnostics[key] = diagnostic
           trajectory = self._trajectory_for_point(point)
           trajectory_probability = (
@@ -3515,16 +3539,34 @@ class SimulatorUI:
             if trajectory is not None else 0.0
           )
           model_probability = diagnostic.score if diagnostic is not None else 0.0
+          future_probability = (
+            self._max_future_occupancy_probability(diagnostic)
+            if diagnostic is not None
+            else 0.0
+          )
           selected = point.track_id in selected_ids
-          if diagnostic is not None or selected or trajectory_probability >= 0.30:
+          transition_relevant = (
+            diagnostic is not None
+            and (
+              (
+                not diagnostic.current_path_occupancy
+                and diagnostic.path_in_score >= 0.10
+              )
+              or diagnostic.stage == "CUT-OUT"
+            )
+          )
+          if (
+            point.d_rel <= REVIEW_POINT_TEXT_MAX_DREL_M
+            and (transition_relevant or selected)
+          ):
             annotation_rows.append((
               selected,
-              max(model_probability, trajectory_probability),
+              max(model_probability, future_probability, trajectory_probability),
               -point.d_rel,
               key,
             ))
         annotation_rows.sort(reverse=True)
-        annotation_keys = {row[3] for row in annotation_rows}
+        annotation_keys = {row[3] for row in annotation_rows[:5]}
         if self.show_trajectories:
           for point in visible_points:
             trajectory = self._trajectory_for_point(point)
@@ -3588,24 +3630,27 @@ class SimulatorUI:
       self._draw_manual_label(rect, frame, "leadTwo", self._color(self.YELLOW), 22.0)
 
     if self.review is not None:
-      visible_points = preferred_radar_points(
-        frame, self.review.source if self.review is not None else None,
+      legend_lines = (
+        "P0: measured state | P.5/P1/P1.5/P2: unchanged model path probabilities",
+        "IN=max(P0,future P) | OUT=max(1-P0,1-future P); detection also uses measured crossing",
+        "fill: front cyan / corner purple | ring: purple CUT-IN, orange CUT-OUT, red >L1, green leadTwo",
       )
-      point_source = (
-        "corner" if any(point.source.startswith("corner") for point in visible_points)
-        else "front" if any(point.source == "frontRadar" for point in visible_points)
-        else "SCC"
-      )
-      point_legend = (
-        f"{point_source} points lateral x4: IN=ahead-only, raw=all horizons; "
-        f"future dots 0.25s to {self.trajectory_horizon_s:.2f}s"
-      )
+      legend_rect = rl.Rectangle(rect.x + 10, rect.y + 8, 680.0, 58.0)
+      rl.draw_rectangle_rec(legend_rect, self._color((14, 18, 23, 220)))
+      for line_index, text in enumerate(legend_lines):
+        self._draw_text(
+          text,
+          rect.x + 18,
+          rect.y + 13 + line_index * 16,
+          11,
+          self._color(self.MUTED),
+        )
     else:
       point_legend = "fused objects" if self.show_fused_objects else "radar points"
-    extras = f"   {point_legend} enabled" if self.show_radar_points else ""
-    comparison_legend = "   circles: current radard L1 cyan / L2 purple" if self.radard_selector is not None else ""
-    legend = f"boxes: model L1 orange / L2 yellow{comparison_legend}{extras}"
-    self._draw_text(legend, rect.x + 18, rect.y + rect.height - 24, 14, self._color(self.MUTED))
+      extras = f"   {point_legend} enabled" if self.show_radar_points else ""
+      comparison_legend = "   circles: current radard L1 cyan / L2 purple" if self.radard_selector is not None else ""
+      legend = f"boxes: model L1 orange / L2 yellow{comparison_legend}{extras}"
+      self._draw_text(legend, rect.x + 18, rect.y + rect.height - 24, 14, self._color(self.MUTED))
 
   @staticmethod
   def _lead_text(frame: RadarFrame, lead: RecordedLead) -> str:
@@ -3690,7 +3735,7 @@ class SimulatorUI:
         else "SCC"
       )
       line(
-        f"{point_source} MODEL + TRAJECTORY  horizon {self.trajectory_horizon_s:.2f}s",
+        f"{point_source} PATH PROBABILITY  display {self.trajectory_horizon_s:.2f}s",
         self.MUTED, 14, 21,
       )
       line(
@@ -3703,39 +3748,50 @@ class SimulatorUI:
         self.MUTED, 12, 17,
       )
       point_rows = []
+      selected_ids = set()
+      for candidate in (selection.lead_one, selection.lead_two):
+        selected_ids.update(candidate_track_ids(candidate))
       for point in visible_points:
-        diagnostic = self._diagnostic_for_point(selection, point.track_id)
+        if (
+          point.d_rel > REVIEW_POINT_TEXT_MAX_DREL_M
+          and point.track_id not in selected_ids
+        ):
+          continue
+        diagnostic = self._diagnostic_for_point(selection, point)
+        if (
+          diagnostic is not None
+          and diagnostic.current_path_occupancy
+          and diagnostic.stage != "CUT-OUT"
+          and point.track_id not in selected_ids
+        ):
+          continue
         trajectory = self._trajectory_for_point(point)
-        trajectory_probability = (
-          trajectory_entry_probability(trajectory, self.trajectory_horizon_s)
-          if trajectory is not None else 0.0
-        )
-        model_probability = diagnostic.score if diagnostic is not None else 0.0
+        stage_priority = {
+          "SELECTED": 5,
+          "OUTPUT": 4,
+          "DECISION": 3,
+          "CUT-OUT": 2,
+          "FARTHER-L1": 1,
+        }.get(diagnostic.stage if diagnostic is not None else "", 0)
         point_rows.append((
-          max(
-            model_probability,
-            diagnostic.path_exit_score if diagnostic is not None else 0.0,
-            trajectory_probability,
-          ),
+          stage_priority,
+          diagnostic.path_in_score if diagnostic is not None else 0.0,
           point,
           diagnostic,
           trajectory,
-          trajectory_probability,
         ))
-      point_rows.sort(key=lambda item: (-item[0], item[1].d_rel))
-      for _, point, diagnostic, trajectory, trajectory_probability in point_rows[:6]:
-        model_probability = diagnostic.score if diagnostic is not None else 0.0
+      point_rows.sort(key=lambda item: (-item[0], -item[1], item[2].d_rel))
+      for _, _, point, diagnostic, trajectory in point_rows[:3]:
         stage = diagnostic.stage if diagnostic is not None else "NO-MODEL"
-        if trajectory is not None and trajectory.time_to_entry_s is not None:
-          tte = f"{trajectory.time_to_entry_s:.2f}s"
-        else:
-          tte = "--"
         line(
           (
-            f"id{point.track_id} IN{model_probability:.2f} "
-            f"OUT{(diagnostic.path_exit_score if diagnostic is not None else 0.0):.2f} "
-            f"H{trajectory_probability:.2f} "
-            f"tte {tte} d{point.d_rel:.0f} y{point.y_rel:+.1f} {stage}"
+            f"id{point.track_id} "
+            f"P0={int(diagnostic.current_path_occupancy) if diagnostic is not None else '-'} "
+            f"IN{diagnostic.path_in_score:.2f} "
+            f"OUT{diagnostic.path_out_score:.2f} "
+            f"{stage}"
+            if diagnostic is not None
+            else f"id{point.track_id} P unavailable"
           ),
           self._stage_color(diagnostic.stage) if diagnostic is not None else self.MUTED,
           13,
@@ -3746,14 +3802,16 @@ class SimulatorUI:
             f"lane p{trajectory.lane_probability:.2f}"
             if trajectory.lane_reliable else "path fallback"
           )
-          model_reason = diagnostic.detail if diagnostic is not None else "not emitted by model"
+          raw = (
+            "/".join(f"{value:.2f}" for value in diagnostic.horizon_scores)
+            if diagnostic is not None and diagnostic.horizon_scores
+            else "--"
+          )
           line(
             (
-              f"  rate {trajectory.d_path_rate:+.2f}m/s "
-              f"sigma {trajectory_sample_at(trajectory, self.trajectory_horizon_s).lateral_sigma:.2f} "
-              f"rot {trajectory.ego_rotation_lateral_speed:.2f} "
-              f"amb {trajectory.turn_ambiguity:.2f}; "
-              f"{lane}; {trajectory.reason}; {model_reason}"
+              f"  P .5/1/1.5/2 {raw}  d{point.d_rel:.0f} y{point.y_rel:+.1f} "
+              f"dPath {trajectory.d_path:+.2f}/"
+              f"{trajectory.lane_half_width + VEHICLE_HALF_WIDTH_M:.2f} {lane}"
             )[:72],
             self.MUTED, 12, 17,
           )
@@ -3940,14 +3998,14 @@ class SimulatorUI:
     if getattr(self, "device_review_mode", False):
       self.probability_slider = None
       self._draw_text(
-        "AUTO: DEVICE CUT-IN OUTPUT",
+        "AUTO DISPLAY: MODEL THRESHOLDS | PAUSE: leadTwo",
         x, slider_y - 4.0, 13, self._color(self.GREEN),
       )
     else:
-      label = f"MANUAL PROB >= {self.min_candidate_probability:.2f}"
+      label = f"DISPLAY PROB >= {self.min_candidate_probability:.2f} | PAUSE: leadTwo"
       self._draw_text(label, x, slider_y - 4.0, 13, self._color(self.TEXT))
-      slider_x = x + 138.0
-      slider_width = max(100.0, rect.width - 180.0)
+      slider_x = x + 230.0
+      slider_width = max(80.0, rect.width - 272.0)
       self.probability_slider = rl.Rectangle(slider_x, slider_y - 7.0, slider_width, 18.0)
       track_y = slider_y + 1.0
       rl.draw_line_ex(rl.Vector2(slider_x, track_y), rl.Vector2(slider_x + slider_width, track_y), 4.0, self._color(self.GRID))
@@ -3958,11 +4016,11 @@ class SimulatorUI:
     if self.review is not None:
       horizon_y = slider_y + 29.0
       self._draw_text(
-        f"PREDICT {self.trajectory_horizon_s:.2f}s",
+        f"DISPLAY FUTURE {self.trajectory_horizon_s:.2f}s",
         x, horizon_y - 4.0, 13, self._color(self.TEXT),
       )
-      horizon_x = x + 108.0
-      horizon_width = max(100.0, rect.width - 150.0)
+      horizon_x = x + 150.0
+      horizon_width = max(100.0, rect.width - 192.0)
       self.trajectory_horizon_slider = rl.Rectangle(
         horizon_x, horizon_y - 7.0, horizon_width, 18.0,
       )
@@ -4102,9 +4160,9 @@ class SimulatorUI:
     probability_top = rect.y + 121.0
     probability_bottom = rect.y + rect.height - 9.0
     probability_height = probability_bottom - probability_top
-    self._draw_text("CUT-IN", rect.x + 5.0, probability_top - 3.0, 11, self._color(self.MUTED))
+    self._draw_text("IN / OUT", rect.x + 5.0, probability_top - 3.0, 11, self._color(self.MUTED))
     if getattr(self, "device_review_mode", False):
-      self._draw_text("DEVICE", rect.x + 5.0, probability_top + 14.0, 10, self._color(self.GREEN))
+      self._draw_text("AUTO TH", rect.x + 5.0, probability_top + 14.0, 10, self._color(self.GREEN))
     else:
       threshold_y = probability_bottom - probability_height * self.min_candidate_probability
       rl.draw_line_ex(
@@ -4113,16 +4171,20 @@ class SimulatorUI:
       )
       self._draw_text(f"{self.min_candidate_probability:.2f}", rect.x + 5.0, threshold_y - 6.0, 10, self._color(self.MUTED))
     stage_legend = (
-      ("MODEL", "model", self.CYAN),
+      ("IN", "model", self.CYAN),
+      ("OUT", "path_out", self.ORANGE),
       ("DECISION", "decision", self.PURPLE),
       ("OUTPUT", "output", self.YELLOW),
       ("SELECTED", "selected", self.GREEN),
     )
+    def stage_probability(candidate: Candidate, field: str) -> float:
+      return candidate.path_out_score if field == "path_out" else candidate.path_in_score
+
     stage_x = rect.x + 70.0
     current_stage = self.cutin_stages[self.index]
     for label, field, color_value in stage_legend:
       candidate = getattr(current_stage, field)
-      value = "--" if candidate is None else f"{candidate.score:.2f}"
+      value = "--" if candidate is None else f"{stage_probability(candidate, field):.2f}"
       item = f"{label} {value}"
       self._draw_text(item, stage_x, probability_top - 2.0, 11, self._color(color_value))
       stage_x += self._measure_text(item, 11) + 20.0
@@ -4136,7 +4198,7 @@ class SimulatorUI:
           previous = None
           continue
         x = plot_left + plot_width * min(max(frame.time_s / total_time, 0.0), 1.0)
-        score = min(max(candidate.score, 0.0), 1.0)
+        score = min(max(stage_probability(candidate, field), 0.0), 1.0)
         y = probability_bottom - probability_height * score
         if previous is not None:
           previous_time, previous_x, previous_y = previous
@@ -4145,7 +4207,8 @@ class SimulatorUI:
         previous = (frame.time_s, x, y)
       candidate = getattr(current_stage, field)
       if candidate is not None:
-        y = probability_bottom - probability_height * min(max(candidate.score, 0.0), 1.0)
+        score = min(max(stage_probability(candidate, field), 0.0), 1.0)
+        y = probability_bottom - probability_height * score
         rl.draw_circle_v(rl.Vector2(cursor_x, y), 3.5, color)
     return rect
 
@@ -4306,6 +4369,12 @@ class SimulatorUI:
     rl = self.rl
     if rl.is_key_pressed(rl.KEY_SPACE):
       self.paused = not self.paused
+      if self.review is not None:
+        state = "MANUAL PAUSE" if self.paused else "PLAYING"
+        self.review_status = (
+          f"{state} @{self.times[self.index]:.2f}s; "
+          "leadTwo pause events remain armed"
+        )
     if rl.is_key_pressed(rl.KEY_ONE):
       self.selected_role = "leadOne"
       self.label_status = "active role: leadOne"
@@ -4336,7 +4405,7 @@ class SimulatorUI:
       self.show_labels = not self.show_labels
     if rl.is_key_pressed(rl.KEY_R) and self.review is not None:
       self.review_handled = set(getattr(self, "review_suppressed", set()))
-      self.review_status = "AUTO REVIEW RESTARTED"
+      self.review_status = "LEAD2 REVIEW RESTARTED"
       self.paused = False
       self.seek(0.0)
       self._pause_for_review(self.index - 1, self.index)
@@ -4380,7 +4449,6 @@ class SimulatorUI:
       if probability != self.min_candidate_probability:
         self.min_candidate_probability = probability
         save_review_probability(probability, self.review_settings_path)
-        self._prepare_review_events()
       return
     if (
       self.trajectory_horizon_slider is not None
@@ -4394,8 +4462,6 @@ class SimulatorUI:
       horizon_s = round((0.25 + min(max(ratio, 0.0), 1.0) * 1.75) * 4.0) / 4.0
       if horizon_s != self.trajectory_horizon_s:
         self.trajectory_horizon_s = horizon_s
-        self.review_handled.clear()
-        self._prepare_review_events()
       return
     if rl.is_mouse_button_pressed(rl.MOUSE_BUTTON_LEFT):
       for expected, button in self.review_label_buttons.items():
@@ -4512,11 +4578,11 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--paused", action="store_true", help="start paused")
   parser.add_argument(
     "--prob", type=float,
-    help="manual raw-probability review threshold (0.00-1.00); omitted follows production CUT-IN output",
+    help="manual probability display threshold (0.00-1.00); pauses still follow production leadTwo",
   )
   parser.add_argument(
     "--manual-prob", action="store_true",
-    help="manual raw-probability review using the last saved slider value",
+    help="probability display using the last saved slider value; pauses still follow production leadTwo",
   )
   parser.add_argument("--summary", action="store_true", help="print comparison summary without opening a window")
   parser.add_argument("--export-csv", type=Path, help="export one comparison row per radar frame")
