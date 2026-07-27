@@ -4,7 +4,12 @@ from openpilot.selfdrive.carrot.radar_motion.controller import (
   CORNER_RADAR_MEASUREMENT_DELAY_S,
   DPathRadarController,
   DPathRadarOutput,
+  LEAD_ACCEL_DT_S,
+  LEAD_ACCEL_FILTER_ALPHA,
+  LEAD_ACCEL_FILTER_TAU_S,
+  LEAD_ACCEL_TAU_S,
   RADAR_MOTION_MAX_TIME_SKEW_S,
+  RadarLeadDynamics,
 )
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   CUTIN_MAX_DREL_M,
@@ -72,6 +77,7 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
 __all__ = (
   "DPathRadarController",
   "DPathRadarOutput",
+  "RadarLeadDynamics",
   "DPathLeadCandidate",
   "DPathLeadSelection",
   "DPathLeadTwoTracker",
@@ -89,6 +95,10 @@ __all__ = (
   "LeadOneExitLatch",
   "CUTIN_MAX_DREL_M",
   "CORNER_RADAR_MEASUREMENT_DELAY_S",
+  "LEAD_ACCEL_DT_S",
+  "LEAD_ACCEL_FILTER_ALPHA",
+  "LEAD_ACCEL_FILTER_TAU_S",
+  "LEAD_ACCEL_TAU_S",
   "IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M",
   "MOTION_HORIZONS_S",
   "MOTION_MAX_DREL_M",

@@ -54,6 +54,7 @@ class Point:
   v_lead: float | None = None
   a_lead: float | None = None
   yv_rel: float = 0.0
+  j_lead: float = 0.0
 
 
 STRAIGHT_PATH = ((0.0, 0.0), (100.0, 0.0))
@@ -472,6 +473,8 @@ def test_corner_lead_uses_mutually_matched_front_longitudinal_kinematics() -> No
   assert fused.v_lead == front.v_lead
   assert fused.a_lead == front.a_lead
   assert fused.j_lead == front.j_lead
+  assert fused.kinematics_source == front.source
+  assert fused.kinematics_track_id == front.track_id
   assert lead_duplicates_primary(
     lead_from_radar_point(fused, 0.0, 0.0, 0.0),
     lead_from_radar_point(front, 0.0, 0.0, 0.0),
@@ -1523,6 +1526,92 @@ def test_controller_uses_sensor_specific_production_thresholds() -> None:
   assert front.motion_decisions.threshold == pytest.approx(0.67)
 
 
+def test_controller_matches_radard_lead_dynamics_and_raw_jerk() -> None:
+  controller = DPathRadarController(prefer_corner_radar=False)
+  hard_motion = Point(
+    10,
+    30.0,
+    0.0,
+    a_lead=1.0,
+    j_lead=0.75,
+  )
+  hard = controller.update(
+    time_s=1.0,
+    v_ego=10.0,
+    radar_points=(hard_motion,),
+    model=model_with_lead(30.0, 0.0, 10.0),
+    radar_reaction_factor=0.5,
+  )
+
+  assert hard.lead_one is not None
+  assert hard.lead_one["aLeadTau"] == pytest.approx(1.35)
+  assert hard.lead_one["jLead"] == pytest.approx(0.75)
+  assert hard.leads_center[0]["aLeadTau"] == pytest.approx(1.35)
+  assert hard.leads_center[0]["jLead"] == pytest.approx(0.75)
+
+  quiet = controller.update(
+    time_s=1.05,
+    v_ego=10.0,
+    radar_points=(replace(hard_motion, a_lead=0.0, j_lead=0.0),),
+    model=model_with_lead(30.0, 0.0, 10.0),
+    radar_reaction_factor=0.5,
+  )
+
+  assert quiet.lead_one is not None
+  assert quiet.lead_one["aLeadTau"] == pytest.approx(0.75)
+  assert quiet.lead_one["jLead"] == pytest.approx(0.0)
+
+
+def test_corner_lead_two_uses_matched_front_dynamics() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  prediction = SimpleNamespace(
+    source="corner235",
+    track_id=1019,
+    continuity_id=1,
+    d_path=2.0,
+    d_path_rate_long=-0.5,
+    cut_out_probability=0.0,
+    path_entry_probability=0.8,
+    current_path_occupancy=False,
+    reason="confirmed physical CUT-IN",
+    path_entry_age_s=0.0,
+    time_to_entry_s=0.5,
+  )
+  controller.motion_predictor = FixedPredictor(prediction)
+  controller.motion_decisions = FixedDecisionTracker(prediction)
+
+  output = controller.update(
+    time_s=1.0,
+    v_ego=10.0,
+    radar_points=(
+      Point(
+        35,
+        20.0,
+        2.0,
+        source="frontRadar",
+        a_lead=1.0,
+        j_lead=0.75,
+      ),
+      Point(
+        1019,
+        20.0,
+        2.0,
+        source="corner235",
+        a_lead=0.0,
+        j_lead=0.0,
+      ),
+    ),
+    model=model_with_lead(30.0, 0.0, 10.0, probability=0.0),
+    radar_reaction_factor=0.5,
+  )
+
+  assert output.lead_two is not None
+  assert output.lead_two["radarTrackId"] == 1019
+  assert output.lead_two["aLead"] == pytest.approx(1.0)
+  assert output.lead_two["jLead"] == pytest.approx(0.75)
+  assert output.lead_two["aLeadTau"] == pytest.approx(1.35)
+
+
 def test_primary_cut_out_requires_same_physical_vehicle() -> None:
   primary = {
     "status": True,
@@ -1833,6 +1922,20 @@ def test_production_dpath_mode_is_independent_of_conventional_radard() -> None:
   assert "RadarMotionPredictor" not in conventional_source
   assert "from openpilot.selfdrive.controls.radard" not in dpath_source
   assert 'getattr(sm["modelV2"], "timestampEof", 0)' in dpath_source
+  assert 'self.params.get_float("RadarReactionFactor") * 0.01' in dpath_source
+  for field in (
+    "leadOne",
+    "leadTwo",
+    "leadLeft",
+    "leadRight",
+    "leadsLeft",
+    "leadsCenter",
+    "leadsRight",
+    "leadsCutIn",
+    "leadsLeft2",
+    "leadsRight2",
+  ):
+    assert f"self.radar_state.{field} =" in dpath_source
   assert "max_measurement_age_s=VALIDATION_CORNER_MAX_MEASUREMENT_AGE_S" in validation_source
   assert '"radard", "openpilot.selfdrive.controls.radard", conventional_radard' in manager_source
   assert '"radard_dpath", "openpilot.selfdrive.carrot.radar.radard_dpath", dpath_radard' in manager_source

@@ -52,6 +52,8 @@
 
 차로 변경 보조가 사용하는 `leadLeft`, `leadRight`와 측면 목록도 같은 motion 센서에서 보이는 좌·우 인접 차량 위치로 발행합니다. `|vLead| < 3 km/h` 포인트는 이 현재 위치에는 사용할 수 있지만 dPath 이력을 만들거나 leadTwo로 예측하지 않습니다.
 
+레이더 측정이 있는 모든 발행 lead는 측정된 `jLead`를 그대로 유지합니다. track별 `aLeadTau`는 기존 `radard`와 동일하게 `RadarReactionFactor` 설정, 작은 가속도 기준, jerk 기준과 0.45초 감쇠 필터를 사용하며 Radar Motion 모드라고 고정값으로 바뀌지 않습니다. 이 동작은 leadOne, leadTwo, 좌우 lead와 모든 좌·중앙·CUT-IN 목록에 동일하게 적용됩니다.
+
 <a id="lead-selection"></a>
 ## 선행차 선택과 검증
 
