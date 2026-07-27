@@ -37,12 +37,14 @@
 
 코너 레이더 객체는 차량 코드가 인식한 지원 메시지 그룹이 있을 때만 생성됩니다. 지원되는 0x430 메시지군도 전방 레이더가 아닌 코너 레이더 입력으로 구분됩니다. 현재 `2`의 끼어들기 처리는 현대 계열을 중심으로 동작하므로 다른 제조사에 같은 값을 일반화하면 안 됩니다.
 
-### Radar Motion 모드
+### 당근레이더모드
 
-| `RadarMotionMode` | 의미 |
+| `CarrotRadarMode` | 의미 |
 |---:|---|
 | `0` | 기존 `radard` 선행차·끼어들기 처리 유지(기본값) |
 | `1` | 독립 dPath RadarD가 vision이 뒷받침한 레이더 leadOne을 먼저 계산하고, 물리 dPath CUT-IN만 leadTwo로 사용 |
+
+코너 레이더와 레이더 트랙 기능이 모두 없는 차량에서는 기존 방식과 동일하게 동작합니다.
 
 `1`은 학습 모델을 사용하지 않으며 기존 `controls/radard.py`를 호출하거나 그 결과를 섞지 않습니다. 독립 프로세스가 삭제 전 `radard_model.py`와 같은 순서로 model lead zero를 전방/SCC 레이더와 먼저 매칭해 leadOne을 정합니다. 새 이동 leadOne 매칭은 기존 radard와 같은 거리·횡위치·속도 결합 likelihood 최소값 `1e-4`도 넘어야 하며, 이미 물리적으로 이어진 ID는 순간적인 낮은 점수를 허용할 수 있습니다. 별도의 저속 정지 leadOne 보강은 `|vLead| ≤ 2.5m/s`인 현재 경로의 `measured=true` 레이더 객체가 model lead zero의 위치와 일치하고 비전 확률이 한 번이라도 0.05 이상이며 model과 radar의 보고 속도 차이가 10m/s 이하인 뒤, 레이더가 0.25초 동안 물리적으로 연속될 때 확정합니다. 따라서 model이 도로 속도로 달리는 차량을 보고 있을 때 정지한 시설물 반사체를 같은 차량으로 붙이지 않습니다. 코너 데이터가 있으면 객체 ID가 더 안정적인 코너 track을 우선하고, 없으면 전방 track을 사용합니다. 한 번 확정된 동일 정지 객체는 비전 확률이 약해지거나 사라져도 레이더와 물리 위치가 이어지는 동안 leadOne으로 유지합니다. 물리 연속성이 깨지거나 model lead zero가 다른 이동 레이더 객체와 일치하면 해제합니다. 이 보강으로 새 정지 포인트를 leadTwo로 승격하지는 않습니다.
 
@@ -57,7 +59,7 @@
 <a id="lead-selection"></a>
 ## 선행차 선택과 검증
 
-manager는 두 레이더 구현을 동시에 실행하지 않습니다. `RadarMotionMode=0`에서는 기존 `openpilot.selfdrive.controls.radard`만 실행하고 기존 leadOne/leadTwo 선택을 그대로 유지합니다. `RadarMotionMode=1`에서는 기존 프로세스를 중지하고 독립 `openpilot.selfdrive.carrot.radar.radard_dpath`만 실행합니다. 이 프로세스는 일반 front/SCC–vision leadOne 또는 비전으로 처음 확인한 연속 정지 leadOne을 먼저 계산한 뒤 아래 물리 predictor로 leadTwo를 계산해 `radarState`를 직접 발행합니다. 전방 레이더, SCC, 코너 레이더의 소스 구분을 유지하며 학습형 레이더 리드 모델은 사용하지 않습니다.
+manager는 두 레이더 구현을 동시에 실행하지 않습니다. `CarrotRadarMode=0`에서는 기존 `openpilot.selfdrive.controls.radard`만 실행하고 기존 leadOne/leadTwo 선택을 그대로 유지합니다. `CarrotRadarMode=1`에서는 기존 프로세스를 중지하고 독립 `openpilot.selfdrive.carrot.radar.radard_dpath`만 실행합니다. 이 프로세스는 일반 front/SCC–vision leadOne 또는 비전으로 처음 확인한 연속 정지 leadOne을 먼저 계산한 뒤 아래 물리 predictor로 leadTwo를 계산해 `radarState`를 직접 발행합니다. 전방 레이더, SCC, 코너 레이더의 소스 구분을 유지하며 학습형 레이더 리드 모델은 사용하지 않습니다.
 
 headless 검증기는 기존 radard와 실험 중인 단순 물리 predictor를 별도로 보고할 수 있습니다. 화면 리플레이는 새 독립 controller와 물리 predictor만 실행합니다. leadOne/leadTwo는 로그의 model·radar 입력으로 다시 계산하며 기록된 기존 radard의 lead 역할과 CUT-IN 마커를 가져오지 않습니다. 리플레이는 종방향 제어를 바꾸지 않습니다.
 

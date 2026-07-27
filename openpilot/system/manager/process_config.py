@@ -64,11 +64,11 @@ def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 
 
 def conventional_radard(started: bool, params: Params, CP: car.CarParams) -> bool:
-  return started and params.get_int("RadarMotionMode") != 1
+  return started and params.get_int("CarrotRadarMode") != 1
 
 
 def dpath_radard(started: bool, params: Params, CP: car.CarParams) -> bool:
-  return started and params.get_int("RadarMotionMode") == 1
+  return started and params.get_int("CarrotRadarMode") == 1
 
 
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:

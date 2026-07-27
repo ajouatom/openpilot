@@ -46,17 +46,18 @@ def test_c3x_lite_hardware_setting_is_exposed(settings, params):
   assert device_hardware["params"] == ["HardwareC3xLite"]
 
 
-def test_physical_radar_mode_replaces_removed_model_mode(settings, params):
+def test_carrot_radar_mode_replaces_removed_model_mode(settings, params):
   by_name = {p["name"]: p for p in params}
   assert "RadarLeadModelMode" not in by_name
   assert "RadarDPathMode" not in by_name
-  assert (by_name["RadarMotionMode"]["min"], by_name["RadarMotionMode"]["max"]) == (0, 1)
-  assert by_name["RadarMotionMode"]["default"] == 0
-  assert by_name["RadarMotionMode"]["control"] == "toggle"
-  assert by_name["RadarMotionMode"]["risk"] == "high"
+  assert "RadarMotionMode" not in by_name
+  assert (by_name["CarrotRadarMode"]["min"], by_name["CarrotRadarMode"]["max"]) == (0, 1)
+  assert by_name["CarrotRadarMode"]["default"] == 0
+  assert by_name["CarrotRadarMode"]["control"] == "toggle"
+  assert by_name["CarrotRadarMode"]["risk"] == "high"
   vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
   radar = next(group for group in vehicle["groups"] if group["id"] == "VEH_RADAR")
-  assert radar["params"] == ["EnableRadarTracks", "EnableCornerRadar", "RadarMotionMode"]
+  assert radar["params"] == ["EnableRadarTracks", "EnableCornerRadar", "CarrotRadarMode"]
 
 
 def test_parameter_names_are_unique(params):
