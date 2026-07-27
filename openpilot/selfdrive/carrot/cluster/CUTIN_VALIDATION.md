@@ -25,11 +25,12 @@ within ±8 m longitudinally of leadOne also needs an actual corridor-entry
 sample in its two-second forecast; proximity alone cannot promote a same-row
 vehicle. Front, SCC, and corner inputs retain their production source identity.
 When the motion track physically matching leadOne reaches CUT-OUT probability
-0.90, leadOne is released. That exiting physical identity stays latched and
-excluded from both lead roles while CUT-IN remains zero and either CUT-OUT
-remains at least 0.60 or the target body still overlaps the current path. The
-latch clears when that identity disappears, gains CUT-IN evidence, or is both
-below 0.60 CUT-OUT and outside the current path.
+0.60 while CUT-IN remains zero, leadOne is released. That exiting physical
+identity stays latched and excluded from both lead roles only while CUT-IN
+remains zero and CUT-OUT remains at least 0.60. Current-path overlap alone
+never keeps the latch active. The latch clears when that identity disappears,
+gains CUT-IN evidence, or falls below 0.60 CUT-OUT, even if the target body
+still overlaps the current path.
 A separate measured moving object already in the current path may start leadTwo
 without the normal new-track history wait while this exit latch is active.
 

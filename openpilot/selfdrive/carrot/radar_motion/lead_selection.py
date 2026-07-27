@@ -18,8 +18,8 @@ PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 3.5
 PRIMARY_DUPLICATE_MAX_YREL_DELTA_M = 1.8
 PRIMARY_EXIT_MAX_VLEAD_DELTA_MPS = 2.0
 PRIMARY_ROW_MAX_DREL_DELTA_M = 8.0
-LEAD_ONE_CUT_OUT_THRESHOLD = 0.90
-LEAD_ONE_EXIT_RELEASE_CUT_OUT_THRESHOLD = 0.60
+LEAD_ONE_CUT_OUT_THRESHOLD = 0.60
+LEAD_ONE_EXIT_RELEASE_CUT_OUT_THRESHOLD = LEAD_ONE_CUT_OUT_THRESHOLD
 FRONT_CUT_IN_MIN_DPATH_RATE_MPS = 0.75
 LEAD_TWO_POSITION_HOLD_S = 0.75
 LEAD_TWO_LONGITUDINAL_JUMP_M = 2.25
@@ -91,11 +91,8 @@ class LeadOneExitLatch:
         continue
       if (
         float(getattr(prediction, "cut_in_probability", 0.0)) <= 0.0
-        and (
-          float(getattr(prediction, "cut_out_probability", 0.0))
-          >= LEAD_ONE_EXIT_RELEASE_CUT_OUT_THRESHOLD
-          or bool(getattr(prediction, "current_path_occupancy", False))
-        )
+        and float(getattr(prediction, "cut_out_probability", 0.0))
+        >= LEAD_ONE_EXIT_RELEASE_CUT_OUT_THRESHOLD
       ):
         return self.active_identity
       self.reset()
@@ -324,10 +321,12 @@ def lead_one_exits_path(
   primary: dict[str, Any] | None,
   motion_lead: dict[str, Any],
   cut_out_probability: float,
+  cut_in_probability: float,
 ) -> bool:
   """Release leadOne only when the same physical motion track exits the path."""
   return (
-    float(cut_out_probability) >= LEAD_ONE_CUT_OUT_THRESHOLD
+    float(cut_in_probability) <= 0.0
+    and float(cut_out_probability) >= LEAD_ONE_CUT_OUT_THRESHOLD
     and lead_one_matches_motion_track(primary, motion_lead)
   )
 
