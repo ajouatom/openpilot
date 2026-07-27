@@ -132,8 +132,8 @@ The screen shows only new-controller and physical-predictor data:
 - short/long `dPath` rate, curvature, uncertainty, and continuity ID;
 - a full-log continuity graph of recalculated leadOne distance in orange and
   leadTwo distance in yellow. Missing leads and track-ID changes break the
-  line. Its horizontal time axis exactly matches the seek bar, and clicking
-  the graph seeks both cursors;
+  line. It spans the window, its horizontal time axis exactly matches the seek
+  bar, and clicking the graph seeks both cursors;
 - a clickable seek bar with physical-predictor CUT-IN entry markers in orange
   and validation windows above it. Existing-radard markers are absent.
 

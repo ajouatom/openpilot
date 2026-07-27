@@ -463,11 +463,14 @@ def test_lead_graph_and_seek_bar_share_one_time_axis() -> None:
     ),
   )
 
-  timeline, _, _, _, continuity = ui._layout_rects(1440, 1080)
+  timeline, panel, _, _, continuity = ui._layout_rects(1440, 1080)
   continuity_axis = ui._continuity_time_axis_rect(continuity)
 
   assert timeline.x == pytest.approx(continuity_axis.x)
   assert timeline.width == pytest.approx(continuity_axis.width)
+  assert timeline.width == pytest.approx(1360.0)
+  assert continuity.width == pytest.approx(1416.0)
+  assert panel.y + panel.height < continuity.y
 
 
 def test_clicking_lead_graph_seeks_on_shared_time_axis() -> None:

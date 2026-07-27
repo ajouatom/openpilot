@@ -2343,29 +2343,27 @@ class SimulatorUI:
     return min(500.0, max(410.0, width * 0.35))
 
   def _timeline_rect(self, width: int, height: int) -> Any:
-    content_width = float(width) - self._panel_width(width) - 34.0
     return self.rl.Rectangle(
       56.0,
       float(height - 42),
-      max(100.0, content_width - 54.0),
+      max(100.0, float(width) - 80.0),
       13.0,
     )
 
-  def _panel_rect(self, width: int, timeline: Any) -> Any:
+  def _panel_rect(self, width: int, bottom: float) -> Any:
     panel_width = self._panel_width(width)
-    content_bottom = timeline.y - 47.0
     return self.rl.Rectangle(
       float(width) - panel_width - 10.0,
       12.0,
       panel_width,
-      max(300.0, content_bottom - 4.0),
+      max(300.0, bottom - 12.0),
     )
 
   def _continuity_time_axis_rect(self, rect: Any) -> Any:
     return self.rl.Rectangle(
       rect.x + 44.0,
       rect.y,
-      max(1.0, rect.width - 54.0),
+      max(1.0, rect.width - 56.0),
       rect.height,
     )
 
@@ -2375,10 +2373,25 @@ class SimulatorUI:
     height: int,
   ) -> tuple[Any, Any, Any, Any, Any]:
     timeline = self._timeline_rect(width, height)
-    panel_rect = self._panel_rect(width, timeline)
+    continuity_bottom = timeline.y - 47.0
+    continuity_height = min(
+      145.0,
+      max(100.0, float(height) * 0.135),
+    )
+    continuity_rect = self.rl.Rectangle(
+      12.0,
+      continuity_bottom - continuity_height,
+      max(120.0, float(width) - 24.0),
+      continuity_height,
+    )
+    upper_bottom = continuity_rect.y - 8.0
+    panel_rect = self._panel_rect(width, upper_bottom)
     content_width = float(width) - panel_rect.width - 34.0
-    content_bottom = timeline.y - 47.0
-    video_height = max(250.0, content_bottom * 0.52)
+    upper_height = max(400.0, upper_bottom - 12.0)
+    video_height = max(
+      250.0,
+      min(upper_height - 158.0, upper_height * 0.60),
+    )
     video_rect = self.rl.Rectangle(
       12.0,
       12.0,
@@ -2386,29 +2399,11 @@ class SimulatorUI:
       video_height,
     )
     map_y = video_rect.y + video_rect.height + 8.0
-    available_below_video = max(220.0, content_bottom - map_y)
-    continuity_height = min(
-      145.0,
-      max(100.0, available_below_video * 0.32),
-    )
-    map_height = max(
-      150.0,
-      available_below_video - continuity_height - 8.0,
-    )
     map_rect = self.rl.Rectangle(
       12.0,
       map_y,
       content_width,
-      map_height,
-    )
-    continuity_rect = self.rl.Rectangle(
-      12.0,
-      map_rect.y + map_rect.height + 8.0,
-      content_width,
-      max(
-        70.0,
-        content_bottom - map_rect.y - map_rect.height - 8.0,
-      ),
+      max(150.0, upper_bottom - map_y),
     )
     return timeline, panel_rect, video_rect, map_rect, continuity_rect
 
