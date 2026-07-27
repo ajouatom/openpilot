@@ -37,12 +37,14 @@ On non-CAN FD Hyundai/Kia vehicles, a positive value attempts to enable radar tr
 
 Corner-radar objects are created only when the vehicle code recognizes a supported message group. The supported 0x430 message family is also classified as corner-radar input rather than front radar. The cut-in processing in mode `2` currently focuses on Hyundai-family implementations and must not be generalized to other manufacturers.
 
-### Radar Motion mode
+### Carrot Radar Mode
 
-| `RadarMotionMode` | Meaning |
+| `CarrotRadarMode` | Meaning |
 |---:|---|
 | `0` | Keep the existing `radard` lead and cut-in processing (default) |
 | `1` | Run the independent dPath RadarD, calculate vision-supported radar leadOne first, then use only physical dPath CUT-INs as leadTwo |
+
+On vehicles with neither corner-radar nor radar-track support, this behaves the same as the existing mode.
 
 Mode `1` does not use a learned model, call `controls/radard.py`, or mix in its output. Following the order used by the removed `radard_model.py`, the independent process first matches model lead zero to front/SCC radar and assigns leadOne. A fresh moving leadOne match must also meet the conventional radard's `1e-4` minimum joint distance/lateral/velocity likelihood; an already continuous identity may tolerate a brief lower score. A separate near-stationary leadOne fallback accepts a measured in-path radar object with `|vLead| <= 2.5 m/s` after model lead zero supplies at least 0.05 probability at a consistent position, its reported speed differs from the radar object by no more than 10 m/s, and the radar remains physically continuous for 0.25 seconds. This prevents a model lead moving at road speed from seeding a stationary infrastructure reflection. Corner object tracks are preferred when corner data is available because their object identity is more stable; otherwise front tracks are used. Once confirmed, the same stationary object remains leadOne through weak or missing vision and physically continuous radar-reflection ID handoffs. It releases on physical discontinuity or when model lead zero is matched to a different moving radar object. This fallback does not promote a new stationary point to leadTwo.
 
@@ -57,7 +59,7 @@ Every published radar-backed lead keeps the measured `jLead`. Its per-track `aLe
 <a id="lead-selection"></a>
 ## Lead selection and validation
 
-The manager never runs both radar implementations together. With `RadarMotionMode=0`, only the conventional `openpilot.selfdrive.controls.radard` runs and its leadOne/leadTwo selection is unchanged. With `RadarMotionMode=1`, that process is stopped and only the independent `openpilot.selfdrive.carrot.radar.radard_dpath` runs. It calculates the normal front/SCC-to-vision leadOne or the vision-seeded continuous stationary leadOne first, calculates leadTwo with the physical predictor below, and publishes `radarState` directly. Front radar, SCC, and corner radar retain their source identity, and no learned radar-lead model is used.
+The manager never runs both radar implementations together. With `CarrotRadarMode=0`, only the conventional `openpilot.selfdrive.controls.radard` runs and its leadOne/leadTwo selection is unchanged. With `CarrotRadarMode=1`, that process is stopped and only the independent `openpilot.selfdrive.carrot.radar.radard_dpath` runs. It calculates the normal front/SCC-to-vision leadOne or the vision-seeded continuous stationary leadOne first, calculates leadTwo with the physical predictor below, and publishes `radarState` directly. Front radar, SCC, and corner radar retain their source identity, and no learned radar-lead model is used.
 
 The headless validator can report existing radard and the experimental physical predictor separately. The visual replay runs only the new independent controller and physical predictor. Its leadOne/leadTwo are calculated again from the logged model and radar inputs; recorded conventional-radard lead roles and CUT-IN markers are never imported. Replay does not change longitudinal control.
 

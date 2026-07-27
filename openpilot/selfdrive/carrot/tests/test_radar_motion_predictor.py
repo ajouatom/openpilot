@@ -1837,6 +1837,7 @@ def test_production_dpath_mode_is_independent_of_conventional_radard() -> None:
 
   assert "RadarLeadModelMode" not in conventional_source
   assert "RadarMotionMode" not in conventional_source
+  assert "CarrotRadarMode" not in conventional_source
   assert "RadarMotionPredictor" not in conventional_source
   assert "from openpilot.selfdrive.controls.radard" not in dpath_source
   assert 'getattr(sm["modelV2"], "timestampEof", 0)' in dpath_source

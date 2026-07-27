@@ -38,15 +38,32 @@ class TestManager:
     CP = car.CarParams.new_message()
     params = Params()
 
-    params.put("RadarMotionMode", "0")
+    params.put("CarrotRadarMode", "0")
     assert managed_processes["radard"].should_run(True, params, CP)
     assert not managed_processes["radard_dpath"].should_run(True, params, CP)
 
-    params.put("RadarMotionMode", "1")
+    params.put("CarrotRadarMode", "1")
     assert not managed_processes["radard"].should_run(True, params, CP)
     assert managed_processes["radard_dpath"].should_run(True, params, CP)
     assert not managed_processes["radard"].should_run(False, params, CP)
     assert not managed_processes["radard_dpath"].should_run(False, params, CP)
+
+  def test_legacy_radar_motion_mode_is_migrated_once(self):
+    params = Params()
+    params.remove("CarrotRadarMode")
+    params.put("RadarMotionMode", "1")
+
+    manager.migrate_legacy_carrot_radar_mode(params)
+
+    assert params.get_int("CarrotRadarMode") == 1
+    assert params.get("RadarMotionMode") is None
+
+    params.put("CarrotRadarMode", "0")
+    params.put("RadarMotionMode", "1")
+    manager.migrate_legacy_carrot_radar_mode(params)
+
+    assert params.get_int("CarrotRadarMode") == 0
+    assert params.get("RadarMotionMode") is None
 
   def test_carrot_navi_is_permanent_7714_owner(self):
     process = managed_processes["carrot_navi"]
