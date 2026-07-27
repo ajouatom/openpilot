@@ -21,22 +21,33 @@ if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
 from openpilot.selfdrive.carrot.radar_motion import (
+  CORNER_RADAR_MEASUREMENT_DELAY_S,
+  CORNER_CUT_IN_THRESHOLD,
   CUT_IN_BOUNDARY_HOLD_S,
   CUT_IN_CONFIRMATION_S,
-  DPathRadarController,
+  DPathLeadCandidate,
+  DPathLeadTwoTracker,
+  FRONT_CUT_IN_THRESHOLD,
   IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M,
+  LEAD_ONE_CUT_OUT_THRESHOLD,
   POSITION_ONLY_MAX_ABS_VLEAD_MPS,
+  STATIONARY_MAX_ABS_VLEAD_MPS,
   RadarMotionDecisionTracker,
   RadarMotionPrediction,
   RadarMotionPredictor,
   VisionRadarMatcher,
+  can_start_current_path_lead_two,
+  cutin_can_compete_with_primary,
   cutin_probability_at,
+  front_cutin_motion_supported,
+  lead_duplicates_primary,
+  lead_one_exits_path,
+  lead_from_radar_point,
   lead_from_vision_match,
+  prefer_front_radar_kinematics,
   model_path_point_at_s,
   project_to_model_path,
-  select_dpath_lead_two,
   select_primary_radar_points,
-  snapshot_radar_points,
   visible_motion_points,
 )
 
@@ -50,14 +61,20 @@ CARROT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_VALIDATION_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.json"
 DEFAULT_TRAJECTORY_LABELS = CARROT_ROOT / "cluster" / "radar_trajectory_labels.json"
 SHADOW_CUTIN_THRESHOLD = 0.50
+VALIDATION_DEFAULT_CORNER_PROBABILITY = CORNER_CUT_IN_THRESHOLD
+VALIDATION_DEFAULT_FRONT_PROBABILITY = FRONT_CUT_IN_THRESHOLD
 CUTIN_CONFIRMATION_S = CUT_IN_CONFIRMATION_S
 CUTIN_DECISION_HOLD_S = CUT_IN_BOUNDARY_HOLD_S
 VALIDATION_EXPECTED_LABELS = ("detect", "clear", "stationary")
 MAX_POINT_MODEL_TIME_SKEW_S = 0.10
+VALIDATION_CORNER_MAX_MEASUREMENT_AGE_S = 0.10
 KOREAN_FONT_BASE_SIZE = 40
 VALIDATION_PROBABILITY_MIN = 0.20
 VALIDATION_PROBABILITY_MAX = 0.80
+STATIONARY_HANDOFF_MAX_DREL_DELTA_M = 3.5
+STATIONARY_HANDOFF_MAX_YREL_DELTA_M = 1.5
 VALIDATION_SETTINGS_ENV = "CARROT_RADAR_VALIDATION_SETTINGS"
+VALIDATION_MOTION_MODES = ("normal", "front")
 
 
 @dataclass(frozen=True)
@@ -115,6 +132,7 @@ class RadarFrame:
   model_leads: tuple[ModelLead, ...]
   recorded_one: RecordedLead
   recorded_two: RecordedLead
+  radar_delay_s: float = 0.0
   video_time_s: float | None = None
   path_y_stds: tuple[tuple[float, float], ...] = ()
   lane_stds: tuple[float, ...] = ()
@@ -135,6 +153,7 @@ class Candidate:
   decision_threshold: float = 0.0
   d_rel: float | None = None
   y_rel: float | None = None
+  v_lead: float | None = None
   track_aliases: tuple[int, ...] = ()
   base_score: float | None = None
   temporal_score: float | None = None
@@ -220,39 +239,99 @@ def validation_settings_path() -> Path:
   return root / "carrotpilot" / "radar_validation.json"
 
 
+def _read_validation_settings(path: Path) -> dict[str, Any]:
+  try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+  except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    return {}
+  return payload if isinstance(payload, dict) else {}
+
+
+def _write_validation_settings(path: Path, payload: dict[str, Any]) -> None:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  temporary = path.with_suffix(path.suffix + ".tmp")
+  temporary.write_text(
+    json.dumps(payload, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+  )
+  temporary.replace(path)
+
+
+def _default_validation_probability(sensor: str) -> float:
+  if sensor == "front":
+    return VALIDATION_DEFAULT_FRONT_PROBABILITY
+  if sensor == "corner":
+    return VALIDATION_DEFAULT_CORNER_PROBABILITY
+  raise ValueError(f"unsupported radar motion sensor: {sensor}")
+
+
 def load_validation_probability(
   path: Path | None = None,
-  default: float = SHADOW_CUTIN_THRESHOLD,
+  default: float | None = None,
+  *,
+  sensor: str = "corner",
 ) -> float:
   settings_path = path or validation_settings_path()
+  fallback = (
+    _default_validation_probability(sensor)
+    if default is None
+    else float(default)
+  )
   try:
-    payload = json.loads(settings_path.read_text(encoding="utf-8"))
-    value = float(payload["probability"])
-  except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
-    return float(default)
+    value = float(
+      _read_validation_settings(settings_path)[f"{sensor}_probability"],
+    )
+  except (KeyError, TypeError, ValueError):
+    return fallback
   return (
     value
     if VALIDATION_PROBABILITY_MIN <= value <= VALIDATION_PROBABILITY_MAX
-    else float(default)
+    else fallback
   )
 
 
 def save_validation_probability(
   probability: float,
   path: Path | None = None,
+  *,
+  sensor: str = "corner",
 ) -> None:
+  _default_validation_probability(sensor)
   value = min(max(
     float(probability),
     VALIDATION_PROBABILITY_MIN,
   ), VALIDATION_PROBABILITY_MAX)
   settings_path = path or validation_settings_path()
-  settings_path.parent.mkdir(parents=True, exist_ok=True)
-  temporary = settings_path.with_suffix(settings_path.suffix + ".tmp")
-  temporary.write_text(
-    json.dumps({"probability": round(value, 2)}, indent=2) + "\n",
-    encoding="utf-8",
+  payload = _read_validation_settings(settings_path)
+  payload.pop("probability", None)
+  payload[f"{sensor}_probability"] = round(value, 2)
+  _write_validation_settings(settings_path, payload)
+
+
+def load_validation_motion_mode(
+  path: Path | None = None,
+  default: str = "normal",
+) -> str:
+  if default not in VALIDATION_MOTION_MODES:
+    raise ValueError(f"unsupported radar motion mode: {default}")
+  value = str(
+    _read_validation_settings(path or validation_settings_path()).get(
+      "motion_mode", default,
+    ),
   )
-  temporary.replace(settings_path)
+  return value if value in VALIDATION_MOTION_MODES else default
+
+
+def save_validation_motion_mode(
+  mode: str,
+  path: Path | None = None,
+) -> None:
+  if mode not in VALIDATION_MOTION_MODES:
+    raise ValueError(f"unsupported radar motion mode: {mode}")
+  settings_path = path or validation_settings_path()
+  payload = _read_validation_settings(settings_path)
+  payload["motion_mode"] = mode
+  _write_validation_settings(settings_path, payload)
 
 
 def candidate_track_ids(candidate: Candidate | None) -> frozenset[int]:
@@ -280,6 +359,7 @@ def lead_continuity_segments(
     raise ValueError("lead selections must align with radar frames")
   segments: list[tuple[tuple[float, float, int], ...]] = []
   current: list[tuple[float, float, int]] = []
+  previous_candidate: Candidate | None = None
   for frame, selection in zip(frames, selections, strict=True):
     candidate = getattr(selection, role)
     if (
@@ -291,15 +371,32 @@ def lead_continuity_segments(
       if current:
         segments.append(tuple(current))
         current = []
+      previous_candidate = None
       continue
     point = (frame.time_s, float(candidate.d_rel), candidate.track_id)
+    stationary_handoff = (
+      previous_candidate is not None
+      and previous_candidate.v_lead is not None
+      and candidate.v_lead is not None
+      and abs(previous_candidate.v_lead)
+      <= STATIONARY_MAX_ABS_VLEAD_MPS
+      and abs(candidate.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+      and previous_candidate.d_rel is not None
+      and abs(candidate.d_rel - previous_candidate.d_rel)
+      <= STATIONARY_HANDOFF_MAX_DREL_DELTA_M
+      and previous_candidate.y_rel is not None
+      and candidate.y_rel is not None
+      and abs(candidate.y_rel - previous_candidate.y_rel)
+      <= STATIONARY_HANDOFF_MAX_YREL_DELTA_M
+    )
     if current and (
-      current[-1][2] != point[2]
+      current[-1][2] != point[2] and not stationary_handoff
       or point[0] - current[-1][0] > 0.15
     ):
       segments.append(tuple(current))
       current = []
     current.append(point)
+    previous_candidate = candidate
   if current:
     segments.append(tuple(current))
   return tuple(segments)
@@ -341,22 +438,9 @@ def motion_points_at_model_time(
   frame: RadarFrame,
   motion_sensor: str,
 ) -> tuple[RadarPoint, ...]:
-  """Project measured radar coordinates to the model-path timestamp."""
-  if (
-    not math.isfinite(frame.input_age_s)
-    or not math.isfinite(frame.model_age_s)
-  ):
-    return ()
-  time_delta_s = frame.input_age_s - frame.model_age_s
-  if abs(time_delta_s) > MAX_POINT_MODEL_TIME_SKEW_S:
-    return ()
+  """Select one sensor from points aligned to the model-path timestamp."""
   return tuple(
-    replace(
-      point,
-      d_rel=point.d_rel + point.v_rel * time_delta_s,
-      y_rel=point.y_rel + point.yv_rel * time_delta_s,
-    )
-    for point in frame.points
+    point for point in radar_points_at_model_time(frame)
     if (
       point.source.startswith("corner")
       if motion_sensor == "corner"
@@ -365,12 +449,53 @@ def motion_points_at_model_time(
   )
 
 
+def radar_points_at_model_time(
+  frame: RadarFrame,
+) -> tuple[RadarPoint, ...]:
+  """Mirror device alignment with each radar source's own delay."""
+  if (
+    not math.isfinite(frame.input_age_s)
+    or not math.isfinite(frame.model_age_s)
+  ):
+    return ()
+  aligned = []
+  for point in frame.points:
+    if not point.measured:
+      continue
+    measurement_delay_s = (
+      CORNER_RADAR_MEASUREMENT_DELAY_S
+      if point.source.startswith("corner")
+      else frame.radar_delay_s
+    )
+    time_delta_s = (
+      frame.input_age_s
+      - frame.model_age_s
+      + measurement_delay_s
+    )
+    if abs(time_delta_s) > MAX_POINT_MODEL_TIME_SKEW_S:
+      continue
+    aligned.append(replace(
+      point,
+      d_rel=point.d_rel + point.v_rel * time_delta_s,
+      y_rel=point.y_rel + point.yv_rel * time_delta_s,
+    ))
+  return tuple(aligned)
+
+
 def radar_trajectory_series(
   frames: Iterable[RadarFrame],
   motion_sensor: str | None = None,
+  lead_one_outputs: Sequence[dict[str, Any] | None] | None = None,
 ) -> tuple[dict[tuple[str, int], RadarMotionPrediction], ...]:
   frame_values = tuple(frames)
   selected_sensor = motion_sensor or preferred_radar_motion_sensor(frame_values)
+  lead_values = (
+    tuple(lead_one_outputs)
+    if lead_one_outputs is not None
+    else (None,) * len(frame_values)
+  )
+  if len(lead_values) != len(frame_values):
+    raise ValueError("leadOne outputs must align with radar frames")
   predictor = RadarMotionPredictor()
   return tuple(
     predictor.update(
@@ -379,8 +504,13 @@ def radar_trajectory_series(
       frame.path,
       frame.v_ego,
       frame.yaw_rate_rad_s,
+      lead_one_d_rel=(
+        _finite(lead["dRel"])
+        if lead is not None and bool(lead.get("status", True))
+        else None
+      ),
     )
-    for frame in frame_values
+    for frame, lead in zip(frame_values, lead_values, strict=True)
   )
 
 
@@ -423,8 +553,13 @@ def _shadow_candidate(prediction: RadarMotionPrediction) -> Candidate:
     and prediction.path_entry_age_s
     <= CUTIN_CONFIRMATION_S + CUTIN_DECISION_HOLD_S
   )
-  if prediction.current_path_occupancy:
+  if (
+    prediction.current_path_occupancy
+    and prediction.cut_in_detection_allowed
+  ):
     stage = "IN"
+  elif prediction.current_path_occupancy:
+    stage = "NEAR-IN"
   elif prediction.reason == "position/velocity motion mismatch":
     stage = "MISMATCH"
   elif prediction.cut_in_probability >= SHADOW_CUTIN_THRESHOLD:
@@ -453,7 +588,8 @@ def _shadow_candidate(prediction: RadarMotionPrediction) -> Candidate:
       + f"dP속={prediction.d_path_rate_short:+.2f}/{prediction.d_path_rate_long:+.2f} "
       + f"각(이력/레이더)={prediction.vector_heading_deg:+.1f}/"
       + f"{prediction.reported_heading_deg:+.1f} "
-      + f"일치={prediction.motion_consistency:.2f}"
+      + f"일치={prediction.motion_consistency:.2f} "
+      + f"최근={prediction.recent_motion_support:.2f}"
     ),
     source=prediction.source,
     horizon_x=tuple(sample.path_x for sample in samples),
@@ -512,6 +648,7 @@ def _controller_candidate(
     reason=reason,
     d_rel=d_rel,
     y_rel=y_rel,
+    v_lead=float(lead.get("vLead", 0.0)),
     source=matched_point.source if matched_point is not None else "",
   )
 
@@ -536,6 +673,7 @@ def _recorded_candidate(lead: RecordedLead, reason: str) -> Candidate | None:
     reason=reason,
     d_rel=lead.d_rel,
     y_rel=lead.y_rel,
+    v_lead=lead.v_lead,
   )
 
 
@@ -592,14 +730,46 @@ class RadarMotionShadowSelector:
     frames: Sequence[RadarFrame],
     decision_threshold: float = SHADOW_CUTIN_THRESHOLD,
     *,
+    motion_sensor: str | None = None,
     motion_points: Sequence[tuple[RadarPoint, ...]] | None = None,
     trajectories: Sequence[
       dict[tuple[str, int], RadarMotionPrediction]
     ] | None = None,
     lead_one_outputs: Sequence[dict[str, Any] | None] | None = None,
   ) -> None:
-    self.motion_sensor = preferred_radar_motion_sensor(frames)
+    if motion_sensor not in (None, "corner", "front"):
+      raise ValueError(f"unsupported radar motion sensor: {motion_sensor}")
+    self.motion_sensor = motion_sensor or preferred_radar_motion_sensor(frames)
     self.decision_threshold = float(decision_threshold)
+    if lead_one_outputs is None:
+      matcher = VisionRadarMatcher()
+      lead_one_results = []
+      for frame in frames:
+        aligned_points = radar_points_at_model_time(frame)
+        stationary_points = (
+          aligned_points
+          if self.motion_sensor == "corner"
+          else tuple(
+            point for point in aligned_points
+            if not point.source.startswith("corner")
+          )
+        )
+        match = matcher.match(
+          _controller_model(frame),
+          select_primary_radar_points(aligned_points, 1),
+          frame.path,
+          time_s=frame.time_s,
+          stationary_points=stationary_points,
+          prefer_corner_stationary=self.motion_sensor == "corner",
+        )
+        lead_one_results.append(
+          lead_from_vision_match(match)
+          if match is not None
+          else None
+        )
+      lead_one_values = tuple(lead_one_results)
+    else:
+      lead_one_values = tuple(lead_one_outputs)
     self.motion_points = (
       tuple(motion_points)
       if motion_points is not None
@@ -607,36 +777,24 @@ class RadarMotionShadowSelector:
         visible_motion_points(
           motion_points_at_model_time(frame, self.motion_sensor),
           frame.path,
+          (
+            _finite(lead["dRel"])
+            if lead is not None and bool(lead.get("status", True))
+            else None
+          ),
         )
-        for frame in frames
+        for frame, lead in zip(frames, lead_one_values, strict=True)
       )
     )
     trajectory_values = (
       tuple(trajectories)
       if trajectories is not None
-      else radar_trajectory_series(frames, self.motion_sensor)
-    )
-    if lead_one_outputs is None:
-      matcher = VisionRadarMatcher()
-      lead_one_values = tuple(
-        (
-          lead_from_vision_match(match)
-          if (
-            match := matcher.match(
-              _controller_model(frame),
-              select_primary_radar_points(
-                snapshot_radar_points(frame.points, frame.v_ego),
-                1,
-              ),
-              frame.path,
-            )
-          ) is not None
-          else None
-        )
-        for frame in frames
+      else radar_trajectory_series(
+        frames,
+        self.motion_sensor,
+        lead_one_values,
       )
-    else:
-      lead_one_values = tuple(lead_one_outputs)
+    )
     if (
       len(self.motion_points) != len(frames)
       or len(trajectory_values) != len(frames)
@@ -644,10 +802,9 @@ class RadarMotionShadowSelector:
     ):
       raise ValueError("cached predictor inputs must align with radar frames")
     selections: list[Selection] = []
-    duplicate_tracker = DPathRadarController(
-      prefer_corner_radar=self.motion_sensor == "corner",
-      enable_radar_tracks=1,
-    )
+    effective_lead_one_values: list[dict[str, Any] | None] = []
+    lead_one_was_filtered = False
+    lead_two_tracker = DPathLeadTwoTracker()
     decision_tracker = RadarMotionDecisionTracker(
       threshold=self.decision_threshold,
     )
@@ -657,30 +814,68 @@ class RadarMotionShadowSelector:
       lead_one_values,
       strict=True,
     ):
-      radar_to_model_time_s = frame.input_age_s - frame.model_age_s
-      synchronized_points = (
-        snapshot_radar_points(
-          frame.points,
-          frame.v_ego,
-          radar_to_model_time_s,
-        )
-        if abs(radar_to_model_time_s) <= MAX_POINT_MODEL_TIME_SKEW_S
-        else ()
+      selected_points = motion_points_at_model_time(
+        frame, self.motion_sensor,
       )
-      selected_points = tuple(
-        point
-        for point in synchronized_points
-        if (
-          point.source.startswith("corner")
-          if self.motion_sensor == "corner"
-          else point.source == "frontRadar"
-        )
-      )
-      point_by_identity = {
+      all_aligned_points = radar_points_at_model_time(frame)
+      exiting_primary_identity: tuple[str, int, int] | None = None
+      selected_point_by_identity = {
         (point.source, point.track_id): point
         for point in selected_points
       }
-      duplicate_tracker._remember_primary(frame.time_s, lead_one)
+      for prediction in predictions.values():
+        point = selected_point_by_identity.get(
+          (prediction.source, prediction.track_id),
+        )
+        if point is None:
+          continue
+        control_point = prefer_front_radar_kinematics(
+          point, all_aligned_points,
+        )
+        control_d_path = (
+          project_to_model_path(
+            frame.path, control_point.d_rel, control_point.y_rel,
+          ).d_path
+          if control_point is not point
+          else prediction.d_path
+        )
+        motion_lead = lead_from_radar_point(
+          control_point, control_d_path, 0.03, 0.0,
+        )
+        if lead_one_exits_path(
+          lead_one,
+          motion_lead,
+          float(getattr(prediction, "cut_out_probability", 0.0)),
+        ):
+          exiting_primary_identity = (
+            prediction.source,
+            prediction.track_id,
+            prediction.continuity_id,
+          )
+          lead_one = None
+          lead_one_was_filtered = True
+          break
+      effective_lead_one_values.append(lead_one)
+      active_identity = lead_two_tracker.active_identity
+      protected_identities = (
+        ()
+        if active_identity is None
+        else ((active_identity[0], active_identity[1]),)
+      )
+      visible_points = visible_motion_points(
+        selected_points,
+        frame.path,
+        (
+          _finite(lead_one["dRel"])
+          if lead_one is not None and bool(lead_one.get("status", True))
+          else None
+        ),
+        protected_identities,
+      )
+      point_by_identity = {
+        (point.source, point.track_id): point
+        for point in visible_points
+      }
       raw_diagnostics = tuple(sorted(
         (_shadow_candidate(prediction) for prediction in predictions.values()),
         key=lambda candidate: (
@@ -693,23 +888,133 @@ class RadarMotionShadowSelector:
         frame.time_s,
         predictions.values(),
       )
-      cutin_leads = tuple(
-        lead
+      confirmed_by_identity = {
+        (
+          cutin.prediction.source,
+          cutin.prediction.track_id,
+          cutin.prediction.continuity_id,
+        ): cutin
         for cutin in decision.confirmed
-        if (
-          lead := duplicate_tracker._cutin_lead(
-            cutin,
-            point_by_identity,
-          )
-        ) is not None
-        and not duplicate_tracker._duplicates_recent_primary(
-          frame.time_s,
-          lead,
+      }
+      lead_candidates = []
+      primary_row_waiting_keys: set[tuple[str, int]] = set()
+      for prediction in predictions.values():
+        point = point_by_identity.get((prediction.source, prediction.track_id))
+        if point is None:
+          continue
+        identity = (
+          prediction.source,
+          prediction.track_id,
+          prediction.continuity_id,
         )
-      )
-      lead_selection = select_dpath_lead_two(
+        if (
+          identity == exiting_primary_identity
+          or float(getattr(prediction, "cut_out_probability", 0.0))
+          >= LEAD_ONE_CUT_OUT_THRESHOLD
+        ):
+          if lead_two_tracker.active_identity == identity:
+            lead_two_tracker.reset()
+          continue
+        cutin = confirmed_by_identity.get(identity)
+        front_motion_supported = front_cutin_motion_supported(
+          prediction.source,
+          prediction.d_path_rate_long,
+        )
+        lead_point = prefer_front_radar_kinematics(
+          point, all_aligned_points,
+        )
+        lead_d_path = (
+          project_to_model_path(
+            frame.path, lead_point.d_rel, lead_point.y_rel,
+          ).d_path
+          if lead_point is not point
+          else prediction.d_path
+        )
+        lead = lead_from_radar_point(
+          lead_point,
+          lead_d_path,
+          0.03,
+          (
+            cutin.score
+            if cutin is not None
+            else prediction.path_entry_probability
+          ),
+        )
+        if lead_duplicates_primary(lead, lead_one):
+          if lead_two_tracker.active_identity == identity:
+            lead_two_tracker.reset()
+          continue
+        confirmed_cutin = (
+          cutin is not None
+          and front_motion_supported
+          and cutin_can_compete_with_primary(
+            lead,
+            lead_one,
+            projected_path_entry=prediction.time_to_entry_s is not None,
+          )
+        )
+        if cutin is not None and not confirmed_cutin:
+          primary_row_waiting_keys.add(
+            (prediction.source, prediction.track_id),
+          )
+        lead_candidates.append(DPathLeadCandidate(
+          lead=lead,
+          source=prediction.source,
+          track_id=prediction.track_id,
+          continuity_id=prediction.continuity_id,
+          retainable=(
+            prediction.current_path_occupancy
+            or prediction.d_path * prediction.d_path_rate_long <= 0.0
+          ),
+          confirmed_cutin=confirmed_cutin,
+          current_path_motion=can_start_current_path_lead_two(
+            prediction.source,
+            float(lead["dRel"]),
+            prediction.current_path_occupancy,
+            prediction.reason != "insufficient measured dPath history",
+          )
+          and (
+            prediction.path_entry_age_s is None
+            or front_motion_supported
+          ),
+        ))
+      if (
+        active_identity is not None
+        and not any(
+          candidate.identity == active_identity
+          for candidate in lead_candidates
+        )
+      ):
+        source, track_id, continuity_id = active_identity
+        point = point_by_identity.get((source, track_id))
+        if point is not None:
+          lead_point = prefer_front_radar_kinematics(
+            point, all_aligned_points,
+          )
+          d_path = project_to_model_path(
+            frame.path,
+            lead_point.d_rel,
+            lead_point.y_rel,
+          ).d_path
+          lead = lead_from_radar_point(
+            lead_point, d_path, 0.03, 0.0,
+          )
+          if lead_duplicates_primary(lead, lead_one):
+            lead_two_tracker.reset()
+          else:
+            lead_candidates.append(DPathLeadCandidate(
+              lead=lead,
+              source=source,
+              track_id=track_id,
+              continuity_id=continuity_id,
+              retainable=True,
+              confirmed_cutin=False,
+              current_path_motion=False,
+            ))
+      lead_selection = lead_two_tracker.update(
+        frame.time_s,
         lead_one,
-        cutin_leads,
+        lead_candidates,
         frame.v_ego,
       )
       confirmed_keys = {
@@ -729,7 +1034,12 @@ class RadarMotionShadowSelector:
           stage=(
             "CUT-IN"
             if candidate.track_id in selected_cutin_ids
-            else "FILTERED"
+            else (
+              "ROW-WAIT"
+              if (candidate.source, candidate.track_id)
+              in primary_row_waiting_keys
+              else "FILTERED"
+            )
           ),
           score=max(
             candidate.score,
@@ -762,7 +1072,11 @@ class RadarMotionShadowSelector:
         decision_cutin_candidates=decisions,
       ))
     self.trajectories = trajectory_values
-    self.lead_one_outputs = lead_one_values
+    self.lead_one_outputs = (
+      tuple(effective_lead_one_values)
+      if lead_one_was_filtered
+      else lead_one_values
+    )
     self.selections = tuple(selections)
 
   def select(self, frame: RadarFrame, frame_index: int | None = None) -> Selection:
@@ -914,6 +1228,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   latest_live_pose_ns = 0
   latest_steer_ratio = 14.0
   latest_wheelbase = 2.8
+  latest_radar_delay_s = 0.0
   latest_path: tuple[tuple[float, float], ...] = ()
   latest_lanes: tuple[tuple[tuple[float, float], ...], ...] = ()
   latest_lane_probs: tuple[float, ...] = ()
@@ -936,7 +1251,11 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       qcamera_start_eof_ns = int(event.qRoadEncodeIdx.timestampEof)
     elif which == "liveTracks":
       event_t = event_ns / 1e9
-      reconstructed = corner_tracker.live_tracks_at(event_t, latest_v_ego)
+      reconstructed = corner_tracker.live_tracks_at(
+        event_t,
+        latest_v_ego,
+        max_measurement_age_s=VALIDATION_CORNER_MAX_MEASUREMENT_AGE_S,
+      )
       merged = route_replay.merge_recorded_and_reconstructed_tracks(
         tuple(event.liveTracks.points), reconstructed, raw_corner_only=True,
       )
@@ -957,6 +1276,9 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       wheelbase = _finite(event.carParams.wheelbase)
       latest_steer_ratio = steer_ratio if 5.0 <= steer_ratio <= 30.0 else 14.0
       latest_wheelbase = wheelbase if 1.8 <= wheelbase <= 4.5 else 2.8
+      latest_radar_delay_s = max(
+        0.0, _finite(event.carParams.radarDelay),
+      )
     elif which == "carState":
       latest_v_ego = _finite(event.carState.vEgo)
       latest_steering_angle_deg = _finite(event.carState.steeringAngleDeg)
@@ -997,11 +1319,18 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         latest_wheelbase,
       )
       radar_state = event.radarState
+      model_reference_ns = (
+        latest_model_eof_ns
+        if latest_model_eof_ns > 0
+        else latest_model_ns
+      )
       absolute_frames.append((event_ns, RadarFrame(
         mono_time_s=event_ns / 1e9,
         time_s=0.0,
         input_age_s=max(0.0, (event_ns - latest_points_ns) / 1e9),
-        model_age_s=max(0.0, (event_ns - latest_model_ns) / 1e9) if latest_model_ns else math.inf,
+        # modelV2 coordinates belong to the camera exposure time. Its event
+        # logMonoTime is publication time after inference and is too recent.
+        model_age_s=max(0.0, (event_ns - model_reference_ns) / 1e9) if model_reference_ns else math.inf,
         v_ego=latest_v_ego,
         points=latest_points,
         path=latest_path,
@@ -1010,6 +1339,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         model_leads=latest_model_leads,
         recorded_one=_copy_recorded_lead(radar_state.leadOne),
         recorded_two=_copy_recorded_lead(radar_state.leadTwo),
+        radar_delay_s=latest_radar_delay_s,
         video_time_s=aligned_video_time_s(qcamera_start_eof_ns, latest_model_eof_ns),
         path_y_stds=latest_path_y_stds,
         lane_stds=latest_lane_stds,
@@ -1339,10 +1669,10 @@ def trajectory_model_review_events(
 ) -> dict[int, tuple[str, ...]]:
   requested = {value.lower() for value in sources}
   events: dict[int, tuple[str, ...]] = {}
-  previous: set[tuple[str, int]] = set()
+  emitted: set[tuple[str, int, int]] = set()
+  trajectories = getattr(selector, "trajectories", ())
   for index, frame in enumerate(frames):
     candidates = selector.select(frame, index).decision_cutin_candidates
-    current: set[tuple[str, int]] = set()
     labels: list[str] = []
     for candidate in candidates:
       sensor = "corner" if candidate.source.startswith("corner") else "front"
@@ -1353,16 +1683,24 @@ def trajectory_model_review_events(
         continue
       if candidate.score < probability_threshold:
         continue
-      key = (candidate.source, candidate.track_id)
-      current.add(key)
-      if key not in previous:
+      prediction = (
+        trajectories[index].get((candidate.source, candidate.track_id))
+        if index < len(trajectories)
+        else None
+      )
+      key = (
+        candidate.source,
+        candidate.track_id,
+        prediction.continuity_id if prediction is not None else -1,
+      )
+      if key not in emitted:
         labels.append(
           f"물리 예측 CUT-IN {sensor} id {candidate.track_id} "
           + f"진입 {candidate.score:.2f} 이탈 {candidate.path_exit_score:.2f}"
         )
+        emitted.add(key)
     if labels:
       events[index] = tuple(labels)
-    previous = current
   return events
 
 
@@ -1426,6 +1764,8 @@ class SimulatorUI:
     validation_cases_path: Path | None = None,
     display_threshold: float = SHADOW_CUTIN_THRESHOLD,
     settings_path: Path | None = None,
+    motion_mode: str = "normal",
+    sensor_probabilities: dict[str, float] | None = None,
   ) -> None:
     import pyray as rl
     self.rl = rl
@@ -1436,15 +1776,41 @@ class SimulatorUI:
     self.reviews = reviews
     self.validation_cases_path = validation_cases_path
     self.settings_path = settings_path or validation_settings_path()
+    if motion_mode not in VALIDATION_MOTION_MODES:
+      raise ValueError(f"unsupported radar motion mode: {motion_mode}")
+    self.motion_mode = motion_mode
+    self.sensor_probabilities = (
+      {
+        "corner": load_validation_probability(
+          self.settings_path, sensor="corner",
+        ),
+        "front": load_validation_probability(
+          self.settings_path, sensor="front",
+        ),
+      }
+      if sensor_probabilities is None
+      else {
+        "corner": float(sensor_probabilities["corner"]),
+        "front": float(sensor_probabilities["front"]),
+      }
+    )
+    self.sensor_probabilities[selector.motion_sensor] = display_threshold
     self.display_threshold = display_threshold
     self.pending_probability = display_threshold
     self.probability_dragging = False
     self.probability_cache = {
-      round(selector.decision_threshold, 2): selector,
+      (
+        selector.motion_sensor,
+        round(selector.decision_threshold, 2),
+      ): selector,
     }
-    self.probability_motion_points = selector.motion_points
-    self.probability_trajectories = selector.trajectories
-    self.probability_lead_one_outputs = selector.lead_one_outputs
+    self.sensor_history_cache = {
+      selector.motion_sensor: (
+        selector.motion_points,
+        selector.trajectories,
+        selector.lead_one_outputs,
+      ),
+    }
     self.index = 0
     self.paused = False
     self.speed = 1.0
@@ -1518,7 +1884,9 @@ class SimulatorUI:
     selector: RadarMotionShadowSelector,
   ) -> None:
     self.selector = selector
+    self.sensor_probabilities[selector.motion_sensor] = value
     self.display_threshold = value
+    self.pending_probability = value
     self.events = trajectory_model_review_events(
       self.frames,
       selector,
@@ -1532,37 +1900,84 @@ class SimulatorUI:
       for selection in selector.selections
     )
     self.status = (
-      f"CUT-IN prob {value:.2f} 적용 완료: "
+      f"경로 근접 감도 {value:.2f} 적용 완료: "
       + f"진입 {len(self.events)}회, L2 {lead_two_frames}프레임"
     )
 
   def _request_probability(self, probability: float) -> None:
     value = self._clamp_probability(probability)
+    sensor = self.selector.motion_sensor
     self.pending_probability = value
     save_error: OSError | None = None
     try:
-      save_validation_probability(value, self.settings_path)
+      save_validation_probability(
+        value, self.settings_path, sensor=sensor,
+      )
     except OSError as exc:
       save_error = exc
 
-    cached = self.probability_cache.get(value)
+    cache_key = (sensor, value)
+    cached = self.probability_cache.get(cache_key)
     if cached is None:
+      motion_points, trajectories, lead_one_outputs = (
+        self.sensor_history_cache[sensor]
+      )
       cached = RadarMotionShadowSelector(
         self.frames,
         value,
-        motion_points=self.probability_motion_points,
-        trajectories=self.probability_trajectories,
-        lead_one_outputs=self.probability_lead_one_outputs,
+        motion_sensor=sensor,
+        motion_points=motion_points,
+        trajectories=trajectories,
+        lead_one_outputs=lead_one_outputs,
       )
-      self.probability_cache[value] = cached
-      while len(self.probability_cache) > 4:
+      self.probability_cache[cache_key] = cached
+      while len(self.probability_cache) > 8:
         self.probability_cache.pop(next(iter(self.probability_cache)))
 
     if abs(self.selector.decision_threshold - value) >= 0.005:
       self._activate_probability(value, cached)
     else:
       self.display_threshold = value
-      self.status = f"CUT-IN prob {value:.2f} 이미 적용됨"
+      self.status = f"경로 근접 감도 {value:.2f} 이미 적용됨"
+    if save_error is not None:
+      self.status += f" · 저장 실패: {save_error}"
+
+  def _request_motion_mode(self, mode: str) -> None:
+    if mode not in VALIDATION_MOTION_MODES:
+      raise ValueError(f"unsupported radar motion mode: {mode}")
+    target_sensor = (
+      "front"
+      if mode == "front"
+      else preferred_radar_motion_sensor(self.frames)
+    )
+    value = self._clamp_probability(
+      self.sensor_probabilities[target_sensor],
+    )
+    cache_key = (target_sensor, value)
+    cached = self.probability_cache.get(cache_key)
+    if cached is None:
+      cached = RadarMotionShadowSelector(
+        self.frames,
+        value,
+        motion_sensor=target_sensor,
+      )
+      self.probability_cache[cache_key] = cached
+      self.sensor_history_cache[target_sensor] = (
+        cached.motion_points,
+        cached.trajectories,
+        cached.lead_one_outputs,
+      )
+    self.motion_mode = mode
+    save_error: OSError | None = None
+    try:
+      save_validation_motion_mode(mode, self.settings_path)
+    except OSError as exc:
+      save_error = exc
+    self._activate_probability(value, cached)
+    mode_text = "일반(코너 우선)" if mode == "normal" else "프런트 전용"
+    self.status = (
+      f"{mode_text} 모드 적용 · {target_sensor} 감도 {value:.2f}"
+    )
     if save_error is not None:
       self.status += f" · 저장 실패: {save_error}"
 
@@ -1797,6 +2212,7 @@ class SimulatorUI:
     prediction: RadarMotionPrediction,
     highlighted: bool,
     cutin_confirmed: bool,
+    control_eligible_current_path: bool,
   ) -> None:
     if not self.show_trajectory_history:
       return
@@ -1898,7 +2314,7 @@ class SimulatorUI:
       )
       if predicted_cutin:
         future_color = (246, 142, 55)
-      elif prediction.current_path_occupancy:
+      elif control_eligible_current_path:
         future_color = (62, 205, 130)
       else:
         future_color = (175, 188, 200)
@@ -1990,8 +2406,8 @@ class SimulatorUI:
       self._color((245, 247, 250)),
     )
     self._draw_front_radar_overlay(rect, frame)
-    selected_ids = {
-      candidate.track_id
+    selected_keys = {
+      (candidate.source, candidate.track_id)
       for candidate in (selection.lead_one, selection.lead_two)
       if candidate is not None
     }
@@ -2014,18 +2430,30 @@ class SimulatorUI:
       )
       if (
         prediction is None
-        and point.track_id not in selected_ids
+        and (point.source, point.track_id) not in selected_keys
         and not position_only
       ):
         continue
       x, y = self._screen(rect, point.d_rel, point.y_rel)
       diagnostic = diagnostics.get((point.source, point.track_id))
+      control_eligible_current_path = (
+        diagnostic is not None
+        and diagnostic.current_path_occupancy
+        and (
+          prediction is not None
+          and prediction.cut_in_detection_allowed
+          or (point.source, point.track_id) in selected_keys
+        )
+      )
       if (point.source, point.track_id) in confirmed_cutin_keys:
         color = (246, 142, 55)
         radius = 7.0
-      elif diagnostic is not None and diagnostic.current_path_occupancy:
+      elif control_eligible_current_path:
         color = (62, 205, 130)
         radius = 7.0
+      elif diagnostic is not None and diagnostic.current_path_occupancy:
+        color = (115, 125, 135)
+        radius = 3.0
       elif position_only:
         color = (115, 125, 135)
         radius = 3.0
@@ -2036,12 +2464,9 @@ class SimulatorUI:
         color = (70, 190, 220)
         radius = 5.0
       highlighted = (
-        point.track_id in selected_ids
-        or diagnostic is not None
-        and (
-          diagnostic.current_path_occupancy
-          or (point.source, point.track_id) in confirmed_cutin_keys
-        )
+        (point.source, point.track_id) in selected_keys
+        or control_eligible_current_path
+        or (point.source, point.track_id) in confirmed_cutin_keys
       )
       if prediction is not None:
         self._draw_prediction_trajectory(
@@ -2051,6 +2476,7 @@ class SimulatorUI:
           prediction,
           highlighted,
           (point.source, point.track_id) in confirmed_cutin_keys,
+          control_eligible_current_path,
         )
       rl.draw_circle(int(x), int(y), radius, self._color(color))
       suffix = " P" if position_only and prediction is None else ""
@@ -2081,13 +2507,8 @@ class SimulatorUI:
       14,
       self._color((145, 158, 170)),
     )
-    observed_text = (
-      "raw radar 표시 중(A: 숨김)"
-      if self.show_radar_observed_history
-      else "A: raw radar 별도 표시"
-    )
     self._draw_text(
-      f"과거: 계산에 쓴 S,dPath 실선 | 미래: 회색/주황 링 | {observed_text}",
+      "과거: S,dPath 실선 | 미래: 회색 부적격 / 녹색 제어가능 IN / 주황 CUT-IN",
       int(rect.x + 12.0),
       int(rect.y + 46.0),
       14,
@@ -2122,8 +2543,13 @@ class SimulatorUI:
       if applying
       else "적용 완료"
     )
+    sensor_text = (
+      "코너"
+      if self.selector.motion_sensor == "corner"
+      else "프런트"
+    )
     self._draw_text(
-      f"CUT-IN 감도 {self.pending_probability:.2f}  {applied_text}",
+      f"{sensor_text} CUT-IN 감도 {self.pending_probability:.2f}  {applied_text}",
       int(slider.x),
       int(slider.y - 27.0),
       14,
@@ -2268,17 +2694,31 @@ class SimulatorUI:
       white,
     )
     sensor_text = "코너" if self.selector.motion_sensor == "corner" else "프런트"
+    mode_text = (
+      "일반(코너 우선)"
+      if self.motion_mode == "normal"
+      else "프런트 전용"
+    )
     self._draw_text(
-      f"dPath 물리 predictor: {sensor_text} 레이더만 사용",
+      f"dPath predictor: {mode_text} · {sensor_text} 레이더 사용",
       x,
       int(rect.y + 82.0),
       18,
       self._color((246, 142, 55)),
     )
+    lead_one_id = (
+      str(selection.lead_one.track_id)
+      if selection.lead_one is not None
+      else "--"
+    )
+    lead_two_id = (
+      str(selection.lead_two.track_id)
+      if selection.lead_two is not None
+      else "--"
+    )
     self._draw_text(
-      "CUT-IN "
-      + str([value.track_id for value in selection.decision_cutin_candidates])
-      + "  | 정지점은 위치만 표시",
+      f"L1 {lead_one_id}  L2 {lead_two_id}  | 새 CUT-IN "
+      + str([value.track_id for value in selection.decision_cutin_candidates]),
       x,
       int(rect.y + 110.0),
       16,
@@ -2295,6 +2735,7 @@ class SimulatorUI:
         "FILTERED": "제어 후보 제외",
         "SHADOW-CUTOUT": "CUT-OUT 예측",
         "MISMATCH": "위치/속도 불일치",
+        "ROW-WAIT": "L1 동일 거리대·실제 진입 없음",
         "BELOW": "기준 미달",
       }.get(candidate.stage, candidate.stage)
       self._draw_text(
@@ -2324,7 +2765,7 @@ class SimulatorUI:
       )
     self._draw_text(self.status[:65], x, int(rect.y + rect.height - 83.0), 15, white)
     self._draw_text(
-      "Space 재생  클릭 탐색  R 처음  H 궤적  F front  A raw  M 마커  Esc 다음",
+      "Space 재생  클릭 탐색  R 처음  T 처리모드  F 표시  H 궤적  A raw  M 마커",
       x,
       int(rect.y + rect.height - 51.0),
       13,
@@ -2516,11 +2957,19 @@ class SimulatorUI:
   ) -> None:
     ratio = min(max((mouse_x - axis.x) / axis.width, 0.0), 1.0)
     self.seek(ratio * self.times[-1])
+    self._rearm_events_from_current()
     self.paused = True
     self.status = (
       f"{source} 탐색 @{self.playback_time:.2f}초; "
-      + "R을 누르면 자동정지 재설정"
+      + "이후 CUT-IN 자동정지 재설정됨"
     )
+
+  def _rearm_events_from_current(self) -> None:
+    self.handled_events = {
+      frame_index
+      for frame_index in getattr(self, "handled_events", ())
+      if frame_index < self.index
+    }
 
   def _pause_for_event(self, previous_index: int, current_index: int) -> bool:
     if current_index < previous_index:
@@ -2557,17 +3006,21 @@ class SimulatorUI:
     shift = rl.is_key_down(rl.KEY_LEFT_SHIFT) or rl.is_key_down(rl.KEY_RIGHT_SHIFT)
     if rl.is_key_pressed(rl.KEY_RIGHT):
       self.seek(self.playback_time + (5.0 if shift else 0.5))
+      self._rearm_events_from_current()
       self.paused = True
       self.status = f"수동 탐색 @{self.playback_time:.2f}초"
     if rl.is_key_pressed(rl.KEY_LEFT):
       self.seek(self.playback_time - (5.0 if shift else 0.5))
+      self._rearm_events_from_current()
       self.paused = True
       self.status = f"수동 탐색 @{self.playback_time:.2f}초"
     if rl.is_key_pressed(rl.KEY_HOME):
       self.seek(0.0)
+      self._rearm_events_from_current()
       self.paused = True
     if rl.is_key_pressed(rl.KEY_END):
       self.seek(self.times[-1])
+      self._rearm_events_from_current()
       self.paused = True
     if rl.is_key_pressed(rl.KEY_UP):
       self.speed = min(8.0, self.speed * 2.0)
@@ -2595,6 +3048,10 @@ class SimulatorUI:
       self.show_front_radar = not self.show_front_radar
       state = "표시" if self.show_front_radar else "숨김"
       self.status = f"front radar 현재 포인트 {state}"
+    if rl.is_key_pressed(rl.KEY_T):
+      mode = "front" if self.motion_mode == "normal" else "normal"
+      self.status = "처리 센서 모드 변경 계산 중..."
+      self._request_motion_mode(mode)
     if rl.is_key_pressed(rl.KEY_I):
       self._label("detect")
     if rl.is_key_pressed(rl.KEY_C):
@@ -2768,12 +3225,28 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--start", type=float, default=0.0)
   parser.add_argument("--paused", action="store_true")
   parser.add_argument("--summary", action="store_true")
-  parser.add_argument("--front-only", action="store_true")
+  parser.add_argument(
+    "--motion-mode",
+    choices=VALIDATION_MOTION_MODES,
+    default=None,
+    help=(
+      "normal prefers corner radar when present; front ignores all corner "
+      + "points (the saved UI mode is used when omitted)"
+    ),
+  )
+  parser.add_argument(
+    "--front-only",
+    action="store_true",
+    help="compatibility alias for --motion-mode front",
+  )
   parser.add_argument(
     "--prob",
     type=float,
     default=None,
-    help="one-run threshold override; otherwise load the UI slider's saved value",
+    help=(
+      "one-run predicted path-overlap probability threshold override; "
+      + "otherwise load the UI slider's saved value"
+    ),
   )
   parser.add_argument("--validation-case", action="append", default=[])
   parser.add_argument("--validation-root", type=Path, default=Path(r"W:\routes"))
@@ -2794,11 +3267,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
   args = parse_args()
-  probability = (
-    load_validation_probability()
-    if args.prob is None
-    else float(args.prob)
-  )
   reviews: tuple[ValidationReview, ...] = ()
   if args.validation_case:
     if args.rlog is not None:
@@ -2812,16 +3280,53 @@ def main() -> int:
     raise SystemExit("rlog or --validation-case is required")
   if not args.rlog.is_file():
     raise SystemExit(f"log file does not exist: {args.rlog}")
-  if not 0.0 <= probability <= 1.0:
+  if args.prob is not None and not 0.0 <= args.prob <= 1.0:
     raise SystemExit("--prob must be between 0.00 and 1.00")
+  if args.front_only and args.motion_mode not in (None, "front"):
+    raise SystemExit("--front-only conflicts with --motion-mode normal")
   print(f"Loading {args.rlog} ...", flush=True)
   frames = load_frames(args.rlog)
-  if args.front_only:
-    frames, removed = front_only_frames(frames)
-    print(f"Front-only replay: removed {removed} corner-radar points.", flush=True)
+  motion_mode = (
+    "front"
+    if args.front_only
+    else args.motion_mode or load_validation_motion_mode()
+  )
+  motion_sensor = (
+    "front"
+    if motion_mode == "front"
+    else preferred_radar_motion_sensor(frames)
+  )
+  sensor_probabilities = {
+    "corner": load_validation_probability(sensor="corner"),
+    "front": load_validation_probability(sensor="front"),
+  }
+  probability = (
+    sensor_probabilities[motion_sensor]
+    if args.prob is None
+    else float(args.prob)
+  )
+  sensor_probabilities[motion_sensor] = probability
+  if motion_mode == "front":
+    ignored = sum(
+      point.measured and point.source.startswith("corner")
+      for frame in frames
+      for point in frame.points
+    )
+    print(
+      f"Front-only replay: ignoring {ignored} measured corner-radar points.",
+      flush=True,
+    )
   print("Building physical dPath predictor history ...", flush=True)
-  print(f"Validation CUT-IN probability: {probability:.2f}", flush=True)
-  selector = RadarMotionShadowSelector(frames, probability)
+  print(
+    f"Validation {motion_sensor} CUT-IN path-proximity threshold: "
+    + f"{probability:.2f}",
+    flush=True,
+  )
+  selector = RadarMotionShadowSelector(
+    frames,
+    probability,
+    motion_sensor=motion_sensor,
+  )
   print_summary(args.rlog, frames, selector)
   if args.summary:
     return 0
@@ -2835,6 +3340,8 @@ def main() -> int:
     reviews=reviews,
     validation_cases_path=args.validation_cases if reviews else None,
     display_threshold=probability,
+    motion_mode=motion_mode,
+    sensor_probabilities=sensor_probabilities,
   ).run(args.start, args.paused, args.screenshot, args.exit_at_end)
   return 0
 
@@ -2851,6 +3358,8 @@ __all__ = (
   "RecordedLead",
   "Selection",
   "SHADOW_CUTIN_THRESHOLD",
+  "VALIDATION_DEFAULT_CORNER_PROBABILITY",
+  "VALIDATION_DEFAULT_FRONT_PROBABILITY",
   "SimulatorUI",
   "ValidationReview",
   "_copy_points",
@@ -2866,6 +3375,7 @@ __all__ = (
   "front_radar_display_points",
   "is_position_only_reference",
   "lead_continuity_segments",
+  "load_validation_motion_mode",
   "load_validation_probability",
   "load_frames",
   "main",
@@ -2874,10 +3384,12 @@ __all__ = (
   "preferred_radar_points",
   "preferred_radar_motion_sensor",
   "qcamera_path_for_log",
+  "radar_points_at_model_time",
   "radar_trajectory_series",
   "resolve_validation_case",
   "resolve_validation_cases",
   "resolved_recorded_track_id",
+  "save_validation_motion_mode",
   "save_validation_probability",
   "trajectory_history_display_y",
   "trajectory_history_display_position",

@@ -95,6 +95,26 @@ def test_reconstructed_corner_tracks_include_filtered_lead_dynamics():
   assert output[0].jLead != 0.0
 
 
+def test_reconstructed_live_tracks_can_reject_stale_measurements():
+  tracker = StableCornerObjectTracker()
+  for index in range(4):
+    tracker.update(corner_object(
+      1.0 + index * 0.02,
+      1,
+      46,
+      index + 1,
+      12.0,
+      2.0,
+      1.0,
+      -1.0,
+    ))
+
+  assert tracker.live_tracks_at(1.08, 15.0, max_measurement_age_s=0.10)
+  assert not tracker.live_tracks_at(
+    1.20, 15.0, max_measurement_age_s=0.10,
+  )
+
+
 def test_recorded_cutin_display_requires_current_leads_cutin_membership():
   parser = RouteLogParser(recompute_cutins=False)
   corner_lead = radar_lead(2540)

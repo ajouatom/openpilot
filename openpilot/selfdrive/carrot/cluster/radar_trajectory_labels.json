@@ -467,6 +467,36 @@
       "human_verified": true
     },
     {
+      "id": "manual-000000cf-002p20-front-61",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "front",
+      "time_s": 2.2,
+      "window": [
+        1.4500000000000002,
+        2.95
+      ],
+      "track_id": 61,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-002p40-corner-1003",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 2.4,
+      "window": [
+        1.65,
+        3.15
+      ],
+      "track_id": 1003,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
       "id": "manual-000000cf-002p60-corner-1003",
       "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
       "log": "000000cf--04b9851018--15/rlog.zst",

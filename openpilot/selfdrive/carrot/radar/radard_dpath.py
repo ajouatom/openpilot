@@ -68,6 +68,13 @@ def _yaw_rate(live_pose: Any) -> float:
   return 0.0
 
 
+def _model_measurement_time_s(sm: messaging.SubMaster) -> float:
+  """Use the camera exposure time, not model publication time."""
+  timestamp_eof_ns = int(getattr(sm["modelV2"], "timestampEof", 0))
+  model_log_ns = int(sm.logMonoTime["modelV2"])
+  return float(timestamp_eof_ns if timestamp_eof_ns > 0 else model_log_ns) * 1e-9
+
+
 class DPathRadarD:
   """Own and publish radarState without importing controls.radard."""
 
@@ -79,6 +86,7 @@ class DPathRadarD:
         params.get_int("EnableCornerRadar"),
       ),
       enable_radar_tracks=params.get_int("EnableRadarTracks"),
+      front_radar_measurement_delay_s=float(CP.radarDelay),
     )
     self.radar_state = log.RadarState.new_message()
     self.radar_state_valid = False
@@ -90,7 +98,7 @@ class DPathRadarD:
     self.radar_state.carStateMonoTime = sm.logMonoTime["carState"]
     self.radar_state.radarErrors = rr.errors
 
-    model_time_s = float(sm.logMonoTime["modelV2"]) * 1e-9
+    model_time_s = _model_measurement_time_s(sm)
     radar_time_s = float(sm.logMonoTime["liveTracks"]) * 1e-9
     time_s = (
       model_time_s

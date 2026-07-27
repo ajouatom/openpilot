@@ -23,19 +23,24 @@ MOTION_MAX_DREL_M = 100.0
 NOMINAL_LANE_WIDTH_M = 3.60
 IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M = 1.5 * NOMINAL_LANE_WIDTH_M
 POSITION_ONLY_MAX_ABS_VLEAD_MPS = 3.0 / 3.6
+FRONT_CUT_IN_MIN_DREL_M = 5.0
 ADJACENT_OCCLUSION_MIN_DREL_M = 5.0
 ADJACENT_OCCLUSION_RANGE_TOLERANCE_M = 1.0
 EGO_PATH_HALF_WIDTH_M = 0.90
 TARGET_VEHICLE_HALF_WIDTH_M = 0.90
 PATH_OVERLAP_HALF_WIDTH_M = EGO_PATH_HALF_WIDTH_M + TARGET_VEHICLE_HALF_WIDTH_M
+PATH_PROXIMITY_MARGIN_M = 1.20
 PATH_STATE_HYSTERESIS_M = 0.12
 CUT_IN_THRESHOLD = 0.50
 CUT_OUT_THRESHOLD = 0.50
+CORNER_CUT_IN_THRESHOLD = 0.30
+FRONT_CUT_IN_THRESHOLD = 0.67
 CUT_IN_CONFIRMATION_S = 0.25
 CUT_IN_BOUNDARY_HOLD_S = 0.40
 MAX_HISTORY_S = 2.0
 SHORT_HISTORY_S = 0.45
 LONG_HISTORY_S = 1.50
+REPORTED_VELOCITY_HISTORY_S = 0.10
 
 
 @dataclass(frozen=True)
@@ -83,6 +88,7 @@ class RadarMotionSample:
   longitudinal_sigma: float
   lateral_sigma: float
   occupancy_prob: float
+  path_proximity_score: float
 
 
 @dataclass(frozen=True)
@@ -103,9 +109,11 @@ class RadarMotionPrediction:
   reported_normal_speed: float
   normal_speed_disagreement: float
   motion_consistency: float
+  recent_motion_support: float
   uncertainty: float
   lane_half_width: float
   current_path_occupancy: bool
+  cut_in_detection_allowed: bool
   cut_in_probability: float
   cut_out_probability: float
   path_entry_probability: float
@@ -189,6 +197,14 @@ def _finite(value: Any, fallback: float = 0.0) -> float:
   return parsed if math.isfinite(parsed) else fallback
 
 
+def radar_motion_cut_in_threshold(sensor: str) -> float:
+  return (
+    CORNER_CUT_IN_THRESHOLD
+    if str(sensor) == "corner"
+    else FRONT_CUT_IN_THRESHOLD
+  )
+
+
 def _sensor(source: str) -> str:
   return "corner" if source.startswith("corner") else "front"
 
@@ -246,9 +262,8 @@ def project_to_model_path(
   best: ModelPathProjection | None = None
   best_distance_sq = math.inf
   accumulated_s = 0.0
-  last_index = len(points) - 2
-  for index, ((x0, y0), (x1, y1)) in enumerate(
-    zip(points, points[1:], strict=False),
+  for (x0, y0), (x1, y1) in zip(
+    points, points[1:], strict=False,
   ):
     dx = x1 - x0
     dy = y1 - y0
@@ -256,12 +271,11 @@ def project_to_model_path(
     if length < 1e-6:
       continue
     raw_ratio = ((x - x0) * dx + (y - y0) * dy) / (length * length)
-    if index == 0 and raw_ratio < 0.0:
-      ratio = raw_ratio
-    elif index == last_index and raw_ratio > 1.0:
-      ratio = raw_ratio
-    else:
-      ratio = min(1.0, max(0.0, raw_ratio))
+    # The final model-path samples can bunch up or reverse when the car
+    # stops. Extrapolating that tiny last segment can create an artificial
+    # centerline through a distant side object, so project only onto the
+    # measured polyline.
+    ratio = min(1.0, max(0.0, raw_ratio))
     center_x = x0 + ratio * dx
     center_y = y0 + ratio * dy
     offset_x = x - center_x
@@ -409,18 +423,32 @@ def _scoped_motion_points(
     if not MOTION_MIN_DREL_M <= d_rel <= MOTION_MAX_DREL_M:
       continue
     y_rel = _value(point, "y_rel", "yRel")
-    d_path = project_to_model_path(path, d_rel, y_rel).d_path
-    if abs(d_path) <= IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M:
-      scoped.append((point, d_rel, d_path))
+    projection = project_to_model_path(path, d_rel, y_rel)
+    distance_to_path = math.hypot(
+      d_rel - projection.center_x,
+      y_rel - projection.center_y,
+    )
+    if distance_to_path <= IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M:
+      scoped.append((point, d_rel, projection.d_path))
   return tuple(scoped)
 
 
 def visible_motion_points(
   points: Iterable[Any],
   path: Sequence[tuple[float, float]],
+  lead_one_d_rel: float | None = None,
+  protected_identities: Iterable[tuple[str, int]] = (),
 ) -> tuple[Any, ...]:
-  """Keep current-lane points and only the nearest visible vehicle per adjacent side."""
+  """Keep relevant adjacent points without hiding an already selected target."""
   scoped = _scoped_motion_points(points, path)
+  protected = set(protected_identities)
+  primary_limit = (
+    float(lead_one_d_rel)
+    if lead_one_d_rel is not None
+    and math.isfinite(float(lead_one_d_rel))
+    and float(lead_one_d_rel) > 0.0
+    else None
+  )
 
   nearest: dict[int, float] = {}
   for _, d_rel, d_path in scoped:
@@ -438,6 +466,17 @@ def visible_motion_points(
     if (
       d_rel < ADJACENT_OCCLUSION_MIN_DREL_M
       or abs(d_path) <= PATH_OVERLAP_HALF_WIDTH_M
+      or (
+        (
+          str(getattr(point, "source", "")),
+          int(getattr(point, "track_id", getattr(point, "trackId", -1))),
+        )
+        in protected
+      )
+      or (
+        primary_limit is not None
+        and d_rel < primary_limit
+      )
       or d_rel <= nearest.get(1 if d_path > 0.0 else -1, math.inf)
       + ADJACENT_OCCLUSION_RANGE_TOLERANCE_M
     )
@@ -450,6 +489,30 @@ def _normal_interval_probability(mean: float, sigma: float, limit: float) -> flo
   upper = math.erf((limit - mean) / scale)
   lower = math.erf((-limit - mean) / scale)
   return min(1.0, max(0.0, 0.5 * (upper - lower)))
+
+
+def _path_proximity_score(d_path: float) -> float:
+  """Normalize remaining body-to-corridor clearance over a physical margin."""
+  clearance = max(0.0, abs(d_path) - PATH_OVERLAP_HALF_WIDTH_M)
+  return min(
+    1.0,
+    max(0.0, 1.0 - clearance / PATH_PROXIMITY_MARGIN_M),
+  )
+
+
+def _inward_motion_support(
+  current_d_path: float,
+  sample: RadarMotionSample,
+  uncertainty: float,
+) -> float:
+  """Require predicted inward displacement to exceed measured path noise."""
+  inward_displacement = max(
+    0.0, abs(current_d_path) - abs(sample.d_path),
+  )
+  return min(
+    1.0,
+    inward_displacement / max(uncertainty, 0.10),
+  )
 
 
 def prediction_sample_at(
@@ -469,12 +532,16 @@ def cutin_probability_at(
   if prediction.current_path_occupancy:
     return 0.0
   sample = prediction_sample_at(prediction, horizon_s)
-  predicted_enter_limit = PATH_OVERLAP_HALF_WIDTH_M - PATH_STATE_HYSTERESIS_M
   return (
-    sample.occupancy_prob * prediction.motion_consistency
+    max(sample.occupancy_prob, sample.path_proximity_score)
+    * _inward_motion_support(
+      prediction.d_path,
+      sample,
+      prediction.uncertainty,
+    )
+    * prediction.motion_consistency
     if (
       abs(sample.d_path) < abs(prediction.d_path)
-      and abs(sample.d_path) <= predicted_enter_limit
       and sample.d_rel > 0.0
     )
     else 0.0
@@ -557,13 +624,19 @@ class RadarMotionPredictor:
     observations = tuple(state.observations)
     short = _window(observations, SHORT_HISTORY_S)
     long = _window(observations, LONG_HISTORY_S)
+    reported_velocity_window = _window(
+      observations, REPORTED_VELOCITY_HISTORY_S,
+    )
     short_slope, short_residual, short_path_span = _spatial_fit(short)
     long_slope, long_residual, long_path_span = _spatial_fit(long)
     _, d_rel_residual = _linear_fit(long, "d_rel")
     path_speed_short, path_x_short_residual = _linear_fit(short, "path_x_world")
     path_speed_long, path_x_long_residual = _linear_fit(long, "path_x_world")
     reported_normal_speed, reported_normal_sigma = _robust_center_and_sigma(
-      tuple(value.normal_velocity for value in long),
+      tuple(
+        value.normal_velocity
+        for value in reported_velocity_window
+      ),
     )
     reported_path_speed, _ = _robust_center_and_sigma(
       tuple(value.path_velocity for value in long),
@@ -586,25 +659,52 @@ class RadarMotionPredictor:
     long_rate = long_slope * path_speed
     curvature_span = max(1.0, long_path_span - 0.5 * short_path_span)
     curvature = max(-0.5, min(0.5, (short_slope - long_slope) / curvature_span))
-    # The prediction mean is the long-window 2-D path vector. Short-window
-    # changes describe curvature/uncertainty instead of being extrapolated as
-    # sustained lateral acceleration.
-    path_slope = long_slope
-    rate = path_slope * path_speed
+    # The long-window 2-D path vector supplies the position-derived motion.
+    # Corner radar must support that direction with its current measured
+    # normal velocity. Use the smaller agreed magnitude so an old trend is not
+    # extrapolated after measured lateral motion stops. A stronger same-sign
+    # radar velocity is support, not a disagreement.
+    position_rate = long_slope * path_speed
+    rate = position_rate
+    if config.use_reported_normal_velocity and enough_history:
+      direction = math.copysign(1.0, position_rate) if abs(position_rate) > 1e-6 else 0.0
+      supported_speed = max(0.0, direction * reported_normal_speed)
+      rate = direction * min(abs(position_rate), supported_speed)
+    path_slope = (
+      rate / path_speed
+      if abs(path_speed) > 0.1
+      else 0.0
+    )
     slope_disagreement = abs(short_slope - long_slope)
     vector_heading_deg = math.degrees(math.atan(path_slope))
     reported_heading_deg = math.degrees(math.atan2(
       reported_normal_speed,
       max(abs(reported_path_speed), 0.1),
     ))
-    normal_speed_disagreement = abs(rate - reported_normal_speed)
+    normal_speed_disagreement = (
+      abs(position_rate - rate)
+      if config.use_reported_normal_velocity
+      else abs(position_rate - reported_normal_speed)
+    )
+    recent_motion_support = (
+      min(
+        1.0,
+        max(
+          0.0,
+          math.copysign(1.0, position_rate) * short_rate
+          / max(abs(position_rate), 0.05),
+        ),
+      )
+      if enough_history and abs(position_rate) > 0.05
+      else 1.0
+    )
     long_duration_s = (
       long[-1].time_s - long[0].time_s
       if len(long) >= 2
       else 0.0
     )
     position_rate_sigma = (
-      config.base_lateral_sigma_m + long_residual
+      math.hypot(long_residual, 0.5 * short_residual)
     ) / max(long_duration_s, 0.25)
     normal_velocity_sigma = math.hypot(
       config.normal_velocity_sigma_mps,
@@ -684,6 +784,11 @@ class RadarMotionPredictor:
         if future_d_rel > 0.0
         else 0.0
       )
+      path_proximity_score = (
+        _path_proximity_score(future_d_path) * extrapolation_support
+        if future_d_rel > 0.0
+        else 0.0
+      )
       samples.append(RadarMotionSample(
         horizon_s=horizon_s,
         d_rel=future_d_rel,
@@ -693,26 +798,47 @@ class RadarMotionPredictor:
         longitudinal_sigma=longitudinal_sigma,
         lateral_sigma=lateral_sigma,
         occupancy_prob=occupancy_prob,
+        path_proximity_score=path_proximity_score,
       ))
 
-    predicted_enter_limit = PATH_OVERLAP_HALF_WIDTH_M - PATH_STATE_HYSTERESIS_M
     inward_samples = tuple(
       sample for sample in samples
       if (
         abs(sample.d_path) < abs(observation.d_path)
-        and abs(sample.d_path) <= predicted_enter_limit
+        and sample.d_rel > 0.0
       )
     )
     outward_samples = tuple(
       sample for sample in samples
       if abs(sample.d_path) > abs(observation.d_path)
     )
-    path_entry_probability = (
+    raw_path_entry_probability = (
       (
-        max((sample.occupancy_prob for sample in inward_samples), default=0.0)
+        max(
+          (
+            max(sample.occupancy_prob, sample.path_proximity_score)
+            * _inward_motion_support(
+              observation.d_path,
+              sample,
+              lateral_base_uncertainty,
+            )
+            for sample in inward_samples
+          ),
+          default=0.0,
+        )
         * motion_consistency
+        * recent_motion_support
       )
       if enough_history
+      else 0.0
+    )
+    cut_in_detection_allowed = (
+      _sensor(state.source) != "front"
+      or observation.d_rel >= FRONT_CUT_IN_MIN_DREL_M
+    )
+    path_entry_probability = (
+      raw_path_entry_probability
+      if cut_in_detection_allowed
       else 0.0
     )
     cut_in_probability = (
@@ -734,7 +860,11 @@ class RadarMotionPredictor:
     time_to_entry_s = next((
       sample.horizon_s
       for sample in samples
-      if sample.d_rel > 0.0 and abs(sample.d_path) <= predicted_enter_limit
+      if (
+        sample.d_rel > 0.0
+        and abs(sample.d_path)
+        <= PATH_OVERLAP_HALF_WIDTH_M - PATH_STATE_HYSTERESIS_M
+      )
     ), None)
     if not enough_history:
       reason = "insufficient measured dPath history"
@@ -749,6 +879,8 @@ class RadarMotionPredictor:
         if cut_out_probability >= CUT_OUT_THRESHOLD
         else "current path overlap"
       )
+    elif not cut_in_detection_allowed:
+      reason = "front CUT-IN below 5m limit"
     elif cut_in_probability >= CUT_IN_THRESHOLD:
       reason = "physical CUT-IN shadow"
     else:
@@ -796,9 +928,11 @@ class RadarMotionPredictor:
       reported_normal_speed=reported_normal_speed,
       normal_speed_disagreement=normal_speed_disagreement,
       motion_consistency=motion_consistency,
+      recent_motion_support=recent_motion_support,
       uncertainty=lateral_base_uncertainty,
       lane_half_width=PATH_OVERLAP_HALF_WIDTH_M,
       current_path_occupancy=state.inside_latched,
+      cut_in_detection_allowed=cut_in_detection_allowed,
       cut_in_probability=cut_in_probability,
       cut_out_probability=cut_out_probability,
       path_entry_probability=path_entry_probability,
@@ -821,6 +955,7 @@ class RadarMotionPredictor:
     path: Sequence[tuple[float, float]],
     v_ego: float = 0.0,
     yaw_rate_rad_s: float = 0.0,
+    lead_one_d_rel: float | None = None,
   ) -> dict[tuple[str, int], RadarMotionPrediction]:
     time_s = float(time_s)
     v_ego = _finite(v_ego)
@@ -848,7 +983,9 @@ class RadarMotionPredictor:
 
     point_values = tuple(points)
     scoped_points = _scoped_motion_points(point_values, path)
-    visible_points = visible_motion_points(point_values, path)
+    visible_points = visible_motion_points(
+      point_values, path, lead_one_d_rel,
+    )
     visible_keys = {
       (_source(point), int(getattr(point, "track_id", getattr(point, "trackId", -1))))
       for point in visible_points
@@ -994,16 +1131,19 @@ class RadarMotionDecisionTracker:
       key
       for key, prediction in prediction_by_key.items()
       if (
-        (
-          not prediction.current_path_occupancy
-          and prediction.cut_in_probability >= self.threshold
-        )
-        or (
-          prediction.current_path_occupancy
-          and prediction.path_entry_age_s is not None
-          and prediction.path_entry_age_s
-          <= self.confirmation_s + self.boundary_hold_s
-          and prediction.path_entry_probability >= self.threshold
+        getattr(prediction, "cut_in_detection_allowed", True)
+        and (
+          (
+            not prediction.current_path_occupancy
+            and prediction.cut_in_probability >= self.threshold
+          )
+          or (
+            prediction.current_path_occupancy
+            and prediction.path_entry_age_s is not None
+            and prediction.path_entry_age_s
+            <= self.confirmation_s + self.boundary_hold_s
+            and prediction.path_entry_probability >= self.threshold
+          )
         )
       )
     }
@@ -1015,6 +1155,7 @@ class RadarMotionDecisionTracker:
       elapsed_s = time_s - self._started_at[key]
       crossing_inward = (
         prediction is not None
+        and getattr(prediction, "cut_in_detection_allowed", True)
         and prediction.current_path_occupancy
         and prediction.d_path * prediction.d_path_rate_long < 0.0
         and prediction.path_entry_age_s is not None
@@ -1040,6 +1181,9 @@ class RadarMotionDecisionTracker:
       for key in self._started_at
       if (
         key in prediction_by_key
+        and getattr(
+          prediction_by_key[key], "cut_in_detection_allowed", True,
+        )
         and prediction_by_key[key].current_path_occupancy
         and prediction_by_key[key].d_path
         * prediction_by_key[key].d_path_rate_long < 0.0

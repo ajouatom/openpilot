@@ -320,13 +320,19 @@ class StableCornerObjectTracker:
         match.age = obj.age
         match.hits += 1
 
-    def _visible_tracks_at(self, t: float) -> tuple[tuple[StableCornerTrack, float, float], ...]:
+    def _visible_tracks_at(
+        self,
+        t: float,
+        max_measurement_age_s: float | None = None,
+    ) -> tuple[tuple[StableCornerTrack, float, float], ...]:
         self._expire(t)
         visible_tracks: list[tuple[StableCornerTrack, float, float]] = []
         for track in self.tracks.values():
             if track.hits < RAW_CORNER_TRACK_DISPLAY_MIN_HITS:
                 continue
             dt = max(0.0, t - track.last_t)
+            if max_measurement_age_s is not None and dt > max_measurement_age_s:
+                continue
             x = track.x + track.vx * dt
             y = track.y + track.vy * dt
             if abs(y) > RAW_CORNER_TRACK_DISPLAY_OUTER_ABS_Y_M and track.hits < RAW_CORNER_TRACK_DISPLAY_OUTER_MIN_HITS:
@@ -338,9 +344,14 @@ class StableCornerObjectTracker:
             visible_tracks.append((track, x, y))
         return tuple(visible_tracks)
 
-    def live_tracks_at(self, t: float, v_ego: float) -> tuple[ReconstructedLiveTrack, ...]:
+    def live_tracks_at(
+        self,
+        t: float,
+        v_ego: float,
+        max_measurement_age_s: float | None = None,
+    ) -> tuple[ReconstructedLiveTrack, ...]:
         live_tracks: list[ReconstructedLiveTrack] = []
-        for track, x, y in self._visible_tracks_at(t):
+        for track, x, y in self._visible_tracks_at(t, max_measurement_age_s):
             v_lead = v_ego + track.vx
             a_lead, j_lead = self._update_lead_dynamics(track, t, v_lead)
             live_tracks.append(ReconstructedLiveTrack(

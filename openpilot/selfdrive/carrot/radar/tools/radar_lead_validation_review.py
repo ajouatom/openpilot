@@ -31,6 +31,7 @@ def simulator_command(
   probability: float | None,
   position: str,
   front_only: bool,
+  motion_mode: str | None = None,
 ) -> list[str]:
   command = [
     sys.executable,
@@ -50,6 +51,8 @@ def simulator_command(
     command.extend(("--validation-case", str(item["id"])))
   if front_only:
     command.append("--front-only")
+  elif motion_mode is not None:
+    command.extend(("--motion-mode", motion_mode))
   return command
 
 
@@ -69,9 +72,18 @@ def parse_args() -> argparse.Namespace:
     "--prob",
     type=float,
     default=None,
-    help="one-run threshold override; otherwise use the slider's saved value",
+    help=(
+      "one-run normalized path-proximity threshold override; "
+      + "otherwise use the slider's saved value"
+    ),
   )
   parser.add_argument("--front-only", action="store_true")
+  parser.add_argument(
+    "--motion-mode",
+    choices=("normal", "front"),
+    default=None,
+    help="initial processing mode; otherwise use the mode saved by the replay UI",
+  )
   parser.add_argument("--list", action="store_true")
   return parser.parse_args()
 
@@ -80,6 +92,8 @@ def main() -> int:
   args = parse_args()
   if args.prob is not None and not 0.0 <= args.prob <= 1.0:
     raise SystemExit("--prob must be between 0.00 and 1.00")
+  if args.front_only and args.motion_mode not in (None, "front"):
+    raise SystemExit("--front-only conflicts with --motion-mode normal")
   payload = json.loads(args.cases.read_text(encoding="utf-8"))
   filters = tuple(value.lower() for value in args.case)
   cases = [
@@ -127,6 +141,7 @@ def main() -> int:
       args.prob,
       f"{index}/{len(groups)}",
       args.front_only,
+      args.motion_mode,
     )
     result = subprocess.run(command, check=False)
     if result.returncode != 0:

@@ -22,13 +22,16 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   front_radar_display_points,
   is_position_only_reference,
   lead_continuity_segments,
+  load_validation_motion_mode,
   load_validation_probability,
   motion_points_at_model_time,
   preferred_radar_motion_sensor,
   radar_trajectory_series,
   resolve_validation_cases,
+  save_validation_motion_mode,
   save_validation_probability,
   trajectory_history_display_y,
+  trajectory_model_review_events,
   update_validation_case_label,
 )
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import (
@@ -144,6 +147,39 @@ def test_new_controller_publishes_confirmed_physical_lead_two() -> None:
   assert candidate_track_id(selection.lead_two) == 1010
   assert selection.active_cutin_candidates == ()
   assert selection.decision_cutin_candidates
+
+
+def test_review_event_is_emitted_once_per_physical_continuity() -> None:
+  frames = [frame((), time_s=index * 0.1) for index in range(3)]
+  candidate = Candidate(
+    1019,
+    1.0,
+    "physical corner dPath shadow",
+    source="corner235",
+  )
+  selections = (
+    Selection(None, None, decision_cutin_candidates=(candidate,)),
+    Selection(None, None),
+    Selection(None, None, decision_cutin_candidates=(candidate,)),
+  )
+  selector = SimpleNamespace(
+    trajectories=tuple(
+      {
+        ("corner235", 1019): SimpleNamespace(continuity_id=15),
+      }
+      for _ in frames
+    ),
+    select=lambda _frame, index: selections[index],
+  )
+
+  events = trajectory_model_review_events(
+    frames,
+    selector,
+    ("front+corner",),
+    0.5,
+  )
+
+  assert tuple(events) == (0,)
 
 
 def test_validation_threshold_is_passed_to_physical_decision_tracker() -> None:
@@ -276,6 +312,24 @@ def test_front_motion_is_used_when_corner_measurements_are_absent() -> None:
   assert set(values[-1]) == {("frontRadar", 10)}
 
 
+def test_front_motion_mode_ignores_corner_points_even_when_present() -> None:
+  frames = [
+    frame((
+      point(10, 30.0, 1.0),
+      point(1010, 29.0, 2.8, source="corner235"),
+    ), time_s=index * 0.1)
+    for index in range(2)
+  ]
+
+  selector = RadarMotionShadowSelector(
+    frames,
+    motion_sensor="front",
+  )
+
+  assert selector.motion_sensor == "front"
+  assert set(selector.trajectories[-1]) == {("frontRadar", 10)}
+
+
 def test_near_zero_vlead_is_exposed_only_as_position_reference() -> None:
   stopped = replace(point(10, 30.0, 1.0), v_lead=0.5)
   current = frame((stopped,))
@@ -297,6 +351,27 @@ def test_radar_point_is_projected_to_model_timestamp_before_dpath() -> None:
   assert aligned[0].y_rel == pytest.approx(3.08)
   prediction = radar_trajectory_series((current,))[0][("frontRadar", 10)]
   assert prediction.d_path == pytest.approx(3.08)
+
+
+def test_corner_measurement_delay_is_added_to_timestamp_alignment() -> None:
+  current = replace(
+    frame((
+      replace(
+        point(1010, 30.0, 3.0, source="corner235"),
+        v_rel=-2.0,
+        yv_rel=-4.0,
+      ),
+    )),
+    input_age_s=0.0,
+    model_age_s=0.076,
+  )
+
+  aligned = motion_points_at_model_time(current, "corner")
+
+  # Camera is 76 ms older, while the corner object itself represents a
+  # measurement one 50 ms radar cycle before liveTracks publication.
+  assert aligned[0].d_rel == pytest.approx(30.052)
+  assert aligned[0].y_rel == pytest.approx(3.104)
 
 
 def test_shadow_metrics_ignore_labels_for_the_unselected_sensor() -> None:
@@ -409,6 +484,24 @@ def test_predictor_event_pause_seeks_to_first_unhandled_marker() -> None:
   assert ui.status == "자동 일시정지 @0.10초: CUT-IN id 10"
 
 
+def test_manual_seek_rearms_future_predictor_pauses() -> None:
+  ui = object.__new__(SimulatorUI)
+  ui.times = (0.0, 0.1, 0.2, 0.3)
+  ui.frames = (None,) * 4
+  ui.index = 3
+  ui.playback_time = 0.3
+  ui.paused = False
+  ui.status = ""
+  ui.handled_events = {1, 2, 3}
+  axis = SimpleNamespace(x=0.0, width=100.0)
+
+  ui._seek_from_time_axis(axis, 25.0, "seek bar")
+
+  assert ui.index == 1
+  assert ui.handled_events == set()
+  assert "자동정지 재설정됨" in ui.status
+
+
 def test_birds_eye_radar_positive_left_is_drawn_left_of_ego() -> None:
   ui = object.__new__(SimulatorUI)
   rect = SimpleNamespace(x=0.0, y=0.0, width=200.0, height=200.0)
@@ -449,6 +542,36 @@ def test_lead_continuity_breaks_on_missing_frames_and_track_id_changes() -> None
     [10, 10],
     [10],
     [11],
+  ]
+
+
+def test_lead_continuity_joins_physical_stationary_track_handoff() -> None:
+  frames = [frame((), time_s=index * 0.1) for index in range(3)]
+  selections = (
+    Selection(
+      Candidate(
+        41, 1.0, "L1", d_rel=30.0, y_rel=0.1, v_lead=0.0,
+      ),
+      None,
+    ),
+    Selection(
+      Candidate(
+        48, 1.0, "L1", d_rel=29.5, y_rel=0.2, v_lead=0.1,
+      ),
+      None,
+    ),
+    Selection(
+      Candidate(
+        45, 1.0, "L1", d_rel=28.9, y_rel=0.1, v_lead=-0.1,
+      ),
+      None,
+    ),
+  )
+
+  segments = lead_continuity_segments(frames, selections, "lead_one")
+
+  assert [[point[2] for point in segment] for segment in segments] == [
+    [41, 48, 45],
   ]
 
 
@@ -493,12 +616,27 @@ def test_clicking_lead_graph_seeks_on_shared_time_axis() -> None:
 def test_validation_probability_is_saved_outside_the_repository(tmp_path) -> None:
   settings = tmp_path / "radar_validation.json"
 
-  assert load_validation_probability(settings) == pytest.approx(0.50)
-  save_validation_probability(0.45, settings)
+  assert load_validation_probability(
+    settings, sensor="corner",
+  ) == pytest.approx(0.30)
+  assert load_validation_probability(
+    settings, sensor="front",
+  ) == pytest.approx(0.67)
+  save_validation_probability(0.45, settings, sensor="corner")
+  save_validation_probability(0.70, settings, sensor="front")
+  save_validation_motion_mode("front", settings)
 
-  assert load_validation_probability(settings) == pytest.approx(0.45)
+  assert load_validation_probability(
+    settings, sensor="corner",
+  ) == pytest.approx(0.45)
+  assert load_validation_probability(
+    settings, sensor="front",
+  ) == pytest.approx(0.70)
+  assert load_validation_motion_mode(settings) == "front"
   assert json.loads(settings.read_text(encoding="utf-8")) == {
-    "probability": 0.45,
+    "corner_probability": 0.45,
+    "front_probability": 0.7,
+    "motion_mode": "front",
   }
 
 
@@ -524,7 +662,40 @@ def test_validation_probability_applies_immediately_from_cached_history(
   ui._request_probability(0.42)
 
   assert ui.selector.decision_threshold == pytest.approx(0.42)
-  assert ui.status.startswith("CUT-IN prob 0.42 적용 완료")
+  assert ui.status.startswith("경로 근접 감도 0.42 적용 완료")
+
+
+def test_validation_mode_toggle_uses_and_saves_front_probability(
+  tmp_path,
+) -> None:
+  frames = [
+    frame((
+      point(10, 30.0, 1.0),
+      point(1010, 29.0, 2.8, source="corner235"),
+    ), time_s=index * 0.1)
+    for index in range(2)
+  ]
+  settings = tmp_path / "radar_validation.json"
+  selector = RadarMotionShadowSelector(
+    frames,
+    decision_threshold=0.30,
+  )
+  ui = SimulatorUI(
+    frames,
+    selector,
+    "test",
+    tmp_path / "rlog.zst",
+    display_threshold=0.30,
+    settings_path=settings,
+    sensor_probabilities={"corner": 0.30, "front": 0.67},
+  )
+
+  ui._request_motion_mode("front")
+
+  assert ui.motion_mode == "front"
+  assert ui.selector.motion_sensor == "front"
+  assert ui.selector.decision_threshold == pytest.approx(0.67)
+  assert load_validation_motion_mode(settings) == "front"
 
 
 def test_resolve_and_update_validation_case_without_model_arguments(tmp_path) -> None:

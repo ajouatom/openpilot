@@ -21,6 +21,9 @@ from openpilot.selfdrive.carrot.radar.tools.radar_validation_replay import (
   front_only_frames,
   load_frames,
 )
+from openpilot.selfdrive.carrot.radar_motion import (
+  STATIONARY_MAX_ABS_VLEAD_MPS,
+)
 
 
 CARROT_ROOT = Path(__file__).resolve().parents[2]
@@ -108,6 +111,9 @@ def _stationary_event(
   selector: Any,
   frames: list[Any],
   entry: dict[str, Any],
+  *,
+  require_target_ids: bool = True,
+  maximum_abs_v_lead: float = 3.0 / 3.6,
 ) -> tuple[float, int] | None:
   start_s, end_s = (float(value) for value in entry["window"])
   targets = {int(value) for value in entry.get("target_track_ids", ())}
@@ -116,12 +122,17 @@ def _stationary_event(
       continue
     selection = selector.select(frame, index)
     for candidate in (selection.lead_one, selection.lead_two):
-      if not candidate_matches_targets(candidate, targets):
+      if candidate is None:
+        continue
+      if (
+        require_target_ids
+        and not candidate_matches_targets(candidate, targets)
+      ):
         continue
       point = next((
         value for value in frame.points
         if value.track_id in {candidate.track_id, *candidate.track_aliases}
-        and abs(value.v_lead) * 3.6 < 3.0
+        and abs(value.v_lead) <= maximum_abs_v_lead
         and 0.8 < value.d_rel < 130.0
       ), None)
       if point is not None:
@@ -220,7 +231,13 @@ def main() -> int:
       expected = str(entry["expected"])
       if expected == "stationary":
         radard_event = _stationary_event(radard, frames, entry)
-        shadow_event = None
+        shadow_event = _stationary_event(
+          shadow,
+          frames,
+          entry,
+          require_target_ids=False,
+          maximum_abs_v_lead=STATIONARY_MAX_ABS_VLEAD_MPS,
+        )
         radard_pass = radard_event is not None
       else:
         radard_event = _first_event(
@@ -240,7 +257,7 @@ def main() -> int:
         )
         radard_pass = (radard_event is not None) == (expected == "detect")
       if expected == "stationary":
-        shadow_applicable = False
+        shadow_applicable = True
       deadline = entry.get("latest_detection_s")
       if (
         radard_pass
