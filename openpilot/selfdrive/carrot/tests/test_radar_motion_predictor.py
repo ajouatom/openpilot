@@ -563,6 +563,36 @@ def test_dpath_lead_two_is_selected_after_and_ahead_of_primary() -> None:
   assert selection.lead_two["radarTrackId"] == 20
 
 
+def test_dpath_lead_two_is_limited_to_80m_and_strictly_closer_than_primary() -> None:
+  primary = {
+    "status": True,
+    "radar": True,
+    "radarTrackId": 10,
+    "dRel": 80.0,
+    "yRel": 0.0,
+  }
+  candidates = tuple(
+    {
+      "status": True,
+      "radar": True,
+      "radarTrackId": track_id,
+      "dRel": d_rel,
+      "yRel": 2.0,
+      "vLead": 20.0,
+    }
+    for track_id, d_rel in ((20, 79.9), (30, 80.0), (40, 80.1))
+  )
+
+  selection = select_dpath_lead_two(primary, candidates, v_ego=40.0)
+  without_primary = select_dpath_lead_two(None, candidates, v_ego=40.0)
+
+  assert dpath_control_max_d_rel(40.0) == pytest.approx(80.0)
+  assert [lead["radarTrackId"] for lead in selection.cutins] == [20]
+  assert [
+    lead["radarTrackId"] for lead in without_primary.cutins
+  ] == [20, 30]
+
+
 def test_primary_matcher_uses_model_lead_zero_and_front_scc_only() -> None:
   matcher = VisionRadarMatcher()
   points = snapshot_radar_points(

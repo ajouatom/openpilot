@@ -44,7 +44,7 @@
 | `0` | 기존 `radard` 선행차·끼어들기 처리 유지(기본값) |
 | `1` | 독립 dPath RadarD가 front/SCC–vision leadOne을 먼저 계산하고, 물리 dPath CUT-IN만 leadTwo로 사용 |
 
-`1`은 학습 모델을 사용하지 않으며 기존 `controls/radard.py`를 호출하거나 그 결과를 섞지 않습니다. 독립 프로세스가 삭제 전 `radard_model.py`와 같은 순서로 model lead zero를 전방/SCC 레이더와 먼저 매칭해 leadOne을 정합니다. 그 뒤 물리 predictor가 0.25초 동안 확인한 OUT→IN 차량 중 leadOne과 다른 객체만 leadTwo 후보가 됩니다. 최근 0.75초의 leadOne은 거리·횡위치·속도 연속성으로도 중복을 막아 비전 ID가 잠깐 바뀌었을 때 같은 차량을 leadTwo로 다시 내보내지 않습니다. leadOne보다 먼 차량과 `max(20 m, vEgo × 2초 + 10 m)` 밖의 차량은 종방향 제어 후보에서 제외합니다.
+`1`은 학습 모델을 사용하지 않으며 기존 `controls/radard.py`를 호출하거나 그 결과를 섞지 않습니다. 독립 프로세스가 삭제 전 `radard_model.py`와 같은 순서로 model lead zero를 전방/SCC 레이더와 먼저 매칭해 leadOne을 정합니다. 그 뒤 물리 predictor가 0.25초 동안 확인한 OUT→IN 차량 중 leadOne과 다른 객체만 leadTwo 후보가 됩니다. 최근 0.75초의 leadOne은 거리·횡위치·속도 연속성으로도 중복을 막아 비전 ID가 잠깐 바뀌었을 때 같은 차량을 leadTwo로 다시 내보내지 않습니다. CUT-IN leadTwo는 `min(80 m, max(20 m, vEgo × 2초 + 10 m))` 이내이며, leadOne이 유효할 때는 반드시 leadOne보다 가까워야 합니다.
 
 코너 레이더 포인트가 한 번이라도 확인되면 해당 실행 동안 코너 motion만 사용하고, 코너 포인트가 없는 구성에서는 `frontRadar` raw track만 사용합니다. 프레임마다 front와 corner를 교체하지 않으며 SCC는 dPath motion 입력으로 사용하지 않습니다. 잘못된 leadTwo는 실제 감속에 영향을 줄 수 있으므로 전체 shadow 검증을 마친 동일 차량 구성에서만 켜세요.
 
@@ -55,7 +55,7 @@
 
 manager는 두 레이더 구현을 동시에 실행하지 않습니다. `RadarMotionMode=0`에서는 기존 `openpilot.selfdrive.controls.radard`만 실행하고 기존 leadOne/leadTwo 선택을 그대로 유지합니다. `RadarMotionMode=1`에서는 기존 프로세스를 중지하고 독립 `openpilot.selfdrive.carrot.radar.radard_dpath`만 실행합니다. 이 프로세스는 front/SCC–vision 매칭으로 leadOne을 먼저 계산한 뒤 아래 물리 predictor로 leadTwo를 계산해 `radarState`를 직접 발행합니다. 전방 레이더, SCC, 코너 레이더의 입력 역할과 소스 구분은 유지하며 학습형 레이더 리드 모델은 사용하지 않습니다.
 
-headless 검증기는 기존 radard와 실험 중인 단순 물리 predictor를 별도로 보고할 수 있습니다. 화면 리플레이는 의도적으로 물리 predictor만 표시하며 기존 radard의 `leadOne`, `leadTwo`, CUT-IN 마커를 가져오지 않고 종방향 제어도 바꾸지 않습니다.
+headless 검증기는 기존 radard와 실험 중인 단순 물리 predictor를 별도로 보고할 수 있습니다. 화면 리플레이는 새 독립 controller와 물리 predictor만 실행합니다. leadOne/leadTwo는 로그의 model·radar 입력으로 다시 계산하며 기록된 기존 radard의 lead 역할과 CUT-IN 마커를 가져오지 않습니다. 리플레이는 종방향 제어를 바꾸지 않습니다.
 
 shadow predictor는 다음 원칙으로 동작합니다.
 
@@ -81,9 +81,9 @@ shadow predictor는 다음 원칙으로 동작합니다.
 
 ### PC 리플레이
 
-`radar_lead_validation_review.py`는 같은 로그의 유지 중인 검증 사례를 묶어 40개 고유 로그를 순서대로 한 번씩 엽니다. 각 화면에는 동기화된 qcamera 비디오와 물리 predictor가 사용·검출한 포인트, 궤적, 확률, CUT-IN 이벤트만 표시합니다. 기존 radard의 `leadOne`, `leadTwo`, CUT-IN 포인트와 이벤트 마커는 표시하지 않습니다. 한 로그가 끝나면 창을 닫고 다음 로그를 자동으로 엽니다. `--front-only`는 리플레이 전에 코너 포인트를 제거합니다. `--prob`는 predictor의 표시·일시정지 기준만 바꾸며 물리 계산식은 바꾸지 않습니다.
+`radar_lead_validation_review.py`는 같은 로그의 유지 중인 검증 사례를 묶어 40개 고유 로그를 순서대로 한 번씩 엽니다. 각 화면에는 동기화된 qcamera 비디오, 새 controller가 다시 계산한 lead 역할과 물리 predictor가 사용·검출한 포인트, 궤적, 확률, CUT-IN 이벤트만 표시합니다. 기록된 기존 radard의 lead 역할, CUT-IN 포인트와 이벤트 마커는 표시하지 않습니다. 한 로그가 끝나면 창을 닫고 다음 로그를 자동으로 엽니다. `--front-only`는 리플레이 전에 코너 포인트를 제거합니다. `--prob`는 검증 전용 물리 확정·표시·일시정지 임계값을 바꾸지만 계산식과 production 임계값은 바꾸지 않습니다.
 
-물리 predictor가 0.25초 동안 새로운 CUT-IN을 확인했을 때만 재생이 멈춥니다. 화면은 한글을 지원하는 읽기 쉬운 글꼴과 한글 작업 문구를 사용합니다. bird's-eye 지도에서 회색선은 model lane line, 흰 점선은 화면 비교용 차선 중심, 파란선은 predictor가 유일한 corridor 기준으로 사용하는 model path입니다. 계산 중 차선 중심으로 바꾸지 않습니다. 기본으로 모든 track에 그려지는 소스 색의 흐려지는 채운 점·실선은 predictor가 실제로 사용하는 경로좌표 `(S, dPath)` 과거 이력입니다. 회색 또는 녹색 빈 원은 같은 이력으로 계산한 0.5/1.0/1.5/2.0초 미래 `(S, dPath)` 위치이고, 확정된 predictor CUT-IN만 주황색으로 바뀝니다. `H`로 이 계산 이력과 미래선을 표시하거나 숨깁니다. `A`를 누르면 ego 이동을 보정한 raw radar `(xRel, yRel)` 과거 관측을 회색으로 별도 겹쳐 볼 수 있습니다. 이 선택적 raw 관측선은 대상 차량의 ground truth도 아니고 predictor가 외삽하는 이력도 아닙니다. ego yaw는 이 선택적 raw 관측선을 한 좌표계에 정렬할 때만 쓰며 시점 동기화된 `dPath`에 다시 적용하지 않습니다. 가로 seek bar에는 확정된 predictor CUT-IN 진입만 주황색으로 표시하고 유지 중인 검증 구간은 bar 위쪽에 표시합니다. 기존 radard 마커는 없습니다. 레이더 지도는 qcamera 위에 투영한 원근 화면이 아니라 자차 좌표계의 bird's-eye 화면입니다. bar를 클릭해 이동할 수 있으며, Space는 일시정지, 좌우 키는 키보드 이동, 위아래 키는 재생 속도 변경, `M`은 predictor CUT-IN 마커 표시/숨김, `R`은 처음부터 다시 재생하면서 처리한 predictor 일시정지를 재활성화합니다. `I`, `C`, `S`는 CUT-IN, CLEAR, STATIONARY 라벨을 적용합니다. 유지 중인 검증 구간 안에서는 해당 사례를 갱신하고, 그 밖에서는 `radar_trajectory_labels.json`에 저장합니다.
+물리 predictor가 0.25초 동안 제어 후보가 될 수 있는 새 CUT-IN을 확인했을 때만 재생이 멈춥니다. 화면은 한글을 지원하는 읽기 쉬운 글꼴과 한글 작업 문구를 사용합니다. 거리 그래프는 -10~120m이고 자차는 흰 점, 다시 계산한 leadOne은 주황 네모, leadTwo는 노랑 네모로 표시합니다. `F`를 누르면 코너 전용 motion 계산은 바꾸지 않고 measured front-radar 포인트만 표시하거나 숨깁니다. bird's-eye 지도에서 회색선은 model lane line, 흰 점선은 화면 비교용 차선 중심, 파란선은 predictor가 유일한 corridor 기준으로 사용하는 model path입니다. 계산 중 차선 중심으로 바꾸지 않습니다. 기본으로 모든 track에 그려지는 소스 색의 흐려지는 채운 점·실선은 predictor가 실제로 사용하는 경로좌표 `(S, dPath)` 과거 이력입니다. 회색 또는 녹색 빈 원은 같은 이력으로 계산한 0.5/1.0/1.5/2.0초 미래 `(S, dPath)` 위치이고, 확정된 predictor CUT-IN만 주황색으로 바뀝니다. `H`로 이 계산 이력과 미래선을 표시하거나 숨깁니다. `A`를 누르면 ego 이동을 보정한 raw radar `(xRel, yRel)` 과거 관측을 회색으로 별도 겹쳐 볼 수 있습니다. 이 선택적 raw 관측선은 대상 차량의 ground truth도 아니고 predictor가 외삽하는 이력도 아닙니다. ego yaw는 이 선택적 raw 관측선을 한 좌표계에 정렬할 때만 쓰며 시점 동기화된 `dPath`에 다시 적용하지 않습니다. 가로 seek bar에는 확정된 predictor CUT-IN 진입만 주황색으로 표시하고 유지 중인 검증 구간은 bar 위쪽에 표시합니다. 기존 radard 마커는 없습니다. 레이더 지도는 qcamera 위에 투영한 원근 화면이 아니라 자차 좌표계의 bird's-eye 화면입니다. bar를 클릭해 이동할 수 있으며, Space는 일시정지, 좌우 키는 키보드 이동, 위아래 키는 재생 속도 변경, `M`은 predictor CUT-IN 마커 표시/숨김, `R`은 처음부터 다시 재생하면서 처리한 predictor 일시정지를 재활성화합니다. `I`, `C`, `S`는 CUT-IN, CLEAR, STATIONARY 라벨을 적용합니다. 유지 중인 검증 구간 안에서는 해당 사례를 갱신하고, 그 밖에서는 `radar_trajectory_labels.json`에 저장합니다.
 
 `validate_radar_lead_model.py` 파일명은 기존 사용 명령과의 호환을 위해 유지하지만 더 이상 학습 모델을 불러오거나 검증하지 않습니다. `cutin_validation_cases.json`과 `radar_trajectory_labels.json` 전체를 재생해 기존 radard와 물리 shadow 결과를 따로 보고합니다. 모든 수동 라벨은 검증 전용이며 계산식, 임계값 조정이나 학습에 사용하지 않습니다.
 

@@ -15,6 +15,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
 CONTROL_RELEVANCE_HORIZON_S = 2.0
 CONTROL_RELEVANCE_MIN_DREL_M = 20.0
 CONTROL_RELEVANCE_BUFFER_M = 10.0
+CUTIN_MAX_DREL_M = 80.0
 PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 3.5
 PRIMARY_DUPLICATE_MAX_YREL_DELTA_M = 1.4
 
@@ -27,10 +28,13 @@ class DPathLeadSelection:
 
 def dpath_control_max_d_rel(v_ego: float) -> float:
   """Limit leadTwo to distance ego can reach over the prediction horizon."""
-  return max(
-    CONTROL_RELEVANCE_MIN_DREL_M,
-    max(0.0, float(v_ego)) * CONTROL_RELEVANCE_HORIZON_S
-    + CONTROL_RELEVANCE_BUFFER_M,
+  return min(
+    CUTIN_MAX_DREL_M,
+    max(
+      CONTROL_RELEVANCE_MIN_DREL_M,
+      max(0.0, float(v_ego)) * CONTROL_RELEVANCE_HORIZON_S
+      + CONTROL_RELEVANCE_BUFFER_M,
+    ),
   )
 
 
@@ -65,10 +69,11 @@ def select_dpath_lead_two(
 ) -> DPathLeadSelection:
   """Choose an independent confirmed CUT-IN after leadOne is known."""
   maximum_d_rel = dpath_control_max_d_rel(v_ego)
+  primary_d_rel = math.inf
   if primary is not None and primary.get("status"):
-    primary_d_rel = float(primary.get("dRel", math.inf))
-    if math.isfinite(primary_d_rel):
-      maximum_d_rel = min(maximum_d_rel, primary_d_rel)
+    value = float(primary.get("dRel", math.inf))
+    if math.isfinite(value):
+      primary_d_rel = value
 
   cutins = tuple(sorted(
     (
@@ -77,6 +82,7 @@ def select_dpath_lead_two(
         lead.get("status")
         and lead.get("radar")
         and 0.8 < float(lead.get("dRel", 0.0)) <= maximum_d_rel
+        and float(lead.get("dRel", 0.0)) < primary_d_rel
         and float(lead.get("vLead", 0.0))
         >= POSITION_ONLY_MAX_ABS_VLEAD_MPS
         and not lead_duplicates_primary(lead, primary)

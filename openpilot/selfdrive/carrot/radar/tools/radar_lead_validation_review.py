@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     "--prob",
     type=float,
     default=0.50,
-    help="predictor future-ring display and CUT-IN pause threshold",
+    help="validation-only physical decision, display, and CUT-IN pause threshold",
   )
   parser.add_argument("--front-only", action="store_true")
   parser.add_argument("--list", action="store_true")

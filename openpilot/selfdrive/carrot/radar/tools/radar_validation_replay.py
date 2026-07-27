@@ -23,6 +23,7 @@ if str(REPO_ROOT) not in sys.path:
 from openpilot.selfdrive.carrot.radar_motion import (
   CUT_IN_BOUNDARY_HOLD_S,
   CUT_IN_CONFIRMATION_S,
+  DPathRadarController,
   IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M,
   POSITION_ONLY_MAX_ABS_VLEAD_MPS,
   RadarMotionDecisionTracker,
@@ -36,7 +37,10 @@ from openpilot.selfdrive.carrot.radar_motion import (
 
 
 RADAR_TO_CAMERA = 1.52
-DEFAULT_FORWARD_RANGE_M = 100.0
+DISPLAY_MIN_DREL_M = -10.0
+DEFAULT_FORWARD_RANGE_M = 120.0
+DISPLAY_TOP_PADDING_PX = 72.0
+DISPLAY_BOTTOM_PADDING_PX = 18.0
 CARROT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_VALIDATION_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.json"
 DEFAULT_TRAJECTORY_LABELS = CARROT_ROOT / "cluster" / "radar_trajectory_labels.json"
@@ -367,6 +371,70 @@ def _shadow_candidate(prediction: RadarMotionPrediction) -> Candidate:
   )
 
 
+def _controller_model(frame: RadarFrame) -> Any:
+  return SimpleNamespace(
+    position=SimpleNamespace(
+      x=tuple(point[0] for point in frame.path),
+      y=tuple(point[1] for point in frame.path),
+    ),
+    leadsV3=tuple(
+      SimpleNamespace(
+        prob=lead.probability,
+        x=(lead.x,),
+        y=(lead.y,),
+        v=(lead.v,),
+        a=(lead.a,),
+        xStd=(lead.x_std,),
+        yStd=(lead.y_std,),
+        vStd=(lead.v_std,),
+      )
+      for lead in frame.model_leads
+    ),
+  )
+
+
+def _controller_candidate(
+  frame: RadarFrame,
+  lead: dict[str, Any] | None,
+  reason: str,
+) -> Candidate | None:
+  if lead is None or not lead.get("status"):
+    return None
+  track_id = int(lead.get("radarTrackId", -1))
+  d_rel = float(lead.get("dRel", 0.0))
+  y_rel = float(lead.get("yRel", 0.0))
+  matched_point = min(
+    (
+      point for point in frame.points
+      if point.measured and point.track_id == track_id
+    ),
+    key=lambda point: (
+      abs(point.d_rel - d_rel),
+      abs(point.y_rel - y_rel),
+    ),
+    default=None,
+  )
+  return Candidate(
+    track_id=track_id,
+    score=float(lead.get("score", lead.get("modelProb", 0.0))),
+    reason=reason,
+    d_rel=d_rel,
+    y_rel=y_rel,
+    source=matched_point.source if matched_point is not None else "",
+  )
+
+
+def front_radar_display_points(frame: RadarFrame) -> tuple[RadarPoint, ...]:
+  return tuple(
+    point for point in motion_points_at_model_time(frame, "front")
+    if (
+      point.measured
+      and point.source == "frontRadar"
+      and DISPLAY_MIN_DREL_M <= point.d_rel <= DEFAULT_FORWARD_RANGE_M
+    )
+  )
+
+
 def _recorded_candidate(lead: RecordedLead, reason: str) -> Candidate | None:
   if not lead.status:
     return None
@@ -427,8 +495,13 @@ class RadarMotionShadowSelector:
 
   name = "physical-dpath-predictor"
 
-  def __init__(self, frames: Sequence[RadarFrame]) -> None:
+  def __init__(
+    self,
+    frames: Sequence[RadarFrame],
+    decision_threshold: float = SHADOW_CUTIN_THRESHOLD,
+  ) -> None:
     self.motion_sensor = preferred_radar_motion_sensor(frames)
+    self.decision_threshold = float(decision_threshold)
     self.motion_points = tuple(
       visible_motion_points(
         motion_points_at_model_time(frame, self.motion_sensor),
@@ -438,10 +511,26 @@ class RadarMotionShadowSelector:
     )
     trajectories = radar_trajectory_series(frames, self.motion_sensor)
     selections: list[Selection] = []
+    controller = DPathRadarController(
+      prefer_corner_radar=self.motion_sensor == "corner",
+      enable_radar_tracks=1,
+    )
+    controller.motion_decisions = RadarMotionDecisionTracker(
+      threshold=self.decision_threshold,
+    )
     decision_tracker = RadarMotionDecisionTracker(
-      threshold=SHADOW_CUTIN_THRESHOLD,
+      threshold=self.decision_threshold,
     )
     for frame, predictions in zip(frames, trajectories, strict=True):
+      radar_to_model_time_s = frame.input_age_s - frame.model_age_s
+      output = controller.update(
+        time_s=frame.time_s,
+        v_ego=frame.v_ego,
+        radar_points=frame.points,
+        model=_controller_model(frame),
+        yaw_rate_rad_s=frame.yaw_rate_rad_s,
+        radar_to_model_time_s=radar_to_model_time_s,
+      )
       raw_diagnostics = tuple(sorted(
         (_shadow_candidate(prediction) for prediction in predictions.values()),
         key=lambda candidate: (
@@ -462,10 +551,17 @@ class RadarMotionShadowSelector:
         (cutin.prediction.source, cutin.prediction.track_id): cutin.score
         for cutin in decision.confirmed
       }
+      selected_cutin_ids = {
+        int(lead["radarTrackId"]) for lead in output.leads_cutin
+      }
       diagnostics = tuple(
         replace(
           candidate,
-          stage="CUT-IN",
+          stage=(
+            "CUT-IN"
+            if candidate.track_id in selected_cutin_ids
+            else "FILTERED"
+          ),
           score=max(
             candidate.score,
             confirmed_scores[(candidate.source, candidate.track_id)],
@@ -479,11 +575,18 @@ class RadarMotionShadowSelector:
       corner = tuple(candidate for candidate in diagnostics if candidate.source.startswith("corner"))
       decisions = tuple(
         candidate for candidate in diagnostics
-        if (candidate.source, candidate.track_id) in confirmed_keys
+        if (
+          (candidate.source, candidate.track_id) in confirmed_keys
+          and candidate.track_id in selected_cutin_ids
+        )
       )
       selections.append(Selection(
-        lead_one=None,
-        lead_two=None,
+        lead_one=_controller_candidate(
+          frame, output.lead_one, "RadarMotion leadOne",
+        ),
+        lead_two=_controller_candidate(
+          frame, output.lead_two, "RadarMotion leadTwo",
+        ),
         front_candidates=front,
         corner_candidates=corner,
         cutin_diagnostics=diagnostics,
@@ -1188,6 +1291,7 @@ class SimulatorUI:
     self.show_shadow_markers = True
     self.show_trajectory_history = True
     self.show_radar_observed_history = False
+    self.show_front_radar = False
     if self.video_path.is_file():
       try:
         route_replay = _route_replay_module()
@@ -1280,15 +1384,24 @@ class SimulatorUI:
 
   def _screen(self, rect: Any, d_rel: float, y_rel: float) -> tuple[float, float]:
     lateral_scale = rect.width / 20.0
-    forward_scale = (rect.height - 36.0) / DEFAULT_FORWARD_RANGE_M
+    plot_top = rect.y + DISPLAY_TOP_PADDING_PX
+    plot_bottom = rect.y + rect.height - DISPLAY_BOTTOM_PADDING_PX
+    forward_scale = (
+      (plot_bottom - plot_top)
+      / (DEFAULT_FORWARD_RANGE_M - DISPLAY_MIN_DREL_M)
+    )
     return (
       rect.x + rect.width * 0.5 - y_rel * lateral_scale,
-      rect.y + rect.height - 18.0 - d_rel * forward_scale,
+      plot_bottom - (d_rel - DISPLAY_MIN_DREL_M) * forward_scale,
     )
 
   def _draw_path(self, rect: Any, frame: RadarFrame) -> None:
     rl = self.rl
-    for distance in range(0, int(DEFAULT_FORWARD_RANGE_M) + 1, 20):
+    distance_ticks = (
+      int(DISPLAY_MIN_DREL_M),
+      *range(0, int(DEFAULT_FORWARD_RANGE_M) + 1, 20),
+    )
+    for distance in distance_ticks:
       _, y = self._screen(rect, float(distance), 0.0)
       rl.draw_line(
         int(rect.x + 8.0),
@@ -1450,7 +1563,9 @@ class SimulatorUI:
       history_color = self._color((*history_rgb, alpha))
       if (
         self.show_radar_observed_history
-        and -5.0 <= sample.actual_x <= DEFAULT_FORWARD_RANGE_M
+        and DISPLAY_MIN_DREL_M
+        <= sample.actual_x
+        <= DEFAULT_FORWARD_RANGE_M
       ):
         observed_position = rl.Vector2(*self._screen(
           rect, sample.actual_x, sample.actual_y,
@@ -1469,7 +1584,7 @@ class SimulatorUI:
           self._color((120, 130, 140, min(alpha, 120))),
         )
         previous_observed = observed_position
-      if -5.0 <= sample.path_x <= DEFAULT_FORWARD_RANGE_M:
+      if DISPLAY_MIN_DREL_M <= sample.path_x <= DEFAULT_FORWARD_RANGE_M:
         history_x, history_y = trajectory_history_display_position(
           frame,
           sample,
@@ -1555,10 +1670,72 @@ class SimulatorUI:
         )
       previous = position
 
+  def _draw_front_radar_overlay(self, rect: Any, frame: RadarFrame) -> None:
+    if not self.show_front_radar:
+      return
+    rl = self.rl
+    color = self._color((70, 190, 220, 190))
+    for point in front_radar_display_points(frame):
+      x, y = self._screen(rect, point.d_rel, point.y_rel)
+      rl.draw_circle_lines(int(x), int(y), 5.0, color)
+      self._draw_text(
+        f"F{point.track_id}",
+        int(x + 6.0),
+        int(y + 3.0),
+        10,
+        color,
+      )
+
+  def _draw_lead_roles(self, rect: Any, selection: Selection) -> None:
+    rl = self.rl
+    roles = (
+      ("L1", selection.lead_one, (246, 142, 55)),
+      ("L2", selection.lead_two, (245, 211, 72)),
+    )
+    for label, candidate, rgb in roles:
+      if (
+        candidate is None
+        or candidate.d_rel is None
+        or candidate.y_rel is None
+        or not DISPLAY_MIN_DREL_M
+        <= candidate.d_rel
+        <= DEFAULT_FORWARD_RANGE_M
+      ):
+        continue
+      x, y = self._screen(rect, candidate.d_rel, candidate.y_rel)
+      color = self._color(rgb)
+      rl.draw_rectangle_lines_ex(
+        rl.Rectangle(x - 11.0, y - 11.0, 22.0, 22.0),
+        3.0,
+        color,
+      )
+      self._draw_text(
+        f"{label} {candidate.track_id} {candidate.d_rel:.1f}m",
+        int(x + 14.0),
+        int(y - 11.0),
+        13,
+        color,
+      )
+
   def _draw_map(self, rect: Any, frame: RadarFrame, selection: Selection) -> None:
     rl = self.rl
     rl.draw_rectangle_rec(rect, self._color((13, 18, 24)))
     self._draw_path(rect, frame)
+    ego_x, ego_y = self._screen(rect, 0.0, 0.0)
+    rl.draw_circle(
+      int(ego_x),
+      int(ego_y),
+      6.0,
+      self._color((245, 247, 250)),
+    )
+    self._draw_text(
+      "내 차",
+      int(ego_x + 9.0),
+      int(ego_y - 7.0),
+      12,
+      self._color((245, 247, 250)),
+    )
+    self._draw_front_radar_overlay(rect, frame)
     selected_ids = {
       candidate.track_id
       for candidate in (selection.lead_one, selection.lead_two)
@@ -1573,7 +1750,7 @@ class SimulatorUI:
       for candidate in selection.decision_cutin_candidates
     }
     for point in self.selector.motion_points[self.index]:
-      if not -5.0 <= point.d_rel <= DEFAULT_FORWARD_RANGE_M:
+      if not DISPLAY_MIN_DREL_M <= point.d_rel <= DEFAULT_FORWARD_RANGE_M:
         continue
       prediction = self.selector.trajectories[self.index].get(
         (point.source, point.track_id),
@@ -1589,10 +1766,7 @@ class SimulatorUI:
         continue
       x, y = self._screen(rect, point.d_rel, point.y_rel)
       diagnostic = diagnostics.get((point.source, point.track_id))
-      if point.track_id in selected_ids:
-        color = (245, 211, 72)
-        radius = 9.0
-      elif (point.source, point.track_id) in confirmed_cutin_keys:
+      if (point.source, point.track_id) in confirmed_cutin_keys:
         color = (246, 142, 55)
         radius = 7.0
       elif diagnostic is not None and diagnostic.current_path_occupancy:
@@ -1633,10 +1807,23 @@ class SimulatorUI:
         13,
         self._color(color),
       )
+    self._draw_lead_roles(rect, selection)
     self._draw_text(
-      "회색: 차선 | 흰 점선: 차선 중심(표시용) | 파랑: model path",
+      "-10~120m | 흰 점: 내 차 | 주황 □: leadOne | 노랑 □: leadTwo",
       int(rect.x + 12.0),
       int(rect.y + 8.0),
+      14,
+      self._color((145, 158, 170)),
+    )
+    front_text = (
+      "front radar 표시 중(F: 숨김)"
+      if self.show_front_radar
+      else "F: front radar 표시"
+    )
+    self._draw_text(
+      f"회색: 차선 | 흰 점선: 차선 중심 | 파랑: model path | {front_text}",
+      int(rect.x + 12.0),
+      int(rect.y + 27.0),
       14,
       self._color((145, 158, 170)),
     )
@@ -1648,7 +1835,7 @@ class SimulatorUI:
     self._draw_text(
       f"과거: 계산에 쓴 S,dPath 실선 | 미래: 회색/주황 링 | {observed_text}",
       int(rect.x + 12.0),
-      int(rect.y + 27.0),
+      int(rect.y + 46.0),
       14,
       self._color((145, 158, 170)),
     )
@@ -1692,6 +1879,7 @@ class SimulatorUI:
         "IN": "현재 경로",
         "PENDING": "CUT-IN 확인 중",
         "CUT-IN": "CUT-IN 확정",
+        "FILTERED": "제어 후보 제외",
         "SHADOW-CUTOUT": "CUT-OUT 예측",
         "MISMATCH": "위치/속도 불일치",
         "BELOW": "기준 미달",
@@ -1723,7 +1911,7 @@ class SimulatorUI:
       )
     self._draw_text(self.status[:65], x, int(rect.y + rect.height - 83.0), 15, white)
     self._draw_text(
-      "Space 재생  클릭 탐색  R 처음  H 궤적  A raw  M 마커  Esc 다음",
+      "Space 재생  클릭 탐색  R 처음  H 궤적  F front  A raw  M 마커  Esc 다음",
       x,
       int(rect.y + rect.height - 51.0),
       13,
@@ -1812,7 +2000,7 @@ class SimulatorUI:
     panel_width = min(500.0, max(410.0, width * 0.35))
     content_width = float(width) - panel_width - 34.0
     content_bottom = timeline.y - 47.0
-    video_height = max(250.0, content_bottom * 0.58)
+    video_height = max(250.0, content_bottom * 0.52)
     video_rect = rl.Rectangle(12.0, 12.0, content_width, video_height)
     map_rect = rl.Rectangle(
       12.0,
@@ -1912,6 +2100,10 @@ class SimulatorUI:
       self.show_radar_observed_history = not self.show_radar_observed_history
       state = "표시" if self.show_radar_observed_history else "숨김"
       self.status = f"별도 raw radar 관측 궤적 {state}"
+    if rl.is_key_pressed(rl.KEY_F):
+      self.show_front_radar = not self.show_front_radar
+      state = "표시" if self.show_front_radar else "숨김"
+      self.status = f"front radar 현재 포인트 {state}"
     if rl.is_key_pressed(rl.KEY_I):
       self._label("detect")
     if rl.is_key_pressed(rl.KEY_C):
@@ -1969,7 +2161,7 @@ class SimulatorUI:
     self.paused = paused or screenshot is not None
     self._pause_for_event(self.index - 1, self.index)
     rl.set_config_flags(rl.FLAG_WINDOW_RESIZABLE | rl.FLAG_VSYNC_HINT)
-    rl.init_window(1440, 960, "carrotpilot radar video validation")
+    rl.init_window(1440, 1080, "carrotpilot radar video validation")
     self._load_font()
     rl.set_target_fps(60)
     local_screenshot: Path | None = None
@@ -2029,7 +2221,12 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--paused", action="store_true")
   parser.add_argument("--summary", action="store_true")
   parser.add_argument("--front-only", action="store_true")
-  parser.add_argument("--prob", type=float, default=SHADOW_CUTIN_THRESHOLD)
+  parser.add_argument(
+    "--prob",
+    type=float,
+    default=SHADOW_CUTIN_THRESHOLD,
+    help="validation-only physical decision, display, and pause threshold",
+  )
   parser.add_argument("--validation-case", action="append", default=[])
   parser.add_argument("--validation-root", type=Path, default=Path(r"W:\routes"))
   parser.add_argument("--validation-cases", type=Path, default=DEFAULT_VALIDATION_CASES)
@@ -2070,7 +2267,7 @@ def main() -> int:
     frames, removed = front_only_frames(frames)
     print(f"Front-only replay: removed {removed} corner-radar points.", flush=True)
   print("Building physical dPath predictor history ...", flush=True)
-  selector = RadarMotionShadowSelector(frames)
+  selector = RadarMotionShadowSelector(frames, args.prob)
   print_summary(args.rlog, frames, selector)
   if args.summary:
     return 0
@@ -2112,6 +2309,7 @@ __all__ = (
   "comparison_summary",
   "current_cutin_track_ids",
   "front_only_frames",
+  "front_radar_display_points",
   "is_position_only_reference",
   "load_frames",
   "main",

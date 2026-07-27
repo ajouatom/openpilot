@@ -17,14 +17,16 @@ selection. `RadarMotionMode=1` does not start or import that implementation. It
 runs only `openpilot/selfdrive/carrot/radar/radard_dpath.py`, first calculates
 front/SCC vision-matched `leadOne`, then supplies `leadTwo` only from a
 physically confirmed dPath CUT-IN.
-It rejects the primary object itself, anything farther than the primary, and
-anything beyond the ego-speed-based two-second control range. Front, SCC, and
-corner inputs retain their production source identity.
+It rejects the primary object itself, anything at or beyond the primary while
+that primary is valid, anything beyond 80 m, and anything beyond the
+ego-speed-based two-second control range. Front, SCC, and corner inputs retain
+their production source identity.
 
-PC visual replay shows `radar_motion/RadarMotionPredictor` alone. It does not
-import or display existing radard `leadOne`, `leadTwo`, or CUT-IN events. The
-headless validator may compute existing-radard metrics separately, but those
-values are never input to the physical predictor.
+PC visual replay runs only the new `DPathRadarController` and
+`RadarMotionPredictor`. Its lead roles are recalculated from logged model and
+radar inputs; it does not import or display recorded conventional-radard lead
+roles or CUT-IN events. The headless validator may compute existing-radard
+metrics separately, but those values are never input to the physical predictor.
 
 The predictor:
 
@@ -113,10 +115,13 @@ python openpilot/selfdrive/carrot/radar_lead_validation_review.py --list
 python openpilot/selfdrive/carrot/radar_lead_validation_review.py --case carnival-5b-18-early
 ```
 
-The screen shows only physical-predictor data:
+The screen shows only new-controller and physical-predictor data:
 
 - synchronized qcamera video;
-- measured front and corner points with their source identity;
+- a -10 through 120 m distance view with ego as a white point, recalculated
+  leadOne in an orange square, and recalculated leadTwo in a yellow square;
+- measured front points as an optional `F`-key overlay and corner points with
+  their source identity;
 - source-colored `(S, dPath)` history actually consumed by the predictor and
   its 0.5/1.0/1.5/2.0-second future paths;
 - an optional `A`-key gray overlay of ego-motion-stabilized raw radar history
@@ -145,6 +150,8 @@ Controls:
   0.5/1.0/1.5/2.0-second future trajectories.
 - `A`: show/hide the separate raw-radar observation overlay. It is off by
   default and is never used as the predictor's displayed input history.
+- `F`: show/hide current measured front-radar points without changing the
+  selected motion sensor or predictor inputs.
 - `M`: show/hide physical-shadow timeline markers.
 - `R`: restart and re-arm already handled physical-predictor CUT-IN pauses.
 - `I`: CUT-IN/detect label.
@@ -156,9 +163,10 @@ Inside a maintained window, a label updates the matching validation case.
 Outside every maintained window, it is stored in
 `radar_trajectory_labels.json`.
 
-`--prob` changes only the shadow display threshold. It does not change existing
-radard, predictor calculations, or stored labels. `--front-only` removes corner
-points before both replay and shadow prediction.
+`--prob` changes the validation-only physical decision, display, and pause
+threshold. It does not change conventional radard, production Radar Motion,
+physical equations, or stored labels. `--front-only` removes corner points
+before both replay and shadow prediction.
 
 ## Review discipline
 

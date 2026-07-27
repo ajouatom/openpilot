@@ -18,6 +18,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   SimulatorUI,
   candidate_track_id,
   front_only_frames,
+  front_radar_display_points,
   is_position_only_reference,
   motion_points_at_model_time,
   preferred_radar_motion_sensor,
@@ -92,7 +93,7 @@ def frame(
   )
 
 
-def test_shadow_selector_does_not_import_existing_radard_lead_roles() -> None:
+def test_shadow_selector_uses_new_controller_not_recorded_radard_roles() -> None:
   frames = [
     frame(
       (
@@ -100,7 +101,7 @@ def test_shadow_selector_does_not_import_existing_radard_lead_roles() -> None:
         point(1010, 25.0, 4.0 - index * 0.4, source="corner235"),
       ),
       time_s=index * 0.1,
-      one=recorded(10, True),
+      one=recorded(99, True),
     )
     for index in range(5)
   ]
@@ -112,15 +113,15 @@ def test_shadow_selector_does_not_import_existing_radard_lead_roles() -> None:
 
   radard_selection = radard.select(frames[-1], len(frames) - 1)
   selection = shadow.select(frames[-1], len(frames) - 1)
-  assert candidate_track_id(radard_selection.lead_one) == 10
+  assert candidate_track_id(radard_selection.lead_one) == 99
   assert candidate_track_id(radard_selection.lead_two) == 1010
-  assert selection.lead_one is None
+  assert candidate_track_id(selection.lead_one) == 10
   assert selection.lead_two is None
   assert selection.active_cutin_candidates == ()
   assert any(candidate.track_id == 1010 for candidate in selection.cutin_diagnostics)
 
 
-def test_physical_shadow_is_diagnostic_only_when_radard_has_no_cutin() -> None:
+def test_new_controller_publishes_confirmed_physical_lead_two() -> None:
   frames = [
     frame(
       (
@@ -136,9 +137,18 @@ def test_physical_shadow_is_diagnostic_only_when_radard_has_no_cutin() -> None:
   shadow = RadarMotionShadowSelector(frames)
   selection = shadow.select(frames[-1], len(frames) - 1)
 
-  assert selection.lead_two is None
+  assert candidate_track_id(selection.lead_two) == 1010
   assert selection.active_cutin_candidates == ()
   assert selection.decision_cutin_candidates
+
+
+def test_validation_threshold_is_passed_to_physical_decision_tracker() -> None:
+  selector = RadarMotionShadowSelector(
+    [frame((point(10, 30.0, 0.0),))],
+    decision_threshold=0.45,
+  )
+
+  assert selector.decision_threshold == pytest.approx(0.45)
 
 
 def test_cutin_confirmation_survives_out_to_in_path_transition() -> None:
@@ -192,6 +202,21 @@ def test_front_only_frames_preserve_non_corner_inputs_and_leads() -> None:
   assert removed == 1
   assert [value.source for value in filtered[0].points] == ["frontRadar", "scc"]
   assert filtered[0].recorded_one == original.recorded_one
+
+
+def test_front_radar_display_toggle_uses_only_measured_front_points() -> None:
+  current = frame((
+    point(10, 30.0, 0.2),
+    point(11, -9.0, 0.2),
+    point(12, 121.0, 0.2),
+    point(13, 20.0, 0.2, measured=False),
+    point(1010, 20.0, 2.0, source="corner235"),
+    point(0, 20.0, 0.0, source="scc"),
+  ))
+
+  assert [
+    value.track_id for value in front_radar_display_points(current)
+  ] == [10, 11]
 
 
 def test_corner_motion_is_preferred_for_whole_log_when_available() -> None:
@@ -353,6 +378,19 @@ def test_birds_eye_radar_positive_left_is_drawn_left_of_ego() -> None:
   right_x, _ = ui._screen(rect, 20.0, -2.0)
 
   assert left_x < center_x < right_x
+
+
+def test_birds_eye_distance_axis_covers_minus_10_to_120m() -> None:
+  ui = object.__new__(SimulatorUI)
+  rect = SimpleNamespace(x=0.0, y=0.0, width=200.0, height=200.0)
+
+  _, top_y = ui._screen(rect, 120.0, 0.0)
+  _, ego_y = ui._screen(rect, 0.0, 0.0)
+  _, bottom_y = ui._screen(rect, -10.0, 0.0)
+
+  assert top_y == pytest.approx(72.0)
+  assert top_y < ego_y < bottom_y
+  assert bottom_y == pytest.approx(182.0)
 
 
 def test_resolve_and_update_validation_case_without_model_arguments(tmp_path) -> None:

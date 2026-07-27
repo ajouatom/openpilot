@@ -6,6 +6,7 @@ from openpilot.selfdrive.carrot.radar_motion.controller import (
   RADAR_MOTION_MAX_TIME_SKEW_S,
 )
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
+  CUTIN_MAX_DREL_M,
   DPathLeadSelection,
   dpath_control_max_d_rel,
   lead_duplicates_primary,
@@ -54,6 +55,7 @@ __all__ = (
   "ADJACENT_OCCLUSION_MIN_DREL_M",
   "CUT_IN_BOUNDARY_HOLD_S",
   "CUT_IN_CONFIRMATION_S",
+  "CUTIN_MAX_DREL_M",
   "IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M",
   "MOTION_HORIZONS_S",
   "MOTION_MAX_DREL_M",
