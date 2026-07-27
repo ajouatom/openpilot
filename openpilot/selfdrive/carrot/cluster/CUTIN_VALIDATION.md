@@ -131,7 +131,9 @@ The screen shows only new-controller and physical-predictor data:
 - current IN, CUT-IN, and CUT-OUT probabilities; and
 - short/long `dPath` rate, curvature, uncertainty, and continuity ID;
 - a full-log continuity graph of recalculated leadOne distance in orange and
-  leadTwo distance in yellow. Missing leads and track-ID changes break the line;
+  leadTwo distance in yellow. Missing leads and track-ID changes break the
+  line. Its horizontal time axis exactly matches the seek bar, and clicking
+  the graph seeks both cursors;
 - a clickable seek bar with physical-predictor CUT-IN entry markers in orange
   and validation windows above it. Existing-radard markers are absent.
 
@@ -157,7 +159,9 @@ Controls:
 - Drag the `CUT-IN sensitivity prob` slider and release it to recalculate
   validation events and lead continuity, then save the value for later logs
   and review runs. The 0.20 end is more sensitive; the 0.80 end is more
-  conservative.
+  conservative. Recalculation immediately reuses the physical trajectories and
+  leadOne history, reevaluating only temporal confirmation and leadTwo
+  selection. Requested and applied values remain distinct while dragging.
 - `M`: show/hide physical-shadow timeline markers.
 - `R`: restart and re-arm already handled physical-predictor CUT-IN pauses.
 - `I`: CUT-IN/detect label.

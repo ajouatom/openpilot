@@ -155,6 +155,29 @@ def test_validation_threshold_is_passed_to_physical_decision_tracker() -> None:
   assert selector.decision_threshold == pytest.approx(0.45)
 
 
+def test_validation_threshold_reuses_cached_physical_trajectories() -> None:
+  frames = [
+    frame(
+      (point(1010, 25.0, 4.0 - index * 0.1, source="corner235"),),
+      time_s=index * 0.1,
+    )
+    for index in range(5)
+  ]
+  original = RadarMotionShadowSelector(frames, decision_threshold=0.50)
+  adjusted = RadarMotionShadowSelector(
+    frames,
+    decision_threshold=0.42,
+    motion_points=original.motion_points,
+    trajectories=original.trajectories,
+    lead_one_outputs=original.lead_one_outputs,
+  )
+
+  assert adjusted.motion_points is original.motion_points
+  assert adjusted.trajectories is original.trajectories
+  assert adjusted.lead_one_outputs is original.lead_one_outputs
+  assert adjusted.decision_threshold == pytest.approx(0.42)
+
+
 def test_cutin_confirmation_survives_out_to_in_path_transition() -> None:
   frames = [
     frame(
@@ -429,6 +452,41 @@ def test_lead_continuity_breaks_on_missing_frames_and_track_id_changes() -> None
   ]
 
 
+def test_lead_graph_and_seek_bar_share_one_time_axis() -> None:
+  ui = object.__new__(SimulatorUI)
+  ui.rl = SimpleNamespace(
+    Rectangle=lambda x, y, width, height: SimpleNamespace(
+      x=x,
+      y=y,
+      width=width,
+      height=height,
+    ),
+  )
+
+  timeline, _, _, _, continuity = ui._layout_rects(1440, 1080)
+  continuity_axis = ui._continuity_time_axis_rect(continuity)
+
+  assert timeline.x == pytest.approx(continuity_axis.x)
+  assert timeline.width == pytest.approx(continuity_axis.width)
+
+
+def test_clicking_lead_graph_seeks_on_shared_time_axis() -> None:
+  ui = object.__new__(SimulatorUI)
+  ui.times = (0.0, 10.0, 20.0)
+  ui.frames = (None, None, None)
+  ui.index = 0
+  ui.playback_time = 0.0
+  ui.paused = False
+  ui.status = ""
+  axis = SimpleNamespace(x=50.0, width=800.0)
+
+  ui._seek_from_time_axis(axis, 650.0, "L1/L2 그래프")
+
+  assert ui.playback_time == pytest.approx(15.0)
+  assert ui.paused
+  assert ui.status.startswith("L1/L2 그래프 탐색 @15.00초")
+
+
 def test_validation_probability_is_saved_outside_the_repository(tmp_path) -> None:
   settings = tmp_path / "radar_validation.json"
 
@@ -439,6 +497,31 @@ def test_validation_probability_is_saved_outside_the_repository(tmp_path) -> Non
   assert json.loads(settings.read_text(encoding="utf-8")) == {
     "probability": 0.45,
   }
+
+
+def test_validation_probability_applies_immediately_from_cached_history(
+  tmp_path,
+) -> None:
+  frames = [
+    frame(
+      (point(1010, 25.0, 4.0 - index * 0.1, source="corner235"),),
+      time_s=index * 0.1,
+    )
+    for index in range(5)
+  ]
+  selector = RadarMotionShadowSelector(frames, decision_threshold=0.50)
+  ui = SimulatorUI(
+    frames,
+    selector,
+    "test",
+    tmp_path / "rlog.zst",
+    display_threshold=0.50,
+    settings_path=tmp_path / "radar_validation.json",
+  )
+  ui._request_probability(0.42)
+
+  assert ui.selector.decision_threshold == pytest.approx(0.42)
+  assert ui.status.startswith("CUT-IN prob 0.42 적용 완료")
 
 
 def test_resolve_and_update_validation_case_without_model_arguments(tmp_path) -> None:

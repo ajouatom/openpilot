@@ -29,9 +29,14 @@ from openpilot.selfdrive.carrot.radar_motion import (
   RadarMotionDecisionTracker,
   RadarMotionPrediction,
   RadarMotionPredictor,
+  VisionRadarMatcher,
   cutin_probability_at,
+  lead_from_vision_match,
   model_path_point_at_s,
   project_to_model_path,
+  select_dpath_lead_two,
+  select_primary_radar_points,
+  snapshot_radar_points,
   visible_motion_points,
 )
 
@@ -586,38 +591,96 @@ class RadarMotionShadowSelector:
     self,
     frames: Sequence[RadarFrame],
     decision_threshold: float = SHADOW_CUTIN_THRESHOLD,
+    *,
+    motion_points: Sequence[tuple[RadarPoint, ...]] | None = None,
+    trajectories: Sequence[
+      dict[tuple[str, int], RadarMotionPrediction]
+    ] | None = None,
+    lead_one_outputs: Sequence[dict[str, Any] | None] | None = None,
   ) -> None:
     self.motion_sensor = preferred_radar_motion_sensor(frames)
     self.decision_threshold = float(decision_threshold)
-    self.motion_points = tuple(
-      visible_motion_points(
-        motion_points_at_model_time(frame, self.motion_sensor),
-        frame.path,
+    self.motion_points = (
+      tuple(motion_points)
+      if motion_points is not None
+      else tuple(
+        visible_motion_points(
+          motion_points_at_model_time(frame, self.motion_sensor),
+          frame.path,
+        )
+        for frame in frames
       )
-      for frame in frames
     )
-    trajectories = radar_trajectory_series(frames, self.motion_sensor)
+    trajectory_values = (
+      tuple(trajectories)
+      if trajectories is not None
+      else radar_trajectory_series(frames, self.motion_sensor)
+    )
+    if lead_one_outputs is None:
+      matcher = VisionRadarMatcher()
+      lead_one_values = tuple(
+        (
+          lead_from_vision_match(match)
+          if (
+            match := matcher.match(
+              _controller_model(frame),
+              select_primary_radar_points(
+                snapshot_radar_points(frame.points, frame.v_ego),
+                1,
+              ),
+              frame.path,
+            )
+          ) is not None
+          else None
+        )
+        for frame in frames
+      )
+    else:
+      lead_one_values = tuple(lead_one_outputs)
+    if (
+      len(self.motion_points) != len(frames)
+      or len(trajectory_values) != len(frames)
+      or len(lead_one_values) != len(frames)
+    ):
+      raise ValueError("cached predictor inputs must align with radar frames")
     selections: list[Selection] = []
-    controller = DPathRadarController(
+    duplicate_tracker = DPathRadarController(
       prefer_corner_radar=self.motion_sensor == "corner",
       enable_radar_tracks=1,
-    )
-    controller.motion_decisions = RadarMotionDecisionTracker(
-      threshold=self.decision_threshold,
     )
     decision_tracker = RadarMotionDecisionTracker(
       threshold=self.decision_threshold,
     )
-    for frame, predictions in zip(frames, trajectories, strict=True):
+    for frame, predictions, lead_one in zip(
+      frames,
+      trajectory_values,
+      lead_one_values,
+      strict=True,
+    ):
       radar_to_model_time_s = frame.input_age_s - frame.model_age_s
-      output = controller.update(
-        time_s=frame.time_s,
-        v_ego=frame.v_ego,
-        radar_points=frame.points,
-        model=_controller_model(frame),
-        yaw_rate_rad_s=frame.yaw_rate_rad_s,
-        radar_to_model_time_s=radar_to_model_time_s,
+      synchronized_points = (
+        snapshot_radar_points(
+          frame.points,
+          frame.v_ego,
+          radar_to_model_time_s,
+        )
+        if abs(radar_to_model_time_s) <= MAX_POINT_MODEL_TIME_SKEW_S
+        else ()
       )
+      selected_points = tuple(
+        point
+        for point in synchronized_points
+        if (
+          point.source.startswith("corner")
+          if self.motion_sensor == "corner"
+          else point.source == "frontRadar"
+        )
+      )
+      point_by_identity = {
+        (point.source, point.track_id): point
+        for point in selected_points
+      }
+      duplicate_tracker._remember_primary(frame.time_s, lead_one)
       raw_diagnostics = tuple(sorted(
         (_shadow_candidate(prediction) for prediction in predictions.values()),
         key=lambda candidate: (
@@ -630,6 +693,25 @@ class RadarMotionShadowSelector:
         frame.time_s,
         predictions.values(),
       )
+      cutin_leads = tuple(
+        lead
+        for cutin in decision.confirmed
+        if (
+          lead := duplicate_tracker._cutin_lead(
+            cutin,
+            point_by_identity,
+          )
+        ) is not None
+        and not duplicate_tracker._duplicates_recent_primary(
+          frame.time_s,
+          lead,
+        )
+      )
+      lead_selection = select_dpath_lead_two(
+        lead_one,
+        cutin_leads,
+        frame.v_ego,
+      )
       confirmed_keys = {
         (cutin.prediction.source, cutin.prediction.track_id)
         for cutin in decision.confirmed
@@ -639,7 +721,7 @@ class RadarMotionShadowSelector:
         for cutin in decision.confirmed
       }
       selected_cutin_ids = {
-        int(lead["radarTrackId"]) for lead in output.leads_cutin
+        int(lead["radarTrackId"]) for lead in lead_selection.cutins
       }
       diagnostics = tuple(
         replace(
@@ -669,17 +751,18 @@ class RadarMotionShadowSelector:
       )
       selections.append(Selection(
         lead_one=_controller_candidate(
-          frame, output.lead_one, "RadarMotion leadOne",
+          frame, lead_one, "RadarMotion leadOne",
         ),
         lead_two=_controller_candidate(
-          frame, output.lead_two, "RadarMotion leadTwo",
+          frame, lead_selection.lead_two, "RadarMotion leadTwo",
         ),
         front_candidates=front,
         corner_candidates=corner,
         cutin_diagnostics=diagnostics,
         decision_cutin_candidates=decisions,
       ))
-    self.trajectories = trajectories
+    self.trajectories = trajectory_values
+    self.lead_one_outputs = lead_one_values
     self.selections = tuple(selections)
 
   def select(self, frame: RadarFrame, frame_index: int | None = None) -> Selection:
@@ -1356,6 +1439,12 @@ class SimulatorUI:
     self.display_threshold = display_threshold
     self.pending_probability = display_threshold
     self.probability_dragging = False
+    self.probability_cache = {
+      round(selector.decision_threshold, 2): selector,
+    }
+    self.probability_motion_points = selector.motion_points
+    self.probability_trajectories = selector.trajectories
+    self.probability_lead_one_outputs = selector.lead_one_outputs
     self.index = 0
     self.paused = False
     self.speed = 1.0
@@ -1416,28 +1505,66 @@ class SimulatorUI:
       "lead_two",
     )
 
-  def _apply_probability(self, probability: float) -> None:
-    value = round(min(max(
+  @staticmethod
+  def _clamp_probability(probability: float) -> float:
+    return round(min(max(
       float(probability),
       VALIDATION_PROBABILITY_MIN,
     ), VALIDATION_PROBABILITY_MAX), 2)
+
+  def _activate_probability(
+    self,
+    value: float,
+    selector: RadarMotionShadowSelector,
+  ) -> None:
+    self.selector = selector
     self.display_threshold = value
+    self.events = trajectory_model_review_events(
+      self.frames,
+      selector,
+      ("front+corner",),
+      value,
+    )
+    self.handled_events.clear()
+    self._refresh_lead_continuity()
+    lead_two_frames = sum(
+      selection.lead_two is not None
+      for selection in selector.selections
+    )
+    self.status = (
+      f"CUT-IN prob {value:.2f} 적용 완료: "
+      + f"진입 {len(self.events)}회, L2 {lead_two_frames}프레임"
+    )
+
+  def _request_probability(self, probability: float) -> None:
+    value = self._clamp_probability(probability)
     self.pending_probability = value
-    if abs(self.selector.decision_threshold - value) >= 0.005:
-      self.selector = RadarMotionShadowSelector(self.frames, value)
-      self.events = trajectory_model_review_events(
-        self.frames,
-        self.selector,
-        ("front+corner",),
-        value,
-      )
-      self.handled_events.clear()
-      self._refresh_lead_continuity()
+    save_error: OSError | None = None
     try:
       save_validation_probability(value, self.settings_path)
-      self.status = f"CUT-IN 검증 prob {value:.2f} 저장·적용"
     except OSError as exc:
-      self.status = f"prob {value:.2f} 적용, 저장 실패: {exc}"
+      save_error = exc
+
+    cached = self.probability_cache.get(value)
+    if cached is None:
+      cached = RadarMotionShadowSelector(
+        self.frames,
+        value,
+        motion_points=self.probability_motion_points,
+        trajectories=self.probability_trajectories,
+        lead_one_outputs=self.probability_lead_one_outputs,
+      )
+      self.probability_cache[value] = cached
+      while len(self.probability_cache) > 4:
+        self.probability_cache.pop(next(iter(self.probability_cache)))
+
+    if abs(self.selector.decision_threshold - value) >= 0.005:
+      self._activate_probability(value, cached)
+    else:
+      self.display_threshold = value
+      self.status = f"CUT-IN prob {value:.2f} 이미 적용됨"
+    if save_error is not None:
+      self.status += f" · 저장 실패: {save_error}"
 
   @staticmethod
   def _color(
@@ -1984,9 +2111,19 @@ class SimulatorUI:
     )
     ratio = min(max(ratio, 0.0), 1.0)
     knob_x = slider.x + slider.width * ratio
+    applying = (
+      abs(
+        self.selector.decision_threshold - self.pending_probability
+      )
+      >= 0.005
+    )
+    applied_text = (
+      f"현재 {self.selector.decision_threshold:.2f} · 놓으면 적용"
+      if applying
+      else "적용 완료"
+    )
     self._draw_text(
-      f"CUT-IN 감도 prob {self.pending_probability:.2f}  "
-      + "(낮을수록 민감, 놓으면 저장)",
+      f"CUT-IN 감도 {self.pending_probability:.2f}  {applied_text}",
       int(slider.x),
       int(slider.y - 27.0),
       14,
@@ -2023,8 +2160,9 @@ class SimulatorUI:
   def _draw_lead_continuity(self, rect: Any) -> None:
     rl = self.rl
     rl.draw_rectangle_rec(rect, self._color((13, 18, 24)))
-    plot_left = rect.x + 44.0
-    plot_right = rect.x + rect.width - 10.0
+    time_axis = self._continuity_time_axis_rect(rect)
+    plot_left = time_axis.x
+    plot_right = time_axis.x + time_axis.width
     plot_top = rect.y + 28.0
     plot_bottom = rect.y + rect.height - 18.0
     plot_width = max(1.0, plot_right - plot_left)
@@ -2200,11 +2338,21 @@ class SimulatorUI:
       self._color((247, 94, 94)),
     )
 
+  @staticmethod
+  def _panel_width(width: int) -> float:
+    return min(500.0, max(410.0, width * 0.35))
+
   def _timeline_rect(self, width: int, height: int) -> Any:
-    return self.rl.Rectangle(24.0, float(height - 42), float(width - 48), 13.0)
+    content_width = float(width) - self._panel_width(width) - 34.0
+    return self.rl.Rectangle(
+      56.0,
+      float(height - 42),
+      max(100.0, content_width - 54.0),
+      13.0,
+    )
 
   def _panel_rect(self, width: int, timeline: Any) -> Any:
-    panel_width = min(500.0, max(410.0, width * 0.35))
+    panel_width = self._panel_width(width)
     content_bottom = timeline.y - 47.0
     return self.rl.Rectangle(
       float(width) - panel_width - 10.0,
@@ -2212,6 +2360,57 @@ class SimulatorUI:
       panel_width,
       max(300.0, content_bottom - 4.0),
     )
+
+  def _continuity_time_axis_rect(self, rect: Any) -> Any:
+    return self.rl.Rectangle(
+      rect.x + 44.0,
+      rect.y,
+      max(1.0, rect.width - 54.0),
+      rect.height,
+    )
+
+  def _layout_rects(
+    self,
+    width: int,
+    height: int,
+  ) -> tuple[Any, Any, Any, Any, Any]:
+    timeline = self._timeline_rect(width, height)
+    panel_rect = self._panel_rect(width, timeline)
+    content_width = float(width) - panel_rect.width - 34.0
+    content_bottom = timeline.y - 47.0
+    video_height = max(250.0, content_bottom * 0.52)
+    video_rect = self.rl.Rectangle(
+      12.0,
+      12.0,
+      content_width,
+      video_height,
+    )
+    map_y = video_rect.y + video_rect.height + 8.0
+    available_below_video = max(220.0, content_bottom - map_y)
+    continuity_height = min(
+      145.0,
+      max(100.0, available_below_video * 0.32),
+    )
+    map_height = max(
+      150.0,
+      available_below_video - continuity_height - 8.0,
+    )
+    map_rect = self.rl.Rectangle(
+      12.0,
+      map_y,
+      content_width,
+      map_height,
+    )
+    continuity_rect = self.rl.Rectangle(
+      12.0,
+      map_rect.y + map_rect.height + 8.0,
+      content_width,
+      max(
+        70.0,
+        content_bottom - map_rect.y - map_rect.height - 8.0,
+      ),
+    )
+    return timeline, panel_rect, video_rect, map_rect, continuity_rect
 
   def _draw_timeline(self, rect: Any) -> None:
     rl = self.rl
@@ -2281,31 +2480,15 @@ class SimulatorUI:
     rl = self.rl
     width = rl.get_screen_width()
     height = rl.get_screen_height()
-    timeline = self._timeline_rect(width, height)
-    panel_rect = self._panel_rect(width, timeline)
-    panel_width = panel_rect.width
-    content_width = float(width) - panel_width - 34.0
-    content_bottom = timeline.y - 47.0
-    video_height = max(250.0, content_bottom * 0.52)
-    video_rect = rl.Rectangle(12.0, 12.0, content_width, video_height)
-    map_y = video_rect.y + video_rect.height + 8.0
-    available_below_video = max(220.0, content_bottom - map_y)
-    continuity_height = min(145.0, max(100.0, available_below_video * 0.32))
-    map_height = max(
-      150.0,
-      available_below_video - continuity_height - 8.0,
-    )
-    map_rect = rl.Rectangle(
-      12.0,
-      map_y,
-      content_width,
-      map_height,
-    )
-    continuity_rect = rl.Rectangle(
-      12.0,
-      map_rect.y + map_rect.height + 8.0,
-      content_width,
-      max(70.0, content_bottom - map_rect.y - map_rect.height - 8.0),
+    (
+      timeline,
+      panel_rect,
+      video_rect,
+      map_rect,
+      continuity_rect,
+    ) = self._layout_rects(
+      width,
+      height,
     )
     frame = self.frames[self.index]
     selection = self.selector.select(frame, self.index)
@@ -2330,6 +2513,20 @@ class SimulatorUI:
       key=lambda candidate: abs(self.times[candidate] - self.playback_time),
     )
 
+  def _seek_from_time_axis(
+    self,
+    axis: Any,
+    mouse_x: float,
+    source: str,
+  ) -> None:
+    ratio = min(max((mouse_x - axis.x) / axis.width, 0.0), 1.0)
+    self.seek(ratio * self.times[-1])
+    self.paused = True
+    self.status = (
+      f"{source} 탐색 @{self.playback_time:.2f}초; "
+      + "R을 누르면 자동정지 재설정"
+    )
+
   def _pause_for_event(self, previous_index: int, current_index: int) -> bool:
     if current_index < previous_index:
       return False
@@ -2348,7 +2545,12 @@ class SimulatorUI:
       return True
     return False
 
-  def _handle_input(self, timeline: Any, probability_slider: Any) -> None:
+  def _handle_input(
+    self,
+    timeline: Any,
+    probability_slider: Any,
+    continuity_axis: Any,
+  ) -> None:
     rl = self.rl
     if rl.is_key_pressed(rl.KEY_SPACE):
       self.paused = not self.paused
@@ -2439,16 +2641,21 @@ class SimulatorUI:
     ):
       self.probability_dragging = False
       slider_interaction = True
-      self._apply_probability(self.pending_probability)
-    if (
+      self._request_probability(self.pending_probability)
+    timeline_clicked = (
       not slider_interaction
       and rl.is_mouse_button_pressed(rl.MOUSE_BUTTON_LEFT)
       and rl.check_collision_point_rec(mouse, timeline)
-    ):
-      ratio = min(max((mouse.x - timeline.x) / timeline.width, 0.0), 1.0)
-      self.seek(ratio * self.times[-1])
-      self.paused = True
-      self.status = f"수동 탐색 @{self.playback_time:.2f}초; R을 누르면 자동정지 재설정"
+    )
+    continuity_clicked = (
+      not slider_interaction
+      and rl.is_mouse_button_pressed(rl.MOUSE_BUTTON_LEFT)
+      and rl.check_collision_point_rec(mouse, continuity_axis)
+    )
+    if timeline_clicked or continuity_clicked:
+      axis = continuity_axis if continuity_clicked else timeline
+      source = "L1/L2 그래프" if continuity_clicked else "seek bar"
+      self._seek_from_time_axis(axis, mouse.x, source)
 
   def _label(self, expected: str) -> None:
     frame = self.frames[self.index]
@@ -2514,12 +2721,24 @@ class SimulatorUI:
               break
             self.paused = True
             self.status = "로그 끝: Esc로 닫기 또는 R로 다시 재생"
-        width = rl.get_screen_width()
-        timeline = self._timeline_rect(width, rl.get_screen_height())
-        panel = self._panel_rect(width, timeline)
+        (
+          timeline,
+          panel,
+          _,
+          _,
+          continuity,
+        ) = self._layout_rects(
+          rl.get_screen_width(),
+          rl.get_screen_height(),
+        )
         probability_slider = self._probability_slider_rect(panel)
+        continuity_axis = self._continuity_time_axis_rect(continuity)
         if screenshot is None:
-          self._handle_input(timeline, probability_slider)
+          self._handle_input(
+            timeline,
+            probability_slider,
+            continuity_axis,
+          )
         rl.begin_drawing()
         self._draw_frame()
         rl.end_drawing()
