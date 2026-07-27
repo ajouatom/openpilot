@@ -34,6 +34,20 @@ class TestManager:
   def test_duplicate_procs(self):
     assert len(procs) == len(managed_processes), "Duplicate process names"
 
+  def test_radard_modes_are_mutually_exclusive(self):
+    CP = car.CarParams.new_message()
+    params = Params()
+
+    params.put("RadarMotionMode", "0")
+    assert managed_processes["radard"].should_run(True, params, CP)
+    assert not managed_processes["radard_dpath"].should_run(True, params, CP)
+
+    params.put("RadarMotionMode", "1")
+    assert not managed_processes["radard"].should_run(True, params, CP)
+    assert managed_processes["radard_dpath"].should_run(True, params, CP)
+    assert not managed_processes["radard"].should_run(False, params, CP)
+    assert not managed_processes["radard_dpath"].should_run(False, params, CP)
+
   def test_carrot_navi_is_permanent_7714_owner(self):
     process = managed_processes["carrot_navi"]
     CP = car.CarParams.new_message()

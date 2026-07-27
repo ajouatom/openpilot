@@ -400,7 +400,7 @@
           "params": [
             "EnableRadarTracks",
             "EnableCornerRadar",
-            "RadarLeadModelMode"
+            "RadarMotionMode"
           ]
         },
         {
@@ -2533,20 +2533,22 @@
       "unit": 1
     },
     {
-      "group": "레이더",
-      "name": "RadarLeadModelMode",
-      "title": "레이더 리드 방식(0)",
-      "descr": "0: 기존 방식\n1: 독립 하이브리드 (vision-radar leadOne + 모델 cut-in/external, 차량 재시동 또는 기기 재부팅 후 적용)",
+      "group": "레이더설정",
+      "name": "RadarMotionMode",
+      "title": "Radar Motion 모드",
+      "descr": "기존 radard 대신 독립 프로세스가 front/SCC-vision leadOne을 먼저 계산하고, dPath 물리 이력으로 확정한 끼어들기 차량만 leadTwo로 사용합니다. 검증된 차량에서만 켜세요.",
       "egroup": "RADAR",
-      "etitle": "Radar lead method(0)",
-      "edescr": "0: Legacy\n1: Independent hybrid (vision-radar leadOne + model cut-in/external; applied after an ignition cycle or device reboot)",
-      "cgroup": "RADAR",
-      "ctitle": "Radar lead method(0)",
-      "cdescr": "0: 传统方式\n1: 模型方式（车辆重新启动或设备重启后生效）",
+      "etitle": "Radar Motion Mode",
+      "edescr": "Replaces conventional radard with an independent process that calculates front/SCC-vision leadOne first and uses only cut-ins confirmed from physical dPath history as leadTwo. Enable only on a validated vehicle.",
+      "cgroup": "雷达设置",
+      "ctitle": "dPath 物理雷达处理",
+      "cdescr": "使用独立进程替代传统 radard，先计算 front/SCC-vision leadOne，再仅将通过 dPath 物理历史确认的切入车辆用作 leadTwo。仅在已验证车辆上启用。",
       "min": 0,
       "max": 1,
       "default": 0,
-      "unit": 1
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "시작",

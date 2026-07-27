@@ -1,0 +1,4663 @@
+{
+  "version": 1,
+  "labels": [
+    {
+      "id": "manual-00000218-000p50-corner-1000",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "time_s": 0.5,
+      "window": [
+        0.0,
+        1.25
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-013p55-corner-1009",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "time_s": 13.55,
+      "window": [
+        12.8,
+        14.3
+      ],
+      "track_id": 1009,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-024p00-corner-1018",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "time_s": 24.0,
+      "window": [
+        23.25,
+        24.75
+      ],
+      "track_id": 1018,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-027p20-corner-1022",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "time_s": 27.2,
+      "window": [
+        26.45,
+        27.95
+      ],
+      "track_id": 1022,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-034p50-corner-1024",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "time_s": 34.5,
+      "window": [
+        33.75,
+        35.25
+      ],
+      "track_id": 1024,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-042p15-corner-1036",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "time_s": 42.15,
+      "window": [
+        41.4,
+        42.9
+      ],
+      "track_id": 1036,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-046p40-corner-1040",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "time_s": 46.4,
+      "window": [
+        45.65,
+        47.15
+      ],
+      "track_id": 1040,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-051p85-corner-1047",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "time_s": 51.85,
+      "window": [
+        51.1,
+        52.6
+      ],
+      "track_id": 1047,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-056p40-corner-1052",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--2/rlog.zst",
+      "source": "corner",
+      "time_s": 56.4,
+      "window": [
+        55.65,
+        57.15
+      ],
+      "track_id": 1052,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-000p20-corner-1000",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--6/rlog.zst",
+      "source": "corner",
+      "time_s": 0.2,
+      "window": [
+        0.0,
+        0.95
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-004p05-corner-1010",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--6/rlog.zst",
+      "source": "corner",
+      "time_s": 4.05,
+      "window": [
+        3.3,
+        4.8
+      ],
+      "track_id": 1010,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-017p40-front-0",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--6/rlog.zst",
+      "source": "front",
+      "time_s": 17.4,
+      "window": [
+        16.65,
+        18.15
+      ],
+      "track_id": 0,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-031p05-corner-1041",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--6/rlog.zst",
+      "source": "corner",
+      "time_s": 31.05,
+      "window": [
+        30.3,
+        31.8
+      ],
+      "track_id": 1041,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-038p30-corner-1050",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--6/rlog.zst",
+      "source": "corner",
+      "time_s": 38.3,
+      "window": [
+        37.55,
+        39.05
+      ],
+      "track_id": 1050,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000218-049p55-corner-1069",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--6/rlog.zst",
+      "source": "corner",
+      "time_s": 49.55,
+      "window": [
+        48.8,
+        50.3
+      ],
+      "track_id": 1069,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006d-028p60-corner-1009",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "0000006d--50a44bb074--1/rlog.zst",
+      "source": "corner",
+      "time_s": 28.6,
+      "window": [
+        27.85,
+        29.35
+      ],
+      "track_id": 1009,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-000p25-corner-1001",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "corner",
+      "time_s": 0.25,
+      "window": [
+        0.0,
+        1.0
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-000p35-corner-1007",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "corner",
+      "time_s": 0.35,
+      "window": [
+        0.0,
+        1.1
+      ],
+      "track_id": 1007,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-000p70-corner-1002",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "corner",
+      "time_s": 0.7,
+      "window": [
+        0.0,
+        1.45
+      ],
+      "track_id": 1002,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-005p35-corner-1001",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "corner",
+      "time_s": 5.35,
+      "window": [
+        4.6,
+        6.1
+      ],
+      "track_id": 1001,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-007p30-corner-1033",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "corner",
+      "time_s": 7.3,
+      "window": [
+        6.55,
+        8.05
+      ],
+      "track_id": 1033,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-030p10-front-36",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "front",
+      "time_s": 30.1,
+      "window": [
+        29.35,
+        30.85
+      ],
+      "track_id": 36,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-030p20-front-59",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "front",
+      "time_s": 30.2,
+      "window": [
+        29.45,
+        30.95
+      ],
+      "track_id": 59,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-040p40-front-32",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "front",
+      "time_s": 40.4,
+      "window": [
+        39.65,
+        41.15
+      ],
+      "track_id": 32,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-040p80-front-39",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "front",
+      "time_s": 40.8,
+      "window": [
+        40.05,
+        41.55
+      ],
+      "track_id": 39,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-040p95-front-48",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "front",
+      "time_s": 40.95,
+      "window": [
+        40.2,
+        41.7
+      ],
+      "track_id": 48,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-041p00-front-41",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "front",
+      "time_s": 41.0,
+      "window": [
+        40.25,
+        41.75
+      ],
+      "track_id": 41,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-041p40-front-46",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "front",
+      "time_s": 41.4,
+      "window": [
+        40.65,
+        42.15
+      ],
+      "track_id": 46,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000b1-051p15-corner-1073",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000b1--b241e88f9b--14/rlog.zst",
+      "source": "corner",
+      "time_s": 51.15,
+      "window": [
+        50.4,
+        51.9
+      ],
+      "track_id": 1073,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-001p60-corner-1002",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 1.6,
+      "window": [
+        0.8500000000000001,
+        2.35
+      ],
+      "track_id": 1002,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-002p05-corner-1003",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 2.05,
+      "window": [
+        1.2999999999999998,
+        2.8
+      ],
+      "track_id": 1003,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-002p20-front-61",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "front",
+      "time_s": 2.2,
+      "window": [
+        1.4500000000000002,
+        2.95
+      ],
+      "track_id": 61,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-002p40-corner-1003",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 2.4,
+      "window": [
+        1.65,
+        3.15
+      ],
+      "track_id": 1003,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-002p60-corner-1003",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 2.6,
+      "window": [
+        1.85,
+        3.35
+      ],
+      "track_id": 1003,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-004p25-corner-1006",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 4.25,
+      "window": [
+        3.5,
+        5.0
+      ],
+      "track_id": 1006,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-005p85-corner-1005",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 5.85,
+      "window": [
+        5.1,
+        6.6
+      ],
+      "track_id": 1005,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-006p25-corner-1003",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 6.25,
+      "window": [
+        5.5,
+        7.0
+      ],
+      "track_id": 1003,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-007p25-corner-1005",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 7.25,
+      "window": [
+        6.5,
+        8.3
+      ],
+      "track_id": 1005,
+      "track_ids": [
+        58,
+        1005
+      ],
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-010p20-corner-1011",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 10.2,
+      "window": [
+        9.45,
+        10.95
+      ],
+      "track_id": 1011,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-013p00-corner-1005",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 13.0,
+      "window": [
+        12.25,
+        13.75
+      ],
+      "track_id": 1005,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-014p15-corner-1005",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 14.15,
+      "window": [
+        13.4,
+        14.9
+      ],
+      "track_id": 1005,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-014p40-corner-1013",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 14.4,
+      "window": [
+        13.65,
+        15.15
+      ],
+      "track_id": 1013,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-053p45-corner-1043",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 53.45,
+      "window": [
+        52.7,
+        54.2
+      ],
+      "track_id": 1043,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-054p50-corner-1044",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--15/rlog.zst",
+      "source": "corner",
+      "time_s": 54.5,
+      "window": [
+        53.75,
+        55.25
+      ],
+      "track_id": 1044,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-015p75-corner-1000",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--3/rlog.zst",
+      "source": "corner",
+      "time_s": 15.75,
+      "window": [
+        15.5,
+        17.25
+      ],
+      "track_id": 1000,
+      "track_ids": [
+        62,
+        1000
+      ],
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-017p30-corner-1001",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--3/rlog.zst",
+      "source": "corner",
+      "time_s": 17.3,
+      "window": [
+        16.55,
+        18.05
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-019p35-corner-1001",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--3/rlog.zst",
+      "source": "corner",
+      "time_s": 19.35,
+      "window": [
+        18.6,
+        20.1
+      ],
+      "track_id": 1001,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-025p75-corner-1001",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--3/rlog.zst",
+      "source": "corner",
+      "time_s": 25.75,
+      "window": [
+        25.0,
+        26.5
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000000cf-025p80-corner-1001",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "000000cf--04b9851018--3/rlog.zst",
+      "source": "corner",
+      "time_s": 25.8,
+      "window": [
+        25.05,
+        26.55
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000aa5-000p15-front-46",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000aa5--26e26ea9a8--3/rlog.zst",
+      "source": "front",
+      "time_s": 0.15,
+      "window": [
+        0.0,
+        0.9
+      ],
+      "track_id": 46,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000aa5-000p20-front-47",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000aa5--26e26ea9a8--3/rlog.zst",
+      "source": "front",
+      "time_s": 0.2,
+      "window": [
+        0.0,
+        0.95
+      ],
+      "track_id": 47,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000aa5-000p25-front-34",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000aa5--26e26ea9a8--3/rlog.zst",
+      "source": "front",
+      "time_s": 0.25,
+      "window": [
+        0.0,
+        1.0
+      ],
+      "track_id": 34,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000aa5-001p90-front-50",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000aa5--26e26ea9a8--3/rlog.zst",
+      "source": "front",
+      "time_s": 1.9,
+      "window": [
+        1.15,
+        2.65
+      ],
+      "track_id": 50,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000aa5-002p45-front-36",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000aa5--26e26ea9a8--3/rlog.zst",
+      "source": "front",
+      "time_s": 2.45,
+      "window": [
+        1.7000000000000002,
+        3.2
+      ],
+      "track_id": 36,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000aa5-002p95-front-35",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000aa5--26e26ea9a8--3/rlog.zst",
+      "source": "front",
+      "time_s": 2.95,
+      "window": [
+        2.2,
+        3.7
+      ],
+      "track_id": 35,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000aa5-004p75-front-44",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000aa5--26e26ea9a8--3/rlog.zst",
+      "source": "front",
+      "time_s": 4.75,
+      "window": [
+        4.0,
+        5.5
+      ],
+      "track_id": 44,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000aa5-006p05-front-54",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000aa5--26e26ea9a8--3/rlog.zst",
+      "source": "front",
+      "time_s": 6.05,
+      "window": [
+        5.3,
+        6.8
+      ],
+      "track_id": 54,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000aa5-006p35-front-57",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000aa5--26e26ea9a8--3/rlog.zst",
+      "source": "front",
+      "time_s": 6.35,
+      "window": [
+        5.6,
+        7.1
+      ],
+      "track_id": 57,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cd0-000p15-front-37",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "front",
+      "time_s": 0.15,
+      "window": [
+        0.0,
+        0.9
+      ],
+      "track_id": 37,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cd0-000p55-front-46",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "front",
+      "time_s": 0.55,
+      "window": [
+        0.0,
+        1.3
+      ],
+      "track_id": 46,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cd0-001p50-front-63",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "front",
+      "time_s": 1.5,
+      "window": [
+        0.75,
+        2.25
+      ],
+      "track_id": 63,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cd0-001p60-front-60",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "front",
+      "time_s": 1.6,
+      "window": [
+        0.8500000000000001,
+        2.35
+      ],
+      "track_id": 60,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cd0-002p05-corner-1000",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "corner",
+      "time_s": 2.05,
+      "window": [
+        1.2999999999999998,
+        2.8
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cd0-015p35-front-39",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "front",
+      "time_s": 15.35,
+      "window": [
+        14.6,
+        16.1
+      ],
+      "track_id": 39,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cd0-015p90-front-43",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "front",
+      "time_s": 15.9,
+      "window": [
+        15.15,
+        16.65
+      ],
+      "track_id": 43,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cd0-016p50-corner-1002",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "corner",
+      "time_s": 16.5,
+      "window": [
+        15.75,
+        17.25
+      ],
+      "track_id": 1002,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cd0-017p20-corner-1002",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd0--3956077d94--1/rlog.zst",
+      "source": "corner",
+      "time_s": 17.2,
+      "window": [
+        16.45,
+        17.95
+      ],
+      "track_id": 1002,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cd2-056p20-corner-1000",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cd2--ea0776cc10--4/rlog.zst",
+      "source": "corner",
+      "time_s": 56.2,
+      "window": [
+        55.45,
+        56.95
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cfb-017p75-corner-1015",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cfb--69588de3d7--6/rlog.zst",
+      "source": "corner",
+      "time_s": 17.75,
+      "window": [
+        17.0,
+        18.5
+      ],
+      "track_id": 1015,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cfb-022p85-corner-1017",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cfb--69588de3d7--6/rlog.zst",
+      "source": "corner",
+      "time_s": 22.85,
+      "window": [
+        22.1,
+        23.6
+      ],
+      "track_id": 1017,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cfb-025p50-corner-1025",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cfb--69588de3d7--6/rlog.zst",
+      "source": "corner",
+      "time_s": 25.5,
+      "window": [
+        24.75,
+        26.25
+      ],
+      "track_id": 1025,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000cfb-036p80-corner-1028",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000cfb--69588de3d7--6/rlog.zst",
+      "source": "corner",
+      "time_s": 36.8,
+      "window": [
+        36.05,
+        37.55
+      ],
+      "track_id": 1028,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000018f-000p25-corner-1000",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "0000018f--2bb73a4538--2/rlog.zst",
+      "source": "corner",
+      "time_s": 0.25,
+      "window": [
+        0.0,
+        1.0
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000018f-010p10-corner-1001",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "0000018f--2bb73a4538--2/rlog.zst",
+      "source": "corner",
+      "time_s": 10.1,
+      "window": [
+        9.35,
+        10.85
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000018f-019p15-front-41",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "0000018f--2bb73a4538--2/rlog.zst",
+      "source": "front",
+      "time_s": 19.15,
+      "window": [
+        18.4,
+        19.9
+      ],
+      "track_id": 41,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000018f-054p70-corner-1164",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "0000018f--2bb73a4538--2/rlog.zst",
+      "source": "corner",
+      "time_s": 54.7,
+      "window": [
+        53.95,
+        55.45
+      ],
+      "track_id": 1164,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000192-020p00-corner-1019",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000192--b0f1546431--7/rlog.zst",
+      "source": "corner",
+      "time_s": 20.0,
+      "window": [
+        19.25,
+        20.75
+      ],
+      "track_id": 1019,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000192-024p15-corner-1000",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000192--b0f1546431--7/rlog.zst",
+      "source": "corner",
+      "time_s": 24.15,
+      "window": [
+        23.4,
+        24.9
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000192-032p30-corner-1036",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000192--b0f1546431--7/rlog.zst",
+      "source": "corner",
+      "time_s": 32.3,
+      "window": [
+        31.549999999999997,
+        33.05
+      ],
+      "track_id": 1036,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000192-040p30-corner-1040",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000192--b0f1546431--7/rlog.zst",
+      "source": "corner",
+      "time_s": 40.3,
+      "window": [
+        39.55,
+        41.05
+      ],
+      "track_id": 1040,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000192-046p90-corner-1041",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000192--b0f1546431--7/rlog.zst",
+      "source": "corner",
+      "time_s": 46.9,
+      "window": [
+        46.15,
+        47.65
+      ],
+      "track_id": 1041,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000192-047p20-corner-1049",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000192--b0f1546431--7/rlog.zst",
+      "source": "corner",
+      "time_s": 47.2,
+      "window": [
+        46.45,
+        47.95
+      ],
+      "track_id": 1049,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001a5-002p05-corner-1001",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a5--ba129171a3--22/rlog.zst",
+      "source": "corner",
+      "time_s": 2.05,
+      "window": [
+        1.2999999999999998,
+        2.8
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001a5-027p40-corner-1014",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a5--ba129171a3--22/rlog.zst",
+      "source": "corner",
+      "time_s": 27.4,
+      "window": [
+        26.65,
+        28.15
+      ],
+      "track_id": 1014,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001a5-057p20-corner-1034",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a5--ba129171a3--22/rlog.zst",
+      "source": "corner",
+      "time_s": 57.2,
+      "window": [
+        56.45,
+        57.95
+      ],
+      "track_id": 1034,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001a7-038p65-corner-1044",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a7--54660d9df7--2/rlog.zst",
+      "source": "corner",
+      "time_s": 38.65,
+      "window": [
+        37.9,
+        39.4
+      ],
+      "track_id": 1044,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001a7-000p25-corner-1001",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a7--54660d9df7--22/rlog.zst",
+      "source": "corner",
+      "time_s": 0.25,
+      "window": [
+        0.0,
+        1.0
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001a7-001p60-corner-1000",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a7--54660d9df7--22/rlog.zst",
+      "source": "corner",
+      "time_s": 1.6,
+      "window": [
+        0.8500000000000001,
+        2.35
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001a7-003p25-corner-1004",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a7--54660d9df7--22/rlog.zst",
+      "source": "corner",
+      "time_s": 3.25,
+      "window": [
+        2.5,
+        4.0
+      ],
+      "track_id": 1004,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001a7-036p20-corner-1068",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a7--54660d9df7--22/rlog.zst",
+      "source": "corner",
+      "time_s": 36.2,
+      "window": [
+        35.45,
+        36.95
+      ],
+      "track_id": 1068,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001a7-036p75-corner-1071",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a7--54660d9df7--22/rlog.zst",
+      "source": "corner",
+      "time_s": 36.75,
+      "window": [
+        36.0,
+        37.5
+      ],
+      "track_id": 1071,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001a7-041p60-corner-1084",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a7--54660d9df7--22/rlog.zst",
+      "source": "corner",
+      "time_s": 41.6,
+      "window": [
+        40.85,
+        42.35
+      ],
+      "track_id": 1084,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-001p30-corner-1003",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 1.3,
+      "window": [
+        0.55,
+        2.05
+      ],
+      "track_id": 1003,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-001p35-corner-1001",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 1.35,
+      "window": [
+        0.6000000000000001,
+        2.1
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-001p45-corner-1002",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 1.45,
+      "window": [
+        0.7,
+        2.2
+      ],
+      "track_id": 1002,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-003p15-corner-1005",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 3.15,
+      "window": [
+        2.4,
+        3.9
+      ],
+      "track_id": 1005,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-007p40-corner-1009",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 7.4,
+      "window": [
+        6.65,
+        8.15
+      ],
+      "track_id": 1009,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-007p70-corner-1010",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 7.7,
+      "window": [
+        6.95,
+        8.45
+      ],
+      "track_id": 1010,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-010p20-corner-1017",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 10.2,
+      "window": [
+        9.45,
+        10.95
+      ],
+      "track_id": 1017,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-014p90-corner-1024",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 14.9,
+      "window": [
+        14.15,
+        15.65
+      ],
+      "track_id": 1024,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-016p45-corner-1027",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 16.45,
+      "window": [
+        15.7,
+        17.2
+      ],
+      "track_id": 1027,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-023p50-corner-1032",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 23.5,
+      "window": [
+        22.75,
+        24.25
+      ],
+      "track_id": 1032,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-036p00-corner-1034",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 36.0,
+      "window": [
+        35.25,
+        36.75
+      ],
+      "track_id": 1034,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-037p50-corner-1037",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 37.5,
+      "window": [
+        36.75,
+        38.25
+      ],
+      "track_id": 1037,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-041p20-corner-1041",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--2/rlog.zst",
+      "source": "corner",
+      "time_s": 41.2,
+      "window": [
+        40.45,
+        41.95
+      ],
+      "track_id": 1041,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-023p80-corner-1008",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--26/rlog.zst",
+      "source": "corner",
+      "time_s": 23.8,
+      "window": [
+        23.05,
+        24.55
+      ],
+      "track_id": 1008,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-032p25-corner-1041",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--26/rlog.zst",
+      "source": "corner",
+      "time_s": 32.25,
+      "window": [
+        31.5,
+        33.0
+      ],
+      "track_id": 1041,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-038p20-corner-1054",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--26/rlog.zst",
+      "source": "corner",
+      "time_s": 38.2,
+      "window": [
+        37.45,
+        38.95
+      ],
+      "track_id": 1054,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-043p85-corner-1055",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--26/rlog.zst",
+      "source": "corner",
+      "time_s": 43.85,
+      "window": [
+        43.1,
+        44.6
+      ],
+      "track_id": 1055,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-049p80-corner-1073",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--26/rlog.zst",
+      "source": "corner",
+      "time_s": 49.8,
+      "window": [
+        49.05,
+        50.55
+      ],
+      "track_id": 1073,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001b9-050p20-corner-1076",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--26/rlog.zst",
+      "source": "corner",
+      "time_s": 50.2,
+      "window": [
+        49.45,
+        50.95
+      ],
+      "track_id": 1076,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-000p35-corner-1002",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 0.35,
+      "window": [
+        0.0,
+        1.1
+      ],
+      "track_id": 1002,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-004p00-corner-1000",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 4.0,
+      "window": [
+        3.25,
+        4.75
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-010p75-corner-1005",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 10.75,
+      "window": [
+        10.0,
+        11.5
+      ],
+      "track_id": 1005,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-014p20-corner-1007",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 14.2,
+      "window": [
+        13.45,
+        14.95
+      ],
+      "track_id": 1007,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-017p00-corner-1001",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 17.0,
+      "window": [
+        16.25,
+        17.75
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-019p35-corner-1009",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 19.35,
+      "window": [
+        18.6,
+        20.1
+      ],
+      "track_id": 1009,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-024p50-corner-1014",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 24.5,
+      "window": [
+        23.75,
+        25.25
+      ],
+      "track_id": 1014,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-024p80-corner-1015",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 24.8,
+      "window": [
+        24.05,
+        25.55
+      ],
+      "track_id": 1015,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-025p20-corner-1012",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 25.2,
+      "window": [
+        24.45,
+        25.95
+      ],
+      "track_id": 1012,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-028p70-corner-1018",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 28.7,
+      "window": [
+        27.95,
+        29.45
+      ],
+      "track_id": 1018,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-032p35-corner-1021",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 32.35,
+      "window": [
+        31.6,
+        33.1
+      ],
+      "track_id": 1021,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-043p20-corner-1033",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 43.2,
+      "window": [
+        42.45,
+        43.95
+      ],
+      "track_id": 1033,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-043p40-corner-1034",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 43.4,
+      "window": [
+        42.65,
+        44.15
+      ],
+      "track_id": 1034,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-050p00-corner-1041",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 50.0,
+      "window": [
+        49.25,
+        50.75
+      ],
+      "track_id": 1041,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-054p85-corner-1063",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 54.85,
+      "window": [
+        54.1,
+        55.6
+      ],
+      "track_id": 1063,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-057p35-corner-1073",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 57.35,
+      "window": [
+        56.6,
+        58.1
+      ],
+      "track_id": 1073,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-059p70-corner-1076",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 59.7,
+      "window": [
+        58.95,
+        60.45
+      ],
+      "track_id": 1076,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001c1-059p90-corner-1077",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001c1--f5225bd6f1--25/rlog.zst",
+      "source": "corner",
+      "time_s": 59.9,
+      "window": [
+        59.15,
+        60.65
+      ],
+      "track_id": 1077,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001ce-000p25-corner-1000",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001ce--d184d0265e--11/rlog.zst",
+      "source": "corner",
+      "time_s": 0.25,
+      "window": [
+        0.0,
+        1.0
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001ce-014p70-corner-1000",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001ce--d184d0265e--11/rlog.zst",
+      "source": "corner",
+      "time_s": 14.7,
+      "window": [
+        13.95,
+        15.45
+      ],
+      "track_id": 1000,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001ce-000p45-corner-1006",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001ce--d184d0265e--26/rlog.zst",
+      "source": "corner",
+      "time_s": 0.45,
+      "window": [
+        0.0,
+        1.2
+      ],
+      "track_id": 1006,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001ce-002p85-corner-1011",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001ce--d184d0265e--26/rlog.zst",
+      "source": "corner",
+      "time_s": 2.85,
+      "window": [
+        2.1,
+        3.6
+      ],
+      "track_id": 1011,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001ce-005p20-corner-1025",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001ce--d184d0265e--26/rlog.zst",
+      "source": "corner",
+      "time_s": 5.2,
+      "window": [
+        4.45,
+        5.95
+      ],
+      "track_id": 1025,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001ce-030p40-corner-1087",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001ce--d184d0265e--26/rlog.zst",
+      "source": "corner",
+      "time_s": 30.4,
+      "window": [
+        29.65,
+        31.15
+      ],
+      "track_id": 1087,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001d6-000p25-corner-1000",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001d6--b3030f2f2e--28/rlog.zst",
+      "source": "corner",
+      "time_s": 0.25,
+      "window": [
+        0.0,
+        1.0
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001d6-012p60-corner-1001",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001d6--b3030f2f2e--28/rlog.zst",
+      "source": "corner",
+      "time_s": 12.6,
+      "window": [
+        11.85,
+        13.35
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000001d6-035p80-corner-1016",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001d6--b3030f2f2e--28/rlog.zst",
+      "source": "corner",
+      "time_s": 35.8,
+      "window": [
+        35.05,
+        36.55
+      ],
+      "track_id": 1016,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-000p15-front-33",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 0.15,
+      "window": [
+        0.0,
+        0.9
+      ],
+      "track_id": 33,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-001p30-front-58",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 1.3,
+      "window": [
+        0.55,
+        2.05
+      ],
+      "track_id": 58,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-008p60-front-49",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 8.6,
+      "window": [
+        7.85,
+        9.35
+      ],
+      "track_id": 49,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-009p20-front-46",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 9.2,
+      "window": [
+        8.45,
+        9.95
+      ],
+      "track_id": 46,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-011p15-front-32",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 11.15,
+      "window": [
+        10.4,
+        11.9
+      ],
+      "track_id": 32,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-012p60-front-39",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 12.6,
+      "window": [
+        11.85,
+        13.35
+      ],
+      "track_id": 39,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-020p40-front-51",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 20.4,
+      "window": [
+        19.65,
+        21.15
+      ],
+      "track_id": 51,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-024p30-front-34",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 24.3,
+      "window": [
+        23.55,
+        25.05
+      ],
+      "track_id": 34,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-031p30-front-50",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 31.3,
+      "window": [
+        30.55,
+        32.05
+      ],
+      "track_id": 50,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-032p85-front-62",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 32.85,
+      "window": [
+        32.1,
+        33.6
+      ],
+      "track_id": 62,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-033p40-front-42",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 33.4,
+      "window": [
+        32.65,
+        34.15
+      ],
+      "track_id": 42,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-035p15-front-56",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 35.15,
+      "window": [
+        34.4,
+        35.9
+      ],
+      "track_id": 56,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-037p65-front-62",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 37.65,
+      "window": [
+        36.9,
+        38.4
+      ],
+      "track_id": 62,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-037p80-front-49",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 37.8,
+      "window": [
+        37.05,
+        38.55
+      ],
+      "track_id": 49,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-038p35-front-38",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 38.35,
+      "window": [
+        37.6,
+        39.1
+      ],
+      "track_id": 38,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-038p70-front-46",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 38.7,
+      "window": [
+        37.95,
+        39.45
+      ],
+      "track_id": 46,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-040p10-front-55",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 40.1,
+      "window": [
+        39.35,
+        40.85
+      ],
+      "track_id": 55,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000bef-041p70-front-57",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "time_s": 41.7,
+      "window": [
+        40.95,
+        42.45
+      ],
+      "track_id": 57,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-000p15-front-37",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 0.15,
+      "window": [
+        0.0,
+        0.9
+      ],
+      "track_id": 37,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-000p45-front-52",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 0.45,
+      "window": [
+        0.0,
+        1.2
+      ],
+      "track_id": 52,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-001p05-front-56",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 1.05,
+      "window": [
+        0.30000000000000004,
+        1.8
+      ],
+      "track_id": 56,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-001p20-front-51",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 1.2,
+      "window": [
+        0.44999999999999996,
+        1.95
+      ],
+      "track_id": 51,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-001p45-front-32",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 1.45,
+      "window": [
+        0.7,
+        2.2
+      ],
+      "track_id": 32,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-002p05-front-35",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 2.05,
+      "window": [
+        1.2999999999999998,
+        2.8
+      ],
+      "track_id": 35,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-017p35-front-40",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 17.35,
+      "window": [
+        16.6,
+        18.1
+      ],
+      "track_id": 40,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-017p70-front-48",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 17.7,
+      "window": [
+        16.95,
+        18.45
+      ],
+      "track_id": 48,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-018p35-front-60",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 18.35,
+      "window": [
+        17.6,
+        19.1
+      ],
+      "track_id": 60,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-019p15-front-46",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 19.15,
+      "window": [
+        18.4,
+        19.9
+      ],
+      "track_id": 46,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-019p50-front-45",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 19.5,
+      "window": [
+        18.75,
+        20.25
+      ],
+      "track_id": 45,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-024p95-front-47",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 24.95,
+      "window": [
+        24.2,
+        25.7
+      ],
+      "track_id": 47,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-029p60-front-58",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 29.6,
+      "window": [
+        28.85,
+        30.35
+      ],
+      "track_id": 58,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-029p80-front-40",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 29.8,
+      "window": [
+        29.05,
+        30.55
+      ],
+      "track_id": 40,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-031p50-front-46",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 31.5,
+      "window": [
+        30.75,
+        32.25
+      ],
+      "track_id": 46,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-032p65-front-61",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 32.65,
+      "window": [
+        31.9,
+        33.4
+      ],
+      "track_id": 61,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-032p75-front-63",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 32.75,
+      "window": [
+        32.0,
+        33.5
+      ],
+      "track_id": 63,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-033p15-front-62",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 33.15,
+      "window": [
+        32.4,
+        33.9
+      ],
+      "track_id": 62,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-058p05-front-59",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--8/rlog.zst",
+      "source": "front",
+      "time_s": 58.05,
+      "window": [
+        57.3,
+        58.8
+      ],
+      "track_id": 59,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-000p15-front-44",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 0.15,
+      "window": [
+        0.0,
+        0.9
+      ],
+      "track_id": 44,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-000p20-front-41",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 0.2,
+      "window": [
+        0.0,
+        0.95
+      ],
+      "track_id": 41,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-000p30-front-34",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 0.3,
+      "window": [
+        0.0,
+        1.05
+      ],
+      "track_id": 34,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-000p35-front-39",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 0.35,
+      "window": [
+        0.0,
+        1.1
+      ],
+      "track_id": 39,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-000p60-front-51",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 0.6,
+      "window": [
+        0.0,
+        1.35
+      ],
+      "track_id": 51,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-001p10-front-37",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 1.1,
+      "window": [
+        0.3500000000000001,
+        1.85
+      ],
+      "track_id": 37,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-001p40-front-49",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 1.4,
+      "window": [
+        0.6499999999999999,
+        2.15
+      ],
+      "track_id": 49,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-004p15-front-35",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 4.15,
+      "window": [
+        3.4000000000000004,
+        4.9
+      ],
+      "track_id": 35,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-006p00-front-46",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 6.0,
+      "window": [
+        5.25,
+        6.75
+      ],
+      "track_id": 46,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-006p20-front-56",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 6.2,
+      "window": [
+        5.45,
+        6.95
+      ],
+      "track_id": 56,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-006p90-front-51",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 6.9,
+      "window": [
+        6.15,
+        7.65
+      ],
+      "track_id": 51,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-007p95-front-54",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 7.95,
+      "window": [
+        7.2,
+        8.7
+      ],
+      "track_id": 54,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-008p70-front-40",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 8.7,
+      "window": [
+        7.949999999999999,
+        9.45
+      ],
+      "track_id": 40,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-009p25-front-50",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 9.25,
+      "window": [
+        8.5,
+        10.0
+      ],
+      "track_id": 50,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-012p10-front-52",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 12.1,
+      "window": [
+        11.35,
+        12.85
+      ],
+      "track_id": 52,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-013p65-front-58",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 13.65,
+      "window": [
+        12.9,
+        14.4
+      ],
+      "track_id": 58,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-024p40-front-61",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 24.4,
+      "window": [
+        23.65,
+        25.15
+      ],
+      "track_id": 61,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-024p85-front-40",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 24.85,
+      "window": [
+        24.1,
+        25.6
+      ],
+      "track_id": 40,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-025p30-front-59",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 25.3,
+      "window": [
+        24.55,
+        26.05
+      ],
+      "track_id": 59,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000c21-033p40-front-63",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000c21--f9485787d6--9/rlog.zst",
+      "source": "front",
+      "time_s": 33.4,
+      "window": [
+        32.65,
+        34.15
+      ],
+      "track_id": 63,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002d3-009p95-corner-1001",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002d3--74e5ed8754--6/rlog.zst",
+      "source": "corner",
+      "time_s": 9.95,
+      "window": [
+        9.2,
+        10.7
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002d3-011p65-corner-1000",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002d3--74e5ed8754--6/rlog.zst",
+      "source": "corner",
+      "time_s": 11.65,
+      "window": [
+        10.9,
+        12.4
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002d3-040p10-corner-1000",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002d3--74e5ed8754--6/rlog.zst",
+      "source": "corner",
+      "time_s": 40.1,
+      "window": [
+        39.35,
+        40.85
+      ],
+      "track_id": 1000,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002d3-040p45-corner-1018",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002d3--74e5ed8754--6/rlog.zst",
+      "source": "corner",
+      "time_s": 40.45,
+      "window": [
+        39.7,
+        41.2
+      ],
+      "track_id": 1018,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002d3-052p75-corner-1079",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002d3--74e5ed8754--6/rlog.zst",
+      "source": "corner",
+      "time_s": 52.75,
+      "window": [
+        52.0,
+        53.5
+      ],
+      "track_id": 1079,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002d3-004p60-corner-1000",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002d3--74e5ed8754--7/rlog.zst",
+      "source": "corner",
+      "time_s": 4.6,
+      "window": [
+        3.8499999999999996,
+        5.35
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002d3-007p15-corner-1001",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002d3--74e5ed8754--7/rlog.zst",
+      "source": "corner",
+      "time_s": 7.15,
+      "window": [
+        6.4,
+        7.9
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002d3-018p15-corner-1013",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002d3--74e5ed8754--7/rlog.zst",
+      "source": "corner",
+      "time_s": 18.15,
+      "window": [
+        17.4,
+        18.9
+      ],
+      "track_id": 1013,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-000p60-corner-1006",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 0.6,
+      "window": [
+        0.0,
+        1.35
+      ],
+      "track_id": 1006,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-000p75-corner-1004",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 0.75,
+      "window": [
+        0.0,
+        1.5
+      ],
+      "track_id": 1004,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-001p75-corner-1007",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 1.75,
+      "window": [
+        1.0,
+        2.5
+      ],
+      "track_id": 1007,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-004p80-corner-1013",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 4.8,
+      "window": [
+        4.05,
+        5.55
+      ],
+      "track_id": 1013,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-029p05-corner-1000",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 29.05,
+      "window": [
+        28.3,
+        29.8
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-031p10-corner-1025",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 31.1,
+      "window": [
+        30.35,
+        31.85
+      ],
+      "track_id": 1025,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-034p05-corner-1030",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 34.05,
+      "window": [
+        33.3,
+        34.8
+      ],
+      "track_id": 1030,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-039p20-corner-1042",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 39.2,
+      "window": [
+        38.45,
+        39.95
+      ],
+      "track_id": 1042,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-042p90-corner-1045",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 42.9,
+      "window": [
+        42.15,
+        43.65
+      ],
+      "track_id": 1045,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-047p55-corner-1053",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 47.55,
+      "window": [
+        46.8,
+        48.3
+      ],
+      "track_id": 1053,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-049p90-corner-1052",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 49.9,
+      "window": [
+        49.15,
+        50.65
+      ],
+      "track_id": 1052,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-050p30-corner-1055",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 50.3,
+      "window": [
+        49.55,
+        51.05
+      ],
+      "track_id": 1055,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-000002df-054p60-corner-1057",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5 d9ec903afdbac0bd",
+      "log": "000002df--aada072b63--9/rlog.zst",
+      "source": "corner",
+      "time_s": 54.6,
+      "window": [
+        53.85,
+        55.35
+      ],
+      "track_id": 1057,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-000p25-corner-1000",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 0.25,
+      "window": [
+        0.0,
+        1.0
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-000p60-corner-1005",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 0.6,
+      "window": [
+        0.0,
+        1.35
+      ],
+      "track_id": 1005,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-001p15-corner-1000",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 1.15,
+      "window": [
+        0.3999999999999999,
+        1.9
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-001p20-corner-1004",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 1.2,
+      "window": [
+        0.44999999999999996,
+        1.95
+      ],
+      "track_id": 1004,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-008p30-corner-1006",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 8.3,
+      "window": [
+        7.550000000000001,
+        9.05
+      ],
+      "track_id": 1006,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-009p05-corner-1022",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 9.05,
+      "window": [
+        8.3,
+        9.8
+      ],
+      "track_id": 1022,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-014p05-corner-1029",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 14.05,
+      "window": [
+        13.3,
+        14.8
+      ],
+      "track_id": 1029,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-014p25-corner-1033",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 14.25,
+      "window": [
+        13.5,
+        15.0
+      ],
+      "track_id": 1033,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-018p05-corner-1003",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 18.05,
+      "window": [
+        17.3,
+        18.8
+      ],
+      "track_id": 1003,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-018p10-corner-1041",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 18.1,
+      "window": [
+        17.35,
+        18.85
+      ],
+      "track_id": 1041,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-025p75-corner-1049",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 25.75,
+      "window": [
+        25.0,
+        26.5
+      ],
+      "track_id": 1049,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-034p35-corner-1067",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 34.35,
+      "window": [
+        33.6,
+        35.1
+      ],
+      "track_id": 1067,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-038p95-corner-1059",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 38.95,
+      "window": [
+        38.2,
+        39.7
+      ],
+      "track_id": 1059,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-039p40-corner-1071",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "time_s": 39.4,
+      "window": [
+        38.65,
+        40.15
+      ],
+      "track_id": 1071,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-039p85-front-0",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "front",
+      "time_s": 39.85,
+      "window": [
+        39.1,
+        40.6
+      ],
+      "track_id": 0,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-012p05-corner-1013",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 12.05,
+      "window": [
+        11.3,
+        12.8
+      ],
+      "track_id": 1013,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-012p15-corner-1052",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 12.15,
+      "window": [
+        11.4,
+        12.9
+      ],
+      "track_id": 1052,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-012p90-corner-1055",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 12.9,
+      "window": [
+        12.15,
+        13.65
+      ],
+      "track_id": 1055,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-013p50-corner-1045",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 13.5,
+      "window": [
+        12.75,
+        14.25
+      ],
+      "track_id": 1045,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-013p60-corner-1052",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 13.6,
+      "window": [
+        12.85,
+        14.35
+      ],
+      "track_id": 1052,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-015p45-corner-1003",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 15.45,
+      "window": [
+        14.7,
+        16.2
+      ],
+      "track_id": 1003,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-015p50-corner-1052",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 15.5,
+      "window": [
+        14.75,
+        16.25
+      ],
+      "track_id": 1052,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-015p75-corner-1084",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 15.75,
+      "window": [
+        15.0,
+        16.5
+      ],
+      "track_id": 1084,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-016p95-corner-1083",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 16.95,
+      "window": [
+        16.2,
+        17.7
+      ],
+      "track_id": 1083,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-019p25-corner-1055",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 19.25,
+      "window": [
+        18.5,
+        20.0
+      ],
+      "track_id": 1055,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-019p55-corner-1052",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 19.55,
+      "window": [
+        18.8,
+        20.3
+      ],
+      "track_id": 1052,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-020p30-corner-1094",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 20.3,
+      "window": [
+        19.55,
+        21.05
+      ],
+      "track_id": 1094,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-020p35-corner-1013",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 20.35,
+      "window": [
+        19.6,
+        21.1
+      ],
+      "track_id": 1013,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-020p40-corner-1063",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 20.4,
+      "window": [
+        19.65,
+        21.15
+      ],
+      "track_id": 1063,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-020p70-front-59",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "front",
+      "time_s": 20.7,
+      "window": [
+        19.95,
+        21.45
+      ],
+      "track_id": 59,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-020p70-corner-1089",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 20.7,
+      "window": [
+        19.95,
+        21.45
+      ],
+      "track_id": 1089,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-022p35-corner-1094",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 22.35,
+      "window": [
+        21.6,
+        23.1
+      ],
+      "track_id": 1094,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-022p70-corner-1052",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 22.7,
+      "window": [
+        21.95,
+        23.45
+      ],
+      "track_id": 1052,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-023p00-corner-1083",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 23.0,
+      "window": [
+        22.25,
+        23.75
+      ],
+      "track_id": 1083,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-023p90-corner-1101",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 23.9,
+      "window": [
+        23.15,
+        24.65
+      ],
+      "track_id": 1101,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-026p00-corner-1106",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 26.0,
+      "window": [
+        25.25,
+        26.75
+      ],
+      "track_id": 1106,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-026p35-corner-1105",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 26.35,
+      "window": [
+        25.6,
+        27.1
+      ],
+      "track_id": 1105,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-026p75-corner-1101",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 26.75,
+      "window": [
+        26.0,
+        27.5
+      ],
+      "track_id": 1101,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-027p15-corner-1106",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 27.15,
+      "window": [
+        26.4,
+        27.9
+      ],
+      "track_id": 1106,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-040p30-corner-1138",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 40.3,
+      "window": [
+        39.55,
+        41.05
+      ],
+      "track_id": 1138,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-040p50-corner-1101",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 40.5,
+      "window": [
+        39.75,
+        41.25
+      ],
+      "track_id": 1101,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-040p85-corner-1089",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 40.85,
+      "window": [
+        40.1,
+        41.6
+      ],
+      "track_id": 1089,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-041p50-corner-1111",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 41.5,
+      "window": [
+        40.75,
+        42.25
+      ],
+      "track_id": 1111,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-041p90-corner-1101",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 41.9,
+      "window": [
+        41.15,
+        42.65
+      ],
+      "track_id": 1101,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-042p55-corner-1089",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 42.55,
+      "window": [
+        41.8,
+        43.3
+      ],
+      "track_id": 1089,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-042p75-corner-1111",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 42.75,
+      "window": [
+        42.0,
+        43.5
+      ],
+      "track_id": 1111,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-043p10-corner-1101",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 43.1,
+      "window": [
+        42.35,
+        43.85
+      ],
+      "track_id": 1101,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-044p30-corner-1111",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 44.3,
+      "window": [
+        43.55,
+        45.05
+      ],
+      "track_id": 1111,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-047p30-corner-1101",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 47.3,
+      "window": [
+        46.55,
+        48.05
+      ],
+      "track_id": 1101,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-048p25-corner-1089",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 48.25,
+      "window": [
+        47.5,
+        49.0
+      ],
+      "track_id": 1089,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-049p45-corner-1111",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 49.45,
+      "window": [
+        48.7,
+        50.2
+      ],
+      "track_id": 1111,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-051p50-corner-1160",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 51.5,
+      "window": [
+        50.75,
+        52.25
+      ],
+      "track_id": 1160,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-052p00-corner-1111",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 52.0,
+      "window": [
+        51.25,
+        52.75
+      ],
+      "track_id": 1111,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-056p00-corner-1153",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 56.0,
+      "window": [
+        55.25,
+        56.75
+      ],
+      "track_id": 1153,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000005b-057p95-corner-1165",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "time_s": 57.95,
+      "window": [
+        57.2,
+        58.7
+      ],
+      "track_id": 1165,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-000p30-corner-1001",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 0.3,
+      "window": [
+        0.0,
+        1.05
+      ],
+      "track_id": 1001,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-006p40-corner-1005",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 6.4,
+      "window": [
+        5.65,
+        7.15
+      ],
+      "track_id": 1005,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-006p45-corner-1002",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 6.45,
+      "window": [
+        5.7,
+        7.2
+      ],
+      "track_id": 1002,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-009p50-corner-1009",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 9.5,
+      "window": [
+        8.75,
+        10.25
+      ],
+      "track_id": 1009,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-009p60-corner-1004",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 9.6,
+      "window": [
+        8.85,
+        10.35
+      ],
+      "track_id": 1004,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-012p90-corner-1010",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 12.9,
+      "window": [
+        12.15,
+        13.65
+      ],
+      "track_id": 1010,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-016p45-corner-1008",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 16.45,
+      "window": [
+        15.7,
+        17.2
+      ],
+      "track_id": 1008,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-023p80-corner-1013",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 23.8,
+      "window": [
+        23.05,
+        24.55
+      ],
+      "track_id": 1013,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-026p00-corner-1012",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 26.0,
+      "window": [
+        25.25,
+        26.75
+      ],
+      "track_id": 1012,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-040p70-corner-1000",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 40.7,
+      "window": [
+        39.95,
+        41.45
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-0000006a-054p90-corner-1023",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000006a--f0976fc330--27/rlog.zst",
+      "source": "corner",
+      "time_s": 54.9,
+      "window": [
+        54.15,
+        55.65
+      ],
+      "track_id": 1023,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000247-001p20-front-55",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "time_s": 1.2,
+      "window": [
+        0.44999999999999996,
+        1.95
+      ],
+      "track_id": 55,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000247-003p65-front-46",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "time_s": 3.65,
+      "window": [
+        2.9,
+        4.4
+      ],
+      "track_id": 46,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000247-006p85-front-46",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "time_s": 6.85,
+      "window": [
+        6.1,
+        7.6
+      ],
+      "track_id": 46,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000247-006p90-front-50",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "time_s": 6.9,
+      "window": [
+        6.15,
+        7.65
+      ],
+      "track_id": 50,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000247-010p95-front-46",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "time_s": 10.95,
+      "window": [
+        10.2,
+        11.7
+      ],
+      "track_id": 46,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000247-024p20-front-62",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "time_s": 24.2,
+      "window": [
+        23.45,
+        24.95
+      ],
+      "track_id": 62,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000247-026p05-front-44",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "time_s": 26.05,
+      "window": [
+        25.3,
+        26.8
+      ],
+      "track_id": 44,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000247-033p90-front-38",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "time_s": 33.9,
+      "window": [
+        33.15,
+        34.65
+      ],
+      "track_id": 38,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000247-045p05-front-52",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "time_s": 45.05,
+      "window": [
+        44.3,
+        45.8
+      ],
+      "track_id": 52,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000247-050p10-front-35",
+      "vehicle_folder": "KIA_K5_DL3_24 36698f7150e1af97",
+      "log": "00000247--b445287f3d--38/rlog.zst",
+      "source": "front",
+      "time_s": 50.1,
+      "window": [
+        49.35,
+        50.85
+      ],
+      "track_id": 35,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000216-049p60-corner-1133",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN 4aa2ded146fd78b9",
+      "log": "00000216--f69e641982--4/rlog.zst",
+      "source": "corner",
+      "time_s": 49.6,
+      "window": [
+        48.85,
+        50.35
+      ],
+      "track_id": 1133,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000221-002p25-corner-1000",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN 4aa2ded146fd78b9",
+      "log": "00000221--1ee7be4212--18/rlog.zst",
+      "source": "corner",
+      "time_s": 2.25,
+      "window": [
+        1.5,
+        3.0
+      ],
+      "track_id": 1000,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000221-045p20-corner-1003",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN 4aa2ded146fd78b9",
+      "log": "00000221--1ee7be4212--18/rlog.zst",
+      "source": "corner",
+      "time_s": 45.2,
+      "window": [
+        44.45,
+        45.95
+      ],
+      "track_id": 1003,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-000p15-front-32",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 0.15,
+      "window": [
+        0.0,
+        0.9
+      ],
+      "track_id": 32,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-000p25-front-49",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 0.25,
+      "window": [
+        0.0,
+        1.0
+      ],
+      "track_id": 49,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-000p35-front-47",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 0.35,
+      "window": [
+        0.0,
+        1.1
+      ],
+      "track_id": 47,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-000p40-front-37",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 0.4,
+      "window": [
+        0.0,
+        1.15
+      ],
+      "track_id": 37,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-000p70-front-43",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 0.7,
+      "window": [
+        0.0,
+        1.45
+      ],
+      "track_id": 43,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-001p20-front-54",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 1.2,
+      "window": [
+        0.44999999999999996,
+        1.95
+      ],
+      "track_id": 54,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-001p40-front-51",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 1.4,
+      "window": [
+        0.6499999999999999,
+        2.15
+      ],
+      "track_id": 51,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-001p45-front-63",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 1.45,
+      "window": [
+        0.7,
+        2.2
+      ],
+      "track_id": 63,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-001p60-front-34",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 1.6,
+      "window": [
+        0.8500000000000001,
+        2.35
+      ],
+      "track_id": 34,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-001p85-front-52",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 1.85,
+      "window": [
+        1.1,
+        2.6
+      ],
+      "track_id": 52,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-005p85-front-54",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 5.85,
+      "window": [
+        5.1,
+        6.6
+      ],
+      "track_id": 54,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-012p05-front-48",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 12.05,
+      "window": [
+        11.3,
+        12.8
+      ],
+      "track_id": 48,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-019p60-front-55",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 19.6,
+      "window": [
+        18.85,
+        20.35
+      ],
+      "track_id": 55,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-023p25-front-55",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 23.25,
+      "window": [
+        22.5,
+        24.0
+      ],
+      "track_id": 55,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
+      "id": "manual-00000129-033p50-front-36",
+      "vehicle_folder": "KIA_PV5 8ca0d3863b1b3c32",
+      "log": "00000129--fc54fff840--8/rlog.zst",
+      "source": "front",
+      "time_s": 33.5,
+      "window": [
+        32.75,
+        34.25
+      ],
+      "track_id": 36,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    }
+  ]
+}
