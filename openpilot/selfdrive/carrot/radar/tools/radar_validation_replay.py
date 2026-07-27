@@ -50,6 +50,9 @@ CUTIN_DECISION_HOLD_S = CUT_IN_BOUNDARY_HOLD_S
 VALIDATION_EXPECTED_LABELS = ("detect", "clear", "stationary")
 MAX_POINT_MODEL_TIME_SKEW_S = 0.10
 KOREAN_FONT_BASE_SIZE = 40
+VALIDATION_PROBABILITY_MIN = 0.20
+VALIDATION_PROBABILITY_MAX = 0.80
+VALIDATION_SETTINGS_ENV = "CARROT_RADAR_VALIDATION_SETTINGS"
 
 
 @dataclass(frozen=True)
@@ -199,6 +202,54 @@ def _finite(value: Any, fallback: float = 0.0) -> float:
   return parsed if math.isfinite(parsed) else fallback
 
 
+def validation_settings_path() -> Path:
+  override = os.environ.get(VALIDATION_SETTINGS_ENV)
+  if override:
+    return Path(override)
+  local_app_data = os.environ.get("LOCALAPPDATA")
+  if local_app_data:
+    root = Path(local_app_data)
+  else:
+    xdg_config = os.environ.get("XDG_CONFIG_HOME")
+    root = Path(xdg_config) if xdg_config else Path.home() / ".config"
+  return root / "carrotpilot" / "radar_validation.json"
+
+
+def load_validation_probability(
+  path: Path | None = None,
+  default: float = SHADOW_CUTIN_THRESHOLD,
+) -> float:
+  settings_path = path or validation_settings_path()
+  try:
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    value = float(payload["probability"])
+  except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+    return float(default)
+  return (
+    value
+    if VALIDATION_PROBABILITY_MIN <= value <= VALIDATION_PROBABILITY_MAX
+    else float(default)
+  )
+
+
+def save_validation_probability(
+  probability: float,
+  path: Path | None = None,
+) -> None:
+  value = min(max(
+    float(probability),
+    VALIDATION_PROBABILITY_MIN,
+  ), VALIDATION_PROBABILITY_MAX)
+  settings_path = path or validation_settings_path()
+  settings_path.parent.mkdir(parents=True, exist_ok=True)
+  temporary = settings_path.with_suffix(settings_path.suffix + ".tmp")
+  temporary.write_text(
+    json.dumps({"probability": round(value, 2)}, indent=2) + "\n",
+    encoding="utf-8",
+  )
+  temporary.replace(settings_path)
+
+
 def candidate_track_ids(candidate: Candidate | None) -> frozenset[int]:
   if candidate is None:
     return frozenset()
@@ -211,6 +262,42 @@ def candidate_track_id(candidate: Candidate | None) -> int | None:
 
 def candidate_matches_targets(candidate: Candidate | None, targets: set[int]) -> bool:
   return candidate is not None and (not targets or bool(candidate_track_ids(candidate) & targets))
+
+
+def lead_continuity_segments(
+  frames: Sequence[RadarFrame],
+  selections: Sequence[Selection],
+  role: str,
+) -> tuple[tuple[tuple[float, float, int], ...], ...]:
+  if role not in ("lead_one", "lead_two"):
+    raise ValueError(f"unsupported lead role: {role}")
+  if len(frames) != len(selections):
+    raise ValueError("lead selections must align with radar frames")
+  segments: list[tuple[tuple[float, float, int], ...]] = []
+  current: list[tuple[float, float, int]] = []
+  for frame, selection in zip(frames, selections, strict=True):
+    candidate = getattr(selection, role)
+    if (
+      candidate is None
+      or candidate.d_rel is None
+      or not math.isfinite(candidate.d_rel)
+      or not 0.0 <= candidate.d_rel <= DEFAULT_FORWARD_RANGE_M
+    ):
+      if current:
+        segments.append(tuple(current))
+        current = []
+      continue
+    point = (frame.time_s, float(candidate.d_rel), candidate.track_id)
+    if current and (
+      current[-1][2] != point[2]
+      or point[0] - current[-1][0] > 0.15
+    ):
+      segments.append(tuple(current))
+      current = []
+    current.append(point)
+  if current:
+    segments.append(tuple(current))
+  return tuple(segments)
 
 
 def model_line_y(points: Sequence[tuple[float, float]], distance: float) -> float:
@@ -1255,6 +1342,7 @@ class SimulatorUI:
     reviews: tuple[ValidationReview, ...] = (),
     validation_cases_path: Path | None = None,
     display_threshold: float = SHADOW_CUTIN_THRESHOLD,
+    settings_path: Path | None = None,
   ) -> None:
     import pyray as rl
     self.rl = rl
@@ -1264,7 +1352,10 @@ class SimulatorUI:
     self.log_path = log_path
     self.reviews = reviews
     self.validation_cases_path = validation_cases_path
+    self.settings_path = settings_path or validation_settings_path()
     self.display_threshold = display_threshold
+    self.pending_probability = display_threshold
+    self.probability_dragging = False
     self.index = 0
     self.paused = False
     self.speed = 1.0
@@ -1276,6 +1367,7 @@ class SimulatorUI:
       ("front+corner",),
       display_threshold,
     )
+    self._refresh_lead_continuity()
     self.handled_events: set[int] = set()
     self.status = (
       f"dPath 물리 predictor 전용: {selector.motion_sensor} 레이더"
@@ -1311,6 +1403,41 @@ class SimulatorUI:
         self.video_error = f"qcamera unavailable: {exc}"
     else:
       self.video_error = f"camera missing: {self.video_path.name}"
+
+  def _refresh_lead_continuity(self) -> None:
+    self.lead_one_segments = lead_continuity_segments(
+      self.frames,
+      self.selector.selections,
+      "lead_one",
+    )
+    self.lead_two_segments = lead_continuity_segments(
+      self.frames,
+      self.selector.selections,
+      "lead_two",
+    )
+
+  def _apply_probability(self, probability: float) -> None:
+    value = round(min(max(
+      float(probability),
+      VALIDATION_PROBABILITY_MIN,
+    ), VALIDATION_PROBABILITY_MAX), 2)
+    self.display_threshold = value
+    self.pending_probability = value
+    if abs(self.selector.decision_threshold - value) >= 0.005:
+      self.selector = RadarMotionShadowSelector(self.frames, value)
+      self.events = trajectory_model_review_events(
+        self.frames,
+        self.selector,
+        ("front+corner",),
+        value,
+      )
+      self.handled_events.clear()
+      self._refresh_lead_continuity()
+    try:
+      save_validation_probability(value, self.settings_path)
+      self.status = f"CUT-IN 검증 prob {value:.2f} 저장·적용"
+    except OSError as exc:
+      self.status = f"prob {value:.2f} 적용, 저장 실패: {exc}"
 
   @staticmethod
   def _color(
@@ -1840,6 +1967,153 @@ class SimulatorUI:
       self._color((145, 158, 170)),
     )
 
+  def _probability_slider_rect(self, panel_rect: Any) -> Any:
+    return self.rl.Rectangle(
+      panel_rect.x + 18.0,
+      panel_rect.y + 160.0,
+      panel_rect.width - 36.0,
+      8.0,
+    )
+
+  def _draw_probability_slider(self, panel_rect: Any) -> None:
+    rl = self.rl
+    slider = self._probability_slider_rect(panel_rect)
+    ratio = (
+      (self.pending_probability - VALIDATION_PROBABILITY_MIN)
+      / (VALIDATION_PROBABILITY_MAX - VALIDATION_PROBABILITY_MIN)
+    )
+    ratio = min(max(ratio, 0.0), 1.0)
+    knob_x = slider.x + slider.width * ratio
+    self._draw_text(
+      f"CUT-IN 감도 prob {self.pending_probability:.2f}  "
+      + "(낮을수록 민감, 놓으면 저장)",
+      int(slider.x),
+      int(slider.y - 27.0),
+      14,
+      self._color((225, 231, 237)),
+    )
+    rl.draw_rectangle_rec(slider, self._color((55, 65, 75)))
+    rl.draw_rectangle(
+      int(slider.x),
+      int(slider.y),
+      max(1, int(slider.width * ratio)),
+      int(slider.height),
+      self._color((72, 145, 255)),
+    )
+    rl.draw_circle_v(
+      rl.Vector2(knob_x, slider.y + slider.height * 0.5),
+      8.0,
+      self._color((245, 247, 250)),
+    )
+    self._draw_text(
+      f"{VALIDATION_PROBABILITY_MIN:.2f} 민감",
+      int(slider.x),
+      int(slider.y + 12.0),
+      11,
+      self._color((145, 158, 170)),
+    )
+    self._draw_text(
+      f"보수 {VALIDATION_PROBABILITY_MAX:.2f}",
+      int(slider.x + slider.width - 58.0),
+      int(slider.y + 12.0),
+      11,
+      self._color((145, 158, 170)),
+    )
+
+  def _draw_lead_continuity(self, rect: Any) -> None:
+    rl = self.rl
+    rl.draw_rectangle_rec(rect, self._color((13, 18, 24)))
+    plot_left = rect.x + 44.0
+    plot_right = rect.x + rect.width - 10.0
+    plot_top = rect.y + 28.0
+    plot_bottom = rect.y + rect.height - 18.0
+    plot_width = max(1.0, plot_right - plot_left)
+    plot_height = max(1.0, plot_bottom - plot_top)
+    for distance in (0.0, 50.0, 100.0, 120.0):
+      y = plot_bottom - distance / DEFAULT_FORWARD_RANGE_M * plot_height
+      rl.draw_line(
+        int(plot_left),
+        int(y),
+        int(plot_right),
+        int(y),
+        self._color((45, 56, 67)),
+      )
+      self._draw_text(
+        f"{distance:.0f}m",
+        int(rect.x + 4.0),
+        int(y - 6.0),
+        10,
+        self._color((120, 135, 148)),
+      )
+
+    total = max(self.times[-1], 1e-6)
+
+    def position(time_s: float, distance: float) -> Any:
+      return rl.Vector2(
+        plot_left + min(max(time_s / total, 0.0), 1.0) * plot_width,
+        plot_bottom
+        - min(max(distance / DEFAULT_FORWARD_RANGE_M, 0.0), 1.0)
+        * plot_height,
+      )
+
+    series = (
+      (self.lead_one_segments, (246, 142, 55)),
+      (self.lead_two_segments, (245, 211, 72)),
+    )
+    for segments, rgb in series:
+      color = self._color(rgb)
+      for segment in segments:
+        previous = None
+        for time_s, distance, _ in segment:
+          current = position(time_s, distance)
+          if previous is not None:
+            rl.draw_line_ex(previous, current, 1.7, color)
+          previous = current
+        if len(segment) == 1:
+          rl.draw_circle_v(previous, 2.0, color)
+
+    current_selection = self.selector.select(
+      self.frames[self.index],
+      self.index,
+    )
+    lead_values = (
+      ("L1", current_selection.lead_one, (246, 142, 55)),
+      ("L2", current_selection.lead_two, (245, 211, 72)),
+    )
+    legend_x = int(plot_left)
+    for label, candidate, rgb in lead_values:
+      value = (
+        f"id{candidate.track_id} {candidate.d_rel:.1f}m"
+        if candidate is not None and candidate.d_rel is not None
+        else "--"
+      )
+      self._draw_text(
+        f"{label} {value}",
+        legend_x,
+        int(rect.y + 7.0),
+        12,
+        self._color(rgb),
+      )
+      legend_x += 150
+      if (
+        candidate is not None
+        and candidate.d_rel is not None
+        and 0.0 <= candidate.d_rel <= DEFAULT_FORWARD_RANGE_M
+      ):
+        rl.draw_circle_v(
+          position(self.playback_time, candidate.d_rel),
+          3.5,
+          self._color(rgb),
+        )
+    cursor_x = plot_left + self.playback_time / total * plot_width
+    rl.draw_line(
+      int(cursor_x),
+      int(plot_top),
+      int(cursor_x),
+      int(plot_bottom),
+      self._color((225, 231, 237, 150)),
+    )
+
   def _draw_panel(self, rect: Any, frame: RadarFrame, selection: Selection) -> None:
     rl = self.rl
     white = self._color((225, 231, 237))
@@ -1872,8 +2146,9 @@ class SimulatorUI:
       16,
       white,
     )
-    y = rect.y + 146.0
-    max_rows = max(3, int((rect.height - 300.0) // 45.0))
+    self._draw_probability_slider(rect)
+    y = rect.y + 194.0
+    max_rows = max(3, int((rect.height - 348.0) // 45.0))
     for candidate in selection.cutin_diagnostics[:max_rows]:
       stage_text = {
         "IN": "현재 경로",
@@ -1927,6 +2202,16 @@ class SimulatorUI:
 
   def _timeline_rect(self, width: int, height: int) -> Any:
     return self.rl.Rectangle(24.0, float(height - 42), float(width - 48), 13.0)
+
+  def _panel_rect(self, width: int, timeline: Any) -> Any:
+    panel_width = min(500.0, max(410.0, width * 0.35))
+    content_bottom = timeline.y - 47.0
+    return self.rl.Rectangle(
+      float(width) - panel_width - 10.0,
+      12.0,
+      panel_width,
+      max(300.0, content_bottom - 4.0),
+    )
 
   def _draw_timeline(self, rect: Any) -> None:
     rl = self.rl
@@ -1997,28 +2282,37 @@ class SimulatorUI:
     width = rl.get_screen_width()
     height = rl.get_screen_height()
     timeline = self._timeline_rect(width, height)
-    panel_width = min(500.0, max(410.0, width * 0.35))
+    panel_rect = self._panel_rect(width, timeline)
+    panel_width = panel_rect.width
     content_width = float(width) - panel_width - 34.0
     content_bottom = timeline.y - 47.0
     video_height = max(250.0, content_bottom * 0.52)
     video_rect = rl.Rectangle(12.0, 12.0, content_width, video_height)
+    map_y = video_rect.y + video_rect.height + 8.0
+    available_below_video = max(220.0, content_bottom - map_y)
+    continuity_height = min(145.0, max(100.0, available_below_video * 0.32))
+    map_height = max(
+      150.0,
+      available_below_video - continuity_height - 8.0,
+    )
     map_rect = rl.Rectangle(
       12.0,
-      video_rect.y + video_rect.height + 8.0,
+      map_y,
       content_width,
-      max(150.0, content_bottom - video_rect.height - 20.0),
+      map_height,
     )
-    panel_rect = rl.Rectangle(
-      float(width) - panel_width - 10.0,
+    continuity_rect = rl.Rectangle(
       12.0,
-      panel_width,
-      max(300.0, content_bottom - 4.0),
+      map_rect.y + map_rect.height + 8.0,
+      content_width,
+      max(70.0, content_bottom - map_rect.y - map_rect.height - 8.0),
     )
     frame = self.frames[self.index]
     selection = self.selector.select(frame, self.index)
     rl.clear_background(self._color((13, 18, 24)))
     self._draw_video(video_rect)
     self._draw_map(map_rect, frame, selection)
+    self._draw_lead_continuity(continuity_rect)
     self._draw_panel(panel_rect, frame, selection)
     self._draw_timeline(timeline)
     return timeline, map_rect
@@ -2054,7 +2348,7 @@ class SimulatorUI:
       return True
     return False
 
-  def _handle_input(self, timeline: Any) -> None:
+  def _handle_input(self, timeline: Any, probability_slider: Any) -> None:
     rl = self.rl
     if rl.is_key_pressed(rl.KEY_SPACE):
       self.paused = not self.paused
@@ -2111,8 +2405,44 @@ class SimulatorUI:
     if rl.is_key_pressed(rl.KEY_S):
       self._label("stationary")
     mouse = rl.get_mouse_position()
+    slider_hit = rl.Rectangle(
+      probability_slider.x,
+      probability_slider.y - 10.0,
+      probability_slider.width,
+      probability_slider.height + 24.0,
+    )
+    slider_interaction = self.probability_dragging
     if (
       rl.is_mouse_button_pressed(rl.MOUSE_BUTTON_LEFT)
+      and rl.check_collision_point_rec(mouse, slider_hit)
+    ):
+      self.probability_dragging = True
+      slider_interaction = True
+      self.paused = True
+    if (
+      self.probability_dragging
+      and rl.is_mouse_button_down(rl.MOUSE_BUTTON_LEFT)
+    ):
+      ratio = min(max(
+        (mouse.x - probability_slider.x) / probability_slider.width,
+        0.0,
+      ), 1.0)
+      self.pending_probability = round(
+        VALIDATION_PROBABILITY_MIN
+        + ratio
+        * (VALIDATION_PROBABILITY_MAX - VALIDATION_PROBABILITY_MIN),
+        2,
+      )
+    if (
+      self.probability_dragging
+      and rl.is_mouse_button_released(rl.MOUSE_BUTTON_LEFT)
+    ):
+      self.probability_dragging = False
+      slider_interaction = True
+      self._apply_probability(self.pending_probability)
+    if (
+      not slider_interaction
+      and rl.is_mouse_button_pressed(rl.MOUSE_BUTTON_LEFT)
       and rl.check_collision_point_rec(mouse, timeline)
     ):
       ratio = min(max((mouse.x - timeline.x) / timeline.width, 0.0), 1.0)
@@ -2184,8 +2514,12 @@ class SimulatorUI:
               break
             self.paused = True
             self.status = "로그 끝: Esc로 닫기 또는 R로 다시 재생"
-        timeline = self._timeline_rect(rl.get_screen_width(), rl.get_screen_height())
-        self._handle_input(timeline)
+        width = rl.get_screen_width()
+        timeline = self._timeline_rect(width, rl.get_screen_height())
+        panel = self._panel_rect(width, timeline)
+        probability_slider = self._probability_slider_rect(panel)
+        if screenshot is None:
+          self._handle_input(timeline, probability_slider)
         rl.begin_drawing()
         self._draw_frame()
         rl.end_drawing()
@@ -2224,8 +2558,8 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument(
     "--prob",
     type=float,
-    default=SHADOW_CUTIN_THRESHOLD,
-    help="validation-only physical decision, display, and pause threshold",
+    default=None,
+    help="one-run threshold override; otherwise load the UI slider's saved value",
   )
   parser.add_argument("--validation-case", action="append", default=[])
   parser.add_argument("--validation-root", type=Path, default=Path(r"W:\routes"))
@@ -2246,6 +2580,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
   args = parse_args()
+  probability = (
+    load_validation_probability()
+    if args.prob is None
+    else float(args.prob)
+  )
   reviews: tuple[ValidationReview, ...] = ()
   if args.validation_case:
     if args.rlog is not None:
@@ -2259,7 +2598,7 @@ def main() -> int:
     raise SystemExit("rlog or --validation-case is required")
   if not args.rlog.is_file():
     raise SystemExit(f"log file does not exist: {args.rlog}")
-  if not 0.0 <= args.prob <= 1.0:
+  if not 0.0 <= probability <= 1.0:
     raise SystemExit("--prob must be between 0.00 and 1.00")
   print(f"Loading {args.rlog} ...", flush=True)
   frames = load_frames(args.rlog)
@@ -2267,7 +2606,8 @@ def main() -> int:
     frames, removed = front_only_frames(frames)
     print(f"Front-only replay: removed {removed} corner-radar points.", flush=True)
   print("Building physical dPath predictor history ...", flush=True)
-  selector = RadarMotionShadowSelector(frames, args.prob)
+  print(f"Validation CUT-IN probability: {probability:.2f}", flush=True)
+  selector = RadarMotionShadowSelector(frames, probability)
   print_summary(args.rlog, frames, selector)
   if args.summary:
     return 0
@@ -2280,7 +2620,7 @@ def main() -> int:
     args.rlog,
     reviews=reviews,
     validation_cases_path=args.validation_cases if reviews else None,
-    display_threshold=args.prob,
+    display_threshold=probability,
   ).run(args.start, args.paused, args.screenshot, args.exit_at_end)
   return 0
 
@@ -2311,6 +2651,8 @@ __all__ = (
   "front_only_frames",
   "front_radar_display_points",
   "is_position_only_reference",
+  "lead_continuity_segments",
+  "load_validation_probability",
   "load_frames",
   "main",
   "model_line_y",
@@ -2322,6 +2664,7 @@ __all__ = (
   "resolve_validation_case",
   "resolve_validation_cases",
   "resolved_recorded_track_id",
+  "save_validation_probability",
   "trajectory_history_display_y",
   "trajectory_history_display_position",
   "trajectory_model_review_events",
@@ -2329,6 +2672,7 @@ __all__ = (
   "upsert_trajectory_review_label",
   "update_validation_case_label",
   "validation_review_events",
+  "validation_settings_path",
 )
 
 

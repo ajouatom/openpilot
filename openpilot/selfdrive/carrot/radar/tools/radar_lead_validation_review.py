@@ -28,7 +28,7 @@ def simulator_command(
   group: list[dict],
   root: Path,
   cases: Path,
-  probability: float,
+  probability: float | None,
   position: str,
   front_only: bool,
 ) -> list[str]:
@@ -40,12 +40,12 @@ def simulator_command(
     str(root),
     "--validation-cases",
     str(cases),
-    "--prob",
-    str(probability),
     "--review-position",
     position,
     "--exit-at-end",
   ]
+  if probability is not None:
+    command.extend(("--prob", str(probability)))
   for item in group:
     command.extend(("--validation-case", str(item["id"])))
   if front_only:
@@ -68,8 +68,8 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument(
     "--prob",
     type=float,
-    default=0.50,
-    help="validation-only physical decision, display, and CUT-IN pause threshold",
+    default=None,
+    help="one-run threshold override; otherwise use the slider's saved value",
   )
   parser.add_argument("--front-only", action="store_true")
   parser.add_argument("--list", action="store_true")
@@ -78,7 +78,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
   args = parse_args()
-  if not 0.0 <= args.prob <= 1.0:
+  if args.prob is not None and not 0.0 <= args.prob <= 1.0:
     raise SystemExit("--prob must be between 0.00 and 1.00")
   payload = json.loads(args.cases.read_text(encoding="utf-8"))
   filters = tuple(value.lower() for value in args.case)

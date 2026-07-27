@@ -130,6 +130,8 @@ The screen shows only new-controller and physical-predictor data:
   model path that remains the predictor's only corridor;
 - current IN, CUT-IN, and CUT-OUT probabilities; and
 - short/long `dPath` rate, curvature, uncertainty, and continuity ID;
+- a full-log continuity graph of recalculated leadOne distance in orange and
+  leadTwo distance in yellow. Missing leads and track-ID changes break the line;
 - a clickable seek bar with physical-predictor CUT-IN entry markers in orange
   and validation windows above it. Existing-radard markers are absent.
 
@@ -152,6 +154,10 @@ Controls:
   default and is never used as the predictor's displayed input history.
 - `F`: show/hide current measured front-radar points without changing the
   selected motion sensor or predictor inputs.
+- Drag the `CUT-IN sensitivity prob` slider and release it to recalculate
+  validation events and lead continuity, then save the value for later logs
+  and review runs. The 0.20 end is more sensitive; the 0.80 end is more
+  conservative.
 - `M`: show/hide physical-shadow timeline markers.
 - `R`: restart and re-arm already handled physical-predictor CUT-IN pauses.
 - `I`: CUT-IN/detect label.
@@ -163,10 +169,11 @@ Inside a maintained window, a label updates the matching validation case.
 Outside every maintained window, it is stored in
 `radar_trajectory_labels.json`.
 
-`--prob` changes the validation-only physical decision, display, and pause
-threshold. It does not change conventional radard, production Radar Motion,
-physical equations, or stored labels. `--front-only` removes corner points
-before both replay and shadow prediction.
+The slider writes its value to the user-local
+`carrotpilot/radar_validation.json`. `--prob` provides a one-run override
+without replacing that saved value. Neither changes conventional radard,
+production Radar Motion's 0.50 threshold, physical equations, or stored labels.
+`--front-only` removes corner points before both replay and shadow prediction.
 
 ## Review discipline
 

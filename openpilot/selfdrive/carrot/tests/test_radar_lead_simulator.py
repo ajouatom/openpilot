@@ -15,15 +15,19 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   RadarMotionShadowSelector,
   RadarPoint,
   RecordedLead,
+  Selection,
   SimulatorUI,
   candidate_track_id,
   front_only_frames,
   front_radar_display_points,
   is_position_only_reference,
+  lead_continuity_segments,
+  load_validation_probability,
   motion_points_at_model_time,
   preferred_radar_motion_sensor,
   radar_trajectory_series,
   resolve_validation_cases,
+  save_validation_probability,
   trajectory_history_display_y,
   update_validation_case_label,
 )
@@ -351,6 +355,19 @@ def test_validation_runner_launches_importable_module_and_advances_at_end(tmp_pa
   assert command[-1] == "--front-only"
 
 
+def test_validation_runner_uses_saved_probability_when_not_overridden(tmp_path) -> None:
+  command = simulator_command(
+    [{"id": "case-a"}],
+    tmp_path,
+    tmp_path / "cases.json",
+    None,
+    "1/1",
+    False,
+  )
+
+  assert "--prob" not in command
+
+
 def test_predictor_event_pause_seeks_to_first_unhandled_marker() -> None:
   ui = object.__new__(SimulatorUI)
   ui.times = (0.0, 0.1, 0.2, 0.3)
@@ -391,6 +408,37 @@ def test_birds_eye_distance_axis_covers_minus_10_to_120m() -> None:
   assert top_y == pytest.approx(72.0)
   assert top_y < ego_y < bottom_y
   assert bottom_y == pytest.approx(182.0)
+
+
+def test_lead_continuity_breaks_on_missing_frames_and_track_id_changes() -> None:
+  frames = [frame((), time_s=index * 0.1) for index in range(5)]
+  selections = (
+    Selection(Candidate(10, 1.0, "L1", d_rel=30.0), None),
+    Selection(Candidate(10, 1.0, "L1", d_rel=29.5), None),
+    Selection(None, None),
+    Selection(Candidate(10, 1.0, "L1", d_rel=28.5), None),
+    Selection(Candidate(11, 1.0, "L1", d_rel=28.0), None),
+  )
+
+  segments = lead_continuity_segments(frames, selections, "lead_one")
+
+  assert [[point[2] for point in segment] for segment in segments] == [
+    [10, 10],
+    [10],
+    [11],
+  ]
+
+
+def test_validation_probability_is_saved_outside_the_repository(tmp_path) -> None:
+  settings = tmp_path / "radar_validation.json"
+
+  assert load_validation_probability(settings) == pytest.approx(0.50)
+  save_validation_probability(0.45, settings)
+
+  assert load_validation_probability(settings) == pytest.approx(0.45)
+  assert json.loads(settings.read_text(encoding="utf-8")) == {
+    "probability": 0.45,
+  }
 
 
 def test_resolve_and_update_validation_case_without_model_arguments(tmp_path) -> None:
