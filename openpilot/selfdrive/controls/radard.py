@@ -2,7 +2,6 @@
 import math
 import numpy as np
 from collections import deque
-from dataclasses import dataclass
 from typing import Any
 import copy
 
@@ -13,12 +12,6 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL, Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.controls.lib.drive_helpers import is_volkswagen_meb
-from openpilot.selfdrive.carrot.radar_motion import (
-  RadarMotionCutIn,
-  RadarMotionDecisionTracker,
-  RadarMotionPredictor,
-  select_dpath_lead_two,
-)
 from openpilot.selfdrive.controls.lib.cutin_helpers import (
   associate_cutin_tracks,
   combine_cutin_future_projection,
@@ -87,8 +80,6 @@ CUTIN_YAW_COMP_MAX_YVREL_CORRECTION = 1.5
 CUTIN_YAW_COMP_MAX_VREL_CORRECTION = 0.6
 
 VISION_ONLY_RADAR_TRACK_MODE = -2
-RADAR_DPATH_MODE_PARAM = "RadarDPathMode"
-RADAR_MOTION_MAX_TIME_SKEW_S = 0.10
 
 CENTER_LEAD_NEAR_DPATH_LIMIT = 1.2
 CENTER_LEAD_FAR_DPATH_LIMIT = 0.9
@@ -169,22 +160,6 @@ EMPTY_LEAD = {
 
 def empty_lead():
   return EMPTY_LEAD.copy()
-
-
-@dataclass(frozen=True)
-class _RadarMotionPoint:
-  track_id: int
-  d_rel: float
-  y_rel: float
-  v_rel: float
-  a_rel: float
-  yv_rel: float
-  v_lead: float
-  measured: bool
-  source: str
-  a_lead: float = 0.0
-  j_lead: float = 0.0
-
 
 def select_side_leads(front_leads: list[dict[str, Any]], corner_leads: list[dict[str, Any]],
                       corner_tracks_available: bool) -> list[dict[str, Any]]:
@@ -768,11 +743,6 @@ class RadarD:
     self.params = Params()
     self.enable_radar_tracks = self.params.get_int("EnableRadarTracks")
     self.enable_corner_radar = self.params.get_int("EnableCornerRadar")
-    self.radar_dpath_mode = self.params.get_int(RADAR_DPATH_MODE_PARAM)
-    self.radar_motion_sensor = "front"
-    self.radar_motion_corner_seen = False
-    self.radar_motion_predictor = RadarMotionPredictor()
-    self.radar_motion_decisions = RadarMotionDecisionTracker()
     self.front_cutin_enabled = False
     self.corner_cutin_enabled = False
     self.radar_lat_factor = 0.0
@@ -808,25 +778,13 @@ class RadarD:
     self.current_time = 1e-9*max(sm.logMonoTime.values())
 
     self.enable_radar_tracks = self.params.get_int("EnableRadarTracks")
-    enable_corner_radar = self.params.get_int("EnableCornerRadar")
-    if enable_corner_radar != self.enable_corner_radar:
-      self._reset_radar_motion()
-    self.enable_corner_radar = enable_corner_radar
-    radar_dpath_mode = self.params.get_int(RADAR_DPATH_MODE_PARAM)
-    if radar_dpath_mode != self.radar_dpath_mode:
-      self._reset_radar_motion()
-    self.radar_dpath_mode = radar_dpath_mode
-    dpath_enabled = self.radar_dpath_mode > 0
-    self.corner_cutin_enabled = (
-      not dpath_enabled
-      and self.enable_corner_radar > 1
-      and self.car_brand == "hyundai"
-    )
-    self.front_cutin_enabled = not dpath_enabled and is_front_radar_cutin_enabled(
+    self.enable_corner_radar = self.params.get_int("EnableCornerRadar")
+    self.corner_cutin_enabled = self.enable_corner_radar > 1 and self.car_brand == "hyundai"
+    self.front_cutin_enabled = is_front_radar_cutin_enabled(
       self.enable_radar_tracks, self.enable_corner_radar, self.car_brand
     )
     cutin_enabled = self.corner_cutin_enabled or self.front_cutin_enabled
-    if self.is_vw_meb and not dpath_enabled:
+    if self.is_vw_meb:
       # VW MEB(ID.4): 코너레이더가 없어 전방 레이더 트랙으로 끼어들기 판정 (구 carrot 검증 로직의 MEB 이식).
       # RadarLatFactor(기본 0)로 옵트인. 타 차종은 코너레이더+현대 조건 그대로.
       cutin_enabled = self.params.get_float("RadarLatFactor") > 0.0
@@ -962,8 +920,6 @@ class RadarD:
       compute_tracks = dict(front_tracks)
       compute_tracks.update(corner_tracks)
       self.compute_leads(self.v_ego, compute_tracks, md, self.lead_prob_filters[0].x, front_tracks)
-      if dpath_enabled:
-        self._compute_dpath_leads(sm, rr, md)
       if self.leadTwo is not None:
         self.radar_state.leadTwo = self.leadTwo
 
@@ -977,139 +933,6 @@ class RadarD:
 
   def _is_corner_track(self, t: Track) -> bool:
     return t.is_corner_radar
-
-  def _reset_radar_motion(self, sensor: str = "front") -> None:
-    self.radar_motion_sensor = sensor
-    self.radar_motion_corner_seen = False
-    self.radar_motion_predictor = RadarMotionPredictor()
-    self.radar_motion_decisions = RadarMotionDecisionTracker()
-
-  def _radar_motion_points(
-    self,
-    sm: messaging.SubMaster,
-    rr: car.RadarData,
-  ) -> tuple[_RadarMotionPoint, ...]:
-    corner_points = tuple(
-      point for point in rr.points
-      if point.measured and self._radar_point_is_corner(point)
-    )
-    if self.enable_corner_radar > 0 and corner_points:
-      self.radar_motion_corner_seen = True
-    desired_sensor = "corner" if self.radar_motion_corner_seen else "front"
-    if desired_sensor != self.radar_motion_sensor:
-      self.radar_motion_sensor = desired_sensor
-      self.radar_motion_predictor = RadarMotionPredictor()
-      self.radar_motion_decisions = RadarMotionDecisionTracker()
-
-    model_time_s = float(sm.logMonoTime["modelV2"]) * 1e-9
-    radar_time_s = float(sm.logMonoTime["liveTracks"]) * 1e-9
-    time_delta_s = model_time_s - radar_time_s
-    if abs(time_delta_s) > RADAR_MOTION_MAX_TIME_SKEW_S:
-      return ()
-
-    selected = (
-      corner_points
-      if self.radar_motion_sensor == "corner"
-      else tuple(
-        point for point in rr.points
-        if (
-          point.measured
-          and not self._radar_point_is_corner(point)
-          and str(point.radarSource) == "frontRadar"
-        )
-      )
-    )
-    values = []
-    for point in selected:
-      v_rel = float(point.vRel)
-      yv_rel = float(point.yvRel)
-      values.append(_RadarMotionPoint(
-        track_id=int(point.trackId),
-        d_rel=float(point.dRel) + v_rel * time_delta_s,
-        y_rel=float(point.yRel) + yv_rel * time_delta_s,
-        v_rel=v_rel,
-        a_rel=float(point.aRel),
-        yv_rel=yv_rel,
-        v_lead=self.v_ego + v_rel,
-        measured=True,
-        source=(
-          str(point.radarSource)
-          if self.radar_motion_sensor == "front"
-          else str(point.radarSource)
-          if str(point.radarSource).startswith("corner")
-          else "corner235"
-        ),
-        a_lead=float(point.aLead),
-        j_lead=float(point.jLead),
-      ))
-    return tuple(values)
-
-  def _dpath_lead_from_prediction(
-    self,
-    cutin: RadarMotionCutIn,
-  ) -> dict[str, Any] | None:
-    prediction = cutin.prediction
-    track = self.tracks.get(prediction.track_id)
-    if track is None or not track.measured:
-      return None
-    lead = (
-      self._corner_lead_from_track(track, 0.03, 0.0)
-      if self._is_corner_track(track)
-      else track.get_RadarState(0.03, 0.0)
-    )
-    lead["dPath"] = float(prediction.d_path)
-    lead["modelProb"] = 0.03
-    lead["score"] = float(cutin.score)
-    return lead
-
-  def _compute_dpath_leads(
-    self,
-    sm: messaging.SubMaster,
-    rr: car.RadarData,
-    md: Any,
-  ) -> None:
-    path = tuple(
-      (float(x), float(y))
-      for x, y in zip(md.position.x, md.position.y, strict=False)
-    )
-    predictions = self.radar_motion_predictor.update(
-      self.current_time,
-      self._radar_motion_points(sm, rr),
-      path,
-      self.v_ego,
-    )
-    decision = self.radar_motion_decisions.update(
-      self.current_time,
-      predictions.values(),
-    )
-    candidates = tuple(
-      lead
-      for cutin in decision.confirmed
-      if (lead := self._dpath_lead_from_prediction(cutin)) is not None
-    )
-    primary = (
-      {
-        "status": True,
-        "radar": bool(self.radar_state.leadOne.radar),
-        "radarTrackId": int(self.radar_state.leadOne.radarTrackId),
-        "dRel": float(self.radar_state.leadOne.dRel),
-        "yRel": float(self.radar_state.leadOne.yRel),
-      }
-      if self.radar_state.leadOne.status
-      else None
-    )
-    selection = select_dpath_lead_two(primary, candidates, self.v_ego)
-    self.radar_state.leadsCutIn = selection.cutins
-    self.leadCutIn = (
-      copy.deepcopy(selection.cutins[0])
-      if selection.cutins
-      else empty_lead()
-    )
-    self.leadTwo = (
-      copy.deepcopy(selection.lead_two)
-      if selection.lead_two is not None
-      else None
-    )
 
   def _is_front_cutin_track(self, t: Track) -> bool:
     return is_front_radar_cutin_candidate(

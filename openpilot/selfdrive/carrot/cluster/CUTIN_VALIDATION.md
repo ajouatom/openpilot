@@ -10,11 +10,13 @@ physical equations, select thresholds, or add scene-specific exceptions.
 
 ## Current architecture
 
-Production control always uses `openpilot/selfdrive/controls/radard.py`.
 `RadarLeadModelMode` and the learned radar-lead/path-occupancy runtimes have
-been removed. `RadarDPathMode=0` preserves the existing lead selection.
-`RadarDPathMode=1` calculates the existing front/SCC vision-matched `leadOne`
-first, then supplies `leadTwo` only from a physically confirmed dPath CUT-IN.
+been removed. `RadarDPathMode=0` runs only
+`openpilot/selfdrive/controls/radard.py` and preserves its existing lead
+selection. `RadarDPathMode=1` does not start or import that implementation. It
+runs only `openpilot/selfdrive/carrot/radar/radard_dpath.py`, first calculates
+front/SCC vision-matched `leadOne`, then supplies `leadTwo` only from a
+physically confirmed dPath CUT-IN.
 It rejects the primary object itself, anything farther than the primary, and
 anything beyond the ego-speed-based two-second control range. Front, SCC, and
 corner inputs retain their production source identity.

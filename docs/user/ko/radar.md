@@ -42,16 +42,18 @@
 | `RadarDPathMode` | 의미 |
 |---:|---|
 | `0` | 기존 `radard` 선행차·끼어들기 처리 유지(기본값) |
-| `1` | 기존 leadOne을 먼저 계산하고, 물리 dPath 이력으로 확정한 CUT-IN만 leadTwo로 사용 |
+| `1` | 독립 dPath RadarD가 front/SCC–vision leadOne을 먼저 계산하고, 물리 dPath CUT-IN만 leadTwo로 사용 |
 
-`1`은 학습 모델을 사용하지 않습니다. 기존 leadOne의 front/SCC–vision 매칭은 바꾸지 않습니다. leadOne 계산이 끝난 뒤 동일한 물리 predictor가 0.25초 동안 확인한 OUT→IN 차량 중 leadOne과 다른 객체만 leadTwo 후보가 됩니다. leadOne보다 먼 차량과 `max(20 m, vEgo × 2초 + 10 m)` 밖의 차량은 종방향 제어 후보에서 제외합니다. 이 모드에서는 기존 heuristic CUT-IN을 동시에 leadTwo에 넣지 않습니다.
+`1`은 학습 모델을 사용하지 않으며 기존 `controls/radard.py`를 호출하거나 그 결과를 섞지 않습니다. 독립 프로세스가 삭제 전 `radard_model.py`와 같은 순서로 model lead zero를 전방/SCC 레이더와 먼저 매칭해 leadOne을 정합니다. 그 뒤 물리 predictor가 0.25초 동안 확인한 OUT→IN 차량 중 leadOne과 다른 객체만 leadTwo 후보가 됩니다. 최근 0.75초의 leadOne은 거리·횡위치·속도 연속성으로도 중복을 막아 비전 ID가 잠깐 바뀌었을 때 같은 차량을 leadTwo로 다시 내보내지 않습니다. leadOne보다 먼 차량과 `max(20 m, vEgo × 2초 + 10 m)` 밖의 차량은 종방향 제어 후보에서 제외합니다.
 
 코너 레이더 포인트가 한 번이라도 확인되면 해당 실행 동안 코너 motion만 사용하고, 코너 포인트가 없는 구성에서는 `frontRadar` raw track만 사용합니다. 프레임마다 front와 corner를 교체하지 않으며 SCC는 dPath motion 입력으로 사용하지 않습니다. 잘못된 leadTwo는 실제 감속에 영향을 줄 수 있으므로 전체 shadow 검증을 마친 동일 차량 구성에서만 켜세요.
+
+차로 변경 보조가 사용하는 `leadLeft`, `leadRight`와 측면 목록도 같은 motion 센서에서 보이는 좌·우 인접 차량 위치로 발행합니다. `|vLead| < 3 km/h` 포인트는 이 현재 위치에는 사용할 수 있지만 dPath 이력을 만들거나 leadTwo로 예측하지 않습니다.
 
 <a id="lead-selection"></a>
 ## 선행차 선택과 검증
 
-carrotpilot의 production 레이더 프로세스는 `radard` 한 가지이며 별도의 학습형 레이더 리드 모델은 없습니다. 전방 레이더, SCC, 코너 레이더는 기존 입력 역할과 소스 구분을 유지합니다. `RadarDPathMode=0`에서는 기존 leadOne/leadTwo 선택이 그대로 동작합니다. `RadarDPathMode=1`에서는 leadOne은 그대로 두고 leadTwo의 CUT-IN 판단만 아래 물리 predictor가 담당합니다.
+manager는 두 레이더 구현을 동시에 실행하지 않습니다. `RadarDPathMode=0`에서는 기존 `openpilot.selfdrive.controls.radard`만 실행하고 기존 leadOne/leadTwo 선택을 그대로 유지합니다. `RadarDPathMode=1`에서는 기존 프로세스를 중지하고 독립 `openpilot.selfdrive.carrot.radar.radard_dpath`만 실행합니다. 이 프로세스는 front/SCC–vision 매칭으로 leadOne을 먼저 계산한 뒤 아래 물리 predictor로 leadTwo를 계산해 `radarState`를 직접 발행합니다. 전방 레이더, SCC, 코너 레이더의 입력 역할과 소스 구분은 유지하며 학습형 레이더 리드 모델은 사용하지 않습니다.
 
 headless 검증기는 기존 radard와 실험 중인 단순 물리 predictor를 별도로 보고할 수 있습니다. 화면 리플레이는 의도적으로 물리 predictor만 표시하며 기존 radard의 `leadOne`, `leadTwo`, CUT-IN 마커를 가져오지 않고 종방향 제어도 바꾸지 않습니다.
 
@@ -115,6 +117,9 @@ ADAS 프리셋이 코너 레이더를 켠다는 것은 하네스에서 접근 �
 
 - 설정 범위와 설명: `openpilot/selfdrive/carrot_settings.json`
 - 기존 production 레이더 선행차 선택: `openpilot/selfdrive/controls/radard.py`
+- 독립 dPath RadarD: `openpilot/selfdrive/carrot/radar/radard_dpath.py`
+- front/SCC–vision leadOne 매칭: `openpilot/selfdrive/carrot/radar_motion/primary.py`
+- leadOne 우선·leadTwo 후처리 순서: `openpilot/selfdrive/carrot/radar_motion/controller.py`
 - 물리 shadow predictor: `openpilot/selfdrive/carrot/radar_motion/predictor.py`
 - dPath leadTwo 선택: `openpilot/selfdrive/carrot/radar_motion/lead_selection.py`
 - PC 리플레이: `openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py`

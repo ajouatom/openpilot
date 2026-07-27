@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Simple physical radar prediction from measured model-path-relative history.
 
-This module is intentionally independent of radard control. It produces shadow
-diagnostics for replay while the existing radard remains the only lead selector.
+This module is intentionally independent of conventional radard control. The
+same physical output is used by shadow replay and the optional independent
+dPath RadarD.
 """
 
 from __future__ import annotations

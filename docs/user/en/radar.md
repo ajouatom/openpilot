@@ -42,16 +42,18 @@ Corner-radar objects are created only when the vehicle code recognizes a support
 | `RadarDPathMode` | Meaning |
 |---:|---|
 | `0` | Keep the existing `radard` lead and cut-in processing (default) |
-| `1` | Calculate the existing leadOne first, then use only physically confirmed dPath CUT-INs as leadTwo |
+| `1` | Run the independent dPath RadarD, calculate front/SCC-to-vision leadOne first, then use only physical dPath CUT-INs as leadTwo |
 
-Mode `1` does not use a learned model. It leaves the existing front/SCC-to-vision leadOne match unchanged. After leadOne is known, only a different OUT-to-IN object confirmed by the same physical predictor for 0.25 seconds can become leadTwo. A vehicle farther than leadOne or beyond `max(20 m, vEgo × 2 seconds + 10 m)` is excluded from longitudinal control. The existing heuristic CUT-IN path does not compete for leadTwo while this mode is active.
+Mode `1` does not use a learned model, call `controls/radard.py`, or mix in its output. Following the order used by the removed `radard_model.py`, the independent process first matches model lead zero to front/SCC radar and assigns leadOne. Only then can a different OUT-to-IN object confirmed by the physical predictor for 0.25 seconds become leadTwo. A 0.75-second recent-primary identity hold also checks distance, lateral position, and velocity continuity so a brief vision ID change cannot republish the same vehicle as leadTwo. A vehicle farther than leadOne or beyond `max(20 m, vEgo × 2 seconds + 10 m)` is excluded from longitudinal control.
 
 Once corner-radar points have been observed, the mode uses only corner motion for the rest of that process run. A configuration with no corner points uses only `frontRadar` raw tracks. It does not switch between front and corner from frame to frame, and SCC is never a dPath-motion input. An incorrect leadTwo can affect real deceleration, so enable this mode only on the same vehicle configuration after completing shadow validation.
+
+The `leadLeft`, `leadRight`, and side lists used by lane-change assistance are also published from visible adjacent vehicles on that same motion sensor. A point below `|vLead| < 3 km/h` may supply its current position there, but it never builds dPath history or becomes predicted leadTwo.
 
 <a id="lead-selection"></a>
 ## Lead selection and validation
 
-carrotpilot has one production radar process, `radard`, and no separate learned radar-lead model. Front radar, SCC, and corner radar retain their existing input roles and source identity. With `RadarDPathMode=0`, the existing leadOne/leadTwo selection is unchanged. With `RadarDPathMode=1`, leadOne remains unchanged and only leadTwo CUT-IN selection is supplied by the physical predictor below.
+The manager never runs both radar implementations together. With `RadarDPathMode=0`, only the conventional `openpilot.selfdrive.controls.radard` runs and its leadOne/leadTwo selection is unchanged. With `RadarDPathMode=1`, that process is stopped and only the independent `openpilot.selfdrive.carrot.radar.radard_dpath` runs. It calculates front/SCC-to-vision leadOne first, calculates leadTwo with the physical predictor below, and publishes `radarState` directly. Front radar, SCC, and corner radar retain their input roles and source identity, and no learned radar-lead model is used.
 
 The headless validator can report existing radard and the experimental physical predictor separately. The visual replay deliberately shows only the physical predictor, never imports existing radard `leadOne`, `leadTwo`, or CUT-IN markers, and does not change longitudinal control.
 
@@ -115,6 +117,9 @@ The ADAS preset enabling corner radar means that its harness can access such a c
 
 - Setting ranges and descriptions: `openpilot/selfdrive/carrot_settings.json`
 - Existing production radar lead selection: `openpilot/selfdrive/controls/radard.py`
+- Independent dPath RadarD: `openpilot/selfdrive/carrot/radar/radard_dpath.py`
+- Front/SCC-to-vision leadOne matching: `openpilot/selfdrive/carrot/radar_motion/primary.py`
+- LeadOne-first and leadTwo-second control order: `openpilot/selfdrive/carrot/radar_motion/controller.py`
 - Physical shadow predictor: `openpilot/selfdrive/carrot/radar_motion/predictor.py`
 - dPath leadTwo selection: `openpilot/selfdrive/carrot/radar_motion/lead_selection.py`
 - PC replay: `openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py`

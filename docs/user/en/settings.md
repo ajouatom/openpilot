@@ -205,6 +205,8 @@ These 14 settings describe the car, harness, and device hardware configuration. 
 
 See [Radar tracks and corner radar](radar.md) before changing radar modes.
 
+`RadarDPathMode` replaces conventional radard with an independent process that calculates front/SCC-to-vision leadOne first and uses physical dPath CUT-IN as leadTwo. Enable it only on the same vehicle after completing shadow validation.
+
 `HardwareC3xLite` must remain off on standard C3 and C3X hardware. Enable it only on a C3X Lite, then reboot the device. The setting skips the unavailable amplifier so startup is not delayed by I2C retries, uses the GPIO buzzer for alerts, disables `micd`, `soundd`, and `loggerd`, and turns off `RecordAudio`. Normal route logging is unavailable while this hardware mode is enabled.
 
 <a id="display"></a>

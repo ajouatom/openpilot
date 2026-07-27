@@ -210,7 +210,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 - `HyundaiCameraSCC`: 현대·기아 차량의 롱컨, 크루즈 동기화와 CAN FD 배선 구성에 따라 모드가 달라집니다.
 - `CanfdHDA2`: HDA2 차량에서만 활성화합니다.
 - `EnableRadarTracks`: SCC 사용부터 레이더 트랙과 저속 SCC 조합까지 여러 모드가 있으므로 차량별 검증이 필요합니다.
-- `RadarDPathMode`: 기존 leadOne은 유지하지만 물리 dPath CUT-IN을 실제 leadTwo로 사용하므로 shadow 검증을 마친 동일 차량에서만 켭니다.
+- `RadarDPathMode`: 기존 radard 대신 독립 프로세스가 front/SCC–vision leadOne을 먼저 계산하고 물리 dPath CUT-IN을 실제 leadTwo로 사용하므로 shadow 검증을 마친 동일 차량에서만 켭니다.
 - `DisableDM`: 운전자 모니터링을 비활성화할 수 있는 안전 관련 항목이며 재부팅이 필요합니다.
 - `SpeedFromPCM`: 비롱컨 순정 SCC의 버튼 스패밍과 커브·카메라 감속 방식에 영향을 줍니다.
 

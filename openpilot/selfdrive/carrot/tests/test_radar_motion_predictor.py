@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,15 @@ from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   dpath_control_max_d_rel,
   select_dpath_lead_two,
 )
+from openpilot.selfdrive.carrot.radar_motion.controller import (
+  DPathRadarController,
+)
+from openpilot.selfdrive.carrot.radar_motion.predictor import RadarMotionCutIn
+from openpilot.selfdrive.carrot.radar_motion.primary import (
+  VisionRadarMatcher,
+  select_primary_radar_points,
+  snapshot_radar_points,
+)
 
 
 @dataclass(frozen=True)
@@ -35,6 +45,45 @@ class Point:
 
 
 STRAIGHT_PATH = ((0.0, 0.0), (100.0, 0.0))
+
+
+def model_with_lead(
+  d_rel: float,
+  y_rel: float,
+  velocity: float,
+  probability: float = 0.9,
+) -> SimpleNamespace:
+  return SimpleNamespace(
+    position=SimpleNamespace(x=(0.0, 100.0), y=(0.0, 0.0)),
+    leadsV3=(SimpleNamespace(
+      prob=probability,
+      x=(d_rel + 1.52,),
+      y=(-y_rel,),
+      v=(velocity,),
+      xStd=(2.0,),
+      yStd=(0.6,),
+      vStd=(1.5,),
+    ),),
+  )
+
+
+class FixedPredictor:
+  def __init__(self, prediction: SimpleNamespace) -> None:
+    self.prediction = prediction
+
+  def update(self, *args, **kwargs):
+    key = self.prediction.source, self.prediction.track_id
+    return {key: self.prediction}
+
+
+class FixedDecisionTracker:
+  def __init__(self, prediction: SimpleNamespace) -> None:
+    self.prediction = prediction
+
+  def update(self, *args, **kwargs):
+    return SimpleNamespace(
+      confirmed=(RadarMotionCutIn(self.prediction, 0.8),),
+    )
 
 
 def update_series(
@@ -514,11 +563,126 @@ def test_dpath_lead_two_is_selected_after_and_ahead_of_primary() -> None:
   assert selection.lead_two["radarTrackId"] == 20
 
 
-def test_production_radard_exposes_only_physical_optional_radar_mode() -> None:
-  radard = Path(__file__).resolve().parents[2] / "controls" / "radard.py"
-  source = radard.read_text(encoding="utf-8")
+def test_primary_matcher_uses_model_lead_zero_and_front_scc_only() -> None:
+  matcher = VisionRadarMatcher()
+  points = snapshot_radar_points(
+    (
+      Point(10, 30.0, 0.2, v_rel=2.0, source="frontRadar"),
+      Point(20, 30.0, 0.2, v_rel=2.0, source="corner235"),
+      Point(30, 22.0, 0.2, v_rel=2.0, source="frontRadar"),
+    ),
+    v_ego=10.0,
+  )
 
-  assert "RadarLeadModelMode" not in source
-  assert "radard_model" not in source
-  assert 'RADAR_DPATH_MODE_PARAM = "RadarDPathMode"' in source
-  assert "RadarMotionPredictor" in source
+  match = matcher.match(
+    model_with_lead(30.0, 0.2, 12.0),
+    points,
+    STRAIGHT_PATH,
+  )
+
+  assert match is not None
+  assert match.point.track_id == 10
+  assert match.point.source == "frontRadar"
+  assert match.d_path == pytest.approx(0.2)
+
+
+def test_primary_input_policy_matches_removed_model_radard() -> None:
+  points = snapshot_radar_points(
+    (
+      Point(10, 30.0, 0.0, source="frontRadar"),
+      Point(0, 30.0, 0.0, source="scc"),
+      Point(1, 30.0, 0.0, v_rel=10.0, source="scc"),
+      Point(1005, 20.0, 2.0, source="corner235"),
+    ),
+    v_ego=0.0,
+  )
+
+  assert [point.track_id for point in select_primary_radar_points(points, -2)] == []
+  assert [point.track_id for point in select_primary_radar_points(points, 0)] == [0, 1]
+  assert [point.track_id for point in select_primary_radar_points(points, 1)] == [10]
+  assert [point.track_id for point in select_primary_radar_points(points, 2)] == [10, 0]
+
+
+def test_independent_controller_calculates_lead_one_before_motion_lead_two() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  prediction = SimpleNamespace(
+    source="corner235",
+    track_id=1005,
+    d_path=1.0,
+  )
+
+  controller.motion_predictor = FixedPredictor(prediction)
+  controller.motion_decisions = FixedDecisionTracker(prediction)
+  output = controller.update(
+    time_s=1.0,
+    v_ego=10.0,
+    radar_points=(
+      Point(10, 30.0, 0.1, v_rel=2.0, source="frontRadar"),
+      Point(1005, 20.0, 2.0, v_rel=0.0, source="corner235"),
+    ),
+    model=model_with_lead(30.0, 0.1, 12.0),
+  )
+
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 10
+  assert output.lead_two is not None
+  assert output.lead_two["radarTrackId"] == 1005
+  assert output.lead_two["dRel"] < output.lead_one["dRel"]
+  assert output.lead_left is not None
+  assert output.lead_left["radarTrackId"] == 1005
+
+
+def test_recent_primary_is_not_republished_as_motion_lead_two() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  prediction = SimpleNamespace(
+    source="corner235",
+    track_id=1005,
+    d_path=1.0,
+  )
+  controller.motion_predictor = FixedPredictor(prediction)
+  controller.motion_decisions = FixedDecisionTracker(prediction)
+  points = (
+    Point(10, 20.0, 1.0, v_rel=0.0, source="frontRadar"),
+    Point(1005, 19.5, 1.1, v_rel=0.0, source="corner235"),
+  )
+
+  matched = controller.update(
+    time_s=1.0,
+    v_ego=10.0,
+    radar_points=points,
+    model=model_with_lead(20.0, 1.0, 10.0),
+  )
+  held = controller.update(
+    time_s=1.1,
+    v_ego=10.0,
+    radar_points=points,
+    model=model_with_lead(20.0, 1.0, 10.0, probability=0.0),
+  )
+
+  assert matched.lead_one is not None
+  assert matched.lead_two is None
+  assert held.lead_one is None
+  assert held.lead_two is None
+
+
+def test_production_dpath_mode_is_independent_of_conventional_radard() -> None:
+  radard = Path(__file__).resolve().parents[2] / "controls" / "radard.py"
+  dpath_radard = (
+    Path(__file__).resolve().parents[1] / "radar" / "radard_dpath.py"
+  )
+  process_config = (
+    Path(__file__).resolve().parents[3]
+    / "system"
+    / "manager"
+    / "process_config.py"
+  )
+  conventional_source = radard.read_text(encoding="utf-8")
+  dpath_source = dpath_radard.read_text(encoding="utf-8")
+  manager_source = process_config.read_text(encoding="utf-8")
+
+  assert "RadarLeadModelMode" not in conventional_source
+  assert "RadarDPathMode" not in conventional_source
+  assert "RadarMotionPredictor" not in conventional_source
+  assert "from openpilot.selfdrive.controls.radard" not in dpath_source
+  assert '"radard", "openpilot.selfdrive.controls.radard", conventional_radard' in manager_source
+  assert '"radard_dpath", "openpilot.selfdrive.carrot.radar.radard_dpath", dpath_radard' in manager_source

@@ -1,5 +1,10 @@
-"""Measured dPath-history radar motion prediction shared by shadow and radard."""
+"""Measured dPath-history prediction shared by replay and independent RadarD."""
 
+from openpilot.selfdrive.carrot.radar_motion.controller import (
+  DPathRadarController,
+  DPathRadarOutput,
+  RADAR_MOTION_MAX_TIME_SKEW_S,
+)
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   DPathLeadSelection,
   dpath_control_max_d_rel,
@@ -29,8 +34,22 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   project_to_model_path,
   visible_motion_points,
 )
+from openpilot.selfdrive.carrot.radar_motion.primary import (
+  PRIMARY_RADAR_SOURCES,
+  RadarPointSnapshot,
+  VisionLead,
+  VisionRadarMatch,
+  VisionRadarMatcher,
+  lead_from_radar_point,
+  lead_from_vision_match,
+  select_primary_radar_points,
+  snapshot_radar_points,
+  vision_lead_from_model,
+)
 
 __all__ = (
+  "DPathRadarController",
+  "DPathRadarOutput",
   "DPathLeadSelection",
   "ADJACENT_OCCLUSION_MIN_DREL_M",
   "CUT_IN_BOUNDARY_HOLD_S",
@@ -40,20 +59,31 @@ __all__ = (
   "MOTION_MAX_DREL_M",
   "MOTION_MIN_DREL_M",
   "POSITION_ONLY_MAX_ABS_VLEAD_MPS",
+  "PRIMARY_RADAR_SOURCES",
   "ModelPathProjection",
+  "RadarPointSnapshot",
   "RadarMotionCutIn",
   "RadarMotionDecision",
   "RadarMotionDecisionTracker",
   "RadarMotionPrediction",
   "RadarMotionPredictor",
   "RadarMotionSample",
+  "RADAR_MOTION_MAX_TIME_SKEW_S",
+  "VisionLead",
+  "VisionRadarMatch",
+  "VisionRadarMatcher",
   "cutin_probability_at",
   "dpath_control_max_d_rel",
   "is_review_candidate",
   "lead_duplicates_primary",
+  "lead_from_radar_point",
+  "lead_from_vision_match",
   "model_path_point_at_s",
   "prediction_sample_at",
   "project_to_model_path",
   "select_dpath_lead_two",
+  "select_primary_radar_points",
+  "snapshot_radar_points",
+  "vision_lead_from_model",
   "visible_motion_points",
 )
