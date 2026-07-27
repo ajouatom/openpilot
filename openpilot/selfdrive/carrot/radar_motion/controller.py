@@ -30,7 +30,6 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   RadarPointSnapshot,
   VisionRadarMatcher,
   lead_from_radar_point,
-  lead_from_vision_match,
   prefer_front_radar_kinematics,
   select_primary_radar_points,
   snapshot_radar_points,
@@ -41,6 +40,12 @@ RADAR_MOTION_MAX_TIME_SKEW_S = 0.10
 # The 0x235/0x180/0x430 object stream is one radar cycle old when emitted.
 # Keep this separate from the vehicle's front-radar delay.
 CORNER_RADAR_MEASUREMENT_DELAY_S = 0.05
+LEAD_ACCEL_TAU_S = 1.5
+LEAD_ACCEL_FILTER_TAU_S = 0.45
+LEAD_ACCEL_DT_S = 0.05
+LEAD_ACCEL_FILTER_ALPHA = (
+  LEAD_ACCEL_DT_S / (LEAD_ACCEL_FILTER_TAU_S + LEAD_ACCEL_DT_S)
+)
 
 
 def _is_corner(point: RadarPointSnapshot) -> bool:
@@ -72,6 +77,55 @@ class DPathRadarOutput:
   leads_right2: tuple[dict[str, Any], ...]
 
 
+class RadarLeadDynamics:
+  """Mirror conventional radard's per-track aLeadTau and raw jLead output."""
+
+  def __init__(self) -> None:
+    self._a_lead_tau: dict[tuple[str, int], float] = {}
+
+  @staticmethod
+  def _identity(point: RadarPointSnapshot) -> tuple[str, int]:
+    if (
+      point.kinematics_source is not None
+      and point.kinematics_track_id is not None
+    ):
+      return point.kinematics_source, point.kinematics_track_id
+    return point.source, point.track_id
+
+  def reset(self) -> None:
+    self._a_lead_tau.clear()
+
+  def update(
+    self,
+    points: tuple[RadarPointSnapshot, ...],
+    radar_reaction_factor: float,
+  ) -> None:
+    factor = max(0.0, float(radar_reaction_factor))
+    active: set[tuple[str, int]] = set()
+    for point in points:
+      identity = point.source, point.track_id
+      active.add(identity)
+      a_lead_tau = self._a_lead_tau.get(identity, LEAD_ACCEL_TAU_S)
+      if (
+        abs(point.a_lead) < 0.5 * factor
+        and abs(point.j_lead) < 0.5
+      ):
+        a_lead_tau = LEAD_ACCEL_TAU_S * factor
+      else:
+        a_lead_tau *= 1.0 - LEAD_ACCEL_FILTER_ALPHA
+      self._a_lead_tau[identity] = a_lead_tau
+
+    for identity in tuple(self._a_lead_tau):
+      if identity not in active:
+        del self._a_lead_tau[identity]
+
+  def a_lead_tau(self, point: RadarPointSnapshot) -> float:
+    return self._a_lead_tau.get(
+      self._identity(point),
+      LEAD_ACCEL_TAU_S,
+    )
+
+
 class DPathRadarController:
   """Calculate leadOne, then current-path and dPath CUT-IN leadTwo."""
 
@@ -97,6 +151,7 @@ class DPathRadarController:
     )
     self.lead_two_tracker = DPathLeadTwoTracker()
     self.lead_one_exit = LeadOneExitLatch()
+    self.lead_dynamics = RadarLeadDynamics()
 
   def _points_at_model_time(
     self,
@@ -173,8 +228,8 @@ class DPathRadarController:
     )
     return (usable[0],) if second is None else (usable[0], second)
 
-  @staticmethod
   def _display_leads(
+    self,
     points: tuple[RadarPointSnapshot, ...],
     path: tuple[tuple[float, float], ...],
   ) -> tuple[
@@ -187,7 +242,7 @@ class DPathRadarController:
     right = []
     for point in visible_motion_points(points, path):
       d_path = project_to_model_path(path, point.d_rel, point.y_rel).d_path
-      lead = lead_from_radar_point(point, d_path, 0.03, 0.0)
+      lead = self._lead_from_radar_point(point, d_path, 0.03, 0.0)
       if abs(d_path) < 1.8:
         center.append(lead)
       elif d_path > 0.0:
@@ -198,6 +253,22 @@ class DPathRadarController:
       leads.sort(key=lambda lead: lead["dRel"])
     return tuple(left), tuple(center), tuple(right)
 
+  def _lead_from_radar_point(
+    self,
+    point: RadarPointSnapshot,
+    d_path: float,
+    model_probability: float,
+    score: float,
+  ) -> dict[str, Any]:
+    lead = lead_from_radar_point(
+      point,
+      d_path,
+      model_probability,
+      score,
+    )
+    lead["aLeadTau"] = self.lead_dynamics.a_lead_tau(point)
+    return lead
+
   def update(
     self,
     time_s: float,
@@ -206,12 +277,14 @@ class DPathRadarController:
     model: Any,
     yaw_rate_rad_s: float = 0.0,
     radar_to_model_time_s: float = 0.0,
+    radar_reaction_factor: float = 1.0,
   ) -> DPathRadarOutput:
     path = _model_path(model)
     if len(path) < 2:
       self.primary_matcher.reset()
       self.lead_two_tracker.reset()
       self.lead_one_exit.reset()
+      self.lead_dynamics.reset()
       return DPathRadarOutput(
         None, None, None, None, (), (), (), (), (), (),
       )
@@ -221,6 +294,7 @@ class DPathRadarController:
       v_ego,
       radar_to_model_time_s,
     )
+    self.lead_dynamics.update(points, radar_reaction_factor)
 
     # This is intentionally first: model lead zero identifies leadOne only
     # among the independently measured front/SCC stream.
@@ -242,11 +316,14 @@ class DPathRadarController:
       ),
       prefer_corner_stationary=self.motion_sensor == "corner",
     )
-    lead_one = (
-      lead_from_vision_match(primary_match)
-      if primary_match is not None
-      else None
-    )
+    lead_one = None
+    if primary_match is not None:
+      lead_one = self._lead_from_radar_point(
+        primary_match.point,
+        primary_match.d_path,
+        primary_match.probability,
+        primary_match.score,
+      )
     motion_points = self._select_motion_points(points)
     leads_left, leads_center, leads_right = self._display_leads(
       motion_points,
@@ -285,7 +362,7 @@ class DPathRadarController:
         if control_point is not point
         else prediction.d_path
       )
-      motion_lead = lead_from_radar_point(
+      motion_lead = self._lead_from_radar_point(
         control_point, control_d_path, 0.03, 0.0,
       )
       identity = (
@@ -373,7 +450,7 @@ class DPathRadarController:
         if lead_point is not point
         else prediction.d_path
       )
-      lead = lead_from_radar_point(
+      lead = self._lead_from_radar_point(
         lead_point,
         lead_d_path,
         0.03,
@@ -436,7 +513,9 @@ class DPathRadarController:
         d_path = project_to_model_path(
           path, lead_point.d_rel, lead_point.y_rel,
         ).d_path
-        lead = lead_from_radar_point(lead_point, d_path, 0.03, 0.0)
+        lead = self._lead_from_radar_point(
+          lead_point, d_path, 0.03, 0.0,
+        )
         if lead_duplicates_primary(lead, lead_one):
           self.lead_two_tracker.reset()
         else:

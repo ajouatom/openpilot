@@ -52,6 +52,8 @@ Once corner-radar points have been observed, the mode uses only corner motion fo
 
 The `leadLeft`, `leadRight`, and side lists used by lane-change assistance are also published from visible adjacent vehicles on that same motion sensor. A point below `|vLead| < 3 km/h` may supply its current position there, but it never builds dPath history or becomes predicted leadTwo.
 
+Every published radar-backed lead keeps the measured `jLead`. Its per-track `aLeadTau` follows the same `RadarReactionFactor` setting, quiet-acceleration threshold, jerk threshold, and 0.45-second decay filter as conventional `radard`; it is not fixed merely because Radar Motion mode is active. This applies consistently to leadOne, leadTwo, side leads, and all side/center/CUT-IN lists.
+
 <a id="lead-selection"></a>
 ## Lead selection and validation
 

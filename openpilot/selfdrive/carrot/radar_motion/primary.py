@@ -87,6 +87,8 @@ class RadarPointSnapshot:
   a_lead: float
   j_lead: float
   measured: bool
+  kinematics_source: str | None = None
+  kinematics_track_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -185,6 +187,8 @@ def prefer_front_radar_kinematics(
     a_lead=front.a_lead,
     j_lead=front.j_lead,
     measured=point.measured and front.measured,
+    kinematics_source=front.source,
+    kinematics_track_id=front.track_id,
   )
 
 
