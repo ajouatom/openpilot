@@ -3415,6 +3415,21 @@
       "human_verified": true
     },
     {
+      "id": "manual-0000005b-039p85-front-0",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "front",
+      "time_s": 39.85,
+      "window": [
+        39.1,
+        40.6
+      ],
+      "track_id": 0,
+      "expected": "clear",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
       "id": "manual-0000005b-012p05-corner-1013",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "0000005b--02344a68f2--18/rlog.1.zst",

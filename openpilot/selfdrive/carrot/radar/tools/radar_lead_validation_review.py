@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay routes and pause on cut-in, vision-only, or unmatched vision events."""
+"""Open maintained radar validation logs with the physical dPath predictor."""
 
 from __future__ import annotations
 
@@ -11,14 +11,9 @@ import sys
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-RADAR_ROOT = SCRIPT_DIR.parent
-CARROT_ROOT = RADAR_ROOT.parent
+CARROT_ROOT = SCRIPT_DIR.parents[1]
 DEFAULT_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.json"
-DEFAULT_MODEL = RADAR_ROOT / "models" / "radar_lead_multitask.npz"
-DEFAULT_FRONT_MODEL = RADAR_ROOT / "models" / "radar_lead_front.npz"
-DEFAULT_CORNER_MODEL = RADAR_ROOT / "models" / "radar_lead_corner.npz"
-DEFAULT_TRAJECTORY_REPORT = RADAR_ROOT / "models" / "radar_path_occupancy_report.json"
-SIMULATOR = SCRIPT_DIR / "radar_lead_simulator.py"
+SIMULATOR_MODULE = "openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator"
 
 
 def group_cases_by_log(cases: list[dict]) -> list[list[dict]]:
@@ -29,114 +24,68 @@ def group_cases_by_log(cases: list[dict]) -> list[list[dict]]:
   return list(groups.values())
 
 
-def print_trajectory_evaluation_table(report_path: Path) -> None:
-  report = json.loads(report_path.read_text(encoding="utf-8"))
-  summary = report["manual_evaluation"]["summary"]
-  print("Manual CUT-IN/CLEAR vs path-occupancy model (labels are validation-only)")
-  print("| model | labels | precision | recall | F1 | accuracy | TP | FP | FN | TN | manual/future |")
-  print("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
-  for source in ("front", "corner"):
-    values = summary[source]
-    print(
-      f"| {source} | {values['labels']} | {float(values['precision']):.3f} | "
-      + f"{float(values['recall']):.3f} | {float(values['f1']):.3f} | "
-      + f"{float(values['accuracy']):.3f} | {values['tp']} | {values['fp']} | "
-      + f"{values['fn']} | {values['tn']} | "
-      + f"{values['manual_actual_agree']}/{values['manual_actual_scorable']} |"
-    )
-  comparison = report.get("carrot_wip_comparison")
-  if comparison is None:
-    return
-
-  def print_comparison(title: str, values: dict) -> None:
-    print(f"\n{title}")
-    print("| implementation | source | labels | precision | recall | F1 | TP | FP | FN | TN |")
-    print("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|")
-    for implementation in ("carrot_wip", "path_occupancy"):
-      for source in ("front", "corner"):
-        row = values[implementation][source]
-        print(
-          f"| {implementation} | {source} | {row['labels']} | "
-          + f"{float(row['precision']):.3f} | {float(row['recall']):.3f} | "
-          + f"{float(row['f1']):.3f} | {row['tp']} | {row['fp']} | "
-          + f"{row['fn']} | {row['tn']} |"
-        )
-
-  print_comparison(
-    "carrot-wip 9088829005 vs path-occupancy final decisions (manual labels)",
-    {
-      "carrot_wip": comparison["carrot_wip"]["summary"],
-      "path_occupancy": comparison["path_occupancy"]["summary"],
-    },
-  )
-  print_comparison(
-    "Same scorable windows with measured future path entry as truth",
-    comparison["actual_future_summary"],
-  )
+def simulator_command(
+  group: list[dict],
+  root: Path,
+  cases: Path,
+  probability: float,
+  position: str,
+  front_only: bool,
+) -> list[str]:
+  command = [
+    sys.executable,
+    "-m",
+    SIMULATOR_MODULE,
+    "--validation-root",
+    str(root),
+    "--validation-cases",
+    str(cases),
+    "--prob",
+    str(probability),
+    "--review-position",
+    position,
+    "--exit-at-end",
+  ]
+  for item in group:
+    command.extend(("--validation-case", str(item["id"])))
+  if front_only:
+    command.append("--front-only")
+  return command
 
 
 def parse_args() -> argparse.Namespace:
-  parser = argparse.ArgumentParser(description="Replay routes and pause on cut-in, vision-only, or unmatched vision events")
-  parser.add_argument("--root", type=Path, default=Path(r"W:\routes"), help="route log root")
-  parser.add_argument("--model", type=Path, help="legacy single model for both radar sources")
-  parser.add_argument(
-    "--front-model", type=Path,
-    default=DEFAULT_FRONT_MODEL if DEFAULT_FRONT_MODEL.is_file() else DEFAULT_MODEL,
+  parser = argparse.ArgumentParser(
+    description="Replay validation logs showing only the physical dPath predictor",
   )
-  parser.add_argument(
-    "--corner-model", type=Path,
-    default=DEFAULT_CORNER_MODEL if DEFAULT_CORNER_MODEL.is_file() else DEFAULT_MODEL,
-  )
+  parser.add_argument("--root", type=Path, default=Path(r"W:\routes"))
   parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
-  parser.add_argument("--case", action="append", default=[], help="case-id substring; repeat to select more")
-  parser.add_argument("--expected", choices=("all", "detect", "clear", "stationary"), default="all")
+  parser.add_argument("--case", action="append", default=[])
   parser.add_argument(
-    "--prob", type=float,
-    help="manual probability display threshold (0.00-1.00); pauses still follow production leadTwo",
+    "--expected",
+    choices=("all", "detect", "clear", "stationary"),
+    default="all",
   )
   parser.add_argument(
-    "--manual-prob", action="store_true",
-    help="probability display using the last saved slider value; pauses still follow production leadTwo",
+    "--prob",
+    type=float,
+    default=0.50,
+    help="predictor future-ring display and CUT-IN pause threshold",
   )
-  parser.add_argument(
-    "--compare-radard", action="store_true",
-    help="also recompute and display the current radard result and graph (slow)",
-  )
-  parser.add_argument(
-    "--front-only", action="store_true",
-    help="remove corner-radar points and validate the production front-only path",
-  )
+  parser.add_argument("--front-only", action="store_true")
   parser.add_argument("--list", action="store_true")
-  parser.add_argument(
-    "--trajectory-table",
-    action="store_true",
-    help="print the saved front/corner manual-label comparison before replay",
-  )
-  parser.add_argument("--trajectory-report", type=Path, default=DEFAULT_TRAJECTORY_REPORT)
-  parser.add_argument(
-    "--trajectory-table-only",
-    action="store_true",
-    help="print the saved trajectory comparison and exit",
-  )
   return parser.parse_args()
 
 
 def main() -> int:
   args = parse_args()
-  if args.prob is not None and args.manual_prob:
-    raise SystemExit("--prob and --manual-prob cannot be used together")
-  if args.prob is not None and not 0.0 <= args.prob <= 1.0:
+  if not 0.0 <= args.prob <= 1.0:
     raise SystemExit("--prob must be between 0.00 and 1.00")
-  if args.trajectory_table or args.trajectory_table_only:
-    print_trajectory_evaluation_table(args.trajectory_report)
-    if args.trajectory_table_only:
-      return 0
   payload = json.loads(args.cases.read_text(encoding="utf-8"))
   filters = tuple(value.lower() for value in args.case)
   cases = [
     case for case in payload.get("cases", ())
     if (args.expected == "all" or case["expected"] == args.expected)
-    and (not filters or any(value in case["id"].lower() for value in filters))
+    and (not filters or any(value in str(case["id"]).lower() for value in filters))
   ]
   if not cases:
     print("No validation cases matched.")
@@ -147,12 +96,13 @@ def main() -> int:
       verification = "H" if case.get("human_verified", False) else "-"
       print(
         f"[{index:02d}/{len(cases):02d}] [{verification}] {case['id']}: "
-        + f"{case['expected']} {case['source']} {window[0]}-{window[1]}s - {case['scene']}"
+        + f"{case['expected']} {case['source']} "
+        + f"{window[0]}-{window[1]}s - {case['scene']}"
       )
     return 0
 
-  missing = 0
   groups = group_cases_by_log(cases)
+  missing = 0
   opened_cases = 0
   opened_logs = 0
   for index, group in enumerate(groups, 1):
@@ -166,36 +116,27 @@ def main() -> int:
       )
       continue
     ids = ", ".join(str(item["id"]) for item in group)
-    heading = f"\n[{index:02d}/{len(groups):02d}] {len(group)} cases in one log: {ids}"
-    print(heading, flush=True)
-    command = [
-      sys.executable, str(SIMULATOR),
-      "--validation-root", str(args.root),
-      "--validation-cases", str(args.cases),
-      "--front-model", str(args.model or args.front_model),
-      "--corner-model", str(args.model or args.corner_model),
-      "--hybrid",
-    ]
-    for item in group:
-      command.extend(("--validation-case", str(item["id"])))
-    if args.compare_radard:
-      command.append("--compare-radard")
-    if args.front_only:
-      command.append("--front-only")
-    if args.manual_prob:
-      command.append("--manual-prob")
-    if args.prob is not None:
-      command.extend(("--prob", str(args.prob)))
+    print(
+      f"\n[{index:02d}/{len(groups):02d}] {len(group)} cases in one log: {ids}",
+      flush=True,
+    )
+    command = simulator_command(
+      group,
+      args.root,
+      args.cases,
+      args.prob,
+      f"{index}/{len(groups)}",
+      args.front_only,
+    )
     result = subprocess.run(command, check=False)
     if result.returncode != 0:
       return result.returncode
     opened_logs += 1
     opened_cases += len(group)
-  summary = (
+  print(
     f"\nVisual review complete: {opened_cases}/{len(cases)} labeled windows "
     + f"in {opened_logs}/{len(groups)} unique logs"
   )
-  print(summary)
   return int(missing > 0)
 
 

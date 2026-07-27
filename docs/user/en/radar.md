@@ -37,53 +37,45 @@ On non-CAN FD Hyundai/Kia vehicles, a positive value attempts to enable radar tr
 
 Corner-radar objects are created only when the vehicle code recognizes a supported message group. The supported 0x430 message family is also classified as corner-radar input rather than front radar. The cut-in processing in mode `2` currently focuses on Hyundai-family implementations and must not be generalized to other manufacturers.
 
-<a id="lead-fusion"></a>
-## Source-separated radar models
+<a id="lead-selection"></a>
+## Lead selection and validation
 
-| `RadarLeadModelMode` | Meaning |
-|---:|---|
-| `0` | Existing lead-selection method |
-| `1` | Source-separated model method with independent front and corner decisions |
+carrotpilot now has one production radar lead path: the existing `radard` implementation. There is no separate learned radar-lead mode or model setting. Front radar, SCC, and corner radar retain their existing input roles and source identity. `leadOne` remains the primary vision/radar lead, while `leadTwo` retains the existing secondary and cut-in role.
 
-`RadarLeadModelMode=1` takes effect after the vehicle or device is restarted. It changes model lead selection independently of whether raw radar tracks are available, so do not change several radar options at once.
+The headless validator can report existing radard and the experimental physical predictor separately. The visual replay deliberately shows only the physical predictor, never imports existing radard `leadOne`, `leadTwo`, or CUT-IN markers, and does not change longitudinal control.
 
-In model mode, `EnableRadarTracks` also selects the front-model input. Values `-1` and `0` use SCC only, `1` uses front-radar tracks only, and `2` or `3` use front-radar tracks together with low-speed SCC. SCC and front-radar inputs are never mixed into the corner-radar model.
+The shadow predictor:
 
-The front and corner models do not share history or decision state. The front model always owns `leadOne` matching and that vehicle's CUT-OUT. On a corner-equipped vehicle, only the corner model owns adjacent-vehicle CUT-IN and `leadTwo` decisions. The front model also owns CUT-IN and `leadTwo` on a vehicle without corner radar or during PC validation with `--front-only`. When a front point matches a selected corner candidate, its control-quality distance, speed, and acceleration are used. A side candidate inside 5 m keeps the corner measurement instead of the noisy near-field front lateral position.
+- uses only `measured=true` radar points;
+- aligns each replay radar point to the model-path timestamp with its measured relative velocity, then projects the point onto the same-time model-path polyline: `S` is arc distance along the centerline and `dPath` is signed normal distance from it;
+- keeps only the ego lane and its immediate left/right lanes, using the fixed model-path-relative range `|dPath| <= 5.4 m`;
+- on each adjacent side, keeps points closer than 5 m and the nearest visible vehicle at or beyond 5 m, while excluding vehicles hidden farther ahead on that same side from detection; measured in-scope history is retained so a vehicle can be evaluated continuously when it becomes visible;
+- uses only corner-radar motion when measured corner data is available for the log, otherwise uses `frontRadar` raw-track motion; SCC remains visible to existing radard but is not motion-predictor input, and the predictor does not switch sources on individual frames;
+- shows points below `|vLead| < 3 km/h` as position-only references and does not build or extrapolate motion history for them;
+- never switches between lane center and model path from frame to frame;
+- does not apply yaw-rate correction again after the radar point and path share the same timestamp and ego coordinate frame;
+- verifies reused track IDs and short gaps using physical position and velocity continuity;
+- maintains independent front and corner histories and parameters;
+- forms a two-dimensional path-relative history from projected centerline progress `S` plus integrated ego travel and signed lateral offset `dPath`, rather than treating raw `dRel` as path distance;
+- fits `dPath` against actual target progress in `S`, so ego-time lateral drift is not extrapolated when the target has little longitudinal progress;
+- uses the long-window `(S, dPath)` motion vector and its angle relative to the model-path tangent for the prediction mean, limits confidence when a future extrapolation exceeds its observed spatial baseline, and uses short-window disagreement to increase curvature and uncertainty rather than forcing a turn;
+- for corner radar, compares position-derived normal motion with the radar-reported lateral velocity and lowers CUT-IN/CUT-OUT confidence when those measurements do not describe the same physical motion, such as a reflection point migrating across a vehicle body;
+- predicts future `dRel` and `dPath` at synchronized 0.5, 1.0, 1.5, and 2.0 second horizons; and
+- reports CUT-IN and CUT-OUT probabilities separately.
 
-The front and corner model artifacts are trained and validated separately. Passing `--front-only` to the PC validator removes corner points and exercises the same front-only path used by a device without corner radar.
+The current path-overlap check includes ego and target vehicle half-widths. A measured vehicle already overlapping the path is shown as current `IN`; a newly observed point that starts there is not treated as a new shadow CUT-IN. A physically tracked `OUT -> IN` crossing retains its pending entry evidence across the boundary, so the 0.25-second confirmation can finish after overlap begins. Only small path-state and confirmation hysteresis are used. The predictor has no per-route, per-vehicle, or scene-specific exceptions.
 
-Vision/radar `leadOne` matching is independent of the new cut-in probability. Using only the current point and past radar history, the cut-in model emits the same vehicle's longitudinal distance `X(h)`, lane/path-center-relative lateral distance `Y(h)`, and per-axis `XStd(h)`/`YStd(h)` at 0.5/1.0/1.5/2.0 seconds. Scene-specific distance, low-speed, stationary, or curve exceptions do not rewrite those positions or probabilities.
+### PC replay
 
-The measured current path state is `P0`: 1 when the radar-return center is within the lane/path boundary and 0 when it is outside. No assumed vehicle half-width is added to that boundary. Future `I(h)` is the probability mass of the `X(h), XStd(h)` distribution remaining ahead of ego, multiplied by the probability mass of `Y(h), YStd(h)` inside the left and right boundaries. `O(h)` is the probability of remaining ahead while outside those boundaries. `IN` is the maximum of `P0` and future `I(h)`; `OUT` is the maximum of `1-P0` and future `O(h)`. Probability mass already behind ego contributes to neither value. Aggregated IN and OUT can both be high because they can come from different horizons.
+`radar_lead_validation_review.py` groups maintained cases by log and opens all 40 unique logs in sequence. Each window shows synchronized qcamera video and only the physical predictor's points, trajectories, probabilities, and CUT-IN events. Existing radard `leadOne`, `leadTwo`, CUT-IN points, and event markers are intentionally absent. At the end of one log the window closes and the next log opens automatically. `--front-only` removes corner points before replay. `--prob` changes the predictor display and pause threshold without changing its physical equations.
 
-CUT-IN activates whenever IN reaches the model threshold. A vehicle currently inside the path has `IN=1.00` by definition and activates immediately even when first observed there. An outside entry candidate uses only a release threshold 0.05 below activation. Once the same physical vehicle is measured inside, a momentary probability drop cannot release it; CUT-IN ends after it has been measured outside for at least 0.25 seconds. CUT-OUT uses the separate OUT output for an inside vehicle and also shows a measured inside-to-outside transition.
+Playback pauses only when the physical predictor confirms a new CUT-IN for 0.25 seconds. The replay uses a readable Korean-capable font and Korean operator labels. In the bird's-eye map, gray lines are model lane lines, the white dashed line is their displayed center, and the blue line is the model path used as the predictor's only corridor. The lane center is never substituted into the calculation. By default, every track's source-colored filled fading trail is exactly the path-relative `(S, dPath)` history used by the predictor. Gray or green hollow rings are its synchronized 0.5/1.0/1.5/2.0-second future `(S, dPath)` positions; rings become orange only for a confirmed predictor CUT-IN. `H` shows or hides these predictor histories and futures. `A` separately overlays the ego-motion-stabilized raw radar `(xRel, yRel)` history in gray for diagnosis. That optional overlay is observation-derived, not ground-truth target motion, and is not the prediction history. Ego yaw is used only to align this optional raw overlay; it is not applied again to synchronized `dPath`. The horizontal seek bar marks confirmed predictor CUT-IN entries in orange and maintained validation windows above the bar; it has no existing-radard markers. The radar map is an ego-coordinate view, not a perspective overlay on qcamera. Click the bar to seek, use Space to pause, Left/Right to seek by key, Up/Down to change playback speed, `M` to show or hide predictor CUT-IN markers, and `R` to restart and re-arm handled predictor pauses. `I`, `C`, and `S` apply CUT-IN, CLEAR, or STATIONARY labels. Inside a maintained validation window they update that case; outside those windows a label is stored in `radar_trajectory_labels.json`.
 
-When `leadOne` exists, a farther CUT-IN keeps its raw probability but cannot become `leadTwo`. A duplicate of the same `leadOne` is also removed. The nearest remaining candidate is selected, and that physical identity remains `leadTwo` until it becomes `leadOne`, is measured outside, or its track is lost. No other distance-, speed-, or lane-specific exception is added to the new probability. A selected CUT-IN is passed to `leadTwo` with its measured radar distance, speed, and acceleration.
-
-The PC validator `radar_lead_validation_review.py` executes the same model, features, and post-processing as the device and pauses only when a CUT-IN becomes final `leadTwo`.
-
-### PC trajectory review
-
-The PC validator opens each log only once even when it contains multiple validation windows and marks every window on the timeline. The radar map expands lateral motion by 4x. `POINTS` shows measured radar returns, while `PATH` shows recent history and the model's future position distributions. Gray history reprojects each old `dPath` onto the current path instead of joining measurements expressed in different old ego frames. Validation shows the same independent front/corner inputs as the device and omits the legacy `FUSED` comparison view. Point and detail labels show `P0`, `IN`, `OUT`, and all four raw `X/Y/XStd/YStd/I/O` values. Near the 0.5 m longitudinal boundary, `XStd(h)` continuously weights IN/OUT by the probability of remaining ahead; the raw position remains visible.
-
-Point fill identifies path state: green means currently inside or confirmed CUT-IN, and purple means outside. An outside point above the displayed IN threshold gets a green outline; an inside point above its model OUT threshold gets a purple outline. Orange and yellow boxes are final `leadOne` and `leadTwo`. Point names use `F` for front and `C` for corner radar. The selected `leadTwo` line includes its actual decision source and `P0/IN/OUT/ON`. Points beyond 35 m retain their position and trajectory but omit text. At most three map labels and one highest-priority full raw-probability detail row are shown.
-
-With no probability option, the PC validator displays rings using the embedded front/corner device thresholds. Playback pauses only when a CUT-IN becomes final `leadTwo`; an unselected high score never pauses. `radar_lead_validation_review.py --prob 0.70` changes only the ring display threshold, and `--manual-prob` restores the last saved display value. Neither option changes pause events, model output, or the on-device threshold. Seeking backward rearms later production `leadTwo` events. Forward seeking and manual Space pauses replace any stale automatic-pause message with `MANUAL SEEK` or `MANUAL PAUSE`.
-
-Front and corner models are trained as separate artifacts. They use only the current point and its measured past history. Targets are the same physically continuous track's measured future longitudinal distance and its lateral distance from the future lane/path center at 0.5, 1.0, 1.5, and 2.0 seconds. A baseline first extends the recent measured longitudinal and lateral motion, then the neural network learns the position residual and standard deviation. Self-supervised rows that actually cross the path boundary within those two seconds receive more lateral-position loss weight than steady rows, so early entry motion is not overwhelmed by the much more common traffic that stays in its lane. The embedded entry threshold is selected from grouped self-supervised cross-validation at an 80% precision target; manual labels do not choose it. Future measurements are target-only and never inference inputs. Unmeasured front-radar slots and physically discontinuous reused IDs are excluded. Every log variant in a segment carrying a human `CUT-IN`/`CLEAR` label in either `radar_trajectory_labels.json` or `cutin_validation_cases.json`, including files such as `rlog.zst` and `rlog.1.zst`, is held out from fitting and used only for validation.
-
-With corner radar present, only the corner CUT-IN decision drives actual `leadTwo` selection. A vehicle without corner radar, or PC validation with `--front-only`, uses the front CUT-IN decision. Raw probabilities and future positions remain visible at any range, while actual `leadTwo` control is limited to a point no farther than a closer `leadOne` and within ego travel over two seconds plus 10 m, with a 20 m minimum. Because `leadOne` is identified by front radar, its front-model CUT-OUT remains active regardless of corner-radar availability. Raw probabilities and histories remain source-separated; front and corner future positions or CUT-IN probabilities are never averaged. CUT-OUT does not directly remove the current `leadOne` or reduce time gap; it only releases a short stale hold after vision has already lost the match.
-
-`radar_lead_validation_review.py --trajectory-table-only` prints the manual-label evaluation and a side-by-side comparison of the branch-point `carrot-wip` decision with the final production path-occupancy decision. It then repeats the comparison using measured future path entry as truth on the same scorable windows, making broadly marked human windows visible separately.
-
-The `DISPLAY FUTURE` slider immediately changes only the displayed `X/Y/XStd/YStd/I/O` horizon. It is display-only and never changes model inference, aggregate IN/OUT, controller thresholds, or `leadTwo`. The model always evaluates its fixed 0.5/1.0/1.5/2.0-second outputs. Ego yaw uses a valid `livePose.angularVelocityDevice.z` no more than 0.20 seconds old, then falls back to an estimate from speed, steering angle, and vehicle geometry. This model does not consume `carState.yawRate`, whose units and sign are not consistent across every vehicle interface. With the livePose device-frame sign convention, radar lateral speed is corrected as `yvRel - yawRate × dRel`; PC replay, training, and device inference use the same priority and features.
-
-Selecting `CUT-IN`, `CLEAR`, or `STATIONARY` inside a maintained validation window updates that case. A candidate found outside every maintained window is saved separately in `radar_trajectory_labels.json`, so it cannot overwrite existing ground truth.
+`validate_radar_lead_model.py` keeps its historical filename for compatibility, but it no longer loads or validates a learned model. It replays the full maintained `cutin_validation_cases.json` and `radar_trajectory_labels.json` sets, reports existing radard and physical-shadow results separately, and treats all human labels as validation-only data. Those labels are never used to tune equations, thresholds, or training.
 
 ## Radar detection sounds
 
-When openpilot is enabled, a newly confirmed cut-in plays a two-tone cue. A continuously tracked object sounds only once. On the speakerless C3X Lite, the same event uses a GPIO buzzer pattern. The cue reports the selected radar result; it does not change lead selection or longitudinal control. A higher-priority safety alert can take precedence.
+When openpilot is enabled, a newly confirmed cut-in plays a two-tone cue. A continuously tracked object sounds only once. On the speakerless C3X Lite, the same event uses a GPIO buzzer pattern. The cue reports the selected existing-radard result; it does not change lead selection or longitudinal control. A higher-priority safety alert can take precedence.
 
 ## Relationship to harness presets
 
@@ -110,7 +102,9 @@ The ADAS preset enabling corner radar means that its harness can access such a c
 ## Code references
 
 - Setting ranges and descriptions: `openpilot/selfdrive/carrot_settings.json`
-- Source-separated model runtime: `openpilot/selfdrive/carrot/radar/radard_model.py`
+- Existing production radar lead selection: `openpilot/selfdrive/controls/radard.py`
+- Physical shadow predictor: `openpilot/selfdrive/carrot/radar_motion/predictor.py`
+- PC replay: `openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py`
 - Hyundai/Kia radar parsing: `opendbc_repo/opendbc/car/hyundai/radar_interface.py`
 - Non-CAN FD radar activation: `opendbc_repo/opendbc/car/hyundai/interface.py`
 - First-run presets: `openpilot/selfdrive/carrot/server/features/intro/presets.py`

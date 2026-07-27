@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
-"""Mine radar disagreements and build small video-review batches."""
+"""Mine physical dPath predictor events and build video-review batches."""
 
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import hashlib
 import json
 from pathlib import Path
 import re
 import sys
 import textwrap
-from typing import Any, Iterable
+from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
+try:
+  from PIL import Image, ImageDraw, ImageFont
+except ModuleNotFoundError:
+  Image = ImageDraw = ImageFont = None
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 if str(REPO_ROOT) not in sys.path:
@@ -22,17 +26,15 @@ if str(REPO_ROOT) not in sys.path:
 
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   Candidate,
-  ProductionHybridLeadSelector,
   RadarFrame,
+  RadarMotionShadowSelector,
   RadarPoint,
-  current_cutin_track_ids,
   load_frames,
   qcamera_path_for_log,
   _route_replay_module,
 )
 
 
-DEFAULT_MODEL = Path(__file__).resolve().parents[1] / "models" / "radar_lead_multitask.npz"
 VERDICTS = ("positive", "negative", "ambiguous")
 CONFIDENCES = ("high", "medium", "low")
 
@@ -46,7 +48,7 @@ class ReviewEvent:
   start_s: float
   end_s: float
   focus_s: float
-  model_peak: float
+  shadow_peak: float
   d_rel: float
   y_rel: float
   source: str
@@ -120,42 +122,24 @@ def _merge_related_events(events: list[ReviewEvent], frames: list[RadarFrame], m
       match.y_rel = candidate.y_rel
       match.source = candidate.source
       match.priority = candidate.priority
-    match.model_peak = max(match.model_peak, candidate.model_peak)
+    match.shadow_peak = max(match.shadow_peak, candidate.shadow_peak)
   return merged
 
 
 def _priority(kind: str, score: float, d_rel: float) -> float:
-  base = {"model-only": 100.0, "radard-only": 95.0, "agreement": 45.0, "uncertain": 35.0}[kind]
+  base = {"predictor-cutin": 100.0, "uncertain": 35.0}[kind]
   return base + 10.0 * score + max(0.0, 50.0 - d_rel) / 10.0
 
 
 def _signals_for_frame(
-  frame: RadarFrame,
   selection: Any,
-  radard_ids: set[int] | None,
 ) -> list[tuple[str, Candidate]]:
-  active = tuple(selection.active_cutin_candidates)
-  signals: list[tuple[str, Candidate]] = []
-  matched_radard: set[int] = set()
-  for candidate in active:
-    matches = {
-      track_id for track_id in (radard_ids or set())
-      if _same_object(frame, candidate.track_id, track_id)
-    }
-    matched_radard.update(matches)
-    signals.append(("agreement" if matches else "model-only", candidate))
-
-  if radard_ids is not None:
-    for track_id in radard_ids - matched_radard:
-      point = _point(frame, track_id)
-      if point is not None:
-        signals.append(("radard-only", Candidate(
-          track_id, 0.0, "current radard cut-in", d_rel=point.d_rel, y_rel=point.y_rel,
-        )))
+  active = tuple(selection.decision_cutin_candidates)
+  signals = [("predictor-cutin", candidate) for candidate in active]
 
   active_ids = {candidate.track_id for candidate in active}
   raw = next((
-    candidate for candidate in selection.corner_candidates
+    candidate for candidate in selection.cutin_diagnostics
     if candidate.track_id not in active_ids and 0.65 <= candidate.score < candidate.decision_threshold
   ), None)
   if raw is not None:
@@ -166,18 +150,15 @@ def _signals_for_frame(
 def mine_events(
   log_path: Path,
   frames: list[RadarFrame],
-  model_path: Path,
-  compare_radard: bool,
   merge_gap_s: float = 1.5,
 ) -> list[ReviewEvent]:
-  selector = ProductionHybridLeadSelector(model_path, frames)
-  radard = current_cutin_track_ids(log_path, frames) if compare_radard else None
+  selector = RadarMotionShadowSelector(frames)
   open_events: dict[tuple[str, int], ReviewEvent] = {}
   completed: list[ReviewEvent] = []
 
   for index, frame in enumerate(frames):
     seen: set[tuple[str, int]] = set()
-    for kind, candidate in _signals_for_frame(frame, selector.select(frame, index), None if radard is None else radard[index]):
+    for kind, candidate in _signals_for_frame(selector.select(frame, index)):
       point = _candidate_point(frame, candidate)
       d_rel = point.d_rel if point is not None else float(candidate.d_rel or 0.0)
       y_rel = point.y_rel if point is not None else float(candidate.y_rel or 0.0)
@@ -192,7 +173,7 @@ def mine_events(
           id=_event_id(log_path, kind, candidate.track_id, frame.time_s),
           log=str(log_path), kind=kind, track_id=candidate.track_id,
           start_s=frame.time_s, end_s=frame.time_s, focus_s=frame.time_s,
-          model_peak=candidate.score, d_rel=d_rel, y_rel=y_rel, source=source,
+          shadow_peak=candidate.score, d_rel=d_rel, y_rel=y_rel, source=source,
           priority=_priority(kind, candidate.score, d_rel), signal_kinds=[kind],
         )
         open_events[key] = event
@@ -201,7 +182,7 @@ def mine_events(
         priority = _priority(kind, candidate.score, d_rel)
         if priority >= event.priority:
           event.focus_s = frame.time_s
-          event.model_peak = max(event.model_peak, candidate.score)
+          event.shadow_peak = max(event.shadow_peak, candidate.score)
           event.d_rel = d_rel
           event.y_rel = y_rel
           event.source = source
@@ -218,7 +199,7 @@ def mine_events(
     event.start_s = round(event.start_s, 3)
     event.end_s = round(event.end_s, 3)
     event.focus_s = round(event.focus_s, 3)
-    event.model_peak = round(event.model_peak, 4)
+    event.shadow_peak = round(event.shadow_peak, 4)
     event.d_rel = round(event.d_rel, 3)
     event.y_rel = round(event.y_rel, 3)
     event.priority = round(event.priority, 3)
@@ -299,7 +280,11 @@ def _reviewed_event(event: ReviewEvent, annotations: dict[str, Any]) -> bool:
 
 
 def _load_queue(path: Path) -> dict[str, Any]:
-  return json.loads(path.read_text(encoding="utf-8"))
+  payload = json.loads(path.read_text(encoding="utf-8"))
+  for event in payload.get("events", ()):
+    if "shadow_peak" not in event and "model_peak" in event:
+      event["shadow_peak"] = event.pop("model_peak")
+  return payload
 
 
 def _queue_log_paths(path: Path) -> set[Path]:
@@ -343,7 +328,7 @@ def build_queue(args: argparse.Namespace) -> int:
       if not qcamera_path_for_log(log_path).is_file():
         raise FileNotFoundError(f"qcamera missing beside {log_path}")
       frames = load_frames(log_path)
-      log_events = mine_events(log_path, frames, args.model, args.compare_radard, args.merge_gap)
+      log_events = mine_events(log_path, frames, args.merge_gap)
       if args.max_events_per_log:
         log_events = log_events[:args.max_events_per_log]
       events.extend(log_events)
@@ -359,16 +344,15 @@ def build_queue(args: argparse.Namespace) -> int:
     events = events[:args.max_events]
   payload = {
     "version": 1,
-    "created_at": datetime.now(timezone.utc).isoformat(),
-    "model": str(args.model),
-    "compare_radard": bool(args.compare_radard),
+    "created_at": datetime.now(UTC).isoformat(),
+    "predictor": "measured dPath physical predictor",
     "merge_gap_s": args.merge_gap,
     "scanned_logs": [str(log) for log in unique_logs],
     "events": [asdict(event) for event in events],
     "errors": errors,
   }
   _save_queue(args.output, payload)
-  counts = {kind: sum(event.kind == kind for event in events) for kind in ("model-only", "radard-only", "agreement", "uncertain")}
+  counts = {kind: sum(event.kind == kind for event in events) for kind in ("predictor-cutin", "uncertain")}
   print(f"wrote {len(events)} events to {args.output}: {counts}; errors {len(errors)}")
   return int(bool(errors) and not events)
 
@@ -378,6 +362,8 @@ def _nearest_frame(frames: list[RadarFrame], time_s: float) -> RadarFrame:
 
 
 def _font(size: int) -> ImageFont.ImageFont:
+  if ImageFont is None:
+    raise RuntimeError("Pillow is required to render radar review contact sheets")
   path = Path(__file__).resolve().parents[3] / "assets" / "fonts" / "Inter-Regular.ttf"
   return ImageFont.truetype(str(path), size) if path.is_file() else ImageFont.load_default()
 
@@ -452,7 +438,7 @@ def render_contact_sheet(event: dict[str, Any], frames: list[RadarFrame], output
       "REVIEW EVENT",
       f"{event['id']}  id {event['track_id']}  {event['source']}",
       f"interval: {event['start_s']:.2f} - {event['end_s']:.2f}s",
-      f"peak: {event['model_peak']:.2f}  d {event['d_rel']:.1f}m  y {event['y_rel']:+.1f}m",
+      f"peak: {event['shadow_peak']:.2f}  d {event['d_rel']:.1f}m  y {event['y_rel']:+.1f}m",
       "magenta: selected track",
       "cyan: front radar   purple: corner radar",
     ]
@@ -516,52 +502,12 @@ def list_queue(args: argparse.Namespace) -> int:
   events = [event for event in payload.get("events", ()) if args.status == "all" or event.get("status", "pending") == args.status]
   for event in events[:args.limit]:
     print(
-      f"{event['id']} {event['status']:<8} {'+'.join(event.get('signal_kinds') or [event['kind']]):<28} "
-      f"t={event['focus_s']:6.2f} id={event['track_id']:4d} d={event['d_rel']:5.1f} "
-      f"p={event['model_peak']:.2f} {event['log']}"
+      f"{event['id']} {event['status']:<8} "
+      + f"{'+'.join(event.get('signal_kinds') or [event['kind']]):<28} "
+      + f"t={event['focus_s']:6.2f} id={event['track_id']:4d} "
+      + f"d={event['d_rel']:5.1f} p={event['shadow_peak']:.2f} {event['log']}"
     )
   print(f"shown {min(len(events), args.limit)}/{len(events)}")
-  return 0
-
-
-def export_annotations(args: argparse.Namespace) -> int:
-  payload = _load_queue(args.queue)
-  base = getattr(args, "base", None)
-  output: dict[str, Any] = _load_queue(base) if base is not None and base.is_file() else {"logs": {}}
-  output["version"] = 2
-  output["description"] = "Video-reviewed radar cut-in event labels."
-  output.setdefault("logs", {})
-  existing_review_ids = {
-    entry.get("review_event_id")
-    for entries in output["logs"].values() for entry in entries
-    if entry.get("review_event_id")
-  }
-  exported = 0
-  for event in payload.get("events", ()):
-    if event.get("status") != "reviewed" or event.get("verdict") == "ambiguous":
-      continue
-    if event.get("confidence") not in args.confidence:
-      continue
-    if event["id"] in existing_review_ids:
-      continue
-    log_path = Path(event["log"])
-    key = f"{log_path.parent.name}/{log_path.name}"
-    output["logs"].setdefault(key, []).append({
-      "start_s": round(max(0.0, float(event["start_s"]) - args.padding), 3),
-      "end_s": round(float(event["end_s"]) + args.padding, 3),
-      "cutin_candidate": int(event["track_id"]),
-      "cutin_label": event["verdict"] == "positive",
-      "review_confidence": event["confidence"],
-      "review_event_id": event["id"],
-    })
-    exported += 1
-  for entries in output["logs"].values():
-    entries.sort(key=lambda entry: (
-      float(entry.get("start_s", 0.0)),
-      int(entry.get("cutin_candidate", entry.get("cutin") if entry.get("cutin") is not None else -1)),
-    ))
-  _save_queue(args.output, output)
-  print(f"exported {exported} reviewed events to {args.output}")
   return 0
 
 
@@ -569,16 +515,14 @@ def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(description="Build and review video-grounded radar cut-in labels")
   subparsers = parser.add_subparsers(dest="command", required=True)
 
-  build = subparsers.add_parser("build", help="mine model/radard cut-in events")
+  build = subparsers.add_parser("build", help="mine physical dPath predictor CUT-IN events")
   build.add_argument("--log", action="append", type=Path, default=[])
   build.add_argument("--selection", type=Path)
   build.add_argument("--inventory", type=Path, help="scan usable logs from a corpus JSONL inventory")
   build.add_argument("--vehicle-pattern", help="case-insensitive vehicle-name regex for --inventory")
   build.add_argument("--split", action="append", choices=("train", "validation", "test"), default=[])
-  build.add_argument("--model", type=Path, default=DEFAULT_MODEL)
   build.add_argument("--exclude-annotations", type=Path, help="skip candidate/time ranges already reviewed")
   build.add_argument("--exclude-queue", action="append", type=Path, default=[], help="skip logs scanned by an earlier queue")
-  build.add_argument("--compare-radard", action="store_true", help="also recompute current radard cut-ins (slow)")
   build.add_argument("--merge-gap", type=float, default=1.5, help="seconds to merge flickering signals for one object")
   build.add_argument("--max-logs", type=int, default=0)
   build.add_argument("--max-logs-per-vehicle", type=int, default=0, help="diversify inventory scans across vehicle folders")
@@ -607,12 +551,6 @@ def parse_args() -> argparse.Namespace:
   listing.add_argument("--status", choices=("all", "pending", "reviewed"), default="pending")
   listing.add_argument("--limit", type=int, default=10)
 
-  export = subparsers.add_parser("export", help="export reviewed events as training annotations")
-  export.add_argument("--queue", type=Path, required=True)
-  export.add_argument("--output", type=Path, required=True)
-  export.add_argument("--base", type=Path, help="preserve and extend an existing annotation file")
-  export.add_argument("--confidence", action="append", choices=CONFIDENCES, default=["high", "medium"])
-  export.add_argument("--padding", type=float, default=0.2)
   return parser.parse_args()
 
 
@@ -623,7 +561,6 @@ def main() -> int:
     "render": render_queue,
     "mark": mark_event,
     "list": list_queue,
-    "export": export_annotations,
   }[args.command](args)
 
 

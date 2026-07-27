@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility launcher for radar model regression validation."""
+"""Compatibility launcher for radard and physical-shadow regression validation."""
 
 from pathlib import Path
 import sys

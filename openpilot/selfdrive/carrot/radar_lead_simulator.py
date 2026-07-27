@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility launcher for the radar lead simulator."""
+"""Compatibility launcher for physical dPath predictor replay."""
 
 from pathlib import Path
 import sys

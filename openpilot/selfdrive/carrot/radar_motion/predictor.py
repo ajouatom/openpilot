@@ -1,0 +1,936 @@
+#!/usr/bin/env python3
+"""Simple physical radar prediction from measured model-path-relative history.
+
+This module is intentionally independent of radard control. It produces shadow
+diagnostics for replay while the existing radard remains the only lead selector.
+"""
+
+from __future__ import annotations
+
+import bisect
+import math
+from collections import deque
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
+from statistics import median
+from typing import Any
+
+
+MOTION_HORIZONS_S = (0.5, 1.0, 1.5, 2.0)
+NOMINAL_LANE_WIDTH_M = 3.60
+IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M = 1.5 * NOMINAL_LANE_WIDTH_M
+POSITION_ONLY_MAX_ABS_VLEAD_MPS = 3.0 / 3.6
+ADJACENT_OCCLUSION_MIN_DREL_M = 5.0
+ADJACENT_OCCLUSION_RANGE_TOLERANCE_M = 1.0
+EGO_PATH_HALF_WIDTH_M = 0.90
+TARGET_VEHICLE_HALF_WIDTH_M = 0.90
+PATH_OVERLAP_HALF_WIDTH_M = EGO_PATH_HALF_WIDTH_M + TARGET_VEHICLE_HALF_WIDTH_M
+PATH_STATE_HYSTERESIS_M = 0.12
+CUT_IN_THRESHOLD = 0.50
+CUT_OUT_THRESHOLD = 0.50
+MAX_HISTORY_S = 2.0
+SHORT_HISTORY_S = 0.45
+LONG_HISTORY_S = 1.50
+
+
+@dataclass(frozen=True)
+class _SourceConfig:
+  missing_hold_s: float
+  longitudinal_jump_m: float
+  lateral_jump_m: float
+  velocity_jump_mps: float
+  base_lateral_sigma_m: float
+  base_longitudinal_sigma_m: float
+  minimum_rate_samples: int
+  minimum_path_span_m: float
+  use_reported_normal_velocity: bool
+  normal_velocity_sigma_mps: float
+
+
+SOURCE_CONFIGS = {
+  "front": _SourceConfig(
+    0.35, 1.75, 0.85, 5.0, 0.20, 0.35, 4, 1.5, False, 0.50,
+  ),
+  "corner": _SourceConfig(
+    0.55, 2.25, 1.25, 7.0, 0.32, 0.55, 3, 2.0, True, 0.25,
+  ),
+}
+
+
+@dataclass(frozen=True)
+class RadarMotionHistorySample:
+  time_s: float
+  age_s: float
+  d_rel: float
+  path_x: float
+  actual_x: float
+  actual_y: float
+  d_path: float
+
+
+@dataclass(frozen=True)
+class RadarMotionSample:
+  horizon_s: float
+  d_rel: float
+  path_x: float
+  y_rel: float
+  d_path: float
+  longitudinal_sigma: float
+  lateral_sigma: float
+  occupancy_prob: float
+
+
+@dataclass(frozen=True)
+class RadarMotionPrediction:
+  track_id: int
+  source: str
+  sensor: str
+  continuity_id: int
+  d_path: float
+  d_path_rate_short: float
+  d_path_rate_long: float
+  d_path_curvature: float
+  path_speed_short: float
+  path_speed_long: float
+  path_speed: float
+  vector_heading_deg: float
+  reported_heading_deg: float
+  reported_normal_speed: float
+  normal_speed_disagreement: float
+  motion_consistency: float
+  uncertainty: float
+  lane_half_width: float
+  current_path_occupancy: bool
+  cut_in_probability: float
+  cut_out_probability: float
+  path_entry_probability: float
+  path_entry_age_s: float | None
+  samples: tuple[RadarMotionSample, ...]
+  history: tuple[RadarMotionHistorySample, ...]
+  history_count: int
+  time_to_entry_s: float | None
+  reason: str
+
+  @property
+  def probability(self) -> float:
+    return self.cut_in_probability
+
+  @property
+  def path_exit_probability(self) -> float:
+    return self.cut_out_probability
+
+
+@dataclass(frozen=True)
+class ModelPathProjection:
+  path_s: float
+  center_x: float
+  center_y: float
+  tangent_x: float
+  tangent_y: float
+  d_path: float
+
+
+@dataclass(frozen=True)
+class _Observation:
+  time_s: float
+  d_rel: float
+  y_rel: float
+  v_rel: float
+  a_rel: float
+  v_lead: float
+  a_lead: float
+  yv_rel: float
+  v_ego: float
+  ego_distance: float
+  ego_x: float
+  ego_y: float
+  ego_heading: float
+  ego_path_s: float
+  path_s: float
+  path_x_world: float
+  path_velocity: float
+  normal_velocity: float
+  actual_world_x: float
+  actual_world_y: float
+  d_path: float
+
+
+@dataclass
+class _TrackState:
+  source: str
+  continuity_id: int
+  observations: deque[_Observation] = field(default_factory=deque)
+  inside_latched: bool = False
+  entry_time_s: float | None = None
+  last_seen_s: float = 0.0
+
+
+def _finite(value: Any, fallback: float = 0.0) -> float:
+  try:
+    parsed = float(value)
+  except (TypeError, ValueError):
+    return fallback
+  return parsed if math.isfinite(parsed) else fallback
+
+
+def _sensor(source: str) -> str:
+  return "corner" if source.startswith("corner") else "front"
+
+
+def _source(point: Any) -> str:
+  return str(getattr(point, "source", getattr(point, "radarSource", "frontRadar")))
+
+
+def _value(point: Any, snake: str, camel: str, fallback: float = 0.0) -> float:
+  return _finite(getattr(point, snake, getattr(point, camel, fallback)), fallback)
+
+
+def model_path_y(path: Sequence[tuple[float, float]], d_rel: float) -> float:
+  """Interpolate model path in radar coordinates (positive left)."""
+  if not path:
+    raise ValueError("model path is required for dPath prediction")
+  if len(path) == 1:
+    return -_finite(path[0][1])
+  xs = tuple(_finite(point[0]) for point in path)
+  index = bisect.bisect_left(xs, d_rel)
+  if index <= 0:
+    return -_finite(path[0][1])
+  if index >= len(path):
+    return -_finite(path[-1][1])
+  x0, y0 = (_finite(value) for value in path[index - 1])
+  x1, y1 = (_finite(value) for value in path[index])
+  ratio = 0.0 if abs(x1 - x0) < 1e-6 else (d_rel - x0) / (x1 - x0)
+  return -(y0 + (y1 - y0) * ratio)
+
+
+def _radar_path(path: Sequence[tuple[float, float]]) -> tuple[tuple[float, float], ...]:
+  return tuple((_finite(x), -_finite(y)) for x, y in path)
+
+
+def project_to_model_path(
+  path: Sequence[tuple[float, float]],
+  x: float,
+  y: float,
+) -> ModelPathProjection:
+  """Project an ego-frame radar point onto the model-path centerline."""
+  points = _radar_path(path)
+  if not points:
+    raise ValueError("model path is required for dPath prediction")
+  if len(points) == 1:
+    center_x, center_y = points[0]
+    return ModelPathProjection(
+      x - center_x,
+      center_x,
+      center_y,
+      1.0,
+      0.0,
+      y - center_y,
+    )
+
+  best: ModelPathProjection | None = None
+  best_distance_sq = math.inf
+  accumulated_s = 0.0
+  last_index = len(points) - 2
+  for index, ((x0, y0), (x1, y1)) in enumerate(
+    zip(points, points[1:], strict=False),
+  ):
+    dx = x1 - x0
+    dy = y1 - y0
+    length = math.hypot(dx, dy)
+    if length < 1e-6:
+      continue
+    raw_ratio = ((x - x0) * dx + (y - y0) * dy) / (length * length)
+    if index == 0 and raw_ratio < 0.0:
+      ratio = raw_ratio
+    elif index == last_index and raw_ratio > 1.0:
+      ratio = raw_ratio
+    else:
+      ratio = min(1.0, max(0.0, raw_ratio))
+    center_x = x0 + ratio * dx
+    center_y = y0 + ratio * dy
+    offset_x = x - center_x
+    offset_y = y - center_y
+    distance_sq = offset_x * offset_x + offset_y * offset_y
+    if distance_sq < best_distance_sq:
+      tangent_x = dx / length
+      tangent_y = dy / length
+      best_distance_sq = distance_sq
+      best = ModelPathProjection(
+        path_s=accumulated_s + ratio * length,
+        center_x=center_x,
+        center_y=center_y,
+        tangent_x=tangent_x,
+        tangent_y=tangent_y,
+        d_path=-tangent_y * offset_x + tangent_x * offset_y,
+      )
+    accumulated_s += length
+  if best is None:
+    center_x, center_y = points[0]
+    return ModelPathProjection(
+      x - center_x,
+      center_x,
+      center_y,
+      1.0,
+      0.0,
+      y - center_y,
+    )
+  return best
+
+
+def model_path_point_at_s(
+  path: Sequence[tuple[float, float]],
+  path_s: float,
+  d_path: float = 0.0,
+) -> tuple[float, float]:
+  """Convert model-path arc distance and normal offset to ego-frame x/y."""
+  points = _radar_path(path)
+  if not points:
+    raise ValueError("model path is required for dPath prediction")
+  if len(points) == 1:
+    return points[0][0] + path_s, points[0][1] + d_path
+
+  accumulated_s = 0.0
+  usable: list[tuple[float, float, float, float, float]] = []
+  for (x0, y0), (x1, y1) in zip(points, points[1:], strict=False):
+    dx = x1 - x0
+    dy = y1 - y0
+    length = math.hypot(dx, dy)
+    if length < 1e-6:
+      continue
+    usable.append((x0, y0, dx / length, dy / length, length))
+  if not usable:
+    return points[0][0] + path_s, points[0][1] + d_path
+
+  for index, (x0, y0, tangent_x, tangent_y, length) in enumerate(usable):
+    segment_s = path_s - accumulated_s
+    if segment_s <= length or index == len(usable) - 1:
+      if index > 0:
+        segment_s = max(0.0, segment_s)
+      center_x = x0 + segment_s * tangent_x
+      center_y = y0 + segment_s * tangent_y
+      return (
+        center_x - tangent_y * d_path,
+        center_y + tangent_x * d_path,
+      )
+    accumulated_s += length
+  return points[-1]
+
+
+def _linear_fit(observations: Sequence[_Observation], field_name: str) -> tuple[float, float]:
+  if len(observations) < 2:
+    return 0.0, 0.0
+  times = tuple(observation.time_s for observation in observations)
+  values = tuple(float(getattr(observation, field_name)) for observation in observations)
+  time_mean = sum(times) / len(times)
+  value_mean = sum(values) / len(values)
+  denominator = sum((time_s - time_mean) ** 2 for time_s in times)
+  if denominator < 1e-6:
+    return 0.0, 0.0
+  slope = sum(
+    (time_s - time_mean) * (value - value_mean)
+    for time_s, value in zip(times, values, strict=True)
+  ) / denominator
+  intercept = value_mean - slope * time_mean
+  residual = math.sqrt(sum(
+    (value - (intercept + slope * time_s)) ** 2
+    for time_s, value in zip(times, values, strict=True)
+  ) / len(times))
+  return slope, residual
+
+
+def _robust_center_and_sigma(values: Sequence[float]) -> tuple[float, float]:
+  if not values:
+    return 0.0, 0.0
+  center = median(values)
+  absolute_deviations = tuple(abs(value - center) for value in values)
+  return center, 1.4826 * median(absolute_deviations)
+
+
+def _spatial_fit(
+  observations: Sequence[_Observation],
+) -> tuple[float, float, float]:
+  """Fit dPath against target path progress, not elapsed ego time."""
+  if len(observations) < 2:
+    return 0.0, 0.0, 0.0
+  xs = tuple(observation.path_x_world for observation in observations)
+  ys = tuple(observation.d_path for observation in observations)
+  x_mean = sum(xs) / len(xs)
+  y_mean = sum(ys) / len(ys)
+  denominator = sum((x - x_mean) ** 2 for x in xs)
+  span = max(xs) - min(xs)
+  if denominator < 1e-6:
+    return 0.0, 0.0, span
+  slope = sum(
+    (x - x_mean) * (y - y_mean)
+    for x, y in zip(xs, ys, strict=True)
+  ) / denominator
+  intercept = y_mean - slope * x_mean
+  residual = math.sqrt(sum(
+    (y - (intercept + slope * x)) ** 2
+    for x, y in zip(xs, ys, strict=True)
+  ) / len(xs))
+  return slope, residual, span
+
+
+def _window(observations: Sequence[_Observation], duration_s: float) -> tuple[_Observation, ...]:
+  if not observations:
+    return ()
+  cutoff = observations[-1].time_s - duration_s
+  return tuple(observation for observation in observations if observation.time_s >= cutoff)
+
+
+def _scoped_motion_points(
+  points: Iterable[Any],
+  path: Sequence[tuple[float, float]],
+) -> tuple[tuple[Any, float, float], ...]:
+  if not path:
+    return ()
+  scoped: list[tuple[Any, float, float]] = []
+  for point in points:
+    if not bool(getattr(point, "measured", False)):
+      continue
+    d_rel = _value(point, "d_rel", "dRel")
+    y_rel = _value(point, "y_rel", "yRel")
+    d_path = project_to_model_path(path, d_rel, y_rel).d_path
+    if abs(d_path) <= IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M:
+      scoped.append((point, d_rel, d_path))
+  return tuple(scoped)
+
+
+def visible_motion_points(
+  points: Iterable[Any],
+  path: Sequence[tuple[float, float]],
+) -> tuple[Any, ...]:
+  """Keep current-lane points and only the nearest visible vehicle per adjacent side."""
+  scoped = _scoped_motion_points(points, path)
+
+  nearest: dict[int, float] = {}
+  for _, d_rel, d_path in scoped:
+    if (
+      d_rel < ADJACENT_OCCLUSION_MIN_DREL_M
+      or abs(d_path) <= PATH_OVERLAP_HALF_WIDTH_M
+    ):
+      continue
+    side = 1 if d_path > 0.0 else -1
+    nearest[side] = min(nearest.get(side, math.inf), d_rel)
+
+  return tuple(
+    point
+    for point, d_rel, d_path in scoped
+    if (
+      d_rel < ADJACENT_OCCLUSION_MIN_DREL_M
+      or abs(d_path) <= PATH_OVERLAP_HALF_WIDTH_M
+      or d_rel <= nearest.get(1 if d_path > 0.0 else -1, math.inf)
+      + ADJACENT_OCCLUSION_RANGE_TOLERANCE_M
+    )
+  )
+
+
+def _normal_interval_probability(mean: float, sigma: float, limit: float) -> float:
+  sigma = max(sigma, 0.05)
+  scale = sigma * math.sqrt(2.0)
+  upper = math.erf((limit - mean) / scale)
+  lower = math.erf((-limit - mean) / scale)
+  return min(1.0, max(0.0, 0.5 * (upper - lower)))
+
+
+def prediction_sample_at(
+  prediction: RadarMotionPrediction,
+  horizon_s: float,
+) -> RadarMotionSample:
+  return min(
+    prediction.samples,
+    key=lambda sample: abs(sample.horizon_s - horizon_s),
+  )
+
+
+def cutin_probability_at(
+  prediction: RadarMotionPrediction,
+  horizon_s: float,
+) -> float:
+  if prediction.current_path_occupancy:
+    return 0.0
+  sample = prediction_sample_at(prediction, horizon_s)
+  predicted_enter_limit = PATH_OVERLAP_HALF_WIDTH_M - PATH_STATE_HYSTERESIS_M
+  return (
+    sample.occupancy_prob * prediction.motion_consistency
+    if (
+      abs(sample.d_path) < abs(prediction.d_path)
+      and abs(sample.d_path) <= predicted_enter_limit
+      and sample.d_rel > 0.0
+    )
+    else 0.0
+  )
+
+
+def is_review_candidate(
+  prediction: RadarMotionPrediction,
+  _d_rel: float,
+  horizon_s: float,
+  probability_threshold: float,
+) -> bool:
+  return (
+    prediction.history_count >= SOURCE_CONFIGS[prediction.sensor].minimum_rate_samples
+    and cutin_probability_at(prediction, horizon_s) >= probability_threshold
+  )
+
+
+class RadarMotionPredictor:
+  """Maintain independent front/corner dPath histories and predict path overlap."""
+
+  def __init__(self) -> None:
+    self._states: dict[str, dict[tuple[str, int], _TrackState]] = {
+      "front": {},
+      "corner": {},
+    }
+    self._next_continuity_id = 1
+    self._ego_distance_m = 0.0
+    self._ego_x_m = 0.0
+    self._ego_y_m = 0.0
+    self._ego_heading_rad = 0.0
+    self._last_update_s: float | None = None
+    self._last_v_ego = 0.0
+    self._last_yaw_rate = 0.0
+
+  def _new_state(self, source: str, time_s: float) -> _TrackState:
+    state = _TrackState(source, self._next_continuity_id, last_seen_s=time_s)
+    self._next_continuity_id += 1
+    return state
+
+  @staticmethod
+  def _continuous(
+    state: _TrackState,
+    observation: _Observation,
+    config: _SourceConfig,
+  ) -> bool:
+    if not state.observations:
+      return True
+    previous = state.observations[-1]
+    dt = observation.time_s - previous.time_s
+    if dt <= 0.0 or dt > config.missing_hold_s:
+      return False
+    recent = _window(tuple(state.observations), SHORT_HISTORY_S)
+    path_slope, _, _ = _spatial_fit(recent)
+    d_path_rate = path_slope * previous.path_velocity
+    predicted_path_x_world = (
+      previous.path_x_world + previous.path_velocity * dt
+    )
+    predicted_d_path = previous.d_path + d_path_rate * dt
+    longitudinal_limit = (
+      config.longitudinal_jump_m
+      + 0.25 * abs(previous.path_velocity) * dt
+    )
+    lateral_limit = config.lateral_jump_m + 0.25 * abs(d_path_rate) * dt
+    return (
+      abs(observation.path_x_world - predicted_path_x_world)
+      <= longitudinal_limit
+      and abs(observation.d_path - predicted_d_path) <= lateral_limit
+      and abs(observation.v_rel - previous.v_rel) <= config.velocity_jump_mps
+    )
+
+  @staticmethod
+  def _prediction(
+    state: _TrackState,
+    track_id: int,
+    observation: _Observation,
+    path: Sequence[tuple[float, float]],
+    config: _SourceConfig,
+  ) -> RadarMotionPrediction:
+    observations = tuple(state.observations)
+    short = _window(observations, SHORT_HISTORY_S)
+    long = _window(observations, LONG_HISTORY_S)
+    short_slope, short_residual, short_path_span = _spatial_fit(short)
+    long_slope, long_residual, long_path_span = _spatial_fit(long)
+    _, d_rel_residual = _linear_fit(long, "d_rel")
+    path_speed_short, path_x_short_residual = _linear_fit(short, "path_x_world")
+    path_speed_long, path_x_long_residual = _linear_fit(long, "path_x_world")
+    reported_normal_speed, reported_normal_sigma = _robust_center_and_sigma(
+      tuple(value.normal_velocity for value in long),
+    )
+    reported_path_speed, _ = _robust_center_and_sigma(
+      tuple(value.path_velocity for value in long),
+    )
+    enough_history = (
+      len(long) >= config.minimum_rate_samples
+      and long_path_span >= config.minimum_path_span_m
+    )
+    if len(long) >= 2:
+      history_path_speed = path_speed_long
+      path_speed = 0.70 * history_path_speed + 0.30 * reported_path_speed
+    else:
+      path_speed = observation.path_velocity
+      path_speed_short = observation.path_velocity
+      path_speed_long = observation.path_velocity
+    if not enough_history:
+      short_slope = 0.0
+      long_slope = 0.0
+    short_rate = short_slope * path_speed
+    long_rate = long_slope * path_speed
+    curvature_span = max(1.0, long_path_span - 0.5 * short_path_span)
+    curvature = max(-0.5, min(0.5, (short_slope - long_slope) / curvature_span))
+    # The prediction mean is the long-window 2-D path vector. Short-window
+    # changes describe curvature/uncertainty instead of being extrapolated as
+    # sustained lateral acceleration.
+    path_slope = long_slope
+    rate = path_slope * path_speed
+    slope_disagreement = abs(short_slope - long_slope)
+    vector_heading_deg = math.degrees(math.atan(path_slope))
+    reported_heading_deg = math.degrees(math.atan2(
+      reported_normal_speed,
+      max(abs(reported_path_speed), 0.1),
+    ))
+    normal_speed_disagreement = abs(rate - reported_normal_speed)
+    long_duration_s = (
+      long[-1].time_s - long[0].time_s
+      if len(long) >= 2
+      else 0.0
+    )
+    position_rate_sigma = (
+      config.base_lateral_sigma_m + long_residual
+    ) / max(long_duration_s, 0.25)
+    normal_velocity_sigma = math.hypot(
+      config.normal_velocity_sigma_mps,
+      reported_normal_sigma,
+      position_rate_sigma,
+    )
+    motion_consistency = (
+      math.exp(-0.5 * (
+        normal_speed_disagreement / max(normal_velocity_sigma, 0.15)
+      ) ** 2)
+      if config.use_reported_normal_velocity and enough_history
+      else 1.0
+    )
+    lateral_base_uncertainty = (
+      config.base_lateral_sigma_m
+      + long_residual
+      + 0.5 * short_residual
+      + (0.45 if not enough_history else 0.0)
+    )
+
+    enter_limit = PATH_OVERLAP_HALF_WIDTH_M
+    exit_limit = PATH_OVERLAP_HALF_WIDTH_M + PATH_STATE_HYSTERESIS_M
+    was_inside = state.inside_latched
+    if state.inside_latched:
+      state.inside_latched = abs(observation.d_path) <= exit_limit
+    else:
+      state.inside_latched = abs(observation.d_path) <= enter_limit
+    if not was_inside and state.inside_latched:
+      state.entry_time_s = observation.time_s if enough_history else None
+    elif not state.inside_latched:
+      state.entry_time_s = None
+
+    relative_accel = max(-3.0, min(3.0, observation.a_rel))
+    path_accel = max(-3.0, min(3.0, observation.a_lead))
+    samples: list[RadarMotionSample] = []
+    for horizon_s in MOTION_HORIZONS_S:
+      path_displacement = (
+        path_speed * horizon_s
+        + 0.5 * path_accel * horizon_s ** 2
+      )
+      future_path_x = observation.path_s + path_displacement
+      ego_path_x = observation.ego_path_s + observation.v_ego * horizon_s
+      future_d_rel = future_path_x - ego_path_x
+      future_d_path = (
+        observation.d_path
+        + path_slope * path_displacement
+      )
+      _, future_y = model_path_point_at_s(
+        path,
+        future_path_x,
+        future_d_path,
+      )
+      lateral_sigma = (
+        lateral_base_uncertainty
+        + slope_disagreement * abs(path_displacement)
+        + 0.20 * abs(curvature) * path_displacement ** 2
+      )
+      longitudinal_sigma = (
+        config.base_longitudinal_sigma_m
+        + d_rel_residual
+        + 0.5 * path_x_long_residual
+        + 0.25 * path_x_short_residual
+        + 0.20 * abs(relative_accel) * horizon_s ** 2
+      )
+      extrapolation_support = min(
+        1.0,
+        long_path_span / max(
+          abs(path_displacement),
+          config.minimum_path_span_m,
+        ),
+      )
+      occupancy_prob = (
+        _normal_interval_probability(
+          future_d_path, lateral_sigma, PATH_OVERLAP_HALF_WIDTH_M,
+        )
+        * extrapolation_support
+        if future_d_rel > 0.0
+        else 0.0
+      )
+      samples.append(RadarMotionSample(
+        horizon_s=horizon_s,
+        d_rel=future_d_rel,
+        path_x=future_path_x,
+        y_rel=future_y,
+        d_path=future_d_path,
+        longitudinal_sigma=longitudinal_sigma,
+        lateral_sigma=lateral_sigma,
+        occupancy_prob=occupancy_prob,
+      ))
+
+    predicted_enter_limit = PATH_OVERLAP_HALF_WIDTH_M - PATH_STATE_HYSTERESIS_M
+    inward_samples = tuple(
+      sample for sample in samples
+      if (
+        abs(sample.d_path) < abs(observation.d_path)
+        and abs(sample.d_path) <= predicted_enter_limit
+      )
+    )
+    outward_samples = tuple(
+      sample for sample in samples
+      if abs(sample.d_path) > abs(observation.d_path)
+    )
+    path_entry_probability = (
+      (
+        max((sample.occupancy_prob for sample in inward_samples), default=0.0)
+        * motion_consistency
+      )
+      if enough_history
+      else 0.0
+    )
+    cut_in_probability = (
+      path_entry_probability
+      if enough_history and not state.inside_latched
+      else 0.0
+    )
+    cut_out_probability = (
+      (
+        max(
+          (1.0 - sample.occupancy_prob for sample in outward_samples),
+          default=0.0,
+        )
+        * motion_consistency
+      )
+      if enough_history and state.inside_latched
+      else 0.0
+    )
+    time_to_entry_s = next((
+      sample.horizon_s
+      for sample in samples
+      if sample.d_rel > 0.0 and abs(sample.d_path) <= predicted_enter_limit
+    ), None)
+    if not enough_history:
+      reason = "insufficient measured dPath history"
+    elif (
+      config.use_reported_normal_velocity
+      and motion_consistency < 0.50
+    ):
+      reason = "position/velocity motion mismatch"
+    elif state.inside_latched:
+      reason = (
+        "physical CUT-OUT shadow"
+        if cut_out_probability >= CUT_OUT_THRESHOLD
+        else "current path overlap"
+      )
+    elif cut_in_probability >= CUT_IN_THRESHOLD:
+      reason = "physical CUT-IN shadow"
+    else:
+      reason = "outside path corridor"
+    history = tuple(
+      RadarMotionHistorySample(
+        sample.time_s,
+        observation.time_s - sample.time_s,
+        sample.d_rel,
+        (
+          observation.ego_path_s
+          + sample.path_x_world
+          - observation.ego_distance
+        ),
+        (
+          math.cos(observation.ego_heading)
+          * (sample.actual_world_x - observation.ego_x)
+          + math.sin(observation.ego_heading)
+          * (sample.actual_world_y - observation.ego_y)
+        ),
+        (
+          -math.sin(observation.ego_heading)
+          * (sample.actual_world_x - observation.ego_x)
+          + math.cos(observation.ego_heading)
+          * (sample.actual_world_y - observation.ego_y)
+        ),
+        sample.d_path,
+      )
+      for sample in observations
+    )
+    return RadarMotionPrediction(
+      track_id=track_id,
+      source=state.source,
+      sensor=_sensor(state.source),
+      continuity_id=state.continuity_id,
+      d_path=observation.d_path,
+      d_path_rate_short=short_rate,
+      d_path_rate_long=long_rate,
+      d_path_curvature=curvature,
+      path_speed_short=path_speed_short,
+      path_speed_long=path_speed_long,
+      path_speed=path_speed,
+      vector_heading_deg=vector_heading_deg,
+      reported_heading_deg=reported_heading_deg,
+      reported_normal_speed=reported_normal_speed,
+      normal_speed_disagreement=normal_speed_disagreement,
+      motion_consistency=motion_consistency,
+      uncertainty=lateral_base_uncertainty,
+      lane_half_width=PATH_OVERLAP_HALF_WIDTH_M,
+      current_path_occupancy=state.inside_latched,
+      cut_in_probability=cut_in_probability,
+      cut_out_probability=cut_out_probability,
+      path_entry_probability=path_entry_probability,
+      path_entry_age_s=(
+        observation.time_s - state.entry_time_s
+        if state.entry_time_s is not None
+        else None
+      ),
+      samples=tuple(samples),
+      history=history,
+      history_count=len(observations),
+      time_to_entry_s=time_to_entry_s,
+      reason=reason,
+    )
+
+  def update(
+    self,
+    time_s: float,
+    points: Iterable[Any],
+    path: Sequence[tuple[float, float]],
+    v_ego: float = 0.0,
+    yaw_rate_rad_s: float = 0.0,
+  ) -> dict[tuple[str, int], RadarMotionPrediction]:
+    time_s = float(time_s)
+    v_ego = _finite(v_ego)
+    yaw_rate_rad_s = _finite(yaw_rate_rad_s)
+    if self._last_update_s is not None:
+      dt = time_s - self._last_update_s
+      if dt > 0.0:
+        distance = 0.5 * (self._last_v_ego + v_ego) * dt
+        yaw_rate = 0.5 * (self._last_yaw_rate + yaw_rate_rad_s)
+        mid_heading = self._ego_heading_rad + 0.5 * yaw_rate * dt
+        self._ego_distance_m += distance
+        self._ego_x_m += distance * math.cos(mid_heading)
+        self._ego_y_m += distance * math.sin(mid_heading)
+        self._ego_heading_rad += yaw_rate * dt
+    self._last_update_s = time_s
+    self._last_v_ego = v_ego
+    self._last_yaw_rate = yaw_rate_rad_s
+    if not path:
+      return {}
+    for sensor, states in self._states.items():
+      hold_s = SOURCE_CONFIGS[sensor].missing_hold_s
+      for key, state in tuple(states.items()):
+        if time_s - state.last_seen_s > hold_s:
+          states.pop(key)
+
+    point_values = tuple(points)
+    scoped_points = _scoped_motion_points(point_values, path)
+    visible_points = visible_motion_points(point_values, path)
+    visible_keys = {
+      (_source(point), int(getattr(point, "track_id", getattr(point, "trackId", -1))))
+      for point in visible_points
+    }
+    scoped_keys = {
+      (_source(point), int(getattr(point, "track_id", getattr(point, "trackId", -1))))
+      for point, _, _ in scoped_points
+    }
+    for point in point_values:
+      source = _source(point)
+      sensor = _sensor(source)
+      track_id = int(getattr(point, "track_id", getattr(point, "trackId", -1)))
+      key = (source, track_id)
+      if bool(getattr(point, "measured", False)) and key not in scoped_keys:
+        self._states[sensor].pop(key, None)
+
+    predictions: dict[tuple[str, int], RadarMotionPrediction] = {}
+    for point, _, _ in scoped_points:
+      source = _source(point)
+      sensor = _sensor(source)
+      config = SOURCE_CONFIGS[sensor]
+      track_id = int(getattr(point, "track_id", getattr(point, "trackId", -1)))
+      key = (source, track_id)
+      d_rel = _value(point, "d_rel", "dRel")
+      y_rel = _value(point, "y_rel", "yRel")
+      projection = project_to_model_path(path, d_rel, y_rel)
+      d_path = projection.d_path
+      ego_projection = project_to_model_path(path, 0.0, 0.0)
+      v_lead = _value(
+        point,
+        "v_lead",
+        "vLead",
+        _value(point, "v_rel", "vRel") + v_ego,
+      )
+      if abs(v_lead) < POSITION_ONLY_MAX_ABS_VLEAD_MPS:
+        self._states[sensor].pop(key, None)
+        continue
+      cos_heading = math.cos(self._ego_heading_rad)
+      sin_heading = math.sin(self._ego_heading_rad)
+      yv_rel = _value(point, "yv_rel", "yvRel")
+      path_velocity = (
+        projection.tangent_x * v_lead
+        + projection.tangent_y * yv_rel
+      )
+      normal_velocity = (
+        -projection.tangent_y * v_lead
+        + projection.tangent_x * yv_rel
+      )
+      observation = _Observation(
+        time_s=time_s,
+        d_rel=d_rel,
+        y_rel=y_rel,
+        v_rel=_value(point, "v_rel", "vRel"),
+        a_rel=_value(point, "a_rel", "aRel"),
+        v_lead=v_lead,
+        a_lead=_value(
+          point,
+          "a_lead",
+          "aLeadK",
+          _value(point, "a_rel", "aRel"),
+        ),
+        yv_rel=yv_rel,
+        v_ego=v_ego,
+        ego_distance=self._ego_distance_m,
+        ego_x=self._ego_x_m,
+        ego_y=self._ego_y_m,
+        ego_heading=self._ego_heading_rad,
+        ego_path_s=ego_projection.path_s,
+        path_s=projection.path_s,
+        path_x_world=(
+          self._ego_distance_m
+          + projection.path_s
+          - ego_projection.path_s
+        ),
+        path_velocity=path_velocity,
+        normal_velocity=normal_velocity,
+        actual_world_x=(
+          self._ego_x_m
+          + cos_heading * d_rel
+          - sin_heading * y_rel
+        ),
+        actual_world_y=(
+          self._ego_y_m
+          + sin_heading * d_rel
+          + cos_heading * y_rel
+        ),
+        d_path=d_path,
+      )
+      state = self._states[sensor].get(key)
+      if state is None or not self._continuous(state, observation, config):
+        state = self._new_state(source, time_s)
+        self._states[sensor][key] = state
+      state.observations.append(observation)
+      while (
+        state.observations
+        and time_s - state.observations[0].time_s > MAX_HISTORY_S
+      ):
+        state.observations.popleft()
+      state.last_seen_s = time_s
+      prediction = self._prediction(state, track_id, observation, path, config)
+      if key in visible_keys:
+        predictions[key] = prediction
+    return predictions
