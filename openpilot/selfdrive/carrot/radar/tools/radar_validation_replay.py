@@ -866,6 +866,7 @@ class RadarMotionShadowSelector:
           lead_one,
           motion_lead,
           float(getattr(prediction, "cut_out_probability", 0.0)),
+          float(getattr(prediction, "cut_in_probability", 0.0)),
         ):
           exiting_primary_identity = identity
           lead_one_exit.start(identity, lead_one)
