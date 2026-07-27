@@ -19,13 +19,11 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   DPathLeadCandidate,
   DPathLeadTwoTracker,
-  LeadOneExitLatch,
   can_start_current_path_lead_two,
   cutin_can_compete_with_primary,
   dpath_control_max_d_rel,
   front_cutin_motion_supported,
   lead_duplicates_primary,
-  lead_one_exits_path,
   select_dpath_lead_two,
 )
 from openpilot.selfdrive.carrot.radar_motion.controller import (
@@ -1612,71 +1610,7 @@ def test_corner_lead_two_uses_matched_front_dynamics() -> None:
   assert output.lead_two["aLeadTau"] == pytest.approx(1.35)
 
 
-def test_primary_cut_out_requires_same_physical_vehicle() -> None:
-  primary = {
-    "status": True,
-    "radarTrackId": 10,
-    "dRel": 30.0,
-    "yRel": 0.0,
-    "vLead": 12.0,
-  }
-  matching_motion = {
-    "status": True,
-    "radarTrackId": 1005,
-    "dRel": 30.5,
-    "yRel": 1.0,
-    "vLead": 12.2,
-  }
-
-  assert lead_one_exits_path(primary, matching_motion, 0.60, 0.0)
-  assert not lead_one_exits_path(primary, matching_motion, 0.599, 0.0)
-  assert not lead_one_exits_path(primary, matching_motion, 1.0, 0.01)
-  assert not lead_one_exits_path(
-    primary,
-    matching_motion | {"dRel": 35.0},
-    1.0,
-    0.0,
-  )
-  assert not lead_one_exits_path(
-    primary,
-    matching_motion | {"vLead": 15.0},
-    1.0,
-    0.0,
-  )
-
-
-def test_primary_exit_latch_requires_zero_cutin_and_cutout_threshold() -> None:
-  identity = ("corner235", 1005, 1)
-  primary = {"status": True, "radarTrackId": 10}
-  prediction = SimpleNamespace(
-    source=identity[0],
-    track_id=identity[1],
-    continuity_id=identity[2],
-    cut_out_probability=0.83,
-    cut_in_probability=0.0,
-    current_path_occupancy=True,
-  )
-  latch = LeadOneExitLatch()
-  latch.start(identity, primary)
-
-  assert latch.update((prediction,)) == identity
-  assert latch.matches_primary(primary)
-
-  prediction.cut_out_probability = 0.59
-  assert latch.update((prediction,)) is None
-
-  prediction.cut_out_probability = 0.83
-  prediction.cut_in_probability = 0.01
-  prediction.current_path_occupancy = True
-  latch.start(identity, primary)
-  assert latch.update((prediction,)) is None
-
-  prediction.cut_in_probability = 0.0
-  latch.start(identity, primary)
-  assert latch.update(()) is None
-
-
-def test_primary_cut_out_releases_lead_one_and_selects_next_lead_two() -> None:
+def test_cut_out_probability_does_not_remove_or_filter_control_leads() -> None:
   controller = DPathRadarController(prefer_corner_radar=True)
   exiting_primary = SimpleNamespace(
     source="corner235",
@@ -1698,11 +1632,11 @@ def test_primary_cut_out_releases_lead_one_and_selects_next_lead_two() -> None:
     continuity_id=2,
     d_path=0.2,
     d_path_rate_long=0.0,
-    cut_out_probability=0.0,
+    cut_out_probability=0.99,
     cut_in_probability=0.0,
     path_entry_probability=0.0,
     current_path_occupancy=True,
-    reason="insufficient measured dPath history",
+    reason="tracked current path",
     path_entry_age_s=None,
     time_to_entry_s=None,
   )
@@ -1725,45 +1659,11 @@ def test_primary_cut_out_releases_lead_one_and_selects_next_lead_two() -> None:
     model=model_with_lead(30.0, 0.0, 12.0),
   )
 
-  assert output.lead_one is None
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 10
   assert output.lead_two is not None
   assert output.lead_two["radarTrackId"] == 1006
-  assert controller.primary_matcher.last_identity is None
-
-  exiting_primary.cut_out_probability = 0.83
-  sticky = controller.update(
-    time_s=1.1,
-    v_ego=10.0,
-    radar_points=(
-      Point(10, 30.2, 0.0, v_rel=2.0, source="frontRadar"),
-      Point(1005, 30.7, 2.0, v_rel=2.0, source="corner235"),
-      Point(1006, 20.1, 0.2, v_rel=1.0, source="corner235"),
-    ),
-    model=model_with_lead(30.2, 0.0, 12.0),
-  )
-
-  assert sticky.lead_one is None
-  assert sticky.lead_two is not None
-  assert sticky.lead_two["radarTrackId"] == 1006
-  assert controller.lead_one_exit.active_identity == (
-    "corner235", 1005, 1,
-  )
-
-  exiting_primary.cut_out_probability = 0.59
-  restored = controller.update(
-    time_s=1.2,
-    v_ego=10.0,
-    radar_points=(
-      Point(10, 30.4, 0.0, v_rel=2.0, source="frontRadar"),
-      Point(1005, 30.9, 2.0, v_rel=2.0, source="corner235"),
-      Point(1006, 20.2, 0.2, v_rel=1.0, source="corner235"),
-    ),
-    model=model_with_lead(30.4, 0.0, 12.0),
-  )
-
-  assert restored.lead_one is not None
-  assert restored.lead_one["radarTrackId"] == 10
-  assert controller.lead_one_exit.active_identity is None
+  assert controller.primary_matcher.last_identity is not None
 
 
 def test_primary_input_policy_matches_removed_model_radard() -> None:
