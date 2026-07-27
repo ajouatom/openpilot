@@ -10,14 +10,10 @@ from typing import Any
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   DPathLeadCandidate,
   DPathLeadTwoTracker,
-  LEAD_ONE_CUT_OUT_THRESHOLD,
-  LeadOneExitLatch,
   can_start_current_path_lead_two,
   cutin_can_compete_with_primary,
   front_cutin_motion_supported,
   lead_duplicates_primary,
-  lead_one_exits_path,
-  lead_one_matches_motion_track,
 )
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
   RadarMotionDecisionTracker,
@@ -150,7 +146,6 @@ class DPathRadarController:
       threshold=radar_motion_cut_in_threshold(self.motion_sensor),
     )
     self.lead_two_tracker = DPathLeadTwoTracker()
-    self.lead_one_exit = LeadOneExitLatch()
     self.lead_dynamics = RadarLeadDynamics()
 
   def _points_at_model_time(
@@ -187,7 +182,6 @@ class DPathRadarController:
         threshold=radar_motion_cut_in_threshold(self.motion_sensor),
       )
       self.lead_two_tracker.reset()
-      self.lead_one_exit.reset()
     if self.motion_sensor == "corner":
       return corner_points
     return tuple(point for point in points if point.source == "frontRadar")
@@ -283,7 +277,6 @@ class DPathRadarController:
     if len(path) < 2:
       self.primary_matcher.reset()
       self.lead_two_tracker.reset()
-      self.lead_one_exit.reset()
       self.lead_dynamics.reset()
       return DPathRadarOutput(
         None, None, None, None, (), (), (), (), (), (),
@@ -341,56 +334,6 @@ class DPathRadarController:
         else None
       ),
     )
-    motion_point_by_identity = {
-      (point.source, point.track_id): point
-      for point in motion_points
-    }
-    exiting_primary_identity = self.lead_one_exit.update(
-      predictions.values(),
-    )
-    for prediction in predictions.values():
-      point = motion_point_by_identity.get(
-        (prediction.source, prediction.track_id),
-      )
-      if point is None:
-        continue
-      control_point = prefer_front_radar_kinematics(point, points)
-      control_d_path = (
-        project_to_model_path(
-          path, control_point.d_rel, control_point.y_rel,
-        ).d_path
-        if control_point is not point
-        else prediction.d_path
-      )
-      motion_lead = self._lead_from_radar_point(
-        control_point, control_d_path, 0.03, 0.0,
-      )
-      identity = (
-        prediction.source,
-        prediction.track_id,
-        prediction.continuity_id,
-      )
-      if (
-        identity == exiting_primary_identity
-        and (
-          self.lead_one_exit.matches_primary(lead_one)
-          or lead_one_matches_motion_track(lead_one, motion_lead)
-        )
-      ):
-        lead_one = None
-        self.primary_matcher.reset()
-        break
-      if lead_one_exits_path(
-        lead_one,
-        motion_lead,
-        float(getattr(prediction, "cut_out_probability", 0.0)),
-        float(getattr(prediction, "cut_in_probability", 0.0)),
-      ):
-        exiting_primary_identity = identity
-        self.lead_one_exit.start(identity, lead_one)
-        lead_one = None
-        self.primary_matcher.reset()
-        break
     decision = self.motion_decisions.update(time_s, predictions.values())
     active_identity = self.lead_two_tracker.active_identity
     protected_identities = (
@@ -430,14 +373,6 @@ class DPathRadarController:
         prediction.track_id,
         prediction.continuity_id,
       )
-      if (
-        identity == exiting_primary_identity
-        or float(getattr(prediction, "cut_out_probability", 0.0))
-        >= LEAD_ONE_CUT_OUT_THRESHOLD
-      ):
-        if self.lead_two_tracker.active_identity == identity:
-          self.lead_two_tracker.reset()
-        continue
       cutin = confirmed.get(identity)
       front_motion_supported = front_cutin_motion_supported(
         prediction.source,
@@ -495,7 +430,6 @@ class DPathRadarController:
               "reason",
               "",
             ) != "insufficient measured dPath history"
-            or exiting_primary_identity is not None
           ),
         )
         and (

@@ -24,15 +24,13 @@ itself and every candidate beyond the fixed 80 m limit. An outside candidate
 within ±8 m longitudinally of leadOne also needs an actual corridor-entry
 sample in its two-second forecast; proximity alone cannot promote a same-row
 vehicle. Front, SCC, and corner inputs retain their production source identity.
-When the motion track physically matching leadOne reaches CUT-OUT probability
-0.60 while CUT-IN remains zero, leadOne is released. That exiting physical
-identity stays latched and excluded from both lead roles only while CUT-IN
-remains zero and CUT-OUT remains at least 0.60. Current-path overlap alone
-never keeps the latch active. The latch clears when that identity disappears,
-gains CUT-IN evidence, or falls below 0.60 CUT-OUT, even if the target body
-still overlaps the current path.
-A separate measured moving object already in the current path may start leadTwo
-without the normal new-track history wait while this exit latch is active.
+CUT-OUT remains a diagnostic prediction only. It never removes leadOne,
+latches an identity out, or excludes either control-lead candidate. LeadOne
+changes only when the primary model-to-front/SCC-radar matcher loses its match
+or switches to another object. This intentionally prefers a brief conservative
+hold on a departing vehicle over a no-lead acceleration gap caused by an
+uncertain future-path prediction. A separate measured moving object already in
+the current path still needs the normal motion history before starting leadTwo.
 
 The stationary leadOne path requires a measured in-path point with
 `|vLead| <= 2.5 m/s`, model-lead positional support at probability 0.05 or

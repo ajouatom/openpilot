@@ -16,10 +16,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
 CUTIN_MAX_DREL_M = 80.0
 PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 3.5
 PRIMARY_DUPLICATE_MAX_YREL_DELTA_M = 1.8
-PRIMARY_EXIT_MAX_VLEAD_DELTA_MPS = 2.0
 PRIMARY_ROW_MAX_DREL_DELTA_M = 8.0
-LEAD_ONE_CUT_OUT_THRESHOLD = 0.60
-LEAD_ONE_EXIT_RELEASE_CUT_OUT_THRESHOLD = LEAD_ONE_CUT_OUT_THRESHOLD
 FRONT_CUT_IN_MIN_DPATH_RATE_MPS = 0.75
 LEAD_TWO_POSITION_HOLD_S = 0.75
 LEAD_TWO_LONGITUDINAL_JUMP_M = 2.25
@@ -45,60 +42,6 @@ class DPathLeadCandidate:
   @property
   def identity(self) -> tuple[str, int, int]:
     return self.source, self.track_id, self.continuity_id
-
-
-@dataclass
-class LeadOneExitLatch:
-  """Keep an exiting physical identity out until its exit evidence clears."""
-
-  active_identity: tuple[str, int, int] | None = None
-  primary_track_id: int | None = None
-
-  def reset(self) -> None:
-    self.active_identity = None
-    self.primary_track_id = None
-
-  def start(
-    self,
-    identity: tuple[str, int, int],
-    primary: dict[str, Any],
-  ) -> None:
-    self.active_identity = identity
-    track_id = int(primary.get("radarTrackId", -1))
-    self.primary_track_id = track_id if track_id >= 0 else None
-
-  def matches_primary(self, primary: dict[str, Any] | None) -> bool:
-    return (
-      primary is not None
-      and bool(primary.get("status"))
-      and self.primary_track_id is not None
-      and int(primary.get("radarTrackId", -1)) == self.primary_track_id
-    )
-
-  def update(
-    self,
-    predictions: Iterable[Any],
-  ) -> tuple[str, int, int] | None:
-    if self.active_identity is None:
-      return None
-    for prediction in predictions:
-      identity = (
-        str(prediction.source),
-        int(prediction.track_id),
-        int(prediction.continuity_id),
-      )
-      if identity != self.active_identity:
-        continue
-      if (
-        float(getattr(prediction, "cut_in_probability", 0.0)) <= 0.0
-        and float(getattr(prediction, "cut_out_probability", 0.0))
-        >= LEAD_ONE_EXIT_RELEASE_CUT_OUT_THRESHOLD
-      ):
-        return self.active_identity
-      self.reset()
-      return None
-    self.reset()
-    return None
 
 
 def can_start_current_path_lead_two(
@@ -294,40 +237,6 @@ def lead_duplicates_primary(
       float(lead.get("yRel", 0.0)) - float(primary.get("yRel", 0.0))
     )
     < PRIMARY_DUPLICATE_MAX_YREL_DELTA_M
-  )
-
-
-def lead_one_matches_motion_track(
-  primary: dict[str, Any] | None,
-  motion_lead: dict[str, Any],
-) -> bool:
-  """Check whether primary and motion output describe the same physical car."""
-  if (
-    primary is None
-    or not primary.get("status")
-    or not lead_duplicates_primary(motion_lead, primary)
-  ):
-    return False
-  return (
-    abs(
-      float(motion_lead.get("vLead", 0.0))
-      - float(primary.get("vLead", 0.0))
-    )
-    <= PRIMARY_EXIT_MAX_VLEAD_DELTA_MPS
-  )
-
-
-def lead_one_exits_path(
-  primary: dict[str, Any] | None,
-  motion_lead: dict[str, Any],
-  cut_out_probability: float,
-  cut_in_probability: float,
-) -> bool:
-  """Release leadOne only when the same physical motion track exits the path."""
-  return (
-    float(cut_in_probability) <= 0.0
-    and float(cut_out_probability) >= LEAD_ONE_CUT_OUT_THRESHOLD
-    and lead_one_matches_motion_track(primary, motion_lead)
   )
 
 

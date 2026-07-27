@@ -29,8 +29,6 @@ from openpilot.selfdrive.carrot.radar_motion import (
   DPathLeadTwoTracker,
   FRONT_CUT_IN_THRESHOLD,
   IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M,
-  LEAD_ONE_CUT_OUT_THRESHOLD,
-  LeadOneExitLatch,
   POSITION_ONLY_MAX_ABS_VLEAD_MPS,
   STATIONARY_MAX_ABS_VLEAD_MPS,
   RadarMotionDecisionTracker,
@@ -42,8 +40,6 @@ from openpilot.selfdrive.carrot.radar_motion import (
   cutin_probability_at,
   front_cutin_motion_supported,
   lead_duplicates_primary,
-  lead_one_exits_path,
-  lead_one_matches_motion_track,
   lead_from_radar_point,
   lead_from_vision_match,
   prefer_front_radar_kinematics,
@@ -804,10 +800,7 @@ class RadarMotionShadowSelector:
     ):
       raise ValueError("cached predictor inputs must align with radar frames")
     selections: list[Selection] = []
-    effective_lead_one_values: list[dict[str, Any] | None] = []
-    lead_one_was_filtered = False
     lead_two_tracker = DPathLeadTwoTracker()
-    lead_one_exit = LeadOneExitLatch()
     decision_tracker = RadarMotionDecisionTracker(
       threshold=self.decision_threshold,
     )
@@ -821,59 +814,6 @@ class RadarMotionShadowSelector:
         frame, self.motion_sensor,
       )
       all_aligned_points = radar_points_at_model_time(frame)
-      exiting_primary_identity = lead_one_exit.update(
-        predictions.values(),
-      )
-      selected_point_by_identity = {
-        (point.source, point.track_id): point
-        for point in selected_points
-      }
-      for prediction in predictions.values():
-        point = selected_point_by_identity.get(
-          (prediction.source, prediction.track_id),
-        )
-        if point is None:
-          continue
-        control_point = prefer_front_radar_kinematics(
-          point, all_aligned_points,
-        )
-        control_d_path = (
-          project_to_model_path(
-            frame.path, control_point.d_rel, control_point.y_rel,
-          ).d_path
-          if control_point is not point
-          else prediction.d_path
-        )
-        motion_lead = lead_from_radar_point(
-          control_point, control_d_path, 0.03, 0.0,
-        )
-        identity = (
-          prediction.source,
-          prediction.track_id,
-          prediction.continuity_id,
-        )
-        if (
-          identity == exiting_primary_identity
-          and (
-            lead_one_exit.matches_primary(lead_one)
-            or lead_one_matches_motion_track(lead_one, motion_lead)
-          )
-        ):
-          lead_one = None
-          lead_one_was_filtered = True
-          break
-        if lead_one_exits_path(
-          lead_one,
-          motion_lead,
-          float(getattr(prediction, "cut_out_probability", 0.0)),
-          float(getattr(prediction, "cut_in_probability", 0.0)),
-        ):
-          exiting_primary_identity = identity
-          lead_one_exit.start(identity, lead_one)
-          lead_one = None
-          lead_one_was_filtered = True
-          break
-      effective_lead_one_values.append(lead_one)
       active_identity = lead_two_tracker.active_identity
       protected_identities = (
         ()
@@ -925,14 +865,6 @@ class RadarMotionShadowSelector:
           prediction.track_id,
           prediction.continuity_id,
         )
-        if (
-          identity == exiting_primary_identity
-          or float(getattr(prediction, "cut_out_probability", 0.0))
-          >= LEAD_ONE_CUT_OUT_THRESHOLD
-        ):
-          if lead_two_tracker.active_identity == identity:
-            lead_two_tracker.reset()
-          continue
         cutin = confirmed_by_identity.get(identity)
         front_motion_supported = front_cutin_motion_supported(
           prediction.source,
@@ -991,7 +923,6 @@ class RadarMotionShadowSelector:
             prediction.current_path_occupancy,
             (
               prediction.reason != "insufficient measured dPath history"
-              or exiting_primary_identity is not None
             ),
           )
           and (
@@ -1093,11 +1024,7 @@ class RadarMotionShadowSelector:
         decision_cutin_candidates=decisions,
       ))
     self.trajectories = trajectory_values
-    self.lead_one_outputs = (
-      tuple(effective_lead_one_values)
-      if lead_one_was_filtered
-      else lead_one_values
-    )
+    self.lead_one_outputs = lead_one_values
     self.selections = tuple(selections)
 
   def select(self, frame: RadarFrame, frame_index: int | None = None) -> Selection:
