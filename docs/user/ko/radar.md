@@ -37,9 +37,9 @@
 
 코너 레이더 객체는 차량 코드가 인식한 지원 메시지 그룹이 있을 때만 생성됩니다. 지원되는 0x430 메시지군도 전방 레이더가 아닌 코너 레이더 입력으로 구분됩니다. 현재 `2`의 끼어들기 처리는 현대 계열을 중심으로 동작하므로 다른 제조사에 같은 값을 일반화하면 안 됩니다.
 
-### dPath 물리 레이더 처리
+### Radar Motion 모드
 
-| `RadarDPathMode` | 의미 |
+| `RadarMotionMode` | 의미 |
 |---:|---|
 | `0` | 기존 `radard` 선행차·끼어들기 처리 유지(기본값) |
 | `1` | 독립 dPath RadarD가 front/SCC–vision leadOne을 먼저 계산하고, 물리 dPath CUT-IN만 leadTwo로 사용 |
@@ -53,7 +53,7 @@
 <a id="lead-selection"></a>
 ## 선행차 선택과 검증
 
-manager는 두 레이더 구현을 동시에 실행하지 않습니다. `RadarDPathMode=0`에서는 기존 `openpilot.selfdrive.controls.radard`만 실행하고 기존 leadOne/leadTwo 선택을 그대로 유지합니다. `RadarDPathMode=1`에서는 기존 프로세스를 중지하고 독립 `openpilot.selfdrive.carrot.radar.radard_dpath`만 실행합니다. 이 프로세스는 front/SCC–vision 매칭으로 leadOne을 먼저 계산한 뒤 아래 물리 predictor로 leadTwo를 계산해 `radarState`를 직접 발행합니다. 전방 레이더, SCC, 코너 레이더의 입력 역할과 소스 구분은 유지하며 학습형 레이더 리드 모델은 사용하지 않습니다.
+manager는 두 레이더 구현을 동시에 실행하지 않습니다. `RadarMotionMode=0`에서는 기존 `openpilot.selfdrive.controls.radard`만 실행하고 기존 leadOne/leadTwo 선택을 그대로 유지합니다. `RadarMotionMode=1`에서는 기존 프로세스를 중지하고 독립 `openpilot.selfdrive.carrot.radar.radard_dpath`만 실행합니다. 이 프로세스는 front/SCC–vision 매칭으로 leadOne을 먼저 계산한 뒤 아래 물리 predictor로 leadTwo를 계산해 `radarState`를 직접 발행합니다. 전방 레이더, SCC, 코너 레이더의 입력 역할과 소스 구분은 유지하며 학습형 레이더 리드 모델은 사용하지 않습니다.
 
 headless 검증기는 기존 radard와 실험 중인 단순 물리 predictor를 별도로 보고할 수 있습니다. 화면 리플레이는 의도적으로 물리 predictor만 표시하며 기존 radard의 `leadOne`, `leadTwo`, CUT-IN 마커를 가져오지 않고 종방향 제어도 바꾸지 않습니다.
 

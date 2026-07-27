@@ -38,11 +38,11 @@ class TestManager:
     CP = car.CarParams.new_message()
     params = Params()
 
-    params.put("RadarDPathMode", "0")
+    params.put("RadarMotionMode", "0")
     assert managed_processes["radard"].should_run(True, params, CP)
     assert not managed_processes["radard_dpath"].should_run(True, params, CP)
 
-    params.put("RadarDPathMode", "1")
+    params.put("RadarMotionMode", "1")
     assert not managed_processes["radard"].should_run(True, params, CP)
     assert managed_processes["radard_dpath"].should_run(True, params, CP)
     assert not managed_processes["radard"].should_run(False, params, CP)

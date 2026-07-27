@@ -681,7 +681,7 @@ def test_production_dpath_mode_is_independent_of_conventional_radard() -> None:
   manager_source = process_config.read_text(encoding="utf-8")
 
   assert "RadarLeadModelMode" not in conventional_source
-  assert "RadarDPathMode" not in conventional_source
+  assert "RadarMotionMode" not in conventional_source
   assert "RadarMotionPredictor" not in conventional_source
   assert "from openpilot.selfdrive.controls.radard" not in dpath_source
   assert '"radard", "openpilot.selfdrive.controls.radard", conventional_radard' in manager_source

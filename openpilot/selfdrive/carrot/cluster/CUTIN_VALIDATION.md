@@ -11,9 +11,9 @@ physical equations, select thresholds, or add scene-specific exceptions.
 ## Current architecture
 
 `RadarLeadModelMode` and the learned radar-lead/path-occupancy runtimes have
-been removed. `RadarDPathMode=0` runs only
+been removed. `RadarMotionMode=0` runs only
 `openpilot/selfdrive/controls/radard.py` and preserves its existing lead
-selection. `RadarDPathMode=1` does not start or import that implementation. It
+selection. `RadarMotionMode=1` does not start or import that implementation. It
 runs only `openpilot/selfdrive/carrot/radar/radard_dpath.py`, first calculates
 front/SCC vision-matched `leadOne`, then supplies `leadTwo` only from a
 physically confirmed dPath CUT-IN.

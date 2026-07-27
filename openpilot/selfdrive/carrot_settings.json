@@ -400,7 +400,7 @@
           "params": [
             "EnableRadarTracks",
             "EnableCornerRadar",
-            "RadarDPathMode"
+            "RadarMotionMode"
           ]
         },
         {
@@ -2534,11 +2534,11 @@
     },
     {
       "group": "레이더설정",
-      "name": "RadarDPathMode",
-      "title": "dPath 물리 레이더 처리",
+      "name": "RadarMotionMode",
+      "title": "Radar Motion 모드",
       "descr": "기존 radard 대신 독립 프로세스가 front/SCC-vision leadOne을 먼저 계산하고, dPath 물리 이력으로 확정한 끼어들기 차량만 leadTwo로 사용합니다. 검증된 차량에서만 켜세요.",
       "egroup": "RADAR",
-      "etitle": "dPath Physical Radar Processing",
+      "etitle": "Radar Motion Mode",
       "edescr": "Replaces conventional radard with an independent process that calculates front/SCC-vision leadOne first and uses only cut-ins confirmed from physical dPath history as leadTwo. Enable only on a validated vehicle.",
       "cgroup": "雷达设置",
       "ctitle": "dPath 物理雷达处理",

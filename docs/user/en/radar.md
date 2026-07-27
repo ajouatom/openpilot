@@ -37,9 +37,9 @@ On non-CAN FD Hyundai/Kia vehicles, a positive value attempts to enable radar tr
 
 Corner-radar objects are created only when the vehicle code recognizes a supported message group. The supported 0x430 message family is also classified as corner-radar input rather than front radar. The cut-in processing in mode `2` currently focuses on Hyundai-family implementations and must not be generalized to other manufacturers.
 
-### dPath physical radar processing
+### Radar Motion mode
 
-| `RadarDPathMode` | Meaning |
+| `RadarMotionMode` | Meaning |
 |---:|---|
 | `0` | Keep the existing `radard` lead and cut-in processing (default) |
 | `1` | Run the independent dPath RadarD, calculate front/SCC-to-vision leadOne first, then use only physical dPath CUT-INs as leadTwo |
@@ -53,7 +53,7 @@ The `leadLeft`, `leadRight`, and side lists used by lane-change assistance are a
 <a id="lead-selection"></a>
 ## Lead selection and validation
 
-The manager never runs both radar implementations together. With `RadarDPathMode=0`, only the conventional `openpilot.selfdrive.controls.radard` runs and its leadOne/leadTwo selection is unchanged. With `RadarDPathMode=1`, that process is stopped and only the independent `openpilot.selfdrive.carrot.radar.radard_dpath` runs. It calculates front/SCC-to-vision leadOne first, calculates leadTwo with the physical predictor below, and publishes `radarState` directly. Front radar, SCC, and corner radar retain their input roles and source identity, and no learned radar-lead model is used.
+The manager never runs both radar implementations together. With `RadarMotionMode=0`, only the conventional `openpilot.selfdrive.controls.radard` runs and its leadOne/leadTwo selection is unchanged. With `RadarMotionMode=1`, that process is stopped and only the independent `openpilot.selfdrive.carrot.radar.radard_dpath` runs. It calculates front/SCC-to-vision leadOne first, calculates leadTwo with the physical predictor below, and publishes `radarState` directly. Front radar, SCC, and corner radar retain their input roles and source identity, and no learned radar-lead model is used.
 
 The headless validator can report existing radard and the experimental physical predictor separately. The visual replay deliberately shows only the physical predictor, never imports existing radard `leadOne`, `leadTwo`, or CUT-IN markers, and does not change longitudinal control.
 
