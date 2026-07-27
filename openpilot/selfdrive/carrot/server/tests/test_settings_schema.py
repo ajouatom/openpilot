@@ -46,11 +46,16 @@ def test_c3x_lite_hardware_setting_is_exposed(settings, params):
   assert device_hardware["params"] == ["HardwareC3xLite"]
 
 
-def test_removed_radar_model_mode_is_not_exposed(settings, params):
-  assert "RadarLeadModelMode" not in {p["name"] for p in params}
+def test_physical_radar_mode_replaces_removed_model_mode(settings, params):
+  by_name = {p["name"]: p for p in params}
+  assert "RadarLeadModelMode" not in by_name
+  assert (by_name["RadarDPathMode"]["min"], by_name["RadarDPathMode"]["max"]) == (0, 1)
+  assert by_name["RadarDPathMode"]["default"] == 0
+  assert by_name["RadarDPathMode"]["control"] == "toggle"
+  assert by_name["RadarDPathMode"]["risk"] == "high"
   vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
   radar = next(group for group in vehicle["groups"] if group["id"] == "VEH_RADAR")
-  assert radar["params"] == ["EnableRadarTracks", "EnableCornerRadar"]
+  assert radar["params"] == ["EnableRadarTracks", "EnableCornerRadar", "RadarDPathMode"]
 
 
 def test_parameter_names_are_unique(params):

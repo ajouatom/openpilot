@@ -37,16 +37,28 @@
 
 코너 레이더 객체는 차량 코드가 인식한 지원 메시지 그룹이 있을 때만 생성됩니다. 지원되는 0x430 메시지군도 전방 레이더가 아닌 코너 레이더 입력으로 구분됩니다. 현재 `2`의 끼어들기 처리는 현대 계열을 중심으로 동작하므로 다른 제조사에 같은 값을 일반화하면 안 됩니다.
 
+### dPath 물리 레이더 처리
+
+| `RadarDPathMode` | 의미 |
+|---:|---|
+| `0` | 기존 `radard` 선행차·끼어들기 처리 유지(기본값) |
+| `1` | 기존 leadOne을 먼저 계산하고, 물리 dPath 이력으로 확정한 CUT-IN만 leadTwo로 사용 |
+
+`1`은 학습 모델을 사용하지 않습니다. 기존 leadOne의 front/SCC–vision 매칭은 바꾸지 않습니다. leadOne 계산이 끝난 뒤 동일한 물리 predictor가 0.25초 동안 확인한 OUT→IN 차량 중 leadOne과 다른 객체만 leadTwo 후보가 됩니다. leadOne보다 먼 차량과 `max(20 m, vEgo × 2초 + 10 m)` 밖의 차량은 종방향 제어 후보에서 제외합니다. 이 모드에서는 기존 heuristic CUT-IN을 동시에 leadTwo에 넣지 않습니다.
+
+코너 레이더 포인트가 한 번이라도 확인되면 해당 실행 동안 코너 motion만 사용하고, 코너 포인트가 없는 구성에서는 `frontRadar` raw track만 사용합니다. 프레임마다 front와 corner를 교체하지 않으며 SCC는 dPath motion 입력으로 사용하지 않습니다. 잘못된 leadTwo는 실제 감속에 영향을 줄 수 있으므로 전체 shadow 검증을 마친 동일 차량 구성에서만 켜세요.
+
 <a id="lead-selection"></a>
 ## 선행차 선택과 검증
 
-carrotpilot의 production 레이더 선행차 경로는 기존 `radard` 한 가지입니다. 별도의 학습형 레이더 리드 모드와 모델 설정은 없습니다. 전방 레이더, SCC, 코너 레이더는 기존 입력 역할과 소스 구분을 그대로 유지합니다. `leadOne`은 기존의 주 비전·레이더 선행차이고, `leadTwo`도 기존 보조·끼어들기 역할을 유지합니다.
+carrotpilot의 production 레이더 프로세스는 `radard` 한 가지이며 별도의 학습형 레이더 리드 모델은 없습니다. 전방 레이더, SCC, 코너 레이더는 기존 입력 역할과 소스 구분을 유지합니다. `RadarDPathMode=0`에서는 기존 leadOne/leadTwo 선택이 그대로 동작합니다. `RadarDPathMode=1`에서는 leadOne은 그대로 두고 leadTwo의 CUT-IN 판단만 아래 물리 predictor가 담당합니다.
 
 headless 검증기는 기존 radard와 실험 중인 단순 물리 predictor를 별도로 보고할 수 있습니다. 화면 리플레이는 의도적으로 물리 predictor만 표시하며 기존 radard의 `leadOne`, `leadTwo`, CUT-IN 마커를 가져오지 않고 종방향 제어도 바꾸지 않습니다.
 
 shadow predictor는 다음 원칙으로 동작합니다.
 
 - `measured=true` 레이더 포인트만 사용합니다.
+- 자차 뒤 5m부터 전방 100m까지의 포인트만 motion 예측에 사용합니다.
 - 리플레이 레이더 포인트를 실측 상대속도로 model path 시점에 먼저 맞춘 뒤 같은 시점의 model path polyline에 수직 투영합니다. 중심선을 따라간 호 길이가 `S`, 중심선 법선 방향의 부호 있는 거리가 `dPath`입니다.
 - model path 기준 고정 범위 `|dPath| ≤ 5.4 m`를 사용해 ego lane과 바로 좌·우 인접 차로만 처리합니다.
 - 좌·우 각 인접 차로에서는 5m 이내 포인트와 5m 이상에서 가장 가까운 차량을 유지하고, 같은 방향에서 그 차량 뒤에 가려진 더 먼 차량은 검출 대상에서 제외합니다. 단, 범위 안의 실측 이력은 유지해 가려졌던 차량이 보이기 시작할 때 물리 연속성을 잃지 않습니다.
@@ -104,6 +116,7 @@ ADAS 프리셋이 코너 레이더를 켠다는 것은 하네스에서 접근 �
 - 설정 범위와 설명: `openpilot/selfdrive/carrot_settings.json`
 - 기존 production 레이더 선행차 선택: `openpilot/selfdrive/controls/radard.py`
 - 물리 shadow predictor: `openpilot/selfdrive/carrot/radar_motion/predictor.py`
+- dPath leadTwo 선택: `openpilot/selfdrive/carrot/radar_motion/lead_selection.py`
 - PC 리플레이: `openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py`
 - 현대·기아 레이더 메시지 파싱: `opendbc_repo/opendbc/car/hyundai/radar_interface.py`
 - 비-CAN FD 레이더 활성화: `opendbc_repo/opendbc/car/hyundai/interface.py`

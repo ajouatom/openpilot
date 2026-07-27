@@ -1,11 +1,24 @@
-"""Measured dPath-history radar motion prediction for offline shadow validation."""
+"""Measured dPath-history radar motion prediction shared by shadow and radard."""
 
+from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
+  DPathLeadSelection,
+  dpath_control_max_d_rel,
+  lead_duplicates_primary,
+  select_dpath_lead_two,
+)
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
   ADJACENT_OCCLUSION_MIN_DREL_M,
+  CUT_IN_BOUNDARY_HOLD_S,
+  CUT_IN_CONFIRMATION_S,
   IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M,
   MOTION_HORIZONS_S,
+  MOTION_MAX_DREL_M,
+  MOTION_MIN_DREL_M,
   POSITION_ONLY_MAX_ABS_VLEAD_MPS,
   ModelPathProjection,
+  RadarMotionCutIn,
+  RadarMotionDecision,
+  RadarMotionDecisionTracker,
   RadarMotionPrediction,
   RadarMotionPredictor,
   RadarMotionSample,
@@ -18,18 +31,29 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
 )
 
 __all__ = (
+  "DPathLeadSelection",
   "ADJACENT_OCCLUSION_MIN_DREL_M",
+  "CUT_IN_BOUNDARY_HOLD_S",
+  "CUT_IN_CONFIRMATION_S",
   "IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M",
   "MOTION_HORIZONS_S",
+  "MOTION_MAX_DREL_M",
+  "MOTION_MIN_DREL_M",
   "POSITION_ONLY_MAX_ABS_VLEAD_MPS",
   "ModelPathProjection",
+  "RadarMotionCutIn",
+  "RadarMotionDecision",
+  "RadarMotionDecisionTracker",
   "RadarMotionPrediction",
   "RadarMotionPredictor",
   "RadarMotionSample",
   "cutin_probability_at",
+  "dpath_control_max_d_rel",
   "is_review_candidate",
+  "lead_duplicates_primary",
   "model_path_point_at_s",
   "prediction_sample_at",
   "project_to_model_path",
+  "select_dpath_lead_two",
   "visible_motion_points",
 )

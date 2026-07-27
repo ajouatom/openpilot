@@ -167,6 +167,21 @@
       "human_verified": true
     },
     {
+      "id": "manual-00000218-017p40-front-0",
+      "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
+      "log": "00000218--6aa147e461--6/rlog.zst",
+      "source": "front",
+      "time_s": 17.4,
+      "window": [
+        16.65,
+        18.15
+      ],
+      "track_id": 0,
+      "expected": "detect",
+      "prediction_horizon_s": 1.0,
+      "human_verified": true
+    },
+    {
       "id": "manual-00000218-031p05-corner-1041",
       "vehicle_folder": "GENESIS_GV80 4857b2d26ed4648e",
       "log": "00000218--6aa147e461--6/rlog.zst",

@@ -195,13 +195,13 @@ These 14 settings describe the car, harness, and device hardware configuration. 
 |---|---|---|
 | Hyundai/Kia | `HyundaiCameraSCC`, `IsLdwsCar`, `HapticFeedbackWhenSpeedCamera` | SCC connection, LDWS behavior, and speed-event haptics |
 | CAN FD/HDA | `CanfdHDA2`, `CanfdDebug`, `HDPuse` | HDA2 selection, CAN FD diagnostics, and HDP |
-| Radar | `EnableRadarTracks`, `EnableCornerRadar` | SCC radar, raw tracks, and corner radar |
+| Radar | `EnableRadarTracks`, `EnableCornerRadar`, `RadarDPathMode` | SCC radar, raw tracks, corner radar, and dPath leadTwo processing |
 | Driver monitoring | `DisableDM`, `MuteDoor`, `MuteSeatbelt` | Driver monitoring and selected vehicle alerts |
 | Vehicle assistance | `MaxAngleFrames`, `SpeedFromPCM` | Steering-angle frames and stock-SCC speed control |
 | Device hardware | `HardwareC3xLite` | Speakerless C3X Lite audio and process configuration |
 
 > [!CAUTION]
-> Incorrect `HyundaiCameraSCC`, `CanfdHDA2`, `EnableRadarTracks`, or `SpeedFromPCM` values can change vehicle identification, SCC, radar, or longitudinal behavior. Confirm the vehicle, model year, HDA generation, harness location, and whether stock ACC is retained.
+> Incorrect `HyundaiCameraSCC`, `CanfdHDA2`, `EnableRadarTracks`, `RadarDPathMode`, or `SpeedFromPCM` values can change vehicle identification, SCC, radar, or longitudinal behavior. Confirm the vehicle, model year, HDA generation, harness location, and whether stock ACC is retained.
 
 See [Radar tracks and corner radar](radar.md) before changing radar modes.
 

@@ -17,6 +17,8 @@ from typing import Any
 
 
 MOTION_HORIZONS_S = (0.5, 1.0, 1.5, 2.0)
+MOTION_MIN_DREL_M = -5.0
+MOTION_MAX_DREL_M = 100.0
 NOMINAL_LANE_WIDTH_M = 3.60
 IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M = 1.5 * NOMINAL_LANE_WIDTH_M
 POSITION_ONLY_MAX_ABS_VLEAD_MPS = 3.0 / 3.6
@@ -28,6 +30,8 @@ PATH_OVERLAP_HALF_WIDTH_M = EGO_PATH_HALF_WIDTH_M + TARGET_VEHICLE_HALF_WIDTH_M
 PATH_STATE_HYSTERESIS_M = 0.12
 CUT_IN_THRESHOLD = 0.50
 CUT_OUT_THRESHOLD = 0.50
+CUT_IN_CONFIRMATION_S = 0.25
+CUT_IN_BOUNDARY_HOLD_S = 0.40
 MAX_HISTORY_S = 2.0
 SHORT_HISTORY_S = 0.45
 LONG_HISTORY_S = 1.50
@@ -118,6 +122,17 @@ class RadarMotionPrediction:
   @property
   def path_exit_probability(self) -> float:
     return self.cut_out_probability
+
+
+@dataclass(frozen=True)
+class RadarMotionCutIn:
+  prediction: RadarMotionPrediction
+  score: float
+
+
+@dataclass(frozen=True)
+class RadarMotionDecision:
+  confirmed: tuple[RadarMotionCutIn, ...]
 
 
 @dataclass(frozen=True)
@@ -390,6 +405,8 @@ def _scoped_motion_points(
     if not bool(getattr(point, "measured", False)):
       continue
     d_rel = _value(point, "d_rel", "dRel")
+    if not MOTION_MIN_DREL_M <= d_rel <= MOTION_MAX_DREL_M:
+      continue
     y_rel = _value(point, "y_rel", "yRel")
     d_path = project_to_model_path(path, d_rel, y_rel).d_path
     if abs(d_path) <= IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M:
@@ -934,3 +951,112 @@ class RadarMotionPredictor:
       if key in visible_keys:
         predictions[key] = prediction
     return predictions
+
+
+class RadarMotionDecisionTracker:
+  """Apply the shared, small temporal confirmation to physical CUT-IN evidence."""
+
+  def __init__(
+    self,
+    threshold: float = CUT_IN_THRESHOLD,
+    confirmation_s: float = CUT_IN_CONFIRMATION_S,
+    boundary_hold_s: float = CUT_IN_BOUNDARY_HOLD_S,
+  ) -> None:
+    self.threshold = float(threshold)
+    self.confirmation_s = float(confirmation_s)
+    self.boundary_hold_s = float(boundary_hold_s)
+    self._started_at: dict[tuple[str, int, int], float] = {}
+    self._peak_score: dict[tuple[str, int, int], float] = {}
+
+  @staticmethod
+  def _key(prediction: RadarMotionPrediction) -> tuple[str, int, int]:
+    return (
+      prediction.source,
+      prediction.track_id,
+      prediction.continuity_id,
+    )
+
+  def reset(self) -> None:
+    self._started_at.clear()
+    self._peak_score.clear()
+
+  def update(
+    self,
+    time_s: float,
+    predictions: Iterable[RadarMotionPrediction],
+  ) -> RadarMotionDecision:
+    prediction_by_key = {
+      self._key(prediction): prediction
+      for prediction in predictions
+    }
+    raw_keys = {
+      key
+      for key, prediction in prediction_by_key.items()
+      if (
+        (
+          not prediction.current_path_occupancy
+          and prediction.cut_in_probability >= self.threshold
+        )
+        or (
+          prediction.current_path_occupancy
+          and prediction.path_entry_age_s is not None
+          and prediction.path_entry_age_s
+          <= self.confirmation_s + self.boundary_hold_s
+          and prediction.path_entry_probability >= self.threshold
+        )
+      )
+    }
+
+    for key in tuple(self._started_at):
+      if key in raw_keys:
+        continue
+      prediction = prediction_by_key.get(key)
+      elapsed_s = time_s - self._started_at[key]
+      crossing_inward = (
+        prediction is not None
+        and prediction.current_path_occupancy
+        and prediction.d_path * prediction.d_path_rate_long < 0.0
+        and prediction.path_entry_age_s is not None
+        and prediction.path_entry_age_s
+        <= self.confirmation_s + self.boundary_hold_s
+        and elapsed_s <= self.confirmation_s + self.boundary_hold_s
+      )
+      if not crossing_inward:
+        self._started_at.pop(key)
+        self._peak_score.pop(key, None)
+
+    for key in raw_keys:
+      prediction = prediction_by_key[key]
+      self._started_at.setdefault(key, time_s)
+      self._peak_score[key] = max(
+        self._peak_score.get(key, 0.0),
+        prediction.cut_in_probability,
+        prediction.path_entry_probability,
+      )
+
+    active_keys = raw_keys | {
+      key
+      for key in self._started_at
+      if (
+        key in prediction_by_key
+        and prediction_by_key[key].current_path_occupancy
+        and prediction_by_key[key].d_path
+        * prediction_by_key[key].d_path_rate_long < 0.0
+        and prediction_by_key[key].path_entry_age_s is not None
+        and prediction_by_key[key].path_entry_age_s
+        <= self.confirmation_s + self.boundary_hold_s
+      )
+    }
+    confirmed = tuple(
+      RadarMotionCutIn(
+        prediction_by_key[key],
+        self._peak_score[key],
+      )
+      for key, started_at in self._started_at.items()
+      if (
+        key in active_keys
+        and key in prediction_by_key
+        and time_s - started_at >= self.confirmation_s
+      )
+    )
+    return RadarMotionDecision(confirmed)

@@ -21,8 +21,11 @@ if str(REPO_ROOT) not in sys.path:
   sys.path.insert(0, str(REPO_ROOT))
 
 from openpilot.selfdrive.carrot.radar_motion import (
+  CUT_IN_BOUNDARY_HOLD_S,
+  CUT_IN_CONFIRMATION_S,
   IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M,
   POSITION_ONLY_MAX_ABS_VLEAD_MPS,
+  RadarMotionDecisionTracker,
   RadarMotionPrediction,
   RadarMotionPredictor,
   cutin_probability_at,
@@ -38,8 +41,8 @@ CARROT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_VALIDATION_CASES = CARROT_ROOT / "cluster" / "cutin_validation_cases.json"
 DEFAULT_TRAJECTORY_LABELS = CARROT_ROOT / "cluster" / "radar_trajectory_labels.json"
 SHADOW_CUTIN_THRESHOLD = 0.50
-CUTIN_CONFIRMATION_S = 0.25
-CUTIN_DECISION_HOLD_S = 0.40
+CUTIN_CONFIRMATION_S = CUT_IN_CONFIRMATION_S
+CUTIN_DECISION_HOLD_S = CUT_IN_BOUNDARY_HOLD_S
 VALIDATION_EXPECTED_LABELS = ("detect", "clear", "stationary")
 MAX_POINT_MODEL_TIME_SKEW_S = 0.10
 KOREAN_FONT_BASE_SIZE = 40
@@ -435,17 +438,10 @@ class RadarMotionShadowSelector:
     )
     trajectories = radar_trajectory_series(frames, self.motion_sensor)
     selections: list[Selection] = []
-    cutin_started_at: dict[tuple[str, int, int], float] = {}
-    cutin_peak_score: dict[tuple[str, int, int], float] = {}
+    decision_tracker = RadarMotionDecisionTracker(
+      threshold=SHADOW_CUTIN_THRESHOLD,
+    )
     for frame, predictions in zip(frames, trajectories, strict=True):
-      prediction_by_key = {
-        (
-          prediction.source,
-          prediction.track_id,
-          prediction.continuity_id,
-        ): prediction
-        for prediction in predictions.values()
-      }
       raw_diagnostics = tuple(sorted(
         (_shadow_candidate(prediction) for prediction in predictions.values()),
         key=lambda candidate: (
@@ -454,84 +450,17 @@ class RadarMotionShadowSelector:
           candidate.d_rel if candidate.d_rel is not None else math.inf,
         ),
       ))
-      raw_cutin_keys = {
-        (
-          prediction.source,
-          prediction.track_id,
-          prediction.continuity_id,
-        )
-        for prediction in predictions.values()
-        if (
-          (
-            not prediction.current_path_occupancy
-            and prediction.cut_in_probability >= SHADOW_CUTIN_THRESHOLD
-          )
-          or (
-            prediction.current_path_occupancy
-            and prediction.path_entry_age_s is not None
-            and prediction.path_entry_age_s
-            <= CUTIN_CONFIRMATION_S + CUTIN_DECISION_HOLD_S
-            and prediction.path_entry_probability >= SHADOW_CUTIN_THRESHOLD
-          )
-        )
-      }
-      for key in tuple(cutin_started_at):
-        if key not in raw_cutin_keys:
-          prediction = prediction_by_key.get(key)
-          elapsed_s = frame.time_s - cutin_started_at[key]
-          crossing_inward = (
-            prediction is not None
-            and prediction.current_path_occupancy
-            and prediction.d_path * prediction.d_path_rate_long < 0.0
-            and prediction.path_entry_age_s is not None
-            and prediction.path_entry_age_s
-            <= CUTIN_CONFIRMATION_S + CUTIN_DECISION_HOLD_S
-            and elapsed_s
-            <= CUTIN_CONFIRMATION_S + CUTIN_DECISION_HOLD_S
-          )
-          if not crossing_inward:
-            cutin_started_at.pop(key)
-            cutin_peak_score.pop(key, None)
-      for key in raw_cutin_keys:
-        cutin_started_at.setdefault(key, frame.time_s)
-        cutin_peak_score[key] = max(
-          cutin_peak_score.get(key, 0.0),
-          prediction_by_key[key].cut_in_probability,
-          prediction_by_key[key].path_entry_probability,
-        )
-      active_cutin_keys = set(raw_cutin_keys) | {
-        key for key in cutin_started_at
-        if (
-          key in prediction_by_key
-          and prediction_by_key[key].current_path_occupancy
-          and prediction_by_key[key].d_path
-          * prediction_by_key[key].d_path_rate_long < 0.0
-          and prediction_by_key[key].path_entry_age_s is not None
-          and prediction_by_key[key].path_entry_age_s
-          <= CUTIN_CONFIRMATION_S + CUTIN_DECISION_HOLD_S
-        )
-      }
-      confirmed_continuity_keys = {
-        (source, track_id, continuity_id)
-        for (
-          source,
-          track_id,
-          continuity_id,
-        ), started_at in cutin_started_at.items()
-        if (
-          (source, track_id, continuity_id) in active_cutin_keys
-          and frame.time_s - started_at >= CUTIN_CONFIRMATION_S
-        )
-      }
+      decision = decision_tracker.update(
+        frame.time_s,
+        predictions.values(),
+      )
       confirmed_keys = {
-        (source, track_id)
-        for source, track_id, _ in confirmed_continuity_keys
+        (cutin.prediction.source, cutin.prediction.track_id)
+        for cutin in decision.confirmed
       }
       confirmed_scores = {
-        (source, track_id): cutin_peak_score[
-          (source, track_id, continuity_id)
-        ]
-        for source, track_id, continuity_id in confirmed_continuity_keys
+        (cutin.prediction.source, cutin.prediction.track_id): cutin.score
+        for cutin in decision.confirmed
       }
       diagnostics = tuple(
         replace(

@@ -37,16 +37,28 @@ On non-CAN FD Hyundai/Kia vehicles, a positive value attempts to enable radar tr
 
 Corner-radar objects are created only when the vehicle code recognizes a supported message group. The supported 0x430 message family is also classified as corner-radar input rather than front radar. The cut-in processing in mode `2` currently focuses on Hyundai-family implementations and must not be generalized to other manufacturers.
 
+### dPath physical radar processing
+
+| `RadarDPathMode` | Meaning |
+|---:|---|
+| `0` | Keep the existing `radard` lead and cut-in processing (default) |
+| `1` | Calculate the existing leadOne first, then use only physically confirmed dPath CUT-INs as leadTwo |
+
+Mode `1` does not use a learned model. It leaves the existing front/SCC-to-vision leadOne match unchanged. After leadOne is known, only a different OUT-to-IN object confirmed by the same physical predictor for 0.25 seconds can become leadTwo. A vehicle farther than leadOne or beyond `max(20 m, vEgo × 2 seconds + 10 m)` is excluded from longitudinal control. The existing heuristic CUT-IN path does not compete for leadTwo while this mode is active.
+
+Once corner-radar points have been observed, the mode uses only corner motion for the rest of that process run. A configuration with no corner points uses only `frontRadar` raw tracks. It does not switch between front and corner from frame to frame, and SCC is never a dPath-motion input. An incorrect leadTwo can affect real deceleration, so enable this mode only on the same vehicle configuration after completing shadow validation.
+
 <a id="lead-selection"></a>
 ## Lead selection and validation
 
-carrotpilot now has one production radar lead path: the existing `radard` implementation. There is no separate learned radar-lead mode or model setting. Front radar, SCC, and corner radar retain their existing input roles and source identity. `leadOne` remains the primary vision/radar lead, while `leadTwo` retains the existing secondary and cut-in role.
+carrotpilot has one production radar process, `radard`, and no separate learned radar-lead model. Front radar, SCC, and corner radar retain their existing input roles and source identity. With `RadarDPathMode=0`, the existing leadOne/leadTwo selection is unchanged. With `RadarDPathMode=1`, leadOne remains unchanged and only leadTwo CUT-IN selection is supplied by the physical predictor below.
 
 The headless validator can report existing radard and the experimental physical predictor separately. The visual replay deliberately shows only the physical predictor, never imports existing radard `leadOne`, `leadTwo`, or CUT-IN markers, and does not change longitudinal control.
 
 The shadow predictor:
 
 - uses only `measured=true` radar points;
+- uses motion points only from 5 m behind ego through 100 m ahead;
 - aligns each replay radar point to the model-path timestamp with its measured relative velocity, then projects the point onto the same-time model-path polyline: `S` is arc distance along the centerline and `dPath` is signed normal distance from it;
 - keeps only the ego lane and its immediate left/right lanes, using the fixed model-path-relative range `|dPath| <= 5.4 m`;
 - on each adjacent side, keeps points closer than 5 m and the nearest visible vehicle at or beyond 5 m, while excluding vehicles hidden farther ahead on that same side from detection; measured in-scope history is retained so a vehicle can be evaluated continuously when it becomes visible;
@@ -104,6 +116,7 @@ The ADAS preset enabling corner radar means that its harness can access such a c
 - Setting ranges and descriptions: `openpilot/selfdrive/carrot_settings.json`
 - Existing production radar lead selection: `openpilot/selfdrive/controls/radard.py`
 - Physical shadow predictor: `openpilot/selfdrive/carrot/radar_motion/predictor.py`
+- dPath leadTwo selection: `openpilot/selfdrive/carrot/radar_motion/lead_selection.py`
 - PC replay: `openpilot/selfdrive/carrot/radar/tools/radar_validation_replay.py`
 - Hyundai/Kia radar parsing: `opendbc_repo/opendbc/car/hyundai/radar_interface.py`
 - Non-CAN FD radar activation: `opendbc_repo/opendbc/car/hyundai/interface.py`

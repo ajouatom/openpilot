@@ -12,8 +12,12 @@ physical equations, select thresholds, or add scene-specific exceptions.
 
 Production control always uses `openpilot/selfdrive/controls/radard.py`.
 `RadarLeadModelMode` and the learned radar-lead/path-occupancy runtimes have
-been removed. Front, SCC, and corner inputs retain their production source
-identity, and the existing meanings of `leadOne` and `leadTwo` are unchanged.
+been removed. `RadarDPathMode=0` preserves the existing lead selection.
+`RadarDPathMode=1` calculates the existing front/SCC vision-matched `leadOne`
+first, then supplies `leadTwo` only from a physically confirmed dPath CUT-IN.
+It rejects the primary object itself, anything farther than the primary, and
+anything beyond the ego-speed-based two-second control range. Front, SCC, and
+corner inputs retain their production source identity.
 
 PC visual replay shows `radar_motion/RadarMotionPredictor` alone. It does not
 import or display existing radard `leadOne`, `leadTwo`, or CUT-IN events. The
@@ -23,39 +27,40 @@ values are never input to the physical predictor.
 The predictor:
 
 1. accepts only `measured=true` points;
-2. projects replay points to the model-path timestamp with measured relative
+2. limits motion prediction to `-5 <= dRel <= 100 m`;
+3. projects replay points to the model-path timestamp with measured relative
    velocity, then projects them onto that same-time model-path polyline; `S`
    is centerline arc distance and `dPath` is signed centerline-normal distance;
-3. limits history and shadow candidates to the ego lane plus the immediate
+4. limits history and shadow candidates to the ego lane plus the immediate
    left/right lanes with the fixed model-path-relative
    `|dPath| <= 5.4 m` range;
-4. keeps points inside 5 m and the nearest point at or beyond 5 m on each
+5. keeps points inside 5 m and the nearest point at or beyond 5 m on each
    adjacent side, excluding farther vehicles occluded on that same side from
    detection while retaining their measured in-scope history for later
    physical continuity;
-5. uses corner motion only when the log has measured corner data, otherwise
+6. uses corner motion only when the log has measured corner data, otherwise
    `frontRadar` raw-track motion; SCC stays available to existing radard but is
    not predictor input, and the source choice never switches per frame;
-6. treats `|vLead| < 3 km/h` as position-only and never builds or extrapolates
+7. treats `|vLead| < 3 km/h` as position-only and never builds or extrapolates
    motion history for those points;
-7. does not switch to lane center and does not apply yaw correction again
+8. does not switch to lane center and does not apply yaw correction again
    after the point and path share a timestamp and ego frame;
-8. checks track-ID reuse and short gaps with physical continuity;
-9. keeps front and corner histories and parameters independent;
-10. builds a 2-D path-relative history from projected centerline progress `S`,
+9. checks track-ID reuse and short gaps with physical continuity;
+10. keeps front and corner histories and parameters independent;
+11. builds a 2-D path-relative history from projected centerline progress `S`,
    integrated ego travel, and signed-normal `dPath`, without treating raw
    `dRel` as centerline distance;
-11. fits `dPath` against target progress in `S`, uses the long-window vector
+12. fits `dPath` against target progress in `S`, uses the long-window vector
    and model-path tangent angle error as the prediction mean, reduces
    confidence beyond the observed spatial baseline, and sends short-window
    disagreement to curvature and uncertainty;
-12. for corner radar, checks position-derived normal motion against reported
+13. for corner radar, checks position-derived normal motion against reported
    lateral velocity and lowers motion confidence when the two are physically
    inconsistent;
-13. predicts synchronized future `dRel` and `dPath`;
-14. confirms a threshold crossing for 0.25 seconds before producing a CUT-IN
+14. predicts synchronized future `dRel` and `dPath`;
+15. confirms a threshold crossing for 0.25 seconds before producing a CUT-IN
    event; and
-15. reports CUT-IN and CUT-OUT probabilities independently.
+16. reports CUT-IN and CUT-OUT probabilities independently.
 
 The current IN state includes ego and target vehicle half-widths. A tracked
 OUT-to-IN crossing keeps its pending entry evidence after overlap begins so

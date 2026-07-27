@@ -5,6 +5,7 @@ import pytest
 
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
   IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M,
+  RadarMotionDecisionTracker,
   RadarMotionPredictor,
   cutin_probability_at,
   model_path_point_at_s,
@@ -12,6 +13,10 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   prediction_sample_at,
   project_to_model_path,
   visible_motion_points,
+)
+from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
+  dpath_control_max_d_rel,
+  select_dpath_lead_two,
 )
 
 
@@ -129,6 +134,17 @@ def test_points_beyond_immediate_left_right_lanes_do_not_create_or_extend_histor
 
   assert first.history_count == 1
   assert resumed.history_count == 1
+
+
+def test_points_outside_motion_longitudinal_range_are_not_predicted() -> None:
+  predictor = RadarMotionPredictor()
+
+  assert predictor.update(
+    0.0,
+    (Point(10, 130.0, -8.0, source="corner235", v_lead=20.0),),
+    ((0.0, 0.0), (150.0, 10.0)),
+    v_ego=20.0,
+  ) == {}
 
 
 def test_adjacent_vehicle_hides_farther_tracks_on_same_side_but_not_close_points() -> None:
@@ -427,9 +443,82 @@ def test_short_long_rate_disagreement_increases_future_uncertainty() -> None:
   ).lateral_sigma
 
 
-def test_production_radard_has_no_alternate_radar_model_entrypoint() -> None:
+def test_shared_decision_tracker_confirms_sustained_physical_cutin() -> None:
+  predictor = RadarMotionPredictor()
+  decision_tracker = RadarMotionDecisionTracker()
+  confirmed_at = None
+
+  for index in range(12):
+    time_s = index * 0.1
+    prediction = predictor.update(
+      time_s,
+      (
+        Point(
+          10,
+          30.0,
+          3.0 - 0.12 * index,
+          v_lead=10.0,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )[("frontRadar", 10)]
+    decision = decision_tracker.update(time_s, (prediction,))
+    if decision.confirmed and confirmed_at is None:
+      confirmed_at = time_s
+
+  assert confirmed_at is not None
+  assert confirmed_at >= 0.8
+  assert decision.confirmed[0].prediction.track_id == 10
+
+
+def test_dpath_lead_two_is_selected_after_and_ahead_of_primary() -> None:
+  primary = {
+    "status": True,
+    "radar": True,
+    "radarTrackId": 10,
+    "dRel": 35.0,
+    "yRel": 0.1,
+  }
+  candidates = (
+    {
+      "status": True,
+      "radar": True,
+      "radarTrackId": 10,
+      "dRel": 34.0,
+      "yRel": 0.2,
+      "vLead": 10.0,
+    },
+    {
+      "status": True,
+      "radar": True,
+      "radarTrackId": 20,
+      "dRel": 22.0,
+      "yRel": 2.0,
+      "vLead": 10.0,
+    },
+    {
+      "status": True,
+      "radar": True,
+      "radarTrackId": 30,
+      "dRel": 45.0,
+      "yRel": -2.0,
+      "vLead": 10.0,
+    },
+  )
+
+  selection = select_dpath_lead_two(primary, candidates, v_ego=20.0)
+
+  assert dpath_control_max_d_rel(20.0) == pytest.approx(50.0)
+  assert [lead["radarTrackId"] for lead in selection.cutins] == [20]
+  assert selection.lead_two["radarTrackId"] == 20
+
+
+def test_production_radard_exposes_only_physical_optional_radar_mode() -> None:
   radard = Path(__file__).resolve().parents[2] / "controls" / "radard.py"
   source = radard.read_text(encoding="utf-8")
 
   assert "RadarLeadModelMode" not in source
   assert "radard_model" not in source
+  assert 'RADAR_DPATH_MODE_PARAM = "RadarDPathMode"' in source
+  assert "RadarMotionPredictor" in source
