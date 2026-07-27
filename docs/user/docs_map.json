@@ -164,7 +164,10 @@
       "description": "전방 레이더 트랙, 코너 레이더와 선행차 결합",
       "code_paths": [
         "openpilot/selfdrive/controls/radard.py",
-        "openpilot/selfdrive/carrot/radar/*",
+        "openpilot/selfdrive/carrot/radar/**",
+        "openpilot/selfdrive/carrot/radar_motion/**",
+        "openpilot/selfdrive/carrot/radar_*.py",
+        "openpilot/selfdrive/carrot/validate_radar_lead_model.py",
         "openpilot/selfdrive/controls/beep.py",
         "openpilot/selfdrive/controls/lib/cutin_alert.py",
         "openpilot/selfdrive/selfdrived/selfdrived.py",

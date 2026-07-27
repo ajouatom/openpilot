@@ -25,6 +25,7 @@ a.out
 .*.swo
 .*.un~
 *.tmp
+.tmp_radar_*
 *.o
 *.o-*
 *.os

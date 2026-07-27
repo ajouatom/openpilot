@@ -199,18 +199,18 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 |---|---|---|
 | 현대·기아 | `HyundaiCameraSCC`, `IsLdwsCar`, `HapticFeedbackWhenSpeedCamera` | SCC 연결 방식, LDWS 차량과 카메라 구간 햅틱 |
 | CANFD·HDA | `CanfdHDA2`, `CanfdDebug`, `HDPuse` | HDA2 차량과 CAN FD 디버그·HDP 기능 |
-| 레이더 | `EnableRadarTracks`, `EnableCornerRadar`, `RadarLeadModelMode` | SCC 레이더, 레이더 트랙, 코너 레이더와 리드 선택 방식 |
+| 레이더 | `EnableRadarTracks`, `EnableCornerRadar`, `RadarMotionMode` | SCC 레이더, 레이더 트랙, 코너 레이더와 dPath leadTwo 처리 |
 | 운전자 모니터링 | `DisableDM`, `MuteDoor`, `MuteSeatbelt` | 운전자 모니터링과 일부 차량 경고음 처리 |
 | 차량 보조 | `MaxAngleFrames`, `SpeedFromPCM` | 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |
 | 기기 하드웨어 | `HardwareC3xLite` | 스피커가 없는 C3X Lite의 알림음과 프로세스 구성 |
 
 > [!CAUTION]
-> `HyundaiCameraSCC`, `CanfdHDA2`, `EnableRadarTracks`, `RadarLeadModelMode`, `SpeedFromPCM`은 잘못 설정하면 차량 인식, SCC, 레이더와 가감속 동작이 달라질 수 있습니다. 차종, 연식, HDA 구성, 하네스 연결 위치와 순정 ACC 사용 여부를 확인한 뒤 변경하세요.
+> `HyundaiCameraSCC`, `CanfdHDA2`, `EnableRadarTracks`, `RadarMotionMode`, `SpeedFromPCM`은 잘못 설정하면 차량 인식, SCC, 레이더와 가감속 동작이 달라질 수 있습니다. 차종, 연식, HDA 구성, 하네스 연결 위치와 순정 ACC 사용 여부를 확인한 뒤 변경하세요.
 
 - `HyundaiCameraSCC`: 현대·기아 차량의 롱컨, 크루즈 동기화와 CAN FD 배선 구성에 따라 모드가 달라집니다.
 - `CanfdHDA2`: HDA2 차량에서만 활성화합니다.
 - `EnableRadarTracks`: SCC 사용부터 레이더 트랙과 저속 SCC 조합까지 여러 모드가 있으므로 차량별 검증이 필요합니다.
-- `RadarLeadModelMode`: 변경 후 차량 또는 장치 재시작이 필요한 리드 선택 방식입니다.
+- `RadarMotionMode`: 기존 radard 대신 독립 프로세스가 front/SCC–vision leadOne을 먼저 계산하고 물리 dPath CUT-IN을 실제 leadTwo로 사용하므로 shadow 검증을 마친 동일 차량에서만 켭니다.
 - `DisableDM`: 운전자 모니터링을 비활성화할 수 있는 안전 관련 항목이며 재부팅이 필요합니다.
 - `SpeedFromPCM`: 비롱컨 순정 SCC의 버튼 스패밍과 커브·카메라 감속 방식에 영향을 줍니다.
 
@@ -285,7 +285,7 @@ Carrot Vision에는 `carrot_settings.json` 카탈로그와 별도로 **AR 표시
 ### 차량 구성을 확인해야 하는 설정
 
 - `HyundaiCameraSCC`, `CanfdHDA2`
-- `EnableRadarTracks`, `RadarLeadModelMode`
+- `EnableRadarTracks`, `EnableCornerRadar`, `RadarMotionMode`
 - `SpeedFromPCM`, `DisableMinSteerSpeed`
 - `LateralTorqueCustom`, `CustomSteer*`
 - `DisableDM`

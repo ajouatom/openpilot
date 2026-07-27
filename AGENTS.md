@@ -1,5 +1,8 @@
 # Repository memory
 
+- For long-running work, treat user questions, status checks, clarifications, and added in-scope
+  requests as interruptions to answer while continuing the active work. Stop an active process or
+  abandon the task only when the user explicitly asks to stop, cancel, pause, or replace it.
 - Navigation deceleration behavior for the `origin/thftgr/navi-stream` branch is documented in
   `docs/carrot_navi_7713_7714_deceleration.md`.
 - The 7714-only control comparison between `origin/carrot-wip` and `origin/thftgr/navi-stream` is

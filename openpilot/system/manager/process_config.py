@@ -62,6 +62,15 @@ def always_run(started: bool, params: Params, CP: car.CarParams) -> bool:
 def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started
 
+
+def conventional_radard(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return started and params.get_int("RadarMotionMode") != 1
+
+
+def dpath_radard(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return started and params.get_int("RadarMotionMode") == 1
+
+
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
 
@@ -177,7 +186,8 @@ procs = [
   PythonProcess("plannerd", "openpilot.selfdrive.controls.plannerd", not_long_maneuver),
   PythonProcess("maneuversd", "openpilot.tools.longitudinal_maneuvers.maneuversd", long_maneuver),
   PythonProcess("lateral_maneuversd", "openpilot.tools.lateral_maneuvers.lateral_maneuversd", lat_maneuver),
-  PythonProcess("radard", "openpilot.selfdrive.controls.radard", only_onroad),
+  PythonProcess("radard", "openpilot.selfdrive.controls.radard", conventional_radard),
+  PythonProcess("radard_dpath", "openpilot.selfdrive.carrot.radar.radard_dpath", dpath_radard),
   PythonProcess("hardwared", "openpilot.system.hardware.hardwared", always_run),
   PythonProcess("modem", "openpilot.system.hardware.tici.modem", always_run, enabled=TICI),
   PythonProcess("tombstoned", "openpilot.system.tombstoned", always_run, enabled=not PC),
