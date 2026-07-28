@@ -460,7 +460,13 @@ class TuringUsbDisplay:
         fields: dict[int, int],
     ) -> None:
         with self._usb_lock:
-            self._send_command(10, "sync", log=False)
+            self._send_optional_command(
+                10,
+                "sync",
+                log=False,
+                no_ack_gap_s=0.0,
+                no_ack_drain_attempts=0,
+            )
             time.sleep(USB_SETTING_SYNC_GAP_S)
             self._send_optional_command(
                 command_id,

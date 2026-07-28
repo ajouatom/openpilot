@@ -312,8 +312,10 @@ Changed display settings follow the capture-derived command procedure:
   with byte 8 set to supported raw orientation `0` or `2`.
 
 The sync and setting write are one USB-locked transaction so an image frame
-cannot split the pair. Initial orientation is stored locally before USB open
-and carried by H.264 setup command `13`. H.264 startup waits for each captured
+cannot split the pair. Both runtime writes are nonblocking on TICI; pending
+responses are drained by the next bounded USB operation, so a missing sync ACK
+cannot terminate the HUD. Initial orientation is stored locally before USB
+open and carried by H.264 setup command `13`. H.264 startup waits for each captured
 setup delay, uses captured finalizer command `52` instead of the
 reference-library command `41`, clears the 464x1920 overlay, then applies FPS
 and queries the chunk size. Setup writes remain nonblocking on TICI and drain

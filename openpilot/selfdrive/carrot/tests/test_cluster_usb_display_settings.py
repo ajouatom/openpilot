@@ -35,6 +35,7 @@ def test_runtime_brightness_uses_captured_sync_then_command_14(monkeypatch):
 
   assert display.set_brightness(64)
   assert [call[0] for call in calls] == [10, 14]
+  assert all(call[3]["expect_response"] is False for call in calls)
   assert calls[1][2] == {8: int(64 / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)}
   assert display.brightness == 64
 
@@ -45,6 +46,7 @@ def test_runtime_orientation_uses_captured_sync_then_command_13(monkeypatch):
 
   assert display.set_orientation(2)
   assert [call[0] for call in calls] == [10, 13]
+  assert all(call[3]["expect_response"] is False for call in calls)
   assert calls[1][2] == {8: 2}
   assert display.orientation == 2
 
