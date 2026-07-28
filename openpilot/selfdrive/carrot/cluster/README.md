@@ -314,13 +314,16 @@ Changed display settings follow the capture-derived command procedure:
 The sync and setting write are one USB-locked transaction so an image frame
 cannot split the pair. Initial orientation is stored locally before USB open
 and carried by H.264 setup command `13`. H.264 startup waits for each captured
-setup response and delay, uses captured finalizer command `52` instead of the
+setup delay, uses captured finalizer command `52` instead of the
 reference-library command `41`, clears the 464x1920 overlay, then applies FPS
-and queries the chunk size. Shutdown sends command `123` and drains command
-`122` status before releasing USB. The panel does not visibly apply command
-`13` during an active H.264 stream, so managed H.264 uses the automatic restart
-described above. `--usb-h264-orientation` remains a separate diagnostic option
-controlling encoder/render geometry.
+and queries the chunk size. Setup writes remain nonblocking on TICI and drain
+pending responses before subsequent writes; waiting synchronously for every
+ACK prevented the H.264 stream from starting. Shutdown sends command `123`
+followed by two bounded command-`122` status drains before releasing USB. The
+panel does not visibly apply command `13` during an active H.264 stream, so
+managed H.264 uses the automatic restart described above.
+`--usb-h264-orientation` remains a separate diagnostic option controlling
+encoder/render geometry.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,

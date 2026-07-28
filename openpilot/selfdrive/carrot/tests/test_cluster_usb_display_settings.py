@@ -65,15 +65,13 @@ def test_preopen_orientation_is_carried_by_h264_setup_without_setting_transactio
 
   display.dev = object()
   calls = []
-  display._send_command = (
+  display._send_optional_command = (
     lambda command_id, name, fields=None, **kwargs:
       calls.append((command_id, name, fields, kwargs))
-      or successful_response(command_id)
   )
-  display._send_frame_ack = (
-    lambda command_id, frame:
-      calls.append((command_id, "clear-overlay", {8: len(frame)}, {}))
-      or successful_response(command_id)
+  display._send_frame_no_ack = (
+    lambda command_id, frame, **kwargs:
+      calls.append((command_id, "clear-overlay", {8: len(frame)}, kwargs))
   )
   display._h264_chunk_size = lambda _requested: 202752
   monkeypatch.setattr("cluster_usb_display.time.sleep", lambda _seconds: None)
@@ -83,6 +81,9 @@ def test_preopen_orientation_is_carried_by_h264_setup_without_setting_transactio
   orientation = next(call for call in calls if call[0] == 13)
   assert orientation[2] == {8: 2}
   assert calls[4][2] == {8: int(80 / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)}
+  assert all(call[3].get("no_ack_gap_s") == 0.0 for call in calls[:6])
+  assert calls[6][3] == {"drain_input": True}
+  assert calls[7][3]["no_ack_gap_s"] == 0.0
 
 
 def test_h264_clear_overlay_matches_captured_shape_and_size():
@@ -94,19 +95,15 @@ def test_h264_clear_overlay_matches_captured_shape_and_size():
   assert int.from_bytes(png[20:24], "big") == 1920
 
 
-def test_h264_stop_waits_for_zero_queue(monkeypatch):
+def test_h264_stop_uses_bounded_nonblocking_status_drain():
   display, calls = recording_display()
-  queued = bytearray(successful_response(122))
-  queued[8] = 2
-  responses = iter((successful_response(123), bytes(queued), successful_response(122)))
-
-  def send(command_id, name, fields=None, **kwargs):
-    calls.append((command_id, name, fields, kwargs))
-    return next(responses)
-
-  display._send_command = send
-  monkeypatch.setattr("cluster_usb_display.time.sleep", lambda _seconds: None)
+  display._send_optional_command = (
+    lambda command_id, name, fields=None, **kwargs:
+      calls.append((command_id, name, fields, kwargs))
+  )
 
   display.stop_h264_stream()
 
   assert [call[0] for call in calls] == [123, 122, 122]
+  assert all(call[3]["no_ack_gap_s"] == 0.080 for call in calls)
+  assert all(call[3]["no_ack_drain_attempts"] == 1 for call in calls)

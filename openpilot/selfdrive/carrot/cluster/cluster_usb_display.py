@@ -626,18 +626,31 @@ class TuringUsbDisplay:
         )
         print(setup_summary, flush=True)
         for (command_id, name, fields), gap_s in zip(setup, USB_H264_SETUP_GAPS_S, strict=True):
-            self._send_command(
+            self._send_optional_command(
                 command_id,
                 name,
                 fields,
                 log=False,
+                no_ack_gap_s=0.0,
+                no_ack_drain_attempts=0,
             )
             time.sleep(gap_s)
 
-        self._send_frame_ack(self._cmd_upload_png, _transparent_h264_overlay_png())
+        self._send_frame_no_ack(
+            self._cmd_upload_png,
+            _transparent_h264_overlay_png(),
+            drain_input=True,
+        )
         time.sleep(USB_H264_CLEAR_GAP_S)
         if self.display_fps > 0:
-            self._send_command(15, "frame-rate", {8: self.display_fps}, log=False)
+            self._send_optional_command(
+                15,
+                "frame-rate",
+                {8: self.display_fps},
+                log=False,
+                no_ack_gap_s=0.0,
+                no_ack_drain_attempts=0,
+            )
             time.sleep(USB_H264_FRAME_RATE_GAP_S)
 
         chunk_size = self._h264_chunk_size(requested_chunk_size)
@@ -647,16 +660,21 @@ class TuringUsbDisplay:
     def stop_h264_stream(self) -> None:
         if self.dev is None:
             return
-        self._send_command(self._cmd_stop_stream, "stop-stream", log=False)
+        self._send_optional_command(
+            self._cmd_stop_stream,
+            "stop-stream",
+            log=False,
+            no_ack_gap_s=USB_H264_STATUS_POLL_S,
+            no_ack_drain_attempts=1,
+        )
         for _ in range(2):
-            time.sleep(USB_H264_STATUS_POLL_S)
-            response = self._send_command(
+            self._send_optional_command(
                 self._cmd_get_stream_status,
                 "h264-stream-status",
                 log=False,
+                no_ack_gap_s=USB_H264_STATUS_POLL_S,
+                no_ack_drain_attempts=1,
             )
-            if len(response) > 8 and response[8] == 0:
-                break
 
     def send_h264_chunk(
         self,
