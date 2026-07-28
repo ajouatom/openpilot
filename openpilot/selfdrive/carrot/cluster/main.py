@@ -712,12 +712,13 @@ def run_demo(
                 product_id_for_hud_mode(hud_mode_watch) if hud_mode_watch is not None else None
             ),
         )
+        # H.264 startup command 13 carries this state; do not add another
+        # mandatory sync transaction immediately after USB initialization.
+        usb_display.set_orientation(active_orientation)
         usb_display.set_profile_enabled(profile_render)
         profile_stage = time.perf_counter()
         try:
             usb_display.open()
-            if initial_orientation in (0, 2):
-                usb_display.set_orientation(initial_orientation, force=True)
         except Exception:
             usb_display.close()
             raise

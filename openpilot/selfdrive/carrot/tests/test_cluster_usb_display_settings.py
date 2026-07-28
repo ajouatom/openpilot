@@ -58,9 +58,11 @@ def test_runtime_orientation_ignores_unsupported_values():
   assert display.orientation == 2
 
 
-def test_h264_setup_carries_the_selected_orientation():
+def test_preopen_orientation_is_carried_by_h264_setup_without_setting_transaction():
   display = TuringUsbDisplay()
-  display.orientation = 2
+  assert not display.set_orientation(2)
+  assert display.orientation == 2
+
   display.dev = object()
   calls = []
   display._send_optional_command = (

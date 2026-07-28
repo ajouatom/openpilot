@@ -308,9 +308,10 @@ Changed display settings follow the capture-derived command procedure:
   with byte 8 set to supported raw orientation `0` or `2`.
 
 The sync and setting write are one USB-locked transaction so an image frame
-cannot split the pair. H.264 startup also carries the selected raw orientation
-in setup command `13`. `--usb-h264-orientation` remains a separate diagnostic
-option controlling encoder/render geometry.
+cannot split the pair. Initial orientation is stored locally before USB open
+and carried by the existing H.264 setup command `13`, avoiding a redundant
+post-initialization sync. `--usb-h264-orientation` remains a separate
+diagnostic option controlling encoder/render geometry.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,
