@@ -25,10 +25,12 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
 from openpilot.selfdrive.carrot.radar_motion.primary import (
   RadarPointSnapshot,
   VisionRadarMatcher,
+  apply_vision_bracket_cutin_support,
   lead_from_radar_point,
   prefer_front_radar_kinematics,
   select_primary_radar_points,
   snapshot_radar_points,
+  vision_lead_from_model,
 )
 
 
@@ -334,7 +336,6 @@ class DPathRadarController:
         else None
       ),
     )
-    decision = self.motion_decisions.update(time_s, predictions.values())
     active_identity = self.lead_two_tracker.active_identity
     protected_identities = (
       ()
@@ -355,6 +356,26 @@ class DPathRadarController:
       (point.source, point.track_id): point
       for point in visible_points
     }
+    vision = vision_lead_from_model(model)
+    predictions = {
+      identity: (
+        apply_vision_bracket_cutin_support(
+          prediction,
+          point,
+          points,
+          vision,
+          lead_one,
+        )
+        if (
+          point := point_by_identity.get(
+            (prediction.source, prediction.track_id),
+          )
+        ) is not None
+        else prediction
+      )
+      for identity, prediction in predictions.items()
+    }
+    decision = self.motion_decisions.update(time_s, predictions.values())
     confirmed = {
       (
         cutin.prediction.source,

@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
+  RadarMotionPrediction,
   project_to_model_path,
 )
 
@@ -21,9 +22,12 @@ VISION_MATCH_DISTANCE_HYSTERESIS_M = 2.0
 VISION_MATCH_FRESH_MIN_SCORE = 1.0e-4
 VISION_MATCH_FRESH_MAX_DPATH_M = 2.0
 VISION_MATCH_HELD_MAX_DPATH_M = 4.0
+VISION_MATCH_XSTD_SIGMA = 2.5
+VISION_MATCH_XSTD_MAX_M = 15.0
 PRIMARY_RADAR_SOURCES = frozenset(("frontRadar", "scc"))
 LOW_SPEED_SCC_MAX_VLEAD_MPS = 5.0
-STATIONARY_VISION_MIN_PROB = 0.05
+STATIONARY_VISION_MIN_PROB = 0.40
+STATIONARY_FRONT_MIN_VISION_SUPPORT_FRAMES = 3
 STATIONARY_CONFIRMATION_S = 0.25
 STATIONARY_MAX_ABS_VLEAD_MPS = 2.5
 STATIONARY_MAX_VISION_SPEED_DELTA_MPS = 10.0
@@ -34,6 +38,14 @@ STATIONARY_LATERAL_CONTINUITY_M = 1.5
 FRONT_KINEMATIC_MATCH_MAX_DREL_DELTA_M = 5.0
 FRONT_KINEMATIC_MATCH_MAX_YREL_DELTA_M = 0.75
 FRONT_KINEMATIC_MATCH_MAX_VLEAD_DELTA_MPS = 2.0
+VISION_BRACKET_MIN_PROB = 0.90
+VISION_BRACKET_MAX_RANGE_GAP_M = 20.0
+VISION_BRACKET_MAX_SPEED_DELTA_MPS = 2.0
+VISION_BRACKET_MAX_ABS_DPATH_M = 3.0
+VISION_BRACKET_MIN_INWARD_RATE_MPS = 0.10
+VISION_BRACKET_MIN_HISTORY_S = 1.0
+VISION_BRACKET_MIN_INWARD_TRAVEL_M = 0.15
+VISION_BRACKET_MIN_MOTION_SUPPORT = 0.70
 
 
 def _finite(value: Any, fallback: float = 0.0) -> float:
@@ -192,6 +204,95 @@ def prefer_front_radar_kinematics(
   )
 
 
+def apply_vision_bracket_cutin_support(
+  prediction: RadarMotionPrediction,
+  point: RadarPointSnapshot,
+  points: Iterable[RadarPointSnapshot],
+  vision: VisionLead | None,
+  lead_one: dict[str, Any] | None,
+) -> RadarMotionPrediction:
+  """Fuse vision existence with a corner track that brackets the primary lead.
+
+  Vision range is not used for control. A mutually matched front point supplies
+  longitudinal radar kinematics while the corner track retains its measured
+  dPath history.
+  """
+  if (
+    not isinstance(prediction, RadarMotionPrediction)
+    or vision is None
+    or vision.probability < VISION_BRACKET_MIN_PROB
+    or lead_one is None
+    or not bool(lead_one.get("status", True))
+    or not point.source.startswith("corner")
+    or prediction.current_path_occupancy
+    or abs(prediction.d_path) > VISION_BRACKET_MAX_ABS_DPATH_M
+    or prediction.motion_consistency < VISION_BRACKET_MIN_MOTION_SUPPORT
+    or prediction.recent_motion_support < VISION_BRACKET_MIN_MOTION_SUPPORT
+  ):
+    return prediction
+
+  lead_point = prefer_front_radar_kinematics(point, points)
+  if (
+    getattr(lead_point, "kinematics_source", None) != "frontRadar"
+    or getattr(lead_point, "kinematics_track_id", None) is None
+  ):
+    return prediction
+
+  lead_one_d_rel = _finite(lead_one.get("dRel"), math.inf)
+  if not (
+    0.5 < lead_point.d_rel < vision.d_rel < lead_one_d_rel
+    and vision.d_rel - lead_point.d_rel
+    <= VISION_BRACKET_MAX_RANGE_GAP_M
+    and abs(lead_point.v_lead - vision.velocity)
+    <= VISION_BRACKET_MAX_SPEED_DELTA_MPS
+  ):
+    return prediction
+
+  inward_sign = -math.copysign(1.0, prediction.d_path)
+  if (
+    inward_sign * prediction.d_path_rate_short
+    < VISION_BRACKET_MIN_INWARD_RATE_MPS
+    or inward_sign * prediction.d_path_rate_long
+    < VISION_BRACKET_MIN_INWARD_RATE_MPS
+  ):
+    return prediction
+
+  past = min(
+    (
+      sample
+      for sample in prediction.history
+      if sample.age_s >= VISION_BRACKET_MIN_HISTORY_S
+    ),
+    key=lambda sample: sample.age_s,
+    default=None,
+  )
+  if (
+    past is None
+    or abs(past.d_path) - abs(prediction.d_path)
+    < VISION_BRACKET_MIN_INWARD_TRAVEL_M
+  ):
+    return prediction
+
+  fused_probability = min(
+    1.0,
+    vision.probability
+    * prediction.motion_consistency
+    * prediction.recent_motion_support,
+  )
+  return replace(
+    prediction,
+    cut_in_probability=max(
+      prediction.cut_in_probability,
+      fused_probability,
+    ),
+    path_entry_probability=max(
+      prediction.path_entry_probability,
+      fused_probability,
+    ),
+    reason="vision-bracketed physical CUT-IN",
+  )
+
+
 def snapshot_radar_points(
   points: Iterable[Any],
   v_ego: float,
@@ -277,6 +378,7 @@ class VisionRadarMatcher:
     self.stationary_identity: tuple[str, int] | None = None
     self._stationary_pending_identity: tuple[str, int] | None = None
     self._stationary_pending_since_s: float | None = None
+    self._stationary_pending_vision_support_frames = 0
     self._stationary_last_point: RadarPointSnapshot | None = None
     self._stationary_last_time_s: float | None = None
     self._stationary_seed_probability = 0.0
@@ -294,6 +396,7 @@ class VisionRadarMatcher:
     self.stationary_identity = None
     self._stationary_pending_identity = None
     self._stationary_pending_since_s = None
+    self._stationary_pending_vision_support_frames = 0
     self._stationary_last_point = None
     self._stationary_last_time_s = None
     self._stationary_seed_probability = 0.0
@@ -498,19 +601,37 @@ class VisionRadarMatcher:
         return None
 
       selected_identity = self._identity(selected[0])
+      selected_has_vision_support = any(
+        self._identity(point) == selected_identity
+        for point, _, _ in supported
+      )
       if selected_identity != self._stationary_pending_identity:
         self._stationary_pending_identity = selected_identity
         self._stationary_pending_since_s = time_s
+        self._stationary_pending_vision_support_frames = (
+          1 if selected_has_vision_support else 0
+        )
         self._stationary_seed_probability = (
           vision.probability if vision is not None else 0.0
         )
         self._stationary_seed_score = selected[2]
+      elif selected_has_vision_support:
+        self._stationary_pending_vision_support_frames += 1
+      elif not selected[0].source.startswith("corner"):
+        self._stationary_pending_vision_support_frames = 0
       self._stationary_last_point = selected[0]
       self._stationary_last_time_s = time_s
+      required_support_frames = (
+        1
+        if selected[0].source.startswith("corner")
+        else STATIONARY_FRONT_MIN_VISION_SUPPORT_FRAMES
+      )
       if (
         self._stationary_pending_since_s is None
         or time_s - self._stationary_pending_since_s
         < STATIONARY_CONFIRMATION_S
+        or self._stationary_pending_vision_support_frames
+        < required_support_frames
       ):
         return None
       self.stationary_identity = selected_identity
@@ -592,7 +713,14 @@ class VisionRadarMatcher:
         and
         abs(candidate[0].d_rel - vision.d_rel)
         < (
-          max(5.0, vision.d_rel * 0.25)
+          max(
+            5.0,
+            vision.d_rel * 0.25,
+            min(
+              VISION_MATCH_XSTD_MAX_M,
+              abs(vision.x_std) * VISION_MATCH_XSTD_SIGMA,
+            ),
+          )
           + (VISION_MATCH_DISTANCE_HYSTERESIS_M if candidate[3] else 0.0)
         )
         and abs(candidate[0].y_rel - vision.y_rel) < 2.0
