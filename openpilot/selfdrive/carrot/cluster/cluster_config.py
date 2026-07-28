@@ -143,7 +143,8 @@ LIGHT_CLUSTER_THEME = ClusterTheme(
 DARK_CLUSTER_THEME = ClusterTheme(
     name="dark",
     is_dark=True,
-    bg=(7, 10, 14),
+    # Match the map and disconnected backings on wide external displays.
+    bg=(0, 0, 0),
     panel_bg=(18, 23, 29),
     text=(238, 242, 247),
     muted=(150, 160, 172),

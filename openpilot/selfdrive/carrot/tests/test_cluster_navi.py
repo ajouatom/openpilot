@@ -48,6 +48,7 @@ from cluster_renderer import (
   NAV_STATUS_CENTER_Y,
   NAV_STATUS_FONT_SIZE,
   NAVI_LIVE_PANEL_X,
+  NAVI_MAP_BACKGROUND,
   SIDE_GAUGE_COLUMN_GAP,
   SIDE_GAUGE_LEFT_CENTER_X,
   SIDE_GAUGE_OUTLINE,
@@ -598,6 +599,13 @@ def test_disconnected_dashboard_draws_system_panel(monkeypatch):
     "panel_h": 478,
     "status_text": "NAVI DISCONNECTED",
   }
+
+
+def test_dark_canvas_matches_navigation_backing_without_flattening_panels():
+  assert (*DARK_CLUSTER_THEME.bg, 255) == NAVI_MAP_BACKGROUND == (0, 0, 0, 255)
+  assert DARK_CLUSTER_THEME.panel_bg != DARK_CLUSTER_THEME.bg
+  assert DARK_CLUSTER_THEME.route_panel_bg != DARK_CLUSTER_THEME.bg
+  assert DARK_CLUSTER_THEME.route_video_bg != DARK_CLUSTER_THEME.bg
 
 
 def test_live_navi_guidance_media_is_scaled_up(monkeypatch):
