@@ -22,6 +22,7 @@ from .paths import route_name, segment_dir, segment_index
 
 UPLOAD_JOB_KEEP_COUNT = 12
 UPLOAD_JOB_MAX_LOG_CHARS = 60000
+UPLOAD_JOB_STALE_SECONDS = 30 * 60
 _jobs: dict[str, dict[str, Any]] = {}
 
 
@@ -34,10 +35,12 @@ def jobs() -> dict[str, dict[str, Any]]:
 
 
 def has_running_job() -> bool:
+  expire_stale_jobs()
   return any(job.get("status") == "running" for job in _jobs.values())
 
 
 def running_job() -> dict[str, Any] | None:
+  expire_stale_jobs()
   for job in _jobs.values():
     if job.get("status") == "running":
       return job
@@ -45,7 +48,8 @@ def running_job() -> dict[str, Any] | None:
 
 
 def touch(job: dict[str, Any]) -> None:
-  job["updated_at"] = time.time()
+  job["updated_at"] = time.time()  # noqa: TID251
+  job["_activity_at"] = time.monotonic()
 
 
 def append(job: dict[str, Any], text: Any) -> None:
@@ -142,6 +146,46 @@ def finish(
   prune()
 
 
+def fail_running_job(job: dict[str, Any], error: str) -> None:
+  if job.get("status") != "running":
+    return
+  results = list(job.get("partial_results") or [])
+  uploaded = sum(1 for item in results if item.get("ok"))
+  total = len(job.get("segments") or [])
+  result = {
+    "ok": False,
+    "error": error,
+    "uploaded": uploaded,
+    "total": total,
+    "results": results,
+    "message": f"Upload failed: {error}",
+  }
+  append(job, f"FAILED: {error}")
+  finish(job, ok=False, result=result, error=error)
+
+
+def expire_stale_jobs(now: float | None = None) -> None:
+  current = time.monotonic() if now is None else float(now)
+  for job in list(_jobs.values()):
+    if job.get("status") != "running":
+      continue
+    task = job.get("_task")
+    task_done = task is not None and task.done()
+    activity_at = float(job.get("_activity_at") or current)
+    inactive = current - activity_at >= UPLOAD_JOB_STALE_SECONDS
+    if not task_done and not inactive:
+      continue
+    if task is not None and not task.done():
+      task.cancel()
+    stale_minutes = max(1, round(UPLOAD_JOB_STALE_SECONDS / 60))
+    reason = (
+      "upload task ended without a final state"
+      if task_done
+      else f"upload job expired after {stale_minutes} minutes without activity"
+    )
+    fail_running_job(job, reason)
+
+
 def prune() -> None:
   finished = [job for job in _jobs.values() if job.get("status") in ("done", "failed", "canceled")]
   if len(finished) <= UPLOAD_JOB_KEEP_COUNT:
@@ -153,7 +197,7 @@ def prune() -> None:
 
 def create_job(segments: list[str]) -> dict[str, Any]:
   job_id = uuid.uuid4().hex[:12]
-  now = time.time()
+  now = time.time()  # noqa: TID251
   job = {
     "id": job_id,
     "action": "dashcam_upload",
@@ -169,10 +213,31 @@ def create_job(segments: list[str]) -> dict[str, Any]:
     "cancel_requested": False,
     "created_at": now,
     "updated_at": now,
+    "_activity_at": time.monotonic(),
   }
   _jobs[job_id] = job
   prune()
   return job
+
+
+def start_job(job: dict[str, Any]) -> asyncio.Task:
+  task = asyncio.create_task(run_job(job))
+  job["_task"] = task
+
+  def finalize_task(done_task: asyncio.Task) -> None:
+    if job.get("_task") is done_task:
+      job.pop("_task", None)
+    if job.get("status") != "running":
+      return
+    if done_task.cancelled():
+      error = "upload task canceled before completion"
+    else:
+      exception = done_task.exception()
+      error = str(exception) if exception else "upload task ended without a final state"
+    fail_running_job(job, error)
+
+  task.add_done_callback(finalize_task)
+  return task
 
 
 async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -219,13 +284,18 @@ async def run_upload_segments(segments: list[str], job: dict[str, Any] | None = 
       try:
         segment_path = segment_dir(segment)
         files = await asyncio.to_thread(segment_file_summary, segment_path)
+        def should_cancel() -> bool:
+          if job:
+            touch(job)
+          return is_cancel_requested(job)
+
         ok = await upload_folder_to_web(
           segment_path,
           device_id,
           segment,
           base_url,
           token,
-          (lambda: is_cancel_requested(job)) if job else None,
+          should_cancel if job else None,
         )
         results[idx0] = {
           "segment": segment,

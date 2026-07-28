@@ -509,7 +509,7 @@ async def api_dashcam_upload_start(request: web.Request) -> web.Response:
         "job": upload_jobs.snapshot(running),
       }, status=409)
     job = upload_jobs.create_job(segments)
-    asyncio.create_task(upload_jobs.run_job(job))
+    upload_jobs.start_job(job)
     return web.json_response({"ok": True, "job_id": job["id"], "status": job["status"]})
   except web.HTTPException as e:
     return web.json_response({"ok": False, "error": e.text or e.reason}, status=e.status)
@@ -534,6 +534,7 @@ async def api_dashcam_upload_job(request: web.Request) -> web.Response:
   job_id = (request.query.get("id") or request.match_info.get("job_id") or "").strip()
   if not job_id:
     return web.json_response({"ok": False, "error": "missing job id"}, status=400)
+  upload_jobs.expire_stale_jobs()
   job = upload_jobs.jobs().get(job_id)
   if not job:
     return web.json_response({"ok": False, "error": "job not found"}, status=404)
