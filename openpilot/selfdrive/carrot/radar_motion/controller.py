@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,9 +19,10 @@ from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
   RadarMotionDecisionTracker,
   RadarMotionPredictor,
+  _scoped_motion_points,
+  _visible_scoped_motion_points,
   project_to_model_path,
-  radar_motion_cut_in_threshold,
-  visible_motion_points,
+  radar_motion_sensitivity,
 )
 from openpilot.selfdrive.carrot.radar_motion.primary import (
   FrontRadarKinematicAssociator,
@@ -132,6 +134,7 @@ class DPathRadarController:
     self,
     prefer_corner_radar: bool = False,
     enable_radar_tracks: int = 1,
+    cut_in_sensitivity: int = 3,
     front_radar_measurement_delay_s: float = 0.0,
     corner_radar_measurement_delay_s: float = CORNER_RADAR_MEASUREMENT_DELAY_S,
   ) -> None:
@@ -144,13 +147,27 @@ class DPathRadarController:
       0.0, float(corner_radar_measurement_delay_s),
     )
     self.motion_sensor = "corner" if prefer_corner_radar else "front"
-    self.motion_predictor = RadarMotionPredictor()
-    self.motion_decisions = RadarMotionDecisionTracker(
-      threshold=radar_motion_cut_in_threshold(self.motion_sensor),
-    )
+    self.cut_in_sensitivity = max(0, min(5, int(cut_in_sensitivity)))
+    self._reset_motion_pipeline()
     self.front_kinematic_associator = FrontRadarKinematicAssociator()
     self.lead_two_tracker = DPathLeadTwoTracker()
     self.lead_dynamics = RadarLeadDynamics()
+
+  def _reset_motion_pipeline(self) -> None:
+    sensitivity = radar_motion_sensitivity(
+      self.cut_in_sensitivity,
+      self.motion_sensor,
+    )
+    self.motion_sensitivity = sensitivity
+    self.motion_predictor = RadarMotionPredictor(
+      directional_min_consistency=(
+        sensitivity.directional_min_consistency
+      ),
+    )
+    self.motion_decisions = RadarMotionDecisionTracker(
+      threshold=sensitivity.cut_in_threshold,
+      confirmation_s=sensitivity.confirmation_s,
+    )
 
   def _points_at_model_time(
     self,
@@ -159,6 +176,8 @@ class DPathRadarController:
     radar_to_model_time_s: float,
   ) -> tuple[RadarPointSnapshot, ...]:
     aligned: list[RadarPointSnapshot] = []
+    batch: list[Any] = []
+    batch_time_delta_s: float | None = None
     for point in radar_points:
       source = str(getattr(point, "radarSource", getattr(point, "source", "")))
       measurement_delay_s = (
@@ -169,7 +188,21 @@ class DPathRadarController:
       time_delta_s = radar_to_model_time_s + measurement_delay_s
       if abs(time_delta_s) > RADAR_MOTION_MAX_TIME_SKEW_S:
         continue
-      aligned.extend(snapshot_radar_points((point,), v_ego, time_delta_s))
+      if (
+        batch
+        and batch_time_delta_s is not None
+        and time_delta_s != batch_time_delta_s
+      ):
+        aligned.extend(snapshot_radar_points(
+          batch, v_ego, batch_time_delta_s,
+        ))
+        batch.clear()
+      batch.append(point)
+      batch_time_delta_s = time_delta_s
+    if batch and batch_time_delta_s is not None:
+      aligned.extend(snapshot_radar_points(
+        batch, v_ego, batch_time_delta_s,
+      ))
     return tuple(aligned)
 
   def _select_motion_points(
@@ -181,10 +214,7 @@ class DPathRadarController:
       # Sensor selection is latched. A temporary corner dropout never causes a
       # frame-by-frame fallback to front radar.
       self.motion_sensor = "corner"
-      self.motion_predictor = RadarMotionPredictor()
-      self.motion_decisions = RadarMotionDecisionTracker(
-        threshold=radar_motion_cut_in_threshold(self.motion_sensor),
-      )
+      self._reset_motion_pipeline()
       self.lead_two_tracker.reset()
     if self.motion_sensor == "corner":
       return corner_points
@@ -228,8 +258,8 @@ class DPathRadarController:
 
   def _display_leads(
     self,
-    points: tuple[RadarPointSnapshot, ...],
-    path: tuple[tuple[float, float], ...],
+    scoped_points: tuple[Any, ...],
+    extra_identities: Iterable[tuple[str, int]] = (),
   ) -> tuple[
     tuple[dict[str, Any], ...],
     tuple[dict[str, Any], ...],
@@ -238,8 +268,21 @@ class DPathRadarController:
     left = []
     center = []
     right = []
-    for point in visible_motion_points(points, path):
-      d_path = project_to_model_path(path, point.d_rel, point.y_rel).d_path
+    projection_by_identity = {
+      (point.source, point.track_id): projection
+      for point, _, projection in scoped_points
+    }
+    visible_identities = {
+      (point.source, point.track_id)
+      for point in _visible_scoped_motion_points(scoped_points)
+    }
+    visible_identities.update(extra_identities)
+    for point, _, _ in scoped_points:
+      if (point.source, point.track_id) not in visible_identities:
+        continue
+      d_path = projection_by_identity[
+        (point.source, point.track_id)
+      ].d_path
       lead = self._lead_from_radar_point(point, d_path, 0.03, 0.0)
       if abs(d_path) < 1.8:
         center.append(lead)
@@ -323,10 +366,7 @@ class DPathRadarController:
         primary_match.score,
       )
     motion_points = self._select_motion_points(points)
-    leads_left, leads_center, leads_right = self._display_leads(
-      motion_points,
-      path,
-    )
+    scoped_motion_points = _scoped_motion_points(motion_points, path)
     predictions = self.motion_predictor.update(
       time_s,
       motion_points,
@@ -338,6 +378,11 @@ class DPathRadarController:
         if lead_one is not None
         else None
       ),
+      scoped_points=scoped_motion_points,
+    )
+    leads_left, leads_center, leads_right = self._display_leads(
+      scoped_motion_points,
+      predictions,
     )
     active_identity = self.lead_two_tracker.active_identity
     protected_identities = (
@@ -345,9 +390,8 @@ class DPathRadarController:
       if active_identity is None
       else ((active_identity[0], active_identity[1]),)
     )
-    visible_points = visible_motion_points(
-      motion_points,
-      path,
+    visible_points = _visible_scoped_motion_points(
+      scoped_motion_points,
       (
         float(lead_one["dRel"])
         if lead_one is not None
@@ -359,6 +403,13 @@ class DPathRadarController:
       (point.source, point.track_id): point
       for point in visible_points
     }
+    point_by_identity.update(
+      {
+        (point.source, point.track_id): point
+        for point, _, _ in scoped_motion_points
+        if (point.source, point.track_id) in predictions
+      }
+    )
     vision = vision_lead_from_model(model)
     predictions = {
       identity: (
@@ -378,7 +429,14 @@ class DPathRadarController:
       )
       for identity, prediction in predictions.items()
     }
-    decision = self.motion_decisions.update(time_s, predictions.values())
+    decision = self.motion_decisions.update(
+      time_s,
+      (
+        predictions.values()
+        if self.motion_sensitivity.cut_in_enabled
+        else ()
+      ),
+    )
     confirmed = {
       (
         cutin.prediction.source,
@@ -425,6 +483,9 @@ class DPathRadarController:
         tracked_close_entry=getattr(
           prediction, "front_tracked_close_entry", False,
         ),
+        minimum_directional_consistency=(
+          self.motion_sensitivity.directional_min_consistency
+        ),
       )
       lead_point = prefer_front_radar_kinematics(
         point, points, front_kinematic_matches,
@@ -460,7 +521,8 @@ class DPathRadarController:
           or prediction.d_path * prediction.d_path_rate_long <= 0.0
         ),
         confirmed_cutin=(
-          cutin is not None
+          self.motion_sensitivity.cut_in_enabled
+          and cutin is not None
           and front_motion_supported
           and cutin_can_compete_with_primary(
             lead,
@@ -475,18 +537,21 @@ class DPathRadarController:
             ),
           )
         ),
-        current_path_motion=can_start_current_path_lead_two(
-          prediction.source,
-          float(lead["dRel"]),
-          prediction.current_path_occupancy,
-          (
-            getattr(
-              prediction,
-              "reason",
-              "",
-            ) != "insufficient measured dPath history"
-          ),
-          getattr(prediction, "front_tracked_close_entry", False),
+        current_path_motion=(
+          self.motion_sensitivity.cut_in_enabled
+          and can_start_current_path_lead_two(
+            prediction.source,
+            float(lead["dRel"]),
+            prediction.current_path_occupancy,
+            (
+              getattr(
+                prediction,
+                "reason",
+                "",
+              ) != "insufficient measured dPath history"
+            ),
+            getattr(prediction, "front_tracked_close_entry", False),
+          )
         )
         and (
           getattr(prediction, "path_entry_age_s", None) is None

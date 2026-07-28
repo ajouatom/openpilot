@@ -44,6 +44,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   RadarMotionPrediction,
   RadarMotionPredictor,
   RadarMotionSample,
+  RadarMotionSensitivity,
   cutin_probability_at,
   is_review_candidate,
   model_path_point_at_s,
@@ -51,6 +52,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   project_to_model_path,
   radar_target_velocity_in_ego_frame,
   radar_motion_cut_in_threshold,
+  radar_motion_sensitivity,
   visible_motion_points,
 )
 from openpilot.selfdrive.carrot.radar_motion.primary import (
@@ -121,6 +123,7 @@ __all__ = (
   "RadarMotionPrediction",
   "RadarMotionPredictor",
   "RadarMotionSample",
+  "RadarMotionSensitivity",
   "RADAR_MOTION_MAX_TIME_SKEW_S",
   "VisionLead",
   "VisionRadarMatch",
@@ -139,6 +142,7 @@ __all__ = (
   "project_to_model_path",
   "radar_target_velocity_in_ego_frame",
   "radar_motion_cut_in_threshold",
+  "radar_motion_sensitivity",
   "select_dpath_lead_two",
   "select_primary_radar_points",
   "snapshot_radar_points",

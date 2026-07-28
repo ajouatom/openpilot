@@ -57,9 +57,32 @@ def test_carrot_radar_mode_replaces_removed_model_mode(settings, params):
   assert by_name["CarrotRadarMode"]["risk"] == "high"
   assert "재부팅" in by_name["CarrotRadarMode"]["descr"]
   assert "restart the vehicle" in by_name["CarrotRadarMode"]["edescr"]
+  sensitivity = by_name["CarrotRadarCutInSensitivity"]
+  assert (
+    sensitivity["min"],
+    sensitivity["max"],
+    sensitivity["default"],
+  ) == (0, 5, 3)
+  assert sensitivity["control"] == "select"
+  assert sensitivity["risk"] == "high"
+  assert sensitivity["options"]["ko"] == [
+    "사용 안 함",
+    "둔감",
+    "약간 둔감",
+    "보통",
+    "민감",
+    "아주 민감",
+  ]
+  assert "당근레이더모드 전용" in sensitivity["descr"]
+  assert "only by Carrot Radar Mode" in sensitivity["edescr"]
   vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
   radar = next(group for group in vehicle["groups"] if group["id"] == "VEH_RADAR")
-  assert radar["params"] == ["EnableRadarTracks", "EnableCornerRadar", "CarrotRadarMode"]
+  assert radar["params"] == [
+    "EnableRadarTracks",
+    "EnableCornerRadar",
+    "CarrotRadarMode",
+    "CarrotRadarCutInSensitivity",
+  ]
 
 
 def test_parameter_names_are_unique(params):

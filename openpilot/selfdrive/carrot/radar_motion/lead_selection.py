@@ -88,6 +88,7 @@ def front_cutin_motion_supported(
   directional_consistency: float = 0.0,
   directional_inward_sample_ratio: float = 0.0,
   tracked_close_entry: bool = False,
+  minimum_directional_consistency: float = DIRECTIONAL_MIN_CONSISTENCY,
 ) -> bool:
   """Require strong motion or sustained direction-supported overlap from front."""
   if source != "frontRadar":
@@ -108,7 +109,8 @@ def front_cutin_motion_supported(
     >= FULL_PREDICTED_PATH_OVERLAP_SUPPORT_S
     and float(directional_inward_displacement_m)
     >= DIRECTIONAL_MIN_INWARD_DISPLACEMENT_M
-    and float(directional_consistency) >= DIRECTIONAL_MIN_CONSISTENCY
+    and float(directional_consistency)
+    >= float(minimum_directional_consistency)
     and float(directional_inward_sample_ratio)
     >= DIRECTIONAL_MIN_INWARD_SAMPLE_RATIO
     and -side * float(d_path_rate_short)
