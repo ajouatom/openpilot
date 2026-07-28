@@ -298,8 +298,9 @@ available, falling back to `deviceState.screenBrightnessPercent`; `1` through
 `100` are fixed brightness percentages. `ClusterHudOrientation` supports `0`
 (0 degrees) and `2` (180 degrees); values `1` and `3` are ignored. The existing
 web settings UI stores both Params without a custom slider path. The running
-HUD checks the stored brightness and orientation every 100 ms and applies
-supported changed values without restarting.
+HUD checks the stored brightness and orientation every 100 ms. Brightness
+applies without restarting. A managed H.264 orientation change exits cleanly
+and autorun relaunches immediately so setup command `13` applies the new value.
 
 Changed display settings follow the capture-derived command procedure:
 
@@ -311,8 +312,10 @@ Changed display settings follow the capture-derived command procedure:
 The sync and setting write are one USB-locked transaction so an image frame
 cannot split the pair. Initial orientation is stored locally before USB open
 and carried by the existing H.264 setup command `13`, avoiding a redundant
-post-initialization sync. `--usb-h264-orientation` remains a separate
-diagnostic option controlling encoder/render geometry.
+post-initialization sync. The panel does not visibly apply command `13` during
+an active H.264 stream, so managed H.264 uses the automatic restart described
+above. `--usb-h264-orientation` remains a separate diagnostic option
+controlling encoder/render geometry.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,

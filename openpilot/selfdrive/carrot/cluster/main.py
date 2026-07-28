@@ -1488,13 +1488,17 @@ def run_demo(
                 )
                 usb_display.set_brightness(next_usb_brightness)
                 next_orientation = usb_orientation_param_reader.read()
-                if (
-                    next_orientation in (0, 2)
-                    and next_orientation != active_orientation
-                    and usb_display.set_orientation(next_orientation)
-                ):
-                    active_orientation = next_orientation
-                    print(f"{CLUSTER_ORIENTATION_PARAM} updated: {active_orientation}", flush=True)
+                if next_orientation in (0, 2) and next_orientation != active_orientation:
+                    if h264_pipeline is not None and hud_mode_watch is not None:
+                        print(
+                            f"{CLUSTER_ORIENTATION_PARAM} changed from "
+                            f"{active_orientation} to {next_orientation}; exiting for H264 restart",
+                            flush=True,
+                        )
+                        break
+                    if usb_display.set_orientation(next_orientation):
+                        active_orientation = next_orientation
+                        print(f"{CLUSTER_ORIENTATION_PARAM} updated: {active_orientation}", flush=True)
                 next_brightness_param_read = brightness_now + BRIGHTNESS_PARAM_POLL_SECONDS
 
             if output_mode in ("window", "both"):
