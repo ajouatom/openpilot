@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 SETTINGS_PATH = Path(__file__).resolve().parents[3] / "carrot_settings.json"
+PARAMS_KEYS_PATH = Path(__file__).resolve().parents[4] / "common" / "params_keys.h"
 
 # Mirrors SETTING_DISPLAY_UNIT_TYPES / SETTING_CONTROL_KINDS in setting.js.
 KNOWN_DISPLAY_UNITS = {"raw", "speedKph", "distanceCm", "timeSec", "timeMin", "percent", "degree"}
@@ -44,6 +45,37 @@ def test_c3x_lite_hardware_setting_is_exposed(settings, params):
   vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
   device_hardware = next(group for group in vehicle["groups"] if group["id"] == "VEH_DEVICE")
   assert device_hardware["params"] == ["HardwareC3xLite"]
+
+
+def test_external_hud_brightness_and_orientation_use_catalog_controls(settings, params):
+  by_name = {p["name"]: p for p in params}
+  brightness = by_name["ClusterHudBrightness"]
+  assert (brightness["min"], brightness["max"], brightness["default"]) == (0, 100, 0)
+  assert "live_update" not in brightness
+
+  orientation = by_name["ClusterHudOrientation"]
+  assert (orientation["min"], orientation["max"], orientation["default"]) == (0, 3, 0)
+  assert orientation["control"] == "select"
+  assert orientation["descr"].endswith("0: 0도\n1: X\n2: 180도\n3: X")
+  assert orientation["options"]["en"] == [
+    "0 degrees",
+    "Unsupported",
+    "180 degrees",
+    "Unsupported",
+  ]
+
+  display = next(category for category in settings["menu"] if category["id"] == "DISPLAY")
+  hud = next(group for group in display["groups"] if group["id"] == "DISP_HUD")
+  basic = next(group for group in hud["groups"] if group["id"] == "HUD_BASIC")
+  assert basic["params"][:3] == [
+    "ClusterHud",
+    "ClusterHudBrightness",
+    "ClusterHudOrientation",
+  ]
+
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"ClusterHudBrightness", {PERSISTENT, INT, "0"}}' in params_keys
+  assert '{"ClusterHudOrientation", {PERSISTENT, INT, "0"}}' in params_keys
 
 
 def test_carrot_radar_mode_replaces_removed_model_mode(settings, params):

@@ -12,6 +12,8 @@ import pytest
 
 
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
+CLUSTER_MAIN_PATH = CLUSTER_DIR / "main.py"
+LOGGERD_SCONSCRIPT = Path(__file__).resolve().parents[3] / "system" / "loggerd" / "SConscript"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_git_status import GitBranchStatusProvider
@@ -27,6 +29,21 @@ import cluster_renderer
 from cluster_live import standby_state
 from cluster_renderer import ClusterUiRenderer
 from cluster_usb_display import product_id_for_hud_mode
+
+
+def test_loggerd_builds_cluster_h264_bridges_on_tici():
+  source = LOGGERD_SCONSCRIPT.read_text(encoding="utf-8")
+
+  assert 'if arch in ("aarch64", "larch64"):' in source
+  assert "'cluster_h264_encoder_bridge'" in source
+  assert "'cluster_h264_decoder_bridge'" in source
+
+
+def test_managed_h264_orientation_change_requests_restart():
+  source = CLUSTER_MAIN_PATH.read_text(encoding="utf-8")
+
+  assert "if h264_pipeline is not None and hud_mode_watch is not None:" in source
+  assert "exiting for H264 restart" in source
 
 
 def test_tici_decoded_buffer_releases_fd_and_capture_lease_once():
@@ -89,6 +106,58 @@ def _import_cluster_autorun(monkeypatch):
   cluster_autorun = importlib.import_module(module_name)
   cluster_autorun._ensure_cluster_paths()
   return cluster_autorun
+
+
+def test_cluster_autorun_restarts_without_delay_after_orientation_change(monkeypatch):
+  cluster_autorun = _import_cluster_autorun(monkeypatch)
+  usb_display_module = importlib.import_module("cluster_usb_display")
+  values = {
+    cluster_autorun.HUD_PARAM: 1,
+    cluster_autorun.HUD_DEBUG_PARAM: 1,
+    cluster_autorun.HUD_ENCODER_PARAM: cluster_autorun.ENCODER_HARDWARE,
+    cluster_autorun.HUD_LIVE_FPS_PARAM: 1,
+    cluster_autorun.HUD_ORIENTATION_PARAM: 0,
+    cluster_autorun.HUD_CORE_MODE_PARAM: cluster_autorun.CORE_MODE_DEDICATED,
+    cluster_autorun.HUD_PRIORITY_PARAM: 10,
+  }
+  runs = []
+
+  class FakeParams:
+    def get_int(self, name):
+      return values[name]
+
+    def put_bool_nonblocking(self, _name, _value):
+      return None
+
+  def run_cluster_once(*_args, **_kwargs):
+    runs.append(values[cluster_autorun.HUD_ORIENTATION_PARAM])
+    if len(runs) == 1:
+      values[cluster_autorun.HUD_ORIENTATION_PARAM] = 2
+    else:
+      values[cluster_autorun.HUD_PARAM] = 0
+
+  monkeypatch.setattr(cluster_autorun, "Params", FakeParams)
+  monkeypatch.setattr(cluster_autorun, "_configure_autorun_locale", lambda: None)
+  monkeypatch.setattr(cluster_autorun, "_configure_autorun_affinity", lambda: None)
+  monkeypatch.setattr(cluster_autorun, "_apply_realtime_setting_env", lambda *_args: None)
+  monkeypatch.setattr(cluster_autorun, "_hud_output_allowed", lambda _params: True)
+  monkeypatch.setattr(cluster_autorun, "_run_cluster_once", run_cluster_once)
+  monkeypatch.setattr(
+    usb_display_module,
+    "find_supported_usb_product",
+    lambda expected_product_id: expected_product_id,
+  )
+  monkeypatch.setattr(
+    cluster_autorun.time,
+    "sleep",
+    lambda _seconds: pytest.fail("orientation restart must not wait for the retry delay"),
+  )
+
+  try:
+    cluster_autorun.main()
+    assert runs == [0, 2]
+  finally:
+    sys.modules.pop("openpilot.selfdrive.carrot.cluster_autorun", None)
 
 
 def _new_h264_pipeline() -> H264UsbPipeline:

@@ -497,6 +497,7 @@
               "params": [
                 "ClusterHud",
                 "ClusterHudBrightness",
+                "ClusterHudOrientation",
                 "ClusterHudMirror",
                 "ClusterHudTheme",
                 "ClusterNaviMapTheme",
@@ -3165,6 +3166,43 @@
       "default": 0,
       "unit": 1,
       "display_unit": "percent"
+    },
+    {
+      "group": "외부 HUD",
+      "name": "ClusterHudOrientation",
+      "title": "외부 HUD 화면 회전(0)",
+      "descr": "변경하면 TURZX 화면에 즉시 적용됩니다.\n0: 0도\n1: X\n2: 180도\n3: X",
+      "egroup": "CLUSTER HUD",
+      "etitle": "External HUD Screen Rotation(0)",
+      "edescr": "Applied to the TURZX screen immediately when changed.\n0: 0 degrees\n1: Unsupported\n2: 180 degrees\n3: Unsupported",
+      "cgroup": "外部 HUD",
+      "ctitle": "外部 HUD 屏幕旋转(0)",
+      "cdescr": "更改后立即应用到 TURZX 屏幕。\n0: 0 度\n1: 不支持\n2: 180 度\n3: 不支持",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": [
+          "0도",
+          "X (미지원)",
+          "180도",
+          "X (미지원)"
+        ],
+        "en": [
+          "0 degrees",
+          "Unsupported",
+          "180 degrees",
+          "Unsupported"
+        ],
+        "zh": [
+          "0 度",
+          "不支持",
+          "180 度",
+          "不支持"
+        ]
+      }
     },
     {
       "group": "외부 HUD",
