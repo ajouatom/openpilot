@@ -76,7 +76,7 @@
 
 ## 선행차 선택과 검증
 
-manager는 두 레이더 구현을 동시에 실행하지 않습니다. `CarrotRadarMode=0`에서는 기존 `openpilot.selfdrive.controls.radard`만 실행하고 기존 leadOne/leadTwo 선택을 그대로 유지합니다. `CarrotRadarMode=1`에서는 기존 프로세스를 중지하고 독립 `openpilot.selfdrive.carrot.radar.radard_dpath`만 실행합니다. 이 프로세스는 일반 front/SCC–vision leadOne 또는 비전으로 처음 확인한 연속 정지 leadOne을 먼저 계산한 뒤 아래 물리 predictor로 leadTwo를 계산해 `radarState`를 직접 발행합니다. 전방 레이더, SCC, 코너 레이더의 소스 구분을 유지하며 학습형 레이더 리드 모델은 사용하지 않습니다.
+manager는 두 레이더 구현을 동시에 실행하지 않습니다. `CarrotRadarMode=0`에서는 기존 `openpilot.selfdrive.controls.radard`만 실행하고 기존 leadOne/leadTwo 선택을 그대로 유지합니다. `CarrotRadarMode=1`에서는 기존 프로세스를 중지하고 독립 `openpilot.selfdrive.carrot.radar.radard_dpath`만 실행합니다. 이 프로세스는 일반 front/SCC–vision leadOne 또는 비전으로 처음 확인한 연속 정지 leadOne을 먼저 계산한 뒤 아래 물리 predictor로 leadTwo를 계산해 `radarState`를 직접 발행합니다. leadOne은 비전과 매칭되는 전방 레이더, SCC, 코너 레이더 순으로 우선하며, 뒤 순위 센서는 앞 순위 측정이 없을 때 연속성 보조로 사용합니다. 전방 레이더, SCC, 코너 레이더의 소스 구분을 유지하며 학습형 레이더 리드 모델은 사용하지 않습니다.
 
 headless 검증기는 기존 radard와 실험 중인 단순 물리 predictor를 별도로 보고할 수 있습니다. 화면 리플레이는 새 독립 controller와 물리 predictor만 실행합니다. leadOne/leadTwo는 로그의 model·radar 입력으로 다시 계산하며 기록된 기존 radard의 lead 역할과 CUT-IN 마커를 가져오지 않습니다. 리플레이는 종방향 제어를 바꾸지 않습니다.
 

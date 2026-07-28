@@ -37,7 +37,10 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
 )
 
 
-RADAR_MOTION_MAX_TIME_SKEW_S = 0.10
+# modelV2 is polled at 20 Hz while liveTracks may arrive just before or after
+# the camera exposure represented by timestampEof. A 0.10 s hard edge drops a
+# valid radar cycle when normal scheduling jitter puts it at 0.101-0.113 s.
+RADAR_MOTION_MAX_TIME_SKEW_S = 0.15
 # The 0x235/0x180/0x430 object stream is one radar cycle old when emitted.
 # Keep this separate from the vehicle's front-radar delay.
 CORNER_RADAR_MEASUREMENT_DELAY_S = 0.05
@@ -355,7 +358,9 @@ class DPathRadarController:
           self.enable_radar_tracks,
         )
       ),
-      prefer_corner_stationary=self.motion_sensor == "corner",
+      # Motion-sensor choice controls CUT-IN prediction only. leadOne remains
+      # front/SCC-first; corner radar is its continuity fallback.
+      prefer_primary_stationary=True,
     )
     lead_one = None
     if primary_match is not None:

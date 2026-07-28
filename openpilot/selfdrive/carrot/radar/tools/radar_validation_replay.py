@@ -31,6 +31,7 @@ from openpilot.selfdrive.carrot.radar_motion import (
   FRONT_CUT_IN_THRESHOLD,
   IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M,
   POSITION_ONLY_MAX_ABS_VLEAD_MPS,
+  RADAR_MOTION_MAX_TIME_SKEW_S,
   STATIONARY_MAX_ABS_VLEAD_MPS,
   RadarMotionDecisionTracker,
   RadarMotionPrediction,
@@ -66,7 +67,7 @@ VALIDATION_DEFAULT_FRONT_PROBABILITY = FRONT_CUT_IN_THRESHOLD
 CUTIN_CONFIRMATION_S = CUT_IN_CONFIRMATION_S
 CUTIN_DECISION_HOLD_S = CUT_IN_BOUNDARY_HOLD_S
 VALIDATION_EXPECTED_LABELS = ("detect", "clear", "stationary")
-MAX_POINT_MODEL_TIME_SKEW_S = 0.10
+MAX_POINT_MODEL_TIME_SKEW_S = RADAR_MOTION_MAX_TIME_SKEW_S
 VALIDATION_CORNER_MAX_MEASUREMENT_AGE_S = 0.10
 KOREAN_FONT_BASE_SIZE = 40
 VALIDATION_PROBABILITY_MIN = 0.20
@@ -894,7 +895,7 @@ class RadarMotionShadowSelector:
           frame.path,
           time_s=frame.time_s,
           stationary_points=stationary_points,
-          prefer_corner_stationary=self.motion_sensor == "corner",
+          prefer_primary_stationary=True,
         )
         lead_one_results.append(
           lead_from_vision_match(match)
