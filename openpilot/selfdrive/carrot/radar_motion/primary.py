@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
+  MIN_PREDICTED_PATH_OVERLAP_S,
   RadarMotionPrediction,
   project_to_model_path,
 )
@@ -38,6 +39,9 @@ STATIONARY_LATERAL_CONTINUITY_M = 1.5
 FRONT_KINEMATIC_MATCH_MAX_DREL_DELTA_M = 5.0
 FRONT_KINEMATIC_MATCH_MAX_YREL_DELTA_M = 0.75
 FRONT_KINEMATIC_MATCH_MAX_VLEAD_DELTA_MPS = 2.0
+FRONT_KINEMATIC_HOLD_MAX_DREL_DELTA_M = 12.0
+FRONT_KINEMATIC_HOLD_MAX_YREL_DELTA_M = 2.0
+FRONT_KINEMATIC_HOLD_MAX_VLEAD_DELTA_MPS = 2.0
 VISION_BRACKET_MIN_PROB = 0.90
 VISION_BRACKET_MAX_RANGE_GAP_M = 20.0
 VISION_BRACKET_MAX_SPEED_DELTA_MPS = 2.0
@@ -142,13 +146,58 @@ def _front_kinematic_match_cost(
   )
 
 
+def _front_kinematic_hold_compatible(
+  corner: RadarPointSnapshot,
+  front: RadarPointSnapshot,
+) -> bool:
+  return (
+    abs(corner.d_rel - front.d_rel)
+    <= FRONT_KINEMATIC_HOLD_MAX_DREL_DELTA_M
+    and abs(corner.y_rel - front.y_rel)
+    <= FRONT_KINEMATIC_HOLD_MAX_YREL_DELTA_M
+    and abs(corner.v_lead - front.v_lead)
+    <= FRONT_KINEMATIC_HOLD_MAX_VLEAD_DELTA_MPS
+  )
+
+
+def _with_front_radar_kinematics(
+  point: RadarPointSnapshot,
+  front: RadarPointSnapshot,
+) -> RadarPointSnapshot:
+  return RadarPointSnapshot(
+    track_id=point.track_id,
+    source=point.source,
+    d_rel=front.d_rel,
+    y_rel=point.y_rel,
+    v_rel=front.v_rel,
+    a_rel=front.a_rel,
+    yv_rel=point.yv_rel,
+    v_lead=front.v_lead,
+    a_lead=front.a_lead,
+    j_lead=front.j_lead,
+    measured=point.measured and front.measured,
+    kinematics_source=front.source,
+    kinematics_track_id=front.track_id,
+  )
+
+
 def prefer_front_radar_kinematics(
   point: RadarPointSnapshot,
   points: Iterable[RadarPointSnapshot],
+  front_matches: Mapping[
+    tuple[str, int], RadarPointSnapshot
+  ] | None = None,
 ) -> RadarPointSnapshot:
   """Use mutually matched front longitudinal values for a corner track."""
   if not point.source.startswith("corner"):
     return point
+  if front_matches is not None:
+    front = front_matches.get((point.source, point.track_id))
+    return (
+      _with_front_radar_kinematics(point, front)
+      if front is not None
+      else point
+    )
   point_values = tuple(points)
   matches = tuple(
     (cost, front)
@@ -187,21 +236,88 @@ def prefer_front_radar_kinematics(
     or matched_corner.track_id != point.track_id
   ):
     return point
-  return RadarPointSnapshot(
-    track_id=point.track_id,
-    source=point.source,
-    d_rel=front.d_rel,
-    y_rel=point.y_rel,
-    v_rel=front.v_rel,
-    a_rel=front.a_rel,
-    yv_rel=point.yv_rel,
-    v_lead=front.v_lead,
-    a_lead=front.a_lead,
-    j_lead=front.j_lead,
-    measured=point.measured and front.measured,
-    kinematics_source=front.source,
-    kinematics_track_id=front.track_id,
-  )
+  return _with_front_radar_kinematics(point, front)
+
+
+class FrontRadarKinematicAssociator:
+  """Keep an established corner/front identity through reflection migration."""
+
+  def __init__(self) -> None:
+    self._pairs: dict[tuple[str, int], tuple[str, int]] = {}
+
+  def reset(self) -> None:
+    self._pairs.clear()
+
+  def update(
+    self,
+    points: Iterable[RadarPointSnapshot],
+  ) -> dict[tuple[str, int], RadarPointSnapshot]:
+    point_values = tuple(points)
+    point_by_identity = {
+      (point.source, point.track_id): point
+      for point in point_values
+    }
+    normal_matches: dict[
+      tuple[str, int], RadarPointSnapshot
+    ] = {}
+    for corner in point_values:
+      if not corner.source.startswith("corner"):
+        continue
+      matched = prefer_front_radar_kinematics(corner, point_values)
+      if (
+        getattr(matched, "kinematics_source", None) == "frontRadar"
+        and getattr(matched, "kinematics_track_id", None) is not None
+      ):
+        front = point_by_identity.get(
+          (
+            matched.kinematics_source,
+            matched.kinematics_track_id,
+          ),
+        )
+        if front is not None:
+          normal_matches[(corner.source, corner.track_id)] = front
+
+    remembered_pairs: dict[
+      tuple[str, int], tuple[str, int]
+    ] = {}
+    for corner_identity, front_identity in self._pairs.items():
+      corner = point_by_identity.get(corner_identity)
+      front = point_by_identity.get(front_identity)
+      if (
+        corner is not None
+        and front is not None
+        and _front_kinematic_hold_compatible(corner, front)
+      ):
+        remembered_pairs[corner_identity] = front_identity
+    remembered_pairs.update({
+      corner_identity: (front.source, front.track_id)
+      for corner_identity, front in normal_matches.items()
+    })
+
+    matches = dict(normal_matches)
+    used_fronts = {
+      (front.source, front.track_id)
+      for front in matches.values()
+    }
+    for corner_identity, front_identity in sorted(remembered_pairs.items()):
+      if (
+        corner_identity in matches
+        or front_identity in used_fronts
+      ):
+        continue
+      corner = point_by_identity.get(corner_identity)
+      front = point_by_identity.get(front_identity)
+      if (
+        corner is None
+        or front is None
+        or not _front_kinematic_hold_compatible(corner, front)
+      ):
+        continue
+      matches[corner_identity] = front
+      used_fronts.add(front_identity)
+
+    self._pairs = remembered_pairs
+    return matches
 
 
 def apply_vision_bracket_cutin_support(
@@ -226,6 +342,8 @@ def apply_vision_bracket_cutin_support(
     or not point.source.startswith("corner")
     or prediction.current_path_occupancy
     or abs(prediction.d_path) > VISION_BRACKET_MAX_ABS_DPATH_M
+    or prediction.predicted_path_overlap_s
+    < MIN_PREDICTED_PATH_OVERLAP_S
     or prediction.motion_consistency < VISION_BRACKET_MIN_MOTION_SUPPORT
     or prediction.recent_motion_support < VISION_BRACKET_MIN_MOTION_SUPPORT
   ):
