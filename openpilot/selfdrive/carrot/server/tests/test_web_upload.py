@@ -24,6 +24,67 @@ def clear_upload_env(monkeypatch):
     monkeypatch.delenv(key, raising=False)
 
 
+class FakeUploadTask:
+  def __init__(self, *, done=False):
+    self._done = done
+    self.cancel_called = False
+
+  def done(self):
+    return self._done
+
+  def cancel(self):
+    self.cancel_called = True
+
+
+def test_dashcam_stale_upload_job_is_failed_and_released():
+  upload_jobs.jobs().clear()
+  job = upload_jobs.create_job(["route--0"])
+  task = FakeUploadTask()
+  job["_task"] = task
+  job["_activity_at"] = 100.0
+
+  upload_jobs.expire_stale_jobs(now=100.0 + upload_jobs.UPLOAD_JOB_STALE_SECONDS)
+
+  assert task.cancel_called is True
+  assert job["status"] == "failed"
+  assert job["error"] == "upload job expired after 30 minutes without activity"
+  assert upload_jobs.running_job() is None
+  upload_jobs.jobs().clear()
+
+
+def test_dashcam_finished_task_cannot_leave_running_job():
+  upload_jobs.jobs().clear()
+  job = upload_jobs.create_job(["route--0"])
+  job["_task"] = FakeUploadTask(done=True)
+
+  upload_jobs.expire_stale_jobs(now=job["_activity_at"])
+
+  assert job["status"] == "failed"
+  assert job["error"] == "upload task ended without a final state"
+  upload_jobs.jobs().clear()
+
+
+def test_dashcam_start_job_finalizes_unhandled_task_failure(monkeypatch):
+  upload_jobs.jobs().clear()
+
+  async def scenario():
+    async def crash(_job):
+      raise RuntimeError("unexpected task failure")
+
+    monkeypatch.setattr(upload_jobs, "run_job", crash)
+    job = upload_jobs.create_job(["route--0"])
+    task = upload_jobs.start_job(job)
+    with pytest.raises(RuntimeError, match="unexpected task failure"):
+      await task
+    await asyncio.sleep(0)
+    return job
+
+  job = asyncio.run(scenario())
+  assert job["status"] == "failed"
+  assert job["error"] == "unexpected task failure"
+  upload_jobs.jobs().clear()
+
+
 def test_carrot_runtime_contains_no_legacy_ftp_code():
   carrot_root = Path(__file__).resolve().parents[2]
   legacy_terms = (

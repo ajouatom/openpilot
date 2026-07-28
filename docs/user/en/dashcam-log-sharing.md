@@ -74,7 +74,7 @@ Upload result: (paste the text copied from Carrot Web)
 Screen recording: yes / no
 ```
 
-Only one upload job can run at a time. If the browser is briefly closed and reopened while the same device-side job is still running, Carrot Web may restore its progress or result.
+Only one upload job can run at a time. If the browser is briefly closed and reopened while the same device-side job is still running, Carrot Web may restore its progress or result. A job ID saved by the browser is verified against the device before it is used, so an already-finished or missing job does not block a new upload by itself. A device-side upload with no activity for 30 minutes is marked failed and released so that it cannot block later uploads.
 
 ## Include a screen recording when useful
 
@@ -93,7 +93,7 @@ A screen recording alone may not contain enough data to determine the control ca
 |---|---|
 | The latest drive is missing | Confirm that the drive has completely ended, wait briefly, and check the list again. |
 | Recording or incomplete-segment error | Wait for that segment to be finalized, then select it again. |
-| Another upload is already running | Wait for the current job to finish or cancel it. Only one job can run at a time. |
+| Another upload is already running | Carrot Web rechecks the existing device-side job and restores its progress. If it is genuinely running, wait for it to finish or cancel it. A job with no activity for 30 minutes is released automatically. |
 | Upload stalls or fails | Check the device's internet connection and retry only the failed segment. |
 | Only some files succeeded | Read the completion result and resend the segment containing the failed item. |
 | The required log is gone | Check whether `Tools > delete all logs` or storage cleanup was used. Deleted logs cannot be restored or uploaded from Carrot Web. |

@@ -1430,10 +1430,11 @@ async function pollDashcamUploadJob(jobId, progress, totalFallback = 0, options 
   return result;
 }
 
-async function resumeDashcamUploadJobIfNeeded() {
+async function resumeDashcamUploadJobIfNeeded(options = {}) {
   if (dashcamUploadResumePromise) return dashcamUploadResumePromise;
   const jobId = getRememberedDashcamUploadJob();
-  if (!jobId || jobId === dashcamUploadActiveJobId) return null;
+  const force = options.force === true;
+  if (!jobId || (!force && jobId === dashcamUploadActiveJobId)) return null;
 
   dashcamUploadResumePromise = (async () => {
     let snapshot = null;
@@ -1508,9 +1509,11 @@ async function resumeDashcamUploadJobIfNeeded() {
 }
 
 async function uploadDashcamSegments(segments, options = {}) {
-  const existingJobId = dashcamUploadActiveJobId || getRememberedDashcamUploadJob();
-  if (existingJobId) {
+  if (dashcamUploadActiveJobId) {
     showAppToast(getUIText("upload_already_running", "Upload already running."), { tone: "error", duration: 3200 });
+    return;
+  }
+  if (getRememberedDashcamUploadJob()) {
     resumeDashcamUploadJobIfNeeded().catch(() => {});
     return;
   }
@@ -1604,7 +1607,7 @@ async function uploadDashcamSegments(segments, options = {}) {
     if (runningJobId) {
       rememberDashcamUploadJob(runningJobId);
       showAppToast(getUIText("upload_already_running", "Upload already running"), { tone: "error", duration: 3200 });
-      resumeDashcamUploadJobIfNeeded().catch(() => {});
+      resumeDashcamUploadJobIfNeeded({ force: true }).catch(() => {});
     } else if (isDashcamUploadCanceledError(e)) {
       if (!cancelRequested) showAppToast(getUIText("upload_canceled", "Upload canceled"), { duration: 2600 });
     } else {

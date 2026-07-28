@@ -41,7 +41,7 @@
       "kind": "bundle",
       "source": "src/entries/logs.js",
       "path": "js/generated/logs.js",
-      "hash": "d3dfa26f83de003296d365392fb909a6957721ecc19df3bf7c3d32e70b90b8dc"
+      "hash": "5a162d00c4884d654946551bcf794e372afdc071f9242da755cf0dc1eb250c5c"
     },
     {
       "id": "terminal.runtime",
