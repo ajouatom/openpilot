@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
+  CUT_IN_CURRENT_SCOPE_HALF_WIDTH_M,
   FRONT_CUT_IN_MIN_DREL_M,
   IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M,
   RadarMotionDecisionTracker,
@@ -16,6 +17,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   model_path_y,
   prediction_sample_at,
   project_to_model_path,
+  radar_target_velocity_in_ego_frame,
   visible_motion_points,
 )
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
@@ -33,6 +35,7 @@ from openpilot.selfdrive.carrot.radar_motion.controller import (
 )
 from openpilot.selfdrive.carrot.radar_motion.predictor import RadarMotionCutIn
 from openpilot.selfdrive.carrot.radar_motion.primary import (
+  FrontRadarKinematicAssociator,
   RadarPointSnapshot,
   VisionLead,
   VisionRadarMatcher,
@@ -145,6 +148,117 @@ def test_dpath_uses_same_frame_model_path_without_lane_or_yaw_correction() -> No
   assert model_path_y(path, 50.0) == pytest.approx(-2.0)
   assert prediction.d_path == pytest.approx(150.0 / (10016.0 ** 0.5))
   assert prediction.current_path_occupancy
+
+
+def test_radar_velocity_removes_ego_rotation_without_changing_dpath() -> None:
+  target_vx, target_vy = radar_target_velocity_in_ego_frame(
+    v_lead=10.06,
+    yv_rel=-0.20,
+    d_rel=10.0,
+    y_rel=3.0,
+    yaw_rate_rad_s=0.02,
+  )
+
+  assert target_vx == pytest.approx(10.0)
+  assert target_vy == pytest.approx(0.0)
+
+  predictor = RadarMotionPredictor()
+  prediction = None
+  for index in range(15):
+    prediction = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          1010,
+          10.0,
+          3.0 - index * 0.05,
+          source="corner235",
+          v_lead=10.06,
+          yv_rel=-0.20,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+      yaw_rate_rad_s=0.02,
+    )[("corner235", 1010)]
+  assert prediction is not None
+
+  assert prediction.d_path == pytest.approx(2.30)
+  assert prediction.reported_normal_speed == pytest.approx(0.0, abs=1e-6)
+  assert prediction.cut_in_probability == pytest.approx(0.0)
+
+
+def test_new_cutin_must_currently_be_within_adjacent_lane_scope() -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  lateral_values = (4.00, 3.70, 3.40, 3.10)
+  for index, y_rel in enumerate(lateral_values):
+    prediction = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          1010,
+          30.0,
+          y_rel,
+          source="corner235",
+          v_lead=10.0,
+          yv_rel=-3.0,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )[("corner235", 1010)]
+  assert prediction is not None
+
+  assert CUT_IN_CURRENT_SCOPE_HALF_WIDTH_M == pytest.approx(3.0)
+  assert abs(prediction.d_path) > CUT_IN_CURRENT_SCOPE_HALF_WIDTH_M
+  assert prediction.predicted_path_overlap_s >= 0.5
+  assert not prediction.cut_in_detection_allowed
+  assert prediction.cut_in_probability == 0.0
+  assert prediction.reason == "outside adjacent-lane CUT-IN scope"
+
+
+@pytest.mark.parametrize(
+  ("reported_lateral_speed", "expected"),
+  ((-0.5, True), (0.5, False)),
+)
+def test_corner_lane_boundary_straddle_requires_directional_radar_agreement(
+  reported_lateral_speed: float,
+  expected: bool,
+) -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  for index, y_rel in enumerate((
+    3.00, 2.95, 2.90, 2.85, 2.80, 2.75,
+    2.70, 2.65, 2.60, 2.55, 2.50, 2.45,
+  )):
+    prediction = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          1010,
+          20.0,
+          y_rel,
+          source="corner235",
+          v_lead=10.0,
+          yv_rel=reported_lateral_speed,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )[("corner235", 1010)]
+  assert prediction is not None
+
+  assert not prediction.current_path_occupancy
+  assert prediction.lane_boundary_directional_entry is expected
+  if expected:
+    assert prediction.cut_in_probability >= 0.30
+    assert prediction.reason == "lane-boundary directional entry"
+    assert RadarMotionDecisionTracker(threshold=0.30).update(
+      1.1, (prediction,),
+    ).confirmed
+  else:
+    assert prediction.cut_in_probability < 0.30
 
 
 def test_projection_uses_path_arc_distance_normal_distance_and_tangent() -> None:
@@ -374,6 +488,12 @@ def test_front_point_inside_five_metres_cannot_start_current_path_lead_two() -> 
   )
   assert can_start_current_path_lead_two(
     "frontRadar",
+    FRONT_CUT_IN_MIN_DREL_M - 0.1,
+    True,
+    tracked_close_entry=True,
+  )
+  assert can_start_current_path_lead_two(
+    "frontRadar",
     FRONT_CUT_IN_MIN_DREL_M,
     True,
   )
@@ -398,7 +518,143 @@ def test_front_point_inside_five_metres_cannot_start_current_path_lead_two() -> 
 def test_front_cutin_needs_stronger_path_relative_motion_than_corner() -> None:
   assert not front_cutin_motion_supported("frontRadar", 0.50)
   assert front_cutin_motion_supported("frontRadar", 0.80)
+  assert front_cutin_motion_supported(
+    "frontRadar",
+    -0.15,
+    d_rel=12.0,
+    d_path=2.5,
+    d_path_rate_short=-0.25,
+    predicted_path_overlap_s=1.0,
+    directional_inward_displacement_m=0.25,
+    directional_consistency=0.80,
+    directional_inward_sample_ratio=0.70,
+  )
+  assert not front_cutin_motion_supported(
+    "frontRadar",
+    -0.15,
+    d_rel=12.0,
+    d_path=2.5,
+    d_path_rate_short=-0.25,
+    predicted_path_overlap_s=1.0,
+    directional_inward_displacement_m=0.25,
+    directional_consistency=0.40,
+    directional_inward_sample_ratio=0.70,
+  )
+  assert front_cutin_motion_supported(
+    "frontRadar",
+    -0.30,
+    d_rel=5.1,
+    d_path=1.7,
+    d_path_rate_short=-0.8,
+    reported_normal_speed=-0.3,
+    current_path_occupancy=True,
+  )
+  assert not front_cutin_motion_supported(
+    "frontRadar",
+    -0.30,
+    d_rel=5.1,
+    d_path=1.7,
+    d_path_rate_short=-0.8,
+    reported_normal_speed=0.0,
+    current_path_occupancy=True,
+  )
   assert front_cutin_motion_supported("corner235", 0.10)
+
+
+def test_tracked_front_out_to_in_crossing_can_start_inside_five_metres() -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  for index, y_rel in enumerate((
+    2.8, 2.7, 2.6, 2.5, 2.4, 2.3, 2.2,
+    2.1, 2.0, 1.9, 1.8, 1.7, 1.6,
+  )):
+    prediction = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          59,
+          3.2,
+          y_rel,
+          v_lead=10.0,
+          yv_rel=-1.0,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )[("frontRadar", 59)]
+  assert prediction is not None
+
+  assert prediction.current_path_occupancy
+  assert prediction.path_entry_age_s is not None
+  assert prediction.front_tracked_close_entry
+  assert prediction.cut_in_detection_allowed
+  assert front_cutin_motion_supported(
+    prediction.source,
+    prediction.d_path_rate_long,
+    tracked_close_entry=prediction.front_tracked_close_entry,
+  )
+  assert can_start_current_path_lead_two(
+    prediction.source,
+    3.2,
+    prediction.current_path_occupancy,
+    tracked_close_entry=prediction.front_tracked_close_entry,
+  )
+
+
+def test_front_point_born_in_path_cannot_use_tracked_close_exception() -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  for index, y_rel in enumerate((
+    1.7, 1.6, 1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9,
+  )):
+    prediction = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          59,
+          3.2,
+          y_rel,
+          v_lead=10.0,
+          yv_rel=-1.0,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )[("frontRadar", 59)]
+  assert prediction is not None
+
+  assert prediction.current_path_occupancy
+  assert prediction.path_entry_age_s is None
+  assert not prediction.front_tracked_close_entry
+  assert not prediction.cut_in_detection_allowed
+
+
+def test_production_controller_selects_tracked_close_front_crossing_as_lead_two() -> None:
+  controller = DPathRadarController(prefer_corner_radar=False)
+  output = None
+  for index, y_rel in enumerate((
+    2.8, 2.7, 2.6, 2.5, 2.4, 2.3, 2.2,
+    2.1, 2.0, 1.9, 1.8, 1.7, 1.6,
+  )):
+    output = controller.update(
+      time_s=index * 0.1,
+      v_ego=10.0,
+      radar_points=(
+        Point(
+          59,
+          3.2,
+          y_rel,
+          v_lead=10.0,
+          yv_rel=-1.0,
+        ),
+      ),
+      model=model_with_lead(30.0, 0.0, 10.0, probability=0.0),
+    )
+  assert output is not None
+
+  assert output.lead_one is None
+  assert output.lead_two is not None
+  assert output.lead_two["radarTrackId"] == 59
 
 
 def test_existing_front_lead_two_can_remain_sticky_inside_five_metres() -> None:
@@ -431,6 +687,7 @@ def test_existing_front_lead_two_can_remain_sticky_inside_five_metres() -> None:
   inside_lead = dict(
     outside_lead,
     dRel=FRONT_CUT_IN_MIN_DREL_M - 0.1,
+    vLead=0.0,
   )
   inside = DPathLeadCandidate(
     inside_lead,
@@ -493,6 +750,54 @@ def test_corner_lead_uses_mutually_matched_front_longitudinal_kinematics() -> No
   )
 
 
+def test_established_corner_front_match_survives_long_reflection_offset() -> None:
+  associator = FrontRadarKinematicAssociator()
+  corner = RadarPointSnapshot(
+    1002, "corner235", 57.0, -0.10, -1.0, 0.0, 0.0,
+    17.0, 0.0, 0.0, True,
+  )
+  front = RadarPointSnapshot(
+    60, "frontRadar", 61.9, -0.20, -0.9, 0.0, 0.0,
+    17.1, 0.0, 0.0, True,
+  )
+  initial_matches = associator.update((corner, front))
+  assert initial_matches[("corner235", 1002)] is front
+
+  moved_corner = replace(corner, d_rel=47.8, y_rel=-3.00, v_lead=18.2)
+  moved_front = replace(front, d_rel=57.0, y_rel=-3.45, v_lead=18.2)
+  assert (
+    prefer_front_radar_kinematics(moved_corner, (moved_corner, moved_front))
+    is moved_corner
+  )
+
+  held_matches = associator.update((moved_corner, moved_front))
+  fused = prefer_front_radar_kinematics(
+    moved_corner,
+    (moved_corner, moved_front),
+    held_matches,
+  )
+  assert fused.d_rel == moved_front.d_rel
+  assert fused.kinematics_track_id == moved_front.track_id
+  assert lead_duplicates_primary(
+    lead_from_radar_point(fused, 0.0, 0.0, 0.0),
+    lead_from_radar_point(moved_front, 0.0, 0.0, 0.0),
+  )
+
+  competing_corner = replace(
+    moved_corner, track_id=1024, d_rel=56.5, y_rel=-3.40,
+  )
+  competing_matches = associator.update(
+    (moved_corner, competing_corner, moved_front),
+  )
+  assert ("corner235", 1002) not in competing_matches
+  assert competing_matches[("corner235", 1024)] is moved_front
+  restored_matches = associator.update((moved_corner, moved_front))
+  assert restored_matches[("corner235", 1002)] is moved_front
+
+  assert associator.update(()) == {}
+  assert associator.update((moved_corner, moved_front)) == {}
+
+
 def test_same_primary_row_needs_an_actual_projected_path_entry() -> None:
   primary = {
     "status": True,
@@ -521,6 +826,37 @@ def test_same_primary_row_needs_an_actual_projected_path_entry() -> None:
     well_ahead,
     primary,
     projected_path_entry=False,
+  )
+
+
+def test_cutin_must_still_be_ahead_of_primary_at_path_entry_time() -> None:
+  primary = {
+    "status": True,
+    "dRel": 20.0,
+    "vRel": 0.0,
+  }
+  currently_closer_but_passing_primary = {
+    "status": True,
+    "dRel": 15.0,
+    "vRel": 3.0,
+  }
+  remains_ahead = {
+    "status": True,
+    "dRel": 15.0,
+    "vRel": 0.0,
+  }
+
+  assert not cutin_can_compete_with_primary(
+    currently_closer_but_passing_primary,
+    primary,
+    projected_path_entry=True,
+    entry_horizon_s=2.0,
+  )
+  assert cutin_can_compete_with_primary(
+    remains_ahead,
+    primary,
+    projected_path_entry=True,
+    entry_horizon_s=2.0,
   )
 
 
@@ -609,7 +945,7 @@ def test_near_zero_vlead_is_position_only_and_clears_motion_history() -> None:
   )[("frontRadar", 10)]
   assert predictor.update(
     0.1,
-    (Point(10, 30.0, 2.0, v_lead=0.5),),
+    (Point(10, 30.0, 2.0, v_lead=2.4),),
     STRAIGHT_PATH,
     v_ego=10.0,
   ) == {}
@@ -623,6 +959,18 @@ def test_near_zero_vlead_is_position_only_and_clears_motion_history() -> None:
   assert first.history_count == 1
   assert resumed.history_count == 1
   assert resumed.continuity_id != first.continuity_id
+
+
+def test_point_above_position_only_speed_builds_motion_history() -> None:
+  predictor = RadarMotionPredictor()
+  prediction = predictor.update(
+    0.0,
+    (Point(10, 30.0, 2.0, v_lead=2.6),),
+    STRAIGHT_PATH,
+    v_ego=10.0,
+  )[("frontRadar", 10)]
+
+  assert prediction.history_count == 1
 
 
 def test_short_gap_keeps_continuity_but_reused_track_id_resets_it() -> None:
@@ -703,6 +1051,103 @@ def test_future_drel_and_dpath_share_each_prediction_horizon() -> None:
   assert sample.d_rel == pytest.approx(27.4)
   assert sample.d_path < prediction.d_path
   assert sample.y_rel == pytest.approx(sample.d_path)
+
+
+def test_consistent_one_way_front_history_influences_future_trajectory() -> None:
+  consistent = update_series(
+    RadarMotionPredictor(),
+    (3.00, 2.98, 2.95, 2.92, 2.88, 2.84, 2.80, 2.75, 2.69, 2.63),
+  )
+  noisy = update_series(
+    RadarMotionPredictor(),
+    (3.00, 2.94, 3.00, 2.94, 3.00, 2.94, 3.00, 2.94, 3.00, 2.94),
+  )
+
+  consistent_effective_rate = (
+    consistent.d_path - prediction_sample_at(consistent, 5.0).d_path
+  ) / 5.0
+  noisy_effective_rate = (
+    noisy.d_path - prediction_sample_at(noisy, 5.0).d_path
+  ) / 5.0
+
+  assert consistent.directional_inward_displacement_m >= 0.20
+  assert consistent.directional_consistency >= 0.75
+  assert consistent.directional_inward_sample_ratio >= 0.65
+  assert consistent_effective_rate > -consistent.d_path_rate_long
+  assert noisy.directional_inward_displacement_m < 0.20
+  assert noisy.directional_consistency < 0.75
+  assert noisy_effective_rate == pytest.approx(-noisy.d_path_rate_long)
+
+
+def test_close_directional_corner_entry_survives_long_vehicle_point_passing_ego() -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  for index in range(9):
+    prediction = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          1003,
+          6.5 - index * 0.3,
+          2.83 - index * 0.03,
+          source="corner235",
+          v_rel=-3.0,
+          v_lead=7.0,
+          yv_rel=-0.3,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )[("corner235", 1003)]
+  assert prediction is not None
+
+  assert prediction.predicted_path_overlap_s == 0.0
+  assert prediction_sample_at(prediction, 1.5).d_rel < 0.0
+  assert prediction.directional_inward_displacement_m >= 0.20
+  assert prediction.directional_consistency >= 0.90
+  assert prediction.near_side_directional_entry
+  assert prediction.cut_in_probability >= 0.30
+  assert prediction.reason == "near-side directional entry"
+  decision = RadarMotionDecisionTracker(threshold=0.30).update(
+    0.8, (prediction,),
+  )
+  assert decision.confirmed
+  assert decision.confirmed[0].prediction.track_id == 1003
+
+
+@pytest.mark.parametrize(
+  ("d_rel", "lateral_values"),
+  (
+    (4.1, (2.59,) * 9),
+    (4.1, (2.59, 2.65, 2.59, 2.65, 2.59, 2.65, 2.59, 2.65, 2.59)),
+    (5.5, (2.83, 2.80, 2.77, 2.74, 2.71, 2.68, 2.65, 2.62, 2.59)),
+  ),
+)
+def test_near_side_entry_rejects_parallel_noise_and_points_beyond_close_range(
+  d_rel: float,
+  lateral_values: tuple[float, ...],
+) -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  for index, y_rel in enumerate(lateral_values):
+    prediction = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          1003,
+          d_rel,
+          y_rel,
+          source="corner235",
+          v_lead=10.0,
+          yv_rel=-0.3,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )[("corner235", 1003)]
+  assert prediction is not None
+
+  assert not prediction.near_side_directional_entry
 
 
 def test_dpath_change_without_target_path_progress_is_not_extrapolated_as_cutin() -> None:
@@ -968,11 +1413,11 @@ def test_shared_decision_tracker_confirms_sustained_physical_cutin() -> None:
       confirmed_at = time_s
 
   assert confirmed_at is not None
-  assert confirmed_at >= 0.7
+  assert confirmed_at == pytest.approx(0.5)
   assert decision.confirmed[0].prediction.track_id == 10
 
 
-def test_sensitivity_uses_continuous_predicted_path_proximity() -> None:
+def test_path_proximity_without_continuous_overlap_is_not_a_cutin() -> None:
   predictor = RadarMotionPredictor()
   prediction = None
   for index in range(15):
@@ -991,12 +1436,13 @@ def test_sensitivity_uses_continuous_predicted_path_proximity() -> None:
     )[("frontRadar", 10)]
   assert prediction is not None
 
-  # The predicted center has not crossed the fixed overlap line, but its
-  # vehicle-width/uncertainty overlap probability is already actionable at
-  # the sensitive setting.
+  # Uncertainty can approach the corridor, but no two consecutive future
+  # samples physically overlap it.
   assert prediction.time_to_entry_s is None
   assert min(abs(sample.d_path) for sample in prediction.samples) > 1.68
-  assert 0.20 < prediction.cut_in_probability < 0.50
+  assert prediction.predicted_path_overlap_s == 0.0
+  assert prediction.cut_in_probability == 0.0
+  assert cutin_probability_at(prediction, 5.0) == 0.0
 
   sensitive = RadarMotionDecisionTracker(threshold=0.20)
   conservative = RadarMotionDecisionTracker(threshold=0.50)
@@ -1004,8 +1450,36 @@ def test_sensitivity_uses_continuous_predicted_path_proximity() -> None:
     sensitive_result = sensitive.update(index * 0.1, (prediction,))
     conservative_result = conservative.update(index * 0.1, (prediction,))
 
-  assert sensitive_result.confirmed
+  assert not sensitive_result.confirmed
   assert not conservative_result.confirmed
+
+
+def test_long_continuous_future_overlap_shortens_temporal_confirmation() -> None:
+  prediction = update_series(
+    RadarMotionPredictor(),
+    (3.0, 2.8, 2.6, 2.4),
+  )
+  assert prediction.samples[-1].horizon_s == pytest.approx(5.0)
+  assert prediction.predicted_path_overlap_s >= 0.5
+
+  long_overlap = replace(
+    prediction,
+    cut_in_probability=0.8,
+    path_entry_probability=0.8,
+    predicted_path_overlap_s=1.5,
+  )
+  short_overlap = replace(
+    long_overlap,
+    predicted_path_overlap_s=0.5,
+  )
+  long_tracker = RadarMotionDecisionTracker(threshold=0.5)
+  short_tracker = RadarMotionDecisionTracker(threshold=0.5)
+
+  assert not long_tracker.update(0.0, (long_overlap,)).confirmed
+  assert not short_tracker.update(0.0, (short_overlap,)).confirmed
+  assert long_tracker.update(0.11, (long_overlap,)).confirmed
+  assert not short_tracker.update(0.11, (short_overlap,)).confirmed
+  assert short_tracker.update(0.21, (short_overlap,)).confirmed
 
 
 def test_close_consistent_corner_entry_uses_short_confirmation() -> None:
@@ -1066,11 +1540,7 @@ def test_slow_adjacent_drift_below_path_uncertainty_is_not_a_cutin() -> None:
 
   assert prediction is not None
   assert prediction.d_path_rate_long == pytest.approx(-0.07)
-  assert (
-    abs(prediction.d_path)
-    - min(abs(sample.d_path) for sample in prediction.samples)
-    < prediction.uncertainty
-  )
+  assert prediction.predicted_path_overlap_s == 0.0
   assert prediction.cut_in_probability < 0.5
 
 
@@ -1377,6 +1847,8 @@ def test_vision_bracket_supports_only_persistent_mutually_matched_cutin() -> Non
     history_count=12,
     time_to_entry_s=None,
     reason="outside path corridor",
+    predicted_path_overlap_s=1.0,
+    predicted_path_overlap_start_s=2.0,
   )
   vision = VisionLead(
     probability=0.993,
@@ -1403,11 +1875,23 @@ def test_vision_bracket_supports_only_persistent_mutually_matched_cutin() -> Non
     replace(vision, d_rel=4.0),
     lead_one,
   )
+  no_continuous_overlap = apply_vision_bracket_cutin_support(
+    replace(
+      prediction,
+      predicted_path_overlap_s=0.0,
+      predicted_path_overlap_start_s=None,
+    ),
+    corner,
+    (corner, front),
+    vision,
+    lead_one,
+  )
 
   assert supported.cut_in_probability == pytest.approx(0.9732393)
   assert supported.path_entry_probability == pytest.approx(0.9732393)
   assert supported.reason == "vision-bracketed physical CUT-IN"
   assert unbracketed is prediction
+  assert no_continuous_overlap.cut_in_probability == pytest.approx(0.21)
 
 
 def test_primary_matcher_rejects_low_score_fresh_distant_side_match() -> None:

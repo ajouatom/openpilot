@@ -23,6 +23,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   visible_motion_points,
 )
 from openpilot.selfdrive.carrot.radar_motion.primary import (
+  FrontRadarKinematicAssociator,
   RadarPointSnapshot,
   VisionRadarMatcher,
   apply_vision_bracket_cutin_support,
@@ -147,6 +148,7 @@ class DPathRadarController:
     self.motion_decisions = RadarMotionDecisionTracker(
       threshold=radar_motion_cut_in_threshold(self.motion_sensor),
     )
+    self.front_kinematic_associator = FrontRadarKinematicAssociator()
     self.lead_two_tracker = DPathLeadTwoTracker()
     self.lead_dynamics = RadarLeadDynamics()
 
@@ -290,6 +292,7 @@ class DPathRadarController:
       radar_to_model_time_s,
     )
     self.lead_dynamics.update(points, radar_reaction_factor)
+    front_kinematic_matches = self.front_kinematic_associator.update(points)
 
     # This is intentionally first: model lead zero identifies leadOne only
     # among the independently measured front/SCC stream.
@@ -398,8 +401,34 @@ class DPathRadarController:
       front_motion_supported = front_cutin_motion_supported(
         prediction.source,
         prediction.d_path_rate_long,
+        d_rel=point.d_rel,
+        d_path=prediction.d_path,
+        d_path_rate_short=getattr(
+          prediction, "d_path_rate_short", prediction.d_path_rate_long,
+        ),
+        reported_normal_speed=getattr(
+          prediction, "reported_normal_speed", 0.0,
+        ),
+        current_path_occupancy=prediction.current_path_occupancy,
+        predicted_path_overlap_s=getattr(
+          prediction, "predicted_path_overlap_s", 0.0,
+        ),
+        directional_inward_displacement_m=getattr(
+          prediction, "directional_inward_displacement_m", 0.0,
+        ),
+        directional_consistency=getattr(
+          prediction, "directional_consistency", 0.0,
+        ),
+        directional_inward_sample_ratio=getattr(
+          prediction, "directional_inward_sample_ratio", 0.0,
+        ),
+        tracked_close_entry=getattr(
+          prediction, "front_tracked_close_entry", False,
+        ),
       )
-      lead_point = prefer_front_radar_kinematics(point, points)
+      lead_point = prefer_front_radar_kinematics(
+        point, points, front_kinematic_matches,
+      )
       lead_d_path = (
         project_to_model_path(
           path, lead_point.d_rel, lead_point.y_rel,
@@ -439,6 +468,11 @@ class DPathRadarController:
             projected_path_entry=(
               getattr(prediction, "time_to_entry_s", None) is not None
             ),
+            entry_horizon_s=getattr(
+              prediction,
+              "predicted_path_overlap_start_s",
+              getattr(prediction, "time_to_entry_s", None),
+            ),
           )
         ),
         current_path_motion=can_start_current_path_lead_two(
@@ -452,6 +486,7 @@ class DPathRadarController:
               "",
             ) != "insufficient measured dPath history"
           ),
+          getattr(prediction, "front_tracked_close_entry", False),
         )
         and (
           getattr(prediction, "path_entry_age_s", None) is None
@@ -465,7 +500,9 @@ class DPathRadarController:
       source, track_id, continuity_id = active_identity
       point = point_by_identity.get((source, track_id))
       if point is not None:
-        lead_point = prefer_front_radar_kinematics(point, points)
+        lead_point = prefer_front_radar_kinematics(
+          point, points, front_kinematic_matches,
+        )
         d_path = project_to_model_path(
           path, lead_point.d_rel, lead_point.y_rel,
         ).d_path

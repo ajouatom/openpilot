@@ -32,6 +32,7 @@ def simulator_command(
   position: str,
   front_only: bool,
   motion_mode: str | None = None,
+  lookahead_s: float | None = None,
 ) -> list[str]:
   command = [
     sys.executable,
@@ -47,6 +48,8 @@ def simulator_command(
   ]
   if probability is not None:
     command.extend(("--prob", str(probability)))
+  if lookahead_s is not None:
+    command.extend(("--lookahead-s", str(lookahead_s)))
   for item in group:
     command.extend(("--validation-case", str(item["id"])))
   if front_only:
@@ -73,8 +76,17 @@ def parse_args() -> argparse.Namespace:
     type=float,
     default=None,
     help=(
-      "one-run normalized path-proximity threshold override; "
-      + "otherwise use the slider's saved value"
+      "advanced one-run probability threshold override"
+    ),
+  )
+  parser.add_argument(
+    "--lookahead-s",
+    type=float,
+    default=None,
+    help=(
+      "one-run future lookahead override from 3.5 to 5.0 seconds in "
+      + "0.5-second steps; "
+      + "otherwise use the slider's saved sensor-specific value"
     ),
   )
   parser.add_argument("--front-only", action="store_true")
@@ -92,6 +104,17 @@ def main() -> int:
   args = parse_args()
   if args.prob is not None and not 0.0 <= args.prob <= 1.0:
     raise SystemExit("--prob must be between 0.00 and 1.00")
+  if (
+    args.lookahead_s is not None
+    and (
+      not 3.5 <= args.lookahead_s <= 5.0
+      or abs(args.lookahead_s * 2.0 - round(args.lookahead_s * 2.0))
+      > 1e-6
+    )
+  ):
+    raise SystemExit(
+      "--lookahead-s must be 3.5, 4.0, 4.5, or 5.0",
+    )
   if args.front_only and args.motion_mode not in (None, "front"):
     raise SystemExit("--front-only conflicts with --motion-mode normal")
   payload = json.loads(args.cases.read_text(encoding="utf-8"))
@@ -142,6 +165,7 @@ def main() -> int:
       f"{index}/{len(groups)}",
       args.front_only,
       args.motion_mode,
+      args.lookahead_s,
     )
     result = subprocess.run(command, check=False)
     if result.returncode != 0:
