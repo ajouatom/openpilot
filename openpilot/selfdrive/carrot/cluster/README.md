@@ -300,7 +300,9 @@ available, falling back to `deviceState.screenBrightnessPercent`; `1` through
 web settings UI stores both Params without a custom slider path. The running
 HUD checks the stored brightness and orientation every 100 ms. Brightness
 applies without restarting. A managed H.264 orientation change exits cleanly
-and autorun relaunches immediately so setup command `13` applies the new value.
+and autorun relaunches immediately. The new stream uses the captured
+`10, 111, 112, 13, 14, 52, 102, 15, 17` setup sequence, including the selected
+raw orientation in command `13`.
 
 Changed display settings follow the capture-derived command procedure:
 
@@ -311,10 +313,13 @@ Changed display settings follow the capture-derived command procedure:
 
 The sync and setting write are one USB-locked transaction so an image frame
 cannot split the pair. Initial orientation is stored locally before USB open
-and carried by the existing H.264 setup command `13`, avoiding a redundant
-post-initialization sync. The panel does not visibly apply command `13` during
-an active H.264 stream, so managed H.264 uses the automatic restart described
-above. `--usb-h264-orientation` remains a separate diagnostic option
+and carried by H.264 setup command `13`. H.264 startup waits for each captured
+setup response and delay, uses captured finalizer command `52` instead of the
+reference-library command `41`, clears the 464x1920 overlay, then applies FPS
+and queries the chunk size. Shutdown sends command `123` and drains command
+`122` status before releasing USB. The panel does not visibly apply command
+`13` during an active H.264 stream, so managed H.264 uses the automatic restart
+described above. `--usb-h264-orientation` remains a separate diagnostic option
 controlling encoder/render geometry.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,

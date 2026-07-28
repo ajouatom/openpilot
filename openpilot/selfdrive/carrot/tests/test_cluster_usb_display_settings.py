@@ -1,6 +1,5 @@
-from pathlib import Path
 import sys
-
+from pathlib import Path
 
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
@@ -8,6 +7,7 @@ sys.path.insert(0, str(CLUSTER_DIR))
 from cluster_usb_display import (
   TURZX_BRIGHTNESS_COMMAND_MAX,
   TuringUsbDisplay,
+  _transparent_h264_overlay_png,
 )
 
 
@@ -58,19 +58,55 @@ def test_runtime_orientation_ignores_unsupported_values():
   assert display.orientation == 2
 
 
-def test_preopen_orientation_is_carried_by_h264_setup_without_setting_transaction():
+def test_preopen_orientation_is_carried_by_h264_setup_without_setting_transaction(monkeypatch):
   display = TuringUsbDisplay()
   assert not display.set_orientation(2)
   assert display.orientation == 2
 
   display.dev = object()
   calls = []
-  display._send_optional_command = (
+  display._send_command = (
     lambda command_id, name, fields=None, **kwargs:
       calls.append((command_id, name, fields, kwargs))
+      or successful_response(command_id)
+  )
+  display._send_frame_ack = (
+    lambda command_id, frame:
+      calls.append((command_id, "clear-overlay", {8: len(frame)}, {}))
+      or successful_response(command_id)
   )
   display._h264_chunk_size = lambda _requested: 202752
+  monkeypatch.setattr("cluster_usb_display.time.sleep", lambda _seconds: None)
 
   assert display.start_h264_stream() == 202752
+  assert [call[0] for call in calls] == [10, 111, 112, 13, 14, 52, 102, 15]
   orientation = next(call for call in calls if call[0] == 13)
   assert orientation[2] == {8: 2}
+  assert calls[4][2] == {8: int(80 / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)}
+
+
+def test_h264_clear_overlay_matches_captured_shape_and_size():
+  png = _transparent_h264_overlay_png()
+
+  assert len(png) == 3585
+  assert png[:8] == b"\x89PNG\r\n\x1a\n"
+  assert int.from_bytes(png[16:20], "big") == 464
+  assert int.from_bytes(png[20:24], "big") == 1920
+
+
+def test_h264_stop_waits_for_zero_queue(monkeypatch):
+  display, calls = recording_display()
+  queued = bytearray(successful_response(122))
+  queued[8] = 2
+  responses = iter((successful_response(123), bytes(queued), successful_response(122)))
+
+  def send(command_id, name, fields=None, **kwargs):
+    calls.append((command_id, name, fields, kwargs))
+    return next(responses)
+
+  display._send_command = send
+  monkeypatch.setattr("cluster_usb_display.time.sleep", lambda _seconds: None)
+
+  display.stop_h264_stream()
+
+  assert [call[0] for call in calls] == [123, 122, 122]
