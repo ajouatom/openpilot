@@ -35,6 +35,7 @@ from openpilot.selfdrive.carrot.radar_motion import (
   RadarMotionPrediction,
   RadarMotionPredictor,
   VisionRadarMatcher,
+  apply_vision_bracket_cutin_support,
   can_start_current_path_lead_two,
   cutin_can_compete_with_primary,
   cutin_probability_at,
@@ -47,6 +48,7 @@ from openpilot.selfdrive.carrot.radar_motion import (
   project_to_model_path,
   select_primary_radar_points,
   visible_motion_points,
+  vision_lead_from_model,
 )
 
 
@@ -833,6 +835,25 @@ class RadarMotionShadowSelector:
       point_by_identity = {
         (point.source, point.track_id): point
         for point in visible_points
+      }
+      vision = vision_lead_from_model(_controller_model(frame))
+      predictions = {
+        identity: (
+          apply_vision_bracket_cutin_support(
+            prediction,
+            point,
+            all_aligned_points,
+            vision,
+            lead_one,
+          )
+          if (
+            point := point_by_identity.get(
+              (prediction.source, prediction.track_id),
+            )
+          ) is not None
+          else prediction
+        )
+        for identity, prediction in predictions.items()
       }
       raw_diagnostics = tuple(sorted(
         (_shadow_candidate(prediction) for prediction in predictions.values()),

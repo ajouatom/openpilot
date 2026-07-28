@@ -8,6 +8,8 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   FRONT_CUT_IN_MIN_DREL_M,
   IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M,
   RadarMotionDecisionTracker,
+  RadarMotionHistorySample,
+  RadarMotionPrediction,
   RadarMotionPredictor,
   cutin_probability_at,
   model_path_point_at_s,
@@ -32,7 +34,9 @@ from openpilot.selfdrive.carrot.radar_motion.controller import (
 from openpilot.selfdrive.carrot.radar_motion.predictor import RadarMotionCutIn
 from openpilot.selfdrive.carrot.radar_motion.primary import (
   RadarPointSnapshot,
+  VisionLead,
   VisionRadarMatcher,
+  apply_vision_bracket_cutin_support,
   lead_from_radar_point,
   prefer_front_radar_kinematics,
   select_primary_radar_points,
@@ -1285,6 +1289,127 @@ def test_primary_matcher_uses_model_lead_zero_and_front_scc_only() -> None:
   assert match.d_path == pytest.approx(0.2)
 
 
+def test_primary_matcher_uses_vision_longitudinal_uncertainty() -> None:
+  matcher = VisionRadarMatcher()
+  points = snapshot_radar_points(
+    (
+      Point(
+        32,
+        26.78,
+        0.0,
+        source="frontRadar",
+        v_lead=14.60,
+      ),
+      Point(
+        56,
+        5.84,
+        -2.59,
+        source="frontRadar",
+        v_lead=11.02,
+      ),
+    ),
+    v_ego=10.0,
+  )
+  model = model_with_lead(18.54, 0.0, 10.54, probability=0.993)
+  model.leadsV3[0].xStd = (3.60,)
+
+  match = matcher.match(model, points, STRAIGHT_PATH)
+
+  assert match is not None
+  assert match.point.track_id == 32
+
+
+def test_vision_bracket_supports_only_persistent_mutually_matched_cutin() -> None:
+  corner, front = snapshot_radar_points(
+    (
+      Point(
+        1003,
+        3.95,
+        -2.59,
+        source="corner235",
+        v_lead=11.41,
+      ),
+      Point(
+        56,
+        5.84,
+        -2.59,
+        source="frontRadar",
+        v_lead=11.02,
+      ),
+    ),
+    v_ego=10.0,
+  )
+  prediction = RadarMotionPrediction(
+    track_id=1003,
+    source="corner235",
+    sensor="corner",
+    continuity_id=1,
+    d_path=-2.59,
+    d_path_rate_short=0.246,
+    d_path_rate_long=0.193,
+    d_path_curvature=0.0,
+    path_speed_short=11.0,
+    path_speed_long=11.0,
+    path_speed=11.0,
+    vector_heading_deg=0.8,
+    reported_heading_deg=0.8,
+    reported_normal_speed=0.2,
+    normal_speed_disagreement=0.0,
+    motion_consistency=0.99,
+    recent_motion_support=0.99,
+    uncertainty=0.4,
+    lane_half_width=1.8,
+    current_path_occupancy=False,
+    cut_in_detection_allowed=True,
+    cut_in_probability=0.21,
+    cut_out_probability=0.0,
+    path_entry_probability=0.21,
+    path_entry_age_s=None,
+    samples=(),
+    history=(
+      RadarMotionHistorySample(
+        0.0, 1.10, 4.2, 4.2, 4.2, -2.91, -2.91,
+      ),
+      RadarMotionHistorySample(
+        1.1, 0.0, 3.95, 3.95, 3.95, -2.59, -2.59,
+      ),
+    ),
+    history_count=12,
+    time_to_entry_s=None,
+    reason="outside path corridor",
+  )
+  vision = VisionLead(
+    probability=0.993,
+    d_rel=18.54,
+    y_rel=0.0,
+    velocity=10.54,
+    x_std=3.60,
+    y_std=0.60,
+    v_std=1.50,
+  )
+  lead_one = {"status": True, "dRel": 26.78}
+
+  supported = apply_vision_bracket_cutin_support(
+    prediction,
+    corner,
+    (corner, front),
+    vision,
+    lead_one,
+  )
+  unbracketed = apply_vision_bracket_cutin_support(
+    prediction,
+    corner,
+    (corner, front),
+    replace(vision, d_rel=4.0),
+    lead_one,
+  )
+
+  assert supported.cut_in_probability == pytest.approx(0.9732393)
+  assert supported.path_entry_probability == pytest.approx(0.9732393)
+  assert supported.reason == "vision-bracketed physical CUT-IN"
+  assert unbracketed is prediction
+
+
 def test_primary_matcher_rejects_low_score_fresh_distant_side_match() -> None:
   matcher = VisionRadarMatcher()
   point = snapshot_radar_points(
@@ -1339,7 +1464,7 @@ def test_stationary_radar_is_confirmed_once_then_retained_without_vision() -> No
         point.d_rel,
         point.y_rel,
         7.0,
-        probability=0.06 if index == 0 else 0.0,
+        probability=0.45 if index == 0 else 0.0,
       ),
       (),
       STRAIGHT_PATH,
@@ -1374,6 +1499,74 @@ def test_stationary_radar_is_confirmed_once_then_retained_without_vision() -> No
 
   assert retained is not None
   assert retained.point.track_id == 1009
+
+
+def test_stationary_front_radar_rejects_low_confidence_vision_seed() -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  for index in range(12):
+    time_s = index * 0.05
+    point = snapshot_radar_points(
+      (
+        Point(
+          55,
+          40.0 - 10.0 * time_s,
+          0.1,
+          v_rel=-10.0,
+          source="frontRadar",
+        ),
+      ),
+      v_ego=10.0,
+    )[0]
+    match = matcher.match(
+      model_with_lead(
+        point.d_rel,
+        point.y_rel,
+        0.0,
+        probability=0.15,
+      ),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+    )
+
+  assert match is None
+  assert matcher.stationary_identity is None
+
+
+def test_stationary_front_radar_rejects_two_frame_vision_spike() -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  for index in range(12):
+    time_s = index * 0.05
+    point = snapshot_radar_points(
+      (
+        Point(
+          50,
+          70.0 - 10.0 * time_s,
+          0.1,
+          v_rel=-10.0,
+          source="frontRadar",
+        ),
+      ),
+      v_ego=10.0,
+    )[0]
+    match = matcher.match(
+      model_with_lead(
+        point.d_rel,
+        point.y_rel,
+        0.0,
+        probability=0.45 if index in (1, 4) else 0.15,
+      ),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+    )
+
+  assert match is None
+  assert matcher.stationary_identity is None
 
 
 def test_stationary_radar_rejects_fast_vision_speed_mismatch() -> None:
@@ -1465,7 +1658,7 @@ def test_stationary_match_prefers_continuous_corner_object() -> None:
       v_ego=10.0,
     )
     match = matcher.match(
-      model_with_lead(d_rel + 1.0, 0.2, 6.0, probability=0.1),
+      model_with_lead(d_rel + 1.0, 0.2, 6.0, probability=0.45),
       (points[0],),
       STRAIGHT_PATH,
       time_s=time_s,
@@ -1495,7 +1688,7 @@ def test_confident_vision_lead_elsewhere_releases_stationary_hold() -> None:
       v_ego=10.0,
     )[0]
     matcher.match(
-      model_with_lead(stationary.d_rel, 0.0, 5.0, probability=0.1),
+      model_with_lead(stationary.d_rel, 0.0, 5.0, probability=0.45),
       (),
       STRAIGHT_PATH,
       time_s=time_s,
@@ -1542,7 +1735,7 @@ def test_controller_publishes_vision_seeded_continuous_corner_stationary_lead() 
         100.0 - 10.0 * time_s,
         0.1,
         7.0,
-        probability=0.06 if index == 0 else 0.0,
+        probability=0.45 if index == 0 else 0.0,
       ),
     )
 
