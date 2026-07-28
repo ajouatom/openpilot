@@ -1004,6 +1004,42 @@ def test_sensitivity_uses_continuous_predicted_path_proximity() -> None:
   assert not conservative_result.confirmed
 
 
+def test_close_consistent_corner_entry_uses_short_confirmation() -> None:
+  prediction = update_series(
+    RadarMotionPredictor(),
+    (2.7, 2.65, 2.6, 2.55, 2.5, 2.45),
+    source="corner235",
+    track_id=1071,
+  )
+  history = prediction.history[:-1] + (
+    replace(prediction.history[-1], d_rel=3.0),
+  )
+  urgent = replace(
+    prediction,
+    d_path=2.15,
+    d_path_rate_short=-0.48,
+    d_path_rate_long=-0.15,
+    motion_consistency=1.0,
+    recent_motion_support=1.0,
+    current_path_occupancy=False,
+    cut_in_probability=0.6,
+    path_entry_probability=0.6,
+    history=history,
+  )
+  not_urgent = replace(
+    urgent,
+    d_path_rate_long=-0.05,
+  )
+  urgent_tracker = RadarMotionDecisionTracker(threshold=0.3)
+  normal_tracker = RadarMotionDecisionTracker(threshold=0.3)
+
+  assert not urgent_tracker.update(0.0, (urgent,)).confirmed
+  assert not normal_tracker.update(0.0, (not_urgent,)).confirmed
+  assert urgent_tracker.update(0.11, (urgent,)).confirmed
+  assert not normal_tracker.update(0.11, (not_urgent,)).confirmed
+  assert normal_tracker.update(0.26, (not_urgent,)).confirmed
+
+
 def test_slow_adjacent_drift_below_path_uncertainty_is_not_a_cutin() -> None:
   predictor = RadarMotionPredictor()
   prediction = None
@@ -1172,7 +1208,7 @@ def test_current_path_motion_becomes_lead_two_without_a_cutin_event() -> None:
   assert [lead["radarTrackId"] for lead in selection.cutins] == [30]
 
 
-def test_current_path_motion_can_be_lead_two_behind_primary() -> None:
+def test_current_path_motion_cannot_be_lead_two_behind_primary() -> None:
   tracker = DPathLeadTwoTracker()
   primary = {
     "status": True,
@@ -1195,7 +1231,7 @@ def test_current_path_motion_can_be_lead_two_behind_primary() -> None:
 
   selection = tracker.update(0.0, primary, (path_candidate,), 20.0)
 
-  assert selection.lead_two is path_lead
+  assert selection.lead_two is None
   assert selection.cutins == ()
 
 

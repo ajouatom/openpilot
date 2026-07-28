@@ -51,7 +51,7 @@ from openpilot.selfdrive.carrot.radar_motion import (
 
 
 RADAR_TO_CAMERA = 1.52
-DISPLAY_MIN_DREL_M = -10.0
+DISPLAY_MIN_DREL_M = -30.0
 DEFAULT_FORWARD_RANGE_M = 120.0
 DISPLAY_TOP_PADDING_PX = 72.0
 DISPLAY_BOTTOM_PADDING_PX = 18.0
@@ -2437,7 +2437,7 @@ class SimulatorUI:
       )
     self._draw_lead_roles(rect, selection)
     self._draw_text(
-      "-10~120m | 흰 점: 내 차 | 주황 □: leadOne | 노랑 □: leadTwo",
+      "-30~120m | 흰 점: 내 차 | 주황 □: leadOne | 노랑 □: leadTwo",
       int(rect.x + 12.0),
       int(rect.y + 8.0),
       14,

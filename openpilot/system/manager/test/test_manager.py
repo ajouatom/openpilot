@@ -39,10 +39,19 @@ class TestManager:
     params = Params()
 
     params.put("CarrotRadarMode", "0")
+    assert not managed_processes["radard"].should_run(False, params, CP)
+    assert not managed_processes["radard_dpath"].should_run(False, params, CP)
     assert managed_processes["radard"].should_run(True, params, CP)
     assert not managed_processes["radard_dpath"].should_run(True, params, CP)
 
     params.put("CarrotRadarMode", "1")
+    # A live parameter write must not replace the radar publisher mid-drive.
+    assert managed_processes["radard"].should_run(True, params, CP)
+    assert not managed_processes["radard_dpath"].should_run(True, params, CP)
+
+    # The next off-road-to-on-road transition applies the new mode.
+    assert not managed_processes["radard"].should_run(False, params, CP)
+    assert not managed_processes["radard_dpath"].should_run(False, params, CP)
     assert not managed_processes["radard"].should_run(True, params, CP)
     assert managed_processes["radard_dpath"].should_run(True, params, CP)
     assert not managed_processes["radard"].should_run(False, params, CP)

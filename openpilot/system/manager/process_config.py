@@ -15,6 +15,15 @@ except ModuleNotFoundError:
 
 WEBCAM = os.getenv("USE_WEBCAM") is not None
 CARROT_WEB_EXTERNAL = os.getenv("CARROT_WEB_EXTERNAL") == "1"
+_carrot_radar_mode_for_drive = 0
+
+
+def _carrot_radar_mode(started: bool, params: Params) -> int:
+  """Refresh off-road, then latch one radar publisher for the whole drive."""
+  global _carrot_radar_mode_for_drive
+  if not started:
+    _carrot_radar_mode_for_drive = params.get_int("CarrotRadarMode")
+  return _carrot_radar_mode_for_drive
 
 def driverview(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started or params.get_bool("IsDriverViewEnabled")
@@ -64,11 +73,13 @@ def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 
 
 def conventional_radard(started: bool, params: Params, CP: car.CarParams) -> bool:
-  return started and params.get_int("CarrotRadarMode") != 1
+  mode = _carrot_radar_mode(started, params)
+  return started and mode != 1
 
 
 def dpath_radard(started: bool, params: Params, CP: car.CarParams) -> bool:
-  return started and params.get_int("CarrotRadarMode") == 1
+  mode = _carrot_radar_mode(started, params)
+  return started and mode == 1
 
 
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:

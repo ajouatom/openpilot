@@ -513,13 +513,13 @@ def test_birds_eye_radar_positive_left_is_drawn_left_of_ego() -> None:
   assert left_x < center_x < right_x
 
 
-def test_birds_eye_distance_axis_covers_minus_10_to_120m() -> None:
+def test_birds_eye_distance_axis_covers_minus_30_to_120m() -> None:
   ui = object.__new__(SimulatorUI)
   rect = SimpleNamespace(x=0.0, y=0.0, width=200.0, height=200.0)
 
   _, top_y = ui._screen(rect, 120.0, 0.0)
   _, ego_y = ui._screen(rect, 0.0, 0.0)
-  _, bottom_y = ui._screen(rect, -10.0, 0.0)
+  _, bottom_y = ui._screen(rect, -30.0, 0.0)
 
   assert top_y == pytest.approx(72.0)
   assert top_y < ego_y < bottom_y

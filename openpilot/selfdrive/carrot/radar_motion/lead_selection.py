@@ -77,13 +77,11 @@ class DPathLeadTwoTracker:
 
   def __init__(self) -> None:
     self.active_identity: tuple[str, int, int] | None = None
-    self._active_allows_farther = False
     self._last_lead: dict[str, Any] | None = None
     self._last_time_s: float | None = None
 
   def reset(self) -> None:
     self.active_identity = None
-    self._active_allows_farther = False
     self._last_lead = None
     self._last_time_s = None
 
@@ -145,17 +143,6 @@ class DPathLeadTwoTracker:
       allow_stopped_track_ids=frozenset(
         candidate.track_id for candidate in active_candidates
       ),
-      allow_farther_track_ids=frozenset(
-        candidate.track_id
-        for candidate in eligible
-        if (
-          candidate.current_path_motion
-          or (
-            candidate in active_candidates
-            and self._active_allows_farther
-          )
-        )
-      ),
     )
     selected = next(
       (
@@ -184,14 +171,7 @@ class DPathLeadTwoTracker:
       lead_two=selection.lead_two,
     )
     if selected is not None:
-      retained_path_role = (
-        selected.identity == self.active_identity
-        and self._active_allows_farther
-      )
       self.active_identity = selected.identity
-      self._active_allows_farther = (
-        selected.current_path_motion or retained_path_role
-      )
       self._last_lead = dict(selected.lead)
       self._last_time_s = float(time_s)
     elif self.active_identity is not None:
@@ -265,7 +245,6 @@ def select_dpath_lead_two(
   v_ego: float,
   *,
   allow_stopped_track_ids: frozenset[int] = frozenset(),
-  allow_farther_track_ids: frozenset[int] = frozenset(),
 ) -> DPathLeadSelection:
   """Choose the closest eligible independent leadTwo after leadOne is known."""
   maximum_d_rel = dpath_control_max_d_rel(v_ego)
@@ -282,10 +261,7 @@ def select_dpath_lead_two(
         lead.get("status")
         and lead.get("radar")
         and 0.8 < float(lead.get("dRel", 0.0)) <= maximum_d_rel
-        and (
-          float(lead.get("dRel", 0.0)) < primary_d_rel
-          or int(lead.get("radarTrackId", -1)) in allow_farther_track_ids
-        )
+        and float(lead.get("dRel", 0.0)) < primary_d_rel
         and (
           float(lead.get("vLead", 0.0))
           >= POSITION_ONLY_MAX_ABS_VLEAD_MPS
