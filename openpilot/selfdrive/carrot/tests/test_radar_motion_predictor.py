@@ -2272,6 +2272,85 @@ def test_stationary_match_prefers_continuous_corner_object() -> None:
   assert match.point.track_id == 1009
 
 
+def test_confirmed_stationary_lead_tolerates_brief_model_path_outlier() -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  for index in range(7):
+    time_s = index * 0.05
+    d_rel = 30.0 - 10.0 * time_s
+    point = snapshot_radar_points(
+      (
+        Point(
+          35,
+          d_rel,
+          0.0,
+          v_rel=-10.0,
+          source="frontRadar",
+        ),
+      ),
+      v_ego=10.0,
+    )[0]
+    match = matcher.match(
+      model_with_lead(d_rel, 0.0, 0.0, probability=0.99),
+      (point,),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_primary_stationary=True,
+    )
+
+  assert match is not None
+  shifted_path = ((0.0, 5.0), (100.0, 5.0))
+  for time_s in (0.35, 0.40):
+    d_rel = 30.0 - 10.0 * time_s
+    point = snapshot_radar_points(
+      (
+        Point(
+          35,
+          d_rel,
+          0.0,
+          v_rel=-10.0,
+          source="frontRadar",
+        ),
+      ),
+      v_ego=10.0,
+    )[0]
+    match = matcher.match(
+      model_with_lead(d_rel, 0.0, 0.0, probability=0.99),
+      (point,),
+      shifted_path,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_primary_stationary=True,
+    )
+    assert match is not None
+    assert match.point.track_id == 35
+
+  time_s = 0.60
+  d_rel = 30.0 - 10.0 * time_s
+  point = snapshot_radar_points(
+    (
+      Point(
+        35,
+        d_rel,
+        0.0,
+        v_rel=-10.0,
+        source="frontRadar",
+      ),
+    ),
+    v_ego=10.0,
+  )[0]
+  released = matcher.match(
+    model_with_lead(d_rel, 0.0, 0.0, probability=0.99),
+    (point,),
+    shifted_path,
+    time_s=time_s,
+    stationary_points=(point,),
+    prefer_primary_stationary=True,
+  )
+  assert released is None
+
+
 def test_confident_vision_lead_elsewhere_releases_stationary_hold() -> None:
   matcher = VisionRadarMatcher()
   for index in range(7):
@@ -2344,6 +2423,74 @@ def test_controller_publishes_vision_seeded_continuous_corner_stationary_lead() 
   assert output.lead_one is not None
   assert output.lead_one["radarTrackId"] == 1009
   assert output.lead_one["vLead"] == pytest.approx(0.0)
+
+
+def test_controller_prefers_front_for_vision_supported_stationary_lead_one() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  output = None
+  for index in range(7):
+    time_s = index * 0.05
+    front_d_rel = 30.0 - 10.0 * time_s
+    output = controller.update(
+      time_s=time_s,
+      v_ego=10.0,
+      radar_points=(
+        Point(
+          35,
+          front_d_rel,
+          0.1,
+          v_rel=-10.0,
+          source="frontRadar",
+        ),
+        Point(
+          1009,
+          front_d_rel - 0.8,
+          0.1,
+          v_rel=-10.0,
+          source="corner235",
+        ),
+        Point(
+          0,
+          front_d_rel - 0.2,
+          0.0,
+          v_rel=-10.0,
+          source="scc",
+        ),
+      ),
+      model=model_with_lead(
+        front_d_rel,
+        0.1,
+        0.0,
+        probability=0.99,
+      ),
+    )
+
+  assert output is not None
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 35
+  assert output.lead_one["dRel"] == pytest.approx(front_d_rel)
+
+
+def test_controller_accepts_normal_radar_model_jitter_but_rejects_stale_data() -> None:
+  point = Point(35, 30.0, 0.0, source="frontRadar")
+  accepted = DPathRadarController(prefer_corner_radar=False).update(
+    time_s=1.0,
+    v_ego=10.0,
+    radar_points=(point,),
+    model=model_with_lead(30.0, 0.0, 10.0),
+    radar_to_model_time_s=-0.11,
+  )
+  rejected = DPathRadarController(prefer_corner_radar=False).update(
+    time_s=1.0,
+    v_ego=10.0,
+    radar_points=(point,),
+    model=model_with_lead(30.0, 0.0, 10.0),
+    radar_to_model_time_s=-0.16,
+  )
+
+  assert accepted.lead_one is not None
+  assert accepted.lead_one["radarTrackId"] == 35
+  assert rejected.lead_one is None
 
 
 def test_controller_uses_sensor_specific_production_thresholds() -> None:

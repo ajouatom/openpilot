@@ -34,6 +34,9 @@ STATIONARY_MAX_ABS_VLEAD_MPS = 2.5
 STATIONARY_MAX_VISION_SPEED_DELTA_MPS = 10.0
 STATIONARY_FRESH_MAX_DPATH_M = 2.0
 STATIONARY_HELD_MAX_DPATH_M = 4.0
+STATIONARY_VISION_PATH_OUTLIER_MAX_DPATH_M = 8.0
+STATIONARY_VISION_PATH_OUTLIER_MIN_PROB = 0.90
+STATIONARY_VISION_PATH_OUTLIER_HOLD_S = 0.20
 STATIONARY_LONGITUDINAL_CONTINUITY_M = 2.5
 STATIONARY_LATERAL_CONTINUITY_M = 1.5
 FRONT_KINEMATIC_MATCH_MAX_DREL_DELTA_M = 5.0
@@ -501,6 +504,7 @@ class VisionRadarMatcher:
     self._stationary_last_time_s: float | None = None
     self._stationary_seed_probability = 0.0
     self._stationary_seed_score = 0.0
+    self._stationary_path_outlier_since_s: float | None = None
 
   def reset(self) -> None:
     self._reset_moving()
@@ -519,6 +523,7 @@ class VisionRadarMatcher:
     self._stationary_last_time_s = None
     self._stationary_seed_probability = 0.0
     self._stationary_seed_score = 0.0
+    self._stationary_path_outlier_since_s = None
 
   @staticmethod
   def _identity(point: RadarPointSnapshot) -> tuple[str, int]:
@@ -584,6 +589,7 @@ class VisionRadarMatcher:
     path: Sequence[tuple[float, float]],
     time_s: float | None,
     prefer_corner: bool,
+    prefer_primary: bool,
   ) -> VisionRadarMatch | None:
     if time_s is None or not math.isfinite(time_s):
       self._reset_stationary()
@@ -602,7 +608,20 @@ class VisionRadarMatcher:
         if identity == self.stationary_identity
         else STATIONARY_FRESH_MAX_DPATH_M
       )
-      if abs(d_path) <= maximum_d_path:
+      held_vision_path_outlier = (
+        identity == self.stationary_identity
+        and vision is not None
+        and vision.probability
+        >= STATIONARY_VISION_PATH_OUTLIER_MIN_PROB
+        and abs(d_path)
+        <= STATIONARY_VISION_PATH_OUTLIER_MAX_DPATH_M
+        and (
+          self._stationary_path_outlier_since_s is None
+          or time_s - self._stationary_path_outlier_since_s
+          <= STATIONARY_VISION_PATH_OUTLIER_HOLD_S
+        )
+      )
+      if abs(d_path) <= maximum_d_path or held_vision_path_outlier:
         candidate_values.append((point, d_path))
     if (
       prefer_corner
@@ -627,6 +646,30 @@ class VisionRadarMatcher:
         )
         if cost is not None:
           supported.append((point, d_path, cost))
+    if (
+      prefer_primary
+      and any(
+        point.source == "frontRadar"
+        for point, _, _ in supported
+      )
+    ):
+      supported = [
+        candidate
+        for candidate in supported
+        if candidate[0].source == "frontRadar"
+      ]
+    elif (
+      prefer_primary
+      and any(
+        point.source == "scc"
+        for point, _, _ in supported
+      )
+    ):
+      supported = [
+        candidate
+        for candidate in supported
+        if candidate[0].source == "scc"
+      ]
 
     selected: tuple[RadarPointSnapshot, float, float] | None = None
     if self.stationary_identity is not None:
@@ -755,6 +798,11 @@ class VisionRadarMatcher:
       self.stationary_identity = selected_identity
 
     point, d_path, score = selected
+    if abs(d_path) > STATIONARY_HELD_MAX_DPATH_M:
+      if self._stationary_path_outlier_since_s is None:
+        self._stationary_path_outlier_since_s = time_s
+    else:
+      self._stationary_path_outlier_since_s = None
     self.stationary_identity = self._identity(point)
     self._stationary_last_point = point
     self._stationary_last_time_s = time_s
@@ -883,6 +931,7 @@ class VisionRadarMatcher:
     time_s: float | None = None,
     stationary_points: Iterable[RadarPointSnapshot] | None = None,
     prefer_corner_stationary: bool = False,
+    prefer_primary_stationary: bool = False,
   ) -> VisionRadarMatch | None:
     vision = vision_lead_from_model(model)
     stationary = self._match_stationary(
@@ -891,6 +940,7 @@ class VisionRadarMatcher:
       path,
       time_s,
       prefer_corner_stationary,
+      prefer_primary_stationary,
     )
     moving = self._match_moving(vision, points, path)
     if (
