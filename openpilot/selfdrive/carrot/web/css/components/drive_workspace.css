@@ -35,7 +35,7 @@
   --drive-workspace-layout-duration: 0ms;
   --drive-workspace-layout-ease: cubic-bezier(0.22, 0.82, 0.22, 1);
   --drive-workspace-split-ease: cubic-bezier(0.16, 0.74, 0.2, 1);
-  --drive-workspace-resize-duration: 160ms;
+  --drive-workspace-resize-duration: 180ms;
   --drive-workspace-settle-duration: 240ms;
   --drive-workspace-feedback-in-duration: 70ms;
   --drive-workspace-feedback-out-duration: 160ms;

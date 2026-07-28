@@ -23,6 +23,33 @@ function choiceText(choice) {
   return String(choice.label ?? "").trim();
 }
 
+function choiceHeading(choice) {
+  if (!choice || typeof choice !== "object") return "";
+  return String(choice.heading ?? "").trim();
+}
+
+function isChoiceItem(choice) {
+  return Boolean(choice) && !choiceHeading(choice) && (choice.label != null || Boolean(choice.labelHtml));
+}
+
+// Split choices into sections. A `{ heading }` entry opens a section and the
+// choices after it belong to it, so an ungrouped list stays a single section
+// with no heading and renders exactly as before.
+export function appDialogChoiceGroups(choices) {
+  const groups = [];
+  for (const choice of Array.isArray(choices) ? choices : []) {
+    const heading = choiceHeading(choice);
+    if (heading) {
+      groups.push({ heading, items: [] });
+      continue;
+    }
+    if (!isChoiceItem(choice)) continue;
+    if (!groups.length) groups.push({ heading: "", items: [] });
+    groups[groups.length - 1].items.push(choice);
+  }
+  return groups.filter((group) => group.items.length > 0);
+}
+
 export function inferAppDialogChoiceLayout(choices, options = {}) {
   const explicit = String(options.choiceLayout || options.choiceKind || "").trim();
   if (explicit === "grid" || explicit === "value-grid" || explicit === "values") return "value-grid";
@@ -34,6 +61,14 @@ export function inferAppDialogChoiceLayout(choices, options = {}) {
       && /^[+-]?(?:\d+|\d+\.\d+|[A-Za-z]{1,4})$/.test(text);
   });
   return shortValueChoices ? "value-grid" : "list";
+}
+
+export function appDialogChoiceLayout(groups, options = {}) {
+  const items = Array.isArray(groups) ? groups.flatMap((group) => group.items || []) : [];
+  if (!items.length) return "";
+  // Section headings need stacked rows; a value grid has no room for them.
+  if (groups.some((group) => Boolean(group?.heading))) return "list";
+  return inferAppDialogChoiceLayout(items, options);
 }
 
 export function appDialogChoiceColumns(count, options = {}) {
@@ -259,12 +294,11 @@ export function createDialogController(environment = {}) {
     const cancelLabel = options.cancelLabel || text("cancel", "Cancel");
     const defaultActionLabel = options.defaultActionLabel || "";
     const hasDefaultAction = mode === "prompt" && Boolean(defaultActionLabel);
-    const choices = Array.isArray(options.choices)
-      ? options.choices.filter((choice) => choice && (choice.label != null || choice.labelHtml))
-      : [];
+    const choiceGroups = appDialogChoiceGroups(options.choices);
+    const choices = choiceGroups.flatMap((group) => group.items);
     const hasChoices = choices.length > 0;
     const isChoice = mode === "choice" || hasChoices;
-    const choiceLayout = hasChoices ? inferAppDialogChoiceLayout(choices, options) : "";
+    const choiceLayout = appDialogChoiceLayout(choiceGroups, options);
     const showCancel = mode !== "alert" && options.showCancel !== false;
 
     resetPresentation();
@@ -323,7 +357,7 @@ export function createDialogController(environment = {}) {
       } else {
         appDialogChoices.style.removeProperty("--app-dialog-choice-columns");
       }
-      for (const choice of choices) {
+      const createChoiceButton = (choice) => {
         const button = documentRoot.createElement("button");
         button.type = "button";
         let buttonClass = choice.danger
@@ -338,8 +372,29 @@ export function createDialogController(environment = {}) {
         if (choice.labelHtml) button.innerHTML = choice.labelHtml;
         else button.textContent = String(choice.label);
         button.addEventListener("click", () => resolveAppDialog(choice.value));
-        appDialogChoices.appendChild(button);
-      }
+        return button;
+      };
+
+      choiceGroups.forEach((group, index) => {
+        if (!group.heading) {
+          for (const choice of group.items) appDialogChoices.appendChild(createChoiceButton(choice));
+          return;
+        }
+        // A labelled section: screen readers announce the heading as the group
+        // name instead of it reading as one more choice in the list.
+        const section = documentRoot.createElement("div");
+        section.className = "app-dialog__choiceGroup";
+        section.setAttribute("role", "group");
+        const headingId = `appDialogChoiceHeading${index}`;
+        section.setAttribute("aria-labelledby", headingId);
+        const heading = documentRoot.createElement("div");
+        heading.id = headingId;
+        heading.className = "app-dialog__choiceHeading";
+        heading.textContent = group.heading;
+        section.appendChild(heading);
+        for (const choice of group.items) section.appendChild(createChoiceButton(choice));
+        appDialogChoices.appendChild(section);
+      });
     }
 
     if (appDialogInputWrap && appDialogInput) {

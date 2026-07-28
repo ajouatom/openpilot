@@ -5,6 +5,7 @@
   --segmented-control-item-padding: var(--sp-sm) var(--sp-md);
   --segmented-control-item-flex: 1 0 max-content;
   --segmented-control-item-font-size: inherit;
+  --segmented-control-item-font-weight: 750;
   --segmented-control-item-radius: var(--control-radius);
   --segmented-control-item-border: color-mix(in srgb, var(--md-outline-var) 46%, transparent);
   --segmented-control-item-bg: var(--md-surface-cont-h);
@@ -12,6 +13,8 @@
   --segmented-control-selected-border: var(--md-outline);
   --segmented-control-selected-bg: var(--md-surface-cont-hh);
   --segmented-control-selected-fg: var(--md-on-surface);
+  --segmented-control-hover-border: var(--segmented-control-selected-border);
+  --segmented-control-hover-fg: var(--segmented-control-selected-fg);
   display: flex;
   width: 100%;
   min-width: 0;
@@ -37,7 +40,7 @@
   color: var(--segmented-control-item-fg);
   font: inherit;
   font-size: var(--segmented-control-item-font-size);
-  font-weight: 750;
+  font-weight: var(--segmented-control-item-font-weight);
   line-height: 1;
   text-align: center;
   white-space: nowrap;
@@ -45,8 +48,8 @@
 }
 
 .c-segmented-control__item:hover {
-  border-color: var(--segmented-control-selected-border);
-  color: var(--segmented-control-selected-fg);
+  border-color: var(--segmented-control-hover-border);
+  color: var(--segmented-control-hover-fg);
 }
 
 .c-segmented-control__item:focus-visible {
@@ -68,4 +71,23 @@
   opacity: var(--state-disabled-opacity);
   cursor: not-allowed;
   pointer-events: none;
+}
+
+/* Equal segments: every item owns the same share of the track regardless of
+   label length, so translated labels never redistribute the widths. */
+.c-segmented-control--equal {
+  --segmented-control-item-flex: 1 1 0;
+}
+
+.c-segmented-control--equal > .c-segmented-control__item {
+  min-inline-size: 0;
+}
+
+/* Label element for equal segments: keeps a long translation inside its own
+   share of the track instead of pushing past it. */
+.c-segmented-control__label {
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

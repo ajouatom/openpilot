@@ -788,7 +788,6 @@ body[data-page="carrot"] #driveHudCard.driveHudCard--loading {
   min-height: 360px;
   border-radius: calc(var(--r-2xl) + 2px);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--md-outline-var) 82%, rgba(255,255,255,0.12));
   background:
     linear-gradient(142deg, rgba(255, 156, 72, 0.10) 0%, rgba(255, 156, 72, 0.025) 28%, rgba(4, 6, 9, 0) 54%),
     linear-gradient(226deg, rgba(122, 132, 150, 0.12) 0%, rgba(6, 8, 12, 0) 42%),

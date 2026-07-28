@@ -1995,7 +1995,7 @@ if (btnSettingFabFingerprint) {
       try {
         await openAppDialog({
           mode: "alert",
-          title: getUIText("setting_fingerprint_title", "내 설정 코드"),
+          title: getUIText("setting_fingerprint_title", "설정 코드"),
           html: true,
           messageHtml: summaryHtml
             + `<div class="setting-fingerprint-history">`

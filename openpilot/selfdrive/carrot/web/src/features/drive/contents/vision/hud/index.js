@@ -12,6 +12,7 @@ import { createSpeedPanel } from "./widgets/speed_panel.js";
 import { createSpeedLimitSign } from "./widgets/speed_limit_sign.js";
 import { createDriveModeBadge } from "./widgets/drive_mode.js";
 import { createClock } from "./widgets/clock.js";
+import { createDeviceTemp } from "./widgets/device_temp.js";
 import { createWifiIcon } from "./widgets/wifi_icon.js";
 import { createLfaIcon } from "./widgets/lfa_icon.js";
 import { createAccelGauge } from "./widgets/accel_gauge.js";
@@ -78,6 +79,8 @@ export function mapPayload(p = {}) {
     trafficState: num(p.trafficState),
     networkConnected: p.networkConnected,
     clock: p.clock,
+    // 가장 뜨거운 코어(네이티브 패리티). 평균값만 오는 경로가 있어 폴백을 둔다.
+    cpuTemp: num(p.cpuTempMaxC ?? p.cpuTempC),
   };
 }
 
@@ -106,6 +109,7 @@ export function createHudOverlay(doc) {
   });
   const tpms = createTpmsBadge(doc);
   const turn = createTurnSignal(doc);
+  const devTemp = createDeviceTemp(doc);
 
   const zoneTL = el(doc, "div", { class: "chud-zone chud-zone--tl" }, [
     el(doc, "div", { class: "chud-row" }, [lfa.el, wifi.el, clock.el]),
@@ -118,7 +122,10 @@ export function createHudOverlay(doc) {
   ]);
   const zoneBL = el(doc, "div", { class: "chud-zone chud-zone--bl" }, [speed.el]);
   const zoneBR = el(doc, "div", { class: "chud-zone chud-zone--br" }, [tpms.el]);
-  root.append(zoneTL, zoneTC, zoneTR, zoneBL, zoneBR);
+  // 코너 스트립은 존이 아니다: 인셋 0으로 화면 모서리에 밀착하고, 존보다 먼저
+  // 붙어 같은 z-index에서 항상 다른 HUD 아래에 깔린다. degradation 대상도 아니다.
+  const cornerBL = el(doc, "div", { class: "chud-corner chud-corner--bl" }, [devTemp.el]);
+  root.append(cornerBL, zoneTL, zoneTC, zoneTR, zoneBL, zoneBR);
   const layoutZones = {
     topLeft: zoneTL,
     topCenter: turn.el,
@@ -127,7 +134,7 @@ export function createHudOverlay(doc) {
     bottomRight: zoneBR,
   };
 
-  const widgets = [lfa, wifi, clock, limit, speed, driveMode, accel, steer, fuel, def, tpms, turn];
+  const widgets = [lfa, wifi, clock, limit, speed, driveMode, accel, steer, fuel, def, tpms, turn, devTemp];
   const suppressions = new Set();
   let visibilitySignature = "";
   let layoutObserver = null;

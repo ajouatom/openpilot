@@ -15,6 +15,11 @@ const RISK_LABEL_KEYS = Object.freeze({
   medium: "setting_risk_medium",
 });
 
+const RISK_TONES = Object.freeze({
+  high: "danger",
+  medium: "warning",
+});
+
 export function getSettingRiskLevel(item) {
   const level = String(item?.risk || "").trim().toLowerCase();
   return RISK_LEVELS.includes(level) ? level : null;
@@ -28,5 +33,6 @@ export function renderSettingRiskBadge(item, options = {}) {
   const label = level === "high"
     ? text(RISK_LABEL_KEYS.high, "주의")
     : text(RISK_LABEL_KEYS.medium, "참고");
-  return `<span class="setting-risk-badge setting-risk-badge--${level}">${escape(label)}</span>`;
+  const tone = RISK_TONES[level];
+  return `<span class="chip chip--compact chip--${tone} setting-risk-badge setting-risk-badge--${level}" data-risk-level="${level}">${escape(label)}</span>`;
 }
