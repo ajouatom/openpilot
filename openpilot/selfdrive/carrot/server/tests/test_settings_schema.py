@@ -55,6 +55,8 @@ def test_carrot_radar_mode_replaces_removed_model_mode(settings, params):
   assert by_name["CarrotRadarMode"]["default"] == 0
   assert by_name["CarrotRadarMode"]["control"] == "toggle"
   assert by_name["CarrotRadarMode"]["risk"] == "high"
+  assert "재부팅" in by_name["CarrotRadarMode"]["descr"]
+  assert "restart the vehicle" in by_name["CarrotRadarMode"]["edescr"]
   vehicle = next(category for category in settings["menu"] if category["id"] == "VEHICLE")
   radar = next(group for group in vehicle["groups"] if group["id"] == "VEH_RADAR")
   assert radar["params"] == ["EnableRadarTracks", "EnableCornerRadar", "CarrotRadarMode"]

@@ -37,6 +37,10 @@ CORNER_CUT_IN_THRESHOLD = 0.30
 FRONT_CUT_IN_THRESHOLD = 0.67
 CUT_IN_CONFIRMATION_S = 0.25
 CUT_IN_BOUNDARY_HOLD_S = 0.40
+URGENT_NEAR_PATH_CONFIRMATION_S = 0.10
+URGENT_NEAR_PATH_MAX_DREL_M = 5.0
+URGENT_NEAR_PATH_MAX_CLEARANCE_M = 0.45
+URGENT_NEAR_PATH_MIN_INWARD_RATE_MPS = 0.10
 MAX_HISTORY_S = 2.0
 SHORT_HISTORY_S = 0.45
 LONG_HISTORY_S = 1.50
@@ -1114,6 +1118,42 @@ class RadarMotionDecisionTracker:
       prediction.continuity_id,
     )
 
+  def _confirmation_time_s(
+    self,
+    prediction: RadarMotionPrediction,
+  ) -> float:
+    """React sooner only to a close, physically consistent corner entry."""
+    current_d_rel = (
+      prediction.history[-1].d_rel
+      if prediction.history
+      else math.inf
+    )
+    side = (
+      math.copysign(1.0, prediction.d_path)
+      if abs(prediction.d_path) > 1e-6
+      else 0.0
+    )
+    inward_short = -side * prediction.d_path_rate_short
+    inward_long = -side * prediction.d_path_rate_long
+    path_clearance = max(
+      0.0,
+      abs(prediction.d_path) - PATH_OVERLAP_HALF_WIDTH_M,
+    )
+    urgent_near_path_entry = (
+      prediction.sensor == "corner"
+      and 0.8 < current_d_rel <= URGENT_NEAR_PATH_MAX_DREL_M
+      and path_clearance <= URGENT_NEAR_PATH_MAX_CLEARANCE_M
+      and inward_short >= URGENT_NEAR_PATH_MIN_INWARD_RATE_MPS
+      and inward_long >= URGENT_NEAR_PATH_MIN_INWARD_RATE_MPS
+      and prediction.motion_consistency >= 0.70
+      and prediction.recent_motion_support >= 0.70
+    )
+    return (
+      min(self.confirmation_s, URGENT_NEAR_PATH_CONFIRMATION_S)
+      if urgent_near_path_entry
+      else self.confirmation_s
+    )
+
   def reset(self) -> None:
     self._started_at.clear()
     self._peak_score.clear()
@@ -1201,7 +1241,8 @@ class RadarMotionDecisionTracker:
       if (
         key in active_keys
         and key in prediction_by_key
-        and time_s - started_at >= self.confirmation_s
+        and time_s - started_at
+        >= self._confirmation_time_s(prediction_by_key[key])
       )
     )
     return RadarMotionDecision(confirmed)
