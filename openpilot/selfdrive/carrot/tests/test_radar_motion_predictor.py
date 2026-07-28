@@ -17,6 +17,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   model_path_y,
   prediction_sample_at,
   project_to_model_path,
+  radar_motion_sensitivity,
   radar_target_velocity_in_ego_frame,
   visible_motion_points,
 )
@@ -378,6 +379,17 @@ def test_adjacent_vehicle_hides_farther_tracks_on_same_side_but_not_close_points
   assert {point.track_id for point in protected} == {1, 2, 3, 4, 6}
 
 
+def test_path_boundary_point_is_not_hidden_by_nearer_adjacent_return() -> None:
+  points = (
+    Point(1018, 9.1, -3.1),
+    Point(1010, 21.1, -1.89),
+  )
+
+  visible = visible_motion_points(points, STRAIGHT_PATH)
+
+  assert {point.track_id for point in visible} == {1010, 1018}
+
+
 def test_adjacent_vehicle_ahead_of_nearest_is_visible_when_closer_than_lead_one() -> None:
   points = (
     Point(1, 10.0, 3.0, source="corner235", v_lead=10.0),
@@ -559,6 +571,49 @@ def test_front_cutin_needs_stronger_path_relative_motion_than_corner() -> None:
     current_path_occupancy=True,
   )
   assert front_cutin_motion_supported("corner235", 0.10)
+
+
+def test_carrot_radar_cutin_sensitivity_keeps_level_three_as_current() -> None:
+  corner = radar_motion_sensitivity(3, "corner")
+  front = radar_motion_sensitivity(3, "front")
+
+  assert corner.cut_in_enabled
+  assert corner.cut_in_threshold == pytest.approx(0.30)
+  assert front.cut_in_threshold == pytest.approx(0.67)
+  assert front.confirmation_s == pytest.approx(0.25)
+  assert front.directional_min_consistency == pytest.approx(0.75)
+  assert not radar_motion_sensitivity(0, "corner").cut_in_enabled
+  assert radar_motion_sensitivity(-1, "corner").level == 0
+  assert radar_motion_sensitivity(99, "front").level == 5
+
+
+def test_higher_cutin_sensitivity_accepts_less_directional_consistency() -> None:
+  common = {
+    "d_rel": 52.6,
+    "d_path": -2.03,
+    "d_path_rate_short": 0.54,
+    "predicted_path_overlap_s": 4.5,
+    "directional_inward_displacement_m": 0.57,
+    "directional_consistency": 0.712,
+    "directional_inward_sample_ratio": 0.80,
+  }
+
+  assert not front_cutin_motion_supported(
+    "frontRadar",
+    0.36,
+    minimum_directional_consistency=(
+      radar_motion_sensitivity(3, "front").directional_min_consistency
+    ),
+    **common,
+  )
+  assert front_cutin_motion_supported(
+    "frontRadar",
+    0.36,
+    minimum_directional_consistency=(
+      radar_motion_sensitivity(4, "front").directional_min_consistency
+    ),
+    **common,
+  )
 
 
 def test_tracked_front_out_to_in_crossing_can_start_inside_five_metres() -> None:
@@ -904,17 +959,17 @@ def test_occluded_point_keeps_history_but_is_not_exposed_until_visible() -> None
     values = predictor.update(
       index * 0.1,
       (
+          Point(
+            1,
+            6.0 if index < 12 else 4.0,
+            -3.1,
+            source="corner235",
+            v_lead=10.0,
+          ),
         Point(
-          1,
-          6.0 if index < 12 else 4.0,
-          -3.0,
-          source="corner235",
-          v_lead=10.0,
-        ),
-        Point(
-          2,
-          25.0,
-          -3.0 + index * 0.1,
+            2,
+            25.0,
+            -3.05 if index < 12 else -1.8,
           source="corner235",
           v_lead=10.0,
           yv_rel=1.0,
@@ -932,7 +987,39 @@ def test_occluded_point_keeps_history_but_is_not_exposed_until_visible() -> None
   assert prediction.history_count == 13
   assert prediction.current_path_occupancy
   assert prediction.path_entry_age_s == pytest.approx(0.0)
-  assert prediction.path_entry_probability > 0.5
+
+
+def test_strong_cutin_motion_exposes_point_behind_adjacent_return() -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  for index in range(15):
+    values = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          1018,
+          9.0,
+          -3.1,
+          source="corner235",
+          v_lead=10.0,
+        ),
+        Point(
+          1010,
+          24.0,
+          -3.4 + index * 0.1,
+          source="corner235",
+          v_lead=10.0,
+          yv_rel=1.0,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )
+    prediction = values.get(("corner235", 1010), prediction)
+
+  assert prediction is not None
+  assert prediction.directional_inward_displacement_m > 0.7
+  assert prediction.cut_in_probability > 0.5
 
 
 def test_near_zero_vlead_is_position_only_and_clears_motion_history() -> None:
@@ -1273,6 +1360,36 @@ def test_corner_position_drift_requires_reported_lateral_motion_consistency() ->
   assert inconsistent_prediction.cut_in_probability < 0.5
   assert consistent_prediction.motion_consistency > 0.9
   assert consistent_prediction.cut_in_probability > 0.5
+
+
+def test_strong_dpath_history_survives_curved_path_normal_velocity_mismatch() -> None:
+  path = ((0.0, 0.0), (100.0, -10.0))
+  predictor = RadarMotionPredictor()
+  prediction = None
+  for index in range(15):
+    prediction = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          1010,
+          25.0,
+          -1.4 + index * 0.1,
+          source="corner235",
+          v_lead=10.0,
+          yv_rel=0.4,
+        ),
+      ),
+      path,
+      v_ego=10.0,
+    )[("corner235", 1010)]
+
+  assert prediction is not None
+  assert prediction.d_path_rate_long > 0.9
+  assert prediction.reported_normal_speed < -0.5
+  assert prediction.directional_inward_displacement_m > 0.7
+  assert prediction.motion_consistency > 0.9
+  assert prediction.predicted_path_overlap_start_s is not None
+  assert prediction.cut_in_probability > 0.5
 
 
 def test_stronger_same_direction_corner_velocity_supports_position_trend() -> None:
@@ -2237,6 +2354,43 @@ def test_controller_uses_sensor_specific_production_thresholds() -> None:
   assert front.motion_decisions.threshold == pytest.approx(0.67)
 
 
+def test_controller_disables_new_lead_two_at_zero_sensitivity() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    cut_in_sensitivity=0,
+  )
+  prediction = SimpleNamespace(
+    source="corner235",
+    track_id=1005,
+    continuity_id=1,
+    d_path=1.0,
+    d_path_rate_long=-0.5,
+    cut_out_probability=0.0,
+    path_entry_probability=1.0,
+    current_path_occupancy=True,
+    reason="current path overlap",
+    path_entry_age_s=0.0,
+    time_to_entry_s=0.0,
+  )
+  controller.motion_predictor = FixedPredictor(prediction)
+  controller.motion_decisions = FixedDecisionTracker(prediction)
+
+  output = controller.update(
+    time_s=1.0,
+    v_ego=10.0,
+    radar_points=(
+      Point(10, 30.0, 0.0, source="frontRadar"),
+      Point(1005, 20.0, 1.0, source="corner235"),
+    ),
+    model=model_with_lead(30.0, 0.0, 10.0),
+  )
+
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 10
+  assert output.lead_two is None
+  assert output.leads_cutin == ()
+
+
 def test_controller_matches_radard_lead_dynamics_and_raw_jerk() -> None:
   controller = DPathRadarController(prefer_corner_radar=False)
   hard_motion = Point(
@@ -2554,6 +2708,7 @@ def test_production_dpath_mode_is_independent_of_conventional_radard() -> None:
   assert "RadarMotionPredictor" not in conventional_source
   assert "from openpilot.selfdrive.controls.radard" not in dpath_source
   assert 'getattr(sm["modelV2"], "timestampEof", 0)' in dpath_source
+  assert 'params.get_int(\n        "CarrotRadarCutInSensitivity",' in dpath_source
   assert 'self.params.get_float("RadarReactionFactor") * 0.01' in dpath_source
   for field in (
     "leadOne",

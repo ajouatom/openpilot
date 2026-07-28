@@ -84,6 +84,49 @@ DIRECTIONAL_MIN_INWARD_SAMPLE_RATIO = 0.65
 DIRECTIONAL_MIN_SHORT_INWARD_RATE_MPS = 0.15
 DIRECTIONAL_MIN_LONG_INWARD_RATE_MPS = 0.10
 DIRECTIONAL_SHORT_RATE_BLEND = 0.50
+POSITION_HISTORY_OVERRIDE_MIN_INWARD_DISPLACEMENT_M = 0.45
+POSITION_HISTORY_OVERRIDE_MIN_CONSISTENCY = 0.95
+POSITION_HISTORY_OVERRIDE_MIN_INWARD_SAMPLE_RATIO = 0.90
+POSITION_HISTORY_OVERRIDE_MIN_SHORT_INWARD_RATE_MPS = 0.35
+POSITION_HISTORY_OVERRIDE_MIN_LONG_INWARD_RATE_MPS = 0.20
+POSITION_HISTORY_OVERRIDE_MIN_RAW_LATERAL_SUPPORT_MPS = 0.15
+
+
+@dataclass(frozen=True)
+class RadarMotionSensitivity:
+  level: int
+  cut_in_enabled: bool
+  cut_in_threshold: float
+  confirmation_s: float
+  directional_min_consistency: float
+
+
+_CORNER_CUT_IN_THRESHOLDS = (0.0, 0.42, 0.36, 0.30, 0.25, 0.20)
+_FRONT_CUT_IN_THRESHOLDS = (0.0, 0.78, 0.72, 0.67, 0.60, 0.53)
+_CUT_IN_CONFIRMATION_TIMES_S = (0.0, 0.40, 0.33, 0.25, 0.18, 0.10)
+_DIRECTIONAL_MIN_CONSISTENCIES = (1.0, 0.82, 0.79, 0.75, 0.71, 0.68)
+
+
+def radar_motion_sensitivity(
+  level: int,
+  sensor: str,
+) -> RadarMotionSensitivity:
+  """Return the Carrot Radar CUT-IN policy; level 3 is the current behavior."""
+  clamped_level = max(0, min(5, int(level)))
+  thresholds = (
+    _CORNER_CUT_IN_THRESHOLDS
+    if str(sensor) == "corner"
+    else _FRONT_CUT_IN_THRESHOLDS
+  )
+  return RadarMotionSensitivity(
+    level=clamped_level,
+    cut_in_enabled=clamped_level > 0,
+    cut_in_threshold=thresholds[clamped_level],
+    confirmation_s=_CUT_IN_CONFIRMATION_TIMES_S[clamped_level],
+    directional_min_consistency=(
+      _DIRECTIONAL_MIN_CONSISTENCIES[clamped_level]
+    ),
+  )
 
 
 @dataclass(frozen=True)
@@ -269,12 +312,8 @@ def radar_target_velocity_in_ego_frame(
   )
 
 
-def radar_motion_cut_in_threshold(sensor: str) -> float:
-  return (
-    CORNER_CUT_IN_THRESHOLD
-    if str(sensor) == "corner"
-    else FRONT_CUT_IN_THRESHOLD
-  )
+def radar_motion_cut_in_threshold(sensor: str, sensitivity: int = 3) -> float:
+  return radar_motion_sensitivity(sensitivity, sensor).cut_in_threshold
 
 
 def _sensor(source: str) -> str:
@@ -423,13 +462,12 @@ def project_to_model_path(
   )
 
 
-def model_path_point_at_s(
-  path: Sequence[tuple[float, float]],
+def _model_path_point_at_s(
+  path_key: tuple[tuple[float, float], ...],
   path_s: float,
-  d_path: float = 0.0,
+  d_path: float,
 ) -> tuple[float, float]:
-  """Convert model-path arc distance and normal offset to ego-frame x/y."""
-  points, usable = _path_geometry(_path_key(path))
+  points, usable = _path_geometry(path_key)
   if not points:
     raise ValueError("model path is required for dPath prediction")
   if not usable:
@@ -456,25 +494,46 @@ def model_path_point_at_s(
   return points[-1]
 
 
+def model_path_point_at_s(
+  path: Sequence[tuple[float, float]],
+  path_s: float,
+  d_path: float = 0.0,
+) -> tuple[float, float]:
+  """Convert model-path arc distance and normal offset to ego-frame x/y."""
+  return _model_path_point_at_s(_path_key(path), path_s, d_path)
+
+
 def _linear_fit(observations: Sequence[_Observation], field_name: str) -> tuple[float, float]:
-  if len(observations) < 2:
+  count = len(observations)
+  if count < 2:
     return 0.0, 0.0
-  times = tuple(observation.time_s for observation in observations)
-  values = tuple(float(getattr(observation, field_name)) for observation in observations)
-  time_mean = sum(times) / len(times)
-  value_mean = sum(values) / len(values)
-  denominator = sum((time_s - time_mean) ** 2 for time_s in times)
+  time_total = 0.0
+  value_total = 0.0
+  for observation in observations:
+    time_total += observation.time_s
+    value_total += float(getattr(observation, field_name))
+  time_mean = time_total / count
+  value_mean = value_total / count
+  denominator = 0.0
+  for observation in observations:
+    denominator += (observation.time_s - time_mean) ** 2
   if denominator < 1e-6:
     return 0.0, 0.0
-  slope = sum(
-    (time_s - time_mean) * (value - value_mean)
-    for time_s, value in zip(times, values, strict=True)
-  ) / denominator
+  numerator = 0.0
+  for observation in observations:
+    numerator += (
+      (observation.time_s - time_mean)
+      * (float(getattr(observation, field_name)) - value_mean)
+    )
+  slope = numerator / denominator
   intercept = value_mean - slope * time_mean
-  residual = math.sqrt(sum(
-    (value - (intercept + slope * time_s)) ** 2
-    for time_s, value in zip(times, values, strict=True)
-  ) / len(times))
+  residual_sum = 0.0
+  for observation in observations:
+    residual_sum += (
+      float(getattr(observation, field_name))
+      - (intercept + slope * observation.time_s)
+    ) ** 2
+  residual = math.sqrt(residual_sum / count)
   return slope, residual
 
 
@@ -490,25 +549,42 @@ def _spatial_fit(
   observations: Sequence[_Observation],
 ) -> tuple[float, float, float]:
   """Fit dPath against target path progress, not elapsed ego time."""
-  if len(observations) < 2:
+  count = len(observations)
+  if count < 2:
     return 0.0, 0.0, 0.0
-  xs = tuple(observation.path_x_world for observation in observations)
-  ys = tuple(observation.d_path for observation in observations)
-  x_mean = sum(xs) / len(xs)
-  y_mean = sum(ys) / len(ys)
-  denominator = sum((x - x_mean) ** 2 for x in xs)
-  span = max(xs) - min(xs)
+  x_total = 0.0
+  y_total = 0.0
+  x_min = math.inf
+  x_max = -math.inf
+  for observation in observations:
+    x = observation.path_x_world
+    x_total += x
+    y_total += observation.d_path
+    x_min = min(x_min, x)
+    x_max = max(x_max, x)
+  x_mean = x_total / count
+  y_mean = y_total / count
+  denominator = 0.0
+  for observation in observations:
+    denominator += (observation.path_x_world - x_mean) ** 2
+  span = x_max - x_min
   if denominator < 1e-6:
     return 0.0, 0.0, span
-  slope = sum(
-    (x - x_mean) * (y - y_mean)
-    for x, y in zip(xs, ys, strict=True)
-  ) / denominator
+  numerator = 0.0
+  for observation in observations:
+    numerator += (
+      (observation.path_x_world - x_mean)
+      * (observation.d_path - y_mean)
+    )
+  slope = numerator / denominator
   intercept = y_mean - slope * x_mean
-  residual = math.sqrt(sum(
-    (y - (intercept + slope * x)) ** 2
-    for x, y in zip(xs, ys, strict=True)
-  ) / len(xs))
+  residual_sum = 0.0
+  for observation in observations:
+    residual_sum += (
+      observation.d_path
+      - (intercept + slope * observation.path_x_world)
+    ) ** 2
+  residual = math.sqrt(residual_sum / count)
   return slope, residual, span
 
 
@@ -554,13 +630,46 @@ def _directional_history_metrics(
   return max(0.0, net_inward), consistency, inward_sample_ratio
 
 
+def _strong_hidden_dpath_entry(
+  observations: Sequence[_Observation],
+  current_d_path: float,
+) -> bool:
+  """Expose an occluded point only after strong measured inward history."""
+  if abs(current_d_path) >= CUT_IN_CURRENT_SCOPE_HALF_WIDTH_M:
+    return False
+  (
+    inward_displacement,
+    consistency,
+    inward_sample_ratio,
+  ) = _directional_history_metrics(observations, current_d_path)
+  reported_lateral_speed, _ = _robust_center_and_sigma(tuple(
+    observation.yv_rel
+    for observation in _window(observations, REPORTED_VELOCITY_HISTORY_S)
+  ))
+  side = (
+    math.copysign(1.0, current_d_path)
+    if abs(current_d_path) > 1e-6
+    else 0.0
+  )
+  return (
+    inward_displacement
+    >= POSITION_HISTORY_OVERRIDE_MIN_INWARD_DISPLACEMENT_M
+    and consistency >= POSITION_HISTORY_OVERRIDE_MIN_CONSISTENCY
+    and inward_sample_ratio
+    >= POSITION_HISTORY_OVERRIDE_MIN_INWARD_SAMPLE_RATIO
+    and -side * reported_lateral_speed
+    >= POSITION_HISTORY_OVERRIDE_MIN_RAW_LATERAL_SUPPORT_MPS
+  )
+
+
 def _scoped_motion_points(
   points: Iterable[Any],
   path: Sequence[tuple[float, float]],
-) -> tuple[tuple[Any, float, float], ...]:
+) -> tuple[tuple[Any, float, ModelPathProjection], ...]:
   if not path:
     return ()
-  scoped: list[tuple[Any, float, float]] = []
+  path_key = _path_key(path)
+  scoped: list[tuple[Any, float, ModelPathProjection]] = []
   for point in points:
     if not bool(getattr(point, "measured", False)):
       continue
@@ -568,25 +677,27 @@ def _scoped_motion_points(
     if not MOTION_MIN_DREL_M <= d_rel <= MOTION_MAX_DREL_M:
       continue
     y_rel = _value(point, "y_rel", "yRel")
-    projection = project_to_model_path(path, d_rel, y_rel)
+    projection = _project_to_model_path_cached(
+      path_key, _finite(d_rel), _finite(y_rel),
+    )
     distance_to_path = math.hypot(
       d_rel - projection.center_x,
       y_rel - projection.center_y,
     )
     if distance_to_path <= IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M:
-      scoped.append((point, d_rel, projection.d_path))
+      scoped.append((point, d_rel, projection))
   return tuple(scoped)
 
 
-def visible_motion_points(
-  points: Iterable[Any],
-  path: Sequence[tuple[float, float]],
+def _visible_scoped_motion_points(
+  scoped: Sequence[tuple[Any, float, ModelPathProjection]],
   lead_one_d_rel: float | None = None,
   protected_identities: Iterable[tuple[str, int]] = (),
 ) -> tuple[Any, ...]:
-  """Keep relevant adjacent points without hiding an already selected target."""
-  scoped = _scoped_motion_points(points, path)
   protected = set(protected_identities)
+  overlap_visibility_limit = (
+    PATH_OVERLAP_HALF_WIDTH_M + PATH_STATE_HYSTERESIS_M
+  )
   primary_limit = (
     float(lead_one_d_rel)
     if lead_one_d_rel is not None
@@ -596,10 +707,11 @@ def visible_motion_points(
   )
 
   nearest: dict[int, float] = {}
-  for _, d_rel, d_path in scoped:
+  for _, d_rel, projection in scoped:
+    d_path = projection.d_path
     if (
       d_rel < ADJACENT_OCCLUSION_MIN_DREL_M
-      or abs(d_path) <= PATH_OVERLAP_HALF_WIDTH_M
+      or abs(d_path) <= overlap_visibility_limit
     ):
       continue
     side = 1 if d_path > 0.0 else -1
@@ -607,10 +719,10 @@ def visible_motion_points(
 
   return tuple(
     point
-    for point, d_rel, d_path in scoped
+    for point, d_rel, projection in scoped
     if (
       d_rel < ADJACENT_OCCLUSION_MIN_DREL_M
-      or abs(d_path) <= PATH_OVERLAP_HALF_WIDTH_M
+      or abs(projection.d_path) <= overlap_visibility_limit
       or (
         (
           str(getattr(point, "source", "")),
@@ -622,9 +734,25 @@ def visible_motion_points(
         primary_limit is not None
         and d_rel < primary_limit
       )
-      or d_rel <= nearest.get(1 if d_path > 0.0 else -1, math.inf)
+      or d_rel <= nearest.get(
+        1 if projection.d_path > 0.0 else -1, math.inf,
+      )
       + ADJACENT_OCCLUSION_RANGE_TOLERANCE_M
     )
+  )
+
+
+def visible_motion_points(
+  points: Iterable[Any],
+  path: Sequence[tuple[float, float]],
+  lead_one_d_rel: float | None = None,
+  protected_identities: Iterable[tuple[str, int]] = (),
+) -> tuple[Any, ...]:
+  """Keep relevant adjacent points without hiding an already selected target."""
+  return _visible_scoped_motion_points(
+    _scoped_motion_points(points, path),
+    lead_one_d_rel,
+    protected_identities,
   )
 
 
@@ -749,7 +877,13 @@ def is_review_candidate(
 class RadarMotionPredictor:
   """Maintain independent front/corner dPath histories and predict path overlap."""
 
-  def __init__(self) -> None:
+  def __init__(
+    self,
+    directional_min_consistency: float = DIRECTIONAL_MIN_CONSISTENCY,
+  ) -> None:
+    self.directional_min_consistency = float(
+      directional_min_consistency,
+    )
     self._states: dict[str, dict[tuple[str, int], _TrackState]] = {
       "front": {},
       "corner": {},
@@ -799,8 +933,8 @@ class RadarMotionPredictor:
       and abs(observation.v_rel - previous.v_rel) <= config.velocity_jump_mps
     )
 
-  @staticmethod
   def _prediction(
+    self,
     state: _TrackState,
     track_id: int,
     observation: _Observation,
@@ -828,6 +962,9 @@ class RadarMotionPredictor:
         value.normal_velocity
         for value in reported_velocity_window
       ),
+    )
+    reported_lateral_speed, _ = _robust_center_and_sigma(
+      tuple(value.yv_rel for value in reported_velocity_window),
     )
     reported_path_speed, _ = _robust_center_and_sigma(
       tuple(value.path_velocity for value in long),
@@ -864,12 +1001,31 @@ class RadarMotionPredictor:
     )
     inward_short = -side * short_rate
     inward_long = -side * long_rate
+    position_history_override = (
+      _sensor(state.source) == "corner"
+      and enough_history
+      and directional_inward_displacement
+      >= POSITION_HISTORY_OVERRIDE_MIN_INWARD_DISPLACEMENT_M
+      and directional_consistency
+      >= POSITION_HISTORY_OVERRIDE_MIN_CONSISTENCY
+      and directional_inward_sample_ratio
+      >= POSITION_HISTORY_OVERRIDE_MIN_INWARD_SAMPLE_RATIO
+      and inward_short
+      >= POSITION_HISTORY_OVERRIDE_MIN_SHORT_INWARD_RATE_MPS
+      and inward_long
+      >= POSITION_HISTORY_OVERRIDE_MIN_LONG_INWARD_RATE_MPS
+      and (
+        math.copysign(1.0, position_rate)
+        * reported_lateral_speed
+        >= POSITION_HISTORY_OVERRIDE_MIN_RAW_LATERAL_SUPPORT_MPS
+      )
+    )
     directional_front_motion = (
       _sensor(state.source) == "front"
       and enough_history
       and directional_inward_displacement
       >= DIRECTIONAL_MIN_INWARD_DISPLACEMENT_M
-      and directional_consistency >= DIRECTIONAL_MIN_CONSISTENCY
+      and directional_consistency >= self.directional_min_consistency
       and directional_inward_sample_ratio
       >= DIRECTIONAL_MIN_INWARD_SAMPLE_RATIO
       and inward_short >= DIRECTIONAL_MIN_SHORT_INWARD_RATE_MPS
@@ -882,7 +1038,11 @@ class RadarMotionPredictor:
       )
       if -side * responsive_rate > inward_long:
         rate = responsive_rate
-    if config.use_reported_normal_velocity and enough_history:
+    if (
+      config.use_reported_normal_velocity
+      and enough_history
+      and not position_history_override
+    ):
       direction = math.copysign(1.0, position_rate) if abs(position_rate) > 1e-6 else 0.0
       supported_speed = max(0.0, direction * reported_normal_speed)
       rate = direction * min(abs(position_rate), supported_speed)
@@ -898,7 +1058,9 @@ class RadarMotionPredictor:
       max(abs(reported_path_speed), 0.1),
     ))
     normal_speed_disagreement = (
-      abs(position_rate - rate)
+      0.0
+      if position_history_override
+      else abs(position_rate - rate)
       if config.use_reported_normal_velocity
       else abs(position_rate - reported_normal_speed)
     )
@@ -961,6 +1123,7 @@ class RadarMotionPredictor:
     relative_accel = max(-3.0, min(3.0, observation.a_rel))
     path_accel = max(-3.0, min(3.0, observation.a_lead))
     samples: list[RadarMotionSample] = []
+    path_key = _path_key(path)
     for horizon_s in MOTION_HORIZONS_S:
       path_displacement = (
         path_speed * horizon_s
@@ -973,8 +1136,8 @@ class RadarMotionPredictor:
         observation.d_path
         + path_slope * path_displacement
       )
-      _, future_y = model_path_point_at_s(
-        path,
+      _, future_y = _model_path_point_at_s(
+        path_key,
         future_path_x,
         future_d_path,
       )
@@ -1296,6 +1459,9 @@ class RadarMotionPredictor:
     v_ego: float = 0.0,
     yaw_rate_rad_s: float = 0.0,
     lead_one_d_rel: float | None = None,
+    scoped_points: Sequence[
+      tuple[Any, float, ModelPathProjection]
+    ] | None = None,
   ) -> dict[tuple[str, int], RadarMotionPrediction]:
     time_s = float(time_s)
     v_ego = _finite(v_ego)
@@ -1322,9 +1488,13 @@ class RadarMotionPredictor:
           states.pop(key)
 
     point_values = tuple(points)
-    scoped_points = _scoped_motion_points(point_values, path)
-    visible_points = visible_motion_points(
-      point_values, path, lead_one_d_rel,
+    scoped_points = (
+      tuple(scoped_points)
+      if scoped_points is not None
+      else _scoped_motion_points(point_values, path)
+    )
+    visible_points = _visible_scoped_motion_points(
+      scoped_points, lead_one_d_rel,
     )
     visible_keys = {
       (_source(point), int(getattr(point, "track_id", getattr(point, "trackId", -1))))
@@ -1344,15 +1514,13 @@ class RadarMotionPredictor:
 
     predictions: dict[tuple[str, int], RadarMotionPrediction] = {}
     ego_projection = project_to_model_path(path, 0.0, 0.0)
-    for point, _, _ in scoped_points:
+    for point, d_rel, projection in scoped_points:
       source = _source(point)
       sensor = _sensor(source)
       config = SOURCE_CONFIGS[sensor]
       track_id = int(getattr(point, "track_id", getattr(point, "trackId", -1)))
       key = (source, track_id)
-      d_rel = _value(point, "d_rel", "dRel")
       y_rel = _value(point, "y_rel", "yRel")
-      projection = project_to_model_path(path, d_rel, y_rel)
       d_path = projection.d_path
       v_lead = _value(
         point,
@@ -1432,9 +1600,28 @@ class RadarMotionPredictor:
       ):
         state.observations.popleft()
       state.last_seen_s = time_s
-      prediction = self._prediction(state, track_id, observation, path, config)
-      if key in visible_keys:
-        predictions[key] = prediction
+      if (
+        key in visible_keys
+        or (
+          sensor == "corner"
+          and _strong_hidden_dpath_entry(
+            tuple(state.observations),
+            observation.d_path,
+          )
+        )
+      ):
+        predictions[key] = self._prediction(
+          state, track_id, observation, path, config,
+        )
+      elif (
+        state.inside_latched
+        and abs(observation.d_path)
+        > PATH_OVERLAP_HALF_WIDTH_M + PATH_STATE_HYSTERESIS_M
+      ):
+        # A hidden adjacent target cannot enter the path corridor, but an
+        # already latched target can finish leaving it while occluded.
+        state.inside_latched = False
+        state.entry_time_s = None
     return predictions
 
 

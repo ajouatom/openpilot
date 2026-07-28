@@ -86,6 +86,9 @@ class DPathRadarD:
         params.get_int("EnableCornerRadar"),
       ),
       enable_radar_tracks=params.get_int("EnableRadarTracks"),
+      cut_in_sensitivity=params.get_int(
+        "CarrotRadarCutInSensitivity",
+      ),
       front_radar_measurement_delay_s=float(CP.radarDelay),
     )
     self.params = params

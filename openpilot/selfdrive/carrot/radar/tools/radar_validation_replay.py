@@ -904,22 +904,6 @@ class RadarMotionShadowSelector:
       lead_one_values = tuple(lead_one_results)
     else:
       lead_one_values = tuple(lead_one_outputs)
-    self.motion_points = (
-      tuple(motion_points)
-      if motion_points is not None
-      else tuple(
-        visible_motion_points(
-          motion_points_at_model_time(frame, self.motion_sensor),
-          frame.path,
-          (
-            _finite(lead["dRel"])
-            if lead is not None and bool(lead.get("status", True))
-            else None
-          ),
-        )
-        for frame, lead in zip(frames, lead_one_values, strict=True)
-      )
-    )
     trajectory_values = (
       tuple(trajectories)
       if trajectories is not None
@@ -927,6 +911,41 @@ class RadarMotionShadowSelector:
         frames,
         self.motion_sensor,
         lead_one_values,
+      )
+    )
+    self.motion_points = (
+      tuple(motion_points)
+      if motion_points is not None
+      else tuple(
+        tuple(
+          point
+          for point in selected_points
+          if (
+            (point.source, point.track_id) in visible_identities
+            or (point.source, point.track_id) in predictions
+          )
+        )
+        for frame, lead, predictions in zip(
+          frames,
+          lead_one_values,
+          trajectory_values,
+          strict=True,
+        )
+        for selected_points in (
+          motion_points_at_model_time(frame, self.motion_sensor),
+        )
+        for visible_identities in ({
+          (point.source, point.track_id)
+          for point in visible_motion_points(
+            selected_points,
+            frame.path,
+            (
+              _finite(lead["dRel"])
+              if lead is not None and bool(lead.get("status", True))
+              else None
+            ),
+          )
+        },)
       )
     )
     if (
@@ -974,6 +993,11 @@ class RadarMotionShadowSelector:
         (point.source, point.track_id): point
         for point in visible_points
       }
+      point_by_identity.update({
+        (point.source, point.track_id): point
+        for point in selected_points
+        if (point.source, point.track_id) in predictions
+      })
       vision = vision_lead_from_model(_controller_model(frame))
       predictions = {
         identity: prediction_with_validation_lookahead(
