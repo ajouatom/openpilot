@@ -21,6 +21,7 @@ HUD_PARAM = "ClusterHud"
 HUD_DEBUG_PARAM = "ClusterHudDebug"
 HUD_ENCODER_PARAM = "ClusterHudEncoder"
 HUD_LIVE_FPS_PARAM = "ClusterHudLiveFps"
+HUD_ORIENTATION_PARAM = "ClusterHudOrientation"
 HUD_CORE_MODE_PARAM = "ClusterHudCoreMode"
 HUD_PRIORITY_PARAM = "ClusterHudPriority"
 IS_ONROAD_PARAM = "IsOnroad"
@@ -206,6 +207,15 @@ def _read_live_fps_mode(params: Params) -> int:
     except Exception as exc:
         print(f"[cluster_autorun] failed to read {HUD_LIVE_FPS_PARAM}: {exc}", flush=True)
         return 0
+
+
+def _read_orientation(params: Params) -> int | None:
+    try:
+        orientation = int(params.get_int(HUD_ORIENTATION_PARAM))
+    except Exception as exc:
+        print(f"[cluster_autorun] failed to read {HUD_ORIENTATION_PARAM}: {exc}", flush=True)
+        return None
+    return orientation if orientation in (0, 2) else None
 
 
 def _read_core_mode(params: Params) -> int:
@@ -573,6 +583,7 @@ def main() -> None:
         hud_mode = _read_hud_mode(params)
         encoder_mode = _read_encoder_mode(params)
         live_fps_mode = _read_live_fps_mode(params)
+        orientation = _read_orientation(params)
         expected_product_id = product_id_for_hud_mode(hud_mode)
         if expected_product_id is None:
             print(f"[cluster_autorun] {HUD_PARAM}={hud_mode}; stopping cluster HUD", flush=True)
@@ -619,12 +630,14 @@ def main() -> None:
             next_hud_mode = _read_hud_mode(params)
             next_encoder_mode = _read_encoder_mode(params)
             next_live_fps_mode = _read_live_fps_mode(params)
+            next_orientation = _read_orientation(params)
             next_core_mode = _read_core_mode(params)
             next_priority = _read_priority(params)
             if (
                 next_hud_mode != hud_mode
                 or next_encoder_mode != encoder_mode
                 or next_live_fps_mode != live_fps_mode
+                or (next_orientation is not None and next_orientation != orientation)
                 or next_core_mode != core_mode
                 or next_priority != priority
             ):
@@ -633,6 +646,7 @@ def main() -> None:
                     f"mode {hud_mode}->{next_hud_mode}, "
                     f"encoder {encoder_mode}->{next_encoder_mode}, "
                     f"live_fps {live_fps_mode}->{next_live_fps_mode}, "
+                    f"orientation {orientation}->{next_orientation}, "
                     f"core_mode {core_mode}->{next_core_mode}, "
                     f"priority {priority}->{next_priority}; rechecking",
                     flush=True,

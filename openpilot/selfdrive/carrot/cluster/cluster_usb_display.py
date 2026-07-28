@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import binascii
 import errno
-import sys
 import os
+import struct
+import sys
 import threading
 import time
+import zlib
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 from cluster_utils import clamp
-
 
 VENDOR_ROOT = Path(__file__).resolve().parent / ".vendor" / "turing-smart-screen-python-main"
 VENDOR_LIBRARY = VENDOR_ROOT / "library"
@@ -26,7 +28,14 @@ MAX_CONSECUTIVE_FRAME_ERRORS = 3
 USB_COMMAND_TIMEOUT_MS = 2000
 USB_FRAME_TIMEOUT_MS = 2000
 USB_COMMAND_GAP_S = 0.2
+USB_SETTING_SYNC_GAP_S = 0.020
+USB_H264_SETUP_GAPS_S = (0.020, 0.020, 0.080, 0.125, 0.360, 0.025)
+USB_H264_CLEAR_GAP_S = 0.070
+USB_H264_FRAME_RATE_GAP_S = 0.015
+USB_H264_STATUS_POLL_S = 0.080
 TURZX_BRIGHTNESS_COMMAND_MAX = 102
+TURZX_H264_OVERLAY_WIDTH = 464
+TURZX_H264_OVERLAY_HEIGHT = 1920
 USB_DISCONNECT_ERRNOS = {
     errno.ENODEV,
     errno.ENXIO,
@@ -51,6 +60,29 @@ DEFAULT_H264_CHUNK_SIZE = 202752
 MAX_H264_CHUNK_SIZE = 1024 * 1024
 _LIBUSB_DLL_DIR_HANDLE = None
 _LIBUSB_BACKEND = None
+
+
+def _png_chunk(kind: bytes, data: bytes) -> bytes:
+    crc = binascii.crc32(kind + data) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", crc)
+
+
+def _transparent_h264_overlay_png() -> bytes:
+    width = TURZX_H264_OVERLAY_WIDTH
+    height = TURZX_H264_OVERLAY_HEIGHT
+    rows = bytes(width * 4 + 1) * height
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return b"".join(
+        (
+            b"\x89PNG\r\n\x1a\n",
+            _png_chunk(b"IHDR", ihdr),
+            _png_chunk(b"sRGB", b"\x00"),
+            _png_chunk(b"gAMA", struct.pack(">I", 45455)),
+            _png_chunk(b"pHYs", struct.pack(">IIB", 3779, 3779, 1)),
+            _png_chunk(b"IDAT", zlib.compress(rows, 4)),
+            _png_chunk(b"IEND", b""),
+        )
+    )
 
 
 def _set_cluster_hud_connected(connected: bool) -> None:
@@ -170,6 +202,7 @@ class TuringUsbDisplay:
         expected_product_id: int | None = None,
     ) -> None:
         self.brightness = int(clamp(brightness, 0, 100))
+        self.orientation = 0
         self.display_fps = int(clamp(display_fps, 0, 255))
         self.jpeg_quality = int(clamp(jpeg_quality, 1, 95))
         self.jpeg_encoder = jpeg_encoder
@@ -204,7 +237,8 @@ class TuringUsbDisplay:
         self._turbojpeg = None
         self._turbojpeg_unavailable = False
         self._jpeg_buffer = BytesIO()
-        self._usb_lock = threading.Lock()
+        # Keep sync + setting atomic with frame writes.
+        self._usb_lock = threading.RLock()
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_USB") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -299,7 +333,20 @@ class TuringUsbDisplay:
             return False
         self.brightness = next_brightness
         if self.dev is not None:
-            self._send_brightness(self.brightness, "brightness")
+            value = int(self.brightness / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)
+            self._send_display_setting(14, "brightness", {8: value})
+            return True
+        return False
+
+    def set_orientation(self, orientation: int, *, force: bool = False) -> bool:
+        if orientation not in (0, 2):
+            return False
+        next_orientation = orientation
+        if next_orientation == self.orientation and not force:
+            return False
+        self.orientation = next_orientation
+        if self.dev is not None:
+            self._send_orientation(self.orientation)
             return True
         return False
 
@@ -401,6 +448,34 @@ class TuringUsbDisplay:
             no_ack_gap_s=0.0,
             no_ack_drain_attempts=0,
         )
+
+    def _send_orientation(self, orientation: int) -> None:
+        if orientation in (0, 2):
+            self._send_display_setting(13, "orientation", {8: orientation})
+
+    def _send_display_setting(
+        self,
+        command_id: int,
+        name: str,
+        fields: dict[int, int],
+    ) -> None:
+        with self._usb_lock:
+            self._send_optional_command(
+                10,
+                "sync",
+                log=False,
+                no_ack_gap_s=0.0,
+                no_ack_drain_attempts=0,
+            )
+            time.sleep(USB_SETTING_SYNC_GAP_S)
+            self._send_optional_command(
+                command_id,
+                name,
+                fields,
+                log=False,
+                no_ack_gap_s=0.0,
+                no_ack_drain_attempts=0,
+            )
 
     def _send_command(
         self,
@@ -540,19 +615,49 @@ class TuringUsbDisplay:
         if self.dev is None:
             raise RuntimeError("USB display is not open")
 
-        for command_id, name in (
-            (111, "video-setup-111"),
-            (112, "video-setup-112"),
-            (13, "video-setup-13"),
-            (41, "video-setup-41"),
-        ):
+        brightness_raw = int(self.brightness / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)
+        setup = (
+            (10, "sync", None),
+            (111, "video-setup-111", None),
+            (112, "video-setup-112", None),
+            (13, "video-setup-13", {8: self.orientation}),
+            (14, "brightness", {8: brightness_raw}),
+            (52, "video-setup-52", None),
+        )
+        setup_summary = " ".join(
+            (
+                f"TURZX H264 captured setup: orientation={self.orientation},",
+                f"brightness={self.brightness}%, display_fps={self.display_fps}",
+            )
+        )
+        print(setup_summary, flush=True)
+        for (command_id, name, fields), gap_s in zip(setup, USB_H264_SETUP_GAPS_S, strict=True):
             self._send_optional_command(
                 command_id,
                 name,
+                fields,
                 log=False,
-                no_ack_gap_s=0.05,
-                no_ack_drain_attempts=1,
+                no_ack_gap_s=0.0,
+                no_ack_drain_attempts=0,
             )
+            time.sleep(gap_s)
+
+        self._send_frame_no_ack(
+            self._cmd_upload_png,
+            _transparent_h264_overlay_png(),
+            drain_input=True,
+        )
+        time.sleep(USB_H264_CLEAR_GAP_S)
+        if self.display_fps > 0:
+            self._send_optional_command(
+                15,
+                "frame-rate",
+                {8: self.display_fps},
+                log=False,
+                no_ack_gap_s=0.0,
+                no_ack_drain_attempts=0,
+            )
+            time.sleep(USB_H264_FRAME_RATE_GAP_S)
 
         chunk_size = self._h264_chunk_size(requested_chunk_size)
         print(f"TURZX H264 stream chunk size: {chunk_size} bytes", flush=True)
@@ -565,9 +670,17 @@ class TuringUsbDisplay:
             self._cmd_stop_stream,
             "stop-stream",
             log=False,
-            no_ack_gap_s=0.0,
+            no_ack_gap_s=USB_H264_STATUS_POLL_S,
             no_ack_drain_attempts=1,
         )
+        for _ in range(2):
+            self._send_optional_command(
+                self._cmd_get_stream_status,
+                "h264-stream-status",
+                log=False,
+                no_ack_gap_s=USB_H264_STATUS_POLL_S,
+                no_ack_drain_attempts=1,
+            )
 
     def send_h264_chunk(
         self,

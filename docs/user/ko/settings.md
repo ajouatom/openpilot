@@ -97,13 +97,13 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 ## 전체 설정 지도
 
-현재 `carrot-wip`의 `carrot_settings.json`에는 **166개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
+현재 `carrot-wip`의 `carrot_settings.json`에는 **169개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
 
 | 대분류 | 항목 수 | 중분류 |
 |---|---:|---|
 | 주행 제어 | 107 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
-| 차량·하드웨어 | 15 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
-| 화면 표시 | 33 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
+| 차량·하드웨어 | 16 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
+| 화면 표시 | 35 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
 | 시스템 | 11 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
 
 ## 주행 제어
@@ -193,7 +193,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 <a id="vehicle-hardware"></a>
 ## 차량·하드웨어
 
-차량·하드웨어 15개 항목은 차종, 하네스와 기기 하드웨어 구성을 결정하는 설정입니다. 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
+차량·하드웨어 16개 항목은 차종, 하네스와 기기 하드웨어 구성을 결정하는 설정입니다. 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
@@ -220,14 +220,14 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 <a id="display"></a>
 ## 화면 표시
 
-화면 표시에는 33개 항목이 있습니다. 일반 화면 항목은 비교적 되돌리기 쉽지만, 외부 HUD는 별도 하드웨어와 성능 설정을 포함합니다.
+화면 표시에는 35개 항목이 있습니다. 일반 화면 항목은 비교적 되돌리기 쉽지만, 외부 HUD는 별도 하드웨어와 성능 설정을 포함합니다.
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
 | 정보 표시 | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode` | 주행 화면의 디버그, 타이어, 시간, 차선, 레이더와 경로 정보 |
 | 경로 표시 | `ShowPathMode`, `ShowPathColor`, `ShowPathColorCruiseOff`, `ShowPathModeLane`, `ShowPathColorLane` | 레인리스·레인모드·크루즈 OFF 상태의 경로 모양과 색상 |
 | 밝기·주행화면 | `ShowCustomBrightness`, `ShowModelView` | 주행 중 밝기와 카메라·모델 표시 조합 |
-| 외부 HUD·기본 | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudMirror`, `ClusterHudTheme`, `ClusterNaviMapTheme`, `ClusterNaviMapType`, `ClusterNaviMapFps` | TURZX 외부 HUD, 밝기, 미러링과 지도 테마 |
+| 외부 HUD·기본 | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudOrientation`, `ClusterHudMirror`, `ClusterHudTheme`, `ClusterNaviMapTheme`, `ClusterNaviMapType`, `ClusterNaviMapFps` | TURZX 외부 HUD, 밝기, 화면 회전, 미러링과 지도 테마 |
 | 외부 HUD·화면·카메라 | `ClusterHudEncoder`, `ClusterHudLiveFps`, `ClusterHudScreenMode`, `ClusterHudCameraViewMode` | 인코더, 전송 FPS와 화면·카메라 구성 |
 | 외부 HUD·레이더 표시 | `ClusterHudRadarInfo`, `ClusterHudRadarDisplay`, `ClusterHudRadarSourceColor` | 외부 HUD의 레이더 정보와 색상 |
 | 외부 HUD·성능·디버그 | `ClusterHudCoreMode`, `ClusterHudPriority`, `ClusterHudDebug` | CPU 코어, 프로세스 우선순위와 진단 정보 |
@@ -235,6 +235,8 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 `ShowRouteInfo` 설명에 남아 있는 APN 표기는 경로 정보 입력 상태를 뜻합니다. 이를 CarrotMan 또는 CarrotLink 지원 안내로 해석하면 안 됩니다.
 
 `ShowCustomBrightness=0`은 주변 밝기에 따른 자동 조절이고, `ShowModelView`는 카메라와 모델 표시 조합을 선택합니다. `ClusterHud` 계열은 지원되는 외부 HUD를 연결한 경우에만 사용하세요.
+
+`ClusterHudBrightness=0`은 카메라 노출값을 따르는 자동 밝기이고, `1~100`은 고정 밝기입니다. `ClusterHudOrientation`은 `0`(0도)과 `2`(180도)만 지원하며 `1`, `3`은 무시합니다. 실행 중인 TURZX 프로세스는 두 저장값을 100ms마다 확인합니다. 밝기는 실행 중 적용되고, 관리형 H.264의 회전값이 바뀌면 HUD가 자동 재시작되어 캡처와 동일한 스트림 설정 절차로 적용됩니다.
 
 `ClusterHudTheme=1`(다크)은 일반 HUD의 빈 배경을 지도와 `NAVI DISCONNECTED` 상태 영역에 사용하는 것과 같은 순수 검정으로 표시합니다. 자동(`0`)도 18:00~06:00에는 같은 다크 팔레트를 사용합니다. 도로, 게이지와 일반 정보 패널은 구분과 가독성을 위해 서로 다른 어두운 음영을 유지합니다.
 
