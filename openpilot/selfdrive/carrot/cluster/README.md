@@ -294,9 +294,23 @@ USB; stale access units are dropped and reported instead of failing the run.
 When `--usb-brightness` is omitted, USB launches follow `ClusterHudBrightness`:
 `0` auto follows live `wideRoadCameraState.exposureValPercent` after samples are
 available, falling back to `deviceState.screenBrightnessPercent`; `1` through
-`100` are fixed brightness percentages.
-Brightness commands use no-ACK command `14` during USB initialization and when
-the resolved brightness changes.
+`100` are fixed brightness percentages. `ClusterHudOrientation` supports `0`
+(0 degrees) and `2` (180 degrees); values `1` and `3` are ignored. The existing
+web settings UI stores both Params without a custom slider path. The running
+HUD checks the stored brightness and orientation every 100 ms and applies
+supported changed values without restarting.
+
+Changed display settings follow the capture-derived command procedure:
+
+- Brightness: command `10` (sync), wait about 20 ms, then command `14` with
+  byte 8 set to `int(percent / 100 * 102)`.
+- Screen rotation: command `10` (sync), wait about 20 ms, then command `13`
+  with byte 8 set to supported raw orientation `0` or `2`.
+
+The sync and setting write are one USB-locked transaction so an image frame
+cannot split the pair. H.264 startup also carries the selected raw orientation
+in setup command `13`. `--usb-h264-orientation` remains a separate diagnostic
+option controlling encoder/render geometry.
 
 The launcher defaults to `--input live`, subscribes to openpilot cereal services,
 and renders live `carState`, `modelV2`, `radarState`, `liveTracks`,

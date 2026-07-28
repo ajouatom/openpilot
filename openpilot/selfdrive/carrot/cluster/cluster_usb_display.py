@@ -26,6 +26,7 @@ MAX_CONSECUTIVE_FRAME_ERRORS = 3
 USB_COMMAND_TIMEOUT_MS = 2000
 USB_FRAME_TIMEOUT_MS = 2000
 USB_COMMAND_GAP_S = 0.2
+USB_SETTING_SYNC_GAP_S = 0.020
 TURZX_BRIGHTNESS_COMMAND_MAX = 102
 USB_DISCONNECT_ERRNOS = {
     errno.ENODEV,
@@ -170,6 +171,7 @@ class TuringUsbDisplay:
         expected_product_id: int | None = None,
     ) -> None:
         self.brightness = int(clamp(brightness, 0, 100))
+        self.orientation = 0
         self.display_fps = int(clamp(display_fps, 0, 255))
         self.jpeg_quality = int(clamp(jpeg_quality, 1, 95))
         self.jpeg_encoder = jpeg_encoder
@@ -204,7 +206,8 @@ class TuringUsbDisplay:
         self._turbojpeg = None
         self._turbojpeg_unavailable = False
         self._jpeg_buffer = BytesIO()
-        self._usb_lock = threading.Lock()
+        # Keep sync + setting atomic with frame writes.
+        self._usb_lock = threading.RLock()
         self.profile_enabled = os.environ.get("CLUSTER_PROFILE_USB") == "1"
         self._profile_samples: list[tuple[str, float]] = []
 
@@ -299,7 +302,20 @@ class TuringUsbDisplay:
             return False
         self.brightness = next_brightness
         if self.dev is not None:
-            self._send_brightness(self.brightness, "brightness")
+            value = int(self.brightness / 100 * TURZX_BRIGHTNESS_COMMAND_MAX)
+            self._send_display_setting(14, "brightness", {8: value})
+            return True
+        return False
+
+    def set_orientation(self, orientation: int, *, force: bool = False) -> bool:
+        if orientation not in (0, 2):
+            return False
+        next_orientation = orientation
+        if next_orientation == self.orientation and not force:
+            return False
+        self.orientation = next_orientation
+        if self.dev is not None:
+            self._send_orientation(self.orientation)
             return True
         return False
 
@@ -401,6 +417,28 @@ class TuringUsbDisplay:
             no_ack_gap_s=0.0,
             no_ack_drain_attempts=0,
         )
+
+    def _send_orientation(self, orientation: int) -> None:
+        if orientation in (0, 2):
+            self._send_display_setting(13, "orientation", {8: orientation})
+
+    def _send_display_setting(
+        self,
+        command_id: int,
+        name: str,
+        fields: dict[int, int],
+    ) -> None:
+        with self._usb_lock:
+            self._send_command(10, "sync", log=False)
+            time.sleep(USB_SETTING_SYNC_GAP_S)
+            self._send_optional_command(
+                command_id,
+                name,
+                fields,
+                log=False,
+                no_ack_gap_s=0.0,
+                no_ack_drain_attempts=0,
+            )
 
     def _send_command(
         self,
@@ -549,6 +587,7 @@ class TuringUsbDisplay:
             self._send_optional_command(
                 command_id,
                 name,
+                {8: self.orientation} if command_id == 13 else None,
                 log=False,
                 no_ack_gap_s=0.05,
                 no_ack_drain_attempts=1,
