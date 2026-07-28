@@ -121,8 +121,9 @@ keep the default slice setting for normal tests. The
 hardware V4L2 rate-control default remains `--usb-h264-rate-control vbr-cfr`;
 `cbr-cfr` made frequent small blocks and `--usb-h264-realtime-priority` landed
 between VBR-CFR and CBR-CFR, so keep both off for normal tests. The
-ffmpeg/libx264 path remains available as a known-good comparison path. Build
-the native library before hardware testing:
+ffmpeg/libx264 path remains available as a known-good comparison path. Normal
+TICI (`larch64`) SCons builds include both native bridges. To rebuild only
+those targets before hardware testing:
 
 ```bash
 scons system/loggerd/libcluster_h264_encoder_bridge.so

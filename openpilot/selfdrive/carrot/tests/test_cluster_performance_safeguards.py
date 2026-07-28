@@ -12,6 +12,7 @@ import pytest
 
 
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
+LOGGERD_SCONSCRIPT = Path(__file__).resolve().parents[3] / "system" / "loggerd" / "SConscript"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_git_status import GitBranchStatusProvider
@@ -27,6 +28,14 @@ import cluster_renderer
 from cluster_live import standby_state
 from cluster_renderer import ClusterUiRenderer
 from cluster_usb_display import product_id_for_hud_mode
+
+
+def test_loggerd_builds_cluster_h264_bridges_on_tici():
+  source = LOGGERD_SCONSCRIPT.read_text(encoding="utf-8")
+
+  assert 'if arch in ("aarch64", "larch64"):' in source
+  assert "'cluster_h264_encoder_bridge'" in source
+  assert "'cluster_h264_decoder_bridge'" in source
 
 
 def test_tici_decoded_buffer_releases_fd_and_capture_lease_once():
