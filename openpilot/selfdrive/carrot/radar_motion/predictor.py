@@ -55,7 +55,7 @@ CUT_IN_THRESHOLD = 0.50
 CUT_OUT_THRESHOLD = 0.50
 CORNER_CUT_IN_THRESHOLD = 0.30
 FRONT_CUT_IN_THRESHOLD = 0.67
-CUT_IN_CONFIRMATION_S = 0.25
+CUT_IN_CONFIRMATION_S = 0.35
 CUT_IN_BOUNDARY_HOLD_S = 0.40
 URGENT_NEAR_PATH_CONFIRMATION_S = 0.10
 URGENT_NEAR_PATH_MAX_DREL_M = 5.0
@@ -84,6 +84,13 @@ DIRECTIONAL_MIN_INWARD_SAMPLE_RATIO = 0.65
 DIRECTIONAL_MIN_SHORT_INWARD_RATE_MPS = 0.15
 DIRECTIONAL_MIN_LONG_INWARD_RATE_MPS = 0.10
 DIRECTIONAL_SHORT_RATE_BLEND = 0.50
+STRONG_FRONT_CONFIRMATION_CREDIT_S = 0.06
+STRONG_FRONT_MIN_INWARD_DISPLACEMENT_M = 0.50
+STRONG_FRONT_MIN_CONSISTENCY = 0.80
+STRONG_FRONT_MIN_INWARD_SAMPLE_RATIO = 0.80
+STRONG_FRONT_MIN_SHORT_INWARD_RATE_MPS = 0.35
+STRONG_FRONT_MIN_LONG_INWARD_RATE_MPS = 0.25
+STRONG_FRONT_MIN_MOTION_SUPPORT = 0.90
 POSITION_HISTORY_OVERRIDE_MIN_INWARD_DISPLACEMENT_M = 0.45
 POSITION_HISTORY_OVERRIDE_MIN_CONSISTENCY = 0.95
 POSITION_HISTORY_OVERRIDE_MIN_INWARD_SAMPLE_RATIO = 0.90
@@ -103,7 +110,7 @@ class RadarMotionSensitivity:
 
 _CORNER_CUT_IN_THRESHOLDS = (0.0, 0.42, 0.36, 0.30, 0.25, 0.20)
 _FRONT_CUT_IN_THRESHOLDS = (0.0, 0.78, 0.72, 0.67, 0.60, 0.53)
-_CUT_IN_CONFIRMATION_TIMES_S = (0.0, 0.40, 0.33, 0.25, 0.18, 0.10)
+_CUT_IN_CONFIRMATION_TIMES_S = (0.0, 0.50, 0.40, 0.35, 0.25, 0.20)
 _DIRECTIONAL_MIN_CONSISTENCIES = (1.0, 0.82, 0.79, 0.75, 0.71, 0.68)
 
 
@@ -1652,7 +1659,7 @@ class RadarMotionDecisionTracker:
     self,
     prediction: RadarMotionPrediction,
   ) -> float:
-    """Use sustained future overlap to shorten, not remove, confirmation."""
+    """Apply the selected measured-evidence dwell to normal CUT-IN entries."""
     if (
       prediction.near_side_directional_entry
       or prediction.lane_boundary_directional_entry
@@ -1691,20 +1698,33 @@ class RadarMotionDecisionTracker:
       and prediction.motion_consistency >= 0.70
       and prediction.recent_motion_support >= 0.70
     )
-    near_path_confirmation_s = (
+    strong_front_directional_entry = (
+      prediction.sensor == "front"
+      and prediction.directional_inward_displacement_m
+      >= STRONG_FRONT_MIN_INWARD_DISPLACEMENT_M
+      and prediction.directional_consistency
+      >= STRONG_FRONT_MIN_CONSISTENCY
+      and prediction.directional_inward_sample_ratio
+      >= STRONG_FRONT_MIN_INWARD_SAMPLE_RATIO
+      and inward_short >= STRONG_FRONT_MIN_SHORT_INWARD_RATE_MPS
+      and inward_long >= STRONG_FRONT_MIN_LONG_INWARD_RATE_MPS
+      and prediction.motion_consistency >= STRONG_FRONT_MIN_MOTION_SUPPORT
+      and prediction.recent_motion_support >= STRONG_FRONT_MIN_MOTION_SUPPORT
+    )
+    if strong_front_directional_entry:
+      # The strict 0.8-second measured direction history already spans the
+      # interval represented by the first qualifying sample. Credit at most
+      # one 20 Hz radar frame so a physically sustained entry is not rejected
+      # only because timestamp deltas land just below the selected dwell.
+      return max(
+        0.0,
+        self.confirmation_s - STRONG_FRONT_CONFIRMATION_CREDIT_S,
+      )
+    return (
       min(self.confirmation_s, URGENT_NEAR_PATH_CONFIRMATION_S)
       if urgent_near_path_entry
       else self.confirmation_s
     )
-    overlap_confirmation_s = max(
-      URGENT_NEAR_PATH_CONFIRMATION_S,
-      self.confirmation_s
-      - 0.10 * max(
-        0.0,
-        getattr(prediction, "predicted_path_overlap_s", 0.0),
-      ),
-    )
-    return min(near_path_confirmation_s, overlap_confirmation_s)
 
   def reset(self) -> None:
     self._started_at.clear()
