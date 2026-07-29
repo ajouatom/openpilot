@@ -80,12 +80,91 @@ test("dashcam and screen-record players expose adjacent-item navigation", () => 
   assert.match(screenrecord, /onNext:\s*next/);
 });
 
-test("dashcam player direct send opens the shared upload result without a success toast", () => {
+test("dashcam player direct send shows progress and the shared result without a success toast", () => {
   const dashcam = read("src/features/logs/dashcam.js");
+  const runtime = read("src/features/logs/runtime.js");
 
-  assert.match(dashcam, /onSegmentSend:[\s\S]*?showProgress:\s*false,[\s\S]*?showResult:\s*true,[\s\S]*?showSuccessToast:\s*false/);
+  assert.match(dashcam, /onSegmentSend:[\s\S]*?showProgress:\s*true,[\s\S]*?showResult:\s*true,[\s\S]*?showSuccessToast:\s*false/);
+  assert.doesNotMatch(dashcam, /onSegmentSend:[\s\S]*?showProgress:\s*false/);
+  assert.match(runtime, /dashcam-player-send[\s\S]*?pauseCurrentPlayback\(\);[\s\S]*?runTopAction/);
   assert.match(dashcam, /if \(options\.showSuccessToast !== false\)[\s\S]*?showAppToast\(message/);
   assert.match(dashcam, /if \(options\.showResult !== false\) await showDashcamUploadResult\(result\)/);
+});
+
+test("dashcam upload confirmation stays compact and uses an explicit send action", () => {
+  const dashcam = read("src/features/logs/dashcam.js");
+  const dialog = read("src/ui/components/dialog/dialog.js");
+  const dialogStyle = read("src/ui/components/dialog/style.css");
+
+  assert.match(dashcam, /messageHtml:\s*dashcamUploadConfirmHtml\(uploadStats\)/);
+  assert.match(dashcam, /upload_segment_count/);
+  assert.match(dashcam, /upload_kind_count/);
+  assert.match(dashcam, /confirmLabel:\s*getUIText\("upload_send",\s*"Send"\)/);
+  assert.match(dashcam, /app-dialog__uploadBrief/);
+  assert.doesNotMatch(
+    dashcam.match(/function dashcamUploadConfirmHtml[\s\S]*?\n}\n/)?.[0] || "",
+    /app-dialog__metaCodeList|upload_original_files_confirm/,
+  );
+  assert.doesNotMatch(dashcam, /getUIText\("upload_data_warning"/);
+  assert.match(dialog, /messageHtml:\s*options\.messageHtml/);
+  assert.match(dialog, /html:\s*options\.html/);
+  assert.match(dialogStyle, /\.app-dialog__uploadBrief\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/s);
+  assert.match(dialogStyle, /\.app-dialog__uploadBriefAmount\s*\{[^}]*white-space:\s*nowrap/s);
+  assert.doesNotMatch(dialogStyle, /\.app-dialog__uploadBrief\s*\{[^}]*background:/s);
+  assert.doesNotMatch(dialogStyle, /\.app-dialog__metaResult\s*\{[^}]*border-radius:/s);
+  assert.doesNotMatch(dialogStyle, /\.app-dialog__metaResult(List)?\s*\{[^}]*border(?:-top|-bottom)?:/s);
+  assert.doesNotMatch(dialogStyle, /\.app-dialog__metaSummary\s*\{[^}]*border-top:/s);
+  assert.doesNotMatch(
+    dashcam.match(/function dashcamUploadResultHtml[\s\S]*?\n}\n/)?.[0] || "",
+    /app-dialog__metaGroup|app-dialog__metaLabel/,
+  );
+  assert.match(dashcam, /onSegmentSend:\s*\(target\)\s*=>\s*uploadDashcamSegments\(\[target\],\s*\{[\s\S]*?showProgress:\s*true/);
+});
+
+test("dashcam upload progress and result reuse the shared dialog components", () => {
+  const dashcam = read("src/features/logs/dashcam.js");
+  const logsStyle = read("src/features/logs/style.css");
+  const dialog = read("src/ui/components/dialog/dialog.js");
+  const dialogFacade = read("src/ui/components/dialog/facade.js");
+  const dialogStyle = read("src/ui/components/dialog/style.css");
+  const progressComponent = read("src/ui/components/progress/progress.js");
+  const progressStyle = read("src/ui/components/progress/style.css");
+  const uploadProgress = read("src/features/logs/upload_progress.js");
+
+  assert.match(dashcam, /openAppProgressDialog\(\{/);
+  assert.match(dashcam, /function dashcamUploadProgressView/);
+  assert.match(dashcam, /dashcamUploadProgressState\(snapshot\)/);
+  assert.match(dashcam, /DASHCAM_UPLOAD_POLL_INTERVAL_MS\s*=\s*160/);
+  assert.match(dashcam, /DASHCAM_UPLOAD_PROGRESS_MIN_VISIBLE_MS\s*=\s*800/);
+  assert.match(dashcam, /await progress\.settle\(\)/);
+  assert.match(dashcam, /createDashcamUploadProgressModel\(\)/);
+  assert.match(dashcam, /bytes_per_second/);
+  assert.match(dashcam, /formatLogBytes\(bytesPerSecond\).*\/s/);
+  assert.match(uploadProgress, /mode:\s*"indeterminate"/);
+  assert.match(uploadProgress, /Math\.min\(bytesCurrent,\s*bytesTotal\)\s*\/\s*bytesTotal/);
+  assert.match(dashcam, /DASHCAM_UPLOAD_RESULT_VISIBLE_LIMIT\s*=\s*5/);
+  assert.match(dashcam, /progress\.update\(snapshot,\s*totalFallback\)/);
+  assert.doesNotMatch(dashcam, /snapshot\.message\s*\|\|/);
+  assert.doesNotMatch(dashcam, /result\.message\s*\|\|\s*getUIText\("upload_complete_count"/);
+  assert.match(dashcam, /app-dialog__metaResultList/);
+  assert.doesNotMatch(dashcam, /dashcam-share-card|dashcam-upload-progress/);
+  assert.doesNotMatch(logsStyle, /dashcam-share-card|dashcam-upload-progress/);
+  assert.match(dialog, /function openAppProgressDialog/);
+  assert.match(dialog, /closeOnCancel:\s*false/);
+  assert.match(dialog, /state\.closeOnCancel && activeDialog === state/);
+  assert.match(dialog, /createAppProgressView\(documentRoot, options\)/);
+  assert.match(dialog, /appDialogBody\.replaceChildren\(progressView\.element\)/);
+  assert.match(progressComponent, /function normalizeAppProgressState/);
+  assert.match(progressComponent, /progress\.value = state\.value/);
+  assert.match(progressComponent, /progress\.setAttribute\("value", String\(state\.value\)\)/);
+  assert.match(progressComponent, /output\.textContent = `\$\{rounded\}%`/);
+  assert.match(dialogFacade, /openAppProgressDialog/);
+  assert.match(dialogStyle, /\.app-dialog--progress \.app-dialog__body/);
+  assert.match(progressStyle, /\.app-progress__track\s*\{[^}]*width:\s*100%/s);
+  assert.match(progressStyle, /\.app-progress__track::\-webkit-progress-value/);
+  assert.match(progressStyle, /\.app-progress__track:indeterminate/);
+  assert.match(progressStyle, /transition:\s*width var\(--motion-medium\) var\(--ease-linear\)/);
+  assert.match(progressStyle, /@media \(prefers-reduced-motion:\s*reduce\)/);
 });
 
 test("landscape settings keep the shared submenu back control", () => {

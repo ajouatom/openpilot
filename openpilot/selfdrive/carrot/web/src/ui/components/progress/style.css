@@ -1,0 +1,108 @@
+.app-progress {
+  display: grid;
+  gap: var(--sp-md);
+}
+
+.app-progress__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-md);
+  min-width: 0;
+}
+
+.app-progress__message {
+  min-width: 0;
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-md);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.app-progress__value {
+  flex: 0 0 auto;
+  color: var(--md-primary);
+  font-size: var(--fs-title-xs);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-progress__track {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 10px;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--r-round);
+  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-primary) 18%, transparent);
+}
+
+.app-progress__track::-webkit-progress-bar {
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
+}
+
+.app-progress__track::-webkit-progress-value {
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--md-primary) 76%, var(--md-action-filled)),
+    var(--md-primary)
+  );
+  box-shadow: 0 0 8px color-mix(in srgb, var(--md-primary) 62%, transparent);
+  transition: width var(--motion-medium) var(--ease-linear);
+}
+
+.app-progress__track::-moz-progress-bar {
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--md-primary) 76%, var(--md-action-filled)),
+    var(--md-primary)
+  );
+  box-shadow: 0 0 8px color-mix(in srgb, var(--md-primary) 62%, transparent);
+  transition: width var(--motion-medium) var(--ease-linear);
+}
+
+.app-progress__track:indeterminate {
+  background:
+    linear-gradient(90deg, transparent 0 22%, var(--md-primary) 40% 60%, transparent 78% 100%)
+    0 0 / 220% 100% no-repeat,
+    color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-cont-h));
+  animation: app-progress-indeterminate 1.05s var(--ease-linear) infinite;
+}
+
+.app-progress__summary {
+  color: var(--md-on-surface-var);
+  font-size: var(--fs-label-md);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes app-progress-indeterminate {
+  from {
+    background-position: 100% 0, 0 0;
+  }
+
+  to {
+    background-position: -100% 0, 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-progress__track::-webkit-progress-value,
+  .app-progress__track::-moz-progress-bar {
+    transition: none;
+  }
+
+  .app-progress__track:indeterminate {
+    animation: none;
+    background-position: 50% 0, 0 0;
+  }
+}

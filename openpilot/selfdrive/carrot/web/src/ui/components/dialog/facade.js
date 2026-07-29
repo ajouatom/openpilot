@@ -3,6 +3,7 @@ import { createFocusTrap } from "./focus_trap.js";
 
 export const DIALOG_LEGACY_GLOBALS = Object.freeze([
   "openAppDialog",
+  "openAppProgressDialog",
   "appAlert",
   "appConfirm",
   "appPrompt",
@@ -27,6 +28,7 @@ export function installDialogFacade(target = globalThis, documentRoot = target.d
   });
   const facade = Object.freeze({
     openAppDialog: controller.openAppDialog,
+    openAppProgressDialog: controller.openAppProgressDialog,
     appAlert: controller.appAlert,
     appConfirm: controller.appConfirm,
     appPrompt: controller.appPrompt,
