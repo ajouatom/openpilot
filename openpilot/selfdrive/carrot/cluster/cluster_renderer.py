@@ -78,6 +78,7 @@ from cluster_scene import (
     cluster_scene_state_key,
 )
 from cluster_system_monitor import SystemStats, SystemStatsSampler
+from cluster_trip_report import TRIP_TRACE_MAX_RADIUS_M, TRIP_TRACE_MIN_RADIUS_M
 from cluster_utils import blink_visible, clamp
 
 
@@ -897,7 +898,7 @@ class ClusterUiRenderer:
         )
         self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
-        self._trip_trace_display_radius_m = 250.0
+        self._trip_trace_display_radius_m = TRIP_TRACE_MIN_RADIUS_M
         self._trip_trace_zoom_t: float | None = None
         self._debug_plot_mode_prev = -1
         self._debug_plot_size = 0
@@ -922,7 +923,7 @@ class ClusterUiRenderer:
     def set_screen_mode(self, screen_mode: int) -> None:
         next_mode = normalize_cluster_screen_mode(screen_mode)
         if next_mode != self.screen_mode and next_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
-            self._trip_trace_display_radius_m = 250.0
+            self._trip_trace_display_radius_m = TRIP_TRACE_MIN_RADIUS_M
             self._trip_trace_zoom_t = None
         self.screen_mode = next_mode
 
@@ -5372,7 +5373,7 @@ class ClusterUiRenderer:
         self._rounded_rect(summary_x, summary_y, summary_w, summary_h, 10.0, card_bg, card_outline, 1.2)
 
         self._draw_text("주행 궤적", trace_x + 16.0, trace_y + 23.0, 15.0, muted)
-        target_radius_m = clamp(report.trace_radius_m, 250.0, 30_000.0)
+        target_radius_m = clamp(report.trace_radius_m, TRIP_TRACE_MIN_RADIUS_M, TRIP_TRACE_MAX_RADIUS_M)
         shown_radius_m = self._trip_trace_radius(target_radius_m)
         self._draw_text(
             f"반경 {self._trip_distance_text(shown_radius_m)}",
@@ -5406,6 +5407,7 @@ class ClusterUiRenderer:
                 1.0,
                 rl_color(grid_color),
             )
+        self._draw_text("N", center.x, map_y + 14.0, 12.0, muted, anchor="center")
         self._draw_trip_trace(report, center, map_w, map_h, shown_radius_m)
 
         legend_y = trace_y + trace_h - 25.0
@@ -5531,7 +5533,7 @@ class ClusterUiRenderer:
             if math.hypot(dx, dy) > radius_m:
                 previous_screen = None
                 continue
-            screen = rl.Vector2(center.x + dx * scale, center.y - dy * scale)
+            screen = self._trip_trace_screen_position(dx, dy, center, scale)
             if previous_screen is not None and segments < TRIP_REPORT_TRACE_MAX_SEGMENTS:
                 color = self._trip_speed_color((previous_speed_kph + point.speed_kph) * 0.5)
                 rl.draw_line_ex(previous_screen, screen, 4.0, rl_color(color))
@@ -5559,6 +5561,15 @@ class ClusterUiRenderer:
             rl_color(WHITE),
         )
 
+    @staticmethod
+    def _trip_trace_screen_position(
+        east_m: float,
+        north_m: float,
+        center: rl.Vector2,
+        scale: float,
+    ) -> rl.Vector2:
+        return rl.Vector2(center.x + east_m * scale, center.y - north_m * scale)
+
     def _trip_trace_radius(self, target_radius_m: float) -> float:
         now = time.monotonic()
         if self._trip_trace_zoom_t is None:
@@ -5572,7 +5583,11 @@ class ClusterUiRenderer:
             ) * blend
             if target_radius_m - self._trip_trace_display_radius_m < 1.0:
                 self._trip_trace_display_radius_m = target_radius_m
-        return clamp(self._trip_trace_display_radius_m, 250.0, 30_000.0)
+        return clamp(
+            self._trip_trace_display_radius_m,
+            TRIP_TRACE_MIN_RADIUS_M,
+            TRIP_TRACE_MAX_RADIUS_M,
+        )
 
     def _draw_trip_metric(
         self,

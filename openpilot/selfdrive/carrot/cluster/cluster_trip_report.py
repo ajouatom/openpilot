@@ -13,8 +13,8 @@ TRIP_TRACE_MIN_PERIOD_S = 0.4
 TRIP_TRACE_MIN_DISTANCE_M = 3.0
 TRIP_TRACE_MAX_POINTS = 512
 TRIP_TRACE_MIN_RADIUS_M = 250.0
-TRIP_TRACE_MAX_RADIUS_M = 30_000.0
-TRIP_TRACE_RADIUS_STEPS_M = (250.0, 500.0, 1_000.0, 2_000.0, 5_000.0, 10_000.0, 20_000.0, 30_000.0)
+TRIP_TRACE_MAX_RADIUS_M = 2_000.0
+TRIP_TRACE_RADIUS_STEPS_M = (250.0, 500.0, 1_000.0, 2_000.0)
 TRIP_HARD_ACCEL_MPS2 = 2.5
 TRIP_HARD_BRAKE_MPS2 = -3.0
 TRIP_HARD_CORNER_MPS2 = 3.0
@@ -394,6 +394,13 @@ class TripReportTracker:
         self._last_trace_x_m = self._x_m
         self._last_trace_y_m = self._y_m
         self._trace_generation += 1
+
+        keep_from = 0
+        for index, point in enumerate(self._trace_points[:-1]):
+            if math.hypot(point.x_m - self._x_m, point.y_m - self._y_m) > TRIP_TRACE_MAX_RADIUS_M:
+                keep_from = index + 1
+        if keep_from > 0:
+            self._trace_points = self._trace_points[keep_from:]
 
         if len(self._trace_points) > TRIP_TRACE_MAX_POINTS:
             reduced = self._trace_points[::2]

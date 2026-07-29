@@ -462,6 +462,8 @@ falls back to steering angle and vehicle speed, aligns the `livePose` heading
 frame to GPS bearing, and applies GPS position correction to the whole trace
 frame so an update cannot introduce a false bend. The same mode can be
 validated with `cluster_replay_usb.py ROUTE --trip-report`.
+The trace is north-up, grows through 250 m, 500 m, 1 km, and 2 km radius
+steps, and drops the contiguous history beyond 2 km.
 Mode `3` also hides the speed, accel, clock, turn-signal, and git HUD so the
 large graph uses the available center/right height with only a small margin.
 Mode `4` keeps the driving HUD and uses the maximum right-side panel height with
