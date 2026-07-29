@@ -14,8 +14,13 @@ from .paths import (
 
 
 DASHCAM_SEGMENT_SECONDS = 60
+QCAMERA_UPLOAD_NAMES = ("qcamera.ts", "qcamera.mp4")
 RLOG_SOURCE_NAMES = ("rlog.zst", "rlog.bz2", "rlog")
 QLOG_SOURCE_NAMES = ("qlog.zst", "qlog.bz2", "qlog")
+UPLOAD_SOURCE_GROUPS = (
+  ("qcamera", QCAMERA_UPLOAD_NAMES),
+  ("rlog", RLOG_SOURCE_NAMES),
+)
 _MODERN_ROUTE_PATTERN = re.compile(r"^([0-9a-fA-F]{8})--([0-9a-fA-F]{10})$")
 
 # A finished segment's recording end time never changes, so once we've stat'd a
@@ -242,13 +247,32 @@ def route_time_bounds(segments_asc: list[str]) -> tuple[int, int]:
 
 
 def segment_file_summary(segment_dir_path: str) -> list[dict[str, Any]]:
+  """Return the original files selected for a segment upload.
+
+  Upload exactly one qcamera source and one rlog source. Prefer logger output
+  over browser-oriented derivatives and never include reduced or auxiliary
+  artifacts. An rlog is required because the uploaded segment cannot be
+  analyzed without it; qcamera is optional so log-only segments remain useful.
+  """
   out: list[dict[str, Any]] = []
-  for name in ("qcamera.mp4", "qcamera.ts", "rlog.zst", "rlog.bz2", "rlog", "qlog.zst", "qlog.bz2", "qlog"):
-    path = os.path.join(segment_dir_path, name)
-    if os.path.isfile(path):
+  for kind, names in UPLOAD_SOURCE_GROUPS:
+    for name in names:
+      path = os.path.join(segment_dir_path, name)
       try:
+        if not os.path.isfile(path):
+          continue
         size = os.path.getsize(path)
       except OSError:
-        size = 0
-      out.append({"name": name, "size": size, "sizeLabel": file_size_label(size)})
+        continue
+      if size <= 0:
+        continue
+      out.append({
+        "kind": kind,
+        "name": name,
+        "size": size,
+        "sizeLabel": file_size_label(size),
+      })
+      break
+  if not any(item["kind"] == "rlog" for item in out):
+    raise web.HTTPNotFound(text="rlog not found")
   return out

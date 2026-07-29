@@ -77,7 +77,6 @@
       '[role="dialog"][aria-modal="true"]',
       ".training-guide-modal",
       ".dashcam-player-overlay.is-open",
-      ".dashcam-upload-progress",
     ].join(",");
     return Array.from(document.querySelectorAll(modalSelector)).some(isRendered);
   }

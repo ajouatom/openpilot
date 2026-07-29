@@ -2,6 +2,7 @@
 @import "../ui/primitives/controls.css";
 @import "../ui/primitives/chip.css";
 @import "../ui/components/dialog/style.css";
+@import "../ui/components/progress/style.css";
 @import "../ui/components/menu/style.css";
 @import "../ui/components/popover/style.css";
 @import "../ui/components/feedback/style.css";
