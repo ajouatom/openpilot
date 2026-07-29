@@ -14,6 +14,7 @@ from opendbc.car.hyundai.radar_interface import (
   CornerObjectTrackIdManager,
   RadarInterface,
   corner_object_position_valid,
+  deduplicate_corner_candidates,
 )
 from opendbc.car.hyundai.values import CAR, HyundaiExtFlags, HyundaiFlags
 
@@ -225,12 +226,67 @@ class TestCornerRadarObjectIdentity:
 
   def test_track_id_survives_slot_move_and_resets_with_age(self):
     manager = CornerObjectTrackIdManager()
-    first_id = manager.get_track_id("corner180", object_id=108, age=240)
+    first = [(240, 108, 240, 40, 25.0, 2.8, 1.0, -0.2, 0.0)]
+    first_id = manager.get_track_ids("corner180", first)[240]
+    next_age = [(240, 108, 241, 40, 25.1, 2.8, 1.0, -0.2, 0.0)]
+    other_source = [(201, 108, 241, 40, 25.1, 2.8, 1.0, -0.2, 0.0)]
+    reset_age = [(240, 108, 2, 40, 25.2, 2.8, 1.0, -0.2, 0.0)]
 
     assert first_id == CORNER_OBJECT_STABLE_TRACK_ID_START
-    assert manager.get_track_id("corner180", object_id=108, age=241) == first_id
-    assert manager.get_track_id("corner235", object_id=108, age=241) != first_id
-    assert manager.get_track_id("corner180", object_id=108, age=2) != first_id
+    assert manager.get_track_ids("corner180", next_age)[240] == first_id
+    assert manager.get_track_ids("corner235", other_source)[201] != first_id
+    assert manager.get_track_ids("corner180", reset_age)[240] != first_id
+
+  def test_same_object_id_at_different_positions_remains_distinct(self):
+    manager = CornerObjectTrackIdManager()
+    candidates = [
+      (201, 32, 111, 35, 13.75, 2.90, 5.00, -0.65, 0.0),
+      (202, 32, 191, 35, 149.35, -2.90, 3.05, 0.00, 0.0),
+    ]
+
+    objects = deduplicate_corner_candidates(candidates)
+    track_ids = manager.get_track_ids("corner235", objects)
+
+    assert len(objects) == 2
+    assert track_ids[201] != track_ids[202]
+
+  def test_interface_publishes_distant_same_id_objects(self):
+    radar_interface = RadarInterface.__new__(RadarInterface)
+    radar_interface.v_ego = 20.0
+    radar_interface.corner_object_track_ids = CornerObjectTrackIdManager()
+    radar_interface.pts = {}
+    for slot_id in (201, 202):
+      radar_interface.pts[slot_id] = structs.RadarData.RadarPoint()
+
+    candidates = [
+      (201, 32, 111, 35, 13.10, 2.90, 4.90, -0.65, 0.0),
+      (202, 32, 191, 35, 149.70, -2.90, 3.05, 0.00, 0.0),
+    ]
+    radar_interface._apply_corner_objects(
+      "corner235", candidates, (201, 202),
+    )
+
+    near = radar_interface.pts[201]
+    far = radar_interface.pts[202]
+    assert near.measured and far.measured
+    assert near.trackId != far.trackId
+    assert near.dRel == pytest.approx(13.10)
+    assert far.dRel == pytest.approx(149.70)
+
+  def test_physical_slot_handoff_is_deduplicated_and_keeps_track_id(self):
+    manager = CornerObjectTrackIdManager()
+    first = [(201, 46, 23, 40, 25.0, 2.8, 1.0, -0.2, 0.0)]
+    first_id = manager.get_track_ids("corner235", first)[201]
+    handoff = [
+      (201, 46, 24, 38, 25.1, 2.75, 1.0, -0.2, 0.0),
+      (207, 46, 25, 42, 25.2, 2.70, 1.0, -0.2, 0.0),
+    ]
+
+    objects = deduplicate_corner_candidates(handoff)
+    track_ids = manager.get_track_ids("corner235", objects)
+
+    assert len(objects) == 1
+    assert track_ids[207] == first_id
 
   def test_clipped_side_object_position_is_valid(self):
     assert corner_object_position_valid(0.0, 2.8)

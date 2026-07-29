@@ -74,6 +74,12 @@ CORNER_OBJECT_430_INWARD_KEEP_YVREL_ABS_YREL = 2.2
 CORNER_OBJECT_430_EARLY_INWARD_NONCENTER_FRAMES = 2
 CORNER_OBJECT_430_SIDE_KEEP_ABS_YREL = 2.0
 CORNER_OBJECT_STABLE_TRACK_ID_START = 1000
+CORNER_OBJECT_IDENTITY_STALE_CYCLES = 3
+CORNER_OBJECT_IDENTITY_MAX_DREL_DELTA = 7.0
+CORNER_OBJECT_IDENTITY_MAX_YREL_DELTA = 3.2
+CORNER_OBJECT_HANDOFF_MAX_DREL_DELTA = 2.0
+CORNER_OBJECT_HANDOFF_MAX_YREL_DELTA = 1.0
+CORNER_OBJECT_HANDOFF_MAX_VREL_DELTA = 3.0
 CORNER_SIDE_OBJECT_MAX_DREL = 0.2
 CORNER_SIDE_OBJECT_MIN_ABS_YREL = 1.4
 CORNER_SIDE_OBJECT_MAX_ABS_YREL = 4.5
@@ -84,21 +90,73 @@ CORNER_SIDE_OBJECT_MAX_ABS_YREL = 4.5
 class CornerObjectTrackIdManager:
   def __init__(self):
     self.next_track_id = CORNER_OBJECT_STABLE_TRACK_ID_START
-    self.objects: dict[tuple[str, int], tuple[int, int]] = {}
-
-  def get_track_id(self, source: str, object_id: int, age: int) -> int:
-    key = (source, object_id)
-    previous = self.objects.get(key)
-    if previous is None or age < previous[1]:
-      track_id = self.next_track_id
-      self.next_track_id += 1
-    else:
-      track_id = previous[0]
-    self.objects[key] = (track_id, age)
-    return track_id
+    self.source_cycles: dict[str, int] = {}
+    self.track_states: dict[tuple[str, int], tuple[int, int, int, float, float, int]] = {}
 
   def clear_source(self, source: str):
-    self.objects = {key: value for key, value in self.objects.items() if key[0] != source}
+    self.track_states = {key: value for key, value in self.track_states.items() if key[0] != source}
+    self.source_cycles.pop(source, None)
+
+  def get_track_ids(self, source: str, candidates) -> dict[int, int]:
+    cycle = self.source_cycles.get(source, 0) + 1
+    self.source_cycles[source] = cycle
+    previous = {
+      track_id: state for (state_source, track_id), state in self.track_states.items()
+      if state_source == source and cycle - state[5] <= CORNER_OBJECT_IDENTITY_STALE_CYCLES
+    }
+    used_track_ids = set()
+    assignments = {}
+
+    # Prefer the previous CAN slot, then permit a physically continuous slot
+    # handoff. Object IDs are not globally unique: two distant objects can use
+    # the same ID at the same time.
+    for candidate in candidates:
+      slot_id, object_id, age, _, d_rel, y_rel, *_ = candidate
+      matches = []
+      for track_id, state in previous.items():
+        previous_slot, previous_object_id, previous_age, previous_d_rel, previous_y_rel, _ = state
+        if track_id in used_track_ids or object_id != previous_object_id or age < previous_age:
+          continue
+        d_delta = abs(d_rel - previous_d_rel)
+        y_delta = abs(y_rel - previous_y_rel)
+        if d_delta > CORNER_OBJECT_IDENTITY_MAX_DREL_DELTA or y_delta > CORNER_OBJECT_IDENTITY_MAX_YREL_DELTA:
+          continue
+        matches.append((previous_slot != slot_id, d_delta + y_delta * 1.5, track_id))
+
+      if matches:
+        track_id = min(matches)[2]
+      else:
+        track_id = self.next_track_id
+        self.next_track_id += 1
+      assignments[slot_id] = track_id
+      used_track_ids.add(track_id)
+      self.track_states[(source, track_id)] = (slot_id, object_id, age, d_rel, y_rel, cycle)
+
+    self.track_states = {
+      key: state for key, state in self.track_states.items()
+      if key[0] != source or cycle - state[5] <= CORNER_OBJECT_IDENTITY_STALE_CYCLES
+    }
+    return assignments
+
+
+def deduplicate_corner_candidates(candidates):
+  objects = []
+  for candidate in candidates:
+    _, object_id, age, quality, d_rel, y_rel, v_rel, *_ = candidate
+    duplicate_index = None
+    for index, previous in enumerate(objects):
+      if object_id != previous[1]:
+        continue
+      if (abs(d_rel - previous[4]) <= CORNER_OBJECT_HANDOFF_MAX_DREL_DELTA and
+          abs(y_rel - previous[5]) <= CORNER_OBJECT_HANDOFF_MAX_YREL_DELTA and
+          abs(v_rel - previous[6]) <= CORNER_OBJECT_HANDOFF_MAX_VREL_DELTA):
+        duplicate_index = index
+        break
+    if duplicate_index is None:
+      objects.append(candidate)
+    elif (age, quality) > (objects[duplicate_index][2], objects[duplicate_index][3]):
+      objects[duplicate_index] = candidate
+  return objects
 
 
 def corner_object_position_valid(d_rel: float, y_rel: float) -> bool:
@@ -561,18 +619,15 @@ class RadarInterface(RadarInterfaceBase):
       self._clear_point(t_id)
 
     # The same object can occupy two CAN slots for one cycle during a slot handoff.
-    # Publish only the newest/highest-quality copy so trackId stays unique.
-    objects = {}
-    for candidate in candidates:
-      object_id = candidate[1]
-      previous = objects.get(object_id)
-      if previous is None or (candidate[2], candidate[3]) > (previous[2], previous[3]):
-        objects[object_id] = candidate
+    # Only merge physically close copies. The radar can assign one object ID to
+    # two distant objects concurrently, so object ID alone is not an identity.
+    objects = deduplicate_corner_candidates(candidates)
+    track_ids = self.corner_object_track_ids.get_track_ids(source, objects)
 
-    for t_id, object_id, age, _, d_rel, y_rel, v_rel, yv_rel, a_rel in objects.values():
+    for t_id, _, _, _, d_rel, y_rel, v_rel, yv_rel, a_rel in objects:
       point = self.pts[t_id]
       point.measured = True
-      point.trackId = self.corner_object_track_ids.get_track_id(source, object_id, age)
+      point.trackId = track_ids[t_id]
       point.radarSource = source
       point.dRel = d_rel
       point.yRel = y_rel
@@ -580,7 +635,6 @@ class RadarInterface(RadarInterfaceBase):
       point.vLead = v_rel + self.v_ego
       point.aRel = a_rel
       point.yvRel = yv_rel
-
 
   def _update_corner_objects_430(self, updated_messages):
     if self.rcp_corner_objects_430 is None:

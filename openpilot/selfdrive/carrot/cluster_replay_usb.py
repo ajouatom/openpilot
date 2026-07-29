@@ -38,6 +38,7 @@ def build_cluster_args(args: argparse.Namespace, passthrough: list[str]) -> list
         "--input", "route",
         "--route", str(args.route),
         "--route-log", args.route_log,
+        "--route-corner-source", args.corner_source,
         "--route-overlay", args.route_overlay,
         "--route-tools", args.route_tools,
         "--camera-view-mode", str(args.camera_view_mode),
@@ -88,6 +89,15 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     )
     parser.add_argument("route", type=Path, help="rlog.zst file, segment directory, or route directory")
     parser.add_argument("--route-log", choices=("rlog", "qlog"), default="rlog", help="Log type to replay")
+    parser.add_argument(
+        "--corner-source",
+        choices=("live", "stable", "raw"),
+        default="live",
+        help=" ".join((
+            "Corner-radar source: live shows device-published liveTracks,",
+            "stable reconstructs physical tracks from raw CAN, and raw shows untracked CAN slots",
+        )),
+    )
     parser.add_argument("--output", choices=("usb", "window", "both"), default="both", help="Render target")
     parser.add_argument("--usb-codec", choices=("jpeg", "png", "h264"), default="jpeg", help="USB transport codec")
     parser.add_argument("--fps", type=float, default=20.0, help="Replay/render FPS")

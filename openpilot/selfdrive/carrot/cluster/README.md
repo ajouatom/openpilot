@@ -219,6 +219,19 @@ python selfdrive/carrot/cluster_replay_usb.py /data/media/0/realdata/0000012e--f
 python selfdrive/carrot/cluster_replay_usb.py /data/media/0/realdata/0000012e--f190807d64--36/rlog.zst --fps 20 --usb-brightness 80
 ```
 
+From a Windows checkout whose repository root contains the `openpilot`
+directory, use:
+
+```powershell
+.venv\Scripts\python.exe openpilot\selfdrive\carrot\cluster_replay_usb.py W:\routes\vehicle\segment\rlog.zst --output both
+```
+
+The default `--corner-source live` displays the `liveTracks` actually
+published by the device. Use `--corner-source stable` to reconstruct
+physically continuous corner tracks from raw CAN, or `--corner-source raw` to
+show the untracked CAN slots. Comparing `live` and `stable` is useful when a
+recorded cluster display is missing a corner object.
+
 Use `--route-overlay full` for a larger replay debug panel, or
 `--output usb --route-overlay off` when only the USB panel should be driven.
 Use `--corner-yaw-comp-gain 0.6` to add replay-only corner-radar yaw
