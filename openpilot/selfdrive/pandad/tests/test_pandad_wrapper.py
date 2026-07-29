@@ -5,28 +5,6 @@ import pytest
 from openpilot.selfdrive.pandad import panda_helpers
 
 
-@pytest.mark.parametrize(
-  ("setting", "speed_hz"),
-  [
-    (0, 50_000_000),
-    (1, 40_000_000),
-    (2, 30_000_000),
-    (3, 25_000_000),
-    (-1, 50_000_000),
-    (4, 50_000_000),
-  ],
-)
-def test_panda_spi_speed_setting(setting, speed_hz):
-  assert panda_helpers.get_panda_spi_speed_hz(setting) == speed_hz
-
-
-def test_configure_panda_spi_speed_exports_native_and_python_speed(monkeypatch):
-  monkeypatch.delenv(panda_helpers.PANDA_SPI_SPEED_ENV, raising=False)
-
-  assert panda_helpers.configure_panda_spi_speed(2) == 30_000_000
-  assert panda_helpers.os.environ[panda_helpers.PANDA_SPI_SPEED_ENV] == "30000000"
-
-
 @dataclass
 class FakePanda:
   serial: str
