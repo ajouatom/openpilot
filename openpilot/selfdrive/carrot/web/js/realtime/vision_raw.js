@@ -552,6 +552,13 @@ function averageFiniteMetric(values) {
   return total / samples.length;
 }
 
+function maxFiniteMetric(values) {
+  const samples = Array.isArray(values)
+    ? values.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+    : [];
+  return samples.length ? Math.max(...samples) : null;
+}
+
 function pickFiniteMetric(...values) {
   for (const value of values) {
     if (value === null || value === undefined || value === "") continue;
@@ -581,6 +588,12 @@ function deriveNormalizedHudDeviceMetrics(rawHudState) {
     averageFiniteMetric(liveDeviceState.cpuTempC),
     averageFiniteMetric(rawDeviceState.cpuTempC),
   );
+  // Hottest core, matching the native cluster and openpilot HUD. Kept separate
+  // from the averaged cpuTempC so each surface keeps the value it was built on.
+  const cpuTempMaxC = pickFiniteMetric(
+    maxFiniteMetric(liveDeviceState.cpuTempC),
+    maxFiniteMetric(rawDeviceState.cpuTempC),
+  );
   const memPct = pickFiniteMetric(
     liveDeviceState.memoryUsagePercent,
     rawDeviceState.memoryUsagePercent,
@@ -598,7 +611,7 @@ function deriveNormalizedHudDeviceMetrics(rawHudState) {
   );
   const voltageV = Number.isFinite(voltageMv) ? (voltageMv / 1000.0) : null;
 
-  return { cpuTempC, memPct, diskPct, voltageV };
+  return { cpuTempC, cpuTempMaxC, memPct, diskPct, voltageV };
 }
 
 function deriveNormalizedHudVehicleMetrics(rawHudState) {
@@ -705,7 +718,7 @@ function deriveCompactHudPayload(state) {
     vSetKph: cruiseKph,
     temp: compactHudTemp(state),
     redDot: false,
-    // 구 hud_renderer/mini HUD용 문자열. 신규 오버레이용 numeric trafficState 등
+    // 미니 HUD용 문자열. 신규 오버레이용 numeric trafficState 등
     // 클러스터 전용 필드는 아래 withVehicleHudFields 가 vehiclePayload 로부터 일괄 채운다.
     tlight: trafficState === 1 ? "red" : (trafficState === 2 ? "green" : "off"),
     tfGap,

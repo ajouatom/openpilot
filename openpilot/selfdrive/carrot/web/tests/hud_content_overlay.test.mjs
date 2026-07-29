@@ -30,17 +30,11 @@ function element() {
   };
 }
 
-test("vision HUD content owns the new overlay and leaves the hidden renderer idle", () => {
+test("vision HUD content drives the overlay for every lifecycle step", () => {
   const root = element();
   const workspace = element();
   const stage = element();
-  const rendererCalls = [];
   const overlayCalls = [];
-  const renderer = {
-    init: () => rendererCalls.push("init"),
-    update: () => rendererCalls.push("update"),
-    relayout: () => rendererCalls.push("relayout"),
-  };
   const overlay = {
     activate: () => overlayCalls.push("activate"),
     deactivate: () => overlayCalls.push("deactivate"),
@@ -62,7 +56,7 @@ test("vision HUD content owns the new overlay and leaves the hidden renderer idl
     addEventListener() {},
   };
 
-  const content = createDriveVisionHudContent({ target, document: documentRoot, renderer });
+  const content = createDriveVisionHudContent({ target, document: documentRoot });
   assert.ok(content);
   content.activate();
   content.update({ evActive: true });
@@ -71,7 +65,8 @@ test("vision HUD content owns the new overlay and leaves the hidden renderer idl
   content.deactivate();
   content.destroy();
 
-  assert.deepEqual(rendererCalls, []);
+  // Every step is expressed as an overlay call: there is no second renderer left
+  // to fall back to.
   assert.deepEqual(overlayCalls, [
     "activate",
     "relayout",

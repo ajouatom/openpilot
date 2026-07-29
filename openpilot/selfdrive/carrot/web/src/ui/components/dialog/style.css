@@ -110,6 +110,8 @@
 }
 
 .app-dialog__choices {
+  --dialog-choice-heading-fg: var(--md-on-surface-var);
+  --dialog-choice-heading-size: var(--fs-label-sm);
   display: grid;
   gap: 6px;
   margin-top: var(--sp-md);
@@ -153,6 +155,22 @@
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+/* Grouped choices: a labelled section keeps the row rhythm of the flat list. */
+.app-dialog__choices--list .app-dialog__choiceGroup {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  min-width: 0;
+}
+
+.app-dialog__choiceHeading {
+  padding: var(--sp-xs) var(--sp-sm) 0;
+  color: var(--dialog-choice-heading-fg);
+  font-size: var(--dialog-choice-heading-size);
+  font-weight: 800;
+  line-height: 1.4;
 }
 
 .app-dialog__choices--list .app-dialog__choiceBtn--action {

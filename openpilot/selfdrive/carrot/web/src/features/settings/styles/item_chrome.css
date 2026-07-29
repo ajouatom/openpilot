@@ -26,23 +26,6 @@
 .page--setting #settingScreenItems .setting-risk-badge {
   flex: 0 0 auto;
   align-self: center;
-  min-height: 17px;
-  padding: 0 7px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 820;
-  line-height: 17px;
-  white-space: nowrap;
-}
-
-.page--setting #settingScreenItems .setting-risk-badge--high {
-  background: color-mix(in srgb, var(--md-danger) 18%, transparent);
-  color: color-mix(in srgb, var(--md-danger) 82%, var(--md-on-surface));
-}
-
-.page--setting #settingScreenItems .setting-risk-badge--medium {
-  background: color-mix(in srgb, var(--md-warning) 18%, transparent);
-  color: color-mix(in srgb, var(--md-warning) 82%, var(--md-on-surface));
 }
 
 .page--setting #settingScreenItems .setting-favorite-mark {

@@ -112,7 +112,9 @@
       isMetric,
       // metric → Korean/Vienna red circle, imperial → US MUTCD rectangle.
       limitStyle: isMetric ? "kr" : "us",
-      cpu: integer(payload?.cpuTempC),
+      // Hottest core, same reading as the vision HUD corner bar and the native
+      // cluster. Falls back to the averaged field on payloads that lack it.
+      cpu: integer(payload?.cpuTempMaxC ?? payload?.cpuTempC),
       speed: displaySpeed(payload?.vEgoKph, isMetric),
       setSpeed: displaySpeed(payload?.vSetKph, isMetric),
       roadLimit: displayLimit(roadLimitKph, isMetric),

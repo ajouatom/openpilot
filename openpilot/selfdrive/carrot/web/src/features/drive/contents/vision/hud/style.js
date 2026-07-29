@@ -35,6 +35,12 @@ html:not([data-carrot-mini-hud="1"]) #carrotMiniHud { display:none !important; }
   --chud-weight:900;
   --chud-white:#fff; --chud-carrot:#14bc68; --chud-limit:#de4840; --chud-amber:#f4ac36; --chud-stroke:#05090c;
   --chud-muted:#96a0ac;
+  /* 코너 온도바: 높이를 토큰으로 정의해 좌하단 존이 정확히 그만큼 올라간다.
+   * (line-height:1 이라 높이 = 글자 크기 + 상하 패딩) */
+  --chud-devtemp-font:clamp(12px,2cqw,20px);
+  --chud-devtemp-pad-block:clamp(2px,0.5cqw,5px);
+  --chud-devtemp-pad-inline:clamp(5px,1.2cqw,11px);
+  --chud-devtemp-height:calc(var(--chud-devtemp-font) + var(--chud-devtemp-pad-block) * 2);
 }
 .chud::before,.chud::after{
   content:"";position:absolute;left:0;right:0;z-index:0;pointer-events:none;
@@ -57,10 +63,24 @@ html:not([data-carrot-mini-hud="1"]) #carrotMiniHud { display:none !important; }
  * (제한속도 중심 ≈ tl패딩+상단아이콘행+gap+표지반높이 → 아래 clamp가 그 밴드 중심을 추종) */
 .chud-zone--tc{left:50%;top:0;transform:translateX(-50%);padding:clamp(8px,2cqw,20px);
   padding-top:clamp(54px,11cqw,108px);gap:clamp(10px,3cqw,26px)}
-.chud-zone--bl{left:0;bottom:0;padding:clamp(10px,3cqw,30px);
+/* 온도바 높이만큼 들어올린다(패딩 대신 bottom 앵커 — degradation의 padding 단축
+ * 지정이 예약분을 덮어쓰지 못한다). */
+.chud-zone--bl{left:0;bottom:var(--chud-devtemp-height);padding:clamp(10px,3cqw,30px);
   flex-direction:column;align-items:flex-start;gap:clamp(6px,1.2cqw,12px)}
 .chud-zone--br{right:clamp(98px,11cqw,122px);bottom:0;padding:clamp(10px,3cqw,30px)}
 .chud-row{display:flex;align-items:center;gap:clamp(8px,1.6cqw,18px)}
+/* 코너 스트립 — 화면 모서리에 완전 밀착(인셋 0). 존과 같은 z-index지만 DOM에서
+ * 먼저 오므로 겹칠 때 항상 다른 HUD 아래에 깔린다. 배경 그라디언트보다는 위. */
+.chud-corner{position:absolute;z-index:1;display:flex;pointer-events:none}
+.chud-corner--bl{left:0;bottom:0}
+
+/* 기기 CPU 온도 — 완전 검은 바 + 흰 글자. 좁아져도 숨기지 않는다. */
+.chud-devtemp{
+  font-family:var(--chud-font);font-weight:var(--chud-weight);
+  font-size:var(--chud-devtemp-font);line-height:1;
+  padding:var(--chud-devtemp-pad-block) var(--chud-devtemp-pad-inline);
+  color:var(--chud-white);background:#000;
+  font-variant-numeric:tabular-nums;letter-spacing:.01em;white-space:nowrap}
 
 /* accel/steer 게이지 */
 .chud-gauge-column{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
