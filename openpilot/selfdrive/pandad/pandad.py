@@ -11,7 +11,7 @@ from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 from openpilot.common.swaglog import cloudlog
-from openpilot.selfdrive.pandad.panda_helpers import connect_all_pandas, pandas_include_internal
+from openpilot.selfdrive.pandad.panda_helpers import configure_panda_spi_speed, connect_all_pandas, pandas_include_internal
 
 
 def get_expected_signature(panda: Panda) -> bytes:
@@ -86,6 +86,8 @@ def main() -> None:
   count = 0
   first_run = True
   params = Params()
+  spi_speed_hz = configure_panda_spi_speed(params.get_int("PandaSpiSpeed"))
+  cloudlog.warning(f"Panda SPI speed configured at {spi_speed_hz // 1_000_000} MHz; reboot after changing the setting")
   no_internal_panda_count = 0
 
   while not do_exit:

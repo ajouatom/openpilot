@@ -97,14 +97,14 @@ Ignoring `x0.01`, `x0.001`, `cm`, `km/h`, or `%` can make a value appear one hun
 
 ## Settings map
 
-The current `carrot_settings.json` contains **169 parameters**. Every entry is assigned to one of these menus:
+The current `carrot_settings.json` contains **170 parameters**. Every entry is assigned to one of these menus:
 
 | Category | Count | Groups |
 |---|---:|---|
 | Driving control | 107 | Startup and auto, buttons and presets, steering, speed and deceleration, cruise and following gap |
 | Vehicle and hardware | 16 | Hyundai/Kia, CAN FD/HDA, radar, driver monitoring, vehicle assistance, device hardware |
 | Display | 35 | Information, path, brightness/on-road view, external HUD |
-| System | 11 | Recording/power, network/map, sound, software |
+| System | 12 | Recording/power, network/map, sound, device communication, software |
 
 ## Driving control
 
@@ -244,7 +244,7 @@ The Replay event timeline also identifies Carrot Navi connection and route-sessi
 <a id="system"></a>
 ## System
 
-The 11 system settings cover recording, power, network, maps, sound, and software menus.
+The 12 system settings cover recording, power, network, maps, sound, device communication, and software menus.
 
 | Group | Parameters | Purpose |
 |---|---|---|
@@ -252,9 +252,12 @@ The 11 system settings cover recording, power, network, maps, sound, and softwar
 | YouTube Live | `CarrotYouTubeLive`, `CarrotYouTubeQuality`, `CarrotYouTubeTimestamp` | Video streaming, quality, and timestamp |
 | Network and map | `HotspotOnBoot`, `MapboxStyle` | Boot hotspot and map background style |
 | Sound | `SoundLanguageSetting`, `SoundVolumeAdjust`, `SoundVolumeAdjustEngage` | Prompt language and volume |
+| Device communication | `PandaSpiSpeed` | SPI communication rate with the internal Panda |
 | Software | `SoftwareMenu` | Carrot Web software-menu availability |
 
 Check storage use for recording and network use, heat, and privacy before enabling live streaming.
+
+`PandaSpiSpeed=0` keeps the existing 50MHz behavior. Only on a device with repeated Panda SPI NACKs, checksum errors, or communication loss, try 40MHz first and lower one step at a time, rebooting after each change. Lower rates are a diagnostic mitigation that increases signal margin; they do not repair faulty hardware.
 
 ## Safe adjustment order
 

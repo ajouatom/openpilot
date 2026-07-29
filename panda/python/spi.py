@@ -32,6 +32,20 @@ MAX_XFER_RETRY_COUNT = 5
 XFER_SIZE = 0x40*31
 
 DEV_PATH = "/dev/spidev0.0"
+SPI_SPEED_ENV = "PANDA_SPI_SPEED_HZ"
+SPI_SPEEDS = (50000000, 40000000, 30000000, 25000000)
+
+
+def get_configured_spi_speed():
+  try:
+    speed = int(os.environ.get(SPI_SPEED_ENV, SPI_SPEEDS[0]))
+  except ValueError:
+    speed = SPI_SPEEDS[0]
+
+  if speed not in SPI_SPEEDS:
+    logger.warning(f"invalid {SPI_SPEED_ENV}={speed}, using {SPI_SPEEDS[0]}")
+    speed = SPI_SPEEDS[0]
+  return speed
 
 
 def crc8(data):
@@ -93,7 +107,8 @@ class SpiDevice:
   # may not support the full 50MHz
   MAX_SPEED = 50000000
 
-  def __init__(self, speed=MAX_SPEED):
+  def __init__(self, speed=None):
+    speed = get_configured_spi_speed() if speed is None else speed
     assert speed <= self.MAX_SPEED
 
     if not os.path.exists(DEV_PATH):

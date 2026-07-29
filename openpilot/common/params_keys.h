@@ -385,5 +385,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"NNFFModelName", {CLEAR_ON_OFFROAD_TRANSITION, STRING}},
 
     {"HardwareC3xLite", {PERSISTENT, INT, "0"}},
+    {"PandaSpiSpeed", {PERSISTENT, INT, "0"}},
     {"ShareData", {PERSISTENT, INT, "0"}},
 };
