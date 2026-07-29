@@ -34,7 +34,7 @@ from cluster_config import (
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
     CLUSTER_SCREEN_MODE_NAVI,
-    CLUSTER_SCREEN_MODE_NAVI_DEBUG,
+    CLUSTER_SCREEN_MODE_TRIP_REPORT,
     CLUSTER_SCREEN_MODE_DEFAULT,
     CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
     ClusterTheme,
@@ -65,6 +65,7 @@ from cluster_models import (
     NaviLiveState,
     NaviTrafficLightInfo,
     RouteOverlay,
+    TripReportState,
 )
 from cluster_scene import (
     ClusterScene,
@@ -106,6 +107,11 @@ ROUTE_CONTROL_BAR_W = ROUTE_CONTROL_PANEL_W - 284.0
 NAVI_LIVE_PANEL_RIGHT = DESIGN_WIDTH - 4
 NAVI_LIVE_PANEL_W = 792
 NAVI_LIVE_PANEL_X = NAVI_LIVE_PANEL_RIGHT - NAVI_LIVE_PANEL_W
+TRIP_REPORT_PANEL_X = NAVI_LIVE_PANEL_X
+TRIP_REPORT_PANEL_Y = 1.0
+TRIP_REPORT_PANEL_W = NAVI_LIVE_PANEL_W
+TRIP_REPORT_PANEL_H = DESIGN_HEIGHT - 2.0
+TRIP_REPORT_TRACE_MAX_SEGMENTS = 511
 CAMERA_BACKGROUND_X = 0.0
 CAMERA_BACKGROUND_Y = 0.0
 CAMERA_BACKGROUND_W = NAVI_LIVE_PANEL_X
@@ -891,6 +897,8 @@ class ClusterUiRenderer:
         )
         self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
+        self._trip_trace_display_radius_m = 250.0
+        self._trip_trace_zoom_t: float | None = None
         self._debug_plot_mode_prev = -1
         self._debug_plot_size = 0
         self._debug_plot_index = -1
@@ -912,7 +920,11 @@ class ClusterUiRenderer:
         self._theme = current_cluster_theme(self.theme_mode)
 
     def set_screen_mode(self, screen_mode: int) -> None:
-        self.screen_mode = normalize_cluster_screen_mode(screen_mode)
+        next_mode = normalize_cluster_screen_mode(screen_mode)
+        if next_mode != self.screen_mode and next_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
+            self._trip_trace_display_radius_m = 250.0
+            self._trip_trace_zoom_t = None
+        self.screen_mode = next_mode
 
     def set_target_fps(self, target_fps: int) -> None:
         self.target_fps = max(0, int(target_fps))
@@ -2651,10 +2663,12 @@ class ClusterUiRenderer:
                 rl.rl_pop_matrix()
 
     def _world_view_shift_x(self, state: ClusterUiState) -> float:
-        if self.screen_mode != CLUSTER_SCREEN_MODE_DEFAULT:
+        if self.screen_mode not in (CLUSTER_SCREEN_MODE_DEFAULT, CLUSTER_SCREEN_MODE_TRIP_REPORT):
             return 0.0
         if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
             return 0.0
+        if self.screen_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
+            return NAVI_WORLD_VIEW_SHIFT_X * self.width / DESIGN_WIDTH
         navi_panel_visible = bool(
             self._navi_live_panel_visible(state.navi_live)
             or self._navi_map_frame_present(state.navi_dashboard)
@@ -3366,7 +3380,11 @@ class ClusterUiRenderer:
                 (frame for frame in dashboard.media if frame.key == "image:traffic_signal"),
                 None,
             ) if dashboard is not None and dashboard.connected else None
-            if traffic_frame is not None and not traffic_drawn_in_map:
+            if (
+                traffic_frame is not None
+                and not traffic_drawn_in_map
+                and screen_mode != CLUSTER_SCREEN_MODE_TRIP_REPORT
+            ):
                 profile_stage = self._profile_start()
                 self._draw_navi_media(
                     traffic_frame,
@@ -3396,7 +3414,11 @@ class ClusterUiRenderer:
                     DEBUG_PLOT_RIGHT_H,
                 )
                 self._profile_add("hud.debug_plot_right", profile_stage)
-            if screen_mode == CLUSTER_SCREEN_MODE_NAVI_DEBUG or navi_debug_active:
+            if screen_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
+                profile_stage = self._profile_start()
+                self._draw_trip_report_panel(state)
+                self._profile_add("hud.trip_report", profile_stage)
+            elif navi_debug_active:
                 profile_stage = self._profile_start()
                 self._draw_navi_debug_panel(state.navi_debug)
                 self._profile_add("hud.navi_debug", profile_stage)
@@ -3409,12 +3431,13 @@ class ClusterUiRenderer:
                 CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
-                CLUSTER_SCREEN_MODE_NAVI_DEBUG,
+                CLUSTER_SCREEN_MODE_TRIP_REPORT,
             ) and not navi_debug_active and not navi_live_active:
                 profile_stage = self._profile_start()
                 self._draw_route_overlay(state.route_overlay)
                 self._profile_add("hud.route_overlay", profile_stage)
-            self._draw_status_footer(state)
+            if screen_mode != CLUSTER_SCREEN_MODE_TRIP_REPORT:
+                self._draw_status_footer(state)
         finally:
             profile_stage = self._profile_start()
             rl.rl_pop_matrix()
@@ -5320,6 +5343,294 @@ class ClusterUiRenderer:
             self._draw_text(f"C{index}", cell_x, line_y + 8, text_size, muted_color)
             self._draw_text(self._percent_text(percent), cell_x + cell_w, line_y + 8, text_size, color, anchor="right")
             self._draw_percent_bar(cell_x, line_y + 19, cell_w, 6, percent, color)
+
+    def _draw_trip_report_panel(self, state: ClusterUiState) -> None:
+        report = state.trip_report or TripReportState()
+        stats = self._system_stats.sample()
+        panel_x = TRIP_REPORT_PANEL_X
+        panel_y = TRIP_REPORT_PANEL_Y
+        panel_w = TRIP_REPORT_PANEL_W
+        panel_h = TRIP_REPORT_PANEL_H
+        panel_bg = (7, 12, 18, 248)
+        card_bg = (16, 23, 32, 246)
+        card_outline = (69, 83, 96, 230)
+        grid_color = (88, 106, 122, 42)
+        muted = (154, 166, 178)
+
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 12.0, panel_bg, (67, 80, 93), 1.5)
+        self._draw_text("주행리포트", panel_x + 20.0, panel_y + 28.0, 25.0, WHITE)
+
+        trace_x = panel_x + 16.0
+        trace_y = panel_y + 53.0
+        trace_w = 474.0
+        trace_h = 328.0
+        summary_x = trace_x + trace_w + 10.0
+        summary_y = trace_y
+        summary_w = panel_x + panel_w - 16.0 - summary_x
+        summary_h = trace_h
+        self._rounded_rect(trace_x, trace_y, trace_w, trace_h, 10.0, card_bg, card_outline, 1.2)
+        self._rounded_rect(summary_x, summary_y, summary_w, summary_h, 10.0, card_bg, card_outline, 1.2)
+
+        self._draw_text("주행 궤적", trace_x + 16.0, trace_y + 23.0, 15.0, muted)
+        target_radius_m = clamp(report.trace_radius_m, 250.0, 30_000.0)
+        shown_radius_m = self._trip_trace_radius(target_radius_m)
+        self._draw_text(
+            f"반경 {self._trip_distance_text(shown_radius_m)}",
+            trace_x + trace_w - 16.0,
+            trace_y + 23.0,
+            14.0,
+            muted,
+            anchor="right",
+        )
+        map_x = trace_x + 12.0
+        map_y = trace_y + 43.0
+        map_w = trace_w - 24.0
+        map_h = 239.0
+        self._rounded_rect(map_x, map_y, map_w, map_h, 7.0, (8, 15, 22), (58, 72, 85), 1.0)
+        center = rl.Vector2(map_x + map_w * 0.5, map_y + map_h * 0.5)
+        for fraction in (0.25, 0.5, 0.75, 1.0):
+            radius_px = min(map_w, map_h) * 0.45 * fraction
+            rl.draw_ring(center, radius_px, radius_px + 1.0, 0.0, 360.0, 64, rl_color(grid_color))
+        for fraction in (-0.5, 0.0, 0.5):
+            line_x = center.x + fraction * map_w * 0.45
+            line_y = center.y + fraction * map_h * 0.45
+            rl.draw_line_ex(
+                rl.Vector2(line_x, map_y + 8.0),
+                rl.Vector2(line_x, map_y + map_h - 8.0),
+                1.0,
+                rl_color(grid_color),
+            )
+            rl.draw_line_ex(
+                rl.Vector2(map_x + 8.0, line_y),
+                rl.Vector2(map_x + map_w - 8.0, line_y),
+                1.0,
+                rl_color(grid_color),
+            )
+        self._draw_trip_trace(report, center, map_w, map_h, shown_radius_m)
+
+        legend_y = trace_y + trace_h - 25.0
+        legend_items = (("느림", 10.0), ("보통", 45.0), ("빠름", 90.0))
+        legend_x = trace_x + 18.0
+        for label, speed_kph in legend_items:
+            color = self._trip_speed_color(speed_kph)
+            rl.draw_line_ex(
+                rl.Vector2(legend_x, legend_y),
+                rl.Vector2(legend_x + 24.0, legend_y),
+                4.0,
+                rl_color(color),
+            )
+            self._draw_text(label, legend_x + 31.0, legend_y, 13.0, muted)
+            legend_x += 94.0
+        source_text = report.heading_source
+        if report.gps_corrected:
+            source_text += " + GPS"
+        self._draw_text(
+            source_text,
+            trace_x + trace_w - 16.0,
+            legend_y,
+            13.0,
+            muted,
+            anchor="right",
+        )
+
+        self._draw_text("주행 요약", summary_x + 15.0, summary_y + 23.0, 15.0, muted)
+        self._draw_text("시간", summary_x + 15.0, summary_y + 57.0, 13.0, muted)
+        self._draw_text(
+            self._trip_format_time(report.duration_s),
+            summary_x + summary_w - 15.0,
+            summary_y + 57.0,
+            24.0,
+            (255, 177, 105),
+            anchor="right",
+        )
+        rl.draw_line_ex(
+            rl.Vector2(summary_x + 14.0, summary_y + 82.0),
+            rl.Vector2(summary_x + summary_w - 14.0, summary_y + 82.0),
+            1.0,
+            rl_color(card_outline),
+        )
+        metric_w = (summary_w - 42.0) * 0.5
+        metric_left = summary_x + 14.0
+        metric_right = metric_left + metric_w + 14.0
+        self._draw_trip_metric(metric_left, summary_y + 109.0, "거리", self._trip_distance_text(report.distance_m), metric_w)
+        self._draw_trip_metric(metric_right, summary_y + 109.0, "평균속도", f"{report.average_speed_kph:.1f}", metric_w, "km/h")
+        self._draw_trip_metric(metric_left, summary_y + 161.0, "최고속도", f"{report.max_speed_kph:.1f}", metric_w, "km/h")
+        self._draw_trip_metric(metric_right, summary_y + 161.0, "자동주행", f"{report.auto_ratio_percent:.0f}", metric_w, "%")
+        self._draw_trip_metric(metric_left, summary_y + 213.0, "최대가속", f"{report.max_accel_mps2:+.2f}", metric_w, "m/s²")
+        self._draw_trip_metric(metric_right, summary_y + 213.0, "최대감속", f"{report.max_decel_mps2:+.2f}", metric_w, "m/s²")
+
+        event_y = summary_y + 279.0
+        event_w = (summary_w - 44.0) / 3.0
+        for index, (label, count, color) in enumerate((
+            ("급가속", report.hard_accel_count, AMBER),
+            ("급감속", report.hard_brake_count, RED),
+            ("급코너", report.hard_corner_count, BLUE_SOFT),
+        )):
+            event_x = summary_x + 14.0 + index * (event_w + 8.0)
+            self._rounded_rect(event_x, event_y, event_w, 35.0, 6.0, (24, 32, 42), color, 1.0)
+            self._draw_text(label, event_x + 8.0, event_y + 17.5, 12.0, muted)
+            self._draw_text(str(count), event_x + event_w - 8.0, event_y + 17.5, 18.0, color, anchor="right")
+
+        system_x = trace_x
+        system_y = panel_y + 389.0
+        system_w = panel_w - 32.0
+        system_h = 73.0
+        self._rounded_rect(system_x, system_y, system_w, system_h, 9.0, card_bg, card_outline, 1.2)
+        self._draw_text("SYSTEM", system_x + 16.0, system_y + 18.0, 13.0, muted)
+        cpu_percent = state.cpu_usage_percent if state.cpu_usage_percent is not None else stats.cpu_used_percent
+        memory_percent = (
+            state.memory_used_percent
+            if state.memory_used_percent is not None
+            else stats.memory_used_percent
+        )
+        disk_percent = (
+            state.disk_used_percent
+            if state.disk_used_percent is not None
+            else stats.disk_used_percent
+        )
+        system_metrics = (
+            ("CPU", self._percent_text(cpu_percent), self._system_metric_color(cpu_percent)),
+            ("TEMP", "--°C" if state.cpu_temp_c is None else f"{state.cpu_temp_c:.0f}°C", self._trip_temp_color(state.cpu_temp_c)),
+            ("MEM", self._percent_text(memory_percent), self._system_metric_color(memory_percent)),
+            ("DISK", self._percent_text(disk_percent), self._system_metric_color(disk_percent)),
+        )
+        metric_x = system_x + 16.0
+        for label, value, color in system_metrics:
+            self._draw_text(label, metric_x, system_y + 43.0, 12.0, muted)
+            self._draw_text(value, metric_x + 83.0, system_y + 43.0, 17.0, color, anchor="right")
+            metric_x += 96.0
+
+        calib_label_x = system_x + system_w - 16.0
+        self._draw_text("디바이스 설치각", calib_label_x, system_y + 18.0, 13.0, muted, anchor="right")
+        calibration_text = "P --°  ·  Y --°"
+        calibration = state.camera_calibration_euler
+        if calibration is not None and len(calibration) >= 3:
+            pitch_deg = math.degrees(calibration[1])
+            yaw_deg = math.degrees(calibration[2])
+            if math.isfinite(pitch_deg) and math.isfinite(yaw_deg):
+                calibration_text = f"P {pitch_deg:+.1f}°  ·  Y {yaw_deg:+.1f}°"
+        self._draw_text(calibration_text, calib_label_x, system_y + 46.0, 18.0, WHITE, anchor="right")
+
+    def _draw_trip_trace(
+        self,
+        report: TripReportState,
+        center: rl.Vector2,
+        map_w: float,
+        map_h: float,
+        radius_m: float,
+    ) -> None:
+        radius_m = max(1.0, radius_m)
+        scale = min(map_w, map_h) * 0.45 / radius_m
+        previous_screen: rl.Vector2 | None = None
+        previous_speed_kph = 0.0
+        last_direction: tuple[float, float] | None = None
+        segments = 0
+        for point in report.trace_points:
+            dx = point.x_m - report.current_x_m
+            dy = point.y_m - report.current_y_m
+            if math.hypot(dx, dy) > radius_m:
+                previous_screen = None
+                continue
+            screen = rl.Vector2(center.x + dx * scale, center.y - dy * scale)
+            if previous_screen is not None and segments < TRIP_REPORT_TRACE_MAX_SEGMENTS:
+                color = self._trip_speed_color((previous_speed_kph + point.speed_kph) * 0.5)
+                rl.draw_line_ex(previous_screen, screen, 4.0, rl_color(color))
+                direction_x = screen.x - previous_screen.x
+                direction_y = screen.y - previous_screen.y
+                if direction_x * direction_x + direction_y * direction_y > 0.25:
+                    last_direction = (direction_x, direction_y)
+                segments += 1
+            previous_screen = screen
+            previous_speed_kph = point.speed_kph
+
+        rl.draw_circle_v(center, 8.0, rl_color((12, 20, 28)))
+        rl.draw_ring(center, 7.0, 10.0, 0.0, 360.0, 32, rl_color(WHITE))
+        if last_direction is None:
+            last_direction = (0.0, -1.0)
+        direction_length = max(0.001, math.hypot(*last_direction))
+        ux = last_direction[0] / direction_length
+        uy = last_direction[1] / direction_length
+        px = -uy
+        py = ux
+        rl.draw_triangle(
+            rl.Vector2(center.x + ux * 16.0, center.y + uy * 16.0),
+            rl.Vector2(center.x - ux * 5.0 + px * 7.0, center.y - uy * 5.0 + py * 7.0),
+            rl.Vector2(center.x - ux * 5.0 - px * 7.0, center.y - uy * 5.0 - py * 7.0),
+            rl_color(WHITE),
+        )
+
+    def _trip_trace_radius(self, target_radius_m: float) -> float:
+        now = time.monotonic()
+        if self._trip_trace_zoom_t is None:
+            self._trip_trace_zoom_t = now
+        dt = clamp(now - self._trip_trace_zoom_t, 0.0, 0.25)
+        self._trip_trace_zoom_t = now
+        if target_radius_m > self._trip_trace_display_radius_m:
+            blend = 1.0 - math.exp(-dt / 0.55)
+            self._trip_trace_display_radius_m += (
+                target_radius_m - self._trip_trace_display_radius_m
+            ) * blend
+            if target_radius_m - self._trip_trace_display_radius_m < 1.0:
+                self._trip_trace_display_radius_m = target_radius_m
+        return clamp(self._trip_trace_display_radius_m, 250.0, 30_000.0)
+
+    def _draw_trip_metric(
+        self,
+        x: float,
+        y: float,
+        label: str,
+        value: str,
+        width: float,
+        unit: str = "",
+    ) -> None:
+        muted = (154, 166, 178)
+        self._draw_text(label, x, y, 12.0, muted)
+        self._draw_text(value, x, y + 23.0, 19.0, WHITE)
+        if unit:
+            self._draw_text(unit, x + width, y + 23.0, 11.0, muted, anchor="right")
+
+    @staticmethod
+    def _trip_speed_color(speed_kph: float) -> tuple[int, int, int]:
+        speed_kph = clamp(speed_kph, 0.0, 100.0)
+        if speed_kph <= 45.0:
+            amount = speed_kph / 45.0
+            return (
+                int(round(235 + (244 - 235) * amount)),
+                int(round(78 + (181 - 78) * amount)),
+                int(round(75 + (58 - 75) * amount)),
+            )
+        amount = (speed_kph - 45.0) / 55.0
+        return (
+            int(round(244 + (44 - 244) * amount)),
+            int(round(181 + (211 - 181) * amount)),
+            int(round(58 + (112 - 58) * amount)),
+        )
+
+    @staticmethod
+    def _trip_temp_color(temp_c: float | None) -> tuple[int, int, int]:
+        if temp_c is None or not math.isfinite(temp_c):
+            return (154, 166, 178)
+        if temp_c >= 90.0:
+            return RED
+        if temp_c >= 75.0:
+            return AMBER
+        return GREEN
+
+    @staticmethod
+    def _trip_format_time(duration_s: float) -> str:
+        total_seconds = max(0, int(round(duration_s)))
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    @staticmethod
+    def _trip_distance_text(distance_m: float) -> str:
+        distance_m = max(0.0, distance_m)
+        if distance_m < 1_000.0:
+            return f"{distance_m:.0f} m"
+        if distance_m < 10_000.0:
+            return f"{distance_m / 1_000.0:.2f} km"
+        return f"{distance_m / 1_000.0:.1f} km"
 
     def _draw_live_debug_panel(self, state: ClusterUiState) -> None:
         sections = self._live_debug_sections(state)

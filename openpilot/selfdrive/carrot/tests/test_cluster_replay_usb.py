@@ -23,3 +23,12 @@ def test_corner_source_is_forwarded_to_cluster_replay():
 
   assert cluster_args[cluster_args.index("--route-corner-source") + 1] == "stable"
   assert cluster_args[-3:] == ["--", "--profile-interval", "1"]
+
+
+def test_trip_report_shortcut_selects_screen_mode_five():
+  args, passthrough = parse_args(["route", "--trip-report"])
+
+  cluster_args = build_cluster_args(args, passthrough)
+
+  assert cluster_args[cluster_args.index("--screen-mode") + 1] == "trip-report"
+  assert cluster_args[cluster_args.index("--camera-view-mode") + 1] == "2"

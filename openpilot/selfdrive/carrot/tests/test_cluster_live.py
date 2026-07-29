@@ -9,7 +9,12 @@ import pytest
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
-from cluster_live import OpenpilotLiveSource, deceleration_source_display_label, standby_state
+from cluster_live import (
+  LIVE_SERVICES_BASE,
+  OpenpilotLiveSource,
+  deceleration_source_display_label,
+  standby_state,
+)
 
 
 @pytest.mark.parametrize(
@@ -75,3 +80,26 @@ def test_live_driving_mode_requires_alive_valid_longitudinal_plan(alive, valid, 
   decorated = source._with_live_hud_state(replace(standby_state(), driving_mode=2))
 
   assert decorated.driving_mode == expected
+
+
+def test_live_trip_report_subscribes_pose_and_both_gps_sources() -> None:
+  assert "livePose" in LIVE_SERVICES_BASE
+  assert "gpsLocationExternal" in LIVE_SERVICES_BASE
+  assert "gpsLocation" in LIVE_SERVICES_BASE
+
+
+def test_cached_calibration_is_loaded_for_installation_angle() -> None:
+  calibration = SimpleNamespace(rpyCalib=(0.0, 0.02, -0.01))
+  event = SimpleNamespace(valid=True, liveCalibration=calibration)
+  calls = []
+  source = object.__new__(OpenpilotLiveSource)
+  source.params = SimpleNamespace(get=lambda key: b"calibration" if key == "CalibrationParams" else None)
+  source.log = SimpleNamespace(Event=object())
+  source.messaging = SimpleNamespace(log_from_bytes=lambda payload, schema: event)
+  source.parser = SimpleNamespace(
+    _update_live_calibration=lambda value, valid: calls.append((value, valid)),
+  )
+
+  source._load_cached_calibration()
+
+  assert calls == [(calibration, True)]

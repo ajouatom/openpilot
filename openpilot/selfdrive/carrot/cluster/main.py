@@ -34,7 +34,6 @@ from cluster_config import (
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
     CLUSTER_SCREEN_MODE_NAVI,
-    CLUSTER_SCREEN_MODE_NAVI_DEBUG,
     CLUSTER_SCREEN_MODE_PARAM,
     CLUSTER_THEME_PARAM,
     DESIGN_HEIGHT,
@@ -111,10 +110,6 @@ def live_debug_panel_enabled(screen_mode: int) -> bool:
 
 def live_debug_plot_enabled(screen_mode: int) -> bool:
     return screen_mode in (CLUSTER_SCREEN_MODE_DEBUG_GRAPH, CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT)
-
-
-def live_navi_debug_enabled(screen_mode: int) -> bool:
-    return screen_mode == CLUSTER_SCREEN_MODE_NAVI_DEBUG
 
 
 def resolved_usb_display_fps(
@@ -839,7 +834,7 @@ def run_demo(
         live_source.set_debug_panels_enabled(
             live_debug=live_debug_panel_enabled(active_screen_mode),
             debug_plot=live_debug_plot_enabled(active_screen_mode),
-            navi_debug=live_navi_debug_enabled(active_screen_mode),
+            navi_debug=False,
         )
     route_source = None
     if input_mode == "route":
@@ -1100,7 +1095,7 @@ def run_demo(
                         live_source.set_debug_panels_enabled(
                             live_debug=live_debug_panel_enabled(next_screen_mode),
                             debug_plot=live_debug_plot_enabled(next_screen_mode),
-                            navi_debug=live_navi_debug_enabled(next_screen_mode),
+                            navi_debug=False,
                         )
                 next_screen_mode_param_read = now + SCREEN_MODE_PARAM_POLL_SECONDS
             if now >= next_camera_view_param_read:
@@ -2176,7 +2171,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--screen-mode",
         default=None,
-        help=f"HUD screen override such as default, navi, or navi-debug. Default reads {CLUSTER_SCREEN_MODE_PARAM}.",
+        help=f"HUD screen override such as default, trip-report, or navi. Default reads {CLUSTER_SCREEN_MODE_PARAM}.",
     )
     parser.add_argument(
         "--cluster-hud-mode",
