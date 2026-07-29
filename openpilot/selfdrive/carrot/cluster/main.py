@@ -73,6 +73,8 @@ from cluster_navi_overlay import merge_navi_overlay_state
 from cluster_profile import GcProfileHook, ProfileReporter, freeze_gc_after_init
 from cluster_renderer import ClusterUiRenderer
 from cluster_route_replay import (
+    ROUTE_CORNER_SOURCE_CHOICES,
+    ROUTE_CORNER_SOURCE_LIVE,
     ROUTE_FRONT_RADAR_ONLY_ENV,
     RouteReplaySource,
     adjacent_route_log_path,
@@ -634,6 +636,7 @@ def run_demo(
     usb_fast_drain_timeout_ms: int,
     route_path: Path,
     route_log: str,
+    route_corner_source: str,
     route_overlay_mode: str,
     route_tools_mode: str,
     camera_view_mode: int | None,
@@ -848,7 +851,7 @@ def run_demo(
                 route_start_segment,
                 route_max_segments,
                 0.0,
-                "live",
+                route_corner_source,
                 0.0,
             )
         except Exception:
@@ -924,7 +927,7 @@ def run_demo(
                 None,
                 1,
                 0.0,
-                "live",
+                route_corner_source,
                 route_active_corner_lateral_offset_m,
             )
         except Exception as exc:
@@ -2137,6 +2140,15 @@ def parse_args() -> argparse.Namespace:
         help="Route log type to read. rlog has full corner radar data; qlog is faster but downsampled.",
     )
     parser.add_argument(
+        "--route-corner-source",
+        choices=ROUTE_CORNER_SOURCE_CHOICES,
+        default=ROUTE_CORNER_SOURCE_LIVE,
+        help=" ".join((
+            "Corner-radar replay source. live uses recorded liveTracks;",
+            "stable reconstructs physical tracks from raw CAN; raw displays untracked CAN slots.",
+        )),
+    )
+    parser.add_argument(
         "--route-overlay",
         choices=("compact", "full", "off"),
         default="compact",
@@ -2483,6 +2495,7 @@ def main(*, exit_on_error: bool = True) -> None:
             args.usb_fast_drain_timeout_ms,
             args.route,
             args.route_log,
+            args.route_corner_source,
             args.route_overlay,
             args.route_tools,
             args.camera_view_mode,
