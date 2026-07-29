@@ -1,9 +1,10 @@
 import re
 import unittest
 
-from opendbc.car import gen_empty_fingerprint
+from opendbc.car import Bus, gen_empty_fingerprint
 from opendbc.car.selected_car import get_selected_car_platform
 from opendbc.car.structs import CarParams
+from opendbc.car.tesla.carstate import CarState
 from opendbc.car.tesla.interface import CarInterface
 from opendbc.car.tesla.fingerprints import FW_VERSIONS
 from opendbc.car.tesla.radar_interface import RADAR_START_ADDR
@@ -57,6 +58,16 @@ class TestTeslaFingerprint(unittest.TestCase):
       CP = CarInterface.get_params(candidate, gen_empty_fingerprint(), [], False, False, False)
       self.assertFalse(CP.dashcamOnly)
       self.assertIsNotNone(CarInterface.CarController)
+
+  def test_brake_status_uses_common_esp_message(self):
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, gen_empty_fingerprint(), [], False, False, False)
+    car_state = CarState(CP)
+    can_parsers = CarState.get_can_parsers(CP)
+
+    car_state.update(can_parsers)
+
+    self.assertIn(0x145, can_parsers[Bus.party].addresses)
+    self.assertNotIn(0x39D, can_parsers[Bus.party].addresses)
 
   def test_fw_platform_code(self):
     # Every EPS FW must parse and its platform letter must match the car it's filed under.

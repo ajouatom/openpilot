@@ -55,8 +55,8 @@ class TestTeslaSafetyBase(common.PandaCarSafetyTest, common.AngleSteeringSafetyT
     return self.packer.make_can_msg_panda("EPAS3S_sysStatus", 0, values)
 
   def _user_brake_msg(self, brake):
-    values = {"IBST_driverBrakeApply": 2 if brake else 1}
-    return self.packer.make_can_msg_panda("IBST_status", 0, values)
+    values = {"ESP_driverBrakeApply": 2 if brake else 1}
+    return self.packer.make_can_msg_panda("ESP_status", 0, values)
 
   def _speed_msg(self, speed):
     values = {"DI_vehicleSpeed": speed * 3.6}

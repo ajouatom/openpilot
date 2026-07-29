@@ -13,6 +13,7 @@
 | 속도·감속 | [속도·감속](ko/speed-deceleration.md) | [Speed and Deceleration](en/speed-deceleration.md) |
 | 크루즈·차간거리 | [크루즈·차간거리](ko/cruise-gap.md) | [Cruise and Following Gap](en/cruise-gap.md) |
 | 레이더 | [레이더트랙·코너레이더](ko/radar.md) | [Radar Tracks and Corner Radar](en/radar.md) |
+| Tesla | [Tesla 차량 연동](ko/tesla.md) | [Tesla Vehicle Integration](en/tesla.md) |
 
 ## 코드 변경 시 문서 확인
 

@@ -85,11 +85,10 @@ class CarState(CarStateBase):
     # Motor speed (EV: motor RPM from inverter)
     ret.engineRpm = cp_party.vl["DI_torque"]["DI_axleSpeed"]
 
-    # Brake pedal
-    # Brake pedal position (0.0-1.0) from iBooster push-rod displacement [0,47] mm
-    brake_rod = cp_party.vl["IBST_status"]["IBST_sInputRodDriver"]
-    ret.brake = max(0.0, brake_rod / 47.0) if brake_rod > 0 else 0.0
-    ret.brakePressed = cp_party.vl["IBST_status"]["IBST_driverBrakeApply"] == 2
+    # Brake pedal. Newer Model Y vehicles do not expose IBST_status on the party bus,
+    # while ESP_status is available across the supported Model 3/Y platforms.
+    ret.brake = 0.0
+    ret.brakePressed = cp_party.vl["ESP_status"]["ESP_driverBrakeApply"] == 2
     ret.brakeLights = cp_party.vl["ESP_status"]["ESP_brakeLamp"] == 1
     ret.regenBraking = cp_party.vl["DI_systemStatus"]["DI_regenLight"] != 0
     ret.espDisabled = cp_party.vl["ESP_status"]["ESP_espFaultLamp"] != 0
