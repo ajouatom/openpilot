@@ -1,4 +1,10 @@
 import { createFocusTrap as createDefaultFocusTrap } from "./focus_trap.js";
+import {
+  createAppProgressView,
+  normalizeAppProgressState,
+} from "../progress/progress.js";
+
+export { normalizeAppProgressState };
 
 export const APP_DIALOG_CLOSE_DELAY = 180;
 
@@ -9,6 +15,7 @@ export const APP_DIALOG_VARIANT_CLASSES = Object.freeze([
   "app-dialog--choice-value-grid",
   "app-dialog--form",
   "app-dialog--input",
+  "app-dialog--progress",
 ]);
 
 const MODAL_SURFACE_IDS = Object.freeze([
@@ -218,9 +225,34 @@ export function createDialogController(environment = {}) {
     resolveDialogState(activeDialog, result);
   }
 
-  function cancelAppDialog() {
-    if (!activeDialog || activeDialog.submitting) return;
-    resolveDialogState(activeDialog, dialogCancelResult(activeDialog));
+  async function cancelAppDialog() {
+    const state = activeDialog;
+    if (!state || state.submitting || state.canceling) return;
+    if (typeof state.onCancel !== "function") {
+      resolveDialogState(state, dialogCancelResult(state));
+      return;
+    }
+    state.canceling = true;
+    if (appDialogCancel) {
+      appDialogCancel.disabled = true;
+      appDialogCancel.textContent = state.cancelingLabel;
+    }
+    try {
+      await state.onCancel();
+      if (state.closeOnCancel && activeDialog === state && !state.closing) {
+        resolveDialogState(state, dialogCancelResult(state));
+      }
+    } catch (error) {
+      if (activeDialog !== state || state.closing) return;
+      state.canceling = false;
+      if (appDialogCancel) {
+        appDialogCancel.disabled = false;
+        appDialogCancel.textContent = state.cancelLabel;
+      }
+      if (typeof target.showAppToast === "function") {
+        target.showAppToast(error?.message || String(error), { tone: "error", duration: 3600 });
+      }
+    }
   }
 
   async function confirmAppDialog() {
@@ -427,9 +459,14 @@ export function createDialogController(environment = {}) {
         mode,
         serial: ++dialogSerial,
         onSubmit: options.onSubmit,
+        onCancel: options.onCancel,
+        closeOnCancel: options.closeOnCancel !== false,
         submitting: false,
+        canceling: false,
         closing: false,
         confirmLabel,
+        cancelLabel,
+        cancelingLabel: options.cancelingLabel || text("canceling", "Canceling..."),
         submittingLabel: options.submittingLabel || text("saving", "Saving..."),
         lastFocus: inheritedLastFocus || documentRoot.activeElement || null,
         focusTrap: null,
@@ -483,11 +520,70 @@ export function createDialogController(environment = {}) {
     });
   }
 
+  function openAppProgressDialog(options = {}) {
+    const completion = openAppDialog({
+      mode: "choice",
+      title: options.title,
+      message: " ",
+      cancelLabel: options.cancelLabel,
+      cancelingLabel: options.cancelingLabel,
+      onCancel: options.onCancel,
+      closeOnCancel: false,
+    });
+    const state = activeDialog;
+    appDialog?.classList?.add("app-dialog--progress");
+    if (appDialogBody) appDialogBody.style.flex = "0 0 auto";
+    const progressView = createAppProgressView(documentRoot, options);
+    if (appDialogBody && progressView) appDialogBody.replaceChildren(progressView.element);
+
+    const isCurrent = () => Boolean(state && activeDialog === state && !state.closing);
+    const controller = {
+      completion,
+      setCancelHandler(handler) {
+        if (!isCurrent()) return;
+        state.onCancel = typeof handler === "function" ? handler : null;
+        if (appDialogCancel) {
+          appDialogCancel.hidden = !state.onCancel;
+          appDialogCancel.setAttribute("aria-hidden", state.onCancel ? "false" : "true");
+        }
+      },
+      setCanceling(active) {
+        if (!isCurrent() || !appDialogCancel) return;
+        state.canceling = Boolean(active);
+        appDialogCancel.disabled = state.canceling;
+        appDialogCancel.textContent = state.canceling ? state.cancelingLabel : state.cancelLabel;
+      },
+      setMessage(value) {
+        if (isCurrent()) progressView?.setMessage(value);
+      },
+      setProgressState(value) {
+        if (isCurrent()) progressView?.setProgressState(value);
+      },
+      setProgress(value) {
+        controller.setProgressState(value);
+      },
+      setSummary(value) {
+        if (isCurrent()) progressView?.setSummary(value);
+      },
+      close() {
+        if (isCurrent()) resolveDialogState(state, true);
+        return completion;
+      },
+    };
+    controller.setMessage(options.message);
+    controller.setProgressState(options.progressState ?? options.progress);
+    controller.setSummary(options.summary);
+    controller.setCancelHandler(options.onCancel);
+    return Object.freeze(controller);
+  }
+
   function appConfirm(message, options = {}) {
     return openAppDialog({
       mode: "confirm",
       title: options.title,
       message,
+      messageHtml: options.messageHtml,
+      html: options.html,
       confirmLabel: options.confirmLabel,
       cancelLabel: options.cancelLabel,
     });
@@ -555,6 +651,7 @@ export function createDialogController(environment = {}) {
 
   return Object.freeze({
     openAppDialog,
+    openAppProgressDialog,
     appAlert,
     appConfirm,
     appPrompt,

@@ -6,7 +6,7 @@
       "kind": "bundle",
       "source": "src/entries/app.js",
       "path": "js/generated/app.js",
-      "hash": "1af713de15b55281ee1a3e3a15dab05129aac5f7f22f65eaf14ea8cf7846f9bb"
+      "hash": "d55ee0caca57fd432655cda0d5eb381bb49d1bcf9da9a4b80b053d657eb37487"
     },
     {
       "id": "drive.runtime",
@@ -41,7 +41,7 @@
       "kind": "bundle",
       "source": "src/entries/logs.js",
       "path": "js/generated/logs.js",
-      "hash": "b59751911fa313e797612e7b3d7d95dffaf4f0bf8bcbb7100b427ff58cebdf18"
+      "hash": "8bca8d16d948b0ff0b6f42de2723cd3ae9f4223145a4620b1bbda37a1b99e303"
     },
     {
       "id": "terminal.runtime",
@@ -90,7 +90,7 @@
       "kind": "bundle",
       "source": "src/entries/design_system.css",
       "path": "css/generated/design-system.css",
-      "hash": "d09ff07a9f3af430b60bc47cc6bba020519935d5805b4f544d11b9acf7bb76c9"
+      "hash": "af78ab5f1aba04b3b914f6e3b26950647d886de8a782b143cd439f5f29b6c3d8"
     },
     {
       "id": "drive.styles",
@@ -125,7 +125,7 @@
       "kind": "bundle",
       "source": "src/entries/logs.css",
       "path": "css/generated/logs.css",
-      "hash": "62e3527995bea1be410774a30955e04ca2662d439dbe70fbb9c9d809f7e3bb16"
+      "hash": "999280fcd3d4c792b4f688457b5fd4006fbee38bd1dc75b22927b64eaa73da9d"
     },
     {
       "id": "terminal.styles",

@@ -465,6 +465,14 @@ function openLogsVideoPlayer(title, src, options = {}) {
     });
     transportPlayButton.setAttribute("aria-pressed", String(!paused));
   };
+  const pauseCurrentPlayback = () => {
+    try {
+      if (player?.pause) player.pause();
+      else videoEl.pause();
+    } finally {
+      window.requestAnimationFrame(syncTransportPlayState);
+    }
+  };
   const toggleTransportPlayback = async () => {
     try {
       const ended = typeof player?.ended === "boolean" ? player.ended : videoEl.ended;
@@ -476,10 +484,8 @@ function openLogsVideoPlayer(title, src, options = {}) {
       if (paused || ended) {
         const playResult = player?.play ? player.play() : videoEl.play();
         if (playResult && typeof playResult.then === "function") await playResult;
-      } else if (player?.pause) {
-        player.pause();
       } else {
-        videoEl.pause();
+        pauseCurrentPlayback();
       }
     } catch (error) {
       if (typeof showAppToast === "function") {
@@ -638,6 +644,7 @@ function openLogsVideoPlayer(title, src, options = {}) {
     const handler = typeof options.onSegmentSend === "function"
       ? ({ close: closePlayer } = {}) => options.onSegmentSend(targetSegment, { close: closePlayer })
       : options.onSend;
+    pauseCurrentPlayback();
     runTopAction(event, handler, "is-action-open");
   });
   overlay.querySelector(".dashcam-player-menu")?.addEventListener("click", (event) => {

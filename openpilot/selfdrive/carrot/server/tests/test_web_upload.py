@@ -8,7 +8,7 @@ from aiohttp import web
 
 from openpilot.selfdrive.carrot import carrot_man as carrot_man_module
 from openpilot.selfdrive.carrot import web_upload
-from openpilot.selfdrive.carrot.server.features.dashcam import routes, upload, upload_jobs
+from openpilot.selfdrive.carrot.server.features.dashcam import catalog, routes, upload, upload_jobs
 from openpilot.selfdrive.carrot.server.services import dashcam_upload_report
 from openpilot.selfdrive.carrot.server.services import web_settings
 
@@ -61,6 +61,104 @@ def test_dashcam_finished_task_cannot_leave_running_job():
 
   assert job["status"] == "failed"
   assert job["error"] == "upload task ended without a final state"
+  upload_jobs.jobs().clear()
+
+
+def test_dashcam_upload_job_exposes_stable_phase_codes():
+  upload_jobs.jobs().clear()
+  job = upload_jobs.create_job(["route--0"])
+
+  assert upload_jobs.snapshot(job)["phase"] == "queued"
+
+  upload_jobs.progress(job, current=1, total=1, phase=upload_jobs.UPLOAD_PHASE_UPLOADING)
+  assert upload_jobs.snapshot(job)["phase"] == "uploading"
+
+  upload_jobs.finish(job, ok=True, result={"ok": True})
+  snapshot = upload_jobs.snapshot(job)
+  assert snapshot["status"] == "done"
+  assert snapshot["phase"] == "complete"
+  upload_jobs.jobs().clear()
+
+
+def test_dashcam_upload_progress_is_monotonic_and_revisioned():
+  upload_jobs.jobs().clear()
+  job = upload_jobs.create_job(["route--0", "route--1"])
+  assert upload_jobs.snapshot(job)["revision"] == 0
+
+  upload_jobs.progress(
+    job,
+    phase=upload_jobs.UPLOAD_PHASE_PREPARING,
+    current=1,
+    total=2,
+    phase_current=1,
+    phase_total=2,
+    percent=4,
+  )
+  preparing = upload_jobs.snapshot(job)
+  assert preparing["progress"] == 4
+  assert preparing["phase_current"] == 1
+  assert preparing["phase_total"] == 2
+  assert preparing["revision"] == 1
+
+  upload_jobs.progress(
+    job,
+    phase=upload_jobs.UPLOAD_PHASE_UPLOADING,
+    percent=2,
+    bytes_current=128,
+    bytes_total=1024,
+    bytes_per_second=512,
+  )
+  uploading = upload_jobs.snapshot(job)
+  assert uploading["progress"] == 4
+  assert uploading["bytes_current"] == 128
+  assert uploading["bytes_total"] == 1024
+  assert uploading["bytes_per_second"] == 512
+  assert uploading["revision"] == 2
+
+  upload_jobs.finish(job, ok=True, result={"ok": True})
+  complete = upload_jobs.snapshot(job)
+  assert complete["progress"] == 100
+  assert complete["revision"] == 3
+  upload_jobs.jobs().clear()
+
+
+def test_dashcam_upload_cancel_and_failure_keep_visible_progress():
+  upload_jobs.jobs().clear()
+
+  canceled_job = upload_jobs.create_job(["route--0"])
+  upload_jobs.progress(
+    canceled_job,
+    phase=upload_jobs.UPLOAD_PHASE_UPLOADING,
+    percent=41,
+  )
+  canceled = upload_jobs.cancel_job(canceled_job["id"])
+  assert canceled["phase"] == "canceling"
+  assert canceled["progress"] == 41
+  upload_jobs.finish(
+    canceled_job,
+    ok=False,
+    status="canceled",
+    result={"ok": False, "canceled": True},
+  )
+  canceled = upload_jobs.snapshot(canceled_job)
+  assert canceled["phase"] == "canceled"
+  assert canceled["progress"] == 41
+
+  failed_job = upload_jobs.create_job(["route--1"])
+  upload_jobs.progress(
+    failed_job,
+    phase=upload_jobs.UPLOAD_PHASE_UPLOADING,
+    percent=62,
+  )
+  upload_jobs.finish(
+    failed_job,
+    ok=False,
+    error="network failed",
+    result={"ok": False, "error": "network failed"},
+  )
+  failed = upload_jobs.snapshot(failed_job)
+  assert failed["phase"] == "failed"
+  assert failed["progress"] == 62
   upload_jobs.jobs().clear()
 
 
@@ -276,8 +374,15 @@ def test_dashcam_upload_report_does_not_merge_nonconsecutive_segments():
 def test_dashcam_upload_completion_notifies_web_server_and_discord(monkeypatch):
   segment = "00000cfb--69588de3d7--10"
   notifications = []
+  uploaded_files = []
+  progress_snapshots = []
 
   async def fake_upload_folder(*args, **kwargs):
+    uploaded_files.extend(kwargs["filenames"])
+    on_progress = kwargs.get("on_progress")
+    if on_progress:
+      on_progress("qcamera.ts", 12, 12, 12)
+      on_progress("rlog.zst", 34, 34, 34)
     return True
 
   async def fake_web_complete(base_url, token, payload):
@@ -300,11 +405,23 @@ def test_dashcam_upload_completion_notifies_web_server_and_discord(monkeypatch):
   monkeypatch.setattr(upload, "discord_webhook_url", lambda params: "https://discord.example/webhook")
   monkeypatch.setattr(upload, "send_discord_webhook", fake_discord)
   monkeypatch.setattr(upload_jobs, "segment_dir", lambda value: "/tmp/segment")
-  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda value: [])
+  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda value: [
+    {"kind": "qcamera", "name": "qcamera.ts", "size": 12},
+    {"kind": "rlog", "name": "rlog.zst", "size": 34},
+  ])
   monkeypatch.setattr(upload_jobs, "upload_folder_to_web", fake_upload_folder)
   monkeypatch.setattr(upload_jobs, "send_web_upload_complete", fake_web_complete)
+  real_progress = upload_jobs.progress
 
-  result = asyncio.run(upload_jobs.run_upload_segments([segment]))
+  def capture_progress(job, **kwargs):
+    real_progress(job, **kwargs)
+    progress_snapshots.append(upload_jobs.snapshot(job))
+
+  monkeypatch.setattr(upload_jobs, "progress", capture_progress)
+
+  upload_jobs.jobs().clear()
+  job = upload_jobs.create_job([segment])
+  result = asyncio.run(upload_jobs.run_upload_segments([segment], job))
 
   assert result["ok"] is True
   assert result["webComplete"] == {"ok": True, "status": 200}
@@ -313,6 +430,28 @@ def test_dashcam_upload_completion_notifies_web_server_and_discord(monkeypatch):
     ("web", "https://upload.example", "session-token", segment),
     ("discord", "https://discord.example/webhook", "shared upload report"),
   ]
+  assert uploaded_files == ["qcamera.ts", "rlog.zst"]
+  snapshot = upload_jobs.snapshot(job)
+  assert snapshot["bytes_current"] == 46
+  assert snapshot["bytes_total"] == 46
+  assert snapshot["bytes_per_second"] >= 0
+  assert snapshot["step_current"] == 1
+  assert snapshot["step_total"] == 1
+  assert snapshot["progress"] == 99
+  assert snapshot["phase"] == "notifying"
+  assert snapshot["phase_current"] == 2
+  assert snapshot["phase_total"] == 2
+  assert [item["progress"] for item in progress_snapshots] == sorted(
+    item["progress"] for item in progress_snapshots
+  )
+  assert {"preparing", "uploading", "notifying"} <= {
+    item["phase"] for item in progress_snapshots
+  }
+  assert any(
+    item["phase"] == "preparing" and 0 < item["progress"] <= upload_jobs.UPLOAD_PREPARING_END_PERCENT
+    for item in progress_snapshots
+  )
+  upload_jobs.jobs().clear()
 
 
 def test_dashcam_toss_completion_never_uses_discord(monkeypatch):
@@ -752,6 +891,84 @@ def test_dashcam_web_upload_streams_and_verifies_every_file(tmp_path: Path, monk
   ]
   assert [request[1] for request in session.requests] == [b"camera-data", b"log-data"]
   assert [request[2]["X-File-Size"] for request in session.requests] == ["11", "8"]
+
+
+def test_dashcam_web_upload_reports_chunk_progress(tmp_path: Path, monkeypatch):
+  (tmp_path / "qcamera.ts").write_bytes(b"camera-data")
+  FakeSession.instances = []
+  FakeSession.size_deltas = []
+  monkeypatch.setattr(web_upload, "ClientSession", FakeSession)
+  updates = []
+
+  assert asyncio.run(web_upload.upload_folder_to_web(
+    str(tmp_path),
+    "device",
+    "route|0",
+    "https://upload.example",
+    "token",
+    on_progress=lambda *args: updates.append(args),
+  ))
+
+  assert updates == [
+    ("qcamera.ts", 0, 11, 0),
+    ("qcamera.ts", 11, 11, 11),
+  ]
+
+
+def test_dashcam_upload_summary_selects_only_original_qcamera_and_rlog(tmp_path: Path):
+  (tmp_path / "qcamera.ts").write_bytes(b"original-video")
+  (tmp_path / "qcamera.mp4").write_bytes(b"converted-video")
+  (tmp_path / "rlog.zst").write_bytes(b"original-rlog")
+  (tmp_path / "rlog.bz2").write_bytes(b"fallback-rlog")
+  (tmp_path / "qlog.zst").write_bytes(b"reduced-log")
+  (tmp_path / "fcamera.hevc").write_bytes(b"auxiliary-video")
+
+  files = catalog.segment_file_summary(str(tmp_path))
+
+  assert [(item["kind"], item["name"], item["size"]) for item in files] == [
+    ("qcamera", "qcamera.ts", len(b"original-video")),
+    ("rlog", "rlog.zst", len(b"original-rlog")),
+  ]
+
+
+def test_dashcam_upload_summary_allows_rlog_without_qcamera(tmp_path: Path):
+  (tmp_path / "rlog.bz2").write_bytes(b"original-rlog")
+
+  files = catalog.segment_file_summary(str(tmp_path))
+
+  assert [(item["kind"], item["name"]) for item in files] == [("rlog", "rlog.bz2")]
+
+
+def test_dashcam_upload_summary_requires_rlog(tmp_path: Path):
+  (tmp_path / "qcamera.ts").write_bytes(b"original-video")
+
+  with pytest.raises(web.HTTPNotFound) as exc_info:
+    catalog.segment_file_summary(str(tmp_path))
+  assert exc_info.value.text == "rlog not found"
+
+
+def test_dashcam_web_upload_honors_explicit_file_selection(tmp_path: Path, monkeypatch):
+  (tmp_path / "qcamera.ts").write_bytes(b"camera-data")
+  (tmp_path / "rlog.zst").write_bytes(b"log-data")
+  (tmp_path / "qlog.zst").write_bytes(b"excluded-data")
+  FakeSession.instances = []
+  FakeSession.size_deltas = []
+  monkeypatch.setattr(web_upload, "ClientSession", FakeSession)
+
+  assert asyncio.run(web_upload.upload_folder_to_web(
+    str(tmp_path),
+    "device",
+    "route|0",
+    "https://upload.example",
+    "token",
+    filenames=("qcamera.ts", "rlog.zst"),
+  ))
+
+  session = FakeSession.instances[-1]
+  assert [request[0].rsplit("/", 1)[-1] for request in session.requests] == [
+    "qcamera.ts",
+    "rlog.zst",
+  ]
 
 
 def test_dashcam_web_upload_retries_size_mismatch(tmp_path: Path, monkeypatch):
