@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import ipaddress
 import os
 from pathlib import Path
+import shutil
 import socket
 import threading
 import time
@@ -135,6 +136,8 @@ class SystemStats:
     memory_used_bytes: int | None = None
     memory_used_percent: float | None = None
     cpu_core_percents: tuple[float | None, ...] = ()
+    cpu_used_percent: float | None = None
+    disk_used_percent: float | None = None
 
 
 class SystemStatsSampler:
@@ -175,13 +178,33 @@ class SystemStatsSampler:
         else:
             cpu_percents = self._linux_cpu_percents(cpu_times)
             self._previous_linux_cpu_times = cpu_times
+        valid_cpu_percents = tuple(value for value in cpu_percents if value is not None)
+        cpu_used_percent = (
+            sum(valid_cpu_percents) / len(valid_cpu_percents)
+            if valid_cpu_percents
+            else None
+        )
 
         return SystemStats(
             memory_total_bytes=memory_total,
             memory_used_bytes=memory_used,
             memory_used_percent=memory_percent,
             cpu_core_percents=cpu_percents,
+            cpu_used_percent=cpu_used_percent,
+            disk_used_percent=self._read_disk_used_percent(),
         )
+
+    @staticmethod
+    def _read_disk_used_percent() -> float | None:
+        for path in (Path("/data"), Path("/")):
+            try:
+                usage = shutil.disk_usage(path)
+            except OSError:
+                continue
+            if usage.total <= 0:
+                continue
+            return max(0.0, min(100.0, usage.used / usage.total * 100.0))
+        return None
 
     @staticmethod
     def _read_linux_memory() -> tuple[int | None, int | None, float | None]:

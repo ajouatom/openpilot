@@ -76,7 +76,7 @@ def build_cluster_args(args: argparse.Namespace, passthrough: list[str]) -> list
         cluster_args.extend(("--navi-map-theme", args.navi_map_theme))
         if args.navi_no_beacon:
             cluster_args.append("--navi-no-beacon")
-    screen_mode = args.screen_mode or ("navi" if args.navi_overlay else None)
+    screen_mode = "trip-report" if args.trip_report else args.screen_mode or ("navi" if args.navi_overlay else None)
     if screen_mode is not None:
         cluster_args.extend(("--screen-mode", screen_mode))
     return [*cluster_args, *passthrough]
@@ -152,7 +152,17 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--navi-advertise-ip", default=None, help="Address advertised to the Android navigation app")
     parser.add_argument("--navi-map-theme", choices=("dark", "auto", "light"), default="dark", help="Theme requested for the smartphone-rendered map")
     parser.add_argument("--navi-no-beacon", action="store_true", help="Disable UDP 7705 navigation discovery")
-    parser.add_argument("--screen-mode", default=None, help="Cluster screen mode; navi is used by default with --navi-overlay")
+    screen_group = parser.add_mutually_exclusive_group()
+    screen_group.add_argument(
+        "--screen-mode",
+        default=None,
+        help="Cluster screen mode; navi is used by default with --navi-overlay",
+    )
+    screen_group.add_argument(
+        "--trip-report",
+        action="store_true",
+        help="Show external HUD screen mode 5 with the live driving report and bounded trace",
+    )
     return parser.parse_known_args(argv)
 
 

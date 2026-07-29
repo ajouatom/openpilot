@@ -109,6 +109,9 @@ LIVE_SERVICES_BASE = (
     "roadCameraState",
     "cameraOdometry",
     "liveCalibration",
+    "livePose",
+    "gpsLocationExternal",
+    "gpsLocation",
     "drivingModelData",
     "liveDelay",
     "liveParameters",
@@ -187,6 +190,7 @@ class OpenpilotLiveSource:
             self._energy_gauge_label = self._resolve_energy_gauge_label()
             self._max_lateral_accel = self._resolve_max_lateral_accel()
             self._load_cached_car_params()
+            self._load_cached_calibration()
         except Exception:
             pass
 
@@ -199,6 +203,20 @@ class OpenpilotLiveSource:
             car_params_bytes = self.params.get("CarParams")
             if car_params_bytes:
                 self.parser._update_car_params(self.messaging.log_from_bytes(car_params_bytes, car.CarParams))
+        except Exception:
+            pass
+
+    def _load_cached_calibration(self) -> None:
+        if self.params is None or self.log is None:
+            return
+        try:
+            calibration_bytes = self.params.get("CalibrationParams")
+            if calibration_bytes:
+                event = self.messaging.log_from_bytes(calibration_bytes, self.log.Event)
+                self.parser._update_live_calibration(
+                    event.liveCalibration,
+                    bool(safe_get(event, "valid", True)),
+                )
         except Exception:
             pass
 
@@ -528,6 +546,10 @@ class OpenpilotLiveSource:
             self.parser._update_camera_odometry(data, self._service_valid(service))
         elif service == "liveCalibration":
             self.parser._update_live_calibration(data, self._service_valid(service))
+        elif service == "livePose":
+            self.parser._update_live_pose(data, event_t)
+        elif service in ("gpsLocationExternal", "gpsLocation"):
+            self.parser._update_gps_location(data, event_t)
         elif service == "carParams":
             self.parser._update_car_params(data)
         elif service == "radarState":
