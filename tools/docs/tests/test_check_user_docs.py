@@ -18,7 +18,7 @@ def test_mapping_is_valid():
   mapping = load_mapping(MAP_PATH)
   assert mapping["version"] == 1
   assert {rule["id"] for rule in mapping["rules"]} >= {
-    "settings-catalog-and-web", "cruise-buttons-and-shared-control", "radar",
+    "settings-catalog-and-web", "cruise-buttons-and-shared-control", "radar", "tesla-vehicle-integration",
   }
 
 
@@ -51,6 +51,17 @@ def test_any_complete_shared_cruise_document_pair_satisfies_rule():
     "docs/user/ko/buttons-presets.md",
     "docs/user/en/buttons-presets.md",
   ]
+  assert find_missing_docs(changed, mapping) == []
+
+
+def test_tesla_vehicle_change_requires_bilingual_docs():
+  mapping = load_mapping(MAP_PATH)
+  code_path = "opendbc_repo/opendbc/car/tesla/carstate.py"
+
+  missing = find_missing_docs([code_path, "docs/user/ko/tesla.md"], mapping)
+  assert [rule["id"] for rule in missing] == ["tesla-vehicle-integration"]
+
+  changed = [code_path, "docs/user/ko/tesla.md", "docs/user/en/tesla.md"]
   assert find_missing_docs(changed, mapping) == []
 
 

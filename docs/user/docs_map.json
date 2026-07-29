@@ -181,6 +181,22 @@
           "docs/user/en/radar.md"
         ]
       ]
+    },
+    {
+      "id": "tesla-vehicle-integration",
+      "description": "Tesla vehicle CAN compatibility and driver-control inputs",
+      "code_paths": [
+        "opendbc_repo/opendbc/car/tesla/**",
+        "opendbc_repo/opendbc/dbc/tesla_model3_party.dbc",
+        "opendbc_repo/opendbc/safety/safety/safety_tesla.h",
+        "opendbc_repo/opendbc/safety/tests/test_tesla.py"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/tesla.md",
+          "docs/user/en/tesla.md"
+        ]
+      ]
     }
   ]
 }
