@@ -28,12 +28,13 @@ enum SpiError {
   RECOVERY_FAILED = -4,
 };
 
-const unsigned int SPI_ACK_TIMEOUT = 500; // milliseconds
-// A blocked SPI transfer also blocks CAN receive and heartbeat handling. Keep
-// retries well below Panda's 5 second heartbeat timeout, then reconnect cleanly.
-const unsigned int SPI_TRANSFER_RETRY_TIMEOUT = 500; // milliseconds
+const unsigned int SPI_ACK_TIMEOUT = 50; // milliseconds
+// A blocked SPI transfer also blocks the 100 Hz CAN path. Transient NACK bursts
+// normally recover within a few milliseconds, so reconnect on sustained faults.
+const unsigned int SPI_TRANSFER_RETRY_TIMEOUT = 100; // milliseconds
 const int SPI_MAX_NACK_RETRIES = 8;
-const int SPI_MAX_ACK_TIMEOUTS = 6;
+const int SPI_MAX_ACK_TIMEOUTS = 3;
+const unsigned int SPI_RECOVERY_TIMEOUT = 50; // milliseconds
 const int SPI_RECOVERY_MAX_ATTEMPTS = 12;
 const std::string SPI_DEVICE = "/dev/spidev0.0";
 
@@ -419,7 +420,10 @@ fail:
   // and ready for the next transfer
   int nack_cnt = 0;
   int recovery_attempts = 0;
-  while ((nack_cnt < 3) && (recovery_attempts < SPI_RECOVERY_MAX_ATTEMPTS)) {
+  const double recovery_start_time = millis_since_boot();
+  while ((nack_cnt < 3) &&
+         (recovery_attempts < SPI_RECOVERY_MAX_ATTEMPTS) &&
+         ((millis_since_boot() - recovery_start_time) < SPI_RECOVERY_TIMEOUT)) {
     recovery_attempts += 1;
     if (wait_for_ack(SPI_NACK, 0x14, 1, SPI_BUF_SIZE/2) == 0) {
       nack_cnt += 1;
@@ -428,7 +432,8 @@ fail:
     }
   }
   if (nack_cnt < 3) {
-    LOGE("SPI recovery failed after %d attempts", recovery_attempts);
+    LOGE("SPI recovery failed after %d attempts (%.2fms)", recovery_attempts,
+         millis_since_boot() - recovery_start_time);
     ret = SpiError::RECOVERY_FAILED;
   }
 
