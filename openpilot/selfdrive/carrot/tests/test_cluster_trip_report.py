@@ -11,7 +11,7 @@ sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_config import CLUSTER_SCREEN_MODE_TRIP_REPORT, normalize_cluster_screen_mode
 from cluster_route_replay import RouteLogParser, frame_to_state
-from cluster_trip_report import TripReportTracker
+from cluster_trip_report import TRIP_TRACE_MAX_RADIUS_M, TripReportTracker
 from cluster_renderer import ClusterUiRenderer, NAVI_WORLD_VIEW_SHIFT_X
 
 
@@ -87,7 +87,7 @@ def test_trip_tracker_aligns_live_pose_heading_to_gps_bearing():
   assert math.isclose(state.current_y_m, math.cos(expected_heading_rad) * 5.0, abs_tol=0.05)
 
 
-def test_late_gps_heading_rotates_existing_trace_without_a_kink():
+def test_late_gps_heading_rotates_existing_trace_north_up_without_a_kink():
   tracker = TripReportTracker()
   tracker.update_live_pose(live_pose(math.pi / 2.0), 0.0)
   tracker.update(0.0, 10.0, 0.0, 0.0, True, 2.7, 15.0)
@@ -144,7 +144,12 @@ def test_trip_tracker_counts_events_once_and_bounds_trace_work():
   assert state.hard_corner_count == 2
   assert 45.0 <= state.auto_ratio_percent <= 55.0
   assert len(state.trace_points) <= 512
-  assert state.trace_radius_m == 30_000.0
+  assert state.trace_radius_m == TRIP_TRACE_MAX_RADIUS_M
+  assert all(
+    math.hypot(point.x_m - state.current_x_m, point.y_m - state.current_y_m)
+    <= TRIP_TRACE_MAX_RADIUS_M
+    for point in state.trace_points
+  )
   assert state.distance_m > 38_000.0
 
 
@@ -167,6 +172,17 @@ def test_report_mode_reserves_the_right_panel_for_non_camera_world_view():
 
   assert renderer._world_view_shift_x(SimpleNamespace(camera_view_mode=0)) == NAVI_WORLD_VIEW_SHIFT_X
   assert renderer._world_view_shift_x(SimpleNamespace(camera_view_mode=2)) == 0.0
+
+
+def test_trip_report_screen_coordinates_are_north_up():
+  center = SimpleNamespace(x=100.0, y=100.0)
+  north = ClusterUiRenderer._trip_trace_screen_position(0.0, 10.0, center, 1.0)
+  east = ClusterUiRenderer._trip_trace_screen_position(10.0, 0.0, center, 1.0)
+
+  assert north.x == center.x
+  assert north.y < center.y
+  assert east.x > center.x
+  assert east.y == center.y
 
 
 def test_trip_trace_tuple_is_reused_until_a_new_display_point_is_sampled():
