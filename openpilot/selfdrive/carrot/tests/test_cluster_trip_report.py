@@ -9,7 +9,11 @@ from types import SimpleNamespace
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
-from cluster_config import CLUSTER_SCREEN_MODE_TRIP_REPORT, normalize_cluster_screen_mode
+from cluster_config import (
+  CLUSTER_SCREEN_MODE_DEFAULT,
+  CLUSTER_SCREEN_MODE_TRIP_REPORT,
+  normalize_cluster_screen_mode,
+)
 from cluster_route_replay import RouteLogParser, frame_to_state
 from cluster_trip_report import TRIP_TRACE_MAX_RADIUS_M, TripReportTracker
 from cluster_renderer import ClusterUiRenderer, NAVI_WORLD_VIEW_SHIFT_X
@@ -172,6 +176,37 @@ def test_report_mode_reserves_the_right_panel_for_non_camera_world_view():
 
   assert renderer._world_view_shift_x(SimpleNamespace(camera_view_mode=0)) == NAVI_WORLD_VIEW_SHIFT_X
   assert renderer._world_view_shift_x(SimpleNamespace(camera_view_mode=2)) == 0.0
+
+
+def test_default_screen_uses_trip_report_until_navigation_is_received():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1920
+  renderer.screen_mode = CLUSTER_SCREEN_MODE_DEFAULT
+  disconnected = SimpleNamespace(
+    camera_view_mode=0,
+    external_nav_active=False,
+    navi_live=None,
+    navi_dashboard=SimpleNamespace(connected=False),
+  )
+
+  assert renderer._effective_screen_mode(disconnected) == CLUSTER_SCREEN_MODE_TRIP_REPORT
+  assert renderer._world_view_shift_x(disconnected) == NAVI_WORLD_VIEW_SHIFT_X
+
+  connected = SimpleNamespace(
+    camera_view_mode=0,
+    external_nav_active=False,
+    navi_live=None,
+    navi_dashboard=SimpleNamespace(connected=True),
+  )
+  assert renderer._effective_screen_mode(connected) == CLUSTER_SCREEN_MODE_DEFAULT
+
+  legacy_navigation = SimpleNamespace(
+    camera_view_mode=0,
+    external_nav_active=True,
+    navi_live=None,
+    navi_dashboard=None,
+  )
+  assert renderer._effective_screen_mode(legacy_navigation) == CLUSTER_SCREEN_MODE_DEFAULT
 
 
 def test_trip_report_screen_coordinates_are_north_up():
