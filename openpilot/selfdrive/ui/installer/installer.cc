@@ -1,7 +1,12 @@
 #include <array>
 #include <cassert>
+#include <cstdio>
 #include <fstream>
 #include <map>
+
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "common/swaglog.h"
 #include "common/util.h"
@@ -24,6 +29,7 @@ const std::string BRANCH_STR = get_str(BRANCH "?                                
 
 #define GIT_SSH_URL "git@github.com:commaai/openpilot.git"
 #define CONTINUE_PATH "/data/continue.sh"
+#define CONTINUE_NEW_PATH "/data/continue.sh.new"
 
 const std::string INSTALL_PATH = "/data/openpilot";
 const std::string VALID_CACHE_PATH = "/data/.openpilot_cache";
@@ -222,16 +228,24 @@ void cloneFinished(int exitCode) {
 #endif
 
   // write continue.sh
-  FILE *of = fopen("/data/continue.sh.new", "wb");
+  FILE *of = fopen(CONTINUE_NEW_PATH, "wb");
   assert(of != NULL);
 
   size_t num = str_continue_end - str_continue;
   size_t num_written = fwrite(str_continue, 1, num, of);
   assert(num == num_written);
-  fclose(of);
+  assert(fflush(of) == 0);
+  assert(fchmod(fileno(of), 0755) == 0);
+  assert(fsync(fileno(of)) == 0);
+  assert(fclose(of) == 0);
+  assert(rename(CONTINUE_NEW_PATH, CONTINUE_PATH) == 0);
 
-  run("chmod +x /data/continue.sh.new");
-  run("mv /data/continue.sh.new " CONTINUE_PATH);
+  // Persist the rename before waiting for the newly installed UI. Otherwise a
+  // reset at this point can leave only continue.sh.new and boot back to setup.
+  int data_dir_fd = open("/data", O_RDONLY | O_DIRECTORY);
+  assert(data_dir_fd >= 0);
+  assert(fsync(data_dir_fd) == 0);
+  assert(close(data_dir_fd) == 0);
 
   // wait for the installed software's UI to take over
   finishInstall();

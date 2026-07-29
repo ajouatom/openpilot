@@ -159,7 +159,10 @@ def _read_stdin():
 
 
 def main():
-  gui_app.init_window("Spinner")
+  # The source-build spinner starts before SCons has generated every font atlas.
+  # Loading only these fonts avoids generating the large CJK atlases in parallel
+  # with the build.
+  gui_app.init_window("Spinner", font_weights=(FontWeight.NORMAL, FontWeight.PRETENDARD))
   spinner = Spinner()
   for _ in gui_app.render():
     text_list = _read_stdin()
