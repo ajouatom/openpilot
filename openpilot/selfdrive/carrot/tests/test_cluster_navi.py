@@ -752,7 +752,7 @@ def test_ipc_media_source_restores_standalone_navigation_images():
   assert source._projected_media() == ()
 
 
-def test_navi_panel_shifts_3d_camera_modes_left():
+def test_navi_or_trip_report_panel_shifts_3d_camera_modes_left():
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1920
   renderer.screen_mode = 0
@@ -777,7 +777,7 @@ def test_navi_panel_shifts_3d_camera_modes_left():
     camera_view_mode=0,
     navi_live=None,
     navi_dashboard=None,
-  )) == 0
+  )) == 398
 
 
 def test_turn_signals_center_on_the_active_world_or_road_camera_content():
@@ -814,7 +814,7 @@ def test_turn_signals_center_on_the_active_world_or_road_camera_content():
     camera_view_mode=0,
     navi_live=None,
     navi_dashboard=None,
-  ), "left") == 0
+  ), "left") == pytest.approx(-398)
 
 
 def test_road_camera_ends_exactly_where_right_navigation_panel_begins():
