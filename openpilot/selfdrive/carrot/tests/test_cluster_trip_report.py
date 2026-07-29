@@ -15,7 +15,11 @@ from cluster_config import (
   normalize_cluster_screen_mode,
 )
 from cluster_route_replay import RouteLogParser, frame_to_state
-from cluster_trip_report import TRIP_TRACE_MAX_RADIUS_M, TripReportTracker
+from cluster_trip_report import (
+  TRIP_TRACE_MAX_RADIUS_M,
+  TRIP_TRACE_RADIUS_QUANTUM_M,
+  TripReportTracker,
+)
 from cluster_renderer import ClusterUiRenderer, NAVI_WORLD_VIEW_SHIFT_X
 
 
@@ -157,6 +161,16 @@ def test_trip_tracker_counts_events_once_and_bounds_trace_work():
   assert state.distance_m > 38_000.0
 
 
+def test_trip_trace_radius_grows_in_ten_meter_increments():
+  tracker = TripReportTracker()
+  tracker.update(0.0, 10.0, 0.0, 0.0, False, 2.7, 15.0)
+  for index in range(1, 47):
+    state = tracker.update(index * 0.5, 10.0, 0.0, 0.0, False, 2.7, 15.0)
+
+  assert state.trace_radius_m == 260.0
+  assert state.trace_radius_m % TRIP_TRACE_RADIUS_QUANTUM_M == 0.0
+
+
 def test_route_parser_carries_report_into_cluster_state():
   parser = RouteLogParser(recompute_cutins=False)
   parser._update_live_pose(live_pose(0.0), 0.0)
@@ -218,6 +232,17 @@ def test_trip_report_screen_coordinates_are_north_up():
   assert north.y < center.y
   assert east.x > center.x
   assert east.y == center.y
+
+
+def test_trip_trace_zoom_eases_toward_the_next_radius(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._trip_trace_display_radius_m = 250.0
+  renderer._trip_trace_zoom_t = 10.0
+  monkeypatch.setattr(sys.modules["cluster_renderer"].time, "monotonic", lambda: 10.1)
+
+  shown_radius_m = renderer._trip_trace_radius(260.0)
+
+  assert 250.0 < shown_radius_m < 260.0
 
 
 def test_trip_trace_tuple_is_reused_until_a_new_display_point_is_sampled():

@@ -14,7 +14,7 @@ TRIP_TRACE_MIN_DISTANCE_M = 3.0
 TRIP_TRACE_MAX_POINTS = 512
 TRIP_TRACE_MIN_RADIUS_M = 250.0
 TRIP_TRACE_MAX_RADIUS_M = 1_000.0
-TRIP_TRACE_RADIUS_STEPS_M = (250.0, 500.0, 1_000.0)
+TRIP_TRACE_RADIUS_QUANTUM_M = 10.0
 TRIP_HARD_ACCEL_MPS2 = 2.5
 TRIP_HARD_BRAKE_MPS2 = -3.0
 TRIP_HARD_CORNER_MPS2 = 3.0
@@ -413,10 +413,11 @@ class TripReportTracker:
             default=0.0,
         )
         required_m = min(TRIP_TRACE_MAX_RADIUS_M, max(TRIP_TRACE_MIN_RADIUS_M, extent_m * 1.12))
-        for radius_m in TRIP_TRACE_RADIUS_STEPS_M:
-            if radius_m >= required_m:
-                self._trace_radius_m = max(self._trace_radius_m, radius_m)
-                break
+        radius_m = min(
+            TRIP_TRACE_MAX_RADIUS_M,
+            math.ceil(required_m / TRIP_TRACE_RADIUS_QUANTUM_M) * TRIP_TRACE_RADIUS_QUANTUM_M,
+        )
+        self._trace_radius_m = max(self._trace_radius_m, radius_m)
 
     def _snapshot(self) -> TripReportState:
         if self._trace_snapshot_generation != self._trace_generation:
