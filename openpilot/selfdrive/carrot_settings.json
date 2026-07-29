@@ -600,6 +600,15 @@
           ]
         },
         {
+          "id": "SYS_DEVICE",
+          "ko": "기기 통신",
+          "en": "Device Communication",
+          "zh": "设备通信",
+          "params": [
+            "PandaSpiSpeed"
+          ]
+        },
+        {
           "id": "SYS_SW",
           "ko": "소프트웨어",
           "en": "Software",
@@ -2469,6 +2478,44 @@
       "unit": 1,
       "control": "toggle",
       "risk": "high"
+    },
+    {
+      "group": "시스템",
+      "name": "PandaSpiSpeed",
+      "title": "Panda SPI 통신 속도",
+      "descr": "기본은 50MHz입니다. Panda SPI NACK, 체크섬 오류 또는 통신 끊김이 반복되는 일부 기기에서만 40→30→25MHz 순서로 낮춰 확인하세요. 변경 후 기기를 재부팅해야 적용됩니다.",
+      "egroup": "SYSTEM",
+      "etitle": "Panda SPI Communication Speed",
+      "edescr": "The default is 50MHz. Only on devices with repeated Panda SPI NACKs, checksum errors, or communication loss, try 40, then 30, then 25MHz. Reboot the device after changing.",
+      "cgroup": "系统",
+      "ctitle": "Panda SPI 通信速度",
+      "cdescr": "默认值为 50MHz。仅当设备反复出现 Panda SPI NACK、校验和错误或通信中断时，依次尝试 40、30、25MHz。更改后请重启设备。",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": 1,
+      "control": "select",
+      "risk": "high",
+      "options": {
+        "ko": [
+          "50 MHz (기본)",
+          "40 MHz",
+          "30 MHz",
+          "25 MHz (안정성 우선)"
+        ],
+        "en": [
+          "50 MHz (default)",
+          "40 MHz",
+          "30 MHz",
+          "25 MHz (stability)"
+        ],
+        "zh": [
+          "50 MHz（默认）",
+          "40 MHz",
+          "30 MHz",
+          "25 MHz（稳定优先）"
+        ]
+      }
     },
     {
       "group": "레이더설정",

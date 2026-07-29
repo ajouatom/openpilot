@@ -97,14 +97,14 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 ## 전체 설정 지도
 
-현재 `carrot-wip`의 `carrot_settings.json`에는 **169개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
+현재 `carrot-wip`의 `carrot_settings.json`에는 **170개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
 
 | 대분류 | 항목 수 | 중분류 |
 |---|---:|---|
 | 주행 제어 | 107 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
 | 차량·하드웨어 | 16 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
 | 화면 표시 | 35 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
-| 시스템 | 11 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
+| 시스템 | 12 | 녹화·전원, 네트워크·지도, 사운드, 기기 통신, 소프트웨어 |
 
 ## 주행 제어
 
@@ -255,7 +255,7 @@ Carrot Vision에는 `carrot_settings.json` 카탈로그와 별도로 **AR 표시
 <a id="system"></a>
 ## 시스템
 
-시스템에는 녹화, 전원, 네트워크, 지도, 소리와 소프트웨어 메뉴를 다루는 11개 항목이 있습니다.
+시스템에는 녹화, 전원, 네트워크, 지도, 소리, 기기 통신과 소프트웨어 메뉴를 다루는 12개 항목이 있습니다.
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
@@ -263,12 +263,14 @@ Carrot Vision에는 `carrot_settings.json` 카탈로그와 별도로 **AR 표시
 | YouTube 라이브 | `CarrotYouTubeLive`, `CarrotYouTubeQuality`, `CarrotYouTubeTimestamp` | 카메라 영상 송출, 품질과 타임스탬프 |
 | 네트워크·지도 | `HotspotOnBoot`, `MapboxStyle` | 부팅 시 핫스팟과 지도 배경 스타일 |
 | 사운드 | `SoundLanguageSetting`, `SoundVolumeAdjust`, `SoundVolumeAdjustEngage` | 안내음 언어와 일반·인게이지 볼륨 |
+| 기기 통신 | `PandaSpiSpeed` | 내부 Panda와의 SPI 통신 속도 |
 | 소프트웨어 | `SoftwareMenu` | Carrot Web의 소프트웨어 메뉴 활성화 |
 
 - `RecordRoadCam`: `0` 녹화 안 함, `1` 일반 카메라, `2` 일반+광각 카메라입니다. 저장 공간 사용량을 확인하세요.
 - `MaxTimeOffroadMin`: 시동이 꺼진 뒤 장치가 자동으로 꺼질 때까지의 시간입니다.
 - `CarrotYouTubeLive`: 네트워크 사용량, 발열과 개인정보 노출 가능성을 함께 확인하세요.
 - `HotspotOnBoot`: USIM을 장착한 장치에서 자동 핫스팟을 사용할 때의 설정입니다.
+- `PandaSpiSpeed`: 기본 `50MHz`는 기존 동작입니다. Panda SPI NACK, 체크섬 오류나 통신 끊김이 반복되는 일부 기기에서만 `40MHz`부터 한 단계씩 낮추고, 변경할 때마다 기기를 재부팅하세요. 낮은 속도는 신호 마진을 늘리기 위한 진단·완화 설정이며 하드웨어 불량을 수리하지는 않습니다.
 - `SoftwareMenu`: 메모리 문제가 있을 때 끌 수 있는 Carrot Web 메뉴 설정입니다.
 
 ## 위험도별로 접근하기

@@ -29,6 +29,21 @@ enum SpiError {
 
 const unsigned int SPI_ACK_TIMEOUT = 500; // milliseconds
 const std::string SPI_DEVICE = "/dev/spidev0.0";
+const uint32_t SPI_SPEED_DEFAULT = 50000000U;
+
+static uint32_t get_configured_spi_speed() {
+  const int speed = util::getenv("PANDA_SPI_SPEED_HZ", static_cast<int>(SPI_SPEED_DEFAULT));
+  switch (speed) {
+    case 50000000:
+    case 40000000:
+    case 30000000:
+    case 25000000:
+      return static_cast<uint32_t>(speed);
+    default:
+      LOGW("invalid PANDA_SPI_SPEED_HZ=%d, using %u", speed, SPI_SPEED_DEFAULT);
+      return SPI_SPEED_DEFAULT;
+  }
+}
 
 class LockEx {
 public:
@@ -62,9 +77,9 @@ PandaSpiHandle::PandaSpiHandle(std::string serial) {
   uint32_t spi_mode = SPI_MODE_0;
   uint8_t spi_bits_per_word = 8;
 
-  // 50MHz is the max of the 845. note that some older
-  // revs of the comma three may not support this speed
-  uint32_t spi_speed = 50000000;
+  // 50MHz is the max of the 845. Some devices have less signal margin at the
+  // maximum rate, so pandad.py can select a lower rate before this process starts.
+  uint32_t spi_speed = get_configured_spi_speed();
   try {
     if (!util::file_exists(SPI_DEVICE)) {
       throw std::runtime_error("Error connecting to panda: SPI device not found");
@@ -80,6 +95,7 @@ PandaSpiHandle::PandaSpiHandle(std::string serial) {
     util::safe_ioctl(spi_fd, SPI_IOC_WR_MODE, &spi_mode, "failed setting SPI mode");
     util::safe_ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed, "failed setting SPI speed");
     util::safe_ioctl(spi_fd, SPI_IOC_WR_BITS_PER_WORD, &spi_bits_per_word, "failed setting SPI bits per word");
+    LOGD("Panda SPI speed set to %u MHz", spi_speed / 1000000U);
 
     // get hw UID/serial
     ret = control_read(0xc3, 0, 0, uid, uid_len, 100);
