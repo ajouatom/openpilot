@@ -245,6 +245,25 @@ def test_trip_trace_zoom_eases_toward_the_next_radius(monkeypatch):
   assert 250.0 < shown_radius_m < 260.0
 
 
+def test_trip_report_footer_keeps_left_status_without_right_core_usage(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  calls = []
+  monkeypatch.setattr(renderer, "_profile_start", lambda: 0.0)
+  monkeypatch.setattr(renderer, "_profile_add", lambda *_args: None)
+  monkeypatch.setattr(renderer, "_draw_git_status", lambda *args: calls.append(("left", args)))
+  monkeypatch.setattr(renderer, "_draw_cluster_core_usage", lambda text: calls.append(("right", text)))
+  state = SimpleNamespace(
+    git_status=SimpleNamespace(branch="carrot-wip"),
+    network_address="192.168.0.10",
+    actual_fps=20.0,
+    cluster_core_usage_text="CPU 12%",
+  )
+
+  renderer._draw_status_footer(state, include_core_usage=False)
+
+  assert [name for name, _value in calls] == ["left"]
+
+
 def test_trip_trace_tuple_is_reused_until_a_new_display_point_is_sampled():
   tracker = TripReportTracker()
   first = tracker.update(0.0, 1.0, 0.0, 0.0, False, 2.7, 15.0)

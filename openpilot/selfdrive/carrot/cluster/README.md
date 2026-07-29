@@ -466,7 +466,9 @@ In default screen mode (`0`), the trip report is shown while no live navigation
 is being received and the navigation panel returns automatically when reception
 starts. The trace is north-up; after the initial 250 m radius, its target radius
 grows in 10 m increments and the renderer eases smoothly toward each target up
-to 1 km. Contiguous history beyond 1 km is dropped.
+to 1 km. Contiguous history beyond 1 km is dropped. Mode 5 keeps the branch,
+network address, and frame-rate status in the lower-left camera area while
+omitting the lower-right core-usage text that would overlap the report.
 Mode `3` also hides the speed, accel, clock, turn-signal, and git HUD so the
 large graph uses the available center/right height with only a small margin.
 Mode `4` keeps the driving HUD and uses the maximum right-side panel height with
