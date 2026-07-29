@@ -33,6 +33,17 @@ GearShifter = structs.CarState.GearShifter
 READY_COUNT_OK = 200
 TRAILER_DISCONNECT_GRACE_FRAMES = int(5.0 / DT_CTRL)
 EV_MODE_STATUS_TIMEOUT_NS = 500_000_000
+LEGACY_LFA_BUTTON_ADDR = 0x391
+LEGACY_CRUISE_BUTTON_ALT_ADDR = 0x3EF
+LEGACY_LFA_BUTTON_ALT_ADDR = 0x416
+
+
+def _get_legacy_button_capabilities(fingerprint: dict[int, int]) -> tuple[bool, bool, bool]:
+  return (
+    LEGACY_LFA_BUTTON_ADDR in fingerprint,
+    LEGACY_CRUISE_BUTTON_ALT_ADDR in fingerprint,
+    LEGACY_LFA_BUTTON_ALT_ADDR in fingerprint,
+  )
 
 
 def _get_ev_mode_state(cp: CANParser) -> tuple[bool, bool]:
@@ -146,7 +157,6 @@ class CarState(CarStateBase):
     self.speedLimitDistance = 0
     self.pcmCruiseGap = 0
 
-    self.cruise_buttons_alt =  True if self.CP.carFingerprint in (CAR.HYUNDAI_CASPER, CAR.HYUNDAI_CASPER_EV) else False
     self.MainMode_ACC = False
     self.ACCMode = 0
     self.LFA_ICON = 0
@@ -167,8 +177,9 @@ class CarState(CarStateBase):
       ecu_disabled = True
 
 
-    self.HAS_LFA_BUTTON = True if 913 in fingerprints[0] else False
-    self.CRUISE_BUTTON_ALT = True if 1007 in fingerprints[0] else False
+    self.HAS_LFA_BUTTON, self.CRUISE_BUTTON_ALT, self.CRUISE_BUTTON_LFA = (
+      _get_legacy_button_capabilities(fingerprints[0])
+    )
 
     cam_bus = CanBus(CP).CAM
     pt_bus = CanBus(CP).ECAN
@@ -191,6 +202,20 @@ class CarState(CarStateBase):
     self.trailer_timeout_cnt = 0
     self.trailer_connected_prev = False
     self.trailer_status = None
+
+  def _get_legacy_cruise_buttons(self, cp):
+    if self.CRUISE_BUTTON_LFA and cp.vl["CRUISE_BUTTON_LFA"]["CruiseSwLfa"] > 0:
+      return [Buttons.LFA_BUTTON]
+    if self.HAS_LFA_BUTTON and cp.vl["BCM_PO_11"]["LFA_Pressed"] == 1:
+      return [Buttons.LFA_BUTTON]
+    if self.CRUISE_BUTTON_ALT:
+      return [cp.vl["CRUISE_BUTTON_ALT"]["CruiseSwState"]]
+    return cp.vl_all["CLU11"]["CF_Clu_CruiseSwState"]
+
+  def _get_legacy_main_buttons(self, cp):
+    if self.CRUISE_BUTTON_ALT:
+      return cp.vl_all["CRUISE_BUTTON_ALT"]["CruiseSwMain"]
+    return cp.vl_all["CLU11"]["CF_Clu_CruiseSwMain"]
 
   def monitor_fingerprint(self, can_parsers, canfd):
     if self.controls_ready_count <= READY_COUNT_OK:
@@ -445,27 +470,9 @@ class CarState(CarStateBase):
 
     self.steer_state = cp.vl["MDPS12"]["CF_Mdps_ToiActive"]  # 0 NOT ACTIVE, 1 ACTIVE
     prev_cruise_buttons = self.cruise_buttons[-1]
-    #self.cruise_buttons.extend(cp.vl_all["CLU11"]["CF_Clu_CruiseSwState"])
-    #carrot {{
-    #if self.CRUISE_BUTTON_ALT and cp.vl["CRUISE_BUTTON_ALT"]["SET_ME_1"] == 1:
-    #  self.cruise_buttons_alt = True
-
-    cruise_button = [Buttons.NONE]
-    if self.cruise_buttons_alt:
-      lfa_button = cp.vl["CRUISE_BUTTON_LFA"]["CruiseSwLfa"]
-      cruise_button = [Buttons.LFA_BUTTON] if lfa_button > 0 else [cp.vl["CRUISE_BUTTON_ALT"]["CruiseSwState"]]
-    elif self.HAS_LFA_BUTTON and cp.vl["BCM_PO_11"]["LFA_Pressed"] == 1:  # for K5
-      cruise_button = [Buttons.LFA_BUTTON]
-    else:
-      cruise_button = cp.vl_all["CLU11"]["CF_Clu_CruiseSwState"]
-    self.cruise_buttons.extend(cruise_button)
-    # }} carrot
+    self.cruise_buttons.extend(self._get_legacy_cruise_buttons(cp))
     prev_main_buttons = self.main_buttons[-1]
-    #self.cruise_buttons.extend(cp.vl_all["CLU11"]["CF_Clu_CruiseSwState"])
-    if self.cruise_buttons_alt:
-      self.main_buttons.extend(cp.vl_all["CRUISE_BUTTON_ALT"]["CruiseSwMain"])
-    else:
-      self.main_buttons.extend(cp.vl_all["CLU11"]["CF_Clu_CruiseSwMain"])
+    self.main_buttons.extend(self._get_legacy_main_buttons(cp))
     self.mdps12 = copy.copy(cp.vl["MDPS12"])
 
     ret.buttonEvents = [*create_button_events(self.cruise_buttons[-1], prev_cruise_buttons, BUTTONS_DICT),
