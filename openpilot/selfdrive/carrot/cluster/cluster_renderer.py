@@ -3439,8 +3439,10 @@ class ClusterUiRenderer:
                 profile_stage = self._profile_start()
                 self._draw_route_overlay(state.route_overlay)
                 self._profile_add("hud.route_overlay", profile_stage)
-            if screen_mode != CLUSTER_SCREEN_MODE_TRIP_REPORT:
-                self._draw_status_footer(state)
+            self._draw_status_footer(
+                state,
+                include_core_usage=screen_mode != CLUSTER_SCREEN_MODE_TRIP_REPORT,
+            )
         finally:
             profile_stage = self._profile_start()
             rl.rl_pop_matrix()
@@ -3464,13 +3466,19 @@ class ClusterUiRenderer:
             else CLUSTER_SCREEN_MODE_TRIP_REPORT
         )
 
-    def _draw_status_footer(self, state: ClusterUiState) -> None:
+    def _draw_status_footer(
+        self,
+        state: ClusterUiState,
+        *,
+        include_core_usage: bool = True,
+    ) -> None:
         profile_stage = self._profile_start()
         self._draw_git_status(state.git_status, state.network_address, state.actual_fps)
         self._profile_add("hud.git_status", profile_stage)
-        profile_stage = self._profile_start()
-        self._draw_cluster_core_usage(state.cluster_core_usage_text)
-        self._profile_add("hud.cluster_core_usage", profile_stage)
+        if include_core_usage:
+            profile_stage = self._profile_start()
+            self._draw_cluster_core_usage(state.cluster_core_usage_text)
+            self._profile_add("hud.cluster_core_usage", profile_stage)
 
     def _draw_route_replay_controls(
         self,
