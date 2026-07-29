@@ -458,9 +458,10 @@ shows the same graph in the right-side panel while keeping the driving scene.
 `5` shows the right-side driving report while keeping the driving scene. The
 report contains a bounded dead-reckoned trace, trip/event statistics, system
 load, and the stored calibration pitch/yaw. Its trace prefers `livePose`,
-falls back to steering angle and vehicle speed, and applies GPS correction
-when available. The same mode can be validated with
-`cluster_replay_usb.py ROUTE --trip-report`.
+falls back to steering angle and vehicle speed, aligns the `livePose` heading
+frame to GPS bearing, and applies GPS position correction to the whole trace
+frame so an update cannot introduce a false bend. The same mode can be
+validated with `cluster_replay_usb.py ROUTE --trip-report`.
 Mode `3` also hides the speed, accel, clock, turn-signal, and git HUD so the
 large graph uses the available center/right height with only a small margin.
 Mode `4` keeps the driving HUD and uses the maximum right-side panel height with
