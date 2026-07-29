@@ -1422,6 +1422,59 @@ def test_stronger_same_direction_corner_velocity_supports_position_trend() -> No
   assert prediction.cut_in_probability > 0.5
 
 
+def test_long_horizon_corner_entry_requires_measured_inward_displacement() -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  for index in range(15):
+    prediction = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          1010,
+          20.0,
+          3.0 - index * 0.02,
+          source="corner235",
+          v_lead=10.0,
+          yv_rel=-0.2,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )[("corner235", 1010)]
+
+  assert prediction is not None
+  assert prediction.predicted_path_overlap_start_s == pytest.approx(4.0)
+  assert prediction.predicted_path_overlap_s >= 0.5
+  assert prediction.directional_inward_displacement_m < 0.30
+  assert prediction.cut_in_probability == pytest.approx(0.0)
+  assert prediction.reason == "long-horizon corner direction unconfirmed"
+
+
+def test_nearer_horizon_corner_entry_keeps_existing_physical_gate() -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  for index in range(15):
+    prediction = predictor.update(
+      index * 0.1,
+      (
+        Point(
+          1010,
+          20.0,
+          2.8 - index * 0.03,
+          source="corner235",
+          v_lead=10.0,
+          yv_rel=-0.3,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )[("corner235", 1010)]
+
+  assert prediction is not None
+  assert prediction.predicted_path_overlap_start_s < 3.5
+  assert prediction.cut_in_probability > 0.5
+
+
 def test_corner_cutin_confidence_drops_when_recent_lateral_motion_stops() -> None:
   predictor = RadarMotionPredictor()
   prediction = None

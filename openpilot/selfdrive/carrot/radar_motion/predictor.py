@@ -84,6 +84,10 @@ DIRECTIONAL_MIN_INWARD_SAMPLE_RATIO = 0.65
 DIRECTIONAL_MIN_SHORT_INWARD_RATE_MPS = 0.15
 DIRECTIONAL_MIN_LONG_INWARD_RATE_MPS = 0.10
 DIRECTIONAL_SHORT_RATE_BLEND = 0.50
+LONG_HORIZON_CORNER_ENTRY_START_S = 3.5
+LONG_HORIZON_CORNER_MIN_INWARD_DISPLACEMENT_M = 0.30
+LONG_HORIZON_CORNER_MIN_CONSISTENCY = 0.80
+LONG_HORIZON_CORNER_MIN_INWARD_SAMPLE_RATIO = 0.75
 STRONG_FRONT_CONFIRMATION_CREDIT_S = 0.06
 STRONG_FRONT_MIN_INWARD_DISPLACEMENT_M = 0.50
 STRONG_FRONT_MIN_CONSISTENCY = 0.80
@@ -1218,6 +1222,19 @@ class RadarMotionPredictor:
       predicted_path_overlap_s
       / FULL_PREDICTED_PATH_OVERLAP_SUPPORT_S,
     )
+    long_horizon_corner_entry_supported = (
+      _sensor(state.source) != "corner"
+      or predicted_path_overlap_start_s is None
+      or predicted_path_overlap_start_s < LONG_HORIZON_CORNER_ENTRY_START_S
+      or (
+        directional_inward_displacement
+        >= LONG_HORIZON_CORNER_MIN_INWARD_DISPLACEMENT_M
+        and directional_consistency
+        >= LONG_HORIZON_CORNER_MIN_CONSISTENCY
+        and directional_inward_sample_ratio
+        >= LONG_HORIZON_CORNER_MIN_INWARD_SAMPLE_RATIO
+      )
+    )
     raw_path_entry_probability = (
       (
         math.sqrt(
@@ -1229,6 +1246,7 @@ class RadarMotionPredictor:
       if (
         enough_history
         and predicted_path_overlap_s >= MIN_PREDICTED_PATH_OVERLAP_S
+        and long_horizon_corner_entry_supported
       )
       else 0.0
     )
@@ -1385,6 +1403,8 @@ class RadarMotionPredictor:
       reason = "near-side directional entry"
     elif lane_boundary_directional_entry:
       reason = "lane-boundary directional entry"
+    elif not long_horizon_corner_entry_supported:
+      reason = "long-horizon corner direction unconfirmed"
     elif cut_in_probability >= CUT_IN_THRESHOLD:
       reason = "physical CUT-IN shadow"
     else:
