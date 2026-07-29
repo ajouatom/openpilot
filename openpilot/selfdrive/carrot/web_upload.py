@@ -4,7 +4,7 @@ import json
 import os
 import time
 import urllib.parse
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import ExitStack
 from typing import Any
 
@@ -195,16 +195,33 @@ async def upload_folder_to_web(
   base_url: str,
   token: str,
   should_cancel: Callable[[], bool] | None = None,
+  filenames: Sequence[str] | None = None,
+  on_progress: Callable[[str, int, int, int], None] | None = None,
 ) -> bool:
   def check_cancel() -> None:
     if should_cancel and should_cancel():
       raise RuntimeError("upload canceled")
 
   check_cancel()
-  try:
-    entries = sorted(entry.name for entry in os.scandir(local_folder) if entry.is_file(follow_symlinks=False))
-  except OSError as e:
-    raise RuntimeError(f"cannot read segment folder: {e}") from e
+  if filenames is None:
+    try:
+      entries = sorted(entry.name for entry in os.scandir(local_folder) if entry.is_file(follow_symlinks=False))
+    except OSError as e:
+      raise RuntimeError(f"cannot read segment folder: {e}") from e
+  else:
+    entries = []
+    seen: set[str] = set()
+    for raw_name in filenames:
+      filename = str(raw_name or "")
+      if not filename or filename in (".", "..") or "/" in filename or "\\" in filename:
+        raise RuntimeError("invalid upload filename")
+      if filename in seen:
+        continue
+      local_path = os.path.join(local_folder, filename)
+      if not os.path.isfile(local_path):
+        raise RuntimeError(f"upload file not found: {filename}")
+      seen.add(filename)
+      entries.append(filename)
   if not token:
     raise RuntimeError("upload session is not configured")
 
@@ -217,9 +234,15 @@ async def upload_folder_to_web(
       file_size = os.path.getsize(local_path)
       sent = 0
 
-      async def send_file(path: str = local_path):
+      async def send_file(
+        path: str = local_path,
+        upload_name: str = filename,
+        upload_size: int = file_size,
+      ):
         nonlocal sent
         sent = 0
+        if on_progress:
+          on_progress(upload_name, sent, upload_size, 0)
         check_cancel()
         with open(path, "rb") as f:
           while True:
@@ -228,6 +251,8 @@ async def upload_folder_to_web(
             if not chunk:
               break
             sent += len(chunk)
+            if on_progress:
+              on_progress(upload_name, sent, upload_size, len(chunk))
             yield chunk
 
       last_error: Exception | None = None
