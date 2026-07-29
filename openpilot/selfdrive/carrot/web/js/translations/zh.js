@@ -663,7 +663,7 @@ window.CarrotTranslations.register("zh", {
     setting_popular_value_chip_mid: "使用",
     setting_popular_value_chip_suffix: "",
     setting_popular_value_title: "本车型热门值",
-    setting_fingerprint_title: "我的设置代码",
+    setting_fingerprint_title: "设置代码",
     setting_fingerprint_recent: "最近更改的设置",
     setting_fingerprint_changed: "自基准以来更改 {n} 项",
     setting_fingerprint_same: "与基准一致",

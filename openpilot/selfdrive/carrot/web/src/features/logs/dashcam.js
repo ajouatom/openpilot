@@ -1787,12 +1787,9 @@ async function showDashcamRangeSelect(route) {
 
 async function setDashcamSort(next) {
   const dir = next === "desc" ? "desc" : "asc";
-  if (dashcamState.sort === dir) {
-    if (typeof syncLogsMenu === "function") syncLogsMenu();
-    return;
-  }
+  // No menu state to refresh: the logs menu reads the direction when it opens.
+  if (dashcamState.sort === dir) return;
   dashcamState.sort = dir;
-  if (typeof syncLogsMenu === "function") syncLogsMenu();
   try {
     localStorage.setItem(DASHCAM_SORT_STORAGE_KEY, dir);
   } catch {}

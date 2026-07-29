@@ -31,6 +31,8 @@ Note as much of the following as possible:
 
 Recent-log upload selects the newest completed segments regardless of the visible sort order. `Recent 5` is recommended for a typical one-time event because it usually includes useful context before and after it.
 
+The Dashcam and Screen Recording tabs use equal-width controls. The top-right Logs menu opens a grouped dialog that separates sort choices from recent-log upload choices; section headings are labels, not selectable actions.
+
 | Selection | Appropriate use |
 |---|---|
 | Recent 2 | The time is certain and upload size must be minimized |

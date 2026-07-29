@@ -663,7 +663,7 @@ window.CarrotTranslations.register("ko", {
     setting_popular_value_chip_mid: "가",
     setting_popular_value_chip_suffix: "사용",
     setting_popular_value_title: "내 차종 인기값",
-    setting_fingerprint_title: "내 설정 코드",
+    setting_fingerprint_title: "설정 코드",
     setting_fingerprint_recent: "최근 바뀐 설정",
     setting_fingerprint_changed: "기준 이후 {n}개 바뀜",
     setting_fingerprint_same: "기준과 같아요",

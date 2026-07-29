@@ -665,7 +665,7 @@ window.CarrotTranslations.register("en", {
     setting_popular_value_chip_mid: "use",
     setting_popular_value_chip_suffix: "",
     setting_popular_value_title: "Popular values for my model",
-    setting_fingerprint_title: "My settings code",
+    setting_fingerprint_title: "Settings code",
     setting_fingerprint_recent: "Recently changed settings",
     setting_fingerprint_changed: "{n} changed since reference",
     setting_fingerprint_same: "Same as reference",

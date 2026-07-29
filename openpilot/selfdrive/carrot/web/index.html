@@ -197,17 +197,17 @@
               </svg>
               <span id="settingFabResetDefaultsLabel">설정 초기화</span>
             </button>
-            <button id="btnSettingFabFingerprint" class="setting-fab-action" type="button" role="menuitem">
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path fill="currentColor" d="M12 2a9 9 0 0 0-9 9c0 1.4.3 2.7.9 3.9l1.8-.9A7 7 0 0 1 12 4a7 7 0 0 1 7 7c0 2.6-.6 5-1.7 7.2l1.8.9A16 16 0 0 0 21 11a9 9 0 0 0-9-9m0 4a5 5 0 0 0-5 5c0 3.1-.8 6-2.2 8.5l1.7 1A19 19 0 0 0 9 11a3 3 0 0 1 6 0c0 3.4-.9 6.6-2.5 9.4l1.7 1A21 21 0 0 0 17 11a5 5 0 0 0-5-5m0 4a1 1 0 0 0-1 1 17 17 0 0 1-2.6 9l1.7 1A19 19 0 0 0 13 11a1 1 0 0 0-1-1"/>
-              </svg>
-              <span id="settingFabFingerprintLabel">설정 지문</span>
-            </button>
             <button id="btnSettingFabSearch" class="setting-fab-action" type="button" role="menuitem">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.47 6.47 0 0 0 4.23-1.57l.27.28v.79L19 20.49 20.49 19zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14"/>
               </svg>
               <span id="settingFabSearchLabel">설정 검색</span>
+            </button>
+            <button id="btnSettingFabFingerprint" class="setting-fab-action" type="button" role="menuitem">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M12 2a9 9 0 0 0-9 9c0 1.4.3 2.7.9 3.9l1.8-.9A7 7 0 0 1 12 4a7 7 0 0 1 7 7c0 2.6-.6 5-1.7 7.2l1.8.9A16 16 0 0 0 21 11a9 9 0 0 0-9-9m0 4a5 5 0 0 0-5 5c0 3.1-.8 6-2.2 8.5l1.7 1A19 19 0 0 0 9 11a3 3 0 0 1 6 0c0 3.4-.9 6.6-2.5 9.4l1.7 1A21 21 0 0 0 17 11a5 5 0 0 0-5-5m0 4a1 1 0 0 0-1 1 17 17 0 0 1-2.6 9l1.7 1A19 19 0 0 0 13 11a1 1 0 0 0-1-1"/>
+              </svg>
+              <span id="settingFabFingerprintLabel">설정 코드</span>
             </button>
           </div>
           <button id="btnSettingSearch" class="fab fab--round fab--icon fab--setting-search fab--setting-menu" type="button" aria-label="설정 작업" aria-expanded="false" aria-haspopup="menu" aria-controls="settingFabActions">
@@ -436,55 +436,39 @@
     <div id="pageLogs" class="page page--full page--logs" hidden style="display:none;">
       <div class="logs-shell">
         <div class="logs-tabbar">
-          <div class="logs-tabs" role="tablist" aria-label="Logs">
-            <button id="logsTabDashcam" class="logs-tab is-active" type="button" role="tab" aria-selected="true">
-              <span id="logsDashcamTitle">대시캠</span>
+          <div id="logsTabs" class="logs-tabs c-segmented-control c-segmented-control--equal"
+               role="tablist" aria-label="로그">
+            <button id="logsTabDashcam" class="c-segmented-control__item is-active" type="button"
+                    role="tab" aria-selected="true" aria-controls="logsDashcamPanel" tabindex="0"
+                    data-logs-tab="dashcam">
+              <span id="logsDashcamTitle" class="c-segmented-control__label">대시캠</span>
             </button>
-            <button id="logsTabScreen" class="logs-tab" type="button" role="tab" aria-selected="false">
-              <span id="logsScreenTitle">화면녹화</span>
+            <button id="logsTabScreen" class="c-segmented-control__item" type="button"
+                    role="tab" aria-selected="false" aria-controls="logsScreenPanel" tabindex="-1"
+                    data-logs-tab="screen">
+              <span id="logsScreenTitle" class="c-segmented-control__label">화면녹화</span>
             </button>
           </div>
+          <!-- Menu contents live in the shared choice dialog (see logs runtime),
+               so only the trigger is markup here. -->
           <div id="logsMenu" class="ui-dropdown-menu logs-menu">
             <button id="logsMenuButton" class="ui-dropdown-menu__button logs-menu__button" type="button"
-                    aria-haspopup="menu" aria-expanded="false" aria-controls="logsMenuPanel"
-                    aria-label="로그 메뉴" title="로그 메뉴">
+                    aria-haspopup="dialog" aria-label="로그 메뉴" title="로그 메뉴">
               <span class="ui-menu-icon" aria-hidden="true">
                 <span class="ui-menu-icon__line"></span>
                 <span class="ui-menu-icon__line"></span>
                 <span class="ui-menu-icon__line"></span>
               </span>
             </button>
-            <div id="logsMenuPanel" class="ui-dropdown-menu__panel logs-menu__panel" role="menu" hidden>
-              <div class="logs-menu__group" role="group" aria-labelledby="logsSortGroupLabel">
-                <div id="logsSortGroupLabel" class="logs-menu__label">정렬</div>
-                <button id="logsSortAsc" class="ui-dropdown-menu__item logs-menu__item" type="button"
-                        role="menuitemradio" aria-checked="false" data-logs-menu-action="sort_asc">
-                  <span id="logsSortAscLabel">정렬: 오름차순</span>
-                </button>
-                <button id="logsSortDesc" class="ui-dropdown-menu__item logs-menu__item" type="button"
-                        role="menuitemradio" aria-checked="false" data-logs-menu-action="sort_desc">
-                  <span id="logsSortDescLabel">정렬: 내림차순</span>
-                </button>
-              </div>
-              <div class="logs-menu__group" role="group" aria-labelledby="logsRecentUploadLabel">
-                <div id="logsRecentUploadLabel" class="logs-menu__label">최근 로그 전송</div>
-                <button id="logsUploadRecent2" class="ui-dropdown-menu__item logs-menu__item" type="button"
-                        role="menuitem" data-logs-menu-action="upload_recent" data-limit="2">최근 2개 전송</button>
-                <button id="logsUploadRecent5" class="ui-dropdown-menu__item logs-menu__item" type="button"
-                        role="menuitem" data-logs-menu-action="upload_recent" data-limit="5">최근 5개 전송</button>
-                <button id="logsUploadRecent10" class="ui-dropdown-menu__item logs-menu__item" type="button"
-                        role="menuitem" data-logs-menu-action="upload_recent" data-limit="10">최근 10개 전송</button>
-              </div>
-            </div>
           </div>
         </div>
 
-        <section id="logsDashcamPanel" class="logs-panel" aria-labelledby="logsTabDashcam">
+        <section id="logsDashcamPanel" class="logs-panel" role="tabpanel" aria-labelledby="logsTabDashcam">
           <div id="dashcamStatus" class="dashcam-status" hidden></div>
           <div id="dashcamRoutes" class="dashcam-routes"></div>
         </section>
 
-        <section id="logsScreenPanel" class="logs-panel" hidden aria-labelledby="logsTabScreen">
+        <section id="logsScreenPanel" class="logs-panel" role="tabpanel" hidden aria-labelledby="logsTabScreen">
           <div id="screenrecordStatus" class="dashcam-status" hidden></div>
           <div id="screenrecordVideos" class="screenrecord-list"></div>
         </section>

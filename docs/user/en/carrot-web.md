@@ -39,6 +39,7 @@ The Drive page displays live video and driving state. Its usual layout contains 
 
 - Select `Start Drive Vision` to begin connecting to the camera stream.
 - The HUD may show vehicle speed, set speed, speed limit, following gap, lead vehicle, and driving alerts.
+- The lower-left corner shows the hottest CPU-core temperature in Celsius. If temperature data is unavailable, it keeps a `--°C` placeholder instead of hiding the indicator.
 - Enable or disable AR in `Tools > Web Settings`.
 - If another browser owns the video stream, the page may say that it is in use elsewhere. Select `Use here` only when you intend to move the stream to the current browser.
 - A parked device or unavailable camera/driving data produces a waiting state instead of live video.

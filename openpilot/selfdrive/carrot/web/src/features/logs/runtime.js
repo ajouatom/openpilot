@@ -48,10 +48,25 @@ import {
 // Owns: tab state, scroll persistence, lazy-image observer, generic helpers,
 // the video player, and page bind/init/teardown.
 
+const LOGS_TAB_SELECTOR = "[data-logs-tab]";
+const LOGS_MENU_SORT = "sort";
+const LOGS_MENU_UPLOAD = "upload_recent";
+const LOGS_RECENT_UPLOAD_LIMITS = Object.freeze([2, 5, 10]);
+
 let logsActiveTab = "dashcam";
 const logsScrollTops = { dashcam: 0, screen: 0 };
 let logsLazyImageObserver = null;
-let logsMenuController = null;
+let logsMenuOpen = false;
+let logsTabsController = null;
+
+function normalizeLogsTab(tab) {
+  return tab === "screen" ? "screen" : "dashcam";
+}
+
+function logsTabItems() {
+  const tabList = document.getElementById("logsTabs");
+  return tabList ? Array.from(tabList.querySelectorAll(LOGS_TAB_SELECTOR)) : [];
+}
 
 function isLogsPageActive() {
   return CURRENT_PAGE === "logs";
@@ -89,62 +104,76 @@ function restoreLogsScrollTop(tab = logsActiveTab, options = {}) {
   });
 }
 
-function closeLogsMenu(options = {}) {
-  logsMenuController?.close({ restoreFocus: options.focusButton === true });
+function syncLogsTabs() {
+  document.getElementById("logsTabs")?.setAttribute("aria-label", getUIText("logs", "Logs"));
 }
 
+// The menu body lives in the shared choice dialog, so only the trigger label
+// needs to follow the active language.
 function syncLogsMenu() {
   const button = document.getElementById("logsMenuButton");
-  const sort = typeof dashcamSortDirection === "function" ? dashcamSortDirection() : "asc";
-  const labels = {
-    logsSortGroupLabel: getUIText("logs_sort", "Sort"),
-    logsSortAscLabel: getUIText("sort_ascending", "Sort: ascending"),
-    logsSortDescLabel: getUIText("sort_descending", "Sort: descending"),
-    logsRecentUploadLabel: getUIText("recent_log_upload", "Upload recent logs"),
-    logsUploadRecent2: getUIText("upload_recent_logs", "Upload recent {count}", { count: 2 }),
-    logsUploadRecent5: getUIText("upload_recent_logs", "Upload recent {count}", { count: 5 }),
-    logsUploadRecent10: getUIText("upload_recent_logs", "Upload recent {count}", { count: 10 }),
-  };
-  Object.entries(labels).forEach(([id, label]) => {
-    const element = document.getElementById(id);
-    if (element) element.textContent = label;
-  });
   const menuLabel = getUIText("logs_menu", "Log menu");
   button?.setAttribute("aria-label", menuLabel);
   button?.setAttribute("title", menuLabel);
-  document.getElementById("logsSortAsc")?.setAttribute("aria-checked", sort === "asc" ? "true" : "false");
-  document.getElementById("logsSortDesc")?.setAttribute("aria-checked", sort === "desc" ? "true" : "false");
 }
 
-function openLogsMenu(options = {}) {
-  logsMenuController?.open({ focusFirst: options.focusFirst === true });
+// Built on open so sort state and translations are always current.
+function logsMenuChoices() {
+  const sort = typeof dashcamSortDirection === "function" ? dashcamSortDirection() : "asc";
+  return [
+    { heading: getUIText("logs_sort", "Sort") },
+    {
+      label: getUIText("sort_ascending", "Sort: ascending"),
+      value: `${LOGS_MENU_SORT}:asc`,
+      selected: sort === "asc",
+    },
+    {
+      label: getUIText("sort_descending", "Sort: descending"),
+      value: `${LOGS_MENU_SORT}:desc`,
+      selected: sort === "desc",
+    },
+    { heading: getUIText("recent_log_upload", "Upload recent logs") },
+    ...LOGS_RECENT_UPLOAD_LIMITS.map((count) => ({
+      label: getUIText("upload_recent_logs", "Upload recent {count}", { count }),
+      value: `${LOGS_MENU_UPLOAD}:${count}`,
+    })),
+  ];
+}
+
+async function runLogsMenuAction(selected) {
+  const [action, argument] = String(selected || "").split(":");
+  if (action === LOGS_MENU_SORT) await setDashcamSort(argument === "desc" ? "desc" : "asc");
+  else if (action === LOGS_MENU_UPLOAD) await uploadRecentDashcamSegments(Number(argument) || 0);
+}
+
+async function openLogsMenu() {
+  if (logsMenuOpen) return;
+  const menu = document.getElementById("logsMenu");
+  logsMenuOpen = true;
+  // Shared trigger styling marks the control as active while its popup is up.
+  menu?.classList.add("is-open");
+  let selected = null;
+  try {
+    selected = await openAppDialog({
+      mode: "choice",
+      title: getUIText("logs_menu", "Log menu"),
+      choiceLayout: "list",
+      choices: logsMenuChoices(),
+    });
+  } finally {
+    logsMenuOpen = false;
+    menu?.classList.remove("is-open");
+  }
+  await runLogsMenuAction(selected);
 }
 
 function bindLogsMenu() {
-  const menu = document.getElementById("logsMenu");
   const button = document.getElementById("logsMenuButton");
-  const panel = document.getElementById("logsMenuPanel");
-  const menuApi = window.CarrotUI?.menu;
-  if (!menu || !button || !panel || logsMenuController || typeof menuApi?.mount !== "function") return;
-
-  logsMenuController = menuApi.mount({
-    root: menu,
-    trigger: button,
-    panel,
-    itemSelector: "[data-logs-menu-action]",
-    beforeOpen: () => {
-      syncLogsMenu();
-      return true;
-    },
-    onSelect: (item) => {
-      const action = item.dataset.logsMenuAction || "";
-      const limit = Number(item.dataset.limit || 0);
-      if (action === "sort_asc") setDashcamSort("asc").catch(() => {});
-      else if (action === "sort_desc") setDashcamSort("desc").catch(() => {});
-      else if (action === "upload_recent") uploadRecentDashcamSegments(limit).catch(() => {});
-    },
-  });
+  if (!button) return;
   syncLogsMenu();
+  if (button.dataset.bound === "1") return;
+  button.dataset.bound = "1";
+  button.addEventListener("click", () => { openLogsMenu().catch(() => {}); });
 }
 
 function formatRelativeEpoch(epochSeconds) {
@@ -702,21 +731,21 @@ function openLogsVideoPlayer(title, src, options = {}) {
 }
 
 function activateLogsTab(tab, options = {}) {
-  const nextTab = tab === "screen" ? "screen" : "dashcam";
+  const nextTab = normalizeLogsTab(tab);
   const shouldLoad = options.load !== false;
   if (nextTab !== logsActiveTab) saveLogsScrollTop(logsActiveTab);
   logsActiveTab = nextTab;
-  const dashTab = document.getElementById("logsTabDashcam");
-  const screenTab = document.getElementById("logsTabScreen");
-  const dashPanel = document.getElementById("logsDashcamPanel");
-  const screenPanel = document.getElementById("logsScreenPanel");
 
-  dashTab?.classList.toggle("is-active", logsActiveTab === "dashcam");
-  screenTab?.classList.toggle("is-active", logsActiveTab === "screen");
-  dashTab?.setAttribute("aria-selected", logsActiveTab === "dashcam" ? "true" : "false");
-  screenTab?.setAttribute("aria-selected", logsActiveTab === "screen" ? "true" : "false");
-  if (dashPanel) dashPanel.hidden = logsActiveTab !== "dashcam";
-  if (screenPanel) screenPanel.hidden = logsActiveTab !== "screen";
+  // Each tab owns its panel through aria-controls, so selection state and panel
+  // visibility stay in sync from one source without per-tab element lookups.
+  for (const item of logsTabItems()) {
+    const selected = normalizeLogsTab(item.dataset.logsTab) === logsActiveTab;
+    item.classList.toggle("is-active", selected);
+    item.setAttribute("aria-selected", selected ? "true" : "false");
+    const panel = document.getElementById(item.getAttribute("aria-controls") || "");
+    if (panel) panel.hidden = !selected;
+  }
+  logsTabsController?.sync();
 
   if (shouldLoad) {
     if (logsActiveTab === "screen" && !screenrecordState.initialized) {
@@ -732,10 +761,30 @@ function activateLogsTab(tab, options = {}) {
   if (options.restoreScroll !== false) restoreLogsScrollTop(logsActiveTab);
 }
 
+function bindLogsTabs(tabList) {
+  if (!tabList) return;
+  syncLogsTabs();
+  if (tabList.dataset.bound === "1") return;
+  tabList.dataset.bound = "1";
+
+  tabList.addEventListener("click", (event) => {
+    const item = event.target?.closest?.(LOGS_TAB_SELECTOR);
+    if (item && tabList.contains(item)) activateLogsTab(item.dataset.logsTab);
+  });
+
+  // Shared control owns tablist keyboard semantics: arrow/Home/End move and
+  // activate, and the roving tabindex keeps a single tab stop.
+  logsTabsController = window.CarrotUI?.segmentedControl?.create(tabList, {
+    itemSelector: LOGS_TAB_SELECTOR,
+    onActivate: (item) => activateLogsTab(item?.dataset?.logsTab),
+  }) || null;
+}
+
 function handleLogsPageChange(event) {
   const page = event?.detail?.page || "";
   if (page === "logs") return;
-  closeLogsMenu();
+  // The menu is a modal dialog now: it owns its own dismissal, and its backdrop
+  // blocks the navigation that would fire this handler while it is open.
   saveLogsScrollTop(logsActiveTab);
   cancelDashcamRouteRender();
   dashcamState.loadSeq += 1;
@@ -758,11 +807,11 @@ function handleLogsPageChange(event) {
 }
 
 function bindLogsPage() {
-  const dashTab = document.getElementById("logsTabDashcam");
-  const screenTab = document.getElementById("logsTabScreen");
+  const tabList = document.getElementById("logsTabs");
   const routesHost = document.getElementById("dashcamRoutes");
   const screenHost = document.getElementById("screenrecordVideos");
   bindLogsMenu();
+  bindLogsTabs(tabList);
 
   if (!dashcamState.layoutBound) {
     dashcamState.layoutBound = true;
@@ -771,6 +820,7 @@ function bindLogsPage() {
     window.addEventListener("carrot:pagechange", handleLogsPageChange);
     window.addEventListener("carrot:languagechange", () => {
       syncLogsMenu();
+      syncLogsTabs();
       dashcamState.signature = "";
       screenrecordState.signature = "";
       dashcamState.routeHeights = Object.create(null);
@@ -803,16 +853,6 @@ function bindLogsPage() {
         if (typeof renderScreenrecordVideos === "function") renderScreenrecordVideos({ preserve: true, animate: false });
       }, 120);
     }, { passive: true });
-  }
-
-  if (dashTab && dashTab.dataset.bound !== "1") {
-    dashTab.dataset.bound = "1";
-    dashTab.addEventListener("click", () => activateLogsTab("dashcam"));
-  }
-
-  if (screenTab && screenTab.dataset.bound !== "1") {
-    screenTab.dataset.bound = "1";
-    screenTab.addEventListener("click", () => activateLogsTab("screen"));
   }
 
   if (routesHost && routesHost.dataset.bound !== "1") {
