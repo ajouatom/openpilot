@@ -2664,11 +2664,12 @@ class ClusterUiRenderer:
                 rl.rl_pop_matrix()
 
     def _world_view_shift_x(self, state: ClusterUiState) -> float:
-        if self.screen_mode not in (CLUSTER_SCREEN_MODE_DEFAULT, CLUSTER_SCREEN_MODE_TRIP_REPORT):
+        screen_mode = self._effective_screen_mode(state)
+        if screen_mode not in (CLUSTER_SCREEN_MODE_DEFAULT, CLUSTER_SCREEN_MODE_TRIP_REPORT):
             return 0.0
         if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
             return 0.0
-        if self.screen_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
+        if screen_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
             return NAVI_WORLD_VIEW_SHIFT_X * self.width / DESIGN_WIDTH
         navi_panel_visible = bool(
             self._navi_live_panel_visible(state.navi_live)
@@ -3316,7 +3317,7 @@ class ClusterUiRenderer:
         rl.rl_scalef(sx, sy, 1.0)
         self._profile_add("hud.push_scale", profile_stage)
         try:
-            screen_mode = self.screen_mode
+            screen_mode = self._effective_screen_mode(state)
             if screen_mode == CLUSTER_SCREEN_MODE_NAVI:
                 self._draw_navi_dashboard(state)
                 self._draw_status_footer(state)
@@ -3443,6 +3444,24 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             rl.rl_pop_matrix()
             self._profile_add("hud.pop_matrix", profile_stage)
+
+    def _effective_screen_mode(self, state: ClusterUiState) -> int:
+        if self.screen_mode != CLUSTER_SCREEN_MODE_DEFAULT:
+            return self.screen_mode
+        dashboard = getattr(state, "navi_dashboard", None)
+        dashboard_connected = bool(
+            dashboard is not None and dashboard.connected
+        )
+        navigation_received = bool(
+            getattr(state, "external_nav_active", False)
+            or dashboard_connected
+            or self._navi_live_panel_visible(getattr(state, "navi_live", None))
+        )
+        return (
+            CLUSTER_SCREEN_MODE_DEFAULT
+            if navigation_received
+            else CLUSTER_SCREEN_MODE_TRIP_REPORT
+        )
 
     def _draw_status_footer(self, state: ClusterUiState) -> None:
         profile_stage = self._profile_start()
