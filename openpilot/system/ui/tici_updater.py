@@ -165,7 +165,10 @@ def main():
   manifest_path = sys.argv[2]
 
   try:
-    gui_app.init_window("System Update")
+    # This UI can run from a clean source checkout before font atlases exist.
+    gui_app.init_window("System Update", font_weights=(
+      FontWeight.NORMAL, FontWeight.MEDIUM, FontWeight.BOLD, FontWeight.SEMI_BOLD,
+    ))
     gui_app.push_widget(Updater(updater_path, manifest_path))
     for _ in gui_app.render():
       pass

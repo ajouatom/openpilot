@@ -12,7 +12,7 @@ import threading
 import platform
 import subprocess
 from contextlib import contextmanager
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from collections import deque
 from enum import StrEnum
 from pathlib import Path
@@ -125,7 +125,7 @@ class FontWeight(StrEnum):
 
 def font_fallback(font: rl.Font) -> rl.Font:
   """Fall back to unifont for languages that require it."""
-  if multilang.requires_unifont():
+  if multilang.requires_unifont() and gui_app.has_font(FontWeight.DISPLAY):
     return gui_app.font(FontWeight.DISPLAY)
   return font
 
@@ -446,7 +446,7 @@ class GuiApplication:
   def request_close(self):
     self._window_close_requested = True
 
-  def init_window(self, title: str, fps: int = _DEFAULT_FPS):
+  def init_window(self, title: str, fps: int = _DEFAULT_FPS, font_weights: Iterable[FontWeight] | None = None):
     with self._startup_profile_context():
       def _close(sig, frame):
         self.close()
@@ -504,7 +504,7 @@ class GuiApplication:
 
       self._target_fps = fps
       self._set_styles()
-      self._load_fonts()
+      self._load_fonts(font_weights)
       self._patch_text_functions()
       self._patch_scissor_mode()
       if BURN_IN_MODE and self._burn_in_shader is None:
@@ -910,6 +910,9 @@ class GuiApplication:
   def font(self, font_weight: FontWeight = FontWeight.NORMAL) -> rl.Font:
     return self._fonts[font_weight]
 
+  def has_font(self, font_weight: FontWeight) -> bool:
+    return font_weight in self._fonts
+
   @property
   def width(self):
     return self._width
@@ -918,8 +921,11 @@ class GuiApplication:
   def height(self):
     return self._height
 
-  def _load_fonts(self):
-    for fw in FontWeight:
+  def _load_fonts(self, font_weights: Iterable[FontWeight] | None = None):
+    # Bootstrap UIs run before SCons has generated the large multilingual font
+    # atlases. Let them load only the small set they actually render.
+    weights = tuple(FontWeight) if font_weights is None else tuple(dict.fromkeys((FontWeight.NORMAL, *font_weights)))
+    for fw in weights:
       fnt_path = FONT_DIR / fw
       font_path = self._resolve_font_path(fnt_path)
       if font_path != fnt_path:
