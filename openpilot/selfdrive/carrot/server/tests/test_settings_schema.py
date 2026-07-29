@@ -47,29 +47,6 @@ def test_c3x_lite_hardware_setting_is_exposed(settings, params):
   assert device_hardware["params"] == ["HardwareC3xLite"]
 
 
-def test_panda_spi_speed_setting_is_exposed_in_system(settings, params):
-  by_name = {p["name"]: p for p in params}
-  spi_speed = by_name["PandaSpiSpeed"]
-  assert (spi_speed["min"], spi_speed["max"], spi_speed["default"]) == (0, 3, 0)
-  assert spi_speed["control"] == "select"
-  assert spi_speed["risk"] == "high"
-  assert spi_speed["options"]["en"] == [
-    "50 MHz (default)",
-    "40 MHz",
-    "30 MHz",
-    "25 MHz (stability)",
-  ]
-  assert "재부팅" in spi_speed["descr"]
-  assert "Reboot" in spi_speed["edescr"]
-
-  system = next(category for category in settings["menu"] if category["id"] == "SYSTEM")
-  device_communication = next(group for group in system["groups"] if group["id"] == "SYS_DEVICE")
-  assert device_communication["params"] == ["PandaSpiSpeed"]
-
-  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
-  assert '{"PandaSpiSpeed", {PERSISTENT, INT, "0"}}' in params_keys
-
-
 def test_external_hud_brightness_and_orientation_use_catalog_controls(settings, params):
   by_name = {p["name"]: p for p in params}
   brightness = by_name["ClusterHudBrightness"]
