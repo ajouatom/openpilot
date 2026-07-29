@@ -113,6 +113,7 @@ TRIP_REPORT_PANEL_Y = 1.0
 TRIP_REPORT_PANEL_W = NAVI_LIVE_PANEL_W
 TRIP_REPORT_PANEL_H = DESIGN_HEIGHT - 2.0
 TRIP_REPORT_TRACE_MAX_SEGMENTS = 511
+TRIP_REPORT_TRACE_ZOOM_TIME_CONSTANT_S = 1.2
 CAMERA_BACKGROUND_X = 0.0
 CAMERA_BACKGROUND_Y = 0.0
 CAMERA_BACKGROUND_W = NAVI_LIVE_PANEL_X
@@ -5596,7 +5597,7 @@ class ClusterUiRenderer:
         dt = clamp(now - self._trip_trace_zoom_t, 0.0, 0.25)
         self._trip_trace_zoom_t = now
         if target_radius_m > self._trip_trace_display_radius_m:
-            blend = 1.0 - math.exp(-dt / 0.55)
+            blend = 1.0 - math.exp(-dt / TRIP_REPORT_TRACE_ZOOM_TIME_CONSTANT_S)
             self._trip_trace_display_radius_m += (
                 target_radius_m - self._trip_trace_display_radius_m
             ) * blend
