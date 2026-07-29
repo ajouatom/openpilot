@@ -464,8 +464,9 @@ frame so an update cannot introduce a false bend. The same mode can be
 validated with `cluster_replay_usb.py ROUTE --trip-report`.
 In default screen mode (`0`), the trip report is shown while no live navigation
 is being received and the navigation panel returns automatically when reception
-starts. The trace is north-up, grows through 250 m, 500 m, and 1 km radius
-steps, and drops the contiguous history beyond 1 km.
+starts. The trace is north-up; after the initial 250 m radius, its target radius
+grows in 10 m increments and the renderer eases smoothly toward each target up
+to 1 km. Contiguous history beyond 1 km is dropped.
 Mode `3` also hides the speed, accel, clock, turn-signal, and git HUD so the
 large graph uses the available center/right height with only a small margin.
 Mode `4` keeps the driving HUD and uses the maximum right-side panel height with
