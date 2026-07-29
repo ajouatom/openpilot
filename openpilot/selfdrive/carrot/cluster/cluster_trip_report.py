@@ -23,6 +23,7 @@ TRIP_EVENT_MIN_GAP_S = 1.5
 TRIP_LIVE_POSE_MAX_AGE_S = 1.0
 TRIP_GPS_MAX_AGE_S = 1.5
 TRIP_GPS_MAX_ACCURACY_M = 50.0
+TRIP_TRACE_SHIFT_BATCH_M = 0.5
 
 
 def _finite(value: Any, default: float | None = None) -> float | None:
@@ -73,6 +74,7 @@ class TripReportTracker:
         self._heading_initialized = False
         self._heading_source = "steering"
         self._live_pose_yaw_rad: float | None = None
+        self._live_pose_heading_offset_rad: float | None = None
         self._live_pose_t = -math.inf
 
         self._gps_origin_lat_deg: float | None = None
@@ -82,6 +84,7 @@ class TripReportTracker:
         self._gps_x_m: float | None = None
         self._gps_y_m: float | None = None
         self._gps_bearing_rad: float | None = None
+        self._gps_bearing_t = -math.inf
         self._gps_accuracy_m = TRIP_GPS_MAX_ACCURACY_M
         self._gps_t = -math.inf
         self._gps_applied_t = -math.inf
@@ -94,6 +97,8 @@ class TripReportTracker:
         self._last_trace_t = -math.inf
         self._last_trace_x_m = 0.0
         self._last_trace_y_m = 0.0
+        self._pending_trace_shift_x_m = 0.0
+        self._pending_trace_shift_y_m = 0.0
         self._trace_radius_m = TRIP_TRACE_MIN_RADIUS_M
         self._last_snapshot = TripReportState()
 
@@ -155,6 +160,7 @@ class TripReportTracker:
             and bearing_accuracy_deg <= 20.0
         ):
             self._gps_bearing_rad = _wrap_angle(math.radians(bearing_deg))
+            self._gps_bearing_t = event_t
 
     def update(
         self,
@@ -214,22 +220,35 @@ class TripReportTracker:
         return self._last_snapshot
 
     def _apply_heading_observations(self, event_t: float, speed_mps: float) -> bool:
-        if self._live_pose_yaw_rad is not None and event_t - self._live_pose_t <= TRIP_LIVE_POSE_MAX_AGE_S:
+        pose_fresh = self._live_pose_yaw_rad is not None and event_t - self._live_pose_t <= TRIP_LIVE_POSE_MAX_AGE_S
+        gps_heading_fresh = (
+            self._gps_bearing_rad is not None
+            and speed_mps >= 2.0
+            and event_t - self._gps_bearing_t <= TRIP_GPS_MAX_AGE_S
+        )
+        if pose_fresh:
+            if self._live_pose_heading_offset_rad is None and gps_heading_fresh:
+                self._live_pose_heading_offset_rad = _wrap_angle(self._gps_bearing_rad - self._live_pose_yaw_rad)
+                if self._heading_initialized:
+                    rotation_rad = _wrap_angle(self._gps_bearing_rad - self._heading_rad)
+                    self._rotate_trace_frame(rotation_rad)
+                    self._heading_rad = self._gps_bearing_rad
+                self._gps_corrected = True
+
+            pose_heading_rad = self._live_pose_yaw_rad
+            if self._live_pose_heading_offset_rad is not None:
+                pose_heading_rad = _wrap_angle(pose_heading_rad + self._live_pose_heading_offset_rad)
             if not self._heading_initialized:
-                self._heading_rad = self._live_pose_yaw_rad
+                self._heading_rad = pose_heading_rad
                 self._heading_initialized = True
             else:
-                yaw_error = _wrap_angle(self._live_pose_yaw_rad - self._heading_rad)
+                yaw_error = _wrap_angle(pose_heading_rad - self._heading_rad)
                 if abs(yaw_error) <= math.radians(75.0):
                     self._heading_rad = _wrap_angle(self._heading_rad + yaw_error * 0.45)
             self._heading_source = "livePose"
             return True
 
-        if (
-            self._gps_bearing_rad is not None
-            and speed_mps >= 2.0
-            and event_t - self._gps_t <= TRIP_GPS_MAX_AGE_S
-        ):
+        if gps_heading_fresh:
             if not self._heading_initialized:
                 self._heading_rad = self._gps_bearing_rad
                 self._heading_initialized = True
@@ -255,9 +274,62 @@ class TripReportTracker:
         if error_m > plausible_error_m:
             return
         alpha = 0.18 if error_m < 8.0 else 0.08
-        self._x_m += error_x * alpha
-        self._y_m += error_y * alpha
+        correction_x_m = error_x * alpha
+        correction_y_m = error_y * alpha
+        self._x_m += correction_x_m
+        self._y_m += correction_y_m
+        self._translate_trace_frame(correction_x_m, correction_y_m)
         self._gps_corrected = True
+
+    def _translate_trace_frame(self, delta_x_m: float, delta_y_m: float) -> None:
+        if abs(delta_x_m) <= 1e-9 and abs(delta_y_m) <= 1e-9:
+            return
+        self._last_trace_x_m += delta_x_m
+        self._last_trace_y_m += delta_y_m
+        self._pending_trace_shift_x_m += delta_x_m
+        self._pending_trace_shift_y_m += delta_y_m
+        if math.hypot(self._pending_trace_shift_x_m, self._pending_trace_shift_y_m) >= TRIP_TRACE_SHIFT_BATCH_M:
+            self._flush_pending_trace_shift()
+
+    def _flush_pending_trace_shift(self) -> None:
+        delta_x_m = self._pending_trace_shift_x_m
+        delta_y_m = self._pending_trace_shift_y_m
+        if abs(delta_x_m) <= 1e-9 and abs(delta_y_m) <= 1e-9:
+            return
+        if self._trace_points:
+            self._trace_points = [
+                TripTracePoint(point.x_m + delta_x_m, point.y_m + delta_y_m, point.speed_kph)
+                for point in self._trace_points
+            ]
+            self._trace_generation += 1
+        self._pending_trace_shift_x_m = 0.0
+        self._pending_trace_shift_y_m = 0.0
+
+    def _rotate_trace_frame(self, rotation_rad: float) -> None:
+        if abs(rotation_rad) <= 1e-9:
+            return
+        self._flush_pending_trace_shift()
+        sin_rotation = math.sin(rotation_rad)
+        cos_rotation = math.cos(rotation_rad)
+
+        def rotate_point(x_m: float, y_m: float) -> tuple[float, float]:
+            relative_x_m = x_m - self._x_m
+            relative_y_m = y_m - self._y_m
+            return (
+                self._x_m + cos_rotation * relative_x_m + sin_rotation * relative_y_m,
+                self._y_m - sin_rotation * relative_x_m + cos_rotation * relative_y_m,
+            )
+
+        if self._trace_points:
+            self._trace_points = [
+                TripTracePoint(*rotate_point(point.x_m, point.y_m), point.speed_kph)
+                for point in self._trace_points
+            ]
+            self._trace_generation += 1
+        self._last_trace_x_m, self._last_trace_y_m = rotate_point(
+            self._last_trace_x_m,
+            self._last_trace_y_m,
+        )
 
     def _update_events(
         self,
@@ -316,6 +388,7 @@ class TripReportTracker:
             or moved_m < TRIP_TRACE_MIN_DISTANCE_M
         ):
             return
+        self._flush_pending_trace_shift()
         self._trace_points.append(TripTracePoint(self._x_m, self._y_m, max(0.0, speed_kph)))
         self._last_trace_t = event_t
         self._last_trace_x_m = self._x_m

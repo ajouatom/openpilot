@@ -15,6 +15,9 @@ from cluster_trip_report import TripReportTracker
 from cluster_renderer import ClusterUiRenderer, NAVI_WORLD_VIEW_SHIFT_X
 
 
+EARTH_RADIUS_M = 6_378_137.0
+
+
 def live_pose(yaw_rad: float) -> SimpleNamespace:
   return SimpleNamespace(
     inputsOK=True,
@@ -66,6 +69,66 @@ def test_trip_tracker_uses_live_pose_and_gps_correction():
   tracker.update_gps(gps(37.0, 127.00006), 0.6)
   state = tracker.update(0.6, 10.0, 0.0, 0.0, True, 2.7, 15.0)
   assert state.gps_corrected
+
+
+def test_trip_tracker_aligns_live_pose_heading_to_gps_bearing():
+  tracker = TripReportTracker()
+  pose_yaw_rad = math.radians(123.55)
+  gps_bearing_deg = 38.96
+  tracker.update_live_pose(live_pose(pose_yaw_rad), 0.0)
+  tracker.update_gps(gps(37.0, 127.0, gps_bearing_deg), 0.0)
+  tracker.update(0.0, 10.0, 0.0, 0.0, True, 2.7, 15.0)
+  state = tracker.update(0.5, 10.0, 0.0, 0.0, True, 2.7, 15.0)
+
+  expected_heading_rad = math.radians(gps_bearing_deg)
+  assert state.heading_source == "livePose"
+  assert state.gps_corrected
+  assert math.isclose(state.current_x_m, math.sin(expected_heading_rad) * 5.0, abs_tol=0.05)
+  assert math.isclose(state.current_y_m, math.cos(expected_heading_rad) * 5.0, abs_tol=0.05)
+
+
+def test_late_gps_heading_rotates_existing_trace_without_a_kink():
+  tracker = TripReportTracker()
+  tracker.update_live_pose(live_pose(math.pi / 2.0), 0.0)
+  tracker.update(0.0, 10.0, 0.0, 0.0, True, 2.7, 15.0)
+  tracker.update_live_pose(live_pose(math.pi / 2.0), 0.5)
+  tracker.update(0.5, 10.0, 0.0, 0.0, True, 2.7, 15.0)
+
+  tracker.update_gps(gps(37.0, 127.0, 0.0), 0.6)
+  tracker.update_live_pose(live_pose(math.pi / 2.0), 0.6)
+  state = tracker.update(0.6, 10.0, 0.0, 0.0, True, 2.7, 15.0)
+
+  assert state.gps_corrected
+  assert len(state.trace_points) == 2
+  for point in state.trace_points:
+    assert math.isclose(point.x_m, state.current_x_m, abs_tol=1e-6)
+  assert state.trace_points[0].y_m < state.trace_points[1].y_m < state.current_y_m
+
+
+def test_gps_position_correction_translates_existing_trace():
+  tracker = TripReportTracker()
+  tracker.update_gps(gps(37.0, 127.0, 0.0), 0.0)
+  tracker.update(0.0, 10.0, 0.0, 0.0, True, 2.7, 15.0)
+  before = tracker.update(0.5, 10.0, 0.0, 0.0, True, 2.7, 15.0)
+  before_relative = tuple(
+    (point.x_m - before.current_x_m, point.y_m - before.current_y_m)
+    for point in before.trace_points
+  )
+
+  latitude_5m_north = 37.0 + math.degrees(5.0 / EARTH_RADIUS_M)
+  longitude_5m_east = 127.0 + math.degrees(5.0 / (EARTH_RADIUS_M * math.cos(math.radians(37.0))))
+  tracker.update_gps(gps(latitude_5m_north, longitude_5m_east, 0.0), 0.6)
+  after = tracker.update(0.6, 0.0, 0.0, 0.0, True, 2.7, 15.0)
+  after_relative = tuple(
+    (point.x_m - after.current_x_m, point.y_m - after.current_y_m)
+    for point in after.trace_points
+  )
+
+  assert after.current_x_m > before.current_x_m
+  assert len(after.trace_points) == len(before.trace_points)
+  for before_point, after_point in zip(before_relative, after_relative, strict=True):
+    assert math.isclose(after_point[0], before_point[0], abs_tol=1e-6)
+    assert math.isclose(after_point[1], before_point[1], abs_tol=1e-6)
 
 
 def test_trip_tracker_counts_events_once_and_bounds_trace_work():
