@@ -573,14 +573,17 @@ def test_front_cutin_needs_stronger_path_relative_motion_than_corner() -> None:
   assert front_cutin_motion_supported("corner235", 0.10)
 
 
-def test_carrot_radar_cutin_sensitivity_keeps_level_three_as_current() -> None:
+def test_carrot_radar_cutin_sensitivity_uses_measured_motion_dwell() -> None:
   corner = radar_motion_sensitivity(3, "corner")
   front = radar_motion_sensitivity(3, "front")
 
   assert corner.cut_in_enabled
   assert corner.cut_in_threshold == pytest.approx(0.30)
   assert front.cut_in_threshold == pytest.approx(0.67)
-  assert front.confirmation_s == pytest.approx(0.25)
+  assert [
+    radar_motion_sensitivity(level, "front").confirmation_s
+    for level in range(6)
+  ] == pytest.approx((0.0, 0.50, 0.40, 0.35, 0.25, 0.20))
   assert front.directional_min_consistency == pytest.approx(0.75)
   assert not radar_motion_sensitivity(0, "corner").cut_in_enabled
   assert radar_motion_sensitivity(-1, "corner").level == 0
@@ -1530,7 +1533,10 @@ def test_shared_decision_tracker_confirms_sustained_physical_cutin() -> None:
       confirmed_at = time_s
 
   assert confirmed_at is not None
-  assert confirmed_at == pytest.approx(0.5)
+  # This front track already has the strict 0.8-second one-way direction
+  # evidence, so it receives at most one radar-frame credit. With 10 Hz test
+  # samples, the first observed confirmation moves from 0.7 s to 0.6 s.
+  assert confirmed_at == pytest.approx(0.6)
   assert decision.confirmed[0].prediction.track_id == 10
 
 
@@ -1571,7 +1577,7 @@ def test_path_proximity_without_continuous_overlap_is_not_a_cutin() -> None:
   assert not conservative_result.confirmed
 
 
-def test_long_continuous_future_overlap_shortens_temporal_confirmation() -> None:
+def test_future_overlap_does_not_replace_measured_motion_dwell() -> None:
   prediction = update_series(
     RadarMotionPredictor(),
     (3.0, 2.8, 2.6, 2.4),
@@ -1589,14 +1595,150 @@ def test_long_continuous_future_overlap_shortens_temporal_confirmation() -> None
     long_overlap,
     predicted_path_overlap_s=0.5,
   )
-  long_tracker = RadarMotionDecisionTracker(threshold=0.5)
-  short_tracker = RadarMotionDecisionTracker(threshold=0.5)
+  long_tracker = RadarMotionDecisionTracker(
+    threshold=0.5,
+    confirmation_s=0.35,
+  )
+  short_tracker = RadarMotionDecisionTracker(
+    threshold=0.5,
+    confirmation_s=0.35,
+  )
 
   assert not long_tracker.update(0.0, (long_overlap,)).confirmed
   assert not short_tracker.update(0.0, (short_overlap,)).confirmed
-  assert long_tracker.update(0.11, (long_overlap,)).confirmed
-  assert not short_tracker.update(0.11, (short_overlap,)).confirmed
-  assert short_tracker.update(0.21, (short_overlap,)).confirmed
+  assert not long_tracker.update(0.34, (long_overlap,)).confirmed
+  assert not short_tracker.update(0.34, (short_overlap,)).confirmed
+  assert long_tracker.update(0.35, (long_overlap,)).confirmed
+  assert short_tracker.update(0.35, (short_overlap,)).confirmed
+
+
+def test_normal_confirmation_does_not_change_at_25_metres() -> None:
+  prediction = update_series(
+    RadarMotionPredictor(),
+    (3.0, 2.8, 2.6, 2.4),
+  )
+  common = {
+    "cut_in_probability": 0.8,
+    "path_entry_probability": 0.8,
+    "predicted_path_overlap_s": 1.5,
+    "current_path_occupancy": False,
+  }
+  near = replace(
+    prediction,
+    history=prediction.history[:-1] + (
+      replace(prediction.history[-1], d_rel=10.0),
+    ),
+    **common,
+  )
+  far = replace(
+    prediction,
+    history=prediction.history[:-1] + (
+      replace(prediction.history[-1], d_rel=40.0),
+    ),
+    **common,
+  )
+  near_tracker = RadarMotionDecisionTracker(
+    threshold=0.5,
+    confirmation_s=0.35,
+  )
+  far_tracker = RadarMotionDecisionTracker(
+    threshold=0.5,
+    confirmation_s=0.35,
+  )
+
+  assert not near_tracker.update(0.0, (near,)).confirmed
+  assert not far_tracker.update(0.0, (far,)).confirmed
+  assert near_tracker.update(0.35, (near,)).confirmed
+  assert far_tracker.update(0.35, (far,)).confirmed
+
+
+@pytest.mark.parametrize(
+  ("sensitivity", "confirmation_s"),
+  ((1, 0.50), (2, 0.40), (3, 0.35), (4, 0.25), (5, 0.20)),
+)
+def test_sensitivity_controls_measured_confirmation_time(
+  sensitivity: int,
+  confirmation_s: float,
+) -> None:
+  prediction = replace(
+    update_series(
+      RadarMotionPredictor(),
+      (3.0, 2.8, 2.6, 2.4),
+    ),
+    cut_in_probability=0.8,
+    path_entry_probability=0.8,
+    predicted_path_overlap_s=1.5,
+    current_path_occupancy=False,
+  )
+  policy = radar_motion_sensitivity(sensitivity, "front")
+  tracker = RadarMotionDecisionTracker(
+    threshold=0.5,
+    confirmation_s=policy.confirmation_s,
+  )
+
+  assert policy.confirmation_s == pytest.approx(confirmation_s)
+  assert not tracker.update(0.0, (prediction,)).confirmed
+  assert not tracker.update(
+    confirmation_s - 0.01,
+    (prediction,),
+  ).confirmed
+  assert tracker.update(confirmation_s, (prediction,)).confirmed
+
+
+def test_strong_front_direction_history_gets_one_frame_confirmation_credit() -> None:
+  prediction = replace(
+    update_series(
+      RadarMotionPredictor(),
+      (3.0, 2.8, 2.6, 2.4),
+    ),
+    cut_in_probability=0.8,
+    path_entry_probability=0.8,
+    predicted_path_overlap_s=1.5,
+    current_path_occupancy=False,
+    directional_inward_displacement_m=0.55,
+    directional_consistency=0.85,
+    directional_inward_sample_ratio=0.85,
+    d_path_rate_short=-0.50,
+    d_path_rate_long=-0.30,
+    motion_consistency=1.0,
+    recent_motion_support=1.0,
+  )
+  tracker = RadarMotionDecisionTracker(
+    threshold=0.5,
+    confirmation_s=0.35,
+  )
+
+  assert not tracker.update(0.0, (prediction,)).confirmed
+  assert not tracker.update(0.28, (prediction,)).confirmed
+  assert tracker.update(0.29, (prediction,)).confirmed
+
+
+def test_small_front_drift_does_not_get_confirmation_credit() -> None:
+  prediction = replace(
+    update_series(
+      RadarMotionPredictor(),
+      (3.0, 2.8, 2.6, 2.4),
+    ),
+    cut_in_probability=0.8,
+    path_entry_probability=0.8,
+    predicted_path_overlap_s=1.5,
+    current_path_occupancy=False,
+    directional_inward_displacement_m=0.20,
+    directional_consistency=0.95,
+    directional_inward_sample_ratio=0.85,
+    d_path_rate_short=-0.50,
+    d_path_rate_long=-0.30,
+    motion_consistency=1.0,
+    recent_motion_support=1.0,
+  )
+  tracker = RadarMotionDecisionTracker(
+    threshold=0.5,
+    confirmation_s=0.35,
+  )
+
+  assert not tracker.update(0.0, (prediction,)).confirmed
+  assert not tracker.update(0.34, (prediction,)).confirmed
+  assert tracker.update(0.35, (prediction,)).confirmed
 
 
 def test_close_consistent_corner_entry_uses_short_confirmation() -> None:
@@ -1632,7 +1774,7 @@ def test_close_consistent_corner_entry_uses_short_confirmation() -> None:
   assert not normal_tracker.update(0.0, (not_urgent,)).confirmed
   assert urgent_tracker.update(0.11, (urgent,)).confirmed
   assert not normal_tracker.update(0.11, (not_urgent,)).confirmed
-  assert normal_tracker.update(0.26, (not_urgent,)).confirmed
+  assert normal_tracker.update(0.35, (not_urgent,)).confirmed
 
 
 def test_slow_adjacent_drift_below_path_uncertainty_is_not_a_cutin() -> None:
