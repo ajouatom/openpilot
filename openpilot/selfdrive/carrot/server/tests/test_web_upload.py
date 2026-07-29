@@ -711,7 +711,9 @@ def test_dashcam_upload_uses_automatic_session_only_for_carrot(tmp_path: Path, m
   (tmp_path / "qlog.zst").write_bytes(b"log")
   monkeypatch.setattr(upload_jobs, "HAS_PARAMS", False)
   monkeypatch.setattr(upload_jobs, "segment_dir", lambda _segment: str(tmp_path))
-  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda _path: [])
+  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda _path: [
+    {"kind": "qlog", "name": "qlog.zst", "size": 3},
+  ])
   monkeypatch.setattr(upload_jobs, "route_name", lambda _segment: "test-route")
   monkeypatch.setattr(upload_jobs, "segment_index", lambda _segment: 0)
   monkeypatch.setattr(upload, "resolve_upload_target", lambda: {
@@ -726,7 +728,7 @@ def test_dashcam_upload_uses_automatic_session_only_for_carrot(tmp_path: Path, m
     calls.append(("session", base_url, metadata["dongleId"], purpose))
     return "automatic-session"
 
-  async def fake_folder(local_folder, directory, remote_path, base_url, token, should_cancel):
+  async def fake_folder(local_folder, directory, remote_path, base_url, token, should_cancel, *, filenames=None, on_progress=None):
     calls.append(("upload", directory, remote_path, base_url, token))
     return True
 
@@ -793,7 +795,9 @@ def test_dashcam_toss_empty_car_name_keeps_none_directory_policy(tmp_path: Path,
   (tmp_path / "qlog.zst").write_bytes(b"log")
   monkeypatch.setattr(upload_jobs, "HAS_PARAMS", False)
   monkeypatch.setattr(upload_jobs, "segment_dir", lambda _segment: str(tmp_path))
-  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda _path: [])
+  monkeypatch.setattr(upload_jobs, "segment_file_summary", lambda _path: [
+    {"kind": "qlog", "name": "qlog.zst", "size": 3},
+  ])
   monkeypatch.setattr(upload_jobs, "route_name", lambda _segment: "test-route")
   monkeypatch.setattr(upload_jobs, "segment_index", lambda _segment: 0)
   monkeypatch.setattr(upload, "resolve_upload_target", lambda: {
@@ -804,7 +808,7 @@ def test_dashcam_toss_empty_car_name_keeps_none_directory_policy(tmp_path: Path,
   })
   uploaded_directories = []
 
-  async def fake_folder(local_folder, directory, remote_path, base_url, token, should_cancel):
+  async def fake_folder(local_folder, directory, remote_path, base_url, token, should_cancel, *, filenames=None, on_progress=None):
     uploaded_directories.append(directory)
     return True
 

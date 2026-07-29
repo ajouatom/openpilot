@@ -96,7 +96,7 @@ test("dashcam upload confirmation stays compact and uses an explicit send action
   const dialog = read("src/ui/components/dialog/dialog.js");
   const dialogStyle = read("src/ui/components/dialog/style.css");
 
-  assert.match(dashcam, /messageHtml:\s*dashcamUploadConfirmHtml\(uploadStats\)/);
+  assert.match(dashcam, /messageHtml:\s*dashcamUploadConfirmHtml\(uploadStats,\s*uploadTarget\)/);
   assert.match(dashcam, /upload_segment_count/);
   assert.match(dashcam, /upload_kind_count/);
   assert.match(dashcam, /confirmLabel:\s*getUIText\("upload_send",\s*"Send"\)/);
@@ -105,7 +105,9 @@ test("dashcam upload confirmation stays compact and uses an explicit send action
     dashcam.match(/function dashcamUploadConfirmHtml[\s\S]*?\n}\n/)?.[0] || "",
     /app-dialog__metaCodeList|upload_original_files_confirm/,
   );
-  assert.doesNotMatch(dashcam, /getUIText\("upload_data_warning"/);
+  assert.match(dashcam, /getUIText\("upload_data_warning"/);
+  assert.match(dashcam, /web_log_upload_target_toss/);
+  assert.match(dashcam, /web_log_upload_target_carrot/);
   assert.match(dialog, /messageHtml:\s*options\.messageHtml/);
   assert.match(dialog, /html:\s*options\.html/);
   assert.match(dialogStyle, /\.app-dialog__uploadBrief\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/s);
