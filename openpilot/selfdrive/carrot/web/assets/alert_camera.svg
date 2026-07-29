@@ -1,3 +1,17 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:f1086279a32f49f68de1db4e89a93aa2aae779395cfb908e5f6a0cbf2bf7dae6
-size 989
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="speed camera">
+  <!-- Prepared asset — not yet wired into the HUD. Reads on the green compact-HUD
+       background; uses currentColor-independent fixed fills so it works standalone. -->
+  <!-- stand -->
+  <rect x="28.5" y="43" width="7" height="14" rx="3.5" fill="#28332e"/>
+  <rect x="21" y="55" width="22" height="5.5" rx="2.75" fill="#28332e"/>
+  <!-- camera body -->
+  <rect x="6" y="12" width="52" height="34" rx="9" fill="#8fbfa8" stroke="#1e2a25" stroke-width="4"/>
+  <!-- inner frame -->
+  <rect x="13.5" y="19.5" width="37" height="21" rx="5.5" fill="#6ba585" stroke="#1e2a25" stroke-width="2.5"/>
+  <!-- lens -->
+  <circle cx="32" cy="30" r="9.5" fill="#18211d" stroke="#eef5f1" stroke-width="2.6"/>
+  <circle cx="32" cy="30" r="4.2" fill="#0b100e"/>
+  <circle cx="35.4" cy="26.8" r="1.7" fill="#eef5f1"/>
+  <!-- indicator light -->
+  <circle cx="18.5" cy="37" r="2.1" fill="#3a4a42"/>
+</svg>

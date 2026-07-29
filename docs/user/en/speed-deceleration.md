@@ -180,6 +180,8 @@ There are four distinct sources:
 - **Future model speed** at a selected future time
 - **Applied model driving speed** from the model's overall desired velocity
 
+The `carrot-wip-rh` branch uses the Rebellious Hope driving model. Its inputs and the meanings and units of the settings below are unchanged, but its predicted path, future speed, and vehicle-action outputs can differ from the previous model. Recheck existing tuning in a familiar, controlled environment instead of assuming it remains safe.
+
 ### `AutoCurveSpeedFactor`
 
 The code scales model yaw rate and calculates a curve speed around a 1.9 m/s² lateral-acceleration target. A larger factor treats the same curve as sharper and produces a lower target.
