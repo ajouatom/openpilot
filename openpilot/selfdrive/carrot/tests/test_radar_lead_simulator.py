@@ -19,10 +19,12 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   SimulatorUI,
   candidate_track_id,
   confirmed_cutin_overlap_at,
+  corner_radar_display_points,
   front_only_frames,
   front_radar_display_points,
   is_position_only_reference,
   lead_continuity_segments,
+  lead_one_rgb,
   load_validation_lookahead,
   load_validation_motion_mode,
   load_validation_probability,
@@ -222,6 +224,7 @@ def test_cutin_confirmation_survives_out_to_in_path_transition() -> None:
   frames = [
     frame(
       (
+        point(10, 30.0, 0.0),
         replace(
           point(
             1010,
@@ -284,6 +287,23 @@ def test_front_radar_display_toggle_uses_only_measured_front_points() -> None:
   assert [
     value.track_id for value in front_radar_display_points(current)
   ] == [10, 11]
+
+
+def test_corner_radar_display_includes_all_measured_points_in_range() -> None:
+  current = frame((
+    point(1001, 20.0, 0.2, source="corner235"),
+    point(1002, 85.0, 1.0, source="corner235"),
+    point(1003, 121.0, 0.2, source="corner235"),
+    point(
+      1004, 30.0, 0.2,
+      source="corner235", measured=False,
+    ),
+    point(10, 20.0, 0.0, source="frontRadar"),
+  ))
+
+  assert [
+    value.track_id for value in corner_radar_display_points(current)
+  ] == [1001, 1002]
 
 
 def test_corner_motion_is_preferred_for_whole_log_when_available() -> None:
@@ -561,6 +581,39 @@ def test_lead_continuity_breaks_on_missing_frames_and_track_id_changes() -> None
     [10, 10],
     [10],
     [11],
+  ]
+
+
+def test_vision_only_lead_one_uses_blue_instead_of_radar_orange() -> None:
+  assert lead_one_rgb(-1) == (72, 145, 255)
+  assert lead_one_rgb(56) == (246, 142, 55)
+  assert lead_one_rgb(None) == (246, 142, 55)
+
+
+def test_lead_continuity_splits_vision_and_radar_color_segments() -> None:
+  frames = [frame((), time_s=index * 0.1) for index in range(2)]
+  selections = (
+    Selection(
+      Candidate(
+        -1, 1.0, "vision L1",
+        d_rel=30.0, y_rel=0.1, v_lead=0.0,
+      ),
+      None,
+    ),
+    Selection(
+      Candidate(
+        41, 1.0, "radar L1",
+        d_rel=29.5, y_rel=0.2, v_lead=0.1,
+      ),
+      None,
+    ),
+  )
+
+  segments = lead_continuity_segments(frames, selections, "lead_one")
+
+  assert [[point[2] for point in segment] for segment in segments] == [
+    [-1],
+    [41],
   ]
 
 

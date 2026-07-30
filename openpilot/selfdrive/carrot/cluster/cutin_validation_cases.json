@@ -2,6 +2,48 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "ioniq9-a7-22-truck",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001a7--54660d9df7--22/rlog.zst",
+      "source": "front+corner",
+      "window": [20.0, 29.0],
+      "expected": "detect",
+      "human_verified": true,
+      "target_track_ids": [56, 1003],
+      "scene": "Right truck enters; L1 must recover front track 56 when the narrow vision likelihood misses it"
+    },
+    {
+      "id": "santafe-495-7-slow-leadone",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5_HEV 61d2c91e1039ab5e",
+      "log": "00000495--f78491e8e3--7/rlog.zst",
+      "source": "front+corner",
+      "window": [9.5, 14.5],
+      "expected": "stationary",
+      "target_track_ids": [56],
+      "scene": "Slow front track 56 must remain leadOne through vision/radar disagreement without switching to farther corner track 1020"
+    },
+    {
+      "id": "ioniq9-1b9-26-tunnel-ghost",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "000001b9--a2a8fbc84b--26/rlog.zst",
+      "source": "front+corner",
+      "window": [0.0, 6.0],
+      "expected": "clear",
+      "forbidden_lead_one_ids": [40, 61],
+      "forbidden_lead_two_ids": [40, 51],
+      "scene": "Tunnel reflections must not become a vision-matched leadOne or stationary leadTwo"
+    },
+    {
+      "id": "sorento-1-4-stationary-113m",
+      "vehicle_folder": "KIA_SORENTO_HEV_4TH_GEN ec52e28535e2b281",
+      "log": "00000001--468b94c6c9--4/rlog.zst",
+      "source": "front+corner",
+      "window": [16.5, 27.5],
+      "expected": "stationary",
+      "target_track_ids": [60, 1003],
+      "scene": "Night stopped vehicle approached from 113 m with front and corner radar"
+    },
+    {
       "id": "carnival-5b-18-early",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "0000005b--02344a68f2--18/rlog.1.zst",
@@ -138,17 +180,6 @@
       "target_track_ids": [52, 1024],
       "latest_detection_s": 56.2,
       "scene": "Very close white vehicle enters from the left; report early and keep the provisional control output softened"
-    },
-    {
-      "id": "ioniq9-a7-22-truck",
-      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
-      "log": "000001a7--54660d9df7--22/rlog.zst",
-      "source": "corner",
-      "window": [20.0, 29.0],
-      "expected": "detect",
-      "human_verified": true,
-      "target_track_ids": [56, 1003],
-      "scene": "Large truck begins entering around 21 seconds"
     },
     {
       "id": "ioniq5-cd0-1-merge",
@@ -388,17 +419,6 @@
       "scene": "Stopped traffic must not promote the adjacent corner point to leadTwo"
     },
     {
-      "id": "ioniq9-1b9-26-tunnel-ghost",
-      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
-      "log": "000001b9--a2a8fbc84b--26/rlog.zst",
-      "source": "front+corner",
-      "window": [0.0, 6.0],
-      "expected": "clear",
-      "forbidden_lead_one_ids": [61],
-      "forbidden_lead_two_ids": [40, 51],
-      "scene": "Tunnel reflections must not become a vision-matched leadOne or stationary leadTwo"
-    },
-    {
       "id": "ioniq5-cd2-4-stopped-false-cutin",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
       "log": "00000cd2--ea0776cc10--4/rlog.zst",
@@ -488,16 +508,6 @@
       "expected": "stationary",
       "target_track_ids": [35],
       "scene": "Night stationary queue approached from 114 m"
-    },
-    {
-      "id": "sorento-1-4-stationary-113m",
-      "vehicle_folder": "KIA_SORENTO_HEV_4TH_GEN ec52e28535e2b281",
-      "log": "00000001--468b94c6c9--4/rlog.zst",
-      "source": "front+corner",
-      "window": [16.5, 27.5],
-      "expected": "stationary",
-      "target_track_ids": [60, 1003],
-      "scene": "Night stopped vehicle approached from 113 m with front and corner radar"
     },
     {
       "id": "sonata-237-0-stationary-99m",

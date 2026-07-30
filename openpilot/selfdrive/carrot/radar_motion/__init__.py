@@ -70,12 +70,16 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   VisionRadarMatch,
   VisionRadarMatcher,
   apply_vision_bracket_cutin_support,
+  lead_from_vision,
   lead_from_radar_point,
   lead_from_vision_match,
+  match_dpath_primary_lead,
   prefer_front_radar_kinematics,
+  select_dpath_primary_radar_points,
   select_primary_radar_points,
   snapshot_radar_points,
   vision_lead_from_model,
+  vision_only_lead_allowed,
 )
 
 __all__ = (
@@ -135,7 +139,9 @@ __all__ = (
   "is_review_candidate",
   "lead_duplicates_primary",
   "lead_from_radar_point",
+  "lead_from_vision",
   "lead_from_vision_match",
+  "match_dpath_primary_lead",
   "prefer_front_radar_kinematics",
   "model_path_point_at_s",
   "prediction_sample_at",
@@ -144,8 +150,10 @@ __all__ = (
   "radar_motion_cut_in_threshold",
   "radar_motion_sensitivity",
   "select_dpath_lead_two",
+  "select_dpath_primary_radar_points",
   "select_primary_radar_points",
   "snapshot_radar_points",
   "vision_lead_from_model",
+  "vision_only_lead_allowed",
   "visible_motion_points",
 )
