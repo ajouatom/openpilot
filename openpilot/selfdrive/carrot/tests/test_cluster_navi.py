@@ -21,6 +21,7 @@ from cluster_config import (
   RADAR_TO_CAMERA_M,
   RED,
   VEHICLE_LENGTH_M,
+  WHITE,
 )
 from cluster_navi import fresh_carrot_navi, parse_carrot_navi, resolve_navi_speed_limit
 from cluster_navi_overlay import merge_navi_overlay_state
@@ -58,8 +59,12 @@ from cluster_renderer import (
   TPMS_STATUS_CENTER_X,
   TPMS_STATUS_COLUMN_OFFSET,
   TPMS_STATUS_FONT_SIZE,
+  TPMS_STATUS_ICON_H,
+  TPMS_STATUS_ICON_W,
   TPMS_STATUS_ROW_OFFSET,
   TPMS_STATUS_VALUE_CENTER_Y,
+  TPMS_STATUS_WHEEL_H,
+  TPMS_STATUS_WHEEL_W,
   ClusterUiRenderer,
 )
 
@@ -964,11 +969,58 @@ def test_default_and_road_camera_share_fixed_tpms_status(monkeypatch, camera_vie
   car_rect = next(rect for rect in rects if rect[2:4] == (TPMS_STATUS_CAR_W, TPMS_STATUS_CAR_H))
   assert car_rect[0] + car_rect[2] * 0.5 == pytest.approx(TPMS_STATUS_CENTER_X)
   assert car_rect[1] + car_rect[3] * 0.5 == pytest.approx(TPMS_STATUS_CAR_CENTER_Y)
-  wheel_rects = [rect for rect in rects if rect[2:4] == (6.0, 17.0)]
-  left_protrusion = car_rect[0] - min(rect[0] for rect in wheel_rects)
-  right_protrusion = max(rect[0] + rect[2] for rect in wheel_rects) - (car_rect[0] + car_rect[2])
-  assert left_protrusion == pytest.approx(5.0)
-  assert right_protrusion == pytest.approx(left_protrusion)
+  wheel_rects = [rect for rect in rects if rect[2:4] == (TPMS_STATUS_WHEEL_W, TPMS_STATUS_WHEEL_H)]
+  assert len(wheel_rects) == 4
+  assert [(rect[0] + rect[2] * 0.5, rect[1] + rect[3] * 0.5) for rect in wheel_rects] == [
+    (
+      TPMS_STATUS_CENTER_X - TPMS_STATUS_COLUMN_OFFSET,
+      TPMS_STATUS_VALUE_CENTER_Y - TPMS_STATUS_ROW_OFFSET,
+    ),
+    (
+      TPMS_STATUS_CENTER_X + TPMS_STATUS_COLUMN_OFFSET,
+      TPMS_STATUS_VALUE_CENTER_Y - TPMS_STATUS_ROW_OFFSET,
+    ),
+    (
+      TPMS_STATUS_CENTER_X - TPMS_STATUS_COLUMN_OFFSET,
+      TPMS_STATUS_VALUE_CENTER_Y + TPMS_STATUS_ROW_OFFSET,
+    ),
+    (
+      TPMS_STATUS_CENTER_X + TPMS_STATUS_COLUMN_OFFSET,
+      TPMS_STATUS_VALUE_CENTER_Y + TPMS_STATUS_ROW_OFFSET,
+    ),
+  ]
+
+
+def test_tpms_status_draws_loaded_toy_car_texture_once(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._tpms_car_texture = SimpleNamespace(width=416, height=312)
+  texture_draws = []
+  badges = []
+  monkeypatch.setattr(
+    "cluster_renderer.rl.draw_texture_pro",
+    lambda *args: texture_draws.append(args),
+  )
+  monkeypatch.setattr(
+    ClusterUiRenderer,
+    "_draw_tpms_car_fallback",
+    lambda self: pytest.fail("fallback TPMS car drawn"),
+  )
+  monkeypatch.setattr(
+    ClusterUiRenderer,
+    "_draw_compact_tpms_value",
+    lambda self, pressure, center_x, center_y: badges.append((pressure, center_x, center_y)),
+  )
+
+  renderer._draw_tpms_status(SimpleNamespace(tpms=TpmsInfo(fl=35.0, fr=34.0, rl=33.0, rr=32.0)))
+
+  assert len(texture_draws) == 1
+  source = texture_draws[0][1]
+  destination = texture_draws[0][2]
+  assert (source.width, source.height) == (416.0, 312.0)
+  assert (destination.width, destination.height) == (TPMS_STATUS_ICON_W, TPMS_STATUS_ICON_H)
+  assert destination.x + destination.width * 0.5 == pytest.approx(TPMS_STATUS_CENTER_X)
+  assert destination.y + destination.height * 0.5 == pytest.approx(TPMS_STATUS_CAR_CENTER_Y)
+  assert len(badges) == 4
 
 
 def test_tpms_status_hides_when_all_pressures_are_missing(monkeypatch):
@@ -989,10 +1041,10 @@ def test_tpms_status_hides_when_all_pressures_are_missing(monkeypatch):
 @pytest.mark.parametrize(
   ("theme", "pressure", "expected_text", "expected_color"),
   (
-    (DARK_CLUSTER_THEME, 31.0, "31", DARK_CLUSTER_THEME.world_label_text),
-    (LIGHT_CLUSTER_THEME, 35.0, "35", LIGHT_CLUSTER_THEME.world_label_text),
+    (DARK_CLUSTER_THEME, 31.0, "31", WHITE),
+    (LIGHT_CLUSTER_THEME, 35.0, "35", WHITE),
     (DARK_CLUSTER_THEME, 30.9, "31", RED),
-    (LIGHT_CLUSTER_THEME, None, "--", LIGHT_CLUSTER_THEME.muted),
+    (LIGHT_CLUSTER_THEME, None, "--", (170, 180, 188, 255)),
   ),
 )
 def test_compact_tpms_value_uses_theme_and_low_pressure_color(
@@ -1015,7 +1067,7 @@ def test_compact_tpms_value_uses_theme_and_low_pressure_color(
       200.0,
       TPMS_STATUS_FONT_SIZE,
       expected_color,
-      theme.world_label_shadow,
+      (0, 0, 0, 255),
       2,
     ),
     {"anchor": "center"},
