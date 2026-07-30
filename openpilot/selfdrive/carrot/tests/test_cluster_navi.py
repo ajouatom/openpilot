@@ -852,7 +852,7 @@ def test_road_camera_cover_crop_retains_more_of_lower_frame():
   assert top_crop / (top_crop + bottom_crop) == pytest.approx(0.75)
 
 
-def test_road_camera_vehicle_ellipse_uses_vehicle_road_anchor(monkeypatch):
+def test_road_camera_vehicle_frame_uses_vehicle_road_anchor(monkeypatch):
   renderer = object.__new__(ClusterUiRenderer)
   projected = []
   monkeypatch.setattr(
@@ -860,7 +860,7 @@ def test_road_camera_vehicle_ellipse_uses_vehicle_road_anchor(monkeypatch):
     "_project_camera_overlay_point",
     lambda self, point, projection, scene_shift_x_m=0.0: (projected.append(point), None)[1],
   )
-  renderer._draw_camera_overlay_vehicle_coin(
+  renderer._draw_camera_overlay_vehicle_frame(
     SimpleNamespace(center=SimpleNamespace(x=0.0, y=10.0)),
     None,
     0.0,
