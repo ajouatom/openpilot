@@ -456,19 +456,27 @@ core usage, `3` shows a large debug graph selected by `ShowPlotMode` with the
 driving scene disabled, and `4`
 shows the same graph in the right-side panel while keeping the driving scene.
 `5` shows the right-side driving report while keeping the driving scene. The
-report contains a bounded dead-reckoned trace, trip/event statistics, system
-load, and the stored calibration pitch/yaw. Its trace prefers `livePose`,
-falls back to steering angle and vehicle speed, aligns the `livePose` heading
-frame to GPS bearing, and applies GPS position correction to the whole trace
-frame so an update cannot introduce a false bend. The same mode can be
-validated with `cluster_replay_usb.py ROUTE --trip-report`.
+report uses a large trip/event summary card and a separate system-load card
+with the stored calibration pitch/yaw. The same mode can be validated with
+`cluster_replay_usb.py ROUTE --trip-report`.
+The renderer polls `LanguageSetting` and `IsMetric` about once per second.
+Korean (`ko`) and English (`en`) localize driving-report, driving-mode, and
+navigation status labels; unsupported language values fall back to English.
+Metric mode renders speed/distance as `km/h`, `m`, and `km`, while imperial
+mode converts the same internal kph/metre state to `mph`, `ft`, and `mi`.
+Vehicle speed, cruise/override/limit values, navigation, radar labels, and the
+trip report all use the selected units; acceleration and temperature remain
+`m/s²` and `°C`. Route replay defaults to Korean/metric and can validate the
+other presentation with
+`cluster_replay_usb.py ROUTE --trip-report --language en --imperial`.
 In default screen mode (`0`), the trip report is shown while no live navigation
 is being received and the navigation panel returns automatically when reception
-starts. The trace is north-up; after the initial 250 m radius, its target radius
-grows in 10 m increments and the renderer eases smoothly toward each target up
-to 1 km. Contiguous history beyond 1 km is dropped. Mode 5 keeps the branch,
-network address, and frame-rate status in the lower-left camera area while
-omitting the lower-right core-usage text that would overlap the report.
+starts. Mode 5 keeps the branch, network address, and frame-rate status in the
+lower-left camera area while omitting the lower-right core-usage text that would
+overlap the report. In road-camera view, ungrouped radar detections are projected
+as small transparent rounded source-colored markers, while detected vehicles
+are enclosed by larger transparent rounded frames using their existing
+detection colors.
 Mode `3` also hides the speed, accel, clock, turn-signal, and git HUD so the
 large graph uses the available center/right height with only a small margin.
 Mode `4` keeps the driving HUD and uses the maximum right-side panel height with

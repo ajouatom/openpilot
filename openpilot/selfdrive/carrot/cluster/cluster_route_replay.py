@@ -1617,8 +1617,6 @@ class RouteLogParser:
                 self._update_camera_odometry(event.cameraOdometry, bool(safe_get(event, "valid", True)))
             elif event_type == "livePose":
                 self._update_live_pose(event.livePose, event_t)
-            elif event_type in ("gpsLocationExternal", "gpsLocation"):
-                self._update_gps_location(getattr(event, event_type), event_t)
             elif event_type == "liveCalibration":
                 self._update_live_calibration(event.liveCalibration, bool(safe_get(event, "valid", True)))
             elif event_type == "carParams":
@@ -2159,12 +2157,8 @@ class RouteLogParser:
         if not self.front_radar_only and ext_flags is not None and (ext_flags & CORNER_RADAR_OBJECTS_EXT_FLAGS):
             self.corner_radar_supported = True
 
-    def _update_live_pose(self, live_pose: Any, event_t: float) -> None:
-        self.trip_report_tracker.update_live_pose(live_pose, event_t)
+    def _update_live_pose(self, live_pose: Any, _event_t: float) -> None:
         self._update_cutin_live_pose(live_pose)
-
-    def _update_gps_location(self, gps_location: Any, event_t: float) -> None:
-        self.trip_report_tracker.update_gps(gps_location, event_t)
 
     def corner_radar_active_for_display(self) -> bool:
         return not self.front_radar_only and (self.corner_radar_supported or self.corner_radar_tracks_seen)

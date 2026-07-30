@@ -84,13 +84,6 @@ class DebugPlotSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
-class TripTracePoint:
-    x_m: float
-    y_m: float
-    speed_kph: float
-
-
-@dataclass(frozen=True, slots=True)
 class TripReportState:
     duration_s: float = 0.0
     moving_time_s: float = 0.0
@@ -103,13 +96,6 @@ class TripReportState:
     hard_accel_count: int = 0
     hard_brake_count: int = 0
     hard_corner_count: int = 0
-    current_x_m: float = 0.0
-    current_y_m: float = 0.0
-    trace_radius_m: float = 250.0
-    trace_points: tuple[TripTracePoint, ...] = ()
-    trace_generation: int = 0
-    heading_source: str = "steering"
-    gps_corrected: bool = False
 
 
 @dataclass(frozen=True, slots=True)

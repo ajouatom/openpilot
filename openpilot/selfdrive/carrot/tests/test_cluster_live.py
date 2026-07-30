@@ -82,10 +82,10 @@ def test_live_driving_mode_requires_alive_valid_longitudinal_plan(alive, valid, 
   assert decorated.driving_mode == expected
 
 
-def test_live_trip_report_subscribes_pose_and_both_gps_sources() -> None:
+def test_live_cluster_avoids_unused_gps_subscriptions_after_trace_removal() -> None:
   assert "livePose" in LIVE_SERVICES_BASE
-  assert "gpsLocationExternal" in LIVE_SERVICES_BASE
-  assert "gpsLocation" in LIVE_SERVICES_BASE
+  assert "gpsLocationExternal" not in LIVE_SERVICES_BASE
+  assert "gpsLocation" not in LIVE_SERVICES_BASE
 
 
 def test_cached_calibration_is_loaded_for_installation_angle() -> None:
