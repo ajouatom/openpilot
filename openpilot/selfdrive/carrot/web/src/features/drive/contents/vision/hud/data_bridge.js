@@ -1,5 +1,12 @@
 "use strict";
 
+import {
+  resolveLaneModeFields,
+  resolveLaneModeState,
+} from "../lane_mode.js";
+
+export { resolveLaneModeState };
+
 function finite(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
@@ -145,12 +152,18 @@ export function createCruiseOverrideHold(options = {}) {
 // Keep the cluster-only fields in one shared rule so live and replay cannot
 // silently drop them at that boundary.
 export function withVehicleHudFields(payload = {}, source = {}) {
+  const laneMode = resolveLaneModeFields({
+    requested: source.laneModeRequested,
+    planned: source.laneModePlanned,
+    controlled: source.activeLaneLine,
+  });
   return {
     ...payload,
     evActive: source.evActive === true,
-    activeLaneLine: source.activeLaneLine == null
-      ? null
-      : source.activeLaneLine === true,
+    activeLaneLine: laneMode.controlled,
+    laneModeRequested: laneMode.requested,
+    laneModePlanned: laneMode.planned,
+    laneModePresentation: laneMode.presentation,
     cruiseOverride: cruiseOverridePayload(source.cruiseOverride),
     trafficState: trafficSignalState(source.trafficState ?? payload.trafficState),
     drivingMode: drivingModeState(source.drivingMode ?? payload.drivingMode),
@@ -164,6 +177,9 @@ export function vehicleHudSignature(payload = {}) {
   return [
     payload.evActive === true ? 1 : 0,
     payload.activeLaneLine == null ? "-" : (payload.activeLaneLine === true ? 1 : 0),
+    payload.laneModeRequested == null ? "-" : (payload.laneModeRequested === true ? 1 : 0),
+    payload.laneModePlanned == null ? "-" : (payload.laneModePlanned === true ? 1 : 0),
+    payload.laneModePresentation ?? "-",
     override?.kph ?? "-",
     override?.label ?? "-",
     override?.mode ?? "-",
@@ -267,19 +283,20 @@ export function deriveVehicleHudPayload(state = {}) {
     ? Math.round(rawGearStep)
     : null;
 
-  // Cluster parity: EV telltale (carState.evModeValid & evModeActive) and the
-  // LFA lane-line lateral mode (controlsState.activeLaneLine → green lane wings).
+  // Keep user intent, planner selection and final control activation separate.
+  // They update on different service clocks in both live and replay.
   const evActive = Boolean(carState.evModeValid) && Boolean(carState.evModeActive);
-  const activeLaneLine = controlsState.activeLaneLine == null
-    ? null
-    : Boolean(controlsState.activeLaneLine);
+  const laneMode = resolveLaneModeState(state);
   const latActive = optionalBoolean(carControl.latActive);
 
   return {
     gear,
     gearStep,
     evActive,
-    activeLaneLine,
+    activeLaneLine: laneMode.controlled,
+    laneModeRequested: laneMode.requested,
+    laneModePlanned: laneMode.planned,
+    laneModePresentation: laneMode.presentation,
     cruiseOverride: deriveCruiseOverride(state),
     trafficState: resolveTrafficState(state),
     drivingMode: drivingModeState(state.longitudinalPlan?.myDrivingMode),
@@ -303,6 +320,7 @@ export function deriveVehicleHudPayload(state = {}) {
 
 export const CarrotHudDataBridge = Object.freeze({
   deriveVehicleHudPayload,
+  resolveLaneModeState,
   deriveCruiseOverride,
   createCruiseOverrideHold,
   resolveTrafficState,

@@ -415,6 +415,8 @@ function drivingHudUpdateFromCarPayload(j) {
     gear: j.gear,
     gearStep: j.gearStep,
     lfaActive: j.lfaActive,
+    laneModeRequested: j.laneModeRequested,
+    laneModePlanned: j.laneModePlanned,
     steeringAngleDeg: j.steeringAngleDeg,
     aEgo: j.aEgo,
     steerOutput: j.steerOutput,
@@ -435,6 +437,9 @@ function drivingHudUpdateFromCarPayload(j) {
     ...basePayload,
     evActive: j.evActive === true,
     activeLaneLine: j.activeLaneLine == null ? null : j.activeLaneLine === true,
+    laneModeRequested: j.laneModeRequested == null ? null : j.laneModeRequested === true,
+    laneModePlanned: j.laneModePlanned == null ? null : j.laneModePlanned === true,
+    laneModePresentation: j.laneModePresentation ?? null,
     cruiseOverride: j.cruiseOverride && typeof j.cruiseOverride === "object"
       ? j.cruiseOverride
       : null,
@@ -752,6 +757,9 @@ function deriveCompactHudPayload(state) {
     ...payload,
     evActive: vehiclePayload.evActive === true,
     activeLaneLine: vehiclePayload.activeLaneLine == null ? null : vehiclePayload.activeLaneLine === true,
+    laneModeRequested: vehiclePayload.laneModeRequested ?? null,
+    laneModePlanned: vehiclePayload.laneModePlanned ?? null,
+    laneModePresentation: vehiclePayload.laneModePresentation ?? null,
     cruiseOverride: vehiclePayload.cruiseOverride ?? null,
     trafficState: Number.isFinite(trafficState) ? trafficState : 0,
     drivingMode: vehiclePayload.drivingMode ?? null,

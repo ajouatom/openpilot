@@ -16,7 +16,7 @@ const RISK_LABEL_KEYS = Object.freeze({
 });
 
 const RISK_TONES = Object.freeze({
-  high: "danger",
+  high: "warning",
   medium: "warning",
 });
 

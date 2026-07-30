@@ -119,12 +119,13 @@ html:not([data-carrot-mini-hud="1"]) #carrotMiniHud { display:none !important; }
 .chud-tlight-halo{opacity:.28}
 .chud-tlight-dot{stroke:rgba(255,255,255,.85);stroke-width:3}
 
-/* LFA 당근 — 클러스터 동작: 활성 풀컬러 / 비활성 회색 + 조향각 회전 */
-.chud-lfa{position:relative;display:flex;align-items:center;justify-content:center}
-/* 레인 날개(폭 2x)가 뜰 때만 그 오버행(각 변 휠 절반)을 패딩으로 예약 →
- * 옆 위젯과 겹치거나 좌측으로 삐져나가지 않는다(휠 위치는 중앙 유지). */
-.chud-lfa.has-lane{padding-inline:clamp(14px,2.8cqw,28px)}
-.chud-lfa-img{position:relative;z-index:1;height:clamp(28px,5.6cqw,56px);width:clamp(28px,5.6cqw,56px);display:block;object-fit:contain;
+/* LFA 아이콘의 flex 점유 폭은 모드와 무관하게 휠 크기로 고정한다.
+ * 2x 레인 날개는 absolute overflow로만 그려 옆 Wi-Fi/시계가 움직이지 않는다. */
+.chud-lfa{position:relative;display:flex;align-items:center;justify-content:center;
+  --chud-lfa-size:clamp(28px,5.6cqw,56px);--chud-lfa-lane-width:clamp(56px,11.2cqw,112px);
+  --chud-lfa-armed-opacity:.48;--chud-lfa-active-opacity:.78;
+  width:var(--chud-lfa-size);height:var(--chud-lfa-size);flex:0 0 auto}
+.chud-lfa-img{position:relative;z-index:1;height:var(--chud-lfa-size);width:var(--chud-lfa-size);display:block;object-fit:contain;
   transform-origin:50% 50%;transition:transform .12s linear,filter .2s,opacity .2s;
   filter:drop-shadow(0 2px 5px rgba(0,0,0,.55))}
 .chud-lfa:not(.is-active) .chud-lfa-img{opacity:.5;filter:grayscale(.7) drop-shadow(0 2px 5px rgba(0,0,0,.55))}
@@ -132,13 +133,17 @@ html:not([data-carrot-mini-hud="1"]) #carrotMiniHud { display:none !important; }
  * 휠 뒤에 깔리고 좌우로 삐져나온다. 색=배경(활성 초록/비활성 muted), 모양=mask(JS가 URL 주입). */
 .chud-lfa-lane{position:absolute;left:50%;top:50%;
   transform:translate(-50%,-56%);pointer-events:none;z-index:0;
-  width:clamp(56px,11.2cqw,112px);height:clamp(28px,5.6cqw,56px);
-  background-color:var(--chud-muted);
+  width:var(--chud-lfa-lane-width);height:var(--chud-lfa-size);
+  background-color:var(--chud-muted);opacity:0;visibility:hidden;
   -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
   -webkit-mask-position:center;mask-position:center;
   -webkit-mask-size:contain;mask-size:contain;
-  filter:drop-shadow(0 2px 5px rgba(0,0,0,.5))}
-.chud-lfa.is-active .chud-lfa-lane{background-color:var(--chud-carrot)}
+  filter:drop-shadow(0 2px 5px rgba(0,0,0,.5));
+  transition:opacity .18s ease-out,background-color .18s ease-out,visibility 0s linear .18s}
+.chud-lfa.has-lane .chud-lfa-lane{opacity:var(--chud-lfa-armed-opacity);visibility:visible;transition-delay:0s}
+.chud-lfa.is-lane-active .chud-lfa-lane{opacity:var(--chud-lfa-active-opacity)}
+.chud-lfa.is-lane-active.is-active .chud-lfa-lane{background-color:var(--chud-carrot);opacity:1}
+@media (prefers-reduced-motion:reduce){.chud-lfa-lane{transition:none}}
 
 /* WiFi */
 .chud-wifi{height:clamp(24px,4.8cqw,48px);width:clamp(24px,4.8cqw,48px);display:block;color:#fff;
@@ -196,9 +201,7 @@ html:not([data-carrot-mini-hud="1"]) #carrotMiniHud { display:none !important; }
  * 커진 결과가 다른 존을 침범하면 layout.js가 낮은 우선순위부터 제거한다. */
 @container chud (max-width:520px){
   .chud-gauge,.chud-level{width:clamp(44px,16cqw,64px)}
-  .chud-lfa-img{width:clamp(32px,12cqw,46px);height:clamp(32px,12cqw,46px)}
-  .chud-lfa-lane{width:clamp(64px,24cqw,92px);height:clamp(32px,12cqw,46px)}
-  .chud-lfa.has-lane{padding-inline:clamp(16px,6cqw,23px)}
+  .chud-lfa{--chud-lfa-size:clamp(32px,12cqw,46px);--chud-lfa-lane-width:clamp(64px,24cqw,92px)}
   .chud-wifi{width:clamp(28px,10cqw,40px);height:clamp(28px,10cqw,40px)}
   .chud-clock{font-size:clamp(28px,10cqw,40px);height:clamp(28px,10cqw,40px)}
   .chud-limit{width:clamp(52px,16cqw,68px)}

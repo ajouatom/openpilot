@@ -40,6 +40,7 @@ Carrot Web provides:
 - **Compare** to inspect a profile or backup before applying it
 - **Reset** to restore the catalog defaults
 - **File and QR backups** from the tools screen
+- **Navigation map appearance** in `Tools > Web Settings > Navigation`, where Carrot Navi's map type can be set to normal or satellite and its theme to dark or light
 
 A full reset or a backup from another vehicle can change many values at once. Save the current settings as both a profile and a file first.
 

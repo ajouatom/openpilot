@@ -135,7 +135,8 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding: 2px var(--tools-scrollbar-content-gap) 0 0;
+  padding: 2px var(--tools-scrollbar-content-gap) var(--tools-content-end-gap) 0;
+  scroll-padding-bottom: var(--tools-content-end-gap);
 }
 
 .tools-primary-actions {
@@ -917,8 +918,8 @@
     grid-row: 3;
     min-height: 0;
     overflow-y: auto;
-    padding-bottom: 0;
-    scroll-padding-bottom: 0;
+    padding-bottom: var(--tools-content-end-gap);
+    scroll-padding-bottom: var(--tools-content-end-gap);
   }
 
   .page--tools > .tools-console-dock {

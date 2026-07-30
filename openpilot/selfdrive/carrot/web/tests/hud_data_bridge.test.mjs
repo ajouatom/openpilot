@@ -7,6 +7,7 @@ import {
   deriveVehicleHudPayload,
   deriveCruiseOverride,
   isCruiseDisplayVisible,
+  resolveLaneModeState,
   resolveCruiseKph,
   resolveTrafficState,
   vehicleHudSignature,
@@ -23,11 +24,40 @@ test("EV telltale requires both valid and active", () => {
   assert.equal(deriveVehicleHudPayload({}).evActive, false);
 });
 
-// Cluster parity: controlsState.activeLaneLine drives the green lane wings; unknown stays null.
-test("active lane line is tri-state (true/false/null)", () => {
-  assert.equal(deriveVehicleHudPayload({ controlsState: { activeLaneLine: true } }).activeLaneLine, true);
-  assert.equal(deriveVehicleHudPayload({ controlsState: { activeLaneLine: false } }).activeLaneLine, false);
+test("lane mode separates user request, planner result and final control", () => {
+  assert.deepEqual(resolveLaneModeState({
+    carState: { useLaneLineSpeed: 50 },
+    lateralPlan: { useLaneLines: false },
+    controlsState: { activeLaneLine: false },
+  }), {
+    requested: true,
+    planned: false,
+    controlled: false,
+    pathActive: false,
+    presentation: "armed",
+  });
+  assert.deepEqual(resolveLaneModeState({
+    carState: { useLaneLineSpeed: 50 },
+    lateralPlan: { useLaneLines: true },
+    controlsState: { activeLaneLine: true },
+  }), {
+    requested: true,
+    planned: true,
+    controlled: true,
+    pathActive: true,
+    presentation: "active",
+  });
   assert.equal(deriveVehicleHudPayload({}).activeLaneLine, null);
+});
+
+test("manual laneless request wins presentation while stale services settle", () => {
+  const laneMode = resolveLaneModeState({
+    carState: { useLaneLineSpeed: 0 },
+    lateralPlan: { useLaneLines: true },
+    controlsState: { activeLaneLine: true },
+  });
+  assert.equal(laneMode.presentation, "laneless");
+  assert.equal(laneMode.pathActive, true, "road geometry keeps following the current planner sample");
 });
 
 test("traffic light keeps an active planner state when carrotMan carries zero", () => {
@@ -209,6 +239,8 @@ test("final presentation payload retains cluster-only fields", () => {
     {
       evActive: true,
       activeLaneLine: false,
+      laneModeRequested: true,
+      laneModePlanned: false,
       cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
     },
   );
@@ -217,6 +249,9 @@ test("final presentation payload retains cluster-only fields", () => {
     gear: "D",
     evActive: true,
     activeLaneLine: false,
+    laneModeRequested: true,
+    laneModePlanned: false,
+    laneModePresentation: "armed",
     cruiseOverride: { kph: 77, label: "cam:n", mode: 2 },
     trafficState: 0,
     drivingMode: null,
@@ -227,6 +262,8 @@ test("cluster-only changes produce distinct presentation signatures", () => {
   const base = { evActive: false, activeLaneLine: null, cruiseOverride: null };
   assert.notEqual(vehicleHudSignature(base), vehicleHudSignature({ ...base, evActive: true }));
   assert.notEqual(vehicleHudSignature(base), vehicleHudSignature({ ...base, activeLaneLine: false }));
+  assert.notEqual(vehicleHudSignature(base), vehicleHudSignature({ ...base, laneModeRequested: true }));
+  assert.notEqual(vehicleHudSignature(base), vehicleHudSignature({ ...base, laneModePlanned: true }));
   assert.notEqual(
     vehicleHudSignature(base),
     vehicleHudSignature({ ...base, cruiseOverride: { kph: 77, label: "cam:n", mode: 2 } }),

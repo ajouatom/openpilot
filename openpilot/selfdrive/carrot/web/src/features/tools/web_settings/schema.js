@@ -74,10 +74,34 @@ const WEB_SETTINGS_GROUPS = [
   {
     id: "navigation",
     labelKey: "web_settings_navigation",
-    // Carrot Navi is always enabled; retain its group as a stable home for
-    // navigation-specific settings added here later.
-    keepWhenEmpty: true,
-    items: [],
+    items: [
+      {
+        id: "carrot_navi_map_appearance",
+        component: "param-selects",
+        fields: [
+          {
+            id: "carrot_navi_map_type",
+            paramName: "ClusterNaviMapType",
+            titleKey: "web_navi_map_type",
+            descKey: "web_navi_map_type_desc",
+            options: [
+              { value: "0", labelKey: "web_navi_map_type_normal" },
+              { value: "1", labelKey: "web_navi_map_type_satellite" },
+            ],
+          },
+          {
+            id: "carrot_navi_map_theme",
+            paramName: "ClusterNaviMapTheme",
+            titleKey: "web_navi_map_theme",
+            descKey: "web_navi_map_theme_desc",
+            options: [
+              { value: "1", labelKey: "web_navi_map_theme_dark" },
+              { value: "2", labelKey: "web_navi_map_theme_light" },
+            ],
+          },
+        ],
+      },
+    ],
   },
   {
     id: "log_upload",
