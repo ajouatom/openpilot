@@ -24,7 +24,6 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   DPathLeadCandidate,
   DPathLeadTwoTracker,
-  can_start_current_path_lead_two,
   cutin_can_compete_with_primary,
   dpath_control_max_d_rel,
   front_cutin_motion_supported,
@@ -492,41 +491,6 @@ def test_front_cutin_pending_state_is_cleared_below_five_metres() -> None:
   assert not tracker.update(0.3, (below_limit,)).confirmed
 
 
-def test_front_point_inside_five_metres_cannot_start_current_path_lead_two() -> None:
-  assert not can_start_current_path_lead_two(
-    "frontRadar",
-    FRONT_CUT_IN_MIN_DREL_M - 0.1,
-    True,
-  )
-  assert can_start_current_path_lead_two(
-    "frontRadar",
-    FRONT_CUT_IN_MIN_DREL_M - 0.1,
-    True,
-    tracked_close_entry=True,
-  )
-  assert can_start_current_path_lead_two(
-    "frontRadar",
-    FRONT_CUT_IN_MIN_DREL_M,
-    True,
-  )
-  assert can_start_current_path_lead_two(
-    "corner235",
-    FRONT_CUT_IN_MIN_DREL_M - 0.1,
-    True,
-  )
-  assert not can_start_current_path_lead_two(
-    "frontRadar",
-    FRONT_CUT_IN_MIN_DREL_M + 1.0,
-    False,
-  )
-  assert not can_start_current_path_lead_two(
-    "frontRadar",
-    FRONT_CUT_IN_MIN_DREL_M + 1.0,
-    True,
-    False,
-  )
-
-
 def test_front_cutin_needs_stronger_path_relative_motion_than_corner() -> None:
   assert not front_cutin_motion_supported("frontRadar", 0.50)
   assert front_cutin_motion_supported("frontRadar", 0.80)
@@ -651,12 +615,6 @@ def test_tracked_front_out_to_in_crossing_can_start_inside_five_metres() -> None
     prediction.d_path_rate_long,
     tracked_close_entry=prediction.front_tracked_close_entry,
   )
-  assert can_start_current_path_lead_two(
-    prediction.source,
-    3.2,
-    prediction.current_path_occupancy,
-    tracked_close_entry=prediction.front_tracked_close_entry,
-  )
 
 
 def test_front_point_born_in_path_cannot_use_tracked_close_exception() -> None:
@@ -733,10 +691,7 @@ def test_existing_front_lead_two_can_remain_sticky_inside_five_metres() -> None:
     20,
     7,
     True,
-    False,
-    can_start_current_path_lead_two(
-      "frontRadar", outside_lead["dRel"], True,
-    ),
+    True,
   )
   assert tracker.update(
     0.0, None, (outside,), 10.0,
@@ -754,9 +709,6 @@ def test_existing_front_lead_two_can_remain_sticky_inside_five_metres() -> None:
     7,
     True,
     False,
-    can_start_current_path_lead_two(
-      "frontRadar", inside_lead["dRel"], True,
-    ),
   )
   assert tracker.update(
     0.1, None, (inside,), 10.0,
@@ -1960,7 +1912,7 @@ def test_confirmed_lead_two_is_retained_while_same_continuity_is_in_path() -> No
   assert tracker.active_identity is None
 
 
-def test_current_path_motion_becomes_lead_two_without_a_cutin_event() -> None:
+def test_unconfirmed_current_path_motion_does_not_become_lead_two() -> None:
   tracker = DPathLeadTwoTracker()
   path_lead = {
     "status": True,
@@ -1971,30 +1923,15 @@ def test_current_path_motion_becomes_lead_two_without_a_cutin_event() -> None:
     "vLead": 10.0,
   }
   path_candidate = DPathLeadCandidate(
-    path_lead, "corner235", 20, 7, True, False, True,
+    path_lead, "corner235", 20, 7, True, False,
   )
   selection = tracker.update(0.0, None, (path_candidate,), 20.0)
 
-  assert selection.lead_two is path_lead
+  assert selection.lead_two is None
   assert selection.cutins == ()
 
-  held_lead = dict(path_lead, dRel=21.0, vLead=0.0)
-  held = DPathLeadCandidate(
-    held_lead, "corner235", 20, 7, True, False,
-  )
-  assert tracker.update(0.1, None, (held,), 20.0).lead_two is held_lead
 
-  closer_lead = dict(path_lead, radarTrackId=30, dRel=12.0)
-  closer = DPathLeadCandidate(
-    closer_lead, "corner235", 30, 8, True, True,
-  )
-  selection = tracker.update(0.2, None, (held, closer), 20.0)
-
-  assert selection.lead_two is closer_lead
-  assert [lead["radarTrackId"] for lead in selection.cutins] == [30]
-
-
-def test_current_path_motion_cannot_be_lead_two_behind_primary() -> None:
+def test_unconfirmed_current_path_motion_stays_out_behind_primary() -> None:
   tracker = DPathLeadTwoTracker()
   primary = {
     "status": True,
@@ -2012,7 +1949,7 @@ def test_current_path_motion_cannot_be_lead_two_behind_primary() -> None:
     "vLead": 10.0,
   }
   path_candidate = DPathLeadCandidate(
-    path_lead, "frontRadar", 20, 1, True, False, True,
+    path_lead, "frontRadar", 20, 1, True, False,
   )
 
   selection = tracker.update(0.0, primary, (path_candidate,), 20.0)
@@ -2039,7 +1976,7 @@ def test_confirmed_cutin_behind_primary_is_not_lead_two() -> None:
     "vLead": 10.0,
   }
   cutin = DPathLeadCandidate(
-    cutin_lead, "frontRadar", 20, 1, True, True, False,
+    cutin_lead, "frontRadar", 20, 1, True, True,
   )
 
   selection = tracker.update(0.0, primary, (cutin,), 20.0)
@@ -3451,6 +3388,33 @@ def test_no_vision_moving_radar_fallback_prefers_corner_then_front_scc() -> None
     assert output.lead_one["radarTrackId"] == expected_track_id
 
 
+def test_moving_corner_born_in_path_waits_for_lead_one_not_lead_two() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+  )
+  output = None
+  for index in range(8):
+    output = controller.update(
+      time_s=index * 0.05,
+      v_ego=10.0,
+      radar_points=(
+        Point(
+          1009, 30.0, 0.1,
+          v_rel=0.0, source="corner235",
+        ),
+      ),
+      model=model_with_lead(
+        30.0, 0.0, 0.0, probability=0.0,
+      ),
+    )
+    assert output.lead_two is None
+
+  assert output is not None
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 1009
+
+
 def test_no_vision_adjacent_moving_corner_does_not_become_lead_one() -> None:
   controller = DPathRadarController(prefer_corner_radar=True)
   output = None
@@ -3666,7 +3630,7 @@ def test_cut_out_probability_does_not_remove_or_filter_control_leads() -> None:
       ("corner235", 1006): next_lead,
     },
   )
-  controller.motion_decisions = EmptyDecisionTracker()
+  controller.motion_decisions = FixedDecisionTracker(next_lead)
 
   output = controller.update(
     time_s=1.0,
@@ -3796,7 +3760,7 @@ def test_independent_controller_retains_confirmed_lead_two_until_path_exit() -> 
   assert exited.lead_two is None
 
 
-def test_current_path_motion_falls_back_to_lead_two_when_lead_one_disappears() -> None:
+def test_confirmed_cutin_falls_back_to_lead_two_when_lead_one_disappears() -> None:
   controller = DPathRadarController(prefer_corner_radar=True)
   prediction = SimpleNamespace(
     source="corner235",

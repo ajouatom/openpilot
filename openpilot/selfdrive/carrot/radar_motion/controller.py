@@ -11,7 +11,6 @@ from typing import Any
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   DPathLeadCandidate,
   DPathLeadTwoTracker,
-  can_start_current_path_lead_two,
   cutin_can_compete_with_primary,
   front_cutin_motion_supported,
   lead_duplicates_primary,
@@ -560,26 +559,6 @@ class DPathRadarController:
             ),
           )
         ),
-        current_path_motion=(
-          self.motion_sensitivity.cut_in_enabled
-          and can_start_current_path_lead_two(
-            prediction.source,
-            float(lead["dRel"]),
-            prediction.current_path_occupancy,
-            (
-              getattr(
-                prediction,
-                "reason",
-                "",
-              ) != "insufficient measured dPath history"
-            ),
-            getattr(prediction, "front_tracked_close_entry", False),
-          )
-        )
-        and (
-          getattr(prediction, "path_entry_age_s", None) is None
-          or front_motion_supported
-        ),
       ))
     if (
       active_identity is not None
@@ -607,7 +586,6 @@ class DPathRadarController:
             continuity_id=continuity_id,
             retainable=True,
             confirmed_cutin=False,
-            current_path_motion=False,
           ))
     selection = self.lead_two_tracker.update(
       time_s,

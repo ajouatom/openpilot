@@ -48,30 +48,10 @@ class DPathLeadCandidate:
   continuity_id: int
   retainable: bool
   confirmed_cutin: bool
-  current_path_motion: bool = False
 
   @property
   def identity(self) -> tuple[str, int, int]:
     return self.source, self.track_id, self.continuity_id
-
-
-def can_start_current_path_lead_two(
-  source: str,
-  d_rel: float,
-  current_path_occupancy: bool,
-  motion_history_ready: bool = True,
-  tracked_close_entry: bool = False,
-) -> bool:
-  """Reject newly born close front points while allowing tracked crossings."""
-  return (
-    current_path_occupancy
-    and motion_history_ready
-    and (
-      source != "frontRadar"
-      or d_rel >= FRONT_CUT_IN_MIN_DREL_M
-      or tracked_close_entry
-    )
-  )
 
 
 def front_cutin_motion_supported(
@@ -194,7 +174,6 @@ class DPathLeadTwoTracker:
       for candidate in candidate_values
       if (
         candidate.confirmed_cutin
-        or candidate.current_path_motion
         or candidate in active_candidates
       )
     )

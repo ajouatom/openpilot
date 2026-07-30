@@ -44,6 +44,26 @@
       "scene": "Night stopped vehicle approached from 113 m with front and corner radar"
     },
     {
+      "id": "ioniq9-209-30-l1-handoff-no-duplicate-cutin",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000209--a5dd001251--30/rlog.zst",
+      "source": "front+corner",
+      "window": [54.5, 55.5],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [1010],
+      "scene": "Fast right-side corner track 1010 hands off to matching front leadOne 60 without duplicate leadTwo"
+    },
+    {
+      "id": "santafe-494-4-born-in-path-l2-ghosts",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5_HEV 61d2c91e1039ab5e",
+      "log": "00000494--0d89801e48--4/rlog.zst",
+      "source": "front+corner",
+      "window": [29.5, 41.5],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [1000, 1040, 1042, 1043, 1045],
+      "scene": "Corner tracks born inside the path must not churn as leadTwo while stable front leadOne 63 remains"
+    },
+    {
       "id": "carnival-5b-18-early",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "0000005b--02344a68f2--18/rlog.1.zst",
