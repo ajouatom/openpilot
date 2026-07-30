@@ -98,6 +98,7 @@ OPENPILOT_ADDON_FONT_DIR = SELFDRIVE_DIR / "assets" / "addon" / "font"
 KAIGEN_GOTHIC_KR_BOLD_FONT_PATH = OPENPILOT_FONT_DIR / "KaiGenGothicKR-Bold.ttf"
 JETBRAINS_MONO_FONT_PATH = OPENPILOT_FONT_DIR / "JetBrainsMono-Medium.ttf"
 VEHICLE_MODEL_PATH = CLUSTER_DIR / "assets" / "models" / "cybertruck" / "cybertruck_cluster.obj"
+TPMS_CAR_ICON_PATH = CLUSTER_DIR / "assets" / "images" / "tpms_toy_car.png"
 SPEED_BG_PATH = SELFDRIVE_DIR / "assets" / "images" / "speed_bg.png"
 TRAFFIC_RED_ICON_PATH = SELFDRIVE_DIR / "assets" / "images" / "traffic_red.png"
 TRAFFIC_GREEN_ICON_PATH = SELFDRIVE_DIR / "assets" / "images" / "traffic_green.png"
@@ -132,6 +133,12 @@ CAMERA_BACKGROUND_VIGNETTE_ALPHA = 32
 CAMERA_BACKGROUND_VERTICAL_BIAS = 0.75
 CAMERA_OVERLAY_VEHICLE_ROAD_HEIGHT_M = 0.025
 CAMERA_OVERLAY_MIN_DEPTH_M = 0.5
+CAMERA_OVERLAY_FRAME_MIN_SIZE_PX = 24.0
+CAMERA_OVERLAY_FRAME_MAX_WIDTH_RATIO = 0.22
+CAMERA_OVERLAY_FRAME_MAX_HEIGHT_RATIO = 0.45
+CAMERA_OVERLAY_FRAME_MAX_ASPECT = 2.4
+CAMERA_OVERLAY_FRAME_EDGE_PAD_PX = 3.0
+CAMERA_OVERLAY_FRAME_ROUND_SEGMENTS = 4
 CAMERA_OVERLAY_DEFAULT_CAMERA = DEVICE_CAMERAS["tici", "ar0231"].fcam
 CAMERA_OVERLAY_DEFAULT_HEIGHT_M = 1.22
 CAMERA_OVERLAY_Z_OFFSET_DEFAULT_M = 0.00
@@ -282,12 +289,16 @@ NAVI_LIVE_PANEL_H = DESIGN_HEIGHT - 2
 NAVI_WORLD_VIEW_SHIFT_X = (DESIGN_WIDTH - NAVI_LIVE_PANEL_X) * 0.5
 NAVI_MAP_BACKGROUND = (0, 0, 0, 255)
 TPMS_STATUS_CENTER_X = NAVI_LIVE_PANEL_X - 62.0
-TPMS_STATUS_VALUE_CENTER_Y = 431.5
+TPMS_STATUS_VALUE_CENTER_Y = 429.5
 TPMS_STATUS_CAR_CENTER_Y = 429.5
-TPMS_STATUS_COLUMN_OFFSET = 40.5
-TPMS_STATUS_ROW_OFFSET = 20.5
-TPMS_STATUS_CAR_W = 40.0
-TPMS_STATUS_CAR_H = 75.0
+TPMS_STATUS_COLUMN_OFFSET = 29.5
+TPMS_STATUS_ROW_OFFSET = 24.0
+TPMS_STATUS_CAR_W = 38.0
+TPMS_STATUS_CAR_H = 72.0
+TPMS_STATUS_WHEEL_W = 32.0
+TPMS_STATUS_WHEEL_H = 30.0
+TPMS_STATUS_ICON_W = 104.0
+TPMS_STATUS_ICON_H = 78.0
 TPMS_STATUS_FONT_SIZE = 21.0
 NAVI_LIVE_ICON_X = NAVI_LIVE_PANEL_X + 72
 NAVI_LIVE_ICON_Y = NAVI_LIVE_PANEL_Y + 99
@@ -876,6 +887,7 @@ class ClusterUiRenderer:
         self._lfa_active_texture = None
         self._lfa_lane_texture = None
         self._wifi_texture = None
+        self._tpms_car_texture = None
         self._navi_guidance_texture = None
         self._navi_guidance_hash = ""
         self._navi_guidance_size: tuple[int, int] | None = None
@@ -1139,6 +1151,9 @@ class ClusterUiRenderer:
         if self._wifi_texture is not None:
             rl.unload_texture(self._wifi_texture)
             self._wifi_texture = None
+        if self._tpms_car_texture is not None:
+            rl.unload_texture(self._tpms_car_texture)
+            self._tpms_car_texture = None
         if self._navi_guidance_texture is not None:
             rl.unload_texture(self._navi_guidance_texture)
             self._navi_guidance_texture = None
@@ -1660,8 +1675,8 @@ class ClusterUiRenderer:
         frame_height_m = max(0.8, vehicle.height_m * 1.12)
         left_base = self._project_camera_overlay_point(
             Vec3(
-                vehicle.center.x - vehicle.right_x * half_width_m,
-                center_y_m - vehicle.right_y * half_width_m,
+                vehicle.center.x - half_width_m,
+                center_y_m,
                 base_z,
             ),
             projection,
@@ -1669,8 +1684,8 @@ class ClusterUiRenderer:
         )
         right_base = self._project_camera_overlay_point(
             Vec3(
-                vehicle.center.x + vehicle.right_x * half_width_m,
-                center_y_m + vehicle.right_y * half_width_m,
+                vehicle.center.x + half_width_m,
+                center_y_m,
                 base_z,
             ),
             projection,
@@ -1678,8 +1693,8 @@ class ClusterUiRenderer:
         )
         left_top = self._project_camera_overlay_point(
             Vec3(
-                vehicle.center.x - vehicle.right_x * half_width_m,
-                center_y_m - vehicle.right_y * half_width_m,
+                vehicle.center.x - half_width_m,
+                center_y_m,
                 base_z + frame_height_m,
             ),
             projection,
@@ -1687,29 +1702,56 @@ class ClusterUiRenderer:
         )
         right_top = self._project_camera_overlay_point(
             Vec3(
-                vehicle.center.x + vehicle.right_x * half_width_m,
-                center_y_m + vehicle.right_y * half_width_m,
+                vehicle.center.x + half_width_m,
+                center_y_m,
                 base_z + frame_height_m,
             ),
             projection,
             scene_shift_x_m,
         )
-        projected_corners = tuple(point for point in (left_base, right_base, left_top, right_top) if point is not None)
-        if not projected_corners:
+        projected_corners = (left_base, right_base, left_top, right_top)
+        if any(point is None for point in projected_corners):
             return
 
-        min_x = min(point.x for point in projected_corners)
-        max_x = max(point.x for point in projected_corners)
-        min_y = min(point.y for point in projected_corners)
-        max_y = max(point.y for point in projected_corners)
+        min_x = min(point.x for point in projected_corners if point is not None)
+        max_x = max(point.x for point in projected_corners if point is not None)
+        min_y = min(point.y for point in projected_corners if point is not None)
+        max_y = max(point.y for point in projected_corners if point is not None)
         width = max_x - min_x
         height = max_y - min_y
+        if not all(math.isfinite(value) for value in (width, height)) or width <= 0.0 or height <= 0.0:
+            return
         pad_x = max(4.0, width * 0.08)
         pad_y = max(4.0, height * 0.08)
-        frame_width = max(24.0, width + pad_x * 2.0)
-        frame_height = max(24.0, height + pad_y * 2.0)
+        frame_width = clamp(
+            width + pad_x * 2.0,
+            CAMERA_OVERLAY_FRAME_MIN_SIZE_PX,
+            projection.dest.width * CAMERA_OVERLAY_FRAME_MAX_WIDTH_RATIO,
+        )
+        frame_height = clamp(
+            height + pad_y * 2.0,
+            CAMERA_OVERLAY_FRAME_MIN_SIZE_PX,
+            projection.dest.height * CAMERA_OVERLAY_FRAME_MAX_HEIGHT_RATIO,
+        )
+        if frame_width > frame_height * CAMERA_OVERLAY_FRAME_MAX_ASPECT:
+            frame_width = frame_height * CAMERA_OVERLAY_FRAME_MAX_ASPECT
+        elif frame_height > frame_width * CAMERA_OVERLAY_FRAME_MAX_ASPECT:
+            frame_height = frame_width * CAMERA_OVERLAY_FRAME_MAX_ASPECT
         frame_center_x = (min_x + max_x) * 0.5
         frame_center_y = (min_y + max_y) * 0.5
+        available_half_width = min(
+            frame_center_x - projection.dest.x - CAMERA_OVERLAY_FRAME_EDGE_PAD_PX,
+            projection.dest.x + projection.dest.width - frame_center_x - CAMERA_OVERLAY_FRAME_EDGE_PAD_PX,
+        )
+        available_half_height = min(
+            frame_center_y - projection.dest.y - CAMERA_OVERLAY_FRAME_EDGE_PAD_PX,
+            projection.dest.y + projection.dest.height - frame_center_y - CAMERA_OVERLAY_FRAME_EDGE_PAD_PX,
+        )
+        minimum_half_size = CAMERA_OVERLAY_FRAME_MIN_SIZE_PX * 0.5
+        if available_half_width < minimum_half_size or available_half_height < minimum_half_size:
+            return
+        frame_width = min(frame_width, available_half_width * 2.0)
+        frame_height = min(frame_height, available_half_height * 2.0)
         marker = rl.Rectangle(
             frame_center_x - frame_width * 0.5,
             frame_center_y - frame_height * 0.5,
@@ -1720,18 +1762,10 @@ class ClusterUiRenderer:
         confidence = clamp(vehicle.confidence, 0.0, 1.0)
         _fill_base, _side_base, ring_base = camera_overlay_vehicle_coin_colors(vehicle, lead_one, lead_two)
         ring_alpha = int(180 + 65 * confidence)
-        shadow = rl.Rectangle(marker.x + 1.5, marker.y + 2.0, marker.width, marker.height)
-        rl.draw_rectangle_rounded_lines_ex(
-            shadow,
-            0.20,
-            8,
-            5.0 if emphasized else 4.0,
-            rl_color((0, 0, 0), int(85 + 45 * confidence)),
-        )
         rl.draw_rectangle_rounded_lines_ex(
             marker,
             0.20,
-            8,
+            CAMERA_OVERLAY_FRAME_ROUND_SEGMENTS,
             3.5 if emphasized else 3.0,
             rl_color(ring_base, ring_alpha),
         )
@@ -1784,7 +1818,13 @@ class ClusterUiRenderer:
             radius * 2.0,
             radius * 2.0,
         )
-        rl.draw_rectangle_rounded_lines_ex(marker, 0.25, 6, 1.8, rl_color(point.color, 245))
+        rl.draw_rectangle_rounded_lines_ex(
+            marker,
+            0.25,
+            CAMERA_OVERLAY_FRAME_ROUND_SEGMENTS,
+            1.8,
+            rl_color(point.color, 245),
+        )
         if not radar_info_shows_radar_points(radar_info_mode):
             return
         label_parts = []
@@ -2454,6 +2494,8 @@ class ClusterUiRenderer:
             self._lfa_lane_texture = self._load_icon_texture(LFA_LANE_ICON_PATH, "LFA lane mode")
         if self._wifi_texture is None:
             self._wifi_texture = self._load_icon_texture(WIFI_ICON_PATH, "Wi-Fi")
+        if self._tpms_car_texture is None:
+            self._tpms_car_texture = self._load_icon_texture(TPMS_CAR_ICON_PATH, "TPMS toy car")
 
     def _load_icon_texture(self, path: Path, label: str):
         if not path.exists():
@@ -2744,53 +2786,8 @@ class ClusterUiRenderer:
         if not any(value is not None for value in pressures):
             return
 
-        theme = self._current_theme()
-        if theme.is_dark:
-            body_fill = (0, 0, 0, 255)
-            body_outline = (168, 179, 187, 237)
-            wheel_fill = (133, 144, 153, 229)
-            glass_fill = (70, 142, 162, 197)
-        else:
-            body_fill = (245, 248, 252, 255)
-            body_outline = (95, 106, 115, 237)
-            wheel_fill = (90, 101, 110, 229)
-            glass_fill = (154, 225, 244, 197)
-
-        car_x = TPMS_STATUS_CENTER_X - TPMS_STATUS_CAR_W * 0.5
-        car_y = TPMS_STATUS_CAR_CENTER_Y - TPMS_STATUS_CAR_H * 0.5
-        wheel_w = 6.0
-        wheel_h = 17.0
-        wheel_body_overlap = 1.0
-        wheel_left_x = car_x - wheel_w + wheel_body_overlap
-        wheel_right_x = car_x + TPMS_STATUS_CAR_W - wheel_body_overlap
-        for wheel_x in (wheel_left_x, wheel_right_x):
-            self._rounded_rect(wheel_x, car_y + 12.0, wheel_w, wheel_h, 1.3, wheel_fill)
-            self._rounded_rect(wheel_x, car_y + 47.0, wheel_w, wheel_h, 1.3, wheel_fill)
-
-        self._rounded_rect(
-            car_x,
-            car_y,
-            TPMS_STATUS_CAR_W,
-            TPMS_STATUS_CAR_H,
-            6.5,
-            body_fill,
-            body_outline,
-            2.0,
-        )
-        self._rounded_rect(
-            car_x + 7.0,
-            car_y + 11.0,
-            TPMS_STATUS_CAR_W - 14.0,
-            24.0,
-            0.0,
-            glass_fill,
-        )
-        rl.draw_line_ex(
-            rl.Vector2(car_x + 4.0, car_y + 49.0),
-            rl.Vector2(car_x + TPMS_STATUS_CAR_W - 4.0, car_y + 49.0),
-            2.0,
-            rl_color(body_outline),
-        )
+        if not self._draw_tpms_car_icon():
+            self._draw_tpms_car_fallback()
 
         badge_positions = (
             (
@@ -2817,20 +2814,112 @@ class ClusterUiRenderer:
         for center_x, center_y, pressure in badge_positions:
             self._draw_compact_tpms_value(pressure, center_x, center_y)
 
-    def _draw_compact_tpms_value(self, pressure: float | None, center_x: float, center_y: float) -> None:
+    def _draw_tpms_car_icon(self) -> bool:
+        texture = getattr(self, "_tpms_car_texture", None)
+        if texture is None:
+            return False
+        source = rl.Rectangle(0.0, 0.0, float(texture.width), float(texture.height))
+        destination = rl.Rectangle(
+            TPMS_STATUS_CENTER_X - TPMS_STATUS_ICON_W * 0.5,
+            TPMS_STATUS_CAR_CENTER_Y - TPMS_STATUS_ICON_H * 0.5,
+            TPMS_STATUS_ICON_W,
+            TPMS_STATUS_ICON_H,
+        )
+        rl.draw_texture_pro(
+            texture,
+            source,
+            destination,
+            rl.Vector2(0.0, 0.0),
+            0.0,
+            rl_color(WHITE),
+        )
+        return True
+
+    def _draw_tpms_car_fallback(self) -> None:
         theme = self._current_theme()
+        if theme.is_dark:
+            body_fill = (0, 0, 0, 255)
+            body_outline = (214, 224, 231, 237)
+            glass_fill = (70, 190, 224, 220)
+        else:
+            body_fill = (245, 248, 252, 255)
+            body_outline = (112, 124, 134, 237)
+            glass_fill = (75, 185, 216, 220)
+        wheel_fill = (5, 9, 12, 247)
+        wheel_outline = (180, 192, 201, 235)
+
+        car_x = TPMS_STATUS_CENTER_X - TPMS_STATUS_CAR_W * 0.5
+        car_y = TPMS_STATUS_CAR_CENTER_Y - TPMS_STATUS_CAR_H * 0.5
+        wheel_centers = (
+            (
+                TPMS_STATUS_CENTER_X - TPMS_STATUS_COLUMN_OFFSET,
+                TPMS_STATUS_VALUE_CENTER_Y - TPMS_STATUS_ROW_OFFSET,
+            ),
+            (
+                TPMS_STATUS_CENTER_X + TPMS_STATUS_COLUMN_OFFSET,
+                TPMS_STATUS_VALUE_CENTER_Y - TPMS_STATUS_ROW_OFFSET,
+            ),
+            (
+                TPMS_STATUS_CENTER_X - TPMS_STATUS_COLUMN_OFFSET,
+                TPMS_STATUS_VALUE_CENTER_Y + TPMS_STATUS_ROW_OFFSET,
+            ),
+            (
+                TPMS_STATUS_CENTER_X + TPMS_STATUS_COLUMN_OFFSET,
+                TPMS_STATUS_VALUE_CENTER_Y + TPMS_STATUS_ROW_OFFSET,
+            ),
+        )
+        for wheel_center_x, wheel_center_y in wheel_centers:
+            self._rounded_rect(
+                wheel_center_x - TPMS_STATUS_WHEEL_W * 0.5,
+                wheel_center_y - TPMS_STATUS_WHEEL_H * 0.5,
+                TPMS_STATUS_WHEEL_W,
+                TPMS_STATUS_WHEEL_H,
+                7.0,
+                wheel_fill,
+                wheel_outline,
+                1.4,
+            )
+
+        self._rounded_rect(
+            car_x,
+            car_y,
+            TPMS_STATUS_CAR_W,
+            TPMS_STATUS_CAR_H,
+            6.5,
+            body_fill,
+            body_outline,
+            2.0,
+        )
+        self._rounded_rect(
+            car_x + 6.0,
+            car_y + 10.0,
+            TPMS_STATUS_CAR_W - 12.0,
+            21.0,
+            5.0,
+            glass_fill,
+            body_outline,
+            1.2,
+        )
+        rl.draw_line_ex(
+            rl.Vector2(car_x + 6.0, car_y + 56.0),
+            rl.Vector2(car_x + TPMS_STATUS_CAR_W - 6.0, car_y + 56.0),
+            1.5,
+            rl_color(body_outline),
+        )
+
+    def _draw_compact_tpms_value(self, pressure: float | None, center_x: float, center_y: float) -> None:
         low = pressure is not None and pressure < TPMS_LOW_PRESSURE_PSI
         text = "--" if pressure is None else f"{pressure:.0f}"
-        color = RED if low else theme.world_label_text
+        color = RED if low else WHITE
         if pressure is None:
-            color = theme.muted
+            color = (170, 180, 188, 255)
         self._draw_text_with_stroke(
             text,
             center_x,
             center_y,
             TPMS_STATUS_FONT_SIZE,
             color,
-            theme.world_label_shadow,
+            (0, 0, 0, 255),
             2,
             anchor="center",
         )

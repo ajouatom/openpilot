@@ -404,10 +404,12 @@ missing, invalid, or stale longitudinal plans hide the badge. The red and
 green traffic-state icons share the slot immediately to its left and remain
 independent of driving mode. Full navigation mode omits both speed-mode
 indicators.
-The normal and road camera HUDs use the same fixed TPMS diagram below the
-acceleration, steering, fuel, and DEF gauges. It remains hidden only when all
-four pressure values are unavailable; individual missing values show `--`, and
-values below 31 psi are red. The surrounding area stays transparent. When
+The normal and road camera HUDs use the same fixed toy-car TPMS diagram below
+the acceleration, steering, fuel, and DEF gauges. Its transparent PNG is loaded
+into one GPU texture at renderer startup, then each unchanged-size live pressure
+value is drawn inside its corresponding enlarged tire. It remains hidden only
+when all four pressure values are unavailable; individual missing values show
+`--`, and values below 31 psi are red. The surrounding area stays transparent. When
 external navigation is active or its dashboard is connected, the green `NAV`
 status appears below the Wi-Fi icon instead of the former lower-right `NAVI`
 label. The center clock, EV indicator, and fuel/DEF gauges are unchanged.
@@ -476,7 +478,10 @@ lower-left camera area while omitting the lower-right core-usage text that would
 overlap the report. In road-camera view, ungrouped radar detections are projected
 as small transparent rounded source-colored markers, while detected vehicles
 are enclosed by larger transparent rounded frames using their existing
-detection colors.
+detection colors. Vehicle frames use a single low-segment outline, ignore noisy
+radar-derived yaw when calculating their screen width, and are discarded before
+drawing when an incomplete or edge-clipped projection would create a stretched
+frame.
 Mode `3` also hides the speed, accel, clock, turn-signal, and git HUD so the
 large graph uses the available center/right height with only a small margin.
 Mode `4` keeps the driving HUD and uses the maximum right-side panel height with

@@ -100,18 +100,105 @@ def test_road_camera_detected_vehicle_uses_transparent_colored_rounded_frame(mon
   monkeypatch.setattr(cluster_renderer.rl, "draw_rectangle_rec", lambda *_args: pytest.fail("filled marker drawn"))
   monkeypatch.setattr(cluster_renderer.rl, "draw_rectangle_rounded", lambda *_args: pytest.fail("filled marker drawn"))
 
-  renderer._draw_camera_overlay_vehicle_frame(vehicle, object(), 0.0, CLUSTER_RADAR_INFO_NONE)
+  projection = SimpleNamespace(dest=cluster_renderer.rl.Rectangle(0.0, 0.0, 300.0, 200.0))
+  renderer._draw_camera_overlay_vehicle_frame(vehicle, projection, 0.0, CLUSTER_RADAR_INFO_NONE)
 
-  assert len(outlines) == 2
-  marker = outlines[1][0]
+  assert len(outlines) == 1
+  marker = outlines[0][0]
   assert marker.height > marker.width
-  assert outlines[1][1] > 0.0
+  assert outlines[0][1] > 0.0
+  assert outlines[0][2] == cluster_renderer.CAMERA_OVERLAY_FRAME_ROUND_SEGMENTS
   _expected_fill, _expected_side, expected_ring = cluster_renderer.camera_overlay_vehicle_coin_colors(
     vehicle,
     False,
     False,
   )
-  assert (outlines[1][4].r, outlines[1][4].g, outlines[1][4].b) == expected_ring
+  assert (outlines[0][4].r, outlines[0][4].g, outlines[0][4].b) == expected_ring
+
+
+def test_road_camera_vehicle_frame_rejects_incomplete_or_edge_clipped_projection(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  outlines = []
+  projection = SimpleNamespace(dest=cluster_renderer.rl.Rectangle(0.0, 0.0, 300.0, 200.0))
+  vehicle = VehicleBox(
+    center=Vec3(0.0, 25.0, 0.0),
+    right_x=0.0,
+    right_y=1.0,
+    forward_x=-1.0,
+    forward_y=0.0,
+    width_m=2.0,
+    length_m=4.5,
+    height_m=1.5,
+    body_color=(255, 255, 255),
+    side_color=(255, 255, 255),
+    rear_color=(255, 255, 255),
+    top_highlight=(255, 255, 255),
+    outline_color=(255, 255, 255),
+    source="cornerRadar",
+    longitudinal_m=25.0,
+  )
+  monkeypatch.setattr(
+    cluster_renderer.rl,
+    "draw_rectangle_rounded_lines_ex",
+    lambda *args: outlines.append(args),
+  )
+
+  incomplete = iter((
+    cluster_renderer.rl.Vector2(150.0, 100.0),
+    cluster_renderer.rl.Vector2(130.0, 100.0),
+    None,
+    cluster_renderer.rl.Vector2(130.0, 50.0),
+    cluster_renderer.rl.Vector2(170.0, 50.0),
+  ))
+  monkeypatch.setattr(renderer, "_project_camera_overlay_point", lambda *_args: next(incomplete))
+  renderer._draw_camera_overlay_vehicle_frame(vehicle, projection, 0.0, CLUSTER_RADAR_INFO_NONE)
+
+  edge_clipped = iter((
+    cluster_renderer.rl.Vector2(5.0, 100.0),
+    cluster_renderer.rl.Vector2(-15.0, 100.0),
+    cluster_renderer.rl.Vector2(25.0, 100.0),
+    cluster_renderer.rl.Vector2(-15.0, 50.0),
+    cluster_renderer.rl.Vector2(25.0, 50.0),
+  ))
+  monkeypatch.setattr(renderer, "_project_camera_overlay_point", lambda *_args: next(edge_clipped))
+  renderer._draw_camera_overlay_vehicle_frame(vehicle, projection, 0.0, CLUSTER_RADAR_INFO_NONE)
+
+  assert outlines == []
+
+
+def test_road_camera_vehicle_frame_ignores_radar_yaw_for_screen_box_width(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  projected_road_points = []
+  vehicle = VehicleBox(
+    center=Vec3(2.0, 25.0, 0.0),
+    right_x=0.0,
+    right_y=1.0,
+    forward_x=-1.0,
+    forward_y=0.0,
+    width_m=2.0,
+    length_m=4.5,
+    height_m=1.5,
+    body_color=(255, 255, 255),
+    side_color=(255, 255, 255),
+    rear_color=(255, 255, 255),
+    top_highlight=(255, 255, 255),
+    outline_color=(255, 255, 255),
+    source="cornerRadar",
+    longitudinal_m=25.0,
+  )
+
+  def project(_self, point, _projection, _scene_shift_x_m=0.0):
+    projected_road_points.append(point)
+    return cluster_renderer.rl.Vector2(150.0 + point.x * 10.0, 100.0 - point.z * 20.0)
+
+  monkeypatch.setattr(ClusterUiRenderer, "_project_camera_overlay_point", project)
+  monkeypatch.setattr(cluster_renderer.rl, "draw_rectangle_rounded_lines_ex", lambda *_args: None)
+  projection = SimpleNamespace(dest=cluster_renderer.rl.Rectangle(0.0, 0.0, 300.0, 200.0))
+  renderer._draw_camera_overlay_vehicle_frame(vehicle, projection, 0.0, CLUSTER_RADAR_INFO_NONE)
+
+  left_base, right_base = projected_road_points[1:3]
+  assert left_base.y == pytest.approx(right_base.y)
+  assert left_base.x < vehicle.center.x < right_base.x
 
 
 def _cluster_state(**changes) -> ClusterUiState:
