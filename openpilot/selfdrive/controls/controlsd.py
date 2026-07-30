@@ -23,6 +23,7 @@ from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
 from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from openpilot.selfdrive.controls.lib.longcontrol import LongControl
+from openpilot.selfdrive.controls.lib.steer_ratio import resolve_vehicle_model_steer_ratio
 
 
 from openpilot.common.realtime import DT_CTRL, DT_MDL
@@ -105,16 +106,13 @@ class Controls:
     # Update VehicleModel
     lp = self.sm['liveParameters']
     x = max(lp.stiffnessFactor, 0.1)
-    if self.is_vw_meb:
-      # VW MEB(ID.4/ID.5): infiniteCable2와 동일하게 학습된 steerRatio를 그대로 사용.
-      # carrot의 SteerRatioRate 자동학습/CustomSR 배수를 곱하면 VM steerRatio가 infiniteCable2와
-      # 어긋나 actual_curvature_vm이 틀어지고 useCarSteerCurvature 보정항이 각도비례 바이어스가 되어
-      # 곡선 발진·차선이탈을 유발함. MEB만 원본 방식(배수 미적용)으로 고정. 타 차종은 carrot 그대로.
-      sr = max(lp.steerRatio, 0.1)
-    else:
-      sr = max(lp.steerRatio, 0.1) * self.params.get_float("SteerRatioRate") / 100.0
-      custom_sr = self.params.get_float("CustomSR") / 10.0
-      sr = max(custom_sr if custom_sr > 1.0 else sr, 0.1)
+    # VW MEB uses the learned ratio directly. Other platforms may scale it or
+    # override it, but legacy/out-of-range persisted rates must never collapse
+    # the vehicle-model ratio and destabilize lateral feedback.
+    sr = resolve_vehicle_model_steer_ratio(lp.steerRatio,
+                                           self.params.get_float("SteerRatioRate"),
+                                           self.params.get_float("CustomSR"),
+                                           self.is_vw_meb)
     self.VM.update_params(x, sr)
 
     steer_angle_without_offset = math.radians(CS.steeringAngleDeg - lp.angleOffsetDeg)

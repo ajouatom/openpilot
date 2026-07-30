@@ -164,6 +164,16 @@ def test_a_percent_parameter_still_carries_its_unit(params):
   assert by_name["TFollowDecelBoost"]["display_unit"] == "percent"
 
 
+def test_steer_ratio_rate_has_safe_catalog_and_registry_defaults(params):
+  by_name = {p["name"]: p for p in params}
+  steer_ratio_rate = by_name["SteerRatioRate"]
+  assert (steer_ratio_rate["min"], steer_ratio_rate["max"], steer_ratio_rate["default"]) == (30, 200, 100)
+  assert steer_ratio_rate["display_unit"] == "percent"
+
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"SteerRatioRate", {PERSISTENT, INT, "100"}}' in params_keys
+
+
 def test_control_overrides_land_on_parameters_that_need_them(params):
   by_name = {p["name"]: p for p in params}
   # Range inference would make these sliders, which is why they are pinned.
