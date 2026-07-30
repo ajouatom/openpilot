@@ -45,6 +45,7 @@ class AugmentedRoadView(CameraView):
     self._matrix_cache_key = (0, 0.0, 0.0, stream_type)
     self._cached_matrix: np.ndarray | None = None
     self._content_rect = rl.Rectangle()
+    self._cluster_hud_connected = False
 
     self.model_renderer = ModelRenderer()
     self._hud_renderer = HudRenderer()
@@ -70,6 +71,9 @@ class AugmentedRoadView(CameraView):
     except Exception:
       self._plot_mode = 0
 
+  def set_cluster_hud_connected(self, connected: bool) -> None:
+    self._cluster_hud_connected = connected
+
   def _render(self, rect):
     # plotMode 갱신(가끔 파일 읽기)은 drawTime 창 밖에서 — total을 오염시키지 않는다
     self._refresh_plot_mode(time.monotonic())
@@ -82,10 +86,9 @@ class AugmentedRoadView(CameraView):
     # total과 구간 합의 차이(미귀속)로 남는다. extras = carrot 테두리(+텍스트)
     cam_ms = model_ms = ds_ms = hud_ms = alert_ms = extras_ms = 0.0
 
-    self._switch_stream_if_needed(ui_state.sm)
-
-    # Update calibration before rendering
-    self._update_calibration()
+    if not self._cluster_hud_connected:
+      self._switch_stream_if_needed(ui_state.sm)
+      self._update_calibration()
 
     # Create inner content area with border padding
     self._content_rect = rl.Rectangle(
@@ -104,15 +107,19 @@ class AugmentedRoadView(CameraView):
       int(self._content_rect.height)
     )
 
-    # Render the base camera view
     _t = time.monotonic()
-    super()._render(rect)
+    if self._cluster_hud_connected:
+      rl.draw_rectangle_rec(self._content_rect, rl.BLACK)
+    else:
+      # Render the base camera view
+      super()._render(rect)
     cam_ms = (time.monotonic() - _t) * 1000.0
 
-    # Draw all UI overlays
-    _t = time.monotonic()
-    self.model_renderer.render(self._content_rect)
-    model_ms = (time.monotonic() - _t) * 1000.0
+    if not self._cluster_hud_connected:
+      # Draw the model overlay only with the camera view
+      _t = time.monotonic()
+      self.model_renderer.render(self._content_rect)
+      model_ms = (time.monotonic() - _t) * 1000.0
     _t = time.monotonic()
     self._hud_renderer.render(self._content_rect)  # plot 활성 시 plot 비용도 hud 구간에 포함
     hud_ms = (time.monotonic() - _t) * 1000.0
