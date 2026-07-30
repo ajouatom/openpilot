@@ -19,6 +19,16 @@ from openpilot.common.transformations.orientation import rot_from_euler
 
 from cluster_gles_dmabuf import DirectNv12DmabufError, create_tici_nv12_dmabuf_pool
 from cluster_gles_readback import DirectNv12ReadbackError, create_tici_direct_readback
+from cluster_display import (
+    CLUSTER_LANGUAGE_KO,
+    cluster_text,
+    display_speed,
+    format_navi_distance,
+    format_radar_distance,
+    format_trip_distance,
+    normalize_cluster_language,
+    speed_unit,
+)
 from cluster_config import (
     AMBER,
     BLUE,
@@ -78,7 +88,6 @@ from cluster_scene import (
     cluster_scene_state_key,
 )
 from cluster_system_monitor import SystemStats, SystemStatsSampler
-from cluster_trip_report import TRIP_TRACE_MAX_RADIUS_M, TRIP_TRACE_MIN_RADIUS_M
 from cluster_utils import blink_visible, clamp
 
 
@@ -112,8 +121,6 @@ TRIP_REPORT_PANEL_X = NAVI_LIVE_PANEL_X
 TRIP_REPORT_PANEL_Y = 1.0
 TRIP_REPORT_PANEL_W = NAVI_LIVE_PANEL_W
 TRIP_REPORT_PANEL_H = DESIGN_HEIGHT - 2.0
-TRIP_REPORT_TRACE_MAX_SEGMENTS = 511
-TRIP_REPORT_TRACE_ZOOM_TIME_CONSTANT_S = 1.2
 CAMERA_BACKGROUND_X = 0.0
 CAMERA_BACKGROUND_Y = 0.0
 CAMERA_BACKGROUND_W = NAVI_LIVE_PANEL_X
@@ -137,7 +144,6 @@ CAMERA_OVERLAY_PITCH_OFFSET_MIN_DEG = -3.0
 CAMERA_OVERLAY_PITCH_OFFSET_MAX_DEG = 3.0
 CAMERA_OVERLAY_PITCH_OFFSET_STEP_DEG = 0.2
 CAMERA_OVERLAY_PITCH_TUNE_PANEL_Y = ROUTE_CONTROL_PANEL_Y - 72.0
-CORNER_RADAR_COIN_RADIUS_M = 0.82
 CORNER_RADAR_COIN_HEIGHT_M = 0.10
 CORNER_RADAR_COIN_SLICES = 28
 CORNER_RADAR_COIN_FILL = (52, 210, 230)
@@ -193,16 +199,17 @@ FOLLOW_GAP_ICON_W = FOLLOW_GAP_ICON_H * FOLLOW_GAP_ICON_ASPECT
 TOP_CRUISE_CENTER_X = FOLLOW_STATUS_CENTER_X + 202
 TOP_CRUISE_FONT_SIZE = 27.0 * DRIVE_STATUS_SCALE
 TOP_CRUISE_UNIT_FONT_SIZE = TOP_CRUISE_FONT_SIZE
-WIFI_STATUS_CENTER_X = 100
+WIFI_STATUS_CENTER_X = 160
 WIFI_STATUS_ICON_SIZE = 48.0
 NAV_STATUS_CENTER_X = WIFI_STATUS_CENTER_X
 NAV_STATUS_CENTER_Y = 99.0
 NAV_STATUS_FONT_SIZE = 22.0
-LFA_STATUS_CENTER_X = 37
+LFA_STATUS_CENTER_X = 70
 LFA_STATUS_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
 LFA_LANE_ICON_WIDTH_SCALE = 2.0
 LFA_LANE_ICON_TOP_OFFSET = 3.0
 TOP_STATUS_CENTER_Y = 55.0
+TOP_CLOCK_CENTER_X = 315.0
 TOP_ICON_SIZE = 34.0 * DRIVE_STATUS_SCALE
 DRIVE_STATUS_BOX_RADIUS = 8.0 * DRIVE_STATUS_SCALE
 SPEED_HUD_SCALE = 0.8
@@ -238,18 +245,19 @@ SPEED_MODEL_TRAFFIC_CENTER_X = SPEED_VALUE_CENTER_X - 38.0
 SPEED_MODEL_TRAFFIC_CENTER_Y = SPEED_PANEL_Y - 9.0
 SPEED_MODEL_TRAFFIC_ICON_SIZE = 34.0
 SPEED_DRIVING_MODE_GAP = 5.0
-SPEED_DRIVING_MODE_X = SPEED_MODEL_TRAFFIC_CENTER_X + SPEED_MODEL_TRAFFIC_ICON_SIZE * 0.5 + SPEED_DRIVING_MODE_GAP
-SPEED_DRIVING_MODE_Y = SPEED_MODEL_TRAFFIC_CENTER_Y - 15.0
-SPEED_DRIVING_MODE_W = 72.0
-SPEED_DRIVING_MODE_H = 30.0
-SPEED_DRIVING_MODE_CENTER_X = SPEED_DRIVING_MODE_X + SPEED_DRIVING_MODE_W * 0.5
-SPEED_DRIVING_MODE_CENTER_Y = SPEED_DRIVING_MODE_Y + SPEED_DRIVING_MODE_H * 0.5
-SPEED_DRIVING_MODE_FONT_SIZE = 21.0
+SPEED_DRIVING_MODE_BASE_CENTER_OFFSET_X = SPEED_DRIVING_MODE_GAP + 36.0
+SPEED_DRIVING_MODE_CENTER_X = (
+    SPEED_MODEL_TRAFFIC_CENTER_X
+    + SPEED_MODEL_TRAFFIC_ICON_SIZE * 0.5
+    + SPEED_DRIVING_MODE_BASE_CENTER_OFFSET_X
+)
+SPEED_DRIVING_MODE_CENTER_Y = SPEED_MODEL_TRAFFIC_CENTER_Y
+SPEED_DRIVING_MODE_FONT_SIZE = 27.0
 SPEED_DRIVING_MODE_STYLES = {
-    1: ("연비", (0, 255, 0, 200)),
-    2: ("안전", (255, 165, 0, 200)),
-    3: ("일반", (255, 255, 255, 200)),
-    4: ("고속", (255, 0, 0, 200)),
+    1: ("driving_mode_eco", (0, 255, 0, 200)),
+    2: ("driving_mode_safe", (255, 165, 0, 200)),
+    3: ("driving_mode_normal", (255, 255, 255, 200)),
+    4: ("driving_mode_sport", (255, 0, 0, 200)),
 }
 SIDE_GAUGE_TOP = 88
 SIDE_GAUGE_BOTTOM = 186
@@ -261,7 +269,7 @@ SIDE_GAUGE_LABEL_OFFSET = 15
 SIDE_GAUGE_LEFT_CENTER_X = 968
 SIDE_GAUGE_COLUMN_GAP = 78
 SIDE_GAUGE_OUTLINE = (240, 244, 248, 190)
-SPEED_LIMIT_SIGN_CENTER_X = 90
+SPEED_LIMIT_SIGN_CENTER_X = 80
 SPEED_LIMIT_SIGN_CENTER_Y = 160
 SPEED_LIMIT_SIGN_RADIUS = 42.0
 SPEED_LIMIT_SIGN_RING_WIDTH = 6.0
@@ -602,21 +610,21 @@ def rl_color(color: tuple[int, int, int] | tuple[int, int, int, int], alpha: int
     return _cached_rl_color(int(r), int(g), int(b), int(a))
 
 
-def radar_point_distance_label(point: RadarPointMarker) -> str:
+def radar_point_distance_label(point: RadarPointMarker, is_metric: bool = True) -> str:
     if point.absolute_speed_kph is not None and abs(point.absolute_speed_kph) <= RADAR_STATIC_OBJECT_SPEED_KPH:
         return ""
-    return f"{point.longitudinal_m:.0f} m"
+    return format_radar_distance(point.longitudinal_m, is_metric)
 
 
-def radar_point_speed_label(point: RadarPointMarker) -> str:
+def radar_point_speed_label(point: RadarPointMarker, is_metric: bool = True) -> str:
     if point.absolute_speed_kph is None:
         return ""
     if abs(point.absolute_speed_kph) <= RADAR_STATIC_OBJECT_SPEED_KPH:
         return ""
-    return f"{point.absolute_speed_kph:.0f} km/h"
+    return f"{display_speed(point.absolute_speed_kph, is_metric):.0f} {speed_unit(is_metric)}"
 
 
-def vehicle_distance_label(vehicle: VehicleBox) -> str:
+def vehicle_distance_label(vehicle: VehicleBox, is_metric: bool = True) -> str:
     if (
         vehicle.absolute_speed_kph is not None
         and abs(vehicle.absolute_speed_kph) <= RADAR_STATIC_OBJECT_SPEED_KPH
@@ -624,7 +632,7 @@ def vehicle_distance_label(vehicle: VehicleBox) -> str:
         and not vehicle.cut_in
     ):
         return ""
-    distance = f"{vehicle_distance_m(vehicle):.0f} m"
+    distance = format_radar_distance(vehicle_distance_m(vehicle), is_metric)
     if vehicle.cut_in:
         return f"CUT-IN {distance}"
     if (vehicle.primary or vehicle.cut_in) and vehicle.label:
@@ -641,12 +649,12 @@ def vehicle_distance_m(vehicle: VehicleBox) -> float:
     return vehicle.center.y - EGO_FORWARD_M
 
 
-def vehicle_speed_label(vehicle: VehicleBox) -> str:
+def vehicle_speed_label(vehicle: VehicleBox, is_metric: bool = True) -> str:
     if vehicle.absolute_speed_kph is None:
         return ""
     if abs(vehicle.absolute_speed_kph) <= RADAR_STATIC_OBJECT_SPEED_KPH:
         return ""
-    return f"{vehicle.absolute_speed_kph:.0f} km/h"
+    return f"{display_speed(vehicle.absolute_speed_kph, is_metric):.0f} {speed_unit(is_metric)}"
 
 
 def radar_info_shows_vehicle(mode: int) -> bool:
@@ -808,6 +816,11 @@ def label_rect_inside_bounds(
 
 
 class ClusterUiRenderer:
+    # Class defaults also keep lightweight object.__new__ render probes on the
+    # original Korean/metric presentation without running the GPU-heavy init.
+    language = CLUSTER_LANGUAGE_KO
+    is_metric = True
+
     def __init__(
         self,
         width: int = DESIGN_WIDTH,
@@ -816,6 +829,8 @@ class ClusterUiRenderer:
         target_fps: int = 0,
         theme_mode: str = "auto",
         screen_mode: int = 0,
+        language: str = CLUSTER_LANGUAGE_KO,
+        is_metric: bool = True,
     ) -> None:
         self.width = width
         self.height = height
@@ -823,6 +838,8 @@ class ClusterUiRenderer:
         self.target_fps = target_fps
         self.theme_mode = normalize_cluster_theme_mode(theme_mode)
         self.screen_mode = normalize_cluster_screen_mode(screen_mode)
+        self.language = normalize_cluster_language(language, default=CLUSTER_LANGUAGE_KO)
+        self.is_metric = bool(is_metric)
         self._theme = current_cluster_theme(self.theme_mode)
         self.hidden = False
         self._window_open = False
@@ -899,8 +916,6 @@ class ClusterUiRenderer:
         )
         self._text_measure_cache: dict[tuple[int, str, float, float], tuple[float, float]] = {}
         self._system_stats = SystemStatsSampler(SYSTEM_STATS_REFRESH_SECONDS)
-        self._trip_trace_display_radius_m = TRIP_TRACE_MIN_RADIUS_M
-        self._trip_trace_zoom_t: float | None = None
         self._debug_plot_mode_prev = -1
         self._debug_plot_size = 0
         self._debug_plot_index = -1
@@ -922,11 +937,14 @@ class ClusterUiRenderer:
         self._theme = current_cluster_theme(self.theme_mode)
 
     def set_screen_mode(self, screen_mode: int) -> None:
-        next_mode = normalize_cluster_screen_mode(screen_mode)
-        if next_mode != self.screen_mode and next_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
-            self._trip_trace_display_radius_m = TRIP_TRACE_MIN_RADIUS_M
-            self._trip_trace_zoom_t = None
-        self.screen_mode = next_mode
+        self.screen_mode = normalize_cluster_screen_mode(screen_mode)
+
+    def set_display_preferences(self, language: str, is_metric: bool) -> None:
+        self.language = normalize_cluster_language(language, default=CLUSTER_LANGUAGE_KO)
+        self.is_metric = bool(is_metric)
+
+    def _text(self, key: str) -> str:
+        return cluster_text(self.language, key)
 
     def set_target_fps(self, target_fps: int) -> None:
         self.target_fps = max(0, int(target_fps))
@@ -1602,7 +1620,7 @@ class ClusterUiRenderer:
         scene_shift_x_m: float,
         radar_info_mode: int,
     ) -> None:
-        self._draw_camera_overlay_vehicle_coin(vehicle, projection, scene_shift_x_m, radar_info_mode)
+        self._draw_camera_overlay_vehicle_frame(vehicle, projection, scene_shift_x_m, radar_info_mode)
 
     @staticmethod
     def _camera_overlay_vehicle_draw_key(vehicle: VehicleBox) -> tuple[int, float]:
@@ -1617,7 +1635,7 @@ class ClusterUiRenderer:
             priority = 2
         return priority, -vehicle_distance_m(vehicle)
 
-    def _draw_camera_overlay_vehicle_coin(
+    def _draw_camera_overlay_vehicle_frame(
         self,
         vehicle: VehicleBox,
         projection: CameraOverlayProjection,
@@ -1638,78 +1656,97 @@ class ClusterUiRenderer:
         lead_two = label.startswith("L2") or "CUT-IN" in label
         lead_one = label.startswith("L1") or (vehicle.primary and not lead_two)
         emphasized = vehicle.primary or vehicle.cut_in
-        radius_m = CORNER_RADAR_COIN_RADIUS_M * (1.42 if lead_two else 1.2 if emphasized else 1.0)
-        right = self._project_camera_overlay_point(
+        half_width_m = max(0.6, vehicle.width_m * 0.58)
+        frame_height_m = max(0.8, vehicle.height_m * 1.12)
+        left_base = self._project_camera_overlay_point(
             Vec3(
-                vehicle.center.x + vehicle.right_x * radius_m,
-                center_y_m + vehicle.right_y * radius_m,
+                vehicle.center.x - vehicle.right_x * half_width_m,
+                center_y_m - vehicle.right_y * half_width_m,
                 base_z,
             ),
             projection,
             scene_shift_x_m,
         )
-        forward = self._project_camera_overlay_point(
+        right_base = self._project_camera_overlay_point(
             Vec3(
-                vehicle.center.x + vehicle.forward_x * radius_m,
-                center_y_m + vehicle.forward_y * radius_m,
+                vehicle.center.x + vehicle.right_x * half_width_m,
+                center_y_m + vehicle.right_y * half_width_m,
                 base_z,
             ),
             projection,
             scene_shift_x_m,
         )
+        left_top = self._project_camera_overlay_point(
+            Vec3(
+                vehicle.center.x - vehicle.right_x * half_width_m,
+                center_y_m - vehicle.right_y * half_width_m,
+                base_z + frame_height_m,
+            ),
+            projection,
+            scene_shift_x_m,
+        )
+        right_top = self._project_camera_overlay_point(
+            Vec3(
+                vehicle.center.x + vehicle.right_x * half_width_m,
+                center_y_m + vehicle.right_y * half_width_m,
+                base_z + frame_height_m,
+            ),
+            projection,
+            scene_shift_x_m,
+        )
+        projected_corners = tuple(point for point in (left_base, right_base, left_top, right_top) if point is not None)
+        if not projected_corners:
+            return
 
-        right_px = math.hypot(right.x - center.x, right.y - center.y) if right is not None else 16.0
-        forward_px = math.hypot(forward.x - center.x, forward.y - center.y) if forward is not None else 10.0
-        radius_x = clamp(
-            max(right_px, forward_px * 0.8),
-            12.0 if lead_two else 10.0 if emphasized else 8.0,
-            42.0 if lead_two else 36.0 if emphasized else 28.0,
-        )
-        radius_y = clamp(
-            min(forward_px * 0.42, radius_x * 0.46),
-            5.0 if lead_two else 4.5 if emphasized else 3.5,
-            15.0 if lead_two else 13.0 if emphasized else 10.0,
+        min_x = min(point.x for point in projected_corners)
+        max_x = max(point.x for point in projected_corners)
+        min_y = min(point.y for point in projected_corners)
+        max_y = max(point.y for point in projected_corners)
+        width = max_x - min_x
+        height = max_y - min_y
+        pad_x = max(4.0, width * 0.08)
+        pad_y = max(4.0, height * 0.08)
+        frame_width = max(24.0, width + pad_x * 2.0)
+        frame_height = max(24.0, height + pad_y * 2.0)
+        frame_center_x = (min_x + max_x) * 0.5
+        frame_center_y = (min_y + max_y) * 0.5
+        marker = rl.Rectangle(
+            frame_center_x - frame_width * 0.5,
+            frame_center_y - frame_height * 0.5,
+            frame_width,
+            frame_height,
         )
 
         confidence = clamp(vehicle.confidence, 0.0, 1.0)
-        fill_base, side_base, ring_base = camera_overlay_vehicle_coin_colors(vehicle, lead_one, lead_two)
-        fill_alpha = int((145 if emphasized else 120) + (95 if emphasized else 110) * confidence)
+        _fill_base, _side_base, ring_base = camera_overlay_vehicle_coin_colors(vehicle, lead_one, lead_two)
         ring_alpha = int(180 + 65 * confidence)
-
-        cx = int(round(center.x))
-        cy = int(round(center.y))
-        rx = int(round(radius_x))
-        ry = int(round(radius_y))
-        rl.draw_ellipse(cx + 1, cy + 3, rx + 3, ry + 2, rl_color((0, 0, 0), int(70 + 45 * confidence)))
-        rl.draw_ellipse(cx, cy + 1, rx + 1, ry + 1, rl_color(side_base, max(120, fill_alpha - 35)))
-        rl.draw_ellipse(cx, cy, rx, ry, rl_color(ring_base, ring_alpha))
-        rl.draw_ellipse(cx, cy, max(1, int(rx * 0.78)), max(1, int(ry * 0.70)), rl_color(fill_base, fill_alpha))
-        rl.draw_ellipse(cx - int(rx * 0.18), cy - max(1, int(ry * 0.25)), max(1, int(rx * 0.26)), max(1, int(ry * 0.28)), rl_color((245, 255, 255), int(72 + 58 * confidence)))
-        rl.draw_ellipse_lines(cx, cy, rx, ry, rl_color(ring_base, 245))
-        if emphasized:
-            rl.draw_ellipse_lines(cx, cy, rx + 4, ry + 3, rl_color(ring_base, 185))
-
-        if forward is not None:
-            end_x = center.x + (forward.x - center.x) * 0.58
-            end_y = center.y + (forward.y - center.y) * 0.58
-            rl.draw_line_ex(
-                center,
-                rl.Vector2(end_x, end_y),
-                3.0 if emphasized else 2.0,
-                rl_color((255, 255, 255), int(170 + 70 * confidence)),
-            )
+        shadow = rl.Rectangle(marker.x + 1.5, marker.y + 2.0, marker.width, marker.height)
+        rl.draw_rectangle_rounded_lines_ex(
+            shadow,
+            0.20,
+            8,
+            5.0 if emphasized else 4.0,
+            rl_color((0, 0, 0), int(85 + 45 * confidence)),
+        )
+        rl.draw_rectangle_rounded_lines_ex(
+            marker,
+            0.20,
+            8,
+            3.5 if emphasized else 3.0,
+            rl_color(ring_base, ring_alpha),
+        )
 
         label = self._vehicle_overlay_label(vehicle, radar_info_mode)
         if label:
             label_color = (*ring_base[:3], 255 if vehicle.primary or vehicle.cut_in else 230)
-            label_y = center.y - radius_y - 16.0
+            label_y = marker.y - 12.0
             if lead_one:
-                label_y = center.y - radius_y - 22.0
+                label_y = marker.y - 18.0
             elif lead_two:
-                label_y = center.y + radius_y + 16.0
+                label_y = marker.y + marker.height + 16.0
             self._draw_world_label_text(
                 label,
-                center.x,
+                marker.x + marker.width * 0.5,
                 max(14.0, label_y),
                 17 if emphasized else 15,
                 label_color,
@@ -1724,9 +1761,9 @@ class ClusterUiRenderer:
             if not (label.startswith("L1") or label.startswith("L2") or "CUT-IN" in label):
                 parts.append(vehicle.label)
         if (stopped or radar_info_shows_distance(radar_info_mode)) and vehicle.longitudinal_m is not None:
-            parts.append(f"{vehicle.longitudinal_m:.0f} m")
+            parts.append(format_radar_distance(vehicle.longitudinal_m, self.is_metric))
         if not stopped and radar_info_shows_speed(radar_info_mode) and vehicle.absolute_speed_kph is not None:
-            parts.append(f"{vehicle.absolute_speed_kph:.0f} km/h")
+            parts.append(f"{display_speed(vehicle.absolute_speed_kph, self.is_metric):.0f} {speed_unit(self.is_metric)}")
         return " ".join(parts)
 
     def _draw_camera_overlay_radar_point(
@@ -1741,14 +1778,20 @@ class ClusterUiRenderer:
         if screen is None:
             return
         radius = max(3.0, min(10.0, 80.0 / max(6.0, point.longitudinal_m)))
-        rl.draw_circle_v(screen, radius, rl_color(point.color, 190))
+        marker = rl.Rectangle(
+            screen.x - radius,
+            screen.y - radius,
+            radius * 2.0,
+            radius * 2.0,
+        )
+        rl.draw_rectangle_rounded_lines_ex(marker, 0.25, 6, 1.8, rl_color(point.color, 245))
         if not radar_info_shows_radar_points(radar_info_mode):
             return
         label_parts = []
         if radar_info_shows_distance(radar_info_mode):
-            label_parts.append(f"{point.longitudinal_m:.0f} m")
+            label_parts.append(format_radar_distance(point.longitudinal_m, self.is_metric))
         if point.absolute_speed_kph is not None:
-            label_parts.append(f"{point.absolute_speed_kph:.0f} km/h")
+            label_parts.append(f"{display_speed(point.absolute_speed_kph, self.is_metric):.0f} {speed_unit(self.is_metric)}")
         if label_parts:
             self._draw_world_label_text(" ".join(label_parts), screen.x, screen.y - 16.0, 15, (*WHITE[:3], 220), anchor="center")
 
@@ -2952,8 +2995,16 @@ class ClusterUiRenderer:
                 continue
             if profile_enabled:
                 layout_stage = time.perf_counter()
-            distance = radar_point_distance_label(point) if radar_info_shows_distance(radar_info_mode) else ""
-            speed = radar_point_speed_label(point) if radar_info_shows_speed(radar_info_mode) else ""
+            distance = (
+                radar_point_distance_label(point, self.is_metric)
+                if radar_info_shows_distance(radar_info_mode)
+                else ""
+            )
+            speed = (
+                radar_point_speed_label(point, self.is_metric)
+                if radar_info_shows_speed(radar_info_mode)
+                else ""
+            )
             if not distance and not speed:
                 if profile_enabled:
                     layout_ms += (time.perf_counter() - layout_stage) * 1000.0
@@ -3109,11 +3160,15 @@ class ClusterUiRenderer:
                 layout_stage = time.perf_counter()
             show_important_label = vehicle.primary or vehicle.cut_in
             distance = (
-                vehicle_distance_label(vehicle)
+                vehicle_distance_label(vehicle, self.is_metric)
                 if radar_info_shows_distance(radar_info_mode) or show_important_label
                 else ""
             )
-            speed = vehicle_speed_label(vehicle) if radar_info_shows_speed(radar_info_mode) else ""
+            speed = (
+                vehicle_speed_label(vehicle, self.is_metric)
+                if radar_info_shows_speed(radar_info_mode)
+                else ""
+            )
             if not distance and not speed:
                 if profile_enabled:
                     layout_ms += (time.perf_counter() - layout_stage) * 1000.0
@@ -3573,7 +3628,7 @@ class ClusterUiRenderer:
         if state.center_clock_text:
             self._draw_text_with_stroke(
                 state.center_clock_text,
-                238,
+                TOP_CLOCK_CENTER_X,
                 TOP_STATUS_CENTER_Y,
                 48,
                 WHITE,
@@ -3840,7 +3895,7 @@ class ClusterUiRenderer:
                 theme.text,
             )
 
-        speed = state.speed_kph
+        displayed_speed = display_speed(state.speed_kph, self.is_metric)
         road_limit = state.speed_limit_kph
         road_name = ""
         if navi is not None:
@@ -3848,12 +3903,19 @@ class ClusterUiRenderer:
                 road_name = navi.vehicle.road_name
             if road_limit is None and navi.speed is not None:
                 road_limit = navi.speed.road_limit_kph
-        self._draw_text(f"{speed:.0f}", 32.0, 284.0, 82.0, theme.text)
-        self._draw_text("km/h", 143.0, 332.0, 18.0, theme.muted)
+        self._draw_text(f"{displayed_speed:.0f}", 32.0, 284.0, 82.0, theme.text)
+        self._draw_text(speed_unit(self.is_metric), 143.0, 332.0, 18.0, theme.muted)
         if road_limit is not None:
             rl.draw_circle_v(rl.Vector2(218.0, 325.0), 36.0, rl_color(WHITE))
             rl.draw_ring(rl.Vector2(218.0, 325.0), 30.0, 36.0, 0.0, 360.0, 48, rl_color(RED))
-            self._draw_text(str(road_limit), 218.0, 308.0, 27.0, (20, 24, 28), anchor="center")
+            self._draw_text(
+                str(int(round(display_speed(road_limit, self.is_metric)))),
+                218.0,
+                308.0,
+                27.0,
+                (20, 24, 28),
+                anchor="center",
+            )
         if road_name:
             self._draw_text(
                 self._ellipsize_text(road_name, 22.0, 480.0),
@@ -3914,7 +3976,7 @@ class ClusterUiRenderer:
         width = NAVI_MODE_RIGHT_W - 36.0
         current = navi.current if navi is not None else None
         next_guidance = navi.next if navi is not None else None
-        self._draw_text("NAVIGATION", x, 14.0, 16.0, theme.muted)
+        self._draw_text(self._text("navigation"), x, 14.0, 16.0, theme.muted)
         if current is not None:
             current_text = current.main_text or current.road_name or current.near_direction
             self._draw_text(
@@ -3934,7 +3996,7 @@ class ClusterUiRenderer:
             )
         if next_guidance is not None:
             next_text = next_guidance.main_text or next_guidance.road_name or next_guidance.near_direction
-            next_line = f"NEXT {self._format_navi_distance(next_guidance.distance_m)}  {next_text}"
+            next_line = f"{self._text('next')} {self._format_navi_distance(next_guidance.distance_m)}  {next_text}"
             self._draw_text(self._ellipsize_text(next_line, 18.0, width), x, 82.0, 18.0, theme.muted)
 
         y = 116.0
@@ -3961,15 +4023,15 @@ class ClusterUiRenderer:
                     continue
                 sdi = label
                 if speed_limit_kph is not None:
-                    sdi += f" {speed_limit_kph} km/h"
+                    sdi += f" {display_speed(speed_limit_kph, self.is_metric):.0f} {speed_unit(self.is_metric)}"
                 if distance_m is not None:
                     sdi += f"  {self._format_navi_distance(distance_m)}"
                 self._draw_text(sdi, x, y + 6.0, 24.0, AMBER)
                 y += 40.0
             if speed.section_active:
-                section = "SECTION"
+                section = self._text("section")
                 if speed.section_average_kph is not None:
-                    section += f" AVG {speed.section_average_kph:.0f}"
+                    section += f" {self._text('average')} {display_speed(speed.section_average_kph, self.is_metric):.0f}"
                 if speed.section_remaining_distance_m is not None:
                     section += f"  {self._format_navi_distance(speed.section_remaining_distance_m)}"
                 self._draw_text(self._ellipsize_text(section, 20.0, width), x, y + 4.0, 20.0, theme.text)
@@ -3980,7 +4042,7 @@ class ClusterUiRenderer:
             route = navi.route
             total = max(1, route.total_distance_m)
             progress = clamp(route.moved_distance_m / total, 0.0, 1.0)
-            self._draw_text("ROUTE", x, route_y, 15.0, theme.muted)
+            self._draw_text(self._text("route"), x, route_y, 15.0, theme.muted)
             route_value = self._format_navi_distance(route.remaining_distance_m)
             if route.remaining_time_s > 0:
                 route_value += f" / {max(1, round(route.remaining_time_s / 60.0))} min"
@@ -3997,10 +4059,10 @@ class ClusterUiRenderer:
 
         status_y = 358.0
         if dashboard is None:
-            self._draw_text("TCP 7714 waiting", x, status_y, 18.0, AMBER)
+            self._draw_text(f"TCP 7714 {self._text('waiting')}", x, status_y, 18.0, AMBER)
             return
         status_color = GREEN if dashboard.connected and dashboard.error is None else RED if dashboard.error else AMBER
-        status_text = "CONNECTED" if dashboard.connected else "WAITING"
+        status_text = self._text("connected") if dashboard.connected else self._text("waiting")
         self._draw_text(status_text, x, status_y, 18.0, status_color)
         self._draw_text(
             f"{dashboard.app_version or '-'}  rev {dashboard.manifest_revision}  rx {dashboard.received_count}",
@@ -4786,21 +4848,23 @@ class ClusterUiRenderer:
         if navi.speed is not None and navi.speed.sdi_type is not None:
             sdi_text = "SDI"
             if navi.speed.sdi_speed_limit_kph:
-                sdi_text += f" {navi.speed.sdi_speed_limit_kph}"
+                sdi_text += f" {display_speed(navi.speed.sdi_speed_limit_kph, self.is_metric):.0f}"
             if navi.speed.sdi_distance_m is not None:
                 sdi_text += f" / {self._format_navi_distance(navi.speed.sdi_distance_m)}"
             footer_parts.append(sdi_text)
         if navi.speed is not None and navi.speed.secondary_sdi_type is not None:
             secondary_sdi_text = "SDI2"
             if navi.speed.secondary_sdi_speed_limit_kph:
-                secondary_sdi_text += f" {navi.speed.secondary_sdi_speed_limit_kph}"
+                secondary_sdi_text += (
+                    f" {display_speed(navi.speed.secondary_sdi_speed_limit_kph, self.is_metric):.0f}"
+                )
             if navi.speed.secondary_sdi_distance_m is not None:
                 secondary_sdi_text += f" / {self._format_navi_distance(navi.speed.secondary_sdi_distance_m)}"
             footer_parts.append(secondary_sdi_text)
         if navi.crossroad is not None and navi.crossroad.visible:
             footer_parts.append(f"JCT {self._format_navi_distance(navi.crossroad.distance_m)}")
         if navi.status is not None and navi.status.off_route:
-            footer_parts.append("OFF ROUTE")
+            footer_parts.append(self._text("off_route"))
         if footer_parts:
             footer = self._ellipsize_text("   ".join(footer_parts), 18.0, w - 40.0)
             self._draw_text(footer, x + 20.0, NAVI_LIVE_FOOTER_Y, 18.0, theme.muted)
@@ -4930,14 +4994,8 @@ class ClusterUiRenderer:
             rl_color(color),
         )
 
-    @staticmethod
-    def _format_navi_distance(distance_m: int | float) -> str:
-        distance = max(0.0, float(distance_m))
-        if distance < 1000.0:
-            return f"{int(round(distance))} m"
-        if distance < 10_000.0:
-            return f"{distance / 1000.0:.1f} km"
-        return f"{distance / 1000.0:.0f} km"
+    def _format_navi_distance(self, distance_m: int | float) -> str:
+        return format_navi_distance(distance_m, self.is_metric)
 
     def _draw_navi_debug_panel(self, info: NaviDebugInfo | None) -> None:
         theme = self._current_theme()
@@ -5383,130 +5441,104 @@ class ClusterUiRenderer:
         panel_bg = (7, 12, 18, 248)
         card_bg = (16, 23, 32, 246)
         card_outline = (69, 83, 96, 230)
-        grid_color = (88, 106, 122, 42)
         muted = (154, 166, 178)
 
         self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 12.0, panel_bg, (67, 80, 93), 1.5)
-        self._draw_text("주행리포트", panel_x + 20.0, panel_y + 28.0, 25.0, WHITE)
+        self._draw_text(self._text("driving_report"), panel_x + 20.0, panel_y + 29.0, 30.0, WHITE)
 
-        trace_x = panel_x + 16.0
-        trace_y = panel_y + 53.0
-        trace_w = 474.0
-        trace_h = 328.0
-        summary_x = trace_x + trace_w + 10.0
-        summary_y = trace_y
-        summary_w = panel_x + panel_w - 16.0 - summary_x
-        summary_h = trace_h
-        self._rounded_rect(trace_x, trace_y, trace_w, trace_h, 10.0, card_bg, card_outline, 1.2)
+        summary_x = panel_x + 16.0
+        summary_y = panel_y + 53.0
+        summary_w = 474.0
+        summary_h = panel_h - 70.0
+        system_x = summary_x + summary_w + 10.0
+        system_y = summary_y
+        system_w = panel_x + panel_w - 16.0 - system_x
+        system_h = summary_h
         self._rounded_rect(summary_x, summary_y, summary_w, summary_h, 10.0, card_bg, card_outline, 1.2)
+        self._rounded_rect(system_x, system_y, system_w, system_h, 10.0, card_bg, card_outline, 1.2)
 
-        self._draw_text("주행 궤적", trace_x + 16.0, trace_y + 23.0, 15.0, muted)
-        target_radius_m = clamp(report.trace_radius_m, TRIP_TRACE_MIN_RADIUS_M, TRIP_TRACE_MAX_RADIUS_M)
-        shown_radius_m = self._trip_trace_radius(target_radius_m)
-        self._draw_text(
-            f"반경 {self._trip_distance_text(shown_radius_m)}",
-            trace_x + trace_w - 16.0,
-            trace_y + 23.0,
-            14.0,
-            muted,
-            anchor="right",
-        )
-        map_x = trace_x + 12.0
-        map_y = trace_y + 43.0
-        map_w = trace_w - 24.0
-        map_h = 239.0
-        self._rounded_rect(map_x, map_y, map_w, map_h, 7.0, (8, 15, 22), (58, 72, 85), 1.0)
-        center = rl.Vector2(map_x + map_w * 0.5, map_y + map_h * 0.5)
-        for fraction in (0.25, 0.5, 0.75, 1.0):
-            radius_px = min(map_w, map_h) * 0.45 * fraction
-            rl.draw_ring(center, radius_px, radius_px + 1.0, 0.0, 360.0, 64, rl_color(grid_color))
-        for fraction in (-0.5, 0.0, 0.5):
-            line_x = center.x + fraction * map_w * 0.45
-            line_y = center.y + fraction * map_h * 0.45
-            rl.draw_line_ex(
-                rl.Vector2(line_x, map_y + 8.0),
-                rl.Vector2(line_x, map_y + map_h - 8.0),
-                1.0,
-                rl_color(grid_color),
-            )
-            rl.draw_line_ex(
-                rl.Vector2(map_x + 8.0, line_y),
-                rl.Vector2(map_x + map_w - 8.0, line_y),
-                1.0,
-                rl_color(grid_color),
-            )
-        self._draw_text("N", center.x, map_y + 14.0, 12.0, muted, anchor="center")
-        self._draw_trip_trace(report, center, map_w, map_h, shown_radius_m)
-
-        legend_y = trace_y + trace_h - 25.0
-        legend_items = (("느림", 10.0), ("보통", 45.0), ("빠름", 90.0))
-        legend_x = trace_x + 18.0
-        for label, speed_kph in legend_items:
-            color = self._trip_speed_color(speed_kph)
-            rl.draw_line_ex(
-                rl.Vector2(legend_x, legend_y),
-                rl.Vector2(legend_x + 24.0, legend_y),
-                4.0,
-                rl_color(color),
-            )
-            self._draw_text(label, legend_x + 31.0, legend_y, 13.0, muted)
-            legend_x += 94.0
-        source_text = report.heading_source
-        if report.gps_corrected:
-            source_text += " + GPS"
-        self._draw_text(
-            source_text,
-            trace_x + trace_w - 16.0,
-            legend_y,
-            13.0,
-            muted,
-            anchor="right",
-        )
-
-        self._draw_text("주행 요약", summary_x + 15.0, summary_y + 23.0, 15.0, muted)
-        self._draw_text("시간", summary_x + 15.0, summary_y + 57.0, 13.0, muted)
+        self._draw_text(self._text("trip_summary"), summary_x + 18.0, summary_y + 29.0, 22.0, muted)
+        self._draw_text(self._text("time"), summary_x + 18.0, summary_y + 76.0, 19.0, muted)
         self._draw_text(
             self._trip_format_time(report.duration_s),
-            summary_x + summary_w - 15.0,
-            summary_y + 57.0,
-            24.0,
+            summary_x + summary_w - 18.0,
+            summary_y + 76.0,
+            35.0,
             (255, 177, 105),
             anchor="right",
         )
         rl.draw_line_ex(
-            rl.Vector2(summary_x + 14.0, summary_y + 82.0),
-            rl.Vector2(summary_x + summary_w - 14.0, summary_y + 82.0),
+            rl.Vector2(summary_x + 18.0, summary_y + 105.0),
+            rl.Vector2(summary_x + summary_w - 18.0, summary_y + 105.0),
             1.0,
             rl_color(card_outline),
         )
-        metric_w = (summary_w - 42.0) * 0.5
-        metric_left = summary_x + 14.0
-        metric_right = metric_left + metric_w + 14.0
-        self._draw_trip_metric(metric_left, summary_y + 109.0, "거리", self._trip_distance_text(report.distance_m), metric_w)
-        self._draw_trip_metric(metric_right, summary_y + 109.0, "평균속도", f"{report.average_speed_kph:.1f}", metric_w, "km/h")
-        self._draw_trip_metric(metric_left, summary_y + 161.0, "최고속도", f"{report.max_speed_kph:.1f}", metric_w, "km/h")
-        self._draw_trip_metric(metric_right, summary_y + 161.0, "자동주행", f"{report.auto_ratio_percent:.0f}", metric_w, "%")
-        self._draw_trip_metric(metric_left, summary_y + 213.0, "최대가속", f"{report.max_accel_mps2:+.2f}", metric_w, "m/s²")
-        self._draw_trip_metric(metric_right, summary_y + 213.0, "최대감속", f"{report.max_decel_mps2:+.2f}", metric_w, "m/s²")
+        metric_w = (summary_w - 54.0) * 0.5
+        metric_left = summary_x + 18.0
+        metric_right = metric_left + metric_w + 18.0
+        report_speed_unit = speed_unit(self.is_metric)
+        self._draw_trip_metric(
+            metric_left,
+            summary_y + 128.0,
+            self._text("distance"),
+            self._trip_distance_text(report.distance_m),
+            metric_w,
+        )
+        self._draw_trip_metric(
+            metric_right,
+            summary_y + 128.0,
+            self._text("average_speed"),
+            f"{display_speed(report.average_speed_kph, self.is_metric):.1f}",
+            metric_w,
+            report_speed_unit,
+        )
+        self._draw_trip_metric(
+            metric_left,
+            summary_y + 202.0,
+            self._text("max_speed"),
+            f"{display_speed(report.max_speed_kph, self.is_metric):.1f}",
+            metric_w,
+            report_speed_unit,
+        )
+        self._draw_trip_metric(
+            metric_right,
+            summary_y + 202.0,
+            self._text("auto_drive"),
+            f"{report.auto_ratio_percent:.0f}",
+            metric_w,
+            "%",
+        )
+        self._draw_trip_metric(
+            metric_left,
+            summary_y + 276.0,
+            self._text("max_accel"),
+            f"{report.max_accel_mps2:+.2f}",
+            metric_w,
+            "m/s²",
+        )
+        self._draw_trip_metric(
+            metric_right,
+            summary_y + 276.0,
+            self._text("max_decel"),
+            f"{report.max_decel_mps2:+.2f}",
+            metric_w,
+            "m/s²",
+        )
 
-        event_y = summary_y + 279.0
-        event_w = (summary_w - 44.0) / 3.0
+        event_y = summary_y + 346.0
+        event_w = (summary_w - 56.0) / 3.0
+        event_label_size = 16.0 if self.language == CLUSTER_LANGUAGE_KO else 13.0
         for index, (label, count, color) in enumerate((
-            ("급가속", report.hard_accel_count, AMBER),
-            ("급감속", report.hard_brake_count, RED),
-            ("급코너", report.hard_corner_count, BLUE_SOFT),
+            (self._text("hard_accel"), report.hard_accel_count, AMBER),
+            (self._text("hard_brake"), report.hard_brake_count, RED),
+            (self._text("hard_corner"), report.hard_corner_count, BLUE_SOFT),
         )):
-            event_x = summary_x + 14.0 + index * (event_w + 8.0)
-            self._rounded_rect(event_x, event_y, event_w, 35.0, 6.0, (24, 32, 42), color, 1.0)
-            self._draw_text(label, event_x + 8.0, event_y + 17.5, 12.0, muted)
-            self._draw_text(str(count), event_x + event_w - 8.0, event_y + 17.5, 18.0, color, anchor="right")
+            event_x = summary_x + 18.0 + index * (event_w + 10.0)
+            self._rounded_rect(event_x, event_y, event_w, 47.0, 7.0, (24, 32, 42), color, 1.2)
+            self._draw_text(label, event_x + 9.0, event_y + 23.5, event_label_size, muted)
+            self._draw_text(str(count), event_x + event_w - 9.0, event_y + 23.5, 23.0, color, anchor="right")
 
-        system_x = trace_x
-        system_y = panel_y + 389.0
-        system_w = panel_w - 32.0
-        system_h = 73.0
-        self._rounded_rect(system_x, system_y, system_w, system_h, 9.0, card_bg, card_outline, 1.2)
-        self._draw_text("SYSTEM", system_x + 16.0, system_y + 18.0, 13.0, muted)
+        self._draw_text(self._text("system"), system_x + 18.0, system_y + 29.0, 22.0, muted)
         cpu_percent = state.cpu_usage_percent if state.cpu_usage_percent is not None else stats.cpu_used_percent
         memory_percent = (
             state.memory_used_percent
@@ -5524,14 +5556,19 @@ class ClusterUiRenderer:
             ("MEM", self._percent_text(memory_percent), self._system_metric_color(memory_percent)),
             ("DISK", self._percent_text(disk_percent), self._system_metric_color(disk_percent)),
         )
-        metric_x = system_x + 16.0
-        for label, value, color in system_metrics:
-            self._draw_text(label, metric_x, system_y + 43.0, 12.0, muted)
-            self._draw_text(value, metric_x + 83.0, system_y + 43.0, 17.0, color, anchor="right")
-            metric_x += 96.0
+        for index, (label, value, color) in enumerate(system_metrics):
+            row_y = system_y + 81.0 + index * 59.0
+            self._draw_text(label, system_x + 18.0, row_y, 18.0, muted)
+            self._draw_text(value, system_x + system_w - 18.0, row_y, 27.0, color, anchor="right")
+            if index < len(system_metrics) - 1:
+                rl.draw_line_ex(
+                    rl.Vector2(system_x + 18.0, row_y + 29.0),
+                    rl.Vector2(system_x + system_w - 18.0, row_y + 29.0),
+                    1.0,
+                    rl_color(card_outline),
+                )
 
-        calib_label_x = system_x + system_w - 16.0
-        self._draw_text("디바이스 설치각", calib_label_x, system_y + 18.0, 13.0, muted, anchor="right")
+        self._draw_text(self._text("device_angle"), system_x + 18.0, system_y + 329.0, 18.0, muted)
         calibration_text = "P --°  ·  Y --°"
         calibration = state.camera_calibration_euler
         if calibration is not None and len(calibration) >= 3:
@@ -5539,82 +5576,13 @@ class ClusterUiRenderer:
             yaw_deg = math.degrees(calibration[2])
             if math.isfinite(pitch_deg) and math.isfinite(yaw_deg):
                 calibration_text = f"P {pitch_deg:+.1f}°  ·  Y {yaw_deg:+.1f}°"
-        self._draw_text(calibration_text, calib_label_x, system_y + 46.0, 18.0, WHITE, anchor="right")
-
-    def _draw_trip_trace(
-        self,
-        report: TripReportState,
-        center: rl.Vector2,
-        map_w: float,
-        map_h: float,
-        radius_m: float,
-    ) -> None:
-        radius_m = max(1.0, radius_m)
-        scale = min(map_w, map_h) * 0.45 / radius_m
-        previous_screen: rl.Vector2 | None = None
-        previous_speed_kph = 0.0
-        last_direction: tuple[float, float] | None = None
-        segments = 0
-        for point in report.trace_points:
-            dx = point.x_m - report.current_x_m
-            dy = point.y_m - report.current_y_m
-            if math.hypot(dx, dy) > radius_m:
-                previous_screen = None
-                continue
-            screen = self._trip_trace_screen_position(dx, dy, center, scale)
-            if previous_screen is not None and segments < TRIP_REPORT_TRACE_MAX_SEGMENTS:
-                color = self._trip_speed_color((previous_speed_kph + point.speed_kph) * 0.5)
-                rl.draw_line_ex(previous_screen, screen, 4.0, rl_color(color))
-                direction_x = screen.x - previous_screen.x
-                direction_y = screen.y - previous_screen.y
-                if direction_x * direction_x + direction_y * direction_y > 0.25:
-                    last_direction = (direction_x, direction_y)
-                segments += 1
-            previous_screen = screen
-            previous_speed_kph = point.speed_kph
-
-        rl.draw_circle_v(center, 8.0, rl_color((12, 20, 28)))
-        rl.draw_ring(center, 7.0, 10.0, 0.0, 360.0, 32, rl_color(WHITE))
-        if last_direction is None:
-            last_direction = (0.0, -1.0)
-        direction_length = max(0.001, math.hypot(*last_direction))
-        ux = last_direction[0] / direction_length
-        uy = last_direction[1] / direction_length
-        px = -uy
-        py = ux
-        rl.draw_triangle(
-            rl.Vector2(center.x + ux * 16.0, center.y + uy * 16.0),
-            rl.Vector2(center.x - ux * 5.0 + px * 7.0, center.y - uy * 5.0 + py * 7.0),
-            rl.Vector2(center.x - ux * 5.0 - px * 7.0, center.y - uy * 5.0 - py * 7.0),
-            rl_color(WHITE),
-        )
-
-    @staticmethod
-    def _trip_trace_screen_position(
-        east_m: float,
-        north_m: float,
-        center: rl.Vector2,
-        scale: float,
-    ) -> rl.Vector2:
-        return rl.Vector2(center.x + east_m * scale, center.y - north_m * scale)
-
-    def _trip_trace_radius(self, target_radius_m: float) -> float:
-        now = time.monotonic()
-        if self._trip_trace_zoom_t is None:
-            self._trip_trace_zoom_t = now
-        dt = clamp(now - self._trip_trace_zoom_t, 0.0, 0.25)
-        self._trip_trace_zoom_t = now
-        if target_radius_m > self._trip_trace_display_radius_m:
-            blend = 1.0 - math.exp(-dt / TRIP_REPORT_TRACE_ZOOM_TIME_CONSTANT_S)
-            self._trip_trace_display_radius_m += (
-                target_radius_m - self._trip_trace_display_radius_m
-            ) * blend
-            if target_radius_m - self._trip_trace_display_radius_m < 1.0:
-                self._trip_trace_display_radius_m = target_radius_m
-        return clamp(
-            self._trip_trace_display_radius_m,
-            TRIP_TRACE_MIN_RADIUS_M,
-            TRIP_TRACE_MAX_RADIUS_M,
+        self._draw_text(
+            calibration_text,
+            system_x + system_w - 18.0,
+            system_y + 372.0,
+            25.0,
+            WHITE,
+            anchor="right",
         )
 
     def _draw_trip_metric(
@@ -5627,27 +5595,10 @@ class ClusterUiRenderer:
         unit: str = "",
     ) -> None:
         muted = (154, 166, 178)
-        self._draw_text(label, x, y, 12.0, muted)
-        self._draw_text(value, x, y + 23.0, 19.0, WHITE)
+        self._draw_text(label, x, y, 18.0, muted)
+        self._draw_text(value, x, y + 32.0, 29.0, WHITE)
         if unit:
-            self._draw_text(unit, x + width, y + 23.0, 11.0, muted, anchor="right")
-
-    @staticmethod
-    def _trip_speed_color(speed_kph: float) -> tuple[int, int, int]:
-        speed_kph = clamp(speed_kph, 0.0, 100.0)
-        if speed_kph <= 45.0:
-            amount = speed_kph / 45.0
-            return (
-                int(round(235 + (244 - 235) * amount)),
-                int(round(78 + (181 - 78) * amount)),
-                int(round(75 + (58 - 75) * amount)),
-            )
-        amount = (speed_kph - 45.0) / 55.0
-        return (
-            int(round(244 + (44 - 244) * amount)),
-            int(round(181 + (211 - 181) * amount)),
-            int(round(58 + (112 - 58) * amount)),
-        )
+            self._draw_text(unit, x + width, y + 32.0, 16.0, muted, anchor="right")
 
     @staticmethod
     def _trip_temp_color(temp_c: float | None) -> tuple[int, int, int]:
@@ -5666,14 +5617,8 @@ class ClusterUiRenderer:
         minutes, seconds = divmod(remainder, 60)
         return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-    @staticmethod
-    def _trip_distance_text(distance_m: float) -> str:
-        distance_m = max(0.0, distance_m)
-        if distance_m < 1_000.0:
-            return f"{distance_m:.0f} m"
-        if distance_m < 10_000.0:
-            return f"{distance_m / 1_000.0:.2f} km"
-        return f"{distance_m / 1_000.0:.1f} km"
+    def _trip_distance_text(self, distance_m: float) -> str:
+        return format_trip_distance(distance_m, self.is_metric)
 
     def _draw_live_debug_panel(self, state: ClusterUiState) -> None:
         sections = self._live_debug_sections(state)
@@ -6221,7 +6166,7 @@ class ClusterUiRenderer:
     def _draw_speed_block(self, state: ClusterUiState) -> None:
         theme = self._current_theme()
         display_speed_kph = state.display_speed_kph if state.display_speed_kph is not None else state.speed_kph
-        speed_value = int(round(clamp(display_speed_kph, 0.0, MAX_SPEED_KPH)))
+        speed_value = int(round(display_speed(clamp(display_speed_kph, 0.0, MAX_SPEED_KPH), self.is_metric)))
         speed_text = str(speed_value)
         speed_font_size = SPEED_VALUE_FONT_SIZE if len(speed_text) <= 2 else SPEED_VALUE_FONT_SIZE * 0.86
         self._draw_speed_panel_bg()
@@ -6263,7 +6208,7 @@ class ClusterUiRenderer:
                 if state.cruise_override_color_mode == 2
                 else theme.text
             )
-            override_text = str(int(round(state.cruise_override_kph)))
+            override_text = str(int(round(display_speed(state.cruise_override_kph, self.is_metric))))
             override_label = state.cruise_override_label or ""
             override_label_font_size = CRUISE_OVERRIDE_LABEL_FONT_SIZE * min(
                 1.0,
@@ -6294,7 +6239,11 @@ class ClusterUiRenderer:
             center = rl.Vector2(SPEED_LIMIT_SIGN_CENTER_X, SPEED_LIMIT_SIGN_CENTER_Y)
             rl.draw_circle_v(center, SPEED_LIMIT_SIGN_RADIUS, rl_color(RED))
             rl.draw_circle_v(center, SPEED_LIMIT_SIGN_RADIUS - SPEED_LIMIT_SIGN_RING_WIDTH, rl_color(WHITE))
-            limit_text = "--" if state.speed_limit_kph is None else str(state.speed_limit_kph)
+            limit_text = (
+                "--"
+                if state.speed_limit_kph is None
+                else str(int(round(display_speed(state.speed_limit_kph, self.is_metric))))
+            )
             limit_font_size = 42 if len(limit_text) <= 2 else 36
             self._draw_text(
                 limit_text,
@@ -6309,23 +6258,15 @@ class ClusterUiRenderer:
         style = SPEED_DRIVING_MODE_STYLES.get(state.driving_mode)
         if style is None:
             return
-        text, color = style
-        self._rounded_rect(
-            SPEED_DRIVING_MODE_X,
-            SPEED_DRIVING_MODE_Y,
-            SPEED_DRIVING_MODE_W,
-            SPEED_DRIVING_MODE_H,
-            8.0,
-            color,
-            WHITE,
-            2.0,
-        )
+        text_key, color = style
+        text = self._text(text_key)
+        font_size = SPEED_DRIVING_MODE_FONT_SIZE if self.language == CLUSTER_LANGUAGE_KO else 22.0
         self._draw_text_with_stroke(
             text,
             SPEED_DRIVING_MODE_CENTER_X,
             SPEED_DRIVING_MODE_CENTER_Y,
-            SPEED_DRIVING_MODE_FONT_SIZE,
-            WHITE,
+            font_size,
+            color,
             (5, 9, 12),
             2,
             anchor="center",
@@ -6378,7 +6319,7 @@ class ClusterUiRenderer:
             SPEED_GEAR_W,
             SPEED_GEAR_H,
         )
-        self._rounded_rect(rect.x, rect.y, rect.width, rect.height, 8.0, (5, 9, 12, 210), outline, 3.0)
+        self._rounded_rect(rect.x, rect.y, rect.width, rect.height, 8.0, (0, 0, 0, 0), outline, 3.0)
         self._draw_text_with_stroke(
             gear,
             SPEED_GEAR_CENTER_X,
@@ -6424,11 +6365,10 @@ class ClusterUiRenderer:
     def _cruise_set_visible(state: ClusterUiState) -> bool:
         return state.cruise_kph is not None and state.cruise_display_state != "off"
 
-    @staticmethod
-    def _cruise_set_speed_text(state: ClusterUiState) -> str:
+    def _cruise_set_speed_text(self, state: ClusterUiState) -> str:
         if state.cruise_display_state == "off" or state.cruise_kph is None:
             return "--"
-        return str(int(round(state.cruise_kph)))
+        return str(int(round(display_speed(state.cruise_kph, self.is_metric))))
 
     @staticmethod
     def _cruise_set_color(state: ClusterUiState, theme: ClusterTheme) -> tuple[int, int, int]:

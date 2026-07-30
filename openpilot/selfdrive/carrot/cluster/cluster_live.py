@@ -110,8 +110,6 @@ LIVE_SERVICES_BASE = (
     "cameraOdometry",
     "liveCalibration",
     "livePose",
-    "gpsLocationExternal",
-    "gpsLocation",
     "drivingModelData",
     "liveDelay",
     "liveParameters",
@@ -548,8 +546,6 @@ class OpenpilotLiveSource:
             self.parser._update_live_calibration(data, self._service_valid(service))
         elif service == "livePose":
             self.parser._update_live_pose(data, event_t)
-        elif service in ("gpsLocationExternal", "gpsLocation"):
-            self.parser._update_gps_location(data, event_t)
         elif service == "carParams":
             self.parser._update_car_params(data)
         elif service == "radarState":
