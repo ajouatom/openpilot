@@ -38,7 +38,6 @@ from openpilot.selfdrive.carrot.radar_motion import (
   RadarMotionPredictor,
   VisionRadarMatcher,
   apply_vision_bracket_cutin_support,
-  can_start_current_path_lead_two,
   cutin_can_compete_with_primary,
   front_cutin_motion_supported,
   lead_from_vision,
@@ -1239,22 +1238,6 @@ class RadarMotionShadowSelector:
             or prediction.d_path * prediction.d_path_rate_long <= 0.0
           ),
           confirmed_cutin=confirmed_cutin,
-          current_path_motion=(
-            self.motion_sensitivity.cut_in_enabled
-            and can_start_current_path_lead_two(
-              prediction.source,
-              float(lead["dRel"]),
-              prediction.current_path_occupancy,
-              (
-                prediction.reason != "insufficient measured dPath history"
-              ),
-              getattr(prediction, "front_tracked_close_entry", False),
-            )
-          )
-          and (
-            prediction.path_entry_age_s is None
-            or front_motion_supported
-          ),
         ))
       if (
         active_identity is not None
@@ -1287,7 +1270,6 @@ class RadarMotionShadowSelector:
               continuity_id=continuity_id,
               retainable=True,
               confirmed_cutin=False,
-              current_path_motion=False,
             ))
       lead_selection = lead_two_tracker.update(
         frame.time_s,
@@ -2778,11 +2760,7 @@ class SimulatorUI:
       control_eligible_current_path = (
         diagnostic is not None
         and diagnostic.current_path_occupancy
-        and (
-          prediction is not None
-          and prediction.cut_in_detection_allowed
-          or (point.source, point.track_id) in selected_keys
-        )
+        and (point.source, point.track_id) in selected_keys
       )
       if (point.source, point.track_id) in confirmed_cutin_keys:
         color = (246, 142, 55)
