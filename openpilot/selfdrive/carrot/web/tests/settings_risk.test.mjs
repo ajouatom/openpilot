@@ -29,7 +29,7 @@ test("a risky parameter renders a level-tagged badge", () => {
     escape,
     text: (key, fallback) => (key === "setting_risk_high" ? "주의" : fallback),
   });
-  assert.match(html, /chip chip--compact chip--danger/);
+  assert.match(html, /chip chip--compact chip--warning/);
   assert.match(html, /setting-risk-badge--high/);
   assert.match(html, /data-risk-level="high"/);
   assert.match(html, />주의</);

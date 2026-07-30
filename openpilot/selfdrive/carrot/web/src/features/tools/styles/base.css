@@ -33,6 +33,10 @@
   --tools-log-scroll-gap: 6px;
   --tools-detail-scroll-gap: 8px;
   --tools-scrollbar-content-gap: 8px;
+  --tools-content-end-gap: max(
+    var(--tools-page-gutter-block),
+    env(safe-area-inset-bottom, 0px)
+  );
   display: flex;
   flex-direction: column;
   position: relative;
@@ -240,11 +244,15 @@
   overflow-wrap: anywhere;
 }
 
-.web-settings-group__body {
+.web-settings-group__body,
+.web-settings-list {
   display: grid;
   grid-auto-rows: max-content;
   gap: var(--sp-sm);
   align-content: start;
+}
+
+.web-settings-group__body {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;

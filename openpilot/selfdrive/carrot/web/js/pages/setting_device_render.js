@@ -74,7 +74,7 @@ function renderSshKeysRow(statusOrUsername, fallbackHasKeys) {
     ],
   });
   return `
-    <div class="setting device-setting">
+    <div class="setting device-setting device-setting--ssh">
       <div class="settingTop">
         <div>
           <div class="title">${escapeHtml(getUIText("ssh_keys", "SSH Keys"))}</div>
