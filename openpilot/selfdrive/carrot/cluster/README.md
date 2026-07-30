@@ -456,13 +456,20 @@ the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and
 `LATERAL PLAN` rows, `2` shows the system information panel with memory and CPU
 core usage, `3` shows a large debug graph selected by `ShowPlotMode` with the
 driving scene disabled, and `4`
-shows the same graph in the right-side panel while keeping the driving scene.
-`5` shows the right-side driving report while keeping the driving scene. The
+shows the same graph in the information panel while keeping the driving scene.
+`5` shows the driving report in the information panel while keeping the driving scene. The
 report uses a large trip/event summary card and a separate system-load card
 with four 2-by-2 circular gauges. A lower target plots stored calibration pitch
 vertically and yaw horizontally around the calibrated center while retaining
 the numeric angles. The same mode can be validated with
 `cluster_replay_usb.py ROUTE --trip-report`.
+`ClusterHudPanelLayout=0` keeps the driving view on the left and the current
+information panel on the right. Value `1` swaps the two regions without
+restarting the HUD. The information region includes screen-mode debug panels,
+the driving report, route diagnostics, and live navigation, including panels
+made visible by `ClusterHudDebug`. Full-screen graph and navigation modes are
+not rearranged. Route replay can validate the swapped layout with
+`cluster_replay_usb.py ROUTE --trip-report --panel-layout driving-right`.
 The renderer polls `LanguageSetting` and `IsMetric` about once per second.
 Korean (`ko`) and English (`en`) localize driving-report, driving-mode, and
 navigation status labels; unsupported language values fall back to English.

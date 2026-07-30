@@ -42,6 +42,7 @@ def build_cluster_args(args: argparse.Namespace, passthrough: list[str]) -> list
         "--route-overlay", args.route_overlay,
         "--route-tools", args.route_tools,
         "--camera-view-mode", str(args.camera_view_mode),
+        "--panel-layout", args.panel_layout,
         "--output", args.output,
         "--usb-codec", args.usb_codec,
         "--fps", str(args.fps),
@@ -141,6 +142,12 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
         help="Compatibility option; route playback does not recompute cut-ins",
     )
     parser.add_argument("--camera-view-mode", type=int, choices=(0, 1, 2), default=2, help="Cluster camera view mode (default: 2, road camera background)")
+    parser.add_argument(
+        "--panel-layout",
+        choices=("driving-left", "driving-right"),
+        default="driving-left",
+        help="Place the driving view on the left or right side",
+    )
     parser.add_argument(
         "--language",
         choices=("ko", "en"),

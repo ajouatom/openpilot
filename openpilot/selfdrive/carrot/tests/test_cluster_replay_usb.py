@@ -32,6 +32,7 @@ def test_trip_report_shortcut_selects_screen_mode_five():
 
   assert cluster_args[cluster_args.index("--screen-mode") + 1] == "trip-report"
   assert cluster_args[cluster_args.index("--camera-view-mode") + 1] == "2"
+  assert cluster_args[cluster_args.index("--panel-layout") + 1] == "driving-left"
   assert cluster_args[cluster_args.index("--language") + 1] == "ko"
   assert "--metric" in cluster_args
 
@@ -44,3 +45,11 @@ def test_replay_forwards_english_imperial_display_preferences():
   assert cluster_args[cluster_args.index("--language") + 1] == "en"
   assert "--imperial" in cluster_args
   assert "--metric" not in cluster_args
+
+
+def test_replay_can_place_the_driving_view_on_the_right():
+  args, passthrough = parse_args(["route", "--panel-layout", "driving-right"])
+
+  cluster_args = build_cluster_args(args, passthrough)
+
+  assert cluster_args[cluster_args.index("--panel-layout") + 1] == "driving-right"

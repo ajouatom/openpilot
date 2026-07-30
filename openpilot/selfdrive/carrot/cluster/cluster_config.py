@@ -73,6 +73,9 @@ CLUSTER_CAMERA_VIEW_MODE_DEFAULT = 0
 CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM = 1
 CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA = 2
 CLUSTER_CAMERA_VIEW_MODE_PARAM = "ClusterHudCameraViewMode"
+CLUSTER_PANEL_LAYOUT_DRIVING_LEFT = 0
+CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT = 1
+CLUSTER_PANEL_LAYOUT_PARAM = "ClusterHudPanelLayout"
 CLUSTER_SCREEN_MODE_DEFAULT = 0
 CLUSTER_SCREEN_MODE_DEBUG = 1
 CLUSTER_SCREEN_MODE_DEBUG_SYSTEM = 2
@@ -331,6 +334,37 @@ def normalize_cluster_camera_view_mode(value: object) -> int:
     if mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
         return CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
     return CLUSTER_CAMERA_VIEW_MODE_DEFAULT
+
+
+def normalize_cluster_panel_layout(value: object) -> int:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        aliases = {
+            "default": CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
+            "driving-left": CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
+            "driving_left": CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
+            "camera-left": CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
+            "camera_left": CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
+            "swapped": CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
+            "swap": CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
+            "driving-right": CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
+            "driving_right": CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
+            "camera-right": CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
+            "camera_right": CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+        try:
+            value = int(normalized)
+        except ValueError:
+            return CLUSTER_PANEL_LAYOUT_DRIVING_LEFT
+    try:
+        layout = int(value)
+    except (TypeError, ValueError):
+        return CLUSTER_PANEL_LAYOUT_DRIVING_LEFT
+    if layout == CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT:
+        return CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT
+    return CLUSTER_PANEL_LAYOUT_DRIVING_LEFT
 
 
 def normalize_cluster_brightness_percent(value: object) -> int:

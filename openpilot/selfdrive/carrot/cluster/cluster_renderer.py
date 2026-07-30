@@ -34,6 +34,8 @@ from cluster_config import (
     BLUE,
     BLUE_SOFT,
     CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+    CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
+    CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
     CLUSTER_RADAR_INFO_ALL_SPEED,
     CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
     CLUSTER_RADAR_INFO_NONE,
@@ -61,6 +63,7 @@ from cluster_config import (
     WHITE,
     current_cluster_theme,
     normalize_cluster_screen_mode,
+    normalize_cluster_panel_layout,
     normalize_cluster_theme_mode,
 )
 from cluster_models import (
@@ -831,6 +834,7 @@ class ClusterUiRenderer:
     # original Korean/metric presentation without running the GPU-heavy init.
     language = CLUSTER_LANGUAGE_KO
     is_metric = True
+    panel_layout = CLUSTER_PANEL_LAYOUT_DRIVING_LEFT
 
     def __init__(
         self,
@@ -840,6 +844,7 @@ class ClusterUiRenderer:
         target_fps: int = 0,
         theme_mode: str = "auto",
         screen_mode: int = 0,
+        panel_layout: int = CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
         language: str = CLUSTER_LANGUAGE_KO,
         is_metric: bool = True,
     ) -> None:
@@ -849,6 +854,7 @@ class ClusterUiRenderer:
         self.target_fps = target_fps
         self.theme_mode = normalize_cluster_theme_mode(theme_mode)
         self.screen_mode = normalize_cluster_screen_mode(screen_mode)
+        self.panel_layout = normalize_cluster_panel_layout(panel_layout)
         self.language = normalize_cluster_language(language, default=CLUSTER_LANGUAGE_KO)
         self.is_metric = bool(is_metric)
         self._theme = current_cluster_theme(self.theme_mode)
@@ -951,12 +957,32 @@ class ClusterUiRenderer:
     def set_screen_mode(self, screen_mode: int) -> None:
         self.screen_mode = normalize_cluster_screen_mode(screen_mode)
 
+    def set_panel_layout(self, panel_layout: int) -> None:
+        self.panel_layout = normalize_cluster_panel_layout(panel_layout)
+
     def set_display_preferences(self, language: str, is_metric: bool) -> None:
         self.language = normalize_cluster_language(language, default=CLUSTER_LANGUAGE_KO)
         self.is_metric = bool(is_metric)
 
     def _text(self, key: str) -> str:
         return cluster_text(self.language, key)
+
+    def _panel_swap_active(self) -> bool:
+        if self.panel_layout != CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT:
+            return False
+        return getattr(self, "screen_mode", CLUSTER_SCREEN_MODE_DEFAULT) not in (
+            CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+            CLUSTER_SCREEN_MODE_NAVI,
+        )
+
+    def _driving_panel_offset_design_x(self) -> float:
+        return NAVI_LIVE_PANEL_W if self._panel_swap_active() else 0.0
+
+    def _information_panel_offset_design_x(self) -> float:
+        return -NAVI_LIVE_PANEL_X if self._panel_swap_active() else 0.0
+
+    def _information_panel_x(self, x: float) -> float:
+        return x + self._information_panel_offset_design_x()
 
     def set_target_fps(self, target_fps: int) -> None:
         self.target_fps = max(0, int(target_fps))
@@ -1458,7 +1484,7 @@ class ClusterUiRenderer:
         sx = self.width / DESIGN_WIDTH
         sy = self.height / DESIGN_HEIGHT
         return rl.Rectangle(
-            CAMERA_BACKGROUND_X * sx,
+            (CAMERA_BACKGROUND_X + self._driving_panel_offset_design_x()) * sx,
             CAMERA_BACKGROUND_Y * sy,
             CAMERA_BACKGROUND_W * sx,
             CAMERA_BACKGROUND_H * sy,
@@ -2685,8 +2711,12 @@ class ClusterUiRenderer:
             rl.CameraProjection.CAMERA_PERSPECTIVE,
         )
         view_shift_x = self._world_view_shift_x(state)
-        if view_shift_x > 0.0:
-            rl.rl_viewport(-int(round(view_shift_x)), 0, self.width, self.height)
+        driving_offset_x = 0.0
+        if abs(view_shift_x) > 0.001:
+            driving_offset_x = self._driving_panel_offset_design_x() * self.width / DESIGN_WIDTH
+        scene_offset_x = driving_offset_x - view_shift_x
+        if abs(scene_offset_x) > 0.001:
+            rl.rl_viewport(int(round(scene_offset_x)), 0, self.width, self.height)
         profile_stage = self._profile_start()
         rl.begin_mode_3d(camera)
         self._profile_add("draw_scene.begin_mode_3d", profile_stage)
@@ -2723,10 +2753,10 @@ class ClusterUiRenderer:
         profile_stage = self._profile_start()
         rl.end_mode_3d()
         self._profile_add("draw_scene.end_mode_3d", profile_stage)
-        if view_shift_x > 0.0:
+        if abs(scene_offset_x) > 0.001:
             rl.rl_viewport(0, 0, self.width, self.height)
             rl.rl_push_matrix()
-            rl.rl_translatef(-view_shift_x, 0.0, 0.0)
+            rl.rl_translatef(scene_offset_x, 0.0, 0.0)
         try:
             profile_stage = self._profile_start()
             self._draw_radar_point_labels(
@@ -2746,7 +2776,7 @@ class ClusterUiRenderer:
             )
             self._profile_add("draw_scene.vehicle_badges", profile_stage)
         finally:
-            if view_shift_x > 0.0:
+            if abs(scene_offset_x) > 0.001:
                 rl.rl_pop_matrix()
 
     def _world_view_shift_x(self, state: ClusterUiState) -> float:
@@ -2778,7 +2808,10 @@ class ClusterUiRenderer:
         if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
             camera_signal_center_x = CAMERA_BACKGROUND_X + signal_center_x * CAMERA_BACKGROUND_W / DESIGN_WIDTH
             return camera_signal_center_x - signal_center_x
-        return -self._world_view_shift_design_x(state)
+        view_shift_x = self._world_view_shift_design_x(state)
+        if self._panel_swap_active() and abs(view_shift_x) <= 0.001:
+            view_shift_x = NAVI_WORLD_VIEW_SHIFT_X
+        return -view_shift_x
 
     def _draw_tpms_status(self, state: ClusterUiState) -> None:
         tpms = state.tpms
@@ -3493,6 +3526,73 @@ class ClusterUiRenderer:
                 self._draw_status_footer(state)
                 return
 
+            self._draw_driving_hud_content(
+                state,
+                screen_mode,
+                left_signal_lit,
+                right_signal_lit,
+            )
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
+                profile_stage = self._profile_start()
+                self._draw_live_debug_panel(state)
+                self._profile_add("hud.live_debug", profile_stage)
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
+                profile_stage = self._profile_start()
+                self._draw_system_stats_panel(state)
+                self._profile_add("hud.system_stats", profile_stage)
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT:
+                profile_stage = self._profile_start()
+                self._draw_debug_plot(
+                    state.debug_plot,
+                    self._information_panel_x(DEBUG_PLOT_RIGHT_X),
+                    DEBUG_PLOT_RIGHT_Y,
+                    DEBUG_PLOT_RIGHT_W,
+                    DEBUG_PLOT_RIGHT_H,
+                )
+                self._profile_add("hud.debug_plot_right", profile_stage)
+            if screen_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
+                profile_stage = self._profile_start()
+                self._draw_trip_report_panel(state)
+                self._profile_add("hud.trip_report", profile_stage)
+            elif navi_debug_active:
+                profile_stage = self._profile_start()
+                self._draw_navi_debug_panel(state.navi_debug)
+                self._profile_add("hud.navi_debug", profile_stage)
+            elif screen_mode == CLUSTER_SCREEN_MODE_DEFAULT and navi_live_active:
+                profile_stage = self._profile_start()
+                self._draw_navi_live_panel(state)
+                self._profile_add("hud.navi_live", profile_stage)
+            if screen_mode not in (
+                CLUSTER_SCREEN_MODE_DEBUG,
+                CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+                CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+                CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+                CLUSTER_SCREEN_MODE_TRIP_REPORT,
+            ) and not navi_debug_active and not navi_live_active:
+                profile_stage = self._profile_start()
+                self._draw_route_overlay(state.route_overlay)
+                self._profile_add("hud.route_overlay", profile_stage)
+            self._draw_status_footer(
+                state,
+                include_core_usage=screen_mode != CLUSTER_SCREEN_MODE_TRIP_REPORT,
+            )
+        finally:
+            profile_stage = self._profile_start()
+            rl.rl_pop_matrix()
+            self._profile_add("hud.pop_matrix", profile_stage)
+
+    def _draw_driving_hud_content(
+        self,
+        state: ClusterUiState,
+        screen_mode: int,
+        left_signal_lit: bool,
+        right_signal_lit: bool,
+    ) -> None:
+        offset_x = self._driving_panel_offset_design_x()
+        rl.rl_push_matrix()
+        if abs(offset_x) > 0.001:
+            rl.rl_translatef(offset_x, 0.0, 0.0)
+        try:
             profile_stage = self._profile_start()
             self._draw_speed_block(state)
             self._profile_add("hud.speed_block", profile_stage)
@@ -3533,9 +3633,12 @@ class ClusterUiRenderer:
                 and screen_mode != CLUSTER_SCREEN_MODE_TRIP_REPORT
             ):
                 profile_stage = self._profile_start()
+                traffic_panel_right = NAVI_TRAFFIC_PANEL_RIGHT
+                if self._panel_swap_active():
+                    traffic_panel_right -= NAVI_WORLD_VIEW_SHIFT_X
                 self._draw_navi_media(
                     traffic_frame,
-                    rl.Rectangle(NAVI_TRAFFIC_PANEL_RIGHT - 230.0, NAVI_TRAFFIC_PANEL_Y, 230.0, 98.0),
+                    rl.Rectangle(traffic_panel_right - 230.0, NAVI_TRAFFIC_PANEL_Y, 230.0, 98.0),
                     align_x=1.0,
                     align_y=0.0,
                 )
@@ -3543,54 +3646,8 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_center_clock(state)
             self._profile_add("hud.center_clock", profile_stage)
-            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
-                profile_stage = self._profile_start()
-                self._draw_live_debug_panel(state)
-                self._profile_add("hud.live_debug", profile_stage)
-            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
-                profile_stage = self._profile_start()
-                self._draw_system_stats_panel(state)
-                self._profile_add("hud.system_stats", profile_stage)
-            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT:
-                profile_stage = self._profile_start()
-                self._draw_debug_plot(
-                    state.debug_plot,
-                    DEBUG_PLOT_RIGHT_X,
-                    DEBUG_PLOT_RIGHT_Y,
-                    DEBUG_PLOT_RIGHT_W,
-                    DEBUG_PLOT_RIGHT_H,
-                )
-                self._profile_add("hud.debug_plot_right", profile_stage)
-            if screen_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
-                profile_stage = self._profile_start()
-                self._draw_trip_report_panel(state)
-                self._profile_add("hud.trip_report", profile_stage)
-            elif navi_debug_active:
-                profile_stage = self._profile_start()
-                self._draw_navi_debug_panel(state.navi_debug)
-                self._profile_add("hud.navi_debug", profile_stage)
-            elif screen_mode == CLUSTER_SCREEN_MODE_DEFAULT and navi_live_active:
-                profile_stage = self._profile_start()
-                self._draw_navi_live_panel(state)
-                self._profile_add("hud.navi_live", profile_stage)
-            if screen_mode not in (
-                CLUSTER_SCREEN_MODE_DEBUG,
-                CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
-                CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
-                CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
-                CLUSTER_SCREEN_MODE_TRIP_REPORT,
-            ) and not navi_debug_active and not navi_live_active:
-                profile_stage = self._profile_start()
-                self._draw_route_overlay(state.route_overlay)
-                self._profile_add("hud.route_overlay", profile_stage)
-            self._draw_status_footer(
-                state,
-                include_core_usage=screen_mode != CLUSTER_SCREEN_MODE_TRIP_REPORT,
-            )
         finally:
-            profile_stage = self._profile_start()
             rl.rl_pop_matrix()
-            self._profile_add("hud.pop_matrix", profile_stage)
 
     def _effective_screen_mode(self, state: ClusterUiState) -> int:
         if self.screen_mode != CLUSTER_SCREEN_MODE_DEFAULT:
@@ -3617,11 +3674,23 @@ class ClusterUiRenderer:
         include_core_usage: bool = True,
     ) -> None:
         profile_stage = self._profile_start()
-        self._draw_git_status(state.git_status, state.network_address, state.actual_fps)
+        offset_x = self._driving_panel_offset_design_x()
+        if abs(offset_x) > 0.001:
+            rl.rl_push_matrix()
+            try:
+                rl.rl_translatef(offset_x, 0.0, 0.0)
+                self._draw_git_status(state.git_status, state.network_address, state.actual_fps)
+            finally:
+                rl.rl_pop_matrix()
+        else:
+            self._draw_git_status(state.git_status, state.network_address, state.actual_fps)
         self._profile_add("hud.git_status", profile_stage)
         if include_core_usage:
             profile_stage = self._profile_start()
-            self._draw_cluster_core_usage(state.cluster_core_usage_text)
+            self._draw_cluster_core_usage(
+                state.cluster_core_usage_text,
+                right_x=DESIGN_WIDTH + self._information_panel_offset_design_x(),
+            )
             self._profile_add("hud.cluster_core_usage", profile_stage)
 
     def _draw_route_replay_controls(
@@ -4685,7 +4754,7 @@ class ClusterUiRenderer:
     def _draw_navi_live_panel(self, state: ClusterUiState) -> None:
         navi = state.navi_live
         theme = self._current_theme()
-        x = NAVI_LIVE_PANEL_X
+        x = self._information_panel_x(NAVI_LIVE_PANEL_X)
         y = NAVI_LIVE_PANEL_Y
         w = NAVI_LIVE_PANEL_W
         h = NAVI_LIVE_PANEL_H
@@ -4873,13 +4942,13 @@ class ClusterUiRenderer:
 
         current = navi.current
         if current is not None:
-            self._draw_navi_turn_icon(current.turn_type, NAVI_LIVE_ICON_X, NAVI_LIVE_ICON_Y, NAVI_LIVE_ICON_SIZE)
+            self._draw_navi_turn_icon(current.turn_type, x + 72.0, NAVI_LIVE_ICON_Y, NAVI_LIVE_ICON_SIZE)
             distance_text = self._format_navi_distance(current.distance_m)
-            self._draw_text(distance_text, NAVI_LIVE_CONTENT_X, y + 26.0, 38.0, theme.text)
+            self._draw_text(distance_text, x + 136.0, y + 26.0, 38.0, theme.text)
             main_text = current.main_text or current.road_name or current.near_direction
             self._draw_text(
                 self._ellipsize_text(main_text, 25.0, NAVI_LIVE_CONTENT_W),
-                NAVI_LIVE_CONTENT_X,
+                x + 136.0,
                 y + 75.0,
                 25.0,
                 theme.text,
@@ -4888,7 +4957,7 @@ class ClusterUiRenderer:
             if detail:
                 self._draw_text(
                     self._ellipsize_text(detail, 18.0, NAVI_LIVE_CONTENT_W),
-                    NAVI_LIVE_CONTENT_X,
+                    x + 136.0,
                     y + 112.0,
                     18.0,
                     theme.muted,
@@ -4970,8 +5039,16 @@ class ClusterUiRenderer:
         theme = self._current_theme()
         box_h = map_height * 0.70
         aspect = frame.width / max(1.0, float(frame.height))
-        box_w = clamp(box_h * aspect, 320.0, map_left - 830.0)
-        box = rl.Rectangle(map_left - box_w, map_top, box_w, box_h)
+        if self._panel_swap_active():
+            box_x = map_left + NAVI_LIVE_PANEL_W
+            available_w = DESIGN_WIDTH - box_x - 4.0
+        else:
+            available_w = map_left - 830.0
+            box_x = map_left
+        box_w = clamp(box_h * aspect, 320.0, max(320.0, available_w))
+        if not self._panel_swap_active():
+            box_x -= box_w
+        box = rl.Rectangle(box_x, map_top, box_w, box_h)
         self._rounded_rect(box.x, box.y, box.width, box.height, 8.0, theme.route_panel_bg, theme.faint, 2.0)
         image_rect = rl.Rectangle(box.x + 4.0, box.y + 4.0, box.width - 8.0, box.height - 8.0)
         rl.begin_scissor_mode(
@@ -4991,7 +5068,7 @@ class ClusterUiRenderer:
         count = min(8, max(lane.count, len(lane.available), len(lane.turn_info)))
         if count <= 0:
             return
-        x = NAVI_LIVE_PANEL_X + 22.0
+        x = self._information_panel_x(NAVI_LIVE_PANEL_X) + 22.0
         available_w = NAVI_LIVE_PANEL_W - 44.0
         gap = 6.0
         cell_w = min(46.0, (available_w - gap * (count - 1)) / count)
@@ -5088,7 +5165,7 @@ class ClusterUiRenderer:
 
     def _draw_navi_debug_panel(self, info: NaviDebugInfo | None) -> None:
         theme = self._current_theme()
-        panel_x = SYSTEM_PANEL_X
+        panel_x = self._information_panel_x(SYSTEM_PANEL_X)
         panel_y = SYSTEM_PANEL_Y
         panel_w = SYSTEM_PANEL_W
         panel_h = min(DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0, 520.0)
@@ -5348,7 +5425,7 @@ class ClusterUiRenderer:
 
     def _draw_navi_guidance_image_box(self, image: NaviGuidanceImage | None) -> None:
         theme = self._current_theme()
-        box_x = NAVI_GUIDANCE_IMAGE_X
+        box_x = self._information_panel_x(NAVI_GUIDANCE_IMAGE_X)
         box_y = NAVI_GUIDANCE_IMAGE_Y
         box_w = NAVI_GUIDANCE_IMAGE_W
         box_h = NAVI_GUIDANCE_IMAGE_H
@@ -5421,12 +5498,14 @@ class ClusterUiRenderer:
         self,
         state: ClusterUiState,
         *,
-        panel_x: float = SYSTEM_PANEL_X,
+        panel_x: float | None = None,
         panel_y: float = SYSTEM_PANEL_Y,
         panel_w: float = SYSTEM_PANEL_W,
         panel_h: float | None = None,
         status_text: str | None = None,
     ) -> None:
+        if panel_x is None:
+            panel_x = self._information_panel_x(SYSTEM_PANEL_X)
         theme = self._current_theme()
         stats = self._system_stats.sample()
         disconnected = status_text is not None
@@ -5523,7 +5602,7 @@ class ClusterUiRenderer:
     def _draw_trip_report_panel(self, state: ClusterUiState) -> None:
         report = state.trip_report or TripReportState()
         stats = self._system_stats.sample()
-        panel_x = TRIP_REPORT_PANEL_X
+        panel_x = self._information_panel_x(TRIP_REPORT_PANEL_X)
         panel_y = TRIP_REPORT_PANEL_Y
         panel_w = TRIP_REPORT_PANEL_W
         panel_h = TRIP_REPORT_PANEL_H
@@ -5872,7 +5951,7 @@ class ClusterUiRenderer:
             return
 
         theme = self._current_theme()
-        panel_x = SYSTEM_PANEL_X
+        panel_x = self._information_panel_x(SYSTEM_PANEL_X)
         panel_y = SYSTEM_PANEL_Y
         panel_w = SYSTEM_PANEL_W
         pad_x = 24.0
@@ -6045,7 +6124,7 @@ class ClusterUiRenderer:
         if overlay is None or not overlay.panel_visible:
             return
         theme = self._current_theme()
-        panel_x = 1416
+        panel_x = self._information_panel_x(SYSTEM_PANEL_X)
         panel_y = 34
         panel_w = 476
         video_h = 244
@@ -6178,7 +6257,7 @@ class ClusterUiRenderer:
         rl.draw_circle_v(rl.Vector2(dot_center_x, center_y), FPS_STATUS_DOT_RADIUS, rl_color(GREEN))
         self._draw_text_with_stroke(text, text_x, center_y, text_size, WHITE, (5, 9, 12), 2)
 
-    def _draw_cluster_core_usage(self, text: str | None) -> None:
+    def _draw_cluster_core_usage(self, text: str | None, *, right_x: float = DESIGN_WIDTH) -> None:
         if not text:
             return
 
@@ -6187,7 +6266,7 @@ class ClusterUiRenderer:
         text = self._ellipsize_text(text, text_size, CLUSTER_CORE_USAGE_MAX_TEXT_W)
         spacing = max(1.0, text_size * 0.02)
         _, text_height = self._measure_text(text, text_size, spacing)
-        x = DESIGN_WIDTH - CLUSTER_CORE_USAGE_MARGIN
+        x = right_x - CLUSTER_CORE_USAGE_MARGIN
         y = DESIGN_HEIGHT - CLUSTER_CORE_USAGE_MARGIN - text_height * 0.5
         self._draw_text(text, x, y, text_size, theme.muted, anchor="right")
 

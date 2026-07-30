@@ -9,13 +9,21 @@ CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_config import (
+  CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
   CLUSTER_SCREEN_MODE_DEFAULT,
+  CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
   CLUSTER_SCREEN_MODE_TRIP_REPORT,
   normalize_cluster_screen_mode,
 )
 from cluster_route_replay import RouteLogParser, frame_to_state
 from cluster_trip_report import TripReportTracker
-from cluster_renderer import ClusterUiRenderer, NAVI_WORLD_VIEW_SHIFT_X
+from cluster_renderer import (
+  CAMERA_BACKGROUND_W,
+  ClusterUiRenderer,
+  NAVI_LIVE_PANEL_W,
+  NAVI_WORLD_VIEW_SHIFT_X,
+  TRIP_REPORT_PANEL_X,
+)
 
 
 def car_state(speed_mps: float, accel_mps2: float = 0.0, steering_angle_deg: float = 0.0) -> SimpleNamespace:
@@ -66,6 +74,24 @@ def test_report_mode_reserves_the_right_panel_for_non_camera_world_view():
 
   assert renderer._world_view_shift_x(SimpleNamespace(camera_view_mode=0)) == NAVI_WORLD_VIEW_SHIFT_X
   assert renderer._world_view_shift_x(SimpleNamespace(camera_view_mode=2)) == 0.0
+
+
+def test_swapped_panel_layout_moves_driving_and_information_regions_as_whole_panels():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1920
+  renderer.height = 480
+  renderer.screen_mode = CLUSTER_SCREEN_MODE_TRIP_REPORT
+  renderer.panel_layout = CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT
+
+  camera_rect = renderer._camera_overlay_content_rect()
+  assert renderer._driving_panel_offset_design_x() == NAVI_LIVE_PANEL_W
+  assert renderer._information_panel_x(TRIP_REPORT_PANEL_X) == 0.0
+  assert camera_rect.x == NAVI_LIVE_PANEL_W
+  assert camera_rect.x + camera_rect.width == NAVI_LIVE_PANEL_W + CAMERA_BACKGROUND_W
+
+  renderer.screen_mode = CLUSTER_SCREEN_MODE_DEBUG_GRAPH
+  assert renderer._driving_panel_offset_design_x() == 0.0
+  assert renderer._information_panel_x(TRIP_REPORT_PANEL_X) == TRIP_REPORT_PANEL_X
 
 
 def test_default_screen_uses_trip_report_until_navigation_is_received():

@@ -104,7 +104,7 @@ The current `carrot_settings.json` contains **169 parameters**. Every entry is a
 |---|---:|---|
 | Driving control | 107 | Startup and auto, buttons and presets, steering, speed and deceleration, cruise and following gap |
 | Vehicle and hardware | 16 | Hyundai/Kia, CAN FD/HDA, radar, driver monitoring, vehicle assistance, device hardware |
-| Display | 35 | Information, path, brightness/on-road view, external HUD |
+| Display | 36 | Information, path, brightness/on-road view, external HUD |
 | System | 11 | Recording/power, network/map, sound, software |
 
 ## Driving control
@@ -215,7 +215,7 @@ See [Radar tracks and corner radar](radar.md) before changing radar modes.
 <a id="display"></a>
 ## Display
 
-Display contains 35 settings. Most on-road display settings are easy to reverse; external-HUD settings include hardware and performance choices.
+Display contains 36 settings. Most on-road display settings are easy to reverse; external-HUD settings include hardware and performance choices.
 
 | Group | Parameters | Purpose |
 |---|---|---|
@@ -228,7 +228,9 @@ An APN label remaining in the `ShowRouteInfo` description refers to route-input 
 
 `ClusterHudBrightness=0` follows camera exposure automatically; values `1` through `100` select fixed brightness. `ClusterHudOrientation` supports only `0` (0 degrees) and `2` (180 degrees); values `1` and `3` are ignored. The running TURZX process checks both stored settings every 100 ms. Brightness applies live; a managed H.264 orientation change automatically restarts the HUD and applies it through the capture-compatible stream setup.
 
-`ClusterHudScreenMode=5` shows a live driving report in the right-hand panel. In default screen mode (`0`), the same report is shown automatically while no live navigation is being received, and the navigation panel returns when reception starts. A large left card summarizes driving time, distance, average and maximum speed, the automated-driving ratio, maximum acceleration/deceleration, and hard acceleration/braking/corner counts. The right card presents CPU load, temperature, memory, and disk use as a 2×2 set of circular gauges. Its lower target plots the stored device pitch (P) vertically and yaw (Y) horizontally relative to the calibrated center while retaining the numeric angles. The lower-left camera area retains the branch, network address, and frame-rate status; the lower-right core-usage text is omitted because it would overlap the report. In road-camera view, detected vehicles are enclosed by transparent rounded frames whose border retains the existing detection color; ungrouped radar detections use smaller transparent rounded markers in their source color. Vehicle frames use one lightweight outline, and frames that would be partially projected at the screen edge or stretched by a noisy radar heading are omitted.
+`ClusterHudPanelLayout=0` places the driving view selected by `ClusterHudCameraViewMode` on the left and the information panel selected by the screen, debug, and navigation state on the right. `1` swaps them, placing information on the left and the driving view on the right. The running HUD applies the setting within about one second without a restart. Modes without two side regions, such as the full-screen graph and full-screen navigation, are unchanged. `ClusterHudDebug` forces always-on output and optional debug UI or navigation input; any resulting debug or navigation information panel follows the selected layout.
+
+`ClusterHudScreenMode=5` shows a live driving report in the information panel. In default screen mode (`0`), the same report is shown automatically while no live navigation is being received, and the navigation panel returns when reception starts. Its large card summarizes driving time, distance, average and maximum speed, the automated-driving ratio, maximum acceleration/deceleration, and hard acceleration/braking/corner counts. The small card presents CPU load, temperature, memory, and disk use as a 2×2 set of circular gauges. Its lower target plots the stored device pitch (P) vertically and yaw (Y) horizontally relative to the calibrated center while retaining the numeric angles. The driving area retains the branch, network address, and frame-rate status; the core-usage text is omitted when it would overlap the report. In road-camera view, detected vehicles are enclosed by transparent rounded frames whose border retains the existing detection color; ungrouped radar detections use smaller transparent rounded markers in their source color. Vehicle frames use one lightweight outline, and frames that would be partially projected at the screen edge or stretched by a noisy radar heading are omitted.
 
 The external HUD follows the device `LanguageSetting` and updates driving-report, driving-mode, and navigation status labels live in Korean (`ko`) or English (`en`). Other language values, including Chinese, fall back to English. With `IsMetric` enabled, vehicle/cruise/limit speeds, navigation, radar labels, and the driving report use `km/h`, `m`, and `km`; with it disabled they are converted to `mph`, `ft`, and `mi`. Acceleration and temperature remain `m/s²` and `°C`. Both settings are polled about once per second and do not require a HUD restart.
 

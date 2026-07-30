@@ -514,6 +514,7 @@
                 "ClusterHudEncoder",
                 "ClusterHudLiveFps",
                 "ClusterHudScreenMode",
+                "ClusterHudPanelLayout",
                 "ClusterHudCameraViewMode"
               ]
             },
@@ -3369,6 +3370,37 @@
       "default": 0,
       "unit": 1,
       "control": "select"
+    },
+    {
+      "group": "외부 HUD",
+      "name": "ClusterHudPanelLayout",
+      "title": "외부 HUD 좌우 배치(0)",
+      "descr": "0: 주행 화면 왼쪽 / 정보 패널 오른쪽\n1: 정보 패널 왼쪽 / 주행 화면 오른쪽\n변경 사항은 실행 중인 HUD에 자동으로 적용됩니다.",
+      "egroup": "CLUSTER HUD",
+      "etitle": "External HUD Panel Layout(0)",
+      "edescr": "0: Driving view left / information panel right\n1: Information panel left / driving view right\nChanges apply automatically while the HUD is running.",
+      "cgroup": "外部 HUD",
+      "ctitle": "External HUD Panel Layout(0)",
+      "cdescr": "0: Driving view left / information panel right\n1: Information panel left / driving view right\nChanges apply automatically while the HUD is running.",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": [
+          "주행 왼쪽 / 정보 오른쪽",
+          "정보 왼쪽 / 주행 오른쪽"
+        ],
+        "en": [
+          "Driving left / info right",
+          "Info left / driving right"
+        ],
+        "zh": [
+          "Driving left / info right",
+          "Info left / driving right"
+        ]
+      }
     },
     {
       "group": "외부 HUD",

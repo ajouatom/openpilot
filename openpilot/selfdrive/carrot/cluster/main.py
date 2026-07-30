@@ -25,6 +25,8 @@ from cluster_config import (
     CLUSTER_HUD_PARAM,
     CLUSTER_LIVE_FPS_PARAM,
     CLUSTER_ORIENTATION_PARAM,
+    CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
+    CLUSTER_PANEL_LAYOUT_PARAM,
     CLUSTER_PRIORITY_PARAM,
     CLUSTER_RADAR_DISPLAY_PARAM,
     CLUSTER_RADAR_INFO_PARAM,
@@ -43,6 +45,7 @@ from cluster_config import (
     normalize_cluster_core_mode,
     normalize_cluster_encoder_mode,
     normalize_cluster_live_fps,
+    normalize_cluster_panel_layout,
     normalize_cluster_priority,
     normalize_cluster_radar_display_mode,
     normalize_cluster_radar_info_mode,
@@ -96,6 +99,7 @@ FPS_PARAM_POLL_SECONDS = 1.0
 BRIGHTNESS_PARAM_POLL_SECONDS = 0.1
 SCREEN_MODE_PARAM_POLL_SECONDS = 1.0
 CAMERA_VIEW_PARAM_POLL_SECONDS = 1.0
+PANEL_LAYOUT_PARAM_POLL_SECONDS = 1.0
 RADAR_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
 HUD_MIRROR_PARAM_POLL_SECONDS = 1.0
@@ -377,6 +381,25 @@ class ClusterCameraViewModeParamReader:
             return normalize_cluster_camera_view_mode(self._params.get_int(CLUSTER_CAMERA_VIEW_MODE_PARAM))
         except Exception:
             return 0
+
+
+class ClusterPanelLayoutParamReader:
+    def __init__(self) -> None:
+        self._params = None
+        try:
+            from openpilot.common.params import Params
+
+            self._params = Params()
+        except Exception:
+            pass
+
+    def read(self) -> int:
+        if self._params is None:
+            return CLUSTER_PANEL_LAYOUT_DRIVING_LEFT
+        try:
+            return normalize_cluster_panel_layout(self._params.get_int(CLUSTER_PANEL_LAYOUT_PARAM))
+        except Exception:
+            return CLUSTER_PANEL_LAYOUT_DRIVING_LEFT
 
 
 class ClusterRadarInfoParamReader:
@@ -664,6 +687,7 @@ def run_demo(
     route_overlay_mode: str,
     route_tools_mode: str,
     camera_view_mode: int | None,
+    panel_layout: str | int | None,
     route_loop: bool,
     route_pause_on_cutin: bool,
     route_replay_speed: float,
@@ -823,6 +847,17 @@ def run_demo(
         if camera_view_override is not None
         else camera_view_param_reader.read()
     )
+    panel_layout_override = (
+        normalize_cluster_panel_layout(panel_layout)
+        if panel_layout is not None
+        else None
+    )
+    panel_layout_param_reader = ClusterPanelLayoutParamReader() if panel_layout_override is None else None
+    active_panel_layout = (
+        panel_layout_override
+        if panel_layout_override is not None
+        else panel_layout_param_reader.read()
+    )
     radar_info_param_reader = ClusterRadarInfoParamReader()
     active_radar_info_mode = radar_info_param_reader.read()
     radar_display_param_reader = ClusterRadarDisplayParamReader()
@@ -842,6 +877,7 @@ def run_demo(
         target_fps=max(0, int(round(target_fps))),
         theme_mode=active_theme_mode,
         screen_mode=active_screen_mode,
+        panel_layout=active_panel_layout,
         language=active_language,
         is_metric=active_is_metric,
     )
@@ -851,6 +887,7 @@ def run_demo(
     )
     print(f"{CLUSTER_SCREEN_MODE_PARAM} initial: {active_screen_mode}", flush=True)
     print(f"{CLUSTER_CAMERA_VIEW_MODE_PARAM} initial: {active_camera_view_mode}", flush=True)
+    print(f"{CLUSTER_PANEL_LAYOUT_PARAM} initial: {active_panel_layout}", flush=True)
     print(
         f"{CLUSTER_RADAR_INFO_PARAM} initial: {active_radar_info_mode} "
         f"{CLUSTER_RADAR_DISPLAY_PARAM} initial: {active_radar_display_mode} "
@@ -942,6 +979,7 @@ def run_demo(
     next_brightness_param_read = start_time
     next_screen_mode_param_read = start_time
     next_camera_view_param_read = start_time
+    next_panel_layout_param_read = start_time
     next_radar_param_read = start_time
     next_hud_mode_param_read = start_time
     next_hud_mirror_param_read = start_time + HUD_MIRROR_PARAM_POLL_SECONDS
@@ -1180,6 +1218,16 @@ def run_demo(
                         )
                         active_camera_view_mode = next_camera_view_mode
                 next_camera_view_param_read = now + CAMERA_VIEW_PARAM_POLL_SECONDS
+            if panel_layout_param_reader is not None and now >= next_panel_layout_param_read:
+                next_panel_layout = panel_layout_param_reader.read()
+                if next_panel_layout != renderer.panel_layout:
+                    print(
+                        f"{CLUSTER_PANEL_LAYOUT_PARAM} updated: "
+                        f"{renderer.panel_layout} -> {next_panel_layout}",
+                        flush=True,
+                    )
+                    renderer.set_panel_layout(next_panel_layout)
+                next_panel_layout_param_read = now + PANEL_LAYOUT_PARAM_POLL_SECONDS
             if now >= next_radar_param_read:
                 next_radar_info_mode = radar_info_param_reader.read()
                 if next_radar_info_mode != active_radar_info_mode:
@@ -2234,6 +2282,14 @@ def parse_args() -> argparse.Namespace:
         help=f"Camera view override. Default reads {CLUSTER_CAMERA_VIEW_MODE_PARAM}; mode 2 is camera.",
     )
     parser.add_argument(
+        "--panel-layout",
+        default=None,
+        help=(
+            "Panel layout override: driving-left (default) or driving-right. "
+            f"Default reads {CLUSTER_PANEL_LAYOUT_PARAM}."
+        ),
+    )
+    parser.add_argument(
         "--theme",
         choices=("auto", "dark", "light"),
         default=None,
@@ -2585,6 +2641,7 @@ def main(*, exit_on_error: bool = True) -> None:
             args.route_overlay,
             args.route_tools,
             args.camera_view_mode,
+            args.panel_layout,
             args.route_loop,
             args.route_pause_on_cutin,
             args.route_replay_speed,
