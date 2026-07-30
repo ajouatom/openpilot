@@ -5533,12 +5533,11 @@ class ClusterUiRenderer:
         muted = (154, 166, 178)
 
         self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 12.0, panel_bg, (67, 80, 93), 1.5)
-        self._draw_text(self._text("driving_report"), panel_x + 20.0, panel_y + 29.0, 30.0, WHITE)
 
         summary_x = panel_x + 16.0
-        summary_y = panel_y + 53.0
+        summary_y = panel_y + 8.0
         summary_w = 474.0
-        summary_h = panel_h - 70.0
+        summary_h = panel_h - 16.0
         system_x = summary_x + summary_w + 10.0
         system_y = summary_y
         system_w = panel_x + panel_w - 16.0 - system_x
@@ -5546,19 +5545,19 @@ class ClusterUiRenderer:
         self._rounded_rect(summary_x, summary_y, summary_w, summary_h, 10.0, card_bg, card_outline, 1.2)
         self._rounded_rect(system_x, system_y, system_w, system_h, 10.0, card_bg, card_outline, 1.2)
 
-        self._draw_text(self._text("trip_summary"), summary_x + 18.0, summary_y + 29.0, 22.0, muted)
-        self._draw_text(self._text("time"), summary_x + 18.0, summary_y + 76.0, 19.0, muted)
+        self._draw_text(self._text("trip_summary"), summary_x + 18.0, summary_y + 31.0, 22.0, muted)
+        self._draw_text(self._text("time"), summary_x + 18.0, summary_y + 82.0, 19.0, muted)
         self._draw_text(
             self._trip_format_time(report.duration_s),
             summary_x + summary_w - 18.0,
-            summary_y + 76.0,
+            summary_y + 82.0,
             35.0,
             (255, 177, 105),
             anchor="right",
         )
         rl.draw_line_ex(
-            rl.Vector2(summary_x + 18.0, summary_y + 105.0),
-            rl.Vector2(summary_x + summary_w - 18.0, summary_y + 105.0),
+            rl.Vector2(summary_x + 18.0, summary_y + 114.0),
+            rl.Vector2(summary_x + summary_w - 18.0, summary_y + 114.0),
             1.0,
             rl_color(card_outline),
         )
@@ -5568,14 +5567,14 @@ class ClusterUiRenderer:
         report_speed_unit = speed_unit(self.is_metric)
         self._draw_trip_metric(
             metric_left,
-            summary_y + 128.0,
+            summary_y + 138.0,
             self._text("distance"),
             self._trip_distance_text(report.distance_m),
             metric_w,
         )
         self._draw_trip_metric(
             metric_right,
-            summary_y + 128.0,
+            summary_y + 138.0,
             self._text("average_speed"),
             f"{display_speed(report.average_speed_kph, self.is_metric):.1f}",
             metric_w,
@@ -5583,7 +5582,7 @@ class ClusterUiRenderer:
         )
         self._draw_trip_metric(
             metric_left,
-            summary_y + 202.0,
+            summary_y + 218.0,
             self._text("max_speed"),
             f"{display_speed(report.max_speed_kph, self.is_metric):.1f}",
             metric_w,
@@ -5591,7 +5590,7 @@ class ClusterUiRenderer:
         )
         self._draw_trip_metric(
             metric_right,
-            summary_y + 202.0,
+            summary_y + 218.0,
             self._text("auto_drive"),
             f"{report.auto_ratio_percent:.0f}",
             metric_w,
@@ -5599,7 +5598,7 @@ class ClusterUiRenderer:
         )
         self._draw_trip_metric(
             metric_left,
-            summary_y + 276.0,
+            summary_y + 298.0,
             self._text("max_accel"),
             f"{report.max_accel_mps2:+.2f}",
             metric_w,
@@ -5607,14 +5606,14 @@ class ClusterUiRenderer:
         )
         self._draw_trip_metric(
             metric_right,
-            summary_y + 276.0,
+            summary_y + 298.0,
             self._text("max_decel"),
             f"{report.max_decel_mps2:+.2f}",
             metric_w,
             "m/s²",
         )
 
-        event_y = summary_y + 346.0
+        event_y = summary_y + 390.0
         event_w = (summary_w - 56.0) / 3.0
         event_label_size = 16.0 if self.language == CLUSTER_LANGUAGE_KO else 13.0
         for index, (label, count, color) in enumerate((
@@ -5627,7 +5626,7 @@ class ClusterUiRenderer:
             self._draw_text(label, event_x + 9.0, event_y + 23.5, event_label_size, muted)
             self._draw_text(str(count), event_x + event_w - 9.0, event_y + 23.5, 23.0, color, anchor="right")
 
-        self._draw_text(self._text("system"), system_x + 18.0, system_y + 29.0, 22.0, muted)
+        self._draw_text(self._text("system"), system_x + 18.0, system_y + 31.0, 22.0, muted)
         cpu_percent = state.cpu_usage_percent if state.cpu_usage_percent is not None else stats.cpu_used_percent
         memory_percent = (
             state.memory_used_percent
@@ -5640,39 +5639,197 @@ class ClusterUiRenderer:
             else stats.disk_used_percent
         )
         system_metrics = (
-            ("CPU", self._percent_text(cpu_percent), self._system_metric_color(cpu_percent)),
-            ("TEMP", "--°C" if state.cpu_temp_c is None else f"{state.cpu_temp_c:.0f}°C", self._trip_temp_color(state.cpu_temp_c)),
-            ("MEM", self._percent_text(memory_percent), self._system_metric_color(memory_percent)),
-            ("DISK", self._percent_text(disk_percent), self._system_metric_color(disk_percent)),
+            ("CPU", self._percent_text(cpu_percent).strip(), cpu_percent, self._system_metric_color(cpu_percent)),
+            (
+                "TEMP",
+                "--°C" if state.cpu_temp_c is None else f"{state.cpu_temp_c:.0f}°C",
+                state.cpu_temp_c,
+                self._trip_temp_color(state.cpu_temp_c),
+            ),
+            ("MEM", self._percent_text(memory_percent).strip(), memory_percent, self._system_metric_color(memory_percent)),
+            ("DISK", self._percent_text(disk_percent).strip(), disk_percent, self._system_metric_color(disk_percent)),
         )
-        for index, (label, value, color) in enumerate(system_metrics):
-            row_y = system_y + 81.0 + index * 59.0
-            self._draw_text(label, system_x + 18.0, row_y, 18.0, muted)
-            self._draw_text(value, system_x + system_w - 18.0, row_y, 27.0, color, anchor="right")
-            if index < len(system_metrics) - 1:
-                rl.draw_line_ex(
-                    rl.Vector2(system_x + 18.0, row_y + 29.0),
-                    rl.Vector2(system_x + system_w - 18.0, row_y + 29.0),
-                    1.0,
-                    rl_color(card_outline),
-                )
+        gauge_pad_x = 16.0
+        gauge_gap_x = 8.0
+        gauge_w = (system_w - gauge_pad_x * 2.0 - gauge_gap_x) * 0.5
+        gauge_centers_y = (system_y + 107.0, system_y + 224.0)
+        for index, (label, value, percent, color) in enumerate(system_metrics):
+            column = index % 2
+            row = index // 2
+            center_x = system_x + gauge_pad_x + gauge_w * 0.5 + column * (gauge_w + gauge_gap_x)
+            self._draw_system_gauge(
+                center_x,
+                gauge_centers_y[row],
+                label,
+                value,
+                percent,
+                color,
+                muted,
+                card_outline,
+            )
 
-        self._draw_text(self._text("device_angle"), system_x + 18.0, system_y + 329.0, 18.0, muted)
-        calibration_text = "P --°  ·  Y --°"
+        rl.draw_line_ex(
+            rl.Vector2(system_x + 18.0, system_y + 282.0),
+            rl.Vector2(system_x + system_w - 18.0, system_y + 282.0),
+            1.0,
+            rl_color(card_outline),
+        )
+        self._draw_text(self._text("device_angle"), system_x + 18.0, system_y + 308.0, 18.0, muted)
+        pitch_deg: float | None = None
+        yaw_deg: float | None = None
         calibration = state.camera_calibration_euler
         if calibration is not None and len(calibration) >= 3:
-            pitch_deg = math.degrees(calibration[1])
-            yaw_deg = math.degrees(calibration[2])
-            if math.isfinite(pitch_deg) and math.isfinite(yaw_deg):
-                calibration_text = f"P {pitch_deg:+.1f}°  ·  Y {yaw_deg:+.1f}°"
-        self._draw_text(
-            calibration_text,
-            system_x + system_w - 18.0,
-            system_y + 372.0,
-            25.0,
-            WHITE,
-            anchor="right",
+            candidate_pitch = math.degrees(calibration[1])
+            candidate_yaw = math.degrees(calibration[2])
+            if math.isfinite(candidate_pitch) and math.isfinite(candidate_yaw):
+                pitch_deg = candidate_pitch
+                yaw_deg = candidate_yaw
+        self._draw_device_angle_indicator(
+            system_x + 14.0,
+            system_y + 325.0,
+            system_w - 28.0,
+            117.0,
+            pitch_deg,
+            yaw_deg,
+            muted,
+            card_outline,
         )
+
+    def _draw_system_gauge(
+        self,
+        center_x: float,
+        center_y: float,
+        label: str,
+        value_text: str,
+        percent: float | None,
+        value_color: tuple[int, int, int],
+        muted: tuple[int, int, int],
+        track_color: tuple[int, int, int],
+    ) -> None:
+        radius = 41.0
+        stroke_width = 5.0
+        start_angle = 135.0
+        sweep_angle = 270.0
+        segments = 24
+        rl.draw_ring(
+            rl.Vector2(center_x, center_y),
+            radius - stroke_width,
+            radius,
+            start_angle,
+            start_angle + sweep_angle,
+            segments,
+            rl_color(track_color),
+        )
+        if percent is not None and math.isfinite(percent):
+            ratio = clamp(percent, 0.0, 100.0) / 100.0
+            if ratio > 0.0:
+                end_angle = start_angle + sweep_angle * ratio
+                progress_color = BLUE_SOFT
+                rl.draw_ring(
+                    rl.Vector2(center_x, center_y),
+                    radius - stroke_width,
+                    radius,
+                    start_angle,
+                    end_angle,
+                    max(4, int(round(segments * ratio))),
+                    rl_color(progress_color),
+                )
+                cap_radius = stroke_width * 0.5
+                for angle in (start_angle, end_angle):
+                    angle_rad = math.radians(angle)
+                    cap_center = rl.Vector2(
+                        center_x + (radius - cap_radius) * math.cos(angle_rad),
+                        center_y + (radius - cap_radius) * math.sin(angle_rad),
+                    )
+                    rl.draw_circle_v(cap_center, cap_radius, rl_color(progress_color))
+
+        self._draw_text(label, center_x, center_y - 13.0, 13.0, muted, anchor="center")
+        self._draw_text(value_text, center_x, center_y + 9.0, 23.0, value_color, anchor="center")
+
+    @staticmethod
+    def _device_angle_target_offset(
+        pitch_deg: float,
+        yaw_deg: float,
+        radius: float,
+        max_angle_deg: float = 6.0,
+    ) -> tuple[float, float]:
+        usable_radius = radius * 0.68
+        scale = usable_radius / max_angle_deg
+        # Match the device settings convention: positive pitch points down and
+        # positive yaw points left.
+        return (
+            -clamp(yaw_deg, -max_angle_deg, max_angle_deg) * scale,
+            clamp(pitch_deg, -max_angle_deg, max_angle_deg) * scale,
+        )
+
+    def _draw_device_angle_indicator(
+        self,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        pitch_deg: float | None,
+        yaw_deg: float | None,
+        muted: tuple[int, int, int],
+        outline: tuple[int, int, int],
+    ) -> None:
+        center_x = x + 52.0
+        center_y = y + height * 0.5
+        radius = 31.0
+        target_fill = (11, 18, 26, 235)
+        rl.draw_circle_v(rl.Vector2(center_x, center_y), radius, rl_color(target_fill))
+        rl.draw_ring(
+            rl.Vector2(center_x, center_y),
+            radius - 1.2,
+            radius,
+            0.0,
+            360.0,
+            24,
+            rl_color(outline),
+        )
+        axis_color = (71, 87, 101, 210)
+        rl.draw_line_ex(
+            rl.Vector2(center_x - radius + 6.0, center_y),
+            rl.Vector2(center_x + radius - 6.0, center_y),
+            1.0,
+            rl_color(axis_color),
+        )
+        rl.draw_line_ex(
+            rl.Vector2(center_x, center_y - radius + 6.0),
+            rl.Vector2(center_x, center_y + radius - 6.0),
+            1.0,
+            rl_color(axis_color),
+        )
+        self._draw_text("P-", center_x, center_y - radius - 7.0, 9.0, muted, anchor="center")
+        self._draw_text("P+", center_x, center_y + radius + 7.0, 9.0, muted, anchor="center")
+        self._draw_text("Y+", center_x - radius - 8.0, center_y, 9.0, muted, anchor="center")
+        self._draw_text("Y-", center_x + radius + 8.0, center_y, 9.0, muted, anchor="center")
+        rl.draw_circle_v(rl.Vector2(center_x, center_y), 2.5, rl_color(muted))
+
+        valid_angles = (
+            pitch_deg is not None
+            and yaw_deg is not None
+            and math.isfinite(pitch_deg)
+            and math.isfinite(yaw_deg)
+        )
+        if valid_angles:
+            offset_x, offset_y = self._device_angle_target_offset(pitch_deg, yaw_deg, radius)
+            marker_x = center_x + offset_x
+            marker_y = center_y + offset_y
+            rl.draw_line_ex(
+                rl.Vector2(center_x, center_y),
+                rl.Vector2(marker_x, marker_y),
+                2.5,
+                rl_color(BLUE_SOFT),
+            )
+            rl.draw_circle_v(rl.Vector2(marker_x, marker_y), 6.0, rl_color(BLUE_SOFT))
+            rl.draw_circle_v(rl.Vector2(marker_x, marker_y), 2.2, rl_color(target_fill))
+
+        value_x = x + width * 0.45
+        pitch_text = "P  --°" if pitch_deg is None else f"P {pitch_deg:+.1f}°"
+        yaw_text = "Y  --°" if yaw_deg is None else f"Y {yaw_deg:+.1f}°"
+        self._draw_text(pitch_text, value_x, y + 36.0, 22.0, WHITE)
+        self._draw_text(yaw_text, value_x, y + 69.0, 22.0, WHITE)
 
     def _draw_trip_metric(
         self,
