@@ -41,16 +41,18 @@ from openpilot.selfdrive.carrot.radar_motion import (
   can_start_current_path_lead_two,
   cutin_can_compete_with_primary,
   front_cutin_motion_supported,
+  lead_from_vision,
   lead_duplicates_primary,
   lead_from_radar_point,
   lead_from_vision_match,
+  match_dpath_primary_lead,
   prefer_front_radar_kinematics,
   radar_motion_sensitivity,
   model_path_point_at_s,
   project_to_model_path,
-  select_primary_radar_points,
   visible_motion_points,
   vision_lead_from_model,
+  vision_only_lead_allowed,
 )
 
 
@@ -80,6 +82,9 @@ STATIONARY_HANDOFF_MAX_YREL_DELTA_M = 1.5
 VALIDATION_SETTINGS_ENV = "CARROT_RADAR_VALIDATION_SETTINGS"
 VALIDATION_MOTION_MODES = ("normal", "front")
 VALIDATION_DEFAULT_SENSITIVITY = 3
+LEAD_ONE_RADAR_RGB = (246, 142, 55)
+LEAD_ONE_VISION_RGB = (72, 145, 255)
+LEAD_TWO_RGB = (245, 211, 72)
 VALIDATION_SENSITIVITY_LABELS = (
   "사용 안 함",
   "둔감",
@@ -213,6 +218,14 @@ class Selection:
   external_candidates: tuple[Candidate, ...] = ()
   active_external_candidates: tuple[Candidate, ...] = ()
   lead_two_tentative: bool | None = None
+
+
+def lead_one_rgb(track_id: int | None) -> tuple[int, int, int]:
+  return (
+    LEAD_ONE_VISION_RGB
+    if track_id is not None and track_id < 0
+    else LEAD_ONE_RADAR_RGB
+  )
 
 
 @dataclass(frozen=True)
@@ -461,8 +474,16 @@ def lead_continuity_segments(
       and abs(candidate.y_rel - previous_candidate.y_rel)
       <= STATIONARY_HANDOFF_MAX_YREL_DELTA_M
     )
+    vision_radar_display_changed = (
+      previous_candidate is not None
+      and (previous_candidate.track_id < 0) != (candidate.track_id < 0)
+    )
     if current and (
-      current[-1][2] != point[2] and not stationary_handoff
+      current[-1][2] != point[2]
+      and (
+        vision_radar_display_changed
+        or not stationary_handoff
+      )
       or point[0] - current[-1][0] > 0.15
     ):
       segments.append(tuple(current))
@@ -728,6 +749,7 @@ def _controller_model(frame: RadarFrame) -> Any:
       )
       for lead in frame.model_leads
     ),
+    velocity=SimpleNamespace(x=(frame.v_ego,)),
   )
 
 
@@ -770,6 +792,19 @@ def front_radar_display_points(frame: RadarFrame) -> tuple[RadarPoint, ...]:
       point.measured
       and point.source == "frontRadar"
       and DISPLAY_MIN_DREL_M <= point.d_rel <= DEFAULT_FORWARD_RANGE_M
+    )
+  )
+
+
+def corner_radar_display_points(frame: RadarFrame) -> tuple[RadarPoint, ...]:
+  return tuple(
+    point for point in radar_points_at_model_time(frame)
+    if (
+      point.measured
+      and point.source.startswith("corner")
+      and DISPLAY_MIN_DREL_M
+      <= point.d_rel
+      <= DEFAULT_FORWARD_RANGE_M
     )
   )
 
@@ -927,19 +962,37 @@ class RadarMotionShadowSelector:
             if not point.source.startswith("corner")
           )
         )
-        match = matcher.match(
+        match = match_dpath_primary_lead(
+          matcher,
           _controller_model(frame),
-          select_primary_radar_points(aligned_points, 1),
+          aligned_points,
           frame.path,
           time_s=frame.time_s,
           stationary_points=stationary_points,
-          prefer_primary_stationary=True,
+          enable_radar_tracks=1,
         )
-        lead_one_results.append(
-          lead_from_vision_match(match)
-          if match is not None
-          else None
-        )
+        if match is not None:
+          lead_one_results.append(lead_from_vision_match(match))
+        else:
+          vision = matcher.vision_fallback
+          lead_one_results.append(
+            lead_from_vision(
+              vision,
+              frame.path,
+              frame.v_ego,
+              model_v_ego=frame.v_ego,
+            )
+            if (
+              vision is not None
+              and vision_only_lead_allowed(
+                1,
+                side_cutin_supported=(
+                  matcher.vision_only_side_cutin_supported
+                ),
+              )
+            )
+            else None
+          )
       lead_one_values = tuple(lead_one_results)
     else:
       lead_one_values = tuple(lead_one_outputs)
@@ -2630,8 +2683,16 @@ class SimulatorUI:
   def _draw_lead_roles(self, rect: Any, selection: Selection) -> None:
     rl = self.rl
     roles = (
-      ("L1", selection.lead_one, (246, 142, 55)),
-      ("L2", selection.lead_two, (245, 211, 72)),
+      (
+        "L1",
+        selection.lead_one,
+        lead_one_rgb(
+          selection.lead_one.track_id
+          if selection.lead_one is not None
+          else None
+        ),
+      ),
+      ("L2", selection.lead_two, LEAD_TWO_RGB),
     )
     for label, candidate, rgb in roles:
       if (
@@ -2690,7 +2751,13 @@ class SimulatorUI:
       (candidate.source, candidate.track_id)
       for candidate in selection.decision_cutin_candidates
     }
-    for point in self.selector.motion_points[self.index]:
+    display_points = {
+      (point.source, point.track_id): point
+      for point in self.selector.motion_points[self.index]
+    }
+    for point in corner_radar_display_points(frame):
+      display_points.setdefault((point.source, point.track_id), point)
+    for point in display_points.values():
       if not DISPLAY_MIN_DREL_M <= point.d_rel <= DEFAULT_FORWARD_RANGE_M:
         continue
       prediction = self.selector.trajectories[self.index].get(
@@ -2703,6 +2770,7 @@ class SimulatorUI:
         prediction is None
         and (point.source, point.track_id) not in selected_keys
         and not position_only
+        and not point.source.startswith("corner")
       ):
         continue
       x, y = self._screen(rect, point.d_rel, point.y_rel)
@@ -2725,12 +2793,12 @@ class SimulatorUI:
       elif diagnostic is not None and diagnostic.current_path_occupancy:
         color = (115, 125, 135)
         radius = 3.0
-      elif position_only:
-        color = (115, 125, 135)
-        radius = 3.0
       elif point.source.startswith("corner"):
         color = (194, 112, 240)
         radius = 5.0
+      elif position_only:
+        color = (115, 125, 135)
+        radius = 3.0
       else:
         color = (70, 190, 220)
         radius = 5.0
@@ -2760,7 +2828,7 @@ class SimulatorUI:
       )
     self._draw_lead_roles(rect, selection)
     self._draw_text(
-      "-30~120m | 흰 점: 내 차 | 주황 □: leadOne | 노랑 □: leadTwo",
+      "-30~120m | 흰 점: 내 차 | 주황 □: radar L1 | 파랑 □: vision L1 | 노랑 □: L2",
       int(rect.x + 12.0),
       int(rect.y + 8.0),
       14,
@@ -2772,7 +2840,7 @@ class SimulatorUI:
       else "F: front radar 표시"
     )
     self._draw_text(
-      f"회색: 차선 | 흰 점선: 차선 중심 | 파랑: model path | {front_text}",
+      f"회색: 차선 | 흰 점선: 차선 중심 | 파랑: model path | 보라: corner radar | {front_text}",
       int(rect.x + 12.0),
       int(rect.y + 27.0),
       14,
@@ -2905,12 +2973,17 @@ class SimulatorUI:
       )
 
     series = (
-      (self.lead_one_segments, (246, 142, 55)),
-      (self.lead_two_segments, (245, 211, 72)),
+      (self.lead_one_segments, True),
+      (self.lead_two_segments, False),
     )
-    for segments, rgb in series:
-      color = self._color(rgb)
+    for segments, is_lead_one in series:
       for segment in segments:
+        rgb = (
+          lead_one_rgb(segment[0][2])
+          if is_lead_one
+          else LEAD_TWO_RGB
+        )
+        color = self._color(rgb)
         previous = None
         for time_s, distance, _ in segment:
           current = position(time_s, distance)
@@ -2925,8 +2998,16 @@ class SimulatorUI:
       self.index,
     )
     lead_values = (
-      ("L1", current_selection.lead_one, (246, 142, 55)),
-      ("L2", current_selection.lead_two, (245, 211, 72)),
+      (
+        "L1",
+        current_selection.lead_one,
+        lead_one_rgb(
+          current_selection.lead_one.track_id
+          if current_selection.lead_one is not None
+          else None
+        ),
+      ),
+      ("L2", current_selection.lead_two, LEAD_TWO_RGB),
     )
     legend_x = int(plot_left)
     for label, candidate, rgb in lead_values:
@@ -3678,11 +3759,13 @@ __all__ = (
   "candidate_track_ids",
   "comparison_summary",
   "confirmed_cutin_overlap_at",
+  "corner_radar_display_points",
   "current_cutin_track_ids",
   "front_only_frames",
   "front_radar_display_points",
   "is_position_only_reference",
   "lead_continuity_segments",
+  "lead_one_rgb",
   "load_validation_motion_mode",
   "load_validation_lookahead",
   "load_validation_probability",
