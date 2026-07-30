@@ -90,9 +90,13 @@ def test_trip_report_draws_english_imperial_labels(monkeypatch):
   ))
   text_draws = []
   metrics = []
+  gauges = []
+  angles = []
   renderer._rounded_rect = lambda *_args, **_kwargs: None
   renderer._draw_text = lambda *args, **kwargs: text_draws.append((args, kwargs))
   renderer._draw_trip_metric = lambda *args, **kwargs: metrics.append((args, kwargs))
+  renderer._draw_system_gauge = lambda *args, **kwargs: gauges.append((args, kwargs))
+  renderer._draw_device_angle_indicator = lambda *args, **kwargs: angles.append((args, kwargs))
   renderer._system_metric_color = lambda _value: (1, 2, 3)
   monkeypatch.setattr(cluster_renderer.rl, "draw_line_ex", lambda *_args, **_kwargs: None)
 
@@ -120,10 +124,21 @@ def test_trip_report_draws_english_imperial_labels(monkeypatch):
   renderer._draw_trip_report_panel(state)
 
   drawn_text = {args[0] for args, _kwargs in text_draws}
-  assert {"DRIVING REPORT", "TRIP SUMMARY", "SYSTEM", "DEVICE ANGLE"} <= drawn_text
+  assert {"TRIP SUMMARY", "SYSTEM", "DEVICE ANGLE"} <= drawn_text
+  assert "DRIVING REPORT" not in drawn_text
   assert {"HARD ACCEL", "HARD BRAKE", "HARD CORNER"} <= drawn_text
   assert metrics[0][0][2:4] == ("DISTANCE", "1.00 mi")
   assert metrics[1][0][2:4] == ("AVG SPEED", "62.1")
   assert metrics[1][0][5] == "mph"
   assert metrics[2][0][2:4] == ("MAX SPEED", "74.6")
   assert metrics[2][0][5] == "mph"
+  assert [gauge[0][2] for gauge in gauges] == ["CPU", "TEMP", "MEM", "DISK"]
+  assert angles[0][0][4:6] == pytest.approx((0.5729578, -1.1459156))
+
+
+def test_device_angle_target_maps_pitch_and_yaw_to_expected_axes():
+  radius = 30.0
+
+  assert ClusterUiRenderer._device_angle_target_offset(3.0, 2.0, radius) == pytest.approx((-6.8, 10.2))
+  assert ClusterUiRenderer._device_angle_target_offset(-3.0, -2.0, radius) == pytest.approx((6.8, -10.2))
+  assert ClusterUiRenderer._device_angle_target_offset(20.0, -20.0, radius) == pytest.approx((20.4, 20.4))

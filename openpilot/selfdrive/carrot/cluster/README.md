@@ -459,7 +459,9 @@ driving scene disabled, and `4`
 shows the same graph in the right-side panel while keeping the driving scene.
 `5` shows the right-side driving report while keeping the driving scene. The
 report uses a large trip/event summary card and a separate system-load card
-with the stored calibration pitch/yaw. The same mode can be validated with
+with four 2-by-2 circular gauges. A lower target plots stored calibration pitch
+vertically and yaw horizontally around the calibrated center while retaining
+the numeric angles. The same mode can be validated with
 `cluster_replay_usb.py ROUTE --trip-report`.
 The renderer polls `LanguageSetting` and `IsMetric` about once per second.
 Korean (`ko`) and English (`en`) localize driving-report, driving-mode, and
