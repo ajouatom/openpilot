@@ -94,8 +94,15 @@
   white-space: nowrap;
 }
 
+.page--setting #deviceItems .device-setting--ssh .settingTop {
+  display: grid;
+  grid-template-columns: minmax(88px, max-content) minmax(0, 1fr);
+  gap: var(--sp-md);
+  align-items: start;
+}
+
 .page--setting #deviceItems .device-ssh-control {
-  width: min(68vw, 720px);
+  width: 100%;
   min-width: 0;
 }
 
@@ -188,8 +195,12 @@
 }
 
 @media (aspect-ratio < 13/10) and (max-width: 639px), (aspect-ratio < 13/10) and (max-height: 649px) {
+  .page--setting #deviceItems .device-setting--ssh .settingTop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .page--setting #deviceItems .device-ssh-control {
-    grid-column: 1 / -1;
+    grid-column: 1;
     width: 100%;
     min-width: 0;
   }

@@ -7,6 +7,7 @@ function own(object, key) {
 function selectedSourceState(state = {}) {
   const carState = state.carState || {};
   const controlsState = state.controlsState || {};
+  const lateralPlan = state.lateralPlan || {};
   const longitudinalPlan = state.longitudinalPlan || {};
   const carrotMan = state.carrotMan || {};
   const selfdriveState = state.selfdriveState || {};
@@ -15,6 +16,7 @@ function selectedSourceState(state = {}) {
     services: {
       carState: own(state, "carState"),
       controlsState: own(state, "controlsState"),
+      lateralPlan: own(state, "lateralPlan"),
       longitudinalPlan: own(state, "longitudinalPlan"),
       carrotMan: own(state, "carrotMan"),
       selfdriveState: own(state, "selfdriveState"),
@@ -27,11 +29,15 @@ function selectedSourceState(state = {}) {
       evModeValid: carState.evModeValid ?? null,
       evModeActive: carState.evModeActive ?? null,
       gearShifter: carState.gearShifter ?? null,
+      useLaneLineSpeed: carState.useLaneLineSpeed ?? null,
     },
     controlsState: {
       enabled: controlsState.enabled ?? null,
       vCruiseCluster: controlsState.vCruiseCluster ?? null,
       activeLaneLine: controlsState.activeLaneLine ?? null,
+    },
+    lateralPlan: {
+      useLaneLines: lateralPlan.useLaneLines ?? null,
     },
     longitudinalPlan: {
       cruiseTarget: longitudinalPlan.cruiseTarget ?? null,

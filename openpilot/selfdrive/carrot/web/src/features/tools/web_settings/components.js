@@ -20,9 +20,12 @@ globalThis.WebSettingsComponents = (() => {
     return components.get(String(name || "")) || null;
   }
 
-  function isVisible(name, fields) {
+  function isVisible(name, fields, item = null) {
     const component = definition(name);
     if (!component) return false;
+    if (typeof component.isVisible === "function") {
+      return component.isVisible(item, fields) === true;
+    }
     return (component.settingKeys || []).every((key) => Boolean(fields[key]));
   }
 

@@ -19,7 +19,10 @@ export function createRoadOverlayPolicy(options = {}) {
   if (!hudModel?.isLaneMode || !hudModel?.isLongActive) return null;
 
   function resolve(overlayState, hudState, params = {}) {
-    const laneMode = hudModel.isLaneMode(hudState);
+    // Geometry follows the actual planner result, never the requested mode
+    // alone. The HUD icon separately acknowledges requested/fallback state.
+    const laneModeState = hudModel.resolveLaneModeState?.(hudState);
+    const laneMode = laneModeState?.pathActive ?? hudModel.isLaneMode(hudState);
     const model = overlayState?.modelV2 || null;
     const lateralPlan = overlayState?.lateralPlan || null;
     const lanePath = lateralPlan?.position;

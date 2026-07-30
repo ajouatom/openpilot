@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createSpeedPanel } from "../src/features/drive/contents/vision/hud/widgets/speed_panel.js";
@@ -10,6 +11,11 @@ import {
   withVehicleHudFields,
 } from "../src/features/drive/contents/vision/hud/data_bridge.js";
 import { COLORS, DRIVE_MODE_COLORS } from "../src/features/drive/contents/vision/hud/tokens.js";
+
+const hudStyleSource = readFileSync(
+  new URL("../src/features/drive/contents/vision/hud/style.js", import.meta.url),
+  "utf8",
+);
 
 /* Minimal DOM stub — enough for the SVG/DOM helpers the widgets use.
  * The widgets only touch: create(NS), setAttribute, className, textContent,
@@ -103,6 +109,7 @@ function renderFromCereal(state) {
     overrideLabel: findByClass(panel.el, "chud-t-override-label"),
     speed: findByClass(panel.el, "chud-t-speed"),
     lane: findByClass(lfa.el, "chud-lfa-lane"),
+    lfa: lfa.el,
   };
 }
 
@@ -133,7 +140,8 @@ test("live: EV + green lane wings + orange decel override all render", () => {
   assert.equal(r.speed.textContent, "53");
   assert.ok(isVisible(r.ev), "EV telltale visible");
   assert.equal(r.ev.textContent, "EV");
-  assert.ok(isVisible(r.lane), "green lane wings visible");
+  assert.ok(r.lfa.classList.contains("has-lane"), "lane wings visible");
+  assert.ok(r.lfa.classList.contains("is-lane-active"), "lane wings active");
   assert.ok(isVisible(r.overrideSpeed), "override visible");
   assert.equal(r.overrideSpeed.textContent, "77");
   assert.equal(r.overrideLabel.textContent, "cam:n");
@@ -149,7 +157,7 @@ test("replay: eco (green) override renders; EV and lane correctly hidden", () =>
   });
   assert.equal(r.speed.textContent, "60");
   assert.ok(!isVisible(r.ev), "EV hidden when not in EV mode");
-  assert.ok(!isVisible(r.lane), "lane wings hidden when lane mode off");
+  assert.ok(!r.lfa.classList.contains("has-lane"), "lane wings hidden when lane mode off");
   assert.ok(isVisible(r.overrideSpeed), "eco override visible");
   assert.equal(r.overrideSpeed.textContent, "95");
   assert.equal(r.overrideLabel.textContent, "eco");
@@ -175,7 +183,32 @@ test("pre-drive idle: EV, override and lane wings are all hidden", () => {
   const r = renderFromCereal({});
   assert.ok(!isVisible(r.ev), "EV hidden");
   assert.ok(!isVisible(r.overrideSpeed), "override hidden");
-  assert.ok(!isVisible(r.lane), "lane wings hidden");
+  assert.ok(!r.lfa.classList.contains("has-lane"), "lane wings hidden");
+});
+
+test("manual lane selection is acknowledged while automatic fallback stays distinct", () => {
+  const armed = renderFromCereal({
+    carState: { useLaneLineSpeed: 50 },
+    lateralPlan: { useLaneLines: false },
+    controlsState: { activeLaneLine: false },
+  });
+  assert.equal(armed.data.laneModePresentation, "armed");
+  assert.ok(armed.lfa.classList.contains("has-lane"));
+  assert.ok(armed.lfa.classList.contains("is-lane-armed"));
+  assert.ok(!armed.lfa.classList.contains("is-lane-active"));
+
+  const laneless = renderFromCereal({
+    carState: { useLaneLineSpeed: 0 },
+    lateralPlan: { useLaneLines: true },
+    controlsState: { activeLaneLine: true },
+  });
+  assert.equal(laneless.data.laneModePresentation, "laneless");
+  assert.ok(!laneless.lfa.classList.contains("has-lane"));
+});
+
+test("lane wing state never changes the LFA flex footprint", () => {
+  assert.match(hudStyleSource, /\.chud-lfa\{[^}]*width:var\(--chud-lfa-size\)[^}]*flex:0 0 auto/s);
+  assert.doesNotMatch(hudStyleSource, /\.chud-lfa\.has-lane\{[^}]*padding/s);
 });
 
 // mph 표시(비미터)에서도 오버라이드 속도가 변환되는지.

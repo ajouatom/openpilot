@@ -48,7 +48,7 @@ export function createSettingsGroupRenderPlan(options = {}) {
       group,
       label,
       count,
-      title: count === null ? label : `${label} (${count})`,
+      title: label,
       favorite: group === ids.favoritesGroup,
       profile: isProfileGroup(group, ids.profileGroupPrefix || ""),
       active: group === currentGroup,

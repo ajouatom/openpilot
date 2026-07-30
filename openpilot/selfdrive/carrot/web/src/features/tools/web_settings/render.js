@@ -30,7 +30,7 @@ function getWebSettingsField(item) {
 
 function isWebSettingsItemVisible(item) {
   if (item?.component) {
-    return Boolean(globalThis.WebSettingsComponents?.isVisible?.(item.component, WEB_SPEC_BY_KEY));
+    return Boolean(globalThis.WebSettingsComponents?.isVisible?.(item.component, WEB_SPEC_BY_KEY, item));
   }
   return Boolean(getWebSettingsField(item));
 }

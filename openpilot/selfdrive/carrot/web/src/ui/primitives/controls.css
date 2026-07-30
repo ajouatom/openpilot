@@ -1,6 +1,13 @@
+:root {
+  --control-switch-width: 52px;
+  --control-switch-height: 32px;
+  --control-switch-sm-width: 44px;
+  --control-switch-sm-height: 28px;
+}
+
 .c-switch {
-  --switch-w: 52px;
-  --switch-h: 32px;
+  --switch-w: var(--control-switch-width);
+  --switch-h: var(--control-switch-height);
   position: relative;
   display: inline-flex;
   flex: 0 0 var(--switch-w);
@@ -11,8 +18,8 @@
 }
 
 .c-switch--sm {
-  --switch-w: 44px;
-  --switch-h: 28px;
+  --switch-w: var(--control-switch-sm-width);
+  --switch-h: var(--control-switch-sm-height);
 }
 
 .c-switch__input {

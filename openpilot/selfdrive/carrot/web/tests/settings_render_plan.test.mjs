@@ -19,7 +19,7 @@ function groupPlan(groups, currentGroup = "") {
   });
 }
 
-test("plain groups become group entries carrying label, count and active state", () => {
+test("plain groups retain internal counts without displaying them in the title", () => {
   const plan = groupPlan([{ group: "SPEED", count: 3 }], "SPEED");
   const [entry] = plan.entries;
 
@@ -27,7 +27,7 @@ test("plain groups become group entries carrying label, count and active state",
   assert.equal(entry.group, "SPEED");
   assert.equal(entry.label, "label:SPEED");
   assert.equal(entry.count, 3);
-  assert.equal(entry.title, "label:SPEED (3)");
+  assert.equal(entry.title, "label:SPEED");
   assert.equal(entry.active, true);
   assert.equal(entry.favorite, false);
   assert.equal(entry.profile, false);

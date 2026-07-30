@@ -24,8 +24,15 @@
 }
 
 .page--setting #settingScreenItems .setting-risk-badge {
+  --chip-font-size: var(--fs-label-sm);
+  --chip-min-height: var(--control-switch-height);
+  --chip-padding-block: 0;
+  --chip-padding-inline: var(--sp-sm);
   flex: 0 0 auto;
   align-self: center;
+  justify-content: center;
+  min-width: var(--control-switch-width);
+  box-sizing: border-box;
 }
 
 .page--setting #settingScreenItems .setting-favorite-mark {

@@ -1,3 +1,5 @@
+import { resolveLaneModeState } from "./lane_mode.js";
+
 function finiteNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -34,8 +36,7 @@ function isLongActive(overlayState) {
 }
 
 function isLaneMode(hudState) {
-  return Boolean(hudState?.controlsState?.activeLaneLine)
-    || finiteNumber(hudState?.carState?.useLaneLineSpeed, 0) > 0;
+  return resolveLaneModeState(hudState).pathActive;
 }
 
 function buildRtcPerf(perf) {
@@ -128,6 +129,7 @@ function formatRtcPerfLabel(perf) {
 export const DriveVisionHudModel = Object.freeze({
   isLongActive,
   isLaneMode,
+  resolveLaneModeState,
   buildRtcPerf,
   formatRtcPerfLabel,
 });
@@ -135,6 +137,7 @@ export const DriveVisionHudModel = Object.freeze({
 export {
   isLongActive,
   isLaneMode,
+  resolveLaneModeState,
   buildRtcPerf,
   formatRtcPerfLabel,
 };
