@@ -63,19 +63,35 @@ def test_external_hud_brightness_and_orientation_use_catalog_controls(settings, 
     "180 degrees",
     "Unsupported",
   ]
+  panel_layout = by_name["ClusterHudPanelLayout"]
+  assert (panel_layout["min"], panel_layout["max"], panel_layout["default"]) == (0, 1, 0)
+  assert panel_layout["control"] == "select"
+  assert panel_layout["options"]["en"] == [
+    "Driving left / info right",
+    "Info left / driving right",
+  ]
 
   display = next(category for category in settings["menu"] if category["id"] == "DISPLAY")
   hud = next(group for group in display["groups"] if group["id"] == "DISP_HUD")
   basic = next(group for group in hud["groups"] if group["id"] == "HUD_BASIC")
+  screen = next(group for group in hud["groups"] if group["id"] == "HUD_SCREEN")
   assert basic["params"][:3] == [
     "ClusterHud",
     "ClusterHudBrightness",
     "ClusterHudOrientation",
   ]
+  assert screen["params"] == [
+    "ClusterHudEncoder",
+    "ClusterHudLiveFps",
+    "ClusterHudScreenMode",
+    "ClusterHudPanelLayout",
+    "ClusterHudCameraViewMode",
+  ]
 
   params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
   assert '{"ClusterHudBrightness", {PERSISTENT, INT, "0"}}' in params_keys
   assert '{"ClusterHudOrientation", {PERSISTENT, INT, "0"}}' in params_keys
+  assert '{"ClusterHudPanelLayout", {PERSISTENT, INT, "0"}}' in params_keys
 
 
 def test_carrot_radar_mode_replaces_removed_model_mode(settings, params):
