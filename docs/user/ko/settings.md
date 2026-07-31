@@ -97,13 +97,13 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 ## 전체 설정 지도
 
-현재 `carrot-wip`의 `carrot_settings.json`에는 **169개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
+현재 `carrot-wip`의 `carrot_settings.json`에는 **171개 파라미터**가 있으며, 모든 항목이 아래 메뉴에 연결되어 있습니다.
 
 | 대분류 | 항목 수 | 중분류 |
 |---|---:|---|
 | 주행 제어 | 107 | 시작·오토, 버튼·프리셋, 차량 조향, 속도·감속, 크루즈·차간 |
 | 차량·하드웨어 | 16 | 현대·기아, CANFD·HDA, 레이더, 운전자 모니터링, 차량 보조, 기기 하드웨어 |
-| 화면 표시 | 36 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
+| 화면 표시 | 37 | 정보 표시, 경로 표시, 밝기·주행화면, 외부 HUD |
 | 시스템 | 11 | 녹화·전원, 네트워크·지도, 사운드, 소프트웨어 |
 
 ## 주행 제어
@@ -222,13 +222,13 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 <a id="display"></a>
 ## 화면 표시
 
-화면 표시에는 36개 항목이 있습니다. 일반 화면 항목은 비교적 되돌리기 쉽지만, 외부 HUD는 별도 하드웨어와 성능 설정을 포함합니다.
+화면 표시에는 37개 항목이 있습니다. 일반 화면 항목은 비교적 되돌리기 쉽지만, 외부 HUD는 별도 하드웨어와 성능 설정을 포함합니다.
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
 | 정보 표시 | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode` | 주행 화면의 디버그, 타이어, 시간, 차선, 레이더와 경로 정보 |
 | 경로 표시 | `ShowPathMode`, `ShowPathColor`, `ShowPathColorCruiseOff`, `ShowPathModeLane`, `ShowPathColorLane` | 레인리스·레인모드·크루즈 OFF 상태의 경로 모양과 색상 |
-| 밝기·주행화면 | `ShowCustomBrightness`, `ShowModelView` | 주행 중 밝기와 카메라·모델 표시 조합 |
+| 밝기·주행화면 | `ShowCustomBrightness`, `ShowModelView`, `ShowCameraWithCluster` | 주행 중 밝기, 카메라·모델 표시 조합과 외부 HUD 연결 중 본체 카메라 표시 |
 | 외부 HUD·기본 | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudOrientation`, `ClusterHudMirror`, `ClusterHudTheme`, `ClusterNaviMapTheme`, `ClusterNaviMapType`, `ClusterNaviMapFps` | TURZX 외부 HUD, 밝기, 화면 회전, 미러링과 지도 테마 |
 | 외부 HUD·화면·카메라 | `ClusterHudEncoder`, `ClusterHudLiveFps`, `ClusterHudScreenMode`, `ClusterHudPanelLayout`, `ClusterHudCameraViewMode` | 인코더, 전송 FPS와 화면·카메라·좌우 패널 구성 |
 | 외부 HUD·레이더 표시 | `ClusterHudRadarInfo`, `ClusterHudRadarDisplay`, `ClusterHudRadarSourceColor` | 외부 HUD의 레이더 정보와 색상 |
@@ -236,13 +236,13 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 
 `ShowRouteInfo` 설명에 남아 있는 APN 표기는 경로 정보 입력 상태를 뜻합니다. 이를 CarrotMan 또는 CarrotLink 지원 안내로 해석하면 안 됩니다.
 
-`ShowCustomBrightness=0`은 주변 밝기에 따른 자동 조절이고, `ShowModelView`는 카메라와 모델 표시 조합을 선택합니다. `ClusterHud` 계열은 지원되는 외부 HUD를 연결한 경우에만 사용하세요.
+`ShowCustomBrightness=0`은 주변 밝기에 따른 자동 조절이고, `ShowModelView`는 카메라와 모델 표시 조합을 선택합니다. `ShowCameraWithCluster=0`은 외부 HUD 연결 중 본체 카메라를 숨기는 기존 기본 동작이고, `1`은 본체 카메라 영상을 표시합니다. `ClusterHud` 계열은 지원되는 외부 HUD를 연결한 경우에만 사용하세요.
 
 `ClusterHudBrightness=0`은 카메라 노출값을 따르는 자동 밝기이고, `1~100`은 고정 밝기입니다. `ClusterHudOrientation`은 `0`(0도)과 `2`(180도)만 지원하며 `1`, `3`은 무시합니다. 실행 중인 TURZX 프로세스는 두 저장값을 100ms마다 확인합니다. 밝기는 실행 중 적용되고, 관리형 H.264의 회전값이 바뀌면 HUD가 자동 재시작되어 캡처와 동일한 스트림 설정 절차로 적용됩니다.
 
 `ClusterHudPanelLayout=0`은 `ClusterHudCameraViewMode`가 선택한 주행 화면을 왼쪽에, 화면 모드·디버그·내비 상태에 따라 선택되는 정보 패널을 오른쪽에 배치합니다. `1`은 두 영역을 서로 바꿔 정보 패널을 왼쪽에, 주행 화면을 오른쪽에 표시합니다. 실행 중 약 1초 안에 적용되며 재시작하지 않습니다. 전체화면 그래프와 전체화면 내비처럼 좌우 영역이 없는 모드는 바뀌지 않습니다. `ClusterHudDebug`은 HUD 상시 출력과 디버그 UI·내비 입력을 강제로 켜는 설정이며, 그 결과 표시되는 디버그·내비 정보 패널도 선택한 좌우 배치를 따릅니다.
 
-외부 HUD가 USB로 연결된 동안 일반 C3/C3X와 mici의 본체 주행 화면은 검은 배경으로 전환하고 카메라 영상과 모델 경로 렌더링을 생략합니다. 속도·제한속도·운전자 상태·경고·주행 상태 테두리 등 본체 HUD는 계속 표시되며, 외부 HUD 연결이 끊기면 카메라 화면이 자동으로 복귀합니다. `camerad`와 모델 입력은 계속 동작하고 본체 화면의 중복 렌더링만 줄입니다.
+외부 HUD가 USB로 연결된 동안 `ShowCameraWithCluster=0`이면 일반 C3/C3X와 mici의 본체 주행 화면은 검은 배경으로 전환하고 카메라 영상과 모델 경로 렌더링을 생략합니다. `1`이면 이 연결 전용 억제를 해제해 본체 카메라 영상과 기존 주행화면 렌더 경로를 사용합니다. 값은 주행 중에도 최대 약 5초 안에 반영됩니다. 어느 값에서도 속도·제한속도·운전자 상태·경고·주행 상태 테두리 등 본체 HUD는 계속 표시되며, 외부 HUD 연결이 끊기면 이 옵션은 화면에 영향을 주지 않습니다. `0`에서도 `camerad`와 모델 입력은 계속 동작하고 본체 화면의 중복 렌더링만 줄입니다.
 
 `ClusterHudScreenMode`의 최종 화면 구성은 다음과 같습니다.
 

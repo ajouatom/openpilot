@@ -99,6 +99,26 @@ def test_external_hud_brightness_and_orientation_use_catalog_controls(settings, 
   assert '{"ClusterHudPanelLayout", {PERSISTENT, INT, "0"}}' in params_keys
 
 
+def test_cluster_camera_preference_is_in_brightness_and_view(settings, params):
+  by_name = {p["name"]: p for p in params}
+  camera = by_name["ShowCameraWithCluster"]
+  assert (camera["min"], camera["max"], camera["default"], camera["unit"]) == (0, 1, 0, 1)
+  assert camera["descr"] == "0: 카메라 미표시(기본)\n1: 카메라 영상 표시"
+  assert camera["edescr"] == "0: Hide camera (default)\n1: Show camera video"
+  assert camera["cdescr"] == "0: 不显示摄像头（默认）\n1: 显示摄像头画面"
+
+  display = next(category for category in settings["menu"] if category["id"] == "DISPLAY")
+  brightness = next(group for group in display["groups"] if group["id"] == "DISP_BRIGHT")
+  assert brightness["params"] == [
+    "ShowCustomBrightness",
+    "ShowModelView",
+    "ShowCameraWithCluster",
+  ]
+
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"ShowCameraWithCluster", {PERSISTENT, INT, "0"}}' in params_keys
+
+
 def test_carrot_radar_mode_replaces_removed_model_mode(settings, params):
   by_name = {p["name"]: p for p in params}
   assert "RadarLeadModelMode" not in by_name
