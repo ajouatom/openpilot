@@ -8,10 +8,12 @@ from types import SimpleNamespace
 CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
+import cluster_renderer
 from cluster_config import (
   CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
   CLUSTER_SCREEN_MODE_DEFAULT,
   CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+  CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
   CLUSTER_SCREEN_MODE_TRIP_REPORT,
   normalize_cluster_screen_mode,
 )
@@ -116,13 +118,92 @@ def test_default_screen_uses_trip_report_until_navigation_is_received():
   )
   assert renderer._effective_screen_mode(connected) == CLUSTER_SCREEN_MODE_DEFAULT
 
-  legacy_navigation = SimpleNamespace(
+  external_navigation = SimpleNamespace(
     camera_view_mode=0,
     external_nav_active=True,
     navi_live=None,
     navi_dashboard=None,
   )
-  assert renderer._effective_screen_mode(legacy_navigation) == CLUSTER_SCREEN_MODE_DEFAULT
+  assert renderer._effective_screen_mode(external_navigation) == CLUSTER_SCREEN_MODE_DEFAULT
+
+
+def test_mode_two_preserves_the_reference_default_system_screen_contract():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1920
+  renderer.height = 480
+  renderer.screen_mode = CLUSTER_SCREEN_MODE_DEBUG_SYSTEM
+  disconnected = SimpleNamespace(
+    camera_view_mode=0,
+    external_nav_active=False,
+    navi_live=None,
+    navi_dashboard=SimpleNamespace(connected=False),
+  )
+
+  assert renderer._effective_screen_mode(disconnected) == CLUSTER_SCREEN_MODE_DEFAULT
+  assert renderer._world_view_shift_x(disconnected) == NAVI_WORLD_VIEW_SHIFT_X
+
+  no_navigation_source = SimpleNamespace(
+    camera_view_mode=0,
+    external_nav_active=False,
+    navi_live=None,
+    navi_dashboard=None,
+  )
+  assert renderer._effective_screen_mode(no_navigation_source) == CLUSTER_SCREEN_MODE_DEFAULT
+  assert renderer._world_view_shift_x(no_navigation_source) == 0.0
+
+
+def test_mode_two_dispatches_reference_default_system_content(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1920
+  renderer.height = 480
+  renderer.screen_mode = CLUSTER_SCREEN_MODE_DEBUG_SYSTEM
+  calls = []
+  route_overlay = object()
+
+  monkeypatch.setattr(cluster_renderer.rl, "rl_push_matrix", lambda: None)
+  monkeypatch.setattr(cluster_renderer.rl, "rl_scalef", lambda *_args: None)
+  monkeypatch.setattr(cluster_renderer.rl, "rl_pop_matrix", lambda: None)
+  monkeypatch.setattr(renderer, "_profile_start", lambda: 0.0)
+  monkeypatch.setattr(renderer, "_profile_add", lambda *_args: None)
+  monkeypatch.setattr(
+    renderer,
+    "_draw_driving_hud_content",
+    lambda _state, mode, *_signals: calls.append(("driving", mode)),
+  )
+  monkeypatch.setattr(renderer, "_draw_navi_live_panel", lambda _state: calls.append(("navi", None)))
+  monkeypatch.setattr(renderer, "_draw_route_overlay", lambda overlay: calls.append(("route", overlay)))
+  monkeypatch.setattr(
+    renderer,
+    "_draw_status_footer",
+    lambda _state, **kwargs: calls.append(("footer", kwargs.get("include_core_usage"))),
+  )
+
+  no_navigation_source = SimpleNamespace(
+    navi_debug=None,
+    navi_live=None,
+    navi_dashboard=None,
+    route_overlay=route_overlay,
+  )
+  renderer._draw_hud(no_navigation_source, (False, False))
+  assert calls == [
+    ("driving", CLUSTER_SCREEN_MODE_DEFAULT),
+    ("route", route_overlay),
+    ("footer", True),
+  ]
+
+  calls.clear()
+  disconnected_dashboard = SimpleNamespace(
+    navi_debug=None,
+    navi_live=None,
+    navi_dashboard=SimpleNamespace(connected=False),
+    route_overlay=route_overlay,
+  )
+  renderer._draw_hud(disconnected_dashboard, (False, False))
+  assert calls == [
+    ("driving", CLUSTER_SCREEN_MODE_DEFAULT),
+    ("navi", None),
+    ("footer", True),
+  ]
 
 
 def test_trip_report_footer_keeps_left_status_without_right_core_usage(monkeypatch):

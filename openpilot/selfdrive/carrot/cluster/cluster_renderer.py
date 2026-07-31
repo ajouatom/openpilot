@@ -3536,10 +3536,6 @@ class ClusterUiRenderer:
                 profile_stage = self._profile_start()
                 self._draw_live_debug_panel(state)
                 self._profile_add("hud.live_debug", profile_stage)
-            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
-                profile_stage = self._profile_start()
-                self._draw_system_stats_panel(state)
-                self._profile_add("hud.system_stats", profile_stage)
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT:
                 profile_stage = self._profile_start()
                 self._draw_debug_plot(
@@ -3564,7 +3560,6 @@ class ClusterUiRenderer:
                 self._profile_add("hud.navi_live", profile_stage)
             if screen_mode not in (
                 CLUSTER_SCREEN_MODE_DEBUG,
-                CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
                 CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
                 CLUSTER_SCREEN_MODE_TRIP_REPORT,
@@ -3650,6 +3645,10 @@ class ClusterUiRenderer:
             rl.rl_pop_matrix()
 
     def _effective_screen_mode(self, state: ClusterUiState) -> int:
+        if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
+            # Screen mode 2 renders the reference commit's mode-0 default
+            # system screen without inheriting the current report fallback.
+            return CLUSTER_SCREEN_MODE_DEFAULT
         if self.screen_mode != CLUSTER_SCREEN_MODE_DEFAULT:
             return self.screen_mode
         dashboard = getattr(state, "navi_dashboard", None)
