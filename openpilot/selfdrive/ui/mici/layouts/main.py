@@ -5,6 +5,7 @@ from openpilot.selfdrive.ui.mici.layouts.settings.settings import SettingsLayout
 from openpilot.selfdrive.ui.mici.layouts.offroad_alerts import MiciOffroadAlerts
 from openpilot.selfdrive.ui.mici.onroad.augmented_road_view import AugmentedRoadView
 from openpilot.selfdrive.ui.ui_state import device, ui_state
+from openpilot.selfdrive.ui.widgets.carrot_web_dialog import CarrotWebDialog
 from openpilot.selfdrive.ui.mici.layouts.onboarding import OnboardingWindow
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller import Scroller
@@ -61,7 +62,7 @@ class MiciMainLayout(Scroller):
     if not self._onboarding_window.completed:
       gui_app.push_widget(self._onboarding_window)
 
-    # carrot_man    
+    # carrot_man
     self._last_carrot_cmd_idx = -1
 
   @staticmethod
@@ -93,7 +94,7 @@ class MiciMainLayout(Scroller):
       return recording
     print(f"CarrotMan command received: {cmd} {arg} (index {cmd_idx})")
     self._last_carrot_cmd_idx = cmd_idx
-    
+
     if not ui_state.started:
       gui_app.stop_recording()
       return self._sync_screen_record_state(screen_record)
@@ -109,11 +110,14 @@ class MiciMainLayout(Scroller):
       gui_app.stop_recording()
     elif arg == "TOGGLE":
       gui_app.toggle_recording()
-      
+
     return self._sync_screen_record_state(screen_record)
 
   def _setup_callbacks(self):
-    self._home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout))
+    self._home_layout.set_callbacks(
+      on_settings=lambda: gui_app.push_widget(self._settings_layout),
+      on_carrot_web=lambda: gui_app.push_widget(CarrotWebDialog()),
+    )
     self._onroad_layout.set_click_callback(lambda: self._scroll_to(self._home_layout))
     device.add_interactive_timeout_callback(self._on_interactive_timeout)
 
@@ -157,7 +161,7 @@ class MiciMainLayout(Scroller):
     if self._onroad_time_delay is not None and rl.get_time() - self._onroad_time_delay >= ONROAD_DELAY:
       gui_app.pop_widgets_to(self, lambda: self._scroll_to(self._onroad_layout))
       self._onroad_time_delay = None
-      
+
     if ui_state.started:
       show_plot_mode = ui_state.params.get_int("ShowPlotMode")
       cluster_hud_connected = ui_state.params.get_bool("ClusterHudConnected")

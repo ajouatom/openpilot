@@ -84,11 +84,13 @@ class MiciHomeLayout(Widget):
   def __init__(self):
     super().__init__()
     self._on_settings_click: Callable | None = None
+    self._on_carrot_web_click: Callable | None = None
 
     self._last_refresh = 0
     self._mouse_down_t: None | float = None
     self._did_long_press = False
     self._is_pressed_prev = False
+    self._carrot_web_pressed = False
 
     self._version_text = None
     self._experimental_mode = False
@@ -96,12 +98,14 @@ class MiciHomeLayout(Widget):
     self._ip_address = "Offline"
 
     self._settings_icon = IconWidget("icons_mici/settings.png", (48, 48), opacity=0.9)
+    self._carrot_web_icon = IconWidget("icons/carrot_web.png", (48, 48), opacity=0.9)
     self._experimental_icon = IconWidget("icons_mici/experimental_mode.png", (48, 48))
     self._mic_icon = IconWidget("icons_mici/microphone.png", (32, 46))
 
     self._status_bar_layout = HBoxLayout([
       IconWidget("icons_mici/settings.png", (48, 48), opacity=0.9),
       NetworkIcon(),
+      self._carrot_web_icon,
       self._experimental_icon,
       self._mic_icon,
     ], spacing=18)
@@ -135,7 +139,7 @@ class MiciHomeLayout(Widget):
     self._is_pressed_prev = self.is_pressed
 
     if self._mouse_down_t is not None:
-      if time.monotonic() - self._mouse_down_t > 0.5:
+      if not self._carrot_web_pressed and time.monotonic() - self._mouse_down_t > 0.5:
         # long gating for experimental mode - only allow toggle if longitudinal control is available
         if ui_state.has_longitudinal_control:
           self._experimental_mode = not self._experimental_mode
@@ -150,13 +154,21 @@ class MiciHomeLayout(Widget):
       self._last_refresh = rl.get_time()
       self._update_params()
 
-  def set_callbacks(self, on_settings: Callable | None = None):
+  def set_callbacks(self, on_settings: Callable | None = None, on_carrot_web: Callable | None = None):
     self._on_settings_click = on_settings
+    self._on_carrot_web_click = on_carrot_web
+
+  def _handle_mouse_press(self, mouse_pos: MousePos):
+    self._carrot_web_pressed = rl.check_collision_point_rec(mouse_pos, self._carrot_web_icon.rect)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if not self._did_long_press:
+    if self._carrot_web_pressed and rl.check_collision_point_rec(mouse_pos, self._carrot_web_icon.rect):
+      if self._on_carrot_web_click:
+        self._on_carrot_web_click()
+    elif not self._did_long_press:
       if self._on_settings_click:
         self._on_settings_click()
+    self._carrot_web_pressed = False
     self._did_long_press = False
 
   def _get_version_text(self) -> tuple[str, str, str, str] | None:
