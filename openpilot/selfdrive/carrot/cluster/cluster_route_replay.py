@@ -204,8 +204,6 @@ REPLAY_CUTIN_YAW_GAIN = 0.6
 NAV_SPEED_LIMIT_HOLD_SECONDS = 10.0
 ROAD_EDGE_VEHICLE_OUTSIDE_MARGIN_M = 0.25
 NEAR_ROAD_EDGE_VEHICLE_BLOCK_DISTANCE_M = 10.0
-BSD_SUMMARY_LONGITUDINAL_M = -1.6
-BSD_SUMMARY_LATERAL_M = 2.9
 LANE_CHANGE_REINDEX_PEAK_THRESHOLD = 0.22
 LANE_CHANGE_REINDEX_RESET_THRESHOLD = -0.08
 CONTINUOUS_LANE_CHANGE_REBASE_PROGRESS = 0.12
@@ -4481,29 +4479,7 @@ def car_state_corner_detections(car_state: Any) -> tuple[DetectedVehicle, ...]:
                 source="carState",
             )
         )
-    if left_blindspot and not car_state_has_near_side_detection(detections, -1.0):
-        detections.append(blindspot_summary_detection("LR", -1.0))
-    if right_blindspot and not car_state_has_near_side_detection(detections, 1.0):
-        detections.append(blindspot_summary_detection("RR", 1.0))
     return tuple(detections)
-
-
-def car_state_has_near_side_detection(detections: list[DetectedVehicle], side: float) -> bool:
-    return any(
-        math.copysign(1.0, vehicle.lateral_m) == side
-        and -8.0 <= vehicle.longitudinal_m <= 8.0
-        for vehicle in detections
-    )
-
-
-def blindspot_summary_detection(label: str, side: float) -> DetectedVehicle:
-    return DetectedVehicle(
-        label=label,
-        longitudinal_m=BSD_SUMMARY_LONGITUDINAL_M,
-        lateral_m=side * BSD_SUMMARY_LATERAL_M,
-        source="carState",
-        probability=0.85,
-    )
 
 
 def parse_corner_radar_message(

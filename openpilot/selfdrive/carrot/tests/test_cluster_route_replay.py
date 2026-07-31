@@ -15,6 +15,7 @@ from cluster_route_replay import (
   StableCornerObjectTracker,
   adjacent_route_log_path,
   blend_frames,
+  car_state_corner_detections,
   corner_track_label,
   frame_to_state,
   model_lead_detections_from_model_v2,
@@ -48,6 +49,30 @@ def radar_lead(track_id, d_rel=25.0, y_rel=2.0):
     vLat=0.0,
     aLeadK=0.0,
   )
+
+
+def test_blindspot_flags_do_not_create_virtual_corner_vehicles():
+  detections = car_state_corner_detections(SimpleNamespace(
+    leftBlindspot=True,
+    rightBlindspot=True,
+  ))
+
+  assert detections == ()
+
+
+def test_blindspot_rear_distance_still_creates_measured_corner_vehicle():
+  detections = car_state_corner_detections(SimpleNamespace(
+    leftBlindspot=True,
+    rightBlindspot=False,
+    leftRearLongDist=3.2,
+    leftRearLatDist=2.4,
+  ))
+
+  assert len(detections) == 1
+  assert detections[0].label == "LR"
+  assert detections[0].longitudinal_m == -3.2
+  assert detections[0].lateral_m == -2.4
+  assert detections[0].source == "carState"
 
 
 def test_corner_430_track_labels_preserve_radar_group():
