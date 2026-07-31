@@ -73,8 +73,7 @@ class Sidebar(Widget):
     self._connect_status = MetricData(tr_noop("CONNECT"), tr_noop("OFFLINE"), Colors.WARNING)
     self._recording_audio = False
 
-    self._home_img = gui_app.texture("images/button_home.png", HOME_BTN.width, HOME_BTN.height)
-    self._flag_img = gui_app.texture("images/button_flag.png", HOME_BTN.width, HOME_BTN.height)
+    self._carrot_web_img = gui_app.texture("icons/carrot_web.png", HOME_BTN.width, HOME_BTN.height)
     self._settings_img = gui_app.texture("images/button_settings.png", SETTINGS_BTN.width, SETTINGS_BTN.height)
     self._mic_img = gui_app.texture("icons/microphone.png", 30, 30)
     self._mic_indicator_rect = rl.Rectangle(0, 0, 0, 0)
@@ -83,13 +82,13 @@ class Sidebar(Widget):
 
     # Callbacks
     self._on_settings_click: Callable | None = None
-    self._on_flag_click: Callable | None = None
+    self._on_carrot_web_click: Callable | None = None
     self._open_settings_callback: Callable | None = None
 
-  def set_callbacks(self, on_settings: Callable | None = None, on_flag: Callable | None = None,
+  def set_callbacks(self, on_settings: Callable | None = None, on_carrot_web: Callable | None = None,
                     open_settings: Callable | None = None):
     self._on_settings_click = on_settings
-    self._on_flag_click = on_flag
+    self._on_carrot_web_click = on_carrot_web
     self._open_settings_callback = open_settings
 
   def _render(self, rect: rl.Rectangle):
@@ -147,9 +146,9 @@ class Sidebar(Widget):
     if rl.check_collision_point_rec(mouse_pos, SETTINGS_BTN):
       if self._on_settings_click:
         self._on_settings_click()
-    elif rl.check_collision_point_rec(mouse_pos, HOME_BTN) and ui_state.started:
-      if self._on_flag_click:
-        self._on_flag_click()
+    elif rl.check_collision_point_rec(mouse_pos, HOME_BTN):
+      if self._on_carrot_web_click:
+        self._on_carrot_web_click()
     elif self._recording_audio and rl.check_collision_point_rec(mouse_pos, self._mic_indicator_rect):
       if self._open_settings_callback:
         self._open_settings_callback()
@@ -163,12 +162,10 @@ class Sidebar(Widget):
     tint = Colors.BUTTON_PRESSED if settings_down else Colors.BUTTON_NORMAL
     rl.draw_texture_ex(self._settings_img, rl.Vector2(SETTINGS_BTN.x, SETTINGS_BTN.y), 0.0, 1.0, tint)
 
-    # Home/Flag button
-    flag_pressed = mouse_down and rl.check_collision_point_rec(mouse_pos, HOME_BTN)
-    button_img = self._flag_img if ui_state.started else self._home_img
-
-    tint = Colors.BUTTON_PRESSED if (ui_state.started and flag_pressed) else Colors.BUTTON_NORMAL
-    rl.draw_texture_ex(button_img, rl.Vector2(HOME_BTN.x, HOME_BTN.y), 0.0, 1.0, tint)
+    # Carrot Web button
+    carrot_web_pressed = mouse_down and rl.check_collision_point_rec(mouse_pos, HOME_BTN)
+    tint = Colors.BUTTON_PRESSED if carrot_web_pressed else Colors.BUTTON_NORMAL
+    rl.draw_texture_ex(self._carrot_web_img, rl.Vector2(HOME_BTN.x, HOME_BTN.y), 0.0, 1.0, tint)
 
     # Microphone button
     if self._recording_audio:
