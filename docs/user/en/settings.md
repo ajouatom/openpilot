@@ -98,13 +98,13 @@ Ignoring `x0.01`, `x0.001`, `cm`, `km/h`, or `%` can make a value appear one hun
 
 ## Settings map
 
-The current `carrot_settings.json` contains **169 parameters**. Every entry is assigned to one of these menus:
+The current `carrot_settings.json` contains **171 parameters**. Every entry is assigned to one of these menus:
 
 | Category | Count | Groups |
 |---|---:|---|
 | Driving control | 107 | Startup and auto, buttons and presets, steering, speed and deceleration, cruise and following gap |
 | Vehicle and hardware | 16 | Hyundai/Kia, CAN FD/HDA, radar, driver monitoring, vehicle assistance, device hardware |
-| Display | 36 | Information, path, brightness/on-road view, external HUD |
+| Display | 37 | Information, path, brightness/on-road view, external HUD |
 | System | 11 | Recording/power, network/map, sound, software |
 
 ## Driving control
@@ -217,22 +217,34 @@ See [Radar tracks and corner radar](radar.md) before changing radar modes.
 <a id="display"></a>
 ## Display
 
-Display contains 36 settings. Most on-road display settings are easy to reverse; external-HUD settings include hardware and performance choices.
+Display contains 37 settings. Most on-road display settings are easy to reverse; external-HUD settings include hardware and performance choices.
 
 | Group | Parameters | Purpose |
 |---|---|---|
 | Information | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode` | Debug, tire, time, lane, radar, and route information |
 | Path | `ShowPathMode`, `ShowPathColor`, `ShowPathColorCruiseOff`, `ShowPathModeLane`, `ShowPathColorLane` | Path shape and color by driving state |
-| Brightness/on-road view | `ShowCustomBrightness`, `ShowModelView` | Brightness and camera/model composition |
+| Brightness/on-road view | `ShowCustomBrightness`, `ShowModelView`, `ShowCameraWithCluster` | Brightness, camera/model composition, and the on-device camera while the external HUD is connected |
 | External HUD | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudOrientation`, and related `ClusterHud*` settings | Supported TURZX HUD layout, live brightness, screen rotation, camera, radar, encoder, and performance options |
 
 An APN label remaining in the `ShowRouteInfo` description refers to route-input state. It is not an indication that CarrotMan or CarrotLink is supported.
+
+`ShowCameraWithCluster=0` keeps the existing default: while the external HUD is connected, the on-device camera is hidden. Set it to `1` to show the on-device camera video.
 
 `ClusterHudBrightness=0` follows camera exposure automatically; values `1` through `100` select fixed brightness. `ClusterHudOrientation` supports only `0` (0 degrees) and `2` (180 degrees); values `1` and `3` are ignored. The running TURZX process checks both stored settings every 100 ms. Brightness applies live; a managed H.264 orientation change automatically restarts the HUD and applies it through the capture-compatible stream setup.
 
 `ClusterHudPanelLayout=0` places the driving view selected by `ClusterHudCameraViewMode` on the left and the information panel selected by the screen, debug, and navigation state on the right. `1` swaps them, placing information on the left and the driving view on the right. The running HUD applies the setting within about one second without a restart. Modes without two side regions, such as the full-screen graph and full-screen navigation, are unchanged. `ClusterHudDebug` forces always-on output and optional debug UI or navigation input; any resulting debug or navigation information panel follows the selected layout.
 
-While the external HUD is connected over USB, the on-device driving view on both regular C3/C3X hardware and mici switches to a black background and skips camera-video and model-path rendering. Speed, speed limit, driver state, alerts, and the driving-state border remain visible on the device, and the camera view returns automatically when the external HUD disconnects. `camerad` and model input continue running; only duplicate rendering on the device display is reduced.
+While the external HUD is connected over USB, `ShowCameraWithCluster=0` switches the on-device driving view on both regular C3/C3X hardware and mici to a black background and skips camera-video and model-path rendering. Setting it to `1` removes that connection-specific suppression and uses the normal on-device camera and on-road rendering path. A live change takes effect within about five seconds. Speed, speed limit, driver state, alerts, and the driving-state border remain visible with either value, and the option has no display effect after the external HUD disconnects. With value `0`, `camerad` and model input continue running; only duplicate rendering on the device display is reduced.
+
+The final `ClusterHudScreenMode` layout is:
+
+- `-1` uses the full width only in 3D camera views `0` and `1`, with no information panel or world shift. Left-side HUD items retain their margins, right-side gauges and TPMS align to the physical right edge, and the clock, world, and turn signals use the full-display center axis. In road-camera view `2`, it behaves exactly like mode `0`, including automatic navigation/report selection and `ClusterHudPanelLayout`.
+- `0` is the default screen. It shows navigation while live navigation is received and automatically shows the driving report otherwise.
+- `1` is the general live-debug panel for grouped delay, torque, steering, and lateral-plan state.
+- `2` is the reference system screen. It does not inherit mode `0`'s automatic report fallback: it keeps navigation or `NAVI DISCONNECTED` when navigation state exists and falls back to the route overlay only when no navigation source exists.
+- `3` disables the driving scene and shows the `ShowPlotMode` graph at large size.
+- `4` keeps the driving scene and shows the same graph in the information panel. The acceleration, steering, fuel, and DEF gauges sit immediately to the graph's left with an 18 px gap instead of near the display center, and follow the graph when the panel sides are swapped. TPMS remains with the driving view.
+- `5` always shows the driving report.
 
 `ClusterHudScreenMode=5` shows a live driving report in the information panel. In default screen mode (`0`), the same report is shown automatically while no live navigation is being received, and the navigation panel returns when reception starts. Its large card summarizes driving time, distance, average and maximum speed, the automated-driving ratio, maximum acceleration/deceleration, and hard acceleration/braking/corner counts. The small card presents CPU load, temperature, memory, and disk use as a 2×2 set of circular gauges. Its lower target plots the stored device pitch (P) vertically and yaw (Y) horizontally relative to the calibrated center while retaining the numeric angles. The driving area retains the branch, network address, and frame-rate status; the core-usage text is omitted when it would overlap the report. In road-camera view, detected vehicles are enclosed by transparent rounded frames whose border retains the existing detection color; ungrouped radar detections use smaller transparent rounded markers in their source color. Vehicle frames use one lightweight outline, and frames that would be partially projected at the screen edge or stretched by a noisy radar heading are omitted.
 

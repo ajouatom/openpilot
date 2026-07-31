@@ -100,7 +100,10 @@ class MainLayout(Widget):
     self._handle_onroad_transition()
     if ui_state.started:
       cluster_hud_connected = ui_state.params.get_bool("ClusterHudConnected")
-      self._layouts[MainState.ONROAD].set_cluster_hud_connected(cluster_hud_connected)
+      self._layouts[MainState.ONROAD].set_cluster_hud_connected(
+        cluster_hud_connected,
+        ui_state.show_camera_with_cluster,
+      )
     self._render_main_content()
     self._handle_carrot_record_cmd(ui_state.sm)
 
