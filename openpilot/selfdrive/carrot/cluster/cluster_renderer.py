@@ -45,6 +45,7 @@ from cluster_config import (
     CLUSTER_SCREEN_MODE_DEBUG,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+    CLUSTER_SCREEN_MODE_FULLSCREEN_3D,
     CLUSTER_SCREEN_MODE_NAVI,
     CLUSTER_SCREEN_MODE_TRIP_REPORT,
     CLUSTER_SCREEN_MODE_DEFAULT,
@@ -290,6 +291,11 @@ SYSTEM_PANEL_W = 476
 NAVI_LIVE_PANEL_Y = 1
 NAVI_LIVE_PANEL_H = DESIGN_HEIGHT - 2
 NAVI_WORLD_VIEW_SHIFT_X = (DESIGN_WIDTH - NAVI_LIVE_PANEL_X) * 0.5
+# Preserve each right-side widget's distance from the driving-view edge when
+# expanding the 1124 px driving region to the full 1920 px display.
+FULLSCREEN_3D_SIDE_WIDGET_OFFSET_X = DESIGN_WIDTH - CAMERA_BACKGROUND_W
+FULLSCREEN_3D_CLOCK_CENTER_X = DESIGN_WIDTH * 0.5
+FULLSCREEN_3D_TRAFFIC_PANEL_RIGHT = DESIGN_WIDTH - 28.0
 NAVI_MAP_BACKGROUND = (0, 0, 0, 255)
 TPMS_STATUS_CENTER_X = NAVI_LIVE_PANEL_X - 62.0
 TPMS_STATUS_VALUE_CENTER_Y = 429.5
@@ -302,6 +308,12 @@ TPMS_STATUS_WHEEL_W = 32.0
 TPMS_STATUS_WHEEL_H = 30.0
 TPMS_STATUS_ICON_W = 104.0
 TPMS_STATUS_ICON_H = 78.0
+FULLSCREEN_3D_CORE_USAGE_RIGHT_X = (
+    TPMS_STATUS_CENTER_X
+    + FULLSCREEN_3D_SIDE_WIDGET_OFFSET_X
+    - TPMS_STATUS_ICON_W * 0.5
+    - 18.0
+)
 TPMS_STATUS_FONT_SIZE = 21.0
 NAVI_LIVE_ICON_X = NAVI_LIVE_PANEL_X + 72
 NAVI_LIVE_ICON_Y = NAVI_LIVE_PANEL_Y + 99
@@ -983,6 +995,32 @@ class ClusterUiRenderer:
 
     def _information_panel_x(self, x: float) -> float:
         return x + self._information_panel_offset_design_x()
+
+    def _driving_hud_offset_design_x(self, screen_mode: int) -> float:
+        if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D:
+            return 0.0
+        return self._driving_panel_offset_design_x()
+
+    @staticmethod
+    def _side_widget_offset_design_x(screen_mode: int) -> float:
+        return FULLSCREEN_3D_SIDE_WIDGET_OFFSET_X if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D else 0.0
+
+    @staticmethod
+    def _center_clock_x(screen_mode: int) -> float:
+        return FULLSCREEN_3D_CLOCK_CENTER_X if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D else TOP_CLOCK_CENTER_X
+
+    def _traffic_panel_right(self, screen_mode: int) -> float:
+        if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D:
+            return FULLSCREEN_3D_TRAFFIC_PANEL_RIGHT
+        right = NAVI_TRAFFIC_PANEL_RIGHT
+        if self._panel_swap_active():
+            right -= NAVI_WORLD_VIEW_SHIFT_X
+        return right
+
+    def _core_usage_right_x(self, screen_mode: int) -> float:
+        if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D:
+            return FULLSCREEN_3D_CORE_USAGE_RIGHT_X
+        return DESIGN_WIDTH + self._information_panel_offset_design_x()
 
     def set_target_fps(self, target_fps: int) -> None:
         self.target_fps = max(0, int(target_fps))
@@ -2805,6 +2843,8 @@ class ClusterUiRenderer:
         signal_center_x = (
             LANE_TURN_SIGNAL_LEFT_CENTER_X if side == "left" else LANE_TURN_SIGNAL_RIGHT_CENTER_X
         )
+        if self._effective_screen_mode(state) == CLUSTER_SCREEN_MODE_FULLSCREEN_3D:
+            return 0.0
         if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
             camera_signal_center_x = CAMERA_BACKGROUND_X + signal_center_x * CAMERA_BACKGROUND_W / DESIGN_WIDTH
             return camera_signal_center_x - signal_center_x
@@ -3532,6 +3572,9 @@ class ClusterUiRenderer:
                 left_signal_lit,
                 right_signal_lit,
             )
+            if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D:
+                self._draw_status_footer(state)
+                return
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
                 profile_stage = self._profile_start()
                 self._draw_live_debug_panel(state)
@@ -3583,18 +3626,27 @@ class ClusterUiRenderer:
         left_signal_lit: bool,
         right_signal_lit: bool,
     ) -> None:
-        offset_x = self._driving_panel_offset_design_x()
+        offset_x = self._driving_hud_offset_design_x(screen_mode)
+        side_widget_offset_x = self._side_widget_offset_design_x(screen_mode)
         rl.rl_push_matrix()
         if abs(offset_x) > 0.001:
             rl.rl_translatef(offset_x, 0.0, 0.0)
         try:
             profile_stage = self._profile_start()
-            self._draw_speed_block(state)
+            self._draw_speed_block(state, tpms_offset_x=side_widget_offset_x)
             self._profile_add("hud.speed_block", profile_stage)
-            profile_stage = self._profile_start()
-            self._draw_accel_block(state)
-            self._profile_add("hud.accel_block", profile_stage)
-            self._draw_steering_output_block(state)
+            side_widgets_translated = abs(side_widget_offset_x) > 0.001
+            if side_widgets_translated:
+                rl.rl_push_matrix()
+                rl.rl_translatef(side_widget_offset_x, 0.0, 0.0)
+            try:
+                profile_stage = self._profile_start()
+                self._draw_accel_block(state)
+                self._profile_add("hud.accel_block", profile_stage)
+                self._draw_steering_output_block(state)
+            finally:
+                if side_widgets_translated:
+                    rl.rl_pop_matrix()
             profile_stage = self._profile_start()
             self._draw_turn_signal(
                 "left",
@@ -3628,9 +3680,7 @@ class ClusterUiRenderer:
                 and screen_mode != CLUSTER_SCREEN_MODE_TRIP_REPORT
             ):
                 profile_stage = self._profile_start()
-                traffic_panel_right = NAVI_TRAFFIC_PANEL_RIGHT
-                if self._panel_swap_active():
-                    traffic_panel_right -= NAVI_WORLD_VIEW_SHIFT_X
+                traffic_panel_right = self._traffic_panel_right(screen_mode)
                 self._draw_navi_media(
                     traffic_frame,
                     rl.Rectangle(traffic_panel_right - 230.0, NAVI_TRAFFIC_PANEL_Y, 230.0, 98.0),
@@ -3639,18 +3689,24 @@ class ClusterUiRenderer:
                 )
                 self._profile_add("hud.navi_traffic", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_center_clock(state)
+            self._draw_center_clock(state, center_x=self._center_clock_x(screen_mode))
             self._profile_add("hud.center_clock", profile_stage)
         finally:
             rl.rl_pop_matrix()
 
     def _effective_screen_mode(self, state: ClusterUiState) -> int:
-        if self.screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
+        requested_screen_mode = getattr(self, "screen_mode", CLUSTER_SCREEN_MODE_DEFAULT)
+        if (
+            requested_screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D
+            and getattr(state, "camera_view_mode", 0) == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
+        ):
+            requested_screen_mode = CLUSTER_SCREEN_MODE_DEFAULT
+        if requested_screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
             # Screen mode 2 renders the reference commit's mode-0 default
             # system screen without inheriting the current report fallback.
             return CLUSTER_SCREEN_MODE_DEFAULT
-        if self.screen_mode != CLUSTER_SCREEN_MODE_DEFAULT:
-            return self.screen_mode
+        if requested_screen_mode != CLUSTER_SCREEN_MODE_DEFAULT:
+            return requested_screen_mode
         dashboard = getattr(state, "navi_dashboard", None)
         dashboard_connected = bool(
             dashboard is not None and dashboard.connected
@@ -3673,7 +3729,8 @@ class ClusterUiRenderer:
         include_core_usage: bool = True,
     ) -> None:
         profile_stage = self._profile_start()
-        offset_x = self._driving_panel_offset_design_x()
+        screen_mode = self._effective_screen_mode(state)
+        offset_x = self._driving_hud_offset_design_x(screen_mode)
         if abs(offset_x) > 0.001:
             rl.rl_push_matrix()
             try:
@@ -3688,7 +3745,7 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             self._draw_cluster_core_usage(
                 state.cluster_core_usage_text,
-                right_x=DESIGN_WIDTH + self._information_panel_offset_design_x(),
+                right_x=self._core_usage_right_x(screen_mode),
             )
             self._profile_add("hud.cluster_core_usage", profile_stage)
 
@@ -3781,11 +3838,11 @@ class ClusterUiRenderer:
         secs = total % 60
         return f"{minutes:d}:{secs:02d}"
 
-    def _draw_center_clock(self, state: ClusterUiState) -> None:
+    def _draw_center_clock(self, state: ClusterUiState, *, center_x: float = TOP_CLOCK_CENTER_X) -> None:
         if state.center_clock_text:
             self._draw_text_with_stroke(
                 state.center_clock_text,
-                TOP_CLOCK_CENTER_X,
+                center_x,
                 TOP_STATUS_CENTER_Y,
                 48,
                 WHITE,
@@ -6487,7 +6544,7 @@ class ClusterUiRenderer:
             rl_color(outline, 210),
         )
 
-    def _draw_speed_block(self, state: ClusterUiState) -> None:
+    def _draw_speed_block(self, state: ClusterUiState, *, tpms_offset_x: float = 0.0) -> None:
         theme = self._current_theme()
         display_speed_kph = state.display_speed_kph if state.display_speed_kph is not None else state.speed_kph
         speed_value = int(round(display_speed(clamp(display_speed_kph, 0.0, MAX_SPEED_KPH), self.is_metric)))
@@ -6522,7 +6579,15 @@ class ClusterUiRenderer:
         self._draw_cruise_gap_badge(state.cruise_gap)
         self._draw_speed_gear_badge(state)
         self._draw_ev_mode_indicator(state)
-        self._draw_tpms_status(state)
+        tpms_translated = abs(tpms_offset_x) > 0.001
+        if tpms_translated:
+            rl.rl_push_matrix()
+            rl.rl_translatef(tpms_offset_x, 0.0, 0.0)
+        try:
+            self._draw_tpms_status(state)
+        finally:
+            if tpms_translated:
+                rl.rl_pop_matrix()
 
         if self._cruise_set_visible(state) and state.cruise_override_kph is not None:
             override_color = (

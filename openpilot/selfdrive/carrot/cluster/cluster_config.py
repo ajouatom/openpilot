@@ -76,6 +76,7 @@ CLUSTER_CAMERA_VIEW_MODE_PARAM = "ClusterHudCameraViewMode"
 CLUSTER_PANEL_LAYOUT_DRIVING_LEFT = 0
 CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT = 1
 CLUSTER_PANEL_LAYOUT_PARAM = "ClusterHudPanelLayout"
+CLUSTER_SCREEN_MODE_FULLSCREEN_3D = -1
 CLUSTER_SCREEN_MODE_DEFAULT = 0
 CLUSTER_SCREEN_MODE_DEBUG = 1
 CLUSTER_SCREEN_MODE_DEBUG_SYSTEM = 2
@@ -385,6 +386,10 @@ def normalize_cluster_screen_mode(value: object) -> int:
     if isinstance(value, str):
         normalized = value.strip().lower()
         aliases = {
+            "3d-fullscreen": CLUSTER_SCREEN_MODE_FULLSCREEN_3D,
+            "3d_fullscreen": CLUSTER_SCREEN_MODE_FULLSCREEN_3D,
+            "fullscreen-3d": CLUSTER_SCREEN_MODE_FULLSCREEN_3D,
+            "fullscreen_3d": CLUSTER_SCREEN_MODE_FULLSCREEN_3D,
             "default": CLUSTER_SCREEN_MODE_DEFAULT,
             "debug": CLUSTER_SCREEN_MODE_DEBUG,
             "system": CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
@@ -418,6 +423,7 @@ def normalize_cluster_screen_mode(value: object) -> int:
     except (TypeError, ValueError):
         return CLUSTER_SCREEN_MODE_DEFAULT
     if mode in (
+        CLUSTER_SCREEN_MODE_FULLSCREEN_3D,
         CLUSTER_SCREEN_MODE_DEFAULT,
         CLUSTER_SCREEN_MODE_DEBUG,
         CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
