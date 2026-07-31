@@ -368,6 +368,7 @@ DEBUG_PLOT_RIGHT_X = SYSTEM_PANEL_X
 DEBUG_PLOT_RIGHT_Y = DEBUG_PLOT_MARGIN
 DEBUG_PLOT_RIGHT_W = SYSTEM_PANEL_W
 DEBUG_PLOT_RIGHT_H = DESIGN_HEIGHT - DEBUG_PLOT_MARGIN * 2.0
+DEBUG_PLOT_SIDE_GAUGE_GAP = DEBUG_PLOT_MARGIN
 GIT_STATUS_MARGIN = 2
 GIT_STATUS_BOTTOM_MARGIN = 12
 GIT_STATUS_DOT_RADIUS = 7
@@ -1002,8 +1003,27 @@ class ClusterUiRenderer:
         return self._driving_panel_offset_design_x()
 
     @staticmethod
-    def _side_widget_offset_design_x(screen_mode: int) -> float:
+    def _tpms_offset_design_x(screen_mode: int) -> float:
         return FULLSCREEN_3D_SIDE_WIDGET_OFFSET_X if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D else 0.0
+
+    def _side_gauge_offset_design_x(self, screen_mode: int) -> float:
+        if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D:
+            return FULLSCREEN_3D_SIDE_WIDGET_OFFSET_X
+        if screen_mode != CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT:
+            return 0.0
+
+        plot_x = self._information_panel_x(DEBUG_PLOT_RIGHT_X)
+        desired_left_center_x = (
+            plot_x
+            - DEBUG_PLOT_SIDE_GAUGE_GAP
+            - SIDE_GAUGE_WIDTH * 0.5
+            - SIDE_GAUGE_COLUMN_GAP
+        )
+        return (
+            desired_left_center_x
+            - self._driving_hud_offset_design_x(screen_mode)
+            - SIDE_GAUGE_LEFT_CENTER_X
+        )
 
     @staticmethod
     def _center_clock_x(screen_mode: int) -> float:
@@ -3627,25 +3647,26 @@ class ClusterUiRenderer:
         right_signal_lit: bool,
     ) -> None:
         offset_x = self._driving_hud_offset_design_x(screen_mode)
-        side_widget_offset_x = self._side_widget_offset_design_x(screen_mode)
+        tpms_offset_x = self._tpms_offset_design_x(screen_mode)
+        side_gauge_offset_x = self._side_gauge_offset_design_x(screen_mode)
         rl.rl_push_matrix()
         if abs(offset_x) > 0.001:
             rl.rl_translatef(offset_x, 0.0, 0.0)
         try:
             profile_stage = self._profile_start()
-            self._draw_speed_block(state, tpms_offset_x=side_widget_offset_x)
+            self._draw_speed_block(state, tpms_offset_x=tpms_offset_x)
             self._profile_add("hud.speed_block", profile_stage)
-            side_widgets_translated = abs(side_widget_offset_x) > 0.001
-            if side_widgets_translated:
+            side_gauges_translated = abs(side_gauge_offset_x) > 0.001
+            if side_gauges_translated:
                 rl.rl_push_matrix()
-                rl.rl_translatef(side_widget_offset_x, 0.0, 0.0)
+                rl.rl_translatef(side_gauge_offset_x, 0.0, 0.0)
             try:
                 profile_stage = self._profile_start()
                 self._draw_accel_block(state)
                 self._profile_add("hud.accel_block", profile_stage)
                 self._draw_steering_output_block(state)
             finally:
-                if side_widgets_translated:
+                if side_gauges_translated:
                     rl.rl_pop_matrix()
             profile_stage = self._profile_start()
             self._draw_turn_signal(

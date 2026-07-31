@@ -461,7 +461,10 @@ report, `1` shows the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`,
 `c0a6773f794a5e4e86aeca8e14515232abc26b1b`'s mode-0 default system screen,
 `3` shows a large debug graph selected by `ShowPlotMode` with the driving scene
 disabled, and `4` shows the same graph in the information panel while keeping
-the driving scene.
+the driving scene. Mode `4` keeps the acceleration, steering, fuel, and DEF
+gauges immediately to the left of the graph instead of near the center of the
+driving view; the gauge block follows the graph when the panel layout is
+swapped, while TPMS remains with the driving view.
 `5` shows the driving report in the information panel while keeping the driving scene. The
 report uses a large trip/event summary card and a separate system-load card
 with four 2-by-2 circular gauges. A lower target plots stored calibration pitch

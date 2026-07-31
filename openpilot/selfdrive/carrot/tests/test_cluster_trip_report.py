@@ -11,9 +11,11 @@ sys.path.insert(0, str(CLUSTER_DIR))
 import cluster_renderer
 from cluster_config import (
   CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+  CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
   CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
   CLUSTER_SCREEN_MODE_DEFAULT,
   CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
+  CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
   CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
   CLUSTER_SCREEN_MODE_FULLSCREEN_3D,
   CLUSTER_SCREEN_MODE_TRIP_REPORT,
@@ -244,9 +246,10 @@ def test_fullscreen_3d_uses_full_width_hud_layout_even_when_panels_are_swapped()
   renderer.screen_mode = CLUSTER_SCREEN_MODE_FULLSCREEN_3D
   renderer.panel_layout = CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT
 
-  fullscreen_offset_x = renderer._side_widget_offset_design_x(CLUSTER_SCREEN_MODE_FULLSCREEN_3D)
+  fullscreen_offset_x = renderer._side_gauge_offset_design_x(CLUSTER_SCREEN_MODE_FULLSCREEN_3D)
   assert renderer._driving_hud_offset_design_x(CLUSTER_SCREEN_MODE_FULLSCREEN_3D) == 0.0
   assert fullscreen_offset_x == 796.0
+  assert renderer._tpms_offset_design_x(CLUSTER_SCREEN_MODE_FULLSCREEN_3D) == fullscreen_offset_x
   assert renderer._center_clock_x(CLUSTER_SCREEN_MODE_FULLSCREEN_3D) == 960.0
   assert renderer._traffic_panel_right(CLUSTER_SCREEN_MODE_FULLSCREEN_3D) == 1892.0
   assert renderer._core_usage_right_x(CLUSTER_SCREEN_MODE_FULLSCREEN_3D) == 1788.0
@@ -265,6 +268,27 @@ def test_fullscreen_3d_uses_full_width_hud_layout_even_when_panels_are_swapped()
   assert renderer._driving_hud_offset_design_x(CLUSTER_SCREEN_MODE_TRIP_REPORT) == 792.0
   assert road_camera_rect.x == 792.0
   assert road_camera_rect.width == CAMERA_BACKGROUND_W
+
+
+def test_graph_right_mode_places_side_gauges_next_to_graph_in_both_panel_layouts():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1920
+  renderer.height = 480
+  renderer.screen_mode = CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT
+
+  for panel_layout in (CLUSTER_PANEL_LAYOUT_DRIVING_LEFT, CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT):
+    renderer.panel_layout = panel_layout
+    driving_offset_x = renderer._driving_hud_offset_design_x(renderer.screen_mode)
+    gauge_offset_x = renderer._side_gauge_offset_design_x(renderer.screen_mode)
+    plot_x = renderer._information_panel_x(cluster_renderer.DEBUG_PLOT_RIGHT_X)
+    first_center_x = cluster_renderer.SIDE_GAUGE_LEFT_CENTER_X + driving_offset_x + gauge_offset_x
+    second_center_x = first_center_x + cluster_renderer.SIDE_GAUGE_COLUMN_GAP
+    gauge_half_width = cluster_renderer.SIDE_GAUGE_WIDTH * 0.5
+    graph_gap = cluster_renderer.DEBUG_PLOT_SIDE_GAUGE_GAP
+
+    assert second_center_x + gauge_half_width + graph_gap == plot_x
+
+    assert renderer._tpms_offset_design_x(renderer.screen_mode) == 0.0
 
 
 def test_fullscreen_3d_repositions_hud_widgets_and_suppresses_information_panels(monkeypatch):
