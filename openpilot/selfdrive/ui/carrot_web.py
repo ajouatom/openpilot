@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from ipaddress import ip_address
-from math import ceil
+from math import ceil, floor
 
 from openpilot.selfdrive.ui.widgets.qr_code import QRCodeTexture
 
@@ -11,6 +11,14 @@ CARROT_WEB_PORT = 7000
 CARROT_WEB_ADDRESS_REFRESH_SECONDS = 0.1
 CARROT_WEB_AUTO_CLOSE_SECONDS = 30.0
 CARROT_WEB_MIN_CLOSE_SECONDS = 0.35
+
+
+def fit_single_line_font_size(preferred_size: int, measured_width: float, max_width: float) -> int:
+  if preferred_size <= 1 or measured_width <= max_width:
+    return max(1, preferred_size)
+  if measured_width <= 0 or max_width <= 0:
+    return 1
+  return max(1, floor(preferred_size * max_width / measured_width))
 
 
 def build_carrot_web_url(address: str | None) -> str | None:

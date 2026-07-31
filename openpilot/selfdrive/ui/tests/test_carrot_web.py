@@ -6,6 +6,7 @@ from openpilot.selfdrive.ui.carrot_web import (
   CarrotWebAddressWatcher,
   CarrotWebQrSession,
   build_carrot_web_url,
+  fit_single_line_font_size,
 )
 
 
@@ -45,6 +46,19 @@ class FakeQRCodeTexture:
 )
 def test_build_carrot_web_url(address, expected):
   assert build_carrot_web_url(address) == expected
+
+
+@pytest.mark.parametrize(
+  "preferred_size,measured_width,max_width,expected",
+  [
+    (26, 250, 274, 26),
+    (26, 300, 274, 23),
+    (65, 750, 685, 59),
+    (26, 300, 0, 1),
+  ],
+)
+def test_fit_single_line_font_size(preferred_size, measured_width, max_width, expected):
+  assert fit_single_line_font_size(preferred_size, measured_width, max_width) == expected
 
 
 def test_address_watcher_polls_at_interval_and_reports_changes():

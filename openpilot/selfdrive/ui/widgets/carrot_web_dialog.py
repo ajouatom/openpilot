@@ -1,9 +1,10 @@
 import pyray as rl
 
-from openpilot.selfdrive.ui.carrot_web import CarrotWebQrSession
+from openpilot.selfdrive.ui.carrot_web import CarrotWebQrSession, fit_single_line_font_size
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import FontWeight, MousePos, gui_app
 from openpilot.system.ui.lib.multilang import tr
+from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import gui_label
 
@@ -54,13 +55,25 @@ class CarrotWebDialog(Widget):
       font_weight=FontWeight.BOLD,
     )
 
+    address_text = (self._session.url or tr("Offline")).removeprefix("http://")
+    preferred_address_size = int(26 * scale)
+    address_font = gui_app.font()
+    address_size = fit_single_line_font_size(
+      preferred_address_size,
+      measure_text_cached(address_font, address_text, preferred_address_size).x,
+      text_width,
+    )
+    while address_size > 1 and measure_text_cached(address_font, address_text, address_size).x > text_width:
+      address_size -= 1
+
     gui_label(
       rl.Rectangle(text_x, content_y + 104 * scale, text_width, 36 * scale),
-      (self._session.url or tr("Offline")).removeprefix("http://"),
-      int(26 * scale),
+      address_text,
+      address_size,
       rl.Color(205, 205, 205, 255),
       alignment=rl.GuiTextAlignment.TEXT_ALIGN_LEFT,
       alignment_vertical=rl.GuiTextAlignmentVertical.TEXT_ALIGN_TOP,
+      elide_right=False,
     )
 
     if self._session.updated_time is not None:
