@@ -112,6 +112,13 @@
       "id": "carrot-web-pages",
       "description": "Carrot Web 주행·화면녹화·도구·로그·터미널 화면",
       "code_paths": [
+        "openpilot/selfdrive/ui/carrot_web.py",
+        "openpilot/selfdrive/ui/layouts/main.py",
+        "openpilot/selfdrive/ui/layouts/sidebar.py",
+        "openpilot/selfdrive/ui/widgets/carrot_web_dialog.py",
+        "openpilot/selfdrive/ui/widgets/qr_code.py",
+        "openpilot/selfdrive/ui/mici/layouts/home.py",
+        "openpilot/selfdrive/ui/mici/layouts/main.py",
         "openpilot/selfdrive/carrot/carrot_man.py",
         "openpilot/selfdrive/carrot/web/index.html",
         "openpilot/selfdrive/carrot/web/js/pages/car.js",

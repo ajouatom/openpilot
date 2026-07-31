@@ -15,6 +15,8 @@ Carrot Web is a local web interface for viewing and managing carrotpilot from a 
 
 Example: `http://192.168.0.25:7000`
 
+Select the white carrot icon on the device to show a large QR code for its current address. On C3, use the bottom-left button; on C4, use the bottom status-icon row. Scan it with a phone on the same network to connect. If the device IP changes while the QR screen is open, both the QR code and displayed address update automatically. Long addresses scale to fit instead of being shortened. The last QR refresh time appears below the address as numeric `HH:MM:SS`, with the 30-second auto-close countdown on the right. Tap the QR screen to close it, or leave it open and it closes when the countdown reaches zero.
+
 Carrot Web is a local device-management interface. Do not expose it directly to the internet or give its address, a remote-support link, or terminal access to an untrusted person.
 
 ## Pages at a glance
