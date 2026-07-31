@@ -480,7 +480,8 @@
           "zh": "亮度与视图",
           "params": [
             "ShowCustomBrightness",
-            "ShowModelView"
+            "ShowModelView",
+            "ShowCameraWithCluster"
           ]
         },
         {
@@ -3104,6 +3105,22 @@
       "unit": 1
     },
     {
+      "group": "화면",
+      "name": "ShowCameraWithCluster",
+      "title": "외부 HUD 연결 시 본체 카메라(0)",
+      "descr": "0: 카메라 미표시(기본)\n1: 카메라 영상 표시",
+      "egroup": "DISPLAY",
+      "etitle": "On-device Camera with External HUD(0)",
+      "edescr": "0: Hide camera (default)\n1: Show camera video",
+      "cgroup": "显示",
+      "ctitle": "外部 HUD 连接时本机摄像头(0)",
+      "cdescr": "0: 不显示摄像头（默认）\n1: 显示摄像头画面",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
       "group": "외부 HUD",
       "name": "ClusterHud",
       "title": "외부 HUD 활성화(0)",
@@ -3358,14 +3375,14 @@
       "group": "외부 HUD",
       "name": "ClusterHudScreenMode",
       "title": "외부 HUD 화면 모드(0)",
-      "descr": "0: 기본\n1: 디버그\n2: 디버그(시스템)\n3: 디버그(그래프1)\n4: 디버그(그래프2)\n5: 주행 리포트",
+      "descr": "-1: 3D 전체화면\n0: 기본(내비/주행 리포트)\n1: 디버그\n2: 디버그(시스템)\n3: 디버그(그래프1)\n4: 디버그(그래프2)\n5: 주행 리포트",
       "egroup": "CLUSTER HUD",
       "etitle": "External HUD Screen Mode(0)",
-      "edescr": "0: Default\n1: Debug\n2: Debug (system)\n3: Debug (graph1)\n4: Debug (graph2)\n5: Driving Report",
+      "edescr": "-1: 3D fullscreen\n0: Default (navigation/driving report)\n1: Debug\n2: Debug (system)\n3: Debug (graph1)\n4: Debug (graph2)\n5: Driving Report",
       "cgroup": "外部 HUD",
       "ctitle": "外部 HUD 画面模式(0)",
-      "cdescr": "0: 默认\n1: 调试\n2: 调试(系统)\n3: 调试(图表1)\n4: 调试(图表2)\n5: 驾驶报告",
-      "min": 0,
+      "cdescr": "-1: 3D全屏\n0: 默认(导航/驾驶报告)\n1: 调试\n2: 调试(系统)\n3: 调试(图表1)\n4: 调试(图表2)\n5: 驾驶报告",
+      "min": -1,
       "max": 5,
       "default": 0,
       "unit": 1,

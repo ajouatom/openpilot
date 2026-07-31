@@ -70,6 +70,11 @@ def test_external_hud_brightness_and_orientation_use_catalog_controls(settings, 
     "Driving left / info right",
     "Info left / driving right",
   ]
+  screen_mode = by_name["ClusterHudScreenMode"]
+  assert (screen_mode["min"], screen_mode["max"], screen_mode["default"]) == (-1, 5, 0)
+  assert screen_mode["descr"].startswith("-1: 3D 전체화면\n0: 기본(내비/주행 리포트)")
+  assert screen_mode["edescr"].startswith("-1: 3D fullscreen\n0: Default (navigation/driving report)")
+  assert screen_mode["cdescr"].startswith("-1: 3D全屏\n0: 默认(导航/驾驶报告)")
 
   display = next(category for category in settings["menu"] if category["id"] == "DISPLAY")
   hud = next(group for group in display["groups"] if group["id"] == "DISP_HUD")
@@ -92,6 +97,26 @@ def test_external_hud_brightness_and_orientation_use_catalog_controls(settings, 
   assert '{"ClusterHudBrightness", {PERSISTENT, INT, "0"}}' in params_keys
   assert '{"ClusterHudOrientation", {PERSISTENT, INT, "0"}}' in params_keys
   assert '{"ClusterHudPanelLayout", {PERSISTENT, INT, "0"}}' in params_keys
+
+
+def test_cluster_camera_preference_is_in_brightness_and_view(settings, params):
+  by_name = {p["name"]: p for p in params}
+  camera = by_name["ShowCameraWithCluster"]
+  assert (camera["min"], camera["max"], camera["default"], camera["unit"]) == (0, 1, 0, 1)
+  assert camera["descr"] == "0: 카메라 미표시(기본)\n1: 카메라 영상 표시"
+  assert camera["edescr"] == "0: Hide camera (default)\n1: Show camera video"
+  assert camera["cdescr"] == "0: 不显示摄像头（默认）\n1: 显示摄像头画面"
+
+  display = next(category for category in settings["menu"] if category["id"] == "DISPLAY")
+  brightness = next(group for group in display["groups"] if group["id"] == "DISP_BRIGHT")
+  assert brightness["params"] == [
+    "ShowCustomBrightness",
+    "ShowModelView",
+    "ShowCameraWithCluster",
+  ]
+
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"ShowCameraWithCluster", {PERSISTENT, INT, "0"}}' in params_keys
 
 
 def test_carrot_radar_mode_replaces_removed_model_mode(settings, params):
