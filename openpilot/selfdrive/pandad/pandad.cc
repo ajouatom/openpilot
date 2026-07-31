@@ -184,6 +184,13 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
   std::vector<std::array<can_health_t, PANDA_CAN_CNT>> panda_can_states;
   panda_can_states.reserve(pandas_cnt);
 
+  struct CanTxDiagnosticState {
+    uint64_t last_log_ns = 0;
+    uint64_t drops = 0;
+  };
+  static std::vector<CanTxDiagnosticState> diagnostic_states;
+  diagnostic_states.resize(pandas_cnt);
+
   const bool red_panda_comma_three = (pandas.size() == 2) &&
                                      (pandas[0]->hw_type == cereal::PandaState::PandaType::DOS) &&
                                      (pandas[1]->hw_type == cereal::PandaState::PandaType::RED_PANDA);
@@ -223,6 +230,18 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
   for (uint32_t i = 0; i < pandas_cnt; i++) {
     Panda *panda = pandas[i];
     const health_t &health = panda_states[i];
+    CanTxDiagnosticState &diagnostic = diagnostic_states[i];
+    const uint64_t now = nanos_since_boot();
+    const uint64_t drops = panda->can_tx_drop_count();
+    const bool log_can_health = (drops != diagnostic.drops) &&
+                                ((diagnostic.last_log_ns == 0U) || ((now - diagnostic.last_log_ns) >= 1'000'000'000ULL));
+    if (log_can_health) {
+      LOGW("Panda CAN TX diagnostic: index=%u/%u serial=%s type=%d buses=%u-%u drops=%" PRIu64 "(+%" PRIu64 ") "
+           "spi_checksum=%u tx_overflow=%u",
+           i, pandas_cnt, panda->hw_serial().c_str(), (int)panda->hw_type, panda->bus_offset,
+           panda->bus_offset + PANDA_BUS_OFFSET - 1, drops, drops - diagnostic.drops,
+           (unsigned)health.spi_checksum_error_count_pkt, health.tx_buffer_overflow_pkt);
+    }
 
     // Make sure CAN buses are live: safety_setter_thread does not work if Panda CAN are silent and there is only one other CAN node
     if (health.safety_mode_pkt == (uint8_t)(cereal::CarParams::SafetyModel::SILENT)) {
@@ -249,7 +268,24 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
 
     auto cs = std::array{ps.initCanState0(), ps.initCanState1(), ps.initCanState2()};
     for (uint32_t j = 0; j < PANDA_CAN_CNT; j++) {
-      fill_panda_can_state(cs[j], panda_can_states[i][j]);
+      const can_health_t &can = panda_can_states[i][j];
+      fill_panda_can_state(cs[j], can);
+      if (log_can_health) {
+        LOGW("Panda CAN health: serial=%s bus=%u off=%u off_cnt=%u warning=%u passive=%u "
+             "lec=%u/%u dlec=%u/%u rec=%u tec=%u errors=%u tx_lost=%u tx_checksum=%u "
+             "tx=%u rx=%u speed=%u/%u fd=%u brs=%u",
+             panda->hw_serial().c_str(), panda->bus_offset + j, (unsigned)can.bus_off, can.bus_off_cnt,
+             (unsigned)can.error_warning, (unsigned)can.error_passive, (unsigned)can.last_error,
+             (unsigned)can.last_stored_error, (unsigned)can.last_data_error,
+             (unsigned)can.last_data_stored_error, (unsigned)can.receive_error_cnt,
+             (unsigned)can.transmit_error_cnt, can.total_error_cnt, can.total_tx_lost_cnt,
+             can.total_tx_checksum_error_cnt, can.total_tx_cnt, can.total_rx_cnt,
+             (unsigned)can.can_speed, (unsigned)can.can_data_speed,
+             (unsigned)can.canfd_enabled, (unsigned)can.brs_enabled);
+      }
+    }
+    if (log_can_health) {
+      diagnostic = {.last_log_ns = now, .drops = drops};
     }
 
     // Convert faults bitset to capnp list

@@ -233,14 +233,13 @@ int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint1
   do {
     ret = spi_transfer(endpoint, tx_data, tx_len, rx_data, max_rx_len, timeout, transfer_deadline);
 
-    // A data NACK on endpoint 3 is Panda CAN TX backpressure (or a bad data
-    // checksum, which is safe to drop). Match USB: wait briefly, then drop this
-    // sendcan batch without restarting otherwise healthy SPI communication.
+    // Endpoint 3 uses the same data NACK for CAN TX backpressure and a bad SPI
+    // data checksum. Match USB: wait briefly, then drop this sendcan batch.
     if (ret == SpiError::CAN_TX_FULL) {
       if (millis_since_boot() < can_tx_deadline) {
         continue;
       }
-      LOGW_100("SPI CAN transmit buffer full, dropping %u bytes", tx_len);
+      LOGW_100("SPI CAN data NACK, dropping %u bytes (queue backpressure or SPI checksum error)", tx_len);
       return 0;
     }
 

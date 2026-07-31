@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <ctime>
 #include <functional>
@@ -46,6 +47,7 @@ struct can_frame {
 class Panda {
 private:
   std::unique_ptr<PandaCommsHandle> handle;
+  std::atomic<uint64_t> can_tx_drop_count_ = 0;
 
 public:
   Panda(std::string serial, uint32_t bus_offset=0);
@@ -56,6 +58,7 @@ public:
   bool connected();
   bool comms_healthy();
   std::string hw_serial();
+  uint64_t can_tx_drop_count() const;
 
   // Static functions
   static std::vector<std::string> list(bool usb_only=false);
