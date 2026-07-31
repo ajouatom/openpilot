@@ -23,6 +23,7 @@ import cluster_renderer
 from cluster_renderer import ClusterUiRenderer
 import cluster_scene
 from cluster_scene import (
+  MeshStrip,
   RadarPointMarker,
   SCENE_STATE_FIELDS,
   Vec3,
@@ -47,7 +48,7 @@ def test_road_camera_radar_point_uses_transparent_source_colored_frame(monkeypat
     lateral_m=1.0,
   )
 
-  monkeypatch.setattr(renderer, "_project_camera_overlay_point", lambda *_args: cluster_renderer.rl.Vector2(100.0, 80.0))
+  monkeypatch.setattr(renderer, "_camera_overlay_screen_xy", lambda *_args: (100.0, 80.0))
   monkeypatch.setattr(
     cluster_renderer.rl,
     "draw_rectangle_rounded_lines_ex",
@@ -67,11 +68,11 @@ def test_road_camera_detected_vehicle_uses_transparent_colored_rounded_frame(mon
   renderer = object.__new__(ClusterUiRenderer)
   outlines = []
   projected = iter((
-    cluster_renderer.rl.Vector2(100.0, 100.0),
-    cluster_renderer.rl.Vector2(80.0, 100.0),
-    cluster_renderer.rl.Vector2(120.0, 100.0),
-    cluster_renderer.rl.Vector2(80.0, 50.0),
-    cluster_renderer.rl.Vector2(120.0, 50.0),
+    (100.0, 100.0),
+    (80.0, 100.0),
+    (120.0, 100.0),
+    (80.0, 50.0),
+    (120.0, 50.0),
   ))
   vehicle = VehicleBox(
     center=Vec3(0.0, 25.0, 0.0),
@@ -91,7 +92,7 @@ def test_road_camera_detected_vehicle_uses_transparent_colored_rounded_frame(mon
     longitudinal_m=25.0,
   )
 
-  monkeypatch.setattr(renderer, "_project_camera_overlay_point", lambda *_args: next(projected))
+  monkeypatch.setattr(renderer, "_camera_overlay_screen_xy", lambda *_args: next(projected))
   monkeypatch.setattr(
     cluster_renderer.rl,
     "draw_rectangle_rounded_lines_ex",
@@ -144,23 +145,23 @@ def test_road_camera_vehicle_frame_rejects_incomplete_or_edge_clipped_projection
   )
 
   incomplete = iter((
-    cluster_renderer.rl.Vector2(150.0, 100.0),
-    cluster_renderer.rl.Vector2(130.0, 100.0),
+    (150.0, 100.0),
+    (130.0, 100.0),
     None,
-    cluster_renderer.rl.Vector2(130.0, 50.0),
-    cluster_renderer.rl.Vector2(170.0, 50.0),
+    (130.0, 50.0),
+    (170.0, 50.0),
   ))
-  monkeypatch.setattr(renderer, "_project_camera_overlay_point", lambda *_args: next(incomplete))
+  monkeypatch.setattr(renderer, "_camera_overlay_screen_xy", lambda *_args: next(incomplete))
   renderer._draw_camera_overlay_vehicle_frame(vehicle, projection, 0.0, CLUSTER_RADAR_INFO_NONE)
 
   edge_clipped = iter((
-    cluster_renderer.rl.Vector2(5.0, 100.0),
-    cluster_renderer.rl.Vector2(-15.0, 100.0),
-    cluster_renderer.rl.Vector2(25.0, 100.0),
-    cluster_renderer.rl.Vector2(-15.0, 50.0),
-    cluster_renderer.rl.Vector2(25.0, 50.0),
+    (5.0, 100.0),
+    (-15.0, 100.0),
+    (25.0, 100.0),
+    (-15.0, 50.0),
+    (25.0, 50.0),
   ))
-  monkeypatch.setattr(renderer, "_project_camera_overlay_point", lambda *_args: next(edge_clipped))
+  monkeypatch.setattr(renderer, "_camera_overlay_screen_xy", lambda *_args: next(edge_clipped))
   renderer._draw_camera_overlay_vehicle_frame(vehicle, projection, 0.0, CLUSTER_RADAR_INFO_NONE)
 
   assert outlines == []
@@ -189,9 +190,9 @@ def test_road_camera_vehicle_frame_ignores_radar_yaw_for_screen_box_width(monkey
 
   def project(_self, point, _projection, _scene_shift_x_m=0.0):
     projected_road_points.append(point)
-    return cluster_renderer.rl.Vector2(150.0 + point.x * 10.0, 100.0 - point.z * 20.0)
+    return 150.0 + point.x * 10.0, 100.0 - point.z * 20.0
 
-  monkeypatch.setattr(ClusterUiRenderer, "_project_camera_overlay_point", project)
+  monkeypatch.setattr(ClusterUiRenderer, "_camera_overlay_screen_xy", project)
   monkeypatch.setattr(cluster_renderer.rl, "draw_rectangle_rounded_lines_ex", lambda *_args: None)
   projection = SimpleNamespace(dest=cluster_renderer.rl.Rectangle(0.0, 0.0, 300.0, 200.0))
   renderer._draw_camera_overlay_vehicle_frame(vehicle, projection, 0.0, CLUSTER_RADAR_INFO_NONE)
@@ -199,6 +200,141 @@ def test_road_camera_vehicle_frame_ignores_radar_yaw_for_screen_box_width(monkey
   left_base, right_base = projected_road_points[1:3]
   assert left_base.y == pytest.approx(right_base.y)
   assert left_base.x < vehicle.center.x < right_base.x
+
+
+def test_road_camera_strip_projects_each_endpoint_once_and_reuses_buffers(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._camera_overlay_strip_points = None
+  renderer._camera_overlay_strip_point_capacity = 0
+  renderer._camera_overlay_strip_pair_visibility = bytearray()
+  projected = []
+  batches = []
+  strip = MeshStrip(
+    left=(Vec3(-1.0, 10.0), Vec3(-2.0, 20.0), Vec3(-3.0, 30.0)),
+    right=(Vec3(1.0, 10.0), Vec3(2.0, 20.0), Vec3(3.0, 30.0)),
+    color=(10, 20, 30, 40),
+    x_offset_m=0.25,
+  )
+
+  def project(point, _projection, scene_shift_x_m=0.0):
+    projected.append((point, scene_shift_x_m))
+    return point.x * 10.0, point.y
+
+  def draw_strip(points, point_count, _color):
+    batches.append(tuple((points[index].x, points[index].y) for index in range(point_count)))
+
+  monkeypatch.setattr(renderer, "_camera_overlay_screen_xy", project)
+  renderer._raw_draw_triangle_strip_2d = draw_strip
+
+  renderer._draw_camera_overlay_strip(strip, object(), 0.5)
+  point_buffer = renderer._camera_overlay_strip_points
+  visibility_buffer = renderer._camera_overlay_strip_pair_visibility
+  renderer._draw_camera_overlay_strip(strip, object(), 0.5)
+
+  expected_batch = (
+    (-10.0, 10.0), (10.0, 10.0),
+    (-20.0, 20.0), (20.0, 20.0),
+    (-30.0, 30.0), (30.0, 30.0),
+  )
+  assert batches == [expected_batch, expected_batch]
+  assert len(projected) == 12
+  assert all(offset == pytest.approx(0.75) for _point, offset in projected)
+  assert renderer._camera_overlay_strip_points is point_buffer
+  assert renderer._camera_overlay_strip_pair_visibility is visibility_buffer
+
+
+def test_road_camera_strip_batches_only_contiguous_visible_pairs(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._camera_overlay_strip_points = None
+  renderer._camera_overlay_strip_point_capacity = 0
+  renderer._camera_overlay_strip_pair_visibility = bytearray()
+  batches = []
+  strip = MeshStrip(
+    left=tuple(Vec3(-1.0, float(index)) for index in range(6)),
+    right=tuple(Vec3(1.0, float(index)) for index in range(6)),
+    color=(255, 255, 255, 255),
+  )
+
+  def project(point, _projection, _scene_shift_x_m=0.0):
+    if point.y == 2.0:
+      return None
+    return point.x, point.y
+
+  def draw_strip(points, point_count, _color):
+    batches.append(tuple((points[index].x, points[index].y) for index in range(point_count)))
+
+  monkeypatch.setattr(renderer, "_camera_overlay_screen_xy", project)
+  renderer._raw_draw_triangle_strip_2d = draw_strip
+  renderer._draw_camera_overlay_strip(strip, object(), 0.0)
+
+  assert batches == [
+    ((-1.0, 0.0), (1.0, 0.0), (-1.0, 1.0), (1.0, 1.0)),
+    ((-1.0, 3.0), (1.0, 3.0), (-1.0, 4.0), (1.0, 4.0), (-1.0, 5.0), (1.0, 5.0)),
+  ]
+
+
+def test_road_camera_strip_fallback_preserves_original_triangle_order(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer._camera_overlay_strip_points = None
+  renderer._camera_overlay_strip_point_capacity = 0
+  renderer._camera_overlay_strip_pair_visibility = bytearray()
+  renderer._raw_draw_triangle_strip_2d = None
+  triangles = []
+  strip = MeshStrip(
+    left=(Vec3(-1.0, 10.0), Vec3(-2.0, 20.0), Vec3(-3.0, 30.0)),
+    right=(Vec3(1.0, 10.0), Vec3(2.0, 20.0), Vec3(3.0, 30.0)),
+    color=(10, 20, 30, 40),
+  )
+
+  monkeypatch.setattr(
+    renderer,
+    "_camera_overlay_screen_xy",
+    lambda point, _projection, _scene_shift_x_m=0.0: (point.x, point.y),
+  )
+  monkeypatch.setattr(
+    cluster_renderer.rl,
+    "draw_triangle",
+    lambda p0, p1, p2, _color: triangles.append(((p0.x, p0.y), (p1.x, p1.y), (p2.x, p2.y))),
+  )
+
+  renderer._draw_camera_overlay_strip(strip, object(), 0.0)
+
+  assert triangles == [
+    ((-1.0, 10.0), (1.0, 10.0), (2.0, 20.0)),
+    ((-1.0, 10.0), (2.0, 20.0), (-2.0, 20.0)),
+    ((-2.0, 20.0), (2.0, 20.0), (3.0, 30.0)),
+    ((-2.0, 20.0), (3.0, 30.0), (-3.0, 30.0)),
+  ]
+
+
+def test_road_camera_world_reuses_one_projection_for_background_and_overlay(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.profile_enabled = False
+  state = SimpleNamespace(camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA, onroad=True)
+  theme = SimpleNamespace(bg=(1, 2, 3, 255))
+  scene = object()
+  projection = object()
+  projection_calls = []
+  background_calls = []
+  overlay_calls = []
+
+  monkeypatch.setattr(renderer, "_current_theme", lambda: theme)
+  monkeypatch.setattr(renderer, "_highlight_lane_lit", lambda *_args: False)
+  monkeypatch.setattr(renderer, "_scene_for_state", lambda *_args: scene)
+  monkeypatch.setattr(
+    renderer,
+    "_camera_overlay_projection",
+    lambda value: projection_calls.append(value) or projection,
+  )
+  monkeypatch.setattr(renderer, "_draw_camera_background", lambda *args: background_calls.append(args))
+  monkeypatch.setattr(renderer, "_draw_camera_projected_overlay", lambda *args: overlay_calls.append(args))
+  monkeypatch.setattr(cluster_renderer.rl, "clear_background", lambda _color: None)
+
+  renderer._render_world(state, (False, False))
+
+  assert projection_calls == [state]
+  assert background_calls == [(state, projection)]
+  assert overlay_calls == [(scene, state, projection)]
 
 
 def _cluster_state(**changes) -> ClusterUiState:

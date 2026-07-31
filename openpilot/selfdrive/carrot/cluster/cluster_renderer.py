@@ -929,6 +929,10 @@ class ClusterUiRenderer:
             tuple[int, int],
             tuple[tuple[Vec3, ...], tuple[Vec3, ...], object, int],
         ] = OrderedDict()
+        self._camera_overlay_strip_points = None
+        self._camera_overlay_strip_point_capacity = 0
+        self._camera_overlay_strip_pair_visibility = bytearray()
+        self._raw_draw_triangle_strip_2d = getattr(getattr(rl, "rl", None), "DrawTriangleStrip", None)
         self._world_label_texture_cache: OrderedDict[
             tuple[int, str, float, float, tuple[int, int, int, int]],
             CachedTextTexture,
@@ -1273,6 +1277,9 @@ class ClusterUiRenderer:
         self._vehicle_model_load_attempted = False
         self._scene_cache_key = None
         self._scene_cache = None
+        self._camera_overlay_strip_points = None
+        self._camera_overlay_strip_point_capacity = 0
+        self._camera_overlay_strip_pair_visibility = bytearray()
         self._route_video_size = None
         self._route_video_frame_id = None
         rl.close_window()
@@ -1448,11 +1455,12 @@ class ClusterUiRenderer:
         rl.clear_background(rl_color(theme.bg))
         self._profile_add("render_world.clear_background", profile_stage)
         if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+            projection = self._camera_overlay_projection(state)
             profile_stage = self._profile_start()
-            self._draw_camera_background(state)
+            self._draw_camera_background(state, projection)
             self._profile_add("render_world.camera_background", profile_stage)
             profile_stage = self._profile_start()
-            self._draw_camera_projected_overlay(scene, state)
+            self._draw_camera_projected_overlay(scene, state, projection)
             self._profile_add("render_world.camera_projected_overlay", profile_stage)
         else:
             profile_stage = self._profile_start()
@@ -1478,11 +1486,16 @@ class ClusterUiRenderer:
         self._scene_cache = scene
         return scene
 
-    def _draw_camera_background(self, state: ClusterUiState) -> None:
+    def _draw_camera_background(
+        self,
+        state: ClusterUiState,
+        projection: CameraOverlayProjection | None = None,
+    ) -> None:
         if state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
             return
         overlay = state.route_overlay
-        projection = self._camera_overlay_projection(state)
+        if projection is None:
+            projection = self._camera_overlay_projection(state)
         if projection is None:
             return
         texture = None
@@ -1625,12 +1638,12 @@ class ClusterUiRenderer:
             camera_height_m=camera_height_m,
         )
 
-    def _project_camera_overlay_point(
+    def _camera_overlay_screen_xy(
         self,
         point: Vec3,
         projection: CameraOverlayProjection,
         scene_shift_x_m: float = 0.0,
-    ) -> rl.Vector2 | None:
+    ) -> tuple[float, float] | None:
         # Scene geometry is shifted forward for the synthetic 3D camera. Camera
         # projection uses the physical road coordinate whose origin is the ego.
         road_forward = float(point.y) - EGO_FORWARD_M
@@ -1639,16 +1652,18 @@ class ClusterUiRenderer:
         if road_forward <= CAMERA_OVERLAY_MIN_DEPTH_M:
             return None
 
-        matrix = projection.view_from_road
-        view_x = matrix[0][0] * road_forward + matrix[0][1] * road_left + matrix[0][2] * road_up
+        row_x, row_y, row_z = projection.view_from_road
+        view_x = row_x[0] * road_forward + row_x[1] * road_left + row_x[2] * road_up
         view_y = (
-            matrix[1][0] * road_forward
-            + matrix[1][1] * road_left
-            + matrix[1][2] * road_up
+            row_y[0] * road_forward
+            + row_y[1] * road_left
+            + row_y[2] * road_up
             + projection.camera_height_m
         )
-        view_z = matrix[2][0] * road_forward + matrix[2][1] * road_left + matrix[2][2] * road_up
-        if view_z <= CAMERA_OVERLAY_MIN_DEPTH_M or not all(math.isfinite(value) for value in (view_x, view_y, view_z)):
+        view_z = row_z[0] * road_forward + row_z[1] * road_left + row_z[2] * road_up
+        if view_z <= CAMERA_OVERLAY_MIN_DEPTH_M or not (
+            math.isfinite(view_x) and math.isfinite(view_y) and math.isfinite(view_z)
+        ):
             return None
 
         camera_x = projection.focal_length * view_x / view_z + projection.camera_width * 0.5
@@ -1663,10 +1678,16 @@ class ClusterUiRenderer:
             or screen_y > projection.dest.y + projection.dest.height + clip_margin
         ):
             return None
-        return rl.Vector2(screen_x, screen_y)
+        return screen_x, screen_y
 
-    def _draw_camera_projected_overlay(self, scene: ClusterScene, state: ClusterUiState) -> None:
-        projection = self._camera_overlay_projection(state)
+    def _draw_camera_projected_overlay(
+        self,
+        scene: ClusterScene,
+        state: ClusterUiState,
+        projection: CameraOverlayProjection | None = None,
+    ) -> None:
+        if projection is None:
+            projection = self._camera_overlay_projection(state)
         if projection is None:
             return
 
@@ -1677,6 +1698,7 @@ class ClusterUiRenderer:
             int(round(projection.dest.height)),
         )
         try:
+            profile_stage = self._profile_start()
             for strip in scene.highlight_lanes:
                 self._draw_camera_overlay_strip(strip, projection, scene.scene_shift_x_m)
             for strip in scene.road_edges:
@@ -1685,10 +1707,15 @@ class ClusterUiRenderer:
                 self._draw_camera_overlay_strip(strip, projection, scene.scene_shift_x_m)
             for strip in scene.planned_path:
                 self._draw_camera_overlay_strip(strip, projection, scene.scene_shift_x_m)
+            self._profile_add("render_world.camera_projected_overlay.strips", profile_stage)
+            profile_stage = self._profile_start()
             for point in scene.radar_points:
                 self._draw_camera_overlay_radar_point(point, projection, scene.scene_shift_x_m, state.radar_info_mode)
+            self._profile_add("render_world.camera_projected_overlay.radar", profile_stage)
+            profile_stage = self._profile_start()
             for vehicle in sorted(scene.vehicles, key=self._camera_overlay_vehicle_draw_key):
                 self._draw_camera_overlay_vehicle(vehicle, projection, scene.scene_shift_x_m, state.radar_info_mode)
+            self._profile_add("render_world.camera_projected_overlay.vehicles", profile_stage)
         finally:
             rl.end_scissor_mode()
 
@@ -1702,15 +1729,74 @@ class ClusterUiRenderer:
         if count < 2:
             return
         color = rl_color(strip.color)
-        for index in range(count - 1):
-            left0 = self._project_camera_overlay_point(strip.left[index], projection, scene_shift_x_m + strip.x_offset_m)
-            right0 = self._project_camera_overlay_point(strip.right[index], projection, scene_shift_x_m + strip.x_offset_m)
-            left1 = self._project_camera_overlay_point(strip.left[index + 1], projection, scene_shift_x_m + strip.x_offset_m)
-            right1 = self._project_camera_overlay_point(strip.right[index + 1], projection, scene_shift_x_m + strip.x_offset_m)
-            if left0 is None or right0 is None or left1 is None or right1 is None:
+        points = self._camera_overlay_strip_point_buffer(count * 2)
+        pair_visible = self._camera_overlay_strip_visibility_buffer(count)
+        x_offset_m = scene_shift_x_m + strip.x_offset_m
+        project_point = self._camera_overlay_screen_xy
+        left_points = strip.left
+        right_points = strip.right
+        for index in range(count):
+            pair_visible[index] = 0
+            left = project_point(left_points[index], projection, x_offset_m)
+            right = project_point(right_points[index], projection, x_offset_m)
+            if left is None or right is None:
                 continue
+            left_point = points[index * 2]
+            left_point.x, left_point.y = left
+            right_point = points[index * 2 + 1]
+            right_point.x, right_point.y = right
+            pair_visible[index] = 1
+
+        draw_triangle_strip = getattr(self, "_raw_draw_triangle_strip_2d", None)
+        if draw_triangle_strip is not None:
+            point_ptr = rl.ffi.cast("struct Vector2 *", points)
+            index = 0
+            while index < count:
+                # Split at rejected endpoint pairs so batching cannot bridge a
+                # gap that the legacy per-segment clipping left empty.
+                while index < count and not pair_visible[index]:
+                    index += 1
+                start = index
+                while index < count and pair_visible[index]:
+                    index += 1
+                pair_count = index - start
+                if pair_count >= 2:
+                    # L0,R0,L1,R1 expands to the same two triangles and
+                    # winding as the legacy DrawTriangle pair below.
+                    draw_triangle_strip(point_ptr + start * 2, pair_count * 2, color)
+            return
+
+        for index in range(count - 1):
+            if not pair_visible[index] or not pair_visible[index + 1]:
+                continue
+            left0 = points[index * 2]
+            right0 = points[index * 2 + 1]
+            left1 = points[(index + 1) * 2]
+            right1 = points[(index + 1) * 2 + 1]
             rl.draw_triangle(left0, right0, right1, color)
             rl.draw_triangle(left0, right1, left1, color)
+
+    def _camera_overlay_strip_point_buffer(self, point_count: int):
+        capacity = getattr(self, "_camera_overlay_strip_point_capacity", 0)
+        points = getattr(self, "_camera_overlay_strip_points", None)
+        if points is not None and capacity >= point_count:
+            return points
+
+        capacity = 1 << max(0, point_count - 1).bit_length()
+        points = rl.ffi.new("struct Vector2[]", capacity)
+        self._camera_overlay_strip_points = points
+        self._camera_overlay_strip_point_capacity = capacity
+        return points
+
+    def _camera_overlay_strip_visibility_buffer(self, pair_count: int) -> bytearray:
+        pair_visible = getattr(self, "_camera_overlay_strip_pair_visibility", None)
+        if pair_visible is None:
+            pair_visible = bytearray()
+        if len(pair_visible) < pair_count:
+            capacity = 1 << max(0, pair_count - 1).bit_length()
+            pair_visible.extend(bytes(capacity - len(pair_visible)))
+        self._camera_overlay_strip_pair_visibility = pair_visible
+        return pair_visible
 
     def _draw_camera_overlay_vehicle(
         self,
@@ -1743,7 +1829,7 @@ class ClusterUiRenderer:
     ) -> None:
         center_y_m = vehicle.center.y + RADAR_TO_CAMERA_M + VEHICLE_LENGTH_M
         base_z = CAMERA_OVERLAY_VEHICLE_ROAD_HEIGHT_M
-        center = self._project_camera_overlay_point(
+        center = self._camera_overlay_screen_xy(
             Vec3(vehicle.center.x, center_y_m, base_z),
             projection,
             scene_shift_x_m,
@@ -1757,7 +1843,7 @@ class ClusterUiRenderer:
         emphasized = vehicle.primary or vehicle.cut_in
         half_width_m = max(0.6, vehicle.width_m * 0.58)
         frame_height_m = max(0.8, vehicle.height_m * 1.12)
-        left_base = self._project_camera_overlay_point(
+        left_base = self._camera_overlay_screen_xy(
             Vec3(
                 vehicle.center.x - half_width_m,
                 center_y_m,
@@ -1766,7 +1852,7 @@ class ClusterUiRenderer:
             projection,
             scene_shift_x_m,
         )
-        right_base = self._project_camera_overlay_point(
+        right_base = self._camera_overlay_screen_xy(
             Vec3(
                 vehicle.center.x + half_width_m,
                 center_y_m,
@@ -1775,7 +1861,7 @@ class ClusterUiRenderer:
             projection,
             scene_shift_x_m,
         )
-        left_top = self._project_camera_overlay_point(
+        left_top = self._camera_overlay_screen_xy(
             Vec3(
                 vehicle.center.x - half_width_m,
                 center_y_m,
@@ -1784,7 +1870,7 @@ class ClusterUiRenderer:
             projection,
             scene_shift_x_m,
         )
-        right_top = self._project_camera_overlay_point(
+        right_top = self._camera_overlay_screen_xy(
             Vec3(
                 vehicle.center.x + half_width_m,
                 center_y_m,
@@ -1793,17 +1879,16 @@ class ClusterUiRenderer:
             projection,
             scene_shift_x_m,
         )
-        projected_corners = (left_base, right_base, left_top, right_top)
-        if any(point is None for point in projected_corners):
+        if left_base is None or right_base is None or left_top is None or right_top is None:
             return
 
-        min_x = min(point.x for point in projected_corners if point is not None)
-        max_x = max(point.x for point in projected_corners if point is not None)
-        min_y = min(point.y for point in projected_corners if point is not None)
-        max_y = max(point.y for point in projected_corners if point is not None)
+        min_x = min(left_base[0], right_base[0], left_top[0], right_top[0])
+        max_x = max(left_base[0], right_base[0], left_top[0], right_top[0])
+        min_y = min(left_base[1], right_base[1], left_top[1], right_top[1])
+        max_y = max(left_base[1], right_base[1], left_top[1], right_top[1])
         width = max_x - min_x
         height = max_y - min_y
-        if not all(math.isfinite(value) for value in (width, height)) or width <= 0.0 or height <= 0.0:
+        if not (math.isfinite(width) and math.isfinite(height)) or width <= 0.0 or height <= 0.0:
             return
         pad_x = max(4.0, width * 0.08)
         pad_y = max(4.0, height * 0.08)
@@ -1892,13 +1977,13 @@ class ClusterUiRenderer:
         radar_info_mode: int,
     ) -> None:
         camera_point = Vec3(point.center.x, point.center.y + RADAR_TO_CAMERA_M, point.center.z)
-        screen = self._project_camera_overlay_point(camera_point, projection, scene_shift_x_m)
+        screen = self._camera_overlay_screen_xy(camera_point, projection, scene_shift_x_m)
         if screen is None:
             return
         radius = max(3.0, min(10.0, 80.0 / max(6.0, point.longitudinal_m)))
         marker = rl.Rectangle(
-            screen.x - radius,
-            screen.y - radius,
+            screen[0] - radius,
+            screen[1] - radius,
             radius * 2.0,
             radius * 2.0,
         )
@@ -1917,7 +2002,14 @@ class ClusterUiRenderer:
         if point.absolute_speed_kph is not None:
             label_parts.append(f"{display_speed(point.absolute_speed_kph, self.is_metric):.0f} {speed_unit(self.is_metric)}")
         if label_parts:
-            self._draw_world_label_text(" ".join(label_parts), screen.x, screen.y - 16.0, 15, (*WHITE[:3], 220), anchor="center")
+            self._draw_world_label_text(
+                " ".join(label_parts),
+                screen[0],
+                screen[1] - 16.0,
+                15,
+                (*WHITE[:3], 220),
+                anchor="center",
+            )
 
     def render_to_file(self, state: ClusterUiState, output_path: str | Path) -> None:
         image = self._render_to_image(state)

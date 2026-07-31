@@ -862,7 +862,7 @@ def test_road_camera_vehicle_frame_uses_vehicle_road_anchor(monkeypatch):
   projected = []
   monkeypatch.setattr(
     ClusterUiRenderer,
-    "_project_camera_overlay_point",
+    "_camera_overlay_screen_xy",
     lambda self, point, projection, scene_shift_x_m=0.0: (projected.append(point), None)[1],
   )
   renderer._draw_camera_overlay_vehicle_frame(
