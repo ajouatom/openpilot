@@ -64,10 +64,64 @@ public:
   static std::vector<std::string> list();
 
 private:
+  enum class TransferPhase : uint8_t {
+    IDLE = 0,
+    HEADER,
+    HEADER_ACK,
+    DATA,
+    DATA_ACK,
+    RESPONSE,
+    RECOVERY,
+  };
+
+  struct HostDiagnostics {
+    uint32_t requested_speed_hz = 0;
+    uint32_t actual_speed_hz = 0;
+    uint32_t actual_mode = 0;
+    uint8_t actual_bits_per_word = 0;
+
+    uint64_t ioctl_count = 0;
+    uint64_t ioctl_error_count = 0;
+    uint64_t ioctl_short_count = 0;
+    uint64_t ioctl_over_1ms_count = 0;
+    uint64_t ioctl_over_5ms_count = 0;
+    uint64_t ioctl_over_20ms_count = 0;
+    uint64_t ioctl_over_100ms_count = 0;
+    double ioctl_total_ms = 0.0;
+    double ioctl_max_ms = 0.0;
+    uint8_t ioctl_max_endpoint = 0;
+    TransferPhase ioctl_max_phase = TransferPhase::IDLE;
+    uint32_t ioctl_max_len = 0;
+    int ioctl_max_ret = 0;
+
+    uint64_t mutex_wait_count = 0;
+    uint64_t mutex_over_1ms_count = 0;
+    uint64_t mutex_over_5ms_count = 0;
+    uint64_t mutex_over_20ms_count = 0;
+    uint64_t mutex_over_100ms_count = 0;
+    double mutex_total_ms = 0.0;
+    double mutex_max_ms = 0.0;
+    uint8_t mutex_max_endpoint = 0;
+
+    uint64_t flock_wait_count = 0;
+    uint64_t flock_error_count = 0;
+    uint64_t flock_over_1ms_count = 0;
+    uint64_t flock_over_5ms_count = 0;
+    uint64_t flock_over_20ms_count = 0;
+    uint64_t flock_over_100ms_count = 0;
+    double flock_total_ms = 0.0;
+    double flock_max_ms = 0.0;
+    uint8_t flock_max_endpoint = 0;
+
+    double last_log_ms = 0.0;
+  };
+
   int spi_fd = -1;
   uint8_t tx_buf[SPI_BUF_SIZE];
   uint8_t rx_buf[SPI_BUF_SIZE];
   inline static std::recursive_mutex hw_lock;
+  TransferPhase transfer_phase = TransferPhase::IDLE;
+  HostDiagnostics host_diagnostics;
 
   struct __attribute__((packed)) spi_header {
     uint8_t sync;
@@ -82,7 +136,10 @@ private:
                    unsigned int timeout, double deadline);
   int spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len, uint8_t *rx_data, uint16_t max_rx_len, unsigned int timeout);
   int lltransfer(struct spi_ioc_transfer &t);
+  void record_lock_diagnostics(uint8_t endpoint, double mutex_wait_ms, double flock_wait_ms, int flock_ret, int flock_errno);
+  void log_host_diagnostics(bool force=false);
+  static const char *phase_name(TransferPhase phase);
 
-  spi_header header;
+  spi_header header{};
   uint32_t xfer_count = 0;
 };
