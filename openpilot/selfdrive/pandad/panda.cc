@@ -114,6 +114,18 @@ std::optional<can_health_t> Panda::get_can_state(uint16_t can_number) {
   return err >= 0 ? std::make_optional(can_health) : std::nullopt;
 }
 
+bool Panda::get_diagnostics(uint16_t page, void *data, uint16_t size) {
+  int err = handle->control_read(0xc7, page, 0, (unsigned char *)data, size);
+  return err == size;
+}
+
+bool Panda::clear_diagnostics() {
+  uint8_t accepted = 0U;
+  int err = handle->control_read(0xc8, PANDA_DIAGNOSTICS_VERSION, PANDA_DIAGNOSTICS_RESET_MAGIC,
+                                 &accepted, sizeof(accepted));
+  return (err == sizeof(accepted)) && (accepted == 1U);
+}
+
 void Panda::set_loopback(bool loopback) {
   handle->control_write(0xe5, loopback, 0);
 }

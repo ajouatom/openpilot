@@ -15,6 +15,17 @@ uint8_t spi_buf_tx[SPI_BUF_SIZE];
 #endif
 
 uint16_t spi_checksum_error_count = 0;
+uint32_t spi_header_sync_nack_count = 0U;
+uint32_t spi_header_checksum_nack_count = 0U;
+uint32_t spi_data_checksum_nack_count = 0U;
+uint32_t spi_endpoint3_checksum_nack_count = 0U;
+uint32_t spi_endpoint3_backpressure_nack_count = 0U;
+uint32_t spi_endpoint3_ack_count = 0U;
+uint32_t spi_last_endpoint3_checksum_time_us = 0U;
+uint32_t spi_last_endpoint3_backpressure_time_us = 0U;
+uint16_t spi_last_endpoint3_checksum_len = 0U;
+uint16_t spi_last_endpoint3_backpressure_len = 0U;
+uint16_t spi_last_backpressure_tx_free[3] = {0U, 0U, 0U};
 
 #if defined(ENABLE_SPI) || defined(BOOTSTUB)
 static uint8_t spi_state = SPI_STATE_HEADER;
@@ -108,6 +119,8 @@ void spi_rx_done(void) {
       response_len = 1U;
     } else {
       // response: NACK and reset state machine
+      spi_header_sync_nack_count += (spi_buf_rx[0] != SPI_SYNC_BYTE) ? 1U : 0U;
+      spi_header_checksum_nack_count += !checksum_valid ? 1U : 0U;
       #ifdef DEBUG_SPI
         print("- incorrect header sync or checksum "); hexdump(spi_buf_rx, SPI_HEADER_SIZE);
       #endif
@@ -144,8 +157,15 @@ void spi_rx_done(void) {
           if (spi_can_tx_ready) {
             spi_can_tx_ready = false;
             comms_can_write(&spi_buf_rx[SPI_HEADER_SIZE], spi_data_len_mosi);
+            spi_endpoint3_ack_count += 1U;
             response_ack = true;
           } else {
+            spi_endpoint3_backpressure_nack_count += 1U;
+            spi_last_endpoint3_backpressure_time_us = microsecond_timer_get();
+            spi_last_endpoint3_backpressure_len = spi_data_len_mosi;
+            #ifndef BOOTSTUB
+              comms_can_get_tx_queue_free(spi_last_backpressure_tx_free);
+            #endif
             response_ack = false;
             print("SPI: CAN NACK\n");
           }
@@ -161,6 +181,12 @@ void spi_rx_done(void) {
       }
     } else {
       // Checksum was incorrect
+      spi_data_checksum_nack_count += 1U;
+      if (spi_endpoint == 3U) {
+        spi_endpoint3_checksum_nack_count += 1U;
+        spi_last_endpoint3_checksum_time_us = microsecond_timer_get();
+        spi_last_endpoint3_checksum_len = spi_data_len_mosi;
+      }
       response_ack = false;
       #ifdef DEBUG_SPI
         print("- incorrect data checksum ");

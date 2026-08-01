@@ -55,6 +55,12 @@ int comms_can_read(uint8_t *data, uint32_t max_len) {
 
 static asm_buffer can_write_buffer = {.ptr = 0U, .tail_size = 0U};
 
+void comms_can_get_tx_queue_free(uint16_t *slots) {
+  for (uint8_t i = 0U; i < PANDA_CAN_CNT; i++) {
+    slots[i] = (uint16_t)can_slots_empty(can_queues[i]);
+  }
+}
+
 // send on CAN
 void comms_can_write(const uint8_t *data, uint32_t len) {
   uint32_t pos = 0U;

@@ -74,6 +74,8 @@ public:
   void set_ir_pwr(uint16_t ir_pwr);
   std::optional<health_t> get_state();
   std::optional<can_health_t> get_can_state(uint16_t can_number);
+  bool get_diagnostics(uint16_t page, void *data, uint16_t size);
+  bool clear_diagnostics();
   void set_loopback(bool loopback);
   std::optional<std::vector<uint8_t>> get_firmware_version();
   bool up_to_date();

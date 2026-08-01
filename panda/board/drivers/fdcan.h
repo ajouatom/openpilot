@@ -31,6 +31,36 @@ void can_clear_send(FDCAN_GlobalTypeDef *FDCANx, uint8_t can_number) {
   }
 }
 
+static void can_diag_capture_error(uint8_t can_number, uint8_t stage, uint32_t timestamp_us,
+                                   uint32_t ir_reg, uint32_t psr_reg, uint32_t ecr_reg,
+                                   uint32_t txfqs_reg, uint32_t rxf0s_reg) {
+  panda_can_error_diag_t *diag = &can_error_diag[can_number][stage];
+  if (diag->valid == 0U) {
+    uint8_t bus_number = BUS_NUM_FROM_CAN_NUM(can_number);
+    diag->version = PANDA_DIAGNOSTICS_VERSION;
+    diag->page = PANDA_DIAGNOSTICS_PAGE_CAN_SNAPSHOT_BASE + (can_number * PANDA_CAN_ERROR_STAGE_COUNT) + stage;
+    diag->can_number = can_number;
+    diag->bus_number = bus_number;
+    diag->safety_mode = (uint8_t)current_safety_mode;
+    diag->safety_param = current_safety_param;
+    diag->timestamp_us = timestamp_us;
+    diag->ir_reg = ir_reg;
+    diag->psr_reg = psr_reg;
+    diag->ecr_reg = ecr_reg;
+    diag->txfqs_reg = txfqs_reg;
+    diag->rxf0s_reg = rxf0s_reg;
+    diag->last_tx_addr = can_diag_last_tx_addr[bus_number];
+    diag->last_tx_time_us = can_diag_last_tx_time_us[bus_number];
+    diag->last_rx_addr = can_diag_last_rx_addr[bus_number];
+    diag->last_rx_time_us = can_diag_last_rx_time_us[bus_number];
+    diag->last_host_addr = can_diag_last_host_addr[bus_number];
+    diag->last_host_time_us = can_diag_last_host_time_us[bus_number];
+    diag->last_fwd_addr = can_diag_last_fwd_addr[bus_number];
+    diag->last_fwd_time_us = can_diag_last_fwd_time_us[bus_number];
+    diag->valid = 1U;
+  }
+}
+
 void update_can_health_pkt(uint8_t can_number, uint32_t ir_reg) {
   uint8_t can_irq_number[3][2] = {
     { FDCAN1_IT0_IRQn, FDCAN1_IT1_IRQn },
@@ -41,6 +71,41 @@ void update_can_health_pkt(uint8_t can_number, uint32_t ir_reg) {
   FDCAN_GlobalTypeDef *FDCANx = CANIF_FROM_CAN_NUM(can_number);
   uint32_t psr_reg = FDCANx->PSR;
   uint32_t ecr_reg = FDCANx->ECR;
+  uint32_t timestamp_us = microsecond_timer_get();
+
+  panda_can_error_hist_t *hist = &can_error_hist[can_number];
+  hist->version = PANDA_DIAGNOSTICS_VERSION;
+  hist->page = PANDA_DIAGNOSTICS_PAGE_CAN_HIST_BASE + can_number;
+  hist->can_number = can_number;
+  hist->bus_number = BUS_NUM_FROM_CAN_NUM(can_number);
+
+  if (ir_reg != 0U) {
+    uint8_t nominal_error = ((psr_reg & FDCAN_PSR_LEC) >> FDCAN_PSR_LEC_Pos);
+    uint8_t data_error = ((psr_reg & FDCAN_PSR_DLEC) >> FDCAN_PSR_DLEC_Pos);
+    if ((nominal_error >= 1U) && (nominal_error <= 6U)) {
+      hist->nominal_error_cnt[nominal_error - 1U] += 1U;
+    }
+    if ((data_error >= 1U) && (data_error <= 6U)) {
+      hist->data_error_cnt[data_error - 1U] += 1U;
+    }
+    hist->error_warning_irq_cnt += ((psr_reg & FDCAN_PSR_EW) != 0U) ? 1U : 0U;
+    hist->error_passive_irq_cnt += ((psr_reg & FDCAN_PSR_EP) != 0U) ? 1U : 0U;
+    hist->bus_off_irq_cnt += ((ir_reg & FDCAN_IR_BO) != 0U) ? 1U : 0U;
+    can_diag_capture_error(can_number, PANDA_CAN_ERROR_STAGE_FIRST, timestamp_us, ir_reg, psr_reg, ecr_reg,
+                           FDCANx->TXFQS, FDCANx->RXF0S);
+  }
+  if ((psr_reg & FDCAN_PSR_EW) != 0U) {
+    can_diag_capture_error(can_number, PANDA_CAN_ERROR_STAGE_WARNING, timestamp_us, ir_reg, psr_reg, ecr_reg,
+                           FDCANx->TXFQS, FDCANx->RXF0S);
+  }
+  if ((psr_reg & FDCAN_PSR_EP) != 0U) {
+    can_diag_capture_error(can_number, PANDA_CAN_ERROR_STAGE_PASSIVE, timestamp_us, ir_reg, psr_reg, ecr_reg,
+                           FDCANx->TXFQS, FDCANx->RXF0S);
+  }
+  if ((ir_reg & FDCAN_IR_BO) != 0U) {
+    can_diag_capture_error(can_number, PANDA_CAN_ERROR_STAGE_BUS_OFF, timestamp_us, ir_reg, psr_reg, ecr_reg,
+                           FDCANx->TXFQS, FDCANx->RXF0S);
+  }
 
   can_health[can_number].bus_off = ((psr_reg & FDCAN_PSR_BO) >> FDCAN_PSR_BO_Pos);
   can_health[can_number].bus_off_cnt += can_health[can_number].bus_off;
@@ -98,6 +163,8 @@ void process_can(uint8_t can_number) {
       if (can_pop(can_queues[bus_number], &to_send)) {
         if (can_check_checksum(&to_send)) {
           can_health[can_number].total_tx_cnt += 1U;
+          can_diag_last_tx_addr[bus_number] = GET_ADDR(&to_send);
+          can_diag_last_tx_time_us[bus_number] = microsecond_timer_get();
 
           uint32_t TxFIFOSA = FDCAN_START_ADDRESS + (can_number * FDCAN_OFFSET) + (FDCAN_RX_FIFO_0_EL_CNT * FDCAN_RX_FIFO_0_EL_SIZE);
           // get the index of the next TX FIFO element (0 to FDCAN_TX_FIFO_EL_CNT - 1)
@@ -190,6 +257,9 @@ void can_rx(uint8_t can_number) {
     to_push.addr = ((to_push.extended != 0U) ? (fifo->header[0] & 0x1FFFFFFFU) : ((fifo->header[0] >> 18) & 0x7FFU));
     to_push.bus = bus_number;
     to_push.data_len_code = ((fifo->header[1] >> 16) & 0xFU);
+
+    can_diag_last_rx_addr[bus_number] = GET_ADDR(&to_push);
+    can_diag_last_rx_time_us[bus_number] = microsecond_timer_get();
 
     uint8_t data_len_w = (dlc_to_len[to_push.data_len_code] / 4U);
     data_len_w += ((dlc_to_len[to_push.data_len_code] % 4U) > 0U) ? 1U : 0U;

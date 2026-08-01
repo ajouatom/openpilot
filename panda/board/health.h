@@ -59,3 +59,125 @@ typedef struct __attribute__((packed)) {
   uint32_t irq2_call_rate;
   uint32_t can_core_reset_cnt;
 } can_health_t;
+
+#define PANDA_DIAGNOSTICS_VERSION 1U
+#define PANDA_DIAGNOSTICS_RESET_MAGIC 0xD1A6U
+#define PANDA_DIAGNOSTICS_PAGE_SPI 0U
+#define PANDA_DIAGNOSTICS_PAGE_CAN_HIST_BASE 1U
+#define PANDA_DIAGNOSTICS_PAGE_CAN_SNAPSHOT_BASE 4U
+#define PANDA_DIAGNOSTICS_PAGE_HYUNDAI_SUMMARY 16U
+#define PANDA_DIAGNOSTICS_PAGE_HYUNDAI_BUFFER_BASE 17U
+
+#define PANDA_CAN_ERROR_STAGE_FIRST 0U
+#define PANDA_CAN_ERROR_STAGE_WARNING 1U
+#define PANDA_CAN_ERROR_STAGE_PASSIVE 2U
+#define PANDA_CAN_ERROR_STAGE_BUS_OFF 3U
+#define PANDA_CAN_ERROR_STAGE_COUNT 4U
+#define PANDA_DIAGNOSTICS_HYUNDAI_BUFFER_COUNT 6U
+
+typedef struct __attribute__((packed)) {
+  uint8_t version;
+  uint8_t page;
+  uint8_t spi_state;
+  uint8_t can_tx_ready;
+  uint32_t header_sync_nack_cnt;
+  uint32_t header_checksum_nack_cnt;
+  uint32_t data_checksum_nack_cnt;
+  uint32_t endpoint3_checksum_nack_cnt;
+  uint32_t endpoint3_backpressure_nack_cnt;
+  uint32_t endpoint3_ack_cnt;
+  uint32_t last_endpoint3_checksum_time_us;
+  uint32_t last_endpoint3_backpressure_time_us;
+  uint16_t last_endpoint3_checksum_len;
+  uint16_t last_endpoint3_backpressure_len;
+  uint16_t current_tx_free[3];
+  uint16_t last_backpressure_tx_free[3];
+  uint32_t tx_overflow_by_bus[3];
+} panda_spi_diag_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t version;
+  uint8_t page;
+  uint8_t can_number;
+  uint8_t bus_number;
+  uint32_t nominal_error_cnt[6];
+  uint32_t data_error_cnt[6];
+  uint32_t error_warning_irq_cnt;
+  uint32_t error_passive_irq_cnt;
+  uint32_t bus_off_irq_cnt;
+} panda_can_error_hist_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t version;
+  uint8_t page;
+  uint8_t can_number;
+  uint8_t bus_number;
+  uint8_t valid;
+  uint8_t safety_mode;
+  uint16_t safety_param;
+  uint32_t timestamp_us;
+  uint32_t ir_reg;
+  uint32_t psr_reg;
+  uint32_t ecr_reg;
+  uint32_t txfqs_reg;
+  uint32_t rxf0s_reg;
+  uint32_t last_tx_addr;
+  uint32_t last_tx_time_us;
+  uint32_t last_rx_addr;
+  uint32_t last_rx_time_us;
+  uint32_t last_host_addr;
+  uint32_t last_host_time_us;
+  uint32_t last_fwd_addr;
+  uint32_t last_fwd_time_us;
+} panda_can_error_diag_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t version;
+  uint8_t page;
+  uint8_t enabled;
+  uint8_t safety_mode;
+  uint16_t safety_param;
+  uint8_t buffer_count;
+  uint8_t reserved;
+  uint32_t tx_buffered_cnt;
+  uint32_t fwd_call_cnt;
+  uint32_t fwd_from_bus0_cnt;
+  uint32_t fwd_from_bus2_cnt;
+  uint32_t replace_to_bus0_cnt;
+  uint32_t replace_to_bus2_cnt;
+  uint32_t pass_to_bus0_cnt;
+  uint32_t pass_to_bus2_cnt;
+  uint32_t dynamic_block_to_bus0_cnt;
+  uint32_t dynamic_block_to_bus2_cnt;
+  uint32_t empty_to_bus0_cnt;
+  uint32_t empty_to_bus2_cnt;
+  uint32_t block_4b9_cnt;
+  uint32_t invalid_bus_cnt;
+} panda_hyundai_fwd_diag_t;
+
+typedef struct __attribute__((packed)) {
+  uint8_t version;
+  uint8_t page;
+  uint8_t index;
+  uint8_t enabled;
+  uint16_t addr;
+  uint8_t dst_bus;
+  uint8_t count;
+  uint8_t reuse_left;
+  uint8_t started;
+  uint8_t has_last_pkt;
+  uint8_t reserved;
+  uint32_t push_attempt_cnt;
+  uint32_t push_accepted_cnt;
+  uint32_t push_full_drop_cnt;
+  uint32_t pop_attempt_cnt;
+  uint32_t pop_success_cnt;
+  uint32_t reuse_attempt_cnt;
+  uint32_t reuse_success_cnt;
+  uint32_t empty_fallback_cnt;
+  uint32_t reset_cnt;
+  uint32_t last_push_time_us;
+  uint32_t last_pop_time_us;
+  uint32_t last_reuse_time_us;
+  uint32_t last_empty_time_us;
+} panda_hyundai_buffer_diag_t;

@@ -4,8 +4,20 @@ uint32_t safety_tx_blocked = 0;
 uint32_t safety_rx_invalid = 0;
 uint32_t tx_buffer_overflow = 0;
 uint32_t rx_buffer_overflow = 0;
+uint32_t tx_buffer_overflow_by_bus[CAN_HEALTH_ARRAY_SIZE] = {0U, 0U, 0U};
 
 can_health_t can_health[CAN_HEALTH_ARRAY_SIZE] = {{0}, {0}, {0}};
+panda_can_error_hist_t can_error_hist[CAN_HEALTH_ARRAY_SIZE] = {{0}, {0}, {0}};
+panda_can_error_diag_t can_error_diag[CAN_HEALTH_ARRAY_SIZE][PANDA_CAN_ERROR_STAGE_COUNT] = {{{0}}};
+
+uint32_t can_diag_last_tx_addr[CAN_HEALTH_ARRAY_SIZE] = {0U, 0U, 0U};
+uint32_t can_diag_last_tx_time_us[CAN_HEALTH_ARRAY_SIZE] = {0U, 0U, 0U};
+uint32_t can_diag_last_rx_addr[CAN_HEALTH_ARRAY_SIZE] = {0U, 0U, 0U};
+uint32_t can_diag_last_rx_time_us[CAN_HEALTH_ARRAY_SIZE] = {0U, 0U, 0U};
+uint32_t can_diag_last_host_addr[CAN_HEALTH_ARRAY_SIZE] = {0U, 0U, 0U};
+uint32_t can_diag_last_host_time_us[CAN_HEALTH_ARRAY_SIZE] = {0U, 0U, 0U};
+uint32_t can_diag_last_fwd_addr[CAN_HEALTH_ARRAY_SIZE] = {0U, 0U, 0U};
+uint32_t can_diag_last_fwd_time_us[CAN_HEALTH_ARRAY_SIZE] = {0U, 0U, 0U};
 
 // Ignition detected from CAN meessages
 bool ignition_can = false;
@@ -244,13 +256,25 @@ bool can_check_checksum(CANPacket_t *packet) {
 
 bool safety_tx_buffered_for_fwd = false;
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
+  if (bus_number < PANDA_BUS_CNT) {
+    if (skip_tx_hook) {
+      can_diag_last_fwd_addr[bus_number] = GET_ADDR(to_push);
+      can_diag_last_fwd_time_us[bus_number] = microsecond_timer_get();
+    } else {
+      can_diag_last_host_addr[bus_number] = GET_ADDR(to_push);
+      can_diag_last_host_time_us[bus_number] = microsecond_timer_get();
+    }
+  }
+
   safety_tx_buffered_for_fwd = false;
   if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
     if (safety_tx_buffered_for_fwd) safety_tx_buffered_for_fwd = false;
     else if (bus_number < PANDA_BUS_CNT) {
       can_set_checksum(to_push);
       // add CAN packet to send queue
-      tx_buffer_overflow += can_push(can_queues[bus_number], to_push) ? 0U : 1U;
+      bool pushed = can_push(can_queues[bus_number], to_push);
+      tx_buffer_overflow += pushed ? 0U : 1U;
+      tx_buffer_overflow_by_bus[bus_number] += pushed ? 0U : 1U;
       process_can(CAN_NUM_FROM_BUS_NUM(bus_number));
     }
   } else {

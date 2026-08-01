@@ -335,6 +335,25 @@ static bool canfd_should_block_fwd(int tx_bus, int addr, uint32_t now) {
 #define CANFD_BFWD_REUSE_MAX 2
 
 typedef struct {
+  uint32_t tx_buffered_cnt;
+  uint32_t fwd_call_cnt;
+  uint32_t fwd_from_bus0_cnt;
+  uint32_t fwd_from_bus2_cnt;
+  uint32_t replace_to_bus0_cnt;
+  uint32_t replace_to_bus2_cnt;
+  uint32_t pass_to_bus0_cnt;
+  uint32_t pass_to_bus2_cnt;
+  uint32_t dynamic_block_to_bus0_cnt;
+  uint32_t dynamic_block_to_bus2_cnt;
+  uint32_t empty_to_bus0_cnt;
+  uint32_t empty_to_bus2_cnt;
+  uint32_t block_4b9_cnt;
+  uint32_t invalid_bus_cnt;
+} HyundaiCanfdFwdDiag;
+
+HyundaiCanfdFwdDiag hyundai_canfd_fwd_diag = {0};
+
+typedef struct {
   int addr;
   int dst_bus;
   bool enabled;
@@ -349,6 +368,20 @@ typedef struct {
   CANPacket_t last_pkt;
 
   CANPacket_t q[CANFD_BFWD_MAX_QUEUE];
+
+  uint32_t push_attempt_cnt;
+  uint32_t push_accepted_cnt;
+  uint32_t push_full_drop_cnt;
+  uint32_t pop_attempt_cnt;
+  uint32_t pop_success_cnt;
+  uint32_t reuse_attempt_cnt;
+  uint32_t reuse_success_cnt;
+  uint32_t empty_fallback_cnt;
+  uint32_t reset_cnt;
+  uint32_t last_push_time_us;
+  uint32_t last_pop_time_us;
+  uint32_t last_reuse_time_us;
+  uint32_t last_empty_time_us;
 } CanfdBufferedFwd;
 
 CanfdBufferedFwd canfd_bfwd[] = {
@@ -386,6 +419,7 @@ static CanfdBufferedFwd* canfd_bfwd_find(int addr, int dst_bus) {
 }
 
 static void canfd_bfwd_reset(CanfdBufferedFwd* st) {
+  st->reset_cnt++;
   st->started = false;
   st->head = 0U;
   st->tail = 0U;
@@ -394,12 +428,16 @@ static void canfd_bfwd_reset(CanfdBufferedFwd* st) {
   st->has_last_pkt = false;
   st->last_pkt = (CANPacket_t){0};
 }
-static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt) {
+static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt, uint32_t now) {
   if ((st == NULL) || !st->enabled) return;
   if (GET_BUS(pkt) != st->dst_bus) return;
 
+  st->push_attempt_cnt++;
+  st->last_push_time_us = now;
+
   // queue가 이미 2개면 이번 새 packet은 버림
   if (st->count >= CANFD_BFWD_MAX_QUEUE) {
+    st->push_full_drop_cnt++;
     return;
   }
 
@@ -407,12 +445,15 @@ static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt) {
   st->tail = (st->tail + 1U) % CANFD_BFWD_MAX_QUEUE;
   st->count++;
   st->started = true;
+  st->push_accepted_cnt++;
 }
 
-static bool canfd_bfwd_pop(CanfdBufferedFwd* st, CANPacket_t* pkt) {
+static bool canfd_bfwd_pop(CanfdBufferedFwd* st, CANPacket_t* pkt, uint32_t now) {
   if ((st == NULL) || !st->enabled) {
     return false;
   }
+
+  st->pop_attempt_cnt++;
 
   if (!st->started || (st->count == 0U)) {
     return false;
@@ -431,12 +472,17 @@ static bool canfd_bfwd_pop(CanfdBufferedFwd* st, CANPacket_t* pkt) {
     st->started = false;
   }
 
+  st->pop_success_cnt++;
+  st->last_pop_time_us = now;
+
   return true;
 }
-static bool canfd_bfwd_reuse_last(CanfdBufferedFwd* st, CANPacket_t* pkt) {
+static bool canfd_bfwd_reuse_last(CanfdBufferedFwd* st, CANPacket_t* pkt, uint32_t now) {
   if ((st == NULL) || !st->enabled) {
     return false;
   }
+
+  st->reuse_attempt_cnt++;
 
   if (!st->has_last_pkt || (st->reuse_left == 0U)) {
     return false;
@@ -444,6 +490,8 @@ static bool canfd_bfwd_reuse_last(CanfdBufferedFwd* st, CANPacket_t* pkt) {
 
   canfd_copy_packet(pkt, &st->last_pkt);
   st->reuse_left--;
+  st->reuse_success_cnt++;
+  st->last_reuse_time_us = now;
 
   return true;
 }
@@ -627,7 +675,8 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   else if (hyundai_canfd_buffered_fwd) {
     CanfdBufferedFwd* bfwd = canfd_bfwd_find(addr, GET_BUS(to_send));
     if (bfwd != NULL) {
-      canfd_bfwd_push(bfwd, to_send);
+      canfd_bfwd_push(bfwd, to_send, microsecond_timer_get());
+      hyundai_canfd_fwd_diag.tx_buffered_cnt++;
       extern bool safety_tx_buffered_for_fwd;
       safety_tx_buffered_for_fwd = true;
       //tx = false;
@@ -646,13 +695,17 @@ static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
 
   int bus_fwd = -1;
   uint32_t now = microsecond_timer_get();
+  hyundai_canfd_fwd_diag.fwd_call_cnt++;
   if (bus_num == 0) {
     bus_fwd = 2;
+    hyundai_canfd_fwd_diag.fwd_from_bus0_cnt++;
   }
   else if (bus_num == 2) {
     bus_fwd = 0;
+    hyundai_canfd_fwd_diag.fwd_from_bus2_cnt++;
   }
   else {
+    hyundai_canfd_fwd_diag.invalid_bus_cnt++;
     return -1;
   }
 
@@ -660,11 +713,11 @@ static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
     CanfdBufferedFwd* bfwd = canfd_bfwd_find(addr, bus_fwd);
     if (bfwd != NULL) {
       CANPacket_t buffered_pkt;
-      bool use_buffered = canfd_bfwd_pop(bfwd, &buffered_pkt);
+      bool use_buffered = canfd_bfwd_pop(bfwd, &buffered_pkt, now);
 
       // queue가 비었으면 마지막 정상값을 1~2회 재사용
       if (!use_buffered) {
-        use_buffered = canfd_bfwd_reuse_last(bfwd, &buffered_pkt);
+        use_buffered = canfd_bfwd_reuse_last(bfwd, &buffered_pkt, now);
         if (use_buffered) {
           print("reuse:"); putui((uint32_t)addr); print(", reuse_left:"); putui((uint32_t)bfwd->reuse_left); print("\n");
         }
@@ -676,23 +729,42 @@ static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
         canfd_copy_packet(to_send, &buffered_pkt);
         canfd_apply_counter_and_update_checksum(to_send, counter);
 
+        if (bus_fwd == 0) {
+          hyundai_canfd_fwd_diag.replace_to_bus0_cnt++;
+        } else {
+          hyundai_canfd_fwd_diag.replace_to_bus2_cnt++;
+        }
+
         return bus_fwd;
+      }
+
+      bfwd->empty_fallback_cnt++;
+      bfwd->last_empty_time_us = now;
+      if (bus_fwd == 0) {
+        hyundai_canfd_fwd_diag.empty_to_bus0_cnt++;
+      } else {
+        hyundai_canfd_fwd_diag.empty_to_bus2_cnt++;
       }
     }
   }
 
   if (bus_num == 0) {
     if (canfd_should_block_fwd(2, addr, now)) {
+      hyundai_canfd_fwd_diag.dynamic_block_to_bus2_cnt++;
       return -1;
     }
     if (addr == 0x4B9) {
+      hyundai_canfd_fwd_diag.block_4b9_cnt++;
       return -1;
     }
+    hyundai_canfd_fwd_diag.pass_to_bus2_cnt++;
     return 2;
   }
   if (canfd_should_block_fwd(0, addr, now)) {
+    hyundai_canfd_fwd_diag.dynamic_block_to_bus0_cnt++;
     return -1;
   }
+  hyundai_canfd_fwd_diag.pass_to_bus0_cnt++;
   return 0;
 }
 

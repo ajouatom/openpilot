@@ -169,6 +169,111 @@ void fill_panda_can_state(cereal::PandaState::PandaCanState::Builder &cs, const 
   cs.setCanCoreResetCnt(can_health.can_core_reset_cnt);
 }
 
+template <typename T>
+std::optional<T> read_panda_diagnostic(Panda *panda, uint16_t page) {
+  T diag{};
+  if (!panda->get_diagnostics(page, &diag, sizeof(diag)) ||
+      (diag.version != PANDA_DIAGNOSTICS_VERSION) || (diag.page != page)) {
+    return std::nullopt;
+  }
+  return diag;
+}
+
+void log_panda_fast_diagnostics(Panda *panda) {
+  const std::string serial = panda->hw_serial();
+  if (auto diag = read_panda_diagnostic<panda_spi_diag_t>(panda, PANDA_DIAGNOSTICS_PAGE_SPI)) {
+    LOGW("Panda SPI diagnostic: serial=%s state=%u ready=%u header_sync_nack=%u header_checksum_nack=%u data_checksum_nack=%u "
+         "ep3_checksum_nack=%u ep3_backpressure_nack=%u ep3_ack=%u "
+         "last_ep3_checksum=%u@%u last_ep3_backpressure=%u@%u tx_free=%u/%u/%u "
+         "last_backpressure_free=%u/%u/%u tx_overflow_bus=%u/%u/%u",
+         serial.c_str(), (unsigned)diag->spi_state, (unsigned)diag->can_tx_ready,
+         diag->header_sync_nack_cnt, diag->header_checksum_nack_cnt, diag->data_checksum_nack_cnt,
+         diag->endpoint3_checksum_nack_cnt,
+         diag->endpoint3_backpressure_nack_cnt, diag->endpoint3_ack_cnt,
+         (unsigned)diag->last_endpoint3_checksum_len, diag->last_endpoint3_checksum_time_us,
+         (unsigned)diag->last_endpoint3_backpressure_len, diag->last_endpoint3_backpressure_time_us,
+         (unsigned)diag->current_tx_free[0], (unsigned)diag->current_tx_free[1],
+         (unsigned)diag->current_tx_free[2], (unsigned)diag->last_backpressure_tx_free[0],
+         (unsigned)diag->last_backpressure_tx_free[1], (unsigned)diag->last_backpressure_tx_free[2],
+         diag->tx_overflow_by_bus[0], diag->tx_overflow_by_bus[1], diag->tx_overflow_by_bus[2]);
+  } else {
+    LOGW("Panda SPI diagnostic page unavailable: serial=%s", serial.c_str());
+  }
+
+  for (uint16_t can_number = 0U; can_number < PANDA_CAN_CNT; can_number++) {
+    uint16_t page = PANDA_DIAGNOSTICS_PAGE_CAN_HIST_BASE + can_number;
+    if (auto diag = read_panda_diagnostic<panda_can_error_hist_t>(panda, page)) {
+      LOGW("Panda CAN IRQ diagnostic: serial=%s bus=%u can=%u "
+           "nominal(stuff/form/ack/bit1/bit0/crc)=%u/%u/%u/%u/%u/%u "
+           "data(stuff/form/ack/bit1/bit0/crc)=%u/%u/%u/%u/%u/%u warning=%u passive=%u bus_off=%u",
+           serial.c_str(), panda->bus_offset + diag->bus_number, (unsigned)diag->can_number,
+           diag->nominal_error_cnt[0], diag->nominal_error_cnt[1], diag->nominal_error_cnt[2],
+           diag->nominal_error_cnt[3], diag->nominal_error_cnt[4], diag->nominal_error_cnt[5],
+           diag->data_error_cnt[0], diag->data_error_cnt[1], diag->data_error_cnt[2],
+           diag->data_error_cnt[3], diag->data_error_cnt[4], diag->data_error_cnt[5],
+           diag->error_warning_irq_cnt, diag->error_passive_irq_cnt, diag->bus_off_irq_cnt);
+    } else {
+      LOGW("Panda CAN IRQ diagnostic page unavailable: serial=%s can=%u", serial.c_str(), can_number);
+    }
+  }
+}
+
+void log_panda_deep_diagnostics(Panda *panda) {
+  const std::string serial = panda->hw_serial();
+  const char *stage_names[PANDA_CAN_ERROR_STAGE_COUNT] = {"first", "warning", "passive", "bus_off"};
+  for (uint16_t can_number = 0U; can_number < PANDA_CAN_CNT; can_number++) {
+    for (uint16_t stage = 0U; stage < PANDA_CAN_ERROR_STAGE_COUNT; stage++) {
+      uint16_t page = PANDA_DIAGNOSTICS_PAGE_CAN_SNAPSHOT_BASE +
+                      (can_number * PANDA_CAN_ERROR_STAGE_COUNT) + stage;
+      auto diag = read_panda_diagnostic<panda_can_error_diag_t>(panda, page);
+      if (diag && (diag->valid != 0U)) {
+        LOGW("Panda CAN first-state: serial=%s stage=%s bus=%u can=%u fw_time=%u safety=%u/%u "
+             "ir=0x%08x psr=0x%08x ecr=0x%08x txfqs=0x%08x rxf0s=0x%08x "
+             "last_tx=0x%x@%u last_rx=0x%x@%u last_host=0x%x@%u last_fwd=0x%x@%u",
+             serial.c_str(), stage_names[stage], panda->bus_offset + diag->bus_number,
+             (unsigned)diag->can_number, diag->timestamp_us, (unsigned)diag->safety_mode,
+             (unsigned)diag->safety_param, diag->ir_reg, diag->psr_reg, diag->ecr_reg,
+             diag->txfqs_reg, diag->rxf0s_reg, diag->last_tx_addr, diag->last_tx_time_us,
+             diag->last_rx_addr, diag->last_rx_time_us, diag->last_host_addr,
+             diag->last_host_time_us, diag->last_fwd_addr, diag->last_fwd_time_us);
+      }
+    }
+  }
+
+  if (auto diag = read_panda_diagnostic<panda_hyundai_fwd_diag_t>(panda, PANDA_DIAGNOSTICS_PAGE_HYUNDAI_SUMMARY)) {
+    LOGW("Panda Hyundai fwd diagnostic: serial=%s enabled=%u safety=%u/%u buffered=%u calls=%u from=0:%u/2:%u "
+         "replace_to=0:%u/2:%u pass_to=0:%u/2:%u dynamic_block_to=0:%u/2:%u "
+         "empty_to=0:%u/2:%u block_4b9=%u invalid_bus=%u",
+         serial.c_str(), (unsigned)diag->enabled, (unsigned)diag->safety_mode,
+         (unsigned)diag->safety_param, diag->tx_buffered_cnt, diag->fwd_call_cnt,
+         diag->fwd_from_bus0_cnt, diag->fwd_from_bus2_cnt, diag->replace_to_bus0_cnt,
+         diag->replace_to_bus2_cnt, diag->pass_to_bus0_cnt, diag->pass_to_bus2_cnt,
+         diag->dynamic_block_to_bus0_cnt, diag->dynamic_block_to_bus2_cnt,
+         diag->empty_to_bus0_cnt, diag->empty_to_bus2_cnt, diag->block_4b9_cnt,
+         diag->invalid_bus_cnt);
+  } else {
+    LOGW("Panda Hyundai forwarding diagnostic page unavailable: serial=%s", serial.c_str());
+  }
+
+  for (uint16_t index = 0U; index < PANDA_DIAGNOSTICS_HYUNDAI_BUFFER_COUNT; index++) {
+    uint16_t page = PANDA_DIAGNOSTICS_PAGE_HYUNDAI_BUFFER_BASE + index;
+    if (auto diag = read_panda_diagnostic<panda_hyundai_buffer_diag_t>(panda, page)) {
+      LOGW("Panda Hyundai buffer diagnostic: serial=%s index=%u addr=0x%x dst=%u enabled=%u "
+           "queue=%u started=%u reuse_left=%u has_last=%u push=%u/%u full_drop=%u "
+           "pop=%u/%u reuse=%u/%u empty=%u resets=%u times=%u/%u/%u/%u",
+           serial.c_str(), (unsigned)diag->index, (unsigned)diag->addr, (unsigned)diag->dst_bus,
+           (unsigned)diag->enabled, (unsigned)diag->count, (unsigned)diag->started,
+           (unsigned)diag->reuse_left, (unsigned)diag->has_last_pkt, diag->push_attempt_cnt,
+           diag->push_accepted_cnt, diag->push_full_drop_cnt, diag->pop_attempt_cnt,
+           diag->pop_success_cnt, diag->reuse_attempt_cnt, diag->reuse_success_cnt,
+           diag->empty_fallback_cnt, diag->reset_cnt, diag->last_push_time_us,
+           diag->last_pop_time_us, diag->last_reuse_time_us, diag->last_empty_time_us);
+    } else {
+      LOGW("Panda Hyundai buffer diagnostic page unavailable: serial=%s index=%u", serial.c_str(), index);
+    }
+  }
+}
+
 std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> &pandas, bool is_onroad, bool spoofing_started) {
   bool ignition_local = false;
   const uint32_t pandas_cnt = pandas.size();
@@ -185,8 +290,18 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
   panda_can_states.reserve(pandas_cnt);
 
   struct CanTxDiagnosticState {
+    bool initialized = false;
+    bool pre_drive_reset_pending = true;
+    bool was_onroad = false;
+    uint8_t onroad_checkpoint_index = 0U;
+    std::string serial;
+    uint64_t onroad_start_ns = 0U;
+    uint64_t last_reset_attempt_ns = 0U;
     uint64_t last_log_ns = 0;
+    uint64_t last_detail_ns = 0;
     uint64_t drops = 0;
+    health_t health{};
+    std::array<can_health_t, PANDA_CAN_CNT> can{};
   };
   static std::vector<CanTxDiagnosticState> diagnostic_states;
   diagnostic_states.resize(pandas_cnt);
@@ -233,14 +348,116 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
     CanTxDiagnosticState &diagnostic = diagnostic_states[i];
     const uint64_t now = nanos_since_boot();
     const uint64_t drops = panda->can_tx_drop_count();
-    const bool log_can_health = (drops != diagnostic.drops) &&
-                                ((diagnostic.last_log_ns == 0U) || ((now - diagnostic.last_log_ns) >= 1'000'000'000ULL));
+    const std::string serial = panda->hw_serial();
+    if (diagnostic.serial != serial) {
+      diagnostic = CanTxDiagnosticState{};
+      diagnostic.serial = serial;
+    }
+
+    const bool onroad_started = is_onroad && !diagnostic.was_onroad;
+    const bool onroad_stopped = !is_onroad && diagnostic.was_onroad;
+    if (onroad_started) {
+      diagnostic.onroad_start_ns = now;
+      diagnostic.onroad_checkpoint_index = 0U;
+    } else if (onroad_stopped) {
+      diagnostic.onroad_start_ns = 0U;
+      diagnostic.onroad_checkpoint_index = 0U;
+      diagnostic.pre_drive_reset_pending = true;
+      diagnostic.last_reset_attempt_ns = 0U;
+    }
+
+    const bool reset_rate_ready = (diagnostic.last_reset_attempt_ns == 0U) ||
+                                  ((now - diagnostic.last_reset_attempt_ns) >= 1'000'000'000ULL);
+    if (!is_onroad && !ignition_local && diagnostic.pre_drive_reset_pending && reset_rate_ready) {
+      diagnostic.last_reset_attempt_ns = now;
+      const bool accepted = panda->clear_diagnostics();
+      LOGW("Panda diagnostic pre-drive reset: serial=%s accepted=%u uptime=%u safety=%u/%u",
+           serial.c_str(), (unsigned)accepted, health.uptime_pkt, (unsigned)health.safety_mode_pkt,
+           (unsigned)health.safety_param_pkt);
+      if (accepted) {
+        diagnostic.pre_drive_reset_pending = false;
+        diagnostic.initialized = false;
+      }
+    }
+
+    static constexpr std::array<uint64_t, 2> ONROAD_DIAGNOSTIC_CHECKPOINT_NS = {
+      5'000'000'000ULL, 15'000'000'000ULL,
+    };
+    const uint64_t onroad_elapsed_ns = (is_onroad && (diagnostic.onroad_start_ns != 0U)) ?
+                                       now - diagnostic.onroad_start_ns : 0U;
+    const bool onroad_checkpoint_due = is_onroad &&
+                                       (diagnostic.onroad_checkpoint_index < ONROAD_DIAGNOSTIC_CHECKPOINT_NS.size()) &&
+                                       (onroad_elapsed_ns >= ONROAD_DIAGNOSTIC_CHECKPOINT_NS[diagnostic.onroad_checkpoint_index]);
+
+    bool diagnostic_changed = !diagnostic.initialized ||
+                              (drops != diagnostic.drops) ||
+                              (health.spi_checksum_error_count_pkt != diagnostic.health.spi_checksum_error_count_pkt) ||
+                              (health.tx_buffer_overflow_pkt != diagnostic.health.tx_buffer_overflow_pkt) ||
+                              (health.rx_buffer_overflow_pkt != diagnostic.health.rx_buffer_overflow_pkt) ||
+                              (health.safety_mode_pkt != diagnostic.health.safety_mode_pkt) ||
+                              (health.safety_param_pkt != diagnostic.health.safety_param_pkt) ||
+                              (health.faults_pkt != diagnostic.health.faults_pkt);
+    bool critical_transition = !diagnostic.initialized ||
+                               ((diagnostic.drops == 0U) && (drops != 0U)) ||
+                               ((diagnostic.health.tx_buffer_overflow_pkt == 0U) && (health.tx_buffer_overflow_pkt != 0U)) ||
+                               ((diagnostic.health.rx_buffer_overflow_pkt == 0U) && (health.rx_buffer_overflow_pkt != 0U));
+    const bool safety_changed = !diagnostic.initialized ||
+                                (health.safety_mode_pkt != diagnostic.health.safety_mode_pkt) ||
+                                (health.safety_param_pkt != diagnostic.health.safety_param_pkt);
+    bool diagnostic_active = (drops != 0U) || (health.spi_checksum_error_count_pkt != 0U) ||
+                             (health.tx_buffer_overflow_pkt != 0U) || (health.rx_buffer_overflow_pkt != 0U);
+
+    for (uint32_t j = 0; j < PANDA_CAN_CNT; j++) {
+      const can_health_t &can = panda_can_states[i][j];
+      const can_health_t &previous = diagnostic.can[j];
+      diagnostic_changed |= (can.bus_off != previous.bus_off) ||
+                            (can.bus_off_cnt != previous.bus_off_cnt) ||
+                            (can.error_warning != previous.error_warning) ||
+                            (can.error_passive != previous.error_passive) ||
+                            (can.last_stored_error != previous.last_stored_error) ||
+                            (can.last_data_stored_error != previous.last_data_stored_error) ||
+                            (can.receive_error_cnt != previous.receive_error_cnt) ||
+                            (can.transmit_error_cnt != previous.transmit_error_cnt) ||
+                            (can.total_error_cnt != previous.total_error_cnt) ||
+                            (can.total_tx_lost_cnt != previous.total_tx_lost_cnt) ||
+                            (can.total_rx_lost_cnt != previous.total_rx_lost_cnt) ||
+                            (can.total_tx_checksum_error_cnt != previous.total_tx_checksum_error_cnt) ||
+                            (can.can_core_reset_cnt != previous.can_core_reset_cnt);
+      critical_transition |= ((previous.total_error_cnt == 0U) && (can.total_error_cnt != 0U)) ||
+                             ((previous.can_core_reset_cnt == 0U) && (can.can_core_reset_cnt != 0U)) ||
+                             ((previous.bus_off == 0U) && (can.bus_off != 0U)) ||
+                             ((previous.error_warning == 0U) && (can.error_warning != 0U)) ||
+                             ((previous.error_passive == 0U) && (can.error_passive != 0U));
+      diagnostic_active |= (can.bus_off != 0U) || (can.bus_off_cnt != 0U) ||
+                           (can.error_warning != 0U) || (can.error_passive != 0U) ||
+                           (can.total_error_cnt != 0U) || (can.total_tx_lost_cnt != 0U) ||
+                           (can.total_rx_lost_cnt != 0U) || (can.total_tx_checksum_error_cnt != 0U) ||
+                           (can.can_core_reset_cnt != 0U);
+    }
+
+    const bool log_rate_ready = !diagnostic.initialized ||
+                                ((now - diagnostic.last_log_ns) >= 1'000'000'000ULL);
+    const bool periodic_due = diagnostic_active &&
+                              (!diagnostic.initialized || ((now - diagnostic.last_log_ns) >= 10'000'000'000ULL));
+    const bool log_can_health = onroad_checkpoint_due || (log_rate_ready && (diagnostic_changed || periodic_due));
+    const bool log_deep_diagnostics = log_can_health &&
+                                      (onroad_checkpoint_due || !diagnostic.initialized || safety_changed || critical_transition ||
+                                       ((now - diagnostic.last_detail_ns) >= 10'000'000'000ULL));
+    const uint64_t drops_delta = diagnostic.initialized ? drops - diagnostic.drops : 0U;
+    if (onroad_checkpoint_due) {
+      LOGW("Panda diagnostic route checkpoint: serial=%s checkpoint=%u/2 elapsed_ms=%" PRIu64 " pre_drive_reset=%u",
+           serial.c_str(), (unsigned)diagnostic.onroad_checkpoint_index + 1U,
+           static_cast<uint64_t>(onroad_elapsed_ns / 1'000'000ULL),
+           (unsigned)!diagnostic.pre_drive_reset_pending);
+    }
     if (log_can_health) {
       LOGW("Panda CAN TX diagnostic: index=%u/%u serial=%s type=%d buses=%u-%u drops=%" PRIu64 "(+%" PRIu64 ") "
-           "spi_checksum=%u tx_overflow=%u",
-           i, pandas_cnt, panda->hw_serial().c_str(), (int)panda->hw_type, panda->bus_offset,
-           panda->bus_offset + PANDA_BUS_OFFSET - 1, drops, drops - diagnostic.drops,
-           (unsigned)health.spi_checksum_error_count_pkt, health.tx_buffer_overflow_pkt);
+           "uptime=%u safety=%u/%u spi_checksum=%u tx_overflow=%u rx_overflow=%u faults=0x%x",
+           i, pandas_cnt, serial.c_str(), (int)panda->hw_type, panda->bus_offset,
+           panda->bus_offset + PANDA_BUS_OFFSET - 1, drops, drops_delta,
+           health.uptime_pkt, (unsigned)health.safety_mode_pkt, (unsigned)health.safety_param_pkt,
+           (unsigned)health.spi_checksum_error_count_pkt, health.tx_buffer_overflow_pkt,
+           health.rx_buffer_overflow_pkt, health.faults_pkt);
     }
 
     // Make sure CAN buses are live: safety_setter_thread does not work if Panda CAN are silent and there is only one other CAN node
@@ -273,20 +490,35 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
       if (log_can_health) {
         LOGW("Panda CAN health: serial=%s bus=%u off=%u off_cnt=%u warning=%u passive=%u "
              "lec=%u/%u dlec=%u/%u rec=%u tec=%u errors=%u tx_lost=%u tx_checksum=%u "
-             "tx=%u rx=%u speed=%u/%u fd=%u brs=%u",
-             panda->hw_serial().c_str(), panda->bus_offset + j, (unsigned)can.bus_off, can.bus_off_cnt,
+             "rx_lost=%u tx=%u rx=%u fwd=%u irq=%u/%u/%u reset=%u speed=%u/%u fd=%u brs=%u",
+             serial.c_str(), panda->bus_offset + j, (unsigned)can.bus_off, can.bus_off_cnt,
              (unsigned)can.error_warning, (unsigned)can.error_passive, (unsigned)can.last_error,
              (unsigned)can.last_stored_error, (unsigned)can.last_data_error,
              (unsigned)can.last_data_stored_error, (unsigned)can.receive_error_cnt,
              (unsigned)can.transmit_error_cnt, can.total_error_cnt, can.total_tx_lost_cnt,
-             can.total_tx_checksum_error_cnt, can.total_tx_cnt, can.total_rx_cnt,
+             can.total_tx_checksum_error_cnt, can.total_rx_lost_cnt, can.total_tx_cnt, can.total_rx_cnt,
+             can.total_fwd_cnt, can.irq0_call_rate, can.irq1_call_rate, can.irq2_call_rate,
+             can.can_core_reset_cnt,
              (unsigned)can.can_speed, (unsigned)can.can_data_speed,
              (unsigned)can.canfd_enabled, (unsigned)can.brs_enabled);
       }
     }
     if (log_can_health) {
-      diagnostic = {.last_log_ns = now, .drops = drops};
+      log_panda_fast_diagnostics(panda);
+      if (log_deep_diagnostics) {
+        log_panda_deep_diagnostics(panda);
+        diagnostic.last_detail_ns = now;
+      }
+      diagnostic.initialized = true;
+      diagnostic.last_log_ns = now;
+      diagnostic.drops = drops;
+      diagnostic.health = health;
+      diagnostic.can = panda_can_states[i];
+      if (onroad_checkpoint_due) {
+        diagnostic.onroad_checkpoint_index += 1U;
+      }
     }
+    diagnostic.was_onroad = is_onroad;
 
     // Convert faults bitset to capnp list
     std::bitset<sizeof(health.faults_pkt) * 8> fault_bits(health.faults_pkt);

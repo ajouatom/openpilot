@@ -47,6 +47,187 @@ static int get_health_pkt(void *dat) {
   return sizeof(*health);
 }
 
+static bool clear_diagnostics(void) {
+  const bool ignition = current_board->check_ignition() || ignition_can;
+  if (ignition || is_car_safety_mode(current_safety_mode)) {
+    return false;
+  }
+
+  ENTER_CRITICAL();
+  spi_header_sync_nack_count = 0U;
+  spi_header_checksum_nack_count = 0U;
+  spi_data_checksum_nack_count = 0U;
+  spi_endpoint3_checksum_nack_count = 0U;
+  spi_endpoint3_backpressure_nack_count = 0U;
+  spi_endpoint3_ack_count = 0U;
+  spi_last_endpoint3_checksum_time_us = 0U;
+  spi_last_endpoint3_backpressure_time_us = 0U;
+  spi_last_endpoint3_checksum_len = 0U;
+  spi_last_endpoint3_backpressure_len = 0U;
+  (void)memset(spi_last_backpressure_tx_free, 0, sizeof(spi_last_backpressure_tx_free));
+
+  (void)memset(tx_buffer_overflow_by_bus, 0, sizeof(tx_buffer_overflow_by_bus));
+  (void)memset(can_error_hist, 0, sizeof(can_error_hist));
+  (void)memset(can_error_diag, 0, sizeof(can_error_diag));
+  (void)memset(can_diag_last_tx_addr, 0, sizeof(can_diag_last_tx_addr));
+  (void)memset(can_diag_last_tx_time_us, 0, sizeof(can_diag_last_tx_time_us));
+  (void)memset(can_diag_last_rx_addr, 0, sizeof(can_diag_last_rx_addr));
+  (void)memset(can_diag_last_rx_time_us, 0, sizeof(can_diag_last_rx_time_us));
+  (void)memset(can_diag_last_host_addr, 0, sizeof(can_diag_last_host_addr));
+  (void)memset(can_diag_last_host_time_us, 0, sizeof(can_diag_last_host_time_us));
+  (void)memset(can_diag_last_fwd_addr, 0, sizeof(can_diag_last_fwd_addr));
+  (void)memset(can_diag_last_fwd_time_us, 0, sizeof(can_diag_last_fwd_time_us));
+
+  #ifdef CANFD
+    (void)memset(&hyundai_canfd_fwd_diag, 0, sizeof(hyundai_canfd_fwd_diag));
+    for (uint8_t i = 0U; i < PANDA_DIAGNOSTICS_HYUNDAI_BUFFER_COUNT; i++) {
+      CanfdBufferedFwd *buffer = &canfd_bfwd[i];
+      buffer->push_attempt_cnt = 0U;
+      buffer->push_accepted_cnt = 0U;
+      buffer->push_full_drop_cnt = 0U;
+      buffer->pop_attempt_cnt = 0U;
+      buffer->pop_success_cnt = 0U;
+      buffer->reuse_attempt_cnt = 0U;
+      buffer->reuse_success_cnt = 0U;
+      buffer->empty_fallback_cnt = 0U;
+      buffer->reset_cnt = 0U;
+      buffer->last_push_time_us = 0U;
+      buffer->last_pop_time_us = 0U;
+      buffer->last_reuse_time_us = 0U;
+      buffer->last_empty_time_us = 0U;
+    }
+  #endif
+  EXIT_CRITICAL();
+
+  return true;
+}
+
+static int get_diagnostics_pkt(uint16_t page, void *dat) {
+  COMPILE_TIME_ASSERT(sizeof(panda_spi_diag_t) == USBPACKET_MAX_SIZE);
+  COMPILE_TIME_ASSERT(sizeof(panda_can_error_hist_t) == USBPACKET_MAX_SIZE);
+  COMPILE_TIME_ASSERT(sizeof(panda_can_error_diag_t) == USBPACKET_MAX_SIZE);
+  COMPILE_TIME_ASSERT(sizeof(panda_hyundai_fwd_diag_t) == USBPACKET_MAX_SIZE);
+  COMPILE_TIME_ASSERT(sizeof(panda_hyundai_buffer_diag_t) == USBPACKET_MAX_SIZE);
+  #ifdef CANFD
+    COMPILE_TIME_ASSERT((sizeof(canfd_bfwd) / sizeof(canfd_bfwd[0])) == (PANDA_DIAGNOSTICS_HYUNDAI_BUFFER_COUNT + 1U));
+  #endif
+
+  int resp_len = 0;
+  (void)memset(dat, 0, USBPACKET_MAX_SIZE);
+
+  if (page == PANDA_DIAGNOSTICS_PAGE_SPI) {
+    panda_spi_diag_t *diag = (panda_spi_diag_t *)dat;
+    diag->version = PANDA_DIAGNOSTICS_VERSION;
+    diag->page = PANDA_DIAGNOSTICS_PAGE_SPI;
+    #ifdef ENABLE_SPI
+      diag->spi_state = spi_state;
+      diag->can_tx_ready = spi_can_tx_ready;
+    #else
+      diag->spi_state = UINT8_MAX;
+      diag->can_tx_ready = 0U;
+    #endif
+    diag->header_sync_nack_cnt = spi_header_sync_nack_count;
+    diag->header_checksum_nack_cnt = spi_header_checksum_nack_count;
+    diag->data_checksum_nack_cnt = spi_data_checksum_nack_count;
+    diag->endpoint3_checksum_nack_cnt = spi_endpoint3_checksum_nack_count;
+    diag->endpoint3_backpressure_nack_cnt = spi_endpoint3_backpressure_nack_count;
+    diag->endpoint3_ack_cnt = spi_endpoint3_ack_count;
+    diag->last_endpoint3_checksum_time_us = spi_last_endpoint3_checksum_time_us;
+    diag->last_endpoint3_backpressure_time_us = spi_last_endpoint3_backpressure_time_us;
+    diag->last_endpoint3_checksum_len = spi_last_endpoint3_checksum_len;
+    diag->last_endpoint3_backpressure_len = spi_last_endpoint3_backpressure_len;
+    uint16_t current_tx_free[3] = {0U, 0U, 0U};
+    comms_can_get_tx_queue_free(current_tx_free);
+    for (uint8_t i = 0U; i < PANDA_CAN_CNT; i++) {
+      diag->current_tx_free[i] = current_tx_free[i];
+      diag->last_backpressure_tx_free[i] = spi_last_backpressure_tx_free[i];
+      diag->tx_overflow_by_bus[i] = tx_buffer_overflow_by_bus[i];
+    }
+    resp_len = sizeof(*diag);
+  } else if ((page >= PANDA_DIAGNOSTICS_PAGE_CAN_HIST_BASE) &&
+             (page < (PANDA_DIAGNOSTICS_PAGE_CAN_HIST_BASE + PANDA_CAN_CNT))) {
+    uint8_t can_number = page - PANDA_DIAGNOSTICS_PAGE_CAN_HIST_BASE;
+    panda_can_error_hist_t *diag = (panda_can_error_hist_t *)dat;
+    (void)memcpy(diag, &can_error_hist[can_number], sizeof(*diag));
+    diag->version = PANDA_DIAGNOSTICS_VERSION;
+    diag->page = (uint8_t)page;
+    diag->can_number = can_number;
+    diag->bus_number = BUS_NUM_FROM_CAN_NUM(can_number);
+    resp_len = sizeof(*diag);
+  } else if ((page >= PANDA_DIAGNOSTICS_PAGE_CAN_SNAPSHOT_BASE) &&
+             (page < (PANDA_DIAGNOSTICS_PAGE_CAN_SNAPSHOT_BASE + (PANDA_CAN_CNT * PANDA_CAN_ERROR_STAGE_COUNT)))) {
+    uint8_t offset = page - PANDA_DIAGNOSTICS_PAGE_CAN_SNAPSHOT_BASE;
+    uint8_t can_number = offset / PANDA_CAN_ERROR_STAGE_COUNT;
+    uint8_t stage = offset % PANDA_CAN_ERROR_STAGE_COUNT;
+    panda_can_error_diag_t *diag = (panda_can_error_diag_t *)dat;
+    (void)memcpy(diag, &can_error_diag[can_number][stage], sizeof(*diag));
+    diag->version = PANDA_DIAGNOSTICS_VERSION;
+    diag->page = (uint8_t)page;
+    diag->can_number = can_number;
+    if (diag->valid == 0U) {
+      diag->bus_number = BUS_NUM_FROM_CAN_NUM(can_number);
+    }
+    resp_len = sizeof(*diag);
+  }
+  #ifdef CANFD
+  else if (page == PANDA_DIAGNOSTICS_PAGE_HYUNDAI_SUMMARY) {
+    panda_hyundai_fwd_diag_t *diag = (panda_hyundai_fwd_diag_t *)dat;
+    diag->version = PANDA_DIAGNOSTICS_VERSION;
+    diag->page = PANDA_DIAGNOSTICS_PAGE_HYUNDAI_SUMMARY;
+    diag->enabled = hyundai_canfd_buffered_fwd;
+    diag->safety_mode = (uint8_t)current_safety_mode;
+    diag->safety_param = current_safety_param;
+    diag->buffer_count = PANDA_DIAGNOSTICS_HYUNDAI_BUFFER_COUNT;
+    diag->tx_buffered_cnt = hyundai_canfd_fwd_diag.tx_buffered_cnt;
+    diag->fwd_call_cnt = hyundai_canfd_fwd_diag.fwd_call_cnt;
+    diag->fwd_from_bus0_cnt = hyundai_canfd_fwd_diag.fwd_from_bus0_cnt;
+    diag->fwd_from_bus2_cnt = hyundai_canfd_fwd_diag.fwd_from_bus2_cnt;
+    diag->replace_to_bus0_cnt = hyundai_canfd_fwd_diag.replace_to_bus0_cnt;
+    diag->replace_to_bus2_cnt = hyundai_canfd_fwd_diag.replace_to_bus2_cnt;
+    diag->pass_to_bus0_cnt = hyundai_canfd_fwd_diag.pass_to_bus0_cnt;
+    diag->pass_to_bus2_cnt = hyundai_canfd_fwd_diag.pass_to_bus2_cnt;
+    diag->dynamic_block_to_bus0_cnt = hyundai_canfd_fwd_diag.dynamic_block_to_bus0_cnt;
+    diag->dynamic_block_to_bus2_cnt = hyundai_canfd_fwd_diag.dynamic_block_to_bus2_cnt;
+    diag->empty_to_bus0_cnt = hyundai_canfd_fwd_diag.empty_to_bus0_cnt;
+    diag->empty_to_bus2_cnt = hyundai_canfd_fwd_diag.empty_to_bus2_cnt;
+    diag->block_4b9_cnt = hyundai_canfd_fwd_diag.block_4b9_cnt;
+    diag->invalid_bus_cnt = hyundai_canfd_fwd_diag.invalid_bus_cnt;
+    resp_len = sizeof(*diag);
+  } else if ((page >= PANDA_DIAGNOSTICS_PAGE_HYUNDAI_BUFFER_BASE) &&
+             (page < (PANDA_DIAGNOSTICS_PAGE_HYUNDAI_BUFFER_BASE + PANDA_DIAGNOSTICS_HYUNDAI_BUFFER_COUNT))) {
+    uint8_t index = page - PANDA_DIAGNOSTICS_PAGE_HYUNDAI_BUFFER_BASE;
+    CanfdBufferedFwd *buffer = &canfd_bfwd[index];
+    panda_hyundai_buffer_diag_t *diag = (panda_hyundai_buffer_diag_t *)dat;
+    diag->version = PANDA_DIAGNOSTICS_VERSION;
+    diag->page = (uint8_t)page;
+    diag->index = index;
+    diag->enabled = buffer->enabled;
+    diag->addr = (uint16_t)buffer->addr;
+    diag->dst_bus = (uint8_t)buffer->dst_bus;
+    diag->count = buffer->count;
+    diag->reuse_left = buffer->reuse_left;
+    diag->started = buffer->started;
+    diag->has_last_pkt = buffer->has_last_pkt;
+    diag->push_attempt_cnt = buffer->push_attempt_cnt;
+    diag->push_accepted_cnt = buffer->push_accepted_cnt;
+    diag->push_full_drop_cnt = buffer->push_full_drop_cnt;
+    diag->pop_attempt_cnt = buffer->pop_attempt_cnt;
+    diag->pop_success_cnt = buffer->pop_success_cnt;
+    diag->reuse_attempt_cnt = buffer->reuse_attempt_cnt;
+    diag->reuse_success_cnt = buffer->reuse_success_cnt;
+    diag->empty_fallback_cnt = buffer->empty_fallback_cnt;
+    diag->reset_cnt = buffer->reset_cnt;
+    diag->last_push_time_us = buffer->last_push_time_us;
+    diag->last_pop_time_us = buffer->last_pop_time_us;
+    diag->last_reuse_time_us = buffer->last_reuse_time_us;
+    diag->last_empty_time_us = buffer->last_empty_time_us;
+    resp_len = sizeof(*diag);
+  }
+  #endif
+
+  return resp_len;
+}
+
 // send on serial, first byte to select the ring
 void comms_endpoint2_write(const uint8_t *data, uint32_t len) {
   uart_ring *ur = get_ring_by_number(data[0]);
@@ -144,6 +325,16 @@ int comms_control_handler(ControlPacket_t *req, uint8_t *resp) {
     case 0xc6:
       resp[0] = current_board->read_som_gpio();
       resp_len = 1;
+      break;
+    // **** 0xc7: read diagnostic page
+    case 0xc7:
+      resp_len = get_diagnostics_pkt(req->param1, resp);
+      break;
+    // **** 0xc8: clear diagnostic-only counters and retained snapshots while offroad
+    case 0xc8:
+      resp[0] = ((req->param1 == PANDA_DIAGNOSTICS_VERSION) &&
+                 (req->param2 == PANDA_DIAGNOSTICS_RESET_MAGIC) && clear_diagnostics()) ? 1U : 0U;
+      resp_len = 1U;
       break;
     // **** 0xd0: fetch serial (aka the provisioned dongle ID)
     case 0xd0:
