@@ -85,16 +85,16 @@ class WikiSettingsGeneratorTest(unittest.TestCase):
       catalog_commit=COMMIT,
       generated_at=STAMP,
     )
-    self.assertEqual(len(result.generated_settings), 169)
-    self.assertEqual(result.index["review"], {"current": 0, "needs_review": 169})
+    self.assertEqual(len(result.generated_settings), 171)
+    self.assertEqual(result.index["review"], {"current": 0, "needs_review": 171})
     self.assertEqual(result.index["locales"], ["ko", "en", "zh"])
-    self.assertEqual(len(result.pages), (169 * 3) + 2)
+    self.assertEqual(len(result.pages), (171 * 3) + 2)
     setting_pages = {
       name: text
       for name, text in result.pages.items()
       if GENERATOR.GENERATED_PAGE_RE.fullmatch(name)
     }
-    self.assertEqual(len(setting_pages), 169 * 3)
+    self.assertEqual(len(setting_pages), 171 * 3)
     self.assertTrue(all(text.count("<!-- CARROT:SETTING:BEGIN ") == 1 for text in setting_pages.values()))
     for name, text in result.pages.items():
       if name.endswith(".md"):

@@ -155,7 +155,7 @@ class AugmentedRoadView(CameraView):
     self._cached_matrix: np.ndarray | None = None
     self._content_rect = rl.Rectangle()
     self._last_click_time = 0.0
-    self._cluster_hud_connected = False
+    self._suppress_camera_for_cluster = False
 
     # Bookmark icon with swipe gesture
     self._bookmark_icon = BookmarkIcon(bookmark_callback)
@@ -193,8 +193,8 @@ class AugmentedRoadView(CameraView):
     """Check if currently swiping left (for scroller to disable)."""
     return self._bookmark_icon.is_swiping_left()
 
-  def set_cluster_hud_connected(self, connected: bool) -> None:
-    self._cluster_hud_connected = connected
+  def set_cluster_hud_connected(self, connected: bool, show_camera: bool = False) -> None:
+    self._suppress_camera_for_cluster = connected and not show_camera
 
   def _update_state(self):
     super()._update_state()
@@ -220,7 +220,7 @@ class AugmentedRoadView(CameraView):
     # alert/extras처럼 흩어진 구간은 누적(+=). scissor begin/end는 raylib 배치 flush
     # 지점이라 특정 구간에 귀속시키지 않는다 — total과 구간 합의 차이(미귀속)로 남는다.
     cam_ms = model_ms = ds_ms = hud_ms = alert_ms = extras_ms = 0.0
-    if not self._cluster_hud_connected:
+    if not self._suppress_camera_for_cluster:
       self._switch_stream_if_needed(ui_state.sm)
       self._update_calibration()
 
@@ -243,20 +243,20 @@ class AugmentedRoadView(CameraView):
 
     road_view_mode = self._road_view_mode()
     _t = time.monotonic()
-    if self._cluster_hud_connected or road_view_mode in (2, 3):
+    if self._suppress_camera_for_cluster or road_view_mode in (2, 3):
       rl.draw_rectangle_rec(self._content_rect, rl.BLACK)
     else:
       # Render the base camera view
       super()._render(self._content_rect)
     cam_ms = (time.monotonic() - _t) * 1000.0
 
-    if not self._cluster_hud_connected and road_view_mode in (0, 2):
+    if not self._suppress_camera_for_cluster and road_view_mode in (0, 2):
       # Draw all UI overlays
       _t = time.monotonic()
       self._model_renderer.render(self._content_rect)
       model_ms = (time.monotonic() - _t) * 1000.0
 
-    if not self._cluster_hud_connected:
+    if not self._suppress_camera_for_cluster:
       # Fade out bottom of overlays for looks
       _t = time.monotonic()
       rl.draw_texture_ex(self._fade_texture, rl.Vector2(self._content_rect.x, self._content_rect.y), 0.0, 1.0, rl.WHITE)
