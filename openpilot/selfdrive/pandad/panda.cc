@@ -242,7 +242,8 @@ void Panda::pack_can_buffer(const capnp::List<cereal::CanData>::Reader &can_data
 void Panda::can_send(const capnp::List<cereal::CanData>::Reader &can_data_list) {
   pack_can_buffer(can_data_list, [this](uint8_t* data, size_t size) {
     const int sent = handle->bulk_write(3, data, size, 5);
-    if (sent != static_cast<int>(size)) {
+    // SPI writes return the response payload length (normally zero), not the transmitted byte count.
+    if (sent < 0) {
       can_tx_drop_count_.fetch_add(1, std::memory_order_relaxed);
     }
   });
