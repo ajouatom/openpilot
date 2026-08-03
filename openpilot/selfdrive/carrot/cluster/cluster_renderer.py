@@ -1980,20 +1980,14 @@ class ClusterUiRenderer:
         screen = self._camera_overlay_screen_xy(camera_point, projection, scene_shift_x_m)
         if screen is None:
             return
-        radius = max(3.0, min(10.0, 80.0 / max(6.0, point.longitudinal_m)))
+        radius = max(2.5, min(5.0, 40.0 / max(6.0, abs(point.longitudinal_m))))
         marker = rl.Rectangle(
             screen[0] - radius,
             screen[1] - radius,
             radius * 2.0,
             radius * 2.0,
         )
-        rl.draw_rectangle_rounded_lines_ex(
-            marker,
-            0.25,
-            CAMERA_OVERLAY_FRAME_ROUND_SEGMENTS,
-            1.8,
-            rl_color(point.color, 245),
-        )
+        rl.draw_rectangle_rec(marker, rl_color(point.color, 225))
         if not radar_info_shows_radar_points(radar_info_mode):
             return
         label_parts = []

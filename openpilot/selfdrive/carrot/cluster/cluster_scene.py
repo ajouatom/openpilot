@@ -109,6 +109,10 @@ CORNER_RADAR_EGO_LATERAL_COMP_MIN_POINTS = 2
 CORNER_RADAR_HEADING_YAW_COMP_MAX_DREL = 120.0
 CORNER_RADAR_HEADING_YAW_COMP_MAX_YAW_RATE = 0.35
 CORNER_RADAR_HEADING_YAW_COMP_MAX_MPS = 3.0
+CORNER_RADAR_INPUT_POINT_LIMIT = 64
+CORNER_RADAR_DISPLAY_POINT_LIMIT = 34
+RADAR_VEHICLE_DISPLAY_LIMIT = 10
+RADAR_MARKER_DISPLAY_LIMIT = 24
 DRIVE_CAMERA_FORWARD_SHIFT_M = 5.0
 DRIVE_CAMERA_EGO_BOTTOM_POSITION_M = (0.0, -6.0, 5.00)
 DRIVE_CAMERA_EGO_BOTTOM_TARGET_M = (0.0, 14.0, -1.00)
@@ -1752,7 +1756,37 @@ def corner_radar_points_for_cluster_display(
     state: ClusterUiState,
     lane_width_m: float,
 ) -> tuple[RadarPoint, ...]:
-    return points
+    del lane_width_m
+    if not points:
+        return ()
+    bounded = tuple(sorted(points, key=lambda point: radar_point_display_priority(point, state)))
+    bounded = bounded[:CORNER_RADAR_INPUT_POINT_LIMIT]
+    if state.radar_display_mode != CLUSTER_RADAR_DISPLAY_DETAIL:
+        bounded = merged_radar_points(bounded, state)
+    return tuple(sorted(bounded, key=lambda point: radar_point_display_priority(point, state)))[
+        :CORNER_RADAR_DISPLAY_POINT_LIMIT
+    ]
+
+
+def radar_point_display_priority(point: RadarPoint, state: ClusterUiState) -> tuple[object, ...]:
+    detected_match = radar_point_matches_detected_vehicle(point, state)
+    hazardous_motion = radar_point_is_oncoming(point, state) or radar_point_is_cross_traffic(point)
+    meaningful_motion = radar_point_has_meaningful_motion(point, state)
+    in_my_lane = point.in_my_lane is not None and point.in_my_lane > 0
+    valid = point.valid is None or point.valid > 0
+    return (
+        0 if detected_match else 1,
+        0 if hazardous_motion else 1,
+        0 if point.promotion_held else 1,
+        0 if in_my_lane else 1,
+        0 if meaningful_motion else 1,
+        0 if valid else 1,
+        abs(point.longitudinal_m),
+        abs(point.lateral_m),
+        -(point.valid_count or 0),
+        -(point.probability or 0.0),
+        point.label,
+    )
 
 
 def corner_radar_common_lateral_speed_mps(points: tuple[RadarPoint, ...], state: ClusterUiState) -> float:
@@ -1939,7 +1973,7 @@ def radar_point_markers(
     lateral_speed_offset_mps: float = 0.0,
 ) -> tuple[RadarPointMarker, ...]:
     markers: list[RadarPointMarker] = []
-    for point in state.radar_points:
+    for point in sorted(state.radar_points, key=lambda item: radar_point_display_priority(item, state)):
         if radar_point_hidden_by_vehicle_box(point, vehicle_points, state):
             continue
         forward_m = render_scene_forward_m(point.longitudinal_m, state)
@@ -1968,6 +2002,8 @@ def radar_point_markers(
                 in_my_lane=point.in_my_lane,
             )
         )
+        if len(markers) >= RADAR_MARKER_DISPLAY_LIMIT:
+            break
     return tuple(markers)
 
 
@@ -1989,23 +2025,14 @@ def radar_vehicle_points(state: ClusterUiState, lane_width_m: float) -> tuple[Ra
             for point in state.radar_points
             if radar_point_is_vehicle_candidate(point, state, lane_width_m)
         ),
-        key=lambda point: (
-            0 if radar_point_matches_detected_vehicle(point, state) else 1,
-            point.longitudinal_m,
-            abs(point.lateral_m),
-        ),
+        key=lambda point: radar_point_display_priority(point, state),
     )
-    if state.radar_display_mode == CLUSTER_RADAR_DISPLAY_DETAIL:
-        return tuple(
-            sorted(
-                candidates,
-                key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label),
-            )
-        )
     for point in candidates:
         if any(radar_points_same_vehicle(point, existing) for existing in selected):
             continue
         selected.append(point)
+        if len(selected) >= RADAR_VEHICLE_DISPLAY_LIMIT:
+            break
     selected.sort(key=lambda point: point.longitudinal_m)
     return tuple(selected)
 
@@ -3508,11 +3535,7 @@ def build_cluster_scene(
     radar_vehicle_x_offset_m = relative_scene_x_offset_m
     camera = scene_camera(state, lane_width_m, anchor_x_m)
     camera_active = state.surround_view_active
-    selected_radar_vehicle_points = (
-        raw_corner_points
-        if raw_corner_active
-        else radar_vehicle_points(state, lane_width_m)
-    )
+    selected_radar_vehicle_points = radar_vehicle_points(state, lane_width_m)
     selected_radar_vehicle_boxes = tuple(
         radar_vehicle_box(point, state, lane_width_m, theme, corner_lateral_speed_offset_mps)
         for point in selected_radar_vehicle_points
@@ -3746,7 +3769,7 @@ def build_cluster_scene(
         radar_points = radar_point_markers(
             state,
             lane_width_m,
-            (),
+            selected_radar_vehicle_points,
             min_forward_m=road_start_m,
             max_forward_m=road_end_m if camera_active else ROAD_FAR_M + 30.0,
             x_offset_m=relative_scene_x_offset_m,
