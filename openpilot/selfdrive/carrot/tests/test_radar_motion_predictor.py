@@ -3257,21 +3257,35 @@ def test_distant_corner_without_correspondence_suppresses_vision() -> None:
   assert output.lead_one is None
 
 
-def test_no_vision_moving_radar_fallback_prefers_corner_then_front_scc() -> None:
+def test_in_path_moving_radar_fallback_prefers_front_then_corner_scc() -> None:
   cases = (
     (
       (
         Point(
           1009, 30.0, 0.1,
-          v_rel=-7.0, source="corner235",
+          v_rel=-5.0, source="corner235",
         ),
         Point(
           35, 30.2, 0.1,
-          v_rel=-7.0, source="frontRadar",
+          v_rel=-5.0, source="frontRadar",
         ),
         Point(
           0, 30.1, 0.1,
-          v_rel=-7.0, source="scc",
+          v_rel=-5.0, source="scc",
+        ),
+      ),
+      1,
+      35,
+    ),
+    (
+      (
+        Point(
+          1009, 30.0, 0.1,
+          v_rel=-5.0, source="corner235",
+        ),
+        Point(
+          0, 30.1, 0.1,
+          v_rel=-5.0, source="scc",
         ),
       ),
       1,
@@ -3386,6 +3400,130 @@ def test_no_vision_moving_radar_fallback_prefers_corner_then_front_scc() -> None
     assert output.lead_one is not None
     assert output.lead_one["radar"]
     assert output.lead_one["radarTrackId"] == expected_track_id
+
+
+def test_vision_range_outlier_falls_back_to_moving_front_radar() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+  )
+  output = None
+  for index in range(7):
+    time_s = index * 0.05
+    output = controller.update(
+      time_s=time_s,
+      v_ego=35.0,
+      radar_points=(
+        Point(
+          39, 50.2 - 5.5 * time_s, -0.05,
+          v_rel=-5.5, source="frontRadar",
+        ),
+        Point(
+          1005, 48.7 - 5.5 * time_s, -0.40,
+          v_rel=-5.5, source="corner235",
+        ),
+      ),
+      model=model_with_lead(
+        81.0, 0.02, 32.0, probability=0.893,
+      ),
+    )
+    if index < 5:
+      assert output.lead_one is None
+
+  assert output is not None
+  assert output.lead_one is not None
+  assert output.lead_one["radar"]
+  assert output.lead_one["radarTrackId"] == 39
+
+
+def test_normal_match_primes_moving_radar_fallback_for_range_jump() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+  )
+  output = None
+  for index in range(6):
+    time_s = index * 0.05
+    radar_d_rel = 50.0 - 5.5 * time_s
+    output = controller.update(
+      time_s=time_s,
+      v_ego=35.0,
+      radar_points=(
+        Point(
+          39, radar_d_rel, -0.05,
+          v_rel=-5.5, source="frontRadar",
+        ),
+      ),
+      model=model_with_lead(
+        radar_d_rel, 0.0, 29.5, probability=0.90,
+      ),
+    )
+    assert output.lead_one is not None
+    assert output.lead_one["radarTrackId"] == 39
+
+  assert output is not None
+  time_s = 0.30
+  output = controller.update(
+    time_s=time_s,
+    v_ego=35.0,
+    radar_points=(
+      Point(
+        39, 50.0 - 5.5 * time_s, -0.05,
+        v_rel=-5.5, source="frontRadar",
+      ),
+    ),
+    model=model_with_lead(
+      81.0, 0.0, 32.0, probability=0.90,
+    ),
+  )
+
+  assert output.lead_one is not None
+  assert output.lead_one["radar"]
+  assert output.lead_one["radarTrackId"] == 39
+
+
+def test_confirmed_closer_moving_radar_overrides_farther_vision_match() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+  )
+  output = None
+  for index in range(7):
+    time_s = index * 0.05
+    output = controller.update(
+      time_s=time_s,
+      v_ego=35.0,
+      radar_points=(
+        Point(
+          39, 84.4 - 5.5 * time_s, 0.1,
+          v_rel=-5.5, source="frontRadar",
+        ),
+        Point(
+          45, 95.3 - 5.5 * time_s, -0.1,
+          v_rel=-5.5, source="frontRadar",
+        ),
+        Point(
+          1005, 82.5 - 5.5 * time_s, -0.4,
+          v_rel=-5.5, source="corner235",
+        ),
+        Point(
+          0, 84.8 - 5.5 * time_s, 0.0,
+          v_rel=-5.5, source="scc",
+        ),
+      ),
+      model=model_with_lead(
+        107.2, 0.0, 29.5, probability=0.715,
+      ),
+    )
+    assert output.lead_one is not None
+    if index < 5:
+      assert output.lead_one["radarTrackId"] == 45
+
+  assert output is not None
+  assert output.lead_one is not None
+  assert output.lead_one["radar"]
+  assert output.lead_one["radarTrackId"] == 39
+  assert output.lead_one["modelProb"] == pytest.approx(0.0)
 
 
 def test_moving_corner_born_in_path_waits_for_lead_one_not_lead_two() -> None:
