@@ -17,6 +17,17 @@ WEB_LANGUAGES = {"", "en", "ko", "zh"}
 WEB_REPLAY_INSIGHTS_TABS = {"events", "graphs", "sensors", "advanced"}
 WEB_DRIVE_LAYOUT_MODES = {"split", "area_1", "area_2"}
 
+# Existing settings files created before the drive-layout keys were persisted
+# should retain the former split layout. Fresh installs use WEB_SETTINGS_SPEC.
+LEGACY_DRIVE_LAYOUT_DEFAULTS = {
+  "carrot_navi_horizontal_mode": "split",
+  "carrot_navi_horizontal_area_1": "vision",
+  "carrot_navi_horizontal_area_2": "navigation",
+  "carrot_navi_vertical_mode": "split",
+  "carrot_navi_vertical_area_1": "vision",
+  "carrot_navi_vertical_area_2": "navigation",
+}
+
 DRIVE_CONTENT_CATALOG_PATH = os.path.join(
   WEB_DIR,
   "src",
@@ -395,18 +406,19 @@ WEB_SETTINGS_SPEC: List[_Field] = [
   _Field("web_language", "str", "", normalize=_normalize_language),
   _Field("web_lab_enabled", "bool", False),
   _Field("vision_fullscreen_default", "bool", False),
+  _Field("carrot_navi_fullscreen_on_tap", "bool", False),
   _Field("vision_ar_enabled", "bool", False, requires_capability="web_lab"),
   _Field("vision_ar_debug", "bool", False, requires_capability="web_lab"),
   _Field("vision_display_mode", "enum", "normal", choices={"fit", "normal", "crop"}),
   _Field("replay_hud_visible", "bool", False),
   _Field("replay_insights_tab", "enum", "events", choices=WEB_REPLAY_INSIGHTS_TABS),
-  _Field("carrot_navi_horizontal_mode", "enum", "split", choices=WEB_DRIVE_LAYOUT_MODES),
-  _Field("carrot_navi_horizontal_area_1", "enum", "vision"),
-  _Field("carrot_navi_horizontal_area_2", "enum", "navigation"),
+  _Field("carrot_navi_horizontal_mode", "enum", "area_1", choices=WEB_DRIVE_LAYOUT_MODES),
+  _Field("carrot_navi_horizontal_area_1", "enum", "navigation"),
+  _Field("carrot_navi_horizontal_area_2", "enum", "vision"),
   _Field("carrot_navi_split_ratio", "str", "0.70", normalize=_normalize_carrot_navi_split_ratio),
-  _Field("carrot_navi_vertical_mode", "enum", "split", choices=WEB_DRIVE_LAYOUT_MODES),
-  _Field("carrot_navi_vertical_area_1", "enum", "vision"),
-  _Field("carrot_navi_vertical_area_2", "enum", "navigation"),
+  _Field("carrot_navi_vertical_mode", "enum", "area_1", choices=WEB_DRIVE_LAYOUT_MODES),
+  _Field("carrot_navi_vertical_area_1", "enum", "navigation"),
+  _Field("carrot_navi_vertical_area_2", "enum", "vision"),
   _Field("carrot_navi_vertical_split_ratio", "str", "0.50", normalize=_normalize_carrot_navi_vertical_split_ratio),
   _Field("kmap_enabled", "bool", False),
   _Field("kmap_url", "str", "https://jominki354.github.io/kmap/", normalize=_normalize_kmap_url),
@@ -487,7 +499,11 @@ def read_web_settings() -> Dict[str, Any]:
       raw = json.load(f)
   except Exception:
     return dict(DEFAULT_WEB_SETTINGS)
-  return sanitize_web_settings(raw if isinstance(raw, dict) else {})
+  if not isinstance(raw, dict):
+    return dict(DEFAULT_WEB_SETTINGS)
+  for key, value in LEGACY_DRIVE_LAYOUT_DEFAULTS.items():
+    raw.setdefault(key, value)
+  return sanitize_web_settings(raw)
 
 
 def write_web_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
