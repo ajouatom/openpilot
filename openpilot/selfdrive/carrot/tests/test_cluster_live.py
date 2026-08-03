@@ -88,6 +88,19 @@ def test_live_cluster_avoids_unused_gps_subscriptions_after_trace_removal() -> N
   assert "gpsLocation" not in LIVE_SERVICES_BASE
 
 
+def test_live_onroad_state_is_unknown_until_device_state_is_alive() -> None:
+  source = object.__new__(OpenpilotLiveSource)
+  device_state = SimpleNamespace(started=False)
+  source._service_alive = lambda _service: False
+  source._service_data = lambda _service: device_state
+  assert source.onroad_state() is None
+
+  source._service_alive = lambda service: service == "deviceState"
+  assert source.onroad_state() is False
+  device_state.started = True
+  assert source.onroad_state() is True
+
+
 def test_cached_calibration_is_loaded_for_installation_angle() -> None:
   calibration = SimpleNamespace(rpyCalib=(0.0, 0.02, -0.01))
   event = SimpleNamespace(valid=True, liveCalibration=calibration)

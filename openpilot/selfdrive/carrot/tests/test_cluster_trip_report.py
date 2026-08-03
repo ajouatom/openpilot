@@ -62,6 +62,35 @@ def test_trip_tracker_counts_events_once_and_accumulates_summary():
   assert state.distance_m > 38_000.0
 
 
+def test_trip_tracker_starts_only_onroad_stops_immediately_and_resets_next_trip():
+  tracker = TripReportTracker()
+  tracker.set_onroad(False)
+
+  before_onroad = tracker.update(0.0, 10.0, 3.0, 120.0, True, 2.7, 15.0)
+  assert before_onroad.distance_m == 0.0
+  assert before_onroad.duration_s == 0.0
+  assert before_onroad.hard_accel_count == 0
+
+  tracker.set_onroad(True)
+  tracker.update(0.0, 10.0, 0.0, 0.0, False, 2.7, 15.0)
+  onroad = tracker.update(0.5, 10.0, 3.0, 120.0, True, 2.7, 15.0)
+  assert onroad.distance_m == 5.0
+  assert onroad.duration_s == 0.5
+
+  stopped = tracker.set_onroad(False)
+  after_offroad_sample = tracker.update(10.0, 30.0, -4.0, 120.0, True, 2.7, 15.0)
+  assert stopped == onroad
+  assert after_offroad_sample == onroad
+
+  restarted = tracker.set_onroad(True)
+  first_sample = tracker.update(20.0, 20.0, 0.0, 0.0, True, 2.7, 15.0)
+  second_sample = tracker.update(20.5, 20.0, 0.0, 0.0, True, 2.7, 15.0)
+  assert restarted.distance_m == 0.0
+  assert restarted.duration_s == 0.0
+  assert first_sample == restarted
+  assert second_sample.distance_m == 10.0
+  assert second_sample.duration_s == 0.5
+
 def test_route_parser_carries_report_into_cluster_state():
   parser = RouteLogParser(recompute_cutins=False)
   parser._frame_from_car_state(car_state(10.0), 0.0)
