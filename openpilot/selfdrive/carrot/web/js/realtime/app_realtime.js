@@ -383,14 +383,30 @@ async function toggleCarrotFullscreen(options = {}) {
   return requestCarrotFullscreen(options);
 }
 
-function isCarrotVisionDefaultFullscreenEnabled() {
+function isBooleanWebSettingEnabled(key, fallback = false) {
   const settings = window.CarrotWebSettingsState || {};
-  const fallback = true;
-  const value = Object.prototype.hasOwnProperty.call(settings, "vision_fullscreen_default")
-    ? settings.vision_fullscreen_default
+  const value = Object.prototype.hasOwnProperty.call(settings, key)
+    ? settings[key]
     : fallback;
   if (typeof value === "string") return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
   return Boolean(value);
+}
+
+function isCarrotVisionDefaultFullscreenEnabled() {
+  return isBooleanWebSettingEnabled("vision_fullscreen_default", true);
+}
+
+function isCarrotNaviFullscreenOnTapEnabled() {
+  return isBooleanWebSettingEnabled("carrot_navi_fullscreen_on_tap", false);
+}
+
+function isCarrotNavigationContentActive() {
+  try {
+    const status = window.DriveCarrotNaviFacade?.content?.status?.();
+    return Boolean(status?.contentActive && status?.layoutVisible);
+  } catch {
+    return false;
+  }
 }
 
 function requestCarrotVisionDefaultFullscreen(options = {}) {
@@ -398,8 +414,29 @@ function requestCarrotVisionDefaultFullscreen(options = {}) {
   return requestCarrotFullscreen(options);
 }
 
+function bindCarrotNaviFullscreenOnTap() {
+  const pane = document.getElementById("carrotNaviPane");
+  if (!pane || pane.dataset.fullscreenTapBound === "1") return false;
+  pane.dataset.fullscreenTapBound = "1";
+  pane.addEventListener("click", (event) => {
+    if (event.defaultPrevented || isFullscreenActive()) return;
+    if (!isCarrotNaviFullscreenOnTapEnabled() || !isCarrotNavigationContentActive()) return;
+    if (window.CarrotMiniHudMode?.isActive?.()) return;
+    if (event.target?.closest?.("button, a, input, select, textarea, [role='button']")) return;
+    void requestCarrotFullscreen({ quiet: false }).catch(() => {});
+  });
+  return true;
+}
+
 function shouldKeepCarrotFullscreen() {
-  return document.body?.dataset?.page === "carrot" && isCarrotVisionActive() && !window.CarrotMiniHudMode?.isActive?.();
+  return document.body?.dataset?.page === "carrot"
+    && (isCarrotVisionActive() || isCarrotNavigationContentActive())
+    && !window.CarrotMiniHudMode?.isActive?.();
+}
+
+function hasEnabledCarrotFullscreenContent() {
+  return (isCarrotVisionActive() && isCarrotVisionDefaultFullscreenEnabled())
+    || (isCarrotNavigationContentActive() && isCarrotNaviFullscreenOnTapEnabled());
 }
 
 async function syncCarrotFullscreenLifecycle() {
@@ -417,6 +454,12 @@ window.addEventListener("carrot:pagechange", () => {
 window.addEventListener("carrot:visionchange", () => {
   void syncCarrotFullscreenLifecycle();
 });
+window.addEventListener("drive:workspacelayoutchange", () => {
+  void syncCarrotFullscreenLifecycle();
+});
+window.addEventListener("drive:workspacecontentchange", () => {
+  void syncCarrotFullscreenLifecycle();
+});
 window.addEventListener("carrot:minihudchange", () => {
   void syncCarrotFullscreenLifecycle();
   syncCarrotRealtimeLifecycle(true);
@@ -425,8 +468,9 @@ window.addEventListener("carrot:drivedataactivitychange", () => {
   syncCarrotRealtimeLifecycle(false);
 });
 window.addEventListener("carrot:websettingschange", (event) => {
-  if (event?.detail?.key !== "vision_fullscreen_default") return;
-  if (isCarrotVisionDefaultFullscreenEnabled()) return;
+  const keys = Array.isArray(event?.detail?.keys) ? event.detail.keys : [event?.detail?.key];
+  if (!keys.some((key) => key === "vision_fullscreen_default" || key === "carrot_navi_fullscreen_on_tap")) return;
+  if (hasEnabledCarrotFullscreenContent()) return;
   void exitCarrotFullscreen({ quiet: true }).catch(() => {});
 });
 
@@ -867,6 +911,7 @@ async function startAll() {
   console.log("[time_sync] syncing server time on page load");
   syncServerTimeOnConnect().catch(() => {});
   rtcInitAuto();
+  bindCarrotNaviFullscreenOnTap();
   startCarrotVisionTestStateFetch();
 
   _hudMarkDirty();

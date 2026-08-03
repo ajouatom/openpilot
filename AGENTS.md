@@ -21,17 +21,13 @@
 
 # User documentation policy
 
-- `docs/user/ko/` and `docs/user/en/` are the paired canonical sources for public carrotpilot user
-  documentation. The Wiki should link to these files instead of copying their detailed contents.
-- When a change affects user-visible behavior, settings, defaults, units, presets, vehicle-control
-  behavior, radar behavior, or the Carrot Web settings interface, update the mapped Korean and
-  English user documents and focused tests in the same change even when the user did not explicitly
-  request docs.
-- Use `docs/user/docs_map.json` to find the documents associated with changed code. Run
-  `python tools/docs/check_user_docs.py --base <base-ref>` before publishing.
-- Refactors, logging-only changes, performance work with unchanged behavior, and test-only changes
-  normally do not require user-documentation edits. For a pull request that changes mapped code
-  without docs, record a concrete `Docs-Not-Needed: <reason>` in the PR body.
+- Do not create or edit files under `docs/user/ko/` or `docs/user/en/` unless the user explicitly
+  requests user-documentation work. User-visible code changes alone do not authorize guide edits.
+- Keep setting-level explanations in the generated GitHub Wiki workflow and web-only explanations
+  in the localized UI instead of duplicating them into `docs/user/` by default.
+- `docs/user/docs_map.json` and `tools/docs/check_user_docs.py` are validation aids, not instructions
+  to generate documentation. For an ordinary code pull request without explicitly requested docs,
+  record a concrete `Docs-Not-Needed: <reason>` in the PR body when the workflow requires it.
 - Do not place private, internal-only, credential-bearing, or non-public feature documentation in
   `docs/user/` or link it from the public Wiki.
 

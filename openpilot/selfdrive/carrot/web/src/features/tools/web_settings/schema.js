@@ -76,6 +76,11 @@ const WEB_SETTINGS_GROUPS = [
     labelKey: "web_settings_navigation",
     items: [
       {
+        id: "carrot_navi_fullscreen_on_tap",
+        titleKey: "web_navi_fullscreen_on_tap",
+        descKey: "web_navi_fullscreen_on_tap_desc",
+      },
+      {
         id: "carrot_navi_map_appearance",
         component: "param-selects",
         fields: [
@@ -95,6 +100,7 @@ const WEB_SETTINGS_GROUPS = [
             titleKey: "web_navi_map_theme",
             descKey: "web_navi_map_theme_desc",
             options: [
+              { value: "0", labelKey: "web_navi_map_theme_auto" },
               { value: "1", labelKey: "web_navi_map_theme_dark" },
               { value: "2", labelKey: "web_navi_map_theme_light" },
             ],
