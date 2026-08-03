@@ -1230,9 +1230,9 @@ class VisionRadarMatcher:
   def _radar_only_moving_source_rank(
     point: RadarPointSnapshot,
   ) -> int:
-    if point.source.startswith("corner"):
-      return 0
     if point.source == "frontRadar":
+      return 0
+    if point.source.startswith("corner"):
       return 1
     if point.source == "scc":
       return 2
@@ -1248,19 +1248,12 @@ class VisionRadarMatcher:
 
   def _match_radar_only_moving(
     self,
-    vision: VisionLead | None,
     points: Iterable[RadarPointSnapshot],
     path: Sequence[tuple[float, float]],
     time_s: float | None,
   ) -> VisionRadarMatch | None:
-    if (
-      time_s is None
-      or not math.isfinite(time_s)
-      or (
-        vision is not None
-        and vision.probability >= VISION_LEAD_MIN_PROB
-      )
-    ):
+    """Track a central moving radar lead independently of visual range."""
+    if time_s is None or not math.isfinite(time_s):
       self._reset_radar_only_moving()
       return None
 
@@ -1626,23 +1619,40 @@ class VisionRadarMatcher:
       regular = moving
     else:
       regular = stationary if stationary is not None else moving
+    radar_moving = self._match_radar_only_moving(
+      stationary_values,
+      path,
+      time_s,
+    )
     if regular is not None:
-      self._reset_radar_only_moving()
+      # Mirror conventional radard's closer-second-track preference. Once a
+      # central moving point has its own physical continuity, do not let a
+      # farther point win solely because an erroneous visual range happens to
+      # be closer to it. The independently confirmed point is already source
+      # ranked and path scoped by _match_radar_only_moving().
+      if (
+        moving is not None
+        and radar_moving is not None
+        and radar_moving.point.d_rel < moving.point.d_rel
+      ):
+        self.last_identity = self._identity(radar_moving.point)
+        self.low_probability_hold_frames = 0
+        return radar_moving
       return regular
     corroborated = self._match_vision_corroborated_radar(
       vision,
       stationary_values,
       path,
     )
-    if corroborated is not None:
-      self._reset_radar_only_moving()
-      return corroborated
-    return self._match_radar_only_moving(
-      vision,
-      stationary_values,
-      path,
-      time_s,
-    )
+    if (
+      radar_moving is not None
+      and (
+        corroborated is None
+        or radar_moving.point.d_rel < corroborated.point.d_rel
+      )
+    ):
+      return radar_moving
+    return corroborated
 
 
 def lead_from_radar_point(

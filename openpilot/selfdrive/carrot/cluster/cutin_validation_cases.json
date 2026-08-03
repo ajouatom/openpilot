@@ -2,6 +2,19 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "ioniq5-d39-41-closest-moving-leadone",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000d39--67b49e7acd--41/rlog.zst",
+      "source": "front+corner",
+      "window": [18.0, 24.0],
+      "expected": "clear",
+      "human_verified": true,
+      "required_lead_one_ids": [39],
+      "forbidden_lead_one_ids": [45],
+      "require_lead_one_continuous": true,
+      "scene": "Keep the nearest confirmed in-path moving front track 39 as leadOne instead of following the farther vision-range match 45"
+    },
+    {
       "id": "ioniq9-a7-22-truck",
       "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
       "log": "000001a7--54660d9df7--22/rlog.zst",
