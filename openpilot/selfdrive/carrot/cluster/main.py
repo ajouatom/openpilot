@@ -103,6 +103,7 @@ PANEL_LAYOUT_PARAM_POLL_SECONDS = 1.0
 RADAR_PARAM_POLL_SECONDS = 1.0
 HUD_MODE_PARAM_POLL_SECONDS = 1.0
 HUD_MIRROR_PARAM_POLL_SECONDS = 1.0
+HUD_OUTPUT_GATE_PARAM_POLL_SECONDS = 0.1
 
 try:
     from openpilot.system.hardware import TICI
@@ -982,6 +983,7 @@ def run_demo(
     next_panel_layout_param_read = start_time
     next_radar_param_read = start_time
     next_hud_mode_param_read = start_time
+    next_hud_output_gate_param_read = start_time
     next_hud_mirror_param_read = start_time + HUD_MIRROR_PARAM_POLL_SECONDS
     report_frames = 0
     display_actual_fps: float | None = None
@@ -1040,15 +1042,15 @@ def run_demo(
         )
         return True
 
-    if hud_output_gate_param_reader is not None and not hud_output_gate_param_reader.allowed():
-        print(
-            f"{CLUSTER_HUD_DEBUG_PARAM}=0 and IsOnroad=0; "
-            "cluster HUD output remains off",
-            flush=True,
-        )
-        return
-
     try:
+        if hud_output_gate_param_reader is not None and not hud_output_gate_param_reader.allowed():
+            print(
+                f"{CLUSTER_HUD_DEBUG_PARAM}=0 and IsOnroad=0; "
+                "cluster HUD output remains off",
+                flush=True,
+            )
+            return
+
         if route_source is not None and route_tools_mode == "separate":
             from cluster_replay_tools import RouteReplayToolsWindow
 
@@ -1159,6 +1161,19 @@ def run_demo(
 
             now = time.perf_counter()
 
+            if (
+                hud_output_gate_param_reader is not None
+                and now >= next_hud_output_gate_param_read
+            ):
+                if not hud_output_gate_param_reader.allowed():
+                    print(
+                        f"{CLUSTER_HUD_DEBUG_PARAM}=0 and IsOnroad=0; "
+                        "exiting to turn off cluster HUD output",
+                        flush=True,
+                    )
+                    break
+                next_hud_output_gate_param_read = now + HUD_OUTPUT_GATE_PARAM_POLL_SECONDS
+
             if now >= next_hud_mirror_param_read:
                 next_hud_mirror_mode = hud_mirror_param_reader.read()
                 if next_hud_mirror_mode != active_hud_mirror_mode:
@@ -1262,7 +1277,6 @@ def run_demo(
                     or hud_core_mode_param_reader is not None
                     or hud_priority_param_reader is not None
                     or hud_debug_param_reader is not None
-                    or hud_output_gate_param_reader is not None
                 )
             ):
                 next_hud_mode = hud_mode_param_reader.read() if hud_mode_param_reader is not None else None
@@ -1306,13 +1320,6 @@ def run_demo(
                         active_hud_debug_mode = next_hud_debug_mode
                         if live_source is not None:
                             live_source.set_hud_debug_mode(active_hud_debug_mode)
-                if hud_output_gate_param_reader is not None and not hud_output_gate_param_reader.allowed():
-                    print(
-                        f"{CLUSTER_HUD_DEBUG_PARAM}=0 and IsOnroad=0; "
-                        "exiting to turn off cluster HUD output",
-                        flush=True,
-                    )
-                    break
                 next_hud_mode_param_read = now + HUD_MODE_PARAM_POLL_SECONDS
             if live_fps_param_reader is not None and now >= next_fps_param_read:
                 next_target_fps = live_fps_param_reader.read()
@@ -1357,6 +1364,17 @@ def run_demo(
             if live_source is not None:
                 profile_stage = time.perf_counter()
                 state = live_source.update()
+                if (
+                    hud_output_gate_param_reader is not None
+                    and live_source.onroad_state() is False
+                    and hud_output_gate_param_reader.read_mode() == 0
+                ):
+                    print(
+                        f"{CLUSTER_HUD_DEBUG_PARAM}=0 and deviceState.started=0; "
+                        "exiting to turn off cluster HUD output",
+                        flush=True,
+                    )
+                    break
                 center_clock_text = time.strftime("%H:%M:%S")
                 profile.add_samples(live_source.profile_samples())
                 profile.add_elapsed("source.live_update", profile_stage)

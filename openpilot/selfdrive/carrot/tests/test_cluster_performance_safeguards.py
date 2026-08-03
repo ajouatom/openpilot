@@ -108,6 +108,28 @@ def _import_cluster_autorun(monkeypatch):
   return cluster_autorun
 
 
+def test_cluster_autorun_output_gate_preserves_debug_override(monkeypatch):
+  cluster_autorun = _import_cluster_autorun(monkeypatch)
+
+  class FakeParams:
+    def __init__(self, onroad, debug):
+      self.onroad = onroad
+      self.debug = debug
+
+    def get_bool(self, name):
+      assert name == cluster_autorun.IS_ONROAD_PARAM
+      return self.onroad
+
+    def get_int(self, name):
+      assert name == cluster_autorun.HUD_DEBUG_PARAM
+      return self.debug
+
+  assert not cluster_autorun._hud_output_allowed(FakeParams(False, 0))
+  assert cluster_autorun._hud_output_allowed(FakeParams(False, 1))
+  assert cluster_autorun._hud_output_allowed(FakeParams(True, 0))
+  assert cluster_autorun.HUD_CHECK_INTERVAL_S == 0.1
+
+
 def test_cluster_autorun_restarts_without_delay_after_orientation_change(monkeypatch):
   cluster_autorun = _import_cluster_autorun(monkeypatch)
   usb_display_module = importlib.import_module("cluster_usb_display")
