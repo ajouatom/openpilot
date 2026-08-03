@@ -58,7 +58,10 @@ STATIONARY_VISION_PATH_OUTLIER_MIN_PROB = 0.85
 STATIONARY_VISION_PATH_OUTLIER_HOLD_S = 0.20
 STATIONARY_LONGITUDINAL_CONTINUITY_M = 2.5
 STATIONARY_LATERAL_CONTINUITY_M = 1.5
-RADAR_ONLY_MOVING_MIN_VLEAD_MPS = 2.0
+# Keep radar-only moving promotion disjoint from the stationary fallback.
+# A front-only point in this band needs vision, corner, or permitted SCC
+# corroboration instead of bypassing stationary-reflection safeguards.
+RADAR_ONLY_MOVING_MIN_VLEAD_MPS = STATIONARY_MAX_ABS_VLEAD_MPS
 RADAR_ONLY_MOVING_CONFIRMATION_S = 0.25
 RADAR_ONLY_MOVING_MAX_DREL_M = 100.0
 RADAR_ONLY_MOVING_MID_DREL_M = 60.0

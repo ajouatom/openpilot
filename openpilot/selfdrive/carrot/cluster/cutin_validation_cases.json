@@ -2,6 +2,18 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "ev9-29-52-front-stationary-ghost",
+      "vehicle_folder": "KIA_EV9 e81593da6ddcb8b2",
+      "log": "00000029--832a1507a7--52/rlog.zst",
+      "source": "front+corner",
+      "window": [44.0, 46.5],
+      "expected": "clear",
+      "human_verified": true,
+      "forbidden_lead_one_ids": [60],
+      "forbidden_lead_two_ids": [60],
+      "scene": "Front-only stationary reflection 60 must not cross the moving speed boundary and trigger close-range braking"
+    },
+    {
       "id": "ioniq5-d39-41-closest-moving-leadone",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
       "log": "00000d39--67b49e7acd--41/rlog.zst",

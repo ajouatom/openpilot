@@ -3436,6 +3436,45 @@ def test_vision_range_outlier_falls_back_to_moving_front_radar() -> None:
   assert output.lead_one["radarTrackId"] == 39
 
 
+@pytest.mark.parametrize(
+  ("v_lead", "expected_track_id"),
+  ((2.4, None), (4.0, None), (4.1, 60)),
+)
+def test_moving_fallback_does_not_overlap_stationary_speed_band(
+  v_lead: float,
+  expected_track_id: int | None,
+) -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+  )
+  output = None
+  v_ego = 26.7
+  v_rel = v_lead - v_ego
+  for index in range(7):
+    time_s = index * 0.05
+    output = controller.update(
+      time_s=time_s,
+      v_ego=v_ego,
+      radar_points=(
+        Point(
+          60, 20.0 + v_rel * time_s, -0.05,
+          v_rel=v_rel, source="frontRadar",
+        ),
+      ),
+      model=model_with_lead(
+        120.0, 0.0, 26.0, probability=0.15,
+      ),
+    )
+
+  assert output is not None
+  if expected_track_id is None:
+    assert output.lead_one is None
+  else:
+    assert output.lead_one is not None
+    assert output.lead_one["radarTrackId"] == expected_track_id
+
+
 def test_normal_match_primes_moving_radar_fallback_for_range_jump() -> None:
   controller = DPathRadarController(
     prefer_corner_radar=True,
