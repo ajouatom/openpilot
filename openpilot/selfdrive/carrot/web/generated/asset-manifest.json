@@ -90,7 +90,7 @@
       "kind": "bundle",
       "source": "src/entries/design_system.css",
       "path": "css/generated/design-system.css",
-      "hash": "c434cd6b7a30ed5b71b1a49b1716cb99537cc965bcf2089e76706d68f0cbaa2a"
+      "hash": "f48a7c1fd9d96df47ca2a824ec4473e427ece8fdbb307b09a97259b40202b3ed"
     },
     {
       "id": "drive.styles",

@@ -158,6 +158,10 @@
   padding: var(--sp-xs) 0;
 }
 
+.app-dialog__uploadBrief > .app-dialog__metaLine {
+  grid-column: 1 / -1;
+}
+
 .app-dialog__uploadBriefCopy,
 .app-dialog__uploadBriefAmount {
   display: grid;

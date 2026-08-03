@@ -111,6 +111,7 @@ test("dashcam upload confirmation stays compact and uses an explicit send action
   assert.match(dialog, /messageHtml:\s*options\.messageHtml/);
   assert.match(dialog, /html:\s*options\.html/);
   assert.match(dialogStyle, /\.app-dialog__uploadBrief\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/s);
+  assert.match(dialogStyle, /\.app-dialog__uploadBrief\s*>\s*\.app-dialog__metaLine\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
   assert.match(dialogStyle, /\.app-dialog__uploadBriefAmount\s*\{[^}]*white-space:\s*nowrap/s);
   assert.doesNotMatch(dialogStyle, /\.app-dialog__uploadBrief\s*\{[^}]*background:/s);
   assert.doesNotMatch(dialogStyle, /\.app-dialog__metaResult\s*\{[^}]*border-radius:/s);
