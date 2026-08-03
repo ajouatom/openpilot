@@ -18,6 +18,17 @@ class TripReportTracker:
     """Low-cost trip statistics for the external HUD report."""
 
     def __init__(self) -> None:
+        self._onroad: bool | None = None
+        self.reset()
+
+    def set_onroad(self, onroad: bool) -> TripReportState:
+        onroad = bool(onroad)
+        if onroad and self._onroad is False:
+            self.reset()
+        self._onroad = onroad
+        return self._last_snapshot
+
+    def reset(self) -> None:
         self._last_t: float | None = None
         self._duration_s = 0.0
         self._moving_time_s = 0.0
@@ -47,6 +58,8 @@ class TripReportTracker:
         wheelbase_m: float,
         steer_ratio: float,
     ) -> TripReportState:
+        if self._onroad is False:
+            return self._last_snapshot
         if not math.isfinite(event_t):
             return self._last_snapshot
         speed_mps = max(0.0, speed_mps if math.isfinite(speed_mps) else 0.0)

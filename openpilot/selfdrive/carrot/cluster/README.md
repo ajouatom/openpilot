@@ -285,9 +285,9 @@ are fixed at startup. Set `CLUSTER_AUTORUN_FPS` only for fixed test overrides;
 rendering only while openpilot is onroad, and `1`, `2`, and `3` keep the
 always-on debug behavior after power-up. In live input only, `2` also keeps the
 top UI icons visible when source data is missing, and `3` also shows the navi
-debug UI before navi data has arrived. When output is gated off,
-`cluster_autorun` sends TURZX brightness `0` so a stale HUD frame does not
-remain visible.
+debug UI before navi data has arrived. Normal mode checks the onroad gate every
+100 ms; when output is gated off, `cluster_autorun` sends TURZX brightness `0`
+so a stale HUD frame does not remain visible.
 The autorun watcher normalizes locale before this dim-only USB path too, so
 vendor USB initialization does not fail before the renderer is launched.
 Manager autostart always configures the cluster process through openpilot's
@@ -469,7 +469,11 @@ swapped, while TPMS remains with the driving view.
 report uses a large trip/event summary card and a separate system-load card
 with four 2-by-2 circular gauges. A lower target plots stored calibration pitch
 vertically and yaw horizontally around the calibrated center while retaining
-the numeric angles. The same mode can be validated with
+the numeric angles. In managed live input, trip statistics remain stopped until
+`deviceState.started` is true, reset and start on that transition, freeze
+immediately when it becomes false, and reset again at the next onroad start.
+Replay and direct parser inputs retain their existing accumulation behavior.
+The same mode can be validated with
 `cluster_replay_usb.py ROUTE --trip-report`.
 `ClusterHudPanelLayout=0` keeps the driving view on the left and the current
 information panel on the right. Value `1` swaps the two regions without

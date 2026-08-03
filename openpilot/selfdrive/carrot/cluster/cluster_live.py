@@ -145,6 +145,7 @@ class OpenpilotLiveSource:
         self.services = list(LIVE_SERVICES_BASE + (LIVE_CAN_SERVICES if include_can else ()))
         self.sm = messaging.SubMaster(self.services)
         self.parser = RouteLogParser()
+        self.parser.trip_report_tracker.set_onroad(False)
         self.timeout_ms = max(0, int(timeout_ms))
         self.last_state: ClusterUiState | None = None
         self.start_t = time.monotonic()
@@ -305,6 +306,9 @@ class OpenpilotLiveSource:
             self._apply_service_update(service, event_t)
         self._profile_add("source.live.apply_updates", profile_stage)
 
+        onroad_state = self.onroad_state()
+        if onroad_state is not None:
+            self.parser.trip_report_tracker.set_onroad(onroad_state)
         if self._service_alive("carState"):
             profile_stage = self._profile_start()
             event_t = self._service_time("carState")
@@ -454,6 +458,12 @@ class OpenpilotLiveSource:
             cruise_override_label=cruise_override_label,
             cruise_override_color_mode=cruise_override_color_mode,
         )
+
+    def onroad_state(self) -> bool | None:
+        if not self._service_alive("deviceState"):
+            return None
+        started = safe_get(self._service_data("deviceState"), "started", None)
+        return bool(started) if started is not None else None
 
     def status_text(self) -> str:
         profile_stage = self._profile_start()
