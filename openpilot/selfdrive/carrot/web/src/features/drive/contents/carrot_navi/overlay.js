@@ -19,6 +19,12 @@ export function guidanceGlyph(guidance) {
   return "↑";
 }
 
+export function selectCurrentGuidanceImageName(hasImage) {
+  if (hasImage("tbt_current_full")) return "tbt_current_full";
+  if (hasImage("tbt_current_compact")) return "tbt_current_compact";
+  return "";
+}
+
 export class OverlayRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -313,9 +319,9 @@ export class OverlayRenderer {
   }
 
   drawGuidanceStack(width, height, padding, compact, allowFallback = true) {
-    const currentName = compact && this.image("tbt_current_compact")
-      ? "tbt_current_compact"
-      : (this.image("tbt_current_full") ? "tbt_current_full" : "tbt_current_compact");
+    // The compact native image is a deliberately short strip. Prefer the
+    // full card at every pane width and reserve compact for source fallback.
+    const currentName = selectCurrentGuidanceImageName((name) => Boolean(this.image(name)));
     const currentSlot = {
       x: padding,
       y: padding,

@@ -395,6 +395,7 @@ WEB_SETTINGS_SPEC: List[_Field] = [
   _Field("web_language", "str", "", normalize=_normalize_language),
   _Field("web_lab_enabled", "bool", False),
   _Field("vision_fullscreen_default", "bool", False),
+  _Field("carrot_navi_fullscreen_on_tap", "bool", False),
   _Field("vision_ar_enabled", "bool", False, requires_capability="web_lab"),
   _Field("vision_ar_debug", "bool", False, requires_capability="web_lab"),
   _Field("vision_display_mode", "enum", "normal", choices={"fit", "normal", "crop"}),
