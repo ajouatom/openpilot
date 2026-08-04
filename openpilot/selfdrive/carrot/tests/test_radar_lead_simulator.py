@@ -39,6 +39,7 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   trajectory_history_display_y,
   trajectory_model_review_events,
   update_validation_case_label,
+  vision_lead_continuity_segments,
 )
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import (
   group_cases_by_log,
@@ -277,23 +278,25 @@ def test_front_only_frames_preserve_non_corner_inputs_and_leads() -> None:
 def test_front_radar_display_toggle_uses_only_measured_front_points() -> None:
   current = frame((
     point(10, 30.0, 0.2),
-    point(11, -9.0, 0.2),
-    point(12, 121.0, 0.2),
-    point(13, 20.0, 0.2, measured=False),
+      point(11, -9.0, 0.2),
+      point(12, 121.0, 0.2),
+      point(14, 131.0, 0.2),
+      point(13, 20.0, 0.2, measured=False),
     point(1010, 20.0, 2.0, source="corner235"),
     point(0, 20.0, 0.0, source="scc"),
   ))
 
   assert [
     value.track_id for value in front_radar_display_points(current)
-  ] == [10, 11]
+  ] == [10, 11, 12]
 
 
 def test_corner_radar_display_includes_all_measured_points_in_range() -> None:
   current = frame((
     point(1001, 20.0, 0.2, source="corner235"),
-    point(1002, 85.0, 1.0, source="corner235"),
-    point(1003, 121.0, 0.2, source="corner235"),
+      point(1002, 85.0, 1.0, source="corner235"),
+      point(1003, 121.0, 0.2, source="corner235"),
+      point(1005, 131.0, 0.2, source="corner235"),
     point(
       1004, 30.0, 0.2,
       source="corner235", measured=False,
@@ -303,7 +306,7 @@ def test_corner_radar_display_includes_all_measured_points_in_range() -> None:
 
   assert [
     value.track_id for value in corner_radar_display_points(current)
-  ] == [1001, 1002]
+  ] == [1001, 1002, 1003]
 
 
 def test_corner_motion_is_preferred_for_whole_log_when_available() -> None:
@@ -552,11 +555,11 @@ def test_birds_eye_radar_positive_left_is_drawn_left_of_ego() -> None:
   assert left_x < center_x < right_x
 
 
-def test_birds_eye_distance_axis_covers_minus_30_to_120m() -> None:
+def test_birds_eye_distance_axis_covers_minus_30_to_130m() -> None:
   ui = object.__new__(SimulatorUI)
   rect = SimpleNamespace(x=0.0, y=0.0, width=200.0, height=200.0)
 
-  _, top_y = ui._screen(rect, 120.0, 0.0)
+  _, top_y = ui._screen(rect, 130.0, 0.0)
   _, ego_y = ui._screen(rect, 0.0, 0.0)
   _, bottom_y = ui._screen(rect, -30.0, 0.0)
 
@@ -617,6 +620,32 @@ def test_lead_continuity_splits_vision_and_radar_color_segments() -> None:
   ]
 
 
+def test_vision_lead_graph_uses_point_four_probability_threshold() -> None:
+  probabilities = (0.40, 0.39, 0.80)
+  frames = [
+    replace(
+      frame((), time_s=index * 0.1),
+      model_leads=(ModelLead(
+        probability,
+        31.52 + index,
+        0.0,
+        20.0,
+        0.0,
+        1.0,
+        0.5,
+        1.0,
+      ),),
+    )
+    for index, probability in enumerate(probabilities)
+  ]
+
+  segments = vision_lead_continuity_segments(frames)
+
+  assert len(segments) == 2
+  assert segments[0][0] == pytest.approx((0.0, 30.0, 0.40))
+  assert segments[1][0] == pytest.approx((0.2, 32.0, 0.80))
+
+
 def test_lead_continuity_joins_physical_stationary_track_handoff() -> None:
   frames = [frame((), time_s=index * 0.1) for index in range(3)]
   selections = (
@@ -658,13 +687,19 @@ def test_lead_graph_and_seek_bar_share_one_time_axis() -> None:
     ),
   )
 
-  timeline, panel, _, _, continuity = ui._layout_rects(1440, 1080)
+  timeline, panel, video, radar_map, continuity = ui._layout_rects(1440, 1080)
   continuity_axis = ui._continuity_time_axis_rect(continuity)
 
   assert timeline.x == pytest.approx(continuity_axis.x)
   assert timeline.width == pytest.approx(continuity_axis.width)
   assert timeline.width == pytest.approx(1360.0)
   assert continuity.width == pytest.approx(1416.0)
+  assert continuity.height == pytest.approx(290.0)
+  assert continuity.y == pytest.approx(701.0)
+  assert video.height == pytest.approx(340.5)
+  assert radar_map.height == pytest.approx(332.5)
+  assert radar_map.height > continuity.height
+  assert panel.y + panel.height == pytest.approx(693.0)
   assert panel.y + panel.height < continuity.y
 
 

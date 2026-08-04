@@ -2,6 +2,30 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "palisade-bef-2-motorcycle-leadone",
+      "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
+      "log": "00000bef--a8eb1d8c98--2/rlog.zst",
+      "source": "front",
+      "window": [10.0, 20.0],
+      "expected": "clear",
+      "human_verified": true,
+      "required_lead_one_ids": [34],
+      "forbidden_lead_one_ids": [43],
+      "require_lead_one_continuous": true,
+      "scene": "Closer in-path motorcycle track 34 must replace the previously held farther moving track 43 without repeated leadOne skips"
+    },
+    {
+      "id": "azera-109-271-corner-moving-ghost",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "00000109--5260b42384--271/rlog.zst",
+      "source": "corner",
+      "window": [4.5, 12.0],
+      "expected": "clear",
+      "human_verified": true,
+      "forbidden_lead_one_ids": [1001, 1002],
+      "scene": "Empty road: reject central moving corner ghosts whose measured range change contradicts reported relative speed"
+    },
+    {
       "id": "azera-109-270-stationary-roadside-ghost",
       "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
       "log": "00000109--5260b42384--270/rlog.zst",
