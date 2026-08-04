@@ -57,7 +57,7 @@ from openpilot.selfdrive.carrot.radar_motion import (
 
 RADAR_TO_CAMERA = 1.52
 DISPLAY_MIN_DREL_M = -30.0
-DEFAULT_FORWARD_RANGE_M = 120.0
+DEFAULT_FORWARD_RANGE_M = 130.0
 DISPLAY_TOP_PADDING_PX = 72.0
 DISPLAY_BOTTOM_PADDING_PX = 18.0
 CARROT_ROOT = Path(__file__).resolve().parents[2]
@@ -84,6 +84,7 @@ VALIDATION_DEFAULT_SENSITIVITY = 3
 LEAD_ONE_RADAR_RGB = (246, 142, 55)
 LEAD_ONE_VISION_RGB = (72, 145, 255)
 LEAD_TWO_RGB = (245, 211, 72)
+VISION_LEAD_DISPLAY_MIN_PROBABILITY = 0.40
 VALIDATION_SENSITIVITY_LABELS = (
   "사용 안 함",
   "둔감",
@@ -489,6 +490,35 @@ def lead_continuity_segments(
       current = []
     current.append(point)
     previous_candidate = candidate
+  if current:
+    segments.append(tuple(current))
+  return tuple(segments)
+
+
+def vision_lead_continuity_segments(
+  frames: Sequence[RadarFrame],
+) -> tuple[tuple[tuple[float, float, float], ...], ...]:
+  """Return visible model leadV3[0] distance runs for the replay graph."""
+  segments: list[tuple[tuple[float, float, float], ...]] = []
+  current: list[tuple[float, float, float]] = []
+  for frame in frames:
+    lead = frame.model_leads[0] if frame.model_leads else None
+    distance = lead.x - RADAR_TO_CAMERA if lead is not None else math.nan
+    if (
+      lead is None
+      or lead.probability < VISION_LEAD_DISPLAY_MIN_PROBABILITY
+      or not math.isfinite(distance)
+      or not 0.0 <= distance <= DEFAULT_FORWARD_RANGE_M
+    ):
+      if current:
+        segments.append(tuple(current))
+        current = []
+      continue
+    point = (frame.time_s, float(distance), float(lead.probability))
+    if current and point[0] - current[-1][0] > 0.15:
+      segments.append(tuple(current))
+      current = []
+    current.append(point)
   if current:
     segments.append(tuple(current))
   return tuple(segments)
@@ -2147,6 +2177,7 @@ class SimulatorUI:
       self.selector.selections,
       "lead_two",
     )
+    self.vision_lead_segments = vision_lead_continuity_segments(self.frames)
 
   @staticmethod
   def _clamp_probability(probability: float) -> float:
@@ -2378,7 +2409,8 @@ class SimulatorUI:
     rl = self.rl
     distance_ticks = (
       int(DISPLAY_MIN_DREL_M),
-      *range(0, int(DEFAULT_FORWARD_RANGE_M) + 1, 20),
+      *range(0, int(DEFAULT_FORWARD_RANGE_M), 20),
+      int(DEFAULT_FORWARD_RANGE_M),
     )
     for distance in distance_ticks:
       _, y = self._screen(rect, float(distance), 0.0)
@@ -2806,7 +2838,7 @@ class SimulatorUI:
       )
     self._draw_lead_roles(rect, selection)
     self._draw_text(
-      "-30~120m | 흰 점: 내 차 | 주황 □: radar L1 | 파랑 □: vision L1 | 노랑 □: L2",
+      "-30~130m | 흰 점: 내 차 | 주황 □: radar L1 | 파랑 □: vision L1 | 노랑 □: L2",
       int(rect.x + 12.0),
       int(rect.y + 8.0),
       14,
@@ -2923,7 +2955,7 @@ class SimulatorUI:
     plot_bottom = rect.y + rect.height - 18.0
     plot_width = max(1.0, plot_right - plot_left)
     plot_height = max(1.0, plot_bottom - plot_top)
-    for distance in (0.0, 50.0, 100.0, 120.0):
+    for distance in (0.0, 50.0, 100.0, DEFAULT_FORWARD_RANGE_M):
       y = plot_bottom - distance / DEFAULT_FORWARD_RANGE_M * plot_height
       rl.draw_line(
         int(plot_left),
@@ -2951,6 +2983,7 @@ class SimulatorUI:
       )
 
     series = (
+      (self.vision_lead_segments, None),
       (self.lead_one_segments, True),
       (self.lead_two_segments, False),
     )
@@ -2959,7 +2992,7 @@ class SimulatorUI:
         rgb = (
           lead_one_rgb(segment[0][2])
           if is_lead_one
-          else LEAD_TWO_RGB
+          else LEAD_TWO_RGB if is_lead_one is False else LEAD_ONE_VISION_RGB
         )
         color = self._color(rgb)
         previous = None
@@ -2974,6 +3007,20 @@ class SimulatorUI:
     current_selection = self.selector.select(
       self.frames[self.index],
       self.index,
+    )
+    frame = self.frames[self.index]
+    vision = frame.model_leads[0] if frame.model_leads else None
+    vision_distance = vision.x - RADAR_TO_CAMERA if vision is not None else None
+    visible_vision = (
+      vision
+      if (
+        vision is not None
+        and vision.probability >= VISION_LEAD_DISPLAY_MIN_PROBABILITY
+        and vision_distance is not None
+        and math.isfinite(vision_distance)
+        and 0.0 <= vision_distance <= DEFAULT_FORWARD_RANGE_M
+      )
+      else None
     )
     lead_values = (
       (
@@ -3012,6 +3059,24 @@ class SimulatorUI:
           3.5,
           self._color(rgb),
         )
+    vision_value = (
+      f"{vision_distance:.1f}m p{visible_vision.probability:.2f}"
+      if visible_vision is not None and vision_distance is not None
+      else "--"
+    )
+    self._draw_text(
+      f"V {vision_value}",
+      legend_x,
+      int(rect.y + 7.0),
+      12,
+      self._color(LEAD_ONE_VISION_RGB),
+    )
+    if visible_vision is not None and vision_distance is not None:
+      rl.draw_circle_v(
+        position(self.playback_time, vision_distance),
+        3.5,
+        self._color(LEAD_ONE_VISION_RGB),
+      )
     cursor_x = plot_left + self.playback_time / total * plot_width
     rl.draw_line(
       int(cursor_x),
@@ -3160,8 +3225,8 @@ class SimulatorUI:
     timeline = self._timeline_rect(width, height)
     continuity_bottom = timeline.y - 47.0
     continuity_height = min(
-      145.0,
-      max(100.0, float(height) * 0.135),
+      290.0,
+      max(200.0, float(height) * 0.27),
     )
     continuity_rect = self.rl.Rectangle(
       12.0,
@@ -3175,7 +3240,7 @@ class SimulatorUI:
     upper_height = max(400.0, upper_bottom - 12.0)
     video_height = max(
       250.0,
-      min(upper_height - 158.0, upper_height * 0.60),
+      min(upper_height - 210.0, upper_height * 0.50),
     )
     video_rect = self.rl.Rectangle(
       12.0,
@@ -3773,6 +3838,7 @@ __all__ = (
   "update_validation_case_label",
   "validation_review_events",
   "validation_settings_path",
+  "vision_lead_continuity_segments",
 )
 
 

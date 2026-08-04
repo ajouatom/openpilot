@@ -425,7 +425,9 @@ def _project_to_model_path_cached(
       y - center_y,
     )
 
-  best: ModelPathProjection | None = None
+  best_values: tuple[
+    float, float, float, float, float, float,
+  ] | None = None
   best_distance_sq = math.inf
   for (
     x0,
@@ -446,16 +448,16 @@ def _project_to_model_path_cached(
     distance_sq = offset_x * offset_x + offset_y * offset_y
     if distance_sq < best_distance_sq:
       best_distance_sq = distance_sq
-      best = ModelPathProjection(
-        path_s=accumulated_s + ratio * length,
-        center_x=center_x,
-        center_y=center_y,
-        tangent_x=tangent_x,
-        tangent_y=tangent_y,
-        d_path=-tangent_y * offset_x + tangent_x * offset_y,
+      best_values = (
+        accumulated_s + ratio * length,
+        center_x,
+        center_y,
+        tangent_x,
+        tangent_y,
+        -tangent_y * offset_x + tangent_x * offset_y,
       )
-  assert best is not None
-  return best
+  assert best_values is not None
+  return ModelPathProjection(*best_values)
 
 
 def project_to_model_path(
