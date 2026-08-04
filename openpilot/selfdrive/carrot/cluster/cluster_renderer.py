@@ -3814,6 +3814,11 @@ class ClusterUiRenderer:
             return CLUSTER_SCREEN_MODE_DEFAULT
         if requested_screen_mode != CLUSTER_SCREEN_MODE_DEFAULT:
             return requested_screen_mode
+        gear_text = str(getattr(state, "gear_text", "") or "").strip().upper()
+        if getattr(state, "onroad", False) and gear_text == "P":
+            # Surface the completed trip as soon as the driver parks, even
+            # when an active navigation session would otherwise own the panel.
+            return CLUSTER_SCREEN_MODE_TRIP_REPORT
         dashboard = getattr(state, "navi_dashboard", None)
         dashboard_connected = bool(
             dashboard is not None and dashboard.connected
