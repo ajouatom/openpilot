@@ -2,6 +2,18 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "azera-109-270-stationary-roadside-ghost",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "00000109--5260b42384--270/rlog.zst",
+      "source": "front+corner",
+      "window": [52.5, 57.0],
+      "expected": "clear",
+      "human_verified": true,
+      "forbidden_lead_one_ids": [1023, 1024],
+      "forbidden_lead_two_ids": [1023, 1024],
+      "scene": "Empty curved road: brief central corner and front-correlated roadside reflections must not become sticky stationary leads"
+    },
+    {
       "id": "ev9-29-52-front-stationary-ghost",
       "vehicle_folder": "KIA_EV9 e81593da6ddcb8b2",
       "log": "00000029--832a1507a7--52/rlog.zst",

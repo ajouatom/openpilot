@@ -40,6 +40,7 @@ LOW_SPEED_SCC_MAX_VLEAD_MPS = 5.0
 STATIONARY_VISION_MIN_PROB = VISION_LEAD_MIN_PROB
 STATIONARY_FRONT_MIN_VISION_SUPPORT_FRAMES = 3
 STATIONARY_CONFIRMATION_S = 0.25
+STATIONARY_RADAR_ONLY_CONFIRMATION_S = 0.50
 STATIONARY_MAX_ABS_VLEAD_MPS = 4.0
 STATIONARY_MAX_VISION_SPEED_DELTA_MPS = 12.0
 STATIONARY_TRUSTED_MAX_VISION_SPEED_DELTA_MPS = 20.0
@@ -49,6 +50,7 @@ STATIONARY_VISION_DISTANCE_MAX_M = (
 )
 STATIONARY_FRESH_MAX_DPATH_M = 2.0
 STATIONARY_HELD_MAX_DPATH_M = 4.0
+STATIONARY_RADAR_ONLY_HELD_MAX_DPATH_M = 1.2
 STATIONARY_RADAR_ONLY_CORNER_MAX_DPATH_M = 0.50
 STATIONARY_RADAR_ONLY_CROSS_SOURCE_MAX_DREL_M = 7.0
 STATIONARY_RADAR_ONLY_CROSS_SOURCE_MAX_DPATH_M = 1.5
@@ -893,7 +895,7 @@ class VisionRadarMatcher:
       tuple[RadarPointSnapshot, float]
     ],
   ) -> list[tuple[RadarPointSnapshot, float, float]]:
-    """Trust only a central corner/SCC or mutually confirmed front+corner."""
+    """Trust only a central corner/SCC; cross-source support only ranks it."""
     front = tuple(
       candidate
       for candidate in candidates
@@ -932,10 +934,9 @@ class VisionRadarMatcher:
         ),
         default=None,
       )
-      if (
-        abs(d_path) > STATIONARY_RADAR_ONLY_CORNER_MAX_DPATH_M
-        and cross_source is None
-      ):
+      # Cross-sensor corroboration confirms that the reflection is physical;
+      # it must not move a roadside stationary object onto the ego path.
+      if abs(d_path) > STATIONARY_RADAR_ONLY_CORNER_MAX_DPATH_M:
         continue
       support_cost = (
         abs(d_path) / STATIONARY_RADAR_ONLY_CORNER_MAX_DPATH_M
@@ -964,6 +965,10 @@ class VisionRadarMatcher:
     if time_s is None or not math.isfinite(time_s):
       self._reset_stationary()
       return None
+    strong_vision = (
+      vision is not None
+      and vision.probability >= STATIONARY_VISION_MIN_PROB
+    )
     candidate_values: list[tuple[RadarPointSnapshot, float]] = []
     for point in points:
       identity = self._identity(point)
@@ -982,14 +987,30 @@ class VisionRadarMatcher:
         # object terminates that radar identity. Radar modes suppress the
         # unmatched central model lead instead of publishing it as blue L1.
         continue
-      d_path = project_to_model_path(path, point.d_rel, point.y_rel).d_path
-      maximum_d_path = (
-        STATIONARY_HELD_MAX_DPATH_M
-        if identity == self.stationary_identity
-        else STATIONARY_FRESH_MAX_DPATH_M
+      strong_vision_support = (
+        strong_vision
+        and vision is not None
+        and self._stationary_vision_base_cost(vision, point) is not None
       )
+      d_path = project_to_model_path(path, point.d_rel, point.y_rel).d_path
+      maximum_d_path = STATIONARY_FRESH_MAX_DPATH_M
+      if identity == self.stationary_identity:
+        maximum_d_path = (
+          STATIONARY_HELD_MAX_DPATH_M
+          if (
+            self._stationary_seed_probability
+            >= STATIONARY_VISION_MIN_PROB
+            or strong_vision_support
+          )
+          else STATIONARY_RADAR_ONLY_HELD_MAX_DPATH_M
+        )
       held_vision_path_outlier = (
         identity == self.stationary_identity
+        and (
+          self._stationary_seed_probability
+          >= STATIONARY_VISION_MIN_PROB
+          or strong_vision_support
+        )
         and vision is not None
         and vision.probability
         >= STATIONARY_VISION_PATH_OUTLIER_MIN_PROB
@@ -1019,10 +1040,6 @@ class VisionRadarMatcher:
     supported: list[
       tuple[RadarPointSnapshot, float, float]
     ] = []
-    strong_vision = (
-      vision is not None
-      and vision.probability >= STATIONARY_VISION_MIN_PROB
-    )
     if strong_vision:
       for point, d_path in candidate_values:
         cost = self._stationary_vision_cost(
@@ -1164,26 +1181,58 @@ class VisionRadarMatcher:
         return None
 
       selected_identity = self._identity(selected[0])
-      selected_has_vision_support = any(
+      selected_has_current_support = any(
         self._identity(point) == selected_identity
         for point, _, _ in supported
       )
       if selected_identity != self._stationary_pending_identity:
-        self._stationary_pending_identity = selected_identity
-        self._stationary_pending_since_s = time_s
-        self._stationary_pending_vision_support_frames = (
-          1 if selected_has_vision_support else 0
+        carry_vision_supported_handoff = (
+          self._stationary_seed_probability
+          >= STATIONARY_VISION_MIN_PROB
+          and self._stationary_cross_source_continuous(
+            selected[0], time_s,
+          )
         )
+        self._stationary_pending_identity = selected_identity
+        if not carry_vision_supported_handoff:
+          self._stationary_pending_since_s = time_s
+          self._stationary_pending_vision_support_frames = 0
+        if selected_has_current_support:
+          self._stationary_pending_vision_support_frames += 1
         self._stationary_seed_probability = (
-          vision.probability if vision is not None else 0.0
+          max(
+            self._stationary_seed_probability,
+            vision.probability if vision is not None else 0.0,
+          )
+          if carry_vision_supported_handoff
+          else (vision.probability if vision is not None else 0.0)
         )
         self._stationary_seed_score = selected[2]
-        self._stationary_corner_supported = corner_supported
-      elif selected_has_vision_support:
+        self._stationary_corner_supported = (
+          self._stationary_corner_supported or corner_supported
+          if carry_vision_supported_handoff
+          else corner_supported
+        )
+      elif selected_has_current_support:
         self._stationary_pending_vision_support_frames += 1
+        if strong_vision and vision is not None:
+          self._stationary_seed_probability = max(
+            self._stationary_seed_probability,
+            vision.probability,
+          )
         self._stationary_corner_supported = (
           self._stationary_corner_supported or corner_supported
         )
+      elif (
+        self._stationary_seed_probability
+        < STATIONARY_VISION_MIN_PROB
+      ):
+        # Radar-only acquisition requires current central support throughout
+        # its longer confirmation dwell. Position
+        # continuity alone can otherwise turn a brief roadside reflection
+        # into a delayed stationary control lead.
+        self._reset_stationary()
+        return None
       elif (
         not selected[0].source.startswith("corner")
         and not self._stationary_corner_supported
@@ -1202,7 +1251,12 @@ class VisionRadarMatcher:
       if (
         self._stationary_pending_since_s is None
         or time_s - self._stationary_pending_since_s
-        < STATIONARY_CONFIRMATION_S
+        < (
+          STATIONARY_CONFIRMATION_S
+          if self._stationary_seed_probability
+          >= STATIONARY_VISION_MIN_PROB
+          else STATIONARY_RADAR_ONLY_CONFIRMATION_S
+        )
         or self._stationary_pending_vision_support_frames
         < required_support_frames
       ):
@@ -1210,6 +1264,18 @@ class VisionRadarMatcher:
       self.stationary_identity = selected_identity
 
     point, d_path, score = selected
+    if (
+      strong_vision
+      and vision is not None
+      and any(
+        self._identity(candidate) == self._identity(point)
+        for candidate, _, _ in supported
+      )
+    ):
+      self._stationary_seed_probability = max(
+        self._stationary_seed_probability,
+        vision.probability,
+      )
     if abs(d_path) > STATIONARY_HELD_MAX_DPATH_M:
       if self._stationary_path_outlier_since_s is None:
         self._stationary_path_outlier_since_s = time_s
