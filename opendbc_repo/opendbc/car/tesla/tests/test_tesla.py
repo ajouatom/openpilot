@@ -69,6 +69,16 @@ class TestTeslaFingerprint(unittest.TestCase):
     self.assertIn(0x145, can_parsers[Bus.party].addresses)
     self.assertNotIn(0x39D, can_parsers[Bus.party].addresses)
 
+  def test_sccm_validity_zero_does_not_invalidate_vehicle_sensors(self):
+    CP = CarInterface.get_params(CAR.TESLA_MODEL_Y, gen_empty_fingerprint(), [], False, False, False)
+    car_state = CarState(CP)
+    can_parsers = CarState.get_can_parsers(CP)
+    can_parsers[Bus.ap_party].vl["SCCM_steeringAngleSensor"]["SCCM_steeringAngleValidity"] = 0
+
+    ret = car_state.update(can_parsers)
+
+    self.assertFalse(ret.vehicleSensorsInvalid)
+
   def test_fw_platform_code(self):
     # Every EPS FW must parse and its platform letter must match the car it's filed under.
     for car_model, ecus in FW_VERSIONS.items():
