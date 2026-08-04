@@ -35,7 +35,6 @@ const unsigned int SPI_ACK_TIMEOUT = 50; // milliseconds
 // A blocked SPI transfer also blocks the 100 Hz CAN path. Transient NACK bursts
 // normally recover within a few milliseconds, so reconnect on sustained faults.
 const unsigned int SPI_TRANSFER_RETRY_TIMEOUT = 100; // milliseconds
-const unsigned int SPI_CAN_TX_TIMEOUT = 5; // milliseconds, matches USB
 const unsigned int SPI_CAN_TX_RETRY_DELAY = 1000; // microseconds
 const int SPI_MAX_NACK_RETRIES = 8;
 const int SPI_MAX_ACK_TIMEOUTS = 3;
@@ -226,22 +225,21 @@ int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint1
   int timeout_count = 0;
   const double start_time = millis_since_boot();
   const double transfer_deadline = start_time + SPI_TRANSFER_RETRY_TIMEOUT;
-  const unsigned int can_tx_timeout = timeout != 0 ? timeout : SPI_CAN_TX_TIMEOUT;
-  const double can_tx_deadline = start_time + can_tx_timeout;
   bool retry_exhausted = false;
 
   do {
     ret = spi_transfer(endpoint, tx_data, tx_len, rx_data, max_rx_len, timeout, transfer_deadline);
 
     // A data NACK on endpoint 3 is Panda CAN TX backpressure (or a bad data
-    // checksum, which is safe to drop). Match USB: wait briefly, then drop this
-    // sendcan batch without restarting otherwise healthy SPI communication.
+    // checksum). Panda NACKs before enqueueing this buffer, so keep retrying the
+    // same sendcan batch within the bounded SPI transfer deadline instead of
+    // silently dropping it after the USB timeout.
     if (ret == SpiError::CAN_TX_FULL) {
-      if (millis_since_boot() < can_tx_deadline) {
+      if (millis_since_boot() < transfer_deadline) {
+        std::this_thread::yield();
         continue;
       }
-      LOGW_100("SPI CAN transmit buffer full, dropping %u bytes", tx_len);
-      return 0;
+      ret = SpiError::DATA_NACK;
     }
 
     if (ret < 0) {
