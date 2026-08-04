@@ -291,13 +291,6 @@ static CanfdTxState* find_canfd_tx_state(int bus, int addr) {
   return NULL;
 }
 
-static uint32_t canfd_get_fwd_timeout_us(const CanfdTxState* st) {
-  // ADRV_0x161 is sent at 20 Hz. Tolerate one missed sendcan batch before
-  // allowing the stock bus 2 message through to the cluster on bus 0.
-  const uint32_t period_count = ((st->bus == 0) && (st->addr == 0x161)) ? 2U : 1U;
-  return (period_count * (1000000U / (uint32_t)st->hz)) + 20000U;
-}
-
 
 static void hyundai_canfd_set_counter(CANPacket_t* to_push, uint8_t counter) {
   if (GET_LEN(to_push) == 8U) {
@@ -706,7 +699,7 @@ static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
 static safety_config hyundai_canfd_init(uint16_t param) {
 
   for (int i = 0; canfd_tx_states[i].addr > 0; i++) {
-    canfd_tx_states[i].timeout_us = canfd_get_fwd_timeout_us(&canfd_tx_states[i]);
+    canfd_tx_states[i].timeout_us = (uint32_t)(1000000.0 / canfd_tx_states[i].hz) + 20000U;
     canfd_tx_states[i].last_tx_us = 0U;
   }
 
