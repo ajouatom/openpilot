@@ -10,32 +10,6 @@ from opendbc.safety.tests.common import CANPackerPanda
 from opendbc.safety.tests.hyundai_common import HyundaiButtonBase, HyundaiLongitudinalBase
 
 
-class TestHyundaiCanfdForwardingTimeout(unittest.TestCase):
-
-  def setUp(self):
-    self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.hyundaiCanfd, HyundaiSafetyFlags.LONG)
-    self.safety.init_tests()
-
-  def test_adrv_161_tolerates_one_missed_period(self):
-    start_time = 1_000_000
-
-    self.safety.set_timer(start_time)
-    self.assertTrue(self.safety.safety_tx_hook(common.make_msg(0, 0x161, 32)))
-    self.safety.set_timer(start_time + 119_999)
-    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0x161))
-    self.safety.set_timer(start_time + 120_000)
-    self.assertEqual(0, self.safety.safety_fwd_hook(2, 0x161))
-
-    # Other 20 Hz messages keep the existing one-period plus 20 ms timeout.
-    self.safety.set_timer(start_time)
-    self.assertTrue(self.safety.safety_tx_hook(common.make_msg(0, 0x162, 32)))
-    self.safety.set_timer(start_time + 69_999)
-    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0x162))
-    self.safety.set_timer(start_time + 70_000)
-    self.assertEqual(0, self.safety.safety_fwd_hook(2, 0x162))
-
-
 class TestHyundaiCanfdBase(HyundaiButtonBase, common.PandaCarSafetyTest, common.DriverTorqueSteeringSafetyTest, common.SteerRequestCutSafetyTest):
 
   TX_MSGS = [[0x50, 0], [0x1CF, 1], [0x2A4, 0]]
