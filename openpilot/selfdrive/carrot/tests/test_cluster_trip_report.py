@@ -18,6 +18,7 @@ from cluster_config import (
   CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
   CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
   CLUSTER_SCREEN_MODE_FULLSCREEN_3D,
+  CLUSTER_SCREEN_MODE_NAVI,
   CLUSTER_SCREEN_MODE_TRIP_REPORT,
   normalize_cluster_screen_mode,
 )
@@ -158,6 +159,29 @@ def test_default_screen_uses_trip_report_until_navigation_is_received():
     navi_dashboard=None,
   )
   assert renderer._effective_screen_mode(external_navigation) == CLUSTER_SCREEN_MODE_DEFAULT
+
+
+def test_default_screen_shows_trip_report_in_park_and_restores_navigation_in_drive():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1920
+  renderer.screen_mode = CLUSTER_SCREEN_MODE_DEFAULT
+  state = SimpleNamespace(
+    camera_view_mode=0,
+    onroad=True,
+    gear_text="P",
+    external_nav_active=True,
+    navi_live=None,
+    navi_dashboard=SimpleNamespace(connected=True),
+  )
+
+  assert renderer._effective_screen_mode(state) == CLUSTER_SCREEN_MODE_TRIP_REPORT
+
+  state.gear_text = "D"
+  assert renderer._effective_screen_mode(state) == CLUSTER_SCREEN_MODE_DEFAULT
+
+  renderer.screen_mode = CLUSTER_SCREEN_MODE_NAVI
+  state.gear_text = "P"
+  assert renderer._effective_screen_mode(state) == CLUSTER_SCREEN_MODE_NAVI
 
 
 def test_mode_two_preserves_the_reference_default_system_screen_contract():

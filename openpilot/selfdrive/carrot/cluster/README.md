@@ -456,7 +456,10 @@ display for either 3D camera view, suppresses information panels, and balances
 the clock, side gauges, TPMS, traffic image, turn signals, and status footer
 across the full width. In road-camera view it behaves exactly like mode `0`.
 Mode `0` is the default mode that switches between navigation and the driving
-report, `1` shows the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`,
+report. While onroad, shifting into park (`P`) temporarily gives the completed
+driving report priority over active navigation; leaving park restores navigation
+immediately. Explicit modes such as report mode `5` and navigation mode `6`
+remain fixed. Mode `1` shows the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`,
 `STEERING`, and `LATERAL PLAN` rows, `2` is the system-debug slot rendering commit
 `c0a6773f794a5e4e86aeca8e14515232abc26b1b`'s mode-0 default system screen,
 `3` shows a large debug graph selected by `ShowPlotMode` with the driving scene
