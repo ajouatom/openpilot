@@ -108,7 +108,9 @@ class CarState(CarStateBase):
     eac_status = self.can_define.dv["EPAS3S_sysStatus"]["EPAS3S_eacStatus"].get(int(epas_status["EPAS3S_eacStatus"]), None)
     ret.steerFaultPermanent = eac_status == "EAC_FAULT"
     ret.steerFaultTemporary = eac_status == "EAC_INHIBITED"
-    ret.vehicleSensorsInvalid = cp_ap_party.vl["SCCM_steeringAngleSensor"]["SCCM_steeringAngleValidity"] != 1
+
+    # Do not set vehicleSensorsInvalid from SCCM_steeringAngleValidity: refreshed
+    # Model Y vehicles report 0 while angle/rate remain valid. EPS faults are covered above.
 
     # FSD disengages on strong user override (handsOnLevel >= 3) or high angle rate faults (fast override, high speed)
     eac_error_code = self.can_define.dv["EPAS3S_sysStatus"]["EPAS3S_eacErrorCode"].get(int(epas_status["EPAS3S_eacErrorCode"]), None)
