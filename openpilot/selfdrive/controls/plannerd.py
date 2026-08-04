@@ -11,7 +11,7 @@ from openpilot.selfdrive.carrot.carrot_functions import CarrotPlanner
 
 
 def main():
-  config_realtime_process(5, Priority.CTRL_LOW)
+  config_realtime_process(7, Priority.CTRL_LOW)
 
   cloudlog.info("plannerd is waiting for CarParams")
   params = Params()

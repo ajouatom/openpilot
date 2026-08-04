@@ -15,10 +15,10 @@ BIG_UI = gui_app.big_ui()
 
 def main():
   cores = {5, }
-  # UI는 상시 SCHED_OTHER — 비RT UI는 core5의 plannerd/radard(FIFO51)를
-  # 절대 선점하지 못하므로 주행 프로세스가 항상 우선한다 (기존 FIFO51 UI는
-  # 같은 우선순위로 core5를 점유해 20Hz cadence를 위협). FIFO 승격 재도입
-  # 금지, core7은 modeld+dmonitoringmodeld 전용이라 UI 재배치도 금지.
+  # UI는 상시 SCHED_OTHER — 비RT UI는 core5의 radard(FIFO51)를 절대
+  # 선점하지 못하므로 주행 프로세스가 항상 우선한다 (기존 FIFO51 UI는
+  # radard와 같은 우선순위로 core5를 점유해 20Hz cadence를 위협). FIFO 승격 재도입
+  # 금지, core7은 modeld+plannerd+dmonitoringmodeld 전용이라 UI 재배치도 금지.
   # GC는 계속 끈다 — 기존 config_realtime_process가 하던 GC pause(프레임
   # 히치) 방지는 유지해야 한다.
   gc.disable()

@@ -1,13 +1,13 @@
 """carrot 전용: UI 스케줄러 foundation(상시 SCHED_OTHER/core5) 회귀 테스트.
 
-기존 FIFO51/core5 UI는 planner/radar(FIFO51)와 같은 우선순위로 core5를 점유해
+기존 FIFO51/core5 UI는 radar(FIFO51)와 같은 우선순위로 core5를 점유해
 20Hz cadence를 위협했다. foundation 계약:
 - UI는 상시 SCHED_OTHER (RT/FIFO 승격 프리미티브 부재, 재도입 금지)
 - 시작은 core0 부트스트랩(offroad power-save의 core4~7 offline 대응),
   onroad에서 render loop가 cores={5}로 re-affine (실패 시 다음 프레임 재시도)
 - 시작 시 SCHED_OTHER를 명시 적용하고 readback 검증 (false success 금지,
   검증 불가면 fail-stop), gc.disable()은 유지
-- core7은 modeld+dmonitoringmodeld 전용 — UI affinity 재도입 금지
+- core7은 modeld+plannerd+dmonitoringmodeld 전용 — UI affinity 재도입 금지
 """
 import ast
 import os
@@ -61,7 +61,7 @@ def _affinity_shapes(tree):
 @pytest.mark.skipif(sys.platform != "linux", reason="sched_* API는 Linux 전용")
 class TestEnsureSchedOtherContract:
   """시작 시 SCHED_OTHER 명시 적용/readback — false success 금지, bounded 재시도,
-  검증 불가면 fail-stop (RT UI가 core5의 planner/radar를 굶기며 돌면 안 된다)."""
+  검증 불가면 fail-stop (RT UI가 core5의 radar를 굶기며 돌면 안 된다)."""
 
   def _run(self, monkeypatch, *, policies, drop_raises=False):
     logs = {"info": [], "critical": []}
@@ -164,7 +164,7 @@ class TestUiStartupAst:
     assert 51 not in call_const_args and 53 not in call_const_args
 
   def test_no_core7_ui_affinity(self):
-    # core7은 modeld(FIFO54)+dmonitoringmodeld(FIFO5) 전용 — UI 재배치 금지
+    # core7은 modeld(FIFO54)+plannerd(FIFO51)+dmonitoringmodeld(FIFO5) 전용 — UI 재배치 금지
     tree = _ui_py_tree()
     for node in ast.walk(tree):
       if isinstance(node, (ast.Set, ast.List, ast.Tuple)):
