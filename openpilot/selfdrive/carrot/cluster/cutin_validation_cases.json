@@ -15,6 +15,18 @@
       "scene": "Closer in-path motorcycle track 34 must replace the previously held farther moving track 43 without repeated leadOne skips"
     },
     {
+      "id": "ioniq9-234-6-stationary-range-outlier",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000234--127adb09bb--6/rlog.zst",
+      "source": "front+corner",
+      "window": [12.5, 19.5],
+      "expected": "stationary",
+      "human_verified": true,
+      "target_track_ids": [45, 1004],
+      "required_lead_one_ids": [45, 1004],
+      "scene": "Stopped lead corroborated by front track 45 and corner track 1004 while the visual longitudinal range is initially overestimated"
+    },
+    {
       "id": "azera-109-271-corner-moving-ghost",
       "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
       "log": "00000109--5260b42384--271/rlog.zst",
