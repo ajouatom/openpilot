@@ -1,3 +1,5 @@
+from collections import deque
+
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
@@ -8,6 +10,7 @@ from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.vehicle_model import VehicleModel
+from openpilot.common.filter_simple import MyMovingAverage
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -31,6 +34,16 @@ PRE_OVERRIDE_CONFIRM_FRAMES = 2
 PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
 LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
 MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
+CANFD_JERK_UPPER_MIN = 1.0
+CANFD_JERK_LIMIT_MAX = 5.0
+CANFD_JERK_ERROR_DELAY = 0.5
+CANFD_JERK_ERROR_FILTER_TIME = 0.4
+CANFD_JERK_ERROR_DEADBAND = 0.25
+CANFD_JERK_ERROR_GAIN = 1.0
+CANFD_JERK_ERROR_MAX = 0.5
+# Stock CAN-FD SCC raises the lower jerk limit with deceleration demand instead of relying on MPC jerk alone.
+CANFD_JERK_LOWER_ACCEL_BP = [0.0, 0.8, 1.2, 1.5, 2.0, 2.5, 3.2]
+CANFD_JERK_LOWER_LIMIT_V = [1.2, 1.2, 1.2, 1.7, 3.0, 3.3, 3.7]
 
 vibrate_intervals = [
   (0.0, 0.5),
@@ -67,6 +80,18 @@ def process_hud_alert(enabled, fingerprint, hud_control):
 
 def rate_limit(x, x_last, lo, hi):
   return float(np.clip(x, x_last + lo, x_last + hi))
+
+
+def calculate_canfd_jerk_limits(accel: float, jerk: float, tracking_error: float = 0.0) -> tuple[float, float]:
+  decel_request = max(0.0, -accel)
+  jerk_l_feedforward = np.interp(decel_request, CANFD_JERK_LOWER_ACCEL_BP, CANFD_JERK_LOWER_LIMIT_V)
+  jerk_l_mpc = np.clip(-jerk * 4.0, CANFD_JERK_LOWER_LIMIT_V[0], CANFD_JERK_LIMIT_MAX)
+  jerk_l_error = np.clip((tracking_error - CANFD_JERK_ERROR_DEADBAND) * CANFD_JERK_ERROR_GAIN, 0.0, CANFD_JERK_ERROR_MAX)
+
+  jerk_u = np.clip(jerk * 2.0, CANFD_JERK_UPPER_MIN, CANFD_JERK_LIMIT_MAX)
+  jerk_l = np.clip(max(jerk_l_feedforward, jerk_l_mpc) + jerk_l_error,
+                   CANFD_JERK_LOWER_LIMIT_V[0], CANFD_JERK_LIMIT_MAX)
+  return float(jerk_u), float(jerk_l)
 
 def apply_steer_angle_limits_physics(desired_sw_deg: float,
                                      last_sw_deg: float,
@@ -724,7 +749,6 @@ class CarController(CarControllerBase):
       self.button_spamming_count = 0
     return 0
 
-from openpilot.common.filter_simple import MyMovingAverage
 class HyundaiJerk:
   def __init__(self):
     self.params = Params()
@@ -734,6 +758,8 @@ class HyundaiJerk:
     self.jerk_u_min = 0.5
     self.carrot_cruise = 1
     self.carrot_cruise_accel = 0.0
+    self.accel_request_history = deque(maxlen=max(1, round(CANFD_JERK_ERROR_DELAY / DT_CTRL)))
+    self.jerk_error_filter = MyMovingAverage(max(1, round(CANFD_JERK_ERROR_FILTER_TIME / DT_CTRL)), 0.0)
 
   def check_carrot_cruise(self, CC, CS, hud_control, stopping, accel, a_target):
     carrot_cruise_decel = self.params.get_float("CarrotCruiseDecel")
@@ -756,29 +782,40 @@ class HyundaiJerk:
       self.carrot_cruise_accel = CS.out.aEgo
 
   def make_jerk(self, CP, CS, accel, actuators, hud_control):
+    canfd = bool(CP.flags & HyundaiFlags.CANFD)
+    jerk_u_min = CANFD_JERK_UPPER_MIN if canfd else self.jerk_u_min
     if actuators.longControlState == LongCtrlState.stopping:
-      self.jerk = self.jerk_u_min / 2 - CS.out.aEgo
+      self.jerk = jerk_u_min / 2 - CS.out.aEgo
     else:
       jerk = actuators.jerk if actuators.longControlState == LongCtrlState.pid else 0.0
       #a_error = actuators.aTarget - CS.out.aEgo
       self.jerk = jerk# + a_error
 
-    jerk_max_l = 5.0
+    jerk_max_l = CANFD_JERK_LIMIT_MAX
     jerk_max_u = jerk_max_l
     if actuators.longControlState == LongCtrlState.off:
       self.jerk_u = jerk_max_u
       self.jerk_l = jerk_max_l
       self.cb_upper = self.cb_lower = 0.0
+      self.accel_request_history.clear()
+      self.jerk_error_filter.set_all(0.0)
     else:
-      if CP.flags & HyundaiFlags.CANFD:
-        # Keep deceleration authority after the MPC jerk settles to zero. Stock SCC raises the
-        # lower jerk limit with the raw acceleration request instead of relying on jerk alone.
-        jerk_l_base = 1.2
-        jerk_l_raw = np.clip(jerk_l_base + 2.0 * max(0.0, -accel - 2.8), jerk_l_base, jerk_max_l)
-        jerk_l_mpc = np.clip(-self.jerk * 4.0, jerk_l_base, jerk_max_l)
+      if canfd:
+        tracking_error = 0.0
+        tracking_error_active = actuators.longControlState == LongCtrlState.pid and not CS.out.brakePressed and not CS.out.gasPressed
+        if tracking_error_active:
+          self.accel_request_history.append(float(accel))
+          if len(self.accel_request_history) == self.accel_request_history.maxlen:
+            delayed_accel = self.accel_request_history[0]
+            request_is_sustained = delayed_accel < -1.0 and accel < -1.0 and abs(accel - delayed_accel) < 0.5
+            if request_is_sustained:
+              tracking_error = CS.out.aEgo - delayed_accel
+          filtered_tracking_error = self.jerk_error_filter.process(max(0.0, tracking_error))
+        else:
+          self.accel_request_history.clear()
+          filtered_tracking_error = self.jerk_error_filter.set_all(0.0)
 
-        self.jerk_u = min(max(self.jerk_u_min, self.jerk * 2.0), jerk_max_u)
-        self.jerk_l = max(jerk_l_raw, jerk_l_mpc)
+        self.jerk_u, self.jerk_l = calculate_canfd_jerk_limits(accel, self.jerk, filtered_tracking_error)
         self.cb_upper = self.cb_lower = 0.0
       else:
         self.jerk_u = min(max(self.jerk_u_min, self.jerk * 2.0), jerk_max_u)
