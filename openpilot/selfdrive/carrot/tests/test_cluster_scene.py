@@ -72,23 +72,22 @@ def test_cluster_alert_is_centered_in_swapped_camera_panel(monkeypatch) -> None:
   renderer.height = cluster_renderer.DESIGN_HEIGHT
   renderer.panel_layout = CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT
   renderer.screen_mode = cluster_renderer.CLUSTER_SCREEN_MODE_DEFAULT
-  rounded_rects = []
   labels = []
 
   monkeypatch.setattr(cluster_renderer.rl, "rl_push_matrix", lambda: None)
   monkeypatch.setattr(cluster_renderer.rl, "rl_scalef", lambda *_args: None)
   monkeypatch.setattr(cluster_renderer.rl, "rl_pop_matrix", lambda: None)
-  monkeypatch.setattr(renderer, "_rounded_rect", lambda *args: rounded_rects.append(args))
+  monkeypatch.setattr(renderer, "_rounded_rect", lambda *_args: pytest.fail("alert background drawn"))
+  monkeypatch.setattr(cluster_renderer.rl, "draw_rectangle_rec", lambda *_args: pytest.fail("alert background drawn"))
   monkeypatch.setattr(renderer, "_fit_alert_text", lambda text, size, *_args: (text, size))
-  monkeypatch.setattr(renderer, "_draw_text", lambda *args, **kwargs: labels.append((args, kwargs)))
+  monkeypatch.setattr(renderer, "_draw_text_with_stroke", lambda *args, **kwargs: labels.append((args, kwargs)))
 
   renderer._draw_alert_overlay(ClusterAlert("Steering Unavailable", "Take Control", size=2, status=1))
 
   camera_center_x = cluster_renderer.NAVI_LIVE_PANEL_W + cluster_renderer.CAMERA_BACKGROUND_W * 0.5
-  rect_x, _rect_y, rect_w, _rect_h = rounded_rects[0][:4]
-  assert rect_x + rect_w * 0.5 == pytest.approx(camera_center_x)
   assert {args[1] for args, _kwargs in labels} == {camera_center_x}
   assert [args[0] for args, _kwargs in labels] == ["Steering Unavailable", "Take Control"]
+  assert all(args[5] == cluster_renderer.CLUSTER_ALERT_TEXT_STROKE for args, _kwargs in labels)
 
 
 def test_synthetic_cluster_alert_uses_cluster_language() -> None:
