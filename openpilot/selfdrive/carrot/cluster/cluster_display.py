@@ -37,6 +37,11 @@ _TEXT = {
         "connected": "CONNECTED",
         "waiting": "WAITING",
         "off_route": "OFF ROUTE",
+        "openpilot_unavailable": "openpilot Unavailable",
+        "waiting_to_start": "Waiting to start",
+        "take_control_immediately": "TAKE CONTROL IMMEDIATELY",
+        "system_unresponsive": "System Unresponsive",
+        "reboot_device": "Reboot Device",
     },
     CLUSTER_LANGUAGE_KO: {
         "driving_report": "주행리포트",
@@ -65,6 +70,11 @@ _TEXT = {
         "connected": "연결됨",
         "waiting": "연결 대기",
         "off_route": "경로 이탈",
+        "openpilot_unavailable": "openpilot 사용 불가",
+        "waiting_to_start": "시작 대기 중",
+        "take_control_immediately": "즉시 운전대를 잡으세요",
+        "system_unresponsive": "시스템 응답 없음",
+        "reboot_device": "기기를 재부팅하세요",
     },
 }
 

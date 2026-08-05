@@ -12,6 +12,7 @@ sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_config import (
   CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+  CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
   CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
   CLUSTER_RADAR_INFO_NONE,
   EGO_FORWARD_M,
@@ -19,7 +20,7 @@ from cluster_config import (
   LIGHT_CLUSTER_THEME,
   VEHICLE_LENGTH_M,
 )
-from cluster_models import ClusterUiState, DetectedVehicle, LaneMarking, ModelPathPoint, RadarPoint
+from cluster_models import ClusterAlert, ClusterUiState, DetectedVehicle, LaneMarking, ModelPathPoint, RadarPoint
 import cluster_renderer
 from cluster_renderer import ClusterUiRenderer
 import cluster_scene
@@ -63,6 +64,47 @@ def test_road_camera_radar_point_uses_simple_source_colored_square(monkeypatch):
   rect, square_color = squares[0]
   assert rect.width == rect.height
   assert (square_color.r, square_color.g, square_color.b) == color
+
+
+def test_cluster_alert_is_centered_in_swapped_camera_panel(monkeypatch) -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = cluster_renderer.DESIGN_WIDTH
+  renderer.height = cluster_renderer.DESIGN_HEIGHT
+  renderer.panel_layout = CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT
+  renderer.screen_mode = cluster_renderer.CLUSTER_SCREEN_MODE_DEFAULT
+  rounded_rects = []
+  labels = []
+
+  monkeypatch.setattr(cluster_renderer.rl, "rl_push_matrix", lambda: None)
+  monkeypatch.setattr(cluster_renderer.rl, "rl_scalef", lambda *_args: None)
+  monkeypatch.setattr(cluster_renderer.rl, "rl_pop_matrix", lambda: None)
+  monkeypatch.setattr(renderer, "_rounded_rect", lambda *args: rounded_rects.append(args))
+  monkeypatch.setattr(renderer, "_fit_alert_text", lambda text, size, *_args: (text, size))
+  monkeypatch.setattr(renderer, "_draw_text", lambda *args, **kwargs: labels.append((args, kwargs)))
+
+  renderer._draw_alert_overlay(ClusterAlert("Steering Unavailable", "Take Control", size=2, status=1))
+
+  camera_center_x = cluster_renderer.NAVI_LIVE_PANEL_W + cluster_renderer.CAMERA_BACKGROUND_W * 0.5
+  rect_x, _rect_y, rect_w, _rect_h = rounded_rects[0][:4]
+  assert rect_x + rect_w * 0.5 == pytest.approx(camera_center_x)
+  assert {args[1] for args, _kwargs in labels} == {camera_center_x}
+  assert [args[0] for args, _kwargs in labels] == ["Steering Unavailable", "Take Control"]
+
+
+def test_synthetic_cluster_alert_uses_cluster_language() -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.language = "ko"
+
+  title, detail = renderer._cluster_alert_text(ClusterAlert(
+    "TAKE CONTROL IMMEDIATELY",
+    "System Unresponsive",
+    size=3,
+    status=2,
+    alert_type="clusterSelfdriveTimeout",
+  ))
+
+  assert title == "즉시 운전대를 잡으세요"
+  assert detail == "시스템 응답 없음"
 
 
 def test_road_camera_radar_point_keeps_optional_text(monkeypatch):

@@ -10,6 +10,7 @@ from typing import Any
 
 from cluster_config import BLUE, DEFAULT_LANE_WIDTH_M, SHOW_PLOT_MODE_PARAM
 from cluster_models import (
+    ClusterAlert,
     ClusterUiState,
     DebugPlotSnapshot,
     LaneMarking,
@@ -44,6 +45,8 @@ LIVE_NAVI_IMAGE_BASE64_MAX_CHARS = 2 * 1024 * 1024
 LIVE_NAVI_IMAGE_MAX_DIMENSION = 2048
 ACCELERATION_DUE_TO_GRAVITY = 9.80665
 DEFAULT_MAX_LATERAL_ACCEL = 3.0
+SELFDRIVE_STATE_TIMEOUT_SECONDS = 5.0
+SELFDRIVE_UNRESPONSIVE_TIMEOUT_SECONDS = 10.0
 DECELERATION_SOURCE_LABELS = {
     "cam": "cam:n",
     "section": "section:n",
@@ -167,6 +170,9 @@ class OpenpilotLiveSource:
         self._live_debug_enabled = False
         self._debug_plot_enabled = False
         self._navi_debug_enabled = False
+        self._alert_onroad = False
+        self._alert_onroad_started_t: float | None = None
+        self._selfdrive_seen_onroad = False
         self._nav_route_coords: tuple[tuple[float, float], ...] = ()
         self._nav_route_model_path: tuple[ModelPathPoint, ...] = ()
         self._nav_route_anchor: tuple[float, float, float] | None = None
@@ -442,6 +448,7 @@ class OpenpilotLiveSource:
         return replace(
             state,
             onroad=onroad,
+            alert=self._live_cluster_alert(state.alert, onroad),
             external_nav_active=external_nav_active,
             speed_limit_kph=speed_limit_kph,
             speed_limit_source=speed_limit_source,
@@ -458,6 +465,62 @@ class OpenpilotLiveSource:
             cruise_override_label=cruise_override_label,
             cruise_override_color_mode=cruise_override_color_mode,
         )
+
+    def _live_cluster_alert(self, current_alert: ClusterAlert | None, onroad: bool) -> ClusterAlert | None:
+        now = time.monotonic()
+        was_onroad = bool(getattr(self, "_alert_onroad", False))
+        if not onroad:
+            self._alert_onroad = False
+            self._alert_onroad_started_t = None
+            self._selfdrive_seen_onroad = False
+            return current_alert
+
+        if not was_onroad:
+            self._alert_onroad_started_t = now
+            self._selfdrive_seen_onroad = False
+        self._alert_onroad = True
+
+        started_t = getattr(self, "_alert_onroad_started_t", None)
+        if started_t is None:
+            started_t = now
+            self._alert_onroad_started_t = started_t
+
+        receive_t = self._service_receive_time("selfdriveState")
+        if self._service_updated("selfdriveState") or (receive_t is not None and receive_t >= started_t):
+            self._selfdrive_seen_onroad = True
+
+        if not getattr(self, "_selfdrive_seen_onroad", False):
+            if now - started_t > SELFDRIVE_STATE_TIMEOUT_SECONDS:
+                return ClusterAlert(
+                    text1="openpilot Unavailable",
+                    text2="Waiting to start",
+                    size=2,
+                    status=0,
+                    alert_type="clusterSelfdriveStartup",
+                )
+            return None
+
+        if receive_t is not None:
+            missing_s = max(0.0, now - receive_t)
+            if missing_s > SELFDRIVE_STATE_TIMEOUT_SECONDS:
+                selfdrive_state = self._service_data("selfdriveState")
+                enabled = bool(safe_get(selfdrive_state, "enabled", False))
+                if enabled and missing_s - SELFDRIVE_STATE_TIMEOUT_SECONDS < SELFDRIVE_UNRESPONSIVE_TIMEOUT_SECONDS:
+                    return ClusterAlert(
+                        text1="TAKE CONTROL IMMEDIATELY",
+                        text2="System Unresponsive",
+                        size=3,
+                        status=2,
+                        alert_type="clusterSelfdriveTimeout",
+                    )
+                return ClusterAlert(
+                    text1="System Unresponsive",
+                    text2="Reboot Device",
+                    size=2,
+                    status=0,
+                    alert_type="clusterSelfdriveReboot",
+                )
+        return current_alert
 
     def onroad_state(self) -> bool | None:
         if not self._service_alive("deviceState"):
@@ -1201,6 +1264,13 @@ class OpenpilotLiveSource:
         except AttributeError:
             mono_time = 0
         return float(mono_time) / 1_000_000_000.0 if mono_time else time.monotonic()
+
+    def _service_receive_time(self, service: str) -> float | None:
+        try:
+            receive_t = float(self.sm.recv_time.get(service, 0.0))
+        except (AttributeError, TypeError, ValueError):
+            return None
+        return receive_t if math.isfinite(receive_t) and receive_t > 0.0 else None
 
     def _service_alive(self, service: str) -> bool:
         try:
