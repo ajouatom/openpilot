@@ -2268,6 +2268,86 @@ def test_stationary_front_radar_rejects_low_confidence_vision_seed() -> None:
   assert matcher.stationary_identity is None
 
 
+def test_stationary_front_corner_pair_survives_visual_range_outlier() -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  for index in range(8):
+    time_s = index * 0.05
+    d_rel = 100.0 - 17.0 * time_s
+    points = snapshot_radar_points(
+      (
+        Point(
+          45,
+          d_rel,
+          0.2,
+          v_rel=-17.0,
+          source="frontRadar",
+        ),
+        Point(
+          1004,
+          d_rel - 1.0,
+          0.5,
+          v_rel=-15.0,
+          source="corner235",
+        ),
+      ),
+      v_ego=20.0,
+    )
+    match = matcher.match(
+      model_with_lead(
+        d_rel + 20.0,
+        0.3,
+        14.0,
+        probability=0.50 if index == 0 else 0.10,
+      ),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=points,
+      prefer_primary_stationary=True,
+    )
+
+  assert match is not None
+  assert match.point.source == "frontRadar"
+  assert match.point.track_id == 45
+  assert matcher.stationary_identity == ("frontRadar", 45)
+
+
+def test_stationary_visual_range_outlier_needs_matching_corner() -> None:
+  matcher = VisionRadarMatcher()
+  for index in range(8):
+    time_s = index * 0.05
+    d_rel = 100.0 - 17.0 * time_s
+    point = snapshot_radar_points(
+      (
+        Point(
+          45,
+          d_rel,
+          0.2,
+          v_rel=-17.0,
+          source="frontRadar",
+        ),
+      ),
+      v_ego=20.0,
+    )[0]
+    match = matcher.match(
+      model_with_lead(
+        d_rel + 20.0,
+        0.3,
+        14.0,
+        probability=0.50,
+      ),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_primary_stationary=True,
+    )
+    assert match is None
+
+  assert matcher.stationary_identity is None
+
+
 def test_stationary_front_radar_rejects_two_frame_vision_spike() -> None:
   matcher = VisionRadarMatcher()
   match = None
