@@ -136,12 +136,12 @@ CAMERA_BACKGROUND_VIGNETTE_ALPHA = 32
 CLUSTER_ALERT_SIZE_SMALL = 1
 CLUSTER_ALERT_SIZE_MID = 2
 CLUSTER_ALERT_SIZE_FULL = 3
-CLUSTER_ALERT_STATUS_COLORS = {
-    0: (21, 21, 21, 240),
-    1: (218, 111, 37, 244),
-    2: (201, 34, 49, 246),
+CLUSTER_ALERT_TEXT_COLORS = {
+    0: (255, 255, 255, 255),
+    1: (255, 174, 82, 255),
+    2: (255, 82, 96, 255),
 }
-CLUSTER_ALERT_OUTLINE = (255, 255, 255, 150)
+CLUSTER_ALERT_TEXT_STROKE = (0, 0, 0, 255)
 CLUSTER_SYNTHETIC_ALERT_TEXT_KEYS = {
     "clusterSelfdriveStartup": ("openpilot_unavailable", "waiting_to_start"),
     "clusterSelfdriveTimeout": ("take_control_immediately", "system_unresponsive"),
@@ -3755,42 +3755,43 @@ class ClusterUiRenderer:
             panel_x = self._driving_panel_offset_design_x()
             panel_w = CAMERA_BACKGROUND_W
             panel_center_x = panel_x + panel_w * 0.5
-            color = CLUSTER_ALERT_STATUS_COLORS.get(alert.status, CLUSTER_ALERT_STATUS_COLORS[0])
 
             if alert.size >= CLUSTER_ALERT_SIZE_FULL:
-                rect = rl.Rectangle(panel_x, 0.0, panel_w, DESIGN_HEIGHT)
-                rl.draw_rectangle_rec(rect, rl_color(color))
                 max_text_w = panel_w - 100.0
                 title_size = 56.0
                 detail_size = 32.0
             elif alert.size == CLUSTER_ALERT_SIZE_MID:
-                alert_w = panel_w - 56.0
-                alert_h = 164.0
-                rect = rl.Rectangle(panel_center_x - alert_w * 0.5, (DESIGN_HEIGHT - alert_h) * 0.5, alert_w, alert_h)
-                self._rounded_rect(rect.x, rect.y, rect.width, rect.height, 18.0, color, CLUSTER_ALERT_OUTLINE, 2.0)
-                max_text_w = alert_w - 72.0
+                max_text_w = panel_w - 128.0
                 title_size = 48.0
                 detail_size = 28.0
             else:
-                alert_w = panel_w - 136.0
-                alert_h = 106.0
-                rect = rl.Rectangle(panel_center_x - alert_w * 0.5, (DESIGN_HEIGHT - alert_h) * 0.5, alert_w, alert_h)
-                self._rounded_rect(rect.x, rect.y, rect.width, rect.height, 16.0, color, CLUSTER_ALERT_OUTLINE, 2.0)
-                max_text_w = alert_w - 64.0
+                max_text_w = panel_w - 200.0
                 title_size = 42.0
                 detail_size = 24.0
 
             title, detail = self._cluster_alert_text(alert)
+            if not title and detail:
+                title, detail = detail, ""
             title, title_size = self._fit_alert_text(title, title_size, max_text_w, 30.0)
             detail, detail_size = self._fit_alert_text(detail, detail_size, max_text_w, 20.0)
-            center_y = rect.y + rect.height * 0.5
+            center_y = DESIGN_HEIGHT * 0.5
+            title_color = CLUSTER_ALERT_TEXT_COLORS.get(alert.status, CLUSTER_ALERT_TEXT_COLORS[0])
             if detail:
                 title_y = center_y - (22.0 if alert.size == CLUSTER_ALERT_SIZE_SMALL else 30.0)
                 detail_y = center_y + (27.0 if alert.size == CLUSTER_ALERT_SIZE_SMALL else 36.0)
-                self._draw_text(title, panel_center_x, title_y, title_size, WHITE, anchor="center")
-                self._draw_text(detail, panel_center_x, detail_y, detail_size, (255, 255, 255, 220), anchor="center")
+                self._draw_text_with_stroke(
+                    title, panel_center_x, title_y, title_size, title_color,
+                    CLUSTER_ALERT_TEXT_STROKE, 4, anchor="center", cache=True,
+                )
+                self._draw_text_with_stroke(
+                    detail, panel_center_x, detail_y, detail_size, WHITE,
+                    CLUSTER_ALERT_TEXT_STROKE, 3, anchor="center", cache=True,
+                )
             else:
-                self._draw_text(title, panel_center_x, center_y, title_size, WHITE, anchor="center")
+                self._draw_text_with_stroke(
+                    title, panel_center_x, center_y, title_size, title_color,
+                    CLUSTER_ALERT_TEXT_STROKE, 4, anchor="center", cache=True,
+                )
         finally:
             rl.rl_pop_matrix()
 
