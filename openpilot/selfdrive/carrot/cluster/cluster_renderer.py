@@ -68,6 +68,7 @@ from cluster_config import (
     normalize_cluster_theme_mode,
 )
 from cluster_models import (
+    ClusterAlert,
     ClusterUiState,
     DebugPlotSnapshot,
     GitBranchStatus,
@@ -132,6 +133,20 @@ CAMERA_BACKGROUND_W = NAVI_LIVE_PANEL_X
 CAMERA_BACKGROUND_H = DESIGN_HEIGHT
 CAMERA_BACKGROUND_ALPHA = 220
 CAMERA_BACKGROUND_VIGNETTE_ALPHA = 32
+CLUSTER_ALERT_SIZE_SMALL = 1
+CLUSTER_ALERT_SIZE_MID = 2
+CLUSTER_ALERT_SIZE_FULL = 3
+CLUSTER_ALERT_STATUS_COLORS = {
+    0: (21, 21, 21, 240),
+    1: (218, 111, 37, 244),
+    2: (201, 34, 49, 246),
+}
+CLUSTER_ALERT_OUTLINE = (255, 255, 255, 150)
+CLUSTER_SYNTHETIC_ALERT_TEXT_KEYS = {
+    "clusterSelfdriveStartup": ("openpilot_unavailable", "waiting_to_start"),
+    "clusterSelfdriveTimeout": ("take_control_immediately", "system_unresponsive"),
+    "clusterSelfdriveReboot": ("system_unresponsive", "reboot_device"),
+}
 # 0.5 is a centered cover crop; values toward 1.0 retain more of the road
 # camera's lower edge. Keep this shared with the projected overlay transform.
 CAMERA_BACKGROUND_VERTICAL_BIAS = 0.75
@@ -1435,6 +1450,9 @@ class ClusterUiRenderer:
         profile_stage = self._profile_start()
         self._draw_hud(state, signal_lights)
         self._profile_add("render.hud", profile_stage)
+        profile_stage = self._profile_start()
+        self._draw_alert_overlay(getattr(state, "alert", None))
+        self._profile_add("render.alert", profile_stage)
 
     def _clear_world(self) -> None:
         theme = self._current_theme()
@@ -3724,6 +3742,77 @@ class ClusterUiRenderer:
             profile_stage = self._profile_start()
             rl.rl_pop_matrix()
             self._profile_add("hud.pop_matrix", profile_stage)
+
+    def _draw_alert_overlay(self, alert: ClusterAlert | None) -> None:
+        if alert is None or alert.size <= 0 or not (alert.text1 or alert.text2):
+            return
+
+        sx = self.width / DESIGN_WIDTH
+        sy = self.height / DESIGN_HEIGHT
+        rl.rl_push_matrix()
+        rl.rl_scalef(sx, sy, 1.0)
+        try:
+            panel_x = self._driving_panel_offset_design_x()
+            panel_w = CAMERA_BACKGROUND_W
+            panel_center_x = panel_x + panel_w * 0.5
+            color = CLUSTER_ALERT_STATUS_COLORS.get(alert.status, CLUSTER_ALERT_STATUS_COLORS[0])
+
+            if alert.size >= CLUSTER_ALERT_SIZE_FULL:
+                rect = rl.Rectangle(panel_x, 0.0, panel_w, DESIGN_HEIGHT)
+                rl.draw_rectangle_rec(rect, rl_color(color))
+                max_text_w = panel_w - 100.0
+                title_size = 56.0
+                detail_size = 32.0
+            elif alert.size == CLUSTER_ALERT_SIZE_MID:
+                alert_w = panel_w - 56.0
+                alert_h = 164.0
+                rect = rl.Rectangle(panel_center_x - alert_w * 0.5, (DESIGN_HEIGHT - alert_h) * 0.5, alert_w, alert_h)
+                self._rounded_rect(rect.x, rect.y, rect.width, rect.height, 18.0, color, CLUSTER_ALERT_OUTLINE, 2.0)
+                max_text_w = alert_w - 72.0
+                title_size = 48.0
+                detail_size = 28.0
+            else:
+                alert_w = panel_w - 136.0
+                alert_h = 106.0
+                rect = rl.Rectangle(panel_center_x - alert_w * 0.5, (DESIGN_HEIGHT - alert_h) * 0.5, alert_w, alert_h)
+                self._rounded_rect(rect.x, rect.y, rect.width, rect.height, 16.0, color, CLUSTER_ALERT_OUTLINE, 2.0)
+                max_text_w = alert_w - 64.0
+                title_size = 42.0
+                detail_size = 24.0
+
+            title, detail = self._cluster_alert_text(alert)
+            title, title_size = self._fit_alert_text(title, title_size, max_text_w, 30.0)
+            detail, detail_size = self._fit_alert_text(detail, detail_size, max_text_w, 20.0)
+            center_y = rect.y + rect.height * 0.5
+            if detail:
+                title_y = center_y - (22.0 if alert.size == CLUSTER_ALERT_SIZE_SMALL else 30.0)
+                detail_y = center_y + (27.0 if alert.size == CLUSTER_ALERT_SIZE_SMALL else 36.0)
+                self._draw_text(title, panel_center_x, title_y, title_size, WHITE, anchor="center")
+                self._draw_text(detail, panel_center_x, detail_y, detail_size, (255, 255, 255, 220), anchor="center")
+            else:
+                self._draw_text(title, panel_center_x, center_y, title_size, WHITE, anchor="center")
+        finally:
+            rl.rl_pop_matrix()
+
+    def _cluster_alert_text(self, alert: ClusterAlert) -> tuple[str, str]:
+        keys = CLUSTER_SYNTHETIC_ALERT_TEXT_KEYS.get(alert.alert_type)
+        if keys is not None:
+            return self._text(keys[0]), self._text(keys[1])
+        return " ".join(alert.text1.split()), " ".join(alert.text2.split())
+
+    def _fit_alert_text(
+        self,
+        text: str,
+        preferred_size: float,
+        max_width: float,
+        minimum_size: float,
+    ) -> tuple[str, float]:
+        if not text:
+            return "", preferred_size
+        size = preferred_size
+        while size > minimum_size and self._measure_text(text, size)[0] > max_width:
+            size -= 2.0
+        return self._ellipsize_text(text, size, max_width), size
 
     def _draw_driving_hud_content(
         self,

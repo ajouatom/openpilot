@@ -8,7 +8,7 @@ CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_live import OpenpilotLiveSource
-from cluster_models import ModelPathPoint
+from cluster_models import ClusterAlert, ModelPathPoint
 from cluster_route_replay import (
   RawCornerObject,
   RouteLogParser,
@@ -244,6 +244,43 @@ def test_live_selfdrive_state_passes_event_timestamp():
   source._apply_service_update("selfdriveState", 12.5)
 
   assert calls == [(source.sm["selfdriveState"], 12.5)]
+
+
+def test_selfdrive_alert_reaches_cluster_state_and_clears() -> None:
+  parser = RouteLogParser()
+  parser._update_selfdrive_state(SimpleNamespace(
+    enabled=True,
+    alertText1="TAKE CONTROL IMMEDIATELY",
+    alertText2="Camera Malfunction",
+    alertSize=SimpleNamespace(raw=3),
+    alertStatus=SimpleNamespace(raw=2),
+    alertType="cameraMalfunction/immediateDisable",
+    alertSound="warningImmediate",
+  ), 1.0)
+
+  frame = parser._frame_from_car_state(SimpleNamespace(), 1.01)
+  assert frame.alert == ClusterAlert(
+    text1="TAKE CONTROL IMMEDIATELY",
+    text2="Camera Malfunction",
+    size=3,
+    status=2,
+    alert_type="cameraMalfunction/immediateDisable",
+  )
+  assert frame_to_state(frame).alert == frame.alert
+
+  parser._update_selfdrive_state(SimpleNamespace(alertSize="none"), 1.02)
+  assert parser._frame_from_car_state(SimpleNamespace(), 1.03).alert is None
+
+
+def test_selfdrive_alert_is_discrete_during_replay_interpolation() -> None:
+  parser = RouteLogParser()
+  base = parser._frame_from_car_state(SimpleNamespace(), 0.0)
+  alert = ClusterAlert("Steering Unavailable", "Take Control", size=2, status=1)
+  alerted = replace(base, t=0.0, alert=alert)
+  cleared = replace(base, t=1.0, alert=None)
+
+  assert blend_frames(alerted, cleared, 0.49).alert == alert
+  assert blend_frames(alerted, cleared, 0.50).alert is None
 
 
 def test_live_longitudinal_plan_passes_service_validity():

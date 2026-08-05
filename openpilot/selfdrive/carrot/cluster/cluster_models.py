@@ -353,6 +353,15 @@ class TpmsInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class ClusterAlert:
+    text1: str
+    text2: str = ""
+    size: int = 0
+    status: int = 0
+    alert_type: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class ClusterUiState:
     speed_kph: float
     accel_mps2: float
@@ -496,6 +505,7 @@ class ClusterUiState:
     cruise_override_color_mode: int = 0
     recorded_cutin_active: bool = False
     recorded_cutin_sound: bool = False
+    alert: ClusterAlert | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -34,6 +34,7 @@ from cluster_config import (
     YELLOW,
 )
 from cluster_models import (
+    ClusterAlert,
     ClusterUiState,
     CruiseDisplayState,
     DetectedVehicle,
@@ -595,6 +596,7 @@ class RouteReplayFrame:
     cpu_temp_c: float | None = None
     memory_used_percent: float | None = None
     disk_used_percent: float | None = None
+    alert: ClusterAlert | None = None
 
 
 @dataclass
@@ -1446,6 +1448,7 @@ class RouteLogParser:
         self.active_lane_line: bool | None = None
         self.selfdrive_enabled: bool | None = None
         self.controls_enabled: bool | None = None
+        self.alert: ClusterAlert | None = None
         self.wheelbase_m = 2.7
         self.steer_ratio = 15.0
         self.trip_report_tracker = TripReportTracker()
@@ -1836,6 +1839,7 @@ class RouteLogParser:
             recorded_cutin_active=event_t - self.recorded_cutin_t <= RECORDED_CUTIN_REPLAY_HOLD_S,
             recorded_cutin_sound=event_t - self.recorded_cutin_sound_t <= RECORDED_CUTIN_REPLAY_HOLD_S,
             trip_report=trip_report,
+            alert=self.alert,
         )
 
     def _display_speed_kph_from_car_state(self, car_state: Any, fallback_speed_mps: float) -> float:
@@ -2091,6 +2095,23 @@ class RouteLogParser:
         enabled = safe_get(selfdrive_state, "enabled", None)
         if enabled is not None:
             self.selfdrive_enabled = bool(enabled)
+        alert_size = safe_enum_int(
+            safe_get(selfdrive_state, "alertSize", 0),
+            ("none", "small", "mid", "full"),
+        )
+        if alert_size > 0:
+            self.alert = ClusterAlert(
+                text1=str(safe_get(selfdrive_state, "alertText1", "") or ""),
+                text2=str(safe_get(selfdrive_state, "alertText2", "") or ""),
+                size=alert_size,
+                status=safe_enum_int(
+                    safe_get(selfdrive_state, "alertStatus", 0),
+                    ("normal", "userprompt", "critical"),
+                ),
+                alert_type=str(safe_get(selfdrive_state, "alertType", "") or ""),
+            )
+        else:
+            self.alert = None
         alert_sound = str(safe_get(selfdrive_state, "alertSound", "none") or "none").lower()
         alert_type = str(safe_get(selfdrive_state, "alertType", "") or "").lower()
         self.recorded_cutin_sound = bool(
@@ -3785,6 +3806,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         disk_used_percent=frame.disk_used_percent,
         recorded_cutin_active=frame.recorded_cutin_active,
         recorded_cutin_sound=frame.recorded_cutin_sound,
+        alert=frame.alert,
     )
 
 
@@ -3995,6 +4017,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         recorded_cutin_active=discrete.recorded_cutin_active,
         recorded_cutin_sound=discrete.recorded_cutin_sound,
         trip_report=discrete.trip_report,
+        alert=discrete.alert,
     )
 
 
@@ -5170,6 +5193,19 @@ def safe_get(obj: Any, name: str, default: Any = None) -> Any:
         return getattr(obj, name)
     except Exception:
         return default
+
+
+def safe_enum_int(value: Any, names: tuple[str, ...], default: int = 0) -> int:
+    raw = safe_get(value, "raw", value)
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError):
+        normalized = str(raw or "").replace("_", "").lower()
+        try:
+            parsed = names.index(normalized)
+        except ValueError:
+            return default
+    return parsed if 0 <= parsed < len(names) else default
 
 
 def safe_float(obj: Any, name: str, default: float) -> float:

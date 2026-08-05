@@ -15,6 +15,8 @@ from cluster_live import (
   deceleration_source_display_label,
   standby_state,
 )
+import cluster_live
+from cluster_models import ClusterAlert
 
 
 @pytest.mark.parametrize(
@@ -116,3 +118,44 @@ def test_cached_calibration_is_loaded_for_installation_angle() -> None:
   source._load_cached_calibration()
 
   assert calls == [(calibration, True)]
+
+
+def test_live_alert_reports_selfdrive_timeout_like_device_ui(monkeypatch) -> None:
+  source = object.__new__(OpenpilotLiveSource)
+  source._alert_onroad = True
+  source._alert_onroad_started_t = 80.0
+  source._selfdrive_seen_onroad = True
+  source.sm = SimpleNamespace(recv_time={"selfdriveState": 94.0})
+  source._service_updated = lambda _service: False
+  source._service_data = lambda _service: SimpleNamespace(enabled=True)
+  monkeypatch.setattr(cluster_live.time, "monotonic", lambda: 100.0)
+
+  alert = source._live_cluster_alert(None, True)
+
+  assert alert == ClusterAlert(
+    "TAKE CONTROL IMMEDIATELY",
+    "System Unresponsive",
+    size=3,
+    status=2,
+    alert_type="clusterSelfdriveTimeout",
+  )
+
+
+def test_live_alert_reports_startup_wait_after_five_seconds(monkeypatch) -> None:
+  source = object.__new__(OpenpilotLiveSource)
+  source._alert_onroad = True
+  source._alert_onroad_started_t = 90.0
+  source._selfdrive_seen_onroad = False
+  source.sm = SimpleNamespace(recv_time={})
+  source._service_updated = lambda _service: False
+  monkeypatch.setattr(cluster_live.time, "monotonic", lambda: 100.0)
+
+  alert = source._live_cluster_alert(None, True)
+
+  assert alert == ClusterAlert(
+    "openpilot Unavailable",
+    "Waiting to start",
+    size=2,
+    status=0,
+    alert_type="clusterSelfdriveStartup",
+  )
