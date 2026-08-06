@@ -66,13 +66,38 @@ def test_rdf_driving_does_not_override_carrot_smoothing():
   }
 
 
-def test_modelstate_always_evaluates_current_frame():
+def test_modelstate_skips_eval_after_vipc_drop():
   tree = ast.parse((MODELD_DIR / "modeld.py").read_text(encoding="utf-8"))
   model_state = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ModelState")
   run = next(node for node in model_state.body if isinstance(node, ast.FunctionDef) and node.name == "run")
+  main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
 
-  assert [arg.arg for arg in run.args.args] == ["self", "bufs", "transforms", "inputs"]
-  assert not any(isinstance(node, ast.Name) and node.id == "prepare_only" for node in ast.walk(tree))
+  assert [arg.arg for arg in run.args.args] == ["self", "bufs", "transforms", "inputs", "prepare_only"]
+  prepare_guard = next(
+    node for node in run.body
+    if isinstance(node, ast.If) and isinstance(node.test, ast.Name) and node.test.id == "prepare_only"
+  )
+  assert len(prepare_guard.body) == 1
+  assert isinstance(prepare_guard.body[0], ast.Return)
+  assert isinstance(prepare_guard.body[0].value, ast.Constant) and prepare_guard.body[0].value.value is None
+
+  prepare_assignment = next(
+    node for node in ast.walk(main)
+    if isinstance(node, ast.Assign)
+    and any(isinstance(target, ast.Name) and target.id == "prepare_only" for target in node.targets)
+  )
+  assert isinstance(prepare_assignment.value, ast.Compare)
+  assert isinstance(prepare_assignment.value.left, ast.Name) and prepare_assignment.value.left.id == "vipc_dropped_frames"
+  assert len(prepare_assignment.value.ops) == 1 and isinstance(prepare_assignment.value.ops[0], ast.Gt)
+  assert len(prepare_assignment.value.comparators) == 1
+  assert isinstance(prepare_assignment.value.comparators[0], ast.Constant) and prepare_assignment.value.comparators[0].value == 0
+
+  model_run = next(
+    node for node in ast.walk(main)
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "run"
+    and isinstance(node.func.value, ast.Name) and node.func.value.id == "model"
+  )
+  assert isinstance(model_run.args[-1], ast.Name) and model_run.args[-1].id == "prepare_only"
 
 
 def test_parser_mdn_default_shape():
