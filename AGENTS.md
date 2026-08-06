@@ -19,6 +19,20 @@
   both use `samplerExternalOES` on texture unit 0; each external image must be rebound immediately
   before every draw, not only when its source frame changes.
 
+# Vehicle settings snapshots
+
+- On this Windows workstation, uploaded vehicle settings are stored under
+  `W:\<branch>\<car-fingerprint> <dongle-id>\toggles-YYYYMMDD-HHMMSS.json`.
+- To find a vehicle's most recent settings, first search all of `W:\` for directories whose names
+  end with the exact dongle ID. Gather `toggles-*.json` from every matching directory and select the
+  file with the newest timestamp encoded in its filename.
+- A dongle can appear under several branch or fingerprint directories. For incident analysis,
+  narrow the matches using the branch and car fingerprint from the route/upload metadata, then
+  inspect the newest snapshot at or before the incident time and compare it with the newest later
+  snapshot.
+- Treat the JSON values as raw Params values; for example, `StoppingAccel` is stored in hundredths
+  of m/s^2.
+
 # User documentation policy
 
 - Do not create or edit files under `docs/user/ko/` or `docs/user/en/` unless the user explicitly
