@@ -10,9 +10,12 @@ git pull
 # SCons timestamp or cache entry cannot preserve the previous key registry.
 bash "$DIR/scripts/ensure_params_build.sh"
 
-# carrot_server runs outside the comma tmux session under a watchdog. Restart
-# only its child so it reloads the newly built Params registry.
+# carrot_server runs outside the comma tmux session under a watchdog. Stop the
+# watchdog too: otherwise a missing/stale pid file can let launch_chffrplus
+# create a second watchdog while the first one keeps restarting its child.
+pkill -f "[c]arrot_web_watchdog[.]sh" 2>/dev/null || true
 pkill -f "openpilot.selfdrive.carrot.carrot_server" 2>/dev/null || true
+rm -f /tmp/carrot_web_watchdog.pid
 
 tmux kill-session -t comma 2>/dev/null || true
 rm -f /tmp/safe_staging_overlay.lock
