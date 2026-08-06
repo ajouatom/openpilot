@@ -4,6 +4,7 @@ set -u
 DIR="${1:-/data/openpilot}"
 PY_BIN="${2:-$(command -v python3 || command -v python || true)}"
 PID_FILE="${CARROT_WEB_PID_FILE:-/tmp/carrot_web_watchdog.pid}"
+LOCK_FILE="${CARROT_WEB_LOCK_FILE:-/tmp/carrot_web_watchdog.lock}"
 PORT="${CARROT_WEB_PORT:-7000}"
 RESTART_DELAY="${CARROT_WEB_RESTART_DELAY:-2}"
 
@@ -12,7 +13,30 @@ if [ -z "$PY_BIN" ]; then
   exit 1
 fi
 
-echo "$$" > "$PID_FILE"
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$LOCK_FILE"
+  if ! flock -n 9; then
+    echo "[carrot_web] another watchdog already holds ${LOCK_FILE}; exiting"
+    exit 0
+  fi
+fi
+
+existing_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+if [ -n "$existing_pid" ] && [ "$existing_pid" != "$$" ] && kill -0 "$existing_pid" >/dev/null 2>&1; then
+  echo "[carrot_web] watchdog pid ${existing_pid} is already running; exiting"
+  exit 0
+fi
+
+cleanup() {
+  current_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [ "$current_pid" = "$$" ]; then
+    rm -f "$PID_FILE"
+  fi
+}
+
+printf '%s\n' "$$" > "$PID_FILE"
+trap cleanup EXIT
+trap 'exit 0' INT TERM
 export CARROT_WEB_EXTERNAL=1
 
 while true; do
