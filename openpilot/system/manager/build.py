@@ -8,6 +8,7 @@ from openpilot.common.basedir import BASEDIR
 from openpilot.common.spinner import Spinner
 from openpilot.common.text_window import TextWindow
 from openpilot.common.swaglog import cloudlog, add_file_handler
+from openpilot.selfdrive.modeld.model_download import ensure_rdf_model
 from openpilot.system.hardware import HARDWARE, AGNOS
 from openpilot.system.version import get_build_metadata
 
@@ -18,6 +19,10 @@ TOTAL_SCONS_NODES = 2705
 MAX_BUILD_PROGRESS = 100
 
 def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
+  spinner.update("Checking RDF driving model")
+  ensure_rdf_model(progress=lambda downloaded, total: spinner.update(
+    f"Downloading RDF driving model: {downloaded * 100 // total}%"))
+
   env = os.environ.copy()
   env['SCONS_PROGRESS'] = "1"
   env['PYTHONUNBUFFERED'] = "1"

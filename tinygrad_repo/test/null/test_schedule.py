@@ -266,7 +266,7 @@ class TestSchedule(unittest.TestCase):
     x = Tensor.empty(big_enough).realize()
     with Context(SPLIT_REDUCEOP=1):
       out = (x - x.max(keepdim=True)).max()
-      check_schedule(out, 4)
+      check_schedule(out, 3)
 
   def test_example_matmul_contig(self):
     x = Tensor.eye(64).clone().realize()
@@ -355,8 +355,7 @@ class TestSchedule(unittest.TestCase):
     b = Tensor.empty((1, 16)).realize()
     out0 = a.sum() + 2
     out1 = a.sum() + b
-    # check_schedule([out0, out1], 2)
-    check_schedule([out0, out1], 3)
+    check_schedule([out0, out1], 2)
 
   def test_scaled_dot_product_attention_multireduce_fusion(self):
     q = Tensor.empty(32,8,16,8).realize()
@@ -546,8 +545,7 @@ class TestSchedule(unittest.TestCase):
     a = Tensor.empty(3, 4, 5).abs().realize()
     b = Tensor.empty(3, 4, 5).abs().realize()
     out = (a.log2().pad(((0, 1), (0, 1), (0, 1)), value=1.0).sum()+b).abs().log2().pad(((0, 1), (0, 1), (0, 1)), value=1.0).sum().contiguous()
-    # check_schedule(out, 1)
-    check_schedule(out, 2)
+    check_schedule(out, 1)
 
   def test_shrink_pad_safe(self):
     a = Tensor.ones((3, )).contiguous().realize()
@@ -601,17 +599,16 @@ class TestSchedule(unittest.TestCase):
     p = P[0]
     p = p.pad(((1, 0), ))
     p = p.repeat([2])
-    check_schedule(p, 3)
+    # TODO: this should be 3 if fix store hazard worked correctly
+    check_schedule(p, 4)
 
   def test_conv2d(self, allowed=4, dtype=dtypes.float):
-    old_default_float, dtypes.default_float = dtypes.default_float, dtype
-    dtypes.default_float = dtype
+    self.enterContext(Context(DEFAULT_FLOAT=dtype))
     Tensor.manual_seed(0)
     BS, CIN = 2, 3
     img = Tensor.randn(BS, CIN, 64, 64).realize()
     w = Tensor.uniform(16, CIN, 3, 3).realize()
     ret = Tensor.conv2d(img, w).relu().mean().backward()
-    dtypes.default_float = old_default_float
     linear, var_vals = Tensor.linear_with_vars(ret, img.grad, w.grad)
     cnt = len([call for call in linear.src if call.src[0].op is Ops.SINK])
     assert cnt == allowed, f"expected {allowed} kernels, got {cnt}"
@@ -1093,14 +1090,14 @@ class TestSchedule(unittest.TestCase):
 
   #@unittest.skip("may want to reconsider this")
   def test_fold_batchnorm(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       img = Tensor.empty(1,32,4,4)
       bn = nn.BatchNorm2d(32, track_running_stats=False)
       out = bn(img)
       check_schedule(out, 3, nn.state.get_parameters(bn))
 
   def test_fold_conv_batchnorm_notrain(self):
-    with Tensor.train(False):
+    with Context(TRAINING=0):
       img = Tensor.empty(1,3,8,8)
       c1 = nn.Conv2d(3,32,3)
       bn = nn.BatchNorm2d(32, track_running_stats=True)
@@ -1108,7 +1105,7 @@ class TestSchedule(unittest.TestCase):
       check_schedule(out, 1, [c1.weight, c1.bias, *nn.state.get_parameters(bn)])
 
   def test_fold_conv_batchnorm_notrain_no_running_stats(self):
-    with Tensor.train(False):
+    with Context(TRAINING=0):
       img = Tensor.empty(1,3,8,8)
       c1 = nn.Conv2d(3,32,3)
       bn = nn.BatchNorm2d(32, track_running_stats=False)
@@ -1116,7 +1113,7 @@ class TestSchedule(unittest.TestCase):
       check_schedule(out, 4, [c1.weight, c1.bias, *nn.state.get_parameters(bn)])
 
   def test_fold_conv_batchnorm(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       img = Tensor.empty(1,3,8,8)
       c1 = nn.Conv2d(3,32,3)
       bn = nn.BatchNorm2d(32, track_running_stats=False)
@@ -1125,7 +1122,7 @@ class TestSchedule(unittest.TestCase):
 
   def test_fold_conv_batchnorm_optim(self, adam=False):
     optim, cnt = (nn.optim.Adam, 29) if adam else (nn.optim.SGD, 15)
-    with Tensor.train():
+    with Context(TRAINING=1):
       img = Tensor.ones(1,3,4,4)
       c1 = nn.Conv2d(3,32,3)
       bn = nn.BatchNorm2d(32, track_running_stats=False)
@@ -1139,7 +1136,7 @@ class TestSchedule(unittest.TestCase):
   def test_fold_conv_batchnorm_optim_adam(self): self.test_fold_conv_batchnorm_optim(True)
 
   def test_fold_batchnorm_backward(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       x = Tensor.empty((2, 16, 8, 8)).contiguous()
       bn = nn.BatchNorm2d(16)
       fw = bn(x).contiguous_backward().relu().contiguous()
@@ -1473,6 +1470,18 @@ class TestSchedule(unittest.TestCase):
     x.softmax().sum().backward()
     run_linear(*check_schedule(x.grad, 4))
 
+  def test_logsumexp_backward(self):
+    Tensor.manual_seed(0)
+    x = Tensor.randn(4, 12, 64, 64).realize()
+    x.logsumexp(-1).sum().backward()
+    run_linear(*check_schedule(x.grad, 3))
+
+  def test_logcumsumexp_backward(self):
+    Tensor.manual_seed(0)
+    x = Tensor.randn(4, 512).realize()
+    x.logcumsumexp(-1).sum().backward()
+    run_linear(*check_schedule(x.grad, 3))
+
   def test_scaled_dot_product_attention_fusion(self):
     x, y, z, m = (Tensor.empty(32, 8, 16, 16) for _ in range(4))
     out = Tensor.scaled_dot_product_attention(x, y, z, attn_mask=m)
@@ -1484,7 +1493,7 @@ class TestSchedule(unittest.TestCase):
     check_schedule(out, 4)
 
   def test_adam_step_fusion(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       x = Tensor.empty(4, 64, 32)
       layer = nn.Linear(32, 32*4)
       _realize_weights(layer)
@@ -1494,7 +1503,7 @@ class TestSchedule(unittest.TestCase):
       check_schedule(opt.schedule_step(), 13)
 
   def test_adam_conv_fuse(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       img = Tensor.empty(2,3,4,4)
       c1 = nn.Conv2d(3,32,3)
       _realize_weights(c1)
@@ -1505,7 +1514,7 @@ class TestSchedule(unittest.TestCase):
       check_schedule(opt.schedule_step(), 13)
 
   def test_adam_2convs_fuse(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       img = Tensor.empty(2,3,4,4)
       c1 = nn.Conv2d(3,16,3,bias=False)
       c2 = nn.Conv2d(16,32,2,bias=False)
@@ -1517,7 +1526,7 @@ class TestSchedule(unittest.TestCase):
       check_schedule(opt.schedule_step(), 15)
 
   def test_sgd_conv_fuse(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       img = Tensor.empty(2,3,4,4)
       c1 = nn.Conv2d(3,32,3)
       _realize_weights(c1)
@@ -1527,7 +1536,7 @@ class TestSchedule(unittest.TestCase):
       check_schedule(opt.schedule_step(), 5) # TODO: 3?
 
   def test_sgd_2convs_fuse(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       img = Tensor.empty(2,3,4,4)
       c1 = nn.Conv2d(3,16,3,bias=False)
       c2 = nn.Conv2d(16,32,2,bias=False)
@@ -1538,7 +1547,7 @@ class TestSchedule(unittest.TestCase):
       check_schedule(opt.schedule_step(), 7)
 
   def test_fold_2convs_sgd_nesterov_momentum_wd(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       img = Tensor.empty(2,3,4,4)
       c1 = nn.Conv2d(3,16,3,bias=False)
       c2 = nn.Conv2d(16,32,2,bias=False)
@@ -1550,7 +1559,7 @@ class TestSchedule(unittest.TestCase):
       check_schedule(opt.schedule_step(), 11)
 
   def test_sgd_4convs_fuse(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       img = Tensor.empty(2,3,16,16)
       c1 = nn.Conv2d(3,4,3,bias=False)
       c2 = nn.Conv2d(4,8,3,bias=False)
@@ -1563,7 +1572,7 @@ class TestSchedule(unittest.TestCase):
       check_schedule(opt.schedule_step(), 15)
 
   def test_sgd_4convs_fuse_conv_bw(self):
-    with Tensor.train():
+    with Context(TRAINING=1):
       img = Tensor.empty(2,3,16,16)
       c1 = nn.Conv2d(3,4,3,bias=False)
       c2 = nn.Conv2d(4,8,3,bias=False)
@@ -1631,11 +1640,11 @@ class TestSchedule(unittest.TestCase):
     self.assertEqual(GlobalCounters.mem_used-base, 0)
 
   def test_const_schedule(self):
-    constv = Tensor.empty(2, 2).uop.const_like(10)
+    constv = Tensor.empty(2, 2).const_like(10).uop
     check_schedule(constv, 0)
 
   def test_const_schedule_contig(self):
-    constv = Tensor.empty(2, 2).uop.const_like(10).contiguous()
+    constv = Tensor.empty(2, 2).const_like(10).uop.contiguous()
     check_schedule(constv, 0)
 
   def test_advanced_simple_indexing_combined(self):
@@ -1664,7 +1673,7 @@ class TestSchedule(unittest.TestCase):
     self.assertEqual(len([x for x in linear.src[0].src[0].backward_slice_with_self if x.op is Ops.REDUCE]), 0)
 
   def test_resnet_block(self):
-    with Tensor.train(False):
+    with Context(TRAINING=0):
       in_planes, planes = 64, 64
       conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
       bn1 = nn.BatchNorm2d(planes)
@@ -1842,7 +1851,7 @@ class TestFusionOp(unittest.TestCase):
     linear = a.schedule_linear()
     prg = to_program(linear.src[-1].src[0], renderer=Device[Device.DEFAULT].renderer)
     self.assertLess(time.perf_counter()-st, 2.0)
-    assert len(prg.src[3].arg.splitlines()) < 250
+    assert len(prg.src[2].arg.splitlines()) < 250
 
   def test_recursive_add_cmp(self):
     st = time.perf_counter()

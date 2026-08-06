@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "url": "https://github.com/ajouatom/openpilot/releases/download/rdf-model-d0caa7d7/driving_supercombo.onnx",
+  "size": 96618974,
+  "sha256": "d0caa7d771cf9b905fca9db471d3413eed1b8b0611413f84c0da964e5992126e",
+  "model_checkpoint": "5c5d862b-d4dd-4087-aa8b-232ff9ac943f/100/1c13f8c7-a35d-4796-880a-902f600130db/400",
+  "input_shapes": {
+    "img": [1, 12, 128, 256],
+    "big_img": [1, 12, 128, 256],
+    "desire_pulse": [1, 25, 8],
+    "traffic_convention": [1, 2],
+    "action_t": [1, 2],
+    "features_buffer": [1, 24, 512]
+  },
+  "output_shapes": {
+    "outputs": [1, 2580]
+  },
+  "output_slices": {
+    "action": [2062, 2066],
+    "hidden_state": [2066, 2578]
+  }
+}

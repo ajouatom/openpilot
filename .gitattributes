@@ -25,5 +25,8 @@ openpilot/tools/cabana/assets/cabana-icon.png filter=lfs diff=lfs merge=lfs -tex
 openpilot/selfdrive/carrot/web/assets/alert_camera.svg filter=lfs diff=lfs merge=lfs -text
 openpilot/selfdrive/carrot/web/assets/alert_police.svg filter=lfs diff=lfs merge=lfs -text
 
-# dmonitoring model was already shipped as a real blob (supercombo stays LFS).
+# dmonitoring model was already shipped as a real blob.
 openpilot/selfdrive/modeld/models/dmonitoring_model.onnx -filter -diff -merge -text
+
+# RDF model is downloaded from a GitHub Release and verified before building.
+openpilot/selfdrive/modeld/models/driving_supercombo.onnx -filter -diff -merge -text

@@ -76,6 +76,7 @@ comma*.sh
 selfdrive/modeld/thneed/compile
 selfdrive/modeld/models/*.thneed
 selfdrive/modeld/models/*.pkl
+openpilot/selfdrive/modeld/models/driving_supercombo.onnx
 
 *.bz2
 *.zst
