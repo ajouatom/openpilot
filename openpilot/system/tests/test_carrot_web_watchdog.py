@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import signal
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,16 @@ def _wait_for_line(path: Path, expected: str, timeout: float = 5.0) -> None:
     time.sleep(0.05)
   output = path.read_text(encoding="utf-8") if path.exists() else "<missing>"
   pytest.fail(f"timed out waiting for {expected!r} in watchdog output:\n{output}")
+
+
+def _wait_for_line_count(path: Path, expected: int, timeout: float = 5.0) -> None:
+  deadline = time.monotonic() + timeout
+  while time.monotonic() < deadline:
+    if path.exists() and len(path.read_text(encoding="utf-8").splitlines()) >= expected:
+      return
+    time.sleep(0.05)
+  output = path.read_text(encoding="utf-8") if path.exists() else "<missing>"
+  pytest.fail(f"timed out waiting for {expected} watchdog output lines:\n{output}")
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="requires a POSIX shell and deleted-cwd semantics")
@@ -46,6 +57,7 @@ def test_watchdog_reenters_checkout_after_directory_replacement(tmp_path: Path) 
   env = os.environ.copy()
   env.update({
     "CARROT_WEB_PID_FILE": str(tmp_path / "watchdog.pid"),
+    "CARROT_WEB_LOCK_FILE": str(tmp_path / "watchdog.lock"),
     "CARROT_WEB_RESTART_DELAY": "0.05",
     "CARROT_WEB_TEST_LAUNCHES": str(launches),
   })
@@ -74,3 +86,57 @@ def test_watchdog_reenters_checkout_after_directory_replacement(tmp_path: Path) 
     except subprocess.TimeoutExpired:
       process.kill()
       process.wait(timeout=2)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="requires a POSIX shell and flock")
+def test_watchdog_allows_only_one_instance(tmp_path: Path) -> None:
+  if shutil.which("flock") is None:
+    pytest.skip("flock is unavailable")
+
+  checkout = tmp_path / "openpilot"
+  checkout.mkdir()
+  launches = tmp_path / "launches"
+  fake_python = tmp_path / "fake_python.sh"
+  fake_python.write_text(
+    "#!/usr/bin/env bash\nprintf 'launch:%s\\n' \"$$\" >> \"$CARROT_WEB_TEST_LAUNCHES\"\nsleep 10\n",
+    encoding="utf-8",
+  )
+  fake_python.chmod(0o755)
+
+  watchdog = Path(BASEDIR) / "scripts" / "carrot_web_watchdog.sh"
+  base_env = os.environ.copy()
+  base_env.update({
+    "CARROT_WEB_LOCK_FILE": str(tmp_path / "watchdog.lock"),
+    "CARROT_WEB_RESTART_DELAY": "0.05",
+    "CARROT_WEB_TEST_LAUNCHES": str(launches),
+  })
+  first_env = {**base_env, "CARROT_WEB_PID_FILE": str(tmp_path / "first.pid")}
+  second_env = {**base_env, "CARROT_WEB_PID_FILE": str(tmp_path / "second.pid")}
+
+  first = subprocess.Popen(
+    ["bash", str(watchdog), str(checkout), str(fake_python)],
+    env=first_env,
+    start_new_session=True,
+  )
+  try:
+    _wait_for_line_count(launches, 1)
+    second = subprocess.run(
+      ["bash", str(watchdog), str(checkout), str(fake_python)],
+      env=second_env,
+      capture_output=True,
+      text=True,
+      timeout=2,
+      check=False,
+    )
+
+    assert second.returncode == 0
+    assert "another watchdog already holds" in second.stdout
+    time.sleep(0.2)
+    assert len(launches.read_text(encoding="utf-8").splitlines()) == 1
+  finally:
+    os.killpg(first.pid, signal.SIGTERM)
+    try:
+      first.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+      os.killpg(first.pid, signal.SIGKILL)
+      first.wait(timeout=2)
