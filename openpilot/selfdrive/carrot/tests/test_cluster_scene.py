@@ -778,6 +778,55 @@ def test_corner_radar_does_not_duplicate_points_covered_by_vehicle_boxes() -> No
   assert scene.radar_points == ()
 
 
+@pytest.mark.parametrize("lead_label", ("L1", "L2"))
+def test_road_camera_hides_own_lane_corner_radar_when_front_lead_is_detected(lead_label) -> None:
+  points = (
+    RadarPoint("CENTER_EXPLICIT", 12.0, 0.2, "cornerRadar", in_my_lane=1),
+    RadarPoint("CENTER_PATH", 30.0, 1.2, "cornerRadar"),
+    RadarPoint("ADJACENT", 20.0, 2.4, "cornerRadar", in_my_lane=0),
+  )
+  state = _cluster_state(
+    camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+    model_path=(ModelPathPoint(0.0, 0.0), ModelPathPoint(40.0, 1.2)),
+    detected_vehicles=(DetectedVehicle(lead_label, 45.0, 0.0, source="radarState", primary=True),),
+    radar_points=points,
+  )
+
+  scene = build_cluster_scene(state)
+  labels = {vehicle.label for vehicle in scene.vehicles}
+
+  assert lead_label in labels
+  assert "ADJACENT" in labels
+  assert "CENTER_EXPLICIT" not in labels
+  assert "CENTER_PATH" not in labels
+  assert {marker.label for marker in scene.radar_points}.isdisjoint({"CENTER_EXPLICIT", "CENTER_PATH"})
+
+
+def test_non_camera_view_keeps_own_lane_corner_radar_with_front_lead() -> None:
+  point = RadarPoint("CENTER", 12.0, 0.2, "cornerRadar", in_my_lane=1)
+  state = _cluster_state(
+    detected_vehicles=(DetectedVehicle("L1", 45.0, 0.0, source="radarState", primary=True),),
+    radar_points=(point,),
+  )
+
+  scene = build_cluster_scene(state)
+
+  assert any(vehicle.label == "CENTER" for vehicle in scene.vehicles)
+
+
+def test_road_camera_keeps_own_lane_corner_radar_without_front_lead() -> None:
+  point = RadarPoint("CENTER", 12.0, 0.2, "cornerRadar", in_my_lane=1)
+  state = _cluster_state(
+    camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+    detected_vehicles=(DetectedVehicle("M1", 45.0, 0.0, source="modelV2.leadsV3", primary=True),),
+    radar_points=(point,),
+  )
+
+  scene = build_cluster_scene(state)
+
+  assert any(vehicle.label == "CENTER" for vehicle in scene.vehicles)
+
+
 def test_many_corner_radar_points_are_bounded_and_not_drawn_twice() -> None:
   points = tuple(
     RadarPoint(
