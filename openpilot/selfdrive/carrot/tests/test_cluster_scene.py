@@ -11,7 +11,9 @@ CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 from cluster_config import (
+  CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA,
   CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+  CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA,
   CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
   CLUSTER_RADAR_INFO_ALL_SPEED_DISTANCE,
   CLUSTER_RADAR_INFO_NONE,
@@ -20,7 +22,7 @@ from cluster_config import (
   LIGHT_CLUSTER_THEME,
   VEHICLE_LENGTH_M,
 )
-from cluster_models import ClusterAlert, ClusterUiState, DetectedVehicle, LaneMarking, ModelPathPoint, RadarPoint
+from cluster_models import ClusterAlert, ClusterUiState, DetectedVehicle, LaneMarking, ModelPathPoint, RadarPoint, RouteOverlay
 import cluster_renderer
 from cluster_renderer import ClusterUiRenderer
 import cluster_scene
@@ -700,7 +702,12 @@ def test_longitudinal_render_distance_is_halved_without_changing_lateral_data() 
   assert detected_box.longitudinal_m == 40.0
 
 
-def test_road_camera_keeps_longitudinal_render_distance_one_to_one() -> None:
+@pytest.mark.parametrize("camera_view_mode", (
+  CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+  CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA,
+  CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA,
+))
+def test_camera_background_modes_keep_longitudinal_render_distance_one_to_one(camera_view_mode) -> None:
   vehicle = DetectedVehicle(
     "L1",
     longitudinal_m=40.0,
@@ -709,7 +716,7 @@ def test_road_camera_keeps_longitudinal_render_distance_one_to_one() -> None:
     primary=True,
   )
   state = _cluster_state(
-    camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+    camera_view_mode=camera_view_mode,
     detected_vehicles=(vehicle,),
   )
 
@@ -720,6 +727,46 @@ def test_road_camera_keeps_longitudinal_render_distance_one_to_one() -> None:
   assert detected_box.center.x == pytest.approx(2.25)
   assert detected_box.center.y == pytest.approx(EGO_FORWARD_M + 40.0 + VEHICLE_LENGTH_M * 0.5)
   assert detected_box.longitudinal_m == 40.0
+
+
+def test_wide_camera_projection_uses_ecam_calibration_and_speed_zoom() -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = cluster_renderer.DESIGN_WIDTH
+  renderer.height = cluster_renderer.DESIGN_HEIGHT
+  renderer.panel_layout = CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT
+  renderer.camera_overlay_pitch_offset_deg = 0.0
+  state = _cluster_state(
+    speed_kph=0.0,
+    camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA,
+    camera_device_type="tici",
+    camera_sensor="ar0231",
+    camera_calibration_euler=(0.0, 0.0, 0.0),
+    wide_camera_from_device_euler=(0.0, 0.02, 0.0),
+  )
+
+  renderer._camera_overlay_wide = False
+  narrow = renderer._camera_overlay_projection(state)
+  renderer._camera_overlay_wide = True
+  wide_low_speed = renderer._camera_overlay_projection(state)
+  wide_high_speed = renderer._camera_overlay_projection(replace(state, speed_kph=54.0))
+
+  assert narrow is not None and wide_low_speed is not None and wide_high_speed is not None
+  assert not narrow.wide_camera
+  assert wide_low_speed.wide_camera
+  assert narrow.focal_length == pytest.approx(2648.0)
+  assert wide_low_speed.focal_length == pytest.approx(567.0)
+  assert wide_low_speed.view_from_road != narrow.view_from_road
+  assert wide_high_speed.zoom == pytest.approx(wide_low_speed.zoom * 1.55)
+
+
+def test_route_overlay_declares_the_camera_projection_stream() -> None:
+  renderer = object.__new__(ClusterUiRenderer)
+  state = _cluster_state(
+    camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA,
+    route_overlay=RouteOverlay(video_rgba=b"frame", camera_stream="wide"),
+  )
+
+  assert renderer._select_camera_overlay_stream(state)
 
 
 def test_model_road_geometry_matches_vehicle_longitudinal_scale() -> None:

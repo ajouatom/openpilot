@@ -92,6 +92,11 @@ def test_external_hud_brightness_and_orientation_use_catalog_controls(settings, 
     "ClusterHudPanelLayout",
     "ClusterHudCameraViewMode",
   ]
+  camera_view = by_name["ClusterHudCameraViewMode"]
+  assert (camera_view["min"], camera_view["max"], camera_view["default"]) == (0, 4, 0)
+  assert camera_view["control"] == "select"
+  assert camera_view["options"]["ko"][2:] == ["일반 카메라", "광각 카메라", "속도 자동"]
+  assert camera_view["options"]["en"][2:] == ["Narrow camera", "Wide camera", "Speed automatic"]
 
   params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
   assert '{"ClusterHudBrightness", {PERSISTENT, INT, "0"}}' in params_keys

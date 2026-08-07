@@ -53,3 +53,11 @@ def test_replay_can_place_the_driving_view_on_the_right():
   cluster_args = build_cluster_args(args, passthrough)
 
   assert cluster_args[cluster_args.index("--panel-layout") + 1] == "driving-right"
+
+
+def test_replay_forwards_wide_and_automatic_camera_modes():
+  for mode in (3, 4):
+    args, passthrough = parse_args(["route", "--camera-view-mode", str(mode)])
+    cluster_args = build_cluster_args(args, passthrough)
+
+    assert cluster_args[cluster_args.index("--camera-view-mode") + 1] == str(mode)
