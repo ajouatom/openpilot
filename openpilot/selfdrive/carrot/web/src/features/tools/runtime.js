@@ -366,7 +366,7 @@ function getToolCommandPreview(action, payload = {}) {
     case "git_remote_add": return `git remote add/set-url ${payload.name || ""}`.trim();
     case "send_tmux_log": return "capture tmux";
     case "server_tmux_log": return "send tmux";
-    case "install_required": return "install flask";
+    case "install_required": return "install shapely";
     case "delete_all_videos": return "delete all videos";
     case "delete_all_logs": return "delete all logs";
     case "rebuild_all": return "rebuild all";
