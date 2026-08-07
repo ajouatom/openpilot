@@ -690,9 +690,7 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
       import importlib.util
 
       packages = [
-        {"pip": "flask", "import": "flask"},
         {"pip": "shapely", "import": "shapely"},
-        {"pip": "kaitaistruct", "import": "kaitaistruct"},
       ]
       results = []
       installed_any = False
@@ -1168,9 +1166,7 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
       import importlib.util
 
       packages = [
-        {"pip": "flask", "import": "flask"},
         {"pip": "shapely", "import": "shapely"},
-        {"pip": "kaitaistruct", "import": "kaitaistruct"},
       ]
 
       results = []
