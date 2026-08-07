@@ -72,7 +72,13 @@ CLUSTER_PRIORITY_MAX = 99
 CLUSTER_CAMERA_VIEW_MODE_DEFAULT = 0
 CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM = 1
 CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA = 2
+CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA = 3
+CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA = 4
 CLUSTER_CAMERA_VIEW_MODE_PARAM = "ClusterHudCameraViewMode"
+CLUSTER_ROAD_CAMERA_AUTO_WIDE_MAX_KPH = 36.0
+CLUSTER_ROAD_CAMERA_AUTO_NARROW_MIN_KPH = 54.0
+CLUSTER_WIDE_CAMERA_ZOOM_MIN = 1.0
+CLUSTER_WIDE_CAMERA_ZOOM_MAX = 1.55
 CLUSTER_PANEL_LAYOUT_DRIVING_LEFT = 0
 CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT = 1
 CLUSTER_PANEL_LAYOUT_PARAM = "ClusterHudPanelLayout"
@@ -319,6 +325,16 @@ def normalize_cluster_camera_view_mode(value: object) -> int:
             "road_camera": CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
             "mode2": CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
             "mode-2": CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+            "wide-camera": CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA,
+            "wide_camera": CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA,
+            "wide": CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA,
+            "mode3": CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA,
+            "mode-3": CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA,
+            "auto-camera": CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA,
+            "auto_camera": CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA,
+            "camera-auto": CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA,
+            "mode4": CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA,
+            "mode-4": CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA,
         }
         if normalized in aliases:
             return aliases[normalized]
@@ -334,7 +350,39 @@ def normalize_cluster_camera_view_mode(value: object) -> int:
         return CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM
     if mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
         return CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
+    if mode == CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA:
+        return CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA
+    if mode == CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA:
+        return CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA
     return CLUSTER_CAMERA_VIEW_MODE_DEFAULT
+
+
+def cluster_camera_view_is_road_camera(mode: object) -> bool:
+    normalized = normalize_cluster_camera_view_mode(mode)
+    return normalized in (
+        CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+        CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA,
+        CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA,
+    )
+
+
+def cluster_camera_view_prefers_wide(mode: object, speed_kph: float, currently_wide: bool) -> bool:
+    normalized = normalize_cluster_camera_view_mode(mode)
+    if normalized == CLUSTER_CAMERA_VIEW_MODE_WIDE_CAMERA:
+        return True
+    if normalized != CLUSTER_CAMERA_VIEW_MODE_AUTO_CAMERA:
+        return False
+    if currently_wide:
+        return speed_kph < CLUSTER_ROAD_CAMERA_AUTO_NARROW_MIN_KPH
+    return speed_kph <= CLUSTER_ROAD_CAMERA_AUTO_WIDE_MAX_KPH
+
+
+def cluster_wide_camera_zoom_factor(speed_kph: float) -> float:
+    ratio = max(0.0, min(1.0, speed_kph / CLUSTER_ROAD_CAMERA_AUTO_NARROW_MIN_KPH))
+    smooth = ratio * ratio * (3.0 - 2.0 * ratio)
+    return CLUSTER_WIDE_CAMERA_ZOOM_MIN + smooth * (
+        CLUSTER_WIDE_CAMERA_ZOOM_MAX - CLUSTER_WIDE_CAMERA_ZOOM_MIN
+    )
 
 
 def normalize_cluster_panel_layout(value: object) -> int:

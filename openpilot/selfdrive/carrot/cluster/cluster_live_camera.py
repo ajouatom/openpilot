@@ -58,6 +58,7 @@ CONNECTION_RETRY_SECONDS = 0.5
 FRAME_POLL_SECONDS = 0.1
 FRAME_STALE_SECONDS = 1.2
 EGL_IMPORT_FAILURE_LIMIT = 3
+STREAM_DISCOVERY_SECONDS = 1.0
 
 
 class LiveRoadCamera:
@@ -76,7 +77,13 @@ class LiveRoadCamera:
 
         self._client_cls = VisionIpcClient
         self._stream_type = VisionStreamType.VISION_STREAM_ROAD
+        self._road_stream_type = VisionStreamType.VISION_STREAM_ROAD
+        self._wide_stream_type = VisionStreamType.VISION_STREAM_WIDE_ROAD
         self._client = self._new_client()
+        self._target_client = None
+        self._target_stream_type = None
+        self._available_streams: set[object] = set()
+        self._last_stream_discovery = 0.0
         self._frame = None
         self._last_connection_attempt = 0.0
         self._connected_at = 0.0
@@ -104,6 +111,62 @@ class LiveRoadCamera:
     def _new_client(self):
         return self._client_cls("camerad", self._stream_type, conflate=True)
 
+    @property
+    def is_wide(self) -> bool:
+        return self._stream_type == self._wide_stream_type
+
+    def select_stream(self, prefer_wide: bool) -> bool:
+        now = time.monotonic()
+        self._refresh_available_streams(now)
+        desired_stream = self._road_stream_type
+        if prefer_wide and self._wide_stream_type in self._available_streams:
+            desired_stream = self._wide_stream_type
+        elif self._road_stream_type not in self._available_streams and self._wide_stream_type in self._available_streams:
+            desired_stream = self._wide_stream_type
+        self._advance_stream_switch(desired_stream, now)
+        return self.is_wide
+
+    def _refresh_available_streams(self, now: float) -> None:
+        if now - self._last_stream_discovery < STREAM_DISCOVERY_SECONDS:
+            return
+        self._last_stream_discovery = now
+        try:
+            streams = self._client_cls.available_streams("camerad", block=False)
+        except Exception:
+            return
+        if streams:
+            self._available_streams = set(streams)
+
+    def _advance_stream_switch(self, desired_stream: object, now: float) -> None:
+        if desired_stream == self._stream_type:
+            self._target_client = None
+            self._target_stream_type = None
+            return
+        if self._target_client is None or self._target_stream_type != desired_stream:
+            self._target_stream_type = desired_stream
+            self._target_client = self._client_cls("camerad", desired_stream, conflate=True)
+        if not self._target_client.is_connected():
+            if not self._target_client.connect(False) or not self._target_client.num_buffers:
+                return
+        target_frame = self._target_client.recv(timeout_ms=0)
+        if target_frame is None:
+            return
+
+        self._destroy_egl_images()
+        self._clear_copy_textures()
+        self._client = self._target_client
+        self._stream_type = desired_stream
+        self._target_client = None
+        self._target_stream_type = None
+        self._frame = target_frame
+        self._connected_at = now
+        self._last_frame_at = now
+        self._texture_needs_update = True
+        print(
+            f"Cluster camera switched to {'wide' if self.is_wide else 'road'} stream: {self._client.width}x{self._client.height}",
+            flush=True,
+        )
+
     def _reset_connection(self) -> None:
         self._frame = None
         self._connected_at = 0.0
@@ -112,6 +175,8 @@ class LiveRoadCamera:
         self._destroy_egl_images()
         self._clear_copy_textures()
         self._client = self._new_client()
+        self._target_client = None
+        self._target_stream_type = None
         self._connection_wait_logged = False
 
     def _ensure_connection(self, now: float) -> bool:
@@ -132,6 +197,7 @@ class LiveRoadCamera:
                 flush=True,
             )
             self._connection_wait_logged = False
+            self._refresh_available_streams(now)
         elif not self._connection_wait_logged:
             print("Cluster road camera waiting for local camerad VisionIPC", flush=True)
             self._connection_wait_logged = True
@@ -306,3 +372,6 @@ class LiveRoadCamera:
         self._last_frame_at = 0.0
         self._egl_import_failures = 0
         self._client = None
+        self._target_client = None
+        self._target_stream_type = None
+        self._available_streams.clear()

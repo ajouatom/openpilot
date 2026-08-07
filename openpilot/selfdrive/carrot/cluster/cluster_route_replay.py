@@ -23,6 +23,7 @@ from typing import Any
 from cluster_config import (
     BLUE,
     BLUE_SOFT,
+    CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
     DEFAULT_LANE_WIDTH_M,
     MAX_ACCEL_MPS2,
     MAX_SPEED_KPH,
@@ -32,6 +33,7 @@ from cluster_config import (
     ROAD_CURVE_M_PER_M2,
     WHITE,
     YELLOW,
+    cluster_camera_view_prefers_wide,
 )
 from cluster_models import (
     ClusterAlert,
@@ -88,6 +90,8 @@ LOG_FILENAMES = {
     "rlog": "rlog.zst",
 }
 NUMBERED_FOLDER_RE = re.compile(r"^(.*?)(\d+)$")
+ROUTE_ROAD_VIDEO_FILENAMES = ("qcamera.ts", "fcamera.hevc", "fcamera.ts")
+ROUTE_WIDE_VIDEO_FILENAMES = ("ecamera.hevc", "ecamera.ts")
 
 
 @dataclass(frozen=True)
@@ -567,6 +571,7 @@ class RouteReplayFrame:
     camera_device_type: str | None = None
     camera_sensor: str | None = None
     camera_calibration_euler: tuple[float, float, float] | None = None
+    wide_camera_from_device_euler: tuple[float, float, float] | None = None
     road_transform_trans: tuple[float, float, float] | None = None
     road_transform_std: tuple[float, float, float] | None = None
     camera_odometry_valid: bool | None = None
@@ -823,7 +828,9 @@ class RouteReplaySource:
         self.times: list[float] = []
         self.duration = 0.0
         self.video_segments: list[RouteVideoSegment] = []
-        self._video_reader = RouteVideoFrameReader(self.video_segments)
+        self.wide_video_segments: list[RouteVideoSegment] = []
+        self._video_stream = "road"
+        self._video_reader = RouteVideoFrameReader(self.video_segments, self._video_stream)
         self._preload_worker = RouteLogPreloadWorker(self.corner_source)
         self._next_file_index = 0
         self._loaded_chunks: list[RouteReplayChunk] = []
@@ -864,23 +871,24 @@ class RouteReplaySource:
         playback_seconds: float,
         loop: bool = False,
         include_overlay: bool = False,
+        camera_view_mode: int = CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
     ) -> ClusterUiState:
         if loop and self._end_of_route and self.duration > 0.0:
             playback_seconds %= self.duration
         self._ensure_loaded(playback_seconds)
         if self.duration <= 0.0:
             state = self._frame_to_state(self.frames[0])
-            return self._with_overlay(state, self.frames[0], 0.0, loop) if include_overlay else state
+            return self._with_overlay(state, self.frames[0], 0.0, loop, camera_view_mode) if include_overlay else state
         if not loop or self._end_of_route:
             playback_seconds = clamp(playback_seconds, 0.0, self.duration)
 
         right_index = bisect_right(self.times, playback_seconds)
         if right_index <= 0:
             state = self._frame_to_state(self.frames[0])
-            return self._with_overlay(state, self.frames[0], playback_seconds, loop) if include_overlay else state
+            return self._with_overlay(state, self.frames[0], playback_seconds, loop, camera_view_mode) if include_overlay else state
         if right_index >= len(self.frames):
             state = self._frame_to_state(self.frames[-1])
-            return self._with_overlay(state, self.frames[-1], playback_seconds, loop) if include_overlay else state
+            return self._with_overlay(state, self.frames[-1], playback_seconds, loop, camera_view_mode) if include_overlay else state
 
         left = self.frames[right_index - 1]
         right = self.frames[right_index]
@@ -888,7 +896,7 @@ class RouteReplaySource:
         amount = clamp((playback_seconds - left.t) / span, 0.0, 1.0)
         frame = blend_frames(left, right, amount)
         state = self._frame_to_state(frame)
-        return self._with_overlay(state, frame, playback_seconds, loop) if include_overlay else state
+        return self._with_overlay(state, frame, playback_seconds, loop, camera_view_mode) if include_overlay else state
 
     def close(self) -> None:
         self._preload_generation += 1
@@ -1084,17 +1092,18 @@ class RouteReplaySource:
         return True
 
     def _append_video_segment(self, file_path: Path, chunk: RouteReplayChunk) -> None:
-        video_path = file_path.parent / "qcamera.ts"
-        if not video_path.exists():
-            return
-        self.video_segments.append(
-            RouteVideoSegment(
-                index=segment_index(file_path),
-                path=video_path,
-                start_t=chunk.start_t,
-                end_t=chunk.end_t,
+        for stream, segments in (("road", self.video_segments), ("wide", self.wide_video_segments)):
+            video_path = route_video_path_for_stream(file_path.parent, stream)
+            if video_path is None:
+                continue
+            segments.append(
+                RouteVideoSegment(
+                    index=segment_index(file_path),
+                    path=video_path,
+                    start_t=chunk.start_t,
+                    end_t=chunk.end_t,
+                )
             )
-        )
 
     def _trim_loaded_chunks(self, playback_seconds: float) -> None:
         removed = False
@@ -1126,7 +1135,9 @@ class RouteReplaySource:
         self.times = []
         self.duration = 0.0
         self.video_segments = []
-        self._video_reader = RouteVideoFrameReader(self.video_segments)
+        self.wide_video_segments = []
+        self._video_stream = "road"
+        self._video_reader = RouteVideoFrameReader(self.video_segments, self._video_stream)
         self._next_file_index = 0
         self._loaded_chunks = []
         self._loaded_file_count = 0
@@ -1138,8 +1149,9 @@ class RouteReplaySource:
         frame: RouteReplayFrame,
         playback_seconds: float,
         loop: bool,
+        camera_view_mode: int,
     ) -> ClusterUiState:
-        overlay = self._route_overlay(frame, state, playback_seconds, loop)
+        overlay = self._route_overlay(frame, state, playback_seconds, loop, camera_view_mode)
         return replace(state, route_overlay=overlay)
 
     def _route_overlay(
@@ -1148,10 +1160,13 @@ class RouteReplaySource:
         state: ClusterUiState,
         playback_seconds: float,
         loop: bool,
+        camera_view_mode: int,
     ) -> RouteOverlay:
         shown_time = playback_seconds % self.duration if loop and self.duration > 0.0 else playback_seconds
         shown_time = clamp(shown_time, 0.0, self.duration)
-        segment = route_video_segment_at(self.video_segments, shown_time)
+        self._select_route_video_stream(camera_view_mode, state.speed_kph, shown_time)
+        active_segments = self.wide_video_segments if self._video_stream == "wide" else self.video_segments
+        segment = route_video_segment_at(active_segments, shown_time)
         segment_label = "--" if segment is None or segment.index is None else str(segment.index)
         video_frame = self._video_reader.frame_at(shown_time) if self._video_reader is not None else None
         signal_text = ("L" if frame.left_signal else "-") + ("R" if frame.right_signal else "-")
@@ -1195,16 +1210,41 @@ class RouteReplaySource:
         )
 
         if video_frame is None:
-            status = self._video_reader.status_text() if self._video_reader is not None else "qcamera unavailable"
-            return RouteOverlay(video_status=status, cutin_status=frame.cutin_debug_text, data_lines=data_lines)
+            status = self._video_reader.status_text() if self._video_reader is not None else "camera unavailable"
+            return RouteOverlay(
+                video_status=status,
+                camera_stream=self._video_stream,
+                cutin_status=frame.cutin_debug_text,
+                data_lines=data_lines,
+            )
         return RouteOverlay(
             video_rgba=video_frame.rgba,
             video_width=video_frame.width,
             video_height=video_frame.height,
             video_frame_id=video_frame.frame_id,
+            camera_stream=self._video_stream,
             cutin_status=frame.cutin_debug_text,
             data_lines=data_lines,
         )
+
+    def _select_route_video_stream(self, camera_view_mode: int, speed_kph: float, playback_seconds: float) -> None:
+        currently_wide = self._video_stream == "wide"
+        prefer_wide = cluster_camera_view_prefers_wide(camera_view_mode, speed_kph, currently_wide)
+        road_available = route_video_segment_at(self.video_segments, playback_seconds) is not None
+        wide_available = route_video_segment_at(self.wide_video_segments, playback_seconds) is not None
+        next_stream = "wide" if (prefer_wide and wide_available) or (not road_available and wide_available) else "road"
+        if next_stream == self._video_stream:
+            return
+        if self._video_reader is not None:
+            self._video_reader.close()
+        self._video_stream = next_stream
+        segments = self.wide_video_segments if next_stream == "wide" else self.video_segments
+        self._video_reader = RouteVideoFrameReader(segments, next_stream)
+
+
+def route_video_path_for_stream(folder: Path, stream: str) -> Path | None:
+    filenames = ROUTE_WIDE_VIDEO_FILENAMES if stream == "wide" else ROUTE_ROAD_VIDEO_FILENAMES
+    return next((candidate for name in filenames if (candidate := folder / name).is_file()), None)
 
 
 def route_video_ffmpeg_path() -> str | None:
@@ -1227,27 +1267,28 @@ def route_video_ffmpeg_path() -> str | None:
 
 
 class RouteVideoFrameReader:
-    def __init__(self, segments: list[RouteVideoSegment]) -> None:
+    def __init__(self, segments: list[RouteVideoSegment], stream_name: str = "road") -> None:
         self.segments = segments
+        self.stream_name = stream_name
         self._ffmpeg = route_video_ffmpeg_path()
         self._process: subprocess.Popen[bytes] | None = None
         self._segment_key: tuple[int | None, str, float, float] | None = None
         self._frame_index = -1
         self._last_frame: RouteVideoFrame | None = None
-        self._status = "qcamera waiting"
+        self._status = f"{self.stream_name} camera waiting"
 
     def frame_at(self, playback_seconds: float) -> RouteVideoFrame | None:
         segment = route_video_segment_at(self.segments, playback_seconds)
         if segment is None:
             self._close_process()
-            self._status = "qcamera missing"
+            self._status = f"{self.stream_name} camera missing"
             return None
         if not segment.path.exists():
             self._close_process()
-            self._status = "qcamera file missing"
+            self._status = f"{self.stream_name} camera file missing"
             return None
         if self._ffmpeg is None:
-            self._status = "qcamera ffmpeg missing"
+            self._status = f"{self.stream_name} camera ffmpeg missing"
             return None
 
         local_time_s = clamp(playback_seconds - segment.start_t, 0.0, max(0.0, segment.end_t - segment.start_t))
@@ -1269,7 +1310,7 @@ class RouteVideoFrameReader:
         return self._last_frame
 
     def status_text(self) -> str:
-        return self._status or "qcamera unavailable"
+        return self._status or f"{self.stream_name} camera unavailable"
 
     def close(self) -> None:
         self._close_process()
@@ -1277,7 +1318,7 @@ class RouteVideoFrameReader:
     def _open_segment(self, segment: RouteVideoSegment, start_frame: int) -> bool:
         self._close_process()
         if self._ffmpeg is None:
-            self._status = "qcamera ffmpeg missing"
+            self._status = f"{self.stream_name} camera ffmpeg missing"
             return False
         seek_s = max(0.0, start_frame / ROUTE_VIDEO_FPS)
         command = [
@@ -1309,24 +1350,24 @@ class RouteVideoFrameReader:
                 stderr=subprocess.DEVNULL,
             )
         except OSError as exc:
-            self._status = f"qcamera ffmpeg failed: {exc}"
+            self._status = f"{self.stream_name} camera ffmpeg failed: {exc}"
             self._process = None
             return False
         self._segment_key = self._key_for_segment(segment)
         self._frame_index = start_frame - 1
         self._last_frame = None
-        self._status = "qcamera starting"
+        self._status = f"{self.stream_name} camera starting"
         return True
 
     def _read_next_frame(self) -> bool:
         process = self._process
         if process is None or process.stdout is None:
-            self._status = "qcamera unavailable"
+            self._status = f"{self.stream_name} camera unavailable"
             return False
         frame_size = ROUTE_VIDEO_DECODE_WIDTH * ROUTE_VIDEO_DECODE_HEIGHT * 4
         data = self._read_exact(process.stdout, frame_size)
         if data is None:
-            self._status = "qcamera ended"
+            self._status = f"{self.stream_name} camera ended"
             self._close_process()
             return False
         self._frame_index += 1
@@ -1512,6 +1553,7 @@ class RouteLogParser:
         self.memory_used_percent: float | None = None
         self.disk_used_percent: float | None = None
         self.camera_calibration_euler: tuple[float, float, float] | None = None
+        self.wide_camera_from_device_euler: tuple[float, float, float] | None = None
         self.road_transform_trans: tuple[float, float, float] | None = None
         self.road_transform_std: tuple[float, float, float] | None = None
         self.camera_odometry_valid: bool | None = None
@@ -1814,6 +1856,7 @@ class RouteLogParser:
             memory_used_percent=self.memory_used_percent,
             disk_used_percent=self.disk_used_percent,
             camera_calibration_euler=self.camera_calibration_euler,
+            wide_camera_from_device_euler=self.wide_camera_from_device_euler,
             road_transform_trans=self.road_transform_trans,
             road_transform_std=self.road_transform_std,
             camera_odometry_valid=self.camera_odometry_valid,
@@ -2052,8 +2095,9 @@ class RouteLogParser:
             yaw_std = finite_float(rot_std[2])
             if yaw_std is not None:
                 self.vision_yaw_rate_std_rps = clamp(yaw_std, 0.0, 2.0)
-        if self.camera_calibration_euler is None:
-            self.camera_calibration_euler = three_float_tuple(safe_get(camera_odometry, "wideFromDeviceEuler"))
+        wide_from_device_euler = three_float_tuple(safe_get(camera_odometry, "wideFromDeviceEuler"))
+        if wide_from_device_euler is not None and self.wide_camera_from_device_euler is None:
+            self.wide_camera_from_device_euler = wide_from_device_euler
         # cameraOdometry's road height is a noisy per-frame vision estimate. Use
         # it only as an initial fallback; liveCalibration supplies the stable
         # installation height and must not be overwritten every model frame.
@@ -2067,6 +2111,9 @@ class RouteLogParser:
         rpy_calib = three_float_tuple(safe_get(live_calibration, "rpyCalib"))
         if rpy_calib is not None:
             self.camera_calibration_euler = rpy_calib
+        wide_from_device_euler = three_float_tuple(safe_get(live_calibration, "wideFromDeviceEuler"))
+        if wide_from_device_euler is not None:
+            self.wide_camera_from_device_euler = wide_from_device_euler
         height_values = safe_get(live_calibration, "height")
         height_m = numeric_tuple(height_values, limit=1, minimum=0.5, maximum=3.0)
         if height_m:
@@ -3775,6 +3822,7 @@ def frame_to_state(frame: RouteReplayFrame) -> ClusterUiState:
         camera_device_type=frame.camera_device_type,
         camera_sensor=frame.camera_sensor,
         camera_calibration_euler=frame.camera_calibration_euler,
+        wide_camera_from_device_euler=frame.wide_camera_from_device_euler,
         road_transform_trans=frame.road_transform_trans,
         road_transform_std=frame.road_transform_std,
         camera_odometry_valid=frame.camera_odometry_valid,
@@ -3992,6 +4040,7 @@ def blend_frames(left: RouteReplayFrame, right: RouteReplayFrame, amount: float)
         memory_used_percent=lerp_optional(left.memory_used_percent, right.memory_used_percent),
         disk_used_percent=lerp_optional(left.disk_used_percent, right.disk_used_percent),
         camera_calibration_euler=discrete.camera_calibration_euler,
+        wide_camera_from_device_euler=discrete.wide_camera_from_device_euler,
         road_transform_trans=discrete.road_transform_trans,
         road_transform_std=discrete.road_transform_std,
         camera_odometry_valid=discrete.camera_odometry_valid,

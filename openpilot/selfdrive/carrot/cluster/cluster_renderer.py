@@ -33,7 +33,6 @@ from cluster_config import (
     AMBER,
     BLUE,
     BLUE_SOFT,
-    CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
     CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
     CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
     CLUSTER_RADAR_INFO_ALL_SPEED,
@@ -62,6 +61,9 @@ from cluster_config import (
     TEXT,
     VEHICLE_LENGTH_M,
     WHITE,
+    cluster_camera_view_is_road_camera,
+    cluster_camera_view_prefers_wide,
+    cluster_wide_camera_zoom_factor,
     current_cluster_theme,
     normalize_cluster_screen_mode,
     normalize_cluster_panel_layout,
@@ -629,6 +631,7 @@ class CameraOverlayProjection:
     video_ty: float
     view_from_road: tuple[tuple[float, float, float], ...]
     camera_height_m: float
+    wide_camera: bool = False
 
 
 @lru_cache(maxsize=256)
@@ -935,6 +938,7 @@ class ClusterUiRenderer:
         self._route_video_frame_id: str | None = None
         self._live_road_camera = None
         self._live_road_camera_failed = False
+        self._camera_overlay_wide = False
         self._left_turn_signal_started_at: float | None = None
         self._right_turn_signal_started_at: float | None = None
         self._hazard_signal_started_at: float | None = None
@@ -1339,7 +1343,7 @@ class ClusterUiRenderer:
                 corner_lateral_offset_m,
                 paused,
                 self.route_camera_tuning_visible
-                and state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+                and cluster_camera_view_is_road_camera(state.camera_view_mode),
             )
             self._profile_add("render_route_frame.controls", profile_stage)
         finally:
@@ -1463,7 +1467,7 @@ class ClusterUiRenderer:
     def _render_world(self, state: ClusterUiState, signal_lights: tuple[bool, bool] | None = None) -> None:
         if signal_lights is None:
             signal_lights = self._turn_signal_lights(state)
-        if state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA or not state.onroad:
+        if not cluster_camera_view_is_road_camera(state.camera_view_mode) or not state.onroad:
             self._close_live_road_camera()
         theme = self._current_theme()
         profile_stage = self._profile_start()
@@ -1472,7 +1476,8 @@ class ClusterUiRenderer:
         profile_stage = self._profile_start()
         rl.clear_background(rl_color(theme.bg))
         self._profile_add("render_world.clear_background", profile_stage)
-        if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+        if cluster_camera_view_is_road_camera(state.camera_view_mode):
+            self._camera_overlay_wide = self._select_camera_overlay_stream(state)
             projection = self._camera_overlay_projection(state)
             profile_stage = self._profile_start()
             self._draw_camera_background(state, projection)
@@ -1481,6 +1486,7 @@ class ClusterUiRenderer:
             self._draw_camera_projected_overlay(scene, state, projection)
             self._profile_add("render_world.camera_projected_overlay", profile_stage)
         else:
+            self._camera_overlay_wide = False
             profile_stage = self._profile_start()
             self._draw_scene(scene, state)
             self._profile_add("render_world.draw_scene", profile_stage)
@@ -1509,7 +1515,7 @@ class ClusterUiRenderer:
         state: ClusterUiState,
         projection: CameraOverlayProjection | None = None,
     ) -> None:
-        if state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+        if not cluster_camera_view_is_road_camera(state.camera_view_mode):
             return
         overlay = state.route_overlay
         if projection is None:
@@ -1551,9 +1557,10 @@ class ClusterUiRenderer:
             rl.end_scissor_mode()
 
     def _live_road_camera_view(self):
-        if self._live_road_camera is not None:
-            return self._live_road_camera
-        if self._live_road_camera_failed or os.name != "posix":
+        live_camera = getattr(self, "_live_road_camera", None)
+        if live_camera is not None:
+            return live_camera
+        if getattr(self, "_live_road_camera_failed", False) or os.name != "posix":
             return None
         try:
             from cluster_live_camera import LiveRoadCamera
@@ -1564,9 +1571,29 @@ class ClusterUiRenderer:
             self._live_road_camera_failed = True
         return self._live_road_camera
 
+    def _select_camera_overlay_stream(self, state: ClusterUiState) -> bool:
+        overlay = getattr(state, "route_overlay", None)
+        if overlay is not None and overlay.video_rgba is not None:
+            return overlay.camera_stream == "wide"
+        live_camera = self._live_road_camera_view() if state.onroad else None
+        if live_camera is None:
+            return False
+        prefer_wide = cluster_camera_view_prefers_wide(
+            state.camera_view_mode,
+            state.speed_kph,
+            live_camera.is_wide,
+        )
+        try:
+            return bool(live_camera.select_stream(prefer_wide))
+        except Exception as exc:
+            print(f"Cluster live camera stream selection failed: {exc}", flush=True)
+            self._close_live_road_camera()
+            return False
+
     def _close_live_road_camera(self) -> None:
-        if self._live_road_camera is not None:
-            self._live_road_camera.close()
+        live_camera = getattr(self, "_live_road_camera", None)
+        if live_camera is not None:
+            live_camera.close()
             self._live_road_camera = None
 
     def _camera_overlay_content_rect(self) -> rl.Rectangle:
@@ -1580,18 +1607,21 @@ class ClusterUiRenderer:
         )
 
     @staticmethod
-    def _camera_overlay_camera(state: ClusterUiState):
+    def _camera_overlay_camera(state: ClusterUiState, wide_camera: bool = False):
         device_type = (state.camera_device_type or "").strip().lower()
         sensor = (state.camera_sensor or "").strip().lower()
         for key in ((device_type, sensor), ("unknown", sensor), (device_type, "unknown")):
             device_camera = DEVICE_CAMERAS.get(key)
             if device_camera is not None:
-                return device_camera.fcam
+                camera = device_camera.ecam if wide_camera else device_camera.fcam
+                return camera if camera.width > 0 and camera.height > 0 else device_camera.fcam
         if sensor:
             for (_, known_sensor), device_camera in DEVICE_CAMERAS.items():
                 if known_sensor == sensor:
-                    return device_camera.fcam
-        return CAMERA_OVERLAY_DEFAULT_CAMERA
+                    camera = device_camera.ecam if wide_camera else device_camera.fcam
+                    return camera if camera.width > 0 and camera.height > 0 else device_camera.fcam
+        default_device_camera = DEVICE_CAMERAS["tici", "ar0231"]
+        return default_device_camera.ecam if wide_camera else CAMERA_OVERLAY_DEFAULT_CAMERA
 
     def _camera_overlay_projection(self, state: ClusterUiState) -> CameraOverlayProjection | None:
         overlay = state.route_overlay
@@ -1602,8 +1632,13 @@ class ClusterUiRenderer:
         pitch += math.radians(self.camera_overlay_pitch_offset_deg)
 
         device_from_road = rot_from_euler([roll, pitch, yaw]).dot(np.diag([1.0, -1.0, -1.0]))
-        view_from_road = view_frame_from_device_frame.dot(device_from_road)
-        camera = self._camera_overlay_camera(state)
+        wide_camera = bool(getattr(self, "_camera_overlay_wide", False))
+        if wide_camera and state.wide_camera_from_device_euler is not None:
+            wide_from_device = rot_from_euler(state.wide_camera_from_device_euler)
+            view_from_road = view_frame_from_device_frame.dot(wide_from_device).dot(device_from_road)
+        else:
+            view_from_road = view_frame_from_device_frame.dot(device_from_road)
+        camera = self._camera_overlay_camera(state, wide_camera)
         source_width = (
             float(overlay.video_width)
             if overlay is not None and overlay.video_width > 0
@@ -1618,6 +1653,8 @@ class ClusterUiRenderer:
         calib_transform = intrinsic @ view_from_road
         kep = calib_transform @ np.array([1000.0, 0.0, 0.0])
         zoom = max(dest.width / float(camera.width), dest.height / float(camera.height))
+        if wide_camera:
+            zoom *= cluster_wide_camera_zoom_factor(state.speed_kph)
         cx = float(intrinsic[0, 2])
         cy = float(intrinsic[1, 2])
         max_x_offset = max(0.0, cx * zoom - dest.width * 0.5)
@@ -1654,6 +1691,7 @@ class ClusterUiRenderer:
             video_ty=video_ty,
             view_from_road=tuple(tuple(float(value) for value in row) for row in view_from_road),
             camera_height_m=camera_height_m,
+            wide_camera=wide_camera,
         )
 
     def _camera_overlay_screen_xy(
@@ -2945,7 +2983,7 @@ class ClusterUiRenderer:
         screen_mode = self._effective_screen_mode(state)
         if screen_mode not in (CLUSTER_SCREEN_MODE_DEFAULT, CLUSTER_SCREEN_MODE_TRIP_REPORT):
             return 0.0
-        if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+        if cluster_camera_view_is_road_camera(state.camera_view_mode):
             return 0.0
         if screen_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
             return NAVI_WORLD_VIEW_SHIFT_X * self.width / DESIGN_WIDTH
@@ -2969,7 +3007,7 @@ class ClusterUiRenderer:
         )
         if self._effective_screen_mode(state) == CLUSTER_SCREEN_MODE_FULLSCREEN_3D:
             return 0.0
-        if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+        if cluster_camera_view_is_road_camera(state.camera_view_mode):
             camera_signal_center_x = CAMERA_BACKGROUND_X + signal_center_x * CAMERA_BACKGROUND_W / DESIGN_WIDTH
             return camera_signal_center_x - signal_center_x
         view_shift_x = self._world_view_shift_design_x(state)
@@ -3895,7 +3933,7 @@ class ClusterUiRenderer:
         requested_screen_mode = getattr(self, "screen_mode", CLUSTER_SCREEN_MODE_DEFAULT)
         if (
             requested_screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D
-            and getattr(state, "camera_view_mode", 0) == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
+            and cluster_camera_view_is_road_camera(getattr(state, "camera_view_mode", 0))
         ):
             requested_screen_mode = CLUSTER_SCREEN_MODE_DEFAULT
         if requested_screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
@@ -5802,7 +5840,7 @@ class ClusterUiRenderer:
             if state.onroad:
                 camera_text = (
                     "ROAD CAMERA"
-                    if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
+                    if cluster_camera_view_is_road_camera(state.camera_view_mode)
                     else "ONROAD"
                 )
             info_rows = (
@@ -6903,7 +6941,7 @@ class ClusterUiRenderer:
             return
         theme = self._current_theme()
         color = WHITE if gear != "U" else theme.muted
-        outline = color if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA else (5, 9, 12, 245)
+        outline = color if cluster_camera_view_is_road_camera(state.camera_view_mode) else (5, 9, 12, 245)
         rect = rl.Rectangle(
             SPEED_GEAR_CENTER_X - SPEED_GEAR_W * 0.5,
             SPEED_GEAR_CENTER_Y - SPEED_GEAR_H * 0.5,
@@ -7092,7 +7130,7 @@ class ClusterUiRenderer:
             )
 
     def _side_gauge_outline(self, state: ClusterUiState) -> tuple[int, int, int, int]:
-        if self._current_theme().is_dark or state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+        if self._current_theme().is_dark or cluster_camera_view_is_road_camera(state.camera_view_mode):
             return SIDE_GAUGE_OUTLINE
         return (5, 9, 12, 235)
 
