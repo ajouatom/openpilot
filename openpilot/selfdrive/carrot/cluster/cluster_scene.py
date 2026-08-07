@@ -1751,6 +1751,23 @@ def raw_corner_radar_points(points: tuple[RadarPoint, ...]) -> tuple[RadarPoint,
     return tuple(sorted(corners, key=lambda point: (point.longitudinal_m, abs(point.lateral_m), point.label)))
 
 
+def detected_vehicle_is_lead_one_or_two(vehicle: DetectedVehicle) -> bool:
+    label = vehicle.label.upper()
+    return label.startswith("L1") or label.startswith("L2")
+
+
+def corner_radar_point_is_in_ego_lane(
+    point: RadarPoint,
+    state: ClusterUiState,
+    lane_width_m: float,
+) -> bool:
+    if point.in_my_lane is not None:
+        return point.in_my_lane > 0
+    path_lateral_m = model_path_lateral_at_forward(state, point.longitudinal_m)
+    lane_center_m = path_lateral_m if path_lateral_m is not None else 0.0
+    return abs(point.lateral_m - lane_center_m) <= lane_width_m * 0.5
+
+
 def corner_radar_points_for_cluster_display(
     points: tuple[RadarPoint, ...],
     state: ClusterUiState,
@@ -3502,6 +3519,16 @@ def build_cluster_scene(
     longitudinal_scale = longitudinal_render_distance_scale(state)
     all_raw_corner_points = raw_corner_radar_points(state.radar_points)
     raw_corner_active = bool(all_raw_corner_points)
+    if (
+        raw_corner_active
+        and state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
+        and any(detected_vehicle_is_lead_one_or_two(vehicle) for vehicle in state.detected_vehicles)
+    ):
+        all_raw_corner_points = tuple(
+            point
+            for point in all_raw_corner_points
+            if not corner_radar_point_is_in_ego_lane(point, state, lane_width_m)
+        )
     raw_corner_points = corner_radar_points_for_cluster_display(all_raw_corner_points, state, lane_width_m)
     display_radar_points = raw_corner_points if raw_corner_active else radar_points_for_display(state)
     display_detected_vehicles = detected_vehicles_without_zero_radar_samples(state.detected_vehicles)
