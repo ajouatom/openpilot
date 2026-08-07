@@ -80,3 +80,82 @@ def test_zero_copy_rebinds_current_camera_image_before_every_draw(monkeypatch):
   camera._texture_needs_update = True
   assert camera._draw_zero_copy(rect, rect)
   assert binds == [(7, camera._egl_images[3])] * 3
+
+
+def test_camera_switch_waits_for_wide_frame_before_changing_projection(monkeypatch):
+  road_stream = 0
+  wide_stream = 2
+
+  class FakeClient:
+    streams = {road_stream, wide_stream}
+    target_frame = None
+
+    def __init__(self, _name, stream, conflate=True):
+      self.stream = stream
+      self.num_buffers = 4
+      self.width = 1928
+      self.height = 1208
+      self.connected = stream == road_stream
+
+    @classmethod
+    def available_streams(cls, _name, block=False):
+      return cls.streams
+
+    def is_connected(self):
+      return self.connected
+
+    def connect(self, _blocking):
+      self.connected = True
+      return True
+
+    def recv(self, timeout_ms=0):
+      return self.target_frame if self.stream == wide_stream else None
+
+  camera = object.__new__(LiveRoadCamera)
+  camera._client_cls = FakeClient
+  camera._road_stream_type = road_stream
+  camera._wide_stream_type = wide_stream
+  camera._stream_type = road_stream
+  camera._client = FakeClient("camerad", road_stream)
+  camera._target_client = None
+  camera._target_stream_type = None
+  camera._available_streams = set()
+  camera._last_stream_discovery = 0.0
+  camera._frame = object()
+  camera._connected_at = 1.0
+  camera._last_frame_at = 1.0
+  camera._texture_needs_update = False
+  camera._zero_copy = False
+  monkeypatch.setattr(camera, "_destroy_egl_images", lambda: None)
+  monkeypatch.setattr(camera, "_clear_copy_textures", lambda: None)
+
+  assert not camera.select_stream(True)
+  assert camera._target_stream_type == wide_stream
+
+  FakeClient.target_frame = SimpleNamespace(idx=1)
+  camera._last_stream_discovery = 0.0
+  assert camera.select_stream(True)
+  assert camera._stream_type == wide_stream
+  assert camera._frame is FakeClient.target_frame
+
+
+def test_camera_wide_request_falls_back_when_stream_is_unavailable():
+  road_stream = 0
+
+  class FakeClient:
+    @classmethod
+    def available_streams(cls, _name, block=False):
+      return {road_stream}
+
+  camera = object.__new__(LiveRoadCamera)
+  camera._client_cls = FakeClient
+  camera._road_stream_type = road_stream
+  camera._wide_stream_type = 2
+  camera._stream_type = road_stream
+  camera._target_client = None
+  camera._target_stream_type = None
+  camera._available_streams = set()
+  camera._last_stream_discovery = 0.0
+
+  assert not camera.select_stream(True)
+  assert camera._target_client is None

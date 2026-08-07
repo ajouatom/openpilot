@@ -41,6 +41,7 @@ from cluster_config import (
     DESIGN_HEIGHT,
     DESIGN_WIDTH,
     normalize_cluster_brightness_percent,
+    cluster_camera_view_is_road_camera,
     normalize_cluster_camera_view_mode,
     normalize_cluster_core_mode,
     normalize_cluster_encoder_mode,
@@ -970,7 +971,7 @@ def run_demo(
         "route_loop": route_loop,
         "pause_on_cutin": route_pause_on_cutin,
         "show_route_overlay": active_route_overlay_mode != "off",
-        "road_camera": active_camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
+        "road_camera": cluster_camera_view_is_road_camera(active_camera_view_mode),
     }
     last_frame_time = start_time
     last_report_time = start_time
@@ -1508,11 +1509,12 @@ def run_demo(
                             playback_seconds = 0.0
 
                 route_source.corner_lateral_offset_m = route_active_corner_lateral_offset_m
-                keep_camera_video = active_camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
+                keep_camera_video = cluster_camera_view_is_road_camera(active_camera_view_mode)
                 state = route_source.state_at(
                     playback_seconds,
                     route_loop,
                     include_overlay=active_route_overlay_mode != "off" or keep_camera_video,
+                    camera_view_mode=active_camera_view_mode,
                 )
                 state = replace(
                     state,
@@ -2295,9 +2297,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--camera-view-mode",
         type=int,
-        choices=(0, 1, 2),
+        choices=(0, 1, 2, 3, 4),
         default=None,
-        help=f"Camera view override. Default reads {CLUSTER_CAMERA_VIEW_MODE_PARAM}; mode 2 is camera.",
+        help=f"Camera view override. Default reads {CLUSTER_CAMERA_VIEW_MODE_PARAM}; 2 is narrow, 3 is wide, and 4 switches by speed.",
     )
     parser.add_argument(
         "--panel-layout",

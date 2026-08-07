@@ -19,6 +19,7 @@ from cluster_route_replay import (
   corner_track_label,
   frame_to_state,
   model_lead_detections_from_model_v2,
+  route_video_path_for_stream,
 )
 
 
@@ -440,9 +441,12 @@ def test_live_calibration_height_is_not_overwritten_by_camera_odometry():
   )
   parser._update_camera_odometry(camera_odometry, True)
   assert parser.road_transform_trans == (0.0, 0.0, 1.36)
+  assert parser.camera_calibration_euler is None
+  assert parser.wide_camera_from_device_euler == (0.0, 0.02, 0.0)
 
   parser._update_live_calibration(SimpleNamespace(
     rpyCalib=(0.0, 0.02, 0.0),
+    wideFromDeviceEuler=(0.0, 0.03, -0.01),
     height=(1.418,),
   ), True)
   parser._update_camera_odometry(SimpleNamespace(
@@ -450,6 +454,16 @@ def test_live_calibration_height_is_not_overwritten_by_camera_odometry():
   ), True)
 
   assert parser.road_transform_trans == (0.0, 0.0, 1.418)
+  assert parser.wide_camera_from_device_euler == (0.0, 0.03, -0.01)
+
+
+def test_route_video_source_prefers_qcamera_and_finds_ecamera(tmp_path):
+  (tmp_path / "fcamera.hevc").write_bytes(b"front")
+  (tmp_path / "qcamera.ts").write_bytes(b"qcam")
+  (tmp_path / "ecamera.hevc").write_bytes(b"wide")
+
+  assert route_video_path_for_stream(tmp_path, "road") == tmp_path / "qcamera.ts"
+  assert route_video_path_for_stream(tmp_path, "wide") == tmp_path / "ecamera.hevc"
 
 
 def test_adjacent_route_log_path_preserves_number_padding(tmp_path):

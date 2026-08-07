@@ -141,7 +141,13 @@ def parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
         default=50.0,
         help="Compatibility option; route playback does not recompute cut-ins",
     )
-    parser.add_argument("--camera-view-mode", type=int, choices=(0, 1, 2), default=2, help="Cluster camera view mode (default: 2, road camera background)")
+    parser.add_argument(
+        "--camera-view-mode",
+        type=int,
+        choices=(0, 1, 2, 3, 4),
+        default=2,
+        help="Cluster camera view mode: 2 narrow, 3 wide, 4 speed automatic",
+    )
     parser.add_argument(
         "--panel-layout",
         choices=("driving-left", "driving-right"),

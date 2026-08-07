@@ -12,7 +12,6 @@ from cluster_config import (
     BLUE,
     BLUE_SOFT,
     CLUSTER_CAMERA_VIEW_MODE_EGO_BOTTOM,
-    CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA,
     CLUSTER_RADAR_DISPLAY_DETAIL,
     CLUSTER_RADAR_SOURCE_COLOR_BY_SOURCE,
     ClusterTheme,
@@ -42,6 +41,7 @@ from cluster_config import (
     VEHICLE_LANE_CHANGE_SLOPE,
     VEHICLE_LENGTH_M,
     VEHICLE_WIDTH_M,
+    cluster_camera_view_is_road_camera,
 )
 from cluster_models import (
     ClusterUiState,
@@ -401,7 +401,7 @@ def data_scene_forward_m(relative_forward_m: float) -> float:
 
 
 def longitudinal_render_distance_scale(state: ClusterUiState) -> float:
-    if state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA:
+    if cluster_camera_view_is_road_camera(state.camera_view_mode):
         return 1.0
     return LONGITUDINAL_RENDER_DISTANCE_SCALE
 
@@ -3521,7 +3521,7 @@ def build_cluster_scene(
     raw_corner_active = bool(all_raw_corner_points)
     if (
         raw_corner_active
-        and state.camera_view_mode == CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
+        and cluster_camera_view_is_road_camera(state.camera_view_mode)
         and any(detected_vehicle_is_lead_one_or_two(vehicle) for vehicle in state.detected_vehicles)
     ):
         all_raw_corner_points = tuple(
@@ -3683,7 +3683,7 @@ def build_cluster_scene(
         camera_active,
         target_offset,
     )
-    show_ego_vehicle = state.camera_view_mode != CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA
+    show_ego_vehicle = not cluster_camera_view_is_road_camera(state.camera_view_mode)
     merged_radar_labels = frozenset[str]()
     if route_mode:
         if raw_corner_active:

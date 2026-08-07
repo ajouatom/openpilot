@@ -58,6 +58,7 @@ class RouteOverlay:
     video_height: int = 0
     video_frame_id: str | None = None
     video_status: str | None = None
+    camera_stream: str = "road"
     panel_visible: bool = True
     cutin_status: str | None = None
     data_lines: tuple[str, ...] = ()
@@ -458,6 +459,7 @@ class ClusterUiState:
     camera_device_type: str | None = None
     camera_sensor: str | None = None
     camera_calibration_euler: tuple[float, float, float] | None = None
+    wide_camera_from_device_euler: tuple[float, float, float] | None = None
     road_transform_trans: tuple[float, float, float] | None = None
     road_transform_std: tuple[float, float, float] | None = None
     camera_odometry_valid: bool | None = None
