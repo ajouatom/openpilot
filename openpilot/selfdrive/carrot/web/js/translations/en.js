@@ -523,7 +523,7 @@ window.CarrotTranslations.register("en", {
     regulatory_load_failed: "Failed to load regulatory information.",
     capture_tmux: "capture tmux",
     send_tmux: "send tmux",
-    install_required: "install flask",
+    install_required: "install shapely",
     delete_all_videos: "delete all videos",
     delete_all_logs: "delete all logs",
     rebuild_all: "Rebuild All",

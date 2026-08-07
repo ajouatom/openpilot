@@ -523,7 +523,7 @@ window.CarrotTranslations.register("ko", {
     regulatory_load_failed: "규제 정보를 불러오지 못했습니다.",
     capture_tmux: "capture tmux",
     send_tmux: "send tmux",
-    install_required: "install flask",
+    install_required: "Shapely 설치",
     delete_all_videos: "delete all videos",
     delete_all_logs: "delete all logs",
     rebuild_all: "Rebuild All",

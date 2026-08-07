@@ -7,7 +7,6 @@ from openpilot.common.params import Params
 from openpilot.system.hardware import PC, TICI
 from openpilot.system.manager.process import PythonProcess, NativeProcess, DaemonProcess
 
-FLASK_AVAILABLE = importlib.util.find_spec("flask") is not None
 try:
   BODYTELEOP_AVAILABLE = importlib.util.find_spec("openpilot.tools.bodyteleop.web") is not None
 except ModuleNotFoundError:
@@ -87,9 +86,6 @@ def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 
 def enable_updated(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started and params.get_bool("SoftwareMenu")
-
-def check_fleet(started, params, CP: car.CarParams) -> bool:
-  return FLASK_AVAILABLE
 
 def or_(*fns):
   return lambda *args: any(fn(*args) for fn in fns)

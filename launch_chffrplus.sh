@@ -225,23 +225,11 @@ function launch {
   rm openpilot/selfdrive/pandad/*.so
   # write tmux scrollback to a file
   tmux capture-pane -pq -S-1500 > /tmp/launch_log
-  if python -c "import flask" > /dev/null 2>&1; then
-    echo "Flask already installed."
-  else
-    echo "Flask installing."
-    pip install flask
-  fi
   if python -c "import shapely" > /dev/null 2>&1; then
     echo "shapely already installed."
   else
     echo "shapely installing."
     pip install shapely
-  fi
-  if python -c "import kaitaistruct" > /dev/null 2>&1; then
-    echo "kaitaistruct already installed."
-  else
-    echo "kaitaistruct installing."
-    pip install kaitaistruct
   fi
   if python3 -c "import msgpack" > /dev/null 2>&1; then
     echo "msgpack already installed."
