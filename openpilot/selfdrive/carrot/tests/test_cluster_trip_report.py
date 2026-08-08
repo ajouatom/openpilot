@@ -204,7 +204,10 @@ def test_mode_two_remains_the_system_screen_regardless_of_navigation_state():
     ),
   ):
     assert renderer._effective_screen_mode(state) == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM
-    assert renderer._world_view_shift_x(state) == 0.0
+    assert renderer._world_view_shift_x(state) == NAVI_WORLD_VIEW_SHIFT_X
+
+  road_camera = SimpleNamespace(camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA)
+  assert renderer._world_view_shift_x(road_camera) == 0.0
 
 
 def test_mode_two_dispatches_only_system_content_when_navigation_is_present(monkeypatch):
@@ -331,25 +334,58 @@ def test_fullscreen_3d_uses_full_width_hud_layout_even_when_panels_are_swapped()
   assert road_camera_rect.width == CAMERA_BACKGROUND_W
 
 
-def test_graph_right_mode_places_side_gauges_next_to_graph_in_both_panel_layouts():
+def test_modes_two_and_four_keep_3d_world_and_side_widgets_in_the_driving_region():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1920
+  renderer.height = 480
+
+  for screen_mode in (CLUSTER_SCREEN_MODE_DEBUG_SYSTEM, CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT):
+    renderer.screen_mode = screen_mode
+    for panel_layout in (CLUSTER_PANEL_LAYOUT_DRIVING_LEFT, CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT):
+      renderer.panel_layout = panel_layout
+      driving_x = renderer._driving_panel_offset_design_x()
+      gauge_offset_x = renderer._side_gauge_offset_design_x(screen_mode)
+      second_gauge_right = (
+        driving_x
+        + cluster_renderer.SIDE_GAUGE_LEFT_CENTER_X
+        + gauge_offset_x
+        + cluster_renderer.SIDE_GAUGE_COLUMN_GAP
+        + cluster_renderer.SIDE_GAUGE_WIDTH * 0.5
+      )
+      tpms_right = (
+        driving_x
+        + cluster_renderer.TPMS_STATUS_CENTER_X
+        + renderer._tpms_offset_design_x(screen_mode)
+        + cluster_renderer.TPMS_STATUS_ICON_W * 0.5
+      )
+
+      for camera_view_mode in (0, 1):
+        state = SimpleNamespace(camera_view_mode=camera_view_mode)
+        assert renderer._world_view_shift_x(state) == NAVI_WORLD_VIEW_SHIFT_X
+        assert renderer._turn_signal_center_x_offset(state, "left") == -NAVI_WORLD_VIEW_SHIFT_X
+      assert gauge_offset_x == 0.0
+      assert second_gauge_right <= driving_x + CAMERA_BACKGROUND_W
+      assert tpms_right <= driving_x + CAMERA_BACKGROUND_W
+
+    road_camera = SimpleNamespace(camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA)
+    assert renderer._world_view_shift_x(road_camera) == 0.0
+
+
+def test_graph_right_mode_uses_the_complete_information_region_in_both_panel_layouts():
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1920
   renderer.height = 480
   renderer.screen_mode = CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT
 
-  for panel_layout in (CLUSTER_PANEL_LAYOUT_DRIVING_LEFT, CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT):
+  for panel_layout, expected_x in (
+    (CLUSTER_PANEL_LAYOUT_DRIVING_LEFT, cluster_renderer.NAVI_LIVE_PANEL_X),
+    (CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT, 0.0),
+  ):
     renderer.panel_layout = panel_layout
-    driving_offset_x = renderer._driving_hud_offset_design_x(renderer.screen_mode)
-    gauge_offset_x = renderer._side_gauge_offset_design_x(renderer.screen_mode)
-    plot_x = renderer._information_panel_x(cluster_renderer.DEBUG_PLOT_RIGHT_X)
-    first_center_x = cluster_renderer.SIDE_GAUGE_LEFT_CENTER_X + driving_offset_x + gauge_offset_x
-    second_center_x = first_center_x + cluster_renderer.SIDE_GAUGE_COLUMN_GAP
-    gauge_half_width = cluster_renderer.SIDE_GAUGE_WIDTH * 0.5
-    graph_gap = cluster_renderer.DEBUG_PLOT_SIDE_GAUGE_GAP
-
-    assert second_center_x + gauge_half_width + graph_gap == plot_x
-
-    assert renderer._tpms_offset_design_x(renderer.screen_mode) == 0.0
+    assert renderer._information_panel_x(cluster_renderer.DEBUG_PLOT_RIGHT_X) == expected_x
+    assert cluster_renderer.DEBUG_PLOT_RIGHT_Y == cluster_renderer.NAVI_LIVE_PANEL_Y
+    assert cluster_renderer.DEBUG_PLOT_RIGHT_W == cluster_renderer.NAVI_LIVE_PANEL_W
+    assert cluster_renderer.DEBUG_PLOT_RIGHT_H == cluster_renderer.NAVI_LIVE_PANEL_H
 
 
 def test_fullscreen_3d_repositions_hud_widgets_and_suppresses_information_panels(monkeypatch):

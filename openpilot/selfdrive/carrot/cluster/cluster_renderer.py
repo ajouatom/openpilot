@@ -381,11 +381,10 @@ DEBUG_PLOT_FULL_X = 500.0
 DEBUG_PLOT_FULL_Y = DEBUG_PLOT_MARGIN
 DEBUG_PLOT_FULL_W = 1392.0
 DEBUG_PLOT_FULL_H = DESIGN_HEIGHT - DEBUG_PLOT_MARGIN * 2.0
-DEBUG_PLOT_RIGHT_X = SYSTEM_PANEL_X
-DEBUG_PLOT_RIGHT_Y = DEBUG_PLOT_MARGIN
-DEBUG_PLOT_RIGHT_W = SYSTEM_PANEL_W
-DEBUG_PLOT_RIGHT_H = DESIGN_HEIGHT - DEBUG_PLOT_MARGIN * 2.0
-DEBUG_PLOT_SIDE_GAUGE_GAP = DEBUG_PLOT_MARGIN
+DEBUG_PLOT_RIGHT_X = NAVI_LIVE_PANEL_X
+DEBUG_PLOT_RIGHT_Y = NAVI_LIVE_PANEL_Y
+DEBUG_PLOT_RIGHT_W = NAVI_LIVE_PANEL_W
+DEBUG_PLOT_RIGHT_H = NAVI_LIVE_PANEL_H
 GIT_STATUS_MARGIN = 2
 GIT_STATUS_BOTTOM_MARGIN = 12
 GIT_STATUS_DOT_RADIUS = 7
@@ -1032,21 +1031,7 @@ class ClusterUiRenderer:
     def _side_gauge_offset_design_x(self, screen_mode: int) -> float:
         if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D:
             return FULLSCREEN_3D_SIDE_WIDGET_OFFSET_X
-        if screen_mode != CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT:
-            return 0.0
-
-        plot_x = self._information_panel_x(DEBUG_PLOT_RIGHT_X)
-        desired_left_center_x = (
-            plot_x
-            - DEBUG_PLOT_SIDE_GAUGE_GAP
-            - SIDE_GAUGE_WIDTH * 0.5
-            - SIDE_GAUGE_COLUMN_GAP
-        )
-        return (
-            desired_left_center_x
-            - self._driving_hud_offset_design_x(screen_mode)
-            - SIDE_GAUGE_LEFT_CENTER_X
-        )
+        return 0.0
 
     @staticmethod
     def _center_clock_x(screen_mode: int) -> float:
@@ -2981,12 +2966,16 @@ class ClusterUiRenderer:
 
     def _world_view_shift_x(self, state: ClusterUiState) -> float:
         screen_mode = self._effective_screen_mode(state)
-        if screen_mode not in (CLUSTER_SCREEN_MODE_DEFAULT, CLUSTER_SCREEN_MODE_TRIP_REPORT):
-            return 0.0
         if cluster_camera_view_is_road_camera(state.camera_view_mode):
             return 0.0
-        if screen_mode == CLUSTER_SCREEN_MODE_TRIP_REPORT:
+        if screen_mode in (
+            CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+            CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+            CLUSTER_SCREEN_MODE_TRIP_REPORT,
+        ):
             return NAVI_WORLD_VIEW_SHIFT_X * self.width / DESIGN_WIDTH
+        if screen_mode != CLUSTER_SCREEN_MODE_DEFAULT:
+            return 0.0
         navi_panel_visible = bool(
             self._navi_live_panel_visible(state.navi_live)
             or self._navi_map_frame_present(state.navi_dashboard)

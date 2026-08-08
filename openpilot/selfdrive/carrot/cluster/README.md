@@ -465,12 +465,14 @@ dashboard regardless of connected, live, disconnected, or debug navigation
 state. The detail card shows network, display/frame rate, camera, memory-capacity,
 and per-core CPU state. The system-health card reuses commit `78aee2b3e`'s 2-by-2
 CPU/temperature/memory/disk gauges and pitch/yaw target; Navi state never replaces
-it with another information panel. Mode `3` shows a large debug graph selected by `ShowPlotMode` with the driving scene
+it with another information panel. In either 3D camera view, mode `2` uses the
+same 1124-pixel driving region and 792-pixel information region as mode `0`.
+Mode `3` shows a large debug graph selected by `ShowPlotMode` with the driving scene
 disabled, and `4` shows the same graph in the information panel while keeping
-the driving scene. Mode `4` keeps the acceleration, steering, fuel, and DEF
-gauges immediately to the left of the graph instead of near the center of the
-driving view; the gauge block follows the graph when the panel layout is
-swapped, while TPMS remains with the driving view.
+the driving scene. Mode `4` also uses mode `0`'s 1124-pixel 3D driving region,
+expands the graph across the opposite 792-pixel information region, and keeps
+the acceleration, steering, fuel, and DEF gauges plus TPMS inside the driving
+region's right edge. Swapping the panel layout exchanges both regions as units.
 `5` shows the driving report in the information panel while keeping the driving scene. The
 report uses a large trip/event summary card and a separate system-load card
 with four 2-by-2 circular gauges. A lower target plots stored calibration pitch
@@ -502,7 +504,10 @@ In default screen mode (`0`), the trip report is shown while no live navigation
 is being received and the navigation panel returns automatically when reception
 starts. System-debug mode (`2`) always keeps its detail and system-health cards.
 It does not switch to live navigation, Navi debug, `NAVI DISCONNECTED`, the route
-overlay, or the driving report when navigation state changes.
+overlay, or the driving report when navigation state changes. In 3D views,
+modes `2` and `4` reserve the same normal driving region as mode `0`; their
+right-side gauges and TPMS remain within that region rather than floating into
+the information panel.
 Fullscreen-3D mode (`-1`) never reserves a navigation/report panel in either 3D
 camera view, even when Navi data is available. Switching to road-camera view
 re-enables the complete mode-0 panel selection and panel-layout behavior.
