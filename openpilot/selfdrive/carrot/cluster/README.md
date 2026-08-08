@@ -460,10 +460,12 @@ report. While onroad, shifting into park (`P`) temporarily gives the completed
 driving report priority over active navigation; leaving park restores navigation
 immediately. Explicit modes such as report mode `5` and navigation mode `6`
 remain fixed. Mode `1` shows the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`,
-`STEERING`, and `LATERAL PLAN` rows. Mode `2` keeps the standalone memory and
-per-core CPU system-statistics panel regardless of connected, live, disconnected,
-or debug navigation state; Navi state never replaces it with another information
-panel. Mode `3` shows a large debug graph selected by `ShowPlotMode` with the driving scene
+`STEERING`, and `LATERAL PLAN` rows. Mode `2` keeps a fixed two-card system
+dashboard regardless of connected, live, disconnected, or debug navigation
+state. The detail card shows network, display/frame rate, camera, memory-capacity,
+and per-core CPU state. The system-health card reuses commit `78aee2b3e`'s 2-by-2
+CPU/temperature/memory/disk gauges and pitch/yaw target; Navi state never replaces
+it with another information panel. Mode `3` shows a large debug graph selected by `ShowPlotMode` with the driving scene
 disabled, and `4` shows the same graph in the information panel while keeping
 the driving scene. Mode `4` keeps the acceleration, steering, fuel, and DEF
 gauges immediately to the left of the graph instead of near the center of the
@@ -498,7 +500,7 @@ other presentation with
 `cluster_replay_usb.py ROUTE --trip-report --language en --imperial`.
 In default screen mode (`0`), the trip report is shown while no live navigation
 is being received and the navigation panel returns automatically when reception
-starts. System-debug mode (`2`) always keeps its memory and per-core CPU panel.
+starts. System-debug mode (`2`) always keeps its detail and system-health cards.
 It does not switch to live navigation, Navi debug, `NAVI DISCONNECTED`, the route
 overlay, or the driving report when navigation state changes.
 Fullscreen-3D mode (`-1`) never reserves a navigation/report panel in either 3D

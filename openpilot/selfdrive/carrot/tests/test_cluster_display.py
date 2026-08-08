@@ -136,6 +136,64 @@ def test_trip_report_draws_english_imperial_labels(monkeypatch):
   assert angles[0][0][4:6] == pytest.approx((0.5729578, -1.1459156))
 
 
+@pytest.mark.parametrize(
+  ("panel_layout", "expected_panel_x"),
+  (
+    (cluster_renderer.CLUSTER_PANEL_LAYOUT_DRIVING_LEFT, 1124.0),
+    (cluster_renderer.CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT, 0.0),
+  ),
+)
+def test_mode_two_system_dashboard_combines_runtime_detail_and_health_cards(panel_layout, expected_panel_x):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1920
+  renderer.height = 480
+  renderer.panel_layout = panel_layout
+  stats = SimpleNamespace()
+  samples = []
+  renderer._system_stats = SimpleNamespace(sample=lambda: samples.append(stats) or stats)
+  renderer._current_theme = lambda: SimpleNamespace(panel_bg=(1, 2, 3), faint=(4, 5, 6))
+  outer_panels = []
+  detail = {}
+  health = {}
+
+  renderer._rounded_rect = lambda *args, **_kwargs: outer_panels.append(args)
+
+  def capture_detail(panel_state, **kwargs):
+    detail["state"] = panel_state
+    detail.update(kwargs)
+
+  def capture_health(panel_state, panel_stats, *bounds, **kwargs):
+    health["state"] = panel_state
+    health["stats"] = panel_stats
+    health["bounds"] = bounds
+    health["kwargs"] = kwargs
+
+  renderer._draw_system_stats_panel = capture_detail
+  renderer._draw_system_health_card = capture_health
+  state = SimpleNamespace()
+
+  renderer._draw_system_dashboard_panel(state)
+
+  assert samples == [stats]
+  assert outer_panels[0][:4] == (expected_panel_x, 1, 792, 478)
+  assert detail == {
+    "state": state,
+    "panel_x": expected_panel_x + 16.0,
+    "panel_y": 9.0,
+    "panel_w": 474.0,
+    "panel_h": 462.0,
+    "show_runtime_info": True,
+    "title_text": "DETAIL",
+    "stats": stats,
+  }
+  assert health == {
+    "state": state,
+    "stats": stats,
+    "bounds": (expected_panel_x + 500.0, 9.0, 276.0, 462.0),
+    "kwargs": {},
+  }
+
+
 def test_device_angle_target_maps_pitch_and_yaw_to_expected_axes():
   radius = 30.0
 

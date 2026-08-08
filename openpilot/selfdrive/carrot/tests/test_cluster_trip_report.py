@@ -225,7 +225,7 @@ def test_mode_two_dispatches_only_system_content_when_navigation_is_present(monk
     "_draw_driving_hud_content",
     lambda _state, mode, *_signals: calls.append(("driving", mode)),
   )
-  monkeypatch.setattr(renderer, "_draw_system_stats_panel", lambda _state: calls.append(("system", None)))
+  monkeypatch.setattr(renderer, "_draw_system_dashboard_panel", lambda _state: calls.append(("system", None)))
   monkeypatch.setattr(renderer, "_draw_navi_live_panel", lambda _state: calls.append(("navi", None)))
   monkeypatch.setattr(renderer, "_draw_navi_debug_panel", lambda _state: calls.append(("navi-debug", None)))
   monkeypatch.setattr(renderer, "_draw_route_overlay", lambda overlay: calls.append(("route", overlay)))

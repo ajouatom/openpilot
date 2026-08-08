@@ -3739,8 +3739,8 @@ class ClusterUiRenderer:
                 return
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
                 profile_stage = self._profile_start()
-                self._draw_system_stats_panel(state)
-                self._profile_add("hud.system_stats", profile_stage)
+                self._draw_system_dashboard_panel(state)
+                self._profile_add("hud.system_dashboard", profile_stage)
                 self._draw_status_footer(state)
                 return
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
@@ -5792,6 +5792,40 @@ class ClusterUiRenderer:
             if loaded_image is not None and rl.is_image_valid(loaded_image):
                 rl.unload_image(loaded_image)
 
+    def _draw_system_dashboard_panel(self, state: ClusterUiState) -> None:
+        theme = self._current_theme()
+        stats = self._system_stats.sample()
+        panel_x = self._information_panel_x(NAVI_LIVE_PANEL_X)
+        panel_y = NAVI_LIVE_PANEL_Y
+        panel_w = NAVI_LIVE_PANEL_W
+        panel_h = NAVI_LIVE_PANEL_H
+        card_y = panel_y + 8.0
+        card_h = panel_h - 16.0
+        detail_x = panel_x + 16.0
+        detail_w = 474.0
+        health_x = detail_x + detail_w + 10.0
+        health_w = panel_x + panel_w - 16.0 - health_x
+
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 12.0, theme.panel_bg, theme.faint, 1.5)
+        self._draw_system_stats_panel(
+            state,
+            panel_x=detail_x,
+            panel_y=card_y,
+            panel_w=detail_w,
+            panel_h=card_h,
+            show_runtime_info=True,
+            title_text="DETAIL",
+            stats=stats,
+        )
+        self._draw_system_health_card(
+            state,
+            stats,
+            health_x,
+            card_y,
+            health_w,
+            card_h,
+        )
+
     def _draw_system_stats_panel(
         self,
         state: ClusterUiState,
@@ -5801,17 +5835,22 @@ class ClusterUiRenderer:
         panel_w: float = SYSTEM_PANEL_W,
         panel_h: float | None = None,
         status_text: str | None = None,
+        show_runtime_info: bool = False,
+        title_text: str = "SYSTEM",
+        stats: SystemStats | None = None,
     ) -> None:
         if panel_x is None:
             panel_x = self._information_panel_x(SYSTEM_PANEL_X)
         theme = self._current_theme()
-        stats = self._system_stats.sample()
+        if stats is None:
+            stats = self._system_stats.sample()
         disconnected = status_text is not None
+        detailed = disconnected or show_runtime_info
         cpu_count = len(stats.cpu_core_percents)
         columns = 2 if cpu_count <= 8 else 4
         rows = max(1, math.ceil(max(1, cpu_count) / columns))
         core_row_h = 30.0 if columns == 2 else 24.0
-        header_h = 216.0 if disconnected else 122.0
+        header_h = 216.0 if detailed else 122.0
         if panel_h is None:
             panel_h = min(DESIGN_HEIGHT - panel_y - 18.0, header_h + rows * core_row_h + 18.0)
         core_area_h = max(24.0, panel_h - header_h - 14.0)
@@ -5823,7 +5862,7 @@ class ClusterUiRenderer:
         text_color = WHITE if disconnected else theme.text
         muted_color = (154, 164, 172, 255) if disconnected else theme.muted
         self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, panel_bg, panel_outline, 2)
-        self._draw_text("SYSTEM", panel_x + pad_x, panel_y + 28, 18, muted_color)
+        self._draw_text(title_text, panel_x + pad_x, panel_y + 28, 18, muted_color)
         if status_text:
             self._draw_text(
                 status_text,
@@ -5834,7 +5873,7 @@ class ClusterUiRenderer:
                 anchor="right",
             )
 
-        if disconnected:
+        if detailed:
             fps_text = "-- Hz"
             if state.actual_fps is not None and math.isfinite(state.actual_fps):
                 fps_text = f"{state.actual_fps:.1f} Hz"
@@ -5857,8 +5896,8 @@ class ClusterUiRenderer:
 
         mem_percent = stats.memory_used_percent
         mem_color = self._system_metric_color(mem_percent)
-        mem_text_y = panel_y + (164.0 if disconnected else 62.0)
-        mem_bar_y = panel_y + (182.0 if disconnected else 80.0)
+        mem_text_y = panel_y + (164.0 if detailed else 62.0)
+        mem_bar_y = panel_y + (182.0 if detailed else 80.0)
         self._draw_text("MEM", panel_x + pad_x, mem_text_y, 17, muted_color)
         self._draw_text(
             self._memory_text(stats),
@@ -5877,7 +5916,7 @@ class ClusterUiRenderer:
         )
         self._draw_percent_bar(panel_x + pad_x, mem_bar_y, panel_w - pad_x * 2, 12, mem_percent, mem_color)
 
-        cpu_header_y = panel_y + (208.0 if disconnected else 104.0)
+        cpu_header_y = panel_y + (208.0 if detailed else 104.0)
         self._draw_text("CPU CORE %", panel_x + pad_x, cpu_header_y, 15, muted_color)
         if cpu_count == 0:
             self._draw_text("unavailable", panel_x + panel_w - pad_x, cpu_header_y, 15, muted_color, anchor="right")
@@ -5920,7 +5959,6 @@ class ClusterUiRenderer:
         system_w = panel_x + panel_w - 16.0 - system_x
         system_h = summary_h
         self._rounded_rect(summary_x, summary_y, summary_w, summary_h, 10.0, card_bg, card_outline, 1.2)
-        self._rounded_rect(system_x, system_y, system_w, system_h, 10.0, card_bg, card_outline, 1.2)
 
         self._draw_text(self._text("trip_summary"), summary_x + 18.0, summary_y + 31.0, 22.0, muted)
         self._draw_text(self._text("time"), summary_x + 18.0, summary_y + 82.0, 19.0, muted)
@@ -6003,7 +6041,57 @@ class ClusterUiRenderer:
             self._draw_text(label, event_x + 9.0, event_y + 23.5, event_label_size, muted)
             self._draw_text(str(count), event_x + event_w - 9.0, event_y + 23.5, 23.0, color, anchor="right")
 
-        self._draw_text(self._text("system"), system_x + 18.0, system_y + 31.0, 22.0, muted)
+        self._draw_system_health_card(
+            state,
+            stats,
+            system_x,
+            system_y,
+            system_w,
+            system_h,
+            panel_bg=card_bg,
+            panel_outline=card_outline,
+            text_color=WHITE,
+            muted_color=muted,
+            target_fill=(11, 18, 26, 235),
+        )
+
+    def _draw_system_health_card(
+        self,
+        state: ClusterUiState,
+        stats: SystemStats,
+        panel_x: float,
+        panel_y: float,
+        panel_w: float,
+        panel_h: float,
+        *,
+        panel_bg: tuple[int, ...] | None = None,
+        panel_outline: tuple[int, ...] | None = None,
+        text_color: tuple[int, ...] | None = None,
+        muted_color: tuple[int, ...] | None = None,
+        target_fill: tuple[int, ...] | None = None,
+    ) -> None:
+        theme = self._current_theme() if any(
+            value is None
+            for value in (panel_bg, panel_outline, text_color, muted_color, target_fill)
+        ) else None
+        if panel_bg is None:
+            assert theme is not None
+            panel_bg = theme.route_panel_bg
+        if panel_outline is None:
+            assert theme is not None
+            panel_outline = theme.faint
+        if text_color is None:
+            assert theme is not None
+            text_color = theme.text
+        if muted_color is None:
+            assert theme is not None
+            muted_color = theme.muted
+        if target_fill is None:
+            assert theme is not None
+            target_fill = theme.panel_bg
+
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 10.0, panel_bg, panel_outline, 1.2)
+        self._draw_text(self._text("system"), panel_x + 18.0, panel_y + 31.0, 22.0, muted_color)
         cpu_percent = state.cpu_usage_percent if state.cpu_usage_percent is not None else stats.cpu_used_percent
         memory_percent = (
             state.memory_used_percent
@@ -6028,12 +6116,12 @@ class ClusterUiRenderer:
         )
         gauge_pad_x = 16.0
         gauge_gap_x = 8.0
-        gauge_w = (system_w - gauge_pad_x * 2.0 - gauge_gap_x) * 0.5
-        gauge_centers_y = (system_y + 107.0, system_y + 224.0)
+        gauge_w = (panel_w - gauge_pad_x * 2.0 - gauge_gap_x) * 0.5
+        gauge_centers_y = (panel_y + 107.0, panel_y + 224.0)
         for index, (label, value, percent, color) in enumerate(system_metrics):
             column = index % 2
             row = index // 2
-            center_x = system_x + gauge_pad_x + gauge_w * 0.5 + column * (gauge_w + gauge_gap_x)
+            center_x = panel_x + gauge_pad_x + gauge_w * 0.5 + column * (gauge_w + gauge_gap_x)
             self._draw_system_gauge(
                 center_x,
                 gauge_centers_y[row],
@@ -6041,17 +6129,17 @@ class ClusterUiRenderer:
                 value,
                 percent,
                 color,
-                muted,
-                card_outline,
+                muted_color,
+                panel_outline,
             )
 
         rl.draw_line_ex(
-            rl.Vector2(system_x + 18.0, system_y + 282.0),
-            rl.Vector2(system_x + system_w - 18.0, system_y + 282.0),
+            rl.Vector2(panel_x + 18.0, panel_y + 282.0),
+            rl.Vector2(panel_x + panel_w - 18.0, panel_y + 282.0),
             1.0,
-            rl_color(card_outline),
+            rl_color(panel_outline),
         )
-        self._draw_text(self._text("device_angle"), system_x + 18.0, system_y + 308.0, 18.0, muted)
+        self._draw_text(self._text("device_angle"), panel_x + 18.0, panel_y + 308.0, 18.0, muted_color)
         pitch_deg: float | None = None
         yaw_deg: float | None = None
         calibration = state.camera_calibration_euler
@@ -6062,14 +6150,16 @@ class ClusterUiRenderer:
                 pitch_deg = candidate_pitch
                 yaw_deg = candidate_yaw
         self._draw_device_angle_indicator(
-            system_x + 14.0,
-            system_y + 325.0,
-            system_w - 28.0,
+            panel_x + 14.0,
+            panel_y + 325.0,
+            panel_w - 28.0,
             117.0,
             pitch_deg,
             yaw_deg,
-            muted,
-            card_outline,
+            muted_color,
+            panel_outline,
+            text_color=text_color,
+            target_fill=target_fill,
         )
 
     def _draw_system_gauge(
@@ -6149,11 +6239,13 @@ class ClusterUiRenderer:
         yaw_deg: float | None,
         muted: tuple[int, int, int],
         outline: tuple[int, int, int],
+        *,
+        text_color: tuple[int, ...] = WHITE,
+        target_fill: tuple[int, ...] = (11, 18, 26, 235),
     ) -> None:
         center_x = x + 52.0
         center_y = y + height * 0.5
         radius = 31.0
-        target_fill = (11, 18, 26, 235)
         rl.draw_circle_v(rl.Vector2(center_x, center_y), radius, rl_color(target_fill))
         rl.draw_ring(
             rl.Vector2(center_x, center_y),
@@ -6205,8 +6297,8 @@ class ClusterUiRenderer:
         value_x = x + width * 0.45
         pitch_text = "P  --°" if pitch_deg is None else f"P {pitch_deg:+.1f}°"
         yaw_text = "Y  --°" if yaw_deg is None else f"Y {yaw_deg:+.1f}°"
-        self._draw_text(pitch_text, value_x, y + 36.0, 22.0, WHITE)
-        self._draw_text(yaw_text, value_x, y + 69.0, 22.0, WHITE)
+        self._draw_text(pitch_text, value_x, y + 36.0, 22.0, text_color)
+        self._draw_text(yaw_text, value_x, y + 69.0, 22.0, text_color)
 
     def _draw_trip_metric(
         self,
