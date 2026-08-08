@@ -194,6 +194,44 @@ def test_mode_two_system_dashboard_combines_runtime_detail_and_health_cards(pane
   }
 
 
+@pytest.mark.parametrize(
+  ("panel_layout", "expected_panel_x"),
+  (
+    (cluster_renderer.CLUSTER_PANEL_LAYOUT_DRIVING_LEFT, 1124.0),
+    (cluster_renderer.CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT, 0.0),
+  ),
+)
+def test_mode_one_live_debug_uses_full_information_region_with_four_cards(panel_layout, expected_panel_x):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.panel_layout = panel_layout
+  renderer._current_theme = lambda: SimpleNamespace(
+    panel_bg=(1, 2, 3),
+    route_panel_bg=(4, 5, 6),
+    faint=(7, 8, 9),
+    muted=(10, 11, 12),
+    text=(13, 14, 15),
+  )
+  panels = []
+  renderer._rounded_rect = lambda *args, **_kwargs: panels.append(args)
+  renderer._draw_text = lambda *_args, **_kwargs: None
+  renderer._ellipsize_text = lambda value, *_args: value
+  state = SimpleNamespace(live_debug=None, lateral_plan_debug_text=None)
+
+  sections = renderer._live_debug_sections(state)
+  renderer._draw_live_debug_panel(state)
+
+  assert [title for title, _rows in sections] == ["LIVE DELAY", "LIVE TORQUE", "STEERING", "LATERAL PLAN"]
+  assert sections[0][1][0][1] == "--% / --"
+  assert sections[3][1][0][1] == "--"
+  assert panels[0][:4] == (expected_panel_x, 1, 792, 478)
+  assert [panel[:4] for panel in panels[1:]] == [
+    (expected_panel_x + 16.0, 9.0, 375.0, 226.0),
+    (expected_panel_x + 401.0, 9.0, 375.0, 226.0),
+    (expected_panel_x + 16.0, 245.0, 375.0, 226.0),
+    (expected_panel_x + 401.0, 245.0, 375.0, 226.0),
+  ]
+
+
 def test_device_angle_target_maps_pitch_and_yaw_to_expected_axes():
   radius = 30.0
 

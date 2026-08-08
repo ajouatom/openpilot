@@ -459,8 +459,10 @@ Mode `0` is the default mode that switches between navigation and the driving
 report. While onroad, shifting into park (`P`) temporarily gives the completed
 driving report priority over active navigation; leaving park restores navigation
 immediately. Explicit modes such as report mode `5` and navigation mode `6`
-remain fixed. Mode `1` shows the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`,
-`STEERING`, and `LATERAL PLAN` rows. Mode `2` keeps a fixed two-card system
+remain fixed. Mode `1` fills the 792-pixel information region with 2-by-2
+`LIVE DELAY`, `LIVE TORQUE`, `STEERING`, and `LATERAL PLAN` cards. In 3D
+views it uses mode `0`'s 1124-pixel driving region and keeps the side gauges
+and TPMS inside that region. Mode `2` keeps a fixed two-card system
 dashboard regardless of connected, live, disconnected, or debug navigation
 state. The detail card shows network, display/frame rate, camera, memory-capacity,
 and per-core CPU state. The system-health card reuses commit `78aee2b3e`'s 2-by-2
@@ -505,7 +507,7 @@ is being received and the navigation panel returns automatically when reception
 starts. System-debug mode (`2`) always keeps its detail and system-health cards.
 It does not switch to live navigation, Navi debug, `NAVI DISCONNECTED`, the route
 overlay, or the driving report when navigation state changes. In 3D views,
-modes `2` and `4` reserve the same normal driving region as mode `0`; their
+modes `1`, `2`, and `4` reserve the same normal driving region as mode `0`; their
 right-side gauges and TPMS remain within that region rather than floating into
 the information panel.
 Fullscreen-3D mode (`-1`) never reserves a navigation/report panel in either 3D

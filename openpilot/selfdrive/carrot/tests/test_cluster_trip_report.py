@@ -14,6 +14,7 @@ from cluster_config import (
   CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
   CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
   CLUSTER_SCREEN_MODE_DEFAULT,
+  CLUSTER_SCREEN_MODE_DEBUG,
   CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
   CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
   CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
@@ -334,12 +335,16 @@ def test_fullscreen_3d_uses_full_width_hud_layout_even_when_panels_are_swapped()
   assert road_camera_rect.width == CAMERA_BACKGROUND_W
 
 
-def test_modes_two_and_four_keep_3d_world_and_side_widgets_in_the_driving_region():
+def test_modes_one_two_and_four_keep_3d_world_and_side_widgets_in_the_driving_region():
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1920
   renderer.height = 480
 
-  for screen_mode in (CLUSTER_SCREEN_MODE_DEBUG_SYSTEM, CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT):
+  for screen_mode in (
+    CLUSTER_SCREEN_MODE_DEBUG,
+    CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+    CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+  ):
     renderer.screen_mode = screen_mode
     for panel_layout in (CLUSTER_PANEL_LAYOUT_DRIVING_LEFT, CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT):
       renderer.panel_layout = panel_layout

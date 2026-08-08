@@ -2969,6 +2969,7 @@ class ClusterUiRenderer:
         if cluster_camera_view_is_road_camera(state.camera_view_mode):
             return 0.0
         if screen_mode in (
+            CLUSTER_SCREEN_MODE_DEBUG,
             CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
             CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
             CLUSTER_SCREEN_MODE_TRIP_REPORT,
@@ -6326,119 +6327,86 @@ class ClusterUiRenderer:
 
     def _draw_live_debug_panel(self, state: ClusterUiState) -> None:
         sections = self._live_debug_sections(state)
-        if not sections:
-            return
-
         theme = self._current_theme()
-        panel_x = self._information_panel_x(SYSTEM_PANEL_X)
-        panel_y = SYSTEM_PANEL_Y
-        panel_w = SYSTEM_PANEL_W
-        pad_x = 24.0
-        header_h = 54.0
-        section_title_h = 20.0
-        row_h = 24.0
-        section_gap = 10.0
-        content_h = sum(section_title_h + len(rows) * row_h for _, rows in sections)
-        content_h += max(0, len(sections) - 1) * section_gap
-        panel_h = min(DESIGN_HEIGHT - SYSTEM_PANEL_Y - 18.0, header_h + content_h + 18.0)
-        max_y = panel_y + panel_h - 18.0
+        panel_x = self._information_panel_x(NAVI_LIVE_PANEL_X)
+        panel_y = NAVI_LIVE_PANEL_Y
+        panel_w = NAVI_LIVE_PANEL_W
+        panel_h = NAVI_LIVE_PANEL_H
+        card_pad_x = 16.0
+        card_pad_y = 8.0
+        card_gap = 10.0
+        card_w = (panel_w - card_pad_x * 2.0 - card_gap) * 0.5
+        card_h = (panel_h - card_pad_y * 2.0 - card_gap) * 0.5
 
-        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 18, theme.route_panel_bg, theme.faint, 2)
-        self._draw_text("LIVE DEBUG", panel_x + pad_x, panel_y + 28, 18, theme.muted)
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 12.0, theme.panel_bg, theme.faint, 1.5)
+        for index, (section_title, rows) in enumerate(sections):
+            column = index % 2
+            row = index // 2
+            card_x = panel_x + card_pad_x + column * (card_w + card_gap)
+            card_y = panel_y + card_pad_y + row * (card_h + card_gap)
+            content_x = card_x + 18.0
+            value_x = card_x + card_w - 18.0
+            value_max_w = card_w - 210.0
 
-        y = panel_y + header_h
-        label_x = panel_x + pad_x
-        value_x = panel_x + panel_w - pad_x
-        label_w = 168.0
-        value_max_w = panel_w - pad_x * 2 - label_w - 12.0
-        for section_index, (section_title, rows) in enumerate(sections):
-            if section_index > 0:
-                line_y = y - section_gap * 0.45
-                rl.draw_line_ex(
-                    rl.Vector2(panel_x + pad_x, line_y),
-                    rl.Vector2(panel_x + panel_w - pad_x, line_y),
-                    1.0,
-                    rl_color(theme.faint),
-                )
-            if y + section_title_h * 0.5 > max_y:
-                break
-            self._draw_text(section_title, label_x, y + 8.0, 15, theme.muted)
-            y += section_title_h
-            for label, value in rows:
-                if y + row_h * 0.5 > max_y:
-                    break
-                self._draw_text(label, label_x, y + 8.0, 17, theme.muted)
-                value = self._ellipsize_text(value, 17, value_max_w)
-                self._draw_text(value, value_x, y + 8.0, 17, theme.text, anchor="right")
-                y += row_h
-            y += section_gap
+            self._rounded_rect(card_x, card_y, card_w, card_h, 12.0, theme.route_panel_bg, theme.faint, 1.2)
+            self._draw_text(section_title, content_x, card_y + 30.0, 18.0, theme.muted)
+            for row_index, (label, value) in enumerate(rows):
+                text_y = card_y + 78.0 + row_index * 38.0
+                self._draw_text(label, content_x, text_y, 17.0, theme.muted)
+                value = self._ellipsize_text(value, 17.0, value_max_w)
+                self._draw_text(value, value_x, text_y, 17.0, theme.text, anchor="right")
 
     def _live_debug_sections(self, state: ClusterUiState) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
-        sections: list[tuple[str, tuple[tuple[str, str], ...]]] = []
         live_debug = state.live_debug
-        if live_debug is not None:
-            if live_debug.live_delay_calibration_percent is not None or live_debug.live_delay_lateral_s is not None:
-                sections.append(
-                    (
-                        "LIVE DELAY",
-                        (
-                            (
-                                "CAL / LAT",
-                                f"{self._optional_percent_text(live_debug.live_delay_calibration_percent)} / "
-                                f"{self._optional_seconds_text(live_debug.live_delay_lateral_s, 2)}",
-                            ),
-                        ),
-                    )
-                )
-            if (
-                live_debug.live_torque_calibration_percent is not None
-                or live_debug.live_torque_valid is not None
-                or live_debug.live_torque_lat_accel_factor is not None
-                or live_debug.live_torque_friction is not None
-            ):
-                live_valid = "--" if live_debug.live_torque_valid is None else "ON" if live_debug.live_torque_valid else "OFF"
-                sections.append(
-                    (
-                        "LIVE TORQUE",
-                        (
-                            (
-                                "STATE",
-                                f"{live_valid} / {self._optional_percent_text(live_debug.live_torque_calibration_percent)}",
-                            ),
-                            (
-                                "FACT / FRIC",
-                                f"{self._optional_float_text(live_debug.live_torque_lat_accel_factor, 2)} / "
-                                f"{self._optional_float_text(live_debug.live_torque_friction, 2)}",
-                            ),
-                        ),
-                    )
-                )
-            if (
-                live_debug.live_steer_ratio is not None
-                or live_debug.custom_steer_ratio is not None
-                or live_debug.steer_actuator_delay_s is not None
-            ):
-                sections.append(
-                    (
-                        "STEERING",
-                        (
-                            (
-                                "SR LIVE / CUSTOM",
-                                f"{self._optional_float_text(live_debug.live_steer_ratio, 1)} / "
-                                f"{self._optional_float_text(live_debug.custom_steer_ratio, 1)}",
-                            ),
-                            ("SAD", self._optional_seconds_text(live_debug.steer_actuator_delay_s, 2)),
-                        ),
-                    )
-                )
-        if state.lateral_plan_debug_text:
-            sections.append(
+        live_valid = "--"
+        if live_debug is not None and live_debug.live_torque_valid is not None:
+            live_valid = "ON" if live_debug.live_torque_valid else "OFF"
+        lateral_plan_text = str(state.lateral_plan_debug_text) if state.lateral_plan_debug_text else "--"
+        return (
+            (
+                "LIVE DELAY",
                 (
-                    "LATERAL PLAN",
-                    (("DEBUG", str(state.lateral_plan_debug_text)),),
-                )
-            )
-        return tuple(sections)
+                    (
+                        "CAL / LAT",
+                        f"{self._optional_percent_text(live_debug.live_delay_calibration_percent if live_debug else None)} / "
+                        f"{self._optional_seconds_text(live_debug.live_delay_lateral_s if live_debug else None, 2)}",
+                    ),
+                ),
+            ),
+            (
+                "LIVE TORQUE",
+                (
+                    (
+                        "STATE",
+                        f"{live_valid} / "
+                        f"{self._optional_percent_text(live_debug.live_torque_calibration_percent if live_debug else None)}",
+                    ),
+                    (
+                        "FACT / FRIC",
+                        f"{self._optional_float_text(live_debug.live_torque_lat_accel_factor if live_debug else None, 2)} / "
+                        f"{self._optional_float_text(live_debug.live_torque_friction if live_debug else None, 2)}",
+                    ),
+                ),
+            ),
+            (
+                "STEERING",
+                (
+                    (
+                        "SR LIVE / CUSTOM",
+                        f"{self._optional_float_text(live_debug.live_steer_ratio if live_debug else None, 1)} / "
+                        f"{self._optional_float_text(live_debug.custom_steer_ratio if live_debug else None, 1)}",
+                    ),
+                    (
+                        "SAD",
+                        self._optional_seconds_text(live_debug.steer_actuator_delay_s if live_debug else None, 2),
+                    ),
+                ),
+            ),
+            (
+                "LATERAL PLAN",
+                (("DEBUG", lateral_plan_text),),
+            ),
+        )
 
     @staticmethod
     def _optional_percent_text(value: float | None) -> str:
