@@ -14,6 +14,7 @@ from cluster_config import (
   CLUSTER_PANEL_LAYOUT_DRIVING_LEFT,
   CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT,
   CLUSTER_SCREEN_MODE_DEFAULT,
+  CLUSTER_SCREEN_MODE_DEBUG,
   CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
   CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
   CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
@@ -184,32 +185,33 @@ def test_default_screen_shows_trip_report_in_park_and_restores_navigation_in_dri
   assert renderer._effective_screen_mode(state) == CLUSTER_SCREEN_MODE_NAVI
 
 
-def test_mode_two_preserves_the_reference_default_system_screen_contract():
+def test_mode_two_remains_the_system_screen_regardless_of_navigation_state():
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1920
   renderer.height = 480
   renderer.screen_mode = CLUSTER_SCREEN_MODE_DEBUG_SYSTEM
-  disconnected = SimpleNamespace(
-    camera_view_mode=0,
-    external_nav_active=False,
-    navi_live=None,
-    navi_dashboard=SimpleNamespace(connected=False),
-  )
+  for state in (
+    SimpleNamespace(
+      camera_view_mode=0,
+      external_nav_active=False,
+      navi_live=None,
+      navi_dashboard=None,
+    ),
+    SimpleNamespace(
+      camera_view_mode=0,
+      external_nav_active=True,
+      navi_live=object(),
+      navi_dashboard=SimpleNamespace(connected=True),
+    ),
+  ):
+    assert renderer._effective_screen_mode(state) == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM
+    assert renderer._world_view_shift_x(state) == NAVI_WORLD_VIEW_SHIFT_X
 
-  assert renderer._effective_screen_mode(disconnected) == CLUSTER_SCREEN_MODE_DEFAULT
-  assert renderer._world_view_shift_x(disconnected) == NAVI_WORLD_VIEW_SHIFT_X
-
-  no_navigation_source = SimpleNamespace(
-    camera_view_mode=0,
-    external_nav_active=False,
-    navi_live=None,
-    navi_dashboard=None,
-  )
-  assert renderer._effective_screen_mode(no_navigation_source) == CLUSTER_SCREEN_MODE_DEFAULT
-  assert renderer._world_view_shift_x(no_navigation_source) == 0.0
+  road_camera = SimpleNamespace(camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA)
+  assert renderer._world_view_shift_x(road_camera) == 0.0
 
 
-def test_mode_two_dispatches_reference_default_system_content(monkeypatch):
+def test_mode_two_dispatches_only_system_content_when_navigation_is_present(monkeypatch):
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1920
   renderer.height = 480
@@ -227,40 +229,50 @@ def test_mode_two_dispatches_reference_default_system_content(monkeypatch):
     "_draw_driving_hud_content",
     lambda _state, mode, *_signals: calls.append(("driving", mode)),
   )
+  monkeypatch.setattr(renderer, "_draw_system_dashboard_panel", lambda _state: calls.append(("system", None)))
   monkeypatch.setattr(renderer, "_draw_navi_live_panel", lambda _state: calls.append(("navi", None)))
+  monkeypatch.setattr(renderer, "_draw_navi_debug_panel", lambda _state: calls.append(("navi-debug", None)))
   monkeypatch.setattr(renderer, "_draw_route_overlay", lambda overlay: calls.append(("route", overlay)))
   monkeypatch.setattr(
     renderer,
     "_draw_status_footer",
-    lambda _state, **kwargs: calls.append(("footer", kwargs.get("include_core_usage"))),
+    lambda _state, **kwargs: calls.append(("footer", kwargs.get("include_core_usage", True))),
   )
 
-  no_navigation_source = SimpleNamespace(
-    navi_debug=None,
-    navi_live=None,
-    navi_dashboard=None,
-    route_overlay=route_overlay,
+  navigation_states = (
+    SimpleNamespace(
+      navi_debug=None,
+      navi_live=None,
+      navi_dashboard=None,
+      route_overlay=route_overlay,
+    ),
+    SimpleNamespace(
+      navi_debug=None,
+      navi_live=None,
+      navi_dashboard=SimpleNamespace(connected=False),
+      route_overlay=route_overlay,
+    ),
+    SimpleNamespace(
+      navi_debug=object(),
+      navi_live=None,
+      navi_dashboard=None,
+      route_overlay=route_overlay,
+    ),
+    SimpleNamespace(
+      navi_debug=None,
+      navi_live=SimpleNamespace(current=object()),
+      navi_dashboard=SimpleNamespace(connected=True),
+      route_overlay=route_overlay,
+    ),
   )
-  renderer._draw_hud(no_navigation_source, (False, False))
-  assert calls == [
-    ("driving", CLUSTER_SCREEN_MODE_DEFAULT),
-    ("route", route_overlay),
-    ("footer", True),
-  ]
-
-  calls.clear()
-  disconnected_dashboard = SimpleNamespace(
-    navi_debug=None,
-    navi_live=None,
-    navi_dashboard=SimpleNamespace(connected=False),
-    route_overlay=route_overlay,
-  )
-  renderer._draw_hud(disconnected_dashboard, (False, False))
-  assert calls == [
-    ("driving", CLUSTER_SCREEN_MODE_DEFAULT),
-    ("navi", None),
-    ("footer", True),
-  ]
+  for state in navigation_states:
+    calls.clear()
+    renderer._draw_hud(state, (False, False))
+    assert calls == [
+      ("driving", CLUSTER_SCREEN_MODE_DEBUG_SYSTEM),
+      ("system", None),
+      ("footer", True),
+    ]
 
 
 def test_fullscreen_3d_mode_falls_back_to_mode_zero_outside_3d_views():
@@ -323,25 +335,62 @@ def test_fullscreen_3d_uses_full_width_hud_layout_even_when_panels_are_swapped()
   assert road_camera_rect.width == CAMERA_BACKGROUND_W
 
 
-def test_graph_right_mode_places_side_gauges_next_to_graph_in_both_panel_layouts():
+def test_modes_one_two_and_four_keep_3d_world_and_side_widgets_in_the_driving_region():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = 1920
+  renderer.height = 480
+
+  for screen_mode in (
+    CLUSTER_SCREEN_MODE_DEBUG,
+    CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
+    CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
+  ):
+    renderer.screen_mode = screen_mode
+    for panel_layout in (CLUSTER_PANEL_LAYOUT_DRIVING_LEFT, CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT):
+      renderer.panel_layout = panel_layout
+      driving_x = renderer._driving_panel_offset_design_x()
+      gauge_offset_x = renderer._side_gauge_offset_design_x(screen_mode)
+      second_gauge_right = (
+        driving_x
+        + cluster_renderer.SIDE_GAUGE_LEFT_CENTER_X
+        + gauge_offset_x
+        + cluster_renderer.SIDE_GAUGE_COLUMN_GAP
+        + cluster_renderer.SIDE_GAUGE_WIDTH * 0.5
+      )
+      tpms_right = (
+        driving_x
+        + cluster_renderer.TPMS_STATUS_CENTER_X
+        + renderer._tpms_offset_design_x(screen_mode)
+        + cluster_renderer.TPMS_STATUS_ICON_W * 0.5
+      )
+
+      for camera_view_mode in (0, 1):
+        state = SimpleNamespace(camera_view_mode=camera_view_mode)
+        assert renderer._world_view_shift_x(state) == NAVI_WORLD_VIEW_SHIFT_X
+        assert renderer._turn_signal_center_x_offset(state, "left") == -NAVI_WORLD_VIEW_SHIFT_X
+      assert gauge_offset_x == 0.0
+      assert second_gauge_right <= driving_x + CAMERA_BACKGROUND_W
+      assert tpms_right <= driving_x + CAMERA_BACKGROUND_W
+
+    road_camera = SimpleNamespace(camera_view_mode=CLUSTER_CAMERA_VIEW_MODE_ROAD_CAMERA)
+    assert renderer._world_view_shift_x(road_camera) == 0.0
+
+
+def test_graph_right_mode_uses_the_complete_information_region_in_both_panel_layouts():
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1920
   renderer.height = 480
   renderer.screen_mode = CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT
 
-  for panel_layout in (CLUSTER_PANEL_LAYOUT_DRIVING_LEFT, CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT):
+  for panel_layout, expected_x in (
+    (CLUSTER_PANEL_LAYOUT_DRIVING_LEFT, cluster_renderer.NAVI_LIVE_PANEL_X),
+    (CLUSTER_PANEL_LAYOUT_DRIVING_RIGHT, 0.0),
+  ):
     renderer.panel_layout = panel_layout
-    driving_offset_x = renderer._driving_hud_offset_design_x(renderer.screen_mode)
-    gauge_offset_x = renderer._side_gauge_offset_design_x(renderer.screen_mode)
-    plot_x = renderer._information_panel_x(cluster_renderer.DEBUG_PLOT_RIGHT_X)
-    first_center_x = cluster_renderer.SIDE_GAUGE_LEFT_CENTER_X + driving_offset_x + gauge_offset_x
-    second_center_x = first_center_x + cluster_renderer.SIDE_GAUGE_COLUMN_GAP
-    gauge_half_width = cluster_renderer.SIDE_GAUGE_WIDTH * 0.5
-    graph_gap = cluster_renderer.DEBUG_PLOT_SIDE_GAUGE_GAP
-
-    assert second_center_x + gauge_half_width + graph_gap == plot_x
-
-    assert renderer._tpms_offset_design_x(renderer.screen_mode) == 0.0
+    assert renderer._information_panel_x(cluster_renderer.DEBUG_PLOT_RIGHT_X) == expected_x
+    assert cluster_renderer.DEBUG_PLOT_RIGHT_Y == cluster_renderer.NAVI_LIVE_PANEL_Y
+    assert cluster_renderer.DEBUG_PLOT_RIGHT_W == cluster_renderer.NAVI_LIVE_PANEL_W
+    assert cluster_renderer.DEBUG_PLOT_RIGHT_H == cluster_renderer.NAVI_LIVE_PANEL_H
 
 
 def test_fullscreen_3d_repositions_hud_widgets_and_suppresses_information_panels(monkeypatch):
