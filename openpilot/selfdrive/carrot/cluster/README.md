@@ -460,9 +460,10 @@ report. While onroad, shifting into park (`P`) temporarily gives the completed
 driving report priority over active navigation; leaving park restores navigation
 immediately. Explicit modes such as report mode `5` and navigation mode `6`
 remain fixed. Mode `1` shows the live debug panel with grouped `LIVE DELAY`, `LIVE TORQUE`,
-`STEERING`, and `LATERAL PLAN` rows, `2` is the system-debug slot rendering commit
-`c0a6773f794a5e4e86aeca8e14515232abc26b1b`'s mode-0 default system screen,
-`3` shows a large debug graph selected by `ShowPlotMode` with the driving scene
+`STEERING`, and `LATERAL PLAN` rows. Mode `2` keeps the standalone memory and
+per-core CPU system-statistics panel regardless of connected, live, disconnected,
+or debug navigation state; Navi state never replaces it with another information
+panel. Mode `3` shows a large debug graph selected by `ShowPlotMode` with the driving scene
 disabled, and `4` shows the same graph in the information panel while keeping
 the driving scene. Mode `4` keeps the acceleration, steering, fuel, and DEF
 gauges immediately to the left of the graph instead of near the center of the
@@ -497,10 +498,9 @@ other presentation with
 `cluster_replay_usb.py ROUTE --trip-report --language en --imperial`.
 In default screen mode (`0`), the trip report is shown while no live navigation
 is being received and the navigation panel returns automatically when reception
-starts. System-debug mode (`2`) reproduces the reference commit's mode-0 system
-screen and does not use the current automatic report fallback. It keeps the
-navigation/disconnected-system panel whenever a navigation dashboard exists,
-and falls back to the route overlay only when no navigation panel source exists.
+starts. System-debug mode (`2`) always keeps its memory and per-core CPU panel.
+It does not switch to live navigation, Navi debug, `NAVI DISCONNECTED`, the route
+overlay, or the driving report when navigation state changes.
 Fullscreen-3D mode (`-1`) never reserves a navigation/report panel in either 3D
 camera view, even when Navi data is available. Switching to road-camera view
 re-enables the complete mode-0 panel selection and panel-layout behavior.

@@ -240,7 +240,7 @@ The final `ClusterHudScreenMode` layout is:
 - `-1` uses the full width only in 3D camera views `0` and `1`, with no information panel or world shift. Left-side HUD items retain their margins, right-side gauges and TPMS align to the physical right edge, and the clock, world, and turn signals use the full-display center axis. In road-camera view `2`, it behaves exactly like mode `0`, including automatic navigation/report selection and `ClusterHudPanelLayout`.
 - `0` is the default screen. It shows navigation while live navigation is received and automatically shows the driving report otherwise.
 - `1` is the general live-debug panel for grouped delay, torque, steering, and lateral-plan state.
-- `2` is the reference system screen. It does not inherit mode `0`'s automatic report fallback: it keeps navigation or `NAVI DISCONNECTED` when navigation state exists and falls back to the route overlay only when no navigation source exists.
+- `2` is the fixed system-debug screen. It keeps the memory and per-core CPU statistics panel regardless of connected, live, disconnected, or debug navigation state and never switches automatically to navigation, `NAVI DISCONNECTED`, the route overlay, or the driving report.
 - `3` disables the driving scene and shows the `ShowPlotMode` graph at large size.
 - `4` keeps the driving scene and shows the same graph in the information panel. The acceleration, steering, fuel, and DEF gauges sit immediately to the graph's left with an 18 px gap instead of near the display center, and follow the graph when the panel sides are swapped. TPMS remains with the driving view.
 - `5` always shows the driving report.

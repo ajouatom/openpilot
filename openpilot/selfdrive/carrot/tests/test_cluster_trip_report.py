@@ -184,32 +184,30 @@ def test_default_screen_shows_trip_report_in_park_and_restores_navigation_in_dri
   assert renderer._effective_screen_mode(state) == CLUSTER_SCREEN_MODE_NAVI
 
 
-def test_mode_two_preserves_the_reference_default_system_screen_contract():
+def test_mode_two_remains_the_system_screen_regardless_of_navigation_state():
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1920
   renderer.height = 480
   renderer.screen_mode = CLUSTER_SCREEN_MODE_DEBUG_SYSTEM
-  disconnected = SimpleNamespace(
-    camera_view_mode=0,
-    external_nav_active=False,
-    navi_live=None,
-    navi_dashboard=SimpleNamespace(connected=False),
-  )
-
-  assert renderer._effective_screen_mode(disconnected) == CLUSTER_SCREEN_MODE_DEFAULT
-  assert renderer._world_view_shift_x(disconnected) == NAVI_WORLD_VIEW_SHIFT_X
-
-  no_navigation_source = SimpleNamespace(
-    camera_view_mode=0,
-    external_nav_active=False,
-    navi_live=None,
-    navi_dashboard=None,
-  )
-  assert renderer._effective_screen_mode(no_navigation_source) == CLUSTER_SCREEN_MODE_DEFAULT
-  assert renderer._world_view_shift_x(no_navigation_source) == 0.0
+  for state in (
+    SimpleNamespace(
+      camera_view_mode=0,
+      external_nav_active=False,
+      navi_live=None,
+      navi_dashboard=None,
+    ),
+    SimpleNamespace(
+      camera_view_mode=0,
+      external_nav_active=True,
+      navi_live=object(),
+      navi_dashboard=SimpleNamespace(connected=True),
+    ),
+  ):
+    assert renderer._effective_screen_mode(state) == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM
+    assert renderer._world_view_shift_x(state) == 0.0
 
 
-def test_mode_two_dispatches_reference_default_system_content(monkeypatch):
+def test_mode_two_dispatches_only_system_content_when_navigation_is_present(monkeypatch):
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1920
   renderer.height = 480
@@ -227,40 +225,50 @@ def test_mode_two_dispatches_reference_default_system_content(monkeypatch):
     "_draw_driving_hud_content",
     lambda _state, mode, *_signals: calls.append(("driving", mode)),
   )
+  monkeypatch.setattr(renderer, "_draw_system_stats_panel", lambda _state: calls.append(("system", None)))
   monkeypatch.setattr(renderer, "_draw_navi_live_panel", lambda _state: calls.append(("navi", None)))
+  monkeypatch.setattr(renderer, "_draw_navi_debug_panel", lambda _state: calls.append(("navi-debug", None)))
   monkeypatch.setattr(renderer, "_draw_route_overlay", lambda overlay: calls.append(("route", overlay)))
   monkeypatch.setattr(
     renderer,
     "_draw_status_footer",
-    lambda _state, **kwargs: calls.append(("footer", kwargs.get("include_core_usage"))),
+    lambda _state, **kwargs: calls.append(("footer", kwargs.get("include_core_usage", True))),
   )
 
-  no_navigation_source = SimpleNamespace(
-    navi_debug=None,
-    navi_live=None,
-    navi_dashboard=None,
-    route_overlay=route_overlay,
+  navigation_states = (
+    SimpleNamespace(
+      navi_debug=None,
+      navi_live=None,
+      navi_dashboard=None,
+      route_overlay=route_overlay,
+    ),
+    SimpleNamespace(
+      navi_debug=None,
+      navi_live=None,
+      navi_dashboard=SimpleNamespace(connected=False),
+      route_overlay=route_overlay,
+    ),
+    SimpleNamespace(
+      navi_debug=object(),
+      navi_live=None,
+      navi_dashboard=None,
+      route_overlay=route_overlay,
+    ),
+    SimpleNamespace(
+      navi_debug=None,
+      navi_live=SimpleNamespace(current=object()),
+      navi_dashboard=SimpleNamespace(connected=True),
+      route_overlay=route_overlay,
+    ),
   )
-  renderer._draw_hud(no_navigation_source, (False, False))
-  assert calls == [
-    ("driving", CLUSTER_SCREEN_MODE_DEFAULT),
-    ("route", route_overlay),
-    ("footer", True),
-  ]
-
-  calls.clear()
-  disconnected_dashboard = SimpleNamespace(
-    navi_debug=None,
-    navi_live=None,
-    navi_dashboard=SimpleNamespace(connected=False),
-    route_overlay=route_overlay,
-  )
-  renderer._draw_hud(disconnected_dashboard, (False, False))
-  assert calls == [
-    ("driving", CLUSTER_SCREEN_MODE_DEFAULT),
-    ("navi", None),
-    ("footer", True),
-  ]
+  for state in navigation_states:
+    calls.clear()
+    renderer._draw_hud(state, (False, False))
+    assert calls == [
+      ("driving", CLUSTER_SCREEN_MODE_DEBUG_SYSTEM),
+      ("system", None),
+      ("footer", True),
+    ]
 
 
 def test_fullscreen_3d_mode_falls_back_to_mode_zero_outside_3d_views():

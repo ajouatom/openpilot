@@ -3737,6 +3737,12 @@ class ClusterUiRenderer:
             if screen_mode == CLUSTER_SCREEN_MODE_FULLSCREEN_3D:
                 self._draw_status_footer(state)
                 return
+            if screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
+                profile_stage = self._profile_start()
+                self._draw_system_stats_panel(state)
+                self._profile_add("hud.system_stats", profile_stage)
+                self._draw_status_footer(state)
+                return
             if screen_mode == CLUSTER_SCREEN_MODE_DEBUG:
                 profile_stage = self._profile_start()
                 self._draw_live_debug_panel(state)
@@ -3936,10 +3942,6 @@ class ClusterUiRenderer:
             and cluster_camera_view_is_road_camera(getattr(state, "camera_view_mode", 0))
         ):
             requested_screen_mode = CLUSTER_SCREEN_MODE_DEFAULT
-        if requested_screen_mode == CLUSTER_SCREEN_MODE_DEBUG_SYSTEM:
-            # Screen mode 2 renders the reference commit's mode-0 default
-            # system screen without inheriting the current report fallback.
-            return CLUSTER_SCREEN_MODE_DEFAULT
         if requested_screen_mode != CLUSTER_SCREEN_MODE_DEFAULT:
             return requested_screen_mode
         gear_text = str(getattr(state, "gear_text", "") or "").strip().upper()
