@@ -11,6 +11,7 @@ CLUSTER_DIR = Path(__file__).resolve().parents[1] / "cluster"
 sys.path.insert(0, str(CLUSTER_DIR))
 
 import cluster_renderer
+from cluster_config import DARK_CLUSTER_THEME, LIGHT_CLUSTER_THEME
 from cluster_display import (
   cluster_text,
   display_speed,
@@ -83,6 +84,7 @@ def test_trip_report_draws_english_imperial_labels(monkeypatch):
   renderer = object.__new__(ClusterUiRenderer)
   renderer.language = "en"
   renderer.is_metric = False
+  renderer._current_theme = lambda: DARK_CLUSTER_THEME
   renderer._system_stats = SimpleNamespace(sample=lambda: SimpleNamespace(
     cpu_used_percent=20.0,
     memory_used_percent=30.0,
@@ -134,6 +136,71 @@ def test_trip_report_draws_english_imperial_labels(monkeypatch):
   assert metrics[2][0][5] == "mph"
   assert [gauge[0][2] for gauge in gauges] == ["CPU", "TEMP", "MEM", "DISK"]
   assert angles[0][0][4:6] == pytest.approx((0.5729578, -1.1459156))
+
+
+@pytest.mark.parametrize("theme", (LIGHT_CLUSTER_THEME, DARK_CLUSTER_THEME), ids=("light", "dark"))
+def test_trip_report_follows_current_cluster_theme(monkeypatch, theme):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.language = "en"
+  renderer.is_metric = True
+  renderer._current_theme = lambda: theme
+  renderer._system_stats = SimpleNamespace(sample=lambda: SimpleNamespace())
+  panels = []
+  text_draws = []
+  health_cards = []
+  renderer._rounded_rect = lambda *args, **_kwargs: panels.append(args)
+  renderer._draw_text = lambda *args, **kwargs: text_draws.append((args, kwargs))
+  renderer._draw_system_health_card = lambda *args, **kwargs: health_cards.append((args, kwargs))
+  monkeypatch.setattr(cluster_renderer.rl, "draw_line_ex", lambda *_args, **_kwargs: None)
+
+  report = SimpleNamespace(
+    duration_s=0.0,
+    distance_m=0.0,
+    average_speed_kph=0.0,
+    max_speed_kph=0.0,
+    auto_ratio_percent=0.0,
+    max_accel_mps2=0.0,
+    max_decel_mps2=0.0,
+    hard_accel_count=0,
+    hard_brake_count=0,
+    hard_corner_count=0,
+  )
+  renderer._draw_trip_report_panel(SimpleNamespace(trip_report=report))
+
+  assert panels[0][5:7] == (theme.panel_bg, theme.faint)
+  assert panels[1][5:7] == (theme.route_panel_bg, theme.faint)
+  assert all(panel[5] == theme.panel_bg for panel in panels[2:5])
+  assert health_cards[0][1] == {
+    "panel_bg": theme.route_panel_bg,
+    "panel_outline": theme.faint,
+    "text_color": theme.text,
+    "muted_color": theme.muted,
+    "target_fill": theme.panel_bg,
+  }
+
+  text_draws.clear()
+  renderer._draw_trip_metric(10.0, 20.0, "LABEL", "VALUE", 100.0, "UNIT")
+  assert [args[4] for args, _kwargs in text_draws] == [theme.muted, theme.text, theme.muted]
+  assert renderer._trip_temp_color(None, theme.muted) == theme.muted
+
+  angle_lines = []
+  monkeypatch.setattr(cluster_renderer, "rl_color", lambda color: color)
+  monkeypatch.setattr(cluster_renderer.rl, "draw_line_ex", lambda *args, **_kwargs: angle_lines.append(args))
+  monkeypatch.setattr(cluster_renderer.rl, "draw_circle_v", lambda *_args, **_kwargs: None)
+  monkeypatch.setattr(cluster_renderer.rl, "draw_ring", lambda *_args, **_kwargs: None)
+  renderer._draw_device_angle_indicator(
+    0.0,
+    0.0,
+    100.0,
+    100.0,
+    None,
+    None,
+    theme.muted,
+    theme.faint,
+    text_color=theme.text,
+    target_fill=theme.panel_bg,
+  )
+  assert [line[3] for line in angle_lines] == [theme.faint, theme.faint]
 
 
 @pytest.mark.parametrize(

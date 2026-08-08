@@ -477,9 +477,11 @@ the acceleration, steering, fuel, and DEF gauges plus TPMS inside the driving
 region's right edge. Swapping the panel layout exchanges both regions as units.
 `5` shows the driving report in the information panel while keeping the driving scene. The
 report uses a large trip/event summary card and a separate system-load card
-with four 2-by-2 circular gauges. A lower target plots stored calibration pitch
-vertically and yaw horizontally around the calibrated center while retaining
-the numeric angles. In managed live input, trip statistics remain stopped until
+with four 2-by-2 circular gauges. Its panel/card fills, outlines, primary and
+secondary text, unavailable values, gauges, and pitch/yaw target follow the
+active Auto, Dark, or Light `ClusterHudTheme` palette. A lower target plots
+stored calibration pitch vertically and yaw horizontally around the calibrated
+center while retaining the numeric angles. In managed live input, trip statistics remain stopped until
 `deviceState.started` is true, reset and start on that transition, freeze
 immediately when it becomes false, and reset again at the next onroad start.
 Replay and direct parser inputs retain their existing accumulation behavior.

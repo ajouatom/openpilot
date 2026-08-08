@@ -5929,16 +5929,18 @@ class ClusterUiRenderer:
     def _draw_trip_report_panel(self, state: ClusterUiState) -> None:
         report = state.trip_report or TripReportState()
         stats = self._system_stats.sample()
+        theme = self._current_theme()
         panel_x = self._information_panel_x(TRIP_REPORT_PANEL_X)
         panel_y = TRIP_REPORT_PANEL_Y
         panel_w = TRIP_REPORT_PANEL_W
         panel_h = TRIP_REPORT_PANEL_H
-        panel_bg = (7, 12, 18, 248)
-        card_bg = (16, 23, 32, 246)
-        card_outline = (69, 83, 96, 230)
-        muted = (154, 166, 178)
+        panel_bg = theme.panel_bg
+        card_bg = theme.route_panel_bg
+        card_outline = theme.faint
+        text_color = theme.text
+        muted = theme.muted
 
-        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 12.0, panel_bg, (67, 80, 93), 1.5)
+        self._rounded_rect(panel_x, panel_y, panel_w, panel_h, 12.0, panel_bg, card_outline, 1.5)
 
         summary_x = panel_x + 16.0
         summary_y = panel_y + 8.0
@@ -5976,6 +5978,8 @@ class ClusterUiRenderer:
             self._text("distance"),
             self._trip_distance_text(report.distance_m),
             metric_w,
+            text_color=text_color,
+            muted_color=muted,
         )
         self._draw_trip_metric(
             metric_right,
@@ -5984,6 +5988,8 @@ class ClusterUiRenderer:
             f"{display_speed(report.average_speed_kph, self.is_metric):.1f}",
             metric_w,
             report_speed_unit,
+            text_color=text_color,
+            muted_color=muted,
         )
         self._draw_trip_metric(
             metric_left,
@@ -5992,6 +5998,8 @@ class ClusterUiRenderer:
             f"{display_speed(report.max_speed_kph, self.is_metric):.1f}",
             metric_w,
             report_speed_unit,
+            text_color=text_color,
+            muted_color=muted,
         )
         self._draw_trip_metric(
             metric_right,
@@ -6000,6 +6008,8 @@ class ClusterUiRenderer:
             f"{report.auto_ratio_percent:.0f}",
             metric_w,
             "%",
+            text_color=text_color,
+            muted_color=muted,
         )
         self._draw_trip_metric(
             metric_left,
@@ -6008,6 +6018,8 @@ class ClusterUiRenderer:
             f"{report.max_accel_mps2:+.2f}",
             metric_w,
             "m/s²",
+            text_color=text_color,
+            muted_color=muted,
         )
         self._draw_trip_metric(
             metric_right,
@@ -6016,6 +6028,8 @@ class ClusterUiRenderer:
             f"{report.max_decel_mps2:+.2f}",
             metric_w,
             "m/s²",
+            text_color=text_color,
+            muted_color=muted,
         )
 
         event_y = summary_y + 390.0
@@ -6027,7 +6041,7 @@ class ClusterUiRenderer:
             (self._text("hard_corner"), report.hard_corner_count, BLUE_SOFT),
         )):
             event_x = summary_x + 18.0 + index * (event_w + 10.0)
-            self._rounded_rect(event_x, event_y, event_w, 47.0, 7.0, (24, 32, 42), color, 1.2)
+            self._rounded_rect(event_x, event_y, event_w, 47.0, 7.0, theme.panel_bg, color, 1.2)
             self._draw_text(label, event_x + 9.0, event_y + 23.5, event_label_size, muted)
             self._draw_text(str(count), event_x + event_w - 9.0, event_y + 23.5, 23.0, color, anchor="right")
 
@@ -6040,9 +6054,9 @@ class ClusterUiRenderer:
             system_h,
             panel_bg=card_bg,
             panel_outline=card_outline,
-            text_color=WHITE,
+            text_color=text_color,
             muted_color=muted,
-            target_fill=(11, 18, 26, 235),
+            target_fill=theme.panel_bg,
         )
 
     def _draw_system_health_card(
@@ -6099,7 +6113,7 @@ class ClusterUiRenderer:
                 "TEMP",
                 "--°C" if state.cpu_temp_c is None else f"{state.cpu_temp_c:.0f}°C",
                 state.cpu_temp_c,
-                self._trip_temp_color(state.cpu_temp_c),
+                self._trip_temp_color(state.cpu_temp_c, muted_color),
             ),
             ("MEM", self._percent_text(memory_percent).strip(), memory_percent, self._system_metric_color(memory_percent)),
             ("DISK", self._percent_text(disk_percent).strip(), disk_percent, self._system_metric_color(disk_percent)),
@@ -6246,18 +6260,17 @@ class ClusterUiRenderer:
             24,
             rl_color(outline),
         )
-        axis_color = (71, 87, 101, 210)
         rl.draw_line_ex(
             rl.Vector2(center_x - radius + 6.0, center_y),
             rl.Vector2(center_x + radius - 6.0, center_y),
             1.0,
-            rl_color(axis_color),
+            rl_color(outline),
         )
         rl.draw_line_ex(
             rl.Vector2(center_x, center_y - radius + 6.0),
             rl.Vector2(center_x, center_y + radius - 6.0),
             1.0,
-            rl_color(axis_color),
+            rl_color(outline),
         )
         self._draw_text("P-", center_x, center_y - radius - 7.0, 9.0, muted, anchor="center")
         self._draw_text("P+", center_x, center_y + radius + 7.0, 9.0, muted, anchor="center")
@@ -6298,17 +6311,29 @@ class ClusterUiRenderer:
         value: str,
         width: float,
         unit: str = "",
+        *,
+        text_color: tuple[int, ...] | None = None,
+        muted_color: tuple[int, ...] | None = None,
     ) -> None:
-        muted = (154, 166, 178)
-        self._draw_text(label, x, y, 18.0, muted)
-        self._draw_text(value, x, y + 32.0, 29.0, WHITE)
+        theme = self._current_theme() if text_color is None or muted_color is None else None
+        if text_color is None:
+            assert theme is not None
+            text_color = theme.text
+        if muted_color is None:
+            assert theme is not None
+            muted_color = theme.muted
+        self._draw_text(label, x, y, 18.0, muted_color)
+        self._draw_text(value, x, y + 32.0, 29.0, text_color)
         if unit:
-            self._draw_text(unit, x + width, y + 32.0, 16.0, muted, anchor="right")
+            self._draw_text(unit, x + width, y + 32.0, 16.0, muted_color, anchor="right")
 
     @staticmethod
-    def _trip_temp_color(temp_c: float | None) -> tuple[int, int, int]:
+    def _trip_temp_color(
+        temp_c: float | None,
+        unavailable_color: tuple[int, ...],
+    ) -> tuple[int, ...]:
         if temp_c is None or not math.isfinite(temp_c):
-            return (154, 166, 178)
+            return unavailable_color
         if temp_c >= 90.0:
             return RED
         if temp_c >= 75.0:
