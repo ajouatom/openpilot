@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
 from collections import deque
-from typing import Optional
 
 import numpy as np
 from openpilot.common.realtime import DT_MDL
-from openpilot.common.constants import CV
+
+from openpilot.selfdrive.controls.lib.cutin_helpers import is_corner_track_id, is_stable_corner_track_id
 
 from .lane_math import calculate_lane_width
 from .hysteresis import ExistCounter
@@ -17,6 +17,15 @@ SIDE_LEAD_MIN_GAP_MAX = 12.0
 SIDE_LEAD_PROJECT_SEC = 1.5
 SIDE_LEAD_TTC_MIN_CLOSING = 0.5
 SIDE_LEAD_TTC_NEAR_MARGIN = 6.0
+
+# A vehicle that just left the blind spot can release the conservative BSD hold
+# only when the same close side-radar track is consistently pulling away.
+SIDE_BSD_RECEDING_MIN_VREL = 3.0
+SIDE_BSD_RECEDING_START_MAX_DREL = 6.0
+SIDE_BSD_RECEDING_CLEAR_MIN_DREL = 5.0
+SIDE_BSD_RECEDING_MIN_DREL_GAIN = 1.0
+SIDE_BSD_RECEDING_CONFIRM_SEC = 0.25
+SIDE_BSD_RECEDING_MAX_DREL_STEP_BACK = 0.25
 
 
 @dataclass
@@ -64,6 +73,10 @@ class SideState:
   # BSD hold (after detection)
   bsd_hold_counter: int = 0
   bsd_detected_now: bool = False
+  bsd_receding_track_id: int = -1
+  bsd_receding_frames: int = 0
+  bsd_receding_start_d_rel: float = 0.0
+  bsd_receding_last_d_rel: float = 0.0
 
   # computed lane change availability (includes BSD+object)
   lane_change_available_geom: bool = False
@@ -119,8 +132,14 @@ class SideState:
                        radar_obj,           # radarState.leadLeft / leadRight
                        blindspot: bool,      # carstate.leftBlindspot/rightBlindspot
                        ignore_bsd: bool,
-                       bsd_hold_sec: float = 2.0):
-    object_detected = self._side_lead_is_unsafe(v_ego, radar_obj)
+                       bsd_hold_sec: float = 2.0,
+                       radar_objects=()):
+    radar_objects = tuple(radar_objects)
+    corner_objects = tuple(obj for obj in radar_objects if self._is_corner_radar_object(obj))
+    primary_object_detected = self._side_lead_is_unsafe(v_ego, radar_obj)
+    object_detected = primary_object_detected or any(
+      self._side_lead_is_unsafe(v_ego, obj) for obj in corner_objects
+    )
     if object_detected:
       self.object_detected_count = max(1, self.object_detected_count + 1)
     else:
@@ -132,8 +151,92 @@ class SideState:
     self.bsd_detected_now = bool(blindspot)
     if self.bsd_detected_now and not ignore_bsd:
       self.bsd_hold_counter = int(bsd_hold_sec / DT_MDL)
-    else:
+      self._reset_bsd_receding_track()
+    elif not ignore_bsd:
       self.bsd_hold_counter = max(0, self.bsd_hold_counter - 1)
+      if (
+        self.bsd_hold_counter > 0
+        and self._bsd_receding_release_ready(v_ego, corner_objects)
+      ):
+        self.bsd_hold_counter = 0
+        # The receding-track confirmation is stronger than the ordinary
+        # side-object decay. Allow the release immediately when the primary
+        # object is also clear.
+        if not primary_object_detected:
+          self.object_detected_count = int(-0.3 / DT_MDL)
+          self.side_object_detected = False
+    else:
+      self.bsd_hold_counter = 0
+      self._reset_bsd_receding_track()
+
+  def _reset_bsd_receding_track(self):
+    self.bsd_receding_track_id = -1
+    self.bsd_receding_frames = 0
+    self.bsd_receding_start_d_rel = 0.0
+    self.bsd_receding_last_d_rel = 0.0
+
+  @classmethod
+  def _is_corner_radar_object(cls, radar_obj) -> bool:
+    if not bool(getattr(radar_obj, "status", False)):
+      return False
+    track_id = int(cls._lead_float(radar_obj, "radarTrackId", -1.0))
+    return is_corner_track_id(track_id) or is_stable_corner_track_id(track_id)
+
+  def _bsd_receding_release_ready(self, v_ego: float, radar_objects) -> bool:
+    candidates = []
+    for radar_obj in radar_objects:
+      if not bool(getattr(radar_obj, "status", False)):
+        continue
+      track_id = int(self._lead_float(radar_obj, "radarTrackId", -1.0))
+      d_rel = self._lead_float(radar_obj, "dRel", 255.0)
+      v_rel = self._lead_float(
+        radar_obj,
+        "vRel",
+        self._lead_float(radar_obj, "vLead", v_ego) - v_ego,
+      )
+      continuing = track_id == self.bsd_receding_track_id
+      if (
+        track_id >= 0
+        and v_rel >= SIDE_BSD_RECEDING_MIN_VREL
+        and 0.1 < d_rel < 160.0
+        and (continuing or d_rel <= SIDE_BSD_RECEDING_START_MAX_DREL)
+      ):
+        candidates.append((not continuing, d_rel, track_id, radar_obj))
+
+    if not candidates:
+      self._reset_bsd_receding_track()
+      return False
+
+    _, d_rel, track_id, selected = min(candidates, key=lambda candidate: candidate[:3])
+    # Never use one receding vehicle to clear another unsafe side object.
+    unsafe_other = any(
+      int(self._lead_float(radar_obj, "radarTrackId", -1.0)) != track_id
+      and self._side_lead_is_unsafe(v_ego, radar_obj)
+      for radar_obj in radar_objects
+    )
+    distance_continuous = (
+      track_id == self.bsd_receding_track_id
+      and d_rel
+      >= self.bsd_receding_last_d_rel
+      - SIDE_BSD_RECEDING_MAX_DREL_STEP_BACK
+    )
+    if unsafe_other or not distance_continuous:
+      self.bsd_receding_track_id = track_id
+      self.bsd_receding_frames = 1
+      self.bsd_receding_start_d_rel = d_rel
+    else:
+      self.bsd_receding_frames += 1
+    self.bsd_receding_last_d_rel = d_rel
+
+    required_frames = 1 + int(SIDE_BSD_RECEDING_CONFIRM_SEC / DT_MDL)
+    return (
+      not unsafe_other
+      and not self._side_lead_is_unsafe(v_ego, selected)
+      and self.bsd_receding_frames >= required_frames
+      and d_rel >= SIDE_BSD_RECEDING_CLEAR_MIN_DREL
+      and d_rel - self.bsd_receding_start_d_rel
+      >= SIDE_BSD_RECEDING_MIN_DREL_GAIN
+    )
 
   @staticmethod
   def _lead_float(radar_obj, name: str, default: float = 0.0) -> float:
@@ -154,7 +257,7 @@ class SideState:
     v_rel = self._lead_float(radar_obj, "vRel", v_lead - v_ego)
     v_ego = max(0.0, float(v_ego))
 
-    if d_rel < SIDE_LEAD_CLOSE_DREL:
+    if d_rel <= SIDE_LEAD_CLOSE_DREL:
       return True
 
     min_gap = float(np.clip(v_ego * SIDE_LEAD_MIN_GAP_TIME,
