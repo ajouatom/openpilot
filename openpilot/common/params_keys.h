@@ -133,6 +133,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"UptimeOnroad", {PERSISTENT, FLOAT, "0.0"}},
     {"UsbGpuPresent", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
     {"UsbGpuCompiled", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
+    {"UseWideCamera", {PERSISTENT, BOOL, "1"}},
     {"Version", {PERSISTENT, STRING}},
 
     // carrot

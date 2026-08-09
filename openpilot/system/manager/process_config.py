@@ -139,7 +139,8 @@ def enable_youtube_encoder(started, params, CP: car.CarParams) -> bool:
 
 def enable_youtube_wide_encoder(started, params, CP: car.CarParams) -> bool:
   try:
-    return params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") == 3
+    use_wide_camera = bool(params.get("UseWideCamera", return_default=True))
+    return use_wide_camera and params.get_int("CarrotYouTubeLive") > 0 and params.get_int("CarrotYouTubeQuality") == 3
   except Exception:
     return False
 

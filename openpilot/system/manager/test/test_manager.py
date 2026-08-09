@@ -7,7 +7,7 @@ from openpilot.cereal import car
 from openpilot.common.params import Params
 import openpilot.system.manager.manager as manager
 from openpilot.system.manager.process import ensure_running
-from openpilot.system.manager.process_config import managed_processes, procs
+from openpilot.system.manager.process_config import enable_youtube_wide_encoder, managed_processes, procs
 from openpilot.system.hardware import HARDWARE
 
 os.environ['FAKEUPLOAD'] = "1"
@@ -33,6 +33,21 @@ class TestManager:
 
   def test_duplicate_procs(self):
     assert len(procs) == len(managed_processes), "Duplicate process names"
+
+  def test_wide_youtube_encoder_requires_wide_camera(self):
+    class FakeParams:
+      def __init__(self, use_wide_camera):
+        self.use_wide_camera = use_wide_camera
+
+      def get(self, key, return_default=False):
+        assert (key, return_default) == ("UseWideCamera", True)
+        return self.use_wide_camera
+
+      def get_int(self, key):
+        return {"CarrotYouTubeLive": 1, "CarrotYouTubeQuality": 3}[key]
+
+    assert enable_youtube_wide_encoder(True, FakeParams(True), car.CarParams.new_message())
+    assert not enable_youtube_wide_encoder(True, FakeParams(False), car.CarParams.new_message())
 
   def test_radard_modes_are_mutually_exclusive(self):
     CP = car.CarParams.new_message()

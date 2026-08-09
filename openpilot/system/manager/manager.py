@@ -14,6 +14,7 @@ from openpilot.common.utils import atomic_write
 from openpilot.common.params import Params, ParamKeyFlag
 from openpilot.common.text_window import TextWindow
 from openpilot.system.hardware import HARDWARE
+from openpilot.system.manager.camera_config import configure_wide_camera
 from openpilot.system.manager.helpers import unblock_stdout, write_onroad_params, save_bootlog
 from openpilot.system.manager.process import ensure_running
 from openpilot.system.manager.process_config import managed_processes
@@ -44,6 +45,7 @@ def get_default_params_key():
   #default_params = get_default_params()
   #all_keys = [key for key, _ in default_params]
   #return all_keys
+
 
 def write_supported_cars_files() -> None:
   params_path = Params().get_param_path()
@@ -88,6 +90,8 @@ def manager_init() -> None:
     default_value = params.get_default_value(k)
     if default_value is not None and params.get(k) is None:
       params.put(k, default_value)
+
+  configure_wide_camera(params)
 
   # Create folders needed for msgq
   try:

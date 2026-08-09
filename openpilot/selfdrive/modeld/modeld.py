@@ -23,7 +23,8 @@ from openpilot.selfdrive.modeld.compile_modeld import make_input_queues, WARP_IN
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
 from openpilot.common.file_chunker import open_file_chunked, get_manifest_path
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
-from openpilot.selfdrive.modeld.helpers import usbgpu_enabled, usbgpu_present, modeld_pkl_path, get_tg_input_devices, load_oob
+from openpilot.selfdrive.modeld.helpers import (get_tg_input_devices, load_oob, modeld_pkl_path,
+                                                select_vision_streams, usbgpu_enabled, usbgpu_present)
 
 PROCESS_NAME = "openpilot.selfdrive.modeld.modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
@@ -195,22 +196,27 @@ def main(demo=False):
   params = Params()
   params.put_bool("UsbGpuPresent", _enabled and _present)
   params.put_bool("UsbGpuCompiled", _compiled)
+  use_wide_camera = bool(params.get("UseWideCamera", return_default=True))
 
   config_realtime_process(7, 54)
 
   # visionipc clients
   while True:
     available_streams = VisionIpcClient.available_streams("camerad", block=False)
-    if available_streams:
-      use_extra_client = VisionStreamType.VISION_STREAM_WIDE_ROAD in available_streams and VisionStreamType.VISION_STREAM_ROAD in available_streams
-      main_wide_camera = VisionStreamType.VISION_STREAM_ROAD not in available_streams
+    vipc_client_main_stream, use_extra_client = select_vision_streams(
+      available_streams,
+      VisionStreamType.VISION_STREAM_ROAD,
+      VisionStreamType.VISION_STREAM_WIDE_ROAD,
+      use_wide_camera,
+    )
+    if vipc_client_main_stream is not None:
       break
     time.sleep(.1)
 
-  vipc_client_main_stream = VisionStreamType.VISION_STREAM_WIDE_ROAD if main_wide_camera else VisionStreamType.VISION_STREAM_ROAD
+  main_wide_camera = vipc_client_main_stream == VisionStreamType.VISION_STREAM_WIDE_ROAD
   vipc_client_main = VisionIpcClient("camerad", vipc_client_main_stream, True)
   vipc_client_extra = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_WIDE_ROAD, False)
-  cloudlog.warning(f"vision stream set up, main_wide_camera: {main_wide_camera}, use_extra_client: {use_extra_client}")
+  cloudlog.warning(f"vision stream set up, use_wide_camera: {use_wide_camera}, main_wide_camera: {main_wide_camera}, use_extra_client: {use_extra_client}")
 
   while not vipc_client_main.connect(False):
     time.sleep(0.1)

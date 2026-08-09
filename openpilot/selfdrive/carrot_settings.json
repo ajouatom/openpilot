@@ -581,6 +581,15 @@
           ]
         },
         {
+          "id": "SYS_CAMERA",
+          "ko": "카메라",
+          "en": "Camera",
+          "zh": "摄像头",
+          "params": [
+            "UseWideCamera"
+          ]
+        },
+        {
           "id": "SYS_NET",
           "ko": "네트워크·지도",
           "en": "Network & Map",
@@ -1912,6 +1921,24 @@
       "default": 60,
       "unit": 10,
       "display_unit": "timeMin"
+    },
+    {
+      "group": "시스템",
+      "name": "UseWideCamera",
+      "title": "광각 전방 카메라 사용",
+      "descr": "기본값은 켜짐입니다. 광각 전방 카메라가 고장 난 장치에서만 끄세요. 끄면 camerad가 광각 카메라를 동기화 대상에서 제외하고 modeld가 일반 전방 카메라 영상을 두 입력에 재사용합니다. 카메라 화각과 모델 성능이 달라질 수 있습니다. 변경 후 기기를 재부팅하세요.",
+      "egroup": "SYSTEM",
+      "etitle": "Use Wide Road Camera",
+      "edescr": "Enabled by default. Turn this off only on a device with a failed wide road camera. When off, camerad excludes the wide camera from synchronization and modeld reuses the narrow road image for both model inputs. Camera coverage and model performance may change. Reboot the device after changing.",
+      "cgroup": "系统",
+      "ctitle": "使用广角前置摄像头",
+      "cdescr": "默认开启。仅在广角前置摄像头故障的设备上关闭。关闭后，camerad 会将广角摄像头排除在同步之外，modeld 会将普通前置摄像头画面复用于两个模型输入。摄像范围和模型性能可能会变化。更改后请重启设备。",
+      "min": 0,
+      "max": 1,
+      "default": 1,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "시작",
