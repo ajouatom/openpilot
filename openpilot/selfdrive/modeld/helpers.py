@@ -5,13 +5,26 @@ import pickle
 import shutil
 import struct
 import tempfile
+from collections.abc import Collection
 from pathlib import Path
+from typing import TypeVar
 
 MODELS_DIR = Path(__file__).resolve().parent / 'models'
 TG_INPUT_DEVICES_PATH = MODELS_DIR / 'tg_input_devices.json'
 USBGPU_VID = 0xADD1
 USBGPU_PID = 0x0001
 USBGPU_ENABLE_ENV_VARS = ("USE_USBGPU", "ENABLE_USBGPU")
+VisionStreamT = TypeVar("VisionStreamT")
+
+
+def select_vision_streams(available_streams: Collection[VisionStreamT], road_stream: VisionStreamT,
+                          wide_stream: VisionStreamT, use_wide_camera: bool) -> tuple[VisionStreamT | None, bool]:
+  """Select modeld camera inputs without waiting on a disabled wide camera."""
+  if road_stream in available_streams:
+    return road_stream, use_wide_camera and wide_stream in available_streams
+  if use_wide_camera and wide_stream in available_streams:
+    return wide_stream, False
+  return None, False
 
 
 def _default_tg_input_devices(process_name: str, usbgpu: bool):
