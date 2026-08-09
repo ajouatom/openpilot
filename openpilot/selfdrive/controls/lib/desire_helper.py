@@ -189,8 +189,10 @@ class DesireHelper:
 
     # obstacles
     v_ego = carstate.vEgo
-    self.left.update_obstacles(v_ego, radarState.leadLeft, carstate.leftBlindspot, ignore_bsd, bsd_hold_sec=2.0)
-    self.right.update_obstacles(v_ego, radarState.leadRight, carstate.rightBlindspot, ignore_bsd, bsd_hold_sec=2.0)
+    self.left.update_obstacles(v_ego, radarState.leadLeft, carstate.leftBlindspot, ignore_bsd,
+                               bsd_hold_sec=2.0, radar_objects=radarState.leadsLeft)
+    self.right.update_obstacles(v_ego, radarState.leadRight, carstate.rightBlindspot, ignore_bsd,
+                                bsd_hold_sec=2.0, radar_objects=radarState.leadsRight)
 
     # compute available (include BSD+object)
     if self.laneLineCheck >= 1:
@@ -407,7 +409,6 @@ class DesireHelper:
                                     not atc_lane_change_retry_line_blocked
               start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
                            side.lane_line_info_edge_detect or solid_line_blocked or block_released_auto or atc_line_release
-                
               if start_gate:
                 if solid_line_blocked:
                   if atc_line_release or (torque_applied and not (bsd_active and block_lanechange_bsd)):
