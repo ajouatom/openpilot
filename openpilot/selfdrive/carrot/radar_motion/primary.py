@@ -72,6 +72,13 @@ STATIONARY_VISION_PATH_OUTLIER_MIN_PROB = 0.85
 STATIONARY_VISION_PATH_OUTLIER_HOLD_S = 0.20
 STATIONARY_LONGITUDINAL_CONTINUITY_M = 2.5
 STATIONARY_LATERAL_CONTINUITY_M = 1.5
+STATIONARY_CLOSER_HANDOFF_MIN_VISION_PROB = 0.90
+STATIONARY_CLOSER_HANDOFF_CONFIRMATION_S = 0.25
+STATIONARY_CLOSER_HANDOFF_MIN_DREL_GAIN_M = 1.0
+STATIONARY_CLOSER_HANDOFF_MAX_DREL_DELTA_M = 5.0
+STATIONARY_CLOSER_HANDOFF_MAX_YREL_DELTA_M = 0.75
+STATIONARY_CLOSER_HANDOFF_MAX_VLEAD_DELTA_MPS = 2.0
+STATIONARY_CLOSER_HANDOFF_MIN_COST_GAIN = 0.10
 # Keep radar-only moving promotion disjoint from the stationary fallback.
 # A front-only point in this band needs vision, corner, or permitted SCC
 # corroboration instead of bypassing stationary-reflection safeguards.
@@ -646,6 +653,14 @@ class VisionRadarMatcher:
     self._stationary_seed_score = 0.0
     self._stationary_path_outlier_since_s: float | None = None
     self._stationary_corner_supported = False
+    self._stationary_closer_challenger_identity: (
+      tuple[str, int] | None
+    ) = None
+    self._stationary_closer_challenger_since_s: float | None = None
+    self._stationary_closer_challenger_last_point: (
+      RadarPointSnapshot | None
+    ) = None
+    self._stationary_closer_challenger_last_time_s: float | None = None
     self._vision_fallback: VisionLead | None = None
     self._vision_fallback_hold_frames = 0
     self._vision_dpath_history: list[tuple[float, float]] = []
@@ -703,6 +718,13 @@ class VisionRadarMatcher:
     self._stationary_seed_score = 0.0
     self._stationary_path_outlier_since_s = None
     self._stationary_corner_supported = False
+    self._reset_stationary_closer_challenger()
+
+  def _reset_stationary_closer_challenger(self) -> None:
+    self._stationary_closer_challenger_identity = None
+    self._stationary_closer_challenger_since_s = None
+    self._stationary_closer_challenger_last_point = None
+    self._stationary_closer_challenger_last_time_s = None
 
   def _reset_radar_only_moving(self) -> None:
     self.radar_only_moving_identity = None
@@ -2326,6 +2348,101 @@ class VisionRadarMatcher:
       d_path=selected[2],
     )
 
+  def _stationary_closer_handoff_ready(
+    self,
+    stationary: VisionRadarMatch | None,
+    moving: VisionRadarMatch | None,
+    vision: VisionLead | None,
+    time_s: float | None,
+  ) -> bool:
+    """Confirm a nearer reflection before replacing a held front-radar ID."""
+    held_cost = (
+      self._stationary_vision_base_cost(vision, stationary.point)
+      if stationary is not None
+      else None
+    )
+    challenger_cost = (
+      self._stationary_vision_base_cost(vision, moving.point)
+      if moving is not None
+      else None
+    )
+    eligible = (
+      stationary is not None
+      and moving is not None
+      and vision is not None
+      and vision.probability
+      >= STATIONARY_CLOSER_HANDOFF_MIN_VISION_PROB
+      and time_s is not None
+      and math.isfinite(time_s)
+      and self._identity(stationary.point) != self._identity(moving.point)
+      and stationary.point.source == "frontRadar"
+      and moving.point.source == stationary.point.source
+      and stationary.point.measured
+      and moving.point.measured
+      and abs(stationary.point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+      and abs(moving.point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+      and (
+        STATIONARY_CLOSER_HANDOFF_MIN_DREL_GAIN_M
+        <= stationary.point.d_rel - moving.point.d_rel
+        <= STATIONARY_CLOSER_HANDOFF_MAX_DREL_DELTA_M
+      )
+      and abs(stationary.point.y_rel - moving.point.y_rel)
+      <= STATIONARY_CLOSER_HANDOFF_MAX_YREL_DELTA_M
+      and abs(stationary.point.v_lead - moving.point.v_lead)
+      <= STATIONARY_CLOSER_HANDOFF_MAX_VLEAD_DELTA_MPS
+      and held_cost is not None
+      and challenger_cost is not None
+      and challenger_cost + STATIONARY_CLOSER_HANDOFF_MIN_COST_GAIN
+      <= held_cost
+    )
+    if not eligible or moving is None or time_s is None:
+      self._reset_stationary_closer_challenger()
+      return False
+
+    identity = self._identity(moving.point)
+    continuing = (
+      identity == self._stationary_closer_challenger_identity
+      and self._stationary_closer_challenger_since_s is not None
+      and self._stationary_closer_challenger_last_point is not None
+      and self._stationary_closer_challenger_last_time_s is not None
+      and self._stationary_position_continuous(
+        self._stationary_closer_challenger_last_point,
+        self._stationary_closer_challenger_last_time_s,
+        moving.point,
+        time_s,
+      )
+    )
+    if not continuing:
+      self._stationary_closer_challenger_identity = identity
+      self._stationary_closer_challenger_since_s = time_s
+    self._stationary_closer_challenger_last_point = moving.point
+    self._stationary_closer_challenger_last_time_s = time_s
+    return (
+      self._stationary_closer_challenger_since_s is not None
+      and time_s - self._stationary_closer_challenger_since_s
+      >= STATIONARY_CLOSER_HANDOFF_CONFIRMATION_S
+    )
+
+  def _adopt_stationary_closer_handoff(
+    self,
+    match: VisionRadarMatch,
+    vision: VisionLead,
+    time_s: float,
+  ) -> None:
+    self.stationary_identity = self._identity(match.point)
+    self._stationary_pending_identity = None
+    self._stationary_pending_since_s = None
+    self._stationary_pending_vision_support_frames = 0
+    self._stationary_last_point = match.point
+    self._stationary_last_time_s = time_s
+    self._stationary_seed_probability = vision.probability
+    base_cost = self._stationary_vision_base_cost(vision, match.point)
+    self._stationary_seed_score = (
+      base_cost if base_cost is not None else max(0.0, 1.0 - match.score)
+    )
+    self._stationary_path_outlier_since_s = None
+    self._reset_stationary_closer_challenger()
+
   def match(
     self,
     model: Any,
@@ -2363,6 +2480,14 @@ class VisionRadarMatcher:
       path,
       time_s,
     )
+    if self._stationary_closer_handoff_ready(
+      stationary, moving, vision, time_s,
+    ):
+      assert moving is not None
+      assert vision is not None
+      assert time_s is not None
+      self._adopt_stationary_closer_handoff(moving, vision, time_s)
+      stationary = moving
     if (
       stationary is not None
       and moving is not None

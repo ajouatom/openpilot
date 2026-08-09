@@ -2,6 +2,20 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "ioniq5-d53-3-stationary-closer-handoff",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
+      "log": "00000d53--4a628c2753--3/rlog.zst",
+      "source": "front+corner",
+      "window": [11.6, 16.4],
+      "expected": "stationary",
+      "human_verified": true,
+      "target_track_ids": [46],
+      "required_lead_one_ids": [46],
+      "forbidden_lead_one_ids": [59],
+      "require_lead_one_continuous": true,
+      "scene": "A persistent closer front-radar reflection 46 must replace the held farther stationary reflection 59 before the final stop"
+    },
+    {
       "id": "palisade-bef-2-motorcycle-leadone",
       "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
       "log": "00000bef--a8eb1d8c98--2/rlog.zst",
