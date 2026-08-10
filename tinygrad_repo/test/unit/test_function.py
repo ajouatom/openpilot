@@ -1,8 +1,10 @@
 import numpy as np
 import unittest
 from tinygrad.function import function
-from tinygrad import Tensor, GlobalCounters
-from tinygrad.uop.ops import UOp, Ops, KernelInfo
+from tinygrad import Tensor, GlobalCounters, Device
+from tinygrad.dtype import Invalid
+from tinygrad.uop.ops import UOp, Ops, KernelInfo, ProgramInfo
+from test.helpers import assert_kernel_count
 
 class TestFunction(unittest.TestCase):
   def test_simple(self):
@@ -19,6 +21,13 @@ class TestFunction(unittest.TestCase):
 
     a = Tensor([1,2,3])
     np.testing.assert_equal(f(a,a).numpy(), [2,4,6])
+
+  def test_depth_restored_on_exception(self):
+    from tinygrad.function import _function
+    @function
+    def f(a:Tensor) -> Tensor: raise ValueError("error")
+    with self.assertRaises(ValueError): f(Tensor([1]))
+    self.assertEqual(_function.depth, 0)
 
   def test_implicit(self):
     inp = Tensor([7,8,9])
@@ -237,6 +246,24 @@ class TestFunction(unittest.TestCase):
     v = UOp.variable("sp", 0, 7)
     r0 = f(buf, x, v.bind(0)).numpy()
     np.testing.assert_equal(r0, [[1.,0.,0.,0.,0.,0.,0.,0.], [2.,0.,0.,0.,0.,0.,0.,0.]])
+
+  def test_single_after_store_precompile(self):
+    """precompiled AFTER(buf, STORE(view, data)) should return buf after the store."""
+    @function(precompile=True)
+    def f(buf:Tensor, x:Tensor, start_pos:int|UOp) -> Tensor:
+      slice_uop = buf[:, start_pos:start_pos+1].uop
+      assigned = Tensor(buf.uop.after(slice_uop.store(x.uop)))
+      return assigned
+
+    x = Tensor([[1.], [2.]]).realize()
+    v = UOp.variable("sp", 0, 7)
+    for sp in (0, 2):
+      with self.subTest(sp=sp):
+        buf = Tensor.zeros(2, 8).clone().realize()
+        expected = np.zeros((2, 8), dtype=np.float32)
+        expected[:, sp] = [1., 2.]
+        np.testing.assert_equal(f(buf, x, v.bind(sp)).numpy(), expected)
+        np.testing.assert_equal(buf.numpy(), expected)
 
   @unittest.expectedFailure
   def test_assign_slice(self):
@@ -509,7 +536,7 @@ class TestFunctionTuple(unittest.TestCase):
 
     @function(precompile=True, precompile_backward=True)
     def f(a:Tensor):
-      c = Tensor(Tensor.invalids(a.shape[0]//len(devs), a.shape[1], dtype=a.dtype, device=devs).uop.multi(0), device=devs)
+      c = Tensor(Tensor.invalids(a.shape[0]//len(devs), a.shape[1], dtype=a.dtype, device=devs).uop.unshard(0), device=devs)
       return Tensor.custom_kernel(c, a, fxn=double_kernel, grad_fxn=double_grad)[0]
 
     np.testing.assert_allclose(f(a).numpy(), 14.0)
@@ -517,7 +544,7 @@ class TestFunctionTuple(unittest.TestCase):
     # g is f with empty output instead of invalids
     @function(precompile=True, allow_implicit=True)
     def g(a:Tensor):
-      c = Tensor(Tensor.empty(a.shape[0]//len(devs), a.shape[1], dtype=a.dtype, device=devs).uop.multi(0), device=devs)
+      c = Tensor(Tensor.empty(a.shape[0]//len(devs), a.shape[1], dtype=a.dtype, device=devs).uop.unshard(0), device=devs)
       return Tensor.custom_kernel(c, a, fxn=double_kernel, grad_fxn=double_grad)[0]
 
     np.testing.assert_allclose(g(a).numpy(), 14.0)
@@ -531,19 +558,71 @@ class TestFunctionTuple(unittest.TestCase):
     def f(a:Tensor): return Tensor.custom_kernel(Tensor.empty(*a.shape, dtype=a.dtype, device=a.device), a, fxn=inplace_add)[0]
     with self.assertRaisesRegex(RuntimeError, "implicit buffer"): f(Tensor([1., 2., 3., 4.]).contiguous().realize())
 
-  def test_custom_kernel_precompile_further_compute(self):
-    def my_kernel(C:UOp, A:UOp) -> UOp:
+  def test_custom_kernel_write_only_persistent_output_is_implicit(self):
+    # a write-only custom_kernel output that is a realized buffer must be captured
+    def write(C:UOp, A:UOp) -> UOp:
       i = UOp.range(A.shape[0], 0)
-      return C[i].store(A[i] * 2.0).end(i).sink(arg=KernelInfo(name="my_kernel"))
+      return C[i].store(A[i] * 2.0).end(i).sink(arg=KernelInfo(name="write"))
+    state = Tensor([100., 200., 300., 400.], device="CPU").contiguous().realize()
+    @function(precompile=True, allow_implicit=True)
+    def f(a:Tensor): return Tensor.custom_kernel(state, a, fxn=write)[0]
+    f(Tensor([1., 2., 3., 4.], device="CPU").contiguous().realize()).realize()
+    np.testing.assert_allclose(state.numpy(), [2., 4., 6., 8.])
+
+  def test_custom_kernel_program_invalids_not_captured(self):
+    # llama FP8 kernels are PROGRAM with bare-buffer sinks (no analyzable stores), so the invalids scratch
+    # still must not be captured as an input -- else it is read before the kernel writes it
+    src = "void k(float* restrict data0, float* restrict data1) { for (int i=0;i<4;i++) data0[i]=data1[i]*2.0f; }"
+    lib = Device["CPU"].compiler.compile(src)
+    def prog(C:UOp, A:UOp) -> UOp:
+      sink = UOp.sink(C.base, A.base, arg=KernelInfo(name="k"))
+      return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.LINEAR, src=(*sink.src, sink)),
+                                   UOp(Ops.SOURCE, arg=src), UOp(Ops.BINARY, arg=lib)),
+                 arg=ProgramInfo(name="k", global_size=(1, 1, 1), local_size=(1, 1, 1), globals=(0, 1)))
 
     @function(precompile=True)
     def f(a:Tensor):
       c = Tensor.invalids(*a.shape, dtype=a.dtype, device=a.device)
+      return Tensor.custom_kernel(c, a, fxn=prog)[0]
+
+    a = Tensor([1., 2., 3., 4.], device="CPU").contiguous().realize()
+    np.testing.assert_allclose(f(a).numpy(), [2., 4., 6., 8.])
+
+  def test_invalid_store_into_realized_buffer_is_captured(self):
+    # only fresh invalids() scratch is skipped; a realized buffer is a real input even if an Invalid store
+    # writes into part of it (its other elements must be preserved), so it is still captured
+    state = Tensor([10., 20., 30., 40.], device="CPU").contiguous().realize()
+    @function(precompile=True, allow_implicit=True)
+    def f(a:Tensor):
+      after = state.uop.after(state.uop.shrink(((0, 2),)).store(Invalid))
+      return Tensor(after).contiguous() + a
+    out = f(Tensor([1., 1., 1., 1.], device="CPU").contiguous().realize())
+    np.testing.assert_allclose(out.numpy(), [11., 21., 31., 41.])
+
+  def test_custom_kernel_precompile_further_compute(self, multi=False, kernel_count:int=2):
+    devs = ("CPU:0", "CPU:1")
+    def my_kernel(C:UOp, A:UOp) -> UOp:
+      C, A = C.flatten(), A.flatten()
+      i = UOp.range(A.numel(), 0)
+      return C[i].store(A[i] * 2.0).end(i).sink(arg=KernelInfo(name="my_kernel"))
+
+    @function(precompile=True)
+    def f(a:Tensor):
+      c = Tensor.invalids(*a.uop.shard_shape, dtype=a.dtype, device=a.device)
+      if multi: c = Tensor(c.uop.unshard(a.uop.axis), device=a.device)
       c = Tensor.custom_kernel(c, a, fxn=my_kernel)[0]
       return c + 1
 
-    a = Tensor([1., 2., 3., 4.]).contiguous().realize()
-    np.testing.assert_allclose(f(a).numpy(), [3., 5., 7., 9.])
+    a = Tensor([1., 2., 3., 4.]).contiguous()
+    if multi: a = a.shard(devs, axis=0)
+    a.realize()
+    out = f(a)
+    GlobalCounters.reset()
+    out.realize()
+    assert_kernel_count(kernel_count)
+    np.testing.assert_allclose(out.numpy(), [3., 5., 7., 9.])
+
+  def test_custom_kernel_precompile_further_compute_multi(self): self.test_custom_kernel_precompile_further_compute(multi=True, kernel_count=4)
 
 class TestFunctionGrad(unittest.TestCase):
   def test_function_grad_ops(self, precompile=False, precompile_backward=False):
@@ -566,7 +645,7 @@ class TestFunctionGrad(unittest.TestCase):
     GlobalCounters.reset()
     loss.realize(w1.grad, w2.grad, w3.grad)
     print(GlobalCounters.global_ops, GlobalCounters.global_mem)
-    self.assertLessEqual(GlobalCounters.global_ops, 4739344)
+    self.assertLessEqual(GlobalCounters.global_ops, 5000000)
   def test_function_grad_ops_precompile(self): self.test_function_grad_ops(precompile=True)
   def test_function_grad_ops_precompile_backward(self):
     self.test_function_grad_ops(precompile=True, precompile_backward=True)

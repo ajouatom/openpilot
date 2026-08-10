@@ -9,6 +9,7 @@ VERSION="${VERSION:-carrot_v$(date +%y%m%d)}"
 MIN_FREE_AFTER_BACKUP_KB="${MIN_FREE_AFTER_BACKUP_KB:-524288}"
 RELEASE_PUSH_BATCH_MB="${RELEASE_PUSH_BATCH_MB:-32}"
 RELEASE_PUSH_RETRIES="${RELEASE_PUSH_RETRIES:-3}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 DRY_RUN=0
 RECOVER_ONLY=0
@@ -259,6 +260,64 @@ git_release() {
   git "${GIT_AUTH_CONFIG[@]}" -c lfs.locksverify=false "$@"
 }
 
+model_compile_tag() {
+  PYTHONPATH="$SOURCE_DIR${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" -c \
+    'from carrot.model_selector.config import compile_env_tag; print(compile_env_tag(), end="")'
+}
+
+require_model_artifact() {
+  local artifact="$1"
+  local manifest="${artifact}.chunkmanifest"
+  local chunk_count
+  local chunk_index
+  local chunk
+
+  [[ -s "$artifact" ]] && return 0
+  [[ -s "$manifest" ]] || die "missing generated model artifact: $artifact"
+  chunk_count="$(tr -d '[:space:]' <"$manifest")"
+  [[ "$chunk_count" =~ ^[1-9][0-9]*$ ]] || die "invalid model chunk manifest: $manifest"
+  for ((chunk_index = 1; chunk_index <= chunk_count; chunk_index++)); do
+    printf -v chunk '%s.chunk%02dof%02d' "$artifact" "$chunk_index" "$chunk_count"
+    [[ -s "$chunk" ]] || die "missing generated model chunk: $chunk"
+  done
+}
+
+validate_prebuilt_models() {
+  local model_dir="$SOURCE_DIR/openpilot/selfdrive/modeld/models"
+  local expected_tag="$1"
+  local packaged_tag
+
+  require_model_artifact "$model_dir/driving_tinygrad.pkl"
+  require_model_artifact "$model_dir/dmonitoring_model_tinygrad.pkl"
+  [[ -s "$model_dir/dmonitoring_model_metadata.pkl" ]] || die "missing dmonitoring metadata"
+  [[ -s "$model_dir/dm_warp_1928x1208_tinygrad.pkl" ]] || die "missing TICI DM warp"
+  [[ -s "$model_dir/dm_warp_1344x760_tinygrad.pkl" ]] || die "missing mici DM warp"
+  [[ -s "$model_dir/tg_input_devices.json" ]] || die "missing tinygrad device map"
+  packaged_tag="$(tr -d '[:space:]' <"$model_dir/.build_stamp" 2>/dev/null || true)"
+  [[ "$packaged_tag" == "$expected_tag" ]] || die "model build stamp does not match compiler fingerprint"
+}
+
+prepare_prebuilt_models() {
+  local model_dir="$SOURCE_DIR/openpilot/selfdrive/modeld/models"
+  local expected_tag
+
+  # The small release-script fixture has no openpilot model build. Real device
+  # releases always do, and must compile before their ONNX inputs are removed.
+  if [[ ! -f "$SOURCE_DIR/carrot/model_selector/config.py" || ! -f "$SOURCE_DIR/openpilot/system/manager/build.py" ]]; then
+    return 0
+  fi
+
+  log "Rebuilding model artifacts for the current tinygrad compiler"
+  rm -f -- "$model_dir"/*_tinygrad.pkl* "$model_dir"/*_metadata.pkl
+  rm -f -- "$model_dir/tg_input_devices.json" "$model_dir/.build_stamp"
+  (cd "$SOURCE_DIR/openpilot/system/manager" && ./build.py) || die "openpilot prebuilt compilation failed"
+
+  expected_tag="$(model_compile_tag)" || die "could not calculate model compiler fingerprint"
+  [[ -n "$expected_tag" ]] || die "empty model compiler fingerprint"
+  printf '%s' "$expected_tag" >"$model_dir/.build_stamp"
+  validate_prebuilt_models "$expected_tag"
+}
+
 if [[ -n "$RELEASE_REMOTE_URL" ]]; then
   PUSH_TARGET="$RELEASE_REMOTE_URL"
   REMOTE_LABEL="custom release URL"
@@ -314,6 +373,8 @@ log "Backup complete"
 cd "$SOURCE_DIR"
 BUILD_BRANCH="release-build/${VERSION}-$(date +%s)-$$"
 git switch -c "$BUILD_BRANCH" "$SOURCE_COMMIT"
+
+prepare_prebuilt_models
 
 log "Cleaning build-only files"
 find . -type f \( -name '*.a' -o -name '*.o' -o -name '*.os' -o -name '*.pyc' -o -name 'moc_*' \) -delete
@@ -418,6 +479,10 @@ fi
 git reset --soft "$SOURCE_COMMIT"
 git commit -m "$VERSION"
 RELEASE_COMMIT="$(git rev-parse HEAD)"
+if [[ -f "$SOURCE_DIR/carrot/model_selector/config.py" && -f "$SOURCE_DIR/openpilot/system/manager/build.py" ]]; then
+  FINAL_MODEL_TAG="$(model_compile_tag)" || die "could not verify final model compiler fingerprint"
+  validate_prebuilt_models "$FINAL_MODEL_TAG"
+fi
 push_release_head "final release commit"
 
 log "Release pushed: $VERSION @ $RELEASE_COMMIT"

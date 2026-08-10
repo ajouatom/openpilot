@@ -16,7 +16,7 @@ from extra.gemm.amd_asm_matmul import Kernel
 
 def custom_add_one(A:UOp) -> UOp:
   A = A.flatten()
-  assert dtypes.is_float(A.dtype.base), f"buffer dtype must be float32, got {A.dtype}"
+  assert dtypes.is_float(A.dtype), f"buffer dtype must be float32, got {A.dtype}"
   threads = UOp.special(A.numel(), "lidx0")
   insts = [
     s_load_b64(s[0:1], s[0:1], soffset=NULL),
@@ -30,13 +30,13 @@ def custom_add_one(A:UOp) -> UOp:
     s_endpgm(),
   ]
   sink = UOp.sink(A.base, threads, arg=KernelInfo(f"custom_add_one_{A.numel()}", estimates=Estimates(ops=A.numel(), mem=A.numel()*4*2)))
-  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.DEVICE, arg="AMD"), UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
+  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
 
 def custom_add_var(A:UOp, B:UOp) -> UOp:
   A,B = A.flatten(), B.flatten()
-  assert A.dtype.base == dtypes.uint32, f"buffer dtype must be uint32, got {A.dtype}"
+  assert A.dtype == dtypes.uint32, f"buffer dtype must be uint32, got {A.dtype}"
   threads = UOp.special(A.numel(), "lidx0")
-  var = UOp.variable("var", 0, 10)
+  var = UOp.param(2, dtypes.int, vmin_vmax=(0, 10), name="var", addrspace=AddrSpace.ALU)
   insts = [
     s_load_b128(s[4:7], s[0:1]),
     s_load_b32(s[8], s[0:1], offset=0x10), # all threads load the same variable
@@ -49,7 +49,7 @@ def custom_add_var(A:UOp, B:UOp) -> UOp:
     s_endpgm(),
   ]
   sink = UOp.sink(A.base, B.base, var, threads, arg=KernelInfo(f"custom_add_var_{A.numel()}"))
-  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.DEVICE, arg="AMD"), UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
+  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
 
 def custom_wave_sync(A:UOp, arch:str) -> UOp:
   # 4 waves across 1024 WG — enough to saturate a SIMD with many concurrent WGs
@@ -63,14 +63,14 @@ def custom_wave_sync(A:UOp, arch:str) -> UOp:
     insts += [s_nop(0)]*4
   insts.append(s_endpgm())
   sink = UOp.sink(A.base, threads, wg, arg=KernelInfo("custom_wave_sync"))
-  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.DEVICE, arg="AMD"), UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
+  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
 
 def custom_lds_sync(A:UOp, arch:str) -> UOp:
   A = A.flatten()
   num_threads = A.shape[0]
   threads = UOp.special(num_threads, "lidx0")
   wg = UOp.special(1, "gidx0")
-  lds = UOp(Ops.DEFINE_LOCAL, dtypes.uint8.ptr(size=512, addrspace=AddrSpace.LOCAL), (), 'lds')  # 128 * 4 bytes
+  lds = UOp.placeholder((512,), dtypes.uint8, 0, AddrSpace.LOCAL)  # 128 * 4 bytes
   isa = r4 if arch == "rdna4" else r3
   wait_kmcnt = [isa.s_wait_kmcnt(simm16=0)] if arch == "rdna4" else [isa.s_waitcnt_lgkmcnt(sdst=NULL, simm16=0)]
   wait_dscnt = [isa.s_wait_dscnt(simm16=0)] if arch == "rdna4" else [isa.s_waitcnt_lgkmcnt(sdst=NULL, simm16=0)]
@@ -97,13 +97,13 @@ def custom_lds_sync(A:UOp, arch:str) -> UOp:
     isa.s_endpgm(),
   ]
   sink = UOp.sink(A.base, lds, threads, wg, arg=KernelInfo("custom_lds_sync"))
-  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.DEVICE, arg="AMD"), UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
+  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
 
 def custom_handwritten(A:UOp) -> UOp:
   A = A.flatten()
   threads = UOp.special(128, "lidx0")
   wg = UOp.special(1, "gidx0")
-  lds = UOp(Ops.DEFINE_LOCAL, dtypes.uint8.ptr(size=512, addrspace=AddrSpace.LOCAL), (), 'lds')  # 128 * 4 bytes
+  lds = UOp.placeholder((512,), dtypes.uint8, 0, AddrSpace.LOCAL)  # 128 * 4 bytes
   pipes = {getenv("PIPE", "")} if getenv("PIPE", "") else {"SALU", "VALU", "TRANSCENDENTAL", "WMMA"}
   k = Kernel()
   # wrap in loop to filter out icache misses
@@ -143,7 +143,7 @@ def custom_handwritten(A:UOp) -> UOp:
   k.emit(r4.s_endpgm())
   insts = k.finalize()
   sink = UOp.sink(A.base, threads, wg, lds, arg=KernelInfo("custom_handwritten"))
-  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.DEVICE, arg="AMD"), UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
+  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
 
 def custom_data_deps(A:UOp) -> UOp:
   A = A.flatten()
@@ -159,7 +159,7 @@ def custom_data_deps(A:UOp) -> UOp:
   k.emit(s_endpgm())
   insts = k.finalize()
   sink = UOp.sink(A.base, threads, arg=KernelInfo("custom_data_deps"))
-  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.DEVICE, arg="AMD"), UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
+  return UOp(Ops.PROGRAM, src=(sink, UOp(Ops.LINEAR, src=tuple([UOp(Ops.INS, arg=x) for x in insts]))))
 
 @unittest.skipUnless(Device.DEFAULT == "AMD", "requires AMD device")
 class TestAsmKernel(unittest.TestCase):

@@ -69,3 +69,11 @@ mutants
 dagre/
 graphlib/
 uv.lock
+
+# These generated-looking files are tracked by the pinned upstream snapshot.
+# Keep them visible when tinygrad is vendored inside the openpilot worktree.
+!/.coveragerc
+!/test/models/efficientnet/imagenet1000_clsidx_to_labels.txt
+!/tinygrad/runtime/autogen/comgr_3.py
+!/tinygrad/viz/assets/dagrejs.github.io/project/dagre/
+!/tinygrad/viz/assets/dagrejs.github.io/project/dagre/dagre.min.js

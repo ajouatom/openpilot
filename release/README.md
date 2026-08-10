@@ -7,6 +7,13 @@ Before changing anything, it copies the complete `/data/openpilot` directory to
 `/data/openpilot_bak` with `cp -a`. The original tree is restored automatically
 after a successful push, a build error, or Ctrl-C.
 
+Before removing the release ONNX files, the script rebuilds the built-in driving
+and driver-monitoring artifacts with the checked-out tinygrad compiler. It then
+verifies every PKL/chunk, the tinygrad device map, and the shared compiler stamp.
+This rebuild is expected to take several minutes after a tinygrad update; a
+compile or stamp mismatch aborts the release instead of publishing a prebuilt
+branch that cannot boot.
+
 ```bash
 cd /data/openpilot
 

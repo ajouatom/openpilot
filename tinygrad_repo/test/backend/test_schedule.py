@@ -2,39 +2,16 @@
 # schedule confirms the right things are capable of fusing
 # NOTE: this has overlap with external_test_opt.py
 
-import unittest
+import unittest, time
 import numpy as np
-from typing import cast
-from hypothesis import assume, given, strategies as strat
 
 from tinygrad import nn, dtypes, Device, Tensor, Variable
-from tinygrad.uop.ops import UOp, Ops, UPat
-from tinygrad.helpers import DEBUG, DEV, GlobalCounters, Context, all_same, temp
-from tinygrad.engine.realize import compile_linear, run_linear
+from tinygrad.uop.ops import Ops, UPat
+from tinygrad.helpers import DEV, GlobalCounters, Context, all_same, temp
+from tinygrad.engine.realize import run_linear
+from test.helpers import check_schedule, assert_kernel_count
 
 supported_dtypes = Device[Device.DEFAULT].renderer.supported_dtypes()
-
-class KernelCountException(Exception): pass
-def check_schedule(t:Tensor|list[Tensor]|UOp, allowed:int, to_prerealize:list[Tensor]|None=None, filter_sink=True):
-  if to_prerealize:
-    with Context(DEBUG=0, TRACK_MATCH_STATS=0): Tensor.realize(*to_prerealize)
-  if isinstance(t, Tensor): linear, var_vals = t.linear_with_vars()
-  elif isinstance(t, list) and isinstance(t[0], Tensor): linear, var_vals = Tensor.linear_with_vars(*t)
-  else:
-    assert isinstance(t, UOp), f"can't schedule {t}"
-    linear, var_vals = Tensor(t).linear_with_vars()
-  kernel_cnt = sum((len(call.device) if isinstance(call.device, tuple) else 1)
-                   for call in linear.src if call.src[0].op is Ops.SINK or not filter_sink)
-  if kernel_cnt != allowed:
-    print(f"SCHEDULE ISSUE, expecting {allowed} got {kernel_cnt}")
-    if DEBUG >= 3:
-      for i,call in enumerate(linear.src):
-        print("kernel", i+1)
-        print(call.src[0])
-    raise KernelCountException(f"{kernel_cnt} != {allowed}")
-  # test compiling the linear
-  compile_linear(linear)
-  return linear, var_vals
 
 def _realize_weights(m):
   for p in nn.state.get_parameters(m): p.realize()
@@ -87,25 +64,6 @@ class TestSchedule(unittest.TestCase):
     x = Tensor.arange(768).reshape(3, 256).float()
     np.testing.assert_allclose((x.sum(axis=1) + x.sum(axis=1).sum()).numpy(), x.numpy().sum(axis=1) + x.numpy().sum(axis=1).sum())
 
-  @unittest.skip("disabling subbuffer manually isn't supported anymore")
-  def test_bitcast_disable_subbufer(self):
-    x = cast(UOp, Tensor.empty(1, dtype=dtypes.float32).realize().uop)
-    a = x.alu(Ops.EXP2).cast(dtypes.int32, True, allow_buffer_view=False)
-    b = x.cast(dtypes.int32, True, allow_buffer_view=False)
-    b = a.alu(Ops.ADD, b)
-    check_schedule(b, 1)
-
-  @given(strat.sampled_from(dtypes.all), strat.sampled_from(dtypes.all))
-  @unittest.skip("kernel count depends on input")
-  def test_cast_padded_const(self, dt1, dt2):
-    assume(dt1 in supported_dtypes and dt2 in supported_dtypes)
-    a = Tensor(1, dtype=dt1).reshape(1, 1).pad(((1, 1), None))
-    casted_view = a.cast(dt2)
-    run_linear(*check_schedule(casted_view, 0))
-    realized_const_view = casted_view.contiguous()
-    run_linear(*check_schedule(realized_const_view, 1))
-    np.testing.assert_equal(realized_const_view.numpy(), [[0], [1], [0]])
-
   def test_fuse_assign_contiguous(self):
     x = Tensor.zeros(4, 4, dtype=dtypes.int).contiguous().realize()
     a = Tensor.arange(8).reshape(4, 2)
@@ -134,11 +92,9 @@ class TestSchedule(unittest.TestCase):
     a2 = mop(a)
     expected = (a+a2).tolist()
     a.assign(a+a2)
-    linear, var_vals = a.linear_with_vars()
-    kcount = len(linear.src)
+    linear, var_vals = check_schedule(a, expected_kcount)
     run_linear(linear, var_vals)
     self.assertListEqual(a.tolist(), expected)
-    self.assertEqual(kcount, expected_kcount)
   def test_setitem_permuted_sched(self): self.test_setitem_sched(lambda x: x.T, 2)
   def test_setitem_paddded_sched(self): self.test_setitem_sched(lambda x: x.shrink_to(4, 1).pad_to(4, 4), 1)
 
@@ -147,9 +103,9 @@ class TestSchedule(unittest.TestCase):
     a = Tensor.arange(16).clone().realize()
     GlobalCounters.reset()
     a[4] = 3
-    self.assertEqual(GlobalCounters.kernel_count, 0)
+    assert_kernel_count(0)
     a.realize()
-    self.assertEqual(GlobalCounters.kernel_count, 1)
+    assert_kernel_count(1)
     self.assertListEqual(a.tolist(), [0, 1, 2, 3, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
 
   def test_no_extra_contiguous_on_setitem_assign_back(self):
@@ -187,6 +143,13 @@ class TestSchedule(unittest.TestCase):
     self.assertEqual(t.device, dev)
     np.testing.assert_equal(t[:64].numpy(), np.arange(64).cumsum())
 
+  def test_copy_multi_scalar(self):
+    devs = ("CPU:0", "CPU:1")
+    x = Tensor.ones(2, device="CPU").shard(devs, axis=0).realize()
+    out = (x.sum()*2).reshape(1).to("CPU")
+    run_linear(*check_schedule(out, 5))
+    np.testing.assert_equal(out.numpy(), [4.])
+
 class TestLimitBufs(unittest.TestCase):
   @unittest.skipIf(DEV.interface.startswith("MOCK") and Device.DEFAULT == "NV", "crashes in ocelot")
   def test_limit_bufs_with_var(self):
@@ -210,6 +173,20 @@ class TestLimitBufs(unittest.TestCase):
         a, b = Tensor.rand(N).realize(), Tensor.rand(N).realize()
         base = (idx >= i).where(a + b, base)
       assert all(x > 0 for x in base.tolist())
+
+  def test_limit_bufs_linear_scaling(self):
+    def sched_time(n):
+      with Context(TRACK_MATCH_STATS=0, DEBUG=0):
+        bufs = [Tensor.ones(16).contiguous().realize() for _ in range(4)]
+        root = bufs[0]
+        for i in range(n): root = root + bufs[i % 4]
+        with Context(MAX_KERNEL_BUFFERS=8, SCACHE=0):
+          st = time.perf_counter()
+          root.schedule_linear()
+          return time.perf_counter() - st
+    sched_time(400)
+    t1, t2 = min(sched_time(400) for _ in range(3)), min(sched_time(1600) for _ in range(3))
+    self.assertLess(t2/t1, 8, f"{t1*1e3:.1f}ms -> {t2*1e3:.1f}ms")
 
 class TestSwizzle(unittest.TestCase):
   def test_swizzle_simple(self):
@@ -363,9 +340,10 @@ class TestCopyFolding(unittest.TestCase):
 
   def test_one_hot_with_copy(self):
     y = Tensor([1, 2, 3]).to("CPU")
-    x = y.one_hot(10)
+    x = y.one_hot(10).int()
     check_schedule(x, 3, filter_sink=False)
 
+  @unittest.skip("no longer supported")
   def test_late_const_copy_folding(self):
     a = Tensor.arange(3).clone().realize()
     zeros = Tensor.zeros(3, buffer=False).realize()
@@ -406,6 +384,7 @@ class TestCopyFolding(unittest.TestCase):
     assert t.uop.is_realized, f"didn't realize Tensor {t}"
     self.assertListEqual(t.tolist(), [1.,1.,1.,1.])
 
+  @unittest.skip("same-device copies are no-ops")
   def test_self_assign_same_device_copy(self):
     a = Tensor.ones(4, 4).contiguous().realize()
     # use copy_to_device to bypass Tensor.to() shortcircuit and force a real same-device COPY in the graph
@@ -468,6 +447,14 @@ class TestCopyFolding(unittest.TestCase):
     b = a.shrink(((0, 4),)).reshape(2, 2).permute(1, 0).to("CPU")
     b.realize()
     self.assertListEqual(b.tolist(), [[0, 2], [1, 3]])
+
+  def test_permute_copy_to_device(self):
+    b = Tensor([[0, 1, 2, 3], [4, 5, 6, 7]], device="CPU").permute(1, 0).to("PYTHON")
+    self.assertListEqual(b.tolist(), [[0, 4], [1, 5], [2, 6], [3, 7]])
+
+  def test_flip_copy_to_device(self):
+    b = Tensor([0, 1, 2, 3], device="CPU").flip(0).to("PYTHON")
+    self.assertListEqual(b.tolist(), [3, 2, 1, 0])
 
 class TestUOpBecome(unittest.TestCase):
   def test_setitem_offset(self):

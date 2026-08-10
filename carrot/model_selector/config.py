@@ -21,13 +21,27 @@ RECOMPILE_FAILED_MARKER_NAME = ".recompile_failed"
 # 올려줄 필요가 없다. 컴파일 산출물(pkl) 호환성을 결정하는 경로만 나열할 것.
 _COMPILE_ENV_PATHS = (
     "tinygrad_repo",
+    "carrot/model_selector/config.py",
+    "carrot/model_selector/installer.py",
+    "carrot/model_selector/compile_legacy_warp.py",
+    "carrot/model_selector/carrot_modeld.py",
     "openpilot/selfdrive/modeld/compile_modeld.py",
+    "openpilot/selfdrive/modeld/compile_dm_warp.py",
+    "openpilot/selfdrive/modeld/get_model_metadata.py",
     "openpilot/selfdrive/modeld/helpers.py",
     "openpilot/selfdrive/modeld/constants.py",
+    "openpilot/selfdrive/modeld/modeld.py",
+    "openpilot/selfdrive/modeld/dmonitoringmodeld.py",
     "openpilot/selfdrive/modeld/SConscript",
+    "openpilot/common/file_chunker.py",
+    "openpilot/common/transformations/camera.py",
+    "openpilot/common/transformations/model.py",
+    "openpilot/system/camerad/cameras/nv12_info.py",
+    "openpilot/system/hardware/hw.py",
 )
 # git 을 못 쓰는 환경(.git 이 없는 배포본 등)에서의 폴백 — 그 환경에서만 수동 관리.
-_COMPILE_ENV_TAG_FALLBACK = "2026.07-tg-oob1"
+TINYGRAD_UPSTREAM_REVISION = "1858f1fd9aa94ca4e302b60a88f075d0d1dd88bc"
+_COMPILE_ENV_TAG_FALLBACK = f"2026.08-tg-{TINYGRAD_UPSTREAM_REVISION[:8]}"
 _compile_env_tag_cache: str | None = None
 
 
@@ -51,6 +65,23 @@ def _derive_compile_env_tag() -> str:
         return f"tg-env:{digest}"
     except Exception:
         return _COMPILE_ENV_TAG_FALLBACK
+
+
+def compile_env_tag_file_matches(path: Path) -> bool:
+    """Return whether *path* contains the current compiler-generation tag.
+
+    This sidecar check must happen before unpickling a tinygrad artifact: an
+    older pickle can fail while its TinyJit objects are being reconstructed,
+    before any metadata stored inside the pickle is available to inspect.
+    """
+    try:
+        return path.read_text().strip() == compile_env_tag()
+    except (OSError, ValueError):
+        return False
+
+
+def model_compile_env_is_current(model_dir: Path) -> bool:
+    return compile_env_tag_file_matches(model_dir / COMPILE_ENV_STAMP_NAME)
 
 # Default built-in model directory (fallback when no custom model is installed)
 # NOTE: carrot-ms 트리는 실제 소스가 openpilot/ 네임스페이스 하위에 있다

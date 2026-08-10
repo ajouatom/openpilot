@@ -17,16 +17,8 @@ from .config import (
     MODELS_DIR,
     MODELS_TMP_DIR,
     RECOMPILE_FAILED_MARKER_NAME,
-    compile_env_tag,
+    compile_env_tag_file_matches,
 )
-
-
-def _tag_file_matches(path) -> bool:
-    try:
-        return path.read_text().strip() == compile_env_tag()
-    except (OSError, ValueError):
-        # 부재/손상(비 UTF-8) 파일은 불일치로 취급한다.
-        return False
 
 
 def run() -> None:
@@ -43,8 +35,8 @@ def run() -> None:
         # 빌드된 경우 보존된 onnx 로 부팅 시 자동 재컴파일한다.
         # 스탬프 일치(정상) 또는 실패 마커 존재(재시도 무의미) 시에는
         # heavy import 없이 바로 통과한다.
-        stamp_ok = _tag_file_matches(MODELS_DIR / COMPILE_ENV_STAMP_NAME)
-        already_failed = _tag_file_matches(MODELS_DIR / RECOMPILE_FAILED_MARKER_NAME)
+        stamp_ok = compile_env_tag_file_matches(MODELS_DIR / COMPILE_ENV_STAMP_NAME)
+        already_failed = compile_env_tag_file_matches(MODELS_DIR / RECOMPILE_FAILED_MARKER_NAME)
         if MODELS_DIR.is_dir() and not stamp_ok and not already_failed:
             from .installer import recompile_stale_if_needed
             recompile_stale_if_needed()

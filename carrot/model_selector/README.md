@@ -136,15 +136,20 @@ describe=/data/models: vision+on_policy+off_policy
   확인하고 미달 시 설치를 중단(백업 복원). 비호환 모델이 설치되어 크래시 루프에 빠지는 것을 사전 차단.
 - **크래시 루프 차단기** (`modeld_runner._arm_crash_loop_breaker`)
   — 커스텀 엔진 기동 시 `/data/models/.load_attempts` 카운터 증가, 90초 생존 시 자동 삭제.
-  3회 연속 조기 크래시(손상 pkl, 포크 업데이트 후 tinygrad 버전 불일치 등) 시 `/data/models` 를
+  3회 연속 조기 크래시(현재 스탬프지만 손상된 pkl, 출력 slice 불일치 등) 시 `/data/models` 를
   `/data/models_quarantined` 로 격리하고 기본 내장 모델로 자동 폴백. 수동 reset 없이 주행 가능 상태 복구.
+- **tinygrad 세대 사전 차단** (`modeld_runner._select_engine`)
+  — `/data/models/.compile_env` 가 현재 컴파일러 태그와 다르면 구 pkl 을 역직렬화하지
+  않고 즉시 기본 내장 모델을 사용한다. 보존된 onnx 자동 재컴파일이 성공하면 새
+  스탬프와 함께 원자적으로 교체되고, 실패하거나 onnx 가 없는 경우에도 구 pkl 로
+  인한 재시작 루프 없이 기본 모델로 부팅한다. 기존 커스텀 파일은 다음 버전의 재시도를 위해 보존한다.
 - **stale PendingModelName 방지**
   — 설치 시작 시(다운로드 전) 이전 pending 제거(`routes.api_install`),
   부팅 시 tmp 가 불완전하면 pending 도 함께 제거(`installer.compile_pending`).
   실패한 다운로드의 잔여 파일이 예전 모델명으로 컴파일되거나 UI 가 영구 "설치중" 이 되는 문제 방지.
 - **PC 컴파일 백엔드 프로브** (`installer._probe_tg_devices`)
-  — 비-TICI 환경에서는 SConscript 와 동일하게 tinygrad 디바이스를 프로브해 CUDA > CPU 순으로 선택
-  (런타임 tg_input_devices.json 과 백엔드 불일치 방지). 실기기는 QCOM 고정.
+  — 비-TICI 모델 설치에서는 tinygrad 디바이스를 프로브해 CUDA > CPU 순으로 선택
+  (런타임 tg_input_devices.json 과 백엔드 불일치 방지). SCons 빌드는 아키텍처로 선택하며 실기기는 QCOM 고정.
 - **USBGPU 동작** — 커스텀 supercombo 설치 시 `/data/models/big_driving_tinygrad.pkl` 이 없으므로
   upstream 의 USBGPU 프로브가 자동으로 비활성(작은 모델을 QCOM 에서 실행). 커스텀 big 모델 컴파일은 미지원(의도된 안전 동작).
 
@@ -166,8 +171,9 @@ upstream 커밋은 주로 자동 체리픽으로 들어오므로, 셀렉터의 �
 기억(체크리스트, 수동 태그 갱신)에 의존하지 않고 전부 **자가 동작**한다:
 
 - **컴파일 환경 스탬프 자동 태그** (`config.compile_env_tag()`)
-  — `tinygrad_repo`, `compile_modeld.py`, `helpers.py`, `constants.py`, `SConscript`
-  의 git 해시에서 태그를 도출. 이 경로에 닿는 커밋이 체리픽되면 태그가 저절로
+  — `tinygrad_repo`, modeld 컴파일·warp·metadata 스크립트, 모델 셀렉터 installer와
+  컴파일 플래그의 git 해시에서 태그를 도출. 기본 모델의 `.build_stamp` 도 같은 태그를
+  사용한다. 이 경로에 닿는 커밋이 체리픽되면 태그가 저절로
   바뀌어 설치본 스탬프와 불일치 → 부팅 시 보존된 onnx 로 자동 재컴파일.
   git 을 못 쓰는 환경에서만 `_COMPILE_ENV_TAG_FALLBACK` 수동 관리.
 - **helpers 훅 자가 점검** (`modeld_runner._upstream_hook_alive`)

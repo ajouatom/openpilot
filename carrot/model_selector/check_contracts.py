@@ -49,6 +49,23 @@ EXPECTED_SIGNATURES = {
 REQUIRED_MODEL_CONSTANTS = ("MODEL_RUN_FREQ", "MODEL_CONTEXT_FREQ", "DESIRE_LEN",
                             "TRAFFIC_CONVENTION_LEN", "FEATURE_LEN")
 
+REQUIRED_COMPILE_ENV_PATHS = {
+    "tinygrad_repo",
+    "carrot/model_selector/config.py",
+    "carrot/model_selector/installer.py",
+    "carrot/model_selector/compile_legacy_warp.py",
+    "carrot/model_selector/carrot_modeld.py",
+    "openpilot/selfdrive/modeld/SConscript",
+    "openpilot/selfdrive/modeld/compile_modeld.py",
+    "openpilot/selfdrive/modeld/compile_dm_warp.py",
+    "openpilot/selfdrive/modeld/get_model_metadata.py",
+    "openpilot/selfdrive/modeld/helpers.py",
+    "openpilot/selfdrive/modeld/constants.py",
+    "openpilot/selfdrive/modeld/modeld.py",
+    "openpilot/selfdrive/modeld/dmonitoringmodeld.py",
+    "openpilot/common/file_chunker.py",
+}
+
 # carrot_modeld / carrot_parse_model_outputs 가 "미러링"하는 upstream 파일들.
 # fill_model_msg 처럼 임포트하는 파일과 달리, 이 둘의 로직 변경(예: 커밋
 # 67b6f17d44 의 has_wide_camera 분기)은 자동 반영되지 않고 사람이 판단해
@@ -82,7 +99,7 @@ def check_helpers_hook() -> str | None:
         from openpilot.selfdrive.modeld.helpers import modeld_pkl_path
         got = Path(modeld_pkl_path(False))
         big = Path(modeld_pkl_path(True))
-        if str(got.parent) != probe:
+        if got.parent != Path(probe):
             return f"MODELD_MODELS_DIR ignored — hook lost (got {got})"
         if got.name != "driving_tinygrad.pkl" or big.name != "big_driving_tinygrad.pkl":
             return f"pkl naming changed: {got.name}, {big.name}"
@@ -118,9 +135,22 @@ def check_pkl_format_pair() -> str | None:
     return None
 
 
+def check_tinygrad_pickle_compat() -> str | None:
+    """The compiler must use tinygrad's native Buffer pickle implementation."""
+    compile_src = (MODELD_DIR / "compile_modeld.py").read_text()
+    device_src = (REPO_ROOT / "tinygrad_repo" / "tinygrad" / "device.py").read_text()
+    if "_patch_tinygrad_buffer_reduce" in compile_src:
+        return "obsolete Buffer pickle monkeypatch restored"
+    if "def __reduce_ex__" not in device_src:
+        return "vendored tinygrad no longer provides native Buffer pickle support"
+    return None
+
+
 def check_sconscript_flags() -> str | None:
     from carrot.model_selector.config import TINYGRAD_COMPILE_ENV_QCOM
     src = (MODELD_DIR / "SConscript").read_text()
+    if "if arch == 'larch64':" not in src or "probe_devices" in src:
+        return "TICI backend must be selected from the build architecture"
     m = re.search(r"DEV=\{tg_backend\}\s+([A-Z0-9_= ]+)'", src)
     if not m:
         return "cannot locate QCOM tg_flags line in SConscript"
@@ -129,6 +159,36 @@ def check_sconscript_flags() -> str | None:
     if sconscript != expected:
         return f"QCOM flags diverged: SConscript={sconscript} config={expected}"
     return None
+
+
+def check_compile_env_guards() -> str | None:
+    """Old tinygrad pickles must be rejected before either model loader runs."""
+    from carrot.model_selector.config import _COMPILE_ENV_PATHS
+
+    problems = []
+    missing = sorted(REQUIRED_COMPILE_ENV_PATHS - set(_COMPILE_ENV_PATHS))
+    if missing:
+        problems.append(f"compiler fingerprint missing paths: {missing}")
+
+    runner = (REPO_ROOT / "carrot/model_selector/modeld_runner.py").read_text()
+    if "model_compile_env_is_current(CUSTOM_MODELS_DIR)" not in runner:
+        problems.append("modeld_runner does not reject stale custom PKLs before load")
+
+    launcher = (REPO_ROOT / "launch_chffrplus.sh").read_text()
+    if "from carrot.model_selector.config import compile_env_tag" not in launcher:
+        problems.append("built-in model stamp does not use the common compiler fingerprint")
+    if "HEAD:openpilot/selfdrive/modeld HEAD:tinygrad_repo" in launcher:
+        problems.append("built-in model stamp still hashes the self-changing modeld tree")
+
+    release = (REPO_ROOT / "release/build_carrot.sh").read_text()
+    build_at = release.find("prepare_prebuilt_models\n")
+    delete_at = release.find('rm -f -- openpilot/selfdrive/modeld/models/*.onnx')
+    if build_at < 0 or delete_at < 0 or build_at >= delete_at:
+        problems.append("prebuilt model compilation must happen before ONNX removal")
+    if 'validate_prebuilt_models "$FINAL_MODEL_TAG"' not in release:
+        problems.append("final prebuilt compiler stamp is not verified")
+
+    return "; ".join(problems) if problems else None
 
 
 def check_fill_model_msg_signatures() -> str | None:
@@ -191,7 +251,9 @@ CHECKS = (
     ("compile-modeld-cli", check_compile_modeld_cli),
     ("metadata-naming", check_metadata_naming),
     ("pkl-format-pair", check_pkl_format_pair),
+    ("tinygrad-pickle-compat", check_tinygrad_pickle_compat),
     ("sconscript-flags", check_sconscript_flags),
+    ("compile-env-guards", check_compile_env_guards),
     ("fill-model-msg-signatures", check_fill_model_msg_signatures),
     ("model-constants", check_model_constants),
     ("wiring", check_wiring),

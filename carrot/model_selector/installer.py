@@ -390,8 +390,8 @@ def recompile_stale_if_needed() -> None:
     보존된 onnx 로 재컴파일한다.  스탬프가 현재 태그와 일치하면 no-op.
 
     onnx 세트가 없거나 직전 재컴파일이 같은 태그로 이미 실패했으면 손대지
-    않는다 — 그 경우 modeld_runner 의 크래시루프 차단기(3회 후 격리)가
-    폴백을 책임진다."""
+    않는다. 그 경우 modeld_runner 가 stale pkl 을 열지 않고 기본 모델을 즉시
+    선택하며, 기존 파일은 다음 컴파일러 태그에서 다시 시도할 수 있게 보존한다."""
     if MODELS_TMP_DIR.exists() or not is_valid_model_dir(MODELS_DIR):
         return
     tag = compile_env_tag()
