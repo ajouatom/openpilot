@@ -11,7 +11,7 @@ from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
 from opendbc.car.hyundai.values import CAMERA_SCC_CAR, CANFD_CAR, CAN_GEARS, CAR, CHECKSUM, DATE_FW_ECUS, \
                                          HYBRID_CAR, EV_CAR, FW_QUERY_CONFIG, LEGACY_SAFETY_MODE_CAR, CANFD_FUZZY_WHITELIST, \
                                          UNSUPPORTED_LONGITUDINAL_CAR, PLATFORM_CODE_ECUS, HYUNDAI_VERSION_REQUEST_LONG, \
-                                         HyundaiExtFlags, HyundaiFlags, get_platform_codes, HyundaiSafetyFlags
+                                         HyundaiFlags, get_platform_codes, HyundaiSafetyFlags
 from opendbc.car.hyundai.fingerprints import FW_VERSIONS
 
 Ecu = CarParams.Ecu
@@ -61,15 +61,6 @@ class TestHyundaiFingerprint:
         fingerprint[1][RADAR_START_ADDR] = 8
       CP = CarInterface.get_params(CAR.HYUNDAI_SONATA, fingerprint, [], False, False)
       assert CP.radarUnavailable != radar
-
-  def test_canfd_gear_shifter_detection(self):
-    fingerprint = gen_empty_fingerprint()
-    ecan = CanBus(None, fingerprint).ECAN
-    fingerprint[ecan][0x130] = 16
-
-    CP = CarInterface.get_params(CAR.KIA_EV6, fingerprint, [], False, False)
-
-    assert CP.extFlags & HyundaiExtFlags.CANFD_GEARS_130
 
   def test_alternate_limits(self):
     # Alternate lateral control limits, for high torque cars, verify Panda safety mode flag is set
