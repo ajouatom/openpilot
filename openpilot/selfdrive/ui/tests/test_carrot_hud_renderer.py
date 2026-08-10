@@ -128,8 +128,9 @@ def make_param_renderer(module, *, next_refresh=0.0):
   renderer._hud_params_next_refresh_time = next_refresh
   renderer._show_device_state = 91
   renderer._show_date_time = 92
-  renderer._show_plot_mode = 93
-  renderer._longitudinal_personality = 94
+  renderer._show_tpms = 93
+  renderer._show_plot_mode = 94
+  renderer._longitudinal_personality = 95
   return renderer
 
 
@@ -154,6 +155,7 @@ def test_direct_hud_param_reads_are_isolated_to_refresh():
   assert reads == [
     ("_refresh_hud_params", "ShowDeviceState"),
     ("_refresh_hud_params", "ShowDateTime"),
+    ("_refresh_hud_params", "ShowTpms"),
     ("_refresh_hud_params", "ShowPlotMode"),
     ("_refresh_hud_params", "LongitudinalPersonality"),
   ]
@@ -188,7 +190,8 @@ def test_hud_params_are_refreshed_once_per_interval(hud_module):
   params = FakeParams({
     "ShowDeviceState": 1,
     "ShowDateTime": 2,
-    "ShowPlotMode": 3,
+    "ShowTpms": 3,
+    "ShowPlotMode": 4,
     "LongitudinalPersonality": 4,
   })
   fake_ui_state.params = params
@@ -198,22 +201,24 @@ def test_hud_params_are_refreshed_once_per_interval(hud_module):
   assert (
     renderer._show_device_state,
     renderer._show_date_time,
+    renderer._show_tpms,
     renderer._show_plot_mode,
     renderer._longitudinal_personality,
-  ) == (1, 2, 3, 4)
+  ) == (1, 2, 3, 4, 4)
   assert renderer._hud_params_next_refresh_time == 1.0
   assert params.calls == [
     "ShowDeviceState",
     "ShowDateTime",
+    "ShowTpms",
     "ShowPlotMode",
     "LongitudinalPersonality",
   ]
 
   renderer._refresh_hud_params(0.999)
-  assert len(params.calls) == 4
+  assert len(params.calls) == 5
 
   renderer._refresh_hud_params(1.0)
-  assert len(params.calls) == 8
+  assert len(params.calls) == 10
   assert renderer._hud_params_next_refresh_time == 2.0
 
 
@@ -222,7 +227,8 @@ def test_show_param_failure_keeps_complete_snapshot_and_retries(hud_module):
   params = FakeParams({
     "ShowDeviceState": 1,
     "ShowDateTime": 2,
-    "ShowPlotMode": 3,
+    "ShowTpms": 3,
+    "ShowPlotMode": 4,
     "LongitudinalPersonality": 4,
   }, failures={"ShowDateTime": 1})
   fake_ui_state.params = params
@@ -233,9 +239,10 @@ def test_show_param_failure_keeps_complete_snapshot_and_retries(hud_module):
   assert (
     renderer._show_device_state,
     renderer._show_date_time,
+    renderer._show_tpms,
     renderer._show_plot_mode,
     renderer._longitudinal_personality,
-  ) == (91, 92, 93, 94)
+  ) == (91, 92, 93, 94, 95)
   assert renderer._hud_params_next_refresh_time == 0.0
   assert params.calls == ["ShowDeviceState", "ShowDateTime"]
 
@@ -243,9 +250,10 @@ def test_show_param_failure_keeps_complete_snapshot_and_retries(hud_module):
   assert (
     renderer._show_device_state,
     renderer._show_date_time,
+    renderer._show_tpms,
     renderer._show_plot_mode,
     renderer._longitudinal_personality,
-  ) == (1, 2, 3, 4)
+  ) == (1, 2, 3, 4, 4)
   assert renderer._hud_params_next_refresh_time == pytest.approx(1.1)
 
 
@@ -254,7 +262,8 @@ def test_personality_failure_uses_gap_eight_and_retries_next_frame(hud_module):
   params = FakeParams({
     "ShowDeviceState": 1,
     "ShowDateTime": 2,
-    "ShowPlotMode": 3,
+    "ShowTpms": 3,
+    "ShowPlotMode": 4,
     "LongitudinalPersonality": 4,
   }, failures={"LongitudinalPersonality": 1})
   fake_ui_state.params = params
@@ -262,7 +271,7 @@ def test_personality_failure_uses_gap_eight_and_retries_next_frame(hud_module):
 
   renderer._refresh_hud_params(0.0)
 
-  assert (renderer._show_device_state, renderer._show_date_time, renderer._show_plot_mode) == (1, 2, 3)
+  assert (renderer._show_device_state, renderer._show_date_time, renderer._show_tpms, renderer._show_plot_mode) == (1, 2, 3, 4)
   assert renderer._get_cruise_gap() == 8
   assert renderer._hud_params_next_refresh_time == 0.0
 
@@ -491,6 +500,29 @@ def test_tpms_legacy_display_boundaries(hud_module, value, expected_text, expect
   assert renderer._get_tpms_color(value) == getattr(module.COLORS, expected_color_name)
 
 
+@pytest.mark.parametrize(("show_tpms", "expected_y"), (
+  (0, []),
+  (1, [180]),
+  (2, [675]),
+  (3, [180, 675]),
+))
+def test_tpms_position_follows_show_tpms(hud_module, monkeypatch, show_tpms, expected_y):
+  module, fake_ui_state = hud_module
+  renderer = object.__new__(module.HudRenderer)
+  renderer._show_tpms = show_tpms
+  fake_ui_state.sm = {
+    "carState": SimpleNamespace(tpms=SimpleNamespace(fl=31, fr=32, rl=33, rr=34)),
+  }
+  calls = []
+  monkeypatch.setattr(renderer, "_draw_tpms_values", lambda bx, by, dw, *values: calls.append((bx, by, dw, values)))
+
+  renderer._draw_tpms(module.rl.Rectangle(10, 50, 1000, 750))
+
+  assert [call[1] for call in calls] == expected_y
+  assert all(call[0] == 885 and call[2] == 80 for call in calls)
+  assert all(call[3] == (31.0, 32.0, 33.0, 34.0) for call in calls)
+
+
 def test_date_text_formats_only_when_minute_key_changes(hud_module, monkeypatch):
   module, _ = hud_module
   renderer = object.__new__(module.HudRenderer)
@@ -556,7 +588,7 @@ def test_render_draws_each_hud_section_in_order(hud_module, monkeypatch):
   )
   monkeypatch.setattr(renderer, "_refresh_hud_params", lambda now: calls.append(("params", now)))
   monkeypatch.setattr(renderer, "_draw_date_time", lambda rect: calls.append("date"))
-  monkeypatch.setattr(renderer, "_draw_tpms_top_right", lambda rect: calls.append("tpms"))
+  monkeypatch.setattr(renderer, "_draw_tpms", lambda rect: calls.append("tpms"))
   monkeypatch.setattr(renderer, "_draw_cruise_speed_animation", lambda rect: calls.append("animation"))
   monkeypatch.setattr(module.rl, "draw_rectangle_gradient_v", lambda *args: calls.append("header"))
   monkeypatch.setattr(module.time, "monotonic", lambda: 12.5)

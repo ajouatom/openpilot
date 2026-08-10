@@ -171,6 +171,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ShowLaneInfo", {PERSISTENT, INT, "1"}},
     {"ShowRadarInfo", {PERSISTENT, INT, "1"}},
     {"ShowDeviceState", {PERSISTENT, INT, "1"}},
+    {"ShowTpms", {PERSISTENT, INT, "1"}},
     {"ShowPathMode", {PERSISTENT, INT, "9"}},
     {"ShowPathColor", {PERSISTENT, INT, "13"}},
     {"ShowPathColorCruiseOff", {PERSISTENT, INT, "19"}},

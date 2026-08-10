@@ -195,6 +195,7 @@ class HudRenderer(Widget):
     self._hud_params_next_refresh_time = 0.0
     self._show_device_state = 0
     self._show_date_time = 0
+    self._show_tpms = 1
     self._show_plot_mode = 0
     self._longitudinal_personality = 7
 
@@ -209,6 +210,7 @@ class HudRenderer(Widget):
     try:
       show_device_state = ui_state.params.get_int("ShowDeviceState")
       show_date_time = ui_state.params.get_int("ShowDateTime")
+      show_tpms = ui_state.params.get_int("ShowTpms")
       show_plot_mode = ui_state.params.get_int("ShowPlotMode")
     except Exception:
       # Keep the last complete snapshot and retry on the next frame.
@@ -224,6 +226,7 @@ class HudRenderer(Widget):
 
     self._show_device_state = show_device_state
     self._show_date_time = show_date_time
+    self._show_tpms = show_tpms
     self._show_plot_mode = show_plot_mode
     self._longitudinal_personality = longitudinal_personality
     self._hud_params_next_refresh_time = now if personality_read_failed else now + HUD_PARAM_REFRESH_INTERVAL
@@ -292,7 +295,7 @@ class HudRenderer(Widget):
     self._plot_renderer.draw(rect, self._font_display, self._show_plot_mode)
 
     self._draw_date_time(rect)
-    self._draw_tpms_top_right(rect)
+    self._draw_tpms(rect)
     self._draw_cruise_speed_animation(rect)
 
   def user_interacting(self) -> bool:
@@ -1006,9 +1009,8 @@ class HudRenderer(Widget):
       return '  -'
     return f'{round(tpms):.0f}'
 
-  def _draw_tpms_top_right(self, rect: rl.Rectangle) -> None:
-    show_tpms = 1 #ui_state.params.get_int('ShowTpms')
-    if show_tpms not in (1, 3):
+  def _draw_tpms(self, rect: rl.Rectangle) -> None:
+    if self._show_tpms not in (1, 2, 3):
       return
 
     try:
@@ -1021,9 +1023,17 @@ class HudRenderer(Widget):
       return
 
     bx = rect.x + rect.width - 125
-    by = rect.y + 130
     dw = 80
 
+    if self._show_tpms in (1, 3):
+      self._draw_tpms_values(bx, rect.y + 130, dw, fl, fr, rl_v, rr)
+    if self._show_tpms in (2, 3):
+      self._draw_tpms_values(bx, rect.y + rect.height - 125, dw, fl, fr, rl_v, rr)
+
+  def _draw_tpms_values(
+    self, bx: float, by: float, dw: float,
+    fl: float, fr: float, rl_v: float, rr: float,
+  ) -> None:
     draw_text_ui_style(
       self._get_tpms_text(fl), bx - dw, by - 55, 40, self._get_tpms_color(fl),
       font=self._font_display, border_width=1.0, shadow_offset=4.0, align='center_bottom',
