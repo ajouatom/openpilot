@@ -64,6 +64,17 @@ def test_wide_camera_fallback_setting_is_exposed(settings, params):
   assert '{"UseWideCamera", {PERSISTENT, BOOL, "1"}}' in params_keys
 
 
+def test_tpms_position_setting_matches_device_support(params):
+  by_name = {p["name"]: p for p in params}
+  show_tpms = by_name["ShowTpms"]
+  assert (show_tpms["min"], show_tpms["max"], show_tpms["default"]) == (0, 3, 1)
+  assert "C4(MICI)는 해당 없음" in show_tpms["descr"]
+  assert "Not applicable to C4 (MICI)" in show_tpms["edescr"]
+
+  params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
+  assert '{"ShowTpms", {PERSISTENT, INT, "1"}}' in params_keys
+
+
 def test_external_hud_brightness_and_orientation_use_catalog_controls(settings, params):
   by_name = {p["name"]: p for p in params}
   brightness = by_name["ClusterHudBrightness"]
