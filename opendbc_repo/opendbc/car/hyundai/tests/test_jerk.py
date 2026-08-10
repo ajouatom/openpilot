@@ -22,22 +22,22 @@ def build_jerk_controller():
 
 
 @pytest.mark.parametrize(
-  "accel, expected_lower",
+  "accel",
   [
-    (0.0, 1.2),
-    (-0.8, 1.2),
-    (-1.2, 1.2),
-    (-1.5, 1.7),
-    (-2.0, 3.0),
-    (-2.5, 3.3),
-    (-3.2, 3.7),
+    0.0,
+    -0.8,
+    -1.2,
+    -1.5,
+    -2.0,
+    -2.5,
+    -3.2,
   ],
 )
-def test_canfd_lower_jerk_tracks_decel_request(accel, expected_lower):
+def test_canfd_lower_jerk_does_not_use_accel_without_tracking_error(accel):
   upper, lower = calculate_canfd_jerk_limits(accel, jerk=0.0)
 
   assert upper == pytest.approx(1.0)
-  assert lower == pytest.approx(expected_lower)
+  assert lower == pytest.approx(1.0)
 
 
 def test_canfd_lower_jerk_keeps_mpc_transient_authority():
@@ -46,12 +46,26 @@ def test_canfd_lower_jerk_keeps_mpc_transient_authority():
   assert lower == pytest.approx(4.0)
 
 
-def test_canfd_lower_jerk_adds_bounded_tracking_error_trim():
-  _, lower = calculate_canfd_jerk_limits(accel=-2.0, jerk=0.0, tracking_error=0.6)
+def test_canfd_lower_jerk_blends_feedforward_for_tracking_error():
+  _, partial_lower = calculate_canfd_jerk_limits(accel=-2.0, jerk=0.0, tracking_error=0.5)
+  _, full_lower = calculate_canfd_jerk_limits(accel=-2.0, jerk=0.0, tracking_error=0.75)
   _, capped_lower = calculate_canfd_jerk_limits(accel=-3.2, jerk=-2.0, tracking_error=2.0)
 
-  assert lower == pytest.approx(3.35)
+  assert partial_lower == pytest.approx(2.0)
+  assert full_lower == pytest.approx(3.0)
   assert capped_lower == pytest.approx(5.0)
+
+
+def test_canfd_positive_jerk_releases_feedforward_immediately():
+  _, lower = calculate_canfd_jerk_limits(accel=-3.2, jerk=0.2, tracking_error=2.0)
+
+  assert lower == pytest.approx(1.0)
+
+
+def test_canfd_small_jerk_noise_keeps_feedforward():
+  _, lower = calculate_canfd_jerk_limits(accel=-2.0, jerk=0.05, tracking_error=0.75)
+
+  assert lower == pytest.approx(3.0)
 
 
 def test_canfd_upper_jerk_uses_stock_like_floor():
@@ -71,7 +85,57 @@ def test_canfd_sustained_tracking_error_adds_trim():
   for _ in range(100):
     controller.make_jerk(CP, CS, accel=-2.0, actuators=actuators, hud_control=None)
 
-  assert controller.jerk_l == pytest.approx(3.35)
+  assert controller.jerk_l == pytest.approx(2.4)
+
+
+def test_canfd_tracking_assist_releases_on_overshoot():
+  controller = build_jerk_controller()
+  CP = SimpleNamespace(flags=HyundaiFlags.CANFD)
+  CS = SimpleNamespace(out=SimpleNamespace(aEgo=-1.0, brakePressed=False, gasPressed=False))
+  actuators = SimpleNamespace(longControlState=LongCtrlState.pid, jerk=0.0)
+
+  for _ in range(100):
+    controller.make_jerk(CP, CS, accel=-2.0, actuators=actuators, hud_control=None)
+  assert controller.jerk_l > 1.0
+
+  CS.out.aEgo = -2.5
+  controller.make_jerk(CP, CS, accel=-2.0, actuators=actuators, hud_control=None)
+
+  assert controller.jerk_l == pytest.approx(1.0)
+
+
+def test_canfd_tracking_assist_does_not_chatter_near_deadband():
+  controller = build_jerk_controller()
+  CP = SimpleNamespace(flags=HyundaiFlags.CANFD)
+  CS = SimpleNamespace(out=SimpleNamespace(aEgo=-1.0, brakePressed=False, gasPressed=False))
+  actuators = SimpleNamespace(longControlState=LongCtrlState.pid, jerk=0.0)
+
+  for _ in range(100):
+    controller.make_jerk(CP, CS, accel=-2.0, actuators=actuators, hud_control=None)
+  assisted_lower = controller.jerk_l
+
+  CS.out.aEgo = -1.8
+  for _ in range(20):
+    controller.make_jerk(CP, CS, accel=-2.0, actuators=actuators, hud_control=None)
+
+  assert controller.jerk_l > 1.0
+  assert controller.jerk_l < assisted_lower
+
+
+def test_canfd_tracking_assist_releases_when_plan_unwinds():
+  controller = build_jerk_controller()
+  CP = SimpleNamespace(flags=HyundaiFlags.CANFD)
+  CS = SimpleNamespace(out=SimpleNamespace(aEgo=-1.0, brakePressed=False, gasPressed=False))
+  actuators = SimpleNamespace(longControlState=LongCtrlState.pid, jerk=0.0)
+
+  for _ in range(100):
+    controller.make_jerk(CP, CS, accel=-2.0, actuators=actuators, hud_control=None)
+  assert controller.jerk_l > 1.0
+
+  actuators.jerk = 0.2
+  controller.make_jerk(CP, CS, accel=-2.0, actuators=actuators, hud_control=None)
+
+  assert controller.jerk_l == pytest.approx(1.0)
 
 
 def test_classic_can_jerk_limits_are_unchanged():
