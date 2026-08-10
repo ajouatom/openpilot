@@ -152,7 +152,6 @@ class HyundaiExtFlags(IntFlag):
   CORNER_RADAR_OBJECTS_430 = 2 ** 14  # 0x430-0x437 left + 0x440-0x447 right IONIQ 9 corner radar bins
   RADAR_GROUP4 = 2 ** 15  # 0x500-0x507 Denso DNMWR006 stable radar tracks
   EV_MODE_STATUS_230 = 2 ** 16  # ECAN 0x230/DLC32 exposes the hybrid power-flow mode used for the EV indicator
-  CANFD_GEARS_130 = 2 ** 17  # Dedicated GEAR_SHIFTER message is present on ECAN
 
 class Footnote(Enum):
   CANFD = CarFootnote(
