@@ -651,6 +651,15 @@ def _suppress_trailer_mode_warning(values, CS):
   if CS.trailer_connected and values.get("ALERTS_5") == 6:
     values["ALERTS_5"] = 0
 
+
+def _hide_lca_service_warning(values):
+  # Preserve blocked-sensor warnings and unrelated DAS faults. The original
+  # camera-side message remains available in logcan for diagnosis.
+  if values.get("FAULT_LCA") == 1:
+    values["FAULT_LCA"] = 0
+    if values.get("FAULT_DAS") == 1:
+      values["FAULT_DAS"] = 0
+
 def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
                      lane_line=True, corner_radar=True,
                      desire=0,
@@ -888,6 +897,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         if (left_lane_warning and not CS.out.leftBlinker) or (right_lane_warning and not CS.out.rightBlinker):
           values["VIBRATE"] = 1
+
+        _hide_lca_service_warning(values)
 
         if canfd_debug > 0:
           values["FAULT_LSS"] = 0
