@@ -126,6 +126,7 @@ class CarInterface(CarInterfaceBase):
         ret.flags |= HyundaiFlags.CANFD_ALT_GEARS_2.value
         print("$$$CANFD ALT_GEARS_2")
       elif 0x130 in fingerprint[CAN.ECAN]:  # 0x130(304): GEAR_SHIFTER
+        ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_130.value
         print("$$$CANFD GEAR_SHIFTER present")
       else:
         ret.extFlags |= HyundaiExtFlags.CANFD_GEARS_NONE.value

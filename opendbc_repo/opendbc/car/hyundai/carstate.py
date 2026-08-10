@@ -83,6 +83,7 @@ class CarState(CarStateBase):
     self.main_buttons: deque = deque([Buttons.NONE] * PREV_BUTTON_SAMPLES, maxlen=PREV_BUTTON_SAMPLES)
 
     self.gear_msg_canfd = "GEAR" if CP.extFlags & HyundaiExtFlags.CANFD_GEARS_69 else \
+                          "GEAR_SHIFTER" if CP.extFlags & HyundaiExtFlags.CANFD_GEARS_130 else \
                           "ACCELERATOR" if CP.flags & HyundaiFlags.EV else \
                           "GEAR_ALT" if CP.flags & HyundaiFlags.CANFD_ALT_GEARS else \
                           "GEAR_ALT_2" if CP.flags & HyundaiFlags.CANFD_ALT_GEARS_2 else \
@@ -811,6 +812,8 @@ class CarState(CarStateBase):
 
   def get_can_parsers_canfd(self, CP):
     msgs = []
+    if CP.extFlags & HyundaiExtFlags.CANFD_GEARS_130:
+      msgs.append(("GEAR_SHIFTER", 100))
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [
