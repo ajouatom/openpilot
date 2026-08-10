@@ -206,7 +206,7 @@ def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer, 
       "DampingGain": 100, #3 if enabled else 100,
       "STEER_REQ": 1 if lat_active else 0,
       #"STEER_MODE": 0,
-      "HAS_LANE_SAFETY": 0,  # hide LKAS settings
+      "HAS_LANE_SAFETY": 1,
       "VALUE63": 0,
       "VALUE64": 0,
     }
