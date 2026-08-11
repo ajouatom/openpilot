@@ -54,33 +54,50 @@ int comms_can_read(uint8_t *data, uint32_t max_len) {
 }
 
 static asm_buffer can_write_buffer = {.ptr = 0U, .tail_size = 0U};
+#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
+// USB and SPI v3 can be serviced from different contexts. Keep their partial
+// CAN packet assembly independent so an optional USB host cannot alter the
+// bytes that SPI preflighted before its main-loop dispatch.
+static asm_buffer spi_v3_can_write_buffer = {.ptr = 0U, .tail_size = 0U};
+#endif
 
 // send on CAN
-void comms_can_write(const uint8_t *data, uint32_t len) {
+static void comms_can_write_internal(asm_buffer *write_buffer,
+                                     const uint8_t *data, uint32_t len,
+                                     bool use_reservations) {
   uint32_t pos = 0U;
 
   // Assembling can message with data from buffer
-  if (can_write_buffer.ptr != 0U) {
-    if (can_write_buffer.tail_size <= (len - pos)) {
+  if (write_buffer->ptr != 0U) {
+    if (write_buffer->tail_size <= (len - pos)) {
       // we have enough data to complete the buffer
       CANPacket_t to_push = {0};
-      (void)memcpy(&can_write_buffer.data[can_write_buffer.ptr], &data[pos], can_write_buffer.tail_size);
-      can_write_buffer.ptr += can_write_buffer.tail_size;
-      pos += can_write_buffer.tail_size;
+      (void)memcpy(&write_buffer->data[write_buffer->ptr], &data[pos], write_buffer->tail_size);
+      write_buffer->ptr += write_buffer->tail_size;
+      pos += write_buffer->tail_size;
 
       // send out
-      (void)memcpy((uint8_t*)&to_push, can_write_buffer.data, can_write_buffer.ptr);
-      can_send(&to_push, to_push.bus, false);
+      (void)memcpy((uint8_t*)&to_push, write_buffer->data, write_buffer->ptr);
+      #if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
+        if (use_reservations) {
+          can_send_reserved(&to_push, to_push.bus, false);
+        } else {
+          can_send(&to_push, to_push.bus, false);
+        }
+      #else
+        (void)use_reservations;
+        can_send(&to_push, to_push.bus, false);
+      #endif
 
       // reset overflow buffer
-      can_write_buffer.ptr = 0U;
-      can_write_buffer.tail_size = 0U;
+      write_buffer->ptr = 0U;
+      write_buffer->tail_size = 0U;
     } else {
       // maybe next time
       uint32_t data_size = len - pos;
-      (void) memcpy(&can_write_buffer.data[can_write_buffer.ptr], &data[pos], data_size);
-      can_write_buffer.tail_size -= data_size;
-      can_write_buffer.ptr += data_size;
+      (void) memcpy(&write_buffer->data[write_buffer->ptr], &data[pos], data_size);
+      write_buffer->tail_size -= data_size;
+      write_buffer->ptr += data_size;
       pos += data_size;
     }
   }
@@ -91,22 +108,62 @@ void comms_can_write(const uint8_t *data, uint32_t len) {
     if ((pos + pckt_len) <= len) {
       CANPacket_t to_push = {0};
       (void)memcpy((uint8_t*)&to_push, &data[pos], pckt_len);
-      can_send(&to_push, to_push.bus, false);
+      #if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
+        if (use_reservations) {
+          can_send_reserved(&to_push, to_push.bus, false);
+        } else {
+          can_send(&to_push, to_push.bus, false);
+        }
+      #else
+        (void)use_reservations;
+        can_send(&to_push, to_push.bus, false);
+      #endif
       pos += pckt_len;
     } else {
-      (void)memcpy(can_write_buffer.data, &data[pos], len - pos);
-      can_write_buffer.ptr = len - pos;
-      can_write_buffer.tail_size = pckt_len - can_write_buffer.ptr;
-      pos += can_write_buffer.ptr;
+      (void)memcpy(write_buffer->data, &data[pos], len - pos);
+      write_buffer->ptr = len - pos;
+      write_buffer->tail_size = pckt_len - write_buffer->ptr;
+      pos += write_buffer->ptr;
     }
   }
 
   refresh_can_tx_slots_available();
 }
 
+void comms_can_write(const uint8_t *data, uint32_t len) {
+  comms_can_write_internal(&can_write_buffer, data, len, false);
+}
+
+#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
+comms_can_write_result_t comms_can_write_v3(const uint8_t *data, uint32_t len) {
+  COMPILE_TIME_ASSERT(SPI_V3_CAN_BUS_COUNT == CAN_QUEUES_ARRAY_SIZE);
+  uint16_t required[SPI_V3_CAN_BUS_COUNT] = {0U};
+  if ((len > UINT16_MAX) ||
+      !spi_v3_can_batch_requirements(spi_v3_can_write_buffer.data,
+                                     (uint16_t)spi_v3_can_write_buffer.ptr,
+                                     (uint16_t)spi_v3_can_write_buffer.tail_size,
+                                     data, (uint16_t)len, required)) {
+    return COMMS_CAN_WRITE_INVALID;
+  }
+  if (!can_tx_reserve_slots(required)) {
+    return COMMS_CAN_WRITE_BUSY;
+  }
+
+  // Reservations prevent concurrent forwarding or USB writers from consuming
+  // this batch's queue capacity. Per-transport assembly buffers protect its
+  // partial packet state without holding interrupts off for the whole batch.
+  comms_can_write_internal(&spi_v3_can_write_buffer, data, len, true);
+  return COMMS_CAN_WRITE_OK;
+}
+#endif
+
 void comms_can_reset(void) {
   can_write_buffer.ptr = 0U;
   can_write_buffer.tail_size = 0U;
+#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
+  spi_v3_can_write_buffer.ptr = 0U;
+  spi_v3_can_write_buffer.tail_size = 0U;
+#endif
   can_read_buffer.ptr = 0U;
   can_read_buffer.tail_size = 0U;
 }

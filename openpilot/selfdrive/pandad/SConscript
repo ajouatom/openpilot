@@ -8,10 +8,18 @@ if arch != "Darwin":
   panda_env['LIBPATH'] += [libusb.LIB_DIR]
 
   libs = [common, messaging, 'pthread', 'usb-1.0']
-  panda = panda_env.Library('panda', ['panda.cc', 'panda_comms.cc', 'spi.cc'])
+  panda = panda_env.Library('panda', [
+    'panda.cc', 'panda_comms.cc', 'spi.cc', 'spi_protocol_v3.cc',
+    'spi_v3_transport.cc', 'spi_version.cc',
+  ])
 
   panda_env.Program('pandad', ['main.cc', 'pandad.cc', 'panda_safety.cc'], LIBS=[panda] + libs)
 
   if GetOption('extras'):
     panda_env.Program('tests/test_pandad_canprotocol', ['tests/test_pandad_canprotocol.cc'], LIBS=[panda] + libs)
     panda_env.Program('tests/test_pandad_scheduler', ['tests/test_pandad_scheduler.cc'])
+    panda_env.Program('tests/test_spi_protocol_v3', ['tests/test_spi_protocol_v3.cc', 'spi_protocol_v3.cc'])
+    panda_env.Program('tests/test_spi_v3_transport', [
+      'tests/test_spi_v3_transport.cc', 'spi_protocol_v3.cc', 'spi_v3_transport.cc',
+    ])
+    panda_env.Program('tests/test_spi_version', ['tests/test_spi_version.cc', 'spi_version.cc'])

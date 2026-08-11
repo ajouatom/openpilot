@@ -1,18 +1,26 @@
 #include <sys/file.h>
 #include <sys/ioctl.h>
+#include <sys/random.h>
 #include <linux/spi/spidev.h>
+#include <unistd.h>
 
+#include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <iomanip>
 #include <sstream>
+#include <thread>
+#include <vector>
 
 #include "common/util.h"
 #include "common/timing.h"
 #include "common/swaglog.h"
 #include "panda/board/comms_definitions.h"
 #include "selfdrive/pandad/panda_comms.h"
+#include "selfdrive/pandad/spi_v3_transport.h"
+#include "selfdrive/pandad/spi_version.h"
 
 
 #define SPI_SYNC 0x5AU
@@ -43,11 +51,23 @@ const int SPI_RECOVERY_MAX_ATTEMPTS = 12;
 const std::string SPI_DEVICE = "/dev/spidev0.0";
 // The Panda SPI slave switches RX DMA phases from its TX-complete interrupt.
 // Do not clock the next phase until that interrupt has had time to re-arm RX.
-// TODO: replace this bounded guard with protocol-level readiness in SPI v3.
+// Protocol v3 removes this phase transition; the guard remains for v2 devices.
 static uint64_t spi_last_bus_activity_ns = 0;  // protected by hw_lock
 
 static void wait_for_spi_turnaround(uint64_t start_ns) {
   while ((nanos_since_boot() - start_ns) < 400000) {}
+}
+
+static uint32_t new_spi_session_id() {
+  uint32_t session_id = 0U;
+  if (getrandom(&session_id, sizeof(session_id), GRND_NONBLOCK) !=
+      static_cast<ssize_t>(sizeof(session_id))) {
+    session_id = static_cast<uint32_t>(nanos_since_boot()) ^
+                 (static_cast<uint32_t>(getpid()) << 16U);
+  }
+  // Zero is valid on the wire, but reserving it makes uninitialized sessions
+  // obvious in firmware diagnostics.
+  return session_id != 0U ? session_id : 1U;
 }
 
 class LockEx {
@@ -101,6 +121,14 @@ PandaSpiHandle::PandaSpiHandle(std::string serial) {
     util::safe_ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, &spi_speed, "failed setting SPI speed");
     util::safe_ioctl(spi_fd, SPI_IOC_WR_BITS_PER_WORD, &spi_bits_per_word, "failed setting SPI bits per word");
 
+    if (!negotiate_protocol()) {
+      // Very old Panda firmware did not expose stable VERSION discovery. It
+      // can only speak v2, so preserve the historical control-read fallback.
+      protocol_version_ = 2U;
+      LOGW("SPI VERSION discovery failed, falling back to protocol v2");
+    }
+    LOGW("using Panda SPI protocol v%d", protocol_version_);
+
     // get hw UID/serial
     ret = control_read(0xc3, 0, 0, uid, uid_len, 100);
     if (ret == uid_len) {
@@ -131,6 +159,7 @@ PandaSpiHandle::~PandaSpiHandle() {
 }
 
 void PandaSpiHandle::cleanup() {
+  v3_transport.reset();
   if (spi_fd != -1) {
     close(spi_fd);
     spi_fd = -1;
@@ -167,7 +196,10 @@ int PandaSpiHandle::bulk_read(unsigned char endpoint, unsigned char* data, int l
 }
 
 int PandaSpiHandle::bulk_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len, uint8_t *rx_data, uint16_t rx_len, unsigned int timeout) {
-  const int xfer_size = SPI_BUF_SIZE - 0x40;
+  const size_t default_xfer_size = SPI_BUF_SIZE - 0x40;
+  const int xfer_size = static_cast<int>(
+    (protocol_version_ == static_cast<uint8_t>(panda::spi::ProtocolSelection::V3) && tx_data != nullptr) ?
+      panda::spi_v3::bulk_write_chunk_size(endpoint, default_xfer_size) : default_xfer_size);
 
   int ret = 0;
   uint16_t length = (tx_data != NULL) ? tx_len : rx_len;
@@ -225,6 +257,10 @@ bool check_checksum(uint8_t *data, int data_len) {
 int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len, uint8_t *rx_data, uint16_t max_rx_len, unsigned int timeout) {
   if (!connected) {
     return -1;
+  }
+
+  if (protocol_version_ == static_cast<uint8_t>(panda::spi::ProtocolSelection::V3)) {
+    return spi_transfer_v3(endpoint, tx_data, tx_len, rx_data, max_rx_len, timeout);
   }
 
   int ret = -1;
@@ -294,6 +330,41 @@ int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint1
   }
 
   return ret;
+}
+
+int PandaSpiHandle::spi_transfer_v3(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len,
+                                    uint8_t *rx_data, uint16_t max_rx_len,
+                                    unsigned int timeout) {
+  if (v3_transport == nullptr) {
+    comms_healthy = false;
+    connected = false;
+    return static_cast<int>(panda::spi_v3::TransportError::InvalidArgument);
+  }
+
+  LockEx lock(spi_fd, hw_lock);
+  xfer_count++;
+  header = {
+    .sync = SPI_SYNC,
+    .endpoint = endpoint,
+    .tx_len = tx_len,
+    .max_rx_len = max_rx_len,
+  };
+
+  const panda::spi_v3::TransferResult result =
+    v3_transport->transfer(endpoint, tx_data, tx_len, max_rx_len, timeout);
+  if (!result.ok()) {
+    LOGE("SPI v3 transfer failed: error=%d, status=%d, endpoint=0x%x, tx=%u, rx=%u",
+         static_cast<int>(result.error), static_cast<int>(result.remote_status),
+         endpoint, tx_len, max_rx_len);
+    comms_healthy = false;
+    connected = false;
+    return static_cast<int>(result.error);
+  }
+
+  if (rx_data != nullptr && !result.payload.empty()) {
+    memcpy(rx_data, result.payload.data(), result.payload.size());
+  }
+  return static_cast<int>(result.payload.size());
 }
 
 int PandaSpiHandle::wait_for_ack(uint8_t ack, uint8_t tx, unsigned int timeout, unsigned int length, double deadline) {
@@ -497,4 +568,93 @@ fail:
   if (ret >= 0) ret = -1;
   spi_last_bus_activity_ns = nanos_since_boot();
   return ret;
+}
+
+bool PandaSpiHandle::negotiate_protocol() {
+  LockEx lock(spi_fd, hw_lock);
+  panda::spi::VersionStreamDecoder decoder;
+
+  const auto accept_version = [this](const std::optional<panda::spi::VersionInfo> &info) {
+    if (!info.has_value()) {
+      return false;
+    }
+
+    // VERSION retains the legacy v2 TX-complete re-arm. Keep the process-wide
+    // flock until its terminal quiet time has elapsed, including when another
+    // process is waiting to use spidev with its own activity timestamp.
+    wait_for_spi_turnaround(spi_last_bus_activity_ns);
+    const panda::spi::ProtocolSelection selection = panda::spi::select_protocol(*info);
+    if (selection == panda::spi::ProtocolSelection::Unsupported) {
+      throw std::runtime_error("unsupported Panda SPI protocol/device combination");
+    }
+    protocol_version_ = static_cast<uint8_t>(selection);
+    if (selection == panda::spi::ProtocolSelection::V3) {
+      v3_transport = std::make_unique<panda::spi_v3::Transport>(
+        [this](const uint8_t *tx, uint8_t *rx, size_t size) {
+          if (size > SPI_BUF_SIZE) {
+            return -1;
+          }
+          memcpy(tx_buf, tx, size);
+          memset(rx_buf, 0xcd, size);
+          spi_ioc_transfer transfer = {};
+          transfer.tx_buf = (uint64_t)tx_buf;
+          transfer.rx_buf = (uint64_t)rx_buf;
+          transfer.len = static_cast<uint32_t>(size);
+          const int result = lltransfer(transfer);
+          memcpy(rx, rx_buf, size);
+          return result;
+        }, new_spi_session_id());
+    }
+    return true;
+  };
+
+  // VERSION is deliberately outside both framed protocols. Its response can
+  // begin while the request itself is still being clocked, so preserve those
+  // MISO bytes in the same decoder used for every subsequent poll.
+  wait_for_spi_turnaround(spi_last_bus_activity_ns);
+  memcpy(tx_buf, panda::spi::kVersionRequest.data(), panda::spi::kVersionRequest.size());
+  memset(rx_buf, 0xcd, panda::spi::kVersionRequest.size());
+  spi_ioc_transfer request_transfer = {};
+  request_transfer.tx_buf = (uint64_t)tx_buf;
+  request_transfer.rx_buf = (uint64_t)rx_buf;
+  request_transfer.len = static_cast<uint32_t>(panda::spi::kVersionRequest.size());
+  if (lltransfer(request_transfer) < 0) {
+    spi_last_bus_activity_ns = nanos_since_boot();
+    wait_for_spi_turnaround(spi_last_bus_activity_ns);
+    return false;
+  }
+  spi_last_bus_activity_ns = nanos_since_boot();
+  if (accept_version(decoder.feed(rx_buf, panda::spi::kVersionRequest.size()))) {
+    return true;
+  }
+
+  // A legacy v2 Panda rearms HEADER RX as soon as its fixed VERSION TX DMA
+  // completes. A wide filler transfer can therefore clock past the response
+  // CRC and inject a fake header. Poll one byte per CS and stop on the exact
+  // byte that completes the packet. The bounded budget can also drain one
+  // maximum v3 response abandoned by a dead previous host, plus enough bytes
+  // for Panda to service and return this VERSION request.
+  constexpr auto version_poll_pacing = std::chrono::microseconds(100);
+  for (size_t poll = 0U; poll < panda::spi::kVersionMaxPollBytes; ++poll) {
+    std::this_thread::sleep_for(version_poll_pacing);
+    wait_for_spi_turnaround(spi_last_bus_activity_ns);
+
+    tx_buf[0] = 0xcdU;
+    rx_buf[0] = 0xcdU;
+    spi_ioc_transfer poll_transfer = {};
+    poll_transfer.tx_buf = (uint64_t)tx_buf;
+    poll_transfer.rx_buf = (uint64_t)rx_buf;
+    poll_transfer.len = 1U;
+    if (lltransfer(poll_transfer) < 0) {
+      spi_last_bus_activity_ns = nanos_since_boot();
+      wait_for_spi_turnaround(spi_last_bus_activity_ns);
+      return false;
+    }
+    spi_last_bus_activity_ns = nanos_since_boot();
+    if (accept_version(decoder.feed(rx_buf, 1U))) {
+      return true;
+    }
+  }
+  wait_for_spi_turnaround(spi_last_bus_activity_ns);
+  return false;
 }

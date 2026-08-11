@@ -268,17 +268,22 @@ class Panda:
     spi_serial = None
     bootstub = None
     spi_version = None
+    spi_hw_type = None
+    spi_pid = None
     try:
       handle = PandaSpiHandle()
 
       # connect by protcol version
       try:
         dat = handle.get_protocol_version()
+        if len(dat) < 15:
+          raise PandaSpiException("short SPI VERSION response")
         spi_serial = binascii.hexlify(dat[:12]).decode()
-        pid = dat[13]
-        if pid not in (0xcc, 0xee):
+        spi_hw_type = dat[12]
+        spi_pid = dat[13]
+        if spi_pid not in (0xcc, 0xee):
           raise PandaSpiException("invalid bootstub status")
-        bootstub = pid == 0xee
+        bootstub = spi_pid == 0xee
         spi_version = dat[14]
       except PandaSpiException:
         # fallback, we'll raise a protocol mismatch below
@@ -295,10 +300,20 @@ class Panda:
       spi_serial = None
       bootstub = False
 
-    # ensure our protocol version matches the panda
-    if handle is not None and not ignore_version:
-      if spi_version != handle.PROTOCOL_VERSION:
-        err = f"panda protocol mismatch: expected {handle.PROTOCOL_VERSION}, got {spi_version}. reflash panda"
+    # VERSION remains a stable v2-shaped probe across generations. Select the
+    # advertised transport only after enumeration: H7 applications use v3,
+    # while H7 bootstub and all F4 firmware continue using v2 for flashing.
+    if handle is not None:
+      v3_device = spi_pid == 0xcc and spi_hw_type is not None and 7 <= spi_hw_type <= 10
+      supported_device_protocol = spi_version in handle.SUPPORTED_PROTOCOL_VERSIONS and (spi_version != 3 or v3_device)
+      if supported_device_protocol:
+        handle.set_protocol_version(spi_version)
+      elif not ignore_version:
+        supported = ", ".join(str(v) for v in handle.SUPPORTED_PROTOCOL_VERSIONS)
+        err = (
+          f"panda protocol mismatch: supported versions are {supported}, got {spi_version} " +
+          f"for hw_type={spi_hw_type}, pid={spi_pid}. reflash panda"
+        )
         raise PandaProtocolMismatch(err)
 
     return None, handle, spi_serial, bootstub, None
