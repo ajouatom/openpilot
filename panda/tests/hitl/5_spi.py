@@ -11,7 +11,7 @@ from panda.python.spi import (
 )
 
 pytestmark = [
-  pytest.mark.test_panda_types((Panda.HW_TYPE_TRES, ))
+  pytest.mark.test_panda_types((Panda.HW_TYPE_TRES, Panda.HW_TYPE_CUATRO))
 ]
 
 @pytest.mark.skip("doesn't work, bootloader seems to ignore commands once it sees junk")
@@ -82,6 +82,27 @@ class TestSpi:
     p.can_recv()
     p.can_send(0x123, b"somedata", 0)
     assert spy.call_count == (4 if v3 else 2*4)
+
+  @pytest.mark.timeout(30)
+  def test_v3_back_to_back_signature_reads(self, p):
+    if p._handle.protocol_version != SPI_V3_VERSION:
+      pytest.skip("SPI protocol v3 only")
+
+    # Repeated d3/d4 requests cross the 8 KiB RX DMA boundary many times. If
+    # CIRC is omitted from the register_set mask, RX stops there permanently.
+    checksum_errors_before = p.health()['spi_checksum_error_count']
+    expected_signature = None
+    for _ in range(100):
+      part_1 = p._handle.controlRead(Panda.REQUEST_IN, 0xd3, 0, 0, 0x40, timeout=100)
+      part_2 = p._handle.controlRead(Panda.REQUEST_IN, 0xd4, 0, 0, 0x40, timeout=100)
+      signature = bytes(part_1 + part_2)
+      assert len(signature) == 128
+      if expected_signature is None:
+        expected_signature = signature
+      else:
+        assert signature == expected_signature
+
+    assert p.health()['spi_checksum_error_count'] == checksum_errors_before
 
   def test_bad_header(self, mocker, p):
     if p._handle.protocol_version == SPI_V3_VERSION:

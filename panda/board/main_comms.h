@@ -8,9 +8,26 @@ static int get_health_pkt(void *dat) {
   COMPILE_TIME_ASSERT(sizeof(struct health_t) <= USBPACKET_MAX_SIZE);
   struct health_t * health = (struct health_t*)dat;
 
+  #if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
+    // SPI v3 dispatches control requests from the main loop. Prevent the 8 Hz
+    // harness tick ISR from reprogramming ADC1 and consuming this conversion's
+    // EOC/DR/EOS while the health reads are in progress. Preserve the previous
+    // enable state so initialization paths remain unchanged.
+    const uint32_t tick_irq_was_enabled = NVIC_GetEnableIRQ(TICK_TIMER_IRQ);
+    if (tick_irq_was_enabled != 0U) {
+      NVIC_DisableIRQ(TICK_TIMER_IRQ);
+    }
+  #endif
+
   health->uptime_pkt = uptime_cnt;
   health->voltage_pkt = current_board->read_voltage_mV();
   health->current_pkt = current_board->read_current_mA();
+
+  #if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
+    if (tick_irq_was_enabled != 0U) {
+      NVIC_EnableIRQ(TICK_TIMER_IRQ);
+    }
+  #endif
 
   // Use the GPIO pin to determine ignition or use a CAN based logic
   health->ignition_line_pkt = (uint8_t)(current_board->check_ignition());

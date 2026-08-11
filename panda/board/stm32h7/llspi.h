@@ -250,7 +250,9 @@ static void DMA2_Stream3_IRQ_Handler(void) {
   const uint32_t dma_flags = DMA2->LISR;
   DMA2->LIFCR = DMA_LIFCR_CFEIF3 | DMA_LIFCR_CDMEIF3 |
                  DMA_LIFCR_CTEIF3 | DMA_LIFCR_CHTIF3 | DMA_LIFCR_CTCIF3;
-  if ((dma_flags & (DMA_LISR_FEIF3 | DMA_LISR_DMEIF3 | DMA_LISR_TEIF3)) != 0U) {
+  // FEIF3 is advisory in direct mode; only direct-mode or transfer errors are
+  // fatal to the response DMA.
+  if ((dma_flags & (DMA_LISR_DMEIF3 | DMA_LISR_TEIF3)) != 0U) {
     register_clear_bits(&(SPI4->CFG1), SPI_CFG1_TXDMAEN);
     register_clear_bits(&(SPI4->IER), SPI_IER_EOTIE);
     SPI4->IFCR = SPI_IFCR_EOTC | SPI_IFCR_TXTFC | SPI_IFCR_UDRC |
@@ -339,7 +341,7 @@ void llspi_init(void) {
   register_set(&(DMA2_Stream2->CR),
                DMA_SxCR_MINC | DMA_SxCR_CIRC | DMA_SxCR_HTIE | DMA_SxCR_TCIE |
                DMA_SxCR_TEIE | DMA_SxCR_DMEIE,
-               0x1E077EFEU);
+               0x1E077EFEU | DMA_SxCR_CIRC);
   register_set(&(DMA2_Stream2->PAR), (uint32_t)&(SPI4->RXDR), 0xFFFFFFFFU);
   register_set(&(DMA2_Stream2->M0AR), (uint32_t)spi_v3_dma_rx_ring, 0xFFFFFFFFU);
   DMA2_Stream2->NDTR = SPI_V3_RX_RING_SIZE;
