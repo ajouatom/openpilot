@@ -13,10 +13,36 @@ from opendbc.car.hyundai.radar_interface import (
   RADAR_START_ADDR_CANFD3,
   CornerObjectTrackIdManager,
   RadarInterface,
+  canfd_group2_track_status,
   corner_object_position_valid,
   deduplicate_corner_candidates,
 )
 from opendbc.car.hyundai.values import CAR, HyundaiExtFlags, HyundaiFlags
+
+
+class TestCanfdGroup2Radar:
+  @staticmethod
+  def parse(dat):
+    name = "RADAR_TRACK_3ac"
+    parser = CANParser("hyundai_canfd_radar_generated", [(name, 20)], 1)
+    parser.update([0, [(0x3AC, bytes.fromhex(dat), 1)]])
+    return parser.vl[name]
+
+  def test_tentative_overpass_reflection_is_not_confirmed(self):
+    track = self.parse("cb6706810c0f2069acf0ff5cbc0680330200003dd0020000")
+
+    assert track["VALID_CNT"] == 15
+    assert track["VALID"] == 1
+    assert track["LONG_DIST"] == pytest.approx(17.2)
+    assert canfd_group2_track_status(track) == (True, 1)
+
+  def test_confirmed_vehicle_remains_eligible(self):
+    track = self.parse("dbc1db5261ff308db8230030be0b400100000000d0020000")
+
+    assert track["VALID_CNT"] == 255
+    assert track["VALID"] == 2
+    assert track["LONG_DIST"] == pytest.approx(95.25)
+    assert canfd_group2_track_status(track) == (True, 2)
 
 
 class TestDensoRadar:

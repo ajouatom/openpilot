@@ -49,6 +49,18 @@ leadOne also needs at least `1e-4` joint distance/lateral/velocity likelihood,
 matching conventional radard's score floor; an already continuous identity
 may tolerate a brief lower score.
 
+Hyundai CAN-FD group-2 front-radar slots retain the radar's categorical
+`VALID` state in `RadarPoint.trackState`. A state-1 tentative object remains
+available for vision matching, corner/physical CUT-IN corroboration, and later
+state-2/3 promotion. With no independent existence evidence it needs 0.75
+seconds of continuous radar-only observation instead of the normal 0.25
+seconds before becoming a moving leadOne. This still admits a persistent
+vision-invisible target while rejecting the maintained state-1 overpass
+reflection, which disappears after 0.66 seconds in `liveTracks`. Sources
+without this metadata use state 0 and preserve their existing behavior. PC
+replay reconstructs the state from raw CAN for older logs before lead
+selection.
+
 PC visual replay runs only the new `DPathRadarController` and
 `RadarMotionPredictor`. Its lead roles are recalculated from logged model and
 radar inputs; it does not import or display recorded conventional-radard lead
@@ -149,6 +161,9 @@ python openpilot/selfdrive/carrot/validate_radar_lead_model.py --case carnival-5
 
 # Treat existing-radard expectation failures as a nonzero result
 python openpilot/selfdrive/carrot/validate_radar_lead_model.py --strict-radard
+
+# Treat physical dPath expectation failures as a nonzero result
+python openpilot/selfdrive/carrot/validate_radar_lead_model.py --strict-shadow
 
 # Remove corner inputs
 python openpilot/selfdrive/carrot/validate_radar_lead_model.py --front-only

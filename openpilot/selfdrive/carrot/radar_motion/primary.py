@@ -84,6 +84,7 @@ STATIONARY_CLOSER_HANDOFF_MIN_COST_GAIN = 0.10
 # corroboration instead of bypassing stationary-reflection safeguards.
 RADAR_ONLY_MOVING_MIN_VLEAD_MPS = STATIONARY_MAX_ABS_VLEAD_MPS
 RADAR_ONLY_MOVING_CONFIRMATION_S = 0.25
+RADAR_ONLY_MOVING_TENTATIVE_CONFIRMATION_S = 0.75
 RADAR_ONLY_MOVING_CORNER_MAX_LONGITUDINAL_ERROR_RATE_MPS = 3.0
 RADAR_ONLY_MOVING_CLOSER_SWITCH_MIN_GAP_M = 3.0
 RADAR_ONLY_MOVING_CLOSER_SWITCH_MAX_DPATH_M = 0.5
@@ -171,6 +172,7 @@ class RadarPointSnapshot:
   a_lead: float
   j_lead: float
   measured: bool
+  radar_track_state: int = 0
   kinematics_source: str | None = None
   kinematics_track_id: int | None = None
 
@@ -537,6 +539,9 @@ def snapshot_radar_points(
       a_lead=_value(point, "a_lead", "aLead"),
       j_lead=_value(point, "j_lead", "jLead"),
       measured=True,
+      radar_track_state=int(_value(
+        point, "radar_track_state", "trackState",
+      )),
     ))
   return tuple(snapshots)
 
@@ -1998,10 +2003,15 @@ class VisionRadarMatcher:
     if not pending_continuous:
       self._radar_only_moving_pending_identity = None
     self._update_radar_only_moving_longitudinal_history(point, time_s)
+    confirmation_s = (
+      RADAR_ONLY_MOVING_TENTATIVE_CONFIRMATION_S
+      if point.radar_track_state == 1
+      else RADAR_ONLY_MOVING_CONFIRMATION_S
+    )
     confirmation_complete = (
       self._radar_only_moving_pending_since_s is not None
       and time_s - self._radar_only_moving_pending_since_s
-      >= RADAR_ONLY_MOVING_CONFIRMATION_S
+      >= confirmation_s
     )
     longitudinally_consistent = (
       self._radar_only_moving_longitudinally_consistent(

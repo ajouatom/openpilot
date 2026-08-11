@@ -37,6 +37,13 @@ CORNER_OBJECT_430_MSG_COUNT_PER_SIDE = 8
 CORNER_OBJECT_430_SLOTS_PER_MSG = 7
 CORNER_OBJECT_430_TRACK_ID_OFFSET = 300
 CORNER_OBJECT_430_DBC = 'hyundai_canfd_corner_radar_430_generated'
+
+
+def canfd_group2_track_status(msg):
+  """Return the existing age gate and the radar-native object state."""
+  return msg['VALID_CNT'] > 10, int(msg['VALID'])
+
+
 CORNER_OBJECT_430_EMPTY_RAW_VALUES = (0x010d1f40, 0x00010d1f)
 CORNER_OBJECT_430_DEFAULT_DISTANCE_RAW_MIN = 2520  # 126.0 m
 CORNER_OBJECT_430_DEFAULT_DISTANCE_RAW_MAX = 2600  # 130.0 m
@@ -458,6 +465,7 @@ class RadarInterface(RadarInterfaceBase):
     for addr in range(self.radar_start_addr, self.radar_start_addr + self.radar_msg_count):
 
       msg = self.rcp_tracks.vl[f"RADAR_TRACK_{addr:x}"]
+      track_state = 0
 
       if self.radar_group1:
         valid = msg['VALID_CNT1'] > 10
@@ -465,7 +473,7 @@ class RadarInterface(RadarInterfaceBase):
         # Group 3 marks an empty object slot with LONG_DIST raw 0x7ff (204.7 m).
         valid = msg['LONG_DIST'] < 204.7
       elif self.canfd:
-        valid = msg['VALID_CNT'] > 10
+        valid, track_state = canfd_group2_track_status(msg)
       elif self.radar_group4:
         # EN: DNMWR006 exposes eight stable tracked-object slots at 0x500-0x507.
         #     Messages from 0x508 onward are distance-sorted raw detections without
@@ -511,6 +519,7 @@ class RadarInterface(RadarInterfaceBase):
         self.pts[t_id].vLead = self.pts[t_id].vRel + self.v_ego
         self.pts[t_id].aRel = float('nan') if self.radar_group3 else msg['REL_ACCEL']
         self.pts[t_id].yvRel = 0.0 if self.radar_group3 else msg['LAT_SPEED']
+        self.pts[t_id].trackState = track_state
       elif self.radar_group4:
         self.pts[t_id].dRel = msg['LONG_DIST']
         self.pts[t_id].yRel = -msg['LAT_DIST']
