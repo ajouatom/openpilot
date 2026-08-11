@@ -355,10 +355,16 @@ int main(void) {
   // enable USB (right before interrupts or enum can fail!)
   usb_init();
 
+#if defined(ENABLE_SPI) && defined(STM32H7)
+  bool spi_enabled = false;
+#endif
 #ifdef ENABLE_SPI
   if (current_board->has_spi) {
     gpio_spi_init();
     spi_init();
+    #ifdef STM32H7
+    spi_enabled = true;
+    #endif
   }
 #endif
 
@@ -377,6 +383,14 @@ int main(void) {
       #endif
         // useful for debugging, fade breaks = panda is overloaded
         for (uint32_t fade = 0U; fade < MAX_LED_FADE; fade += 1U) {
+          #if defined(ENABLE_SPI) && defined(STM32H7)
+          if (spi_enabled) {
+            // At 240 MHz the largest following delay is 640 tight-loop
+            // iterations. Servicing every fade step keeps normal parser
+            // dispatch comfortably below the 50 us host-poll interval.
+            spi_process();
+          }
+          #endif
           led_set(LED_RED, true);
           delay(fade >> 4);
           led_set(LED_RED, false);
@@ -384,6 +398,11 @@ int main(void) {
         }
 
         for (uint32_t fade = MAX_LED_FADE; fade > 0U; fade -= 1U) {
+          #if defined(ENABLE_SPI) && defined(STM32H7)
+          if (spi_enabled) {
+            spi_process();
+          }
+          #endif
           led_set(LED_RED, true);
           delay(fade >> 4);
           led_set(LED_RED, false);
@@ -400,6 +419,13 @@ int main(void) {
       #endif
     } else {
       __WFI();
+      #if defined(ENABLE_SPI) && defined(STM32H7)
+      if (spi_enabled) {
+        // NSS/HT/TC wakes the core; consume the published DMA bytes before
+        // returning to sleep so the circular ring cannot silently fill.
+        spi_process();
+      }
+      #endif
       SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk;
     }
   }

@@ -2,12 +2,17 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 struct libusb_context;
 struct libusb_device_handle;
+
+namespace panda::spi_v3 {
+class Transport;
+}
 
 #define TIMEOUT 0
 #define SPI_BUF_SIZE 2048
@@ -61,6 +66,8 @@ public:
   int bulk_read(unsigned char endpoint, unsigned char* data, int length, unsigned int timeout=TIMEOUT);
   void cleanup();
 
+  uint8_t protocol_version() const { return protocol_version_; }
+
   static std::vector<std::string> list();
 
 private:
@@ -78,11 +85,16 @@ private:
 
   int wait_for_ack(uint8_t ack, uint8_t tx, unsigned int timeout, unsigned int length, double deadline);
   int bulk_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len, uint8_t *rx_data, uint16_t rx_len, unsigned int timeout);
+  bool negotiate_protocol();
+  int spi_transfer_v3(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len,
+                      uint8_t *rx_data, uint16_t max_rx_len, unsigned int timeout);
   int spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len, uint8_t *rx_data, uint16_t max_rx_len,
                    unsigned int timeout, double deadline);
   int spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len, uint8_t *rx_data, uint16_t max_rx_len, unsigned int timeout);
   int lltransfer(struct spi_ioc_transfer &t);
 
   spi_header header;
+  std::unique_ptr<panda::spi_v3::Transport> v3_transport;
+  uint8_t protocol_version_ = 2U;
   uint32_t xfer_count = 0;
 };
