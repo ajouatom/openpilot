@@ -76,6 +76,20 @@
       "scene": "Front-only stationary reflection 60 must not cross the moving speed boundary and trigger close-range braking"
     },
     {
+      "id": "ev9-2f-3-overpass-front-moving-ghost",
+      "vehicle_folder": "KIA_EV9 f1653dc04207a818",
+      "log": "0000002f--5c877408ea--3/rlog.zst",
+      "source": "front+corner",
+      "window": [7.8, 9.0],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [39],
+      "forbidden_lead_one_ids": [39],
+      "forbidden_lead_two_ids": [39],
+      "scene": "Empty road before an overpass: brief central front-radar reflection 39 with implausible positive acceleration must not become a radar-only moving lead"
+    },
+    {
       "id": "ioniq5-d39-41-closest-moving-leadone",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
       "log": "00000d39--67b49e7acd--41/rlog.zst",

@@ -52,6 +52,11 @@ def parse_args() -> argparse.Namespace:
     action="store_true",
     help="return nonzero when an existing-radard expectation fails",
   )
+  parser.add_argument(
+    "--strict-shadow",
+    action="store_true",
+    help="return nonzero when a physical dPath shadow expectation fails",
+  )
   return parser.parse_args()
 
 
@@ -92,7 +97,12 @@ def _first_event(
   for index, frame in enumerate(frames):
     if not start_s <= frame.time_s <= end_s:
       continue
-    candidates = tuple(getattr(selector.select(frame, index), attribute))
+    value = getattr(selector.select(frame, index), attribute)
+    candidates = (
+      () if value is None
+      else (value,) if attribute in ("lead_one", "lead_two")
+      else tuple(value)
+    )
     matches = [
       candidate for candidate in candidates
       if candidate_matches_targets(candidate, targets)
@@ -240,8 +250,13 @@ def main() -> int:
         )
         radard_pass = radard_event is not None
       else:
+        validation_attribute = (
+          "lead_one"
+          if str(entry.get("validation_stage", "output")) == "lead_one"
+          else "active_cutin_candidates"
+        )
         radard_event = _first_event(
-          radard, frames, entry, "active_cutin_candidates",
+          radard, frames, entry, validation_attribute,
         )
         entry_source = str(entry.get("source", "front+corner"))
         shadow_applicable = (
@@ -250,7 +265,14 @@ def main() -> int:
         )
         shadow_event = (
           _first_event(
-            shadow, frames, entry, "decision_cutin_candidates",
+            shadow,
+            frames,
+            entry,
+            (
+              "lead_one"
+              if validation_attribute == "lead_one"
+              else "decision_cutin_candidates"
+            ),
           )
           if shadow_applicable
           else None
@@ -258,6 +280,10 @@ def main() -> int:
         radard_pass = (radard_event is not None) == (expected == "detect")
       if expected == "stationary":
         shadow_applicable = True
+      shadow_pass = (
+        not shadow_applicable
+        or (shadow_event is not None) == (expected in ("detect", "stationary"))
+      )
       deadline = entry.get("latest_detection_s")
       if (
         radard_pass
@@ -266,6 +292,13 @@ def main() -> int:
         and expected == "detect"
       ):
         radard_pass = radard_event[0] <= float(deadline)
+      if (
+        shadow_pass
+        and deadline is not None
+        and shadow_event is not None
+        and expected == "detect"
+      ):
+        shadow_pass = shadow_event[0] <= float(deadline)
       row = {
         "id": str(entry["id"]),
         "validation_set": str(entry["validation_set"]),
@@ -276,13 +309,14 @@ def main() -> int:
         "shadow_applicable": shadow_applicable,
         "shadow_sensor": shadow.motion_sensor,
         "radard_pass": radard_pass,
+        "shadow_pass": shadow_pass,
       }
       rows.append(row)
       print(
-        f"  {'PASS' if radard_pass else 'FAIL'} {entry['id']} "
-        + f"expected={expected} radard={_event_text(radard_event)} "
+        f"  {entry['id']} expected={expected} "
+        + f"radard={'PASS' if radard_pass else 'FAIL'}:{_event_text(radard_event)} "
         + (
-          f"shadow={_event_text(shadow_event)}"
+          f"shadow={'PASS' if shadow_pass else 'FAIL'}:{_event_text(shadow_event)}"
           if shadow_applicable
           else f"shadow=N/A({shadow.motion_sensor})"
         ),
@@ -300,9 +334,11 @@ def main() -> int:
     _print_metrics("existing radard", _metrics(subset, "radard_event"))
     _print_metrics("physical dPath shadow", _metrics(subset, "shadow_event"))
   radard_failures = sum(not row["radard_pass"] for row in rows)
+  shadow_failures = sum(not row["shadow_pass"] for row in rows)
   print(
     f"\nprocessed={len(rows)} missing={missing} "
-    + f"existing-radard expectation failures={radard_failures}"
+    + f"existing-radard expectation failures={radard_failures} "
+    + f"physical-dpath expectation failures={shadow_failures}"
   )
 
   if args.report is not None:
@@ -315,6 +351,7 @@ def main() -> int:
         "physical_dpath_shadow": _metrics(rows, "shadow_event"),
         "missing": missing,
         "radard_expectation_failures": radard_failures,
+        "physical_dpath_expectation_failures": shadow_failures,
       },
     }
     args.report.write_text(
@@ -322,7 +359,11 @@ def main() -> int:
       encoding="utf-8",
     )
     print(f"report written: {args.report}")
-  return int(missing > 0 or (args.strict_radard and radard_failures > 0))
+  return int(
+    missing > 0
+    or (args.strict_radard and radard_failures > 0)
+    or (args.strict_shadow and shadow_failures > 0)
+  )
 
 
 if __name__ == "__main__":

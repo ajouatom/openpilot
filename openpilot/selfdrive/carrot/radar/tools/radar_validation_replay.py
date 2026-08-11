@@ -71,6 +71,9 @@ CUTIN_DECISION_HOLD_S = CUT_IN_BOUNDARY_HOLD_S
 VALIDATION_EXPECTED_LABELS = ("detect", "clear", "stationary")
 MAX_POINT_MODEL_TIME_SKEW_S = RADAR_MOTION_MAX_TIME_SKEW_S
 VALIDATION_CORNER_MAX_MEASUREMENT_AGE_S = 0.10
+VALIDATION_GROUP2_RADAR_START_ADDR = 0x3A5
+VALIDATION_GROUP2_RADAR_TRACK_COUNT = 32
+VALIDATION_GROUP2_QUALITY_MAX_AGE_S = 0.15
 KOREAN_FONT_BASE_SIZE = 40
 VALIDATION_PROBABILITY_MIN = 0.20
 VALIDATION_PROBABILITY_MAX = 0.80
@@ -113,6 +116,7 @@ class RadarPoint:
   source: str
   a_lead: float = 0.0
   j_lead: float = 0.0
+  radar_track_state: int = 0
 
 
 @dataclass(frozen=True)
@@ -1407,12 +1411,30 @@ def _copy_track_points(points: Iterable[Any]) -> tuple[RadarPoint, ...]:
       source=source,
       a_lead=_finite(getattr(point, "aLead", 0.0)),
       j_lead=_finite(getattr(point, "jLead", 0.0)),
+      radar_track_state=int(_finite(getattr(point, "trackState", 0))),
     ))
   return tuple(copied)
 
 
 def _copy_points(message: Any) -> tuple[RadarPoint, ...]:
   return _copy_track_points(message.points)
+
+
+def _with_group2_front_track_state(
+  point: RadarPoint,
+  event_ns: int,
+  quality: dict[int, tuple[int, int]],
+) -> RadarPoint:
+  if point.source != "frontRadar" or not 32 <= point.track_id < 64:
+    return point
+  state = quality.get(point.track_id)
+  if state is None:
+    return point
+  quality_ns, track_state = state
+  age_s = max(0.0, (event_ns - quality_ns) / 1e9)
+  if age_s > VALIDATION_GROUP2_QUALITY_MAX_AGE_S:
+    return point
+  return replace(point, radar_track_state=track_state)
 
 
 def _xy_points(data: Any) -> tuple[tuple[float, float], ...]:
@@ -1530,6 +1552,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   qcamera_start_eof_ns = 0
   absolute_frames: list[tuple[int, RadarFrame]] = []
   corner_tracker = route_replay.StableCornerObjectTracker()
+  group2_front_quality: dict[int, tuple[int, int]] = {}
 
   for event in schema.Event.read_multiple_bytes(data):
     try:
@@ -1549,15 +1572,35 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       merged = route_replay.merge_recorded_and_reconstructed_tracks(
         tuple(event.liveTracks.points), reconstructed, raw_corner_only=True,
       )
-      latest_points = _copy_track_points(merged)
+      copied_points = _copy_track_points(merged)
+      latest_points = tuple(
+        _with_group2_front_track_state(
+          point, event_ns, group2_front_quality,
+        ) for point in copied_points
+      )
       latest_points_ns = event_ns
     elif which == "can":
       event_t = event_ns / 1e9
       for can_message in event.can:
+        address = int(can_message.address)
+        raw = bytes(can_message.dat)
+        if (
+          VALIDATION_GROUP2_RADAR_START_ADDR
+          <= address
+          < VALIDATION_GROUP2_RADAR_START_ADDR
+          + VALIDATION_GROUP2_RADAR_TRACK_COUNT
+          and len(raw) == 24
+        ):
+          track_id = 32 + address - VALIDATION_GROUP2_RADAR_START_ADDR
+          valid_state = route_replay.dbc_unsigned(raw, 25, 2, "be")
+          group2_front_quality[track_id] = (
+            event_ns,
+            valid_state,
+          )
         if int(can_message.src) != route_replay.RAW_CORNER_RADAR_BUS or int(can_message.src) >= 0x80:
           continue
         for obj in route_replay.decode_raw_corner_objects(
-          event_t, int(can_message.address), bytes(can_message.dat),
+          event_t, address, raw,
         ):
           if route_replay.raw_corner_object_is_valid(obj):
             corner_tracker.update(obj)

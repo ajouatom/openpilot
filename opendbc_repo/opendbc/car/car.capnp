@@ -372,6 +372,7 @@ struct RadarData @0x888ad6581cf0aacb {
     aLead @8 :Float32; # m/s^2
     jLead @9 :Float32; # m/s^3
     radarSource @10 :RadarSource;
+    trackState @11 :UInt8; # radar-native object state; 0 when unavailable
 
     enum RadarSource {
       frontRadar @0;
