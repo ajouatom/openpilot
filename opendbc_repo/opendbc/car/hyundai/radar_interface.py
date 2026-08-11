@@ -273,7 +273,10 @@ class RadarInterface(RadarInterfaceBase):
     self.radar_tracks = self.params.get_int("EnableRadarTracks") >= 1
     self.corner_object_tracks = bool(CP.extFlags & HyundaiExtFlags.CORNER_RADAR_OBJECTS_235.value) and self.params.get_int("EnableCornerRadar") > 0
     self.corner_object_180_tracks = bool(CP.extFlags & HyundaiExtFlags.CORNER_RADAR_OBJECTS_180.value) and self.params.get_int("EnableCornerRadar") > 0
-    self.corner_object_430_tracks = bool(CP.extFlags & HyundaiExtFlags.CORNER_RADAR_OBJECTS_430.value) and self.params.get_int("EnableCornerRadar") > 0
+    # 0x430/0x440 bins are not promoted to RadarData until their object layout
+    # is validated. Parsing them as tracks produced false side objects and
+    # phantom braking on IONIQ 9.
+    self.corner_object_430_tracks = False
     self.updated_tracks = set()
     self.updated_scc = set()
     self.updated_corner_objects = set()
