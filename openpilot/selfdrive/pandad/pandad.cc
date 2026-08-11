@@ -16,6 +16,7 @@
 #include "common/swaglog.h"
 #include "common/timing.h"
 #include "common/util.h"
+#include "selfdrive/pandad/pandad_scheduler.h"
 #include "system/hardware/hw.h"
 
 #define MAX_IR_PANDA_VAL 50
@@ -169,42 +170,72 @@ void fill_panda_can_state(cereal::PandaState::PandaCanState::Builder &cs, const 
   cs.setCanCoreResetCnt(can_health.can_core_reset_cnt);
 }
 
-std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> &pandas, bool is_onroad, bool spoofing_started) {
+struct PandaStateSnapshot {
+  std::vector<health_t> health;
+  std::vector<std::array<can_health_t, PANDA_CAN_CNT>> can_health;
+  bool valid = false;
+
+  void reset(size_t pandas_count) {
+    health.resize(pandas_count);
+    can_health.resize(pandas_count);
+    valid = true;
+  }
+};
+
+constexpr size_t PANDA_STATE_READS_PER_PANDA = 1U + PANDA_CAN_CNT;
+constexpr size_t PANDA_STATE_OPERATIONS_PER_PANDA = PANDA_STATE_READS_PER_PANDA + 1U;  // reads + heartbeat
+
+void run_panda_state_operation(const std::vector<Panda *> &pandas, PandaStateSnapshot &snapshot,
+                               size_t operation, bool engaged) {
+  // Read slow CAN diagnostics first. Ignition/safety health and heartbeats are
+  // kept near the publish boundary so control-relevant state stays fresh.
+  assert(!pandas.empty());
+  const auto target = pandad_scheduler::state_operation_target(operation, pandas.size());
+  assert(target.panda_index < pandas.size());
+
+  Panda *panda = pandas[target.panda_index];
+  if (target.stage < PANDA_CAN_CNT) {
+    auto can_health = panda->get_can_state(target.stage);
+    if (can_health) {
+      snapshot.can_health[target.panda_index][target.stage] = *can_health;
+    } else {
+      snapshot.valid = false;
+    }
+  } else if (target.stage == PANDA_CAN_CNT) {
+    auto health = panda->get_state();
+    if (health) {
+      snapshot.health[target.panda_index] = *health;
+    } else {
+      snapshot.valid = false;
+    }
+  } else {
+    assert(target.stage == PANDA_CAN_CNT + 1U);
+    panda->send_heartbeat(engaged);
+  }
+}
+
+std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> &pandas,
+                                      const PandaStateSnapshot &snapshot, bool is_onroad,
+                                      bool spoofing_started) {
   bool ignition_local = false;
   const uint32_t pandas_cnt = pandas.size();
+  assert(snapshot.health.size() == pandas_cnt);
+  assert(snapshot.can_health.size() == pandas_cnt);
 
   // build msg
   MessageBuilder msg;
   auto evt = msg.initEvent();
   auto pss = evt.initPandaStates(pandas_cnt);
 
-  std::vector<health_t> panda_states;
-  panda_states.reserve(pandas_cnt);
-
-  std::vector<std::array<can_health_t, PANDA_CAN_CNT>> panda_can_states;
-  panda_can_states.reserve(pandas_cnt);
+  std::vector<health_t> panda_states = snapshot.health;
 
   const bool red_panda_comma_three = (pandas.size() == 2) &&
                                      (pandas[0]->hw_type == cereal::PandaState::PandaType::DOS) &&
                                      (pandas[1]->hw_type == cereal::PandaState::PandaType::RED_PANDA);
 
-  for (Panda *panda : pandas) {
-    auto health_opt = panda->get_state();
-    if (!health_opt) {
-      return std::nullopt;
-    }
-
-    health_t health = *health_opt;
-
-    std::array<can_health_t, PANDA_CAN_CNT> can_health{};
-    for (uint32_t i = 0; i < PANDA_CAN_CNT; i++) {
-      auto can_health_opt = panda->get_can_state(i);
-      if (!can_health_opt) {
-        return std::nullopt;
-      }
-      can_health[i] = *can_health_opt;
-    }
-    panda_can_states.push_back(can_health);
+  for (uint32_t i = 0; i < pandas_cnt; i++) {
+    Panda *panda = pandas[i];
+    health_t &health = panda_states[i];
 
     if (spoofing_started) {
       health.ignition_line_pkt = 1;
@@ -217,7 +248,6 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
     }
 
     ignition_local |= ((health.ignition_line_pkt != 0) || (health.ignition_can_pkt != 0));
-    panda_states.push_back(health);
   }
 
   for (uint32_t i = 0; i < pandas_cnt; i++) {
@@ -249,7 +279,7 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
 
     auto cs = std::array{ps.initCanState0(), ps.initCanState1(), ps.initCanState2()};
     for (uint32_t j = 0; j < PANDA_CAN_CNT; j++) {
-      fill_panda_can_state(cs[j], panda_can_states[i][j]);
+      fill_panda_can_state(cs[j], snapshot.can_health[i][j]);
     }
 
     // Convert faults bitset to capnp list
@@ -303,14 +333,16 @@ void send_peripheral_state(Panda *panda, PubMaster *pm) {
   pm->send("peripheralState", msg);
 }
 
-void process_panda_state(const std::vector<Panda *> &pandas, PubMaster *pm, bool engaged, bool is_onroad, bool spoofing_started) {
+void process_panda_state(const std::vector<Panda *> &pandas, PubMaster *pm,
+                         const PandaStateSnapshot &snapshot, bool is_onroad,
+                         bool spoofing_started) {
   std::vector<std::string> connected_serials;
   connected_serials.reserve(pandas.size());
   for (Panda *panda : pandas) {
     connected_serials.push_back(panda->hw_serial());
   }
 
-  auto ignition_opt = send_panda_states(pm, pandas, is_onroad, spoofing_started);
+  auto ignition_opt = send_panda_states(pm, pandas, snapshot, is_onroad, spoofing_started);
   if (!ignition_opt) {
     LOGE("Failed to get ignition_opt");
     return;
@@ -337,10 +369,6 @@ void process_panda_state(const std::vector<Panda *> &pandas, PubMaster *pm, bool
         }
       }
     }
-  }
-
-  for (Panda *panda : pandas) {
-    panda->send_heartbeat(engaged);
   }
 }
 
@@ -422,6 +450,7 @@ void pandad_run(std::vector<Panda *> &pandas) {
   PubMaster pm({"can", "pandaStates", "peripheralState"});
   PandaSafety panda_safety(pandas);
   Panda *peripheral_panda = pandas[0];
+  PandaStateSnapshot panda_state_snapshot;
   bool engaged = false;
   bool is_onroad = false;
 
@@ -429,34 +458,58 @@ void pandad_run(std::vector<Panda *> &pandas) {
   while (!do_exit && check_all_connected(pandas)) {
     can_recv(pandas, &pm);
 
+    if (pandad_scheduler::state_cycle_start(rk.frame())) {
+      panda_state_snapshot.reset(pandas.size());
+    }
+
+    const size_t state_operation_count = pandas.size() * PANDA_STATE_OPERATIONS_PER_PANDA;
+    const auto [operation_begin, operation_end] = pandad_scheduler::operation_range(rk.frame(), state_operation_count);
+    const size_t heartbeat_operation_begin = pandas.size() * PANDA_STATE_READS_PER_PANDA;
+    bool heartbeat_due = false;
+    for (size_t operation = operation_begin; operation < operation_end; operation++) {
+      heartbeat_due |= operation >= heartbeat_operation_begin;
+    }
+    if (heartbeat_due) {
+      sm.update(0);
+      engaged = sm.allAliveAndValid({"selfdriveState"}) && sm["selfdriveState"].getSelfdriveState().getEnabled();
+    }
+    for (size_t operation = operation_begin; operation < operation_end; operation++) {
+      run_panda_state_operation(pandas, panda_state_snapshot, operation, engaged);
+    }
+
     // Process peripheral state at 20 Hz
     if (rk.frame() % 5 == 0) {
       process_peripheral_state(peripheral_panda, &pm, no_fan_control);
     }
 
-    // Process panda state at 10 Hz
-    if (rk.frame() % 10 == 0) {
-      sm.update(0);
-      engaged = sm.allAliveAndValid({"selfdriveState"}) && sm["selfdriveState"].getSelfdriveState().getEnabled();
+    // Publish the completed Panda state snapshot at 10 Hz.
+    if (pandad_scheduler::state_publish_due(rk.frame())) {
       is_onroad = params.getBool("IsOnroad");
-      process_panda_state(pandas, &pm, engaged, is_onroad, spoofing_started);
+      if (panda_state_snapshot.valid) {
+        process_panda_state(pandas, &pm, panda_state_snapshot, is_onroad, spoofing_started);
+      } else {
+        LOGE("Failed to collect panda state snapshot");
+      }
       panda_safety.configureSafetyMode(is_onroad);
     }
 
     // Send out peripheralState at 2Hz
-    if (rk.frame() % 50 == 0) {
+    if (pandad_scheduler::peripheral_state_due(rk.frame())) {
       send_peripheral_state(peripheral_panda, &pm);
     }
 
-    // Forward logs from pandas to cloudlog if available
-    for (Panda *panda : pandas) {
-      std::string log = panda->serial_read();
-      if (!log.empty()) {
-        if (log.find("Register 0x") != std::string::npos) {
-          // Log register divergent faults as errors
-          LOGE("%s", log.c_str());
-        } else {
-          LOGD("%s", log.c_str());
+    // Debug logs are low priority. One bounded read at 10 Hz prevents a noisy
+    // Panda log from monopolizing the shared SPI lock and starving CAN.
+    if (pandad_scheduler::serial_log_poll_due(rk.frame())) {
+      for (Panda *panda : pandas) {
+        std::string log = panda->serial_read(0, 1);
+        if (!log.empty()) {
+          if (log.find("Register 0x") != std::string::npos) {
+            // Log register divergent faults as errors
+            LOGE("%s", log.c_str());
+          } else {
+            LOGD("%s", log.c_str());
+          }
         }
       }
     }

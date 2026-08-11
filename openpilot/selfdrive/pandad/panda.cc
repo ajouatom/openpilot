@@ -58,11 +58,11 @@ void Panda::set_alternative_experience(uint16_t alternative_experience) {
   handle->control_write(0xdf, alternative_experience, 0);
 }
 
-std::string Panda::serial_read(int port_number) {
+std::string Panda::serial_read(int port_number, uint32_t max_reads) {
   std::string ret;
   char buffer[USBPACKET_MAX_SIZE] = {};
 
-  while (true) {
+  for (uint32_t read_count = 0; read_count < max_reads; read_count++) {
     int bytes_read = handle->control_read(0xe0, port_number, 0, (unsigned char *)buffer, USBPACKET_MAX_SIZE);
     if (bytes_read <= 0) {
       break;
