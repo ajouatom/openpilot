@@ -292,6 +292,19 @@ static void EXTI15_10_IRQ_Handler(void) {
   if (pending != 0U) {
     llspi_v3_wait_rx_quiescent();
     llspi_v3_rx_snapshot();
+    // H7 raises EOT (and can raise UDR) at every hardware-NSS session end,
+    // including the one-byte polls used by protocol discovery. Leaving those
+    // flags latched prevents the SPI internal session state from restarting
+    // reliably on the next falling NSS edge. Legacy v2 cleared them from its
+    // always-armed EOT interrupt; v3 must do the same here while keeping SPE
+    // and the response TX FIFO/DMA alive across short polls.
+    //
+    // Snapshot TXC and NDTR before acknowledging the transaction flags so TX
+    // completion observes the session which just ended, not a following poll.
+    const uint32_t spi_status = SPI4->SR;
+    const uint32_t tx_ndtr = DMA2_Stream3->NDTR;
+    SPI4->IFCR = SPI_IFCR_EOTC | SPI_IFCR_TXTFC | SPI_IFCR_UDRC |
+                 SPI_IFCR_OVRC | SPI_IFCR_SUSPC;
     const uint32_t produced = spi_v3_rx_ring.produced;
     if (llspi_v3_exact_version_transaction(spi_v3_last_nss_produced, produced)) {
       spi_v3_version_request_pending = true;
@@ -302,8 +315,8 @@ static void EXTI15_10_IRQ_Handler(void) {
       // have left memory. It may continue the same self-framed response in a
       // later CS transaction; only the rising edge at/after NDTR zero counts.
       spi_v3_tx_completion_note_nss(&spi_v3_tx_completion,
-                                    DMA2_Stream3->NDTR == 0U);
-      if (spi_v3_tx_completion.dma_done && ((SPI4->SR & SPI_SR_TXC) != 0U)) {
+                                    tx_ndtr == 0U);
+      if (spi_v3_tx_completion.dma_done && ((spi_status & SPI_SR_TXC) != 0U)) {
         spi_v3_tx_completion_note_txc(&spi_v3_tx_completion);
         register_clear_bits(&(SPI4->IER), SPI_IER_EOTIE);
       }
@@ -351,13 +364,11 @@ void llspi_init(void) {
   SPI4->IFCR = SPI_IFCR_EOTC | SPI_IFCR_TXTFC | SPI_IFCR_UDRC |
                SPI_IFCR_OVRC | SPI_IFCR_SUSPC;
 
-  __DMB();
-  DMA2_Stream2->CR |= DMA_SxCR_EN;
-  register_set_bits(&(SPI4->CR1), SPI_CR1_SPE);
-
   // PE11 remains SPI4_NSS in alternate-function mode; EXTI can independently
   // observe its rising edge and provides both transaction accounting and the
-  // final TX completion condition.
+  // final TX completion condition. Route and enable it before arming SPI so a
+  // probe arriving at application startup cannot be received without its NSS
+  // boundary being recorded.
   register_set(&(SYSCFG->EXTICR[2]), SYSCFG_EXTICR3_EXTI11_PE, 0xF000U);
   EXTI->PR1 = (1U << 11U);
   register_set_bits(&(EXTI->IMR1), (1U << 11U));
@@ -368,6 +379,14 @@ void llspi_init(void) {
   NVIC_EnableIRQ(DMA2_Stream3_IRQn);
   NVIC_EnableIRQ(SPI4_IRQn);
   NVIC_EnableIRQ(EXTI15_10_IRQn);
+
+  // Establish the first transaction boundary at the exact RX arm point. Any
+  // earlier EXTI event contained no SPI bytes and a later VERSION retry gets a
+  // clean seven-byte comparison window.
+  spi_v3_last_nss_produced = spi_v3_rx_ring.produced;
+  __DMB();
+  DMA2_Stream2->CR |= DMA_SxCR_EN;
+  register_set_bits(&(SPI4->CR1), SPI_CR1_SPE);
 }
 
 #elif defined(ENABLE_SPI) || defined(BOOTSTUB)
