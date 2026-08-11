@@ -41,6 +41,14 @@ const int SPI_MAX_ACK_TIMEOUTS = 3;
 const unsigned int SPI_RECOVERY_TIMEOUT = 50; // milliseconds
 const int SPI_RECOVERY_MAX_ATTEMPTS = 12;
 const std::string SPI_DEVICE = "/dev/spidev0.0";
+// The Panda SPI slave switches RX DMA phases from its TX-complete interrupt.
+// Do not clock the next phase until that interrupt has had time to re-arm RX.
+// TODO: replace this bounded guard with protocol-level readiness in SPI v3.
+static uint64_t spi_last_bus_activity_ns = 0;  // protected by hw_lock
+
+static void wait_for_spi_turnaround(uint64_t start_ns) {
+  while ((nanos_since_boot() - start_ns) < 400000) {}
+}
 
 class LockEx {
 public:
@@ -236,8 +244,13 @@ int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint1
     // silently dropping it after the USB timeout.
     if (ret == SpiError::CAN_TX_FULL) {
       if (millis_since_boot() < transfer_deadline) {
+        // Back off outside hw_lock so CAN RX and heartbeat traffic can use the
+        // bus while Panda's CAN TX queue drains.
+        usleep(SPI_CAN_TX_RETRY_DELAY);
         std::this_thread::yield();
-        continue;
+        if (millis_since_boot() < transfer_deadline) {
+          continue;
+        }
       }
       ret = SpiError::DATA_NACK;
     }
@@ -372,6 +385,8 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   assert(tx_len < SPI_BUF_SIZE);
   assert(max_rx_len < SPI_BUF_SIZE);
 
+  wait_for_spi_turnaround(spi_last_bus_activity_ns);
+
   xfer_count++;
   header = {
     .sync = SPI_SYNC,
@@ -400,6 +415,7 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   if (ret < 0) {
     goto fail;
   }
+  wait_for_spi_turnaround(nanos_since_boot());
 
   // Send data
   if (tx_data != NULL) {
@@ -416,9 +432,8 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   // Wait for (N)ACK
   ret = wait_for_ack(SPI_DACK, 0x13, timeout, 3, deadline);
   if ((ret == SpiError::DATA_NACK) && (endpoint == 3U) && (tx_len > 0U)) {
-    // Keep the SPI lock while Panda's NACK completion interrupt returns the
-    // protocol state machine to HEADER.
-    usleep(SPI_CAN_TX_RETRY_DELAY);
+    // The next lock owner enforces the remaining NACK-to-header turnaround.
+    spi_last_bus_activity_ns = nanos_since_boot();
     return SpiError::CAN_TX_FULL;
   }
   if (ret < 0) {
@@ -448,6 +463,7 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
     memcpy(rx_data, rx_buf + 3, rx_data_len);
   }
 
+  spi_last_bus_activity_ns = nanos_since_boot();
   return rx_data_len;
 
 fail:
@@ -457,11 +473,16 @@ fail:
   int recovery_attempts = 0;
   const double recovery_start_time = millis_since_boot();
   const double recovery_deadline = std::min(recovery_start_time + SPI_RECOVERY_TIMEOUT, deadline);
+  // The NACK or response that sent us here also completes from Panda's TX ISR.
+  // Let it restore HEADER RX before clocking recovery junk.
+  wait_for_spi_turnaround(nanos_since_boot());
   while ((nack_cnt < 3) &&
          (recovery_attempts < SPI_RECOVERY_MAX_ATTEMPTS) &&
          (millis_since_boot() < recovery_deadline)) {
     recovery_attempts += 1;
-    if (wait_for_ack(SPI_NACK, 0x14, 1, SPI_BUF_SIZE/2, recovery_deadline) == 0) {
+    const int recovery_ret = wait_for_ack(SPI_NACK, 0x14, 1, SPI_BUF_SIZE/2, recovery_deadline);
+    wait_for_spi_turnaround(nanos_since_boot());
+    if (recovery_ret == 0) {
       nack_cnt += 1;
     } else {
       nack_cnt = 0;
@@ -474,5 +495,6 @@ fail:
   }
 
   if (ret >= 0) ret = -1;
+  spi_last_bus_activity_ns = nanos_since_boot();
   return ret;
 }

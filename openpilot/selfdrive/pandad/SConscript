@@ -14,3 +14,4 @@ if arch != "Darwin":
 
   if GetOption('extras'):
     panda_env.Program('tests/test_pandad_canprotocol', ['tests/test_pandad_canprotocol.cc'], LIBS=[panda] + libs)
+    panda_env.Program('tests/test_pandad_scheduler', ['tests/test_pandad_scheduler.cc'])
