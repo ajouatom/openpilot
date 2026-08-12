@@ -137,6 +137,7 @@ def test_manifest_disables_only_cluster_unused_images():
   assert [stream["stream_handle"] for stream in manifest["streams"]] == list(range(1, 29))
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
   assert map_stream["params"]["map_theme"] == "auto"
+  assert map_stream["params"]["screen_center_y_ratio"] == 0.8
 
   invalid_requirements = requirements_query()
   invalid_requirements["catalog_revision"] = 2
@@ -151,6 +152,7 @@ def test_manifest_requests_configured_map_appearance():
     map_type="satellite",
     map_hz=60,
     map_bitrate_kbps=12000,
+    screen_center_y_ratio=0.68,
   )
   map_stream = next(stream for stream in manifest["streams"] if stream["kind"] == "render")
   crossroad_streams = [
@@ -162,6 +164,7 @@ def test_manifest_requests_configured_map_appearance():
   assert map_stream["params"]["map_type"] == "satellite"
   assert map_stream["params"]["fps"] == 60
   assert map_stream["params"]["h264_bitrate_kbps"] == 12000
+  assert map_stream["params"]["screen_center_y_ratio"] == 0.68
   assert len(crossroad_streams) == 2
   assert all(stream["params"]["theme"] == "dark" for stream in crossroad_streams)
 
@@ -173,6 +176,8 @@ def test_manifest_requests_configured_map_appearance():
     build_manifest("12345678", map_hz=61)
   with pytest.raises(ValueError, match="bitrate"):
     build_manifest("12345678", map_bitrate_kbps=12001)
+  with pytest.raises(ValueError, match="screen center ratio"):
+    build_manifest("12345678", screen_center_y_ratio=0.49)
 
 
 def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
@@ -181,6 +186,7 @@ def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
       "ClusterNaviMapTheme": 2,
       "ClusterNaviMapType": 1,
       "ClusterNaviMapFps": 3,
+      "CarrotNaviHudMapProfile": 1,
     }
 
     def get_int(self, key):
@@ -191,7 +197,7 @@ def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
     map_theme="dark", map_type="normal", map_hz=10, map_bitrate_kbps=3000,
   )
 
-  assert reader() == ("light", "satellite", 30, 6000)
+  assert reader() == ("light", "satellite", 30, 6000, 0.68)
   assert receiver.set_map_config(*reader()) is True
   assert receiver.set_map_config(*reader()) is False
 
@@ -201,10 +207,12 @@ def test_cluster_navi_map_params_and_receiver_updates_next_manifest():
   assert map_stream["params"]["map_type"] == "satellite"
   assert map_stream["params"]["fps"] == 30
   assert map_stream["params"]["h264_bitrate_kbps"] == 6000
+  assert map_stream["params"]["screen_center_y_ratio"] == 0.68
   assert receiver.health()["map_theme"] == "light"
   assert receiver.health()["map_type"] == "satellite"
   assert receiver.health()["map_hz"] == 30
   assert receiver.health()["map_bitrate_kbps"] == 6000
+  assert receiver.health()["screen_center_y_ratio"] == 0.68
 
 
 def test_cluster_navi_map_fps_modes_and_automatic_bitrate_resolution():

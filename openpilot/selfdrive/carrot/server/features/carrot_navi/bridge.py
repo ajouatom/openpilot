@@ -52,6 +52,7 @@ class CarrotNaviWebBridge:
     self._state_count = 0
     self._media_count = 0
     self._client_diagnostics: dict[str, tuple[float, dict[str, Any]]] = {}
+    self._hud_map_profile_clients = 0
     self._error = ""
     self._stream_allowed = False
     self._next_stream_allowed_check = 0.0
@@ -61,6 +62,11 @@ class CarrotNaviWebBridge:
         raise RuntimeError("Params unavailable")
     except Exception:
       self._params = None
+    try:
+      if self._params is not None:
+        self._params.put_int_nonblocking("CarrotNaviHudMapProfile", 0)
+    except Exception:
+      pass
 
   def stream_allowed(self, force: bool = False) -> bool:
     now = time.monotonic()
@@ -103,6 +109,7 @@ class CarrotNaviWebBridge:
       "stateMessages": self._state_count,
       "mediaMessages": self._media_count,
       "mapStream": media_status["mapStream"],
+      "hudMapProfile": self._hud_map_profile_clients > 0,
       "clientDiagnostics": [
         {
           **diagnostic,
@@ -116,6 +123,20 @@ class CarrotNaviWebBridge:
 
   def record_client_diagnostic(self, peer: str, diagnostic: dict[str, Any]) -> None:
     self._client_diagnostics[str(peer or "-")[:128]] = (time.monotonic(), diagnostic)
+
+  def set_hud_map_profile(self, active: bool) -> None:
+    if active:
+      self._hud_map_profile_clients += 1
+    else:
+      self._hud_map_profile_clients = max(0, self._hud_map_profile_clients - 1)
+    try:
+      if self._params is not None:
+        self._params.put_int_nonblocking(
+          "CarrotNaviHudMapProfile",
+          1 if self._hud_map_profile_clients > 0 else 0,
+        )
+    except Exception:
+      pass
 
   async def register_state(self, ws: web.WebSocketResponse, client_id: str, *, takeover: bool = False) -> bool:
     initial_wire = None
@@ -165,6 +186,12 @@ class CarrotNaviWebBridge:
       except Exception:
         pass
     await self._clients.stop()
+    self._hud_map_profile_clients = 0
+    try:
+      if self._params is not None:
+        self._params.put_int_nonblocking("CarrotNaviHudMapProfile", 0)
+    except Exception:
+      pass
     self._clear_runtime_cache()
     self._close_sockets()
 

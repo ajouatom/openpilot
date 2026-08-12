@@ -115,6 +115,7 @@ window.CarrotVisionCompact = (() => {
     [3, ["deviceState", [
       ["memoryUsagePercent", "i8"], ["freeSpacePercent", "f32"], ["cpuTempC", "f32list"],
       ["deviceType", "enumname", ["unknown", "neo", "chffrAndroid", "chffrIos", "tici", "pc", "tizi", "mici"]],
+      ["started", "bool"],
     ]]],
     [4, ["peripheralState", [["voltage", "u32"]]]],
     [5, ["carrotMan", [

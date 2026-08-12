@@ -42,6 +42,10 @@ MAP_HZ_DEFAULT = 10
 MAP_BITRATE_KBPS_MIN = 1
 MAP_BITRATE_KBPS_MAX = 12_000
 MAP_BITRATE_KBPS_DEFAULT = 3_000
+MAP_SCREEN_CENTER_Y_RATIO_DEFAULT = 0.80
+MAP_SCREEN_CENTER_Y_RATIO_HUD = 0.68
+MAP_SCREEN_CENTER_Y_RATIO_MIN = 0.50
+MAP_SCREEN_CENTER_Y_RATIO_MAX = 0.90
 MAP_AUTO_BITRATE_REFERENCE_HZ = 10
 MAP_AUTO_BITRATE_KBPS_BY_HZ = {
   5: 1_500,
@@ -287,6 +291,7 @@ def _stream_params(
   map_type: str = "normal",
   map_hz: int = MAP_HZ_DEFAULT,
   map_bitrate_kbps: int = MAP_BITRATE_KBPS_DEFAULT,
+  screen_center_y_ratio: float = MAP_SCREEN_CENTER_Y_RATIO_DEFAULT,
 ) -> dict[str, Any]:
   if kind == "json":
     return {
@@ -321,7 +326,7 @@ def _stream_params(
     "bearing": 0.0,
     "follow_vehicle_bearing": True,
     "fov": 40.0,
-    "screen_center_y_ratio": 0.8,
+    "screen_center_y_ratio": screen_center_y_ratio,
     "follow_vehicle": True,
     "center_latitude": None,
     "center_longitude": None,
@@ -336,6 +341,7 @@ def build_manifest(
   map_type: str = "normal",
   map_hz: int = MAP_HZ_DEFAULT,
   map_bitrate_kbps: int = MAP_BITRATE_KBPS_DEFAULT,
+  screen_center_y_ratio: float = MAP_SCREEN_CENTER_Y_RATIO_DEFAULT,
 ) -> dict[str, Any]:
   normalized_map_theme = str(map_theme).strip().lower()
   if normalized_map_theme not in MAP_THEMES:
@@ -347,6 +353,9 @@ def build_manifest(
     raise ValueError(f"unsupported map refresh rate: {map_hz}")
   if not MAP_BITRATE_KBPS_MIN <= int(map_bitrate_kbps) <= MAP_BITRATE_KBPS_MAX:
     raise ValueError(f"unsupported map bitrate: {map_bitrate_kbps}")
+  normalized_screen_center_y_ratio = float(screen_center_y_ratio)
+  if not MAP_SCREEN_CENTER_Y_RATIO_MIN <= normalized_screen_center_y_ratio <= MAP_SCREEN_CENTER_Y_RATIO_MAX:
+    raise ValueError(f"unsupported map screen center ratio: {screen_center_y_ratio}")
   streams = []
   for handle, (kind, name) in enumerate(CATALOG, start=1):
     streams.append({
@@ -357,7 +366,7 @@ def build_manifest(
       "enabled": kind != "image" or name in CLUSTER_ENABLED_IMAGE_NAMES,
       "params": _stream_params(
         kind, name, normalized_map_theme, normalized_map_type,
-        int(map_hz), int(map_bitrate_kbps),
+        int(map_hz), int(map_bitrate_kbps), normalized_screen_center_y_ratio,
       ),
     })
   return {
@@ -431,6 +440,7 @@ class CarrotNaviReceiver:
     map_type: str = "normal",
     map_hz: int = MAP_HZ_DEFAULT,
     map_bitrate_kbps: int = MAP_BITRATE_KBPS_DEFAULT,
+    screen_center_y_ratio: float = MAP_SCREEN_CENTER_Y_RATIO_DEFAULT,
   ) -> None:
     self._lock = threading.RLock()
     self._port = port
@@ -446,6 +456,9 @@ class CarrotNaviReceiver:
     self._map_bitrate_kbps = int(map_bitrate_kbps)
     if not MAP_BITRATE_KBPS_MIN <= self._map_bitrate_kbps <= MAP_BITRATE_KBPS_MAX:
       raise ValueError(f"unsupported map bitrate: {map_bitrate_kbps}")
+    self._screen_center_y_ratio = float(screen_center_y_ratio)
+    if not MAP_SCREEN_CENTER_Y_RATIO_MIN <= self._screen_center_y_ratio <= MAP_SCREEN_CENTER_Y_RATIO_MAX:
+      raise ValueError(f"unsupported map screen center ratio: {screen_center_y_ratio}")
     self._session_id: str | None = None
     self._app_version = ""
     self._manifest: dict[str, Any] | None = None
@@ -497,6 +510,7 @@ class CarrotNaviReceiver:
         map_type=self._map_type,
         map_hz=self._map_hz,
         map_bitrate_kbps=self._map_bitrate_kbps,
+        screen_center_y_ratio=self._screen_center_y_ratio,
       )
       self._session_id = session_id
       self._app_version = app_version
@@ -522,6 +536,7 @@ class CarrotNaviReceiver:
     map_type: str,
     map_hz: int,
     map_bitrate_kbps: int,
+    screen_center_y_ratio: float,
   ) -> bool:
     normalized_map_theme = str(map_theme).strip().lower()
     normalized_map_type = str(map_type).strip().lower()
@@ -535,18 +550,23 @@ class CarrotNaviReceiver:
     normalized_map_bitrate_kbps = int(map_bitrate_kbps)
     if not MAP_BITRATE_KBPS_MIN <= normalized_map_bitrate_kbps <= MAP_BITRATE_KBPS_MAX:
       raise ValueError(f"unsupported map bitrate: {map_bitrate_kbps}")
+    normalized_screen_center_y_ratio = float(screen_center_y_ratio)
+    if not MAP_SCREEN_CENTER_Y_RATIO_MIN <= normalized_screen_center_y_ratio <= MAP_SCREEN_CENTER_Y_RATIO_MAX:
+      raise ValueError(f"unsupported map screen center ratio: {screen_center_y_ratio}")
     with self._lock:
       if (
         normalized_map_theme == self._map_theme
         and normalized_map_type == self._map_type
         and normalized_map_hz == self._map_hz
         and normalized_map_bitrate_kbps == self._map_bitrate_kbps
+        and normalized_screen_center_y_ratio == self._screen_center_y_ratio
       ):
         return False
       self._map_theme = normalized_map_theme
       self._map_type = normalized_map_type
       self._map_hz = normalized_map_hz
       self._map_bitrate_kbps = normalized_map_bitrate_kbps
+      self._screen_center_y_ratio = normalized_screen_center_y_ratio
       self._mark_state_changed_locked()
       return True
 
@@ -735,6 +755,7 @@ class CarrotNaviReceiver:
         "map_type": self._map_type,
         "map_hz": self._map_hz,
         "map_bitrate_kbps": self._map_bitrate_kbps,
+        "screen_center_y_ratio": self._screen_center_y_ratio,
         "app_foreground": self._app_foreground_locked(),
         "control_connected": self._control_connections > 0,
         "control_connections": self._control_connections,
@@ -945,7 +966,7 @@ class ClusterNaviMapParamReader:
     except Exception:
       return default
 
-  def read(self) -> tuple[str, str, int, int]:
+  def read(self) -> tuple[str, str, int, int, float]:
     theme_value = self._read_int("ClusterNaviMapTheme", 1)
     type_value = self._read_int("ClusterNaviMapType", 0)
     map_hz = resolve_map_hz(self._read_int("ClusterNaviMapFps", 1))
@@ -954,14 +975,16 @@ class ClusterNaviMapParamReader:
       MAP_RENDER_HEIGHT,
       map_hz,
     )
+    hud_profile = self._read_int("CarrotNaviHudMapProfile", 0) == 1
     return (
       self.THEMES.get(theme_value, "dark"),
       self.TYPES.get(type_value, "normal"),
       map_hz,
       map_bitrate_kbps,
+      MAP_SCREEN_CENTER_Y_RATIO_HUD if hud_profile else MAP_SCREEN_CENTER_Y_RATIO_DEFAULT,
     )
 
-  def __call__(self) -> tuple[str, str, int, int]:
+  def __call__(self) -> tuple[str, str, int, int, float]:
     return self.read()
 
 
@@ -977,8 +1000,10 @@ async def _watch_map_config(app: web.Application) -> None:
   receiver = app[RECEIVER_KEY]
   reader = app[MAP_CONFIG_READER_KEY]
   while True:
-    map_theme, map_type, map_hz, map_bitrate_kbps = reader()
-    if receiver.set_map_config(map_theme, map_type, map_hz, map_bitrate_kbps):
+    map_theme, map_type, map_hz, map_bitrate_kbps, screen_center_y_ratio = reader()
+    if receiver.set_map_config(
+      map_theme, map_type, map_hz, map_bitrate_kbps, screen_center_y_ratio,
+    ):
       sockets = tuple(app[WEBSOCKETS_KEY])
       if sockets:
         await asyncio.gather(*(
@@ -1167,7 +1192,7 @@ async def ws_render(request: web.Request) -> web.WebSocketResponse:
 
 def create_app(
   receiver: CarrotNaviReceiver | None = None,
-  map_config_reader: Callable[[], tuple[str, str, int, int]] | None = None,
+  map_config_reader: Callable[[], tuple[str, str, int, int, float]] | None = None,
 ) -> web.Application:
   app = web.Application(client_max_size=MAX_MESSAGE_BYTES)
   app[RECEIVER_KEY] = receiver or CarrotNaviReceiver()
@@ -1192,7 +1217,7 @@ def run_receiver_app(
   *,
   retry_count: int = BIND_RETRY_COUNT,
   retry_interval_s: float = BIND_RETRY_INTERVAL_S,
-  map_config_reader: Callable[[], tuple[str, str, int, int]] | None = None,
+  map_config_reader: Callable[[], tuple[str, str, int, int, float]] | None = None,
 ) -> None:
   retry_count = max(0, int(retry_count))
   retry_interval_s = max(0.0, float(retry_interval_s))
@@ -1229,17 +1254,24 @@ def main() -> None:
 
   param_reader = ClusterNaviMapParamReader()
 
-  def read_map_config() -> tuple[str, str, int, int]:
-    param_map_theme, param_map_type, map_hz, map_bitrate_kbps = param_reader()
-    return args.map_theme or param_map_theme, args.map_type or param_map_type, map_hz, map_bitrate_kbps
+  def read_map_config() -> tuple[str, str, int, int, float]:
+    param_map_theme, param_map_type, map_hz, map_bitrate_kbps, screen_center_y_ratio = param_reader()
+    return (
+      args.map_theme or param_map_theme,
+      args.map_type or param_map_type,
+      map_hz,
+      map_bitrate_kbps,
+      screen_center_y_ratio,
+    )
 
-  map_theme, map_type, map_hz, map_bitrate_kbps = read_map_config()
+  map_theme, map_type, map_hz, map_bitrate_kbps, screen_center_y_ratio = read_map_config()
   receiver = CarrotNaviReceiver(
     port=args.port,
     map_theme=map_theme,
     map_type=map_type,
     map_hz=map_hz,
     map_bitrate_kbps=map_bitrate_kbps,
+    screen_center_y_ratio=screen_center_y_ratio,
   )
   advertise_ip = args.advertise_ip or (args.host if args.host not in ("", "0.0.0.0", "::") else None)
   beacon = None if args.no_beacon else CarrotNaviDiscoveryBeacon(advertise_ip)
@@ -1262,6 +1294,7 @@ def main() -> None:
     f"[carrot_navi] starting receiver on {args.host}:{args.port}",
     f"map_theme={map_theme} map_type={map_type} map_hz={map_hz}",
     f"map_bitrate_kbps={map_bitrate_kbps}",
+    f"screen_center_y_ratio={screen_center_y_ratio:.2f}",
   )
   try:
     run_receiver_app(receiver, args.host, args.port, map_config_reader=read_map_config)

@@ -625,6 +625,7 @@ void encode_device_state(std::string &out, const DynamicReader &value) {
   append_f32(out, value, "freeSpacePercent");
   append_f32_list(out, value, "cpuTempC");
   append_enum(out, value, "deviceType");
+  append_bool(out, value, "started");
 }
 
 void encode_carrot_man(std::string &out, const DynamicReader &value) {
