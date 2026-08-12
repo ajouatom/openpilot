@@ -58,6 +58,7 @@ STATIONARY_VISION_DISTANCE_MAX_M = (
 )
 STATIONARY_FRESH_MAX_DPATH_M = 2.0
 STATIONARY_HELD_MAX_DPATH_M = 4.0
+STATIONARY_HELD_FRONT_NO_VISION_MAX_DPATH_M = 1.1
 STATIONARY_RADAR_ONLY_HELD_MAX_DPATH_M = 1.2
 STATIONARY_RADAR_ONLY_CORNER_MAX_DPATH_M = 0.50
 STATIONARY_RADAR_ONLY_CROSS_SOURCE_MAX_DREL_M = 7.0
@@ -1502,15 +1503,28 @@ class VisionRadarMatcher:
       d_path = project_to_model_path(path, point.d_rel, point.y_rel).d_path
       maximum_d_path = STATIONARY_FRESH_MAX_DPATH_M
       if identity == self.stationary_identity:
-        maximum_d_path = (
-          STATIONARY_HELD_MAX_DPATH_M
-          if (
-            self._stationary_seed_probability
-            >= STATIONARY_VISION_MIN_PROB
-            or strong_vision_support
+        if (
+          point.source == "frontRadar"
+          and not strong_vision
+          and not self._stationary_corner_supported
+        ):
+          # A weak visual seed can otherwise keep a roadside front-radar
+          # reflector alive for tens of seconds after vision disappears.
+          # Preserve centered stopped leads, but require renewed vision (or
+          # independent corner support) for an offset front-only identity.
+          maximum_d_path = (
+            STATIONARY_HELD_FRONT_NO_VISION_MAX_DPATH_M
           )
-          else STATIONARY_RADAR_ONLY_HELD_MAX_DPATH_M
-        )
+        else:
+          maximum_d_path = (
+            STATIONARY_HELD_MAX_DPATH_M
+            if (
+              self._stationary_seed_probability
+              >= STATIONARY_VISION_MIN_PROB
+              or strong_vision_support
+            )
+            else STATIONARY_RADAR_ONLY_HELD_MAX_DPATH_M
+          )
       held_vision_path_outlier = (
         identity == self.stationary_identity
         and (

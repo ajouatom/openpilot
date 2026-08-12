@@ -3018,6 +3018,72 @@ def test_controller_publishes_vision_seeded_continuous_corner_stationary_lead() 
   assert output.lead_one["vLead"] == pytest.approx(0.0)
 
 
+@pytest.mark.parametrize(
+  ("source", "y_rel", "expected_track_id"),
+  (
+    ("frontRadar", 1.5, None),
+    ("frontRadar", 0.5, 34),
+    ("corner235", 1.5, 1005),
+  ),
+)
+def test_weak_vision_releases_only_offset_front_stationary_hold(
+  source: str,
+  y_rel: float,
+  expected_track_id: int | None,
+) -> None:
+  matcher = VisionRadarMatcher()
+  track_id = 1005 if source.startswith("corner") else 34
+  match = None
+  for index in range(7):
+    time_s = index * 0.05
+    point = snapshot_radar_points((Point(
+      track_id,
+      37.0,
+      y_rel,
+      v_rel=0.0,
+      source=source,
+    ),), v_ego=0.0)[0]
+    match = matcher.match(
+      model_with_lead(
+        30.6,
+        0.0,
+        0.2,
+        probability=0.42,
+      ),
+      (point,),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_primary_stationary=True,
+    )
+
+  assert match is not None
+  assert match.point.track_id == track_id
+
+  point = snapshot_radar_points((Point(
+    track_id,
+    36.9,
+    y_rel,
+    v_rel=-0.1,
+    source=source,
+  ),), v_ego=0.1)[0]
+  match = matcher.match(
+    model_with_lead(
+      55.0,
+      0.0,
+      10.0,
+      probability=0.01,
+    ),
+    (point,),
+    STRAIGHT_PATH,
+    time_s=0.35,
+    stationary_points=(point,),
+    prefer_primary_stationary=True,
+  )
+
+  assert (None if match is None else match.point.track_id) == expected_track_id
+
+
 def test_held_stationary_corner_ignores_bounded_velocity_outlier() -> None:
   matcher = VisionRadarMatcher()
   match = None
