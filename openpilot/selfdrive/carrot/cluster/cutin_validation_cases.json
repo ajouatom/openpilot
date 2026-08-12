@@ -2,6 +2,29 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "sorento-1-4-stationary-113m",
+      "vehicle_folder": "KIA_SORENTO_HEV_4TH_GEN ec52e28535e2b281",
+      "log": "00000001--468b94c6c9--4/rlog.zst",
+      "source": "front+corner",
+      "window": [16.5, 27.5],
+      "expected": "stationary",
+      "target_track_ids": [60, 1003],
+      "scene": "Night stopped vehicle approached from 113 m with front and corner radar"
+    },
+    {
+      "id": "sorento-1-4-weak-vision-paired-early-lead",
+      "vehicle_folder": "KIA_SORENTO_HEV_4TH_GEN ec52e28535e2b281",
+      "log": "00000001--468b94c6c9--4/rlog.zst",
+      "source": "front+corner",
+      "window": [18.2, 18.8],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [60, 1003],
+      "latest_detection_s": 18.70,
+      "scene": "Weak night vision may accelerate leadOne only after a tight, central and continuous front/corner stationary pair confirms the same stopped vehicle"
+    },
+    {
       "id": "ioniq5-d53-3-stationary-closer-handoff",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8b06424f3adf2bd3",
       "log": "00000d53--4a628c2753--3/rlog.zst",
@@ -159,16 +182,6 @@
       "forbidden_lead_one_ids": [40, 61],
       "forbidden_lead_two_ids": [40, 51],
       "scene": "Tunnel reflections must not become a vision-matched leadOne or stationary leadTwo"
-    },
-    {
-      "id": "sorento-1-4-stationary-113m",
-      "vehicle_folder": "KIA_SORENTO_HEV_4TH_GEN ec52e28535e2b281",
-      "log": "00000001--468b94c6c9--4/rlog.zst",
-      "source": "front+corner",
-      "window": [16.5, 27.5],
-      "expected": "stationary",
-      "target_track_ids": [60, 1003],
-      "scene": "Night stopped vehicle approached from 113 m with front and corner radar"
     },
     {
       "id": "ioniq9-209-30-l1-handoff-no-duplicate-cutin",

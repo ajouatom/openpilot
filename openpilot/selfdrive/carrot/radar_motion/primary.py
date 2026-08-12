@@ -45,6 +45,17 @@ VISION_ONLY_CUTIN_MIN_INWARD_RATIO = 0.70
 PRIMARY_RADAR_SOURCES = frozenset(("frontRadar", "scc"))
 LOW_SPEED_SCC_MAX_VLEAD_MPS = 5.0
 STATIONARY_VISION_MIN_PROB = VISION_LEAD_MIN_PROB
+STATIONARY_WEAK_VISION_MIN_PROB = 0.20
+STATIONARY_WEAK_VISION_PAIR_CONFIRMATION_S = 0.35
+STATIONARY_WEAK_VISION_PAIR_HOLD_S = 0.75
+STATIONARY_WEAK_VISION_MAX_DPATH_M = 1.0
+STATIONARY_WEAK_VISION_MAX_DISTANCE_ERROR_M = 15.0
+STATIONARY_WEAK_VISION_MAX_SPEED_DELTA_MPS = 12.0
+STATIONARY_WEAK_PAIR_MAX_DREL_M = 7.0
+STATIONARY_WEAK_PAIR_MAX_DPATH_DELTA_M = 1.5
+STATIONARY_WEAK_PAIR_MAX_VLEAD_DELTA_MPS = 2.0
+STATIONARY_WEAK_PAIR_FRONT_MAX_DPATH_M = 1.0
+STATIONARY_WEAK_PAIR_CORNER_MAX_DPATH_M = 0.75
 STATIONARY_FRONT_MIN_VISION_SUPPORT_FRAMES = 3
 STATIONARY_CONFIRMATION_S = 0.25
 STATIONARY_RADAR_ONLY_CONFIRMATION_S = 0.50
@@ -660,6 +671,11 @@ class VisionRadarMatcher:
     self._stationary_seed_score = 0.0
     self._stationary_path_outlier_since_s: float | None = None
     self._stationary_corner_supported = False
+    self._stationary_weak_pair_identity: (
+      tuple[int, str, int] | None
+    ) = None
+    self._stationary_weak_pair_last_vision_time_s: float | None = None
+    self._stationary_pending_weak_pair_supported = False
     self._stationary_closer_challenger_identity: (
       tuple[str, int] | None
     ) = None
@@ -725,6 +741,9 @@ class VisionRadarMatcher:
     self._stationary_seed_score = 0.0
     self._stationary_path_outlier_since_s = None
     self._stationary_corner_supported = False
+    self._stationary_weak_pair_identity = None
+    self._stationary_weak_pair_last_vision_time_s = None
+    self._stationary_pending_weak_pair_supported = False
     self._reset_stationary_closer_challenger()
 
   def _reset_stationary_closer_challenger(self) -> None:
@@ -1376,6 +1395,169 @@ class VisionRadarMatcher:
       supported.append((point, d_path, support_cost))
     return supported
 
+  def _stationary_weak_vision_pair_support(
+    self,
+    vision: VisionLead | None,
+    points: Sequence[RadarPointSnapshot],
+    path: Sequence[tuple[float, float]],
+    time_s: float,
+  ) -> list[tuple[RadarPointSnapshot, float, float]]:
+    """Use weak vision only to confirm one tight front/corner physical pair."""
+    has_current_weak_vision = bool(
+      vision is not None
+      and vision.probability >= STATIONARY_WEAK_VISION_MIN_PROB
+    )
+    has_held_pair = bool(
+      self._stationary_weak_pair_identity is not None
+      and self._stationary_weak_pair_last_vision_time_s is not None
+      and time_s - self._stationary_weak_pair_last_vision_time_s
+      <= STATIONARY_WEAK_VISION_PAIR_HOLD_S
+    )
+    if not has_current_weak_vision and not has_held_pair:
+      self._stationary_weak_pair_identity = None
+      self._stationary_weak_pair_last_vision_time_s = None
+      return []
+
+    fronts = tuple(
+      (point, project_to_model_path(path, point.d_rel, point.y_rel).d_path)
+      for point in points
+      if (
+        point.measured
+        and point.source == "frontRadar"
+        and 0.5 < point.d_rel < 180.0
+        and abs(point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+      )
+    )
+    corners = tuple(
+      (point, project_to_model_path(path, point.d_rel, point.y_rel).d_path)
+      for point in points
+      if (
+        point.measured
+        and point.source.startswith("corner")
+        and 0.5 < point.d_rel < 180.0
+        and abs(point.v_lead)
+        <= STATIONARY_VISION_CROSS_SOURCE_CORNER_MAX_ABS_VLEAD_MPS
+      )
+    )
+    pairs = tuple(
+      (front, front_d_path, corner, corner_d_path)
+      for front, front_d_path in fronts
+      for corner, corner_d_path in corners
+      if (
+        abs(front.d_rel - corner.d_rel)
+        <= STATIONARY_WEAK_PAIR_MAX_DREL_M
+        and abs(front_d_path - corner_d_path)
+        <= STATIONARY_WEAK_PAIR_MAX_DPATH_DELTA_M
+        and abs(front.v_lead - corner.v_lead)
+        <= STATIONARY_WEAK_PAIR_MAX_VLEAD_DELTA_MPS
+        and abs(front_d_path)
+        <= STATIONARY_WEAK_PAIR_FRONT_MAX_DPATH_M
+        and abs(corner_d_path)
+        <= STATIONARY_WEAK_PAIR_CORNER_MAX_DPATH_M
+      )
+    )
+    if not pairs:
+      self._stationary_weak_pair_identity = None
+      self._stationary_weak_pair_last_vision_time_s = None
+      return []
+
+    vision_d_path = (
+      project_to_model_path(path, vision.d_rel, vision.y_rel).d_path
+      if vision is not None
+      else math.inf
+    )
+
+    def vision_supports_pair(
+      pair: tuple[
+        RadarPointSnapshot,
+        float,
+        RadarPointSnapshot,
+        float,
+      ],
+    ) -> bool:
+      front, _, corner, _ = pair
+      return bool(
+        vision is not None
+        and vision.probability >= STATIONARY_WEAK_VISION_MIN_PROB
+        and abs(vision_d_path) <= STATIONARY_WEAK_VISION_MAX_DPATH_M
+        and min(
+          abs(vision.d_rel - front.d_rel),
+          abs(vision.d_rel - corner.d_rel),
+        ) <= STATIONARY_WEAK_VISION_MAX_DISTANCE_ERROR_M
+        and min(
+          abs(vision.velocity - front.v_lead),
+          abs(vision.velocity - corner.v_lead),
+        ) <= STATIONARY_WEAK_VISION_MAX_SPEED_DELTA_MPS
+      )
+
+    supported_pairs = tuple(
+      pair for pair in pairs if vision_supports_pair(pair)
+    )
+    if supported_pairs:
+      selected_pair = min(
+        supported_pairs,
+        key=lambda pair: (
+          abs(pair[1]) + abs(pair[3]),
+          abs(pair[0].d_rel - pair[2].d_rel),
+          pair[0].track_id,
+          pair[2].track_id,
+        ),
+      )
+      pair_identity = (
+        selected_pair[0].track_id,
+        selected_pair[2].source,
+        selected_pair[2].track_id,
+      )
+      self._stationary_weak_pair_identity = pair_identity
+      self._stationary_weak_pair_last_vision_time_s = time_s
+    else:
+      if (
+        self._stationary_weak_pair_identity is None
+        or self._stationary_weak_pair_last_vision_time_s is None
+        or time_s - self._stationary_weak_pair_last_vision_time_s
+        > STATIONARY_WEAK_VISION_PAIR_HOLD_S
+      ):
+        self._stationary_weak_pair_identity = None
+        self._stationary_weak_pair_last_vision_time_s = None
+        return []
+      selected_pair = next(
+        (
+          pair for pair in pairs
+          if (
+            pair[0].track_id,
+            pair[2].source,
+            pair[2].track_id,
+          ) == self._stationary_weak_pair_identity
+        ),
+        None,
+      )
+      if selected_pair is None:
+        self._stationary_weak_pair_identity = None
+        self._stationary_weak_pair_last_vision_time_s = None
+        return []
+
+    front, front_d_path, corner, corner_d_path = selected_pair
+    range_cost = (
+      abs(front.d_rel - corner.d_rel)
+      / STATIONARY_WEAK_PAIR_MAX_DREL_M
+    )
+    return [
+      (
+        front,
+        front_d_path,
+        range_cost
+        + abs(front_d_path)
+        / STATIONARY_WEAK_PAIR_FRONT_MAX_DPATH_M,
+      ),
+      (
+        corner,
+        corner_d_path,
+        range_cost
+        + abs(corner_d_path)
+        / STATIONARY_WEAK_PAIR_CORNER_MAX_DPATH_M,
+      ),
+    ]
+
   def _match_stationary(
     self,
     vision: VisionLead | None,
@@ -1571,6 +1753,9 @@ class VisionRadarMatcher:
     supported: list[
       tuple[RadarPointSnapshot, float, float]
     ] = []
+    weak_pair_supported: list[
+      tuple[RadarPointSnapshot, float, float]
+    ] = []
     if strong_vision:
       for point, d_path in candidate_values:
         cost = self._stationary_vision_cost(
@@ -1598,7 +1783,15 @@ class VisionRadarMatcher:
       supported = self._stationary_radar_only_support(
         candidate_values,
       )
-      if any(
+      weak_pair_supported = self._stationary_weak_vision_pair_support(
+        vision,
+        point_values,
+        path,
+        time_s,
+      )
+      if weak_pair_supported:
+        supported = weak_pair_supported
+      if not weak_pair_supported and any(
         point.source.startswith("corner")
         for point, _, _ in supported
       ):
@@ -1763,6 +1956,13 @@ class VisionRadarMatcher:
           if carry_vision_supported_handoff
           else corner_supported
         )
+        self._stationary_pending_weak_pair_supported = bool(
+          weak_pair_supported
+          and any(
+            self._identity(point) == selected_identity
+            for point, _, _ in weak_pair_supported
+          )
+        )
       elif selected_has_current_support:
         self._stationary_pending_vision_support_frames += 1
         if strong_vision and vision is not None:
@@ -1773,6 +1973,13 @@ class VisionRadarMatcher:
         self._stationary_corner_supported = (
           self._stationary_corner_supported or corner_supported
         )
+        if self._stationary_seed_probability < STATIONARY_VISION_MIN_PROB:
+          # The shorter weak-vision dwell is valid only while the corroborating
+          # front/corner pair remains present. If it drops out, fall back to
+          # the normal radar-only confirmation interval.
+          self._stationary_pending_weak_pair_supported = bool(
+            weak_pair_supported
+          )
       elif (
         self._stationary_seed_probability
         < STATIONARY_VISION_MIN_PROB
@@ -1805,7 +2012,11 @@ class VisionRadarMatcher:
           STATIONARY_CONFIRMATION_S
           if self._stationary_seed_probability
           >= STATIONARY_VISION_MIN_PROB
-          else STATIONARY_RADAR_ONLY_CONFIRMATION_S
+          else (
+            STATIONARY_WEAK_VISION_PAIR_CONFIRMATION_S
+            if self._stationary_pending_weak_pair_supported
+            else STATIONARY_RADAR_ONLY_CONFIRMATION_S
+          )
         )
         or self._stationary_pending_vision_support_frames
         < required_support_frames

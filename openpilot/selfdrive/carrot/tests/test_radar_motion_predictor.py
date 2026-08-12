@@ -3018,6 +3018,102 @@ def test_controller_publishes_vision_seeded_continuous_corner_stationary_lead() 
   assert output.lead_one["vLead"] == pytest.approx(0.0)
 
 
+def test_weak_vision_accelerates_only_tight_front_corner_stationary_pair() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+    cut_in_sensitivity=0,
+  )
+  output = None
+  for index in range(8):
+    front_d_rel = 90.0 - index * 0.6
+    output = controller.update(
+      time_s=index * 0.05,
+      v_ego=12.0,
+      radar_points=(
+        Point(
+          60,
+          front_d_rel,
+          0.45,
+          v_rel=-12.0,
+          source="frontRadar",
+        ),
+        Point(
+          1003,
+          front_d_rel + 4.5,
+          0.20,
+          v_rel=-12.0,
+          source="corner235",
+        ),
+      ),
+      model=model_with_lead(
+        front_d_rel - 2.0,
+        0.20,
+        0.0,
+        probability=0.23 if index == 0 else 0.05,
+      ),
+    )
+    if index < 7:
+      assert output.lead_one is None
+
+  assert output is not None
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 60
+  assert output.lead_one["dRel"] == pytest.approx(85.8)
+
+
+@pytest.mark.parametrize(
+  ("weak_probability", "include_corner", "lateral_m"),
+  (
+    (0.19, True, 0.20),
+    (0.23, False, 0.20),
+    (0.23, True, 1.20),
+  ),
+)
+def test_weak_vision_cannot_promote_without_tight_physical_pair(
+  weak_probability: float,
+  include_corner: bool,
+  lateral_m: float,
+) -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+    cut_in_sensitivity=0,
+  )
+  output = None
+  for index in range(8):
+    front_d_rel = 90.0 - index * 0.6
+    radar_points = [Point(
+      60,
+      front_d_rel,
+      lateral_m,
+      v_rel=-12.0,
+      source="frontRadar",
+    )]
+    if include_corner:
+      radar_points.append(Point(
+        1003,
+        front_d_rel + 4.5,
+        lateral_m,
+        v_rel=-12.0,
+        source="corner235",
+      ))
+    output = controller.update(
+      time_s=index * 0.05,
+      v_ego=12.0,
+      radar_points=tuple(radar_points),
+      model=model_with_lead(
+        front_d_rel - 2.0,
+        lateral_m,
+        0.0,
+        probability=weak_probability if index == 0 else 0.05,
+      ),
+    )
+
+  assert output is not None
+  assert output.lead_one is None
+
+
 @pytest.mark.parametrize(
   ("source", "y_rel", "expected_track_id"),
   (

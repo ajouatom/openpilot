@@ -40,6 +40,8 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   trajectory_model_review_events,
   update_validation_case_label,
   vision_lead_continuity_segments,
+  vision_lead_display_value,
+  vision_lead_rgb,
 )
 from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import (
   group_cases_by_log,
@@ -645,8 +647,8 @@ def test_lead_continuity_splits_vision_and_radar_color_segments() -> None:
   ]
 
 
-def test_vision_lead_graph_uses_point_four_probability_threshold() -> None:
-  probabilities = (0.40, 0.39, 0.80)
+def test_vision_lead_graph_shows_point_two_and_splits_weak_color() -> None:
+  probabilities = (0.20, 0.19, 0.39, 0.40, 0.80)
   frames = [
     replace(
       frame((), time_s=index * 0.1),
@@ -666,9 +668,26 @@ def test_vision_lead_graph_uses_point_four_probability_threshold() -> None:
 
   segments = vision_lead_continuity_segments(frames)
 
-  assert len(segments) == 2
-  assert segments[0][0] == pytest.approx((0.0, 30.0, 0.40))
-  assert segments[1][0] == pytest.approx((0.2, 32.0, 0.80))
+  assert len(segments) == 3
+  assert segments[0][0] == pytest.approx((0.0, 30.0, 0.20))
+  assert segments[1][0] == pytest.approx((0.2, 32.0, 0.39))
+  assert segments[2][0] == pytest.approx((0.3, 33.0, 0.40))
+  assert vision_lead_rgb(0.39) != vision_lead_rgb(0.40)
+
+
+def test_vision_lead_legend_keeps_subthreshold_probability_visible() -> None:
+  weak = ModelLead(0.23, 81.52, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+  faint = replace(weak, probability=0.06)
+
+  weak_text, weak_rgb, weak_distance = vision_lead_display_value(weak)
+  faint_text, faint_rgb, faint_distance = vision_lead_display_value(faint)
+
+  assert weak_text == "80.0m p0.23"
+  assert weak_rgb == vision_lead_rgb(0.23)
+  assert weak_distance == pytest.approx(80.0)
+  assert faint_text == "-- p0.06"
+  assert faint_rgb != weak_rgb
+  assert faint_distance is None
 
 
 def test_lead_continuity_joins_physical_stationary_track_handoff() -> None:
