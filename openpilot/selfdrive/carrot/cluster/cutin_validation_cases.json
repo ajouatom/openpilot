@@ -16,6 +16,20 @@
       "scene": "A persistent closer front-radar reflection 46 must replace the held farther stationary reflection 59 before the final stop"
     },
     {
+      "id": "ioniq9-25b-10-stationary-corner-velocity-hold",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "0000025b--c5bf47c084--10/rlog.zst",
+      "source": "front+corner",
+      "window": [27.20, 29.20],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [1005],
+      "latest_detection_s": 27.22,
+      "lead_one_continuous_window": [27.21, 29.20],
+      "scene": "A selected stationary corner L1 and comma vision keep identifying the same far lead after the corner velocity becomes a bounded negative outlier; retain radar track 1005 and preserve L1 continuity"
+    },
+    {
       "id": "palisade-bef-2-motorcycle-leadone",
       "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
       "log": "00000bef--a8eb1d8c98--2/rlog.zst",

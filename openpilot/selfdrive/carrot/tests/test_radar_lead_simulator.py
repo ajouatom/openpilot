@@ -45,7 +45,10 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import 
   group_cases_by_log,
   simulator_command,
 )
-from openpilot.selfdrive.carrot.radar.tools.validate_radar_lead_model import _metrics
+from openpilot.selfdrive.carrot.radar.tools.validate_radar_lead_model import (
+  _lead_one_continuous,
+  _metrics,
+)
 
 
 def point(
@@ -585,6 +588,28 @@ def test_lead_continuity_breaks_on_missing_frames_and_track_id_changes() -> None
     [10],
     [11],
   ]
+
+
+def test_validation_lead_one_continuity_rejects_a_single_missing_frame() -> None:
+  frames = [frame((), time_s=index * 0.1) for index in range(4)]
+  lead = Candidate(-1, 1.0, "vision L1", d_rel=30.0)
+  selections = (
+    Selection(lead, None),
+    Selection(lead, None),
+    Selection(None, None),
+    Selection(lead, None),
+  )
+  selector = SimpleNamespace(
+    select=lambda _frame, index: selections[index],
+  )
+  entry = {"lead_one_continuous_window": [0.0, 0.3]}
+
+  assert not _lead_one_continuous(selector, frames, entry)
+  assert _lead_one_continuous(
+    selector,
+    frames,
+    {"lead_one_continuous_window": [0.0, 0.1]},
+  )
 
 
 def test_vision_only_lead_one_uses_blue_instead_of_radar_orange() -> None:

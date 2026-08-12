@@ -117,6 +117,23 @@ def _first_event(
   return None
 
 
+def _lead_one_continuous(
+  selector: Any,
+  frames: list[Any],
+  entry: dict[str, Any],
+) -> bool | None:
+  window = entry.get("lead_one_continuous_window")
+  if window is None:
+    return None
+  start_s, end_s = (float(value) for value in window)
+  samples = [
+    selector.select(frame, index).lead_one is not None
+    for index, frame in enumerate(frames)
+    if start_s <= frame.time_s <= end_s
+  ]
+  return bool(samples) and all(samples)
+
+
 def _stationary_event(
   selector: Any,
   frames: list[Any],
@@ -299,6 +316,16 @@ def main() -> int:
         and expected == "detect"
       ):
         shadow_pass = shadow_event[0] <= float(deadline)
+      radard_continuous = _lead_one_continuous(
+        radard, frames, entry,
+      )
+      shadow_continuous = _lead_one_continuous(
+        shadow, frames, entry,
+      )
+      if radard_continuous is not None:
+        radard_pass = radard_pass and radard_continuous
+      if shadow_continuous is not None and shadow_applicable:
+        shadow_pass = shadow_pass and shadow_continuous
       row = {
         "id": str(entry["id"]),
         "validation_set": str(entry["validation_set"]),
@@ -310,6 +337,8 @@ def main() -> int:
         "shadow_sensor": shadow.motion_sensor,
         "radard_pass": radard_pass,
         "shadow_pass": shadow_pass,
+        "radard_continuous": radard_continuous,
+        "shadow_continuous": shadow_continuous,
       }
       rows.append(row)
       print(
@@ -319,6 +348,14 @@ def main() -> int:
           f"shadow={'PASS' if shadow_pass else 'FAIL'}:{_event_text(shadow_event)}"
           if shadow_applicable
           else f"shadow=N/A({shadow.motion_sensor})"
+        )
+        + (
+          " continuity="
+          + f"radard:{'PASS' if radard_continuous else 'FAIL'}"
+          + f"/shadow:{'PASS' if shadow_continuous else 'FAIL'}"
+          if radard_continuous is not None
+          and shadow_continuous is not None
+          else ""
         ),
         flush=True,
       )
