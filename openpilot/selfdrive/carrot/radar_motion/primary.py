@@ -49,6 +49,7 @@ STATIONARY_FRONT_MIN_VISION_SUPPORT_FRAMES = 3
 STATIONARY_CONFIRMATION_S = 0.25
 STATIONARY_RADAR_ONLY_CONFIRMATION_S = 0.50
 STATIONARY_MAX_ABS_VLEAD_MPS = 4.0
+STATIONARY_HELD_CORNER_MAX_ABS_VLEAD_MPS = 8.0
 STATIONARY_MAX_VISION_SPEED_DELTA_MPS = 12.0
 STATIONARY_TRUSTED_MAX_VISION_SPEED_DELTA_MPS = 20.0
 STATIONARY_VISION_DISTANCE_FRACTION = 0.30
@@ -1419,9 +1420,32 @@ class VisionRadarMatcher:
       self._identity(point): (point, d_path, cost, corner)
       for point, d_path, cost, corner in cross_source_front_support
     }
+    held_corner_vision_position_cost: dict[
+      tuple[str, int], float
+    ] = {}
     eligible_points: list[RadarPointSnapshot] = []
     for point in point_values:
       identity = self._identity(point)
+      held_corner_position_cost = (
+        self._stationary_vision_cross_source_position_cost(
+          vision, point,
+        )
+        if (
+          strong_vision
+          and identity in (
+            self.stationary_identity,
+            self._stationary_pending_identity,
+          )
+          and point.source.startswith("corner")
+          and abs(point.v_lead)
+          <= STATIONARY_HELD_CORNER_MAX_ABS_VLEAD_MPS
+        )
+        else None
+      )
+      if held_corner_position_cost is not None:
+        held_corner_vision_position_cost[identity] = (
+          held_corner_position_cost
+        )
       retained_cross_source_pair = (
         identity in front_corner_pair_identities
         and self._stationary_corner_supported
@@ -1438,7 +1462,10 @@ class VisionRadarMatcher:
       )
       if (
         not 0.5 < point.d_rel < 180.0
-        or abs(point.v_lead) > STATIONARY_MAX_ABS_VLEAD_MPS
+        or (
+          abs(point.v_lead) > STATIONARY_MAX_ABS_VLEAD_MPS
+          and identity not in held_corner_vision_position_cost
+        )
       ):
         continue
       if (
@@ -1446,6 +1473,7 @@ class VisionRadarMatcher:
         and vision is not None
         and abs(point.d_rel - vision.d_rel)
         > VISION_RADAR_MAX_DISTANCE_ERROR_M
+        and identity not in held_corner_vision_position_cost
         and identity not in cross_source_front_support_by_identity
         and not retained_cross_source_pair
       ):
@@ -1535,11 +1563,21 @@ class VisionRadarMatcher:
           vision, point, d_path, prefer_corner,
         )
         if cost is None:
-          cross_source = cross_source_front_support_by_identity.get(
-            self._identity(point),
+          identity = self._identity(point)
+          held_position_cost = held_corner_vision_position_cost.get(
+            identity,
           )
-          if cross_source is not None:
-            cost = cross_source[2]
+          if held_position_cost is not None:
+            cost = (
+              held_position_cost
+              + 0.15 * abs(d_path) / STATIONARY_HELD_MAX_DPATH_M
+            )
+          else:
+            cross_source = cross_source_front_support_by_identity.get(
+              identity,
+            )
+            if cross_source is not None:
+              cost = cross_source[2]
         if cost is not None:
           supported.append((point, d_path, cost))
     else:
@@ -2066,17 +2104,29 @@ class VisionRadarMatcher:
         path, point.d_rel, point.y_rel,
       ).d_path
       stationary = abs(point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+      retained_corner_velocity_outlier = (
+        point.source.startswith("corner")
+        and self._identity(point) in (
+          self.stationary_identity,
+          self._stationary_pending_identity,
+        )
+        and abs(point.v_lead)
+        <= STATIONARY_HELD_CORNER_MAX_ABS_VLEAD_MPS
+      )
       if (
         abs(point.d_rel - vision.d_rel)
         > VISION_RADAR_MAX_DISTANCE_ERROR_M
         or abs(d_path) > VISION_MATCH_FRESH_MAX_DPATH_M
         or abs(d_path - vision_d_path)
         > VISION_ONLY_CORROBORATION_MAX_DPATH_DELTA_M
-        or abs(point.v_lead - vision.velocity)
-        > (
-          _stationary_vision_speed_delta_limit(point)
-          if stationary
-          else VISION_ONLY_CORROBORATION_MAX_VLEAD_DELTA_MPS
+        or (
+          abs(point.v_lead - vision.velocity)
+          > (
+            _stationary_vision_speed_delta_limit(point)
+            if stationary
+            else VISION_ONLY_CORROBORATION_MAX_VLEAD_DELTA_MPS
+          )
+          and not retained_corner_velocity_outlier
         )
         or (
           stationary
