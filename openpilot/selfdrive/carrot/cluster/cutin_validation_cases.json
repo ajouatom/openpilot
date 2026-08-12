@@ -30,6 +30,18 @@
       "scene": "A selected stationary corner L1 and comma vision keep identifying the same far lead after the corner velocity becomes a bounded negative outlier; retain radar track 1005 and preserve L1 continuity"
     },
     {
+      "id": "k5-224-11-weak-vision-front-stationary-ghost",
+      "vehicle_folder": "KIA_K5_2021 UnregisteredDevice",
+      "log": "00000224--9cfd6f3b43--11/rlog.zst",
+      "source": "front",
+      "window": [35.0, 44.4],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [34],
+      "scene": "Empty road after a weak visual seed: offset stationary front-radar reflection 34 must release when current vision support disappears"
+    },
+    {
       "id": "palisade-bef-2-motorcycle-leadone",
       "vehicle_folder": "HYUNDAI_PALISADE b84b4a4fbb604be1",
       "log": "00000bef--a8eb1d8c98--2/rlog.zst",
