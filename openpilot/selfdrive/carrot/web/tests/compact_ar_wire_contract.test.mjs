@@ -9,6 +9,8 @@ const carrotRoot = path.resolve(webRoot, "..");
 const pythonSource = fs.readFileSync(path.join(carrotRoot, "realtime", "compact_state.py"), "utf8");
 const nativeSource = fs.readFileSync(path.join(carrotRoot, "realtime", "compact_state_native.cc"), "utf8");
 const browserSource = fs.readFileSync(path.join(webRoot, "js", "realtime", "vision_compact.js"), "utf8");
+const rawWsSource = fs.readFileSync(path.join(carrotRoot, "realtime", "transports", "raw_ws.py"), "utf8");
+const replaySource = fs.readFileSync(path.join(carrotRoot, "server", "features", "dashcam", "replay.py"), "utf8");
 
 const arContract = {
   carState: [1, [
@@ -21,6 +23,9 @@ const arContract = {
   ]],
   selfdriveState: [6, [
     "enabled", "personality", "alertStatus", "alertSize", "alertType", "alertText1", "alertText2",
+  ]],
+  deviceState: [3, [
+    "memoryUsagePercent", "freeSpacePercent", "cpuTempC", "deviceType", "started",
   ]],
   gpsLocationExternal: [7, [
     "latitude", "longitude", "speed", "bearingDeg", "bearingAccuracyDeg", "speedAccuracy",
@@ -118,7 +123,7 @@ function pythonServiceBlocks() {
 }
 
 function browserServiceBlocks() {
-  const markers = Array.from(browserSource.matchAll(/^    \[(\d+), \["([A-Za-z0-9]+)", \[$/gm));
+  const markers = Array.from(browserSource.matchAll(/^    \[(\d+), \["([A-Za-z0-9]+)", /gm));
   return new Map(markers.map((marker, index) => {
     const end = markers[index + 1]?.index ?? browserSource.indexOf("\n  ]);", marker.index);
     return [marker[2], {
@@ -210,6 +215,7 @@ test("native AR encoders retain the shared field sequence and route limit", () =
   const directEncoders = {
     encode_car_state: arContract.carState[1].flatMap((field) => field === "tpms" ? ["tpms", "fl", "tpms", "fr", "tpms", "rl", "tpms", "rr"] : [field]),
     encode_selfdrive_state: arContract.selfdriveState[1],
+    encode_device_state: arContract.deviceState[1],
     encode_gps: arContract.gpsLocationExternal[1],
     encode_model_v2: arContract.modelV2[1].filter((field) => field !== "leadsV3"),
     encode_live_calibration: arContract.liveCalibration[1],
@@ -246,4 +252,9 @@ test("native AR encoders retain the shared field sequence and route limit", () =
   assert.match(pythonSource, /^ROUTE_POLYLINE_LIMIT = 64$/m);
   assert.match(nativeSource, /^constexpr size_t kRoutePolylineLimit = 64;$/m);
   assert.match(browserSource, /const AR_SERVICES = \["cameraOdometry", "livePose", "carrotNavi"\];/);
+});
+
+test("deviceState uses the source encoder across rolling native updates", () => {
+  assert.match(rawWsSource, /encode_compact_frame_native is not None and service != "deviceState"/);
+  assert.match(replaySource, /encode_compact_frame_native is not None and service != "deviceState"/);
 });

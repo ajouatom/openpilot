@@ -44,6 +44,7 @@ async def api_capabilities(_request: web.Request) -> web.Response:
     "sessionPolicy": "single-viewer-last-entry-wins",
     "sessionTakeoverChannel": "state",
     "sessionBusyCode": SESSION_BUSY_CODE,
+    "mapProfiles": ["default", "cavdy_hud"],
   })
 
 
@@ -76,17 +77,25 @@ async def _serve_ws(request: web.Request, media: bool) -> web.WebSocketResponse:
   await ws.prepare(request)
   if media:
     include_map = request.query.get("map", "1").lower() not in ("0", "false", "no")
+    hud_map_profile = (
+      raw_client_id == "cavdy-navdy"
+      and request.query.get("profile", "").strip().lower() == "cavdy_hud"
+    )
     registered = await bridge.register_media(ws, client_id, include_map=include_map)
   else:
     registered = await bridge.register_state(ws, client_id, takeover=takeover)
   if not registered:
     return ws
+  if media and hud_map_profile:
+    bridge.set_hud_map_profile(True)
   try:
     async for message in ws:
       if message.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.ERROR):
         break
   finally:
     await bridge.unregister(ws)
+    if media and hud_map_profile:
+      bridge.set_hud_map_profile(False)
   return ws
 
 

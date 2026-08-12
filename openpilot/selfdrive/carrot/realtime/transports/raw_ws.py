@@ -218,7 +218,11 @@ class RawWsHub:
   def _compact_frame(self, service: str, payload: bytes) -> bytes | None:
     sequence = (self._sequence.get(service, 0) + 1) & 0xffff
     try:
-      if encode_compact_frame_native is not None:
+      # deviceState carries the HUD power-policy signal. Keep it on the
+      # source-level encoder so a rolling source update cannot load an older
+      # compact_state_pyx.so that silently omits a newly appended `started`.
+      # At 2 Hz this has no meaningful device-side cost.
+      if encode_compact_frame_native is not None and service != "deviceState":
         try:
           frame = encode_compact_frame_native(service, payload, sequence)
         except Exception:

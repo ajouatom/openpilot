@@ -75,7 +75,9 @@ def _event_bytes(event: Any) -> bytes:
 
 
 def _compact_frame(event: Any, service: str, sequence: int) -> bytes:
-  if encode_compact_frame_native is not None:
+  # Match live delivery during rolling updates; an old native module may not
+  # contain the trailing deviceState.started power signal yet.
+  if encode_compact_frame_native is not None and service != "deviceState":
     try:
       return encode_compact_frame_native(service, _event_bytes(event), sequence)
     except Exception:
