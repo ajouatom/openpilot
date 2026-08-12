@@ -86,8 +86,11 @@ VALIDATION_MOTION_MODES = ("normal", "front")
 VALIDATION_DEFAULT_SENSITIVITY = 3
 LEAD_ONE_RADAR_RGB = (246, 142, 55)
 LEAD_ONE_VISION_RGB = (72, 145, 255)
+LEAD_ONE_VISION_WEAK_RGB = (104, 205, 255)
+LEAD_ONE_VISION_INACTIVE_RGB = (112, 145, 160)
 LEAD_TWO_RGB = (245, 211, 72)
-VISION_LEAD_DISPLAY_MIN_PROBABILITY = 0.40
+VISION_LEAD_DISPLAY_MIN_PROBABILITY = 0.20
+VISION_LEAD_STRONG_DISPLAY_MIN_PROBABILITY = 0.40
 VALIDATION_SENSITIVITY_LABELS = (
   "사용 안 함",
   "둔감",
@@ -129,6 +132,38 @@ class ModelLead:
   x_std: float
   y_std: float
   v_std: float
+
+
+def vision_lead_rgb(probability: float) -> tuple[int, int, int]:
+  return (
+    LEAD_ONE_VISION_RGB
+    if float(probability) >= VISION_LEAD_STRONG_DISPLAY_MIN_PROBABILITY
+    else LEAD_ONE_VISION_WEAK_RGB
+  )
+
+
+def vision_lead_display_value(
+  vision: ModelLead | None,
+) -> tuple[str, tuple[int, int, int], float | None]:
+  if vision is None:
+    return "--", LEAD_ONE_VISION_INACTIVE_RGB, None
+  probability = float(vision.probability)
+  distance = float(vision.x - RADAR_TO_CAMERA)
+  if (
+    probability >= VISION_LEAD_DISPLAY_MIN_PROBABILITY
+    and math.isfinite(distance)
+    and 0.0 <= distance <= DEFAULT_FORWARD_RANGE_M
+  ):
+    return (
+      f"{distance:.1f}m p{probability:.2f}",
+      vision_lead_rgb(probability),
+      distance,
+    )
+  return (
+    f"-- p{probability:.2f}",
+    LEAD_ONE_VISION_INACTIVE_RGB,
+    None,
+  )
 
 
 @dataclass(frozen=True)
@@ -519,7 +554,10 @@ def vision_lead_continuity_segments(
         current = []
       continue
     point = (frame.time_s, float(distance), float(lead.probability))
-    if current and point[0] - current[-1][0] > 0.15:
+    if current and (
+      point[0] - current[-1][0] > 0.15
+      or vision_lead_rgb(point[2]) != vision_lead_rgb(current[-1][2])
+    ):
       segments.append(tuple(current))
       current = []
     current.append(point)
@@ -3035,7 +3073,11 @@ class SimulatorUI:
         rgb = (
           lead_one_rgb(segment[0][2])
           if is_lead_one
-          else LEAD_TWO_RGB if is_lead_one is False else LEAD_ONE_VISION_RGB
+          else (
+            LEAD_TWO_RGB
+            if is_lead_one is False
+            else vision_lead_rgb(segment[0][2])
+          )
         )
         color = self._color(rgb)
         previous = None
@@ -3053,17 +3095,8 @@ class SimulatorUI:
     )
     frame = self.frames[self.index]
     vision = frame.model_leads[0] if frame.model_leads else None
-    vision_distance = vision.x - RADAR_TO_CAMERA if vision is not None else None
-    visible_vision = (
-      vision
-      if (
-        vision is not None
-        and vision.probability >= VISION_LEAD_DISPLAY_MIN_PROBABILITY
-        and vision_distance is not None
-        and math.isfinite(vision_distance)
-        and 0.0 <= vision_distance <= DEFAULT_FORWARD_RANGE_M
-      )
-      else None
+    vision_value, vision_rgb, vision_distance = vision_lead_display_value(
+      vision,
     )
     lead_values = (
       (
@@ -3102,23 +3135,18 @@ class SimulatorUI:
           3.5,
           self._color(rgb),
         )
-    vision_value = (
-      f"{vision_distance:.1f}m p{visible_vision.probability:.2f}"
-      if visible_vision is not None and vision_distance is not None
-      else "--"
-    )
     self._draw_text(
       f"V {vision_value}",
       legend_x,
       int(rect.y + 7.0),
       12,
-      self._color(LEAD_ONE_VISION_RGB),
+      self._color(vision_rgb),
     )
-    if visible_vision is not None and vision_distance is not None:
+    if vision_distance is not None:
       rl.draw_circle_v(
         position(self.playback_time, vision_distance),
         3.5,
-        self._color(LEAD_ONE_VISION_RGB),
+        self._color(vision_rgb),
       )
     cursor_x = plot_left + self.playback_time / total * plot_width
     rl.draw_line(
@@ -3882,6 +3910,8 @@ __all__ = (
   "validation_review_events",
   "validation_settings_path",
   "vision_lead_continuity_segments",
+  "vision_lead_display_value",
+  "vision_lead_rgb",
 )
 
 
