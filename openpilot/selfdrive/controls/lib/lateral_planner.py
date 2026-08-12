@@ -240,8 +240,11 @@ class LateralPlanner:
 
     #lateralPlan.desire = self.DH.desire
     lateralPlan.useLaneLines = self.lanelines_active
-    #lateralPlan.laneChangeState = self.DH.lane_change_state
-    #lateralPlan.laneChangeDirection = self.DH.lane_change_direction
+    # DesireHelper runs in modeld in this branch. Mirror its published model
+    # metadata into lateralPlan so compact HUD clients receive the same manual
+    # and automatic lane-change state used by the on-road UI.
+    lateralPlan.laneChangeState = sm['modelV2'].meta.laneChangeState
+    lateralPlan.laneChangeDirection = sm['modelV2'].meta.laneChangeDirection
     lateralPlan.laneWidth = float(self.LP.lane_width)
 
     #plan_send.lateralPlan.dPathWLinesX = [float(x) for x in self.d_path_w_lines_xyz[:, 0]]
