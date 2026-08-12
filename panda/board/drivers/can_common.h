@@ -40,19 +40,6 @@ can_buffer(tx3_q, CAN_TX_BUFFER_SIZE)
 // FIXME:
 // cppcheck-suppress misra-c2012-9.3
 can_ring *can_queues[CAN_QUEUES_ARRAY_SIZE] = {&can_tx1_q, &can_tx2_q, &can_tx3_q};
-#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
-static volatile uint32_t can_tx_reserved_slots[CAN_QUEUES_ARRAY_SIZE] = {0U};
-
-static volatile uint32_t *can_reserved_slots_for(const can_ring *q) {
-  volatile uint32_t *reserved = NULL;
-  for (uint8_t bus = 0U; bus < CAN_QUEUES_ARRAY_SIZE; ++bus) {
-    if (q == can_queues[bus]) {
-      reserved = &can_tx_reserved_slots[bus];
-    }
-  }
-  return reserved;
-}
-#endif
 
 // ********************* interrupt safe queue *********************
 bool can_pop(can_ring *q, CANPacket_t *elem) {
@@ -73,14 +60,7 @@ bool can_pop(can_ring *q, CANPacket_t *elem) {
   return ret;
 }
 
-static uint32_t can_slots_empty_raw(const can_ring *q) {
-  return (q->w_ptr >= q->r_ptr) ?
-    (q->fifo_size - 1U - q->w_ptr + q->r_ptr) :
-    (q->r_ptr - q->w_ptr - 1U);
-}
-
-static bool can_push_internal(can_ring *q, const CANPacket_t *elem,
-                              bool use_reservation) {
+bool can_push(can_ring *q, const CANPacket_t *elem) {
   bool ret = false;
   uint32_t next_w_ptr;
 
@@ -90,26 +70,9 @@ static bool can_push_internal(can_ring *q, const CANPacket_t *elem,
   } else {
     next_w_ptr = q->w_ptr + 1U;
   }
-#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
-  const uint32_t raw_slots = can_slots_empty_raw(q);
-  volatile uint32_t *reserved_slots = can_reserved_slots_for(q);
-  const uint32_t reserved_count =
-    (reserved_slots != NULL) ? *reserved_slots : 0U;
-  const bool slot_available = use_reservation ?
-    ((reserved_slots != NULL) && (reserved_count > 0U) && (raw_slots > 0U)) :
-    (raw_slots > reserved_count);
-#else
-  (void)use_reservation;
-  const bool slot_available = next_w_ptr != q->r_ptr;
-#endif
-  if (slot_available) {
+  if (next_w_ptr != q->r_ptr) {
     q->elems[q->w_ptr] = *elem;
     q->w_ptr = next_w_ptr;
-#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
-    if (use_reservation) {
-      *reserved_slots -= 1U;
-    }
-#endif
     ret = true;
   }
   EXIT_CRITICAL();
@@ -133,73 +96,24 @@ static bool can_push_internal(can_ring *q, const CANPacket_t *elem,
   return ret;
 }
 
-bool can_push(can_ring *q, const CANPacket_t *elem) {
-  return can_push_internal(q, elem, false);
-}
-
-#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
-bool can_push_reserved(can_ring *q, const CANPacket_t *elem) {
-  return can_push_internal(q, elem, true);
-}
-#endif
-
 uint32_t can_slots_empty(const can_ring *q) {
   uint32_t ret = 0;
 
   ENTER_CRITICAL();
-#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
-  const uint32_t raw_slots = can_slots_empty_raw(q);
-  const volatile uint32_t *reserved_slots = can_reserved_slots_for(q);
-  const uint32_t reserved_count =
-    (reserved_slots != NULL) ? *reserved_slots : 0U;
-  ret = (raw_slots >= reserved_count) ?
-    (raw_slots - reserved_count) : 0U;
-#else
-  ret = can_slots_empty_raw(q);
-#endif
+  if (q->w_ptr >= q->r_ptr) {
+    ret = q->fifo_size - 1U - q->w_ptr + q->r_ptr;
+  } else {
+    ret = q->r_ptr - q->w_ptr - 1U;
+  }
   EXIT_CRITICAL();
 
   return ret;
 }
 
-#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
-bool can_tx_reserve_slots(const uint16_t required[CAN_QUEUES_ARRAY_SIZE]) {
-  bool reserved = required != NULL;
-  ENTER_CRITICAL();
-  for (uint8_t bus = 0U; (bus < CAN_QUEUES_ARRAY_SIZE) && reserved; ++bus) {
-    const can_ring *q = can_queues[bus];
-    const uint32_t raw_slots = can_slots_empty_raw(q);
-    const uint32_t available = (raw_slots >= can_tx_reserved_slots[bus]) ?
-      (raw_slots - can_tx_reserved_slots[bus]) : 0U;
-    reserved = required[bus] <= available;
-  }
-  if (reserved) {
-    for (uint8_t bus = 0U; bus < CAN_QUEUES_ARRAY_SIZE; ++bus) {
-      can_tx_reserved_slots[bus] += required[bus];
-    }
-  }
-  EXIT_CRITICAL();
-  return reserved;
-}
-
-void can_release_reserved(can_ring *q) {
-  ENTER_CRITICAL();
-  volatile uint32_t *reserved_slots = can_reserved_slots_for(q);
-  if ((reserved_slots != NULL) && (*reserved_slots > 0U)) {
-    *reserved_slots -= 1U;
-  }
-  EXIT_CRITICAL();
-}
-#endif
-
 void can_clear(can_ring *q) {
   ENTER_CRITICAL();
   q->w_ptr = 0;
   q->r_ptr = 0;
-  // A v3 reservation is a right to perform the remainder of the current
-  // synchronous batch, not an entry already stored in this queue. Preserve
-  // it across a concurrent clear so subsequent reserved pushes cannot fail or
-  // be stolen by an ordinary writer. Static initialization starts at zero.
   EXIT_CRITICAL();
   // handle TX buffer full with zero ECUs awake on the bus
   refresh_can_tx_slots_available();
@@ -329,53 +243,6 @@ bool can_check_checksum(CANPacket_t *packet) {
 }
 
 bool safety_tx_buffered_for_fwd = false;
-#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
-static void can_send_internal(CANPacket_t *to_push, uint8_t bus_number,
-                              bool skip_tx_hook, bool use_reservation) {
-  bool reservation_consumed = false;
-  safety_tx_buffered_for_fwd = false;
-  if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
-    if (safety_tx_buffered_for_fwd) safety_tx_buffered_for_fwd = false;
-    else if (bus_number < PANDA_BUS_CNT) {
-      can_set_checksum(to_push);
-      // add CAN packet to send queue
-      const bool pushed = use_reservation ?
-        can_push_reserved(can_queues[bus_number], to_push) :
-        can_push(can_queues[bus_number], to_push);
-      reservation_consumed = use_reservation && pushed;
-      tx_buffer_overflow += pushed ? 0U : 1U;
-      process_can(CAN_NUM_FROM_BUS_NUM(bus_number));
-    }
-  } else {
-    safety_tx_blocked += 1U;
-    to_push->returned = 0U;
-    to_push->rejected = 1U;
-
-    // data changed
-    can_set_checksum(to_push);
-    rx_buffer_overflow += can_push(&can_rx_q, to_push) ? 0U : 1U;
-  }
-  if (use_reservation && (bus_number < PANDA_BUS_CNT) && !reservation_consumed) {
-    // Rejected/buffered packets do not consume a TX queue entry.
-    can_release_reserved(can_queues[bus_number]);
-  }
-}
-
-void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
-  can_send_internal(to_push, bus_number, skip_tx_hook, false);
-}
-
-void can_send_reserved(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
-  // Legacy SPI and USB execute CAN writes from non-preemptible IRQ context.
-  // v3 dispatches from the main loop, so preserve that per-packet atomicity:
-  // safety_tx_hook() uses safety_tx_buffered_for_fwd as shared scratch state
-  // and must not be interrupted by a CAN RX forwarding can_send(). Queue
-  // helpers use the nesting-aware critical-depth mechanism.
-  ENTER_CRITICAL();
-  can_send_internal(to_push, bus_number, skip_tx_hook, true);
-  EXIT_CRITICAL();
-}
-#else
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
   safety_tx_buffered_for_fwd = false;
   if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
@@ -396,7 +263,6 @@ void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
     rx_buffer_overflow += can_push(&can_rx_q, to_push) ? 0U : 1U;
   }
 }
-#endif
 
 bool is_speed_valid(uint32_t speed, const uint32_t *all_speeds, uint8_t len) {
   bool ret = false;
