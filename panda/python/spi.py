@@ -7,8 +7,6 @@ import time
 import struct
 import threading
 from contextlib import contextmanager
-from dataclasses import dataclass
-from enum import IntEnum
 from functools import reduce
 from collections.abc import Callable
 
@@ -30,206 +28,10 @@ CHECKSUM_START = 0xAB
 
 MIN_ACK_TIMEOUT_MS = 100
 MAX_XFER_RETRY_COUNT = 5
-SPI_V2_TURNAROUND_NS = 400_000
 
 XFER_SIZE = 0x40*31
 
 DEV_PATH = "/dev/spidev0.0"
-
-SPI_V3_MAGIC = b"\x5a\xc3\x69\x96"
-SPI_V3_VERSION = 3
-SPI_V3_HEADER_SIZE = 28
-SPI_V3_TRAILER_SIZE = 4
-SPI_V3_WIRE_BUFFER_SIZE = 2048
-SPI_V3_MAX_PAYLOAD_SIZE = SPI_V3_WIRE_BUFFER_SIZE - SPI_V3_HEADER_SIZE - SPI_V3_TRAILER_SIZE
-SPI_V3_CAN_WRITE_MAX_PAYLOAD_SIZE = 512
-SPI_V3_FILLER = 0xCD
-SPI_V3_POLL_CHUNK_SIZE = 256
-SPI_V3_MAX_FILLER_PREFIX_BYTES = 512
-SPI_V3_POLL_INTERVAL_US = 250
-SPI_V3_RESPONSE_ATTEMPT_TIMEOUT_MS = 8
-SPI_V3_TRANSFER_TIMEOUT_MS = 100
-
-SPI_VERSION_REQUEST = b"VERSION"
-SPI_VERSION_MAX_DATA_SIZE = 1000
-SPI_VERSION_METADATA_SIZE = 15
-# VERSION is a legacy-shaped response even when it selects v3. Legacy Panda
-# firmware re-arms its 7-byte header RX DMA as soon as the final response byte
-# leaves TX DMA, so a fixed-size read may clock dummy bytes into that new
-# header. A new process may also inherit one maximum-sized v3 response from a
-# host that died mid-transfer. Poll one byte at a time, budget that full stale
-# frame plus service margin, and stop exactly at the valid VERSION CRC byte.
-SPI_VERSION_POLL_SERVICE_MARGIN_BYTES = 64
-SPI_VERSION_MAX_POLL_BYTES = SPI_V3_WIRE_BUFFER_SIZE + SPI_VERSION_POLL_SERVICE_MARGIN_BYTES
-SPI_VERSION_POLL_INTERVAL_US = 100
-
-
-class SpiV3FrameType(IntEnum):
-  REQUEST = 1
-  RESPONSE = 2
-
-
-class SpiV3Status(IntEnum):
-  OK = 0
-  BAD_FRAME = 1
-  UNSUPPORTED_VERSION = 2
-  BAD_LENGTH = 3
-  BAD_ENDPOINT = 4
-  BUSY = 5
-  SEQUENCE_CONFLICT = 6
-  INTERNAL_ERROR = 7
-
-
-@dataclass(frozen=True)
-class SpiV3Frame:
-  frame_type: SpiV3FrameType
-  status: SpiV3Status
-  session_id: int
-  sequence: int
-  endpoint: int
-  payload: bytes = b""
-  max_response_length: int = 0
-  flags: int = 0
-
-
-def _make_crc32c_table() -> tuple[int, ...]:
-  table = []
-  for byte in range(256):
-    crc = byte
-    for _ in range(8):
-      crc = (crc >> 1) ^ (0x82F63B78 if (crc & 1) else 0)
-    table.append(crc)
-  return tuple(table)
-
-
-_CRC32C_TABLE = _make_crc32c_table()
-
-
-def spi_v3_crc32c(data: bytes | bytearray | memoryview) -> int:
-  crc = 0xFFFFFFFF
-  for byte in data:
-    crc = _CRC32C_TABLE[(crc ^ byte) & 0xFF] ^ (crc >> 8)
-  return crc ^ 0xFFFFFFFF
-
-
-def spi_v3_encode_frame(frame: SpiV3Frame) -> bytes:
-  payload = bytes(frame.payload)
-  if frame.frame_type not in (SpiV3FrameType.REQUEST, SpiV3FrameType.RESPONSE):
-    raise ValueError("invalid SPI v3 frame type")
-  if frame.status not in SpiV3Status:
-    raise ValueError("invalid SPI v3 status")
-  if not 0 <= frame.session_id <= 0xFFFFFFFF or not 0 <= frame.sequence <= 0xFFFFFFFF:
-    raise ValueError("invalid SPI v3 session or sequence")
-  if not 0 <= frame.endpoint <= 0xFF or frame.flags != 0:
-    raise ValueError("invalid SPI v3 frame fields")
-  if len(payload) > SPI_V3_MAX_PAYLOAD_SIZE or not 0 <= frame.max_response_length <= SPI_V3_MAX_PAYLOAD_SIZE:
-    raise ValueError("SPI v3 payload is too large")
-  if frame.frame_type == SpiV3FrameType.REQUEST:
-    if frame.status != SpiV3Status.OK:
-      raise ValueError("SPI v3 request has non-OK status")
-  elif frame.max_response_length != 0:
-    raise ValueError("SPI v3 response has a request length limit")
-
-  header = struct.pack(
-    "<4sBBBBIIBBHHH", SPI_V3_MAGIC, SPI_V3_VERSION, frame.frame_type, frame.flags, frame.status,
-    frame.session_id, frame.sequence, frame.endpoint, 0, len(payload), frame.max_response_length, 0,
-  )
-  header += struct.pack("<I", spi_v3_crc32c(header))
-  encoded = header + payload
-  return encoded + struct.pack("<I", spi_v3_crc32c(encoded))
-
-
-class SpiV3StreamDecoder:
-  def __init__(self, max_payload_size: int = SPI_V3_MAX_PAYLOAD_SIZE):
-    if not 0 <= max_payload_size <= SPI_V3_MAX_PAYLOAD_SIZE:
-      raise ValueError("invalid SPI v3 decoder payload limit")
-    self.max_payload_size = max_payload_size
-    self.buffer = bytearray()
-    self.bad_header_crc = 0
-    self.bad_frame_crc = 0
-    self.bad_version = 0
-    self.bad_length = 0
-    self.bad_fields = 0
-
-  def _discard_prefix(self, length: int) -> None:
-    del self.buffer[:length]
-
-  def feed(self, data: bytes | bytearray | memoryview) -> list[SpiV3Frame]:
-    self.buffer.extend(data)
-    frames = []
-    while True:
-      magic_offset = self.buffer.find(SPI_V3_MAGIC)
-      if magic_offset < 0:
-        keep = 0
-        for candidate in range(min(len(self.buffer), len(SPI_V3_MAGIC) - 1), 0, -1):
-          if self.buffer[-candidate:] == SPI_V3_MAGIC[:candidate]:
-            keep = candidate
-            break
-        self._discard_prefix(len(self.buffer) - keep)
-        break
-
-      self._discard_prefix(magic_offset)
-      if len(self.buffer) < SPI_V3_HEADER_SIZE:
-        break
-
-      received_header_crc = struct.unpack_from("<I", self.buffer, 24)[0]
-      if spi_v3_crc32c(memoryview(self.buffer)[:24]) != received_header_crc:
-        self.bad_header_crc += 1
-        self._discard_prefix(1)
-        continue
-      if self.buffer[4] != SPI_V3_VERSION:
-        self.bad_version += 1
-        self._discard_prefix(1)
-        continue
-
-      payload_length, max_response_length = struct.unpack_from("<HH", self.buffer, 18)
-      if payload_length > self.max_payload_size or max_response_length > SPI_V3_MAX_PAYLOAD_SIZE:
-        self.bad_length += 1
-        self._discard_prefix(1)
-        continue
-
-      raw_type, flags, raw_status = self.buffer[5:8]
-      try:
-        frame_type = SpiV3FrameType(raw_type)
-        status = SpiV3Status(raw_status)
-      except ValueError:
-        self.bad_fields += 1
-        self._discard_prefix(1)
-        continue
-
-      semantic_fields = (
-        flags == 0 and self.buffer[17] == 0 and struct.unpack_from("<H", self.buffer, 22)[0] == 0 and
-        ((frame_type == SpiV3FrameType.REQUEST and status == SpiV3Status.OK) or
-         (frame_type == SpiV3FrameType.RESPONSE and max_response_length == 0))
-      )
-      if not semantic_fields:
-        self.bad_fields += 1
-        self._discard_prefix(1)
-        continue
-
-      frame_length = SPI_V3_HEADER_SIZE + payload_length + SPI_V3_TRAILER_SIZE
-      if len(self.buffer) < frame_length:
-        break
-      received_frame_crc = struct.unpack_from("<I", self.buffer, frame_length - SPI_V3_TRAILER_SIZE)[0]
-      if spi_v3_crc32c(memoryview(self.buffer)[:frame_length - SPI_V3_TRAILER_SIZE]) != received_frame_crc:
-        self.bad_frame_crc += 1
-        self._discard_prefix(1)
-        continue
-
-      session_id, sequence = struct.unpack_from("<II", self.buffer, 8)
-      frames.append(SpiV3Frame(
-        frame_type=frame_type,
-        status=status,
-        session_id=session_id,
-        sequence=sequence,
-        endpoint=self.buffer[16],
-        payload=bytes(self.buffer[SPI_V3_HEADER_SIZE:SPI_V3_HEADER_SIZE + payload_length]),
-        max_response_length=max_response_length,
-        flags=flags,
-      ))
-      self._discard_prefix(frame_length)
-
-    return frames
 
 
 def crc8(data):
@@ -244,50 +46,6 @@ def crc8(data):
       else:
         crc <<= 1
   return crc
-
-
-class SpiVersionStreamDecoder:
-  """Decoder for the stable, legacy-shaped VERSION discovery response."""
-
-  def __init__(self):
-    self.buffer = bytearray()
-    self.bad_checksum = 0
-    self.bad_length = 0
-
-  def feed(self, data: bytes | bytearray | memoryview) -> bytes | None:
-    self.buffer.extend(data)
-    while True:
-      version_offset = self.buffer.find(SPI_VERSION_REQUEST)
-      if version_offset < 0:
-        keep = 0
-        for candidate in range(min(len(self.buffer), len(SPI_VERSION_REQUEST) - 1), 0, -1):
-          if self.buffer[-candidate:] == SPI_VERSION_REQUEST[:candidate]:
-            keep = candidate
-            break
-        del self.buffer[:len(self.buffer) - keep]
-        return None
-
-      del self.buffer[:version_offset]
-      data_offset = len(SPI_VERSION_REQUEST) + 2
-      if len(self.buffer) < data_offset:
-        return None
-      data_length = struct.unpack_from("<H", self.buffer, len(SPI_VERSION_REQUEST))[0]
-      if not SPI_VERSION_METADATA_SIZE <= data_length <= SPI_VERSION_MAX_DATA_SIZE:
-        self.bad_length += 1
-        del self.buffer[0]
-        continue
-
-      packet_length = data_offset + data_length + 1
-      if len(self.buffer) < packet_length:
-        return None
-      if crc8(memoryview(self.buffer)[:packet_length - 1]) != self.buffer[packet_length - 1]:
-        self.bad_checksum += 1
-        del self.buffer[0]
-        continue
-
-      response = bytes(self.buffer[data_offset:data_offset + data_length])
-      del self.buffer[:packet_length]
-      return response
 
 
 class PandaSpiException(Exception):
@@ -310,12 +68,6 @@ class PandaSpiBadChecksum(PandaSpiException):
 
 class PandaSpiTransferFailed(PandaSpiException):
   pass
-
-
-class PandaSpiV3RemoteError(PandaSpiException):
-  def __init__(self, status: SpiV3Status):
-    self.status = status
-    super().__init__(f"SPI v3 request failed with status {status.name}")
 
 
 class PandaSpiTransfer(ctypes.Structure):
@@ -375,29 +127,25 @@ class PandaSpiHandle(BaseHandle):
   A class that mimics a libusb1 handle for panda SPI communications.
   """
 
-  PROTOCOL_VERSION = SPI_V3_VERSION
-  SUPPORTED_PROTOCOL_VERSIONS = (2, SPI_V3_VERSION)
+  PROTOCOL_VERSION = 2
 
   def __init__(self) -> None:
     self.dev = SpiDevice()
-    self.protocol_version = 2
-    self._v3_session_id = int.from_bytes(os.urandom(4), "little") or 1
-    self._v3_next_sequence = 1
 
-    self._transfer_v2_raw: Callable[[SpiDevice, int, bytes, int, int, bool], bytes] = self._transfer_spidev
+    self._transfer_raw: Callable[[SpiDevice, int, bytes, int, int, bool], bytes] = self._transfer_spidev
 
     if "KERN" in os.environ:
-      # The out-of-tree ioctl performs HACK->payload entirely in the kernel and
-      # has no 400 us RX-DMA turnaround. Sleeping around the ioctl cannot fix
-      # that internal race, so explicitly bypass KERN until its driver grows
-      # the same guard. Direct spidev keeps v2 bootstub/F4 flashing reliable.
-      logger.warning("KERN Panda SPI transport lacks the required v2 turnaround; using direct spidev")
+      self._transfer_raw = self._transfer_kernel_driver
 
-  def set_protocol_version(self, version: int) -> None:
-    if version not in self.SUPPORTED_PROTOCOL_VERSIONS:
-      supported = ", ".join(str(v) for v in self.SUPPORTED_PROTOCOL_VERSIONS)
-      raise PandaProtocolMismatch(f"unsupported panda SPI protocol {version}; supported versions: {supported}")
-    self.protocol_version = version
+      self.tx_buf = bytearray(1024)
+      self.rx_buf = bytearray(1024)
+      tx_buf_raw = ctypes.c_char.from_buffer(self.tx_buf)
+      rx_buf_raw = ctypes.c_char.from_buffer(self.rx_buf)
+
+      self.ioctl_data = PandaSpiTransfer()
+      self.ioctl_data.tx_buf = ctypes.addressof(tx_buf_raw)
+      self.ioctl_data.rx_buf = ctypes.addressof(rx_buf_raw)
+      self.fileno = self.dev._spidev.fileno()
 
   # helpers
   def _calc_checksum(self, data: bytes) -> int:
@@ -419,40 +167,25 @@ class PandaSpiHandle(BaseHandle):
 
     raise PandaSpiMissingAck
 
-  @staticmethod
-  def _wait_for_v2_turnaround(start_ns: int) -> None:
-    deadline_ns = start_ns + SPI_V2_TURNAROUND_NS
-    while True:
-      remaining_ns = deadline_ns - time.monotonic_ns()
-      if remaining_ns <= 0:
-        return
-      time.sleep(remaining_ns * 1e-9)
-
   def _transfer_spidev(self, spi, endpoint: int, data, timeout: int, max_rx_len: int = 1000, expect_disconnect: bool = False) -> bytes:
     max_rx_len = max(USBPACKET_MAX_SIZE, max_rx_len)
-    bus_active = False
-    try:
-      logger.debug("- send header")
-      packet = struct.pack("<BBHH", SYNC, endpoint, len(data), max_rx_len)
-      packet += bytes([self._calc_checksum(packet), ])
-      bus_active = True
-      spi.xfer2(packet)
 
-      logger.debug("- waiting for header ACK")
-      self._wait_for_ack(spi, HACK, MIN_ACK_TIMEOUT_MS, 0x11)
+    logger.debug("- send header")
+    packet = struct.pack("<BBHH", SYNC, endpoint, len(data), max_rx_len)
+    packet += bytes([self._calc_checksum(packet), ])
+    spi.xfer2(packet)
 
-      # V2 Panda switches its RX DMA phase from the HACK TX-complete ISR.
-      # Clocking the payload too soon races that re-arm, especially at 50 MHz.
-      self._wait_for_v2_turnaround(time.monotonic_ns())
+    logger.debug("- waiting for header ACK")
+    self._wait_for_ack(spi, HACK, MIN_ACK_TIMEOUT_MS, 0x11)
 
-      logger.debug("- sending data")
-      packet = bytes([*data, self._calc_checksum(data)])
-      spi.xfer2(packet)
+    logger.debug("- sending data")
+    packet = bytes([*data, self._calc_checksum(data)])
+    spi.xfer2(packet)
 
-      if expect_disconnect:
-        logger.debug("- expecting disconnect, returning")
-        return b""
-
+    if expect_disconnect:
+      logger.debug("- expecting disconnect, returning")
+      return b""
+    else:
       logger.debug("- waiting for data ACK")
       preread_len = USBPACKET_MAX_SIZE + 1  # read enough for a controlRead
       dat = self._wait_for_ack(spi, DACK, timeout, 0x13, length=3 + preread_len)
@@ -467,127 +200,31 @@ class PandaSpiHandle(BaseHandle):
       if remaining > 0:
         dat += bytes(spi.readbytes(remaining))
 
+
       dat = dat[:3 + response_len + 1]
       if self._calc_checksum(dat) != 0:
         raise PandaSpiBadChecksum
 
       return dat[3:-1]
-    finally:
-      if bus_active:
-        # Hold SpiDevice's thread lock and flock for the full terminal quiet
-        # time, so another process cannot start the next v2 header early.
-        self._wait_for_v2_turnaround(time.monotonic_ns())
 
   def _transfer_kernel_driver(self, spi, endpoint: int, data, timeout: int, max_rx_len: int = 1000, expect_disconnect: bool = False) -> bytes:
-    raise PandaSpiUnavailable("KERN Panda SPI transport does not implement the required v2 400 us turnaround")
+    import spidev2
+    self.tx_buf[:len(data)] = data
+    self.ioctl_data.endpoint = endpoint
+    self.ioctl_data.tx_length = len(data)
+    self.ioctl_data.rx_length_max = max_rx_len
+    self.ioctl_data.expect_disconnect = int(expect_disconnect)
 
-  @staticmethod
-  def _inspect_v3_frames(frames: list[SpiV3Frame], request: SpiV3Frame) -> tuple[str, bytes | None]:
-    for frame in frames:
-      if frame.frame_type != SpiV3FrameType.RESPONSE or frame.session_id != request.session_id or frame.sequence != request.sequence:
-        # A delayed response from an earlier request or connection is safe to
-        # consume and ignore because v3 is self-framed.
-        continue
-      if frame.endpoint != request.endpoint:
-        raise PandaSpiException(f"SPI v3 response endpoint mismatch ({request.endpoint} {frame.endpoint})")
-      if frame.max_response_length != 0:
-        raise PandaSpiException("SPI v3 response contains a request length limit")
-      if len(frame.payload) > request.max_response_length:
-        raise PandaSpiException(f"response length greater than max ({request.max_response_length} {len(frame.payload)})")
-      if frame.status == SpiV3Status.BUSY:
-        return "retry", None
-      if frame.status != SpiV3Status.OK:
-        raise PandaSpiV3RemoteError(frame.status)
-      return "complete", frame.payload
-    return "continue", None
-
-  @staticmethod
-  def _clock_v3(spi, tx: bytes, decoder: SpiV3StreamDecoder) -> list[SpiV3Frame]:
+    # TODO: use our own ioctl request
     try:
-      rx = spi.xfer2(tx)
-    except (OSError, ValueError) as e:
-      raise PandaSpiException("SPI v3 transfer failed") from e
-    if len(rx) != len(tx):
-      raise PandaSpiException(f"SPI v3 transfer length mismatch ({len(tx)} {len(rx)})")
-    return decoder.feed(bytes(rx))
+      ret = fcntl.ioctl(self.fileno, spidev2.SPI_IOC_RD_LSB_FIRST, self.ioctl_data)
+    except OSError as e:
+      raise PandaSpiException from e
+    if ret < 0:
+      raise PandaSpiException(f"ioctl returned {ret}")
+    return bytes(self.rx_buf[:ret])
 
-  def _transfer_v3_spidev(self, spi, endpoint: int, data, timeout: int, max_rx_len: int, expect_disconnect: bool) -> bytes:
-    payload = bytes(data)
-    if not 0 <= endpoint <= 0xFF:
-      raise PandaSpiException(f"invalid SPI v3 endpoint: {endpoint}")
-    if len(payload) > SPI_V3_MAX_PAYLOAD_SIZE or not 0 <= max_rx_len <= SPI_V3_MAX_PAYLOAD_SIZE:
-      raise PandaSpiException(
-        f"SPI v3 transfer exceeds {SPI_V3_MAX_PAYLOAD_SIZE}-byte payload limit ({len(payload)} {max_rx_len})",
-      )
-    if endpoint == 3 and len(payload) > SPI_V3_CAN_WRITE_MAX_PAYLOAD_SIZE:
-      raise PandaSpiException(
-        f"SPI v3 endpoint 3 write exceeds {SPI_V3_CAN_WRITE_MAX_PAYLOAD_SIZE}-byte payload limit ({len(payload)})",
-      )
-
-    sequence = self._v3_next_sequence
-    self._v3_next_sequence = (self._v3_next_sequence + 1) & 0xFFFFFFFF
-    request = SpiV3Frame(
-      frame_type=SpiV3FrameType.REQUEST,
-      status=SpiV3Status.OK,
-      session_id=self._v3_session_id,
-      sequence=sequence,
-      endpoint=endpoint,
-      payload=payload,
-      max_response_length=max_rx_len,
-    )
-    # Encode exactly once. A timeout or BUSY response must resend these exact
-    # bytes so Panda's replay cache cannot execute endpoint 3 twice.
-    encoded_request = spi_v3_encode_frame(request)
-    decoder = SpiV3StreamDecoder()
-
-    if expect_disconnect:
-      self._clock_v3(spi, encoded_request, decoder)
-      return b""
-
-    overall_timeout_ms = max(SPI_V3_TRANSFER_TIMEOUT_MS, timeout)
-    deadline = time.monotonic() + overall_timeout_ms * 1e-3
-    maximum_attempts = max(1, math.ceil(overall_timeout_ms / SPI_V3_RESPONSE_ATTEMPT_TIMEOUT_MS))
-    for attempt in range(maximum_attempts):
-      if attempt != 0 and time.monotonic() >= deadline:
-        break
-      attempt_start = time.monotonic()
-      frames = self._clock_v3(spi, encoded_request, decoder)
-      action, response = self._inspect_v3_frames(frames, request)
-      if action == "complete":
-        assert response is not None
-        return response
-
-      # Never clock more than one maximum-sized response plus 512 bytes of
-      # leading filler per attempt. This keeps a missing response from
-      # overflowing Panda's 8 KiB circular RX ring before its main loop drains.
-      scan_bytes_remaining = SPI_V3_HEADER_SIZE + SPI_V3_TRAILER_SIZE + max_rx_len + SPI_V3_MAX_FILLER_PREFIX_BYTES
-      while action == "continue" and scan_bytes_remaining > 0 and time.monotonic() < deadline:
-        poll_size = min(SPI_V3_POLL_CHUNK_SIZE, scan_bytes_remaining)
-        filler = bytes([SPI_V3_FILLER]) * poll_size
-        frames = self._clock_v3(spi, filler, decoder)
-        scan_bytes_remaining -= poll_size
-        action, response = self._inspect_v3_frames(frames, request)
-        if action == "continue" and scan_bytes_remaining > 0 and SPI_V3_POLL_INTERVAL_US:
-          time.sleep(SPI_V3_POLL_INTERVAL_US * 1e-6)
-      if action == "complete":
-        assert response is not None
-        return response
-      now = time.monotonic()
-      if now >= deadline or attempt + 1 >= maximum_attempts:
-        break
-
-      # BUSY and a response-attempt timeout both retry encoded_request without
-      # changing its session, sequence, header, payload, or CRCs. Keep request
-      # starts at least 8 ms apart so firmware has time to drain received bytes.
-      next_attempt = min(deadline, attempt_start + SPI_V3_RESPONSE_ATTEMPT_TIMEOUT_MS * 1e-3)
-      if now < next_attempt:
-        time.sleep(next_attempt - now)
-
-    if decoder.bad_header_crc or decoder.bad_frame_crc:
-      raise PandaSpiBadChecksum
-    raise PandaSpiMissingAck
-
-  def _transfer_v2(self, endpoint: int, data, timeout: int, max_rx_len: int, expect_disconnect: bool) -> bytes:
+  def _transfer(self, endpoint: int, data, timeout: int, max_rx_len: int = 1000, expect_disconnect: bool = False) -> bytes:
     logger.debug("starting transfer: endpoint=%d, max_rx_len=%d", endpoint, max_rx_len)
     logger.debug("==============================================")
 
@@ -599,70 +236,47 @@ class PandaSpiHandle(BaseHandle):
       logger.debug("\ntry #%d", n)
       with self.dev.acquire() as spi:
         try:
-          return self._transfer_v2_raw(spi, endpoint, data, timeout, max_rx_len, expect_disconnect)
+          return self._transfer_raw(spi, endpoint, data, timeout, max_rx_len, expect_disconnect)
         except PandaSpiException as e:
           exc = e
           logger.debug("SPI transfer failed, retrying", exc_info=True)
 
     raise exc
 
-  def _transfer(self, endpoint: int, data, timeout: int, max_rx_len: int = 1000, expect_disconnect: bool = False) -> bytes:
-    logger.debug("starting transfer: protocol=%d, endpoint=%d, max_rx_len=%d", self.protocol_version, endpoint, max_rx_len)
-    if self.protocol_version == SPI_V3_VERSION:
-      # Keep the whole stop-and-wait exchange under both locks. This prevents a
-      # second process from interleaving a request between this request and its
-      # response polls or byte-identical retries.
-      with self.dev.acquire() as spi:
-        return self._transfer_v3_spidev(spi, endpoint, data, timeout, max_rx_len, expect_disconnect)
-    return self._transfer_v2(endpoint, data, timeout, max_rx_len, expect_disconnect)
-
   def get_protocol_version(self) -> bytes:
+    vers_str = b"VERSION"
+    def _get_version(spi) -> bytes:
+      spi.writebytes(vers_str)
+
+      logger.debug("- waiting for echo")
+      start = time.monotonic()
+      while True:
+        version_bytes = spi.readbytes(len(vers_str) + 2)
+        if bytes(version_bytes).startswith(vers_str):
+          break
+        if (time.monotonic() - start) > 0.001:
+          raise PandaSpiMissingAck
+
+      rlen = struct.unpack("<H", bytes(version_bytes[-2:]))[0]
+      if rlen > 1000:
+        raise PandaSpiException("response length greater than max")
+
+      # get response
+      dat = spi.readbytes(rlen + 1)
+      resp = dat[:-1]
+      calculated_crc = crc8(bytes(version_bytes + resp))
+      if calculated_crc != dat[-1]:
+        raise PandaSpiBadChecksum
+      return bytes(resp)
+
     exc = PandaSpiException()
     with self.dev.acquire() as spi:
-      decoder = SpiVersionStreamDecoder()
-      bus_active = False
-      try:
-        # Send VERSION once. Re-sending a seven-byte request while an earlier
-        # response is partly shifted could cross its final byte and become a
-        # bogus v2 header. Include the request transaction's MISO in the same
-        # stream decoder because a delayed response may already start there.
-        bus_active = True
-        request_rx = bytes(spi.xfer2(SPI_VERSION_REQUEST))
-        response = decoder.feed(request_rx)
-        if response is not None:
-          return response
-
-        # v2 arms VERSION TX from its RX-complete ISR; v3 does so from the main
-        # service loop. This one-time guard covers both without imposing the
-        # old delay on normal v3 transfers.
-        self._wait_for_v2_turnaround(time.monotonic_ns())
-        for poll in range(SPI_VERSION_MAX_POLL_BYTES):
-          try:
-            chunk = bytes(spi.readbytes(1))
-          except (OSError, ValueError) as e:
-            raise PandaSpiException("SPI VERSION transfer failed") from e
-          response = decoder.feed(chunk)
-          if response is not None:
-            return response
-          if decoder.bad_checksum:
-            raise PandaSpiBadChecksum
-          if decoder.bad_length:
-            raise PandaSpiException("SPI VERSION response length invalid")
-          if poll + 1 < SPI_VERSION_MAX_POLL_BYTES:
-            time.sleep(SPI_VERSION_POLL_INTERVAL_US * 1e-6)
-
-        raise PandaSpiMissingAck
-      except (OSError, ValueError, PandaSpiException) as e:
-        if isinstance(e, PandaSpiException):
+      for _ in range(10):
+        try:
+          return _get_version(spi)
+        except PandaSpiException as e:
           exc = e
-        else:
-          exc = PandaSpiException("SPI VERSION transfer failed")
-        logger.debug("SPI get protocol version failed", exc_info=True)
-      finally:
-        if bus_active:
-          # Hold flock through the terminal quiet period before a v2 fallback
-          # header. On a valid response the preceding poll stopped at its CRC.
-          self._wait_for_v2_turnaround(time.monotonic_ns())
+          logger.debug("SPI get protocol version failed, retrying", exc_info=True)
     raise exc
 
   # libusb1 functions
@@ -670,17 +284,14 @@ class PandaSpiHandle(BaseHandle):
     self.dev.close()
 
   def controlWrite(self, request_type: int, request: int, value: int, index: int, data, timeout: int = TIMEOUT, expect_disconnect: bool = False):
-    max_rx_len = 0 if self.protocol_version == SPI_V3_VERSION else 1000
-    return self._transfer(0, struct.pack("<BHHH", request, value, index, 0), timeout, max_rx_len=max_rx_len, expect_disconnect=expect_disconnect)
+    return self._transfer(0, struct.pack("<BHHH", request, value, index, 0), timeout, expect_disconnect=expect_disconnect)
 
   def controlRead(self, request_type: int, request: int, value: int, index: int, length: int, timeout: int = TIMEOUT):
     return self._transfer(0, struct.pack("<BHHH", request, value, index, length), timeout, max_rx_len=length)
 
   def bulkWrite(self, endpoint: int, data: bytes, timeout: int = TIMEOUT) -> int:
-    max_rx_len = 0 if self.protocol_version == SPI_V3_VERSION else 1000
-    xfer_size = SPI_V3_CAN_WRITE_MAX_PAYLOAD_SIZE if self.protocol_version == SPI_V3_VERSION and endpoint == 3 else XFER_SIZE
-    for x in range(math.ceil(len(data) / xfer_size)):
-      self._transfer(endpoint, data[xfer_size*x:xfer_size*(x+1)], timeout, max_rx_len=max_rx_len)
+    for x in range(math.ceil(len(data) / XFER_SIZE)):
+      self._transfer(endpoint, data[XFER_SIZE*x:XFER_SIZE*(x+1)], timeout)
     return len(data)
 
   def bulkRead(self, endpoint: int, length: int, timeout: int = TIMEOUT) -> bytes:

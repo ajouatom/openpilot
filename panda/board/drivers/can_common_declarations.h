@@ -54,14 +54,7 @@ extern can_ring *can_queues[CAN_QUEUES_ARRAY_SIZE];
 // ********************* interrupt safe queue *********************
 bool can_pop(can_ring *q, CANPacket_t *elem);
 bool can_push(can_ring *q, const CANPacket_t *elem);
-#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
-bool can_push_reserved(can_ring *q, const CANPacket_t *elem);
-#endif
 uint32_t can_slots_empty(const can_ring *q);
-#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
-bool can_tx_reserve_slots(const uint16_t required[CAN_QUEUES_ARRAY_SIZE]);
-void can_release_reserved(can_ring *q);
-#endif
 
 // assign CAN numbering
 // bus num: CAN Bus numbers in panda, sent to/from USB
@@ -92,7 +85,4 @@ uint8_t calculate_checksum(const uint8_t *dat, uint32_t len);
 void can_set_checksum(CANPacket_t *packet);
 bool can_check_checksum(CANPacket_t *packet);
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook);
-#if defined(STM32H7) && defined(ENABLE_SPI) && !defined(BOOTSTUB)
-void can_send_reserved(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook);
-#endif
 bool is_speed_valid(uint32_t speed, const uint32_t *all_speeds, uint8_t len);
