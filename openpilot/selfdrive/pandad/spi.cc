@@ -41,6 +41,12 @@ const int SPI_MAX_ACK_TIMEOUTS = 3;
 const unsigned int SPI_RECOVERY_TIMEOUT = 50; // milliseconds
 const int SPI_RECOVERY_MAX_ATTEMPTS = 12;
 const std::string SPI_DEVICE = "/dev/spidev0.0";
+// TODO: fix SPI turnaround synchronization at the protocol level.
+static uint64_t spi_last_bus_activity_ns = 0;  // protected by hw_lock
+
+static void wait_for_spi_turnaround(uint64_t start_ns) {
+  while ((nanos_since_boot() - start_ns) < 400000) {}
+}
 
 class LockEx {
 public:
@@ -372,6 +378,8 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   assert(tx_len < SPI_BUF_SIZE);
   assert(max_rx_len < SPI_BUF_SIZE);
 
+  wait_for_spi_turnaround(spi_last_bus_activity_ns);
+
   xfer_count++;
   header = {
     .sync = SPI_SYNC,
@@ -400,6 +408,7 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   if (ret < 0) {
     goto fail;
   }
+  wait_for_spi_turnaround(nanos_since_boot());
 
   // Send data
   if (tx_data != NULL) {
@@ -418,6 +427,7 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   if ((ret == SpiError::DATA_NACK) && (endpoint == 3U) && (tx_len > 0U)) {
     // Keep the SPI lock while Panda's NACK completion interrupt returns the
     // protocol state machine to HEADER.
+    spi_last_bus_activity_ns = nanos_since_boot();
     usleep(SPI_CAN_TX_RETRY_DELAY);
     return SpiError::CAN_TX_FULL;
   }
@@ -448,6 +458,7 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
     memcpy(rx_data, rx_buf + 3, rx_data_len);
   }
 
+  spi_last_bus_activity_ns = nanos_since_boot();
   return rx_data_len;
 
 fail:
@@ -456,7 +467,9 @@ fail:
   int nack_cnt = 0;
   int recovery_attempts = 0;
   const double recovery_start_time = millis_since_boot();
-  const double recovery_deadline = std::min(recovery_start_time + SPI_RECOVERY_TIMEOUT, deadline);
+  // Recovery needs its own bounded window. The transfer deadline can already
+  // be exhausted here, which previously skipped recovery without one attempt.
+  const double recovery_deadline = recovery_start_time + SPI_RECOVERY_TIMEOUT;
   while ((nack_cnt < 3) &&
          (recovery_attempts < SPI_RECOVERY_MAX_ATTEMPTS) &&
          (millis_since_boot() < recovery_deadline)) {
@@ -473,6 +486,7 @@ fail:
     ret = SpiError::RECOVERY_FAILED;
   }
 
+  spi_last_bus_activity_ns = nanos_since_boot();
   if (ret >= 0) ret = -1;
   return ret;
 }
