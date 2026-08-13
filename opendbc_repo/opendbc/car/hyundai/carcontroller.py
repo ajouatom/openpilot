@@ -367,9 +367,10 @@ class CarController(CarControllerBase):
       # Once fully recovered, hold full authority until the next driver override.
       torque_delta = 0.0
     elif self.override_latched:
-      # Hold reduced authority until driver torque stays below 60% for 0.2 seconds.
+      # Hold reduced authority until driver torque stays below 60% for configured release delay.
+      override_release_sec = self.params.get_int("SteerOverrideReleaseSec") * 0.01
       self.override_release_frames = self.override_release_frames + 1 if torque_ratio < 0.6 else 0
-      if self.override_release_frames >= int(0.2 / DT_CTRL):
+      if self.override_release_frames >= int(override_release_sec / DT_CTRL):
         self.override_latched = False
         self.override_release_frames = 0
         recovery_allowed = True
@@ -379,21 +380,25 @@ class CarController(CarControllerBase):
       recovery_allowed = True
 
     if recovery_allowed:
-      # Use one-second model uncertainty to set the base torque recovery time.
-      # Missing or invalid model data falls back to a moderate 1.5-second recovery.
-      y_std_1s = 0.2
-      if CS.modelV2 is not None and len(CS.modelV2.position.yStd) > 10:
-        model_y_std_1s = float(CS.modelV2.position.yStd[10])
-        if np.isfinite(model_y_std_1s) and model_y_std_1s >= 0.0:
-          y_std_1s = model_y_std_1s
+      override_recovery_sec = self.params.get_int("SteerOverrideRecoverySec") * 0.01
+      if override_recovery_sec > 0:
+        recovery_time = override_recovery_sec
+      else:
+        # Use one-second model uncertainty to set the base torque recovery time.
+        # Missing or invalid model data falls back to a moderate 1.5-second recovery.
+        y_std_1s = 0.2
+        if CS.modelV2 is not None and len(CS.modelV2.position.yStd) > 10:
+          model_y_std_1s = float(CS.modelV2.position.yStd[10])
+          if np.isfinite(model_y_std_1s) and model_y_std_1s >= 0.0:
+            y_std_1s = model_y_std_1s
 
-      recovery_time = float(np.interp(y_std_1s, [0.1, 0.2, 0.3, 0.4], [0.5, 0.8, 1.5, 3.0]))
-      recovery_time = max(recovery_time, float(np.interp(
-        self.repeated_override_count,
-        [0, 1, 2, 3],
-        [0.1, 1.0, 2.0, 3.0],
-      )))
-      base_rate_up = (self.angle_max_torque - self.params.ANGLE_MIN_TORQUE) * DT_CTRL / recovery_time
+        recovery_time = float(np.interp(y_std_1s, [0.1, 0.2, 0.3, 0.4], [0.5, 0.8, 1.5, 3.0]))
+        recovery_time = max(recovery_time, float(np.interp(
+          self.repeated_override_count,
+          [0, 1, 2, 3],
+          [0.1, 1.0, 2.0, 3.0],
+        )))
+      base_rate_up = (self.angle_max_torque - self.params.ANGLE_MIN_TORQUE) * DT_CTRL / max(0.01, recovery_time)
 
       # During recovery, taper the rate to zero. Only steeringPressed can reduce authority.
       torque_delta = base_rate_up * float(np.interp(torque_ratio, [0.6, 0.8], [1.0, 0.0]))
