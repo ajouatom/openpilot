@@ -10,6 +10,7 @@ from typing import Any
 
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   DPathLeadCandidate,
+  DPathStationaryPrimaryHandoffTracker,
   DPathStationaryShadowTracker,
   DPathLeadTwoTracker,
   cutin_can_compete_with_primary,
@@ -214,6 +215,9 @@ class DPathRadarController:
     self.front_kinematic_associator = FrontRadarKinematicAssociator()
     self.lead_two_tracker = DPathLeadTwoTracker()
     self.stationary_shadow_tracker = DPathStationaryShadowTracker()
+    self.stationary_primary_handoff_tracker = (
+      DPathStationaryPrimaryHandoffTracker()
+    )
     self.lead_dynamics = RadarLeadDynamics()
 
   def _reset_motion_pipeline(self) -> None:
@@ -280,6 +284,7 @@ class DPathRadarController:
       self._reset_motion_pipeline()
       self.lead_two_tracker.reset()
       self.stationary_shadow_tracker.reset()
+      self.stationary_primary_handoff_tracker.reset()
     if self.motion_sensor == "corner":
       return corner_points
     return tuple(point for point in points if point.source == "frontRadar")
@@ -389,6 +394,7 @@ class DPathRadarController:
       self.primary_matcher.reset()
       self.lead_two_tracker.reset()
       self.stationary_shadow_tracker.reset()
+      self.stationary_primary_handoff_tracker.reset()
       self.primary_cut_out_predictor = RadarMotionPredictor()
       self.lead_dynamics.reset()
       return DPathRadarOutput(
@@ -636,6 +642,37 @@ class DPathRadarController:
           )
         ),
       ))
+    stationary_primary_candidates = []
+    for point, _, projection in scoped_motion_points:
+      if not _is_corner(point):
+        continue
+      lead = self._lead_from_radar_point(
+        point, projection.d_path, 0.03, 0.0,
+      )
+      stationary_primary_candidates.append(DPathLeadCandidate(
+        lead=lead,
+        source=point.source,
+        track_id=point.track_id,
+        continuity_id=0,
+        retainable=True,
+        confirmed_cutin=False,
+      ))
+    stationary_primary_handoff = (
+      self.stationary_primary_handoff_tracker.update(
+        time_s,
+        lead_one,
+        stationary_primary_candidates,
+        active_identity,
+      )
+    )
+    if (
+      stationary_primary_handoff is not None
+      and not any(
+        candidate.identity == stationary_primary_handoff.identity
+        for candidate in candidates
+      )
+    ):
+      candidates.append(stationary_primary_handoff)
     stationary_shadow_inputs = []
     for point, _, projection in front_scoped_motion_points:
       identity = (point.source, point.track_id, 0)

@@ -26,6 +26,7 @@ from openpilot.selfdrive.carrot.radar_motion import (
   CUT_IN_BOUNDARY_HOLD_S,
   CUT_IN_CONFIRMATION_S,
   DPathLeadCandidate,
+  DPathStationaryPrimaryHandoffTracker,
   DPathStationaryShadowTracker,
   DPathLeadTwoTracker,
   FrontRadarKinematicAssociator,
@@ -1126,6 +1127,9 @@ class RadarMotionShadowSelector:
     front_kinematic_associator = FrontRadarKinematicAssociator()
     lead_two_tracker = DPathLeadTwoTracker()
     stationary_shadow_tracker = DPathStationaryShadowTracker()
+    stationary_primary_handoff_tracker = (
+      DPathStationaryPrimaryHandoffTracker()
+    )
     primary_cut_out_predictor = RadarMotionPredictor()
     decision_tracker = RadarMotionDecisionTracker(
       threshold=self.decision_threshold,
@@ -1335,6 +1339,37 @@ class RadarMotionShadowSelector:
           ),
           confirmed_cutin=confirmed_cutin,
         ))
+      stationary_primary_candidates = []
+      for point in selected_points:
+        if not point.source.startswith("corner"):
+          continue
+        d_path = project_to_model_path(
+          frame.path, point.d_rel, point.y_rel,
+        ).d_path
+        stationary_primary_candidates.append(DPathLeadCandidate(
+          lead=lead_from_radar_point(point, d_path, 0.03, 0.0),
+          source=point.source,
+          track_id=point.track_id,
+          continuity_id=0,
+          retainable=True,
+          confirmed_cutin=False,
+        ))
+      stationary_primary_handoff = (
+        stationary_primary_handoff_tracker.update(
+          frame.time_s,
+          lead_one,
+          stationary_primary_candidates,
+          active_identity,
+        )
+      )
+      if (
+        stationary_primary_handoff is not None
+        and not any(
+          candidate.identity == stationary_primary_handoff.identity
+          for candidate in lead_candidates
+        )
+      ):
+        lead_candidates.append(stationary_primary_handoff)
       stationary_shadow_inputs = []
       for point in visible_motion_points(
         front_motion_points, frame.path, None,

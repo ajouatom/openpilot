@@ -28,6 +28,19 @@
       "scene": "After corner confirmation and dropout, physically continuous stopped front track 53 must remain leadTwo while moving motorcycle track 44 remains leadOne"
     },
     {
+      "id": "ioniq9-263-16-stationary-corner-primary-handoff-1039",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000263--89012ce993--16/rlog.zst",
+      "source": "front+corner",
+      "window": [20.95, 21.20],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [1039],
+      "latest_detection_s": 21.05,
+      "scene": "Vision-confirmed central stopped corner track 1039 must hand off from leadOne to closer leadTwo when farther front track 55 becomes leadOne"
+    },
+    {
       "id": "ioniq5-352-5-overhead-sign-stationary-shadow-48",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE f54fcc4d13d575f6",
       "log": "00000352--7e771034ce--5/rlog.zst",
