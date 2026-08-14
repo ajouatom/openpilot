@@ -23,24 +23,18 @@
 
 
 enum SpiError {
-  HEADER_NACK = -2,
+  NACK = -2,
   ACK_TIMEOUT = -3,
-  RECOVERY_FAILED = -4,
-  DATA_NACK = -5,
-  CAN_TX_FULL = -6,
 };
 
-const unsigned int SPI_ACK_MIN_TIMEOUT = 20; // milliseconds
-const unsigned int SPI_ACK_TIMEOUT = 50; // milliseconds
-// A blocked SPI transfer also blocks the 100 Hz CAN path. Transient NACK bursts
-// normally recover within a few milliseconds, so reconnect on sustained faults.
-const unsigned int SPI_TRANSFER_RETRY_TIMEOUT = 100; // milliseconds
-const unsigned int SPI_CAN_TX_RETRY_DELAY = 1000; // microseconds
-const int SPI_MAX_NACK_RETRIES = 8;
-const int SPI_MAX_ACK_TIMEOUTS = 3;
-const unsigned int SPI_RECOVERY_TIMEOUT = 50; // milliseconds
-const int SPI_RECOVERY_MAX_ATTEMPTS = 12;
+const unsigned int SPI_ACK_TIMEOUT = 500; // milliseconds
 const std::string SPI_DEVICE = "/dev/spidev0.0";
+// TODO: fix SPI turnaround synchronization at the protocol level.
+static uint64_t spi_last_bus_activity_ns = 0;  // protected by hw_lock
+
+static void wait_for_spi_turnaround(uint64_t start_ns) {
+  while ((nanos_since_boot() - start_ns) < 400000) {}
+}
 
 class LockEx {
 public:
@@ -215,81 +209,47 @@ bool check_checksum(uint8_t *data, int data_len) {
 
 
 int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len, uint8_t *rx_data, uint16_t max_rx_len, unsigned int timeout) {
-  if (!connected) {
-    return -1;
-  }
-
-  int ret = -1;
-  int header_nack_count = 0;
-  int data_nack_count = 0;
+  int ret;
+  int nack_count = 0;
   int timeout_count = 0;
-  const double start_time = millis_since_boot();
-  const double transfer_deadline = start_time + SPI_TRANSFER_RETRY_TIMEOUT;
-  bool retry_exhausted = false;
+  bool timed_out = false;
+  double start_time = millis_since_boot();
 
   do {
-    ret = spi_transfer(endpoint, tx_data, tx_len, rx_data, max_rx_len, timeout, transfer_deadline);
-
-    // A data NACK on endpoint 3 is Panda CAN TX backpressure (or a bad data
-    // checksum). Panda NACKs before enqueueing this buffer, so keep retrying the
-    // same sendcan batch within the bounded SPI transfer deadline instead of
-    // silently dropping it after the USB timeout.
-    if (ret == SpiError::CAN_TX_FULL) {
-      if (millis_since_boot() < transfer_deadline) {
-        std::this_thread::yield();
-        continue;
-      }
-      ret = SpiError::DATA_NACK;
-    }
+    ret = spi_transfer(endpoint, tx_data, tx_len, rx_data, max_rx_len, timeout);
 
     if (ret < 0) {
-      header_nack_count += ret == SpiError::HEADER_NACK;
-      data_nack_count += ret == SpiError::DATA_NACK;
+      timed_out = (timeout != 0) && (timeout_count > 5);
       timeout_count += ret == SpiError::ACK_TIMEOUT;
-      const int nack_count = header_nack_count + data_nack_count;
-      const double elapsed = millis_since_boot() - start_time;
-      retry_exhausted = (ret == SpiError::RECOVERY_FAILED) ||
-                        (elapsed >= SPI_TRANSFER_RETRY_TIMEOUT) ||
-                        (nack_count >= SPI_MAX_NACK_RETRIES) ||
-                        (timeout_count >= SPI_MAX_ACK_TIMEOUTS);
 
-      if (!retry_exhausted) {
-        // give other threads a chance to run
-        std::this_thread::yield();
+      // give other threads a chance to run
+      std::this_thread::yield();
 
-        if ((ret == SpiError::HEADER_NACK) || (ret == SpiError::DATA_NACK)) {
-          // Prevent busy waiting on a persistent protocol NACK.
-          if (nack_count > 3) {
-            SPILOG(LOGD, "NACK sleep %d", nack_count);
-            usleep(std::clamp(nack_count*10, 200, 2000));
-          }
+      if (ret == SpiError::NACK) {
+        // prevent busy waiting while the panda is NACK'ing
+        // due to full TX buffers
+        nack_count += 1;
+        if (nack_count > 3) {
+          SPILOG(LOGD, "NACK sleep %d", nack_count);
+          usleep(std::clamp(nack_count*10, 200, 2000));
         }
       }
     }
-  } while (ret < 0 && connected && !retry_exhausted);
+  } while (ret < 0 && connected && !timed_out);
 
   if (ret < 0) {
-    const double elapsed = millis_since_boot() - start_time;
-    LOGE("SPI transfer failed: ret=%d, endpoint=0x%x, tx=%u, rx=%u, header_nacks=%d, data_nacks=%d, timeouts=%d, elapsed=%.2fms",
-         ret, endpoint, tx_len, max_rx_len, header_nack_count, data_nack_count, timeout_count, elapsed);
-
-    // Let native pandad exit. The Python wrapper will reopen the SPI device and
-    // configure Panda and safety from a known state instead of draining stale
-    // sendcan messages after a multi-second stall.
-    comms_healthy = false;
-    connected = false;
+    SPILOG(LOGE, "transfer failed, after %d tries, %.2fms", timeout_count, millis_since_boot() - start_time);
   }
 
   return ret;
 }
 
-int PandaSpiHandle::wait_for_ack(uint8_t ack, uint8_t tx, unsigned int timeout, unsigned int length, double deadline) {
-  const double start_millis = millis_since_boot();
+int PandaSpiHandle::wait_for_ack(uint8_t ack, uint8_t tx, unsigned int timeout, unsigned int length) {
+  double start_millis = millis_since_boot();
   if (timeout == 0) {
     timeout = SPI_ACK_TIMEOUT;
   }
-  timeout = std::clamp(timeout, SPI_ACK_MIN_TIMEOUT, SPI_ACK_TIMEOUT);
-  const double ack_deadline = std::min(start_millis + timeout, deadline);
+  timeout = std::clamp(timeout, 20U, SPI_ACK_TIMEOUT);
 
   spi_ioc_transfer transfer = {
     .tx_buf = (uint64_t)tx_buf,
@@ -299,11 +259,6 @@ int PandaSpiHandle::wait_for_ack(uint8_t ack, uint8_t tx, unsigned int timeout, 
   memset(tx_buf, tx, length);
 
   while (true) {
-    if (millis_since_boot() >= ack_deadline) {
-      SPILOG(LOGW, "SPI: timed out waiting for ACK, waiting for 0x%x", ack);
-      return SpiError::ACK_TIMEOUT;
-    }
-
     int ret = lltransfer(transfer);
     if (ret < 0) {
       SPILOG(LOGE, "SPI: failed to send ACK request");
@@ -313,13 +268,12 @@ int PandaSpiHandle::wait_for_ack(uint8_t ack, uint8_t tx, unsigned int timeout, 
     if (rx_buf[0] == ack) {
       break;
     } else if (rx_buf[0] == SPI_NACK) {
-      const int nack_error = ack == SPI_HACK ? SpiError::HEADER_NACK : SpiError::DATA_NACK;
-      SPILOG(LOGD, "SPI: got %s NACK, waiting for 0x%x", ack == SPI_HACK ? "header" : "data", ack);
-      return nack_error;
+      SPILOG(LOGD, "SPI: got NACK, waiting for 0x%x", ack);
+      return SpiError::NACK;
     }
 
     // handle timeout
-    if (millis_since_boot() >= ack_deadline) {
+    if (millis_since_boot() - start_millis > timeout) {
       SPILOG(LOGW, "SPI: timed out waiting for ACK, waiting for 0x%x", ack);
       return SpiError::ACK_TIMEOUT;
     }
@@ -362,8 +316,7 @@ int PandaSpiHandle::lltransfer(spi_ioc_transfer &t) {
   return ret;
 }
 
-int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len, uint8_t *rx_data, uint16_t max_rx_len,
-                                unsigned int timeout, double deadline) {
+int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len, uint8_t *rx_data, uint16_t max_rx_len, unsigned int timeout) {
   int ret;
   uint16_t rx_data_len;
   LockEx lock(spi_fd, hw_lock);
@@ -371,6 +324,8 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   // needs to be less, since we need to have space for the checksum
   assert(tx_len < SPI_BUF_SIZE);
   assert(max_rx_len < SPI_BUF_SIZE);
+
+  wait_for_spi_turnaround(spi_last_bus_activity_ns);
 
   xfer_count++;
   header = {
@@ -396,10 +351,11 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   }
 
   // Wait for (N)ACK
-  ret = wait_for_ack(SPI_HACK, 0x11, timeout, 1, deadline);
+  ret = wait_for_ack(SPI_HACK, 0x11, timeout, 1);
   if (ret < 0) {
     goto fail;
   }
+  wait_for_spi_turnaround(nanos_since_boot());
 
   // Send data
   if (tx_data != NULL) {
@@ -414,13 +370,7 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   }
 
   // Wait for (N)ACK
-  ret = wait_for_ack(SPI_DACK, 0x13, timeout, 3, deadline);
-  if ((ret == SpiError::DATA_NACK) && (endpoint == 3U) && (tx_len > 0U)) {
-    // Keep the SPI lock while Panda's NACK completion interrupt returns the
-    // protocol state machine to HEADER.
-    usleep(SPI_CAN_TX_RETRY_DELAY);
-    return SpiError::CAN_TX_FULL;
-  }
+  ret = wait_for_ack(SPI_DACK, 0x13, timeout, 3);
   if (ret < 0) {
     goto fail;
   }
@@ -448,31 +398,22 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
     memcpy(rx_data, rx_buf + 3, rx_data_len);
   }
 
+  spi_last_bus_activity_ns = nanos_since_boot();
   return rx_data_len;
 
 fail:
   // ensure slave is in a consistent state
   // and ready for the next transfer
   int nack_cnt = 0;
-  int recovery_attempts = 0;
-  const double recovery_start_time = millis_since_boot();
-  const double recovery_deadline = std::min(recovery_start_time + SPI_RECOVERY_TIMEOUT, deadline);
-  while ((nack_cnt < 3) &&
-         (recovery_attempts < SPI_RECOVERY_MAX_ATTEMPTS) &&
-         (millis_since_boot() < recovery_deadline)) {
-    recovery_attempts += 1;
-    if (wait_for_ack(SPI_NACK, 0x14, 1, SPI_BUF_SIZE/2, recovery_deadline) == 0) {
+  while (nack_cnt < 3) {
+    if (wait_for_ack(SPI_NACK, 0x14, 1, SPI_BUF_SIZE/2) == 0) {
       nack_cnt += 1;
     } else {
       nack_cnt = 0;
     }
   }
-  if (nack_cnt < 3) {
-    LOGE("SPI recovery failed after %d attempts (%.2fms)", recovery_attempts,
-         millis_since_boot() - recovery_start_time);
-    ret = SpiError::RECOVERY_FAILED;
-  }
 
+  spi_last_bus_activity_ns = nanos_since_boot();
   if (ret >= 0) ret = -1;
   return ret;
 }
