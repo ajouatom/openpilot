@@ -267,11 +267,11 @@ def main() -> int:
         )
         radard_pass = radard_event is not None
       else:
-        validation_attribute = (
-          "lead_one"
-          if str(entry.get("validation_stage", "output")) == "lead_one"
-          else "active_cutin_candidates"
-        )
+        validation_stage = str(entry.get("validation_stage", "output"))
+        validation_attribute = {
+          "lead_one": "lead_one",
+          "lead_two": "lead_two",
+        }.get(validation_stage, "active_cutin_candidates")
         radard_event = _first_event(
           radard, frames, entry, validation_attribute,
         )
@@ -286,8 +286,8 @@ def main() -> int:
             frames,
             entry,
             (
-              "lead_one"
-              if validation_attribute == "lead_one"
+              validation_attribute
+              if validation_attribute in ("lead_one", "lead_two")
               else "decision_cutin_candidates"
             ),
           )

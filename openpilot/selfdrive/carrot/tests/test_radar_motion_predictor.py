@@ -1881,6 +1881,116 @@ def test_dpath_lead_two_is_limited_to_80m_and_strictly_closer_than_primary() -> 
   ] == [20, 30]
 
 
+def test_stationary_shadow_may_be_farther_than_cutting_out_primary() -> None:
+  primary = {
+    "status": True,
+    "radar": True,
+    "radarTrackId": 44,
+    "dRel": 50.0,
+    "yRel": -1.0,
+    "vLead": 10.0,
+  }
+  stopped = {
+    "status": True,
+    "radar": True,
+    "radarTrackId": 53,
+    "dRel": 60.0,
+    "yRel": 0.0,
+    "dPath": 0.0,
+    "vLead": 0.0,
+  }
+
+  normal = select_dpath_lead_two(primary, (stopped,), v_ego=16.0)
+  shadow = select_dpath_lead_two(
+    primary,
+    (stopped,),
+    v_ego=16.0,
+    allow_stopped_track_ids=frozenset((53,)),
+    allow_farther_track_ids=frozenset((53,)),
+  )
+
+  assert normal.lead_two is None
+  assert shadow.lead_two is stopped
+
+
+def test_controller_confirms_stationary_shadow_behind_cutting_out_lead() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+    cut_in_sensitivity=3,
+  )
+  controller.primary_cut_out_predictor = FixedPredictor(SimpleNamespace(
+    source="frontRadar",
+    track_id=44,
+    cut_out_probability=0.90,
+  ))
+
+  output = None
+  for index in range(7):
+    output = controller.update(
+      time_s=index * 0.05,
+      v_ego=16.0,
+      radar_points=(
+        Point(
+          44, 50.0, -1.0, v_rel=-6.0, v_lead=10.0,
+          trackState=2,
+        ),
+        Point(
+          53, 60.0 - index * 0.8, 0.0,
+          v_rel=-16.0, v_lead=0.0, trackState=2,
+        ),
+      ),
+      model=model_with_lead(50.0, -1.0, 10.0, probability=0.99),
+    )
+    assert output.lead_one is not None
+    assert output.lead_one["radarTrackId"] == 44
+    if index < 5:
+      assert output.lead_two is None
+
+  assert output is not None
+  assert output.lead_two is not None
+  assert output.lead_two["radarTrackId"] == 53
+  assert output.lead_two["dRel"] > output.lead_one["dRel"]
+  assert output.leads_cutin == ()
+
+
+@pytest.mark.parametrize(
+  ("track_state", "cut_out_probability"),
+  ((0, 0.90), (1, 0.90), (2, 0.69)),
+)
+def test_controller_rejects_unconfirmed_stationary_shadow(
+  track_state: int,
+  cut_out_probability: float,
+) -> None:
+  controller = DPathRadarController(enable_radar_tracks=1)
+  controller.primary_cut_out_predictor = FixedPredictor(SimpleNamespace(
+    source="frontRadar",
+    track_id=44,
+    cut_out_probability=cut_out_probability,
+  ))
+
+  output = None
+  for index in range(8):
+    output = controller.update(
+      time_s=index * 0.05,
+      v_ego=16.0,
+      radar_points=(
+        Point(
+          44, 50.0, -1.0, v_rel=-6.0, v_lead=10.0,
+          trackState=2,
+        ),
+        Point(
+          53, 60.0 - index * 0.8, 0.0,
+          v_rel=-16.0, v_lead=0.0, trackState=track_state,
+        ),
+      ),
+      model=model_with_lead(50.0, -1.0, 10.0, probability=0.99),
+    )
+
+  assert output is not None
+  assert output.lead_two is None
+
+
 def test_confirmed_lead_two_is_retained_while_same_continuity_is_in_path() -> None:
   tracker = DPathLeadTwoTracker()
   detected_lead = {

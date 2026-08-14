@@ -26,6 +26,7 @@ from openpilot.selfdrive.carrot.radar_motion import (
   CUT_IN_BOUNDARY_HOLD_S,
   CUT_IN_CONFIRMATION_S,
   DPathLeadCandidate,
+  DPathStationaryShadowTracker,
   DPathLeadTwoTracker,
   FrontRadarKinematicAssociator,
   FRONT_CUT_IN_THRESHOLD,
@@ -1123,6 +1124,8 @@ class RadarMotionShadowSelector:
     selections: list[Selection] = []
     front_kinematic_associator = FrontRadarKinematicAssociator()
     lead_two_tracker = DPathLeadTwoTracker()
+    stationary_shadow_tracker = DPathStationaryShadowTracker()
+    primary_cut_out_predictor = RadarMotionPredictor()
     decision_tracker = RadarMotionDecisionTracker(
       threshold=self.decision_threshold,
       confirmation_s=self.motion_sensitivity.confirmation_s,
@@ -1137,6 +1140,26 @@ class RadarMotionShadowSelector:
         frame, self.motion_sensor,
       )
       all_aligned_points = radar_points_at_model_time(frame)
+      front_motion_points = tuple(
+        point for point in all_aligned_points
+        if point.source == "frontRadar"
+      )
+      primary_cut_out_predictions = primary_cut_out_predictor.update(
+        frame.time_s,
+        front_motion_points,
+        frame.path,
+        frame.v_ego,
+      )
+      primary_track_id = (
+        int(lead_one.get("radarTrackId", -1))
+        if lead_one is not None and lead_one.get("radar")
+        else -1
+      )
+      primary_cut_out_probability = max((
+        float(prediction.cut_out_probability)
+        for prediction in primary_cut_out_predictions.values()
+        if prediction.track_id == primary_track_id
+      ), default=0.0)
       front_kinematic_matches = front_kinematic_associator.update(
         all_aligned_points,
       )
@@ -1311,6 +1334,41 @@ class RadarMotionShadowSelector:
           ),
           confirmed_cutin=confirmed_cutin,
         ))
+      stationary_shadow_inputs = []
+      for point in visible_motion_points(
+        front_motion_points, frame.path, None,
+      ):
+        if point.radar_track_state < 2:
+          continue
+        d_path = project_to_model_path(
+          frame.path, point.d_rel, point.y_rel,
+        ).d_path
+        stationary_shadow_inputs.append(DPathLeadCandidate(
+          lead=lead_from_radar_point(
+            point, d_path, 0.03, primary_cut_out_probability,
+          ),
+          source=point.source,
+          track_id=point.track_id,
+          continuity_id=0,
+          retainable=True,
+          confirmed_cutin=False,
+        ))
+      stationary_shadow = stationary_shadow_tracker.update(
+        frame.time_s,
+        lead_one,
+        primary_cut_out_probability,
+        stationary_shadow_inputs,
+      )
+      if (
+        stationary_shadow is not None
+        and stationary_shadow.confirmed_stationary_shadow
+        and stationary_shadow.track_id != primary_track_id
+        and not any(
+          candidate.identity == stationary_shadow.identity
+          for candidate in lead_candidates
+        )
+      ):
+        lead_candidates.append(stationary_shadow)
       if (
         active_identity is not None
         and not any(
