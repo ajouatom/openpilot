@@ -62,6 +62,12 @@ Panda *connect(std::string serial, uint32_t index) {
 
 void can_send_thread(std::vector<Panda *> pandas, bool fake_send) {
   util::set_thread_name("pandad_can_send");
+  if (!Hardware::PC()) {
+    int err = util::set_realtime_priority(55);
+    if (err != 0) {
+      LOGE("failed to raise Panda CAN send thread priority: %d", err);
+    }
+  }
 
   AlignedBuffer aligned_buf;
   std::unique_ptr<Context> context(Context::create());
@@ -165,6 +171,12 @@ void can_recv(const std::vector<Panda *> &pandas, PubMaster *pm) {
 
 void can_recv_thread(std::vector<Panda *> pandas) {
   util::set_thread_name("pandad_can_recv");
+  if (!Hardware::PC()) {
+    int err = util::set_realtime_priority(55);
+    if (err != 0) {
+      LOGE("failed to raise Panda CAN receive thread priority: %d", err);
+    }
+  }
 
   RateKeeper rk("pandad_can_recv", 100);
   PubMaster pm({"can"});
