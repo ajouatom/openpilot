@@ -41,6 +41,11 @@ STATIONARY_SHADOW_MAX_DPATH_M = 0.75
 STATIONARY_SHADOW_MAX_ABS_VLEAD_MPS = 1.5
 STATIONARY_SHADOW_MIN_PRIMARY_VLEAD_MPS = 4.0
 STATIONARY_SHADOW_EQUIVALENCE_BRAKE_MPS2 = 2.5
+STATIONARY_PRIMARY_HANDOFF_MAX_ABS_VLEAD_MPS = 4.0
+STATIONARY_PRIMARY_HANDOFF_MAX_DPATH_M = 0.75
+STATIONARY_PRIMARY_HANDOFF_MIN_MODEL_PROBABILITY = 0.40
+STATIONARY_PRIMARY_HANDOFF_SUPPORT_HOLD_S = 1.0
+STATIONARY_PRIMARY_HANDOFF_MIN_CLOSER_MARGIN_M = 1.0
 
 
 @dataclass(frozen=True)
@@ -189,6 +194,122 @@ class DPathStationaryShadowTracker:
       and time_s - self._since_s >= STATIONARY_SHADOW_CONFIRMATION_S
     )
     return replace(active, confirmed_stationary_shadow=confirmed)
+
+
+class DPathStationaryPrimaryHandoffTracker:
+  """Hand a vision-confirmed stopped corner leadOne back to leadTwo."""
+
+  def __init__(self) -> None:
+    self._identity: tuple[str, int, int] | None = None
+    self._last_primary_s: float | None = None
+    self._last_primary_candidate: DPathLeadCandidate | None = None
+
+  def reset(self) -> None:
+    self._identity = None
+    self._last_primary_s = None
+    self._last_primary_candidate = None
+
+  @staticmethod
+  def _eligible(candidate: DPathLeadCandidate) -> bool:
+    lead = candidate.lead
+    return (
+      candidate.source.startswith("corner")
+      and bool(lead.get("status"))
+      and abs(float(lead.get("vLead", 0.0)))
+      <= STATIONARY_PRIMARY_HANDOFF_MAX_ABS_VLEAD_MPS
+      and abs(float(lead.get("dPath", math.inf)))
+      <= STATIONARY_PRIMARY_HANDOFF_MAX_DPATH_M
+      and 0.8 < float(lead.get("dRel", 0.0))
+      <= STATIONARY_SHADOW_MAX_DREL_M
+    )
+
+  def _continuous(
+    self,
+    time_s: float,
+    candidate: DPathLeadCandidate,
+  ) -> bool:
+    previous_candidate = self._last_primary_candidate
+    previous_time_s = self._last_primary_s
+    if previous_candidate is None or previous_time_s is None:
+      return True
+    dt = float(time_s) - previous_time_s
+    if dt < 0.0 or dt > STATIONARY_PRIMARY_HANDOFF_SUPPORT_HOLD_S:
+      return False
+    previous = previous_candidate.lead
+    predicted_d_rel = (
+      float(previous.get("dRel", 0.0))
+      + float(previous.get("vRel", 0.0)) * dt
+    )
+    predicted_y_rel = (
+      float(previous.get("yRel", 0.0))
+      + float(previous.get("vLat", 0.0)) * dt
+    )
+    return (
+      abs(float(candidate.lead.get("dRel", 0.0)) - predicted_d_rel)
+      <= LEAD_TWO_LONGITUDINAL_JUMP_M
+      and abs(float(candidate.lead.get("yRel", 0.0)) - predicted_y_rel)
+      <= LEAD_TWO_LATERAL_JUMP_M
+    )
+
+  def update(
+    self,
+    time_s: float,
+    primary: dict[str, Any] | None,
+    candidates: Iterable[DPathLeadCandidate],
+    active_identity: tuple[str, int, int] | None,
+  ) -> DPathLeadCandidate | None:
+    time_s = float(time_s)
+    values = tuple(candidate for candidate in candidates if self._eligible(candidate))
+    primary_track_id = (
+      int(primary.get("radarTrackId", -1))
+      if primary is not None and primary.get("status") and primary.get("radar")
+      else -1
+    )
+    primary_candidate = next((
+      candidate for candidate in values
+      if candidate.track_id == primary_track_id
+    ), None)
+    if (
+      primary_candidate is not None
+      and primary is not None
+      and float(primary.get("modelProb", 0.0))
+      >= STATIONARY_PRIMARY_HANDOFF_MIN_MODEL_PROBABILITY
+    ):
+      if (
+        primary_candidate.identity != self._identity
+        or not self._continuous(time_s, primary_candidate)
+      ):
+        self._identity = primary_candidate.identity
+      self._last_primary_candidate = primary_candidate
+      self._last_primary_s = time_s
+      return None
+
+    if self._identity is None:
+      return None
+    candidate = next((
+      value for value in values if value.identity == self._identity
+    ), None)
+    if candidate is None or candidate.track_id == primary_track_id:
+      return None
+    if active_identity == self._identity:
+      return candidate
+    if (
+      self._last_primary_s is None
+      or time_s - self._last_primary_s
+      > STATIONARY_PRIMARY_HANDOFF_SUPPORT_HOLD_S
+      or not self._continuous(time_s, candidate)
+    ):
+      self.reset()
+      return None
+    if primary is None or not primary.get("status"):
+      return None
+    if (
+      float(candidate.lead.get("dRel", math.inf))
+      + STATIONARY_PRIMARY_HANDOFF_MIN_CLOSER_MARGIN_M
+      >= float(primary.get("dRel", math.inf))
+    ):
+      return None
+    return replace(candidate, confirmed_stationary_shadow=True)
 
 
 def front_cutin_motion_supported(

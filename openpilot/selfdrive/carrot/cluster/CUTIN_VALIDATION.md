@@ -25,7 +25,11 @@ the full confirmation interval. Front-only returns and nearby moving corner
 returns cannot start this stationary `leadTwo`. After confirmation, the same
 state-2 front identity remains eligible through corner dropouts while its
 reported position stays physically continuous; it cannot transfer that trust
-to a new or reused track. An in-path second lead may be
+to a new or reused track. A central slow corner point that was itself
+vision-confirmed as leadOne may likewise hand off to leadTwo when the primary
+matcher switches to a farther object; this support expires after one second
+unless leadTwo has already retained the same physically continuous identity.
+An in-path second lead may be
 beyond leadOne, while a predicted CUT-IN must be closer than leadOne. It rejects
 the primary object
 itself and every candidate beyond the fixed 80 m limit. An outside candidate
