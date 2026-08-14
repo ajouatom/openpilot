@@ -331,7 +331,7 @@ static bool canfd_should_block_fwd(int tx_bus, int addr, uint32_t now) {
   return (now - st->last_tx_us) < st->timeout_us;
 }
 
-#define CANFD_BFWD_MAX_QUEUE 2
+#define CANFD_BFWD_MAX_QUEUE 6
 #define CANFD_BFWD_START_COUNT 2
 #define CANFD_BFWD_REUSE_MAX 2
 
@@ -399,9 +399,10 @@ static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt) {
   if ((st == NULL) || !st->enabled) return;
   if (GET_BUS(pkt) != st->dst_bus) return;
 
-  // queue가 이미 2개면 이번 새 packet은 버림
+  // Keep the newest host commands when a burst fills the queue.
   if (st->count >= CANFD_BFWD_MAX_QUEUE) {
-    return;
+    st->head = (st->head + 1U) % CANFD_BFWD_MAX_QUEUE;
+    st->count--;
   }
 
   canfd_copy_packet(&st->q[st->tail], pkt);
