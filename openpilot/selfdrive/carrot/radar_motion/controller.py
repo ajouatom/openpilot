@@ -638,22 +638,34 @@ class DPathRadarController:
       ))
     stationary_shadow_inputs = []
     for point, _, projection in front_scoped_motion_points:
+      identity = (point.source, point.track_id, 0)
+      retained_stationary_shadow = active_identity == identity
+      corner_supported = stationary_shadow_corner_supported(
+        point, points, path,
+      )
       if (
         point.radar_track_state < 2
-        or not stationary_shadow_corner_supported(point, points, path)
+        or not (corner_supported or retained_stationary_shadow)
       ):
         continue
       lead = self._lead_from_radar_point(
         point, projection.d_path, 0.03, primary_cut_out_probability,
       )
-      stationary_shadow_inputs.append(DPathLeadCandidate(
+      candidate = DPathLeadCandidate(
         lead=lead,
         source=point.source,
         track_id=point.track_id,
         continuity_id=0,
         retainable=True,
         confirmed_cutin=False,
-      ))
+      )
+      if corner_supported:
+        stationary_shadow_inputs.append(candidate)
+      if (
+        retained_stationary_shadow
+        and point.track_id != primary_track_id
+      ):
+        candidates.append(candidate)
     stationary_shadow = self.stationary_shadow_tracker.update(
       time_s,
       lead_one,

@@ -1975,7 +1975,13 @@ def test_controller_confirms_stationary_shadow_behind_cutting_out_lead() -> None
   ))
 
   output = None
-  for index in range(7):
+  for index in range(12):
+    corner = (
+      Point(
+        1053, 66.0 - index * 0.8, 0.4,
+        v_rel=-15.0, v_lead=1.0, source="corner235",
+      ),
+    ) if index <= 6 else ()
     output = controller.update(
       time_s=index * 0.05,
       v_ego=16.0,
@@ -1988,11 +1994,7 @@ def test_controller_confirms_stationary_shadow_behind_cutting_out_lead() -> None
           53, 60.0 - index * 0.8, 0.0,
           v_rel=-16.0, v_lead=0.0, trackState=2,
         ),
-        Point(
-          1053, 66.0 - index * 0.8, 0.4,
-          v_rel=-15.0, v_lead=1.0, source="corner235",
-        ),
-      ),
+      ) + corner,
       model=model_with_lead(50.0, -1.0, 10.0, probability=0.99),
     )
     assert output.lead_one is not None
