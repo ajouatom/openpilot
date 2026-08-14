@@ -172,6 +172,11 @@ class Car:
     self.card_diag_process_max_us = 0
     self.card_diag_slow_loop = 0
     self.card_diag_slow_process = 0
+    self.card_diag_stage_names = ('decode', 'ci_update', 'sm_update', 'radar', 'state_tail',
+                                  'state_total', 'publish', 'apply', 'sendcan', 'total')
+    self.card_diag_stage_current = dict.fromkeys(self.card_diag_stage_names, 0)
+    self.card_diag_stage_sum_us = dict.fromkeys(self.card_diag_stage_names, 0)
+    self.card_diag_stage_max_us = dict.fromkeys(self.card_diag_stage_names, 0)
 
   def state_update(self) -> tuple[car.CarState, structs.RadarDataT | None]:
     """carState update loop, driven by can"""
@@ -185,6 +190,7 @@ class Car:
     self.card_diag_prev_recv_ns = recv_ns
     self.card_diag_recv_ns = recv_ns
     can_list = can_capnp_to_list(can_strs)
+    decode_done_ns = time.monotonic_ns()
 
     rcv_time = time.time()
 
@@ -192,11 +198,13 @@ class Car:
     CS = self.CI.update(can_list)
     if self.CP.brand == 'mock':
       CS = self.mock_carstate.update(CS)
+    ci_done_ns = time.monotonic_ns()
 
     # Update radar tracks from CAN
     #RD: structs.RadarDataT | None = self.RI.update_carrot(CS.vEgo, can_list)
 
     self.sm.update(0)
+    sm_done_ns = time.monotonic_ns()
     #self.t1 = time.monotonic()
 
     can_rcv_valid = len(can_strs) > 0
@@ -209,6 +217,7 @@ class Car:
       self.can_log_mono_time = messaging.log_from_bytes(can_strs[0]).logMonoTime
 
     RD: structs.RadarDataT | None = self.RI.update_carrot(CS.vEgo, CS.aEgo, rcv_time, can_list)
+    radar_done_ns = time.monotonic_ns()
     #self.t2 = time.monotonic()
 
     #self.v_cruise_helper.update_v_cruise(CS, self.sm['carControl'].enabled, self.is_metric)
@@ -235,6 +244,19 @@ class Car:
     CS.carrotCruise = 1 if self.v_cruise_helper.carrot_cruise_active else 0
 
     self.CI.CS.softHoldActive = CS.softHoldActive
+    state_done_ns = time.monotonic_ns()
+    self.card_diag_stage_current = {
+      'decode': (decode_done_ns - recv_ns) // 1000,
+      'ci_update': (ci_done_ns - decode_done_ns) // 1000,
+      'sm_update': (sm_done_ns - ci_done_ns) // 1000,
+      'radar': (radar_done_ns - sm_done_ns) // 1000,
+      'state_tail': (state_done_ns - radar_done_ns) // 1000,
+      'state_total': (state_done_ns - recv_ns) // 1000,
+      'publish': 0,
+      'apply': 0,
+      'sendcan': 0,
+      'total': 0,
+    }
     return CS, RD
 
   def state_publish(self, CS: car.CarState, RD: structs.RadarDataT | None):
@@ -279,23 +301,55 @@ class Car:
 
     if self.sm.all_alive(['carControl']):
       # send car controls over can
+      apply_start_ns = time.monotonic_ns()
       now_nanos = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
       model_v2 = self.sm['modelV2'] if self.sm.valid['modelV2'] and self.sm.alive['modelV2'] else None
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2)
+      apply_done_ns = time.monotonic_ns()
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
+      sendcan_done_ns = time.monotonic_ns()
 
-      process_us = (time.monotonic_ns() - self.card_diag_recv_ns) // 1000
+      process_us = (sendcan_done_ns - self.card_diag_recv_ns) // 1000
+      self.card_diag_stage_current['apply'] = (apply_done_ns - apply_start_ns) // 1000
+      self.card_diag_stage_current['sendcan'] = (sendcan_done_ns - apply_done_ns) // 1000
+      self.card_diag_stage_current['total'] = process_us
+      for name in self.card_diag_stage_names:
+        stage_us = self.card_diag_stage_current[name]
+        self.card_diag_stage_sum_us[name] += stage_us
+        self.card_diag_stage_max_us[name] = max(self.card_diag_stage_max_us[name], stage_us)
       self.card_diag_process_max_us = max(self.card_diag_process_max_us, process_us)
       self.card_diag_slow_process += process_us > 5000
       self.card_diag_frames += 1
       if self.card_diag_frames >= 100:
         print(f"card_sendcan_diag: loop_max_us={self.card_diag_loop_max_us}, process_max_us={self.card_diag_process_max_us}, "
               f"loop_over_12ms={self.card_diag_slow_loop}, process_over_5ms={self.card_diag_slow_process}")
+        print(f"card_stage_state_diag: decode_avg_us={self.card_diag_stage_sum_us['decode'] // self.card_diag_frames}, "
+              f"decode_max_us={self.card_diag_stage_max_us['decode']}, "
+              f"ci_avg_us={self.card_diag_stage_sum_us['ci_update'] // self.card_diag_frames}, "
+              f"ci_max_us={self.card_diag_stage_max_us['ci_update']}, "
+              f"sm_avg_us={self.card_diag_stage_sum_us['sm_update'] // self.card_diag_frames}, "
+              f"sm_max_us={self.card_diag_stage_max_us['sm_update']}, "
+              f"radar_avg_us={self.card_diag_stage_sum_us['radar'] // self.card_diag_frames}, "
+              f"radar_max_us={self.card_diag_stage_max_us['radar']}, "
+              f"tail_avg_us={self.card_diag_stage_sum_us['state_tail'] // self.card_diag_frames}, "
+              f"tail_max_us={self.card_diag_stage_max_us['state_tail']}, "
+              f"state_avg_us={self.card_diag_stage_sum_us['state_total'] // self.card_diag_frames}, "
+              f"state_max_us={self.card_diag_stage_max_us['state_total']}")
+        print(f"card_stage_send_diag: publish_avg_us={self.card_diag_stage_sum_us['publish'] // self.card_diag_frames}, "
+              f"publish_max_us={self.card_diag_stage_max_us['publish']}, "
+              f"apply_avg_us={self.card_diag_stage_sum_us['apply'] // self.card_diag_frames}, "
+              f"apply_max_us={self.card_diag_stage_max_us['apply']}, "
+              f"sendcan_avg_us={self.card_diag_stage_sum_us['sendcan'] // self.card_diag_frames}, "
+              f"sendcan_max_us={self.card_diag_stage_max_us['sendcan']}, "
+              f"total_avg_us={self.card_diag_stage_sum_us['total'] // self.card_diag_frames}, "
+              f"total_max_us={self.card_diag_stage_max_us['total']}")
         self.card_diag_frames = 0
         self.card_diag_loop_max_us = 0
         self.card_diag_process_max_us = 0
         self.card_diag_slow_loop = 0
         self.card_diag_slow_process = 0
+        self.card_diag_stage_sum_us = dict.fromkeys(self.card_diag_stage_names, 0)
+        self.card_diag_stage_max_us = dict.fromkeys(self.card_diag_stage_names, 0)
 
       self.CC_prev = CC
 
@@ -311,7 +365,9 @@ class Car:
       else:
         cloudlog.warning("Cruise MAIN long press ignored: vehicle has no openpilot controller")
 
+    publish_start_ns = time.monotonic_ns()
     self.state_publish(CS, RD)
+    self.card_diag_stage_current['publish'] = (time.monotonic_ns() - publish_start_ns) // 1000
 
     initialized = (not any(e.name == EventName.selfdriveInitializing for e in self.sm['onroadEvents']) and
                    self.sm.seen['onroadEvents'])
