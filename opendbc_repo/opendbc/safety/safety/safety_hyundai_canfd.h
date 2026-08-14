@@ -332,6 +332,7 @@ static bool canfd_should_block_fwd(int tx_bus, int addr, uint32_t now) {
 }
 
 #define CANFD_BFWD_MAX_QUEUE 2
+#define CANFD_BFWD_START_COUNT 2
 #define CANFD_BFWD_REUSE_MAX 2
 
 typedef struct {
@@ -406,7 +407,12 @@ static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt) {
   canfd_copy_packet(&st->q[st->tail], pkt);
   st->tail = (st->tail + 1U) % CANFD_BFWD_MAX_QUEUE;
   st->count++;
-  st->started = true;
+
+  // Start with one command in reserve. Waiting for both queue entries before
+  // the first pop absorbs roughly one control cycle of host/IPC/SPI jitter.
+  if (st->count >= CANFD_BFWD_START_COUNT) {
+    st->started = true;
+  }
 }
 
 static bool canfd_bfwd_pop(CanfdBufferedFwd* st, CANPacket_t* pkt) {
