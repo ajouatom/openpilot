@@ -616,14 +616,17 @@ void pandad_run(std::vector<Panda *> &pandas) {
     for (Panda *panda : pandas) {
       std::string log = panda->serial_read();
       if (!log.empty()) {
-        if (log.find("Register 0x") != std::string::npos) {
+        const bool has_register_fault = log.find("Register 0x") != std::string::npos;
+        const bool has_spi_diag = (log.find("SPI:") != std::string::npos) ||
+                                  (log.find("incorrect header") != std::string::npos) ||
+                                  (log.find("incorrect data checksum") != std::string::npos);
+        if (has_spi_diag) {
+          LOGW("panda_spi_serial_diag: %s", log.c_str());
+        }
+        if (has_register_fault) {
           // Log register divergent faults as errors
           LOGE("%s", log.c_str());
-        } else if ((log.find("SPI:") != std::string::npos) ||
-                   (log.find("incorrect header") != std::string::npos) ||
-                   (log.find("incorrect data checksum") != std::string::npos)) {
-          LOGW("panda_spi_serial_diag: %s", log.c_str());
-        } else {
+        } else if (!has_spi_diag) {
           LOGD("%s", log.c_str());
         }
       }
