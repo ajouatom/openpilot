@@ -155,6 +155,7 @@ class CarState(CarStateBase):
 
     self.totalDistance = 0.0
     self.speedLimitDistance = 0
+    self.vehicleSpeedCameraDistanceFactor = min(20, max(1, self.op_params.get_int("VehicleSpeedCameraDistanceFactor")))
     self.pcmCruiseGap = 0
 
     self.MainMode_ACC = False
@@ -514,9 +515,9 @@ class CarState(CarStateBase):
 
   def update_speed_limit(self, ret, speed_limit_cam):
     self.totalDistance += ret.vEgo * DT_CTRL
-    if ret.speedLimit > 0 and not ret.gasPressed and speed_limit_cam:
+    if ret.speedLimit > 0 and speed_limit_cam:
       if self.speedLimitDistance <= self.totalDistance:
-        self.speedLimitDistance = self.totalDistance + ret.speedLimit * 6
+        self.speedLimitDistance = self.totalDistance + ret.speedLimit * self.vehicleSpeedCameraDistanceFactor
       self.speedLimitDistance = max(self.totalDistance + 1, self.speedLimitDistance)
     else:
       self.speedLimitDistance = self.totalDistance

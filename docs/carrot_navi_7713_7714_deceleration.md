@@ -231,6 +231,7 @@ SDI를 지울 때는 더 큰 sequence로 `present: false`, `value: null`, 비어
 | 구간단속(block) | `nSdiBlockType` 2/3, block distance | primary SDI block type 2/3, block distance | type을 4로 바꾸고 block distance 사용. 단, block speed는 사용하지 않고 primary SDI speed에 안전계수를 적용 | `section` |
 | 7714 전용 section object | 없음 | `section.active`, speed limit, remaining distance | present + active + not suspended + section off-route 아님 + 전체 off-route 아님 + limit > 0일 때 type 4로 변환 | `section` |
 | 방지턱 | primary/plus type 22 | primary/secondary type 22 | `roadcate > 1`, mode >= 2. payload speed는 무시하고 `AutoNaviSpeedBumpSpeed` 사용. 단, 7714는 road category 갱신 순서/기본값 문제로 type 22가 수신되어도 후보 생성에 실패할 수 있음 | `bump` |
+| 차량 수신 과속카메라 | `carState.speedLimit/speedLimitDistance` | 동일 | 차량 CAN에서 단속속도만 수신하며 Hyundai `CarState`가 `speedLimit × VehicleSpeedCameraDistanceFactor`로 가상거리 생성. `VehicleSpeedCameraControlMode`에 따라 미사용·항상 적용·가속페달 속도 하한·가속페달 입력 중 해제를 선택 | `hda` (기존 호환 source명) 또는 하한 적용 시 `gas` |
 | 도로 제한속도 | `nRoadLimitSpeed` | `road_limit_kph` | `AutoRoadSpeedLimitOffset >= 0`, active >= 2, road limit valid일 때 limit+offset | `road` |
 | 현재 TBT | `nTBTTurnType/nTBTDist` | `guidance_current.turn_type/distance_m` | 지원 turn type이 `xTurnInfo`로 변환되고 `AutoTurnControl`이 2 또는 3일 때 속도 목표 계산 | `atc` |
 | 다음 TBT | `nTBTTurnTypeNext/nTBTDistNext` | `guidance_next` | 현재 거리 + 다음 거리를 사용하고 같은 ATC 설정 적용 | `atc2` |
@@ -240,6 +241,31 @@ SDI를 지울 때는 더 큰 sequence로 `present: false`, `value: null`, 비어
 공통 감속 속도는 목표 지점의 안전속도와 안전시간을 기준으로
 `sqrt(v_target^2 + 2 * decel_rate * decel_distance)` 형태로 계산한다. 모든 후보 중 최솟값을
 `desiredSpeed`로 선택하고, planner가 cruise 속도와 다시 `min()`하여 실제 종방향 목표에 반영한다.
+
+### 차량 수신 과속카메라 정책
+
+Hyundai 일반 CAN의 `Navi_HU.SpeedLim_Nav_Cam == 1` 또는 CAN-FD의 `HDA_INFO_4A3.MapSource == 2`이면
+`carState.speedLimit`에 차량이 수신한 과속카메라 단속속도를 넣는다. 별도 거리 신호가 없으므로
+`VehicleSpeedCameraDistanceFactor` 기본값 6을 사용하여 다음 가상거리를 만든다.
+
+`speedLimitDistance(m) = speedLimit(km/h) × VehicleSpeedCameraDistanceFactor`
+
+따라서 기본값에서 50 km/h는 300 m, 80 km/h는 480 m다. 이 값은 시간(초)이 아니라 기존 동작을
+유지하는 거리 배수이며, 설정은 Hyundai `CarState` 시작 시 읽으므로 변경 후 차량 재시동 또는 기기
+재부팅이 필요하다.
+
+`VehicleSpeedCameraControlMode` 기본값은 1이다.
+
+| 값 | 동작 |
+|---:|---|
+| 0 | 차량 수신 과속카메라 후보를 만들지 않는다. 원시 `carState.speedLimit` 표시는 유지될 수 있다. |
+| 1 | 가속페달 상태와 무관하게 후보를 항상 적용한다. 가속페달 속도 하한은 만들지 않는다. |
+| 2 | 차량 수신 과속카메라가 최종 후보일 때, 가속페달로 도달한 최고속도를 `gas_override_speed`에 저장하고 감속 목표의 하한으로 유지한다. |
+| 3 | 가속페달을 밟는 동안 차량 수신 과속카메라 후보만 제외하고, 페달을 놓으면 다시 적용한다. |
+
+mode 2의 하한은 source 변경, 정차, 브레이크 입력, 제한속도 변경 또는 정상 목표가 150 km/h를 넘을 때
+초기화된다. 이 정책은 Carrot Navi의 `cam/section`, 방지턱, route, turn 등 다른 감속 source에는 적용하지
+않는다.
 
 ## 수신되지만 감속 제어에는 쓰이지 않는 값
 
@@ -374,8 +400,8 @@ on-road UI, mici UI, cluster live UI는 모두 다음 조건에서 실제 source
 따라서 route 데이터가 존재하는 것만으로 `route`가 표시되는 것은 아니다. route 후보가 설정상
 활성이고 다른 모든 후보보다 낮아 실제 winner가 되어야 한다. 방지턱도 같은 방식으로 `bump`가 winner일
 때만 표시된다. `longitudinalPlan.cruiseTarget`의 eco 표시 조건이 먼저 참이면 `eco`가 우선 표시된다.
-가속페달 override가 허용되는 source는 최종 source가 `gas`로 바뀔 수 있다. `cam`, `section`, `police`는
-가속페달 override reset 대상이지만 bump, route, road, atc, waze 등은 그렇지 않다.
+`VehicleSpeedCameraControlMode=2`에서 차량 수신 과속카메라 `hda`가 winner이고 가속페달 속도 하한이
+더 높으면 최종 source가 `gas`로 바뀐다. 다른 감속 source에는 이 override를 적용하지 않는다.
 
 후보 속도가 완전히 같으면 list 순서상 `atc`, `atc2`, SDI 계열, `road`, `vturn`, `route`, `model`
 순서로 먼저 등장한 source가 label이 된다.
@@ -466,8 +492,8 @@ km/h다.
 - `navigation_status.off_route=true`이면 7714 SDI가 억제된다.
 - `HapticFeedbackWhenSpeedCamera=1`은 현재 checkout에서 Param 등록/설정 UI 외에 읽는 코드가 없어
   방지턱 감속이나 실제 햅틱에 영향을 주지 않는다.
-- bump는 가속페달 override 보호 source 목록에 없으므로 감속 중 가속페달을 새로 밟으면 최종 source가
-  `gas`로 바뀌고 방지턱 목표보다 높은 속도가 허용될 수 있다.
+- bump에는 차량 수신 과속카메라용 가속페달 하한을 적용하지 않으므로, 가속페달 입력만으로 방지턱
+  목표 source가 `gas`로 바뀌지 않는다.
 
 ### 실제 적용과 무관할 수 있는 별도 표시
 
