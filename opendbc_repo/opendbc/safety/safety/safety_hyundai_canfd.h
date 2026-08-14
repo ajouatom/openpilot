@@ -334,6 +334,7 @@ static bool canfd_should_block_fwd(int tx_bus, int addr, uint32_t now) {
 #define CANFD_BFWD_MAX_QUEUE 6
 #define CANFD_BFWD_START_COUNT 2
 #define CANFD_BFWD_REUSE_MAX 2
+#define CANFD_BFWD_DIAG_INTERVAL_US 5000000U
 
 typedef struct {
   int addr;
@@ -352,6 +353,11 @@ typedef struct {
   uint32_t last_push_us;
   uint32_t last_push_dt_us;
   uint32_t overflow_count;
+  uint32_t reuse_diag_last_us;
+  uint32_t reuse_diag_count;
+  uint32_t reuse_diag_exhausted;
+  uint32_t reuse_diag_max_age_us;
+  uint32_t reuse_diag_max_dt_us;
 
   CANPacket_t q[CANFD_BFWD_MAX_QUEUE];
 } CanfdBufferedFwd;
@@ -401,6 +407,11 @@ static void canfd_bfwd_reset(CanfdBufferedFwd* st) {
   st->last_push_us = 0U;
   st->last_push_dt_us = 0U;
   st->overflow_count = 0U;
+  st->reuse_diag_last_us = 0U;
+  st->reuse_diag_count = 0U;
+  st->reuse_diag_exhausted = 0U;
+  st->reuse_diag_max_age_us = 0U;
+  st->reuse_diag_max_dt_us = 0U;
 }
 static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt) {
   if ((st == NULL) || !st->enabled) return;
@@ -687,14 +698,35 @@ static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
       if (!use_buffered) {
         use_buffered = canfd_bfwd_reuse_last(bfwd, &buffered_pkt);
         if (use_buffered) {
-          uint32_t push_age_us = microsecond_timer_get() - bfwd->last_push_us;
-          print("reuse:"); putui((uint32_t)addr);
-          print(", reuse_left:"); putui((uint32_t)bfwd->reuse_left);
-          print(", q:"); putui((uint32_t)bfwd->count);
-          print(", push_age_us:"); putui(push_age_us);
-          print(", push_dt_us:"); putui(bfwd->last_push_dt_us);
-          print(", overflow:"); putui(bfwd->overflow_count);
-          print("\n");
+          uint32_t now_us = microsecond_timer_get();
+          uint32_t push_age_us = now_us - bfwd->last_push_us;
+          bfwd->reuse_diag_count++;
+          bfwd->reuse_diag_exhausted += bfwd->reuse_left == 0U;
+          if (push_age_us > bfwd->reuse_diag_max_age_us) {
+            bfwd->reuse_diag_max_age_us = push_age_us;
+          }
+          if (bfwd->last_push_dt_us > bfwd->reuse_diag_max_dt_us) {
+            bfwd->reuse_diag_max_dt_us = bfwd->last_push_dt_us;
+          }
+
+          // Panda serial output shares the SPI transport with CAN. Aggregate
+          // reuse diagnostics so observing a queue underrun cannot amplify it.
+          if ((bfwd->reuse_diag_last_us == 0U) ||
+              ((now_us - bfwd->reuse_diag_last_us) >= CANFD_BFWD_DIAG_INTERVAL_US)) {
+            print("reuse_diag:"); putui((uint32_t)addr);
+            print(", count:"); putui(bfwd->reuse_diag_count);
+            print(", exhausted:"); putui(bfwd->reuse_diag_exhausted);
+            print(", q:"); putui((uint32_t)bfwd->count);
+            print(", max_age_us:"); putui(bfwd->reuse_diag_max_age_us);
+            print(", max_dt_us:"); putui(bfwd->reuse_diag_max_dt_us);
+            print(", overflow:"); putui(bfwd->overflow_count);
+            print("\n");
+            bfwd->reuse_diag_last_us = now_us;
+            bfwd->reuse_diag_count = 0U;
+            bfwd->reuse_diag_exhausted = 0U;
+            bfwd->reuse_diag_max_age_us = 0U;
+            bfwd->reuse_diag_max_dt_us = 0U;
+          }
         }
       }
 

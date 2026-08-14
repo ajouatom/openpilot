@@ -4,6 +4,7 @@
 #include <array>
 #include <bitset>
 #include <cassert>
+#include <cinttypes>
 #include <cerrno>
 #include <memory>
 #include <thread>
@@ -474,30 +475,76 @@ void pandad_run(std::vector<Panda *> &pandas) {
   bool engaged = false;
   bool is_onroad = false;
 
+  uint32_t loop_diag_count = 0U;
+  uint32_t loop_diag_peripheral_count = 0U;
+  uint32_t loop_diag_state_count = 0U;
+  uint32_t loop_diag_publish_count = 0U;
+  uint32_t loop_diag_work_slow = 0U;
+  uint64_t loop_diag_prev_start_ns = 0U;
+  uint64_t loop_diag_gap_max_us = 0U;
+  uint64_t loop_diag_can_sum_us = 0U;
+  uint64_t loop_diag_can_max_us = 0U;
+  uint64_t loop_diag_peripheral_sum_us = 0U;
+  uint64_t loop_diag_peripheral_max_us = 0U;
+  uint64_t loop_diag_state_sum_us = 0U;
+  uint64_t loop_diag_state_max_us = 0U;
+  uint64_t loop_diag_publish_sum_us = 0U;
+  uint64_t loop_diag_publish_max_us = 0U;
+  uint64_t loop_diag_serial_sum_us = 0U;
+  uint64_t loop_diag_serial_max_us = 0U;
+  uint64_t loop_diag_work_sum_us = 0U;
+  uint64_t loop_diag_work_max_us = 0U;
+
   // Main loop: receive CAN data and process states
   while (!do_exit && check_all_connected(pandas)) {
+    const uint64_t loop_start_ns = nanos_since_boot();
+    if (loop_diag_prev_start_ns != 0U) {
+      loop_diag_gap_max_us = std::max(loop_diag_gap_max_us, (loop_start_ns - loop_diag_prev_start_ns) / 1000U);
+    }
+    loop_diag_prev_start_ns = loop_start_ns;
+
     can_recv(pandas, &pm);
+    const uint64_t can_done_ns = nanos_since_boot();
+    const uint64_t can_us = (can_done_ns - loop_start_ns) / 1000U;
+    loop_diag_can_sum_us += can_us;
+    loop_diag_can_max_us = std::max(loop_diag_can_max_us, can_us);
 
     // Process peripheral state at 20 Hz
     if (rk.frame() % 5 == 0) {
+      const uint64_t peripheral_start_ns = nanos_since_boot();
       process_peripheral_state(peripheral_panda, &pm, no_fan_control);
+      const uint64_t peripheral_us = (nanos_since_boot() - peripheral_start_ns) / 1000U;
+      loop_diag_peripheral_sum_us += peripheral_us;
+      loop_diag_peripheral_max_us = std::max(loop_diag_peripheral_max_us, peripheral_us);
+      loop_diag_peripheral_count++;
     }
 
     // Process panda state at 10 Hz
     if (rk.frame() % 10 == 0) {
+      const uint64_t state_start_ns = nanos_since_boot();
       sm.update(0);
       engaged = sm.allAliveAndValid({"selfdriveState"}) && sm["selfdriveState"].getSelfdriveState().getEnabled();
       is_onroad = params.getBool("IsOnroad");
       process_panda_state(pandas, &pm, engaged, is_onroad, spoofing_started);
       panda_safety.configureSafetyMode(is_onroad);
+      const uint64_t state_us = (nanos_since_boot() - state_start_ns) / 1000U;
+      loop_diag_state_sum_us += state_us;
+      loop_diag_state_max_us = std::max(loop_diag_state_max_us, state_us);
+      loop_diag_state_count++;
     }
 
     // Send out peripheralState at 2Hz
     if (rk.frame() % 50 == 0) {
+      const uint64_t publish_start_ns = nanos_since_boot();
       send_peripheral_state(peripheral_panda, &pm);
+      const uint64_t publish_us = (nanos_since_boot() - publish_start_ns) / 1000U;
+      loop_diag_publish_sum_us += publish_us;
+      loop_diag_publish_max_us = std::max(loop_diag_publish_max_us, publish_us);
+      loop_diag_publish_count++;
     }
 
     // Forward logs from pandas to cloudlog if available
+    const uint64_t serial_start_ns = nanos_since_boot();
     for (Panda *panda : pandas) {
       std::string log = panda->serial_read();
       if (!log.empty()) {
@@ -508,6 +555,52 @@ void pandad_run(std::vector<Panda *> &pandas) {
           LOGD("%s", log.c_str());
         }
       }
+    }
+    const uint64_t serial_us = (nanos_since_boot() - serial_start_ns) / 1000U;
+    const uint64_t work_us = (nanos_since_boot() - loop_start_ns) / 1000U;
+    loop_diag_serial_sum_us += serial_us;
+    loop_diag_serial_max_us = std::max(loop_diag_serial_max_us, serial_us);
+    loop_diag_work_sum_us += work_us;
+    loop_diag_work_max_us = std::max(loop_diag_work_max_us, work_us);
+    loop_diag_work_slow += work_us > 10000U;
+    loop_diag_count++;
+
+    if (loop_diag_count >= 100U) {
+      const uint64_t peripheral_avg_us = loop_diag_peripheral_count > 0U ?
+        loop_diag_peripheral_sum_us / loop_diag_peripheral_count : 0U;
+      const uint64_t state_avg_us = loop_diag_state_count > 0U ?
+        loop_diag_state_sum_us / loop_diag_state_count : 0U;
+      const uint64_t publish_avg_us = loop_diag_publish_count > 0U ?
+        loop_diag_publish_sum_us / loop_diag_publish_count : 0U;
+      LOGW("pandad_loop_diag: gap_max_us=%" PRIu64 ", can_avg_us=%" PRIu64 ", can_max_us=%" PRIu64
+           ", peripheral_avg_us=%" PRIu64 ", peripheral_max_us=%" PRIu64
+           ", state_avg_us=%" PRIu64 ", state_max_us=%" PRIu64
+           ", publish_avg_us=%" PRIu64 ", publish_max_us=%" PRIu64
+           ", serial_avg_us=%" PRIu64 ", serial_max_us=%" PRIu64
+           ", work_avg_us=%" PRIu64 ", work_max_us=%" PRIu64 ", work_over_10ms=%u",
+           loop_diag_gap_max_us, loop_diag_can_sum_us / loop_diag_count, loop_diag_can_max_us,
+           peripheral_avg_us, loop_diag_peripheral_max_us, state_avg_us, loop_diag_state_max_us,
+           publish_avg_us, loop_diag_publish_max_us,
+           loop_diag_serial_sum_us / loop_diag_count, loop_diag_serial_max_us,
+           loop_diag_work_sum_us / loop_diag_count, loop_diag_work_max_us, loop_diag_work_slow);
+      loop_diag_count = 0U;
+      loop_diag_peripheral_count = 0U;
+      loop_diag_state_count = 0U;
+      loop_diag_publish_count = 0U;
+      loop_diag_work_slow = 0U;
+      loop_diag_gap_max_us = 0U;
+      loop_diag_can_sum_us = 0U;
+      loop_diag_can_max_us = 0U;
+      loop_diag_peripheral_sum_us = 0U;
+      loop_diag_peripheral_max_us = 0U;
+      loop_diag_state_sum_us = 0U;
+      loop_diag_state_max_us = 0U;
+      loop_diag_publish_sum_us = 0U;
+      loop_diag_publish_max_us = 0U;
+      loop_diag_serial_sum_us = 0U;
+      loop_diag_serial_max_us = 0U;
+      loop_diag_work_sum_us = 0U;
+      loop_diag_work_max_us = 0U;
     }
 
     rk.keepTime();
