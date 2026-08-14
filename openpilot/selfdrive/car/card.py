@@ -165,11 +165,25 @@ class Car:
     #self.t3 = self.t2
     # card is driven by can recv, expected at 100Hz
     self.rk = Ratekeeper(100, print_delay_threshold=None)
+    self.card_diag_recv_ns = 0
+    self.card_diag_prev_recv_ns = 0
+    self.card_diag_frames = 0
+    self.card_diag_loop_max_us = 0
+    self.card_diag_process_max_us = 0
+    self.card_diag_slow_loop = 0
+    self.card_diag_slow_process = 0
 
   def state_update(self) -> tuple[car.CarState, structs.RadarDataT | None]:
     """carState update loop, driven by can"""
 
     can_strs = messaging.drain_sock_raw(self.can_sock, wait_for_one=True)
+    recv_ns = time.monotonic_ns()
+    if self.card_diag_prev_recv_ns != 0:
+      loop_us = (recv_ns - self.card_diag_prev_recv_ns) // 1000
+      self.card_diag_loop_max_us = max(self.card_diag_loop_max_us, loop_us)
+      self.card_diag_slow_loop += loop_us > 12000
+    self.card_diag_prev_recv_ns = recv_ns
+    self.card_diag_recv_ns = recv_ns
     can_list = can_capnp_to_list(can_strs)
 
     rcv_time = time.time()
@@ -269,6 +283,19 @@ class Car:
       model_v2 = self.sm['modelV2'] if self.sm.valid['modelV2'] and self.sm.alive['modelV2'] else None
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2)
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
+
+      process_us = (time.monotonic_ns() - self.card_diag_recv_ns) // 1000
+      self.card_diag_process_max_us = max(self.card_diag_process_max_us, process_us)
+      self.card_diag_slow_process += process_us > 5000
+      self.card_diag_frames += 1
+      if self.card_diag_frames >= 100:
+        print(f"card_sendcan_diag: loop_max_us={self.card_diag_loop_max_us}, process_max_us={self.card_diag_process_max_us}, "
+              f"loop_over_12ms={self.card_diag_slow_loop}, process_over_5ms={self.card_diag_slow_process}")
+        self.card_diag_frames = 0
+        self.card_diag_loop_max_us = 0
+        self.card_diag_process_max_us = 0
+        self.card_diag_slow_loop = 0
+        self.card_diag_slow_process = 0
 
       self.CC_prev = CC
 

@@ -68,6 +68,17 @@ void can_send_thread(std::vector<Panda *> pandas, bool fake_send) {
   assert(subscriber != NULL);
   subscriber->setTimeout(100);
 
+  uint32_t diag_count = 0;
+  uint32_t diag_gap_slow = 0;
+  uint32_t diag_queue_slow = 0;
+  uint32_t diag_write_slow = 0;
+  uint32_t diag_total_slow = 0;
+  uint64_t diag_prev_recv_ns = 0;
+  uint64_t diag_gap_max_us = 0;
+  uint64_t diag_queue_max_us = 0;
+  uint64_t diag_write_max_us = 0;
+  uint64_t diag_total_max_us = 0;
+
   // run as fast as messages come in
   while (!do_exit && check_all_connected(pandas)) {
     std::unique_ptr<Message> msg(subscriber->receive());
@@ -77,13 +88,51 @@ void can_send_thread(std::vector<Panda *> pandas, bool fake_send) {
 
     capnp::FlatArrayMessageReader cmsg(aligned_buf.align(msg.get()));
     cereal::Event::Reader event = cmsg.getRoot<cereal::Event>();
+    const uint64_t recv_ns = nanos_since_boot();
+    const uint64_t event_ns = event.getLogMonoTime();
+    const uint64_t queue_age_ns = recv_ns >= event_ns ? recv_ns - event_ns : 0U;
+    if (diag_prev_recv_ns != 0U) {
+      const uint64_t recv_gap_us = (recv_ns - diag_prev_recv_ns) / 1000U;
+      diag_gap_max_us = std::max(diag_gap_max_us, recv_gap_us);
+      diag_gap_slow += recv_gap_us > 12000U;
+    }
+    diag_prev_recv_ns = recv_ns;
 
     // Don't send if older than 1 second
-    if ((nanos_since_boot() - event.getLogMonoTime() < 1e9) && !fake_send) {
+    if ((queue_age_ns < 1e9) && !fake_send) {
+      uint64_t write_max_us = 0;
       for (Panda *panda : pandas) {
         LOGT("sending sendcan to panda: %s", (panda->hw_serial()).c_str());
+        const uint64_t write_start_ns = nanos_since_boot();
         panda->can_send(event.getSendcan());
+        write_max_us = std::max(write_max_us, (nanos_since_boot() - write_start_ns) / 1000U);
         LOGT("sendcan sent to panda: %s", (panda->hw_serial()).c_str());
+      }
+
+      const uint64_t queue_age_us = queue_age_ns / 1000U;
+      const uint64_t total_us = (nanos_since_boot() - event_ns) / 1000U;
+      diag_queue_max_us = std::max(diag_queue_max_us, queue_age_us);
+      diag_write_max_us = std::max(diag_write_max_us, write_max_us);
+      diag_total_max_us = std::max(diag_total_max_us, total_us);
+      diag_queue_slow += queue_age_us > 3000U;
+      diag_write_slow += write_max_us > 3000U;
+      diag_total_slow += total_us > 8000U;
+      diag_count++;
+
+      if (diag_count >= 100U) {
+        LOGW("sendcan_diag: gap_max_us=%" PRIu64 ", queue_max_us=%" PRIu64 ", write_max_us=%" PRIu64
+             ", total_max_us=%" PRIu64 ", gap_over_12ms=%u, queue_over_3ms=%u, write_over_3ms=%u, total_over_8ms=%u",
+             diag_gap_max_us, diag_queue_max_us, diag_write_max_us, diag_total_max_us,
+             diag_gap_slow, diag_queue_slow, diag_write_slow, diag_total_slow);
+        diag_count = 0U;
+        diag_gap_slow = 0U;
+        diag_queue_slow = 0U;
+        diag_write_slow = 0U;
+        diag_total_slow = 0U;
+        diag_gap_max_us = 0U;
+        diag_queue_max_us = 0U;
+        diag_write_max_us = 0U;
+        diag_total_max_us = 0U;
       }
     } else {
       LOGE("sendcan too old to send: %" PRIu64 ", %" PRIu64, nanos_since_boot(), event.getLogMonoTime());

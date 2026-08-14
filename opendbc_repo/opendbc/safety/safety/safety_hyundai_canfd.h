@@ -349,6 +349,10 @@ typedef struct {
   bool has_last_pkt;
   CANPacket_t last_pkt;
 
+  uint32_t last_push_us;
+  uint32_t last_push_dt_us;
+  uint32_t overflow_count;
+
   CANPacket_t q[CANFD_BFWD_MAX_QUEUE];
 } CanfdBufferedFwd;
 
@@ -394,15 +398,25 @@ static void canfd_bfwd_reset(CanfdBufferedFwd* st) {
   st->reuse_left = 0U;
   st->has_last_pkt = false;
   st->last_pkt = (CANPacket_t){0};
+  st->last_push_us = 0U;
+  st->last_push_dt_us = 0U;
+  st->overflow_count = 0U;
 }
 static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt) {
   if ((st == NULL) || !st->enabled) return;
   if (GET_BUS(pkt) != st->dst_bus) return;
 
+  uint32_t now = microsecond_timer_get();
+  if (st->last_push_us != 0U) {
+    st->last_push_dt_us = now - st->last_push_us;
+  }
+  st->last_push_us = now;
+
   // Keep the newest host commands when a burst fills the queue.
   if (st->count >= CANFD_BFWD_MAX_QUEUE) {
     st->head = (st->head + 1U) % CANFD_BFWD_MAX_QUEUE;
     st->count--;
+    st->overflow_count++;
   }
 
   canfd_copy_packet(&st->q[st->tail], pkt);
@@ -673,7 +687,14 @@ static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
       if (!use_buffered) {
         use_buffered = canfd_bfwd_reuse_last(bfwd, &buffered_pkt);
         if (use_buffered) {
-          print("reuse:"); putui((uint32_t)addr); print(", reuse_left:"); putui((uint32_t)bfwd->reuse_left); print("\n");
+          uint32_t push_age_us = microsecond_timer_get() - bfwd->last_push_us;
+          print("reuse:"); putui((uint32_t)addr);
+          print(", reuse_left:"); putui((uint32_t)bfwd->reuse_left);
+          print(", q:"); putui((uint32_t)bfwd->count);
+          print(", push_age_us:"); putui(push_age_us);
+          print(", push_dt_us:"); putui(bfwd->last_push_dt_us);
+          print(", overflow:"); putui(bfwd->overflow_count);
+          print("\n");
         }
       }
 
