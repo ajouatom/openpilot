@@ -84,10 +84,21 @@ static bool validate_checksum(const uint8_t *data, uint16_t len) {
   return checksum == 0U;
 }
 
+static bool is_recovery_probe(const uint8_t *data) {
+  bool recovery_probe = true;
+  for (uint16_t i = 0U; i < SPI_HEADER_SIZE; i++) {
+    if (data[i] != 0x14U) {
+      recovery_probe = false;
+    }
+  }
+  return recovery_probe;
+}
+
 void spi_rx_done(void) {
   uint16_t response_len = 0U;
   uint8_t next_rx_state = SPI_STATE_HEADER_NACK;
   bool checksum_valid = false;
+  bool checksum_error = false;
   static uint8_t spi_endpoint;
   static uint16_t spi_data_len_miso;
 
@@ -101,6 +112,7 @@ void spi_rx_done(void) {
     next_rx_state = SPI_STATE_HEADER_NACK;;
   } else if (spi_state == SPI_STATE_HEADER) {
     checksum_valid = validate_checksum(spi_buf_rx, SPI_HEADER_SIZE);
+    const bool recovery_probe = is_recovery_probe(spi_buf_rx);
     if ((spi_buf_rx[0] == SPI_SYNC_BYTE) && checksum_valid) {
       // response: ACK and start receiving data portion
       spi_buf_tx[0] = SPI_HACK;
@@ -108,8 +120,11 @@ void spi_rx_done(void) {
       response_len = 1U;
     } else {
       // response: NACK and reset state machine
-      #ifdef DEBUG_SPI
-        print("- incorrect header sync or checksum "); hexdump(spi_buf_rx, SPI_HEADER_SIZE);
+      checksum_error = !checksum_valid && !recovery_probe;
+      #ifndef BOOTSTUB
+      if (!recovery_probe) {
+        print("SPI: incorrect header sync or checksum "); hexdump(spi_buf_rx, SPI_HEADER_SIZE);
+      }
       #endif
       spi_buf_tx[0] = SPI_NACK;
       next_rx_state = SPI_STATE_HEADER_NACK;
@@ -162,13 +177,11 @@ void spi_rx_done(void) {
     } else {
       // Checksum was incorrect
       response_ack = false;
-      #ifdef DEBUG_SPI
-        print("- incorrect data checksum ");
-        puth4(spi_data_len_mosi);
-        print("\n");
-        hexdump(spi_buf_rx, SPI_HEADER_SIZE);
-        hexdump(&(spi_buf_rx[SPI_HEADER_SIZE]), MIN(spi_data_len_mosi, 64));
-        print("\n");
+      checksum_error = true;
+      #ifndef BOOTSTUB
+      print("SPI: incorrect data checksum endpoint "); puth(spi_endpoint);
+      print(" len "); puth4(spi_data_len_mosi); print(" data ");
+      hexdump(&(spi_buf_rx[SPI_HEADER_SIZE]), MIN(spi_data_len_mosi, 16U));
       #endif
     }
 
@@ -206,7 +219,7 @@ void spi_rx_done(void) {
   llspi_miso_dma(spi_buf_tx, response_len);
 
   spi_state = next_rx_state;
-  if (!checksum_valid && (spi_checksum_error_count < UINT16_MAX)) {
+  if (checksum_error && (spi_checksum_error_count < UINT16_MAX)) {
     spi_checksum_error_count += 1U;
   }
 }

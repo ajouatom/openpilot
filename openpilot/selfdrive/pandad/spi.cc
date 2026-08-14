@@ -468,6 +468,9 @@ int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint1
     LOGW("spi_failure_diag: endpoint=0x%x, attempts=%u, final_ret=%d"
          ", hack_nacks=%u, dack_nacks=%u, ack_timeouts=%u, host_checksums=%u"
          ", other_failures=%u, first_phase=%s, last_phase=%s"
+         ", first_lock_us=%" PRIu64 ", first_turnaround_us=%" PRIu64
+         ", first_hack_us=%" PRIu64 ", first_dack_us=%" PRIu64
+         ", first_recovery_us=%" PRIu64
          ", last_lock_us=%" PRIu64 ", last_turnaround_us=%" PRIu64
          ", last_hack_us=%" PRIu64 ", last_dack_us=%" PRIu64
          ", last_recovery_us=%" PRIu64 ", recovery_restarts=%u",
@@ -475,6 +478,9 @@ int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint1
          total_ack_timeouts, total_host_checksums, total_other_failures,
          spi_failure_phase_name(first_failure_timing.failure_phase),
          spi_failure_phase_name(last_failure_timing.failure_phase),
+         first_failure_timing.lock_us, first_failure_timing.turnaround_us,
+         first_failure_timing.hack_us, first_failure_timing.dack_us,
+         first_failure_timing.recovery_us,
          last_failure_timing.lock_us, last_failure_timing.turnaround_us,
          last_failure_timing.hack_us, last_failure_timing.dack_us,
          last_failure_timing.recovery_us, total_recovery_restarts);
