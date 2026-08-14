@@ -18,19 +18,25 @@ runs only `openpilot/selfdrive/carrot/radar/radard_dpath.py`, first calculates
 the normal front/SCC vision-matched `leadOne` or a vision-seeded physically
 continuous stationary `leadOne`, then supplies `leadTwo` from either a
 different measured moving point already in the current path or a physically
-confirmed dPath CUT-IN. An in-path second lead may be beyond leadOne, while a
-predicted CUT-IN must be closer than leadOne. It rejects the primary object
+confirmed dPath CUT-IN. A third path may expose a central stopped front-radar
+return behind a moving lead that is cutting out, but only when an independent
+slow corner-radar return agrees in range, model-path position, and speed for
+the full confirmation interval. Front-only returns and nearby moving corner
+returns cannot start this stationary `leadTwo`. An in-path second lead may be
+beyond leadOne, while a predicted CUT-IN must be closer than leadOne. It rejects
+the primary object
 itself and every candidate beyond the fixed 80 m limit. An outside candidate
 within ±8 m longitudinally of leadOne also needs an actual corridor-entry
 sample in its two-second forecast; proximity alone cannot promote a same-row
 vehicle. Front, SCC, and corner inputs retain their production source identity.
-CUT-OUT remains a diagnostic prediction only. It never removes leadOne,
-latches an identity out, or excludes either control-lead candidate. LeadOne
-changes only when the primary model-to-front/SCC-radar matcher loses its match
-or switches to another object. This intentionally prefers a brief conservative
-hold on a departing vehicle over a no-lead acceleration gap caused by an
-uncertain future-path prediction. A separate measured moving object already in
-the current path still needs the normal motion history before starting leadTwo.
+CUT-OUT never removes leadOne, latches an identity out, or excludes either
+control-lead candidate. Its only control use is arming the cross-sensor-confirmed
+stationary `leadTwo` path above. LeadOne changes only when the primary
+model-to-front/SCC-radar matcher loses its match or switches to another object.
+This intentionally prefers a brief conservative hold on a departing vehicle
+over a no-lead acceleration gap caused by an uncertain future-path prediction.
+A separate measured moving object already in the current path still needs the
+normal motion history before starting leadTwo.
 
 The stationary leadOne path requires a measured in-path point with
 `|vLead| <= 4.0 m/s`, model-lead support at probability 0.40 or higher, and

@@ -48,6 +48,7 @@ from openpilot.selfdrive.carrot.radar_motion import (
   match_dpath_primary_lead,
   prefer_front_radar_kinematics,
   radar_motion_sensitivity,
+  stationary_shadow_corner_supported,
   model_path_point_at_s,
   project_to_model_path,
   visible_motion_points,
@@ -1338,7 +1339,12 @@ class RadarMotionShadowSelector:
       for point in visible_motion_points(
         front_motion_points, frame.path, None,
       ):
-        if point.radar_track_state < 2:
+        if (
+          point.radar_track_state < 2
+          or not stationary_shadow_corner_supported(
+            point, all_aligned_points, frame.path,
+          )
+        ):
           continue
         d_path = project_to_model_path(
           frame.path, point.d_rel, point.y_rel,
