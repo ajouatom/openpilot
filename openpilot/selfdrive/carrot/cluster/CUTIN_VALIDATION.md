@@ -22,7 +22,10 @@ confirmed dPath CUT-IN. A third path may expose a central stopped front-radar
 return behind a moving lead that is cutting out, but only when an independent
 slow corner-radar return agrees in range, model-path position, and speed for
 the full confirmation interval. Front-only returns and nearby moving corner
-returns cannot start this stationary `leadTwo`. An in-path second lead may be
+returns cannot start this stationary `leadTwo`. After confirmation, the same
+state-2 front identity remains eligible through corner dropouts while its
+reported position stays physically continuous; it cannot transfer that trust
+to a new or reused track. An in-path second lead may be
 beyond leadOne, while a predicted CUT-IN must be closer than leadOne. It rejects
 the primary object
 itself and every candidate beyond the fixed 80 m limit. An outside candidate

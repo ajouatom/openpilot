@@ -15,6 +15,19 @@
       "scene": "A moving motorcycle lead 44 cuts out left and reveals central stopped front-radar track 53; retain the motorcycle as leadOne while confirming track 53 as an early stationary shadow leadTwo"
     },
     {
+      "id": "carnival-ed-11-stationary-shadow-retained-after-corner-dropout",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "000000ed--9fbaeb1dea--11/rlog.zst",
+      "source": "front+corner",
+      "window": [19.70, 20.60],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [53],
+      "latest_detection_s": 19.85,
+      "scene": "After corner confirmation and dropout, physically continuous stopped front track 53 must remain leadTwo while moving motorcycle track 44 remains leadOne"
+    },
+    {
       "id": "ioniq5-352-5-overhead-sign-stationary-shadow-48",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE f54fcc4d13d575f6",
       "log": "00000352--7e771034ce--5/rlog.zst",
