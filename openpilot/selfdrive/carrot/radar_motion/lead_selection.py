@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
@@ -32,6 +32,15 @@ FRONT_NEAR_PATH_MIN_REPORTED_INWARD_MPS = 0.15
 LEAD_TWO_POSITION_HOLD_S = 0.75
 LEAD_TWO_LONGITUDINAL_JUMP_M = 2.25
 LEAD_TWO_LATERAL_JUMP_M = 1.25
+STATIONARY_SHADOW_CUT_OUT_PROBABILITY = 0.70
+STATIONARY_SHADOW_CONFIRMATION_S = 0.25
+STATIONARY_SHADOW_SIGNAL_HOLD_S = 0.75
+STATIONARY_SHADOW_MIN_PRIMARY_GAP_M = 3.0
+STATIONARY_SHADOW_MAX_DREL_M = 80.0
+STATIONARY_SHADOW_MAX_DPATH_M = 0.75
+STATIONARY_SHADOW_MAX_ABS_VLEAD_MPS = 1.5
+STATIONARY_SHADOW_MIN_PRIMARY_VLEAD_MPS = 4.0
+STATIONARY_SHADOW_EQUIVALENCE_BRAKE_MPS2 = 2.5
 
 
 @dataclass(frozen=True)
@@ -48,10 +57,138 @@ class DPathLeadCandidate:
   continuity_id: int
   retainable: bool
   confirmed_cutin: bool
+  confirmed_stationary_shadow: bool = False
 
   @property
   def identity(self) -> tuple[str, int, int]:
     return self.source, self.track_id, self.continuity_id
+
+
+class DPathStationaryShadowTracker:
+  """Confirm a central stopped object revealed behind a cutting-out lead."""
+
+  def __init__(self) -> None:
+    self._identity: tuple[str, int, int] | None = None
+    self._since_s: float | None = None
+    self._last_signal_s: float | None = None
+    self._last_candidate: DPathLeadCandidate | None = None
+    self._last_time_s: float | None = None
+
+  def reset(self) -> None:
+    self._identity = None
+    self._since_s = None
+    self._last_signal_s = None
+    self._last_candidate = None
+    self._last_time_s = None
+
+  def _continuous(
+    self,
+    time_s: float,
+    candidate: DPathLeadCandidate,
+  ) -> bool:
+    if self._last_candidate is None or self._last_time_s is None:
+      return True
+    dt = time_s - self._last_time_s
+    if dt < 0.0 or dt > LEAD_TWO_POSITION_HOLD_S:
+      return False
+    previous = self._last_candidate.lead
+    predicted_d_rel = (
+      float(previous.get("dRel", 0.0))
+      + float(previous.get("vRel", 0.0)) * dt
+    )
+    predicted_y_rel = (
+      float(previous.get("yRel", 0.0))
+      + float(previous.get("vLat", 0.0)) * dt
+    )
+    return (
+      abs(float(candidate.lead.get("dRel", 0.0)) - predicted_d_rel)
+      <= LEAD_TWO_LONGITUDINAL_JUMP_M
+      and abs(float(candidate.lead.get("yRel", 0.0)) - predicted_y_rel)
+      <= LEAD_TWO_LATERAL_JUMP_M
+    )
+
+  @staticmethod
+  def _stopped_equivalent_distance(lead: dict[str, Any]) -> float:
+    speed = max(0.0, float(lead.get("vLead", 0.0)))
+    return (
+      float(lead.get("dRel", math.inf))
+      + speed * speed
+      / (2.0 * STATIONARY_SHADOW_EQUIVALENCE_BRAKE_MPS2)
+    )
+
+  def update(
+    self,
+    time_s: float,
+    primary: dict[str, Any] | None,
+    primary_cut_out_probability: float,
+    candidates: Iterable[DPathLeadCandidate],
+  ) -> DPathLeadCandidate | None:
+    time_s = float(time_s)
+    values = tuple(candidates)
+    primary_is_moving = (
+      primary is not None
+      and bool(primary.get("status"))
+      and float(primary.get("vLead", 0.0))
+      > STATIONARY_SHADOW_MIN_PRIMARY_VLEAD_MPS
+    )
+    cut_out_signal = (
+      primary_is_moving
+      and float(primary_cut_out_probability)
+      >= STATIONARY_SHADOW_CUT_OUT_PROBABILITY
+    )
+    if cut_out_signal:
+      self._last_signal_s = time_s
+
+    signal_held = (
+      self._last_signal_s is not None
+      and time_s - self._last_signal_s <= STATIONARY_SHADOW_SIGNAL_HOLD_S
+    )
+    eligible = tuple(
+      candidate for candidate in values
+      if (
+        abs(float(candidate.lead.get("vLead", 0.0)))
+        <= STATIONARY_SHADOW_MAX_ABS_VLEAD_MPS
+        and abs(float(candidate.lead.get("dPath", math.inf)))
+        <= STATIONARY_SHADOW_MAX_DPATH_M
+        and 0.8 < float(candidate.lead.get("dRel", 0.0))
+        <= STATIONARY_SHADOW_MAX_DREL_M
+      )
+    )
+    if not eligible or not signal_held:
+      self.reset()
+      return None
+
+    active = next((
+      candidate for candidate in eligible
+      if candidate.identity == self._identity
+      and self._continuous(time_s, candidate)
+    ), None)
+    if active is None and cut_out_signal and primary is not None:
+      primary_d_rel = float(primary.get("dRel", math.inf))
+      primary_obstacle = self._stopped_equivalent_distance(primary)
+      active = min((
+        candidate for candidate in eligible
+        if (
+          float(candidate.lead.get("dRel", 0.0))
+          >= primary_d_rel + STATIONARY_SHADOW_MIN_PRIMARY_GAP_M
+          and self._stopped_equivalent_distance(candidate.lead)
+          < primary_obstacle
+        )
+      ), key=lambda candidate: float(candidate.lead["dRel"]), default=None)
+
+    if active is None:
+      self.reset()
+      return None
+    if active.identity != self._identity:
+      self._identity = active.identity
+      self._since_s = time_s
+    self._last_candidate = active
+    self._last_time_s = time_s
+    confirmed = (
+      self._since_s is not None
+      and time_s - self._since_s >= STATIONARY_SHADOW_CONFIRMATION_S
+    )
+    return replace(active, confirmed_stationary_shadow=confirmed)
 
 
 def front_cutin_motion_supported(
@@ -119,11 +256,13 @@ class DPathLeadTwoTracker:
 
   def __init__(self) -> None:
     self.active_identity: tuple[str, int, int] | None = None
+    self._active_stationary_shadow = False
     self._last_lead: dict[str, Any] | None = None
     self._last_time_s: float | None = None
 
   def reset(self) -> None:
     self.active_identity = None
+    self._active_stationary_shadow = False
     self._last_lead = None
     self._last_time_s = None
 
@@ -174,6 +313,7 @@ class DPathLeadTwoTracker:
       for candidate in candidate_values
       if (
         candidate.confirmed_cutin
+        or candidate.confirmed_stationary_shadow
         or candidate in active_candidates
       )
     )
@@ -183,6 +323,29 @@ class DPathLeadTwoTracker:
       v_ego,
       allow_stopped_track_ids=frozenset(
         candidate.track_id for candidate in active_candidates
+      ) | frozenset(
+        candidate.track_id for candidate in eligible
+        if candidate.confirmed_stationary_shadow
+      ),
+      allow_farther_track_ids=frozenset(
+        candidate.track_id for candidate in eligible
+        if (
+          candidate.confirmed_stationary_shadow
+          or (
+            candidate in active_candidates
+            and self._active_stationary_shadow
+          )
+        )
+      ),
+      allow_primary_proximity_track_ids=frozenset(
+        candidate.track_id for candidate in eligible
+        if (
+          candidate.confirmed_stationary_shadow
+          or (
+            candidate in active_candidates
+            and self._active_stationary_shadow
+          )
+        )
       ),
     )
     selected = next(
@@ -212,6 +375,13 @@ class DPathLeadTwoTracker:
       lead_two=selection.lead_two,
     )
     if selected is not None:
+      self._active_stationary_shadow = (
+        selected.confirmed_stationary_shadow
+        or (
+          selected.identity == self.active_identity
+          and self._active_stationary_shadow
+        )
+      )
       self.active_identity = selected.identity
       self._last_lead = dict(selected.lead)
       self._last_time_s = float(time_s)
@@ -304,6 +474,8 @@ def select_dpath_lead_two(
   v_ego: float,
   *,
   allow_stopped_track_ids: frozenset[int] = frozenset(),
+  allow_farther_track_ids: frozenset[int] = frozenset(),
+  allow_primary_proximity_track_ids: frozenset[int] = frozenset(),
 ) -> DPathLeadSelection:
   """Choose the closest eligible independent leadTwo after leadOne is known."""
   maximum_d_rel = dpath_control_max_d_rel(v_ego)
@@ -320,13 +492,20 @@ def select_dpath_lead_two(
         lead.get("status")
         and lead.get("radar")
         and 0.8 < float(lead.get("dRel", 0.0)) <= maximum_d_rel
-        and float(lead.get("dRel", 0.0)) < primary_d_rel
+        and (
+          float(lead.get("dRel", 0.0)) < primary_d_rel
+          or int(lead.get("radarTrackId", -1)) in allow_farther_track_ids
+        )
         and (
           float(lead.get("vLead", 0.0))
           > POSITION_ONLY_MAX_ABS_VLEAD_MPS
           or int(lead.get("radarTrackId", -1)) in allow_stopped_track_ids
         )
-        and not lead_duplicates_primary(lead, primary)
+        and (
+          not lead_duplicates_primary(lead, primary)
+          or int(lead.get("radarTrackId", -1))
+          in allow_primary_proximity_track_ids
+        )
       )
     ),
     key=lambda lead: float(lead["dRel"]),

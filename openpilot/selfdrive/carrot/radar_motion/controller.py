@@ -10,6 +10,7 @@ from typing import Any
 
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   DPathLeadCandidate,
+  DPathStationaryShadowTracker,
   DPathLeadTwoTracker,
   cutin_can_compete_with_primary,
   front_cutin_motion_supported,
@@ -163,8 +164,10 @@ class DPathRadarController:
     self.motion_sensor = "corner" if prefer_corner_radar else "front"
     self.cut_in_sensitivity = max(0, min(5, int(cut_in_sensitivity)))
     self._reset_motion_pipeline()
+    self.primary_cut_out_predictor = RadarMotionPredictor()
     self.front_kinematic_associator = FrontRadarKinematicAssociator()
     self.lead_two_tracker = DPathLeadTwoTracker()
+    self.stationary_shadow_tracker = DPathStationaryShadowTracker()
     self.lead_dynamics = RadarLeadDynamics()
 
   def _reset_motion_pipeline(self) -> None:
@@ -230,6 +233,7 @@ class DPathRadarController:
       self.motion_sensor = "corner"
       self._reset_motion_pipeline()
       self.lead_two_tracker.reset()
+      self.stationary_shadow_tracker.reset()
     if self.motion_sensor == "corner":
       return corner_points
     return tuple(point for point in points if point.source == "frontRadar")
@@ -338,6 +342,8 @@ class DPathRadarController:
     if len(path) < 2:
       self.primary_matcher.reset()
       self.lead_two_tracker.reset()
+      self.stationary_shadow_tracker.reset()
+      self.primary_cut_out_predictor = RadarMotionPredictor()
       self.lead_dynamics.reset()
       return DPathRadarOutput(
         None, None, None, None, (), (), (), (), (), (),
@@ -402,6 +408,30 @@ class DPathRadarController:
       ),
       scoped_points=scoped_motion_points,
     )
+    front_motion_points = tuple(
+      point for point in points if point.source == "frontRadar"
+    )
+    front_scoped_motion_points = _scoped_motion_points(
+      front_motion_points, path,
+    )
+    primary_cut_out_predictions = self.primary_cut_out_predictor.update(
+      time_s,
+      front_motion_points,
+      path,
+      v_ego,
+      yaw_rate_rad_s,
+      scoped_points=front_scoped_motion_points,
+    )
+    primary_track_id = (
+      int(lead_one.get("radarTrackId", -1))
+      if lead_one is not None and lead_one.get("radar")
+      else -1
+    )
+    primary_cut_out_probability = max((
+      float(prediction.cut_out_probability)
+      for prediction in primary_cut_out_predictions.values()
+      if prediction.track_id == primary_track_id
+    ), default=0.0)
     leads_left, leads_center, leads_right = self._display_leads(
       scoped_motion_points,
       predictions,
@@ -560,6 +590,37 @@ class DPathRadarController:
           )
         ),
       ))
+    stationary_shadow_inputs = []
+    for point, _, projection in front_scoped_motion_points:
+      if point.radar_track_state < 2:
+        continue
+      lead = self._lead_from_radar_point(
+        point, projection.d_path, 0.03, primary_cut_out_probability,
+      )
+      stationary_shadow_inputs.append(DPathLeadCandidate(
+        lead=lead,
+        source=point.source,
+        track_id=point.track_id,
+        continuity_id=0,
+        retainable=True,
+        confirmed_cutin=False,
+      ))
+    stationary_shadow = self.stationary_shadow_tracker.update(
+      time_s,
+      lead_one,
+      primary_cut_out_probability,
+      stationary_shadow_inputs,
+    )
+    if (
+      stationary_shadow is not None
+      and stationary_shadow.confirmed_stationary_shadow
+      and stationary_shadow.track_id != primary_track_id
+      and not any(
+        candidate.identity == stationary_shadow.identity
+        for candidate in candidates
+      )
+    ):
+      candidates.append(stationary_shadow)
     if (
       active_identity is not None
       and not any(candidate.identity == active_identity for candidate in candidates)

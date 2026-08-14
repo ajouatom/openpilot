@@ -2,6 +2,19 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "carnival-ed-11-motorcycle-cutout-stationary-shadow",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "000000ed--9fbaeb1dea--11/rlog.zst",
+      "source": "front+corner",
+      "window": [18.80, 21.20],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [53],
+      "latest_detection_s": 19.30,
+      "scene": "A moving motorcycle lead 44 cuts out left and reveals central stopped front-radar track 53; retain the motorcycle as leadOne while confirming track 53 as an early stationary shadow leadTwo"
+    },
+    {
       "id": "sorento-1-4-stationary-113m",
       "vehicle_folder": "KIA_SORENTO_HEV_4TH_GEN ec52e28535e2b281",
       "log": "00000001--468b94c6c9--4/rlog.zst",
