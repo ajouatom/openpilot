@@ -15,6 +15,45 @@
       "scene": "A moving motorcycle lead 44 cuts out left and reveals central stopped front-radar track 53; retain the motorcycle as leadOne while confirming track 53 as an early stationary shadow leadTwo"
     },
     {
+      "id": "ioniq5-352-5-overhead-sign-stationary-shadow-48",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE f54fcc4d13d575f6",
+      "log": "00000352--7e771034ce--5/rlog.zst",
+      "source": "front+corner",
+      "window": [13.50, 17.20],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [48],
+      "forbidden_lead_two_ids": [48],
+      "scene": "Overhead electronic sign produces a front-only stationary reflection; track 48 must never become leadTwo"
+    },
+    {
+      "id": "ioniq5-352-5-overhead-sign-stationary-shadow-63",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE f54fcc4d13d575f6",
+      "log": "00000352--7e771034ce--5/rlog.zst",
+      "source": "front+corner",
+      "window": [22.00, 26.00],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [63],
+      "forbidden_lead_two_ids": [63],
+      "scene": "Second overhead sign produces a front-only stationary reflection; track 63 must never become leadTwo"
+    },
+    {
+      "id": "ioniq5-352-5-tunnel-stationary-shadow-34",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE f54fcc4d13d575f6",
+      "log": "00000352--7e771034ce--5/rlog.zst",
+      "source": "front+corner",
+      "window": [52.30, 56.00],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [34],
+      "forbidden_lead_two_ids": [34],
+      "scene": "Tunnel structure produces stationary front track 34 beside a moving corner return; the speed mismatch must reject leadTwo"
+    },
+    {
       "id": "k8-2b1-12-left-truck-cutin-34",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN 4aa2ded146fd78b9",
       "log": "000002b1--1e5c7aad6a--12/rlog.zst",

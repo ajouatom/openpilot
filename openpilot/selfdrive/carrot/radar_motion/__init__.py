@@ -10,6 +10,7 @@ from openpilot.selfdrive.carrot.radar_motion.controller import (
   LEAD_ACCEL_TAU_S,
   RADAR_MOTION_MAX_TIME_SKEW_S,
   RadarLeadDynamics,
+  stationary_shadow_corner_supported,
 )
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   CUTIN_MAX_DREL_M,
@@ -153,6 +154,7 @@ __all__ = (
   "select_dpath_primary_radar_points",
   "select_primary_radar_points",
   "snapshot_radar_points",
+  "stationary_shadow_corner_supported",
   "vision_lead_from_model",
   "vision_only_lead_allowed",
   "visible_motion_points",
