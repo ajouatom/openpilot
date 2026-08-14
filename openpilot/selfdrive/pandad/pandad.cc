@@ -172,7 +172,7 @@ void can_recv(const std::vector<Panda *> &pandas, PubMaster *pm) {
 void can_recv_thread(std::vector<Panda *> pandas) {
   util::set_thread_name("pandad_can_recv");
   if (!Hardware::PC()) {
-    int err = util::set_realtime_priority(55);
+    int err = util::set_realtime_priority(56);
     if (err != 0) {
       LOGE("failed to raise Panda CAN receive thread priority: %d", err);
     }
