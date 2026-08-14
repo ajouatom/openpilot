@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cinttypes>
 #include <cmath>
+#include <condition_variable>
 #include <cstring>
 #include <iomanip>
 #include <mutex>
@@ -120,9 +121,49 @@ static void record_spi_phase_diag(uint8_t endpoint, uint64_t total_us, uint32_t 
   }
 }
 
+static int spi_lock_priority(uint8_t endpoint) {
+  if (endpoint == 0x03U) return 2;  // CAN TX
+  if (endpoint == 0x81U) return 1;  // CAN RX
+  return 0;                         // control and status
+}
+
+class SpiPriorityArbiter {
+public:
+  void lock(int priority) {
+    std::unique_lock lk(lock_);
+    waiters_[priority]++;
+    cv_.wait(lk, [this, priority]() {
+      if (active_) return false;
+      for (int i = priority + 1; i < 3; i++) {
+        if (waiters_[i] > 0U) return false;
+      }
+      return true;
+    });
+    waiters_[priority]--;
+    active_ = true;
+  }
+
+  void unlock() {
+    {
+      std::lock_guard lk(lock_);
+      active_ = false;
+    }
+    cv_.notify_all();
+  }
+
+private:
+  std::mutex lock_;
+  std::condition_variable cv_;
+  uint32_t waiters_[3] = {0U, 0U, 0U};
+  bool active_ = false;
+};
+
+static SpiPriorityArbiter spi_priority_arbiter;
+
 class LockEx {
 public:
-  LockEx(int fd_, std::recursive_mutex &m_) : fd(fd_), m(m_) {
+  LockEx(int fd_, std::recursive_mutex &m_, uint8_t endpoint) : fd(fd_), m(m_) {
+    spi_priority_arbiter.lock(spi_lock_priority(endpoint));
     m.lock();
     flock(fd, LOCK_EX);
   }
@@ -130,6 +171,7 @@ public:
   ~LockEx() {
     flock(fd, LOCK_UN);
     m.unlock();
+    spi_priority_arbiter.unlock();
   }
 
 private:
@@ -428,7 +470,7 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   const uint64_t attempt_start_ns = nanos_since_boot();
   uint64_t phase_start_ns = 0U;
   spi_attempt_timing = {};
-  LockEx lock(spi_fd, hw_lock);
+  LockEx lock(spi_fd, hw_lock, endpoint);
   spi_attempt_timing.lock_us = (nanos_since_boot() - attempt_start_ns) / 1000U;
 
   // needs to be less, since we need to have space for the checksum
