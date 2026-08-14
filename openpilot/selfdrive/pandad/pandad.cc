@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <memory>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 
 #include "cereal/gen/cpp/car.capnp.h"
@@ -278,6 +279,7 @@ void fill_panda_can_state(cereal::PandaState::PandaCanState::Builder &cs, const 
 }
 
 std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> &pandas, bool is_onroad, bool spoofing_started) {
+  static std::unordered_map<std::string, uint16_t> spi_checksum_counts;
   bool ignition_local = false;
   const uint32_t pandas_cnt = pandas.size();
 
@@ -303,6 +305,20 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
     }
 
     health_t health = *health_opt;
+
+    const std::string panda_serial = panda->hw_serial();
+    auto [checksum_it, inserted] = spi_checksum_counts.try_emplace(panda_serial, health.spi_checksum_error_count_pkt);
+    if (inserted) {
+      LOGW("panda_spi_checksum_diag: serial=%s, total=%u, delta=0, baseline=1",
+           panda_serial.c_str(), health.spi_checksum_error_count_pkt);
+    } else if (checksum_it->second != health.spi_checksum_error_count_pkt) {
+      const bool reset = health.spi_checksum_error_count_pkt < checksum_it->second;
+      const uint32_t delta = reset ? health.spi_checksum_error_count_pkt :
+                             health.spi_checksum_error_count_pkt - checksum_it->second;
+      LOGW("panda_spi_checksum_diag: serial=%s, total=%u, delta=%u, baseline=0, reset=%d",
+           panda_serial.c_str(), health.spi_checksum_error_count_pkt, delta, reset);
+      checksum_it->second = health.spi_checksum_error_count_pkt;
+    }
 
     std::array<can_health_t, PANDA_CAN_CNT> can_health{};
     for (uint32_t i = 0; i < PANDA_CAN_CNT; i++) {
@@ -603,6 +619,10 @@ void pandad_run(std::vector<Panda *> &pandas) {
         if (log.find("Register 0x") != std::string::npos) {
           // Log register divergent faults as errors
           LOGE("%s", log.c_str());
+        } else if ((log.find("SPI:") != std::string::npos) ||
+                   (log.find("incorrect header") != std::string::npos) ||
+                   (log.find("incorrect data checksum") != std::string::npos)) {
+          LOGW("panda_spi_serial_diag: %s", log.c_str());
         } else {
           LOGD("%s", log.c_str());
         }
