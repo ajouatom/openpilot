@@ -23,6 +23,7 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 PREV_BUTTON_SAMPLES = 8
 CLUSTER_SAMPLE_RATE = 20  # frames
+VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES = round(1.0 / DT_CTRL)
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
 
 BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: ButtonType.decelCruise,
@@ -155,7 +156,9 @@ class CarState(CarStateBase):
 
     self.totalDistance = 0.0
     self.speedLimitDistance = 0
-    self.vehicleSpeedCameraDistanceFactor = min(20, max(1, self.op_params.get_int("VehicleSpeedCameraDistanceFactor")))
+    distance_time_tenths = self.op_params.get_int("VehicleSpeedCameraDistanceTime")
+    self.vehicleSpeedCameraDistanceTime = self._vehicle_speed_camera_distance_time(distance_time_tenths)
+    self.vehicleSpeedCameraParamsCounter = 0
     self.pcmCruiseGap = 0
 
     self.MainMode_ACC = False
@@ -513,11 +516,28 @@ class CarState(CarStateBase):
 
     return ret
 
+  @staticmethod
+  def _vehicle_speed_camera_distance_time(raw_value):
+    return min(200, max(10, raw_value)) / 10.0
+
+  def _update_vehicle_speed_camera_params(self):
+    self.vehicleSpeedCameraParamsCounter += 1
+    if self.vehicleSpeedCameraParamsCounter < VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES:
+      return False
+
+    self.vehicleSpeedCameraParamsCounter = 0
+    distance_time_tenths = self.op_params.get_int("VehicleSpeedCameraDistanceTime")
+    distance_time = self._vehicle_speed_camera_distance_time(distance_time_tenths)
+    changed = distance_time != self.vehicleSpeedCameraDistanceTime
+    self.vehicleSpeedCameraDistanceTime = distance_time
+    return changed
+
   def update_speed_limit(self, ret, speed_limit_cam):
+    distance_time_changed = self._update_vehicle_speed_camera_params()
     self.totalDistance += ret.vEgo * DT_CTRL
     if ret.speedLimit > 0 and speed_limit_cam:
-      if self.speedLimitDistance <= self.totalDistance:
-        self.speedLimitDistance = self.totalDistance + ret.speedLimit * self.vehicleSpeedCameraDistanceFactor
+      if distance_time_changed or self.speedLimitDistance <= self.totalDistance:
+        self.speedLimitDistance = self.totalDistance + ret.speedLimit * self.vehicleSpeedCameraDistanceTime
       self.speedLimitDistance = max(self.totalDistance + 1, self.speedLimitDistance)
     else:
       self.speedLimitDistance = self.totalDistance

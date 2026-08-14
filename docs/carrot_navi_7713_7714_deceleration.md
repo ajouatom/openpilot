@@ -231,7 +231,7 @@ SDI를 지울 때는 더 큰 sequence로 `present: false`, `value: null`, 비어
 | 구간단속(block) | `nSdiBlockType` 2/3, block distance | primary SDI block type 2/3, block distance | type을 4로 바꾸고 block distance 사용. 단, block speed는 사용하지 않고 primary SDI speed에 안전계수를 적용 | `section` |
 | 7714 전용 section object | 없음 | `section.active`, speed limit, remaining distance | present + active + not suspended + section off-route 아님 + 전체 off-route 아님 + limit > 0일 때 type 4로 변환 | `section` |
 | 방지턱 | primary/plus type 22 | primary/secondary type 22 | `roadcate > 1`, mode >= 2. payload speed는 무시하고 `AutoNaviSpeedBumpSpeed` 사용. 단, 7714는 road category 갱신 순서/기본값 문제로 type 22가 수신되어도 후보 생성에 실패할 수 있음 | `bump` |
-| 차량 수신 과속카메라 | `carState.speedLimit/speedLimitDistance` | 동일 | 차량 CAN에서 단속속도만 수신하며 Hyundai `CarState`가 `speedLimit × VehicleSpeedCameraDistanceFactor`로 가상거리 생성. `VehicleSpeedCameraControlMode`에 따라 미사용·항상 적용·가속페달 속도 하한·가속페달 입력 중 해제를 선택 | `hda` (기존 호환 source명) 또는 하한 적용 시 `gas` |
+| 차량 수신 과속카메라 | `carState.speedLimit/speedLimitDistance` | 동일 | 차량 CAN에서 단속속도만 수신하며 Hyundai `CarState`가 `speedLimit × (VehicleSpeedCameraDistanceTime / 10)`으로 가상거리 생성. `VehicleSpeedCameraControlMode`에 따라 미사용·항상 적용·가속페달 속도 하한·가속페달 입력 중 해제를 선택 | `hda` (기존 호환 source명) 또는 하한 적용 시 `gas` |
 | 도로 제한속도 | `nRoadLimitSpeed` | `road_limit_kph` | `AutoRoadSpeedLimitOffset >= 0`, active >= 2, road limit valid일 때 limit+offset | `road` |
 | 현재 TBT | `nTBTTurnType/nTBTDist` | `guidance_current.turn_type/distance_m` | 지원 turn type이 `xTurnInfo`로 변환되고 `AutoTurnControl`이 2 또는 3일 때 속도 목표 계산 | `atc` |
 | 다음 TBT | `nTBTTurnTypeNext/nTBTDistNext` | `guidance_next` | 현재 거리 + 다음 거리를 사용하고 같은 ATC 설정 적용 | `atc2` |
@@ -246,13 +246,14 @@ SDI를 지울 때는 더 큰 sequence로 `present: false`, `value: null`, 비어
 
 Hyundai 일반 CAN의 `Navi_HU.SpeedLim_Nav_Cam == 1` 또는 CAN-FD의 `HDA_INFO_4A3.MapSource == 2`이면
 `carState.speedLimit`에 차량이 수신한 과속카메라 단속속도를 넣는다. 별도 거리 신호가 없으므로
-`VehicleSpeedCameraDistanceFactor` 기본값 6을 사용하여 다음 가상거리를 만든다.
+`VehicleSpeedCameraDistanceTime` 기본값 60(6.0초)을 사용하여 다음 가상거리를 만든다. 저장값은
+0.1초 단위이므로 62는 6.2초다.
 
-`speedLimitDistance(m) = speedLimit(km/h) × VehicleSpeedCameraDistanceFactor`
+`speedLimitDistance(m) = speedLimit(km/h) × VehicleSpeedCameraDistanceTime / 10`
 
-따라서 기본값에서 50 km/h는 300 m, 80 km/h는 480 m다. 이 값은 시간(초)이 아니라 기존 동작을
-유지하는 거리 배수이며, 설정은 Hyundai `CarState` 시작 시 읽으므로 변경 후 차량 재시동 또는 기기
-재부팅이 필요하다.
+따라서 기본값에서 50 km/h는 300 m, 80 km/h는 480 m이며, 62로 설정하면 50 km/h에서 310 m다.
+Hyundai `CarState`가 설정을 약 1초마다 다시 읽으며, 값이 바뀌면 현재 활성 과속카메라의 가상거리도
+새 값으로 즉시 다시 계산한다.
 
 `VehicleSpeedCameraControlMode` 기본값은 1이다.
 
