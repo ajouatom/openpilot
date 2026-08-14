@@ -2,10 +2,13 @@
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
 
+#include <algorithm>
 #include <cassert>
+#include <cinttypes>
 #include <cmath>
 #include <cstring>
 #include <iomanip>
+#include <mutex>
 #include <sstream>
 
 #include "common/util.h"
@@ -34,6 +37,87 @@ static uint64_t spi_last_bus_activity_ns = 0;  // protected by hw_lock
 
 static void wait_for_spi_turnaround(uint64_t start_ns) {
   while ((nanos_since_boot() - start_ns) < 400000) {}
+}
+
+struct SpiAttemptTiming {
+  uint64_t lock_us = 0U;
+  uint64_t turnaround_us = 0U;
+  uint64_t hack_us = 0U;
+  uint64_t dack_us = 0U;
+  uint64_t recovery_us = 0U;
+  uint64_t total_us = 0U;
+};
+
+struct SpiPhaseDiagStats {
+  uint32_t count = 0U;
+  uint32_t slow_count = 0U;
+  uint32_t retry_count = 0U;
+  uint32_t nack_count = 0U;
+  uint32_t ack_timeout_count = 0U;
+  uint32_t max_attempts = 0U;
+  uint64_t total_sum_us = 0U;
+  uint64_t total_max_us = 0U;
+  uint64_t lock_max_us = 0U;
+  uint64_t turnaround_max_us = 0U;
+  uint64_t hack_max_us = 0U;
+  uint64_t dack_max_us = 0U;
+  uint64_t recovery_max_us = 0U;
+};
+
+static thread_local SpiAttemptTiming spi_attempt_timing;
+static std::mutex spi_phase_diag_lock;
+static SpiPhaseDiagStats spi_phase_diag[2];
+
+static int spi_phase_diag_index(uint8_t endpoint) {
+  if (endpoint == 0x03U) return 0;
+  if (endpoint == 0x81U) return 1;
+  return -1;
+}
+
+static void record_spi_phase_diag(uint8_t endpoint, uint64_t total_us, uint32_t attempts,
+                                  uint32_t nacks, uint32_t ack_timeouts,
+                                  uint64_t lock_max_us, uint64_t turnaround_max_us,
+                                  uint64_t hack_max_us, uint64_t dack_max_us,
+                                  uint64_t recovery_max_us) {
+  int idx = spi_phase_diag_index(endpoint);
+  if (idx < 0) return;
+
+  bool emit = false;
+  SpiPhaseDiagStats snapshot = {};
+  {
+    std::lock_guard lk(spi_phase_diag_lock);
+    SpiPhaseDiagStats &st = spi_phase_diag[idx];
+    st.count++;
+    st.slow_count += total_us > 5000U;
+    st.retry_count += attempts > 1U;
+    st.nack_count += nacks;
+    st.ack_timeout_count += ack_timeouts;
+    st.max_attempts = std::max(st.max_attempts, attempts);
+    st.total_sum_us += total_us;
+    st.total_max_us = std::max(st.total_max_us, total_us);
+    st.lock_max_us = std::max(st.lock_max_us, lock_max_us);
+    st.turnaround_max_us = std::max(st.turnaround_max_us, turnaround_max_us);
+    st.hack_max_us = std::max(st.hack_max_us, hack_max_us);
+    st.dack_max_us = std::max(st.dack_max_us, dack_max_us);
+    st.recovery_max_us = std::max(st.recovery_max_us, recovery_max_us);
+
+    if (st.count >= 100U) {
+      snapshot = st;
+      st = {};
+      emit = true;
+    }
+  }
+
+  if (emit) {
+    LOGW("spi_phase_diag: endpoint=0x%x, total_avg_us=%" PRIu64 ", total_max_us=%" PRIu64
+         ", lock_max_us=%" PRIu64 ", turnaround_max_us=%" PRIu64 ", hack_max_us=%" PRIu64
+         ", dack_max_us=%" PRIu64 ", recovery_max_us=%" PRIu64
+         ", slow_over_5ms=%u, retries=%u, nacks=%u, ack_timeouts=%u, max_attempts=%u",
+         endpoint, snapshot.total_sum_us / snapshot.count, snapshot.total_max_us,
+         snapshot.lock_max_us, snapshot.turnaround_max_us, snapshot.hack_max_us,
+         snapshot.dack_max_us, snapshot.recovery_max_us, snapshot.slow_count,
+         snapshot.retry_count, snapshot.nack_count, snapshot.ack_timeout_count, snapshot.max_attempts);
+  }
 }
 
 class LockEx {
@@ -214,9 +298,26 @@ int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint1
   int timeout_count = 0;
   bool timed_out = false;
   double start_time = millis_since_boot();
+  const uint64_t diag_start_ns = nanos_since_boot();
+  uint32_t attempts = 0U;
+  uint32_t total_nacks = 0U;
+  uint32_t total_ack_timeouts = 0U;
+  uint64_t lock_max_us = 0U;
+  uint64_t turnaround_max_us = 0U;
+  uint64_t hack_max_us = 0U;
+  uint64_t dack_max_us = 0U;
+  uint64_t recovery_max_us = 0U;
 
   do {
     ret = spi_transfer(endpoint, tx_data, tx_len, rx_data, max_rx_len, timeout);
+    attempts++;
+    total_nacks += ret == SpiError::NACK;
+    total_ack_timeouts += ret == SpiError::ACK_TIMEOUT;
+    lock_max_us = std::max(lock_max_us, spi_attempt_timing.lock_us);
+    turnaround_max_us = std::max(turnaround_max_us, spi_attempt_timing.turnaround_us);
+    hack_max_us = std::max(hack_max_us, spi_attempt_timing.hack_us);
+    dack_max_us = std::max(dack_max_us, spi_attempt_timing.dack_us);
+    recovery_max_us = std::max(recovery_max_us, spi_attempt_timing.recovery_us);
 
     if (ret < 0) {
       timed_out = (timeout != 0) && (timeout_count > 5);
@@ -236,6 +337,11 @@ int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint1
       }
     }
   } while (ret < 0 && connected && !timed_out);
+
+  record_spi_phase_diag(endpoint, (nanos_since_boot() - diag_start_ns) / 1000U,
+                        attempts, total_nacks, total_ack_timeouts,
+                        lock_max_us, turnaround_max_us, hack_max_us,
+                        dack_max_us, recovery_max_us);
 
   if (ret < 0) {
     SPILOG(LOGE, "transfer failed, after %d tries, %.2fms", timeout_count, millis_since_boot() - start_time);
@@ -319,13 +425,19 @@ int PandaSpiHandle::lltransfer(spi_ioc_transfer &t) {
 int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx_len, uint8_t *rx_data, uint16_t max_rx_len, unsigned int timeout) {
   int ret;
   uint16_t rx_data_len;
+  const uint64_t attempt_start_ns = nanos_since_boot();
+  uint64_t phase_start_ns = 0U;
+  spi_attempt_timing = {};
   LockEx lock(spi_fd, hw_lock);
+  spi_attempt_timing.lock_us = (nanos_since_boot() - attempt_start_ns) / 1000U;
 
   // needs to be less, since we need to have space for the checksum
   assert(tx_len < SPI_BUF_SIZE);
   assert(max_rx_len < SPI_BUF_SIZE);
 
+  phase_start_ns = nanos_since_boot();
   wait_for_spi_turnaround(spi_last_bus_activity_ns);
+  spi_attempt_timing.turnaround_us += (nanos_since_boot() - phase_start_ns) / 1000U;
 
   xfer_count++;
   header = {
@@ -351,11 +463,15 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   }
 
   // Wait for (N)ACK
+  phase_start_ns = nanos_since_boot();
   ret = wait_for_ack(SPI_HACK, 0x11, timeout, 1);
+  spi_attempt_timing.hack_us = (nanos_since_boot() - phase_start_ns) / 1000U;
   if (ret < 0) {
     goto fail;
   }
+  phase_start_ns = nanos_since_boot();
   wait_for_spi_turnaround(nanos_since_boot());
+  spi_attempt_timing.turnaround_us += (nanos_since_boot() - phase_start_ns) / 1000U;
 
   // Send data
   if (tx_data != NULL) {
@@ -370,7 +486,9 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   }
 
   // Wait for (N)ACK
+  phase_start_ns = nanos_since_boot();
   ret = wait_for_ack(SPI_DACK, 0x13, timeout, 3);
+  spi_attempt_timing.dack_us = (nanos_since_boot() - phase_start_ns) / 1000U;
   if (ret < 0) {
     goto fail;
   }
@@ -399,11 +517,13 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   }
 
   spi_last_bus_activity_ns = nanos_since_boot();
+  spi_attempt_timing.total_us = (spi_last_bus_activity_ns - attempt_start_ns) / 1000U;
   return rx_data_len;
 
 fail:
   // ensure slave is in a consistent state
   // and ready for the next transfer
+  phase_start_ns = nanos_since_boot();
   int nack_cnt = 0;
   while (nack_cnt < 3) {
     if (wait_for_ack(SPI_NACK, 0x14, 1, SPI_BUF_SIZE/2) == 0) {
@@ -412,8 +532,10 @@ fail:
       nack_cnt = 0;
     }
   }
+  spi_attempt_timing.recovery_us = (nanos_since_boot() - phase_start_ns) / 1000U;
 
   spi_last_bus_activity_ns = nanos_since_boot();
+  spi_attempt_timing.total_us = (spi_last_bus_activity_ns - attempt_start_ns) / 1000U;
   if (ret >= 0) ret = -1;
   return ret;
 }
