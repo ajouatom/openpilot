@@ -119,6 +119,8 @@
                 "SteerActuatorDelay",
                 "LatSmoothSec",
                 "LatSuspendAngleDeg",
+                "SteerOverrideReleaseSec",
+                "SteerOverrideRecoverySec",
                 "CustomSR",
                 "SteerRatioRate"
               ]
@@ -993,6 +995,38 @@
       "max": 300,
       "default": 300,
       "unit": 10
+    },
+    {
+      "group": "조향튜닝",
+      "name": "SteerOverrideReleaseSec",
+      "title": "수동조향해제대기시간(20)",
+      "descr": "수동 조향 개입 후 손을 뗐을 때 자동 조향 토크 복구를 시작하기까지의 대기시간 (단위: 0.01초, 20 = 0.20초). 값을 낮추면 손을 떼자마자 복구가 바로 시작됩니다.",
+      "egroup": "LAT",
+      "etitle": "Steer Override Release Delay(20)",
+      "edescr": "Delay before starting steering torque recovery after releasing the wheel (unit: 0.01s, 20 = 0.20s). Lower values start recovery immediately.",
+      "cgroup": "转向",
+      "ctitle": "Steer Override Release Delay(20)",
+      "cdescr": "Delay before starting steering torque recovery after releasing the wheel (unit: 0.01s, 20 = 0.20s). Lower values start recovery immediately.",
+      "min": 0,
+      "max": 100,
+      "default": 20,
+      "unit": 1
+    },
+    {
+      "group": "조향튜닝",
+      "name": "SteerOverrideRecoverySec",
+      "title": "수동조향복구시간(50)",
+      "descr": "수동 조향 후 손을 뗐을 때 자동 조향 토크가 100%까지 램프업되는 복구시간 (단위: 0.01초, 50 = 0.50초). 낮출수록 커브길에서 손을 뗀 직후 토크가 멍하지 않고 빠르게 회복됩니다.",
+      "egroup": "LAT",
+      "etitle": "Steer Override Recovery Time(50)",
+      "edescr": "Ramp-up time for steering torque to reach 100% after releasing the wheel (unit: 0.01s, 50 = 0.50s). Lower values recover full torque faster in curves.",
+      "cgroup": "转向",
+      "ctitle": "Steer Override Recovery Time(50)",
+      "cdescr": "Ramp-up time for steering torque to reach 100% after releasing the wheel (unit: 0.01s, 50 = 0.50s). Lower values recover full torque faster in curves.",
+      "min": 0,
+      "max": 300,
+      "default": 50,
+      "unit": 5
     },
     {
       "group": "크루즈",
