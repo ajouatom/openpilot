@@ -119,8 +119,10 @@ The predictor:
 14. scales path-proximity evidence by inward displacement relative to measured
    path uncertainty, so static proximity or sub-noise drift is insufficient;
 15. for corner radar, checks position-derived normal motion against the most
-   recent 0.1 seconds of reported lateral velocity and promptly lowers motion
-   confidence when current motion no longer supports an older inward trend;
+   recent 0.1 seconds of reported lateral velocity; a strongly established
+   one-way position history uses narrower hold hysteresis so small directional
+   metric jitter cannot reset CUT-IN confirmation, while loss of recent inward
+   rate or raw lateral support still promptly lowers confidence;
 16. for front-only radar, requires a new predicted CUT-IN to sustain at least
    `0.75 m/s` of inward long-window `dPath` motion independently of the
    path-proximity sensitivity;

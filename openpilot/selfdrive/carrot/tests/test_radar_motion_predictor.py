@@ -1348,6 +1348,54 @@ def test_strong_dpath_history_survives_curved_path_normal_velocity_mismatch() ->
   assert prediction.cut_in_probability > 0.5
 
 
+def test_corner_position_history_override_holds_through_small_directional_jitter() -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  lateral_values = tuple(3.5 - index * 0.08 for index in range(11))
+  for index, y_rel in enumerate(lateral_values):
+    prediction = predictor.update(
+      index * 0.05,
+      (
+        Point(
+          1010,
+          25.0,
+          y_rel,
+          source="corner235",
+          v_lead=10.0,
+          yv_rel=-0.2,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+    )[("corner235", 1010)]
+
+  assert prediction is not None
+  assert prediction.directional_consistency >= 0.95
+  assert prediction.motion_consistency > 0.9
+  assert prediction.cut_in_probability > 0.5
+
+  jittered = predictor.update(
+    len(lateral_values) * 0.05,
+    (
+      Point(
+        1010,
+        25.0,
+        lateral_values[-1] + 0.03,
+        source="corner235",
+        v_lead=10.0,
+        yv_rel=-0.2,
+      ),
+    ),
+    STRAIGHT_PATH,
+    v_ego=10.0,
+  )[("corner235", 1010)]
+
+  assert 0.90 <= jittered.directional_consistency < 0.95
+  assert jittered.directional_inward_displacement_m >= 0.35
+  assert jittered.motion_consistency > 0.9
+  assert jittered.cut_in_probability > 0.5
+
+
 def test_stronger_same_direction_corner_velocity_supports_position_trend() -> None:
   predictor = RadarMotionPredictor()
   prediction = None

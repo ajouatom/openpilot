@@ -101,6 +101,11 @@ POSITION_HISTORY_OVERRIDE_MIN_INWARD_SAMPLE_RATIO = 0.90
 POSITION_HISTORY_OVERRIDE_MIN_SHORT_INWARD_RATE_MPS = 0.35
 POSITION_HISTORY_OVERRIDE_MIN_LONG_INWARD_RATE_MPS = 0.20
 POSITION_HISTORY_OVERRIDE_MIN_RAW_LATERAL_SUPPORT_MPS = 0.15
+POSITION_HISTORY_OVERRIDE_HOLD_MIN_INWARD_DISPLACEMENT_M = 0.35
+POSITION_HISTORY_OVERRIDE_HOLD_MIN_CONSISTENCY = 0.90
+POSITION_HISTORY_OVERRIDE_HOLD_MIN_INWARD_SAMPLE_RATIO = 0.85
+POSITION_HISTORY_OVERRIDE_HOLD_MIN_SHORT_INWARD_RATE_MPS = 0.25
+POSITION_HISTORY_OVERRIDE_HOLD_MIN_LONG_INWARD_RATE_MPS = 0.15
 
 
 @dataclass(frozen=True)
@@ -291,6 +296,7 @@ class _TrackState:
   observations: deque[_Observation] = field(default_factory=deque)
   inside_latched: bool = False
   entry_time_s: float | None = None
+  position_history_override_latched: bool = False
   last_seen_s: float = 0.0
 
 
@@ -1014,7 +1020,7 @@ class RadarMotionPredictor:
     )
     inward_short = -side * short_rate
     inward_long = -side * long_rate
-    position_history_override = (
+    position_history_override_acquired = (
       _sensor(state.source) == "corner"
       and enough_history
       and directional_inward_displacement
@@ -1033,6 +1039,31 @@ class RadarMotionPredictor:
         >= POSITION_HISTORY_OVERRIDE_MIN_RAW_LATERAL_SUPPORT_MPS
       )
     )
+    position_history_override_held = (
+      _sensor(state.source) == "corner"
+      and state.position_history_override_latched
+      and enough_history
+      and directional_inward_displacement
+      >= POSITION_HISTORY_OVERRIDE_HOLD_MIN_INWARD_DISPLACEMENT_M
+      and directional_consistency
+      >= POSITION_HISTORY_OVERRIDE_HOLD_MIN_CONSISTENCY
+      and directional_inward_sample_ratio
+      >= POSITION_HISTORY_OVERRIDE_HOLD_MIN_INWARD_SAMPLE_RATIO
+      and inward_short
+      >= POSITION_HISTORY_OVERRIDE_HOLD_MIN_SHORT_INWARD_RATE_MPS
+      and inward_long
+      >= POSITION_HISTORY_OVERRIDE_HOLD_MIN_LONG_INWARD_RATE_MPS
+      and (
+        math.copysign(1.0, position_rate)
+        * reported_lateral_speed
+        >= POSITION_HISTORY_OVERRIDE_MIN_RAW_LATERAL_SUPPORT_MPS
+      )
+    )
+    position_history_override = (
+      position_history_override_acquired
+      or position_history_override_held
+    )
+    state.position_history_override_latched = position_history_override
     directional_front_motion = (
       _sensor(state.source) == "front"
       and enough_history
