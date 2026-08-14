@@ -119,6 +119,8 @@
                 "SteerActuatorDelay",
                 "LatSmoothSec",
                 "LatSuspendAngleDeg",
+                "SteerOverrideReleaseSec",
+                "SteerOverrideRecoverySec",
                 "CustomSR",
                 "SteerRatioRate"
               ]
@@ -993,6 +995,38 @@
       "max": 300,
       "default": 300,
       "unit": 10
+    },
+    {
+      "group": "조향튜닝",
+      "name": "SteerOverrideReleaseSec",
+      "title": "수동조향해제대기시간(20)",
+      "descr": "수동 조향 개입 후 손을 뗐을 때 자동 조향 토크 복구를 시작하기까지의 대기시간 (단위: 0.01초, 20 = 0.20초). 값을 낮추면 손을 떼자마자 복구가 바로 시작됩니다.",
+      "egroup": "LAT",
+      "etitle": "Steer Override Release Delay(20)",
+      "edescr": "Delay before starting steering torque recovery after releasing the wheel (unit: 0.01s, 20 = 0.20s). Lower values start recovery immediately.",
+      "cgroup": "转向",
+      "ctitle": "Steer Override Release Delay(20)",
+      "cdescr": "Delay before starting steering torque recovery after releasing the wheel (unit: 0.01s, 20 = 0.20s). Lower values start recovery immediately.",
+      "min": 0,
+      "max": 100,
+      "default": 20,
+      "unit": 1
+    },
+    {
+      "group": "조향튜닝",
+      "name": "SteerOverrideRecoverySec",
+      "title": "수동조향복구시간(0)",
+      "descr": "수동 조향 후 자동 조향 토크가 100%까지 회복되는 시간입니다. 0은 도로 인식 상태에 따른 자동복구이며, 고정 복구를 원하면 50(0.50초)처럼 설정하세요.",
+      "egroup": "LAT",
+      "etitle": "Steer Override Recovery Time(0)",
+      "edescr": "Time for steering torque to recover fully after driver override. 0 uses automatic recovery based on road confidence; set 50 for a fixed 0.50-second recovery.",
+      "cgroup": "转向",
+      "ctitle": "Steer Override Recovery Time(0)",
+      "cdescr": "Time for steering torque to recover fully after driver override. 0 uses automatic recovery based on road confidence; set 50 for a fixed 0.50-second recovery.",
+      "min": 0,
+      "max": 300,
+      "default": 0,
+      "unit": 5
     },
     {
       "group": "크루즈",
