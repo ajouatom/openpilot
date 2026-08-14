@@ -186,7 +186,6 @@ class CarrotServ:
     self.atc_paused = False
     self.atc_activate_count = 0
     self.gas_override_speed = 0
-    self.gas_pressed_state = False
     self.source_last = "none"
 
     self.carrot_navi_session_id = ""
@@ -215,6 +214,7 @@ class CarrotServ:
     self.autoNaviSpeedBumpTime = float(self.params.get_int("AutoNaviSpeedBumpTime"))
     self.autoNaviSpeedCtrlEnd = float(self.params.get_int("AutoNaviSpeedCtrlEnd"))
     self.autoNaviSpeedCtrlMode = self.params.get_int("AutoNaviSpeedCtrlMode")
+    self.vehicleSpeedCameraControlMode = min(3, max(0, self.params.get_int("VehicleSpeedCameraControlMode")))
     self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
     self.autoNaviCountDownMode = self.params.get_int("AutoNaviCountDownMode")
@@ -346,6 +346,27 @@ class CarrotServ:
     else:
       speed_mps = math.sqrt(temp)
     return max(safe_speed_kph, min(250, speed_mps * 3.6))
+
+  def _vehicle_speed_camera_enabled(self, CS):
+    return (self.vehicleSpeedCameraControlMode > 0 and CS.speedLimit > 0 and CS.speedLimitDistance > 0 and
+            not (self.vehicleSpeedCameraControlMode == 3 and CS.gasPressed))
+
+  def _apply_vehicle_speed_camera_gas_floor(self, CS, desired_speed, source, v_ego_kph, road_speed_limit_changed):
+    gas_floor_active = self.vehicleSpeedCameraControlMode == 2 and source == "hda"
+    if not gas_floor_active:
+      self.gas_override_speed = 0
+    else:
+      reset_floor = (source != self.source_last or CS.vEgo < 0.1 or desired_speed > 150 or
+                     CS.brakePressed or road_speed_limit_changed)
+      if reset_floor:
+        self.gas_override_speed = 0
+      elif CS.gasPressed:
+        self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
+
+    self.source_last = source
+    if gas_floor_active and desired_speed < self.gas_override_speed:
+      return self.gas_override_speed, "gas"
+    return desired_speed, source
 
   def _update_tbt(self):
     #xTurnInfo : 1: left turn, 2: right turn, 3: left lane change, 4: right lane change, 5: rotary, 6: tg, 7: arrive or uturn
@@ -1151,7 +1172,7 @@ class CarrotServ:
       self.xTurnInfoNext = -1
 
     sdi_speed = 250
-    hda_active = False
+    vehicle_speed_camera_active = False
     ### 과속카메라, 사고방지턱
     if self.xSpdLimit > 0 and (self.xSpdDist > 0 or self.xSpdType in [100, 101]) and self.active_carrot > 0:
       safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
@@ -1161,16 +1182,16 @@ class CarrotServ:
       if self.xSpdType == 4 or (self.xSpdType in [100, 101] and self.xSpdDist <= 0):
         sdi_speed = self.xSpdLimit
         self.active_carrot = 4
-    elif CS is not None and CS.speedLimit > 0 and CS.speedLimitDistance > 0:
+    elif CS is not None and self._vehicle_speed_camera_enabled(CS):
       sdi_speed = min(sdi_speed,
                       self.calculate_current_speed(CS.speedLimitDistance,
                                                    CS.speedLimit * self.autoNaviSpeedSafetyFactor,
                                                    self.autoNaviSpeedCtrlEnd,
                                                    self.autoNaviSpeedDecelRate))
       #self.active_carrot = 6
-      hda_active = True
+      vehicle_speed_camera_active = True
 
-    #print(f"sdi_speed: {sdi_speed}, hda_active: {hda_active}, xSpdType: {self.xSpdType}, xSpdDist: {self.xSpdDist}, active_carrot: {self.active_carrot}, v_ego_kph: {v_ego_kph}, nRoadLimitSpeed: {self.nRoadLimitSpeed}")
+    #print(f"sdi_speed: {sdi_speed}, vehicle_speed_camera_active: {vehicle_speed_camera_active}, xSpdType: {self.xSpdType}, xSpdDist: {self.xSpdDist}, active_carrot: {self.active_carrot}, v_ego_kph: {v_ego_kph}, nRoadLimitSpeed: {self.nRoadLimitSpeed}")
     ### TBT 속도제어
     atc_desired, self.atcType, self.atcSpeed, self.atcDist = self.update_auto_turn(v_ego*3.6, sm, self.xTurnInfo, self.xDistToTurn, True)
     atc_desired_next, _, _, _ = self.update_auto_turn(v_ego*3.6, sm, self.xTurnInfoNext, self.xDistToTurnNext, False)
@@ -1198,10 +1219,13 @@ class CarrotServ:
       self.atcType = "none"
 
 
+    sdi_source = ("hda" if vehicle_speed_camera_active else "bump" if self.xSpdType == 22 else
+                  "section" if self.xSpdType == 4 else "police" if self.xSpdType == 100 else
+                  "waze" if self.xSpdType == 101 else "cam")
     speed_n_sources = [
       (atc_desired, "atc"),
       (atc_desired_next, "atc2"),
-      (sdi_speed, "hda" if hda_active else "bump" if self.xSpdType == 22 else "section" if self.xSpdType == 4 else "police" if self.xSpdType == 100 else "waze" if self.xSpdType == 101 else "cam"),
+      (sdi_speed, sdi_source),
       (limit_speed, "road"),
     ]
     if self.turnSpeedControlMode in [1,2]:
@@ -1222,20 +1246,9 @@ class CarrotServ:
     desired_speed, source = min(speed_n_sources, key=lambda x: x[0])
 
     if CS is not None:
-      if source != self.source_last:
-        self.gas_override_speed = 0
-        self.gas_pressed_state = CS.gasPressed
-      if CS.vEgo < 0.1 or desired_speed > 150 or source in ["cam", "section", "police"] or CS.brakePressed or road_speed_limit_changed:
-        self.gas_override_speed = 0
-      elif CS.gasPressed and not self.gas_pressed_state:
-        self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
-      else:
-        self.gas_pressed_state = False
-      self.source_last = source
-
-      if desired_speed < self.gas_override_speed:
-        source = "gas"
-        desired_speed = self.gas_override_speed
+      desired_speed, source = self._apply_vehicle_speed_camera_gas_floor(
+        CS, desired_speed, source, v_ego_kph, road_speed_limit_changed,
+      )
 
       self.debugText += f"route={route_speed:.1f}"#f"desired={desired_speed:.1f},{source},g={self.gas_override_speed:.0f}"
 

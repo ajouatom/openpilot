@@ -206,6 +206,8 @@
               "en": "Speed Camera",
               "zh": "测速摄像头",
               "params": [
+                "VehicleSpeedCameraControlMode",
+                "VehicleSpeedCameraDistanceFactor",
                 "AutoNaviSpeedCtrlMode",
                 "AutoNaviSpeedCtrlEnd",
                 "AutoNaviSpeedDecelRate",
@@ -2947,6 +2949,59 @@
       "min": 0,
       "max": 3,
       "default": 2,
+      "unit": 1
+    },
+    {
+      "group": "감속제어",
+      "name": "VehicleSpeedCameraControlMode",
+      "title": "차량 수신 과속카메라 감속(항상 적용)",
+      "descr": "차량 CAN에서 수신한 과속카메라 단속속도를 자동 감속에 적용하는 방식을 선택합니다. Carrot Navi에서 수신하는 과속카메라 정보에는 영향을 주지 않습니다.\n0: 사용 안 함\n1: 가속페달과 관계없이 항상 적용\n2: 가속페달을 밟아 도달한 속도를 감속 목표의 하한으로 유지\n3: 가속페달을 밟는 동안 차량 수신 과속카메라 감속 해제",
+      "egroup": "SPEED",
+      "etitle": "Vehicle-received Speed Camera Deceleration(Always apply)",
+      "edescr": "Select how speed-camera enforcement speeds received over vehicle CAN are used for automatic deceleration. This does not affect speed-camera information received from Carrot Navi.\n0: Disabled\n1: Always apply regardless of accelerator input\n2: Keep the speed reached with the accelerator as the lower bound\n3: Suspend vehicle-received speed-camera deceleration while the accelerator is pressed",
+      "cgroup": "速度控制",
+      "ctitle": "车辆接收测速摄像头减速（始终应用）",
+      "cdescr": "选择如何将通过车辆 CAN 接收的测速摄像头执法速度用于自动减速。此设置不影响从 Carrot Navi 接收的测速摄像头信息。\n0：禁用\n1：无论加速踏板输入如何都始终应用\n2：将踩加速踏板后达到的速度保持为减速目标下限\n3：踩下加速踏板期间暂停车辆接收的测速摄像头减速",
+      "min": 0,
+      "max": 3,
+      "default": 1,
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": [
+          "사용 안 함",
+          "항상 적용",
+          "가속페달 속도 하한",
+          "가속페달 입력 중 해제"
+        ],
+        "en": [
+          "Disabled",
+          "Always apply",
+          "Accelerator speed floor",
+          "Suspend while accelerating"
+        ],
+        "zh": [
+          "禁用",
+          "始终应用",
+          "加速踏板速度下限",
+          "加速时暂停"
+        ]
+      }
+    },
+    {
+      "group": "감속제어",
+      "name": "VehicleSpeedCameraDistanceFactor",
+      "title": "차량 과속카메라 가상거리 배수(6)",
+      "descr": "차량이 과속카메라 거리 없이 단속속도만 보낼 때 가상 감속거리를 만듭니다. 가상거리(m) = 단속속도(km/h) × 설정값입니다. 예를 들어 50 km/h에서 6은 300 m입니다. 변경 후 차량을 재시동하거나 기기를 재부팅해야 적용됩니다.",
+      "egroup": "SPEED",
+      "etitle": "Vehicle Speed Camera Virtual Distance Factor(6)",
+      "edescr": "Creates a virtual deceleration distance when the vehicle sends only a speed-camera enforcement speed without distance. Virtual distance (m) = enforcement speed (km/h) × this value. For example, 50 km/h with 6 produces 300 m. Restart the vehicle or reboot the device after changing this setting.",
+      "cgroup": "速度控制",
+      "ctitle": "车辆测速摄像头虚拟距离倍数（6）",
+      "cdescr": "当车辆仅发送测速摄像头执法速度而没有距离时，创建虚拟减速距离。虚拟距离（米）= 执法速度（km/h）× 设置值。例如 50 km/h 设为 6 时为 300 米。更改后请重新启动车辆或重启设备。",
+      "min": 1,
+      "max": 20,
+      "default": 6,
       "unit": 1
     },
     {
