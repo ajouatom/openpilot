@@ -496,7 +496,22 @@ def test_front_cutin_pending_state_is_cleared_below_five_metres() -> None:
 
 def test_front_cutin_needs_stronger_path_relative_motion_than_corner() -> None:
   assert not front_cutin_motion_supported("frontRadar", 0.50)
-  assert front_cutin_motion_supported("frontRadar", 0.80)
+  assert not front_cutin_motion_supported("frontRadar", 0.80)
+  assert front_cutin_motion_supported(
+    "frontRadar",
+    0.80,
+    d_path=-2.5,
+    directional_consistency=0.80,
+    directional_inward_sample_ratio=0.70,
+  )
+  assert not front_cutin_motion_supported(
+    "frontRadar",
+    0.80,
+    d_path=-2.5,
+    directional_consistency=0.47,
+    directional_inward_sample_ratio=0.73,
+    minimum_directional_consistency=0.71,
+  )
   assert front_cutin_motion_supported(
     "frontRadar",
     -0.15,
