@@ -218,7 +218,8 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
                                      (pandas[0]->hw_type == cereal::PandaState::PandaType::DOS) &&
                                      (pandas[1]->hw_type == cereal::PandaState::PandaType::RED_PANDA);
 
-  for (Panda *panda : pandas) {
+  for (size_t panda_index = 0; panda_index < pandas.size(); ++panda_index) {
+    Panda *panda = pandas[panda_index];
     auto health_opt = panda->get_state();
     if (!health_opt) {
       return std::nullopt;
@@ -227,16 +228,19 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
     health_t health = *health_opt;
 
     const std::string panda_serial = panda->hw_serial();
+    const std::string log_source = "panda[" + std::to_string(panda_index) + "]";
     auto [checksum_it, inserted] = spi_checksum_counts.try_emplace(panda_serial, health.spi_checksum_error_count_pkt);
     if (inserted) {
-      LOGW("panda_spi_checksum_diag: serial=%s, total=%u, delta=0, baseline=1",
-           panda_serial.c_str(), health.spi_checksum_error_count_pkt);
+      cloudlog_e(CLOUDLOG_WARNING, log_source.c_str(), __LINE__, __func__,
+                 "SPI checksum: serial=%s, total=%u, delta=0, baseline=1",
+                 panda_serial.c_str(), health.spi_checksum_error_count_pkt);
     } else if (checksum_it->second != health.spi_checksum_error_count_pkt) {
       const bool reset = health.spi_checksum_error_count_pkt < checksum_it->second;
       const uint32_t delta = reset ? health.spi_checksum_error_count_pkt :
                              health.spi_checksum_error_count_pkt - checksum_it->second;
-      LOGW("panda_spi_checksum_diag: serial=%s, total=%u, delta=%u, baseline=0, reset=%d",
-           panda_serial.c_str(), health.spi_checksum_error_count_pkt, delta, reset);
+      cloudlog_e(CLOUDLOG_WARNING, log_source.c_str(), __LINE__, __func__,
+                 "SPI checksum: serial=%s, total=%u, delta=%u, baseline=0, reset=%d",
+                 panda_serial.c_str(), health.spi_checksum_error_count_pkt, delta, reset);
       checksum_it->second = health.spi_checksum_error_count_pkt;
     }
 
@@ -457,6 +461,7 @@ void log_panda_serial(size_t panda_index, const std::string &log) {
   const bool has_spi_diag = (log.find("SPI:") != std::string::npos) ||
                             (log.find("incorrect header") != std::string::npos) ||
                             (log.find("incorrect data checksum") != std::string::npos);
+  const std::string log_source = "panda[" + std::to_string(panda_index) + "]";
 
   size_t line_start = 0;
   while (line_start < log.size()) {
@@ -467,13 +472,9 @@ void log_panda_serial(size_t panda_index, const std::string &log) {
     }
 
     if (!line.empty()) {
-      if (has_register_fault) {
-        LOGE("panda_serial[%zu]: %s", panda_index, line.c_str());
-      } else if (has_spi_diag) {
-        LOGW("panda_spi_serial_diag[%zu]: %s", panda_index, line.c_str());
-      } else {
-        LOGD("panda_serial[%zu]: %s", panda_index, line.c_str());
-      }
+      const int level = has_register_fault ? CLOUDLOG_ERROR :
+                        has_spi_diag ? CLOUDLOG_WARNING : CLOUDLOG_DEBUG;
+      cloudlog_e(level, log_source.c_str(), __LINE__, __func__, "%s", line.c_str());
     }
 
     if (line_end == std::string::npos) break;
