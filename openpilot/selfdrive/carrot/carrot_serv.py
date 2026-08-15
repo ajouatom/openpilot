@@ -186,6 +186,7 @@ class CarrotServ:
     self.atc_paused = False
     self.atc_activate_count = 0
     self.gas_override_speed = 0
+    self.gas_pressed_state = False
     self.source_last = "none"
 
     self.carrot_navi_session_id = ""
@@ -351,20 +352,41 @@ class CarrotServ:
     return (self.vehicleSpeedCameraControlMode > 0 and CS.speedLimit > 0 and CS.speedLimitDistance > 0 and
             not (self.vehicleSpeedCameraControlMode == 3 and CS.gasPressed))
 
-  def _apply_vehicle_speed_camera_gas_floor(self, CS, desired_speed, source, v_ego_kph, road_speed_limit_changed):
-    gas_floor_active = self.vehicleSpeedCameraControlMode == 2 and source == "hda"
-    if not gas_floor_active:
-      self.gas_override_speed = 0
-    else:
-      reset_floor = (source != self.source_last or CS.vEgo < 0.1 or desired_speed > 150 or
-                     CS.brakePressed or road_speed_limit_changed)
-      if reset_floor:
+  def _apply_speed_source_gas_floor(self, CS, desired_speed, source, v_ego_kph, road_speed_limit_changed):
+    if source == "hda":
+      gas_floor_active = self.vehicleSpeedCameraControlMode == 2
+      if not gas_floor_active:
         self.gas_override_speed = 0
-      elif CS.gasPressed:
-        self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
+      else:
+        reset_floor = (source != self.source_last or CS.vEgo < 0.1 or desired_speed > 150 or
+                       CS.brakePressed or road_speed_limit_changed)
+        if reset_floor:
+          self.gas_override_speed = 0
+        elif CS.gasPressed:
+          self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
+
+      self.source_last = source
+      if gas_floor_active and desired_speed < self.gas_override_speed:
+        return self.gas_override_speed, "gas"
+      return desired_speed, source
+
+    # Vehicle speed-camera modes must not change the existing accelerator
+    # override behavior for road limits, curves, or other navigation sources.
+    if source != self.source_last:
+      self.gas_override_speed = 0
+      self.gas_pressed_state = CS.gasPressed
+
+    reset_floor = (CS.vEgo < 0.1 or desired_speed > 150 or source in ["cam", "section", "police"] or
+                   CS.brakePressed or road_speed_limit_changed)
+    if reset_floor:
+      self.gas_override_speed = 0
+    elif CS.gasPressed and not self.gas_pressed_state:
+      self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
+    else:
+      self.gas_pressed_state = False
 
     self.source_last = source
-    if gas_floor_active and desired_speed < self.gas_override_speed:
+    if desired_speed < self.gas_override_speed:
       return self.gas_override_speed, "gas"
     return desired_speed, source
 
@@ -1246,7 +1268,7 @@ class CarrotServ:
     desired_speed, source = min(speed_n_sources, key=lambda x: x[0])
 
     if CS is not None:
-      desired_speed, source = self._apply_vehicle_speed_camera_gas_floor(
+      desired_speed, source = self._apply_speed_source_gas_floor(
         CS, desired_speed, source, v_ego_kph, road_speed_limit_changed,
       )
 

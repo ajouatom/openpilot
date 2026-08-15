@@ -9,6 +9,7 @@ def _serv(mode):
   serv = CarrotServ.__new__(CarrotServ)
   serv.vehicleSpeedCameraControlMode = mode
   serv.gas_override_speed = 0
+  serv.gas_pressed_state = False
   serv.source_last = "none"
   return serv
 
@@ -43,14 +44,14 @@ def test_gas_floor_tracks_peak_speed_and_remains_after_release():
   serv.source_last = "hda"
   CS = _car_state(gas=True)
 
-  desired_speed, source = serv._apply_vehicle_speed_camera_gas_floor(CS, 60, "hda", 80, False)
+  desired_speed, source = serv._apply_speed_source_gas_floor(CS, 60, "hda", 80, False)
   assert (desired_speed, source, serv.gas_override_speed) == (80, "gas", 80)
 
-  desired_speed, source = serv._apply_vehicle_speed_camera_gas_floor(CS, 60, "hda", 85, False)
+  desired_speed, source = serv._apply_speed_source_gas_floor(CS, 60, "hda", 85, False)
   assert (desired_speed, source, serv.gas_override_speed) == (85, "gas", 85)
 
   CS.gasPressed = False
-  desired_speed, source = serv._apply_vehicle_speed_camera_gas_floor(CS, 60, "hda", 82, False)
+  desired_speed, source = serv._apply_speed_source_gas_floor(CS, 60, "hda", 82, False)
   assert (desired_speed, source, serv.gas_override_speed) == (85, "gas", 85)
 
 
@@ -59,21 +60,50 @@ def test_non_floor_modes_do_not_raise_vehicle_camera_target(mode):
   serv = _serv(mode)
   serv.gas_override_speed = 90
 
-  desired_speed, source = serv._apply_vehicle_speed_camera_gas_floor(
+  desired_speed, source = serv._apply_speed_source_gas_floor(
     _car_state(gas=True), 60, "hda", 80, False,
   )
 
   assert (desired_speed, source, serv.gas_override_speed) == (60, "hda", 0)
 
 
-def test_gas_floor_does_not_override_other_deceleration_sources():
-  serv = _serv(2)
+@pytest.mark.parametrize("mode", (0, 1, 2, 3))
+def test_road_limit_keeps_accelerator_speed_floor_after_release(mode):
+  serv = _serv(mode)
+  serv.source_last = "road"
+  CS = _car_state(gas=True)
 
-  desired_speed, source = serv._apply_vehicle_speed_camera_gas_floor(
-    _car_state(gas=True), 30, "bump", 80, False,
+  desired_speed, source = serv._apply_speed_source_gas_floor(CS, 52, "road", 79, False)
+  assert (desired_speed, source, serv.gas_override_speed) == (79, "gas", 79)
+
+  CS.gasPressed = False
+  desired_speed, source = serv._apply_speed_source_gas_floor(CS, 52, "road", 79, False)
+  assert (desired_speed, source, serv.gas_override_speed) == (79, "gas", 79)
+
+
+def test_road_limit_change_resets_accelerator_speed_floor():
+  serv = _serv(1)
+  serv.source_last = "road"
+  serv.gas_override_speed = 79
+
+  desired_speed, source = serv._apply_speed_source_gas_floor(
+    _car_state(), 52, "road", 79, True,
   )
 
-  assert (desired_speed, source, serv.gas_override_speed) == (30, "bump", 0)
+  assert (desired_speed, source, serv.gas_override_speed) == (52, "road", 0)
+
+
+@pytest.mark.parametrize("source", ("cam", "section", "police"))
+def test_enforced_navigation_sources_reject_accelerator_speed_floor(source):
+  serv = _serv(2)
+  serv.source_last = source
+  serv.gas_override_speed = 80
+
+  desired_speed, returned_source = serv._apply_speed_source_gas_floor(
+    _car_state(gas=True), 30, source, 80, False,
+  )
+
+  assert (desired_speed, returned_source, serv.gas_override_speed) == (30, source, 0)
 
 
 @pytest.mark.parametrize(("brake_pressed", "road_limit_changed"), (
@@ -85,7 +115,7 @@ def test_gas_floor_resets_on_brake_or_camera_speed_change(brake_pressed, road_li
   serv.source_last = "hda"
   serv.gas_override_speed = 85
 
-  desired_speed, source = serv._apply_vehicle_speed_camera_gas_floor(
+  desired_speed, source = serv._apply_speed_source_gas_floor(
     _car_state(brake=brake_pressed), 60, "hda", 80, road_limit_changed,
   )
 
