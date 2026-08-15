@@ -522,12 +522,15 @@ void pandad_run(std::vector<Panda *> &pandas) {
       send_peripheral_state(peripheral_panda, &pm);
     }
 
-    // Forward logs from pandas to cloudlog if available
-    for (size_t i = 0; i < pandas.size(); ++i) {
-      Panda *panda = pandas[i];
-      std::string log = panda->serial_read();
-      if (!log.empty()) {
-        log_panda_serial(i, log);
+    // Forward logs from pandas to cloudlog if available. Panda retains serial
+    // output, so 10 Hz is enough while avoiding a control SPI transfer every tick.
+    if (rk.frame() % 10 == 0) {
+      for (size_t i = 0; i < pandas.size(); ++i) {
+        Panda *panda = pandas[i];
+        std::string log = panda->serial_read();
+        if (!log.empty()) {
+          log_panda_serial(i, log);
+        }
       }
     }
 
