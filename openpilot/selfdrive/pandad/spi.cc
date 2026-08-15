@@ -157,7 +157,15 @@ static void record_spi_phase_diag(uint8_t endpoint, uint64_t total_us, uint32_t 
     }
   }
 
-  if (emit) {
+  // Keep healthy SPI traffic silent. The timing summary is useful only when
+  // its window contains a retry or protocol failure; slow transfers alone are
+  // expected when the CAN threads contend for the shared bus.
+  const bool has_issue = snapshot.retry_count > 0U || snapshot.nack_count > 0U ||
+                         snapshot.hack_nack_count > 0U || snapshot.dack_nack_count > 0U ||
+                         snapshot.ack_timeout_count > 0U || snapshot.host_checksum_count > 0U ||
+                         snapshot.other_failure_count > 0U || snapshot.recovery_count > 0U ||
+                         snapshot.recovery_restart_count > 0U;
+  if (emit && has_issue) {
     LOGW("spi_phase_diag: endpoint=0x%x, total_avg_us=%" PRIu64 ", total_max_us=%" PRIu64
          ", lock_max_us=%" PRIu64 ", turnaround_max_us=%" PRIu64 ", hack_max_us=%" PRIu64
          ", dack_max_us=%" PRIu64 ", recovery_max_us=%" PRIu64
