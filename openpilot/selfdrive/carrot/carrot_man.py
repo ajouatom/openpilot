@@ -315,7 +315,6 @@ class CarrotMan:
 
     self.carrot_serv = CarrotServ()
 
-    self.show_panda_debug = False
     self.broadcast_ip = self.get_broadcast_address()
     self.broadcast_port = 7705
     self.carrot_man_port = 7706
@@ -351,9 +350,6 @@ class CarrotMan:
 
     self.carrot_zmq_thread = threading.Thread(target=self.carrot_cmd_zmq, args=[], daemon=True)
     self.carrot_zmq_thread.start()
-
-    self.carrot_panda_debug_thread = threading.Thread(target=self.carrot_panda_debug, args=[], daemon=True)
-    self.carrot_panda_debug_thread.start()
 
     self.carrot_route_thread = threading.Thread(target=self.carrot_route, args=[], daemon=True)
     self.carrot_route_thread.start()
@@ -1085,19 +1081,6 @@ class CarrotMan:
         except Exception:
           pass
 
-  def carrot_panda_debug(self):
-    #time.sleep(2)
-    while True:
-      if self.show_panda_debug:
-        self.show_panda_debug = False
-        try:
-          subprocess.run("/data/openpilot/openpilot/selfdrive/debug/debug_console_carrot.py", shell=True)
-        except Exception as e:
-          print(f"debug_console error: {e}")
-          time.sleep(2)
-      else:
-        time.sleep(1)
-
   def get_all_toggle_values(self):
     toggle_values = {}
 
@@ -1205,8 +1188,6 @@ class CarrotMan:
               can_error_tmux_requested = False
               current_onroad_car_state_seen = False
               current_onroad_radar_state_seen = False
-              if AUTO_ONROAD_DIAGNOSTICS:
-                self.show_panda_debug = True
             else:
               isOnroadCount += 1
               current_onroad_car_state_seen |= can_sm.updated['carState']

@@ -532,6 +532,35 @@ void process_peripheral_state(Panda *panda, PubMaster *pm, bool no_fan_control) 
   }
 }
 
+void log_panda_serial(size_t panda_index, const std::string &log) {
+  const bool has_register_fault = log.find("Register 0x") != std::string::npos;
+  const bool has_spi_diag = (log.find("SPI:") != std::string::npos) ||
+                            (log.find("incorrect header") != std::string::npos) ||
+                            (log.find("incorrect data checksum") != std::string::npos);
+
+  size_t line_start = 0;
+  while (line_start < log.size()) {
+    const size_t line_end = log.find('\n', line_start);
+    std::string line = log.substr(line_start, line_end - line_start);
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+
+    if (!line.empty()) {
+      if (has_register_fault) {
+        LOGE("panda_serial[%zu]: %s", panda_index, line.c_str());
+      } else if (has_spi_diag) {
+        LOGW("panda_spi_serial_diag[%zu]: %s", panda_index, line.c_str());
+      } else {
+        LOGD("panda_serial[%zu]: %s", panda_index, line.c_str());
+      }
+    }
+
+    if (line_end == std::string::npos) break;
+    line_start = line_end + 1;
+  }
+}
+
 void pandad_run(std::vector<Panda *> &pandas) {
   const bool no_fan_control = getenv("NO_FAN_CONTROL") != nullptr;
   const bool spoofing_started = getenv("STARTED") != nullptr;
@@ -613,22 +642,11 @@ void pandad_run(std::vector<Panda *> &pandas) {
 
     // Forward logs from pandas to cloudlog if available
     const uint64_t serial_start_ns = nanos_since_boot();
-    for (Panda *panda : pandas) {
+    for (size_t i = 0; i < pandas.size(); ++i) {
+      Panda *panda = pandas[i];
       std::string log = panda->serial_read();
       if (!log.empty()) {
-        const bool has_register_fault = log.find("Register 0x") != std::string::npos;
-        const bool has_spi_diag = (log.find("SPI:") != std::string::npos) ||
-                                  (log.find("incorrect header") != std::string::npos) ||
-                                  (log.find("incorrect data checksum") != std::string::npos);
-        if (has_spi_diag) {
-          LOGW("panda_spi_serial_diag: %s", log.c_str());
-        }
-        if (has_register_fault) {
-          // Log register divergent faults as errors
-          LOGE("%s", log.c_str());
-        } else if (!has_spi_diag) {
-          LOGD("%s", log.c_str());
-        }
+        log_panda_serial(i, log);
       }
     }
     const uint64_t serial_us = (nanos_since_boot() - serial_start_ns) / 1000U;
