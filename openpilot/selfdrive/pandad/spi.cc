@@ -574,6 +574,8 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   const uint64_t attempt_start_ns = nanos_since_boot();
   uint64_t phase_start_ns = 0U;
   spi_attempt_timing = {};
+  const bool safety_mode_control = (endpoint == 0U) && (tx_data != nullptr) &&
+                                   (tx_len >= sizeof(ControlPacket_t)) && (tx_data[0] == 0xdcU);
   LockEx lock(spi_fd, hw_lock, endpoint);
   spi_attempt_timing.lock_us = (nanos_since_boot() - attempt_start_ns) / 1000U;
 
@@ -677,8 +679,6 @@ int PandaSpiHandle::spi_transfer(uint8_t endpoint, uint8_t *tx_data, uint16_t tx
   // Safety mode changes reinitialize the Panda CAN controllers. The dedicated
   // CAN RX thread can already be waiting on this transfer, so keep the shared
   // SPI bus idle long enough for the Panda header DMA to be armed again.
-  const bool safety_mode_control = (endpoint == 0U) && (tx_data != nullptr) &&
-                                   (tx_len >= sizeof(ControlPacket_t)) && (tx_data[0] == 0xdcU);
   spi_inter_transaction_ns = safety_mode_control ? SPI_SAFETY_MODE_TURNAROUND_NS : SPI_TURNAROUND_NS;
   spi_attempt_timing.total_us = (spi_last_bus_activity_ns - attempt_start_ns) / 1000U;
   return rx_data_len;
