@@ -331,16 +331,26 @@ def front_cutin_motion_supported(
   """Require strong motion or sustained direction-supported overlap from front."""
   if source != "frontRadar":
     return True
-  if tracked_close_entry:
-    return True
-  if abs(float(d_path_rate_long)) >= FRONT_CUT_IN_MIN_DPATH_RATE_MPS:
-    return True
-
   side = (
     math.copysign(1.0, float(d_path))
     if abs(float(d_path)) > 1e-6
     else 0.0
   )
+  if tracked_close_entry:
+    return True
+  # Front-radar azimuth quantization can create a high one-second dPath rate
+  # for a parallel vehicle. Do not bypass the measured direction history.
+  strong_directional_motion = (
+    -side * float(d_path_rate_long)
+    >= FRONT_CUT_IN_MIN_DPATH_RATE_MPS
+    and float(directional_consistency)
+    >= float(minimum_directional_consistency)
+    and float(directional_inward_sample_ratio)
+    >= DIRECTIONAL_MIN_INWARD_SAMPLE_RATIO
+  )
+  if strong_directional_motion:
+    return True
+
   directional_future_overlap = (
     float(d_rel) >= FRONT_CUT_IN_MIN_DREL_M
     and float(predicted_path_overlap_s)
