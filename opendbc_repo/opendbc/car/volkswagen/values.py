@@ -92,6 +92,8 @@ class CarControllerParams:
       self.STEERING_POWER_MAX      = 50    # HCA_03 maximum steering power %
       self.STEERING_POWER_MIN      = 4     # HCA_03 minimum steering power %
       self.STEERING_POWER_STEP     = 2     # HCA_03 steering power counter steps
+      self.HOLD_RELEASE_MAX_STEPS  = 100   # sustain ACC_Anfahren up to ~2s (ACC_CONTROL_STEP based)
+      self.HOLD_RELEASE_DONE_SPEED = 0.3   # m/s, above this the car has actually launched
 
       self.CURVATURE_LIMITS: CurvatureSteeringLimits = CurvatureSteeringLimits(0.195)
 
