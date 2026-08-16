@@ -34,6 +34,7 @@ class CarController(CarControllerBase):
     self.hca_frame_same_torque = 0
     # MEB longitudinal (ported from infiniteCable2): EPB-error mitigation ramp counters
     self.long_override_counter = 0
+    self.hold_release_frames = 0
     self.long_disabled_counter = 0
     self.klr_counter_last = None  # capacitive wheel touch (EA hands-on pacification)
 
@@ -165,8 +166,27 @@ class CarController(CarControllerBase):
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         if self.CP.flags & VolkswagenFlags.MEB:
           stopping = actuators.longControlState == LongCtrlState.stopping
-          starting = actuators.longControlState == LongCtrlState.starting and CS.out.vEgo <= self.CP.vEgoStarting
           accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.enabled else 0)
+          # Creeping to a stop behind a lead keeps the planner in "pid" instead of "stopping".
+          # If the car then latches its own ESP hold, ACC_Anfahren is never sent with the
+          # (lcs == starting) condition alone and the car stays stuck in hold even after the
+          # lead pulls away. Request a start whenever openpilot wants to accelerate out of hold.
+          starting_planner = actuators.longControlState == LongCtrlState.starting and CS.out.vEgo <= self.CP.vEgoStarting
+          # Only begin the release above 0.2 m/s^2 so tiny accel values can't unlatch the hold
+          # and let the car roll back on a hill (normal launch uses startAccel 0.8, no delay).
+          begin_release = (actuators.longControlState == LongCtrlState.pid
+                           and CS.esp_hold_confirmation and accel >= 0.2)
+          # Hold the request until the car is actually moving. Do NOT keep esp_hold_confirmation
+          # in the sustain condition: it goes false the moment the car acknowledges the release,
+          # which cancels our own request mid-handshake. The car then falls back to the EPB and
+          # escalates to P (measured: parkingBrake 0.06s after hold released, gear=park 0.8s later).
+          if begin_release:
+            self.hold_release_frames = self.CCP.HOLD_RELEASE_MAX_STEPS
+          elif self.hold_release_frames > 0:
+            self.hold_release_frames -= 1
+          if not CC.enabled or stopping or accel <= 0.0 or CS.out.vEgo > self.CCP.HOLD_RELEASE_DONE_SPEED:
+            self.hold_release_frames = 0
+          starting = starting_planner or self.hold_release_frames > 0
 
           # override / disable ramp handling to avoid EPB error at low speed (infiniteCable2)
           long_override = CC.cruiseControl.override or CS.out.gasPressed
