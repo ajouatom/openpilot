@@ -34,6 +34,7 @@ PRE_OVERRIDE_CONFIRM_FRAMES = 2
 PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
 LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
 MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
+LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS fault-angle region
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
 CANFD_JERK_ERROR_DELAY = 0.5
@@ -146,6 +147,13 @@ def apply_steer_angle_limits_physics(desired_sw_deg: float,
   err = abs(target_sw - last_sw_deg)
   if err > 20.0:
     max_sw_rate_deg_per_tick = min(max_sw_rate_deg_per_tick, 1.0)
+
+  # Once steering is in the large-angle region, do not make the return toward center wait on
+  # the normal low-speed/large-error cap. This only relaxes unwinding; winding farther into the
+  # turn keeps all existing limits.
+  unwinding_large_angle = abs(last_sw_deg) >= MAX_ANGLE and last_sw_deg * (target_sw - last_sw_deg) < 0.0
+  if unwinding_large_angle:
+    max_sw_rate_deg_per_tick = max(max_sw_rate_deg_per_tick, LARGE_ANGLE_UNWIND_RATE)
 
   max_drw_per_tick_deg = min(
     max_drw_per_tick_deg,
