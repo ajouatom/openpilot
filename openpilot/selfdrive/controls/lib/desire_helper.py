@@ -356,7 +356,9 @@ class DesireHelper:
         self.turn_direction = TurnDirection.none
 
         if self.lane_change_state == LaneChangeState.off:
-          if desire_enabled and not self.prev_desire_enabled and not below_lane_change_speed and side is not None:
+          driver_desire_started = driver_enabled and driver_changed
+          if desire_enabled and (not self.prev_desire_enabled or driver_desire_started) and \
+             not below_lane_change_speed and side is not None:
             self.lane_change_state = LaneChangeState.preLaneChange
             self.lane_change_ll_prob = 1.0
             self.lane_change_delay = self.laneChangeDelay
