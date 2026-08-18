@@ -48,8 +48,11 @@ normal motion history before starting leadTwo.
 The stationary leadOne path requires a measured in-path point with
 `|vLead| <= 4.0 m/s`, model-lead support at probability 0.40 or higher, and
 0.25 seconds of physical continuity. A front-only stationary point needs three
-vision-supported frames. A central radar-only corner/SCC point instead uses a
-0.50 second confirmation and a narrow center gate. When a front point and a
+vision-supported frames. A radar point that needs the broader immediate
+vision-correlated recovery path must already have been measured continuously
+for 0.25 seconds; brief infrastructure reflections remain pending instead of
+borrowing a nearby visual lead. A central radar-only corner/SCC point instead
+uses a 0.50 second confirmation and a narrow center gate. When a front point and a
 corner point are mutually consistent within 5 m longitudinally, 0.75 m raw
 lateral position, and 2.5 m/s target speed, a high-uncertainty visual lead may
 seed the front point despite up to 30 m visual range error. The front point
