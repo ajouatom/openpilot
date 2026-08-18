@@ -69,6 +69,7 @@ BROADCAST_NETWORK_ERROR_LOG_INTERVAL = 30.0
 AUTO_ONROAD_TMUX_DELAY_SECONDS = float(os.environ.get("CARROT_AUTO_ONROAD_TMUX_DELAY_SECONDS", "60"))
 CARROT_CAN_ERROR_TMUX_DELAY_SECONDS = float(os.environ.get("CARROT_CAN_ERROR_TMUX_DELAY_SECONDS", "5"))
 CARROT_EXCEPTION_UPLOAD_RETRY_SECONDS = 60.0
+CARROT_EXCEPTION_TMUX_REASONS = ("exception", "log", "tmux_send", "can_error", "spi_error")
 DISCORD_TMUX_FILE_MAX_BYTES = 8 * 1024 * 1024
 EXCEPTION_DISCORD_WEBHOOK_KEY = b"carrot-exception-v1"
 EXCEPTION_DISCORD_WEBHOOK_OBFUSCATED = (
@@ -1258,7 +1259,7 @@ class CarrotMan:
             carrot_exception = None
             print("[carrot_man] CAN error tmux canceled after going offroad")
 
-          if carrot_exception in ["exception", "log", "tmux_send", "can_error"] \
+          if carrot_exception in CARROT_EXCEPTION_TMUX_REASONS \
               and pending_tmux_reason is None and now >= pending_tmux_next_attempt_at:
             if self.make_tmux_data():
               pending_tmux_reason = carrot_exception

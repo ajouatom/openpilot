@@ -2,10 +2,15 @@ from types import SimpleNamespace
 
 from openpilot.selfdrive.carrot.carrot_man import (
   CARROT_CAN_ERROR_TMUX_DELAY_SECONDS,
+  CARROT_EXCEPTION_TMUX_REASONS,
   carrot_can_error,
   carrot_can_error_sources,
   carrot_can_error_send_ready,
 )
+
+
+def test_spi_error_requests_tmux_capture():
+  assert "spi_error" in CARROT_EXCEPTION_TMUX_REASONS
 
 
 def test_can_error_send_waits_for_five_seconds_after_detection():
