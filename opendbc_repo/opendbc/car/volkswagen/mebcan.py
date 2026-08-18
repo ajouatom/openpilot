@@ -165,10 +165,14 @@ def acc_control_value(main_switch_on, acc_faulted, long_active, override):
   return acc_control
 
 
-def acc_hold_type(main_switch_on, acc_faulted, long_active, starting, stopping, esp_hold, override, override_begin, long_disabling):
-  if acc_faulted:
-    acc_hold_type = ACC_HMS_NO_REQUEST
-  elif not long_active:
+def acc_hold_type(main_switch_on, acc_faulted, long_active, starting, stopping, esp_hold, override, override_begin, long_disabling,
+                  releasing=False):
+  # releasing: 직전에 HALTEN(1)/ANFAHREN(4)/LOESEN_UEBER_RAMPE(5)를 보냈고 아직 저속인 상태.
+  # HALTEN/ANFAHREN -> KEINE_ANFORDERUNG(0) 직행은 차가 P로 폴트나므로 (commaai/opendbc 확인)
+  # 사이에 LOESEN_UEBER_RAMPE(5)를 끼워 넣는다.
+  # acc_faulted도 해제 경로를 탄다: 홀드 중 폴트가 나도 0으로 직행하지 않고 램프를 거치게 한다
+  # (commaai/opendbc는 accFaulted를 long_active에 포함시켜 항상 disengage 램프를 태운다).
+  if acc_faulted or not long_active:
     if long_disabling:
       acc_hold_type = ACC_HMS_RAMP_RELEASE  # ramp release right after disabling (prevents car error with EPB at low speed)
     else:
@@ -182,6 +186,8 @@ def acc_hold_type(main_switch_on, acc_faulted, long_active, starting, stopping, 
     acc_hold_type = ACC_HMS_RELEASE
   elif stopping or esp_hold:
     acc_hold_type = ACC_HMS_HOLD
+  elif releasing:
+    acc_hold_type = ACC_HMS_RAMP_RELEASE
   else:
     acc_hold_type = ACC_HMS_NO_REQUEST
   return acc_hold_type

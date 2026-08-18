@@ -16,6 +16,7 @@ class CarState(CarStateBase):
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.esp_hold_confirmation = False
+    self.long_control_inhibit = False  # MEB: 차가 종방향 제어를 일시 거부 중 (VMM_02)
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
     # MEB (VW ID.4/ID.5) state - ported from infiniteCable2 via id4-meb branch
@@ -28,12 +29,19 @@ class CarState(CarStateBase):
     self.curvature = 0.
     self.cruise_recovery_timer = 0  # update_acc_fault 디바운스용 (infiniteCable2)
 
-  def update_acc_fault(self, acc_fault, parking_brake=False, drive_mode=True, recovery_frames_max=100):
+  def update_acc_fault(self, acc_fault, parking_brake=False, drive_mode=True, recovery_frames_max=100,
+                       long_inhibit=False):
     # infiniteCable2 포팅: 주차 중(EPB+비주행)엔 TSK fault를 무시하고, 주행 전환 직후
     # recovery_frames_max(100) 동안 grace를 줘서 출발 직후 일시적 TSK 글리치로 인한
     # 불필요한 Cruise Fault 해제를 막는다.
+    # long_inhibit: 운전자가 저속에서 세게 제동하면 TSK가 잠시 폴트로 떨어지는데, 차가
+    # VMM_02.Long_Control_Inhibit 으로 미리 알려준다. 예정된 폴트이므로 오해제하지 않는다.
+    # (commaai/opendbc: "TSK temporarily faults ... shortly after driver harshly brakes")
     fault = acc_fault
-    if parking_brake and not drive_mode:
+    if long_inhibit:
+      self.cruise_recovery_timer = self.frame
+      fault = False
+    elif parking_brake and not drive_mode:
       fault = False
       self.cruise_recovery_timer = self.frame
     elif self.frame - self.cruise_recovery_timer < recovery_frames_max:
@@ -204,8 +212,9 @@ class CarState(CarStateBase):
     # HCA 상태 (QFK_01) - vw_meb.dbc는 소문자 값 정의, update_hca_state는 대문자 비교 → 변환
     hca_status_raw = self.CCP.hca_status_values.get(pt_cp.vl["QFK_01"]["LatCon_HCA_Status"])
     hca_status = hca_status_raw.upper() if hca_status_raw else hca_status_raw
-    # GEN2(2024+): Getriebe_11이 PT버스에 안 옴 -> Gateway_73에서 기어 읽기 (infiniteCable2 동일, 실차 rlog 확인)
-    if self.CP.flags & VolkswagenFlags.MEB_GEN2:
+    # 기어 소스: Getriebe_11이 PT버스에 안 오는 차(MK2 등)는 Gateway_73에서 읽는다.
+    # 차종 플래그가 아니라 interface.py가 핑거프린트(0x3DC)로 세운 ALT_GEAR를 본다.
+    if self.CP.flags & VolkswagenFlags.ALT_GEAR:
       gear_raw = pt_cp.vl["Gateway_73"]["GE_Fahrstufe"]
     else:
       gear_raw = pt_cp.vl["Getriebe_11"]["GE_Fahrstufe"]
@@ -270,6 +279,11 @@ class CarState(CarStateBase):
     # 어긋났음 -> EPB 홀드/릴리스 타이밍 불일치로 재출발이 막힐 수 있었음.
     self.esp_hold_confirmation = pt_cp.vl["ESC_50"]["Motion_State"] == 3
 
+    # 저속에서 운전자가 세게 제동한 직후 차가 종방향 제어를 일시 거부하는 구간.
+    # 이 상태에서 출발요청(ACC_Anfahren)을 넣으면 TSK가 폴트난다 (commaai/opendbc).
+    # 2 = inhibited. 실차 rlog 검증: MK1/MK2 모두 평시 1(not_inhibited)로 안정적으로 읽힘.
+    self.long_control_inhibit = pt_cp.vl["VMM_02"]["Long_Control_Inhibit"] == 2
+
     # ACC/크루즈 상태
     ret.cruiseState.available  = pt_cp.vl["Motor_51"]["TSK_Status"] in (2, 3, 4, 5)
     ret.cruiseState.enabled    = pt_cp.vl["Motor_51"]["TSK_Status"] in (3, 4, 5)
@@ -277,7 +291,8 @@ class CarState(CarStateBase):
     # 주행 전환 직후 100프레임 grace -> 출발 직후 일시적 TSK 글리치로 인한 오해제 방지. (infiniteCable2)
     acc_drive_mode = ret.gearShifter == GearShifter.drive
     ret.accFaulted = self.update_acc_fault(pt_cp.vl["Motor_51"]["TSK_Status"] in (6, 7),
-                                           parking_brake=ret.parkingBrake, drive_mode=acc_drive_mode)
+                                           parking_brake=ret.parkingBrake, drive_mode=acc_drive_mode,
+                                           long_inhibit=self.long_control_inhibit)
     ret.cruiseState.standstill = self.CP.pcmCruise and self.esp_hold_confirmation
     ret.cruiseState.nonAdaptive = bool(pt_cp.vl["Motor_51"]["TSK_Limiter_ausgewaehlt"])
 
@@ -474,12 +489,15 @@ class CarState(CarStateBase):
       ("SMLS_01", 1),       # From 스탈크 컨트롤
     ]
 
-    # GEN2(2024+, ID.4 MK2): 기어는 Gateway_73으로 오고, 일부 메시지 주기가 낮음 (실차 rlog 실측)
+    # GEN2(2024+, ID.4 MK2): 일부 메시지 주기가 낮음 (실차 rlog 실측)
     gen2 = bool(CP.flags & VolkswagenFlags.MEB_GEN2)
-    if gen2:
-      pt_messages += [("Gateway_73", 10)]   # 기어 (GE_Fahrstufe)
+    # 기어: ALT_GEAR(핑거프린트에 Gateway_73 존재)면 Gateway_73, 아니면 Getriebe_11
+    if CP.flags & VolkswagenFlags.ALT_GEAR:
+      pt_messages += [("Gateway_73", 10)]   # 기어 (GE_Fahrstufe, 실측 20Hz - 여유 두고 10 선언)
     else:
       pt_messages += [("Getriebe_11", 50)]  # 기어
+
+    pt_messages += [("VMM_02", 50)]  # 종방향 제어 일시 거부 (Long_Control_Inhibit), MK1/MK2 실측 50Hz
 
     if CP.flags & VolkswagenFlags.STOCK_KLR_PRESENT:
       pt_messages += [("KLR_01", 10 if gen2 else 50)]  # 정전식 핸들 터치 (EA 핸즈온, GEN2 실측 ~16Hz)

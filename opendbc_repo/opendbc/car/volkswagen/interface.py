@@ -57,6 +57,12 @@ class CarInterface(CarInterfaceBase):
       if 0x25D in fingerprint[0]:  # KLR_01 - capacitive steering wheel module (Emergency Assist hands-on)
         ret.flags |= VolkswagenFlags.STOCK_KLR_PRESENT.value
 
+      # 기어(GE_Fahrstufe) 소스: MK2(GEN2)는 Getriebe_11이 PT버스에 안 오고 Gateway_73으로만 온다.
+      # 차종 플래그 대신 실제 메시지 유무로 판정 (commaai/opendbc 방식).
+      # MK1 실차 rlog 검증: 두 메시지 모두 존재하며 GE_Fahrstufe 값이 1205/1205 프레임 완전 일치.
+      if 0x3DC in fingerprint[0]:  # Gateway_73
+        ret.flags |= VolkswagenFlags.ALT_GEAR.value
+
       if all(msg in fingerprint[2] for msg in (0x1A4, 0x1F0)):  # EA_01, EA_02 - Emergency Assist HUD
         ret.flags |= VolkswagenFlags.STOCK_EA_PRESENT.value
 

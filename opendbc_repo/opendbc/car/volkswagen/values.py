@@ -94,6 +94,9 @@ class CarControllerParams:
       self.STEERING_POWER_STEP     = 2     # HCA_03 steering power counter steps
       self.HOLD_RELEASE_MAX_STEPS  = 100   # sustain ACC_Anfahren up to ~2s (ACC_CONTROL_STEP based)
       self.HOLD_RELEASE_DONE_SPEED = 0.3   # m/s, above this the car has actually launched
+      # Dropping ACC_Anforderung_HMS straight from HALTEN(1)/ANFAHREN(4) to KEINE_ANFORDERUNG(0)
+      # can fault the car into park (commaai/opendbc). Pass through LOESEN_UEBER_RAMPE(5) below this speed.
+      self.HOLD_RELEASE_SPEED      = 5 * CV.KPH_TO_MS  # m/s
 
       self.CURVATURE_LIMITS: CurvatureSteeringLimits = CurvatureSteeringLimits(0.195)
 
@@ -193,6 +196,7 @@ class VolkswagenSafetyFlags(IntFlag):
 class VolkswagenFlags(IntFlag):
   # Detected flags
   STOCK_HCA_PRESENT = 1
+  ALT_GEAR = 32  # 기어(GE_Fahrstufe)가 Getriebe_11 대신 Gateway_73(0x3DC)로 오는 차 (commaai/opendbc 동일 값)
   STOCK_KLR_PRESENT = 64  # capacitive steering wheel module present (KLR_01) -> EA hands-on pacification
   STOCK_EA_PRESENT = 16384  # Emergency Assist module present (EA_01/EA_02) -> relay EA HUD (wheel icon)
 

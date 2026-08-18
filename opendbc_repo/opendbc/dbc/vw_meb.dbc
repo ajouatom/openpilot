@@ -327,6 +327,7 @@ BO_ 313 VMM_02: 32 XXX
  SG_ AEB_Active : 31|1@0+ (1,0) [0|1] "" XXX
  SG_ ESP_Hold : 35|1@0+ (1,0) [0|1] "" XXX
  SG_ Brake_Pressed_3 : 48|1@0+ (1,0) [0|1] "" XXX
+ SG_ Long_Control_Inhibit : 52|2@1+ (1,0) [0|3] "" XXX
  SG_ FCW_Active : 56|1@1+ (1,0) [0|1] "" XXX
  SG_ Brake_Pressure : 76|11@1+ (1,0) [0|100] "" XXX
 
@@ -2158,6 +2159,7 @@ CM_ BO_ 522 "Steuergerät für Fahrzeugbewegung";
 CM_ BO_ 1622 "Steuergerät für Lenkungsverriegelung";
 CM_ BO_ 316495165 "Steuergerät ICAS1";
 CM_ BO_ 441800001 "Steuergerät für Fahrzeugbewegung";
+VAL_ 313 Long_Control_Inhibit 1 "not_inhibited" 2 "inhibited";
 VAL_ 64 AB_RGS_Anst 4 "aktiv_Niveau_1" 5 "aktiv_Niveau_2" 6 "aktiv_Niveau_3" 7 "aktiv_Niveau_4" 8 "deaktiviert";
 VAL_ 64 AB_Front_Crash 0 "kein_Front_Crash" 1 "Front_Crash";
 VAL_ 64 AB_Heck_Crash 0 "kein_Heck_Crash" 1 "Heck_Crash";
