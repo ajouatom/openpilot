@@ -35,6 +35,8 @@ VISION_RADAR_FAR_MAX_VLEAD_DELTA_MPS = 10.0
 VISION_RADAR_FAR_CONFIRMATION_S = 0.25
 VISION_ONLY_CORROBORATION_MAX_DPATH_DELTA_M = 2.0
 VISION_ONLY_CORROBORATION_MAX_VLEAD_DELTA_MPS = 20.0
+VISION_CORROBORATED_MIN_OBSERVED_S = 0.25
+VISION_CORROBORATED_MAX_OBSERVATION_GAP_S = 0.15
 VISION_ONLY_RADAR_TRACK_MODE = -2
 VISION_ONLY_CUTIN_HISTORY_S = 0.60
 VISION_ONLY_CUTIN_MIN_HISTORY_S = 0.25
@@ -670,6 +672,8 @@ class VisionRadarMatcher:
     self._stationary_seed_probability = 0.0
     self._stationary_seed_score = 0.0
     self._stationary_path_outlier_since_s: float | None = None
+    self._observed_since_s: dict[tuple[str, int], float] = {}
+    self._observed_last_s: dict[tuple[str, int], float] = {}
     self._stationary_corner_supported = False
     self._stationary_weak_pair_identity: (
       tuple[int, str, int] | None
@@ -2305,6 +2309,7 @@ class VisionRadarMatcher:
     vision: VisionLead | None,
     points: Iterable[RadarPointSnapshot],
     path: Sequence[tuple[float, float]],
+    time_s: float | None,
   ) -> VisionRadarMatch | None:
     """Recover a physical point rejected only by the probabilistic matcher."""
     if (
@@ -2384,6 +2389,17 @@ class VisionRadarMatcher:
         candidate[0].track_id,
       ),
     )
+    if (
+      time_s is not None
+      and math.isfinite(time_s)
+      and point.source.startswith("corner")
+      and abs(point.v_lead - vision.velocity)
+      > max(5.0, abs(vision.velocity) * 0.30)
+      and time_s
+      - self._observed_since_s.get(self._identity(point), time_s)
+      < VISION_CORROBORATED_MIN_OBSERVED_S
+    ):
+      return None
     if abs(point.v_lead) > STATIONARY_MAX_ABS_VLEAD_MPS:
       self.last_identity = self._identity(point)
       self.low_probability_hold_frames = 0
@@ -2750,6 +2766,30 @@ class VisionRadarMatcher:
       if stationary_points is None
       else tuple(stationary_points)
     )
+    if time_s is not None and math.isfinite(time_s):
+      current_identities = {
+        self._identity(point)
+        for point in (*point_values, *stationary_values)
+        if point.measured
+      }
+      for identity in current_identities:
+        last_s = self._observed_last_s.get(identity)
+        if (
+          last_s is None
+          or time_s < last_s
+          or time_s - last_s
+          > VISION_CORROBORATED_MAX_OBSERVATION_GAP_S
+        ):
+          self._observed_since_s[identity] = time_s
+        self._observed_last_s[identity] = time_s
+      stale_identities = tuple(
+        identity
+        for identity, last_s in self._observed_last_s.items()
+        if time_s - last_s > VISION_CORROBORATED_MAX_OBSERVATION_GAP_S
+      )
+      for identity in stale_identities:
+        self._observed_since_s.pop(identity, None)
+        self._observed_last_s.pop(identity, None)
     stationary = self._match_stationary(
       vision,
       stationary_values,
@@ -2807,9 +2847,7 @@ class VisionRadarMatcher:
         return radar_moving
       return regular
     corroborated = self._match_vision_corroborated_radar(
-      vision,
-      stationary_values,
-      path,
+      vision, stationary_values, path, time_s,
     )
     if corroborated is None:
       corroborated = far_corroborated

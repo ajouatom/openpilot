@@ -2858,6 +2858,79 @@ def test_stationary_radar_rejects_fast_vision_speed_mismatch() -> None:
   assert matcher.stationary_identity is None
 
 
+def test_stationary_corner_cannot_bypass_confirmation_via_vision_recovery() -> None:
+  matcher = VisionRadarMatcher()
+  v_ego = 22.2
+  for index in range(5):
+    time_s = index * 0.05
+    point = snapshot_radar_points(
+      (
+        Point(
+          1078,
+          79.0 - 20.0 * time_s,
+          0.8,
+          v_rel=1.5 - v_ego,
+          source="corner235",
+        ),
+      ),
+      v_ego=v_ego,
+    )[0]
+    match = matcher.match(
+      model_with_lead(
+        point.d_rel + 8.5,
+        -0.5,
+        21.3,
+        probability=0.65,
+      ),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_primary_stationary=True,
+    )
+    assert match is None
+
+  assert matcher.stationary_identity is None
+
+
+def test_moving_corner_vision_recovery_requires_observed_age() -> None:
+  matcher = VisionRadarMatcher()
+  v_ego = 22.2
+  match = None
+  for index in range(6):
+    time_s = index * 0.05
+    point = snapshot_radar_points(
+      (
+        Point(
+          1077,
+          87.0 - 15.0 * time_s,
+          -1.3,
+          v_rel=7.2 - v_ego,
+          source="corner235",
+        ),
+      ),
+      v_ego=v_ego,
+    )[0]
+    match = matcher.match(
+      model_with_lead(
+        point.d_rel + 0.5,
+        -0.5,
+        22.0,
+        probability=0.85,
+      ),
+      (),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(point,),
+      prefer_primary_stationary=True,
+    )
+    if index < 5:
+      assert match is None
+
+  assert match is not None
+  assert match.point.track_id == 1077
+
+
 def test_central_corner_stationary_becomes_lead_without_vision() -> None:
   matcher = VisionRadarMatcher()
   match = None
@@ -3545,9 +3618,12 @@ def test_held_stationary_corner_ignores_bounded_velocity_outlier() -> None:
       stationary_points=(point,),
       prefer_corner_stationary=True,
     )
-    assert match is not None
-    assert match.point.track_id == 1005
-    assert match.point.v_lead == pytest.approx(v_lead)
+    if index < 5:
+      assert match is None
+    else:
+      assert match is not None
+      assert match.point.track_id == 1005
+      assert match.point.v_lead == pytest.approx(v_lead)
 
   assert matcher.stationary_identity == ("corner235", 1005)
 

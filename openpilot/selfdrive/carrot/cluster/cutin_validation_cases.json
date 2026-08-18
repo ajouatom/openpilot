@@ -80,6 +80,45 @@
       "scene": "Second overhead sign produces a front-only stationary reflection; track 63 must never become leadTwo"
     },
     {
+      "id": "santafe-4f4-14-sign-pole-stationary-lead-one-1078",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5_HEV 61d2c91e1039ab5e",
+      "log": "000004f4--e1ae2223e7--14/rlog.zst",
+      "source": "front+corner",
+      "window": [39.45, 39.74],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [1078],
+      "forbidden_lead_one_ids": [1078],
+      "scene": "A brief stationary corner reflection from a roadside sign pole must complete stationary confirmation instead of borrowing a moving visual lead and becoming leadOne"
+    },
+    {
+      "id": "santafe-4f4-14-sign-pole-stationary-handoff-1078",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5_HEV 61d2c91e1039ab5e",
+      "log": "000004f4--e1ae2223e7--14/rlog.zst",
+      "source": "front+corner",
+      "window": [39.45, 39.74],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [1078],
+      "forbidden_lead_two_ids": [1078],
+      "scene": "The same unconfirmed sign-pole reflection must not hand off from a transient leadOne assignment into leadTwo"
+    },
+    {
+      "id": "santafe-4f4-14-sign-pole-moving-lead-one-1077",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5_HEV 61d2c91e1039ab5e",
+      "log": "000004f4--e1ae2223e7--14/rlog.zst",
+      "source": "front+corner",
+      "window": [39.25, 39.90],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [1077],
+      "forbidden_lead_one_ids": [1077],
+      "scene": "A short-lived moving corner reflection from the same sign structure narrowly passes broad x/y/velocity sanity gates but must age before vision-correlated recovery can make it leadOne"
+    },
+    {
       "id": "ioniq5-352-5-tunnel-stationary-shadow-34",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE f54fcc4d13d575f6",
       "log": "00000352--7e771034ce--5/rlog.zst",
