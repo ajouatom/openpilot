@@ -644,6 +644,13 @@ class CAR(Platforms):
     CarSpecs(mass=2055, wheelbase=2.9, steerRatio=16, tireStiffnessFactor=0.65),
     flags=HyundaiFlags.EV | HyundaiFlags.ANGLE_CONTROL,
   )
+  KIA_EV5 = HyundaiCanFDPlatformConfig(
+    [
+      HyundaiCarDocs("Kia EV5 (with HDA II) 2026", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_p]))
+    ],
+    CarSpecs(mass=2095, wheelbase=2.75, steerRatio=16, tireStiffnessFactor=0.65),
+    flags=HyundaiFlags.EV | HyundaiFlags.ANGLE_CONTROL,
+  )
   KIA_CARNIVAL_4TH_GEN = HyundaiCanFDPlatformConfig(
     [
       HyundaiCarDocs("Kia Carnival 2022-24", car_parts=CarParts.common([CarHarness.hyundai_a])),
