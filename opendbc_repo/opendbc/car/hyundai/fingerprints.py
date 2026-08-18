@@ -1040,6 +1040,12 @@ FW_VERSIONS = {
       b'\xf1\x00CV  MFC  AT KOR LHD 1.00 1.01 99210-CV500 240405',
     ],
   },
+  CAR.KIA_EV5: {  # (OV1)
+    (Ecu.fwdRadar, 0x7d0, None): [
+    ],
+    (Ecu.fwdCamera, 0x7c4, None): [
+    ],
+  },
   CAR.HYUNDAI_IONIQ_5: {
     (Ecu.fwdRadar, 0x7d0, None): [
       b'\xf1\x00NE1_ RDR -----      1.00 1.00 99110-GI000         ',
@@ -1181,7 +1187,7 @@ FW_VERSIONS = {
       b'\xf1\x00JKev SCC -----      1.00 1.01 99110-DS000         ',
     ],
   },
-  
+
   CAR.HYUNDAI_NEXO_1ST_GEN: {
     (Ecu.abs, 0x7d1, None): [
       b'\xf1\x00FE IEB \x01 312 \x11\x13 58520-M5000',
@@ -1198,7 +1204,7 @@ FW_VERSIONS = {
       b'\xf1\x00FE__ SCC FHCUP      1.00 1.05 99110-M5000         ',
     ],
   },
-  
+
   CAR.GENESIS_GV60_EV_1ST_GEN: {
     (Ecu.fwdCamera, 0x7c4, None): [
       b'\xf1\x00JW1 MFC  AT AUS RHD 1.00 1.03 99211-CU100 221118',
