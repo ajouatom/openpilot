@@ -200,8 +200,12 @@ class CarController(CarControllerBase):
           long_override = CC.cruiseControl.override or CS.out.gasPressed
           self.long_override_counter = min(self.long_override_counter + 1, 5) if long_override else 0
           long_override_begin = long_override and self.long_override_counter < 5
-          self.long_disabled_counter = min(self.long_disabled_counter + 1, 5) if not CC.enabled else 0
-          long_disabling = not CC.enabled and self.long_disabled_counter < 5
+          # accFaulted 도 비활성과 동일하게 램프를 태운다. CC.enabled 가 아직 살아있는 폴트 첫
+          # 프레임들에 HALTEN/ANFAHREN -> 0 직행이 나가는 구멍 방지 (commaai/opendbc 는 faulted 를
+          # long_active 에 포함시켜 항상 disengage 램프 경유. 램프 5스텝 = 100ms 동일).
+          long_inactive = not CC.enabled or CS.out.accFaulted
+          self.long_disabled_counter = min(self.long_disabled_counter + 1, 5) if long_inactive else 0
+          long_disabling = long_inactive and self.long_disabled_counter < 5
 
           acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.enabled, long_override)
           # HALTEN(1)/ANFAHREN(4) -> KEINE_ANFORDERUNG(0) 직행은 차가 P 로 폴트난다 (commaai/opendbc).
