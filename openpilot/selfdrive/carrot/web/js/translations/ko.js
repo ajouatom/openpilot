@@ -370,7 +370,7 @@ window.CarrotTranslations.register("ko", {
     web_auto_update_reboot_desc: "새 소프트웨어를 실제로 받은 경우에만 선택한 조건에서 재부팅합니다.",
     web_auto_update_reboot_off: "재부팅 안 함",
     web_auto_update_reboot_park: "P단에서 재부팅",
-    web_auto_update_reboot_disengaged: "Engage 해제 1초 후",
+    web_auto_update_reboot_disengaged_or_offroad: "Engage 해제 또는 Offroad 1초 후",
     web_auto_update_running: "자동 업데이트: git pull 실행 중입니다.",
     web_auto_update_done: "자동 업데이트가 완료되었습니다. 재부팅은 요청하지 않았습니다.",
     web_auto_update_failed: "자동 업데이트 실패",

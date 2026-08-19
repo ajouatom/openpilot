@@ -80,10 +80,10 @@ def _is_park(gear_shifter) -> bool:
 class AutoRebootCondition:
   """Tracks continuous vehicle state for one pending post-update reboot."""
 
-  def __init__(self, mode: str, disengaged_delay: float = AUTO_REBOOT_DISENGAGED_DELAY) -> None:
+  def __init__(self, mode: str, ready_delay: float = AUTO_REBOOT_DISENGAGED_DELAY) -> None:
     self.mode = mode if mode in AUTO_REBOOT_MODES else AUTO_REBOOT_OFF
-    self.disengaged_delay = max(0.0, float(disengaged_delay))
-    self.disengaged_since: float | None = None
+    self.ready_delay = max(0.0, float(ready_delay))
+    self.ready_since: float | None = None
 
   def update(
     self,
@@ -93,6 +93,8 @@ class AutoRebootCondition:
     engaged: bool,
     car_state_valid: bool = False,
     gear_shifter=None,
+    device_state_valid: bool = False,
+    device_started: bool = True,
   ) -> bool:
     if self.mode == AUTO_REBOOT_PARK:
       return selfdrive_valid and not engaged and car_state_valid and _is_park(gear_shifter)
@@ -100,12 +102,14 @@ class AutoRebootCondition:
     if self.mode != AUTO_REBOOT_DISENGAGED:
       return False
 
-    if not selfdrive_valid or engaged:
-      self.disengaged_since = None
+    disengaged = selfdrive_valid and not engaged
+    offroad = device_state_valid and not device_started
+    if not (disengaged or offroad):
+      self.ready_since = None
       return False
-    if self.disengaged_since is None:
-      self.disengaged_since = now
-    return now - self.disengaged_since >= self.disengaged_delay
+    if self.ready_since is None:
+      self.ready_since = now
+    return now - self.ready_since >= self.ready_delay
 
 
 def _request_reboot() -> None:
@@ -119,7 +123,7 @@ async def _wait_for_auto_reboot(initial_mode: str) -> None:
   # ordinary auto-update polling adds no continuous msgq workload.
   from openpilot.cereal import messaging
 
-  sm = messaging.SubMaster(["carState", "selfdriveState"])
+  sm = messaging.SubMaster(["carState", "selfdriveState", "deviceState"])
   mode = initial_mode
   condition = AutoRebootCondition(mode)
   print(f"[auto_update] reboot armed mode={mode}", flush=True)
@@ -137,14 +141,18 @@ async def _wait_for_auto_reboot(initial_mode: str) -> None:
     sm.update(0)
     selfdrive_valid = _message_valid(sm, "selfdriveState")
     car_state_valid = _message_valid(sm, "carState")
+    device_state_valid = _message_valid(sm, "deviceState")
     engaged = bool(sm["selfdriveState"].enabled) if selfdrive_valid else False
     gear_shifter = sm["carState"].gearShifter if car_state_valid else None
+    device_started = bool(sm["deviceState"].started) if device_state_valid else True
     if condition.update(
       now=time.monotonic(),
       selfdrive_valid=selfdrive_valid,
       engaged=engaged,
       car_state_valid=car_state_valid,
       gear_shifter=gear_shifter,
+      device_state_valid=device_state_valid,
+      device_started=device_started,
     ):
       print(f"[auto_update] reboot condition met mode={mode}", flush=True)
       _request_reboot()

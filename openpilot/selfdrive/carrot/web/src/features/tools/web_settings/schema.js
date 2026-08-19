@@ -21,7 +21,7 @@ const WEB_SETTINGS_GROUPS = [
         options: [
           { value: "off", labelKey: "web_auto_update_reboot_off" },
           { value: "park", labelKey: "web_auto_update_reboot_park" },
-          { value: "disengaged", labelKey: "web_auto_update_reboot_disengaged" },
+          { value: "disengaged", labelKey: "web_auto_update_reboot_disengaged_or_offroad" },
         ],
       },
       {

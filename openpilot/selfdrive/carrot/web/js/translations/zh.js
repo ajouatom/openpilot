@@ -370,7 +370,7 @@ window.CarrotTranslations.register("zh", {
     web_auto_update_reboot_desc: "仅在实际拉取到新软件后，才会按所选条件重启。",
     web_auto_update_reboot_off: "不重启",
     web_auto_update_reboot_park: "P挡时重启",
-    web_auto_update_reboot_disengaged: "退出 Engage 1秒后",
+    web_auto_update_reboot_disengaged_or_offroad: "退出 Engage 或进入 Offroad 1秒后",
     web_auto_update_running: "自动更新：正在执行 git pull。",
     web_auto_update_done: "自动更新完成。未请求重启。",
     web_auto_update_failed: "自动更新失败",

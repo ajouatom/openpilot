@@ -37,6 +37,51 @@ def test_disengaged_timer_resets_when_state_is_engaged_or_invalid():
   assert condition.update(now=4.0, selfdrive_valid=True, engaged=False)
 
 
+def test_offroad_reboot_requires_one_continuous_second_without_selfdrive_state():
+  condition = AutoRebootCondition(AUTO_REBOOT_DISENGAGED)
+
+  assert not condition.update(
+    now=20.0,
+    selfdrive_valid=False,
+    engaged=False,
+    device_state_valid=True,
+    device_started=False,
+  )
+  assert not condition.update(
+    now=20.9,
+    selfdrive_valid=False,
+    engaged=False,
+    device_state_valid=True,
+    device_started=False,
+  )
+  assert condition.update(
+    now=21.0,
+    selfdrive_valid=False,
+    engaged=False,
+    device_state_valid=True,
+    device_started=False,
+  )
+
+
+def test_onroad_without_valid_selfdrive_state_does_not_reboot():
+  condition = AutoRebootCondition(AUTO_REBOOT_DISENGAGED)
+
+  assert not condition.update(
+    now=30.0,
+    selfdrive_valid=False,
+    engaged=False,
+    device_state_valid=True,
+    device_started=True,
+  )
+  assert not condition.update(
+    now=32.0,
+    selfdrive_valid=False,
+    engaged=False,
+    device_state_valid=True,
+    device_started=True,
+  )
+
+
 def test_off_mode_never_requests_reboot():
   condition = AutoRebootCondition(AUTO_REBOOT_OFF)
 
