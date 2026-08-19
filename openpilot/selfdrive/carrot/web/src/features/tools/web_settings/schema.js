@@ -15,6 +15,16 @@ const WEB_SETTINGS_GROUPS = [
         descKey: "web_auto_update_desc",
       },
       {
+        id: "auto_update_reboot",
+        titleKey: "web_auto_update_reboot",
+        descKey: "web_auto_update_reboot_desc",
+        options: [
+          { value: "off", labelKey: "web_auto_update_reboot_off" },
+          { value: "park", labelKey: "web_auto_update_reboot_park" },
+          { value: "disengaged", labelKey: "web_auto_update_reboot_disengaged" },
+        ],
+      },
+      {
         id: "start_page",
         titleKey: "web_start_page",
         descKey: "web_start_page_desc",

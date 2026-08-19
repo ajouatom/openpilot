@@ -11,14 +11,22 @@ from .web_settings import read_web_settings
 
 # Device-side auto update. Runs inside carrot_server (always_run), so it works
 # whenever the device is on — no browser/web tab needed. Mirrors the manual
-# "git pull" tool (hard reset + pull). Never reboots; the user reboots later.
+# "git pull" tool (hard reset + pull). An optional reboot is armed only when
+# the pull actually changes HEAD, then waits for the configured condition.
 AUTO_UPDATE_POLL_INTERVAL = 60.0
 AUTO_UPDATE_COOLDOWN = 300.0       # min seconds between pulls
 AUTO_UPDATE_INITIAL_DELAY = 30.0
+AUTO_REBOOT_POLL_INTERVAL = 0.1
+AUTO_REBOOT_DISENGAGED_DELAY = 1.0
 RESET_TIMEOUT = 120.0
 PULL_TIMEOUT = 180.0
 GIT_INFO_TIMEOUT = 10.0    # cheap rev-parse/log/diff lookups
 NOTIFY_TIMEOUT = 4.0       # CWP push POST (fire-and-forget)
+
+AUTO_REBOOT_OFF = "off"
+AUTO_REBOOT_PARK = "park"
+AUTO_REBOOT_DISENGAGED = "disengaged"
+AUTO_REBOOT_MODES = {AUTO_REBOOT_OFF, AUTO_REBOOT_PARK, AUTO_REBOOT_DISENGAGED}
 
 _last_pull_at = 0.0
 
@@ -45,6 +53,103 @@ def _auto_update_enabled() -> bool:
     return bool(read_web_settings().get("auto_update_git_pull"))
   except Exception:
     return False
+
+
+def _auto_reboot_mode() -> str:
+  try:
+    mode = str(read_web_settings().get("auto_update_reboot") or AUTO_REBOOT_OFF).strip().lower()
+  except Exception:
+    return AUTO_REBOOT_OFF
+  return mode if mode in AUTO_REBOOT_MODES else AUTO_REBOOT_OFF
+
+
+def _message_valid(sm, service: str) -> bool:
+  try:
+    return bool(sm.valid[service]) and bool(sm.alive[service])
+  except Exception:
+    return False
+
+
+def _is_park(gear_shifter) -> bool:
+  try:
+    return str(gear_shifter).strip().lower().rsplit(".", 1)[-1] == "park"
+  except Exception:
+    return False
+
+
+class AutoRebootCondition:
+  """Tracks continuous vehicle state for one pending post-update reboot."""
+
+  def __init__(self, mode: str, disengaged_delay: float = AUTO_REBOOT_DISENGAGED_DELAY) -> None:
+    self.mode = mode if mode in AUTO_REBOOT_MODES else AUTO_REBOOT_OFF
+    self.disengaged_delay = max(0.0, float(disengaged_delay))
+    self.disengaged_since: float | None = None
+
+  def update(
+    self,
+    *,
+    now: float,
+    selfdrive_valid: bool,
+    engaged: bool,
+    car_state_valid: bool = False,
+    gear_shifter=None,
+  ) -> bool:
+    if self.mode == AUTO_REBOOT_PARK:
+      return selfdrive_valid and not engaged and car_state_valid and _is_park(gear_shifter)
+
+    if self.mode != AUTO_REBOOT_DISENGAGED:
+      return False
+
+    if not selfdrive_valid or engaged:
+      self.disengaged_since = None
+      return False
+    if self.disengaged_since is None:
+      self.disengaged_since = now
+    return now - self.disengaged_since >= self.disengaged_delay
+
+
+def _request_reboot() -> None:
+  from openpilot.common.params import Params
+
+  Params().put_bool("DoReboot", True)
+
+
+async def _wait_for_auto_reboot(initial_mode: str) -> None:
+  # Create a dedicated SubMaster only while an actual update is pending, so
+  # ordinary auto-update polling adds no continuous msgq workload.
+  from openpilot.cereal import messaging
+
+  sm = messaging.SubMaster(["carState", "selfdriveState"])
+  mode = initial_mode
+  condition = AutoRebootCondition(mode)
+  print(f"[auto_update] reboot armed mode={mode}", flush=True)
+
+  while True:
+    selected_mode = _auto_reboot_mode()
+    if selected_mode == AUTO_REBOOT_OFF:
+      print("[auto_update] reboot cancelled", flush=True)
+      return
+    if selected_mode != mode:
+      mode = selected_mode
+      condition = AutoRebootCondition(mode)
+      print(f"[auto_update] reboot mode changed mode={mode}", flush=True)
+
+    sm.update(0)
+    selfdrive_valid = _message_valid(sm, "selfdriveState")
+    car_state_valid = _message_valid(sm, "carState")
+    engaged = bool(sm["selfdriveState"].enabled) if selfdrive_valid else False
+    gear_shifter = sm["carState"].gearShifter if car_state_valid else None
+    if condition.update(
+      now=time.monotonic(),
+      selfdrive_valid=selfdrive_valid,
+      engaged=engaged,
+      car_state_valid=car_state_valid,
+      gear_shifter=gear_shifter,
+    ):
+      print(f"[auto_update] reboot condition met mode={mode}", flush=True)
+      _request_reboot()
+      return
+    await asyncio.sleep(AUTO_REBOOT_POLL_INTERVAL)
 
 
 async def _diff_stats(old_head: str, new_head: str) -> tuple[int, int, int]:
@@ -120,13 +225,14 @@ async def _notify_cwp(old_head: str) -> None:
   print(f"[auto_update] notify {'sent' if ok else 'failed'} commits={len(commits)} http={status}", flush=True)
 
 
-async def _run_git_pull() -> bool:
+async def _run_git_pull() -> tuple[bool, bool]:
   rc, old_head = await _git(["rev-parse", "HEAD"], GIT_INFO_TIMEOUT)
   old_head = old_head.strip() if rc == 0 else ""
-  # Same as the manual git pull button: hard reset then pull. No reboot.
+  # Same as the manual git pull button: hard reset then pull.
   await _git(["reset", "--hard"], RESET_TIMEOUT)
   rc, out = await _git(["pull"], PULL_TIMEOUT)
-  if rc == 0 and did_git_pull_update(out):
+  updated = rc == 0 and did_git_pull_update(out)
+  if updated:
     try:
       write_git_pull_time()
     except Exception:
@@ -135,7 +241,7 @@ async def _run_git_pull() -> bool:
       await _notify_cwp(old_head)
     except Exception as exc:
       print(f"[auto_update] notify skipped: {exc}", flush=True)
-  return rc == 0
+  return rc == 0, updated
 
 
 async def auto_update_loop(
@@ -154,9 +260,17 @@ async def auto_update_loop(
         if behind > 0 and (time.time() - _last_pull_at) >= AUTO_UPDATE_COOLDOWN:
           print(f"[auto_update] behind {behind} commit(s) -> git pull")
           _last_pull_at = time.time()
-          ok = await _run_git_pull()
+          ok, updated = await _run_git_pull()
           clear_git_status_cache()
           print(f"[auto_update] git pull {'ok' if ok else 'failed'}")
+          mode = _auto_reboot_mode()
+          if updated and mode != AUTO_REBOOT_OFF:
+            try:
+              await _wait_for_auto_reboot(mode)
+            except asyncio.CancelledError:
+              raise
+            except Exception as exc:
+              print(f"[auto_update] reboot monitor error: {exc}", flush=True)
     except asyncio.CancelledError:
       raise
     except Exception as exc:
