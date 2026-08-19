@@ -18,10 +18,13 @@ from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   lead_duplicates_primary,
 )
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
+  CornerCutInPredecelTracker,
+  RadarMotionCutIn,
   RadarMotionDecisionTracker,
   RadarMotionPredictor,
   _scoped_motion_points,
   _visible_scoped_motion_points,
+  corner_cutin_predecel_score,
   project_to_model_path,
   radar_motion_sensitivity,
 )
@@ -138,6 +141,7 @@ class DPathRadarOutput:
   leads_cutin: tuple[dict[str, Any], ...]
   leads_left2: tuple[dict[str, Any], ...]
   leads_right2: tuple[dict[str, Any], ...]
+  lead_cutin_risk: dict[str, Any] | None
 
 
 class RadarLeadDynamics:
@@ -235,6 +239,7 @@ class DPathRadarController:
       threshold=sensitivity.cut_in_threshold,
       confirmation_s=sensitivity.confirmation_s,
     )
+    self.cutin_predecel_tracker = CornerCutInPredecelTracker()
 
   def _points_at_model_time(
     self,
@@ -397,8 +402,9 @@ class DPathRadarController:
       self.stationary_primary_handoff_tracker.reset()
       self.primary_cut_out_predictor = RadarMotionPredictor()
       self.lead_dynamics.reset()
+      self.cutin_predecel_tracker.reset()
       return DPathRadarOutput(
-        None, None, None, None, (), (), (), (), (), (),
+        None, None, None, None, (), (), (), (), (), (), None,
       )
 
     points = self._points_at_model_time(
@@ -533,6 +539,43 @@ class DPathRadarController:
       )
       for identity, prediction in predictions.items()
     }
+    predecel = self.cutin_predecel_tracker.update(
+      time_s,
+      (
+        RadarMotionCutIn(
+          prediction,
+          corner_cutin_predecel_score(
+            prediction,
+            point.d_rel,
+            point.v_rel,
+          ),
+        )
+        for prediction in predictions.values()
+        if (
+          self.motion_sensitivity.cut_in_enabled
+          and (
+            point := point_by_identity.get(
+              (prediction.source, prediction.track_id),
+            )
+          ) is not None
+        )
+      ),
+    )
+    lead_cutin_risk = None
+    if predecel is not None:
+      risk_point = point_by_identity.get((
+        predecel.prediction.source,
+        predecel.prediction.track_id,
+      ))
+      if risk_point is not None:
+        lead_cutin_risk = self._lead_from_radar_point(
+          risk_point,
+          predecel.prediction.d_path,
+          0.0,
+          predecel.score,
+        )
+        if lead_duplicates_primary(lead_cutin_risk, lead_one):
+          lead_cutin_risk = None
     decision = self.motion_decisions.update(
       time_s,
       (
@@ -763,4 +806,5 @@ class DPathRadarController:
       leads_cutin=selection.cutins,
       leads_left2=self._pick_two(leads_left),
       leads_right2=self._pick_two(leads_right),
+      lead_cutin_risk=lead_cutin_risk,
     )
