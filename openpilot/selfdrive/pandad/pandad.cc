@@ -19,6 +19,7 @@
 #include "common/swaglog.h"
 #include "common/timing.h"
 #include "common/util.h"
+#include "selfdrive/pandad/spi_alert.h"
 #include "system/hardware/hw.h"
 
 #define MAX_IR_PANDA_VAL 50
@@ -150,49 +151,57 @@ void spi_error_report_thread() {
   uint64_t observed_sequence = get_panda_spi_error_sequence();
   PandaSpiErrorEvent pending_event;
   bool has_pending_event = false;
-  bool capture_requested = false;
+  PandaSpiAlertTracker alert_tracker;
 
   while (!do_exit) {
+    const uint64_t now_ms = millis_since_boot();
     const uint64_t current_sequence = get_panda_spi_error_sequence();
     const bool is_onroad = pandad_is_onroad.load(std::memory_order_relaxed);
+    alert_tracker.update_onroad(is_onroad, now_ms);
 
     if (!is_onroad) {
-      // Ignore startup/offroad SPI activity and arm one capture for the next drive.
+      // Ignore startup/offroad SPI activity and discard an alert candidate when
+      // ignition drops during the confirmation delay.
       observed_sequence = current_sequence;
       has_pending_event = false;
-      capture_requested = false;
-    } else if (!capture_requested) {
-      if (!has_pending_event && current_sequence != observed_sequence) {
+    } else {
+      if (current_sequence != observed_sequence) {
+        const uint64_t event_count = current_sequence - observed_sequence;
         pending_event = get_latest_panda_spi_error_event();
-        has_pending_event = true;
-        LOGW("spi_tmux_trigger_diag: sequence=%" PRIu64 ", endpoint=0x%x"
-             ", attempt=%u, result=%d, tx_len=%u, max_rx_len=%u, timeout_ms=%u"
-             ", phase=%s, lock_us=%" PRIu64
-             ", turnaround_us=%" PRIu64 ", hack_us=%" PRIu64
-             ", dack_us=%" PRIu64 ", recovery_us=%" PRIu64
-             ", total_us=%" PRIu64 ", recovery_restarts=%u",
-             pending_event.sequence, pending_event.endpoint, pending_event.attempt,
-             pending_event.result, pending_event.tx_len, pending_event.max_rx_len,
-             pending_event.timeout_ms, pending_event.phase.c_str(), pending_event.lock_us,
-             pending_event.turnaround_us, pending_event.hack_us, pending_event.dack_us,
-             pending_event.recovery_us, pending_event.total_us, pending_event.recovery_restarts);
+        observed_sequence = current_sequence;
+        const bool terminal_failure = pending_event.final_result < 0;
+        if (alert_tracker.observe(now_ms, event_count, terminal_failure)) {
+          has_pending_event = true;
+          LOGW("spi_tmux_candidate_diag: sequence=%" PRIu64 ", events=%" PRIu64
+               ", endpoint=0x%x, first_result=%d, final_result=%d"
+               ", attempts=%u, recoveries=%u, tx_len=%u, max_rx_len=%u, timeout_ms=%u"
+               ", phase=%s, lock_us=%" PRIu64
+               ", turnaround_us=%" PRIu64 ", hack_us=%" PRIu64
+               ", dack_us=%" PRIu64 ", recovery_us=%" PRIu64
+               ", total_us=%" PRIu64 ", recovery_restarts=%u",
+               pending_event.sequence, event_count, pending_event.endpoint,
+               pending_event.result, pending_event.final_result,
+               pending_event.attempts, pending_event.recoveries,
+               pending_event.tx_len, pending_event.max_rx_len,
+               pending_event.timeout_ms, pending_event.phase.c_str(), pending_event.lock_us,
+               pending_event.turnaround_us, pending_event.hack_us, pending_event.dack_us,
+               pending_event.recovery_us, pending_event.total_us, pending_event.recovery_restarts);
+        }
       }
 
-      if (has_pending_event) {
+      if (has_pending_event && alert_tracker.ready(now_ms)) {
         const std::string pending_reason = params.get("CarrotException");
         if (pending_reason.empty()) {
           params.put("CarrotException", "spi_error");
           LOGW("spi_tmux_trigger: queued CarrotException=spi_error");
-          observed_sequence = pending_event.sequence;
-          capture_requested = true;
+          alert_tracker.mark_capture_requested();
+          has_pending_event = false;
         } else if (pending_reason == "spi_error") {
           LOGW("spi_tmux_trigger: coalesced with CarrotException=spi_error");
-          observed_sequence = pending_event.sequence;
-          capture_requested = true;
+          alert_tracker.mark_capture_requested();
+          has_pending_event = false;
         }
       }
-    } else {
-      observed_sequence = current_sequence;
     }
 
     util::sleep_for(100);

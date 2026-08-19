@@ -17,6 +17,9 @@ struct PandaSpiErrorEvent {
   uint8_t endpoint = 0U;
   uint32_t attempt = 0U;
   int result = 0;
+  int final_result = 0;
+  uint32_t attempts = 0U;
+  uint32_t recoveries = 0U;
   uint16_t tx_len = 0U;
   uint16_t max_rx_len = 0U;
   unsigned int timeout_ms = 0U;

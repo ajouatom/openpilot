@@ -7,6 +7,67 @@
 #include "cereal/messaging/messaging.h"
 #include "common/util.h"
 #include "selfdrive/pandad/panda.h"
+#include "selfdrive/pandad/spi_alert.h"
+
+TEST_CASE("Panda SPI alert ignores isolated recovered retries", "[spi_alert]") {
+  PandaSpiAlertTracker tracker;
+  tracker.update_onroad(true, 1000U);
+
+  REQUIRE_FALSE(tracker.observe(6000U, 1U, false));
+  REQUIRE_FALSE(tracker.ready(8000U));
+}
+
+TEST_CASE("Panda SPI alert reports a recovered burst after confirmation", "[spi_alert]") {
+  PandaSpiAlertTracker tracker;
+  tracker.update_onroad(true, 1000U);
+
+  REQUIRE_FALSE(tracker.observe(6000U, 1U, false));
+  REQUIRE_FALSE(tracker.observe(7000U, 1U, false));
+  REQUIRE(tracker.observe(8000U, 1U, false));
+  REQUIRE_FALSE(tracker.ready(8999U));
+  REQUIRE(tracker.ready(9000U));
+}
+
+TEST_CASE("Panda SPI alert expires recovered retries outside the burst window", "[spi_alert]") {
+  PandaSpiAlertTracker tracker;
+  tracker.update_onroad(true, 1000U);
+
+  REQUIRE_FALSE(tracker.observe(6000U, 1U, false));
+  REQUIRE_FALSE(tracker.observe(7000U, 1U, false));
+  REQUIRE_FALSE(tracker.observe(17001U, 1U, false));
+  REQUIRE_FALSE(tracker.ready(20000U));
+}
+
+TEST_CASE("Panda SPI alert confirms terminal failures only while onroad", "[spi_alert]") {
+  PandaSpiAlertTracker tracker;
+  tracker.update_onroad(true, 1000U);
+
+  REQUIRE(tracker.observe(6000U, 1U, true));
+  REQUIRE_FALSE(tracker.ready(6999U));
+  tracker.update_onroad(false, 6500U);
+  REQUIRE_FALSE(tracker.ready(7000U));
+
+  tracker.update_onroad(true, 8000U);
+  REQUIRE_FALSE(tracker.observe(9000U, 1U, true));
+  REQUIRE(tracker.observe(13000U, 1U, true));
+  REQUIRE(tracker.ready(14000U));
+}
+
+TEST_CASE("Panda SPI alert captures at most once per drive", "[spi_alert]") {
+  PandaSpiAlertTracker tracker;
+  tracker.update_onroad(true, 1000U);
+  REQUIRE(tracker.observe(6000U, 3U, false));
+  REQUIRE(tracker.ready(7000U));
+  tracker.mark_capture_requested();
+
+  REQUIRE_FALSE(tracker.observe(8000U, 3U, false));
+  REQUIRE_FALSE(tracker.ready(9000U));
+
+  tracker.update_onroad(false, 10000U);
+  tracker.update_onroad(true, 11000U);
+  REQUIRE(tracker.observe(16000U, 3U, false));
+  REQUIRE(tracker.ready(17000U));
+}
 
 struct PandaTest : public Panda {
   PandaTest(uint32_t bus_offset, int can_list_size, cereal::PandaState::PandaType hw_type);
