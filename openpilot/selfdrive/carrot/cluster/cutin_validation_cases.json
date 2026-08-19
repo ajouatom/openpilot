@@ -1169,6 +1169,18 @@
       "human_verified": true,
       "forbidden_lead_two_ids": [58, 1005],
       "scene": "Vehicle ahead continues in its lane without cutting in"
+    },
+    {
+      "id": "santafe-4f6-19-adjacent-left-17",
+      "vehicle_folder": "HYUNDAI_SANTAFE_MX5_HEV 61d2c91e1039ab5e",
+      "log": "000004f6--33e8c8595d--19/rlog.zst",
+      "source": "front+corner",
+      "window": [17.20, 18.20],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "forbidden_lead_two_ids": [2516],
+      "scene": "Black sedan remains in the adjacent left lane while a small quantized inward shift briefly touches the lane-boundary straddle gate"
     }
   ]
 }

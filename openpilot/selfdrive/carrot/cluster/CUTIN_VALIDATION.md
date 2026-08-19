@@ -82,6 +82,10 @@ PC visual replay runs only the new `DPathRadarController` and
 radar inputs; it does not import or display recorded conventional-radard lead
 roles or CUT-IN events. The headless validator may compute existing-radard
 metrics separately, but those values are never input to the physical predictor.
+Replay first orders rlog messages by `logMonoTime`, advances predictor history
+on the logged `modelV2.timestampEof` exposure clock used by production RadarD,
+and prefers recorded stable corner `liveTracks`. Raw-CAN corner reconstruction
+is used only when the corresponding recorded corner group is absent.
 
 When an older log needs raw-CAN corner-track reconstruction, reconstructed
 points older than 100 ms are excluded from predictor input. The longer display
@@ -150,7 +154,11 @@ The predictor:
 The current IN state includes ego and target vehicle half-widths. A tracked
 OUT-to-IN crossing keeps its pending entry evidence after overlap begins so
 the confirmation interval can complete. A point first observed inside has no
-such entry evidence. Only small path-state and confirmation hysteresis are allowed. Do not add per-route,
+such entry evidence. The corner-radar lane-boundary straddle path requires at
+least 0.35 m of measured inward displacement so a parallel adjacent vehicle's
+small quantized lateral shift cannot create a boundary-only CUT-IN. The closer
+near-side emergency path retains its separate 0.20 m displacement requirement.
+Only small path-state and confirmation hysteresis are allowed. Do not add per-route,
 per-vehicle, or scene-specific exceptions in response to a poor validation
 case; report the underlying history, continuity, geometry, or uncertainty
 failure instead.
@@ -177,6 +185,9 @@ python openpilot/selfdrive/carrot/validate_radar_lead_model.py --cases-only
 # One named case
 python openpilot/selfdrive/carrot/validate_radar_lead_model.py --case carnival-5b-18-early
 
+# Fast predictor iteration: skip the unchanged existing-radard replay
+python openpilot/selfdrive/carrot/validate_radar_lead_model.py --shadow-only
+
 # Treat existing-radard expectation failures as a nonzero result
 python openpilot/selfdrive/carrot/validate_radar_lead_model.py --strict-radard
 
@@ -186,6 +197,12 @@ python openpilot/selfdrive/carrot/validate_radar_lead_model.py --strict-shadow
 # Remove corner inputs
 python openpilot/selfdrive/carrot/validate_radar_lead_model.py --front-only
 ```
+
+`--shadow-only` still loads every maintained rlog and runs the complete
+physical dPath controller. It skips only the separate existing-radard CUT-IN
+reconstruction, which otherwise rereads each rlog once per requested radar
+source. Use it while iterating on `radar_motion`; run the normal command before
+final integration when the existing-radard comparison is also required.
 
 An optional `--report PATH` writes a validation replay report. Reports are
 diagnostic output, not a production artifact.
@@ -233,7 +250,7 @@ physical-predictor CUT-IN only. One physical continuity creates at most one
 automatic pause even if it briefly moves between lead roles; a physically
 discontinuous reuse of the same track ID may create another pause.
 
-With no filters, the maintained cases cover 48 unique logs. They open in
+With no filters, the maintained cases cover 49 unique logs. They open in
 sequence, and finishing one log automatically opens the next.
 
 Controls:

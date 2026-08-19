@@ -264,6 +264,40 @@ def test_corner_lane_boundary_straddle_requires_directional_radar_agreement(
     assert prediction.cut_in_probability < 0.30
 
 
+def test_lane_boundary_entry_rejects_sub_35cm_quantized_drift() -> None:
+  predictor = RadarMotionPredictor()
+  prediction = None
+  lateral_values = (3.0,) * 18 + (
+    2.98, 2.96, 2.94, 2.92, 2.90, 2.88, 2.86, 2.84,
+    2.82, 2.80, 2.78, 2.76, 2.74, 2.72, 2.69,
+  )
+  for index, y_rel in enumerate(lateral_values):
+    prediction = predictor.update(
+      index * 0.05,
+      (
+        Point(
+          2516,
+          15.0 - index * 0.2,
+          y_rel,
+          source="corner235",
+          v_rel=-4.0,
+          v_lead=16.0,
+          yv_rel=-0.2,
+        ),
+      ),
+      STRAIGHT_PATH,
+      v_ego=20.0,
+    )[("corner235", 2516)]
+  assert prediction is not None
+
+  assert 0.20 <= prediction.directional_inward_displacement_m < 0.35
+  assert prediction.directional_consistency >= 0.90
+  assert prediction.d_path_rate_short < -0.25
+  assert prediction.reported_normal_speed <= -0.20
+  assert not prediction.lane_boundary_directional_entry
+  assert prediction.cut_in_probability < 0.30
+
+
 def test_projection_uses_path_arc_distance_normal_distance_and_tangent() -> None:
   path = ((0.0, 0.0), (10.0, 0.0), (20.0, -10.0))
   offset = 2.0 / (2.0 ** 0.5)

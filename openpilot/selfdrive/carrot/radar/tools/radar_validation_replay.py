@@ -971,6 +971,7 @@ def prediction_with_validation_lookahead(
   if (
     prediction.current_path_occupancy
     or prediction.near_side_directional_entry
+    or prediction.lane_boundary_directional_entry
     or has_sustained_future_overlap
   ):
     return replace(
@@ -1644,10 +1645,24 @@ def _copy_recorded_lead(lead: Any) -> RecordedLead:
   )
 
 
+def _empty_recorded_lead() -> RecordedLead:
+  return RecordedLead(False, False, -1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+
 def aligned_video_time_s(qcamera_start_eof_ns: int, model_eof_ns: int) -> float | None:
   if qcamera_start_eof_ns <= 0 or model_eof_ns < qcamera_start_eof_ns:
     return None
   return (model_eof_ns - qcamera_start_eof_ns) / 1e9
+
+
+def monotonic_log_events(events: Iterable[Any]) -> list[Any]:
+  """Return rlog events in the timestamp order seen by live subscribers."""
+  return sorted(events, key=lambda event: int(event.logMonoTime))
+
+
+def predictor_reference_time_ns(event_ns: int, model_reference_ns: int) -> int:
+  """Use the model exposure timestamp, matching production RadarD."""
+  return model_reference_ns if model_reference_ns > 0 else event_ns
 
 
 def _yaw_metadata(
@@ -1698,11 +1713,14 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   latest_model_ns = 0
   latest_model_eof_ns = 0
   qcamera_start_eof_ns = 0
-  absolute_frames: list[tuple[int, RadarFrame]] = []
+  absolute_frames: list[tuple[int, int, int, RadarFrame]] = []
+  recorded_leads_by_model_ns: dict[
+    int, tuple[RecordedLead, RecordedLead]
+  ] = {}
   corner_tracker = route_replay.StableCornerObjectTracker()
   group2_front_quality: dict[int, tuple[int, int]] = {}
 
-  for event in schema.Event.read_multiple_bytes(data):
+  for event in monotonic_log_events(schema.Event.read_multiple_bytes(data)):
     try:
       which = event.which()
     except Exception:
@@ -1718,7 +1736,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         max_measurement_age_s=VALIDATION_CORNER_MAX_MEASUREMENT_AGE_S,
       )
       merged = route_replay.merge_recorded_and_reconstructed_tracks(
-        tuple(event.liveTracks.points), reconstructed, raw_corner_only=True,
+        tuple(event.liveTracks.points), reconstructed,
       )
       copied_points = _copy_track_points(merged)
       latest_points = tuple(
@@ -1786,7 +1804,8 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       ) = _copy_model(event.modelV2)
       latest_model_ns = event_ns
       latest_model_eof_ns = int(event.modelV2.timestampEof)
-    elif which == "radarState" and latest_points is not None:
+      if latest_points is None:
+        continue
       live_pose_age_s = (
         max(0.0, (event_ns - latest_live_pose_ns) / 1e9)
         if latest_live_pose_ns else math.inf
@@ -1799,15 +1818,18 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         latest_steer_ratio,
         latest_wheelbase,
       )
-      radar_state = event.radarState
       model_reference_ns = (
         latest_model_eof_ns
         if latest_model_eof_ns > 0
         else latest_model_ns
       )
-      absolute_frames.append((event_ns, RadarFrame(
+      predictor_time_ns = predictor_reference_time_ns(
+        event_ns, model_reference_ns,
+      )
+      absolute_frames.append((
+        event_ns, predictor_time_ns, latest_model_ns, RadarFrame(
         mono_time_s=event_ns / 1e9,
-        time_s=0.0,
+        time_s=predictor_time_ns / 1e9,
         input_age_s=max(0.0, (event_ns - latest_points_ns) / 1e9),
         # modelV2 coordinates belong to the camera exposure time. Its event
         # logMonoTime is publication time after inference and is too recent.
@@ -1818,8 +1840,8 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         lane_lines=latest_lanes,
         lane_probs=latest_lane_probs,
         model_leads=latest_model_leads,
-        recorded_one=_copy_recorded_lead(radar_state.leadOne),
-        recorded_two=_copy_recorded_lead(radar_state.leadTwo),
+        recorded_one=_empty_recorded_lead(),
+        recorded_two=_empty_recorded_lead(),
         radar_delay_s=latest_radar_delay_s,
         video_time_s=aligned_video_time_s(qcamera_start_eof_ns, latest_model_eof_ns),
         path_y_stds=latest_path_y_stds,
@@ -1832,14 +1854,31 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         steer_ratio=latest_steer_ratio,
         wheelbase=latest_wheelbase,
       )))
+    elif which == "radarState":
+      radar_state = event.radarState
+      model_ns = int(radar_state.mdMonoTime)
+      if model_ns > 0:
+        recorded_leads_by_model_ns[model_ns] = (
+          _copy_recorded_lead(radar_state.leadOne),
+          _copy_recorded_lead(radar_state.leadTwo),
+        )
 
   if not absolute_frames:
-    raise RuntimeError("no aligned liveTracks/radarState frames were found in this log")
-  origin_ns = absolute_frames[0][0]
-  return [
-    replace(frame, time_s=(event_ns - origin_ns) / 1e9)
-    for event_ns, frame in absolute_frames
-  ]
+    raise RuntimeError("no aligned liveTracks/modelV2 frames were found in this log")
+  origin_ns = absolute_frames[0][1]
+  frames = []
+  for _, predictor_time_ns, model_ns, frame in absolute_frames:
+    recorded = recorded_leads_by_model_ns.get(model_ns)
+    if recorded is not None:
+      frame = replace(
+        frame,
+        recorded_one=recorded[0],
+        recorded_two=recorded[1],
+      )
+    frames.append(replace(
+      frame, time_s=(predictor_time_ns - origin_ns) / 1e9,
+    ))
+  return frames
 
 
 def front_only_frames(frames: list[RadarFrame]) -> tuple[list[RadarFrame], int]:
@@ -3998,8 +4037,10 @@ __all__ = (
   "main",
   "model_line_y",
   "motion_points_at_model_time",
+  "monotonic_log_events",
   "preferred_radar_points",
   "preferred_radar_motion_sensor",
+  "predictor_reference_time_ns",
   "qcamera_path_for_log",
   "radar_points_at_model_time",
   "radar_trajectory_series",
