@@ -33,6 +33,8 @@ FRONT_PREDICTED_CUTIN_MAX_ABS_DPATH_M = 2.20
 CORNER_FAR_CUTIN_MAX_ABS_DPATH_M = 2.20
 CORNER_FAR_CUTIN_MIN_LONG_INWARD_MPS = 0.65
 CORNER_FAR_CUTIN_MIN_CLOSING_SPEED_MPS = 3.0
+CORNER_DISTANT_CURRENT_PATH_MIN_DREL_M = 45.0
+CORNER_DISTANT_CURRENT_PATH_MIN_INWARD_DISPLACEMENT_M = 0.35
 FRONT_NEAR_PATH_MAX_DREL_M = 10.0
 FRONT_NEAR_PATH_MIN_SHORT_INWARD_MPS = 0.50
 FRONT_NEAR_PATH_MIN_LONG_INWARD_MPS = 0.20
@@ -339,16 +341,35 @@ def front_cutin_motion_supported(
 ) -> bool:
   """Require strong motion or sustained direction-supported overlap from front."""
   if source != "frontRadar":
+    side = (
+      math.copysign(1.0, float(d_path))
+      if abs(float(d_path)) > 1e-6
+      else 0.0
+    )
     if (
       source.startswith("corner")
       and not current_path_occupancy
       and abs(float(d_path)) > CORNER_FAR_CUTIN_MAX_ABS_DPATH_M
     ):
-      side = math.copysign(1.0, float(d_path))
       return (
         -side * float(d_path_rate_long)
         >= CORNER_FAR_CUTIN_MIN_LONG_INWARD_MPS
         or float(v_rel) <= -CORNER_FAR_CUTIN_MIN_CLOSING_SPEED_MPS
+      )
+    if (
+      source.startswith("corner")
+      and current_path_occupancy
+      and float(d_rel) >= CORNER_DISTANT_CURRENT_PATH_MIN_DREL_M
+    ):
+      return (
+        float(directional_inward_displacement_m)
+        >= CORNER_DISTANT_CURRENT_PATH_MIN_INWARD_DISPLACEMENT_M
+        and float(directional_consistency)
+        >= float(minimum_directional_consistency)
+        and float(directional_inward_sample_ratio)
+        >= DIRECTIONAL_MIN_INWARD_SAMPLE_RATIO
+        and -side * float(d_path_rate_long)
+        >= DIRECTIONAL_MIN_LONG_INWARD_RATE_MPS
       )
     return True
   side = (
@@ -459,7 +480,9 @@ class DPathLeadTwoTracker:
       candidate
       for candidate in candidate_values
       if (
-        candidate.identity == self.active_identity
+        self.active_identity is not None
+        and candidate.source == self.active_identity[0]
+        and candidate.continuity_id == self.active_identity[2]
         and candidate.retainable
         and self._position_continuous(time_s, candidate)
       )

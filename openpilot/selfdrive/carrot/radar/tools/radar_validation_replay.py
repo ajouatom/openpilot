@@ -10,7 +10,7 @@ import math
 import os
 import shutil
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,6 +26,7 @@ from openpilot.selfdrive.carrot.radar_motion import (
   CUT_IN_BOUNDARY_HOLD_S,
   CUT_IN_CONFIRMATION_S,
   CornerCutInPredecelTracker,
+  DPathRadarController,
   DPathLeadCandidate,
   DPathStationaryPrimaryHandoffTracker,
   DPathStationaryShadowTracker,
@@ -95,8 +96,17 @@ LEAD_ONE_VISION_RGB = (72, 145, 255)
 LEAD_ONE_VISION_WEAK_RGB = (104, 205, 255)
 LEAD_ONE_VISION_INACTIVE_RGB = (112, 145, 160)
 LEAD_TWO_RGB = (245, 211, 72)
+LEAD_ONE_SPEED_RGB = (62, 205, 130)
+SCC_DISTANCE_RGB = (247, 94, 160)
+SCC_ACCEL_RGB = (247, 94, 160)
+CARROT_ACCEL_RGB = (62, 205, 130)
 VISION_LEAD_DISPLAY_MIN_PROBABILITY = 0.20
 VISION_LEAD_STRONG_DISPLAY_MIN_PROBABILITY = 0.40
+SCC_SAMPLE_MAX_AGE_S = 0.15
+LONGITUDINAL_PLAN_MAX_AGE_S = 0.20
+ACCEL_GRAPH_MIN_MPS2 = -4.0
+ACCEL_GRAPH_MAX_MPS2 = 2.0
+LEAD_SPEED_GRAPH_MAX_KPH = 140.0
 VALIDATION_SENSITIVITY_LABELS = (
   "사용 안 함",
   "둔감",
@@ -211,6 +221,10 @@ class RadarFrame:
   yaw_rate_source: str = "unknown"
   steer_ratio: float = 14.0
   wheelbase: float = 2.8
+  scc_bus: int | None = None
+  scc_distance_m: float | None = None
+  scc_a_req_raw: float | None = None
+  carrot_a_target: float | None = None
 
 
 @dataclass(frozen=True)
@@ -237,6 +251,7 @@ class Candidate:
   horizon_y: tuple[float, ...] = ()
   horizon_x_stds: tuple[float, ...] = ()
   horizon_y_stds: tuple[float, ...] = ()
+  continuity_id: int | None = None
 
   @property
   def eligible(self) -> bool:
@@ -283,6 +298,7 @@ class ValidationReview:
   end_s: float
   scene: str
   target_track_ids: tuple[int, ...] = ()
+  forbidden_lead_one_ids: tuple[int, ...] = ()
   forbidden_lead_two_ids: tuple[int, ...] = ()
   validation_stage: str = "output"
   human_verified: bool = False
@@ -505,6 +521,12 @@ def lead_continuity_segments(
       previous_candidate = None
       continue
     point = (frame.time_s, float(candidate.d_rel), candidate.track_id)
+    physical_motion_handoff = (
+      previous_candidate is not None
+      and previous_candidate.source == candidate.source
+      and previous_candidate.continuity_id is not None
+      and previous_candidate.continuity_id == candidate.continuity_id
+    )
     stationary_handoff = (
       previous_candidate is not None
       and previous_candidate.v_lead is not None
@@ -528,7 +550,7 @@ def lead_continuity_segments(
       current[-1][2] != point[2]
       and (
         vision_radar_display_changed
-        or not stationary_handoff
+        or not (physical_motion_handoff or stationary_handoff)
       )
       or point[0] - current[-1][0] > 0.15
     ):
@@ -536,6 +558,67 @@ def lead_continuity_segments(
       current = []
     current.append(point)
     previous_candidate = candidate
+  if current:
+    segments.append(tuple(current))
+  return tuple(segments)
+
+
+def lead_speed_continuity_segments(
+  frames: Sequence[RadarFrame],
+  selections: Sequence[Selection],
+) -> tuple[tuple[tuple[float, float, int], ...], ...]:
+  """Return leadOne absolute-speed runs in km/h for the replay graph."""
+  if len(frames) != len(selections):
+    raise ValueError("lead selections must align with radar frames")
+  segments: list[tuple[tuple[float, float, int], ...]] = []
+  current: list[tuple[float, float, int]] = []
+  for frame, selection in zip(frames, selections, strict=True):
+    candidate = selection.lead_one
+    if (
+      candidate is None
+      or candidate.v_lead is None
+      or not math.isfinite(candidate.v_lead)
+    ):
+      if current:
+        segments.append(tuple(current))
+        current = []
+      continue
+    point = (
+      frame.time_s,
+      max(0.0, float(candidate.v_lead) * 3.6),
+      candidate.track_id,
+    )
+    if current and (
+      current[-1][2] != point[2]
+      or point[0] - current[-1][0] > 0.15
+    ):
+      segments.append(tuple(current))
+      current = []
+    current.append(point)
+  if current:
+    segments.append(tuple(current))
+  return tuple(segments)
+
+
+def frame_value_continuity_segments(
+  frames: Sequence[RadarFrame],
+  attribute: str,
+) -> tuple[tuple[tuple[float, float], ...], ...]:
+  """Return finite scalar frame values split across missing/stale samples."""
+  segments: list[tuple[tuple[float, float], ...]] = []
+  current: list[tuple[float, float]] = []
+  for frame in frames:
+    value = getattr(frame, attribute)
+    if value is None or not math.isfinite(value):
+      if current:
+        segments.append(tuple(current))
+        current = []
+      continue
+    point = (frame.time_s, float(value))
+    if current and point[0] - current[-1][0] > 0.15:
+      segments.append(tuple(current))
+      current = []
+    current.append(point)
   if current:
     segments.append(tuple(current))
   return tuple(segments)
@@ -805,6 +888,7 @@ def _shadow_candidate(prediction: RadarMotionPrediction) -> Candidate:
     horizon_y=tuple(sample.d_path for sample in samples),
     horizon_x_stds=tuple(sample.longitudinal_sigma for sample in samples),
     horizon_y_stds=tuple(sample.lateral_sigma for sample in samples),
+    continuity_id=prediction.continuity_id,
   )
 
 
@@ -835,6 +919,7 @@ def _controller_candidate(
   frame: RadarFrame,
   lead: dict[str, Any] | None,
   reason: str,
+  continuity_by_identity: Mapping[tuple[str, int], int] | None = None,
 ) -> Candidate | None:
   if lead is None or not lead.get("status"):
     return None
@@ -852,6 +937,7 @@ def _controller_candidate(
     ),
     default=None,
   )
+  source = matched_point.source if matched_point is not None else ""
   return Candidate(
     track_id=track_id,
     score=float(lead.get("score", lead.get("modelProb", 0.0))),
@@ -859,7 +945,12 @@ def _controller_candidate(
     d_rel=d_rel,
     y_rel=y_rel,
     v_lead=float(lead.get("vLead", 0.0)),
-    source=matched_point.source if matched_point is not None else "",
+    source=source,
+    continuity_id=(
+      continuity_by_identity.get((source, track_id))
+      if continuity_by_identity is not None
+      else None
+    ),
   )
 
 
@@ -1011,6 +1102,7 @@ class RadarMotionShadowSelector:
     ] | None = None,
     lead_one_outputs: Sequence[dict[str, Any] | None] | None = None,
     maximum_lookahead_s: float = VALIDATION_DEFAULT_LOOKAHEAD_S,
+    enable_radar_tracks: int = 1,
   ) -> None:
     if motion_sensor not in (None, "corner", "front"):
       raise ValueError(f"unsupported radar motion sensor: {motion_sensor}")
@@ -1028,7 +1120,22 @@ class RadarMotionShadowSelector:
     self.maximum_lookahead_s = _validation_lookahead_s(
       maximum_lookahead_s,
     )
-    if lead_one_outputs is None:
+    self.enable_radar_tracks = int(enable_radar_tracks)
+    production_outputs = (
+      _production_controller_outputs(
+        frames,
+        motion_sensor=self.motion_sensor,
+        enable_radar_tracks=self.enable_radar_tracks,
+        cut_in_sensitivity=self.cut_in_sensitivity,
+      )
+      if self.enable_radar_tracks != 1
+      else (None,) * len(frames)
+    )
+    if self.enable_radar_tracks != 1:
+      lead_one_values = tuple(
+        output.lead_one for output in production_outputs
+      )
+    elif lead_one_outputs is None:
       matcher = VisionRadarMatcher()
       lead_one_results = []
       for frame in frames:
@@ -1048,7 +1155,7 @@ class RadarMotionShadowSelector:
           frame.path,
           time_s=frame.time_s,
           stationary_points=stationary_points,
-          enable_radar_tracks=1,
+          enable_radar_tracks=self.enable_radar_tracks,
         )
         if match is not None:
           lead_one_results.append(lead_from_vision_match(match))
@@ -1064,7 +1171,7 @@ class RadarMotionShadowSelector:
             if (
               vision is not None
               and vision_only_lead_allowed(
-                1,
+                self.enable_radar_tracks,
                 side_cutin_supported=(
                   matcher.vision_only_side_cutin_supported
                 ),
@@ -1141,10 +1248,11 @@ class RadarMotionShadowSelector:
       confirmation_s=self.motion_sensitivity.confirmation_s,
     )
     predecel_tracker = CornerCutInPredecelTracker()
-    for frame, predictions, lead_one in zip(
+    for frame, predictions, lead_one, production_output in zip(
       frames,
       trajectory_values,
       lead_one_values,
+      production_outputs,
       strict=True,
     ):
       selected_points = motion_points_at_model_time(
@@ -1554,10 +1662,26 @@ class RadarMotionShadowSelector:
       )
       selections.append(Selection(
         lead_one=_controller_candidate(
-          frame, lead_one, "RadarMotion leadOne",
+          frame,
+          lead_one,
+          "RadarMotion leadOne",
+          {
+            (prediction.source, prediction.track_id): prediction.continuity_id
+            for prediction in predictions.values()
+          },
         ),
         lead_two=_controller_candidate(
-          frame, lead_selection.lead_two, "RadarMotion leadTwo",
+          frame,
+          (
+            production_output.lead_two
+            if production_output is not None
+            else lead_selection.lead_two
+          ),
+          "RadarMotion leadTwo",
+          {
+            (prediction.source, prediction.track_id): prediction.continuity_id
+            for prediction in predictions.values()
+          },
         ),
         front_candidates=front,
         corner_candidates=corner,
@@ -1692,6 +1816,43 @@ def _copy_recorded_lead(lead: Any) -> RecordedLead:
   )
 
 
+def _production_controller_outputs(
+  frames: Sequence[RadarFrame],
+  *,
+  motion_sensor: str,
+  enable_radar_tracks: int,
+  cut_in_sensitivity: int,
+) -> tuple[Any, ...]:
+  """Replay the real dPath controller for option-dependent lead roles."""
+  controller = DPathRadarController(
+    prefer_corner_radar=motion_sensor == "corner",
+    enable_radar_tracks=enable_radar_tracks,
+    cut_in_sensitivity=cut_in_sensitivity,
+  )
+  outputs = []
+  for frame in frames:
+    controller.front_radar_measurement_delay_s = max(
+      0.0, float(frame.radar_delay_s),
+    )
+    radar_points = (
+      tuple(
+        point for point in frame.points
+        if not point.source.startswith("corner")
+      )
+      if motion_sensor == "front"
+      else frame.points
+    )
+    outputs.append(controller.update(
+      frame.time_s,
+      frame.v_ego,
+      radar_points,
+      _controller_model(frame),
+      frame.yaw_rate_rad_s,
+      frame.input_age_s - frame.model_age_s,
+    ))
+  return tuple(outputs)
+
+
 def _empty_recorded_lead() -> RecordedLead:
   return RecordedLead(False, False, -1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
@@ -1710,6 +1871,114 @@ def monotonic_log_events(events: Iterable[Any]) -> list[Any]:
 def predictor_reference_time_ns(event_ns: int, model_reference_ns: int) -> int:
   """Use the model exposure timestamp, matching production RadarD."""
   return model_reference_ns if model_reference_ns > 0 else event_ns
+
+
+def _hyundai_scc_dbc_messages(
+  route_replay: Any,
+  car_fingerprint: str,
+) -> dict[int, tuple[str, dict[str, Any]]]:
+  """Load the route vehicle's SCC signal layout from its powertrain DBC."""
+  # Standalone validation runs only put the openpilot root on sys.path. The
+  # vendored opendbc package lives beside it, so make that import independent
+  # of the caller's PYTHONPATH (the normal review launcher does not set one).
+  opendbc_repo = REPO_ROOT / "opendbc_repo"
+  if opendbc_repo.is_dir() and str(opendbc_repo) not in sys.path:
+    sys.path.insert(0, str(opendbc_repo))
+  try:
+    from opendbc.car.hyundai.values import DBC
+  except ImportError:
+    return {}
+  dbc_by_bus = DBC.get(car_fingerprint)
+  if dbc_by_bus is None:
+    dbc_by_bus = next(
+      (
+        value for fingerprint, value in DBC.items()
+        if str(fingerprint) == car_fingerprint
+      ),
+      None,
+    )
+  if dbc_by_bus is None:
+    return {}
+  dbc_name = next(
+    (
+      value for bus, value in dbc_by_bus.items()
+      if str(getattr(bus, "value", bus)) == "pt"
+    ),
+    None,
+  )
+  if not dbc_name:
+    return {}
+  dbc_path = route_replay.find_opendbc_file(
+    REPO_ROOT,
+    "opendbc",
+    "dbc",
+    f"{dbc_name}.dbc",
+  )
+  if dbc_path is None:
+    return {}
+
+  message_names = {"SCC_CONTROL", "SCC11", "SCC12"}
+  signal_names = {
+    "ACC_ObjDist", "ACC_ObjStatus", "ObjValid", "aReqRaw",
+  }
+  messages: dict[int, tuple[str, dict[str, Any]]] = {}
+  current_address: int | None = None
+  current_name = ""
+  with open(dbc_path, encoding="utf-8") as dbc_file:
+    for line in dbc_file:
+      if line.startswith("BO_ "):
+        parts = line.split()
+        current_address = int(parts[1], 0) if len(parts) > 2 else None
+        current_name = parts[2].rstrip(":") if len(parts) > 2 else ""
+        if current_address is not None and current_name in message_names:
+          messages[current_address] = (current_name, {})
+        continue
+      if current_address not in messages:
+        continue
+      match = route_replay.DBC_SIGNAL_RE.match(line)
+      if match is None:
+        continue
+      name, start, length, endian, sign, factor, offset = match.groups()
+      if name not in signal_names:
+        continue
+      messages[current_address][1][name] = route_replay.DbcSignalSpec(
+        start=int(start),
+        length=int(length),
+        byte_order="le" if endian == "1" else "be",
+        signed=sign == "-",
+        factor=float(factor),
+        offset=float(offset),
+      )
+  return messages
+
+
+def _decode_scc_can_message(
+  route_replay: Any,
+  address: int,
+  data: bytes,
+  messages: dict[int, tuple[str, dict[str, Any]]],
+) -> tuple[float | None, float | None, bool | None]:
+  message = messages.get(address)
+  if message is None:
+    return None, None, None
+  _, signals = message
+  values: dict[str, float] = {}
+  for name, signal in signals.items():
+    raw_value = route_replay.dbc_unsigned(
+      data, signal.start, signal.length, signal.byte_order,
+    )
+    if signal.signed:
+      sign_bit = 1 << (signal.length - 1)
+      raw_value = raw_value - (1 << signal.length) if raw_value & sign_bit else raw_value
+    values[name] = raw_value * signal.factor + signal.offset
+  object_valid = (
+    values["ACC_ObjStatus"] > 0.0
+    if "ACC_ObjStatus" in values
+    else values["ObjValid"] > 0.0
+    if "ObjValid" in values
+    else None
+  )
+  return values.get("ACC_ObjDist"), values.get("aReqRaw"), object_valid
 
 
 def _yaw_metadata(
@@ -1741,6 +2010,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   route_replay = _route_replay_module()
   schema = route_replay.load_openpilot_log_schema()
   data = route_replay.read_log_bytes(log_path)
+  events = monotonic_log_events(schema.Event.read_multiple_bytes(data))
   latest_points: tuple[RadarPoint, ...] | None = None
   latest_points_ns = 0
   latest_v_ego = 0.0
@@ -1750,6 +2020,28 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   latest_live_pose_ns = 0
   latest_steer_ratio = 14.0
   latest_wheelbase = 2.8
+  latest_scc_distance_m: float | None = None
+  latest_scc_distance_ns = 0
+  latest_scc_a_req_raw: float | None = None
+  latest_scc_a_req_raw_ns = 0
+  latest_scc_object_valid: bool | None = None
+  latest_scc_bus: int | None = None
+  latest_scc_bus_ns = 0
+  latest_carrot_a_target: float | None = None
+  latest_carrot_a_target_ns = 0
+  scc_dbc_messages: dict[int, tuple[str, dict[str, Any]]] = {}
+  # carParams can be emitted well into a segment. Resolve the static vehicle
+  # DBC before consuming CAN so SCC_CONTROL is decoded from the first frame.
+  for event in events:
+    try:
+      if event.which() == "carParams":
+        scc_dbc_messages = _hyundai_scc_dbc_messages(
+          route_replay,
+          str(event.carParams.carFingerprint),
+        )
+        break
+    except Exception:
+      continue
   latest_radar_delay_s = 0.0
   latest_path: tuple[tuple[float, float], ...] = ()
   latest_lanes: tuple[tuple[tuple[float, float], ...], ...] = ()
@@ -1767,7 +2059,7 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
   corner_tracker = route_replay.StableCornerObjectTracker()
   group2_front_quality: dict[int, tuple[int, int]] = {}
 
-  for event in monotonic_log_events(schema.Event.read_multiple_bytes(data)):
+  for event in events:
     try:
       which = event.which()
     except Exception:
@@ -1797,6 +2089,39 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
       for can_message in event.can:
         address = int(can_message.address)
         raw = bytes(can_message.dat)
+        scc_distance, scc_a_req_raw, scc_object_valid = (
+          _decode_scc_can_message(
+            route_replay,
+            address,
+            raw,
+            scc_dbc_messages,
+          )
+          if int(can_message.src) < 0x80
+          else (None, None, None)
+        )
+        if any(value is not None for value in (
+          scc_distance, scc_a_req_raw, scc_object_valid,
+        )):
+          latest_scc_bus = int(can_message.src)
+          latest_scc_bus_ns = event_ns
+        if scc_object_valid is not None:
+          latest_scc_object_valid = scc_object_valid
+          if not scc_object_valid:
+            latest_scc_distance_m = None
+            latest_scc_distance_ns = event_ns
+        if scc_distance is not None:
+          latest_scc_distance_m = (
+            float(scc_distance)
+            if (
+              0.0 < scc_distance < 150.0
+              and latest_scc_object_valid is not False
+            )
+            else None
+          )
+          latest_scc_distance_ns = event_ns
+        if scc_a_req_raw is not None:
+          latest_scc_a_req_raw = float(scc_a_req_raw)
+          latest_scc_a_req_raw_ns = event_ns
         if (
           VALIDATION_GROUP2_RADAR_START_ADDR
           <= address
@@ -1818,6 +2143,11 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
           if route_replay.raw_corner_object_is_valid(obj):
             corner_tracker.update(obj)
     elif which == "carParams":
+      car_fingerprint = str(event.carParams.carFingerprint)
+      scc_dbc_messages = _hyundai_scc_dbc_messages(
+        route_replay,
+        car_fingerprint,
+      )
       steer_ratio = _finite(event.carParams.steerRatio)
       wheelbase = _finite(event.carParams.wheelbase)
       latest_steer_ratio = steer_ratio if 5.0 <= steer_ratio <= 30.0 else 14.0
@@ -1840,6 +2170,14 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         sensorsOK=bool(event.livePose.sensorsOK),
       )
       latest_live_pose_ns = event_ns
+    elif which == "longitudinalPlan":
+      latest_carrot_a_target = _finite(
+        event.longitudinalPlan.aTarget,
+        math.nan,
+      )
+      if not math.isfinite(latest_carrot_a_target):
+        latest_carrot_a_target = None
+      latest_carrot_a_target_ns = event_ns
     elif which == "modelV2":
       (
         latest_path,
@@ -1900,6 +2238,42 @@ def load_frames(log_path: Path) -> list[RadarFrame]:
         yaw_rate_source=yaw_source,
         steer_ratio=latest_steer_ratio,
         wheelbase=latest_wheelbase,
+        scc_bus=(
+          latest_scc_bus
+          if (
+            latest_scc_bus_ns > 0
+            and (event_ns - latest_scc_bus_ns) / 1e9
+            <= SCC_SAMPLE_MAX_AGE_S
+          )
+          else None
+        ),
+        scc_distance_m=(
+          latest_scc_distance_m
+          if (
+            latest_scc_distance_ns > 0
+            and (event_ns - latest_scc_distance_ns) / 1e9
+            <= SCC_SAMPLE_MAX_AGE_S
+          )
+          else None
+        ),
+        scc_a_req_raw=(
+          latest_scc_a_req_raw
+          if (
+            latest_scc_a_req_raw_ns > 0
+            and (event_ns - latest_scc_a_req_raw_ns) / 1e9
+            <= SCC_SAMPLE_MAX_AGE_S
+          )
+          else None
+        ),
+        carrot_a_target=(
+          latest_carrot_a_target
+          if (
+            latest_carrot_a_target_ns > 0
+            and (event_ns - latest_carrot_a_target_ns) / 1e9
+            <= LONGITUDINAL_PLAN_MAX_AGE_S
+          )
+          else None
+        ),
       )))
     elif which == "radarState":
       radar_state = event.radarState
@@ -2033,6 +2407,7 @@ def _validation_review_from_case(case: dict[str, Any]) -> ValidationReview:
     scene=str(case["scene"]),
     validation_stage=str(case.get("validation_stage", "output")),
     target_track_ids=tuple(int(value) for value in case.get("target_track_ids", ())),
+    forbidden_lead_one_ids=tuple(int(value) for value in case.get("forbidden_lead_one_ids", ())),
     forbidden_lead_two_ids=tuple(int(value) for value in case.get("forbidden_lead_two_ids", ())),
     human_verified=bool(case.get("human_verified", False)),
   )
@@ -2177,6 +2552,9 @@ def validation_review_events(
     }
     added = current - previous
     values = [f"CUT-IN id {track_id}" for track_id in sorted(added)]
+    if review is not None and selection.lead_one is not None:
+      if selection.lead_one.track_id in set(review.forbidden_lead_one_ids):
+        values.append(f"FALSE leadOne id {selection.lead_one.track_id}")
     if review is not None and selection.lead_two is not None:
       if selection.lead_two.track_id in set(review.forbidden_lead_two_ids):
         values.append(f"FALSE leadTwo id {selection.lead_two.track_id}")
@@ -2366,6 +2744,7 @@ class SimulatorUI:
     self.rl = rl
     self.frames = frames
     self.selector = selector
+    self.enable_radar_tracks = selector.enable_radar_tracks
     self.title = title
     self.log_path = log_path
     self.reviews = reviews
@@ -2434,7 +2813,8 @@ class SimulatorUI:
     self._refresh_lead_continuity()
     self.handled_events: set[int] = set()
     self.status = (
-      f"dPath 물리 predictor 전용: {selector.motion_sensor} 레이더"
+      f"dPath 물리 predictor 전용: {selector.motion_sensor} 레이더 · "
+      + f"EnableRadarTracks {self.enable_radar_tracks}"
     )
     self.font: Any | None = None
     self._owns_font = False
@@ -2480,6 +2860,22 @@ class SimulatorUI:
       "lead_two",
     )
     self.vision_lead_segments = vision_lead_continuity_segments(self.frames)
+    self.lead_one_speed_segments = lead_speed_continuity_segments(
+      self.frames,
+      self.selector.selections,
+    )
+    self.scc_distance_segments = frame_value_continuity_segments(
+      self.frames,
+      "scc_distance_m",
+    )
+    self.scc_accel_segments = frame_value_continuity_segments(
+      self.frames,
+      "scc_a_req_raw",
+    )
+    self.carrot_accel_segments = frame_value_continuity_segments(
+      self.frames,
+      "carrot_a_target",
+    )
 
   @staticmethod
   def _clamp_probability(probability: float) -> float:
@@ -2544,6 +2940,7 @@ class SimulatorUI:
         self.frames,
         cut_in_sensitivity=value,
         motion_sensor=sensor,
+        enable_radar_tracks=self.enable_radar_tracks,
         motion_points=(
           cached_history[0]
           if cached_history is not None
@@ -2602,6 +2999,7 @@ class SimulatorUI:
         self.frames,
         cut_in_sensitivity=self.cut_in_sensitivity,
         motion_sensor=target_sensor,
+        enable_radar_tracks=self.enable_radar_tracks,
         maximum_lookahead_s=VALIDATION_DEFAULT_LOOKAHEAD_S,
       )
       self.probability_cache[cache_key] = cached
@@ -3263,7 +3661,9 @@ class SimulatorUI:
     plot_left = time_axis.x
     plot_right = time_axis.x + time_axis.width
     plot_top = rect.y + 28.0
-    plot_bottom = rect.y + rect.height - 18.0
+    plot_bottom = rect.y + rect.height * 0.64
+    accel_top = plot_bottom + 30.0
+    accel_bottom = rect.y + rect.height - 18.0
     plot_width = max(1.0, plot_right - plot_left)
     plot_height = max(1.0, plot_bottom - plot_top)
     for distance in (0.0, 50.0, 100.0, DEFAULT_FORWARD_RANGE_M):
@@ -3282,21 +3682,77 @@ class SimulatorUI:
         10,
         self._color((120, 135, 148)),
       )
+    for speed_kph in (0.0, 70.0, LEAD_SPEED_GRAPH_MAX_KPH):
+      y = plot_bottom - speed_kph / LEAD_SPEED_GRAPH_MAX_KPH * plot_height
+      self._draw_text(
+        f"{speed_kph:.0f}",
+        int(plot_right - 25.0),
+        int(y - 6.0),
+        10,
+        self._color(LEAD_ONE_SPEED_RGB),
+      )
 
     total = max(self.times[-1], 1e-6)
 
-    def position(time_s: float, distance: float) -> Any:
+    def time_x(time_s: float) -> float:
+      return plot_left + min(max(time_s / total, 0.0), 1.0) * plot_width
+
+    def distance_position(time_s: float, distance: float) -> Any:
       return rl.Vector2(
-        plot_left + min(max(time_s / total, 0.0), 1.0) * plot_width,
+        time_x(time_s),
         plot_bottom
         - min(max(distance / DEFAULT_FORWARD_RANGE_M, 0.0), 1.0)
         * plot_height,
       )
 
+    def speed_position(time_s: float, speed_kph: float) -> Any:
+      return rl.Vector2(
+        time_x(time_s),
+        plot_bottom
+        - min(max(speed_kph / LEAD_SPEED_GRAPH_MAX_KPH, 0.0), 1.0)
+        * plot_height,
+      )
+
+    def accel_position(time_s: float, accel: float) -> Any:
+      fraction = (
+        (min(max(accel, ACCEL_GRAPH_MIN_MPS2), ACCEL_GRAPH_MAX_MPS2)
+         - ACCEL_GRAPH_MIN_MPS2)
+        / (ACCEL_GRAPH_MAX_MPS2 - ACCEL_GRAPH_MIN_MPS2)
+      )
+      return rl.Vector2(
+        time_x(time_s),
+        accel_bottom - fraction * max(1.0, accel_bottom - accel_top),
+      )
+
+    def draw_segments(
+      segments: Sequence[Sequence[Sequence[float]]],
+      position: Any,
+      rgb: tuple[int, int, int],
+      width: float = 1.7,
+    ) -> None:
+      color = self._color(rgb)
+      for segment in segments:
+        previous = None
+        for sample in segment:
+          current = position(float(sample[0]), float(sample[1]))
+          if previous is not None:
+            rl.draw_line_ex(previous, current, width, color)
+          previous = current
+        if len(segment) == 1 and previous is not None:
+          rl.draw_circle_v(previous, 2.0, color)
+
+    draw_segments(
+      self.scc_distance_segments,
+      distance_position,
+      SCC_DISTANCE_RGB,
+      1.8,
+    )
+    # Keep Carrot/model results above the stock SCC reference when lines
+    # overlap, since those are the primary series being validated.
     series = (
-      (self.vision_lead_segments, None),
       (self.lead_one_segments, True),
       (self.lead_two_segments, False),
+      (self.vision_lead_segments, None),
     )
     for segments, is_lead_one in series:
       for segment in segments:
@@ -3312,12 +3768,49 @@ class SimulatorUI:
         color = self._color(rgb)
         previous = None
         for time_s, distance, _ in segment:
-          current = position(time_s, distance)
+          current = distance_position(time_s, distance)
           if previous is not None:
             rl.draw_line_ex(previous, current, 1.7, color)
           previous = current
         if len(segment) == 1:
           rl.draw_circle_v(previous, 2.0, color)
+    draw_segments(
+      self.lead_one_speed_segments,
+      speed_position,
+      LEAD_ONE_SPEED_RGB,
+      1.4,
+    )
+
+    for accel in (-4.0, -2.0, 0.0, 2.0):
+      y = accel_position(0.0, accel).y
+      rl.draw_line(
+        int(plot_left),
+        int(y),
+        int(plot_right),
+        int(y),
+        self._color((55, 66, 77) if accel != 0.0 else (95, 108, 120)),
+      )
+      self._draw_text(
+        f"{accel:+.0f}",
+        int(rect.x + 8.0),
+        int(y - 6.0),
+        10,
+        self._color((120, 135, 148)),
+      )
+    draw_segments(
+      self.scc_accel_segments,
+      accel_position,
+      SCC_ACCEL_RGB,
+      1.8,
+    )
+    # Carrot is the primary series under review, so keep it visible when both
+    # acceleration targets overlap.
+    draw_segments(
+      self.carrot_accel_segments,
+      accel_position,
+      CARROT_ACCEL_RGB,
+      2.2,
+    )
 
     current_selection = self.selector.select(
       self.frames[self.index],
@@ -3354,17 +3847,63 @@ class SimulatorUI:
         12,
         self._color(rgb),
       )
-      legend_x += 150
+      legend_x += 145
       if (
         candidate is not None
         and candidate.d_rel is not None
         and 0.0 <= candidate.d_rel <= DEFAULT_FORWARD_RANGE_M
       ):
         rl.draw_circle_v(
-          position(self.playback_time, candidate.d_rel),
+          distance_position(self.playback_time, candidate.d_rel),
           3.5,
           self._color(rgb),
         )
+      if (
+        label == "L1"
+        and candidate is not None
+        and candidate.v_lead is not None
+      ):
+        rl.draw_circle_v(
+          speed_position(self.playback_time, candidate.v_lead * 3.6),
+          3.0,
+          self._color(LEAD_ONE_SPEED_RGB),
+        )
+      if label == "L1":
+        speed_value = (
+          f"{candidate.v_lead * 3.6:.1f}km/h"
+          if candidate is not None and candidate.v_lead is not None
+          else "--"
+        )
+        self._draw_text(
+          f"L1 vLead {speed_value}",
+          legend_x,
+          int(rect.y + 7.0),
+          12,
+          self._color(LEAD_ONE_SPEED_RGB),
+        )
+        legend_x += 165
+    scc_bus_text = (
+      f"[B{frame.scc_bus}]" if frame.scc_bus is not None else ""
+    )
+    scc_value = (
+      f"{frame.scc_distance_m:.1f}m"
+      if frame.scc_distance_m is not None
+      else "--"
+    )
+    self._draw_text(
+      f"SCC{scc_bus_text} ObjDist {scc_value}",
+      legend_x,
+      int(rect.y + 7.0),
+      12,
+      self._color(SCC_DISTANCE_RGB),
+    )
+    if frame.scc_distance_m is not None:
+      rl.draw_circle_v(
+        distance_position(self.playback_time, frame.scc_distance_m),
+        3.5,
+        self._color(SCC_DISTANCE_RGB),
+      )
+    legend_x += 200
     self._draw_text(
       f"V {vision_value}",
       legend_x,
@@ -3374,16 +3913,54 @@ class SimulatorUI:
     )
     if vision_distance is not None:
       rl.draw_circle_v(
-        position(self.playback_time, vision_distance),
+        distance_position(self.playback_time, vision_distance),
         3.5,
         self._color(vision_rgb),
       )
-    cursor_x = plot_left + self.playback_time / total * plot_width
+
+    scc_accel_text = (
+      f"{frame.scc_a_req_raw:+.2f}"
+      if frame.scc_a_req_raw is not None
+      else "--"
+    )
+    carrot_accel_text = (
+      f"{frame.carrot_a_target:+.2f}"
+      if frame.carrot_a_target is not None
+      else "--"
+    )
+    self._draw_text(
+      f"SCC{scc_bus_text} aReqRaw {scc_accel_text}",
+      int(plot_left),
+      int(accel_top - 21.0),
+      12,
+      self._color(SCC_ACCEL_RGB),
+    )
+    self._draw_text(
+      f"Carrot aTarget {carrot_accel_text} m/s²",
+      int(plot_left + 190.0),
+      int(accel_top - 21.0),
+      12,
+      self._color(CARROT_ACCEL_RGB),
+    )
+    if frame.scc_a_req_raw is not None:
+      rl.draw_circle_v(
+        accel_position(self.playback_time, frame.scc_a_req_raw),
+        3.0,
+        self._color(SCC_ACCEL_RGB),
+      )
+    if frame.carrot_a_target is not None:
+      rl.draw_circle_v(
+        accel_position(self.playback_time, frame.carrot_a_target),
+        3.0,
+        self._color(CARROT_ACCEL_RGB),
+      )
+
+    cursor_x = time_x(self.playback_time)
     rl.draw_line(
       int(cursor_x),
       int(plot_top),
       int(cursor_x),
-      int(plot_bottom),
+      int(accel_bottom),
       self._color((225, 231, 237, 150)),
     )
 
@@ -3409,7 +3986,8 @@ class SimulatorUI:
       else "프런트 전용"
     )
     self._draw_text(
-      f"dPath predictor: {mode_text} · {sensor_text} 레이더 사용",
+      f"dPath predictor: {mode_text} · {sensor_text} 레이더 사용 · "
+      + f"EnableRadarTracks {self.enable_radar_tracks}",
       x,
       int(rect.y + 82.0),
       18,
@@ -3544,8 +4122,8 @@ class SimulatorUI:
     timeline = self._timeline_rect(width, height)
     continuity_bottom = timeline.y - 47.0
     continuity_height = min(
-      290.0,
-      max(200.0, float(height) * 0.27),
+      360.0,
+      max(300.0, float(height) * 0.33),
     )
     continuity_rect = self.rl.Rectangle(
       12.0,
@@ -3984,6 +4562,16 @@ def parse_args() -> argparse.Namespace:
       + "UI's saved level (default 3)"
     ),
   )
+  parser.add_argument(
+    "--enable-radar-tracks",
+    type=int,
+    choices=range(-2, 4),
+    default=2,
+    help=(
+      "EnableRadarTracks value used by the real dPath controller replay "
+      + "(default: 2)"
+    ),
+  )
   parser.add_argument("--validation-case", action="append", default=[])
   parser.add_argument("--validation-root", type=Path, default=Path(r"W:\routes"))
   parser.add_argument("--validation-cases", type=Path, default=DEFAULT_VALIDATION_CASES)
@@ -4078,6 +4666,7 @@ def main() -> int:
     ),
     cut_in_sensitivity=cut_in_sensitivity,
     motion_sensor=motion_sensor,
+    enable_radar_tracks=args.enable_radar_tracks,
   )
   print_summary(args.rlog, frames, selector)
   if args.summary:
@@ -4129,8 +4718,10 @@ __all__ = (
   "current_cutin_track_ids",
   "front_only_frames",
   "front_radar_display_points",
+  "frame_value_continuity_segments",
   "is_position_only_reference",
   "lead_continuity_segments",
+  "lead_speed_continuity_segments",
   "lead_one_rgb",
   "load_validation_motion_mode",
   "load_validation_lookahead",

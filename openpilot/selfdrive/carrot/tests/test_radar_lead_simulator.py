@@ -20,10 +20,12 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   candidate_track_id,
   confirmed_cutin_overlap_at,
   corner_radar_display_points,
+  frame_value_continuity_segments,
   front_only_frames,
   front_radar_display_points,
   is_position_only_reference,
   lead_continuity_segments,
+  lead_speed_continuity_segments,
   lead_one_rgb,
   load_validation_lookahead,
   load_validation_motion_mode,
@@ -50,7 +52,10 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_validation_review import 
   simulator_command,
 )
 from openpilot.selfdrive.carrot.radar.tools.validate_radar_lead_model import (
+  _candidate_matches_entry,
+  _first_role_constraint_event,
   _lead_one_continuous,
+  _lead_two_continuous,
   _metrics,
 )
 
@@ -161,6 +166,47 @@ def test_new_controller_publishes_confirmed_physical_lead_two() -> None:
   assert candidate_track_id(selection.lead_two) == 1010
   assert selection.active_cutin_candidates == ()
   assert selection.decision_cutin_candidates
+
+
+def test_shadow_selector_replays_option_two_scc_lead_two() -> None:
+  frames = []
+  for index in range(5):
+    current = frame((
+      replace(
+        point(0, 105.0, 0.0, source="scc"),
+        v_rel=-15.5,
+        v_lead=4.5,
+      ),
+      replace(
+        point(45, 103.5, 8.0),
+        v_rel=-15.6,
+        v_lead=4.4,
+      ),
+      replace(
+        point(1618, 104.0, 7.5, source="corner235"),
+        v_rel=-14.0,
+        v_lead=6.0,
+      ),
+    ), time_s=index * 0.05)
+    frames.append(replace(
+      current,
+      path=((0.0, 0.0), (120.0, -9.6)),
+      model_leads=(
+        ModelLead(0.20, 111.52, -8.0, 4.5, 0.0, 8.0, 1.5, 2.0),
+      ),
+    ))
+
+  option_one = RadarMotionShadowSelector(
+    frames,
+    enable_radar_tracks=1,
+  )
+  option_two = RadarMotionShadowSelector(
+    frames,
+    enable_radar_tracks=2,
+  )
+
+  assert option_one.selections[-1].lead_two is None
+  assert candidate_track_id(option_two.selections[-1].lead_two) == 45
 
 
 def test_shadow_selector_preserves_lane_boundary_directional_entry() -> None:
@@ -514,6 +560,70 @@ def test_shadow_metrics_ignore_labels_for_the_unselected_sensor() -> None:
   assert metrics["fn"] == 0
 
 
+def test_validation_role_constraint_finds_forbidden_lead_one() -> None:
+  frames = [frame((), time_s=1.0, one=recorded(99, True))]
+  selector = CurrentRadardSelector(frames, [set()])
+
+  event = _first_role_constraint_event(
+    selector,
+    frames,
+    {"window": [0.5, 1.5]},
+    "lead_one",
+    [99],
+  )
+
+  assert event == (1.0, 99)
+
+
+def test_validation_spatial_target_survives_raw_track_id_changes() -> None:
+  entry = {
+    "target_track_ids": [1013],
+    "target_spatial_match": {
+      "d_rel": [3.5, 6.0],
+      "y_rel": [-3.0, -2.0],
+    },
+  }
+
+  assert _candidate_matches_entry(
+    Candidate(202, 0.8, "physical", d_rel=4.8, y_rel=-2.5),
+    entry,
+  )
+  assert not _candidate_matches_entry(
+    Candidate(202, 0.8, "other", d_rel=12.0, y_rel=2.5),
+    entry,
+  )
+
+
+def test_validation_requires_physical_lead_two_through_continuity_window() -> None:
+  frames = [frame((), time_s=index * 0.1) for index in range(4)]
+  matching = Candidate(
+    202, 0.8, "physical", d_rel=4.8, y_rel=-2.5,
+  )
+  selector = SimpleNamespace(selections=(
+    Selection(None, matching),
+    Selection(None, replace(matching, track_id=203)),
+    Selection(None, replace(matching, track_id=204)),
+    Selection(None, matching),
+  ))
+  selector.select = lambda _frame, index: selector.selections[index]
+  entry = {
+    "lead_two_continuous_window": [0.0, 0.3],
+    "target_track_ids": [1013],
+    "target_spatial_match": {
+      "d_rel": [3.5, 6.0],
+      "y_rel": [-3.0, -2.0],
+    },
+  }
+
+  assert _lead_two_continuous(selector, frames, entry)
+  selector.selections = (
+    *selector.selections[:2],
+    Selection(None, None),
+    selector.selections[3],
+  )
+  assert not _lead_two_continuous(selector, frames, entry)
+
+
 def test_unmeasured_points_are_absent_from_replay_trajectory_series() -> None:
   frames = [
     frame((point(10, 30.0, 2.0, measured=False),), time_s=0.0),
@@ -583,6 +693,7 @@ def test_validation_runner_uses_saved_probability_when_not_overridden(tmp_path) 
   )
 
   assert "--prob" not in command
+  assert command[command.index("--enable-radar-tracks") + 1] == "2"
 
 
 def test_validation_runner_forwards_device_sensitivity_override(tmp_path) -> None:
@@ -677,6 +788,46 @@ def test_lead_continuity_breaks_on_missing_frames_and_track_id_changes() -> None
     [10],
     [11],
   ]
+
+
+def test_lead_speed_continuity_converts_vlead_to_kph() -> None:
+  frames = [frame((), time_s=index * 0.1) for index in range(3)]
+  selections = (
+    Selection(Candidate(10, 1.0, "L1", v_lead=20.0), None),
+    Selection(Candidate(10, 1.0, "L1", v_lead=19.5), None),
+    Selection(None, None),
+  )
+
+  segments = lead_speed_continuity_segments(frames, selections)
+
+  assert len(segments) == 1
+  assert segments[0][0] == (0.0, 72.0, 10)
+  assert segments[0][1][1] == pytest.approx(70.2)
+
+
+def test_frame_value_segments_break_when_scc_object_is_not_detected() -> None:
+  frames = (
+    replace(frame((), time_s=0.0), scc_distance_m=42.0),
+    replace(frame((), time_s=0.1), scc_distance_m=40.0),
+    replace(frame((), time_s=0.2), scc_distance_m=None),
+    replace(frame((), time_s=0.3), scc_distance_m=35.0),
+  )
+
+  segments = frame_value_continuity_segments(frames, "scc_distance_m")
+
+  assert segments == (((0.0, 42.0), (0.1, 40.0)), ((0.3, 35.0),))
+
+
+def test_frame_value_segments_preserve_zero_scc_acceleration() -> None:
+  frames = (
+    replace(frame((), time_s=0.0), scc_a_req_raw=0.0),
+    replace(frame((), time_s=0.1), scc_a_req_raw=0.0),
+    replace(frame((), time_s=0.2), scc_a_req_raw=-1.0),
+  )
+
+  segments = frame_value_continuity_segments(frames, "scc_a_req_raw")
+
+  assert segments == (((0.0, 0.0), (0.1, 0.0), (0.2, -1.0)),)
 
 
 def test_validation_lead_one_continuity_rejects_a_single_missing_frame() -> None:
@@ -807,6 +958,40 @@ def test_lead_continuity_joins_physical_stationary_track_handoff() -> None:
   ]
 
 
+def test_lead_continuity_joins_moving_raw_id_handoff_by_continuity_id() -> None:
+  frames = [frame((), time_s=index * 0.1) for index in range(3)]
+  selections = (
+    Selection(
+      None,
+      Candidate(
+        202, 1.0, "L2", d_rel=5.8, y_rel=-2.5, v_lead=6.3,
+        source="corner235", continuity_id=40,
+      ),
+    ),
+    Selection(
+      None,
+      Candidate(
+        203, 1.0, "L2", d_rel=5.9, y_rel=-2.4, v_lead=6.2,
+        source="corner235", continuity_id=40,
+      ),
+    ),
+    Selection(
+      None,
+      Candidate(
+        204, 1.0, "L2", d_rel=6.0, y_rel=-2.3, v_lead=6.1,
+        source="corner235", continuity_id=41,
+      ),
+    ),
+  )
+
+  segments = lead_continuity_segments(frames, selections, "lead_two")
+
+  assert [[point[2] for point in segment] for segment in segments] == [
+    [202, 203],
+    [204],
+  ]
+
+
 def test_lead_graph_and_seek_bar_share_one_time_axis() -> None:
   ui = object.__new__(SimulatorUI)
   ui.rl = SimpleNamespace(
@@ -825,12 +1010,12 @@ def test_lead_graph_and_seek_bar_share_one_time_axis() -> None:
   assert timeline.width == pytest.approx(continuity_axis.width)
   assert timeline.width == pytest.approx(1360.0)
   assert continuity.width == pytest.approx(1416.0)
-  assert continuity.height == pytest.approx(290.0)
-  assert continuity.y == pytest.approx(701.0)
-  assert video.height == pytest.approx(340.5)
-  assert radar_map.height == pytest.approx(332.5)
-  assert radar_map.height > continuity.height
-  assert panel.y + panel.height == pytest.approx(693.0)
+  assert continuity.height == pytest.approx(356.4)
+  assert continuity.y == pytest.approx(634.6)
+  assert video.height == pytest.approx(307.3)
+  assert radar_map.height == pytest.approx(299.3)
+  assert radar_map.height >= 150.0
+  assert panel.y + panel.height == pytest.approx(626.6)
   assert panel.y + panel.height < continuity.y
 
 
