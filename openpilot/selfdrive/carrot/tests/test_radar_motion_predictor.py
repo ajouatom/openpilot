@@ -535,14 +535,14 @@ def test_front_cutin_needs_stronger_path_relative_motion_than_corner() -> None:
   assert front_cutin_motion_supported(
     "frontRadar",
     0.80,
-    d_path=-2.5,
+    d_path=-2.1,
     directional_consistency=0.80,
     directional_inward_sample_ratio=0.70,
   )
   assert not front_cutin_motion_supported(
     "frontRadar",
     0.80,
-    d_path=-2.5,
+    d_path=-2.1,
     directional_consistency=0.47,
     directional_inward_sample_ratio=0.73,
     minimum_directional_consistency=0.71,
@@ -551,7 +551,7 @@ def test_front_cutin_needs_stronger_path_relative_motion_than_corner() -> None:
     "frontRadar",
     -0.15,
     d_rel=12.0,
-    d_path=2.5,
+    d_path=2.1,
     d_path_rate_short=-0.25,
     predicted_path_overlap_s=1.0,
     directional_inward_displacement_m=0.25,
@@ -562,7 +562,7 @@ def test_front_cutin_needs_stronger_path_relative_motion_than_corner() -> None:
     "frontRadar",
     -0.15,
     d_rel=12.0,
-    d_path=2.5,
+    d_path=2.1,
     d_path_rate_short=-0.25,
     predicted_path_overlap_s=1.0,
     directional_inward_displacement_m=0.25,
@@ -588,6 +588,66 @@ def test_front_cutin_needs_stronger_path_relative_motion_than_corner() -> None:
     current_path_occupancy=True,
   )
   assert front_cutin_motion_supported("corner235", 0.10)
+
+
+def test_front_forecast_only_cutin_waits_until_measured_near_path() -> None:
+  common = {
+    "d_rel": 30.0,
+    "d_path_rate_short": 1.72,
+    "predicted_path_overlap_s": 2.5,
+    "directional_inward_displacement_m": 0.90,
+    "directional_consistency": 0.89,
+    "directional_inward_sample_ratio": 0.80,
+  }
+
+  assert not front_cutin_motion_supported(
+    "frontRadar",
+    0.83,
+    d_path=-2.37,
+    **common,
+  )
+  assert front_cutin_motion_supported(
+    "frontRadar",
+    0.83,
+    d_path=-2.18,
+    **common,
+  )
+
+
+def test_far_corner_cutin_needs_strong_lateral_or_longitudinal_closing() -> None:
+  common = {
+    "d_rel": 20.0,
+    "d_path": -2.68,
+    "d_path_rate_short": 0.59,
+    "current_path_occupancy": False,
+  }
+
+  assert not front_cutin_motion_supported(
+    "corner180",
+    0.43,
+    v_rel=-2.20,
+    **common,
+  )
+  assert front_cutin_motion_supported(
+    "corner235",
+    0.74,
+    v_rel=-1.90,
+    **common,
+  )
+  assert front_cutin_motion_supported(
+    "corner235",
+    0.56,
+    v_rel=-6.50,
+    **common,
+  )
+  assert front_cutin_motion_supported(
+    "corner180",
+    0.43,
+    d_path=-2.18,
+    v_rel=-2.20,
+    d_rel=20.0,
+    current_path_occupancy=False,
+  )
 
 
 def test_carrot_radar_cutin_sensitivity_uses_measured_motion_dwell() -> None:
@@ -929,7 +989,7 @@ def test_controller_filters_same_row_proximity_without_projected_entry() -> None
     track_id=1005,
     continuity_id=1,
     d_path=2.5,
-    d_path_rate_long=-0.2,
+    d_path_rate_long=-0.7,
     path_entry_probability=0.8,
     current_path_occupancy=False,
     time_to_entry_s=None,
