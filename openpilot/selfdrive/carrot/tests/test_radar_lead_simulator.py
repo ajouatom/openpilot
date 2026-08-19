@@ -30,7 +30,9 @@ from openpilot.selfdrive.carrot.radar.tools.radar_lead_simulator import (
   load_validation_probability,
   load_validation_sensitivity,
   motion_points_at_model_time,
+  monotonic_log_events,
   preferred_radar_motion_sensor,
+  predictor_reference_time_ns,
   radar_trajectory_series,
   resolve_validation_cases,
   save_validation_motion_mode,
@@ -159,6 +161,31 @@ def test_new_controller_publishes_confirmed_physical_lead_two() -> None:
   assert candidate_track_id(selection.lead_two) == 1010
   assert selection.active_cutin_candidates == ()
   assert selection.decision_cutin_candidates
+
+
+def test_shadow_selector_preserves_lane_boundary_directional_entry() -> None:
+  frames = [
+    frame((
+      point(10, 30.0, 0.0),
+      replace(
+        point(1010, 20.0, y_rel, source="corner235"),
+        yv_rel=-0.5,
+        v_lead=10.0,
+      ),
+    ), time_s=index * 0.1)
+    for index, y_rel in enumerate((
+      3.00, 2.95, 2.90, 2.85, 2.80, 2.75,
+      2.70, 2.65, 2.60, 2.55, 2.50, 2.45,
+    ))
+  ]
+
+  selector = RadarMotionShadowSelector(frames, motion_sensor="corner")
+
+  assert selector.selections[-1].decision_cutin_candidates
+  assert (
+    selector.selections[-1].decision_cutin_candidates[0].track_id
+    == 1010
+  )
 
 
 def test_review_event_is_emitted_once_per_physical_continuity() -> None:
@@ -383,6 +410,22 @@ def test_radar_point_is_projected_to_model_timestamp_before_dpath() -> None:
   assert aligned[0].y_rel == pytest.approx(3.08)
   prediction = radar_trajectory_series((current,))[0][("frontRadar", 10)]
   assert prediction.d_path == pytest.approx(3.08)
+
+
+def test_log_events_are_replayed_in_monotonic_timestamp_order() -> None:
+  events = tuple(
+    SimpleNamespace(logMonoTime=value)
+    for value in (300, 100, 200, 200)
+  )
+
+  ordered = monotonic_log_events(events)
+
+  assert [event.logMonoTime for event in ordered] == [100, 200, 200, 300]
+
+
+def test_predictor_uses_model_exposure_timestamp_with_event_fallback() -> None:
+  assert predictor_reference_time_ns(300, 200) == 200
+  assert predictor_reference_time_ns(300, 0) == 300
 
 
 def test_corner_measurement_delay_is_added_to_timestamp_alignment() -> None:
