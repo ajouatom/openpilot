@@ -169,8 +169,9 @@ def test_shadow_selector_preserves_lane_boundary_directional_entry() -> None:
       point(10, 30.0, 0.0),
       replace(
         point(1010, 20.0, y_rel, source="corner235"),
+        v_rel=-3.5,
         yv_rel=-0.5,
-        v_lead=10.0,
+        v_lead=6.5,
       ),
     ), time_s=index * 0.1)
     for index, y_rel in enumerate((

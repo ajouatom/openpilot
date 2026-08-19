@@ -15,6 +15,7 @@ from openpilot.selfdrive.carrot.radar_motion.controller import (
 from openpilot.selfdrive.carrot.radar_motion.lead_selection import (
   CUTIN_MAX_DREL_M,
   FRONT_CUT_IN_MIN_DPATH_RATE_MPS,
+  FRONT_PREDICTED_CUTIN_MAX_ABS_DPATH_M,
   DPathLeadCandidate,
   DPathLeadSelection,
   DPathStationaryPrimaryHandoffTracker,
@@ -108,6 +109,7 @@ __all__ = (
   "FRONT_CUT_IN_THRESHOLD",
   "FRONT_CUT_IN_MIN_DREL_M",
   "FRONT_CUT_IN_MIN_DPATH_RATE_MPS",
+  "FRONT_PREDICTED_CUTIN_MAX_ABS_DPATH_M",
   "CUTIN_MAX_DREL_M",
   "CORNER_RADAR_MEASUREMENT_DELAY_S",
   "LEAD_ACCEL_DT_S",

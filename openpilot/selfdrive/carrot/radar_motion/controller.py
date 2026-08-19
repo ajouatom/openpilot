@@ -607,6 +607,7 @@ class DPathRadarController:
         prediction.source,
         prediction.d_path_rate_long,
         d_rel=point.d_rel,
+        v_rel=point.v_rel,
         d_path=prediction.d_path,
         d_path_rate_short=getattr(
           prediction, "d_path_rate_short", prediction.d_path_rate_long,

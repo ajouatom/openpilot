@@ -157,13 +157,21 @@ The predictor:
    rate or raw lateral support still promptly lowers confidence;
 16. for front-only radar, requires a new predicted CUT-IN to sustain at least
    `0.75 m/s` of inward long-window `dPath` motion independently of the
-   path-proximity sensitivity;
+   path-proximity sensitivity, and prevents forecast-only control until the
+   measured target reaches `|dPath| <= 2.20 m`; this keeps coarse azimuth
+   steps from promoting a parallel adjacent vehicle;
 17. predicts synchronized future `dRel` and `dPath`;
 18. confirms a threshold crossing for 0.25 seconds before producing a CUT-IN
    event; and
 19. reports CUT-IN and CUT-OUT probabilities independently; and
 20. reports the stricter early corner-risk signal separately from confirmed
     CUT-IN, so it cannot enter the normal leadTwo/MPC obstacle path.
+
+A confirmed corner candidate that is still outside `|dPath| = 2.20 m` may
+enter the normal leadTwo path only with at least `0.65 m/s` long-window inward
+motion or `3.0 m/s` longitudinal closing speed. Weaker outside motion remains
+an adjacent candidate instead of causing full lead control. This gate does not
+change the separate bounded pre-deceleration path.
 
 The current IN state includes ego and target vehicle half-widths. A tracked
 OUT-to-IN crossing keeps its pending entry evidence after overlap begins so
