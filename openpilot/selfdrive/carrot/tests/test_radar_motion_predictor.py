@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
+  CornerCutInPredecelTracker,
   CUT_IN_CURRENT_SCOPE_HALF_WIDTH_M,
   FRONT_CUT_IN_MIN_DREL_M,
   IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M,
@@ -2514,6 +2515,59 @@ def test_vision_bracket_supports_only_persistent_mutually_matched_cutin() -> Non
   assert supported.reason == "vision-bracketed physical CUT-IN"
   assert unbracketed is prediction
   assert no_continuous_overlap.cut_in_probability == pytest.approx(0.21)
+
+
+def test_controller_publishes_strong_corner_cutin_predecel_before_lead_two() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  model = SimpleNamespace(
+    position=SimpleNamespace(x=(0.0, 100.0), y=(0.0, 0.0)),
+    leadsV3=(),
+    velocity=SimpleNamespace(x=(30.0,)),
+  )
+  first_risk = None
+  for index in range(18):
+    output = controller.update(
+      index * 0.05,
+      30.0,
+      (Point(
+        2091,
+        25.0 - 0.325 * index,
+        3.60 - 0.05 * index,
+        v_rel=-6.5,
+        source="corner235",
+        v_lead=23.5,
+        yv_rel=-1.0,
+        trackState=2,
+      ),),
+      model,
+    )
+    if output.lead_cutin_risk is not None and first_risk is None:
+      first_risk = index * 0.05, output
+
+  assert first_risk is not None
+  risk_time_s, output = first_risk
+  assert risk_time_s == pytest.approx(0.65)
+  assert output.lead_two is None
+  assert output.lead_cutin_risk["radarTrackId"] == 2091
+  assert output.lead_cutin_risk["score"] > 0.85
+  assert output.lead_cutin_risk["vRel"] == pytest.approx(-6.5)
+
+
+def test_corner_cutin_predecel_requires_continuous_confirmation() -> None:
+  tracker = CornerCutInPredecelTracker(confirmation_s=0.10, hold_s=0.20)
+  candidate = RadarMotionCutIn(SimpleNamespace(
+    source="corner235",
+    track_id=2091,
+    continuity_id=1,
+  ), 0.9)
+
+  assert tracker.update(0.00, (candidate,)) is None
+  assert tracker.update(0.05, ()) is None
+  assert tracker.update(0.11, (candidate,)) is None
+  assert tracker.update(0.16, (candidate,)) is None
+  assert tracker.update(0.22, (candidate,)) is not None
+  assert tracker.update(0.35, ()) is not None
+  assert tracker.update(0.45, ()) is None
 
 
 def test_primary_matcher_rejects_low_score_fresh_distant_side_match() -> None:

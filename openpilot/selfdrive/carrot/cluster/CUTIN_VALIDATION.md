@@ -45,6 +45,18 @@ over a no-lead acceleration gap caused by an uncertain future-path prediction.
 A separate measured moving object already in the current path still needs the
 normal motion history before starting leadTwo.
 
+Before normal CUT-IN confirmation, a separate corner-radar-only risk path may
+request bounded pre-deceleration without creating leadTwo. It requires 0.10
+seconds of the same closing track, `8 <= dRel <= 45 m`, `2.4 <= |dPath| <=
+3.4 m`, longitudinal closing speed of at least `1.5 m/s`, TTC no greater than
+8 seconds, and mutually agreeing short/long position history plus reported
+lateral velocity. The measured inward displacement must be at least 0.35 m,
+directional consistency at least 0.90, and inward sample ratio at least 0.80.
+The longitudinal planner converts this signal to only a `-0.25` through
+`-0.65 m/s^2` acceleration ceiling with a bounded ramp. It is disabled while
+longitudinal control is inactive or the driver presses the accelerator. SCC
+requests and `objDist` are not inputs to this path.
+
 The stationary leadOne path requires a measured in-path point with
 `|vLead| <= 4.0 m/s`, model-lead support at probability 0.40 or higher, and
 0.25 seconds of physical continuity. A front-only stationary point needs three
@@ -149,7 +161,9 @@ The predictor:
 17. predicts synchronized future `dRel` and `dPath`;
 18. confirms a threshold crossing for 0.25 seconds before producing a CUT-IN
    event; and
-19. reports CUT-IN and CUT-OUT probabilities independently.
+19. reports CUT-IN and CUT-OUT probabilities independently; and
+20. reports the stricter early corner-risk signal separately from confirmed
+    CUT-IN, so it cannot enter the normal leadTwo/MPC obstacle path.
 
 The current IN state includes ego and target vehicle half-widths. A tracked
 OUT-to-IN crossing keeps its pending entry evidence after overlap begins so
@@ -193,6 +207,9 @@ python openpilot/selfdrive/carrot/validate_radar_lead_model.py --strict-radard
 
 # Treat physical dPath expectation failures as a nonzero result
 python openpilot/selfdrive/carrot/validate_radar_lead_model.py --strict-shadow
+
+# Check only early corner pre-deceleration detections and clear-window safety
+python openpilot/selfdrive/carrot/validate_radar_lead_model.py --shadow-only --strict-predecel
 
 # Remove corner inputs
 python openpilot/selfdrive/carrot/validate_radar_lead_model.py --front-only

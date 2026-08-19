@@ -9,10 +9,13 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
-from openpilot.cereal import car
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc, N
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan, is_volkswagen_meb
+from openpilot.selfdrive.controls.lib.cutin_predecel import (
+  apply_cutin_predecel_accel_limit,
+  get_cutin_predecel_accel_limit,
+)
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
@@ -107,7 +110,7 @@ class LongitudinalPlanner:
     self.vCluRatio = 1.0
     self.reset_decel_timer = 0
     self.reset_decel_start_a = 0.0
-    
+
     self.v_cruise_kph = 0.0
 
     self.params = Params()
@@ -179,7 +182,7 @@ class LongitudinalPlanner:
       self.v_desired_filter.x = v_ego
       # Clip aEgo to cruise limits to prevent large accelerations when becoming active
       self.a_desired = np.clip(sm['carState'].aEgo, accel_limits[0], accel_limits[1])
-      
+
       self.mpc.prev_a = np.full(N+1, self.a_desired) ## carrot
 
       self.reset_decel_timer = int(RESET_DECEL_RAMP_TIME / self.dt)
@@ -212,11 +215,25 @@ class LongitudinalPlanner:
 
     if force_slow_decel:
       v_cruise = 0.0
+    cutin_predecel_limit = (
+      get_cutin_predecel_accel_limit(sm['radarState'])
+      if not reset_state and not sm['carState'].gasPressed
+      else None
+    )
     # clip limits, cannot init MPC outside of bounds
     accel_limits_turns[0] = min(accel_limits_turns[0], self.a_desired + 0.05)
-    accel_limits_turns[1] = max(accel_limits_turns[1], self.a_desired - 0.05)
+    accel_limits_turns[1] = apply_cutin_predecel_accel_limit(
+      accel_limits_turns[1],
+      self.a_desired,
+      cutin_predecel_limit,
+    )
 
-    self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality, jerk_factor = carrot.jerk_factor_apply, a_change_cost_starting = carrot.aChangeCostStarting)
+    self.mpc.set_weights(
+      prev_accel_constraint,
+      personality=sm['selfdriveState'].personality,
+      jerk_factor=carrot.jerk_factor_apply,
+      a_change_cost_starting=carrot.aChangeCostStarting,
+    )
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
     self.mpc.update(carrot, reset_state, sm['radarState'], v_cruise, x, v, a, j, personality=sm['selfdriveState'].personality)
@@ -250,8 +267,13 @@ class LongitudinalPlanner:
     vEgoStopping = self.params.get_float("VEgoStopping") * 0.01
     action_t =  longitudinalActuatorDelay + DT_MDL
 
-    output_a_target_mpc, output_should_stop_mpc, output_v_target_mpc, _ = get_accel_from_plan(self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX,
-                                                                        action_t=action_t, vEgoStopping=vEgoStopping)
+    output_a_target_mpc, output_should_stop_mpc, output_v_target_mpc, _ = get_accel_from_plan(
+      self.v_desired_trajectory,
+      self.a_desired_trajectory,
+      CONTROL_N_T_IDX,
+      action_t=action_t,
+      vEgoStopping=vEgoStopping,
+    )
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
     output_v_target_now_e2e = sm['modelV2'].action.desiredVelocity

@@ -57,6 +57,20 @@ CORNER_CUT_IN_THRESHOLD = 0.30
 FRONT_CUT_IN_THRESHOLD = 0.67
 CUT_IN_CONFIRMATION_S = 0.35
 CUT_IN_BOUNDARY_HOLD_S = 0.40
+CORNER_PREDECEL_CONFIRMATION_S = 0.10
+CORNER_PREDECEL_HOLD_S = 0.20
+CORNER_PREDECEL_MIN_DREL_M = 8.0
+CORNER_PREDECEL_MAX_DREL_M = 45.0
+CORNER_PREDECEL_MIN_ABS_DPATH_M = 2.40
+CORNER_PREDECEL_MAX_ABS_DPATH_M = 3.40
+CORNER_PREDECEL_MIN_CLOSING_SPEED_MPS = 1.50
+CORNER_PREDECEL_MAX_TTC_S = 8.0
+CORNER_PREDECEL_MIN_SHORT_INWARD_RATE_MPS = 0.45
+CORNER_PREDECEL_MIN_LONG_INWARD_RATE_MPS = 0.25
+CORNER_PREDECEL_MIN_REPORTED_INWARD_MPS = 0.40
+CORNER_PREDECEL_MIN_INWARD_DISPLACEMENT_M = 0.35
+CORNER_PREDECEL_MIN_DIRECTIONAL_CONSISTENCY = 0.90
+CORNER_PREDECEL_MIN_INWARD_SAMPLE_RATIO = 0.80
 URGENT_NEAR_PATH_CONFIRMATION_S = 0.10
 URGENT_NEAR_PATH_MAX_DREL_M = 5.0
 URGENT_NEAR_PATH_MAX_CLEARANCE_M = 0.45
@@ -253,6 +267,143 @@ class RadarMotionCutIn:
 @dataclass(frozen=True)
 class RadarMotionDecision:
   confirmed: tuple[RadarMotionCutIn, ...]
+
+
+def corner_cutin_predecel_score(
+  prediction: RadarMotionPrediction,
+  d_rel: float,
+  v_rel: float,
+) -> float:
+  """Return a strong, SCC-independent adjacent-lane approach risk score.
+
+  This deliberately does not relax normal CUT-IN confirmation. It recognizes
+  only a sustained corner-radar target that is closing longitudinally while
+  its measured path-relative history and reported lateral velocity both move
+  inward. The score is used for a bounded pre-deceleration request.
+  """
+  sensor = getattr(
+    prediction,
+    "sensor",
+    "corner" if str(getattr(prediction, "source", "")).startswith("corner") else "front",
+  )
+  if (
+    sensor != "corner"
+    or bool(getattr(prediction, "current_path_occupancy", False))
+    or int(getattr(prediction, "history_count", 0)) < 12
+  ):
+    return 0.0
+  d_rel = _finite(d_rel, math.inf)
+  v_rel = _finite(v_rel)
+  abs_d_path = abs(prediction.d_path)
+  if (
+    not CORNER_PREDECEL_MIN_DREL_M
+    <= d_rel
+    <= CORNER_PREDECEL_MAX_DREL_M
+    or not CORNER_PREDECEL_MIN_ABS_DPATH_M
+    <= abs_d_path
+    <= CORNER_PREDECEL_MAX_ABS_DPATH_M
+    or v_rel > -CORNER_PREDECEL_MIN_CLOSING_SPEED_MPS
+  ):
+    return 0.0
+  side = math.copysign(1.0, prediction.d_path)
+  inward_short = -side * prediction.d_path_rate_short
+  inward_long = -side * prediction.d_path_rate_long
+  reported_inward = -side * prediction.reported_normal_speed
+  ttc_s = d_rel / max(-v_rel, 0.1)
+  if (
+    ttc_s > CORNER_PREDECEL_MAX_TTC_S
+    or inward_short < CORNER_PREDECEL_MIN_SHORT_INWARD_RATE_MPS
+    or inward_long < CORNER_PREDECEL_MIN_LONG_INWARD_RATE_MPS
+    or reported_inward < CORNER_PREDECEL_MIN_REPORTED_INWARD_MPS
+    or prediction.directional_inward_displacement_m
+    < CORNER_PREDECEL_MIN_INWARD_DISPLACEMENT_M
+    or prediction.directional_consistency
+    < CORNER_PREDECEL_MIN_DIRECTIONAL_CONSISTENCY
+    or prediction.directional_inward_sample_ratio
+    < CORNER_PREDECEL_MIN_INWARD_SAMPLE_RATIO
+  ):
+    return 0.0
+  return max(0.0, min(1.0, (
+    CORNER_PREDECEL_MAX_TTC_S - ttc_s
+  ) / (CORNER_PREDECEL_MAX_TTC_S - 2.5)))
+
+
+class CornerCutInPredecelTracker:
+  """Confirm strong early corner motion and bridge short radar dropouts."""
+
+  def __init__(
+    self,
+    confirmation_s: float = CORNER_PREDECEL_CONFIRMATION_S,
+    hold_s: float = CORNER_PREDECEL_HOLD_S,
+  ) -> None:
+    self.confirmation_s = float(confirmation_s)
+    self.hold_s = float(hold_s)
+    self._started_at: dict[tuple[str, int, int], float] = {}
+    self._last_seen_at: dict[tuple[str, int, int], float] = {}
+    self._last_candidate: dict[tuple[str, int, int], RadarMotionCutIn] = {}
+    self._confirmed: set[tuple[str, int, int]] = set()
+
+  @staticmethod
+  def _key(candidate: RadarMotionCutIn) -> tuple[str, int, int]:
+    prediction = candidate.prediction
+    return prediction.source, prediction.track_id, prediction.continuity_id
+
+  def reset(self) -> None:
+    self._started_at.clear()
+    self._last_seen_at.clear()
+    self._last_candidate.clear()
+    self._confirmed.clear()
+
+  def update(
+    self,
+    time_s: float,
+    candidates: Iterable[RadarMotionCutIn],
+  ) -> RadarMotionCutIn | None:
+    time_s = float(time_s)
+    current_keys: set[tuple[str, int, int]] = set()
+    for candidate in candidates:
+      if candidate.score <= 0.0:
+        continue
+      key = self._key(candidate)
+      current_keys.add(key)
+      self._started_at.setdefault(key, time_s)
+      self._last_seen_at[key] = time_s
+      previous = self._last_candidate.get(key)
+      self._last_candidate[key] = (
+        candidate
+        if previous is None or candidate.score >= previous.score
+        else RadarMotionCutIn(candidate.prediction, previous.score)
+      )
+
+    for key in tuple(self._started_at):
+      last_seen = self._last_seen_at.get(key, -math.inf)
+      if (
+        key not in current_keys
+        and (
+          key not in self._confirmed
+          or time_s - last_seen > self.hold_s
+        )
+      ):
+        self._started_at.pop(key, None)
+        self._last_seen_at.pop(key, None)
+        self._last_candidate.pop(key, None)
+        self._confirmed.discard(key)
+
+    self._confirmed.update(
+      key
+      for key in current_keys
+      if time_s - self._started_at[key] + 1e-6 >= self.confirmation_s
+    )
+
+    confirmed = [
+      self._last_candidate[key]
+      for key in self._confirmed
+      if (
+        key in self._last_candidate
+        and time_s - self._last_seen_at[key] <= self.hold_s
+      )
+    ]
+    return max(confirmed, key=lambda candidate: candidate.score, default=None)
 
 
 @dataclass(frozen=True)

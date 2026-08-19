@@ -25,6 +25,7 @@ from openpilot.selfdrive.carrot.radar_motion import (
   CORNER_CUT_IN_THRESHOLD,
   CUT_IN_BOUNDARY_HOLD_S,
   CUT_IN_CONFIRMATION_S,
+  CornerCutInPredecelTracker,
   DPathLeadCandidate,
   DPathStationaryPrimaryHandoffTracker,
   DPathStationaryShadowTracker,
@@ -36,11 +37,13 @@ from openpilot.selfdrive.carrot.radar_motion import (
   RADAR_MOTION_MAX_TIME_SKEW_S,
   STATIONARY_MAX_ABS_VLEAD_MPS,
   RadarMotionDecisionTracker,
+  RadarMotionCutIn,
   RadarMotionPrediction,
   RadarMotionPredictor,
   VisionRadarMatcher,
   apply_vision_bracket_cutin_support,
   cutin_can_compete_with_primary,
+  corner_cutin_predecel_score,
   front_cutin_motion_supported,
   lead_from_vision,
   lead_duplicates_primary,
@@ -260,6 +263,7 @@ class Selection:
   external_candidates: tuple[Candidate, ...] = ()
   active_external_candidates: tuple[Candidate, ...] = ()
   lead_two_tentative: bool | None = None
+  cutin_predecel_candidate: Candidate | None = None
 
 
 def lead_one_rgb(track_id: int | None) -> tuple[int, int, int]:
@@ -1136,6 +1140,7 @@ class RadarMotionShadowSelector:
       threshold=self.decision_threshold,
       confirmation_s=self.motion_sensitivity.confirmation_s,
     )
+    predecel_tracker = CornerCutInPredecelTracker()
     for frame, predictions, lead_one in zip(
       frames,
       trajectory_values,
@@ -1216,6 +1221,46 @@ class RadarMotionShadowSelector:
         )
         for identity, prediction in predictions.items()
       }
+      predecel = predecel_tracker.update(
+        frame.time_s,
+        (
+          RadarMotionCutIn(
+            prediction,
+            corner_cutin_predecel_score(
+              prediction,
+              point.d_rel,
+              point.v_rel,
+            ),
+          )
+          for prediction in predictions.values()
+          if (
+            self.motion_sensitivity.cut_in_enabled
+            and (
+              point := point_by_identity.get(
+                (prediction.source, prediction.track_id),
+              )
+            ) is not None
+          )
+        ),
+      )
+      predecel_candidate = None
+      if predecel is not None:
+        point = point_by_identity.get((
+          predecel.prediction.source,
+          predecel.prediction.track_id,
+        ))
+        if point is not None:
+          predecel_candidate = Candidate(
+            track_id=predecel.prediction.track_id,
+            score=predecel.score,
+            reason="corner CUT-IN pre-deceleration risk",
+            decision_threshold=0.0,
+            d_rel=point.d_rel,
+            y_rel=point.y_rel,
+            v_lead=point.v_lead,
+            stage="PRE-DECEL",
+            source=predecel.prediction.source,
+          )
       raw_diagnostics = tuple(sorted(
         (_shadow_candidate(prediction) for prediction in predictions.values()),
         key=lambda candidate: (
@@ -1517,6 +1562,7 @@ class RadarMotionShadowSelector:
         corner_candidates=corner,
         cutin_diagnostics=diagnostics,
         decision_cutin_candidates=decisions,
+        cutin_predecel_candidate=predecel_candidate,
       ))
     self.trajectories = trajectory_values
     self.lead_one_outputs = lead_one_values
