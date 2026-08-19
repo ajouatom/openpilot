@@ -370,7 +370,7 @@ window.CarrotTranslations.register("en", {
     web_auto_update_reboot_desc: "Reboot under the selected condition only when new software was actually pulled.",
     web_auto_update_reboot_off: "Do not reboot",
     web_auto_update_reboot_park: "Reboot in Park",
-    web_auto_update_reboot_disengaged: "1 sec after disengage",
+    web_auto_update_reboot_disengaged_or_offroad: "1 sec after disengage or offroad",
     web_auto_update_running: "Auto update: running git pull.",
     web_auto_update_done: "Auto update complete. Reboot was not requested.",
     web_auto_update_failed: "Auto update failed",
