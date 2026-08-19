@@ -16,6 +16,7 @@ WEB_PRIMARY_PAGES = {"last", "carrot", "setting", "tools", "logs", "terminal"}
 WEB_LANGUAGES = {"", "en", "ko", "zh"}
 WEB_REPLAY_INSIGHTS_TABS = {"events", "graphs", "sensors", "advanced"}
 WEB_DRIVE_LAYOUT_MODES = {"split", "area_1", "area_2"}
+WEB_AUTO_UPDATE_REBOOT_MODES = {"off", "park", "disengaged"}
 
 # Existing settings files created before the drive-layout keys were persisted
 # should retain the former split layout. Fresh installs use WEB_SETTINGS_SPEC.
@@ -401,6 +402,7 @@ class _Field:
 # Declarative schema. Order here is the canonical key order.
 WEB_SETTINGS_SPEC: List[_Field] = [
   _Field("auto_update_git_pull", "bool", False),
+  _Field("auto_update_reboot", "enum", "off", choices=WEB_AUTO_UPDATE_REBOOT_MODES),
   _Field("start_page", "enum", "last", choices=WEB_PRIMARY_PAGES),
   _Field("mini_hud_enabled", "bool", False),
   _Field("web_language", "str", "", normalize=_normalize_language),
