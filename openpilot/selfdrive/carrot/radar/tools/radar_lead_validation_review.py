@@ -33,6 +33,7 @@ def simulator_command(
   front_only: bool,
   motion_mode: str | None = None,
   sensitivity: int | None = None,
+  enable_radar_tracks: int = 2,
 ) -> list[str]:
   command = [
     sys.executable,
@@ -45,6 +46,8 @@ def simulator_command(
     "--review-position",
     position,
     "--exit-at-end",
+    "--enable-radar-tracks",
+    str(enable_radar_tracks),
   ]
   if probability is not None:
     command.extend(("--prob", str(probability)))
@@ -87,6 +90,13 @@ def parse_args() -> argparse.Namespace:
       "Carrot Radar CUT-IN sensitivity 0..5; otherwise use the validation "
       + "UI's saved level"
     ),
+  )
+  parser.add_argument(
+    "--enable-radar-tracks",
+    type=int,
+    choices=range(-2, 4),
+    default=2,
+    help="EnableRadarTracks value used by the dPath replay (default: 2)",
   )
   parser.add_argument("--front-only", action="store_true")
   parser.add_argument(
@@ -156,6 +166,7 @@ def main() -> int:
       args.front_only,
       args.motion_mode,
       args.sensitivity,
+      args.enable_radar_tracks,
     )
     result = subprocess.run(command, check=False)
     if result.returncode != 0:

@@ -63,6 +63,19 @@ STATIONARY_SHADOW_CORNER_MAX_DPATH_M = 1.25
 STATIONARY_SHADOW_CORNER_MAX_DPATH_DELTA_M = 1.25
 STATIONARY_SHADOW_CORNER_MAX_ABS_VLEAD_MPS = 3.0
 STATIONARY_SHADOW_CORNER_MAX_VLEAD_DELTA_MPS = 3.0
+SCC_LEAD_TWO_CONFIRMATION_S = 0.15
+SCC_LEAD_TWO_MAX_DREL_M = 150.0
+SCC_LEAD_TWO_MAX_VLEAD_MPS = 5.0
+SCC_LEAD_TWO_MAX_POSITION_ERROR_M = 3.0
+SCC_LEAD_TWO_MAX_SPEED_JUMP_MPS = 2.0
+SCC_PHYSICAL_MATCH_MIN_DREL_M = 4.0
+SCC_PHYSICAL_MATCH_DREL_FRACTION = 0.05
+SCC_PHYSICAL_MATCH_MAX_DREL_M = 8.0
+SCC_PHYSICAL_MATCH_MAX_VLEAD_DELTA_MPS = 3.0
+SCC_PHYSICAL_MATCH_MAX_ABS_DPATH_M = 2.2
+SCC_PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 5.0
+SCC_PRIMARY_DUPLICATE_MAX_VLEAD_DELTA_MPS = 3.0
+SCC_PRIMARY_CLOSER_MARGIN_M = 1.0
 
 
 def _is_corner(point: RadarPointSnapshot) -> bool:
@@ -127,6 +140,145 @@ def stationary_shadow_corner_supported(
     ):
       return True
   return False
+
+
+def _scc_physical_support(
+  scc: RadarPointSnapshot,
+  points: Iterable[RadarPointSnapshot],
+  path: tuple[tuple[float, float], ...],
+) -> RadarPointSnapshot | None:
+  """Prefer an in-path physical return that corroborates the OEM SCC lead."""
+  d_rel_gate = min(
+    SCC_PHYSICAL_MATCH_MAX_DREL_M,
+    max(
+      SCC_PHYSICAL_MATCH_MIN_DREL_M,
+      scc.d_rel * SCC_PHYSICAL_MATCH_DREL_FRACTION,
+    ),
+  )
+  supported = []
+  for point in points:
+    if (
+      not point.measured
+      or point.source == "scc"
+      or not (
+        point.source == "frontRadar" or _is_corner(point)
+      )
+      or abs(point.d_rel - scc.d_rel) > d_rel_gate
+      or abs(point.v_lead - scc.v_lead)
+      > SCC_PHYSICAL_MATCH_MAX_VLEAD_DELTA_MPS
+    ):
+      continue
+    projection = project_to_model_path(
+      path, point.d_rel, point.y_rel,
+    )
+    if abs(projection.d_path) > SCC_PHYSICAL_MATCH_MAX_ABS_DPATH_M:
+      continue
+    supported.append((
+      0 if point.source == "frontRadar" else 1,
+      abs(point.d_rel - scc.d_rel),
+      abs(point.v_lead - scc.v_lead),
+      point,
+    ))
+  return min(
+    supported,
+    key=lambda candidate: candidate[:3],
+    default=(0, 0.0, 0.0, None),
+  )[-1]
+
+
+class DPathSccLeadTwoTracker:
+  """Confirm an opt-in low-speed OEM SCC backup independently of dPath."""
+
+  def __init__(self) -> None:
+    self._since_s: float | None = None
+    self._last_time_s: float | None = None
+    self._last_point: RadarPointSnapshot | None = None
+
+  def reset(self) -> None:
+    self._since_s = None
+    self._last_time_s = None
+    self._last_point = None
+
+  def _continuous(
+    self,
+    time_s: float,
+    point: RadarPointSnapshot,
+  ) -> bool:
+    if self._last_time_s is None or self._last_point is None:
+      return True
+    dt = float(time_s) - self._last_time_s
+    if dt < 0.0 or dt > RADAR_MOTION_MAX_TIME_SKEW_S:
+      return False
+    predicted_d_rel = self._last_point.d_rel + self._last_point.v_rel * dt
+    return (
+      abs(point.d_rel - predicted_d_rel)
+      <= SCC_LEAD_TWO_MAX_POSITION_ERROR_M
+      and abs(point.v_lead - self._last_point.v_lead)
+      <= SCC_LEAD_TWO_MAX_SPEED_JUMP_MPS
+    )
+
+  def update(
+    self,
+    time_s: float,
+    points: Iterable[RadarPointSnapshot],
+    *,
+    enabled: bool,
+  ) -> RadarPointSnapshot | None:
+    if not enabled:
+      self.reset()
+      return None
+    candidates = tuple(
+      point for point in points
+      if (
+        point.measured
+        and point.source == "scc"
+        and 0.8 < point.d_rel <= SCC_LEAD_TWO_MAX_DREL_M
+        and point.v_lead < SCC_LEAD_TWO_MAX_VLEAD_MPS
+      )
+    )
+    point = min(candidates, key=lambda value: value.d_rel, default=None)
+    if point is None:
+      self.reset()
+      return None
+    if not self._continuous(time_s, point):
+      self._since_s = float(time_s)
+    elif self._since_s is None:
+      self._since_s = float(time_s)
+    self._last_time_s = float(time_s)
+    self._last_point = point
+    if (
+      self._since_s is None
+      or float(time_s) - self._since_s < SCC_LEAD_TWO_CONFIRMATION_S
+    ):
+      return None
+    return point
+
+
+def _scc_lead_two_can_compete(
+  lead: dict[str, Any],
+  primary: dict[str, Any] | None,
+) -> bool:
+  if primary is None or not primary.get("status"):
+    return True
+  if lead_duplicates_primary(lead, primary):
+    return False
+  distance_delta = abs(
+    float(lead.get("dRel", 0.0))
+    - float(primary.get("dRel", 0.0))
+  )
+  speed_delta = abs(
+    float(lead.get("vLead", 0.0))
+    - float(primary.get("vLead", 0.0))
+  )
+  if (
+    distance_delta <= SCC_PRIMARY_DUPLICATE_MAX_DREL_DELTA_M
+    and speed_delta <= SCC_PRIMARY_DUPLICATE_MAX_VLEAD_DELTA_MPS
+  ):
+    return False
+  return (
+    float(lead.get("dRel", math.inf)) + SCC_PRIMARY_CLOSER_MARGIN_M
+    < float(primary.get("dRel", math.inf))
+  )
 
 
 @dataclass(frozen=True)
@@ -222,6 +374,7 @@ class DPathRadarController:
     self.stationary_primary_handoff_tracker = (
       DPathStationaryPrimaryHandoffTracker()
     )
+    self.scc_lead_two_tracker = DPathSccLeadTwoTracker()
     self.lead_dynamics = RadarLeadDynamics()
 
   def _reset_motion_pipeline(self) -> None:
@@ -290,6 +443,7 @@ class DPathRadarController:
       self.lead_two_tracker.reset()
       self.stationary_shadow_tracker.reset()
       self.stationary_primary_handoff_tracker.reset()
+      self.scc_lead_two_tracker.reset()
     if self.motion_sensor == "corner":
       return corner_points
     return tuple(point for point in points if point.source == "frontRadar")
@@ -400,6 +554,7 @@ class DPathRadarController:
       self.lead_two_tracker.reset()
       self.stationary_shadow_tracker.reset()
       self.stationary_primary_handoff_tracker.reset()
+      self.scc_lead_two_tracker.reset()
       self.primary_cut_out_predictor = RadarMotionPredictor()
       self.lead_dynamics.reset()
       self.cutin_predecel_tracker.reset()
@@ -796,9 +951,39 @@ class DPathRadarController:
       candidates,
       v_ego,
     )
+    scc_point = self.scc_lead_two_tracker.update(
+      time_s,
+      points,
+      enabled=self.enable_radar_tracks >= 2,
+    )
+    scc_lead_two = None
+    if scc_point is not None:
+      physical_support = _scc_physical_support(
+        scc_point, points, path,
+      )
+      lead_point = physical_support or scc_point
+      scc_lead_two = self._lead_from_radar_point(
+        lead_point,
+        project_to_model_path(
+          path, lead_point.d_rel, lead_point.y_rel,
+        ).d_path,
+        0.03,
+        1.0 if physical_support is not None else 0.5,
+      )
+      if not _scc_lead_two_can_compete(scc_lead_two, lead_one):
+        scc_lead_two = None
+    lead_two = selection.lead_two
+    if (
+      scc_lead_two is not None
+      and (
+        lead_two is None
+        or float(scc_lead_two["dRel"]) < float(lead_two["dRel"])
+      )
+    ):
+      lead_two = scc_lead_two
     return DPathRadarOutput(
       lead_one=lead_one,
-      lead_two=selection.lead_two,
+      lead_two=lead_two,
       lead_left=self._pick_side(leads_left),
       lead_right=self._pick_side(leads_right),
       leads_left=leads_left,

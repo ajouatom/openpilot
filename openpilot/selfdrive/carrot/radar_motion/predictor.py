@@ -338,15 +338,15 @@ class CornerCutInPredecelTracker:
   ) -> None:
     self.confirmation_s = float(confirmation_s)
     self.hold_s = float(hold_s)
-    self._started_at: dict[tuple[str, int, int], float] = {}
-    self._last_seen_at: dict[tuple[str, int, int], float] = {}
-    self._last_candidate: dict[tuple[str, int, int], RadarMotionCutIn] = {}
-    self._confirmed: set[tuple[str, int, int]] = set()
+    self._started_at: dict[tuple[str, int], float] = {}
+    self._last_seen_at: dict[tuple[str, int], float] = {}
+    self._last_candidate: dict[tuple[str, int], RadarMotionCutIn] = {}
+    self._confirmed: set[tuple[str, int]] = set()
 
   @staticmethod
-  def _key(candidate: RadarMotionCutIn) -> tuple[str, int, int]:
+  def _key(candidate: RadarMotionCutIn) -> tuple[str, int]:
     prediction = candidate.prediction
-    return prediction.source, prediction.track_id, prediction.continuity_id
+    return prediction.source, prediction.continuity_id
 
   def reset(self) -> None:
     self._started_at.clear()
@@ -360,7 +360,7 @@ class CornerCutInPredecelTracker:
     candidates: Iterable[RadarMotionCutIn],
   ) -> RadarMotionCutIn | None:
     time_s = float(time_s)
-    current_keys: set[tuple[str, int, int]] = set()
+    current_keys: set[tuple[str, int]] = set()
     for candidate in candidates:
       if candidate.score <= 0.0:
         continue
@@ -1059,6 +1059,10 @@ class RadarMotionPredictor:
       "front": {},
       "corner": {},
     }
+    self._retired_states: dict[str, dict[int, _TrackState]] = {
+      "front": {},
+      "corner": {},
+    }
     self._next_continuity_id = 1
     self._ego_distance_m = 0.0
     self._ego_x_m = 0.0
@@ -1073,18 +1077,21 @@ class RadarMotionPredictor:
     self._next_continuity_id += 1
     return state
 
+  def _retire_state(self, sensor: str, state: _TrackState) -> None:
+    self._retired_states[sensor][state.continuity_id] = state
+
   @staticmethod
-  def _continuous(
+  def _continuity_cost(
     state: _TrackState,
     observation: _Observation,
     config: _SourceConfig,
-  ) -> bool:
+  ) -> float | None:
     if not state.observations:
-      return True
+      return 0.0
     previous = state.observations[-1]
     dt = observation.time_s - previous.time_s
     if dt <= 0.0 or dt > config.missing_hold_s:
-      return False
+      return None
     recent = _window(tuple(state.observations), SHORT_HISTORY_S)
     path_slope, _, _ = _spatial_fit(recent)
     d_path_rate = path_slope * previous.path_velocity
@@ -1097,12 +1104,82 @@ class RadarMotionPredictor:
       + 0.25 * abs(previous.path_velocity) * dt
     )
     lateral_limit = config.lateral_jump_m + 0.25 * abs(d_path_rate) * dt
-    return (
-      abs(observation.path_x_world - predicted_path_x_world)
-      <= longitudinal_limit
-      and abs(observation.d_path - predicted_d_path) <= lateral_limit
-      and abs(observation.v_rel - previous.v_rel) <= config.velocity_jump_mps
+    longitudinal_error = abs(
+      observation.path_x_world - predicted_path_x_world
     )
+    lateral_error = abs(observation.d_path - predicted_d_path)
+    velocity_error = abs(observation.v_rel - previous.v_rel)
+    if (
+      longitudinal_error > longitudinal_limit
+      or lateral_error > lateral_limit
+      or velocity_error > config.velocity_jump_mps
+    ):
+      return None
+    return (
+      longitudinal_error / max(longitudinal_limit, 1.0e-3)
+      + lateral_error / max(lateral_limit, 1.0e-3)
+      + velocity_error / max(config.velocity_jump_mps, 1.0e-3)
+    )
+
+  @classmethod
+  def _continuous(
+    cls,
+    state: _TrackState,
+    observation: _Observation,
+    config: _SourceConfig,
+  ) -> bool:
+    return cls._continuity_cost(state, observation, config) is not None
+
+  def _reassociate_state(
+    self,
+    sensor: str,
+    key: tuple[str, int],
+    observation: _Observation,
+    config: _SourceConfig,
+    unavailable_continuity_ids: set[int],
+  ) -> _TrackState | None:
+    """Continue a physical corner target across raw object-ID handoffs.
+
+    Corner object slots can change every few frames while position and
+    velocity remain continuous. Only absent same-source keys are eligible, so
+    two simultaneously visible targets cannot be merged merely because they
+    pass close to one another.
+    """
+    if sensor != "corner":
+      return None
+    states = self._states[sensor]
+    retired_states = self._retired_states[sensor]
+    matches = []
+    for old_key, state in states.items():
+      if (
+        old_key == key
+        or old_key[0] != key[0]
+        or state.continuity_id in unavailable_continuity_ids
+      ):
+        continue
+      cost = self._continuity_cost(state, observation, config)
+      if cost is not None:
+        matches.append((cost, -state.last_seen_s, old_key, state, False))
+    for state in retired_states.values():
+      if (
+        state.source != key[0]
+        or state.continuity_id in unavailable_continuity_ids
+      ):
+        continue
+      cost = self._continuity_cost(state, observation, config)
+      if cost is not None:
+        matches.append((cost, -state.last_seen_s, None, state, True))
+    if not matches:
+      return None
+    _, _, old_key, state, was_retired = min(
+      matches, key=lambda match: match[:2],
+    )
+    if was_retired:
+      retired_states.pop(state.continuity_id, None)
+    elif old_key is not None:
+      states.pop(old_key, None)
+    states[key] = state
+    return state
 
   def _prediction(
     self,
@@ -1698,6 +1775,11 @@ class RadarMotionPredictor:
       for key, state in tuple(states.items()):
         if time_s - state.last_seen_s > hold_s:
           states.pop(key)
+      for continuity_id, state in tuple(
+        self._retired_states[sensor].items()
+      ):
+        if time_s - state.last_seen_s > hold_s:
+          self._retired_states[sensor].pop(continuity_id)
 
     point_values = tuple(points)
     scoped_points = (
@@ -1722,10 +1804,13 @@ class RadarMotionPredictor:
       track_id = int(getattr(point, "track_id", getattr(point, "trackId", -1)))
       key = (source, track_id)
       if bool(getattr(point, "measured", False)) and key not in scoped_keys:
-        self._states[sensor].pop(key, None)
+        state = self._states[sensor].pop(key, None)
+        if state is not None:
+          self._retire_state(sensor, state)
 
     predictions: dict[tuple[str, int], RadarMotionPrediction] = {}
     ego_projection = project_to_model_path(path, 0.0, 0.0)
+    prepared = []
     for point, d_rel, projection in scoped_points:
       source = _source(point)
       sensor = _sensor(source)
@@ -1741,7 +1826,9 @@ class RadarMotionPredictor:
         _value(point, "v_rel", "vRel") + v_ego,
       )
       if abs(v_lead) <= POSITION_ONLY_MAX_ABS_VLEAD_MPS:
-        self._states[sensor].pop(key, None)
+        state = self._states[sensor].pop(key, None)
+        if state is not None:
+          self._retire_state(sensor, state)
         continue
       cos_heading = math.cos(self._ego_heading_rad)
       sin_heading = math.sin(self._ego_heading_rad)
@@ -1801,10 +1888,55 @@ class RadarMotionPredictor:
         ),
         d_path=d_path,
       )
+      prepared.append((
+        source,
+        sensor,
+        config,
+        track_id,
+        key,
+        observation,
+      ))
+
+    # Reserve every exact raw-ID association that is also physically
+    # continuous. Remaining measurements may then claim only unreserved
+    # trajectories, which handles simultaneous object-slot swaps without
+    # stealing the history of a stable target processed later in the frame.
+    reserved_continuity_ids = {
+      state.continuity_id
+      for _, sensor, config, _, key, observation in prepared
+      if (
+        (state := self._states[sensor].get(key)) is not None
+        and self._continuous(state, observation, config)
+      )
+    }
+    claimed_continuity_ids: set[int] = set()
+    for (
+      source,
+      sensor,
+      config,
+      track_id,
+      key,
+      observation,
+    ) in prepared:
       state = self._states[sensor].get(key)
-      if state is None or not self._continuous(state, observation, config):
-        state = self._new_state(source, time_s)
-        self._states[sensor][key] = state
+      if state is not None and not self._continuous(
+        state, observation, config,
+      ):
+        self._states[sensor].pop(key, None)
+        self._retire_state(sensor, state)
+        state = None
+      if state is None:
+        state = self._reassociate_state(
+          sensor,
+          key,
+          observation,
+          config,
+          claimed_continuity_ids | reserved_continuity_ids,
+        )
+        if state is None:
+          state = self._new_state(source, time_s)
+          self._states[sensor][key] = state
+      claimed_continuity_ids.add(state.continuity_id)
       state.observations.append(observation)
       while (
         state.observations
@@ -1849,16 +1981,12 @@ class RadarMotionDecisionTracker:
     self.threshold = float(threshold)
     self.confirmation_s = float(confirmation_s)
     self.boundary_hold_s = float(boundary_hold_s)
-    self._started_at: dict[tuple[str, int, int], float] = {}
-    self._peak_score: dict[tuple[str, int, int], float] = {}
+    self._started_at: dict[tuple[str, int], float] = {}
+    self._peak_score: dict[tuple[str, int], float] = {}
 
   @staticmethod
-  def _key(prediction: RadarMotionPrediction) -> tuple[str, int, int]:
-    return (
-      prediction.source,
-      prediction.track_id,
-      prediction.continuity_id,
-    )
+  def _key(prediction: RadarMotionPrediction) -> tuple[str, int]:
+    return prediction.source, prediction.continuity_id
 
   def _confirmation_time_s(
     self,

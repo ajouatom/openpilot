@@ -2,6 +2,174 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "ioniq5-4b9-7-corner-predecel-cutin-28",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 7f419ed56030e135",
+      "log": "000004b9--f989b3c8ec--7/rlog.zst",
+      "source": "corner",
+      "window": [28.05, 28.45],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "predecel",
+      "target_track_ids": [2091],
+      "latest_detection_s": 28.25,
+      "scene": "A fast-closing vehicle moves steadily inward from the right; strong corner-radar motion should request bounded pre-deceleration before normal CUT-IN confirmation"
+    },
+    {
+      "id": "ioniq5-4b9-7-corner-confirmed-cutin-28",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 7f419ed56030e135",
+      "log": "000004b9--f989b3c8ec--7/rlog.zst",
+      "source": "corner",
+      "window": [28.65, 29.05],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [2091],
+      "latest_detection_s": 28.80,
+      "scene": "The same right-side vehicle is separately required to reach ordinary confirmed CUT-IN leadTwo after the earlier pre-deceleration risk"
+    },
+    {
+      "id": "carnival-5b-18-early",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "window": [0.0, 10.0],
+      "expected": "detect",
+      "human_verified": true,
+      "target_track_ids": [1013],
+      "target_spatial_match": {
+        "d_rel": [3.5, 6.0],
+        "y_rel": [-3.0, -2.0]
+      },
+      "lead_two_continuous_window": [5.45, 6.15],
+      "latest_detection_s": 5.6,
+      "scene": "Multiple early cut-ins"
+    },
+    {
+      "id": "carnival-5b-18-post-takeover",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "window": [7.3, 8.5],
+      "expected": "clear",
+      "human_verified": true,
+      "target_track_ids": [1013],
+      "scene": "Do not re-report a cut-in after the same vehicle became leadOne"
+    },
+    {
+      "id": "carnival-5b-18-close-entry",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "window": [17.5, 19.2],
+      "expected": "detect",
+      "human_verified": true,
+      "scene": "Close vehicle enters from the right; detect before it reaches the lane line"
+    },
+    {
+      "id": "carnival-5b-18-adjacent-29",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--18/rlog.1.zst",
+      "source": "corner",
+      "window": [28.0, 38.5],
+      "expected": "clear",
+      "human_verified": true,
+      "scene": "Fast adjacent-lane change remains outside the ego lane"
+    },
+    {
+      "id": "carnival-5b-15-truck",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "window": [45.0, 50.0],
+      "expected": "detect",
+      "human_verified": true,
+      "target_track_ids": [39, 1071],
+      "target_spatial_match": {
+        "d_rel": [1.5, 5.5],
+        "y_rel": [1.5, 2.6]
+      },
+      "lead_two_continuous_window": [47.30, 47.85],
+      "scene": "Truck enters from the left"
+    },
+    {
+      "id": "carnival-5b-15-truck-before-entry-42",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "window": [42.3, 43.6],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [39, 1071],
+      "scene": "Truck remains parallel before beginning its lane entry"
+    },
+    {
+      "id": "carnival-5b-15-truck-before-entry-45",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "window": [44.8, 46.1],
+      "expected": "clear",
+      "forbidden_lead_two_ids": [39, 1071],
+      "scene": "Truck remains outside before sustained inward motion starts"
+    },
+    {
+      "id": "carnival-5b-15-adjacent-27",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "corner",
+      "window": [26.0, 29.0],
+      "expected": "clear",
+      "scene": "Right adjacent SUV remains in its lane"
+    },
+    {
+      "id": "carnival-5b-15-adjacent-right-56",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000005b--02344a68f2--15/rlog.1.zst",
+      "source": "front+corner",
+      "window": [56.2, 59.9],
+      "expected": "detect",
+      "human_verified": true,
+      "target_track_ids": [50, 1080],
+      "scene": "Right SUV crosses into the ego path near the end of the route"
+    },
+    {
+      "id": "azera-109-271-corner-moving-ghost",
+      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
+      "log": "00000109--5260b42384--271/rlog.zst",
+      "source": "corner",
+      "window": [4.5, 12.0],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [1001, 1002, 20452, 20453],
+      "forbidden_lead_one_ids": [1001, 1002, 20452, 20453],
+      "scene": "Empty road: reject central moving corner ghosts whose measured range change contradicts reported relative speed"
+    },
+    {
+      "id": "ioniq9-234-6-stationary-range-outlier",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000234--127adb09bb--6/rlog.zst",
+      "source": "front+corner",
+      "window": [12.5, 19.5],
+      "expected": "stationary",
+      "human_verified": true,
+      "target_track_ids": [45, 1004],
+      "required_lead_one_ids": [45, 1004],
+      "scene": "Stopped lead corroborated by front track 45 and corner track 1004 while the visual longitudinal range is initially overestimated"
+    },
+    {
+      "id": "ioniq9-234-6-scc-corroborated-early-l2",
+      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
+      "log": "00000234--127adb09bb--6/rlog.zst",
+      "source": "front+corner",
+      "window": [11.50, 12.30],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [45],
+      "latest_detection_s": 11.65,
+      "scene": "With EnableRadarTracks 2, a continuous low-speed SCC target corroborated by the curved-path front and corner returns must publish physical front track 45 as early leadTwo"
+    },
+    {
       "id": "ioniq5-c93-34-adjacent-truck-front-57",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 8912d0cf07880819",
       "log": "00000c93--0576896015--34/rlog.zst",
@@ -220,29 +388,6 @@
       "scene": "Closer in-path motorcycle track 34 must replace the previously held farther moving track 43 without repeated leadOne skips"
     },
     {
-      "id": "ioniq9-234-6-stationary-range-outlier",
-      "vehicle_folder": "HYUNDAI_IONIQ_9 c92fab3f15c0dbfb",
-      "log": "00000234--127adb09bb--6/rlog.zst",
-      "source": "front+corner",
-      "window": [12.5, 19.5],
-      "expected": "stationary",
-      "human_verified": true,
-      "target_track_ids": [45, 1004],
-      "required_lead_one_ids": [45, 1004],
-      "scene": "Stopped lead corroborated by front track 45 and corner track 1004 while the visual longitudinal range is initially overestimated"
-    },
-    {
-      "id": "azera-109-271-corner-moving-ghost",
-      "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
-      "log": "00000109--5260b42384--271/rlog.zst",
-      "source": "corner",
-      "window": [4.5, 12.0],
-      "expected": "clear",
-      "human_verified": true,
-      "forbidden_lead_one_ids": [1001, 1002],
-      "scene": "Empty road: reject central moving corner ghosts whose measured range change contradicts reported relative speed"
-    },
-    {
       "id": "azera-109-270-stationary-roadside-ghost",
       "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
       "log": "00000109--5260b42384--270/rlog.zst",
@@ -344,89 +489,6 @@
       "expected": "clear",
       "forbidden_lead_two_ids": [1000, 1040, 1042, 1043, 1045],
       "scene": "Corner tracks born inside the path must not churn as leadTwo while stable front leadOne 63 remains"
-    },
-    {
-      "id": "carnival-5b-18-early",
-      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
-      "log": "0000005b--02344a68f2--18/rlog.1.zst",
-      "source": "corner",
-      "window": [0.0, 10.0],
-      "expected": "detect",
-      "human_verified": true,
-      "target_track_ids": [1013],
-      "latest_detection_s": 5.6,
-      "scene": "Multiple early cut-ins"
-    },
-    {
-      "id": "carnival-5b-18-post-takeover",
-      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
-      "log": "0000005b--02344a68f2--18/rlog.1.zst",
-      "source": "corner",
-      "window": [7.3, 8.5],
-      "expected": "detect",
-      "human_verified": true,
-      "target_track_ids": [1013],
-      "scene": "Do not re-report a cut-in after the same vehicle became leadOne"
-    },
-    {
-      "id": "carnival-5b-18-close-entry",
-      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
-      "log": "0000005b--02344a68f2--18/rlog.1.zst",
-      "source": "corner",
-      "window": [17.5, 19.2],
-      "expected": "detect",
-      "human_verified": true,
-      "scene": "Close vehicle enters from the right; detect before it reaches the lane line"
-    },
-    {
-      "id": "carnival-5b-18-adjacent-29",
-      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
-      "log": "0000005b--02344a68f2--18/rlog.1.zst",
-      "source": "corner",
-      "window": [28.0, 38.5],
-      "expected": "clear",
-      "human_verified": true,
-      "scene": "Fast adjacent-lane change remains outside the ego lane"
-    },
-    {
-      "id": "carnival-5b-15-truck",
-      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
-      "log": "0000005b--02344a68f2--15/rlog.1.zst",
-      "source": "corner",
-      "window": [45.0, 50.0],
-      "expected": "detect",
-      "human_verified": true,
-      "target_track_ids": [39, 1071],
-      "scene": "Truck enters from the left"
-    },
-    {
-      "id": "carnival-5b-15-truck-before-entry-42",
-      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
-      "log": "0000005b--02344a68f2--15/rlog.1.zst",
-      "source": "corner",
-      "window": [42.3, 43.6],
-      "expected": "clear",
-      "forbidden_lead_two_ids": [39, 1071],
-      "scene": "Truck remains parallel before beginning its lane entry"
-    },
-    {
-      "id": "carnival-5b-15-truck-before-entry-45",
-      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
-      "log": "0000005b--02344a68f2--15/rlog.1.zst",
-      "source": "corner",
-      "window": [44.8, 46.1],
-      "expected": "clear",
-      "forbidden_lead_two_ids": [39, 1071],
-      "scene": "Truck remains outside before sustained inward motion starts"
-    },
-    {
-      "id": "carnival-5b-15-adjacent-27",
-      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
-      "log": "0000005b--02344a68f2--15/rlog.1.zst",
-      "source": "corner",
-      "window": [26.0, 29.0],
-      "expected": "clear",
-      "scene": "Right adjacent SUV remains in its lane"
     },
     {
       "id": "azera-6d-1-front",
@@ -1018,17 +1080,6 @@
       "forbidden_lead_two_ids": [40],
       "scene": "Right vehicle remains outside before its later lane entry"
     },
-      {
-        "id": "carnival-5b-15-adjacent-right-56",
-        "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
-        "log": "0000005b--02344a68f2--15/rlog.1.zst",
-        "source": "front+corner",
-        "window": [56.2, 59.9],
-        "expected": "detect",
-        "human_verified": true,
-        "target_track_ids": [50, 1080],
-        "scene": "Right SUV crosses into the ego path near the end of the route"
-    },
     {
       "id": "azera-6d-1-adjacent-left-16",
       "vehicle_folder": "HYUNDAI_AZERA_7TH_GEN f3a537501c7197ec",
@@ -1181,32 +1232,6 @@
       "validation_stage": "lead_two",
       "forbidden_lead_two_ids": [2516],
       "scene": "Black sedan remains in the adjacent left lane while a small quantized inward shift briefly touches the lane-boundary straddle gate"
-    },
-    {
-      "id": "ioniq5-4b9-7-corner-predecel-cutin-28",
-      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 7f419ed56030e135",
-      "log": "000004b9--f989b3c8ec--7/rlog.zst",
-      "source": "corner",
-      "window": [28.05, 28.45],
-      "expected": "detect",
-      "human_verified": true,
-      "validation_stage": "predecel",
-      "target_track_ids": [2091],
-      "latest_detection_s": 28.25,
-      "scene": "A fast-closing vehicle moves steadily inward from the right; strong corner-radar motion should request bounded pre-deceleration before normal CUT-IN confirmation"
-    },
-    {
-      "id": "ioniq5-4b9-7-corner-confirmed-cutin-28",
-      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 7f419ed56030e135",
-      "log": "000004b9--f989b3c8ec--7/rlog.zst",
-      "source": "corner",
-      "window": [28.65, 29.05],
-      "expected": "detect",
-      "human_verified": true,
-      "validation_stage": "lead_two",
-      "target_track_ids": [2091],
-      "latest_detection_s": 28.80,
-      "scene": "The same right-side vehicle is separately required to reach ordinary confirmed CUT-IN leadTwo after the earlier pre-deceleration risk"
     }
   ]
 }
