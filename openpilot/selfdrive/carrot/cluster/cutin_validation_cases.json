@@ -1194,6 +1194,19 @@
       "target_track_ids": [2091],
       "latest_detection_s": 28.25,
       "scene": "A fast-closing vehicle moves steadily inward from the right; strong corner-radar motion should request bounded pre-deceleration before normal CUT-IN confirmation"
+    },
+    {
+      "id": "ioniq5-4b9-7-corner-confirmed-cutin-28",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 7f419ed56030e135",
+      "log": "000004b9--f989b3c8ec--7/rlog.zst",
+      "source": "corner",
+      "window": [28.65, 29.05],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [2091],
+      "latest_detection_s": 28.80,
+      "scene": "The same right-side vehicle is separately required to reach ordinary confirmed CUT-IN leadTwo after the earlier pre-deceleration risk"
     }
   ]
 }

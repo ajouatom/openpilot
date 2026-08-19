@@ -1250,8 +1250,8 @@ class RadarMotionShadowSelector:
           predecel.prediction.track_id,
         ))
         if point is not None:
-          predecel_candidate = Candidate(
-            track_id=predecel.prediction.track_id,
+          predecel_candidate = replace(
+            _shadow_candidate(predecel.prediction),
             score=predecel.score,
             reason="corner CUT-IN pre-deceleration risk",
             decision_threshold=0.0,
@@ -2236,11 +2236,35 @@ def trajectory_model_review_events(
 ) -> dict[int, tuple[str, ...]]:
   requested = {value.lower() for value in sources}
   events: dict[int, tuple[str, ...]] = {}
-  emitted: set[tuple[str, int, int]] = set()
+  emitted: set[tuple[str, str, int, int]] = set()
   trajectories = getattr(selector, "trajectories", ())
   for index, frame in enumerate(frames):
-    candidates = selector.select(frame, index).decision_cutin_candidates
+    selection = selector.select(frame, index)
+    candidates = selection.decision_cutin_candidates
     labels: list[str] = []
+    predecel = selection.cutin_predecel_candidate
+    if predecel is not None:
+      sensor = "corner" if predecel.source.startswith("corner") else "front"
+      prediction = (
+        trajectories[index].get((predecel.source, predecel.track_id))
+        if index < len(trajectories)
+        else None
+      )
+      key = (
+        "predecel",
+        predecel.source,
+        predecel.track_id,
+        prediction.continuity_id if prediction is not None else -1,
+      )
+      if (
+        (sensor in requested or "front+corner" in requested)
+        and key not in emitted
+      ):
+        labels.append(
+          f"예비감속 위험 {sensor} id {predecel.track_id} "
+          + f"위험도 {predecel.score:.2f}"
+        )
+        emitted.add(key)
     for candidate in candidates:
       sensor = "corner" if candidate.source.startswith("corner") else "front"
       if (
@@ -2256,6 +2280,7 @@ def trajectory_model_review_events(
         else None
       )
       key = (
+        "cutin",
         candidate.source,
         candidate.track_id,
         prediction.continuity_id if prediction is not None else -1,
@@ -3042,6 +3067,12 @@ class SimulatorUI:
       (candidate.source, candidate.track_id)
       for candidate in selection.decision_cutin_candidates
     }
+    predecel_key = (
+      (selection.cutin_predecel_candidate.source,
+       selection.cutin_predecel_candidate.track_id)
+      if selection.cutin_predecel_candidate is not None
+      else None
+    )
     display_points = {
       (point.source, point.track_id): point
       for point in self.selector.motion_points[self.index]
@@ -3074,6 +3105,9 @@ class SimulatorUI:
       if (point.source, point.track_id) in confirmed_cutin_keys:
         color = (246, 142, 55)
         radius = 7.0
+      elif (point.source, point.track_id) == predecel_key:
+        color = (70, 190, 220)
+        radius = 8.0
       elif control_eligible_current_path:
         color = (62, 205, 130)
         radius = 7.0
@@ -3391,8 +3425,13 @@ class SimulatorUI:
       if selection.lead_two is not None
       else "--"
     )
+    predecel_id = (
+      str(selection.cutin_predecel_candidate.track_id)
+      if selection.cutin_predecel_candidate is not None
+      else "--"
+    )
     self._draw_text(
-      f"L1 {lead_one_id}  L2 {lead_two_id}  | 새 CUT-IN "
+      f"L1 {lead_one_id}  L2 {lead_two_id}  | 예비감속 {predecel_id}  | CUT-IN "
       + str([value.track_id for value in selection.decision_cutin_candidates]),
       x,
       int(rect.y + 110.0),
@@ -3402,6 +3441,19 @@ class SimulatorUI:
     self._draw_probability_slider(rect)
     y = rect.y + 194.0
     max_rows = max(3, int((rect.height - 348.0) // 45.0))
+    predecel = selection.cutin_predecel_candidate
+    if predecel is not None:
+      self._draw_text(
+        f"{predecel.source[:9]:9} id{predecel.track_id:4d} "
+        + f"위험도{predecel.score:.2f} 예비감속 활성 (CUT-IN 미확정)",
+        x,
+        int(y),
+        15,
+        self._color((70, 190, 220)),
+      )
+      self._draw_text(predecel.detail[:59], x + 18, int(y + 20.0), 14, muted)
+      y += 45.0
+      max_rows -= 1
     for candidate in selection.cutin_diagnostics[:max_rows]:
       stage_text = {
         "IN": "현재 경로",
@@ -3548,11 +3600,15 @@ class SimulatorUI:
     if self.show_shadow_markers:
       for frame_index in self.events:
         marker_x = rect.x + rect.width * self.times[frame_index] / total
+        predecel_event = any(
+          label.startswith("예비감속 위험")
+          for label in self.events[frame_index]
+        )
         rl.draw_line_ex(
           rl.Vector2(marker_x, rect.y - 15.0),
           rl.Vector2(marker_x, rect.y + rect.height + 7.0),
           3.0,
-          self._color((246, 142, 55)),
+          self._color((70, 190, 220) if predecel_event else (246, 142, 55)),
         )
     progress = min(max(self.playback_time / total, 0.0), 1.0)
     rl.draw_rectangle(
@@ -3576,9 +3632,9 @@ class SimulatorUI:
       self._color((225, 231, 237)),
     )
     shadow_text = (
-      "주황: predictor CUT-IN 일시정지(M: 숨김)"
+      "하늘: 예비감속 위험 · 주황: CUT-IN 확정(M: 숨김)"
       if self.show_shadow_markers
-      else "CUT-IN 마커 숨김(M: 표시)"
+      else "예비감속/CUT-IN 마커 숨김(M: 표시)"
     )
     self._draw_text(
       f"{shadow_text}   위쪽 막대: 검증 구간",

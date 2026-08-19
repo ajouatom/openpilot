@@ -222,6 +222,49 @@ def test_review_event_is_emitted_once_per_physical_continuity() -> None:
   assert tuple(events) == (0,)
 
 
+def test_predecel_and_confirmed_cutin_are_distinct_review_events() -> None:
+  frames = [frame((), time_s=index * 0.1) for index in range(4)]
+  predecel = Candidate(
+    2091,
+    0.87,
+    "corner CUT-IN pre-deceleration risk",
+    source="corner235",
+    stage="PRE-DECEL",
+  )
+  cutin = Candidate(
+    2091,
+    0.79,
+    "physical corner dPath shadow",
+    source="corner235",
+  )
+  selections = (
+    Selection(None, None, cutin_predecel_candidate=predecel),
+    Selection(None, None, cutin_predecel_candidate=predecel),
+    Selection(None, None, decision_cutin_candidates=(cutin,)),
+    Selection(None, None, decision_cutin_candidates=(cutin,)),
+  )
+  selector = SimpleNamespace(
+    trajectories=tuple(
+      {
+        ("corner235", 2091): SimpleNamespace(continuity_id=21),
+      }
+      for _ in frames
+    ),
+    select=lambda _frame, index: selections[index],
+  )
+
+  events = trajectory_model_review_events(
+    frames,
+    selector,
+    ("front+corner",),
+    0.5,
+  )
+
+  assert tuple(events) == (0, 2)
+  assert events[0] == ("예비감속 위험 corner id 2091 위험도 0.87",)
+  assert events[2] == ("물리 예측 CUT-IN corner id 2091 진입 0.79 이탈 0.00",)
+
+
 def test_validation_threshold_is_passed_to_physical_decision_tracker() -> None:
   selector = RadarMotionShadowSelector(
     [frame((point(10, 30.0, 0.0),))],
