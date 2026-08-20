@@ -1,0 +1,48 @@
+import pytest
+
+from openpilot.selfdrive.carrot.traffic_stop import (
+  get_traffic_stop_obstacle_distance,
+  get_virtual_traffic_stop_distance,
+  is_traffic_stop_entry_allowed,
+)
+
+
+@pytest.mark.parametrize("speed_kph", [0.0, 30.0, 60.0, 100.0, 140.0])
+def test_virtual_stop_distance_never_exceeds_model(speed_kph):
+  for model_distance in (0.0, 10.0, 15.0, 30.0, 60.0, 120.0):
+    adjusted = get_virtual_traffic_stop_distance(model_distance, speed_kph)
+    assert 0.0 <= adjusted <= model_distance
+
+
+def test_virtual_stop_distance_is_unmodified_when_stopped_and_fades_near_line():
+  assert get_virtual_traffic_stop_distance(100.0, 0.0) == pytest.approx(100.0)
+  assert get_virtual_traffic_stop_distance(15.0, 100.0) == pytest.approx(13.65)
+
+
+def test_virtual_stop_distance_advances_early_and_fades_near_line():
+  # Around the supplied route's 62 km/h signal-stop onset, retain the historical
+  # correction strength while making it available to the MPC from the first frame.
+  assert get_virtual_traffic_stop_distance(110.0, 62.0) == pytest.approx(89.54)
+  assert get_virtual_traffic_stop_distance(40.0, 62.0) == pytest.approx(34.048)
+  assert get_virtual_traffic_stop_distance(20.0, 62.0) == pytest.approx(18.512)
+
+
+def test_virtual_stop_distance_is_monotonic_in_model_distance():
+  adjusted = [get_virtual_traffic_stop_distance(distance, 80.0) for distance in range(0, 151)]
+  assert adjusted == sorted(adjusted)
+
+
+def test_configured_obstacle_adjustment_is_used_at_all_speeds():
+  assert get_traffic_stop_obstacle_distance(100.0, -1.5) == pytest.approx(98.5)
+  assert get_traffic_stop_obstacle_distance(1.0, -1.5) == 0.0
+  assert get_traffic_stop_obstacle_distance(0.0, -2.0) == 0.0
+
+
+@pytest.mark.parametrize("steering_angle_deg", [-49.9, -20.0, 0.0, 20.0, 49.9])
+def test_traffic_stop_entry_is_allowed_below_50_degrees(steering_angle_deg):
+  assert is_traffic_stop_entry_allowed(steering_angle_deg)
+
+
+@pytest.mark.parametrize("steering_angle_deg", [-50.0, 50.0, -90.0, 90.0])
+def test_traffic_stop_entry_is_blocked_at_or_above_50_degrees(steering_angle_deg):
+  assert not is_traffic_stop_entry_allowed(steering_angle_deg)

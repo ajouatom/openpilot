@@ -11,6 +11,7 @@ from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
 # from openpilot.selfdrive.carrot.carrot_functions import CarrotPlanner
 from openpilot.selfdrive.carrot.carrot_functions import XState
+from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_obstacle_distance
 
 if __name__ == '__main__':  # generating code
   from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -438,10 +439,10 @@ class LongitudinalMpc:
                                  v_upper)
       cruise_obstacle = np.cumsum(T_DIFFS * v_cruise_clipped) + get_safe_obstacle_distance(v_cruise_clipped, t_follow, comfort_brake, stop_distance)
 
-      adjust_dist = carrot.trafficStopDistanceAdjust if v_ego > 0.1 else -2.0
-      if 50 < stop_x + adjust_dist < cruise_obstacle[0]:
-        stop_x = cruise_obstacle[0] - adjust_dist
-      x2 = stop_x * np.ones(N+1) + adjust_dist
+      # Keep the signal-stop obstacle independent at every distance. Folding it into
+      # cruise_obstacle above 50 m delayed the stationary constraint until late in the stop.
+      traffic_stop_obstacle = get_traffic_stop_obstacle_distance(stop_x, carrot.trafficStopDistanceAdjust)
+      x2 = traffic_stop_obstacle * np.ones(N+1)
 
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle, x2])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
