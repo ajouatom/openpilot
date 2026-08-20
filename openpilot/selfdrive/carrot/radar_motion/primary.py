@@ -100,6 +100,7 @@ STATIONARY_CLOSER_HANDOFF_MIN_COST_GAIN = 0.10
 RADAR_ONLY_MOVING_MIN_VLEAD_MPS = STATIONARY_MAX_ABS_VLEAD_MPS
 RADAR_ONLY_MOVING_CONFIRMATION_S = 0.25
 RADAR_ONLY_MOVING_TENTATIVE_CONFIRMATION_S = 0.75
+RADAR_ONLY_MOVING_FAR_CORNER_CONFIRMATION_S = 1.0
 RADAR_ONLY_MOVING_CORNER_MAX_LONGITUDINAL_ERROR_RATE_MPS = 2.0
 RADAR_ONLY_MOVING_CLOSER_SWITCH_MIN_GAP_M = 3.0
 RADAR_ONLY_MOVING_CLOSER_SWITCH_MAX_DPATH_M = 0.5
@@ -2270,11 +2271,19 @@ class VisionRadarMatcher:
     if not pending_continuous:
       self._radar_only_moving_pending_identity = None
     self._update_radar_only_moving_longitudinal_history(point, time_s)
-    confirmation_s = (
-      RADAR_ONLY_MOVING_TENTATIVE_CONFIRMATION_S
-      if point.radar_track_state == 1
-      else RADAR_ONLY_MOVING_CONFIRMATION_S
-    )
+    if point.radar_track_state == 1:
+      confirmation_s = RADAR_ONLY_MOVING_TENTATIVE_CONFIRMATION_S
+    elif (
+      point.source.startswith("corner")
+      and point.d_rel > RADAR_ONLY_MOVING_FAR_DREL_M
+    ):
+      # A distant corner-only tunnel/overpass return can look like a moving
+      # vehicle for the first few cycles. Observe one full consistency window
+      # before publishing L1; a mutually visible front point wins source
+      # ranking above, and a vision-supported point uses the regular matcher.
+      confirmation_s = RADAR_ONLY_MOVING_FAR_CORNER_CONFIRMATION_S
+    else:
+      confirmation_s = RADAR_ONLY_MOVING_CONFIRMATION_S
     confirmation_complete = (
       self._radar_only_moving_pending_since_s is not None
       and time_s - self._radar_only_moving_pending_since_s
