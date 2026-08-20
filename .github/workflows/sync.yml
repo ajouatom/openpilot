@@ -1,0 +1,18 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 매일 한국 시간 기준 오전 9시에 자동 실행
+  workflow_dispatch:      # 수동 실행 버튼 활성화
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync upstream
+        run: gh repo sync $GITHUB_REPOSITORY --source 원본계정명/저장소명
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
