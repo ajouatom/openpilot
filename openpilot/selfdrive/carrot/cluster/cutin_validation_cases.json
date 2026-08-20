@@ -300,6 +300,19 @@
       "scene": "Tunnel structure produces stationary front track 34 beside a moving corner return; the speed mismatch must reject leadTwo"
     },
     {
+      "id": "ioniq5-377-52-tunnel-overhead-moving-lead-one-2809",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE f54fcc4d13d575f6",
+      "log": "00000377--7b2bbb6afe--52/rlog.zst",
+      "source": "corner",
+      "window": [42.45, 43.45],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [2809],
+      "forbidden_lead_one_ids": [2809],
+      "scene": "A distant moving corner-only reflection from tunnel ceiling equipment must age out without becoming leadOne when neither front radar nor vision corroborates it"
+    },
+    {
       "id": "k8-2b1-12-left-truck-cutin-34",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN 4aa2ded146fd78b9",
       "log": "000002b1--1e5c7aad6a--12/rlog.zst",

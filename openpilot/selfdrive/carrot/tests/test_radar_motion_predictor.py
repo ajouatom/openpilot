@@ -4248,6 +4248,111 @@ def test_radar_only_moving_corner_accepts_consistent_range_rate() -> None:
   assert output.lead_one["radarTrackId"] == 1002
 
 
+def test_radar_only_moving_far_corner_rejects_tunnel_fixture() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+    cut_in_sensitivity=0,
+  )
+  output = None
+  # Reproduce the tunnel-fixture signature: no usable vision, a centered
+  # corner-only return near 94 m, and initially plausible range kinematics
+  # that contradict the reported vRel after roughly half a second.
+  d_rels = (
+    96.65, 96.15, 95.05, 94.50, 94.55, 94.25, 93.60,
+    93.60, 92.65, 91.45, 90.80, 89.45, 88.35, 89.60,
+    89.00, 88.90, 88.60, 88.00, 89.15, 88.65,
+  )
+  v_rels = (
+    -8.85, -8.85, -9.85, -9.85, -11.10, -11.10, -11.10,
+    -11.10, -10.75, -11.50, -11.50, -12.90, -12.95, -10.95,
+    -10.95, -10.60, -10.60, -10.60, -8.90, -8.80,
+  )
+  for index, (d_rel, v_rel) in enumerate(zip(d_rels, v_rels, strict=True)):
+    time_s = index * 0.05
+    output = controller.update(
+      time_s=time_s,
+      v_ego=29.6,
+      radar_points=(Point(
+        2809,
+        d_rel,
+        -0.55,
+        v_rel=v_rel,
+        source="corner235",
+      ),),
+      model=model_with_lead(
+        118.0, 0.2, 27.5, probability=0.02,
+      ),
+    )
+    assert output.lead_one is None
+
+  assert output is not None
+
+
+def test_radar_only_moving_far_corner_accepts_after_longer_confirmation() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+    cut_in_sensitivity=0,
+  )
+  output = None
+  for index in range(22):
+    time_s = index * 0.05
+    output = controller.update(
+      time_s=time_s,
+      v_ego=20.0,
+      radar_points=(Point(
+        1002,
+        95.0 - 2.0 * time_s,
+        0.1,
+        v_rel=-2.0,
+        source="corner235",
+      ),),
+      model=model_with_lead(
+        120.0, 0.0, 20.0, probability=0.0,
+      ),
+    )
+    if time_s < 1.0:
+      assert output.lead_one is None
+
+  assert output is not None
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 1002
+
+
+def test_radar_only_moving_far_corner_with_front_support_uses_front() -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+    cut_in_sensitivity=0,
+  )
+  output = None
+  for index in range(7):
+    time_s = index * 0.05
+    d_rel = 95.0 - 2.0 * time_s
+    output = controller.update(
+      time_s=time_s,
+      v_ego=20.0,
+      radar_points=(
+        Point(
+          1002, d_rel, 0.1,
+          v_rel=-2.0, source="corner235",
+        ),
+        Point(
+          52, d_rel + 0.2, 0.1,
+          v_rel=-2.0, source="frontRadar",
+        ),
+      ),
+      model=model_with_lead(
+        100.0, 0.0, 20.0, probability=0.0,
+      ),
+    )
+
+  assert output is not None
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 52
+
+
 @pytest.mark.parametrize("track_state", (0, 2, 3))
 def test_radar_only_moving_front_accepts_unknown_or_confirmed_state(
   track_state: int,
