@@ -627,6 +627,16 @@ class DPathRadarController:
     front_scoped_motion_points = _scoped_motion_points(
       front_motion_points, path,
     )
+    primary_track_id = (
+      int(lead_one.get("radarTrackId", -1))
+      if lead_one is not None and lead_one.get("radar")
+      else -1
+    )
+    primary_cut_out_identities = frozenset(
+      (point.source, point.track_id)
+      for point in front_motion_points
+      if point.track_id == primary_track_id
+    )
     primary_cut_out_predictions = self.primary_cut_out_predictor.update(
       time_s,
       front_motion_points,
@@ -634,11 +644,7 @@ class DPathRadarController:
       v_ego,
       yaw_rate_rad_s,
       scoped_points=front_scoped_motion_points,
-    )
-    primary_track_id = (
-      int(lead_one.get("radarTrackId", -1))
-      if lead_one is not None and lead_one.get("radar")
-      else -1
+      prediction_identities=primary_cut_out_identities,
     )
     primary_cut_out_probability = max((
       float(prediction.cut_out_probability)
