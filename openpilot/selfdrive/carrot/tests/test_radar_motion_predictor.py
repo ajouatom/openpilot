@@ -362,6 +362,40 @@ def test_unmeasured_points_never_create_or_extend_history() -> None:
   assert resumed.history_count == 2
 
 
+def test_requested_predictions_keep_unselected_front_histories_ready() -> None:
+  reference = RadarMotionPredictor()
+  selective = RadarMotionPredictor()
+  selected_identity = ("frontRadar", 10)
+  waiting_identity = ("frontRadar", 20)
+
+  for index in range(12):
+    points = (
+      Point(10, 30.0 - index * 0.2, 0.2, v_rel=-2.0),
+      Point(20, 42.0 - index * 0.2, 2.8 - index * 0.04, v_rel=-2.0),
+    )
+    reference_values = reference.update(
+      index * 0.05, points, STRAIGHT_PATH, v_ego=20.0,
+    )
+    requested = (
+      (waiting_identity,)
+      if index == 11
+      else (selected_identity,)
+    )
+    selective_values = selective.update(
+      index * 0.05,
+      points,
+      STRAIGHT_PATH,
+      v_ego=20.0,
+      prediction_identities=requested,
+    )
+
+    assert set(selective_values) == set(requested)
+    identity = requested[0]
+    assert selective_values[identity] == reference_values[identity]
+
+  assert selective_values[waiting_identity].history_count == 12
+
+
 def test_points_beyond_immediate_left_right_lanes_do_not_create_or_extend_history() -> None:
   predictor = RadarMotionPredictor()
   inside_y = IMMEDIATE_LANE_SCOPE_HALF_WIDTH_M - 0.01
@@ -2222,6 +2256,51 @@ def test_stationary_shadow_may_be_farther_than_cutting_out_primary() -> None:
 
   assert normal.lead_two is None
   assert shadow.lead_two is stopped
+
+
+def test_controller_only_runs_front_cut_out_prediction_for_lead_one(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  controller = DPathRadarController(
+    prefer_corner_radar=True,
+    enable_radar_tracks=1,
+    cut_in_sensitivity=3,
+  )
+  original_prediction = RadarMotionPredictor._prediction
+  predicted_track_ids = []
+
+  def counted_prediction(self, state, track_id, *args, **kwargs):
+    if self is controller.primary_cut_out_predictor:
+      predicted_track_ids.append(track_id)
+    return original_prediction(self, state, track_id, *args, **kwargs)
+
+  monkeypatch.setattr(
+    RadarMotionPredictor, "_prediction", counted_prediction,
+  )
+  for index in range(10):
+    output = controller.update(
+      time_s=index * 0.05,
+      v_ego=20.0,
+      radar_points=(
+        Point(44, 50.0, 0.0, v_rel=-10.0),
+        Point(45, 58.0, 0.5, v_rel=-9.0),
+        Point(46, 66.0, -0.5, v_rel=-8.0),
+        Point(47, 74.0, 1.5, v_rel=-7.0),
+      ),
+      model=model_with_lead(
+        50.0, 0.0, 10.0, probability=0.99,
+      ),
+    )
+    assert output.lead_one is not None
+    assert output.lead_one["radarTrackId"] == 44
+
+  assert predicted_track_ids == [44] * 10
+  assert set(controller.primary_cut_out_predictor._states["front"]) == {
+    ("frontRadar", 44),
+    ("frontRadar", 45),
+    ("frontRadar", 46),
+    ("frontRadar", 47),
+  }
 
 
 def test_controller_confirms_stationary_shadow_behind_cutting_out_lead() -> None:

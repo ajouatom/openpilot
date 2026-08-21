@@ -1376,17 +1376,9 @@ class RadarMotionPredictor:
       + (0.45 if not enough_history else 0.0)
     )
 
-    enter_limit = PATH_OVERLAP_HALF_WIDTH_M
-    exit_limit = PATH_OVERLAP_HALF_WIDTH_M + PATH_STATE_HYSTERESIS_M
-    was_inside = state.inside_latched
-    if state.inside_latched:
-      state.inside_latched = abs(observation.d_path) <= exit_limit
-    else:
-      state.inside_latched = abs(observation.d_path) <= enter_limit
-    if not was_inside and state.inside_latched:
-      state.entry_time_s = observation.time_s if enough_history else None
-    elif not state.inside_latched:
-      state.entry_time_s = None
+    self._update_path_occupancy_state(
+      state, observation, enough_history,
+    )
     path_entry_age_s = (
       observation.time_s - state.entry_time_s
       if state.entry_time_s is not None
@@ -1751,6 +1743,7 @@ class RadarMotionPredictor:
     scoped_points: Sequence[
       tuple[Any, float, ModelPathProjection]
     ] | None = None,
+    prediction_identities: Iterable[tuple[str, int]] | None = None,
   ) -> dict[tuple[str, int], RadarMotionPrediction]:
     time_s = float(time_s)
     v_ego = _finite(v_ego)
@@ -1798,6 +1791,11 @@ class RadarMotionPredictor:
       (_source(point), int(getattr(point, "track_id", getattr(point, "trackId", -1))))
       for point, _, _ in scoped_points
     }
+    requested_prediction_identities = (
+      None
+      if prediction_identities is None
+      else frozenset(prediction_identities)
+    )
     for point in point_values:
       source = _source(point)
       sensor = _sensor(source)
@@ -1810,6 +1808,8 @@ class RadarMotionPredictor:
 
     predictions: dict[tuple[str, int], RadarMotionPrediction] = {}
     ego_projection = project_to_model_path(path, 0.0, 0.0)
+    cos_heading = math.cos(self._ego_heading_rad)
+    sin_heading = math.sin(self._ego_heading_rad)
     prepared = []
     for point, d_rel, projection in scoped_points:
       source = _source(point)
@@ -1830,8 +1830,6 @@ class RadarMotionPredictor:
         if state is not None:
           self._retire_state(sensor, state)
         continue
-      cos_heading = math.cos(self._ego_heading_rad)
-      sin_heading = math.sin(self._ego_heading_rad)
       yv_rel = _value(point, "yv_rel", "yvRel")
       target_vx, target_vy = radar_target_velocity_in_ego_frame(
         v_lead,
@@ -1944,7 +1942,7 @@ class RadarMotionPredictor:
       ):
         state.observations.popleft()
       state.last_seen_s = time_s
-      if (
+      prediction_visible = (
         key in visible_keys
         or (
           sensor == "corner"
@@ -1953,9 +1951,35 @@ class RadarMotionPredictor:
             observation.d_path,
           )
         )
+      )
+      if (
+        prediction_visible
+        and (
+          requested_prediction_identities is None
+          or key in requested_prediction_identities
+        )
       ):
         predictions[key] = self._prediction(
           state, track_id, observation, path, config,
+        )
+      elif prediction_visible:
+        # The front cut-out tracker retains every physical history so a new
+        # leadOne has its full past immediately, but only the requested active
+        # identity needs the expensive regression and horizon prediction.
+        long = _window(tuple(state.observations), LONG_HISTORY_S)
+        long_path_span = (
+          max(value.path_x_world for value in long)
+          - min(value.path_x_world for value in long)
+          if len(long) >= 2
+          else 0.0
+        )
+        self._update_path_occupancy_state(
+          state,
+          observation,
+          (
+            len(long) >= config.minimum_rate_samples
+            and long_path_span >= config.minimum_path_span_m
+          ),
         )
       elif (
         state.inside_latched
@@ -1967,6 +1991,24 @@ class RadarMotionPredictor:
         state.inside_latched = False
         state.entry_time_s = None
     return predictions
+
+  @staticmethod
+  def _update_path_occupancy_state(
+    state: _TrackState,
+    observation: _Observation,
+    enough_history: bool,
+  ) -> None:
+    enter_limit = PATH_OVERLAP_HALF_WIDTH_M
+    exit_limit = PATH_OVERLAP_HALF_WIDTH_M + PATH_STATE_HYSTERESIS_M
+    was_inside = state.inside_latched
+    if state.inside_latched:
+      state.inside_latched = abs(observation.d_path) <= exit_limit
+    else:
+      state.inside_latched = abs(observation.d_path) <= enter_limit
+    if not was_inside and state.inside_latched:
+      state.entry_time_s = observation.time_s if enough_history else None
+    elif not state.inside_latched:
+      state.entry_time_s = None
 
 
 class RadarMotionDecisionTracker:
