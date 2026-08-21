@@ -147,6 +147,53 @@ def test_shadow_selector_uses_new_controller_not_recorded_radard_roles() -> None
   assert any(candidate.track_id == 1010 for candidate in selection.cutin_diagnostics)
 
 
+def test_shadow_selector_rejects_far_corner_only_tunnel_fixture() -> None:
+  d_rels = (
+    96.65, 96.15, 95.05, 94.50, 94.55, 94.25, 93.60,
+    93.60, 92.65, 91.45, 90.80, 89.45, 88.35, 89.60,
+    89.00, 88.90, 88.60, 88.00, 89.15, 88.65,
+  )
+  v_rels = (
+    -8.85, -8.85, -9.85, -9.85, -11.10, -11.10, -11.10,
+    -11.10, -10.75, -11.50, -11.50, -12.90, -12.95, -10.95,
+    -10.95, -10.60, -10.60, -10.60, -8.90, -8.80,
+  )
+  frames = []
+  for index, (d_rel, v_rel) in enumerate(zip(d_rels, v_rels, strict=True)):
+    time_s = index * 0.05
+    current = frame((
+      replace(
+        point(
+          2809,
+          d_rel,
+          -0.55,
+          source="corner235",
+        ),
+        v_rel=v_rel,
+        v_lead=29.6 + v_rel,
+      ),
+    ), time_s=time_s)
+    frames.append(replace(
+      current,
+      v_ego=29.6,
+      model_leads=(
+        ModelLead(
+          0.02, 119.52, -0.2, 27.5, 0.0, 1.0, 0.5, 1.0,
+        ),
+      ),
+    ))
+
+  selector = RadarMotionShadowSelector(
+    frames,
+    enable_radar_tracks=1,
+  )
+
+  assert all(
+    selector.select(current, index).lead_one is None
+    for index, current in enumerate(frames)
+  )
+
+
 def test_new_controller_publishes_confirmed_physical_lead_two() -> None:
   frames = [
     frame(
