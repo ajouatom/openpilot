@@ -2,6 +2,7 @@ import pytest
 
 from openpilot.selfdrive.carrot.traffic_stop import (
   get_traffic_stop_obstacle_distance,
+  get_traffic_stop_reference_speed,
   get_virtual_traffic_stop_distance,
   is_traffic_stop_entry_allowed,
 )
@@ -30,6 +31,21 @@ def test_virtual_stop_distance_advances_early_and_fades_near_line():
 def test_virtual_stop_distance_is_monotonic_in_model_distance():
   adjusted = [get_virtual_traffic_stop_distance(distance, 80.0) for distance in range(0, 151)]
   assert adjusted == sorted(adjusted)
+
+
+def test_signal_stop_reference_speed_does_not_relax_during_deceleration():
+  reference_speed = get_traffic_stop_reference_speed(69.23, None)
+  assert get_traffic_stop_reference_speed(34.84, reference_speed) == pytest.approx(69.23)
+  assert get_traffic_stop_reference_speed(71.0, reference_speed) == pytest.approx(71.0)
+
+
+def test_latched_entry_speed_keeps_mid_stop_distance_advanced():
+  model_distance = 40.0
+  current_speed_distance = get_virtual_traffic_stop_distance(model_distance, 30.0)
+  entry_speed_distance = get_virtual_traffic_stop_distance(model_distance, 69.23)
+  assert current_speed_distance == pytest.approx(37.12)
+  assert entry_speed_distance == pytest.approx(33.35392)
+  assert entry_speed_distance < current_speed_distance
 
 
 def test_configured_obstacle_adjustment_is_used_at_all_speeds():

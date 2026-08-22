@@ -18,6 +18,11 @@ def is_traffic_stop_entry_allowed(steering_angle_deg: float) -> bool:
   return abs(float(steering_angle_deg)) < TRAFFIC_STOP_ENTRY_STEERING_LIMIT_DEG
 
 
+def get_traffic_stop_reference_speed(v_ego_kph: float, previous_reference_kph: float | None) -> float:
+  """Latch the highest speed seen during a signal stop so its distance advance does not relax."""
+  return max(0.0, float(v_ego_kph), float(previous_reference_kph or 0.0))
+
+
 def get_virtual_traffic_stop_distance(model_distance: float, v_ego_kph: float) -> float:
   """Return the model stop distance with a bounded, near-line-fading advance."""
   model_distance = max(0.0, float(model_distance))
