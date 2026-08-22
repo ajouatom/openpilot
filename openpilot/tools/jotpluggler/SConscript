@@ -109,7 +109,7 @@ if arch == "Darwin":
 else:
   libs += ["GL", "dl"]
 
-program = jot_env.Program("jotpluggler", jot_env.Glob("*.cc"), LIBS=libs)
+program = jot_env.Program("_jotpluggler", jot_env.Glob("*.cc"), LIBS=libs)
 jot_env.Depends(program, generated_dbc_stamp)
 jot_env.Depends(program, car_fingerprint_to_dbc)
 jot_env.Depends(program, event_extractors)
