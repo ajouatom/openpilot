@@ -39,6 +39,16 @@ FRONT_NEAR_PATH_MAX_DREL_M = 10.0
 FRONT_NEAR_PATH_MIN_SHORT_INWARD_MPS = 0.50
 FRONT_NEAR_PATH_MIN_LONG_INWARD_MPS = 0.20
 FRONT_NEAR_PATH_MIN_REPORTED_INWARD_MPS = 0.15
+# A close slow target is normally discarded as position-only noise. Permit it
+# only when front and corner radar have independently associated the same
+# object and its measured front-radar history shows a sustained path entry.
+CROSS_SENSOR_CLOSE_CUTIN_MAX_DREL_M = 12.0
+CROSS_SENSOR_CLOSE_CUTIN_MIN_OVERLAP_S = 1.0
+CROSS_SENSOR_CLOSE_CUTIN_MIN_INWARD_DISPLACEMENT_M = 0.30
+CROSS_SENSOR_CLOSE_CUTIN_MIN_DIRECTIONAL_CONSISTENCY = 0.50
+CROSS_SENSOR_CLOSE_CUTIN_MIN_INWARD_SAMPLE_RATIO = 0.50
+CROSS_SENSOR_CLOSE_CUTIN_MIN_SHORT_INWARD_MPS = 0.25
+CROSS_SENSOR_CLOSE_CUTIN_MIN_LONG_INWARD_MPS = 0.20
 LEAD_TWO_POSITION_HOLD_S = 0.75
 LEAD_TWO_LONGITUDINAL_JUMP_M = 2.25
 LEAD_TWO_LATERAL_JUMP_M = 1.25
@@ -73,6 +83,7 @@ class DPathLeadCandidate:
   retainable: bool
   confirmed_cutin: bool
   confirmed_stationary_shadow: bool = False
+  allow_low_speed: bool = False
 
   @property
   def identity(self) -> tuple[str, int, int]:
@@ -338,6 +349,7 @@ def front_cutin_motion_supported(
   directional_inward_sample_ratio: float = 0.0,
   corner_directional_entry: bool = False,
   tracked_close_entry: bool = False,
+  cross_sensor_confirmed: bool = False,
   minimum_directional_consistency: float = DIRECTIONAL_MIN_CONSISTENCY,
 ) -> bool:
   """Require strong motion or sustained direction-supported overlap from front."""
@@ -390,6 +402,25 @@ def front_cutin_motion_supported(
   measured_near_path = (
     abs(float(d_path)) <= FRONT_PREDICTED_CUTIN_MAX_ABS_DPATH_M
   )
+  if (
+    cross_sensor_confirmed
+    and measured_near_path
+    and FRONT_CUT_IN_MIN_DREL_M <= float(d_rel)
+    <= CROSS_SENSOR_CLOSE_CUTIN_MAX_DREL_M
+    and float(predicted_path_overlap_s)
+    >= CROSS_SENSOR_CLOSE_CUTIN_MIN_OVERLAP_S
+    and float(directional_inward_displacement_m)
+    >= CROSS_SENSOR_CLOSE_CUTIN_MIN_INWARD_DISPLACEMENT_M
+    and float(directional_consistency)
+    >= CROSS_SENSOR_CLOSE_CUTIN_MIN_DIRECTIONAL_CONSISTENCY
+    and float(directional_inward_sample_ratio)
+    >= CROSS_SENSOR_CLOSE_CUTIN_MIN_INWARD_SAMPLE_RATIO
+    and -side * float(d_path_rate_short)
+    >= CROSS_SENSOR_CLOSE_CUTIN_MIN_SHORT_INWARD_MPS
+    and -side * float(d_path_rate_long)
+    >= CROSS_SENSOR_CLOSE_CUTIN_MIN_LONG_INWARD_MPS
+  ):
+    return True
   # Front-radar azimuth quantization can create a high one-second dPath rate
   # for a parallel vehicle. Do not bypass the measured direction history.
   strong_directional_motion = (
@@ -512,7 +543,10 @@ class DPathLeadTwoTracker:
         candidate.track_id for candidate in active_candidates
       ) | frozenset(
         candidate.track_id for candidate in eligible
-        if candidate.confirmed_stationary_shadow
+        if (
+          candidate.confirmed_stationary_shadow
+          or candidate.allow_low_speed
+        )
       ),
       allow_farther_track_ids=frozenset(
         candidate.track_id for candidate in eligible
@@ -555,6 +589,10 @@ class DPathLeadTwoTracker:
         candidate.track_id
         for candidate in active_candidates
         if candidate.confirmed_cutin
+      ) | frozenset(
+        candidate.track_id
+        for candidate in eligible
+        if candidate.confirmed_cutin and candidate.allow_low_speed
       ),
     )
     selection = DPathLeadSelection(

@@ -677,6 +677,42 @@ def test_front_forecast_only_cutin_waits_until_measured_near_path() -> None:
   )
 
 
+def test_close_cross_sensor_cutin_accepts_sustained_moderate_motion_only() -> None:
+  common = {
+    "d_rel": 5.8,
+    "d_path": -2.15,
+    "d_path_rate_short": 0.34,
+    "predicted_path_overlap_s": 2.0,
+    "directional_inward_displacement_m": 0.44,
+    "directional_consistency": 0.57,
+    "directional_inward_sample_ratio": 0.53,
+  }
+
+  assert not front_cutin_motion_supported(
+    "frontRadar", 0.30, **common,
+  )
+  assert front_cutin_motion_supported(
+    "frontRadar", 0.30, cross_sensor_confirmed=True, **common,
+  )
+  assert not front_cutin_motion_supported(
+    "frontRadar",
+    0.30,
+    cross_sensor_confirmed=True,
+    directional_inward_displacement_m=0.10,
+    **{
+      key: value for key, value in common.items()
+      if key != "directional_inward_displacement_m"
+    },
+  )
+  assert not front_cutin_motion_supported(
+    "frontRadar",
+    0.30,
+    cross_sensor_confirmed=True,
+    d_rel=12.1,
+    **{key: value for key, value in common.items() if key != "d_rel"},
+  )
+
+
 def test_far_corner_cutin_needs_strong_lateral_motion_not_closing_alone() -> None:
   common = {
     "d_rel": 20.0,
@@ -1215,6 +1251,33 @@ def test_near_zero_vlead_is_position_only_and_clears_motion_history() -> None:
   assert first.history_count == 1
   assert resumed.history_count == 1
   assert resumed.continuity_id != first.continuity_id
+
+
+def test_explicit_low_speed_identity_keeps_measured_motion_history() -> None:
+  predictor = RadarMotionPredictor()
+  identity = ("frontRadar", 49)
+  prediction = None
+
+  for index in range(6):
+    values = predictor.update(
+      index * 0.1,
+      (Point(
+        49,
+        10.0 - 0.78 * index,
+        -2.8 + 0.10 * index,
+        v_rel=-7.8,
+        v_lead=2.2,
+      ),),
+      STRAIGHT_PATH,
+      v_ego=10.0,
+      prediction_identities=(identity,),
+      allow_low_speed_identities=(identity,),
+    )
+    prediction = values[identity]
+
+  assert prediction is not None
+  assert prediction.history_count == 6
+  assert prediction.directional_inward_displacement_m > 0.4
 
 
 def test_point_above_position_only_speed_builds_motion_history() -> None:
@@ -2873,6 +2936,58 @@ def test_controller_publishes_strong_corner_cutin_predecel_before_lead_two() -> 
   assert output.lead_cutin_risk["radarTrackId"] == 2091
   assert output.lead_cutin_risk["score"] > 0.85
   assert output.lead_cutin_risk["vRel"] == pytest.approx(-6.5)
+
+
+def test_controller_selects_cross_sensor_slow_close_cutin() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  output = None
+  selected_pickup = []
+
+  for index in range(30):
+    time_s = index * 0.1
+    primary_d_rel = 25.0 - 0.05 * index
+    pickup_d_rel = 13.0 - 0.12 * index
+    pickup_y_rel = -2.9 + 0.04 * index
+    output = controller.update(
+      time_s,
+      10.0,
+      (
+        Point(
+          35,
+          primary_d_rel,
+          0.0,
+          v_rel=-4.0,
+          v_lead=6.0,
+        ),
+        Point(
+          49,
+          pickup_d_rel,
+          pickup_y_rel,
+          v_rel=-7.8,
+          v_lead=2.2,
+        ),
+        Point(
+          16687,
+          pickup_d_rel - 0.25,
+          pickup_y_rel - 0.15,
+          v_rel=-7.7,
+          v_lead=2.3,
+          source="corner235",
+          trackState=2,
+        ),
+      ),
+      model_with_lead(primary_d_rel, 0.0, 6.0),
+    )
+    if output.lead_two is not None:
+      selected_pickup.append((time_s, output.lead_two))
+
+  assert output is not None
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 35
+  assert selected_pickup
+  assert selected_pickup[0][0] <= 2.1
+  assert selected_pickup[0][1]["radarTrackId"] == 49
+  assert selected_pickup[0][1]["vLead"] == pytest.approx(2.2)
 
 
 def test_corner_cutin_predecel_requires_continuous_confirmation() -> None:

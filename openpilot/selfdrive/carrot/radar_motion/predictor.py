@@ -1744,6 +1744,7 @@ class RadarMotionPredictor:
       tuple[Any, float, ModelPathProjection]
     ] | None = None,
     prediction_identities: Iterable[tuple[str, int]] | None = None,
+    allow_low_speed_identities: Iterable[tuple[str, int]] = (),
   ) -> dict[tuple[str, int], RadarMotionPrediction]:
     time_s = float(time_s)
     v_ego = _finite(v_ego)
@@ -1796,6 +1797,7 @@ class RadarMotionPredictor:
       if prediction_identities is None
       else frozenset(prediction_identities)
     )
+    low_speed_identities = frozenset(allow_low_speed_identities)
     for point in point_values:
       source = _source(point)
       sensor = _sensor(source)
@@ -1825,7 +1827,10 @@ class RadarMotionPredictor:
         "vLead",
         _value(point, "v_rel", "vRel") + v_ego,
       )
-      if abs(v_lead) <= POSITION_ONLY_MAX_ABS_VLEAD_MPS:
+      if (
+        abs(v_lead) <= POSITION_ONLY_MAX_ABS_VLEAD_MPS
+        and key not in low_speed_identities
+      ):
         state = self._states[sensor].pop(key, None)
         if state is not None:
           self._retire_state(sensor, state)
