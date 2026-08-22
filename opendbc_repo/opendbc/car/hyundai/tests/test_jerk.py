@@ -6,6 +6,7 @@ import pytest
 from opendbc.car import DT_CTRL
 from opendbc.car.hyundai.carcontroller import CANFD_JERK_ERROR_DELAY, CANFD_JERK_ERROR_FILTER_TIME, HyundaiJerk, LongCtrlState, \
                                                    calculate_canfd_jerk_limits
+from opendbc.car.hyundai.hyundaicanfd import apply_accel_jerk_limit, create_acc_control_scc2
 from opendbc.car.hyundai.values import HyundaiFlags
 from openpilot.common.filter_simple import MyMovingAverage
 
@@ -74,6 +75,55 @@ def test_canfd_upper_jerk_uses_stock_like_floor():
 
   assert upper_floor == pytest.approx(1.0)
   assert upper_dynamic == pytest.approx(1.6)
+
+
+def test_canfd_accel_value_uses_lower_jerk_while_decelerating():
+  value = apply_accel_jerk_limit(a_raw=-4.0, a_value_last=0.0, jerk_u=1.0, jerk_l=5.0)
+
+  assert value == pytest.approx(-0.1)
+
+
+def test_canfd_accel_value_uses_upper_jerk_while_releasing_deceleration():
+  value = apply_accel_jerk_limit(a_raw=0.0, a_value_last=-2.0, jerk_u=1.0, jerk_l=5.0)
+
+  assert value == pytest.approx(-1.98)
+
+
+def test_canfd_accel_value_reaches_raw_without_overshoot():
+  value = 0.0
+  for _ in range(50):
+    value = apply_accel_jerk_limit(a_raw=-4.0, a_value_last=value, jerk_u=1.0, jerk_l=5.0)
+
+  assert value == pytest.approx(-4.0)
+
+
+def test_camera_scc_accel_value_keeps_ramping_from_previous_value():
+  class FakePacker:
+    @staticmethod
+    def make_can_msg(name, bus, values):
+      return name, bus, values.copy()
+
+  CAN = SimpleNamespace(ECAN=0)
+  CS = SimpleNamespace(
+    scc_control={"ACC_ObjRelSpd": 0.0, "InfoDisplay": 0},
+    softHoldActive=0,
+    paddle_button_prev=0,
+    out=SimpleNamespace(aEgo=0.0, vEgo=20.0),
+  )
+  hud_control = SimpleNamespace(leadDistanceBars=2, leadVisible=False)
+  jerk = SimpleNamespace(carrot_cruise=0, jerk_u=1.0, jerk_l=5.0)
+
+  first_msg, first_value = create_acc_control_scc2(
+    FakePacker(), CAN, True, 0.0, -4.0, False, False, 100.0, hud_control, jerk, CS,
+  )
+  second_msg, second_value = create_acc_control_scc2(
+    FakePacker(), CAN, True, first_value, -4.0, False, False, 100.0, hud_control, jerk, CS,
+  )
+
+  assert first_msg[2]["aReqRaw"] == pytest.approx(-4.0)
+  assert first_msg[2]["aReqValue"] == pytest.approx(-0.1)
+  assert second_msg[2]["aReqValue"] == pytest.approx(-0.2)
+  assert second_value == pytest.approx(-0.2)
 
 
 def test_canfd_sustained_tracking_error_adds_trim():
