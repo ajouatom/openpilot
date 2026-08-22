@@ -89,6 +89,20 @@
       ]
     },
     {
+      "id": "lane-change",
+      "description": "차로 변경 요청, 진입 조건, 차선·BSD·측면 물체 판단",
+      "code_paths": [
+        "openpilot/selfdrive/controls/lib/desire_helper.py",
+        "openpilot/selfdrive/controls/lib/desire_lib/**"
+      ],
+      "doc_sets": [
+        [
+          "docs/user/ko/lane-change.md",
+          "docs/user/en/lane-change.md"
+        ]
+      ]
+    },
+    {
       "id": "longitudinal-and-gap",
       "description": "종방향 제어, 정차·재출발과 차간거리",
       "code_paths": [
