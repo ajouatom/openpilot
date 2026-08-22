@@ -55,6 +55,20 @@ for name in pkg_names:
       continue
     raise
 
+ffmpeg = pkgs[pkg_names.index('ffmpeg')]
+# Newer comma FFmpeg packages use shared libraries, while older AGNOS/device
+# environments can still provide static archives with extra link dependencies.
+_ffmpeg_lib_names = os.listdir(ffmpeg.LIB_DIR) if os.path.isdir(ffmpeg.LIB_DIR) else []
+ffmpeg_shared = any(
+  name.startswith('libavcodec.so') or (name.startswith('libavcodec') and name.endswith('.dylib'))
+  for name in _ffmpeg_lib_names
+)
+ffmpeg_libs = ['avformat', 'avcodec', 'swresample', 'avutil']
+if not ffmpeg_shared:
+  ffmpeg_libs += ['x264', 'z']
+  if arch != "Darwin":
+    ffmpeg_libs += ['va', 'va-drm', 'drm']
+
 
 # ***** enforce a whitelist of system libraries *****
 # this prevents silently relying on a 3rd party package,
@@ -216,7 +230,7 @@ else:
 np_version = SCons.Script.Value(np.__version__)
 Export('envCython', 'np_version')
 
-Export('env', 'arch')
+Export('env', 'arch', 'ffmpeg_libs')
 
 # Setup cache dir
 cache_dir = '/data/scons_cache' if arch == "larch64" else '/tmp/scons_cache'

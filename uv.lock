@@ -114,6 +114,11 @@ wheels = [
 ]
 
 [[package]]
+name = "bootstrap-icons"
+version = "1.10.5.0"
+source = { git = "https://github.com/commaai/dependencies.git?subdirectory=bootstrap-icons&rev=release-bootstrap-icons#c4393237b34dffdb325b5e72b24712c5ca074e03" }
+
+[[package]]
 name = "brotli"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -906,6 +911,7 @@ testing = [
     { name = "ty" },
 ]
 tools = [
+    { name = "bootstrap-icons" },
     { name = "imgui" },
     { name = "metadrive-simulator", marker = "platform_machine != 'aarch64'" },
 ]
@@ -915,6 +921,7 @@ requires-dist = [
     { name = "aiohttp" },
     { name = "aiortc" },
     { name = "av" },
+    { name = "bootstrap-icons", marker = "extra == 'tools'", git = "https://github.com/commaai/dependencies.git?subdirectory=bootstrap-icons&rev=release-bootstrap-icons" },
     { name = "brotli" },
     { name = "bzip2", git = "https://github.com/commaai/dependencies.git?subdirectory=bzip2&rev=release-bzip2" },
     { name = "capnproto", git = "https://github.com/commaai/dependencies.git?subdirectory=capnproto&rev=release-capnproto" },
