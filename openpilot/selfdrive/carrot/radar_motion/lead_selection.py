@@ -336,6 +336,7 @@ def front_cutin_motion_supported(
   directional_inward_displacement_m: float = 0.0,
   directional_consistency: float = 0.0,
   directional_inward_sample_ratio: float = 0.0,
+  corner_directional_entry: bool = False,
   tracked_close_entry: bool = False,
   minimum_directional_consistency: float = DIRECTIONAL_MIN_CONSISTENCY,
 ) -> bool:
@@ -351,10 +352,17 @@ def front_cutin_motion_supported(
       and not current_path_occupancy
       and abs(float(d_path)) > CORNER_FAR_CUTIN_MAX_ABS_DPATH_M
     ):
+      # Ego closing speed cannot prove a lateral merge: a stationary roadside
+      # vehicle closes at nearly ego speed too. Far corner-only targets must
+      # show strong measured path-relative inward motion of their own, or have
+      # already passed the predictor's strict directional-history entry gate.
       return (
         -side * float(d_path_rate_long)
         >= CORNER_FAR_CUTIN_MIN_LONG_INWARD_MPS
-        or float(v_rel) <= -CORNER_FAR_CUTIN_MIN_CLOSING_SPEED_MPS
+        or (
+          bool(corner_directional_entry)
+          and float(v_rel) <= -CORNER_FAR_CUTIN_MIN_CLOSING_SPEED_MPS
+        )
       )
     if (
       source.startswith("corner")

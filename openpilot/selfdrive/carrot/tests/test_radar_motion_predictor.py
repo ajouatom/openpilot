@@ -677,7 +677,7 @@ def test_front_forecast_only_cutin_waits_until_measured_near_path() -> None:
   )
 
 
-def test_far_corner_cutin_needs_strong_lateral_or_longitudinal_closing() -> None:
+def test_far_corner_cutin_needs_strong_lateral_motion_not_closing_alone() -> None:
   common = {
     "d_rel": 20.0,
     "d_path": -2.68,
@@ -697,10 +697,17 @@ def test_far_corner_cutin_needs_strong_lateral_or_longitudinal_closing() -> None
     v_rel=-1.90,
     **common,
   )
+  assert not front_cutin_motion_supported(
+    "corner235",
+    0.56,
+    v_rel=-6.50,
+    **common,
+  )
   assert front_cutin_motion_supported(
     "corner235",
     0.56,
     v_rel=-6.50,
+    corner_directional_entry=True,
     **common,
   )
   assert front_cutin_motion_supported(

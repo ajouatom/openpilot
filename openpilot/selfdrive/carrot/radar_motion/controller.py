@@ -789,6 +789,10 @@ class DPathRadarController:
         directional_inward_sample_ratio=getattr(
           prediction, "directional_inward_sample_ratio", 0.0,
         ),
+        corner_directional_entry=(
+          getattr(prediction, "near_side_directional_entry", False)
+          or getattr(prediction, "lane_boundary_directional_entry", False)
+        ),
         tracked_close_entry=getattr(
           prediction, "front_tracked_close_entry", False,
         ),
