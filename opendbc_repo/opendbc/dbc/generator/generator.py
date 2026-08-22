@@ -2,8 +2,10 @@
 import os
 import re
 import glob
+import shutil
 import subprocess
 import sys
+import tempfile
 
 generator_path = os.path.dirname(os.path.realpath(__file__))
 opendbc_root = os.path.join(generator_path, '../')
@@ -40,17 +42,17 @@ def create_dbc(src_dir: str, filename: str, output_path: str):
     dbc_file_out.write(core_dbc)
 
 
-def create_all(output_path: str):
+def create_all(output_path: str, source_path: str = generator_path):
   # clear out old DBCs
   for f in glob.glob(f"{output_path}/*{generated_suffix}"):
     os.remove(f)
 
   # run python generator scripts first
-  for f in glob.glob(f"{generator_path}/*/*.py"):
+  for f in glob.glob(f"{source_path}/*/*.py"):
     subprocess.check_call([sys.executable, f])
 
-  for src_dir, _, filenames in os.walk(generator_path):
-    if src_dir == generator_path:
+  for src_dir, _, filenames in os.walk(source_path):
+    if src_dir == source_path:
       continue
 
     #print(src_dir)
@@ -60,6 +62,20 @@ def create_all(output_path: str):
 
       #print(filename)
       create_dbc(src_dir, filename, output_path)
+
+
+def generate_all() -> dict[str, str]:
+  """Generate all composed DBCs and return them keyed by filename stem."""
+  with tempfile.TemporaryDirectory() as temp_path:
+    source_path = os.path.join(temp_path, "generator")
+    output_path = os.path.join(temp_path, "output")
+    shutil.copytree(generator_path, source_path)
+    os.mkdir(output_path)
+    create_all(output_path, source_path)
+    return {
+      os.path.splitext(os.path.basename(filename))[0]: read_dbc(output_path, os.path.basename(filename))
+      for filename in sorted(glob.glob(f"{output_path}/*{generated_suffix}"))
+    }
 
 if __name__ == "__main__":
   create_all(opendbc_root)
