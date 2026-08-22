@@ -1,7 +1,7 @@
 __pycache__/
 jot_*.o
 *.o
-jotpluggler
+_jotpluggler
 car_fingerprint_to_dbc.h
 generated_event_extractors.h
 generated_dbcs/.stamp

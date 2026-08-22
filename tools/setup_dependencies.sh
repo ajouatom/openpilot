@@ -19,6 +19,11 @@ function retry() {
   return 1
 }
 
+function is_ubuntu_pc() {
+  [[ ! -e "/AGNOS" && ! -e "/TICI" && -r "/etc/os-release" ]] || return 1
+  (source /etc/os-release && [[ "${ID:-}" == "ubuntu" ]])
+}
+
 function install_linux_deps() {
   SUDO=""
 
@@ -30,6 +35,29 @@ function install_linux_deps() {
     SUDO="sudo"
   fi
 
+  local -a ubuntu_tool_deps=()
+  if command -v apt-get > /dev/null 2>&1 && is_ubuntu_pc; then
+    # Runtime and plugin dependencies for the prebuilt PlotJuggler bundle.
+    # Development package names stay stable across supported Ubuntu releases
+    # while pulling in the release-specific runtime names (including t64).
+    ubuntu_tool_deps=(
+      qtbase5-dev
+      libgles-dev
+      libqt5charts5-dev
+      libqt5svg5-dev
+      libqt5websockets5-dev
+      libqt5serialport5-dev
+      libqt5opengl5-dev
+      libqt5x11extras5-dev
+      qtwayland5
+      libprotoc-dev
+      libzmq3-dev
+      liblz4-dev
+      libzstd-dev
+      python3-dev
+    )
+  fi
+
   local missing_linux_deps=0
   for cmd in gcc g++ make curl curl-config git; do
     if ! command -v "$cmd" > /dev/null 2>&1; then
@@ -38,13 +66,24 @@ function install_linux_deps() {
     fi
   done
 
+  if [[ "$missing_linux_deps" -eq 0 ]]; then
+    for package in "${ubuntu_tool_deps[@]}"; do
+      if ! dpkg-query -W -f='${Status}\n' "$package" 2>/dev/null | grep -q '^install ok installed$'; then
+        missing_linux_deps=1
+        break
+      fi
+    done
+  fi
+
   # normal stuff, this mostly for bare docker images
   if [[ "$missing_linux_deps" -eq 0 ]]; then
     # the native package managers are slow, so skip if we can
     echo "[ ] system packages already installed t=$SECONDS"
   elif command -v apt-get > /dev/null 2>&1; then
     $SUDO apt-get update
-    $SUDO apt-get install -y --no-install-recommends ca-certificates build-essential curl libcurl4-openssl-dev locales git
+    $SUDO apt-get install -y --no-install-recommends \
+      ca-certificates build-essential curl libcurl4-openssl-dev locales git \
+      "${ubuntu_tool_deps[@]}"
   elif command -v dnf > /dev/null 2>&1; then
     $SUDO dnf install -y ca-certificates gcc gcc-c++ make curl libcurl-devel glibc-langpack-en git
   elif command -v yum > /dev/null 2>&1; then

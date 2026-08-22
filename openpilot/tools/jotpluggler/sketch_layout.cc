@@ -610,13 +610,13 @@ void append_log_event(cereal::Event::Which which,
       logs->push_back(std::move(entry));
       break;
     }
-    case cereal::Event::Which::OPERATING_SYSTEM_LOG: {
-      const auto operating_system_log = event.getOperatingSystemLog();
-      auto entry = make_entry(LogOrigin::OperatingSystem, operating_system_priority_to_level(operating_system_log.getPriority()));
-      entry.wall_time = operating_system_wall_time_seconds(operating_system_log.getTs());
-      entry.source = operating_system_log.hasTag() ? operating_system_log.getTag().cStr() : "operating_system";
-      entry.message = operating_system_log.hasMessage() ? operating_system_log.getMessage().cStr() : std::string();
-      entry.context = "pid=" + std::to_string(operating_system_log.getPid()) + ", tid=" + std::to_string(operating_system_log.getTid());
+    case cereal::Event::Which::ANDROID_LOG: {
+      const auto android_log = event.getAndroidLog();
+      auto entry = make_entry(LogOrigin::OperatingSystem, operating_system_priority_to_level(android_log.getPriority()));
+      entry.wall_time = operating_system_wall_time_seconds(android_log.getTs());
+      entry.source = android_log.hasTag() ? android_log.getTag().cStr() : "android";
+      entry.message = android_log.hasMessage() ? android_log.getMessage().cStr() : std::string();
+      entry.context = "pid=" + std::to_string(android_log.getPid()) + ", tid=" + std::to_string(android_log.getTid());
       if (!entry.message.empty()) {
         std::string err;
         if (const auto p = json11::Json::parse(entry.message, err); err.empty() && p.is_object()) {
@@ -627,7 +627,7 @@ void append_log_event(cereal::Event::Which which,
             entry.level = operating_system_priority_to_level(*pri);
           if (auto ts = json_u64_value(p["__REALTIME_TIMESTAMP"]); ts.has_value())
             entry.wall_time = operating_system_wall_time_seconds(*ts);
-          entry.context = format_journal_context(p, operating_system_log.getPid(), operating_system_log.getTid());
+          entry.context = format_journal_context(p, android_log.getPid(), android_log.getTid());
         }
       }
       logs->push_back(std::move(entry));
