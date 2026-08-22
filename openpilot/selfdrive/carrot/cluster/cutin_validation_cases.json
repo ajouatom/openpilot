@@ -313,6 +313,19 @@
       "scene": "A distant moving corner-only reflection from tunnel ceiling equipment must age out without becoming leadOne when neither front radar nor vision corroborates it"
     },
     {
+      "id": "ioniq5-d73-5-left-stationary-row-corner-cutin-2009",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 07b62e389ed26c81",
+      "log": "00000d73--ab24ffde45--5/rlog.zst",
+      "source": "corner",
+      "window": [33.20, 35.95],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [2009],
+      "forbidden_lead_two_ids": [2009],
+      "scene": "A stationary white vehicle in the separated left-side parking row must not become CUT-IN leadTwo solely because ego closing speed and curve-relative corner-radar motion appear inward"
+    },
+    {
       "id": "k8-2b1-12-left-truck-cutin-34",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN 4aa2ded146fd78b9",
       "log": "000002b1--1e5c7aad6a--12/rlog.zst",
