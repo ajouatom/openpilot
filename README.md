@@ -31,6 +31,12 @@ The developer does **not take any responsibility** for real-world installation o
   <a href="https://g4iwnl.gitbook.io/carrotpilot">Manual</a>
 </h3>
 
+<h3>
+  <a href="https://github.com/ajouatom/openpilot/wiki">CarrotPilot Wiki</a>
+  <span> · </span>
+  <a href="https://github.com/ajouatom/openpilot/wiki/Guide-Lane-Change">차로 변경 안내</a>
+</h3>
+
 ![image](https://github.com/user-attachments/assets/4d80d256-7e66-4473-a289-04a50733b7e0)
 
 

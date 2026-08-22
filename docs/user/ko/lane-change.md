@@ -2,6 +2,8 @@
 
 [English](../en/lane-change.md)
 
+[GitHub Wiki에서 보기](https://github.com/ajouatom/openpilot/wiki/Guide-Lane-Change)
+
 > [!IMPORTANT]
 > 방향지시등은 주변 차량에 의사를 알리는 장치인 동시에, openpilot에는 **차로 변경 요청**이 됩니다. 먼저 거울과 사각지대를 확인하고 안전한 간격을 선택한 뒤 방향지시등을 켜세요. 방향지시등부터 켜고 안전 여부를 나중에 확인하면 설정에 따라 차로 변경이 바로 시작될 수 있습니다.
 
