@@ -4,10 +4,11 @@ from types import SimpleNamespace
 import pytest
 
 from opendbc.car import DT_CTRL
-from opendbc.car.hyundai.carcontroller import CANFD_JERK_ERROR_DELAY, CANFD_JERK_ERROR_FILTER_TIME, HyundaiJerk, LongCtrlState, \
+from opendbc.car.hyundai.carcontroller import CANFD_JERK_ERROR_DELAY, CANFD_JERK_ERROR_FILTER_TIME, CarController, HyundaiJerk, LongCtrlState, \
                                                    calculate_canfd_jerk_limits
-from opendbc.car.hyundai.carstate import is_canfd_avh_active
-from opendbc.car.hyundai.hyundaicanfd import apply_accel_jerk_limit, create_acc_control, create_acc_control_scc2, create_tcs_messages
+from opendbc.car.hyundai.carstate import is_canfd_avh_active, is_canfd_parking_brake_active
+from opendbc.car.hyundai.hyundaicanfd import apply_accel_jerk_limit, create_acc_control, create_acc_control_scc2, create_tcs_messages, \
+                                                 longitudinal_interlock_active
 from opendbc.car.hyundai.values import HyundaiFlags
 from openpilot.common.filter_simple import MyMovingAverage
 
@@ -15,6 +16,51 @@ from openpilot.common.filter_simple import MyMovingAverage
 @pytest.mark.parametrize(("avh_state", "active"), [(0, False), (1, True), (2, True), (3, False)])
 def test_canfd_avh_interlock_states(avh_state, active):
   assert is_canfd_avh_active(avh_state) is active
+
+
+@pytest.mark.parametrize(("parking_brake_state", "active"), [(0, False), (1, True), (2, False), (3, False)])
+def test_canfd_parking_brake_states(parking_brake_state, active):
+  assert is_canfd_parking_brake_active(parking_brake_state) is active
+
+
+@pytest.mark.parametrize(("brake_hold_active", "parking_brake", "active"), [
+  (False, False, False),
+  (True, False, True),
+  (False, True, True),
+  (True, True, True),
+])
+def test_canfd_longitudinal_interlock_sources(brake_hold_active, parking_brake, active):
+  CS = SimpleNamespace(out=SimpleNamespace(brakeHoldActive=brake_hold_active, parkingBrake=parking_brake))
+  assert longitudinal_interlock_active(CS) is active
+
+
+def test_canfd_incident_transition_has_no_interlock_gap():
+  # K5 incident sequence: held -> releasing -> AVH briefly clears while the
+  # error-applied parking brake remains engaged.
+  incident_states = [(1, 0), (2, 0), (0, 1), (1, 1), (2, 1)]
+
+  for avh_state, parking_brake_state in incident_states:
+    CS = SimpleNamespace(out=SimpleNamespace(
+      brakeHoldActive=is_canfd_avh_active(avh_state),
+      parkingBrake=is_canfd_parking_brake_active(parking_brake_state),
+    ))
+    assert longitudinal_interlock_active(CS)
+
+
+@pytest.mark.parametrize(("brake_hold_active", "parking_brake"), [(True, False), (False, True)])
+def test_canfd_hold_interlock_blocks_all_automatic_button_paths(brake_hold_active, parking_brake):
+  controller = CarController.__new__(CarController)
+  controller.activateCruise = 1
+  controller.MainMode_ACC_trigger = 6
+  controller.LFA_trigger = 6
+  CS = SimpleNamespace(out=SimpleNamespace(brakePressed=False, brakeHoldActive=brake_hold_active, parkingBrake=parking_brake))
+
+  assert controller.create_button_messages(SimpleNamespace(), CS, use_clu11=False) == []
+  assert controller.make_spam_button(SimpleNamespace(), CS) == 0
+  assert controller.activateCruise == 0
+
+  controller.canfd_toggle_adas(SimpleNamespace(), CS)
+  assert controller.MainMode_ACC_trigger == -200
 
 
 def build_jerk_controller():
@@ -114,7 +160,7 @@ def test_camera_scc_accel_value_keeps_ramping_from_previous_value():
     scc_control={"ACC_ObjRelSpd": 0.0, "InfoDisplay": 0},
     softHoldActive=0,
     paddle_button_prev=0,
-    out=SimpleNamespace(aEgo=0.0, vEgo=20.0, brakeHoldActive=False),
+    out=SimpleNamespace(aEgo=0.0, vEgo=20.0, brakeHoldActive=False, parkingBrake=False),
   )
   hud_control = SimpleNamespace(leadDistanceBars=2, leadVisible=False)
   jerk = SimpleNamespace(carrot_cruise=0, jerk_u=1.0, jerk_l=5.0)
@@ -133,7 +179,8 @@ def test_camera_scc_accel_value_keeps_ramping_from_previous_value():
 
 
 @pytest.mark.parametrize("camera_scc", [False, True])
-def test_canfd_auto_hold_blocks_acc_control(camera_scc):
+@pytest.mark.parametrize(("brake_hold_active", "parking_brake"), [(True, False), (False, True)])
+def test_canfd_hold_interlock_blocks_acc_control(camera_scc, brake_hold_active, parking_brake):
   class FakePacker:
     @staticmethod
     def make_can_msg(name, bus, values):
@@ -144,7 +191,8 @@ def test_canfd_auto_hold_blocks_acc_control(camera_scc):
     scc_control={"ACC_ObjRelSpd": 0.0, "InfoDisplay": 0},
     softHoldActive=2,
     paddle_button_prev=0,
-    out=SimpleNamespace(aEgo=0.0, vEgo=0.0, brakeHoldActive=True, cruiseState=SimpleNamespace(standstill=True)),
+    out=SimpleNamespace(aEgo=0.0, vEgo=0.0, brakeHoldActive=brake_hold_active, parkingBrake=parking_brake,
+                        cruiseState=SimpleNamespace(standstill=True)),
   )
   hud_control = SimpleNamespace(leadDistanceBars=2, leadVisible=False)
 
@@ -163,6 +211,7 @@ def test_canfd_auto_hold_blocks_acc_control(camera_scc):
   assert msg[2]["StopReq"] == 0
   assert msg[2]["aReqValue"] == 0
   assert msg[2]["aReqRaw"] == 0
+  assert msg[2]["InfoDisplay"] == 0
 
 
 @pytest.mark.parametrize("brake_hold_active", [False, True])

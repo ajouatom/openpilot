@@ -612,7 +612,7 @@ class CarController(CarControllerBase):
 
   def create_button_messages(self, CC: structs.CarControl, CS: CarState, use_clu11: bool):
     can_sends = []
-    if CS.out.brakePressed or CS.out.brakeHoldActive:
+    if CS.out.brakePressed or CS.out.brakeHoldActive or CS.out.parkingBrake:
       return can_sends
     if use_clu11:
       if CS.clu11 is None:
@@ -687,6 +687,9 @@ class CarController(CarControllerBase):
     trigger_start = 6
     self.MainMode_ACC_trigger = max(trigger_min, self.MainMode_ACC_trigger - 1)
     self.LFA_trigger = max(trigger_min, self.LFA_trigger - 1)
+    if CS.out.brakeHoldActive or CS.out.parkingBrake:
+      self.MainMode_ACC_trigger = trigger_min
+      return
     if self.MainMode_ACC_trigger == trigger_min and self.LFA_trigger == trigger_min:
       if CC.enabled and not CS.MainMode_ACC and CS.out.vEgo > 3.:
         self.MainMode_ACC_trigger = trigger_start
@@ -711,6 +714,10 @@ class CarController(CarControllerBase):
 
 
   def make_spam_button(self, CC, CS):
+    if CS.out.brakePressed or CS.out.brakeHoldActive or CS.out.parkingBrake:
+      self.activateCruise = 0
+      return 0
+
     hud_control = CC.hudControl
     set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
     target = int(set_speed_in_units+0.5)

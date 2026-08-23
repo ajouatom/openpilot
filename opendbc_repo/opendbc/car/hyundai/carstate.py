@@ -47,6 +47,10 @@ def is_canfd_avh_active(avh_state: int) -> bool:
   return avh_state in (1, 2)
 
 
+def is_canfd_parking_brake_active(parking_brake_state: int) -> bool:
+  return parking_brake_state == 1
+
+
 def _get_legacy_button_capabilities(fingerprint: dict[int, int]) -> tuple[bool, bool, bool]:
   return (
     LEGACY_LFA_BUTTON_ADDR in fingerprint,
@@ -709,6 +713,7 @@ class CarState(CarStateBase):
       ret.gasPressed = bool(cp.vl[self.accelerator_msg_canfd]["ACCELERATOR_PEDAL_PRESSED"]) if not self.use_accelerator else False if self.accelerator is None else bool(self.accelerator["ACCELERATOR_PEDAL_PRESSED"])
 
     ret.brakePressed = cp.vl["TCS"]["DriverBraking"] == 1
+    ret.parkingBrake = is_canfd_parking_brake_active(cp.vl["TCS"]["ESC_PrkBrkActvSta"])
     #print(cp.vl["TCS"], cp.vl_all["TCS"]["DriverBraking"][-10:])
 
     if self.doors_seatbelts is not None:

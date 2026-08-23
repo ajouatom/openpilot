@@ -14,6 +14,10 @@ TurnDirection = log.Desire
 ACC_CONTROL_DT = 1.0 / 50.0
 
 
+def longitudinal_interlock_active(CS) -> bool:
+  return CS.out.brakeHoldActive or CS.out.parkingBrake
+
+
 def apply_accel_jerk_limit(a_raw: float, a_value_last: float, jerk_u: float, jerk_l: float,
                            dt: float = ACC_CONTROL_DT) -> float:
   """Ramp aReqValue toward aReqRaw using the asymmetric stock SCC jerk limits."""
@@ -343,8 +347,8 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
 
   if CS.scc_control is None:
     return None, accel_value_last
-  brake_hold_active = CS.out.brakeHoldActive
-  enabled = (enabled or CS.softHoldActive > 0) and CS.paddle_button_prev == 0 and not brake_hold_active
+  interlock_active = longitudinal_interlock_active(CS)
+  enabled = (enabled or CS.softHoldActive > 0) and CS.paddle_button_prev == 0 and not interlock_active
 
   acc_mode = 0 if not enabled else (2 if gas_override else 1)
 
@@ -368,7 +372,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   rx_counter = values.pop("COUNTER", None)
   values["ACCMode"] = acc_mode
   values["MainMode_ACC"] = 1
-  values["StopReq"] = 1 if not brake_hold_active and (stopping or CS.softHoldActive > 0) else 0  # 1: Stop control is required, 2: Not used, 3: Error Indicator
+  values["StopReq"] = 1 if not interlock_active and (stopping or CS.softHoldActive > 0) else 0  # 1: Stop control is required, 2: Not used, 3: Error Indicator
   values["aReqValue"] = a_val
   values["aReqRaw"] = a_raw
   values["VSetDis"] = set_speed
@@ -401,7 +405,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
 
   # 이거안하면 정지중 뒤로 밀리는 현상 발생하는듯.. (신호정지중에 뒤로 밀리는 경험함.. 시험해봐야)
   if values["InfoDisplay"] != 5: #5: Front Car Departure Notice
-    values["InfoDisplay"] = 4 if stopping and CS.out.aEgo > -0.3 else 0  # 1: SCC Mode, 2: Convention Cruise Mode, 3: Object disappered at low speed, 4: Available to resume acceleration control, 5: Front vehicle departure notice, 6: Reserved, 7: Invalid
+    values["InfoDisplay"] = 4 if not interlock_active and stopping and CS.out.aEgo > -0.3 else 0  # 1: SCC Mode, 2: Convention Cruise Mode, 3: Object disappered at low speed, 4: Available to resume acceleration control, 5: Front vehicle departure notice, 6: Reserved, 7: Invalid
 
   values["TakeOverReq"] = 0    # 1: Takeover request, 2: Not used, 3: Error indicator , 이것이 켜지면 가속을 안하는듯함.
   #values["NEW_SIGNAL_4"] = 9 if hud_control.leadVisible else 0
@@ -417,8 +421,8 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS):
 
-  brake_hold_active = CS.out.brakeHoldActive
-  enabled = (enabled or CS.softHoldActive > 0) and not brake_hold_active
+  interlock_active = longitudinal_interlock_active(CS)
+  enabled = (enabled or CS.softHoldActive > 0) and not interlock_active
   jerk = 5
   jn = jerk / 50
   if not enabled or gas_override:
@@ -430,7 +434,7 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   values = {
     "ACCMode": 0 if not enabled else (2 if gas_override else 1),
     "MainMode_ACC": 1,
-    "StopReq": 1 if not brake_hold_active and (stopping or CS.softHoldActive > 0) else 0,
+    "StopReq": 1 if not interlock_active and (stopping or CS.softHoldActive > 0) else 0,
     "aReqValue": a_val,
     "aReqRaw": a_raw,
     "VSetDis": set_speed,
@@ -448,7 +452,7 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
     #"SET_ME_3": 0x3,
     "ACC_ObjLatPos": 0x64,
     "DISTANCE_SETTING": hud_control.leadDistanceBars, # + 5,
-    "InfoDisplay": 4 if stopping and CS.out.cruiseState.standstill else 0,
+    "InfoDisplay": 4 if not interlock_active and stopping and CS.out.cruiseState.standstill else 0,
   }
 
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
@@ -703,6 +707,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
                          disp_angle, left_lane_warning, right_lane_warning,
                          enable_corner_radar, stopping, canfd_debug):
   ret = []
+  interlock_active = longitudinal_interlock_active(CS)
 
   md = CS.modelV2
   if not hasattr(create_ccnc_messages, '_lane_line_check') or frame % 100 == 0:
@@ -730,7 +735,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1
 
-        if CC.enabled:
+        if CC.enabled and not interlock_active:
           if not CS.MainMode_ACC:
             if 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
               values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
