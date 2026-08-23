@@ -1,11 +1,13 @@
 import pytest
 
 from openpilot.selfdrive.carrot.traffic_stop import (
+  TrafficStopDistanceTracker,
   get_traffic_stop_accel_floor,
   get_traffic_stop_obstacle_distance,
   get_traffic_stop_reference_speed,
   get_virtual_traffic_stop_distance,
   is_traffic_stop_entry_allowed,
+  should_limit_traffic_stop_accel,
 )
 
 
@@ -61,6 +63,12 @@ def test_signal_stop_accel_floor_limits_early_braking_with_margin():
   assert accel_floor == pytest.approx(-2.2314, abs=1e-4)
 
 
+def test_signal_stop_accel_floor_limits_d85_onset_to_comfortable_braking():
+  # Supplied d85 route: 76.41 km/h with about 137 m to the physical stop line.
+  accel_floor = get_traffic_stop_accel_floor(76.41 / 3.6, 137.0, 5.5)
+  assert accel_floor == -2.2
+
+
 def test_signal_stop_accel_floor_releases_when_distance_is_short():
   accel_floor = get_traffic_stop_accel_floor(62.0 / 3.6, 60.0, 5.5)
   assert accel_floor < -3.8
@@ -75,6 +83,39 @@ def test_signal_stop_accel_floor_releases_monotonically_as_margin_shrinks():
   floors = [get_traffic_stop_accel_floor(20.0, distance, 5.5) for distance in range(20, 201)]
   assert all(-4.0 <= floor <= -2.2 for floor in floors)
   assert floors == sorted(floors)
+
+
+def test_stop_distance_tracker_rejects_a_transient_nearer_line_in_world_coordinates():
+  tracker = TrafficStopDistanceTracker(sample_count=4)
+  assert tracker.update(100.0, 0.0) == pytest.approx(100.0)
+  assert tracker.update(99.0, 1.0) == pytest.approx(99.0)
+  assert tracker.update(70.0, 1.0) == pytest.approx(98.0)
+  assert tracker.update(97.0, 1.0) == pytest.approx(97.0)
+
+
+def test_stop_distance_tracker_accepts_a_persistent_nearer_line():
+  tracker = TrafficStopDistanceTracker(sample_count=3)
+  tracker.update(100.0, 0.0)
+  assert tracker.update(70.0, 1.0) == pytest.approx(99.0)
+  assert tracker.update(69.0, 1.0) == pytest.approx(98.0)
+  assert tracker.update(68.0, 1.0) == pytest.approx(68.0)
+
+
+def test_stop_distance_tracker_accepts_a_farther_line_immediately():
+  tracker = TrafficStopDistanceTracker(sample_count=4)
+  tracker.update(100.0, 0.0)
+  assert tracker.update(110.0, 1.0) == pytest.approx(110.0)
+
+
+@pytest.mark.parametrize("source", ["cruise", "e2e"])
+def test_signal_stop_accel_limit_covers_both_signal_sources(source):
+  assert should_limit_traffic_stop_accel(True, source)
+
+
+@pytest.mark.parametrize("source", ["lead0", "lead1"])
+def test_signal_stop_accel_limit_yields_to_real_lead_sources(source):
+  assert not should_limit_traffic_stop_accel(True, source)
+  assert not should_limit_traffic_stop_accel(False, "e2e")
 
 
 @pytest.mark.parametrize("steering_angle_deg", [-49.9, -20.0, 0.0, 20.0, 49.9])
