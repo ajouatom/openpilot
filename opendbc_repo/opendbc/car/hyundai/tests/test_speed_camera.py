@@ -97,6 +97,31 @@ def test_vehicle_speed_camera_params_are_not_read_every_frame():
   assert state.op_params.read_count == 0
 
 
+def test_vehicle_navigation_toggles_reload_every_second_without_restart():
+  state = _car_state()
+  state.op_params.vehicle_navi = True
+  state.op_params.school_zone = True
+  state.vehicleSpeedCameraParamsCounter = VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES - 1
+
+  state._update_vehicle_speed_camera_params()
+
+  assert state.vehicleNaviCanControl
+  assert state.vehicleNaviSchoolZoneControl
+
+  state.op_params.vehicle_navi = False
+  state.op_params.school_zone = False
+  state.vehicleNaviEvents = [{"type": "camera", "speed": 50, "kind": 1, "target": 100.0}]
+  state.vehicleNaviSchoolZoneActive = True
+  state.vehicleSpeedCameraParamsCounter = VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES - 1
+
+  state._update_vehicle_speed_camera_params()
+
+  assert not state.vehicleNaviCanControl
+  assert not state.vehicleNaviSchoolZoneControl
+  assert state.vehicleNaviEvents == []
+  assert not state.vehicleNaviSchoolZoneActive
+
+
 @pytest.mark.parametrize(("speed_limit", "camera", "expected"), (
   (0.0, True, 0.0),
   (50.0, False, 0.0),
