@@ -6,9 +6,15 @@ import pytest
 from opendbc.car import DT_CTRL
 from opendbc.car.hyundai.carcontroller import CANFD_JERK_ERROR_DELAY, CANFD_JERK_ERROR_FILTER_TIME, HyundaiJerk, LongCtrlState, \
                                                    calculate_canfd_jerk_limits
+from opendbc.car.hyundai.carstate import is_canfd_avh_active
 from opendbc.car.hyundai.hyundaicanfd import apply_accel_jerk_limit, create_acc_control, create_acc_control_scc2, create_tcs_messages
 from opendbc.car.hyundai.values import HyundaiFlags
 from openpilot.common.filter_simple import MyMovingAverage
+
+
+@pytest.mark.parametrize(("avh_state", "active"), [(0, False), (1, True), (2, True), (3, False)])
+def test_canfd_avh_interlock_states(avh_state, active):
+  assert is_canfd_avh_active(avh_state) is active
 
 
 def build_jerk_controller():
