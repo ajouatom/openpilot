@@ -3548,6 +3548,44 @@ def test_radar_only_stationary_corner_requires_half_second_confirmation() -> Non
   assert match.point.track_id == 1009
 
 
+def test_radar_only_stationary_corner_range_jumps_restart_confirmation() -> None:
+  matcher = VisionRadarMatcher()
+  ranges_m = (
+    23.20, 21.55, 20.75, 18.30, 18.30, 15.95, 17.35, 16.55,
+    14.90, 13.35, 11.70, 10.50, 8.80, 8.75, 6.30, 9.25,
+    6.80, 6.80, 3.55, 1.05,
+  )
+  lateral_m = (
+    -0.70, -0.65, -0.60, -0.50, -0.50, -0.40, -0.40, -0.40,
+    -0.35, -0.30, -0.25, -0.20, -0.10, -0.15, -0.10, -0.10,
+    -0.05, -0.05, -0.05, 0.0,
+  )
+
+  for index, (d_rel, y_rel) in enumerate(zip(
+    ranges_m, lateral_m, strict=True,
+  )):
+    point = snapshot_radar_points((Point(
+      1910,
+      d_rel,
+      y_rel,
+      v_rel=-29.8,
+      v_lead=-0.4,
+      source="corner235",
+    ),), v_ego=29.4)[0]
+    match = matcher.match(
+      model_with_lead(115.0, 8.5, 30.0, probability=0.002),
+      (),
+      STRAIGHT_PATH,
+      time_s=index * 0.05,
+      stationary_points=(point,),
+      prefer_corner_stationary=True,
+    )
+
+    assert match is None
+
+  assert matcher.stationary_identity is None
+
+
 def test_radar_only_stationary_pending_resets_after_center_support_loss() -> None:
   matcher = VisionRadarMatcher()
   for index in range(20):

@@ -1933,6 +1933,29 @@ class VisionRadarMatcher:
         self._identity(point) == selected_identity
         for point, _, _ in supported
       )
+      radar_only_pending_discontinuous = (
+        selected_identity == self._stationary_pending_identity
+        and selected_has_current_support
+        and self._stationary_seed_probability
+        < STATIONARY_VISION_MIN_PROB
+        and not self._stationary_pending_weak_pair_supported
+        and self._stationary_last_point is not None
+        and self._stationary_last_time_s is not None
+        and not self._stationary_position_continuous(
+          self._stationary_last_point,
+          self._stationary_last_time_s,
+          selected[0],
+          time_s,
+        )
+      )
+      if radar_only_pending_discontinuous:
+        # A persistent raw corner ID is not sufficient evidence by itself.
+        # Roadside reflections can keep the ID while their range jumps by
+        # several metres. Radar-only stationary acquisition must therefore
+        # maintain the same kinematic continuity as a held lead throughout
+        # its confirmation dwell.
+        self._reset_stationary()
+        return None
       if selected_identity != self._stationary_pending_identity:
         carry_vision_supported_handoff = (
           self._stationary_seed_probability
