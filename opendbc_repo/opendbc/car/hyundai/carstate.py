@@ -52,19 +52,21 @@ def is_canfd_parking_brake_active(parking_brake_state: int) -> bool:
   return parking_brake_state == 1
 
 
-def update_canfd_avh_interlock_state(avh_state: int, acc_req: int, avh_active_prev: bool,
+def update_canfd_avh_interlock_state(avh_state: int, acc_req: int, brake_pressed: bool, avh_active_prev: bool,
                                      oem_hold_latched: bool, release_grace_frames: int) -> tuple[bool, bool, int]:
   """Separate an OEM AutoHold from an openpilot SCC-induced hydraulic hold.
 
   AVH_Sta reports who is physically holding the service brake, not whether the
-  AutoHold button is enabled. An OEM hold appears before TCS.ACC_REQ, while a
-  soft hold appears after ACC_REQ. Keep an OEM classification across short AVH
-  dropouts so automatic cruise cannot reopen the interlock during a transition.
+  AutoHold button is enabled. An OEM hold begins while the driver brake signal
+  is asserted and before TCS.ACC_REQ, while cruise stops and soft hold assert
+  AVH without the driver brake signal. Keep an OEM classification across short
+  AVH dropouts so automatic cruise cannot reopen the interlock during a
+  transition.
   """
   avh_active = is_canfd_avh_active(avh_state)
   if avh_active:
     if not avh_active_prev and not oem_hold_latched:
-      oem_hold_latched = acc_req != 1
+      oem_hold_latched = brake_pressed and acc_req != 1
     release_grace_frames = CANFD_AVH_RELEASE_GRACE_FRAMES if oem_hold_latched else 0
   elif oem_hold_latched:
     release_grace_frames = max(0, release_grace_frames - 1)
@@ -848,10 +850,11 @@ class CarState(CarStateBase):
       ret.cruiseState.enabled = acc_req == 1
       ret.cruiseState.standstill = False
       # AVH_Sta is also asserted by openpilot SCC/soft hold. Only expose an
-      # OEM-owned hold to the cruise interlock; TCS.ACC_REQ establishes which
-      # controller requested the hydraulic hold first.
+      # OEM-owned hold to the cruise interlock. Driver brake distinguishes an
+      # AutoHold engagement from an SCC/soft-hold hydraulic stop, with ACC_REQ
+      # guarding the controller handoff timing.
       ret.brakeHoldActive, self.canfdAvhActivePrev, self.canfdAvhReleaseGraceFrames = update_canfd_avh_interlock_state(
-        avh_state, acc_req, self.canfdAvhActivePrev,
+        avh_state, acc_req, cp.vl["ESP_STATUS"]["BRAKE_PRESSED"] == 1, self.canfdAvhActivePrev,
         self.canfdOemBrakeHoldLatched, self.canfdAvhReleaseGraceFrames,
       )
       self.canfdOemBrakeHoldLatched = ret.brakeHoldActive
