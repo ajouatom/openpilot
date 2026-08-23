@@ -24,6 +24,10 @@ ButtonType = structs.CarState.ButtonEvent.Type
 PREV_BUTTON_SAMPLES = 8
 CLUSTER_SAMPLE_RATE = 20  # frames
 VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES = round(1.0 / DT_CTRL)
+VEHICLE_NAVI_MAX_EVENT_DISTANCE = 2500.0
+VEHICLE_NAVI_PASSED_EVENT_DISTANCE = 30.0
+VEHICLE_NAVI_MAX_EVENTS = 32
+VEHICLE_NAVI_CAMERA_KINDS = (0, 1, 2)
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
 
 BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: ButtonType.decelCruise,
@@ -131,6 +135,8 @@ class CarState(CarStateBase):
     self.adrv_0x160 = None
     self.ccnc_0x162 = None
     self.hda_info_4a3 = None
+    self.navi_segment_4b9 = None
+    self.navi_profile_4be = None
     self.tcs = None
     self.mdps = None
     self.steer_touch_2af = None
@@ -158,7 +164,13 @@ class CarState(CarStateBase):
     self.speedLimitDistance = 0
     distance_time_tenths = self.op_params.get_int("VehicleSpeedCameraDistanceTime")
     self.vehicleSpeedCameraDistanceTime = self._vehicle_speed_camera_distance_time(distance_time_tenths)
+    self.vehicleNaviCanControl = self.op_params.get_bool("VehicleNaviCanControl")
     self.vehicleSpeedCameraParamsCounter = 0
+    self.vehicleNaviEvents = []
+    self.vehicleNaviSegmentTimestamp = 0
+    self.vehicleNaviProfileTimestamp = 0
+    self.vehicleNaviRouteResetTimestamp = 0
+    self.vehicleNaviCameraTarget = None
     self.pcmCruiseGap = 0
 
     self.MainMode_ACC = False
@@ -297,6 +309,8 @@ class CarState(CarStateBase):
           add_and_cache(self.cp_cam, "CCNC_0x162", "ccnc_0x162")
         elif self.controls_ready_count == 123:
           add_and_cache(self.cp, "HDA_INFO_4A3", "hda_info_4a3")
+          add_and_cache(self.cp, "NEW_MSG_4B9", "navi_segment_4b9")
+          add_and_cache(self.cp, "NEW_MSG_4BE", "navi_profile_4be")
           add_and_cache(self.cp, "STEER_TOUCH_2AF", "steer_touch_2af")
         elif self.controls_ready_count == 124:
           add_and_cache(self.cp, self.cruise_btns_msg_canfd, "cruise_buttons_msg")
@@ -530,18 +544,122 @@ class CarState(CarStateBase):
     distance_time = self._vehicle_speed_camera_distance_time(distance_time_tenths)
     changed = distance_time != self.vehicleSpeedCameraDistanceTime
     self.vehicleSpeedCameraDistanceTime = distance_time
+    vehicle_navi_can_control = self.op_params.get_bool("VehicleNaviCanControl")
+    if vehicle_navi_can_control != self.vehicleNaviCanControl:
+      self.vehicleNaviCanControl = vehicle_navi_can_control
+      if not vehicle_navi_can_control:
+        self._clear_vehicle_navi_events()
     return changed
 
-  def update_speed_limit(self, ret, speed_limit_cam):
-    distance_time_changed = self._update_vehicle_speed_camera_params()
+  def _clear_vehicle_navi_events(self):
+    self.vehicleNaviEvents = []
+    self.vehicleNaviCameraTarget = None
+
+  @staticmethod
+  def _vehicle_navi_message_timestamp(cp, name):
+    return max(cp.ts_nanos.get(name, {}).values(), default=0)
+
+  @staticmethod
+  def _decode_vehicle_navi_segment(values):
+    raw = sum(int(values.get(f"BYTE_{i + 1}", 0)) << (i * 8) for i in range(8))
+    return {
+      "offset": raw & 0x1fff,
+      "calculated_route": (raw >> 22) & 0x3,
+    }
+
+  @staticmethod
+  def _decode_vehicle_navi_profile(values):
+    return {
+      "value": int(values.get("PROLONG_VALUE", 0xffffffff)),
+      "offset": int(values.get("PROLONG_OFFSET", 8191)),
+      "counter": int(values.get("PROLONG_CYCLIC_COUNTER", 0)),
+      "update": int(values.get("PROLONG_UPDATE", 0)),
+      "profile_type": int(values.get("PROLONG_PROFILE_TYPE", 31)),
+    }
+
+  @staticmethod
+  def _classify_vehicle_navi_profile(profile):
+    if profile["profile_type"] != 16 or not 0 < profile["offset"] <= VEHICLE_NAVI_MAX_EVENT_DISTANCE:
+      return None
+
+    value = profile["value"]
+    if value == 6:
+      return "bump", 0, 6
+
+    if not 0 < value <= 0xff:
+      return None
+    kind = value & 0xf
+    speed_code = value >> 4
+    if kind not in VEHICLE_NAVI_CAMERA_KINDS or not 1 < speed_code <= 15:
+      return None
+    return "camera", (speed_code - 1) * 5, kind
+
+  def _add_vehicle_navi_event(self, event_type, speed, kind, offset):
+    target = self.totalDistance + offset
+    for event in self.vehicleNaviEvents:
+      if event["type"] == event_type and event["speed"] == speed and event["kind"] == kind and abs(event["target"] - target) < 20:
+        event["target"] = target
+        return
+
+    self.vehicleNaviEvents.append({"type": event_type, "speed": speed, "kind": kind, "target": target})
+    self.vehicleNaviEvents.sort(key=lambda event: event["target"])
+    self.vehicleNaviEvents = self.vehicleNaviEvents[:VEHICLE_NAVI_MAX_EVENTS]
+
+  def _update_vehicle_navi_events(self, cp, ret):
+    ret.speedBumpDistance = 0.0
+    self.vehicleNaviCameraTarget = None
+    if not self.vehicleNaviCanControl:
+      return False
+
+    if self.navi_segment_4b9 is not None:
+      timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4B9")
+      if timestamp > self.vehicleNaviSegmentTimestamp:
+        self.vehicleNaviSegmentTimestamp = timestamp
+        segment = self._decode_vehicle_navi_segment(self.navi_segment_4b9)
+        if segment["calculated_route"] == 2:
+          self.vehicleNaviRouteResetTimestamp = timestamp
+          self._clear_vehicle_navi_events()
+
+    if self.navi_profile_4be is not None:
+      timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4BE")
+      if timestamp > self.vehicleNaviProfileTimestamp:
+        self.vehicleNaviProfileTimestamp = timestamp
+        profile = self._decode_vehicle_navi_profile(self.navi_profile_4be)
+        event = self._classify_vehicle_navi_profile(profile)
+        if event is not None and timestamp > self.vehicleNaviRouteResetTimestamp:
+          self._add_vehicle_navi_event(*event, profile["offset"])
+
+    self.vehicleNaviEvents = [event for event in self.vehicleNaviEvents
+                              if event["target"] >= self.totalDistance - VEHICLE_NAVI_PASSED_EVENT_DISTANCE]
+    upcoming = [event for event in self.vehicleNaviEvents if event["target"] > self.totalDistance]
+
+    bumps = [event for event in upcoming if event["type"] == "bump"]
+    if bumps:
+      ret.speedBumpDistance = bumps[0]["target"] - self.totalDistance
+
+    cameras = [event for event in upcoming if event["type"] == "camera"]
+    if cameras:
+      camera = cameras[0]
+      self.vehicleNaviCameraTarget = camera["target"]
+      ret.speedLimit = camera["speed"]
+      return True
+    return False
+
+  def update_speed_limit(self, ret, speed_limit_cam, distance_time_changed=None):
+    if distance_time_changed is None:
+      distance_time_changed = self._update_vehicle_speed_camera_params()
     self.totalDistance += ret.vEgo * DT_CTRL
-    if ret.speedLimit > 0 and speed_limit_cam:
+    if ret.speedLimit > 0 and speed_limit_cam and self.vehicleNaviCanControl and self.vehicleNaviCameraTarget is not None:
+      self.speedLimitDistance = self.vehicleNaviCameraTarget
+      ret.speedLimitDistance = max(0.0, self.speedLimitDistance - self.totalDistance)
+    elif ret.speedLimit > 0 and speed_limit_cam:
       if distance_time_changed or self.speedLimitDistance <= self.totalDistance:
         self.speedLimitDistance = self.totalDistance + ret.speedLimit * self.vehicleSpeedCameraDistanceTime
       self.speedLimitDistance = max(self.totalDistance + 1, self.speedLimitDistance)
+      ret.speedLimitDistance = self.speedLimitDistance - self.totalDistance
     else:
       self.speedLimitDistance = self.totalDistance
-    ret.speedLimitDistance = self.speedLimitDistance - self.totalDistance
+      ret.speedLimitDistance = 0.0
 
   def update_canfd(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -816,7 +934,9 @@ class CarState(CarStateBase):
     vEgoClu, aEgoClu = self.update_clu_speed_kf(ret.vEgoCluster)
     ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
 
-    self.update_speed_limit(ret, speed_limit_cam)
+    distance_time_changed = self._update_vehicle_speed_camera_params()
+    speed_limit_cam = self._update_vehicle_navi_events(cp, ret) or speed_limit_cam
+    self.update_speed_limit(ret, speed_limit_cam, distance_time_changed)
 
     paddle_button = self.paddle_button_prev
     if self.cruise_btns_msg_canfd == "CRUISE_BUTTONS":
@@ -833,7 +953,9 @@ class CarState(CarStateBase):
     return ret
 
   def get_can_parsers_canfd(self, CP):
-    msgs = []
+    # Stock-navigation route/profile messages are sparse bursts. Register them
+    # as optional from startup so dynamic fingerprint timing cannot miss them.
+    msgs = [("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)]
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [

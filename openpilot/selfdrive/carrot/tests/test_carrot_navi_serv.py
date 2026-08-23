@@ -1,5 +1,7 @@
 import pytest
 
+from types import SimpleNamespace
+
 from openpilot.common.constants import CV
 from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
 
@@ -53,6 +55,7 @@ def _serv():
   serv.nRoadLimitSpeed_counter = 0
   serv.active_kisa_count = 0
   serv.autoNaviSpeedCtrlMode = 3
+  serv.vehicleNaviCanControl = True
   serv.autoNaviSpeedSafetyFactor = 1.0
   serv.autoNaviSpeedBumpSpeed = 20
   serv.is_metric = True
@@ -325,3 +328,21 @@ def test_waze_alert_without_road_limit_has_no_speed_target():
   assert serv.xSpdType == 101
   assert serv.xSpdLimit == 0
   assert serv.xSpdDist == 200
+
+
+def test_vehicle_navi_speed_bump_requires_both_settings_and_distance():
+  serv = _serv()
+  car_state = SimpleNamespace(speedBumpDistance=120.0)
+
+  assert serv._vehicle_speed_bump_enabled(car_state)
+
+  serv.vehicleNaviCanControl = False
+  assert not serv._vehicle_speed_bump_enabled(car_state)
+
+  serv.vehicleNaviCanControl = True
+  serv.autoNaviSpeedCtrlMode = 1
+  assert not serv._vehicle_speed_bump_enabled(car_state)
+
+  serv.autoNaviSpeedCtrlMode = 2
+  car_state.speedBumpDistance = 0.0
+  assert not serv._vehicle_speed_bump_enabled(car_state)
