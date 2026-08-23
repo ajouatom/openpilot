@@ -165,12 +165,14 @@ class CarState(CarStateBase):
     distance_time_tenths = self.op_params.get_int("VehicleSpeedCameraDistanceTime")
     self.vehicleSpeedCameraDistanceTime = self._vehicle_speed_camera_distance_time(distance_time_tenths)
     self.vehicleNaviCanControl = self.op_params.get_bool("VehicleNaviCanControl")
+    self.vehicleNaviSchoolZoneControl = self.op_params.get_bool("VehicleNaviSchoolZoneControl")
     self.vehicleSpeedCameraParamsCounter = 0
     self.vehicleNaviEvents = []
     self.vehicleNaviSegmentTimestamp = 0
     self.vehicleNaviProfileTimestamp = 0
     self.vehicleNaviRouteResetTimestamp = 0
     self.vehicleNaviCameraTarget = None
+    self.vehicleNaviSchoolZoneActive = False
     self.pcmCruiseGap = 0
 
     self.MainMode_ACC = False
@@ -549,6 +551,11 @@ class CarState(CarStateBase):
       self.vehicleNaviCanControl = vehicle_navi_can_control
       if not vehicle_navi_can_control:
         self._clear_vehicle_navi_events()
+    vehicle_navi_school_zone_control = self.op_params.get_bool("VehicleNaviSchoolZoneControl")
+    if vehicle_navi_school_zone_control != self.vehicleNaviSchoolZoneControl:
+      self.vehicleNaviSchoolZoneControl = vehicle_navi_school_zone_control
+      if not vehicle_navi_school_zone_control:
+        self.vehicleNaviSchoolZoneActive = False
     return changed
 
   def _clear_vehicle_navi_events(self):
@@ -579,17 +586,23 @@ class CarState(CarStateBase):
 
   @staticmethod
   def _classify_vehicle_navi_profile(profile):
-    if profile["profile_type"] != 16 or not 0 < profile["offset"] <= VEHICLE_NAVI_MAX_EVENT_DISTANCE:
+    if profile["profile_type"] != 16:
       return None
 
     value = profile["value"]
+    if 0 < value <= 0xff:
+      kind = value & 0xf
+      speed_code = value >> 4
+      if kind == 7 and profile["offset"] == 0 and 1 < speed_code <= 15:
+        return "speed_limit_zone", (speed_code - 1) * 5, kind
+
+    if not 0 < profile["offset"] <= VEHICLE_NAVI_MAX_EVENT_DISTANCE:
+      return None
     if value == 6:
       return "bump", 0, 6
 
     if not 0 < value <= 0xff:
       return None
-    kind = value & 0xf
-    speed_code = value >> 4
     if kind not in VEHICLE_NAVI_CAMERA_KINDS or not 1 < speed_code <= 15:
       return None
     return "camera", (speed_code - 1) * 5, kind
@@ -607,8 +620,9 @@ class CarState(CarStateBase):
 
   def _update_vehicle_navi_events(self, cp, ret):
     ret.speedBumpDistance = 0.0
+    ret.schoolZoneActive = False
     self.vehicleNaviCameraTarget = None
-    if not self.vehicleNaviCanControl:
+    if not (self.vehicleNaviCanControl or self.vehicleNaviSchoolZoneControl):
       return False
 
     if self.navi_segment_4b9 is not None:
@@ -627,7 +641,11 @@ class CarState(CarStateBase):
         profile = self._decode_vehicle_navi_profile(self.navi_profile_4be)
         event = self._classify_vehicle_navi_profile(profile)
         if event is not None and timestamp > self.vehicleNaviRouteResetTimestamp:
-          self._add_vehicle_navi_event(*event, profile["offset"])
+          if event[0] == "speed_limit_zone":
+            if self.vehicleNaviSchoolZoneControl:
+              self.vehicleNaviSchoolZoneActive = event[1] == 30
+          elif self.vehicleNaviCanControl:
+            self._add_vehicle_navi_event(*event, profile["offset"])
 
     self.vehicleNaviEvents = [event for event in self.vehicleNaviEvents
                               if event["target"] >= self.totalDistance - VEHICLE_NAVI_PASSED_EVENT_DISTANCE]
@@ -636,6 +654,11 @@ class CarState(CarStateBase):
     bumps = [event for event in upcoming if event["type"] == "bump"]
     if bumps:
       ret.speedBumpDistance = bumps[0]["target"] - self.totalDistance
+
+    if self.vehicleNaviSchoolZoneControl and self.vehicleNaviSchoolZoneActive:
+      ret.schoolZoneActive = True
+      ret.speedLimit = 30
+      return False
 
     cameras = [event for event in upcoming if event["type"] == "camera"]
     if cameras:
