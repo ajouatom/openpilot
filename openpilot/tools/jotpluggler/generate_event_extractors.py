@@ -20,6 +20,10 @@ SCALAR_KINDS = {
 NESTED_TYPE_KINDS = {"struct", "list"}
 IGNORED_TYPE_KINDS = {"void", "text", "data", "interface", "anyPointer"}
 
+# Model trajectories use 33 samples. Keep longer lists collapsed to avoid
+# turning raw tensors and other large payloads into thousands of plot series.
+MAX_EXPANDED_SCALAR_LIST_SIZE = 33
+
 
 def cxx_string(value):
   return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -171,7 +175,7 @@ class Generator:
 
     elem_scalar = scalar_kind(elem_type)
     if elem_scalar is not None:
-      self.emit(indent, f"if ({list_expr}.size() <= 16) {{")
+      self.emit(indent, f"if ({list_expr}.size() <= {MAX_EXPANDED_SCALAR_LIST_SIZE}) {{")
       index_var = self.tmp("i")
       self.emit(indent + 2, f"for (uint {index_var} = 0; {index_var} < {list_expr}.size(); ++{index_var}) {{")
       item_series = self.tmp("item_series")

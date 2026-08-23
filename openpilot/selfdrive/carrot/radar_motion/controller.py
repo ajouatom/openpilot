@@ -76,6 +76,10 @@ SCC_PHYSICAL_MATCH_MAX_ABS_DPATH_M = 2.2
 SCC_PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 5.0
 SCC_PRIMARY_DUPLICATE_MAX_VLEAD_DELTA_MPS = 3.0
 SCC_PRIMARY_CLOSER_MARGIN_M = 1.0
+CROSS_SENSOR_CLOSE_CUTIN_MIN_DREL_M = 2.0
+CROSS_SENSOR_CLOSE_CUTIN_MAX_DREL_M = 12.0
+CROSS_SENSOR_CLOSE_CUTIN_MAX_ABS_DPATH_M = 3.0
+CROSS_SENSOR_CLOSE_CUTIN_MIN_VLEAD_MPS = 0.5
 
 
 def _is_corner(point: RadarPointSnapshot) -> bool:
@@ -392,6 +396,14 @@ class DPathRadarController:
       threshold=sensitivity.cut_in_threshold,
       confirmation_s=sensitivity.confirmation_s,
     )
+    self.close_front_motion_sensitivity = radar_motion_sensitivity(
+      self.cut_in_sensitivity,
+      "front",
+    )
+    self.close_front_motion_decisions = RadarMotionDecisionTracker(
+      threshold=self.close_front_motion_sensitivity.cut_in_threshold,
+      confirmation_s=self.close_front_motion_sensitivity.confirmation_s,
+    )
     self.cutin_predecel_tracker = CornerCutInPredecelTracker()
 
   def _points_at_model_time(
@@ -556,6 +568,7 @@ class DPathRadarController:
       self.stationary_primary_handoff_tracker.reset()
       self.scc_lead_two_tracker.reset()
       self.primary_cut_out_predictor = RadarMotionPredictor()
+      self.close_front_motion_decisions.reset()
       self.lead_dynamics.reset()
       self.cutin_predecel_tracker.reset()
       return DPathRadarOutput(
@@ -637,6 +650,23 @@ class DPathRadarController:
       for point in front_motion_points
       if point.track_id == primary_track_id
     )
+    cross_sensor_close_front_identities = frozenset(
+      (front.source, front.track_id)
+      for front in front_kinematic_matches.values()
+      if (
+        front.track_id != primary_track_id
+        and front.measured
+        and CROSS_SENSOR_CLOSE_CUTIN_MIN_DREL_M < front.d_rel
+        <= CROSS_SENSOR_CLOSE_CUTIN_MAX_DREL_M
+        and front.v_lead > CROSS_SENSOR_CLOSE_CUTIN_MIN_VLEAD_MPS
+        and abs(project_to_model_path(
+          path, front.d_rel, front.y_rel,
+        ).d_path) <= CROSS_SENSOR_CLOSE_CUTIN_MAX_ABS_DPATH_M
+      )
+    )
+    requested_front_prediction_identities = (
+      primary_cut_out_identities | cross_sensor_close_front_identities
+    )
     primary_cut_out_predictions = self.primary_cut_out_predictor.update(
       time_s,
       front_motion_points,
@@ -644,8 +674,14 @@ class DPathRadarController:
       v_ego,
       yaw_rate_rad_s,
       scoped_points=front_scoped_motion_points,
-      prediction_identities=primary_cut_out_identities,
+      prediction_identities=requested_front_prediction_identities,
+      allow_low_speed_identities=cross_sensor_close_front_identities,
     )
+    close_front_predictions = {
+      identity: prediction
+      for identity, prediction in primary_cut_out_predictions.items()
+      if identity in cross_sensor_close_front_identities
+    }
     primary_cut_out_probability = max((
       float(prediction.cut_out_probability)
       for prediction in primary_cut_out_predictions.values()
@@ -753,8 +789,32 @@ class DPathRadarController:
       ): cutin
       for cutin in decision.confirmed
     }
+    close_front_decision = self.close_front_motion_decisions.update(
+      time_s,
+      (
+        close_front_predictions.values()
+        if self.close_front_motion_sensitivity.cut_in_enabled
+        else ()
+      ),
+    )
+    confirmed.update({
+      (
+        cutin.prediction.source,
+        cutin.prediction.track_id,
+        cutin.prediction.continuity_id,
+      ): cutin
+      for cutin in close_front_decision.confirmed
+    })
+    candidate_predictions = dict(predictions)
+    candidate_predictions.update(close_front_predictions)
+    point_by_identity.update({
+      (point.source, point.track_id): point
+      for point in front_motion_points
+      if (point.source, point.track_id)
+      in cross_sensor_close_front_identities
+    })
     candidates = []
-    for prediction in predictions.values():
+    for prediction in candidate_predictions.values():
       point = point_by_identity.get((prediction.source, prediction.track_id))
       if point is None:
         continue
@@ -795,6 +855,10 @@ class DPathRadarController:
         ),
         tracked_close_entry=getattr(
           prediction, "front_tracked_close_entry", False,
+        ),
+        cross_sensor_confirmed=(
+          (prediction.source, prediction.track_id)
+          in cross_sensor_close_front_identities
         ),
         minimum_directional_consistency=(
           self.motion_sensitivity.directional_min_consistency
@@ -849,6 +913,10 @@ class DPathRadarController:
               getattr(prediction, "time_to_entry_s", None),
             ),
           )
+        ),
+        allow_low_speed=(
+          (prediction.source, prediction.track_id)
+          in cross_sensor_close_front_identities
         ),
       ))
     stationary_primary_candidates = []

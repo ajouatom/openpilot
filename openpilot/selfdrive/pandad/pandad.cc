@@ -295,19 +295,20 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
 
     const std::string panda_serial = panda->hw_serial();
     const std::string log_source = "panda[" + std::to_string(panda_index) + "]";
-    auto [checksum_it, inserted] = spi_checksum_counts.try_emplace(panda_serial, health.spi_checksum_error_count_pkt);
+    const uint16_t spi_checksum_error_count = health.spi_checksum_error_count_pkt;
+    auto [checksum_it, inserted] = spi_checksum_counts.try_emplace(panda_serial, spi_checksum_error_count);
     if (inserted) {
       cloudlog_e(CLOUDLOG_WARNING, log_source.c_str(), __LINE__, __func__,
                  "SPI checksum: serial=%s, total=%u, delta=0, baseline=1",
-                 panda_serial.c_str(), health.spi_checksum_error_count_pkt);
-    } else if (checksum_it->second != health.spi_checksum_error_count_pkt) {
-      const bool reset = health.spi_checksum_error_count_pkt < checksum_it->second;
-      const uint32_t delta = reset ? health.spi_checksum_error_count_pkt :
-                             health.spi_checksum_error_count_pkt - checksum_it->second;
+                 panda_serial.c_str(), spi_checksum_error_count);
+    } else if (checksum_it->second != spi_checksum_error_count) {
+      const bool reset = spi_checksum_error_count < checksum_it->second;
+      const uint32_t delta = reset ? spi_checksum_error_count :
+                             spi_checksum_error_count - checksum_it->second;
       cloudlog_e(CLOUDLOG_WARNING, log_source.c_str(), __LINE__, __func__,
                  "SPI checksum: serial=%s, total=%u, delta=%u, baseline=0, reset=%d",
-                 panda_serial.c_str(), health.spi_checksum_error_count_pkt, delta, reset);
-      checksum_it->second = health.spi_checksum_error_count_pkt;
+                 panda_serial.c_str(), spi_checksum_error_count, delta, reset);
+      checksum_it->second = spi_checksum_error_count;
     }
 
     std::array<can_health_t, PANDA_CAN_CNT> can_health{};

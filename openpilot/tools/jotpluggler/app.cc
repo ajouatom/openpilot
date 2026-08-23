@@ -4,7 +4,7 @@
 #include "tools/jotpluggler/internal.h"
 #include "tools/jotpluggler/map.h"
 #include "tools/jotpluggler/thumbnail.h"
-#include "common/hardware/hw.h"
+#include "system/hardware/hw.h"
 #include "imgui_impl_glfw.h"
 
 #include "imgui_internal.h"

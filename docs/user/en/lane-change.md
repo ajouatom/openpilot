@@ -2,6 +2,8 @@
 
 [한국어](../ko/lane-change.md)
 
+[View the Wiki guide](https://github.com/ajouatom/openpilot/wiki/Guide-Lane-Change)
+
 > [!IMPORTANT]
 > A turn signal tells other road users what you intend to do, but it is also a **lane-change request** to openpilot. Check the mirrors and blind spot and select a safe gap before signaling. If you signal first and check later, the maneuver may begin immediately depending on your settings.
 

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
+ROOT="$(cd "$DIR/../../../" && pwd)"
+
+cd "$ROOT"
+scons -u openpilot/tools/jotpluggler/_jotpluggler
+
+exec "$DIR/_jotpluggler" "$@"

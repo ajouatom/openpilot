@@ -326,6 +326,20 @@
       "scene": "A stationary white vehicle in the separated left-side parking row must not become CUT-IN leadTwo solely because ego closing speed and curve-relative corner-radar motion appear inward"
     },
     {
+      "id": "ioniq5-4ca-133-right-pickup-close-cutin-49",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 7f419ed56030e135",
+      "log": "000004ca--d57d548dd5--133/rlog.zst",
+      "source": "front+corner",
+      "window": [48.50, 49.35],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "lead_two",
+      "target_track_ids": [49, 16687],
+      "lead_two_continuous_window": [49.05, 49.35],
+      "latest_detection_s": 49.15,
+      "scene": "A slow right-side pickup crosses the lane line inside 8m while corner track 16687 and front track 49 remain mutually associated; it must control as leadTwo before reaching the ego vehicle"
+    },
+    {
       "id": "k8-2b1-12-left-truck-cutin-34",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN 4aa2ded146fd78b9",
       "log": "000002b1--1e5c7aad6a--12/rlog.zst",
