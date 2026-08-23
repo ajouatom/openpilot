@@ -9,7 +9,11 @@ from openpilot.common.swaglog import cloudlog
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
-from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_accel_floor, get_traffic_stop_obstacle_distance
+from openpilot.selfdrive.carrot.traffic_stop import (
+  get_traffic_stop_accel_floor,
+  get_traffic_stop_obstacle_distance,
+  should_limit_traffic_stop_accel,
+)
 
 if __name__ == '__main__':  # generating code
   from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -445,19 +449,20 @@ class LongitudinalMpc:
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle, x2])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
-      # Limit early signal braking while the unadjusted model stop line still has
-      # enough margin. Release the limit progressively as that margin shrinks.
-      signal_stop_active = getattr(carrot, "traffic_stop_reference_speed_kph", None) is not None
-      if signal_stop_active and self.source == 'e2e' and not self.status:
-        signal_stop_accel_floor = get_traffic_stop_accel_floor(
-          v_ego, getattr(carrot, "traffic_stop_raw_distance", 0.0), stop_distance,
-        )
-        self.params[:,0] = np.maximum(self.params[:,0], signal_stop_accel_floor)
-
       if v_cruise == 0 and self.source == 'cruise':
         self.params[:,0] = - carrot.autoNaviSpeedDecelRate
       #elif self.source in ['cruise', 'e2e']:
       #  self.params[:,0] = - COMFORT_BRAKE
+
+      # Limit early signal braking for either signal-related MPC source. A real
+      # lead source bypasses this floor, and the distance-based floor releases
+      # progressively when the stable stop-line estimate leaves less margin.
+      signal_stop_active = getattr(carrot, "traffic_stop_reference_speed_kph", None) is not None
+      if should_limit_traffic_stop_accel(signal_stop_active, self.source):
+        signal_stop_accel_floor = get_traffic_stop_accel_floor(
+          v_ego, getattr(carrot, "traffic_stop_raw_distance", 0.0), stop_distance,
+        )
+        self.params[:,0] = np.maximum(self.params[:,0], signal_stop_accel_floor)
 
       # These are not used in ACC mode
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0

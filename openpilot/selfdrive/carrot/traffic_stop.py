@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import deque
+
 import numpy as np
 
 
@@ -16,6 +18,31 @@ TRAFFIC_STOP_MAX_DECEL_MPS2 = 4.0
 TRAFFIC_STOP_RESPONSE_TIME_S = 0.5
 TRAFFIC_STOP_DISTANCE_UNCERTAINTY_M = 5.0
 TRAFFIC_STOP_DECEL_SAFETY_BUFFER_MPS2 = 0.2
+TRAFFIC_STOP_DISTANCE_STABILITY_SAMPLES = 8  # 0.4 s at the 20 Hz model rate
+
+
+class TrafficStopDistanceTracker:
+  """Hold transient near stop-line estimates while accounting for ego motion."""
+
+  def __init__(self, sample_count: int = TRAFFIC_STOP_DISTANCE_STABILITY_SAMPLES):
+    self._world_candidates = deque(maxlen=max(1, int(sample_count)))
+    self._distance_traveled = 0.0
+
+  def update(self, model_distance: float, ego_distance: float) -> float:
+    ego_distance = float(ego_distance)
+    if np.isfinite(ego_distance):
+      self._distance_traveled += max(0.0, ego_distance)
+
+    model_distance = float(model_distance)
+    if np.isfinite(model_distance):
+      # Convert every candidate to the same fixed world coordinate. The largest
+      # recent candidate rejects a one-frame closer estimate, while a persistent
+      # closer line is accepted as soon as the older samples leave the window.
+      self._world_candidates.append(self._distance_traveled + max(0.0, model_distance))
+
+    if not self._world_candidates:
+      return 0.0
+    return max(0.0, max(self._world_candidates) - self._distance_traveled)
 
 
 def is_traffic_stop_entry_allowed(steering_angle_deg: float) -> bool:
@@ -74,3 +101,8 @@ def get_traffic_stop_accel_floor(v_ego: float, raw_stop_distance: float, stop_di
     TRAFFIC_STOP_MAX_DECEL_MPS2,
   )
   return -float(allowed_decel)
+
+
+def should_limit_traffic_stop_accel(signal_stop_active: bool, mpc_source: str) -> bool:
+  """Limit signal braking unless a real lead obstacle is the active MPC source."""
+  return bool(signal_stop_active) and mpc_source in ("cruise", "e2e")
