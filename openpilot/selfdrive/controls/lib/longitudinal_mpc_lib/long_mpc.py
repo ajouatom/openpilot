@@ -9,7 +9,7 @@ from openpilot.common.swaglog import cloudlog
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
-from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_obstacle_distance
+from openpilot.selfdrive.carrot.traffic_stop import get_traffic_stop_accel_floor, get_traffic_stop_obstacle_distance
 
 if __name__ == '__main__':  # generating code
   from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -444,6 +444,15 @@ class LongitudinalMpc:
 
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle, x2])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
+
+      # Limit early signal braking while the unadjusted model stop line still has
+      # enough margin. Release the limit progressively as that margin shrinks.
+      signal_stop_active = getattr(carrot, "traffic_stop_reference_speed_kph", None) is not None
+      if signal_stop_active and self.source == 'e2e' and not self.status:
+        signal_stop_accel_floor = get_traffic_stop_accel_floor(
+          v_ego, getattr(carrot, "traffic_stop_raw_distance", 0.0), stop_distance,
+        )
+        self.params[:,0] = np.maximum(self.params[:,0], signal_stop_accel_floor)
 
       if v_cruise == 0 and self.source == 'cruise':
         self.params[:,0] = - carrot.autoNaviSpeedDecelRate

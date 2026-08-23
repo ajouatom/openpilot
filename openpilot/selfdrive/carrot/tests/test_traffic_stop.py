@@ -1,6 +1,7 @@
 import pytest
 
 from openpilot.selfdrive.carrot.traffic_stop import (
+  get_traffic_stop_accel_floor,
   get_traffic_stop_obstacle_distance,
   get_traffic_stop_reference_speed,
   get_virtual_traffic_stop_distance,
@@ -52,6 +53,28 @@ def test_configured_obstacle_adjustment_is_used_at_all_speeds():
   assert get_traffic_stop_obstacle_distance(100.0, -1.5) == pytest.approx(98.5)
   assert get_traffic_stop_obstacle_distance(1.0, -1.5) == 0.0
   assert get_traffic_stop_obstacle_distance(0.0, -2.0) == 0.0
+
+
+def test_signal_stop_accel_floor_limits_early_braking_with_margin():
+  # Supplied d76 route: 78.52 km/h and about 138.5 m available at detection.
+  accel_floor = get_traffic_stop_accel_floor(78.52 / 3.6, 138.5, 5.5)
+  assert accel_floor == pytest.approx(-2.2314, abs=1e-4)
+
+
+def test_signal_stop_accel_floor_releases_when_distance_is_short():
+  accel_floor = get_traffic_stop_accel_floor(62.0 / 3.6, 60.0, 5.5)
+  assert accel_floor < -3.8
+  assert get_traffic_stop_accel_floor(20.0, 10.0, 5.5) == -4.0
+
+
+def test_signal_stop_accel_floor_fails_safe_for_invalid_distance():
+  assert get_traffic_stop_accel_floor(20.0, float("nan"), 5.5) == -4.0
+
+
+def test_signal_stop_accel_floor_releases_monotonically_as_margin_shrinks():
+  floors = [get_traffic_stop_accel_floor(20.0, distance, 5.5) for distance in range(20, 201)]
+  assert all(-4.0 <= floor <= -2.2 for floor in floors)
+  assert floors == sorted(floors)
 
 
 @pytest.mark.parametrize("steering_angle_deg", [-49.9, -20.0, 0.0, 20.0, 49.9])

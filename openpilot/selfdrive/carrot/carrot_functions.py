@@ -76,6 +76,7 @@ class CarrotPlanner:
     self.xStop = 0.0
     self.actual_stop_distance = 0.0
     self.traffic_stop_reference_speed_kph = None
+    self.traffic_stop_raw_distance = 1000.0
     #self.debugLongText = ""
     self.stopping_count = 0
     self.traffic_starting_count = 0
@@ -563,6 +564,7 @@ class CarrotPlanner:
           self.traffic_stop_reference_speed_kph = get_traffic_stop_reference_speed(
             v_ego_kph, self.traffic_stop_reference_speed_kph,
           )
+          self.traffic_stop_raw_distance = stop_model_x_rl
           stop_dist = get_virtual_traffic_stop_distance(stop_model_x_rl, self.traffic_stop_reference_speed_kph)
           if stop_dist > 10.0:  # 10m 이상일 때만 실제 정지거리를 갱신함.
             self.actual_stop_distance = stop_dist
@@ -590,6 +592,7 @@ class CarrotPlanner:
         self.add_event(EventName.trafficStopping)
         self.xState = XState.e2eStop
         self.traffic_stop_reference_speed_kph = get_traffic_stop_reference_speed(v_ego_kph, None)
+        self.traffic_stop_raw_distance = stop_model_x_rl
         self.actual_stop_distance = get_virtual_traffic_stop_distance(stop_model_x_rl, self.traffic_stop_reference_speed_kph)
       else:
         self.xState = XState.e2eCruise
@@ -604,6 +607,7 @@ class CarrotPlanner:
 
     if self.xState not in [XState.e2eStop, XState.e2eStopped]:
       self.traffic_stop_reference_speed_kph = None
+      self.traffic_stop_raw_distance = 1000.0
 
     if mode == 'acc':
       mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
