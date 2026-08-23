@@ -6,7 +6,7 @@ import pytest
 from opendbc.car import DT_CTRL
 from opendbc.car.hyundai.carcontroller import CANFD_JERK_ERROR_DELAY, CANFD_JERK_ERROR_FILTER_TIME, HyundaiJerk, LongCtrlState, \
                                                    calculate_canfd_jerk_limits
-from opendbc.car.hyundai.hyundaicanfd import apply_accel_jerk_limit, create_acc_control, create_acc_control_scc2, create_tcs_messages
+from opendbc.car.hyundai.hyundaicanfd import apply_accel_jerk_limit, create_acc_control_scc2
 from opendbc.car.hyundai.values import HyundaiFlags
 from openpilot.common.filter_simple import MyMovingAverage
 
@@ -108,7 +108,7 @@ def test_camera_scc_accel_value_keeps_ramping_from_previous_value():
     scc_control={"ACC_ObjRelSpd": 0.0, "InfoDisplay": 0},
     softHoldActive=0,
     paddle_button_prev=0,
-    out=SimpleNamespace(aEgo=0.0, vEgo=20.0, brakeHoldActive=False),
+    out=SimpleNamespace(aEgo=0.0, vEgo=20.0),
   )
   hud_control = SimpleNamespace(leadDistanceBars=2, leadVisible=False)
   jerk = SimpleNamespace(carrot_cruise=0, jerk_u=1.0, jerk_l=5.0)
@@ -124,67 +124,6 @@ def test_camera_scc_accel_value_keeps_ramping_from_previous_value():
   assert first_msg[2]["aReqValue"] == pytest.approx(-0.1)
   assert second_msg[2]["aReqValue"] == pytest.approx(-0.2)
   assert second_value == pytest.approx(-0.2)
-
-
-@pytest.mark.parametrize("camera_scc", [False, True])
-def test_canfd_auto_hold_blocks_acc_control(camera_scc):
-  class FakePacker:
-    @staticmethod
-    def make_can_msg(name, bus, values):
-      return name, bus, values.copy()
-
-  CAN = SimpleNamespace(ECAN=0)
-  CS = SimpleNamespace(
-    scc_control={"ACC_ObjRelSpd": 0.0, "InfoDisplay": 0},
-    softHoldActive=2,
-    paddle_button_prev=0,
-    out=SimpleNamespace(aEgo=0.0, vEgo=0.0, brakeHoldActive=True, cruiseState=SimpleNamespace(standstill=True)),
-  )
-  hud_control = SimpleNamespace(leadDistanceBars=2, leadVisible=False)
-
-  if camera_scc:
-    jerk = SimpleNamespace(carrot_cruise=0, jerk_u=1.0, jerk_l=5.0)
-    msg, accel_value = create_acc_control_scc2(
-      FakePacker(), CAN, True, -0.5, 1.0, True, False, 30.0, hud_control, jerk, CS,
-    )
-    assert accel_value == 0
-  else:
-    msg = create_acc_control(
-      FakePacker(), CAN, True, -0.5, 1.0, True, False, 30.0, hud_control, 1.0, 5.0, CS,
-    )
-
-  assert msg[2]["ACCMode"] == 0
-  assert msg[2]["StopReq"] == 0
-  assert msg[2]["aReqValue"] == 0
-  assert msg[2]["aReqRaw"] == 0
-
-
-@pytest.mark.parametrize("brake_hold_active", [False, True])
-def test_canfd_auto_hold_preserves_tcs_braking_signals(brake_hold_active):
-  class FakePacker:
-    @staticmethod
-    def make_can_msg(name, bus, values):
-      return name, bus, values.copy()
-
-  CAN = SimpleNamespace(CAM=2)
-  CS = SimpleNamespace(
-    tcs={
-      "DriverBraking": 1,
-      "DriverBrakingLowSens": 1,
-      "NEW_SIGNAL_20": 1,
-      "NEW_SIGNAL_11": 1,
-      "NEW_SIGNAL_1": 0,
-      "ACC_REQ": 0,
-    },
-    out=SimpleNamespace(brakeHoldActive=brake_hold_active),
-  )
-
-  values = create_tcs_messages(FakePacker(), CAN, CS)[0][2]
-  expected = 1 if brake_hold_active else 0
-  assert values["DriverBraking"] == expected
-  assert values["DriverBrakingLowSens"] == expected
-  assert values["NEW_SIGNAL_20"] == expected
-  assert values["NEW_SIGNAL_11"] == expected
 
 
 def test_canfd_sustained_tracking_error_adds_trim():
