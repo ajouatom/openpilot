@@ -233,6 +233,7 @@ SDI를 지울 때는 더 큰 sequence로 `present: false`, `value: null`, 비어
 | 방지턱 | primary/plus type 22 | primary/secondary type 22 | `roadcate > 1`, mode >= 2. payload speed는 무시하고 `AutoNaviSpeedBumpSpeed` 사용. 단, 7714는 road category 갱신 순서/기본값 문제로 type 22가 수신되어도 후보 생성에 실패할 수 있음 | `bump` |
 | 차량 수신 과속카메라 | `carState.speedLimit/speedLimitDistance` | 동일 | 차량 CAN에서 단속속도만 수신하며 Hyundai `CarState`가 `speedLimit × (VehicleSpeedCameraDistanceTime / 10)`으로 가상거리 생성. `VehicleSpeedCameraControlMode`에 따라 미사용·항상 적용·가속페달 속도 하한·가속페달 입력 중 해제를 선택 | `hda` (기존 호환 source명) 또는 하한 적용 시 `gas` |
 | 차량 내비 CAN 정확거리 | `carState.speedLimitDistance/speedBumpDistance` | 동일 | `VehicleNaviCanControl`이 켜진 Hyundai CAN-FD에서 0x4BE alert spot의 Offset을 휠 주행거리로 추적. 카메라는 기존 `hda`, Value 6 방지턱은 별도 후보로 계산 | `hda`, `hda_bump` |
+| 차량 내비 CAN 30 km/h 구간 | `carState.schoolZoneActive` | 동일 | `VehicleNaviSchoolZoneControl`이 켜지고 0x4BE 종류 7이 30 km/h를 알리면 다음 50 km/h 전환까지 가속페달·안전계수·도로 오프셋보다 우선하는 30 km/h 상한 적용 | `school_zone` |
 | 도로 제한속도 | `nRoadLimitSpeed` | `road_limit_kph` | `AutoRoadSpeedLimitOffset >= 0`, active >= 2, road limit valid일 때 limit+offset | `road` |
 | 현재 TBT | `nTBTTurnType/nTBTDist` | `guidance_current.turn_type/distance_m` | 지원 turn type이 `xTurnInfo`로 변환되고 `AutoTurnControl`이 2 또는 3일 때 속도 목표 계산 | `atc` |
 | 다음 TBT | `nTBTTurnTypeNext/nTBTDistNext` | `guidance_next` | 현재 거리 + 다음 거리를 사용하고 같은 ATC 설정 적용 | `atc2` |
@@ -272,17 +273,25 @@ mode 2의 하한은 source 변경, 정차, 브레이크 입력, 제한속도 변
 
 ### 차량 내비 CAN 정확거리 정책
 
-`VehicleNaviCanControl`은 기본값이 꺼진 실험 기능이다. 켜면 Hyundai CAN-FD `0x4BE`
-`ProfileType=16`(Alert Information Spot)을 해석한다. 확인된 값은 다음과 같다.
+`VehicleNaviCanControl`과 `VehicleNaviSchoolZoneControl`은 기본값이 꺼진 실험 기능이다. 둘 중
+하나를 켜면 Hyundai CAN-FD `0x4BE` `ProfileType=16`(Alert Information Spot)을 해석한다.
+전자는 카메라·방지턱 거리 제어, 후자는 종류 7의 30 km/h 구간 상한만 활성화한다.
+확인된 값은 다음과 같다.
 
 - `Value=0x06`: 방지턱 후보. `carState.speedBumpDistance`로 전달하고
   `AutoNaviSpeedCtrlMode >= 2`일 때 `AutoNaviSpeedBumpSpeed/Time`을 적용한다.
 - `Value=0xB1/0x71/0xD1`: 각각 50/30/60 km/h 카메라 후보다.
   확인된 형식은 하위 4비트가 종류, 상위 4비트가 `(제한속도 / 5) + 1`이다.
 - 카메라 종류는 실로그로 확인한 0, 1, 2만 제어에 사용하며 나머지는 무시한다.
+- `Value=0x77/0xB7`, `Offset=0`: 계기판 제한속도 30/50 km/h 전환과 일치하는 종류 7의
+  현재 도로 제한속도 이벤트다. `VehicleNaviSchoolZoneControl`이 켜진 경우 0x77부터 0xB7까지
+  `carState.schoolZoneActive`를 유지하고, 가속페달·안전계수·도로 제한속도 오프셋과 무관하게
+  `school_zone` 속도 후보를 30 km/h로 제한한다. 별도의 어린이보호구역 비트가 확인된 것은
+  아니므로 일반 30 km/h 제한구역에도 적용될 수 있다.
 
 각 이벤트는 수신 시점 누적 주행거리와 `Offset`을 더한 절대 위치로 보관하고, 이후 실제 주행거리를
-차감한다. `0x4B9 CalculatedRoute=2`(off route/recalculating)를 받으면 경로 후보를 즉시 모두 삭제한다.
+차감한다. `0x4B9 CalculatedRoute=2`(off route/recalculating)를 받으면 거리 기반 경로 후보를 즉시 모두
+삭제하지만, 현재 적용 중인 종류 7 제한속도 상태는 다음 종류 7 전환까지 유지한다.
 `0x4BE` 무효값 `0xffffffff`, Offset 8191, 2.5 km 밖 이벤트와 지원하지 않는 값은 무시한다.
 
 정확한 카메라 후보가 있으면 기존 `speedLimitDistance` 가상거리보다 우선한다. 후보가 없거나 설정이

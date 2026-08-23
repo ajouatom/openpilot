@@ -8,6 +8,7 @@ from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
 def _serv(mode):
   serv = CarrotServ.__new__(CarrotServ)
   serv.vehicleSpeedCameraControlMode = mode
+  serv.vehicleNaviSchoolZoneControl = False
   serv.gas_override_speed = 0
   serv.gas_pressed_state = False
   serv.source_last = "none"
@@ -20,6 +21,7 @@ def _car_state(*, gas=False, brake=False, speed_limit=50, distance=300, v_ego=20
     brakePressed=brake,
     speedLimit=speed_limit,
     speedLimitDistance=distance,
+    schoolZoneActive=False,
     vEgo=v_ego,
   )
 
@@ -93,7 +95,7 @@ def test_road_limit_change_resets_accelerator_speed_floor():
   assert (desired_speed, source, serv.gas_override_speed) == (52, "road", 0)
 
 
-@pytest.mark.parametrize("source", ("cam", "section", "police"))
+@pytest.mark.parametrize("source", ("cam", "section", "police", "school_zone"))
 def test_enforced_navigation_sources_reject_accelerator_speed_floor(source):
   serv = _serv(2)
   serv.source_last = source
@@ -104,6 +106,18 @@ def test_enforced_navigation_sources_reject_accelerator_speed_floor(source):
   )
 
   assert (desired_speed, returned_source, serv.gas_override_speed) == (30, source, 0)
+
+
+def test_school_zone_control_is_independent_of_camera_mode():
+  serv = _serv(0)
+  CS = _car_state()
+  CS.schoolZoneActive = True
+
+  assert not serv._vehicle_school_zone_enabled(CS)
+  assert serv._vehicle_school_zone_speed(CS) == 250
+  serv.vehicleNaviSchoolZoneControl = True
+  assert serv._vehicle_school_zone_enabled(CS)
+  assert serv._vehicle_school_zone_speed(CS) == 30
 
 
 @pytest.mark.parametrize(("brake_pressed", "road_limit_changed"), (

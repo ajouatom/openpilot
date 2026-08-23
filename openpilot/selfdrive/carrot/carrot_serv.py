@@ -216,6 +216,7 @@ class CarrotServ:
     self.autoNaviSpeedCtrlEnd = float(self.params.get_int("AutoNaviSpeedCtrlEnd"))
     self.autoNaviSpeedCtrlMode = self.params.get_int("AutoNaviSpeedCtrlMode")
     self.vehicleNaviCanControl = self.params.get_bool("VehicleNaviCanControl")
+    self.vehicleNaviSchoolZoneControl = self.params.get_bool("VehicleNaviSchoolZoneControl")
     self.vehicleSpeedCameraControlMode = min(3, max(0, self.params.get_int("VehicleSpeedCameraControlMode")))
     self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
@@ -356,6 +357,12 @@ class CarrotServ:
   def _vehicle_speed_bump_enabled(self, CS):
     return self.vehicleNaviCanControl and self.autoNaviSpeedCtrlMode >= 2 and CS.speedBumpDistance > 0
 
+  def _vehicle_school_zone_enabled(self, CS):
+    return self.vehicleNaviSchoolZoneControl and CS.schoolZoneActive
+
+  def _vehicle_school_zone_speed(self, CS):
+    return 30 if self._vehicle_school_zone_enabled(CS) else 250
+
   def _apply_speed_source_gas_floor(self, CS, desired_speed, source, v_ego_kph, road_speed_limit_changed):
     if source == "hda":
       gas_floor_active = self.vehicleSpeedCameraControlMode == 2
@@ -380,7 +387,7 @@ class CarrotServ:
       self.gas_override_speed = 0
       self.gas_pressed_state = CS.gasPressed
 
-    reset_floor = (CS.vEgo < 0.1 or desired_speed > 150 or source in ["cam", "section", "police"] or
+    reset_floor = (CS.vEgo < 0.1 or desired_speed > 150 or source in ["cam", "section", "police", "school_zone"] or
                    CS.brakePressed or road_speed_limit_changed)
     if reset_floor:
       self.gas_override_speed = 0
@@ -1200,6 +1207,7 @@ class CarrotServ:
     sdi_speed = 250
     vehicle_speed_camera_active = False
     vehicle_bump_speed = 250
+    vehicle_school_zone_speed = 250
     ### 과속카메라, 사고방지턱
     if self.xSpdLimit > 0 and (self.xSpdDist > 0 or self.xSpdType in [100, 101]) and self.active_carrot > 0:
       safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
@@ -1224,6 +1232,11 @@ class CarrotServ:
                                                         self.autoNaviSpeedBumpTime,
                                                         self.autoNaviSpeedDecelRate)
       self.active_carrot = 5
+
+    if CS is not None:
+      vehicle_school_zone_speed = self._vehicle_school_zone_speed(CS)
+      if vehicle_school_zone_speed < 250:
+        self.active_carrot = 6
 
     #print(f"sdi_speed: {sdi_speed}, vehicle_speed_camera_active: {vehicle_speed_camera_active}, xSpdType: {self.xSpdType}, xSpdDist: {self.xSpdDist}, active_carrot: {self.active_carrot}, v_ego_kph: {v_ego_kph}, nRoadLimitSpeed: {self.nRoadLimitSpeed}")
     ### TBT 속도제어
@@ -1261,6 +1274,7 @@ class CarrotServ:
       (atc_desired_next, "atc2"),
       (sdi_speed, sdi_source),
       (vehicle_bump_speed, "hda_bump"),
+      (vehicle_school_zone_speed, "school_zone"),
       (limit_speed, "road"),
     ]
     if self.turnSpeedControlMode in [1,2]:

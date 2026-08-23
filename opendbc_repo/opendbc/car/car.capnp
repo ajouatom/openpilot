@@ -266,6 +266,7 @@ struct CarState {
   evModeActive @85 :Bool; # decoded hybrid power-flow mode calls for the EV indicator
   evModeValid @86 :Bool; # evModeActive is backed by a fresh, checksum-valid CAN frame of the expected bus and length
   speedBumpDistance @87 :Float32; # distance to a speed bump received from the stock navigation CAN, meters
+  schoolZoneActive @88 :Bool; # stock-navigation kind 7 currently indicates a 30 km/h speed-limit zone
 
   struct Tpms {
     fl @0 :Float32;
