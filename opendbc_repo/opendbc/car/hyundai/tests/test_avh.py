@@ -42,17 +42,17 @@ def _classify_avh_sequence(sequence):
   oem_hold_latched = False
   release_grace_frames = 0
   results = []
-  for avh_state, acc_req in sequence:
+  for avh_state, acc_req, brake_pressed in sequence:
     oem_hold_latched, avh_active_prev, release_grace_frames = update_canfd_avh_interlock_state(
-      avh_state, acc_req, avh_active_prev, oem_hold_latched, release_grace_frames,
+      avh_state, acc_req, brake_pressed, avh_active_prev, oem_hold_latched, release_grace_frames,
     )
     results.append(oem_hold_latched)
   return results
 
 
 def test_canfd_oem_autohold_precedes_acc_request_and_latches_interlock():
-  # OEM AutoHold log: AVH rises first, followed by the attempted SCC request.
-  sequence = [(0, 0), (1, 0), (1, 1), (2, 1)]
+  # OEM AutoHold log: driver braking is asserted when AVH rises.
+  sequence = [(0, 0, False), (1, 0, True), (1, 1, False), (2, 1, False)]
 
   assert _classify_avh_sequence(sequence) == [False, True, True, True]
 
@@ -60,19 +60,28 @@ def test_canfd_oem_autohold_precedes_acc_request_and_latches_interlock():
 def test_canfd_soft_hold_follows_acc_request_without_latching_interlock():
   # Soft-hold log: SCC/TCS ACC_REQ rises first and AVH follows roughly 160 ms later.
   # A brief ACC_REQ dropout while AVH remains active must not reclassify the hold.
-  sequence = [(0, 0), (0, 1), (1, 1), (1, 0), (2, 1), (0, 0)]
+  sequence = [(0, 0, True), (0, 1, False), (1, 1, False),
+              (1, 0, False), (2, 1, False), (0, 0, False)]
+
+  assert _classify_avh_sequence(sequence) == [False] * len(sequence)
+
+
+def test_canfd_cruise_stop_ignores_avh_during_acc_req_dropout():
+  # K5 cruise-stop log: AVH is asserted without driver braking. Do not cancel
+  # active cruise even if ACC_REQ has a transient timing gap at the AVH edge.
+  sequence = [(0, 1, False), (1, 0, False), (1, 1, False), (0, 1, False)]
 
   assert _classify_avh_sequence(sequence) == [False] * len(sequence)
 
 
 def test_canfd_oem_autohold_interlock_survives_short_avh_dropout():
-  sequence = [(1, 0), (0, 0), (1, 1)]
+  sequence = [(1, 0, True), (0, 0, False), (1, 1, False)]
 
   assert _classify_avh_sequence(sequence) == [True, True, True]
 
 
 def test_canfd_oem_autohold_interlock_clears_after_release_grace():
-  sequence = [(1, 0)] + [(0, 0)] * CANFD_AVH_RELEASE_GRACE_FRAMES
+  sequence = [(1, 0, True)] + [(0, 0, False)] * CANFD_AVH_RELEASE_GRACE_FRAMES
   results = _classify_avh_sequence(sequence)
 
   assert all(results[:-1])
