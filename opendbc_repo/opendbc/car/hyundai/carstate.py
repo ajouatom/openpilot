@@ -43,6 +43,10 @@ LEGACY_CRUISE_BUTTON_ALT_ADDR = 0x3EF
 LEGACY_LFA_BUTTON_ALT_ADDR = 0x416
 
 
+def is_canfd_avh_active(avh_state: int) -> bool:
+  return avh_state in (1, 2)
+
+
 def _get_legacy_button_capabilities(fingerprint: dict[int, int]) -> tuple[bool, bool, bool]:
   return (
     LEGACY_LFA_BUTTON_ADDR in fingerprint,
@@ -804,7 +808,9 @@ class CarState(CarStateBase):
       self.ACCMode = cp_cam.vl["SCC_CONTROL"]["ACCMode"]
       self.LFA_ICON = cp_cam.vl["LFAHDA_CLUSTER"]["HDA_LFA_SymSta"]
 
-    avh_active = cp.vl["ESP_STATUS"]["AVH_Sta"] == 1
+    # Keep the interlock through state 2 (being released). Longitudinal
+    # control may resume only after AVH reports state 0 (no apply).
+    avh_active = is_canfd_avh_active(cp.vl["ESP_STATUS"]["AVH_Sta"])
     if self.CP.openpilotLongitudinalControl:
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
