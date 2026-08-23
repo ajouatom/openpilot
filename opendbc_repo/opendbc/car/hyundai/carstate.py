@@ -804,10 +804,14 @@ class CarState(CarStateBase):
       self.ACCMode = cp_cam.vl["SCC_CONTROL"]["ACCMode"]
       self.LFA_ICON = cp_cam.vl["LFAHDA_CLUSTER"]["HDA_LFA_SymSta"]
 
+    avh_active = cp.vl["ESP_STATUS"]["AVH_Sta"] == 1
     if self.CP.openpilotLongitudinalControl:
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
+      # Stock SCC_CONTROL is blocked while openpilot longitudinal is active, so
+      # AVH_Sta itself is the interlock source in this topology.
+      ret.brakeHoldActive = avh_active
       if self.MainMode_ACC or self.main_enabled:
         self.main_enabled = True
     else:
@@ -820,7 +824,7 @@ class CarState(CarStateBase):
       ret.cruiseState.speed = cp_cruise_info.vl["SCC_CONTROL"]["VSetDis"] * speed_factor
       # AVH_Sta is the hydraulic service-brake hold state, not the AutoHold
       # feature setting. SCC stops can also set it, so exclude active SCC.
-      ret.brakeHoldActive = cp.vl["ESP_STATUS"]["AVH_Sta"] == 1 and cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] not in (1, 2)
+      ret.brakeHoldActive = avh_active and cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] not in (1, 2)
 
     speed_limit_cam = False
     corner = False
