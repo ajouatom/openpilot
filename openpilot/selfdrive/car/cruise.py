@@ -190,7 +190,6 @@ class VCruiseCarrot:
     self._cruise_cancel_state = False
     self._pause_auto_speed_up = False
     self._activate_cruise = 0
-    self._brake_hold_active = False
     self._lat_enabled = self.params.get_int("AutoEngage") > 0
     self._v_cruise_kph_at_brake = 0
     self.cruise_state_available_last = False
@@ -337,14 +336,6 @@ class VCruiseCarrot:
     #self.events = []
     self.v_ego_kph_set = int(CS.vEgoCluster * CV.MS_TO_KPH + 0.5)
     self._activate_cruise = 0
-    self._brake_hold_active = CS.brakeHoldActive
-    if self._brake_hold_active:
-      # OEM AutoHold owns longitudinal control while active. Drop queued
-      # automatic engagement state so it cannot leak into the hold or fire
-      # immediately from a request generated during the hold.
-      self._cruise_ready = False
-      self._paddle_decel_active = False
-      self._soft_hold_active = 0
     self._prepare_brake_gas(CS, CC)
     if CC.enabled:
       self._cruise_ready = False
@@ -715,10 +706,6 @@ class VCruiseCarrot:
     return v_cruise_kph
 
   def _cruise_control(self, enable, cancel_timer, reason):
-    if enable > 0 and self._brake_hold_active:
-      self._activate_cruise = 0
-      self._add_log(reason + " > AutoHold active")
-      return
     if self._cruise_cancel_state: # and self._soft_hold_active != 2:
       self._add_log(reason + " > Cancel state")
     elif enable > 0 and self._cancel_timer > 0 and cancel_timer >= 0:

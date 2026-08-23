@@ -343,8 +343,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
 
   if CS.scc_control is None:
     return None, accel_value_last
-  brake_hold_active = CS.out.brakeHoldActive
-  enabled = (enabled or CS.softHoldActive > 0) and CS.paddle_button_prev == 0 and not brake_hold_active
+  enabled = (enabled or CS.softHoldActive > 0) and CS.paddle_button_prev == 0
 
   acc_mode = 0 if not enabled else (2 if gas_override else 1)
 
@@ -368,7 +367,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   rx_counter = values.pop("COUNTER", None)
   values["ACCMode"] = acc_mode
   values["MainMode_ACC"] = 1
-  values["StopReq"] = 1 if not brake_hold_active and (stopping or CS.softHoldActive > 0) else 0  # 1: Stop control is required, 2: Not used, 3: Error Indicator
+  values["StopReq"] = 1 if stopping or CS.softHoldActive > 0 else 0  # 1: Stop control is required, 2: Not used, 3: Error Indicator
   values["aReqValue"] = a_val
   values["aReqRaw"] = a_raw
   values["VSetDis"] = set_speed
@@ -417,8 +416,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
 
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS):
 
-  brake_hold_active = CS.out.brakeHoldActive
-  enabled = (enabled or CS.softHoldActive > 0) and not brake_hold_active
+  enabled = enabled or CS.softHoldActive > 0
   jerk = 5
   jn = jerk / 50
   if not enabled or gas_override:
@@ -430,7 +428,7 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   values = {
     "ACCMode": 0 if not enabled else (2 if gas_override else 1),
     "MainMode_ACC": 1,
-    "StopReq": 1 if not brake_hold_active and (stopping or CS.softHoldActive > 0) else 0,
+    "StopReq": 1 if stopping or CS.softHoldActive > 0 else 0,
     "aReqValue": a_val,
     "aReqRaw": a_raw,
     "VSetDis": set_speed,
@@ -496,11 +494,10 @@ def create_tcs_messages(packer, CAN, CS):
   if CS.tcs is not None:
     values = copy.copy(CS.tcs)
     #rx_counter = values.pop("COUNTER", None)
-    if not CS.out.brakeHoldActive:
-      values["DriverBraking"] = 0
-      values["NEW_SIGNAL_20"] = 0
-      values["NEW_SIGNAL_11"] = 0
-      values["DriverBrakingLowSens"] = 0
+    values["DriverBraking"] = 0
+    values["NEW_SIGNAL_20"] = 0
+    values["NEW_SIGNAL_11"] = 0
+    values["DriverBrakingLowSens"] = 0
     #values["NEW_SIGNAL_1"] = 0 # accel과 관련..  옆두부 꺼지는것과 관련? 확인필요
     #values["ACC_REQ"] = 1 # 옆두부 꺼지는것과 관련? 확인필요.. 항상 켜지게함..
     values["NEW_SIGNAL_1"] = 0 if values["ACC_REQ"] == 1 else 1 # 옆두부..
