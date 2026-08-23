@@ -340,6 +340,19 @@
       "scene": "A slow right-side pickup crosses the lane line inside 8m while corner track 16687 and front track 49 remain mutually associated; it must control as leadTwo before reaching the ego vehicle"
     },
     {
+      "id": "carnival-121-43-curve-corner-stationary-ghost-1910",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "00000121--02ae79b0f1--43/rlog.zst",
+      "source": "corner",
+      "window": [8.75, 9.45],
+      "expected": "clear",
+      "human_verified": true,
+      "validation_stage": "lead_one",
+      "target_track_ids": [1910],
+      "forbidden_lead_one_ids": [1910],
+      "scene": "A range-jumping stationary corner-only reflection on a clear right curve must not complete radar-only confirmation and become leadOne without vision, front-radar, or SCC support"
+    },
+    {
       "id": "k8-2b1-12-left-truck-cutin-34",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN 4aa2ded146fd78b9",
       "log": "000002b1--1e5c7aad6a--12/rlog.zst",
