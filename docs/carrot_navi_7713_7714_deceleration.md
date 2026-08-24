@@ -436,6 +436,9 @@ on-road UI, mici UI, cluster live UI는 모두 다음 조건에서 선택된 sou
 - 차량 CAN 내비 source `hda`, `hda_bump`, `school`은 파란색 `vNAVI`
 - 나머지 source는 기존 축약 표기(`turn:c`, `gas:v` 등)와 주황색을 유지
 
+cluster 기본 화면에서 `vNAVI`는 외부 내비 세션으로 취급하지 않으므로 주행리포트 패널을 그대로
+유지한다. 실제 7713/7714 guidance가 함께 수신될 때만 기존처럼 내비 패널로 전환한다.
+
 따라서 route 데이터가 존재하는 것만으로 `route`가 표시되는 것은 아니다. route 후보가 설정상
 활성이고 다른 모든 후보보다 낮아 실제 winner가 되어야 한다. 방지턱도 같은 방식으로 `bump`가 winner일
 때만 표시된다. `longitudinalPlan.cruiseTarget`의 eco 표시 조건이 먼저 참이면 `eco`가 우선 표시된다.
