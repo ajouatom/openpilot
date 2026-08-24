@@ -24,6 +24,7 @@ def _car_state(*, gas=False, brake=False, speed_limit=50, distance=300, v_ego=20
     brakePressed=brake,
     speedLimit=speed_limit,
     speedLimitDistance=distance,
+    speedBumpDistance=0,
     schoolZoneActive=False,
     vehicleNaviActive=False,
     vehicleNaviSectionActive=False,
@@ -73,6 +74,45 @@ def test_non_floor_modes_do_not_raise_vehicle_camera_target(mode):
   )
 
   assert (desired_speed, source, serv.gas_override_speed) == (60, "hda", 0)
+
+
+def test_vehicle_navi_exact_distance_feeds_countdown():
+  serv = _serv(1)
+  serv.autoNaviCountDownMode = 1
+  serv.xSpdType = -1
+  serv.xSpdDist = 0
+  CS = _car_state(distance=1997)
+  CS.vehicleNaviActive = True
+
+  assert serv._speed_countdown_distance(CS) == 1997
+
+
+def test_vehicle_navi_bump_countdown_follows_countdown_mode():
+  serv = _serv(1)
+  serv.xSpdType = -1
+  serv.xSpdDist = 0
+  CS = _car_state(distance=0)
+  CS.vehicleNaviActive = True
+  CS.speedBumpDistance = 120
+
+  serv.autoNaviCountDownMode = 1
+  assert serv._speed_countdown_distance(CS) == 0
+  serv.autoNaviCountDownMode = 2
+  assert serv._speed_countdown_distance(CS) == 120
+
+
+def test_countdown_idle_reset_rearms_same_second_for_next_camera():
+  serv = _serv(1)
+  serv.left_sec = 5
+  serv.max_left_sec = 6
+  serv.carrot_left_sec = 5
+  serv.sdi_inform = True
+
+  serv._update_countdown_alert(100, "none", 50)
+  assert (serv.left_sec, serv.carrot_left_sec) == (100, 100)
+
+  serv._update_countdown_alert(5, "hda", 50)
+  assert (serv.left_sec, serv.carrot_left_sec) == (5, 5)
 
 
 @pytest.mark.parametrize("mode", (0, 1, 2, 3))

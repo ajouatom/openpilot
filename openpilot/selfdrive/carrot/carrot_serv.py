@@ -382,6 +382,44 @@ class CarrotServ:
       speed = 0
     return speed > 0, speed, bool(getattr(CS, "vehicleNaviSectionActive", False))
 
+  def _speed_countdown_distance(self, CS):
+    distances = []
+    legacy_bump_suppressed = self.xSpdType == 22 and self.autoNaviCountDownMode == 1
+    if self.xSpdDist > 0 and not legacy_bump_suppressed:
+      distances.append(self.xSpdDist)
+
+    vehicle_navi_active = (CS is not None and self.vehicleNaviCanControl and
+                           getattr(CS, "vehicleNaviActive", False))
+    if vehicle_navi_active:
+      camera_distance = getattr(CS, "speedLimitDistance", 0)
+      if camera_distance > 0:
+        distances.append(camera_distance)
+      bump_distance = getattr(CS, "speedBumpDistance", 0)
+      if self.autoNaviCountDownMode >= 2 and bump_distance > 0:
+        distances.append(bump_distance)
+
+    return min(distances, default=0)
+
+  def _update_countdown_alert(self, left_sec, source, v_ego_kph):
+    if left_sec > 11:
+      self.left_sec = 100
+      self.max_left_sec = 100
+      self.carrot_left_sec = 100
+      self.sdi_inform = False
+      return
+
+    self.sdi_inform = source in ("cam", "hda")
+    self.max_left_sec = min(11, max(6, int(v_ego_kph / 10) + 1))
+    if left_sec != self.left_sec:
+      if left_sec == self.max_left_sec and self.sdi_inform:
+        self.carrot_left_sec = 11
+      elif 1 <= left_sec < self.max_left_sec:
+        self.carrot_left_sec = left_sec
+      elif left_sec == 0 and self.left_sec == 1:
+        self.carrot_left_sec = left_sec
+
+      self.left_sec = left_sec
+
   def _apply_speed_source_gas_floor(self, CS, desired_speed, source, v_ego_kph, road_speed_limit_changed):
     if source in ("hda", "hda_section", "school"):
       gas_floor_active = self.vehicleSpeedCameraControlMode == 2
@@ -1340,11 +1378,9 @@ class CarrotServ:
     left_spd_sec = 100
     left_tbt_sec = 100
     if self.autoNaviCountDownMode > 0:
-      if self.xSpdType == 22 and self.autoNaviCountDownMode == 1: # speed bump
-        pass
-      else:
-        if self.xSpdDist > 0:
-          left_spd_sec = min(self.left_spd_sec, int(max(self.xSpdDist - v_ego, 1) / max(1, v_ego) + 0.5))
+      speed_countdown_distance = self._speed_countdown_distance(CS)
+      if speed_countdown_distance > 0:
+        left_spd_sec = min(self.left_spd_sec, int(max(speed_countdown_distance - v_ego, 1) / max(1, v_ego) + 0.5))
 
       if self.xDistToTurn > 0:
         left_tbt_sec = min(self.left_tbt_sec, int(max(self.xDistToTurn - v_ego, 1) / max(1, v_ego) + 0.5))
@@ -1353,24 +1389,7 @@ class CarrotServ:
     self.left_tbt_sec = left_tbt_sec
 
     left_sec = min(left_spd_sec, left_tbt_sec)
-
-    if left_sec > 11:
-      self.left_sec = 100
-      self.max_left_sec = 100
-    else:
-      self.sdi_inform = True if source in ["cam", "hda"] else False
-      self.max_left_sec = min(11, max(6, int(v_ego_kph/10) + 1))
-
-    if left_sec != self.left_sec:
-      if left_sec == self.max_left_sec and self.sdi_inform:
-        self.carrot_left_sec = 11
-      elif 1 <= left_sec < self.max_left_sec:
-        self.carrot_left_sec = left_sec
-      elif left_sec == 0 and self.left_sec == 1:
-        self.carrot_left_sec = left_sec
-
-      self.left_sec = left_sec
-
+    self._update_countdown_alert(left_sec, source, v_ego_kph)
 
     self._update_cmd()
     msg = messaging.new_message('carrotMan')
