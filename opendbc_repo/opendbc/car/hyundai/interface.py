@@ -80,9 +80,9 @@ class CarInterface(CarInterfaceBase):
       if all(fingerprint[CAN.ACAN].get(addr) == 32 for addr in range(0x180, 0x185)):
         ret.extFlags |= HyundaiExtFlags.CORNER_RADAR_OBJECTS_180.value
         print("##### Corner radar objects 0x180 group detected")
-      if all(fingerprint[CAN.ACAN].get(addr) == 32 for addr in tuple(range(0x430, 0x438)) + tuple(range(0x440, 0x448))):
-        ret.extFlags |= HyundaiExtFlags.CORNER_RADAR_OBJECTS_430.value
-        print("##### Corner radar objects 0x430/0x440 group detected")
+      # The 0x430/0x440 layout is not validated as object data. Keep these
+      # frames available in raw logs for offline analysis, but do not advertise
+      # them as live corner-radar tracks.
 
       # detect HDA2 with ADAS Driving ECU
       if hda2:
