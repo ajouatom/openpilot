@@ -150,7 +150,7 @@ describe=/data/models: vision+on_policy+off_policy
 - **PC 컴파일 백엔드 프로브** (`installer._probe_tg_devices`)
   — 비-TICI 모델 설치에서는 tinygrad 디바이스를 프로브해 CUDA > CPU 순으로 선택
   (런타임 tg_input_devices.json 과 백엔드 불일치 방지). SCons 빌드는 아키텍처로 선택하며 실기기는 QCOM 고정.
-- **USBGPU 동작** — 커스텀 supercombo 설치 시 `/data/models/usbgpu_driving_tinygrad.pkl` 이 없으므로
+- **USBGPU 동작** — 커스텀 supercombo 설치 시 커스텀 모델 디렉터리에 `big_driving_<sha16>_tinygrad.pkl` 이 없으므로
   upstream 의 USBGPU 프로브가 자동으로 비활성(작은 모델을 QCOM 에서 실행). 커스텀 big 모델 컴파일은 미지원(의도된 안전 동작).
 
 ## 웹 UI 특징

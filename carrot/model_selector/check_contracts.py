@@ -99,9 +99,10 @@ def check_helpers_hook() -> str | None:
         from openpilot.selfdrive.modeld.helpers import modeld_pkl_path
         got = Path(modeld_pkl_path(False))
         big = Path(modeld_pkl_path(True))
-        if got.parent != Path(probe):
-            return f"MODELD_MODELS_DIR ignored — hook lost (got {got})"
-        if got.name != "driving_tinygrad.pkl" or big.name != "usbgpu_driving_tinygrad.pkl":
+        if got.parent != Path(probe) or big.parent != Path(probe):
+            return f"MODELD_MODELS_DIR ignored — hook lost (got {got}, big {big})"
+        big_ok = big.name.startswith("big_driving_") and big.name.endswith("_tinygrad.pkl")
+        if got.name != "driving_tinygrad.pkl" or not big_ok:
             return f"pkl naming changed: {got.name}, {big.name}"
         return None
     finally:

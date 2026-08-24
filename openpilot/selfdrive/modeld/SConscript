@@ -6,7 +6,8 @@ from openpilot.common.file_chunker import chunk_file, get_chunk_targets, get_exi
 from openpilot.common.transformations.camera import _ar_ox_fisheye, _os_fisheye
 from openpilot.common.transformations.model import MEDMODEL_INPUT_SIZE, DM_INPUT_SIZE
 from openpilot.selfdrive.modeld.constants import ModelConstants
-from openpilot.selfdrive.modeld.helpers import TG_INPUT_DEVICES_PATH, usbgpu_present, modeld_pkl_path
+from openpilot.selfdrive.modeld.big_model import active_manifest, active_model_path
+from openpilot.selfdrive.modeld.helpers import TG_INPUT_DEVICES_PATH, modeld_pkl_path, usbgpu_present
 
 
 CAMERA_CONFIGS = [
@@ -42,7 +43,7 @@ tg_devices = { # which device to put jit inputs to at runtime
   },
 }
 
-USBGPU = usbgpu_present()
+USBGPU = os.getenv('BUILD_USB_GPU_MODEL') == '1' and usbgpu_present()
 if USBGPU:
   usbgpu_tg_flags = f'DEBUG=2 DEV=USB+AMD:LLVM WARP_DEV={tg_backend} FLOAT16=1 JIT_BATCH_SIZE=0 GMMU=0 TC_OPT=2'
   # the USB+AMD GPU takes an exclusive flock; serialize all targets that touch it
@@ -72,17 +73,24 @@ compile_modeld_script = [
 model_w, model_h = MEDMODEL_INPUT_SIZE
 frame_skip = ModelConstants.MODEL_RUN_FREQ // ModelConstants.MODEL_CONTEXT_FREQ
 
-for usbgpu in [False, True] if USBGPU else [False]:
-  target_pkl_path = File(modeld_pkl_path(usbgpu)).abspath
-  # carrotpilot remotes do not use LFS. Compile the checked-in driving model for
-  # both QCOM and USB+AMD instead of depending on big_driving_supercombo.onnx.
-  file_prefix, cmd_flags = ('', usbgpu_tg_flags) if usbgpu else ('big_' if os.getenv('BIG_INTO_SMALL') else '', tg_flags)
-  driving_onnx_deps = get_existing_chunks(File(f"models/{file_prefix}driving_supercombo.onnx").abspath)
+model_builds = []
+regular_prefix = 'big_' if os.getenv('BIG_INTO_SMALL') else ''
+regular_onnx = File(f"models/{regular_prefix}driving_supercombo.onnx").abspath
+model_builds.append((False, modeld_pkl_path(False), get_existing_chunks(regular_onnx), regular_onnx, tg_flags))
+
+if USBGPU:
+  big_manifest = active_manifest()
+  big_onnx = active_model_path()
+  if big_manifest is not None and big_onnx is not None:
+    model_builds.append((True, modeld_pkl_path(True, big_manifest.sha256), [str(big_onnx)], str(big_onnx), usbgpu_tg_flags))
+
+for usbgpu, pkl_path, driving_onnx_deps, driving_onnx, cmd_flags in model_builds:
+  target_pkl_path = File(pkl_path).abspath
   camera_res_args = ' '.join(f'{cw}x{ch}' for cw, ch in CAMERA_CONFIGS)
   cmd = (f'{cmd_flags} {mac_brew_string} python3 {modeld_dir}/compile_modeld.py '
         f'--model-size {model_w}x{model_h} '
         f'--camera-resolutions {camera_res_args} '
-        f'--onnx {File(f"models/{file_prefix}driving_supercombo.onnx").abspath} '
+        f'--onnx {driving_onnx} '
         f'--output {target_pkl_path} --frame-skip {frame_skip}')
   onnx_sizes_sum = sum(os.path.getsize(f) for f in driving_onnx_deps)
   chunk_targets = get_chunk_targets(target_pkl_path, estimate_pickle_max_size(onnx_sizes_sum))
@@ -95,6 +103,7 @@ for usbgpu in [False, True] if USBGPU else [False]:
   )
   if usbgpu:
     lenv.SideEffect(usbgpu_lock, node)
+    lenv.NoCache(node)
 
 # get model metadata
 fn = File(f"models/dmonitoring_model").abspath

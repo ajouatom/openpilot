@@ -5,6 +5,7 @@ from pathlib import Path
 
 # NOTE: Do NOT import anything here that needs be built (e.g. params)
 from openpilot.common.basedir import BASEDIR
+from openpilot.common.file_chunker import get_manifest_path
 from openpilot.common.spinner import Spinner
 from openpilot.common.text_window import TextWindow
 from openpilot.common.swaglog import cloudlog, add_file_handler
@@ -16,6 +17,55 @@ CACHE_DIR = Path("/data/scons_cache" if AGNOS else "/tmp/scons_cache")
 
 TOTAL_SCONS_NODES = 2705
 MAX_BUILD_PROGRESS = 100
+
+
+def build_usbgpu_model(spinner: Spinner) -> bool:
+  """Build the optional big model without making the normal build depend on it."""
+  from openpilot.selfdrive.modeld.big_model import active_model_path
+  from openpilot.selfdrive.modeld.helpers import modeld_pkl_path, usbgpu_present
+
+  if not usbgpu_present() or active_model_path() is None:
+    return False
+
+  pkl_path = Path(modeld_pkl_path(usbgpu=True))
+  manifest_path = Path(get_manifest_path(pkl_path))
+  if manifest_path.is_file():
+    return True
+
+  # Remove only an incomplete artifact for the currently selected model. Older
+  # verified versions remain available as a runtime fallback.
+  for path in pkl_path.parent.glob(pkl_path.name + "*"):
+    if path.is_file():
+      path.unlink()
+
+  env = os.environ.copy()
+  env['BUILD_USB_GPU_MODEL'] = '1'
+  env['PYTHONUNBUFFERED'] = '1'
+  target = os.path.relpath(manifest_path, BASEDIR)
+  spinner.update("Compiling optional USB eGPU big model")
+  process = subprocess.Popen(["scons", "-j1", "--cache-populate", target], cwd=BASEDIR, env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+  assert process.stdout is not None
+  output: list[bytes] = []
+  for line in iter(process.stdout.readline, b''):
+    line = line.rstrip()
+    if line:
+      output.append(line)
+      line_text = line.decode('utf8', 'replace')
+      print(line_text)
+      spinner.update(line_text)
+  process.wait()
+
+  if process.returncode == 0 and manifest_path.is_file():
+    return True
+
+  for path in pkl_path.parent.glob(pkl_path.name + "*"):
+    if path.is_file():
+      path.unlink()
+  add_file_handler(cloudlog)
+  cloudlog.error("optional USB eGPU model build failed\n" + b"\n".join(output).decode('utf8', 'replace'))
+  spinner.update("USB eGPU model unavailable; using the internal model")
+  return False
 
 def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
   env = os.environ.copy()
@@ -96,3 +146,4 @@ if __name__ == "__main__":
   spinner.update_progress(0, 100)
   build_metadata = get_build_metadata()
   build(spinner, build_metadata.openpilot.is_dirty, minimal = AGNOS)
+  build_usbgpu_model(spinner)
