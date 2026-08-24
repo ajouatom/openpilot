@@ -194,6 +194,7 @@ class CarState(CarStateBase):
     self.op_params = Params()
 
     self.main_enabled = True if self.op_params.get_int("AutoEngage") == 2 else False
+    self.manual_main_off_latched = False
     self.gear_shifter = GearShifter.drive # Gear_init for Nexo ?? unknown 21.02.23.LSW
 
     self.totalDistance = 0.0
@@ -275,6 +276,21 @@ class CarState(CarStateBase):
     if self.CRUISE_BUTTON_ALT:
       return cp.vl_all["CRUISE_BUTTON_ALT"]["CruiseSwMain"]
     return cp.vl_all["CLU11"]["CF_Clu_CruiseSwMain"]
+
+  def _update_canfd_main_enabled(self, cruise_button, main_button_released):
+    if cruise_button in (Buttons.RES_ACCEL, Buttons.SET_DECEL) and self.CP.openpilotLongitudinalControl:
+      self.main_enabled = True
+      self.manual_main_off_latched = False
+
+    if main_button_released:
+      self.main_enabled = not self.main_enabled
+      self.manual_main_off_latched = not self.main_enabled
+      print(f"main_enabled = {self.main_enabled}")
+
+    # Camera SCC reports the MAIN change after the physical button release.
+    # Do not let that stale state immediately undo an explicit manual MAIN off.
+    if self.CP.openpilotLongitudinalControl and self.MainMode_ACC and not self.manual_main_off_latched:
+      self.main_enabled = True
 
   def monitor_fingerprint(self, can_parsers, canfd):
     if self.controls_ready_count <= READY_COUNT_OK:
@@ -850,19 +866,27 @@ class CarState(CarStateBase):
         ret.leftBlindspot = (bsm_info["FL_INDICATOR"] + bsm_info["INDICATOR_LEFT_TWO"] + bsm_info["INDICATOR_LEFT_FOUR"]) > 0
         ret.rightBlindspot = (bsm_info["FR_INDICATOR"] + bsm_info["INDICATOR_RIGHT_TWO"] + bsm_info["INDICATOR_RIGHT_FOUR"]) > 0
 
+    prev_main_buttons = self.main_buttons[-1]
+    if self.cruise_buttons_alt2 is not None:
+      self.main_buttons.extend([1 if int(self.cruise_buttons_alt2.get("CRUISE_BUTTONS", 0)) == 8 else 0])
+    else:
+      adaptive_main = cp.vl_all[self.cruise_btns_msg_canfd]["ADAPTIVE_CRUISE_MAIN_BTN"]
+      normal_main = cp.vl_all[self.cruise_btns_msg_canfd]["NORMAL_CRUISE_MAIN_BTN"]
+      self.main_buttons.extend(int(adaptive or normal) for adaptive, normal in zip(adaptive_main, normal_main, strict=True))
+    main_button_released = self.main_buttons[-1] != prev_main_buttons and not self.main_buttons[-1]
+
     # cruise state
     if self.cruise_buttons_alt2 is not None:
       cruise_button = self.cruise_buttons_alt2["CRUISE_BUTTONS"]
     else:
       cruise_button = cp.vl[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"]
-    if cruise_button in [Buttons.RES_ACCEL, Buttons.SET_DECEL] and self.CP.openpilotLongitudinalControl:
-      self.main_enabled = True
-    # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
-    ret.cruiseState.available = self.main_enabled and self.controls_ready_count >= READY_COUNT_OK #cp.vl["TCS"]["ACCEnable"] == 0
     if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
       self.MainMode_ACC = cp_cam.vl["SCC_CONTROL"]["MainMode_ACC"] == 1
       self.ACCMode = cp_cam.vl["SCC_CONTROL"]["ACCMode"]
       self.LFA_ICON = cp_cam.vl["LFAHDA_CLUSTER"]["HDA_LFA_SymSta"]
+    self._update_canfd_main_enabled(cruise_button, main_button_released)
+    # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
+    ret.cruiseState.available = self.main_enabled and self.controls_ready_count >= READY_COUNT_OK #cp.vl["TCS"]["ACCEnable"] == 0
 
     avh_state = cp.vl["ESP_STATUS"]["AVH_Sta"]
     if self.CP.openpilotLongitudinalControl:
@@ -879,8 +903,6 @@ class CarState(CarStateBase):
         self.canfdOemBrakeHoldLatched, self.canfdAvhReleaseGraceFrames,
       )
       self.canfdOemBrakeHoldLatched = ret.brakeHoldActive
-      if self.MainMode_ACC or self.main_enabled:
-        self.main_enabled = True
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
@@ -1008,17 +1030,6 @@ class CarState(CarStateBase):
       else:
         self.cruise_buttons_msg = copy.copy(cp.vl[self.cruise_btns_msg_canfd])
      """
-    prev_main_buttons = self.main_buttons[-1]
-    #self.cruise_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"])
-    if self.cruise_buttons_alt2 is not None:
-      self.main_buttons.extend([1 if int(self.cruise_buttons_alt2.get("CRUISE_BUTTONS", 0)) == 8 else 0])
-    else:
-      adaptive_main = cp.vl_all[self.cruise_btns_msg_canfd]["ADAPTIVE_CRUISE_MAIN_BTN"]
-      normal_main = cp.vl_all[self.cruise_btns_msg_canfd]["NORMAL_CRUISE_MAIN_BTN"]
-      self.main_buttons.extend(int(adaptive or normal) for adaptive, normal in zip(adaptive_main, normal_main, strict=True))
-    if self.main_buttons[-1] != prev_main_buttons and not self.main_buttons[-1]: # and self.CP.openpilotLongitudinalControl: #carrot
-      self.main_enabled = not self.main_enabled
-      print("main_enabled = {}".format(self.main_enabled))
     self.buttons_counter = cp.vl[self.cruise_btns_msg_canfd]["COUNTER"]
     ret.accFaulted = cp.vl["TCS"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED
 
