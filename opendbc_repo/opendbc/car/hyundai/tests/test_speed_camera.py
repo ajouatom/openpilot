@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from opendbc.car.hyundai.carstate import CarState, VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES
+from opendbc.car.hyundai.carstate import CarState, VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE, VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES
 
 
 class FakeParams:
@@ -39,6 +39,8 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviRouteResetTimestamp = 0
   state.vehicleNaviCameraTarget = None
   state.vehicleNaviSchoolZoneActive = False
+  state.vehicleNaviSchoolZoneStartDistance = 0.0
+  state.vehicleNaviSchoolZoneUsesCameraStatus = False
   state.navi_segment_4b9 = None
   state.navi_profile_4be = None
   return state
@@ -187,19 +189,19 @@ def test_vehicle_navi_route_recalculation_clears_events():
   cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BE": {"PROLONG_VALUE": 1}})
   ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
 
-  assert not state._update_vehicle_navi_events(cp, ret)
+  assert not state._update_vehicle_navi_events(cp, ret, False)
   assert ret.speedBumpDistance == pytest.approx(890.0)
 
   raw = bytes.fromhex("0000b8063110fdff")
   state.navi_segment_4b9 = {f"BYTE_{i + 1}": byte for i, byte in enumerate(raw)}
   cp.ts_nanos["NEW_MSG_4B9"] = {"BYTE_1": 2}
-  state._update_vehicle_navi_events(cp, ret)
+  state._update_vehicle_navi_events(cp, ret, False)
 
   assert state.vehicleNaviEvents == []
   assert ret.speedBumpDistance == 0.0
 
 
-def test_vehicle_navi_school_zone_caps_at_30_until_exit():
+def test_vehicle_navi_school_zone_follows_vehicle_camera_status():
   state = _car_state()
   state.vehicleNaviSchoolZoneControl = True
   state.navi_profile_4be = {
@@ -212,24 +214,76 @@ def test_vehicle_navi_school_zone_caps_at_30_until_exit():
   cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BE": {"PROLONG_VALUE": 1}})
   ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
 
-  assert not state._update_vehicle_navi_events(cp, ret)
+  ret.speedLimit = 30.0
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  assert ret.schoolZoneActive
+  assert ret.speedLimit == 30
+  assert state.vehicleNaviSchoolZoneUsesCameraStatus
+
+  # 00000d87--35927b43c4: 0x77 is followed by an invalid profile, not 0xB7.
+  state.navi_profile_4be.update({
+    "PROLONG_VALUE": 0xffffffff,
+    "PROLONG_OFFSET": 8191,
+    "PROLONG_PROFILE_TYPE": 31,
+  })
+  cp.ts_nanos["NEW_MSG_4BE"]["PROLONG_VALUE"] = 2
+  ret.speedLimit = 30.0
+  assert not state._update_vehicle_navi_events(cp, ret, True)
   assert ret.schoolZoneActive
   assert ret.speedLimit == 30
 
+  ret.speedLimit = 0.0
+  assert not state._update_vehicle_navi_events(cp, ret, False)
+  assert not ret.schoolZoneActive
+  assert not state.vehicleNaviSchoolZoneActive
+
+
+def test_vehicle_navi_school_zone_explicit_speed_change_clears_cap():
+  state = _car_state()
+  state.vehicleNaviSchoolZoneControl = True
+  state.vehicleNaviSchoolZoneActive = True
+  state.navi_profile_4be = {
+    "PROLONG_VALUE": 0xB7,
+    "PROLONG_OFFSET": 0,
+    "PROLONG_CYCLIC_COUNTER": 3,
+    "PROLONG_UPDATE": 1,
+    "PROLONG_PROFILE_TYPE": 16,
+  }
+  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BE": {"PROLONG_VALUE": 1}})
+  ret = SimpleNamespace(speedLimit=50.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert not state._update_vehicle_navi_events(cp, ret, False)
+  assert not ret.schoolZoneActive
+  assert not state.vehicleNaviSchoolZoneActive
+
+
+def test_vehicle_navi_route_recalculation_clears_school_zone():
+  state = _car_state()
+  state.vehicleNaviSchoolZoneControl = True
+  state.vehicleNaviSchoolZoneActive = True
+  state.vehicleNaviSchoolZoneStartDistance = 10.0
   raw = bytes.fromhex("0000b8063110fdff")
   state.navi_segment_4b9 = {f"BYTE_{i + 1}": byte for i, byte in enumerate(raw)}
-  cp.ts_nanos["NEW_MSG_4B9"] = {"BYTE_1": 2}
-  ret.speedLimit = 0.0
-  assert not state._update_vehicle_navi_events(cp, ret)
-  assert ret.schoolZoneActive
-  assert ret.speedLimit == 30
+  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4B9": {"BYTE_1": 2}})
+  ret = SimpleNamespace(speedLimit=30.0, speedBumpDistance=0.0, schoolZoneActive=False)
 
-  state.navi_profile_4be["PROLONG_VALUE"] = 0xB7
-  cp.ts_nanos["NEW_MSG_4BE"]["PROLONG_VALUE"] = 3
-  ret.speedLimit = 0.0
-  assert not state._update_vehicle_navi_events(cp, ret)
+  assert not state._update_vehicle_navi_events(cp, ret, True)
   assert not ret.schoolZoneActive
-  assert ret.speedLimit == 0.0
+  assert not state.vehicleNaviSchoolZoneActive
+
+
+def test_vehicle_navi_school_zone_distance_fail_safe():
+  state = _car_state()
+  state.vehicleNaviSchoolZoneControl = True
+  state.vehicleNaviSchoolZoneActive = True
+  state.vehicleNaviSchoolZoneStartDistance = 10.0
+  state.totalDistance = 10.0 + VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE
+  cp = SimpleNamespace(ts_nanos={})
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert not state._update_vehicle_navi_events(cp, ret, False)
+  assert not ret.schoolZoneActive
+  assert not state.vehicleNaviSchoolZoneActive
 
 
 def test_vehicle_navi_exact_camera_distance_replaces_virtual_distance():
