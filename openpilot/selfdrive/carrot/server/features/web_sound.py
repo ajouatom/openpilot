@@ -110,7 +110,7 @@ async def _send_sound_states(ws: web.WebSocketResponse) -> None:
         countdown = int(sm["carrotMan"].leftSec)
       except (TypeError, ValueError):
         countdown = 100
-    if last_signature is None or sm.updated["selfdriveState"]:
+    if last_signature is None or sm.updated["selfdriveState"] or sm.updated["carrotMan"]:
       emitted_countdown = countdown
 
     button_events = sm["carState"].buttonEvents if _message_valid(sm, "carState") else ()

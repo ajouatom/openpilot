@@ -12,13 +12,53 @@ from openpilot.selfdrive.ui.soundd import (
 import os
 import time
 import wave
+from types import SimpleNamespace
 
 from openpilot.common.basedir import BASEDIR
 
 AudibleAlert = car.CarControl.HUDControl.AudibleAlert
 
 
+class _SoundSubMaster:
+  def __init__(self, countdown, *, selfdrive_updated=False, carrot_updated=True):
+    self.updated = {"selfdriveState": selfdrive_updated, "carrotMan": carrot_updated}
+    self.services = {
+      "selfdriveState": SimpleNamespace(alertSound=SimpleNamespace(raw=AudibleAlert.none)),
+      "carrotMan": SimpleNamespace(leftSec=countdown),
+    }
+
+  def __getitem__(self, service):
+    return self.services[service]
+
+
 class TestSoundd:
+  def test_countdown_reacts_to_carrot_man_update_without_selfdrive_update(self):
+    soundd = Soundd.__new__(Soundd)
+    soundd.carrot_count_down = 100
+    soundd.current_alert = AudibleAlert.none
+    soundd.current_sound_frame = 0
+    soundd.loaded_sounds = {AudibleAlert.audio10: [0] * 10}
+
+    soundd.get_audible_alert(_SoundSubMaster(10))
+
+    assert soundd.carrot_count_down == 10
+    assert soundd.current_alert == AudibleAlert.audio10
+
+  def test_countdown_reset_allows_same_number_for_next_camera(self):
+    soundd = Soundd.__new__(Soundd)
+    soundd.carrot_count_down = 5
+    soundd.current_alert = AudibleAlert.audio5
+    soundd.current_sound_frame = 10
+    soundd.loaded_sounds = {AudibleAlert.audio5: [0] * 10}
+
+    soundd.get_audible_alert(_SoundSubMaster(100))
+    assert soundd.carrot_count_down == 100
+    assert soundd.current_alert == AudibleAlert.none
+
+    soundd.get_audible_alert(_SoundSubMaster(5))
+    assert soundd.carrot_count_down == 5
+    assert soundd.current_alert == AudibleAlert.audio5
+
   def test_missing_sound_asset_falls_back_to_english_prompt(self, tmp_path):
     sound_dir = tmp_path / "sounds"
     fallback_dir = tmp_path / "sounds_eng"
