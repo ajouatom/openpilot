@@ -21,6 +21,9 @@ IMPERIAL_INCREMENT = round(CV.MPH_TO_KPH, 1)  # round here to avoid rounding err
 ButtonEvent = car.CarState.ButtonEvent
 ButtonType = car.CarState.ButtonEvent.Type
 CRUISE_LONG_PRESS = 50
+# Keep automatic re-engagement out of parking/full-lock turns. Hyundai EPS
+# fault avoidance begins at 85 degrees, so leave margin below that boundary.
+AUTO_CRUISE_MAX_STEERING_ANGLE = 70.0
 CRUISE_NEAREST_FUNC = {
   ButtonType.accelCruise: math.ceil,
   ButtonType.decelCruise: math.floor,
@@ -195,6 +198,7 @@ class VCruiseCarrot:
     self._pause_auto_speed_up = False
     self._activate_cruise = 0
     self._hold_interlock_active = False
+    self._steering_interlock_active = False
     self._lat_enabled = self.params.get_int("AutoEngage") > 0
     self._v_cruise_kph_at_brake = 0
     self.cruise_state_available_last = False
@@ -342,6 +346,7 @@ class VCruiseCarrot:
     self.v_ego_kph_set = int(CS.vEgoCluster * CV.MS_TO_KPH + 0.5)
     self._activate_cruise = 0
     self._hold_interlock_active = is_hold_interlock_active(CS)
+    self._steering_interlock_active = abs(CS.steeringAngleDeg) >= AUTO_CRUISE_MAX_STEERING_ANGLE
     if self._hold_interlock_active:
       # Drop queued automatic engagement state while AVH or the parking brake
       # owns longitudinal control.
@@ -718,6 +723,10 @@ class VCruiseCarrot:
     return v_cruise_kph
 
   def _cruise_control(self, enable, cancel_timer, reason):
+    if enable > 0 and self._steering_interlock_active:
+      self._activate_cruise = 0
+      self._add_log(reason + " > Steering angle interlock active")
+      return
     if enable > 0 and self._hold_interlock_active:
       self._activate_cruise = 0
       self._add_log(reason + " > Brake hold interlock active")

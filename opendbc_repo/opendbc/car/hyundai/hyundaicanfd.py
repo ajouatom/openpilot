@@ -678,13 +678,19 @@ def _suppress_trailer_mode_warning(values, CS):
     values["ALERTS_5"] = 0
 
 
-def _hide_lca_service_warning(values):
+def _hide_replaced_adas_service_warning(values):
+  # Openpilot replaces the stock lane-change/highway-driving control path, so
+  # the camera can latch their service-required flags during low-speed turns.
   # Preserve blocked-sensor warnings and unrelated DAS faults. The original
   # camera-side message remains available in logcan for diagnosis.
-  if values.get("FAULT_LCA") == 1:
-    values["FAULT_LCA"] = 0
-    if values.get("FAULT_DAS") == 1:
-      values["FAULT_DAS"] = 0
+  service_warning_hidden = False
+  for fault in ("FAULT_LCA", "FAULT_HDA"):
+    if values.get(fault) == 1:
+      values[fault] = 0
+      service_warning_hidden = True
+
+  if service_warning_hidden and values.get("FAULT_DAS") == 1:
+    values["FAULT_DAS"] = 0
 
 def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
                      lane_line=True, corner_radar=True,
@@ -925,7 +931,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if (left_lane_warning and not CS.out.leftBlinker) or (right_lane_warning and not CS.out.rightBlinker):
           values["VIBRATE"] = 1
 
-        _hide_lca_service_warning(values)
+        _hide_replaced_adas_service_warning(values)
 
         if canfd_debug > 0:
           values["FAULT_LSS"] = 0
