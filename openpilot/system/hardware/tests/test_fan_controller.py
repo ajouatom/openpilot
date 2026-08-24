@@ -4,9 +4,9 @@ from openpilot.system.hardware.fan_controller import FanController
 
 ALL_CONTROLLERS = [FanController]
 
-def patched_controller(mocker, controller_class):
+def patched_controller(mocker, controller_class, device_type="tici"):
   mocker.patch("os.system", new=mocker.Mock())
-  return controller_class(2)
+  return controller_class(2, device_type)
 
 class TestFanController:
   def wind_up(self, controller, ignition=True):
@@ -48,3 +48,15 @@ class TestFanController:
     for _ in range(10):
       controller.update(90, True)
     assert controller.update(90, True) >= 60
+
+  @pytest.mark.parametrize("device_type", ["tici", "tizi"])
+  def test_c3_temperature_feedforward(self, mocker, device_type):
+    controller = patched_controller(mocker, FanController, device_type)
+    assert controller.update(60, True) == 30
+    assert controller.update(80, True) >= 50
+    assert controller.update(90, True) >= 75
+
+  def test_mici_keeps_current_profile(self, mocker):
+    controller = patched_controller(mocker, FanController, "mici")
+    assert controller.update(60, True) == 30
+    assert controller.update(90, True) == 30
