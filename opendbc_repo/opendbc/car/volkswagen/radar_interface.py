@@ -75,6 +75,11 @@ class RadarInterface(RadarInterfaceBase):
     msg = self.rcp.vl["Strukturen_01"]
     get = msg.__getitem__
 
+    # 레이더 가림/이용불가 (commaai/opendbc 동일): Distance_Status != 0 이면 센서가 가려진 상태
+    # (3 = obstructed 실측). 눈/진흙으로 가려져도 "앞차 없음"으로 오인하지 않게 오류로 올린다.
+    if msg["Distance_Status"] != 0:
+      ret.errors.radarUnavailableTemporary = True
+
     active_objects: dict[int, tuple[float, float, float]] = {}
     for obj_id_sig, long_sig, lat_sig, vel_sig in SIGNAL_SETS:
       obj_id = get(obj_id_sig)
@@ -86,7 +91,7 @@ class RadarInterface(RadarInterfaceBase):
       v_rel = get(vel_sig)
 
       # 유효성 게이트 (safety): 전방 리드만 통과시킨다.
-      # Long_Distance는 offset -6m라 raw가 낮으면 0 근처/음수로 디코딩됨 -> 노이즈/유령 객체가
+      # Long_Distance는 offset -3.75m라 raw가 낮으면 0 근처/음수로 디코딩됨 -> 노이즈/유령 객체가
       # "코앞에 차"로 잡혀 인게이지 순간 오탐 FCW/급제동을 유발. 비현실적 근접(<=1m)·범위 밖은 제외.
       if not (1.0 < d_rel < 250.0):
         continue
