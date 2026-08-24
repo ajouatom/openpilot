@@ -41,6 +41,7 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviEvents = []
   state.vehicleNaviSegmentTimestamp = 0
   state.vehicleNaviProfileTimestamp = 0
+  state.vehicleNaviAvailable = False
   state.vehicleNaviRouteResetTimestamp = 0
   state.vehicleNaviCameraTarget = None
   state.vehicleNaviSpeedZoneActive = False
@@ -140,7 +141,7 @@ def test_vehicle_navi_availability_only_requires_receiving_0x4be():
 
   cp.ts_nanos["NEW_MSG_4BE"]["PROLONG_VALUE"] = 0
   assert not state._update_vehicle_navi_events(cp, ret, False)
-  assert not ret.vehicleNaviAvailable
+  assert ret.vehicleNaviAvailable
   assert state.vehicleNaviEvents == []
   assert not state.vehicleNaviSchoolZoneActive
 

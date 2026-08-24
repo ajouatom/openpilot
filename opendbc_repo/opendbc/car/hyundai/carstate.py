@@ -209,6 +209,7 @@ class CarState(CarStateBase):
     self.vehicleNaviEvents = []
     self.vehicleNaviSegmentTimestamp = 0
     self.vehicleNaviProfileTimestamp = 0
+    self.vehicleNaviAvailable = False
     self.vehicleNaviRouteResetTimestamp = 0
     self.vehicleNaviCameraTarget = None
     self.vehicleNaviSpeedZoneActive = False
@@ -699,7 +700,8 @@ class CarState(CarStateBase):
     ret.vehicleNaviSectionActive = False
     ret.vehicleNaviSpeed = 0.0
     profile_timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4BE")
-    ret.vehicleNaviAvailable = profile_timestamp > 0
+    self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0
+    ret.vehicleNaviAvailable = self.vehicleNaviAvailable
     self.vehicleNaviCameraTarget = None
     if not (self.vehicleNaviCanControl or self.vehicleNaviSchoolZoneControl):
       return False

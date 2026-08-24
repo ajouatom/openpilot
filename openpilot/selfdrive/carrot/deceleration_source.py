@@ -60,3 +60,8 @@ def navigation_status_presentation(vehicle_available: bool, external_active: boo
   if vehicle_available:
     return "vNAVI", 3
   return None
+
+
+def external_navigation_connected(legacy_remote: str | None, carrot_navi_connected: bool) -> bool:
+  """Return external-navigation connectivity without consulting speed-control state."""
+  return bool(str(legacy_remote or "").strip()) or bool(carrot_navi_connected)
