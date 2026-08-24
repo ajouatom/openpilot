@@ -118,7 +118,7 @@ export function createCruiseOverrideHold(options = {}) {
     lastClockMs = clockMs;
 
     if (next) {
-      if (next.mode === 2) {
+      if (next.mode === 2 || next.mode === 3 || next.mode === 4) {
         held = next;
         lastSeenMs = clockMs;
       } else {
@@ -187,19 +187,27 @@ export function vehicleHudSignature(payload = {}) {
   ].join(":");
 }
 
-// Cluster parity: cluster_live.py deceleration_source_display_label.
+// Cluster parity: vehicle-CAN navigation is blue vNAVI; external navigation is green NAVI.
+const EXTERNAL_NAVI_SOURCES = new Set(["cam", "section", "bump", "police", "waze", "road", "atc", "atc2", "route"]);
+const VEHICLE_NAVI_SOURCES = new Set(["hda", "hda_bump", "school"]);
 const DECEL_SOURCE_LABELS = Object.freeze({
-  cam: "cam:n", section: "section:n", bump: "bump:n", police: "police:n",
-  waze: "waze:n", road: "road:n", atc: "turn:n", atc2: "turn:n",
-  hda: "cam:v", route: "route:v", gas: "gas:v",
+  gas: "gas:v",
   vturn: "turn:c", model: "turn:c", turn: "turn:c",
 });
 
-function decelerationSourceLabel(source) {
+function decelerationSourcePresentation(source) {
   const normalized = String(source || "").trim().toLowerCase();
-  if (!normalized) return "apply";
-  if (normalized.endsWith(":n") || normalized.endsWith(":v") || normalized.endsWith(":c")) return normalized;
-  return DECEL_SOURCE_LABELS[normalized] || normalized.slice(0, 8);
+  if (!normalized) return { label: "apply", mode: 2 };
+  if (VEHICLE_NAVI_SOURCES.has(normalized) || ["cam:v", "bump:v", "school:v"].includes(normalized)) {
+    return { label: "vNAVI", mode: 3 };
+  }
+  if (EXTERNAL_NAVI_SOURCES.has(normalized) || normalized.endsWith(":n")) {
+    return { label: "NAVI", mode: 4 };
+  }
+  if (normalized.endsWith(":v") || normalized.endsWith(":c")) {
+    return { label: normalized, mode: 2 };
+  }
+  return { label: DECEL_SOURCE_LABELS[normalized] || normalized.slice(0, 8), mode: 2 };
 }
 
 // Cluster parity: prefer the cluster-facing set speed, but treat zero/sentinel
@@ -242,7 +250,8 @@ export function isCruiseDisplayVisible(state = {}, cruiseKph = resolveCruiseKph(
 
 // Cruise set-speed override telltale. Mirrors cluster_live.py priority/thresholds:
 //   mode 1 (eco, green)    = longitudinalPlan.cruiseTarget above the set speed
-//   mode 2 (decel, orange) = carrotMan.desiredSpeed below the set speed, with source label
+//   mode 2 (other deceleration, orange) / 3 (vehicle navigation CAN, blue)
+//   mode 4 (external navigation, green)
 // Returns { kph, label, mode } in kph, or null. Shared by live and replay.
 export function deriveCruiseOverride(state = {}) {
   const cruiseKph = resolveCruiseKph(state);
@@ -255,7 +264,8 @@ export function deriveCruiseOverride(state = {}) {
 
   const desiredSpeed = finite(state.carrotMan?.desiredSpeed);
   if (desiredSpeed != null && desiredSpeed > 0 && desiredSpeed < 200 && desiredSpeed < cruiseKph) {
-    return { kph: desiredSpeed, label: decelerationSourceLabel(state.carrotMan?.desiredSource), mode: 2 };
+    const presentation = decelerationSourcePresentation(state.carrotMan?.desiredSource);
+    return { kph: desiredSpeed, ...presentation };
   }
   return null;
 }

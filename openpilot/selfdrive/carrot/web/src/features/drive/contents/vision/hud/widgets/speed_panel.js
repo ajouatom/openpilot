@@ -185,10 +185,13 @@ export function createSpeedPanel(doc) {
     overrideSpeed.style.display = show ? "" : "none";
     overrideLabel.style.display = show ? "" : "none";
     if (show) {
-      // 활성: mode 1 eco(초록) / 2 감속(주황) / 그 외 흰색. 비활성: 회색(muted).
+      // 활성: mode 1 eco(초록) / 2 기타 감속(주황) / 3 차량 내비 CAN(파랑) / 4 외부 내비(초록).
       const color = !active
         ? COLORS.muted
-        : lastOverride.mode === 1 ? COLORS.carrot : lastOverride.mode === 2 ? COLORS.override : COLORS.white;
+        : lastOverride.mode === 1 ? COLORS.carrot
+          : lastOverride.mode === 2 ? COLORS.override
+            : lastOverride.mode === 3 ? COLORS.blue
+              : lastOverride.mode === 4 ? COLORS.carrot : COLORS.white;
       place(overrideSpeed, OVERRIDE_SPEED_Y, OVERRIDE_SPEED_FS);
       setText(overrideSpeed, String(lastOverride.kph));
       overrideSpeed.style.fill = color;

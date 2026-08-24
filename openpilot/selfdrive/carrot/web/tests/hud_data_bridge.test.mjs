@@ -133,12 +133,22 @@ test("cruise override is null when cruise is off or sentinel", () => {
   assert.equal(deriveCruiseOverride({ carrotMan: { desiredSpeed: 40 } }), null);
 });
 
-test("decel override (orange, mode 2) maps the source label", () => {
+test("external navigation override is green NAVI", () => {
   const out = deriveCruiseOverride({
     carState: { vCruiseCluster: 88 },
     carrotMan: { desiredSpeed: 77, desiredSource: "cam" },
   });
-  assert.deepEqual(out, { kph: 77, label: "cam:n", mode: 2 });
+  assert.deepEqual(out, { kph: 77, label: "NAVI", mode: 4 });
+});
+
+test("vehicle CAN navigation override is blue vNAVI", () => {
+  for (const desiredSource of ["hda", "hda_bump", "school"]) {
+    const out = deriveCruiseOverride({
+      carState: { vCruiseCluster: 88 },
+      carrotMan: { desiredSpeed: 77, desiredSource },
+    });
+    assert.deepEqual(out, { kph: 77, label: "vNAVI", mode: 3 });
+  }
 });
 
 test("decel override falls back to 'apply' and truncates unknown sources", () => {
@@ -168,16 +178,24 @@ test("no override when desiredSpeed is not below the set speed", () => {
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 95 } }), null);
 });
 
-test("orange override survives a short live or replay sample gap", () => {
+test("green external navigation override survives a short live or replay sample gap", () => {
   const hold = createCruiseOverrideHold();
-  const orange = { kph: 70, label: "cam:n", mode: 2 };
-  assert.deepEqual(hold.update(orange, { clockMs: 1000, clockKey: "replay:a", active: true }), orange);
-  assert.deepEqual(hold.update(null, { clockMs: 3499, clockKey: "replay:a", active: true }), orange);
+  const green = { kph: 70, label: "NAVI", mode: 4 };
+  assert.deepEqual(hold.update(green, { clockMs: 1000, clockKey: "replay:a", active: true }), green);
+  assert.deepEqual(hold.update(null, { clockMs: 3499, clockKey: "replay:a", active: true }), green);
   assert.equal(hold.update(null, { clockMs: 3501, clockKey: "replay:a", active: true }), null);
 });
 
+test("blue vehicle navigation override survives a short sample gap", () => {
+  const hold = createCruiseOverrideHold();
+  const blue = { kph: 70, label: "vNAVI", mode: 3 };
+  assert.deepEqual(hold.update(blue, { clockMs: 1000, clockKey: "live", active: true }), blue);
+  assert.deepEqual(hold.update(null, { clockMs: 3499, clockKey: "live", active: true }), blue);
+  assert.equal(hold.update(null, { clockMs: 3501, clockKey: "live", active: true }), null);
+});
+
 test("orange override hold resets on seek, source clock change, or cruise off", () => {
-  const orange = { kph: 70, label: "cam:n", mode: 2 };
+  const orange = { kph: 70, label: "gas:v", mode: 2 };
 
   const seek = createCruiseOverrideHold();
   seek.update(orange, { clockMs: 5000, clockKey: "replay:a", active: true });
@@ -194,34 +212,36 @@ test("orange override hold resets on seek, source clock change, or cruise off", 
 
 test("eco override replaces orange immediately and is never held", () => {
   const hold = createCruiseOverrideHold();
-  const orange = { kph: 70, label: "cam:n", mode: 2 };
+  const orange = { kph: 70, label: "gas:v", mode: 2 };
   const eco = { kph: 95, label: "eco", mode: 1 };
   hold.update(orange, { clockMs: 1000, clockKey: "live", active: true });
   assert.deepEqual(hold.update(eco, { clockMs: 1100, clockKey: "live", active: true }), eco);
   assert.equal(hold.update(null, { clockMs: 1200, clockKey: "live", active: true }), null);
 });
 
-test("all carrot/MICI deceleration sources keep their cluster display origin", () => {
+test("navigation deceleration sources distinguish external and vehicle CAN presentation", () => {
   const cases = {
-    cam: "cam:n",
-    section: "section:n",
-    bump: "bump:n",
-    police: "police:n",
-    waze: "waze:n",
-    road: "road:n",
-    atc: "turn:n",
-    atc2: "turn:n",
-    hda: "cam:v",
-    route: "route:v",
-    gas: "gas:v",
-    vturn: "turn:c",
-    model: "turn:c",
+    cam: ["NAVI", 4],
+    section: ["NAVI", 4],
+    bump: ["NAVI", 4],
+    police: ["NAVI", 4],
+    waze: ["NAVI", 4],
+    road: ["NAVI", 4],
+    atc: ["NAVI", 4],
+    atc2: ["NAVI", 4],
+    hda: ["vNAVI", 3],
+    hda_bump: ["vNAVI", 3],
+    school: ["vNAVI", 3],
+    route: ["NAVI", 4],
+    gas: ["gas:v", 2],
+    vturn: ["turn:c", 2],
+    model: ["turn:c", 2],
   };
-  for (const [source, label] of Object.entries(cases)) {
-    assert.equal(deriveCruiseOverride({
+  for (const [source, [label, mode]] of Object.entries(cases)) {
+    assert.deepEqual(deriveCruiseOverride({
       carState: { vCruiseCluster: 88 },
       carrotMan: { desiredSpeed: 70, desiredSource: source },
-    }).label, label, source);
+    }), { kph: 70, label, mode }, source);
   }
 });
 

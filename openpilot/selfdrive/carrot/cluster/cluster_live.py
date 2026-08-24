@@ -40,6 +40,8 @@ OPENPILOT_ROOT = find_openpilot_root(Path(__file__).resolve().parent)
 if OPENPILOT_ROOT is not None:
     sys.path.insert(0, str(OPENPILOT_ROOT))
 
+from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation
+
 LIVE_NAV_ROUTE_MAX_POINTS = 4096
 LIVE_NAVI_IMAGE_BASE64_MAX_CHARS = 2 * 1024 * 1024
 LIVE_NAVI_IMAGE_MAX_DIMENSION = 2048
@@ -47,31 +49,10 @@ ACCELERATION_DUE_TO_GRAVITY = 9.80665
 DEFAULT_MAX_LATERAL_ACCEL = 3.0
 SELFDRIVE_STATE_TIMEOUT_SECONDS = 5.0
 SELFDRIVE_UNRESPONSIVE_TIMEOUT_SECONDS = 10.0
-DECELERATION_SOURCE_LABELS = {
-    "cam": "cam:n",
-    "section": "section:n",
-    "bump": "bump:n",
-    "police": "police:n",
-    "waze": "waze:n",
-    "road": "road:n",
-    "atc": "turn:n",
-    "atc2": "turn:n",
-    "hda": "cam:v",
-    "route": "route:v",
-    "gas": "gas:v",
-    "vturn": "turn:c",
-    "model": "turn:c",
-    "turn": "turn:c",
-}
 
 
 def deceleration_source_display_label(source: str | None) -> str:
-    normalized = str(source or "").strip().lower()
-    if not normalized:
-        return "apply"
-    if normalized.endswith((":n", ":v", ":c")):
-        return normalized
-    return DECELERATION_SOURCE_LABELS.get(normalized, normalized[:8])
+    return deceleration_source_presentation(source)[0]
 
 
 def _limited_items(items: Any, max_items: int):
@@ -442,8 +423,7 @@ class OpenpilotLiveSource:
                 desired_source = str(safe_get(carrot_man, "desiredSource", "") or "").strip()
                 if desired_speed is not None and 0.0 < desired_speed < 200.0 and desired_speed < state.cruise_kph:
                     cruise_override_kph = desired_speed
-                    cruise_override_label = deceleration_source_display_label(desired_source)
-                    cruise_override_color_mode = 2
+                    cruise_override_label, cruise_override_color_mode = deceleration_source_presentation(desired_source)
 
         return replace(
             state,
