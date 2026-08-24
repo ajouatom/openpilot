@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from openpilot.cereal import car
@@ -18,6 +20,7 @@ def make_cruise_helper(button_kph, cruise_button_mode, carrot_cruise_active, cru
   helper._lat_enabled = False
   helper._pause_auto_speed_up = True
   helper._soft_hold_active = 0
+  helper._cruise_available = True
   helper._hold_interlock_active = False
   helper._steering_interlock_active = False
   helper._cruise_ready = False
@@ -91,6 +94,7 @@ def test_accel_keeps_initialized_speed_without_brake_snapshot_while_cruise_is_of
 
 def test_auto_hold_blocks_automatic_cruise_activation():
   helper = VCruiseCarrot.__new__(VCruiseCarrot)
+  helper._cruise_available = True
   helper._hold_interlock_active = True
   helper._steering_interlock_active = False
   helper._activate_cruise = 0
@@ -103,6 +107,7 @@ def test_auto_hold_blocks_automatic_cruise_activation():
 
 def test_large_steering_angle_blocks_automatic_cruise_activation():
   helper = VCruiseCarrot.__new__(VCruiseCarrot)
+  helper._cruise_available = True
   helper._hold_interlock_active = False
   helper._steering_interlock_active = True
   helper._activate_cruise = 0
@@ -111,6 +116,54 @@ def test_large_steering_angle_blocks_automatic_cruise_activation():
   helper._cruise_control(1, -1, "Cruise on (speed)")
 
   assert helper._activate_cruise == 0
+
+
+@pytest.mark.parametrize(("cruise_available", "expected_activate"), [(False, 0), (True, 1)])
+def test_cruise_availability_gates_automatic_activation(cruise_available, expected_activate):
+  helper = VCruiseCarrot.__new__(VCruiseCarrot)
+  helper._cruise_available = cruise_available
+  helper._hold_interlock_active = False
+  helper._steering_interlock_active = False
+  helper._cruise_cancel_state = False
+  helper._cancel_timer = 0
+  helper._activate_cruise = 0
+  helper._soft_hold_active = 0
+  helper.autoCruiseControl = 1
+  helper.autoCruiseControl_cancel_timer = 0
+  helper._add_log = lambda log: None
+
+  helper._cruise_control(1, -1, "Cruise on (test)")
+
+  assert helper._activate_cruise == expected_activate
+
+
+def test_soft_hold_does_not_arm_when_cruise_is_unavailable():
+  helper = VCruiseCarrot.__new__(VCruiseCarrot)
+  helper.CP = SimpleNamespace(pcmCruise=False)
+  helper.autoCruiseControl = 1
+  helper.enabled_last = False
+  helper._cruise_ready = False
+  helper._paddle_decel_active = False
+  helper._gas_pressed_count = -1
+  helper._gas_pressed_count_last = 0
+  helper._gas_pressed_value = 0
+  helper._gas_tok_timer = 40
+  helper._gas_tok = False
+  helper._brake_pressed_count = 60
+  helper._soft_hold_count = 60
+  helper._soft_hold_active = 0
+
+  CS = SimpleNamespace(
+    gasPressed=False,
+    brakePressed=True,
+    vEgo=0.0,
+    gearShifter=car.CarState.GearShifter.drive,
+    cruiseState=SimpleNamespace(available=False),
+  )
+  helper._prepare_brake_gas(CS, car.CarControl(enabled=False))
+
+  assert helper._soft_hold_count == 0
+  assert helper._soft_hold_active == 0
 
 
 @pytest.mark.parametrize(("brake_hold_active", "parking_brake", "active"), [
