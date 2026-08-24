@@ -513,6 +513,10 @@ struct StreamPoller::Impl {
                           std::unordered_map<CanMessageId, size_t, CanMessageIdHash> *can_slots,
                           StreamExtractBatch *src) {
     for (RouteSeries &series : src->series) {
+      auto info_it = src->enum_info.find(series.path);
+      if (info_it != src->enum_info.end() && info_it->second.text_values) {
+        remap_text_series(&series, info_it->second, &dst->enum_info[info_it->first]);
+      }
       auto [it, inserted] = series_slots->try_emplace(series.path, dst->series.size());
       if (inserted) {
         dst->series.push_back(RouteSeries{.path = series.path});
@@ -537,7 +541,9 @@ struct StreamPoller::Impl {
                            std::make_move_iterator(src->timeline.end()));
     }
     for (auto &[path, info] : src->enum_info) {
-      dst->enum_info[path] = std::move(info);
+      if (!info.text_values) {
+        dst->enum_info[path] = std::move(info);
+      }
     }
     if (!src->car_fingerprint.empty()) {
       dst->car_fingerprint = src->car_fingerprint;

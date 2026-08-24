@@ -68,12 +68,14 @@ struct SeriesAccumulator {
   std::vector<CanMessageData> can_messages;
   std::unordered_map<std::string, size_t> dynamic_slots;
   std::unordered_map<std::string, std::vector<size_t>> list_scalar_slots;
+  std::unordered_map<std::string, std::unordered_map<std::string, size_t>> text_value_slots;
   std::unordered_map<CanMessageId, size_t, CanMessageIdHash> can_message_slots;
   std::unordered_map<std::string, EnumInfo> enum_info;
 };
 
 void append_fixed_scalar_point(RouteSeries *series, double tm, double value);
 void append_dynamic_scalar_point(const std::string &path, double tm, double value, SeriesAccumulator *series);
+void append_text_point(const std::string &path, double tm, capnp::Text::Reader value, SeriesAccumulator *series);
 RouteSeries *ensure_list_scalar_series(const std::string &base_path, size_t index, SeriesAccumulator *series);
 void append_can_frame(CanServiceKind service,
                       uint8_t bus,
@@ -1045,6 +1047,31 @@ void append_dynamic_scalar_point(const std::string &path, double tm, double valu
   append_scalar_point(ensure_dynamic_series(path, series), path, tm, value);
 }
 
+void append_text_point(const std::string &path,
+                       double tm,
+                       capnp::Text::Reader value,
+                       SeriesAccumulator *series) {
+  EnumInfo &info = series->enum_info[path];
+  info.text_values = true;
+  const std::string text(value.begin(), value.size());
+  auto [it, inserted] = series->text_value_slots[path].try_emplace(text, info.names.size());
+  if (inserted) {
+    info.names.push_back(text);
+  }
+  const double category = static_cast<double>(it->second);
+  RouteSeries *text_series = ensure_dynamic_series(path, series);
+  if (text_series->values.empty()) {
+    append_scalar_point(text_series, path, tm, category);
+    append_scalar_point(text_series, path, tm, category);
+  } else if (text_series->values.back() == category) {
+    text_series->times.back() = tm;
+  } else {
+    text_series->times.back() = tm;
+    append_scalar_point(text_series, path, tm, category);
+    append_scalar_point(text_series, path, tm, category);
+  }
+}
+
 void append_event_fast(cereal::Event::Which which,
                        int32_t eidx_segnum,
                        kj::ArrayPtr<const capnp::word> data,
@@ -1113,10 +1140,18 @@ void merge_series_accumulator(SeriesAccumulator *dst, SeriesAccumulator *src) {
   }
 
   for (size_t i = 0; i < dst->fixed_series.size(); ++i) {
+    auto info_it = src->enum_info.find(src->fixed_series[i].path);
+    if (info_it != src->enum_info.end() && info_it->second.text_values) {
+      remap_text_series(&src->fixed_series[i], info_it->second, &dst->enum_info[info_it->first]);
+    }
     merge_route_series(&dst->fixed_series[i], &src->fixed_series[i]);
   }
   for (auto &series : src->dynamic_series) {
     if (series.path.empty()) continue;
+    auto info_it = src->enum_info.find(series.path);
+    if (info_it != src->enum_info.end() && info_it->second.text_values) {
+      remap_text_series(&series, info_it->second, &dst->enum_info[info_it->first]);
+    }
     RouteSeries &dst_series = dst->dynamic_series[ensure_dynamic_slot(series.path, dst)];
     merge_route_series(&dst_series, &series);
   }
@@ -1125,7 +1160,9 @@ void merge_series_accumulator(SeriesAccumulator *dst, SeriesAccumulator *src) {
     merge_can_message_data(&dst_message, &message);
   }
   for (auto &[path, info] : src->enum_info) {
-    dst->enum_info.try_emplace(path, std::move(info));
+    if (!info.text_values) {
+      dst->enum_info.try_emplace(path, std::move(info));
+    }
   }
 }
 

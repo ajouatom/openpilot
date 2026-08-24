@@ -168,6 +168,7 @@ struct LogEntry {
 
 struct EnumInfo {
   std::vector<std::string> names;
+  bool text_values = false;
 };
 
 struct SeriesFormat {
@@ -743,6 +744,7 @@ SeriesFormat compute_series_format(const std::vector<double> &values, bool enum_
 std::string format_display_value(double display_value,
                                  const SeriesFormat &format,
                                  const EnumInfo *enum_info);
+void remap_text_series(RouteSeries *series, const EnumInfo &source_info, EnumInfo *destination_info);
 std::vector<std::string> decode_browser_drag_payload(std::string_view payload);
 void collect_visible_leaf_paths(const BrowserNode &node,
                                 const std::string &filter,
