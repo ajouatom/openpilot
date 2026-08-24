@@ -5,6 +5,7 @@ import pyray as rl
 from dataclasses import dataclass
 from typing import Optional
 from openpilot.common.constants import CV
+from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation
 # from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar # 아이콘에 토크 적용: 토크바 미사용
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
@@ -39,7 +40,7 @@ class SetSpeedOverrideState:
   active: bool
   speed_kph: float
   label: str
-  speed_color_mode: int # 0: white, 1: green, 2: orange
+  speed_color_mode: int # 0: white, 1: eco green, 2: orange, 3: vehicle-navigation blue, 4: external-navigation green
   force_persist: bool
 
 
@@ -73,13 +74,12 @@ class SetSpeedOverride:
       desired_source = ""
 
     if desired_speed is not None and 0 < desired_speed < 200 and desired_speed < set_speed_kph:
-      label = desired_source.strip() or "apply"
-      label = label[:8]  # 너무 길면 UI 깨짐 방지 (원하면 길이 조절)
+      label, speed_color_mode = deceleration_source_presentation(desired_source)
       return SetSpeedOverrideState(
         active=True,
         speed_kph=desired_speed,
         label=label,
-        speed_color_mode=2,
+        speed_color_mode=speed_color_mode,
         force_persist=True,   # 조건 유지되는 동안 계속 표시
       )
 
@@ -742,6 +742,10 @@ class HudRenderer(Widget):
           set_color = rl.Color(0, 255, 0, 230)
         elif ov.speed_color_mode == 2:    # apply
           set_color = rl.Color(255, 165, 0, 230)
+        elif ov.speed_color_mode == 3:    # vehicle navigation CAN
+          set_color = rl.Color(38, 132, 255, 230)
+        elif ov.speed_color_mode == 4:    # external navigation
+          set_color = rl.Color(0, 255, 0, 230)
         else:
           set_color = rl.Color(0, 255, 0, 230)   # your sample is green
 
