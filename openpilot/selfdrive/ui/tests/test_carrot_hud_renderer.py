@@ -589,6 +589,7 @@ def test_render_draws_each_hud_section_in_order(hud_module, monkeypatch):
   monkeypatch.setattr(renderer, "_refresh_hud_params", lambda now: calls.append(("params", now)))
   monkeypatch.setattr(renderer, "_draw_date_time", lambda rect: calls.append("date"))
   monkeypatch.setattr(renderer, "_draw_tpms", lambda rect: calls.append("tpms"))
+  monkeypatch.setattr(renderer, "_draw_egpu_badge", lambda rect: calls.append("egpu"))
   monkeypatch.setattr(renderer, "_draw_cruise_speed_animation", lambda rect: calls.append("animation"))
   monkeypatch.setattr(module.rl, "draw_rectangle_gradient_v", lambda *args: calls.append("header"))
   monkeypatch.setattr(module.time, "monotonic", lambda: 12.5)
@@ -602,11 +603,12 @@ def test_render_draws_each_hud_section_in_order(hud_module, monkeypatch):
     ("plot", 6),
     "date",
     "tpms",
+    "egpu",
     "animation",
   ]
 
 
-def test_vehicle_navigation_profile_displays_with_cruise_off(hud_module):
+def test_vehicle_navigation_profile_does_not_force_speed_with_cruise_off(hud_module):
   module, _ = hud_module
   sm = {
     "longitudinalPlan": SimpleNamespace(cruiseTarget=0.0),
@@ -620,8 +622,8 @@ def test_vehicle_navigation_profile_displays_with_cruise_off(hud_module):
 
   override = module.SetSpeedOverride().compute(sm, set_speed_kph=105)
 
-  assert override.active
+  assert not override.active
   assert override.speed_kph == 105
-  assert override.label == "vNAVI"
-  assert override.speed_color_mode == 3
-  assert override.force_persist
+  assert override.label == "MAX"
+  assert override.speed_color_mode == 0
+  assert not override.force_persist

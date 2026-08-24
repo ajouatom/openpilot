@@ -16,6 +16,7 @@ import pyray as rl
 
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
+from openpilot.selfdrive.carrot.deceleration_source import navigation_status_presentation
 
 from cluster_gles_dmabuf import DirectNv12DmabufError, create_tici_nv12_dmabuf_pool
 from cluster_gles_readback import DirectNv12ReadbackError, create_tici_direct_readback
@@ -59,6 +60,7 @@ from cluster_config import (
     RADAR_TO_CAMERA_M,
     RED,
     TEXT,
+    VEHICLE_NAVI,
     VEHICLE_LENGTH_M,
     WHITE,
     cluster_camera_view_is_road_camera,
@@ -4087,13 +4089,18 @@ class ClusterUiRenderer:
                 anchor="center",
             )
         navi_connected = bool(state.navi_dashboard is not None and state.navi_dashboard.connected)
-        if state.external_nav_active or navi_connected:
+        navi_status = navigation_status_presentation(
+            getattr(state, "vehicle_navi_available", False),
+            state.external_nav_active or navi_connected,
+        )
+        if navi_status is not None:
+            navi_label, navi_color_mode = navi_status
             self._draw_text_with_stroke(
-                "NAV",
+                navi_label,
                 NAV_STATUS_CENTER_X,
                 NAV_STATUS_CENTER_Y,
                 NAV_STATUS_FONT_SIZE,
-                GREEN,
+                VEHICLE_NAVI if navi_color_mode == 3 else GREEN,
                 (10, 13, 16),
                 2,
                 anchor="center",
@@ -6925,12 +6932,11 @@ class ClusterUiRenderer:
             if tpms_translated:
                 rl.rl_pop_matrix()
 
-        show_vehicle_navi = state.cruise_override_color_mode == 3 and state.cruise_override_label == "vNAVI"
-        if state.cruise_override_kph is not None and (self._cruise_set_visible(state) or show_vehicle_navi):
+        if self._cruise_set_visible(state) and state.cruise_override_kph is not None:
             override_color = (
                 GREEN
                 if state.cruise_override_color_mode in (1, 4)
-                else BLUE
+                else VEHICLE_NAVI
                 if state.cruise_override_color_mode == 3
                 else CRUISE_OVERRIDE_APPLY_COLOR
                 if state.cruise_override_color_mode == 2

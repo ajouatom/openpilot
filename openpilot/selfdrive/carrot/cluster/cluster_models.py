@@ -495,6 +495,7 @@ class ClusterUiState:
     network_connected: bool = False
     egpu_active: bool = False
     external_nav_active: bool = False
+    vehicle_navi_available: bool = False
     steering_output: float | None = None
     steering_output_normalized: float | None = None
     steering_output_kind: Literal["angle", "torque"] | None = None

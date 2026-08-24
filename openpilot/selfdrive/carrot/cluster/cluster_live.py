@@ -429,13 +429,8 @@ class OpenpilotLiveSource:
             and self._service_valid("longitudinalPlan")
             else None
         )
-        vehicle_navi_active = bool(safe_get(carrot_man, "vehicleNaviActive", False))
-        vehicle_navi_speed = safe_optional_float(carrot_man, "vehicleNaviSpeed")
-        if vehicle_navi_active and vehicle_navi_speed is not None and 0.0 < vehicle_navi_speed < 200.0:
-            cruise_override_kph = vehicle_navi_speed
-            cruise_override_label = "vNAVI"
-            cruise_override_color_mode = 3
-        elif state.cruise_kph is not None and state.cruise_display_state != "off":
+        vehicle_navi_available = bool(safe_get(carrot_man, "vehicleNaviAvailable", False))
+        if state.cruise_kph is not None and state.cruise_display_state != "off":
             # Keep this priority and the thresholds in sync with mici's SetSpeedOverride.
             longitudinal_plan = self._service_data("longitudinalPlan")
             cruise_target = safe_optional_float(longitudinal_plan, "cruiseTarget")
@@ -455,6 +450,7 @@ class OpenpilotLiveSource:
             alert=self._live_cluster_alert(state.alert, onroad),
             egpu_active=getattr(self, "_egpu_active", False),
             external_nav_active=external_nav_active,
+            vehicle_navi_available=vehicle_navi_available,
             speed_limit_kph=speed_limit_kph,
             speed_limit_source=speed_limit_source,
             navi_live=navi_live,

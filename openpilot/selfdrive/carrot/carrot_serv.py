@@ -1414,6 +1414,7 @@ class CarrotServ:
     msg.carrotMan.vehicleNaviActive = vehicle_navi_active
     msg.carrotMan.vehicleNaviSpeed = vehicle_navi_speed
     msg.carrotMan.vehicleNaviSectionActive = vehicle_navi_section_active
+    msg.carrotMan.vehicleNaviAvailable = bool(getattr(CS, "vehicleNaviAvailable", False))
     msg.carrotMan.carrotCmdIndex = int(self.carrotCmdIndex)
     msg.carrotMan.carrotCmd = self.carrotCmd
     msg.carrotMan.carrotArg = self.carrotArg

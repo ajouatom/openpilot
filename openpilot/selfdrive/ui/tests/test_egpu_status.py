@@ -25,6 +25,9 @@ def test_both_device_huds_render_active_egpu_badge():
     assert any(call.func.attr == "_draw_egpu_badge" for call in calls)
 
     badge = _method(path, "HudRenderer", "_draw_egpu_badge")
+    badge_source = ast.unparse(badge)
+    assert "badge_w" in badge_source
+    assert "rect.width / 2" not in badge_source
     assert any(
       isinstance(node, ast.Attribute)
       and isinstance(node.value, ast.Name)

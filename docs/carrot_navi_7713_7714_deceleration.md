@@ -226,18 +226,18 @@ SDI를 지울 때는 더 큰 sequence로 `present: false`, `value: null`, 비어
 
 | 기능 | 7713 입력 | 7714 입력 | 실제 적용 조건과 결과 | 적용 source/UI label |
 |---|---|---|---|---|
-| 고정/일반 카메라 | `nSdiType` 0,1,2,3,4,8,75,76 + speed/dist | primary `sdi`의 같은 type + speed/dist | `AutoNaviSpeedCtrlMode > 0`, speed > 0. 안전계수와 감속률 적용 | `cam` / 녹색 `NAVI` |
-| 이동식 카메라 | type 7 | type 7 | mode 3에서만 적용. mode 1/2에서는 `_update_sdi()`가 limit/dist를 0으로 지움 | `cam` / 녹색 `NAVI` |
-| 구간단속(block) | `nSdiBlockType` 2/3, block distance | primary SDI block type 2/3, block distance | type을 4로 바꾸고 block distance 사용. 단, block speed는 사용하지 않고 primary SDI speed에 안전계수를 적용 | `section` / 녹색 `NAVI` |
-| 7714 전용 section object | 없음 | `section.active`, speed limit, remaining distance | present + active + not suspended + section off-route 아님 + 전체 off-route 아님 + limit > 0일 때 type 4로 변환 | `section` / 녹색 `NAVI` |
-| 방지턱 | primary/plus type 22 | primary/secondary type 22 | `roadcate > 1`, mode >= 2. payload speed는 무시하고 `AutoNaviSpeedBumpSpeed` 사용. 단, 7714는 road category 갱신 순서/기본값 문제로 type 22가 수신되어도 후보 생성에 실패할 수 있음 | `bump` / 녹색 `NAVI` |
-| 차량 수신 과속카메라 | `carState.speedLimit/speedLimitDistance` | 동일 | 차량 CAN에서 단속속도만 수신하며 Hyundai `CarState`가 `speedLimit × (VehicleSpeedCameraDistanceTime / 10)`으로 가상거리 생성. `VehicleSpeedCameraControlMode`에 따라 미사용·항상 적용·가속페달 속도 하한·가속페달 입력 중 해제를 선택 | `hda` / 파랑 `vNAVI`, 하한 적용 시 `gas:v` |
-| 차량 내비 CAN 정확거리/구간 | `carState.speedLimitDistance/speedBumpDistance/vehicleNaviSectionActive` | 동일 | `VehicleNaviCanControl`이 켜진 Hyundai CAN-FD에서 0x4BE alert spot의 Offset을 휠 주행거리로 추적. 카메라는 기존 `hda`, Value 6 방지턱은 별도 후보, 종류 7의 30 초과 제한속도 구간은 안전계수를 적용한 연속 상한으로 계산 | `hda`, `hda_section`, `hda_bump` / 파랑 `vNAVI` |
-| 차량 내비 CAN 30 km/h 구간 | `carState.schoolZoneActive` | 동일 | `VehicleNaviSchoolZoneControl`이 켜지고 0x4BE 종류 7이 30 km/h를 알리면 30 km/h 후보 적용. 차량의 30 카메라 상태 종료, 비-30 종류 7, 경로 재계산 또는 1 km 주행 시 해제. 가속페달 동작은 `VehicleSpeedCameraControlMode`를 따름 | `school` / 파랑 `vNAVI`, mode 2 하한 적용 시 `gas:v` |
-| 도로 제한속도 | `nRoadLimitSpeed` | `road_limit_kph` | `AutoRoadSpeedLimitOffset >= 0`, active >= 2, road limit valid일 때 limit+offset | `road` / 녹색 `NAVI` |
-| 현재 TBT | `nTBTTurnType/nTBTDist` | `guidance_current.turn_type/distance_m` | 지원 turn type이 `xTurnInfo`로 변환되고 `AutoTurnControl`이 2 또는 3일 때 속도 목표 계산 | `atc` / 녹색 `NAVI` |
-| 다음 TBT | `nTBTTurnTypeNext/nTBTDistNext` | `guidance_next` | 현재 거리 + 다음 거리를 사용하고 같은 ATC 설정 적용 | `atc2` / 녹색 `NAVI` |
-| route 곡률 | `route`/`vrtx`, 최대 4096점 | route polyline, 최대 256점 | 동일 경로 곡률 계산. `TurnSpeedControlMode=2`는 TBT ±500 m, mode 3/4는 항상. 기본값 mode 1에서는 route 감속 미적용 | `route` / 녹색 `NAVI` |
+| 고정/일반 카메라 | `nSdiType` 0,1,2,3,4,8,75,76 + speed/dist | primary `sdi`의 같은 type + speed/dist | `AutoNaviSpeedCtrlMode > 0`, speed > 0. 안전계수와 감속률 적용 | `cam` / 녹색 `cam` |
+| 이동식 카메라 | type 7 | type 7 | mode 3에서만 적용. mode 1/2에서는 `_update_sdi()`가 limit/dist를 0으로 지움 | `cam` / 녹색 `cam` |
+| 구간단속(block) | `nSdiBlockType` 2/3, block distance | primary SDI block type 2/3, block distance | type을 4로 바꾸고 block distance 사용. 단, block speed는 사용하지 않고 primary SDI speed에 안전계수를 적용 | `section` / 녹색 `section` |
+| 7714 전용 section object | 없음 | `section.active`, speed limit, remaining distance | present + active + not suspended + section off-route 아님 + 전체 off-route 아님 + limit > 0일 때 type 4로 변환 | `section` / 녹색 `section` |
+| 방지턱 | primary/plus type 22 | primary/secondary type 22 | `roadcate > 1`, mode >= 2. payload speed는 무시하고 `AutoNaviSpeedBumpSpeed` 사용. 단, 7714는 road category 갱신 순서/기본값 문제로 type 22가 수신되어도 후보 생성에 실패할 수 있음 | `bump` / 녹색 `bump` |
+| 차량 수신 과속카메라 | `carState.speedLimit/speedLimitDistance` | 동일 | 차량 CAN에서 단속속도만 수신하며 Hyundai `CarState`가 `speedLimit × (VehicleSpeedCameraDistanceTime / 10)`으로 가상거리 생성. `VehicleSpeedCameraControlMode`에 따라 미사용·항상 적용·가속페달 속도 하한·가속페달 입력 중 해제를 선택 | `hda` / 라벤더 `cam`, 하한 적용 시 `gas` |
+| 차량 내비 CAN 정확거리/구간 | `carState.speedLimitDistance/speedBumpDistance/vehicleNaviSectionActive` | 동일 | `VehicleNaviCanControl`이 켜진 Hyundai CAN-FD에서 0x4BE alert spot의 Offset을 휠 주행거리로 추적. 카메라는 기존 `hda`, Value 6 방지턱은 별도 후보, 종류 7의 30 초과 제한속도 구간은 안전계수를 적용한 연속 상한으로 계산 | `hda`, `hda_section`, `hda_bump` / 라벤더 `cam`, `section`, `bump` |
+| 차량 내비 CAN 30 km/h 구간 | `carState.schoolZoneActive` | 동일 | `VehicleNaviSchoolZoneControl`이 켜지고 0x4BE 종류 7이 30 km/h를 알리면 30 km/h 후보 적용. 차량의 30 카메라 상태 종료, 비-30 종류 7, 경로 재계산 또는 1 km 주행 시 해제. 가속페달 동작은 `VehicleSpeedCameraControlMode`를 따름 | `school` / 라벤더 `school`, mode 2 하한 적용 시 `gas` |
+| 도로 제한속도 | `nRoadLimitSpeed` | `road_limit_kph` | `AutoRoadSpeedLimitOffset >= 0`, active >= 2, road limit valid일 때 limit+offset | `road` / 녹색 `road` |
+| 현재 TBT | `nTBTTurnType/nTBTDist` | `guidance_current.turn_type/distance_m` | 지원 turn type이 `xTurnInfo`로 변환되고 `AutoTurnControl`이 2 또는 3일 때 속도 목표 계산 | `atc` / 녹색 `turn` |
+| 다음 TBT | `nTBTTurnTypeNext/nTBTDistNext` | `guidance_next` | 현재 거리 + 다음 거리를 사용하고 같은 ATC 설정 적용 | `atc2` / 녹색 `turn` |
+| route 곡률 | `route`/`vrtx`, 최대 4096점 | route polyline, 최대 256점 | 동일 경로 곡률 계산. `TurnSpeedControlMode=2`는 TBT ±500 m, mode 3/4는 항상. 기본값 mode 1에서는 route 감속 미적용 | `route` / 녹색 `route` |
 | 신호등 | `sinf/ssinf` | `traffic_signal` | `TrafficLight` shared-memory param과 cluster/UI 표시에만 전달. `desiredSpeed`나 longitudinal stop target에는 직접 연결되지 않음 | 감속 source 없음 |
 
 공통 감속 속도는 목표 지점의 안전속도와 안전시간을 기준으로
@@ -436,19 +436,19 @@ secondary SDI/route 확장은 이 primary gate 문제를 고치지 않는다.
 `atc`, `atc2`, `cam`, `hda`, `hda_section`, `hda_bump`, `school`, `bump`, `section`, `police`, `waze`,
 `road`, `vturn`, `route`, `model`, `gas`
 
-on-road UI, mici UI, cluster live UI는 선택된 source의 표시 이름과 목표속도를 표시한다. 제어용
-`desiredSource` 값 자체는 바꾸지 않는다. 단, 유효한 차량 `0x4BE` 프로파일이 현재 위치와 관련 있으면
-`carrotMan.vehicleNaviActive/vehicleNaviSpeed`를 사용해 cruise 상태와 무관하게 파란색 `vNAVI`를 표시한다.
+on-road UI, mici UI, cluster live UI의 보조속도 영역은 선택된 감속 이유와 목표속도만 표시한다. 제어용
+`desiredSource` 값 자체는 바꾸지 않으며, cruise가 꺼졌을 때 차량 내비 속도를 보조속도처럼 강제로 표시하지 않는다.
 
 - `0 < desiredSpeed < 200`
 - `desiredSpeed < 운전자 설정 cruise speed`
-- 외부 내비 source `cam`, `section`, `bump`, `police`, `waze`, `road`, `atc`, `atc2`, `route`는
-  녹색 `NAVI`
-- 차량 CAN 내비 source `hda`, `hda_section`, `hda_bump`, `school`은 파란색 `vNAVI`
-- 나머지 source는 기존 축약 표기(`turn:c`, `gas:v` 등)와 주황색을 유지
+- 외부 내비 source는 실제 이유(`cam`, `section`, `bump`, `turn`, `route` 등)를 녹색으로 표시
+- 차량 CAN 내비 source는 실제 이유(`cam`, `section`, `bump`, `school`)를 라벤더로 표시
+- 나머지 source도 실제 이유(`turn`, `gas` 등)와 주황색을 유지
 
-cluster 기본 화면에서 `vNAVI`는 외부 내비 세션으로 취급하지 않으므로 주행리포트 패널을 그대로
-유지한다. 실제 7713/7714 guidance가 함께 수신될 때만 기존처럼 내비 패널로 전환한다.
+내비 상태 표시는 보조속도와 별개다. 외부 내비가 연결되면 녹색 `NAVI`, Hyundai CAN-FD에서
+`0x4BE`가 한 번이라도 수신되면 라벤더 `vNAVI`를 디바이스와 USB 클러스터의 동일한 상태 위치에 표시한다.
+`vNAVI`는 외부 내비 세션으로 취급하지 않으므로 cluster 주행리포트 패널을 그대로 유지하고, 실제
+7713/7714 guidance가 함께 수신될 때만 기존처럼 내비 패널로 전환한다.
 
 따라서 route 데이터가 존재하는 것만으로 `route`가 표시되는 것은 아니다. route 후보가 설정상
 활성이고 다른 모든 후보보다 낮아 실제 winner가 되어야 한다. 방지턱도 같은 방식으로 `bump`가 winner일

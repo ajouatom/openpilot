@@ -698,6 +698,8 @@ class CarState(CarStateBase):
     ret.vehicleNaviActive = False
     ret.vehicleNaviSectionActive = False
     ret.vehicleNaviSpeed = 0.0
+    profile_timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4BE")
+    ret.vehicleNaviAvailable = profile_timestamp > 0
     self.vehicleNaviCameraTarget = None
     if not (self.vehicleNaviCanControl or self.vehicleNaviSchoolZoneControl):
       return False
@@ -726,7 +728,7 @@ class CarState(CarStateBase):
           self._clear_vehicle_navi_school_zone()
 
     if self.navi_profile_4be is not None:
-      timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4BE")
+      timestamp = profile_timestamp
       if timestamp > self.vehicleNaviProfileTimestamp:
         self.vehicleNaviProfileTimestamp = timestamp
         profile = self._decode_vehicle_navi_profile(self.navi_profile_4be)
