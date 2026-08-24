@@ -33,7 +33,7 @@ def deceleration_source_presentation(source: str | None) -> tuple[str, int]:
   """Return the actual deceleration reason and its source color mode.
 
   Color mode 2 is the normal deceleration orange, mode 3 is vehicle CAN
-  navigation lavender, and mode 4 is external-navigation green.
+  navigation lavender, and mode 4 is external-navigation orange.
   """
   normalized = str(source or "").strip().lower()
   if not normalized:
@@ -55,8 +55,8 @@ def deceleration_source_presentation(source: str | None) -> tuple[str, int]:
 
 def navigation_status_presentation(vehicle_available: bool, external_active: bool) -> tuple[str, int] | None:
   """Return the navigation availability badge, independent of speed control."""
-  if vehicle_available:
-    return "vNAVI", 3
   if external_active:
     return "NAVI", 4
+  if vehicle_available:
+    return "vNAVI", 3
   return None

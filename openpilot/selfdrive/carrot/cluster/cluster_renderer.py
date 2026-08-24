@@ -235,7 +235,7 @@ EGPU_STATUS_CENTER_X = 245.0
 EGPU_STATUS_W = 76.0
 EGPU_STATUS_H = 34.0
 EGPU_STATUS_FONT_SIZE = 19.0
-NAV_STATUS_CENTER_X = WIFI_STATUS_CENTER_X
+NAV_STATUS_CENTER_X = WIFI_STATUS_CENTER_X - 22.0
 NAV_STATUS_CENTER_Y = 99.0
 NAV_STATUS_FONT_SIZE = 22.0
 LFA_STATUS_CENTER_X = 70
@@ -4100,7 +4100,7 @@ class ClusterUiRenderer:
                 NAV_STATUS_CENTER_X,
                 NAV_STATUS_CENTER_Y,
                 NAV_STATUS_FONT_SIZE,
-                VEHICLE_NAVI if navi_color_mode == 3 else GREEN,
+                VEHICLE_NAVI if navi_color_mode == 3 else AMBER,
                 (10, 13, 16),
                 2,
                 anchor="center",
@@ -6935,7 +6935,9 @@ class ClusterUiRenderer:
         if self._cruise_set_visible(state) and state.cruise_override_kph is not None:
             override_color = (
                 GREEN
-                if state.cruise_override_color_mode in (1, 4)
+                if state.cruise_override_color_mode == 1
+                else AMBER
+                if state.cruise_override_color_mode == 4
                 else VEHICLE_NAVI
                 if state.cruise_override_color_mode == 3
                 else CRUISE_OVERRIDE_APPLY_COLOR

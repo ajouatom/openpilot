@@ -261,7 +261,7 @@ export function isCruiseDisplayVisible(state = {}, cruiseKph = resolveCruiseKph(
 // Cruise set-speed override telltale. Mirrors cluster_live.py priority/thresholds:
 //   mode 1 (eco, green)    = longitudinalPlan.cruiseTarget above the set speed
 //   mode 2 (other deceleration, orange) / 3 (vehicle navigation CAN, lavender)
-//   mode 4 (external navigation, green)
+//   mode 4 (external navigation, orange)
 // Returns { kph, label, mode } in kph, or null. Shared by live and replay.
 export function deriveCruiseOverride(state = {}) {
   const cruiseKph = resolveCruiseKph(state);

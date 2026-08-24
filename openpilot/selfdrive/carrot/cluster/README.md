@@ -379,7 +379,7 @@ speed and `km/h` use the same font size and color; paused cruise keeps the set
 speed but draws it gray, and inactive cruise draws gray `--- km/h`. The
 deceleration override keeps the selected `carrotMan.desiredSource` control
 value unchanged. External navigation sources (`cam`, `section`, `bump`,
-`police`, `waze`, `road`, `atc`, `atc2`, and `route`) display their actual reason in green.
+`police`, `waze`, `road`, `atc`, `atc2`, and `route`) display their actual reason in orange.
 Vehicle
 CAN navigation sources (`hda`, `hda_bump`, and `school`) display their actual reason in
 lavender. Other sources retain concise labels such as comma-model turn prediction
@@ -414,8 +414,9 @@ into one GPU texture at renderer startup, then each unchanged-size live pressure
 value is drawn inside its corresponding enlarged tire. It remains hidden only
 when all four pressure values are unavailable; individual missing values show
 `--`, and values below 31 psi are red. The surrounding area stays transparent. When
-external navigation is active or its dashboard is connected, the green `NAVI`
-status appears below the Wi-Fi icon. Once Hyundai CAN-FD `0x4BE` has been
+external navigation is active or its dashboard is connected, the orange `NAVI`
+status appears one character-width left of the Wi-Fi center. It takes priority
+over vehicle navigation availability. Once Hyundai CAN-FD `0x4BE` has been
 observed during the drive, lavender `vNAVI` appears in the same status slot
 instead. This availability status is independent of speed control. The center
 clock, EV indicator, and fuel/DEF gauges are unchanged.
