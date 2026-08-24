@@ -360,8 +360,10 @@ class TestCornerRadar430CandidateFilter:
       radar_data = radar_interface.update([0, packets])
     return radar_data
 
-  def test_430_promotes_supported_neighbor_bins(self, monkeypatch):
+  def test_430_bins_are_not_promoted_to_live_tracks(self, monkeypatch):
     radar_interface = self.build_interface(monkeypatch)
+    assert radar_interface.rcp_corner_objects_430 is None
+
     empty = self.message({})
     supported_bins = self.message({
       6: self.slot_word(1000),
@@ -371,13 +373,8 @@ class TestCornerRadar430CandidateFilter:
     packets += [(addr, empty, 1) for addr in range(0x440, 0x448)]
 
     radar_data = self.update_frames(radar_interface, packets)
-    points = {point.trackId: point for point in radar_data.points}
 
-    assert points[300].measured
-    assert str(points[300].radarSource) == "corner430"
-    assert points[300].dRel == pytest.approx(50.1)
-    assert points[300].yRel == pytest.approx(2.0)
-    assert points[300].yvRel == 0.0
+    assert all(str(point.radarSource) != "corner430" for point in radar_data.points)
 
   def test_430_expires_noncenter_inward_yvrel(self, monkeypatch):
     radar_interface = self.build_interface(monkeypatch)
@@ -404,6 +401,5 @@ class TestCornerRadar430CandidateFilter:
     radar_data = self.update_frames(radar_interface, packets, frames=3)
     points = {point.trackId: point for point in radar_data.points}
 
-    assert points[300].measured
-    assert points[300].yRel == pytest.approx(2.0)
-    assert points[300].yvRel == 0.0
+    assert 300 not in points
+    assert all(str(point.radarSource) != "corner430" for point in points.values())

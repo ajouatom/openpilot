@@ -5,7 +5,7 @@ import pyray as rl
 from dataclasses import dataclass
 from typing import Optional
 from openpilot.common.constants import CV
-from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation
+from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation, navigation_status_presentation
 # from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar # 아이콘에 토크 적용: 토크바 미사용
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
@@ -294,7 +294,36 @@ class HudRenderer(Widget):
 
     self._draw_steering_wheel(rect)
 
+    self._draw_egpu_badge(rect)
+
     self._draw_cruise_speed_animation(rect)
+
+  def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
+    if not ui_state.usbgpu_active:
+      return
+
+    text = "eGPU"
+    font_size = 22
+    text_size = measure_text_cached(self._font_semi_bold, text, font_size)
+    pad_x, pad_y = 10, 5
+    badge_w = text_size.x + pad_x * 2
+    badge = rl.Rectangle(
+      rect.x + rect.width - badge_w - 24,
+      rect.y + 12,
+      badge_w,
+      text_size.y + pad_y * 2,
+    )
+    green = rl.Color(0, 255, 0, 230)
+    rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
+    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 2, green)
+    rl.draw_text_ex(
+      self._font_semi_bold,
+      text,
+      rl.Vector2(badge.x + pad_x, badge.y + pad_y),
+      font_size,
+      0,
+      green,
+    )
 
   def _update_cruise_speed_animation(self, cruise_text: str) -> None:
     if self._cruise_speed_text_last == cruise_text:
@@ -743,7 +772,7 @@ class HudRenderer(Widget):
         elif ov.speed_color_mode == 2:    # apply
           set_color = rl.Color(255, 165, 0, 230)
         elif ov.speed_color_mode == 3:    # vehicle navigation CAN
-          set_color = rl.Color(38, 132, 255, 230)
+          set_color = rl.Color(199, 125, 255, 230)
         elif ov.speed_color_mode == 4:    # external navigation
           set_color = rl.Color(0, 255, 0, 230)
         else:
@@ -779,10 +808,14 @@ class HudRenderer(Widget):
     # active carrot
     sm = ui_state.sm
     active_carrot = sm['carrotMan'].activeCarrot
-    if active_carrot >= 2:
+    vehicle_navi_available = bool(getattr(sm['carrotMan'], "vehicleNaviAvailable", False))
+    navi_status = navigation_status_presentation(vehicle_navi_available, active_carrot >= 2)
+    if navi_status is not None:
+      navi_label, navi_color_mode = navi_status
       x = int(panel_x + panel_w * 0.60)
       y = int(panel_y + panel_h * 0.82)
-      draw_text_ui_style("NAV", x, y, 26, rl.GREEN, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
+      navi_color = rl.Color(199, 125, 255, 230) if navi_color_mode == 3 else rl.GREEN
+      draw_text_ui_style(navi_label, x, y, 26, navi_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
 
     # ----- gear (right side box with letter) -----

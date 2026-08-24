@@ -16,6 +16,7 @@ import pyray as rl
 
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
+from openpilot.selfdrive.carrot.deceleration_source import navigation_status_presentation
 
 from cluster_gles_dmabuf import DirectNv12DmabufError, create_tici_nv12_dmabuf_pool
 from cluster_gles_readback import DirectNv12ReadbackError, create_tici_direct_readback
@@ -59,6 +60,7 @@ from cluster_config import (
     RADAR_TO_CAMERA_M,
     RED,
     TEXT,
+    VEHICLE_NAVI,
     VEHICLE_LENGTH_M,
     WHITE,
     cluster_camera_view_is_road_camera,
@@ -229,6 +231,10 @@ TOP_CRUISE_FONT_SIZE = 27.0 * DRIVE_STATUS_SCALE
 TOP_CRUISE_UNIT_FONT_SIZE = TOP_CRUISE_FONT_SIZE
 WIFI_STATUS_CENTER_X = 160
 WIFI_STATUS_ICON_SIZE = 48.0
+EGPU_STATUS_CENTER_X = 245.0
+EGPU_STATUS_W = 76.0
+EGPU_STATUS_H = 34.0
+EGPU_STATUS_FONT_SIZE = 19.0
 NAV_STATUS_CENTER_X = WIFI_STATUS_CENTER_X
 NAV_STATUS_CENTER_Y = 99.0
 NAV_STATUS_FONT_SIZE = 22.0
@@ -4083,13 +4089,18 @@ class ClusterUiRenderer:
                 anchor="center",
             )
         navi_connected = bool(state.navi_dashboard is not None and state.navi_dashboard.connected)
-        if state.external_nav_active or navi_connected:
+        navi_status = navigation_status_presentation(
+            getattr(state, "vehicle_navi_available", False),
+            state.external_nav_active or navi_connected,
+        )
+        if navi_status is not None:
+            navi_label, navi_color_mode = navi_status
             self._draw_text_with_stroke(
-                "NAV",
+                navi_label,
                 NAV_STATUS_CENTER_X,
                 NAV_STATUS_CENTER_Y,
                 NAV_STATUS_FONT_SIZE,
-                GREEN,
+                VEHICLE_NAVI if navi_color_mode == 3 else GREEN,
                 (10, 13, 16),
                 2,
                 anchor="center",
@@ -6660,11 +6671,27 @@ class ClusterUiRenderer:
             and state.cruise_gap is None
             and not self._cruise_set_visible(state)
             and state.lfa_active is None
+            and not state.egpu_active
         ):
             return
 
         self._draw_network_status(state, TOP_STATUS_CENTER_Y + WIFI_STATUS_ICON_SIZE * 0.5)
+        self._draw_egpu_status(state)
         self._draw_lfa_status_icon(state, TOP_STATUS_CENTER_Y + LFA_STATUS_ICON_SIZE * 0.5)
+
+    def _draw_egpu_status(self, state: ClusterUiState) -> None:
+        if not state.egpu_active:
+            return
+        rect = rl.Rectangle(
+            EGPU_STATUS_CENTER_X - EGPU_STATUS_W * 0.5,
+            TOP_STATUS_CENTER_Y - EGPU_STATUS_H * 0.5,
+            EGPU_STATUS_W,
+            EGPU_STATUS_H,
+        )
+        rl.draw_rectangle_rounded(rect, 0.35, 8, rl_color((0, 0, 0), 150))
+        rl.draw_rectangle_rounded_lines_ex(rect, 0.35, 8, 2.0, rl_color(GREEN))
+        self._draw_text("eGPU", EGPU_STATUS_CENTER_X, TOP_STATUS_CENTER_Y + 1.0,
+                        EGPU_STATUS_FONT_SIZE, GREEN, anchor="center", cache=True)
 
     def _draw_drive_status_box(
         self,
@@ -6909,7 +6936,7 @@ class ClusterUiRenderer:
             override_color = (
                 GREEN
                 if state.cruise_override_color_mode in (1, 4)
-                else BLUE
+                else VEHICLE_NAVI
                 if state.cruise_override_color_mode == 3
                 else CRUISE_OVERRIDE_APPLY_COLOR
                 if state.cruise_override_color_mode == 2

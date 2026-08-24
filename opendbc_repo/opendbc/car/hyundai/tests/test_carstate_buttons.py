@@ -14,6 +14,15 @@ def make_carstate(*, lfa_button=False, cruise_button_alt=False, lfa_button_alt=F
   return carstate
 
 
+def make_canfd_main_carstate(*, main_enabled=True, manual_main_off_latched=False, main_mode_acc=True):
+  carstate = CarState.__new__(CarState)
+  carstate.CP = SimpleNamespace(openpilotLongitudinalControl=True)
+  carstate.main_enabled = main_enabled
+  carstate.manual_main_off_latched = manual_main_off_latched
+  carstate.MainMode_ACC = main_mode_acc
+  return carstate
+
+
 @pytest.mark.parametrize(("fingerprint", "expected"), (
   ({0x4F1: 4}, (False, False, False)),
   ({0x391: 8, 0x4F1: 4}, (True, False, False)),
@@ -73,3 +82,47 @@ def test_alt_cruise_and_lfa_sources_are_independent():
 
   cp.vl["BCM_PO_11"]["LFA_Pressed"] = 1
   assert carstate._get_legacy_cruise_buttons(cp) == [Buttons.LFA_BUTTON]
+
+
+def test_canfd_manual_main_off_ignores_delayed_camera_main_state():
+  carstate = make_canfd_main_carstate()
+
+  carstate._update_canfd_main_enabled(Buttons.NONE, main_button_released=True)
+  assert not carstate.main_enabled
+  assert carstate.manual_main_off_latched
+
+  # The report log keeps MainMode_ACC high for about 80 ms after release.
+  for _ in range(10):
+    carstate._update_canfd_main_enabled(Buttons.NONE, main_button_released=False)
+    assert not carstate.main_enabled
+
+  carstate.MainMode_ACC = False
+  carstate._update_canfd_main_enabled(Buttons.NONE, main_button_released=False)
+  assert not carstate.main_enabled
+
+
+def test_canfd_main_button_turns_cruise_back_on_and_clears_manual_off():
+  carstate = make_canfd_main_carstate(main_enabled=False, manual_main_off_latched=True, main_mode_acc=False)
+
+  carstate._update_canfd_main_enabled(Buttons.NONE, main_button_released=True)
+
+  assert carstate.main_enabled
+  assert not carstate.manual_main_off_latched
+
+
+@pytest.mark.parametrize("button", (Buttons.RES_ACCEL, Buttons.SET_DECEL))
+def test_canfd_cruise_enable_button_clears_manual_main_off(button):
+  carstate = make_canfd_main_carstate(main_enabled=False, manual_main_off_latched=True, main_mode_acc=False)
+
+  carstate._update_canfd_main_enabled(button, main_button_released=False)
+
+  assert carstate.main_enabled
+  assert not carstate.manual_main_off_latched
+
+
+def test_canfd_camera_main_still_enables_cruise_without_manual_off():
+  carstate = make_canfd_main_carstate(main_enabled=False)
+
+  carstate._update_canfd_main_enabled(Buttons.NONE, main_button_released=False)
+
+  assert carstate.main_enabled

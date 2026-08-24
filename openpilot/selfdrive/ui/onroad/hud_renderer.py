@@ -65,7 +65,7 @@ class Colors:
   GREEN_200 = rl.Color(0, 255, 0, 200)
   GREEN_210 = rl.Color(0, 255, 0, 210)
   BLUE_210 = rl.Color(0, 120, 255, 210)
-  VEHICLE_NAVI_BLUE = rl.Color(38, 132, 255, 230)
+  VEHICLE_NAVI_LAVENDER = rl.Color(199, 125, 255, 230)
   RED_200 = rl.Color(255, 0, 0, 200)
   RED_210 = rl.Color(255, 0, 0, 210)
   YELLOW_210 = rl.Color(255, 255, 0, 210)
@@ -297,10 +297,38 @@ class HudRenderer(Widget):
 
     self._draw_date_time(rect)
     self._draw_tpms(rect)
+    self._draw_egpu_badge(rect)
     self._draw_cruise_speed_animation(rect)
 
   def user_interacting(self) -> bool:
     return self._exp_button.is_pressed
+
+  def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
+    if not ui_state.usbgpu_active:
+      return
+
+    text = "eGPU"
+    font_size = 38
+    text_size = measure_text_cached(self._font_semi_bold, text, font_size)
+    pad_x, pad_y = 18, 8
+    badge_w = text_size.x + pad_x * 2
+    exp_button_left = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
+    badge = rl.Rectangle(
+      exp_button_left - badge_w - 24,
+      rect.y + 24,
+      badge_w,
+      text_size.y + pad_y * 2,
+    )
+    rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
+    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 3, COLORS.GREEN_210)
+    rl.draw_text_ex(
+      self._font_semi_bold,
+      text,
+      rl.Vector2(badge.x + pad_x, badge.y + pad_y),
+      font_size,
+      0,
+      COLORS.GREEN_210,
+    )
 
   def _draw_set_speed(self, rect: rl.Rectangle) -> None:
     """Draw the MAX speed indicator box."""
@@ -644,7 +672,7 @@ class HudRenderer(Widget):
       elif ov.speed_color_mode == 2:
         ov_color = COLORS.ORANGE_230
       elif ov.speed_color_mode == 3:
-        ov_color = COLORS.VEHICLE_NAVI_BLUE
+        ov_color = COLORS.VEHICLE_NAVI_LAVENDER
       elif ov.speed_color_mode == 4:
         ov_color = rl.GREEN
       else:

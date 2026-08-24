@@ -19,6 +19,7 @@ from opendbc.car.car_helpers import get_car, interfaces
 from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.alternative_experience import get_alternative_experience
+from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
 from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
@@ -172,6 +173,7 @@ class Car:
     self.card_diag_process_max_us = 0
     self.card_diag_slow_loop = 0
     self.card_diag_slow_process = 0
+    self.card_diag_can_timeouts = 0
     self.card_diag_stage_names = ('decode', 'ci_update', 'sm_update', 'radar', 'state_tail',
                                   'state_total', 'publish', 'apply', 'sendcan', 'total')
     self.card_diag_stage_current = dict.fromkeys(self.card_diag_stage_names, 0)
@@ -212,6 +214,7 @@ class Car:
     # Check for CAN timeout
     if not can_rcv_valid:
       self.can_rcv_cum_timeout_counter += 1
+      self.card_diag_can_timeouts += 1
 
     if can_rcv_valid and REPLAY:
       self.can_log_mono_time = messaging.log_from_bytes(can_strs[0]).logMonoTime
@@ -321,33 +324,36 @@ class Car:
       self.card_diag_slow_process += process_us > 5000
       self.card_diag_frames += 1
       if self.card_diag_frames >= 100:
-        print(f"card_sendcan_diag: loop_max_us={self.card_diag_loop_max_us}, process_max_us={self.card_diag_process_max_us}, "
-              f"loop_over_12ms={self.card_diag_slow_loop}, process_over_5ms={self.card_diag_slow_process}")
-        print(f"card_stage_state_diag: decode_avg_us={self.card_diag_stage_sum_us['decode'] // self.card_diag_frames}, "
-              f"decode_max_us={self.card_diag_stage_max_us['decode']}, "
-              f"ci_avg_us={self.card_diag_stage_sum_us['ci_update'] // self.card_diag_frames}, "
-              f"ci_max_us={self.card_diag_stage_max_us['ci_update']}, "
-              f"sm_avg_us={self.card_diag_stage_sum_us['sm_update'] // self.card_diag_frames}, "
-              f"sm_max_us={self.card_diag_stage_max_us['sm_update']}, "
-              f"radar_avg_us={self.card_diag_stage_sum_us['radar'] // self.card_diag_frames}, "
-              f"radar_max_us={self.card_diag_stage_max_us['radar']}, "
-              f"tail_avg_us={self.card_diag_stage_sum_us['state_tail'] // self.card_diag_frames}, "
-              f"tail_max_us={self.card_diag_stage_max_us['state_tail']}, "
-              f"state_avg_us={self.card_diag_stage_sum_us['state_total'] // self.card_diag_frames}, "
-              f"state_max_us={self.card_diag_stage_max_us['state_total']}")
-        print(f"card_stage_send_diag: publish_avg_us={self.card_diag_stage_sum_us['publish'] // self.card_diag_frames}, "
-              f"publish_max_us={self.card_diag_stage_max_us['publish']}, "
-              f"apply_avg_us={self.card_diag_stage_sum_us['apply'] // self.card_diag_frames}, "
-              f"apply_max_us={self.card_diag_stage_max_us['apply']}, "
-              f"sendcan_avg_us={self.card_diag_stage_sum_us['sendcan'] // self.card_diag_frames}, "
-              f"sendcan_max_us={self.card_diag_stage_max_us['sendcan']}, "
-              f"total_avg_us={self.card_diag_stage_sum_us['total'] // self.card_diag_frames}, "
-              f"total_max_us={self.card_diag_stage_max_us['total']}")
+        if should_log_card_diagnostics(self.card_diag_loop_max_us, self.card_diag_process_max_us, self.card_diag_can_timeouts):
+          print(f"card_sendcan_diag: can_timeouts={self.card_diag_can_timeouts}, "
+                f"loop_max_us={self.card_diag_loop_max_us}, process_max_us={self.card_diag_process_max_us}, "
+                f"loop_over_12ms={self.card_diag_slow_loop}, process_over_5ms={self.card_diag_slow_process}")
+          print(f"card_stage_state_diag: decode_avg_us={self.card_diag_stage_sum_us['decode'] // self.card_diag_frames}, "
+                f"decode_max_us={self.card_diag_stage_max_us['decode']}, "
+                f"ci_avg_us={self.card_diag_stage_sum_us['ci_update'] // self.card_diag_frames}, "
+                f"ci_max_us={self.card_diag_stage_max_us['ci_update']}, "
+                f"sm_avg_us={self.card_diag_stage_sum_us['sm_update'] // self.card_diag_frames}, "
+                f"sm_max_us={self.card_diag_stage_max_us['sm_update']}, "
+                f"radar_avg_us={self.card_diag_stage_sum_us['radar'] // self.card_diag_frames}, "
+                f"radar_max_us={self.card_diag_stage_max_us['radar']}, "
+                f"tail_avg_us={self.card_diag_stage_sum_us['state_tail'] // self.card_diag_frames}, "
+                f"tail_max_us={self.card_diag_stage_max_us['state_tail']}, "
+                f"state_avg_us={self.card_diag_stage_sum_us['state_total'] // self.card_diag_frames}, "
+                f"state_max_us={self.card_diag_stage_max_us['state_total']}")
+          print(f"card_stage_send_diag: publish_avg_us={self.card_diag_stage_sum_us['publish'] // self.card_diag_frames}, "
+                f"publish_max_us={self.card_diag_stage_max_us['publish']}, "
+                f"apply_avg_us={self.card_diag_stage_sum_us['apply'] // self.card_diag_frames}, "
+                f"apply_max_us={self.card_diag_stage_max_us['apply']}, "
+                f"sendcan_avg_us={self.card_diag_stage_sum_us['sendcan'] // self.card_diag_frames}, "
+                f"sendcan_max_us={self.card_diag_stage_max_us['sendcan']}, "
+                f"total_avg_us={self.card_diag_stage_sum_us['total'] // self.card_diag_frames}, "
+                f"total_max_us={self.card_diag_stage_max_us['total']}")
         self.card_diag_frames = 0
         self.card_diag_loop_max_us = 0
         self.card_diag_process_max_us = 0
         self.card_diag_slow_loop = 0
         self.card_diag_slow_process = 0
+        self.card_diag_can_timeouts = 0
         self.card_diag_stage_sum_us = dict.fromkeys(self.card_diag_stage_names, 0)
         self.card_diag_stage_max_us = dict.fromkeys(self.card_diag_stage_names, 0)
 

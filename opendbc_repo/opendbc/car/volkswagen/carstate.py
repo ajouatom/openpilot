@@ -16,6 +16,7 @@ class CarState(CarStateBase):
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.esp_hold_confirmation = False
+    self.long_control_inhibit = False  # MEB: 차가 종방향 제어를 일시 거부 중 (VMM_02)
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
     # MEB (VW ID.4/ID.5) state - ported from infiniteCable2 via id4-meb branch
@@ -28,12 +29,19 @@ class CarState(CarStateBase):
     self.curvature = 0.
     self.cruise_recovery_timer = 0  # update_acc_fault 디바운스용 (infiniteCable2)
 
-  def update_acc_fault(self, acc_fault, parking_brake=False, drive_mode=True, recovery_frames_max=100):
+  def update_acc_fault(self, acc_fault, parking_brake=False, drive_mode=True, recovery_frames_max=100,
+                       long_inhibit=False):
     # infiniteCable2 포팅: 주차 중(EPB+비주행)엔 TSK fault를 무시하고, 주행 전환 직후
     # recovery_frames_max(100) 동안 grace를 줘서 출발 직후 일시적 TSK 글리치로 인한
     # 불필요한 Cruise Fault 해제를 막는다.
+    # long_inhibit: 운전자가 저속에서 세게 제동하면 TSK가 잠시 폴트로 떨어지는데, 차가
+    # VMM_02.Long_Control_Inhibit 으로 미리 알려준다. 예정된 폴트이므로 오해제하지 않는다.
+    # (commaai/opendbc: "TSK temporarily faults ... shortly after driver harshly brakes")
     fault = acc_fault
-    if parking_brake and not drive_mode:
+    if long_inhibit:
+      self.cruise_recovery_timer = self.frame
+      fault = False
+    elif parking_brake and not drive_mode:
       fault = False
       self.cruise_recovery_timer = self.frame
     elif self.frame - self.cruise_recovery_timer < recovery_frames_max:
@@ -186,7 +194,9 @@ class CarState(CarStateBase):
     ret.steeringAngleDeg = pt_cp.vl["LWI_01"]["LWI_Lenkradwinkel"] * (1, -1)[int(pt_cp.vl["LWI_01"]["LWI_VZ_Lenkradwinkel"])]
     ret.steeringRateDeg  = pt_cp.vl["LWI_01"]["LWI_Lenkradw_Geschw"] * (1, -1)[int(pt_cp.vl["LWI_01"]["LWI_VZ_Lenkradw_Geschw"])]
     ret.steeringTorque   = pt_cp.vl["LH_EPS_03"]["EPS_Lenkmoment"] * (1, -1)[int(pt_cp.vl["LH_EPS_03"]["EPS_VZ_Lenkmoment"])]
-    ret.steeringPressed  = abs(ret.steeringTorque) > self.CCP.STEER_DRIVER_ALLOWANCE
+    # 5프레임(50ms) 연속일 때만 개입 판정 (commaai/opendbc 동일). 임계값(0.6Nm)은 실차 검증값 유지.
+    # 즉시 판정은 노면 요철 한 방에도 개입으로 오인해 곡률 PID unwind/override가 튈 수 있음.
+    ret.steeringPressed  = self.update_steering_pressed(abs(ret.steeringTorque) > self.CCP.STEER_DRIVER_ALLOWANCE, 5)
 
     # MEB curvature 피드백: QFK_01.Curvature(40비트) + Curvature_VZ(55비트)
     # QFK_01 곡률은 openpilot 곡률 부호 관례와 반대 -> 음수화 (infiniteCable2: ret.steeringCurvature = -QFK...)
@@ -204,8 +214,9 @@ class CarState(CarStateBase):
     # HCA 상태 (QFK_01) - vw_meb.dbc는 소문자 값 정의, update_hca_state는 대문자 비교 → 변환
     hca_status_raw = self.CCP.hca_status_values.get(pt_cp.vl["QFK_01"]["LatCon_HCA_Status"])
     hca_status = hca_status_raw.upper() if hca_status_raw else hca_status_raw
-    # GEN2(2024+): Getriebe_11이 PT버스에 안 옴 -> Gateway_73에서 기어 읽기 (infiniteCable2 동일, 실차 rlog 확인)
-    if self.CP.flags & VolkswagenFlags.MEB_GEN2:
+    # 기어 소스: Getriebe_11이 PT버스에 안 오는 차(MK2 등)는 Gateway_73에서 읽는다.
+    # 차종 플래그가 아니라 interface.py가 핑거프린트(0x3DC)로 세운 ALT_GEAR를 본다.
+    if self.CP.flags & VolkswagenFlags.ALT_GEAR:
       gear_raw = pt_cp.vl["Gateway_73"]["GE_Fahrstufe"]
     else:
       gear_raw = pt_cp.vl["Getriebe_11"]["GE_Fahrstufe"]
@@ -225,12 +236,15 @@ class CarState(CarStateBase):
     # 매 정차마다 오인되지 않음. 실제 전자식 주차브레이크 작동 시에만 True.
     ret.parkingBrake = pt_cp.vl["ESC_50"]["EPB_Status"] in (1, 4)
 
-    # 도어
-    ret.doorOpen = any([pt_cp.vl["Gateway_72"]["ZV_FT_offen"],
-                        pt_cp.vl["Gateway_72"]["ZV_BT_offen"],
-                        pt_cp.vl["Gateway_72"]["ZV_HFS_offen"],
-                        pt_cp.vl["Gateway_72"]["ZV_HBFS_offen"],
-                        pt_cp.vl["Gateway_72"]["ZV_HD_offen"]])
+    # 도어: Gateway_72.ZV_02_alt 가 서 있으면 도어의 실제 소스는 ZV_02 (commaai/opendbc 동일).
+    # 실차 검증: MK1/MK2 모두 ZV_02_alt=1 고정 -> 기존 Gateway_72 도어비트는 죽은 릴레이였음
+    # (문 열림이 아예 감지되지 않던 상태). 두 메시지의 도어 신호명은 동일.
+    doors = pt_cp.vl["ZV_02"] if bool(pt_cp.vl["Gateway_72"]["ZV_02_alt"]) else pt_cp.vl["Gateway_72"]
+    ret.doorOpen = any([doors["ZV_FT_offen"],
+                        doors["ZV_BT_offen"],
+                        doors["ZV_HFS_offen"],
+                        doors["ZV_HBFS_offen"],
+                        doors["ZV_HD_offen"]])
 
     # 안전벨트
     ret.seatbeltUnlatched = pt_cp.vl["Airbag_02"]["AB_Gurtschloss_FA"] != 3
@@ -258,7 +272,17 @@ class CarState(CarStateBase):
     ret.stockFcw = False
     ret.stockAeb = False
 
-    self.acc_type = 2  # ACC stop and go
+    # Report EA as a non-critical fault while it is actively intervening (phases 3-6, commaai/opendbc).
+    # Reads 2 (STANDBY) in normal driving. EA_01 is only parsed when STOCK_EA_PRESENT.
+    if self.CP.flags & VolkswagenFlags.STOCK_EA_PRESENT:
+      ret.carFaultedNonCritical = cam_cp.vl["EA_01"]["EA_Funktionsstatus"] in (3, 4, 5, 6)
+
+    # ACC type: on the gateway harness read it from the stock radar's ACC_18 (commaai/opendbc;
+    # RX CRC verified on MK1/MK2 logs). Camera harness keeps the radar silent, keep 2.
+    if self.CP.networkLocation == NetworkLocation.gateway:
+      self.acc_type = ext_cp.vl["ACC_18"]["ACC_Typ"]
+    else:
+      self.acc_type = 2  # ACC stop and go
     self.eps_stock_values = pt_cp.vl["LH_EPS_03"]
     # 정전식 핸들 터치(KLR_01) stock 값 - Emergency Assist 핸즈온 pacification용
     self.klr_stock_values = pt_cp.vl["KLR_01"] if self.CP.flags & VolkswagenFlags.STOCK_KLR_PRESENT else {}
@@ -270,6 +294,11 @@ class CarState(CarStateBase):
     # 어긋났음 -> EPB 홀드/릴리스 타이밍 불일치로 재출발이 막힐 수 있었음.
     self.esp_hold_confirmation = pt_cp.vl["ESC_50"]["Motion_State"] == 3
 
+    # 저속에서 운전자가 세게 제동한 직후 차가 종방향 제어를 일시 거부하는 구간.
+    # 이 상태에서 출발요청(ACC_Anfahren)을 넣으면 TSK가 폴트난다 (commaai/opendbc).
+    # 2 = inhibited. 실차 rlog 검증: MK1/MK2 모두 평시 1(not_inhibited)로 안정적으로 읽힘.
+    self.long_control_inhibit = pt_cp.vl["VMM_02"]["Long_Control_Inhibit"] == 2
+
     # ACC/크루즈 상태
     ret.cruiseState.available  = pt_cp.vl["Motor_51"]["TSK_Status"] in (2, 3, 4, 5)
     ret.cruiseState.enabled    = pt_cp.vl["Motor_51"]["TSK_Status"] in (3, 4, 5)
@@ -277,7 +306,8 @@ class CarState(CarStateBase):
     # 주행 전환 직후 100프레임 grace -> 출발 직후 일시적 TSK 글리치로 인한 오해제 방지. (infiniteCable2)
     acc_drive_mode = ret.gearShifter == GearShifter.drive
     ret.accFaulted = self.update_acc_fault(pt_cp.vl["Motor_51"]["TSK_Status"] in (6, 7),
-                                           parking_brake=ret.parkingBrake, drive_mode=acc_drive_mode)
+                                           parking_brake=ret.parkingBrake, drive_mode=acc_drive_mode,
+                                           long_inhibit=self.long_control_inhibit)
     ret.cruiseState.standstill = self.CP.pcmCruise and self.esp_hold_confirmation
     ret.cruiseState.nonAdaptive = bool(pt_cp.vl["Motor_51"]["TSK_Limiter_ausgewaehlt"])
 
@@ -304,9 +334,9 @@ class CarState(CarStateBase):
     ret.cruiseSpeedBigStep = bool(pt_cp.vl["GRA_ACC_01"]["GRA_Tip_Stufe_2"])
     self.gra_stock_values = pt_cp.vl["GRA_ACC_01"]
 
-    # ESP 상태
-    ret.espDisabled = False
-    ret.espActive   = False
+    # ESP 상태 (commaai/opendbc 동일): ESC 수동 off / ESC 개입 중. 평시 둘 다 0 (실차 확인).
+    ret.espDisabled = bool(pt_cp.vl["ESP_21"]["ESP_Tastung_passiv"])
+    ret.espActive   = bool(pt_cp.vl["ESP_21"]["ESP_Eingriff"])
 
     self.frame += 1
     return ret
@@ -474,12 +504,16 @@ class CarState(CarStateBase):
       ("SMLS_01", 1),       # From 스탈크 컨트롤
     ]
 
-    # GEN2(2024+, ID.4 MK2): 기어는 Gateway_73으로 오고, 일부 메시지 주기가 낮음 (실차 rlog 실측)
+    # GEN2(2024+, ID.4 MK2): 일부 메시지 주기가 낮음 (실차 rlog 실측)
     gen2 = bool(CP.flags & VolkswagenFlags.MEB_GEN2)
-    if gen2:
-      pt_messages += [("Gateway_73", 10)]   # 기어 (GE_Fahrstufe)
+    # 기어: ALT_GEAR(핑거프린트에 Gateway_73 존재)면 Gateway_73, 아니면 Getriebe_11
+    if CP.flags & VolkswagenFlags.ALT_GEAR:
+      pt_messages += [("Gateway_73", 10)]   # 기어 (GE_Fahrstufe, 실측 20Hz - 여유 두고 10 선언)
     else:
       pt_messages += [("Getriebe_11", 50)]  # 기어
+
+    pt_messages += [("VMM_02", 50)]  # 종방향 제어 일시 거부 (Long_Control_Inhibit), MK1/MK2 실측 50Hz
+    pt_messages += [("ZV_02", 5)]    # 도어 실소스 (ZV_02_alt=1), MK1/MK2 실측 5Hz
 
     if CP.flags & VolkswagenFlags.STOCK_KLR_PRESENT:
       pt_messages += [("KLR_01", 10 if gen2 else 50)]  # 정전식 핸들 터치 (EA 핸즈온, GEN2 실측 ~16Hz)
@@ -494,6 +528,7 @@ class CarState(CarStateBase):
     if CP.networkLocation == NetworkLocation.gateway:
       cam_messages += [
         ("MEB_ACC_01", 10 if gen2 else 50),   # From 레이더 (ACC 설정속도, GEN2 실측 ~16Hz)
+        ("ACC_18", 50),                       # From 레이더 (ACC_Typ 실측), MK1/MK2 실측 50Hz
       ]
       if CP.enableBsm:
         # GEN2(2024+)는 BSM이 PT 버스로 옴 (infiniteCable2 동일)

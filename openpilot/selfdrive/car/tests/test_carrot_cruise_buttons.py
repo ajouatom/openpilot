@@ -19,6 +19,7 @@ def make_cruise_helper(button_kph, cruise_button_mode, carrot_cruise_active, cru
   helper._pause_auto_speed_up = True
   helper._soft_hold_active = 0
   helper._hold_interlock_active = False
+  helper._steering_interlock_active = False
   helper._cruise_ready = False
   helper._v_cruise_kph_at_brake = cruise_speed_at_brake
   helper._cruise_speed_initialized = cruise_speed_initialized
@@ -91,10 +92,23 @@ def test_accel_keeps_initialized_speed_without_brake_snapshot_while_cruise_is_of
 def test_auto_hold_blocks_automatic_cruise_activation():
   helper = VCruiseCarrot.__new__(VCruiseCarrot)
   helper._hold_interlock_active = True
+  helper._steering_interlock_active = False
   helper._activate_cruise = 0
   helper._add_log = lambda log: None
 
   helper._cruise_control(1, -1, "Cruise on (test)")
+
+  assert helper._activate_cruise == 0
+
+
+def test_large_steering_angle_blocks_automatic_cruise_activation():
+  helper = VCruiseCarrot.__new__(VCruiseCarrot)
+  helper._hold_interlock_active = False
+  helper._steering_interlock_active = True
+  helper._activate_cruise = 0
+  helper._add_log = lambda log: None
+
+  helper._cruise_control(1, -1, "Cruise on (speed)")
 
   assert helper._activate_cruise == 0
 

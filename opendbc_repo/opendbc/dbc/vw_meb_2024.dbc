@@ -436,24 +436,24 @@ BO_ 591 Strukturen_01: 64 XXX
  SG_ Right_Lane_02_ObjectID : 46|6@1+ (1,0) [0|63] "Unit_ObjectID" XXX
  SG_ Unknown_02 : 52|2@1+ (1,0) [0|3] "" XXX
  SG_ Unknown_03 : 54|10@1+ (1,0) [0|3] "" XXX
- SG_ Same_Lane_01_Long_Distance : 64|12@1+ (0.07,-6) [0|300] "Unit_Meter" XXX
+ SG_ Same_Lane_01_Long_Distance : 64|12@1+ (0.0625,-3.75) [0|300] "Unit_Meter" XXX
  SG_ Same_Lane_01_Lat_Distance : 76|10@1+ (0.065,-33.28) [-50|50] "Unit_Meter" XXX
- SG_ Same_Lane_01_Rel_Velo : 86|10@1+ (0.28,-143.36) [-150|150] "Unit_MeterPerSecond" XXX
- SG_ Left_Lane_01_Long_Distance : 96|12@1+ (0.07,-6) [0|300] "Unit_Meter" XXX
+ SG_ Same_Lane_01_Rel_Velo : 86|10@1+ (0.25,-128) [-150|150] "Unit_MeterPerSecond" XXX
+ SG_ Left_Lane_01_Long_Distance : 96|12@1+ (0.0625,-3.75) [0|300] "Unit_Meter" XXX
  SG_ Left_Lane_01_Lat_Distance : 108|10@1+ (0.065,-33.28) [-50|50] "Unit_Meter" XXX
- SG_ Left_Lane_01_Rel_Velo : 118|10@1+ (0.28,-143.36) [-150|150] "Unit_MeterPerSecond" XXX
- SG_ Right_Lane_01_Long_Distance : 128|12@1+ (0.07,-6) [0|300] "Unit_Meter" XXX
+ SG_ Left_Lane_01_Rel_Velo : 118|10@1+ (0.25,-128) [-150|150] "Unit_MeterPerSecond" XXX
+ SG_ Right_Lane_01_Long_Distance : 128|12@1+ (0.0625,-3.75) [0|300] "Unit_Meter" XXX
  SG_ Right_Lane_01_Lat_Distance : 140|10@1+ (0.065,-33.28) [-50|50] "Unit_Meter" XXX
- SG_ Right_Lane_01_Rel_Velo : 150|10@1+ (0.28,-143.36) [-150|150] "Unit_MeterPerSecond" XXX
- SG_ Same_Lane_02_Long_Distance : 160|12@1+ (0.07,-6) [0|300] "Unit_Meter" XXX
+ SG_ Right_Lane_01_Rel_Velo : 150|10@1+ (0.25,-128) [-150|150] "Unit_MeterPerSecond" XXX
+ SG_ Same_Lane_02_Long_Distance : 160|12@1+ (0.0625,-3.75) [0|300] "Unit_Meter" XXX
  SG_ Same_Lane_02_Lat_Distance : 172|10@1+ (0.065,-33.28) [-50|50] "Unit_Meter" XXX
- SG_ Same_Lane_02_Rel_Velo : 182|10@1+ (0.28,-143.36) [-150|150] "Unit_MeterPerSecond" XXX
- SG_ Left_Lane_02_Long_Distance : 192|12@1+ (0.07,-6) [0|300] "Unit_Meter" XXX
+ SG_ Same_Lane_02_Rel_Velo : 182|10@1+ (0.25,-128) [-150|150] "Unit_MeterPerSecond" XXX
+ SG_ Left_Lane_02_Long_Distance : 192|12@1+ (0.0625,-3.75) [0|300] "Unit_Meter" XXX
  SG_ Left_Lane_02_Lat_Distance : 204|10@1+ (0.065,-33.28) [-50|50] "Unit_Meter" XXX
- SG_ Left_Lane_02_Rel_Velo : 214|10@1+ (0.28,-143.36) [-150|150] "Unit_MeterPerSecond" XXX
- SG_ Right_Lane_02_Long_Distance : 224|12@1+ (0.07,-6) [0|300] "Unit_Meter" XXX
+ SG_ Left_Lane_02_Rel_Velo : 214|10@1+ (0.25,-128) [-150|150] "Unit_MeterPerSecond" XXX
+ SG_ Right_Lane_02_Long_Distance : 224|12@1+ (0.0625,-3.75) [0|300] "Unit_Meter" XXX
  SG_ Right_Lane_02_Lat_Distance : 236|10@1+ (0.065,-33.28) [-50|50] "Unit_Meter" XXX
- SG_ Right_Lane_02_Rel_Velo : 246|10@1+ (0.28,-143.36) [-150|150] "Unit_MeterPerSecond" XXX
+ SG_ Right_Lane_02_Rel_Velo : 246|10@1+ (0.25,-128) [-150|150] "Unit_MeterPerSecond" XXX
  SG_ Same_Lane_01_Unknown_01 : 256|8@1+ (1,-128) [0|31] "" XXX
  SG_ Same_Lane_01_Unknown_02 : 264|6@1+ (1,-15) [0|31] "" XXX
  SG_ Same_Lane_01_Unknown_03 : 270|6@1+ (1,0) [0|127] "" XXX
@@ -2109,6 +2109,7 @@ CM_ BO_ 522 "Steuergerät für Fahrzeugbewegung";
 CM_ BO_ 1622 "Steuergerät für Lenkungsverriegelung";
 CM_ BO_ 316495165 "Steuergerät ICAS1";
 CM_ BO_ 441800001 "Steuergerät für Fahrzeugbewegung";
+VAL_ 313 Long_Control_Inhibit 1 "not_inhibited" 2 "inhibited";
 VAL_ 64 AB_RGS_Anst 4 "aktiv_Niveau_1" 5 "aktiv_Niveau_2" 6 "aktiv_Niveau_3" 7 "aktiv_Niveau_4" 8 "deaktiviert";
 VAL_ 64 AB_Front_Crash 0 "kein_Front_Crash" 1 "Front_Crash";
 VAL_ 64 AB_Heck_Crash 0 "kein_Heck_Crash" 1 "Heck_Crash";
@@ -3503,6 +3504,7 @@ BO_ 313 VMM_02: 32 XXX
  SG_ AEB_Active : 31|1@0+ (1,0) [0|1] "" XXX
  SG_ ESP_Hold : 35|1@0+ (1,0) [0|1] "" XXX
  SG_ Brake_Pressed_3 : 48|1@0+ (1,0) [0|1] "" XXX
+ SG_ Long_Control_Inhibit : 52|2@1+ (1,0) [0|3] "" XXX
  SG_ FCW_Reaction_2 : 56|1@1+ (1,0) [0|1] "" XXX
  SG_ Brake_Pressure : 76|11@1+ (1,0) [0|100] "" XXX
  SG_ FCW_Reaction_3 : 88|5@1+ (1,0) [0|31] "" XXX

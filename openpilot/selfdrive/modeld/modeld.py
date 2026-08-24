@@ -3,6 +3,7 @@ import os
 os.environ['GMMU'] = '0' # for usbgpu fast loading, noop for qcom
 from tinygrad.tensor import Tensor
 import time
+import threading
 import numpy as np
 import openpilot.cereal.messaging as messaging
 from openpilot.cereal import car, log
@@ -21,10 +22,10 @@ from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan, 
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.compile_modeld import make_input_queues, WARP_INPUTS, POLICY_INPUTS
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
-from openpilot.common.file_chunker import open_file_chunked, get_manifest_path
+from openpilot.common.file_chunker import open_file_chunked
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.helpers import (get_tg_input_devices, load_oob, modeld_pkl_path,
-                                                select_vision_streams, usbgpu_enabled, usbgpu_present)
+                                                select_vision_streams, usbgpu_compiled_path, usbgpu_present)
 
 PROCESS_NAME = "openpilot.selfdrive.modeld.modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
@@ -33,6 +34,7 @@ SIMULATION = os.getenv('SIMULATION') == '1'
 LAT_SMOOTH_SECONDS = 0.0
 LONG_SMOOTH_SECONDS = 0.3
 MIN_LAT_CONTROL_SPEED = 0.3
+USBGPU_MODEL_LOAD_TIMEOUT = 60
 
 
 def get_lat_smooth_seconds_dynamic(model_output: dict[str, np.ndarray],
@@ -101,16 +103,17 @@ class FrameMeta:
 class ModelState:
   prev_desire: np.ndarray  # for tracking the rising edge of the pulse
 
-  def __init__(self, cam_w: int, cam_h: int, usbgpu: bool):
+  def __init__(self, cam_w: int, cam_h: int, usbgpu: bool, pkl_path=None):
     input_devices = get_tg_input_devices(PROCESS_NAME, usbgpu)
     self.WARP_DEV, self.QUEUE_DEV = input_devices['WARP_DEV'], input_devices['QUEUE_DEV']
-    jits = load_oob(open_file_chunked(modeld_pkl_path(usbgpu)))
+    jits = load_oob(open_file_chunked(pkl_path or modeld_pkl_path(usbgpu)))
     metadata = jits['metadata']
     self.input_shapes = metadata['input_shapes']
     self.vision_input_names = [k for k in self.input_shapes if 'img' in k]
     self.output_slices = metadata['output_slices']
 
     self.prev_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
+    self.usbgpu = usbgpu
 
     self.frame_skip = ModelConstants.MODEL_RUN_FREQ // ModelConstants.MODEL_CONTEXT_FREQ
     self.input_queues, self.npy = make_input_queues(self.input_shapes, self.frame_skip, device=self.QUEUE_DEV)
@@ -177,6 +180,8 @@ class ModelState:
       **{k: self.input_queues[k] for k in POLICY_INPUTS if k in self.input_queues}, warped=warped
     )
     model_output = outs.numpy()[0]
+    if self.usbgpu and not np.all(np.isfinite(model_output)):
+      raise RuntimeError("eGPU model output is not finite")
     outputs_dict = self.parser.parse_outputs(self.slice_outputs(model_output, self.output_slices))
     self.npy['prev_feat'][:] = model_output[self.output_slices['hidden_state']]
 
@@ -188,14 +193,16 @@ class ModelState:
 def main(demo=False):
   cloudlog.warning("modeld init")
 
-  _enabled = usbgpu_enabled()
   _present = usbgpu_present()
-  _compiled = _enabled and os.path.isfile(get_manifest_path(modeld_pkl_path(usbgpu=True)))
-  USBGPU = _enabled and _present and _compiled
-  cloudlog.warning(f"usbgpu enabled: {_enabled}, present: {_present}, compiled: {_compiled}, active: {USBGPU}")
+  usbgpu_pkl_path = usbgpu_compiled_path()
+  _compiled = usbgpu_pkl_path is not None
+  USBGPU = _present and _compiled
+  cloudlog.warning(f"usbgpu present: {_present}, compiled: {_compiled}, requested: {USBGPU}")
   params = Params()
-  params.put_bool("UsbGpuPresent", _enabled and _present)
+  params.put_bool("UsbGpuPresent", _present)
   params.put_bool("UsbGpuCompiled", _compiled)
+  params.put_bool("UsbGpuLoading", USBGPU)
+  params.put_bool("UsbGpuActive", False)
   use_wide_camera = bool(params.get("UseWideCamera", return_default=True))
 
   config_realtime_process(7, 54)
@@ -229,7 +236,31 @@ def main(demo=False):
 
   st = time.monotonic()
   cloudlog.warning("loading model")
-  model = ModelState(vipc_client_main.width, vipc_client_main.height, USBGPU)
+  model = None
+  if USBGPU:
+    usbgpu_model = None
+
+    def load_usbgpu_model():
+      nonlocal usbgpu_model
+      try:
+        usbgpu_model = ModelState(vipc_client_main.width, vipc_client_main.height, True, usbgpu_pkl_path)
+      except Exception:
+        cloudlog.exception("eGPU model load failed")
+
+    loader = threading.Thread(target=load_usbgpu_model, name="usbgpu-model-loader", daemon=True)
+    loader.start()
+    loader.join(USBGPU_MODEL_LOAD_TIMEOUT)
+    model = usbgpu_model
+    if loader.is_alive():
+      cloudlog.error(f"eGPU model load timed out after {USBGPU_MODEL_LOAD_TIMEOUT}s")
+    params.put_bool("UsbGpuActive", model is not None)
+
+  # Keep the internal-GPU model ready so a USB disconnect or runtime error does
+  # not take modeld down while driving.
+  small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False) if model is None or USBGPU else None
+  if model is None:
+    model = small_model
+  params.put_bool("UsbGpuLoading", False)
   cloudlog.warning(f"models loaded in {time.monotonic() - st:.1f}s, modeld starting")
 
   # messaging
@@ -368,7 +399,16 @@ def main(demo=False):
     }
 
     mt1 = time.perf_counter()
-    model_output = model.run(bufs, transforms, inputs, prepare_only)
+    try:
+      model_output = model.run(bufs, transforms, inputs, prepare_only)
+    except Exception:
+      if not params.get_bool("UsbGpuActive") or small_model is None:
+        raise
+      cloudlog.exception("eGPU model failed, falling back to internal GPU")
+      params.put_bool("UsbGpuActive", False)
+      model = small_model
+      run_count = 0
+      model_output = None
     mt2 = time.perf_counter()
     model_execution_time = mt2 - mt1
 

@@ -20,6 +20,7 @@ from cluster_config import (
   LIGHT_CLUSTER_THEME,
   RADAR_TO_CAMERA_M,
   RED,
+  VEHICLE_NAVI,
   VEHICLE_LENGTH_M,
   WHITE,
 )
@@ -1098,7 +1099,7 @@ def test_nav_status_is_centered_below_wifi_and_keeps_clock(
 
   assert draws[0][0][0] == "12:34:56"
   assert draws[1] == ((
-    "NAV",
+    "NAVI",
     NAV_STATUS_CENTER_X,
     NAV_STATUS_CENTER_Y,
     NAV_STATUS_FONT_SIZE,
@@ -1120,6 +1121,29 @@ def test_nav_status_hides_without_external_navigation():
   ))
 
   assert draws == []
+
+
+def test_vehicle_nav_status_uses_lavender_vnavi_and_takes_priority():
+  renderer = object.__new__(ClusterUiRenderer)
+  draws = []
+  renderer._draw_text_with_stroke = lambda *args, **kwargs: draws.append((args, kwargs))
+
+  renderer._draw_center_clock(SimpleNamespace(
+    center_clock_text=None,
+    external_nav_active=True,
+    vehicle_navi_available=True,
+    navi_dashboard=SimpleNamespace(connected=True),
+  ))
+
+  assert draws == [( (
+    "vNAVI",
+    NAV_STATUS_CENTER_X,
+    NAV_STATUS_CENTER_Y,
+    NAV_STATUS_FONT_SIZE,
+    VEHICLE_NAVI,
+    (10, 13, 16),
+    2,
+  ), {"anchor": "center", "cache": True})]
 
 
 def test_parser_accepts_direct_projection_dict():

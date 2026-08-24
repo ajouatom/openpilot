@@ -187,25 +187,35 @@ export function vehicleHudSignature(payload = {}) {
   ].join(":");
 }
 
-// Cluster parity: vehicle-CAN navigation is blue vNAVI; external navigation is green NAVI.
+// The auxiliary speed panel describes why speed is reduced. Navigation
+// availability (NAVI/vNAVI) is a separate status indicator.
 const EXTERNAL_NAVI_SOURCES = new Set(["cam", "section", "bump", "police", "waze", "road", "atc", "atc2", "route"]);
-const VEHICLE_NAVI_SOURCES = new Set(["hda", "hda_bump", "school"]);
+const VEHICLE_NAVI_SOURCES = new Set(["hda", "hda_section", "hda_bump", "school"]);
 const DECEL_SOURCE_LABELS = Object.freeze({
-  gas: "gas:v",
-  vturn: "turn:c", model: "turn:c", turn: "turn:c",
+  cam: "cam", section: "section", bump: "bump", police: "police", waze: "waze", road: "road",
+  atc: "turn", atc2: "turn", route: "route",
+  hda: "cam", hda_section: "section", hda_bump: "bump", school: "school",
+  gas: "gas", vturn: "turn", model: "turn", turn: "turn",
 });
 
 function decelerationSourcePresentation(source) {
   const normalized = String(source || "").trim().toLowerCase();
   if (!normalized) return { label: "apply", mode: 2 };
-  if (VEHICLE_NAVI_SOURCES.has(normalized) || ["cam:v", "bump:v", "school:v"].includes(normalized)) {
-    return { label: "vNAVI", mode: 3 };
+  if (VEHICLE_NAVI_SOURCES.has(normalized)) {
+    return { label: DECEL_SOURCE_LABELS[normalized] || normalized.slice(0, 8), mode: 3 };
   }
   if (EXTERNAL_NAVI_SOURCES.has(normalized) || normalized.endsWith(":n")) {
-    return { label: "NAVI", mode: 4 };
+    const base = normalized.endsWith(":n") ? normalized.slice(0, -2) : normalized;
+    return { label: DECEL_SOURCE_LABELS[base] || base.slice(0, 8), mode: 4 };
   }
-  if (normalized.endsWith(":v") || normalized.endsWith(":c")) {
-    return { label: normalized, mode: 2 };
+  if (normalized.endsWith(":v")) {
+    const base = normalized.slice(0, -2);
+    const mode = ["cam", "section", "bump", "school"].includes(base) ? 3 : 2;
+    return { label: DECEL_SOURCE_LABELS[base] || base.slice(0, 8), mode };
+  }
+  if (normalized.endsWith(":c")) {
+    const base = normalized.slice(0, -2);
+    return { label: DECEL_SOURCE_LABELS[base] || base.slice(0, 8), mode: 2 };
   }
   return { label: DECEL_SOURCE_LABELS[normalized] || normalized.slice(0, 8), mode: 2 };
 }
@@ -250,17 +260,18 @@ export function isCruiseDisplayVisible(state = {}, cruiseKph = resolveCruiseKph(
 
 // Cruise set-speed override telltale. Mirrors cluster_live.py priority/thresholds:
 //   mode 1 (eco, green)    = longitudinalPlan.cruiseTarget above the set speed
-//   mode 2 (other deceleration, orange) / 3 (vehicle navigation CAN, blue)
+//   mode 2 (other deceleration, orange) / 3 (vehicle navigation CAN, lavender)
 //   mode 4 (external navigation, green)
 // Returns { kph, label, mode } in kph, or null. Shared by live and replay.
 export function deriveCruiseOverride(state = {}) {
   const cruiseKph = resolveCruiseKph(state);
-  if (!isCruiseDisplayVisible(state, cruiseKph)) return null;
-
+  const cruiseVisible = isCruiseDisplayVisible(state, cruiseKph);
   const cruiseTarget = finite(state.longitudinalPlan?.cruiseTarget);
-  if (cruiseTarget != null && cruiseTarget > cruiseKph + 0.5) {
+  if (cruiseVisible && cruiseTarget != null && cruiseTarget > cruiseKph + 0.5) {
     return { kph: cruiseTarget, label: "eco", mode: 1 };
   }
+
+  if (!cruiseVisible) return null;
 
   const desiredSpeed = finite(state.carrotMan?.desiredSpeed);
   if (desiredSpeed != null && desiredSpeed > 0 && desiredSpeed < 200 && desiredSpeed < cruiseKph) {
