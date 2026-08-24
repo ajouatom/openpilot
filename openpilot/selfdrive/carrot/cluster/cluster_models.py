@@ -493,6 +493,7 @@ class ClusterUiState:
     disk_used_percent: float | None = None
     network_address: str | None = None
     network_connected: bool = False
+    egpu_active: bool = False
     external_nav_active: bool = False
     steering_output: float | None = None
     steering_output_normalized: float | None = None
