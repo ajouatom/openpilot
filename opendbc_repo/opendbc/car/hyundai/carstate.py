@@ -28,6 +28,7 @@ VEHICLE_NAVI_MAX_EVENT_DISTANCE = 2500.0
 VEHICLE_NAVI_PASSED_EVENT_DISTANCE = 30.0
 VEHICLE_NAVI_MAX_EVENTS = 32
 VEHICLE_NAVI_CAMERA_KINDS = (0, 1, 2)
+VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE = 1000.0
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
 CANFD_AVH_RELEASE_GRACE_FRAMES = round(0.5 / DT_CTRL)
 
@@ -208,6 +209,8 @@ class CarState(CarStateBase):
     self.vehicleNaviRouteResetTimestamp = 0
     self.vehicleNaviCameraTarget = None
     self.vehicleNaviSchoolZoneActive = False
+    self.vehicleNaviSchoolZoneStartDistance = 0.0
+    self.vehicleNaviSchoolZoneUsesCameraStatus = False
     self.pcmCruiseGap = 0
 
     self.MainMode_ACC = False
@@ -593,12 +596,17 @@ class CarState(CarStateBase):
     if vehicle_navi_school_zone_control != self.vehicleNaviSchoolZoneControl:
       self.vehicleNaviSchoolZoneControl = vehicle_navi_school_zone_control
       if not vehicle_navi_school_zone_control:
-        self.vehicleNaviSchoolZoneActive = False
+        self._clear_vehicle_navi_school_zone()
     return changed
 
   def _clear_vehicle_navi_events(self):
     self.vehicleNaviEvents = []
     self.vehicleNaviCameraTarget = None
+
+  def _clear_vehicle_navi_school_zone(self):
+    self.vehicleNaviSchoolZoneActive = False
+    self.vehicleNaviSchoolZoneStartDistance = self.totalDistance
+    self.vehicleNaviSchoolZoneUsesCameraStatus = False
 
   @staticmethod
   def _vehicle_navi_message_timestamp(cp, name):
@@ -656,7 +664,7 @@ class CarState(CarStateBase):
     self.vehicleNaviEvents.sort(key=lambda event: event["target"])
     self.vehicleNaviEvents = self.vehicleNaviEvents[:VEHICLE_NAVI_MAX_EVENTS]
 
-  def _update_vehicle_navi_events(self, cp, ret):
+  def _update_vehicle_navi_events(self, cp, ret, speed_limit_cam):
     ret.speedBumpDistance = 0.0
     ret.schoolZoneActive = False
     self.vehicleNaviCameraTarget = None
@@ -671,6 +679,7 @@ class CarState(CarStateBase):
         if segment["calculated_route"] == 2:
           self.vehicleNaviRouteResetTimestamp = timestamp
           self._clear_vehicle_navi_events()
+          self._clear_vehicle_navi_school_zone()
 
     if self.navi_profile_4be is not None:
       timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4BE")
@@ -681,7 +690,12 @@ class CarState(CarStateBase):
         if event is not None and timestamp > self.vehicleNaviRouteResetTimestamp:
           if event[0] == "speed_limit_zone":
             if self.vehicleNaviSchoolZoneControl:
-              self.vehicleNaviSchoolZoneActive = event[1] == 30
+              if event[1] == 30:
+                self.vehicleNaviSchoolZoneActive = True
+                self.vehicleNaviSchoolZoneStartDistance = self.totalDistance
+                self.vehicleNaviSchoolZoneUsesCameraStatus = speed_limit_cam and ret.speedLimit == 30
+              else:
+                self._clear_vehicle_navi_school_zone()
           elif self.vehicleNaviCanControl:
             self._add_vehicle_navi_event(*event, profile["offset"])
 
@@ -692,6 +706,13 @@ class CarState(CarStateBase):
     bumps = [event for event in upcoming if event["type"] == "bump"]
     if bumps:
       ret.speedBumpDistance = bumps[0]["target"] - self.totalDistance
+
+    if self.vehicleNaviSchoolZoneActive:
+      camera_status_ended = (self.vehicleNaviSchoolZoneUsesCameraStatus and
+                             (not speed_limit_cam or ret.speedLimit != 30))
+      distance_expired = self.totalDistance - self.vehicleNaviSchoolZoneStartDistance >= VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE
+      if camera_status_ended or distance_expired:
+        self._clear_vehicle_navi_school_zone()
 
     if self.vehicleNaviSchoolZoneControl and self.vehicleNaviSchoolZoneActive:
       ret.schoolZoneActive = True
@@ -1008,7 +1029,7 @@ class CarState(CarStateBase):
     ret.vCluRatio = (ret.vEgo / vEgoClu) if (vEgoClu > 3. and ret.vEgo > 3.) else 1.0
 
     distance_time_changed = self._update_vehicle_speed_camera_params()
-    speed_limit_cam = self._update_vehicle_navi_events(cp, ret) or speed_limit_cam
+    speed_limit_cam = self._update_vehicle_navi_events(cp, ret, speed_limit_cam) or speed_limit_cam
     self.update_speed_limit(ret, speed_limit_cam, distance_time_changed)
 
     paddle_button = self.paddle_button_prev
