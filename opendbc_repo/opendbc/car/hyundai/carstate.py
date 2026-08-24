@@ -29,6 +29,7 @@ VEHICLE_NAVI_PASSED_EVENT_DISTANCE = 30.0
 VEHICLE_NAVI_MAX_EVENTS = 32
 VEHICLE_NAVI_CAMERA_KINDS = (0, 1, 2)
 VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE = 1000.0
+VEHICLE_NAVI_POSITION_TIMEOUT_NS = 1_000_000_000
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
 CANFD_AVH_RELEASE_GRACE_FRAMES = round(0.5 / DT_CTRL)
 
@@ -171,6 +172,7 @@ class CarState(CarStateBase):
     self.adrv_0x160 = None
     self.ccnc_0x162 = None
     self.hda_info_4a3 = None
+    self.navi_position_4b4 = None
     self.navi_segment_4b9 = None
     self.navi_profile_4be = None
     self.tcs = None
@@ -370,6 +372,7 @@ class CarState(CarStateBase):
           add_and_cache(self.cp_cam, "CCNC_0x162", "ccnc_0x162")
         elif self.controls_ready_count == 123:
           add_and_cache(self.cp, "HDA_INFO_4A3", "hda_info_4a3")
+          add_and_cache(self.cp, "NEW_MSG_4B4", "navi_position_4b4")
           add_and_cache(self.cp, "NEW_MSG_4B9", "navi_segment_4b9")
           add_and_cache(self.cp, "NEW_MSG_4BE", "navi_profile_4be")
           add_and_cache(self.cp, "STEER_TOUCH_2AF", "steer_touch_2af")
@@ -699,6 +702,18 @@ class CarState(CarStateBase):
     if not (self.vehicleNaviCanControl or self.vehicleNaviSchoolZoneControl):
       return False
 
+    # 0x4B4 is periodic while the stock navigation is running. Its range
+    # average speed is zero outside a section-camera zone and valid inside it.
+    # It is therefore authoritative for the *current* section state; 0x4BE is
+    # sparse future spot data and must not be used alone to hold this state.
+    position_timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4B4")
+    position_seen = position_timestamp > 0
+    position_age = getattr(cp, "_last_update_nanos", position_timestamp) - position_timestamp
+    position_recent = position_seen and 0 <= position_age <= VEHICLE_NAVI_POSITION_TIMEOUT_NS
+    range_avg_speed = (int(self.navi_position_4b4.get("POS_RANGE_AVG_SPEED", 0))
+                       if position_recent and self.navi_position_4b4 is not None else 0)
+    range_section_active = 0 < range_avg_speed < 511
+
     if self.navi_segment_4b9 is not None:
       timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4B9")
       if timestamp > self.vehicleNaviSegmentTimestamp:
@@ -731,6 +746,13 @@ class CarState(CarStateBase):
           elif self.vehicleNaviCanControl:
             self._add_vehicle_navi_event(*event, profile["offset"])
 
+    if position_seen:
+      if not range_section_active or not self.vehicleNaviCanControl or 0 < ret.speedLimit <= 30:
+        self._clear_vehicle_navi_speed_zone()
+      elif 30 < ret.speedLimit < 255:
+        self.vehicleNaviSpeedZoneActive = True
+        self.vehicleNaviSpeedZoneSpeed = ret.speedLimit
+
     self.vehicleNaviEvents = [event for event in self.vehicleNaviEvents
                               if event["target"] >= self.totalDistance - VEHICLE_NAVI_PASSED_EVENT_DISTANCE]
     upcoming = [event for event in self.vehicleNaviEvents if event["target"] > self.totalDistance]
@@ -739,7 +761,7 @@ class CarState(CarStateBase):
     if bumps:
       ret.speedBumpDistance = bumps[0]["target"] - self.totalDistance
 
-    if self.vehicleNaviSpeedZoneActive and not speed_limit_cam:
+    if self.vehicleNaviSpeedZoneActive and (not position_seen and not speed_limit_cam):
       self._clear_vehicle_navi_speed_zone()
 
     if self.vehicleNaviSchoolZoneActive:
@@ -1091,9 +1113,9 @@ class CarState(CarStateBase):
     return ret
 
   def get_can_parsers_canfd(self, CP):
-    # Stock-navigation route/profile messages are sparse bursts. Register them
-    # as optional from startup so dynamic fingerprint timing cannot miss them.
-    msgs = [("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)]
+    # Register stock-navigation position/route/profile messages as optional
+    # from startup so dynamic fingerprint timing cannot miss sparse profiles.
+    msgs = [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)]
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [
