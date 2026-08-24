@@ -376,14 +376,15 @@ ratio and is taller than before while the gap bars keep their own size/spacing;
 all four gap bars stay visible, sit close together, and bottom-align to the
 vehicle while inactive bars are gray and active bars use `#bb3d91`. Cruise set
 speed and `km/h` use the same font size and color; paused cruise keeps the set
-speed but draws it gray, and inactive cruise draws gray `--- km/h`. The orange
+speed but draws it gray, and inactive cruise draws gray `--- km/h`. The
 deceleration override keeps the selected `carrotMan.desiredSource` control
-value unchanged but annotates its displayed origin: navigation camera `cam:n`,
-vehicle/HDA camera `cam:v`, vehicle-side route curvature `route:v`, and
-comma-model turn prediction `turn:c`. Navigation TBT turn control displays
-`turn:n`; the label font scales down slightly for longer values such as
-`section:n` instead of dropping the origin suffix. The separate lane-change
-icon is not drawn. The LFA icon uses
+value unchanged. External navigation sources (`cam`, `section`, `bump`,
+`police`, `waze`, `road`, `atc`, `atc2`, and `route`) display `NAVI` in green.
+Vehicle
+CAN navigation sources (`hda`, `hda_bump`, and `school`) display `vNAVI` in
+blue. Other sources retain compact labels such as comma-model turn prediction
+`turn:c` and gas override `gas:v` in orange. The separate lane-change icon is
+not drawn. The LFA icon uses
 `selfdrive/assets/icons_mici/carrot_wheel_org.png`, rotates by
 `-carState.steeringAngleDeg`, and recolors its white pixels green when LFA is
 active. When `controlsState.activeLaneLine` is true, the fixed

@@ -141,6 +141,32 @@ bool is_decoded_can_series_path(std::string_view path) {
   return util::starts_with(value, "/can/") || util::starts_with(value, "/sendcan/");
 }
 
+void remap_text_series(RouteSeries *series, const EnumInfo &source_info, EnumInfo *destination_info) {
+  if (series == nullptr || destination_info == nullptr || !source_info.text_values) return;
+
+  destination_info->text_values = true;
+  std::unordered_map<std::string, size_t> destination_slots;
+  destination_slots.reserve(destination_info->names.size() + source_info.names.size());
+  for (size_t i = 0; i < destination_info->names.size(); ++i) {
+    destination_slots.emplace(destination_info->names[i], i);
+  }
+  std::vector<size_t> remap(source_info.names.size());
+  for (size_t i = 0; i < source_info.names.size(); ++i) {
+    auto [it, inserted] = destination_slots.try_emplace(source_info.names[i], destination_info->names.size());
+    if (inserted) {
+      destination_info->names.push_back(source_info.names[i]);
+    }
+    remap[i] = it->second;
+  }
+  for (double &value : series->values) {
+    if (!std::isfinite(value) || value < 0.0) continue;
+    const size_t source_index = static_cast<size_t>(value);
+    if (static_cast<double>(source_index) == value && source_index < remap.size()) {
+      value = static_cast<double>(remap[source_index]);
+    }
+  }
+}
+
 bool apply_route_can_decode_update(AppSession *session, UiState *state);
 
 void rebuild_series_lookup_preserving_formats(AppSession *session,

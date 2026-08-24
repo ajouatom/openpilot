@@ -81,17 +81,15 @@ void apply_stream_batch(AppSession *session, UiState *state, StreamExtractBatch 
   if (!batch.dbc_name.empty()) {
     session->route_data.dbc_name = batch.dbc_name;
   }
-  if (!batch.enum_info.empty()) {
-    for (auto &[path, info] : batch.enum_info) {
-      session->route_data.enum_info[path] = std::move(info);
-    }
-  }
-
   bool new_paths = false;
   std::vector<RouteSeries> new_series;
   std::vector<std::string> touched_paths;
   touched_paths.reserve(batch.series.size());
   for (RouteSeries &incoming : batch.series) {
+    auto info_it = batch.enum_info.find(incoming.path);
+    if (info_it != batch.enum_info.end() && info_it->second.text_values) {
+      remap_text_series(&incoming, info_it->second, &session->route_data.enum_info[info_it->first]);
+    }
     touched_paths.push_back(incoming.path);
     auto existing_it = session->series_by_path.find(incoming.path);
     if (existing_it == session->series_by_path.end()) {
@@ -102,6 +100,11 @@ void apply_stream_batch(AppSession *session, UiState *state, StreamExtractBatch 
     RouteSeries &existing = *existing_it->second;
     existing.times.insert(existing.times.end(), incoming.times.begin(), incoming.times.end());
     existing.values.insert(existing.values.end(), incoming.values.begin(), incoming.values.end());
+  }
+  for (auto &[path, info] : batch.enum_info) {
+    if (!info.text_values) {
+      session->route_data.enum_info[path] = std::move(info);
+    }
   }
   for (RouteSeries &series : new_series) {
     session->route_data.paths.push_back(series.path);

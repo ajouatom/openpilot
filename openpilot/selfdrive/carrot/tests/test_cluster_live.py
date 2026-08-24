@@ -12,6 +12,7 @@ sys.path.insert(0, str(CLUSTER_DIR))
 from cluster_live import (
   LIVE_SERVICES_BASE,
   OpenpilotLiveSource,
+  deceleration_source_presentation,
   deceleration_source_display_label,
   standby_state,
 )
@@ -22,13 +23,15 @@ from cluster_models import ClusterAlert
 @pytest.mark.parametrize(
   ("source", "expected"),
   (
-    ("cam", "cam:n"),
-    ("hda", "cam:v"),
-    ("route", "route:v"),
+    ("cam", "NAVI"),
+    ("hda", "vNAVI"),
+    ("hda_bump", "vNAVI"),
+    ("school", "vNAVI"),
+    ("route", "NAVI"),
     ("vturn", "turn:c"),
     ("model", "turn:c"),
-    ("atc", "turn:n"),
-    ("section", "section:n"),
+    ("atc", "NAVI"),
+    ("section", "NAVI"),
     ("longsource:c", "longsource:c"),
     ("custom-source", "custom-s"),
     (None, "apply"),
@@ -39,15 +42,17 @@ def test_deceleration_source_display_label(source, expected) -> None:
 
 
 @pytest.mark.parametrize(
-  ("desired_source", "expected_label"),
+  ("desired_source", "expected_label", "expected_mode"),
   (
-    ("cam", "cam:n"),
-    ("hda", "cam:v"),
-    ("route", "route:v"),
-    ("model", "turn:c"),
+    ("cam", "NAVI", 4),
+    ("hda", "vNAVI", 3),
+    ("hda_bump", "vNAVI", 3),
+    ("school", "vNAVI", 3),
+    ("route", "NAVI", 4),
+    ("model", "turn:c", 2),
   ),
 )
-def test_live_deceleration_override_adds_source_origin(desired_source, expected_label) -> None:
+def test_live_deceleration_override_presents_navigation_origin(desired_source, expected_label, expected_mode) -> None:
   source = object.__new__(OpenpilotLiveSource)
   source._max_lateral_accel = 3.0
   source._energy_gauge_label = "fuel"
@@ -62,7 +67,19 @@ def test_live_deceleration_override_adds_source_origin(desired_source, expected_
 
   assert decorated.cruise_override_kph == 55.0
   assert decorated.cruise_override_label == expected_label
-  assert decorated.cruise_override_color_mode == 2
+  assert decorated.cruise_override_color_mode == expected_mode
+
+
+def test_vehicle_navigation_presentation_is_blue() -> None:
+  assert deceleration_source_presentation("hda") == ("vNAVI", 3)
+  assert deceleration_source_presentation("hda_bump") == ("vNAVI", 3)
+  assert deceleration_source_presentation("school") == ("vNAVI", 3)
+
+
+def test_external_navigation_presentation_is_green() -> None:
+  assert deceleration_source_presentation("cam") == ("NAVI", 4)
+  assert deceleration_source_presentation("bump") == ("NAVI", 4)
+  assert deceleration_source_presentation("route") == ("NAVI", 4)
 
 
 @pytest.mark.parametrize(

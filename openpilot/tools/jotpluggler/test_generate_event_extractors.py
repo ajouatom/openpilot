@@ -19,3 +19,14 @@ def test_model_trajectory_lists_are_expanded():
 
   assert MAX_EXPANDED_SCALAR_LIST_SIZE == 33
   assert f".size() <= {MAX_EXPANDED_SCALAR_LIST_SIZE}" in position_x_extractor
+
+
+def test_text_fields_and_lists_are_extracted_as_categories():
+  capnp.remove_import_hook()
+  log = capnp.load(str(REPO_ROOT / "openpilot/cereal/log.capnp"),
+                   imports=[str(REPO_ROOT / "opendbc_repo/opendbc/car")])
+  generated = Generator(log.Event.schema).generate()
+
+  assert 'append_text_point("/selfdriveState/alertText1"' in generated
+  kernel_args = generated.index(' = "/initData/kernelArgs";')
+  assert 'append_text_point(item_path_' in generated[kernel_args:kernel_args + 500]

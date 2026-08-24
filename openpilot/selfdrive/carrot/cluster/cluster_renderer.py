@@ -6908,7 +6908,9 @@ class ClusterUiRenderer:
         if self._cruise_set_visible(state) and state.cruise_override_kph is not None:
             override_color = (
                 GREEN
-                if state.cruise_override_color_mode == 1
+                if state.cruise_override_color_mode in (1, 4)
+                else BLUE
+                if state.cruise_override_color_mode == 3
                 else CRUISE_OVERRIDE_APPLY_COLOR
                 if state.cruise_override_color_mode == 2
                 else theme.text

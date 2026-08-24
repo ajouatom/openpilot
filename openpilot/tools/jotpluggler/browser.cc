@@ -309,9 +309,11 @@ std::string format_display_value(double display_value,
   if (enum_info != nullptr) {
     const int idx = static_cast<int>(std::llround(display_value));
     if (idx >= 0 && std::abs(display_value - static_cast<double>(idx)) < 0.01
-        && static_cast<size_t>(idx) < enum_info->names.size()
-        && !enum_info->names[static_cast<size_t>(idx)].empty()) {
-      return enum_info->names[static_cast<size_t>(idx)];
+        && static_cast<size_t>(idx) < enum_info->names.size()) {
+      const std::string &name = enum_info->names[static_cast<size_t>(idx)];
+      if (enum_info->text_values || !name.empty()) {
+        return name.empty() ? "(empty)" : name;
+      }
     }
   }
   char buf[64] = {};
