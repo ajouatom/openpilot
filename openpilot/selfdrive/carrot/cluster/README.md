@@ -384,7 +384,9 @@ Vehicle
 CAN navigation sources (`hda`, `hda_bump`, and `school`) display `vNAVI` in
 blue. Other sources retain compact labels such as comma-model turn prediction
 `turn:c` and gas override `gas:v` in orange. The separate lane-change icon is
-not drawn. The LFA icon uses
+not drawn. A vehicle-CAN `vNAVI` source does not count as an external navigation
+session, so it does not replace the default driving-report panel; actual 7713/7714
+guidance still replaces that panel normally. The LFA icon uses
 `selfdrive/assets/icons_mici/carrot_wheel_org.png`, rotates by
 `-carState.steeringAngleDeg`, and recolors its white pixels green when LFA is
 active. When `controlsState.activeLaneLine` is true, the fixed

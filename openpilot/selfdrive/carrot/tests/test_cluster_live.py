@@ -83,6 +83,36 @@ def test_external_navigation_presentation_is_green() -> None:
 
 
 @pytest.mark.parametrize(
+  ("active_carrot", "desired_source", "guidance_active", "expected"),
+  (
+    (5, "hda_bump", False, False),
+    (6, "school", False, False),
+    (3, "hda", False, False),
+    (3, "cam", False, True),
+    (5, "bump", False, True),
+    (5, "hda_bump", True, True),
+  ),
+)
+def test_vehicle_navigation_does_not_replace_driving_report(
+  active_carrot, desired_source, guidance_active, expected,
+) -> None:
+  source = object.__new__(OpenpilotLiveSource)
+  source._max_lateral_accel = 3.0
+  source._energy_gauge_label = "fuel"
+  source._carrot_navi_media = None
+  navi_live = SimpleNamespace(current=object(), status=None, speed=None) if guidance_active else None
+  source._current_carrot_navi = lambda _now: navi_live
+  carrot_man = SimpleNamespace(activeCarrot=active_carrot, desiredSpeed=55.0, desiredSource=desired_source)
+  source._service_data = lambda service: carrot_man if service == "carrotMan" else None
+  source._service_alive = lambda _service: False
+  source._service_valid = lambda _service: False
+
+  decorated = source._with_live_hud_state(replace(standby_state(), cruise_kph=100, cruise_display_state="engaged"))
+
+  assert decorated.external_nav_active is expected
+
+
+@pytest.mark.parametrize(
   ("alive", "valid", "expected"),
   ((True, True, 2), (True, False, None), (False, True, None), (False, False, None)),
 )

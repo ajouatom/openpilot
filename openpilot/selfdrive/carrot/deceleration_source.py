@@ -11,6 +11,11 @@ DECELERATION_SOURCE_LABELS = {
 }
 
 
+def is_vehicle_navigation_source(source: str | None) -> bool:
+  normalized = str(source or "").strip().lower()
+  return normalized in VEHICLE_NAVI_SOURCES or normalized in ("cam:v", "bump:v", "school:v")
+
+
 def deceleration_source_presentation(source: str | None) -> tuple[str, int]:
   """Return the compact HUD label and color mode for a deceleration source.
 
@@ -20,7 +25,7 @@ def deceleration_source_presentation(source: str | None) -> tuple[str, int]:
   normalized = str(source or "").strip().lower()
   if not normalized:
     return "apply", 2
-  if normalized in VEHICLE_NAVI_SOURCES or normalized in ("cam:v", "bump:v", "school:v"):
+  if is_vehicle_navigation_source(normalized):
     return "vNAVI", 3
   if normalized in EXTERNAL_NAVI_SOURCES or normalized.endswith(":n"):
     return "NAVI", 4

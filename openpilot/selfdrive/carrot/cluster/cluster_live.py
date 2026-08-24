@@ -40,7 +40,7 @@ OPENPILOT_ROOT = find_openpilot_root(Path(__file__).resolve().parent)
 if OPENPILOT_ROOT is not None:
     sys.path.insert(0, str(OPENPILOT_ROOT))
 
-from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation
+from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation, is_vehicle_navigation_source
 
 LIVE_NAV_ROUTE_MAX_POINTS = 4096
 LIVE_NAVI_IMAGE_BASE64_MAX_CHARS = 2 * 1024 * 1024
@@ -380,6 +380,7 @@ class OpenpilotLiveSource:
 
         carrot_man = self._service_data("carrotMan")
         active_carrot = safe_optional_float(carrot_man, "activeCarrot")
+        desired_source = str(safe_get(carrot_man, "desiredSource", "") or "").strip()
         navi_live = self._current_carrot_navi(time.monotonic())
         navi_dashboard = (
             self._carrot_navi_media.update(navi_live)
@@ -392,7 +393,14 @@ class OpenpilotLiveSource:
                 or (navi_live.status is not None and navi_live.status.guidance_active)
             )
         )
-        external_nav_active = (active_carrot is not None and active_carrot > 0.0) or navi_guidance_active
+        # Vehicle-CAN camera/bump/school candidates also raise activeCarrot.
+        # They have no external navigation surface, so keep the driving report
+        # unless real external guidance is present.
+        external_nav_active = navi_guidance_active or bool(
+            active_carrot is not None
+            and active_carrot > 0.0
+            and not is_vehicle_navigation_source(desired_source)
+        )
 
         speed_limit_kph, speed_limit_source = resolve_navi_speed_limit(
             state.speed_limit_kph,
@@ -420,7 +428,6 @@ class OpenpilotLiveSource:
                 cruise_override_color_mode = 1
             else:
                 desired_speed = safe_optional_float(carrot_man, "desiredSpeed")
-                desired_source = str(safe_get(carrot_man, "desiredSource", "") or "").strip()
                 if desired_speed is not None and 0.0 < desired_speed < 200.0 and desired_speed < state.cruise_kph:
                     cruise_override_kph = desired_speed
                     cruise_override_label, cruise_override_color_mode = deceleration_source_presentation(desired_source)
