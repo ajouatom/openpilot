@@ -114,9 +114,11 @@ function start_carrot_web {
 
 function invalidate_modeld_build_if_needed {
   local stamp_path="$DIR/openpilot/selfdrive/modeld/models/.build_stamp"
+  local big_stamp_path="$DIR/openpilot/selfdrive/modeld/models/.big_model_build_stamp"
   local tg_devices_path="$DIR/openpilot/selfdrive/modeld/models/tg_input_devices.json"
   local driving_pkl_path="$DIR/openpilot/selfdrive/modeld/models/driving_tinygrad.pkl"
   local old_stamp
+  local old_big_stamp
 
   MODEL_BUILD_STAMP_VALUE="$(git rev-parse HEAD:openpilot/selfdrive/modeld HEAD:tinygrad_repo HEAD:openpilot/common/file_chunker.py 2>/dev/null | tr '\n' ':')"
   if [ -z "$MODEL_BUILD_STAMP_VALUE" ]; then
@@ -130,6 +132,25 @@ function invalidate_modeld_build_if_needed {
     rm -f "$DIR"/openpilot/selfdrive/modeld/models/*_metadata.pkl
     rm -f "$DIR"/openpilot/selfdrive/modeld/models/tg_input_devices.json
     FORCE_REBUILD=1
+  fi
+
+  if [ -n "$BIG_MODEL_SHA" ]; then
+    old_big_stamp="$(cat "$big_stamp_path" 2>/dev/null || true)"
+    if [ "$BIG_MODEL_SHA" != "$old_big_stamp" ] || [ ! -f "${BIG_MODEL_PKL_PATH}.chunkmanifest" ]; then
+      echo "USB eGPU big model changed or needs compilation."
+      FORCE_REBUILD=1
+    fi
+  fi
+}
+
+function prepare_big_model_if_needed {
+  # This exits immediately without network access on devices without the USB
+  # eGPU. Download errors are non-fatal and leave the last verified model active.
+  python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu || true
+  BIG_MODEL_SHA="$(python3 -m openpilot.selfdrive.modeld.big_model --active-sha 2>/dev/null || true)"
+  BIG_MODEL_PKL_PATH=""
+  if [ -n "$BIG_MODEL_SHA" ]; then
+    BIG_MODEL_PKL_PATH="$(python3 -c 'from openpilot.selfdrive.modeld.helpers import modeld_pkl_path; print(modeld_pkl_path(True))' 2>/dev/null || true)"
   fi
 }
 
@@ -219,6 +240,7 @@ function launch {
 
 
   FORCE_REBUILD=0
+  prepare_big_model_if_needed
   invalidate_modeld_build_if_needed
   invalidate_native_build_if_needed
 
@@ -260,6 +282,9 @@ function launch {
     if [ "$FORCE_REBUILD" = "1" ]; then
       mkdir -p "$DIR/openpilot/selfdrive/modeld/models"
       echo -n "$MODEL_BUILD_STAMP_VALUE" > "$DIR/openpilot/selfdrive/modeld/models/.build_stamp"
+      if [ -n "$BIG_MODEL_SHA" ] && [ -f "${BIG_MODEL_PKL_PATH}.chunkmanifest" ]; then
+        echo -n "$BIG_MODEL_SHA" > "$DIR/openpilot/selfdrive/modeld/models/.big_model_build_stamp"
+      fi
     fi
   fi
   ./manager.py

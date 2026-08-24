@@ -25,7 +25,7 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_drivi
 from openpilot.common.file_chunker import open_file_chunked
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.helpers import (get_tg_input_devices, load_oob, modeld_pkl_path,
-                                                select_vision_streams, usbgpu_compiled, usbgpu_present)
+                                                select_vision_streams, usbgpu_compiled_path, usbgpu_present)
 
 PROCESS_NAME = "openpilot.selfdrive.modeld.modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
@@ -103,10 +103,10 @@ class FrameMeta:
 class ModelState:
   prev_desire: np.ndarray  # for tracking the rising edge of the pulse
 
-  def __init__(self, cam_w: int, cam_h: int, usbgpu: bool):
+  def __init__(self, cam_w: int, cam_h: int, usbgpu: bool, pkl_path=None):
     input_devices = get_tg_input_devices(PROCESS_NAME, usbgpu)
     self.WARP_DEV, self.QUEUE_DEV = input_devices['WARP_DEV'], input_devices['QUEUE_DEV']
-    jits = load_oob(open_file_chunked(modeld_pkl_path(usbgpu)))
+    jits = load_oob(open_file_chunked(pkl_path or modeld_pkl_path(usbgpu)))
     metadata = jits['metadata']
     self.input_shapes = metadata['input_shapes']
     self.vision_input_names = [k for k in self.input_shapes if 'img' in k]
@@ -194,7 +194,8 @@ def main(demo=False):
   cloudlog.warning("modeld init")
 
   _present = usbgpu_present()
-  _compiled = usbgpu_compiled()
+  usbgpu_pkl_path = usbgpu_compiled_path()
+  _compiled = usbgpu_pkl_path is not None
   USBGPU = _present and _compiled
   cloudlog.warning(f"usbgpu present: {_present}, compiled: {_compiled}, requested: {USBGPU}")
   params = Params()
@@ -242,7 +243,7 @@ def main(demo=False):
     def load_usbgpu_model():
       nonlocal usbgpu_model
       try:
-        usbgpu_model = ModelState(vipc_client_main.width, vipc_client_main.height, True)
+        usbgpu_model = ModelState(vipc_client_main.width, vipc_client_main.height, True, usbgpu_pkl_path)
       except Exception:
         cloudlog.exception("eGPU model load failed")
 

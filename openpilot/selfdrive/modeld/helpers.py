@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TypeVar
 
 from openpilot.common.file_chunker import get_manifest_path
+from openpilot.selfdrive.modeld.big_model import active_manifest, read_state
 
 MODELS_DIR = Path(__file__).resolve().parent / 'models'
 TG_INPUT_DEVICES_PATH = MODELS_DIR / 'tg_input_devices.json'
@@ -48,11 +49,13 @@ def get_tg_input_devices(process_name: str, usbgpu: bool):
   except FileNotFoundError:
     return _default_tg_input_devices(process_name, usbgpu)
 
-def modeld_pkl_path(usbgpu: bool):
-  # Keep the eGPU artifact separate while compiling it from the regular model.
-  # This avoids requiring the LFS-only big model on carrotpilot remotes.
-  prefix = 'usbgpu_' if usbgpu else ''
-  return MODELS_DIR / f'{prefix}driving_tinygrad.pkl'
+def modeld_pkl_path(usbgpu: bool, model_sha256: str | None = None):
+  if not usbgpu:
+    return MODELS_DIR / 'driving_tinygrad.pkl'
+  if model_sha256 is None:
+    model = active_manifest()
+    model_sha256 = model.sha256 if model is not None else 'unavailable'
+  return MODELS_DIR / f'big_driving_{model_sha256[:16]}_tinygrad.pkl'
 
 def dump_oob(obj, f):
   with tempfile.TemporaryFile(dir=".") as tmp:
@@ -92,5 +95,16 @@ def usbgpu_present() -> bool:
       pass
   return False
 
+def usbgpu_compiled_path() -> Path | None:
+  state = read_state()
+  for model in (state['active'], state['previous']):
+    if model is None:
+      continue
+    path = modeld_pkl_path(usbgpu=True, model_sha256=model.sha256)
+    if Path(get_manifest_path(path)).is_file():
+      return path
+  return None
+
+
 def usbgpu_compiled() -> bool:
-  return Path(get_manifest_path(modeld_pkl_path(usbgpu=True))).is_file()
+  return usbgpu_compiled_path() is not None
