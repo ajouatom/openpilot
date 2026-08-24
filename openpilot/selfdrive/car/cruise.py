@@ -197,6 +197,7 @@ class VCruiseCarrot:
     self._cruise_cancel_state = False
     self._pause_auto_speed_up = False
     self._activate_cruise = 0
+    self._cruise_available = False
     self._hold_interlock_active = False
     self._steering_interlock_active = False
     self._lat_enabled = self.params.get_int("AutoEngage") > 0
@@ -345,6 +346,12 @@ class VCruiseCarrot:
     #self.events = []
     self.v_ego_kph_set = int(CS.vEgoCluster * CV.MS_TO_KPH + 0.5)
     self._activate_cruise = 0
+    self._cruise_available = CS.cruiseState.available
+    if not self._cruise_available:
+      self._cruise_ready = False
+      self._paddle_decel_active = False
+      self._soft_hold_count = 0
+      self._soft_hold_active = 0
     self._hold_interlock_active = is_hold_interlock_active(CS)
     self._steering_interlock_active = abs(CS.steeringAngleDeg) >= AUTO_CRUISE_MAX_STEERING_ANGLE
     if self._hold_interlock_active:
@@ -723,6 +730,10 @@ class VCruiseCarrot:
     return v_cruise_kph
 
   def _cruise_control(self, enable, cancel_timer, reason):
+    if enable > 0 and not self._cruise_available:
+      self._activate_cruise = 0
+      self._add_log(reason + " > Cruise unavailable")
+      return
     if enable > 0 and self._steering_interlock_active:
       self._activate_cruise = 0
       self._add_log(reason + " > Steering angle interlock active")
@@ -897,8 +908,9 @@ class VCruiseCarrot:
       if self._brake_pressed_count == 1 and self.enabled_last:
         self._v_cruise_kph_at_brake = self.v_cruise_kph
         self._add_log(f"{self.v_cruise_kph} Cruise speed at brake")
-      self._soft_hold_count = self._soft_hold_count + 1 if CS.vEgo < 0.1 and CS.gearShifter == GearShifter.drive else 0
-      if self.autoCruiseControl == 0 or self.CP.pcmCruise:
+      soft_hold_available = CS.cruiseState.available and self.autoCruiseControl != 0 and not self.CP.pcmCruise
+      self._soft_hold_count = self._soft_hold_count + 1 if soft_hold_available and CS.vEgo < 0.1 and CS.gearShifter == GearShifter.drive else 0
+      if not soft_hold_available:
         self._soft_hold_active = 0
       else:
         self._soft_hold_active = 1 if self._soft_hold_count > 60 else 0

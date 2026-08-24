@@ -13,7 +13,7 @@
       "kind": "bundle",
       "source": "src/entries/drive.js",
       "path": "js/generated/drive.js",
-      "hash": "bdbc0a3ba36c9cbea11691fb3ae83ca7c21f3c6812339b3a11df5e84dfcf2c32"
+      "hash": "240604fb69aab178570a3551f79079f20241eb0e3ec6108079a02571a2d679b4"
     },
     {
       "id": "replay.runtime",

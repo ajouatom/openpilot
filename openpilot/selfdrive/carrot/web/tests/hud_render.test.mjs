@@ -131,7 +131,7 @@ test("live and replay traffic lights render from the active planner state", () =
   assert.ok(isVisible(green.trafficLights[1]), "green light visible");
 });
 
-test("live: EV + green lane wings + green external navigation reason all render", () => {
+test("live: EV + green lane wings + orange external navigation reason all render", () => {
   const r = renderFromCereal({
     carState: { vEgoCluster: 53, vCruiseCluster: 88, evModeValid: true, evModeActive: true, gearShifter: "drive" },
     controlsState: { activeLaneLine: true },
@@ -145,7 +145,7 @@ test("live: EV + green lane wings + green external navigation reason all render"
   assert.ok(isVisible(r.overrideSpeed), "override visible");
   assert.equal(r.overrideSpeed.textContent, "77");
   assert.equal(r.overrideLabel.textContent, "cam");
-  assert.equal(r.overrideSpeed.style.fill, COLORS.carrot); // green external navigation (mode 4)
+  assert.equal(r.overrideSpeed.style.fill, COLORS.amber); // orange external navigation (mode 4)
 });
 
 test("live: vehicle CAN navigation override renders lavender bump reason", () => {
