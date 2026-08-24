@@ -1,8 +1,13 @@
+import math
 from types import SimpleNamespace
 
 import pytest
 
-from opendbc.car.hyundai.carstate import CarState, VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE, VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES
+from opendbc.can import CANParser
+from opendbc.car.hyundai.carstate import (
+  CarState, VEHICLE_NAVI_POSITION_TIMEOUT_NS, VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE,
+  VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES,
+)
 
 
 class FakeParams:
@@ -44,6 +49,7 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviSchoolZoneStartDistance = 0.0
   state.vehicleNaviSchoolZoneUsesCameraStatus = False
   state.navi_segment_4b9 = None
+  state.navi_position_4b4 = None
   state.navi_profile_4be = None
   return state
 
@@ -334,6 +340,67 @@ def test_vehicle_navi_section_log_frames_hold_cap_until_camera_status_ends():
   assert not state._update_vehicle_navi_events(cp, ret, False)
   assert not state.vehicleNaviSpeedZoneActive
   assert not ret.vehicleNaviActive
+  assert not ret.vehicleNaviSectionActive
+
+
+def test_vehicle_navi_range_average_holds_section_until_zero():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.navi_position_4b4 = {"POS_RANGE_AVG_SPEED": 103}
+  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4B4": {"POS_RANGE_AVG_SPEED": 1_000_000_000}},
+                       _last_update_nanos=1_100_000_000)
+  ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  assert state.vehicleNaviSpeedZoneActive
+  assert ret.vehicleNaviActive
+  assert ret.vehicleNaviSectionActive
+  assert ret.vehicleNaviSpeed == 100
+
+  state.navi_position_4b4["POS_RANGE_AVG_SPEED"] = 0
+  cp.ts_nanos["NEW_MSG_4B4"]["POS_RANGE_AVG_SPEED"] = 1_200_000_000
+  cp._last_update_nanos = 1_200_000_000
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  assert not state.vehicleNaviSpeedZoneActive
+  assert not ret.vehicleNaviActive
+  assert not ret.vehicleNaviSectionActive
+
+
+def test_vehicle_navi_range_average_dbc_decodes_logged_frame():
+  parser = CANParser("hyundai_canfd_generated", [("NEW_MSG_4B4", math.nan)], 0)
+  parser.update([1_000_000_000, [(0x4B4, bytes.fromhex("0d0085cbb18948a5"), 0)]])
+
+  assert parser.vl["NEW_MSG_4B4"]["POS_OFFSET"] == 13
+  assert parser.vl["NEW_MSG_4B4"]["POS_RANGE_AVG_SPEED"] == 92
+
+
+def test_vehicle_navi_stale_range_average_releases_section():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.navi_position_4b4 = {"POS_RANGE_AVG_SPEED": 103}
+  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4B4": {"POS_RANGE_AVG_SPEED": 1_000_000_000}},
+                       _last_update_nanos=1_000_000_000)
+  ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  cp._last_update_nanos += VEHICLE_NAVI_POSITION_TIMEOUT_NS + 1
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  assert not state.vehicleNaviSpeedZoneActive
+  assert not ret.vehicleNaviSectionActive
+
+
+def test_vehicle_navi_range_average_does_not_keep_regular_cap_in_school_zone():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.vehicleNaviSpeedZoneActive = True
+  state.vehicleNaviSpeedZoneSpeed = 100
+  state.navi_position_4b4 = {"POS_RANGE_AVG_SPEED": 25}
+  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4B4": {"POS_RANGE_AVG_SPEED": 1_000_000_000}},
+                       _last_update_nanos=1_000_000_000)
+  ret = SimpleNamespace(speedLimit=30.0, speedBumpDistance=0.0, schoolZoneActive=False)
+
+  assert not state._update_vehicle_navi_events(cp, ret, True)
+  assert not state.vehicleNaviSpeedZoneActive
   assert not ret.vehicleNaviSectionActive
 
 
