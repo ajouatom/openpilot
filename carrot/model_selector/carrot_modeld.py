@@ -397,6 +397,16 @@ class ModelState:
         self.slice_outputs(self.off_policy_output, self.off_policy_output_slices))
 
     self.policy_output = self.policy_run(**self.policy_inputs).contiguous().realize().uop.base.buffer.numpy().flatten()
+
+    # eGPU numerics can degrade silently, so mirror upstream modeld.py and refuse to
+    # publish a non-finite frame instead of feeding garbage downstream.
+    if USBGPU:
+      for name, raw in (('vision', self.vision_output),
+                        ('off_policy', self.off_policy_output if self.has_off_policy else None),
+                        ('policy', self.policy_output)):
+        if raw is not None and not np.all(np.isfinite(raw)):
+          raise RuntimeError(f"eGPU model output is not finite ({name})")
+
     policy_outputs_dict = self.parser.parse_policy_outputs(self.slice_outputs(self.policy_output, self.policy_output_slices))
 
     # Merge order: vision → off_policy → policy.  On-policy overrides shared

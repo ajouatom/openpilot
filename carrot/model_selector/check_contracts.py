@@ -131,8 +131,10 @@ def check_pkl_format_pair() -> str | None:
     modeld_src = (MODELD_DIR / "modeld.py").read_text()
     if "dump_oob" not in compile_src:
         return "compile_modeld.py no longer writes with dump_oob"
-    if not re.search(r"load_oob\(open_file_chunked\(modeld_pkl_path", modeld_src):
-        return "modeld.py loader changed (expected load_oob(open_file_chunked(modeld_pkl_path(...))))"
+    # upstream may pass an explicit override first (pkl_path or modeld_pkl_path(...)),
+    # so allow anything up to the modeld_pkl_path fallback inside the same call.
+    if not re.search(r"load_oob\(open_file_chunked\([^)]*modeld_pkl_path", modeld_src):
+        return "modeld.py loader changed (expected load_oob(open_file_chunked(... modeld_pkl_path(...))))"
     return None
 
 
