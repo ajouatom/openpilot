@@ -40,7 +40,7 @@ OPENPILOT_ROOT = find_openpilot_root(Path(__file__).resolve().parent)
 if OPENPILOT_ROOT is not None:
     sys.path.insert(0, str(OPENPILOT_ROOT))
 
-from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation, is_vehicle_navigation_source
+from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation, external_navigation_connected
 
 LIVE_NAV_ROUTE_MAX_POINTS = 4096
 LIVE_NAVI_IMAGE_BASE64_MAX_CHARS = 2 * 1024 * 1024
@@ -390,27 +390,21 @@ class OpenpilotLiveSource:
             steering_output_kind = "torque"
 
         carrot_man = self._service_data("carrotMan")
-        active_carrot = safe_optional_float(carrot_man, "activeCarrot")
         desired_source = str(safe_get(carrot_man, "desiredSource", "") or "").strip()
         navi_live = self._current_carrot_navi(time.monotonic())
         navi_dashboard = (
             self._carrot_navi_media.update(navi_live)
             if self._carrot_navi_media is not None else None
         )
-        navi_guidance_active = bool(
-            navi_live is not None
-            and (
-                navi_live.current is not None
-                or (navi_live.status is not None and navi_live.status.guidance_active)
-            )
+        carrot_navi = self._service_data("carrotNavi")
+        carrot_navi_connected = bool(
+            self._service_alive("carrotNavi")
+            and self._service_valid("carrotNavi")
+            and safe_get(carrot_navi, "connected", False)
         )
-        # Vehicle-CAN camera/bump/school candidates also raise activeCarrot.
-        # They have no external navigation surface, so keep the driving report
-        # unless real external guidance is present.
-        external_nav_active = navi_guidance_active or bool(
-            active_carrot is not None
-            and active_carrot > 0.0
-            and not is_vehicle_navigation_source(desired_source)
+        external_nav_active = external_navigation_connected(
+            safe_get(carrot_man, "remote", ""),
+            carrot_navi_connected or bool(navi_dashboard is not None and navi_dashboard.connected),
         )
 
         speed_limit_kph, speed_limit_source = resolve_navi_speed_limit(

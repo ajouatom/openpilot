@@ -448,8 +448,11 @@ on-road UI, mici UI, cluster live UI의 보조속도 영역은 선택된 감속 
 내비 상태 표시는 보조속도와 별개다. 외부 내비가 연결되면 주황 `NAVI`를 차량 CAN 내비보다 우선하고,
 그렇지 않은 상태에서 Hyundai CAN-FD `0x4BE`가 한 번이라도 수신되면 라벤더 `vNAVI`를 표시한다.
 두 표시는 디바이스와 USB 클러스터에서 기존 위치보다 글자 한 칸 정도 왼쪽에 배치한다.
-`vNAVI`는 외부 내비 세션으로 취급하지 않으므로 cluster 주행리포트 패널을 그대로 유지하고, 실제
-7713/7714 guidance가 함께 수신될 때만 기존처럼 내비 패널로 전환한다.
+외부 내비 연결은 감속 상태인 `activeCarrot`로 추정하지 않는다. 7713 legacy 경로는 최근 송신자 주소인
+`carrotMan.remote`, 7714 경로는 alive/valid인 `carrotNavi.connected`를 사용한다. 따라서 차량 CAN의
+카메라·구간단속·방지턱·school 후보가 `activeCarrot=3/4/5/6`을 만들더라도 `vNAVI`가 `NAVI`로 바뀌지
+않고 cluster도 외부 내비 화면으로 전환하지 않는다. 실제 외부 연결이 생기면 기존 내비 패널로 전환하고,
+연결이 끊기면 주행 중 유지된 `vehicleNaviAvailable`에 따라 다시 `vNAVI`와 주행리포트로 복귀한다.
 
 따라서 route 데이터가 존재하는 것만으로 `route`가 표시되는 것은 아니다. route 후보가 설정상
 활성이고 다른 모든 후보보다 낮아 실제 winner가 되어야 한다. 방지턱도 같은 방식으로 `bump`가 winner일

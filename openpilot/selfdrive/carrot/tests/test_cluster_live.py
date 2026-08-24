@@ -129,29 +129,34 @@ def test_external_navigation_deceleration_presents_actual_reason() -> None:
 
 
 @pytest.mark.parametrize(
-  ("active_carrot", "desired_source", "guidance_active", "expected"),
+  ("active_carrot", "desired_source", "legacy_remote", "carrot_navi_connected", "expected"),
   (
-    (5, "hda_bump", False, False),
-    (6, "school", False, False),
-    (3, "hda", False, False),
-    (3, "cam", False, True),
-    (5, "bump", False, True),
-    (5, "hda_bump", True, True),
+    (5, "hda_bump", "", False, False),
+    (6, "school", "", False, False),
+    (3, "cam", "", False, False),
+    (0, "none", "192.168.0.2", False, True),
+    (5, "hda_bump", "192.168.0.2", False, True),
+    (0, "none", "", True, True),
   ),
 )
-def test_vehicle_navigation_does_not_replace_driving_report(
-  active_carrot, desired_source, guidance_active, expected,
+def test_external_navigation_connection_does_not_follow_speed_control_state(
+  active_carrot, desired_source, legacy_remote, carrot_navi_connected, expected,
 ) -> None:
   source = object.__new__(OpenpilotLiveSource)
   source._max_lateral_accel = 3.0
   source._energy_gauge_label = "fuel"
   source._carrot_navi_media = None
-  navi_live = SimpleNamespace(current=object(), status=None, speed=None) if guidance_active else None
-  source._current_carrot_navi = lambda _now: navi_live
-  carrot_man = SimpleNamespace(activeCarrot=active_carrot, desiredSpeed=55.0, desiredSource=desired_source)
-  source._service_data = lambda service: carrot_man if service == "carrotMan" else None
-  source._service_alive = lambda _service: False
-  source._service_valid = lambda _service: False
+  source._current_carrot_navi = lambda _now: None
+  carrot_man = SimpleNamespace(
+    activeCarrot=active_carrot,
+    desiredSpeed=55.0,
+    desiredSource=desired_source,
+    remote=legacy_remote,
+  )
+  carrot_navi = SimpleNamespace(connected=carrot_navi_connected)
+  source._service_data = lambda service: carrot_man if service == "carrotMan" else carrot_navi if service == "carrotNavi" else None
+  source._service_alive = lambda service: carrot_navi_connected if service == "carrotNavi" else False
+  source._service_valid = lambda service: carrot_navi_connected if service == "carrotNavi" else False
 
   decorated = source._with_live_hud_state(replace(standby_state(), cruise_kph=100, cruise_display_state="engaged"))
 

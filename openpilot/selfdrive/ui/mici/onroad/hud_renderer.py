@@ -5,7 +5,11 @@ import pyray as rl
 from dataclasses import dataclass
 from typing import Optional
 from openpilot.common.constants import CV
-from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation, navigation_status_presentation
+from openpilot.selfdrive.carrot.deceleration_source import (
+  deceleration_source_presentation,
+  external_navigation_connected,
+  navigation_status_presentation,
+)
 # from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar # 아이콘에 토크 적용: 토크바 미사용
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
@@ -805,11 +809,24 @@ class HudRenderer(Widget):
     gap_size = measure_text_cached(self._font_semi_bold, gap_text, gap_font)
     draw_text_ui_style(gap_text, gap_center_x, gap_center_y, gap_font, rl.WHITE, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="center", y_offset=0.0)
 
-    # active carrot
+    # Navigation availability is independent of speed-control state. Vehicle
+    # CAN candidates also change activeCarrot, so it cannot identify an
+    # external navigation connection.
     sm = ui_state.sm
-    active_carrot = sm['carrotMan'].activeCarrot
-    vehicle_navi_available = bool(getattr(sm['carrotMan'], "vehicleNaviAvailable", False))
-    navi_status = navigation_status_presentation(vehicle_navi_available, active_carrot >= 2)
+    carrot_man = sm['carrotMan']
+    vehicle_navi_available = bool(getattr(carrot_man, "vehicleNaviAvailable", False))
+    try:
+      carrot_navi_connected = bool(
+        sm.alive['carrotNavi']
+        and sm.valid['carrotNavi']
+        and getattr(sm['carrotNavi'], "connected", False)
+      )
+    except Exception:
+      carrot_navi_connected = False
+    external_navi_connected = external_navigation_connected(
+      getattr(carrot_man, "remote", ""), carrot_navi_connected,
+    )
+    navi_status = navigation_status_presentation(vehicle_navi_available, external_navi_connected)
     if navi_status is not None:
       navi_label, navi_color_mode = navi_status
       x = int(panel_x + panel_w * 0.60 - 26)
