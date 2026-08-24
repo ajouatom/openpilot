@@ -93,7 +93,7 @@ BO_ 96 ESP_STATUS: 32 XXX
  SG_ TRACTION_AND_STABILITY_CONTROL : 42|3@1+ (1,0) [0|63] "" XXX
  SG_ BRAKE_PRESSURE : 128|11@1+ (1,0) [0|2047] "" XXX
  SG_ BRAKE_PRESSED : 148|1@1+ (1,0) [0|3] "" XXX
- SG_ AUTO_HOLD : 192|1@0+ (1,0) [0|1] "" XXX
+ SG_ AVH_Sta : 192|2@1+ (1,0) [0|3] "" XXX
 
 BO_ 101 BRAKE: 32 XXX
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
@@ -927,14 +927,12 @@ BO_ 1209 NEW_MSG_4B9: 8 XXX
  SG_ BYTE_8 : 63|8@0+ (1,0) [0|255] "" XXX
 
 BO_ 1214 NEW_MSG_4BE: 8 XXX
- SG_ BYTE_1 : 7|8@0+ (1,0) [0|255] "" XXX
- SG_ BYTE_2 : 15|8@0+ (1,0) [0|255] "" XXX
- SG_ BYTE_3 : 23|8@0+ (1,0) [0|255] "" XXX
- SG_ BYTE_4 : 31|8@0+ (1,0) [0|255] "" XXX
- SG_ BYTE_5 : 39|8@0+ (1,0) [0|255] "" XXX
- SG_ BYTE_6 : 47|8@0+ (1,0) [0|255] "" XXX
- SG_ BYTE_7 : 55|8@0+ (1,0) [0|255] "" XXX
- SG_ BYTE_8 : 63|8@0+ (1,0) [0|255] "" XXX
+ SG_ PROLONG_VALUE : 0|32@1+ (1,0) [0|4294967295] "" XXX
+ SG_ PROLONG_OFFSET : 32|13@1+ (1,0) [0|8191] "m" XXX
+ SG_ PROLONG_CYCLIC_COUNTER : 45|2@1+ (1,0) [0|3] "" XXX
+ SG_ PROLONG_UPDATE : 47|1@1+ (1,0) [0|1] "" XXX
+ SG_ PROLONG_PATH_INDEX : 48|6@1+ (1,0) [0|63] "" XXX
+ SG_ PROLONG_PROFILE_TYPE : 54|5@1+ (1,0) [0|31] "" XXX
 
 BO_ 1240 CLUSTER_INFO: 8 XXX
  SG_ DISTANCE_UNIT : 0|1@1+ (1,0) [0|1] "" XXX
@@ -955,6 +953,7 @@ BO_ 1264 LOCAL_TIME: 8 XXX
 
 CM_ SG_ 80 HAS_LANE_SAFETY "If 0, hides LKAS 'Lane Safety' menu from vehicle settings";
 CM_ SG_ 96 BRAKE_PRESSURE "User applied brake pedal pressure. Ramps from computer applied pressure on falling edge of cruise. Cruise cancels if !=0";
+CM_ SG_ 96 AVH_Sta "AVH status. Indicates whether the vehicle is held with the hydraulic service brake";
 CM_ SG_ 101 BRAKE_POSITION "User applied brake pedal position, max is ~700. Signed on some vehicles";
 CM_ SG_ 272 LKAS_ANGLE_CMD "tracks MDPS->STEERING_ANGLE when not engaged, not STEERING_SENSORS->STEERING_ANGLE";
 CM_ SG_ 352 SET_ME_9 "has something to do with AEB settings";
@@ -978,6 +977,7 @@ VAL_ 69 GEAR 0 "P" 5 "D" 6 "N" 7 "R";
 VAL_ 80 LKA_MODE 1 "warning only" 2 "assist" 6 "off";
 VAL_ 80 LKA_ICON 0 "hidden" 1 "grey" 2 "green" 3 "flashing green";
 VAL_ 96 TRACTION_AND_STABILITY_CONTROL 0 "On" 5 "Limited" 1 "Off";
+VAL_ 96 AVH_Sta 0 "No apply" 1 "Vehicle is held by the service brake" 2 "Being released" 3 "Error Indicator";
 VAL_ 112 GEAR 0 "P" 5 "D" 6 "N" 7 "R";
 VAL_ 234 LKA_FAULT 0 "ok" 1 "lka fault";
 VAL_ 267 CRUISE_BUTTONS 8 "CRUISE_MAIN" 4 "CANCEL" 1 "RES" 2 "SET" 3 "GAP";

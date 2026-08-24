@@ -9,6 +9,7 @@ from openpilot.common.constants import CV
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.carrot.t_follow import ramp_t_follow
 from openpilot.selfdrive.carrot.traffic_stop import (
+  TrafficStopDistanceTracker,
   get_traffic_stop_reference_speed,
   get_virtual_traffic_stop_distance,
   is_traffic_stop_entry_allowed,
@@ -146,7 +147,7 @@ class CarrotPlanner:
     self.atcType = ""
     self.atc_active = False
 
-    self._stop_x_rl = None
+    self._traffic_stop_distance_tracker = TrafficStopDistanceTracker()
     self.last_event_time = 0.0
 
   def _params_update(self):
@@ -507,17 +508,8 @@ class CarrotPlanner:
 
     self.xStop = self.update_stop_dist(x[31])
     stop_model_x_raw = self.xStop
-    if self._stop_x_rl is None:
-      self._stop_x_rl = stop_model_x_raw
-    else:
-      max_close = v_ego * DT_MDL + 0.5
-      if stop_model_x_raw > self._stop_x_rl:
-        self._stop_x_rl = stop_model_x_raw
-      else:
-        self._stop_x_rl = max(self._stop_x_rl - max_close, stop_model_x_raw)
-
-    stop_model_x = self._stop_x_rl
-    stop_model_x_rl = self._stop_x_rl
+    stop_model_x_rl = self._traffic_stop_distance_tracker.update(stop_model_x_raw, v_ego * DT_MDL)
+    stop_model_x = stop_model_x_rl
 
     trafficState_last = self.trafficState
     #self.check_model_stopping(v, v_ego, self.xStop, y)
@@ -619,10 +611,6 @@ class CarrotPlanner:
       self.actual_stop_distance = 0.0
     elif self.actual_stop_distance > 0:  # e2eStop 또는 e2eStopped 상태
       stop_model_x = 0.0
-
-    stopping_active = self.xState not in [XState.e2eStop, XState.e2eStopped]
-    if not stopping_active:
-      self._stop_x_rl = stop_model_x_raw
 
     # self.debugLongText = (
     #   f"XState({str(self.xState)})," +

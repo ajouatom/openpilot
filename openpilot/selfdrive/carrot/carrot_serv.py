@@ -215,6 +215,8 @@ class CarrotServ:
     self.autoNaviSpeedBumpTime = float(self.params.get_int("AutoNaviSpeedBumpTime"))
     self.autoNaviSpeedCtrlEnd = float(self.params.get_int("AutoNaviSpeedCtrlEnd"))
     self.autoNaviSpeedCtrlMode = self.params.get_int("AutoNaviSpeedCtrlMode")
+    self.vehicleNaviCanControl = self.params.get_bool("VehicleNaviCanControl")
+    self.vehicleNaviSchoolZoneControl = self.params.get_bool("VehicleNaviSchoolZoneControl")
     self.vehicleSpeedCameraControlMode = min(3, max(0, self.params.get_int("VehicleSpeedCameraControlMode")))
     self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
@@ -352,8 +354,18 @@ class CarrotServ:
     return (self.vehicleSpeedCameraControlMode > 0 and CS.speedLimit > 0 and CS.speedLimitDistance > 0 and
             not (self.vehicleSpeedCameraControlMode == 3 and CS.gasPressed))
 
+  def _vehicle_speed_bump_enabled(self, CS):
+    return self.vehicleNaviCanControl and self.autoNaviSpeedCtrlMode >= 2 and CS.speedBumpDistance > 0
+
+  def _vehicle_school_zone_enabled(self, CS):
+    return (self.vehicleNaviSchoolZoneControl and self.vehicleSpeedCameraControlMode > 0 and CS.schoolZoneActive and
+            not (self.vehicleSpeedCameraControlMode == 3 and CS.gasPressed))
+
+  def _vehicle_school_zone_speed(self, CS):
+    return 30 if self._vehicle_school_zone_enabled(CS) else 250
+
   def _apply_speed_source_gas_floor(self, CS, desired_speed, source, v_ego_kph, road_speed_limit_changed):
-    if source == "hda":
+    if source in ("hda", "school"):
       gas_floor_active = self.vehicleSpeedCameraControlMode == 2
       if not gas_floor_active:
         self.gas_override_speed = 0
@@ -389,6 +401,14 @@ class CarrotServ:
     if desired_speed < self.gas_override_speed:
       return self.gas_override_speed, "gas"
     return desired_speed, source
+
+  @staticmethod
+  def _legacy_sdi_suppressed(x_spd_type, vehicle_camera_active, vehicle_bump_active):
+    # Keep independent KISA/Waze hazards (100/101); only replace navigation
+    # camera/section candidates that can describe the same physical alert.
+    same_camera = vehicle_camera_active and x_spd_type in (0, 1, 2, 3, 4, 7, 8, 75, 76)
+    same_bump = vehicle_bump_active and x_spd_type == 22
+    return same_camera or same_bump
 
   def _update_tbt(self):
     #xTurnInfo : 1: left turn, 2: right turn, 3: left lane change, 4: right lane change, 5: rotary, 6: tg, 7: arrive or uturn
@@ -1194,9 +1214,16 @@ class CarrotServ:
       self.xTurnInfoNext = -1
 
     sdi_speed = 250
-    vehicle_speed_camera_active = False
+    vehicle_camera_speed = 250
+    vehicle_speed_camera_active = CS is not None and self._vehicle_speed_camera_enabled(CS)
+    vehicle_bump_active = CS is not None and self._vehicle_speed_bump_enabled(CS)
+    vehicle_bump_speed = 250
+    vehicle_school_zone_speed = 250
     ### 과속카메라, 사고방지턱
-    if self.xSpdLimit > 0 and (self.xSpdDist > 0 or self.xSpdType in [100, 101]) and self.active_carrot > 0:
+    legacy_sdi_active = (self.xSpdLimit > 0 and (self.xSpdDist > 0 or self.xSpdType in [100, 101]) and
+                         self.active_carrot > 0 and
+                         not self._legacy_sdi_suppressed(self.xSpdType, vehicle_speed_camera_active, vehicle_bump_active))
+    if legacy_sdi_active:
       safe_sec = self.autoNaviSpeedBumpTime if self.xSpdType == 22 else self.autoNaviSpeedCtrlEnd
       decel = self.autoNaviSpeedDecelRate
       sdi_speed = min(sdi_speed, self.calculate_current_speed(self.xSpdDist, self.xSpdLimit, safe_sec, decel))
@@ -1204,14 +1231,24 @@ class CarrotServ:
       if self.xSpdType == 4 or (self.xSpdType in [100, 101] and self.xSpdDist <= 0):
         sdi_speed = self.xSpdLimit
         self.active_carrot = 4
-    elif CS is not None and self._vehicle_speed_camera_enabled(CS):
-      sdi_speed = min(sdi_speed,
-                      self.calculate_current_speed(CS.speedLimitDistance,
-                                                   CS.speedLimit * self.autoNaviSpeedSafetyFactor,
-                                                   self.autoNaviSpeedCtrlEnd,
-                                                   self.autoNaviSpeedDecelRate))
+    if vehicle_speed_camera_active:
+      vehicle_camera_speed = self.calculate_current_speed(CS.speedLimitDistance,
+                                                          CS.speedLimit * self.autoNaviSpeedSafetyFactor,
+                                                          self.autoNaviSpeedCtrlEnd,
+                                                          self.autoNaviSpeedDecelRate)
       #self.active_carrot = 6
-      vehicle_speed_camera_active = True
+
+    if vehicle_bump_active:
+      vehicle_bump_speed = self.calculate_current_speed(CS.speedBumpDistance,
+                                                        self.autoNaviSpeedBumpSpeed,
+                                                        self.autoNaviSpeedBumpTime,
+                                                        self.autoNaviSpeedDecelRate)
+      self.active_carrot = 5
+
+    if CS is not None:
+      vehicle_school_zone_speed = self._vehicle_school_zone_speed(CS)
+      if vehicle_school_zone_speed < 250:
+        self.active_carrot = 6
 
     #print(f"sdi_speed: {sdi_speed}, vehicle_speed_camera_active: {vehicle_speed_camera_active}, xSpdType: {self.xSpdType}, xSpdDist: {self.xSpdDist}, active_carrot: {self.active_carrot}, v_ego_kph: {v_ego_kph}, nRoadLimitSpeed: {self.nRoadLimitSpeed}")
     ### TBT 속도제어
@@ -1241,13 +1278,16 @@ class CarrotServ:
       self.atcType = "none"
 
 
-    sdi_source = ("hda" if vehicle_speed_camera_active else "bump" if self.xSpdType == 22 else
-                  "section" if self.xSpdType == 4 else "police" if self.xSpdType == 100 else
+    sdi_source = ("bump" if self.xSpdType == 22 else "section" if self.xSpdType == 4 else
+                  "police" if self.xSpdType == 100 else
                   "waze" if self.xSpdType == 101 else "cam")
     speed_n_sources = [
       (atc_desired, "atc"),
       (atc_desired_next, "atc2"),
       (sdi_speed, sdi_source),
+      (vehicle_camera_speed, "hda"),
+      (vehicle_bump_speed, "hda_bump"),
+      (vehicle_school_zone_speed, "school"),
       (limit_speed, "road"),
     ]
     if self.turnSpeedControlMode in [1,2]:
