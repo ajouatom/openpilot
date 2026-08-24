@@ -74,6 +74,7 @@ class Colors:
   TPMS_LOW = rl.Color(255, 90, 90, 220)
   ORANGE_200 = rl.Color(255, 165, 0, 200)
   ORANGE_230 = rl.Color(255, 165, 0, 230)
+  EXTERNAL_NAVI_ORANGE = rl.Color(244, 172, 54, 230)
   RED_SOLID = rl.Color(255, 0, 0, 255)
 
 
@@ -674,7 +675,7 @@ class HudRenderer(Widget):
       elif ov.speed_color_mode == 3:
         ov_color = COLORS.VEHICLE_NAVI_LAVENDER
       elif ov.speed_color_mode == 4:
-        ov_color = rl.GREEN
+        ov_color = COLORS.EXTERNAL_NAVI_ORANGE
       else:
         ov_color = rl.GREEN
 

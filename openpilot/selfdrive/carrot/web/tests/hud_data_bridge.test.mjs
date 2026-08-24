@@ -133,7 +133,7 @@ test("cruise override is null when cruise is off or sentinel", () => {
   assert.equal(deriveCruiseOverride({ carrotMan: { desiredSpeed: 40 } }), null);
 });
 
-test("external navigation override shows the actual green reason", () => {
+test("external navigation override shows the actual orange reason", () => {
   const out = deriveCruiseOverride({
     carState: { vCruiseCluster: 88 },
     carrotMan: { desiredSpeed: 77, desiredSource: "cam" },
@@ -190,11 +190,11 @@ test("no override when desiredSpeed is not below the set speed", () => {
   assert.equal(deriveCruiseOverride({ carState: { vCruiseCluster: 88 }, carrotMan: { desiredSpeed: 95 } }), null);
 });
 
-test("green external navigation reason survives a short live or replay sample gap", () => {
+test("orange external navigation reason survives a short live or replay sample gap", () => {
   const hold = createCruiseOverrideHold();
-  const green = { kph: 70, label: "cam", mode: 4 };
-  assert.deepEqual(hold.update(green, { clockMs: 1000, clockKey: "replay:a", active: true }), green);
-  assert.deepEqual(hold.update(null, { clockMs: 3499, clockKey: "replay:a", active: true }), green);
+  const orange = { kph: 70, label: "cam", mode: 4 };
+  assert.deepEqual(hold.update(orange, { clockMs: 1000, clockKey: "replay:a", active: true }), orange);
+  assert.deepEqual(hold.update(null, { clockMs: 3499, clockKey: "replay:a", active: true }), orange);
   assert.equal(hold.update(null, { clockMs: 3501, clockKey: "replay:a", active: true }), null);
 });
 

@@ -774,7 +774,7 @@ class HudRenderer(Widget):
         elif ov.speed_color_mode == 3:    # vehicle navigation CAN
           set_color = rl.Color(199, 125, 255, 230)
         elif ov.speed_color_mode == 4:    # external navigation
-          set_color = rl.Color(0, 255, 0, 230)
+          set_color = rl.Color(244, 172, 54, 230)
         else:
           set_color = rl.Color(0, 255, 0, 230)   # your sample is green
 
@@ -812,9 +812,9 @@ class HudRenderer(Widget):
     navi_status = navigation_status_presentation(vehicle_navi_available, active_carrot >= 2)
     if navi_status is not None:
       navi_label, navi_color_mode = navi_status
-      x = int(panel_x + panel_w * 0.60)
+      x = int(panel_x + panel_w * 0.60 - 26)
       y = int(panel_y + panel_h * 0.82)
-      navi_color = rl.Color(199, 125, 255, 230) if navi_color_mode == 3 else rl.GREEN
+      navi_color = rl.Color(199, 125, 255, 230) if navi_color_mode == 3 else rl.Color(244, 172, 54, 230)
       draw_text_ui_style(navi_label, x, y, 26, navi_color, font=self._font_display, border_width=1.0, shadow_offset=8.0, align="left_top", y_offset=0.0)
 
 
