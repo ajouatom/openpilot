@@ -23,17 +23,17 @@ from cluster_models import ClusterAlert
 @pytest.mark.parametrize(
   ("source", "expected"),
   (
-    ("cam", "NAVI"),
-    ("hda", "vNAVI"),
-    ("hda_section", "vNAVI"),
-    ("hda_bump", "vNAVI"),
-    ("school", "vNAVI"),
-    ("route", "NAVI"),
-    ("vturn", "turn:c"),
-    ("model", "turn:c"),
-    ("atc", "NAVI"),
-    ("section", "NAVI"),
-    ("longsource:c", "longsource:c"),
+    ("cam", "cam"),
+    ("hda", "cam"),
+    ("hda_section", "section"),
+    ("hda_bump", "bump"),
+    ("school", "school"),
+    ("route", "route"),
+    ("vturn", "turn"),
+    ("model", "turn"),
+    ("atc", "turn"),
+    ("section", "section"),
+    ("longsource:c", "longsour"),
     ("custom-source", "custom-s"),
     (None, "apply"),
   ),
@@ -45,13 +45,13 @@ def test_deceleration_source_display_label(source, expected) -> None:
 @pytest.mark.parametrize(
   ("desired_source", "expected_label", "expected_mode"),
   (
-    ("cam", "NAVI", 4),
-    ("hda", "vNAVI", 3),
-    ("hda_section", "vNAVI", 3),
-    ("hda_bump", "vNAVI", 3),
-    ("school", "vNAVI", 3),
-    ("route", "NAVI", 4),
-    ("model", "turn:c", 2),
+    ("cam", "cam", 4),
+    ("hda", "cam", 3),
+    ("hda_section", "section", 3),
+    ("hda_bump", "bump", 3),
+    ("school", "school", 3),
+    ("route", "route", 4),
+    ("model", "turn", 2),
   ),
 )
 def test_live_deceleration_override_presents_navigation_origin(desired_source, expected_label, expected_mode) -> None:
@@ -88,14 +88,14 @@ def test_live_hud_reads_active_egpu_param(monkeypatch) -> None:
   assert decorated.egpu_active
 
 
-def test_vehicle_navigation_presentation_is_blue() -> None:
-  assert deceleration_source_presentation("hda") == ("vNAVI", 3)
-  assert deceleration_source_presentation("hda_section") == ("vNAVI", 3)
-  assert deceleration_source_presentation("hda_bump") == ("vNAVI", 3)
-  assert deceleration_source_presentation("school") == ("vNAVI", 3)
+def test_vehicle_navigation_deceleration_presents_actual_reason() -> None:
+  assert deceleration_source_presentation("hda") == ("cam", 3)
+  assert deceleration_source_presentation("hda_section") == ("section", 3)
+  assert deceleration_source_presentation("hda_bump") == ("bump", 3)
+  assert deceleration_source_presentation("school") == ("school", 3)
 
 
-def test_vehicle_navigation_profile_displays_with_cruise_off() -> None:
+def test_vehicle_navigation_availability_does_not_force_speed_with_cruise_off() -> None:
   source = object.__new__(OpenpilotLiveSource)
   source._max_lateral_accel = 3.0
   source._energy_gauge_label = "fuel"
@@ -107,6 +107,7 @@ def test_vehicle_navigation_profile_displays_with_cruise_off() -> None:
     desiredSource="none",
     vehicleNaviActive=True,
     vehicleNaviSpeed=105,
+    vehicleNaviAvailable=True,
   )
   source._service_data = lambda service: carrot_man if service == "carrotMan" else None
   source._service_alive = lambda _service: False
@@ -115,15 +116,16 @@ def test_vehicle_navigation_profile_displays_with_cruise_off() -> None:
   decorated = source._with_live_hud_state(standby_state())
 
   assert decorated.cruise_display_state == "off"
-  assert decorated.cruise_override_kph == 105
-  assert decorated.cruise_override_label == "vNAVI"
-  assert decorated.cruise_override_color_mode == 3
+  assert decorated.cruise_override_kph is None
+  assert decorated.cruise_override_label is None
+  assert decorated.cruise_override_color_mode == 0
+  assert decorated.vehicle_navi_available
 
 
-def test_external_navigation_presentation_is_green() -> None:
-  assert deceleration_source_presentation("cam") == ("NAVI", 4)
-  assert deceleration_source_presentation("bump") == ("NAVI", 4)
-  assert deceleration_source_presentation("route") == ("NAVI", 4)
+def test_external_navigation_deceleration_presents_actual_reason() -> None:
+  assert deceleration_source_presentation("cam") == ("cam", 4)
+  assert deceleration_source_presentation("bump") == ("bump", 4)
+  assert deceleration_source_presentation("route") == ("route", 4)
 
 
 @pytest.mark.parametrize(

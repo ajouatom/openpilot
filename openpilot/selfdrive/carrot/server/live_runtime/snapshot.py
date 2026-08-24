@@ -482,6 +482,7 @@ def _build_carrot(service: Any, previous: dict[str, Any] | None = None) -> dict[
   p["vehicleNaviActive"] = safe_bool(safe_get(service, "vehicleNaviActive"))
   p["vehicleNaviSpeed"] = safe_int(safe_get(service, "vehicleNaviSpeed"))
   p["vehicleNaviSectionActive"] = safe_bool(safe_get(service, "vehicleNaviSectionActive"))
+  p["vehicleNaviAvailable"] = safe_bool(safe_get(service, "vehicleNaviAvailable"))
   p["activeCarrot"] = safe_int(safe_get(service, "activeCarrot"))
   p["xState"] = safe_text(safe_get(service, "xState"))
   p["trafficState"] = safe_text(safe_get(service, "trafficState"))

@@ -65,7 +65,7 @@ class Colors:
   GREEN_200 = rl.Color(0, 255, 0, 200)
   GREEN_210 = rl.Color(0, 255, 0, 210)
   BLUE_210 = rl.Color(0, 120, 255, 210)
-  VEHICLE_NAVI_BLUE = rl.Color(38, 132, 255, 230)
+  VEHICLE_NAVI_LAVENDER = rl.Color(199, 125, 255, 230)
   RED_200 = rl.Color(255, 0, 0, 200)
   RED_210 = rl.Color(255, 0, 0, 210)
   YELLOW_210 = rl.Color(255, 255, 0, 210)
@@ -109,24 +109,7 @@ class SetSpeedOverride:
         force_persist=True,   # eco 조건 유지되는 동안 계속 표시
       )
 
-    # 2) a valid vehicle-navigation CAN profile is informational even with ACC off.
-    try:
-      vehicle_navi_active = bool(sm['carrotMan'].vehicleNaviActive)
-      vehicle_navi_speed = float(sm['carrotMan'].vehicleNaviSpeed)
-    except Exception:
-      vehicle_navi_active = False
-      vehicle_navi_speed = 0.0
-
-    if vehicle_navi_active and 0 < vehicle_navi_speed < 200:
-      return SetSpeedOverrideState(
-        active=True,
-        speed_kph=vehicle_navi_speed,
-        label="vNAVI",
-        speed_color_mode=3,
-        force_persist=True,
-      )
-
-    # 3) apply_speed (desiredSpeed/source)
+    # 2) apply_speed (desiredSpeed/source)
     desired_speed = None
     desired_source = ""
     try:
@@ -146,7 +129,7 @@ class SetSpeedOverride:
         force_persist=True,   # 조건 유지되는 동안 계속 표시
       )
 
-    # 4) default
+    # 3) default
     return SetSpeedOverrideState(
       active=False,
       speed_kph=set_speed_kph,
@@ -328,10 +311,12 @@ class HudRenderer(Widget):
     font_size = 38
     text_size = measure_text_cached(self._font_semi_bold, text, font_size)
     pad_x, pad_y = 18, 8
+    badge_w = text_size.x + pad_x * 2
+    exp_button_left = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
     badge = rl.Rectangle(
-      rect.x + rect.width / 2 - text_size.x / 2 - pad_x,
+      exp_button_left - badge_w - 24,
       rect.y + 24,
-      text_size.x + pad_x * 2,
+      badge_w,
       text_size.y + pad_y * 2,
     )
     rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
@@ -687,7 +672,7 @@ class HudRenderer(Widget):
       elif ov.speed_color_mode == 2:
         ov_color = COLORS.ORANGE_230
       elif ov.speed_color_mode == 3:
-        ov_color = COLORS.VEHICLE_NAVI_BLUE
+        ov_color = COLORS.VEHICLE_NAVI_LAVENDER
       elif ov.speed_color_mode == 4:
         ov_color = rl.GREEN
       else:

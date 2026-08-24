@@ -655,6 +655,7 @@ void encode_carrot_man(std::string &out, const DynamicReader &value) {
   append_bool(out, value, "vehicleNaviActive");
   append_i32(out, value, "vehicleNaviSpeed");
   append_bool(out, value, "vehicleNaviSectionActive");
+  append_bool(out, value, "vehicleNaviAvailable");
 }
 
 void encode_selfdrive_state(std::string &out, const DynamicReader &value) {

@@ -44,6 +44,7 @@ struct CarrotMan @0x81c2f05a394cf4af {
 	vehicleNaviActive @29 : Bool;
 	vehicleNaviSpeed @30 : Int32;
 	vehicleNaviSectionActive @31 : Bool;
+	vehicleNaviAvailable @32 : Bool;
 }
 
 struct CarrotNaviState @0xaedffd8f31e7b55d {

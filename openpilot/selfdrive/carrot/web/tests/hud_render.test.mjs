@@ -131,7 +131,7 @@ test("live and replay traffic lights render from the active planner state", () =
   assert.ok(isVisible(green.trafficLights[1]), "green light visible");
 });
 
-test("live: EV + green lane wings + green external navigation override all render", () => {
+test("live: EV + green lane wings + green external navigation reason all render", () => {
   const r = renderFromCereal({
     carState: { vEgoCluster: 53, vCruiseCluster: 88, evModeValid: true, evModeActive: true, gearShifter: "drive" },
     controlsState: { activeLaneLine: true },
@@ -144,20 +144,20 @@ test("live: EV + green lane wings + green external navigation override all rende
   assert.ok(r.lfa.classList.contains("is-lane-active"), "lane wings active");
   assert.ok(isVisible(r.overrideSpeed), "override visible");
   assert.equal(r.overrideSpeed.textContent, "77");
-  assert.equal(r.overrideLabel.textContent, "NAVI");
+  assert.equal(r.overrideLabel.textContent, "cam");
   assert.equal(r.overrideSpeed.style.fill, COLORS.carrot); // green external navigation (mode 4)
 });
 
-test("live: vehicle CAN navigation override renders blue vNAVI", () => {
+test("live: vehicle CAN navigation override renders lavender bump reason", () => {
   const r = renderFromCereal({
     carState: { vEgoCluster: 53, vCruiseCluster: 88, gearShifter: "drive" },
     carrotMan: { desiredSpeed: 77, desiredSource: "hda_bump" },
   });
   assert.ok(isVisible(r.overrideSpeed), "override visible");
   assert.equal(r.overrideSpeed.textContent, "77");
-  assert.equal(r.overrideLabel.textContent, "vNAVI");
-  assert.equal(r.overrideSpeed.style.fill, COLORS.blue);
-  assert.equal(r.overrideLabel.style.fill, COLORS.blue);
+  assert.equal(r.overrideLabel.textContent, "bump");
+  assert.equal(r.overrideSpeed.style.fill, COLORS.vehicleNavi);
+  assert.equal(r.overrideLabel.style.fill, COLORS.vehicleNavi);
 });
 
 // 리플레이: 동일 파이프라인. eco(초록) 오버라이드, EV/레인은 꺼진 케이스로 변형 검증.
@@ -234,7 +234,7 @@ test("non-metric: override speed converts to mph", () => {
   panel.update(data);
   const override = findByClass(panel.el, "chud-t-override");
   assert.equal(override.textContent, String(Math.round(100 * 0.621371))); // 62
-  assert.equal(findByClass(panel.el, "chud-t-override-label").textContent, "NAVI");
+  assert.equal(findByClass(panel.el, "chud-t-override-label").textContent, "section");
 });
 
 // 센티넬 desiredSpeed(200)는 주황 오버라이드가 되면 안 된다.

@@ -128,6 +128,19 @@ def test_vehicle_navigation_toggles_reload_every_second_without_restart():
 
   assert not state.vehicleNaviCanControl
   assert not state.vehicleNaviSchoolZoneControl
+
+
+def test_vehicle_navi_availability_only_requires_receiving_0x4be():
+  state = _car_state()
+  cp = SimpleNamespace(ts_nanos={"NEW_MSG_4BE": {"PROLONG_VALUE": 1}})
+  ret = SimpleNamespace()
+
+  assert not state._update_vehicle_navi_events(cp, ret, False)
+  assert ret.vehicleNaviAvailable
+
+  cp.ts_nanos["NEW_MSG_4BE"]["PROLONG_VALUE"] = 0
+  assert not state._update_vehicle_navi_events(cp, ret, False)
+  assert not ret.vehicleNaviAvailable
   assert state.vehicleNaviEvents == []
   assert not state.vehicleNaviSchoolZoneActive
 
