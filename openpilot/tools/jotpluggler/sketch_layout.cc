@@ -59,6 +59,7 @@ struct SchemaIndex {
 };
 
 constexpr size_t INVALID_DYNAMIC_SLOT = std::numeric_limits<size_t>::max();
+constexpr double SEGMENT_DURATION_SECONDS = 60.0;
 
 struct SeriesAccumulator {
   explicit SeriesAccumulator(size_t fixed_count = 0) : fixed_series(fixed_count) {}
@@ -1357,6 +1358,28 @@ RouteData build_route_data(std::vector<RouteSeries> &&series_list,
   return route_data;
 }
 
+void constrain_route_time_range_to_loaded_segments(RouteData *route_data,
+                                                    const std::map<int, SegmentLogs> &segments) {
+  if (route_data == nullptr || !route_data->has_time_range || segments.empty() || segments.begin()->first < 0) {
+    return;
+  }
+
+  // Route logs can contain metadata copied from earlier segments. Keep those samples available,
+  // but do not let them add an empty prefix to the default view for a partial route.
+  double loaded_min = static_cast<double>(segments.begin()->first) * SEGMENT_DURATION_SECONDS;
+  double loaded_max = static_cast<double>(segments.rbegin()->first + 1) * SEGMENT_DURATION_SECONDS;
+  if (loaded_max <= route_data->x_min || loaded_min >= route_data->x_max) {
+    loaded_max -= loaded_min;
+    loaded_min = 0.0;
+  }
+  const double constrained_min = std::max(route_data->x_min, loaded_min);
+  const double constrained_max = std::min(route_data->x_max, loaded_max);
+  if (constrained_max > constrained_min) {
+    route_data->x_min = constrained_min;
+    route_data->x_max = constrained_max;
+  }
+}
+
 const RouteSeries *find_route_series(const RouteData &route_data, std::string_view path) {
   auto it = std::lower_bound(route_data.series.begin(), route_data.series.end(), path,
                              [](const RouteSeries &series, std::string_view target) {
@@ -1919,6 +1942,7 @@ RouteData load_route_data(const std::string &route_name,
                                           std::move(artifacts.enum_info),
                                           metadata.car_fingerprint,
                                           resolved_dbc);
+  constrain_route_time_range_to_loaded_segments(&route_data, segments);
   route_data.route_id = make_route_identifier(route, segments);
   build_camera_index(segments, route_data, &SegmentLogs::fcamera, "roadEncodeIdx", &route_data.road_camera);
   build_camera_index(segments, route_data, &SegmentLogs::dcamera, "driverEncodeIdx", &route_data.driver_camera);
