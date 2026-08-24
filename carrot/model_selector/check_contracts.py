@@ -101,7 +101,7 @@ def check_helpers_hook() -> str | None:
         big = Path(modeld_pkl_path(True))
         if got.parent != Path(probe):
             return f"MODELD_MODELS_DIR ignored — hook lost (got {got})"
-        if got.name != "driving_tinygrad.pkl" or big.name != "big_driving_tinygrad.pkl":
+        if got.name != "driving_tinygrad.pkl" or big.name != "usbgpu_driving_tinygrad.pkl":
             return f"pkl naming changed: {got.name}, {big.name}"
         return None
     finally:

@@ -294,7 +294,35 @@ class HudRenderer(Widget):
 
     self._draw_steering_wheel(rect)
 
+    self._draw_egpu_badge(rect)
+
     self._draw_cruise_speed_animation(rect)
+
+  def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
+    if not ui_state.usbgpu_active:
+      return
+
+    text = "eGPU"
+    font_size = 22
+    text_size = measure_text_cached(self._font_semi_bold, text, font_size)
+    pad_x, pad_y = 10, 5
+    badge = rl.Rectangle(
+      rect.x + rect.width / 2 - text_size.x / 2 - pad_x,
+      rect.y + 12,
+      text_size.x + pad_x * 2,
+      text_size.y + pad_y * 2,
+    )
+    green = rl.Color(0, 255, 0, 230)
+    rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
+    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 2, green)
+    rl.draw_text_ex(
+      self._font_semi_bold,
+      text,
+      rl.Vector2(badge.x + pad_x, badge.y + pad_y),
+      font_size,
+      0,
+      green,
+    )
 
   def _update_cruise_speed_animation(self, cruise_text: str) -> None:
     if self._cruise_speed_text_last == cruise_text:

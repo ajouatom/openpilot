@@ -103,6 +103,10 @@ class UIState:
     self.show_brightness_ratio: float = 1.0
     self.show_model_view: int = 0
     self.show_camera_with_cluster: bool = False
+    self.usbgpu_present: bool = False
+    self.usbgpu_compiled: bool = False
+    self.usbgpu_loading: bool = False
+    self.usbgpu_active: bool = False
 
     self.update_params()
 
@@ -209,6 +213,10 @@ class UIState:
     self.show_brightness_ratio: float = self.params.get_int("ShowCustomBrightness") / 100.0
     self.show_model_view = self.params.get_int("ShowModelView")
     self.show_camera_with_cluster = self.params.get_int("ShowCameraWithCluster") == 1
+    self.usbgpu_present = self.params.get_bool("UsbGpuPresent")
+    self.usbgpu_compiled = self.params.get_bool("UsbGpuCompiled")
+    self.usbgpu_loading = self.params.get_bool("UsbGpuLoading")
+    self.usbgpu_active = self.params.get_bool("UsbGpuActive")
 
     self._param_update_time = time.monotonic()
 

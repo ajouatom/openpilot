@@ -297,10 +297,36 @@ class HudRenderer(Widget):
 
     self._draw_date_time(rect)
     self._draw_tpms(rect)
+    self._draw_egpu_badge(rect)
     self._draw_cruise_speed_animation(rect)
 
   def user_interacting(self) -> bool:
     return self._exp_button.is_pressed
+
+  def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
+    if not ui_state.usbgpu_active:
+      return
+
+    text = "eGPU"
+    font_size = 38
+    text_size = measure_text_cached(self._font_semi_bold, text, font_size)
+    pad_x, pad_y = 18, 8
+    badge = rl.Rectangle(
+      rect.x + rect.width / 2 - text_size.x / 2 - pad_x,
+      rect.y + 24,
+      text_size.x + pad_x * 2,
+      text_size.y + pad_y * 2,
+    )
+    rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
+    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 3, COLORS.GREEN_210)
+    rl.draw_text_ex(
+      self._font_semi_bold,
+      text,
+      rl.Vector2(badge.x + pad_x, badge.y + pad_y),
+      font_size,
+      0,
+      COLORS.GREEN_210,
+    )
 
   def _draw_set_speed(self, rect: rl.Rectangle) -> None:
     """Draw the MAX speed indicator box."""

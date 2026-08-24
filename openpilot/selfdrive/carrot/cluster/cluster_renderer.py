@@ -229,6 +229,10 @@ TOP_CRUISE_FONT_SIZE = 27.0 * DRIVE_STATUS_SCALE
 TOP_CRUISE_UNIT_FONT_SIZE = TOP_CRUISE_FONT_SIZE
 WIFI_STATUS_CENTER_X = 160
 WIFI_STATUS_ICON_SIZE = 48.0
+EGPU_STATUS_CENTER_X = 245.0
+EGPU_STATUS_W = 76.0
+EGPU_STATUS_H = 34.0
+EGPU_STATUS_FONT_SIZE = 19.0
 NAV_STATUS_CENTER_X = WIFI_STATUS_CENTER_X
 NAV_STATUS_CENTER_Y = 99.0
 NAV_STATUS_FONT_SIZE = 22.0
@@ -6660,11 +6664,27 @@ class ClusterUiRenderer:
             and state.cruise_gap is None
             and not self._cruise_set_visible(state)
             and state.lfa_active is None
+            and not state.egpu_active
         ):
             return
 
         self._draw_network_status(state, TOP_STATUS_CENTER_Y + WIFI_STATUS_ICON_SIZE * 0.5)
+        self._draw_egpu_status(state)
         self._draw_lfa_status_icon(state, TOP_STATUS_CENTER_Y + LFA_STATUS_ICON_SIZE * 0.5)
+
+    def _draw_egpu_status(self, state: ClusterUiState) -> None:
+        if not state.egpu_active:
+            return
+        rect = rl.Rectangle(
+            EGPU_STATUS_CENTER_X - EGPU_STATUS_W * 0.5,
+            TOP_STATUS_CENTER_Y - EGPU_STATUS_H * 0.5,
+            EGPU_STATUS_W,
+            EGPU_STATUS_H,
+        )
+        rl.draw_rectangle_rounded(rect, 0.35, 8, rl_color((0, 0, 0), 150))
+        rl.draw_rectangle_rounded_lines_ex(rect, 0.35, 8, 2.0, rl_color(GREEN))
+        self._draw_text("eGPU", EGPU_STATUS_CENTER_X, TOP_STATUS_CENTER_Y + 1.0,
+                        EGPU_STATUS_FONT_SIZE, GREEN, anchor="center", cache=True)
 
     def _draw_drive_status_box(
         self,

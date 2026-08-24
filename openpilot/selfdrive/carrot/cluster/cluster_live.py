@@ -147,6 +147,8 @@ class OpenpilotLiveSource:
         self._held_navi_traffic_light: NaviTrafficLightInfo | None = None
         self._held_navi_traffic_light_received_t: float | None = None
         self._show_plot_mode = 0
+        self._egpu_active = False
+        self._next_egpu_param_read_t = 0.0
         self._hud_debug_mode = 0
         self._live_debug_enabled = False
         self._debug_plot_enabled = False
@@ -318,6 +320,15 @@ class OpenpilotLiveSource:
         return self.last_state
 
     def _with_live_hud_state(self, state: ClusterUiState) -> ClusterUiState:
+        now = time.monotonic()
+        if now >= getattr(self, "_next_egpu_param_read_t", 0.0):
+            params = getattr(self, "params", None)
+            try:
+                self._egpu_active = bool(params is not None and params.get_bool("UsbGpuActive"))
+            except Exception:
+                self._egpu_active = False
+            self._next_egpu_param_read_t = now + 1.0
+
         device_state = self._service_data("deviceState")
         onroad = self._service_alive("deviceState") and bool(safe_get(device_state, "started", False))
         car_state = self._service_data("carState")
@@ -436,6 +447,7 @@ class OpenpilotLiveSource:
             state,
             onroad=onroad,
             alert=self._live_cluster_alert(state.alert, onroad),
+            egpu_active=getattr(self, "_egpu_active", False),
             external_nav_active=external_nav_active,
             speed_limit_kph=speed_limit_kph,
             speed_limit_source=speed_limit_source,

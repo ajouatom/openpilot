@@ -70,6 +70,22 @@ def test_live_deceleration_override_presents_navigation_origin(desired_source, e
   assert decorated.cruise_override_color_mode == expected_mode
 
 
+def test_live_hud_reads_active_egpu_param(monkeypatch) -> None:
+  source = object.__new__(OpenpilotLiveSource)
+  source._max_lateral_accel = 3.0
+  source._energy_gauge_label = "fuel"
+  source._carrot_navi_media = None
+  source._current_carrot_navi = lambda _now: None
+  source.params = SimpleNamespace(get_bool=lambda key: key == "UsbGpuActive")
+  source._service_data = lambda _service: None
+  source._service_alive = lambda _service: False
+  monkeypatch.setattr(cluster_live.time, "monotonic", lambda: 100.0)
+
+  decorated = source._with_live_hud_state(standby_state())
+
+  assert decorated.egpu_active
+
+
 def test_vehicle_navigation_presentation_is_blue() -> None:
   assert deceleration_source_presentation("hda") == ("vNAVI", 3)
   assert deceleration_source_presentation("hda_bump") == ("vNAVI", 3)

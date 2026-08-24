@@ -9,11 +9,11 @@ from collections.abc import Collection
 from pathlib import Path
 from typing import TypeVar
 
+from openpilot.common.file_chunker import get_manifest_path
+
 MODELS_DIR = Path(__file__).resolve().parent / 'models'
 TG_INPUT_DEVICES_PATH = MODELS_DIR / 'tg_input_devices.json'
-USBGPU_VID = 0xADD1
-USBGPU_PID = 0x0001
-USBGPU_ENABLE_ENV_VARS = ("USE_USBGPU", "ENABLE_USBGPU")
+USBGPU_USB_IDS = ((0xADD1, 0x0001), (0x3801, 0x0001))
 VisionStreamT = TypeVar("VisionStreamT")
 
 
@@ -49,7 +49,9 @@ def get_tg_input_devices(process_name: str, usbgpu: bool):
     return _default_tg_input_devices(process_name, usbgpu)
 
 def modeld_pkl_path(usbgpu: bool):
-  prefix = 'big_' if usbgpu else ''
+  # Keep the eGPU artifact separate while compiling it from the regular model.
+  # This avoids requiring the LFS-only big model on carrotpilot remotes.
+  prefix = 'usbgpu_' if usbgpu else ''
   # carrot model selector: load a custom-compiled model dir instead of the built-in one
   models_dir = Path(override) if (override := os.getenv('MODELD_MODELS_DIR')) else MODELS_DIR
   return models_dir / f'{prefix}driving_tinygrad.pkl'
@@ -78,15 +80,15 @@ def load_oob(f):
       yield pb
   return pickle.load(io.BytesIO(opcodes), buffers=buffers())
 
-def usbgpu_enabled() -> bool:
-  return any(os.getenv(name) == "1" for name in USBGPU_ENABLE_ENV_VARS)
-
 def usbgpu_present() -> bool:
   for d in Path("/sys/bus/usb/devices").glob("*"):
     try:
-      if int((d / "idVendor").read_text(), 16) == USBGPU_VID and \
-          int((d / "idProduct").read_text(), 16) == USBGPU_PID:
+      usb_id = (int((d / "idVendor").read_text(), 16), int((d / "idProduct").read_text(), 16))
+      if usb_id in USBGPU_USB_IDS:
         return True
     except Exception:
       pass
   return False
+
+def usbgpu_compiled() -> bool:
+  return Path(get_manifest_path(modeld_pkl_path(usbgpu=True))).is_file()
