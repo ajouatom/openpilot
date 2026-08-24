@@ -8,7 +8,10 @@ from openpilot.selfdrive.carrot.carrot_serv import CarrotServ
 def _serv(mode):
   serv = CarrotServ.__new__(CarrotServ)
   serv.vehicleSpeedCameraControlMode = mode
+  serv.vehicleNaviCanControl = True
   serv.vehicleNaviSchoolZoneControl = False
+  serv.autoNaviSpeedSafetyFactor = 1.05
+  serv.autoNaviSpeedBumpSpeed = 25
   serv.gas_override_speed = 0
   serv.gas_pressed_state = False
   serv.source_last = "none"
@@ -22,6 +25,9 @@ def _car_state(*, gas=False, brake=False, speed_limit=50, distance=300, v_ego=20
     speedLimit=speed_limit,
     speedLimitDistance=distance,
     schoolZoneActive=False,
+    vehicleNaviActive=False,
+    vehicleNaviSectionActive=False,
+    vehicleNaviSpeed=0,
     vEgo=v_ego,
   )
 
@@ -138,6 +144,46 @@ def test_school_mode_two_uses_accelerator_speed_floor():
   desired_speed, source = serv._apply_speed_source_gas_floor(CS, 30, "school", 48, False)
 
   assert (desired_speed, source, serv.gas_override_speed) == (48, "gas", 48)
+
+
+@pytest.mark.parametrize(("mode", "gas_pressed", "expected"), (
+  (0, False, False),
+  (1, False, True),
+  (1, True, True),
+  (2, True, True),
+  (3, False, True),
+  (3, True, False),
+))
+def test_vehicle_section_zone_holds_speed_cap(mode, gas_pressed, expected):
+  serv = _serv(mode)
+  CS = _car_state(gas=gas_pressed)
+  CS.vehicleNaviActive = True
+  CS.vehicleNaviSectionActive = True
+  CS.vehicleNaviSpeed = 100
+
+  assert serv._vehicle_section_zone_enabled(CS) is expected
+  if expected:
+    assert CS.vehicleNaviSpeed * serv.autoNaviSpeedSafetyFactor == pytest.approx(105.0)
+
+
+def test_vehicle_navigation_display_is_independent_of_cruise_state():
+  serv = _serv(1)
+  CS = _car_state()
+  CS.vehicleNaviActive = True
+  CS.vehicleNaviSectionActive = True
+  CS.vehicleNaviSpeed = 100
+
+  assert serv._vehicle_navigation_display(CS) == (True, 105, True)
+
+
+def test_vehicle_section_mode_two_uses_accelerator_speed_floor():
+  serv = _serv(2)
+  serv.source_last = "hda_section"
+  CS = _car_state(gas=True)
+
+  desired_speed, source = serv._apply_speed_source_gas_floor(CS, 105, "hda_section", 115, False)
+
+  assert (desired_speed, source, serv.gas_override_speed) == (115, "gas", 115)
 
 
 @pytest.mark.parametrize(("x_spd_type", "vehicle_camera", "vehicle_bump", "suppressed"), (

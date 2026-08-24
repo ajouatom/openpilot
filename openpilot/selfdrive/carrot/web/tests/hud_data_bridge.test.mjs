@@ -142,13 +142,24 @@ test("external navigation override is green NAVI", () => {
 });
 
 test("vehicle CAN navigation override is blue vNAVI", () => {
-  for (const desiredSource of ["hda", "hda_bump", "school"]) {
+  for (const desiredSource of ["hda", "hda_section", "hda_bump", "school"]) {
     const out = deriveCruiseOverride({
       carState: { vCruiseCluster: 88 },
       carrotMan: { desiredSpeed: 77, desiredSource },
     });
     assert.deepEqual(out, { kph: 77, label: "vNAVI", mode: 3 });
   }
+});
+
+test("0x4BE vehicle navigation telltale stays visible with cruise off or at the same speed", () => {
+  const carrotMan = { vehicleNaviActive: true, vehicleNaviSpeed: 105 };
+  assert.deepEqual(deriveCruiseOverride({
+    carState: { vCruiseCluster: 105 },
+    selfdriveState: { enabled: false },
+    carrotMan,
+  }), { kph: 105, label: "vNAVI", mode: 3 });
+  assert.deepEqual(deriveCruiseOverride({ carrotMan }), { kph: 105, label: "vNAVI", mode: 3 });
+  assert.equal(deriveCruiseOverride({ carrotMan: { ...carrotMan, vehicleNaviActive: false } }), null);
 });
 
 test("decel override falls back to 'apply' and truncates unknown sources", () => {

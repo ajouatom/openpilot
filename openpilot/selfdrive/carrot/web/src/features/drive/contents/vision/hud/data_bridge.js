@@ -189,7 +189,7 @@ export function vehicleHudSignature(payload = {}) {
 
 // Cluster parity: vehicle-CAN navigation is blue vNAVI; external navigation is green NAVI.
 const EXTERNAL_NAVI_SOURCES = new Set(["cam", "section", "bump", "police", "waze", "road", "atc", "atc2", "route"]);
-const VEHICLE_NAVI_SOURCES = new Set(["hda", "hda_bump", "school"]);
+const VEHICLE_NAVI_SOURCES = new Set(["hda", "hda_section", "hda_bump", "school"]);
 const DECEL_SOURCE_LABELS = Object.freeze({
   gas: "gas:v",
   vturn: "turn:c", model: "turn:c", turn: "turn:c",
@@ -255,12 +255,22 @@ export function isCruiseDisplayVisible(state = {}, cruiseKph = resolveCruiseKph(
 // Returns { kph, label, mode } in kph, or null. Shared by live and replay.
 export function deriveCruiseOverride(state = {}) {
   const cruiseKph = resolveCruiseKph(state);
-  if (!isCruiseDisplayVisible(state, cruiseKph)) return null;
-
+  const cruiseVisible = isCruiseDisplayVisible(state, cruiseKph);
   const cruiseTarget = finite(state.longitudinalPlan?.cruiseTarget);
-  if (cruiseTarget != null && cruiseTarget > cruiseKph + 0.5) {
+  if (cruiseVisible && cruiseTarget != null && cruiseTarget > cruiseKph + 0.5) {
     return { kph: cruiseTarget, label: "eco", mode: 1 };
   }
+
+  // A valid 0x4BE profile is a vehicle-navigation telltale, not a cruise
+  // override. Keep it visible during lateral-only driving and when its speed
+  // equals the stale cruise set speed.
+  const vehicleNaviSpeed = finite(state.carrotMan?.vehicleNaviSpeed);
+  if (state.carrotMan?.vehicleNaviActive === true &&
+      vehicleNaviSpeed != null && vehicleNaviSpeed > 0 && vehicleNaviSpeed < 200) {
+    return { kph: vehicleNaviSpeed, label: "vNAVI", mode: 3 };
+  }
+
+  if (!cruiseVisible) return null;
 
   const desiredSpeed = finite(state.carrotMan?.desiredSpeed);
   if (desiredSpeed != null && desiredSpeed > 0 && desiredSpeed < 200 && desiredSpeed < cruiseKph) {

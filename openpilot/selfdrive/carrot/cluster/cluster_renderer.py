@@ -6925,7 +6925,8 @@ class ClusterUiRenderer:
             if tpms_translated:
                 rl.rl_pop_matrix()
 
-        if self._cruise_set_visible(state) and state.cruise_override_kph is not None:
+        show_vehicle_navi = state.cruise_override_color_mode == 3 and state.cruise_override_label == "vNAVI"
+        if state.cruise_override_kph is not None and (self._cruise_set_visible(state) or show_vehicle_navi):
             override_color = (
                 GREEN
                 if state.cruise_override_color_mode in (1, 4)

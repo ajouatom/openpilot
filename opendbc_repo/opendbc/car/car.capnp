@@ -267,6 +267,9 @@ struct CarState {
   evModeValid @86 :Bool; # evModeActive is backed by a fresh, checksum-valid CAN frame of the expected bus and length
   speedBumpDistance @87 :Float32; # distance to a speed bump received from the stock navigation CAN, meters
   schoolZoneActive @88 :Bool; # stock-navigation kind 7 currently indicates a 30 km/h speed-limit zone
+  vehicleNaviActive @89 :Bool; # a valid stock-navigation CAN profile is currently relevant
+  vehicleNaviSectionActive @90 :Bool; # stock-navigation kind 7 indicates a non-school speed-limit section
+  vehicleNaviSpeed @91 :Float32; # raw speed from the active stock-navigation CAN profile, kph
 
   struct Tpms {
     fl @0 :Float32;

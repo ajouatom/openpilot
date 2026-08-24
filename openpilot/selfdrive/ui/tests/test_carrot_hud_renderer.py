@@ -604,3 +604,24 @@ def test_render_draws_each_hud_section_in_order(hud_module, monkeypatch):
     "tpms",
     "animation",
   ]
+
+
+def test_vehicle_navigation_profile_displays_with_cruise_off(hud_module):
+  module, _ = hud_module
+  sm = {
+    "longitudinalPlan": SimpleNamespace(cruiseTarget=0.0),
+    "carrotMan": SimpleNamespace(
+      vehicleNaviActive=True,
+      vehicleNaviSpeed=105,
+      desiredSpeed=105,
+      desiredSource="hda_section",
+    ),
+  }
+
+  override = module.SetSpeedOverride().compute(sm, set_speed_kph=105)
+
+  assert override.active
+  assert override.speed_kph == 105
+  assert override.label == "vNAVI"
+  assert override.speed_color_mode == 3
+  assert override.force_persist

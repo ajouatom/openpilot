@@ -25,6 +25,7 @@ from cluster_models import ClusterAlert
   (
     ("cam", "NAVI"),
     ("hda", "vNAVI"),
+    ("hda_section", "vNAVI"),
     ("hda_bump", "vNAVI"),
     ("school", "vNAVI"),
     ("route", "NAVI"),
@@ -46,6 +47,7 @@ def test_deceleration_source_display_label(source, expected) -> None:
   (
     ("cam", "NAVI", 4),
     ("hda", "vNAVI", 3),
+    ("hda_section", "vNAVI", 3),
     ("hda_bump", "vNAVI", 3),
     ("school", "vNAVI", 3),
     ("route", "NAVI", 4),
@@ -88,8 +90,34 @@ def test_live_hud_reads_active_egpu_param(monkeypatch) -> None:
 
 def test_vehicle_navigation_presentation_is_blue() -> None:
   assert deceleration_source_presentation("hda") == ("vNAVI", 3)
+  assert deceleration_source_presentation("hda_section") == ("vNAVI", 3)
   assert deceleration_source_presentation("hda_bump") == ("vNAVI", 3)
   assert deceleration_source_presentation("school") == ("vNAVI", 3)
+
+
+def test_vehicle_navigation_profile_displays_with_cruise_off() -> None:
+  source = object.__new__(OpenpilotLiveSource)
+  source._max_lateral_accel = 3.0
+  source._energy_gauge_label = "fuel"
+  source._carrot_navi_media = None
+  source._current_carrot_navi = lambda _now: None
+  carrot_man = SimpleNamespace(
+    activeCarrot=0,
+    desiredSpeed=250.0,
+    desiredSource="none",
+    vehicleNaviActive=True,
+    vehicleNaviSpeed=105,
+  )
+  source._service_data = lambda service: carrot_man if service == "carrotMan" else None
+  source._service_alive = lambda _service: False
+  source._service_valid = lambda _service: False
+
+  decorated = source._with_live_hud_state(standby_state())
+
+  assert decorated.cruise_display_state == "off"
+  assert decorated.cruise_override_kph == 105
+  assert decorated.cruise_override_label == "vNAVI"
+  assert decorated.cruise_override_color_mode == 3
 
 
 def test_external_navigation_presentation_is_green() -> None:

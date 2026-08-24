@@ -109,7 +109,24 @@ class SetSpeedOverride:
         force_persist=True,   # eco 조건 유지되는 동안 계속 표시
       )
 
-    # 2) apply_speed (desiredSpeed/source)
+    # 2) a valid vehicle-navigation CAN profile is informational even with ACC off.
+    try:
+      vehicle_navi_active = bool(sm['carrotMan'].vehicleNaviActive)
+      vehicle_navi_speed = float(sm['carrotMan'].vehicleNaviSpeed)
+    except Exception:
+      vehicle_navi_active = False
+      vehicle_navi_speed = 0.0
+
+    if vehicle_navi_active and 0 < vehicle_navi_speed < 200:
+      return SetSpeedOverrideState(
+        active=True,
+        speed_kph=vehicle_navi_speed,
+        label="vNAVI",
+        speed_color_mode=3,
+        force_persist=True,
+      )
+
+    # 3) apply_speed (desiredSpeed/source)
     desired_speed = None
     desired_source = ""
     try:
@@ -129,7 +146,7 @@ class SetSpeedOverride:
         force_persist=True,   # 조건 유지되는 동안 계속 표시
       )
 
-    # 3) default
+    # 4) default
     return SetSpeedOverrideState(
       active=False,
       speed_kph=set_speed_kph,
