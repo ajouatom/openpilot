@@ -35,7 +35,10 @@ class TrialError(Exception):
 
 
 def run(*args: str, capture: bool = False) -> str:
-  result = subprocess.run(args, check=True, text=True, capture_output=capture)
+  if capture:
+    result = subprocess.run(args, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+  else:
+    result = subprocess.run(args, check=True, text=True)
   return result.stdout.strip() if capture else ""
 
 
@@ -312,6 +315,29 @@ def should_defer_success() -> int:
     return 1
 
 
+def activate() -> None:
+  require_root()
+  require_offroad()
+  state = load_state()
+  if state.get("phase") != "ready":
+    raise TrialError(f"활성화할 수 없는 시험 상태입니다: {state.get('phase')}")
+
+  target = state.get("trial_slot")
+  if target not in ("_a", "_b"):
+    raise TrialError("시험 슬롯 정보가 올바르지 않습니다.")
+  size = int(state.get("boot_size", 0))
+  expected_hash = state.get("boot_sha256", "")
+  if size <= 0 or len(expected_hash) != 64:
+    raise TrialError("시험 boot 이미지 검증 정보가 올바르지 않습니다.")
+  written_hash = sha256_file(partition_path("boot", target), size)
+  if written_hash != expected_hash:
+    raise TrialError(f"시험 boot 파티션 checksum 불일치: {written_hash}")
+
+  set_active_slot(target)
+  print(f"다음 부팅 슬롯을 시험 슬롯 {target}로 설정했습니다.")
+  print("준비되면 'sudo reboot'를 실행하세요.")
+
+
 def confirm() -> None:
   require_root()
   state = load_state()
@@ -345,7 +371,7 @@ def status() -> None:
 
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("command", choices=("status", "prepare", "install", "confirm", "rollback", "should-defer-success"))
+  parser.add_argument("command", choices=("status", "prepare", "install", "activate", "confirm", "rollback", "should-defer-success"))
   args = parser.parse_args()
 
   try:
@@ -355,6 +381,8 @@ def main() -> int:
       prepare_inactive_agnos()
     elif args.command == "install":
       install()
+    elif args.command == "activate":
+      activate()
     elif args.command == "confirm":
       confirm()
     elif args.command == "rollback":
