@@ -54,21 +54,24 @@ def is_canfd_parking_brake_active(parking_brake_state: int) -> bool:
   return parking_brake_state == 1
 
 
-def update_canfd_avh_interlock_state(avh_state: int, acc_req: int, brake_pressed: bool, avh_active_prev: bool,
-                                     oem_hold_latched: bool, release_grace_frames: int) -> tuple[bool, bool, int]:
+def update_canfd_avh_interlock_state(avh_state: int, acc_req: int, brake_pressed: bool, soft_hold_active: bool,
+                                     avh_active_prev: bool, oem_hold_latched: bool,
+                                     release_grace_frames: int) -> tuple[bool, bool, int]:
   """Separate an OEM AutoHold from an openpilot SCC-induced hydraulic hold.
 
   AVH_Sta reports who is physically holding the service brake, not whether the
   AutoHold button is enabled. An OEM hold begins while the driver brake signal
-  is asserted and before TCS.ACC_REQ, while cruise stops and soft hold assert
-  AVH without the driver brake signal. Keep an OEM classification across short
+  is asserted and before TCS.ACC_REQ, while cruise stops and soft hold can also
+  assert AVH. Some cars assert AVH before TCS.ACC_REQ reflects a soft-hold SCC
+  request, so use the already-published soft-hold intent to avoid classifying
+  openpilot's own hold as OEM-owned. Keep an OEM classification across short
   AVH dropouts so automatic cruise cannot reopen the interlock during a
   transition.
   """
   avh_active = is_canfd_avh_active(avh_state)
   if avh_active:
     if not avh_active_prev and not oem_hold_latched:
-      oem_hold_latched = brake_pressed and acc_req != 1
+      oem_hold_latched = avh_state == 1 and brake_pressed and acc_req != 1 and not soft_hold_active
     release_grace_frames = CANFD_AVH_RELEASE_GRACE_FRAMES if oem_hold_latched else 0
   elif oem_hold_latched:
     release_grace_frames = max(0, release_grace_frames - 1)
@@ -954,12 +957,11 @@ class CarState(CarStateBase):
       ret.cruiseState.enabled = acc_req == 1
       ret.cruiseState.standstill = False
       # AVH_Sta is also asserted by openpilot SCC/soft hold. Only expose an
-      # OEM-owned hold to the cruise interlock. Driver brake distinguishes an
-      # AutoHold engagement from an SCC/soft-hold hydraulic stop, with ACC_REQ
-      # guarding the controller handoff timing.
+      # OEM-owned hold to the cruise interlock. The soft-hold intent identifies
+      # ownership even on cars where AVH rises before ACC_REQ catches up.
       ret.brakeHoldActive, self.canfdAvhActivePrev, self.canfdAvhReleaseGraceFrames = update_canfd_avh_interlock_state(
-        avh_state, acc_req, cp.vl["ESP_STATUS"]["BRAKE_PRESSED"] == 1, self.canfdAvhActivePrev,
-        self.canfdOemBrakeHoldLatched, self.canfdAvhReleaseGraceFrames,
+        avh_state, acc_req, cp.vl["ESP_STATUS"]["BRAKE_PRESSED"] == 1, self.softHoldActive > 0,
+        self.canfdAvhActivePrev, self.canfdOemBrakeHoldLatched, self.canfdAvhReleaseGraceFrames,
       )
       self.canfdOemBrakeHoldLatched = ret.brakeHoldActive
     else:

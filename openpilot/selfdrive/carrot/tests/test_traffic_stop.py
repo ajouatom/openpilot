@@ -60,7 +60,7 @@ def test_configured_obstacle_adjustment_is_used_at_all_speeds():
 def test_signal_stop_accel_floor_limits_early_braking_with_margin():
   # Supplied d76 route: 78.52 km/h and about 138.5 m available at detection.
   accel_floor = get_traffic_stop_accel_floor(78.52 / 3.6, 138.5, 5.5)
-  assert accel_floor == pytest.approx(-2.2314, abs=1e-4)
+  assert accel_floor == -2.2
 
 
 def test_signal_stop_accel_floor_limits_d85_onset_to_comfortable_braking():
@@ -69,10 +69,39 @@ def test_signal_stop_accel_floor_limits_d85_onset_to_comfortable_braking():
   assert accel_floor == -2.2
 
 
+def test_signal_stop_accel_floor_ignores_dbd_model_endpoint_contraction():
+  # Supplied dbd route started at 78.23 km/h with about 155 m to the physical
+  # line. Even a persistently contracted 96 m model endpoint is not yet an
+  # emergency and must not recreate the observed -3.01 m/s^2 initial request.
+  accel_floor = get_traffic_stop_accel_floor(78.23 / 3.6, 96.0, 5.5)
+  assert accel_floor == -2.2
+
+
+def test_signal_stop_accel_floor_blends_between_comfort_and_emergency():
+  # Choose the distance so buffered required decel is exactly 4.5 m/s^2,
+  # halfway through the 4.0..5.0 emergency release interval.
+  accel_floor = get_traffic_stop_accel_floor(20.0, 67.0116279070, 5.5)
+  assert accel_floor == pytest.approx(-3.1)
+
+
 def test_signal_stop_accel_floor_releases_when_distance_is_short():
-  accel_floor = get_traffic_stop_accel_floor(62.0 / 3.6, 60.0, 5.5)
-  assert accel_floor < -3.8
+  accel_floor = get_traffic_stop_accel_floor(62.0 / 3.6, 50.0, 5.5)
+  assert accel_floor == -4.0
   assert get_traffic_stop_accel_floor(20.0, 10.0, 5.5) == -4.0
+
+
+def test_signal_stop_accel_floor_keeps_a_close_stop_safely_reachable():
+  # Worst-case check: treat the contracted dbd endpoint as a real 80 m line.
+  # The strongest braking permitted by this floor still stops before the line.
+  v_ego = 78.23 / 3.6
+  raw_stop_distance = 80.0
+  dt = 0.01
+  while v_ego > 0.01:
+    accel = get_traffic_stop_accel_floor(v_ego, raw_stop_distance, 5.5)
+    raw_stop_distance -= v_ego * dt
+    v_ego = max(0.0, v_ego + accel * dt)
+
+  assert 5.5 < raw_stop_distance < 15.0
 
 
 def test_signal_stop_accel_floor_fails_safe_for_invalid_distance():
