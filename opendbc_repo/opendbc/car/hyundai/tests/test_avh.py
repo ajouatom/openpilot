@@ -1,23 +1,59 @@
-from opendbc.can import CANDefine
+from opendbc.can import CANDefine, CANParser
 from opendbc.can.dbc import DBC
-from opendbc.car.hyundai.carstate import CANFD_AVH_RELEASE_GRACE_FRAMES, update_canfd_avh_interlock_state
+from opendbc.car.hyundai.carstate import CANFD_AVH_RELEASE_GRACE_FRAMES, update_canfd_auto_hold_interlock_state
 
 
 def test_canfd_avh_status_definition():
   dbc = DBC("hyundai_canfd_generated")
-  signal = dbc.name_to_msg["ESP_STATUS"].sigs["AVH_Sta"]
+  signals = dbc.name_to_msg["ESP_STATUS"].sigs
+  signal = signals["AVH_Sta"]
 
   assert signal.start_bit == 192
   assert signal.size == 2
   assert signal.is_little_endian
+  assert signals["AVH_I_LAMP"].start_bit == 218
+  assert signals["AVH_I_LAMP"].size == 2
+  assert signals["AVH_I_LAMP"].is_little_endian
+  assert signals["AVH_LAMP"].start_bit == 220
+  assert signals["AVH_LAMP"].size == 3
+  assert signals["AVH_LAMP"].is_little_endian
 
-  definitions = CANDefine("hyundai_canfd_generated").dv["ESP_STATUS"]["AVH_Sta"]
-  assert definitions == {
+  definitions = CANDefine("hyundai_canfd_generated").dv["ESP_STATUS"]
+  assert definitions["AVH_Sta"] == {
     0: "NO_APPLY",
     1: "VEHICLE_IS_HELD_BY_THE_SERVICE_BRAKE",
     2: "BEING_RELEASED",
     3: "ERROR_INDICATOR",
   }
+  assert definitions["AVH_I_LAMP"] == {
+    0: "LAMP_ON",
+    1: "LAMP_OFF",
+    2: "RESERVED",
+    3: "RESERVED",
+  }
+  assert definitions["AVH_LAMP"] == {
+    0: "AVH_OFF",
+    1: "AVH_FAILURE",
+    2: "AVH_ACTIVE",
+    3: "AVH_READY",
+    4: "RESERVED",
+    5: "RESERVED",
+    6: "RESERVED",
+    7: "RESERVED",
+  }
+
+
+def test_canfd_autohold_switch_log_frames():
+  parser = CANParser("hyundai_canfd_generated", [("ESP_STATUS", 100)], 0)
+  frames = [
+    ("b0d44800000500000202000140ff00ff930005000008ff0044000004fffa0000", 1, 0),
+    ("6442f300000000000202000240ff00ff000005000008ff0040000030fffa0000", 0, 3),
+  ]
+
+  for timestamp, (raw, indicator_lamp, mode_lamp) in enumerate(frames, 1):
+    assert parser.update([timestamp * 10_000_000, [(0x60, bytes.fromhex(raw), 0)]]) == {0x60}
+    assert parser.vl["ESP_STATUS"]["AVH_I_LAMP"] == indicator_lamp
+    assert parser.vl["ESP_STATUS"]["AVH_LAMP"] == mode_lamp
 
 
 def test_canfd_parking_brake_status_definition():
@@ -38,74 +74,60 @@ def test_canfd_parking_brake_status_definition():
 
 
 def _classify_avh_sequence(sequence):
-  avh_active_prev = False
   oem_hold_latched = False
   release_grace_frames = 0
   results = []
-  for avh_state, acc_req, brake_pressed, soft_hold_active in sequence:
-    oem_hold_latched, avh_active_prev, release_grace_frames = update_canfd_avh_interlock_state(
-      avh_state, acc_req, brake_pressed, soft_hold_active, avh_active_prev, oem_hold_latched, release_grace_frames,
+  for avh_state, avh_lamp in sequence:
+    oem_hold_latched, release_grace_frames = update_canfd_auto_hold_interlock_state(
+      avh_state, avh_lamp, oem_hold_latched, release_grace_frames,
     )
     results.append(oem_hold_latched)
   return results
 
 
-def test_canfd_oem_autohold_precedes_acc_request_and_latches_interlock():
-  # OEM AutoHold log: driver braking is asserted when AVH rises.
-  sequence = [(0, 0, False, False), (1, 0, True, False), (1, 1, False, False), (2, 1, False, False)]
+def test_canfd_oem_autohold_lamp_latches_interlock():
+  # OEM logs: READY -> ACTIVE while held -> READY while releasing.
+  sequence = [(0, 3), (1, 2), (2, 3)]
 
-  assert _classify_avh_sequence(sequence) == [False, True, True, True]
+  assert _classify_avh_sequence(sequence) == [False, True, True]
 
 
-def test_canfd_soft_hold_follows_acc_request_without_latching_interlock():
-  # Soft-hold log: SCC/TCS ACC_REQ rises first and AVH follows roughly 160 ms later.
-  # A brief ACC_REQ dropout while AVH remains active must not reclassify the hold.
-  sequence = [(0, 0, True, True), (0, 1, False, True), (1, 1, False, True),
-              (1, 0, False, True), (2, 1, False, True), (0, 0, False, False)]
+def test_canfd_soft_hold_with_autohold_off_does_not_latch_interlock():
+  # Ioniq 5 and GV80 logs: SCC/soft hold asserts AVH while AutoHold stays off.
+  sequence = [(0, 0), (1, 0), (2, 0), (0, 0)]
 
   assert _classify_avh_sequence(sequence) == [False] * len(sequence)
 
 
-def test_canfd_cruise_stop_ignores_avh_during_acc_req_dropout():
-  # K5 cruise-stop log: AVH is asserted without driver braking. Do not cancel
-  # active cruise even if ACC_REQ has a transient timing gap at the AVH edge.
-  sequence = [(0, 1, False, False), (1, 0, False, False), (1, 1, False, False), (0, 1, False, False)]
+def test_canfd_scc_hold_with_autohold_ready_does_not_latch_interlock():
+  # K5 mixed log: SCC can assert AVH while AutoHold remains READY, not ACTIVE.
+  sequence = [(0, 3), (1, 3), (0, 3)]
 
   assert _classify_avh_sequence(sequence) == [False] * len(sequence)
 
 
 def test_canfd_oem_autohold_interlock_survives_short_avh_dropout():
-  sequence = [(1, 0, True, False), (0, 0, False, False), (1, 1, False, False)]
+  sequence = [(1, 2), (0, 3), (0, 3)]
 
   assert _classify_avh_sequence(sequence) == [True, True, True]
 
 
 def test_canfd_oem_autohold_interlock_clears_after_release_grace():
-  sequence = [(1, 0, True, False)] + [(0, 0, False, False)] * CANFD_AVH_RELEASE_GRACE_FRAMES
+  sequence = [(1, 2)] + [(0, 3)] * CANFD_AVH_RELEASE_GRACE_FRAMES
   results = _classify_avh_sequence(sequence)
 
   assert all(results[:-1])
   assert not results[-1]
 
 
-def test_canfd_gv80_soft_hold_avh_precedes_delayed_acc_request():
-  # GV80 incident: soft hold commands SCC first, AVH rises 22 ms later while
-  # the driver brake is still asserted, and TCS.ACC_REQ follows another 8 ms
-  # later. The soft-hold intent must own this hydraulic hold from its first AVH
-  # frame instead of briefly latching it as OEM AutoHold.
-  sequence = [
-    (0, 0, True, True),
-    (1, 0, True, True),
-    (1, 1, True, True),
-    (1, 1, False, True),
-    (2, 0, False, True),
-    (0, 0, False, False),
-  ]
+def test_canfd_autohold_switch_log_does_not_report_hold_while_ready():
+  # Ioniq 5 PE switch log: OFF -> READY -> OFF -> READY -> OFF, without braking.
+  sequence = [(0, 0), (0, 3), (0, 0), (0, 3), (0, 0)]
 
   assert _classify_avh_sequence(sequence) == [False] * len(sequence)
 
 
 def test_canfd_avh_release_state_does_not_start_oem_hold_latch():
-  sequence = [(0, 0, True, False), (2, 0, True, False)]
+  sequence = [(0, 3), (2, 3)]
 
   assert _classify_avh_sequence(sequence) == [False, False]
