@@ -92,8 +92,17 @@ function agnos_init {
   sudo rm -f /data/etc/NetworkManager/system-connections/*.nmmeta
   rm -f /data/scons_cache/config.lock
 
-  # set success flag for current boot slot
-  sudo abctl --set_success
+  # Keep the stock slot recoverable until the experimental USB-PD kernel has
+  # been tested and explicitly confirmed by the user.
+  if [ -f /data/usbpd-kernel-trial.json ]; then
+    if python3 "$DIR/scripts/usbpd_kernel_trial.py" should-defer-success; then
+      echo "USB-PD kernel trial active; deferring boot slot success confirmation."
+    else
+      echo "USB-PD trial state exists but is not valid for this slot; refusing automatic boot success confirmation."
+    fi
+  else
+    sudo abctl --set_success
+  fi
 
   # TODO: do this without udev in AGNOS
   # udev does this, but sometimes we startup faster
