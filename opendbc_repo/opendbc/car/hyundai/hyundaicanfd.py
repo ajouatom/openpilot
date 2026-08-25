@@ -13,14 +13,8 @@ TurnDirection = log.Desire
 
 ACC_CONTROL_DT = 1.0 / 50.0
 
-# ══════════════════════════════════════════════════════════════════════════════
-# [차량 모델 선택 (ccNC DBC 규격)]
-# 0: 순정(1), 1: 승용차(3), 2: 트럭(5), 3: 보행자(7), 4: 자전거(9), 5: 오토바이(11), 6: 라바콘(13)
-# ══════════════════════════════════════════════════════════════════════════════
-CAR_MODEL_TYPE = 1
-
+# [ccNC 클러스터 3D 차량 모델 매핑 (0: 순정, 1: 승용차, 2: 트럭, 3: 보행자, 4: 자전거, 5: 오토바이, 6: 라바콘)]
 _MODEL_ID_MAP = {0: 1, 1: 3, 2: 5, 3: 7, 4: 9, 5: 11, 6: 13}
-CAR_MODEL_ID = _MODEL_ID_MAP.get(CAR_MODEL_TYPE, 1)
 
 
 def longitudinal_interlock_active(CS) -> bool:
@@ -349,6 +343,9 @@ def create_lfa_icon_non_camera_scc(packer, CS, CAN, CC):
     if values["ALERTS_5"] in [1, 2, 3, 4, 5]:
       values["ALERTS_5"] = 0
 
+    if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
+      values["ALERTS_5"] = 0
+
     ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter=rx_counter))
   return ret
 
@@ -357,9 +354,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   if CS.scc_control is None:
     return None, accel_value_last
   interlock_active = longitudinal_interlock_active(CS)
-  soft_hold_active = CS.softHoldActive > 0 and CS.out.cruiseState.available
-  acc_control_enabled = (enabled or soft_hold_active) and CS.out.cruiseState.available and CS.paddle_button_prev == 0 and not interlock_active
-  enabled = acc_control_enabled
+  enabled = (enabled or CS.softHoldActive > 0) and CS.paddle_button_prev == 0 and not interlock_active
 
   acc_mode = 0 if not enabled else (2 if gas_override else 1)
 
@@ -371,7 +366,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   elif hyundai_jerk.carrot_cruise == 2:
     accel = accel_value_last = hyundai_jerk.carrot_cruise_accel
 
-  jerk_u = 2.0 if stopping or soft_hold_active else hyundai_jerk.jerk_u
+  jerk_u = 2.0 if stopping or CS.softHoldActive else hyundai_jerk.jerk_u
   jerk_l = hyundai_jerk.jerk_l
   if not enabled or gas_override:
     a_val, a_raw = 0, 0
@@ -383,7 +378,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
   rx_counter = values.pop("COUNTER", None)
   values["ACCMode"] = acc_mode
   values["MainMode_ACC"] = 1
-  values["StopReq"] = 1 if acc_control_enabled and (stopping or soft_hold_active) else 0  # 1: Stop control is required, 2: Not used, 3: Error Indicator
+  values["StopReq"] = 1 if not interlock_active and (stopping or CS.softHoldActive > 0) else 0  # 1: Stop control is required, 2: Not used, 3: Error Indicator
   values["aReqValue"] = a_val
   values["aReqRaw"] = a_raw
   values["VSetDis"] = set_speed
@@ -412,7 +407,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
 
   values["TARGET_DISTANCE"] = CS.out.vEgo * 1.0 + 4.0
 
-  soft_hold_info = 1 if soft_hold_active and CS.softHoldActive > 1 and enabled else 0
+  soft_hold_info = 1 if CS.softHoldActive > 1 and enabled else 0
 
   # 이거안하면 정지중 뒤로 밀리는 현상 발생하는듯.. (신호정지중에 뒤로 밀리는 경험함.. 시험해봐야)
   if values["InfoDisplay"] != 5: #5: Front Car Departure Notice
@@ -433,9 +428,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
 def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_override, set_speed, hud_control, jerk_u, jerk_l, CS):
 
   interlock_active = longitudinal_interlock_active(CS)
-  soft_hold_active = CS.softHoldActive > 0 and CS.out.cruiseState.available
-  acc_control_enabled = (enabled or soft_hold_active) and CS.out.cruiseState.available and not interlock_active
-  enabled = acc_control_enabled
+  enabled = (enabled or CS.softHoldActive > 0) and not interlock_active
   jerk = 5
   jn = jerk / 50
   if not enabled or gas_override:
@@ -447,7 +440,7 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   values = {
     "ACCMode": 0 if not enabled else (2 if gas_override else 1),
     "MainMode_ACC": 1,
-    "StopReq": 1 if acc_control_enabled and (stopping or soft_hold_active) else 0,
+    "StopReq": 1 if not interlock_active and (stopping or CS.softHoldActive > 0) else 0,
     "aReqValue": a_val,
     "aReqRaw": a_raw,
     "VSetDis": set_speed,
@@ -668,12 +661,9 @@ def _apply_radar_blink(values, radar_pairs, frame, *,
     interval = int((1 + (max_interval - 1) * (d / disp_dist)) * t)
     interval = _clip_int(interval, 1, max_interval)
 
-    blink = (frame // interval) & 1
-    if CAR_MODEL_ID > 1:
-      values[det_key] = (CAR_MODEL_ID + 1) if blink else CAR_MODEL_ID
-    else:
-      values[det_key] = 2 - blink
     values[dist_key] = min_dist
+    blink = (frame // interval) & 1
+    values[det_key] = 2 - blink
 
 def _suppress_trailer_mode_warning(values, CS):
   # Logs from IONIQ 9 show ALERTS_5=6 is the periodic
@@ -682,19 +672,13 @@ def _suppress_trailer_mode_warning(values, CS):
     values["ALERTS_5"] = 0
 
 
-def _hide_replaced_adas_service_warning(values):
-  # Openpilot replaces the stock lane-change/highway-driving control path, so
-  # the camera can latch their service-required flags during low-speed turns.
+def _hide_lca_service_warning(values):
   # Preserve blocked-sensor warnings and unrelated DAS faults. The original
   # camera-side message remains available in logcan for diagnosis.
-  service_warning_hidden = False
-  for fault in ("FAULT_LCA", "FAULT_HDA"):
-    if values.get(fault) == 1:
-      values[fault] = 0
-      service_warning_hidden = True
-
-  if service_warning_hidden and values.get("FAULT_DAS") == 1:
-    values["FAULT_DAS"] = 0
+  if values.get("FAULT_LCA") == 1:
+    values["FAULT_LCA"] = 0
+    if values.get("FAULT_DAS") == 1:
+      values["FAULT_DAS"] = 0
 
 def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
                      lane_line=True, corner_radar=True,
@@ -718,9 +702,12 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
       ('LR_DETECT', 'LR_DETECT_DISTANCE'),
       ('RR_DETECT', 'RR_DETECT_DISTANCE'),
     ]
+    car_model_type = Params().get_int("CarModelType") or 1
+    car_model_id = _MODEL_ID_MAP.get(car_model_type, 3)
+
     for det_key, dist_key in radar_all:
-      if values[det_key] > 0 and values[dist_key] != 0:
-        values[det_key] = CAR_MODEL_ID
+      if values[det_key] > 0 and values[dist_key] > 0:
+        values[det_key] = car_model_id
 
     if blink_pairs:
       _apply_radar_blink(values, blink_pairs, frame, t=blink_t)
@@ -905,7 +892,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           lane_line=True,
           corner_radar=True,
           desire=desire,
-          # 기존대로 LR/RR만 깜빡임
           blink_pairs=[('LR_DETECT', 'LR_DETECT_DISTANCE'),
                        ('RR_DETECT', 'RR_DETECT_DISTANCE')],
           blink_t=1.0
@@ -916,9 +902,12 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
       if CS.ccnc_0x162 is not None:
         values = copy.copy(CS.ccnc_0x162)
 
-        if hud_control.leadDistance > 0:
+        car_model_type = Params().get_int("CarModelType") or 1
+        car_model_id = _MODEL_ID_MAP.get(car_model_type, 3)
+
+        if hud_control.leadVisible and hud_control.leadDistance > 0:
           values["FF_DISTANCE"] = hud_control.leadDistance
-          ff_type = CAR_MODEL_ID if CAR_MODEL_ID > 1 else (3 if hud_control.leadRadar == 1 else 13)
+          ff_type = car_model_id if car_model_id > 1 else (3 if hud_control.leadRadar == 1 else 13)
           values["FF_DETECT"] = (ff_type + 1) if hud_control.leadRelSpeed < -0.1 else ff_type
 
         _make_ccnc_values(
@@ -926,7 +915,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           lane_line=False,
           corner_radar=True,
           desire=0,
-          # 필요하면 162도 깜빡임 적용(원래 코드처럼 LR/RR만)
           blink_pairs=[('LR_DETECT', 'LR_DETECT_DISTANCE'),
                        ('RR_DETECT', 'RR_DETECT_DISTANCE')],
           blink_t=1.0
@@ -935,7 +923,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if (left_lane_warning and not CS.out.leftBlinker) or (right_lane_warning and not CS.out.rightBlinker):
           values["VIBRATE"] = 1
 
-        _hide_replaced_adas_service_warning(values)
+        _hide_lca_service_warning(values)
 
         if canfd_debug > 0:
           values["FAULT_LSS"] = 0
