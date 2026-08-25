@@ -303,7 +303,9 @@ class HudRenderer(Widget):
     self._draw_cruise_speed_animation(rect)
 
   def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
-    if not ui_state.usbgpu_active:
+    # Active is authoritative. A shared USB hub can briefly disappear from
+    # sysfs while it re-enumerates, but that sample must not blink the badge.
+    if not ui_state.usbgpu_present and not ui_state.usbgpu_active:
       return
 
     text = "eGPU"
@@ -317,16 +319,16 @@ class HudRenderer(Widget):
       badge_w,
       text_size.y + pad_y * 2,
     )
-    green = rl.Color(0, 255, 0, 230)
+    color = rl.Color(0, 255, 0, 230) if ui_state.usbgpu_active else rl.Color(255, 165, 0, 230)
     rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
-    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 2, green)
+    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 2, color)
     rl.draw_text_ex(
       self._font_semi_bold,
       text,
       rl.Vector2(badge.x + pad_x, badge.y + pad_y),
       font_size,
       0,
-      green,
+      color,
     )
 
   def _update_cruise_speed_animation(self, cruise_text: str) -> None:

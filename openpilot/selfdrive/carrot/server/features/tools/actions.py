@@ -22,7 +22,6 @@ KNOWN_TOOL_ACTIONS = {
   "git_reset_repo_checkout",
   "git_reset_repo_fetch",
   "git_sync",
-  "install_required",
   "reboot",
   "rebuild_all",
   "reset_calib",

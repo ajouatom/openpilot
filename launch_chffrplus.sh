@@ -28,6 +28,64 @@ function cleanup_stale_git_lfs_hooks {
   done
 }
 
+function ensure_python_package {
+  local import_name="$1"
+  local package_name="$2"
+  local required="${3:-0}"
+  local install_dependencies="${4:-0}"
+  local wheel_dir="$DIR/third_party/wheels"
+
+  if python3 -c "import ${import_name}" > /dev/null 2>&1; then
+    echo "${package_name} already installed."
+    return 0
+  fi
+
+  echo "${package_name} installing from local wheel."
+  if [ "$install_dependencies" = "1" ]; then
+    python3 -m pip install --no-index --find-links "$wheel_dir" --target "$PYDEPS" --upgrade "$package_name"
+  else
+    python3 -m pip install --no-index --no-deps --find-links "$wheel_dir" --target "$PYDEPS" --upgrade "$package_name"
+  fi
+  if [ "$?" = "0" ] && \
+     python3 -c "import ${import_name}" > /dev/null 2>&1; then
+    echo "${package_name} installed."
+    return 0
+  fi
+
+  if [ "$required" = "1" ]; then
+    echo "Required Python package ${package_name} is unavailable; not starting openpilot."
+    return 1
+  fi
+
+  echo "Optional Python package ${package_name} is unavailable; continuing without it."
+  return 0
+}
+
+function bootstrap_runtime_dependencies {
+  if ! ensure_python_package serial pyserial 1 || \
+     ! ensure_python_package msgpack msgpack 1 || \
+     ! ensure_python_package aiohttp aiohttp 1 1 || \
+     ! ensure_python_package psutil psutil 1 || \
+     ! ensure_python_package crcmod crcmod-plus 1 || \
+     ! ensure_python_package jsonrpc json-rpc 1 || \
+     ! ensure_python_package qrcode qrcode 1; then
+    return 1
+  fi
+
+  ensure_python_package brotli brotli 0
+  ensure_python_package usb pyusb 0
+
+  # AGNOS 19 follows current comma, which no longer includes the legacy Eigen
+  # and libjpeg wrappers used by this branch's rednose and JPEG encoder. Keep
+  # those native headers/libraries available from official offline wheels.
+  if { [ -f /TICI ] || [ -f /AGNOS ]; } && \
+     { ! ensure_python_package eigen eigen 1 || ! ensure_python_package libjpeg libjpeg 1; }; then
+    return 1
+  fi
+
+  ensure_python_package shapely shapely 0
+}
+
 function agnos_init {
   # TODO: move this to agnos
   sudo rm -f /data/etc/NetworkManager/system-connections/*.nmmeta
@@ -77,10 +135,20 @@ function agnos_init {
     echo "MANIFEST=${MANIFEST}"
     echo "MODEL=${MODEL}"
     if ! python3 $DIR/openpilot/system/ui/updater.py $AGNOS_PY $MANIFEST; then
-      echo "python updater failed, falling back to bundled updater"
-      $DIR/openpilot/system/hardware/tici/updater $AGNOS_PY $MANIFEST
+      echo "AGNOS updater UI failed, falling back to the headless Python updater"
+      if python3 "$AGNOS_PY" --swap "$MANIFEST"; then
+        echo "AGNOS update installed; rebooting."
+        if ! sudo reboot; then
+          echo "AGNOS update installed, but the reboot command failed."
+          return 1
+        fi
+        while true; do sleep 1; done
+      fi
+      echo "AGNOS update failed; refusing to start openpilot on the old OS."
+      return 1
     fi
-    echo "end updater $AGNOS_PY $MANIFEST"
+    echo "AGNOS updater exited without reboot; refusing to start openpilot on the old OS."
+    return 1
   fi
 }
 
@@ -151,10 +219,10 @@ function invalidate_modeld_build_if_needed {
 
   old_stamp="$(cat "$stamp_path" 2>/dev/null || true)"
   if [ "$MODEL_BUILD_STAMP_VALUE" != "$old_stamp" ] || [ ! -f "$tg_devices_path" ] || { [ ! -f "$driving_pkl_path" ] && [ ! -f "$driving_pkl_path.chunkmanifest" ]; }; then
-    echo "Model/tinygrad inputs changed, invalidating generated modeld artifacts."
-    rm -f "$DIR"/openpilot/selfdrive/modeld/models/*_tinygrad.pkl*
-    rm -f "$DIR"/openpilot/selfdrive/modeld/models/*_metadata.pkl
-    rm -f "$DIR"/openpilot/selfdrive/modeld/models/tg_input_devices.json
+    echo "Model/tinygrad inputs changed or artifacts are missing; revalidating with SCons."
+    # Keep generated artifacts. SCons tracks the compiler, tinygrad and model
+    # dependencies and will rebuild only stale targets. Deleting everything
+    # here caused unrelated modeld changes to trigger long full recompiles.
     FORCE_REBUILD=1
   fi
 
@@ -168,11 +236,17 @@ function invalidate_modeld_build_if_needed {
 }
 
 function prepare_big_model_if_needed {
-  # This exits immediately without network access on devices without the USB
-  # eGPU. Download errors are non-fatal and leave the last verified model active.
-  python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu || true
-  BIG_MODEL_SHA="$(python3 -m openpilot.selfdrive.modeld.big_model --active-sha 2>/dev/null || true)"
+  BIG_MODEL_SHA=""
   BIG_MODEL_PKL_PATH=""
+
+  # A cached big model must not force compilation when the USB eGPU is absent.
+  if ! python3 -c 'from openpilot.selfdrive.modeld.helpers import usbgpu_present; raise SystemExit(0 if usbgpu_present() else 1)' 2>/dev/null; then
+    return
+  fi
+
+  # Download errors are non-fatal and leave the last verified model active.
+  python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu --network-wait-seconds 60 || true
+  BIG_MODEL_SHA="$(python3 -m openpilot.selfdrive.modeld.big_model --active-sha 2>/dev/null || true)"
   if [ -n "$BIG_MODEL_SHA" ]; then
     BIG_MODEL_PKL_PATH="$(python3 -c 'from openpilot.selfdrive.modeld.helpers import modeld_pkl_path; print(modeld_pkl_path(True))' 2>/dev/null || true)"
   fi
@@ -252,11 +326,19 @@ function launch {
 
   # hardware specific init
   if [ -f /AGNOS ]; then
-    agnos_init
+    if ! agnos_init; then
+      while true; do sleep 1; done
+    fi
   fi
 
-  # AGNOS must be current before SCons loads its Python and native build
-  # dependencies. Build Params before any long-running carrot service imports it.
+  # AGNOS must be current before installing its matching offline wheels. SCons
+  # imports native dependency modules while building Params, so bootstrap them
+  # before the first SCons invocation.
+  if ! bootstrap_runtime_dependencies; then
+    while true; do sleep 1; done
+  fi
+
+  # Build Params before any long-running carrot service imports it.
   if ! bash "$DIR/scripts/ensure_params_build.sh"; then
     echo "Params registry build failed, not starting openpilot."
     while true; do sleep 1; done
@@ -270,33 +352,9 @@ function launch {
   invalidate_modeld_build_if_needed
   invalidate_native_build_if_needed
 
-  rm openpilot/selfdrive/pandad/*.so
+  rm -f openpilot/selfdrive/pandad/*.so
   # write tmux scrollback to a file
   tmux capture-pane -pq -S-1500 > /tmp/launch_log
-  if python -c "import shapely" > /dev/null 2>&1; then
-    echo "shapely already installed."
-  else
-    echo "shapely installing."
-    pip install shapely
-  fi
-  if python3 -c "import msgpack" > /dev/null 2>&1; then
-    echo "msgpack already installed."
-  else
-    MSGPACK_WHEEL_DIR="$DIR/third_party/wheels"
-    if ls "$MSGPACK_WHEEL_DIR"/msgpack-*.whl > /dev/null 2>&1; then
-      echo "msgpack installing from local wheel to pydeps."
-      python3 -m pip install --no-index --find-links "$MSGPACK_WHEEL_DIR" --target "$PYDEPS" --upgrade msgpack || python3 -m pip install --target "$PYDEPS" --upgrade msgpack
-    else
-      echo "msgpack local wheel missing, installing to pydeps from network."
-      python3 -m pip install --target "$PYDEPS" --upgrade msgpack
-    fi
-
-    if python3 -c "import msgpack" > /dev/null 2>&1; then
-      echo "msgpack installed for python3."
-    else
-      echo "msgpack install failed for python3."
-    fi
-  fi
 
   # start manager
   cd openpilot/system/manager

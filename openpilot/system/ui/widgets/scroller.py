@@ -80,7 +80,8 @@ class _Scroller(Widget):
 
     self._reset_scroll_at_show = True
 
-    self._scrolling_to: tuple[float | None, bool] = (None, False)  # target offset, block_interaction
+    # target offset, block manual interruption, block child widget interaction
+    self._scrolling_to: tuple[float | None, bool, bool] = (None, False, False)
     self._scrolling_to_filter = FirstOrderFilter(0.0, SCROLL_RC, 1 / gui_app.target_fps)
     self._zoom_filter = FirstOrderFilter(1.0, 0.2, 1 / gui_app.target_fps)
     self._zoom_out_t: float = 0.0
@@ -116,8 +117,9 @@ class _Scroller(Widget):
   def set_reset_scroll_at_show(self, scroll: bool):
     self._reset_scroll_at_show = scroll
 
-  def scroll_to(self, pos: float, smooth: bool = False, block_interaction: bool = False):
-    assert not block_interaction or smooth, "Instant scroll cannot block user interaction"
+  def scroll_to(self, pos: float, smooth: bool = False, block_interrupt: bool = False,
+                block_widget_interaction: bool = False):
+    assert smooth or (not block_interrupt and not block_widget_interaction), "Instant scroll cannot block interaction"
 
     # already there
     if abs(pos) < 1:
@@ -127,7 +129,7 @@ class _Scroller(Widget):
     scroll_offset = self.scroll_panel.get_offset() - pos
     if smooth:
       self._scrolling_to_filter.x = self.scroll_panel.get_offset()
-      self._scrolling_to = scroll_offset, block_interaction
+      self._scrolling_to = scroll_offset, block_interrupt, block_widget_interaction
     else:
       self.scroll_panel.set_offset(scroll_offset)
 
@@ -148,7 +150,7 @@ class _Scroller(Widget):
 
     # preserve original touch valid callback
     original_touch_valid_callback = item._touch_valid_callback
-    item.set_touch_valid_callback(lambda: self.scroll_panel.is_touch_valid() and self.enabled and self._scrolling_to[0] is None
+    item.set_touch_valid_callback(lambda: self.scroll_panel.is_touch_valid() and self.enabled and not self._scrolling_to[2]
                                           and not self.moving_items and (original_touch_valid_callback() if
                                                                          original_touch_valid_callback else True))
 
@@ -172,10 +174,10 @@ class _Scroller(Widget):
           else:
             self._zoom_filter.update(0.85)
 
-    # Cancel auto-scroll if user starts manually scrolling (unless block_interaction)
+    # Cancel auto-scroll if user starts manually scrolling (unless interruption is blocked)
     if (self.scroll_panel.state in (ScrollState.PRESSED, ScrollState.MANUAL_SCROLL) and
         self._scrolling_to[0] is not None and not self._scrolling_to[1]):
-      self._scrolling_to = None, False
+      self._scrolling_to = None, False, False
 
     if self._scrolling_to[0] is not None and len(self._pending_lift) == 0:
       self._scrolling_to_filter.update(self._scrolling_to[0])
@@ -183,7 +185,7 @@ class _Scroller(Widget):
 
       if abs(self._scrolling_to_filter.x - self._scrolling_to[0]) < 1:
         self.scroll_panel.set_offset(self._scrolling_to[0])
-        self._scrolling_to = None, False
+        self._scrolling_to = None, False, False
 
   def _get_scroll(self, visible_items: list[Widget], content_size: float) -> float:
     scroll_enabled = self._scroll_enabled() if callable(self._scroll_enabled) else self._scroll_enabled
@@ -409,7 +411,7 @@ class _Scroller(Widget):
     self._move_lift.clear()
     self._pending_lift.clear()
     self._pending_move.clear()
-    self._scrolling_to = None, False
+    self._scrolling_to = None, False, False
     self._scrolling_to_filter.x = 0.0
 
   def hide_event(self):

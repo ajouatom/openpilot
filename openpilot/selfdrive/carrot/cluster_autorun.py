@@ -49,6 +49,7 @@ ENCODER_NAMES = {
     ENCODER_HARDWARE: "hardware",
     ENCODER_SOFTWARE: "software",
 }
+USB_DISCONNECT_TEXT = ("usb display disconnected", "no such device", "device has been disconnected")
 INITIAL_ALLOWED_CORES = (
     sorted(os.sched_getaffinity(0))
     if sys.platform == "linux" and hasattr(os, "sched_getaffinity")
@@ -73,6 +74,19 @@ def _ensure_cluster_paths() -> None:
         path_text = str(path)
         if path_text not in sys.path:
             sys.path.insert(0, path_text)
+
+
+def _is_usb_disconnect_error(exc: BaseException) -> bool:
+    """Recognize an expected hot-unplug through the wrapped pipeline errors."""
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        message = str(current).lower()
+        if any(marker in message for marker in USB_DISCONNECT_TEXT):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def _normalize_core_mode(value: object) -> int:
@@ -657,11 +671,17 @@ def main() -> None:
                 flush=True,
             )
         except Exception as exc:
-            print(
-                f"[cluster_autorun] cluster HUD failed: {exc}; retrying in {RETRY_INTERVAL_S:.0f}s",
-                flush=True,
-            )
-            traceback.print_exc()
+            if _is_usb_disconnect_error(exc):
+                print(
+                    f"[cluster_autorun] USB display disconnected; retrying in {RETRY_INTERVAL_S:.0f}s",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[cluster_autorun] cluster HUD failed: {exc}; retrying in {RETRY_INTERVAL_S:.0f}s",
+                    flush=True,
+                )
+                traceback.print_exc()
         time.sleep(RETRY_INTERVAL_S)
 
 

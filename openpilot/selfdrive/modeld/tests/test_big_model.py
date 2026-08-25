@@ -44,6 +44,37 @@ def test_manifest_resolves_relative_https_url():
   assert manifest.cache_filename.endswith(".onnx")
 
 
+class FakeConnection:
+  def __init__(self):
+    self.closed = False
+
+  def close(self):
+    self.closed = True
+
+
+def test_wait_for_manifest_network_connects_to_manifest_host(monkeypatch):
+  connection = FakeConnection()
+  calls = []
+
+  def fake_create_connection(address, timeout):
+    calls.append((address, timeout))
+    return connection
+
+  monkeypatch.setattr(big_model.socket, "create_connection", fake_create_connection)
+  assert big_model.wait_for_manifest_network("https://example.com:8443/models/manifest.json", timeout=0)
+  assert calls == [(('example.com', 8443), 0.1)]
+  assert connection.closed
+
+
+def test_wait_for_manifest_network_times_out(monkeypatch):
+  def fail_connection(_address, timeout):
+    assert timeout == 0.1
+    raise OSError("offline")
+
+  monkeypatch.setattr(big_model.socket, "create_connection", fail_connection)
+  assert not big_model.wait_for_manifest_network("https://example.com/manifest.json", timeout=0)
+
+
 @pytest.mark.parametrize("field,value", [
   ("model_id", "../bad"),
   ("filename", "../model.onnx"),

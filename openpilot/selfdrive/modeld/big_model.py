@@ -14,8 +14,10 @@ import json
 import os
 import re
 import shutil
+import socket
 import sys
 import tempfile
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -134,6 +136,27 @@ def fetch_manifest(manifest_url: str = DEFAULT_MANIFEST_URL, timeout: float = 15
   return BigModelManifest.from_dict(json.loads(data), manifest_url)
 
 
+def wait_for_manifest_network(manifest_url: str, timeout: float = 60.0,
+                              connect_timeout: float = 2.0, poll_interval: float = 2.0) -> bool:
+  parsed = urlparse(manifest_url)
+  if parsed.scheme != "https" or parsed.hostname is None:
+    raise ValueError("model manifest URL must use HTTPS and include a host")
+
+  address = (parsed.hostname, parsed.port or 443)
+  deadline = time.monotonic() + max(0.0, timeout)
+  while True:
+    remaining = max(0.0, deadline - time.monotonic())
+    try:
+      connection = socket.create_connection(address, timeout=max(0.1, min(connect_timeout, remaining or 0.1)))
+      connection.close()
+      return True
+    except OSError:
+      remaining = deadline - time.monotonic()
+      if remaining <= 0.0:
+        return False
+      time.sleep(min(poll_interval, remaining))
+
+
 def _sha256(path: Path) -> str:
   digest = hashlib.sha256()
   with path.open("rb") as f:
@@ -243,12 +266,20 @@ def main() -> int:
   parser.add_argument("--active-sha", action="store_true")
   parser.add_argument("--active-path", action="store_true")
   parser.add_argument("--manifest-url", default=os.getenv("CARROT_BIG_MODEL_MANIFEST", DEFAULT_MANIFEST_URL))
+  parser.add_argument("--network-wait-seconds", type=float, default=0.0)
   args = parser.parse_args()
+
+  if args.network_wait_seconds < 0.0:
+    parser.error("--network-wait-seconds must be non-negative")
 
   if args.ensure_if_egpu:
     from openpilot.selfdrive.modeld.helpers import usbgpu_present
     if usbgpu_present():
       try:
+        if active_manifest() is None and args.network_wait_seconds > 0.0:
+          print(f"waiting up to {args.network_wait_seconds:g}s for the big model server")
+          if not wait_for_manifest_network(args.manifest_url, args.network_wait_seconds):
+            raise TimeoutError(f"big model server unavailable after {args.network_wait_seconds:g}s")
         path, changed = ensure_big_model(args.manifest_url)
         print(f"big model {'updated' if changed else 'ready'}: {path}")
       except Exception as e:

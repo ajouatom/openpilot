@@ -15,7 +15,7 @@ def _method(path: Path, class_name: str, method_name: str) -> ast.FunctionDef:
   return next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == method_name)
 
 
-def test_both_device_huds_render_active_egpu_badge():
+def test_both_device_huds_render_connected_egpu_badge_with_active_state():
   for path in HUD_PATHS:
     render = _method(path, "HudRenderer", "_render")
     calls = [
@@ -28,6 +28,14 @@ def test_both_device_huds_render_active_egpu_badge():
     badge_source = ast.unparse(badge)
     assert "badge_w" in badge_source
     assert "rect.width / 2" not in badge_source
+    assert "not ui_state.usbgpu_present and (not ui_state.usbgpu_active)" in badge_source
+    assert any(
+      isinstance(node, ast.Attribute)
+      and isinstance(node.value, ast.Name)
+      and node.value.id == "ui_state"
+      and node.attr == "usbgpu_present"
+      for node in ast.walk(badge)
+    )
     assert any(
       isinstance(node, ast.Attribute)
       and isinstance(node.value, ast.Name)
@@ -48,3 +56,26 @@ def test_ui_state_reads_modeld_egpu_active_param():
     and node.args[0].value == "UsbGpuActive"
     for node in ast.walk(update_params)
   )
+
+
+def test_modeld_refreshes_hotplug_state_after_startup():
+  source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
+
+  assert 'put_bool_nonblocking("UsbGpuPresent", usbgpu_present())' in source
+  assert 'put_bool_nonblocking("UsbGpuCompiled", usbgpu_compiled_path() is not None)' in source
+
+
+def test_modeld_retries_transient_egpu_pcie_startup():
+  source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
+
+  assert "USBGPU_INIT_ATTEMPTS = 6" in source
+  assert "usbgpu_pcie_not_ready(exc)" in source
+  assert "eGPU PCIe link not ready; retrying" in source
+
+
+def test_modeld_restarts_instead_of_racing_a_timed_out_egpu_loader():
+  source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
+
+  assert "USBGPU_MODEL_LOAD_TIMEOUT = 30" in source
+  assert 'params.put_bool("UsbGpuStartupFailed", True)' in source
+  assert 'raise RuntimeError("eGPU model loader did not terminate")' in source
