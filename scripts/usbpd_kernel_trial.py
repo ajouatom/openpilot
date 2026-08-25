@@ -67,6 +67,16 @@ def slot_number(slot: str) -> int:
   return 0 if slot == "_a" else 1
 
 
+def set_active_slot(slot: str) -> None:
+  last_output = ""
+  for _ in range(5):
+    last_output = run("abctl", "--set_active", str(slot_number(slot)), capture=True)
+    if "No such file or directory" not in last_output and "lun as boot lun" in last_output:
+      return
+    time.sleep(1)
+  raise TrialError(f"부팅 슬롯 {slot} 활성화 실패: {last_output}")
+
+
 def partition_path(name: str, slot: str) -> Path:
   return Path(f"/dev/disk/by-partlabel/{name}{slot}")
 
@@ -281,7 +291,7 @@ def install() -> None:
 
   state["phase"] = "ready"
   save_state(state)
-  run("abctl", "--set_active", str(slot_number(target)))
+  set_active_slot(target)
   print("\n시험 커널 설치와 검증이 완료됐습니다.")
   print(f"현재 슬롯 {active}는 그대로 보존됐고 다음 부팅 슬롯은 {target}입니다.")
   print("준비되면 'sudo reboot'를 실행하세요.")
@@ -313,7 +323,7 @@ def rollback() -> None:
   previous = state.get("previous_slot")
   if previous not in ("_a", "_b"):
     raise TrialError("원래 슬롯 정보가 올바르지 않습니다.")
-  run("abctl", "--set_active", str(slot_number(previous)))
+  set_active_slot(previous)
   archive_state(state, "rolled-back")
   print(f"다음 부팅 슬롯을 원래 슬롯 {previous}로 되돌렸습니다.")
   print("준비되면 'sudo reboot'를 실행하세요.")
