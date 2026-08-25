@@ -524,7 +524,10 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
       # Phase 0: clear stale git locks so the remote/config/fetch steps below
       # aren't blocked by a leftover *.lock from a crashed git process.
       await jobs.capture_exec(["find", ".git", "-type", "f", "-name", "*.lock", "-delete"], cwd=repo_dir, timeout=10)
-      # Phase 1: ensure origin points to the correct URL
+      # Phase 1: ensure origin points to the correct URL and tracks every
+      # branch. Installations migrated from comma may still have a narrow
+      # release-tizi-staging fetch refspec, which does not exist on this
+      # remote and makes even a plain `git fetch origin` fail.
       jobs.progress(job, message="configuring origin remote", current=1, total=4)
 
       rc_set, _ = await jobs.capture_exec(
@@ -541,6 +544,15 @@ async def run_tool_job(job: Dict[str, Any]) -> None:
           jobs.finish(job, ok=False, result={"ok": False, "error": f"failed to configure remote: {out_add}"})
           return
       jobs.append(job, f"origin → {url}\n")
+
+      rc_branches, out_branches = await jobs.capture_exec(
+        ["git", "remote", "set-branches", "origin", "*"], cwd=repo_dir, timeout=15
+      )
+      if rc_branches != 0:
+        jobs.append(job, f"failed to configure origin branches: {out_branches}\n")
+        jobs.finish(job, ok=False, result={"ok": False, "error": f"failed to configure origin branches: {out_branches}"})
+        return
+      jobs.append(job, "origin branches: *\n")
 
       # Phase 2: remove ALL other remotes (so only origin remains)
       jobs.progress(job, message="cleaning other remotes", current=2, total=4)
@@ -1056,6 +1068,11 @@ async def dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Respo
           return web.json_response({"ok": False, "error": f"failed to configure remote: {out_add}"})
       else:
         out_all += f"> git remote set-url origin {url}\n{out_set}\n\n"
+
+      rc_branches, out_branches = run(["git", "remote", "set-branches", "origin", "*"], cwd=REPO_DIR)
+      out_all += f"> git remote set-branches origin '*'\n{out_branches}\n\n"
+      if rc_branches != 0:
+        return web.json_response({"ok": False, "rc": rc_branches, "out": out_all.strip()})
 
       rc_rem, out_rem = run(["git", "remote"], cwd=REPO_DIR)
       for rname in (out_rem or "").splitlines():
