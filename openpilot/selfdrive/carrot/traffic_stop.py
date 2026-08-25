@@ -18,6 +18,7 @@ TRAFFIC_STOP_MAX_DECEL_MPS2 = 4.0
 TRAFFIC_STOP_RESPONSE_TIME_S = 0.5
 TRAFFIC_STOP_DISTANCE_UNCERTAINTY_M = 5.0
 TRAFFIC_STOP_DECEL_SAFETY_BUFFER_MPS2 = 0.2
+TRAFFIC_STOP_DECEL_URGENCY_BP_MPS2 = (4.0, 5.0)
 TRAFFIC_STOP_DISTANCE_STABILITY_SAMPLES = 8  # 0.4 s at the 20 Hz model rate
 
 
@@ -79,7 +80,7 @@ def get_traffic_stop_obstacle_distance(stop_distance: float, distance_adjust: fl
 
 
 def get_traffic_stop_accel_floor(v_ego: float, raw_stop_distance: float, stop_distance: float) -> float:
-  """Return a comfortable signal-stop accel floor that releases as stopping margin shrinks."""
+  """Hold comfortable signal braking until the remaining distance becomes safety-critical."""
   values = (v_ego, raw_stop_distance, stop_distance)
   if not all(np.isfinite(value) for value in values):
     return -TRAFFIC_STOP_MAX_DECEL_MPS2
@@ -94,11 +95,15 @@ def get_traffic_stop_accel_floor(v_ego: float, raw_stop_distance: float, stop_di
   if available_distance <= 0.0:
     return -TRAFFIC_STOP_MAX_DECEL_MPS2
 
-  required_decel = v_ego ** 2 / (2.0 * available_distance)
-  allowed_decel = np.clip(
-    max(TRAFFIC_STOP_SOFT_DECEL_MPS2, required_decel + TRAFFIC_STOP_DECEL_SAFETY_BUFFER_MPS2),
-    TRAFFIC_STOP_SOFT_DECEL_MPS2,
-    TRAFFIC_STOP_MAX_DECEL_MPS2,
+  buffered_required_decel = v_ego ** 2 / (2.0 * available_distance) + TRAFFIC_STOP_DECEL_SAFETY_BUFFER_MPS2
+  # position.x[-1] is a predicted trajectory endpoint, not a measured stop-line
+  # distance. Do not increase braking continuously as that prediction contracts.
+  # Keep the comfort floor through the normal margin range, then blend quickly
+  # to the full safety limit only when the required decel is genuinely high.
+  allowed_decel = np.interp(
+    buffered_required_decel,
+    TRAFFIC_STOP_DECEL_URGENCY_BP_MPS2,
+    (TRAFFIC_STOP_SOFT_DECEL_MPS2, TRAFFIC_STOP_MAX_DECEL_MPS2),
   )
   return -float(allowed_decel)
 
