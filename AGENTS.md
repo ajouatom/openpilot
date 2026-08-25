@@ -3,6 +3,8 @@
 - For long-running work, treat user questions, status checks, clarifications, and added in-scope
   requests as interruptions to answer while continuing the active work. Stop an active process or
   abandon the task only when the user explicitly asks to stop, cancel, pause, or replace it.
+- While the `carrot-egpu` branch exists, apply and push each user-requested `carrot-wip` code change
+  to both `carrot-wip` and `carrot-egpu`. Stop this mirroring rule when `carrot-egpu` is removed.
 - Navigation deceleration behavior for the `origin/thftgr/navi-stream` branch is documented in
   `docs/carrot_navi_7713_7714_deceleration.md`.
 - The 7714-only control comparison between `origin/carrot-wip` and `origin/thftgr/navi-stream` is

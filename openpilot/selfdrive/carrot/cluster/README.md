@@ -382,8 +382,9 @@ value unchanged. External navigation sources (`cam`, `section`, `bump`,
 `police`, `waze`, `road`, `atc`, `atc2`, and `route`) display their actual reason in orange.
 Vehicle
 CAN navigation sources (`hda`, `hda_bump`, and `school`) display their actual reason in
-lavender. Other sources retain concise labels such as comma-model turn prediction
-`turn` and gas override `gas` in orange. Vehicle navigation availability does
+lavender. Other sources retain concise labels: navigation TBT is `turn`, the
+lane/curvature candidate is `vturn`, model prediction is `model`, and gas
+override is `gas` in orange. Vehicle navigation availability does
 not force an auxiliary speed while cruise is off. The separate lane-change icon is
 not drawn. A vehicle-CAN source does not count as an external navigation
 session, so it does not replace the default driving-report panel; actual 7713/7714
