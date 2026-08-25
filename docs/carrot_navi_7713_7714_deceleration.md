@@ -443,7 +443,8 @@ on-road UI, mici UI, cluster live UI의 보조속도 영역은 선택된 감속 
 - `desiredSpeed < 운전자 설정 cruise speed`
 - 외부 내비 source는 실제 이유(`cam`, `section`, `bump`, `turn`, `route` 등)를 주황으로 표시
 - 차량 CAN 내비 source는 실제 이유(`cam`, `section`, `bump`, `school`)를 라벤더로 표시
-- 나머지 source도 실제 이유(`turn`, `gas` 등)와 주황색을 유지
+- `atc`/`atc2`는 실제 내비 회전 안내이므로 `turn`, 차선·곡률 기반 `vturn`은 `vturn`,
+  모델 예측 감속은 `model`로 구분하고 나머지 source도 실제 이유(`gas` 등)와 주황색을 유지
 
 내비 상태 표시는 보조속도와 별개다. 외부 내비가 연결되면 주황 `NAVI`를 차량 CAN 내비보다 우선하고,
 그렇지 않은 상태에서 Hyundai CAN-FD `0x4BE`가 한 번이라도 수신되면 라벤더 `vNAVI`를 표시한다.
@@ -459,7 +460,14 @@ on-road UI, mici UI, cluster live UI의 보조속도 영역은 선택된 감속 
 때만 표시된다. `longitudinalPlan.cruiseTarget`의 eco 표시 조건이 먼저 참이면 `eco`가 우선 표시된다.
 `VehicleSpeedCameraControlMode=2`에서 차량 수신 과속카메라 `hda`, 구간단속 `hda_section` 또는 30 km/h 구간 `school`이 winner이고
 가속페달 속도 하한이 더 높으면 최종 source가 `gas`로 바뀐다. 다른 감속 source에는 이 모드 선택을 적용하지 않으며, 각 source의
-기존 공통 가속페달 오버라이드 동작을 그대로 유지한다.
+기존 공통 가속페달 오버라이드 동작을 그대로 유지한다. 차량 CAN 방지턱 `hda_bump`는 카메라 모드와 무관하게 가속페달
+오버라이드를 허용한다. `school`에서 mode 2의 `gas`가 연속 3초 이상 유지되면 현재 school 구간을 억제하고,
+차량의 `schoolZoneActive`가 끝난 뒤 다음 구간에서 다시 활성화한다.
+
+카운트다운은 같은 종류의 다음 카메라·방지턱·회전까지 거리가 20 m 또는 현재 2초 주행거리보다 크게 증가하면 새 목표로
+판정한다. 이전 이벤트의 초 값이 11 이하라면 `leftSec=100`을 한 프레임 발행해 soundd를 재무장한 뒤 새 목표의 초 값을
+다시 발행한다. 따라서 앞 이벤트가 사라지는 idle 프레임 없이 다음 0x4BE 후보로 바로 넘어가도 같은 숫자의 안내음이
+누락되지 않는다.
 
 후보 속도가 완전히 같으면 list 순서상 `atc`, `atc2`, SDI 계열, `road`, `vturn`, `route`, `model`
 순서로 먼저 등장한 source가 label이 된다.
