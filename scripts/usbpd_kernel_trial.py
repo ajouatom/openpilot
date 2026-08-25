@@ -153,7 +153,7 @@ def download_file(url: str, destination: Path) -> None:
       raise
 
 
-def download_and_verify_boot(boot_partition: dict) -> tuple[Path, str]:
+def download_and_verify_boot() -> tuple[Path, str, int]:
   print("USB-PD 시험 커널과 checksum을 내려받습니다.", flush=True)
   download_file(CHECKSUM_URL, CHECKSUM_PATH)
   download_file(BOOT_URL, BOOT_IMAGE_PATH)
@@ -162,13 +162,14 @@ def download_and_verify_boot(boot_partition: dict) -> tuple[Path, str]:
   if not checksum_fields or len(checksum_fields[0]) != 64:
     raise TrialError("배포 checksum 형식이 올바르지 않습니다.")
   expected_hash = checksum_fields[0].lower()
-  if BOOT_IMAGE_PATH.stat().st_size != int(boot_partition["size"]):
-    raise TrialError("시험 boot.img 크기가 AGNOS 19.6 boot 파티션과 다릅니다.")
+  image_size = BOOT_IMAGE_PATH.stat().st_size
+  if image_size <= 0:
+    raise TrialError("시험 boot.img가 비어 있습니다.")
 
   actual_hash = sha256_file(BOOT_IMAGE_PATH)
   if actual_hash != expected_hash:
     raise TrialError(f"시험 boot.img checksum 불일치: {actual_hash}")
-  return BOOT_IMAGE_PATH, actual_hash
+  return BOOT_IMAGE_PATH, actual_hash, image_size
 
 
 def save_state(state: dict) -> None:
@@ -239,8 +240,11 @@ def install() -> None:
     )
 
   boot_partition = manifest_partition("boot")
-  image_path, image_hash = download_and_verify_boot(boot_partition)
+  image_path, image_hash, image_size = download_and_verify_boot()
   target_boot = partition_path("boot", target)
+  partition_size = int(run("blockdev", "--getsize64", str(target_boot), capture=True))
+  if image_size > partition_size:
+    raise TrialError(f"시험 boot.img({image_size})가 boot 파티션({partition_size})보다 큽니다.")
   DATA_DIR.mkdir(parents=True, exist_ok=True)
   created_at = int(time.time())
   backup_path = DATA_DIR / f"boot{target}-before-usbpd-{created_at}.img"
@@ -266,6 +270,7 @@ def install() -> None:
     "previous_slot": active,
     "trial_slot": target,
     "boot_sha256": image_hash,
+    "boot_size": image_size,
     "backup_path": str(backup_path),
     "agnos_version": EXPECTED_AGNOS_VERSION,
   }
@@ -273,7 +278,7 @@ def install() -> None:
 
   print(f"시험 커널을 비활성 슬롯 {target}에 기록합니다. 전원을 끄지 마세요.", flush=True)
   run("abctl", "--set_unbootable", str(slot_number(target)))
-  size = int(boot_partition["size"])
+  size = image_size
   with image_path.open("rb", buffering=0) as source, target_boot.open("r+b", buffering=0) as destination:
     remaining = size
     while remaining:
