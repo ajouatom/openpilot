@@ -2,6 +2,8 @@
 
 #include "imgui_internal.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <unordered_set>
@@ -13,6 +15,21 @@ constexpr float BROWSER_VALUE_WIDTH = 88.0f;
 bool path_matches_filter(const std::string &path, const std::string &lower_filter) {
   if (lower_filter.empty()) return true;
   return lowercase_copy(path).find(lower_filter) != std::string::npos;
+}
+
+bool numeric_label_less(const std::string &a, const std::string &b) {
+  const bool a_numeric = !a.empty() && std::all_of(a.begin(), a.end(), [](unsigned char c) { return std::isdigit(c); });
+  const bool b_numeric = !b.empty() && std::all_of(b.begin(), b.end(), [](unsigned char c) { return std::isdigit(c); });
+  if (a_numeric != b_numeric) return a_numeric;
+  if (!a_numeric) return a < b;
+
+  const size_t a_first = std::min(a.find_first_not_of('0'), a.size() - 1);
+  const size_t b_first = std::min(b.find_first_not_of('0'), b.size() - 1);
+  const std::string_view a_value(a.data() + a_first, a.size() - a_first);
+  const std::string_view b_value(b.data() + b_first, b.size() - b_first);
+  if (a_value.size() != b_value.size()) return a_value.size() < b_value.size();
+  if (a_value != b_value) return a_value < b_value;
+  return a < b;
 }
 
 void insert_browser_path(std::vector<BrowserNode> *nodes, const std::string &path) {
@@ -56,7 +73,7 @@ void sort_browser_nodes(std::vector<BrowserNode> *nodes) {
     if (a.children.empty() != b.children.empty()) {
       return !a.children.empty();
     }
-    return a.label < b.label;
+    return numeric_label_less(a.label, b.label);
   });
   for (BrowserNode &node : *nodes) {
     sort_browser_nodes(&node.children);
