@@ -37,6 +37,7 @@ CORNER_RADAR_SLOT_TRACK_RANGES = ((200, 220), (240, 250))
 CORNER_RADAR_SLOT_DISCONTINUITY_D_REL_M = 8.0
 CORNER_RADAR_SLOT_DISCONTINUITY_Y_REL_M = 1.5
 CORNER_RADAR_SLOT_DISCONTINUITY_V_REL_MPS = 4.0
+RADAR_ACCEL_INNOVATION_LIMIT = 3.0
 
 NEURAL_PARAMS_PATH = os.path.join(BASEDIR, 'torque_data/neural_ff_weights.json')
 TORQUE_NN_MODEL_PATH = os.path.join(BASEDIR, 'torque_data/lat_models')
@@ -214,6 +215,7 @@ class MyTrack:
   def __init__(self, track_id: int, radar_point, dt: float):
     self.track_id = track_id
     self.reused_corner_slot = radar_track_id_is_reused_corner_slot(track_id)
+    self.radar_source = str(radar_point.radarSource)
     self.cnt = 0
     self.dRel = radar_point.dRel
     self.vRel = radar_point.vRel
@@ -232,6 +234,7 @@ class MyTrack:
     self.cnt = 0
 
   def init_point(self, radar_point):
+    self.radar_source = str(radar_point.radarSource)
     self.dRel = radar_point.dRel
     self.vRel = radar_point.vRel
     self.yRel = radar_point.yRel
@@ -280,11 +283,23 @@ class MyTrack:
         a_raw = (v_lead_filtered - self.v_lead_filtered_last) / self.dt
         self.v_lead_filtered_last = v_lead_filtered
 
-        self.noisy = abs(a_raw - self.aLead) > 3.0
-        if self.noisy:
+        self.noisy = abs(a_raw - self.aLead) > RADAR_ACCEL_INNOVATION_LIMIT
+        accel_sample = np.clip(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0
+        if self.noisy and self.radar_source == "scc":
+          # SCC exposes one reusable object slot, so a large kinematic jump can mean the
+          # source switched to a different lead without changing the track ID.
           self.cnt = 0
-        
-        a_lead = self.aLead_avg.update(np.clip(a_raw, -10.0, 5.0) if not pseudo_stop else 0.0)
+        elif self.noisy:
+          # Keep protection against quantized radar velocity jumps, but do not reset the
+          # age of an identified radar track: that used to publish aLead/jLead as zero during
+          # real hard braking. Repeated measurements can still move the estimate quickly.
+          accel_sample = np.clip(
+            accel_sample,
+            self.aLead - RADAR_ACCEL_INNOVATION_LIMIT,
+            self.aLead + RADAR_ACCEL_INNOVATION_LIMIT,
+          )
+
+        a_lead = self.aLead_avg.update(accel_sample)
 
         j_lead = (a_lead - self.aLead) / self.dt
         self.aLead = a_lead
