@@ -562,6 +562,7 @@ def test_egpu_indicator_draws_only_while_active(monkeypatch, active, expected_dr
   if texts:
     assert texts[0][0][0] == "eGPU"
     assert texts[0][0][4] == GREEN
+    assert texts[0][1] == {"anchor": "center"}
 
 
 @pytest.mark.parametrize(
