@@ -32,6 +32,7 @@ VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE = 1000.0
 VEHICLE_NAVI_POSITION_TIMEOUT_NS = 1_000_000_000
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
 CANFD_AVH_RELEASE_GRACE_FRAMES = round(0.5 / DT_CTRL)
+CANFD_AVH_LAMP_ACTIVE = 2
 
 BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: ButtonType.decelCruise,
                 Buttons.GAP_DIST: ButtonType.gapAdjustCruise, Buttons.CANCEL: ButtonType.cancel, Buttons.LFA_BUTTON: ButtonType.lfaButton}
@@ -54,25 +55,20 @@ def is_canfd_parking_brake_active(parking_brake_state: int) -> bool:
   return parking_brake_state == 1
 
 
-def update_canfd_avh_interlock_state(avh_state: int, acc_req: int, brake_pressed: bool, soft_hold_active: bool,
-                                     avh_active_prev: bool, oem_hold_latched: bool,
-                                     release_grace_frames: int) -> tuple[bool, bool, int]:
-  """Separate an OEM AutoHold from an openpilot SCC-induced hydraulic hold.
+def update_canfd_auto_hold_interlock_state(avh_state: int, avh_lamp: int, oem_hold_latched: bool,
+                                           release_grace_frames: int) -> tuple[bool, int]:
+  """Track an OEM AutoHold without confusing SCC-induced hydraulic holds.
 
-  AVH_Sta reports who is physically holding the service brake, not whether the
-  AutoHold button is enabled. An OEM hold begins while the driver brake signal
-  is asserted and before TCS.ACC_REQ, while cruise stops and soft hold can also
-  assert AVH. Some cars assert AVH before TCS.ACC_REQ reflects a soft-hold SCC
-  request, so use the already-published soft-hold intent to avoid classifying
-  openpilot's own hold as OEM-owned. Keep an OEM classification across short
-  AVH dropouts so automatic cruise cannot reopen the interlock during a
-  transition.
+  AVH_Sta reports the hydraulic service-brake state and is also asserted by
+  openpilot longitudinal control. AVH_LAMP identifies the OEM AutoHold state:
+  2 is actively holding and 3 is ready/releasing. Start the interlock only from
+  the active lamp state, then retain it through AVH release and short dropouts.
   """
-  avh_active = is_canfd_avh_active(avh_state)
-  if avh_active:
-    if not avh_active_prev and not oem_hold_latched:
-      oem_hold_latched = avh_state == 1 and brake_pressed and acc_req != 1 and not soft_hold_active
-    release_grace_frames = CANFD_AVH_RELEASE_GRACE_FRAMES if oem_hold_latched else 0
+  if avh_lamp == CANFD_AVH_LAMP_ACTIVE:
+    oem_hold_latched = True
+    release_grace_frames = CANFD_AVH_RELEASE_GRACE_FRAMES
+  elif oem_hold_latched and avh_state == 2:
+    release_grace_frames = CANFD_AVH_RELEASE_GRACE_FRAMES
   elif oem_hold_latched:
     release_grace_frames = max(0, release_grace_frames - 1)
     if release_grace_frames == 0:
@@ -80,7 +76,7 @@ def update_canfd_avh_interlock_state(avh_state: int, acc_req: int, brake_pressed
   else:
     release_grace_frames = 0
 
-  return oem_hold_latched, avh_active, release_grace_frames
+  return oem_hold_latched, release_grace_frames
 
 
 def _get_legacy_button_capabilities(fingerprint: dict[int, int]) -> tuple[bool, bool, bool]:
@@ -226,7 +222,6 @@ class CarState(CarStateBase):
     self.ACCMode = 0
     self.LFA_ICON = 0
     self.paddle_button_prev = 0
-    self.canfdAvhActivePrev = False
     self.canfdOemBrakeHoldLatched = False
     self.canfdAvhReleaseGraceFrames = 0
 
@@ -951,19 +946,16 @@ class CarState(CarStateBase):
     ret.cruiseState.available = self.main_enabled and self.controls_ready_count >= READY_COUNT_OK #cp.vl["TCS"]["ACCEnable"] == 0
 
     avh_state = cp.vl["ESP_STATUS"]["AVH_Sta"]
+    avh_lamp = cp.vl["ESP_STATUS"]["AVH_LAMP"]
+    ret.brakeHoldActive, self.canfdAvhReleaseGraceFrames = update_canfd_auto_hold_interlock_state(
+      avh_state, avh_lamp, self.canfdOemBrakeHoldLatched, self.canfdAvhReleaseGraceFrames,
+    )
+    self.canfdOemBrakeHoldLatched = ret.brakeHoldActive
     if self.CP.openpilotLongitudinalControl:
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       acc_req = cp.vl["TCS"]["ACC_REQ"]
       ret.cruiseState.enabled = acc_req == 1
       ret.cruiseState.standstill = False
-      # AVH_Sta is also asserted by openpilot SCC/soft hold. Only expose an
-      # OEM-owned hold to the cruise interlock. The soft-hold intent identifies
-      # ownership even on cars where AVH rises before ACC_REQ catches up.
-      ret.brakeHoldActive, self.canfdAvhActivePrev, self.canfdAvhReleaseGraceFrames = update_canfd_avh_interlock_state(
-        avh_state, acc_req, cp.vl["ESP_STATUS"]["BRAKE_PRESSED"] == 1, self.softHoldActive > 0,
-        self.canfdAvhActivePrev, self.canfdOemBrakeHoldLatched, self.canfdAvhReleaseGraceFrames,
-      )
-      self.canfdOemBrakeHoldLatched = ret.brakeHoldActive
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
@@ -972,9 +964,6 @@ class CarState(CarStateBase):
         ret.pcmCruiseGap = int(np.clip(cp_cruise_info.vl["SCC_CONTROL"]["DISTANCE_SETTING"], 1, 4))
       ret.cruiseState.standstill = cp_cruise_info.vl["SCC_CONTROL"]["InfoDisplay"] >= 4
       ret.cruiseState.speed = cp_cruise_info.vl["SCC_CONTROL"]["VSetDis"] * speed_factor
-      # AVH_Sta is the hydraulic service-brake hold state, not the AutoHold
-      # feature setting. SCC stops can also set it, so exclude active SCC.
-      ret.brakeHoldActive = is_canfd_avh_active(avh_state) and cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] not in (1, 2)
 
     speed_limit_cam = False
     corner = False
