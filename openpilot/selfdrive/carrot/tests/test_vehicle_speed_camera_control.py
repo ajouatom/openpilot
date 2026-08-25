@@ -15,6 +15,8 @@ def _serv(mode):
   serv.gas_override_speed = 0
   serv.gas_pressed_state = False
   serv.source_last = "none"
+  serv.school_zone_gas_override_started_at = None
+  serv.school_zone_suppressed = False
   return serv
 
 
@@ -115,6 +117,19 @@ def test_countdown_idle_reset_rearms_same_second_for_next_camera():
   assert (serv.left_sec, serv.carrot_left_sec) == (5, 5)
 
 
+def test_countdown_distance_jump_publishes_idle_before_next_event():
+  left_sec, distance, rearmed = CarrotServ._countdown_channel(85, 5, 1, 10)
+  assert (left_sec, distance, rearmed) == (100, 85, True)
+
+  left_sec, distance, rearmed = CarrotServ._countdown_channel(84, distance, left_sec, 10)
+  assert (left_sec, distance, rearmed) == (7, 84, False)
+
+
+def test_countdown_distance_jump_resets_to_new_time_before_announcement_window():
+  left_sec, distance, rearmed = CarrotServ._countdown_channel(400, 100, 15, 10)
+  assert (left_sec, distance, rearmed) == (39, 400, False)
+
+
 @pytest.mark.parametrize("mode", (0, 1, 2, 3))
 def test_road_limit_keeps_accelerator_speed_floor_after_release(mode):
   serv = _serv(mode)
@@ -184,6 +199,51 @@ def test_school_mode_two_uses_accelerator_speed_floor():
   desired_speed, source = serv._apply_speed_source_gas_floor(CS, 30, "school", 48, False)
 
   assert (desired_speed, source, serv.gas_override_speed) == (48, "gas", 48)
+
+
+@pytest.mark.parametrize("mode", (0, 1, 2, 3))
+def test_vehicle_bump_always_uses_accelerator_speed_floor(mode):
+  serv = _serv(mode)
+  serv.source_last = "hda_bump"
+
+  desired_speed, source = serv._apply_speed_source_gas_floor(
+    _car_state(gas=True), 22, "hda_bump", 35, False,
+  )
+
+  assert (desired_speed, source, serv.gas_override_speed) == (35, "gas", 35)
+
+
+def test_vehicle_bump_override_activates_when_pedal_precedes_source():
+  serv = _serv(1)
+  CS = _car_state(gas=True)
+
+  assert serv._apply_speed_source_gas_floor(CS, 22, "hda_bump", 34, False)[:2] == (22, "hda_bump")
+  assert serv._apply_speed_source_gas_floor(CS, 22, "hda_bump", 35, False)[:2] == (35, "gas")
+
+
+def test_school_gas_override_suppresses_zone_after_three_seconds(monkeypatch):
+  serv = _serv(2)
+  serv.vehicleNaviSchoolZoneControl = True
+  serv.source_last = "school"
+  CS = _car_state(gas=True)
+  CS.schoolZoneActive = True
+  now = [100.0]
+  monkeypatch.setattr(CarrotServ._update_school_zone_gas_override.__globals__["time"], "monotonic", lambda: now[0])
+
+  assert serv._apply_speed_source_gas_floor(CS, 30, "school", 48, False)[:2] == (48, "gas")
+  now[0] += 2.9
+  serv._apply_speed_source_gas_floor(CS, 30, "school", 48, False)
+  assert serv._vehicle_school_zone_enabled(CS)
+
+  now[0] += 0.2
+  serv._apply_speed_source_gas_floor(CS, 30, "school", 48, False)
+  assert not serv._vehicle_school_zone_enabled(CS)
+  assert not serv._vehicle_speed_camera_enabled(CS)
+
+  CS.schoolZoneActive = False
+  assert not serv._vehicle_school_zone_enabled(CS)
+  CS.schoolZoneActive = True
+  assert serv._vehicle_school_zone_enabled(CS)
 
 
 @pytest.mark.parametrize(("mode", "gas_pressed", "expected"), (
