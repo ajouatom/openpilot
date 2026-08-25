@@ -305,10 +305,13 @@ class HudRenderer(Widget):
     return self._exp_button.is_pressed
 
   def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
-    if not ui_state.usbgpu_active:
+    # Active is authoritative. A shared USB hub can briefly disappear from
+    # sysfs while it re-enumerates, but that sample must not blink the badge.
+    if not ui_state.usbgpu_present and not ui_state.usbgpu_active:
       return
 
     text = "eGPU"
+    color = COLORS.GREEN_210 if ui_state.usbgpu_active else COLORS.ORANGE_230
     font_size = 38
     text_size = measure_text_cached(self._font_semi_bold, text, font_size)
     pad_x, pad_y = 18, 8
@@ -321,14 +324,14 @@ class HudRenderer(Widget):
       text_size.y + pad_y * 2,
     )
     rl.draw_rectangle_rounded(badge, 0.35, 8, rl.Color(0, 0, 0, 150))
-    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 3, COLORS.GREEN_210)
+    rl.draw_rectangle_rounded_lines_ex(badge, 0.35, 8, 3, color)
     rl.draw_text_ex(
       self._font_semi_bold,
       text,
       rl.Vector2(badge.x + pad_x, badge.y + pad_y),
       font_size,
       0,
-      COLORS.GREEN_210,
+      color,
     )
 
   def _draw_set_speed(self, rect: rl.Rectangle) -> None:

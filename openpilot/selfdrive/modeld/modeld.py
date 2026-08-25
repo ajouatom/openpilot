@@ -25,7 +25,8 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_drivi
 from openpilot.common.file_chunker import open_file_chunked
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.helpers import (get_tg_input_devices, load_oob, modeld_pkl_path,
-                                                select_vision_streams, usbgpu_compiled_path, usbgpu_present)
+                                                refresh_usbgpu_device_cache, select_vision_streams, usbgpu_compiled_path,
+                                                usbgpu_pcie_not_ready, usbgpu_present)
 
 PROCESS_NAME = "openpilot.selfdrive.modeld.modeld"
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
@@ -34,7 +35,9 @@ SIMULATION = os.getenv('SIMULATION') == '1'
 LAT_SMOOTH_SECONDS = 0.0
 LONG_SMOOTH_SECONDS = 0.3
 MIN_LAT_CONTROL_SPEED = 0.3
-USBGPU_MODEL_LOAD_TIMEOUT = 60
+USBGPU_MODEL_LOAD_TIMEOUT = 30
+USBGPU_INIT_ATTEMPTS = 6
+USBGPU_INIT_RETRY_INTERVAL = 2.0
 
 
 def get_lat_smooth_seconds_dynamic(model_output: dict[str, np.ndarray],
@@ -193,12 +196,13 @@ class ModelState:
 def main(demo=False):
   cloudlog.warning("modeld init")
 
+  params = Params()
   _present = usbgpu_present()
   usbgpu_pkl_path = usbgpu_compiled_path()
   _compiled = usbgpu_pkl_path is not None
-  USBGPU = _present and _compiled
-  cloudlog.warning(f"usbgpu present: {_present}, compiled: {_compiled}, requested: {USBGPU}")
-  params = Params()
+  _startup_failed = params.get_bool("UsbGpuStartupFailed")
+  USBGPU = _present and _compiled and not _startup_failed
+  cloudlog.warning(f"usbgpu present: {_present}, compiled: {_compiled}, startup_failed: {_startup_failed}, requested: {USBGPU}")
   params.put_bool("UsbGpuPresent", _present)
   params.put_bool("UsbGpuCompiled", _compiled)
   params.put_bool("UsbGpuLoading", USBGPU)
@@ -242,17 +246,31 @@ def main(demo=False):
 
     def load_usbgpu_model():
       nonlocal usbgpu_model
-      try:
-        usbgpu_model = ModelState(vipc_client_main.width, vipc_client_main.height, True, usbgpu_pkl_path)
-      except Exception:
-        cloudlog.exception("eGPU model load failed")
+      for attempt in range(1, USBGPU_INIT_ATTEMPTS + 1):
+        try:
+          usbgpu_model = ModelState(vipc_client_main.width, vipc_client_main.height, True, usbgpu_pkl_path)
+          return
+        except Exception as exc:
+          if usbgpu_pcie_not_ready(exc) and attempt < USBGPU_INIT_ATTEMPTS:
+            cloudlog.warning(f"eGPU PCIe link not ready; retrying ({attempt}/{USBGPU_INIT_ATTEMPTS})")
+            time.sleep(USBGPU_INIT_RETRY_INTERVAL)
+            refresh_usbgpu_device_cache()
+            continue
+          cloudlog.exception("eGPU model load failed")
+          return
 
     loader = threading.Thread(target=load_usbgpu_model, name="usbgpu-model-loader", daemon=True)
     loader.start()
     loader.join(USBGPU_MODEL_LOAD_TIMEOUT)
-    model = usbgpu_model
     if loader.is_alive():
       cloudlog.error(f"eGPU model load timed out after {USBGPU_MODEL_LOAD_TIMEOUT}s")
+      params.put_bool("UsbGpuStartupFailed", True)
+      params.put_bool("UsbGpuLoading", False)
+      # A Python thread cannot be stopped safely. Terminate modeld so the
+      # process restart releases every tinygrad/libusb resource, then use the
+      # internal model for the rest of this ignition cycle.
+      raise RuntimeError("eGPU model loader did not terminate")
+    model = usbgpu_model
     params.put_bool("UsbGpuActive", model is not None)
 
   # Keep the internal-GPU model ready so a USB disconnect or runtime error does
@@ -312,6 +330,10 @@ def main(demo=False):
       long_delay = params.get_float("LongActuatorDelay")*0.01
       vEgoStopping = params.get_float("VEgoStopping") * 0.01
       camera_yaw_trim_deg = params.get_float("CameraYawTrimDeg") * 0.01
+      # eGPU power follows ignition on the vehicle. Keep UI state current when
+      # the shared USB hub is connected or removed after modeld starts.
+      params.put_bool_nonblocking("UsbGpuPresent", usbgpu_present())
+      params.put_bool_nonblocking("UsbGpuCompiled", usbgpu_compiled_path() is not None)
 
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
     while meta_main.timestamp_sof < meta_extra.timestamp_sof + 25000000:

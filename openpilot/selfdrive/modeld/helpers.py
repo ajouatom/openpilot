@@ -15,6 +15,12 @@ from openpilot.selfdrive.modeld.big_model import active_manifest, read_state
 MODELS_DIR = Path(__file__).resolve().parent / 'models'
 TG_INPUT_DEVICES_PATH = MODELS_DIR / 'tg_input_devices.json'
 USBGPU_USB_IDS = ((0xADD1, 0x0001), (0x3801, 0x0001))
+USBGPU_TRANSIENT_INIT_TEXT = (
+  "pcie link not up",
+  "read(0xb450",
+  "libusb_open: no such device",
+  "amd:0 does not exist",
+)
 VisionStreamT = TypeVar("VisionStreamT")
 
 
@@ -85,15 +91,58 @@ def load_oob(f):
       yield prev
   return pickle.load(io.BytesIO(opcodes), buffers=buffers())
 
-def usbgpu_present() -> bool:
+def usb_device_present(usb_ids: Collection[tuple[int, int]]) -> bool:
   for d in Path("/sys/bus/usb/devices").glob("*"):
     try:
       usb_id = (int((d / "idVendor").read_text(), 16), int((d / "idProduct").read_text(), 16))
-      if usb_id in USBGPU_USB_IDS:
+      if usb_id in usb_ids:
         return True
     except Exception:
       pass
   return False
+
+
+def usbgpu_present() -> bool:
+  return usb_device_present(USBGPU_USB_IDS)
+
+
+def refresh_usbgpu_device_cache() -> None:
+  """Discard libusb device pointers that may go stale during USB re-enumeration."""
+  try:
+    from tinygrad.runtime.support.usb import USB3
+    USB3.list_devices.__func__.cache_clear()
+  except (AttributeError, ImportError):
+    pass
+
+
+def usbgpu_pcie_not_ready(error: BaseException | str) -> bool:
+  """Recognize the transient state between USB enumeration and PCIe link-up."""
+  if isinstance(error, str):
+    message = error.lower()
+    return any(marker in message for marker in USBGPU_TRANSIENT_INIT_TEXT)
+
+  pending: list[BaseException] = [error]
+  seen: set[int] = set()
+  while pending:
+    current = pending.pop()
+    if id(current) in seen:
+      continue
+    seen.add(id(current))
+    message = str(current).lower()
+    if any(marker in message for marker in USBGPU_TRANSIENT_INIT_TEXT):
+      return True
+
+    # tinygrad tries KFD, native PCIe, and USB PCIe backends together. When all
+    # fail it reports an ExceptionGroup, so the transient USB link error is one
+    # of the child exceptions rather than the direct cause/context.
+    children = getattr(current, "exceptions", ())
+    pending.extend(child for child in children if isinstance(child, BaseException))
+    if current.__cause__ is not None:
+      pending.append(current.__cause__)
+    if current.__context__ is not None:
+      pending.append(current.__context__)
+  return False
+
 
 def usbgpu_compiled_path() -> Path | None:
   state = read_state()

@@ -14,3 +14,15 @@ def test_device_cluster_uses_standalone_carrot_navi_ipc():
   assert "--navi-overlay" not in args
   assert "--navi-publish-cereal" not in args
   assert args[args.index("--output") + 1] == "usb"
+
+
+def test_usb_hot_unplug_is_recognized_through_wrapped_pipeline_errors():
+  try:
+    try:
+      raise RuntimeError("TURZX USB display disconnected")
+    except RuntimeError as exc:
+      raise RuntimeError("H264 USB pipeline failed") from exc
+  except RuntimeError as exc:
+    assert cluster_autorun._is_usb_disconnect_error(exc)
+
+  assert not cluster_autorun._is_usb_disconnect_error(RuntimeError("encoder failed"))

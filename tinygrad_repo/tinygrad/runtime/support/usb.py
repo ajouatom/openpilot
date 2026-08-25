@@ -1,4 +1,4 @@
-import ctypes, struct, dataclasses, array, itertools, time, functools
+import ctypes, struct, dataclasses, array, itertools, time, functools, contextlib
 from typing import Sequence
 from tinygrad.runtime.autogen import libusb
 from tinygrad.helpers import DEBUG, DEV, to_mv, round_up, OSX, getenv, ceildiv
@@ -87,6 +87,13 @@ class USB3:
       self.buf_data_out_mvs = [to_mv(ctypes.addressof(self.buf_data_out[i]), 0x80000) for i in range(self.max_streams)]
 
       for slot in range(self.max_streams): struct.pack_into(">B", self.buf_cmd[slot], 3, slot + 1)
+
+  def close(self):
+    handle = getattr(self, "handle", None)
+    if handle is None: return
+    with contextlib.suppress(Exception): libusb.libusb_release_interface(handle, 0)
+    libusb.libusb_close(handle)
+    self.handle = None
 
   def _prep_transfer(self, tr, ep, stream_id, buf, length):
     tr.contents.dev_handle, tr.contents.endpoint, tr.contents.length, tr.contents.buffer = self.handle, ep, length, buf
@@ -188,6 +195,10 @@ class ReadOp: addr:int; size:int # noqa: E702
 class ScsiWriteOp: data:bytes; lba:int=0 # noqa: E702
 
 class CustomASM24Controller:
+  PCIE_LINK_READY = 0x78
+  PCIE_LINK_TIMEOUT_S = 2.0
+  PCIE_LINK_POLL_INTERVAL_S = 0.05
+
   def __init__(self, usb:USB3|None=None):
     if not usb:
       devs = USB3.list_devices(0xADD1, 0x0001)
@@ -202,9 +213,14 @@ class CustomASM24Controller:
 
     # Custom firmware now boots with PCIe off. Power it on before probing the link.
     ltssm = self.read(0xB450, 1)[0]
-    if ltssm != 0x78: self.set_pcie_power(True)
-    ltssm = self.read(0xB450, 1)[0]
-    if ltssm != 0x78: raise RuntimeError(f"PCIe link not up (LTSSM=0x{ltssm:02X}), custom firmware not ready")
+    if ltssm != self.PCIE_LINK_READY:
+      self.set_pcie_power(True)
+      deadline = time.monotonic() + self.PCIE_LINK_TIMEOUT_S
+      while ltssm != self.PCIE_LINK_READY and time.monotonic() < deadline:
+        time.sleep(self.PCIE_LINK_POLL_INTERVAL_S)
+        ltssm = self.read(0xB450, 1)[0]
+    if ltssm != self.PCIE_LINK_READY:
+      raise RuntimeError(f"PCIe link not up (LTSSM=0x{ltssm:02X}), custom firmware not ready")
 
   def set_pcie_power(self, enabled:bool, timeout:int=10000):
     checked(libusb.libusb_control_transfer,

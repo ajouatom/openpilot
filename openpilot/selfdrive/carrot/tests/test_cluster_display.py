@@ -203,6 +203,69 @@ def test_trip_report_follows_current_cluster_theme(monkeypatch, theme):
   assert [line[3] for line in angle_lines] == [theme.faint, theme.faint]
 
 
+def test_trip_report_cache_refreshes_once_per_second_and_on_context_changes():
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.width = cluster_renderer.DESIGN_WIDTH
+  renderer.height = cluster_renderer.DESIGN_HEIGHT
+  renderer.language = "ko"
+  renderer.is_metric = True
+  renderer.panel_layout = cluster_renderer.CLUSTER_PANEL_LAYOUT_DRIVING_LEFT
+  renderer._trip_report_target = None
+  renderer._trip_report_cache_key = None
+  renderer._trip_report_cache_valid = False
+  renderer._trip_report_cache_visible = False
+  renderer._trip_report_cache_next_refresh = 0.0
+  renderer._profile_start = lambda: None
+  renderer._profile_add = lambda *_args: None
+
+  current_theme = [LIGHT_CLUSTER_THEME]
+  renderer._current_theme = lambda: current_theme[0]
+  renderer._effective_screen_mode = lambda state: state.mode
+  refreshes = []
+
+  def refresh(state):
+    refreshes.append(state.mode)
+    renderer._trip_report_target = SimpleNamespace()
+
+  renderer._refresh_trip_report_cache = refresh
+  state = SimpleNamespace(mode=cluster_renderer.CLUSTER_SCREEN_MODE_TRIP_REPORT)
+
+  renderer._prepare_trip_report_cache(state, now=10.0)
+  renderer._prepare_trip_report_cache(state, now=10.9)
+  assert len(refreshes) == 1
+
+  current_theme[0] = DARK_CLUSTER_THEME
+  renderer._prepare_trip_report_cache(state, now=10.9)
+  assert len(refreshes) == 2
+
+  state.mode = cluster_renderer.CLUSTER_SCREEN_MODE_DEFAULT
+  renderer._prepare_trip_report_cache(state, now=10.95)
+  state.mode = cluster_renderer.CLUSTER_SCREEN_MODE_TRIP_REPORT
+  renderer._prepare_trip_report_cache(state, now=10.96)
+  assert len(refreshes) == 3
+
+
+def test_trip_report_cache_draws_one_texture_instead_of_panel_contents(monkeypatch):
+  renderer = object.__new__(ClusterUiRenderer)
+  renderer.panel_layout = cluster_renderer.CLUSTER_PANEL_LAYOUT_DRIVING_LEFT
+  renderer.screen_mode = cluster_renderer.CLUSTER_SCREEN_MODE_TRIP_REPORT
+  texture = SimpleNamespace(width=792, height=478)
+  renderer._trip_report_target = SimpleNamespace(texture=texture)
+  renderer._trip_report_cache_valid = True
+  renderer._draw_trip_report_panel_contents = lambda _state: pytest.fail("cached panel was redrawn")
+  draws = []
+  monkeypatch.setattr(cluster_renderer, "rl_color", lambda color: color)
+  monkeypatch.setattr(cluster_renderer.rl, "draw_texture_pro", lambda *args: draws.append(args))
+
+  renderer._draw_trip_report_panel(SimpleNamespace())
+
+  assert len(draws) == 1
+  assert draws[0][0] is texture
+  assert draws[0][1].height == -478.0
+  assert (draws[0][2].x, draws[0][2].y) == (1124.0, 1.0)
+  assert (draws[0][2].width, draws[0][2].height) == (792.0, 478.0)
+
+
 @pytest.mark.parametrize(
   ("panel_layout", "expected_panel_x"),
   (
