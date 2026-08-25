@@ -29,8 +29,8 @@ from cluster_models import ClusterAlert
     ("hda_bump", "bump"),
     ("school", "school"),
     ("route", "route"),
-    ("vturn", "turn"),
-    ("model", "turn"),
+    ("vturn", "vturn"),
+    ("model", "model"),
     ("atc", "turn"),
     ("section", "section"),
     ("longsource:c", "longsour"),
@@ -51,7 +51,7 @@ def test_deceleration_source_display_label(source, expected) -> None:
     ("hda_bump", "bump", 3),
     ("school", "school", 3),
     ("route", "route", 4),
-    ("model", "turn", 2),
+    ("model", "model", 2),
   ),
 )
 def test_live_deceleration_override_presents_navigation_origin(desired_source, expected_label, expected_mode) -> None:

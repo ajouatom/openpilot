@@ -18,8 +18,8 @@ DECELERATION_SOURCE_LABELS = {
   "hda_bump": "bump",
   "school": "school",
   "gas": "gas",
-  "vturn": "turn",
-  "model": "turn",
+  "vturn": "vturn",
+  "model": "model",
   "turn": "turn",
 }
 

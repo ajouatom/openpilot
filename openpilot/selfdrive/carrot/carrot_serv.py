@@ -78,6 +78,11 @@ nav_type_mapping = {
 }
 
 import collections
+
+COUNTDOWN_NEW_TARGET_MIN_JUMP_M = 20.0
+SCHOOL_ZONE_GAS_OVERRIDE_TIMEOUT_S = 3.0
+
+
 class CarrotServ:
   def __init__(self):
     self.params = Params()
@@ -175,8 +180,10 @@ class CarrotServ:
     self.traffic_light_count = -1
     self.traffic_state = 0
 
-    self.left_spd_sec = 0
-    self.left_tbt_sec = 0
+    self.left_spd_sec = 100
+    self.left_tbt_sec = 100
+    self.speed_countdown_distance_last = 0.0
+    self.turn_countdown_distance_last = 0.0
     self.left_sec = 100
     self.max_left_sec = 100
     self.carrot_left_sec = 100
@@ -188,6 +195,8 @@ class CarrotServ:
     self.gas_override_speed = 0
     self.gas_pressed_state = False
     self.source_last = "none"
+    self.school_zone_gas_override_started_at = None
+    self.school_zone_suppressed = False
 
     self.carrot_navi_session_id = ""
     self.carrot_navi_speed_sequence = -1
@@ -352,13 +361,18 @@ class CarrotServ:
 
   def _vehicle_speed_camera_enabled(self, CS):
     return (self.vehicleSpeedCameraControlMode > 0 and CS.speedLimit > 0 and CS.speedLimitDistance > 0 and
+            not (CS.schoolZoneActive and self.school_zone_suppressed) and
             not (self.vehicleSpeedCameraControlMode == 3 and CS.gasPressed))
 
   def _vehicle_speed_bump_enabled(self, CS):
     return self.vehicleNaviCanControl and self.autoNaviSpeedCtrlMode >= 2 and CS.speedBumpDistance > 0
 
   def _vehicle_school_zone_enabled(self, CS):
-    return (self.vehicleNaviSchoolZoneControl and self.vehicleSpeedCameraControlMode > 0 and CS.schoolZoneActive and
+    if not CS.schoolZoneActive:
+      self.school_zone_gas_override_started_at = None
+      self.school_zone_suppressed = False
+      return False
+    return (self.vehicleNaviSchoolZoneControl and self.vehicleSpeedCameraControlMode > 0 and not self.school_zone_suppressed and
             not (self.vehicleSpeedCameraControlMode == 3 and CS.gasPressed))
 
   def _vehicle_school_zone_speed(self, CS):
@@ -420,9 +434,34 @@ class CarrotServ:
 
       self.left_sec = left_sec
 
+  @staticmethod
+  def _countdown_channel(distance, previous_distance, previous_left_sec, v_ego):
+    if distance <= 0:
+      return 100, 0.0, False
+
+    calculated = int(max(distance - v_ego, 1) / max(1, v_ego) + 0.5)
+    new_target = (previous_distance > 0 and
+                  distance - previous_distance > max(COUNTDOWN_NEW_TARGET_MIN_JUMP_M, v_ego * 2.0))
+    rearmed = new_target and previous_left_sec <= 11
+    left_sec = calculated if new_target else min(previous_left_sec, calculated)
+    return (100 if rearmed else left_sec), float(distance), rearmed
+
+  def _update_school_zone_gas_override(self, override_active):
+    if not override_active:
+      self.school_zone_gas_override_started_at = None
+      return
+
+    now = time.monotonic()
+    if self.school_zone_gas_override_started_at is None:
+      self.school_zone_gas_override_started_at = now
+    elif now - self.school_zone_gas_override_started_at >= SCHOOL_ZONE_GAS_OVERRIDE_TIMEOUT_S:
+      self.school_zone_suppressed = True
+
   def _apply_speed_source_gas_floor(self, CS, desired_speed, source, v_ego_kph, road_speed_limit_changed):
-    if source in ("hda", "hda_section", "school"):
-      gas_floor_active = self.vehicleSpeedCameraControlMode == 2
+    if source in ("hda", "hda_section", "hda_bump", "school"):
+      # Vehicle speed bumps always allow an intentional accelerator override.
+      # Camera, section, and school sources continue to follow mode 2.
+      gas_floor_active = source == "hda_bump" or self.vehicleSpeedCameraControlMode == 2
       if not gas_floor_active:
         self.gas_override_speed = 0
       else:
@@ -434,7 +473,12 @@ class CarrotServ:
           self.gas_override_speed = max(v_ego_kph, self.gas_override_speed)
 
       self.source_last = source
-      if gas_floor_active and desired_speed < self.gas_override_speed:
+      override_active = gas_floor_active and desired_speed < self.gas_override_speed
+      if source == "school":
+        self._update_school_zone_gas_override(override_active)
+      elif not self.school_zone_suppressed:
+        self.school_zone_gas_override_started_at = None
+      if override_active:
         return self.gas_override_speed, "gas"
       return desired_speed, source
 
@@ -1377,18 +1421,24 @@ class CarrotServ:
 
     left_spd_sec = 100
     left_tbt_sec = 100
+    speed_countdown_rearmed = False
+    turn_countdown_rearmed = False
     if self.autoNaviCountDownMode > 0:
       speed_countdown_distance = self._speed_countdown_distance(CS)
-      if speed_countdown_distance > 0:
-        left_spd_sec = min(self.left_spd_sec, int(max(speed_countdown_distance - v_ego, 1) / max(1, v_ego) + 0.5))
-
-      if self.xDistToTurn > 0:
-        left_tbt_sec = min(self.left_tbt_sec, int(max(self.xDistToTurn - v_ego, 1) / max(1, v_ego) + 0.5))
+      left_spd_sec, self.speed_countdown_distance_last, speed_countdown_rearmed = self._countdown_channel(
+        speed_countdown_distance, self.speed_countdown_distance_last, self.left_spd_sec, v_ego,
+      )
+      left_tbt_sec, self.turn_countdown_distance_last, turn_countdown_rearmed = self._countdown_channel(
+        self.xDistToTurn, self.turn_countdown_distance_last, self.left_tbt_sec, v_ego,
+      )
+    else:
+      self.speed_countdown_distance_last = 0.0
+      self.turn_countdown_distance_last = 0.0
 
     self.left_spd_sec = left_spd_sec
     self.left_tbt_sec = left_tbt_sec
 
-    left_sec = min(left_spd_sec, left_tbt_sec)
+    left_sec = 100 if speed_countdown_rearmed or turn_countdown_rearmed else min(left_spd_sec, left_tbt_sec)
     self._update_countdown_alert(left_sec, source, v_ego_kph)
 
     self._update_cmd()
