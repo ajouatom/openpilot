@@ -33,6 +33,18 @@
 - Treat the JSON values as raw Params values; for example, `StoppingAccel` is stored in hundredths
   of m/s^2.
 
+# Carrot Dashcam Upload route lookup
+
+- When the user provides a `Carrot Dashcam Upload` block, resolve the local route before doing a
+  broad search. Build the preferred log path as
+  `\\DS1821P\openpilot\routes\<Car name> <DongleId>\<Result segment>\rlog.zst`.
+- Decode presentation escaping before building the path: Markdown `\_` is `_`, URL `%20` is a
+  space, and the result link's final directory name is the route segment.
+- If the exact path is absent, search `\\DS1821P\openpilot\routes` for a vehicle directory ending
+  in the exact dongle ID and then the exact result segment. Prefer `rlog.zst`; use `qlog.zst` only
+  when the full log is unavailable.
+- Treat Upload Time, Branch, and Commit as incident-analysis metadata, not as path components.
+
 # User documentation policy
 
 - Do not create or edit files under `docs/user/ko/` or `docs/user/en/` unless the user explicitly
