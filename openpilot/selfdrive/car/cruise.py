@@ -908,7 +908,8 @@ class VCruiseCarrot:
       if self._brake_pressed_count == 1 and self.enabled_last:
         self._v_cruise_kph_at_brake = self.v_cruise_kph
         self._add_log(f"{self.v_cruise_kph} Cruise speed at brake")
-      soft_hold_available = CS.cruiseState.available and self.autoCruiseControl != 0 and not self.CP.pcmCruise
+      soft_hold_available = CS.cruiseState.available and self.autoCruiseControl != 0 and not self.CP.pcmCruise and \
+                            self.autoCruiseControl_cancel_timer == 0
       self._soft_hold_count = self._soft_hold_count + 1 if soft_hold_available and CS.vEgo < 0.1 and CS.gearShifter == GearShifter.drive else 0
       if not soft_hold_available:
         self._soft_hold_active = 0

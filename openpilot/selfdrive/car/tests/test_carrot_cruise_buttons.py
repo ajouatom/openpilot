@@ -152,6 +152,7 @@ def test_soft_hold_does_not_arm_when_cruise_is_unavailable():
   helper._brake_pressed_count = 60
   helper._soft_hold_count = 60
   helper._soft_hold_active = 0
+  helper.autoCruiseControl_cancel_timer = 0
 
   CS = SimpleNamespace(
     gasPressed=False,
@@ -164,6 +165,40 @@ def test_soft_hold_does_not_arm_when_cruise_is_unavailable():
 
   assert helper._soft_hold_count == 0
   assert helper._soft_hold_active == 0
+
+
+@pytest.mark.parametrize(("cancel_timer", "expected_count", "expected_active"), [
+  (1, 0, 0),
+  (0, 61, 1),
+])
+def test_post_shift_cancel_timer_gates_soft_hold(cancel_timer, expected_count, expected_active):
+  helper = VCruiseCarrot.__new__(VCruiseCarrot)
+  helper.CP = SimpleNamespace(pcmCruise=False)
+  helper.autoCruiseControl = 1
+  helper.enabled_last = False
+  helper._cruise_ready = False
+  helper._paddle_decel_active = False
+  helper._gas_pressed_count = -1
+  helper._gas_pressed_count_last = 0
+  helper._gas_pressed_value = 0
+  helper._gas_tok_timer = 40
+  helper._gas_tok = False
+  helper._brake_pressed_count = 60
+  helper._soft_hold_count = 60
+  helper._soft_hold_active = 0
+  helper.autoCruiseControl_cancel_timer = cancel_timer
+
+  CS = SimpleNamespace(
+    gasPressed=False,
+    brakePressed=True,
+    vEgo=0.0,
+    gearShifter=car.CarState.GearShifter.drive,
+    cruiseState=SimpleNamespace(available=True),
+  )
+  helper._prepare_brake_gas(CS, car.CarControl(enabled=False))
+
+  assert helper._soft_hold_count == expected_count
+  assert helper._soft_hold_active == expected_active
 
 
 @pytest.mark.parametrize(("brake_hold_active", "parking_brake", "active"), [
