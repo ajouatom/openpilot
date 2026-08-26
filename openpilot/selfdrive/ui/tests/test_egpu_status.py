@@ -69,7 +69,7 @@ def test_modeld_refreshes_hotplug_state_after_startup():
 def test_modeld_retries_transient_egpu_pcie_startup():
   source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
 
-  assert "USBGPU_INIT_ATTEMPTS = 3" in source
+  assert "USBGPU_INIT_ATTEMPTS = 6" in source
   assert "usbgpu_pcie_not_ready(exc)" in source
   assert "eGPU PCIe link not ready; retrying" in source
 

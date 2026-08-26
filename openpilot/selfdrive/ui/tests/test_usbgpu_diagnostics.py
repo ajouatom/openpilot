@@ -58,10 +58,10 @@ def test_check_usbgpu_reports_pcie_and_success(monkeypatch, tmp_path):
   assert usbgpu.check_usbgpu(tmp_path) is None
 
 
-def test_check_usbgpu_retries_after_bridge_reset(monkeypatch, tmp_path):
+def test_check_usbgpu_retries_in_fresh_process(monkeypatch, tmp_path):
   make_device(tmp_path)
   results = iter((
-    SimpleNamespace(returncode=1, stdout="", stderr="PCIe link not up; USB bridge reset requested"),
+    SimpleNamespace(returncode=1, stdout="", stderr="PCIe link not up (LTSSM=0x00)"),
     SimpleNamespace(returncode=0, stdout="", stderr=""),
   ))
   sleeps = []
@@ -70,6 +70,22 @@ def test_check_usbgpu_retries_after_bridge_reset(monkeypatch, tmp_path):
 
   assert usbgpu.check_usbgpu(tmp_path) is None
   assert sleeps == [usbgpu.USBGPU_CHECK_RETRY_INTERVAL]
+
+
+def test_check_usbgpu_power_uses_firmware_rail_status(monkeypatch, tmp_path):
+  make_device(tmp_path)
+
+  monkeypatch.setattr(usbgpu, "get_usbgpu_power_status",
+                      lambda: usbgpu.UsbGpuPowerStatus(12100, 850, False))
+  assert usbgpu.check_usbgpu_power(tmp_path) is None
+
+  monkeypatch.setattr(usbgpu, "get_usbgpu_power_status",
+                      lambda: usbgpu.UsbGpuPowerStatus(120, 0, False))
+  assert usbgpu.check_usbgpu_power(tmp_path) == "12V off (120 mV)"
+
+  monkeypatch.setattr(usbgpu, "get_usbgpu_power_status",
+                      lambda: usbgpu.UsbGpuPowerStatus(11900, 0, True))
+  assert usbgpu.check_usbgpu_power(tmp_path) == "eGPU power fault (11900 mV, 0 mA)"
 
 
 def test_check_usbgpu_reports_new_link_errors(monkeypatch):

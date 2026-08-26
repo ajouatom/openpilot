@@ -200,9 +200,8 @@ class ScsiWriteOp: data:bytes; lba:int=0 # noqa: E702
 
 class CustomASM24Controller:
   PCIE_LINK_READY = 0x78
-  PCIE_LINK_TIMEOUT_S = 5.0
+  PCIE_LINK_TIMEOUT_S = 2.0
   PCIE_LINK_POLL_INTERVAL_S = 0.05
-  PCIE_POWER_CYCLE_OFF_S = 0.5
 
   def __init__(self, usb:USB3|None=None):
     if not usb:
@@ -216,35 +215,23 @@ class CustomASM24Controller:
     self._f0_out_buf, self._f0_out_mv = alloc_cbuffer(0x1000) # for f0 and e4, allocate big enough for e4
     self._f0_in_buf, _ = alloc_cbuffer(8)
 
-    # A modeld restart can leave the GPU powered but its PCIe link down. Sending
-    # another power-on request does not recover that state, while disconnecting
-    # USB does. Explicitly cycle PCIe power before retraining the link so a
-    # normal ignition restart does not require physically reconnecting USB.
+    # Match the proven USB-PD branch startup sequence. The custom firmware's
+    # power-on command already asserts PERST, resets the tunnel state, and
+    # retrains PCIe; an extra power-off or USB reset can disturb a bridge that
+    # remained enumerated while vehicle-switched GPU power was off.
     ltssm = self.read(0xB450, 1)[0]
     if ltssm != self.PCIE_LINK_READY:
-      self.set_pcie_power(False)
-      time.sleep(self.PCIE_POWER_CYCLE_OFF_S)
       self.set_pcie_power(True)
       deadline = time.monotonic() + self.PCIE_LINK_TIMEOUT_S
       while ltssm != self.PCIE_LINK_READY and time.monotonic() < deadline:
         time.sleep(self.PCIE_LINK_POLL_INTERVAL_S)
         ltssm = self.read(0xB450, 1)[0]
     if ltssm != self.PCIE_LINK_READY:
-      message = f"PCIe link not up (LTSSM=0x{ltssm:02X}), custom firmware not ready"
-      try:
-        self.reset_usb_bridge()
-      except Exception as reset_error:
-        raise RuntimeError(f"{message}; USB bridge reset failed: {reset_error}") from reset_error
-      raise RuntimeError(f"{message}; USB bridge reset requested")
+      raise RuntimeError(f"PCIe link not up (LTSSM=0x{ltssm:02X}), custom firmware not ready")
 
   def set_pcie_power(self, enabled:bool, timeout:int=10000):
     checked(libusb.libusb_control_transfer,
             f"F3 PCIe power {'on' if enabled else 'off'} failed")(self.usb.handle, 0x40, 0xF3, int(enabled), 0, None, 0, timeout)
-
-  def reset_usb_bridge(self):
-    # A successful reset invalidates the controller setup. The caller raises
-    # and reopens the device instead of continuing with this handle.
-    checked(libusb.libusb_reset_device, "USB bridge reset failed")(self.usb.handle)
 
   # === PCIe TLP via 0xF0 vendor command ===
 

@@ -256,7 +256,7 @@ function prepare_big_model_if_needed {
   # bridge-only presence must not force an optional eGPU SCons build.
   if [ -n "$BIG_MODEL_PKL_PATH" ] && [ ! -f "${BIG_MODEL_PKL_PATH}.chunkmanifest" ]; then
     echo "Checking USB eGPU readiness before optional PKL compilation."
-    readiness="$(python3 -c 'from openpilot.system.hardware.usbgpu import check_usbgpu; print(check_usbgpu(timeout=10.0) or "")' 2>&1 || true)"
+    readiness="$(python3 -c 'from openpilot.system.hardware.usbgpu import check_usbgpu_power; print(check_usbgpu_power() or "")' 2>&1 || true)"
     if [ -n "$readiness" ]; then
       echo "USB eGPU not ready for PKL compilation: $readiness"
       BIG_MODEL_SHA=""

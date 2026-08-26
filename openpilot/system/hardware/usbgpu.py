@@ -1,4 +1,5 @@
 import os
+import struct
 import subprocess
 import sys
 import time
@@ -13,6 +14,7 @@ USBGPU_USB_IDS = ((0xADD1, 0x0001), (0x3801, 0x0001))
 USB_DEVICES_PATH = Path("/sys/bus/usb/devices")
 USBGPU_CHECK_ATTEMPTS = 2
 USBGPU_CHECK_RETRY_INTERVAL = 1.0
+USBGPU_MIN_POWER_MV = 8000
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,13 @@ class UsbGpuDevice:
   busnum: int
   devnum: int
   link_error_count: int
+
+
+@dataclass(frozen=True)
+class UsbGpuPowerStatus:
+  voltage_mv: int
+  current_ma: int
+  fault: bool
 
 
 def _read(path: Path) -> str:
@@ -109,6 +118,54 @@ def usbgpu_status(compiled: bool, loading: bool, active: bool, startup_failed: b
   return "ready"
 
 
+def get_usbgpu_power_status(timeout_ms: int = 2000) -> UsbGpuPowerStatus | None:
+  """Read the custom bridge INA231/BOB status without starting the GPU."""
+  import usb.core
+  import usb.util
+
+  device = None
+  try:
+    for vendor_id, product_id in USBGPU_USB_IDS:
+      device = usb.core.find(idVendor=vendor_id, idProduct=product_id)
+      if device is not None:
+        break
+    if device is None:
+      return None
+
+    # Firmware vendor request 0xC0 returns uint16 mV, int16 mA, bool fault.
+    raw = bytes(device.ctrl_transfer(0xC0, 0xC0, 0, 0, 8, timeout=timeout_ms))
+    if len(raw) < 5:
+      raise RuntimeError(f"short eGPU power status ({len(raw)} bytes)")
+    voltage_mv, current_ma, fault = struct.unpack_from("<HhB", raw)
+    return UsbGpuPowerStatus(voltage_mv, current_ma, bool(fault))
+  finally:
+    if device is not None:
+      usb.util.dispose_resources(device)
+
+
+def check_usbgpu_power(devices_path: Path = USB_DEVICES_PATH) -> str | None:
+  """Check switched GPU power without changing PCIe or USB bridge state."""
+  device = get_usbgpu_device(devices_path)
+  if device is None:
+    return "USB not connected"
+  if device.speed_mbps < 5000:
+    return f"USB link {device.speed_mbps} Mbps"
+  if not is_current_usbgpu_firmware(device.product):
+    return "firmware mismatch"
+
+  try:
+    status = get_usbgpu_power_status()
+  except Exception as exc:
+    return f"power status unavailable: {exc}"
+  if status is None:
+    return "USB not connected"
+  if status.fault:
+    return f"eGPU power fault ({status.voltage_mv} mV, {status.current_ma} mA)"
+  if status.voltage_mv < USBGPU_MIN_POWER_MV:
+    return f"12V off ({status.voltage_mv} mV)"
+  return None
+
+
 def check_usbgpu(devices_path: Path = USB_DEVICES_PATH, timeout: float = 15.0) -> str | None:
   """Run an offroad connection check. None means the USB and GPU checks passed."""
   device = get_usbgpu_device(devices_path)
@@ -135,8 +192,7 @@ def check_usbgpu(devices_path: Path = USB_DEVICES_PATH, timeout: float = 15.0) -
     output = f"{result.stdout}\n{result.stderr}".lower()
     pcie_not_ready = "pcie link not up" in output or "read(0xb450" in output
     if pcie_not_ready and attempt + 1 < USBGPU_CHECK_ATTEMPTS:
-      # CustomASM24Controller resets the bridge before reporting a failed
-      # link. Give it time to re-enumerate, then verify using a fresh process.
+      # Retry in a fresh process, matching modeld's proven USB-PD startup path.
       time.sleep(USBGPU_CHECK_RETRY_INTERVAL)
       continue
     return "12V / PCIe not ready" if pcie_not_ready else "GPU incompatible"

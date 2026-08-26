@@ -168,8 +168,8 @@ def test_known_egpu_prefetch_does_not_block_startup_or_force_build_without_live_
   assert "--ensure-if-egpu" not in prepare
   assert egpu_check < active_sha
   assert "return" in prepare[egpu_check:active_sha]
-  assert "check_usbgpu(timeout=10.0)" in prepare
-  assert 'BIG_MODEL_SHA=""' in prepare[prepare.index("check_usbgpu(timeout=10.0)"):]
+  assert "check_usbgpu_power()" in prepare
+  assert 'BIG_MODEL_SHA=""' in prepare[prepare.index("check_usbgpu_power()"):]
   assert "--ensure-if-egpu" in update
   assert "/tmp/big_model_update.log" in update
   assert ") >> \"$log_path\" 2>&1 &" in update
@@ -231,10 +231,9 @@ def test_tinygrad_waits_for_custom_egpu_pcie_link_training() -> None:
   source = (Path(BASEDIR) / "tinygrad_repo/tinygrad/runtime/support/usb.py").read_text(encoding="utf-8")
 
   assert "PCIE_LINK_READY = 0x78" in source
-  assert "PCIE_LINK_TIMEOUT_S = 5.0" in source
-  assert "self.set_pcie_power(False)" in source
+  assert "PCIE_LINK_TIMEOUT_S = 2.0" in source
+  assert "self.set_pcie_power(False)" not in source
   assert "self.set_pcie_power(True)" in source
-  assert "self.reset_usb_bridge()" in source
-  assert "libusb.libusb_reset_device" in source
+  assert "self.reset_usb_bridge()" not in source
   assert "while ltssm != self.PCIE_LINK_READY" in source
   assert "time.sleep(self.PCIE_LINK_POLL_INTERVAL_S)" in source
