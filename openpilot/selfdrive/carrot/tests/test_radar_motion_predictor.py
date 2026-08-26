@@ -3219,6 +3219,95 @@ def test_stationary_front_hands_off_to_persistent_closer_vision_match() -> None:
   assert matcher.stationary_identity == ("frontRadar", 46)
 
 
+def test_stationary_front_hands_off_to_offset_closer_vision_range() -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  for index in range(7):
+    time_s = index * 0.05
+    held = snapshot_radar_points(
+      (Point(55, 4.55, -0.30, v_rel=0.0),),
+      v_ego=0.0,
+    )[0]
+    match = matcher.match(
+      model_with_lead(4.55, -0.30, 0.0, probability=1.0),
+      (held,),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(held,),
+      prefer_primary_stationary=True,
+    )
+
+  assert match is not None
+  assert match.point.track_id == 55
+
+  selected_ids = []
+  for index in range(7, 14):
+    time_s = index * 0.05
+    points = snapshot_radar_points((
+      Point(55, 4.55, -0.30, v_rel=0.0),
+      Point(35, 2.40, 0.75, v_rel=0.0),
+    ), v_ego=0.0)
+    model = model_with_lead(2.80, 0.0, 0.0, probability=1.0)
+    model.leadsV3[0].xStd = (0.44,)
+    model.leadsV3[0].yStd = (0.22,)
+    model.leadsV3[0].vStd = (0.07,)
+    match = matcher.match(
+      model,
+      points,
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=points,
+      prefer_primary_stationary=True,
+    )
+    assert match is not None
+    selected_ids.append(match.point.track_id)
+
+  assert selected_ids[:5] == [55] * 5
+  assert selected_ids[-1] == 35
+  assert matcher.stationary_identity == ("frontRadar", 35)
+
+
+def test_stationary_front_rejects_offset_challenger_without_range_gain() -> None:
+  matcher = VisionRadarMatcher()
+  match = None
+  for index in range(7):
+    time_s = index * 0.05
+    held = snapshot_radar_points(
+      (Point(55, 4.55, -0.30, v_rel=0.0),),
+      v_ego=0.0,
+    )[0]
+    match = matcher.match(
+      model_with_lead(4.55, -0.30, 0.0, probability=1.0),
+      (held,),
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=(held,),
+      prefer_primary_stationary=True,
+    )
+
+  assert match is not None
+  assert match.point.track_id == 55
+
+  for index in range(7, 15):
+    time_s = index * 0.05
+    points = snapshot_radar_points((
+      Point(55, 4.55, -0.30, v_rel=0.0),
+      Point(35, 2.40, 0.75, v_rel=0.0),
+    ), v_ego=0.0)
+    match = matcher.match(
+      model_with_lead(4.10, 0.0, 0.0, probability=1.0),
+      points,
+      STRAIGHT_PATH,
+      time_s=time_s,
+      stationary_points=points,
+      prefer_primary_stationary=True,
+    )
+    assert match is not None
+    assert match.point.track_id == 55
+
+  assert matcher.stationary_identity == ("frontRadar", 55)
+
+
 def test_stationary_front_ignores_transient_closer_vision_match() -> None:
   matcher = VisionRadarMatcher()
   match = None
