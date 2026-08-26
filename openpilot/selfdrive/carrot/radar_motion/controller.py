@@ -592,6 +592,7 @@ class DPathRadarController:
       path,
       time_s=time_s,
       enable_radar_tracks=self.enable_radar_tracks,
+      yaw_rate_rad_s=yaw_rate_rad_s,
     )
     lead_one = None
     if primary_match is not None:

@@ -62,6 +62,8 @@ STATIONARY_FRONT_MIN_VISION_SUPPORT_FRAMES = 3
 STATIONARY_CONFIRMATION_S = 0.25
 STATIONARY_RADAR_ONLY_CONFIRMATION_S = 0.50
 STATIONARY_MAX_ABS_VLEAD_MPS = 4.0
+STATIONARY_TURN_MIN_ABS_YAW_RATE_RAD_S = 0.10
+STATIONARY_TURN_CORNER_MIN_VISION_PROB = 0.80
 STATIONARY_HELD_CORNER_MAX_ABS_VLEAD_MPS = 8.0
 STATIONARY_MAX_VISION_SPEED_DELTA_MPS = 12.0
 STATIONARY_TRUSTED_MAX_VISION_SPEED_DELTA_MPS = 20.0
@@ -2810,6 +2812,7 @@ class VisionRadarMatcher:
     stationary_points: Iterable[RadarPointSnapshot] | None = None,
     prefer_corner_stationary: bool = False,
     prefer_primary_stationary: bool = False,
+    yaw_rate_rad_s: float = 0.0,
   ) -> VisionRadarMatch | None:
     vision = vision_lead_from_model(model)
     self._update_vision_fallback(vision)
@@ -2822,6 +2825,29 @@ class VisionRadarMatcher:
       if stationary_points is None
       else tuple(stationary_points)
     )
+    if (
+      math.isfinite(yaw_rate_rad_s)
+      and abs(yaw_rate_rad_s)
+      >= STATIONARY_TURN_MIN_ABS_YAW_RATE_RAD_S
+    ):
+      # During a tight turn, parked objects sweep laterally through the ego
+      # frame and can briefly overlap the curved model path. Do not let that
+      # geometry seed a new stationary corner-radar lead unless vision is
+      # consistently strong throughout the normal confirmation dwell. A
+      # stationary lead confirmed before the turn remains eligible.
+      stationary_values = tuple(
+        point for point in stationary_values
+        if not (
+          point.source.startswith("corner")
+          and abs(point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+          and self._identity(point) != self.stationary_identity
+          and (
+            vision is None
+            or vision.probability
+            < STATIONARY_TURN_CORNER_MIN_VISION_PROB
+          )
+        )
+      )
     if time_s is not None and math.isfinite(time_s):
       current_identities = {
         self._identity(point)
@@ -2964,6 +2990,7 @@ def match_dpath_primary_lead(
   time_s: float,
   enable_radar_tracks: int,
   stationary_points: Iterable[RadarPointSnapshot] | None = None,
+  yaw_rate_rad_s: float = 0.0,
 ) -> VisionRadarMatch | None:
   """Apply dPath vision-present and no-vision primary fallback orders."""
   point_values = tuple(points)
@@ -2988,6 +3015,7 @@ def match_dpath_primary_lead(
     # stationary corner is the physical fallback, followed by SCC.
     prefer_corner_stationary=False,
     prefer_primary_stationary=True,
+    yaw_rate_rad_s=yaw_rate_rad_s,
   )
 
 

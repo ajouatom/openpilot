@@ -4157,6 +4157,112 @@ def test_controller_publishes_vision_seeded_continuous_corner_stationary_lead() 
   assert output.lead_one["vLead"] == pytest.approx(0.0)
 
 
+def test_controller_turn_rejects_weak_vision_stationary_corner_seed() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  output = None
+  for index in range(12):
+    time_s = index * 0.05
+    output = controller.update(
+      time_s=time_s,
+      v_ego=6.0,
+      radar_points=(Point(
+        2734,
+        14.0 - 6.0 * time_s,
+        -0.5,
+        v_rel=-6.0,
+        source="corner235",
+      ),),
+      model=model_with_lead(
+        14.0 - 6.0 * time_s,
+        -0.5,
+        0.0,
+        probability=0.65,
+      ),
+      yaw_rate_rad_s=0.20,
+    )
+
+  assert output is not None
+  assert (
+    output.lead_one is None
+    or output.lead_one["radarTrackId"] != 2734
+  )
+  assert controller.primary_matcher.stationary_identity is None
+
+
+def test_controller_turn_allows_strong_vision_stationary_corner_seed() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  output = None
+  for index in range(7):
+    time_s = index * 0.05
+    output = controller.update(
+      time_s=time_s,
+      v_ego=6.0,
+      radar_points=(Point(
+        1009,
+        14.0 - 6.0 * time_s,
+        0.1,
+        v_rel=-6.0,
+        source="corner235",
+      ),),
+      model=model_with_lead(
+        14.0 - 6.0 * time_s,
+        0.1,
+        0.0,
+        probability=0.85,
+      ),
+      yaw_rate_rad_s=0.20,
+    )
+
+  assert output is not None
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 1009
+
+
+def test_controller_turn_retains_previously_confirmed_stationary_corner() -> None:
+  controller = DPathRadarController(prefer_corner_radar=True)
+  output = None
+  for index in range(7):
+    time_s = index * 0.05
+    output = controller.update(
+      time_s=time_s,
+      v_ego=6.0,
+      radar_points=(Point(
+        1009,
+        20.0 - 6.0 * time_s,
+        0.1,
+        v_rel=-6.0,
+        source="corner235",
+      ),),
+      model=model_with_lead(
+        20.0 - 6.0 * time_s,
+        0.1,
+        0.0,
+        probability=0.45,
+      ),
+    )
+
+  assert output is not None
+  assert output.lead_one is not None
+  assert output.lead_one["radarTrackId"] == 1009
+
+  retained = controller.update(
+    time_s=0.35,
+    v_ego=6.0,
+    radar_points=(Point(
+      1009,
+      17.9,
+      0.2,
+      v_rel=-6.0,
+      source="corner235",
+    ),),
+    model=model_with_lead(17.9, 0.2, 0.0, probability=0.0),
+    yaw_rate_rad_s=0.20,
+  )
+
+  assert retained.lead_one is not None
+  assert retained.lead_one["radarTrackId"] == 1009
+
+
 def test_weak_vision_accelerates_only_tight_front_corner_stationary_pair() -> None:
   controller = DPathRadarController(
     prefer_corner_radar=True,
