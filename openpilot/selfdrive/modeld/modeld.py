@@ -282,7 +282,13 @@ def main(demo=False):
   small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False) if model is None or USBGPU else None
   if model is None:
     model = small_model
-  params.put_bool("UsbGpuLoading", False)
+  # Loading is not complete until the first model result is published. The
+  # first eGPU execution can spend several seconds initializing queues/kernels
+  # after the PKL has loaded; clearing this here causes a false commIssue while
+  # modelV2 and its downstream services are still waiting for their first data.
+  usbgpu_startup_pending = USBGPU and model is not None
+  if not usbgpu_startup_pending:
+    params.put_bool("UsbGpuLoading", False)
   cloudlog.warning(f"models loaded in {time.monotonic() - st:.1f}s, modeld starting")
 
   # messaging
@@ -495,6 +501,12 @@ def main(demo=False):
       pm.send('modelV2', modelv2_send)
       pm.send('drivingModelData', drivingdata_send)
       pm.send('cameraOdometry', posenet_send)
+      if usbgpu_startup_pending:
+        # Clear only after all first-frame outputs are on the bus so selfdrived
+        # cannot observe "ready" before modelV2 and its dependants can run.
+        params.put_bool("UsbGpuLoading", False)
+        usbgpu_startup_pending = False
+        cloudlog.warning("eGPU first model output published; startup complete")
     last_vipc_frame_id = meta_main.frame_id
 
 

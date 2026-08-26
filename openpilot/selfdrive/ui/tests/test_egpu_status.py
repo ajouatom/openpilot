@@ -82,6 +82,16 @@ def test_modeld_restarts_instead_of_racing_a_timed_out_egpu_loader():
   assert 'raise RuntimeError("eGPU model loader did not terminate")' in source
 
 
+def test_modeld_keeps_egpu_loading_until_first_output_is_published():
+  source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
+
+  pending = source.index("usbgpu_startup_pending = USBGPU and model is not None")
+  first_send = source.index("pm.send('modelV2', modelv2_send)", pending)
+  clear = source.index('params.put_bool("UsbGpuLoading", False)', first_send)
+  assert pending < first_send < clear
+  assert "eGPU first model output published; startup complete" in source[clear:]
+
+
 def test_modeld_runs_internal_fallback_on_the_same_frame():
   source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
 
