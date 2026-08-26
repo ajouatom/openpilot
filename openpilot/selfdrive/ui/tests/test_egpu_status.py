@@ -61,14 +61,15 @@ def test_ui_state_reads_modeld_egpu_active_param():
 def test_modeld_refreshes_hotplug_state_after_startup():
   source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
 
-  assert 'put_bool_nonblocking("UsbGpuPresent", usbgpu_present())' in source
+  assert "usbgpu_present_now = usbgpu_present()" in source
+  assert 'put_bool_nonblocking("UsbGpuPresent", usbgpu_present_now)' in source
   assert 'put_bool_nonblocking("UsbGpuCompiled", usbgpu_compiled_path() is not None)' in source
 
 
 def test_modeld_retries_transient_egpu_pcie_startup():
   source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
 
-  assert "USBGPU_INIT_ATTEMPTS = 6" in source
+  assert "USBGPU_INIT_ATTEMPTS = 3" in source
   assert "usbgpu_pcie_not_ready(exc)" in source
   assert "eGPU PCIe link not ready; retrying" in source
 
@@ -76,7 +77,7 @@ def test_modeld_retries_transient_egpu_pcie_startup():
 def test_modeld_restarts_instead_of_racing_a_timed_out_egpu_loader():
   source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
 
-  assert "USBGPU_MODEL_LOAD_TIMEOUT = 30" in source
+  assert "USBGPU_MODEL_LOAD_TIMEOUT = 40" in source
   assert 'params.put_bool("UsbGpuStartupFailed", True)' in source
   assert 'raise RuntimeError("eGPU model loader did not terminate")' in source
 

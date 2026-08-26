@@ -216,6 +216,8 @@ def test_tinygrad_waits_for_custom_egpu_pcie_link_training() -> None:
   source = (Path(BASEDIR) / "tinygrad_repo/tinygrad/runtime/support/usb.py").read_text(encoding="utf-8")
 
   assert "PCIE_LINK_READY = 0x78" in source
-  assert "PCIE_LINK_TIMEOUT_S = 2.0" in source
+  assert "PCIE_LINK_TIMEOUT_S = 5.0" in source
+  assert "self.set_pcie_power(False)" in source
+  assert "self.set_pcie_power(True)" in source
   assert "while ltssm != self.PCIE_LINK_READY" in source
   assert "time.sleep(self.PCIE_LINK_POLL_INTERVAL_S)" in source

@@ -35,8 +35,8 @@ SIMULATION = os.getenv('SIMULATION') == '1'
 LAT_SMOOTH_SECONDS = 0.0
 LONG_SMOOTH_SECONDS = 0.3
 MIN_LAT_CONTROL_SPEED = 0.3
-USBGPU_MODEL_LOAD_TIMEOUT = 30
-USBGPU_INIT_ATTEMPTS = 6
+USBGPU_MODEL_LOAD_TIMEOUT = 40
+USBGPU_INIT_ATTEMPTS = 3
 USBGPU_INIT_RETRY_INTERVAL = 2.0
 
 
@@ -254,7 +254,7 @@ def main(demo=False):
           return
         except Exception as exc:
           if usbgpu_pcie_not_ready(exc) and attempt < USBGPU_INIT_ATTEMPTS:
-            cloudlog.warning(f"eGPU PCIe link not ready; retrying ({attempt}/{USBGPU_INIT_ATTEMPTS})")
+            cloudlog.warning(f"eGPU PCIe link not ready; retrying ({attempt}/{USBGPU_INIT_ATTEMPTS}): {exc!r}")
             time.sleep(USBGPU_INIT_RETRY_INTERVAL)
             refresh_usbgpu_device_cache()
             continue
@@ -273,6 +273,8 @@ def main(demo=False):
       # internal model for the rest of this ignition cycle.
       raise RuntimeError("eGPU model loader did not terminate")
     model = usbgpu_model
+    if model is None:
+      params.put_bool("UsbGpuStartupFailed", True)
     params.put_bool("UsbGpuActive", model is not None)
 
   # Keep the internal-GPU model ready so a USB disconnect or runtime error does

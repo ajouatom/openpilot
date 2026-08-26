@@ -71,7 +71,18 @@ def test_custom_usb_controller_waits_for_pcie_link(monkeypatch):
   monkeypatch.setattr("tinygrad.runtime.support.usb.time.sleep", lambda _seconds: None)
 
   CustomASM24Controller(object())
-  assert power_calls == [True]
+  assert power_calls == [False, True]
+
+
+def test_custom_usb_controller_preserves_ready_pcie_link(monkeypatch):
+  from tinygrad.runtime.support.usb import CustomASM24Controller
+
+  power_calls = []
+  monkeypatch.setattr(CustomASM24Controller, "read", lambda *_args: bytes([0x78]))
+  monkeypatch.setattr(CustomASM24Controller, "set_pcie_power", lambda _self, enabled: power_calls.append(enabled))
+
+  CustomASM24Controller(object())
+  assert power_calls == []
 
 
 def test_usb_pci_device_releases_resources_after_init_failure(monkeypatch):

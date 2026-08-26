@@ -18,6 +18,8 @@ USBGPU_USB_IDS = ((0xADD1, 0x0001), (0x3801, 0x0001))
 USBGPU_MIN_SPEED_MBPS = 5000
 USBGPU_TRANSIENT_INIT_TEXT = (
   "pcie link not up",
+  "pcie power off failed",
+  "pcie power on failed",
   "read(0xb450",
   "libusb_open: no such device",
   "amd:0 does not exist",
