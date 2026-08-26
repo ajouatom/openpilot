@@ -43,6 +43,7 @@ A_EGO_COST = 0.
 J_EGO_COST = 5.0
 A_CHANGE_COST = 200.
 A_CHANGE_COST_STARTING = 10. #30.
+JLEAD_A_CHANGE_COST_MIN = 20.0
 DANGER_ZONE_COST = 100.
 CRASH_DISTANCE = .25
 LEAD_DANGER_FACTOR = 0.8 # 0.75
@@ -77,6 +78,12 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
     return 0.5
   else:
     raise NotImplementedError("Longitudinal personality not supported")
+
+
+def get_jlead_a_change_cost(j_lead, j_lead_factor):
+  factor = float(np.clip(j_lead_factor, 0.0, 1.0))
+  min_cost = float(np.interp(factor, [0.0, 1.0], [A_CHANGE_COST, JLEAD_A_CHANGE_COST_MIN]))
+  return float(np.interp(abs(j_lead), [0.3, 2.0], [A_CHANGE_COST, min_cost]))
 
 
 def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
@@ -468,7 +475,7 @@ class LongitudinalMpc:
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
       if radarstate.leadOne.status:
-        base_a_change_cost = float(np.interp(abs(self.j_lead), [0.3, 2.0], [A_CHANGE_COST, 20]))
+        base_a_change_cost = get_jlead_a_change_cost(self.j_lead, carrot.j_lead_factor)
       else:
         base_a_change_cost = A_CHANGE_COST
 
