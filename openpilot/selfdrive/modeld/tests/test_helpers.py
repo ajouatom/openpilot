@@ -85,6 +85,25 @@ def test_custom_usb_controller_preserves_ready_pcie_link(monkeypatch):
   assert power_calls == []
 
 
+def test_custom_usb_controller_resets_bridge_after_failed_retrain(monkeypatch):
+  from tinygrad.runtime.support.usb import CustomASM24Controller
+
+  power_calls = []
+  reset_calls = []
+  monotonic_values = iter((0.0, 6.0))
+  monkeypatch.setattr(CustomASM24Controller, "read", lambda *_args: bytes([0x00]))
+  monkeypatch.setattr(CustomASM24Controller, "set_pcie_power", lambda _self, enabled: power_calls.append(enabled))
+  monkeypatch.setattr(CustomASM24Controller, "reset_usb_bridge", lambda _self: reset_calls.append(True))
+  monkeypatch.setattr("tinygrad.runtime.support.usb.time.monotonic", lambda: next(monotonic_values))
+  monkeypatch.setattr("tinygrad.runtime.support.usb.time.sleep", lambda _seconds: None)
+
+  with pytest.raises(RuntimeError, match="USB bridge reset requested"):
+    CustomASM24Controller(object())
+
+  assert power_calls == [False, True]
+  assert reset_calls == [True]
+
+
 def test_usb_pci_device_releases_resources_after_init_failure(monkeypatch):
   from tinygrad.runtime.support import system
 

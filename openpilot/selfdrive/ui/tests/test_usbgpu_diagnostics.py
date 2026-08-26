@@ -49,12 +49,27 @@ def test_check_usbgpu_reports_pcie_and_success(monkeypatch, tmp_path):
   make_device(tmp_path)
 
   failed = SimpleNamespace(returncode=1, stdout="", stderr="PCIe link not up (LTSSM=0x00)")
+  monkeypatch.setattr(usbgpu.time, "sleep", lambda _seconds: None)
   monkeypatch.setattr(usbgpu.subprocess, "run", lambda *_args, **_kwargs: failed)
   assert usbgpu.check_usbgpu(tmp_path) == "12V / PCIe not ready"
 
   passed = SimpleNamespace(returncode=0, stdout="", stderr="")
   monkeypatch.setattr(usbgpu.subprocess, "run", lambda *_args, **_kwargs: passed)
   assert usbgpu.check_usbgpu(tmp_path) is None
+
+
+def test_check_usbgpu_retries_after_bridge_reset(monkeypatch, tmp_path):
+  make_device(tmp_path)
+  results = iter((
+    SimpleNamespace(returncode=1, stdout="", stderr="PCIe link not up; USB bridge reset requested"),
+    SimpleNamespace(returncode=0, stdout="", stderr=""),
+  ))
+  sleeps = []
+  monkeypatch.setattr(usbgpu.subprocess, "run", lambda *_args, **_kwargs: next(results))
+  monkeypatch.setattr(usbgpu.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+  assert usbgpu.check_usbgpu(tmp_path) is None
+  assert sleeps == [usbgpu.USBGPU_CHECK_RETRY_INTERVAL]
 
 
 def test_check_usbgpu_reports_new_link_errors(monkeypatch):

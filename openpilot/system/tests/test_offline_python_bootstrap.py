@@ -234,5 +234,7 @@ def test_tinygrad_waits_for_custom_egpu_pcie_link_training() -> None:
   assert "PCIE_LINK_TIMEOUT_S = 5.0" in source
   assert "self.set_pcie_power(False)" in source
   assert "self.set_pcie_power(True)" in source
+  assert "self.reset_usb_bridge()" in source
+  assert "libusb.libusb_reset_device" in source
   assert "while ltssm != self.PCIE_LINK_READY" in source
   assert "time.sleep(self.PCIE_LINK_POLL_INTERVAL_S)" in source

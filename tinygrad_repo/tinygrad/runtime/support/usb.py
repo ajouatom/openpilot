@@ -230,11 +230,21 @@ class CustomASM24Controller:
         time.sleep(self.PCIE_LINK_POLL_INTERVAL_S)
         ltssm = self.read(0xB450, 1)[0]
     if ltssm != self.PCIE_LINK_READY:
-      raise RuntimeError(f"PCIe link not up (LTSSM=0x{ltssm:02X}), custom firmware not ready")
+      message = f"PCIe link not up (LTSSM=0x{ltssm:02X}), custom firmware not ready"
+      try:
+        self.reset_usb_bridge()
+      except Exception as reset_error:
+        raise RuntimeError(f"{message}; USB bridge reset failed: {reset_error}") from reset_error
+      raise RuntimeError(f"{message}; USB bridge reset requested")
 
   def set_pcie_power(self, enabled:bool, timeout:int=10000):
     checked(libusb.libusb_control_transfer,
             f"F3 PCIe power {'on' if enabled else 'off'} failed")(self.usb.handle, 0x40, 0xF3, int(enabled), 0, None, 0, timeout)
+
+  def reset_usb_bridge(self):
+    # A successful reset invalidates the controller setup. The caller raises
+    # and reopens the device instead of continuing with this handle.
+    checked(libusb.libusb_reset_device, "USB bridge reset failed")(self.usb.handle)
 
   # === PCIe TLP via 0xF0 vendor command ===
 

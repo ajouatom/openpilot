@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from openpilot.common.basedir import BASEDIR
 USBGPU_FW_VERSION = "ed4e39b7"
 USBGPU_USB_IDS = ((0xADD1, 0x0001), (0x3801, 0x0001))
 USB_DEVICES_PATH = Path("/sys/bus/usb/devices")
+USBGPU_CHECK_ATTEMPTS = 2
+USBGPU_CHECK_RETRY_INTERVAL = 1.0
 
 
 @dataclass(frozen=True)
@@ -119,17 +122,25 @@ def check_usbgpu(devices_path: Path = USB_DEVICES_PATH, timeout: float = 15.0) -
 
   env = {**os.environ, "DEV": "USB+AMD:LLVM", "GMMU": "0", "PYTHONPATH": os.path.join(BASEDIR, "tinygrad_repo")}
   code = "from tinygrad import Tensor; x = Tensor.rand(1 << 20).realize(); [x.numpy() for _ in range(8)]"
-  try:
-    result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True,
-                            timeout=timeout, check=False)
-  except subprocess.TimeoutExpired:
-    return "GPU check timed out"
+  for attempt in range(USBGPU_CHECK_ATTEMPTS):
+    try:
+      result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True,
+                              timeout=timeout, check=False)
+    except subprocess.TimeoutExpired:
+      return "GPU check timed out"
 
-  if result.returncode != 0:
+    if result.returncode == 0:
+      break
+
     output = f"{result.stdout}\n{result.stderr}".lower()
-    if "pcie link not up" in output or "read(0xb450" in output:
-      return "12V / PCIe not ready"
-    return "GPU incompatible"
+    pcie_not_ready = "pcie link not up" in output or "read(0xb450" in output
+    if pcie_not_ready and attempt + 1 < USBGPU_CHECK_ATTEMPTS:
+      # CustomASM24Controller resets the bridge before reporting a failed
+      # link. Give it time to re-enumerate, then verify using a fresh process.
+      time.sleep(USBGPU_CHECK_RETRY_INTERVAL)
+      continue
+    return "12V / PCIe not ready" if pcie_not_ready else "GPU incompatible"
+
   device_after = get_usbgpu_device(devices_path)
   if device_after is None or device_after.link_error_count > link_errors:
     return "USB link errors"
