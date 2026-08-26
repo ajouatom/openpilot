@@ -239,13 +239,14 @@ function prepare_big_model_if_needed {
   BIG_MODEL_SHA=""
   BIG_MODEL_PKL_PATH=""
 
-  # A cached big model must not force compilation when the USB eGPU is absent.
+  # A previously seen eGPU can prefetch a new ONNX while its power is off.
+  # Compilation still requires the live USB device and remains gated below.
+  python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu --network-wait-seconds 60 || true
+
   if ! python3 -c 'from openpilot.selfdrive.modeld.helpers import usbgpu_present; raise SystemExit(0 if usbgpu_present() else 1)' 2>/dev/null; then
     return
   fi
 
-  # Download errors are non-fatal and leave the last verified model active.
-  python3 -m openpilot.selfdrive.modeld.big_model --ensure-if-egpu --network-wait-seconds 60 || true
   BIG_MODEL_SHA="$(python3 -m openpilot.selfdrive.modeld.big_model --active-sha 2>/dev/null || true)"
   if [ -n "$BIG_MODEL_SHA" ]; then
     BIG_MODEL_PKL_PATH="$(python3 -c 'from openpilot.selfdrive.modeld.helpers import modeld_pkl_path; print(modeld_pkl_path(True))' 2>/dev/null || true)"

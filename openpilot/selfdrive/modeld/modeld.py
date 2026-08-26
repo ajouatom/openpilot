@@ -204,6 +204,8 @@ def main(demo=False):
   USBGPU = _present and _compiled and not _startup_failed
   cloudlog.warning(f"usbgpu present: {_present}, compiled: {_compiled}, startup_failed: {_startup_failed}, requested: {USBGPU}")
   params.put_bool("UsbGpuPresent", _present)
+  if _present:
+    params.put_bool("UsbGpuEverPresent", True)
   params.put_bool("UsbGpuCompiled", _compiled)
   params.put_bool("UsbGpuLoading", USBGPU)
   params.put_bool("UsbGpuActive", False)
@@ -332,7 +334,10 @@ def main(demo=False):
       camera_yaw_trim_deg = params.get_float("CameraYawTrimDeg") * 0.01
       # eGPU power follows ignition on the vehicle. Keep UI state current when
       # the shared USB hub is connected or removed after modeld starts.
-      params.put_bool_nonblocking("UsbGpuPresent", usbgpu_present())
+      usbgpu_present_now = usbgpu_present()
+      params.put_bool_nonblocking("UsbGpuPresent", usbgpu_present_now)
+      if usbgpu_present_now:
+        params.put_bool_nonblocking("UsbGpuEverPresent", True)
       params.put_bool_nonblocking("UsbGpuCompiled", usbgpu_compiled_path() is not None)
 
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame

@@ -28,6 +28,21 @@ class FakeResponse:
     return self.status
 
 
+class FakeParams:
+  def __init__(self, remembered=False):
+    self.remembered = remembered
+    self.puts = []
+
+  def get_bool(self, key):
+    assert key == "UsbGpuEverPresent"
+    return self.remembered
+
+  def put_bool(self, key, value):
+    assert key == "UsbGpuEverPresent"
+    self.puts.append((key, value))
+    self.remembered = value
+
+
 def manifest_for(data: bytes, model_id: str = "big-400") -> dict:
   return {
     "model_id": model_id,
@@ -73,6 +88,18 @@ def test_wait_for_manifest_network_times_out(monkeypatch):
 
   monkeypatch.setattr(big_model.socket, "create_connection", fail_connection)
   assert not big_model.wait_for_manifest_network("https://example.com/manifest.json", timeout=0)
+
+
+@pytest.mark.parametrize("remembered,present,cached,expected,write", [
+  (False, False, False, False, False),
+  (False, True, False, True, True),
+  (False, False, True, True, True),
+  (True, False, False, True, False),
+])
+def test_remember_usbgpu_connection(remembered, present, cached, expected, write):
+  params = FakeParams(remembered)
+  assert big_model.remember_usbgpu_connection(params, present, cached) is expected
+  assert bool(params.puts) is write
 
 
 @pytest.mark.parametrize("field,value", [

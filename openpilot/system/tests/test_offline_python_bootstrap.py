@@ -156,15 +156,25 @@ def test_logger_xattrs_use_python_standard_library() -> None:
   assert "os.setxattr(path, attr_name, attr_value)" in source
 
 
-def test_cached_big_model_does_not_force_build_without_egpu() -> None:
+def test_known_egpu_prefetch_does_not_force_build_without_live_device() -> None:
   launcher = (Path(BASEDIR) / "launch_chffrplus.sh").read_text(encoding="utf-8")
   prepare = launcher[launcher.index("function prepare_big_model_if_needed {"):]
   prepare = prepare[:prepare.index("\n}")]
 
+  ensure_model = prepare.index("--ensure-if-egpu")
   egpu_check = prepare.index("usbgpu_present")
   active_sha = prepare.index("--active-sha")
-  assert egpu_check < active_sha
+  assert ensure_model < egpu_check < active_sha
   assert "return" in prepare[egpu_check:active_sha]
+
+
+def test_usbgpu_history_is_persistent_and_recorded() -> None:
+  params = (Path(BASEDIR) / "openpilot/common/params_keys.h").read_text(encoding="utf-8")
+  modeld = (Path(BASEDIR) / "openpilot/selfdrive/modeld/modeld.py").read_text(encoding="utf-8")
+
+  assert '{"UsbGpuEverPresent", {PERSISTENT, BOOL}}' in params
+  assert 'params.put_bool("UsbGpuEverPresent", True)' in modeld
+  assert 'params.put_bool_nonblocking("UsbGpuEverPresent", True)' in modeld
 
 
 def test_model_revalidation_preserves_compiled_artifacts() -> None:

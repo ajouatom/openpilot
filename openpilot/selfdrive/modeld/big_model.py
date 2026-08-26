@@ -260,6 +260,15 @@ def active_model_path(cache_dir: Path | None = None) -> Path | None:
   return model_path(active, cache_dir) if active is not None else None
 
 
+def remember_usbgpu_connection(params, present: bool, cached_model: bool) -> bool:
+  """Persist eGPU history so model downloads can be prepared while it is powered off."""
+  remembered = params.get_bool("UsbGpuEverPresent")
+  known = remembered or present or cached_model
+  if known and not remembered:
+    params.put_bool("UsbGpuEverPresent", True)
+  return known
+
+
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("--ensure-if-egpu", action="store_true")
@@ -273,8 +282,10 @@ def main() -> int:
     parser.error("--network-wait-seconds must be non-negative")
 
   if args.ensure_if_egpu:
+    from openpilot.common.params import Params
     from openpilot.selfdrive.modeld.helpers import usbgpu_present
-    if usbgpu_present():
+    present = usbgpu_present()
+    if remember_usbgpu_connection(Params(), present, active_manifest() is not None):
       try:
         if active_manifest() is None and args.network_wait_seconds > 0.0:
           print(f"waiting up to {args.network_wait_seconds:g}s for the big model server")
