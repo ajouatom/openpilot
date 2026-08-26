@@ -65,6 +65,7 @@ function bootstrap_runtime_dependencies {
   if ! ensure_python_package serial pyserial 1 || \
      ! ensure_python_package msgpack msgpack 1 || \
      ! ensure_python_package aiohttp aiohttp 1 1 || \
+     ! ensure_python_package "aiortc; import av; import pylibsrtp" "aiortc==1.14.0" 1 1 || \
      ! ensure_python_package psutil psutil 1 || \
      ! ensure_python_package crcmod crcmod-plus 1 || \
      ! ensure_python_package jsonrpc json-rpc 1 || \
