@@ -110,7 +110,8 @@ class LongitudinalPlanner:
     self.vCluRatio = 1.0
     self.reset_decel_timer = 0
     self.reset_decel_start_a = 0.0
-
+    self.cruise_ramp_a = FirstOrderFilter(0.0, 1.5, self.dt)
+    
     self.v_cruise_kph = 0.0
 
     self.params = Params()
@@ -168,15 +169,21 @@ class LongitudinalPlanner:
     # No change cost when user is controlling the speed, or when standstill
     prev_accel_constraint = not (reset_state or sm['carState'].standstill)
 
-    if self.mpc.mode == 'acc':
-      #accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
-      accel_limits = [A_CRUISE_MIN, carrot.get_carrot_accel(v_ego)]
-      curvature_future = get_future_curvature(sm['modelV2'], sm['controlsState'].desiredCurvature)
-      a_lat_max = 3.0
-      accel_limits_turns = limit_accel_in_turns(v_ego, curvature_future, accel_limits, a_lat_max)
+    has_lead = sm['radarState'].leadOne.status
+    max_accel_target = carrot.get_carrot_accel(v_ego)
+
+    # 선행차 유무와 관계없이 부드러운 아날로그 연속 S-curve 가속 램프업(1차 LPF) 적용
+    if reset_state:
+      self.cruise_ramp_a.x = max(0.0, sm['carState'].aEgo)
     else:
-      accel_limits = [ACCEL_MIN, ACCEL_MAX]
-      accel_limits_turns = [ACCEL_MIN, ACCEL_MAX]
+      # 정차 상태 출발 시 자연스러운 출발 가속도 보장 및 부드러운 연속 램프업
+      target_a = max(0.6 if sm['carState'].standstill else 0.0, max_accel_target)
+      self.cruise_ramp_a.update(target_a)
+
+    accel_limits = [A_CRUISE_MIN, self.cruise_ramp_a.x]
+    curvature_future = get_future_curvature(sm['modelV2'], sm['controlsState'].desiredCurvature)
+    a_lat_max = 3.0
+    accel_limits_turns = limit_accel_in_turns(v_ego, curvature_future, accel_limits, a_lat_max)
 
     if reset_state:
       self.v_desired_filter.x = v_ego
@@ -287,10 +294,7 @@ class LongitudinalPlanner:
       output_v_target_now = min(output_v_target_mpc, output_v_target_now_e2e)
       self.output_should_stop = output_should_stop_e2e or output_should_stop_mpc
 
-    #for idx in range(2):
-    #  accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - 0.05, self.prev_accel_clip[idx] + 0.05)
-    #self.output_a_target = np.clip(output_a_target, accel_clip[0], accel_clip[1])
-    #self.prev_accel_clip = accel_clip
+    output_a_target = float(np.clip(output_a_target, accel_limits_turns[0], accel_limits_turns[1]))
     self.output_a_target = output_a_target
     self.output_v_target_now = output_v_target_now
     self.output_j_target_now = self.j_desired_trajectory[0]
