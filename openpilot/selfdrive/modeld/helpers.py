@@ -15,6 +15,7 @@ from openpilot.selfdrive.modeld.big_model import active_manifest, read_state
 MODELS_DIR = Path(__file__).resolve().parent / 'models'
 TG_INPUT_DEVICES_PATH = MODELS_DIR / 'tg_input_devices.json'
 USBGPU_USB_IDS = ((0xADD1, 0x0001), (0x3801, 0x0001))
+USBGPU_MIN_SPEED_MBPS = 5000
 USBGPU_TRANSIENT_INIT_TEXT = (
   "pcie link not up",
   "read(0xb450",
@@ -91,11 +92,12 @@ def load_oob(f):
       yield prev
   return pickle.load(io.BytesIO(opcodes), buffers=buffers())
 
-def usb_device_present(usb_ids: Collection[tuple[int, int]]) -> bool:
+def usb_device_present(usb_ids: Collection[tuple[int, int]], min_speed_mbps: int = 0) -> bool:
   for d in Path("/sys/bus/usb/devices").glob("*"):
     try:
       usb_id = (int((d / "idVendor").read_text(), 16), int((d / "idProduct").read_text(), 16))
-      if usb_id in usb_ids:
+      speed_mbps = float((d / "speed").read_text()) if min_speed_mbps > 0 else 0
+      if usb_id in usb_ids and speed_mbps >= min_speed_mbps:
         return True
     except Exception:
       pass
@@ -103,7 +105,9 @@ def usb_device_present(usb_ids: Collection[tuple[int, int]]) -> bool:
 
 
 def usbgpu_present() -> bool:
-  return usb_device_present(USBGPU_USB_IDS)
+  # The custom bridge can remain enumerated over USB 2.0 while its SuperSpeed
+  # link is unavailable. That state cannot support PCIe model loading.
+  return usb_device_present(USBGPU_USB_IDS, USBGPU_MIN_SPEED_MBPS)
 
 
 def refresh_usbgpu_device_cache() -> None:
