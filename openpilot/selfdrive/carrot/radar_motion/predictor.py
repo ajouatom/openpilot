@@ -71,6 +71,23 @@ CORNER_PREDECEL_MIN_REPORTED_INWARD_MPS = 0.40
 CORNER_PREDECEL_MIN_INWARD_DISPLACEMENT_M = 0.35
 CORNER_PREDECEL_MIN_DIRECTIONAL_CONSISTENCY = 0.90
 CORNER_PREDECEL_MIN_INWARD_SAMPLE_RATIO = 0.80
+CLOSE_LOW_SPEED_PREDECEL_MAX_VEGO_MPS = 12.0
+CLOSE_LOW_SPEED_PREDECEL_MIN_DREL_M = 2.0
+CLOSE_LOW_SPEED_PREDECEL_MAX_DREL_M = CORNER_PREDECEL_MIN_DREL_M
+CLOSE_LOW_SPEED_PREDECEL_MIN_ABS_DPATH_M = 2.20
+CLOSE_LOW_SPEED_PREDECEL_MAX_ABS_DPATH_M = 3.00
+CLOSE_LOW_SPEED_PREDECEL_MIN_VLEAD_MPS = 2.0
+CLOSE_LOW_SPEED_PREDECEL_MIN_VLEAD_RATIO = 0.50
+CLOSE_LOW_SPEED_PREDECEL_MIN_CLOSING_SPEED_MPS = 0.50
+CLOSE_LOW_SPEED_PREDECEL_MAX_ENTRY_TIME_S = 1.85
+CLOSE_LOW_SPEED_PREDECEL_MIN_ENTRY_TIME_S = 0.50
+CLOSE_LOW_SPEED_PREDECEL_MIN_SHORT_INWARD_RATE_MPS = 0.30
+CLOSE_LOW_SPEED_PREDECEL_MIN_LONG_INWARD_RATE_MPS = 0.25
+CLOSE_LOW_SPEED_PREDECEL_MIN_REPORTED_INWARD_MPS = 0.20
+CLOSE_LOW_SPEED_PREDECEL_MIN_INWARD_DISPLACEMENT_M = 0.28
+CLOSE_LOW_SPEED_PREDECEL_MIN_DIRECTIONAL_CONSISTENCY = 0.90
+CLOSE_LOW_SPEED_PREDECEL_MIN_INWARD_SAMPLE_RATIO = 0.68
+CLOSE_LOW_SPEED_PREDECEL_MIN_MOTION_SUPPORT = 0.80
 URGENT_NEAR_PATH_CONFIRMATION_S = 0.10
 URGENT_NEAR_PATH_MAX_DREL_M = 5.0
 URGENT_NEAR_PATH_MAX_CLEARANCE_M = 0.45
@@ -273,13 +290,16 @@ def corner_cutin_predecel_score(
   prediction: RadarMotionPrediction,
   d_rel: float,
   v_rel: float,
+  *,
+  v_ego: float | None = None,
+  cross_sensor_confirmed: bool = False,
 ) -> float:
   """Return a strong, SCC-independent adjacent-lane approach risk score.
 
   This deliberately does not relax normal CUT-IN confirmation. It recognizes
-  only a sustained corner-radar target that is closing longitudinally while
-  its measured path-relative history and reported lateral velocity both move
-  inward. The score is used for a bounded pre-deceleration request.
+  either a fast-closing distant target or a close low-speed moving target that
+  is independently paired with front radar. Both paths require sustained
+  measured inward motion. The score is used only for bounded pre-deceleration.
   """
   sensor = getattr(
     prediction,
@@ -294,7 +314,57 @@ def corner_cutin_predecel_score(
     return 0.0
   d_rel = _finite(d_rel, math.inf)
   v_rel = _finite(v_rel)
+  v_ego = _finite(v_ego, math.nan)
   abs_d_path = abs(prediction.d_path)
+  side = math.copysign(1.0, prediction.d_path)
+  inward_short = -side * prediction.d_path_rate_short
+  inward_long = -side * prediction.d_path_rate_long
+  reported_inward = -side * prediction.reported_normal_speed
+  close_entry_time_s = (
+    max(0.0, abs_d_path - PATH_OVERLAP_HALF_WIDTH_M)
+    / max(min(inward_short, inward_long), 1e-3)
+  )
+  v_lead = v_ego + v_rel
+  close_low_speed_entry = (
+    bool(cross_sensor_confirmed)
+    and math.isfinite(v_ego)
+    and 0.0 < v_ego <= CLOSE_LOW_SPEED_PREDECEL_MAX_VEGO_MPS
+    and CLOSE_LOW_SPEED_PREDECEL_MIN_DREL_M
+    <= d_rel
+    < CLOSE_LOW_SPEED_PREDECEL_MAX_DREL_M
+    and CLOSE_LOW_SPEED_PREDECEL_MIN_ABS_DPATH_M
+    <= abs_d_path
+    <= CLOSE_LOW_SPEED_PREDECEL_MAX_ABS_DPATH_M
+    and v_rel <= -CLOSE_LOW_SPEED_PREDECEL_MIN_CLOSING_SPEED_MPS
+    and v_lead >= CLOSE_LOW_SPEED_PREDECEL_MIN_VLEAD_MPS
+    and v_lead >= CLOSE_LOW_SPEED_PREDECEL_MIN_VLEAD_RATIO * v_ego
+    and close_entry_time_s <= CLOSE_LOW_SPEED_PREDECEL_MAX_ENTRY_TIME_S
+    and inward_short
+    >= CLOSE_LOW_SPEED_PREDECEL_MIN_SHORT_INWARD_RATE_MPS
+    and inward_long
+    >= CLOSE_LOW_SPEED_PREDECEL_MIN_LONG_INWARD_RATE_MPS
+    and reported_inward
+    >= CLOSE_LOW_SPEED_PREDECEL_MIN_REPORTED_INWARD_MPS
+    and prediction.directional_inward_displacement_m
+    >= CLOSE_LOW_SPEED_PREDECEL_MIN_INWARD_DISPLACEMENT_M
+    and prediction.directional_consistency
+    >= CLOSE_LOW_SPEED_PREDECEL_MIN_DIRECTIONAL_CONSISTENCY
+    and prediction.directional_inward_sample_ratio
+    >= CLOSE_LOW_SPEED_PREDECEL_MIN_INWARD_SAMPLE_RATIO
+    and prediction.motion_consistency
+    >= CLOSE_LOW_SPEED_PREDECEL_MIN_MOTION_SUPPORT
+    and prediction.recent_motion_support
+    >= CLOSE_LOW_SPEED_PREDECEL_MIN_MOTION_SUPPORT
+  )
+  if close_low_speed_entry:
+    entry_urgency = (
+      CLOSE_LOW_SPEED_PREDECEL_MAX_ENTRY_TIME_S - close_entry_time_s
+    ) / (
+      CLOSE_LOW_SPEED_PREDECEL_MAX_ENTRY_TIME_S
+      - CLOSE_LOW_SPEED_PREDECEL_MIN_ENTRY_TIME_S
+    )
+    return max(0.20, min(1.0, entry_urgency))
+
   if (
     not CORNER_PREDECEL_MIN_DREL_M
     <= d_rel
@@ -305,10 +375,6 @@ def corner_cutin_predecel_score(
     or v_rel > -CORNER_PREDECEL_MIN_CLOSING_SPEED_MPS
   ):
     return 0.0
-  side = math.copysign(1.0, prediction.d_path)
-  inward_short = -side * prediction.d_path_rate_short
-  inward_long = -side * prediction.d_path_rate_long
-  reported_inward = -side * prediction.reported_normal_speed
   ttc_s = d_rel / max(-v_rel, 0.1)
   if (
     ttc_s > CORNER_PREDECEL_MAX_TTC_S

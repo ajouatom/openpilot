@@ -1338,6 +1338,11 @@ class RadarMotionShadowSelector:
               prediction,
               point.d_rel,
               point.v_rel,
+              v_ego=frame.v_ego,
+              cross_sensor_confirmed=(
+                (prediction.source, prediction.track_id)
+                in front_kinematic_matches
+              ),
             ),
           )
           for prediction in predictions.values()
