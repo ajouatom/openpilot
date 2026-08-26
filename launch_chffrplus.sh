@@ -28,6 +28,25 @@ function cleanup_stale_git_lfs_hooks {
   done
 }
 
+function ensure_webrtc_runtime {
+  local wheel_dir="$DIR/third_party/wheels"
+
+  if python3 -c "import aiortc; import av; import pylibsrtp" > /dev/null 2>&1; then
+    echo "Carrot Vision WebRTC dependencies already installed."
+    return 0
+  fi
+
+  echo "Installing Carrot Vision WebRTC dependencies from local wheels."
+  if python3 -m pip install --no-index --find-links "$wheel_dir" --target "$PYDEPS" --upgrade "aiortc==1.14.0" && \
+     python3 -c "import aiortc; import av; import pylibsrtp" > /dev/null 2>&1; then
+    echo "Carrot Vision WebRTC dependencies installed."
+    return 0
+  fi
+
+  echo "Carrot Vision WebRTC dependencies are unavailable; video streaming will remain disabled."
+  return 1
+}
+
 function agnos_init {
   # TODO: move this to agnos
   sudo rm -f /data/etc/NetworkManager/system-connections/*.nmmeta
@@ -264,6 +283,10 @@ function launch {
   if [ -f /AGNOS ]; then
     agnos_init
   fi
+
+  # Carrot Vision imports aiortc lazily when the first /stream request arrives.
+  # Repair a missing AGNOS runtime before starting the web and WebRTC services.
+  ensure_webrtc_runtime
 
   # AGNOS must be current before SCons loads its Python and native build
   # dependencies. Build Params before any long-running carrot service imports it.
