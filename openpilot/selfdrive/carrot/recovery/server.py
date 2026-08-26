@@ -118,7 +118,6 @@ PARAMS_DIR = "/data/params"
 DEFAULT_WEB_UPLOAD_URL = "https://upload.shind0.synology.me"
 DEFAULT_TMUX_WEB_UPLOAD_URL = "https://tmux.carrotpilot.app/upload"
 CWP_RECOVERY_BOOT_PARAM = "CwebPushRecoveryBoot"
-CWP_RECOVERY_BOOT_MARKER = "/tmp/carrot_recovery_cwp_boot_sent"
 CWP_REPORT_URL_KEY = 23
 CWP_REPORT_URL_BYTES = (
   127, 99, 99, 103, 100, 45, 56, 56, 116, 96, 103, 57, 125, 120, 122, 126, 121,
@@ -953,17 +952,6 @@ def _cwp_set_enabled(enabled: bool) -> dict:
   return {**status, "ok": True, "enabled": enabled}
 
 
-def _boot_id() -> str:
-  try:
-    return Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
-  except Exception:
-    return ""
-
-
-def _mark_cwp_recovery_boot_sent() -> None:
-  Path(CWP_RECOVERY_BOOT_MARKER).write_text(_boot_id() or "sent", encoding="utf-8")
-
-
 def _cwp_boot_worker(port: int = DEFAULT_PORT) -> None:
   if _read_param(CWP_RECOVERY_BOOT_PARAM) != "1":
     return
@@ -984,8 +972,6 @@ def _cwp_boot_worker(port: int = DEFAULT_PORT) -> None:
     if result.get("ok") and body.get("ok"):
       pushed = int(body.get("pushed") or 0)
       registered = bool(body.get("registered"))
-      if pushed > 0:
-        _mark_cwp_recovery_boot_sent()
       if not registered:
         _write_param(CWP_RECOVERY_BOOT_PARAM, "0")
       print(f"[recovery] CWP boot registered={registered} pushed={pushed}", flush=True)
@@ -2025,8 +2011,8 @@ HTML_PAGE = """<!doctype html>
 .rc-cwp:hover { background: var(--md-surface-cont-h); }
 .rc-cwp:has(input:disabled) { opacity: .55; cursor: default; }
 .rc-cwp:has(input:disabled):hover { background: transparent; }
-.rc-cwp__text { display: flex; flex-direction: column; gap: 2px; }
-.rc-cwp__state { color: var(--md-on-surface-variant); font-size: 11px; font-weight: 600; }
+.rc-cwp__control { display: inline-flex; align-items: center; gap: 8px; }
+.rc-cwp__state { color: var(--md-on-surface-variant); font-size: 10px; font-weight: 600; }
 .rc-cwp input { width: 18px; height: 18px; accent-color: var(--md-primary); }
 .rc-brand { color: var(--md-primary); font-weight: 800; }
 </style>
@@ -2054,8 +2040,8 @@ HTML_PAGE = """<!doctype html>
               <button id="rcToolsBtn" class="smallBtn" type="button" aria-haspopup="true" aria-expanded="false">Tools &#x25BE;</button>
               <div id="rcToolsMenu" class="rc-menu" hidden>
                 <label class="rc-cwp" for="rcCwpPush">
-                  <span class="rc-cwp__text"><span>CWP Push</span><span id="rcCwpState" class="rc-cwp__state">Checking</span></span>
-                  <input id="rcCwpPush" type="checkbox" disabled>
+                  <span>CWP Push</span>
+                  <span class="rc-cwp__control"><span id="rcCwpState" class="rc-cwp__state" hidden></span><input id="rcCwpPush" type="checkbox" disabled></span>
                 </label>
                 <button data-tool="send_tmux_log">download tmux log</button>
                 <button data-tool="server_tmux_log">send tmux log</button>
@@ -2237,7 +2223,8 @@ RECOVERY_JS = """\"use strict\";
     if (!cwpPush || !cwpState) return;
     cwpPush.checked = !!(data && data.enabled);
     cwpPush.disabled = !(data && data.ok && data.registered);
-    cwpState.textContent = data && data.registered ? \"Ready\" : (data && data.state === \"unregistered\" ? \"Not registered\" : \"Unavailable\");
+    cwpState.hidden = !!(data && data.registered);
+    cwpState.textContent = data && data.state === \"unregistered\" ? \"Not registered\" : \"Unavailable\";
   }
   async function refreshCwp() {
     try {

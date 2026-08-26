@@ -28,22 +28,10 @@ DEFAULT_DEBOUNCE_S = 1.0
 DEFAULT_TIMEOUT_S = 4.0
 DEFAULT_BACKOFF_S = 5.0
 MAX_BACKOFF_S = 180.0
-RECOVERY_BOOT_PUSH_MARKER = "/tmp/carrot_recovery_cwp_boot_sent"
 
 
 def _decode_default_report_url() -> str:
   return "".join(chr(value ^ _DEFAULT_REPORT_URL_KEY) for value in _DEFAULT_REPORT_URL_BYTES)
-
-
-def _recovery_boot_push_sent(marker_path: str = RECOVERY_BOOT_PUSH_MARKER) -> bool:
-  try:
-    with open(marker_path, encoding="utf-8") as file:
-      marker = file.read().strip()
-    with open("/proc/sys/kernel/random/boot_id", encoding="utf-8") as file:
-      boot_id = file.read().strip()
-    return bool(marker and boot_id and marker == boot_id)
-  except Exception:
-    return False
 
 
 def _default_heartbeat_url(report_url: str) -> str:
@@ -194,7 +182,6 @@ class CwebPushReporter:
     self.current_candidate_since = 0.0
     self.was_down = True
     self.first_report = True
-    self.recovery_boot_push_sent = _recovery_boot_push_sent()
     self.next_retry_at = 0.0
     self.backoff_s = DEFAULT_BACKOFF_S
     self.next_heartbeat_at = time.monotonic() + random.uniform(0.0, self.heartbeat_interval_s)
@@ -227,13 +214,6 @@ class CwebPushReporter:
 
     if now - self.current_candidate_since < self.debounce_s:
       return False
-
-    if self.first_report and self.recovery_boot_push_sent:
-      self.first_report = False
-      self.last_success_ip = local_ip
-      self.was_down = False
-      self.next_heartbeat_at = now
-      self._status("recovery_handoff", ip=local_ip)
 
     should_report = self.first_report or local_ip != self.last_success_ip
     if not should_report:
