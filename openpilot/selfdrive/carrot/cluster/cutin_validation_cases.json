@@ -1308,6 +1308,17 @@
       "validation_stage": "lead_two",
       "forbidden_lead_two_ids": [2516],
       "scene": "Black sedan remains in the adjacent left lane while a small quantized inward shift briefly touches the lane-boundary straddle gate"
+    },
+    {
+      "id": "carnival-14a-20-turn-parked-left-22",
+      "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
+      "log": "0000014a--26d45431d5--20/rlog.zst",
+      "source": "front+corner",
+      "window": [22.45, 24.05],
+      "expected": "clear",
+      "human_verified": true,
+      "forbidden_lead_one_ids": [2734],
+      "scene": "A parked truck on the left sweeps across the curved model path while the ego vehicle makes a tight left turn"
     }
   ]
 }
