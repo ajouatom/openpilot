@@ -378,6 +378,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CarrotException", {CLEAR_ON_MANAGER_START, STRING}},
     {"CarrotExceptionSent", {CLEAR_ON_MANAGER_START, BOOL}},
     {"CarrotExceptionDiscordWebhookUrl", {PERSISTENT, STRING}},
+    {"CwebPushRecoveryBoot", {PERSISTENT, BOOL, "0"}},
 
     {"CarName", {PERSISTENT, STRING}},
     {"EVTable", {PERSISTENT, BOOL, "0"}},
