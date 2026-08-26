@@ -94,6 +94,10 @@ STATIONARY_CLOSER_HANDOFF_MAX_DREL_DELTA_M = 5.0
 STATIONARY_CLOSER_HANDOFF_MAX_YREL_DELTA_M = 0.75
 STATIONARY_CLOSER_HANDOFF_MAX_VLEAD_DELTA_MPS = 2.0
 STATIONARY_CLOSER_HANDOFF_MIN_COST_GAIN = 0.10
+STATIONARY_CLOSER_HANDOFF_RANGE_MAX_YREL_DELTA_M = 1.25
+STATIONARY_CLOSER_HANDOFF_MAX_DPATH_M = 1.0
+STATIONARY_CLOSER_HANDOFF_MAX_VISION_YREL_ERROR_M = 1.0
+STATIONARY_CLOSER_HANDOFF_MIN_VISION_RANGE_GAIN_M = 0.75
 # Keep radar-only moving promotion disjoint from the stationary fallback.
 # A front-only point in this band needs vision, corner, or permitted SCC
 # corroboration instead of bypassing stationary-reflection safeguards.
@@ -2688,7 +2692,7 @@ class VisionRadarMatcher:
     vision: VisionLead | None,
     time_s: float | None,
   ) -> bool:
-    """Confirm a nearer reflection before replacing a held front-radar ID."""
+    """Confirm a nearer vision-range match before replacing a held radar ID."""
     held_cost = (
       self._stationary_vision_base_cost(vision, stationary.point)
       if stationary is not None
@@ -2698,6 +2702,31 @@ class VisionRadarMatcher:
       self._stationary_vision_base_cost(vision, moving.point)
       if moving is not None
       else None
+    )
+    cost_supported = (
+      stationary is not None
+      and moving is not None
+      and abs(stationary.point.y_rel - moving.point.y_rel)
+      <= STATIONARY_CLOSER_HANDOFF_MAX_YREL_DELTA_M
+      and held_cost is not None
+      and challenger_cost is not None
+      and challenger_cost + STATIONARY_CLOSER_HANDOFF_MIN_COST_GAIN
+      <= held_cost
+    )
+    vision_range_supported = (
+      stationary is not None
+      and moving is not None
+      and vision is not None
+      and abs(stationary.point.y_rel - moving.point.y_rel)
+      <= STATIONARY_CLOSER_HANDOFF_RANGE_MAX_YREL_DELTA_M
+      and abs(moving.d_path) <= STATIONARY_CLOSER_HANDOFF_MAX_DPATH_M
+      and abs(moving.point.y_rel - vision.y_rel)
+      <= STATIONARY_CLOSER_HANDOFF_MAX_VISION_YREL_ERROR_M
+      and (
+        abs(moving.point.d_rel - vision.d_rel)
+        + STATIONARY_CLOSER_HANDOFF_MIN_VISION_RANGE_GAIN_M
+        <= abs(stationary.point.d_rel - vision.d_rel)
+      )
     )
     eligible = (
       stationary is not None
@@ -2719,14 +2748,9 @@ class VisionRadarMatcher:
         <= stationary.point.d_rel - moving.point.d_rel
         <= STATIONARY_CLOSER_HANDOFF_MAX_DREL_DELTA_M
       )
-      and abs(stationary.point.y_rel - moving.point.y_rel)
-      <= STATIONARY_CLOSER_HANDOFF_MAX_YREL_DELTA_M
       and abs(stationary.point.v_lead - moving.point.v_lead)
       <= STATIONARY_CLOSER_HANDOFF_MAX_VLEAD_DELTA_MPS
-      and held_cost is not None
-      and challenger_cost is not None
-      and challenger_cost + STATIONARY_CLOSER_HANDOFF_MIN_COST_GAIN
-      <= held_cost
+      and (cost_supported or vision_range_supported)
     )
     if not eligible or moving is None or time_s is None:
       self._reset_stationary_closer_challenger()

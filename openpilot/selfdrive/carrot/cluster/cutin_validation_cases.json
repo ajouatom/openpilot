@@ -2,6 +2,16 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "k8-2db-56-stopped-motorcycle-leadone-35",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "000002db--6b934dd8b1--56/rlog.zst",
+      "source": "front+corner",
+      "window": [40.70, 41.20],
+      "expected": "clear",
+      "required_lead_one_ids": [35],
+      "scene": "Strong vision range and a distinct closer front-radar track should hand leadOne from the stopped car to the motorcycle without SCC support"
+    },
+    {
       "id": "k8-2e3-33-close-low-speed-predecel-3423",
       "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
       "log": "000002e3--e8f3253035--33/rlog.zst",
