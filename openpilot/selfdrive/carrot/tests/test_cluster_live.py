@@ -14,6 +14,7 @@ from cluster_live import (
   OpenpilotLiveSource,
   deceleration_source_presentation,
   deceleration_source_display_label,
+  live_route_parser,
   standby_state,
 )
 import cluster_live
@@ -186,6 +187,18 @@ def test_live_cluster_avoids_unused_gps_subscriptions_after_trace_removal() -> N
   assert "livePose" in LIVE_SERVICES_BASE
   assert "gpsLocationExternal" not in LIVE_SERVICES_BASE
   assert "gpsLocation" not in LIVE_SERVICES_BASE
+
+
+def test_live_cluster_uses_authoritative_recorded_cutin_without_recomputation() -> None:
+  parser = live_route_parser()
+
+  def fail_if_called(*_args) -> None:
+    raise AssertionError("live cluster must not recompute CUT-IN from liveTracks")
+
+  parser._update_offline_cutin = fail_if_called
+  parser._update_live_tracks(SimpleNamespace(points=()), 1.0)
+
+  assert not parser.recompute_cutins
 
 
 def test_live_onroad_state_is_unknown_until_device_state_is_alive() -> None:
