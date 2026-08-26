@@ -1,0 +1,67 @@
+import importlib.util
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+
+MODULE_PATH = Path(__file__).resolve().parents[3] / "system" / "hardware" / "usbgpu.py"
+SPEC = importlib.util.spec_from_file_location("usbgpu_test_module", MODULE_PATH)
+assert SPEC is not None and SPEC.loader is not None
+usbgpu = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = usbgpu
+SPEC.loader.exec_module(usbgpu)
+
+
+def make_device(root: Path, vendor: str = "3801", speed: str = "5000",
+                product: str = "custom ed4e39b7-CLEAN") -> Path:
+  device = root / "4-1.4"
+  device.mkdir()
+  (device / "idVendor").write_text(vendor)
+  (device / "idProduct").write_text("0001")
+  (device / "speed").write_text(speed)
+  (device / "manufacturer").write_text("tiny")
+  (device / "product").write_text(product)
+  (device / "busnum").write_text("4")
+  (device / "devnum").write_text("7")
+  return device
+
+
+def test_usbgpu_status_distinguishes_link_and_runtime_states(tmp_path):
+  assert usbgpu.usbgpu_status(False, False, False, False, tmp_path) == "not detected"
+
+  device = make_device(tmp_path, speed="480")
+  assert usbgpu.usbgpu_status(True, False, False, False, tmp_path) == "slow USB (480 Mbps)"
+
+  (device / "speed").write_text("5000")
+  assert usbgpu.usbgpu_status(False, False, False, False, tmp_path) == "model not compiled"
+  assert usbgpu.usbgpu_status(True, True, False, False, tmp_path) == "loading"
+  assert usbgpu.usbgpu_status(True, False, True, False, tmp_path) == "active"
+  assert usbgpu.usbgpu_status(True, False, False, True, tmp_path) == "startup failed"
+  assert usbgpu.usbgpu_status(True, False, False, False, tmp_path) == "ready"
+
+
+def test_usbgpu_status_checks_firmware(tmp_path):
+  make_device(tmp_path, product="custom old-CLEAN")
+  assert usbgpu.usbgpu_status(True, False, False, False, tmp_path) == "firmware mismatch"
+
+
+def test_check_usbgpu_reports_pcie_and_success(monkeypatch, tmp_path):
+  make_device(tmp_path)
+
+  failed = SimpleNamespace(returncode=1, stdout="", stderr="PCIe link not up (LTSSM=0x00)")
+  monkeypatch.setattr(usbgpu.subprocess, "run", lambda *_args, **_kwargs: failed)
+  assert usbgpu.check_usbgpu(tmp_path) == "12V / PCIe not ready"
+
+  passed = SimpleNamespace(returncode=0, stdout="", stderr="")
+  monkeypatch.setattr(usbgpu.subprocess, "run", lambda *_args, **_kwargs: passed)
+  assert usbgpu.check_usbgpu(tmp_path) is None
+
+
+def test_check_usbgpu_reports_new_link_errors(monkeypatch):
+  before = usbgpu.UsbGpuDevice("4-1.4", 0x3801, 1, 5000, "tiny", "custom ed4e39b7-CLEAN", 4, 7, 3)
+  after = usbgpu.UsbGpuDevice("4-1.4", 0x3801, 1, 5000, "tiny", "custom ed4e39b7-CLEAN", 4, 7, 4)
+  devices = iter((before, after))
+  monkeypatch.setattr(usbgpu, "get_usbgpu_device", lambda _path: next(devices))
+  monkeypatch.setattr(usbgpu.subprocess, "run", lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""))
+
+  assert usbgpu.check_usbgpu() == "USB link errors"

@@ -79,3 +79,26 @@ def test_modeld_restarts_instead_of_racing_a_timed_out_egpu_loader():
   assert "USBGPU_MODEL_LOAD_TIMEOUT = 30" in source
   assert 'params.put_bool("UsbGpuStartupFailed", True)' in source
   assert 'raise RuntimeError("eGPU model loader did not terminate")' in source
+
+
+def test_modeld_runs_internal_fallback_on_the_same_frame():
+  source = (UI_DIR.parent / "modeld" / "modeld.py").read_text(encoding="utf-8")
+
+  fallback = source[source.index("eGPU model failed, falling back to internal GPU"):]
+  assert "model = small_model" in fallback
+  assert "model_output = model.run(bufs, transforms, inputs, prepare_only)" in fallback
+
+
+def test_selfdrived_allows_five_seconds_for_egpu_fallback_to_settle():
+  source = (UI_DIR.parent / "selfdrived" / "selfdrived.py").read_text(encoding="utf-8")
+
+  assert "def _big_model_settling" in source
+  assert "self.big_model_active and not active" in source
+  assert "self.big_model_ready_t + 5.0" in source
+  assert "and not big_model_settling" in source
+
+
+def test_tinygrad_retries_interrupted_usb_event_waits():
+  source = (UI_DIR.parents[2] / "tinygrad_repo" / "tinygrad" / "runtime" / "support" / "usb.py").read_text(encoding="utf-8")
+
+  assert "rc != libusb.LIBUSB_ERROR_INTERRUPTED" in source

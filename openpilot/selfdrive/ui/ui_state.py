@@ -108,6 +108,7 @@ class UIState:
     self.usbgpu_compiled: bool = False
     self.usbgpu_loading: bool = False
     self.usbgpu_active: bool = False
+    self.usbgpu_startup_failed: bool = False
 
     self.update_params()
 
@@ -218,6 +219,7 @@ class UIState:
     self.usbgpu_compiled = self.params.get_bool("UsbGpuCompiled")
     self.usbgpu_loading = self.params.get_bool("UsbGpuLoading")
     self.usbgpu_active = self.params.get_bool("UsbGpuActive")
+    self.usbgpu_startup_failed = self.params.get_bool("UsbGpuStartupFailed")
 
     self._param_update_time = time.monotonic()
 

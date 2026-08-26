@@ -107,7 +107,11 @@ class USB3:
 
     running = len(cmds)
     while running:
-      checked(libusb.libusb_handle_events)(USB3.ctx())
+      # Signals can interrupt libusb's event wait without indicating a USB
+      # transfer failure. Retry EINTR, but keep surfacing real link errors.
+      rc = libusb.libusb_handle_events(USB3.ctx())
+      if rc < 0 and rc != libusb.LIBUSB_ERROR_INTERRUPTED:
+        raise RuntimeError(f"libusb_handle_events: {ctypes.string_at(libusb.libusb_strerror(rc)).decode()}")
       running = len(cmds)
       for tr in cmds:
         if tr.contents.status == libusb.LIBUSB_TRANSFER_COMPLETED: running -= 1

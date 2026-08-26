@@ -430,7 +430,10 @@ def main(demo=False):
       params.put_bool("UsbGpuActive", False)
       model = small_model
       run_count = 0
-      model_output = None
+      # Run the already-loaded internal model for this same camera frame. A
+      # missing modelV2 frame during fallback can otherwise cascade into a
+      # misleading communication/CAN error while selfdrived waits for modeld.
+      model_output = model.run(bufs, transforms, inputs, prepare_only)
     mt2 = time.perf_counter()
     model_execution_time = mt2 - mt1
 
