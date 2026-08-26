@@ -13,6 +13,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   RadarMotionHistorySample,
   RadarMotionPrediction,
   RadarMotionPredictor,
+  corner_cutin_predecel_score,
   cutin_probability_at,
   model_path_point_at_s,
   model_path_y,
@@ -2936,6 +2937,81 @@ def test_controller_publishes_strong_corner_cutin_predecel_before_lead_two() -> 
   assert output.lead_cutin_risk["radarTrackId"] == 2091
   assert output.lead_cutin_risk["score"] > 0.85
   assert output.lead_cutin_risk["vRel"] == pytest.approx(-6.5)
+
+
+def test_close_low_speed_cutin_predecel_uses_moving_cross_sensor_target() -> None:
+  prediction = SimpleNamespace(
+    sensor="corner",
+    source="corner180",
+    current_path_occupancy=False,
+    history_count=40,
+    d_path=-2.40,
+    d_path_rate_short=0.36,
+    d_path_rate_long=0.41,
+    reported_normal_speed=0.26,
+    directional_inward_displacement_m=0.34,
+    directional_consistency=0.96,
+    directional_inward_sample_ratio=0.75,
+    motion_consistency=0.83,
+    recent_motion_support=0.87,
+  )
+
+  score = corner_cutin_predecel_score(
+    prediction,
+    3.10,
+    -2.00,
+    v_ego=7.69,
+    cross_sensor_confirmed=True,
+  )
+
+  assert score >= 0.20
+  assert corner_cutin_predecel_score(
+    prediction,
+    3.10,
+    -2.00,
+    v_ego=7.69,
+    cross_sensor_confirmed=False,
+  ) == 0.0
+
+
+@pytest.mark.parametrize(
+  ("v_ego", "v_rel", "prediction_overrides"),
+  (
+    (15.0, -2.0, {}),
+    (7.69, -7.69, {}),
+    (7.69, -2.0, {"reported_normal_speed": 0.0}),
+    (7.69, -2.0, {"directional_consistency": 0.70}),
+  ),
+)
+def test_close_low_speed_cutin_predecel_rejects_unsafe_shortcuts(
+  v_ego: float,
+  v_rel: float,
+  prediction_overrides: dict[str, float],
+) -> None:
+  values = {
+    "sensor": "corner",
+    "source": "corner180",
+    "current_path_occupancy": False,
+    "history_count": 40,
+    "d_path": -2.40,
+    "d_path_rate_short": 0.36,
+    "d_path_rate_long": 0.41,
+    "reported_normal_speed": 0.26,
+    "directional_inward_displacement_m": 0.34,
+    "directional_consistency": 0.96,
+    "directional_inward_sample_ratio": 0.75,
+    "motion_consistency": 0.83,
+    "recent_motion_support": 0.87,
+  }
+  values.update(prediction_overrides)
+
+  assert corner_cutin_predecel_score(
+    SimpleNamespace(**values),
+    3.10,
+    v_rel,
+    v_ego=v_ego,
+    cross_sensor_confirmed=True,
+  ) == 0.0
 
 
 def test_controller_selects_cross_sensor_slow_close_cutin() -> None:

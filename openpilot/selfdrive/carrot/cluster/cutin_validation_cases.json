@@ -2,6 +2,19 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "k8-2e3-33-close-low-speed-predecel-3423",
+      "vehicle_folder": "KIA_K8_HEV_1ST_GEN b34d1abb87cce93b",
+      "log": "000002e3--e8f3253035--33/rlog.zst",
+      "source": "corner",
+      "window": [21.95, 22.40],
+      "expected": "detect",
+      "human_verified": true,
+      "validation_stage": "predecel",
+      "target_track_ids": [3423],
+      "latest_detection_s": 22.20,
+      "scene": "A moving vehicle cuts in at low traffic speed with weak longitudinal closing; paired front and corner radar should request bounded pre-deceleration before normal leadTwo confirmation"
+    },
+    {
       "id": "ioniq5-4b9-7-corner-predecel-cutin-28",
       "vehicle_folder": "HYUNDAI_IONIQ_5_PE 7f419ed56030e135",
       "log": "000004b9--f989b3c8ec--7/rlog.zst",
