@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import ipaddress
 import json
 import mimetypes
 import os
@@ -114,6 +115,20 @@ TOOL_ACTIONS = {
 
 TMUX_LOG_PATH = "/data/media/tmux.log"
 PARAMS_DIR = "/data/params"
+DEFAULT_WEB_UPLOAD_URL = "https://upload.shind0.synology.me"
+DEFAULT_TMUX_WEB_UPLOAD_URL = "https://tmux.carrotpilot.app/upload"
+CWP_RECOVERY_BOOT_PARAM = "CwebPushRecoveryBoot"
+CWP_REPORT_URL_KEY = 23
+CWP_REPORT_URL_BYTES = (
+  127, 99, 99, 103, 100, 45, 56, 56, 116, 96, 103, 57, 125, 120, 122, 126, 121,
+  124, 126, 36, 34, 35, 57, 123, 126, 97, 114, 56, 101, 114, 103, 120, 101, 99,
+)
+DISCORD_TMUX_FILE_MAX_BYTES = 8 * 1024 * 1024
+EXCEPTION_DISCORD_WEBHOOK_KEY = b"carrot-exception-v1"
+EXCEPTION_DISCORD_WEBHOOK_OBFUSCATED = (
+  "CxUGAhxOAkocChYTGxsLQE4ZXEwAAhtAA0gHEAwKGwdGXlsfQgdTUEVKXkEcUkpaVEdEWkAkRwMCFzEL" +
+  "MF8zS1YzWh8YJlkpVk4EUwQ0ED02IkgXKjMkQzIYIRt/HgUWUTUQWCcaAS1XKhpFUT4cGDBnLiACOx1DXQ=="
+)
 
 
 # ===================================================================
@@ -732,23 +747,6 @@ def _capture_tmux_log() -> tuple[int, str]:
   return 0, ""
 
 
-def _put_param(key: str, value: bytes) -> None:
-  """Write an openpilot param the same way the C++ Params does: stage in
-  /data/params/d_tmp then atomic-rename into /data/params/d. Lets recovery
-  trigger `server_tmux_log` (CarrotException=tmux_send) without importing
-  openpilot; a running carrot_man consumes it (no-op if openpilot is down)."""
-  d = os.path.join(PARAMS_DIR, "d")
-  d_tmp = os.path.join(PARAMS_DIR, "d_tmp")
-  os.makedirs(d, exist_ok=True)
-  os.makedirs(d_tmp, exist_ok=True)
-  tmp = os.path.join(d_tmp, key)
-  with open(tmp, "wb") as f:
-    f.write(value)
-    f.flush()
-    os.fsync(f.fileno())
-  os.replace(tmp, os.path.join(d, key))
-
-
 def _tool_action(action: str, payload: dict) -> dict:
   if action == "rebuild_all":
     # Same as the tools button: clean build + drop prebuilt, then reboot.
@@ -760,11 +758,12 @@ def _tool_action(action: str, payload: dict) -> dict:
       return {"ok": False, "error": err or "tmux capture failed"}
     return {"ok": True, "file": "/download/tmux.log"}
   if action == "server_tmux_log":
-    try:
-      _put_param("CarrotException", b"tmux_send")
-      return {"ok": True}
-    except Exception as exc:
-      return {"ok": False, "error": str(exc)}
+    rc, err = _capture_tmux_log()
+    if rc != 0:
+      return {"ok": False, "error": err or "tmux capture failed"}
+    result = _send_tmux_destinations("tmux_send")
+    result["file"] = "/download/tmux.log"
+    return result
   return {"ok": False, "error": f"unknown action: {action}"}
 
 
@@ -852,6 +851,407 @@ def _read_param(key: str, default: str = "") -> str:
       return f.read().strip() or default
   except Exception:
     return default
+
+
+def _write_param(key: str, value: str) -> None:
+  param_dir = os.path.join(PARAMS_DIR, "d")
+  if not os.path.isdir(param_dir):
+    raise FileNotFoundError(f"params unavailable: {param_dir}")
+  target = os.path.join(param_dir, key)
+  temp = os.path.join(param_dir, f".tmp_{key}_{secrets.token_hex(6)}")
+  lock_fd = None
+  try:
+    if fcntl is not None:
+      lock_fd = os.open(os.path.join(PARAMS_DIR, ".lock"), os.O_CREAT | os.O_RDWR, 0o664)
+      fcntl.flock(lock_fd, fcntl.LOCK_EX)
+    fd = os.open(temp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o664)
+    try:
+      os.write(fd, str(value).encode("utf-8"))
+      os.fsync(fd)
+    finally:
+      os.close(fd)
+    os.replace(temp, target)
+    dir_fd = os.open(param_dir, os.O_RDONLY)
+    try:
+      os.fsync(dir_fd)
+    finally:
+      os.close(dir_fd)
+  finally:
+    try:
+      os.unlink(temp)
+    except FileNotFoundError:
+      pass
+    if lock_fd is not None:
+      fcntl.flock(lock_fd, fcntl.LOCK_UN)
+      os.close(lock_fd)
+
+
+def _cwp_device_id() -> str:
+  for value in (_read_param("DongleId"), _read_param("HardwareSerial"), socket.gethostname()):
+    text = str(value or "").strip()
+    if text and text.lower() not in {"unknown", "none", "null", "unregistereddevice"}:
+      return text
+  return "comma"
+
+
+def _cwp_url(path: str) -> str:
+  report_url = os.environ.get("CWEB_PUSH_REPORT_URL", "").strip()
+  if not report_url:
+    report_url = "".join(chr(value ^ CWP_REPORT_URL_KEY) for value in CWP_REPORT_URL_BYTES)
+  base = report_url[:-len("/report")] if report_url.endswith("/report") else report_url.rstrip("/")
+  return base + path
+
+
+def _cwp_request(path: str, payload: dict, timeout: int = 4) -> dict:
+  headers = {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "User-Agent": "CarrotRecovery/2.0",
+  }
+  token = os.environ.get("CWP_REPORT_TOKEN", "").strip()
+  if token:
+    headers["Authorization"] = f"Bearer {token}"
+  request = urllib.request.Request(
+    _cwp_url(path), data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST",
+  )
+  return _request_result(request, timeout)
+
+
+def _cwp_status() -> dict:
+  enabled = _read_param(CWP_RECOVERY_BOOT_PARAM) == "1"
+  result = _cwp_request("/recovery/status", {"deviceId": _cwp_device_id()})
+  body = result.get("body") if isinstance(result.get("body"), dict) else {}
+  if not result.get("ok") or not body.get("ok"):
+    return {
+      "ok": False,
+      "enabled": enabled,
+      "registered": None,
+      "state": "unavailable",
+      "error": result.get("error") or "CWP unavailable",
+    }
+  registered = bool(body.get("registered"))
+  if enabled and not registered:
+    _write_param(CWP_RECOVERY_BOOT_PARAM, "0")
+    enabled = False
+  return {
+    "ok": True,
+    "enabled": enabled,
+    "registered": registered,
+    "state": "ready" if registered else "unregistered",
+  }
+
+
+def _cwp_set_enabled(enabled: bool) -> dict:
+  status = _cwp_status()
+  if enabled:
+    if not status.get("ok"):
+      return status
+    if not status.get("registered"):
+      return {**status, "ok": False, "error": "Not registered"}
+  _write_param(CWP_RECOVERY_BOOT_PARAM, "1" if enabled else "0")
+  return {**status, "ok": True, "enabled": enabled}
+
+
+def _cwp_boot_worker(port: int = DEFAULT_PORT) -> None:
+  if _read_param(CWP_RECOVERY_BOOT_PARAM) != "1":
+    return
+  deadline = time.monotonic() + 120.0
+  candidate = ""
+  while time.monotonic() < deadline:
+    local_ip = _local_ip()
+    if not local_ip or local_ip != candidate:
+      candidate = local_ip
+      time.sleep(2.0)
+      continue
+    result = _cwp_request("/recovery/boot", {
+      "deviceId": _cwp_device_id(),
+      "ip": local_ip,
+      "port": int(port),
+    })
+    body = result.get("body") if isinstance(result.get("body"), dict) else {}
+    if result.get("ok") and body.get("ok"):
+      pushed = int(body.get("pushed") or 0)
+      registered = bool(body.get("registered"))
+      if not registered:
+        _write_param(CWP_RECOVERY_BOOT_PARAM, "0")
+      print(f"[recovery] CWP boot registered={registered} pushed={pushed}", flush=True)
+      return
+    time.sleep(5.0)
+  print("[recovery] CWP boot unavailable", flush=True)
+
+
+def _exception_webhook_url() -> str:
+  if os.environ.get("CARROT_EXCEPTION_DISCORD_WEBHOOK_DISABLE", "").strip().lower() in {"1", "true", "yes", "on"}:
+    return ""
+  for key in ("CARROT_EXCEPTION_DISCORD_WEBHOOK_URL", "CARROT_DISCORD_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"):
+    value = os.environ.get(key, "").strip()
+    if value:
+      return value
+  for key in (
+    "CarrotExceptionDiscordWebhookUrl",
+    "CarrotDiscordWebhookUrl",
+    "CarrotDiscordWebhookURL",
+    "DiscordWebhookUrl",
+    "DiscordWebhookURL",
+  ):
+    value = _read_param(key)
+    if value:
+      return value
+  try:
+    data = base64.b64decode(EXCEPTION_DISCORD_WEBHOOK_OBFUSCATED)
+    decoded = bytes(
+      byte ^ EXCEPTION_DISCORD_WEBHOOK_KEY[index % len(EXCEPTION_DISCORD_WEBHOOK_KEY)]
+      for index, byte in enumerate(data)
+    )
+    return decoded.decode("utf-8").strip()
+  except Exception:
+    return ""
+
+
+def _exception_repo_url() -> str:
+  remote = _read_param("GitRemote")
+  if remote.startswith("git@github.com:"):
+    remote = "https://github.com/" + remote[len("git@github.com:"):]
+  if remote.startswith(("https://github.com/", "http://github.com/")):
+    return remote.removesuffix(".git").replace("http://github.com/", "https://github.com/", 1)
+  github_user = _read_param("GithubUsername")
+  return f"https://github.com/{github_user}/openpilot" if github_user else "https://github.com/ajouatom/openpilot"
+
+
+def _local_ip() -> str:
+  sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  try:
+    sock.connect(("8.8.8.8", 80))
+    value = sock.getsockname()[0]
+    return value if ipaddress.ip_address(value).is_private else ""
+  except Exception:
+    return ""
+  finally:
+    sock.close()
+
+
+def _tmux_upload_payload(reason: str) -> dict[str, str]:
+  return {
+    "tmux_why": reason,
+    "car_name": _read_param("CarName"),
+    "git_branch": _read_param("GitBranch"),
+    "github_id": _read_param("GithubUsername"),
+    "git_remote": _read_param("GitRemote"),
+    "git_commit": _read_param("GitCommit"),
+    "git_commit_date": _read_param("GitCommitDate"),
+    "dongle_id": _read_param("DongleId"),
+    "device_serial": _read_param("HardwareSerial"),
+    "local_ip": _local_ip(),
+  }
+
+
+def _web_upload_base_url() -> str:
+  configured = os.environ.get("CARROT_WEB_UPLOAD_URL", "").strip()
+  if not configured:
+    state_dir = os.path.join(os.environ.get("CARROT_DATA_DIR", "/data/carrot"), "state")
+    try:
+      with open(os.path.join(state_dir, "web_settings.json"), encoding="utf-8") as file:
+        settings = json.load(file)
+      configured = str(settings.get("web_upload_url") or settings.get("toss_upload_url") or "").strip()
+    except Exception:
+      configured = ""
+  url = (configured or DEFAULT_WEB_UPLOAD_URL).rstrip("/")
+  if not url.startswith(("http://", "https://")):
+    raise ValueError("web upload URL must start with http:// or https://")
+  return url
+
+
+def _carrot_logs_url() -> str:
+  url = (os.environ.get("CARROT_TMUX_WEB_UPLOAD_URL", "").strip() or DEFAULT_TMUX_WEB_UPLOAD_URL).rstrip("/")
+  if not url.startswith(("http://", "https://")):
+    raise ValueError("Carrot Logs URL must start with http:// or https://")
+  return url
+
+
+def _exception_discord_content(reason: str, web_result: dict | None = None) -> str:
+  branch = _read_param("GitBranch", "unknown")
+  commit = _read_param("GitCommit", "unknown")
+  commit_date = _read_param("GitCommitDate", "unknown")
+  repo_url = _exception_repo_url()
+  commit_text = f"[{commit[:8]}]({repo_url}/commit/{commit})" if commit and commit != "unknown" else "unknown"
+  web_result = web_result or {}
+  web_status = web_result.get("status")
+  web_text = "ok" if web_result.get("ok") else "failed"
+  if web_status is not None:
+    web_text += f" ({web_status})"
+  return "\n".join((
+    "# Carrot Exception",
+    "### Upload",
+    f"- Time: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+    f"- Reason: {reason}",
+    f"- Web: {web_text}",
+    "### Device",
+    f"- Car name: {_read_param('CarName', 'none')}",
+    f"- DongleId: {_read_param('DongleId', 'unknown')}",
+    f"- Serial: {_read_param('HardwareSerial', 'unknown')}",
+    f"- GitHub: {repo_url}",
+    f"- Branch: {branch}",
+    f"- Commit: {commit_text} ({commit_date})",
+  ))[:1900]
+
+
+def _multipart_form(fields: dict[str, str], files: list[tuple[str, str, str, bytes]]) -> tuple[bytes, str]:
+  boundary = f"----CarrotRecovery{secrets.token_hex(16)}"
+  body = bytearray()
+
+  def add(value: bytes) -> None:
+    body.extend(value)
+    body.extend(b"\r\n")
+
+  for name, value in fields.items():
+    add(f"--{boundary}".encode())
+    add(f'Content-Disposition: form-data; name="{name}"'.encode())
+    add(b"")
+    add(str(value).encode("utf-8"))
+  for name, filename, content_type, file_data in files:
+    add(f"--{boundary}".encode())
+    add(f'Content-Disposition: form-data; name="{name}"; filename="{filename}"'.encode())
+    add(f"Content-Type: {content_type}".encode())
+    add(b"")
+    add(file_data)
+  body.extend(f"--{boundary}--\r\n".encode())
+  return bytes(body), boundary
+
+
+def _discord_multipart(payload: dict, filename: str, file_data: bytes) -> tuple[bytes, str]:
+  return _multipart_form(
+    {"payload_json": json.dumps(payload, ensure_ascii=False)},
+    [("files[0]", filename, "text/plain", file_data)],
+  )
+
+
+def _request_result(request: urllib.request.Request, timeout: int) -> dict:
+  try:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+      status = int(response.status)
+      response_data = response.read(1024 * 1024)
+      try:
+        response_body = json.loads(response_data.decode("utf-8")) if response_data else None
+      except Exception:
+        response_body = None
+      return {"configured": True, "ok": 200 <= status < 300, "status": status, "body": response_body}
+  except urllib.error.HTTPError as exc:
+    try:
+      detail = exc.read().decode("utf-8", errors="replace")[:500]
+    except Exception:
+      detail = ""
+    return {"configured": True, "ok": False, "status": exc.code, "error": detail or str(exc)}
+  except Exception as exc:
+    return {"configured": True, "ok": False, "error": str(exc)}
+
+
+def _post_json(url: str, payload: dict, timeout: int = 12) -> dict:
+  request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "User-Agent": "CarrotRecovery/2.0",
+  }, method="POST")
+  return _request_result(request, timeout)
+
+
+def _post_tmux_upload(url: str, headers: dict[str, str], payload: dict[str, str], raw: bytes) -> dict:
+  body, boundary = _multipart_form(payload, [("files[0]", "tmux.log", "text/plain", raw)])
+  request = urllib.request.Request(url, data=body, headers={
+    **headers,
+    "Content-Type": f"multipart/form-data; boundary={boundary}",
+    "Accept": "application/json",
+    "User-Agent": "CarrotRecovery/2.0",
+  }, method="POST")
+  return _request_result(request, 30)
+
+
+def _send_tmux_dsm(payload: dict[str, str], raw: bytes) -> dict:
+  try:
+    base_url = _web_upload_base_url()
+    token = os.environ.get("CARROT_WEB_UPLOAD_TOKEN", "").strip()
+    if not token:
+      session_payload = {key: str(value or "")[:160] for key, value in payload.items()}
+      session_payload["deviceId"] = payload.get("dongle_id") or payload.get("device_serial") or "unknown"
+      session_payload["purpose"] = "tmux"
+      session = _post_json(f"{base_url}/api/v1/session", session_payload)
+      body = session.get("body") if isinstance(session.get("body"), dict) else {}
+      token = str(body.get("token") or "").strip()
+      if not session.get("ok") or not body.get("ok") or not token:
+        return {**session, "ok": False, "error": session.get("error") or "upload server did not issue a session"}
+    return _post_tmux_upload(
+      f"{base_url}/api/v1/tmux/upload",
+      {"Authorization": f"Bearer {token}"},
+      payload,
+      raw,
+    )
+  except Exception as exc:
+    return {"configured": True, "ok": False, "error": str(exc)}
+
+
+def _send_tmux_carrot_logs(payload: dict[str, str], raw: bytes) -> dict:
+  try:
+    return _post_tmux_upload(_carrot_logs_url(), {}, payload, raw)
+  except Exception as exc:
+    return {"configured": True, "ok": False, "error": str(exc)}
+
+
+def _send_tmux_discord(reason: str, raw: bytes | None = None, web_result: dict | None = None) -> dict:
+  url = _exception_webhook_url()
+  if not url or not url.startswith(("http://", "https://")):
+    return {"configured": bool(url), "ok": False, "error": "Discord webhook is not configured"}
+  if raw is None:
+    try:
+      raw = Path(TMUX_LOG_PATH).read_bytes()
+    except Exception as exc:
+      return {"configured": True, "ok": False, "error": f"tmux log read failed: {exc}"}
+
+  branch = _read_param("GitBranch", "unknown").replace("/", "__").replace("\\", "__")
+  stamp = time.strftime("%Y%m%d-%H%M%S")
+  filename = f"{reason}-{stamp}-{branch}.txt"
+  if len(raw) > DISCORD_TMUX_FILE_MAX_BYTES:
+    marker = b"\n\n===== DISCORD TMUX TRUNCATED =====\n\n"
+    keep_each = (DISCORD_TMUX_FILE_MAX_BYTES - len(marker)) // 2
+    raw = raw[:keep_each] + marker + raw[-keep_each:]
+    filename = f"{reason}-{stamp}-{branch}-truncated.txt"
+
+  payload = {
+    "username": "Carrot Exception",
+    "content": _exception_discord_content(reason, web_result),
+    "allowed_mentions": {"parse": []},
+    "flags": 4,
+  }
+  body, boundary = _discord_multipart(payload, filename, raw)
+  request = urllib.request.Request(url, data=body, headers={
+    "Content-Type": f"multipart/form-data; boundary={boundary}",
+    "Accept": "application/json",
+    "User-Agent": "CarrotRecovery/2.0",
+  }, method="POST")
+  result = _request_result(request, 12)
+  result.pop("body", None)
+  return result
+
+
+def _send_tmux_destinations(reason: str) -> dict:
+  try:
+    raw = Path(TMUX_LOG_PATH).read_bytes()
+  except Exception as exc:
+    return {"ok": False, "error": f"tmux log read failed: {exc}"}
+  payload = _tmux_upload_payload(reason)
+  dsm = _send_tmux_dsm(payload, raw)
+  carrot_logs = _send_tmux_carrot_logs(payload, raw)
+  discord = _send_tmux_discord(reason, raw, dsm)
+  destinations = {"dsm": dsm, "carrot_logs": carrot_logs, "discord": discord}
+  ok = any(result.get("ok") for result in destinations.values())
+  failed = [name for name, result in destinations.items() if not result.get("ok")]
+  return {
+    "ok": ok,
+    "partial": ok and bool(failed),
+    "destinations": destinations,
+    "error": "" if ok else "; ".join(
+      f"{name}: {result.get('error') or result.get('status') or 'failed'}"
+      for name, result in destinations.items()
+    ),
+  }
 
 
 def _support_metadata() -> dict:
@@ -1603,6 +2003,17 @@ HTML_PAGE = """<!doctype html>
 .rc-menu button:hover { background: var(--md-surface-cont-h); }
 .rc-menu button.danger { color: var(--md-danger); }
 .rc-menu button.danger:hover { background: var(--md-danger-cont); }
+.rc-cwp {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; color: var(--md-on-surface); border-radius: var(--control-radius);
+  font-weight: 700; cursor: pointer;
+}
+.rc-cwp:hover { background: var(--md-surface-cont-h); }
+.rc-cwp:has(input:disabled) { opacity: .55; cursor: default; }
+.rc-cwp:has(input:disabled):hover { background: transparent; }
+.rc-cwp__control { display: inline-flex; align-items: center; gap: 8px; }
+.rc-cwp__state { color: var(--md-on-surface-variant); font-size: 10px; font-weight: 600; }
+.rc-cwp input { width: 18px; height: 18px; accent-color: var(--md-primary); }
 .rc-brand { color: var(--md-primary); font-weight: 800; }
 </style>
 </head>
@@ -1628,6 +2039,10 @@ HTML_PAGE = """<!doctype html>
             <div class="rc-menu-wrap">
               <button id="rcToolsBtn" class="smallBtn" type="button" aria-haspopup="true" aria-expanded="false">Tools &#x25BE;</button>
               <div id="rcToolsMenu" class="rc-menu" hidden>
+                <label class="rc-cwp" for="rcCwpPush">
+                  <span>CWP Push</span>
+                  <span class="rc-cwp__control"><span id="rcCwpState" class="rc-cwp__state" hidden></span><input id="rcCwpPush" type="checkbox" disabled></span>
+                </label>
                 <button data-tool="send_tmux_log">download tmux log</button>
                 <button data-tool="server_tmux_log">send tmux log</button>
                 <button data-tool="rebuild_all" class="danger">rebuild</button>
@@ -1802,6 +2217,34 @@ RECOVERY_JS = """\"use strict\";
     });
     return r.json();
   }
+  var cwpPush = document.getElementById(\"rcCwpPush\");
+  var cwpState = document.getElementById(\"rcCwpState\");
+  function showCwp(data) {
+    if (!cwpPush || !cwpState) return;
+    cwpPush.checked = !!(data && data.enabled);
+    cwpPush.disabled = !(data && data.ok && data.registered);
+    cwpState.hidden = !!(data && data.registered);
+    cwpState.textContent = data && data.state === \"unregistered\" ? \"Not registered\" : \"Unavailable\";
+  }
+  async function refreshCwp() {
+    try {
+      showCwp(await CarrotRecoveryApi.getJson(\"/api/recovery/cwp\"));
+    } catch (err) {
+      showCwp((err && err.payload) || {});
+    }
+  }
+  if (cwpPush) cwpPush.addEventListener(\"change\", async function (event) {
+    event.stopPropagation();
+    var enabled = cwpPush.checked;
+    cwpPush.disabled = true;
+    try {
+      showCwp(await CarrotRecoveryApi.postJson(\"/api/recovery/cwp\", { enabled: enabled }));
+      toast(\"CWP Push \" + (enabled ? \"on\" : \"off\"), \"success\");
+    } catch (err) {
+      toast((err && err.message) || \"CWP failed\", \"error\");
+      await refreshCwp();
+    }
+  });
   async function runInTerminal(command) {
     await fetch(\"/api/terminal/input\", {
       method: \"POST\", headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ data: command }),
@@ -1892,7 +2335,7 @@ RECOVERY_JS = """\"use strict\";
     }
     if (action === \"server_tmux_log\") {
       var r2 = await callAction(\"server_tmux_log\");
-      if (r2 && r2.ok) toast(\"tmux log send triggered\", \"success\");
+      if (r2 && r2.ok) toast(r2.partial ? \"tmux log sent to server (partial)\" : \"tmux log sent to server\", \"success\");
       else toast((r2 && r2.error) || \"failed\", \"error\");
       return;
     }
@@ -1904,6 +2347,7 @@ RECOVERY_JS = """\"use strict\";
   document.querySelectorAll(\"[data-tool]\").forEach(function (btn) {
     btn.addEventListener(\"click\", function (e) { e.stopPropagation(); onTool(btn.dataset.tool); });
   });
+  refreshCwp();
 
   // Boot the reused generated terminal runtime.
   function boot() {
@@ -1987,6 +2431,11 @@ class RecoveryHandler(BaseHTTPRequestHandler):
       self._send_json(200, SUPPORT.snapshot())
       return
 
+    if path == "/api/recovery/cwp":
+      status = _cwp_status()
+      self._send_json(200 if status.get("ok") else 503, status)
+      return
+
     if path in ("/", "/index.html"):
       self._send_bytes(200, "text/html; charset=utf-8", HTML_PAGE.encode("utf-8"))
       return
@@ -2039,6 +2488,15 @@ class RecoveryHandler(BaseHTTPRequestHandler):
       self._send_json(200, handler(action, payload))
       return
 
+    if path == "/api/recovery/cwp":
+      enabled = payload.get("enabled")
+      if not isinstance(enabled, bool):
+        self._send_json(400, {"ok": False, "error": "enabled must be boolean"})
+        return
+      result = _cwp_set_enabled(enabled)
+      self._send_json(200 if result.get("ok") else 409, result)
+      return
+
     if path == "/api/terminal/input":
       # Used by the git panel to run a recovered command in the shared PTY.
       try:
@@ -2080,6 +2538,7 @@ def main() -> None:
   httpd = ThreadingHTTPServer((args.host, args.port), RecoveryHandler)
   httpd.daemon_threads = True
   print(f"[recovery] serving http://{args.host}:{args.port} cwd={REPO_ROOT} web={WEB_DIR}")
+  threading.Thread(target=_cwp_boot_worker, args=(args.port,), daemon=True).start()
   try:
     httpd.serve_forever()
   except KeyboardInterrupt:
