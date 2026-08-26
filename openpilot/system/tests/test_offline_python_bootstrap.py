@@ -156,16 +156,27 @@ def test_logger_xattrs_use_python_standard_library() -> None:
   assert "os.setxattr(path, attr_name, attr_value)" in source
 
 
-def test_known_egpu_prefetch_does_not_force_build_without_live_device() -> None:
+def test_known_egpu_prefetch_does_not_block_startup_or_force_build_without_live_device() -> None:
   launcher = (Path(BASEDIR) / "launch_chffrplus.sh").read_text(encoding="utf-8")
   prepare = launcher[launcher.index("function prepare_big_model_if_needed {"):]
   prepare = prepare[:prepare.index("\n}")]
+  update = launcher[launcher.index("function start_big_model_update {"):]
+  update = update[:update.index("\n}")]
 
-  ensure_model = prepare.index("--ensure-if-egpu")
   egpu_check = prepare.index("usbgpu_present")
   active_sha = prepare.index("--active-sha")
-  assert ensure_model < egpu_check < active_sha
+  assert "--ensure-if-egpu" not in prepare
+  assert egpu_check < active_sha
   assert "return" in prepare[egpu_check:active_sha]
+  assert "--ensure-if-egpu" in update
+  assert "/tmp/big_model_update.log" in update
+  assert ") >> \"$log_path\" 2>&1 &" in update
+
+  launch = launcher[launcher.index("function launch {"):]
+  build = launch.index("./build.py")
+  update_start = launch.index("start_big_model_update", build)
+  manager = launch.index("./manager.py", update_start)
+  assert build < update_start < manager
 
 
 def test_usbgpu_history_is_persistent_and_recorded() -> None:
