@@ -26,6 +26,7 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
   """Build the optional big model without making the normal build depend on it."""
   from openpilot.selfdrive.modeld.big_model import active_model_path
   from openpilot.selfdrive.modeld.helpers import modeld_pkl_path, usbgpu_pcie_not_ready, usbgpu_present
+  from openpilot.system.hardware.usbgpu import check_usbgpu
 
   if not usbgpu_present() or active_model_path() is None:
     return False
@@ -34,6 +35,13 @@ def build_usbgpu_model(spinner: Spinner) -> bool:
   manifest_path = Path(get_manifest_path(pkl_path))
   if manifest_path.is_file():
     return True
+
+  readiness_error = check_usbgpu(timeout=10.0)
+  if readiness_error is not None:
+    message = f"USB eGPU not ready for optional model compilation: {readiness_error}"
+    print(message)
+    spinner.update(message)
+    return False
 
   env = os.environ.copy()
   env['BUILD_USB_GPU_MODEL'] = '1'

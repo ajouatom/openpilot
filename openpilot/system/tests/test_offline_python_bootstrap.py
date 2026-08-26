@@ -168,6 +168,8 @@ def test_known_egpu_prefetch_does_not_block_startup_or_force_build_without_live_
   assert "--ensure-if-egpu" not in prepare
   assert egpu_check < active_sha
   assert "return" in prepare[egpu_check:active_sha]
+  assert "check_usbgpu(timeout=10.0)" in prepare
+  assert 'BIG_MODEL_SHA=""' in prepare[prepare.index("check_usbgpu(timeout=10.0)"):]
   assert "--ensure-if-egpu" in update
   assert "/tmp/big_model_update.log" in update
   assert ") >> \"$log_path\" 2>&1 &" in update
@@ -208,6 +210,8 @@ def test_optional_egpu_scons_target_is_not_gated_by_second_usb_scan() -> None:
 def test_optional_egpu_build_retries_transient_pcie_link_startup() -> None:
   source = (Path(BASEDIR) / "openpilot/system/manager/build.py").read_text(encoding="utf-8")
 
+  assert "check_usbgpu(timeout=10.0)" in source
+  assert "USB eGPU not ready for optional model compilation" in source
   assert "USBGPU_BUILD_ATTEMPTS = 6" in source
   assert "usbgpu_pcie_not_ready(error_text)" in source
   assert "USB eGPU PCIe link not ready; retrying" in source

@@ -238,6 +238,7 @@ function invalidate_modeld_build_if_needed {
 function prepare_big_model_if_needed {
   BIG_MODEL_SHA=""
   BIG_MODEL_PKL_PATH=""
+  local readiness
 
   # Only local state is consulted on the startup path. Remote model delivery
   # runs in the background below and must never delay manager startup.
@@ -248,6 +249,19 @@ function prepare_big_model_if_needed {
   BIG_MODEL_SHA="$(python3 -m openpilot.selfdrive.modeld.big_model --active-sha 2>/dev/null || true)"
   if [ -n "$BIG_MODEL_SHA" ]; then
     BIG_MODEL_PKL_PATH="$(python3 -c 'from openpilot.selfdrive.modeld.helpers import modeld_pkl_path; print(modeld_pkl_path(True))' 2>/dev/null || true)"
+  fi
+
+  # The USB bridge remains at 5 Gbps while vehicle-switched GPU power is off.
+  # Only probe the actual GPU when the current model still needs a PKL; a
+  # bridge-only presence must not force an optional eGPU SCons build.
+  if [ -n "$BIG_MODEL_PKL_PATH" ] && [ ! -f "${BIG_MODEL_PKL_PATH}.chunkmanifest" ]; then
+    echo "Checking USB eGPU readiness before optional PKL compilation."
+    readiness="$(python3 -c 'from openpilot.system.hardware.usbgpu import check_usbgpu; print(check_usbgpu(timeout=10.0) or "")' 2>&1 || true)"
+    if [ -n "$readiness" ]; then
+      echo "USB eGPU not ready for PKL compilation: $readiness"
+      BIG_MODEL_SHA=""
+      BIG_MODEL_PKL_PATH=""
+    fi
   fi
 }
 
