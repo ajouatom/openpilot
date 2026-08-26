@@ -109,6 +109,13 @@ LIVE_CAN_SERVICES = ("can", "sendcan")
 NAVI_TRAFFIC_LIGHT_HOLD_SECONDS = 10.0
 
 
+def live_route_parser() -> RouteLogParser:
+    # radarState is authoritative in production. Recomputing CUT-IN from
+    # liveTracks here duplicates radard's per-track motion pipeline and makes
+    # the external HUD cost grow sharply with dense radar scenes.
+    return RouteLogParser(recompute_cutins=False)
+
+
 class OpenpilotLiveSource:
     def __init__(self, include_can: bool = False, timeout_ms: int = 0) -> None:
         try:
@@ -128,7 +135,7 @@ class OpenpilotLiveSource:
             self.log = None
         self.services = list(LIVE_SERVICES_BASE + (LIVE_CAN_SERVICES if include_can else ()))
         self.sm = messaging.SubMaster(self.services)
-        self.parser = RouteLogParser()
+        self.parser = live_route_parser()
         self.parser.trip_report_tracker.set_onroad(False)
         self.timeout_ms = max(0, int(timeout_ms))
         self.last_state: ClusterUiState | None = None
