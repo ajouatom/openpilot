@@ -729,7 +729,7 @@ class CarController(CarControllerBase):
 
     if CC.enabled:
       if not CS.out.cruiseState.enabled:
-        if (hud_control.leadVisible or v_ego_kph > 10.0) and self.activateCruise == 0:
+        if (hud_control.leadVisible or v_ego_kph > 3.0) and self.activateCruise == 0:
           send_button = Buttons.RES_ACCEL
           self.activateCruise = 1
           activate_cruise = True
@@ -740,7 +740,7 @@ class CarController(CarControllerBase):
       elif target > current and current < 160 and self.speed_from_pcm != 1:
         send_button = Buttons.RES_ACCEL
     elif CS.out.activateCruise: #CC.cruiseControl.activate:
-      if (hud_control.leadVisible or v_ego_kph > 10.0) and self.activateCruise == 0:
+      if (hud_control.leadVisible or v_ego_kph > 3.0) and self.activateCruise == 0:
         self.activateCruise = 1
         send_button = Buttons.RES_ACCEL
         activate_cruise = True
@@ -827,6 +827,13 @@ class HyundaiJerk:
       self.accel_request_history.clear()
       self.jerk_error_filter.set_all(0.0)
     else:
+      if actuators.longControlState == LongCtrlState.pid:
+        ju_floor = float(np.interp(CS.out.vEgo, [2.0, 5.5, 12.5], [1.1, 0.8, 0.5]))
+        jl_cap = float(np.interp(actuators.aTarget, [-3.0, -2.0, -1.0], [jerk_max_l, 3.2, 2.4]))
+      else:
+        ju_floor = self.jerk_u_min
+        jl_cap = jerk_max_l
+
       if canfd:
         tracking_error = 0.0
         tracking_error_active = actuators.longControlState == LongCtrlState.pid and not CS.out.brakePressed and not CS.out.gasPressed
@@ -837,13 +844,7 @@ class HyundaiJerk:
             delayed_accel = self.accel_request_history[0]
             request_is_sustained = delayed_accel < -1.0 and accel < -1.0 and abs(accel - delayed_accel) < 0.5
             if request_is_sustained:
-              # Only assist when measured deceleration is weaker than both the
-              # current request and the delay-aligned request. The current-request
-              # comparison makes the assist release promptly while aReq unwinds.
               tracking_error = min(CS.out.aEgo - delayed_accel, CS.out.aEgo - accel)
-          # Require sustained measured under-deceleration before slowly enabling
-          # feedforward. Release it immediately once the plan unwinds or the vehicle
-          # meets/exceeds either request, avoiding a filtered braking tail.
           if request_is_sustained and self.jerk <= CANFD_JERK_RELEASE_THRESHOLD and tracking_error > 0.0:
             filtered_tracking_error = self.jerk_error_filter.process(tracking_error)
           else:
@@ -852,11 +853,13 @@ class HyundaiJerk:
           self.accel_request_history.clear()
           filtered_tracking_error = self.jerk_error_filter.set_all(0.0)
 
-        self.jerk_u, self.jerk_l = calculate_canfd_jerk_limits(accel, self.jerk, filtered_tracking_error)
+        jerk_u, jerk_l = calculate_canfd_jerk_limits(accel, self.jerk, filtered_tracking_error)
+        self.jerk_u = min(max(ju_floor, jerk_u), jerk_max_u)
+        self.jerk_l = min(jerk_l, jl_cap)
         self.cb_upper = self.cb_lower = 0.0
       else:
-        self.jerk_u = min(max(self.jerk_u_min, self.jerk * 2.0), jerk_max_u)
-        self.jerk_l = min(max(1.0, -self.jerk * 4.0), jerk_max_l)
+        self.jerk_u = min(max(ju_floor, self.jerk * 2.0), jerk_max_u)
+        self.jerk_l = min(max(1.0, -self.jerk * 4.0), jl_cap)
         self.cb_upper = np.clip(0.9 + accel * 0.2, 0, 1.2)
         self.cb_lower = np.clip(0.8 + accel * 0.2, 0, 1.2)
 
