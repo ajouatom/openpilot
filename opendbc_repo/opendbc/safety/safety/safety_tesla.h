@@ -269,7 +269,6 @@ static safety_config tesla_init(uint16_t param) {
     {0x488, 0, 4},  // DAS_steeringControl
     {0x2b9, 0, 8},  // DAS_control
     {0x27D, 0, 3},  // APS_eacMonitor
-    {0x3E9, 1, 8},  // DAS_bodyControls (blinker on vehicle bus)
   };
 
   const uint16_t TESLA_FLAG_FSD_14 = 2;
