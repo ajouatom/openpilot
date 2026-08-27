@@ -8,6 +8,14 @@ from opendbc.car.tesla.values import DBC, CANBUS, GEAR_MAP, STEER_THRESHOLD, Tes
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
+TESLA_GAS_PRESS_ON = 0.8
+TESLA_GAS_PRESS_OFF = 0.4
+
+
+def update_tesla_gas_pressed(previous: bool, pedal_position: float) -> bool:
+  threshold = TESLA_GAS_PRESS_OFF if previous else TESLA_GAS_PRESS_ON
+  return float(pedal_position) > threshold
+
 
 class CarState(CarStateBase):
   def __init__(self, CP):
@@ -23,9 +31,11 @@ class CarState(CarStateBase):
     self.suspected_fsd14_clear_frames = 0
 
     self.hands_on_level = 0
+    self.gas_pressed = False
+    # Conservative default: no steering until the first update() proves otherwise
+    self.steering_disengage = True
     self.acc_cancel_last = 0
     self.das_control = None
-    self.das_body_controls_dat = b""
     self.das_accCancel = False
     self.cruise_override = False
     self.coop_steering = True
@@ -77,10 +87,12 @@ class CarState(CarStateBase):
 
     ret.vEgoCluster = ui_speed * (CV.KPH_TO_MS if ui_is_kph else CV.MPH_TO_MS)
 
-    # Gas pedal
+    # Gas pedal. Hysteresis (0.8% on / 0.4% off) so DI_accelPedalPos noise
+    # above 0 does not spuriously trigger gasPressed.
     pedal_status = cp_party.vl["DI_systemStatus"]["DI_accelPedalPos"]
     ret.gas = pedal_status / 100.0
-    ret.gasPressed = pedal_status > 0
+    self.gas_pressed = update_tesla_gas_pressed(self.gas_pressed, pedal_status)
+    ret.gasPressed = self.gas_pressed
 
     # Motor speed (EV: motor RPM from inverter)
     ret.engineRpm = cp_party.vl["DI_torque"]["DI_axleSpeed"]
@@ -231,10 +243,6 @@ class CarState(CarStateBase):
     # Messages needed by carcontroller
     self.das_control = copy.copy(cp_ap_party.vl["DAS_control"])
 
-    # Raw stock DAS_bodyControls bytes (bus 2), used to ride the blinker on the vehicle bus.
-    if Bus.cam in can_parsers:
-      self.das_body_controls_dat = bytes(can_parsers[Bus.cam].dat.get(0x3E9, b""))
-
     # 3-finger infotainment press detection (vehicle bus)
     if Bus.adas in can_parsers:
       cp_adas = can_parsers[Bus.adas]
@@ -254,6 +262,4 @@ class CarState(CarStateBase):
     }
     if CP.flags & TeslaFlags.HAS_VEHICLE_BUS:
       parsers[Bus.adas] = CANParser("tesla_model3_vehicle", [("UI_status2", 2)], CANBUS.vehicle)
-    if CP.flags & TeslaFlags.HAS_DAS_BODY_CONTROLS:
-      parsers[Bus.cam] = CANParser("tesla_model3_vehicle", [("DAS_bodyControls", 2)], CANBUS.autopilot_party)
     return parsers
