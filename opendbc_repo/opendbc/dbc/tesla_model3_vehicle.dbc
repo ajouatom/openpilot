@@ -193,6 +193,10 @@ BO_ 568 STW_ACTN_RQ: 8 STW
  SG_ MC_STW_ACTN_RQ : 52|4@1+ (1,0) [0|15] "" NEO
  SG_ CRC_STW_ACTN_RQ : 56|8@1+ (1,0) [0|0] "" NEO
 
+BO_ 605 DAS_road: 6 XXX
+ SG_ DAS_stopLineDist : 16|8@1+ (0.5,0) [0|127.5] "m" XXX
+ SG_ DAS_trafficLightColor : 26|3@0+ (1,0) [0|7] "" XXX
+
 BO_ 1001 DAS_bodyControls: 8 VEH
  SG_ DAS_headlightRequest : 0|2@1+ (1,0) [0|3] "" aps
  SG_ DAS_hazardLightRequest : 2|2@1+ (1,0) [0|3] "" aps
@@ -357,6 +361,7 @@ VAL_ 259 VCRIGHT_frontLatchStatus 8 "LATCH_FAULT" 2 "LATCH_CLOSED" 1 "LATCH_OPEN
 VAL_ 585 SCCM_washWipeButtonStatus 3 "SNA" 0 "NOT_PRESSED" 2 "2ND_DETENT" 1 "1ST_DETENT";
 VAL_ 585 SCCM_turnIndicatorStalkStatus 3 "DOWN_1" 5 "SNA" 0 "IDLE" 1 "UP_1" 4 "DOWN_2" 2 "UP_2";
 VAL_ 585 SCCM_highBeamStalkStatus 3 "SNA" 0 "IDLE" 1 "PULL" 2 "PUSH";
+VAL_ 605 DAS_trafficLightColor 0 "NONE" 1 "RED" 2 "GREEN" 3 "YELLOW";
 VAL_ 280 DI_epbRequest 0 "DI_EPBREQUEST_NO_REQUEST" 1 "DI_EPBREQUEST_PARK" 2 "DI_EPBREQUEST_UNPARK";
 VAL_ 280 DI_keepAliveRequest 1 "KEEP_ALIVE" 0 "NO_REQUEST";
 VAL_ 280 DI_accelPedalPos 255 "SNA";
