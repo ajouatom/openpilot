@@ -32,9 +32,12 @@ def test_v2_release_isolated_from_v1():
 
 def test_read_diagnostic_files_preserves_binary_data(tmp_path: Path):
   diagnostic = tmp_path / "console-ramoops"
-  diagnostic.write_bytes(b"usbpd state\xff")
+  diagnostic.write_bytes(b"usbpd\x00 state\xff")
 
   output = trial.read_diagnostic_files([diagnostic])
 
   assert str(diagnostic) in output
-  assert "usbpd state" in output
+  assert "usbpd" in output
+  assert "state" in output
+  assert "\\x00" in output
+  assert "\x00" not in output

@@ -228,6 +228,10 @@ def read_diagnostic_files(paths: list[Path]) -> str:
   for path in paths:
     try:
       value = path.read_bytes().decode("utf-8", errors="replace").rstrip()
+      value = "".join(
+        char if char in "\n\r\t" or ord(char) >= 32 else f"\\x{ord(char):02x}"
+        for char in value
+      )
     except OSError as exc:
       value = f"<error: {exc}>"
     output.append(f"--- {path} ---\n{value}")
@@ -267,8 +271,8 @@ def collect_diagnostics() -> None:
     ("pci devices", best_effort_command("lspci", "-nn")),
     ("usb sysfs", usb_sysfs_snapshot()),
     ("power supply", read_diagnostic_files(sorted(Path("/sys/class/power_supply/usb").glob("*")))),
-    ("pstore", read_diagnostic_files(sorted(PSTORE_PATH.glob("*")))),
     ("dmesg", best_effort_command("dmesg", "-T")),
+    ("pstore", read_diagnostic_files(sorted(PSTORE_PATH.glob("*")))),
   ]
   contents = "\n\n".join(f"===== {name} =====\n{value}" for name, value in sections)
   destination.write_text(contents + "\n", encoding="utf-8")
