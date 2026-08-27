@@ -226,6 +226,7 @@ class CarrotServ:
     self.autoNaviSpeedCtrlMode = self.params.get_int("AutoNaviSpeedCtrlMode")
     self.vehicleNaviCanControl = self.params.get_bool("VehicleNaviCanControl")
     self.vehicleNaviCurveControl = self.params.get_bool("VehicleNaviCurveControl")
+    self.vehicleNaviCurveMppControl = self.params.get_bool("VehicleNaviCurveMppControl")
     self.vehicleNaviCurveSpeedFactor = min(2.0, max(0.5, self.params.get_int("VehicleNaviCurveSpeedFactor") * 0.01))
     self.vehicleNaviSchoolZoneControl = self.params.get_bool("VehicleNaviSchoolZoneControl")
     self.vehicleSpeedCameraControlMode = min(3, max(0, self.params.get_int("VehicleSpeedCameraControlMode")))
@@ -373,7 +374,9 @@ class CarrotServ:
     reference_speed = float(getattr(CS, "vehicleNaviCurveSpeed", 0.0))
     curvature = float(getattr(CS, "vehicleNaviCurveCurvature", 0.0))
     route_active = bool(getattr(CS, "vehicleNaviCurveRouteActive", False))
-    if not self.vehicleNaviCurveControl or not route_active or reference_speed <= 0 or abs(curvature) < 1e-7:
+    route_state = int(getattr(CS, "vehicleNaviCurveRouteState", 1 if route_active else 3))
+    route_allowed = route_active or (self.vehicleNaviCurveMppControl and route_state == 0)
+    if not self.vehicleNaviCurveControl or not route_allowed or reference_speed <= 0 or abs(curvature) < 1e-7:
       return 250.0
 
     target_speed = max(self.autoCurveSpeedLowerLimit, reference_speed * self.vehicleNaviCurveSpeedFactor)
