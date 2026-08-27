@@ -28,3 +28,13 @@ def test_v2_release_isolated_from_v1():
   assert trial.RELEASE_TAG == "usbpd-test-v2-c4"
   assert trial.RELEASE_TAG in trial.BOOT_URL
   assert trial.DATA_DIR == Path("/data/usbpd-kernel-v2")
+
+
+def test_read_diagnostic_files_preserves_binary_data(tmp_path: Path):
+  diagnostic = tmp_path / "console-ramoops"
+  diagnostic.write_bytes(b"usbpd state\xff")
+
+  output = trial.read_diagnostic_files([diagnostic])
+
+  assert str(diagnostic) in output
+  assert "usbpd state" in output

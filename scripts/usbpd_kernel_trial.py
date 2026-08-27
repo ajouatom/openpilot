@@ -29,6 +29,7 @@ BOOT_IMAGE_PATH = DATA_DIR / "boot.img"
 CHECKSUM_PATH = DATA_DIR / "boot.img.sha256"
 PARAMS_PATH = Path("/data/params/d")
 DEVICE_MODEL_PATH = Path("/sys/firmware/devicetree/base/model")
+PSTORE_PATH = Path("/sys/fs/pstore")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "openpilot/system/hardware/tici/agnos.json"
 
@@ -211,6 +212,68 @@ def archive_state(state: dict, result: str) -> None:
   destination = DATA_DIR / f"trial-{result}-{state['finished_at']}.json"
   destination.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
   STATE_PATH.unlink(missing_ok=True)
+
+
+def best_effort_command(*args: str) -> str:
+  try:
+    result = subprocess.run(args, text=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, check=False)
+    return f"$ {' '.join(args)}\nexit={result.returncode}\n{result.stdout.rstrip()}\n"
+  except OSError as exc:
+    return f"$ {' '.join(args)}\nerror={exc}\n"
+
+
+def read_diagnostic_files(paths: list[Path]) -> str:
+  output = []
+  for path in paths:
+    try:
+      value = path.read_bytes().decode("utf-8", errors="replace").rstrip()
+    except OSError as exc:
+      value = f"<error: {exc}>"
+    output.append(f"--- {path} ---\n{value}")
+  return "\n".join(output)
+
+
+def usb_sysfs_snapshot() -> str:
+  fields = ("idVendor", "idProduct", "manufacturer", "product", "speed",
+            "devpath", "busnum", "devnum", "authorized")
+  output = []
+  for device in sorted(Path("/sys/bus/usb/devices").glob("*")):
+    values = []
+    for field in fields:
+      try:
+        values.append(f"{field}={(device / field).read_text().strip()}")
+      except OSError:
+        pass
+    if values:
+      output.append(f"{device.name}: " + " ".join(values))
+  return "\n".join(output)
+
+
+def collect_diagnostics() -> None:
+  require_root()
+  DATA_DIR.mkdir(parents=True, exist_ok=True)
+  destination = DATA_DIR / f"diagnostics-{int(time.time())}.txt"
+
+  sections = [
+    ("trial", STATE_PATH.read_text(encoding="utf-8").rstrip() if STATE_PATH.exists() else "no active trial"),
+    ("release", RELEASE_TAG),
+    ("device", device_type()),
+    ("slot", current_slot()),
+    ("cmdline", Path("/proc/cmdline").read_text(encoding="utf-8").rstrip()),
+    ("uname", best_effort_command("uname", "-a")),
+    ("usb tree", best_effort_command("lsusb", "-t")),
+    ("usb devices", best_effort_command("lsusb")),
+    ("pci devices", best_effort_command("lspci", "-nn")),
+    ("usb sysfs", usb_sysfs_snapshot()),
+    ("power supply", read_diagnostic_files(sorted(Path("/sys/class/power_supply/usb").glob("*")))),
+    ("pstore", read_diagnostic_files(sorted(PSTORE_PATH.glob("*")))),
+    ("dmesg", best_effort_command("dmesg", "-T")),
+  ]
+  contents = "\n\n".join(f"===== {name} =====\n{value}" for name, value in sections)
+  destination.write_text(contents + "\n", encoding="utf-8")
+  os.sync()
+  print(f"진단 자료를 저장했습니다: {destination}")
 
 
 def prepare_inactive_agnos() -> None:
@@ -396,7 +459,7 @@ def status() -> None:
 
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("command", choices=("status", "prepare", "install", "activate", "confirm", "rollback", "should-defer-success"))
+  parser.add_argument("command", choices=("status", "prepare", "install", "activate", "confirm", "rollback", "collect", "should-defer-success"))
   args = parser.parse_args()
 
   try:
@@ -412,6 +475,8 @@ def main() -> int:
       confirm()
     elif args.command == "rollback":
       rollback()
+    elif args.command == "collect":
+      collect_diagnostics()
     else:
       return should_defer_success()
   except (TrialError, OSError, subprocess.CalledProcessError, urllib.error.URLError) as error:
