@@ -29,6 +29,8 @@ VEHICLE_NAVI_PASSED_EVENT_DISTANCE = 30.0
 VEHICLE_NAVI_MAX_EVENTS = 32
 VEHICLE_NAVI_MAX_CURVES = 64
 VEHICLE_NAVI_CAMERA_KINDS = (0, 1, 2)
+VEHICLE_NAVI_CONTROLLED_ACCESS_LINK_CLASSES = (1, 2, 3)  # Freeway, IC, JC
+VEHICLE_NAVI_CONTROLLED_ACCESS_ROAD_CLASSES = (1, 2)  # Freeway, arterial/city freeway
 VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE = 1000.0
 VEHICLE_NAVI_POSITION_TIMEOUT_NS = 1_000_000_000
 VEHICLE_NAVI_CURVE_MAX_DISTANCE = 1500.0
@@ -668,9 +670,10 @@ class CarState(CarStateBase):
       "functional_road_class": (raw >> 24) & 0x7,
     }
 
-  def _vehicle_navi_is_freeway(self):
+  def _vehicle_navi_is_controlled_access_road(self):
     link_class = int(self.hda_info_4a3.get("LinkClass", 0)) if self.hda_info_4a3 is not None else 0
-    return link_class == 1 or self.vehicleNaviRoadClass == 1
+    return (link_class in VEHICLE_NAVI_CONTROLLED_ACCESS_LINK_CLASSES or
+            self.vehicleNaviRoadClass in VEHICLE_NAVI_CONTROLLED_ACCESS_ROAD_CLASSES)
 
   @staticmethod
   def _decode_vehicle_navi_profile(values):
@@ -876,8 +879,8 @@ class CarState(CarStateBase):
           self._clear_vehicle_navi_school_zone()
 
     self._update_vehicle_navi_curve_profile(cp, ret)
-    on_freeway = self._vehicle_navi_is_freeway()
-    if on_freeway:
+    on_controlled_access_road = self._vehicle_navi_is_controlled_access_road()
+    if on_controlled_access_road:
       self._clear_vehicle_navi_school_zone()
     if not (self.vehicleNaviCanControl or self.vehicleNaviSchoolZoneControl):
       return False
@@ -894,13 +897,14 @@ class CarState(CarStateBase):
               self.vehicleNaviSpeedZoneActive = True
               self.vehicleNaviSpeedZoneSpeed = event[1]
             if self.vehicleNaviSchoolZoneControl:
-              if event[1] == 30 and not on_freeway:
+              if event[1] == 30 and not on_controlled_access_road:
                 self.vehicleNaviSchoolZoneActive = True
                 self.vehicleNaviSchoolZoneStartDistance = self.totalDistance
                 self.vehicleNaviSchoolZoneUsesCameraStatus = speed_limit_cam and ret.speedLimit == 30
               else:
                 self._clear_vehicle_navi_school_zone()
-          elif self.vehicleNaviCanControl:
+          elif self.vehicleNaviCanControl and (not on_controlled_access_road or
+                                               (event[0] != "bump" and not (event[0] == "camera" and event[1] == 30))):
             self._add_vehicle_navi_event(*event, profile["offset"])
 
     if position_seen:
@@ -911,7 +915,9 @@ class CarState(CarStateBase):
         self.vehicleNaviSpeedZoneSpeed = ret.speedLimit
 
     self.vehicleNaviEvents = [event for event in self.vehicleNaviEvents
-                              if event["target"] >= self.totalDistance - VEHICLE_NAVI_PASSED_EVENT_DISTANCE]
+                              if event["target"] >= self.totalDistance - VEHICLE_NAVI_PASSED_EVENT_DISTANCE and
+                              (not on_controlled_access_road or
+                               (event["type"] != "bump" and not (event["type"] == "camera" and event["speed"] == 30)))]
     upcoming = [event for event in self.vehicleNaviEvents if event["target"] > self.totalDistance]
 
     bumps = [event for event in upcoming if event["type"] == "bump"]
@@ -928,7 +934,7 @@ class CarState(CarStateBase):
       if camera_status_ended or distance_expired:
         self._clear_vehicle_navi_school_zone()
 
-    if self.vehicleNaviSchoolZoneControl and self.vehicleNaviSchoolZoneActive and not on_freeway:
+    if self.vehicleNaviSchoolZoneControl and self.vehicleNaviSchoolZoneActive and not on_controlled_access_road:
       ret.schoolZoneActive = True
       ret.speedLimit = 30
       if self.vehicleNaviCanControl:
@@ -958,6 +964,8 @@ class CarState(CarStateBase):
   def update_speed_limit(self, ret, speed_limit_cam, distance_time_changed=None):
     if distance_time_changed is None:
       distance_time_changed = self._update_vehicle_speed_camera_params()
+    if self._vehicle_navi_is_controlled_access_road() and ret.speedLimit == 30:
+      speed_limit_cam = False
     self.totalDistance += ret.vEgo * DT_CTRL
     if ret.speedLimit > 0 and speed_limit_cam and self.vehicleNaviCanControl and self.vehicleNaviCameraTarget is not None:
       self.speedLimitDistance = self.vehicleNaviCameraTarget
