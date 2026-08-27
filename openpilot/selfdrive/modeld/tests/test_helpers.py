@@ -41,6 +41,8 @@ def test_usbgpu_pcie_readiness_error_is_recognized_through_wrappers():
 
   assert usbgpu_pcie_not_ready("PCIe link not up (LTSSM=0x00)")
   assert usbgpu_pcie_not_ready("AssertionError: read(0xB450, 1) failed: -1")
+  assert usbgpu_pcie_not_ready("AssertionError: F0 OUT failed: -1")
+  assert not usbgpu_pcie_not_ready("AssertionError: F0 OUT failed: -4")
   assert usbgpu_pcie_not_ready("libusb_open: No such device (it may have been disconnected)")
   assert usbgpu_pcie_not_ready("AMD:0 does not exist (0 devices available)")
   assert not usbgpu_pcie_not_ready(RuntimeError("USB device disconnected"))

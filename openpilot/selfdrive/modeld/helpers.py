@@ -22,6 +22,7 @@ USBGPU_TRANSIENT_INIT_TEXT = (
   "pcie power on failed",
   "usb bridge reset failed",
   "read(0xb450",
+  "f0 out failed: -1",
   "libusb_open: no such device",
   "amd:0 does not exist",
 )
