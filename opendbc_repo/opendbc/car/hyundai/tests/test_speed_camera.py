@@ -449,6 +449,44 @@ def test_vehicle_navi_curve_profile_publishes_reference_speed_and_distance():
   assert ret.vehicleNaviCurveRouteActive
 
 
+def test_vehicle_navi_curve_holds_until_neutral_curvature_end():
+  state = _car_state()
+  state.vehicleNaviCurves = [
+    {"target": 100.0, "curvature": 0.01, "speed": 50.0},
+    {"target": 180.0, "curvature": 0.0002, "speed": 250.0},
+  ]
+  ret = SimpleNamespace()
+  cp = SimpleNamespace(ts_nanos={})
+
+  state.totalDistance = 110.0
+  state._update_vehicle_navi_curve_profile(cp, ret)
+  assert ret.vehicleNaviCurveDistance == 0.0
+  assert ret.vehicleNaviCurveSpeed == 50.0
+
+  state.totalDistance = 179.9
+  state._update_vehicle_navi_curve_profile(cp, ret)
+  assert ret.vehicleNaviCurveSpeed == 50.0
+
+  state.totalDistance = 180.0
+  state._update_vehicle_navi_curve_profile(cp, ret)
+  assert ret.vehicleNaviCurveSpeed == 0.0
+
+
+def test_vehicle_navi_curve_missing_end_uses_conservative_fallback():
+  state = _car_state()
+  state.vehicleNaviCurves = [{"target": 100.0, "curvature": 0.01, "speed": 50.0}]
+  ret = SimpleNamespace()
+  cp = SimpleNamespace(ts_nanos={})
+
+  state.totalDistance = 219.9
+  state._update_vehicle_navi_curve_profile(cp, ret)
+  assert ret.vehicleNaviCurveSpeed == 50.0
+
+  state.totalDistance = 220.0
+  state._update_vehicle_navi_curve_profile(cp, ret)
+  assert ret.vehicleNaviCurveSpeed == 0.0
+
+
 def test_vehicle_navi_route_recalculation_clears_curve_profile():
   state = _car_state()
   state.vehicleNaviCurves = [{"target": 300.0, "curvature": 0.01, "speed": 50.0}]
