@@ -223,6 +223,7 @@ class CarState(CarStateBase):
     self.vehicleNaviRouteResetTimestamp = 0
     self.vehicleNaviCurveRouteActive = False
     self.vehicleNaviCurveRouteState = 3
+    self.vehicleNaviRoadClass = 7
     self.vehicleNaviCameraTarget = None
     self.vehicleNaviSpeedZoneActive = False
     self.vehicleNaviSpeedZoneSpeed = 0.0
@@ -664,7 +665,12 @@ class CarState(CarStateBase):
     return {
       "offset": raw & 0x1fff,
       "calculated_route": (raw >> 22) & 0x3,
+      "functional_road_class": (raw >> 24) & 0x7,
     }
+
+  def _vehicle_navi_is_freeway(self):
+    link_class = int(self.hda_info_4a3.get("LinkClass", 0)) if self.hda_info_4a3 is not None else 0
+    return link_class == 1 or self.vehicleNaviRoadClass == 1
 
   @staticmethod
   def _decode_vehicle_navi_profile(values):
@@ -848,6 +854,8 @@ class CarState(CarStateBase):
       if timestamp > self.vehicleNaviSegmentTimestamp:
         self.vehicleNaviSegmentTimestamp = timestamp
         segment = self._decode_vehicle_navi_segment(self.navi_segment_4b9)
+        if segment["functional_road_class"] != 7:
+          self.vehicleNaviRoadClass = segment["functional_road_class"]
         if segment["calculated_route"] == 1:
           if self.vehicleNaviCurveRouteState != 1:
             self._clear_vehicle_navi_curves()
@@ -868,6 +876,9 @@ class CarState(CarStateBase):
           self._clear_vehicle_navi_school_zone()
 
     self._update_vehicle_navi_curve_profile(cp, ret)
+    on_freeway = self._vehicle_navi_is_freeway()
+    if on_freeway:
+      self._clear_vehicle_navi_school_zone()
     if not (self.vehicleNaviCanControl or self.vehicleNaviSchoolZoneControl):
       return False
 
@@ -883,7 +894,7 @@ class CarState(CarStateBase):
               self.vehicleNaviSpeedZoneActive = True
               self.vehicleNaviSpeedZoneSpeed = event[1]
             if self.vehicleNaviSchoolZoneControl:
-              if event[1] == 30:
+              if event[1] == 30 and not on_freeway:
                 self.vehicleNaviSchoolZoneActive = True
                 self.vehicleNaviSchoolZoneStartDistance = self.totalDistance
                 self.vehicleNaviSchoolZoneUsesCameraStatus = speed_limit_cam and ret.speedLimit == 30
@@ -917,7 +928,7 @@ class CarState(CarStateBase):
       if camera_status_ended or distance_expired:
         self._clear_vehicle_navi_school_zone()
 
-    if self.vehicleNaviSchoolZoneControl and self.vehicleNaviSchoolZoneActive:
+    if self.vehicleNaviSchoolZoneControl and self.vehicleNaviSchoolZoneActive and not on_freeway:
       ret.schoolZoneActive = True
       ret.speedLimit = 30
       if self.vehicleNaviCanControl:
