@@ -74,37 +74,6 @@ class TeslaCAN:
     values["APS_eacMonitorChecksum"] = self.checksum(0x27d, data[:2])
     return self.packer.make_can_msg("APS_eacMonitor", CANBUS.party, values)
 
-  def create_body_controls(self, stock_dat, left_blinker, right_blinker, cancel=False):
-    # Ride alongside the car's native DAS_bodyControls: copy the raw frame, override only the
-    # turn-indicator bits, and stamp counter + 1 so our frame supersedes the stock one.
-    dat = bytearray(stock_dat)
-    if len(dat) < 8:
-      dat.extend(b"\x00" * (8 - len(dat)))
-
-    if left_blinker or right_blinker:
-      turn_req = 1 if left_blinker else 2  # DAS_TURN_INDICATOR_LEFT / _RIGHT
-      # DAS_turnIndicatorRequest: bits 8-9 = byte1 bits 0-1
-      dat[1] = (dat[1] & ~0x03) | (turn_req & 0x03)
-      # DAS_turnIndicatorRequestReason: bits 17-20 = byte2 bits 1-4, DAS_ACTIVE_NAV_LANE_CHANGE = 1
-      dat[2] = (dat[2] & ~0x1E) | (1 << 1)
-    elif cancel:
-      # DAS_TURN_INDICATOR_CANCEL = 3
-      dat[1] = (dat[1] & ~0x03) | 0x03
-      # DAS_CANCEL_LANE_CHANGE = 4
-      dat[2] = (dat[2] & ~0x1E) | (4 << 1)
-
-    counter = (((dat[6] >> 4) + 1) & 0x0F)
-    dat[6] = (dat[6] & ~0xF0) | (counter << 4)
-
-    addr = 0x3E9
-    checksum_val = (addr & 0xFF) + ((addr >> 8) & 0xFF)
-    for i in range(7):
-      checksum_val += dat[i]
-    dat[7] = checksum_val & 0xFF
-
-    return addr, bytes(dat), CANBUS.vehicle
-
-
 def tesla_checksum(address: int, sig, d: bytearray) -> int:
   checksum = (address & 0xFF) + ((address >> 8) & 0xFF)
   checksum_byte = sig.start_bit // 8

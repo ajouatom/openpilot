@@ -54,8 +54,4 @@ class CarInterface(CarInterfaceBase):
     if 0x3DF in fingerprint[CANBUS.vehicle]:
       ret.flags |= TeslaFlags.HAS_VEHICLE_BUS.value
 
-    # DAS_bodyControls detection: 0x3E9 on bus 2 (autopilot party)
-    if 0x3E9 in fingerprint[CANBUS.autopilot_party]:
-      ret.flags |= TeslaFlags.HAS_DAS_BODY_CONTROLS.value
-
     return ret
