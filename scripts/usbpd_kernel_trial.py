@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safely install, confirm, or roll back the experimental C4 USB-PD v2 kernel."""
+"""Safely install, confirm, or roll back the experimental C4 USB-PD v3 kernel."""
 
 from __future__ import annotations
 
@@ -19,12 +19,12 @@ import urllib.request
 
 EXPECTED_AGNOS_VERSION = "19.6"
 EXPECTED_DEVICE_TYPE = "mici"
-RELEASE_TAG = "usbpd-test-v2-c4"
+RELEASE_TAG = "usbpd-test-v3-c4"
 RELEASE_BASE = f"https://github.com/ajouatom/agnos-builder/releases/download/{RELEASE_TAG}"
 BOOT_URL = f"{RELEASE_BASE}/boot.img"
 CHECKSUM_URL = f"{RELEASE_BASE}/boot.img.sha256"
 STATE_PATH = Path("/data/usbpd-kernel-trial.json")
-DATA_DIR = Path("/data/usbpd-kernel-v2")
+DATA_DIR = Path("/data/usbpd-kernel-v3")
 BOOT_IMAGE_PATH = DATA_DIR / "boot.img"
 CHECKSUM_PATH = DATA_DIR / "boot.img.sha256"
 PARAMS_PATH = Path("/data/params/d")

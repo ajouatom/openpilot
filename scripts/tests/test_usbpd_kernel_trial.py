@@ -24,10 +24,10 @@ def test_require_c4_rejects_non_mici(monkeypatch):
     trial.require_c4()
 
 
-def test_v2_release_isolated_from_v1():
-  assert trial.RELEASE_TAG == "usbpd-test-v2-c4"
+def test_v3_release_isolated_from_earlier_trials():
+  assert trial.RELEASE_TAG == "usbpd-test-v3-c4"
   assert trial.RELEASE_TAG in trial.BOOT_URL
-  assert trial.DATA_DIR == Path("/data/usbpd-kernel-v2")
+  assert trial.DATA_DIR == Path("/data/usbpd-kernel-v3")
 
 
 def test_read_diagnostic_files_preserves_binary_data(tmp_path: Path):
