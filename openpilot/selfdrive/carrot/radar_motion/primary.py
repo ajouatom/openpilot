@@ -12,6 +12,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   MIN_PREDICTED_PATH_OVERLAP_S,
   RadarMotionPrediction,
   project_to_model_path,
+  turning_corner_path_entry_allowed,
 )
 
 
@@ -2830,21 +2831,31 @@ class VisionRadarMatcher:
       and abs(yaw_rate_rad_s)
       >= STATIONARY_TURN_MIN_ABS_YAW_RATE_RAD_S
     ):
-      # During a tight turn, parked objects sweep laterally through the ego
-      # frame and can briefly overlap the curved model path. Do not let that
-      # geometry seed a new stationary corner-radar lead unless vision is
-      # consistently strong throughout the normal confirmation dwell. A
-      # stationary lead confirmed before the turn remains eligible.
+      # During a tight turn, side objects sweep laterally through the ego frame
+      # and can briefly overlap the curved model path. Besides parked objects,
+      # reject a far-lateral moving corner target when curve projection alone
+      # places it on-path. A strong vision match, or a lead confirmed before
+      # the turn, remains eligible.
       stationary_values = tuple(
         point for point in stationary_values
         if not (
           point.source.startswith("corner")
-          and abs(point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
           and self._identity(point) != self.stationary_identity
           and (
             vision is None
             or vision.probability
             < STATIONARY_TURN_CORNER_MIN_VISION_PROB
+          )
+          and (
+            abs(point.v_lead) <= STATIONARY_MAX_ABS_VLEAD_MPS
+            or not turning_corner_path_entry_allowed(
+              point.source,
+              point.y_rel,
+              project_to_model_path(
+                path, point.d_rel, point.y_rel,
+              ).d_path,
+              yaw_rate_rad_s,
+            )
           )
         )
       )

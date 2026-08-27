@@ -55,6 +55,9 @@ CUT_IN_THRESHOLD = 0.50
 CUT_OUT_THRESHOLD = 0.50
 CORNER_CUT_IN_THRESHOLD = 0.30
 FRONT_CUT_IN_THRESHOLD = 0.67
+TURNING_CORNER_PATH_MIN_ABS_YAW_RATE_RAD_S = 0.20
+TURNING_CORNER_PATH_MIN_ABS_YREL_M = 5.0
+TURNING_CORNER_PATH_MIN_OFFSET_DISCREPANCY_M = 3.0
 CUT_IN_CONFIRMATION_S = 0.35
 CUT_IN_BOUNDARY_HOLD_S = 0.40
 CORNER_PREDECEL_CONFIRMATION_S = 0.10
@@ -174,6 +177,34 @@ def radar_motion_sensitivity(
     directional_min_consistency=(
       _DIRECTIONAL_MIN_CONSISTENCIES[clamped_level]
     ),
+  )
+
+
+def turning_corner_path_entry_allowed(
+  source: str,
+  y_rel: float,
+  d_path: float,
+  yaw_rate_rad_s: float,
+  *,
+  cross_sensor_confirmed: bool = False,
+) -> bool:
+  """Reject curve-projection aliases from a corner radar without front support.
+
+  On a tight turn, a physically distant side target can project close to the
+  curved model path and imitate inward motion. Keep genuine close-side entries
+  and cross-sensor-confirmed targets eligible.
+  """
+  if cross_sensor_confirmed or not source.startswith("corner"):
+    return True
+  if not all(math.isfinite(value) for value in (
+    y_rel, d_path, yaw_rate_rad_s,
+  )):
+    return True
+  return not (
+    abs(yaw_rate_rad_s) >= TURNING_CORNER_PATH_MIN_ABS_YAW_RATE_RAD_S
+    and abs(y_rel) >= TURNING_CORNER_PATH_MIN_ABS_YREL_M
+    and abs(y_rel) - abs(d_path)
+    >= TURNING_CORNER_PATH_MIN_OFFSET_DISCREPANCY_M
   )
 
 

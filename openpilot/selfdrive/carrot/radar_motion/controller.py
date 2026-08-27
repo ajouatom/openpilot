@@ -27,6 +27,7 @@ from openpilot.selfdrive.carrot.radar_motion.predictor import (
   corner_cutin_predecel_score,
   project_to_model_path,
   radar_motion_sensitivity,
+  turning_corner_path_entry_allowed,
 )
 from openpilot.selfdrive.carrot.radar_motion.primary import (
   FrontRadarKinematicAssociator,
@@ -737,6 +738,22 @@ class DPathRadarController:
       )
       for identity, prediction in predictions.items()
     }
+    allowed_predictions = {
+      identity: prediction
+      for identity, prediction in predictions.items()
+      if (
+        (point := point_by_identity.get(identity)) is not None
+        and turning_corner_path_entry_allowed(
+          prediction.source,
+          point.y_rel,
+          prediction.d_path,
+          yaw_rate_rad_s,
+          cross_sensor_confirmed=(
+            identity in front_kinematic_matches
+          ),
+        )
+      )
+    }
     predecel = self.cutin_predecel_tracker.update(
       time_s,
       (
@@ -753,7 +770,7 @@ class DPathRadarController:
             ),
           ),
         )
-        for prediction in predictions.values()
+        for prediction in allowed_predictions.values()
         if (
           self.motion_sensitivity.cut_in_enabled
           and (
@@ -782,7 +799,7 @@ class DPathRadarController:
     decision = self.motion_decisions.update(
       time_s,
       (
-        predictions.values()
+        allowed_predictions.values()
         if self.motion_sensitivity.cut_in_enabled
         else ()
       ),
