@@ -8,12 +8,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.constants import CV
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.carrot.t_follow import ramp_t_follow
-from openpilot.selfdrive.carrot.traffic_stop import (
-  TrafficStopDistanceTracker,
-  get_traffic_stop_reference_speed,
-  get_virtual_traffic_stop_distance,
-  is_traffic_stop_entry_allowed,
-)
+from openpilot.selfdrive.carrot.traffic_stop import is_traffic_stop_entry_allowed
 from openpilot.selfdrive.selfdrived.events import Events
 
 EventName = log.OnroadEvent.EventName
@@ -76,8 +71,6 @@ class CarrotPlanner:
     self.xState = XState.cruise
     self.xStop = 0.0
     self.actual_stop_distance = 0.0
-    self.traffic_stop_reference_speed_kph = None
-    self.traffic_stop_raw_distance = 1000.0
     #self.debugLongText = ""
     self.stopping_count = 0
     self.traffic_starting_count = 0
@@ -147,7 +140,7 @@ class CarrotPlanner:
     self.atcType = ""
     self.atc_active = False
 
-    self._traffic_stop_distance_tracker = TrafficStopDistanceTracker()
+    self._stop_x_rl = None
     self.last_event_time = 0.0
 
   def _params_update(self):
@@ -508,8 +501,17 @@ class CarrotPlanner:
 
     self.xStop = self.update_stop_dist(x[31])
     stop_model_x_raw = self.xStop
-    stop_model_x_rl = self._traffic_stop_distance_tracker.update(stop_model_x_raw, v_ego * DT_MDL)
-    stop_model_x = stop_model_x_rl
+    if self._stop_x_rl is None:
+      self._stop_x_rl = stop_model_x_raw
+    else:
+      max_close = v_ego * DT_MDL + 0.5
+      if stop_model_x_raw > self._stop_x_rl:
+        self._stop_x_rl = stop_model_x_raw
+      else:
+        self._stop_x_rl = max(self._stop_x_rl - max_close, stop_model_x_raw)
+
+    stop_model_x = self._stop_x_rl
+    stop_model_x_rl = self._stop_x_rl
 
     trafficState_last = self.trafficState
     #self.check_model_stopping(v, v_ego, self.xStop, y)
@@ -553,11 +555,9 @@ class CarrotPlanner:
         else:
           self.comfort_brake = self.comfortBrake * 0.9
           #self.comfort_brake = COMFORT_BRAKE
-          self.traffic_stop_reference_speed_kph = get_traffic_stop_reference_speed(
-            v_ego_kph, self.traffic_stop_reference_speed_kph,
-          )
-          self.traffic_stop_raw_distance = stop_model_x_rl
-          stop_dist = get_virtual_traffic_stop_distance(stop_model_x_rl, self.traffic_stop_reference_speed_kph)
+          self.trafficStopAdjustRatio = np.interp(v_ego_kph, [0, 100], [1.0, 0.7])
+          # 속도가 높을수록 먼 정지거리 추정값을 줄여 보정함.
+          stop_dist = stop_model_x_rl * np.interp(stop_model_x_rl, [0, 50], [1.0, self.trafficStopAdjustRatio])
           if stop_dist > 10.0:  # 10m 이상일 때만 실제 정지거리를 갱신함.
             self.actual_stop_distance = stop_dist
           stop_model_x = 0
@@ -583,9 +583,7 @@ class CarrotPlanner:
       elif self.trafficState == TrafficState.red and is_traffic_stop_entry_allowed(carstate.steeringAngleDeg) and self.traffic_starting_count == 0:
         self.add_event(EventName.trafficStopping)
         self.xState = XState.e2eStop
-        self.traffic_stop_reference_speed_kph = get_traffic_stop_reference_speed(v_ego_kph, None)
-        self.traffic_stop_raw_distance = stop_model_x_rl
-        self.actual_stop_distance = get_virtual_traffic_stop_distance(stop_model_x_rl, self.traffic_stop_reference_speed_kph)
+        self.actual_stop_distance = stop_model_x_rl
       else:
         self.xState = XState.e2eCruise
 
@@ -597,10 +595,6 @@ class CarrotPlanner:
       self.actual_stop_distance = self.user_stop_distance
       self.xState = XState.e2eStop if self.user_stop_distance > 0 else XState.e2eStopped
 
-    if self.xState not in [XState.e2eStop, XState.e2eStopped]:
-      self.traffic_stop_reference_speed_kph = None
-      self.traffic_stop_raw_distance = 1000.0
-
     if mode == 'acc':
       mode = 'blended' if self.xState in [XState.e2ePrepare] else 'acc'
 
@@ -611,6 +605,10 @@ class CarrotPlanner:
       self.actual_stop_distance = 0.0
     elif self.actual_stop_distance > 0:  # e2eStop 또는 e2eStopped 상태
       stop_model_x = 0.0
+
+    stopping_active = self.xState not in [XState.e2eStop, XState.e2eStopped]
+    if not stopping_active:
+      self._stop_x_rl = stop_model_x_raw
 
     # self.debugLongText = (
     #   f"XState({str(self.xState)})," +
