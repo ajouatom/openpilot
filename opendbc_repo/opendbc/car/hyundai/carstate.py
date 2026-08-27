@@ -32,7 +32,7 @@ VEHICLE_NAVI_CAMERA_KINDS = (0, 1, 2)
 VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE = 1000.0
 VEHICLE_NAVI_POSITION_TIMEOUT_NS = 1_000_000_000
 VEHICLE_NAVI_CURVE_MAX_DISTANCE = 1500.0
-VEHICLE_NAVI_CURVE_PASSED_DISTANCE = 20.0
+VEHICLE_NAVI_CURVE_END_FALLBACK_DISTANCE = 120.0
 VEHICLE_NAVI_CURVE_TARGET_LAT_ACCEL = 1.9
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
 CANFD_AVH_RELEASE_GRACE_FRAMES = round(0.5 / DT_CTRL)
@@ -755,13 +755,23 @@ class CarState(CarStateBase):
         if curve is not None and timestamp > self.vehicleNaviRouteResetTimestamp:
           self._add_vehicle_navi_curve(curve)
 
+    # Keep passed curve spots until a following near-straight spot identifies the
+    # actual curve end. This avoids releasing the speed cap at an arbitrary
+    # distance after the apex while the vehicle is still in the curve.
     self.vehicleNaviCurves = [curve for curve in self.vehicleNaviCurves
-                              if curve["target"] >= self.totalDistance - VEHICLE_NAVI_CURVE_PASSED_DISTANCE]
+                              if curve["target"] >= self.totalDistance - VEHICLE_NAVI_CURVE_END_FALLBACK_DISTANCE]
     candidates = []
     for curve in self.vehicleNaviCurves:
       if curve["speed"] >= 250:
         continue
-      distance = max(0.0, curve["target"] - self.totalDistance)
+      distance = curve["target"] - self.totalDistance
+      if distance < 0:
+        curve_end = next((point["target"] for point in self.vehicleNaviCurves
+                          if point["target"] > curve["target"] and point["speed"] >= 250), None)
+        hold_until = curve_end if curve_end is not None else curve["target"] + VEHICLE_NAVI_CURVE_END_FALLBACK_DISTANCE
+        if self.totalDistance >= hold_until:
+          continue
+        distance = 0.0
       target_speed = max(self.vehicleNaviCurveLowerLimit, curve["speed"] * self.vehicleNaviCurveSpeedFactor)
       safe_speed = target_speed / CV.MS_TO_KPH
       decel_distance = max(0.0, distance - safe_speed * self.vehicleNaviCurveControlEnd)

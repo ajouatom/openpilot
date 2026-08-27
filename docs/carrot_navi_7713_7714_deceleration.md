@@ -606,6 +606,12 @@ Hyundai CAN-FD 차량에서 수신되는 `0x4BA` ADASIS v2 Profile Short의 `Pro
 `AutoNaviSpeedDecelRate`를 그대로 적용하고, 후보가 이기면 `desiredSource=hda_curve`, UI label은
 차량 내비 색상의 `curve`다. 두 설정은 주행 중 다시 읽으므로 재시작이 필요 없다.
 
+선택된 커브 곡률점을 통과한 뒤에도 제한속도를 즉시 해제하지 않는다. 뒤따르는 0x4BA 점 중
+곡률이 충분히 작아 기준속도가 250 km/h로 포화되는 점을 해당 커브의 종료점으로 보고, 그 지점을
+통과하는 순간 커브 제한을 해제한다. 종료점 프로파일이 누락된 경우에만 곡률점 이후 120 m를
+보수적인 fallback 종료거리로 사용한다. 제한이 해제되면 종방향 제어의 일반 가속 제한 안에서
+기존 크루즈 설정속도로 복귀한다.
+
 목적지가 없을 때 `0x4B9 CalculatedRoute=0`은 내비가 예측한 전방 경로(MPP)를 뜻하고, 목적지를
 탐색한 경로는 `CalculatedRoute=1`로 전달된다. `CalculatedRoute=2` 재탐색 신호에서는 기존
 곡률 캐시를 즉시 비워 이전 경로의 커브가 남지 않게 한다.
