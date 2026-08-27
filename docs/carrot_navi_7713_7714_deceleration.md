@@ -598,13 +598,14 @@ Hyundai CAN-FD 차량에서 수신되는 `0x4BA` ADASIS v2 Profile Short의 `Pro
 - `vehicleNaviCurveSpeed`: 목표 횡가속도 1.9 m/s²로 계산한 100% 기준 속도
 - `vehicleNaviCurveCurvature`: 복호화한 곡률(1/m)
 
-`VehicleNaviCurveControl=1`이고 `vehicleNaviCurveRouteActive=true`일 때만 `CarrotServ`가 이 값을
-감속 후보로 추가한다. 최종 목표속도는
+`VehicleNaviCurveControl=1`이고 목적지 탐색 경로(`CalculatedRoute=1`)일 때 `CarrotServ`가 이 값을
+감속 후보로 추가한다. `VehicleNaviCurveMppControl=1`을 추가로 켜면 목적지가 없는 예상 경로
+(`CalculatedRoute=0`, MPP)에서도 곡률 감속을 허용한다. 최종 목표속도는
 `vehicleNaviCurveSpeed × VehicleNaviCurveSpeedFactor / 100`이며, 기본 100%, 조절 범위는
 50~200%다. 기존 `AutoCurveSpeedLowerLimit`, `AutoNaviSpeedCtrlEnd`,
 `AutoNaviSpeedDecelRate`를 그대로 적용하고, 후보가 이기면 `desiredSource=hda_curve`, UI label은
 차량 내비 색상의 `curve`다. 두 설정은 주행 중 다시 읽으므로 재시작이 필요 없다.
 
 목적지가 없을 때 `0x4B9 CalculatedRoute=0`은 내비가 예측한 전방 경로(MPP)를 뜻하고, 목적지를
-탐색한 경로는 `CalculatedRoute=1`로 전달될 수 있다. `CalculatedRoute=2` 재탐색 신호에서는 기존
+탐색한 경로는 `CalculatedRoute=1`로 전달된다. `CalculatedRoute=2` 재탐색 신호에서는 기존
 곡률 캐시를 즉시 비워 이전 경로의 커브가 남지 않게 한다.

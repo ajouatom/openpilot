@@ -99,20 +99,26 @@ def test_vehicle_navi_school_zone_control_is_opt_in(settings, params):
 def test_vehicle_navi_curve_control_is_opt_in_and_adjustable(settings, params):
   by_name = {p["name"]: p for p in params}
   control = by_name["VehicleNaviCurveControl"]
+  mpp_control = by_name["VehicleNaviCurveMppControl"]
   factor = by_name["VehicleNaviCurveSpeedFactor"]
   assert (control["min"], control["max"], control["default"]) == (0, 1, 0)
   assert control["control"] == "toggle"
   assert control["risk"] == "high"
+  assert (mpp_control["min"], mpp_control["max"], mpp_control["default"]) == (0, 1, 0)
+  assert mpp_control["control"] == "toggle"
+  assert mpp_control["risk"] == "high"
   assert (factor["min"], factor["max"], factor["default"]) == (50, 200, 100)
 
   driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
   speed = next(group for group in driving["groups"] if group["id"] == "SPEED")
   curve = next(group for group in speed["groups"] if group["id"] == "SPEED_CURVE")
   assert "VehicleNaviCurveControl" in curve["params"]
+  assert "VehicleNaviCurveMppControl" in curve["params"]
   assert "VehicleNaviCurveSpeedFactor" in curve["params"]
 
   params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
   assert '{"VehicleNaviCurveControl", {PERSISTENT, BOOL, "0"}}' in params_keys
+  assert '{"VehicleNaviCurveMppControl", {PERSISTENT, BOOL, "0"}}' in params_keys
   assert '{"VehicleNaviCurveSpeedFactor", {PERSISTENT, INT, "100"}}' in params_keys
 
 

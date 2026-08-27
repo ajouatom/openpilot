@@ -222,6 +222,7 @@ class CarState(CarStateBase):
     self.vehicleNaviAvailable = False
     self.vehicleNaviRouteResetTimestamp = 0
     self.vehicleNaviCurveRouteActive = False
+    self.vehicleNaviCurveRouteState = 3
     self.vehicleNaviCameraTarget = None
     self.vehicleNaviSpeedZoneActive = False
     self.vehicleNaviSpeedZoneSpeed = 0.0
@@ -744,6 +745,7 @@ class CarState(CarStateBase):
     ret.vehicleNaviCurveSpeed = 0.0
     ret.vehicleNaviCurveCurvature = 0.0
     ret.vehicleNaviCurveRouteActive = self.vehicleNaviCurveRouteActive
+    ret.vehicleNaviCurveRouteState = self.vehicleNaviCurveRouteState
 
     if self.navi_profile_4ba is not None:
       timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4BA")
@@ -837,13 +839,17 @@ class CarState(CarStateBase):
         self.vehicleNaviSegmentTimestamp = timestamp
         segment = self._decode_vehicle_navi_segment(self.navi_segment_4b9)
         if segment["calculated_route"] == 1:
-          if not self.vehicleNaviCurveRouteActive:
+          if self.vehicleNaviCurveRouteState != 1:
             self._clear_vehicle_navi_curves()
+          self.vehicleNaviCurveRouteState = 1
           self.vehicleNaviCurveRouteActive = True
-        elif segment["calculated_route"] == 0 and segment["offset"] == 0:
+        elif segment["calculated_route"] == 0:
+          if self.vehicleNaviCurveRouteState != 0:
+            self._clear_vehicle_navi_curves()
+          self.vehicleNaviCurveRouteState = 0
           self.vehicleNaviCurveRouteActive = False
-          self._clear_vehicle_navi_curves()
         if segment["calculated_route"] == 2:
+          self.vehicleNaviCurveRouteState = 2
           self.vehicleNaviCurveRouteActive = False
           self.vehicleNaviRouteResetTimestamp = timestamp
           self._clear_vehicle_navi_events()

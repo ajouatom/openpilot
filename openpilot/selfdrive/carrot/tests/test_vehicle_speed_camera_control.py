@@ -10,6 +10,7 @@ def _serv(mode):
   serv.vehicleSpeedCameraControlMode = mode
   serv.vehicleNaviCanControl = True
   serv.vehicleNaviCurveControl = False
+  serv.vehicleNaviCurveMppControl = False
   serv.vehicleNaviCurveSpeedFactor = 1.0
   serv.vehicleNaviSchoolZoneControl = False
   serv.autoNaviSpeedSafetyFactor = 1.05
@@ -40,6 +41,7 @@ def _car_state(*, gas=False, brake=False, speed_limit=50, distance=300, v_ego=20
     vehicleNaviCurveSpeed=0,
     vehicleNaviCurveCurvature=0,
     vehicleNaviCurveRouteActive=False,
+    vehicleNaviCurveRouteState=3,
     vEgo=v_ego,
   )
 
@@ -70,6 +72,20 @@ def test_vehicle_navi_curve_speed_factor_scales_calculated_target():
   assert serv._vehicle_navi_curve_speed(CS) == pytest.approx(50)
   serv.vehicleNaviCurveSpeedFactor = 1.5
   assert serv._vehicle_navi_curve_speed(CS) == pytest.approx(75)
+
+
+def test_vehicle_navi_curve_mpp_control_is_separate_opt_in():
+  serv = _serv(1)
+  serv.vehicleNaviCurveControl = True
+  CS = _car_state()
+  CS.vehicleNaviCurveDistance = 120
+  CS.vehicleNaviCurveSpeed = 50
+  CS.vehicleNaviCurveCurvature = 0.01
+  CS.vehicleNaviCurveRouteState = 0
+
+  assert serv._vehicle_navi_curve_speed(CS) == 250
+  serv.vehicleNaviCurveMppControl = True
+  assert serv._vehicle_navi_curve_speed(CS) < 250
 
 
 @pytest.mark.parametrize(("mode", "gas_pressed", "expected"), (

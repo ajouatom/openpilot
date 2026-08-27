@@ -56,6 +56,7 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviAvailable = False
   state.vehicleNaviRouteResetTimestamp = 0
   state.vehicleNaviCurveRouteActive = False
+  state.vehicleNaviCurveRouteState = 3
   state.vehicleNaviCameraTarget = None
   state.vehicleNaviSpeedZoneActive = False
   state.vehicleNaviSpeedZoneSpeed = 0.0
@@ -471,11 +472,13 @@ def test_vehicle_navi_curve_control_requires_calculated_route():
   assert not state._update_vehicle_navi_events(cp, ret, False)
   assert state.vehicleNaviCurveRouteActive
   assert ret.vehicleNaviCurveRouteActive
+  assert ret.vehicleNaviCurveRouteState == 1
 
   state.navi_segment_4b9 = {f"BYTE_{i + 1}": 0 for i in range(8)}
   cp.ts_nanos["NEW_MSG_4B9"]["BYTE_1"] = 2
   assert not state._update_vehicle_navi_events(cp, ret, False)
   assert not state.vehicleNaviCurveRouteActive
+  assert ret.vehicleNaviCurveRouteState == 0
   assert state.vehicleNaviCurves == []
 
 
