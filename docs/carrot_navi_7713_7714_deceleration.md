@@ -287,8 +287,11 @@ mode 2의 하한은 source 변경, 정차, 브레이크 입력, 제한속도 변
   현재 도로 제한속도 이벤트다. `VehicleNaviSchoolZoneControl`이 켜진 경우 0x77에서
   `carState.schoolZoneActive`를 시작하고 `school` 속도 후보를 30 km/h로 제한한다. 0x77 수신 시
   `HDA_INFO_4A3`의 30 km/h 카메라 상태도 활성화돼 있었다면 그 상태가 끝날 때 함께 해제한다.
-  단, `HDA_INFO_4A3 LinkClass=1` 또는 `0x4B9 FuncRoadClass=1`로 고속도로가 확인되면
-  `school` 30 km/h 후보를 생성하지 않으며 이미 활성화된 후보도 즉시 해제한다. 실제 카메라 제한속도 후보는 유지한다.
+  단, `HDA_INFO_4A3 LinkClass=1/2/3`(Freeway/IC/JC) 또는
+  `0x4B9 FuncRoadClass=1/2`(Freeway/Arterial-City freeway)로 고속도로·고속화도로가 확인되면
+  `school` 30 km/h 후보를 생성하지 않으며 이미 활성화된 후보도 즉시 해제한다. 같은 도로에서는
+  차량 내비 방지턱 후보도 생성하지 않고 기존 대기 후보를 제거한다. 차량 내비의 일반 30 km/h 카메라
+  후보 역시 감속 거리를 만들지 않지만, 50 km/h 이상의 실제 카메라·구간단속 후보는 유지한다.
   명시적인 비-30 종류 7 이벤트, `0x4B9 CalculatedRoute=2` 경로 재계산, 또는 진입 후 1 km 주행도
   해제 조건으로 사용하여 종료 프레임 누락 시 고착되지 않게 한다.
   `VehicleSpeedCameraControlMode` 0/1/2/3은 각각 미사용/항상 적용/가속페달 속도 하한/가속 중 해제로 동작한다.
