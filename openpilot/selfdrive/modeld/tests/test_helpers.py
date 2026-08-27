@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -99,6 +100,69 @@ def test_custom_usb_controller_reports_failed_retrain(monkeypatch):
     CustomASM24Controller(object())
 
   assert power_calls == [True]
+
+
+def test_custom_usb_controller_retries_transient_xdata_read(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = usb.CustomASM24Controller.__new__(usb.CustomASM24Controller)
+  controller.usb = SimpleNamespace(handle=object())
+  controller._f0_out_buf, controller._f0_out_mv = usb.alloc_cbuffer(0x1000)
+  attempts = iter((-1, 8))
+  sleeps = []
+
+  def control_transfer(_handle, _request_type, _request, _value, _index, buffer, length, _timeout):
+    ret = next(attempts)
+    if ret == length:
+      buffer[:length] = bytes(range(length))
+    return ret
+
+  monkeypatch.setattr(usb.libusb, "libusb_control_transfer", control_transfer)
+  monkeypatch.setattr(usb.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+  assert controller.read(0xA8F0, 8) == bytes(range(8))
+  assert sleeps == [controller.XDATA_READ_RETRY_INTERVAL_S]
+
+
+def test_custom_usb_controller_limits_xdata_read_retries(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = usb.CustomASM24Controller.__new__(usb.CustomASM24Controller)
+  controller.usb = SimpleNamespace(handle=object())
+  controller._f0_out_buf, controller._f0_out_mv = usb.alloc_cbuffer(0x1000)
+  calls = []
+
+  def control_transfer(*_args):
+    calls.append(None)
+    return -1
+
+  monkeypatch.setattr(usb.libusb, "libusb_control_transfer", control_transfer)
+  monkeypatch.setattr(usb.time, "sleep", lambda _seconds: None)
+
+  with pytest.raises(AssertionError, match=r"read\(0xA8F0, 8\) failed: -1"):
+    controller.read(0xA8F0, 8)
+
+  assert len(calls) == controller.XDATA_READ_ATTEMPTS
+
+
+def test_custom_usb_controller_does_not_retry_xdata_disconnect(monkeypatch):
+  from tinygrad.runtime.support import usb
+
+  controller = usb.CustomASM24Controller.__new__(usb.CustomASM24Controller)
+  controller.usb = SimpleNamespace(handle=object())
+  controller._f0_out_buf, controller._f0_out_mv = usb.alloc_cbuffer(0x1000)
+  calls = []
+
+  def control_transfer(*_args):
+    calls.append(None)
+    return usb.libusb.LIBUSB_ERROR_NO_DEVICE
+
+  monkeypatch.setattr(usb.libusb, "libusb_control_transfer", control_transfer)
+
+  with pytest.raises(AssertionError, match=r"read\(0xA8F0, 8\) failed: -4"):
+    controller.read(0xA8F0, 8)
+
+  assert len(calls) == 1
 
 
 def test_usb_pci_device_releases_resources_after_init_failure(monkeypatch):

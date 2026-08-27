@@ -202,6 +202,8 @@ class CustomASM24Controller:
   PCIE_LINK_READY = 0x78
   PCIE_LINK_TIMEOUT_S = 2.0
   PCIE_LINK_POLL_INTERVAL_S = 0.05
+  XDATA_READ_ATTEMPTS = 3
+  XDATA_READ_RETRY_INTERVAL_S = 0.005
 
   def __init__(self, usb:USB3|None=None):
     if not usb:
@@ -303,7 +305,13 @@ class CustomASM24Controller:
     result = b''
     for off in range(0, length, 0xFF):
       chunk = min(0xFF, length - off)
-      ret = libusb.libusb_control_transfer(self.usb.handle, 0xC0, 0xE4, base_addr + off, 0, self._f0_out_buf, chunk, 1000)
+      for attempt in range(self.XDATA_READ_ATTEMPTS):
+        ret = libusb.libusb_control_transfer(self.usb.handle, 0xC0, 0xE4, base_addr + off, 0, self._f0_out_buf, chunk, 1000)
+        if ret == chunk or ret != libusb.LIBUSB_ERROR_IO or attempt + 1 == self.XDATA_READ_ATTEMPTS: break
+        # XDATA reads are side-effect free. A shared xHCI/hub can surface a
+        # transient LIBUSB_ERROR_IO while the bridge remains enumerated, so
+        # retry the read briefly before modeld falls back to the internal GPU.
+        time.sleep(self.XDATA_READ_RETRY_INTERVAL_S)
       assert ret == chunk, f"read(0x{base_addr + off:04X}, {chunk}) failed: {ret}"
       result += bytes(self._f0_out_buf[:ret])
     return result[:length]
