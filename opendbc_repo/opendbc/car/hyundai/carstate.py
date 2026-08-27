@@ -27,9 +27,13 @@ VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES = round(1.0 / DT_CTRL)
 VEHICLE_NAVI_MAX_EVENT_DISTANCE = 2500.0
 VEHICLE_NAVI_PASSED_EVENT_DISTANCE = 30.0
 VEHICLE_NAVI_MAX_EVENTS = 32
+VEHICLE_NAVI_MAX_CURVES = 64
 VEHICLE_NAVI_CAMERA_KINDS = (0, 1, 2)
 VEHICLE_NAVI_SCHOOL_ZONE_MAX_DISTANCE = 1000.0
 VEHICLE_NAVI_POSITION_TIMEOUT_NS = 1_000_000_000
+VEHICLE_NAVI_CURVE_MAX_DISTANCE = 1500.0
+VEHICLE_NAVI_CURVE_PASSED_DISTANCE = 20.0
+VEHICLE_NAVI_CURVE_TARGET_LAT_ACCEL = 1.9
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
 CANFD_AVH_RELEASE_GRACE_FRAMES = round(0.5 / DT_CTRL)
 CANFD_AVH_LAMP_ACTIVE = 2
@@ -173,6 +177,7 @@ class CarState(CarStateBase):
     self.hda_info_4a3 = None
     self.navi_position_4b4 = None
     self.navi_segment_4b9 = None
+    self.navi_profile_4ba = None
     self.navi_profile_4be = None
     self.tcs = None
     self.mdps = None
@@ -204,12 +209,19 @@ class CarState(CarStateBase):
     self.vehicleSpeedCameraDistanceTime = self._vehicle_speed_camera_distance_time(distance_time_tenths)
     self.vehicleNaviCanControl = self.op_params.get_bool("VehicleNaviCanControl")
     self.vehicleNaviSchoolZoneControl = self.op_params.get_bool("VehicleNaviSchoolZoneControl")
+    self.vehicleNaviCurveSpeedFactor = min(2.0, max(0.5, self.op_params.get_int("VehicleNaviCurveSpeedFactor") * 0.01))
+    self.vehicleNaviCurveLowerLimit = max(5.0, self.op_params.get_int("AutoCurveSpeedLowerLimit"))
+    self.vehicleNaviCurveDecelRate = max(0.01, self.op_params.get_int("AutoNaviSpeedDecelRate") * 0.01)
+    self.vehicleNaviCurveControlEnd = max(0.0, self.op_params.get_int("AutoNaviSpeedCtrlEnd"))
     self.vehicleSpeedCameraParamsCounter = 0
     self.vehicleNaviEvents = []
+    self.vehicleNaviCurves = []
     self.vehicleNaviSegmentTimestamp = 0
+    self.vehicleNaviCurveTimestamp = 0
     self.vehicleNaviProfileTimestamp = 0
     self.vehicleNaviAvailable = False
     self.vehicleNaviRouteResetTimestamp = 0
+    self.vehicleNaviCurveRouteActive = False
     self.vehicleNaviCameraTarget = None
     self.vehicleNaviSpeedZoneActive = False
     self.vehicleNaviSpeedZoneSpeed = 0.0
@@ -373,6 +385,7 @@ class CarState(CarStateBase):
           add_and_cache(self.cp, "HDA_INFO_4A3", "hda_info_4a3")
           add_and_cache(self.cp, "NEW_MSG_4B4", "navi_position_4b4")
           add_and_cache(self.cp, "NEW_MSG_4B9", "navi_segment_4b9")
+          add_and_cache(self.cp, "NEW_MSG_4BA", "navi_profile_4ba")
           add_and_cache(self.cp, "NEW_MSG_4BE", "navi_profile_4be")
           add_and_cache(self.cp, "STEER_TOUCH_2AF", "steer_touch_2af")
         elif self.controls_ready_count == 124:
@@ -607,6 +620,10 @@ class CarState(CarStateBase):
     distance_time = self._vehicle_speed_camera_distance_time(distance_time_tenths)
     changed = distance_time != self.vehicleSpeedCameraDistanceTime
     self.vehicleSpeedCameraDistanceTime = distance_time
+    self.vehicleNaviCurveSpeedFactor = min(2.0, max(0.5, self.op_params.get_int("VehicleNaviCurveSpeedFactor") * 0.01))
+    self.vehicleNaviCurveLowerLimit = max(5.0, self.op_params.get_int("AutoCurveSpeedLowerLimit"))
+    self.vehicleNaviCurveDecelRate = max(0.01, self.op_params.get_int("AutoNaviSpeedDecelRate") * 0.01)
+    self.vehicleNaviCurveControlEnd = max(0.0, self.op_params.get_int("AutoNaviSpeedCtrlEnd"))
     vehicle_navi_can_control = self.op_params.get_bool("VehicleNaviCanControl")
     if vehicle_navi_can_control != self.vehicleNaviCanControl:
       self.vehicleNaviCanControl = vehicle_navi_can_control
@@ -623,6 +640,9 @@ class CarState(CarStateBase):
   def _clear_vehicle_navi_events(self):
     self.vehicleNaviEvents = []
     self.vehicleNaviCameraTarget = None
+
+  def _clear_vehicle_navi_curves(self):
+    self.vehicleNaviCurves = []
 
   def _clear_vehicle_navi_school_zone(self):
     self.vehicleNaviSchoolZoneActive = False
@@ -654,6 +674,103 @@ class CarState(CarStateBase):
       "update": int(values.get("PROLONG_UPDATE", 0)),
       "profile_type": int(values.get("PROLONG_PROFILE_TYPE", 31)),
     }
+
+  @staticmethod
+  def _decode_adasis_curvature(value):
+    """Decode the standard ADASIS v2 10-bit piecewise curvature profile."""
+    value = int(value)
+    if not 0 <= value < 1023:
+      return None
+
+    coded = value - 511
+    magnitude = abs(coded)
+    sign = -1 if coded < 0 else 1
+    if magnitude <= 64:
+      decoded = coded
+    elif magnitude <= 128:
+      decoded = 2 * (coded - sign * 32)
+    elif magnitude <= 192:
+      decoded = 4 * (coded - sign * 80)
+    elif magnitude <= 256:
+      decoded = 8 * (coded - sign * 136)
+    elif magnitude <= 320:
+      decoded = 16 * (coded - sign * 196)
+    elif magnitude <= 384:
+      decoded = 32 * (coded - sign * 258)
+    elif magnitude <= 448:
+      decoded = 64 * (coded - sign * 321)
+    else:
+      decoded = 128 * (coded - sign * 384)
+    return decoded / 100000.0
+
+  @staticmethod
+  def _decode_vehicle_navi_curve(values):
+    if int(values.get("PROSHORT_PROFILE_TYPE", 0)) != 1:
+      return None
+
+    offset = int(values.get("PROSHORT_OFFSET", 8191))
+    raw_curvature = int(values.get("PROSHORT_VALUE_0", 1023))
+    if not 0 <= offset <= VEHICLE_NAVI_CURVE_MAX_DISTANCE or raw_curvature == 1023:
+      return None
+
+    curvature = CarState._decode_adasis_curvature(raw_curvature)
+    if curvature is None:
+      return None
+    return {
+      "offset": offset,
+      "curvature": curvature,
+      "raw_curvature": raw_curvature,
+    }
+
+  @staticmethod
+  def _vehicle_navi_curve_reference_speed(curvature):
+    if abs(curvature) < 1e-7:
+      return 250.0
+    return min(250.0, max(5.0, math.sqrt(VEHICLE_NAVI_CURVE_TARGET_LAT_ACCEL / abs(curvature)) * CV.MS_TO_KPH))
+
+  def _add_vehicle_navi_curve(self, curve):
+    target = self.totalDistance + curve["offset"]
+    reference_speed = self._vehicle_navi_curve_reference_speed(curve["curvature"])
+    nearest = min(self.vehicleNaviCurves, key=lambda item: abs(item["target"] - target), default=None)
+    if nearest is not None and abs(nearest["target"] - target) <= 2.0:
+      nearest.update(target=target, curvature=curve["curvature"], speed=reference_speed)
+    else:
+      self.vehicleNaviCurves.append({"target": target, "curvature": curve["curvature"], "speed": reference_speed})
+    self.vehicleNaviCurves.sort(key=lambda item: item["target"])
+    self.vehicleNaviCurves = self.vehicleNaviCurves[:VEHICLE_NAVI_MAX_CURVES]
+
+  def _update_vehicle_navi_curve_profile(self, cp, ret):
+    ret.vehicleNaviCurveDistance = 0.0
+    ret.vehicleNaviCurveSpeed = 0.0
+    ret.vehicleNaviCurveCurvature = 0.0
+    ret.vehicleNaviCurveRouteActive = self.vehicleNaviCurveRouteActive
+
+    if self.navi_profile_4ba is not None:
+      timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4BA")
+      if timestamp > self.vehicleNaviCurveTimestamp:
+        self.vehicleNaviCurveTimestamp = timestamp
+        curve = self._decode_vehicle_navi_curve(self.navi_profile_4ba)
+        if curve is not None and timestamp > self.vehicleNaviRouteResetTimestamp:
+          self._add_vehicle_navi_curve(curve)
+
+    self.vehicleNaviCurves = [curve for curve in self.vehicleNaviCurves
+                              if curve["target"] >= self.totalDistance - VEHICLE_NAVI_CURVE_PASSED_DISTANCE]
+    candidates = []
+    for curve in self.vehicleNaviCurves:
+      if curve["speed"] >= 250:
+        continue
+      distance = max(0.0, curve["target"] - self.totalDistance)
+      target_speed = max(self.vehicleNaviCurveLowerLimit, curve["speed"] * self.vehicleNaviCurveSpeedFactor)
+      safe_speed = target_speed / CV.MS_TO_KPH
+      decel_distance = max(0.0, distance - safe_speed * self.vehicleNaviCurveControlEnd)
+      preview_speed = math.sqrt(safe_speed ** 2 + 2 * self.vehicleNaviCurveDecelRate * decel_distance) * CV.MS_TO_KPH
+      candidates.append((preview_speed, distance, curve))
+
+    if candidates:
+      _, distance, curve = min(candidates, key=lambda item: item[0])
+      ret.vehicleNaviCurveDistance = distance
+      ret.vehicleNaviCurveSpeed = curve["speed"]
+      ret.vehicleNaviCurveCurvature = curve["curvature"]
 
   @staticmethod
   def _classify_vehicle_navi_profile(profile):
@@ -701,8 +818,6 @@ class CarState(CarStateBase):
     self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
     self.vehicleNaviCameraTarget = None
-    if not (self.vehicleNaviCanControl or self.vehicleNaviSchoolZoneControl):
-      return False
 
     # 0x4B4 is periodic while the stock navigation is running. Its range
     # average speed is zero outside a section-camera zone and valid inside it.
@@ -721,11 +836,24 @@ class CarState(CarStateBase):
       if timestamp > self.vehicleNaviSegmentTimestamp:
         self.vehicleNaviSegmentTimestamp = timestamp
         segment = self._decode_vehicle_navi_segment(self.navi_segment_4b9)
+        if segment["calculated_route"] == 1:
+          if not self.vehicleNaviCurveRouteActive:
+            self._clear_vehicle_navi_curves()
+          self.vehicleNaviCurveRouteActive = True
+        elif segment["calculated_route"] == 0 and segment["offset"] == 0:
+          self.vehicleNaviCurveRouteActive = False
+          self._clear_vehicle_navi_curves()
         if segment["calculated_route"] == 2:
+          self.vehicleNaviCurveRouteActive = False
           self.vehicleNaviRouteResetTimestamp = timestamp
           self._clear_vehicle_navi_events()
+          self._clear_vehicle_navi_curves()
           self._clear_vehicle_navi_speed_zone()
           self._clear_vehicle_navi_school_zone()
+
+    self._update_vehicle_navi_curve_profile(cp, ret)
+    if not (self.vehicleNaviCanControl or self.vehicleNaviSchoolZoneControl):
+      return False
 
     if self.navi_profile_4be is not None:
       timestamp = profile_timestamp
@@ -1110,7 +1238,7 @@ class CarState(CarStateBase):
   def get_can_parsers_canfd(self, CP):
     # Register stock-navigation position/route/profile messages as optional
     # from startup so dynamic fingerprint timing cannot miss sparse profiles.
-    msgs = [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)]
+    msgs = [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BA", math.nan), ("NEW_MSG_4BE", math.nan)]
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [
