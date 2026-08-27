@@ -96,9 +96,9 @@ function agnos_init {
   # been tested and explicitly confirmed by the user.
   if [ -f /data/usbpd-kernel-trial.json ]; then
     if python3 "$DIR/scripts/usbpd_kernel_trial.py" should-defer-success; then
-      echo "USB-PD kernel trial active; deferring boot slot success confirmation."
+      echo "C4 USB-PD v2 kernel trial active; deferring boot slot success confirmation."
     else
-      echo "USB-PD trial state exists but is not valid for this slot; refusing automatic boot success confirmation."
+      echo "C4 USB-PD v2 trial state exists but is not valid for this slot; refusing automatic boot success confirmation."
     fi
   else
     sudo abctl --set_success

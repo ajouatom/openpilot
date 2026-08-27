@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safely install, confirm, or roll back the experimental USB-PD kernel."""
+"""Safely install, confirm, or roll back the experimental C4 USB-PD v2 kernel."""
 
 from __future__ import annotations
 
@@ -18,14 +18,17 @@ import urllib.request
 
 
 EXPECTED_AGNOS_VERSION = "19.6"
-RELEASE_BASE = "https://github.com/ajouatom/agnos-builder/releases/download/usbpd-test-v1"
+EXPECTED_DEVICE_TYPE = "mici"
+RELEASE_TAG = "usbpd-test-v2-c4"
+RELEASE_BASE = f"https://github.com/ajouatom/agnos-builder/releases/download/{RELEASE_TAG}"
 BOOT_URL = f"{RELEASE_BASE}/boot.img"
 CHECKSUM_URL = f"{RELEASE_BASE}/boot.img.sha256"
 STATE_PATH = Path("/data/usbpd-kernel-trial.json")
-DATA_DIR = Path("/data/usbpd-kernel")
+DATA_DIR = Path("/data/usbpd-kernel-v2")
 BOOT_IMAGE_PATH = DATA_DIR / "boot.img"
 CHECKSUM_PATH = DATA_DIR / "boot.img.sha256"
 PARAMS_PATH = Path("/data/params/d")
+DEVICE_MODEL_PATH = Path("/sys/firmware/devicetree/base/model")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "openpilot/system/hardware/tici/agnos.json"
 
@@ -53,6 +56,20 @@ def require_offroad() -> None:
       raise TrialError("주행 중에는 설치할 수 없습니다. 시동을 끄고 offroad 상태에서 실행하세요.")
   except FileNotFoundError:
     pass
+
+
+def device_type() -> str:
+  try:
+    model = DEVICE_MODEL_PATH.read_text(encoding="utf-8").strip("\x00")
+  except (FileNotFoundError, OSError) as exc:
+    raise TrialError(f"장치 종류를 확인할 수 없습니다: {exc}") from exc
+  return model.split("comma ")[-1]
+
+
+def require_c4() -> None:
+  actual = device_type()
+  if actual != EXPECTED_DEVICE_TYPE:
+    raise TrialError(f"이 시험 커널은 comma four(mici) 전용입니다. 현재 장치: {actual}")
 
 
 def current_slot() -> str:
@@ -199,6 +216,7 @@ def archive_state(state: dict, result: str) -> None:
 def prepare_inactive_agnos() -> None:
   require_root()
   require_offroad()
+  require_c4()
   check_version()
   if STATE_PATH.exists():
     raise TrialError("이미 진행 중인 시험이 있습니다. 먼저 confirm 또는 rollback을 실행하세요.")
@@ -227,6 +245,7 @@ def prepare_inactive_agnos() -> None:
 def install() -> None:
   require_root()
   require_offroad()
+  require_c4()
   check_version()
   if STATE_PATH.exists():
     raise TrialError("이미 진행 중인 시험이 있습니다. 먼저 status를 확인하세요.")
@@ -276,6 +295,8 @@ def install() -> None:
     "boot_size": image_size,
     "backup_path": str(backup_path),
     "agnos_version": EXPECTED_AGNOS_VERSION,
+    "device_type": EXPECTED_DEVICE_TYPE,
+    "release_tag": RELEASE_TAG,
   }
   save_state(state)
 
@@ -318,6 +339,7 @@ def should_defer_success() -> int:
 def activate() -> None:
   require_root()
   require_offroad()
+  require_c4()
   state = load_state()
   if state.get("phase") != "ready":
     raise TrialError(f"활성화할 수 없는 시험 상태입니다: {state.get('phase')}")
@@ -340,6 +362,7 @@ def activate() -> None:
 
 def confirm() -> None:
   require_root()
+  require_c4()
   state = load_state()
   if current_slot() != state.get("trial_slot"):
     raise TrialError("현재 시험 슬롯으로 부팅된 상태가 아니므로 확정할 수 없습니다.")
@@ -363,6 +386,8 @@ def rollback() -> None:
 def status() -> None:
   print(f"현재 슬롯: {current_slot()}")
   print(f"AGNOS 버전: {Path('/VERSION').read_text(encoding='utf-8').strip()}")
+  print(f"장치: {device_type()}")
+  print(f"시험 릴리스: {RELEASE_TAG}")
   if STATE_PATH.exists():
     print(STATE_PATH.read_text(encoding="utf-8").rstrip())
   else:
